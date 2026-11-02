@@ -262,7 +262,7 @@ test "a counted fill whose counter is assigned keeps its clear (D14d)" {
 test "definitely assigned references read back after the arena churns (D13d, O2)" {
     kept := Vec<DiNode&>()
     for i in range 200 {
-        n DiNode&kept
+        n DiNode&
         if i % 2 == 0 {
             n = DiNode(i)
         } else {

@@ -52,21 +52,21 @@ fn RealOf(path String&) String {
 
 # the program root is the root of, checked as "olang test" checks it (its tests too) - with each file of overlay (by
 # real path) read from there instead of from disk - and, where held is true, held to section 8 (Hold)
-fn Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg, overlay Map<String&, String&>&, held Bool = true) mut Analysis&cfg {
-    f mut fetch.Fetcher&cfg = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, true)
-    nm mut source.Names&cfg = source.Names()
-    l mut load.Loader&cfg = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
+fn Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&, overlay Map<String&, String&>&, held Bool = true) mut Analysis& {
+    f mut fetch.Fetcher& = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, true)
+    nm mut source.Names& = source.Names()
+    l mut load.Loader& = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
     l.Clang = $cfg.Clang
     for x in cfg.CFlags() { l.CFlags.Push($x) }
     for e in overlay { l.Overlay.Put($e.Key, $e.Value) }
     t0 := time.Now()
     l.Load(root)
     Log($"loaded " $root " (" $l.Mods.Len() " modules) in " $(time.Since(t0) / 1000000) " ms")
-    a mut Analysis&cfg = Analysis(l)
+    a mut Analysis& = Analysis(l)
     if l.Root < 0 or d.HasFatal() { return a }
-    c mut typecheck.Checker&cfg = interp.Analyze(l, true)
+    c mut typecheck.Checker& = interp.Analyze(l, true)
     a.C = c
-    asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
+    asserts mut Map<pair.Pair<I64, I64>, Bool>& = Map<pair.Pair<I64, I64>, Bool>()
     clean := d.Errors() == 0
     if clean { interp.DecideValues(c) }
     interp.DecideAsserts(c, asserts)
@@ -81,13 +81,13 @@ fn Hold(a mut Analysis&, cfg mut build.Config&) {
     if a.C is null or a.Sc is not null or a.L.Diags.HasFatal() { return }
     t0 := time.Now()
     c := a.C
-    sc mut scope.Scoper&cfg = scope.Scoper(c!.P, c!.Bodies)
+    sc mut scope.Scoper& = scope.Scoper(c!.P, c!.Bodies)
     sc.InstNote = fn(inst I64) String { return c!.InstNote(inst) }
     sc.Spell = fn(t types.TypeId) String { return c!.Ty(t) }
     sc.Run()
     Log($"held to section 8 in " $(time.Since(t0) / 1000000) " ms")
     a.Sc = sc
-    x mut interp.Exec&cfg = interp.Exec(c!.P, c!.Bodies, eval.Mode.Compile)
+    x mut interp.Exec& = interp.Exec(c!.P, c!.Bodies, eval.Mode.Compile)
     x.Faulty = c!.Faulty
     a.X = x
 }
@@ -101,7 +101,7 @@ fn (a Analysis&) ModuleOf(real String&) I64 {
 }
 
 # a module's file text
-fn (a Analysis&) TextOf(mi I64) String&a { return a.L.Mods[mi].Src!.Text }
+fn (a Analysis&) TextOf(mi I64) String& { return a.L.Mods[mi].Src!.Text }
 
 # the real path of the file a diagnostics file number names, "" for none
 fn (a Analysis&) RealOfFile(file I64) String {
@@ -1069,7 +1069,7 @@ fn Format(path String&, text String&) String ? fmt.Unparsable {
 # "olang explain -caps": what each module of the program file is the root of may reach, on the standard output; the
 # status 1 where the program does not check
 fn CapsMode(file String&, cfg mut build.Config&) I32 {
-    d mut diag.Diagnostics&cfg = diag.Diagnostics(diag.ColorWanted())
+    d mut diag.Diagnostics& = diag.Diagnostics(diag.ColorWanted())
     a := Analyze(file, cfg, d, Map<String&, String&>(), false)
     if d.Errors() > 0 or a.C is null {
         say(d.Render())
@@ -1087,7 +1087,7 @@ fn CapsMode(file String&, cfg mut build.Config&) I32 {
 # status: 0, or 1 where something did not check or could not be written
 fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Config&) I32 {
     if html == "" {
-        d mut diag.Diagnostics&cfg = diag.Diagnostics(diag.ColorWanted())
+        d mut diag.Diagnostics& = diag.Diagnostics(diag.ColorWanted())
         a := Analyze(files[0], cfg, d, Map<String&, String&>())
         if d.Errors() > 0 or a.C is null or a.Sc is null {
             say(d.Render())
@@ -1137,7 +1137,7 @@ fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Conf
 # the page of the module root is, written into the directory html: 0, or 1 where it did not check or could not be
 # written (its diagnostics said)
 fn docPage(root String&, cfg mut build.Config&, html String&) I32 {
-    d mut diag.Diagnostics&cfg = diag.Diagnostics(diag.ColorWanted())
+    d mut diag.Diagnostics& = diag.Diagnostics(diag.ColorWanted())
     a := Analyze(root, cfg, d, Map<String&, String&>())
     if d.Errors() > 0 or a.C is null or a.Sc is null {
         say(d.Render())

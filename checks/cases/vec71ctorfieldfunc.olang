@@ -3,7 +3,7 @@
 # argument (C2d, O10c)
 import "std/io"
 type H struct(x String&, n I64) {
-    y String&x = $n "-new-text-in-x's-scope"
+    y String& = $n "-new-text-in-x's-scope"
 }
 fn mk(p String&) H { return H(p, 5) }
 fn main() ? {

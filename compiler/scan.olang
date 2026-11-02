@@ -136,15 +136,15 @@ fn (ts Tokens&) Match(open I32) I32 {
 fn Scan(text String&) Tokens {
     s := scanner(text)
     s.run()
-    toks Array<token.Token>&return = s.toks.ToArray()
+    toks Array<token.Token>& = s.toks.ToArray()
     count I64 = 0
     for tk in toks {
         if tk.Kind == token.Tok.LBrace { count++ }
     }
-    opens mut Array<I32>&return = Array<I32>(count)
-    closes mut Array<I32>&return = Array<I32>(count, -1)
+    opens mut Array<I32>& = Array<I32>(count)
+    closes mut Array<I32>& = Array<I32>(count, -1)
     matchBraces(toks, opens, closes)
-    diags Array<Diag>&return = s.diags.ToArray()
+    diags Array<Diag>& = s.diags.ToArray()
     return Tokens(toks, opens, closes, diags)
 }
 

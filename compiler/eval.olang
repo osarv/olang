@@ -1651,7 +1651,7 @@ fn (m mut Machine&) localPtr(fi I64, l mir.LocalId) Ptr {
     return Ptr(id, 0)
 }
 
-fn (m Machine&) fnOfFrame(fi I64) mir.Fn&m { return m.fns.Ref(m.fs[fi].Fn) }
+fn (m Machine&) fnOfFrame(fi I64) mir.Fn& { return m.fns.Ref(m.fs[fi].Fn) }
 
 # statement i of frame fi's function (fk) in its flat form (cfn.Fast): what assign makes of it, its operands read
 # and its destination written through the same checks
@@ -4522,7 +4522,7 @@ fn (m mut Machine&) exit(fi I64, file I64, sp source.Span, kind mir.ExitKind, ms
         m.refuse(WhyEnds)
         return
     }
-    text String&m = ""
+    text String& = ""
     if msg != mir.Operand.None {
         p := m.addr(fi, msg, 1)
         data, n := m.arrayView(p, m.opType(fi, msg))
@@ -4722,7 +4722,7 @@ fn (m mut Machine&) traced(fi I64, k I64, sp source.Span) {
 fn (m Machine&) TraceLen() I64 { return m.trace.Len() / 4 }
 fn (m Machine&) TraceAt(i I64) I64, I64, I64 { return m.trace[4 * i], m.trace[4 * i + 1], m.trace[4 * i + 2] }
 # a place's own text: a requirement's (D17), "" for its kind's
-fn (m Machine&) TraceWhat(i I64) String&m {
+fn (m Machine&) TraceWhat(i I64) String& {
     w := m.trace[4 * i + 3]
     return m.whats[w] if w >= 0 else ""
 }
@@ -5571,7 +5571,7 @@ fn tfn(t mut types.Table&, id I64, ty types.TypeId) mir.Fn {
 fn tkey(id I64) mir.FnKey { return mir.FnKey.Body(typed.BodyId(I32(id))) }
 
 # f checked by the verifier, then defined in m
-fn tdefine(t mut types.Table&, m mut Machine&, f mut mir.Fn&t) {
+fn tdefine(t mut types.Table&, m mut Machine&, f mut mir.Fn&) {
     v := f.Verify(t)
     assert v == "", v
     m.Define(f)
@@ -5637,7 +5637,7 @@ CmpOps Array<typed.PrimOp>& = typed.PrimOp[typed.PrimOp.Eq, typed.PrimOp.Ne, typ
 # divided by -1 refused, as undefined
 fn intsAgree<T>(t mut types.Table&, name String&, xs Array<T>&, ns Array<T>&, signed Bool, min I64) {
     ty := t.Prim(name)
-    m mut Machine&t = NewMachine(t, Mode.Compile)
+    m mut Machine& = NewMachine(t, Mode.Compile)
     id := 100
     for op in IntOps {
         tdefine(t, m, opFn(t, id, op, ty, ty, true))
@@ -5774,7 +5774,7 @@ FloatOps Array<typed.PrimOp>& = typed.PrimOp[typed.PrimOp.Add, typed.PrimOp.Sub,
 # wherever the host gives one (whose payload E33a leaves unspecified); negation the sign flipped
 fn floatsAgree<T>(t mut types.Table&, name String&, xs Array<T>&) {
     ty := t.Prim(name)
-    m mut Machine&t = NewMachine(t, Mode.Compile)
+    m mut Machine& = NewMachine(t, Mode.Compile)
     w := m.width(ty)
     id := 200
     for op in FloatOps {
@@ -5856,7 +5856,7 @@ fn hostConv<S>(to String&, x S) I64 {
 # type's range, or a NaN, refused as undefined (E26)
 fn convsAgree<S>(t mut types.Table&, name String&, xs Array<S>&, bits fn(x S) I64) {
     from := t.Prim(name)
-    m mut Machine&t = NewMachine(t, Mode.Compile)
+    m mut Machine& = NewMachine(t, Mode.Compile)
     id := 300
     for to in NumNames {
         ty := t.Prim(to)
@@ -5966,7 +5966,7 @@ fn fibHost(n I64) I64 { return n if n < 2 else fibHost(n - 1) + fibHost(n - 2) }
 test "loops and recursion: a loop's scope every turn, calls to depth, a loop that allocates nothing never grows" {
     names := source.Names()
     t := types.NewTable(names)
-    m mut Machine&t = NewMachine(t, Mode.Compile)
+    m mut Machine& = NewMachine(t, Mode.Compile)
     tdefine(t, m, sumFn(t, 1, false))
     tdefine(t, m, sumFn(t, 2, true))
     tdefine(t, m, fibFn(t, 3))
@@ -6043,7 +6043,7 @@ fn passFn(t mut types.Table&, id I64, g I64, gty types.TypeId, from types.ListId
 test "errors: raised under the function's own list, dispatched by a switch, re-encoded where they pass on (R6, R17)" {
     names := source.Names()
     t := types.NewTable(names)
-    m mut Machine&t = NewMachine(t, Mode.Compile)
+    m mut Machine& = NewMachine(t, Mode.Compile)
     i64 := t.Prim("I64")
     e, o := terr(t, names, "E"), terr(t, names, "O")
     el := t.List(types.TypeId[o, e])
@@ -6078,7 +6078,7 @@ fn tspan(a I64) source.Span { return source.Span(I32(a), I32(a + 1)) }
 test "undefined behaviour stops with where: outside an array, after a scope closed, through null, budgets run out" {
     names := source.Names()
     t := types.NewTable(names)
-    m mut Machine&t = NewMachine(t, Mode.Compile)
+    m mut Machine& = NewMachine(t, Mode.Compile)
     i64 := t.Prim("I64")
     arr := t.Array(i64, types.TypeId(0))
     ri := t.Ref(i64, types.Writable)
@@ -6173,7 +6173,7 @@ test "exits: a failed check stops with FILE:LINE and its message (S18a); done an
     h.End(B0, mir.Term.Exit(Sp0, mir.ExitKind.Done, mir.Operand.None))
     src := source.Source("a.olang", "one\ntwo\nthree\n")
     for mode in Mode[Mode.Compile, Mode.Run] {
-        m mut Machine&t = NewMachine(t, mode)
+        m mut Machine& = NewMachine(t, mode)
         tdefine(t, m, f)
         tdefine(t, m, g)
         tdefine(t, m, h)
@@ -6198,7 +6198,7 @@ fn tdecl(t mut types.Table&, names mut source.Names&, kind types.DeclKind, name 
 test "aggregates, enums, arrays and references: laid out as the target lays them out, read and written in place" {
     names := source.Names()
     t := types.NewTable(names)
-    m mut Machine&t = NewMachine(t, Mode.Compile)
+    m mut Machine& = NewMachine(t, Mode.Compile)
     i32, i64 := t.Prim("I32"), t.Prim("I64")
     # struct P(x I32, y I64): "p := P(3, 40); r := &p; r.x = 7; return I64(p.x) + p.y"
     pt := tdecl(t, names, types.DeclKind.Struct, "P")
@@ -6299,7 +6299,7 @@ fn gplace(t mut types.Table&, name source.NameId) mir.Lvalue {
 test "globals while compiling: an immutable one initialized when first read (K2), a mutable one or a write refused" {
     names := source.Names()
     t := types.NewTable(names)
-    m mut Machine&t = NewMachine(t, Mode.Compile)
+    m mut Machine& = NewMachine(t, Mode.Compile)
     i64 := t.Prim("I64")
     ga, gb, gm, gc, gd := names.Intern("A"), names.Intern("B"), names.Intern("M"), names.Intern("C"), names.Intern("D")
     # A = 6 * 7, B = A + 1: B read first initializes A on the way
@@ -6347,7 +6347,7 @@ test "globals while compiling: an immutable one initialized when first read (K2)
 test "scopes and destructors under -i: a scope's registrations run as it closes, last registered first (O15, O16)" {
     names := source.Names()
     t := types.NewTable(names)
-    m mut Machine&t = NewMachine(t, Mode.Run)
+    m mut Machine& = NewMachine(t, Mode.Run)
     i64 := t.Prim("I64")
     rt := tdecl(t, names, types.DeclKind.Struct, "R")
     t.SetStructBody(rt, t.List1(i64), true)
@@ -6385,7 +6385,7 @@ test "scopes and destructors under -i: a scope's registrations run as it closes,
     s := m.Eval(tkey(1), I64[])
     assert s == Stop.None and m.Int(m.Result, i64) == 321, $s " " $m.Int(m.Result, i64)
     # while compiling, building a value whose destructor would run is refused (K1)
-    c mut Machine&t = NewMachine(t, Mode.Compile)
+    c mut Machine& = NewMachine(t, Mode.Compile)
     c.Define(d)
     c.DefineDestructor(rt, tkey(20))
     tdefine(t, c, f)

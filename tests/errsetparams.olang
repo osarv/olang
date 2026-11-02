@@ -72,7 +72,7 @@ test "QAH: a comparator that fails stops the sort" {
 
 # an iterator that can fail on its way (QAH): its Next fails with Bad beside Exhausted
 type Reader struct(of Array<I64>&) {
-    xs Array<I64>&of = of
+    xs Array<I64>& = of
     at I64 = 0
 }
 

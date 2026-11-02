@@ -262,7 +262,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     Debug Bool = false
 }
 
-fn (f mut Free&) T() mut types.Table&f { return f.P.T }
+fn (f mut Free&) T() mut types.Table& { return f.P.T }
 
 # ---- candidates ----
 
@@ -850,7 +850,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     errDefers Vec<I64>
 }
 
-fn newWalker(f mut Free&, b I64, final Bool) mut walker&f {
+fn newWalker(f mut Free&, b I64, final Bool) mut walker& {
     if f.wk is null { f.wk = walker(f, b, final) }
     w := f.wk!
     w.Id = b
@@ -907,8 +907,8 @@ fn (f mut Free&) save(w walker&, b I64) {
     n := w.origins.Len()
     total := 0
     for o in w.origins { total += o.Len() }
-    at mut Array<I64>&f = Array<I64>(n + 1)
-    sv mut Array<I64>&f = Array<I64>(total)
+    at mut Array<I64>& = Array<I64>(n + 1)
+    sv mut Array<I64>& = Array<I64>(total)
     k := 0
     for l in range n {
         at[l] = k
@@ -999,7 +999,7 @@ fn (w mut walker&) reset() {
 
 fn (w mut walker&) body() typed.Body& { return w.F.Bodies[w.Id] }
 
-fn (w mut walker&) T() mut types.Table&w { return w.F.P.T }
+fn (w mut walker&) T() mut types.Table& { return w.F.P.T }
 
 fn (w mut walker&) block(bl typed.Block&) {
     track := w.Final and w.F.dIn[w.Id]
@@ -1405,7 +1405,7 @@ fn pureIndex(x typed.Expr&) Bool {
 }
 
 # the place holding a field or an element: its container
-fn baseOf(p typed.Lvalue&) typed.Lvalue?&p {
+fn baseOf(p typed.Lvalue&) typed.Lvalue?& {
     return match p {
         case typed.Lvalue.Field(_, _, b, _): b
         case typed.Lvalue.Elem(_, _, e): e.Base
@@ -1458,7 +1458,7 @@ fn (w mut walker&) eval(sp source.Span, x typed.Expr&) {
 }
 
 # the call an expression is, under a try, null for none
-fn callOf(x typed.Expr&) typed.Call?&x {
+fn callOf(x typed.Expr&) typed.Call?& {
     return match x {
         case typed.Expr.Call(_, _, c): c
         case typed.Expr.Try(_, _, t): callOf(t.X!) if t.X is not null else null
@@ -2502,7 +2502,7 @@ fn (w mut walker&) destroyStore(l I64, x typed.Expr&, sp source.Span) {
 }
 
 # what a value is under a try with no default - its operand
-fn unwrapped(x typed.Expr&) typed.Expr&x {
+fn unwrapped(x typed.Expr&) typed.Expr& {
     match x {
         case typed.Expr.Try(_, _, t) {
             if t.X is null { return x }
@@ -2720,7 +2720,7 @@ fn (f mut Free&) keepView(k I64, file I64, sp source.Span, text String&, g I64) 
 fn (f mut Free&) mustOf(b I64) {
     body := f.Bodies[b]
     if body.Root is null { return }
-    m mut mustW&f = mustW(f, b)
+    m mut mustW& = mustW(f, b)
     for _ in range body.Locals.Len() {
         m.must.Push(MustTop)
         m.within.Push(MustTop)
@@ -2982,7 +2982,7 @@ fn (m mut mustW&) fresh(x typed.Expr&, depth I64) Bool {
 
 # the reference whose referent holds an argument's storage: a reference read whole, or the reference a borrowed place
 # is reached through - null for none (a local's own storage, a global's)
-fn derefRoot(p typed.Lvalue&) typed.Expr?&p {
+fn derefRoot(p typed.Lvalue&) typed.Expr?& {
     return match p {
         case typed.Lvalue.Deref(_, _, r): r
         case typed.Lvalue.Field(_, _, b, _): derefRoot(b)
@@ -2992,7 +2992,7 @@ fn derefRoot(p typed.Lvalue&) typed.Expr?&p {
     }
 }
 
-fn (w mut walker&) rootOf(x typed.Expr&) typed.Expr?&x {
+fn (w mut walker&) rootOf(x typed.Expr&) typed.Expr?& {
     t := w.T()
     match x {
         case typed.Expr.Read(_, ty, p, _) {
@@ -3283,7 +3283,7 @@ fn (f mut Free&) placeable(st store) Bool {
 }
 
 # the constructor call a temporary is, null for none
-fn ctorCall(x typed.Expr&) typed.Call?&x {
+fn ctorCall(x typed.Expr&) typed.Call?& {
     return match x {
         case typed.Expr.Call(_, _, c): c
         case _: null
@@ -3419,13 +3419,13 @@ fn (f mut Free&) orVars(b I64, c typed.Call&, b2 I64, at typed.Scope, v I64) I64
 }
 
 # the call at a site of a body, found by walking it
-fn (f mut Free&) callAt(b I64, site I64) typed.Call?&f {
+fn (f mut Free&) callAt(b I64, site I64) typed.Call?& {
     body := f.Bodies[b]
     if body.Root is null { return null }
     return findCallBlock(body.Root!, site)
 }
 
-fn findCallBlock(bl typed.Block&, site I64) typed.Call?&bl {
+fn findCallBlock(bl typed.Block&, site I64) typed.Call?& {
     for st in bl.Stmts {
         c := findCallStmt(st, site)
         if c is not null: return c
@@ -3433,7 +3433,7 @@ fn findCallBlock(bl typed.Block&, site I64) typed.Call?&bl {
     return null
 }
 
-fn findCallStmt(st typed.Stmt&, site I64) typed.Call?&st {
+fn findCallStmt(st typed.Stmt&, site I64) typed.Call?& {
     return match st {
         case typed.Stmt.Let(_, _, x): findCall(x, site)
         case typed.Stmt.Assign(_, p, x): findCall(x, site) if findCall(x, site) is not null else findCallPlace(p, site)
@@ -3447,7 +3447,7 @@ fn findCallStmt(st typed.Stmt&, site I64) typed.Call?&st {
     }
 }
 
-fn findIf(i typed.If&, site I64) typed.Call?&i {
+fn findIf(i typed.If&, site I64) typed.Call?& {
     c := findCall(i.Test, site)
     if c is not null { return c }
     c = findCallBlock(i.Then, site)
@@ -3456,7 +3456,7 @@ fn findIf(i typed.If&, site I64) typed.Call?&i {
     return null
 }
 
-fn findCallPlace(p typed.Lvalue&, site I64) typed.Call?&p {
+fn findCallPlace(p typed.Lvalue&, site I64) typed.Call?& {
     return match p {
         case typed.Lvalue.Deref(_, _, r): findCall(r, site)
         case typed.Lvalue.Field(_, _, b, _): findCallPlace(b, site)
@@ -3465,7 +3465,7 @@ fn findCallPlace(p typed.Lvalue&, site I64) typed.Call?&p {
     }
 }
 
-fn findCall(x typed.Expr&, site I64) typed.Call?&x {
+fn findCall(x typed.Expr&, site I64) typed.Call?& {
     match x {
         case typed.Expr.Call(_, _, c) {
             if I64(c.Site) == site { return c }

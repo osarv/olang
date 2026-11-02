@@ -280,7 +280,7 @@ fn (t mut Target&) FromProbe(out String&) ? Probe {
 }
 
 # the text after key up to the next '"'
-fn field(out String&, key String&) String&out ? {
+fn field(out String&, key String&) String& ? {
     at := try out.Find(key)
     from := at + key.Len()
     end := try out[from:].FindByte('"')
@@ -288,7 +288,7 @@ fn field(out String&, key String&) String&out ? {
 }
 
 # the value of attribute "name"="..." in an attribute line
-fn attrValue(line String&, name String&) String&line ? {
+fn attrValue(line String&, name String&) String& ? {
     return try field(line, $"\"" $name "\"=\"")
 }
 

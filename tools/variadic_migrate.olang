@@ -138,8 +138,8 @@ fn sayHand(path String&, text String&, at I64, why String&) {
 
 # a call's arguments between from and to, split at the commas no bracket holds, each without its surrounding spaces;
 # a line break no bracket holds - items on several lines - fails with NotOneLine
-fn splitArgs(text String&, mask String&, from I64, to I64) Vec<String&>&text ? NotOneLine {
-    parts mut Vec<String&>&text = Vec<String&>()
+fn splitArgs(text String&, mask String&, from I64, to I64) Vec<String&>& ? NotOneLine {
+    parts mut Vec<String&>& = Vec<String&>()
     depth := 0
     start := from
     for i in range from, to {
@@ -220,7 +220,7 @@ fn newForm(args Vec<String&>&, m moved&) Bool {
 }
 
 # an old parameter's name, its default left off
-fn nameOf(p String&) String&p { return p[:try p.Find("=") catch default p.Len()] }
+fn nameOf(p String&) String& { return p[:try p.Find("=") catch default p.Len()] }
 
 # whether an argument is given by name, "name = value"
 fn isNamed(a String&) Bool {

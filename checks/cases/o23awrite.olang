@@ -9,10 +9,10 @@ type Box struct() {
     n I64 = 0
 }
 type Cursor struct(of Box&) {
-    box Box&of = of
-    cur mut Node?&of = null
+    box Box& = of
+    cur mut Node?& = null
 }
-fn (c mut Cursor&) Set(n mut Node&c) { c.cur = n }
+fn (c mut Cursor&) Set(n mut Node&) { c.cur = n }
 fn main() ? {
     ws Box& = Box()
     for i in range 3 {

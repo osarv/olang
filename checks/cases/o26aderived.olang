@@ -6,7 +6,7 @@
 import "std/io"
 
 type W struct(d Array<I64>&) {
-    D Array<I64>&d = d
+    D Array<I64>& = d
 }
 
 type H struct(x Array<I64>&) {

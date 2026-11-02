@@ -34,7 +34,7 @@ fn (p mut Parser&) primary() Expr& {
     }
     return Expr.Num(t.val)
 }
-fn (p mut Parser&) expr(minPrec I64) Expr& {
+fn (p mut Parser&) expr(minPrec I64) mut Expr& {
     lhs := p.primary()
     for {
         op := p.toks[p.at]

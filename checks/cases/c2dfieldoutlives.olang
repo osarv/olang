@@ -5,7 +5,7 @@ type Node struct(v I64) {
     v
 }
 type View struct(of Node&) {
-    n Node&of = of
+    n Node& = of
 }
 fn main() ? {
     base Node& = Node(0)

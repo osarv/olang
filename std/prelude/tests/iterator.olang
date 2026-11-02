@@ -2,7 +2,7 @@
 # when they are run
 
 fn upTo(n I64) Vec<I64>& {
-    l mut Vec<I64>&return = Vec<I64>()
+    l mut Vec<I64>& = Vec<I64>()
     for i in range n { l.Push(i) }
     return l
 }

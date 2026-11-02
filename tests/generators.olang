@@ -318,7 +318,7 @@ test "D18e: a walk left by a return out of two loops, or by an error, closes its
 # ---- D18c: elements borrowed from what a generator was given, or kept by its walk ----
 
 # the words of t, each a view of t's own text
-fn spans(t String&) Iterator<String&t> {
+fn spans(t String&) Iterator<String&> {
     i I64 = 0
     for i < t.Len() {
         for i < t.Len() and t[i] == ' ' { i++ }
@@ -380,19 +380,19 @@ type Pt struct(x I64) {
 }
 
 # each point made once and kept by the walk, handed out as it is made and then all again
-fn points(n I64) Iterator<Pt&return> {
-    all mut Vec<Pt&>&return = Vec<Pt&>()
+fn points(n I64) Iterator<Pt&> {
+    all mut Vec<Pt&>& = Vec<Pt&>()
     for i in range n {
-        p Pt&return = Pt(i * 10)
+        p Pt& = Pt(i * 10)
         all.Push(p)
         yield p
     }
     for p in all { yield p }
 }
 
-fn labels(n I64) Iterator<String&return> {
+fn labels(n I64) Iterator<String&> {
     for i in range n {
-        s String&return = $"label " $i
+        s String& = $"label " $i
         yield s
     }
 }

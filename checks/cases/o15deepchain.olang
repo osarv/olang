@@ -15,7 +15,7 @@ type Deep struct(v I64) {
 fn release() {
     head mut Deep?& = null
     for i in range 300000 {
-        n mut Deep&head = Deep(i)
+        n mut Deep& = Deep(i)
         n.next = head
         head = n
     }

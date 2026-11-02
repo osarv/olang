@@ -69,7 +69,7 @@ fn copyOut(fill fn(buf mut Array<U8>&) I64) String& ? Error {
     n := fill(Array<U8>(0))
     for {
         try check(n)
-        text mut String&return = String(Array<U8>(n))
+        text mut String& = String(Array<U8>(n))
         got := fill(text)
         if got <= n {
             try check(got)
@@ -82,11 +82,11 @@ fn copyOut(fill fn(buf mut Array<U8>&) I64) String& ? Error {
 
 # the program's command line (B4a): its own name first - the path it was started by, or under "olang interpret" the file
 # being interpreted - then each argument, as given
-fn Args() Array<String&>& {
+fn Args() mut Array<String&>& {
     n := __olang_arg_count()
-    args mut Array<String&>&return = Array<String&>(n, "")     # each written below
+    args mut Array<String&>& = Array<String&>(n, "")     # each written below
     for i in range n {
-        text String&return = String(Array<U8>(__olang_arg(i, Array<U8>(0), 0)))
+        text String& = String(Array<U8>(__olang_arg(i, Array<U8>(0), 0)))
         __olang_arg(i, text, text.Len())
         args[i] = text
     }
@@ -345,11 +345,11 @@ fn memFile() I32 ? Error {
 }
 
 # everything written to the file fd, from its start, as text built where the caller puts it
-fn readBack(fd I32) String& ? Error {
+fn readBack(fd I32) mut String& ? Error {
     size := unistd.lseek(fd, 0, 2)
     if size < 0 { try raise(__olang_err()) }
     unistd.lseek(fd, 0, 0)
-    text mut String&return = String(Array<U8>(size))
+    text mut String& = String(Array<U8>(size))
     got I64 = 0
     for got < size {
         n := unistd.read(fd, text[got:], U64(size - got))
@@ -371,11 +371,11 @@ fn ReadFile(path String&) String& ? Error {
     # has no size to give (lseek fails or says 0), and a file may grow while it is read
     size := unistd.lseek(fd, 0, 2)
     if size < 0 { size = 0 } else { unistd.lseek(fd, 0, 0) }
-    text mut String&return = String(Array<U8>(size + 1))
+    text mut String& = String(Array<U8>(size + 1))
     got I64 = 0
     for {
         if got == text.Len() {
-            more mut String&return = String(Array<U8>(text.Len() * 2))
+            more mut String& = String(Array<U8>(text.Len() * 2))
             for i in range got { more[i] = text[i] }
             text = more
         }
@@ -521,7 +521,7 @@ fn MkTemp(dir String& = "", prefix String& = "") String& ? Error {
     if prefix.Contains("/") { error Error.Failed }      # a name, never a path below "dir"
     base := tempDir(dir)
     sep := "" if base.EndsWith("/") else "/"
-    path mut String&return = $base $sep $prefix "XXXXXX\0"
+    path mut String& = $base $sep $prefix "XXXXXX\0"
     if __olang_mkdtemp(path) != 0 { try raise(__olang_err()) }
     return path[:path.Len() - 1]
 }
@@ -546,10 +546,10 @@ fn Link(from String&, to String&) ? Error {
 }
 
 # what the symbolic link at "path" holds, as it was written - not resolved further
-fn ReadLink(path String&) String& ? Error {
+fn ReadLink(path String&) mut String& ? Error {
     p := $path "\0"
     cap I64 = 256
-    buf mut Array<U8>&return = Array<U8>(cap)
+    buf mut Array<U8>& = Array<U8>(cap)
     n := unistd.readlink(p, buf, U64(cap))
     for n == cap {                                  # it may not all have fitted: again, with twice the room
         cap = cap * 2
@@ -574,7 +574,7 @@ fn Cwd() String& ? Error {
 # the names in the directory "path", in byte order, without "." and ".."
 fn ReadDir(path String&) Array<String&>& ? Error {
     p := $path "\0"
-    all String&return = try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_dir(p, buf, buf.Len()) })
+    all String& = try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_dir(p, buf, buf.Len()) })
     if all.Len() == 0 { return Array<String&>(0) }
     names := all[:all.Len() - 1].Split("\0")      # each name ends in a NUL, the last one included
     names.Sort(fn(a, b) { return a.Compare(b) < 0 })

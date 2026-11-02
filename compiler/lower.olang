@@ -216,7 +216,7 @@ fn (lw mut Lowerer&) anyRender(ti I64, top Bool) mir.Fn {
 
 # what LowerKey makes of k, held to the verifier, as Verified
 fn (lw mut Lowerer&) VerifiedKey(k mir.FnKey, dump Bool) String, String ? GapMet {
-    f mir.Fn&lw = lw.LowerKey(k)
+    f mir.Fn& = lw.LowerKey(k)
     if lw.Gapped { error GapMet }
     problems := f.Verify(lw.P.T)
     text := f.Dump(lw.P.T) if dump else ""
@@ -240,7 +240,7 @@ fn (lw mut Lowerer&) InitModules() Vec<I64> {
 # body id lowered and held to the verifier: the verifier's problems ("" for none) and the function's dump where dump
 # is asked for - failing with GapMet where lowering met a gap (or a body with errors)
 fn (lw mut Lowerer&) Verified(id I64, dump Bool) String, String ? GapMet {
-    f mir.Fn&lw = lw.Lower(id)
+    f mir.Fn& = lw.Lower(id)
     if lw.Gapped { error GapMet }
     problems := f.Verify(lw.P.T)
     text := f.Dump(lw.P.T) if dump else ""
@@ -680,7 +680,7 @@ fn (ln mut lowering&) releaseAt(l mir.LocalId, paths Vec<Array<I64>>&, sp source
 
 # ---- scopes and the exit sequence ----
 
-fn (ln lowering&) top() level&ln { return ln.levels.Ref(ln.levels.Len() - 1) }
+fn (ln lowering&) top() level& { return ln.levels.Ref(ln.levels.Len() - 1) }
 
 # a typed block lowered: a scope of its own where its id is not the enclosing block's, its statements, and on falling
 # off its end the exit sequence for it
@@ -814,7 +814,7 @@ fn (ln mut lowering&) cleanup(sp source.Span, k I64) {
 fn (ln mut lowering&) joinFailed(i I64, s mir.ScopeId, code mir.Operand, errs types.ListId, sp source.Span) {
     saved Vec<level>
     for ln.levels.Len() > i { saved.Push(try ln.levels.Pop() catch { unreachable }) }
-    savedT mut Vec<tryCtx>&ln = Vec<tryCtx>()
+    savedT mut Vec<tryCtx>& = Vec<tryCtx>()
     for ln.tries.Len() > 0 and ln.tries[ln.tries.Len() - 1].Depth > i { savedT.Push(try ln.tries.Pop() catch { unreachable }) }
     pushed := -1
     for k in range ln.joinS.Len() {
@@ -995,7 +995,7 @@ fn (ln mut lowering&) tryCopies(t typed.Try&) Bool {
 }
 
 # x with the conversions around it taken off (T29a: each names its argument's storage)
-fn (ln mut lowering&) unconvert(x typed.Expr&) typed.Expr&x {
+fn (ln mut lowering&) unconvert(x typed.Expr&) typed.Expr& {
     match x {
         case typed.Expr.Prim(_, _, op, _, args) {
             if op == typed.PrimOp.Convert and args.Len() == 1 and ln.valueArray(args[0].Type()) { return ln.unconvert(args[0]) }
@@ -1014,7 +1014,7 @@ fn partLvalue(p typed.Lvalue&) Bool {
 }
 
 # the reference a read of what it names reads through, else null
-fn derefOf(x typed.Expr&) typed.Expr?&x {
+fn derefOf(x typed.Expr&) typed.Expr?& {
     return match x {
         case typed.Expr.Read(_, _, p, _): match p {
             case typed.Lvalue.Deref(_, _, r): r
@@ -1081,7 +1081,7 @@ fn (ln mut lowering&) storageOf(l typed.LocalId) mir.ScopeRef {
     h := ln.F.Locals[I64(l)].Home
     if h != mir.ScopeRef.Frame { return h }
     # an array value whose elements the scope pass keeps in an outer block's arena (OLANG_SCOPES=infer's lift, 2.4)
-    if source.InferScopes and I64(l) < ln.plan.Stored.Len() {
+    if I64(l) < ln.plan.Stored.Len() {
         match ln.plan.Stored[I64(l)] {
             case typed.Scope.Block(b) { return ln.scopeRef(typed.Scope.Block(b)) }
             case _ { }
@@ -1319,7 +1319,7 @@ fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
 }
 
 # the items of a tuple a return makes, else null
-fn tupleItems(x typed.Expr&) Array<typed.Expr&>&x {
+fn tupleItems(x typed.Expr&) Array<typed.Expr&>& {
     match x {
         case typed.Expr.Make(_, _, m) {
             if m.Kind == typed.MakeKind.Tuple { return m.Items }
@@ -1363,7 +1363,7 @@ fn (ln mut lowering&) assert(sp source.Span, c typed.Expr&, msg typed.Expr?&) {
 # replace
 fn (ln mut lowering&) join(sp source.Span, j typed.Join&) {
     errs := ln.joinErrors(j.Code)
-    tc mut tryCtx&ln = tryCtx(ln.levels.Len(), j.Clauses, false)
+    tc mut tryCtx& = tryCtx(ln.levels.Len(), j.Clauses, false)
     for _ in j.Clauses { tc.entries.Push(mir.NoBlock) }
     ln.openBlock(j.Code, mir.ScopeKind.Join, errs)
     ln.joins.Push(tc)
@@ -1795,7 +1795,7 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
     if ty != types.VoidT and ty != types.NoreturnT { slot = ln.temp(ty, sp) }
     relK := ln.tryRel
     ln.tryRel = -1
-    tc mut tryCtx&ln = tryCtx(ln.levels.Len(), t.Clauses, t.Ends, t.Passes)
+    tc mut tryCtx& = tryCtx(ln.levels.Len(), t.Clauses, t.Ends, t.Passes)
     for _ in t.Clauses { tc.entries.Push(mir.NoBlock) }
     ln.tries.Push(tc)
     v := ln.val(t.X)
@@ -1915,7 +1915,7 @@ fn (ln mut lowering&) widens(x typed.Expr&, ty types.TypeId) Bool {
     }
 }
 
-fn convertArg(x typed.Expr&) typed.Expr&x {
+fn convertArg(x typed.Expr&) typed.Expr& {
     return match x {
         case typed.Expr.Prim(_, _, _, _, args): args[0]
         case _: x
@@ -2064,7 +2064,7 @@ fn clausedTry(x typed.Expr&) Bool {
 }
 
 # the comprehension an expression is - a lane operation's result, the collect a sequence ends in - null for none
-fn collectOf(x typed.Expr&) typed.Collect?&x {
+fn collectOf(x typed.Expr&) typed.Collect?& {
     return match x {
         case typed.Expr.Collect(_, _, c): c
         case typed.Expr.Seq(_, _, sq): collectOf(sq.X!) if sq.X is not null else null
@@ -2073,7 +2073,7 @@ fn collectOf(x typed.Expr&) typed.Collect?&x {
 }
 
 # the call an expression is, under a try, null for none
-fn callOfExpr(x typed.Expr&) typed.Call?&x {
+fn callOfExpr(x typed.Expr&) typed.Call?& {
     return match x {
         case typed.Expr.Call(_, _, c): c
         case typed.Expr.Try(_, _, t): callOfExpr(t.X!) if t.X is not null else null
@@ -3064,7 +3064,7 @@ fn (ln mut lowering&) someWrites(xs Array<types.TypeId>&, depth I64) Bool {
 }
 
 # the block of a body named id, null for none
-fn findBlock(b typed.Block&, id typed.BlockId) typed.Block?&b {
+fn findBlock(b typed.Block&, id typed.BlockId) typed.Block?& {
     if b.Id == id: return b
     for s in b.Stmts {
         r := match s {
@@ -3077,7 +3077,7 @@ fn findBlock(b typed.Block&, id typed.BlockId) typed.Block?&b {
     return null
 }
 
-fn findIn(a typed.Block&, e typed.Block?&, id typed.BlockId) typed.Block?&a {
+fn findIn(a typed.Block&, e typed.Block?&, id typed.BlockId) typed.Block?& {
     r := findBlock(a, id)
     if r is not null or e is null: return r
     return findBlock(e, id)
@@ -3281,7 +3281,7 @@ fn (lw mut Lowerer&) allFresh(b typed.Body&) Bool {
     return true
 }
 
-fn (lw mut Lowerer&) T() mut types.Table&lw { return lw.P.T }
+fn (lw mut Lowerer&) T() mut types.Table& { return lw.P.T }
 
 fn (lw mut Lowerer&) freshRet(b typed.Body&, u typed.LocalUses&, x typed.Expr&) Bool {
     return match x {
@@ -3375,7 +3375,7 @@ fn (lw mut Lowerer&) keepsParts(b typed.Body&, k I64) Bool {
 }
 
 # the value a reference local is given storage for (Promote), else null
-fn promoted(x typed.Expr&) typed.Expr?&x {
+fn promoted(x typed.Expr&) typed.Expr?& {
     return match x {
         case typed.Expr.Promote(_, _, pr): pr.X
         case typed.Expr.Away(_, _, y): promoted(y)
@@ -3385,7 +3385,7 @@ fn promoted(x typed.Expr&) typed.Expr?&x {
 
 # the call a value is, through what passes it on as it is: a try (a walk's Next, whose Exhausted leaves the loop), a
 # conversion, a statement-less sequence
-fn viewCallIn(x typed.Expr&) typed.Call?&x {
+fn viewCallIn(x typed.Expr&) typed.Call?& {
     return match x {
         case typed.Expr.Call(_, _, c): c
         case typed.Expr.Try(_, _, tr): viewCallIn(tr.X!) if tr.X is not null else null
@@ -3715,7 +3715,7 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
     # a fixed array a reference names, as a run-time-length array value: the pair naming that storage, not a copy of it
     # (D9b: a by-value array is the caller's array whatever the argument is - a copy is made where one is wanted, a
     # declaration's or a body that writes it)
-    r typed.Expr?&args = null
+    r typed.Expr?& = null
     if op == typed.PrimOp.Convert and args.Len() == 1 and ln.valueArray(ty) and not ln.convertsApart(args[0].Type(), ty) { r = derefOf(args[0]) }
     if r is not null and ln.arrayOf(args[0].Type()) != types.UnknownT and ln.fixedLen(ln.arrayOf(args[0].Type())) >= 0 {
         v := ln.val(r)
@@ -5079,7 +5079,7 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
 # in braces; an entry holding some words of a type, those words ("os.Error.Denied") - each qualified as its values are
 # (B5: "lib.Both", the prelude's and the root program's own bare), so "Vec<lib.Both>[lib.LibErr.B]" reads alike
 fn (lw mut Lowerer&) ErrValSpelling(ty types.TypeId) String {
-    t types.Table&lw = lw.P.T
+    t types.Table& = lw.P.T
     nd := t.ErrValName(ty)
     if nd >= types.DeclId(0) { return $lw.errQualifier(nd) $t.Names.Text(t.DeclName(nd)) }
     es := t.Items(t.ErrValItems(ty))

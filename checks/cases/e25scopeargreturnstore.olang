@@ -5,7 +5,7 @@ type P struct(n I64) { n }
 type H struct(p P&) { p }
 fn mkp(i I64) P& { return P(i) }
 fn put(h mut H&, i I64) String {
-    h.p = mkp&return(i)
+    h.p = mkp(i)
     return "r" $i
 }
 fn main() {

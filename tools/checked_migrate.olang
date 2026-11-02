@@ -355,7 +355,7 @@ fn migrate(path String&, src String&, c mut Result&) String {
     return res
 }
 
-fn lineText(src String&, i I64) String&src {
+fn lineText(src String&, i I64) String& {
     a := i
     for a > 0 and src[a - 1] != '\n' { a-- }
     b := try src[i:].FindByte('\n') catch default (src.Len() - i)

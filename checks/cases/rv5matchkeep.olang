@@ -6,7 +6,7 @@ type E enum {
     A(p P)
     Z
 }
-fn borrow(b P&) P&b { return b }
+fn borrow(b P&) P& { return b }
 fn main() ? {
     keep P& = P(0)
     for i in range 3 {

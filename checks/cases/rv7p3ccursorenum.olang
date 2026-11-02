@@ -7,7 +7,7 @@ type Bag struct(c mut Cell&) {
     c
 }
 type Cur struct(of Bag&) {
-    c mut Cell&of = of.c
+    c mut Cell& = of.c
 }
 type Opt enum {
     Some(c mut Cur&)

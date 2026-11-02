@@ -6,7 +6,7 @@ import "std/io"
 fn main() ? {
     v := Vec<I64>()
     v.Push(1)
-    w mut Vec<I64>&v = v
+    w mut Vec<I64>& = v
     d := v.View()
     for i in range 100 { w.Push(i) }
     try io.Println($d[0])

@@ -696,7 +696,7 @@ fn (w mut walker&) expr(x ast.Expr?&) {
             w.expr(c)
             w.expr(b)
         }
-        case ast.Expr.Call(_, f, args), ast.Expr.ScopeCall(_, f, _, args), ast.Expr.Index(_, f, args) {
+        case ast.Expr.Call(_, f, args), ast.Expr.Index(_, f, args) {
             w.expr(f)
             w.exprs(args)
         }

@@ -24,12 +24,12 @@ fn nv(n Node&) I64 {
     return n.next!.v
 }
 fn grow(x mut Node&) { x.next = Node(x.v + 100) }
-fn f(n mut Node&) mut Node&n ? {
+fn f(n mut Node&) mut Node& ? {
     if n.v > 0 { error Stop.Here }
     return n
 }
 fn g(v I64) mut Node& { return Node(v) }
-fn id(n mut Node&) mut Node&n { return n }
+fn id(n mut Node&) mut Node& { return n }
 fn (b Bag&) Str() String {
     h := fn() mut Node& { return Node(5) }
     x := try f(b.head) catch default h()

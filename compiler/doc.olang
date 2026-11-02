@@ -420,7 +420,7 @@ fn item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
 fn pushBuilders(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, e mut Entry&, builders Vec<I64>, all Bool) {
     for f in builders {
         name := $c.P.L.Names.Text(c.P.FnDecl(f).Name)
-        bi := try item&e(c, sc, x, mi, name, all) catch explain.Missing { continue }
+        bi := try item(c, sc, x, mi, name, all) catch explain.Missing { continue }
         bi.Builder = true
         e.Members.Push(bi)
     }
@@ -437,7 +437,7 @@ fn methodName(line String&) String {
 
 # what follows a line's attributes (G39): "@Key("id") Id I64" is "Id I64" - each "@" up to the first space outside its
 # brackets and quotes
-fn PastAttrs(line String&) String&line {
+fn PastAttrs(line String&) String& {
     i I64 = 0
     for i < line.Len() and line[i] == '@' {
         depth I64 = 0

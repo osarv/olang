@@ -42,7 +42,7 @@ Tools String& = ("[{\"name\":\"check\",\"description\":\"Check an olang file as 
 # serves the protocol until the end of the input: 0
 fn Serve(cfg mut build.Config&, exe String&) I32 {
     session.IgnoreBrokenPipes()
-    input mut session.Reader&cfg = session.Reader(0)
+    input mut session.Reader& = session.Reader(0)
     for input.Fill() {
         for {
             line := try input.NextLine() catch session.Incomplete { break }
@@ -128,7 +128,7 @@ fn run(name String&, file String&, hasText Bool, text String&, item String&, cfg
         formatted := try session.Format(path, given) catch { return textResult($path " does not parse - check it for its diagnostics", true) }
         return textResult(formatted, false)
     }
-    d mut diag.Diagnostics&cfg = diag.Diagnostics(false)
+    d mut diag.Diagnostics& = diag.Diagnostics(false)
     a := session.Analyze(path, cfg, d, overlay)
     if name == "check" { return checkResult(a, d) }
     if d.Errors() > 0 or a.C is null or a.Sc is null { return textResult($d.Render() $d.Summary(), true) }
@@ -235,7 +235,7 @@ fn textResult(text String&, isError Bool) String {
 
 fn toolError(text String&) String { return textResult(text, true) }
 
-fn str(j json.Json&, key String&) String&j { return try j[key].AsStr() catch json.Error default "" }
+fn str(j json.Json&, key String&) String& { return try j[key].AsStr() catch json.Error default "" }
 
 fn idOf(msg json.Json&) String {
     v := try msg["id"] catch json.Error { return "" }

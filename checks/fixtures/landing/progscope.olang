@@ -10,7 +10,7 @@ G Node& = Node(5)
 BadA mut I64 = 0
 BadB mut I64 = 0
 
-fn mk(p Node&, k I64) Node&p { return Node(p.v + k) }
+fn mk(p Node&, k I64) Node& { return Node(p.v + k) }
 
 fn workA(n I64) {
     for i in range n {

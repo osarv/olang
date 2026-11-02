@@ -59,8 +59,8 @@ fn run(args Array<String&>&) {
     testBuild := false
     verbose := false
     standin := false
-    mirAt String&args = ""
-    typedAt String&args = ""
+    mirAt String& = ""
+    typedAt String& = ""
     k I64 = 1
     for k < args.Len() and args[k].StartsWith("-") {
         if args[k] == "-t" {

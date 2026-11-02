@@ -26,7 +26,7 @@ fn main() ? {
     items := Vec<P&>()
     m := Map<I64, P&>()
     for i in range 4 {
-        p P&m = P(i, "name-" $i)
+        p P& = P(i, "name-" $i)
         items.Push(p)
         m.Put(i, p)
     }

@@ -118,9 +118,6 @@ RoleDtor I64 = 2
 # an index - the earlier parameter whose variable a parameter shares ("&x", O4b), or a result is borrowed from ("T&p")
 OwnScope I64 = -1
 FromTypeVar I64 = -2
-# the rework's round 1 (OLANG_SCOPES=infer): a result written borrowed from a parameter ("T&p"), its marker read as bare
-# - built, in the result scope, for section 8, and keeping its written permission at a call as a borrowed one did
-KeptPerm I64 = -3
 
 # what ScopeVarsOf gives besides a parameter's index: the result scope (a constructor's instance), the closing scope
 ResultVar I64 = -1
@@ -323,7 +320,7 @@ fn (t mut Table&) List(xs Array<TypeId>&) ListId {
     if xs.Len() == 0 { return ListId(0) }
     id := try t.listKeys.Get(xs) catch default ListId(-1)
     if id >= ListId(0) { return id }
-    kept mut Array<TypeId>&t = Array<TypeId>(xs.Len())
+    kept mut Array<TypeId>& = Array<TypeId>(xs.Len())
     for i in range xs.Len() { kept[i] = xs[i] }
     id = ListId(I32(t.lists.Len()))
     t.lists.Push(kept)
@@ -334,7 +331,7 @@ fn (t mut Table&) List(xs Array<TypeId>&) ListId {
 fn (t mut Table&) List1(a TypeId) ListId { return t.List(TypeId[a]) }
 
 # the types of a list
-fn (t Table&) Items(l ListId) Array<TypeId>&t { return t.lists[I64(l)] }
+fn (t Table&) Items(l ListId) Array<TypeId>& { return t.lists[I64(l)] }
 
 # a declared type, or an instance: its arguments held plain, so an instance never depends on scopes (G16a)
 fn (t mut Table&) Named(d DeclId, args ListId) TypeId {
@@ -369,7 +366,7 @@ fn (t mut Table&) Func(params ListId, result TypeId, errors ListId, scopes Scope
 # a written function type's parameter names, interned (0 for none: a type no source wrote, or one with no parameters)
 fn (t mut Table&) ParamNames(ns Array<I64>&) I64 {
     if ns.Len() == 0 { return 0 }
-    key mut Array<I64>&t = Array<I64>(ns.Len())
+    key mut Array<I64>& = Array<I64>(ns.Len())
     for i in range ns.Len() { key[i] = ns[i] }
     id := try t.nameKeys.Get(key) catch default -1
     if id >= 0 { return id }
@@ -383,7 +380,7 @@ fn (t mut Table&) ParamNames(ns Array<I64>&) I64 {
 fn (t Table&) NamesIdOf(f TypeId) I64 { return t.at(f).E if t.KindOf(f) == Kind.Func else 0 }
 
 # a function type's parameters' names as written (NameIds), none where no source wrote it
-fn (t Table&) NamesOf(f TypeId) Array<I64>&t { return t.nameLists[t.at(f).E] if t.KindOf(f) == Kind.Func else t.nameLists[0] }
+fn (t Table&) NamesOf(f TypeId) Array<I64>& { return t.nameLists[t.at(f).E] if t.KindOf(f) == Kind.Func else t.nameLists[0] }
 
 # the same function type carrying names - the names a declaration, a lambda or a written type gives its parameters
 fn (t mut Table&) WithNames(f TypeId, names I64) TypeId {
@@ -441,7 +438,7 @@ fn (t mut Table&) AnonEnum(names Array<source.NameId>&, cases ListId, fields Arr
     k := key.ToString()
     s := try t.shapeKeys.Get(k) catch default -1
     if s < 0 {
-        kept mut Array<source.NameId>&t = Array<source.NameId>(names.Len())
+        kept mut Array<source.NameId>& = Array<source.NameId>(names.Len())
         for i in range names.Len() { kept[i] = names[i] }
         s = t.shapes.Len()
         t.shapes.Push(kept)
@@ -450,7 +447,7 @@ fn (t mut Table&) AnonEnum(names Array<source.NameId>&, cases ListId, fields Arr
         t.shapeKeys.Put($k, s)
     }
     if fields.Len() > 0 and t.shapeFields[s].Len() == 0 {
-        fs mut Array<source.NameId>&t = Array<source.NameId>(fields.Len())
+        fs mut Array<source.NameId>& = Array<source.NameId>(fields.Len())
         for i in range fields.Len() { fs[i] = fields[i] }
         t.shapeFields[s] = fs
     }
@@ -532,12 +529,12 @@ fn (t Table&) ConstType(id TypeId) TypeId { return TypeId(I32(t.A(id))) }
 fn (t Table&) ConstValue(id TypeId) I64 { return t.B(id) }
 
 # a constant pattern's key
-fn (t Table&) Pattern(id TypeId) String&t { return t.patterns[t.A(id)] }
+fn (t Table&) Pattern(id TypeId) String& { return t.patterns[t.A(id)] }
 
 # an anonymous enum's case names and payloads
-fn (t Table&) ShapeNames(id TypeId) Array<source.NameId>&t { return t.shapes[t.A(id)] }
+fn (t Table&) ShapeNames(id TypeId) Array<source.NameId>& { return t.shapes[t.A(id)] }
 fn (t Table&) ShapeCases(id TypeId) ListId { return t.shapeCases[t.A(id)] }
-fn (t Table&) ShapeFields(id TypeId) Array<source.NameId>&t { return t.shapeFields[t.A(id)] }
+fn (t Table&) ShapeFields(id TypeId) Array<source.NameId>& { return t.shapeFields[t.A(id)] }
 
 # G17: how deep a type nests - a number 1, Array<List<I64>> 3
 fn (t Table&) Depth(id TypeId) I64 { return I64(t.depthOf(id)) }
@@ -629,7 +626,7 @@ fn (t mut Table&) Scopes(role I64, params Array<I64>&, results Array<I64>&) Scop
     for e in params { plain = plain and e == OwnScope }
     for e in results { plain = plain and e == OwnScope }
     if plain { return ScopesId(0) }
-    key mut Array<I64>&t = Array<I64>(2 + params.Len() + results.Len())
+    key mut Array<I64>& = Array<I64>(2 + params.Len() + results.Len())
     key[0], key[1] = role, params.Len()
     for i in range params.Len() { key[2 + i] = params[i] }
     for i in range results.Len() { key[2 + params.Len() + i] = results[i] }
@@ -951,7 +948,7 @@ fn (t mut Table&) ScopeVarsOf(f TypeId) Array<I64> {
     rs := t.Results(f)
     for k in range rs.Len() {
         e := t.ResultFrom(f, k)
-        if (e == OwnScope or e == FromTypeVar or e == KeptPerm) and (t.HoldsRefs(rs[k]) or t.runTimeArray(rs[k])) { built = true }
+        if (e == OwnScope or e == FromTypeVar) and (t.HoldsRefs(rs[k]) or t.runTimeArray(rs[k])) { built = true }
     }
     if built { out.Push(ResultVar) }
     return out.ToArray()
@@ -995,7 +992,7 @@ fn (t mut Table&) SetStructBody(id TypeId, fields ListId, destructs Bool) {
 
 # an enum's body: its cases' names, and each case's payload, a Record (0 for none)
 fn (t mut Table&) SetEnumBody(id TypeId, names Array<source.NameId>&, payloads ListId) {
-    kept mut Array<source.NameId>&t = Array<source.NameId>(names.Len())
+    kept mut Array<source.NameId>& = Array<source.NameId>(names.Len())
     for i in range names.Len() { kept[i] = names[i] }
     t.caseNames.Put(id, kept)
     t.bodies.Put(id, body(ListId(0), payloads, UnknownT, false, true))
@@ -1012,7 +1009,7 @@ fn (t Table&) Base(id TypeId) TypeId { return t.bodyOf(id).Base }
 fn (t Table&) Destructs(id TypeId) Bool { return t.bodyOf(id).Destructs }
 
 # an enum's case names, in order
-fn (t Table&) CaseNames(id TypeId) Array<source.NameId>&t { return try t.caseNames.Get(id) catch default Array<source.NameId>(0) }
+fn (t Table&) CaseNames(id TypeId) Array<source.NameId>& { return try t.caseNames.Get(id) catch default Array<source.NameId>(0) }
 
 # whether an enum carries a payload in any case (T17): one that does not is its bare ordinal
 fn (t Table&) HasPayload(cases ListId) Bool {
@@ -1240,7 +1237,7 @@ fn (t Table&) ViaMemory(id TypeId) Bool { return t.ByAddress(id) and t.Size(id) 
 # ---- spellings ----
 
 # the LLVM type of a value: a declared struct by its name (%"CANON"), an anonymous one spelled out
-fn (t mut Table&) Llvm(id TypeId) String&t {
+fn (t mut Table&) Llvm(id TypeId) String& {
     i := I64(id)
     if t.llvm[i] != "" { return t.llvm[i] }
     t.llvm[i] = t.spellLlvm(id)

@@ -487,21 +487,21 @@ type Passes struct() {
 }
 
 fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&, prog mut build.Program&
-    d mut diag.Diagnostics&cfg) ? build.Failed {
+    d mut diag.Diagnostics&) ? build.Failed {
     tests := kind == build.Kind.Tests
     build.Phase("start")
-    l mut load.Loader&cfg = try p.load(root, cfg, d)
+    l mut load.Loader& = try p.load(root, cfg, d)
     build.Phase("load")
-    c mut typecheck.Checker&cfg = interp.Analyze(l, tests)
+    c mut typecheck.Checker& = interp.Analyze(l, tests)
     build.Phase("check")
     if kind == build.Kind.Program and not cfg.Library { c.CheckMain() }
-    asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
+    asserts mut Map<pair.Pair<I64, I64>, Bool>& = Map<pair.Pair<I64, I64>, Bool>()
     # T29d, D13c, K2: on a program that checked cleanly, the values evaluation decides - a literal's constructor, a
     # zero value, a global baked (one that aborts the program an error)
     clean := d.Errors() == 0
     if clean { interp.DecideValues(c) }
     interp.DecideAsserts(c, asserts)
-    baked mut Map<I64, eval.Image>&cfg = Map<I64, eval.Image>()
+    baked mut Map<I64, eval.Image>& = Map<I64, eval.Image>()
     if clean { baked = interp.Bake(c) }
     build.Phase("evaluate")
     if d.Errors() > 0 {
@@ -516,7 +516,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         for g in c.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) ": it does not check " $g.What " yet") }
         error build.Failed.Unbuilt
     }
-    lw mut lower.Lowerer&cfg = lower.Lowerer(c.P, c.Bodies)
+    lw mut lower.Lowerer& = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
     lw.ViewDump = (try os.Env("OLANG_VIEWDUMP") catch default "") != ""
     # O8d: early freeing is decided for a program at its root - a module compiled on its own frees nothing early (B3i)
@@ -527,18 +527,18 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     if cfg.Memory and d.Errors() == 0 { try io.Print(fr.Report()) catch io.Error { } }
     if (try os.Env("OLANG_FREEDUMP") catch default "") != "" { try io.PrintErr(fr.Dump()) catch io.Error { } }
     if d.Errors() > 0 { error build.Failed.Reported }
-    e mut emit.Emitter&cfg = emitter(c, lw, d, cfg, kind, baked)
+    e mut emit.Emitter& = emitter(c, lw, d, cfg, kind, baked)
     # B3i: a module whose object a build with the same inputs made already is not lowered or written again
-    keys Array<String&>&cfg = Array<String&>(0)
+    keys Array<String&>& = Array<String&>(0)
     if kind != build.Kind.Module {
         keys = moduleKeys(l, cfg, tests)
         e.Reuse = reusable(l, cfg, keys)
     }
-    objs := e.Objects&prog()
+    objs := e.Objects()
     if e.Redo {
         # a reused module's objects were cut otherwise than this program's now are: every module written afresh
         e = emitter(c, lw, d, cfg, kind, baked)
-        objs = e.Objects&prog()
+        objs = e.Objects()
     }
     build.Phase("lower+emit")
     if e.Fuzz != "" {
@@ -569,20 +569,20 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             r := e.Reuse.Ref(o.From)
             base := recordPath(cfg, l.Mods[r.Module].Identity, keys[r.Module])
             for k, id in r.Parts {
-                pir String&prog = try os.ReadFile($base ".p" $k ".ll") catch os.Error {
+                pir String& = try os.ReadFile($base ".p" $k ".ll") catch os.Error {
                     build.Unbuildable($"its record " $base " was lost while it was read")
                     error build.Failed.Unbuilt
                 }
                 if pir.Contains("@__olang_dyncall") { dyncall = true }
                 if e.Library { pir = libraryIr(pir) }
-                u mut build.Unit&prog = build.Unit($id, build.UnitKind.Locations if r.Locs[k] else build.UnitKind.Module, pir)
+                u mut build.Unit& = build.Unit($id, build.UnitKind.Locations if r.Locs[k] else build.UnitKind.Module, pir)
                 u.Hash = $r.Hashes[k]
                 prog.Units.Push(u)
             }
             hashes.Push("")
             continue
         }
-        ir String&prog = o.Ir
+        ir String& = o.Ir
         if ir.Contains("@__olang_dyncall") { dyncall = true }
         if e.Library { ir = libraryIr(ir) }
         holds := match o.Kind {
@@ -592,7 +592,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             case emit.ObjectKind.Instances: build.UnitKind.Instances
             case emit.ObjectKind.Locations: build.UnitKind.Locations
         }
-        u mut build.Unit&prog = build.Unit($o.Identity, holds, ir)
+        u mut build.Unit& = build.Unit($o.Identity, holds, ir)
         if kind != build.Kind.Module and (o.Kind == emit.ObjectKind.Module or o.Kind == emit.ObjectKind.Locations) {
             u.Hash = build.IrHash(ir)
         }
@@ -607,7 +607,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             build.Unbuildable($"its C import's code " $m.CUnit " was lost while it was read")
             error build.Failed.Unbuilt
         }
-        cir := cIr&prog(m.CUnit, ctext, cfg)
+        cir := cIr(m.CUnit, ctext, cfg)
         if cir == "" {
             build.Unbuildable($"clang cannot compile its C import's code " $m.CUnit)
             error build.Failed.Unbuilt
@@ -639,9 +639,9 @@ fn libraryIr(ir String&) String { return ir.Replace("thread_local(initialexec)",
 
 # the emission of a checked and placed program, for this build's modes and target
 fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnostics&, cfg mut build.Config&
-    kind build.Kind, baked mut Map<I64, eval.Image>&) mut emit.Emitter&cfg {
+    kind build.Kind, baked mut Map<I64, eval.Image>&) mut emit.Emitter& {
     tests := kind == build.Kind.Tests
-    e mut emit.Emitter&cfg = emit.Emitter(c.P, lw, d, c.P.T)
+    e mut emit.Emitter& = emit.Emitter(c.P, lw, d, c.P.T)
     e.Tests = tests
     e.Baked = baked              # K2: the immutable globals the evaluator gives, written as their values
     e.Attrs = $("sanitize_thread " if cfg.Race else "") $cfg.FnAttrs()
@@ -682,16 +682,16 @@ fn buildInputs(cfg build.Config&, tests Bool) String {
     info := try os.Stat(exe) catch os.Error { return "" }
     cwd := try os.Cwd() catch default ""
     t := cfg.Target
-    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests $(" prof" if cfg.Profile else "") $(" fuzz" if cfg.Fuzz != "" else "") $(" infer" if source.InferScopes else "") "\n" $
+    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests $(" prof" if cfg.Profile else "") $(" fuzz" if cfg.Fuzz != "" else "") "\n" $
             t.Triple "\n" $t.Arch "\n" $t.Cpu "\n" $t.Attrs "\n" $cfg.Consts.Fingerprint() "\n" $cwd "\n" $load.StdDir())
 }
 
 # each module's key, "" for the root's (never reused): the hash of buildInputs, then of its own text, identity and
 # paths and those of every module its imports reach, in their order, and the prelude's
-fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<String&>&cfg {
-    mods Vec<mut load.Module&>&l = l.Mods
+fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<String&>& {
+    mods Vec<mut load.Module&>& = l.Mods
     n := mods.Len()
-    keys mut Array<String&>&cfg = Array<String&>(n, "")     # "" for none
+    keys mut Array<String&>& = Array<String&>(n, "")     # "" for none
     # under -debug every object's debug information names the program's compile unit, which is the root's file (B2e):
     # there a module's object is the root's program's as well as its own
     base := buildInputs(cfg, tests)
@@ -818,7 +818,7 @@ fn putFile(path String&, text String&, pid I32) Bool {
 fn checkReuse(e mut emit.Emitter&, prog mut build.Program&, c mut typecheck.Checker&, lw mut lower.Lowerer&
     d mut diag.Diagnostics&, cfg mut build.Config&, kind build.Kind, baked mut Map<I64, eval.Image>&) {
     if e.ReusedAt.Len() == 0 { return }
-    f mut emit.Emitter&cfg = emitter(c, lw, d, cfg, kind, baked)
+    f mut emit.Emitter& = emitter(c, lw, d, cfg, kind, baked)
     fresh := f.Objects()
     bad := fresh.Len() != prog.Units.Len()
     for i in range fresh.Len() {
@@ -836,7 +836,7 @@ fn checkReuse(e mut emit.Emitter&, prog mut build.Program&, c mut typecheck.Chec
     try io.PrintErr($"olang: reuse check: " $e.ReusedAt.Len() " modules reused, every object the same\n") catch io.Error { }
 }
 
-# what the rework's inference found (OLANG_SCOPES=infer), where OLANG_SCOPESTATS asks: to the standard error, or with
+# what the scope inference found, where OLANG_SCOPESTATS asks: to the standard error, or with
 # a directory named ("/..."), into a file of its own there headed by the command line - for measuring over many builds
 fn inferStats(sc mut scope.Scoper&) {
     to := try os.Env("OLANG_SCOPESTATS") catch default ""
@@ -858,31 +858,31 @@ fn inferStats(sc mut scope.Scoper&) {
 
 # where lowering puts things: the scope pass's plans (M6), its errors reported - section 8 holds the program, each
 # temporary built where the pass places it and each local where it homes it
-fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, destroys Bool = true) mut free.Free&cfg ? build.Failed {
-    sc mut scope.Scoper&cfg = scope.Scoper(c.P, c.Bodies)
+fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, destroys Bool = true) mut free.Free& ? build.Failed {
+    sc mut scope.Scoper& = scope.Scoper(c.P, c.Bodies)
     # its notes name types, and the instantiation an error is in, as the checker spells them (B11, G16b)
     sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
     sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
-    sc.Trace = source.InferScopes and (try os.Env("OLANG_INFERDUMP") catch default "") != ""
+    sc.Trace = (try os.Env("OLANG_INFERDUMP") catch default "") != ""
     sc.Run()
     # a construct section 8 does not judge yet: never built as though it were judged, as the checker's gaps are not
     if sc.Gaps.Len() > 0 {
         for g in sc.Gaps { build.Unbuildable($c.P.L.Diags.Locate(g.File, I64(g.Sp.Start)) ": it does not judge " $g.What " yet") }
         error build.Failed.Unbuilt
     }
-    if source.InferScopes { inferStats(sc) }
+    inferStats(sc)
     for t in sc.TraceLog { try io.PrintErr($t "\n") catch io.Error { } }
     # and early freeing's decisions written into its plans (O8d), for a program at its root
-    fr mut free.Free&cfg = free.Free(c.P, c.Bodies, sc)
+    fr mut free.Free& = free.Free(c.P, c.Bodies, sc)
     fr.Debug = (try os.Env("OLANG_FREEDUMP") catch default "") != ""
     fr.Decide(sc.Plans, root, destroys)
     return fr
 }
 
-fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg) mut load.Loader&cfg ? build.Failed {
-    f mut fetch.Fetcher&cfg = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, false)
-    nm mut source.Names&cfg = source.Names()
-    l mut load.Loader&cfg = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
+fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnostics&) mut load.Loader& ? build.Failed {
+    f mut fetch.Fetcher& = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, false)
+    nm mut source.Names& = source.Names()
+    l mut load.Loader& = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
     l.Clang = $cfg.Clang
     for x in cfg.CFlags() { l.CFlags.Push($x) }
     l.Load(root)
@@ -895,10 +895,10 @@ fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnost
 # S18c) - and its main run by the evaluator, its globals set first, the program given its file and ARGS as its command
 # line; the status main ends with
 fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.Config&
-    d mut diag.Diagnostics&cfg) I32 ? build.Failed {
-    l mut load.Loader&cfg = try p.load(root, cfg, d)
-    c mut typecheck.Checker&cfg = interp.Analyze(l, false)
-    asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
+    d mut diag.Diagnostics&) I32 ? build.Failed {
+    l mut load.Loader& = try p.load(root, cfg, d)
+    c mut typecheck.Checker& = interp.Analyze(l, false)
+    asserts mut Map<pair.Pair<I64, I64>, Bool>& = Map<pair.Pair<I64, I64>, Bool>()
     # T29d, D13c, K2: what the build decides while compiling is decided here too - its errors the same
     clean := d.Errors() == 0
     if clean { interp.DecideValues(c) }
@@ -917,7 +917,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
         if why != "" { d.Error(diag.Where.Nowhere, msgs.InterpLink(m.CUnit, why)) }
     }
     if d.Errors() > 0 { error build.Failed.Reported }
-    x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
+    x mut interp.Exec& = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
     x.Lw.AssertsTrue = asserts
     x.Lw.Cleanups = true    # a stop runs the deferred code of the blocks it leaves (B3e)
     # where things live is the scope pass's (M6), its errors reported as a build reports them: what a build refuses is
@@ -1026,21 +1026,21 @@ fn cLibrary(unit String&, cfg build.Config&) String {
 # explain FILE NAME (B11b): the program FILE is the root of checked as for a build - its values and asserts decided,
 # its globals baked, section 8 run - and the item NAME of FILE as the compiler sees it; a name FILE does not declare is
 # an error
-fn (p mut Passes&) Explain(root String&, name String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg) String ? build.Failed {
-    l mut load.Loader&cfg = try p.load(root, cfg, d)
-    c mut typecheck.Checker&cfg = interp.Analyze(l, false)
-    asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
+fn (p mut Passes&) Explain(root String&, name String&, cfg mut build.Config&, d mut diag.Diagnostics&) String ? build.Failed {
+    l mut load.Loader& = try p.load(root, cfg, d)
+    c mut typecheck.Checker& = interp.Analyze(l, false)
+    asserts mut Map<pair.Pair<I64, I64>, Bool>& = Map<pair.Pair<I64, I64>, Bool>()
     clean := d.Errors() == 0
     if clean { interp.DecideValues(c) }
     interp.DecideAsserts(c, asserts)
     if clean { interp.Bake(c) }
     if d.Errors() > 0 { error build.Failed.Reported }
-    sc mut scope.Scoper&cfg = scope.Scoper(c.P, c.Bodies)
+    sc mut scope.Scoper& = scope.Scoper(c.P, c.Bodies)
     sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
     sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
     sc.Run()
     if d.Errors() > 0 { error build.Failed.Reported }
-    x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Compile)
+    x mut interp.Exec& = interp.Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     text := try explain.Item(c, sc, x, l.Root, name) catch explain.Missing {
         d.Error(diag.Where.Nowhere, msgs.ExplainNoItem(name, root))
@@ -1122,7 +1122,7 @@ test "the options are recorded wherever they stand, and passed on as written" {
     assert cl.Mode == Test and cl.Files.Len() == 2 and cl.Files[0] == "a.olang" and cl.Files[1] == "b.olang"
     assert c.Race and c.Debug and not c.San and not c.Update and cl.Spec == "x86-64"
     assert c.Consts.Raw("N") == "3"
-    p Vec<String&>&cl = cl.Passed
+    p Vec<String&>& = cl.Passed
     assert p.Len() == 6 and p[0] == "-race" and p[1] == "-define" and p[2] == "N=3" and p[3] == "-target"
     assert p[4] == "x86-64" and p[5] == "-debug"
     c2 := build.Config()
@@ -1178,7 +1178,7 @@ explainedSrc String& = ("type MathError error { Zero }\n"
                      "type Sh enum {\n    Whole N\n    Parts(a I64, b I64)\n    None\n}\n"
                      "Answer I64 = 6 * 7\n"
                      "fn pct(part I64, whole I64) [whole > 0, part >= 0] I64 ? { return part * 100 / whole }\n"
-                     "fn link(a mut N&, b N&) [b outlives a] { }\n"
+                     "fn link(a mut N&, b N&) { a.next = b }\n"
                      "fn main() ? {\n"
                      "    nn := N(pct(1, 4)!, null)\n"
                      "    link(nn, nn)\n"
@@ -1219,8 +1219,8 @@ test "doc, lsp and mcp: their files, names and options (B14-B16)" {
 test "explain FILE NAME prints an item as the compiler sees it: inferred errors, obligations, instances, members, a baked value (B11b)" {
     assert explained("divmod") == ("fn divmod(a I64, b I64) I64, I64 ? MathError.Zero   # its error set inferred\n" $
             "    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
-    assert explained("wrap") == ("fn wrap(n N&) H\n    [n outlives return]\n" $
-            "    # not a value: its scope obligations, above, relate its arguments' scopes, which a call through a function value cannot check (T22a) - call it directly\n" $
+    assert explained("wrap") == ("fn wrap(n N&) H\n    # scopes: n outlives return\n" $
+            "    # not a value: its scope obligations (# scopes, above) relate its arguments' scopes, which a call through a function value cannot check (T22a) - call it directly\n" $
             "    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
     # B11b, G18a: a generic's needs and why it is no value; each instance's effects
     assert explained("big") == ("fn big<T>(a T, b T) T\n    # T needs: Less\n" $
@@ -1234,11 +1234,11 @@ test "explain FILE NAME prints an item as the compiler sees it: inferred errors,
     assert explained("MathError") == "type MathError error\n    Zero\n"
     assert explained("Answer") == "Answer I64 = 42\n"
     assert explained("Sh") == "type Sh enum\n    Whole N\n    Parts(a I64, b I64)\n    None\n"
-    # D17: a contract's conditions as written, its results named; a scope relation it writes among the obligations
+    # D17: a contract's conditions as written; a scope relation the body asks among the obligations, inferred (O10b)
     assert explained("pct") == ("fn pct(part I64, whole I64) I64 ? ArgumentError   # its error set inferred\n    [whole > 0]\n" $
             "    [part >= 0]\n    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
-    assert explained("link") == ("fn link(a mut N&, b N&)\n    [b outlives a]\n" $
-            "    # not a value: its scope obligations, above, relate its arguments' scopes, which a call through a function value cannot check (T22a) - call it directly\n" $
+    assert explained("link") == ("fn link(a mut N&, b N&)\n    # scopes: b outlives a\n" $
+            "    # not a value: its scope obligations (# scopes, above) relate its arguments' scopes, which a call through a function value cannot check (T22a) - call it directly\n" $
             "    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
     assert explained("nope").Contains("error[B11b]: 'nope' is no top-level item of ")
 }

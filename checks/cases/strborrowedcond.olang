@@ -21,7 +21,7 @@ type Bag struct(head mut Node&, name String&, k I64) {
     name
     k
 }
-fn (b Bag&) Str() String&b {
+fn (b Bag&) Str() String& {
     return b.name if b.k == 0 else "lit"
 }
 fn main() ? {

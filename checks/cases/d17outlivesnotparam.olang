@@ -5,7 +5,7 @@ type Node struct(v I64) {
     next Node?& = null
 }
 
-fn link(a mut Node&, b Node&) [b outlives q] { }
+fn link(a mut Node&, b Node&) { }
 
 fn main() {
     n := Node(1)

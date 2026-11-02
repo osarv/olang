@@ -11,7 +11,7 @@ type Bag struct(head mut Node&) {
     head
 }
 type Wr struct(h mut Node&) {
-    hh mut Node&h = h
+    hh mut Node& = h
 }
 fn (b Bag&) Str() String {
     w := Wr(b.head)

@@ -81,10 +81,10 @@ fn (m mut Map<K, V>&) add(b I64, key K, value V) {
 # the room past them never read before an add writes it, and the old arrays retired
 fn (m mut Map<K, V>&) room() {
     r I64 = 8 if m.ents.Len() < 4 else m.ents.Len() * 2
-    oe Array<MapEntry<K, V>>&m = m.ents
+    oe Array<MapEntry<K, V>>& = m.ents
     m.ents = oe[:m.n].grown(r)
     oe.retire()
-    on Array<I64>&m = m.next
+    on Array<I64>& = m.next
     m.next = on[:m.n].grown(r)
     on.retire()
 }
@@ -133,10 +133,10 @@ fn (m Map<K, V>&) Get(key K) V ? MapError { return m.ents[try m.slotOf(key)].Val
 
 # the value for key where the map holds it, read with no copy made (Get gives one) - failing with Missing when there is
 # none. Good until the map grows (a Put of a new key may move the values) or loses the key
-fn (m Map<K, V>&) Ref(key K) V&m ? MapError { return m.ents[try m.slotOf(key)].Value }
+fn (m Map<K, V>&) Ref(key K) V& ? MapError { return m.ents[try m.slotOf(key)].Value }
 
 # ...writable, to change in place - "m.RefMut(k).Push(x)" for a Map of Vecs
-fn (m mut Map<K, V>&) RefMut(key K) mut V&m ? MapError { return m.ents[try m.slotOf(key)].Value }
+fn (m mut Map<K, V>&) RefMut(key K) mut V& ? MapError { return m.ents[try m.slotOf(key)].Value }
 
 # whether key has a value - what "key in m" asks (E29)
 fn (m Map<K, V>&) Has(key K) Bool {
@@ -247,7 +247,7 @@ fn typeWritten<T>(a Array<T>&) String {
 # again. The entry just given may be removed while the walk goes on; any other change to the map during a walk leaves
 # which entries the rest of it gives unspecified, though never anything but entries of the map
 type MapIter<K, V> struct(of Map<K, V>&) {
-    m Map<K, V>&of = of
+    m Map<K, V>& = of
     i I64 = 0
 }
 
@@ -280,7 +280,7 @@ fn (m Map<K, V>&) Values() MapValueIter<K, V> { return MapValueIter<K, V>(m) }
 # Each holds the walk itself, as MapIter does: what it gives is read through a field of its own, which is where the
 # map's entries live (O23a), and "for k in m.Keys() { l.Push(k) }" keeps a key as "for e in m" keeps an entry's
 type MapKeyIter<K, V> struct(of Map<K, V>&) {
-    m Map<K, V>&of = of
+    m Map<K, V>& = of
     i I64 = 0
 }
 
@@ -294,7 +294,7 @@ fn (it mut MapKeyIter<K, V>&) Next() K ? Exhausted {
 }
 
 type MapValueIter<K, V> struct(of Map<K, V>&) {
-    m Map<K, V>&of = of
+    m Map<K, V>& = of
     i I64 = 0
 }
 

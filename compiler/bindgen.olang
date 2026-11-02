@@ -126,7 +126,7 @@ type gen struct(header String&) {
 
 # ---- reading clang's tree ----
 
-fn member(j json.Json&, key String&) json.Json?&j {
+fn member(j json.Json&, key String&) json.Json?& {
     match j {
         case json.Json.Obj(o) {
             for i in range o.Len() {
@@ -266,8 +266,8 @@ fn (g mut gen&) read(root json.Json&, probe String&) {
             continue
         }
         if kind == "FunctionDecl" and g.wanted(where) and not flag(n, "isImplicit") {
-            ps mut Vec<String&>&g = Vec<String&>()
-            pts mut Vec<String&>&g = Vec<String&>()
+            ps mut Vec<String&>& = Vec<String&>()
+            pts mut Vec<String&>& = Vec<String&>()
             for p in inner(n) {
                 if text(p, "kind") == "ParmVarDecl" {
                     ps.Push(text(p, "name"))
@@ -277,7 +277,7 @@ fn (g mut gen&) read(root json.Json&, probe String&) {
             static := text(n, "storageClass") == "static" or flag(n, "inline")
             if where == 1 and static { g.ownFile.Put($name, 0) }
             mangled := text(n, "mangledName")
-            sym mut String&g = $("" if mangled == "" or mangled == name else mangled)
+            sym mut String& = $("" if mangled == "" or mangled == name else mangled)
             g.funcs.Push(cFunc($name, typeOf(n), ps.ToArray(), pts.ToArray(), static, sym))
             continue
         }
@@ -958,8 +958,8 @@ fn (g gen&) wantRecord(i I64) Bool {
 # ---- macros (X19) ----
 
 # C's preprocessing tokens of text: names, numbers, character and text literals, punctuators
-fn cLex(t String&) Vec<String&>&t {
-    out mut Vec<String&>&t = Vec<String&>()
+fn cLex(t String&) Vec<String&>& {
+    out mut Vec<String&>& = Vec<String&>()
     i I64 = 0
     for i < t.Len() {
         c := t[i]
@@ -1042,7 +1042,7 @@ fn (g mut gen&) readMacros(out String&, probe String&, own String&, deps mut Vec
         if e == 0 { continue }
         nm := rest[:e]
         isFn := e < rest.Len() and rest[e] == '('
-        ps mut Vec<String&>&g = Vec<String&>()
+        ps mut Vec<String&>& = Vec<String&>()
         variadic := false
         body := rest[e:]
         if isFn {
@@ -1058,7 +1058,7 @@ fn (g mut gen&) readMacros(out String&, probe String&, own String&, deps mut Vec
             }
             body = rest[close + 1:]
         }
-        m mut cMacro&g = cMacro($nm, isFn, ps.ToArray(), cLex(body).ToArray(), file == own or own == "")
+        m mut cMacro& = cMacro($nm, isFn, ps.ToArray(), cLex(body).ToArray(), file == own or own == "")
         m.Variadic = variadic
         k := try g.macroAt.Get(nm) catch default -1
         if k >= 0 {

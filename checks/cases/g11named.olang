@@ -3,7 +3,7 @@
 # variable would name this function's scope, inside generic code that cannot see it
 type Box<T> struct(v T) { v }
 fn f(p Array<I32>&) I32 {
-    b Box<Array<I32>&p>& = Box<Array<I32>&p>(p)
+    b Box<Array<I32>&>& = Box<Array<I32>&>(p)
     return 0
 }
 test "never runs" { }

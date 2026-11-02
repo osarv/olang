@@ -89,13 +89,13 @@ fn compare(golden Vec<String&>&, got Vec<String&>&, allowed Array<String&>&) out
 }
 
 # the first tab-separated field of a row
-fn key(row String&) String&row { return field(row, 0) }
+fn key(row String&) String& { return field(row, 0) }
 
 # the second
-fn rest(row String&) String&row { return field(row, 1) }
+fn rest(row String&) String& { return field(row, 1) }
 
 # the n-th tab-separated field of a row, empty past its last
-fn field(row String&, n I64) String&row {
+fn field(row String&, n I64) String& {
     at I64 = 0
     for _ in range n {
         tab := try row[at:].FindByte('\t') catch default -1

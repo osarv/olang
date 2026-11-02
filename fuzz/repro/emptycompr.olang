@@ -14,10 +14,10 @@ import "std/io"
 fn cc(n I32) String {
     m := Map<I8, U32>()
     a Array<U16> = U16[1 for _ in m.Values()]
-    ra Array<U16>&a = a
+    ra Array<U16>& = a
     l := Vec<U16>()
     e Array<U16> = U16[3 for _ in l]
-    re Array<U16>&e = e
+    re Array<U16>& = e
     return $ra " " $(ra.Len() == 0) " | " $re " " $(re.Len() == 0)
 }
 K String = cc(3)

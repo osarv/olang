@@ -17,7 +17,7 @@ fn depth(f Value&) I64 {
     match f {
         case Value.Fn(c) {
             other := Env(null)
-            local := Env&c(other)
+            local := Env(other)
             local.n = 1
             return local.n
         }

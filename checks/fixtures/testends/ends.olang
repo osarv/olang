@@ -59,7 +59,7 @@ type bag struct(n I64) {
     n
 }
 fn (b bag&) Str() String {
-    r res&return = res(1)
+    r res& = res(1)
     q := res(2)
     if b.n == 7 { unreachable }
     return "b" $r.k $q.k

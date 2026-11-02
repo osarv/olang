@@ -81,7 +81,7 @@ fn (g mut goldenRun&) file(path String&) I64 {
     }
     real := "checks/cases/" $path
     if path.StartsWith("$ROOT/") { real = $(path[6:]) }
-    text := try os.ReadFile&g(real) catch default ""
+    text := try os.ReadFile(real) catch default ""
     g.paths.Push($path)
     g.texts.Push(text)
     return g.d.AddFile(path, text)

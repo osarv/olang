@@ -3,7 +3,7 @@
 # ('y := mk&x(n)', E25)
 import "std/io"
 type H struct(x String&, n I64) {
-    y := mk&x(n)
+    y := mk(n)
 }
 fn mk(n I64) String& { return $n "-new-text-in-x's-scope" }
 fn main() ? {

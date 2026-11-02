@@ -9,13 +9,13 @@
 type Store struct() {
     keys mut Vec<String&>& = Vec<String&>()
 }
-fn put(s mut Store&, k String&s, v String&s) {
+fn put(s mut Store&, k String&, v String&) {
     s.keys.Push(k)
     s.keys.Push(v)
 }
 fn mk(n I64) String& { return $n "x" }
 fn load(n I64) Store& {
-    st mut Store&return = Store()
+    st mut Store& = Store()
     text := mk(n)
     put(st, text[:1], text[1:])
     return st

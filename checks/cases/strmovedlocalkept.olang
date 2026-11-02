@@ -20,7 +20,7 @@ fn churn(d I64) I64 {
     if d == 0 { return 0 }
     return churn(d - 1) + a[3] - d
 }
-fn h(n mut Node&) mut Node&n {
+fn h(n mut Node&) mut Node& {
     p := P2(n)
     n.pp = p
     return p.n

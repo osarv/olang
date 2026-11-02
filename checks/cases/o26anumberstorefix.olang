@@ -13,7 +13,7 @@ fn sneak(t String&, s mut S&) I64 {
 fn scan(n I64) S {
     s := S()
     for i in range n {
-        line := mk&s(i)
+        line := mk(i)
         v := sneak(line, s)
         if v > s.best { s.best = v }
     }

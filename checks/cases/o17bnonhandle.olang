@@ -9,7 +9,7 @@ type Box struct() {
     c mut Cell& = Cell()
     pad I64 = 0
 }
-fn (a mut Box&) BitAnd(b mut Box&) mut Box&b { return b }
+fn (a mut Box&) BitAnd(b mut Box&) mut Box& { return b }
 fn (h mut Box&) stash() {
     h.c.kept = h.c.kept! & h
 }

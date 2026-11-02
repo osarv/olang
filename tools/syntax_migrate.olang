@@ -657,7 +657,7 @@ fn (g mut migration&) typeLists() {
 # ---- applying ----
 
 fn (g migration&) applied() String {
-    reps Vec<String&>&g = g.reps
+    reps Vec<String&>& = g.reps
     sorted := g.edits.ToArray()
     sorted.Sort(fn(a Edit, b Edit) Bool {
         if a.start != b.start { return a.start < b.start }

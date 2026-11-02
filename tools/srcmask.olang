@@ -82,24 +82,24 @@ fn CloseOf(text String&, mask String&, start I64) I64 {
 # ---- text, as Python's str methods treat it ----
 
 # t without the whitespace at its start
-fn StripStart(t String&) String&t {
+fn StripStart(t String&) String& {
     i I64 = 0
     for i < t.Len() and IsPySpace(t[i]) { i++ }
     return t[i:]
 }
 
 # t without the whitespace at its end
-fn StripEnd(t String&) String&t {
+fn StripEnd(t String&) String& {
     e := t.Len()
     for e > 0 and IsPySpace(t[e - 1]) { e-- }
     return t[:e]
 }
 
 # t without the whitespace at either end
-fn Strip(t String&) String&t { return StripEnd(StripStart(t)) }
+fn Strip(t String&) String& { return StripEnd(StripStart(t)) }
 
 # the first n characters of t - code points, not bytes - or all of t when it is shorter
-fn Prefix(t String&, n I64) String&t {
+fn Prefix(t String&, n I64) String& {
     count I64 = 0
     for i in range t.Len() {
         if U8(t[i]) < 128 or U8(t[i]) >= 192 {

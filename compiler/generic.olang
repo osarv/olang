@@ -206,7 +206,7 @@ fn (p Program&) file(mi I64) I64 { return p.L.Mods[mi].File }
 
 fn (p mut Program&) at(mi I64, sp source.Span) diag.Where { return diag.Where.Span(p.file(mi), I64(sp.Start), I64(sp.End)) }
 
-fn (p mut Program&) text(n source.NameId) String&p { return p.L.Names.Text(n) }
+fn (p mut Program&) text(n source.NameId) String& { return p.L.Names.Text(n) }
 
 # ---- declarations ----
 
@@ -240,7 +240,7 @@ fn (p mut Program&) DeclFor(mi I64, ei I64) types.DeclId {
     return d
 }
 
-fn (p Program&) typeDecl(d types.DeclId) ast.TypeDecl?&p { return p.R.Tables[p.declMi[I64(d)]].Entries[p.declEi[I64(d)]].Decl }
+fn (p Program&) typeDecl(d types.DeclId) ast.TypeDecl?& { return p.R.Tables[p.declMi[I64(d)]].Entries[p.declEi[I64(d)]].Decl }
 
 fn (p Program&) DeclModule(d types.DeclId) I64 { return p.declMi[I64(d)] }
 
@@ -358,51 +358,245 @@ fn (p mut Program&) IsGenerator(f I64) Bool {
     return try p.genFns.Get(f) catch default false
 }
 
-# D18c: where a generator's elements live, as its result writes it - GenPerTurn where its element type names no scope
-# ("Iterator<String&>", "Iterator<I64>": each value is built where its Next's result goes), GenFromReturn for
-# "Iterator<T&return>" (in storage its walk keeps, where the generator lives), else the index among its signature's
-# parameters, the receiver first, of the one its element borrows from ("Iterator<String&t>"); GenBadScope for a name no
-# parameter has (check says so)
+# D18c (QCB: inferred, nothing written): where a generator's elements live - GenPerTurn where each value is built where
+# its Next's result goes, GenFromReturn where they are views of storage its walk keeps (where the generator lives),
+# else the index among its signature's parameters, the receiver first, of the reference parameter they are views of
 GenPerTurn I64 = -1
 GenFromReturn I64 = -2
-GenBadScope I64 = -3
 
 fn (p mut Program&) GenElem(f I64) I64 {
     p.Sig(f)
     return try p.genElems.Get(f) catch default GenPerTurn
 }
 
-# where the elements of a generator declared fd live, from its written result (GenElem)
-fn genElemOf(p Program&, fd ast.Func&) I64 {
-    if fd.S.Results.Len() != 1 { return GenPerTurn }
-    match fd.S.Results[0] {
-        case ast.TypeRef.Named(_, _, args) {
-            if args.Len() == 0 { return GenPerTurn }
-            a := args[0]
-            match a {
-                case ast.TypeRef.Perm(_, of, _, _) { if of is not null { a = of } }
+# what the values of a generator's body are views of (genElemOf): a bit per reference parameter, GenLocalBit for
+# storage of its own - its locals', a by-value parameter's (the walk's copy) - and none for a value it builds
+GenLocalBit I64 = 1 << 62
+
+type genRoots struct(params Array<source.NameId>&, byValue Array<Bool>&) {
+    params
+    byValue
+    locals Map<source.NameId, I64>
+    yields I64 = 0
+}
+
+fn (g genRoots&) paramBit(n source.NameId) I64 {
+    for k in range g.params.Len() {
+        if g.params[k] != n: continue
+        return GenLocalBit if g.byValue[k] or k >= 62 else I64(1) << k
+    }
+    return -1
+}
+
+# what an expression's value is a view of: a name's, a part's, an index's or a slice's base, a method call's receiver
+# (it may hand back a view of it) - a value a call builds, a literal, a rendering, none
+fn (g genRoots&) root(x ast.Expr?&) I64 {
+    if x is null: return 0
+    return match x {
+        case ast.Expr.Name(_, n): g.nameRoot(n)
+        case ast.Expr.Paren(_, y), ast.Expr.Named(_, _, y), ast.Expr.Spread(_, y), ast.Expr.Postfix(_, _, y): g.root(y)
+        case ast.Expr.Member(_, y, _), ast.Expr.Index(_, y, _), ast.Expr.Slice(_, y, _, _), ast.Expr.As(_, y, _): g.root(y)
+        case ast.Expr.Try(_, y, _): g.root(y)
+        case ast.Expr.Cond(_, a, _, b): g.root(a) | g.root(b)
+        case ast.Expr.Call(_, f, _): g.callRoot(f)
+        case ast.Expr.MatchE(_, m): g.caseRoots(m)
+        case _: 0
+    }
+}
+
+# a parameter's bit; a local's roots - a local holding no view of a parameter is storage of the walk's own, which
+# yielding it keeps where the generator lives; a name of neither (a global, a function) none
+fn (g genRoots&) nameRoot(n source.NameId) I64 {
+    b := g.paramBit(n)
+    if b >= 0: return b
+    if not g.locals.Has(n): return 0
+    r := try g.locals.Get(n) catch default 0
+    return r if (r & ~GenLocalBit) != 0 else GenLocalBit
+}
+
+fn (g genRoots&) callRoot(f ast.Expr&) I64 {
+    return match f {
+        case ast.Expr.Member(_, recv, _): g.root(recv)
+        case _: 0
+    }
+}
+
+fn (g genRoots&) caseRoots(m ast.Match&) I64 {
+    r I64 = 0
+    for cs in m.Cases: r |= g.root(cs.Value)
+    return r
+}
+
+# a local's roots grown by r - a parameter's are its own
+fn (g mut genRoots&) grow(n source.NameId, r I64) {
+    if n == source.NameId(0) or g.paramBit(n) >= 0: return
+    g.locals.Put(n, (try g.locals.Get(n) catch default 0) | r)
+}
+
+# the local a target names, through its parts ("seen[i] = x", "h.f = x") - 0 for none
+fn baseName(x ast.Expr&) source.NameId {
+    return match x {
+        case ast.Expr.Name(_, n): n
+        case ast.Expr.Member(_, y, _), ast.Expr.Index(_, y, _), ast.Expr.Slice(_, y, _, _), ast.Expr.Paren(_, y): baseName(y)
+        case _: source.NameId(0)
+    }
+}
+
+fn (g mut genRoots&) stmts(body Array<ast.Stmt&>&) {
+    for st in body: g.stmt(st)
+}
+
+fn (g mut genRoots&) stmt(st ast.Stmt?&) {
+    if st is null: return
+    match st {
+        case ast.Stmt.Var(_, v) { g.declared(v) }
+        case ast.Stmt.Multi(_, m) {
+            r I64 = 0
+            for x in m.Values: r |= g.root(x)
+            for t in m.Targets: g.grow(baseName(t), r)
+        }
+        case ast.Stmt.Assign(_, _, t, v) { g.grow(baseName(t), g.root(v)) }
+        case ast.Stmt.ExprS(_, x) { g.stored(x) }
+        case ast.Stmt.Yield(_, x) {
+            g.yields |= g.root(x)
+            g.stored(x)
+        }
+        case ast.Stmt.ForIn(_, f) {
+            r := g.root(f.Source)
+            g.grow(f.Name, r)
+            g.stmts(f.Body)
+            for k in f.Clauses: g.stmts(k.Body)
+        }
+        case ast.Stmt.If(_, i) { g.branches(i) }
+        case ast.Stmt.MatchS(_, m) { g.matched(m) }
+        case _ { g.inner(st) }
+    }
+}
+
+# the statements a statement holds, its own read nowhere
+fn (g mut genRoots&) inner(st ast.Stmt&) {
+    match st {
+        case ast.Stmt.Forever(_, b), ast.Stmt.Block(_, b), ast.Stmt.While(_, _, b), ast.Stmt.DoFor(_, b, _): g.stmts(b)
+        case ast.Stmt.For3(_, f) {
+            g.stmt(f.Init)
+            g.stmt(f.Post)
+            g.stmts(f.Body)
+        }
+        case ast.Stmt.TryStore(_, s, cs) {
+            g.stmt(s)
+            for k in cs: g.stmts(k.Body)
+        }
+        case ast.Stmt.Defer(_, d, _): g.stmt(d)
+        case ast.Stmt.Join(_, j) {
+            g.stmts(j.Body)
+            for k in j.Clauses: g.stmts(k.Body)
+        }
+        case _ { }
+    }
+}
+
+fn (g mut genRoots&) declared(v ast.VarDecl&) {
+    for i, n in v.Names {
+        if v.Values.Len() == v.Names.Len() {
+            g.grow(n, g.root(v.Values[i]))
+        } else if v.Values.Len() == 1 {
+            g.grow(n, g.root(v.Values[0]))
+        } else {
+            g.grow(n, GenLocalBit)     # declared with no value: storage of its own, filled later
+        }
+    }
+}
+
+# a method call storing what it is given into its receiver: "seen.Push(t[a:b])" makes seen hold a view of t
+fn (g mut genRoots&) stored(x ast.Expr&) {
+    match x {
+        case ast.Expr.Call(_, f, args) {
+            match f {
+                case ast.Expr.Member(_, recv, _) {
+                    r I64 = 0
+                    for a in args: r |= g.root(a)
+                    g.grow(baseName(recv), r)
+                }
                 case _ { }
             }
-            match a {
-                case ast.TypeRef.Ref(_, _, sc, _) {
-                    if sc == source.NameId(0) { return GenPerTurn }
-                    if p.L.Names.Text(sc) == "return" { return GenFromReturn }
-                    k I64 = 0
-                    if fd.Recv is not null {
-                        if fd.Recv!.Name == sc { return 0 }
-                        k = 1
-                    }
-                    for prm in fd.S.Params {
-                        if prm.Name == sc { return k }
-                        k++
-                    }
-                    return GenBadScope
-                }
-                case _ { return GenPerTurn }
-            }
         }
-        case _ { return GenPerTurn }
+        case ast.Expr.Try(_, y, _) { g.stored(y) }
+        case _ { }
     }
+}
+
+fn (g mut genRoots&) branches(i ast.If?&) {
+    if i is null: return
+    if i.Then is not null: g.stmts(i.Then!.Body)
+    g.stmt(i.Else)
+}
+
+fn (g mut genRoots&) matched(m ast.Match&) {
+    r := g.root(m.Subject)
+    for cs in m.Cases {
+        for a in cs.Alts: g.binds(a, r)
+        g.stmts(cs.Body)
+    }
+}
+
+fn (g mut genRoots&) binds(pt ast.Pattern&, r I64) {
+    match pt {
+        case ast.Pattern.Bind(_, n), ast.Pattern.Rest(_, n), ast.Pattern.Type(_, _, n, _) { g.grow(n, r) }
+        case ast.Pattern.Case(_, _, subs), ast.Pattern.Elems(_, _, subs) {
+            for q in subs: g.binds(q, r)
+        }
+        case _ { }
+    }
+}
+
+# whether a generator's element type, Iterator<T>'s T as written, is a reference borrowing can give: read-only, never
+# null (a writable or nullable element is built where each Next's result goes)
+fn borrowableElem(fd ast.Func&) Bool {
+    if fd.S.Results.Len() != 1: return false
+    return match fd.S.Results[0] {
+        case ast.TypeRef.Named(_, _, args): args.Len() > 0 and refElem(args[0])
+        case _: false
+    }
+}
+
+fn refElem(a ast.TypeRef&) Bool {
+    return match a {
+        case ast.TypeRef.Ref(_, _, nullable): not nullable
+        case _: false
+    }
+}
+
+fn byValueParam(prm ast.Param&) Bool {
+    if prm.Ty is null: return true
+    return match prm.Ty! {
+        case ast.TypeRef.Ref(_, _, _), ast.TypeRef.Perm(_, _, _, _): false
+        case _: true
+    }
+}
+
+# where the elements of a generator declared fd live (GenElem), read off what its yields give: none a view - each built
+# per Next; views of one reference parameter's referent - borrowed from it; views of the walk's own storage, or of
+# several parameters' - where the generator lives
+fn genElemOf(fd ast.Func&) I64 {
+    if not borrowableElem(fd): return GenPerTurn
+    ns Vec<source.NameId>
+    bv Vec<Bool>
+    if fd.Recv is not null {
+        ns.Push(fd.Recv!.Name)
+        bv.Push(byValueParam(fd.Recv!))
+    }
+    for prm in fd.S.Params {
+        ns.Push(prm.Name)
+        bv.Push(byValueParam(prm))
+    }
+    g := genRoots(ns.ToArray(), bv.ToArray())
+    # twice: a loop's later statements give what its earlier ones read
+    g.stmts(fd.Body)
+    g.stmts(fd.Body)
+    r := g.yields
+    if r == 0: return GenPerTurn
+    if (r & GenLocalBit) != 0 or r.PopCount() != 1: return GenFromReturn
+    return r.TrailingZeros()
 }
 
 # D18c: the ViewGenerator<T ? E> a generator whose elements are borrowed stands for, its result written t an
@@ -617,7 +811,7 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
         case ast.TypeRef.Named(sp, path, args): p.named(c, sp, path, args)
         case ast.TypeRef.Func(sp, s): p.funcType(c, sp, s)
         case ast.TypeRef.Shape(_, body): p.shape(c, body)
-        case ast.TypeRef.Ref(sp, of, _, nullable): p.refType(c, sp, p.Resolve(c, of), nullable)
+        case ast.TypeRef.Ref(sp, of, nullable): p.refType(c, sp, p.Resolve(c, of), nullable)
         case ast.TypeRef.Perm(_, of, writable, owned): p.perm(p.Resolve(c, of), writable, owned)
         # T32: what "any R&" refers to - the trait R names, the checker saying where it names none (writtenMet)
         case ast.TypeRef.Any(_, of): p.T.Any(p.Resolve(c, of))
@@ -901,6 +1095,25 @@ fn (p mut Program&) flagBans(c Context&, s ast.Sig&, sig types.TypeId, recv Bool
     }
 }
 
+# D18c: whether a function is the prelude's ViewGenerator.Next - the one result borrowed from its receiver no body says
+# (its walk's elements live where the generator does, what its function value gives cannot tell): nothing is written
+# (QCB), so the compiler knows it, as it knows the generator it stands for
+fn (p mut Program&) viewNext(row fnRow&) Bool {
+    if row.F.Recv is null or p.L.Names.Text(row.F.Name) != "Next" or p.L.Mods[row.Mi].Identity != "std/prelude/iterator" { return false }
+    return match row.F.Recv!.Ty {
+        case ast.TypeRef.Perm(_, of, _, _): of is not null and viewGenTy(p, of)
+        case _: viewGenTy(p, row.F.Recv!.Ty!)
+    }
+}
+
+fn viewGenTy(p Program&, t ast.TypeRef&) Bool {
+    return match t {
+        case ast.TypeRef.Ref(_, of, _): viewGenTy(p, of)
+        case ast.TypeRef.Named(_, path, _): path.Len() == 1 and p.L.Names.Text(path[0]) == "ViewGenerator"
+        case _: false
+    }
+}
+
 # a signature's parameters' names, interned for a function type to render with (E11a)
 fn (p mut Program&) SigNames(s ast.Sig&) I64 {
     ns := Array<I64>(s.Params.Len())
@@ -910,26 +1123,23 @@ fn (p mut Program&) SigNames(s ast.Sig&) I64 {
 
 fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName source.NameId) types.TypeId {
     ps Vec<types.TypeId>
-    named Vec<source.NameId>
     shares Vec<I64>
     if recv != types.UnknownT {
         ps.Push(recv)
-        named.Push(recvName)
         shares.Push(types.OwnScope)
     }
     for prm in s.Params {
         ps.Push(p.Resolve(c, prm.Ty))
-        shares.Push(p.markedParam(c, prm.Ty!, named, shares))
-        named.Push(prm.Name)
+        shares.Push(types.OwnScope)
     }
     result := types.VoidT
+    # every parameter has a scope of its own and every result is built in the result scope or is a bare type
+    # variable's (QCB: nothing written relates them - the obligations are the body's, O10b)
     from := Array<I64>(s.Results.Len())
     rs := Array<types.TypeId>(s.Results.Len())
     for i in range s.Results.Len() {
         rs[i] = p.Resolve(c, s.Results[i])
-        from[i] = p.markedParam(c, s.Results[i], named, shares)
-        if from[i] == types.OwnScope and p.T.KindOf(rs[i]) == types.Kind.Var { from[i] = types.FromTypeVar }
-        if from[i] == types.OwnScope and source.InferScopes and p.erasedParam(c, s.Results[i], named) { from[i] = types.KeptPerm }
+        from[i] = types.FromTypeVar if p.T.KindOf(rs[i]) == types.Kind.Var else types.OwnScope
     }
     if s.Results.Len() == 1 {
         result = rs[0]
@@ -939,62 +1149,6 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
     if s.NoReturn { result = types.NoreturnT }
     scopes := p.T.Scopes(types.RoleFn, shares.ToArray(), from)
     return p.T.Func(p.T.List(ps.ToArray()), result, p.errorList(c, s.HasErrors, s.Errors), scopes)
-}
-
-# the earlier parameter a written type's marker names (O4a), as the parameter whose own scope variable that one is:
-# OwnScope for a bare marker, "&return", none, or a name that is no earlier parameter
-fn (p mut Program&) markedParam(c Context&, t ast.TypeRef&, named Vec<source.NameId>&, shares Vec<I64>&) I64 {
-    scope := p.markOf(t)
-    if scope == source.NameId(0) { return types.OwnScope }
-    for j in range named.Len() {
-        if named[j] == scope { return shares[j] if shares[j] >= 0 else j }
-    }
-    # a name no earlier parameter has (O4a)
-    text := p.L.Names.Text(scope)
-    if text != "return" {
-        sp := p.markSpan(t)
-        nsp := source.Span(sp.End - I32(text.Len()), sp.End)
-        near mut msgs.Nearest& = msgs.Nearest(text)
-        for nm in named { near.Offer(p.L.Names.Text(nm)) }
-        near.Offer("return")
-        p.L.Diags.ErrorOncePerLine(p.at(c.Mi, nsp), msgs.UnknownScopeName(msgs.Tok(text), near.Hint()))
-    }
-    return types.OwnScope
-}
-
-# the rework's round 1 (OLANG_SCOPES=infer): whether a result's marker, read as bare, named an earlier parameter - the
-# result then keeps its written permission at a call, as a borrowed one did, and section 8 infers the rest (KeptPerm)
-fn (p mut Program&) erasedParam(c Context&, t ast.TypeRef&, named Vec<source.NameId>&) Bool {
-    sp := p.markSpan(t)
-    src := p.L.Mods[c.Mi].Src
-    if src is null or sp.End <= sp.Start { return false }
-    text := src.Text[sp.Start:sp.End]
-    i := text.Len()
-    for i > 0 and (text[i - 1].IsLetter() or text[i - 1].IsDigit() or text[i - 1] == '_') { i-- }
-    if i == text.Len() or i == 0 or text[i - 1] != '&' { return false }
-    for nm in named {
-        if p.L.Names.Text(nm) == text[i:] { return true }
-    }
-    return false
-}
-
-# the span of a written type's outermost reference marker, whose scope name ends it
-fn (p mut Program&) markSpan(t ast.TypeRef&) source.Span {
-    return match t {
-        case ast.TypeRef.Ref(sp, _, _, _): sp
-        case ast.TypeRef.Perm(_, of, _, _): p.markSpan(of) if of is not null else source.Span(0, 0)
-        case _: source.Span(0, 0)
-    }
-}
-
-# the name a written type's outermost marker names, 0 for none ("mut", "own" stand before it)
-fn (p mut Program&) markOf(t ast.TypeRef?&) source.NameId {
-    if t is null { return source.NameId(0) }
-    return match t {
-        case ast.TypeRef.Ref(_, _, sc, _): sc
-        case ast.TypeRef.Perm(_, of, _, _): p.markOf(of)
-        case _: source.NameId(0)
-    }
 }
 
 # an error set's item: an error type, its own module's or one an alias chain reaches (names records the head); Unknown
@@ -1190,7 +1344,7 @@ fn (p mut Program&) IsErrorSet(t types.TypeId) Bool {
 }
 
 # the words an error type declares (T19), in order - its declaration found among its module's, a top-level if's too
-fn (p mut Program&) ErrorWords(d types.DeclId) Array<source.NameId>&p {
+fn (p mut Program&) ErrorWords(d types.DeclId) Array<source.NameId>& {
     e := p.errorDecl(d)
     if e is null { return Array<source.NameId>(0) }
     return match e {
@@ -1216,7 +1370,7 @@ fn (p mut Program&) ErrorWordName(d types.DeclId, w I64) String {
 }
 
 # the members a named error set declares (T19a), in order, as written in its module
-fn (p mut Program&) ErrorMembers(d types.DeclId) Array<ast.Path&>&p {
+fn (p mut Program&) ErrorMembers(d types.DeclId) Array<ast.Path&>& {
     e := p.errorDecl(d)
     if e is null { return Array<ast.Path&>(0) }
     return match e {
@@ -1226,11 +1380,11 @@ fn (p mut Program&) ErrorMembers(d types.DeclId) Array<ast.Path&>&p {
 }
 
 # an error type's declaration (T19), among its module's and a top-level if's; null for none
-fn (p mut Program&) errorDecl(d types.DeclId) ast.Decl?&p {
+fn (p mut Program&) errorDecl(d types.DeclId) ast.Decl?& {
     return errorDeclIn(p.L.Mods[p.T.DeclModule(d)].Decls, p.T.DeclName(d))
 }
 
-fn errorDeclIn(ds Array<ast.Decl&>&, name source.NameId) ast.Decl?&ds {
+fn errorDeclIn(ds Array<ast.Decl&>&, name source.NameId) ast.Decl?& {
     if ds.Len() == 0 { return null }
     for d in ds {
         match d {
@@ -1247,7 +1401,7 @@ fn errorDeclIn(ds Array<ast.Decl&>&, name source.NameId) ast.Decl?&ds {
     return null
 }
 
-fn errorDeclInIf(ti ast.TopIf&, name source.NameId) ast.Decl?&ti {
+fn errorDeclInIf(ti ast.TopIf&, name source.NameId) ast.Decl?& {
     if ti.Then is not null {
         e := errorDeclIn(ti.Then!.Decls, name)
         if e is not null { return e }
@@ -1326,7 +1480,7 @@ fn (p mut Program&) FoldLength(c Context&, e ast.Expr?&) types.TypeId {
     i64 := p.T.Prim("I64")
     f := p.eval(c, e)
     if f.St == Unfolded and (c.Owner < 0 or p.varsBound(c)) {
-        key String&p = p.LengthKey(c, e)
+        key String& = p.LengthKey(c, e)
         if p.Lengths.Has(key) {
             v := try p.Lengths.Get(key) catch default RunTimeLength
             return types.TypeId(0) if v == RunTimeLength else p.T.Const(i64, v)
@@ -1336,8 +1490,8 @@ fn (p mut Program&) FoldLength(c Context&, e ast.Expr?&) types.TypeId {
             if a.Key == key { seen = true }
         }
         if not seen {
-            ns mut Array<source.NameId>&p = Array<source.NameId>(c.Vars.Len())
-            vs mut Array<types.TypeId>&p = Array<types.TypeId>(c.Vars.Len())
+            ns mut Array<source.NameId>& = Array<source.NameId>(c.Vars.Len())
+            vs mut Array<types.TypeId>& = Array<types.TypeId>(c.Vars.Len())
             k I64 = 0
             for v in c.Vars {
                 ns[k], vs[k] = v.Key, v.Value
@@ -1462,7 +1616,7 @@ fn (p mut Program&) constOf(c Context&, f folded, want types.TypeId, e ast.Expr?
     # T7c: one needing evaluation, reading no variable (a call, a global a call computes) - what the evaluator found
     # where it has, else asked for once and the unknown constant meanwhile
     if f.St == Unfolded and e is not null {
-        key String&p = p.LengthKey(c, e)
+        key String& = p.LengthKey(c, e)
         if p.Lengths.Has(key) {
             v := try p.Lengths.Get(key) catch default RunTimeLength
             return types.TypeId(0) if v == RunTimeLength else p.T.Const(want, p.wrap(v, want))
@@ -1472,8 +1626,8 @@ fn (p mut Program&) constOf(c Context&, f folded, want types.TypeId, e ast.Expr?
             if a.Key == key { seen = true }
         }
         if not seen {
-            ns mut Array<source.NameId>&p = Array<source.NameId>(c.Vars.Len())
-            vs mut Array<types.TypeId>&p = Array<types.TypeId>(c.Vars.Len())
+            ns mut Array<source.NameId>& = Array<source.NameId>(c.Vars.Len())
+            vs mut Array<types.TypeId>& = Array<types.TypeId>(c.Vars.Len())
             k I64 = 0
             for v in c.Vars {
                 ns[k], vs[k] = v.Key, v.Value
@@ -1646,7 +1800,7 @@ fn (p mut Program&) foldGlobal(mi I64, n source.NameId) folded {
 
 # an immutable global's declaration in a module, outside every top-level if; null for none (a mutable global is no
 # constant)
-fn (p mut Program&) globalDecl(mi I64, n source.NameId) ast.VarDecl?&p {
+fn (p mut Program&) globalDecl(mi I64, n source.NameId) ast.VarDecl?& {
     ds := p.L.Mods[mi].Decls
     if ds.Len() == 0 { return null }
     for d in ds {
@@ -2085,21 +2239,21 @@ fn (p mut Program&) nameType(c Context&, sp source.Span, n source.NameId) types.
 }
 
 # a global's declaration in a module, in the branches of its top-level ifs that were taken too; null for none
-fn (p mut Program&) anyGlobal(mi I64, n source.NameId) ast.VarDecl?&p {
+fn (p mut Program&) anyGlobal(mi I64, n source.NameId) ast.VarDecl?& {
     v := try p.synth.Get(pair.Pair(mi, I64(n))) catch { return p.globalIn(mi, p.L.Mods[mi].Decls, n) }
     return v
 }
 
 # K3: a hidden immutable global of module mi named n, its value x - a "comptime e"'s, which no program names
 fn (p mut Program&) SynthGlobal(mi I64, n source.NameId, x ast.Expr&) {
-    v ast.VarDecl&p = ast.VarDecl(Array<source.NameId>(1, n), Array<source.Span>(1, x.Span()), null, Array<ast.Expr&>(1, x), true, false)
+    v ast.VarDecl& = ast.VarDecl(Array<source.NameId>(1, n), Array<source.Span>(1, x.Span()), null, Array<ast.Expr&>(1, x), true, false)
     p.synth.Put(pair.Pair(mi, I64(n)), v)
 }
 
 # K3: whether module mi's global n is a hidden one holding a "comptime e"'s value
 fn (p mut Program&) IsSynth(mi I64, n source.NameId) Bool { return p.synth.Has(pair.Pair(mi, I64(n))) }
 
-fn (p mut Program&) globalIn(mi I64, ds Array<ast.Decl&>&, n source.NameId) ast.VarDecl?&p {
+fn (p mut Program&) globalIn(mi I64, ds Array<ast.Decl&>&, n source.NameId) ast.VarDecl?& {
     if ds.Len() == 0 { return null }
     for d in ds {
         match d {
@@ -2116,7 +2270,7 @@ fn (p mut Program&) globalIn(mi I64, ds Array<ast.Decl&>&, n source.NameId) ast.
     return null
 }
 
-fn (p mut Program&) globalInIf(mi I64, ti ast.TopIf&, chosen I64, index I64, n source.NameId) ast.VarDecl?&p {
+fn (p mut Program&) globalInIf(mi I64, ti ast.TopIf&, chosen I64, index I64, n source.NameId) ast.VarDecl?& {
     if chosen == index and ti.Then!.Decls.Len() > 0 { return p.globalIn(mi, ti.Then!.Decls, n) }
     if ti.ElseIf is not null { return p.globalInIf(mi, ti.ElseIf!, chosen, index + 1, n) }
     if ti.Else is not null and chosen == index + 1 { return p.globalIn(mi, ti.Else!.Decls, n) }
@@ -2400,7 +2554,7 @@ fn (p mut Program&) recvKey(mi I64, t ast.TypeRef?&, tps Array<ast.TypeParam&>&)
     if t is null { return -1 }
     match t {
         case ast.TypeRef.Perm(_, of, _, _) { return p.recvKey(mi, of, tps) }
-        case ast.TypeRef.Ref(_, of, _, _) { return p.recvKey(mi, of, tps) }
+        case ast.TypeRef.Ref(_, of, _) { return p.recvKey(mi, of, tps) }
         case ast.TypeRef.Named(sp, path, _) {
             ref := p.R.Use(p.file(mi), sp.Start)
             if ref.Kind == names.What.TypeVar {
@@ -2633,6 +2787,7 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
         recvName = row.F.Recv!.Name
     }
     sig := p.sigType(c, row.F.S, recv, recvName)
+    if p.viewNext(row) { sig = p.T.Func(p.T.Params(sig), p.T.Result(sig), p.T.Errors(sig), p.T.Scopes(types.RoleFn, Array<I64>(p.T.Items(p.T.Params(sig)).Len(), types.OwnScope), I64[0])) }
     if not p.FnIsExtern(f) and not row.F.Export { p.flagBans(c, row.F.S, sig, recv != types.UnknownT) }
     # D18: a function whose result is written Iterator<T ? E> and whose body yields is a generator - its result the
     # prelude's Generator<T ? E>, its errors its Next's alone (written on the signature, they are the checker's to say)
@@ -2641,7 +2796,7 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
         if g != types.UnknownT {
             p.genFns.Put(f, true)
             # D18c: one whose elements are borrowed gives a ViewGenerator<T ? E>, its Next's result read-only and borrowed
-            el := genElemOf(p, row.F)
+            el := genElemOf(row.F)
             if el != GenPerTurn {
                 vg := p.viewGeneratorOf(p.T.Result(sig))
                 if vg != types.UnknownT {
@@ -2701,7 +2856,7 @@ fn mentionsName(t ast.TypeRef?&, n source.NameId) Bool {
             }
             return false
         }
-        case ast.TypeRef.Ref(_, of, _, _) { return mentionsName(of, n) }
+        case ast.TypeRef.Ref(_, of, _) { return mentionsName(of, n) }
         case ast.TypeRef.Perm(_, of, _, _) { return mentionsName(of, n) }
         case ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { return mentionsName(of, n) }
         case ast.TypeRef.Errs(_, items) {
@@ -2814,7 +2969,7 @@ fn (p mut Program&) introductions(mi I64, t ast.TypeRef?&, ns mut Vec<source.Nam
             }
             for a in args { p.introductions(mi, a, ns, true) }
         }
-        case ast.TypeRef.Ref(_, of, _, _) { p.introductions(mi, of, ns, inArgs) }
+        case ast.TypeRef.Ref(_, of, _) { p.introductions(mi, of, ns, inArgs) }
         case ast.TypeRef.Perm(_, of, _, _) { p.introductions(mi, of, ns, inArgs) }
         case ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { p.introductions(mi, of, ns, inArgs) }
         # QAH: "? E" among a receiver's arguments introduces its error-set variable
@@ -2836,7 +2991,7 @@ fn errIntroductions(t ast.TypeRef?&, out mut Vec<source.NameId>&) {
         case ast.TypeRef.Named(_, _, args) {
             for a in args { errIntroductions(a, out) }
         }
-        case ast.TypeRef.Ref(_, of, _, _) { errIntroductions(of, out) }
+        case ast.TypeRef.Ref(_, of, _) { errIntroductions(of, out) }
         case ast.TypeRef.Perm(_, of, _, _) { errIntroductions(of, out) }
         case ast.TypeRef.Errs(_, items) {
             for e in items {
@@ -2876,7 +3031,7 @@ fn (p mut Program&) BoundTraits(b types.TypeId) Array<types.TypeId> {
 }
 
 # the constraint a type-parameter list gives a name, or null
-fn listed(tps Array<ast.TypeParam&>&, n source.NameId) ast.TypeRef?&tps {
+fn listed(tps Array<ast.TypeParam&>&, n source.NameId) ast.TypeRef?& {
     if tps.Len() == 0 { return null }
     for tp in tps {
         if tp.Name == n { return tp.Ty }
@@ -2953,7 +3108,7 @@ fn (p mut Program&) FnInstance(f I64, written types.ListId) I64 {
         b.PushChar('>')
     }
     i = p.instances.Len()
-    text String&p = b.ToString()
+    text String& = b.ToString()
     p.instances.Push(instance(f, args, sig, types.Symbol(text), text, p.Asking))
     p.instanceOf.Put(key, i)
     return i
@@ -2971,13 +3126,13 @@ fn (p Program&) InstanceCount() I64 { return p.instances.Len() }
 fn (p mut Program&) AllFns() { p.allFns() }
 fn (p Program&) FnCount() I64 { return p.fns.Len() }
 fn (p Program&) FnModule(f I64) I64 { return p.fns[f].Mi }
-fn (p Program&) FnDecl(f I64) ast.Func&p { return p.fns[f].F }
+fn (p Program&) FnDecl(f I64) ast.Func& { return p.fns[f].F }
 fn (p Program&) FnIsExtern(f I64) Bool { return p.fns[f].Extern }
 
 # the symbol an extern links by: its name, or another a C import's translation says (X20)
 fn (p Program&) ExternSymbol(f I64) String { return p.L.CSymbol(p.fns[f].Mi, p.T.Names.Text(p.fns[f].F.Name)) }
 # a declared type's declaration (null for an error type), and its context: its module and its variables by name
-fn (p Program&) TypeDecl(d types.DeclId) ast.TypeDecl?&p { return p.typeDecl(d) }
+fn (p Program&) TypeDecl(d types.DeclId) ast.TypeDecl?& { return p.typeDecl(d) }
 fn (p mut Program&) DeclContext(d types.DeclId) Context { return p.declContext(d) }
 # a function's context, its variables bound to args (an instance's) - or to themselves where args is the empty list
 fn (p mut Program&) FnContext(f I64, args types.ListId) Context {
@@ -3031,7 +3186,7 @@ fn (p mut Program&) CtorVars(d types.DeclId) I64 {
     if (try p.varsAt.Get(owner) catch default -1) >= 0 { return p.VarCount(owner) }
     ns Vec<source.NameId>
     td := p.typeDecl(d)
-    tps Array<ast.TypeParam&>&td = Array<ast.TypeParam&>(0)
+    tps Array<ast.TypeParam&>& = Array<ast.TypeParam&>(0)
     if td is not null and td.Body is not null and (td.Params.Len() == 0) {
         match td.Body {
             case ast.TypeBody.Struct(s) { tps = s.TypeParams }
@@ -3099,14 +3254,10 @@ fn (p mut Program&) CaseSig(t types.TypeId, tag I64) types.TypeId {
 
 fn (p mut Program&) paramsSig(c Context&, params Array<ast.Param&>&, errs ast.Sig?&, result types.TypeId) types.TypeId {
     ps Vec<types.TypeId>
-    named Vec<source.NameId>
     shares Vec<I64>
-    if params.Len() > 0 {
-        for prm in params {
-            ps.Push(p.Resolve(c, prm.Ty))
-            shares.Push(p.markedParam(c, prm.Ty!, named, shares))
-            named.Push(prm.Name)
-        }
+    for prm in params {
+        ps.Push(p.Resolve(c, prm.Ty))
+        shares.Push(types.OwnScope)
     }
     scopes := p.T.Scopes(types.RoleCtor, shares.ToArray(), I64[types.OwnScope])
     el := p.errorList(c, errs.HasErrors, errs.Errors) if errs is not null else types.ListId(0)
@@ -3116,7 +3267,7 @@ fn (p mut Program&) paramsSig(c Context&, params Array<ast.Param&>&, errs ast.Si
 # a written type's error set item, read in a context: an error type (R1), Unknown for none
 fn (p mut Program&) ErrorType(c Context&, e ast.Path&) types.TypeId { return p.errorType(c, e) }
 # a global's declaration in a module, outside every top-level if; null for none
-fn (p mut Program&) GlobalDecl(mi I64, n source.NameId) ast.VarDecl?&p { return p.anyGlobal(mi, n) }
+fn (p mut Program&) GlobalDecl(mi I64, n source.NameId) ast.VarDecl?& { return p.anyGlobal(mi, n) }
 # whether one number type flows into another, and where two meet (T6b): Unknown where they do not
 fn (p mut Program&) Meet(a types.TypeId, b types.TypeId) types.TypeId { return p.meetTyped(a, b) }
 # a constructor's value as ":=" holds it (C11)
@@ -3126,8 +3277,8 @@ fn (p mut Program&) ModuleIndex(identity String&) I64 {
     p.ensureModules()
     return try p.identity.Get(identity) catch default -1
 }
-fn (p Program&) InstanceName(i I64) String&p { return p.instances[i].Name }
-fn (p Program&) InstanceText(i I64) String&p { return p.instances[i].Text }
+fn (p Program&) InstanceName(i I64) String& { return p.instances[i].Name }
+fn (p Program&) InstanceText(i I64) String& { return p.instances[i].Text }
 fn (p Program&) InstanceOrigin(i I64) Origin { return p.instances[i].From }
 
 # the scope variables a call of a function of this type passes (types.ScopeVarsOf), the bodies of the declared types
@@ -3456,7 +3607,7 @@ fn (p mut Program&) Missing(t types.TypeId, tr types.TypeId, membership Bool = t
 
 # the types a closed trait lists (T31a), a closed trait among them taken in with its own - in order, each once; none for
 # an open trait
-fn (p mut Program&) Members(tr types.TypeId) Array<types.TypeId>&p {
+fn (p mut Program&) Members(tr types.TypeId) Array<types.TypeId>& {
     if tr in p.membersOf { return try p.membersOf.Get(tr) catch default Array<types.TypeId>(0) }
     out Vec<types.TypeId>
     p.members(tr, out, 0)
@@ -3736,7 +3887,7 @@ fn (p mut Program&) anyCovers(r types.TypeId, out mut Vec<types.TypeId>&, depth 
 
 # the slots of a trait's tables, in order (T32b): its methods and those of the traits it extends, then the defaults
 # of those traits a table can hold - one whose type variables the receiver binds, mentioned nowhere but there (T35)
-fn (p mut Program&) AnySlots(r types.TypeId) Array<AnySlot>&p {
+fn (p mut Program&) AnySlots(r types.TypeId) Array<AnySlot>& {
     have := try p.anySlotsOf.Get(r) catch default Array<AnySlot>(0)
     if have.Len() > 0 or p.anySlotsOf.Has(r) { return have }
     p.allFns()
@@ -3776,7 +3927,7 @@ fn (p mut Program&) AnySlots(r types.TypeId) Array<AnySlot>&p {
         writes := ps.Len() > 0 and p.T.KindOf(ps[0]) == types.Kind.Ref and (p.T.PermOf(ps[0]) & types.Writable) != 0
         out.Push(AnySlot(p.fns[f].F.Name, tr, -1, f, writes, sig))
     }
-    kept mut Array<AnySlot>&p = Array<AnySlot>(out.Len(), AnySlot(source.NameId(0), types.UnknownT, -1, -1, false, types.UnknownT))
+    kept mut Array<AnySlot>& = Array<AnySlot>(out.Len(), AnySlot(source.NameId(0), types.UnknownT, -1, -1, false, types.UnknownT))
     for i in range out.Len() { kept[i] = out[i] }
     p.anySlotsOf.Put(r, kept)
     return kept
@@ -4277,7 +4428,7 @@ fn (p mut Program&) CaseFieldNames(t types.TypeId, cs I64) Array<source.NameId> 
 }
 
 # the parameters written where a type's constructor is declared (C1, T29d), or none
-fn (p mut Program&) CtorParams(t types.TypeId) Array<ast.Param&>&p {
+fn (p mut Program&) CtorParams(t types.TypeId) Array<ast.Param&>& {
     none := Array<ast.Param&>(0)
     if p.T.KindOf(t) != types.Kind.Named { return none }
     td := p.typeDecl(p.T.DeclOf(t))
@@ -4295,8 +4446,8 @@ fn (p mut Program&) CtorParams(t types.TypeId) Array<ast.Param&>&p {
 # the attributes written on what a type or a descriptor names (G39, G40), and the module declaring them: a declared
 # type's own, a field's (a pun's its parameter's), a case's (a struct's one case its type's), a constructor's parameter's;
 # none for anything else - a type no program declares, a result, an error value's word, a function type's parameter
-fn (p mut Program&) AttrsOf(t types.TypeId) I64, Array<ast.Attr&>&p {
-    none Array<ast.Attr&>&p = Array<ast.Attr&>(0)
+fn (p mut Program&) AttrsOf(t types.TypeId) I64, Array<ast.Attr&>& {
+    none Array<ast.Attr&>& = Array<ast.Attr&>(0)
     ds := p.DescOf(t)
     if ds.K == DescNone {
         if p.T.KindOf(t) != types.Kind.Named { return -1, none }
@@ -4900,32 +5051,29 @@ test "a closed trait (T31a): the prelude's Float, Integer and Number are met by 
     }
 }
 
-test "function types carry what their markers say; a call's scope variables come from the type; instances remember where" {
+test "every reference parameter has a scope variable of its own, a reference result a result scope; instances remember where" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("type N struct(v I64) {\n    v\n}\ntype Box<T> struct(v T) {\n    v\n}\n"
-                       "fn link(a mut N&, b N&a) { }\nfn first(l N&) N&l { return l }\nfn make() N& { return N(1) }\n"
-                       "fn (l mut N&) Put(x N&l) { }\nfn apply(f fn(a mut N&, b N&a), x mut N&, y N&) { }\n"
+                       "fn link(a mut N&, b N&) { }\nfn first(l N&) N& { return l }\nfn make() N& { return N(1) }\n"
+                       "fn (l mut N&) Put(x N&) { }\nfn apply(f fn(a mut N&, b N&), x mut N&, y N&) { }\n"
                        "fn id<T>(x T) T { return x }\nfn count(a I64, l N&) I64 { return a }\nfn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := Program(l, r)
     m := l.Mods[l.Root].Identity
+    # QCB: no scope is written - what relates them is the body's, inferred (O10b)
     link := p.Sig(p.FnNamed(l.Root, l.Names.Intern("link")))
-    assert p.T.ShareOf(link, 1) == 0 and p.ScopeVarsOf(link) == I64[0]
-    text := "fn(mut " $m ":N&, " $m ":N&) ~[0,2,-1,0]"
-    assert p.T.Canon(link) == text, p.T.Canon(link)
-    assert p.roundTrip(text) and p.T.Same(link, p.T.Plain(link)) and link != p.T.Plain(link)
+    assert p.T.ShareOf(link, 1) == types.OwnScope and p.ScopeVarsOf(link) == I64[0, 1]
     first := p.Sig(p.FnNamed(l.Root, l.Names.Intern("first")))
-    assert p.T.ResultFrom(first, 0) == 0 and p.ScopeVarsOf(first) == I64[0]
+    assert p.T.ResultFrom(first, 0) == types.OwnScope and p.ScopeVarsOf(first) == I64[0, types.ResultVar]
     make := p.Sig(p.FnNamed(l.Root, l.Names.Intern("make")))
     assert p.ScopeVarsOf(make) == I64[types.ResultVar]
     nt := try p.ParseCanon($m ":N") catch { unreachable }
     put := p.MethodSig(p.MethodOf(nt, l.Names.Intern("Put")), p.T.Ref(nt, types.Writable))
-    assert p.T.ShareOf(put, 1) == 0 and p.ScopeVarsOf(put) == I64[0]
+    assert p.T.ShareOf(put, 1) == types.OwnScope and p.ScopeVarsOf(put) == I64[0, 1]
     apply := p.Sig(p.FnNamed(l.Root, l.Names.Intern("apply")))
-    cb := p.T.Items(p.T.Params(apply))[0]
-    assert p.T.ShareOf(cb, 1) == 0 and p.ScopeVarsOf(apply) == I64[0, 1, 2]
+    assert p.ScopeVarsOf(apply) == I64[0, 1, 2]
     count := p.Sig(p.FnNamed(l.Root, l.Names.Intern("count")))
     assert p.ScopeVarsOf(count) == I64[1]   # a number holds no reference, so passes no scope
     # a result written as a type variable: a result scope where it becomes a reference (O14b), none for a number
@@ -4934,8 +5082,6 @@ test "function types carry what their markers say; a call's scope variables come
     atI64 := p.FnInstance(f, p.T.List1(p.T.Prim("I64")))
     atRef := p.FnInstance(f, p.T.List1(p.T.Ref(nt, types.ReadOnly)))
     assert p.ScopeVarsOf(p.InstanceSig(atI64)) == I64[] and p.ScopeVarsOf(p.InstanceSig(atRef)) == I64[0, types.ResultVar]
-    # a function type argument keeps where its references live (G16a, T22): two instances
-    assert p.FnInstance(f, p.T.List1(link)) != p.FnInstance(f, p.T.List1(p.T.Plain(link)))
     # an instance remembers where it was first asked for (G16b)
     p.Asking = Origin(7, source.Span(3, 9), atI64)
     bx := try p.ParseCanon($m ":Box<I32>") catch { unreachable }

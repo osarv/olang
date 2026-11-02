@@ -146,7 +146,7 @@ test "Vec: a copy is a Vec of its own, a second name is written &" {
     b := a                                              # a value: b holds a's elements, in a buffer of its own
     b.Push(4)
     assert a.Len() == 3 and b.Len() == 4 and b != a
-    r mut Vec<I64>&a = a                                # a second name for a
+    r mut Vec<I64>& = a                                # a second name for a
     r.Push(4)
     assert a.Len() == 4 and a[3] == 4 and b == a
     for i in range 100 { a.Push(i) }                    # a's buffer replaced several times; r follows it, b does not
@@ -189,7 +189,7 @@ test "Vec: a lambda capturing one holds it as it was when made, one capturing a 
     v := Vec<I64>()
     v.Push(1)
     n := fn() I64 { return v.Len() }                    # a capture of a value is a copy (D16c)
-    r Vec<I64>&v = v
+    r Vec<I64>& = v
     m := fn() I64 { return r.Len() }                    # ...of a reference, the same Vec
     for i in range 30 { v.Push(i) }
     churn()
@@ -378,7 +378,7 @@ test "Vec: elements that are values holding references, kept across growth and r
 fn vecViewNamed(n I64) I64 {
     v := Vec<Char>()
     for _ in range n { v.Push('a') }
-    w String&v = String(v.View())
+    w String& = String(v.View())
     v[0] = 'z'
     return 1 if w[0] == 'z' and w.Len() == n else 0
 }

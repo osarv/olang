@@ -45,7 +45,7 @@ fn main() {
     n := g.Len()                                # used before the growth only
     v.Push(1)
     assert n > 0
-    c mut Vec<I64>&v = v                                      # a second name, no view
+    c mut Vec<I64>& = v                                      # a second name, no view
     c.Push(3)
     v.Push(4)
     assert c.Len() == v.Len()

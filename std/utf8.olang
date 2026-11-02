@@ -122,7 +122,7 @@ fn Count(t String&) I64 ? Error.Invalid {
 # and the walk goes on from the next byte - as Go's range over a string and every browser decode - so a walk never
 # fails; Valid or Decode say where text is not UTF-8. Pos is the byte the next code point starts at
 type RuneIter struct(of String&) {
-    t String&of = of
+    t String& = of
     Pos I64 = 0
 }
 
@@ -165,8 +165,8 @@ fn FromRunes(a Array<Rune>&) String ? Error.Invalid {
 if TestBuild {
 
 # text from its bytes, for bytes no text literal writes
-fn bytes(a Array<U8>&) String& {
-    t mut String&return = String(Array<Char>(a.Len()))
+fn bytes(a Array<U8>&) mut String& {
+    t mut String& = String(Array<Char>(a.Len()))
     for i in range a.Len() { t[i] = Char(a[i]) }
     return t
 }

@@ -3,7 +3,7 @@
 # default is built in the caller, where the parameters are no locals
 type P struct(n I64) { n }
 fn mkp(i I64) P& { return P(i) }
-fn use(q P&, p P& = mkp&q(5)) I64 { return q.n + p.n }
+fn use(q P&, p P& = mkp(5)) I64 { return q.n + p.n }
 fn main() {
     assert use(P(1)) == 6
 }

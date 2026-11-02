@@ -2,9 +2,9 @@
 # D18c: a generator's borrowed elements are read-only views
 type Node struct(v I64) { v }
 
-fn nodes(n I64) Iterator<Node&return> {
+fn nodes(n I64) Iterator<Node&> {
     for i in range n {
-        x Node&return = Node(i)
+        x Node& = Node(i)
         yield x
     }
 }

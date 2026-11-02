@@ -15,7 +15,7 @@ fn IsAbs(path String&) Bool { return path.Len() > 0 and path[0] == '/' }
 
 # the last element of the path, its trailing slashes aside: "c" for "a/b/c" and for "a/b/c/"; "/" for a path of only
 # slashes, and "." for the empty path
-fn Base(path String&) String&path {
+fn Base(path String&) String& {
     if path.Len() == 0 { return "." }
     end I64 = path.Len()
     for end > 0 and path[end - 1] == '/' { end-- }
@@ -27,7 +27,7 @@ fn Base(path String&) String&path {
 
 # the extension of the path's last element: what follows the last '.' in it, the '.' included - ".gz" for
 # "a/b.tar.gz", "" for "a.b/c", and ".bashrc" for ".bashrc"
-fn Ext(path String&) String&path {
+fn Ext(path String&) String& {
     i I64 = path.Len() - 1
     for i >= 0 and path[i] != '/' {
         if path[i] == '.' { return path[i:] }
@@ -38,7 +38,7 @@ fn Ext(path String&) String&path {
 
 # everything but the path's last element, cleaned (Clean): "a/b" for "a/b/c", and for "a/b/c/" too, whose last element
 # is the empty one after its slash; "." for a path with no slash in it, "/" for one in the root
-fn Dir(path String&) String&path {
+fn Dir(path String&) String& {
     i I64 = path.Len() - 1
     for i >= 0 and path[i] != '/' { i-- }
     return Clean(path[:i + 1])
@@ -50,7 +50,7 @@ fn Dir(path String&) String&path {
 # slash, and the empty path, or one that cleans to nothing, is ".". "a//b/./c/../d/" is "a/b/d", "/../x" is "/x", and
 # "../../x" stays as it is. It knows nothing of symbolic links: "a/.." is "." even where "a" is a link elsewhere
 # (os.RealPath asks the file system)
-fn Clean(path String&) String&path {
+fn Clean(path String&) String& {
     n := path.Len()
     if n == 0 { return "." }
     out := Array<Char>(n)              # never longer than the path: elements are only removed
@@ -105,7 +105,7 @@ fn Clean(path String&) String&path {
         }
     }
     if same { return path[:w] }
-    text mut String&path = String(Array<Char>(w))
+    text mut String& = String(Array<Char>(w))
     for i in range w { text[i] = out[i] }
     return text
 }

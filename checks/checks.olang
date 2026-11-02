@@ -80,11 +80,11 @@ Cases Array<String&>& = only(try os.ReadDir("checks/cases") catch default Array<
 # a case CHECKS_ONLY names: its file name holds one of the comma-separated texts
 fn wanted(name String&) Bool { return Only.Split(",").Some(fn(w String&) Bool { return name.Contains(w) }) }
 
-fn only(names Array<String&>&) Array<String&>&names {
+fn only(names Array<String&>&) Array<String&>& {
     if Only == "" { return names }
     n := 0
     for x in names { if wanted(x): n++ }
-    out mut Array<String&>&names = Array<String&>(n)
+    out mut Array<String&>& = Array<String&>(n)
     k := 0
     for x in names {
         if wanted(x) {
@@ -120,7 +120,7 @@ Outcomes Array<String&>& = runAll()
 # (Seed).
 fn runAll() Array<String&>& {
     n I64 = Checks.Len() + Cases.Len()
-    outcomes mut Array<String&>&return = Array<String&>(n)
+    outcomes mut Array<String&>& = Array<String&>(n)
     took mut Array<I64>& = Array<I64>(n)
     queue mut chan.Chan<I64>& = chan.Chan<I64>(n)
     chan.Init(queue)
@@ -213,7 +213,7 @@ fn (r mut report&) expect(ok Bool, what String&, dir String&) ? Failed {
 }
 
 # the text after "<prefix>" on the line that starts with it, or "" when no line does
-fn lineAfter(src String&, prefix String&) String&src {
+fn lineAfter(src String&, prefix String&) String& {
     at := try src.Find(prefix) catch { return src[0:0] }
     rest := src[at + prefix.Len():]
     end := try rest.FindByte('\n') catch { return rest }
@@ -232,7 +232,7 @@ fn store() String& {
 
 # a fresh, empty directory for one check, as an absolute path
 fn fresh(tag String&) String& {
-    dir mut String&return = $root() "/build/checks/" $tag
+    dir mut String& = $root() "/build/checks/" $tag
     os.Run("rm -rf " $os.Quote(dir) " && mkdir -p " $os.Quote(dir))
     return dir
 }

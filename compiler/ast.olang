@@ -16,8 +16,8 @@ type TypeRef enum {
     Func(sp source.Span, sig Sig&)
     # an inline shape - an anonymous enum, struct or trait - kept as the declaration it would be
     Shape(sp source.Span, body TypeBody&)
-    # a reference marker after a type: "&" (scope 0), "&x", "&return" (T24, O3); "?&" nullable (T2c)
-    Ref(sp source.Span, of TypeRef&, scope source.NameId, nullable Bool)
+    # a reference marker after a type: "&" (T24); "?&" nullable (T2c)
+    Ref(sp source.Span, of TypeRef&, nullable Bool)
     # the permission before a type: "mut" (T25b) - owned never set by the parser, own being gone from the language
     Perm(sp source.Span, of TypeRef?&, writable Bool, owned Bool)
     # "any Trait": a run-time trait value's referent (T32) - the reference marker after it a Ref around it
@@ -61,20 +61,8 @@ type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool,
     Variadic   # "..." after an extern's parameters (X17): C's variable arguments
 }
 
-# a contract (D17): its bracketed block's span, its conditions as statements - each an Assert with no message - and its
-# "outlives" chains
-type ContractBlock struct(Sp source.Span, Items Array<Stmt&>&, Chains Array<Outlives&>&) {
-    Sp
-    Items
-    Chains
-}
-
-# "a outlives b outlives c": the names in order, 0 for "return" (the result scope), and where each is written
-type Outlives struct(Sp source.Span, Names Array<source.NameId>&, Sps Array<source.Span>&) {
-    Sp
-    Names
-    Sps
-}
+# a contract (D17): its bracketed block's span and its conditions as statements - each an Assert with no message
+type ContractBlock struct(Sp source.Span, Items Array<Stmt&>&) { Sp, Items }
 
 # a dotted name: alias.Type.word - an error set's or a catch clause's item, an error statement's word
 type Path struct(Sp source.Span, Parts Array<source.NameId>&) {
@@ -98,7 +86,6 @@ type Expr enum {
     Is(sp source.Span, x Expr&, y Expr&, negated Bool)
     As(sp source.Span, x Expr&, t TypeRef&)
     Call(sp source.Span, f Expr&, args Array<Expr&>&)
-    ScopeCall(sp source.Span, f Expr&, scope source.NameId, args Array<Expr&>&)   # f&x(args) (E25)
     Generic(sp source.Span, x Expr&, args Array<TypeRef&>&)                       # Name<args>: Array<I32>(n)
     Member(sp source.Span, x Expr&, name source.NameId)
     # x[i, j] - an index, or, where x names a type, an array literal (the resolver decides, DESIGN.md point 1). "T[]"
@@ -392,7 +379,7 @@ fn (e Expr&) Span() source.Span {
         case Expr.Name(sp, _), Expr.Lit(sp, _), Expr.Paren(sp, _), Expr.Unary(sp, _, _), Expr.Postfix(sp, _, _): sp
         case Expr.Binary(sp, _, _, _), Expr.NotIn(sp, _, _), Expr.Chain(sp, _), Expr.Cond(sp, _, _, _): sp
         case Expr.IsType(sp, _, _, _), Expr.Is(sp, _, _, _), Expr.As(sp, _, _), Expr.Call(sp, _, _): sp
-        case Expr.ScopeCall(sp, _, _, _), Expr.Generic(sp, _, _), Expr.Member(sp, _, _), Expr.Index(sp, _, _): sp
+        case Expr.Generic(sp, _, _), Expr.Member(sp, _, _), Expr.Index(sp, _, _): sp
         case Expr.Slice(sp, _, _, _), Expr.ArrayLit(sp, _, _), Expr.Row(sp, _), Expr.Compr(sp, _): sp
         case Expr.Join(sp, _), Expr.Try(sp, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _): sp
         case Expr.Default(sp): sp
@@ -424,7 +411,7 @@ fn (e Expr&) IsNamed() Bool {
 fn (t TypeRef&) Span() source.Span {
     return match t {
         case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _): sp
-        case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _, _), TypeRef.Perm(sp, _, _, _), TypeRef.Any(sp, _): sp
+        case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _), TypeRef.Perm(sp, _, _, _), TypeRef.Any(sp, _): sp
         case TypeRef.Errs(sp, _), TypeRef.Spread(sp, _): sp
     }
 }
@@ -524,7 +511,7 @@ fn yieldInExpr(x Expr?&) source.Span {
         case Expr.Binary(_, _, a, b), Expr.NotIn(_, a, b), Expr.Is(_, a, b, _): yieldOr(yieldInExpr(a), yieldInExpr(b))
         case Expr.Cond(_, a, k, b): yieldOr(yieldOr(yieldInExpr(a), yieldInExpr(k)), yieldInExpr(b))
         case Expr.Chain(_, ch): yieldInExprs(ch.Xs)
-        case Expr.Call(_, f, args), Expr.ScopeCall(_, f, _, args), Expr.Index(_, f, args): yieldOr(yieldInExpr(f), yieldInExprs(args))
+        case Expr.Call(_, f, args), Expr.Index(_, f, args): yieldOr(yieldInExpr(f), yieldInExprs(args))
         case Expr.Slice(_, y, lo, hi): yieldOr(yieldOr(yieldInExpr(y), yieldInExpr(lo)), yieldInExpr(hi))
         case Expr.ArrayLit(_, _, items), Expr.Row(_, items), Expr.Variadic(_, items), Expr.Join(_, items), Expr.Range(_, items): yieldInExprs(items)
         case Expr.Try(_, y, cs): yieldOr(yieldInExpr(y), yieldInCatches(cs))
@@ -544,7 +531,7 @@ fn (p Pattern&) Span() source.Span {
 # ---- tests (B7, B7a) ----
 
 # the test declared at sp among ds - inside the branches of top-level ifs too - null for none
-fn FindTest(ds Array<Decl&>&, sp source.Span) Decl?&ds {
+fn FindTest(ds Array<Decl&>&, sp source.Span) Decl?& {
     for d in ds {
         match d {
             case Decl.Test(dsp, _, _, _) {
@@ -560,7 +547,7 @@ fn FindTest(ds Array<Decl&>&, sp source.Span) Decl?&ds {
     return null
 }
 
-fn findTestIf(ti TopIf?&, sp source.Span) Decl?&ti {
+fn findTestIf(ti TopIf?&, sp source.Span) Decl?& {
     if ti is null { return null }
     if ti.Then is not null {
         f := FindTest(ti.Then!.Decls, sp)
@@ -598,7 +585,7 @@ fn RecvTarget(f Func&, names source.Names&) String {
     for t is not null {
         match t {
             case TypeRef.Perm(_, of, _, _) { t = of }
-            case TypeRef.Ref(_, of, _, _) { t = of }
+            case TypeRef.Ref(_, of, _) { t = of }
             case TypeRef.Named(_, path, _) {
                 n := path[path.Len() - 1]
                 for tp in f.TypeParams {

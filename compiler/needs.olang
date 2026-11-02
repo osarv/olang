@@ -18,7 +18,7 @@ import typecheck "check"
 
 # the lines of what f's variables need, "T needs: Less, Plus" - none for a function of no variables or no needs
 fn Lines(c mut typecheck.Checker&, f I64) Array<String&> {
-    w mut walker&c = walker(c, f, 0)
+    w mut walker& = walker(c, f, 0)
     w.run()
     out Vec<String&>
     owner := generic.FnOwner(f)
@@ -70,7 +70,7 @@ fn (w mut walker&) varOf(t ast.TypeRef?&) I64 {
             if path.Len() != 1 or args.Len() > 0 { return -1 }
             return try w.vars.Get(path[0]) catch default -1
         }
-        case ast.TypeRef.Ref(_, of, _, _) { return w.varOf(of) }
+        case ast.TypeRef.Ref(_, of, _) { return w.varOf(of) }
         case ast.TypeRef.Perm(_, of, _, _) { return w.varOf(of) }
         case _ { return -1 }
     }
@@ -85,7 +85,7 @@ fn (w mut walker&) elemOf(t ast.TypeRef?&) I64 {
             if args.Len() != 1 or (last != "Array" and last != "Vec") { return -1 }
             return w.varOf(args[0])
         }
-        case ast.TypeRef.Ref(_, of, _, _) { return w.elemOf(of) }
+        case ast.TypeRef.Ref(_, of, _) { return w.elemOf(of) }
         case ast.TypeRef.Perm(_, of, _, _) { return w.elemOf(of) }
         case _ { return -1 }
     }
@@ -420,7 +420,7 @@ fn (w mut walker&) through(f ast.Expr&, args Array<ast.Expr&>&) {
 
 # what generic g needs of the variable a parameter of it is written as (t), followed depth calls deep
 fn innerNeeds(c mut typecheck.Checker&, g I64, t ast.TypeRef?&, depth I64) Vec<String&> {
-    inner mut walker&c = walker(c, g, depth)
+    inner mut walker& = walker(c, g, depth)
     inner.run()
     out Vec<String&>
     u := inner.varOf(t)

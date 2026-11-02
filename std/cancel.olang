@@ -38,7 +38,7 @@ type Token struct(deadlineNs I64 = 0) {
 }
 
 # a token that fires by itself once ms milliseconds have passed - and on Cancel(), like any other
-fn After(ms I64) Token& {
+fn After(ms I64) mut Token& {
     return Token(NowNs() + ms * 1000000)
 }
 

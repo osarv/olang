@@ -9,5 +9,5 @@ type aPt struct(x I64, y I64) {
     y
 }
 fn (p aPt&) Name() String { return "pt " $p.x }
-fn bor(p aPt) any aNamed&p { return p }
+fn bor(p aPt) any aNamed& { return p }
 fn main() { }

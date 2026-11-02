@@ -1,4 +1,4 @@
-fn View2(v Vec<I64>&) Array<I64>&v { return v.View() }
+fn View2(v Vec<I64>&) Array<I64>& { return v.View() }
 fn Sum(v Vec<I64>&) I64 {
     t := 0
     for x in v { t += x }

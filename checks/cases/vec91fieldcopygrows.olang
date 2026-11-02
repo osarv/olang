@@ -9,7 +9,7 @@ type Lexer struct(n I64) {
 fn main() ? {
     l := Lexer(3)
     for i in range 3 { l.toks.Push(i) }
-    c Vec<I64>&l = l.toks
+    c Vec<I64>& = l.toks
     l.toks.Push(9)
     try io.Println($c[0])
 }

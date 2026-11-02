@@ -54,7 +54,7 @@ fn Write(fd I32, data Array<U8>&) ? Error {
 # "buf" and the return share the scope variable "s" (O3): the returned slice points into the caller's own
 # buffer, so its lifetime is that buffer's, and saying so is what lets it be returned at all - a bare "&"
 # return type is rejected outright (O13).
-fn Read(fd I32, buf mut Array<U8>&) Array<U8>&buf ? Error {
+fn Read(fd I32, buf mut Array<U8>&) Array<U8>& ? Error {
     n I64 = unistd.read(fd, buf, U64(buf.Len()))
     if n < 0 {
         error Error.Failed
@@ -182,9 +182,9 @@ fn (l mut Lines&) Next() String& ? Error, Exhausted {
 }
 
 # buf[first:last] as new text, a carriage return at its end dropped
-fn (l Lines&) line(first I64, last I64) String& {
+fn (l Lines&) line(first I64, last I64) mut String& {
     n I64 = last - first - (1 if last > first and l.buf[last - 1] == '\r' else 0)
-    text mut String&return = String(Array<U8>(n))
+    text mut String& = String(Array<U8>(n))
     for k in range n { text[k] = l.buf[first + k] }
     return text
 }
@@ -352,9 +352,9 @@ fn reading(text String&) I32 {
 }
 
 # the lines of "text", read through Lines with a buffer of "size" bytes, each in brackets
-fn bracketed(text String&, size I64) String& {
+fn bracketed(text String&, size I64) mut String& {
     fd := reading(text)
-    out mut String&return = ""
+    out mut String& = ""
     for line in try Lines(fd, size) {
         out = $out "[" $line "]"
     } catch Error { unreachable }
@@ -438,8 +438,8 @@ test "a line kept is built where it is kept" {
 }
 
 # what a pipe's read end holds once its write end is closed, as text
-fn drained(fd I32) String& {
-    out mut String&return = ""
+fn drained(fd I32) mut String& {
+    out mut String& = ""
     for line in try Lines(fd) {
         out = $out $line "\n"
     } catch Error { unreachable }

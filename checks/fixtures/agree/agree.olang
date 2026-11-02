@@ -76,7 +76,7 @@ type Holder struct(a mut Array<I64>&) {
     a
 }
 fn mkHolder() Holder {
-    arr mut Array<I64>&return = Array<I64>(3)
+    arr mut Array<I64>& = Array<I64>(3)
     return Holder(arr)
 }
 Hold Holder = mkHolder()

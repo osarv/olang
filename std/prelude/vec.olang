@@ -48,7 +48,7 @@ fn (v mut Vec<T>&) room(need I64) {
     r I64 = 8 if v.data.Len() < 4 else v.data.Len() * 2
     if r < need { r = need }
     if r < v.want { r = v.want }
-    old Array<T>&v = v.data                                  # the buffer being replaced, viewed (not copied)
+    old Array<T>& = v.data                                  # the buffer being replaced, viewed (not copied)
     v.data = old[:v.n].grown(r)
     old.retire()
 }
@@ -103,10 +103,10 @@ fn (v Vec<T>&) Get(i I64) T ? VecError.OutOfRange {
 
 # the element at position i where the Vec holds it, read with no copy made - "vv[i]" gives a copy. Unchecked, as At is;
 # good until the Vec grows or loses it, as a view is (View)
-fn (v Vec<T>&) Ref(i I64) T&v { return v.data[i] }
+fn (v Vec<T>&) Ref(i I64) T& { return v.data[i] }
 
 # ...writable, to change in place - "vv.RefMut(i).Push(x)" for a Vec of Vecs
-fn (v mut Vec<T>&) RefMut(i I64) mut T&v { return v.data[i] }
+fn (v mut Vec<T>&) RefMut(i I64) mut T& { return v.data[i] }
 
 # replaces the element at position i - "v[i] = x" (E31), unchecked as At is
 fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
@@ -144,10 +144,10 @@ fn (v mut Vec<T>&) Truncate(k I64) {
 
 # the elements, lent as an array - a window on the buffer as it is now, good until the Vec grows (a Push, a PushAll, an
 # Insert, a Reserve may replace the buffer, and the view goes on showing the old one)
-fn (v Vec<T>&) View() Array<T>&v { return v.data[:v.n] }
+fn (v Vec<T>&) View() Array<T>& { return v.data[:v.n] }
 
 # ...writable
-fn (v mut Vec<T>&) ViewMut() mut Array<T>&v { return v.data[:v.n] }
+fn (v mut Vec<T>&) ViewMut() mut Array<T>& { return v.data[:v.n] }
 
 # removes the element at position i, giving nothing (Remove lets go, Take gives - TakeAt below), the elements after it each
 # moving down one place as TakeAt moves them
@@ -248,7 +248,7 @@ fn (v Vec<String>&) Join(sep String&) String {
 # the elements copied into one array in the CALLER's scope - independent of the Vec, which may grow
 fn (v Vec<T>&) ToArray() mut Array<T>& {
     if v.n == 0 { return Array<T>(0) }
-    out mut Array<T>&return = Array<T>(v.n, v.data[0])
+    out mut Array<T>& = Array<T>(v.n, v.data[0])
     for i in range v.n { out[i] = v.data[i] }
     return out
 }

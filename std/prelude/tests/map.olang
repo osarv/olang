@@ -167,7 +167,7 @@ test "O18b/O23a: text keys put in a loop survive it, and one map's entries go in
 fn mapCopyInto(from Map<String&, I64>&, into mut Map<String&, I64>&) {
     for e in from { into.Put(e.Key, e.Value) }
 }
-fn mapAnyKey(from Map<String&, I64>&) String&from {
+fn mapAnyKey(from Map<String&, I64>&) String& {
     for e in from { return e.Key }
     return ""
 }
@@ -188,7 +188,7 @@ test "O18c: a Map's entries, walked through a parameter, go into another map and
 # T25d: constant text elements of a read-only array literal walked by for-in are the static data itself, so they may go
 # into a map anywhere; O1b/O25e: a global map read through read-only receivers binds their scope to the program's
 fn mapGlobalMade() Map<I32, I32>& {
-    m mut Map<I32, I32>&return = Map<I32, I32>()
+    m mut Map<I32, I32>& = Map<I32, I32>()
     m.Put(1, 2)
     return m
 }
@@ -343,7 +343,7 @@ fn mapCopies() I64 {
     n := m
     assert n.Remove("a")
     assert m.Len() == 7 and m.Has("a") and n.Len() == 6 and not n.Has("a")
-    r mut Map<String&, I64>&m = m                # a second name for m, written as one
+    r mut Map<String&, I64>& = m                # a second name for m, written as one
     assert r.Remove("a")
     assert m.Len() == 6 and not m.Has("a") and m.Keys().ToVec().Len() == 6
     c := m

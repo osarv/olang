@@ -4,7 +4,7 @@ type Node struct(v I64) {
     v
 }
 
-fn keep(a mut Node&, b Node&) [b outlives a] { }
+fn keep(a mut Node&, b Node&) { }
 
 fn main() {
     f := keep

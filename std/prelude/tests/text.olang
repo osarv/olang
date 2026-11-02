@@ -50,8 +50,8 @@ fn bracketed(text String&) String& {
 }
 
 # the lines of text kept in a Vec - borrows of the text, so the Vec lives where the text does
-fn linesOf(t String&) Vec<String&>&t {
-    out mut Vec<String&>&t = Vec<String&>()
+fn linesOf(t String&) Vec<String&>& {
+    out mut Vec<String&>& = Vec<String&>()
     for line in t.Lines() { out.Push(line) }
     return out
 }

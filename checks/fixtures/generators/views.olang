@@ -17,7 +17,7 @@ type Pt struct(x I64) {
     x
 }
 
-fn spans(t String&) Iterator<String&t> {
+fn spans(t String&) Iterator<String&> {
     i I64 = 0
     for i < t.Len() {
         for i < t.Len() and t[i] == ' ' { i++ }
@@ -28,25 +28,25 @@ fn spans(t String&) Iterator<String&t> {
     }
 }
 
-fn (t String&) Halves() Iterator<String&t> {
+fn (t String&) Halves() Iterator<String&> {
     yield t[0:t.Len() / 2]
     yield t[t.Len() / 2:]
 }
 
-fn points(n I64) Iterator<Pt&return> {
-    all mut Vec<Pt&>&return = Vec<Pt&>()
+fn points(n I64) Iterator<Pt&> {
+    all mut Vec<Pt&>& = Vec<Pt&>()
     r := Res(n)
     for i in range n {
-        p Pt&return = Pt(i * 10 + r.id)
+        p Pt& = Pt(i * 10 + r.id)
         all.Push(p)
         yield p
     }
     for p in all { yield p }
 }
 
-fn labels(t String&, n I64) Iterator<String&return> {
+fn labels(t String&, n I64) Iterator<String&> {
     for i in range n {
-        s String&return = $t "-" $i
+        s String& = $t "-" $i
         yield s
         junk := $i "junk"
         assert junk.Len() > 4

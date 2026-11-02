@@ -8,7 +8,7 @@ type Bag struct(c mut Cell&) {
     c
 }
 type Cur struct(of Bag&) {
-    c mut Cell&of = of.c
+    c mut Cell& = of.c
 }
 fn poke(p mut Cur&) { p.c.v++ }
 type B1 struct(b Bag&) {

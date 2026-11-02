@@ -17,7 +17,7 @@ fn (p mut Parser&) parse() Ast& {
 fn (p Parser&) describe() String& {
     return $p.src.Len() "!"
 }
-fn Parse(n I64) Ast& {
+fn Parse(n I64) mut Ast& {
     src := $n $n $n
     p := Parser(src)
     return p.parse()

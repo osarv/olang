@@ -42,7 +42,7 @@ fn run(args Array<String&>&) {
     defines Vec<String&>
     testBuild := false
     standin := false
-    outPath String&args = ""
+    outPath String& = ""
     k I64 = 1
     for k < args.Len() and args[k].StartsWith("-") and args[k] != "-rt" {
         if args[k] == "-t" {

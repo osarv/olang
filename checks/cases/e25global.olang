@@ -5,7 +5,7 @@ type GN struct(v I32) { v }
 fn gmk(v I32) GN& { return GN(v) }
 G GN& = GN(1)
 fn f() I32 {
-    x := gmk&G(2)
+    x := gmk(2)
     return x.v
 }
 fn main() ? { assert f() == 2 }

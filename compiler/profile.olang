@@ -33,7 +33,7 @@ extern { fn signal(sig I32, handler I64) I64 }
 
 # profile FILE ARGS: the program built for profiling, run, and reported on - the status the program's own, or the
 # build's where it did not build
-fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&c) I32 {
+fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&) I32 {
     html := $c.Output                   # -output names the flame graph here, not the program
     c.Output = ""
     c.Quiet = true

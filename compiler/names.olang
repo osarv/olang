@@ -326,7 +326,7 @@ type raisedName struct(Name source.NameId, Sp source.Span, Count I64, Named Bool
 # each name entered as a type of module mi, and its declaration added to the module's: an error type of one word, the
 # name itself (generic.IsRaisedError)
 fn (r mut Resolver&) declareRaised(mi I64, firsts Vec<raisedName>&) {
-    ds mut Vec<ast.Decl&>&r = Vec<ast.Decl&>()
+    ds mut Vec<ast.Decl&>& = Vec<ast.Decl&>()
     for d in r.L.Mods[mi].Decls { ds.Push(d) }
     for f in firsts {
         r.addType(mi, f.Name, f.Sp, null)
@@ -380,7 +380,7 @@ fn (r Resolver&) LocalSpan(i I64) source.Span {
 
 fn key(file I64, at I32) I64 { return (file << 32) | I64(at) }
 
-fn (r mut Resolver&) text(n source.NameId) String&r { return r.L.Names.Text(n) }
+fn (r mut Resolver&) text(n source.NameId) String& { return r.L.Names.Text(n) }
 
 fn (r mut Resolver&) at(mi I64, sp source.Span) diag.Where {
     return diag.Where.Span(r.L.Mods[mi].File, I64(sp.Start), I64(sp.End))
@@ -851,17 +851,11 @@ fn (r mut Resolver&) func(f ast.Func&) {
     r.popTo(m)
 }
 
-# a contract's names (D17), its parameters already declared: each condition's, and an "outlives" chain's - parameters
-# or "return"
+# a contract's names (D17), its parameters already declared: each condition's
 fn (r mut Resolver&) contract(s ast.Sig&) {
     if s.Contract is null { return }
     m := r.mark()
     r.block(s.Contract!.Items)
-    for ch in s.Contract!.Chains {
-        for i in range ch.Names.Len() {
-            if ch.Names[i] != source.NameId(0) { r.name(ch.Sps[i], ch.Names[i]) }
-        }
-    }
     r.popTo(m)
 }
 
@@ -949,7 +943,7 @@ fn (r mut Resolver&) receiverVars(t ast.TypeRef?&, inArgs Bool) {
                 }
             }
         }
-        case ast.TypeRef.Ref(_, of, _, _) { r.receiverVars(of, inArgs) }
+        case ast.TypeRef.Ref(_, of, _) { r.receiverVars(of, inArgs) }
         case ast.TypeRef.Perm(_, of, _, _) { r.receiverVars(of, inArgs) }
         case _ { }
     }
@@ -1279,7 +1273,7 @@ fn (r mut Resolver&) decideLocal(c ast.Expr&) cond.Decision {
     for n in r.itemNames { m.Scope!.Locals.Push(n) }
     m.Scope!.Fixed.Clear()
     for n in r.itemInits { m.Scope!.Fixed.Push(n) }
-    e mut cond.Eval&m = cond.Eval(m.Src!.Text, r.L.Names, m.Scope!, r.L.Consts)
+    e mut cond.Eval& = cond.Eval(m.Src!.Text, r.L.Names, m.Scope!, r.L.Consts)
     return e.Local(c)
 }
 
@@ -1429,11 +1423,6 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
             r.typeRef(t)
         }
         case ast.Expr.Call(_, f, args) {
-            r.expr(f)
-            for a in args { r.expr(a) }
-        }
-        case ast.Expr.ScopeCall(_, f, scope, args) {
-            r.read(r.lookup(scope))   # D3b
             r.expr(f)
             for a in args { r.expr(a) }
         }
@@ -1665,15 +1654,7 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef?&) {
                 case _ { }
             }
         }
-        case ast.TypeRef.Ref(_, of, scope, _) {
-            r.typeRef(of)
-            if scope != source.NameId(0) and r.text(scope) != "return" {
-                sref := r.lookup(scope)
-                r.record(r.nameSpan(r.mi, of.Span().End, scope), sref)
-                r.read(sref)   # D3b: where a reference lives says where the local does
-            }
-        }
-        case ast.TypeRef.Perm(_, of, _, _) { r.typeRef(of) }
+        case ast.TypeRef.Ref(_, of, _), ast.TypeRef.Perm(_, of, _, _) { r.typeRef(of) }
         case ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { r.typeRef(of) }
         case ast.TypeRef.Errs(_, items) {
             for e in items { r.path(e) }

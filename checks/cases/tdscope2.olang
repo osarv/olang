@@ -1,9 +1,9 @@
 # check: fail error[R11, O25]: a reference default lives where the call's result does
 type E error { X }
 type B struct(v I32) { v }
-fn pick(b B&, ok Bool) B&b ? E {
+fn pick(b B&, ok Bool) B& ? E {
     if not ok { error E.X }
     return b
 }
-fn other(p B&, q B&) B&p { return try pick(p, false) catch default q }
+fn other(p B&, q B&) B& { return try pick(p, false) catch default q }
 fn main() ? E { }

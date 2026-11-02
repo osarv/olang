@@ -15,7 +15,7 @@ type CB struct() {
     text mut String& = $1 "-ttttttttttttttt"
 }
 type H struct(x String&, n I64) {
-    y String&x = $n "-in-x"
+    y String& = $n "-in-x"
 }
 type K struct(x String&, n I64) {
     y String& = $n "-in-the-instance"
@@ -33,8 +33,8 @@ fn main() ? {
     assert k.y == "6-in-the-instance"
     c := CB()
     x := c.text
-    h := mk&x(x)
-    h2 := H&x(x, 6)
+    h := mk(x)
+    h2 := H(x, 6)
     churn()
     assert h.y == "5-in-x"
     assert h2.y == "6-in-x"

@@ -14,7 +14,7 @@ type CB struct() {
 fn main() ? {
     c := CB()
     l := c.items
-    s mut String&l = $5 "-new-text-made-where-the-list-lives"
+    s mut String& = $5 "-new-text-made-where-the-list-lives"
     l.Push(s)
     assert s == "5-new-text-made-where-the-list-lives"
     c.items = Vec<String&>()

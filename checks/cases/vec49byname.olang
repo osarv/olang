@@ -13,8 +13,8 @@ type CB struct() {
     data mut Array<Char>& = Array<Char>(2, 'a')
     text mut String& = "bb"
 }
-fn (c CB&) Text() String&c { return c.text }
-fn (c CB&) Pick(trim Bool) String&c {
+fn (c CB&) Text() String& { return c.text }
+fn (c CB&) Pick(trim Bool) String& {
     if trim { return c.Text() }
     t := c.Text()
     return t

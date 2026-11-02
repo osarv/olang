@@ -12,7 +12,7 @@ type Box struct() {
     head mut Node& = Node()
 }
 type W struct(b Box) { b }
-fn pick(x mut Box&) mut Box&x { return x }
+fn pick(x mut Box&) mut Box& { return x }
 fn viaCall(r mut Box&) {
     d Box = pick(r)
     d.head.next = Node()

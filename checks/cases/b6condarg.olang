@@ -6,7 +6,7 @@ import "std/io"
 type Bag struct() {
     last String& = ""
 }
-fn keep(b mut Bag&, s String&b) { b.last = s }
+fn keep(b mut Bag&, s String&) { b.last = s }
 fn main() ? {
     b mut Bag& = Bag()
     outer String& = "outer"

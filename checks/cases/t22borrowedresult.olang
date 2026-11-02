@@ -5,7 +5,7 @@ type N struct(v I64) {
     v
     next N?& = null
 }
-fn self(a mut N&) mut N&a { return a }
+fn self(a mut N&) mut N& { return a }
 fn keep(f fn(a mut N&) N&, out mut N&, i I64) {
     t := N(i)
     out.next = f(t)

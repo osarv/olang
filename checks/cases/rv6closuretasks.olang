@@ -7,7 +7,7 @@ type Node struct(v I64) {
     w I64 = v * 3
     next mut Node?& = null
 }
-fn mk(r Node&, i I64) Node&r { return Node(i) }
+fn mk(r Node&, i I64) Node& { return Node(i) }
 fn work(f fn(i I64) I64, base I64) I64 {
     s I64 = 0
     for i in range 50000 { s += f(base + i) }

@@ -246,7 +246,7 @@ fn (w mut writer&) sig(s ast.Sig&) {
     w.errors(s)
 }
 
-# a contract (D17): " [item, ...]" - its conditions, "for" and "if" items, then its "outlives" chains
+# a contract (D17): " [item, ...]" - its conditions
 fn (w mut writer&) contract(s ast.Sig&) {
     if s.Contract is null { return }
     k := s.Contract!
@@ -256,14 +256,6 @@ fn (w mut writer&) contract(s ast.Sig&) {
         if not first { w.put(", ") }
         first = false
         w.contractItem(st)
-    }
-    for ch in k.Chains {
-        if not first { w.put(", ") }
-        first = false
-        for i in range ch.Names.Len() {
-            if i > 0 { w.put(" outlives ") }
-            if ch.Names[i] == source.NameId(0) { w.put("return") } else { w.name(ch.Names[i]) }
-        }
     }
     w.put("]")
 }
@@ -509,10 +501,9 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
             if wrap { w.put(")") }
         }
         case ast.TypeRef.Shape(_, body) { w.typeBody(body) }
-        case ast.TypeRef.Ref(_, of, scope, nullable) {
+        case ast.TypeRef.Ref(_, of, nullable) {
             w.ty(of)
             w.put("?&" if nullable else "&")
-            if scope != source.NameId(0) { w.name(scope) }
         }
         case ast.TypeRef.Any(_, of) {
             w.put("any ")
@@ -932,14 +923,6 @@ fn (w mut writer&) expr(x ast.Expr&) {
         }
         case ast.Expr.Call(_, f, args) {
             w.expr(f)
-            w.put("(")
-            w.items(args)
-            w.put(")")
-        }
-        case ast.Expr.ScopeCall(_, f, scope, args) {
-            w.expr(f)
-            w.put("&")
-            w.name(scope)
             w.put("(")
             w.items(args)
             w.put(")")

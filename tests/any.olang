@@ -393,10 +393,10 @@ fn chains(n I64) String {
     h := RNode(0)
     p := RPlain(0)
     for i in range 1, n {
-        a mut RNode&h = RNode(i)
+        a mut RNode& = RNode(i)
         a.next = h.next
         h.next = a
-        q mut RPlain&p = RPlain(i)
+        q mut RPlain& = RPlain(i)
         q.next = p.next
         p.next = q
     }
@@ -629,15 +629,15 @@ test "T32: a type variable in an any's trait, substituted and inferred; Map to a
 # where the box lands - so the box copies it, and a block's scope argument does not leave the box dangling
 fn sArg(i I64) String { return "text" $i "-" $(i * 7) }
 fn sArgStash(l mut Vec<any Named&>&, i I64) String {
-    l.Push(Label(sArg&return(i)))
+    l.Push(Label(sArg(i)))
     return "r" $i
 }
 fn scopeArgs(n I64) String {
     xs := Vec<any Named&>()
     for i in range n {
         t := "inner" $i
-        xs.Push(Label(sArg&t(i)))
-        xs.Push(Label(sArg&t(i) if i >= 0 else "x" $i))
+        xs.Push(Label(sArg(i)))
+        xs.Push(Label(sArg(i) if i >= 0 else "x" $i))
         sArgStash(xs, i)
     }
     churn()
@@ -715,21 +715,21 @@ test "M21: Eq and Hash of one instance are not another's" {
 # holds - text and arrays of numbers too - so a function returning one copies it into its result, a local declared from
 # one is not moved, and a box of a call returning one is a copy; each value read back after a churn
 fn saArr(i I64) Array<I64> { return I64[i, i * 2] }
-fn saText(p String&, i I64) String { return sArg&p(i) }
+fn saText(p String&, i I64) String { return sArg(i) }
 fn saChain(p String&, i I64) String { return saText(p, i) }
-fn saNums(p String&, i I64) Array<I64> { return saArr&p(i) }
+fn saNums(p String&, i I64) Array<I64> { return saArr(i) }
 fn saLocal(i I64) String {
     t := "local" $i
-    r := sArg&t(i)
+    r := sArg(i)
     return r
 }
 fn saTuple(i I64) String, I64 {
     t := "tuple" $i
-    return sArg&t(i), i
+    return sArg(i), i
 }
 fn saTry(i I64) String {
     t := "try" $i
-    return try saFail&t(i) catch default "no"
+    return try saFail(i) catch default "no"
 }
 fn saFail(i I64) String ? ChOops {
     if i < 0 { error ChOops.Bad }
@@ -775,7 +775,7 @@ fn snAlias(lst mut Vec<String&>&, i I64) String {
 }
 fn snHandle(lst mut Vec<String&>&, i I64) String {
     s := "hnd" $i
-    l mut Vec<String&>&lst = lst
+    l mut Vec<String&>& = lst
     l.Push(s)
     return s
 }
@@ -786,14 +786,14 @@ fn snElem(ks mut Vec<mut SnK&>&, i I64) String {
 }
 fn snChain(k mut SnK&, i I64) String {
     s := "chn" $i
-    r1 String&s = ""
-    r2 String&s = ""
-    r3 String&s = ""
-    r4 String&s = ""
-    r5 String&s = ""
-    r6 String&s = ""
-    r7 String&s = ""
-    r8 String&s = ""
+    r1 String& = ""
+    r2 String& = ""
+    r3 String& = ""
+    r4 String& = ""
+    r5 String& = ""
+    r6 String& = ""
+    r7 String& = ""
+    r8 String& = ""
     for _ in range 10 {
         k.s = r8
         r8 = r7
@@ -846,11 +846,11 @@ type SpP struct(n I64) { n }
 fn spMk(i I64) SpP& { return SpP(i) }
 fn spawnScoped(k I64) String {
     t := "outer" $k
-    x SpP?&t = null
-    y SpP?&t = null
+    x SpP?& = null
+    y SpP?& = null
     join {
-        spawn x = spMk&t(k * 11 + 1)
-        spawn y = spMk&t(k * 11 + 2)
+        spawn x = spMk(k * 11 + 1)
+        spawn y = spMk(k * 11 + 2)
     }
     churn()
     return $x!.n " " $y!.n
@@ -879,14 +879,14 @@ fn spawnStores(k I64) String {
     for i in range k + 1 {
         u := "inner" $i
         join {
-            spawn a, n = spTwo&u(i)
-            spawn b = try spTry&u(i) catch default "dflt"
-            spawn c = spNums&u(i)
+            spawn a, n = spTwo(i)
+            spawn b = try spTry(i) catch default "dflt"
+            spawn c = spNums(i)
         }
     }
     {
         w := "w"
-        join { spawn same = sArg&w(1) }
+        join { spawn same = sArg(1) }
     }
     churn()
     return $a " " $n " " $b " " $c " " $same " " $before
@@ -903,15 +903,15 @@ test "P1g, T11b: a spawn target holding an array by value is stored as its assig
 # with the returned local's borrow may keep it with no obligation, so the local is copied at its return; a slice of
 # it lent the same way; baked as at run time, and an assert the compiler decides agrees
 type ShHolder struct(l mut Vec<String&>&) { l }
-fn (h mut ShHolder&) Add(x String&h) I64 {
+fn (h mut ShHolder&) Add(x String&) I64 {
     h.l.Push(x)
     return 1
 }
-fn (x String&) AddTo(h mut ShHolder&x) I64 {
+fn (x String&) AddTo(h mut ShHolder&) I64 {
     h.l.Push(x)
     return 3
 }
-fn shTie(l mut Vec<String&>&, x String&l) I64 {
+fn shTie(l mut Vec<String&>&, x String&) I64 {
     l.Push(x)
     return 2
 }
@@ -1051,12 +1051,12 @@ test "T7b, K1: a returned conditional, match or catch default is copied while co
 # E25, O25a (the fifth any review, 5): a local a call given a scope argument declares lives where the argument puts it
 fn soMk(i I64) String { return "mk" $i }
 fn soReturn(keep mut Vec<String&>&, i I64) String {
-    x := soMk&return(i)
+    x := soMk(i)
     keep.Push(x)
     return x
 }
 fn soKeep(keep mut Vec<String&>&, i I64) String {
-    x := soMk&keep(i)
+    x := soMk(i)
     keep.Push(x)
     return x
 }

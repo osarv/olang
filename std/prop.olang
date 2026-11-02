@@ -141,7 +141,7 @@ fn gen<T>(s mut source&) T ? skip {
             } else if T.Kind == TypeKind.Float {
                 return T(s.float())
             } else if T.Kind == TypeKind.Reference {
-                x mut T.Target&return = try gen<T.Target>(s)
+                x mut T.Target& = try gen<T.Target>(s)
                 return x
             } else if T.Kind == TypeKind.Array {
                 v := Vec<T.Element>()

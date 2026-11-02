@@ -89,8 +89,8 @@ fn (g migration&) typeAngle(i I64) Bool {
 # each bracket's partner and the innermost bracket around each token: "(", "[", "{" and type brackets
 fn (g mut migration&) brackets() {
     n := g.v.Len()
-    m mut Array<I64>&g = Array<I64>(n, -1)
-    enc mut Array<I64>&g = Array<I64>(n, -1)
+    m mut Array<I64>& = Array<I64>(n, -1)
+    enc mut Array<I64>& = Array<I64>(n, -1)
     stack Vec<I64>
     for i in range n {
         enc[i] = stack[stack.Len() - 1] if stack.Len() > 0 else -1
@@ -318,7 +318,7 @@ fn (g mut migration&) run() {
 }
 
 fn (g migration&) applied() String {
-    reps Vec<String&>&g = g.reps
+    reps Vec<String&>& = g.reps
     sorted := g.edits.ToArray()
     sorted.Sort(fn(a Edit, b Edit) Bool {
         if a.start != b.start { return a.start < b.start }

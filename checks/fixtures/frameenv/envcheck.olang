@@ -52,7 +52,7 @@ fn count(text String&) pair.Pair<I64, I64> {
 }
 
 # the line's first word, as awk's $1
-fn firstField(line String&) String&line {
+fn firstField(line String&) String& {
     i I64 = 0
     for i < line.Len() and (line[i] == ' ' or line[i] == '\t') { i++ }
     s := i

@@ -82,15 +82,15 @@ type TextFlag struct(f mut flag&) { f }
 fn (h BoolFlag&) Get() Bool { return h.f.b }
 fn (h IntFlag&) Get() I64 { return h.f.i }
 fn (h FloatFlag&) Get() F64 { return h.f.f }
-fn (h TextFlag&) Get() String&h { return h.f.t }
+fn (h TextFlag&) Get() String& { return h.f.t }
 fn (h BoolFlag&) IsSet() Bool { return h.f.isSet }
 fn (h IntFlag&) IsSet() Bool { return h.f.isSet }
 fn (h FloatFlag&) IsSet() Bool { return h.f.isSet }
 fn (h TextFlag&) IsSet() Bool { return h.f.isSet }
 
-fn (p mut Flags&) add(name String&, short Char, kind Kind, help String&) mut flag&p {
+fn (p mut Flags&) add(name String&, short Char, kind Kind, help String&) mut flag& {
     s := p.s
-    r mut flag&s = flag(name, short, kind, help)
+    r mut flag& = flag(name, short, kind, help)
     s.all.Push(r)
     return r
 }
@@ -125,21 +125,21 @@ fn (p mut Flags&) Text(name String&, short Char, value String&, help String&) Te
 fn (p Flags&) Args() Vec<String&> { return p.s.args }
 
 # what the last failing Parse failed on, as a sentence: "grep: unknown flag --colour (see --help)"
-fn (p Flags&) Message() String&p { return p.s.message }
+fn (p Flags&) Message() String& { return p.s.message }
 
 # what Message() says, for the failure about to be raised
 fn (s mut state&) say(what String&) {
     s.message = $s.program ": " $what " (see --help)"
 }
 
-fn (s state&) byName(name String&) mut flag&s ? Error.Unknown {
+fn (s state&) byName(name String&) mut flag& ? Error.Unknown {
     for f in s.all {
         if f.name == name: return f
     }
     error Error.Unknown
 }
 
-fn (s state&) byShort(c Char) mut flag&s ? Error.Unknown {
+fn (s state&) byShort(c Char) mut flag& ? Error.Unknown {
     for f in s.all {
         if f.short != 0 and f.short == c: return f
     }
@@ -207,7 +207,7 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
         body := arg[2:] if long else arg[1:]
         eq := try body.FindByte('=') catch default -1
         key := body[:eq] if eq >= 0 else body
-        f mut flag?&s = null
+        f mut flag?& = null
         if long {
             f = try s.byName(key) catch Error.Unknown {
                 s.say("unknown flag --" $key)
@@ -266,9 +266,9 @@ fn (p mut Flags&) Read<T>(args Array<String&>&) T ? {
 
 # a parameter's flag, declared
 fn (p mut Flags&) declare<Q>(q Q) {
-    help String&p = $(q.Attr<Help>()!).Text if q.HasAttr<Help>() else ""
+    help String& = $(q.Attr<Help>()!).Text if q.HasAttr<Help>() else ""
     short := (q.Attr<Short>()!).Letter if q.HasAttr<Short>() else Char(0)
-    name := dashed&p(q.Name)
+    name := dashed(q.Name)
     match Q.Type {
         case Bool {
             f := p.add(name, short, Kind.Bool, help)

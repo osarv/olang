@@ -3,7 +3,7 @@
 # that parameter - the instance may not outlive the argument's block (C2d)
 import "std/io"
 type H struct(x String&, n I64) {
-    y String&x = $n "-new-text-in-x's-scope"
+    y String& = $n "-new-text-in-x's-scope"
 }
 fn main() ? {
     h := H("outer", 1)

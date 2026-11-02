@@ -9,7 +9,7 @@ type Box enum {
     Has(n Node&)
     Two(a Node&, b Node&)
 }
-fn ro(n Node&) Node&n { return n }
+fn ro(n Node&) Node& { return n }
 fn main() ? {
     outer Node& = Node(1)
     keep := ro(outer)

@@ -78,7 +78,7 @@ fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
 
 # M19g (compiler/views.olang), on a program that checked cleanly: a Vec's view used after the Vec may have grown
 fn judgeViews(c mut typecheck.Checker&) {
-    vw mut views.Viewer&c = views.Viewer(c.P, c.Bodies)
+    vw mut views.Viewer& = views.Viewer(c.P, c.Bodies)
     vw.Run()
 }
 
@@ -91,7 +91,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     if tops.Len() == 0 and c.Asks.Len() == 0 and c.P.ConstAsks.Len() == 0 and c.EmbedAsks.Len() == 0 and c.UnrollAsks.Len() == 0 {
         return 0
     }
-    x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
+    x mut Exec& = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     x.ReadsBuild = c.ReadsBuild
     made I64 = 0
@@ -194,7 +194,7 @@ fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) chained {
     d := c.P.L.Diags
     file := c.P.L.Mods[mi].File
     k I64 = 0
-    link ast.TopIf?&ti = ti
+    link ast.TopIf?& = ti
     for link is not null {
         csp := link.Cond!.Span()
         at := diag.Where.Span(file, I64(csp.Start), I64(csp.End))
@@ -224,7 +224,7 @@ type chained struct(Chosen I64, Decided Bool, Why String&, At diag.Where) {
 }
 
 # the top-level if whose first condition starts at that offset, in decls or a branch of an if in them
-fn findIf(ds Array<ast.Decl&>&, at I32) ast.TopIf?&ds {
+fn findIf(ds Array<ast.Decl&>&, at I32) ast.TopIf?& {
     if ds.Len() == 0 { return null }
     for d in ds {
         match d {
@@ -239,7 +239,7 @@ fn findIf(ds Array<ast.Decl&>&, at I32) ast.TopIf?&ds {
     return null
 }
 
-fn findInIf(ti ast.TopIf?&, at I32) ast.TopIf?&ti {
+fn findInIf(ti ast.TopIf?&, at I32) ast.TopIf?& {
     if ti is null { return null }
     if ti.Then is not null {
         f := findIf(ti.Then!.Decls, at)
@@ -261,7 +261,7 @@ fn findInIf(ti ast.TopIf?&, at I32) ast.TopIf?&ti {
 fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&) I64 {
     if c.AssertAsks.Len() == 0 and c.ContractAsks.Len() == 0 and c.TopAsserts.Len() == 0 { return 0 }
     d := c.P.L.Diags
-    x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
+    x mut Exec& = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     n I64 = decideContracts(c, x) + decideTopAsserts(c, x)
     for a in c.AssertAsks {
@@ -415,7 +415,7 @@ fn decideContracts(c mut typecheck.Checker&, x mut Exec&) I64 {
 fn DecideValues(c mut typecheck.Checker&) I64 {
     if c.ValueAsks.Len() == 0 { return 0 }
     d := c.P.L.Diags
-    x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
+    x mut Exec& = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     said Map<pair.Pair<I64, I64>, Bool>
     n I64 = 0
@@ -522,7 +522,7 @@ fn valueWhy(s eval.Stop, at source.Span) String, I64, source.Span {
 # none of them at startup. One the evaluator refuses is set at startup as before
 fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
     out Map<I64, eval.Image>
-    x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
+    x mut Exec& = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     x.start()
     d := c.P.L.Diags
@@ -963,7 +963,7 @@ fn (x mut Exec&) callee(c mir.Callee, work mut Vec<mir.FnKey>&) {
 # table ti defined for the machine, its functions reached
 fn (x mut Exec&) table(ti I64, work mut Vec<mir.FnKey>&) {
     tab := x.P.AnyTables.Ref(ti)
-    keys mut Array<mir.FnKey>&x = Array<mir.FnKey>(tab.Slots.Len() + types.AnySlotBase - 1)
+    keys mut Array<mir.FnKey>& = Array<mir.FnKey>(tab.Slots.Len() + types.AnySlotBase - 1)
     keys[0] = mir.FnKey.AnyRender(ti, false)
     keys[1] = mir.FnKey.AnyRender(ti, true)
     for i in range tab.Slots.Len() { keys[i + 2] = x.Lw.CodeOf(typed.BodyId(I32(tab.Slots[i]))) }

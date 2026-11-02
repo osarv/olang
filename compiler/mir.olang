@@ -465,7 +465,7 @@ type Fn struct(Of FnKey, Ty types.TypeId, File I64, Sp source.Span) {
 }
 
 # S18d: what a Raise at sp says in a kept error return trace: its text where one was given, "" for "raised here"
-fn (f Fn&) RaiseText(sp source.Span) String&f {
+fn (f Fn&) RaiseText(sp source.Span) String& {
     for i in range f.RaiseAt.Len() {
         if f.RaiseAt[i] == sp.Start { return f.RaiseWhat[i] }
     }
@@ -633,7 +633,7 @@ fn ErrorCode(t types.Table&, errors types.ListId, err types.TypeId, word I64) I6
 # the problems with a function, a line each - "bbN[i]: ..." for the i-th statement of block N, "bbN[term]: ..." for
 # its terminator, "fn: ..." for the function's own tables; "" when it keeps the contract
 fn (f Fn&) Verify(t mut types.Table&) String {
-    v mut verifier&t = verifier(f, t)
+    v mut verifier& = verifier(f, t)
     v.run()
     return v.out.ToString()
 }
@@ -1069,6 +1069,15 @@ fn (v mut verifier&) fits(from types.TypeId, to types.TypeId) Bool {
         # parameter's array is the read-only one its argument is
         pf, pt := t.PermOf(from) | types.Nullable, t.PermOf(to) & ~types.Spread
         return v.sameRepr(t.Referent(from), t.Referent(to)) and (pf | pt) == pf
+    }
+    if t.KindOf(from) == types.Kind.Tuple and t.KindOf(to) == types.Kind.Tuple {
+        # several results, each as one would fit (a call's results held writable where its caller's are read-only)
+        fs, ts := t.Items(t.Parts(from)), t.Items(t.Parts(to))
+        if fs.Len() != ts.Len() { return false }
+        for k in range fs.Len() {
+            if not v.fits(fs[k], ts[k]) { return false }
+        }
+        return true
     }
     return false
 }
@@ -2118,7 +2127,7 @@ fn (v mut verifier&) termFlow(term Term) {
 
 # a function as text: its signature, its locals, its scopes, then each block's statements and terminator
 fn (f Fn&) Dump(t mut types.Table&) String {
-    w mut dumper&t = dumper(f, t)
+    w mut dumper& = dumper(f, t)
     w.all()
     return w.out.ToString()
 }
@@ -2369,7 +2378,7 @@ fn (w mut dumper&) call(c Call) String {
 }
 
 # an enum case's name without its type's
-fn short(t String&) String&t {
+fn short(t String&) String& {
     at := try t.FindLast(".") catch { return t }
     return t[at + 1:]
 }
@@ -2389,7 +2398,7 @@ fn tfn(t mut types.Table&, ty types.TypeId) Fn {
 }
 
 # the verifier finds want among the problems with f
-fn expect(t mut types.Table&, f Fn&t, want String&) {
+fn expect(t mut types.Table&, f Fn&, want String&) {
     got := f.Verify(t)
     at := try got.Find(want) catch default -1
     assert at >= 0, "wanted '" $want "' among:\n" $got
@@ -2682,7 +2691,7 @@ test "constants are flattened into the function's tables; helpers' ABI is their 
     t := types.NewTable(names)
     f := addFn(t)
     c := f.AddConst(typed.Const.Items(typed.Const&[typed.Const.Bytes(U8[104, 105]), typed.Const.Bits(7)]))
-    w mut dumper&t = dumper(f, t)
+    w mut dumper& = dumper(f, t)
     assert w.constant(c) == "[text 2 7]" and f.Bytes.Len() == 2 and f.ConstItems.Len() == 2
     i64 := t.Prim("I64")
     render := HelperType(t, HelperKind.Render, i64)

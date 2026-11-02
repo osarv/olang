@@ -14,7 +14,7 @@ fn (b Bag&) Str() String {
     }
     return $name "/" $kind
 }
-fn pick(t String&, c Bool) String&t { return t if c else "same" }
+fn pick(t String&, c Bool) String& { return t if c else "same" }
 Baked := pick("x", false) == pick("y", false)
 fn main() ? {
     a := $Bag("")

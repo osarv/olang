@@ -13,7 +13,7 @@ type R struct() {
 }
 fn (r mut R&) load(path String&) {
     src := "text" $path
-    m mut Module&r = Module(path, path[0:1], src)
+    m mut Module& = Module(path, path[0:1], src)
     r.mods.Push(m)
 }
 fn main() ? {

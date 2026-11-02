@@ -80,7 +80,7 @@ fn (p Position&) Str() String { return $p.Line ":" $p.Col }
 # "try doc[0]". Only under try - a JSON text can always lack what is asked of it - and a "try" over a chain of them
 # checks each: "try doc["users"][0]["name"]". Fails with MISSING when there is no such member or item, WRONG_KIND
 # when the value is not an object (a name asked) or an array (an index).
-fn (j Json&) At<K>(key K) Json&j ? Error {
+fn (j Json&) At<K>(key K) Json& ? Error {
     match K {
         case String {
             match j {
@@ -174,7 +174,7 @@ fn (j Json&) AsBool() Bool ? Error {
 }
 
 # the text j holds - part of the tree, so it lives where j does
-fn (j Json&) AsStr() String&j ? Error {
+fn (j Json&) AsStr() String& ? Error {
     match j {
         case Json.Str(s) { return s }
         case _ { error Error.WrongKind }
@@ -182,7 +182,7 @@ fn (j Json&) AsStr() String&j ? Error {
 }
 
 # the items of the array j is: "for x in try doc.AsArr() { ... } catch Error { ... }"
-fn (j Json&) AsArr() Array<Json&>&j ? Error {
+fn (j Json&) AsArr() Array<Json&>& ? Error {
     match j {
         case Json.Arr(items) { return items }
         case _ { error Error.WrongKind }
@@ -190,7 +190,7 @@ fn (j Json&) AsArr() Array<Json&>&j ? Error {
 }
 
 # the object j is - its Keys and Values, and asking it by name
-fn (j Json&) AsObj() Object&j ? Error {
+fn (j Json&) AsObj() Object& ? Error {
     match j {
         case Json.Obj(o) { return o }
         case _ { error Error.WrongKind }
@@ -201,7 +201,7 @@ fn (j Json&) AsObj() Object&j ? Error {
 fn (o Object&) Len() I64 { return o.Keys.Len() }
 
 # the value of the member named key - the last, when several are - failing with Missing when there is none
-fn (o Object&) At(key String&) Json&o ? Error {
+fn (o Object&) At(key String&) Json& ? Error {
     return o.Values[try o.find(key) catch { error Error.Missing }]
 }
 
@@ -255,7 +255,7 @@ fn nameIndex(keys Array<String&>&) Array<I32>& {
     if n <= 8 { return Array<I32>(0) }
     size I64 = 16
     for size < 2 * n { size = size * 2 }
-    slots mut Array<I32>&return = Array<I32>(size)
+    slots mut Array<I32>& = Array<I32>(size)
     mask I64 = size - 1
     for i in range n {
         s I64 = nameHash(keys[i]) & mask
@@ -375,7 +375,7 @@ fn (j Json&) Hash() I64 {
 # ignored). Fails with the Error that says why the text is not JSON; "at", when given, is set to where reading
 # stopped - the start of the problem, or the end of the text.
 fn Parse(text String&, at mut Position?& = null) Json& ? Error {
-    r mut reader&return = reader(text)
+    r mut reader& = reader(text)
     defer {
         if at is not null { r.place(at) }
     }
@@ -457,14 +457,14 @@ fn (r mut reader&) close() {
     r.depth--
     from I64 = r.starts[r.depth]
     n I64 = r.nv - from
-    items mut Array<Json&>&r = Array<Json&>(n, r.vals[0])     # each written below
+    items mut Array<Json&>& = Array<Json&>(n, r.vals[0])     # each written below
     for i in range n { items[i] = r.vals[from + i] }
     r.nv = from
     namesFrom I64 = r.nameStarts[r.depth]
     if namesFrom < 0 {
         r.push(Json.Arr(items))
     } else {
-        names mut Array<String&>&r = Array<String&>(n, r.names[0])
+        names mut Array<String&>& = Array<String&>(n, r.names[0])
         for i in range n { names[i] = r.names[namesFrom + i] }
         r.nn = namesFrom
         r.push(Json.Obj(try Object(names, items) catch { unreachable }))
@@ -624,7 +624,7 @@ fn (r mut reader&) string() String& ? Error {
         }
     }
     end I64 = r.pos
-    out mut String&return = String(Array<U8>(size))
+    out mut String& = String(Array<U8>(size))
     w I64 = 0
     r.pos = start
     for r.pos < end {
@@ -825,7 +825,7 @@ fn (r reader&) digitAt(i I64) Bool { return i < r.src.Len() and r.src[i].IsDigit
 
 # the number the text from start to pos is, its F64 v: a Num - or, for a whole number written with no fraction and no
 # exponent that an I64 or a U64 holds and v does not hold exactly, an Int or a Uint holding it exactly
-fn (r reader&) exact(start I64, v F64) Json& {
+fn (r reader&) exact(start I64, v F64) mut Json& {
     t := r.src[start:r.pos]
     if t.Len() - (1 if t[0] == '-' else 0) <= 15 { return Json.Num(v) }      # 15 digits or fewer: v is exact
     for ch in t {

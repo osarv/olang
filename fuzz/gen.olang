@@ -419,7 +419,7 @@ fn (g mut Gen&) intLit(t I32) String& {
 }
 
 fn (g mut Gen&) floatLit(t I32) String& {
-    body mut String&return = g.floatBody(t)
+    body mut String& = g.floatBody(t)
     if g.chance(30) { return "(-" $body ")" }
     return body
 }
@@ -479,7 +479,7 @@ fn (g mut Gen&) fit(t I32, d I64) String& {
 
 # an expression of exactly type t that is not a literal
 fn (g mut Gen&) solid(t I32, d I64) String& {
-    e mut String&return = g.ex(t, d)
+    e mut String& = g.ex(t, d)
     if isLit(e) { return g.nonLit(t) }
     return e
 }
@@ -614,7 +614,7 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
         }
     }
     if k == 18 {
-        m mut String&return = g.matchVal(t, d)
+        m mut String& = g.matchVal(t, d)
         if m.Len() > 0 { return m }
     }
     if k == 19 { return g.fallibleCall(t, d) }
@@ -692,7 +692,7 @@ fn (g mut Gen&) exFloat(t I32, d I64) String& {
     if k == 12 { return g.cond(t, d) }
     if k == 13 { return g.recur(t, d) }
     if k == 14 {
-        m mut String&return = g.matchVal(t, d)
+        m mut String& = g.matchVal(t, d)
         if m.Len() > 0 { return m }
     }
     if k == 15 { return g.fallibleCall(t, d) }
@@ -1106,7 +1106,7 @@ fn (g mut Gen&) recur(t I32, d I64) String& {
 fn (g mut Gen&) block(n I64, d I64, ind String&) String& {
     save := g.nv
     sb := g.enter()
-    b mut String&return = g.stmts(n, d, ind)
+    b mut String& = g.stmts(n, d, ind)
     g.curBlock = sb
     g.nv = save
     return b
@@ -1866,7 +1866,7 @@ fn (g mut Gen&) refStmt(ind String&) String& {
             s := g.vt[src]
             x := g.use(src)
             t I32 = s
-            text mut String&return = $ind "x" $g.nv " := " $x "\n"
+            text mut String& = $ind "x" $g.nv " := " $x "\n"
             if g.chance(40) {
                 t = I32(3000 + elemOf(s)) if isRefArr(s) else I32(4100 + structOf(s))
                 text = $ind "x" $g.nv " " $g.tn(t) $x " = " $x "\n"

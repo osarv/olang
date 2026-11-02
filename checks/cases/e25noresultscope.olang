@@ -6,6 +6,6 @@ fn num(i I64) I64 { return i }
 fn mkpv(i I64) P { return P(i) }
 fn main() {
     t := "x"
-    a := num&t(1)
+    a := num(1)
     assert a == 1
 }

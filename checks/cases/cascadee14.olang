@@ -11,7 +11,7 @@ type H struct(Name String&, Value String&) {
 type R struct(Hs Array<H>&) {
     Hs
 }
-fn (r R&) find(name String&) String&r ? {
+fn (r R&) find(name String&) String& ? {
     for h in r.Hs {
         if h.Name == name { return h.Value }
     }
@@ -19,7 +19,7 @@ fn (r R&) find(name String&) String&r ? {
 }
 fn make(url String&) R ? {
     if url.Len() == 0 { error Lookup.Missing }
-    hs mut Array<H>&return = Array<H>(1)
+    hs mut Array<H>& = Array<H>(1)
     hs[0] = H("a", "b")
     return R(hs)
 }

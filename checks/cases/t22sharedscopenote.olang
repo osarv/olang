@@ -4,7 +4,7 @@ type N struct(v I64) {
     v
     next mut N?& = null
 }
-fn link(a mut N&, b N&a) { a.v = b.v + 1 }
+fn link(a mut N&, b N&) { a.v = b.v + 1 }
 fn main() {
     f fn(a mut N&, b N&) = link
     x mut N& = N(41)

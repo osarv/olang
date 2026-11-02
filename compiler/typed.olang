@@ -101,14 +101,6 @@ type ContractInfo struct(Name String&, File I64) {
     ReqTexts Vec<String&>
 }
 
-# a scope relation a contract writes (D17d): Hi outlives Lo, each one of the body's scope variables, by its index in
-# Vars; where it is written
-type ScopeRel struct(Hi I64, Lo I64, Sp source.Span) {
-    Hi
-    Lo
-    Sp
-}
-
 # one of a body's scope variables: what its hidden scope arguments, and its environment's scopes, stand for. The ones
 # a call passes are types.ScopeVarsOf of the body's type, in that order (SetVars); a Capture, after them, is carried in
 # the lambda's environment instead (D16c)
@@ -593,12 +585,12 @@ fn (w ViewWalk&) copyViews(x Expr?&) I64 {
 fn (w ViewWalk&) ElidedCopy(x Expr?&) Bool { return w.copyViews(x) > 0 }
 
 # (exported for lowering's views kept in place of copies)
-fn CopiedOf(t types.Table&, x Expr&) Expr?&x { return copied(t, x) }
+fn CopiedOf(t types.Table&, x Expr&) Expr?& { return copied(t, x) }
 
 # what a stored value copies: a MakeKind.Copy's item where it keeps the type (an array of references read as values is
 # no view - its elements are copied out, E12), a value array or part read as it is (copied by T7b where it is stored); null
 # where nothing is copied
-fn copied(t types.Table&, x Expr&) Expr?&x {
+fn copied(t types.Table&, x Expr&) Expr?& {
     return match x {
         case Expr.Make(_, ty, m): m.Items[0] if m.Kind == MakeKind.Copy and m.Items.Len() == 1 and t.Same(m.Items[0].Type(), ty) else null
         case Expr.Read(_, _, _, _), Expr.Slice(_, _, _): x
@@ -1150,7 +1142,7 @@ fn (u mut LocalUses&) refArg(a Expr&, body I64, k I64) Bool {
 }
 
 # the value a writable borrow of a temporary whole lends (a value given storage for the call, Promote), else null
-fn (u LocalUses&) tempLent(a Expr&) Expr?&a {
+fn (u LocalUses&) tempLent(a Expr&) Expr?& {
     return match a {
         case Expr.Borrow(_, ty, p): match p {
             case Lvalue.Temp(_, _, v, _): v if (u.T.PermOf(ty) & types.Writable) != 0 else null
@@ -1474,18 +1466,16 @@ type Body struct(Id BodyId, Of BodyOf, Ty types.TypeId, File I64, Sp source.Span
     # instance's and a twin's constructor, their own
     Fields Vec<LocalId>
     Root Block?& = null     # null until checked; a payload's (Case) stays null
-    Written Vec<ScopeRel>   # the scope relations its contract writes (D17d), which section 8 holds every call to
     # S18d: what its error return trace says where a Raise starts - "pick: y > x" for a requirement false on entry
     # (D17) - by the Raise's span's start; "raised here" where none is given
     RaiseAt Vec<I32>
     RaiseWhat Vec<String&>
     Gen Bool = false    # a generator's Next (D18): a lambda its Suspends give values from, its end an Exhausted
     # D18c: a generator's Next whose elements are borrowed - the capture whose referent's scope they live in: its
-    # parameter's ("Iterator<T&t>"), or where the generator lives ("Iterator<T&return>", GenHome: a capture made for it,
-    # null, living in the generator's result scope); -1 where each value is built where its Next's result goes
+    # parameter's, or where the generator lives (GenHome: a capture made for it, null, living in the generator's result
+    # scope) - inferred from its yields (generic.genElemOf); -1 where each value is built where its Next's result goes
     GenElem LocalId = LocalId(-1)
     GenHome Bool = false
-    GenBad Bool = false   # ... whose element names a scope no reference parameter has (check's error): yields not judged
     # D18e: the hidden iterators of for-ins over a generator made by a direct call right there - the call's walk made
     # and finished in the for-in's block, no one else holding the generator (check.walkIter)
     Walks Vec<LocalId>
@@ -1875,7 +1865,7 @@ fn isAssertAt(s Stmt&, sp source.Span) Bool {
 }
 
 # the block a statement runs whenever it is reached: a block's, a loop's body (run once at least), a join's code
-fn within(s Stmt&) Block?&s {
+fn within(s Stmt&) Block?& {
     return match s {
         case Stmt.Block(_, b): b
         case Stmt.Loop(_, body, _): body
@@ -2045,7 +2035,7 @@ fn (w mut leaveWalk&) armLeaves(a Arm&) Bool {
 
 # a body as text: a statement a line, indented by its block, an expression as a parenthesized term naming its kind
 fn (b Body&) Print(t mut types.Table&) String {
-    w mut printer&t = printer(t)
+    w mut printer& = printer(t)
     w.line(0, "body " $b.Locals.Len() " locals " $b.Blocks.Len() " blocks " $b.Sites.Len() " sites")
     if b.Root is not null { w.block(b.Root!, 1) }
     return w.out.ToString()
@@ -2164,7 +2154,7 @@ fn constItems(xs Array<Const&>&) String {
 }
 
 # an enum case's name without its type's
-fn short(t String&) String&t {
+fn short(t String&) String& {
     at := try t.FindLast(".") catch { return t }
     return t[at + 1:]
 }
@@ -2269,7 +2259,7 @@ test "a body's marks and scope variables come from its type; constants, temporar
     region := b.AddSite(SiteKind.Region, sp)
     tmp := b.AddSite(SiteKind.Temp, sp)
     owner := t.Ref(n, types.Owning | types.Writable)
-    w mut printer&t = printer(t)
+    w mut printer& = printer(t)
     borrow := Expr.Read(sp, roN, Lvalue.Local(sp, owner, a), region)
     assert w.expr(borrow) == "(read L0 site 0)", w.expr(borrow)
     temp := Lvalue.Temp(sp, i64, Expr.Lit(sp, i64, 7), tmp)

@@ -39,7 +39,7 @@ fn run(args Array<String&>&) {
     std := try os.Env("OLANG_STD") catch default "std"
     defines Vec<String&>
     testBuild := false
-    planAt String&args = ""
+    planAt String& = ""
     k I64 = 1
     for k < args.Len() and args[k].StartsWith("-") {
         if args[k] == "-t" {

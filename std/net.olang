@@ -419,7 +419,7 @@ type Listener struct(fd I32) {
 # a socket listening at a, which may name port 0 for one the system chooses (Addr() says which), and the "any"
 # address to listen on every one this machine has. The address may be listened at again at once after a previous
 # listener closed (SO_REUSEADDR); IPv6's "any" takes IPv4 connections too
-fn Listen(a Addr&, backlog I32 = 128) Listener& ? Error {
+fn Listen(a Addr&, backlog I32 = 128) mut Listener& ? Error {
     fd := try open(a, sockStream)
     setInt(fd, solSocket, soReuseaddr, 1)
     if a.Host.V6: setInt(fd, ipprotoIpv6, ipv6V6only, 0)
@@ -436,7 +436,7 @@ fn Listen(a Addr&, backlog I32 = 128) Listener& ? Error {
 fn (l Listener&) Addr() Addr ? Error { return try nameOf(l.fd, false) }
 
 # waits for a connection and gives it
-fn (l mut Listener&) Accept() Conn& ? Error {
+fn (l mut Listener&) Accept() mut Conn& ? Error {
     for {
         sa := Array<U8>(28)
         len := U32[28]
@@ -448,7 +448,7 @@ fn (l mut Listener&) Accept() Conn& ? Error {
 }
 
 # a connection to a - failing with REFUSED when nothing listens there, UNREACHABLE, Timeout when the system gives up
-fn Dial(a Addr&) Conn& ? Error {
+fn Dial(a Addr&) mut Conn& ? Error {
     fd := try open(a, sockStream)
     sa := sockaddr(a)
     if sock.connect(fd, sa, U32(sa.Len())) < 0 {
@@ -462,7 +462,7 @@ fn Dial(a Addr&) Conn& ? Error {
 # what arrives next, up to buf's length, read into the front of buf and handed back as that front - a borrow of buf -
 # waiting until something does. Fails with Closed once the other side has closed and everything it sent has been read,
 # Timeout when a timeout set by SetTimeout passes first, RESET when the connection was reset
-fn (c Conn&) Read(buf mut Array<U8>&) Array<U8>&buf ? Error {
+fn (c Conn&) Read(buf mut Array<U8>&) Array<U8>& ? Error {
     if buf.Len() == 0 { return buf[:0] }
     for {
         n := sock.recv(c.fd, buf, U64(buf.Len()), 0)
@@ -517,7 +517,7 @@ type UDP struct(fd I32) {
 }
 
 # a UDP socket bound to a (port 0 for one the system chooses, Local() saying which)
-fn ListenUDP(a Addr&) UDP& ? Error {
+fn ListenUDP(a Addr&) mut UDP& ? Error {
     fd := try open(a, sockDgram)
     if a.Host.V6: setInt(fd, ipprotoIpv6, ipv6V6only, 0)
     sa := sockaddr(a)
@@ -539,7 +539,7 @@ fn (u UDP&) SendTo(data Array<U8>&, a Addr&) ? Error {
 
 # the next datagram, read into the front of buf and handed back as that front, with the address it came from; one
 # longer than buf is cut to it
-fn (u UDP&) RecvFrom(buf mut Array<U8>&) Array<U8>&buf, Addr ? Error {
+fn (u UDP&) RecvFrom(buf mut Array<U8>&) Array<U8>&, Addr ? Error {
     for {
         sa := Array<U8>(28)
         len := U32[28]

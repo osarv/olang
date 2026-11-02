@@ -257,7 +257,7 @@ fn receiverVars(c mut typecheck.Checker&, f I64) I64 {
     return c.P.T.Items(c.P.T.Args(recv)).Len()
 }
 
-# a contract's conditions (D17), each as written in its brackets - its "outlives" chains are among the obligations
+# a contract's conditions (D17), each as written in its brackets
 fn contract(b mut StringBuilder&, c mut typecheck.Checker&, s ast.Sig&, mi I64, indent String&) {
     if s.Commutes { b.Push($indent "# commutes: the operator applies with its operands the other way round too (E31c)\n") }
     if s.Contract is null { return }
@@ -265,9 +265,11 @@ fn contract(b mut StringBuilder&, c mut typecheck.Checker&, s ast.Sig&, mi I64, 
     for it in s.Contract!.Items { b.Push($indent "[" $src[I64(it.Span().Start):I64(it.Span().End)] "]\n") }
 }
 
+# its scope obligations, inferred from the body (O10b, QCB: none is written) - what every call is held to - one a line:
+# "# scopes: b outlives a", "return" the result scope
 fn obligations(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, body I64, indent String&) {
     if body < 0 { return }
-    for o in sc.Obligations(body, c.P.L.Names) { b.Push($indent "[" $o "]\n") }
+    for o in sc.Obligations(body, c.P.L.Names) { b.Push($indent "# scopes: " $o "\n") }
 }
 
 # A2.3: what a call may do beyond computing its result, read off the body and everything it may call (effects.olang)
@@ -301,7 +303,7 @@ fn NoValueWhy(c mut typecheck.Checker&, sc scope.Scoper&, f I64, body I64) Strin
     }
     if c.P.VarCount(owner) > 0 { return $"a generic is a value only named with its type arguments, '" $name "<...>' (G12)" }
     if body >= 0 and sc.Obligations(body, c.P.L.Names).Len() > 0 {
-        return "its scope obligations, above, relate its arguments' scopes, which a call through a function value cannot check (T22a) - call it directly"
+        return "its scope obligations (# scopes, above) relate its arguments' scopes, which a call through a function value cannot check (T22a) - call it directly"
     }
     return ""
 }
@@ -406,7 +408,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
     return b.ToString()
 }
 
-fn casePayload(td ast.TypeDecl&, k I64) Array<ast.Param&>&td {
+fn casePayload(td ast.TypeDecl&, k I64) Array<ast.Param&>& {
     match td.Body {
         case ast.TypeBody.Enum(cases, _) { return cases[k].Payload }
         case _ { return Array<ast.Param&>(0) }
@@ -420,7 +422,7 @@ fn caseWhole(td ast.TypeDecl&, k I64) Bool {
     }
 }
 
-fn ctorParams(td ast.TypeDecl&) Array<ast.Param&>&td {
+fn ctorParams(td ast.TypeDecl&) Array<ast.Param&>& {
     match td.Body {
         case ast.TypeBody.Struct(sb) { return sb.Params }
         case _ { return Array<ast.Param&>(0) }

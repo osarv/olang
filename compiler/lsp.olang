@@ -60,8 +60,8 @@ StuckNs I64 = 60000000000
 # serves the protocol until "exit" or the end of the input: the status to end with (0 after a shutdown)
 fn Serve(cfg mut build.Config&) I32 {
     session.IgnoreBrokenPipes()
-    s mut Server&cfg = Server(cfg)
-    input mut session.Reader&cfg = session.Reader(0)
+    s mut Server& = Server(cfg)
+    input mut session.Reader& = session.Reader(0)
     for not s.Done {
         fds := Array<I32>(2, -1)
         fds[0] = 0
@@ -188,7 +188,7 @@ fn (s mut Server&) opened(uri String&, text String&) {
             }
         }
         if k < 0 {
-            d mut Doc&s = Doc($uri, $path, session.RealOf(path))
+            d mut Doc& = Doc($uri, $path, session.RealOf(path))
             s.Docs.Push(d)
             k = s.Docs.Len() - 1
         } else {
@@ -272,7 +272,7 @@ fn (s mut Server&) startWorker() {
         session.CloseFd(toW)
         session.CloseFd(fromR)
         session.Dup2(2, 1)      # nothing the compiler writes reaches the editor but through the protocol
-        work mut worker&s = worker(s, s.Cfg, toR, fromW)
+        work mut worker& = worker(s, s.Cfg, toR, fromW)
         work.Run()
         session.Exit(0)
     }
@@ -409,7 +409,7 @@ type worker struct(s Server&, Cfg mut build.Config&, In I32, Out I32) {
 }
 
 # the analysis of the open file in slot k as the files are now: the last one where it is that file's
-fn (w mut worker&) analysis(k I64, d mut diag.Diagnostics&) mut session.Analysis&w {
+fn (w mut worker&) analysis(k I64, d mut diag.Diagnostics&) mut session.Analysis& {
     if k == w.lastSlot and w.last is not null { return w.last! }
     a := session.Analyze(w.s.Docs[k].Path, w.Cfg, d, w.overlay)
     w.last = a
@@ -439,7 +439,7 @@ fn (w mut worker&) send(body String&) { session.WriteFramed(w.Out, body) }
 fn (w mut worker&) check(k I64) {
     doc := w.s.Docs[k]
     cfg := w.Cfg
-    d mut diag.Diagnostics&cfg = diag.Diagnostics(false)
+    d mut diag.Diagnostics& = diag.Diagnostics(false)
     # what the checker says is published as soon as it is said; section 8's errors, which take a while longer on a large
     # program, follow if there are any
     a := session.Analyze(doc.Path, cfg, d, w.overlay, false)
@@ -607,7 +607,7 @@ fn (w mut worker&) answer(body String&) {
     ch := try p["position"]["character"].AsInt() catch json.Error default 0
     at := pos.Offset(line, ch)
     cfg := w.Cfg
-    d mut diag.Diagnostics&cfg = diag.Diagnostics(false)
+    d mut diag.Diagnostics& = diag.Diagnostics(false)
     if method == "textDocument/formatting" {
         formatted := try session.Format(doc.Path, text) catch {
             w.send(reply(id, "null"))
@@ -673,7 +673,7 @@ fn (w mut worker&) answer(body String&) {
 
 # completion at offset at of an open file: after "x." x's members - checked with the "." and the word the cursor is in
 # taken out, so the line is what it was before they were typed - else the names that may stand there
-fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut build.Config&, d mut diag.Diagnostics&cfg) {
+fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut build.Config&, d mut diag.Diagnostics&) {
     start := at
     for start > 0 and session.WordChar(text[start - 1]) { start-- }
     it := session.Items()
@@ -698,7 +698,7 @@ fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut 
 # ---- messages ----
 
 # a member of an object as text, "" for none or another kind
-fn str(j json.Json&, key String&) String&j {
+fn str(j json.Json&, key String&) String& {
     return try j[key].AsStr() catch json.Error default ""
 }
 
@@ -783,8 +783,8 @@ fn compilerUnderTest() String {
 fn framed(body String&) String { return $"Content-Length: " $body.Len() "\r\n\r\n" $body }
 
 # the messages an LSP output holds, each body
-fn frames(out String&) Vec<String&>&out {
-    l mut Vec<String&>&out = Vec<String&>()
+fn frames(out String&) Vec<String&>& {
+    l mut Vec<String&>& = Vec<String&>()
     r := out[:]
     for {
         at := try r.Find("Content-Length: ") catch { break }

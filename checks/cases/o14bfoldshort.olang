@@ -4,7 +4,7 @@
 fn main() ? {
     keep := Vec<String&>()
     keep.Push("x")
-    longest String&keep = keep[0]
+    longest String& = keep[0]
     for i in range 2 {
         words := Vec<String&>()
         words.Push($i "abc")

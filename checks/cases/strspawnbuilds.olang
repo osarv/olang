@@ -10,7 +10,7 @@ type Bag struct(head mut Node&) {
     head
 }
 fn grow(n Node&) I64 {
-    m Node&n = Node(n.v + 1, null)
+    m Node& = Node(n.v + 1, null)
     return m.v
 }
 fn hjoin(n Node&) I64 {

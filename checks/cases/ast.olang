@@ -14,7 +14,7 @@ type Program struct() {
 # lives, so the place's new value lives in its old value's storage
 #
 #
-fn simplify(e Expr&) Expr&e {
+fn simplify(e Expr&) Expr& {
     match e {
         case Expr.Lit(_) { return e }
         case Expr.Neg(Expr.Neg(a)) { return simplify(a) }

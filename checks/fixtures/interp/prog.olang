@@ -20,7 +20,7 @@ type Expr enum {
     Add(a Expr&, b Expr&)
     Neg(e Expr&)
 }
-fn fold(e Expr&) Expr&e {
+fn fold(e Expr&) Expr& {
     return match e {
         case Expr.Add(Expr.Lit(a), Expr.Lit(b)): Expr.Lit(a + b)
         case Expr.Add(a, b): Expr.Add(fold(a), fold(b))

@@ -84,7 +84,7 @@ type unlocked error {
 }
 
 # the commit the lock file names for key, or a miss
-fn (f mut Fetcher&) Locked(key String&) String&f ? {
+fn (f mut Fetcher&) Locked(key String&) String& ? {
     f.load()
     for i in range f.keys.Len() {
         if f.keys[i] == key { return f.commits[i] }

@@ -3,7 +3,7 @@
 # given that local
 import "std/io"
 type H struct(x String&, n I64) {
-    t String&x = $n "-new-text-in-x's-scope"
+    t String& = $n "-new-text-in-x's-scope"
     y := t
 }
 fn main() ? {

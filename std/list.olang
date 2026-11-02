@@ -112,7 +112,7 @@ fn (s mut listState<T>&) grow(fill T) {
         if s.chunks.Len() == 0 {
             s.chunks = Array<mut Array<T>&>(4, s.first) # every slot past made written before it is read
         } else if s.made == s.chunks.Len() {
-            more mut Array<mut Array<T>&>&s = Array<mut Array<T>&>(s.made * 2, s.first)
+            more mut Array<mut Array<T>&>& = Array<mut Array<T>&>(s.made * 2, s.first)
             for k in range s.made { more[k] = s.chunks[k] }
             s.chunks = more
         }
@@ -126,7 +126,7 @@ fn (s mut listState<T>&) grow(fill T) {
 }
 
 # chunk k of those made - the first is held on its own, so a list that never outgrows it has no array of chunks
-fn (s listState<T>&) chunk(k I64) mut Array<T>&s {
+fn (s listState<T>&) chunk(k I64) mut Array<T>& {
     if k == 0 { return s.first }
     return s.chunks[k]
 }
@@ -383,8 +383,8 @@ fn From<I Iterator<T ? E>, T ? E>(it mut I&) List<T> ? E {
 # each step is a load and a few compares. "for x in l" walks a List run by run rather than through it (S9f); generic
 # code over Iterator<T> takes it.
 type Iter<T> struct(of List<T>&) {
-    list listState<T>&of = of.s
-    chunk mut Array<T>&of = of.s.first # the chunk holding the next element; the first before it is entered
+    list listState<T>& = of.s
+    chunk mut Array<T>& = of.s.first # the chunk holding the next element; the first before it is entered
     k I64 = 0                          # the next chunk's number
     i I64 = 0                          # the next element's place in chunk
     room I64 = 0                       # chunk's length
@@ -496,8 +496,8 @@ fn (it mut Iter<T>&) Fold<U ? E>(init U, f fn(acc U, x T) U ? E) U ? E {
 }
 
 # a new Vec - in the caller's scope - of f applied to every remaining element
-fn (it mut Iter<T>&) Map<U ? E>(f fn(x T) U ? E) Vec<U>& ? E {
-    out mut Vec<U>&return = Vec<U>()
+fn (it mut Iter<T>&) Map<U ? E>(f fn(x T) U ? E) mut Vec<U>& ? E {
+    out mut Vec<U>& = Vec<U>()
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
@@ -511,8 +511,8 @@ fn (it mut Iter<T>&) Map<U ? E>(f fn(x T) U ? E) Vec<U>& ? E {
 }
 
 # a new Vec - in the caller's scope - of the remaining elements keep holds for
-fn (it mut Iter<T>&) Filter<? E>(keep fn(x T) Bool ? E) Vec<T>& ? E {
-    out mut Vec<T>&return = Vec<T>()
+fn (it mut Iter<T>&) Filter<? E>(keep fn(x T) Bool ? E) mut Vec<T>& ? E {
+    out mut Vec<T>& = Vec<T>()
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
@@ -530,7 +530,7 @@ fn (it mut Iter<T>&) Filter<? E>(keep fn(x T) Bool ? E) Vec<T>& ? E {
 # over the runs, and within each a counted loop over a slice, which the optimizer vectorizes as it does a loop over an
 # array. The loop asks for the next run where the last one ended, so an element pushed while it runs is walked too, as
 # the iterator would give it.
-fn (l List<T>&) RunFrom(at I64) Array<T>&l ? Exhausted {
+fn (l List<T>&) RunFrom(at I64) Array<T>& ? Exhausted {
     s := l.s
     if at >= s.count or at < 0 { error Exhausted.End }
     if s.nChunks == 1 { return s.first[at:s.used] } # a list in one chunk - most are - is one run
@@ -540,7 +540,7 @@ fn (l List<T>&) RunFrom(at I64) Array<T>&l ? Exhausted {
 # the run in chunk k from position at: to the chunk's end, or the list's when k is the last chunk in use - a slice of
 # the chunk itself, read-only, what a read-only list hands out (no call between: a function's array value result is
 # copied where its caller keeps it, D9h)
-fn (s listState<T>&) runIn(k I64, at I64) Array<T>&s {
+fn (s listState<T>&) runIn(k I64, at I64) Array<T>& {
     lo := at + firstChunk - (firstChunk << k)
     last := k == s.nChunks - 1
     if k == 0: return s.first[lo:s.used] if last else s.first[lo:]
@@ -553,7 +553,7 @@ fn (s listState<T>&) runIn(k I64, at I64) Array<T>&s {
 fn (l List<T>&) ToArray() mut Array<T>& {
     s := l.s
     if s.count == 0 { return Array<T>(0) } # no element, so no zero value of T is needed (D13c)
-    out mut Array<T>&return = Array<T>(s.count, s.first[0])
+    out mut Array<T>& = Array<T>(s.count, s.first[0])
     at I64 = 0
     for k in range s.nChunks {
         c := s.chunk(k)
@@ -775,8 +775,8 @@ if TestBuild {
 
     # G11: a type argument may be a reference, written with a bare marker - a list of slices of one text holds
     # references into it and copies nothing
-    fn wordsOf(t String&) List<String&>&t {
-        out mut List<String&>&t = List<String&>()
+    fn wordsOf(t String&) mut List<String&>& {
+        out mut List<String&>& = List<String&>()
         start I64 = 0
         for i in range t.Len() + 1 {
             if i == t.Len() or t[i] == ' ' {
@@ -1073,8 +1073,8 @@ if TestBuild {
     }
 
     # 0, 1, ... n - 1
-    fn listUpTo(n I64) List<I64>& {
-        l mut List<I64>&return = List<I64>()
+    fn listUpTo(n I64) mut List<I64>& {
+        l mut List<I64>& = List<I64>()
         for i in range n { l.Push(i) }
         return l
     }
@@ -1500,13 +1500,13 @@ if TestBuild {
     type listItem struct(n I64) {
         n
     }
-    fn listFind(l List<pair.Pair<String&, listItem&>>&, key String&) listItem&l ? {
+    fn listFind(l List<pair.Pair<String&, listItem&>>&, key String&) listItem& ? {
         for f in l {
             if f.First == key { return f.Second }
         }
         error Error.NotFound
     }
-    fn listFindIter(l List<pair.Pair<String&, listItem&>>&, key String&) listItem&l ? {
+    fn listFindIter(l List<pair.Pair<String&, listItem&>>&, key String&) listItem& ? {
         for f in l.Iter() {
             if f.First == key { return f.Second }
         }

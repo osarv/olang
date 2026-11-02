@@ -32,7 +32,7 @@ type ViewGenerator<T ? E> struct(next (fn() T& ? E, Exhausted)) {
     next
 }
 
-fn (g mut ViewGenerator<T ? E>&) Next() T&g ? E, Exhausted { return try g.next() }
+fn (g mut ViewGenerator<T ? E>&) Next() T& ? E, Exhausted { return try g.next() }
 
 # what every iterator can do, declared once here (M19e): defaults, each a method of every type satisfying Iterator -
 # "l.Iter().Count(f)", "m.Iter().Some(f)", an array's "a.Iter().Fold(...)" - with nothing written on those types.
@@ -73,8 +73,8 @@ fn (it mut I&) Fold<I Iterator<T ? E>, T, U ? E>(init U, f fn(acc U, x T) U ? E)
 }
 
 # a new Vec - in the caller's scope - of f applied to every element
-fn (it mut I&) Map<I Iterator<T ? E>, T, U ? E>(f fn(x T) U ? E) Vec<U>& ? E {
-    out mut Vec<U>&return = Vec<U>()
+fn (it mut I&) Map<I Iterator<T ? E>, T, U ? E>(f fn(x T) U ? E) mut Vec<U>& ? E {
+    out mut Vec<U>& = Vec<U>()
     for x in try it {
         out.Push(try f(x))
     }
@@ -82,8 +82,8 @@ fn (it mut I&) Map<I Iterator<T ? E>, T, U ? E>(f fn(x T) U ? E) Vec<U>& ? E {
 }
 
 # a new Vec - in the caller's scope - of the elements keep holds for
-fn (it mut I&) Filter<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) Vec<T>& ? E {
-    out mut Vec<T>&return = Vec<T>()
+fn (it mut I&) Filter<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) mut Vec<T>& ? E {
+    out mut Vec<T>& = Vec<T>()
     for x in try it {
         if try keep(x) { out.Push(x) }
     }
@@ -91,8 +91,8 @@ fn (it mut I&) Filter<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) Vec<T>& ?
 }
 
 # a new Vec - in the caller's scope - of every value, in order: "m.Keys().ToVec()"
-fn (it mut I&) ToVec<I Iterator<T ? E>, T ? E>() Vec<T>& ? E {
-    out mut Vec<T>&return = Vec<T>()
+fn (it mut I&) ToVec<I Iterator<T ? E>, T ? E>() mut Vec<T>& ? E {
+    out mut Vec<T>& = Vec<T>()
     for x in try it {
         out.Push(x)
     }
@@ -108,7 +108,7 @@ type Indexable<T> trait {
 
 # a position in an Indexable - the collection by reference, and the next index
 type IndexIter<T, C Indexable<T>> struct(of C&) {
-    c C&of = of
+    c C& = of
     i I64 = 0
 }
 
@@ -476,8 +476,8 @@ fn (it mut I&) FlatMap<I Iterator<T ? E>, T, J Iterator<U ? E>, U ? E>(f fn(x T)
 # the values split by keep: two new Vecs - in the caller's scope - of those keep holds for and of the rest, each in
 # the order they came: "small, big := it.Partition(fn(x): return x < 10)"
 fn (it mut I&) Partition<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) Vec<T>&, Vec<T>& ? E {
-    yes mut Vec<T>&return = Vec<T>()
-    no mut Vec<T>&return = Vec<T>()
+    yes mut Vec<T>& = Vec<T>()
+    no mut Vec<T>& = Vec<T>()
     for x in try it {
         if try keep(x) {
             yes.Push(x)
@@ -491,7 +491,7 @@ fn (it mut I&) Partition<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) Vec<T>
 # a collection with positions walked from its last element to its first - what Reversed gives a Vec, or any type with
 # At and Len (an array's own Reversed is in array.olang)
 type ReversedIndexIter<T, C Indexable<T>> struct(of C&) {
-    c C&of = of
+    c C& = of
     i I64 = of.Len()
 }
 
@@ -527,8 +527,8 @@ fn (it mut I&) Scan<I Iterator<T ? E>, T, U ? E>(init U, f fn(acc U, x T) U ? E)
 
 # the values grouped by their key: a new Map - in the caller's scope - from each key to a Vec of the values that have
 # it, in the order they came, the keys in the order first met; key called once per value
-fn (it mut I&) GroupBy<I Iterator<T ? E>, T, K Hashable<K> ? E>(key fn(x T) K ? E) Map<K, Vec<T>>& ? E {
-    out mut Map<K, Vec<T>>&return = Map<K, Vec<T>>()
+fn (it mut I&) GroupBy<I Iterator<T ? E>, T, K Hashable<K> ? E>(key fn(x T) K ? E) mut Map<K, Vec<T>>& ? E {
+    out mut Map<K, Vec<T>>& = Map<K, Vec<T>>()
     for x in try it {
         k := try key(x)
         if not out.Has(k): out.Put(k, Vec<T>())
@@ -590,8 +590,8 @@ fn (it mut I&) Dedup<I Iterator<T ? E>, T ? E>() DedupIter<I, T ? E> { return De
 
 # a walk of pairs (Zip's) taken apart: two new Vecs - in the caller's scope - of the first parts and of the second
 fn (it mut I&) Unzip<I Iterator<Zipped<A, B> ? E>, A, B ? E>() Vec<A>&, Vec<B>& ? E {
-    firsts mut Vec<A>&return = Vec<A>()
-    seconds mut Vec<B>&return = Vec<B>()
+    firsts mut Vec<A>& = Vec<A>()
+    seconds mut Vec<B>& = Vec<B>()
     for z in try it {
         firsts.Push(z.First)
         seconds.Push(z.Second)
@@ -646,7 +646,7 @@ fn (c C&) BinarySearch<C Indexable<T>, T>(x T) I64 ? ArrayError.NotFound {
 # a collection with positions walked from its first element to its last and round again, without end - an empty one
 # gives nothing
 type CycleIndexIter<T, C Indexable<T>> struct(of C&) {
-    c C&of = of
+    c C& = of
     i I64 = 0
 }
 

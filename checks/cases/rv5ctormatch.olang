@@ -6,7 +6,7 @@ type E enum {
     A(p P)
     Z
 }
-fn borrow(b P&) P&b { return b }
+fn borrow(b P&) P& { return b }
 fn deep(n I64) I64 {
     a := Array<I64>(64)
     for i in range 64 { a[i] = -7 }

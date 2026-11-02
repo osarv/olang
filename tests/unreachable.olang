@@ -4,7 +4,7 @@ import "std/io"
 
 type Shape enum { Circle(r F64), Square(s F64) }
 
-fn pick(s String&, b Bool) String&s { return s if b else unreachable "never " $b }
+fn pick(s String&, b Bool) String& { return s if b else unreachable "never " $b }
 
 fn area(sh Shape) F64 {
     return match sh {
@@ -23,7 +23,7 @@ fn sum(xs Array<I64>&) I64 {
     return t
 }
 
-fn first(xs Vec<String&>&) String&xs { return xs[0] if xs.Len() > 0 else unreachable }
+fn first(xs Vec<String&>&) String& { return xs[0] if xs.Len() > 0 else unreachable }
 
 fn twice(x I64) I64 { return x * 2 }
 

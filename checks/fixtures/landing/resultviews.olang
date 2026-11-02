@@ -33,7 +33,7 @@ fn (g G&) viewOf(k I64) View {
 }
 
 # numbers computed for a slice of a parameter
-fn window(a Array<I64>&, at I64) Array<I64>&a {
+fn window(a Array<I64>&, at I64) Array<I64>& {
     from I64 = at + 1
     to I64 = from + 2
     return a[from:to]

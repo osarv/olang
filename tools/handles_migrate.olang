@@ -320,7 +320,7 @@ fn worker(olang String&, files Array<String&>&, dir String&, outputs mut Array<S
 }
 
 fn compileAll(olang String&, files Array<String&>&, work Array<String&>&) Array<String&>& {
-    outputs mut Array<String&>&return = Array<String&>(files.Len(), "")
+    outputs mut Array<String&>& = Array<String&>(files.Len(), "")
     Taken = 0
     join {
         for w in work { spawn worker(olang, files, w, outputs) }

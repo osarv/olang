@@ -13,7 +13,7 @@ type Holder struct(e Env) {
 fn build(c mut Holder&) {
     for k in range 3 {
         local := Info(k + 100)
-        x := Env&c(local)
+        x := Env(local)
         c.e = x
     }
 }

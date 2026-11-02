@@ -13,7 +13,7 @@ type Bag struct(head mut Node&) {
     head
 }
 fn (b Bag&) Str() String {
-    x Res&b = Res(b.head)
+    x Res& = Res(b.head)
     return "b"
 }
 type Junk struct(a I64, b I64) {

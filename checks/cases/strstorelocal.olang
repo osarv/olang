@@ -12,7 +12,7 @@ type Wr struct(h mut Node&) {
     h
 }
 fn (b Bag&) Str() String {
-    w Wr&b = Wr(b.head)
+    w Wr& = Wr(b.head)
     f := fn() { w.h.next = Node(5, null) }
     f()
     return "b"

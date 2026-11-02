@@ -142,7 +142,7 @@ fn entries(root String&, rel String&, scratch String&, cfg mut build.Config&) Ve
 
 # in the child: the module checked, its exported items and members written a line each, "key TAB kind TAB line"
 fn writeSigs(file String&, scratch String&, cfg mut build.Config&) I32 {
-    d mut diag.Diagnostics&cfg = diag.Diagnostics(false)
+    d mut diag.Diagnostics& = diag.Diagnostics(false)
     a := session.Analyze(file, cfg, d, Map<String&, String&>())
     if d.Errors() > 0 or a.C is null or a.Sc is null {
         say(d.Render())

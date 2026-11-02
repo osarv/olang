@@ -147,7 +147,7 @@ fn classifyPoint(p Point) I32 {
 # O13/O26: a bare "&" result is built where the caller puts it, and "&return" names that scope - so the Point
 # is allocated there rather than in makePoint's, which closes at the return.
 fn makePoint(x I32, y I32) Point& {
-    p mut Point&return = Point(x, y)
+    p mut Point& = Point(x, y)
     return p
 }
 
@@ -390,7 +390,7 @@ fn useHandleLocally() I32 {
 # makeHandle returns. This replaces the old "return <bare local> skips its own destructor" special case:
 # the scope tag now expresses that fact directly, so no dataflow exception is needed for it at all.
 fn makeHandle(n I32) Handle& {
-    h mut Handle&return = Handle(n)
+    h mut Handle& = Handle(n)
     return h
 }
 
@@ -398,7 +398,7 @@ fn makeHandle(n I32) Handle& {
 # destructors fire in this function": "discard" is tagged to makeAndDiscardOne's OWN scope, so it is
 # destructed when that function returns, while "keep" survives into the caller's.
 fn makeAndDiscardOne(n I32) Handle& {
-    keep mut Handle&return = Handle(n)
+    keep mut Handle& = Handle(n)
     discard Handle& = Handle(n + 100)
     return keep
 }
@@ -442,11 +442,11 @@ fn useHandleArrayLocallyRuntimeLength() I32 {
 # outlives it. The "Checked" functions below build their intermediates where their result lives, "&return"
 # (O26), and return a part of them.
 type ScopedBox struct(seed mut Point&) {
-    inner mut Point&seed = seed
+    inner mut Point& = seed
 }
 
 fn fillBoxViaCtor() Point& {
-    b := ScopedBox&return(Point(7, 8))
+    b := ScopedBox(Point(7, 8))
     return b.inner
 }
 
@@ -459,8 +459,8 @@ fn makeScopedBoxPlain(seed mut Point&) ScopedBox {
 # a value tagged with a scope RECEIVED as a parameter is always safe to read through a local adopting it:
 # every received scope outlives the function's own (O10a)
 fn narrowNamedIntoOwn(seed Point&) I32 {
-    p Point&seed = seed
-    q Point&p = p
+    p Point& = seed
+    q Point& = p
     return q.x
 }
 
@@ -468,7 +468,7 @@ fn narrowNamedIntoOwn(seed Point&) I32 {
 # later member access is checked against the caller's frame: box's "seed" is bound to the result scope here,
 # so returning box.inner is a verified exact match
 fn fillBoxViaCtorChecked(x I32, y I32) Point& {
-    box := ScopedBox&return(Point(x, y))
+    box := ScopedBox(Point(x, y))
     return box.inner
 }
 
@@ -480,7 +480,7 @@ fn makePointChecked(x I32, y I32) Point& {
 # "field of a field": Mid's "leaf" tracks Mid's argument; Outer's bare "mid" field lives with the Outer, and
 # Mid's Point, a temporary, is built there too - so o.mid.leaf lives where o does
 type Mid struct(p mut Point&) {
-    leaf mut Point&p = p
+    leaf mut Point& = p
 }
 
 type Outer struct(x I32, y I32) {
@@ -488,33 +488,33 @@ type Outer struct(x I32, y I32) {
 }
 
 fn fieldOfFieldChecked(x I32, y I32) Point& {
-    o := Outer&return(x, y)
+    o := Outer(x, y)
     return o.mid.leaf
 }
 
 # nested forwarding: each field tracks its own argument, through any number of levels
 type WrappedPoint struct(p mut Point&) {
-    inner mut Point&p = p
+    inner mut Point& = p
 }
 
 type PunnedBox struct(w mut WrappedPoint&) {
-    wrapped mut WrappedPoint&w = w
+    wrapped mut WrappedPoint& = w
 }
 
 fn makePunnedBoxChecked(x I32, y I32) Point& {
-    b := PunnedBox&return(WrappedPoint(Point(x, y)))
+    b := PunnedBox(WrappedPoint(Point(x, y)))
     return b.wrapped.inner
 }
 
 # two fields of one same-typed shape, from arguments in different scopes: each field's binding is told apart,
 # so d.left.inner is in the result scope and d.right.inner in this block's - and only the first is returned
 type DualWrapped struct(l mut WrappedPoint&, r mut WrappedPoint&) {
-    left mut WrappedPoint&l = l
-    right mut WrappedPoint&r = r
+    left mut WrappedPoint& = l
+    right mut WrappedPoint& = r
 }
 
 fn dualWrappedFieldChecked(leftX I32, leftY I32, rightX I32, rightY I32) Point& {
-    l mut WrappedPoint&return = WrappedPoint(Point(leftX, leftY))
+    l mut WrappedPoint& = WrappedPoint(Point(leftX, leftY))
     r mut WrappedPoint& = WrappedPoint(Point(rightX, rightY))
     d DualWrapped& = DualWrapped(l, r)
     return d.left.inner
@@ -524,29 +524,29 @@ fn dualWrappedFieldChecked(leftX I32, leftY I32, rightX I32, rightY I32) Point& 
 # in the result scope: an instance may not outlive what a field written "&p" refers into (C2d), so d could be there
 # only with r there too - and through h.box, d's own field bindings are read at d's scope (O23)
 type Holder struct(b DualWrapped&) {
-    box DualWrapped&b = b
+    box DualWrapped& = b
 }
 
 fn holderFieldChecked(leftX I32, leftY I32, rightX I32, rightY I32) Point& {
-    l mut WrappedPoint&return = WrappedPoint(Point(leftX, leftY))
-    r mut WrappedPoint&return = WrappedPoint(Point(rightX, rightY))
-    d DualWrapped&return = DualWrapped(l, r)
+    l mut WrappedPoint& = WrappedPoint(Point(leftX, leftY))
+    r mut WrappedPoint& = WrappedPoint(Point(rightX, rightY))
+    d DualWrapped& = DualWrapped(l, r)
     h Holder& = Holder(d)
     return h.box.left.inner
 }
 
 # two chains reaching one shared type's field through different paths resolve to two different scopes
 type LeafWrap struct(w mut WrappedPoint&) {
-    leaf mut WrappedPoint&w = w
+    leaf mut WrappedPoint& = w
 }
 
 type SiblingPair struct(o WrappedPoint&, t LeafWrap&) {
-    one WrappedPoint&o = o
-    two LeafWrap&t = t
+    one WrappedPoint& = o
+    two LeafWrap& = t
 }
 
 fn siblingPairOneChecked(x1 I32, y1 I32, x2 I32, y2 I32) Point& {
-    one WrappedPoint&return = WrappedPoint(Point(x1, y1))
+    one WrappedPoint& = WrappedPoint(Point(x1, y1))
     two LeafWrap& = LeafWrap(WrappedPoint(Point(x2, y2)))
     p SiblingPair& = SiblingPair(one, two)
     return p.one.inner
@@ -554,7 +554,7 @@ fn siblingPairOneChecked(x1 I32, y1 I32, x2 I32, y2 I32) Point& {
 
 fn siblingPairTwoLeafChecked(x1 I32, y1 I32, x2 I32, y2 I32) Point& {
     one WrappedPoint& = WrappedPoint(Point(x1, y1))
-    two LeafWrap&return = LeafWrap(WrappedPoint(Point(x2, y2)))
+    two LeafWrap& = LeafWrap(WrappedPoint(Point(x2, y2)))
     p SiblingPair& = SiblingPair(one, two)
     return p.two.leaf.inner
 }
@@ -562,14 +562,14 @@ fn siblingPairTwoLeafChecked(x1 I32, y1 I32, x2 I32, y2 I32) Point& {
 # reassignment tracking: "box = ScopedBox(...)" re-binds box's own map, so box.inner after it is checked
 # against what box holds now
 fn reassignSameScopeChecked(x I32, y I32) Point& {
-    box ScopedBox&return = ScopedBox(Point(1, 2))
+    box ScopedBox& = ScopedBox(Point(1, 2))
     box = ScopedBox(Point(x, y))
     return box.inner
 }
 
 # two branches reassigning box into one agreed scope merge to that scope
 fn reassignBothBranchesAgreeChecked(cond Bool, x I32, y I32) Point& {
-    box ScopedBox&return = ScopedBox(Point(1, 2))
+    box ScopedBox& = ScopedBox(Point(1, 2))
     if cond {
         box = ScopedBox(Point(x, y))
     } else {
@@ -2155,7 +2155,7 @@ test "E11a/E11b: a function can build text and return it into its caller's scope
 # that does that excluded run-time-length arrays, so the callee's variable was looked up in the caller's
 # frame and mangled as a global with no owner. Only a literal reached it: an lvalue argument borrows and
 # takes a different path, which is why nothing had hit it.
-fn head3(b Array<U8>&) Array<U8>&b { return b[0:2] }
+fn head3(b Array<U8>&) Array<U8>& { return b[0:2] }
 
 test "T11: a literal passed to a 'Array<T>&' parameter" {
     assert bytesEq(head3("abcd"), "ab")
@@ -2466,8 +2466,8 @@ type Growable struct(cap I32) {
     n I32 = 0
 }
 
-fn (c Growable&) regrow(newCap I32) mut Growable&c {
-    w mut Growable&c = Growable(newCap)
+fn (c Growable&) regrow(newCap I32) mut Growable& {
+    w mut Growable& = Growable(newCap)
     for i in range c.n { w.data[i] = c.data[i] }
     w.n = c.n
     return w
@@ -2532,7 +2532,7 @@ test "T11a: a sized reference declaration allocates, and its type is length-free
 # declaring a "Point" - different types by owner+name - shared one instantiation), and EVERY array
 # contributed the literal "arr". Neither miscompiled, because the reuse always failed a later fit check.
 # an array is held in a struct by reference (T7a), so the generic takes its type argument as one
-fn PassArray<T>(a Array<T>&) Array<T>&a { return a }
+fn PassArray<T>(a Array<T>&) Array<T>& { return a }
 
 test "G16a: two array instantiations of one generic are distinct" {
     a := Array<I32>(2, 7)
@@ -3026,7 +3026,7 @@ test "a loop inside a join starts one task per iteration" {
 # malloc's own consistency assertion roughly four runs in five. Each task now allocates into a private
 # arena standing in for the scope it was given, and the spawner folds them back in after the join.
 fn churnInto(times I32) Crate2& {
-    last mut Crate2&return = Crate2(0)
+    last mut Crate2& = Crate2(0)
     for i in range times {
         last = Crate2(i)
     }
@@ -3045,7 +3045,7 @@ test "two tasks may allocate into one scope" {
 # there, and still reachable, once the block ends. "Held3&o(...)" builds it where the container lives, which
 # is what O20 requires of anything stored through a longer-lived container.
 fn produceInto(o mut Box3&, n I32) {
-    o.inner = Held3&o(Crate2(n))
+    o.inner = Held3(Crate2(n))
 }
 
 test "a value a task allocates into the caller's scope survives the join" {
@@ -3524,7 +3524,7 @@ type RefCell struct(v I32) {
     val I32 = v
 }
 
-fn makeCellRefs(a RefCell&, b RefCell&a) Array<RefCell&>&a {
+fn makeCellRefs(a RefCell&, b RefCell&) Array<RefCell&>& {
     return RefCell&[a, b]
 }
 
@@ -3560,7 +3560,7 @@ test "a value promotes into a reference target, and a reference copies out into 
 # T11a: an array of references to arrays - each row a separate array with its own length, since a
 # reference takes its length from what it points to. The whole thing crosses a function boundary like any
 # other reference, its rows inheriting its scope.
-fn makeRows(a Array<I32>&, b Array<I32>&a) Array<Array<I32>&>&a {
+fn makeRows(a Array<I32>&, b Array<I32>&) Array<Array<I32>&>& {
     return Array<I32>&[a, b]
 }
 
@@ -3620,7 +3620,7 @@ fn makeFixedArrayRef() Array<I32>& {
 # for a runtime-known length), so it's implicitly reference-shaped even here, without writing "&s" a
 # second time on the local itself.
 fn makeSizedArrayRef(n I32) Array<I32>& {
-    result mut Array<I32>&return = Array<I32>(n, 0)
+    result mut Array<I32>& = Array<I32>(n, 0)
     result[0] = 42
     return result
 }
@@ -4154,14 +4154,14 @@ test "the static scope checker resolves a scope tag through three levels of nest
 # identity survives, and a later write through q allocates where p's referent lives rather than in this
 # function's arena.
 fn longerScopeIntoOwn(p Point&) I32 {
-    q Point&p = p
+    q Point& = p
     return q.x
 }
 
 # scratch lives in this function's block and keep where the result goes - two scopes, neither of them named
 fn twoScopeVars(n I32) Point& {
     scratch Point& = Point(n, n)
-    keep mut Point&return = Point(scratch.x, n)
+    keep mut Point& = Point(scratch.x, n)
     return keep
 }
 
@@ -4833,7 +4833,7 @@ test "C2a: every local-variable initialization rule applies to a constructor fie
 # O13 still rejects a bare "&" return type, null or not: the rule is about the TYPE a caller receives,
 # which needs a scope it can name, and "return null" does not change what the signature promises. Naming
 # the scope is what makes it returnable - and null then flows into it freely, having no scope of its own.
-fn firstOrNull(a Array<Crate2&>&, i I32) Crate2?&a {
+fn firstOrNull(a Array<Crate2&>&, i I32) Crate2?& {
     return null
 }
 
@@ -5628,7 +5628,7 @@ fn astEval(e Ast&, x I64) I64 {
 
 # one node, its operands already folded: numbers combine, x + 0, x * 1 and x * 0 simplify, -(-e) is e. The result is
 # borrowed from n (O13) - built where n lives, or a part of n handed back as it is
-fn astSimplify(n Ast&) Ast&n {
+fn astSimplify(n Ast&) Ast& {
     return match n {
         case Ast.Add(Ast.Num(a), Ast.Num(b)): Ast.Num(a + b)
         case Ast.Mul(Ast.Num(a), Ast.Num(b)): Ast.Num(a * b)
@@ -5641,7 +5641,7 @@ fn astSimplify(n Ast&) Ast&n {
     }
 }
 
-fn astFold(e Ast&) Ast&e {
+fn astFold(e Ast&) Ast& {
     return match e {
         case Ast.Add(a, b): astSimplify(Ast.Add(astFold(a!), astFold(b)))
         case Ast.Mul(a, b): astSimplify(Ast.Mul(astFold(a), astFold(b)))
@@ -5651,7 +5651,7 @@ fn astFold(e Ast&) Ast&e {
 }
 
 # the leaves, left to right, into a list living where the tree does (G11: a List of enum references)
-fn astLeaves(e Ast&, out mut Vec<Ast&>&e) {
+fn astLeaves(e Ast&, out mut Vec<Ast&>&) {
     match e {
         case Ast.Num(_), Ast.Var(_) { out.Push(e) }
         case Ast.Add(a, b), Ast.Mul(a, b) {
@@ -6028,7 +6028,7 @@ test "a generic run-time-sized field still works for reference-free element type
 #   the tag - every assignment into a "&s" field is checked against s, where it is written
 #   O13a - the binding made at construction is checked at the return
 type Parcel3 struct(b mut Crate2&) {
-    held mut Crate2&b = b
+    held mut Crate2& = b
 }
 
 fn wrapValid(valid mut Crate2&) Parcel3 { return Parcel3(valid) }
@@ -6061,7 +6061,7 @@ test "a struct holding a reference can be returned when the scope is named" {
 # ambiguous rather than silently picking one. Ambiguous is then treated as unverifiable and rejected,
 # because "it could be more than one thing" includes "it could be this function's own scope" whenever any
 # arm bound it there - and that arm would return a reference to a scope that closed at the return.
-fn mergedSame(a mut Crate2&, b mut Crate2&a, c Bool) Parcel3 {
+fn mergedSame(a mut Crate2&, b mut Crate2&, c Bool) Parcel3 {
     h Parcel3 = Parcel3(a)
     if c { h = Parcel3(b) }        # both arms bind s to p - they agree
     return h
@@ -6105,7 +6105,7 @@ test "branches that agree on a scope keep it" {
 # own local and have it stored somewhere that outlives the call. That was a real use-after-free: after the
 # call returned, churning the arena left the stored reference reading someone else's bytes.
 type Held3 struct(b mut Crate2?&) {
-    held mut Crate2?&b = b
+    held mut Crate2?& = b
 }
 type Box3 struct(x Held3) {
     inner Held3 = x
@@ -6194,7 +6194,7 @@ test "a field of a container parameter can be written, and the caller discharges
 # to outlive the container's construction scope, which outlives wherever the container now sits. And it
 # only works because O22 keeps the WRITE side precise - weakening both halves to the container's scope
 # costs per-field precision, weakening only the read costs nothing.
-fn innerOf(w Held3&) Crate2&w { return w.held! }
+fn innerOf(w Held3&) Crate2& { return w.held! }
 
 test "a field of a container parameter can be read out at the container's scope" {
     c mut Crate2& = Crate2(31)
@@ -6221,7 +6221,7 @@ test "a temporary written through a container parameter lands in the caller's sc
 # does not know - so it may read through it, and pass it on, but not build through it. The rejected program
 # can only be named here: "fn fill(o mut Held3&) { o.held = Crate2(9) }".
 type Wrap2 struct(i mut Crate2&) {
-    inner mut Crate2&i = i
+    inner mut Crate2& = i
 }
 
 # a local taking where the field's referent lives - where w's argument for "i" was, a scope of this function's own
@@ -6235,7 +6235,7 @@ fn takesNamed(c Crate2&) I32 { return c.v }
 fn passesOn(w Wrap2&) I32 { return takesNamed(w.inner) }
 
 # an instance-scoped field can be built into and returned, borrowed from the container
-fn namedBoth(w mut Held5&) Crate2&w {
+fn namedBoth(w mut Held5&) Crate2& {
     w.held = Crate2(4)        # allocation: lands in w's scope, the caller's arena
     return w.held
 }
@@ -6309,7 +6309,7 @@ test "a generic linked node, walked by a for loop that advances by assignment" {
 # O3: a scope name is not a value, so a local may share one - and codegen keyed both by bare name, so
 # "return res" below found the hidden scope argument's slot and returned the scope pointer as the array
 fn sizedIn(n I32) Array<I32>& {
-    res mut Array<I32>&return = Array<I32>(n, 7)
+    res mut Array<I32>& = Array<I32>(n, 7)
     return res
 }
 
@@ -6325,7 +6325,7 @@ test "a returned local is built where the result goes" {
 # allocated the new node in this function's arena and hung it off the caller's list - read back as garbage
 # once the arena was reused. Now a local says where it lives - here, where p does.
 fn linkThrough(p mut Link&) {
-    a mut Link&p = p    # a is exactly p's scope, not this function's own
+    a mut Link& = p    # a is exactly p's scope, not this function's own
     a.next = Link(5)        # so the new node is allocated there
 }
 
@@ -6366,7 +6366,7 @@ test "O25: same-scope locals link, and an inner-block cursor writes into the out
     b mut Link& = Link(2)
     a.next = b
     if a.v == 1 {
-        c Link&a = a        # exactly a's scope, not the if's
+        c Link& = a        # exactly a's scope, not the if's
         c.next!.next = Link(3)
     }
     churnLinks()
@@ -6379,7 +6379,7 @@ test "O25: same-scope locals link, and an inner-block cursor writes into the out
 # allocated into it or stored through it
 fn sumLinks(p Link&) I32 {
     sum I32 = 0
-    for c Link?&p = p, c is not null, c = c.next { sum = sum + c.v }
+    for c Link?& = p, c is not null, c = c.next { sum = sum + c.v }
     return sum
 }
 
@@ -6399,7 +6399,7 @@ test "O25: a bare parameter's scope is adopted for reading" {
 # D15: ":=" takes its type from any call returning a value, "try" calls included. A reference result takes
 # the call's exact scope (O25a), so it is written through exactly as a declared one would be.
 fn sevenFold(n I32) I32 { return n * 7 }
-fn freshLink(n I32) Link& { return Link(n) }
+fn freshLink(n I32) mut Link& { return Link(n) }
 
 test "D15: := from a call" {
     a := sevenFold(3)
@@ -6428,7 +6428,7 @@ fn digitsD(a I32, b I32) I32 ? DivError {
 }
 
 # each result keeps its own scope tag, and every scope rule applies to it separately
-fn linkAndDouble(n I32) Link&, I32 { return Link(n), n * 2 }
+fn linkAndDouble(n I32) mut Link&, I32 { return Link(n), n * 2 }
 
 fn swapD<T>(a T, b T) T, T { return b, a }
 
@@ -6543,8 +6543,8 @@ fn (r RangeD&) ShiftedD(dlo I32, dhi I32) I32 { return r.lo + dlo + r.hi + dhi }
 fn digitSumD(n I32) I32 ? DivError { return addD(try safeDivD(n, 10)) }
 fn twiceD(f fn(a I32) I32, v I32) I32, I32 { return f(v), f(f(v)) }
 # a reference among the results lands where the outer call's result does (O18a)
-fn linkPairD(n I32) Link&, I32 { return Link(n), n }
-fn keepLinkD(l mut Link&, n I32) mut Link&l {
+fn linkPairD(n I32) mut Link&, I32 { return Link(n), n }
+fn keepLinkD(l mut Link&, n I32) mut Link& {
     l.v = l.v + n
     return l
 }
@@ -6652,7 +6652,7 @@ test "E13b: a field holding a function is called as x.f(args)" {
 fn textE() String& { return " 42 " }
 fn textsE() Array<String&>& { return String&["7", "x8"] }
 type ParserE struct(t String&) { t }
-fn (p ParserE&) Text() String&p { return p.t }
+fn (p ParserE&) Text() String& { return p.t }
 fn chainTriedE() I64 {
     a := try textE().Trim().ParseInt() catch default -1
     b := try textsE()[0].ParseInt() catch default -1
@@ -6772,19 +6772,19 @@ type TdBox struct(v I32) {
     v
 }
 
-fn tdPick(b TdBox&, ok Bool) TdBox&b ? MathError {
+fn tdPick(b TdBox&, ok Bool) TdBox& ? MathError {
     if not ok { error MathError.DivByZero }
     return b
 }
 
 # the default is another reference in the result's own scope - p's, which q shares
-fn tdOther(p TdBox&, q TdBox&p) TdBox&p {
+fn tdOther(p TdBox&, q TdBox&) TdBox& {
     return try tdPick(p, false) catch default q
 }
 
 # the default is a temporary: it has no scope of its own, so it is built where the result lives - the
 # p's scope - and must survive this function's return
-fn tdFresh(p TdBox&) TdBox&p {
+fn tdFresh(p TdBox&) TdBox& {
     return try tdPick(p, false) catch default TdBox(7)
 }
 
@@ -7011,7 +7011,7 @@ fn ktFib(n I32) I32 {
 }
 
 fn ktSquares() Array<I32>& {
-    t mut Array<I32>&return = Array<I32>(8)
+    t mut Array<I32>& = Array<I32>(8)
     for i in range I32(8) {
         t[i] = i * i
     }
@@ -7443,7 +7443,7 @@ fn rangeSum(n I32) I32 {
 RangeSumTen := rangeSum(10)
 
 fn rangeText(end I32, start I32, step I32) String& {
-    t mut String&return = ""
+    t mut String& = ""
     for v in range start, end, step { t = $t $v "," }
     return t
 }
@@ -7703,12 +7703,12 @@ test "E27/T7: a comprehension or Array<T>(n) returned through a reference result
 fn comprNothing(n I32) String {
     m := Map<I8, U32>()
     a Array<U16> = U16[1 for _ in m.Values()]
-    ra Array<U16>&a = a
+    ra Array<U16>& = a
     l := Vec<U16>()
     e Array<U16> = U16[3 for x in l if x > 0]
-    re Array<U16>&e = e
+    re Array<U16>& = e
     r Array<U16> = U16[2 for _ in range n]
-    rr Array<U16>&r = r
+    rr Array<U16>& = r
     return $ra " " $(ra.Len() == 0) " " $re " " $(re.Len() == 0) " " $rr " " $(rr.Len() == 0)
 }
 
@@ -7723,7 +7723,7 @@ test "E27/T2c: a comprehension over an empty source is an empty array" {
     assert comprNothing(n) == ComprNothingBaked
     l := Vec<I64>()
     empty := I64[x for x in l]
-    er Array<I64>&empty = empty
+    er Array<I64>& = empty
     assert empty.Len() == 0 and er.Len() == 0
 }
 
@@ -8078,7 +8078,7 @@ fn (g OpGrid&) Slice(lo I64, hi I64) Array<I32> { return I32[g.cells[i] for i in
 
 # O20: a slice of a reference field lives where the field's array does - its container's scope - so returning one
 # borrowed from the receiver is legal
-fn (g OpGrid&) Row(lo I64, hi I64) Array<I32>&g { return g.cells[lo:hi] }
+fn (g OpGrid&) Row(lo I64, hi I64) Array<I32>& { return g.cells[lo:hi] }
 
 type OpBits struct(v I64) {
     v
@@ -8427,9 +8427,9 @@ type TxGrid struct(n I64) {
 fn (g TxGrid&) At(i I64) I32 { return g.cells[i] }
 fn (g mut TxGrid&) SetAt(i I64, v I32) { g.cells[i] = v }
 fn (g TxGrid&) Len() I64 { return g.n }
-fn (g TxGrid&) Slice(lo I64, hi I64) Array<I32>&g { return g.cells[lo:hi] }
+fn (g TxGrid&) Slice(lo I64, hi I64) Array<I32>& { return g.cells[lo:hi] }
 fn (g TxGrid&) Get(i I64) I32 ? ArrayError.OutOfRange { return try g.cells.Get(i) }
-fn (g TxGrid&) SliceOf(lo I64, hi I64) Array<I32>&g ? ArrayError.OutOfRange { return try g.cells.SliceOf(lo, hi) }
+fn (g TxGrid&) SliceOf(lo I64, hi I64) Array<I32>& ? ArrayError.OutOfRange { return try g.cells.SliceOf(lo, hi) }
 fn (g mut TxGrid&) Set(i I64, v I32) ? ArrayError.OutOfRange {
     if i < 0 or i >= g.n { error ArrayError.OutOfRange }
     g.cells[i] = v
@@ -8903,7 +8903,7 @@ type O4bSlot struct(key String&, val I32, next mut O4bSlot?&) {
 }
 type O4bMap struct() { first mut O4bSlot?& = null }
 fn (m mut O4bMap&) Put(key String&, val I32) {
-    for s mut O4bSlot?&m = m.first, s is not null, s = s.next {
+    for s mut O4bSlot?& = m.first, s is not null, s = s.next {
         if s.key.Eq(key) {
             s.val = val
             return
@@ -8912,7 +8912,7 @@ fn (m mut O4bMap&) Put(key String&, val I32) {
     m.first = O4bSlot(key, val, m.first)
 }
 fn (m O4bMap&) Get(key String&) I32 {
-    for s O4bSlot?&m = m.first, s is not null, s = s.next {
+    for s O4bSlot?& = m.first, s is not null, s = s.next {
         if s.key.Eq(key) { return s.val }
     }
     return -1
@@ -8934,10 +8934,10 @@ type LandE struct(v I32, l LandE?&) {
     v
     l
 }
-fn landMk(v I32) LandE& { return LandE(v, null) }
+fn landMk(v I32) mut LandE& { return LandE(v, null) }
 fn landPair(a I32, b I32) LandE& { return LandE(a, landMk(b)) }
 fn landChain(n I32) LandE& {
-    left mut LandE&return = landMk(0)
+    left mut LandE& = landMk(0)
     for i in range n { left = LandE(i + 1, left) }
     return left
 }
@@ -8966,26 +8966,26 @@ type OxN struct(v I32, nx mut OxN?&) {
     next mut OxN?& = nx
 }
 
-fn oxLink(a mut OxN&, b mut OxN&a) { a.next = b }
+fn oxLink(a mut OxN&, b mut OxN&) { a.next = b }
 
-fn (l OxN&) OxFirst() OxN&l { return l.next! }
+fn (l OxN&) OxFirst() OxN& { return l.next! }
 
 fn (l mut OxN&) OxGrow(v I32) {
-    e mut OxN&l = OxN(v, null)
+    e mut OxN& = OxN(v, null)
     e.next = l.next
     l.next = e
 }
 
 fn oxChain(seed mut OxN&) {
     for _ in range 3 {
-        left mut OxN&seed = OxN(10, null)
-        right mut OxN&left = OxN(11, null)
+        left mut OxN& = OxN(10, null)
+        right mut OxN& = OxN(11, null)
         left.next = right
         seed.next = left
     }
 }
 
-fn oxMk(v I32) OxN& { return OxN(v, null) }
+fn oxMk(v I32) mut OxN& { return OxN(v, null) }
 
 # reuses every chunk a closed block gave back, so a value wrongly built in one reads back as garbage
 fn oxChurn() I32 {
@@ -8999,9 +8999,9 @@ fn oxChurn() I32 {
 
 fn oxGraft(at mut OxN&) {
     for _ in range 1 {
-        x := oxMk&at(5)
+        x := oxMk(5)
         at.next = x
-        x.next = oxMk&at(6)
+        x.next = oxMk(6)
     }
 }
 
@@ -9022,8 +9022,8 @@ test "O4a: &x on parameters, results and locals" {
 test "O4a: &x naming a block-scoped local builds there, from an inner block" {
     outer := OxN(1, null)
     for _ in range 1 {
-        inner mut OxN&outer = OxN(7, null)
-        called mut OxN&outer = oxMk(8)
+        inner mut OxN& = OxN(7, null)
+        called mut OxN& = oxMk(8)
         outer.next = inner
         inner.next = called
     }
@@ -9035,7 +9035,7 @@ test "O4a: &x naming a block-scoped local builds there, from an inner block" {
 test "E25: f&x() builds the result where x lives" {
     outer := OxN(1, null)
     for _ in range 1 {
-        x := oxMk&outer(4)
+        x := oxMk(4)
         outer.next = x
     }
     assert oxChurn() > 0
@@ -9058,31 +9058,31 @@ type OE struct(v I32, l mut OE?&, r mut OE?&) {
 
 type OHolder struct(x mut OxN&) { n mut OxN& = x }
 
-fn oNum(v I32) OE& { return OE(v, null, null) }
+fn oNum(v I32) mut OE& { return OE(v, null, null) }
 
-fn oTerm(n I32) OE& {
-    left mut OE&return = oNum(1)
+fn oTerm(n I32) mut OE& {
+    left mut OE& = oNum(1)
     for i in range n {
-        right mut OE&left = oNum(I32(i) + 2)
+        right mut OE& = oNum(I32(i) + 2)
         left = OE(0, left, right)
     }
     return left
 }
 
 fn oBuild(v I32) OHolder {
-    h := OHolder&return(OxN(v, null))
+    h := OHolder(OxN(v, null))
     h.n.next = OxN(v + 1, null)
     return h
 }
 
-fn (l OxN&) oLast() OxN&l {
-    c OxN&l = l
+fn (l OxN&) oLast() OxN& {
+    c OxN& = l
     for c.next is not null { c = c.next! }
     return c
 }
 
 fn oFresh() OxN& {
-    x mut OxN?&return = null
+    x mut OxN?& = null
     for i in range 3 { x = OxN(I32(i), x) }
     return x!
 }
@@ -9127,7 +9127,7 @@ test "O18a: a by-value result is built where it lands - a loop body's own block,
 # what it walks, and a write through it builds where the walked structure lives. C2c/E25: a scope argument on
 # a constructor call builds the instance where the named variable lives.
 type OCursor struct(of mut OxN&) {
-    at mut OxN&of = of
+    at mut OxN& = of
     steps I32 = 0
 }
 
@@ -9143,7 +9143,7 @@ test "C2d/E25: a cursor over a longer-lived list, and a constructor built where 
         c.OAdvance()
         assert c.at.v == 2
         c.at.next = OxN(9, null)
-        made mut OxN&list = OxN&list(7, null)
+        made mut OxN& = OxN(7, null)
         list.next!.next!.next = made
     }
     assert oxChurn() > 0
@@ -9153,14 +9153,14 @@ test "C2d/E25: a cursor over a longer-lived list, and a constructor built where 
 
 # O26/E25: "f&return()" builds a call's result in this function's result scope, and ":=" takes that scope, so
 # the local can be built on and returned. A typed local says where it lives - "x OxN&l" - and never adopts.
-fn oChainRet(n I32) OxN& {
-    x := oxMk&return(n)
+fn oChainRet(n I32) mut OxN& {
+    x := oxMk(n)
     x.next = oxMk(n + 1)
     return x
 }
 
-fn (l OxN&) oSecond() OxN&l {
-    c OxN&l = l.next!
+fn (l OxN&) oSecond() OxN& {
+    c OxN& = l.next!
     return c
 }
 
@@ -9564,7 +9564,7 @@ CtSplitLast String& = "k=v".Split("=")[1]
 test "Split's pieces live with the text, and the evaluator splits as the run time does" {
     k I32 = ctRuntimeZero
     line String& = "x" $k ",yy,zzz"
-    parts Array<String&>&line = line.Split("!")
+    parts Array<String&>& = line.Split("!")
     if k == 0 {
         parts = line.Split(",")
     }
@@ -9673,14 +9673,14 @@ test "D16: lambdas take their types from where they are passed, and from their b
     assert ($fn(x I32) { return x }).Eq("fn(x I32) I32")
 }
 
-# E11a: a function renders as its signature is written - a parameter's own scope is its bare "&", another's is named
+# E11a: a function renders as its signature is written - every reference a bare "&" (no scope is written, QCB)
 type RdNode struct(v I32) { v }
 fn rdTouch(n mut RdNode&) { }
-fn rdPick(a RdNode&, b RdNode&a) RdNode&a { return b }
+fn rdPick(a RdNode&, b RdNode&) RdNode& { return b }
 RdSig := $rdPick
-test "a signature renders as it is written, its scopes included" {
+test "a signature renders as it is written" {
     assert $rdTouch == "rdTouch(n mut RdNode&)"
-    assert RdSig == "rdPick(a RdNode&, b RdNode&a) RdNode&a"
+    assert RdSig == "rdPick(a RdNode&, b RdNode&) RdNode&"
     f fn(n mut RdNode&) = rdTouch
     assert $f == "fn(n mut RdNode&)"
 }
@@ -9900,9 +9900,9 @@ type PermNode struct(v I32, next mut PermNode?&) {
     v
     next
 }
-fn permFirst(l PermNode&) PermNode&l { return l }               # borrowed read-only
-fn permGrab(l mut PermNode&) mut PermNode&l { return l }        # borrowed writable
-fn permFresh(n I32) PermNode& { return PermNode(n, null) }    # built: writable
+fn permFirst(l PermNode&) PermNode& { return l }               # borrowed read-only
+fn permGrab(l mut PermNode&) mut PermNode& { return l }        # borrowed writable
+fn permFresh(n I32) mut PermNode& { return PermNode(n, null) }    # written writable (T25c)
 fn permBump(p mut PermNode&) { p.v++ }
 fn permSum(a Array<PermNode&>&) I32 {                         # reads through read-only elements
     t I32 = 0
@@ -9913,7 +9913,7 @@ PermRO PermNode& = PermNode(1, null)
 
 test "T25b: writable and read-only references, by type" {
     k I32 = ctRuntimeZero
-    n := permFresh(k + 3)              # a built result is writable
+    n := permFresh(k + 3)              # a result is as writable as it is written
     permBump(n)
     assert n.v == 4
     g := permGrab(n)
@@ -9957,8 +9957,8 @@ fn (b PermBag) Doubled() I32 {                  # a by-value receiver too
     b.n = b.n * 2
     return b.n
 }
-fn permPick(xs Array<String&>&, want I64) String&xs {
-    found String&xs = ""                        # read-only, so it may take a read-only element later
+fn permPick(xs Array<String&>&, want I64) String& {
+    found String& = ""                        # read-only, so it may take a read-only element later
     for w in xs { if w.Len() == want { found = w } }
     return found
 }
@@ -10211,9 +10211,9 @@ type CaExpr enum {
     Num(v F64)
     Neg(e CaExpr&)
 }
-fn caWrap(a CaExpr&) CaExpr&a { return CaExpr.Neg(a) }
-fn caSimplify(e CaExpr?&) CaExpr&e { return caWrap(e) if e is not null else CaExpr.Num(1.0) }
-fn caSimplifyM(e CaExpr&, k I64) CaExpr&e {
+fn caWrap(a CaExpr&) CaExpr& { return CaExpr.Neg(a) }
+fn caSimplify(e CaExpr?&) CaExpr& { return caWrap(e) if e is not null else CaExpr.Num(1.0) }
+fn caSimplifyM(e CaExpr&, k I64) CaExpr& {
     return match k {
         case 0: caWrap(e)
         case _: CaExpr.Num(F64(k))
@@ -11335,10 +11335,10 @@ fn (b mut ObItems&) Add(x ObNode&) {
     b.n++
 }
 type ObItemsIter struct(of ObItems&) {
-    bag ObItems&of = of
+    bag ObItems& = of
     i I64 = 0
 }
-fn (it mut ObItemsIter&) Next() ObNode&it ? Exhausted {
+fn (it mut ObItemsIter&) Next() ObNode& ? Exhausted {
     if it.i == it.bag.n { error Exhausted.End }
     v := it.bag.items[it.i]
     it.i++
@@ -11442,7 +11442,7 @@ WlGS mut String& = ""
 WlGB mut WlBox = WlBox(null)
 WlGW mut Array<I64> = Array<I64>(2, 0)
 
-fn wlMkNode(v I64) WlNode& { return WlNode(v) }
+fn wlMkNode(v I64) mut WlNode& { return WlNode(v) }
 fn wlMkBox(v I64) WlBox { return WlBox(WlNode(v)) }
 fn wlSetGlobals(n I64) {
     WlGA = WlNode(n)
@@ -11475,7 +11475,7 @@ test "O1b: what a function assigns to a global, or into one, is built in the pro
 }
 
 WlG WlNode& = WlNode(5)
-fn wlFromG(p WlNode&, k I64) WlNode&p { return WlNode(p.v + k) }
+fn wlFromG(p WlNode&, k I64) WlNode& { return WlNode(p.v + k) }
 fn wlTask(n I64, out mut Array<I64>&, slot I64) {
     bad I64 = 0
     for i in range n {
@@ -11586,7 +11586,7 @@ fn sfTwo(k I64) mut SfNode&, mut SfNode& ? SfErr {
     if k > -100 { error SfErr.Bad }
     return SfNode(k), SfNode(k + 1)
 }
-fn sfFallback(a mut SfNode&) mut SfNode&a { return try sfMk(1) catch default a }
+fn sfFallback(a mut SfNode&) mut SfNode& { return try sfMk(1) catch default a }
 
 test "R9a: a reference default is judged where the call's result lands, not where the try is written" {
     outer mut SfNode& = SfNode(sfRun)
@@ -11605,7 +11605,7 @@ test "R9a: a reference default is judged where the call's result lands, not wher
 
 fn sfMkBox(v I64) SfBox& { return SfBox(SfNode(v)) }
 fn sfMkNodes(v I64) Array<mut SfNode&>& {
-    n mut SfNode&return = SfNode(v)
+    n mut SfNode& = SfNode(v)
     return Array<mut SfNode&>(2, n)
 }
 fn sfMkArr(v I64) Array<I64>& { return Array<I64>(4, v) }
@@ -11659,7 +11659,7 @@ test "D8c/O18a: results destructured into existing variables land where those va
     assert a.v == 46 and b.v == 8
 }
 
-fn sfPick(n SfNode&, c Bool) SfNode&n { return n if c else SfNode(9) }
+fn sfPick(n SfNode&, c Bool) SfNode& { return n if c else SfNode(9) }
 
 test "E28/S12b: a conditional or match of a reference and a new value is a reference, the new one built where it lands" {
     n SfNode& = SfNode(sfRun)
@@ -11717,7 +11717,7 @@ type SfHolder struct(n SfNode&) {
     n
 }
 fn sfIdHolder(x SfHolder) SfHolder { return x }
-fn sfIdRef(h SfHolder&) SfHolder&h { return h }
+fn sfIdRef(h SfHolder&) SfHolder& { return h }
 
 test "O4b/O14c: a by-value parameter holding references returns them to a caller that keeps them no further out" {
     outer SfNode& = SfNode(sfRun)
@@ -11752,11 +11752,11 @@ SfGL mut Vec<SfWrap&>& = Vec<SfWrap&>()
 SfGN mut SfNode& = SfNode(7)
 SfGR Vec<I64>& = sfReadOnlyList()
 fn sfReadOnlyList() Vec<I64>& {
-    l mut Vec<I64>&return = Vec<I64>()
+    l mut Vec<I64>& = Vec<I64>()
     l.Push(5)
     return l
 }
-fn sfLink(a mut SfBox&, b mut SfNode&a) { a.n = b }
+fn sfLink(a mut SfBox&, b mut SfNode&) { a.n = b }
 fn sfCount(l Vec<I64>&) I64 { return l.Len() }
 fn sfFillGlobals(n I64) {
     for i in range n {
@@ -12024,7 +12024,7 @@ type EvHolder struct(a mut Array<I64>&, b mut Array<I64>&) {
     b
 }
 fn evMkHolder() EvHolder {
-    arr mut Array<I64>&return = Array<I64>(4)
+    arr mut Array<I64>& = Array<I64>(4)
     return EvHolder(arr, arr[1:3])
 }
 EvHold EvHolder = evMkHolder()
@@ -12049,10 +12049,10 @@ type EvNode struct(v I64) {
     v
 }
 fn evMk(v I64) EvNode& {
-    n mut EvNode&return = EvNode(v)
+    n mut EvNode& = EvNode(v)
     return n
 }
-fn evIdr(n EvNode&) EvNode&n { return n }
+fn evIdr(n EvNode&) EvNode& { return n }
 EvA EvNode& = evMk(4)
 EvB EvNode& = EvA
 EvC EvNode& = evIdr(EvA)
@@ -12145,7 +12145,7 @@ fn fzChurn(n I64) I64 {
     return b.Len()
 }
 fn fzTextCond(k I64) String& {
-    c String&return = fzBoolText(k)
+    c String& = fzBoolText(k)
     j := fzChurn(50)
     return "(" $c " " $j ")"
 }
@@ -12408,9 +12408,9 @@ test "R10: a try statement's clauses do not take an error raised by its call's a
 # every empty array is: an array is never null (fuzz/repro/nullarrayrender.olang)
 fn fzNullArr(n I64) String {
     d Array<U16>
-    rd Array<U16>&d = d
+    rd Array<U16>& = d
     e Array<U16> = Array<U16>(n - n)
-    re Array<U16>&e = e
+    re Array<U16>& = e
     return $rd " " $(rd.Len() == 0) " " $re " " $(re.Len() == 0)
 }
 FzNullArrBaked String = fzNullArr(3)
@@ -12843,7 +12843,7 @@ test "O18c: a call with a catch block lands as a call with no clause does" {
 
 # O18c: a call's result passed on as a receiver or a loop's source lands where its obligations say - an element of a
 # list of lists, where the outer list lives - as "inner := adj[a]" does
-fn sbAdd(adj mut Vec<mut Vec<String&>&>&, a I64, v String&adj) {
+fn sbAdd(adj mut Vec<mut Vec<String&>&>&, a I64, v String&) {
     adj[a].Push(v)
 }
 fn sbJoin(adj Vec<mut Vec<String&>&>&, a I64) String& {
@@ -12856,7 +12856,7 @@ test "O18c: an element of a list of lists, used as a receiver and as a loop's so
     adj.Push(Vec<String&>())
     adj.Push(Vec<String&>())
     for i in range 3 {
-        t String&adj = $(i + sbRun) "."
+        t String& = $(i + sbRun) "."
         sbAdd(adj, i % 2, t)
     }
     sbChurn()
@@ -12882,7 +12882,7 @@ test "a number read out of a list is a number" {
 # O13c/O25a: "v := e; return v" keeps what "return e" keeps - a hand-written iterator over a list of references to nodes
 # that can be stored through, handing out each element through a local
 type sbIt<T> struct(of Array<T>&) {
-    a Array<T>&of = of
+    a Array<T>& = of
     i I64 = 0
 }
 fn (it mut sbIt<T>&) Next() T ? Exhausted {
@@ -12945,10 +12945,10 @@ test "O25h: an enum field's case rebuilt from its own payload" {
 # reference; and a lambda handing back one of its arguments fits Fold's callback, whose type-variable result says each
 # argument outlives the result - which Fold, and each call through the callback, is held to
 type sbTextIt struct(of Array<String&>&) {
-    a Array<String&>&of = of
+    a Array<String&>& = of
     i I64 = 0
 }
-fn (it mut sbTextIt&) Next() String&it ? Exhausted {
+fn (it mut sbTextIt&) Next() String& ? Exhausted {
     if it.i == it.a.Len() { error Exhausted.End }
     it.i++
     return it.a[it.i - 1]
@@ -12957,10 +12957,10 @@ fn sbLongest(n I64) String& {
     words := Vec<String&>()
     arr := Array<String&>(3)
     for i in range 3 {
-        full String&words = $(n * 10) "abcd"
-        t String&words = full[:I64(i) * 2 + 1]
-        words.Push(t)
-        arr[i] = t
+        full String& = $(n * 10) "abcd"
+        t String& = full[:I64(i) * 2 + 1]
+        words.Push($t)         # a view of a turn's text kept past the turn is a copy (O27)
+        arr[i] = $t
     }
     a := words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
     b := sbTextIt(arr).Fold(arr[0], fn(best, w) { return best if best.Len() >= w.Len() else w })
@@ -12983,7 +12983,7 @@ test "O25a: Fold with a reference accumulator" {
 # T25d/O20: a static literal's elements are constant data, as long-lived as the program - stored into an array that
 # outlives the loop that read them
 fn sbNames() Array<String&>& {
-    all mut Array<String&>&return = Array<String&>(2)
+    all mut Array<String&>& = Array<String&>(2)
     for i, s in String&["alpha", "beta"] { all[i] = s }
     return all
 }
@@ -13037,7 +13037,7 @@ fn sbRegroup(n I64) String& {
         g.Push($(i + n) "g")
     }
     if not groups.Remove(1) { return "lost" }
-    fresh mut Vec<String&>&groups = Vec<String&>()
+    fresh mut Vec<String&>& = Vec<String&>()
     fresh.Push($n "new")
     groups.Put(9, fresh)
     sbChurn()
@@ -13061,7 +13061,7 @@ type sbBox struct(n I64, from Array<I64>& = Array<I64>(0)) {
     Data mut Array<I64>& = Array<I64>(n)
 }
 fn sbCopyOf(b Array<I64>&) sbBox {
-    c := sbBox&return(b.Len() + 2)
+    c := sbBox(b.Len() + 2)
     for i in range b.Len() { c.Data[i] = b[i] }
     return c
 }
@@ -13071,7 +13071,7 @@ fn sbFill(d mut Array<I64>&, v I64) { for i in range d.Len() { d[i] = v } }
 fn sbMade(n I64) sbBox {
     id := sbBox(n, Array<I64>(0))
     sbFill(id.Data, 3)
-    b := sbBox&return(n + id.size())
+    b := sbBox(n + id.size())
     sbFill(b.Data, 7)
     assert b.size() == n + n
     return b
@@ -13099,10 +13099,10 @@ type sbJNode struct(v I64) {
     next mut sbJNode?& = null
 }
 fn sbFields(n I64) Vec<pair.Pair<String&, sbJNode&>>& {
-    fields mut Vec<pair.Pair<String&, sbJNode&>>&return = Vec<pair.Pair<String&, sbJNode&>>()
+    fields mut Vec<pair.Pair<String&, sbJNode&>>& = Vec<pair.Pair<String&, sbJNode&>>()
     for i in range n {
-        key String&fields = $i "k"
-        value sbJNode&fields = sbJNode(I64(i) * 10)
+        key String& = $i "k"
+        value sbJNode& = sbJNode(I64(i) * 10)
         fields.Push(pair.Pair<String&, sbJNode&>(key, value))
     }
     return fields
@@ -14031,24 +14031,24 @@ type c3Parser struct() {
     b c3Leaf& = c3Leaf(2)
     pos I64 = 0
 }
-fn (p c3Parser&) first() c3Leaf&p { return p.a }
-fn (p c3Parser&) second() c3Leaf&p { return p.b }
-fn (p mut c3Parser&) node() c3Node&p {
+fn (p c3Parser&) first() c3Leaf& { return p.a }
+fn (p c3Parser&) second() c3Leaf& { return p.b }
+fn (p mut c3Parser&) node() c3Node& {
     p.pos++
     return c3Node.One(c3Leaf(p.pos * 10))
 }
-fn (p mut c3Parser&) either(c Bool) c3Node&p {
+fn (p mut c3Parser&) either(c Bool) c3Node& {
     x := p.first() if c else p.second()
     return c3Node.One(x)
 }
-fn (p mut c3Parser&) direct(c Bool) c3Node&p {
+fn (p mut c3Parser&) direct(c Bool) c3Node& {
     return c3Node.One(p.first() if c else p.second())
 }
-fn (p mut c3Parser&) maybe(c Bool) c3Node&p {
+fn (p mut c3Parser&) maybe(c Bool) c3Node& {
     x := p.node() if c else null
     return c3Node.Many(c3Node&[x!])
 }
-fn (p mut c3Parser&) orNew(c Bool) c3Node&p {
+fn (p mut c3Parser&) orNew(c Bool) c3Node& {
     x := p.first() if c else c3Leaf(5)
     return c3Node.One(x)
 }
@@ -14080,7 +14080,7 @@ type c3Counts struct(text String&) {
     vowels := c3Vowels(text).Len()
 }
 fn c3Vowels(t String&) Array<Char> {
-    out mut Array<Char>&return = Array<Char>(t.Len())
+    out mut Array<Char>& = Array<Char>(t.Len())
     k I64 = 0
     for c in t { if c == 'a' or c == 'e' {
         out[k] = c
@@ -14123,7 +14123,7 @@ type c3Mod struct() {
 type c3Modules struct() {
     mods Vec<mut c3Mod&>
 }
-fn (r c3Modules&) find(n String&) c3Sym?&r {
+fn (r c3Modules&) find(n String&) c3Sym?& {
     t := try r.mods[0].top.Get(n) catch default null
     return t
 }
@@ -14344,7 +14344,7 @@ fn sc3Prec(c Char) I64 {
     }
 }
 fn (p mut sc3Parser&) peek() sc3Tok { return p.toks[p.at] }
-fn (p mut sc3Parser&) primary() sc3Expr& {
+fn (p mut sc3Parser&) primary() mut sc3Expr& {
     t := p.peek()
     p.at++
     if t.kind == '-' {
@@ -14358,7 +14358,7 @@ fn (p mut sc3Parser&) primary() sc3Expr& {
     }
     return sc3Expr.Num(t.val)
 }
-fn (p mut sc3Parser&) expr(minPrec I64) sc3Expr& {
+fn (p mut sc3Parser&) expr(minPrec I64) mut sc3Expr& {
     lhs := p.primary()
     for {
         op := p.peek()
@@ -14718,16 +14718,16 @@ type c4Node enum {
 type c4Parser struct() {
     pos I64 = 0
 }
-fn (p mut c4Parser&) leaf() c4Node&p {
+fn (p mut c4Parser&) leaf() c4Node& {
     p.pos++
     return c4Node.Leaf(p.pos)
 }
-fn (p mut c4Parser&) many(n I64) c4Node&p {
+fn (p mut c4Parser&) many(n I64) c4Node& {
     l := Vec<c4Node&>()
     for _ in range n { l.Push(p.leaf()) }
     return c4Node.Many(l.ToArray())
 }
-fn (p mut c4Parser&) maybe(b Bool) c4Node&p {
+fn (p mut c4Parser&) maybe(b Bool) c4Node& {
     items := Array<c4Node&>(0)
     if b { items = c4Node&[p.leaf(), p.leaf()] }
     return c4Node.Many(items)
@@ -14976,7 +14976,7 @@ type s4dHold struct() {
 }
 fn s4dDepth(n s4dNode&) I64 {
     d I64 = 0
-    for c s4dNode?&n = n, c is not null and d < 100, c = c.next { d++ }
+    for c s4dNode?& = n, c is not null and d < 100, c = c.next { d++ }
     return d
 }
 fn s4dNegs(k I64) I64 {
@@ -15120,25 +15120,24 @@ test "T22: a read-only reference parameter fits a function type whose parameter 
     assert t22Apply(s, p) == 12
 }
 
-# T22: a function type says where its references live - "b t22sN&a" lives where a does - so a function whose parameters
-# share a scope is a value only of a type saying the same, and a call through it builds what it hands over where the
-# type says (a value of "fn(a mut t22sN&, b t22sN&)" was accepted, and stored b where a lives with nothing checked)
+# T22a: a function relating its parameters' scopes - b stored where a lives - is no value (nothing a function type says
+# could check it); called directly, what it is given is built where the relation needs it
 type t22sN struct(v I64) {
     v
     next t22sN?& = null
 }
-fn t22sLink(a mut t22sN&, b t22sN&a) { a.next = b }
-fn t22sPut(f fn(a mut t22sN&, b t22sN&a), a mut t22sN&, i I64) { f(a, t22sN(i)) }
+fn t22sLink(a mut t22sN&, b t22sN&) { a.next = b }
+fn t22sPut(a mut t22sN&, i I64) { t22sLink(a, t22sN(i)) }
 fn t22sBuild() I64 {
     x mut t22sN& = t22sN(1)
-    t22sPut(t22sLink, x, 6)
+    t22sPut(x, 6)
     return x.v + x.next!.v
 }
-T22sBuilt := t22sBuild()                            # baked: the evaluator calls through the value as the run time does
-test "T22: a function value whose parameters share a scope, through a type saying so" {
+T22sBuilt := t22sBuild()                            # baked: the evaluator builds where the run time does
+test "T22a: a function whose parameters' scopes relate, called directly, links what it is given where it is kept" {
     x mut t22sN& = t22sN(1)
     for i in range 3 {
-        t22sPut(t22sLink, x, 40 + i)
+        t22sPut(x, 40 + i)
         sbChurn()
     }
     sbChurn()
@@ -15262,7 +15261,7 @@ fn o26xText(s String&) String& { return $s }
 fn o26xByArg(srcs Array<String&>&) Vec<o26xLine> {
     out := Vec<o26xLine>()
     for i in range srcs.Len() {
-        text := o26xText&out(srcs[i])
+        text := o26xText(srcs[i])
         for line in text.Lines() { out.Push(o26xLine(line)) }
     }
     return out
@@ -15270,7 +15269,7 @@ fn o26xByArg(srcs Array<String&>&) Vec<o26xLine> {
 fn o26xByType(srcs Array<String&>&) Vec<o26xLine> {
     out := Vec<o26xLine>()
     for i in range srcs.Len() {
-        text String&out = o26xText(srcs[i])
+        text String& = o26xText(srcs[i])
         for line in text.Lines() { out.Push(o26xLine(line)) }
     }
     return out
@@ -15333,10 +15332,10 @@ fn o17bAliases() String& ? {
     l := Vec<String&>()
     m := Map<I64, I64>()
     for i in range 4 {
-        l2 mut Vec<String&>&l = l
+        l2 mut Vec<String&>& = l
         l2.Push($i)
         o17bAddTo(l2, "a" $i)
-        m2 mut Map<I64, I64>&m = m
+        m2 mut Map<I64, I64>& = m
         o17bPutIn(m2, i)
         sbChurn()
     }
@@ -15387,9 +15386,9 @@ type o20Rule struct(target String&, deps Vec<String&>) {
 type o20Mk struct() {
     rules Map<String&, o20Rule> = Map<String&, o20Rule>()
 }
-fn (m mut o20Mk&) parse(text String&m) {
+fn (m mut o20Mk&) parse(text String&) {
     for line in text.Lines() {
-        deps mut Vec<String&>&m = Vec<String&>()
+        deps mut Vec<String&>& = Vec<String&>()
         for d in line.Split(" ") { deps.Push(d) }
         m.rules.Put(line, o20Rule(line, deps))
     }
@@ -15397,7 +15396,7 @@ fn (m mut o20Mk&) parse(text String&m) {
 test "O20: a value copied out of a reference holds what its referent holds" {
     m := o20Mk()
     for i in range 20 {
-        text String&m = "t" $i " a" $i " b" $i "\nu" $i " c" $i
+        text String& = "t" $i " a" $i " b" $i "\nu" $i " c" $i
         m.parse(text)
     }
     sbChurn()
@@ -15487,7 +15486,7 @@ test "T25c: a read-only copy is read, iterated and passed by value; a writable o
     b := QcBoxG
     assert b.P[1] == 5 and qcFirst(b) == 4
     w := Vec<I64>()
-    v mut Vec<I64>&w = w
+    v mut Vec<I64>& = w
     v.Push(7 + k)
     assert w.Len() == 1 and w[0] == 7
     c := QcList
@@ -15517,7 +15516,7 @@ type rv3E enum {
     A(b rv3Box)
     Z
 }
-fn rv3Pick(x mut rv3Box&) mut rv3Box&x { return x }
+fn rv3Pick(x mut rv3Box&) mut rv3Box& { return x }
 fn rv3ViaCall(r mut rv3Box&) {
     d rv3Box = rv3Pick(r)
     d.head.next = rv3Node()
@@ -15664,7 +15663,7 @@ type s6Pos struct() {
     k I64 = 0
 }
 type s6Cur struct(of s6Bag&) {
-    c mut s6Cell&of = of.c
+    c mut s6Cell& = of.c
     n I64 = 0
     at s6Pos = s6Pos()
 }
@@ -15844,7 +15843,7 @@ type strWalkNode struct(v I64, next mut strWalkNode?&) {
     next
 }
 type strWalkIt struct(of strWalkBag&) {
-    slot mut strWalkNode&of = of.head
+    slot mut strWalkNode& = of.head
 }
 type strWalkBag struct(head mut strWalkNode&) {
     head
@@ -16197,11 +16196,11 @@ fn s5Kept(n I64) I64 {
     rows := Vec<Vec<String&>>()
     outer := "outer"
     for k in range n {
-        t mut String&bs = $k "-kept-text"
+        t mut String& = $k "-kept-text"
         bs.Push(s5MkBox(t))
         bs.Push(s5MkBox(outer))
         rows.Push(s5One(t))
-        rec mut Vec<String&>&rows = Vec<String&>()
+        rec mut Vec<String&>& = Vec<String&>()
         rec.Push($k "-in-rec")
         rows.Push(rec)
         sbChurn()
@@ -16221,7 +16220,7 @@ fn s5KeptField(n I64) I64 {
     ss := Vec<String&>()
     outer := "outer-field"
     for k in range n {
-        t mut String&ss = $k "-field"
+        t mut String& = $k "-field"
         ss.Push(s5MkBox(t).s)
         ss.Push(s5MkBox(outer).s)
         sbChurn()
@@ -16369,7 +16368,7 @@ fn s5Mk2(n I64) Vec<String&>, I64 {
 fn s5Destructured(n I64) I64 {
     rows := Vec<Vec<String&>>()
     for k in range n {
-        rec, next := s5Mk2&rows(k)
+        rec, next := s5Mk2(k)
         rows.Push(rec)
         assert next == k + 1
         sbChurn()
@@ -16722,9 +16721,9 @@ type Rv9Res struct(n mut Rv9Node&, k I64) {
 }
 fn rv9Close() {
     a mut Rv9Node& = Rv9Node(0)
-    r1 Rv9Res&a = Rv9Res(a, 1)
-    r2 Rv9Res&a = Rv9Res(a, 3)
-    r3 Rv9Res&a = Rv9Res(a, 5)
+    r1 Rv9Res& = Rv9Res(a, 1)
+    r2 Rv9Res& = Rv9Res(a, 3)
+    r3 Rv9Res& = Rv9Res(a, 5)
 }
 test "C9/O16: what a destructor builds through its fields lives until its scope's destructors have run" {
     rv9Log = 0
@@ -16788,7 +16787,7 @@ type c5Store struct() {
     infos mut Vec<c5Info>& = Vec<c5Info>()
 }
 fn (g c5Store&) count(i c5Info&) I64 { return i.Len }
-fn (g c5Store&) pick(i c5Info&) c5Info&i { return i }
+fn (g c5Store&) pick(i c5Info&) c5Info& { return i }
 fn (g c5Store&) measured(k I64) c5Info {
     i := g.infos[k]
     return c5Info(i.Offset, g.count(i))
@@ -16807,7 +16806,7 @@ fn c5Build(x I64) c5Holder {
     h.keep(i)
     return h
 }
-fn c5Window(a Array<I64>&, at I64) Array<I64>&a {
+fn c5Window(a Array<I64>&, at I64) Array<I64>& {
     from I64 = at + 1
     to I64 = from + 2
     return a[from:to]
@@ -16977,7 +16976,7 @@ type c5Env struct() {
 test "O4b: a Map whose values hold Maps of themselves" {
     outer := Map<String&, c5Dyn>()
     for i in range 3 {
-        inner mut Map<String&, c5Dyn>&outer = Map<String&, c5Dyn>()
+        inner mut Map<String&, c5Dyn>& = Map<String&, c5Dyn>()
         inner.Put("x", c5Dyn.Num(F64(i * sbRun)))
         inner.Put("y", c5Dyn.Num(0.5))
         outer.Put("k" $i, c5Dyn.Obj(inner))
@@ -17007,9 +17006,9 @@ type c5Callable enum {
 fn c5Call(f c5Callable&, k I64) I64 {
     match f {
         case c5Callable.Fn(c) {
-            local := c5Frame&c(c.env)
+            local := c5Frame(c.env)
             local.n = k
-            frame mut c5Frame&c = c5Frame(c.env)
+            frame mut c5Frame& = c5Frame(c.env)
             frame.n = local.n
             c.env.parent = frame
             return local.n + local.parent!.n
@@ -17471,7 +17470,7 @@ test "C10: a destructor calls a method on a field it reads bare" {
 type b6PNode struct(v I64) {
     v
 }
-fn b6PMake(i I64) b6PNode& { return b6PNode(i) }
+fn b6PMake(i I64) mut b6PNode& { return b6PNode(i) }
 fn b6Pars() I64 {
     k I64 = 0
     a mut b6PNode& = b6PNode(0)
@@ -18181,8 +18180,8 @@ fn dkSign(x I64, neg Bool) [(x < 0) == neg] ? { }
 fn dkNarrow(x I64) [x >= I32.Min and x <= I32.Max] I32 ? { return I32(x) }
 type dkRing struct(cap I64) [cap > 0, (cap & (cap - 1)) == 0] ? { cap }
 type dkNode struct(v I64) { v }
-fn dkLink(a mut dkNode&, b dkNode&) [b outlives a] { }
-fn dkChain(a mut dkNode&, b mut dkNode&, c dkNode&) [c outlives b outlives a] { }
+fn dkLink(a mut dkNode&, b dkNode&) { }
+fn dkChain(a mut dkNode&, b mut dkNode&, c dkNode&) { }
 # a call in a condition that fails leaves the function as itself (D17a); its set is inferred, ArgumentError in it
 fn dkParsed(t String&) [try t.ParseInt() > 0] I64 ? { return try t.ParseInt() }
 # a written set names ArgumentError

@@ -1,6 +1,6 @@
 # check: fail error[D18c]: a generator's borrowed elements are read-only - write its element without 'mut'
 # D18c: a generator's borrowed elements are read-only
-fn firsts(t mut String&) Iterator<mut String&t> {
+fn firsts(t mut String&) Iterator<mut String&> {
     yield t
 }
 

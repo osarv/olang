@@ -6,7 +6,7 @@ fn churn(n I64) String& {
     return b.ToString()
 }
 fn wrap(k I64) String& {
-    c String&return = lit(k)
+    c String& = lit(k)
     j := churn(50)
     return "(" $c " != " $j.Len() ")"
 }

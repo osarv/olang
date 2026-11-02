@@ -20,7 +20,7 @@ fn (h Heap<T>&) Len() I64 { return h.items.Len() }
 
 # x added
 fn (h mut Heap<T>&) Push(x T) {
-    v mut Vec<T>&h = h.items
+    v mut Vec<T>& = h.items
     v.Push(x)
     i := v.Len() - 1
     for i > 0 {
@@ -40,7 +40,7 @@ fn (h Heap<T>&) Peek() T ? Error.Empty {
 
 # the top element, taken off
 fn (h mut Heap<T>&) Pop() T ? Error.Empty {
-    v mut Vec<T>&h = h.items
+    v mut Vec<T>& = h.items
     if v.Len() == 0 { error Error.Empty }
     top := v[0]
     last := try v.Pop() catch VecError { unreachable }

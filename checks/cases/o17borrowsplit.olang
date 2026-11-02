@@ -10,7 +10,7 @@ fn (b mut Box&) regrow(v I64) {
     b.Data = Array<I64>(8, v)
 }
 fn make(n I64) Box {
-    b := Box&return(n)
+    b := Box(n)
     assert b.size() == n
     b.regrow(7)
     return b

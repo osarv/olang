@@ -2,7 +2,7 @@
 # D18c, O14: a by-value parameter's own storage is the walk's copy - nothing borrows from it
 type Node struct(v I64) { v }
 
-fn firsts(n Node) Iterator<Node&n> {
+fn firsts(n Node) Iterator<Node&> {
     yield n
 }
 

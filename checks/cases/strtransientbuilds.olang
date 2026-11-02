@@ -17,7 +17,7 @@ fn peek(n Node&) I64 {
 }
 fn peek2(n Node&) I64 {
     return apply(fn() I64 {
-        m Node&n = Node(n.v + 1)
+        m Node& = Node(n.v + 1)
         return m.v
     })
 }

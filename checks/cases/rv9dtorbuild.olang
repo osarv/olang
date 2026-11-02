@@ -21,9 +21,9 @@ type Res struct(n mut Node&, k I64) {
 }
 fn f() {
     a mut Node& = Node(0)
-    r1 Res&a = Res(a, 11)
-    r2 Res&a = Res(a, 22)
-    r3 Res&a = Res(a, 33)
+    r1 Res& = Res(a, 11)
+    r2 Res& = Res(a, 22)
+    r3 Res& = Res(a, 33)
 }
 fn main() ? {
     f()

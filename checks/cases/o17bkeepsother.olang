@@ -4,7 +4,7 @@
 type St struct() { x I64 = 0 }
 type H struct() { s mut St& = St() }
 type Keeper struct() { h mut H?& = null }
-fn (h mut H&) me() mut H&h { return h }
+fn (h mut H&) me() mut H& { return h }
 fn main() ? {
     m := Map<I64, H>()
     m.Put(1, H())

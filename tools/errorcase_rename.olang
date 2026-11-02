@@ -58,7 +58,7 @@ fn (ws mut Words&) add(name String&, word String&) {
 }
 
 # the identifier starting at i, "" where none does
-fn identAt(t String&, i I64) String&t {
+fn identAt(t String&, i I64) String& {
     if i >= t.Len() or not srcmask.IsIdStart(t[i]) or (i > 0 and srcmask.IsWord(t[i - 1])) { return "" }
     j := i
     for j < t.Len() and srcmask.IsWord(t[j]) { j++ }
@@ -74,7 +74,7 @@ fn skipSpaces(t String&, i I64) I64 {
 
 # a declaration "type NAME error ... {" at i: the position of its "{" and NAME, or -1 where none starts there - the
 # braces on the declaration's line
-fn declAt(t String&, i I64) I64, String&t {
+fn declAt(t String&, i I64) I64, String& {
     if identAt(t, i) != "type" { return -1, "" }
     j := skipSpaces(t, i + 4)
     name := identAt(t, j)
@@ -116,8 +116,8 @@ fn collect(t String&, ws mut Words&) {
 }
 
 # the identifiers between from and to
-fn wordsIn(t String&, from I64, to I64) Vec<String&>&t {
-    out mut Vec<String&>&t = Vec<String&>()
+fn wordsIn(t String&, from I64, to I64) Vec<String&>& {
+    out mut Vec<String&>& = Vec<String&>()
     j := from
     for j < to {
         w := identAt(t, j)
@@ -196,7 +196,7 @@ fn loneUse(t String&, i I64, w String&, ws Words&) Bool {
 }
 
 # the identifier written directly before ".", the "." directly before i; "" for none
-fn nameBefore(t String&, i I64) String&t {
+fn nameBefore(t String&, i I64) String& {
     if i < 2 or t[i - 1] != '.' { return "" }
     j := i - 1
     for j > 0 and srcmask.IsWord(t[j - 1]) { j-- }

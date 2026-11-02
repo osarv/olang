@@ -24,7 +24,7 @@ fn nv(n Node&) I64 {
     return n.next!.v
 }
 fn grow(x mut Node&) { x.next = Node(x.v + 100) }
-fn f(n mut Node&) mut Node&n ? {
+fn f(n mut Node&) mut Node& ? {
     if n.v > 0 { error Stop.Here }
     return n
 }

@@ -7,7 +7,7 @@ type Node struct(v I64) {
     next mut Node?& = null
 }
 type View struct(ns Array<mut Node&>&) {
-    at Array<mut Node&>&ns = ns
+    at Array<mut Node&>& = ns
 }
 fn run(f fn()) { f() }
 fn visit(w View&) {

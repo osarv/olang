@@ -111,7 +111,7 @@ type formatter struct(text String&, toks Array<token.Token>&) {
 }
 
 fn (f formatter&) kind(j I64) token.Tok { return f.toks[j].Kind }
-fn (f formatter&) tokText(j I64) String&f { return f.text[f.toks[j].Start:f.toks[j].End] }
+fn (f formatter&) tokText(j I64) String& { return f.text[f.toks[j].Start:f.toks[j].End] }
 
 fn (f mut formatter&) run() {
     sawEnd := false

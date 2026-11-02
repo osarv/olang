@@ -107,7 +107,7 @@ fn ContainsAny(what String&, texts Vec<String&>&) Bool {
 }
 
 # text[a:b], as Python slices: the ends past the text are clamped
-fn Sub(text String&, a I64, b I64) String&text {
+fn Sub(text String&, a I64, b I64) String& {
     lo := a if a < text.Len() else text.Len()
     hi := b if b < text.Len() else text.Len()
     if hi < lo { hi = lo }
@@ -251,7 +251,7 @@ fn worker(olang String&, files Array<String&>&, dir String&, testLines Bool, out
 
 # what compiling each of the files prints, in the order of the files, "jobs" at a time, each worker in a directory of its own
 fn CompileAll(olang String&, files Array<String&>&, workDirs Array<String&>&, testLines Bool) Array<String&>& {
-    outputs mut Array<String&>&return = Array<String&>(files.Len())
+    outputs mut Array<String&>& = Array<String&>(files.Len())
     for i in range files.Len() { outputs[i] = "" }
     Taken = 0
     join {

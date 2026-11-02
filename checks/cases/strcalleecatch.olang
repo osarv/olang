@@ -22,7 +22,7 @@ fn churn() I64 {
 type Bag struct(head mut Node&) {
     head
 }
-fn find(n Node&, k I64) Node&n ? {
+fn find(n Node&, k I64) Node& ? {
     if k > 0 { error Stop.Here }
     return n
 }

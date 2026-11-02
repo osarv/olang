@@ -334,7 +334,7 @@ fn (v mut Viewer&) str(t String&) I64 {
     return v.strs.Len() - 1
 }
 
-fn (v mut Viewer&) text(n source.NameId) String&v { return v.P.L.Names.Text(n) }
+fn (v mut Viewer&) text(n source.NameId) String& { return v.P.L.Names.Text(n) }
 
 # a body's function's name as written, quoted - "a call through a function value" for none
 fn (v mut Viewer&) quoted(b I64) String {
@@ -627,8 +627,8 @@ fn (v mut Viewer&) rootLocal(p typed.Lvalue&) I64 {
 }
 
 # the local or global a place is below
-fn (v mut Viewer&) rootPlace(p typed.Lvalue&) typed.Lvalue?&p {
-    q typed.Lvalue?&p = p
+fn (v mut Viewer&) rootPlace(p typed.Lvalue&) typed.Lvalue?& {
+    q typed.Lvalue?& = p
     for _ in range 64 {
         if q is null { return null }
         match q {
@@ -649,7 +649,7 @@ fn (v mut Viewer&) rootPlace(p typed.Lvalue&) typed.Lvalue?&p {
     return null
 }
 
-fn unAway(x typed.Expr&) typed.Expr&x {
+fn unAway(x typed.Expr&) typed.Expr& {
     y := x
     for _ in range 16 {
         match y {
@@ -661,7 +661,7 @@ fn unAway(x typed.Expr&) typed.Expr&x {
 }
 
 # the place an argument names, for a keep
-fn argPlace(x typed.Expr&) typed.Lvalue?&x {
+fn argPlace(x typed.Expr&) typed.Lvalue?& {
     y := unAway(x)
     return match y {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p): p

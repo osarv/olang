@@ -25,7 +25,7 @@ fn rd(n Node&) I64 {
     return n.next!.v
 }
 type W struct() { b Box = Box() }
-fn pickw(w mut W&) mut W&w { return w }
+fn pickw(w mut W&) mut W& { return w }
 fn pickwv(w mut W&) W { return w }
 fn main() ? {
     c := churn() < 0

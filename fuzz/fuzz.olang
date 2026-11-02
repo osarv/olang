@@ -229,7 +229,7 @@ fn write(dir String&, seed I64, expect Array<String&>&, has Array<Bool>&) Bool ?
 
 # the cases whose asserts the compiler decided false, from its diagnostics
 fn falseAsserts(diag String&) Vec<I64>& {
-    bad mut Vec<I64>&return = Vec<I64>()
+    bad mut Vec<I64>& = Vec<I64>()
     rest := diag[:]
     for {
         at := try rest.Find("error[S18c]") catch { break }

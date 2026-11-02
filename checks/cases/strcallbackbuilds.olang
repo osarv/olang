@@ -8,7 +8,7 @@ type Bag struct(words Array<String&>&) {
 fn via(a Array<String&>&, f fn(x String&) Bool) I64 { return a.Count(f) }
 fn (b Bag&) Str() String {
     n := b.words.Count(fn(s String&) Bool {
-        t String&s = $s "x"
+        t String& = $s "x"
         return t.Len() > 2
     })
     return "n" $n
@@ -18,7 +18,7 @@ type Bag2 struct(words Array<String&>&) {
 }
 fn (b Bag2&) Str() String {
     n := via(b.words, fn(s String&) Bool {
-        t String&s = $s "x"
+        t String& = $s "x"
         return t.Len() > 2
     })
     return "n" $n

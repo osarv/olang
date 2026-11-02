@@ -77,9 +77,9 @@ type Failed error {
 # the front end: analyzes the program whose root is root and fills prog with its IR, reporting what is wrong to d; or
 # runs it (-i), giving the status it ends with
 type Frontend trait {
-    mut Analyze(root String&, kind Kind, cfg mut Config&, prog mut Program&, d mut diag.Diagnostics&cfg) ? Failed
-    mut Interpret(root String&, args Array<String&>&, cfg mut Config&, d mut diag.Diagnostics&cfg) I32 ? Failed
-    mut Explain(root String&, name String&, cfg mut Config&, d mut diag.Diagnostics&cfg) String ? Failed
+    mut Analyze(root String&, kind Kind, cfg mut Config&, prog mut Program&, d mut diag.Diagnostics&) ? Failed
+    mut Interpret(root String&, args Array<String&>&, cfg mut Config&, d mut diag.Diagnostics&) I32 ? Failed
+    mut Explain(root String&, name String&, cfg mut Config&, d mut diag.Diagnostics&) String ? Failed
 }
 
 # ---- a build's configuration ----
@@ -238,7 +238,7 @@ fn (c Config&) DataFlags() Vec<String&> {
 }
 
 # clang's own version, which every object's name holds: another clang may compile the same IR to another object
-fn (c mut Config&) clangVersion() String&c {
+fn (c mut Config&) clangVersion() String& {
     if c.version == "" {
         out := try target.ClangSays(String&[$c.Clang, "--version"], "", true) catch os.Error { return "" }
         c.version = $out.Stdout
@@ -400,8 +400,8 @@ fn (c mut Config&) ObjectPath(base String&, k UnitKind, irHash String&, flags Ve
 # size), so the longest is not the last to start, keeping every core busy to the end
 fn RunAll(cmds Array<Array<String&>&>&, width I64, weights Array<I64>& = Array<I64>(0)) Array<I32>, Array<String&> {
     n := cmds.Len()
-    status mut Array<I32>&return = Array<I32>(n)
-    said mut Array<String&>&return = Array<String&>(n, "")
+    status mut Array<I32>& = Array<I32>(n)
+    said mut Array<String&>& = Array<String&>(n, "")
     if n == 0 { return status, said }
     order := Array<I64>(n)
     for k in range n { order[k] = k }
@@ -479,7 +479,7 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
         error Failed.Reported
     }
     tmp := $path "." $unistd.getpid() ".tmp"
-    args mut Vec<String&>&j = Vec<String&>()
+    args mut Vec<String&>& = Vec<String&>()
     args.Push($c.Clang)
     for f in flags { args.Push($f) }
     args.Push("-c")
@@ -712,7 +712,7 @@ fn (p Program&) rootIdentity() String {
 }
 
 # compile FILE: the one module's object, and the runtime's beside it (B2)
-fn Compile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
+fn Compile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&) I32 {
     prog := Program()
     try fe.Analyze(file, Kind.Module, c, prog, d) catch Failed.Reported { return finish(d) } catch Failed.Unbuilt { return unbuilt() }
     if d.Errors() > 0 or prog.Units.Len() == 0 { return finish(d) }
@@ -735,7 +735,7 @@ fn Compile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagno
 }
 
 # build FILE: every module's object, then one link (B3)
-fn BuildProgram<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
+fn BuildProgram<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&) I32 {
     prog := Program()
     try fe.Analyze(file, Kind.Program, c, prog, d) catch Failed.Reported { return finish(d) } catch Failed.Unbuilt { return unbuilt() }
     if d.Errors() > 0 or prog.Units.Len() == 0 { return finish(d) }
@@ -785,7 +785,7 @@ fn LibName(file String&) String {
 
 # FILE.olang ARGS: the program built, saying nothing when it is, then run in this process's place with FILE (as
 # written) and ARGS as its command line - its status, a signal's included, the program's own (B3g)
-fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&c) I32 {
+fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&) I32 {
     c.Quiet = true
     status := BuildProgram(fe, c, file, d)
     if status != 0 { return status }
@@ -803,7 +803,7 @@ fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Str
 }
 
 # test FILE with one file: its test binary built and run here (B3a). 0 when every test passed
-fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&c, filters Array<String&>& = Array<String&>(0)) I32 {
+fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&, filters Array<String&>& = Array<String&>(0)) I32 {
     info := try os.Stat(file) catch os.Error { return c.unusable(file, msgs.CannotOpen(), d) }
     if info.Kind == os.FileKind.DIR { return c.unusable(file, msgs.IsDirectory(), d) }
     if info.Kind != os.FileKind.FILE { return c.unusable(file, msgs.NotRegular(), d) }
@@ -949,12 +949,12 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
 }
 
 # interpret FILE ARGS: the program run by the front end (B3e); the status it ends with
-fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&c) I32 {
+fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&) I32 {
     return try fe.Interpret(file, args, c, d) catch Failed.Reported { return finish(d) } catch Failed.Unbuilt { return unbuilt() }
 }
 
 # explain FILE NAME (B11b): the item, as the front end sees it, on the standard output; a program with errors says them
-fn Explain<F Frontend>(fe mut F&, c mut Config&, file String&, name String&, d mut diag.Diagnostics&c) I32 {
+fn Explain<F Frontend>(fe mut F&, c mut Config&, file String&, name String&, d mut diag.Diagnostics&) I32 {
     text := try fe.Explain(file, name, c, d) catch Failed.Reported { return finish(d) } catch Failed.Unbuilt { return unbuilt() }
     say(text)
     return 0
@@ -1064,14 +1064,14 @@ type stubFrontend struct() {
 }
 
 fn (s mut stubFrontend&) Analyze(root String&, kind Kind, cfg mut Config&, prog mut Program&
-    d mut diag.Diagnostics&cfg) ? Failed {
+    d mut diag.Diagnostics&) ? Failed {
     s.Analyzed++
     n := cfg.Consts.Raw("N") if cfg.Consts.Has("N") else "41"
     attrs := $"attributes #0 = { nounwind " $cfg.Target.Attrs " }\n"
     tt := $"target triple = \"" $cfg.Target.Triple "\"\n"
     prog.Units.Push(Unit("lib", UnitKind.Module, $tt "define i32 @lib_n() #0 {\n  ret i32 " $n "\n}\n" $attrs))
     prog.Units.Push(Unit("util", UnitKind.Module, $tt "define i32 @util_k() #0 {\n  ret i32 " $s.Edit "\n}\n" $attrs))
-    main mut String&prog = ($tt "declare i32 @lib_n()\ndeclare i32 @util_k()\ndeclare i32 @inst_z()\ndeclare void @olang_rt()\n" $
+    main mut String& = ($tt "declare i32 @lib_n()\ndeclare i32 @util_k()\ndeclare i32 @inst_z()\ndeclare void @olang_rt()\n" $
             "define i32 @main() #0 {\n  call void @olang_rt()\n  %a = call i32 @lib_n()\n" $
             "  %b = call i32 @util_k()\n  %c = call i32 @inst_z()\n  %s = add i32 %a, %b\n  %t = add i32 %s, %c\n" $
             "  ret i32 %t\n}\n" $attrs)
@@ -1081,11 +1081,11 @@ fn (s mut stubFrontend&) Analyze(root String&, kind Kind, cfg mut Config&, prog 
 }
 
 fn (s mut stubFrontend&) Interpret(root String&, args Array<String&>&, cfg mut Config&
-    d mut diag.Diagnostics&cfg) I32 ? Failed {
+    d mut diag.Diagnostics&) I32 ? Failed {
     return I32(args.Len())
 }
 
-fn (s mut stubFrontend&) Explain(root String&, name String&, cfg mut Config&, d mut diag.Diagnostics&cfg) String ? Failed {
+fn (s mut stubFrontend&) Explain(root String&, name String&, cfg mut Config&, d mut diag.Diagnostics&) String ? Failed {
     return $"fn " $name "()\n"
 }
 

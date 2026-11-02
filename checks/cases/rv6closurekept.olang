@@ -13,8 +13,8 @@ type Node struct(v I64) {
     v
     next mut Node?& = null
 }
-fn mk(r Node&, i I64) Node&r { return Node(i) }
-fn keepR(r Node&, i I64) R&r { return R(i) }
+fn mk(r Node&, i I64) Node& { return Node(i) }
+fn keepR(r Node&, i I64) R& { return R(i) }
 fn make(n Node&, fns mut Vec<fn(i I64) I64>&) {
     fns.Push(fn(i I64) I64 {
         m := mk(n, n.v + i)

@@ -11,7 +11,7 @@ fn main() ? {
     {
         b Node& = Node(2)
         l := a if k else b
-        x Node&l = Node(3)
+        x Node& = Node(3)
         try io.Println($x.v " " $l.v)
     }
 }

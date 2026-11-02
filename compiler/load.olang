@@ -195,8 +195,8 @@ fn ErrQualifier(identity String&, inRoot Bool) String {
 }
 
 # a file's type names, error types and sets included, in every branch: "type Name"
-fn typeNames(text String&, ts scan.Tokens&) Vec<String&>&text {
-    out mut Vec<String&>&text = Vec<String&>()
+fn typeNames(text String&, ts scan.Tokens&) Vec<String&>& {
+    out mut Vec<String&>& = Vec<String&>()
     toks := ts.Toks
     for i in range toks.Len() - 2 {
         k := toks[i].Kind
@@ -303,7 +303,7 @@ fn (l mut Loader&) importAt(m mut Module&, i I64, parent I64) {
         alias = $DeriveAlias(spec)
         aliasSp = sp
     }
-    imp mut Import&m = Import(sp, aliasSp, $alias, $spec, parent)
+    imp mut Import& = Import(sp, aliasSp, $alias, $spec, parent)
     # X9, X17: "link "name"" after the path
     if toks[j + 1].Kind == token.Tok.Iden and m.Src!.Text[toks[j + 1].Start:toks[j + 1].End] == "link" and
        toks[j + 2].Kind == token.Tok.StrLit {
@@ -315,7 +315,7 @@ fn (l mut Loader&) importAt(m mut Module&, i I64, parent I64) {
 
 # M4: an import's alias when none is written - its path's last element, without ".olang", or a C file's without ".h"
 # or ".c" (X17)
-fn DeriveAlias(spec String&) String&spec {
+fn DeriveAlias(spec String&) String& {
     start := (try spec.FindLast("/") catch default -1) + 1
     end := spec.Len()
     if end - start >= 6 and spec.EndsWith(".olang") { end -= 6 }
@@ -449,7 +449,7 @@ fn (l mut Loader&) evalCond(mi I64, i I64) cond.Decision {
     l.CondParser(m)
     x := try m.cparser!.ExprAt(i) catch { return cond.Decision(cond.Outcome.Failed, false) } # the parser reports it
     if m.Toks!.Toks[m.cparser!.Pos()].Kind != token.Tok.LBrace { return cond.Decision(cond.Outcome.Deferred, false) }
-    e mut cond.Eval&m = cond.Eval(m.Src!.Text, l.Names, m.Scope!, l.Consts)
+    e mut cond.Eval& = cond.Eval(m.Src!.Text, l.Names, m.Scope!, l.Consts)
     d := e.Top(x)
     if d.Of == cond.Outcome.Failed {
         at, msg := e.Error()
@@ -768,7 +768,7 @@ fn fileStamp(clang String&) String {
 # relative import's is, against the module's own directory, and kept inside std or the remote repository the module is
 # in. A file is read once in a compilation (every check of the program sees the same bytes) and recorded with the
 # module, whose object it is part of (B3i's key reads it)
-fn (l mut Loader&) Embed(mi I64, spec String&) Array<U8>&l, String {
+fn (l mut Loader&) Embed(mi I64, spec String&) Array<U8>&, String {
     none := Array<U8>(0)
     m := l.Mods[mi]
     if spec.Len() == 0 { return none, "an empty path names no file" }
@@ -824,12 +824,12 @@ fn (l mut Loader&) Embed(mi I64, spec String&) Array<U8>&l, String {
 }
 
 # the bytes of the file an embed read, by its path (Embeds): what a module's key holds of it (B3i)
-fn (l Loader&) Embedded(path String&) Array<U8>&l { return try l.embedded.Get(path) catch default Array<U8>(0) }
+fn (l Loader&) Embedded(path String&) Array<U8>& { return try l.embedded.Get(path) catch default Array<U8>(0) }
 
 # host/owner/repo[@ref] of a remote import's parts
 fn key(parts Array<String&>&) String { return $parts[0] "/" $parts[1] "/" $parts[2] }
 
-fn firstElems(p String&, n I64) String&p {
+fn firstElems(p String&, n I64) String& {
     count I64 = 0
     for i, c in p {
         if c == '/' {

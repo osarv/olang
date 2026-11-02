@@ -9,7 +9,7 @@ fn glue(a String&, b String&) String { return $a "/" $b }
 fn joined(dir String&, names Array<String&>&, out mut Vec<String&>&) {
     for name in names {
         t := "x" $name
-        p := glue&t(dir, name)
+        p := glue(dir, name)
         out.Push(p)
     }
 }

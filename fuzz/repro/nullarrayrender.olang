@@ -9,7 +9,7 @@
 import "std/io"
 fn cc(n I32) String {
     d Array<U16>
-    rd Array<U16>&d = d
+    rd Array<U16>& = d
     return $rd " " $(rd.Len() == 0)
 }
 K String = cc(3)

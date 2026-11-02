@@ -8,6 +8,6 @@ fn main() {
     h := H(P(0))
     for i in range 3 {
         t := "inner" $i
-        h.p = mkp&t(i)
+        h.p = mkp(i)
     }
 }

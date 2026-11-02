@@ -7,7 +7,7 @@ type Node struct() {
 type Box struct() {
     head mut Node& = Node()
 }
-fn pick(x mut Box&) mut Box&x { return x }
+fn pick(x mut Box&) mut Box& { return x }
 fn f(r mut Box&) {
     d := Box()
     d = pick(r)

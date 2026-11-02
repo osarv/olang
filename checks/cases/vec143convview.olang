@@ -6,7 +6,7 @@ fn viewed() I64 {
     v := Vec<Char>()
     v.Push('a')
     v.Push('a')
-    w String&v = String(v.View())
+    w String& = String(v.View())
     v[0] = 'z'
     return 1 if w[0] == 'z' else 0
 }

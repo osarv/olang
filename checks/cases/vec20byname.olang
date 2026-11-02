@@ -5,14 +5,14 @@
 # borrowed result is still a value
 import "std/io"
 type Ix Array<I64>
-fn view(v Vec<I64>&) Array<I64>&v { return v.View() }
-fn asIx(v Vec<I64>&) Ix&v { return Ix(v.View()) }
-fn asText(v Vec<Char>&) String&v { return String(v.View()) }
-fn first(a Array<I64>&) Array<I64>&a { return a[:1] }
+fn view(v Vec<I64>&) Array<I64>& { return v.View() }
+fn asIx(v Vec<I64>&) Ix& { return Ix(v.View()) }
+fn asText(v Vec<Char>&) String& { return String(v.View()) }
+fn first(a Array<I64>&) Array<I64>& { return a[:1] }
 type CB struct() {
     data mut Array<Char>& = Array<Char>(2, 'x')
 }
-fn (c CB&) Text() String&c { return String(c.data) }
+fn (c CB&) Text() String& { return String(c.data) }
 fn main() ? {
     v := Vec<I64>()
     v.Push(10)

@@ -19,7 +19,7 @@ fn (s Vs&) At(i I64) V {
     v.p.X = 100 + i
     return v
 }
-fn id(p Pt&) Pt&p { return p }
+fn id(p Pt&) Pt& { return p }
 fn churn() ? io.Error {
     for k in range 100 {
         a := Array<I64>(64, k * 1000 + 7)

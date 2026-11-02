@@ -7,7 +7,7 @@ type N struct() {
     v I64 = 0
 }
 type C struct(of mut N&) {
-    cur mut N&of = of
+    cur mut N& = of
 }
 fn main() ? {
     g mut N& = N()

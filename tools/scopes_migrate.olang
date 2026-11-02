@@ -63,7 +63,7 @@ type migration struct(src String&) {
 
 fn (g migration&) touches(a I64, b I64) Bool { return g.v[a].end == g.v[b].start }
 
-fn (g migration&) text(i I64) String&g { return g.src[g.v[i].start:g.v[i].end] }
+fn (g migration&) text(i I64) String& { return g.src[g.v[i].start:g.v[i].end] }
 
 # the markers and scope arguments: an "&" touching what is before it and the name after it
 fn (g mut migration&) markers() {

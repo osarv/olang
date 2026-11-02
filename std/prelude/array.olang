@@ -201,8 +201,8 @@ fn (a mut Array<T>&) Reverse() {
 
 # a new Vec - in the caller's scope - holding the elements, in order: "I32[3, 1, 2].ToVec()", or n copies of one value,
 # "Array<I32>(n, v).ToVec()". The reverse of Vec's ToArray
-fn (a Array<T>&) ToVec() Vec<T>& {
-    out mut Vec<T>&return = Vec<T>()
+fn (a Array<T>&) ToVec() mut Vec<T>& {
+    out mut Vec<T>& = Vec<T>()
     out.PushAll(a)
     return out
 }
@@ -465,7 +465,7 @@ fn sortRotate<T>(a mut Array<T>&, lo I64, m I64, hi I64) {
 # a position in an array - what lets generic code written over Iterator<T> take an array too ("total(a.Iter())"),
 # as it takes a Vec or a Map. "for x in a" does not go through it: an array is walked directly.
 type ArrayIter<T> struct(of Array<T>&) {
-    arr Array<T>&of = of
+    arr Array<T>& = of
     i I64 = 0
 }
 
@@ -476,7 +476,7 @@ fn (it mut ArrayIter<T>&) Next() T ? Exhausted {
 }
 
 # the elements it has still to give, as a view of the array
-fn (it ArrayIter<T>&) Rest() Array<T>&it { return it.arr[it.i:] }
+fn (it ArrayIter<T>&) Rest() Array<T>& { return it.arr[it.i:] }
 
 # moves past at most n of the elements it has still to give, as that many Nexts would: how many it passed (fewer only
 # where the array ends first; none for an n below one)
@@ -503,9 +503,9 @@ type ChunkSize I64(v I64) ? ArrayError.BadChunk {
 # "join { for part in a.Chunks(4) { spawn work(part) } }" hands every task a part of its own to write and cannot race on
 # the array. An empty array has no pieces. The pieces are held in an array that lives where the array does, as Split's
 # (so a piece outlives nothing it views), allocated once at its exact length
-fn (a mut Array<T>&) Chunks(size ChunkSize) mut Array<mut Array<T>&>&a {
+fn (a mut Array<T>&) Chunks(size ChunkSize) mut Array<mut Array<T>&>& {
     n := I64(size)
-    pieces mut Array<mut Array<T>&>&a = Array<mut Array<T>&>((a.Len() + n - 1) / n, a)   # each piece written below
+    pieces mut Array<mut Array<T>&>& = Array<mut Array<T>&>((a.Len() + n - 1) / n, a)   # each piece written below
     for k in range pieces.Len() {
         start I64 = k * n
         end I64 = start + n if a.Len() - start > n else a.Len()
@@ -516,7 +516,7 @@ fn (a mut Array<T>&) Chunks(size ChunkSize) mut Array<mut Array<T>&>&a {
 
 # a position in an array walked from its last element to its first - what an array's Reversed gives
 type ReversedIter<T> struct(of Array<T>&) {
-    arr Array<T>&of = of
+    arr Array<T>& = of
     i I64 = of.Len()
 }
 
@@ -534,17 +534,17 @@ fn (a Array<T>&) Reversed() ReversedIter<T> { return ReversedIter<T>(a) }
 # is shorter than size), each a read-only view of the array's own storage (a slice, E16a), nothing copied - "for w in
 # a.Windows(3) { smooth.Push(w.Sum() / 3.0) }". The views are held in an array that lives where the array does, as
 # Chunks' and Split's, allocated once at its exact length
-fn (a Array<T>&) Windows(size ChunkSize) Array<Array<T>&>&a {
+fn (a Array<T>&) Windows(size ChunkSize) mut Array<Array<T>&>& {
     n := I64(size)
     count := a.Len() - n + 1 if a.Len() >= n else 0
-    views mut Array<Array<T>&>&a = Array<Array<T>&>(count, a)   # each view written below
+    views mut Array<Array<T>&>& = Array<Array<T>&>(count, a)   # each view written below
     for k in range count { views[k] = a[k:k + n] }
     return views
 }
 
 # the leading elements keep holds for: a read-only view of them, up to the first it does not hold for (the whole array
 # where it holds for all) - nothing copied, keep not called past that first
-fn (a Array<T>&) TakeWhile<? E>(keep fn(x T) Bool ? E) Array<T>&a ? E {
+fn (a Array<T>&) TakeWhile<? E>(keep fn(x T) Bool ? E) Array<T>& ? E {
     for i in range a.Len() {
         if not try keep(a[i]) { return a[:i] }
     }
@@ -552,7 +552,7 @@ fn (a Array<T>&) TakeWhile<? E>(keep fn(x T) Bool ? E) Array<T>&a ? E {
 }
 
 # the elements from the first keep does not hold for on: a read-only view (empty where keep holds for all)
-fn (a Array<T>&) SkipWhile<? E>(keep fn(x T) Bool ? E) Array<T>&a ? E {
+fn (a Array<T>&) SkipWhile<? E>(keep fn(x T) Bool ? E) Array<T>& ? E {
     for i in range a.Len() {
         if not try keep(a[i]) { return a[i:] }
     }
@@ -606,7 +606,7 @@ fn (a Array<T>&) BinarySearch(x T) I64 ? ArrayError.NotFound {
 
 # a position in an array walked from its first element to its last and round again, without end - what Cycle gives
 type CycleIter<T> struct(of Array<T>&) {
-    arr Array<T>&of = of
+    arr Array<T>& = of
     i I64 = 0
 }
 
@@ -625,7 +625,7 @@ fn (a Array<T>&) Cycle() CycleIter<T> { return CycleIter<T>(a) }
 # a read-only view of the array's own storage (a slice, E16a), nothing copied - "a.ChunkBy(fn(x, y): return x == y)"
 # gives the runs of equal elements. The views are held in an array that lives where the array does, as Windows' and
 # Chunks', allocated once at its exact length; same is called once per neighbouring pair
-fn (a Array<T>&) ChunkBy<? E>(same fn(x T, y T) Bool ? E) Array<Array<T>&>&a ? E {
+fn (a Array<T>&) ChunkBy<? E>(same fn(x T, y T) Bool ? E) Array<Array<T>&>& ? E {
     if a.Len() == 0: return Array<Array<T>&>(0, a)
     cuts := Array<Bool>(a.Len())            # cuts[i]: a run begins at i
     n I64 = 1
@@ -633,7 +633,7 @@ fn (a Array<T>&) ChunkBy<? E>(same fn(x T, y T) Bool ? E) Array<Array<T>&>&a ? E
         cuts[i] = not try same(a[i - 1], a[i])
         if cuts[i]: n++
     }
-    runs mut Array<Array<T>&>&a = Array<Array<T>&>(n, a)   # each run written below
+    runs mut Array<Array<T>&>& = Array<Array<T>&>(n, a)   # each run written below
     k I64 = 0
     from I64 = 0
     for i in range 1, a.Len() {

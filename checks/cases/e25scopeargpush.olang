@@ -7,6 +7,6 @@ fn main() {
     xs := Vec<P&>()
     for i in range 3 {
         t := "inner" $i
-        xs.Push(mkp&t(i))
+        xs.Push(mkp(i))
     }
 }

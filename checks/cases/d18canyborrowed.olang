@@ -1,6 +1,6 @@
 # check: fail error[T32a, T22]: ViewGenerator<String>'s 'Next' says where its references live as Iterator<String&>'s signature does not - it cannot be called through an 'any Iterator<String&>&'
 # D18c, T32a: a generator whose elements are borrowed is no 'any Iterator<String&>&' - its Next says where they live
-fn words(t String&) Iterator<String&t> {
+fn words(t String&) Iterator<String&> {
     i I64 = 0
     for i < t.Len() {
         for i < t.Len() and t[i] == 0x20 { i++ }

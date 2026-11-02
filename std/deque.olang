@@ -22,7 +22,7 @@ type Deque<T> struct() {
 # element about to be stored, so no zero value is needed (D13c)
 fn (d mut Deque<T>&) room(x T) {
     if d.n < d.buf.Len() { return }
-    old Array<T>&d = d.buf
+    old Array<T>& = d.buf
     size I64 = 8 if old.Len() == 0 else old.Len() * 2
     d.buf = Array<T>(size, x)
     for i in range d.n { d.buf[i] = old[(d.head + i) % old.Len()] }
@@ -89,7 +89,7 @@ fn (d mut Deque<T>&) Clear() {
 
 # the elements front to back, in an array of their own
 fn (d Deque<T>&) ToArray() mut Array<T>& {
-    out mut Array<T>&return = Array<T>(0)
+    out mut Array<T>& = Array<T>(0)
     if d.n == 0 { return out }
     out = Array<T>(d.n, d.buf[d.head])
     for i in range d.n { out[i] = d.buf[(d.head + i) % d.buf.Len()] }
@@ -98,7 +98,7 @@ fn (d Deque<T>&) ToArray() mut Array<T>& {
 
 # a position in a Deque, front to back: "for x in d" walks one
 type Iter<T> struct(of Deque<T>&) {
-    d Deque<T>&of = of
+    d Deque<T>& = of
     i I64 = 0
 }
 

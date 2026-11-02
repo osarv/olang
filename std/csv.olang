@@ -47,7 +47,7 @@ type Error error {
 #         ...
 #     }
 type Rows struct(of String&, sep Char = ',') {
-    text String&of = of
+    text String& = of
     sep
     at I64 = 0                       # where the next record starts
     Line I64 = 0

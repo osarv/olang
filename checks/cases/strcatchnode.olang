@@ -11,8 +11,8 @@ type Node struct(v I64, next Node?&) {
 type Bag struct(head Node&) {
     head
 }
-fn find(n Node&, k I64) Node&n ? {
-    for c Node?&n = n, c is not null, c = c.next { if c.v == k { return c } }
+fn find(n Node&, k I64) Node& ? {
+    for c Node?& = n, c is not null, c = c.next { if c.v == k { return c } }
     error Stop.Here
 }
 fn (b Bag&) Str() String {

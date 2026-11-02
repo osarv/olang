@@ -5,7 +5,7 @@ type P struct(n I64) { n }
 fn mkp(i I64) P& { return P(i) }
 fn leak(i I64) P& {
     t := "inner" $i
-    return mkp&t(i)
+    return mkp(i)
 }
 fn main() {
     p := leak(3)

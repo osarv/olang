@@ -155,7 +155,7 @@ type opts struct() {
     all Vec<mut opt&> = Vec<mut opt&>()
 }
 
-fn (s opts&) byName(name String&) mut opt&s ? NotFound {
+fn (s opts&) byName(name String&) mut opt& ? NotFound {
     for f in s.all {
         if f.name == name: return f
     }
@@ -167,7 +167,7 @@ fn (s opts&) setValue(f mut opt&, value String&) {
 }
 
 fn (s opts&) parse(arg String&) {
-    f mut opt?&s = null
+    f mut opt?& = null
     f = try s.byName(arg[:3]) catch NotFound { return }
     fl := f
     s.setValue(fl, arg[4:])

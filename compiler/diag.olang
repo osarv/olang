@@ -325,7 +325,7 @@ fn (d Diagnostics&) TopContext() Where, String {
 }
 
 # a file's text
-fn (d Diagnostics&) TextOf(file I64) String&d { return d.texts[file] }
+fn (d Diagnostics&) TextOf(file I64) String& { return d.texts[file] }
 
 fn (d Diagnostics&) isLibrary(at Where) Bool {
     match at {
@@ -735,7 +735,7 @@ fn section() String {
 }
 
 # the rule a line defines - "**B1.**", "- **O25a.**", "**T6b (a title).**" - or "" when it defines none
-fn ruleIdAt(line String&) String&line {
+fn ruleIdAt(line String&) String& {
     l := line[2:] if line.StartsWith("- ") else line[:]
     if l.Len() < 4 or not l.StartsWith("**") or not l[2].IsUpper() or not l[3].IsDigit() { return line[0:0] }
     p I64 = 3

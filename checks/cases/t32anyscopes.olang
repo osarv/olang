@@ -5,7 +5,7 @@ type aHas trait {
     Get() aItem&
 }
 type aBox struct(it aItem&) { it }
-fn (b aBox&) Get() aItem&b { return b.it }
+fn (b aBox&) Get() aItem& { return b.it }
 fn f(x any aHas&) { }
 fn main() {
     b := aBox(aItem(1))

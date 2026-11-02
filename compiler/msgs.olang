@@ -228,8 +228,6 @@ type Diag enum {
     BuildDefaultFit
     UnknownBuildName
     NameInUse
-    UnknownScopeName
-    ReturnScopeNone
     ConstraintDisagrees
     ConstraintUnmet
     ConstraintUnmetMethod
@@ -254,9 +252,7 @@ type Diag enum {
     ArrayLengthRange
     TypeMatchValueCase
     ArrayTooManyArgs
-    NamedScopeOnElement
     ConstraintNotTrait
-    TypeArgNamedScope
     InvalidReferenceTarget
     DoubleReferenceMarker
     DestructTypeByValue
@@ -279,7 +275,6 @@ type Diag enum {
     AnyCaseNotAny
     AnySpawned
     AnySpawnedResult
-    TraitContractOutlives
     NoteAnyMethod
     EnumCaseInUse
     DeclaredTwice
@@ -287,7 +282,6 @@ type Diag enum {
     TraitMethodGeneric
     CtorFieldNoValue
     DefaultNotTrailing
-    ScopeDecl
     TypeVarNamesType
     TypeVarNotInferable
     TypeVarNotErrorSet
@@ -376,8 +370,6 @@ type Diag enum {
     LiteralExprRange
     LiteralNeedsCtor
     ReadOnlyToWritable
-    ReadOnlyToBuiltResult
-    ReadOnlyToBuiltResultNo
     ReadOnlyCopyDecl
     ReadOnlyCopyGlobal
     ReadOnlyCopyStored
@@ -398,12 +390,10 @@ type Diag enum {
     StoreIntoUnknownScope
     TagUnknownScope
     BuildThroughUnknownScope
-    ScopeArgUnknown
     ReturnTypeMismatch
     ArgCount
     ArgCountRange
     SpreadCount
-    ScopeArgNotAccepted
     ScopeArgsDisagree
     BorrowSplitScopes
     SliceSplitValue
@@ -554,7 +544,6 @@ type Diag enum {
     AsNeedsCase
     PatternType
     CaseIsPrivate
-    IsAsMarker
     AsNothing
     IsAsNotEnum
     SliceNeedsLen
@@ -651,8 +640,6 @@ type Diag enum {
     CaseAfterWildcard
     CaseUnknownName
     CaseIsSubject
-    ReturnBorrowAsBuilt
-    ReturnProgramAsBuilt
     ReturnOwnStorage
     ViewKept
     ViewReturned
@@ -667,11 +654,6 @@ type Diag enum {
     GenErrors
     YieldOwnStorage
     GenYieldsBorrow
-    GenReturnScope
-    GenElemWritable
-    GenElemNullable
-    GenElemScopeUnknown
-    GenElemByValue
     GenYieldShorter
     ReturnCount
     ReturnInCtor
@@ -808,8 +790,6 @@ type Diag enum {
     NoRawValues
     FromPayload
     FromCaseName
-    ContractOutlivesNoScope
-    ContractOutlivesNotParam
     ContractFalse
     ContractNeedsArgumentError
     GenContractNeedsArgumentError
@@ -1448,12 +1428,6 @@ fn UnknownBuildName(tok String&, text String&) Msg { return Msg(Diag.UnknownBuil
 # ERR_NAME_IN_USE
 fn NameInUse(tok String&) Msg { return Msg(Diag.NameInUse, "D2", $tok " is already declared in this module") }
 
-# ERR_UNKNOWN_SCOPE_NAME
-fn UnknownScopeName(tok String&, hint String&) Msg { return Msg(Diag.UnknownScopeName, "O4a", $tok " names no variable visible here - a marker names where the reference lives, as '&x'" $hint) }
-
-# ERR_RETURN_SCOPE_NONE
-fn ReturnScopeNone() Msg { return Msg(Diag.ReturnScopeNone, "O26", "'&return' names the result scope, and this function has none") }
-
 # ERR_CONSTRAINT_DISAGREES
 fn ConstraintDisagrees(tok String&) Msg { return Msg(Diag.ConstraintDisagrees, "G19", $tok " is constrained differently elsewhere in this declaration - one constraint per variable") }
 
@@ -1562,14 +1536,8 @@ fn TypeMatchValueCase(text String&) Msg { return Msg(Diag.TypeMatchValueCase, "G
 # ERR_ARRAY_TOO_MANY_ARGS
 fn ArrayTooManyArgs(n I64) Msg { return Msg(Diag.ArrayTooManyArgs, "G8, T7", "Array takes one type argument, its element type, found " $n " - a length is never written in a type: 'Array<T>(n)' makes n elements") }
 
-# ERR_NAMED_SCOPE_ON_ELEMENT
-fn NamedScopeOnElement() Msg { return Msg(Diag.NamedScopeOnElement, "T24", "a nested reference lives in its container's scope - write a bare '&' here") }
-
 # ERR_CONSTRAINT_NOT_TRAIT
 fn ConstraintNotTrait(ty String&) Msg { return Msg(Diag.ConstraintNotTrait, "G6, G19", $ty " is not a trait, so it cannot constrain a type variable - a type parameter's constraint is a trait, and a length is no parameter (T7)") }
-
-# ERR_TYPE_ARG_NAMED_SCOPE
-fn TypeArgNamedScope() Msg { return Msg(Diag.TypeArgNamedScope, "G11", "a type argument's reference marker is bare, as 'Vec<String&>' - its references live in the container") }
 
 # ERR_INVALID_REFERENCE_TARGET
 fn InvalidReferenceTarget(ty String&) Msg { return Msg(Diag.InvalidReferenceTarget, "T24", $ty " cannot be a reference - only a struct, an enum or an array can") }
@@ -1631,9 +1599,6 @@ fn AnySpawnedResult(targets String&, ty String&, text String&) Msg { return Msg(
 
 fn AnySpawned(text String&) Msg { return Msg(Diag.AnySpawned, "T32b, P1", "a task calls a function or a function value, never through an 'any''s table - write 'spawn fn() { " $text " }'") }
 
-# ERR_TRAIT_CONTRACT_OUTLIVES
-fn TraitContractOutlives() Msg { return Msg(Diag.TraitContractOutlives, "D17f, D17d", "a trait's method states no 'outlives' - a call through an 'any' cannot check one; write it on the type's method") }
-
 fn AnyCaseNotAny(ty String&) Msg { return Msg(Diag.AnyCaseNotAny, "T34", "a type case matches an 'any' of a closed trait, and this is " $ty) }
 
 # NOTE_ANY_METHOD
@@ -1658,9 +1623,6 @@ fn CtorFieldNoValue(tok String&) Msg { return Msg(Diag.CtorFieldNoValue, "C4", "
 
 # ERR_DEFAULT_NOT_TRAILING
 fn DefaultNotTrailing(tok String&) Msg { return Msg(Diag.DefaultNotTrailing, "D8a", $tok " has no default, but a parameter before it does - defaulted parameters come last") }
-
-# ERR_SCOPE_DECL
-fn ScopeDecl() Msg { return Msg(Diag.ScopeDecl, "O3", "a scope has no name to declare - write a bare '&', or '&x' for where 'x' lives") }
 
 # ERR_TYPE_VAR_NAMES_TYPE
 fn TypeVarNamesType(tok String&) Msg { return Msg(Diag.TypeVarNamesType, "G1", "type variable " $tok " is named after a type - choose a name no type has, as '<T>'") }
@@ -1927,12 +1889,6 @@ fn LiteralNeedsCtor(ty1 String&, ty2 String&) Msg { return Msg(Diag.LiteralNeeds
 # ERR_READ_ONLY_TO_WRITABLE
 fn ReadOnlyToWritable() Msg { return Msg(Diag.ReadOnlyToWritable, "T25c", "a read-only reference cannot become writable - pass a writable one, or drop the 'mut'") }
 
-# ERR_READ_ONLY_TO_BUILT_RESULT
-fn ReadOnlyToBuiltResult(text String&) Msg { return Msg(Diag.ReadOnlyToBuiltResult, "T25c, O14", "a built result is new storage and writable, and this reference is read-only - borrow it: '" $text "'") }
-
-# ERR_READ_ONLY_TO_BUILT_RESULT_NO
-fn ReadOnlyToBuiltResultNo() Msg { return Msg(Diag.ReadOnlyToBuiltResultNo, "T25c, O14", "a built result is new storage and writable, and this reference is read-only - return a copy, or borrow the result from the parameter it is read through") }
-
 # ERR_READ_ONLY_COPY_DECL
 fn ReadOnlyCopyDecl(ty String&, text String&) Msg { return Msg(Diag.ReadOnlyCopyDecl, "T25c", "this copies a read-only " $ty ", and a written type declares a writable one - declare it with ':=' for a read-only copy, borrow it read-only, or make one of its own " $text) }
 
@@ -1991,10 +1947,7 @@ fn StoreIntoUnknownScope() Msg { return Msg(Diag.StoreIntoUnknownScope, "O12", "
 fn TagUnknownScope(tok1 String&, tok2 String&) Msg { return Msg(Diag.TagUnknownScope, "O12", "where " $tok1 " lives is not known here, so nothing is declared to live there - read it through " $tok2 ", or declare the local with ':='") }
 
 # ERR_BUILD_THROUGH_UNKNOWN_SCOPE
-fn BuildThroughUnknownScope() Msg { return Msg(Diag.BuildThroughUnknownScope, "C2d", "this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows") }
-
-# ERR_SCOPE_ARG_UNKNOWN
-fn ScopeArgUnknown(tok String&) Msg { return Msg(Diag.ScopeArgUnknown, "E25", $tok " is no local or parameter here - a scope argument names where the result is built") }
+fn BuildThroughUnknownScope() Msg { return Msg(Diag.BuildThroughUnknownScope, "C2d", "this builds through a field whose scope is not known here - build where it lives, in the function that knows") }
 
 # ERR_RETURN_TYPE_MISMATCH
 fn ReturnTypeMismatch(ty1 String&, ty2 String&) Msg { return Msg(Diag.ReturnTypeMismatch, "D8", "this function returns " $ty1 ", found " $ty2) }
@@ -2008,14 +1961,11 @@ fn ArgCountRange(n1 I64, n2 I64, n3 I64) Msg { return Msg(Diag.ArgCountRange, "E
 # ERR_SPREAD_COUNT
 fn SpreadCount() Msg { return Msg(Diag.SpreadCount, "D8d", "these results are passed as the arguments, so there must be as many - destructure them first: 'a, b := g()'") }
 
-# ERR_SCOPE_ARG_NOT_ACCEPTED
-fn ScopeArgNotAccepted(text String&) Msg { return Msg(Diag.ScopeArgNotAccepted, "E25", $text " builds no result a scope argument could place") }
-
 # ERR_SCOPE_ARGS_DISAGREE
-fn ScopeArgsDisagree() Msg { return Msg(Diag.ScopeArgsDisagree, "O25e", "these arguments live in different scopes, and the signature requires one ('&p')") }
+fn ScopeArgsDisagree() Msg { return Msg(Diag.ScopeArgsDisagree, "O25e", "these arguments live in different scopes, and the call needs them in one - make them where one of them lives") }
 
 # ERR_BORROW_SPLIT_SCOPES
-fn BorrowSplitScopes() Msg { return Msg(Diag.BorrowSplitScopes, "O17", "this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')") }
+fn BorrowSplitScopes() Msg { return Msg(Diag.BorrowSplitScopes, "O17", "this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')") }
 
 # ERR_SLICE_SPLIT_VALUE
 fn SliceSplitValue() Msg { return Msg(Diag.SliceSplitValue, "O17a", "this value's references live where its own storage does not, so it is not sliced or viewed - index the value itself, or lend it whole to a call") }
@@ -2024,13 +1974,13 @@ fn SliceSplitValue() Msg { return Msg(Diag.SliceSplitValue, "O17a", "this value'
 fn BorrowSplitValue() Msg { return Msg(Diag.BorrowSplitValue, "O17a", "this value's references live where its own storage does not, so it is not held by reference - use the value itself") }
 
 # ERR_FIELD_BINDING_UNKNOWN
-fn FieldBindingUnknown() Msg { return Msg(Diag.FieldBindingUnknown, "O23, O11", "this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance") }
+fn FieldBindingUnknown() Msg { return Msg(Diag.FieldBindingUnknown, "O23, O11", "this stores into a field whose binding is not known through this path - store through a variable holding the instance") }
 
 # ERR_SCOPE_OBLIGATION_UNMET
 fn ScopeObligationUnmet() Msg { return Msg(Diag.ScopeObligationUnmet, "O10c", "the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope") }
 
 # ERR_REFERENCE_NARROWED
-fn ReferenceNarrowed() Msg { return Msg(Diag.ReferenceNarrowed, "O25", "a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='") }
+fn ReferenceNarrowed() Msg { return Msg(Diag.ReferenceNarrowed, "O25", "a reference never narrows - declare it with ':=' from what it is given") }
 
 # ERR_REFERENCE_NARROWED_LOCAL
 fn ReferenceNarrowedLocal(text String&) Msg { return Msg(Diag.ReferenceNarrowedLocal, "O25", "a reference never narrows - '" $text "' lives in a block that closes first, and this keeps it longer") }
@@ -2428,9 +2378,6 @@ fn PatternType(ty String&, text String&) Msg { return Msg(Diag.PatternType, "S13
 # ERR_CASE_IS_PRIVATE
 fn CaseIsPrivate(tok String&) Msg { return Msg(Diag.CaseIsPrivate, "M6a", "case " $tok " is private to its module") }
 
-# ERR_IS_AS_MARKER
-fn IsAsMarker(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.IsAsMarker, "E32", "'&" $text1 "' after the type is read as a reference marker, not the operator '&' - parenthesize: '(x " $text2 " T) & " $text3 "'") }
-
 # ERR_AS_NOTHING
 fn AsNothing(text String&) Msg { return Msg(Diag.AsNothing, "E32", "case " $text " carries nothing for 'as' to give - test for it with '=='") }
 
@@ -2454,7 +2401,7 @@ fn SetatUndeclared(ty String&) Msg { return Msg(Diag.SetatUndeclared, "E31", $ty
 fn WriteThroughAtNoSetat(ty String&) Msg { return Msg(Diag.WriteThroughAtNoSetat, "E31", "this writes through x[i] on " $ty ", which declares At but not SetAt - the copy At gives back is never written back; declare SetAt") }
 
 # ERR_WRITE_THROUGH_AT_BUILDS
-fn WriteThroughAtBuilds() Msg { return Msg(Diag.WriteThroughAtBuilds, "E31, O17", "x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')") }
+fn WriteThroughAtBuilds() Msg { return Msg(Diag.WriteThroughAtBuilds, "E31, O17", "x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')") }
 
 # ERR_COND_LENT_WRITABLE
 fn CondLentWritable() Msg { return Msg(Diag.CondLentWritable, "E28", "a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference") }
@@ -2666,7 +2613,7 @@ fn DestructOneValue(ty String&) Msg { return Msg(Diag.DestructOneValue, "D8c", "
 fn DestructCount(n1 I64, n2 I64) Msg { return Msg(Diag.DestructCount, "D8c", $n1 " targets for " $n2 " results - write '_' for one not wanted") }
 
 # ERR_STORED_REF_OUTLIVED
-fn StoredRefOutlived() Msg { return Msg(Diag.StoredRefOutlived, "O20", "the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')") }
+fn StoredRefOutlived() Msg { return Msg(Diag.StoredRefOutlived, "O20", "the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Clone()')") }
 
 # ERR_PAYLOAD_SCOPES_DISAGREE
 fn PayloadScopesDisagree() Msg { return Msg(Diag.PayloadScopesDisagree, "T17c", "this payload holds references into two scopes, and it lives in one - build what it holds in one scope") }
@@ -2681,10 +2628,10 @@ fn ElemOutlived() Msg { return Msg(Diag.ElemOutlived, "O25c", "the array outlive
 fn PayloadOutlived() Msg { return Msg(Diag.PayloadOutlived, "T17c", "this value's payload refers to storage the value would outlive - make that storage where the value is kept") }
 
 # ERR_INSTANCE_OUTLIVES_REFERENT
-fn InstanceOutlivesReferent() Msg { return Msg(Diag.InstanceOutlivesReferent, "C2d", "this instance would outlive what its '&p' field refers to - keep it in that block, or build it there ('T&x(...)')") }
+fn InstanceOutlivesReferent() Msg { return Msg(Diag.InstanceOutlivesReferent, "C2d", "this instance would outlive what its field refers to - keep it in that block, or give the field a copy ('$x', 'x.Clone()')") }
 
 # ERR_INSTANCE_OUTLIVES_ARG
-fn InstanceOutlivesArg() Msg { return Msg(Diag.InstanceOutlivesArg, "C2d", "this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')") }
+fn InstanceOutlivesArg() Msg { return Msg(Diag.InstanceOutlivesArg, "C2d", "this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')") }
 
 # ERR_GLOBAL_HOLDS_SHORTER
 fn GlobalHoldsShorter() Msg { return Msg(Diag.GlobalHoldsShorter, "O1b", "a global holds only what lives as long as the program - store something built here, or another global's") }
@@ -2794,12 +2741,8 @@ fn CaseUnknownName(tok String&) Msg { return Msg(Diag.CaseUnknownName, "S13f", "
 # ERR_CASE_IS_SUBJECT
 fn CaseIsSubject(tok String&) Msg { return Msg(Diag.CaseIsSubject, "S13f", $tok " is the value being matched, so this compares it with itself - to take any value and test it, write 'case _ if ...'") }
 
-# ERR_RETURN_BORROW_AS_BUILT
-fn ReturnBorrowAsBuilt() Msg { return Msg(Diag.ReturnBorrowAsBuilt, "O14", "this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'") }
-fn ReturnProgramAsBuilt() Msg { return Msg(Diag.ReturnProgramAsBuilt, "O14, T25c", "this returns a global's storage, and a built result is new storage its caller may write - return the value, which copies it (a result written without '&', T7b)") }
-
 # ERR_RETURN_OWN_STORAGE
-fn ReturnOwnStorage() Msg { return Msg(Diag.ReturnOwnStorage, "O26", "this value refers to this function's own storage, which dies at the return - build it in '&return'") }
+fn ReturnOwnStorage() Msg { return Msg(Diag.ReturnOwnStorage, "O26", "this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Clone()')") }
 
 # ERR_VIEW_KEPT
 fn ViewKept(name String&) Msg { return Msg(Diag.ViewKept, "O27", "this keeps a view of '" $name "', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Clone()'") }
@@ -2819,13 +2762,8 @@ fn YieldInDefer() Msg { return Msg(Diag.YieldInDefer, "S19b, S20", "deferred cod
 fn YieldInJoin() Msg { return Msg(Diag.YieldInJoin, "S20", "a join block may not yield - its tasks are waited for before it is left") }
 fn YieldPastDefer() Msg { return Msg(Diag.YieldPastDefer, "S20", "a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block") }
 fn GenReturnValue() Msg { return Msg(Diag.GenReturnValue, "D18a", "a generator gives its values by 'yield' - 'return' ends it and takes none") }
-fn GenYieldsBorrow(name String&) Msg { return Msg(Diag.GenYieldsBorrow, "D18c, T22a", "this generator yields what " $("'" $name "'" if name != "" else "a parameter") " refers to, which outlives no Next call it can be shown to - write its elements as borrowed from it ('Iterator<T&" $(name if name != "" else "p") ">'), or yield a copy ('$x', 'x.Clone()')") }
+fn GenYieldsBorrow(name String&) Msg { return Msg(Diag.GenYieldsBorrow, "D18c, T22a", "this generator yields what " $("'" $name "'" if name != "" else "a parameter") " refers to, which outlives no Next call it can be shown to - yield a copy ('$x', 'x.Clone()')") }
 fn YieldOwnStorage() Msg { return Msg(Diag.YieldOwnStorage, "S20, O26", "this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Clone()', '$x')") }
-fn GenReturnScope() Msg { return Msg(Diag.GenReturnScope, "D18b", "a generator's result scope is one Next call's, which its locals outlive - '&return' marks storage its walk keeps only where its elements live there: 'Iterator<T&return>'") }
-fn GenElemWritable() Msg { return Msg(Diag.GenElemWritable, "D18c", "a generator's borrowed elements are read-only - write its element without 'mut'") }
-fn GenElemNullable() Msg { return Msg(Diag.GenElemNullable, "D18c", "a generator's borrowed element is never null - write it 'T&p' or 'T&return'") }
-fn GenElemScopeUnknown(name String&) Msg { return Msg(Diag.GenElemScopeUnknown, "D18c", $name " is no parameter of this generator - its elements borrow from a reference parameter ('Iterator<T&p>') or live where it does ('Iterator<T&return>')") }
-fn GenElemByValue(name String&, fix String&) Msg { return Msg(Diag.GenElemByValue, "D18c, O14", $name " is a value, its own storage the walk's copy - its elements can borrow only from what a reference parameter refers to: '" $fix "'") }
 fn GenYieldShorter(where String&) Msg { return Msg(Diag.GenYieldShorter, "D18c, S20", "this generator's elements live " $where ", and this value is not shown to last as long - yield a part of what lives there, or values ('Iterator<T>') and a copy ('$x', 'x.Clone()')") }
 fn GenErrors(elem String&) Msg { return Msg(Diag.GenErrors, "D18", "a generator fails as its Next does - write its errors in its result: 'Iterator<" $elem " ? E>'") }
 
@@ -3128,7 +3066,7 @@ fn NoteHeldIndexWhere(text String&) Msg { return Msg(Diag.NoteHeldIndexWhere, ""
 fn NoteCondValue() Msg { return Msg(Diag.NoteCondValue, "", "this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)") }
 
 # NOTE_SLICE_OF_TEMPORARY
-fn NoteSliceOfTemporary() Msg { return Msg(Diag.NoteSliceOfTemporary, "", "this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that") }
+fn NoteSliceOfTemporary() Msg { return Msg(Diag.NoteSliceOfTemporary, "", "this borrows a value made here, which lives only in this block - keep a copy of what the slice shows ('$x', 'x.Clone()')") }
 
 # NOTE_TEXT_COPY_WHERE
 fn NoteTextCopyWhere(text String&) Msg { return Msg(Diag.NoteTextCopyWhere, "", "this text lives in a block that closes first - pass a copy, which is made where '" $text "' lives: write '$' before it") }
@@ -3160,10 +3098,6 @@ fn ModuleIdentityClash(text String&) Msg { return Msg(Diag.ModuleIdentityClash, 
 # ---- tests ----
 
 # ---- contracts (D17) ----
-
-fn ContractOutlivesNoScope(tok String&) Msg { return Msg(Diag.ContractOutlivesNoScope, "D17d", $tok " names no scope - an 'outlives' item names a reference parameter, a parameter holding references, or 'return'") }
-
-fn ContractOutlivesNotParam(tok String&) Msg { return Msg(Diag.ContractOutlivesNotParam, "D17d", $tok " is no parameter of this function - an 'outlives' item names its parameters and 'return'") }
 
 fn ContractNeedsArgumentError(name String&) Msg { return Msg(Diag.ContractNeedsArgumentError, "D17", $name " has conditions, so a call fails with ArgumentError where one is false - add it after '?'") }
 fn GenContractNeedsArgumentError(name String&) Msg { return Msg(Diag.GenContractNeedsArgumentError, "D18, D17", $name " has conditions, so its first Next fails with ArgumentError where one is false - add it to its result's errors, 'Iterator<T ? ArgumentError>'") }

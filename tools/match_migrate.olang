@@ -41,7 +41,7 @@ fn (w walker&) kind(i I64) token.Tok {
     return w.ts[i].Kind
 }
 
-fn (w walker&) text(i I64) String&w { return w.src[I64(w.ts[i].Start):I64(w.ts[i].End)] }
+fn (w walker&) text(i I64) String& { return w.src[I64(w.ts[i].Start):I64(w.ts[i].End)] }
 
 # whether the tokens at i and i + 1 are "=>" as the old syntax wrote it, an "=" touching a ">"
 fn (w walker&) arrowAt(i I64) Bool {
@@ -191,7 +191,7 @@ fn migrate(src String&, hand mut Vec<String&>&, path String&) String {
     w.walk()
     for h in w.r.hand { hand.Push($path ":" $h) }
     if w.r.edits.Len() == 0: return src
-    es mut Vec<edit>&w = w.r.edits
+    es mut Vec<edit>& = w.r.edits
     es.Sort(fn(a edit, b edit): return a.Start < b.Start)
     out := StringBuilder()
     at I64 = 0

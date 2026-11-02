@@ -5,7 +5,7 @@ type N struct(v I32) {
     v
 }
 type Cur struct(of mut N&) {
-    at mut N&of = of
+    at mut N& = of
 }
 type Outer struct(c mut Cur&) {
     c

@@ -206,7 +206,7 @@ fn (e mut Emitter&) Program(w mut io.Writer&) {
 fn (e mut Emitter&) Objects() Vec<Object> {
     e.emitAll()
     out Vec<Object>
-    mods Vec<mut load.Module&>&e = e.P.L.Mods
+    mods Vec<mut load.Module&>& = e.P.L.Mods
     root := e.P.L.Root
     if e.Module {
         if not e.dbg() { e.mergeSame() }
@@ -244,7 +244,7 @@ fn (e mut Emitter&) Objects() Vec<Object> {
             o.From = ri
             out.Push(o)
         } else if used.Has(m) {
-            made mut Reused&e = Reused(m)
+            made mut Reused& = Reused(m)
             made.Split = split
             made.From = out.Len()
             for i in range e.itemSym.Len() {
@@ -285,7 +285,7 @@ fn (e mut Emitter&) Objects() Vec<Object> {
 # imports from - stay as they were, where with the instances cut by their symbols' hashes alone a new instance changed
 # a part every module imported, and the link redid nearly every module's code
 fn (e mut Emitter&) instGroups() {
-    mods Vec<mut load.Module&>&e = e.P.L.Mods
+    mods Vec<mut load.Module&>& = e.P.L.Mods
     root := e.P.L.Root
     order Vec<I64>
     for m in range mods.Len() {
@@ -428,7 +428,7 @@ fn (e mut Emitter&) parts(out mut Vec<Object>&, identity String&, kind ObjectKin
 fn (e mut Emitter&) locations(locs Map<I64, Bool>&) String {
     its Vec<I64>
     for l in locs { its.Push(l.Key) }
-    syms Vec<String&>&e = e.itemSym
+    syms Vec<String&>& = e.itemSym
     sorted := its.ToArray()
     sorted.Sort(fn(a I64, b I64) Bool { return syms[a] < syms[b] })
     b := StringBuilder()
@@ -811,7 +811,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
             mine.Push(i)
         }
     }
-    syms Vec<String&>&e = e.itemSym
+    syms Vec<String&>& = e.itemSym
     sorted := mine.ToArray()
     sorted.Sort(fn(a I64, b I64) Bool { return syms[a] < syms[b] })
     order Vec<I64>
@@ -974,7 +974,7 @@ fn (e mut Emitter&) initOrder() Vec<I64> {
     with := e.Lw.InitModules()
     done Map<I64, Bool>
     order Vec<I64>
-    mods Vec<mut load.Module&>&e = e.P.L.Mods
+    mods Vec<mut load.Module&>& = e.P.L.Mods
     for m in range mods.Len() {
         if mods[m].Prelude { e.visit(m, done, order) }
     }
@@ -995,7 +995,7 @@ fn (e mut Emitter&) visit(m I64, done mut Map<I64, Bool>&, order mut Vec<I64>&) 
     order.Push(m)
 }
 
-fn (e mut Emitter&) text(n source.NameId) String&e { return e.T.Names.Text(n) }
+fn (e mut Emitter&) text(n source.NameId) String& { return e.T.Names.Text(n) }
 
 # the bodies by what they are: a type's constructor (twin 0) and destructor
 fn (e mut Emitter&) index() {
@@ -1725,7 +1725,7 @@ fn (e mut Emitter&) item(symbol String&, home I64, text String&, decl String& = 
 }
 
 # item i's references, found once
-fn (e mut Emitter&) refs(i I64) Array<I64>&e {
+fn (e mut Emitter&) refs(i I64) Array<I64>& {
     if e.itemRefs[i].Len() == 0 { e.itemRefs[i] = refsIn(e.itemText[i]).ToArray() }
     return e.itemRefs[i]
 }
@@ -2251,7 +2251,7 @@ fn (e mut Emitter&) function(k mir.FnKey) {
         e.declared(k)
         return
     }
-    f mir.Fn&e = e.Lw.LowerKey(k)
+    f mir.Fn& = e.Lw.LowerKey(k)
     symbol := e.sym(k)
     env := e.hasEnv(k)
     passed := e.passedOf(k, f.Ty)
@@ -2302,7 +2302,7 @@ fn (e mut Emitter&) isGenFn(k mir.FnKey) Bool {
 # types are not settled, the item then a stub
 fn (e mut Emitter&) writeBody(k mir.FnKey, f mir.Fn&, symbol String&, passed I64, env Bool, hdr0 String&, walkForm Bool) Bool {
     hdr := $hdr0
-    fe mut fnEm&e = fnEm(e, f, k)
+    fe mut fnEm& = fnEm(e, f, k)
     fe.passed = passed
     fe.env = env
     fe.gen = f.Gen
@@ -4963,7 +4963,7 @@ fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
     }
     # the value's error list differs from its function's (R6, R17): its result, and its code re-encoded under the
     # value's list - a code its list does not name being the value's default error
-    fe mut fnEm&e = fnEm(e, mir.Fn(code, ty, 0, source.Span(0, 0)), code)
+    fe mut fnEm& = fnEm(e, mir.Fn(code, ty, 0, source.Span(0, 0)), code)
     from := t.Errors(mine)
     to := t.Errors(ty)
     res2 := t.Result(mine)
@@ -5023,7 +5023,7 @@ fn (e mut Emitter&) fvAdapter(f types.TypeId, g types.TypeId) {
     ip := mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), f)
     key := e.adaptKey(f, g)
     hdr := e.header(mir.FnKey.Init(0), g, "olang_fvadapt_" $key, vp, true, "linkonce_odr")
-    fe mut fnEm&e = fnEm(e, mir.Fn(mir.FnKey.Init(0), g, 0, source.Span(0, 0)), mir.FnKey.Init(0))
+    fe mut fnEm& = fnEm(e, mir.Fn(mir.FnKey.Init(0), g, 0, source.Span(0, 0)), mir.FnKey.Init(0))
     code := fe.load("ptr", "%env")
     inner := fe.load("ptr", fe.let("getelementptr { ptr, ptr }, ptr %env, i32 0, i32 1"))
     args := StringBuilder()
@@ -5857,7 +5857,7 @@ fn (e mut Emitter&) exportEntry(i I64) {
     ty := body.Ty
     k := mir.FnKey.Body(typed.BodyId(I32(i)))
     e.want(k)
-    fe mut fnEm&e = fnEm(e, mir.Fn(k, ty, 0, source.Span(0, 0)), k)
+    fe mut fnEm& = fnEm(e, mir.Fn(k, ty, 0, source.Span(0, 0)), k)
     res := t.Result(ty)
     hasRes := res != types.VoidT and res != types.NoreturnT
     if hasRes { p.Layout(res) }

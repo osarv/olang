@@ -5,6 +5,6 @@ type P struct(n I64) { n }
 fn main() {
     out := Vec<P&>()
     t := "x"
-    out.Push(P&t(1))
+    out.Push(P(1))
     assert out.Len() == 1
 }

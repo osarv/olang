@@ -43,10 +43,10 @@ fn aliases() String& ? {
     l := Vec<String&>()
     m := Map<I64, I64>()
     for i in range 4 {
-        l2 mut Vec<String&>&l = l
+        l2 mut Vec<String&>& = l
         l2.Push($i)
         addTo(l2, "a" $i)
-        m2 mut Map<I64, I64>&m = m
+        m2 mut Map<I64, I64>& = m
         putIn(m2, i)
         churn()
     }

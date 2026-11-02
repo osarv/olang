@@ -8,7 +8,7 @@ type Bag struct(n I64) {
     n
 }
 fn (b Bag&) Str() String {
-    r Res&return = Res(b.n)
+    r Res& = Res(b.n)
     assert b.n != 7, "a Str stops its test"
     return "b-" $b.n
 }

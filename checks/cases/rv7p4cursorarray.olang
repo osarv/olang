@@ -8,7 +8,7 @@ type Bag struct(c mut Cell&) {
     c
 }
 type Cur struct(of Bag&) {
-    c mut Cell&of = of.c
+    c mut Cell& = of.c
 }
 fn (b Bag&) Str() String {
     cs := Cur[Cur(b)]

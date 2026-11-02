@@ -2,6 +2,6 @@
 # D17f, D17d: run-time trait values
 type aNode struct(v I64) { v }
 type aLink trait {
-    mut Set(n aNode&) [n outlives return]
+    mut Set(n aNode&)
 }
 fn main() { }

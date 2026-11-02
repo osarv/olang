@@ -26,7 +26,7 @@ fn pushTo(v mut Vec<I64>&, n I64) { for i in range n { v.Push(i * i) } }
 fn main() {
     v := Vec<I64>()
     pushTo(v, 50)                                   # a copy is a second name: v sees the Pushes
-    w mut Vec<I64>&v = v
+    w mut Vec<I64>& = v
     w.Push(-1)
     c := v
     for i in range 1000 { v.Push(i) }               # the buffer replaced; w follows, c does not
