@@ -1850,10 +1850,24 @@ fn (ln mut lowering&) val(x typed.Expr?&) mir.Operand {
     # there - and forgotten after, so another lowering of the same expression (deferred code) makes its own
     rs := ln.regionSite(x)
     if rs < 0 { return ln.value(x) }
-    ln.regionOf(rs)
+    held := ln.regionOf(rs)
     v := ln.value(x)
     ln.regions.Remove(rs)
-    return v
+    return ln.settled(rs, held, v, x.Type(), x.Span())
+}
+
+# an owner's value built in a region of its own (O8d, types.Anchors): the region released at once where none of its
+# anchors names it - it holds nothing - so a place given an empty value keeps no region for it
+fn (ln mut lowering&) settled(rs I64, held mir.ScopeRef, v mir.Operand, ty types.TypeId, sp source.Span) mir.Operand {
+    if ln.dead or v == mir.Operand.None or ln.plan.RegionKind[rs] != 1 or ln.T.Anchors(ty).Len() == 0 { return v }
+    h := match held {
+        case mir.ScopeRef.Held(l): l
+        case _: mir.NoLocal
+    }
+    if h == mir.NoLocal { return v }
+    l := ln.local(v, ty, sp)
+    ln.emit(mir.Stmt.Settle(sp, h, mir.L(l)))
+    return mir.Operand.Copy(mir.L(l))
 }
 
 fn (ln mut lowering&) value(x typed.Expr&) mir.Operand {

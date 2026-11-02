@@ -830,6 +830,38 @@ fn (t mut Table&) ownsParts(id TypeId, depth I64) Bool {
     }
 }
 
+# O8d: the anchors of an owner - a struct held by value whose every field is plain data, an owned part (an array of a
+# run-time length held by value) or such a struct in turn, at least one owned part among them, and no destructor -
+# each the field path to an owned part; none for any other type. Everything an owner's value reaches, it reaches
+# through its anchors, so where all of its storage is built in one region (early freeing's owner places), an anchor
+# holding storage names that region (the word before it), and one with none is empty or constant data
+fn (t mut Table&) Anchors(id TypeId) Vec<Array<I64>> {
+    out Vec<Array<I64>>
+    try t.anchorsInto(id, Array<I64>(0), out, 0) catch { return Vec<Array<I64>>() }
+    if out.Len() == 0 { return Vec<Array<I64>>() }
+    return out
+}
+
+# the anchors of a struct held in place at path `at`, added to out - failing with NoOwner where a field is none of
+# plain data, an owned part, or such a struct in turn
+fn (t mut Table&) anchorsInto(id TypeId, at Array<I64>&, out mut Vec<Array<I64>>&, depth I64) ? NoOwner {
+    r := t.Repr(id)
+    if depth > 8 or t.KindOf(r) != Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != DeclKind.Struct: error NoOwner
+    if t.Destructs(r): error NoOwner
+    fs := t.Items(t.Fields(r))
+    for i in range fs.Len() {
+        path := Array<I64>(at.Len() + 1)
+        for j in range at.Len() { path[j] = at[j] }
+        path[at.Len()] = i
+        if t.OwnedPart(fs[i]) {
+            out.Push(path)
+            continue
+        }
+        if not t.HoldsRefs(fs[i]) and not t.OwnsParts(fs[i]): continue
+        try t.anchorsInto(fs[i], path, out, depth + 1)
+    }
+}
+
 # whether a value of a type holds a reference, a function value or an "any": HoldsRefs with its owned parts aside - what
 # a copy of it made by OwnsParts' rule still shares with the original (the references it holds name what they named)
 fn (t mut Table&) SharesRefs(id TypeId) Bool { return t.sharesRefs(id, 0) }

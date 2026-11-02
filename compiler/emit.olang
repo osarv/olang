@@ -1654,7 +1654,7 @@ fn stmtSpan(s mir.Stmt&) source.Span {
     return match s {
         case mir.Stmt.Assign(sp, _, _), mir.Stmt.Live(sp, _), mir.Stmt.Dead(sp, _), mir.Stmt.Open(sp, _): sp
         case mir.Stmt.Close(sp, _), mir.Stmt.Give(sp, _), mir.Stmt.RegisterDtor(sp, _, _, _): sp
-        case mir.Stmt.RegisterOwner(sp, _, _), mir.Stmt.Release(sp, _), mir.Stmt.Write(sp, _, _, _): sp
+        case mir.Stmt.RegisterOwner(sp, _, _), mir.Stmt.Release(sp, _), mir.Stmt.Settle(sp, _, _), mir.Stmt.Write(sp, _, _, _): sp
         case mir.Stmt.CopyElems(sp, _, _, _), mir.Stmt.Spawn(sp, _, _), mir.Stmt.Raised(sp): sp
         case mir.Stmt.Deferred(sp, _, _): sp
     }
@@ -3535,12 +3535,26 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
         }
         case mir.Stmt.RegisterOwner(_, _, _) { fe.gap("RegisterOwner") }
         case mir.Stmt.Release(_, p) {
-            # O8d: the region the reference p holds was built in released (none for null or constant data), p left null
+            # O8d: the region the reference p holds was built in released (none for null or constant data), p left null;
+            # an owner's, the region its first anchor holding storage names
             at, pty := fe.addr(p)
+            if not t.IsRef(pty) {
+                fe.E.runtime("__olang_region_drop")
+                fe.w("call void @__olang_region_drop(ptr " $fe.anchorRegion(at, pty) ")")
+                fe.store(fe.ty(pty), "zeroinitializer", at)
+                return
+            }
             v := fe.load(fe.ty(pty), at)
             fe.E.runtime("__olang_region_release")
             fe.w("call void @__olang_region_release(ptr " $fe.objectPtr(v, pty) ")")
             fe.store(fe.ty(pty), fe.E.constText(pty, 0), at)
+        }
+        case mir.Stmt.Settle(_, h, p) {
+            at, pty := fe.addr(p)
+            r := fe.let("inttoptr i64 " $fe.load("i64", fe.localAt(h)) " to ptr")
+            keep := fe.let("icmp eq ptr " $fe.anchorRegion(at, pty) ", " $r)
+            fe.E.runtime("__olang_region_settle")
+            fe.w("call void @__olang_region_settle(ptr " $r ", i1 " $keep ")")
         }
         case mir.Stmt.Write(_, b, how, x) {
             if fe.directRef(b) {
@@ -4117,6 +4131,28 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             return fe.let("ptrtoint ptr " $r " to i64")
         }
     }
+}
+
+# O8d: the region an owner's value at `at` (of type ty, types.Anchors) is built in: the region the first of its anchors
+# holding storage names - each one's found while all are live - else null
+fn (fe mut fnEm&) anchorRegion(at String&, ty types.TypeId) String {
+    t := fe.E.T
+    fe.E.runtime("__olang_region_or")
+    r := "null"
+    anchors := t.Anchors(ty)
+    for i := anchors.Len() - 1, i >= 0, i-- {
+        q := at
+        qt := ty
+        for k in anchors[i] {
+            q = fe.let("getelementptr " $fe.ty(t.Repr(qt)) ", ptr " $q ", i32 0, i32 " $k)
+            qt = t.Items(fe.fieldList(t.Repr(qt)))[k]
+        }
+        o := fe.objectPtr(fe.load(fe.ty(qt), q), qt)
+        ri := fe.let("call ptr @__olang_region_or(ptr " $o ", ptr null)")
+        some := fe.let("icmp ne ptr " $ri ", null")
+        r = fe.let("select i1 " $some ", ptr " $ri ", ptr " $r)
+    }
+    return r
 }
 
 # the object a reference value v of type ty names: its pointer, the pointer half of a run-time-length array's pair

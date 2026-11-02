@@ -2196,6 +2196,27 @@ entry:
 look:
   %word = getelementptr i8, ptr %obj, i64 -8
   %r = load ptr, ptr %word
+  tail call void @__olang_region_drop(ptr %r)
+  br label %done
+done:
+  ret void
+}
+
+; O8d: an owner held in place, its value's region released only where none of its anchors names it - a value built
+; there holding nothing (every anchor empty), whose region nothing reaches
+define void @__olang_region_settle(ptr %r, i1 %keep) {
+entry:
+  br i1 %keep, label %done, label %drop
+drop:
+  tail call void @__olang_region_drop(ptr %r)
+  br label %done
+done:
+  ret void
+}
+
+; region r released - taken out of its parent's kids and closed, with its own kids - nothing for null
+define void @__olang_region_drop(ptr %r) noinline {
+entry:
   %static = icmp eq ptr %r, null
   br i1 %static, label %done, label %unlink
 unlink:

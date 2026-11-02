@@ -270,7 +270,10 @@ type Stmt enum {
                                                                           # when s closes (O16)
     RegisterOwner(sp source.Span, s ScopeRef, p Lvalue)    # the owner slot p released when s closes, if it holds one:
                                                           # an owner local (O35), a hold (F3), a result in flight (N3)
-    Release(sp source.Span, p Lvalue)   # the object the own slot p holds, if any, released, and p left null (O35)
+    Release(sp source.Span, p Lvalue)   # the object the own slot p holds, if any, released, and p left null (O35);
+                                        # an owner's value (types.Anchors): the region its anchors name released
+    Settle(sp source.Span, h LocalId, p Lvalue)   # O8d: the region local h holds released unless an anchor of the
+                                                  # owner's value at p names it - a value built there holding nothing
     Write(sp source.Span, b ScopeRef, how WriteKind, x Operand)    # x appended to the text builder b (E11a)
     CopyElems(sp source.Span, dst Lvalue, src Lvalue, n Operand)     # n elements of array src into array dst, from 0
     Spawn(sp source.Span, j ScopeId, task I32)    # f.Tasks[task] started in join j (P1): see Task
@@ -884,6 +887,10 @@ fn (v mut verifier&) stmtShape(st Stmt&) {
             v.place(p)
         }
         case Stmt.Release(_, p) { v.place(p) }
+        case Stmt.Settle(_, h, p) {
+            v.local(h)
+            v.place(p)
+        }
         case Stmt.Write(_, b, _, x) {
             v.ref(b)
             v.operand(x)
@@ -1264,7 +1271,13 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
         # O8d: what a sole place let go of - a reference, its object in a region (or none: null, constant data)
         case Stmt.Release(_, p) {
             pt := v.placeType(p)
-            if pt != types.UnknownT and not t.IsRef(pt) { v.bad("a release of a " $v.canon(pt) ", not a reference") }
+            if pt != types.UnknownT and not t.IsRef(pt) and t.Anchors(pt).Len() == 0 {
+                v.bad("a release of a " $v.canon(pt) ", not a reference or an owner")
+            }
+        }
+        case Stmt.Settle(_, _, p) {
+            pt := v.placeType(p)
+            if pt != types.UnknownT and t.Anchors(pt).Len() == 0 { v.bad("a settle of a " $v.canon(pt) ", not an owner") }
         }
         case Stmt.Write(_, b, how, x) {
             v.builder(b)
@@ -1970,6 +1983,10 @@ fn (v mut verifier&) stmtFlow(s Stmt&) {
             v.readPlace(p)
         }
         case Stmt.Release(_, p) { v.readPlace(p) }
+        case Stmt.Settle(_, h, p) {
+            v.used(h)
+            v.readPlace(p)
+        }
         case Stmt.Write(_, b, _, x) {
             v.usesScope(b)
             v.reads(x)
@@ -2300,6 +2317,7 @@ fn (w mut dumper&) stmt(s Stmt&) String {
         case Stmt.RegisterDtor(_, sc, ty, x): "register dtor " $w.T.Canon(ty) " " $w.operand(x) " in " $w.ref(sc)
         case Stmt.RegisterOwner(_, sc, p): "register owner " $w.place(p) " in " $w.ref(sc)
         case Stmt.Release(_, p): "release " $w.place(p)
+        case Stmt.Settle(_, h, p): "settle L" $I64(h) " by " $w.place(p)
         case Stmt.Write(_, b, how, x): "write " $short($how) " " $w.operand(x) " to " $w.ref(b)
         case Stmt.CopyElems(_, d, src, n): "copy " $w.operand(n) " from " $w.place(src) " to " $w.place(d)
         case Stmt.Spawn(_, j, k): "spawn in S" $j " " $w.task(w.F.Tasks[I64(k)])

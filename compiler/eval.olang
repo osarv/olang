@@ -1534,11 +1534,37 @@ fn (m mut Machine&) stepClose() {
 # data - and p left null. A read through the reference afterwards finds its allocation freed and stops (K1): the
 # evaluator's own check of an early free
 fn (m mut Machine&) releaseHeld(p Ptr, ty types.TypeId) {
-    q := m.objectAt(p, ty)
+    region := m.anchorRegion(p, ty) if not m.T.IsRef(ty) else m.regionOfObject(m.objectAt(p, ty))
     if m.halted { return }
     m.zero(p, m.size(ty))
-    region := m.regionOfObject(q)
     if region == 0 { return }
+    m.closeRegion(region)
+}
+
+# O8d: the region an owner's value at p (types.Anchors) is built in - the first live one of its anchors' - else 0
+fn (m mut Machine&) anchorRegion(p Ptr, ty types.TypeId) I64 {
+    for path in m.T.Anchors(ty) {
+        q := p
+        qt := ty
+        for j in path {
+            q = Ptr(q.Id, q.Off + m.partOffset(qt, j))
+            qt = m.partType(qt, j)
+        }
+        r := m.regionOfObject(m.objectAt(q, qt))
+        if m.halted: return 0
+        if r != 0: return r
+    }
+    return 0
+}
+
+# O8d: the region an owner's value at p was built in (h) closed where none of its anchors names it - nothing reaches it
+fn (m mut Machine&) settle(h I64, p Ptr, ty types.TypeId) {
+    if h == 0 or not m.live(h) or m.scopes[h & slotMask].Kind != sRegion { return }
+    if m.anchorRegion(p, ty) == h or m.halted { return }
+    m.closeRegion(h)
+}
+
+fn (m mut Machine&) closeRegion(region I64) {
     m.disown(region)
     m.scopes[region & slotMask].Early = true
     m.closing.Push(region)
@@ -3574,6 +3600,16 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
             slot, pty := m.place(fi, p)
             n := m.closing.Len()
             m.releaseHeld(slot, pty)
+            if m.closing.Len() > n {
+                m.fs[fi].Pending = true
+                return
+            }
+        }
+        case mir.Stmt.Settle(sp, h, p) {
+            m.atK(fk, sp)
+            slot, pty := m.place(fi, p)
+            n := m.closing.Len()
+            m.settle(m.heldScope(fi, h), slot, pty)
             if m.closing.Len() > n {
                 m.fs[fi].Pending = true
                 return

@@ -98,6 +98,8 @@ RMade I64 = 2     # a value not made for it (condition 1)
 RView I64 = 3     # a view in use across a let-go of it (condition 6)
 RTask I64 = 4     # the program has tasks (condition 3)
 RDtor I64 = 5     # a destructor (condition 4)
+RInPlace I64 = 6  # an owner's value changed in place (ownerCand)
+RCopied I64 = 7   # a value holding an owner's copied where no store is made for it (ownerLeaves)
 
 # a store into a candidate place: the value's classification, and where it is built if made for the place
 type store struct(PlaceId I64, Body I64, File I64, Sp source.Span, Kind I64, Of I64, Site I64, X typed.Expr?&, Root typed.Expr?&) {
@@ -187,11 +189,13 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     keyTy Vec<types.TypeId>
     keyField Vec<I64>
     handle Vec<Bool>
+    owner Vec<Bool>           # by place: an owner held in place (types.Anchors) - a Vec, a Map held by value
     valTy Vec<types.TypeId>
     placeOf Map<pair.Pair<I64, I64>, I64>
     typeAsked Map<pair.Pair<I64, I64>, I64>    # a key asked: 1 no candidate, 2 a candidate (place in placeOf)
     safeAsked Map<types.TypeId, I64>             # contents asked: 1 being asked, 2 no, 3 yes
     leafAsked Map<types.TypeId, Vec<leaf>>
+    ownersAsked Map<types.TypeId, Vec<I64>>    # ownerLeaves, by type
     # by body: its module, whether its code is emitted in the root's object, whether it is the program's own (not std)
     module Vec<I64>
     rootEmitted Vec<Bool>
@@ -291,6 +295,63 @@ fn (f mut Free&) handleCand(ty types.TypeId) Bool {
     return fs.Len() == 1 and f.refCand(fs[0])
 }
 
+# whether a field's type is an owner held in place (types.Anchors): a value of its own - a Vec, a Map - whose storage,
+# all reached through its anchors, is built in a region of its own where the place is sole, and released through them
+# when the place lets go of it. Its value changed in place (a store into it, a writable reference to it handed on)
+# makes the place keep: what such a change builds would be built where the container lives (inOwner)
+fn (f mut Free&) ownerCand(ty types.TypeId) Bool {
+    t := f.T()
+    if t.IsRef(ty) { return false }
+    return t.Anchors(ty).Len() > 0 and f.safe(ty)
+}
+
+# the owner places a value of type ty holds by value - a struct's own owner fields and what its by-value fields, an
+# array's elements and an enum's payloads hold in turn. A copy of such a value makes values of those places with no
+# store into them, built where the copy is - outside any region of their own - so a place a copy reaches keeps
+# (RCopied), but where the copy is itself the value a store makes for the place (copyInto's view constructor)
+fn (f mut Free&) ownerLeaves(ty types.TypeId) Vec<I64> {
+    t := f.T()
+    r := t.Plain(t.Repr(ty))
+    if f.ownersAsked.Has(r) { return try f.ownersAsked.Get(r) catch default Vec<I64>() }
+    out Vec<I64>
+    f.ownersAsked.Put(r, out)        # (none while asked: a type holds itself by value only through an array)
+    k := t.KindOf(r)
+    if k == types.Kind.Array {
+        out = f.ownerLeaves(t.Elem(r))
+    } else if k == types.Kind.Named and t.HasBody(r) {
+        dk := t.DeclKindOf(t.DeclOf(r))
+        if dk == types.DeclKind.Struct {
+            fs := t.Items(t.Fields(r))
+            for i in range fs.Len() {
+                q := f.placeKey(r, i)
+                if q >= 0 and f.owner[q] { addTo(out, q) }
+                if not t.IsRef(fs[i]) { addAllTo(out, f.ownerLeaves(fs[i])) }
+            }
+        } else if dk == types.DeclKind.Enum {
+            for c in t.Items(t.Cases(r)) {
+                if not t.IsRef(c) { addAllTo(out, f.ownerLeaves(c)) }
+            }
+        }
+    } else if k == types.Kind.Record or k == types.Kind.Tuple {
+        for c in t.Items(t.Parts(r)) {
+            if not t.IsRef(c) { addAllTo(out, f.ownerLeaves(c)) }
+        }
+    }
+    f.ownersAsked.Put(r, out)
+    return out
+}
+
+# D9h: the parameters body b's result may be a view of (check's load.ViewResults or CtorViews) - a caller keeping it
+# copies it (lowering), where it lands
+fn (f mut Free&) viewsOf(b I64) I64 {
+    if b < 0 or b >= f.Bodies.Len() { return 0 }
+    return match f.Bodies[b].Of {
+        case typed.BodyOf.Fn(inst): try f.P.L.ViewResults.Get(inst) catch default I64(0)
+        case typed.BodyOf.Ctor(t, twin): (try f.P.L.CtorViews.Get(I64(t)) catch default I64(0)) if twin == types.ListId(0) else 0
+        case _: 0
+    }
+}
+
 # whether what a value of type ty holds, through fields, elements, payloads and references, has nothing an early free
 # cannot meet: no destructor (O15, condition 4), no function value, no any, no type variable
 fn (f mut Free&) safe(ty types.TypeId) Bool {
@@ -350,6 +411,7 @@ fn (f mut Free&) placeKey(ty types.TypeId, i I64) I64 {
     cand := false
     vt := types.UnknownT
     hd := false
+    ow := false
     dt := false
     if i < 0 {
         if t.KindOf(r) == types.Kind.Array {
@@ -369,6 +431,10 @@ fn (f mut Free&) placeKey(ty types.TypeId, i I64) I64 {
                 cand = true
                 hd = true
             }
+            if not cand and f.ownerCand(vt) {
+                cand = true
+                ow = true
+            }
             if not cand and f.dtorCand(vt) {
                 cand = true
                 dt = true
@@ -380,6 +446,7 @@ fn (f mut Free&) placeKey(ty types.TypeId, i I64) I64 {
         return -1
     }
     n := f.newPlace(r, i, hd, vt, dt)
+    f.owner[n] = ow
     f.placeOf.Put(k, n)
     f.typeAsked.Put(k, 2)
     return n
@@ -392,6 +459,7 @@ fn (f mut Free&) newPlace(ty types.TypeId, field I64, hd Bool, vt types.TypeId, 
     f.keyTy.Push(ty)
     f.keyField.Push(field)
     f.handle.Push(hd)
+    f.owner.Push(false)
     f.valTy.Push(vt)
     f.whyKind.Push(RNone)
     f.libTaken.Push(false)
@@ -818,6 +886,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     quiet I64 = 0              # events not counted: a value walked again for what it refers into
     storeWithin I64 = -1       # the parameter the container being stored into is reached from (withinOf), -1 none
     storeInside I64 = -1       # ... the place a value of which it is reached through (insidePlace), -1 none
+    exemptSite I64 = -1        # the call a store's value is, whose copy (D9h) is made for the place it is stored into
     yieldOrig Vec<mut Vec<I64>&>  # what each Collect being walked yields may refer into
     stmtSp source.Span = source.Span(0, 0)     # the statement being walked
     readPlace Vec<I64>        # view reads: the place, the statement
@@ -1066,6 +1135,34 @@ fn (w mut walker&) holds(ty types.TypeId) Bool {
     return f.holdsOf[i] == 2
 }
 
+# an owner's value changed in place: the owner places whose values o may be part of keep - but place `but`, the store's
+# own target. What a change of an owner held in place builds is built where the container lives, outside the value's
+# region, which a let-go would never release (and an anchor in another region would release that region)
+fn (w mut walker&) inOwner(o Vec<I64>&, but I64, sp source.Span, how String&) {
+    if not w.Final or w.quiet > 0 { return }
+    for y in o {
+        k := oval(y)
+        if (okind(y) == OPl or okind(y) == OMov) and k != but and w.F.IsOwner(k) {
+            w.F.keep(k, RInPlace, w.body().File, sp, $"its value is changed in place, by " $how ": '" $w.text(sp) "'")
+        }
+    }
+}
+
+# a value holding owners made with no store into their places (a copy, a call's value copied, D9h): those places keep
+fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&) {
+    if not w.Final or w.quiet > 0 { return }
+    for k in w.F.ownerLeaves(ty) {
+        w.F.keep(k, RCopied, w.body().File, sp, $"a value holding it is made with no store into it, by " $how ": '" $w.text(sp) "'")
+    }
+}
+
+# whether a value of type ty is a writable reference
+fn (w mut walker&) writable(ty types.TypeId) Bool {
+    t := w.T()
+    r := t.Repr(ty)
+    return t.KindOf(r) == types.Kind.Ref and (t.PermOf(r) & types.Writable) != 0
+}
+
 # a local given more origins
 fn (w mut walker&) give(l I64, o Vec<I64>&) {
     # another pass is needed only where a local grows after this pass read it
@@ -1192,8 +1289,16 @@ fn (w mut walker&) result(o Vec<I64>&) {
 
 fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     w.targets.Push(p)
+    c0 := callOf(x)
+    outer := w.exemptSite
+    w.exemptSite = I64(c0.Site) if c0 is not null and p != typed.Lvalue.Local else -1
     o := w.expr(x)
+    w.exemptSite = outer
     try w.targets.Pop() catch { }
+    # (a value array stored whole from existing storage is copied there, T7b)
+    if p != typed.Lvalue.Local and w.T().KindOf(w.T().Repr(p.Type())) == types.Kind.Array and copiedStore(x) {
+        w.untracked(p.Type(), sp, "a whole array of them stored")
+    }
     match p {
         case typed.Lvalue.Local(_, _, l) {
             w.give(I64(l), o)
@@ -1204,8 +1309,8 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
         }
         case _ { }
     }
-    w.reach(p)
     k := w.F.placeOfPlace(p)
+    w.inOwner(w.reach(p), k, sp, "a store into it")
     if w.Final { w.orStoreOf(p, x) }
     w.storeWithin = w.withinOf(p)
     # a value of the container's place stays where it was only where it is the container's own value: reached through
@@ -1258,6 +1363,7 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
     b2 := f.calleeBody(c) if c is not null else -1
     if b2 >= 0 and f.Bodies[b2].Root is not null and t.Role(f.Bodies[b2].Ty) == types.RoleCtor and
        t.Results(f.Bodies[b2].Ty).Len() == 1 and t.Same(t.Repr(t.Results(f.Bodies[b2].Ty)[0]), t.Repr(ty)) {
+        if f.viewsOf(b2) != 0 { w.viewCtor(lvs, c!, x, sp) }
         out Vec<I64>
         w.quiet++
         for y in f.resFrom[b2] {
@@ -1282,6 +1388,24 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
         }
     }
     return o
+}
+
+# a constructor handing back views of what it is given, its instance stored into a struct held in place: the copy its
+# caller makes (D9h) is the owner leaves' new value, built where the call's value lands - made for the one owner leaf
+# there is, in a region of its own; with several, one region would hold them all, so none is made for any
+fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp source.Span) {
+    f := w.F
+    if not w.Final or w.quiet > 0 { return }
+    owners Vec<I64>
+    for lf in lvs {
+        if f.IsOwner(lf.PlaceId): owners.Push(lf.PlaceId)
+    }
+    if owners.Len() == 0 { return }
+    one := owners.Len() == 1 and c.Site >= typed.SiteId(0) and f.rootEmitted[w.Id]
+    for k in owners {
+        f.stores.Push(store(k, w.Id, w.body().File, sp, SFresh if one else SFail, -1, I64(c.Site) if one else -1, x, null))
+        if not one: f.keep(k, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given, which holds other owners too: '" $w.text(x.Span()) "'")
+    }
 }
 
 # the local holding the object a place is part of, where every value it holds is an object this body made - -1 for
@@ -1458,6 +1582,16 @@ fn (w mut walker&) eval(sp source.Span, x typed.Expr&) {
 }
 
 # the call an expression is, under a try, null for none
+# whether a value stored whole is existing storage, which a store of a value array copies (T7b)
+fn copiedStore(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Read(_, _, _, _), typed.Expr.Slice(_, _, _): true
+        case typed.Expr.Cond(_, _, k): (k.A is not null and copiedStore(k.A!)) or copiedStore(k.B)
+        case typed.Expr.Away(_, _, y): copiedStore(y)
+        case _: false
+    }
+}
+
 fn callOf(x typed.Expr&) typed.Call?& {
     return match x {
         case typed.Expr.Call(_, _, c): c
@@ -1713,6 +1847,7 @@ fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
             }
             if m.Length is not null { w.expr(m.Length!) }
             if m.Site >= typed.SiteId(0) { addTo(out, orig(ONew, I64(m.Site))) }
+            if m.Kind == typed.MakeKind.Copy or m.Kind == typed.MakeKind.Fill { w.untracked(ty, sp, "a copy of a value holding it") }
             w.makeStores(m, ty, sp)
         }
         case typed.Expr.Collect(_, ty, c) {
@@ -1862,8 +1997,15 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         case _ { }
     }
     args Vec<Vec<I64>>
-    for a in c.Args { args.Push(w.expr(a)) }
+    for a in c.Args {
+        o := w.expr(a)
+        if w.writable(a.Type()) { w.inOwner(o, -1, sp, "a writable reference to it handed to a call") }
+        args.Push(o)
+    }
     if w.holds(ty) and c.Site >= typed.SiteId(0) { addTo(out, orig(ONew, I64(c.Site))) }
+    # (a callee handing back a view its caller copies where it keeps it (D9h) - but the value of a store, whose copy is
+    # made where the place's value is; a callee not known may hand back any copy)
+    if (b2 < 0 or unknown or f.viewsOf(b2) != 0) and I64(c.Site) != w.exemptSite { w.untracked(ty, sp, "a call's value copied") }
     if b2 >= 0 and not unknown {
         if f.isCase(b2) {
             for a in args { addAllTo(out, a) }
@@ -3613,6 +3755,9 @@ fn (f mut Free&) SoleLeaves(ty types.TypeId) Vec<leaf> {
 }
 
 fn (f Free&) IsHandle(k I64) Bool { return k >= 0 and k < f.handle.Len() and f.handle[k] }
+
+# whether a candidate place holds an owner (types.Anchors): its let-go releases the region its anchors name
+fn (f Free&) IsOwner(k I64) Bool { return k >= 0 and k < f.owner.Len() and f.owner[k] }
 
 # the sole place a dropped call's result is a value moved out of - what lowering releases after the statement - -1
 # for none
