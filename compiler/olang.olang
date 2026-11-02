@@ -1055,14 +1055,19 @@ fn (p mut Passes&) Explain(root String&, name String&, cfg mut build.Config&, d 
 
 # ---- tests ----
 
-# the row a command line's mistake is reported as, and whether it was one
-fn mistake(words Array<String&>&) String {
+# words as the command line after "olang"
+fn commandLine(words Array<String&>&) Array<String&> {
     args Vec<String&>
     args.Push("olang")
     for w in words { args.Push($w) }
+    return args.ToArray()
+}
+
+# the row a command line's mistake is reported as, and whether it was one
+fn mistake(words Array<String&>&) String {
     d := diag.Diagnostics(false)
     c := build.Config()
-    cl := try Parse(args.ToArray(), c, d) catch Bad { return d.Render() }
+    cl := try Parse(commandLine(words), c, d) catch Bad { return d.Render() }
     return $"no mistake: " $modeName(cl.Mode)
 }
 
@@ -1141,12 +1146,9 @@ test "the options are recorded wherever they stand, and passed on as written" {
 
 # the row Prepare reports for args, with the target given or native
 fn prepared(words Array<String&>&) String {
-    args Vec<String&>
-    args.Push("olang")
-    for w in words { args.Push($w) }
     d := diag.Diagnostics(false)
     c := build.Config()
-    cl := try Prepare(args.ToArray(), c, d) catch Bad { return d.Render() }
+    cl := try Prepare(commandLine(words), c, d) catch Bad { return d.Render() }
     return $"no mistake: " $modeName(cl.Mode)
 }
 

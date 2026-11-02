@@ -5483,7 +5483,7 @@ fn (m mut Machine&) Why(k mir.FnKey) String, I64, source.Span {
 fn (m mut Machine&) whyStmt(f mir.Fn&, s mir.Stmt) String, source.Span {
     match s {
         case mir.Stmt.Assign(sp, p, rv) {
-            if m.writesGlobal(p) { return $WhyWritesGlobalVar, sp }
+            if placeNamesGlobal(p) { return $WhyWritesGlobalVar, sp }
             if m.readsMutable(f, rv) { return $WhyMutableGlobal, sp }
         }
         case mir.Stmt.RegisterDtor(sp, s2, _, _) {
@@ -5525,13 +5525,6 @@ fn (m mut Machine&) whyCall(target mir.Callee, sp source.Span, seen mut Map<I64,
         case _ { }
     }
     return "", source.Span(0, 0)
-}
-
-fn (m mut Machine&) writesGlobal(p mir.Lvalue) Bool {
-    return match p.B {
-        case mir.Base.Global(_, _, _): true
-        case _: false
-    }
 }
 
 fn (m mut Machine&) readsMutable(f mir.Fn&, rv mir.Rvalue) Bool {

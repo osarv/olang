@@ -1721,8 +1721,8 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
         rt := s.resultTerm(0)
         # an array value returned from a function with no result scope (its type holds no reference) lasts only in the
         # program's scope (T7b, as lower's copy of one is made there)
-        if s.isBlock(rt) and s.arenaValue(loc.Ty) and s.returnsArray() { rt = s.storageTerm() }
-        if rt.Runs() and not s.isBlock(rt) {
+        if isBlockTerm(rt) and s.arenaValue(loc.Ty) and s.returnsArray() { rt = s.storageTerm() }
+        if rt.Runs() and not isBlockTerm(rt) {
             s.flowStart(l, 0)
             s.flCaps = false
             s.flowRun(ss, from)
@@ -2191,7 +2191,7 @@ fn (s mut Scoper&) tiedToBlock(x typed.Expr&) Bool {
                 for i in range c.Args.Len() {
                     k := s.P.T.ShareOf(fty, i)
                     q := k if k >= 0 else i
-                    if v < vars.Len() and vars[v] == q and s.isBlock(s.peekTerm(c.Args[i])) { return true }
+                    if v < vars.Len() and vars[v] == q and isBlockTerm(s.peekTerm(c.Args[i])) { return true }
                 }
             }
             case _ { }
@@ -7548,7 +7548,7 @@ fn (s mut Scoper&) ownIntoResult(hi Term, lo Term) Bool {
         case typed.BodyOf.Ctor(_, _) { return false }
         case _ { }
     }
-    return s.resultVar >= 0 and lo == Term.Var(s.resultVar) and s.isBlock(hi)
+    return s.resultVar >= 0 and lo == Term.Var(s.resultVar) and isBlockTerm(hi)
 }
 
 # whether a relation names the instance of the constructor being judged (C2d)
@@ -8024,9 +8024,9 @@ fn (s mut Scoper&) paramOfTerm(t Term) I64 {
 # local lives
 fn (s mut Scoper&) noteDisagree(rec I64, a typed.Expr&, at Term, b typed.Expr&, bt Term) {
     short, long := b, a
-    if s.isBlock(at) and not s.isBlock(bt) {
+    if isBlockTerm(at) and not isBlockTerm(bt) {
         short, long = a, b
-    } else if not s.isBlock(bt) {
+    } else if not isBlockTerm(bt) {
         return
     }
     w := s.shownLocal(flRootExpr(s.unAway(long)), 0)
@@ -8213,7 +8213,7 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
     }
     if k == Holds and exact and t != slot {
         k = s.order(slot, t)
-        if k == FailsBlock and s.isBlock(slot) {
+        if k == FailsBlock and isBlockTerm(slot) {
             # a reference narrowed into a shorter block (O25)
             s.fitNarrow = true
             s.fitError(x, kind, true)
@@ -8286,13 +8286,6 @@ fn (s mut Scoper&) derivedTerm(t Term) Bool {
     }
 }
 
-fn (s mut Scoper&) isBlock(t Term) Bool {
-    return match t {
-        case Term.Block(_): true
-        case _: false
-    }
-}
-
 fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
     if not s.report { return }
     # O27: a view of storage kept where the storage does not live
@@ -8339,7 +8332,7 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
     # of a known length widened to a run-time one too (T7c)
     match unWidened(s.unAway(x)) {
         case typed.Expr.Slice(sp, _, sl) {
-            if rec >= 0 and throughTemp(sl.Base) { s.note(rec, s.B!.File, s.sliceAt(sp, sl), msgs.NoteSliceOfTemporary()) }
+            if rec >= 0 and tempOf(sl.Base) is not null { s.note(rec, s.B!.File, s.sliceAt(sp, sl), msgs.NoteSliceOfTemporary()) }
         }
         case _ { }
     }
@@ -8380,15 +8373,6 @@ fn unWidened(x typed.Expr&) typed.Expr& {
     return x
 }
 
-fn throughTemp(p typed.Lvalue&) Bool {
-    return match p {
-        case typed.Lvalue.Temp(_, _, _, _): true
-        case typed.Lvalue.Field(_, _, b, _): throughTemp(b)
-        case typed.Lvalue.Elem(_, _, e): throughTemp(e.Base)
-        case typed.Lvalue.Payload(_, _, pl): throughTemp(pl.Base)
-        case _: false
-    }
-}
 
 fn (s mut Scoper&) fitErrorAt(sp source.Span, kind I64, exact Bool) I64 {
     if s.taskTemp and s.fitSlot == s.taskSlot {
@@ -8624,14 +8608,7 @@ fn (s mut Scoper&) partKept(x typed.Expr&, sp source.Span) Bool {
 # whether x reads a part of a local - a field or an element of what it names - rather than the local itself
 fn partRead(x typed.Expr&) Bool {
     return match x {
-        case typed.Expr.Read(_, _, p, _): partPlace(p)
-        case _: false
-    }
-}
-
-fn partPlace(p typed.Lvalue&) Bool {
-    return match p {
-        case typed.Lvalue.Field(_, _, _, _), typed.Lvalue.Elem(_, _, _), typed.Lvalue.Payload(_, _, _): true
+        case typed.Expr.Read(_, _, p, _): partOf(p)
         case _: false
     }
 }
