@@ -741,3 +741,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   (every bench row back to the base or below), folding measured and not built, rungold captured (404 run cases), E10 bug
   fixed (an empty Vec unequal to its copy, evaluator too). Next: the early-freeing round (parts held in place, Map
   growth, x[i] mutating calls through RefMut); then QCI 3/4; then the refactor (Opus), bulk review, final verify.
+- 2026-11-02 CET: early freeing round 8 merged (144f971, fast-forward; verify passed but two hash goldens, recaptured
+  after; fuzz free, dead regions, scopesan clean): owners held in place freed early (server 145 -> 2.3 MB, mapvec 66 ->
+  1.9 MB), a collection's own arrays freed at growth (knucleotide's peak 13.6 -> 9.9 MB), mutating calls through x[i]
+  in place via RefMut; found: no program importing std/os freed anything early (RunOnStack's function value counted as a
+  task everywhere), fuzz free had run nothing since round 4. Next: QCI 3/4 (fn&/fn?&, declared function types, nullable
+  arrays) - two bootstrap stages; then the refactor (Opus), bulk review, final verify.

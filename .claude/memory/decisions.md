@@ -2412,3 +2412,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   instead of 234, `Server` field 0 promoted) is accepted - it is checked by a full reporting judging, and fewer lifts.
   The agent's six details stand; 3 (a call through a function value may refuse where the direct call builds the
   argument longer) and 5 (the reuse comparison ignoring E11c's build-site note) for the bulk review.
+- Early freeing round 8 (wt-free5 144f971) and Part B's plan - its four questions DECIDED by me 2026-11-02 (theirs to
+  review): (1) a nullable function type is a flag on the function type entry, two words, a null code pointer its null;
+  (2) a nullable array's null is a length sentinel `{-1, null}`, all-zero bits staying the empty array (the zero value),
+  `is null` testing the length - no zero value changes; (3) declared function types (`type Handler fn(...)`) come right
+  after `fn&`/`fn?&` in the same batch; (4) in-place calls through `x[i]` keep plain arguments only (no reordering of
+  what the user sees). The agent's six details stand; 1, 2 and 6 for the bulk review.
