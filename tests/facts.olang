@@ -13,6 +13,11 @@ fn Scale(out mut Array<F64>&, a Array<F64>&, k F64) {
 
 fn Bump() { Count++ }
 
+Seen mut Vec<I64> = Vec<I64>()
+
+# a store into a global made by a method it is lent to (bulk review 6 F1: it went unsaid)
+fn Note(x I64) { Seen.Push(x) }
+
 fn Fact(n I64) I64 { return 1 if n < 2 else n * Fact(n - 1) }
 
 fn Shout(t String&) ? io.Error { try io.Println(t) }
@@ -49,6 +54,7 @@ fn (v Vec2) Len2() F64 { return v.X * v.X + v.Y * v.Y }
 assert not Scale.Allocates, "Scale allocates nothing"
 assert Scale.Terminates and not Scale.Blocks and not Scale.CallsC and not Scale.Recursive
 assert Bump.WritesGlobals and not Scale.WritesGlobals
+assert Note.WritesGlobals, "Seen.Push writes the global Seen"
 assert Fact.Recursive and not Fact.Terminates
 assert Shout.CallsC and Shout.Blocks and not Shout.Terminates
 assert Label.Allocates and Label.Terminates
@@ -90,6 +96,8 @@ test "facts are constants the running program reads too" {
     Scale(out, F64[1.0, 2.0], 2.0)
     assert out[1] == 4.0 and Fact(5) == 120 and Settle(9) == 1 and Label(3) == "#3"
     Bump()
+    Note(7)
+    assert Seen.Len() == 1 and Seen[0] == 7
     assert Count == 1 and Gather(3) == 0 and Twice(fn(x I64) I64: return x + 1, 1) == 3 and first(1, 2) == 1
     assert (Vec2(1.0, 2.0) * 2.0).Len2() == 20.0 and (2.0 * Vec2(1.0, 0.0)).X == 2.0
 }

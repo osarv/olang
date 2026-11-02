@@ -245,6 +245,10 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # attempt before found them - kept from one attempt to the next, as errPresets is
     factReads Vec<factRead>
     factPresets Map<String&, Bool>
+    # E31b: the calls made in place through x[i] (inPlaceCall), as each attempt made them, and the sites found, after an
+    # attempt, to reach what could change the collection - kept from one attempt to the next, as factPresets is
+    inPlaceReads Vec<inPlaceRead>
+    inPlaceRefused Map<String&, Bool>
     Attempts I64 = 0
     viewsGrew Bool = false  # D9h: a body's views grew - settleAllViews goes round again (growViews)
     viewHeld Map<I64, I64>  # D9h: the locals of the body being settled holding views of its arguments (settleViews)
@@ -460,6 +464,15 @@ type factRead struct(Inst I64, Fact String&, Value Bool, File I64, Sp source.Spa
     Text
 }
 
+# E31b: a call made in place through x[i] - where (its file and offset), and the bodies it runs before its write lands:
+# the method's and those of the constructors its arguments call
+type inPlaceRead struct(Key String&, Bodies Vec<I64>, File I64, Sp source.Span) {
+    Key
+    Bodies
+    File
+    Sp
+}
+
 # S3: a call standing as a statement whose value is dropped, judged once every body is checked (settleIdle): its body,
 # where it is and as it is written, the call checked
 type idleCall struct(Body I64, File I64, Sp source.Span, Text String&, X typed.Expr&) {
@@ -583,8 +596,12 @@ fn (c mut Checker&) CheckProgram() {
         }
         # G42: a fact read as other than the bodies found it means checking again, reading what they found
         moved := c.settleFacts()
+        # E31b: a call made in place found to reach what could change its collection means checking again, the copy's
+        inPlaceMoved := c.settleInPlace()
+        moved = moved or inPlaceMoved
         if (not grew and not moved) or c.Attempts >= 20 {
             if moved { c.factsUndecided() }
+            if inPlaceMoved { c.inPlaceUndecided() }
             c.settleFixed()
             c.orderGlobals()
             c.settleAllViews()
@@ -650,6 +667,7 @@ fn (c mut Checker&) reset() {
     c.inferredErrs = Map<I64, types.ListId>()
     c.errReads = Vec<pair.Pair<I64, I64>>()
     c.factReads = Vec<factRead>()
+    c.inPlaceReads = Vec<inPlaceRead>()
     c.unsettled = Map<I64, Bool>()
     c.found = Map<pair.Pair<I64, I64>, types.ListId>()
     c.boundsMet = Map<types.TypeId, Bool>()
@@ -12244,14 +12262,78 @@ fn (c mut Checker&) inPlaceCall(sp source.Span, call typed.Expr&) typed.Expr& {
     if c.spawning > 0 or cl is null or cl.Args.Len() == 0: return call
     tv := c.atTemp(cl.Args[0])
     if tv is null: return call
+    # an element reaching a writable reference, a function value or an any: through it the method could change the
+    # collection (a closure over it, a reference to it)
+    if c.P.T.ReachesWrite(c.deref(typeOf(tv))): return call
     for j in range 1, cl.Args.Len() {
         if not c.plainArg(cl.Args[j]): return call
     }
+    key := $c.fr().File ":" $sp.Start
+    if c.inPlaceRefused.Has(key): return call
+    bodies := c.inPlaceBodies(cl)
+    if bodies.Len() == 0: return call
     ref := c.inPlaceRef(sp, tv)
     if ref is null: return call
+    c.inPlaceReads.Push(inPlaceRead(key, bodies, c.fr().File, sp))
     args mut Array<typed.Expr&>& = Array<typed.Expr&>(cl.Args.Len(), ref)
     for j in range 1, cl.Args.Len() { args[j] = cl.Args[j] }
     return typed.Expr.Call(call.Span(), typeOf(call), typed.Call(cl.Target, args, cl.Site, cl.Zero, cl.Tail))
+}
+
+# the bodies a call made in place runs before its write lands: the method's, then those of the constructors its other
+# arguments call (plainArg's) - none where the method is no body of the program's
+fn (c mut Checker&) inPlaceBodies(cl typed.Call&) Vec<I64> {
+    out Vec<I64>
+    match cl.Target {
+        case typed.Callee.Body(id): out.Push(I64(id))
+        case _: return out
+    }
+    for j in range 1, cl.Args.Len() { c.ctorBodies(cl.Args[j], out) }
+    return out
+}
+
+fn (c mut Checker&) ctorBodies(x typed.Expr&, into mut Vec<I64>&) {
+    match x {
+        case typed.Expr.Prim(_, _, _, _, args) { for a in args: c.ctorBodies(a, into) }
+        case typed.Expr.Call(_, _, k) {
+            match k.Target {
+                case typed.Callee.Body(id): into.Push(I64(id))
+                case _ { }
+            }
+            for a in k.Args: c.ctorBodies(a, into)
+        }
+        case typed.Expr.Away(_, _, y) { c.ctorBodies(y, into) }
+        case _ { }
+    }
+}
+
+# E31b, once an attempt has checked every body: a call made in place whose method, or a constructor an argument calls,
+# may write a global, call through a function value or an any, or reach a body that did not check - any of which could
+# grow or replace the collection, leaving the element's reference naming storage it no longer uses - is refused the
+# in-place form, so the program is checked again with the copy's (and its error). Whether any was
+fn (c mut Checker&) settleInPlace() Bool {
+    if c.inPlaceReads.Len() == 0 or c.P.L.Diags.Errors() > 0: return false
+    c.fx = null    # this attempt's bodies, every one of them
+    moved := false
+    for r in c.inPlaceReads {
+        if c.inPlaceRefused.Has(r.Key): continue
+        for b in r.Bodies {
+            f := c.Effects().Of(b)
+            if not (f.WritesGlobals or f.Unknown or f.Unchecked): continue
+            c.inPlaceRefused.Put(r.Key, true)
+            moved = true
+            break
+        }
+    }
+    return moved
+}
+
+# E31b: calls made in place still found unsafe after the last attempt - left to no wrong answer, a gap that stops the
+# build
+fn (c mut Checker&) inPlaceUndecided() {
+    for r in c.inPlaceReads {
+        if c.inPlaceRefused.Has(r.Key): c.Gaps.Push(Gap(r.File, r.Sp, "a call through x[i] made in place whose callee may change the collection (E31b)"))
+    }
 }
 
 # the At call whose value a writable borrow lends - a temporary's storage, or one made for it (E12) - null for any other

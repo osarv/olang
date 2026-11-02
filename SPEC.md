@@ -3962,7 +3962,12 @@ declares `RefMut` (as a store needs) and is reached writably - a writable place,
 other argument of the call is a **plain value**: a literal, constant data, a read of a local, a global or a field of
 them (an element of an array indexed by such), an operation over plain values, a constructor called on plain values -
 none of them holding a writable reference, a function value or an `any` (through which the callee could reach the
-collection: `l[0].Mark(l)` lends `l` itself).
+collection: `l[0].Mark(l)` lends `l` itself) - and where nothing the call runs before its write lands could change the
+collection either: the element's type reaches no writable reference, function value or `any` (a closure the element
+holds over its own collection), and neither the method's body nor that of a constructor an argument calls - with
+everything each may call - writes a global (or what a global refers to), calls through a function value or an `any`, or
+reaches a body that did not check. Judged once every body is checked (B1.1's effect summaries); where it does not hold,
+the call is the copy's, and the error below.
 The receiver is then `x.RefMut(i)`, taken before the arguments are evaluated, which nothing they do can change:
 `v[i].Push(x)`, `accs[i % 3].Add(2 * n)`, `grid[0][0].Push(4)`, `rows[k].Truncate(0)`. Not in a spawned call (a task
 holding the element's reference while the collection could grow under it), not for an argument read through `x[i]` (a
@@ -8689,7 +8694,7 @@ body it may call:
 |---|---|
 | `Allocates` | ask the runtime for storage in any scope, its frame's included: a text, an array, a comprehension, a temporary given storage, a lambda's environment (a value in place, a fixed array in place does not count) |
 | `Blocks` | wait: a join, a lock, a channel, a sleep, a C function not known to return at once |
-| `WritesGlobals` | store into a global's own storage |
+| `WritesGlobals` | store into a global's storage, or through a reference a global holds - itself, or by a callee lent it (`G.Push(x)`) |
 | `CallsC` | call an extern or a C import's function, C's math functions (X8) and the runtime's own aside |
 | `Spawns` | start a task |
 | `Recursive` | call itself, directly or through others |

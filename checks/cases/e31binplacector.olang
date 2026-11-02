@@ -1,0 +1,23 @@
+# check: fail error[E31b]: x[i] gives a copy of the element
+# E31b (bulk review 6 F1): the call through x[i] is not made in place through RefMut where what it runs before its
+# write lands - the method, a constructor an argument calls - may change the collection (here: a constructor its argument calls grows it through a global) - the copy's error
+import "std/io"
+
+type blk struct(n I64) { n }
+
+G mut Vec<blk> = Vec<blk>()
+
+fn grow(x I64) I64 {
+    for i in range 1000 { G.Push(blk(i)) }
+    return x
+}
+
+type w struct(x I64) { y := grow(x) }
+
+fn (b mut blk&) Set(a w) { b.n = a.y }
+
+fn main() {
+    G.Push(blk(1))
+    G[0].Set(w(42))
+    io.Println("G[0].n = " $G[0].n " len " $G.Len())!
+}

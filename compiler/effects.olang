@@ -273,7 +273,15 @@ fn (e mut Effects&) settle(comp Vec<I64>&) {
             for l in e.links[b] {
                 if l.Callee < 0 or l.Callee >= e.Bodies.Len() or e.state[l.Callee] < 1 { continue }
                 if inComp.Has(l.Callee) or e.state[l.Callee] == 2 {
-                    if not hasBit(e.whole[l.Callee].Writes, l.At) or hasBit(e.whole[b].Writes, l.Param) { continue }
+                    if not hasBit(e.whole[l.Callee].Writes, l.At) { continue }
+                    if l.Param == globalParam {
+                        # a callee writing through what a global's storage lends it: a store into the global (G.Push(x))
+                        if e.whole[b].WritesGlobals { continue }
+                        for w in comp: e.whole[w].WritesGlobals = true
+                        changed = true
+                        continue
+                    }
+                    if hasBit(e.whole[b].Writes, l.Param) { continue }
                     e.whole[b].Writes = e.whole[b].Writes | paramBit(l.Param)
                     changed = true
                 }
@@ -282,6 +290,9 @@ fn (e mut Effects&) settle(comp Vec<I64>&) {
     }
     for b in comp { e.state[b] = 2 }
 }
+
+# a link's Param where the argument lends a global's storage, or what a global refers to
+globalParam I64 = -2
 
 # parameter k's bit of a Writes set: none past the 63rd, said of no parameter
 fn paramBit(k I64) I64 { return (1 << k) if k >= 0 and k < 63 else 0 }
@@ -516,6 +527,7 @@ fn (e mut Effects&) call(cl typed.Call&) {
             for j in range cl.Args.Len() {
                 k := e.argParam(cl.Args[j])
                 if k >= 0 { e.curLinks.Push(link(I64(id), j, k)) }
+                if e.argGlobal(cl.Args[j]) { e.curLinks.Push(link(I64(id), j, globalParam)) }
             }
         }
         case typed.Callee.Extern(f) { e.extern(f) }
@@ -553,9 +565,9 @@ fn (e mut Effects&) placeParts(p typed.Lvalue&) {
     }
 }
 
-# a store into a place: a global's, or through a reference a parameter reaches
+# a store into a place: a global's, through a reference a global holds, or through a reference a parameter reaches
 fn (e mut Effects&) store(p typed.Lvalue&) {
-    if e.globalRoot(p) {
+    if e.globalReached(p) {
         e.cur.WritesGlobals = true
         return
     }
@@ -597,14 +609,25 @@ fn (e mut Effects&) through(local I64) {
     e.cur.Writes = e.cur.Writes | paramBit(k) | (try e.derived.Get(local) catch default 0)
 }
 
-# whether a place is part of a global's own storage: the global, its fields and elements, none of it through a reference
-fn (e mut Effects&) globalRoot(p typed.Lvalue&) Bool {
-    match p {
-        case typed.Lvalue.Global(_, _, _, _) { return true }
-        case typed.Lvalue.Field(_, _, base, _) { return e.globalRoot(base) }
-        case typed.Lvalue.Elem(_, _, el) { return not e.P.T.IsRef(el.Base.Type()) and e.globalRoot(el.Base) }
-        case typed.Lvalue.Payload(_, _, pl) { return e.globalRoot(pl.Base) }
-        case _ { return false }
+# whether a place is a global's storage or reached through a reference a global holds
+fn (e mut Effects&) globalReached(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Global(_, _, _, _): true
+        case typed.Lvalue.Field(_, _, base, _): e.globalReached(base)
+        case typed.Lvalue.Elem(_, _, el): e.globalReached(el.Base)
+        case typed.Lvalue.Payload(_, _, pl): e.globalReached(pl.Base)
+        case typed.Lvalue.Deref(_, _, r): e.argGlobal(r)
+        case _: false
+    }
+}
+
+# whether an argument lends what a global's storage holds: a borrow of it, or a read of a reference held there
+fn (e mut Effects&) argGlobal(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Borrow(_, _, p): e.globalReached(p)
+        case typed.Expr.Read(_, ty, p, _): (e.P.T.HoldsRefs(ty) or e.P.T.IsRef(ty)) and e.globalReached(p)
+        case typed.Expr.Away(_, _, y): e.argGlobal(y)
+        case _: false
     }
 }
 

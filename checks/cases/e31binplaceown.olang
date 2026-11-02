@@ -1,0 +1,18 @@
+# check: run
+# E31b (bulk review 6 F1): a method growing a Vec the element holds itself - no global, no function value, no any - is
+# still made in place through RefMut: the element's own storage is no part of the collection's
+type blk struct(n I64, xs Vec<I64>) { n, xs }
+
+fn (b mut blk&) Add(k I64) {
+    for i in range k { b.xs.Push(i) }
+    b.n = b.xs.Len()
+}
+
+fn main() {
+    v := Vec<blk>()
+    for _ in range 3 { v.Push(blk(0, Vec<I64>())) }
+    v[1].Add(1000)
+    v[2].Add(5)
+    assert v[0].n == 0 and v[1].n == 1000 and v[2].n == 5
+    assert v[1].xs.Len() == 1000 and v[1].xs[999] == 999
+}
