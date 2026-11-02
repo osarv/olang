@@ -728,3 +728,10 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   for in place, D9a/D9c lifted, Vec<String>.Join; seven bugs fixed on the way. Bench within 0.01% but knucleotide +3.4%
   instructions / +4 MB peak, vecopaque -7.7%; the self-build peak 2.02 -> 2.28 GB. Next: round 4 (the flip); then an
   early-freeing round (parts held in place, Map growth, x[i] mutating calls through RefMut); then QCI 3/4.
+- 2026-11-02 CET: rework round 4 merged (bc0737c, fast-forward; full verify passed on 622583f, docs only after;
+  scopesan, scopefuzz clean; seed regenerated, bootstrap a fixed point): scopes inferred the only path, every scope
+  spelling gone from the grammar (tools/scopes_migrate.olang, last text tool in olang fix; 287 files), 115 checks cases
+  now run cases, explain/doc/hover print `# scopes:`; a permission hole fixed (a read-only List<List<I64>> cloned to
+  writable inner lists). Costs: scope phase 0.98 -> 3.39 s on compiler/, peak 2.28 -> 2.49 GB, vec gather +6.6%,
+  dispatch +0.7-1.3%. Next: round 4b (open point 5, scope phase speed, gather, folding, rungold); then the early-freeing
+  round; then QCI 3/4; then the refactor (Opus), bulk review, final verify.

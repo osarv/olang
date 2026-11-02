@@ -2398,3 +2398,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   5 (the section-8 relaxations owns, viewed, ownCall, splitHeld) and 10 (a stale `Ref` after growth caught only by
   -sanitize and the evaluator) for the bulk review. handles_migrate stays out of `olang fix` (not idempotent, as
   io_print), kept for oann's catch-up.
+- Rework round 4 (the flip, bc0737c) - its two questions DECIDED by me 2026-11-02 (theirs to review): (1) a reference
+  result is as writable as its signature writes (`mut T&` where the caller may write it) - T25b's rule, permission part
+  of the type, with no special case for "built" results; a constructor's result stays writable; (2) open point 5 (a
+  function type's `T&` result read as borrowed from its `&` parameters - the user approved it as my call 2 on
+  2026-11-01) is built next, in round 4b, with the scope phase's compile time (3.4 s against the base's 0.98 s on
+  compiler/ - must come down: the user's compile-speed priority), the vec gather +6.6%, small-block folding and the
+  115 new run cases' stored outputs (rungold). The agent's four details stand; 3 (`&` followed by an operand on its
+  line is the bitwise operator) for the bulk review.
