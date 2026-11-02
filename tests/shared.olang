@@ -9032,7 +9032,7 @@ test "O4a: &x naming a block-scoped local builds there, from an inner block" {
     assert outer.next!.next!.v == 8
 }
 
-test "E25: f&x() builds the result where x lives" {
+test "E25 (inferred, QCB): a call's result built where what it is kept in lives" {
     outer := OxN(1, null)
     for _ in range 1 {
         x := oxMk(4)
@@ -9164,7 +9164,7 @@ fn (l OxN&) oSecond() OxN& {
     return c
 }
 
-test "O26/O25a: &return as a scope argument, := adopting it, and a typed local naming its scope" {
+test "O26/O25a (inferred, QCB): a result built where the result goes, := adopting it, a typed local holding it" {
     out := OxN(0, null)
     for _ in range 1 { out.next = oChainRet(5) }
     assert oxChurn() > 0
