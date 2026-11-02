@@ -4,9 +4,9 @@
 #   - where the compiler says null reaches a reference that is never null - "x N& = null", a constructor or a call given
 #     null, "return null", a declaration with no value, a "p is null" that could never be true - its note points at the
 #     "&" of the type where it is written, and a "?" is put before it ("N?&");
-#   - an array is never null - its zero value is the empty array: a "?&" on one becomes "&", a null it is given its
-#     empty array ("Array<I64>(0)", "\"\""), "x is null" "x.Len() == 0", and a "!" with nothing to unwrap comes
-#     off - before anything else;
+#   - an array written "&" is never null - its zero value is the empty array: a null it is given becomes its empty
+#     array ("Array<I64>(0)", "\"\""), "x is null" "x.Len() == 0", and a "!" with nothing to unwrap comes off - before
+#     anything else (an array that may be null is written "?&", QCI 4: a person says which);
 #   - only in a round with nothing of those kinds left: where a reference that may be null is read through, or given where
 #     one that never is null is wanted, a "!" is put after it ("p!.next"), ending the program there on a null, where the
 #     program used to trap at the read. Reads a test already guards need nothing (S8e).
@@ -85,8 +85,8 @@ fn diagsFrom(output String&, allowed Vec<String&>&, edits mut Vec<diagedit.Reque
                 answered = true
                 continue
             }
-            if rule.Contains("T2c") and msg.StartsWith("an array is never null") {
-                kind := "dropq" if msg.Contains("not '?&'") else "empty" if msg.Contains(", or no value") else "isempty"
+            if rule.Contains("T2c") and msg.StartsWith("an array written '&' is never null") {
+                kind := "empty" if msg.Contains("for an empty") else "isempty"
                 if diagedit.Allowed(full, allowed) { edits.Push(diagedit.Request($full, line, col, kind, written(msg), $row)) }
                 answered = true
                 continue
@@ -146,14 +146,10 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
             at := r.Col - 1
             if at < 0 or at >= text.Len() or mask[at] != 'c' { continue }
             replaced := ""
-            if kind == "dropq" or kind == "empty" or kind == "isempty" or kind == "dropbang" {
+            if kind == "empty" or kind == "isempty" or kind == "dropbang" {
                 delta := I64(0)
                 if kind == "dropbang" {
                     if text[at] != '!' { continue }
-                    replaced = $text[:at] $text[at + 1:]
-                    delta = -1
-                } else if kind == "dropq" {
-                    if text[at] != '?' { continue }
                     replaced = $text[:at] $text[at + 1:]
                     delta = -1
                 } else if kind == "empty" {
@@ -291,7 +287,7 @@ fn main() ? {
         requests Vec<diagedit.Request>
         unanswered = Vec<diagedit.Request>()
         for o in outputs { diagsFrom(o, allowed, requests, unanswered) }
-        arrays := apply(requests, "dropq") + apply(requests, "empty") + apply(requests, "isempty") + apply(requests, "dropbang")
+        arrays := apply(requests, "empty") + apply(requests, "isempty") + apply(requests, "dropbang")
         nullable := apply(requests, "nullable") if arrays == 0 else 0
         bangs I64 = 0
         if nullable == 0 and arrays == 0 { bangs = apply(requests, "bang") }

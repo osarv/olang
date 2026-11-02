@@ -61,7 +61,8 @@ type Kind enum {
     Array       # A its element; B its length - a Const, or a constant pattern - or 0 for a length known at run time (T7)
     Ref         # A what it refers to, B its permission (Perm): T24, T25b, T25e
     Func        # A its parameters (a ListId), B its result (Void for none, a Tuple for several, D8c), C its errors, D its
-                # scopes (a ScopesId), E its parameters' names where it is written (rendering only: E11a, Unnamed)
+                # scopes (a ScopesId), E its parameters' names where it is written (rendering only: E11a, Unnamed), F
+                # Nullable where it may be null ("fn?&(...)", T21) - a function value is never null otherwise
     Tuple       # several results (D8c): A its elements
     Record      # an anonymous struct - an enum case's payload: A its fields
     AnonEnum    # an anonymous enum (T27): A its shape (cases and payloads)
@@ -93,13 +94,14 @@ Nullable I64 = 4    # "?&": a reference that may be null (T2c) - none is unless 
 Spread I64 = 8      # "xs ...T": a variadic parameter's read-only array, as its function's signature holds it (D8g)
 
 # a type's key: its kind and operands - what it is, and so what it is interned by
-type data struct(K Kind, A I64, B I64, C I64, D I64 = 0, E I64 = 0) {
+type data struct(K Kind, A I64, B I64, C I64, D I64 = 0, E I64 = 0, F I64 = 0) {
     K
     A
     B
     C
     D
     E
+    F
 }
 
 # a function type's scopes, interned: 0 the scopes of a function type no marker of which names anything - each parameter
@@ -351,16 +353,30 @@ fn (t mut Table&) Ref(of TypeId, perm I64) TypeId {
     return id
 }
 
-# a function type: its parameters, its result (Void for none, a Tuple for several), its errors, in order (T22), and its
-# scopes - what its markers say, which T22's identity leaves out (Plain)
-fn (t mut Table&) Func(params ListId, result TypeId, errors ListId, scopes ScopesId = ScopesId(0), names I64 = 0) TypeId {
+# a function type: its parameters, its result (Void for none, a Tuple for several), its errors, in order (T22), its
+# scopes - what its markers say, which T22's identity leaves out (Plain) - and whether it may be null ("fn?&", T21),
+# which is part of its identity as "?&" is a reference's (T2c)
+fn (t mut Table&) Func(params ListId, result TypeId, errors ListId, scopes ScopesId = ScopesId(0), names I64 = 0
+                       nullable Bool = false) TypeId {
     d := t.deepest(params)
     if t.depthOf(result) > d { d = t.depthOf(result) }
-    id := t.intern(data(Kind.Func, I64(params), I64(result), I64(errors), I64(scopes), names), d + 1)
+    fl := Nullable if nullable else 0
+    id := t.intern(data(Kind.Func, I64(params), I64(result), I64(errors), I64(scopes), names, fl), d + 1)
     pp := t.PlainList(params)
     pr := t.Plain(result)
-    if scopes != ScopesId(0) or names != 0 or pp != params or pr != result { t.plains[I64(id)] = t.Func(pp, pr, errors) }
+    if scopes != ScopesId(0) or names != 0 or pp != params or pr != result {
+        t.plains[I64(id)] = t.Func(pp, pr, errors, nullable = nullable)
+    }
     return id
+}
+
+# whether a function type may be null ("fn?&(...)", T21)
+fn (t Table&) FuncNullable(f TypeId) Bool { return t.KindOf(f) == Kind.Func and (t.at(f).F & Nullable) != 0 }
+
+# a function type with other parts, as nullable as f is: what every rebuilding of a value's function type keeps
+fn (t mut Table&) Refunc(f TypeId, params ListId, result TypeId, errors ListId, scopes ScopesId = ScopesId(0)
+                         names I64 = 0) TypeId {
+    return t.Func(params, result, errors, scopes, names, t.FuncNullable(f))
 }
 
 # a written function type's parameter names, interned (0 for none: a type no source wrote, or one with no parameters)
@@ -385,7 +401,7 @@ fn (t Table&) NamesOf(f TypeId) Array<I64>& { return t.nameLists[t.at(f).E] if t
 # the same function type carrying names - the names a declaration, a lambda or a written type gives its parameters
 fn (t mut Table&) WithNames(f TypeId, names I64) TypeId {
     if t.KindOf(f) != Kind.Func { return f }
-    return t.Func(t.Params(f), t.Result(f), t.Errors(f), t.ScopesOf(f), names)
+    return t.Refunc(f, t.Params(f), t.Result(f), t.Errors(f), t.ScopesOf(f), names)
 }
 
 # a type with its function types' parameter names left out, scopes kept: what tells instances apart (G16a), where the
@@ -393,7 +409,7 @@ fn (t mut Table&) WithNames(f TypeId, names I64) TypeId {
 fn (t mut Table&) Unnamed(id TypeId) TypeId {
     k := t.KindOf(id)
     if k == Kind.Func {
-        return t.Func(t.unnamedList(t.Params(id)), t.Unnamed(t.Result(id)), t.Errors(id), t.ScopesOf(id))
+        return t.Refunc(id, t.unnamedList(t.Params(id)), t.Unnamed(t.Result(id)), t.Errors(id), t.ScopesOf(id))
     }
     if k == Kind.Ref { return t.Ref(t.Unnamed(t.Referent(id)), t.PermOf(id)) }
     if k == Kind.Array { return t.Array(t.Unnamed(t.Elem(id)), t.Length(id)) }
@@ -548,14 +564,22 @@ fn (t Table&) AnyTrait(id TypeId) TypeId {
     return TypeId(I32(t.A(x))) if t.KindOf(x) == Kind.Any else UnknownT
 }
 
-# T2c: a reference that may be null ("?&"), and the same reference known not to be, or allowed to be
-fn (t Table&) IsNullable(id TypeId) Bool { return t.KindOf(id) == Kind.Ref and (t.PermOf(id) & Nullable) != 0 }
+# T2c: a reference that may be null ("?&"), a function value that may be ("fn?&", T21), and the same known not to be,
+# or allowed to be
+fn (t Table&) IsNullable(id TypeId) Bool {
+    return t.KindOf(id) == Kind.Ref and (t.PermOf(id) & Nullable) != 0 or t.FuncNullable(id)
+}
 fn (t mut Table&) NonNull(id TypeId) TypeId {
     if not t.IsNullable(id) { return id }
+    if t.KindOf(id) == Kind.Func { return t.Func(t.Params(id), t.Result(id), t.Errors(id), t.ScopesOf(id), t.NamesIdOf(id)) }
     return t.Ref(t.Referent(id), t.PermOf(id) & ~Nullable)
 }
 fn (t mut Table&) OrNull(id TypeId) TypeId {
-    if t.KindOf(id) != Kind.Ref or t.IsNullable(id) or t.ArrayRef(id) { return id }
+    if t.IsNullable(id) { return id }
+    if t.KindOf(id) == Kind.Func {
+        return t.Func(t.Params(id), t.Result(id), t.Errors(id), t.ScopesOf(id), t.NamesIdOf(id), true)
+    }
+    if t.KindOf(id) != Kind.Ref { return id }
     return t.Ref(t.Referent(id), t.PermOf(id) | Nullable)
 }
 # D8g: a variadic parameter's type ("xs ...T"), the same read-only array reference as its body holds it, and which of a
@@ -573,7 +597,7 @@ fn (t Table&) SpreadAt(f TypeId) I64 {
     }
     return -1
 }
-# whether a reference names an array - never null: its zero value is the empty array (T2c)
+# whether a reference names an array - its zero value the empty array, whether or not it may be null (T2c)
 fn (t Table&) ArrayRef(id TypeId) Bool { return t.KindOf(id) == Kind.Ref and t.KindOf(t.Repr(t.Referent(id))) == Kind.Array }
 fn (t Table&) IsNumber(id TypeId) Bool { return id >= TypeId(3) and id <= TypeId(14) or t.KindOf(id) == Kind.Int }
 fn (t Table&) IsInt(id TypeId) Bool { return id >= TypeId(3) and id <= TypeId(10) or t.KindOf(id) == Kind.Int }
@@ -1458,7 +1482,7 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
             b.Push("?&" if (p & Nullable) != 0 else "&")
         }
         case Kind.Func {
-            b.Push("fn(")
+            b.Push("fn?(" if (d.F & Nullable) != 0 else "fn(")
             t.joined(b, t.Params(id))
             b.PushChar(')')
             r := t.Result(id)

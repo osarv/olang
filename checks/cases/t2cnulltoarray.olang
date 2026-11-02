@@ -1,4 +1,4 @@
-# check: fail error[T2c]: an array is never null - its zero value is the empty array: write '""', or no value, for an empty String
+# check: fail error[T2c]: an array written '&' is never null - write '""' for an empty String, or '?&' where it may be null
 # T2a, T2c: null given for an array is an error naming its empty array
 fn main() {
     s String& = null

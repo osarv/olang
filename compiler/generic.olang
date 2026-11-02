@@ -821,24 +821,12 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
     }
 }
 
-# a reference to r, "?&" where it may be null (T2c) - but an array, which is never null: its zero value is the empty
-# array, so "?&" on one is said once and read as "&" (a type declared over another asked for its body first: a signature
-# may be signed before anything else has)
+# a reference to r, "?&" where it may be null (T2c) - an array's too, its null no array at all where its zero value is
+# the empty one (QCI 4)
 fn (p mut Program&) refType(c Context&, sp source.Span, r types.TypeId, nullable Bool) types.TypeId {
-    # T21: a function type is held only by reference, its marker on the "fn" - the function value itself
-    if p.T.KindOf(r) == types.Kind.Func { return r }
-    if nullable { p.overBodies(r) }
-    if nullable and p.T.KindOf(p.T.Repr(r)) == types.Kind.Array {
-        key := pair.Pair(c.Mi, I64(sp.Start))
-        if not (try p.r1bSaid.Get(key) catch default false) {
-            p.r1bSaid.Put(key, true)
-            text := p.L.Mods[c.Mi].Src!.Text
-            q := I64(sp.End) - 1
-            for q > I64(sp.Start) and not (text[q] == '?' and text[q + 1] == '&') { q-- }
-            p.L.Diags.Error(p.at(c.Mi, source.Span(I32(q), I32(q + 1))), msgs.ArrayNullable())
-        }
-        return p.T.Ref(r, types.ReadOnly)
-    }
+    # T21: a function type is held only by reference, its marker on the "fn" - the function value itself, "?&" one that
+    # may be null
+    if p.T.KindOf(r) == types.Kind.Func { return p.T.OrNull(r) if nullable else r }
     return p.T.Ref(r, types.Nullable if nullable else types.ReadOnly)
 }
 
@@ -1070,7 +1058,7 @@ fn (p mut Program&) funcType(c Context&, sp source.Span, s ast.Sig&) types.TypeI
             p.r1bSaid.Put(key, true)
             p.L.Diags.Error(p.at(c.Mi, source.Span(sp.Start, sp.Start + 2)), msgs.FuncTypeErrsUnwritten())
         }
-        f = p.T.Func(p.T.Params(f), p.T.Result(f), types.ListId(0), p.T.ScopesOf(f))
+        f = p.T.Refunc(f, p.T.Params(f), p.T.Result(f), types.ListId(0), p.T.ScopesOf(f))
     }
     return p.T.WithNames(f, p.SigNames(s))
 }
@@ -1994,8 +1982,8 @@ fn (p mut Program&) Subst(t types.TypeId, owner I64, args types.ListId) types.Ty
         case types.Kind.Array { return p.T.Array(p.Subst(p.T.Elem(t), owner, args), p.Subst(p.T.Length(t), owner, args)) }
         case types.Kind.Ref { return p.T.Ref(p.Subst(p.T.Referent(t), owner, args), p.T.PermOf(t)) }
         case types.Kind.Func {
-            return p.T.Func(p.substList(p.T.Params(t), owner, args), p.Subst(p.T.Result(t), owner, args)
-                            p.substErrs(p.T.Errors(t), owner, args), p.T.ScopesOf(t), p.T.NamesIdOf(t))
+            return p.T.Refunc(t, p.substList(p.T.Params(t), owner, args), p.Subst(p.T.Result(t), owner, args)
+                              p.substErrs(p.T.Errors(t), owner, args), p.T.ScopesOf(t), p.T.NamesIdOf(t))
         }
         case types.Kind.ErrSet { return p.ErrSetOf(p.substErrs(p.T.ErrSetItems(t), owner, args)) }
         case types.Kind.Tuple { return p.T.Tuple(p.substList(p.T.Parts(t), owner, args)) }
@@ -4347,7 +4335,7 @@ fn (p mut Program&) reflName(b mut StringBuilder&, t types.TypeId) {
             b.Push("?&" if (pm & types.Nullable) != 0 else "&")
         }
         case types.Kind.Func {
-            b.Push("fn(")
+            b.Push("fn?&(" if p.T.FuncNullable(t) else "fn&(")
             ps := p.T.Items(p.T.Params(t))
             for i in range ps.Len() {
                 if i > 0 { b.Push(", ") }
@@ -4725,7 +4713,8 @@ fn (p mut Program&) canonType(c mut cursor&) types.TypeId ? BadCanon, Undeclared
 }
 
 fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? BadCanon, Undeclared {
-    if c.eat("fn(") { return try p.canonFunc(c) }
+    if c.eat("fn(") { return try p.canonFunc(c, false) }
+    if c.eat("fn?(") { return try p.canonFunc(c, true) }
     if c.eat("struct(") { return p.T.Record(try p.canonList(c, ")")) }
     if c.eat("enum{") { return try p.canonEnum(c) }
     if c.eat("(") { return p.T.Tuple(try p.canonList(c, ")")) }
@@ -4789,7 +4778,7 @@ fn (p mut Program&) canonList(c mut cursor&, close String&) types.ListId ? {
     return p.T.List(xs.ToArray())
 }
 
-fn (p mut Program&) canonFunc(c mut cursor&) types.TypeId ? {
+fn (p mut Program&) canonFunc(c mut cursor&, nullable Bool) types.TypeId ? {
     params := try p.canonList(c, ")")
     result := types.VoidT
     if c.eat(" (") {
@@ -4828,7 +4817,7 @@ fn (p mut Program&) canonFunc(c mut cursor&) types.TypeId ? {
         all := xs.ToArray()
         scopes = p.T.Scopes(all[0], all[2:2 + n], all[2 + n:])
     }
-    return p.T.Func(params, result, p.T.List(es.ToArray()), scopes)
+    return p.T.Func(params, result, p.T.List(es.ToArray()), scopes, nullable = nullable)
 }
 
 fn (p mut Program&) canonEnum(c mut cursor&) types.TypeId ? {

@@ -3279,6 +3279,8 @@ fn (e mut Emitter&) constText(ty types.TypeId, bits I64) String {
     s := e.ty(ty)
     if s == "ptr" { return "null" if bits == 0 else "inttoptr (i64 " $bits " to ptr)" }
     if s.StartsWith("i") { return $bits }
+    # T2c: a null array - its length -1, no storage - where the empty array is all zero bits
+    if s == "{ i64, ptr }" and bits != 0 { return "{ i64 " $bits ", ptr null }" }
     return "zeroinitializer"
 }
 

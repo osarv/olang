@@ -737,7 +737,7 @@ fn (c mut Checker&) settleUnset() {
         d.Drop(u.Group)
         name := c.text(b.Locals[u.Local].Name)
         fix := ""
-        if c.isRef(u.Ty) and not c.P.T.IsNullable(u.Ty) and not c.P.T.ArrayRef(u.Ty) { fix = ", or write '" $c.ty(c.P.T.OrNull(u.Ty)) "'" }
+        if c.neverNull(u.Ty) { fix = ", or write '" $c.ty(c.P.T.OrNull(u.Ty)) "'" }
         rec I64 = -1
         if u.Field {
             rec = d.Error(diag.Where.Span(b.File, I64(u.Sp.Start), I64(u.Sp.End)), msgs.FieldUnassigned(name, c.ty(u.Ty), fix))
@@ -5574,7 +5574,8 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
             c.spellGroup = false
             wasItem := c.spellItem
             c.spellItem = true
-            b.Push("(fn(" if wrap else "fn(")
+            if wrap { b.PushChar('(') }
+            b.Push("fn?&(" if c.P.T.FuncNullable(t) else "fn&(")   # T21: always held by reference, its marker on its "fn"
             ps := c.P.T.Items(c.P.T.Params(t))
             ns := c.P.T.NamesOf(t)
             for i in range ps.Len() {
@@ -6537,8 +6538,10 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
         c.err(sp, msgs.ErrValueNotHeld(c.ty(want), c.ty(have), c.setText(left)))
         return x
     }
-    # T2c: a reference never null fits where one that may be is wanted; one that may be, nowhere it may not
-    if hk == types.Kind.Ref and wk == types.Kind.Ref and c.P.T.IsNullable(have) != c.P.T.IsNullable(want) {
+    # T2c: a reference never null fits where one that may be is wanted; one that may be, nowhere it may not - a function
+    # value's alike (T21)
+    if (hk == types.Kind.Ref and wk == types.Kind.Ref or hk == types.Kind.Func and wk == types.Kind.Func) and
+       c.P.T.IsNullable(have) != c.P.T.IsNullable(want) {
         if c.P.T.IsNullable(have) {
             xsp := x.Span()
             c.err(xsp, msgs.MayBeNull(c.src(xsp), c.ty(have), c.ty(want), bangOf(c.src(xsp))))
@@ -6611,14 +6614,14 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
         if a is not null { return a }
     }
     if have == types.NullT {
-        if (wk == types.Kind.Ref and c.P.T.IsNullable(want)) or wk == types.Kind.Func { return c.lit(sp, want, 0) }
+        if c.P.T.IsNullable(want) { return c.nullOf(sp, want) }
         if c.P.T.ArrayRef(want) {
             # T2c: an array is never null - an empty one is written as one
             c.err(sp, msgs.NullToArray(c.ty(c.deref(want)), c.emptyArray(want)))
             return c.lit(sp, want, 0)
         }
-        if wk == types.Kind.Ref {
-            # T2c: a reference that may be null says so where its type is written
+        if wk == types.Kind.Ref or wk == types.Kind.Func {
+            # T2c: a reference that may be null says so where its type is written - a function value too (T21)
             rec := c.err(sp, msgs.NullToNonNull(c.ty(want), c.ty(c.P.T.OrNull(want))))
             c.declNote(rec)
             return x
@@ -7132,11 +7135,22 @@ fn (c mut Checker&) askValue(kind ValueKind, sp source.Span, t types.TypeId, x a
     c.ValueAsks.Push(ValueAsk(kind, file, sp, t, id, d.UseOf(diag.Where.Span(file, I64(sp.Start), I64(sp.End)))))
 }
 
-# the zero value of a type (D13c): zero bits for a number, a Bool, a reference, a function value, an array; a struct's
-# constructor on its defaults
+# T2c, T21: whether a type is a reference or a function value that is never null - one with no zero value (an array,
+# whose zero value is the empty array, is none)
+fn (c mut Checker&) neverNull(t types.TypeId) Bool {
+    if c.P.T.KindOf(t) == types.Kind.Func { return not c.P.T.FuncNullable(t) }
+    return c.isRef(t) and not c.P.T.IsNullable(t) and not c.P.T.ArrayRef(t) and c.deref(t) != types.UnknownT
+}
+
+# null as a value of a type that may be null (T2a): zero bits - a reference's null pointer, a function value's null code
+# - but an array's, which are the empty array: its null is the length -1 with no storage (T2c)
+fn (c mut Checker&) nullOf(sp source.Span, t types.TypeId) typed.Expr& { return c.lit(sp, t, -1 if c.P.T.ArrayRef(t) else 0) }
+
+# the zero value of a type (D13c): zero bits for a number, a Bool, a reference that may be null, one that may be null,
+# an array; a struct's constructor on its defaults
 fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr& {
-    # T2c: a reference never null has no zero value
-    if c.isRef(t) and not c.P.T.IsNullable(t) and not c.P.T.ArrayRef(t) and c.deref(t) != types.UnknownT {
+    # T2c: a reference never null has no zero value, nor a function value never null (T21)
+    if c.neverNull(t) {
         rec := c.err(sp, msgs.NoZeroNonNull(c.ty(t), c.ty(c.P.T.OrNull(t))))
         c.declNote(rec)
         return c.unknown(sp)
@@ -7175,7 +7189,7 @@ fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr& {
         sig := c.P.CaseSig(t, 0)
         if sig != types.UnknownT {
             for pt in c.P.T.Items(c.P.T.Params(sig)) {
-                if c.isRef(pt) and not c.P.T.IsNullable(pt) and not c.P.T.ArrayRef(pt) and c.deref(pt) != types.UnknownT {
+                if c.neverNull(pt) {
                     rec := c.err(sp, msgs.NoZeroNonNull(c.ty(pt), c.ty(c.P.T.OrNull(pt))))
                     c.declNote(rec)
                     return c.unknown(sp)
@@ -7319,8 +7333,7 @@ fn (c mut Checker&) expr1(x ast.Expr?&, want types.TypeId, accept Bool) typed.Ex
 fn (c mut Checker&) literal(sp source.Span, kind token.Tok, want types.TypeId) typed.Expr& {
     if kind == token.Tok.BoolLit { return c.lit(sp, types.BoolT, 1 if c.src(sp) == "true" else 0) }
     if kind == token.Tok.NullLit {
-        k := c.P.T.KindOf(want)
-        if (k == types.Kind.Ref and c.P.T.IsNullable(want)) or k == types.Kind.Func { return c.lit(sp, want, 0) }
+        if c.P.T.IsNullable(want) { return c.nullOf(sp, want) }
         return c.lit(sp, types.NullT, 0)
     }
     if kind == token.Tok.CharLit { return c.lit(sp, c.charType(), c.charValue(sp)) }
@@ -8227,7 +8240,7 @@ fn (c mut Checker&) equality(sp source.Span, op token.Tok, x typed.Expr&, y type
     if ta == types.NullT or tb == types.NullT {
         a := x if ta != types.NullT else y
         if c.isRef(typeOf(a)) or c.P.T.KindOf(typeOf(a)) == types.Kind.Func {
-            z := c.lit(sp, typeOf(a), 0)
+            z := c.nullOf(sp, typeOf(a))
             return c.prim(sp, types.BoolT, typed.PrimOp.Same if op == token.Tok.EqEq else typed.PrimOp.Ne, a, z)
         }
         c.gap(sp, "'==' between null and a value")
@@ -8273,9 +8286,9 @@ fn (c mut Checker&) equality(sp source.Span, op token.Tok, x typed.Expr&, y type
         c.stmts.Push(typed.Stmt.Let(sp, typed.LocalId(I32(ia)), x))
         ib := c.local(source.NameId(0), sp, tb, typed.LocalKind.Var, typed.Mark.Infer)
         c.stmts.Push(typed.Stmt.Let(sp, typed.LocalId(I32(ib)), y))
-        an := c.prim(sp, types.BoolT, typed.PrimOp.Same, c.readLocal(sp, ia), c.lit(sp, ta, 0))
-        bn := c.prim(sp, types.BoolT, typed.PrimOp.Same, c.readLocal(sp, ib), c.lit(sp, tb, 0))
-        bn2 := c.prim(sp, types.BoolT, typed.PrimOp.Same, c.readLocal(sp, ib), c.lit(sp, tb, 0))
+        an := c.prim(sp, types.BoolT, typed.PrimOp.Same, c.readLocal(sp, ia), c.nullOf(sp, ta))
+        bn := c.prim(sp, types.BoolT, typed.PrimOp.Same, c.readLocal(sp, ib), c.nullOf(sp, tb))
+        bn2 := c.prim(sp, types.BoolT, typed.PrimOp.Same, c.readLocal(sp, ib), c.nullOf(sp, tb))
         av := c.read(sp, typed.Lvalue.Local(sp, c.P.T.NonNull(ta), typed.LocalId(I32(ia))))
         bv := c.read(sp, typed.Lvalue.Local(sp, c.P.T.NonNull(tb), typed.LocalId(I32(ib))))
         call := c.invoke(sp, sp, eq, av, Array<ast.Expr&>(0), c.one(bv))
@@ -8528,13 +8541,14 @@ fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated B
         c.err(isp, msgs.IsNullOfValue(c.ty(xt)))
         return c.lit(sp, types.BoolT, 0)
     }
-    if c.P.T.ArrayRef(xt) {
-        # T2c: an array is never null - its zero value is the empty array, what such a test meant
+    if c.P.T.ArrayRef(xt) and not c.P.T.IsNullable(xt) {
+        # T2c: an array written "&" is never null - its zero value is the empty array, what such a test meant
         c.err(isp, msgs.ArrayIsNull(c.src(a.Span()), ".Len() > 0" if negated else ".Len() == 0"))
         return c.lit(sp, types.BoolT, 1 if negated else 0)
     }
-    if c.isRef(xt) and not c.P.T.IsNullable(xt) {
-        # T2c: a reference never null - the test decides nothing; where it may be, its type says so
+    if c.neverNull(xt) {
+        # T2c: a reference never null - the test decides nothing; where it may be, its type says so (a function value's
+        # too, T21)
         rec := c.err(isp, msgs.NeverNull(c.src(a.Span()), c.ty(xt), "true" if negated else "false"))
         p := readPlace(x)
         at := c.placeAt(p) if p is not null else c.calledAt(x)
@@ -8778,6 +8792,8 @@ fn (c mut Checker&) cond(sp source.Span, a ast.Expr&, k ast.Expr&, b ast.Expr&, 
             rt = c.P.T.OrNull(ta)   # T2c: null beside a reference makes one that may be null
         } else if ta == types.NullT and (c.isRef(tb) or c.P.T.KindOf(tb) == types.Kind.Func) {
             rt = c.P.T.OrNull(tb)
+        } else if c.P.T.KindOf(ta) == types.Kind.Func and c.P.T.Same(c.P.T.OrNull(ta), c.P.T.OrNull(tb)) {
+            rt = c.P.T.OrNull(ta)   # T21: a function value never null beside one that may be
         } else if c.isRef(ta) and not c.isRef(tb) and c.flowsInto(tb, c.P.T.Referent(ta)) {
             rt = ta
         } else if c.isRef(tb) and not c.isRef(ta) and c.flowsInto(ta, c.P.T.Referent(tb)) {
@@ -10419,6 +10435,7 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
         case ast.TypeRef.Ref(_, of, _) {
             match of {
                 case ast.TypeRef.Any(_, trt) { return c.anyWritten(trt) }
+                case ast.TypeRef.Func(_, s) { return c.sigWritten(s) }   # T21: "fn&(...)", "fn?&(...)"
                 case _ { }
             }
             if c.traitWritten(of, tr) { return false }
@@ -10450,19 +10467,21 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
             }
             return true
         }
-        case ast.TypeRef.Func(_, s) {
-            for prm in s.Params {
-                if not c.writtenMet(prm.Ty) { return false }
-            }
-            if s.Results.Len() > 0 {
-                for r in s.Results {
-                    if c.errorResult(r) or not c.writtenMet(r) { return false }
-                }
-            }
-            return true
-        }
+        # a function type written bare - a type declaration's base; anywhere else the parser said T21
+        case ast.TypeRef.Func(_, s) { return c.sigWritten(s) }
         case _ { return true }
     }
+}
+
+# a function type's signature, as written: its parameters' and results' types (T21)
+fn (c mut Checker&) sigWritten(s ast.Sig&) Bool {
+    for prm in s.Params {
+        if not c.writtenMet(prm.Ty) { return false }
+    }
+    for r in s.Results {
+        if c.errorResult(r) or not c.writtenMet(r) { return false }
+    }
+    return true
 }
 
 # ---- calls (E13, E14, D8a, G9, M19) ----
@@ -11353,6 +11372,11 @@ fn (c mut Checker&) markAt(mi I64, tr ast.TypeRef?&) diag.Where {
     if tr is null or mi < 0 { return diag.Where.Nowhere }
     sp := tr.Span()
     text := c.P.L.Mods[mi].Src!.Text[I64(sp.Start):I64(sp.End)]
+    # T21: a function type's marker is on its "fn" - "fn&(", "fn?&(" - not its result's
+    if refWrittenTop(tr) and tr.IsFunc() and text.StartsWith("fn") {
+        k := 3 if text.StartsWith("fn?&") else 2
+        return diag.Where.Span(c.P.L.Mods[mi].File, I64(sp.Start) + k, I64(sp.Start) + k + 1)
+    }
     for i in range text.Len() {
         k := text.Len() - 1 - i
         if text[k] == '&' { return diag.Where.Span(c.P.L.Mods[mi].File, I64(sp.Start) + k, I64(sp.Start) + k + 1) }
@@ -12166,7 +12190,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
             p := readPlace(rx)
             if p is null { p = typed.Lvalue.Temp(x.Span(), rt, rx, c.site(typed.SiteKind.Temp, x.Span())) }
             fp := c.field(sp, nsp, p!, n)
-            if fp is not null { return c.callValue(sp, nsp, c.read(sp, fp), args) }
+            if fp is not null { return c.callValue(sp, nsp, c.read(source.Span(x.Span().Start, nsp.End), fp), args) }
         }
         if c.isNamed(dt) and c.declKind(dt) == types.DeclKind.Trait {
             # a trait as a value's type was said where it is written (T30)
@@ -12377,6 +12401,11 @@ fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&, a
     if t == types.UnknownT {
         c.dropArgs(args)
         return c.unknown(sp)
+    }
+    if c.P.T.FuncNullable(t) {
+        # T21: nothing is called through a function value that may be null until a test says it is not
+        c.err(fv.Span(), msgs.ReadMaybeNull(c.src(fv.Span()), c.ty(t), bangOf(c.src(fv.Span()))))
+        t = c.P.T.NonNull(t)
     }
     if c.P.T.KindOf(t) == types.Kind.Func { return c.callBody(sp, fsp, t, typed.Callee.Value(fv), -1, null, args, Array<typed.Expr&>(0)) }
     m := c.P.MethodOf(c.deref(t), c.P.L.Names.Intern("Call"))
@@ -14378,7 +14407,7 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     c.produced(clauses, mark, end)
     # T2c: a "default null" beside a reference never null gives one that may be - the try's value, its operand as it is
     rt := typeOf(x)
-    if asValue and c.isRef(rt) and not c.P.T.IsNullable(rt) and nullDefault(clauses) and (want == types.UnknownT or c.P.T.IsNullable(want)) {
+    if asValue and c.neverNull(rt) and nullDefault(clauses) and (want == types.UnknownT or c.P.T.IsNullable(want)) {
         rt = c.P.T.OrNull(rt)
     }
     cls Vec<typed.Clause&>
@@ -14431,12 +14460,12 @@ fn (c mut Checker&) bang(sp source.Span, y ast.Expr&, want types.TypeId) typed.E
     mark := fr.leaks.Len()
     before := fr.Fallible
     fr.Tries++
-    x := c.expr(y, c.P.T.OrNull(want) if c.isRef(want) else want)
+    x := c.expr(y, c.P.T.OrNull(want) if c.isRef(want) or c.P.T.KindOf(want) == types.Kind.Func else want)
     fr.Tries--
     covered := fr.Fallible != before
     fr.Fallible = before
     # T2c: on a reference that may be null, "x!" is it known not to be - after what can fail, where something can
-    nullable := c.P.T.IsNullable(typeOf(x)) or c.P.T.KindOf(typeOf(x)) == types.Kind.Func   # STAGE1: "f!" on a bare one
+    nullable := c.P.T.IsNullable(typeOf(x))
     if not covered and typeOf(x) != types.UnknownT and not c.copiesDiffer() {
         if nullable { return c.unwrapNull(sp, x) }
         c.err(source.Span(sp.End - 1, sp.End), msgs.BangNothingFails())
@@ -14485,7 +14514,7 @@ fn (c mut Checker&) unwrapNull(sp source.Span, x typed.Expr&) typed.Expr& {
         case typed.Expr.Read(rsp, _, p, site) {
             if purePlace(p) {
                 pf := c.stmts.Len()
-                isNull := c.prim(sp, types.BoolT, typed.PrimOp.Same, x, c.lit(sp, t, 0))
+                isNull := c.prim(sp, types.BoolT, typed.PrimOp.Same, x, c.nullOf(sp, t))
                 ef := c.stmts.Len()
                 c.stmts.Push(typed.Stmt.Exit(sp, typed.ExitKind.NullReached, null))
                 ends := typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, ef))
@@ -14499,7 +14528,7 @@ fn (c mut Checker&) unwrapNull(sp source.Span, x typed.Expr&) typed.Expr& {
     id := c.local(source.NameId(0), sp, t, typed.LocalKind.Var, typed.Mark.Infer)
     c.roLet(id, x)   # T25c: what is reached through it is reached from where x was read
     c.stmts.Push(typed.Stmt.Let(sp, typed.LocalId(I32(id)), x))
-    isNull := c.prim(sp, types.BoolT, typed.PrimOp.Same, c.readLocal(sp, id), c.lit(sp, t, 0))
+    isNull := c.prim(sp, types.BoolT, typed.PrimOp.Same, c.readLocal(sp, id), c.nullOf(sp, t))
     efrom := c.stmts.Len()
     c.stmts.Push(typed.Stmt.Exit(sp, typed.ExitKind.NullReached, null))
     ends := typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, efrom))
@@ -20416,7 +20445,7 @@ fn (c mut Checker&) caseValue(m ast.Match&, x ast.Expr&, rt0 types.TypeId
 # any length, a reference to an array of a run-time length (so another case's of another length meets it, G9a)
 fn (c mut Checker&) firstValueType(m ast.Match&, v typed.Expr&, x ast.Expr&) types.TypeId {
     rt := typeOf(v)
-    if c.isRef(rt) and nullValue(m) { rt = c.P.T.OrNull(rt) }
+    if (c.isRef(rt) or c.P.T.KindOf(rt) == types.Kind.Func) and nullValue(m) { rt = c.P.T.OrNull(rt) }
     if c.P.T.KindOf(rt) == types.Kind.Array and c.P.T.Length(rt) != types.TypeId(0) and c.litArray(x) {
         rt = c.P.T.Array(c.P.T.Elem(rt), types.TypeId(0))
     }
@@ -21005,11 +21034,11 @@ fn isTrue(x typed.Expr&) Bool {
 # S12b: a value of a match that does not fit the others' type - a null where they are a reference never null said as
 # T2c says it, with where that type is written (T2c's note)
 fn (c mut Checker&) matchValueMismatch(sp source.Span, said types.TypeId, rt types.TypeId, v typed.Expr&) {
-    if typeOf(v) == types.NullT and c.P.T.ArrayRef(rt) {
+    if typeOf(v) == types.NullT and c.P.T.ArrayRef(rt) and not c.P.T.IsNullable(rt) {
         c.err(sp, msgs.NullToArray(c.ty(c.deref(rt)), c.emptyArray(rt)))
         return
     }
-    if typeOf(v) == types.NullT and c.isRef(rt) and not c.P.T.IsNullable(rt) {
+    if typeOf(v) == types.NullT and c.neverNull(rt) {
         rec := c.err(sp, msgs.NullToNonNull(c.ty(rt), c.ty(c.P.T.OrNull(rt))))
         c.declNote(rec)
         return

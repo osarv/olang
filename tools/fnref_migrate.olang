@@ -1,0 +1,154 @@
+# fnref_migrate - function types are reference-only (T21, QCI 3, 2026-11-02): a place holding a function value writes
+# "fn&(...)" (never null) or "fn?&(...)" (may be null), and a function type written bare is an error. Every function
+# type written with no marker on a place - read by the compiler's own parser, which says where each one begins - is
+# given "&" after its "fn": "f fn(x I64) I64" becomes "f fn&(x I64) I64", "Vec<fn(e Event)>" "Vec<fn&(e Event)>". A
+# type declaration's base ("type Handler fn(e Event)") is written bare and left alone, and so are a function's own
+# declaration and a lambda, which are no types. Which of them may be null is said by null_migrate afterwards (its
+# notes point at the "&" now written, and it puts "?" before it, and "!" where a call reads one that may be): olang fix
+# runs this among the text tools and null_migrate among the driven ones, in that order. Comments and string literals
+# are never edited; the olang blocks of a Markdown file are migrated too. Idempotent: a marked type is never bare.
+#
+#     $OLANG build tools/fnref_migrate.olang && build/tools_fnref_migrate [--check] [-v] FILE|DIR...
+#
+#   --check  write nothing; the exit status says whether anything would change
+#   -v       name each file changed and how many types it marked
+
+import "std/os"
+import "srcmask"
+import "../compiler/source"
+import "../compiler/scan"
+import "../compiler/parse"
+import "../compiler/diag"
+
+# where each bare function type of a text begins, as the parser reads it - whatever else it finds wrong there (a
+# Markdown block may be part of a program only)
+fn bareAt(path String&, text String&) Vec<I32> {
+    src := source.Source($path, $text)
+    names := source.Names()
+    d := diag.Diagnostics(false)
+    file := d.AddFile(src.Path, src.Text)
+    ts := scan.Scan(src.Text)
+    p := parse.Parser(src, ts, names, parse.Oracle(), d, file)
+    p.File()
+    return p.BareFuncs
+}
+
+# how many function types a run marked
+type Count struct(N I64 = 0) { N }
+
+# a text with "&" written after each bare function type's "fn"; how many were written added to marked
+fn migrate(path String&, src String&, marked mut Count&) String {
+    at := bareAt(path, src)
+    if at.Len() == 0: return $src
+    at.Sort(fn(a, b): return a < b)
+    out := StringBuilder()
+    from I64 = 0
+    for k in at {
+        e := I64(k) + 2
+        if e <= from or src[I64(k):e] != "fn" { continue }
+        out.Push(src[from:e])
+        out.PushChar('&')
+        from = e
+        marked.N++
+    }
+    out.Push(src[from:])
+    return out.ToString()
+}
+
+# a Markdown text with its "```olang" blocks migrated
+fn migrateMarkdown(path String&, src String&, marked mut Count&) String {
+    out := StringBuilder()
+    lines := src.Split("\n")
+    inBlock := false
+    block := StringBuilder()
+    for k in range lines.Len() {
+        line := lines[k]
+        if inBlock and line.StartsWith("```") {
+            out.Push(migrate(path, block.ToString(), marked))
+            block.Clear()
+            inBlock = false
+        } else if inBlock {
+            block.Push(line)
+            block.PushChar('\n')
+            continue
+        } else if line.StartsWith("```olang") {
+            inBlock = true
+        }
+        out.Push(line)
+        if k < lines.Len() - 1: out.PushChar('\n')
+    }
+    if inBlock: out.Push(block.ToString())
+    return out.ToString()
+}
+
+fn main() ? {
+    check := false
+    verbose := false
+    paths Vec<String>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check" {
+            check = true
+        } else if a == "-v" {
+            verbose = true
+        } else {
+            paths.Push($a)
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_fnref_migrate [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    files Vec<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    total I64 = 0
+    changed I64 = 0
+    for path in files {
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("fnref_migrate: cannot read " $path)
+            os.Exit(1)
+        }
+        mine := Count()
+        out := migrateMarkdown(path, src, mine) if path.EndsWith(".md") else migrate(path, src, mine)
+        total += mine.N
+        if out == src: continue
+        changed++
+        if verbose: srcmask.Say($path ": " $mine.N " function types marked")
+        if check: continue
+        try os.WriteFile(path, out) catch {
+            srcmask.SayErr("fnref_migrate: cannot write " $path)
+            os.Exit(1)
+        }
+    }
+    verb := "would change " if check else "changed "
+    srcmask.Say($verb $changed " files: " $total " function types marked")
+    if check and changed > 0: os.Exit(1)
+}
+
+fn run(src String&) String {
+    n := Count()
+    return migrate("t.olang", src, n)
+}
+
+test "a function type on a place is marked, a declaration and a lambda are not" {
+    assert run("fn apply(f fn(x I64) I64, v I64) I64 { return f(v) }\n") == "fn apply(f fn&(x I64) I64, v I64) I64 { return f(v) }\n"
+    assert run("g := fn(x I64) I64 { return x }\n") == "g := fn(x I64) I64 { return x }\n"
+    assert run("hs Vec<fn(e I64)>\n") == "hs Vec<fn&(e I64)>\n"
+    assert run("type Handler fn(e I64)\n") == "type Handler fn(e I64)\n"
+    assert run("type B struct(on fn(n I64) fn(m I64)) { on }\n") == "type B struct(on fn&(n I64) fn&(m I64)) { on }\n"
+}
+
+test "a marked type is left as it is, so a second run changes nothing" {
+    once := run("fn f(a fn(x I64), b fn?&(y I64)) { }\n")
+    assert once == "fn f(a fn&(x I64), b fn?&(y I64)) { }\n"
+    assert run(once) == once
+}
+
+test "a Markdown file's olang blocks are migrated, its prose is not" {
+    n := Count()
+    md := "a fn(x) here\n```olang\nf fn(x I64)\n```\n"
+    assert migrateMarkdown("t.md", md, n) == "a fn(x) here\n```olang\nf fn&(x I64)\n```\n" and n.N == 1
+}

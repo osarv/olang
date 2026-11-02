@@ -3999,10 +3999,14 @@ fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp 
         return
     }
     r := t.Repr(ty)
+    if t.IsNullable(r) and t.ArrayRef(r) and ln.isText(ty) and not ln.hasStr(ty) {
+        ln.renderMaybeText(b, v, ty, sp)
+        return
+    }
     how := mir.WriteKind.Bool
     direct := true
-    if ln.hasStr(ty) {
-        direct = false
+    if ln.hasStr(ty) or t.IsNullable(r) and t.ArrayRef(r) {
+        direct = false   # (an array that may be null renders as "null" where it is, T2c - through its helper)
     } else if ln.isChar(ty) {
         how = mir.WriteKind.Char
     } else if r == types.BoolT {
@@ -4032,6 +4036,21 @@ fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp 
                                mir.NoLocal, mir.NoBlock))
     ln.end(mir.Term.Call(sp, k))
     ln.start(ok)
+}
+
+# T2c: text that may be null rendered at the top of a rendering - "null" where it is, else the text itself
+fn (ln mut lowering&) renderMaybeText(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp source.Span) {
+    x := ln.local(v, ty, sp)
+    isNull := ln.prim(typed.PrimOp.Same, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, -1)], sp)
+    none, some, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(isNull, none, some))
+    ln.start(none)
+    ln.word(b, "null", sp)
+    ln.goto(after)
+    ln.start(some)
+    ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Bytes, mir.Operand.Copy(mir.L(x))))
+    ln.goto(after)
+    ln.start(after)
 }
 
 # T20, B5: an error value rendered as an error's name prints ("os.Error.Denied", the prelude's and the root program's
@@ -4794,9 +4813,17 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
     if t.IsRef(r) {
         x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
         some, after := ln.F.NewBlock(), ln.F.NewBlock()
-        if t.ArrayRef(r) {
-            # T2c: an array is never null - its zero bits are the empty array, rendered as one
+        if t.ArrayRef(r) and not t.IsNullable(r) {
+            # T2c: an array written "&" is never null - its zero bits are the empty array, rendered as one
             ln.goto(some)
+        } else if t.ArrayRef(r) {
+            # T2c: an array that may be null is null where its length is -1 (its zero bits are the empty array)
+            isNull := ln.prim(typed.PrimOp.Same, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, -1)], sp)
+            none := ln.F.NewBlock()
+            ln.end(mir.Term.Branch(isNull, none, some))
+            ln.start(none)
+            ln.word(b, "null", sp)
+            ln.goto(after)
         } else {
             nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
             none := ln.F.NewBlock()

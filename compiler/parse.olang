@@ -74,6 +74,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     prevEnd I32 = 0
     noGt Bool = false                  # in a type-argument list: ">" closes it, and a comparison or shift is no operator
     inCtor Bool = false                # at a constructor body's top level: a bare name is a field (C2)
+    fnBase Bool = false                # the type next is a declaration's base: a function type there has no marker (T21)
     inLine Bool = false                # in a one-line body (S1b): "else" and "catch" end its statement too
     lamItem Bool = false               # ... and the lambda an item of a list: its "," is the list's (L18c)
     inLam Bool = false                 # in a lambda's one-line body (S1b, D16): what closes its bracket ends it, a line end is left
@@ -119,6 +120,9 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     # of every expression; tools/precedence_migrate.olang compares two readings by it
     RecordOperators Bool = false
     Operators Vec<source.Span>
+    # where each function type written with no marker on a place begins (its "fn") - T21's error, and where
+    # tools/fnref_migrate.olang writes the "&"
+    BareFuncs Vec<I32>
     # the tokens the formatter spaces as the grammar places them, by token index: each "(" grouping a function type in a
     # list (L18c), each "[" opening a contract and each ":" before a contract item's body (D17), each "@" beginning an
     # attribute (G39)
@@ -953,7 +957,9 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
             return ast.TypeBody.Trait(methods.ToArray(), exts, members)
         }
         case _ {
+            p.fnBase = true
             base := try p.typeExpr()
+            p.fnBase = false
             if p.sees(token.Tok.LParen) {      # a constructor over a primitive (T29d)
                 cat := p.advance()
                 cp := try p.params(false)
@@ -1336,9 +1342,12 @@ fn (p mut Parser&) typeExpr() ast.TypeRef& ? Fail {
 
 fn (p mut Parser&) typeBase() ast.TypeRef& ? Fail {
     at := p.here()
+    bareOk := p.fnBase
+    p.fnBase = false
     match p.peek() {
         case token.Tok.Fn {
-            # T21: a function type is reference-only - "fn&(...)" never null, "fn?&(...)" may be - its marker on the "fn"
+            # T21: a function type is reference-only - "fn&(...)" never null, "fn?&(...)" may be - its marker on the "fn";
+            # only a type declaration's base is written bare ("type Handler fn(e Event)")
             p.advance()
             marked := p.sees(token.Tok.Amp) or p.nullMark()
             nullable := p.sees(token.Tok.Question)
@@ -1346,7 +1355,12 @@ fn (p mut Parser&) typeBase() ast.TypeRef& ? Fail {
             if marked { p.advance() }
             s := try p.sig(false, true)
             f := ast.TypeRef.Func(p.from(at), s)
-            return ast.TypeRef.Ref(p.from(at), f, nullable) if marked else f
+            if marked { return ast.TypeRef.Ref(p.from(at), f, nullable) }
+            if not bareOk {
+                p.BareFuncs.Push(at)
+                p.report(at, at + 2, msgs.FuncTypeBare($p.src.Text[I64(at) + 2:I64(p.prevEnd)]))
+            }
+            return f
         }
         case token.Tok.Enum, token.Tok.Struct, token.Tok.Trait {
             body := try p.typeBody()

@@ -1942,7 +1942,11 @@ fn (m mut Machine&) put(fi I64, dst Ptr, dt types.TypeId, x mir.Operand) {
         }
         case mir.Operand.Const(ty, bits) {
             n := m.size(dt)
-            if bits == 0 or m.shape(ty) == vAgg or m.shape(ty) == vFixed {
+            if bits != 0 and m.shape(ty) == vPair {
+                # T2c: a null array, its length -1 and no storage - never the empty array, all zero bits
+                m.zero(dst, n)
+                m.wr(dst, 8, bits)
+            } else if bits == 0 or m.shape(ty) == vAgg or m.shape(ty) == vFixed {
                 m.zero(dst, n)
             } else if m.shape(ty) == vWide {
                 lo, hi := m.wideConst(ty, bits)

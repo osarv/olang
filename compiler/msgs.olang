@@ -259,6 +259,7 @@ type Diag enum {
     TraitNotAType
     AnyNotTrait
     AnyNeedsMarker
+    FuncTypeBare
     AnyNotConverted
     AnyCopyOutlived
     AnyUnmet
@@ -538,7 +539,6 @@ type Diag enum {
     NeverNull
     NoZeroNonNull
     ReadMaybeNull
-    ArrayNullable
     NullToArray
     ArrayIsNull
     AsNeedsCase
@@ -1557,6 +1557,9 @@ fn AnyNotTrait(ty String&) Msg { return Msg(Diag.AnyNotTrait, "T32", "'any' take
 # ERR_ANY_NEEDS_MARKER
 fn AnyNeedsMarker(ty String&) Msg { return Msg(Diag.AnyNeedsMarker, "T32", "an 'any' is always a reference - write 'any " $ty "&'") }
 
+# ERR_FUNC_TYPE_BARE
+fn FuncTypeBare(rest String&) Msg { return Msg(Diag.FuncTypeBare, "T21", "a function type is held only by reference - write 'fn&" $rest "', or 'fn?&" $rest "' where it may be null") }
+
 # ERR_ANY_NOT_CONVERTED
 fn AnyCopyOutlived() Msg { return Msg(Diag.AnyCopyOutlived, "T32a", "the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes") }
 
@@ -2359,9 +2362,8 @@ fn NoteNullableDecl() Msg { return Msg(Diag.NoteNullableDecl, "", "the type is w
 fn NeverNull(text String&, ty String&, val String&) Msg { return Msg(Diag.NeverNull, "T2c", "'" $text "' is a " $ty ", never null, so this is always " $val) }
 fn NoZeroNonNull(ty1 String&, ty2 String&) Msg { return Msg(Diag.NoZeroNonNull, "T2c", $ty1 " is never null, so it has no zero value - give it a value, or write " $ty2) }
 fn ReadMaybeNull(text String&, ty String&, bang String&) Msg { return Msg(Diag.ReadMaybeNull, "T2c", "'" $text "' is a " $ty ", which may be null - read through it where a test says it is not ('if x is not null'), or write '" $bang "!'") }
-fn ArrayNullable() Msg { return Msg(Diag.ArrayNullable, "T2c", "an array is never null - its zero value is the empty array: write '&', not '?&'") }
-fn NullToArray(ty String&, empty String&) Msg { return Msg(Diag.NullToArray, "T2c", "an array is never null - its zero value is the empty array: write '" $empty "', or no value, for an empty " $ty) }
-fn ArrayIsNull(text String&, empty String&) Msg { return Msg(Diag.ArrayIsNull, "T2c", "an array is never null - test whether it is empty: write '" $text $empty "'") }
+fn NullToArray(ty String&, empty String&) Msg { return Msg(Diag.NullToArray, "T2c", "an array written '&' is never null - write '" $empty "' for an empty " $ty ", or '?&' where it may be null") }
+fn ArrayIsNull(text String&, empty String&) Msg { return Msg(Diag.ArrayIsNull, "T2c", "an array written '&' is never null - test whether it is empty: write '" $text $empty "', or '?&' where it may be null") }
 fn NarrowedWrite(local String&, kase String&) Msg { return Msg(Diag.NarrowedWrite, "S8d", "a narrowed payload field is read, never written or lent writably - '" $local "' is narrowed to " $kase ", and what it reads there is a copy of the payload: assign the whole case, '" $local " = " $kase "(...)', or change a copy a match binds and assign the case back") }
 fn CallDoesNothing(call String&) Msg { return Msg(Diag.CallDoesNothing, "S3", "'" $call "' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out") }
 
