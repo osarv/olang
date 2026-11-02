@@ -2456,3 +2456,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   field null too, as every `?&` zero is null - in the bulk-6 fix round; (2) shared.olang's test names naming `f&x()` /
   `&return` are renamed in the fix round, which recaptures run.txt anyway; (3) MIR's `Give`/`RegisterOwner` removed is
   fine (never lowered; `own` is gone).
+- Bulk review 6 fix round (wt-bfix6 6797652) - its two questions DECIDED by me 2026-11-02: (1) the four relaxations
+  (lambdas capturing a local array or reference, returned; a slice of a copy returned; a local copied from another place
+  returned) stand - inference places their storage where the result goes, which QCB asks for - but get a narrow
+  soundness review before the first version is called done, with F13's FreshCtorAt (which read freed storage in an
+  earlier version); (2) `held/gen_walkkept`'s two errors for one cause collapse in a later round (a diagnostic). The
+  agent's six details stand.
