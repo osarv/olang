@@ -762,3 +762,8 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   line deeper than four blocks (408 before), depth-four lines 1,038 -> 288, -308 lines, `Scoper.call` split. Merged
   with the front end by taking the golden rows per file (no code overlap); the merged tip is verified by the joint
   cleanup pass, next. Then bulk review 6, its fix round, the final verify.
+- 2026-11-02 CET: tidy pass merged (94e75ae + memory; full verify passed on its tip, which verifies the two refactors
+  merged): dead scope-argument code, types.Owning, MIR Give/RegisterOwner, checkdiff/scopediff gone, shared helpers in
+  typed.olang, NoteMakeWhere reworded, `if c: a, b = x, y` parses, `Array<T>?&`'s zero null, nested null text renders
+  null; bench IR identical. Bulk review 6 done (no use-after-free; 7 wrong results...). Next: its fix round, then the
+  final verify - the first version.

@@ -2452,3 +2452,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   message corrected); F13 early freeing reaches a Vec local reassigned in a loop and a Vec field of a constructed struct
   (the `-memory` reason "a call's value copied" for a constructor call is the bug); F14 errors said at the program's
   call, not inside std, and one error per cause (D3b not beside O27). The reviewer's decision reviews stand.
+- Tidy pass (wt-tidy 94e75ae) - its three questions DECIDED by me 2026-11-02: (1) an enum's zero gives a `?&` payload
+  field null too, as every `?&` zero is null - in the bulk-6 fix round; (2) shared.olang's test names naming `f&x()` /
+  `&return` are renamed in the fix round, which recaptures run.txt anyway; (3) MIR's `Give`/`RegisterOwner` removed is
+  fine (never lowered; `own` is gone).
