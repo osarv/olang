@@ -802,6 +802,17 @@ fn refsIn(text String&) Vec<I64> {
     return out
 }
 
+# the types a declaration of another object's item names, wanted here too (a mutable global baked as plain data is
+# declared "external global %T": T need be named nowhere else in this object - found by tests/facts.olang's Vec global)
+fn (e mut Emitter&) declTypes(decl String&, tys mut Vec<I64>&, tyHave mut Map<I64, Bool>&) {
+    rs := refsIn(decl)
+    for r in range 0, rs.Len(), 3 {
+        if rs[r] != 1 { continue }
+        t := try e.tyAt.Get(decl[rs[r + 1]:rs[r + 2]]) catch default -1
+        if t >= 0 and not tyHave.Has(t) { e.wantType(t, tys, tyHave) }
+    }
+}
+
 fn symbolChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' or c == '.' or c == '$' or c == '-' }
 
 # one object's text: the items homed at home (with the instances' too, alsoInst) in its part of parts, each shared or local item they name
@@ -858,6 +869,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
                 if not have.Has(into) and not declared.Has(into) {
                     declared.Put(into, true)
                     decls.Push(e.itemDecl[into])
+                    e.declTypes(e.itemDecl[into], tys, tyHave)
                 }
             }
             continue
@@ -886,6 +898,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
                 # homed in another object (another part of this one's home included)
                 declared.Put(j, true)
                 decls.Push(e.itemDecl[j])
+                e.declTypes(e.itemDecl[j], tys, tyHave)
                 if h == HomeInst and inst is not null { inst.Push($e.itemSym[j]) }
                 if h == HomeLoc and locs is not null { locs.Put(j, true) }
             }
