@@ -2593,7 +2593,9 @@ error). HISTORY.md "The rework, round 4" has the whole story; in short:
   the type, which says nothing now; `check.roRefResult` reads the returns); RefMut chains in loops (landTerm); a tuple
   result in MIR's verifier.
 - **Compile time.** The field inference's last round is the reporting judging when it changed nothing and left no refusal
-  unsaid (`inferFields`, `wantHits`): the compiler's scope phase 6.5 -> 5.3 s (the base, written markers: 0.98 s).
+  unsaid (`inferFields`, `wantHits`): the compiler's scope phase 6.5 -> 5.3 s on -quick compilers; at -O3, 3.39 s against
+  the base's 0.98 s (peak memory 2.28 -> 2.49 GB). Bench: all rows level but vec gather +6.6%, dispatch +0.7..1.3%,
+  knucleotide +0.9% (instructions).
   Three whole judgings remain (two that promote, one that reports); caching the judgings of components no promotion
   touches is the next step.
 - **Not built.** Folding (2.9): every block keeps its scope. Open point 5: a function type's `T&` result is not read as

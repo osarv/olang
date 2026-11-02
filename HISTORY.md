@@ -28008,6 +28008,15 @@ because a written scope said too little - inferred, each value is built where it
 C2d, O17, T25c). The interpret scenario's refused program is a kept view (O27); vecalias's n2 calls `View2` by name (made
 a value it is T22a's error now).
 
+**Measured** (the base 9013fd4 against the flip, each compiler built at -O3 and building compiler/): the scope phase
+0.98 -> 3.39 s (with the field inference's last round taken as the reporting judging - 6.5 -> 5.3 s measured on -quick
+compilers before and after that change), check 1.57 -> 1.61 s, lower+emit 2.61 -> 2.49 s, peak memory 2.28 -> 2.49 GB.
+Bench (callgrind, -target x86-64): every row within 0.05% of instructions and 0.5 MB of peak RSS but five - vec gather
++6.6% (6.07 -> 6.47M Ir, about two instructions more per element; its loop's code differs, not traced further),
+dispatch any +1.3%, direct +1.3%, enum +0.7%, knucleotide +0.9%. `make scopefuzz` (100 programs, 436 scenarios) and
+`make scopesan` (1,685 tests) are clean; the bootstrap from the regenerated seed reaches its fixed point; `make verify`
+passes.
+
 **Left.** docs/rework.md's open point 5 (a function type's `T&` result read as borrowed from its `&` parameters) is not
 built: a function handing back what an argument refers to is no value. The small-block folding (O2's tiny block folded
 into its parent) is not built. The field loop's quiet rounds (scope.inferFields) still judge the whole program each round.
