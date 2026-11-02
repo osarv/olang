@@ -1196,7 +1196,6 @@ fn (v mut verifier&) localType(l LocalId) types.TypeId { return v.F.Locals[I64(l
 
 # a place's type, its projections followed; Unknown, said, where one does not apply
 fn (v mut verifier&) placeType(p Lvalue) types.TypeId {
-    t := v.T
     ty := match p.B {
         case Base.Local(l): v.localType(l)
         case Base.Global(_, _, gt): gt
@@ -1204,61 +1203,66 @@ fn (v mut verifier&) placeType(p Lvalue) types.TypeId {
     }
     for i in range p.Path.N {
         if ty == types.UnknownT { return ty }
-        pr := v.F.Projs[I64(p.Path.At) + i]
-        match pr {
-            case Proj.Field(k) {
-                fl, ok := FieldsOf(v.T, ty), HasFields(v.T, ty)
-                fs := t.Items(fl)
-                if not ok or k < 0 or k >= fs.Len() {
-                    v.bad("no field " $k " in a " $v.canon(ty))
-                    return types.UnknownT
-                }
-                ty = fs[k]
-            }
-            case Proj.Index(l) {
-                if not t.IsInt(t.Repr(v.localType(l))) { v.bad("an index L" $l " is a " $v.canon(v.localType(l))) }
-                a := v.arrayOf(ty)
-                if a == types.UnknownT {
-                    v.bad("an index into a " $v.canon(ty) ", not an array")
-                    return a
-                }
-                ty = t.Elem(a)
-            }
-            case Proj.At(k) {
-                a := v.arrayOf(ty)
-                if a == types.UnknownT {
-                    v.bad("an index into a " $v.canon(ty) ", not an array")
-                    return a
-                }
-                n := t.Length(a)
-                if k < 0 or (n != types.TypeId(0) and t.KindOf(n) == types.Kind.Const and k >= t.ConstValue(n)) {
-                    v.bad("constant index " $k " outside a " $v.canon(ty))
-                }
-                ty = t.Elem(a)
-            }
-            case Proj.Deref {
-                if not t.IsRef(ty) {
-                    v.bad("a deref of a " $v.canon(ty) ", not a reference")
-                    return types.UnknownT
-                }
-                ty = t.Referent(ty)
-            }
-            case Proj.Payload(tag) {
-                cl, ok := CasesOf(v.T, ty), HasCases(v.T, ty)
-                cs := t.Items(cl)
-                if not ok or tag < 0 or tag >= cs.Len() {
-                    v.bad("no case " $tag " in a " $v.canon(ty))
-                    return types.UnknownT
-                }
-                if cs[tag] == types.TypeId(0) {
-                    v.bad("case " $tag " of a " $v.canon(ty) " has no payload")
-                    return types.UnknownT
-                }
-                ty = cs[tag]
-            }
-        }
+        ty = v.projected(ty, v.F.Projs[I64(p.Path.At) + i])
     }
     return ty
+}
+
+# the type a projection pr of a place of type ty reaches; Unknown, said, where it does not apply
+fn (v mut verifier&) projected(ty types.TypeId, pr Proj) types.TypeId {
+    t := v.T
+    match pr {
+        case Proj.Field(k) {
+            fl, ok := FieldsOf(v.T, ty), HasFields(v.T, ty)
+            fs := t.Items(fl)
+            if not ok or k < 0 or k >= fs.Len() {
+                v.bad("no field " $k " in a " $v.canon(ty))
+                return types.UnknownT
+            }
+            return fs[k]
+        }
+        case Proj.Index(l) {
+            if not t.IsInt(t.Repr(v.localType(l))) { v.bad("an index L" $l " is a " $v.canon(v.localType(l))) }
+            a := v.arrayOf(ty)
+            if a == types.UnknownT {
+                v.bad("an index into a " $v.canon(ty) ", not an array")
+                return a
+            }
+            return t.Elem(a)
+        }
+        case Proj.At(k) {
+            a := v.arrayOf(ty)
+            if a == types.UnknownT {
+                v.bad("an index into a " $v.canon(ty) ", not an array")
+                return a
+            }
+            n := t.Length(a)
+            if k < 0 or (n != types.TypeId(0) and t.KindOf(n) == types.Kind.Const and k >= t.ConstValue(n)) {
+                v.bad("constant index " $k " outside a " $v.canon(ty))
+            }
+            return t.Elem(a)
+        }
+        case Proj.Deref {
+            if not t.IsRef(ty) {
+                v.bad("a deref of a " $v.canon(ty) ", not a reference")
+                return types.UnknownT
+            }
+            return t.Referent(ty)
+        }
+        case Proj.Payload(tag) {
+            cl, ok := CasesOf(v.T, ty), HasCases(v.T, ty)
+            cs := t.Items(cl)
+            if not ok or tag < 0 or tag >= cs.Len() {
+                v.bad("no case " $tag " in a " $v.canon(ty))
+                return types.UnknownT
+            }
+            if cs[tag] == types.TypeId(0) {
+                v.bad("case " $tag " of a " $v.canon(ty) " has no payload")
+                return types.UnknownT
+            }
+            return cs[tag]
+        }
+    }
 }
 
 fn (v mut verifier&) operandType(x Operand) types.TypeId {
