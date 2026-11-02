@@ -28147,8 +28147,8 @@ a join, a spawn or gives C a function value anywhere": std/os's `RunOnStack` han
 importing std/os - every bench program - freed nothing early at all, whatever it did. It is now a body starting a task
 reached from where code may begin (`reachedTasks`: every body but a plain function no one calls, names as a value or
 exports - main, tests, initializers, lambdas, methods a table may call, constructors, destructors) through the scope
-pass's callees and the walks' calls. knucleotide's maps then free their old slots as they grow: peak 13.6 MB -> 10.0 MB
-(the +4 MB handles-as-values had added), instructions +1.05% (a region per slot array); the rest of bench within +0.5%
+pass's callees and the walks' calls. knucleotide's maps then free their old slots as they grow: peak 13.6 MB -> 9.9 MB
+(the +4 MB handles-as-values had added), instructions +0.76% (a region per slot array); the rest of bench within +0.5%
 of instructions (vecfields +0.5, vecpush +0.22, dispdirect +0.2), peaks level or lower.
 
 **E31b: a call through `x[i]` in place.** `v[i].Push(x)` on a Vec of Vecs had been E31b's error (the element read is a

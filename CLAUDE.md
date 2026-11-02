@@ -1161,7 +1161,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   of it; owners win (an array an owner in a sole place holds keeps). And `tasks` (condition 3) is now a task reached
   from where code may begin - a plain function nothing calls or names starts none: std/os's `RunOnStack` handing C a
   function value had stopped every early free in any program importing std/os. Measured: the earlyfree fixtures by
-  value again, server 145 -> 2.3 MB, mapvec 66 -> 1.9 MB; knucleotide's peak 13.6 -> 10.0 MB (+1.05% instructions);
+  value again, server 145 -> 2.3 MB, mapvec 66 -> 1.9 MB; knucleotide's peak 13.6 -> 9.9 MB (+0.76% instructions);
   bench otherwise within 0.5%. The early-free fuzzer's programs had stopped compiling since round 4 (a read-only result,
   std/list not imported) - fixed.
 - **Recorded limits:** long-lived mutated structures holding values a task can reach still only grow (ledger QF), and
