@@ -447,11 +447,8 @@ fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
             }
             case ast.Decl.ExternBlock(_, _, ds) {
                 for x in ds {
-                    match x {
-                        case ast.Decl.Extern(f) { t.waiting.Put(f.Name, true) }
-                        case ast.Decl.Type(_, td) { t.waiting.Put(td.Name, true) }
-                        case _ { }
-                    }
+                    n := externDeclName(x)
+                    if n != source.NameId(0) { t.waiting.Put(n, true) }
                 }
             }
             case ast.Decl.Import(_, alias, path, _) {
@@ -464,6 +461,15 @@ fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
             }
             case _ { }
         }
+    }
+}
+
+# the name an extern block's function or type declares, NameId(0) for anything else
+fn externDeclName(x ast.Decl&) source.NameId {
+    return match x {
+        case ast.Decl.Extern(f): f.Name
+        case ast.Decl.Type(_, td): td.Name
+        case _: source.NameId(0)
     }
 }
 
@@ -834,7 +840,7 @@ fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
         r.typeRef(f.Recv!.Ty)
     }
     for p in s.Params {
-        if p.Ty is not null { r.typeRef(p.Ty) }
+        r.typeRef(p.Ty)
     }
     for t in s.Results { r.typeRef(t) }
     for e in s.Errors { r.path(e) }
@@ -869,7 +875,7 @@ fn (r mut Resolver&) typeParams(tps Array<ast.TypeParam&>&) {
         r.record(nsp, Ref(What.TypeVar, r.mi, r.locals.Len() - 1))
     }
     for p in tps {
-        if p.Ty is not null { r.typeRef(p.Ty) }
+        r.typeRef(p.Ty)
         for a in p.Also { r.typeRef(a) }
     }
 }
@@ -880,31 +886,15 @@ fn (r mut Resolver&) receiverVars(t ast.TypeRef?&, inArgs Bool) {
     if t is null { return }
     match t {
         case ast.TypeRef.Named(_, _, args) {
-            for i in range args.Len() {
-                a := args[i]
+            for a in args {
                 match a {
                     # QAH: "? E" in a receiver's arguments introduces its error-set variable, as a bare name does
                     case ast.TypeRef.Errs(_, items) {
                         for e in items {
-                            if e.Parts.Len() != 1 { continue }
-                            n := e.Parts[0]
-                            j := try r.scope.Get(n) catch default -1
-                            known := j >= 0 and r.locals[j].Kind == What.TypeVar
-                            if not known and r.typeIn(r.mi, n).Kind == What.None { r.introduce(e.Sp, n, null) }
+                            if e.Parts.Len() == 1 { r.introduceVar(e.Sp, e.Parts[0]) }
                         }
                     }
-                    case ast.TypeRef.Named(asp, ap, aargs) {
-                        if ap.Len() == 1 and aargs.Len() == 0 {
-                            n := ap[0]
-                            j := try r.scope.Get(n) catch default -1
-                            known := j >= 0 and r.locals[j].Kind == What.TypeVar
-                            if not known and r.typeIn(r.mi, n).Kind == What.None {
-                                r.introduce(asp, n, null)
-                            }
-                        } else {
-                            r.receiverVars(a, true)
-                        }
-                    }
+                    case ast.TypeRef.Named(asp, ap, aargs) if ap.Len() == 1 and aargs.Len() == 0 { r.introduceVar(asp, ap[0]) }
                     case _ { r.receiverVars(a, true) }
                 }
             }
@@ -913,6 +903,13 @@ fn (r mut Resolver&) receiverVars(t ast.TypeRef?&, inArgs Bool) {
         case ast.TypeRef.Perm(_, of, _, _) { r.receiverVars(of, inArgs) }
         case _ { }
     }
+}
+
+# a bare name in a receiver's arguments that names no type variable in scope and no type introduces one
+fn (r mut Resolver&) introduceVar(sp source.Span, n source.NameId) {
+    j := try r.scope.Get(n) catch default -1
+    known := j >= 0 and r.locals[j].Kind == What.TypeVar
+    if not known and r.typeIn(r.mi, n).Kind == What.None { r.introduce(sp, n, null) }
 }
 
 fn (r mut Resolver&) param(p ast.Param&, body Bool) {
@@ -932,7 +929,7 @@ fn (r mut Resolver&) param(p ast.Param&, body Bool) {
 fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
     if t.Params.Len() > 0 {
         for p in t.Params {
-            if p.Ty is not null { r.typeRef(p.Ty) }
+            r.typeRef(p.Ty)
             for a in p.Also { r.typeRef(a) }
             r.bind(p.Name, p.Sp, What.TypeVar)
         }
@@ -943,7 +940,7 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
             m0 := r.mark()
             r.typeParams(s.TypeParams)
             for p in s.Params {
-                if p.Ty is not null { r.typeRef(p.Ty) }
+                r.typeRef(p.Ty)
             }
             if s.Errs is not null {
                 for e in s.Errs!.Errors { r.path(e) }
@@ -969,7 +966,7 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
             if raw is not null { r.typeRef(raw) }   # T17e
             for c in cases {
                 for p in c.Payload {
-                    if p.Ty is not null { r.typeRef(p.Ty) }
+                    r.typeRef(p.Ty)
                 }
             }
         }
@@ -1034,13 +1031,8 @@ fn (r mut Resolver&) stmt(s ast.Stmt?&) {
             for x in mu.Values { r.expr(x) }
             for t in mu.Targets {
                 match t {
-                    case ast.Expr.Name(sp, n) {
-                        if mu.Define and r.text(n) != "_" {
-                            r.declareRead(n, sp, true)
-                        } else if not mu.Define {
-                            r.target(t)
-                        }
-                    }
+                    case ast.Expr.Name(sp, n) if mu.Define and r.text(n) != "_" { r.declareRead(n, sp, true) }
+                    case ast.Expr.Name(_, _) if mu.Define { }
                     case _ { r.target(t) }
                 }
             }
@@ -1592,34 +1584,22 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef?&) {
     match t {
         case ast.TypeRef.Named(sp, path, args) {
             r.typePath(sp, path)
-            for i in range args.Len() {
-                r.typeRef(args[i])
-            }
+            for a in args { r.typeRef(a) }
         }
         case ast.TypeRef.Func(_, s) {
-            for p in s.Params {
-                if p.Ty is not null { r.typeRef(p.Ty) }
-            }
+            for p in s.Params { r.typeRef(p.Ty) }
             for res in s.Results { r.typeRef(res) }
             for e in s.Errors { r.path(e) }
         }
-        case ast.TypeRef.Shape(_, body) {
-            match body {
-                case ast.TypeBody.Enum(cases, _) {
-                    for c in cases {
-                        for p in c.Payload {
-                            if p.Ty is not null { r.typeRef(p.Ty) }
-                        }
-                    }
-                }
-                case ast.TypeBody.Struct(s) {
-                    for p in s.Params {
-                        if p.Ty is not null { r.typeRef(p.Ty) }
-                    }
-                }
-                case _ { }
+        case ast.TypeRef.Shape(_, ast.TypeBody.Enum(cases, _)) {
+            for c in cases {
+                for p in c.Payload { r.typeRef(p.Ty) }
             }
         }
+        case ast.TypeRef.Shape(_, ast.TypeBody.Struct(s)) {
+            for p in s.Params { r.typeRef(p.Ty) }
+        }
+        case ast.TypeRef.Shape(_, _) { }
         case ast.TypeRef.Ref(_, of, _), ast.TypeRef.Perm(_, of, _, _) { r.typeRef(of) }
         case ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { r.typeRef(of) }
         case ast.TypeRef.Errs(_, items) {
