@@ -28049,6 +28049,9 @@ every body (inferClaims' gathering, then the one that reports). Four changes, ea
    gathered (`inferClaims`), so its last round - nothing grew - leaves the claims as the reporting judging reads them:
    no separate quiet judging a round, and none after.
 Also: the D9b walk for written by-value arrays runs only where a body has such a parameter (`runArrayParam`).
+The self-build, cold (each compiler building its own sources at -O3, fc5a71c's against this round's): the scope phase
+3.54 -> 1.63 s, wall time 63.4 -> 66.1 s (clang's compile and link, 53 s of it, vary by more than that run to run), peak
+memory 2.49 -> 2.37 GB.
 Measured (-O3 compilers, compiler/ as the program, OLANG_TIMES): the scope phase 3.39 s -> 1.31-1.44 s (round 1 of the
 field inference ~1.0 s, round 2 ~0.15 s, round 3 ~0.04 s); the field rounds now take 20,958 of 21,214 components again.
 The inference's own findings moved with the early give-back (234 -> 208 locals lifted, 78 -> 42 calls landed, one field
