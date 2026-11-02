@@ -1,4 +1,4 @@
-# check: fail error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first: 'v.ToArray()'
+# check: fail error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
 # also: note: 'grow' may grow it here
 # M19g: a call given both a view of the Vec and the Vec itself, through a parameter it may grow
 import "std/io"

@@ -1,5 +1,5 @@
 # check: fail error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
-# also: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+# also: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
 # M19g: a view of a Vec kept across a Push on the same Vec, in one function - the view shows the buffer the growth replaced
 import "std/io"
 fn main() ? {

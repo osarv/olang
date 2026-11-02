@@ -67,6 +67,7 @@ type view struct(P place, Site I64) {
     GrowIn I64 = 0
     InnerFile I64 = -1
     InnerAt source.Span = source.Span(0, 0)
+    Of I64 = 0      # whose view: 1 a Vec's, 2 a Map's (the prelude's call handing it back), 0 not known
 }
 
 # a local L holding a view V
@@ -184,6 +185,7 @@ type Viewer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     texts Map<I64, String&>         # a file's text, by file
     library Map<I64, Bool>          # the standard library's files
     vecFile I64 = -1                # the prelude's Vec module's file
+    mapFile I64 = -1                # ... and its Map module's
     fieldsOf Map<types.DeclId, I64> # a struct's field names, as an index in nameLists
     nameLists Vec<Vec<source.NameId>>
     # the call graph (Tarjan): each body's callees in edgeTo from edgeFrom[b]; the components, callees' first
@@ -208,6 +210,7 @@ type Viewer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     targets Vec<typed.Lvalue&>   # the places of the Assigns being walked, innermost last (Lvalue.Target)
     reported Map<I64, Bool>      # (file << 32) | offset: an error said there
     reportedHolds Map<I64, Bool> # (file << 40) | (local << 24) | growth offset: one error a holder for each growth
+    reportedViews Map<I64, Bool> # (file << 48) | (view site << 24) | growth offset: one error a view for each growth
 }
 
 # every body's summary found, callees first, and every body walked against them
@@ -217,6 +220,7 @@ fn (v mut Viewer&) Run() {
         if m.Src is not null { v.texts.Put(m.File, m.Src!.Text) }
         if m.Identity.StartsWith("std/") { v.library.Put(m.File, true) }
         if m.Identity == "std/prelude/vec" { v.vecFile = m.File }
+        if m.Identity == "std/prelude/map" { v.mapFile = m.File }
     }
     if v.vecFile < 0 { return }
     v.str("")
@@ -808,13 +812,17 @@ fn (v mut Viewer&) use(id I64, sp source.Span, st state&) {
         k := (v.B!.File << 40) | (id << 24) | I64(h.V.GrowAt.Start)
         if v.reportedHolds.Has(k) { return }
         v.reportedHolds.Put(k, true)
+        # one use, one error: a view read through a second holder of it (a for-in's hidden walk of 'g') is said once
+        kv := (v.B!.File << 48) | ((h.V.Site & 16777215) << 24) | (I64(h.V.GrowAt.Start) & 16777215)
+        if v.reportedViews.Has(kv) { return }
+        v.reportedViews.Put(kv, true)
         if v.seen(sp) { return }
         w := v.where(h.V.P)
         n := v.B!.Locals[id].Name
         m := msgs.VecHiddenViewStale(w, w) if n == source.NameId(0) else msgs.VecViewStale(v.text(n), w, w)
         rec := v.P.L.Diags.Error(v.at(sp), m)
         grewIn := v.strs[h.V.GrowIn]
-        v.P.L.Diags.Note(rec, v.at(h.V.GrowAt), msgs.NoteVecGrowsHere(w, grewIn, w))
+        v.P.L.Diags.Note(rec, v.at(h.V.GrowAt), msgs.NoteVecGrowsHere(w, grewIn, copyHint(h.V.Of, w)))
         if h.V.InnerFile >= 0 and not v.library.Has(h.V.InnerFile) {
             v.P.L.Diags.Note(rec, diag.Where.Span(h.V.InnerFile, I64(h.V.InnerAt.Start), I64(h.V.InnerAt.End))
                 msgs.NoteVecGrowsInside(grewIn))
@@ -848,7 +856,7 @@ fn (v mut Viewer&) grow(g place, sp source.Span, grewIn I64, innerFile I64, inne
     for t in st.Tasks {
         if not v.meets(t.V.P, g) or v.seen(sp) { continue }
         w := v.where(t.V.P)
-        rec := v.P.L.Diags.Error(v.at(sp), msgs.VecGrowsUnderTask(w, w))
+        rec := v.P.L.Diags.Error(v.at(sp), msgs.VecGrowsUnderTask(w, taskCopy(t.V.Of, w)))
         v.P.L.Diags.Note(rec, v.at(t.At), msgs.NoteVecTaskHolds(w))
         return
     }
@@ -1405,7 +1413,7 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
                 g := v.grownAt(r.P, grows)
                 if g < 0 { continue }
                 at := v.tokOf(c.Args[i])
-                if not v.seen(at) { v.givenGrowing(at, r.P, name, innerFile[g] if known else -1, innerAt[g]) }
+                if not v.seen(at) { v.givenGrowing(at, r.P, r.Of, name, innerFile[g] if known else -1, innerAt[g]) }
                 break
             }
         }
@@ -1421,7 +1429,11 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
             viewed[f.Param] = true
             at Vec<place>
             v.exprPlaces(c.Args[f.Param], st, at)
-            for a in at { viewAdd(out, view(v.below(a, f.Path, f.Show, f.Any), I64(tok.Start))) }
+            for a in at {
+                w := view(v.below(a, f.Path, f.Show, f.Any), I64(tok.Start))
+                w.Of = 1 if v.Bodies[callee].File == v.vecFile else 2 if v.Bodies[callee].File == v.mapFile else 0
+                viewAdd(out, w)
+            }
         }
     }
     if v.carries(ty) {
@@ -1450,6 +1462,18 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
     }
 }
 
+# how to copy what a view shows, for a message naming the collection w: a Map's value (of: view.Of 2), else the
+# elements of a Vec, the only other collection a view is of
+fn copyHint(of I64, w String&) String {
+    if of == 2 { return $"copy the value first ('" $w ".Get(k)')" }
+    return $"copy the elements first ('" $w ".ToArray()')"
+}
+
+fn taskCopy(of I64, w String&) String {
+    if of == 2 { return $"a copy of the value: '" $w ".Get(k)'" }
+    return $"a copy: '" $w ".ToArray()'"
+}
+
 # the first growth g of grows that may grow the Vec a view of p is of, -1 for none
 fn (v mut Viewer&) grownAt(p place, grows Vec<place>&) I64 {
     for g in range grows.Len() {
@@ -1460,9 +1484,9 @@ fn (v mut Viewer&) grownAt(p place, grows Vec<place>&) I64 {
 
 # M19g: a view of p given to the very call that may grow its Vec, said - with where inside the callee it grows, in a
 # file of the program's own
-fn (v mut Viewer&) givenGrowing(at source.Span, p place, name I64, file I64, inner source.Span) {
+fn (v mut Viewer&) givenGrowing(at source.Span, p place, of I64, name I64, file I64, inner source.Span) {
     w := v.where(p)
-    rec := v.P.L.Diags.Error(v.at(at), msgs.VecViewGivenGrowing(w, v.strs[name], w, w))
+    rec := v.P.L.Diags.Error(v.at(at), msgs.VecViewGivenGrowing(w, v.strs[name], w, copyHint(of, w)))
     if file < 0 or v.library.Has(file) { return }
     v.P.L.Diags.Note(rec, diag.Where.Span(file, I64(inner.Start), I64(inner.End)), msgs.NoteVecGrowsInside(v.strs[name]))
 }

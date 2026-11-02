@@ -1,0 +1,16 @@
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
+# never: Clone
+# C2d, B11 (review 6b F6): an argument of a type with no Clone - a Vec, a value copied by assignment - is not told to
+# give a copy by 'x.Clone()' or '$x'
+import "std/io"
+type holder struct(v Vec<I64>&) { v }
+fn main() {
+    out := Vec<holder>()
+    for i in range 1, 6 {
+        v := Vec<I64>()
+        for j in range i { v.Push(j) }
+        w := holder(v)
+        out.Push(w)
+    }
+    io.Println($out.Len())!
+}

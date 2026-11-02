@@ -2185,7 +2185,7 @@ fn NoteFuncTypeScopes(ty String&) Msg { return Msg(Diag.NoteFuncTypeScopes, "", 
 fn NoteVecGrewHere() Msg { return Msg(Diag.NoteVecGrewHere, "", "the Vec grew here, after the view was taken; take the view after the growth, or copy the elements first: 'v.ToArray()'") }
 
 # NOTE_VEC_GROWS_HERE
-fn NoteVecGrowsHere(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.NoteVecGrowsHere, "", "'" $text1 "' may grow here, in " $text2 " - take the view or the reference after it, or copy the elements first ('" $text3 ".ToArray()' for a Vec)") }
+fn NoteVecGrowsHere(text1 String&, text2 String&, copy String&) Msg { return Msg(Diag.NoteVecGrowsHere, "", "'" $text1 "' may grow here, in " $text2 " - take the view or the reference after it, or " $copy) }
 
 # NOTE_VEC_GROWS_INSIDE
 fn NoteVecGrowsInside(text String&) Msg { return Msg(Diag.NoteVecGrowsInside, "", $text " may grow it here") }
@@ -2646,10 +2646,10 @@ fn ElemOutlived() Msg { return Msg(Diag.ElemOutlived, "O25c", "the array outlive
 fn PayloadOutlived() Msg { return Msg(Diag.PayloadOutlived, "T17c", "this value's payload refers to storage the value would outlive - make that storage where the value is kept") }
 
 # ERR_INSTANCE_OUTLIVES_REFERENT
-fn InstanceOutlivesReferent() Msg { return Msg(Diag.InstanceOutlivesReferent, "C2d", "this instance would outlive what its field refers to - keep it in that block, hold the value by value in the field, or give the field a copy ('$x', 'x.Clone()')") }
+fn InstanceOutlivesReferent(copy String&) Msg { return Msg(Diag.InstanceOutlivesReferent, "C2d", "this instance would outlive what its field refers to - keep it in that block" $(", hold the value by value in the field, or give the field a copy (" $copy ")" if copy != "" else ", or hold the value by value in the field")) }
 
 # ERR_INSTANCE_OUTLIVES_ARG
-fn InstanceOutlivesArg() Msg { return Msg(Diag.InstanceOutlivesArg, "C2d", "this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')") }
+fn InstanceOutlivesArg(copy String&) Msg { return Msg(Diag.InstanceOutlivesArg, "C2d", "this instance holds a reference to an argument it would outlive - make the argument where the instance goes" $(", hold it by value in a field, or give it a copy (" $copy ")" if copy != "" else ", or hold it by value in a field")) }
 
 # ERR_GLOBAL_HOLDS_SHORTER
 fn GlobalHoldsShorter() Msg { return Msg(Diag.GlobalHoldsShorter, "O1b", "a global holds only what lives as long as the program - store something built here, or another global's") }
@@ -3038,10 +3038,10 @@ fn VecViewStale(text1 String&, text2 String&, text3 String&) Msg { return Msg(Di
 fn VecHiddenViewStale(text1 String&, text2 String&) Msg { return Msg(Diag.VecHiddenViewStale, "M19g", "this reads a view of '" $text1 "' taken before '" $text2 "' may have grown") }
 
 # ERR_VEC_VIEW_GIVEN_GROWING
-fn VecViewGivenGrowing(text1 String&, text2 String&, text3 String&, text4 String&) Msg { return Msg(Diag.VecViewGivenGrowing, "M19g", "this view of '" $text1 "' is given to " $text2 ", which may grow '" $text3 "' - copy the elements first: '" $text4 ".ToArray()'") }
+fn VecViewGivenGrowing(text1 String&, text2 String&, text3 String&, copy String&) Msg { return Msg(Diag.VecViewGivenGrowing, "M19g", "this view of '" $text1 "' is given to " $text2 ", which may grow '" $text3 "' - " $copy) }
 
 # ERR_VEC_GROWS_UNDER_TASK
-fn VecGrowsUnderTask(text1 String&, text2 String&) Msg { return Msg(Diag.VecGrowsUnderTask, "M19g", "'" $text1 "' may grow here while a task holds a view of it - give the task a copy: '" $text2 ".ToArray()'") }
+fn VecGrowsUnderTask(text1 String&, copy String&) Msg { return Msg(Diag.VecGrowsUnderTask, "M19g", "'" $text1 "' may grow here while a task holds a view of it - give the task " $copy) }
 
 # ERR_ASSERT_STALE
 fn AssertStale(text String&) Msg { return Msg(Diag.AssertStale, "S18c, K1", "evaluated while compiling, this assertion stops on a stale view: " $text) }

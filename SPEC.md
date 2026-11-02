@@ -2785,7 +2785,8 @@ element type growing is no growth of this one. Two places of different roots are
 second name stored in a structure makes them one: that hazard is not refused. It is never a memory error - the buffer a
 growth replaces stays where the `Vec` lives until that scope closes (M19d) - and the compile-time evaluator stops on such
 a use (K1) and the scope sanitizer reports it (B2f). The error names the view and the `Vec`, with a note at the growth:
-take the view after it, or copy the elements first (`v.ToArray()`). The prelude's own `Vec` methods, which read a
+take the view after it, or copy the elements first (`v.ToArray()`; a `Map`'s value, `m.Get(k)`) - one error for one
+stale use, however many holders of the view it is read through. The prelude's own `Vec` methods, which read a
 replaced buffer on purpose while copying it, are not held to it.
 
 The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a

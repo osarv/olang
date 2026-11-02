@@ -1,0 +1,21 @@
+# check: fail error[M19g]: 'g' holds a view of 'v' taken before 'v' may have grown
+# never: this reads a view of 'v'
+# M19g, B11 (review 6b F6): one stale use is one error - a for-in over a holder of a stale view reads it through its
+# hidden walk too, which was a second error at the same loop
+import "std/io"
+type blk struct(n I64) { n }
+fn (b mut blk&) Counter() Iterator<I64> {
+    for _ in range 3 {
+        b.n++
+        yield b.n
+    }
+}
+fn main() {
+    v := Vec<blk>()
+    v.Push(blk(10))
+    g := v[0].Counter()
+    for i in range 1000 { v.Push(blk(i)) }
+    s := 0
+    for x in g: s += x
+    io.Println("sum " $s)!
+}

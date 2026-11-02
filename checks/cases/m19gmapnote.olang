@@ -1,0 +1,13 @@
+# check: fail error[M19g]: 'r' holds a view of 'm' taken before 'm' may have grown
+# also: copy the value first ('m.Get(k)')
+# never: ToArray
+# M19g (review 6b F6): the note on a Map's reference names what a Map has - its value read - not a Vec's ToArray
+import "std/io"
+type blk struct(n I64) { n }
+fn main() {
+    m := Map<I64, blk>()
+    m.Put(1, blk(1))
+    r := m.Ref(1)!
+    for k in range 2, 3000 { m.Put(k, blk(k)) }
+    io.Println("r " $r.n)!
+}

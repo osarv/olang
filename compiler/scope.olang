@@ -5104,7 +5104,7 @@ fn (s mut Scoper&) instanceOutlivesArg(x typed.Expr&, slot Term) Bool {
         # only existing storage of one of this function's blocks that closes first, given as the argument: anything else -
         # a temporary built for the call included - the store's own fit judges
         if not t.Runs() or s.order(t, slot) != FailsBlock or s.isFresh(c.Args[ai]) or s.madeLocal(c.Args[ai], 0) < 0 { continue }
-        if s.report { s.err(s.argAt(c.Args[ai]), msgs.InstanceOutlivesArg()) }
+        if s.report { s.err(s.argAt(c.Args[ai]), msgs.InstanceOutlivesArg(s.copyHint(c.Args[ai]))) }
         return true
     }
     return false
@@ -7418,7 +7418,8 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
             if ai < 0 { ai = s.argOfVar(c, r.Lo) }
             at := s.argAt(c.Args[ai]) if ai >= 0 else s.nameSpan(sp)
             if r.Why == WhyResult and s.landSite == I64(c.Site) { at = s.landSp }
-            rec := s.err(at, msgs.InstanceOutlivesReferent() if r.Why == WhyField else msgs.InstanceOutlivesArg())
+            hint := s.copyHint(c.Args[ai]) if ai >= 0 else ""
+            rec := s.err(at, msgs.InstanceOutlivesReferent(hint) if r.Why == WhyField else msgs.InstanceOutlivesArg(hint))
             # the argument made where the instance goes - a parameter's scope (B11)
             w := s.paramOfTerm(lo)
             if ai >= 0 and w >= 0 { s.noteMadeNamed(rec, c.Args[ai], w, s.P.L.Names.Text(s.B!.Locals[w].Name), 0) }
@@ -7719,6 +7720,16 @@ fn (s mut Scoper&) indexCall(c typed.Call&) Bool {
         case _ { }
     }
     return false
+}
+
+# how C2d's message says to copy an argument (B11): "'$x', 'x.Clone()'" for text, "'x.Clone()'" for a type with a
+# Clone, "" for one with none - a Vec's or a Map's copy is a value held by value, which the message names already
+# (review 6b F6: it named 'x.Clone()' for a Vec)
+fn (s mut Scoper&) copyHint(x typed.Expr&) String {
+    d := s.P.T.Referent(x.Type()) if s.isRef(x.Type()) else x.Type()
+    if s.isText(d) { return "'$x', 'x.Clone()'" }
+    if s.P.MethodOf(d, s.P.L.Names.Intern("Clone")) < 0 { return "" }
+    return "'x.Clone()'"
 }
 
 fn (s mut Scoper&) isText(ty types.TypeId) Bool {
