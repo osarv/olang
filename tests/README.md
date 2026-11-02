@@ -34,6 +34,9 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `handover.olang`, `inplace.olang` - D9h: value results viewing what a function is given handed over uncopied where the
   caller only reads them, copied where it keeps them; locals holding views in place of copies where nothing could tell.
   `handoverglobal.olang` - the same with a global reaching writable storage, which keeps every such view a copy.
+- `fnvalues.olang` - T22a's open point 5: functions handing back what a reference argument refers to - whole, a view of
+  it, through a lambda - as function values, a call through one landing where its argument lives; baked beside the run
+  time.
 
 Imports are relative to the importing file. A module's identity is its path from the
 working directory (M22), so these are `tests/shared`, `tests/geom/rect` and so on.

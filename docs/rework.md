@@ -2600,3 +2600,26 @@ error). HISTORY.md "The rework, round 4" has the whole story; in short:
   touches is the next step.
 - **Not built.** Folding (2.9): every block keeps its scope. Open point 5: a function type's `T&` result is not read as
   borrowed from its `&` parameters, so a function handing back what an argument refers to is no value (T22a).
+
+## 21. Round 4b: the scope phase's time, open point 5, the bench rows back (wt-flip2)
+
+HISTORY.md "The rework, round 4b" has the story; in short:
+
+- **The scope phase** 3.39 s -> ~1.35 s on compiler/ (-O3 compilers): a component's judging is set aside with what it
+  read (constructor fields' marks, callees' and constructors' summaries) and taken again by a later round of the field
+  inference where all of it is as it was (`compRun`, `takeable`; `OLANG_SCOPECHECK=1` checks it, `OLANG_NOREUSE=1` turns
+  it off); a promoted field built through where no binding is known is given back right after the component that found
+  it; a lone body is judged once, reporting and gathering at once (`judgeOnce`, redone where it proposed a claim or said
+  something); a cycle's fixed-point rounds gather the claims. Rounds: ~1.0 s, ~0.15 s, ~0.04 s.
+- **Open point 5 built**: a function type's result holding references reads as borrowed from its reference parameters
+  - a call through a value holds each reference argument to outlive where the result lands (exactly where both can be
+  stored through, the result landing there), as a view (O27, never by building the argument longer); a function whose
+  obligations are only these is a value (T22, T22a; `valueRels`, `valueCovered`).
+- **Bench back at the base**: a returned reference local's own slot had moved to the result scope with what it names
+  (O26a); it stays in its block now - vec gather -6.2%, knucleotide -0.9%, dispatch -0.7..1.3% of instructions.
+- **Found**: `==` on references to arrays tested null first, so an empty Vec was unequal to its copy (and the evaluator
+  agreed with the bug); fixed in lowering's equalAt/hashAt.
+- **Folding (2.9) measured, not built**: temporaries-only blocks folded changed no bench row and not the compiler's
+  front end; it pays only where the enclosing scope allocates in the same activation and the folded block's own
+  allocation is a bounded call result - which needs a per-body bound on what a callee builds in its result scope, the
+  next step if code shows the cost.

@@ -480,7 +480,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   and `Vec`, so those compare by what they hold however held. A reference compared with a value of its referent's type
   compares the value it names (mine: a value has no storage to be the same as). The compiler supplies `Hash` for plain
   data; a type declaring `Eq` must declare `Hash`; hashing follows equality. Identity of two arrays or Lists is no longer
-  written (a capability removed with `a is b`).
+  written (a capability removed with `a is b`). Found 2026-11-02 (round 4b): the arrays' helper tested two references
+  for null first, so a zero Vec and its copy compared unequal - an array is never null, its lengths decide now.
 - **Structs are built only by their constructor (T13, C2d, the user's call).** No struct literals, no field-list
   structs. A constructor body is a block whose top-level locals are the fields (C2a); a bare name is a pun of a
   parameter; `return` is rejected. Defaults are compile-time expressions (D8a). `destruct { }` makes a type
@@ -687,9 +688,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (2026-10-25: never compared, so a `Call` with a contract read its error code as a result). A
   function value returned from a parameter is an obligation (O14a). No function type says where references live (QCB,
   2026-11-02): a function whose inferred obligations relate its arguments' scopes - `fn link(a mut N&, b N&)` storing b
-  into a, or one handing back what an argument refers to - is no value (T22a), said by explain/doc/hover (`# not a
-  value`) and at the conversion; a lambda calling it is one. (Until 2026-11-02 a type could write `b N&a` or `T&p`; docs/rework.md's
-  open point 5 - a function type's `T&` result read as borrowed from its `&` parameters - is not built.)
+  into a - is no value (T22a), said by explain/doc/hover (`# not a value`) and at the conversion; a lambda calling it
+  is one. (Until 2026-11-02 a type could write `b N&a` or `T&p`.) **A result holding references reads as borrowed from
+  the reference parameters (open point 5, the user's approval; built 2026-11-02, round 4b)**: a call through a value
+  holds each reference argument to outlive where the result lands - exactly there where something can be stored
+  through both, the result landing where that argument lives - and as a view (O27: never met by building the argument
+  longer), so a function whose obligations are only these hands back what an argument refers to and is a value (`fn
+  first(a Array<I64>&) Array<I64>& { return a[0:1] }; g := first`). Decided (mine): reference parameters only; a call
+  through a value is stricter than the direct call where that would build the argument longer.
 - **Static literals (T25d).** A literal known while compiling reaching a read-only reference is the constant data
   itself; an immutable global no writable reference reaches is `constant`, and importers see its value (K2).
 - **A number type's limits through its name (E36, the user's decision 2026-10-24).** `I64.Max`, `U8.Min`, `T.Max`
@@ -1058,7 +1064,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   user, 2026-10-31): what a block built that nothing outside keeps is freed at its close, guaranteed - the one
   structural handle on memory left. Optimization (the user: a tiny block's overhead may be skipped): a block whose
   allocations are bounded and small, with no loop between it and the enclosing scope, is folded into that scope (no
-  header, no close) - its memory freed at most one scope later, by a bounded amount (mine: the bound and the rule). (Not built: the folding - every block keeps its scope; recorded in docs/rework.md section 20.) Round 1 was
+  header, no close) - its memory freed at most one scope later, by a bounded amount (mine: the bound and the rule). (Not built: the folding - measured in round 4b, docs/rework.md section 21: temporaries-only blocks folded changed no bench row nor the compiler's front end; it pays only where the enclosing scope allocates too and the block's allocation is a call result, which needs a bound on what a callee builds - every block keeps its scope.) Round 1 was
   built behind `OLANG_SCOPES=infer` (2026-10-31); round 4 made it the only path (2026-11-02): the switch, every marker,
   scope argument and `outlives` gone from the grammar, the repository migrated by `tools/scopes_migrate.olang` (in `olang
   fix`), explain/doc/hover printing the inferred obligations as `# scopes: a outlives b`. Decided with it (mine, the user

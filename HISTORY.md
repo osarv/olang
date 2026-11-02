@@ -28020,3 +28020,74 @@ passes.
 **Left.** docs/rework.md's open point 5 (a function type's `T&` result read as borrowed from its `&` parameters) is not
 built: a function handing back what an argument refers to is no value. The small-block folding (O2's tiny block folded
 into its parent) is not built. The field loop's quiet rounds (scope.inferFields) still judge the whole program each round.
+
+## The rework, round 4b: the scope phase's time, open point 5, the bench rows back, folding measured (2026-11-02)
+
+docs/rework.md section 21. Round 4 left the scope phase at 3.39 s on compiler/ (the base, with markers, 0.98 s), four
+bench rows above the base and open point 5 unbuilt.
+
+**The scope phase.** Of round 4's 3.39 s, three whole judgings of the program (the field inference's rounds: two that
+promote or give fields back, one that reports) each cost about a second, and a judging was itself about two judgings of
+every body (inferClaims' gathering, then the one that reports). Four changes, each kept by measurement:
+1. *A component's judging taken again.* Each judging of a call-graph component is set aside (`compRun`: its bodies'
+   plans and summaries, its diagnostics - `diag.Since`/`Replay` -, the functions it made values, its gaps, what it asked
+   of the field inference) with what it read: the marks of the constructor fields `fieldMark` read (and its own
+   constructors' every field), the summaries of its callees outside it and of the constructors whose construction
+   bindings it read (O23a's `FieldFrom`), as they were. A later round takes the latest judging whose inputs are all as
+   they are now (`takeable`, `asItWas`), so a round after one that gave fields back takes the judgings of the round
+   before they were promoted. `OLANG_SCOPECHECK=1` judges a component it would take anyway and asserts the outcome is
+   the same; it passes over the compiler and the whole suite. `OLANG_NOREUSE=1` turns it off, for measuring.
+2. *Fields given back as the round goes.* A promoted field built through where no binding is known goes back for good
+   (2.6); it is now given back right after the component that found it, so the components after it read the marks the
+   next round would (most then taken again from the round before the promotion); what a round that gave back asks is
+   asked again by the next, judged with consistent marks.
+3. *A lone body judged once.* A body alone in its component is judged once, reporting and gathering the inference's
+   claims at once (`judgeOnce`); kept where it proposed no claim and said nothing - then it is the judging the
+   gathering would have been followed by - else everything it gave is forgotten and the two judgings made as before
+   (95 of the compiler's ~10,500 bodies).
+4. *A cycle's rounds gather.* A cyclic component's fixed-point rounds judge each body once a round with the claims
+   gathered (`inferClaims`), so its last round - nothing grew - leaves the claims as the reporting judging reads them:
+   no separate quiet judging a round, and none after.
+Also: the D9b walk for written by-value arrays runs only where a body has such a parameter (`runArrayParam`).
+Measured (-O3 compilers, compiler/ as the program, OLANG_TIMES): the scope phase 3.39 s -> 1.31-1.44 s (round 1 of the
+field inference ~1.0 s, round 2 ~0.15 s, round 3 ~0.04 s); the field rounds now take 20,958 of 21,214 components again.
+The inference's own findings moved with the early give-back (234 -> 208 locals lifted, 78 -> 42 calls landed, one field
+more promoted - `Server` - with 33 given back against 34): another fixed point, as sound, reached in another order.
+
+**Found: an empty array unequal to an empty array.** `==` on references to arrays (lowering's `equalAt`) tested both for
+null first, so a zero Vec's buffer (a null reference) and the empty one its copy holds were unequal - `a == b` false
+for `b := a` of an empty Vec, and through a struct holding one (the scope pass's own summaries compared unequal when
+empty, so no judging was ever taken again); the evaluator ran the same helper. An array is never null (T2c): the arrays'
+own comparison - lengths first - decides now, and Hash follows (`hashAt` hashes the array). `std/prelude/tests/vec.olang`
+holds it, baked and at run time. Also in diag: `Forget` left the `Yield` entries of the records it dropped.
+
+**Open point 5, built** (the user's approval, 2026-10-31). A function type's result holding references reads as borrowed
+from its reference parameters (T22): a call through a value holds each reference argument to outlive the scope the result
+lands in - exactly that scope where something can be stored through both the parameter and the result (O25g), the result
+landing where the argument lives (O18c, `callRels` in `decide`, `landByObligations`) - and as a view: never met by
+building the argument longer (O27), since the callee may hand back a view of its storage. A function whose obligations
+are only these is a value (`valueCovered`): `fn first(a Array<I64>&) Array<I64>& { return a[0:1] }; g := first` and a
+lambda handing back its argument compile; explain says nothing of it under "not a value". Decided (mine): reference
+parameters only (a by-value one holding references keeps today's rule), a result holding references of any kind; a call
+through a value is stricter than the direct call it stands for where the direct call would build an argument longer (a
+loop turn's text given beside a list the result is: O10c through the value, accepted by name). tests/fnvalues.olang;
+checks t22aviewkept (O27 through a value), t22avalueexact (O10c); vec20byname is a run case, t22borrowedresult O27's.
+
+**The bench rows back.** vec gather (+6.6% after the flip), knucleotide (+0.9%) and dispatch (+0.7-1.3%) had one cause:
+a returned reference local (`m mut Map<String&, I64>& = Map()` in knucleotide's `counts`, `out` in `Vec.ToArray`) had
+its own slot - the pointer - homed in the result scope with what it names (O26a's "its own storage too"), so every read
+of it in a loop went through the result scope's arena and LLVM kept no register for it; before the flip `&seq` or
+`&return` was written on such locals, which O26a did not move. A reference's slot can be named by nothing (no reference
+to a reference, T11): it stays in its block now (SPEC O26a). Bench (callgrind, baseline x86-64, the round's rows): every
+row within 0.04% of the base or below it - vec gather 6.47 -> 6.07M, knucleotide 69.63 -> 69.02M, dispatch any 15.32 ->
+15.12M, enum 14.84 -> 14.74M, direct 7.93 -> 7.83M; peak RSS level.
+
+**Folding, measured and not built.** O2's folding of a tiny block into the enclosing scope (2.9) saves a scope's chunk
+taken and given back only where the enclosing scope allocates in the same activation: a branch allocating in a loop turn
+costs what the turn allocating does (33 instructions a turn either way in a microbenchmark), a function allocating in its
+frame and in a branch 145 against ~98 a call. Built as a measurement - every plain block whose sites are temporaries
+only (Promote, Temp: their sizes known), folded through the plan into the enclosing block in lowering's `scopeRef` - it
+changed no bench row (+596 instructions a program, at startup) and the compiler's own front end not measurably. The
+blocks where it would pay hold a call building its result there, whose size no summary bounds; a size summary per body
+(what a callee may build in its result scope, bounded) would be the next step if code shows the cost. Recorded in
+docs/rework.md 21; every block keeps its scope.
