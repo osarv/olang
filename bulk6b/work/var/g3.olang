@@ -1,0 +1,19 @@
+import "std/io"
+type node struct(v I64) { v }
+fn mk(k I64) node& { return node(k) }
+fn gen(k I64) Iterator<I64> {
+    r := mk(k)
+    for i in range 3 {
+        f := fn() I64 { return r.v }
+        yield f() + i
+    }
+}
+fn main() {
+    t := 0
+    for x in gen(5) {
+        junk := Vec<String>()
+        for i in range 2000 { junk.Push($i "abcdefghijklmnopqrstuvwxyz") }
+        t += x + junk.Len() - 2000
+    }
+    io.Println($t)!
+}

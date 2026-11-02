@@ -1,0 +1,30 @@
+# D9h (F2's quiet statement): a value result viewing an argument, read where it stands in a join, while a later piece
+# of the same statement calls a closure (no argument) writing what it views - the join's operands are all evaluated
+# before any piece renders (E11b)
+import "std/io"
+
+fn first(v Vec<I64>&) Array<I64> { return v.View()[0:2] }
+
+type hold struct(v mut Vec<I64>&) { v }
+
+fn poke(h hold) I64 {
+    h.v[0] = 77
+    return 0
+}
+
+fn main() {
+    v := Vec<I64>()
+    v.Push(1)
+    v.Push(2)
+    pv mut Vec<I64>& = v
+    f := fn() I64 {
+        pv[0] = 99
+        return 0
+    }
+    io.Println($first(v) " " $f() " (I64[1, 2] 0 expected: first's result is a value)")!
+    v[0] = 1
+    io.Println($first(v) " " $poke(hold(pv)) " (I64[1, 2] 0)")!
+    w := first(v)
+    g := f()
+    io.Println($w " " $g " (I64[77, 2] 0: w is a copy taken before f writes 99)")!
+}

@@ -1,0 +1,27 @@
+# O8d Map values let go at replacement, against a Ref reached through a call's result (ss.RefMut(0).m.Ref(3)), held across
+# a Put replacing that value made through the same route (M19g's hidden route: neither side meets the other)
+import "std/io"
+
+type rec struct(name String, xs Vec<I64>) { name, xs }
+
+fn mk(k I64) Vec<I64> {
+    v Vec<I64>
+    for i in range 6 { v.Push(k * 10 + i) }
+    return v
+}
+
+fn label(k I64) String { return $k "-label-padded-to-some-length" }
+
+type st struct() {
+    m Map<I64, rec>
+}
+
+fn main() {
+    ss := Vec<st>()
+    ss.Push(st())
+    for k in range 5 { ss.RefMut(0).m.Put(k, rec(label(k), mk(k))) }
+    r := ss.RefMut(0).m.Ref(3)!
+    ss.RefMut(0).m.Put(3, rec(label(33), mk(33)))
+    for k in range 100, 2000 { ss.RefMut(0).m.Put(k % 5, rec(label(k), mk(k))) }
+    io.Println("r " $r.name " " $r.xs)!
+}

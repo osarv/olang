@@ -1,0 +1,26 @@
+# E31b in place (F1 fix) + M19g: a generator method called through x[i] in another function, handed back; the caller
+# grows the collection before walking it
+import "std/io"
+
+type blk struct(n I64) { n }
+
+fn (b mut blk&) Counter() Iterator<I64> {
+    for _ in range 3 {
+        b.n++
+        yield b.n
+    }
+}
+
+fn counterOf(v mut Vec<blk>&) Generator<I64> { return v[0].Counter() }
+
+fn main() {
+    v := Vec<blk>()
+    v.Push(blk(10))
+    g := counterOf(v)
+    for i in range 1000 { v.Push(blk(i)) }
+    junk := Vec<blk>()
+    for i in range 5000 { junk.Push(blk(-i)) }
+    s := 0
+    for x in g: s += x
+    io.Println("sum " $s " v[0].n " $v[0].n " (33 13)")!
+}

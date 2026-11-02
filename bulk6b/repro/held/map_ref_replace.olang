@@ -1,0 +1,27 @@
+# O8d Map values let go at replacement (the earlyfree mapvec shape) against a Ref of the replaced value held across the
+# Put (no growth, so M19g says nothing); and a view of an owner local's value held across its reassignment
+import "std/io"
+
+type rec struct(name String, xs Vec<I64>) { name, xs }
+
+fn mk(k I64) Vec<I64> {
+    v Vec<I64>
+    for i in range 6 { v.Push(k * 10 + i) }
+    return v
+}
+
+fn label(k I64) String { return $k "-label-padded-to-some-length" }
+
+fn main() {
+    m := Map<I64, rec>()
+    for k in range 5 { m.Put(k, rec(label(k), mk(k))) }
+    r := m.Ref(3)!
+    m.Put(3, rec(label(33), mk(33)))
+    for k in range 100, 2000 { m.Put(k % 5 + 10, rec(label(k), mk(k))) }
+    io.Println("r " $r.name " " $r.xs " (by the language, what slot 3 holds now or held: no freed storage)")!
+    b := rec(label(0), mk(0))
+    w := b.xs.View()
+    b = rec(label(1), mk(1))
+    for k in range 100, 2000 { m.Put(k % 5 + 10, rec(label(k), mk(k))) }
+    io.Println("w " $w " (I64[0, 1, 2, 3, 4, 5])")!
+}

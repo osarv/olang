@@ -1,0 +1,24 @@
+# E31b in place (F1 fix): the method's own body writes no global, but a destructor run at an inner block's close grows
+# the collection before the method's write lands
+import "std/io"
+
+type blk struct(n I64) { n }
+
+G mut Vec<blk>
+
+type guard struct() { } destruct {
+    for i in range 1000 { G.Push(blk(i)) }
+}
+
+fn (b mut blk&) Bump() {
+    {
+        g := guard()
+    }
+    b.n = 99
+}
+
+fn main() {
+    G.Push(blk(1))
+    G[0].Bump()
+    io.Println("G[0].n = " $G[0].n " (99) len " $G.Len())!
+}

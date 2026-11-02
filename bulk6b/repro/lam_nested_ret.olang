@@ -1,0 +1,23 @@
+# O26a/D16d (F9's relaxation): a returned lambda calling a lambda local over a reference from a built call (O10d), against
+# the lambda local returned itself
+import "std/io"
+
+type node struct(v I64) { v }
+
+fn mk(k I64) node& { return node(k) }
+
+fn direct(k I64) fn&() I64 {
+    r := mk(k)
+    g := fn() I64 { return r.v + 1 }
+    return g
+}
+
+fn nested(k I64) fn&() I64 {
+    r := mk(k)
+    g := fn() I64 { return r.v + 1 }
+    return fn() I64 { return g() * 2 }
+}
+
+fn main() {
+    io.Println($direct(3)() " " $nested(6)() " (4 14)")!
+}

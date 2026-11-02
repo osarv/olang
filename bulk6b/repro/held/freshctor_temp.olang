@@ -1,0 +1,33 @@
+# F13 FreshCtorAt / typed.FreshViews: a constructor given a call's value that views a temporary of the same statement
+# (same(mk(k)), a view of its argument handed back uncopied, D9h), the instance kept past the statement's block
+import "std/io"
+
+type box struct(v Vec<I64>) { v }
+
+fn same(x Vec<I64>&) Vec<I64> { return x }
+
+fn mk(k I64) Vec<I64> {
+    v Vec<I64>
+    for i in range 5 { v.Push(k * 10 + i) }
+    return v
+}
+
+fn churn() I64 {
+    junk := Vec<Vec<I64>>()
+    for i in range 300 { junk.Push(mk(i + 5)) }
+    return junk.Len()
+}
+
+fn main() {
+    b := box(mk(0))
+    keep := Vec<box>()
+    for k in range 1, 4 {
+        {
+            b = box(same(mk(k)))
+        }
+        keep.Push(box(same(mk(k + 10))))
+        n := churn()
+        io.Println($b.v " " $n)!
+    }
+    for x in keep: io.Println($x.v)!
+}
