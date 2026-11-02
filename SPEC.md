@@ -7497,7 +7497,8 @@ parameters it writes through (`writes through 'out'`), `writes a global`, `alloc
 Vec`, `starts tasks`, the classes of B11c it reaches (`files`, `network`, `processes`, `environment`, `threads`, `C`),
 else `calls C`, `may end the program`, `may block` or `never blocks`, `recursive`, `always ends` (G42's `Terminates`),
 and `may be computed while compiling` (K1a: no C but C's math, no mutable global read or written). A call through a
-function value or an `any` is `anything`; a body that did not check is `not known`. Under a generic function, a line
+function value or an `any` is `anything`, and so is a call of C (G42's) where the program has an export fn - `anything -
+it calls C, which may call the program's export fns`; a body that did not check is `not known`. Under a generic function, a line
 `# T needs: Less, a walk ...` for each type variable says what its body asks of it beyond its written constraint
 (G18a). Under a function that cannot become a value (T21), a line `# not a value: ...` says why: a method is called as
 one (M19), an extern by its name (X1), a generic is a value only named with its type arguments (G12), one compiled per
@@ -8726,8 +8727,10 @@ body it may call:
 | `Recursive` | call itself, directly or through others |
 | `Terminates` | **always end**: every loop of it is a for-in over an array or a range (a count known before the loop starts), it is not recursive, and nothing of it waits or calls C not known to return - the one fact true where nothing is known against it |
 
-A call through a function value or an `any` may do anything, and so may a body that did not check: such a function
-has every fact but `Terminates`, so no fact is claimed that a run could prove false. A fact is decided once the
+A call through a function value or an `any` may do anything, and so may a body that did not check, and - where the
+program has an export fn (X12), which C may call from any C call (X13) - a call of C but C's math, the runtime's own and
+the C functions known to return at once without calling back: such a function has every fact but `Terminates`, so no
+fact is claimed that a run could prove false. A fact is decided once the
 program has checked, from every body: read in a body, it is the constant the bodies give - an attempt reads each as
 its cautious value first and the program is checked again with the values found, until what is read is what is found
 (as R1a's sets are); a fact whose value changes the code it is read from (a function reading its own fact to choose

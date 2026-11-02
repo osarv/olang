@@ -1,0 +1,20 @@
+# check: fail error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way
+# E31b (review 6b F1): a method called through x[i] that calls C is not made on the element in place where the program
+# has an export fn - C may call it (X13), and this one grows the collection, which left the element's reference naming
+# the buffer the growth retired: the write was lost
+import "std/io"
+import poke "../fixtures/callback/poke.c"
+type blk struct(n I64) { n }
+G mut Vec<blk>
+export fn olang_grow(n I64) {
+    for i in range n { G.Push(blk(i)) }
+}
+fn (b mut blk&) Bump() {
+    poke.c_poke(1000)
+    b.n = 99
+}
+fn main() {
+    G.Push(blk(1))
+    G[0].Bump()
+    io.Println("G[0].n = " $G[0].n " len " $G.Len())!
+}

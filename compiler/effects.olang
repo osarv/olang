@@ -49,6 +49,7 @@ type Facts struct() {
     Recursive Bool = false      # may call itself, directly or through others
     Unbounded Bool = false      # holds a loop no count known before it starts bounds
     Unknown Bool = false        # calls through a function value or an "any": anything may happen
+    Back Bool = false           # ... or calls C, which may call one of the program's export fns (X13): Unknown too
     Grows Bool = false          # may grow a Vec (M19d: a buffer retired)
     Exits Bool = false          # may end the program on purpose (os.Exit, a C exit)
     Unchecked Bool = false      # reaches a body that did not check
@@ -156,6 +157,7 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     derived Map<I64, I64>         # by local: the parameters (Writes bits) what it holds is read out of (B11b)
     bounded Map<I64, Bool>
     curMod I64 = -1
+    exports I64 = -1              # how many export fns the program has (X12), -1 until counted
 }
 
 type pair struct(A I64, B I64) {
@@ -174,11 +176,24 @@ fn (e mut Effects&) grow() {
         e.tLow.Push(0)
         e.tOn.Push(false)
     }
+    if e.exports < 0 { e.exports = e.countExports() }
     if e.fileMod.Len() == 0 {
         for mi in range e.P.L.Mods.Len() {
             if e.P.L.Mods[mi].File >= 0 { e.fileMod.Put(e.P.L.Mods[mi].File, mi) }
         }
     }
+}
+
+# the program's export fns: C may call one from any C call (X13) - free.olang's condition 3 too
+fn (e mut Effects&) countExports() I64 {
+    n I64 = 0
+    for body in e.Bodies {
+        match body.Of {
+            case typed.BodyOf.Fn(i) { if e.P.FnDecl(e.P.InstanceFn(i)).Export: n++ }
+            case _ { }
+        }
+    }
+    return n
 }
 
 # what body b may do, with everything it may call
@@ -311,6 +326,7 @@ fn Merge(into mut Facts&, from Facts&) {
     into.Recursive = into.Recursive or from.Recursive
     into.Unbounded = into.Unbounded or from.Unbounded
     into.Unknown = into.Unknown or from.Unknown
+    into.Back = into.Back or from.Back
     into.Grows = into.Grows or from.Grows
     into.Exits = into.Exits or from.Exits
     into.Unchecked = into.Unchecked or from.Unchecked
@@ -718,6 +734,12 @@ fn (e mut Effects&) extern(f I64) {
         e.cur.Opaque = true
     }
     if name == "exit" or name == "_exit" or name == "abort" { e.cur.Exits = true }
+    # C may call any of the program's export fns before it returns (X13), and they may do anything: where the program
+    # has one, a C call is not known - but the runtime's own and those known to return at once, calling nothing back
+    if e.exports > 0 and not name.StartsWith("__olang_") and not quickC(name) {
+        e.cur.Unknown = true
+        e.cur.Back = true
+    }
     bit := capOf(name)
     if bit != 0 { e.cap(bit) }
     # C the program calls itself - from a module outside the standard library - is a class of its own (B1.2); what std
@@ -770,6 +792,7 @@ quickNames := String&["__olang_err", "__olang_arg_count", "__olang_arg", "__olan
 # the line under a signature (A2.3), names the parameters' names (the receiver first): "none", or what it may do
 fn Describe(f Facts&, names Array<String&>&) String {
     if f.Unchecked { return "not known - it reaches code that did not check" }
+    if f.Unknown and f.Back { return $"anything - it calls C, which may call the program's export fns" $endsNote(f) }
     if f.Unknown { return $"anything - it calls through a function value or an 'any'" $endsNote(f) }
     if f.Idle() {
         if f.Evaluable() { return $"none - it may be computed while compiling where its arguments are known" $endsNote(f) }
