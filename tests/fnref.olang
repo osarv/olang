@@ -79,6 +79,30 @@ ZerosBaked String = zeros()
 
 assert zeros() == "null null null String?&[null, null] true null", "decided while compiling (S17a)"
 
+# T2c (bulk review 6 F4, the tidy pass's question 1): a null inside a value renders null - a field, a Vec's or an
+# array's element, a payload - and an enum's zero is its first case of its payload's zero values, a null array's null
+type Held struct(s String?&, a Array<I64>?&) { s, a }
+type Maybe enum { Some(s String?&, n I64), None }
+type Wrap struct(m Maybe) { m }
+
+fn nested() String {
+    z String?&
+    v := Vec<String?&>()
+    v.Push(z)
+    v.Push("x")
+    m Maybe
+    w Wrap
+    return $Held(z, null) " " $v " " $String?&[z, "y"] " " $Maybe.Some(z, 1) " " $m " " $w
+}
+
+NestedBaked String = nested()
+
+assert nested() == "Held(null, null) Vec<String?&>[null, \"x\"] String?&[null, \"y\"] Maybe.Some(null, 1) Maybe.Some(null, 0) Wrap(Maybe.Some(null, 0))", "decided while compiling (S17a)"
+
+test nested "a null inside a value renders null, and an enum's zero holds its payload's zero values" {
+    assert nested() == NestedBaked
+}
+
 test fire "a declared function type is held as its function value, a lambda fitting it directly" {
     h Handler& = fn(e): return e.n + 1
     assert fire(h, Event(1)) == 2 and fire(fn(e): return e.n * 10, Event(2)) == 20

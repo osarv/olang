@@ -1006,7 +1006,9 @@ enum's zero value (D13) is its **first declared case**, by representation: a zer
 reference in a later case's payload is unreachable without a `match` whose tag test selects that case
 (S13b). A first case carrying no payload therefore makes the type's zero value a complete, meaningful one —
 which is exactly `Option`-shaped when the other case holds a reference. A reference in the first case's payload is
-null (T2a), as a reference to the enum itself is (T17d) - which a nested pattern does not match (S13d).
+null (T2a), as a reference to the enum itself is (T17d) - which a nested pattern does not match (S13d) - and each other
+payload field holds its own type's zero value: an array that may be null is null (T2c), a struct its constructor on its
+defaults (D13c).
 
 ### 2.6 Error types
 

@@ -7234,6 +7234,10 @@ fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr& {
                     return c.unknown(sp)
                 }
             }
+            # ...each payload field its own zero value: where one is no zero bits (an array that may be null, whose zero
+            # is null, T2c; a struct's constructor) the case is made of them
+            z := c.caseZero(sp, t, sig)
+            if z is not null: return z
         }
     }
     # a declared number with a constructor (T29d): its constructor on its base's zero
@@ -7243,6 +7247,25 @@ fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr& {
         return c.callOfBody(sp, t, id, c.one(c.zero(sp, p0)), zero = true)
     }
     return c.lit(sp, t, 0)
+}
+
+# T2c: an enum's first case made of its payload fields' zero values (D13c), null where every one is zero bits - the
+# enum's own zero bits then
+fn (c mut Checker&) caseZero(sp source.Span, t types.TypeId, sig types.TypeId) typed.Expr?& {
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    from := c.exprs.Len()
+    bits := true
+    for pt in ps {
+        z := c.zero(sp, pt)
+        match z {
+            case typed.Expr.Lit(_, _, b) { if b != 0: bits = false }
+            case _ { bits = false }
+        }
+        c.exprs.Push(z)
+    }
+    items := gather(c.exprs, from)
+    if bits: return null
+    return typed.Expr.Make(sp, t, typed.Make(typed.MakeKind.Case, 0, items, null, typed.SiteId(-1), typed.Check.None))
 }
 
 # T2c, E35: an expression as "!" is written after it - parenthesized where a space outside brackets says it is more
