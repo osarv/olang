@@ -1,0 +1,30 @@
+# memory: a Vec field of a local struct reassigned each turn (round 8's owner held in place), against a Vec local
+import "std/io"
+
+type box struct(v Vec<I64>) { v }
+
+fn sum(v Vec<I64>&) I64 {
+    s := 0
+    for x in v { s += x }
+    return s
+}
+
+fn mk(k I64) Vec<I64> {
+    v := Vec<I64>()
+    for i in range 100 { v.Push(i + k) }
+    return v
+}
+
+fn run() I64 {
+    b := box(Vec<I64>())
+    t := 0
+    for k in range 200000 {
+        b.v = mk(k)
+        t += sum(b.v)
+    }
+    return t
+}
+
+fn main() {
+    io.Println($run())!
+}

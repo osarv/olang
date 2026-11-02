@@ -1,0 +1,35 @@
+# O8d condition 3, round 8's reachedTasks: a task reached only through an any's table - is it seen?
+import "std/io"
+
+type Runner trait { Go(v Vec<I64>&) I64 }
+type r1 struct(k I64) { k }
+
+fn (r r1&) Go(v Vec<I64>&) I64 {
+    out := 0
+    join { spawn out = sum(v) }
+    return out
+}
+
+fn sum(v Vec<I64>&) I64 {
+    s := 0
+    for x in v { s += x }
+    return s
+}
+
+fn mk(k I64) Vec<I64> {
+    v := Vec<I64>()
+    for i in range 100 { v.Push(i + k) }
+    return v
+}
+
+fn main() {
+    rr := r1(1)
+    a any Runner& = rr
+    v := mk(0)
+    t := 0
+    for k in range 1000 {
+        v = mk(k)
+        t += a.Go(v)
+    }
+    io.Println($t)!
+}

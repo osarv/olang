@@ -1,0 +1,28 @@
+# a value local owning storage whose references live in the caller's scope, lent to a constructor keeping a reference
+# to it, the instance stored into the caller's collection - after the function returns, what does it name?
+import "std/io"
+
+type holder struct(v Vec<String&>&) { v }
+
+fn fill(hs mut Vec<holder>&, t String&, k I64) {
+    v := Vec<String&>()
+    for _ in range k { v.Push(t) }
+    hs.Push(holder(v))
+}
+
+fn stomp(n I64) I64 {
+    a := Array<I64>(64, n)
+    s := 0
+    for x in a { s += x }
+    return s
+}
+
+fn main() {
+    t := "text"
+    hs := Vec<holder>()
+    for k in range 1, 6 { fill(hs, t, k) }
+    x := stomp(0x4141414141)
+    s := 0
+    for h in hs { s += h.v.Len() }
+    io.Println("lens " $s " (15) " $x)!
+}

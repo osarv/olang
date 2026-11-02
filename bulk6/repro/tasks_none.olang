@@ -1,0 +1,28 @@
+# control for tasks_any: the same place letting go with no task anywhere
+import "std/io"
+
+fn sum(v Vec<I64>&) I64 {
+    s := 0
+    for x in v { s += x }
+    return s
+}
+
+fn mk(k I64) Vec<I64> {
+    v := Vec<I64>()
+    for i in range 100 { v.Push(i + k) }
+    return v
+}
+
+fn run() I64 {
+    v := mk(0)
+    t := 0
+    for k in range 1000 {
+        v = mk(k)
+        t += sum(v)
+    }
+    return t
+}
+
+fn main() {
+    io.Println($run())!
+}

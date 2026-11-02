@@ -271,3 +271,184 @@
 < checks/cases/rv3roforin.olang:17:9: note: 'x' is declared here
 ---
 > checks/cases/rv3roforiX.olang:17:9: note: 'x' is declared here
+=== s17msgreturn.olang
+1c1
+< checks/cases/s17msgreturn.olang:13:39: error[S17]: an assert's message may not return - it is evaluated only where it is used, and gives text
+---
+> checks/cases/s17msgreturX.olang:13:39: error[S17]: an assert's message may not return - it is evaluated only where it is used, and gives text
+=== s19ereturn.olang
+1c1
+< checks/cases/s19ereturn.olang:6:20: error[S19b]: deferred code may not return - it runs while its block is left
+---
+> checks/cases/s19ereturX.olang:6:20: error[S19b]: deferred code may not return - it runs while its block is left
+=== s19return.olang
+1c1
+< checks/cases/s19return.olang:5:20: error[S19b]: deferred code may not return - it runs while its block is left
+---
+> checks/cases/s19returX.olang:5:20: error[S19b]: deferred code may not return - it runs while its block is left
+=== s19spawn.olang
+1c1
+< checks/cases/s19spawn.olang:7:15: error[S19b, P1a]: a spawn in deferred code needs a join written in the deferred code
+---
+> checks/cases/s19spawX.olang:7:15: error[S19b, P1a]: a spawn in deferred code needs a join written in the deferred code
+=== s5e31bspawn.olang
+1c1
+< checks/cases/s5e31bspawn.olang:12:16: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+---
+> checks/cases/s5e31bspawX.olang:12:16: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+=== s5handlerepointfn.olang
+1c1
+< checks/cases/s5handlerepointfn.olang:13:17: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
+---
+> checks/cases/s5handlerepointfX.olang:13:17: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
+4c4
+< checks/cases/s5handlerepointfn.olang:13:17: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+---
+> checks/cases/s5handlerepointfX.olang:13:17: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+=== s5projection.olang
+1c1
+< checks/cases/s5projection.olang:16:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+---
+> checks/cases/s5projectioX.olang:16:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+7c7
+< checks/cases/s5projection.olang:15:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives: 't mut String&bs = ...'
+---
+> checks/cases/s5projectioX.olang:15:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives: 't mut String&bs = ...'
+=== s8bchosen.olang
+1c1
+< checks/cases/s8bchosen.olang:6:8: error[B10]: unknown name 'Level' - if it is a build constant, define it with '-define Level=VALUE', or declare it with a default
+---
+> checks/cases/s8bchoseX.olang:6:8: error[B10]: unknown name 'Level' - if it is a build constant, define it with '-define Level=VALUE', or declare it with a default
+4c4
+< checks/cases/s8bchosen.olang:6:8: error: unknown name 'Level'
+---
+> checks/cases/s8bchoseX.olang:6:8: error: unknown name 'Level'
+7c7
+< checks/cases/s8bchosen.olang:9:13: error: unknown function or type 'onlyOnSmallBuilds'
+---
+> checks/cases/s8bchoseX.olang:9:13: error: unknown function or type 'onlyOnSmallBuilds'
+=== strcalleespawn.olang
+1c1
+< checks/cases/strcalleespawn.olang:28:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+---
+> checks/cases/strcalleespawX.olang:28:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+4c4
+< checks/cases/strcalleespawn.olang:24:18: note: built here, where the receiver's part it was handed lives
+---
+> checks/cases/strcalleespawX.olang:24:18: note: built here, where the receiver's part it was handed lives
+=== strobligation.olang
+1c1
+< checks/cases/strobligation.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+---
+> checks/cases/strobligatioX.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+=== strstorespawn.olang
+1c1
+< checks/cases/strstorespawn.olang:12:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+---
+> checks/cases/strstorespawX.olang:12:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+4c4
+< checks/cases/strstorespawn.olang:12:39: note: built here, where the receiver's part it was handed lives
+---
+> checks/cases/strstorespawX.olang:12:39: note: built here, where the receiver's part it was handed lives
+=== t10len.olang
+1c1
+< checks/cases/t10len.olang:5:15: error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
+---
+> checks/cases/t10leX.olang:5:15: error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
+=== t21nozero.olang
+1c1
+< checks/cases/t21nozerX.olang:4:11: error[T2c]: fn&(x I64) I64 is never null, so it has no zero value - give it a value, or write fn?&(x I64) I64
+---
+> checks/cases/t21nozero.olang:4:11: error[T2c]: fn&(x I64) I64 is never null, so it has no zero value - give it a value, or write fn?&(x I64) I64
+=== t22aobligation.olang
+1c1
+< checks/cases/t22aobligation.olang:8:12: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+---
+> checks/cases/t22aobligatioX.olang:8:12: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+4c4
+< checks/cases/t22aobligation.olang:17:11: error[T22a]: 'hang' relates its arguments' scopes, which a call through a function value cannot check - call it directly
+---
+> checks/cases/t22aobligatioX.olang:17:11: error[T22a]: 'hang' relates its arguments' scopes, which a call through a function value cannot check - call it directly
+=== t25ccopyforin.olang
+1c1
+< checks/cases/t25ccopyforin.olang:11:22: error[T25c]: this writes through a reference a read-only copy holds - a copy of a place reached read-only writes nothing it shares
+---
+> checks/cases/t25ccopyforiX.olang:11:22: error[T25c]: this writes through a reference a read-only copy holds - a copy of a place reached read-only writes nothing it shares
+4c4
+< checks/cases/t25ccopyforin.olang:11:5: note: 'b' copies a place reached read-only, so it is read-only
+---
+> checks/cases/t25ccopyforiX.olang:11:5: note: 'b' copies a place reached read-only, so it is read-only
+=== t25ccopypun.olang
+1c1
+< checks/cases/t25ccopypun.olang:12:15: error[T25c]: 'Wrap' writes through or keeps its parameter 'b', and this Box is a read-only copy - pass one of its own, made from its parts
+---
+> checks/cases/t25ccopypuX.olang:12:15: error[T25c]: 'Wrap' writes through or keeps its parameter 'b', and this Box is a read-only copy - pass one of its own, made from its parts
+4c4
+< checks/cases/t25ccopypun.olang:8:18: note: 'b' is declared here
+---
+> checks/cases/t25ccopypuX.olang:8:18: note: 'b' is declared here
+=== t29aconvassign.olang
+1c1
+< checks/cases/t29aconvassign.olang:5:10: error[S4]: this cannot be written - a variable, an element or a member can
+---
+> checks/cases/t29aconvassigX.olang:5:10: error[S4]: this cannot be written - a variable, an element or a member can
+=== t29dreturn.olang
+1c1
+< checks/cases/t29dreturn.olang:4:18: error[C2b]: a constructor gives no value - its fields are the instance; fail with 'error'
+---
+> checks/cases/t29dreturX.olang:4:18: error[C2b]: a constructor gives no value - its fields are the instance; fail with 'error'
+=== t2cnozero.olang
+1c1
+< checks/cases/t2cnozerX.olang:5:1: error[T2c]: N& is never null, so it has no zero value - give it a value, or write N?&
+---
+> checks/cases/t2cnozero.olang:5:1: error[T2c]: N& is never null, so it has no zero value - give it a value, or write N?&
+=== t31amemberopen.olang
+1c1
+< checks/cases/t31amemberopen.olang:6:22: error[T31a]: caShape is an open trait, so it lists no types to take in - list types, or closed traits
+---
+> checks/cases/t31amemberopeX.olang:6:22: error[T31a]: caShape is an open trait, so it lists no types to take in - list types, or closed traits
+=== t34caseunknown.olang
+1c1
+< checks/cases/t34caseunknown.olang:11:14: error: unknown type 'aBx'
+---
+> checks/cases/t34caseunknowX.olang:11:14: error: unknown type 'aBx'
+=== t4aextern.olang
+1c1
+< checks/cases/t4aextern.olang:3:15: error[X2]: U24 cannot cross the C boundary - an extern parameter is a number of the twelve primitives, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
+---
+> checks/cases/t4aexterX.olang:3:15: error[X2]: U24 cannot cross the C boundary - an extern parameter is a number of the twelve primitives, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
+=== unseen.olang
+1c1
+< checks/cases/unseen.olang:7:4: error[B9c]: this top-level condition uses what exists only in the branches it decides, or does not check
+---
+> checks/cases/unseeX.olang:7:4: error[B9c]: this top-level condition uses what exists only in the branches it decides, or does not check
+=== vec104viewfn.olang
+1c1
+< checks/cases/vec104viewfn.olang:15:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
+---
+> checks/cases/vec104viewfX.olang:15:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
+4c4
+< checks/cases/vec104viewfn.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view after it, or copy the elements first: 'l.toks.ToArray()'
+---
+> checks/cases/vec104viewfX.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view after it, or copy the elements first: 'l.toks.ToArray()'
+=== vec54assertmsgreturn.olang
+1c1
+< checks/cases/vec54assertmsgreturn.olang:26:51: error[S17]: an assert's message may not return - it is evaluated only where it is used, and gives text
+---
+> checks/cases/vec54assertmsgreturX.olang:26:51: error[S17]: an assert's message may not return - it is evaluated only where it is used, and gives text
+=== x11notplain.olang
+1c1
+< checks/cases/x11notplain.olang:8:16: error[X2]: Named cannot cross the C boundary - an extern parameter is a number of the twelve primitives, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
+---
+> checks/cases/x11notplaiX.olang:8:16: error[X2]: Named cannot cross the C boundary - an extern parameter is a number of the twelve primitives, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
+=== x17broken.olang
+1c1
+< checks/cases/x17broken.olang:3:10: error[X17]: 'bits/waitstatus.h' cannot be imported: "Never include <bits/waitstatus.h> directly; use <sys/wait.h> instead."
+---
+> checks/cases/x17brokeX.olang:3:10: error[X17]: 'bits/waitstatus.h' cannot be imported: "Never include <bits/waitstatus.h> directly; use <sys/wait.h> instead."
+=== x19macro.olang
+1c1
+< checks/cases/x19macrX.olang:5:24: error[X19]: the C import has no olang form of 'stdout': a variable - an extern variable has no olang form (X1)
+---
+> checks/cases/x19macro.olang:5:24: error[X19]: the C import has no olang form of 'stdout': a variable - an extern variable has no olang form (X1)
+done

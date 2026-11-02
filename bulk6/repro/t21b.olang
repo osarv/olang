@@ -1,0 +1,22 @@
+# T21b: declared function types - nominal, methods, conversion, in the run and the evaluator
+import "std/io"
+
+type Op fn(x I64) I64
+type Op2 fn(x I64) I64
+
+fn (o Op&) Twice(x I64) I64 { return o(o(x)) }
+
+fn inc(x I64) I64 { return x + 1 }
+
+fn apply(o Op&, x I64) I64 { return o.Twice(x) }
+
+B := apply(inc, 5)
+assert B == 7
+
+fn main() {
+    o Op& = inc
+    p := Op2(o)
+    io.Println($apply(inc, 1) " " $o.Twice(10) " " $p(1) " baked " $B " " $o)!
+    q Op?& = null
+    io.Println($(q is null))!
+}

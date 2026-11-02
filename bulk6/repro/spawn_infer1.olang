@@ -1,0 +1,20 @@
+# P2 with inferred scopes: a task given a join block's local, a task storing a view of its own text outside, a task
+# result holding a reference
+import "std/io"
+
+fn put(out mut Vec<String&>&, t String&) { out.Push(t) }
+
+fn first(t String&) String& { return t[0:1] }
+
+fn main() {
+    out := Vec<String&>()
+    for i in range 3 {
+        t := $i "-text"
+        join {
+            spawn put(out, t)
+        }
+    }
+    junk := Vec<String>()
+    for i in range 100 { junk.Push("zzzzzzzzzzzzzzzzzz" $i) }
+    io.Println($out " " $junk.Len())!
+}
