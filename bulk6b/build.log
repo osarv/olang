@@ -1,0 +1,3 @@
+built build/olang.s1
+built build/olang.s2
+EXIT 0

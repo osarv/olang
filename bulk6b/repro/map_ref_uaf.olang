@@ -1,0 +1,37 @@
+# round 8's slot release at a Map's growth (RetireDropped) against a RefMut reached through a call's result
+# (ss.RefMut(0).m.RefMut(1)), held across a call that grows the Map: the reference names released slots, and the
+# write through it lands in storage reused by another Map
+import "std/io"
+
+type blk struct(n I64, m I64) { n, m }
+
+fn fill(m mut Map<I64, blk>&) { for i in range 2, 5000 { m.Put(i, blk(i, i)) } }
+
+type st struct() {
+    m Map<I64, blk>
+}
+
+fn main() {
+    s := st()
+    s.m.Put(1, blk(1, 2))
+    ss := Vec<st>()
+    ss.Push(s)
+    r := ss.RefMut(0).m.RefMut(1)!
+    fill(ss.RefMut(0).m)
+    others := Vec<Map<I64, blk>>()
+    for i in range 50 {
+        w := Map<I64, blk>()
+        for j in range 1, 4 { w.Put(j, blk(100 * i + j, 0)) }
+        others.Push(w)
+    }
+    r.n = 77
+    r.m = 77
+    seen := 0
+    for w in others {
+        for j in range 1, 4 {
+            b := w.Get(j)!
+            if b.n == 77 or b.m == 77: seen++
+        }
+    }
+    io.Println("r " $r.n " " $r.m " ss[0].m[1].n " $ss[0].m.Get(1)!.n " other maps' entries changed by the write: " $seen)!
+}

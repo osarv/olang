@@ -1,0 +1,53 @@
+# O26a/D16d (F9's relaxation): a reference from a built call captured by a lambda that leaves inside a struct, in a loop
+# turn, through a generator, and nested
+import "std/io"
+
+type node struct(v I64) { v }
+type wrap struct(f fn&() I64) { f }
+
+fn mk(k I64) node& { return node(k) }
+
+fn inStruct(k I64) wrap {
+    r := mk(k)
+    return wrap(fn() I64 { return r.v })
+}
+
+fn inTurn(k I64) fn&() I64 {
+    for i in range k {
+        r := mk(i * 7)
+        if i == k - 1: return fn() I64 { return r.v }
+    }
+    return fn() I64 { return -1 }
+}
+
+fn gen(k I64) Iterator<I64> {
+    r := mk(k)
+    f := fn() I64 { return r.v }
+    for i in range 3 { yield f() + i }
+}
+
+fn twice(k I64) fn&() I64 {
+    r := mk(k)
+    s := mk(k + 1)
+    r = s
+    return fn() I64 { return r.v }
+}
+
+fn churn() I64 {
+    junk := Vec<String>()
+    for i in range 2000 { junk.Push($i "abcdefghijklmnopqrstuvwxyz") }
+    return junk.Len()
+}
+
+fn main() {
+    a := inStruct(3)
+    b := inTurn(4)
+    c := twice(9)
+    n := churn()
+    t := 0
+    for x in gen(5) {
+        churn()
+        t += x
+    }
+    io.Println($a.f() " " $b() " " $c() " " $t " " $n " (3 21 10 18 2000)")!
+}

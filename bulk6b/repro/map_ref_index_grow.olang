@@ -1,0 +1,21 @@
+# M19g (F7) hidden route through an index, and round 8's release of the slots a Map replaced at growth: a Ref into
+# ms[0]'s slots held across ms[0]'s growth made through the index (in place, E31b)
+import "std/io"
+
+type blk struct(n I64, m I64) { n, m }
+
+fn main() {
+    ms := Vec<Map<I64, blk>>()
+    ms.Push(Map<I64, blk>())
+    ms[0].Put(1, blk(1, 2))
+    r := ms.RefMut(0).RefMut(1)!
+    for i in range 2, 5000 { ms[0].Put(i, blk(i, i)) }
+    junk := Vec<Map<I64, blk>>()
+    for i in range 300 {
+        w := Map<I64, blk>()
+        for j in range 20 { w.Put(j, blk(-i, -j)) }
+        junk.Push(w)
+    }
+    r.n = 77
+    io.Println("ms[0][1].n " $ms[0].Get(1)!.n " r.n " $r.n " r.m " $r.m " " $junk.Len())!
+}

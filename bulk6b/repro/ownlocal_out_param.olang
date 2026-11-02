@@ -1,0 +1,46 @@
+# O8d owner locals (F13): a view of an owner local stored into a caller's collection, then the local reassigned;
+# a generator yielding views of an owner local it reassigns
+import "std/io"
+
+fn mk(k I64) Vec<I64> {
+    v Vec<I64>
+    for i in range 50 { v.Push(k * 1000 + i) }
+    return v
+}
+
+fn churn() I64 {
+    junk := Vec<Vec<I64>>()
+    for i in range 300 { junk.Push(mk(i + 5)) }
+    return junk.Len()
+}
+
+fn fill(out mut Vec<Array<I64>&>&) {
+    v := mk(0)
+    for k in range 1, 4 {
+        out.Push(v.View()[3:4])
+        v = mk(k)
+    }
+}
+
+fn walk() Iterator<I64> {
+    v := mk(0)
+    for k in range 1, 4 {
+        w := v.View()
+        v = mk(k)
+        yield w[3]
+    }
+}
+
+fn main() {
+    out := Vec<Array<I64>&>()
+    fill(out)
+    n := churn()
+    s := 0
+    for a in out { s += a[0] }
+    t := 0
+    for x in walk() {
+        churn()
+        t += x
+    }
+    io.Println($s " " $t " " $n " (3009 3009 300)")!
+}

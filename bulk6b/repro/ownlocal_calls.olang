@@ -1,0 +1,73 @@
+# O8d owner locals (F13): views of an owner local made by callees - a borrowed result, a Ref, a view through a reference
+import "std/io"
+
+type hold struct(a Array<I64>&) { a }
+
+fn mk(k I64) Vec<I64> {
+    v Vec<I64>
+    for i in range 50 { v.Push(k * 1000 + i) }
+    return v
+}
+
+fn churn() I64 {
+    junk := Vec<Vec<I64>>()
+    for i in range 300 { junk.Push(mk(i + 5)) }
+    return junk.Len()
+}
+
+fn part(v Vec<I64>&) Array<I64>& { return v.View()[3:4] }
+
+fn flat() I64 {
+    v := mk(0)
+    for k in range 1, 200 { v = mk(k) }
+    return v[3]
+}
+
+fn borrowed() I64 {
+    s := 0
+    v := mk(0)
+    for k in range 1, 4 {
+        a := part(v)
+        v = mk(k)
+        n := churn()
+        s += a[0] + n
+    }
+    return s
+}
+
+type pt struct(n I64) { n }
+
+fn mkp(k I64) Vec<pt> {
+    v Vec<pt>
+    for i in range 50 { v.Push(pt(k * 1000 + i)) }
+    return v
+}
+
+fn byRef() I64 {
+    s := 0
+    v := mkp(0)
+    for k in range 1, 4 {
+        r := v.Ref(3)
+        v = mkp(k)
+        n := churn()
+        s += r.n + n
+    }
+    return s
+}
+
+fn throughRef() I64 {
+    s := 0
+    v := mk(0)
+    pv Vec<I64>& = v
+    for k in range 1, 4 {
+        f := fn() I64 { return pv[3] }
+        v = mk(k)
+        n := churn()
+        s += f() + n
+    }
+    return s
+}
+
+fn main() {
+    io.Println($flat() " " $borrowed() " " $byRef() " " $throughRef() " (199003 3909 3909 6909)")!
+}

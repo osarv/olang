@@ -16,5 +16,5 @@ fn main() {
     junk := Vec<String>()
     for i in range 2000 { junk.Push($i "-junk-junk-junk-junk-junk") }
     r.n = 77
-    io.Println("v[0].n " $v[0].n " r.n " $r.n " r.s '" r.s "' len " $v.Len() " " $junk.Len())!
+    io.Println("v[0].n " $v[0].n " r.n " $r.n " r.s '" $r.s "' len " $v.Len() " " $junk.Len())!
 }

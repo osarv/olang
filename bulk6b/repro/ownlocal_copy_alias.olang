@@ -1,0 +1,56 @@
+# O8d owner locals (F13) + D9h held views: a copy of an owner local held across its reassignment
+import "std/io"
+
+type blk struct(xs Vec<I64>) { xs }
+
+fn mk(k I64) Vec<I64> {
+    v Vec<I64>
+    for i in range 50 { v.Push(k * 1000 + i) }
+    return v
+}
+
+fn churn() I64 {
+    junk := Vec<Vec<I64>>()
+    for i in range 300 { junk.Push(mk(i + 5)) }
+    return junk.Len()
+}
+
+fn plainCopy() I64 {
+    s := 0
+    v := mk(0)
+    for k in range 1, 4 {
+        w := v
+        v = mk(k)
+        n := churn()
+        s += w[3] + n
+    }
+    return s
+}
+
+fn structCopy() I64 {
+    s := 0
+    v := mk(0)
+    for k in range 1, 4 {
+        b := blk(v)
+        v = mk(k)
+        n := churn()
+        s += b.xs[3] + n
+    }
+    return s
+}
+
+fn sliceKept() I64 {
+    s := 0
+    v := mk(0)
+    for k in range 1, 4 {
+        a := v.View()[3:5]
+        v = mk(k)
+        n := churn()
+        s += a[0] + n
+    }
+    return s
+}
+
+fn main() {
+    io.Println($plainCopy() " " $structCopy() " " $sliceKept() " (3909 each)")!
+}

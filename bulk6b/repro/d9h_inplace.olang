@@ -6,7 +6,7 @@ type blk struct(xs Vec<I64>, n I64) { xs, n }
 fn (b mut blk&) SetFirst(k I64) { b.xs[0] = k }
 fn (b mut blk&) Refill(k I64) {
     b.xs = Vec<I64>()
-    for i in range 40 { b.xs.Push(k) }
+    for _ in range 40 { b.xs.Push(k) }
 }
 
 fn mk(k I64) blk {

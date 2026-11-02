@@ -18,7 +18,7 @@ fn fromGlobal() node& {
 }
 
 fn fromField(h node&) node& {
-    cur := h.next!
+    cur node = h.next!
     cur.v += 1000
     return cur
 }
