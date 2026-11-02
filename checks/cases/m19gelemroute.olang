@@ -1,0 +1,15 @@
+# check: fail error[M19g]: 'r' holds a view of 'vs[...]' taken before 'vs[...]' may have grown
+# M19g (review 6b F4): a reference into an element's Vec, reached through an index of the outer Vec, held across that
+# element's growth made through an index too (in place, E31b) - one route, one function: refused (any two indexes may be
+# the same element). The write went to the buffer the growth retired
+import "std/io"
+type blk struct(n I64, m I64) { n, m }
+fn main() {
+    vs := Vec<Vec<blk>>()
+    vs.Push(Vec<blk>())
+    vs[0].Push(blk(1, 2))
+    r := vs.RefMut(0).RefMut(0)
+    for i in range 1000 { vs[0].Push(blk(i, i)) }
+    r.n = 77
+    io.Println("vs[0][0].n " $vs[0][0].n " r.n " $r.n)!
+}

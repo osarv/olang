@@ -1613,6 +1613,12 @@ fn vechandle(r mut report&) ? Failed {
         try r.expect(sh(dir, $bin " > out.txt 2>&1") == 134 and outOf(dir).Contains("stale view: storage a collection replaced")
                      "stale " $flags " was not reported", dir)
     }
+    for flags in String&["-sanitize", "-debug -sanitize"] {
+        bin := "./build/stalecopy" $(".debug" if flags == "-debug -sanitize" else "") ".san"
+        try r.expect(sh(dir, "\"$OLANG\" build " $flags " stalecopy.olang > out.txt 2>&1") == 0, "stalecopy " $flags, dir)
+        try r.expect(sh(dir, $bin " > out.txt 2>&1") == 134 and outOf(dir).Contains("stale view: storage a collection replaced")
+                     "stalecopy " $flags " was not reported", dir)
+    }
     try r.expect(sh(dir, "\"$OLANG\" interpret stale.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("stale.olang:12: it uses a view of a collection's elements taken before the collection grew") and
                  outOf(dir).Contains("stale.olang:8: the collection grew here"), "stale interpreted", dir)

@@ -1443,8 +1443,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   may have grown is a compile-time error where the compiler sees the same Vec on both sides - grown in the function
   (by name or a second name it made), by a call given the Vec or a struct holding it through a parameter whose body may
   grow it (summaries read off bodies, a fixed point; a function value grows what it is given writably), a global grown
-  by name, or while a task holds the view; never by element type, and a place through an index or a call's result
-  meets no other (mine). Since bulk review 6 a `Ref(i)`/`RefMut(i)` (and a Map's) is a view too, and a stale view or Ref
+  by name, or while a task holds the view; never by element type, and a place through a call's result meets no other (mine) but an
+  element a Ref/RefMut hands back, any index of it (`vs[...]` - bulk review 6b F4; unsure means refused). Since bulk review 6 a `Ref(i)`/`RefMut(i)` (and a Map's) is a view too, and a stale view or Ref
   reads the retired buffer, its owning elements emptied by the growth (SPEC follows the code). Hidden routes stay the
   evaluator's and `-sanitize`'s. Vec had been abandoned in 2026-09 for `List` (a bump allocator could not free a grown
   buffer), then built on `own` (QH), and is now neither.

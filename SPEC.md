@@ -2776,8 +2776,11 @@ compile-time error **where the same `Vec` is visible on both sides**, and nowher
 4. **A task**: while a task given a view (as an argument, or captured by the lambda it runs) may still run - until its
    `join` - the spawner grows that view's `Vec` as in 1-3.
 
-Where the `Vec` is reached is compared by root and fields only: through an index or a call's result it is not known
-which `Vec` is meant, so no growth there makes a view stale, and **never by element type** - another `Vec` of the same
+Where the `Vec` is reached is compared by root, fields and elements: an element of a `Vec`'s or a `Map`'s buffer reached
+through a call handing one back (`Ref`, `RefMut` - so `x[i]` made in place, E31b) is any element of it, `vs[...]`, so a
+growth through `vs.RefMut(j)` makes a view taken through `vs.RefMut(i)` stale whatever `i` and `j` are; through any
+other call's result it is not known which `Vec` is meant, so no growth there makes a view stale; and **never by element
+type** - another `Vec` of the same
 element type growing is no growth of this one. Two places of different roots are different `Vec`s here, even where a
 second name stored in a structure makes them one: that hazard is not refused. It is never a memory error - the buffer a
 growth replaces stays where the `Vec` lives until that scope closes (M19d) - and the compile-time evaluator stops on such

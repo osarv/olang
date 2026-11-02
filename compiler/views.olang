@@ -13,8 +13,9 @@
 #   names below it ("l.toks"). Every Vec operation reaches the buffer through the Vec itself, which holds it by value
 #   (its own record), so a growth and a view are both at the Vec's place, read off the prelude's own bodies like any
 #   other's: an assignment to a Vec's "data" grows it, and a slice of it is a view of it. Nothing about Vec
-#   is special-cased by its methods' names. A place through an element or a call's result is not known, and meets no
-#   other place.
+#   is special-cased by its methods' names. An element a call hands back a view of (Ref, RefMut: a summary's view of
+#   its receiver's buffer) is a place of its own below the Vec's, of any index ("vs[...]"); a place through any other
+#   call's result is not known, and meets no other place.
 # - Each body's SUMMARY says what a call of it may do: the places below its parameters and the globals it may grow, the
 #   views of places below its parameters it may hand back, what its result may hold of each argument, and which
 #   argument it may keep in which. Summaries are a least fixed point over the call graph's strongly connected
@@ -504,9 +505,39 @@ fn (v mut Viewer&) exprPlaces(x typed.Expr?&, st state&, out mut Vec<place>&) {
             v.exprPlaces(c.B, st, out)
         }
         case typed.Expr.Away(_, _, y) { v.exprPlaces(y, st, out) }
+        case typed.Expr.Seq(_, _, q) { v.exprPlaces(q.X, st, out) }    # "x!" (E35)
+        case typed.Expr.Call(_, _, c) { v.callPlaces(c, st, out) }
         case _ { }
     }
 }
+
+# the places a call's result is, where it hands back an element of a buffer it is given (Ref, RefMut - F7's views, a
+# summary's): that element, of any index - "vs[...]" - a place of its own below the Vec's or Map's, so a growth made
+# through the same route (x[i].Push(), in place, E31b) meets a view taken through it (review 6b F4)
+fn (v mut Viewer&) callPlaces(c typed.Call&, st state&, out mut Vec<place>&) {
+    callee := match c.Target {
+        case typed.Callee.Body(id): I64(id)
+        case _: -1
+    }
+    if callee < 0 or not v.sums[callee].Known { return }
+    for f in v.sums[callee].Views {
+        if f.Param < 0 or f.Param >= c.Args.Len() { continue }
+        at Vec<place>
+        v.exprPlaces(c.Args[f.Param], st, at)
+        for a in at {
+            q := v.below(a, f.Path, f.Show, f.Any)
+            if q.Any {
+                placeAdd(out, q)
+                continue
+            }
+            path := v.str($v.strs[q.Path] $ElemSeg)
+            placeAdd(out, place(q.R, path, v.strs[path].Len(), false))
+        }
+    }
+}
+
+# a place's path segment for an element of its buffer, of any index
+ElemSeg := "[...]"
 
 fn (v mut Viewer&) placePlaces(p typed.Lvalue?&, st state&, out mut Vec<place>&) {
     if p is null { return }
@@ -524,6 +555,7 @@ fn (v mut Viewer&) placePlaces(p typed.Lvalue?&, st state&, out mut Vec<place>&)
         }
         case typed.Lvalue.Global(_, _, m, n) { placeAdd(out, place(Root.Global(m, n), 0, 0, false)) }
         case typed.Lvalue.Deref(_, _, r) { v.exprPlaces(r, st, out) }
+        case typed.Lvalue.Temp(_, _, x, _) { v.exprPlaces(x, st, out) }
         case typed.Lvalue.Field(_, _, b, i) {
             base Vec<place>
             v.placePlaces(b, st, base)
@@ -607,7 +639,7 @@ fn (v mut Viewer&) below(a place, path I64, show I64, any Bool) place {
 fn (v mut Viewer&) prefix(a I64, b I64) Bool {
     x := v.strs[a]
     y := v.strs[b]
-    return y.StartsWith(x) and (y.Len() == x.Len() or y[x.Len()] == '.')
+    return y.StartsWith(x) and (y.Len() == x.Len() or y[x.Len()] == '.' or y[x.Len()] == '[')
 }
 
 fn real(r Root) Bool {

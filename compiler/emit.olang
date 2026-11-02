@@ -4187,6 +4187,27 @@ fn (fe mut fnEm&) arrayStorage(sc String&, bytes String&, el types.TypeId, zeroe
     return fe.let("call ptr @" $f "(ptr " $sc ", i64 " $bytes ")")
 }
 
+# whether an array of type ty made here is the buffer of a Vec's or a Map's record this function copies: the Copy
+# helper of such a record, making the array its buffer field holds
+fn (fe mut fnEm&) bufferCopy(ty types.TypeId) Bool {
+    k := fe.F.Of
+    if k != mir.FnKey.Helper or k.kind != mir.HelperKind.Copy: return false
+    t := fe.E.T
+    r := t.Repr(k.t)
+    if t.KindOf(r) != types.Kind.Named: return false
+    decl := t.DeclOf(r)
+    name := fe.E.P.L.Names.Text(t.DeclName(decl))
+    mod := t.Modules[t.DeclModule(decl)]
+    field := "data" if name == "Vec" and mod == "std/prelude/vec" else "ents" if name == "Map" and mod == "std/prelude/map" else ""
+    if field == "": return false
+    names := fe.E.P.FieldNames(r)
+    parts := t.Items(mir.FieldsOf(t, r))
+    for i in range names.Len().Min(parts.Len()) {
+        if fe.E.P.L.Names.Text(names[i]) == field: return t.Repr(parts[i]) == t.Repr(ty)
+    }
+    return false
+}
+
 # a run-time-length array value given storage of its own in scope s: its elements copied there
 fn (fe mut fnEm&) copyArray(s mir.ScopeRef, v String&, ty types.TypeId) String { return fe.copyArrayIn(fe.scope(s), v, ty) }
 
@@ -4252,9 +4273,10 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
         return fe.pair(cnt, fe.arrayStorage(sc, bytes, el, false))
     }
     if fill == mir.Operand.None { zero = true }
-    if fe.E.San and fe.E.retires(fe.F.File) {
+    if fe.E.San and (fe.E.retires(fe.F.File) or fe.bufferCopy(ty)) {
         # B2f: an array made in a module that retires arrays (M19d) has a chunk of its own, zero-filled, so that
-        # retiring it can make it unreadable
+        # retiring it can make it unreadable - and so has a Vec's or a Map's buffer copied with its record (a struct
+        # holding one copied, QCE), which the copy's growth retires (review 6b F4: it was poisoned, never protected)
         fe.E.runtime("__olang_san_alloc_own")
         p = fe.let("call ptr @__olang_san_alloc_own(ptr " $sc ", i64 " $bytes ")")
         if zero { return fe.pair(cnt, p) }

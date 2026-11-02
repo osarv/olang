@@ -1,0 +1,19 @@
+# check: fail error[M19g]: 'r' holds a view of 'ss[...].m' taken before 'ss[...].m' may have grown
+# M19g (review 6b F4): a reference into a Map held in a field of a Vec's element, taken through the index, across a call
+# growing that Map through the same route
+import "std/io"
+type blk struct(n I64, m I64) { n, m }
+fn fill(m mut Map<I64, blk>&) { for i in range 2, 5000 { m.Put(i, blk(i, i)) } }
+type st struct() {
+    m Map<I64, blk>
+}
+fn main() {
+    s := st()
+    s.m.Put(1, blk(1, 2))
+    ss := Vec<st>()
+    ss.Push(s)
+    r := ss.RefMut(0).m.RefMut(1)!
+    fill(ss.RefMut(0).m)
+    r.n = 77
+    io.Println("r.n " $r.n " r.m " $r.m)!
+}
