@@ -471,33 +471,32 @@ fn noteWhy(d mut diag.Diagnostics&, rec I64, file I64, sp source.Span, whyFile I
 # where in the program's use the type named ty is written as a type argument - "Chan<Ticket>" - and the generic
 # spelled with it held by reference ("Chan<Ticket&>"); the use itself and "" where it is not written there
 fn zeroUseArg(d mut diag.Diagnostics&, use diag.Where, ty String&) diag.Where, String {
-    match use {
-        case diag.Where.Span(f, from, to) {
-            text := d.TextOf(f)
-            i := from
-            for i + ty.Len() <= to and i + ty.Len() <= text.Len() {
-                if text[i:i + ty.Len()] == ty and i > 0 and i + ty.Len() < text.Len() {
-                    before := text[i - 1]
-                    after := text[i + ty.Len()]
-                    if (before == '<' or before == ' ' or before == ',') and (after == '>' or after == ',') {
-                        lt := i - 1
-                        for lt > from and text[lt] != '<' { lt-- }
-                        st := lt
-                        for st > from and (text[st - 1].IsLetter() or text[st - 1].IsDigit() or text[st - 1] == '_') { st-- }
-                        gt := i + ty.Len()
-                        for gt < to and text[gt] != '>' { gt++ }
-                        if text[lt] == '<' and gt < text.Len() {
-                            fix := $text[st:i + ty.Len()] "&" $text[i + ty.Len():gt + 1]
-                            return diag.Where.Span(f, i, i + ty.Len()), fix
-                        }
-                    }
-                }
-                i++
-            }
-            return use, ""
-        }
-        case _ { return use, "" }
+    if use != diag.Where.Span { return use, "" }
+    text := d.TextOf(use.file)
+    i := use.start
+    for i + ty.Len() <= use.end and i + ty.Len() <= text.Len() {
+        fix := zeroFix(text, i, ty, use.start, use.end)
+        if fix != "" { return diag.Where.Span(use.file, i, i + ty.Len()), fix }
+        i++
     }
+    return use, ""
+}
+
+# type argument ty written at i of text (in from..to), given its "&": the whole application so written, "" where ty is
+# no type argument there
+fn zeroFix(text String&, i I64, ty String&, from I64, to I64) String {
+    if text[i:i + ty.Len()] != ty or i <= 0 or i + ty.Len() >= text.Len() { return "" }
+    before := text[i - 1]
+    after := text[i + ty.Len()]
+    if before != '<' and before != ' ' and before != ',' or after != '>' and after != ',' { return "" }
+    lt := i - 1
+    for lt > from and text[lt] != '<' { lt-- }
+    st := lt
+    for st > from and (text[st - 1].IsLetter() or text[st - 1].IsDigit() or text[st - 1] == '_') { st-- }
+    gt := i + ty.Len()
+    for gt < to and text[gt] != '>' { gt++ }
+    if text[lt] != '<' or gt >= text.Len() { return "" }
+    return $text[st:i + ty.Len()] "&" $text[i + ty.Len():gt + 1]
 }
 
 # why an evaluation giving a value decided while compiling gave none, and where: "" for a value. The constructor's
@@ -529,128 +528,21 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
     abortsAt Map<pair.Pair<I64, I64>, Bool>
     whyNot Map<I64, String&>        # K3: why a comptime's global gave no value
     for i in x.Globals {
-        match x.Bodies[i].Of {
-            case typed.BodyOf.Global(m, n) {
-                if writtenMut(c.P.GlobalDecl(m, n)) {
-                    mimg := try x.bakeMutable(m, n) catch eval.NotBaked { continue }
-                    out.Put(i, mimg)
-                    continue
-                }
-                img := try x.M.Image(m, n) catch eval.NotBaked {
-                    if c.ComptimeSites.Has(i) {
-                        why, _, _ := valueWhy(x.M.Stopped, x.Bodies[i].Sp)
-                        whyNot.Put(i, $why)
-                        continue
-                    }
-                    # G39: an attribute's value is built while compiling, or is an error - never set at startup
-                    av := c.P.GlobalDecl(m, n)
-                    if av is not null and av.Hidden {
-                        # one evaluated with nothing to write - of no size, or reaching storage it cannot hold - is
-                        # built all the same, and set at startup as any global
-                        b := x.Bodies[i]
-                        why, _, _ := valueWhy(x.M.Stopped, b.Sp)
-                        if not x.Faulty.Has(i) and why != "" {
-                            d.Error(diag.Where.Span(b.File, I64(b.Sp.Start), I64(b.Sp.End)), msgs.AttrNotBuilt(why))
-                        }
-                        continue
-                    }
-                    # K1/K2: an initializer reaching what aborts the program would abort it at startup - an error at
-                    # the global, said once per place it is reached (a global reading another reaches the other's)
-                    match x.M.Stopped {
-                        case eval.Stop.Refused(why, file, sp) {
-                            if why != eval.WhyStale { continue }
-                            key := pair.Pair(file, I64(sp.Start))
-                            if abortsAt.Has(key) { continue }
-                            abortsAt.Put(key, true)
-                            b := x.Bodies[i]
-                            rec := d.Error(diag.Where.Span(b.File, I64(b.Sp.Start), I64(b.Sp.End)), msgs.GlobalStale(why))
-                            staleNotes(x, d, rec, file, sp)
-                        }
-                        case eval.Stop.Exited(kind, file, sp, _) {
-                            if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail { continue }
-                            key := pair.Pair(file, I64(sp.Start))
-                            if abortsAt.Has(key) { continue }
-                            abortsAt.Put(key, true)
-                            b := x.Bodies[i]
-                            at := diag.Where.Span(b.File, I64(b.Sp.Start), I64(b.Sp.End))
-                            rec := d.Error(at, msgs.GlobalAborts(AbortWhy(kind)))
-                            if file != b.File or d.LineAt(file, I64(sp.Start)) != d.LineAt(b.File, I64(b.Sp.Start)) {
-                                d.Note(rec, diag.Where.Span(file, I64(sp.Start), I64(sp.End)), msgs.NoteHere())
-                            }
-                        }
-                        case _ { }
-                    }
-                    continue
-                }
-                out.Put(i, img)
-            }
-            case _ { }
-        }
-    }
-    # K2b: storage two globals reach - one naming the instance another's initializer made, a slice of another's array,
-    # the same constant text - is one instance, written once per module: with the first global (in the order they are
-    # set) whose image holds it, which every other names. A global naming storage no baked global of its own module
-    # holds - another module's, or one set at startup's - is set at startup itself
-    home Map<I64, pair.Pair<I64, I64>>        # an allocation: the global (body) whose image holds it, and its blob there
-    for i in x.Globals {
-        img := try out.Ref(i) catch { continue }
-        mi := globalModule(x.Bodies[i])
-        ok := true
-        newIdx := Array<I64>(img.Blobs.Len(), -1)
-        k I64 = 0
-        for j in range img.Blobs.Len() {
-            sl := img.Slots[j]
-            if j > 0 and home.Has(sl) {
-                h := try home.Get(sl) catch default pair.Pair(I64(-1), I64(-1))
-                if globalModule(x.Bodies[h.First]) != mi { ok = false }
-                continue
-            }
-            newIdx[j] = k
-            k++
-        }
-        for b in img.Blobs {
-            for e in b.Ext {
-                if e < 0 { continue }
-                h := try home.Get(e) catch default pair.Pair(I64(-1), I64(-1))
-                if h.First < 0 or globalModule(x.Bodies[h.First]) != mi { ok = false }
-            }
-        }
-        if not ok {
-            out.Remove(i)
+        of := x.Bodies[i].Of
+        if of != typed.BodyOf.Global { continue }
+        m, n := of.module, of.name
+        if writtenMut(c.P.GlobalDecl(m, n)) {
+            mimg := try x.bakeMutable(m, n) catch eval.NotBaked { continue }
+            out.Put(i, mimg)
             continue
         }
-        kept := eval.Image()
-        kept.Mutable = img.Mutable
-        for j in range img.Blobs.Len() {
-            if newIdx[j] < 0 { continue }
-            b := img.Blobs.Ref(j)
-            nb := eval.Blob()
-            nb.Bytes = b.Bytes
-            nb.Align = b.Align
-            nb.Constant = b.Constant
-            for r in range b.At.Len() {
-                nb.At.Push(b.At[r])
-                nb.Off.Push(b.Off[r])
-                target := b.Ext[r] if b.To[r] < 0 else img.Slots[b.To[r]]
-                if b.To[r] >= 0 and newIdx[b.To[r]] >= 0 {
-                    nb.To.Push(newIdx[b.To[r]])
-                    nb.Ext.Push(-1)
-                    continue
-                }
-                h := try home.Get(target) catch default pair.Pair(I64(-1), I64(-1))
-                hm, hn := globalName(x.Bodies[h.First])
-                nb.To.Push(-1)
-                nb.Ext.Push(target)
-                nb.ExtMod.Push(hm)
-                nb.ExtName.Push(hn)
-                nb.ExtIdx.Push(h.Second)
-            }
-            kept.Blobs.Push(nb)
-            kept.Slots.Push(img.Slots[j])
-            home.Put(img.Slots[j], pair.Pair(i, newIdx[j]))
+        img := try x.M.Image(m, n) catch eval.NotBaked {
+            unbaked(x, c, d, i, c.P.GlobalDecl(m, n), abortsAt, whyNot)
+            continue
         }
-        out.Put(i, kept)
+        out.Put(i, img)
     }
+    shareStorage(x, out)
     # K3: a comptime's value is data or an error - never set at startup
     for e in c.ComptimeSites {
         if out.Has(e.Key) or x.Faulty.Has(e.Key) { continue }
@@ -660,6 +552,128 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
         d.Error(diag.Where.Span(b.File, I64(e.Value.Start), I64(e.Value.End)), msgs.ComptimeNotBaked(why))
     }
     return out
+}
+
+# global i, whose initializer gave no image: a comptime's why kept for its error (K3); an attribute that could not be
+# built an error (G39); an initializer reaching what aborts the program an error at the global (K1/K2), said once per
+# place it is reached (a global reading another reaches the other's)
+fn unbaked(x mut Exec&, c mut typecheck.Checker&, d mut diag.Diagnostics&, i I64, av ast.VarDecl?&
+           abortsAt mut Map<pair.Pair<I64, I64>, Bool>&, whyNot mut Map<I64, String&>&) {
+    b := x.Bodies[i]
+    if c.ComptimeSites.Has(i) {
+        why, _, _ := valueWhy(x.M.Stopped, b.Sp)
+        whyNot.Put(i, $why)
+        return
+    }
+    # G39: an attribute's value is built while compiling, or is an error - never set at startup
+    if av is not null and av.Hidden {
+        # one evaluated with nothing to write - of no size, or reaching storage it cannot hold - is built all the same,
+        # and set at startup as any global
+        why, _, _ := valueWhy(x.M.Stopped, b.Sp)
+        if not x.Faulty.Has(i) and why != "" { d.Error(diag.Where.Span(b.File, I64(b.Sp.Start), I64(b.Sp.End)), msgs.AttrNotBuilt(why)) }
+        return
+    }
+    at := diag.Where.Span(b.File, I64(b.Sp.Start), I64(b.Sp.End))
+    match x.M.Stopped {
+        case eval.Stop.Refused(why, file, sp) {
+            if why != eval.WhyStale { return }
+            try firstAt(abortsAt, file, sp) catch Said { return }
+            rec := d.Error(at, msgs.GlobalStale(why))
+            staleNotes(x, d, rec, file, sp)
+        }
+        case eval.Stop.Exited(kind, file, sp, _) {
+            if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail { return }
+            try firstAt(abortsAt, file, sp) catch Said { return }
+            rec := d.Error(at, msgs.GlobalAborts(AbortWhy(kind)))
+            if file != b.File or d.LineAt(file, I64(sp.Start)) != d.LineAt(b.File, I64(b.Sp.Start)) {
+                d.Note(rec, diag.Where.Span(file, I64(sp.Start), I64(sp.End)), msgs.NoteHere())
+            }
+        }
+        case _ { }
+    }
+}
+
+# a place a global's initializer was found stopping at, marked seen - failing with Said where it was before
+fn firstAt(seen mut Map<pair.Pair<I64, I64>, Bool>&, file I64, sp source.Span) ? Said {
+    key := pair.Pair(file, I64(sp.Start))
+    if seen.Has(key) { error Said }
+    seen.Put(key, true)
+}
+
+# K2b: storage two globals reach - one naming the instance another's initializer made, a slice of another's array, the
+# same constant text - is one instance, written once per module: with the first global (in the order they are set) whose
+# image holds it, which every other names. A global naming storage no baked global of its own module holds - another
+# module's, or one set at startup's - is set at startup itself
+fn shareStorage(x mut Exec&, out mut Map<I64, eval.Image>&) {
+    home Map<I64, pair.Pair<I64, I64>>        # an allocation: the global (body) whose image holds it, and its blob there
+    for i in x.Globals {
+        img := try out.Ref(i) catch { continue }
+        newIdx := Array<I64>(img.Blobs.Len(), -1)
+        try homesKnown(x, img, home, globalModule(x.Bodies[i]), newIdx) catch HeldElsewhere {
+            out.Remove(i)
+            continue
+        }
+        kept := eval.Image()
+        kept.Mutable = img.Mutable
+        for j in range img.Blobs.Len() {
+            if newIdx[j] < 0 { continue }
+            kept.Blobs.Push(keptBlob(x, img, img.Blobs.Ref(j), newIdx, home))
+            kept.Slots.Push(img.Slots[j])
+            home.Put(img.Slots[j], pair.Pair(i, newIdx[j]))
+        }
+        out.Put(i, kept)
+    }
+}
+
+# every allocation image img (of a global of module mi) reaches is its own module's: one another global's image holds
+# there (home), or one of its own blobs - which newIdx numbers in the order kept, -1 for one held elsewhere; failing
+# with HeldElsewhere where one is another module's, or no baked global's
+fn homesKnown(x Exec&, img eval.Image&, home Map<I64, pair.Pair<I64, I64>>&, mi I64, newIdx mut Array<I64>&) ? HeldElsewhere {
+    k I64 = 0
+    for j in range img.Blobs.Len() {
+        sl := img.Slots[j]
+        if j > 0 and home.Has(sl) {
+            h := try home.Get(sl) catch default pair.Pair(I64(-1), I64(-1))
+            if globalModule(x.Bodies[h.First]) != mi { error HeldElsewhere }
+            continue
+        }
+        newIdx[j] = k
+        k++
+    }
+    for b in img.Blobs {
+        for e in b.Ext {
+            if e < 0 { continue }
+            h := try home.Get(e) catch default pair.Pair(I64(-1), I64(-1))
+            if h.First < 0 or globalModule(x.Bodies[h.First]) != mi { error HeldElsewhere }
+        }
+    }
+}
+
+# blob b of image img, kept: its pointers into the image's own blobs renumbered (newIdx), those into storage another
+# global holds named through that global (home)
+fn keptBlob(x mut Exec&, img eval.Image&, b eval.Blob&, newIdx Array<I64>&, home Map<I64, pair.Pair<I64, I64>>&) eval.Blob {
+    nb := eval.Blob()
+    nb.Bytes = b.Bytes
+    nb.Align = b.Align
+    nb.Constant = b.Constant
+    for r in range b.At.Len() {
+        nb.At.Push(b.At[r])
+        nb.Off.Push(b.Off[r])
+        target := b.Ext[r] if b.To[r] < 0 else img.Slots[b.To[r]]
+        if b.To[r] >= 0 and newIdx[b.To[r]] >= 0 {
+            nb.To.Push(newIdx[b.To[r]])
+            nb.Ext.Push(-1)
+            continue
+        }
+        h := try home.Get(target) catch default pair.Pair(I64(-1), I64(-1))
+        hm, hn := globalName(x.Bodies[h.First])
+        nb.To.Push(-1)
+        nb.Ext.Push(target)
+        nb.ExtMod.Push(hm)
+        nb.ExtName.Push(hn)
+        nb.ExtIdx.Push(h.Second)
+    }
+    return nb
 }
 
 fn globalModule(b typed.Body&) I64 {
@@ -888,28 +902,16 @@ fn (x mut Exec&) Need(k mir.FnKey) {
         key := try work.Pop() catch { break }
         if x.defined.Has(key) { continue }
         x.defined.Put(key, true)
-        if x.When == eval.Mode.Compile {
-            match key {
-                case mir.FnKey.Body(id) {
-                    if x.Faulty.Has(I64(id)) {
-                        x.Unlowered.Push(key)
-                        continue
-                    }
-                }
-                case _ { }
-            }
+        if x.When == eval.Mode.Compile and key == mir.FnKey.Body and x.Faulty.Has(I64(key.id)) {
+            x.Unlowered.Push(key)
+            continue
         }
         f := x.Lw.LowerKey(key)
         if x.Lw.Gapped {
             x.Unlowered.Push(key)
             continue
         }
-        match key {
-            case mir.FnKey.Body(id) {
-                if x.ReadsBuild.Has(I64(id)) { x.M.BuildFns.Put(key, true) }
-            }
-            case _ { }
-        }
+        if key == mir.FnKey.Body and x.ReadsBuild.Has(I64(key.id)) { x.M.BuildFns.Put(key, true) }
         x.reach(f, work)
         x.M.Define(f)
     }
@@ -917,32 +919,34 @@ fn (x mut Exec&) Need(k mir.FnKey) {
 
 # what f's code can reach: its calls' and tasks' callees, the code of the function values it makes, the destructors it
 # registers - each pushed onto work; its externs defined by name
+# the functions a statement of f reaches, queued: a closure's code, an any's table's (T32), a destructor registered
+fn (x mut Exec&) reachStmt(f mir.Fn&, s mir.Stmt, work mut Vec<mir.FnKey>&) {
+    match s {
+        case mir.Stmt.Assign(_, _, mir.Rvalue.Closure(code, _, _, _, _)) { work.Push(code) }
+        case mir.Stmt.Assign(_, _, mir.Rvalue.Prim(typed.PrimOp.AnyMake, _, args)) {
+            # T32: the table a run-time trait value is made with, and the functions it holds
+            match f.Ops[I64(args.At) + 1] {
+                case mir.Operand.Const(_, ti) { x.table(ti, work) }
+                case _ { }
+            }
+        }
+        case mir.Stmt.RegisterDtor(_, _, ty, _) {
+            d := try x.dtorOf.Get(ty) catch default -1
+            if d < 0 { return }
+            dk := mir.FnKey.Body(typed.BodyId(I32(d)))
+            x.M.DefineDestructor(ty, dk)
+            work.Push(dk)
+        }
+        case _ { }
+    }
+}
+
 fn (x mut Exec&) reach(f mir.Fn&, work mut Vec<mir.FnKey>&) {
     for c in f.Calls { x.callee(c.Target, work) }
     for t in f.Tasks { x.callee(t.Target, work) }
     for blockIx in range f.Blocks.Len() {
         bb := f.Blocks.Ref(blockIx)
-        for s in bb.Stmts {
-            match s {
-                case mir.Stmt.Assign(_, _, mir.Rvalue.Closure(code, _, _, _, _)) { work.Push(code) }
-                case mir.Stmt.Assign(_, _, mir.Rvalue.Prim(typed.PrimOp.AnyMake, _, args)) {
-                    # T32: the table a run-time trait value is made with, and the functions it holds
-                    match f.Ops[I64(args.At) + 1] {
-                        case mir.Operand.Const(_, ti) { x.table(ti, work) }
-                        case _ { }
-                    }
-                }
-                case mir.Stmt.RegisterDtor(_, _, ty, _) {
-                    d := try x.dtorOf.Get(ty) catch default -1
-                    if d >= 0 {
-                        dk := mir.FnKey.Body(typed.BodyId(I32(d)))
-                        x.M.DefineDestructor(ty, dk)
-                        work.Push(dk)
-                    }
-                }
-                case _ { }
-            }
-        }
+        for s in bb.Stmts { x.reachStmt(f, s, work) }
     }
 }
 
