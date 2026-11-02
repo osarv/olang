@@ -494,30 +494,25 @@ fn (f mut finder&) expr(x typed.Expr?&) {
 fn (f mut finder&) callee(sp source.Span, cl typed.Callee&) {
     if I64(sp.Start) > f.s or f.e > I64(sp.End) { return }
     match cl {
-        case typed.Callee.Body(bid) {
-            b := f.c.Bodies[I64(bid)]
-            match b.Of {
-                case typed.BodyOf.Fn(inst) {
-                    fi := f.c.P.InstanceFn(inst)
-                    if f.c.P.L.Names.Text(f.c.P.FnDecl(fi).Name) == f.name {
-                        if f.c.P.FnDecl(fi).Recv is not null { f.take(sp, Target.Method(fi)) } else {
-                            f.take(sp, Target.Item(f.c.P.FnModule(fi), $f.name))
-                        }
-                    }
-                }
-                case typed.BodyOf.Ctor(ct, _) {
-                    tt := ct
-                    if f.c.P.T.KindOf(tt) == types.Kind.Named {
-                        d := f.c.P.T.DeclOf(tt)
-                        if f.c.P.L.Names.Text(f.c.P.T.DeclName(d)) == f.name {
-                            f.take(sp, Target.Item(f.c.P.DeclModule(d), $f.name))
-                        }
-                    }
-                }
-                case _ { }
-            }
-        }
+        case typed.Callee.Body(bid) { f.bodyCallee(sp, f.c.Bodies[I64(bid)].Of) }
         case typed.Callee.Value(v) { f.expr(v) }
+        case _ { }
+    }
+}
+
+# a call at sp of a body (of): a function's, a method's or a constructor's - what it names, where it is named f.name
+fn (f mut finder&) bodyCallee(sp source.Span, of typed.BodyOf) {
+    match of {
+        case typed.BodyOf.Fn(inst) {
+            fi := f.c.P.InstanceFn(inst)
+            if f.c.P.L.Names.Text(f.c.P.FnDecl(fi).Name) != f.name { return }
+            if f.c.P.FnDecl(fi).Recv is not null { f.take(sp, Target.Method(fi)) } else { f.take(sp, Target.Item(f.c.P.FnModule(fi), $f.name)) }
+        }
+        case typed.BodyOf.Ctor(ct, _) {
+            if f.c.P.T.KindOf(ct) != types.Kind.Named { return }
+            d := f.c.P.T.DeclOf(ct)
+            if f.c.P.L.Names.Text(f.c.P.T.DeclName(d)) == f.name { f.take(sp, Target.Item(f.c.P.DeclModule(d), $f.name)) }
+        }
         case _ { }
     }
 }
@@ -723,14 +718,10 @@ fn (w mut symWriter&) members(b mut StringBuilder&, body ast.TypeBody&, nm sourc
         case ast.TypeBody.Struct(sb) {
             if sb.Body.Len() == 0 { return }
             for st in sb.Body {
-                match st {
-                    case ast.Stmt.Var(vsp, v) {
-                        for k in range v.Names.Len() {
-                            ns := v.NameSps[k]
-                            w.leaf(b, nm.Text(v.Names[k]), KindField, I64(vsp.Start), I64(vsp.End), I64(ns.Start), I64(ns.End), "")
-                        }
-                    }
-                    case _ { }
+                if st != ast.Stmt.Var { continue }
+                for k in range st.v.Names.Len() {
+                    ns := st.v.NameSps[k]
+                    w.leaf(b, nm.Text(st.v.Names[k]), KindField, I64(st.sp.Start), I64(st.sp.End), I64(ns.Start), I64(ns.End), "")
                 }
             }
         }
@@ -871,29 +862,28 @@ fn (a Analysis&) typeEndingAt(file I64, end I64) types.TypeId {
 }
 
 # the fields and methods of a type - through a reference, of what it refers to
+# the fields of a declared type's instance as completions: its constructor's, a bare one (C2a) named where it is written
+fn (a Analysis&) fieldMembers(it mut Items&, tt types.TypeId) {
+    c := a.C
+    d := c!.P.T.DeclOf(tt)
+    for body in c!.Bodies {
+        bo := body.Of
+        if bo != typed.BodyOf.Ctor or c!.P.T.KindOf(bo.t) != types.Kind.Named or c!.P.T.DeclOf(bo.t) != d { continue }
+        tys := c!.P.T.Items(c!.P.T.Fields(tt))
+        for i in range body.Fields.Len() {
+            l := body.Locals[I64(body.Fields[i])]
+            name := (a.L.Diags.TextOf(body.File)[I64(l.Sp.Start):I64(l.Sp.End)] if l.Name == source.NameId(0)
+                     else c!.P.L.Names.Text(l.Name))
+            it.Add(name, CompField, c!.Ty(tys[i] if i < tys.Len() else l.Ty))
+        }
+        return
+    }
+}
+
 fn (a Analysis&) typeMembers(it mut Items&, t types.TypeId) {
     c := a.C
     tt := c!.P.T.Referent(t) if c!.P.T.KindOf(t) == types.Kind.Ref else t
-    if c!.P.T.KindOf(tt) == types.Kind.Named {
-        d := c!.P.T.DeclOf(tt)
-        for body in c!.Bodies {
-            match body.Of {
-                case typed.BodyOf.Ctor(bt, _) {
-                    if c!.P.T.KindOf(bt) != types.Kind.Named or c!.P.T.DeclOf(bt) != d { continue }
-                    tys := c!.P.T.Items(c!.P.T.Fields(tt))
-                    for i in range body.Fields.Len() {
-                        l := body.Locals[I64(body.Fields[i])]
-                        # a bare field (C2a) is named where it is written
-                        name := (a.L.Diags.TextOf(body.File)[I64(l.Sp.Start):I64(l.Sp.End)] if l.Name == source.NameId(0)
-                                 else c!.P.L.Names.Text(l.Name))
-                        it.Add(name, CompField, c!.Ty(tys[i] if i < tys.Len() else l.Ty))
-                    }
-                    break
-                }
-                case _ { }
-            }
-        }
-    }
+    if c!.P.T.KindOf(tt) == types.Kind.Named { a.fieldMembers(it, tt) }
     # methods: every function with a receiver whose type is t's - of its declaration, or of its kind for a built-in one
     c!.P.AllFns()
     for f in range c!.P.FnCount() {

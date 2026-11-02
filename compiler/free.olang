@@ -854,28 +854,18 @@ fn (f mut Free&) findStmt(st typed.Stmt&) {
 
 # an x.Destroy() statement: a destroy target for its local (C9b)
 fn (f mut Free&) findDestroy(sp source.Span, x typed.Expr&) {
-    match x {
-        case typed.Expr.Prim(_, _, op, _, args) {
-            if op != typed.PrimOp.Destroy or args.Len() != 1 { return }
-            match args[0] {
-                case typed.Expr.Read(_, ty, p, _) {
-                    match p {
-                        case typed.Lvalue.Local(_, _, l) {
-                            key := pair.Pair(f.curBody, I64(l))
-                            if f.destroyOf.Has(key) { return }
-                            d := f.newPlace(ty, -2, false, ty, false)
-                            f.destroyOf.Put(key, d)
-                            f.dBody[d] = f.curBody
-                            f.dLocal[d] = I64(l)
-                            f.dSp[d] = sp
-                            f.dIn[f.curBody] = true
-                            f.destroys++
-                        }
-                        case _ { }
-                    }
-                }
-                case _ { }
-            }
+    if x != typed.Expr.Prim or x.op != typed.PrimOp.Destroy or x.args.Len() != 1 { return }
+    match x.args[0] {
+        case typed.Expr.Read(_, ty, typed.Lvalue.Local(_, _, l), _) {
+            key := pair.Pair(f.curBody, I64(l))
+            if f.destroyOf.Has(key) { return }
+            d := f.newPlace(ty, -2, false, ty, false)
+            f.destroyOf.Put(key, d)
+            f.dBody[d] = f.curBody
+            f.dLocal[d] = I64(l)
+            f.dSp[d] = sp
+            f.dIn[f.curBody] = true
+            f.destroys++
         }
         case _ { }
     }
@@ -1245,6 +1235,15 @@ fn (w mut walker&) give(l I64, o Vec<I64>&) {
     if addAllTo(w.origins[l], o) > 0 and w.seen[l] { w.grew = true }
 }
 
+# C9b: the destroy targets among what a return at statement n gives (o) - it ends their paths
+fn (w mut walker&) returnedDestroys(o Vec<I64>&, n I64) {
+    for y in o {
+        if okind(y) != OPl or not w.F.isDestroy(oval(y)) { continue }
+        w.dRetD.Push(oval(y))
+        w.dRetAt.Push(n)
+    }
+}
+
 fn (w mut walker&) stmt(st typed.Stmt&) {
     n := w.no
     w.no++
@@ -1291,14 +1290,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             if x is not null {
                 o := w.expr(x)
                 if not w.Final { w.result(o) }
-                if w.Final and w.F.dIn[w.Id] {
-                    for y in o {
-                        if okind(y) == OPl and w.F.isDestroy(oval(y)) {
-                            w.dRetD.Push(oval(y))
-                            w.dRetAt.Push(n)
-                        }
-                    }
-                }
+                if w.Final and w.F.dIn[w.Id] { w.returnedDestroys(o, n) }
             }
             # between a yield and the next Next the consumer runs what it likes: a let-go of any place, for every view
             # the body holds across it
@@ -1493,17 +1485,8 @@ fn (w mut walker&) freshRoot(p typed.Lvalue&) I64 {
         case typed.Lvalue.Field(_, _, b, _) { return w.freshRoot(b) }
         case typed.Lvalue.Elem(_, _, e) { return w.freshRoot(e.Base) }
         case typed.Lvalue.Payload(_, _, pl) { return w.freshRoot(pl.Base) }
-        case typed.Lvalue.Deref(_, _, r) {
-            match r {
-                case typed.Expr.Read(_, _, q, _) {
-                    match q {
-                        case typed.Lvalue.Local(_, _, id) { l = I64(id) }
-                        case _ { return -1 }
-                    }
-                }
-                case _ { return -1 }
-            }
-        }
+        case typed.Lvalue.Deref(_, _, typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, id), _)) { l = I64(id) }
+        case typed.Lvalue.Deref(_, _, _) { return -1 }
         case _ { return -1 }
     }
     if w.params.Has(l) or w.fields.Has(l) { return -1 }
@@ -1615,27 +1598,28 @@ fn baseOf(p typed.Lvalue&) typed.Lvalue?& {
 }
 
 # a statement's value dropped: a vacate statement lets go of the place, a moved value dropped is let go of here
+# C9b: a.Destroy() - a destroy target's event, where a reads one; and a value moved out of a place ended here: a let-go
+# of that place for this body's views of it and its callers' - one of them may be this very value
+fn (w mut walker&) destroyed(sp source.Span, a typed.Expr&) {
+    l := readLocalOf(a)
+    d := w.destroyOf(l)
+    if d >= 0 and w.Final {
+        w.dGoD.Push(d)
+        w.dGoAt.Push(w.cur)
+        w.dGoDefer.Push(w.deferStack[w.deferStack.Len() - 1] if w.deferStack.Len() > 0 else -1)
+    }
+    if l < 0 { return }
+    for y in w.origins[l] {
+        if okind(y) == OMov { w.go(oval(y), LDestroy, sp, source.Span(0, 0), -1) }
+    }
+}
+
 fn (w mut walker&) eval(sp source.Span, x typed.Expr&) {
     o := w.expr(x)
     match x {
         case typed.Expr.Prim(_, _, op, _, args) {
             # C9b: a Destroy() of a destroy target, its events judged once the body is walked (destroys)
-            if op == typed.PrimOp.Destroy and w.quiet == 0 {
-                l := readLocalOf(args[0])
-                d := w.destroyOf(l)
-                if d >= 0 and w.Final {
-                    w.dGoD.Push(d)
-                    w.dGoAt.Push(w.cur)
-                    w.dGoDefer.Push(w.deferStack[w.deferStack.Len() - 1] if w.deferStack.Len() > 0 else -1)
-                }
-                # a value moved out of a place, ended here: a let-go of that place for this body's views of it and its
-                # callers' - one of them may be this very value
-                if l >= 0 {
-                    for y in w.origins[l] {
-                        if okind(y) == OMov { w.go(oval(y), LDestroy, sp, source.Span(0, 0), -1) }
-                    }
-                }
-            }
+            if op == typed.PrimOp.Destroy and w.quiet == 0 { w.destroyed(sp, args[0]) }
             return
         }
         case typed.Expr.Take(_, ty, p) {
@@ -1967,6 +1951,19 @@ fn (w mut walker&) takeOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
     return o
 }
 
+# lambda lb made here: this body walked again when its summary changes, and registering where it does
+fn (w mut walker&) lambdaMade(lb typed.BodyId) {
+    addTo(w.F.callers[I64(lb)], w.Id)
+    if w.F.regOut[I64(lb)] { w.F.setRegOut(w.Id) }
+}
+
+# what a lambda made at sp captures (x): escaping into it
+fn (w mut walker&) captured(sp source.Span, x typed.Expr&) Vec<I64> {
+    o := w.expr(x)
+    w.escape(o, sp, "", false)
+    return o
+}
+
 fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
     out Vec<I64>
     match x {
@@ -2044,15 +2041,8 @@ fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
             match fv {
                 case typed.FnVal.Lambda(lb, caps, site) {
                     # a lambda that may register in what it captured: its maker may, where it is called is not known
-                    if not w.Final {
-                        addTo(w.F.callers[I64(lb)], w.Id)     # walked again when the lambda's summary changes
-                        if w.F.regOut[I64(lb)] { w.F.setRegOut(w.Id) }
-                    }
-                    for c in caps {
-                        o := w.expr(c.Outer)
-                        w.escape(o, sp, "", false)
-                        addAllTo(out, o)
-                    }
+                    if not w.Final { w.lambdaMade(lb) }
+                    for c in caps { addAllTo(out, w.captured(sp, c.Outer)) }
                     addTo(out, orig(ONew, I64(site)))
                 }
                 case typed.FnVal.Named(b) { w.F.named[I64(b)] = true }
@@ -3154,6 +3144,14 @@ fn (m mut mustW&) stmt(st typed.Stmt&) {
 }
 
 # the statements inside an expression: a sequence's, a match's arms', a try's clauses'
+# a match alternative's bindings, each an assignment
+fn (m mut mustW&) binds(alt typed.Alt&) {
+    for bd in alt.Binds {
+        m.assigned.Push(I64(bd.To))
+        m.values.Push(bd.From)
+    }
+}
+
 fn (m mut mustW&) expr(x typed.Expr&) {
     match x {
         case typed.Expr.Seq(_, _, q) {
@@ -3163,12 +3161,7 @@ fn (m mut mustW&) expr(x typed.Expr&) {
         case typed.Expr.Match(_, _, mt) {
             for st in mt.Held { m.stmt(st) }
             for a in mt.Arms {
-                for alt in a.Alts {
-                    for bd in alt.Binds {
-                        m.assigned.Push(I64(bd.To))
-                        m.values.Push(bd.From)
-                    }
-                }
+                for alt in a.Alts { m.binds(alt) }
                 if a.Code is not null { m.block(a.Code!) }
                 if a.Value is not null { m.expr(a.Value!) }
             }
@@ -3237,6 +3230,14 @@ fn (m mut mustW&) tryMust(t typed.Try&) I64 {
 
 # whether every value of an expression is new: built where it is (a temporary, a constructor, an array, a text), null,
 # constant data, or a built result (O13) of a call whose results are all new
+# whether every value local l is assigned is fresh (none: fresh)
+fn (m mut mustW&) assignedFresh(l I64, depth I64) Bool {
+    for a in range m.assigned.Len() {
+        if m.assigned[a] == l and not m.fresh(m.values[a], depth + 1): return false
+    }
+    return true
+}
+
 fn (m mut mustW&) fresh(x typed.Expr&, depth I64) Bool {
     f := m.F
     t := f.T()
@@ -3258,13 +3259,7 @@ fn (m mut mustW&) fresh(x typed.Expr&, depth I64) Bool {
         }
         case typed.Expr.Read(_, _, p, _) {
             match p {
-                case typed.Lvalue.Local(_, _, l) {
-                    if m.isParam(I64(l)) { return false }
-                    for a in range m.assigned.Len() {
-                        if m.assigned[a] == I64(l) and not m.fresh(m.values[a], depth + 1): return false
-                    }
-                    return true
-                }
+                case typed.Lvalue.Local(_, _, l) { return not m.isParam(I64(l)) and m.assignedFresh(I64(l), depth) }
                 case _ { return false }
             }
         }

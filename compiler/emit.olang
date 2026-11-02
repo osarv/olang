@@ -284,6 +284,33 @@ fn (e mut Emitter&) Objects() Vec<Object> {
 # instances go into a group of their own module's: the other groups' objects - which every module's ThinLTO backend
 # imports from - stay as they were, where with the instances cut by their symbols' hashes alone a new instance changed
 # a part every module imported, and the link redid nearly every module's code
+# the instances module m's items (work) reach, through items shared or local to a module on the way, put in m's group
+# where no group before has them
+fn (e mut Emitter&) groupReached(m I64, work mut Vec<I64>&) {
+    seen Map<I64, Bool>
+    w I64 = 0
+    for w < work.Len() {
+        i := work[w]
+        w++
+        text := e.itemText[i]
+        rs := e.refs(i)
+        for r in range 0, rs.Len(), 3 {
+            if rs[r] != 0 { continue }
+            j := e.itemNamed(text[rs[r + 1]:rs[r + 2]])
+            if j < 0 { continue }
+            h := e.itemHome[j]
+            if h == HomeInst {
+                if e.instGroup.Has(j) { continue }
+                e.instGroup.Put(j, m)
+                work.Push(j)
+            } else if (h == HomeShared or h == HomeLocal) and not seen.Has(j) {
+                seen.Put(j, true)
+                work.Push(j)
+            }
+        }
+    }
+}
+
 fn (e mut Emitter&) instGroups() {
     mods Vec<mut load.Module&>& = e.P.L.Mods
     root := e.P.L.Root
@@ -317,28 +344,7 @@ fn (e mut Emitter&) instGroups() {
         } else {
             for i := first[m], i >= 0, i = next[i] { work.Push(i) }
         }
-        seen Map<I64, Bool>
-        w I64 = 0
-        for w < work.Len() {
-            i := work[w]
-            w++
-            text := e.itemText[i]
-            rs := e.refs(i)
-            for r in range 0, rs.Len(), 3 {
-                if rs[r] != 0 { continue }
-                j := e.itemNamed(text[rs[r + 1]:rs[r + 2]])
-                if j < 0 { continue }
-                h := e.itemHome[j]
-                if h == HomeInst {
-                    if e.instGroup.Has(j) { continue }
-                    e.instGroup.Put(j, m)
-                    work.Push(j)
-                } else if (h == HomeShared or h == HomeLocal) and not seen.Has(j) {
-                    seen.Put(j, true)
-                    work.Push(j)
-                }
-            }
-        }
+        e.groupReached(m, work)
     }
     have Map<I64, Bool>
     for i in range e.itemSym.Len() {
@@ -1470,25 +1476,15 @@ fn (e mut Emitter&) fieldNames(r types.TypeId, n I64) Array<String&> {
     if e.T.KindOf(r) != types.Kind.Named { return out }
     td := e.P.TypeDecl(e.T.DeclOf(r))
     if td is null or td.Body is null { return out }
-    match td.Body {
-        case ast.TypeBody.Struct(sb) {
-            if sb.Body.Len() == 0 { return out }
-            k I64 = 0
-            for st in sb.Body {
-                match st {
-                    case ast.Stmt.Var(_, v) {
-                        if v.Field {
-                            for vn in v.Names {
-                                if k < n { out[k] = $e.text(vn) }
-                                k++
-                            }
-                        }
-                    }
-                    case _ { }
-                }
-            }
+    tb := td.Body
+    if tb != ast.TypeBody.Struct { return out }
+    k I64 = 0
+    for st in tb.s.Body {
+        if st != ast.Stmt.Var or not st.v.Field { continue }
+        for vn in st.v.Names {
+            if k < n { out[k] = $e.text(vn) }
+            k++
         }
-        case _ { }
     }
     return out
 }
@@ -2709,7 +2705,7 @@ fn (fe mut fnEm&) run() {
     for i in range f.Params.Len() {
         l := f.Params[i]
         lt := f.Locals[I64(l)].Ty
-        if fe.runTime(lt) and fe.writesInto(l) {
+        if fe.runTime(lt) and fe.F.WritesInto(fe.E.T, l) {
             fe.bigArena()
             v := fe.load("{ i64, ptr }", "%l" $l)
             fe.store("{ i64, ptr }", fe.copyArrayIn("%big", v, lt), "%l" $l)
@@ -2905,7 +2901,7 @@ fn (fe mut fnEm&) apart(p mir.Lvalue, args mir.Range) Bool {
     for i in range args.N {
         match fe.arg(args, i) {
             case mir.Operand.Copy(q) {
-                if fe.derefs(q) or fe.baseIs(q, dst) { return false }
+                if fe.derefs(q) or q.BaseIs(dst) { return false }
                 match q.B {
                     case mir.Base.Local(_) { }
                     case _ { return false }
@@ -2965,27 +2961,7 @@ fn (fe mut fnEm&) fillInPlace(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool
                 if fe.arg(args, i) != fe.arg(args, 0) { same = false }
             }
             if same {
-                v := fe.val(fe.arg(args, 0), el)
-                at, _ := fe.addr(p)
-                head := fe.fresh("fill")
-                body := fe.fresh("fill")
-                done := fe.fresh("fill")
-                pre := fe.fresh("fill")
-                fe.w("br label %" $pre)
-                fe.label(pre)
-                fe.w("br label %" $head)
-                fe.label(head)
-                i := fe.tmp()
-                next := fe.tmp()
-                fe.w($i " = phi i64 [ 0, %" $pre " ], [ " $next ", %" $body " ]")
-                more := fe.let("icmp slt i64 " $i ", " $n)
-                fe.w("br i1 " $more ", label %" $body ", label %" $done)
-                fe.label(body)
-                e := fe.let("getelementptr " $lt ", ptr " $at ", i64 0, i64 " $i)
-                fe.store(et, v, e)
-                fe.w($next " = add i64 " $i ", 1")
-                fe.w("br label %" $head)
-                fe.label(done)
+                fe.fillLoop(p, lt, et, fe.val(fe.arg(args, 0), el), n)
                 return true
             }
             vs Vec<String&>
@@ -2997,61 +2973,48 @@ fn (fe mut fnEm&) fillInPlace(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool
             }
             return true
         }
-        case mir.Rvalue.Use(x) {
-            match x {
-                case mir.Operand.Copy(q) {
-                    k := t.KindOf(t.Repr(pt))
-                    if k != types.Kind.Array and k != types.Kind.Named and k != types.Kind.AnonEnum { return false }
-                    if t.KindOf(t.Repr(pt)) == types.Kind.Array and not fe.fixed(t.Repr(pt)) { return false }
-                    if fe.size(pt) <= 128 or fe.placeType(q) != pt { return false }
-                    src, _ := fe.addr(q)
-                    dst, _ := fe.addr(p)
-                    fe.E.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
-                    fe.w("call void @llvm.memmove.p0.p0.i64(ptr " $dst ", ptr " $src ", i64 " $fe.size(pt) ", i1 false)")
-                    return true
-                }
-                case _ { return false }
-            }
-        }
+        case mir.Rvalue.Use(x) { return x == mir.Operand.Copy and fe.moveInPlace(p, pt, x.p) }
         case _ { return false }
     }
 }
 
-# whether the function writes into what local l holds: a store or a copy into a place reached from it, or a writable
-# reference made to it
-fn (fe mut fnEm&) writesInto(l mir.LocalId) Bool {
-    f := fe.F
-    for blockIx in range f.Blocks.Len() {
-        bb := f.Blocks.Ref(blockIx)
-        for st in bb.Stmts {
-            match st {
-                case mir.Stmt.Assign(_, p, rv) {
-                    if p.Path.N > I32(0) and fe.baseIs(p, l) { return true }
-                    match rv {
-                        case mir.Rvalue.Ref(q, ty) {
-                            if fe.baseIs(q, l) and (fe.E.T.PermOf(fe.E.T.Repr(ty)) & types.Writable) != 0 { return true }
-                        }
-                        case mir.Rvalue.Slice(q, _, _, ty) {
-                            if fe.baseIs(q, l) and (fe.E.T.PermOf(fe.E.T.Repr(ty)) & types.Writable) != 0 { return true }
-                        }
-                        case _ { }
-                    }
-                }
-                case mir.Stmt.CopyElems(_, d, _, _) {
-                    if fe.baseIs(d, l) { return true }
-                }
-                case _ { }
-            }
-        }
-    }
-    return false
+# n copies of one value v (of LLVM type et) stored into the fixed array at p (lt its type), by a loop
+fn (fe mut fnEm&) fillLoop(p mir.Lvalue, lt String&, et String&, v String&, n I64) {
+    at, _ := fe.addr(p)
+    head := fe.fresh("fill")
+    body := fe.fresh("fill")
+    done := fe.fresh("fill")
+    pre := fe.fresh("fill")
+    fe.w("br label %" $pre)
+    fe.label(pre)
+    fe.w("br label %" $head)
+    fe.label(head)
+    i := fe.tmp()
+    next := fe.tmp()
+    fe.w($i " = phi i64 [ 0, %" $pre " ], [ " $next ", %" $body " ]")
+    more := fe.let("icmp slt i64 " $i ", " $n)
+    fe.w("br i1 " $more ", label %" $body ", label %" $done)
+    fe.label(body)
+    e := fe.let("getelementptr " $lt ", ptr " $at ", i64 0, i64 " $i)
+    fe.store(et, v, e)
+    fe.w($next " = add i64 " $i ", 1")
+    fe.w("br label %" $head)
+    fe.label(done)
 }
 
-fn (fe mut fnEm&) baseIs(p mir.Lvalue, l mir.LocalId) Bool {
-    return match p.B {
-        case mir.Base.Local(k): k == l
-        case _: false
-    }
+# a large value of type pt copied from place q to p in place, memory to memory - an array of a fixed length, a struct
+# or an enum over 128 bytes; false where it is no such copy
+fn (fe mut fnEm&) moveInPlace(p mir.Lvalue, pt types.TypeId, q mir.Lvalue) Bool {
+    t := fe.E.T
+    k := t.KindOf(t.Repr(pt))
+    if k != types.Kind.Array and k != types.Kind.Named and k != types.Kind.AnonEnum { return false }
+    if t.KindOf(t.Repr(pt)) == types.Kind.Array and not fe.fixed(t.Repr(pt)) { return false }
+    if fe.size(pt) <= 128 or fe.placeType(q) != pt { return false }
+    src, _ := fe.addr(q)
+    dst, _ := fe.addr(p)
+    fe.E.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
+    fe.w("call void @llvm.memmove.p0.p0.i64(ptr " $dst ", ptr " $src ", i64 " $fe.size(pt) ", i1 false)")
+    return true
 }
 
 # a lambda's environment: its captures in order
@@ -3621,42 +3584,16 @@ fn (fe mut fnEm&) findIdle() {
     # header to close when the walk is dropped
     held := Array<Bool>(f.Refs.Len())
     for k in range f.Blocks.Len() {
-        match f.Blocks[k].T {
-            case mir.Term.Suspend(_, _, _, h) {
-                for i in range h.N { held[I64(h.At) + i] = true }
-            }
-            case _ { }
-        }
+        t := f.Blocks[k].T
+        if t != mir.Term.Suspend { continue }
+        for i in range t.held.N { held[I64(t.held.At) + i] = true }
     }
     for i in range f.Refs.Len() {
         if not held[i] { u.use(f.Refs[i]) }
     }
     for k in range f.Blocks.Len() {
         bb := f.Blocks.Ref(k)
-        for st in bb.Stmts {
-            match st {
-                case mir.Stmt.RegisterDtor(_, r, _, _), mir.Stmt.RegisterOwner(_, r, _), mir.Stmt.Write(_, r, _, _) {
-                    u.use(r)
-                }
-                case mir.Stmt.Spawn(_, j, _) { u.used[I64(j)] = true }
-                case mir.Stmt.Give(_, x) { u.used[I64(x)] = true }
-                case mir.Stmt.Assign(_, _, rv) {
-                    match rv {
-                        case mir.Rvalue.New(r, _, _), mir.Rvalue.NewArray(r, _, _, _), mir.Rvalue.Closure(_, _, r, _, _) {
-                            u.use(r)
-                        }
-                        case mir.Rvalue.Text(b, into, _) {
-                            u.use(b)
-                            u.use(into)
-                        }
-                        # a region's parent (O8d): its kids close with it, and its registrations go on its list (C9b)
-                        case mir.Rvalue.Region(r), mir.Rvalue.RegionOr(_, r) { u.use(r) }
-                        case _ { }
-                    }
-                }
-                case _ { }
-            }
-        }
+        for st in bb.Stmts { u.stmt(st) }
         match bb.T {
             case mir.Term.Wait(_, j, _, _, _) { u.used[I64(j)] = true }
             case _ { }
@@ -3709,8 +3646,7 @@ fn (fe fnEm&) walkKey(b I64, i I64) I64 { return b << 20 | (i & 0xFFFFF) }
 # the dataflow of findWalks for scope sc and its walk call c: at each close of sc and each suspend holding it, whether
 # the walk is made there - failing with Undecided where some such point, or the call itself, cannot be decided
 fn (fe mut fnEm&) walkFlow(sc I64, c I64) Map<I64, Bool> ? Undecided {
-    f := fe.F
-    nb := f.Blocks.Len()
+    nb := fe.F.Blocks.Len()
     st := Array<I64>(nb, -1)
     st[0] = 0
     work Vec<I64>
@@ -3725,72 +3661,79 @@ fn (fe mut fnEm&) walkFlow(sc I64, c I64) Map<I64, Bool> ? Undecided {
         }
         for work.Len() > 0 {
             b := try work.Pop() catch { unreachable }
-            x := st[b]
-            bb := f.Blocks.Ref(b)
-            for i in range bb.Stmts.Len() {
-                match bb.Stmts[i] {
-                    case mir.Stmt.Open(_, s) { if I64(s) == sc: x = 0 }
-                    case mir.Stmt.Close(_, s) {
-                        if I64(s) == sc {
-                            if phase == 1 {
-                                if x == 2: error Undecided
-                                out.Put(fe.walkKey(b, i), x == 1)
-                            }
-                            x = 0
-                        }
-                    }
-                    case _ { }
-                }
-            }
-            nexts Vec<I64>
-            match bb.T {
-                case mir.Term.Goto(t) { nexts.Push(I64(t)) }
-                case mir.Term.Branch(_, y, n) {
-                    nexts.Push(I64(y))
-                    nexts.Push(I64(n))
-                }
-                case mir.Term.Switch(_, r, o) {
-                    for i in range r.N { nexts.Push(I64(f.Cases[I64(r.At) + i].To)) }
-                    nexts.Push(I64(o))
-                }
-                case mir.Term.Call(_, k) {
-                    cl := f.Calls[I64(k)]
-                    if I64(k) == c {
-                        # the call runs again before its scope closed (or while the walk may be made): undecided
-                        if x != 0: error Undecided
-                        if phase == 0 { fe.walkJoin(st, I64(cl.Ok), 1, work) }
-                        if cl.Err != mir.NoBlock and phase == 0 { fe.walkJoin(st, I64(cl.Err), x, work) }
-                        continue
-                    }
-                    nexts.Push(I64(cl.Ok))
-                    if cl.Err != mir.NoBlock: nexts.Push(I64(cl.Err))
-                }
-                case mir.Term.Wait(_, _, ok, _, failed) {
-                    nexts.Push(I64(ok))
-                    if failed != mir.NoBlock: nexts.Push(I64(failed))
-                }
-                case mir.Term.Suspend(_, _, r, held) {
-                    for j in range held.N {
-                        match f.Refs[I64(held.At) + j] {
-                            case mir.ScopeRef.Scope(s) {
-                                if I64(s) == sc and phase == 1 {
-                                    if x == 2: error Undecided
-                                    out.Put(fe.walkKey(b, -1), x == 1)
-                                }
-                            }
-                            case _ { }
-                        }
-                    }
-                    nexts.Push(I64(r))
-                }
-                case _ { }
-            }
-            if phase == 0 {
-                for t in nexts { fe.walkJoin(st, t, x, work) }
-            }
+            try fe.walkBlock(sc, c, b, phase, st, work, out)
         }
     }
     return out
+}
+
+# block b's turn of walkFlow: its entry state run through its statements - in phase 1 each close of sc, and each suspend
+# holding it, recorded in out; in phase 0 its successors' states met with its exit state
+fn (fe mut fnEm&) walkBlock(sc I64, c I64, b I64, phase I64, st mut Array<I64>&, work mut Vec<I64>&, out mut Map<I64, Bool>&) ? Undecided {
+    f := fe.F
+    x := st[b]
+    bb := f.Blocks.Ref(b)
+    for i in range bb.Stmts.Len() {
+        match bb.Stmts[i] {
+            case mir.Stmt.Open(_, s) { if I64(s) == sc: x = 0 }
+            case mir.Stmt.Close(_, s) {
+                if I64(s) != sc { continue }
+                if phase == 1 {
+                    if x == 2: error Undecided
+                    out.Put(fe.walkKey(b, i), x == 1)
+                }
+                x = 0
+            }
+            case _ { }
+        }
+    }
+    nexts Vec<I64>
+    match bb.T {
+        case mir.Term.Goto(t) { nexts.Push(I64(t)) }
+        case mir.Term.Branch(_, y, n) {
+            nexts.Push(I64(y))
+            nexts.Push(I64(n))
+        }
+        case mir.Term.Switch(_, r, o) {
+            for i in range r.N { nexts.Push(I64(f.Cases[I64(r.At) + i].To)) }
+            nexts.Push(I64(o))
+        }
+        case mir.Term.Call(_, k) {
+            cl := f.Calls[I64(k)]
+            if I64(k) == c {
+                # the call runs again before its scope closed (or while the walk may be made): undecided
+                if x != 0: error Undecided
+                if phase == 0 { fe.walkJoin(st, I64(cl.Ok), 1, work) }
+                if cl.Err != mir.NoBlock and phase == 0 { fe.walkJoin(st, I64(cl.Err), x, work) }
+                return
+            }
+            nexts.Push(I64(cl.Ok))
+            if cl.Err != mir.NoBlock: nexts.Push(I64(cl.Err))
+        }
+        case mir.Term.Wait(_, _, ok, _, failed) {
+            nexts.Push(I64(ok))
+            if failed != mir.NoBlock: nexts.Push(I64(failed))
+        }
+        case mir.Term.Suspend(_, _, r, held) {
+            if phase == 1 and fe.holdsScope(held, sc) {
+                if x == 2: error Undecided
+                out.Put(fe.walkKey(b, -1), x == 1)
+            }
+            nexts.Push(I64(r))
+        }
+        case _ { }
+    }
+    if phase == 0 {
+        for t in nexts { fe.walkJoin(st, t, x, work) }
+    }
+}
+
+# whether the scopes a suspend holds open (held, of f.Refs) are sc among them
+fn (fe fnEm&) holdsScope(held mir.Range, sc I64) Bool {
+    for j in range held.N {
+        if fe.F.Refs[I64(held.At) + j] == mir.ScopeRef.Scope(mir.ScopeId(I32(sc))) { return true }
+    }
+    return false
 }
 
 # a successor's entry state met with x, queued again where it changed
@@ -3861,6 +3804,28 @@ fn (fe mut fnEm&) walkEnds() {
 type scopeUse struct(used mut Array<Bool>&) {
     used
     frame Bool = false
+}
+
+# the scopes a statement uses, marked: what it registers in, writes into, starts a task in, gives back to, builds in
+fn (u mut scopeUse&) stmt(st mir.Stmt) {
+    match st {
+        case mir.Stmt.RegisterDtor(_, r, _, _), mir.Stmt.RegisterOwner(_, r, _), mir.Stmt.Write(_, r, _, _) { u.use(r) }
+        case mir.Stmt.Spawn(_, j, _) { u.used[I64(j)] = true }
+        case mir.Stmt.Give(_, x) { u.used[I64(x)] = true }
+        case mir.Stmt.Assign(_, _, rv) {
+            match rv {
+                case mir.Rvalue.New(r, _, _), mir.Rvalue.NewArray(r, _, _, _), mir.Rvalue.Closure(_, _, r, _, _) { u.use(r) }
+                case mir.Rvalue.Text(b, into, _) {
+                    u.use(b)
+                    u.use(into)
+                }
+                # a region's parent (O8d): its kids close with it, and its registrations go on its list (C9b)
+                case mir.Rvalue.Region(r), mir.Rvalue.RegionOr(_, r) { u.use(r) }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
 }
 
 # a scope a reference names, marked used
@@ -4047,13 +4012,6 @@ fn (fe mut fnEm&) extend(v String&, ty types.TypeId, w String&, unsigned Bool) S
     r := t.Repr(ty)
     if $fe.ty(r) == w { return $v }
     return fe.let($("zext " if unsigned else "sext ") $fe.ty(r) " " $v " to " $w)
-}
-
-fn (fe mut fnEm&) zext64(v String&, ty types.TypeId) String {
-    t := fe.E.T
-    r := t.Repr(ty)
-    if t.Bits(r) == 64 { return $v }
-    return fe.let("zext " $fe.ty(r) " " $v " to i64")
 }
 
 # text between quotes q, escaped as a literal writes it: measured, then written where the builder has room
@@ -4762,6 +4720,30 @@ fn (fe mut fnEm&) narrowBF16(f String&) String {
 }
 
 # whether op over args, typed ty, has a true result ty cannot hold (E15a's Overflow)
+# whether a float x (of type r, lt in LLVM) converted to the integer type g does not fit it - a NaN included
+fn (fe mut fnEm&) floatOverflows(x String&, lt String&, r types.TypeId, g types.TypeId) String {
+    t := fe.E.T
+    d := $x
+    if t.Bits(r) != 64 { d = fe.let("fpext " $lt " " $x " to double") }
+    gb := t.Bits(g)
+    lo := ""
+    hi := ""
+    if t.IsUnsigned(g) {
+        lo = fe.let("fcmp ogt double " $d ", -1.0")
+        hi = fe.let("fcmp olt double " $d ", " $fe.E.pow2(gb))
+    } else {
+        if gb > 53 {
+            # -2^(gb-1): its power of two's bits with the sign bit set (a hex constant takes no "-"); an F64 is either it
+            # or no whole number of this many bits, so the test is >= (T4a: up to 128)
+            lo = fe.let("fcmp oge double " $d ", " $fe.E.constText(types.TypeId(14), (I64(F64(1.0).Bits()) + ((gb - 1) << 52)) | (I64(1) << 63)))
+        } else {
+            lo = fe.let("fcmp ogt double " $d ", " $fe.E.constText(types.TypeId(14), I64((F64(0) - F64(I64(1) << (gb - 1)) - 1.0).Bits())))
+        }
+        hi = fe.let("fcmp olt double " $d ", " $fe.E.pow2(gb - 1))
+    }
+    return fe.let("xor i1 " $fe.let("and i1 " $lo ", " $hi) ", true")
+}
+
 fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) String {
     t := fe.E.T
     a0 := fe.arg(args, 0)
@@ -4798,27 +4780,7 @@ fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) St
             return fe.let("icmp eq " $lt " " $x ", " $fe.let("shl " $lt " 1, " $(bits - 1)))
         }
         case typed.PrimOp.Convert {
-            if t.IsFloat(r) {
-                d := $x
-                if t.Bits(r) != 64 { d = fe.let("fpext " $lt " " $x " to double") }
-                gb := t.Bits(g)
-                lo := ""
-                hi := ""
-                if t.IsUnsigned(g) {
-                    lo = fe.let("fcmp ogt double " $d ", -1.0")
-                    hi = fe.let("fcmp olt double " $d ", " $fe.E.pow2(gb))
-                } else {
-                    if gb > 53 {
-                        # -2^(gb-1): its power of two's bits with the sign bit set (a hex constant takes no "-"); an
-                        # F64 is either it or no whole number of this many bits, so the test is >= (T4a: up to 128)
-                        lo = fe.let("fcmp oge double " $d ", " $fe.E.constText(types.TypeId(14), (I64(F64(1.0).Bits()) + ((gb - 1) << 52)) | (I64(1) << 63)))
-                    } else {
-                        lo = fe.let("fcmp ogt double " $d ", " $fe.E.constText(types.TypeId(14), I64((F64(0) - F64(I64(1) << (gb - 1)) - 1.0).Bits())))
-                    }
-                    hi = fe.let("fcmp olt double " $d ", " $fe.E.pow2(gb - 1))
-                }
-                return fe.let("xor i1 " $fe.let("and i1 " $lo ", " $hi) ", true")
-            }
+            if t.IsFloat(r) { return fe.floatOverflows(x, lt, r, g) }
             # an integer narrowed or changing sign: converted there and back, a different value
             there := fe.convert(x, t0, ty)
             back := fe.convert(there, ty, t0)
@@ -5805,48 +5767,53 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId, variadic Bo
 # lowering makes it a local assigned the closure once, here found
 fn (fe mut fnEm&) exportNamed(x mir.Operand) String {
     l := mir.LocalId(-1)
-    match x {
-        case mir.Operand.Copy(pl) {
-            match pl.B {
-                case mir.Base.Local(k) { l = k }
-                case _ { }
-            }
+    if x == mir.Operand.Copy {
+        l = match x.p.B {
+            case mir.Base.Local(k): k
+            case _: l
         }
-        case _ { }
     }
     for blockIx in range fe.F.Blocks.Len() {
         bb := fe.F.Blocks.Ref(blockIx)
         for st in bb.Stmts {
-            match st {
-                case mir.Stmt.Assign(_, pl, rv) {
-                    if pl.Path.N != I32(0) or not fe.baseIs(pl, l) { continue }
-                    match rv {
-                        case mir.Rvalue.Closure(code, _, _, _, _) {
-                            match code {
-                                case mir.FnKey.Body(id) {
-                                    match fe.E.Lw.Bodies[I64(id)].Of {
-                                        case typed.BodyOf.Fn(inst) { return $fe.E.text(fe.E.P.FnDecl(fe.E.P.InstanceFn(inst)).Name) }
-                                        case _ { }
-                                    }
-                                }
-                                case _ { }
-                            }
-                        }
-                        # T21: converted to a C function pointer that may be null ("fn?&") - the value it was made of
-                        case mir.Rvalue.Prim(op, _, args) {
-                            if op == typed.PrimOp.Convert and args.N == I32(1) { return fe.exportNamed(fe.F.Ops[I64(args.At)]) }
-                        }
-                        case _ { }
-                    }
-                }
-                case _ { }
-            }
+            if st != mir.Stmt.Assign or st.p.Path.N != I32(0) or not st.p.BaseIs(l) { continue }
+            rv := st.v
+            # T21: converted to a C function pointer that may be null ("fn?&") - the value it was made of
+            if rv == mir.Rvalue.Prim and rv.op == typed.PrimOp.Convert and rv.args.N == I32(1) { return fe.exportNamed(fe.F.Ops[I64(rv.args.At)]) }
+            name := fe.exportBody(rv)
+            if name != "" { return name }
         }
     }
     fe.gap("a C callback that is no export fn named at the call")
     return "null"
 }
 
+# the name of the export fn a closure is made of, "" where the value is no such closure
+fn (fe mut fnEm&) exportBody(rv mir.Rvalue) String {
+    if rv != mir.Rvalue.Closure { return "" }
+    code := rv.code
+    if code != mir.FnKey.Body { return "" }
+    of := fe.E.Lw.Bodies[I64(code.id)].Of
+    if of != typed.BodyOf.Fn { return "" }
+    return $fe.E.text(fe.E.P.FnDecl(fe.E.P.InstanceFn(of.instance)).Name)
+}
+
+
+# an export fn's result returned to C in registers, in parts (X11): stored, then read back as the parts' aggregate - the
+# operand of its "ret"
+fn (fe mut fnEm&) partsResult(rw cabi.Way, res types.TypeId, val String&) String {
+    t := fe.E.T
+    tmp := fe.alloca($"[" $cabi.Span(t, rw, res) " x i8]", 8)
+    fe.store(fe.E.ty(res), val, tmp)
+    whole := cabi.PartsType(rw)
+    if rw.Parts.Len() == 1 { return $whole " " $fe.load(whole, tmp) }
+    agg := "undef"
+    for q in range rw.Parts.Len() {
+        at := tmp if rw.Offs[q] == 0 else fe.let($"getelementptr i8, ptr " $tmp ", i64 " $rw.Offs[q])
+        agg = fe.let($"insertvalue " $whole " " $agg ", " $rw.Parts[q] " " $fe.load(rw.Parts[q], at) ", " $q)
+    }
+    return $whole " " $agg
+}
 
 # the export fns this build writes - each body that is one, in the order the bodies are - and the error types their
 # lists name, in order of first appearance: a library's error codes number them (X14), every entry of the program the
@@ -6052,21 +6019,7 @@ fn (e mut Emitter&) exportEntry(i I64) {
     } else if hasRes {
         match rw.Kind {
             case cabi.Pass.Direct { ret = $e.ty(res) " " $val }
-            case cabi.Pass.Parts {
-                tmp := fe.alloca($"[" $cabi.Span(t, rw, res) " x i8]", 8)
-                fe.store(e.ty(res), val, tmp)
-                whole := cabi.PartsType(rw)
-                if rw.Parts.Len() == 1 {
-                    ret = $whole " " $fe.load(whole, tmp)
-                } else {
-                    agg := "undef"
-                    for q in range rw.Parts.Len() {
-                        at := tmp if rw.Offs[q] == 0 else fe.let($"getelementptr i8, ptr " $tmp ", i64 " $rw.Offs[q])
-                        agg = fe.let($"insertvalue " $whole " " $agg ", " $rw.Parts[q] " " $fe.load(rw.Parts[q], at) ", " $q)
-                    }
-                    ret = $whole " " $agg
-                }
-            }
+            case cabi.Pass.Parts { ret = fe.partsResult(rw, res, val) }
             case _ { fe.store(e.ty(res), val, "%sret") }
         }
     }
@@ -7192,18 +7145,25 @@ fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty typ
                 if k.Targets.N == I32(1) {
                     b.Push("  %hd" $ci " = load ptr, ptr %f" $tfield "\n  store " $e.ty(res) " " $value ", ptr %hd" $ci "\n")
                 } else {
-                    parts := t.Items(t.Parts(t.Repr(res)))
-                    for i in range k.Targets.N {
-                        b.Push("  %hd" $ci "_" $i " = load ptr, ptr %f" $(tfield + i) "\n")
-                        b.Push("  %hx" $ci "_" $i " = extractvalue " $e.ty(res) " " $value ", " $i "\n")
-                        b.Push("  store " $e.ty(parts[i]) " %hx" $ci "_" $i ", ptr %hd" $ci "_" $i "\n")
-                    }
+                    fe.storeParts(b, $ci, res, value, tfield, k.Targets.N)
                 }
                 fe.taskFix(b, k, tfield, copyF, "c" $ci)
             }
             h++
         }
         b.Push("  ret ptr null\npass" $ci ":\n")
+    }
+}
+
+# a handler's several results (its value, of type res) stored into the task's targets, whose places are the frame's
+# fields from tfield on - clause ci's
+fn (fe mut fnEm&) storeParts(b mut StringBuilder&, ci String&, res types.TypeId, value String&, tfield I64, n I32) {
+    t := fe.E.T
+    parts := t.Items(t.Parts(t.Repr(res)))
+    for i in range n {
+        b.Push("  %hd" $ci "_" $i " = load ptr, ptr %f" $(tfield + i) "\n")
+        b.Push("  %hx" $ci "_" $i " = extractvalue " $fe.E.ty(res) " " $value ", " $i "\n")
+        b.Push("  store " $fe.E.ty(parts[i]) " %hx" $ci "_" $i ", ptr %hd" $ci "_" $i "\n")
     }
 }
 

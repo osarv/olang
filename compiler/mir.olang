@@ -511,7 +511,63 @@ fn (f mut Fn&) Add(b BlockId, s Stmt&) {
 
 fn (f mut Fn&) End(b BlockId, t Term) { f.Blocks[I64(b)].T = t }
 
-fn (f Fn&) TermOf(b BlockId) Term { return f.Blocks[I64(b)].T }
+# whether the place is local l or a part of what l holds
+fn (p Lvalue) BaseIs(l LocalId) Bool { return p.B == Base.Local(l) }
+
+# whether f writes into what local l holds: a store or a copy into a place reached from it, or a writable reference made
+# to it (D9b) - one judgement for emit and the evaluator
+fn (f Fn&) WritesInto(t types.Table&, l LocalId) Bool {
+    for blockIx in range f.Blocks.Len() {
+        bb := f.Blocks.Ref(blockIx)
+        for st in bb.Stmts {
+            if writesInto(t, st, l): return true
+        }
+    }
+    return false
+}
+
+fn writesInto(t types.Table&, st Stmt, l LocalId) Bool {
+    match st {
+        case Stmt.Assign(_, p, rv) {
+            if p.Path.N > I32(0) and p.BaseIs(l) { return true }
+            return match rv {
+                case Rvalue.Ref(q, ty), Rvalue.Slice(q, _, _, ty): q.BaseIs(l) and (t.PermOf(t.Repr(ty)) & types.Writable) != 0
+                case _: false
+            }
+        }
+        case Stmt.CopyElems(_, d, _, _) { return d.BaseIs(l) }
+        case _ { return false }
+    }
+}
+
+# whether a type has fields: a struct, a tuple or a record
+fn HasFields(t types.Table&, ty types.TypeId) Bool {
+    r := t.Repr(ty)
+    k := t.KindOf(r)
+    return k == types.Kind.Tuple or k == types.Kind.Record or
+           (k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct and t.HasBody(r))
+}
+
+# the fields of a struct, a tuple or a record, in order; none for any other type
+fn FieldsOf(t types.Table&, ty types.TypeId) types.ListId {
+    if not HasFields(t, ty) { return types.ListId(0) }
+    r := t.Repr(ty)
+    return t.Parts(r) if t.KindOf(r) != types.Kind.Named else t.Fields(r)
+}
+
+# whether a type is an enum
+fn HasCases(t types.Table&, ty types.TypeId) Bool {
+    r := t.Repr(ty)
+    return t.KindOf(r) == types.Kind.AnonEnum or
+           (t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum and t.HasBody(r))
+}
+
+# an enum's cases' payloads (a record, or 0 for none), in order; none for any other type
+fn CasesOf(t types.Table&, ty types.TypeId) types.ListId {
+    if not HasCases(t, ty) { return types.ListId(0) }
+    r := t.Repr(ty)
+    return t.ShapeCases(r) if t.KindOf(r) == types.Kind.AnonEnum else t.Cases(r)
+}
 
 # a place: a local, or a base and its projections
 fn (f mut Fn&) Place(base Base, projs Array<Proj>&) Lvalue {
@@ -688,6 +744,14 @@ fn (v mut verifier&) run() {
 
 # ---- shape: ids and ranges in bounds, every block terminated ----
 
+# constant i's items (r of f.ConstItems), each a constant made before it
+fn (v mut verifier&) itemsBefore(r Range, i I64) {
+    for k in range r.N {
+        c := v.F.ConstItems[I64(r.At) + k]
+        if c < I32(0) or c >= I32(i) { v.bad("constant " $i " holds constant " $c ", not made before it") }
+    }
+}
+
 fn (v mut verifier&) shape() Bool {
     f := v.F
     start := v.out.Len()
@@ -769,12 +833,7 @@ fn (v mut verifier&) shape() Bool {
         match f.Consts[i] {
             case ConstNode.Bytes(r) { v.within(r, f.Bytes.Len(), "bytes") }
             case ConstNode.Items(r) {
-                if v.within(r, f.ConstItems.Len(), "constant items") {
-                    for k in range r.N {
-                        c := f.ConstItems[I64(r.At) + k]
-                        if c < I32(0) or c >= I32(i) { v.bad("constant " $i " holds constant " $c ", not made before it") }
-                    }
-                }
+                if v.within(r, f.ConstItems.Len(), "constant items") { v.itemsBefore(r, i) }
             }
             case _ { }
         }
@@ -1133,42 +1192,10 @@ fn (v mut verifier&) arrayOf(ty types.TypeId) types.TypeId {
     return r if v.T.KindOf(r) == types.Kind.Array else types.UnknownT
 }
 
-# whether a type has fields: a struct, a tuple or a record
-fn (v mut verifier&) hasFields(ty types.TypeId) Bool {
-    t := v.T
-    r := t.Repr(ty)
-    k := t.KindOf(r)
-    return k == types.Kind.Tuple or k == types.Kind.Record or
-           (k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct and t.HasBody(r))
-}
-
-# the fields of a struct, a tuple or a record, in order; none for any other
-fn (v mut verifier&) fieldsOf(ty types.TypeId) types.ListId {
-    if not v.hasFields(ty) { return types.ListId(0) }
-    r := v.T.Repr(ty)
-    return v.T.Parts(r) if v.T.KindOf(r) != types.Kind.Named else v.T.Fields(r)
-}
-
-# whether a type is an enum
-fn (v mut verifier&) hasCases(ty types.TypeId) Bool {
-    t := v.T
-    r := t.Repr(ty)
-    return t.KindOf(r) == types.Kind.AnonEnum or
-           (t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum and t.HasBody(r))
-}
-
-# an enum's cases' payloads (a Record, or 0 for none), in order; none for any other type
-fn (v mut verifier&) casesOf(ty types.TypeId) types.ListId {
-    if not v.hasCases(ty) { return types.ListId(0) }
-    r := v.T.Repr(ty)
-    return v.T.ShapeCases(r) if v.T.KindOf(r) == types.Kind.AnonEnum else v.T.Cases(r)
-}
-
 fn (v mut verifier&) localType(l LocalId) types.TypeId { return v.F.Locals[I64(l)].Ty }
 
 # a place's type, its projections followed; Unknown, said, where one does not apply
 fn (v mut verifier&) placeType(p Lvalue) types.TypeId {
-    t := v.T
     ty := match p.B {
         case Base.Local(l): v.localType(l)
         case Base.Global(_, _, gt): gt
@@ -1176,61 +1203,66 @@ fn (v mut verifier&) placeType(p Lvalue) types.TypeId {
     }
     for i in range p.Path.N {
         if ty == types.UnknownT { return ty }
-        pr := v.F.Projs[I64(p.Path.At) + i]
-        match pr {
-            case Proj.Field(k) {
-                fl, ok := v.fieldsOf(ty), v.hasFields(ty)
-                fs := t.Items(fl)
-                if not ok or k < 0 or k >= fs.Len() {
-                    v.bad("no field " $k " in a " $v.canon(ty))
-                    return types.UnknownT
-                }
-                ty = fs[k]
-            }
-            case Proj.Index(l) {
-                if not t.IsInt(t.Repr(v.localType(l))) { v.bad("an index L" $l " is a " $v.canon(v.localType(l))) }
-                a := v.arrayOf(ty)
-                if a == types.UnknownT {
-                    v.bad("an index into a " $v.canon(ty) ", not an array")
-                    return a
-                }
-                ty = t.Elem(a)
-            }
-            case Proj.At(k) {
-                a := v.arrayOf(ty)
-                if a == types.UnknownT {
-                    v.bad("an index into a " $v.canon(ty) ", not an array")
-                    return a
-                }
-                n := t.Length(a)
-                if k < 0 or (n != types.TypeId(0) and t.KindOf(n) == types.Kind.Const and k >= t.ConstValue(n)) {
-                    v.bad("constant index " $k " outside a " $v.canon(ty))
-                }
-                ty = t.Elem(a)
-            }
-            case Proj.Deref {
-                if not t.IsRef(ty) {
-                    v.bad("a deref of a " $v.canon(ty) ", not a reference")
-                    return types.UnknownT
-                }
-                ty = t.Referent(ty)
-            }
-            case Proj.Payload(tag) {
-                cl, ok := v.casesOf(ty), v.hasCases(ty)
-                cs := t.Items(cl)
-                if not ok or tag < 0 or tag >= cs.Len() {
-                    v.bad("no case " $tag " in a " $v.canon(ty))
-                    return types.UnknownT
-                }
-                if cs[tag] == types.TypeId(0) {
-                    v.bad("case " $tag " of a " $v.canon(ty) " has no payload")
-                    return types.UnknownT
-                }
-                ty = cs[tag]
-            }
-        }
+        ty = v.projected(ty, v.F.Projs[I64(p.Path.At) + i])
     }
     return ty
+}
+
+# the type a projection pr of a place of type ty reaches; Unknown, said, where it does not apply
+fn (v mut verifier&) projected(ty types.TypeId, pr Proj) types.TypeId {
+    t := v.T
+    match pr {
+        case Proj.Field(k) {
+            fl, ok := FieldsOf(v.T, ty), HasFields(v.T, ty)
+            fs := t.Items(fl)
+            if not ok or k < 0 or k >= fs.Len() {
+                v.bad("no field " $k " in a " $v.canon(ty))
+                return types.UnknownT
+            }
+            return fs[k]
+        }
+        case Proj.Index(l) {
+            if not t.IsInt(t.Repr(v.localType(l))) { v.bad("an index L" $l " is a " $v.canon(v.localType(l))) }
+            a := v.arrayOf(ty)
+            if a == types.UnknownT {
+                v.bad("an index into a " $v.canon(ty) ", not an array")
+                return a
+            }
+            return t.Elem(a)
+        }
+        case Proj.At(k) {
+            a := v.arrayOf(ty)
+            if a == types.UnknownT {
+                v.bad("an index into a " $v.canon(ty) ", not an array")
+                return a
+            }
+            n := t.Length(a)
+            if k < 0 or (n != types.TypeId(0) and t.KindOf(n) == types.Kind.Const and k >= t.ConstValue(n)) {
+                v.bad("constant index " $k " outside a " $v.canon(ty))
+            }
+            return t.Elem(a)
+        }
+        case Proj.Deref {
+            if not t.IsRef(ty) {
+                v.bad("a deref of a " $v.canon(ty) ", not a reference")
+                return types.UnknownT
+            }
+            return t.Referent(ty)
+        }
+        case Proj.Payload(tag) {
+            cl, ok := CasesOf(v.T, ty), HasCases(v.T, ty)
+            cs := t.Items(cl)
+            if not ok or tag < 0 or tag >= cs.Len() {
+                v.bad("no case " $tag " in a " $v.canon(ty))
+                return types.UnknownT
+            }
+            if cs[tag] == types.TypeId(0) {
+                v.bad("case " $tag " of a " $v.canon(ty) " has no payload")
+                return types.UnknownT
+            }
+            return cs[tag]
+        }
+    }
 }
 
 fn (v mut verifier&) operandType(x Operand) types.TypeId {
@@ -1242,6 +1274,11 @@ fn (v mut verifier&) operandType(x Operand) types.TypeId {
 }
 
 fn (v mut verifier&) arg(r Range, i I64) Operand { return v.F.Ops[I64(r.At) + i] }
+
+# each of a task's targets of the type of its result
+fn (v mut verifier&) taskTargets(task Task&, rs Array<types.TypeId>&) {
+    for i in range task.Targets.N { v.want(rs[i], v.placeType(v.F.Places[I64(task.Targets.At) + i]), "a task's result " $i) }
+}
 
 fn (v mut verifier&) stmtTypes(s Stmt&) {
     t := v.T
@@ -1315,9 +1352,7 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
                 if task.Targets.N > I32(0) and I64(task.Targets.N) != rs.Len() {
                     v.bad("a task with " $task.Targets.N " targets for " $rs.Len() " results")
                 } else {
-                    for i in range task.Targets.N {
-                        v.want(rs[i], v.placeType(v.F.Places[I64(task.Targets.At) + i]), "a task's result " $i)
-                    }
+                    v.taskTargets(task, rs)
                 }
                 if task.Clauses.N > I32(0) and t.Items(t.Errors(ty)).Len() == 0 {
                     v.bad("a task's clauses for a call that cannot fail")
@@ -1393,7 +1428,7 @@ fn (v mut verifier&) refType(of types.TypeId, ty types.TypeId) types.TypeId {
 fn (v mut verifier&) takeType(of types.TypeId) types.TypeId { return of }
 
 fn (v mut verifier&) tagType(of types.TypeId) types.TypeId {
-    ok := v.hasCases(of)
+    ok := HasCases(v.T, of)
     if of != types.UnknownT and not ok { v.bad("the case of a " $v.canon(of) ", not an enum") }
     return I64T
 }
@@ -1481,7 +1516,7 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
             if ty != types.VoidT { v.bad("Retire typed " $v.canon(ty)) }
         }
         case typed.PrimOp.IsCase {
-            ok := v.hasCases(a)
+            ok := HasCases(v.T, a)
             if not ok { v.bad("IsCase of a " $v.canon(a)) }
             if ty != types.BoolT { v.bad("IsCase typed " $v.canon(ty)) }
         }
@@ -1551,7 +1586,7 @@ fn (v mut verifier&) aggregateType(ty types.TypeId, tag I64, r Range) types.Type
         for i in range n { v.want(v.operandType(v.arg(r, i)), t.Elem(a), "element " $i) }
         return ty
     }
-    cl, isEnum := v.casesOf(ty), v.hasCases(ty)
+    cl, isEnum := CasesOf(v.T, ty), HasCases(v.T, ty)
     cs := t.Items(cl)
     if isEnum {
         if tag < 0 or tag >= cs.Len() {
@@ -1561,7 +1596,7 @@ fn (v mut verifier&) aggregateType(ty types.TypeId, tag I64, r Range) types.Type
         v.parts(ty, t.Parts(cs[tag]) if cs[tag] != types.TypeId(0) else types.ListId(0), r)
         return ty
     }
-    fl, ok := v.fieldsOf(ty), v.hasFields(ty)
+    fl, ok := FieldsOf(v.T, ty), HasFields(v.T, ty)
     if not ok {
         v.bad("a " $v.canon(ty) " made of parts")
         return ty
@@ -1668,6 +1703,16 @@ fn (v mut verifier&) args(c Callee, ty types.TypeId, args Range, scopes Range) {
     }
 }
 
+# each of a switch's case values (r of f.Cases) once
+fn (v mut verifier&) casesOnce(r Range) {
+    f := v.F
+    for i in range r.N {
+        for j in range i {
+            if f.Cases[I64(r.At) + i].Value == f.Cases[I64(r.At) + j].Value { v.bad("a switch with the value " $f.Cases[I64(r.At) + i].Value " twice") }
+        }
+    }
+}
+
 fn (v mut verifier&) termTypes(term Term) {
     t := v.T
     f := v.F
@@ -1679,13 +1724,7 @@ fn (v mut verifier&) termTypes(term Term) {
         case Term.Switch(x, r, _) {
             xt := v.operandType(x)
             if not t.IsInt(t.Repr(xt)) { v.bad("a switch on a " $v.canon(xt)) }
-            for i in range r.N {
-                for j in range i {
-                    if f.Cases[I64(r.At) + i].Value == f.Cases[I64(r.At) + j].Value {
-                        v.bad("a switch with the value " $f.Cases[I64(r.At) + i].Value " twice")
-                    }
-                }
-            }
+            v.casesOnce(r)
         }
         case Term.Call(_, k) {
             c := f.Calls[I64(k)]
