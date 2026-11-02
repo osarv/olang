@@ -1,0 +1,323 @@
+# scopes_migrate - QCB (2026-11-02, round 4 of the scoping rework, docs/rework.md section 20): scopes are inferred and
+# none is written, so every scope spelling has left the language. This rewrites olang sources written with them:
+#   - a reference marker after a type loses its scope name: "T&x" -> "T&", "T?&x" -> "T?&", "T&return" -> "T&",
+#     "Iterator<String&t>" -> "Iterator<String&>";
+#   - a scope argument goes: "f&x(a)" -> "f(a)";
+#   - an "outlives" chain in a contract block goes, and the block with it where nothing else is in it:
+#     "fn link(a mut N&, b N&) [b outlives a] {" -> "fn link(a mut N&, b N&) {".
+# A marker is told from a bitwise and by its layout (B13): the "&" touches the type before it and the name after it,
+# where "a & b" is spaced. Comments and string literals are left alone - code a program writes into a string (a test,
+# a generator) is not migrated. A Markdown file has its "```olang" blocks migrated. Running it again changes nothing.
+#
+#     $OLANG build tools/scopes_migrate.olang && build/tools_scopes_migrate [--check] [-v] FILE|DIR...
+#
+# Files are rewritten in place and a count printed; --check writes nothing and the exit status says whether anything
+# would change. A contract block of several lines holding an "outlives" item is listed "by hand:" (none was written).
+
+import "std/os"
+import "srcmask"
+import "../compiler/scan"
+import "../compiler/token"
+
+# a token of the text: kind, span, and whether a line ended before it
+type VT struct(k token.Tok, start I64, end I64, lb Bool) { k, start, end, lb }
+
+# a span of the text replaced: start..end by rep
+type Edit struct(start I64, end I64, rep String) { start, end, rep }
+
+# what a migration changed
+type Counts struct() {
+    markers I64 = 0
+    calls I64 = 0
+    chains I64 = 0
+    byHand Vec<String>
+}
+
+fn (c mut Counts&) Add(o Counts&) {
+    c.markers += o.markers
+    c.calls += o.calls
+    c.chains += o.chains
+    for h in o.byHand: c.byHand.Push(h)
+}
+
+fn (c Counts&) Describe() String {
+    return $c.markers " markers made bare, " $c.calls " scope arguments dropped, " $c.chains " outlives chains dropped"
+}
+
+# the text's tokens, statement ends dropped; the last is Eof
+fn vtokens(src String&) Vec<VT> {
+    out Vec<VT>
+    for tk in scan.Scan(src).Toks {
+        if tk.Kind == token.Tok.StmtEnd: continue
+        out.Push(VT(tk.Kind, I64(tk.Start), I64(tk.End), tk.Has(token.LineBreak)))
+    }
+    return out
+}
+
+type migration struct(src String&) {
+    src
+    v Vec<VT>
+    edits Vec<Edit>
+    c Counts
+}
+
+fn (g migration&) touches(a I64, b I64) Bool { return g.v[a].end == g.v[b].start }
+
+fn (g migration&) text(i I64) String&g { return g.src[g.v[i].start:g.v[i].end] }
+
+# the markers and scope arguments: an "&" touching what is before it and the name after it
+fn (g mut migration&) markers() {
+    for i in range 1, g.v.Len() - 2 {
+        if g.v[i].k != token.Tok.Amp or not g.touches(i - 1, i) or not g.touches(i, i + 1): continue
+        nk := g.v[i + 1].k
+        if nk != token.Tok.Iden and nk != token.Tok.Return: continue
+        if g.v[i + 2].k == token.Tok.LParen and g.touches(i + 1, i + 2) {
+            g.edits.Push(Edit(g.v[i].start, g.v[i + 1].end, ""))
+            g.c.calls++
+            continue
+        }
+        g.edits.Push(Edit(g.v[i + 1].start, g.v[i + 1].end, ""))
+        g.c.markers++
+    }
+}
+
+# the "[" open around token k, -1 for none (a "(" or "{" between them ends the search)
+fn (g migration&) bracketOf(k I64) I64 {
+    depth I64 = 0
+    for d in range k {
+        i := k - 1 - d
+        t := g.v[i].k
+        if t == token.Tok.RBrack or t == token.Tok.RParen or t == token.Tok.RBrace: depth++
+        if t == token.Tok.LParen or t == token.Tok.LBrace {
+            if depth == 0: return -1
+            depth--
+        }
+        if t == token.Tok.LBrack {
+            if depth == 0: return i
+            depth--
+        }
+    }
+    return -1
+}
+
+# the "]" closing the "[" at o
+fn (g migration&) closeOf(o I64) I64 {
+    depth I64 = 0
+    for i in range o, g.v.Len() {
+        t := g.v[i].k
+        if t == token.Tok.LBrack or t == token.Tok.LParen or t == token.Tok.LBrace: depth++
+        if t == token.Tok.RBrack or t == token.Tok.RParen or t == token.Tok.RBrace {
+            depth--
+            if depth == 0: return i
+        }
+    }
+    return -1
+}
+
+# the items of the bracket o..c, as token ranges [first, last]
+fn (g migration&) items(o I64, c I64) Vec<I64> {
+    out Vec<I64>
+    first := o + 1
+    depth I64 = 0
+    for i in range o + 1, c {
+        t := g.v[i].k
+        if t == token.Tok.LBrack or t == token.Tok.LParen or t == token.Tok.LBrace: depth++
+        if t == token.Tok.RBrack or t == token.Tok.RParen or t == token.Tok.RBrace: depth--
+        if depth == 0 and t == token.Tok.Comma {
+            out.Push(first)
+            out.Push(i - 1)
+            first = i + 1
+        }
+    }
+    out.Push(first)
+    out.Push(c - 1)
+    return out
+}
+
+# whether tokens a..b name an "outlives" chain at the item's own level
+fn (g migration&) isChain(a I64, b I64) Bool {
+    for i in range a, b + 1 {
+        if g.v[i].k == token.Tok.Iden and g.text(i) == "outlives": return true
+    }
+    return false
+}
+
+# the contract blocks holding an "outlives" chain: the chains dropped, the block with them where it held nothing else
+fn (g mut migration&) chains() {
+    done Map<I64, Bool>
+    for k in range g.v.Len() {
+        if g.v[k].k != token.Tok.Iden or g.text(k) != "outlives": continue
+        o := g.bracketOf(k)
+        if o < 1 or done.Has(o): continue
+        done.Put(o, true)
+        c := g.closeOf(o)
+        if c < 0: continue
+        if g.spansLines(o, c) {
+            g.c.byHand.Push($"a contract block across lines holding an outlives chain, at byte " $g.v[o].start)
+            continue
+        }
+        g.dropChains(o, c)
+    }
+}
+
+fn (g migration&) spansLines(o I64, c I64) Bool {
+    for i in range o + 1, c + 1 {
+        if g.v[i].lb: return true
+    }
+    return false
+}
+
+fn (g mut migration&) dropChains(o I64, c I64) {
+    it := g.items(o, c)
+    kept Vec<String>
+    for j in range 0, it.Len(), 2 {
+        if g.isChain(it[j], it[j + 1]) {
+            g.c.chains++
+            continue
+        }
+        kept.Push($g.src[g.v[it[j]].start:g.v[it[j + 1]].end])
+    }
+    if kept.Len() == 0 {
+        g.edits.Push(Edit(g.v[o - 1].end, g.v[c].end, ""))
+        return
+    }
+    g.edits.Push(Edit(g.v[o].start, g.v[c].end, $"[" $kept.Join(", ") "]"))
+}
+
+# the text with every edit made, in order; one overlapping an earlier is left out
+fn (g migration&) applied() String {
+    sorted := g.edits.ToArray()
+    sorted.Sort(fn(a Edit, b Edit) Bool: return a.start < b.start)
+    out := StringBuilder()
+    last I64 = 0
+    for e in sorted {
+        if e.start < last: continue
+        out.Push(g.src[last:e.start])
+        out.Push(e.rep)
+        last = e.end
+    }
+    out.Push(g.src[last:])
+    return out.ToString()
+}
+
+# src migrated, what it took added to total
+fn migrate(src String&, total mut Counts&) String {
+    g := migration(src)
+    g.v = vtokens(src)
+    g.markers()
+    g.chains()
+    total.Add(g.c)
+    if g.edits.Len() == 0: return $src
+    return g.applied()
+}
+
+# a Markdown text with its "```olang" blocks migrated
+fn migrateMarkdown(src String&, total mut Counts&) String {
+    out := StringBuilder()
+    lines := src.Split("\n")
+    inBlock := false
+    block := StringBuilder()
+    for k in range lines.Len() {
+        line := lines[k]
+        if inBlock and line.StartsWith("```") {
+            out.Push(migrate(block.ToString(), total))
+            block.Clear()
+            inBlock = false
+        } else if inBlock {
+            block.Push(line)
+            block.PushChar('\n')
+            continue
+        } else if line.StartsWith("```olang") {
+            inBlock = true
+        }
+        out.Push(line)
+        if k < lines.Len() - 1: out.PushChar('\n')
+    }
+    if inBlock: out.Push(block.ToString())
+    return out.ToString()
+}
+
+fn main() ? {
+    check := false
+    verbose := false
+    paths Vec<String>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check" {
+            check = true
+        } else if a == "-v" {
+            verbose = true
+        } else {
+            paths.Push($a)
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_scopes_migrate [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    files Vec<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    total := Counts()
+    changed I64 = 0
+    for path in files {
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("scopes_migrate: cannot read " $path)
+            os.Exit(1)
+        }
+        mine := Counts()
+        out := migrateMarkdown(src, mine) if path.EndsWith(".md") else migrate(src, mine)
+        for h in mine.byHand: srcmask.Say($"by hand: " $path ": " $h)
+        total.Add(mine)
+        if out == src: continue
+        changed++
+        if verbose: srcmask.Say($path ": " $mine.Describe())
+        if check: continue
+        try os.WriteFile(path, out) catch {
+            srcmask.SayErr("scopes_migrate: cannot write " $path)
+            os.Exit(1)
+        }
+    }
+    verb := "would change " if check else "changed "
+    srcmask.Say($verb $changed " files: " $total.Describe())
+    if check and changed > 0: os.Exit(1)
+}
+
+fn run(src String&) String {
+    c := Counts()
+    return migrate(src, c)
+}
+
+test "a marker loses its scope name, a nullable one and a result's too" {
+    assert run("fn f(a Node&, b Node&a) Node&b { }\n") == "fn f(a Node&, b Node&) Node& { }\n"
+    assert run("x mut Vec<String&>&c = Vec<String&>()\n") == "x mut Vec<String&>& = Vec<String&>()\n"
+    assert run("fn g(p P?&q) Node?&return { }\n") == "fn g(p P?&) Node?& { }\n"
+    assert run("fn words(t String&) Iterator<String&t> { }\n") == "fn words(t String&) Iterator<String&> { }\n"
+}
+
+test "a scope argument goes, a bitwise and stays" {
+    assert run("x := mk&t(1, 2)\ny := a & b\n") == "x := mk(1, 2)\ny := a & b\n"
+    assert run("w := lib.Make&return(t)\n") == "w := lib.Make(t)\n"
+}
+
+test "an outlives chain goes, the block with it where it held nothing else" {
+    assert run("fn l(a mut N&, b N&) [b outlives a] { }\n") == "fn l(a mut N&, b N&) { }\n"
+    assert run("fn l(a mut N&, b N&, k I64) [k > 0, b outlives a] { }\n") == "fn l(a mut N&, b N&, k I64) [k > 0] { }\n"
+    assert run("fn c(a mut N&, b mut N&, c N&) [c outlives b outlives a] { }\n") == "fn c(a mut N&, b mut N&, c N&) { }\n"
+    assert run("fn ok(a I64) [a > 0] { }\n") == "fn ok(a I64) [a > 0] { }\n"
+}
+
+test "comments, text and code already bare are left alone; running it again changes nothing" {
+    src := "# T&x in a comment\nt := \"f&x()\"\nfn f(a Node&) Node& { }\n"
+    assert run(src) == src
+    once := run("fn f(a Node&, b Node&a) Node&b { return mk&b(a) }\n")
+    assert run(once) == once
+}
+
+test "a Markdown file's olang blocks are migrated, its prose is not" {
+    c := Counts()
+    assert migrateMarkdown("Write `T&x`.\n```olang\nfn f(a N&, b N&a) { }\n```\n", c) ==
+        "Write `T&x`.\n```olang\nfn f(a N&, b N&) { }\n```\n"
+}
