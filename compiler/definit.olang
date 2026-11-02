@@ -368,15 +368,8 @@ fn (w mut heldWalker&) block(bl typed.Block?&, armed Bool) {
             case typed.Stmt.Let(_, l, init) {
                 if l == w.g {
                     a = true
-                    match init {
-                        case typed.Expr.Call(_, _, k) {
-                            match k.Target {
-                                case typed.Callee.Body(id) { w.callee = I64(id) }
-                                case _ { }
-                            }
-                        }
-                        case _ { }
-                    }
+                    id := typed.CalledBody(init)
+                    if id >= 0 { w.callee = id }
                 }
                 if l == w.it and a and w.readsG(init) { w.once = true }
             }

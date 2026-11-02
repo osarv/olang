@@ -338,6 +338,19 @@ type Collect struct(Reserve Expr?&, Loop Block&, Site SiteId, Checked Check, Exa
 # atomics). Operands are of the operation's type, widened before it (T6b); "==" here is on numbers and Bools only
 # the operations whose result names the storage their first argument names (a conversion, T29a; a run-time trait value
 # made of a reference, and its instance read back, T32): what is said of the argument's references is said of it
+# the body a call of one calls, -1 for any other expression
+fn CalledBody(x Expr&) I64 {
+    match x {
+        case Expr.Call(_, _, cl) {
+            match cl.Target {
+                case Callee.Body(id) { return I64(id) }
+                case _ { return -1 }
+            }
+        }
+        case _ { return -1 }
+    }
+}
+
 # whether a call is given a scope argument, "f&x(...)" or "f&return(...)" (E25): its result is built where that says,
 # never where the call stands - so it is no temporary there, and is judged where it is put as existing storage is
 fn ScopedCall(c Call&) Bool {
