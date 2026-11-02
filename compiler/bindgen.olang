@@ -689,8 +689,9 @@ fn (g mut gen&) pointerParam(t I64, ro Bool) String ? Skip {
         }
         case CKind.Fn {
             if n.Text == "variadic" { try g.skip("a callback taking a variable number of arguments") }
+            # T21: a C function pointer may be null - "fn?&(...)"; an export fn given for one is never null
             b := StringBuilder()
-            b.Push("fn(")
+            b.Push("fn?&(")
             for k in range n.N {
                 if k > 0 { b.Push(", ") }
                 b.Push($"a" $k " " $(try g.valueType(g.params[n.First + k], true)))

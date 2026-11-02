@@ -1467,7 +1467,7 @@ test "nested lambdas and try-catch statements parse in time linear in their dept
 
 fn nestparse(r mut report&) ? Failed {
     dir := fresh("nestparse")
-    lambdas String& = nested("fn k() { }\nfn f(g fn()) { g() }\nfn main() ? {\n    ", "f(fn() { ", "k()", " })", "\n}\n", 40)
+    lambdas String& = nested("fn k() { }\nfn f(g fn&()) { g() }\nfn main() ? {\n    ", "f(fn() { ", "k()", " })", "\n}\n", 40)
     try os.WriteFile($dir "/lambdas.olang", lambdas) catch { }
     try r.expect(sh(dir, "timeout 60 \"$OLANG\" interpret lambdas.olang > out.txt 2>&1") == 0, "nested lambdas", dir)
     tries String& = nested("type E error { X }\nfn k() { }\nfn g() ? E { error E.X }\nfn main() ? {\n    "

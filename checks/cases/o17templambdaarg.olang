@@ -17,7 +17,7 @@ fn churn() {
     }
 }
 fn idBox(seed mut Box&) Box { return seed }
-fn twice(f fn() I64) I64 { return f() + f() }
+fn twice(f fn&() I64) I64 { return f() + f() }
 fn viaArg(b Box&) I64 { return twice(fn() I64 { return b.head.v }) }
 fn main() ? {
     seed := Box()

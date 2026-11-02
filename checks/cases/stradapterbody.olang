@@ -15,7 +15,7 @@ type Bag struct(c mut Ctr&) {
     c
 }
 fn (b Bag&) Str() String {
-    g fn() I64 = b.c
+    g fn&() I64 = b.c
     return "b" $g()
 }
 fn main() ? {

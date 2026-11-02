@@ -7,7 +7,7 @@ type Box struct(v I64) {
 }
 type W struct(h Box&) { h }
 type M struct(w W) {
-    F fn() I64 = fn() I64 { return w.h.v }
+    F fn&() I64 = fn() I64 { return w.h.v }
 }
 
 fn main() {

@@ -1,7 +1,7 @@
 # check: fail error[X13]: a C function is given a function by the name of an export fn
 # X2, X13: a function value crosses the C boundary to a C function only as an export fn named where it is passed (X13),
 # which has a C entry setting up the thread C calls it on - an ordinary function has none
-extern fn atexit(f fn()) I32
+extern fn atexit(f fn&()) I32
 
 fn bye() { }
 

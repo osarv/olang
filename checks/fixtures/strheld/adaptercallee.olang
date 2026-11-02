@@ -8,7 +8,7 @@ fn (c Ctr&) Call() I64 {
     return s.Len()
 }
 fn hh(c Ctr&) I64 {
-    g fn() I64 = c
+    g fn&() I64 = c
     return g()
 }
 type Bag struct(c Ctr&) {

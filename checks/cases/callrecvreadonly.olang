@@ -8,6 +8,6 @@ fn (c mut Counter&) Call() I32 {
   c.n++
   return c.n
 }
-fn run(f fn() I32) I32 { return f() }
+fn run(f fn&() I32) I32 { return f() }
 fn peek(c Counter&) I32 { return run(c) }
 fn main() ? { }

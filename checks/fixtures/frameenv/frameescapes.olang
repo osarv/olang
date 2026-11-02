@@ -5,10 +5,10 @@
 type Node struct(v I64) {
     v
 }
-type Holder struct(f fn() I64) {
+type Holder struct(f fn&() I64) {
     f
 }
-fn apply(f fn() I64) I64 { return f() }
+fn apply(f fn&() I64) I64 { return f() }
 fn passed(n Node&) I64 {
     f := fn() I64 { return n.v }
     return apply(f) + f()
@@ -17,7 +17,7 @@ fn stored(n Node&) Holder {
     f := fn() I64 { return n.v + 1 }
     return Holder(f)
 }
-fn captured(n Node&) fn() I64 {
+fn captured(n Node&) fn&() I64 {
     f := fn() I64 { return n.v + 2 }
     return fn() I64 { return f() }
 }
@@ -32,12 +32,12 @@ fn compared(n Node&) I64 {
     same := f == f
     return f() if same else 0
 }
-fn assigned(n Node&) fn() I64 {
+fn assigned(n Node&) fn&() I64 {
     f := fn() I64 { return n.v + 5 }
     g := f
     return g
 }
-fn returned(n Node&) fn() I64 {
+fn returned(n Node&) fn&() I64 {
     f := fn() I64 { return n.v + 6 }
     return f
 }

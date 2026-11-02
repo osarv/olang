@@ -4,7 +4,7 @@ type E error {
     Bad
 }
 Gate mut I64 = 1
-fn make() (fn() I64) ? E {
+fn make() (fn&() I64) ? E {
     if Gate < 0 { error E.Bad }
     return fn() I64 { return 7 }
 }

@@ -9,7 +9,7 @@ type Node struct(v I64) {
 type Bag struct(head mut Node&) {
     head
 }
-fn rec(g fn(x mut Node&), n mut Node&, c I64) {
+fn rec(g fn&(x mut Node&), n mut Node&, c I64) {
     if c > 0 { rec(fn(x mut Node&) { x.next = Node(x.v + 100) }, n, c - 1) }
     g(n)
 }

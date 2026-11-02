@@ -375,20 +375,20 @@ x := (small
 lambda, with several results or several error items - the item is written in parentheses, whole:
 
 ```
-m Map<String&, (fn(x I64) I64, I64 ? io.Error, ParseError)>
-fn apply(f (fn(x I64) I64, I64), n I64) I64
+m Map<String&, (fn&(x I64) I64, I64 ? io.Error, ParseError)>
+fn apply(f (fn&(x I64) I64, I64), n I64) I64
 total := apply((fn(x I64) I64, I64 { return x, x + 1 }), 3)
-fn adder() (fn(x I64) I64, I64)                         # one result, a function of two
+fn adder() (fn&(x I64) I64, I64)                         # one result, a function of two
 ```
 
 Written as an item without them, a function type or a lambda takes one result and one error item, and a `,` after
-it separates the list it stands in: `Map<K, fn(x I64) I64, I64>` is three type arguments. The lists are those of L18a;
+it separates the list it stands in: `Map<K, fn&(x I64) I64, I64>` is three type arguments. The lists are those of L18a;
 a function type or a lambda anywhere else - a field's, a local's or a global's type, a lambda written as a statement's
-value - takes its results and error items as a declaration does, comma by comma (`g fn(x I64) I64, I64 ? A, B = h`).
+value - takes its results and error items as a declaration does, comma by comma (`g fn&(x I64) I64, I64 ? A, B = h`).
 A type is parenthesized nowhere else: parentheses around a type that is no function type holding such a comma are a
 compile-time error, with one exception - a function type with no error set of its own, written as a declaration's or a
 function type's result before that signature's `?`, is parenthesized so the `?` is not read as its own: `fn f()
-(fn() I64) ? E` returns an infallible function and may fail with `E`, where `fn f() fn() I64 ? E` returns a function
+(fn&() I64) ? E` returns an infallible function and may fail with `E`, where `fn f() fn&() I64 ? E` returns a function
 failing with `E`. Inside the parentheses the item is no item of the list: its commas are its own. A parenthesized
 expression (E1) groups as it always does, so a lambda is grouped by one.
 
@@ -452,6 +452,7 @@ a parameter's type, a return type, an array's element type) — is one of:
 
 ```
 type-expr ::= [ "mut" ] ( enum-body | struct-body | trait-body | func-type | type-ref | any-ref )
+func-type ::= "fn" reference-marker func-sig     (T21; bare - "fn" func-sig - only as a type declaration's base, T21b)
 ```
 
 A leading `mut` makes a reference type writable (T25b); it is valid on a reference-shaped type and on a type
@@ -466,10 +467,10 @@ or a method's receiver, is written as its bare name, a `type-ref` (G8b).
 
 **T2a (`null`).** `null` is a literal denoting the **absent reference**. It has no type of its own: like a
 numeric literal (T6), it adapts to whatever type it is used against, and the types it may adapt to are
-exactly the **nullable** ones — a reference marked `?&` (T2c) and a function type (T21, D16d). Used against any other
-type - a reference marked `&` without `?` included - it is a compile-time error naming the nullable form (`Node?&`); used
-against an array, a value or a reference (`String&` included), it is one naming the empty array, which is what the
-array's absence is (`""`, `Array<T>(0)`, T2c). Calling through a null function value is a null dereference (T2b).
+exactly the **nullable** ones — a reference marked `?&` (T2c), an array's included (`String?&`), and a function type
+marked `?&` (`fn?&(...)`, T21). Used against any other type - a reference or a function type marked `&` without `?`
+included - it is a compile-time error naming the nullable form (`Node?&`, `fn?&(e Event)`); used against an array
+written `&` or held by value, it is one naming the empty array and the nullable form (`""`, `Array<T>(0)`, T2c).
 
 **T2c (nullable references).** A reference marker is `&` or `?&` (T24): `Node&` is never null, `Node?&` may be -
 `mut Node?&`, `List<Node?&>`, `Array<Node?&>&`. The two are different types of one representation: a
@@ -479,18 +480,24 @@ by a test (S8e), or unwrapped by `x!` (E35), which ends the program on a null. T
 null; `==`, `is null`, assignment and passing it on as a `T?&` need nothing. `x is null` and `x is not null` on a
 reference that is never null are compile-time errors (always false, always true). Where `null` and a `T&` meet - the
 values of a conditional or a match (E28, S12b), a `catch default null` beside a call giving `T&` (R11) - the result is
-`T?&`. A function value stays nullable (T21). A type whose zero value would hold a reference never null - an enum whose first
-case carries one, a struct whose constructor has no value for one - has no zero value (D13c).
+`T?&`. A function value follows the same rules where its type is written `fn?&(...)`, and is never null where it is
+written `fn&(...)` (T21). A type whose zero value would hold a reference or a function value never null - an enum whose
+first case carries one, a struct whose constructor has no value for one - has no zero value (D13c).
 
-**An array is never null.** Its zero value is the empty array, which stands for "no array" wherever one is missing - so
-an array reference is never nullable: `Array<T>?&` and `String?&` are compile-time errors naming `&` alone, `null` given
-for an array is an error naming its empty array (`""` for a `String`, `Array<T>(0)` otherwise), and `x is null` /
-`x is not null` on an array is an error naming `x.Len() == 0` / `x.Len() > 0`. Nothing reads through a null array, so an
-array reference needs no narrowing and no `!`.
+**An array may be null only where its type says so.** An array written `&` - and an array held by value - is never
+null: its zero value is the empty array. One written `?&` - `Array<T>?&`, `String?&`, `Array<Node&>?&` - may be absent,
+and its null is not the empty array: `x is null` is false of an empty one, a null renders as `null` and an empty one as
+`""` or `I64[]` (E11a), and a null equals only a null (E10). It follows every rule of a `T?&` above: nothing is read
+through it - no element, slice, `Len()` or method - until it is known not to be null (S8e, or `x!`, E35). Its **zero
+value is the empty array**, all zero bits, as every array's is (D13): a declaration with no value is empty, and `null`
+is written where it is absent. `null` given for an array written `&` is a compile-time error naming its empty array
+(`""` for a `String`, `Array<T>(0)` otherwise) and `?&`, and `x is null` / `x is not null` on one is an error naming
+`x.Len() == 0` / `x.Len() > 0` and `?&`.
 
-Its representation is **all-zero bits**, at every nullable type. For a single-pointer type that is the null
-pointer; for the two-word shapes it is each word zeroed, and for an array that is its zero value, the empty array
-`{ 0, null }` — `Len()` (E23) of it is `0` and it reads as genuinely empty.
+Its representation is **all-zero bits**, at every nullable type but an array. For a single-pointer type that is the null
+pointer; for a function value the pair of words zeroed. An array's all-zero bits are its zero value, the empty array
+`{ 0, null }` — `Len()` (E23) of it is `0` and it reads as genuinely empty - so a null array is the length `-1` with no
+storage, `{ -1, null }`, which `x is null` tests.
 
 `null` carries **no scope** (§8): there is nothing for it to outlive, so it flows into a target of any
 scope without a containment check. Whether a reference holds none is asked with `p is null` (E10c). A null equals
@@ -498,8 +505,7 @@ only a null (E10).
 
 **T2b (memory safety).** A reference is null only where its type says it may be (T2c), and the compiler holds every
 read through one to a test; a narrowing of a field path can still meet a null that a call stored there since the test
-(S8e). Reading or writing a field or element through a null reference, or calling through a null function value,
-**traps**: the program ends there with the platform's fault signal (`SIGSEGV`), as when a stack overflows -
+(S8e). Reading or writing a field or element through a null reference **traps**: the program ends there with the platform's fault signal (`SIGSEGV`), as when a stack overflows -
 writing `os.OnCrash`'s message first if one is set (std/os) - and nothing after the access runs. It costs nothing
 per access: null is the all-zero representation and the lowest addresses are never mapped, so the access itself
 faults, and the compiler never assumes that a reference it sees read through is not null, so it never deletes or
@@ -904,7 +910,7 @@ declaration:
 - In a function, its `fn-type-params` list after its name introduces its variables (G3) - `fn max<T>(a T, b T) T` -
   for the whole declaration, receiver included, in any order, and for its body. A method on a generic type takes the
   type's variables from its receiver's type arguments (`fn (l List<T>&) Push(x T)`, G3b) and lists only variables of
-  its own (`fn (l List<T>&) Map<U>(f fn(x T) U) List<U>&`). A list item carries the variable's constraint (`<T Shape>`,
+  its own (`fn (l List<T>&) Map<U>(f fn&(x T) U) List<U>&`). A list item carries the variable's constraint (`<T Shape>`,
   G19).
 - A constructor's list after `struct` introduces the variables a plain type's constructor writes (G10d).
 - A function type (G3a) and a lambda (D16) introduce nothing: a variable written in one is the enclosing
@@ -1020,7 +1026,7 @@ LoadError error os.Error, ParseError`. Its members are what an `error-list` name
 members stands for its own, and the words of one type are one entry (R1c). A set with braces as well, `type LoadError
 error os.Error, ParseError { TIMEOUT }`, is also an error type of its own words (`LoadError.Timeout`), a member of its
 own set after the others. A named set is written wherever an error set is - after a signature's `?` (`fn load() Config
-? LoadError`), in a function type and a trait's method (`fn(I64) ? LoadError`), as a member of another set, and as a
+? LoadError`), in a function type and a trait's method (`fn&(I64) ? LoadError`), as a member of another set, and as a
 catch item (R11: `catch LoadError` takes every member) - and is **the same set as its members written out**: `?
 LoadError` and `? os.Error, ParseError` promise the same errors, and two function types differing only in that
 spelling are one type (T27). It is never a code space of its own: codes stay per member type (R6), so a set adds
@@ -1067,13 +1073,23 @@ expected is recoded (R7).
 
 ### 2.7 Function types
 
-**T21.** `func-type ::= "fn" func-sig`, where `func-sig` is the parameter list, optional return
-type, and optional error list described in §3.4. A
-function type is usable as a variable's, field's, or parameter's declared type, making a function
-(named or, wherever a value of function type is otherwise obtained, referenced by that value) a
-first-class value that can be passed and called through it. A value of function type is **reference-shaped**:
-it refers to the function together with whatever a lambda captured (D16c), so it is nullable (T2a) and §8's
-rules for references apply to it (D16d). `==` compares by identity: a named function is one value however
+**T21.** `func-type ::= "fn" reference-marker func-sig`, where `reference-marker` is T24's (`&` or `?&`, written directly
+after the `fn`) and `func-sig` is the parameter list, optional return type, and optional error list described in §3.4.
+A function type is **reference-only**, as an `any` (T32), a type with a destructor (C11) and an extern type (X10) are:
+every place holding a function value - a variable's, field's, parameter's or result's type, an element's, a type
+argument - writes its marker, `fn&(e Event)` a function value that is never null and `fn?&(e Event)` one that may be,
+making a function (named or, wherever a value of function type is otherwise obtained, referenced by that value) a
+first-class value that can be passed and called through it. Written with no marker on a place (`f fn(e Event)`) it is a
+compile-time error naming the `&` (`fn&(e Event)`) - only a type declaration's base is written bare (T21b). A
+function's own declaration (D7) and a lambda (D16) are no types and carry none. Nothing writes through a function value,
+so its marker says nothing of permission (T25b) and `mut` has nothing to say on one. A value of function type refers to
+the function together with whatever a lambda captured (D16c), and §8's rules for references apply to it (D16d). A
+`fn&` value is never null - it has **no zero value** (D13): a place of one is given a value, or assigned on every path
+before it is read (D13d) - and a `fn?&` value may be, with every rule a `T?&` has (T2c): `null` is its zero value, a
+`fn&` fits wherever a `fn?&` is wanted, a `fn?&` fits a `fn&` only where it is known not to be null - narrowed by a test
+(S8e) or unwrapped by `f!` (E35) - and nothing is called through it before (`f!(x)` calls one, ending the program on a
+null); `f is null` on a `fn&` is a compile-time error (always false). The two are different types of one
+representation - two words, the code and the environment, a null one's code null. `==` compares by identity: a named function is one value however
 often it is named, and each evaluation of a capturing lambda makes a new one. A **global** of function type is a
 variable like any other, holding a function value: `F(x)` calls the function `F` holds, `F` read is that value, and
 a `mut` one may be assigned another - a named function's value, or a lambda's capturing nothing, is made once for the
@@ -1084,8 +1100,8 @@ parameter's type, permission included (T25b), in order, presence and identity of
 same error types **in the same order**, since a fallible call reports an error by its position in the
 callee's own list (§7). A function value **fits** a function type that differs only in permission where reading for
 writing is safe: a parameter may be read-only where the type passes a writable reference (it reads what it may write), and
-the result writable where the type gives a read-only one - so `fn(acc I32, b Box&) I32` is accepted for
-`fn(acc I32, b mut Box&) I32`. A **named function** used as a value fits a type whose error list holds every error
+the result writable where the type gives a read-only one - so `fn&(acc I32, b Box&) I32` is accepted for
+`fn&(acc I32, b mut Box&) I32`. A **named function** used as a value fits a type whose error list holds every error
 the function can fail with, in any order and with more beside them (§7 R1b): its value re-encodes its codes for the
 type's list. A `noreturn` function value also fits a type with the same parameters, no result, no error
 list and no `noreturn`: never returning, it does all such a type promises (D8e). Every other part must be the same. A
@@ -1103,7 +1119,7 @@ says of every function that cannot become a value that it cannot and why (B11b).
 call (T22) is none of these: a function whose obligations are only each reference parameter's scope outliving its
 result's - exactly where something can be stored through both - hands back what an argument refers to and is a value
 (`fn first(a Array<I64>&) Array<I64>& { return a[0:1] }`, `g := first`). The exception is a function type whose result is written as
-a **type variable** bound to a reference, or to a value holding references (a callback's `fn(acc U, x T) U`):
+a **type variable** bound to a reference, or to a value holding references (a callback's `fn&(acc U, x T) U`):
 such a result may hand back one of the arguments (O14b), so the type itself requires each reference argument to
 outlive its result scope - and to be exactly it where something can be stored through the argument (O25g) - and a call
 through a value of it is held to that as a direct call is held to its callee's obligations (O10c). A lambda written for
@@ -1183,7 +1199,7 @@ A local's **written type** says what its reference permits: `x T& = e` is read-o
 `mut T&` writable - whether its body builds it (§8 O13) or hands back storage it was given (O14); a **constructor's**
 instance, new storage only its caller holds, is writable. A result written as a **type variable** (`U`) is neither: it may hand back existing
 storage (O14b), so it has the permission its type argument has - in a function type too, a callback's
-`fn(acc U, x T) U` with `U` bound to `String&` returns a read-only `String&` - and a lambda written for such a
+`fn&(acc U, x T) U` with `U` bound to `String&` returns a read-only `String&` - and a lambda written for such a
 type with a result of its own (`fn(a String&, w String&) String& { ... }`) has the expected type's.
 
 **T25c (converting permission).** A writable reference converts to a read-only one wherever a value is
@@ -1533,10 +1549,10 @@ with `At` and `Len` has, beside `Iter()`, the default `Reversed()`, a `ReversedI
 `LowerBound(x)`, in elements sorted by `<`, the first position whose element is not below `x` (`Len()` where all are) -
 a binary search; and `BinarySearch(x)`, the first position whose element is `==` to `x`, failing with
 `ArrayError.NotFound` where there is none.
-The prelude also declares `type Generator<T ? E> struct(next (fn() T ? E, Exhausted)) { next }`, whose `Next()` calls
+The prelude also declares `type Generator<T ? E> struct(next (fn&() T ? E, Exhausted)) { next }`, whose `Next()` calls
 `next`: what a generator gives (D18), and an iterator made of any such function value. A copy of a `Generator` is a
 second name for the same walk, as a `Vec`'s copy is the same `Vec`. Beside it, `type ViewGenerator<T ? E> struct(next
-(fn() T& ? E, Exhausted)) { next }`, whose `Next() T& ? E, Exhausted` gives a read-only reference living where the value
+(fn&() T& ? E, Exhausted)) { next }`, whose `Next() T& ? E, Exhausted` gives a read-only reference living where the value
 it is called on does (the one result the compiler knows to be handed back from its receiver, which its body - a call
 through a function value - cannot show): what a generator whose elements are borrowed gives (D18c).
 
@@ -1613,7 +1629,7 @@ directly, or from generic code (G19), it is fine. A default of `R` introducing t
 in the table (T35): it is reached as T32c says. A default whose result holds its receiver by value - an adapter that
 keeps a copy of the iterator it is made from (`Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `TakeWhile`, `SkipWhile`,
 `StepBy`, `FlatMap`), a `List` of it, which
-holds its elements behind its reference to its state, or a function value giving it (`fn() G`) - has no copy to keep of an
+holds its elements behind its reference to its state, or a function value giving it (`fn&() G`) - has no copy to keep of an
 `any`, whose instance is of a type not known there: calling one through an `any` is a compile-time error at the call,
 naming the instance's own type as where to call it. A default the table holds is instantiated for `T` only where some call
 through an `any` of `R` in the program reaches it: so a type a default does not fit - its constraint (`Sum`'s `T
@@ -1795,7 +1811,7 @@ value); a function with no `ret-type` returns no value (bare `return`/fall-throu
 nothing after it declares an **inferred** error set (§7.1 R1a); a list declares those types and words and nothing else.
 See §7 for what a `error-list`'s combined set means. A function type or a lambda (T2, D16) written as an item of a
 list takes one result and one error item, and a function type of several is parenthesized whole there (L18c):
-`f (fn(I64) I64 ? ParseError, io.Error)` as a parameter, `g fn(I64) I64 ? ParseError, io.Error` as a field or a local.
+`f (fn&(I64) I64 ? ParseError, io.Error)` as a parameter, `g fn&(I64) I64 ? ParseError, io.Error` as a field or a local.
 
 **D8e (`noreturn`).** A function whose signature writes `noreturn` where a result would stand (`fn Exit(code I32)
 noreturn`) **never returns to its caller**: no path through its body may reach a `return` or fall off its end. Its body is
@@ -1811,7 +1827,7 @@ wherever a value is expected too; as a generic argument it takes no part in infe
 `noreturn` call written in a value position has no type of its own, so no diagnostic names one: where it does not fit
 (`:=`, below) it is said that it gives no value. `noreturn` is not a type: no variable,
 parameter, field, element or type argument is `noreturn`, and `:=` from such a call is a compile-time error (D15). A
-function type may write it too (`fn(I32) noreturn`, T21); a `noreturn` function fits such a type, and also one with the
+function type may write it too (`fn&(I32) noreturn`, T21); a `noreturn` function fits such a type, and also one with the
 same parameters, no result and no error set, which it satisfies by never returning (T22). A method and an `extern fn`
 may be `noreturn`, and so may a trait's method signature (T31); a constructor, a destructor, an operator method (E31), a
 lambda (`fn() noreturn { ... }` is a compile-time error - a lambda's type is inferred, D16b, and a function type
@@ -1820,7 +1836,7 @@ expected of one says no more than its parameters and result) and `main` may not.
 **D8c (several results).** A `ret-type` of two or more types, written bare - `fn divmod(a I64, b I64) I64, I64` -
 declares that the function returns **several values**, one per type, in that order. Each result is an item of the
 results' list (L18a), so a result that is itself a function type of several results or error items is parenthesized
-whole (L18c): `fn adder() (fn(x I64) I64, I64), I64`. They are not one value: there is no
+whole (L18c): `fn adder() (fn&(x I64) I64, I64), I64`. They are not one value: there is no
 tuple type, and a call returning several values may appear only
 
 - as the right-hand side of a **destructuring** statement (S4b),
@@ -1895,7 +1911,7 @@ as long as it runs. An existing array of `T` - of a known length or not, a slice
 whole with `...a` written as all of the variadic parameter's arguments: `sum(...xs)`; `...a` beside other arguments
 there, or anywhere but a variadic parameter's place, is a compile-time error. A generic's `T` is inferred from the
 arguments as from any (G9: `fn largest<T>(first T, rest ...T) T` gives `largest(3, 9, 2)` an `I64` and
-`largest("b", "a")` a `String`). A method, a lambda and a function type may have one (`fn(xs ...I64) I64`, T21); a
+`largest("b", "a")` a `String`). A method, a lambda and a function type may have one (`fn&(xs ...I64) I64`, T21); a
 function type's says how a call through it is written, and the value either way is a function taking the array, so a
 function fits a function type of either form (T22). A constructor, an enum case's payload and an `extern fn` (whose
 variable arguments are C's `...`, X21) have none - a compile-time error naming an array parameter. `explain`, `doc` and
@@ -2250,9 +2266,10 @@ of that kind is - a local, a global (`X, Y mut I32 = 0, 0`) - and as constructor
 also be puns (`x, y`) or inferred (`p, q := a, b`).
 
 **D13.** A declaration with no initializer is its declared type's **zero value**: `false` for `Bool`,
-`0`/`0.0` for numeric types, `null` (T2a) for anything nullable - a `T?&`; a `T&` has **no zero value**, so a
-declaration of one with no initializer that is not definitely initialised (D13d), an `Array<T&>(n)` with no fill, and a
-struct field of one with no default or parameter to give it are compile-time errors naming `T?&` - an empty array (0 elements, T7c) for `Array<T>`,
+`0`/`0.0` for numeric types, `null` (T2a) for anything nullable - a `T?&`, a `fn?&(...)`; a `T&` and a `fn&(...)` have **no
+zero value**, so a declaration of one with no initializer that is not definitely initialised (D13d), an `Array<T&>(n)`
+with no fill, and a struct field of one with no default or parameter to give it are compile-time errors naming `T?&` -
+an empty array (0 elements, T7c) for `Array<T>` and for an `Array<T>?&` alike (T2c),
 the first-declared case for an enum — an enum has no other meaningful "zero", so this is the type's
 first case by representation, not by any declared meaning - and `null`, no error, for an error value (T20). A type with a **constructor** - every struct (T13), and a
 declared number with one (T29d) - makes its own zero value (D13c). Nothing is ever uninitialized. For a **global**
@@ -2864,7 +2881,7 @@ A method may not share a name with a **field** of its receiver type; such a call
 `x.f` names exactly one thing.
 
 **M19e (defaults).** A method whose receiver is a type variable constrained by a trait - `fn (s S) Describe<S Shape>()
-I32`, `fn (it mut I&) Count<I Iterator<T>, T>(keep fn(x T) Bool) I64` (G3b) - is a **default** of that trait: a method of
+I32`, `fn (it mut I&) Count<I Iterator<T>, T>(keep fn&(x T) Bool) I64` (G3b) - is a **default** of that trait: a method of
 every type that satisfies it, written once. It is declared in the trait's own module, and may not reuse the name of a
 method the trait requires. `l.Iter().Count(f)` calls the `Count` declared for `Iterator<T>`, since a `List`'s
 iterator satisfies it: the call is an ordinary generic one (§12), its receiver's variable bound to the value's type
@@ -3345,8 +3362,8 @@ its type: the value written the way it would be in source:
   alike, written unchanged (never quoted).
 - a function — its signature, `(params) results ? errors`, every type written as source writes it, permissions
   included (`(l mut List<mut Node&>&) mut Node&`), preceded by its name when the operand names a
-  declared function directly (`add(a I32, b I32) I32`) and by `fn` for a function value, whose name is
-  not known where the `$` is written (`fn(a I32, b I32) I32`). A null function value is `null`.
+  declared function directly (`add(a I32, b I32) I32`) and by `fn&` for a function value, whose name is
+  not known where the `$` is written (`fn&(a I32, b I32) I32`). A null function value is `null`.
 - a reference — `null` when it is null, otherwise its referent. References are followed at most **8**
   deep along any one path from the operand; the next one is rendered as `...`, which is what makes a cyclic
   structure's rendering finite. An `any` (T33) is a reference and counts as one.
@@ -4241,10 +4258,11 @@ writes `FILE:LINE: ` and the error - its type, named as the program writes it, a
 of its path (`io.Error.Failed`), and its word - to standard error and aborts. Its trace follows (S18d). Its value is the expression's on
 success. It never turns a check on (built-in arithmetic, indexing and conversions under it stay unchecked; a check is a call
 that can fail, E15a), and nothing leaves the function through it, so the enclosing function needs no `?` for it:
-`fn main() { io.Println("Hello World!")! }` is a program. On a value of a nullable reference type (T2c), `x!` is that
-reference as a `T&`, ending the program as a failed `assert` does (`FILE:LINE: null reached`) when it is null - after
-handling a failure first, where the expression can also fail. `!` on an expression that neither can fail as written nor
-is a nullable reference is a compile-time error, as `try` there is (R8), with the same exception in a generic's body. It binds as a postfix
+`fn main() { io.Println("Hello World!")! }` is a program. On a value of a nullable reference type (T2c) - an array's
+included - `x!` is that reference as a `T&`, and on a function value that may be null (`fn?&(...)`, T21) that value as
+a `fn&(...)` (`f!(x)` calls it), ending the program as a failed `assert` does (`FILE:LINE: null reached`) when it is
+null - after handling a failure first, where the expression can also fail. `!` on an expression that neither can fail
+as written nor may be null is a compile-time error, as `try` there is (R8), with the same exception in a generic's body. It binds as a postfix
 operator, tighter than any prefix one: `-f(x)!` is `-(f(x)!)`; the chain may go on after it (`f()!.g()`, `g` then not
 covered). A `!` directly followed by `=` is the `!=` token (L16), which a postfix `!` never needs to stand before.
 While compiling, an error reaching `!` is in K1's abort class: where a value is required it is a compile-time error,
@@ -4474,7 +4492,8 @@ of them writably (`e.Grow()` with a `mut` receiver, `e.c` or `e` given to a `mut
 error naming the whole-value assignment and a match's binding, a copy of its own. A field of a case the local is not known to hold is no member of an enum,
 and a compile-time error.
 
-**S8e (null narrowing).** A local or a parameter holding a `T?&` known not to be null (S8d) reads as a `T&` (T2c);
+**S8e (null narrowing).** A local or a parameter holding a `T?&` known not to be null (S8d) reads as a `T&` (T2c) - an
+`Array<T>?&` as an `Array<T>&`, a `fn?&(...)` as a `fn&(...)` (T21);
 besides the tests S8d reads, a statement assigning it a value never null (`p = Node(1)`) makes it known not to be null
 from there.
 
@@ -5497,7 +5516,7 @@ canonical: by the module each type is declared in (its identity, M22), then by n
 set (each module's own, §10) gives it the same codes. A module's importers infer a function's set from its source, as
 they derive its scope obligations (§8 O10b); nothing is written down for them.
 
-**R1b.** A **function type** always writes its error set (`fn(x I64) I64 ? io.Error`), and so does a trait's method
+**R1b.** A **function type** always writes its error set (`fn&(x I64) I64 ? io.Error`), and so does a trait's method
 signature (T30): no body says what it is, and a value or a constrained call is held to what is written. `?` alone in
 one is a compile-time error. A named function used as a value fits a function type whose set holds every error the
 function can fail with, in any order (T22) - its codes are re-encoded for the type's list where the two differ - and a
@@ -6223,7 +6242,7 @@ only what lives in the program's scope is handed back from it.
 
 **O14a.** A **function value** (T21) returned - a parameter's, or one reached through a parameter's data - needs only
 that what it captured outlive the result scope (nothing is written through a function value, D16d); it is an
-obligation of the function (O10b), checked at every call once the result has landed (O18a). `fn id(f fn() I32) fn()
+obligation of the function (O10b), checked at every call once the result has landed (O18a). `fn id(f fn&() I32) fn&()
 I32 { return f }` is legal, and `keep = id(y)` is a compile-time error where `y`'s closure lives in a block `keep`
 outlives.
 
@@ -6452,7 +6471,7 @@ what it read out of the region** brings in nothing new either: one whose initial
 into a part of it, anywhere in the body, is such a read - `t := a[i]  a[i] = a[j]  a[j] = t` - and which is never lent
 writably nor given a task's result. A call through a **function value** keeps nothing of its arguments beyond the call but
 in its result (T22a), so it stores nothing where an argument leads whose parameter's type lets nothing be stored through
-it (O25g) - `less(a[i], a[j])` with `less fn(x T, y T) Bool` and `T` a read-only reference or a value holding none; a
+it (O25g) - `less(a[i], a[j])` with `less fn&(x T, y T) Bool` and `T` a read-only reference or a value holding none; a
 parameter through which something can be stored keeps counting as a store. So a callee that only permutes the elements
 - `Reverse`, `Sort`, a swap through a local - may be lent the value. A callee that only reads the value, or writes
 numbers into it, may be lent it: `toks := split(line);
@@ -7671,7 +7690,7 @@ extern-type`, and `extern-ret-type ::= extern-value-type`. What crosses the C bo
 `extern-ret-type` is one `extern-value-type` - never an array (see X3 for why), several results (D8c) or nothing else.
 No other type - a struct holding anything else, an enum type, an error type, a function type, an array of any other
 element - is valid in an `extern-param` or `extern-ret-type` position, with one exception: a parameter of one of the
-runtime's own functions (X6, a name beginning `__olang_`) may be the function type `fn()` - no parameters, no result,
+runtime's own functions (X6, a name beginning `__olang_`) may be the function type `fn&()` - no parameters, no result,
 no errors - where that function's prototype in X6 has one. The runtime calls such a value only on a thread it made and
 set up itself, and only before it returns; no C function is ever handed one.
 
@@ -7696,7 +7715,7 @@ there is no sound way to reconstruct a real `{ len, ptr }` value from it — acc
 either fabricating a length (silently unsound) or inventing a real pointer-typed value somewhere in
 the language (exactly what X3's own marshalling exists to avoid).
 
-A `fn()` parameter (X2) is passed as two pointers: the function value's code, then its environment - what a lambda
+A `fn&()` parameter (X2) is passed as two pointers: the function value's code, then its environment - what a lambda
 captured, or nothing for a named function - which the code takes as its one argument, as C's own callbacks take a
 context pointer.
 
@@ -7767,7 +7786,7 @@ must state exactly the prototype below (X1a).
 | `__olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64` | `path` made absolute with every symbolic link, `.` and `..` resolved, as `__olang_arg` gives an entry — `-1` when that fails |
 | `__olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32` | starts the program the first of the `count` zero-terminated entries of `args` names - looked up through `PATH` unless it holds a `/` - with all of them as its command line and no shell between, and the descriptors `stdin`, `stdout` and `stderr` (each `-1` for this process's own) as its standard input, output and error, in the zero-terminated directory `dir` (empty: this process's own; a relative program path is found from it); returns its process id, or `-1` when it cannot be started (`__olang_err` says why). The caller waits for it (`waitpid`, an ordinary C function). Where the C library cannot change a spawned program's directory itself, the program is run through `/bin/sh` with the directory and the arguments as the shell's arguments, never its script |
 | `__olang_mkdtemp(template Array<U8>) I32` | makes a new directory, readable, writable and enterable by this user alone, named by the zero-terminated `template` with its last six characters - six `X`s - replaced by ones that make the name unused, written over the template's; returns `0`, or `-1` when it fails (`__olang_err` says why) |
-| `__olang_run_on_stack(bytes I64, f fn())` | calls `f` on a thread of its own with a stack of `bytes` bytes - raised to the least the system allows a thread, and stopping the program as a failed check does when the system will not make it - and returns once `f` has, nothing running beside it. While a test is running, a check failing, `unreachable` or a failing `!` inside `f` ends the test as it would have had `f` been called directly (S16, S18), the scopes open on both threads unwound first (P1d). Evaluated while compiling (K1) and under `interpret` as the call `f()`, the evaluator's own limits on depth standing for the stack |
+| `__olang_run_on_stack(bytes I64, f fn&())` | calls `f` on a thread of its own with a stack of `bytes` bytes - raised to the least the system allows a thread, and stopping the program as a failed check does when the system will not make it - and returns once `f` has, nothing running beside it. While a test is running, a check failing, `unreachable` or a failing `!` inside `f` ends the test as it would have had `f` been called directly (S16, S18), the scopes open on both threads unwound first (P1d). Evaluated while compiling (K1) and under `interpret` as the call `f()`, the evaluator's own limits on depth standing for the stack |
 | `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it. The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under `interpret` the message is written first when the interpreter's process crashes |
 | `__olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32` | whether the function the zero-terminated `name` names - in what the process has loaded, or in the C math library - can be called as `kinds` and `ret` describe: `0` it can, `1` there is no such function, `2` a kind is one that cannot be passed. `kinds` holds a byte per argument and a `0` after the last: a number type's code - `I8` 1, `I16` 2, `I32` 3, `I64` 4, `U8` 5, `U16` 6, `U32` 7, `U64` 8, `F16` 9, `BF16` 10, `F32` 11, `F64` 12 - with `0x80` added for an array of that type; `ret` is the result's code, `0` for none. A 16-bit float is passed only in an array, and an array is never a result |
 | `__olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64` | calls that function with the arguments `words` holds, in order: a number is one word, its bits from the lowest; an array is one word holding its length, then its elements' bytes packed into as many words as they fill, the function handed a pointer to those bytes, so what it writes there is in `words` after the call. Returns the result's bits, an integer extended to 64 bits as its type extends. A call `__olang_dyncall_check` would refuse stops the program as a failed check does. The runtime's part over the C library's `dlsym` and `libffi` that these two are is in a program, and linked, only when a module of it declares one of them |
@@ -8045,7 +8064,7 @@ where it is written, since `<Point>` would otherwise read as parameterizing over
 
 **G1a (error-set parameters).** A type parameter list - a struct type's, a trait's or a function's or method's, not a
 constructor's - may end in one **error-set parameter**, `? E` after the last type parameter, or alone: `type Iterator<T
-? E> trait`, `fn apply<T, U ? E>(x T, f fn(x T) U ? E) U ? E`, `fn (a Array<T>&) Some<? E>(keep fn(x T) Bool ? E) Bool ?
+? E> trait`, `fn apply<T, U ? E>(x T, f fn&(x T) U ? E) U ? E`, `fn (a Array<T>&) Some<? E>(keep fn&(x T) Bool ? E) Bool ?
 E`. A method's receiver introduces one written as its type's error-set argument (G8), as it introduces a type variable
 (G3b): `fn (t mut TakeIter<I, T ? E>&) Next() T ? E, Exhausted`. `E` stands for a set of errors, bound per instantiation,
 and is written only where an error set is - an item of a signature's, a function type's or a trait method's `? ...`
@@ -8058,7 +8077,7 @@ cannot fail (R7) and is called with no `try` (R8). An error-set parameter is no 
 (T20), and an instance at one set is compiled as if its sets were written out (G16).
 
 A call binds `E` (G9) to the **union** of what every function value and iterator matched against it fails with -
-beyond the other items of the set it stands in, so `fn(x T) U ? E` matched with a function failing with `ParseError`
+beyond the other items of the set it stands in, so `fn&(x T) U ? E` matched with a function failing with `ParseError`
 binds `ParseError`, and `Next() T ? E, Exhausted` matched with one failing with `io.Error, Exhausted` binds `io.Error`.
 Two arguments never conflict over it: each adds what it fails with. A lambda given for a parameter whose function type
 names `E` infers its set from its body (D16b) and then fails, as a value, with the set the parameter is given. An `E`
@@ -8084,9 +8103,9 @@ fn pairUp<A, B>(a A, b B) A { ... }
 every name written as one of that type's arguments, at any depth, that names no type and that its own list does not
 introduce - as Go's methods do: `fn (l List<T>&) Push(x T)`, `fn (m Map<K, V>&) Len() I64`. Such a method is a method of every application of the
 type (G8a). Its own list introduces only what the receiver does not - a variable of its own (`fn (l List<T>&) Map<U>(f
-fn(x T) U) List<U>&`), or a receiver variable's constraint (`fn (c Cell<T>&) Show<T Shape>()`). A receiver that is a
+fn&(x T) U) List<U>&`), or a receiver variable's constraint (`fn (c Cell<T>&) Show<T Shape>()`). A receiver that is a
 type variable itself - a trait's default (M19e) - is introduced by the method's list, with its constraint and the
-constraint's own variables: `fn (it mut I&) Count<I Iterator<T>, T>(keep fn(x T) Bool) I64`.
+constraint's own variables: `fn (it mut I&) Count<I Iterator<T>, T>(keep fn&(x T) Bool) I64`.
 
 **G3a.** G3 applies to a function **declaration** only. A function **type** (T2's `func-type`, written as a
 parameter's or variable's type) is never generic in its own right: a variable written in one is the *enclosing*
@@ -8095,7 +8114,7 @@ parameter cannot demand "any generic function", only a function at the enclosing
 types.
 
 ```
-fn sortBy<T>(v mut Array<T>&, less fn(a T, b T) Bool) { ... }
+fn sortBy<T>(v mut Array<T>&, less fn&(a T, b T) Bool) { ... }
 ```
 
 `T` here is `sortBy`'s, inferred from the call as usual (G9, which unifies through a function type's own
@@ -8320,7 +8339,7 @@ constraint (G19), and the count is G7's. A function whose instance needs a varia
 length an array taken by value gives (G29) - is a value in no instance; called, such variables are inferred from its
 arguments as always. A **method** takes type arguments the same way, written directly after its name at a call (E3) - `x.Narrow<I32>()`,
 `xs.Map<U>(f)` - one for each variable its list introduces that its receiver's type does not name, in the list's
-order: `fn (l List<T>&) Map<U>(f fn(x T) U) List<U>` takes `U`, the receiver's `T` being the receiver's; `fn (x T)
+order: `fn (l List<T>&) Map<U>(f fn&(x T) U) List<U>` takes `U`, the receiver's `T` being the receiver's; `fn (x T)
 Narrow<T Number, U Number>() U ? NumberError` takes `U`. Those not written are inferred from the arguments, the
 receiver included. A method so given its arguments is only called, never a value (M19). Only a function's own
 variables are written: a non-generic function, and a method whose list introduces nothing its receiver does not name,
@@ -8637,8 +8656,8 @@ module, its receiver's type and its name, so an instance a descriptor is an argu
 compilation. A table collected while compiling:
 
 ```
-fn routes() Map<String&, fn(r Request&) Response> {
-    m := Map<String&, fn(r Request&) Response>()
+fn routes() Map<String&, fn&(r Request&) Response> {
+    m := Map<String&, fn&(r Request&) Response>()
     for f in handlers.Functions {
         if f.HasAttr<Route>() { m.Put((f.Attr<Route>()!).Path, fn(r Request&) Response { return f(r) }) }
     }

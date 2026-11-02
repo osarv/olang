@@ -6,7 +6,7 @@ type N struct(v I64) {
     v
     w I64 = v * 3
 }
-type H struct(f fn(i I64)) { f }
+type H struct(f fn&(i I64)) { f }
 fn work(h H&, base I64) {
     for i in range 200000 { h.f(i + base) }
 }

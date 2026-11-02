@@ -1020,6 +1020,16 @@ fn (c mut Checker&) exportArray(t types.TypeId) Bool {
 # X13: what a C function is given for a parameter of a function type: an export fn, named - its C entry, which C may
 # call on any thread (X12) - and nothing else, no lambda and no function value held, which C could not call
 fn (c mut Checker&) callbackArg(x typed.Expr&, sp source.Span) {
+    # T21: an export fn given for a C function pointer that may be null - "fn?&(...)" - is converted to it
+    match x {
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op == typed.PrimOp.Convert and args.Len() == 1 {
+                c.callbackArg(args[0], sp)
+                return
+            }
+        }
+        case _ { }
+    }
     match x {
         case typed.Expr.Fn(_, _, fv) {
             match fv {
@@ -22728,7 +22738,7 @@ test "for-in walks iterators, runs, iterables and indexables; comprehensions (S9
 test "lambdas: expected types, inference, captures, generic calls (D16, D16a-D16c, G9a, G9c)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("fn apply(f fn(x I64) I64, v I64) I64 { return f(v) }\n"
+    l := testLoad(dir, ("fn apply(f fn&(x I64) I64, v I64) I64 { return f(v) }\n"
                        "fn main() ? {\n    k I64 = 3\n    a := apply(fn(x) { return x + k }, 4)\n"
                        "    g := fn(x I64) { return x * 2 }\n    b := g(5)\n"
                        "    xs := I64[1, 2, 3]\n    n := xs.Count(fn(x) { return x > 1 })\n"

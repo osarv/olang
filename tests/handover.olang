@@ -35,7 +35,7 @@ type tag struct(text mut String&) {
 fn (g tag) Label() String { return g.text[1:] }
 
 # a function a value calls: its copying wrapper copies what it hands back
-fn apply(f fn(t String&) String, t String&) String { return f(t) }
+fn apply(f fn&(t String&) String, t String&) String { return f(t) }
 
 test inner "hands a view over where the caller only reads it, and copies it where the caller keeps it" {
     s := $"[abcd]"
@@ -83,7 +83,7 @@ type cutter struct(n I64) {
 
 fn (k cutter) Call(t String&) String { return t[k.n:] }
 
-fn cutWith(f fn(t String&) String, t String&) String { return f(t) }
+fn cutWith(f fn&(t String&) String, t String&) String { return f(t) }
 
 # a guaranteed tail call of a function handing back a view of its own argument: handed back as it is too
 fn skipSpaces(t String&, i I64) String {
@@ -119,7 +119,7 @@ assert skipSpaces("  hi", 0) == "hi" and spacedOut("ab", 0) == "ab"
 
 # a call given only read-only arguments may still write through a closure one of them holds (a "mut" reference it
 # captured): a view read after such a call in its statement is the copy it would be
-type sink struct(f fn()) {
+type sink struct(f fn&()) {
     f
 }
 

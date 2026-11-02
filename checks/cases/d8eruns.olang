@@ -14,7 +14,7 @@ fn g(n I64) I64 ? {
     if n < 0 { error E.No }
     return n
 }
-fn call(f fn(c I32)) { f(0) }
+fn call(f fn&(c I32)) { f(0) }
 fn main() {
     x := try g(5) catch default die(4)
     assert pick(x) == 5

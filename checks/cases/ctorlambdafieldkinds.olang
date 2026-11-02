@@ -12,14 +12,14 @@ type Box struct(v I64) {
 }
 type W struct(h Box) { h }
 type M struct(w W) {
-    F fn() I64 = fn() I64 { return w.h.v }
+    F fn&() I64 = fn() I64 { return w.h.v }
 }
 type A struct(n I64) {
     arr Array<I64> = I64[n, n + 1, n + 2]
-    G fn() I64 = fn() I64 { return arr[1] }
+    G fn&() I64 = fn() I64 { return arr[1] }
 }
 type C struct(d Array<I64>&) {
-    F fn() I64 = fn() I64 { return d[0] }
+    F fn&() I64 = fn() I64 { return d[0] }
     k I64 = F()
 }
 type Ctr struct(n I64) {
@@ -27,7 +27,7 @@ type Ctr struct(n I64) {
 }
 fn (c Ctr&) Call() I64 { return c.n }
 type D struct(c Ctr&) {
-    F fn() I64 = c
+    F fn&() I64 = c
 }
 type E struct(d Array<I64>&) {
     F := fn() I64 { return d[1] }

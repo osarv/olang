@@ -2,7 +2,7 @@
 # flags: -debug -sanitize
 # P2 (decision 48, replacing decision 40's refusal): a spawned lambda calling a closure held in what it captured - the
 # closure builds, from the task's thread, into its own part of the scope it captured
-type H struct(f fn(i I64)) { f }
+type H struct(f fn&(i I64)) { f }
 fn main() ? {
     a mut Vec<I64>& = Vec<I64>()
     ha H& = H(fn(i I64) { a.Push(i) })

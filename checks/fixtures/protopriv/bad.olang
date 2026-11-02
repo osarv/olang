@@ -16,7 +16,7 @@ fn main() ? {
     r := $kk.Wrap(kk.Key(1))
     ks := kk.Key[kk.Key(1)] == kk.Key[kk.Key(1)]
     h := kk.Wrap(kk.Key(1)).Hash()
-    f fn(x I32) I32 = c
+    f fn&(x I32) I32 = c
     assert seen(a) and seen(s) and seen(v) and seen(l) and seen(x) and seen(y) and seen(n) and seen(w) and seen(r) and
         seen(ks) and seen(h) and seen(f)
 }

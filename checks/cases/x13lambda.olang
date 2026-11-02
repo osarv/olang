@@ -1,6 +1,6 @@
 # check: fail error[X13]: a C function is given a function by the name of an export fn
 # X13: C calls a callback by its C entry, which a lambda - code with what it captured - does not have
-extern fn qsort(base mut Array<I32>&, n I64, size I64, cmp fn(a Box&, b Box&) I32)
+extern fn qsort(base mut Array<I32>&, n I64, size I64, cmp fn&(a Box&, b Box&) I32)
 
 type Box struct(v I32) { v }
 

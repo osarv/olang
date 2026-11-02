@@ -486,7 +486,7 @@ fn HashGoldenRead(base String&, target String&) HashGolden {
 }
 
 # writes a hashed golden of the files' sections; full says which sections are kept whole too
-fn HashGoldenWrite(base String&, what String&, files Vec<String&>&, sections Golden&, full fn(body String&) Bool) {
+fn HashGoldenWrite(base String&, what String&, files Vec<String&>&, sections Golden&, full fn&(body String&) Bool) {
     table := StringBuilder()
     table.Push("# " $what " - a row per file: the hash of its text, the hash of its section, its path (compiler/tools/toolkit.olang)\n")
     whole := StringBuilder()

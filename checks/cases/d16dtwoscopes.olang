@@ -2,13 +2,13 @@
 # QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
 # program runs - read after what it was built in closes, as the description below says it would be
 # D16d: a closure capturing what two parameters refer to, returned, holds both to where it is put - the second too
-fn both(a String&, b String&) fn() String {
+fn both(a String&, b String&) fn&() String {
     return fn() { return $a $b }
 }
 
 fn main() {
     a := "hello"
-    g fn() String
+    g fn&() String
     {
         b := $a "x"
         g = both(a, b)

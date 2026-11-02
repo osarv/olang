@@ -198,7 +198,7 @@ test "D8a/D16: a lambda default from another module" {
 }
 
 # G12: an instance of another module's generic function, named by its type arguments through the import's alias
-fn g12Apply(f fn(a I64, b I64) I64, x I64) I64 { return f(x, 9) }
+fn g12Apply(f fn&(a I64, b I64) I64, x I64) I64 { return f(x, 9) }
 G12Picked I64 = sh.PickSecond<I64>(1, 2)        # K2: evaluated while compiling
 test "G12: sh.PickSecond<I64> names an instance, called or as a value" {
     assert G12Picked == 2

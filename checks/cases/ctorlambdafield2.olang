@@ -7,7 +7,7 @@ import "std/io"
 type M struct(n I64, d Array<I64>&) {
     n
     own Array<I64>& = Array<I64>(4, 8)
-    f fn() I64 = fn() I64 { return own[1] + d[0] }
+    f fn&() I64 = fn() I64 { return own[1] + d[0] }
 }
 
 fn main() {

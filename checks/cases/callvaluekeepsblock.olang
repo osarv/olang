@@ -5,10 +5,10 @@ type Node struct(v I64) {
     v
 }
 type Keeper struct() {
-    kept fn() I64 = null
+    kept fn?&() I64 = null
 }
-fn (k mut Keeper&) Call(x fn() I64) { k.kept = x }
-fn apply(s fn(x fn() I64), g fn() I64) { s(g) }
+fn (k mut Keeper&) Call(x fn&() I64) { k.kept = x }
+fn apply(s fn&(x fn&() I64), g fn&() I64) { s(g) }
 fn churn(d I64) I64 {
     a := I64[d, d, d, d, d, d, d, d]
     l := Vec<I64>()
@@ -18,11 +18,11 @@ fn churn(d I64) I64 {
 }
 fn main() ? {
     kp := Keeper()
-    s fn(x fn() I64) = kp
+    s fn&(x fn&() I64) = kp
     {
         m := Node(10)
         s(fn() I64 { return m.v + 1 })
     }
     t := churn(100)
-    try io.Println($kp.kept() " " $t)
+    try io.Println($kp.kept!() " " $t)
 }

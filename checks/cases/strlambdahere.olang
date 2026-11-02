@@ -8,7 +8,7 @@ type Cell struct() {
 type Bag struct(c mut Cell&) {
     c
 }
-fn apply(f fn()) { f() }
+fn apply(f fn&()) { f() }
 fn (b Bag&) Str() String {
     f := fn() { b.c.v++ }
     f()

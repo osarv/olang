@@ -1,7 +1,7 @@
 # check: fail error[P2, D16e]: this function value closes before the join does
 # P2/E13b: a function value computed for the task holds what it was made from - passed through a call it is the very
 # value passed, here a closure over a loop body's array, which closes while the task runs
-fn id(g fn()) fn() { return g }
+fn id(g fn&()) fn&() { return g }
 fn main() ? {
     c mut Array<I64>& = Array<I64>(4)
     join {

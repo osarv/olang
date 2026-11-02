@@ -207,7 +207,7 @@ fn (g Gen&) tn(t I32) String& {
     if t < 200 { return "S" $g.ci "_" $(t - 100) }
     if t < 300 { return "E" $g.ci "_" $(t - 200) }
     if t < 400 { return "Array<" $Prims[t - 300] ">" }
-    if t < 500 { return "fn(p " $Prims[g.lp[t - 400]] ") " $Prims[g.lr[t - 400]] }
+    if t < 500 { return "fn&(p " $Prims[g.lp[t - 400]] ") " $Prims[g.lr[t - 400]] }
     if t < 600 { return "Vec<" $Prims[t - 500] ">" }
     if isMap(t) { return "Map<" $g.tn(mapK(t)) ", " $Prims[mapV(t)] ">" }
     if isGen(t) { return "G" $g.ci "<" $Prims[(t - 6000) / 16] ">" }
@@ -1291,7 +1291,7 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
         g.lp[li] = pt
         g.lr[li] = rt
         g.declare(x, I32(400 + li), -1, true)
-        return $ind "x" $x " fn(x" $a " " $Prims[pt] ") " $Prims[rt] " = fn(x" $a ") { return " $body " }\n"
+        return $ind "x" $x " fn&(x" $a " " $Prims[pt] ") " $Prims[rt] " = fn(x" $a ") { return " $body " }\n"
     }
     if k == 21 {                                    # deferred code: run at its block's way out (S19)
         l := g.pick(0, 19)

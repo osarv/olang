@@ -22,7 +22,7 @@ fn even(x I64) I64 ? Other {
     return x
 }
 
-fn apply<T, U ? E>(x T, f fn(x T) U ? E) U ? E { return try f(x) }
+fn apply<T, U ? E>(x T, f fn&(x T) U ? E) U ? E { return try f(x) }
 
 test "G1a: an error-set parameter takes what the callback fails with, nothing where it cannot fail" {
     assert apply(3, fn(x I64) I64 { return x * 2 }) == 6
@@ -118,8 +118,8 @@ test "QAH: an iterator's own errors reach what walks it" {
 }
 
 # a struct type over an error set: what it runs fails with what it holds fails with
-type Retry<T ? E> struct(f fn() T ? E, times I64) {
-    run fn() T ? E = f
+type Retry<T ? E> struct(f fn&() T ? E, times I64) {
+    run fn&() T ? E = f
     n I64 = times
 }
 

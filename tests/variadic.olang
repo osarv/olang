@@ -42,7 +42,7 @@ fn calls(z I64) String {
     t.Add()
     t.Add(...a)
     g := sum
-    h fn(xs ...I64) I64 = sum
+    h fn&(xs ...I64) I64 = sum
     f := fn(xs ...String&) I64 { return xs.Len() }
     return $sum() " " $sum(1 + z) " " $sum(1, 2, 3) " " $sum(...a) " " $sum(...v.View()) " " $t.n " " $g(7, 8) " " $h() " " $f("a", "b")
 }
@@ -90,8 +90,8 @@ fn countAll(xs Array<I64>&) I64 { return xs.Len() }
 # the variadic parameter says how a call is written; the value is the array either way, so a function fits a function
 # type of either form (T22)
 fn forms(z I64) String {
-    f fn(xs Array<I64>&) I64 = sum
-    g fn(xs ...I64) I64 = countAll
+    f fn&(xs Array<I64>&) I64 = sum
+    g fn&(xs ...I64) I64 = countAll
     return $f(I64[1, 2 + z]) " " $g(5, 6, 7)
 }
 

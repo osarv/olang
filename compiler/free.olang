@@ -2656,7 +2656,7 @@ fn (f mut Free&) fnName(b I64) String {
 fn (f mut Free&) builtSpell(ty types.TypeId) String {
     t := f.T()
     if not t.IsRef(ty) or f.Sc.Spell is null { return "T&" }
-    return $f.Sc.Spell(t.Referent(ty)) "&"
+    return $f.Sc.Spell!(t.Referent(ty)) "&"
 }
 
 # what a value of a reference type is called in a note: a tree where it is an enum holding its own kind
@@ -4143,7 +4143,7 @@ fn (f mut Free&) Dump() String {
         for st in f.stores {
             if st.PlaceId == k: sto++
         }
-        nm := f.Sc.Spell(f.keyTy[k]) if f.Sc.Spell is not null else $t.Canon(f.keyTy[k])
+        nm := f.Sc.Spell!(f.keyTy[k]) if f.Sc.Spell is not null else $t.Canon(f.keyTy[k])
         b.Push($"place " $k " " $nm "." $f.keyField[k] $(" handle" if f.handle[k] else "") " sole " $f.IsSole(k) " lets " $lets " stores " $sto " why " $f.whyKind[k] " " $f.why[k].Text "\n")
     }
     for st in f.stores {

@@ -167,12 +167,19 @@ fn typeArgs(c mut typecheck.Checker&, args types.ListId) String {
     return b.ToString()
 }
 
-# a function type as the checker spells it, its error set replaced by the inferred one where it is "?" alone
+# a function type as the checker spells it, its error set replaced by the inferred one where it is "?" alone - as a
+# declaration's signature, "fn(...)", with no marker (T21: a place's type has one, a declaration none)
 fn sigOf(c mut typecheck.Checker&, sig types.TypeId, body I64) String {
-    if body < 0 or not c.InfersErrors(sig) { return c.Ty(sig) }
+    if body < 0 or not c.InfersErrors(sig) { return declSig(c, sig) }
     errs := c.ErrorsOf(body)
     full := c.P.T.Func(c.P.T.Params(sig), c.P.T.Result(sig), errs, c.P.T.ScopesOf(sig), c.P.T.NamesIdOf(sig))
-    return $c.Ty(full) "   # its error set inferred"
+    return $declSig(c, full) "   # its error set inferred"
+}
+
+# a declaration's signature spelled: its function type as the checker writes it, with no marker after "fn" (T21)
+fn declSig(c mut typecheck.Checker&, sig types.TypeId) String {
+    s := c.Ty(sig)
+    return $"fn" $s[3:] if s.StartsWith("fn&(") else $s
 }
 
 # a parameter list as the checker spells it (its parentheses left off), each defaulted parameter followed by " = " and
@@ -366,7 +373,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
                         # T17a: a payload written whole is its one type
                         b.Push($" " $c.Ty(c.P.T.Items(c.P.T.Params(c.P.CaseSig(self, k)))[0]))
                     } else {
-                        sig := c.Ty(named(c, c.P.CaseSig(self, k), null, casePayload(c.P.TypeDecl(d)!, k)))
+                        sig := declSig(c, named(c, c.P.CaseSig(self, k), null, casePayload(c.P.TypeDecl(d)!, k)))
                         b.Push(sig[2:firstClose(sig) + 1])
                     }
                 }
@@ -379,7 +386,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
             match c.P.TypeDecl(d)!.Body {
                 case ast.TypeBody.Over(_, ctor) {
                     if ctor is not null {
-                        sig := c.Ty(named(c, c.P.CtorSig(self), null, ctor.S.Params))
+                        sig := declSig(c, named(c, c.P.CtorSig(self), null, ctor.S.Params))
                         close := firstClose(sig)
                         b.Push($sig[2:close + 1] $errorsAfter(sig[close + 1:]))
                     }
@@ -389,7 +396,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
             b.PushChar('\n')
         }
         case types.DeclKind.Struct {
-            sig := c.Ty(named(c, c.P.CtorSig(self), null, ctorParams(c.P.TypeDecl(d)!)))
+            sig := declSig(c, named(c, c.P.CtorSig(self), null, ctorParams(c.P.TypeDecl(d)!)))
             close := firstClose(sig)
             ps := withDefaults(c, sig[3:close], ctorParams(c.P.TypeDecl(d)!), c.P.DeclModule(d), 0)
             b.Push($"type " $name " struct(" $ps ")" $errorsAfter(sig[close + 1:]) "\n")

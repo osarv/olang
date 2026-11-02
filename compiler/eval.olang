@@ -5896,7 +5896,7 @@ fn hostConv<S>(to String&, x S) I64 {
 
 # every x, of the numeric type named, converted to every numeric type against the host: a float out of an integer
 # type's range, or a NaN, refused as undefined (E26)
-fn convsAgree<S>(t mut types.Table&, name String&, xs Array<S>&, bits fn(x S) I64) {
+fn convsAgree<S>(t mut types.Table&, name String&, xs Array<S>&, bits fn&(x S) I64) {
     from := t.Prim(name)
     m mut Machine& = NewMachine(t, Mode.Compile)
     id := 300

@@ -25,7 +25,7 @@ type Bag struct(head mut Node&) {
     head
     g Getter = Getter(21)
 }
-fn applyI(f fn() I64) I64 { return f() }
+fn applyI(f fn&() I64) I64 { return f() }
 fn (b Bag&) Str() String {
     return $applyI(b.g)
 }

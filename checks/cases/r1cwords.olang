@@ -15,7 +15,7 @@ fn two(n I64) I64 ? LE.Empty, LE.Gone {
     return try pop(n)
 }
 fn inf(n I64) I64 ? { return try two(n) catch LE.Gone default 7 }
-fn run(f fn(n I64) I64 ? LE) I64 { return try f(N) catch LE default 3 }
+fn run(f fn&(n I64) I64 ? LE) I64 { return try f(N) catch LE default 3 }
 Baked I64 = (try pop(0) catch LE.Empty default -1) + (try inf(1) catch LE.Empty default 0) + run(pop)
 fn main() {
     a := try pop(N) catch LE.Empty default -1

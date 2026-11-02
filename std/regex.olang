@@ -1336,7 +1336,7 @@ fn (re Regex&) Replace(t String&, repl String&) String {
 }
 
 # t with every match replaced by what f gives for it
-fn (re Regex&) ReplaceFunc(t String&, f fn(m Match) String) String {
+fn (re Regex&) ReplaceFunc(t String&, f fn&(m Match) String) String {
     b := StringBuilder()
     last I64 = 0
     for m in re.FindAll(t) {

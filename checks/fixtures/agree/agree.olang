@@ -65,8 +65,8 @@ fn comprDeep(n I64) I64 {
 
 fn dbl(x I32) I32 { return x * 2 }
 fn tri(x I32) I32 { return x * 3 }
-F mut fn(x I32) I32 = dbl
-G fn(x I32) I32 = tri
+F mut fn&(x I32) I32 = dbl
+G fn&(x I32) I32 = tri
 
 Early mut I64 = Late + 1
 Late I64 = seed + 10
@@ -99,12 +99,12 @@ type Scale struct(k I32) {
     k
 }
 fn (s Scale) Call(x I32) I32 { return s.k * x }
-fn apply(f fn(x I32) I32, v I32) I32 { return f(v) }
-fn twice(f fn(x I32) I32, v I32) I32 { return f(f(v)) }
+fn apply(f fn&(x I32) I32, v I32) I32 { return f(v) }
+fn twice(f fn&(x I32) I32, v I32) I32 { return f(f(v)) }
 fn adapters(k I32) String {
     c := Counter(10)
     a := apply(c, k)
-    f fn(x I32) I32 = c
+    f fn&(x I32) I32 = c
     b I32 = f(k) + f(k)
     return $a " " $b " " $c.n " " $twice(Scale(k + 1), 5) " " $(f == f)
 }

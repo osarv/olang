@@ -16,7 +16,7 @@ fn (b Box&) sum() I64 {
     f := fn() I64 { return b.head.v }
     return f()
 }
-fn apply(f fn()) { f() }
+fn apply(f fn&()) { f() }
 fn (b Box&) grow2() {
     apply(fn() { b.head.next = Node(7, null) })
 }

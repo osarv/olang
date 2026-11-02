@@ -214,8 +214,8 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     Bodies
     Plans Vec<typed.Plan>
     Gaps Vec<Gap>
-    InstNote fn(inst I64) String = null # the checker's note for an instance's context ("instantiated here, with T = ...")
-    Spell fn(t types.TypeId) String = null # a type as source writes it, for a message (the checker's)
+    InstNote fn?&(inst I64) String = null # the checker's note for an instance's context ("instantiated here, with T = ...")
+    Spell fn?&(t types.TypeId) String = null # a type as source writes it, for a message (the checker's)
     sums Vec<mut summary&>
     ctorOf Map<types.TypeId, I64>  # a type's constructor's body (twin 0)
     stTypes Map<types.TypeId, I64> # storeThrough, once asked: 1 being asked, 2 no, 3 yes
@@ -714,7 +714,7 @@ fn (s mut Scoper&) instContexts(inst I64) I64 {
     for kk in range chain.Len() {
         o := chain[chain.Len() - 1 - kk]
         i := insts[chain.Len() - 1 - kk]
-        text := s.InstNote(i) if s.InstNote is not null else "instantiated here"
+        text := s.InstNote!(i) if s.InstNote is not null else "instantiated here"
         s.P.L.Diags.PushContext(diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End)), text)
     }
     return chain.Len()
@@ -854,8 +854,8 @@ fn (s mut Scoper&) anyTables() {
             if b >= s.sums.Len() or s.sums[b].Rels.Len() == 0 { continue }
             at := diag.Where.Span(tab.File, I64(tab.Sp.Start), I64(tab.Sp.End))
             name := $"'" $s.P.L.Names.Text(slots[k % slots.Len()].Name) "'" if slots.Len() > 0 else ""
-            ty := s.Spell(tab.Concrete) if s.Spell is not null else s.P.T.Canon(tab.Concrete)
-            tr := s.Spell(tab.Trait) if s.Spell is not null else s.P.T.Canon(tab.Trait)
+            ty := s.Spell!(tab.Concrete) if s.Spell is not null else s.P.T.Canon(tab.Concrete)
+            tr := s.Spell!(tab.Trait) if s.Spell is not null else s.P.T.Canon(tab.Trait)
             s.P.L.Diags.Error(at, msgs.AnyMethodObligations(ty, name, tr))
             break
         }
@@ -8040,7 +8040,7 @@ fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr?&, w I64, wname Strin
         }
     }
     writable := (s.P.T.PermOf(ty) & types.Writable) != 0 if s.isRef(ty) else true
-    full := $("mut " if writable and not s.isFunc(shown) else "") $s.Spell(shown)
+    full := $("mut " if writable and not s.isFunc(shown) else "") $s.Spell!(shown)
     s.note(rec, s.B!.File, at, msgs.NoteDeclareWhere(name, wname, name, full, wname))
 }
 
@@ -8543,7 +8543,7 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
         l := s.argLocal(unPassed(x))
         if l >= 0 and s.B!.Locals[l].Kind == typed.LocalKind.Param and not s.isRef(s.B!.Locals[l].Ty) and s.Spell is not null {
             name := s.P.L.Names.Text(s.B!.Locals[l].Name)
-            s.note(rec, s.B!.File, s.wordAt(s.B!.Locals[l].Sp, name), msgs.NoteParamCopy(name, $name " " $s.Spell(s.B!.Locals[l].Ty) "&"))
+            s.note(rec, s.B!.File, s.wordAt(s.B!.Locals[l].Sp, name), msgs.NoteParamCopy(name, $name " " $s.Spell!(s.B!.Locals[l].Ty) "&"))
         }
     }
     # T17c: the payload's storage is to be made where the value is kept - a parameter's (B11)

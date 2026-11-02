@@ -18,7 +18,7 @@ type Iterator<T ? E> trait {
 # it fails with Exhausted once the body has ended - and again whenever it is asked after - or with the error the body
 # failed with, after which the body is over. A copy is a second name for the same walk, as a Vec's copy is the same
 # list. next is the walk itself: a Generator made of any such function value walks it
-type Generator<T ? E> struct(next (fn() T ? E, Exhausted)) {
+type Generator<T ? E> struct(next (fn&() T ? E, Exhausted)) {
     next
 }
 
@@ -28,7 +28,7 @@ fn (g mut Generator<T ? E>&) Next() T ? E, Exhausted { return try g.next() }
 # a reference into what its parameter p refers to - or Iterator<T&return ? E> - into storage its walk keeps, where the
 # generator lives - gives a ViewGenerator<T ? E>, T the elements' referent. Its Next gives a read-only reference that
 # lives where the generator does, at least: no shorter than what Next is called on
-type ViewGenerator<T ? E> struct(next (fn() T& ? E, Exhausted)) {
+type ViewGenerator<T ? E> struct(next (fn&() T& ? E, Exhausted)) {
     next
 }
 
@@ -40,7 +40,7 @@ fn (g mut ViewGenerator<T ? E>&) Next() T& ? E, Exhausted { return try g.next() 
 # (E, QAH): with nothing, for an iterator that cannot fail and callbacks that cannot, and then it is called with no try
 
 # true when keep holds for at least one value
-fn (it mut I&) Some<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) Bool ? E {
+fn (it mut I&) Some<I Iterator<T ? E>, T ? E>(keep fn&(x T) Bool ? E) Bool ? E {
     for x in try it {
         if try keep(x) { return true }
     }
@@ -48,7 +48,7 @@ fn (it mut I&) Some<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) Bool ? E {
 }
 
 # true when keep holds for every value - so for none, when there are none
-fn (it mut I&) Every<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) Bool ? E {
+fn (it mut I&) Every<I Iterator<T ? E>, T ? E>(keep fn&(x T) Bool ? E) Bool ? E {
     for x in try it {
         if not try keep(x) { return false }
     }
@@ -56,7 +56,7 @@ fn (it mut I&) Every<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) Bool ? E {
 }
 
 # how many values keep holds for - through Fold, as Sum
-fn (it mut I&) Count<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) I64 ? E {
+fn (it mut I&) Count<I Iterator<T ? E>, T ? E>(keep fn&(x T) Bool ? E) I64 ? E {
     return try it.Fold(I64(0), fn(n I64, x T) I64 ? E {
         if try keep(x): return n + 1
         return n
@@ -64,7 +64,7 @@ fn (it mut I&) Count<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) I64 ? E {
 }
 
 # every value folded into one, starting from init
-fn (it mut I&) Fold<I Iterator<T ? E>, T, U ? E>(init U, f fn(acc U, x T) U ? E) U ? E {
+fn (it mut I&) Fold<I Iterator<T ? E>, T, U ? E>(init U, f fn&(acc U, x T) U ? E) U ? E {
     acc U = init
     for x in try it {
         acc = try f(acc, x)
@@ -73,7 +73,7 @@ fn (it mut I&) Fold<I Iterator<T ? E>, T, U ? E>(init U, f fn(acc U, x T) U ? E)
 }
 
 # a new Vec - in the caller's scope - of f applied to every element
-fn (it mut I&) Map<I Iterator<T ? E>, T, U ? E>(f fn(x T) U ? E) mut Vec<U>& ? E {
+fn (it mut I&) Map<I Iterator<T ? E>, T, U ? E>(f fn&(x T) U ? E) mut Vec<U>& ? E {
     out mut Vec<U>& = Vec<U>()
     for x in try it {
         out.Push(try f(x))
@@ -82,7 +82,7 @@ fn (it mut I&) Map<I Iterator<T ? E>, T, U ? E>(f fn(x T) U ? E) mut Vec<U>& ? E
 }
 
 # a new Vec - in the caller's scope - of the elements keep holds for
-fn (it mut I&) Filter<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) mut Vec<T>& ? E {
+fn (it mut I&) Filter<I Iterator<T ? E>, T ? E>(keep fn&(x T) Bool ? E) mut Vec<T>& ? E {
     out mut Vec<T>& = Vec<T>()
     for x in try it {
         if try keep(x) { out.Push(x) }
@@ -145,7 +145,7 @@ fn (it mut I&) Take<I Iterator<T ? E>, T ? E>(n I64) TakeIter<I, T ? E> { return
 # every value left folded into one, as Fold - over an array's iterator (or Skip's over one) a counted loop over at most
 # the n elements it has left, so a reduction through Fold (Sum, Count, Min, Max) vectorizes as over the array itself;
 # over anything else as Next walks
-fn (t mut TakeIter<I, T ? E>&) Fold<U ? F>(init U, f fn(acc U, x T) U ? F) U ? {
+fn (t mut TakeIter<I, T ? E>&) Fold<U ? F>(init U, f fn&(acc U, x T) U ? F) U ? {
     match I {
         case ArrayIter<T> { return try t.foldArray(t.it, init, f) }
         case SkipIter<ArrayIter<T>, T ? E> {
@@ -170,7 +170,7 @@ fn (t mut TakeIter<I, T ? E>&) Fold<U ? F>(init U, f fn(acc U, x T) U ? F) U ? {
 
 # Take's fold over a, the array iterator it wraps (itself, or behind a Skip settled): its count taken down by what it
 # gave, as Next would - by one more where the array ended before the count did
-fn (t mut TakeIter<I, T ? E>&) foldArray<U ? F>(a mut ArrayIter<T>&, init U, f fn(acc U, x T) U ? F) U ? F {
+fn (t mut TakeIter<I, T ? E>&) foldArray<U ? F>(a mut ArrayIter<T>&, init U, f fn&(acc U, x T) U ? F) U ? F {
     before := a.Rest().Len()
     acc, k := try foldUpTo(a, t.left, init, f) catch F e {
         t.left -= before - a.Rest().Len()
@@ -182,7 +182,7 @@ fn (t mut TakeIter<I, T ? E>&) foldArray<U ? F>(a mut ArrayIter<T>&, init U, f f
 
 # at most n of what an array's iterator has left folded into one, as that many Nexts and folds would: the fold and
 # how many it folded, the iterator past them - or, where f fails, past the one it failed on
-fn foldUpTo<T, U ? F>(a mut ArrayIter<T>&, n I64, init U, f fn(acc U, x T) U ? F) U, I64 ? F {
+fn foldUpTo<T, U ? F>(a mut ArrayIter<T>&, n I64, init U, f fn&(acc U, x T) U ? F) U, I64 ? F {
     rest := a.Rest()
     k := n if n < rest.Len() else rest.Len()
     if k < 0: k = 0
@@ -198,7 +198,7 @@ fn foldUpTo<T, U ? F>(a mut ArrayIter<T>&, n I64, init U, f fn(acc U, x T) U ? F
 }
 
 # ... of what an Indexable's iterator has left: a counted loop over its At
-fn foldIndexed<T, C Indexable<T>, U ? F>(a mut IndexIter<T, C>&, n I64, init U, f fn(acc U, x T) U ? F) U, I64 ? F {
+fn foldIndexed<T, C Indexable<T>, U ? F>(a mut IndexIter<T, C>&, n I64, init U, f fn&(acc U, x T) U ? F) U, I64 ? F {
     k := a.c.Len() - a.i
     if n < k: k = n
     if k < 0: k = 0
@@ -241,7 +241,7 @@ fn (s mut SkipIter<I, T ? E>&) settle() {
 
 # every value left folded into one, as Fold - over an array's iterator its skip taken at once, then the rest folded by
 # the array's own iterator
-fn (s mut SkipIter<I, T ? E>&) Fold<U ? F>(init U, f fn(acc U, x T) U ? F) U ? {
+fn (s mut SkipIter<I, T ? E>&) Fold<U ? F>(init U, f fn&(acc U, x T) U ? F) U ? {
     match I {
         case ArrayIter<T> {
             s.settle()
@@ -341,7 +341,7 @@ fn (it mut I&) Max<I Iterator<T ? E>, T ? E>() T ? E, Exhausted {
 
 # the value whose key is least, key called once per value - the first of several equal ones; failing with Exhausted
 # when there is none: "people.Iter().MinBy(fn(p Person) I64 { return p.Age })"
-fn (it mut I&) MinBy<I Iterator<T ? E>, T, K ? E>(key fn(x T) K ? E) T ? E, Exhausted {
+fn (it mut I&) MinBy<I Iterator<T ? E>, T, K ? E>(key fn&(x T) K ? E) T ? E, Exhausted {
     best := try it.Next()
     bestKey := try key(best)
     for x in try it {
@@ -355,7 +355,7 @@ fn (it mut I&) MinBy<I Iterator<T ? E>, T, K ? E>(key fn(x T) K ? E) T ? E, Exha
 }
 
 # the value whose key is greatest, as MinBy
-fn (it mut I&) MaxBy<I Iterator<T ? E>, T, K ? E>(key fn(x T) K ? E) T ? E, Exhausted {
+fn (it mut I&) MaxBy<I Iterator<T ? E>, T, K ? E>(key fn&(x T) K ? E) T ? E, Exhausted {
     best := try it.Next()
     bestKey := try key(best)
     for x in try it {
@@ -372,9 +372,9 @@ fn (it mut I&) MaxBy<I Iterator<T ? E>, T, K ? E>(key fn(x T) K ? E) T ? E, Exha
 
 # the values up to the first keep does not hold for, which ends the walk there (and is not given): "for x in
 # it.TakeWhile(fn(x): return x < 100)". keep is not called again once it has said no
-type TakeWhileIter<I, T ? E> struct(of I, keep fn(x T) Bool ? E) {
+type TakeWhileIter<I, T ? E> struct(of I, keep fn&(x T) Bool ? E) {
     it I = of
-    pred fn(x T) Bool ? E = keep
+    pred fn&(x T) Bool ? E = keep
     done Bool = false
 }
 
@@ -388,15 +388,15 @@ fn (t mut TakeWhileIter<I, T ? E>&) Next() T ? E, Exhausted {
     return x
 }
 
-fn (it mut I&) TakeWhile<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) TakeWhileIter<I, T ? E> {
+fn (it mut I&) TakeWhile<I Iterator<T ? E>, T ? E>(keep fn&(x T) Bool ? E) TakeWhileIter<I, T ? E> {
     return TakeWhileIter<I, T ? E>(it, keep)
 }
 
 # the values from the first keep does not hold for on, that one included: the leading run keep holds for is skipped,
 # and keep is not called again after it
-type SkipWhileIter<I, T ? E> struct(of I, keep fn(x T) Bool ? E) {
+type SkipWhileIter<I, T ? E> struct(of I, keep fn&(x T) Bool ? E) {
     it I = of
-    pred fn(x T) Bool ? E = keep
+    pred fn&(x T) Bool ? E = keep
     skipping Bool = true
 }
 
@@ -411,7 +411,7 @@ fn (s mut SkipWhileIter<I, T ? E>&) Next() T ? E, Exhausted {
     return try s.it.Next()
 }
 
-fn (it mut I&) SkipWhile<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) SkipWhileIter<I, T ? E> {
+fn (it mut I&) SkipWhile<I Iterator<T ? E>, T ? E>(keep fn&(x T) Bool ? E) SkipWhileIter<I, T ? E> {
     return SkipWhileIter<I, T ? E>(it, keep)
 }
 
@@ -446,9 +446,9 @@ fn (it mut I&) StepBy<I Iterator<T ? E>, T ? E>(n StepSize) StepByIter<I, T ? E>
 
 # the values of the iterator f gives for each value, one after another: "for w in lines.FlatMap(fn(l String&)
 # ArrayIter<String&> { return l.Split(" ").Iter() })". Each inner walk is made when the one before it has run out
-type FlatMapIter<I, T, J, U ? E> struct(of I, f fn(x T) J ? E) {
+type FlatMapIter<I, T, J, U ? E> struct(of I, f fn&(x T) J ? E) {
     it I = of
-    make fn(x T) J ? E = f
+    make fn&(x T) J ? E = f
     cur Vec<J>          # the inner walk under way: none before the first value, and after each has run out (a Vec,
                         # since a walk may have no zero value, D13c)
 }
@@ -469,13 +469,13 @@ fn (m mut FlatMapIter<I, T, J, U ? E>&) Next() U ? E, Exhausted {
     }
 }
 
-fn (it mut I&) FlatMap<I Iterator<T ? E>, T, J Iterator<U ? E>, U ? E>(f fn(x T) J ? E) FlatMapIter<I, T, J, U ? E> {
+fn (it mut I&) FlatMap<I Iterator<T ? E>, T, J Iterator<U ? E>, U ? E>(f fn&(x T) J ? E) FlatMapIter<I, T, J, U ? E> {
     return FlatMapIter<I, T, J, U ? E>(it, f)
 }
 
 # the values split by keep: two new Vecs - in the caller's scope - of those keep holds for and of the rest, each in
 # the order they came: "small, big := it.Partition(fn(x): return x < 10)"
-fn (it mut I&) Partition<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) Vec<T>&, Vec<T>& ? E {
+fn (it mut I&) Partition<I Iterator<T ? E>, T ? E>(keep fn&(x T) Bool ? E) Vec<T>&, Vec<T>& ? E {
     yes mut Vec<T>& = Vec<T>()
     no mut Vec<T>& = Vec<T>()
     for x in try it {
@@ -509,10 +509,10 @@ fn (c C&) Reversed<C Indexable<T>, T>() ReversedIndexIter<T, C> { return Reverse
 
 # each running value of f, from init: the first f(init, x0), then f of that and x1, and so on - "it.Scan(0, fn(a, x):
 # return a + x)" gives the running sums; init itself is not given
-type ScanIter<I, T, U ? E> struct(of I, init U, f fn(acc U, x T) U ? E) {
+type ScanIter<I, T, U ? E> struct(of I, init U, f fn&(acc U, x T) U ? E) {
     it I = of
     acc U = init
-    step fn(acc U, x T) U ? E = f
+    step fn&(acc U, x T) U ? E = f
 }
 
 fn (s mut ScanIter<I, T, U ? E>&) Next() U ? E, Exhausted {
@@ -521,13 +521,13 @@ fn (s mut ScanIter<I, T, U ? E>&) Next() U ? E, Exhausted {
     return s.acc
 }
 
-fn (it mut I&) Scan<I Iterator<T ? E>, T, U ? E>(init U, f fn(acc U, x T) U ? E) ScanIter<I, T, U ? E> {
+fn (it mut I&) Scan<I Iterator<T ? E>, T, U ? E>(init U, f fn&(acc U, x T) U ? E) ScanIter<I, T, U ? E> {
     return ScanIter<I, T, U ? E>(it, init, f)
 }
 
 # the values grouped by their key: a new Map - in the caller's scope - from each key to a Vec of the values that have
 # it, in the order they came, the keys in the order first met; key called once per value
-fn (it mut I&) GroupBy<I Iterator<T ? E>, T, K Hashable<K> ? E>(key fn(x T) K ? E) mut Map<K, Vec<T>>& ? E {
+fn (it mut I&) GroupBy<I Iterator<T ? E>, T, K Hashable<K> ? E>(key fn&(x T) K ? E) mut Map<K, Vec<T>>& ? E {
     out mut Map<K, Vec<T>>& = Map<K, Vec<T>>()
     for x in try it {
         k := try key(x)
@@ -540,9 +540,9 @@ fn (it mut I&) GroupBy<I Iterator<T ? E>, T, K Hashable<K> ? E>(key fn(x T) K ? 
 # the values in runs: each run a new Vec of consecutive values same holds for, called on each value and the one before
 # it - "for run in it.ChunkBy(fn(a, b): return b == a + 1)" walks the runs of counting numbers. A run ends where same
 # says no; each is built where its Next's result lands, so a for-in's run is reclaimed with its turn
-type ChunkByIter<I, T ? E> struct(of I, same fn(a T, b T) Bool ? E) {
+type ChunkByIter<I, T ? E> struct(of I, same fn&(a T, b T) Bool ? E) {
     it I = of
-    pred fn(a T, b T) Bool ? E = same
+    pred fn&(a T, b T) Bool ? E = same
     next Vec<T>         # the value that began the next run, read past the end of the last one (a Vec, since T may
                         # have no zero value, D13c)
 }
@@ -565,7 +565,7 @@ fn (c mut ChunkByIter<I, T ? E>&) Next() Vec<T> ? E, Exhausted {
     }
 }
 
-fn (it mut I&) ChunkBy<I Iterator<T ? E>, T ? E>(same fn(a T, b T) Bool ? E) ChunkByIter<I, T ? E> {
+fn (it mut I&) ChunkBy<I Iterator<T ? E>, T ? E>(same fn&(a T, b T) Bool ? E) ChunkByIter<I, T ? E> {
     return ChunkByIter<I, T ? E>(it, same)
 }
 

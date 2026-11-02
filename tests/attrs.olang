@@ -59,8 +59,8 @@ fn typeKey<T>() String {
 }
 
 # the routes of attrmod's handlers, collected while compiling into a table read at run time
-fn routes() Map<String&, fn(q String&) String> {
-    m := Map<String&, fn(q String&) String>()
+fn routes() Map<String&, fn&(q String&) String> {
+    m := Map<String&, fn&(q String&) String>()
     for f in attrmod.Functions {
         if f.HasAttr<attrmod.Route>() { m.Put((f.Attr<attrmod.Route>()!).Path, fn(q String&) String { return f(q) }) }
     }
@@ -139,7 +139,7 @@ test "functions reflected: a router and a command table collected while compilin
     m := routes()
     assert m.Len() == 2 and (m.Get("/items")!)("x") == "items:x" and (m.Get("/users")!)("y") == "users:y"
     assert commands(5) == "add=15 " and CommandsBaked == commands(5)
-    assert shapes() == "Users(1):fn(String&) String q;Items(1):fn(String&) String q;Add(2):fn(I64, I64) I64 a b=;Plain(1):fn(I64) I64 x;OwnWords(0):fn() String;"
+    assert shapes() == "Users(1):fn&(String&) String q;Items(1):fn&(String&) String q;Add(2):fn&(I64, I64) I64 a b=;Plain(1):fn&(I64) I64 x;OwnWords(0):fn&() String;"
     assert ShapesBaked == shapes()
     assert methods(attrmod.Rec(1)) == "Sum=3 Twice=9 "
     assert apply(attrmod.Functions[3], 4) == 8

@@ -6,7 +6,7 @@ import "std/io"
 
 type M struct(n I64, data Array<I64>&) {
     n
-    F fn() I64 = fn() I64 { return data[1] }
+    F fn&() I64 = fn() I64 { return data[1] }
 }
 
 fn main() {

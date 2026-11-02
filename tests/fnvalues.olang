@@ -8,12 +8,12 @@ fn longer(a String&, b String&) String& { return a if a.Len() >= b.Len() else b 
 fn grab(v mut Vec<String&>&) mut Vec<String&>& { return v }
 fn built(n I64) Array<I64> { return Array<I64>(n, 7) }
 
-fn apply(f fn(a Array<I64>&) Array<I64>&, xs Array<I64>&) I64 {
+fn apply(f fn&(a Array<I64>&) Array<I64>&, xs Array<I64>&) I64 {
     r := f(xs)
     return r[0] + r.Len()
 }
 
-fn pickWith(f fn(a String&, b String&) String&, a String&, b String&) String { return $f(a, b) }
+fn pickWith(f fn&(a String&, b String&) String&, a String&, b String&) String { return $f(a, b) }
 
 # baked while compiling: the evaluator calls through the same values
 Baked I64 = apply(first, I64[5, 6, 7]) + apply(whole, I64[1, 2])

@@ -16,7 +16,7 @@ fn g(i I64) I64 ? E {
     if i >= 3 { error E.Stop }
     return i
 }
-fn pick(i I64) (fn(x I64) I64) ? E {
+fn pick(i I64) (fn&(x I64) I64) ? E {
     if i >= 3 { error E.Stop }
     return fn(x I64) I64 { return x + i }
 }

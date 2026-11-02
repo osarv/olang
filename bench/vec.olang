@@ -31,7 +31,7 @@ fn values(n I64) Array<I64> {
 
 # what "opaque" calls: through a mutable global, so no optimizer sees which function it is
 fn twice(x I64) I64 { return x * 2 + 1 }
-Opaque mut fn(x I64) I64 = twice
+Opaque mut fn&(x I64) I64 = twice
 
 type SimV struct(n I64) {
     pos Vec<I64> = Vec<I64>()

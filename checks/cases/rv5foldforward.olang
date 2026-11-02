@@ -13,12 +13,12 @@ type R struct(id I64) {
 type Holder struct() {
     res mut R?& = null
 }
-fn pass(f fn(i I64)) fn(i I64) { return f }
-fn call(f fn(i I64), i I64) { f(i) }
+fn pass(f fn&(i I64)) fn&(i I64) { return f }
+fn call(f fn&(i I64), i I64) { f(i) }
 fn run() {
     n mut Holder& = Holder()
     g := fn(i I64) { n.res = R(i) }
-    k fn(i I64) = g
+    k fn&(i I64) = g
     join {
         spawn k = pass(g)
     }

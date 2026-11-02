@@ -291,7 +291,7 @@ Prelude := (
     "fn addVia(b Box&, v I64) { b.head.next = Node(v) }\n"
     "fn addViaMut(b mut Box&, v I64) { b.head.next = Node(v) }\n"
     "fn readBox(b Box&) I64 { return chain(b.head) }\n"
-    "fn keepBox(b Box&) fn() I64 { return fn() I64 { return chain(b.head) } }\n"
+    "fn keepBox(b Box&) fn&() I64 { return fn() I64 { return chain(b.head) } }\n"
     "fn useBox(b Box&) I64 {\n    f := fn() I64 { return chain(b.head) }\n    return f() + f()\n}\n"
     "fn putNode(m mut Map<I64, mut Node&>&, k I64, v I64) { m.Put(k, Node(v)) }\n"
     "fn setNode(a mut Array<mut Node&>&, k I64, v I64) { a[k] = Node(v) }\n"
@@ -325,8 +325,8 @@ Prelude := (
     "    if Run > 0 { error SgErr.E }\n"
     "    return n\n"
     "}\n"
-    "fn applyN(n mut Node&, f fn(x mut Node&)) { f(n) }\n"
-    "fn applyR(n Node&, f fn(x Node&) I64) I64 { return f(n) }\n"
+    "fn applyN(n mut Node&, f fn&(x mut Node&)) { f(n) }\n"
+    "fn applyR(n Node&, f fn&(x Node&) I64) I64 { return f(n) }\n"
     "fn idT<T>(x T) T { return x }\n"
     "fn cycA(n Node&, c I64) I64 {\n"
     "    if c > 0 { return cycB(n, c - 1) }\n"
@@ -616,7 +616,7 @@ fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
         if m == 4 {    # the callee keeps the copy in a lambda it returns, read after a churn (O17: refused)
             ks := g.name("ks")
             kk := g.name("k")
-            return ($ind "{\n" $ind "    " $ks " := list.List<fn() I64>()\n" $ind "    for " $i " in range 3 { " $ks ".Push(keepBox(idBox("
+            return ($ind "{\n" $ind "    " $ks " := list.List<fn&() I64>()\n" $ind "    for " $i " in range 3 { " $ks ".Push(keepBox(idBox("
                     $b "))) }\n" $ind "    churn()\n" $ind "    for " $kk " in " $ks " { if " $kk "() == -7 { abort } }\n" $ind "}\n")
         }
         if m == 5 { return $ind "for " $i " in range 3 { useBox(idBox(" $b ")) }\n" }    # a lambda only called in the callee
@@ -936,8 +936,8 @@ fn (g mut SG&) ctorScopeOp(a String&, ind String&, k I64) String& {
         field = "    y String& = match n >= 0 {\n        case true: p\n        case false: $n \"-new-text-in-the-instance\"\n    }\n"
     }
     if k >= 7 {
-        field = "    y String& = $n \"-new-text-in-the-instance\"\n    f fn() I64 = fn() I64 { return p.Len() + I64(p[0]) + y.Len() }\n"
-        if k == 8 { field = "    y String& = $n \"-new-text-in-the-instance\"\n    f fn() I64 = fn() I64 { return y.Len() + I64(y[0]) }\n" }
+        field = "    y String& = $n \"-new-text-in-the-instance\"\n    f fn&() I64 = fn() I64 { return p.Len() + I64(p[0]) + y.Len() }\n"
+        if k == 8 { field = "    y String& = $n \"-new-text-in-the-instance\"\n    f fn&() I64 = fn() I64 { return y.Len() + I64(y[0]) }\n" }
     }
     g.addHelper(("fn " $mkt "(n I64) String& { return $n \"-made-in-p\" }\ntype " $ty " struct(p String&, n I64) {\n" $field
                 "}\nfn " $mkh "(p String&, n I64) " $ty " { return " $ty "(p, n) }\n"))
@@ -1298,8 +1298,8 @@ fn (g mut SG&) secondScenario(k I64) String& {
         head = "fn " $f "(i I64) Lab {\n" $sbody "    return Lab(s)\n}\n"
         probe = "    s := \"ghi\" $i\n    y := Lab(s)\n    y[0] = 'Q'\n    x := " $f "(i)\n    x[0] = 'R'\n    return $s \" \" $y \" \" $x\n"
     } else if kind == 4 {
-        head = "fn " $f "(fs mut list.List<fn() I64>&, i I64) String {\n" $sbody "    fs.Push(fn() I64 { return I64(U8(s[0])) })\n    return s\n}\n"
-        probe = "    fs := list.List<fn() I64>()\n    x := " $f "(fs, i)\n    x[0] = 'Q'\n    return $fs[0]() \" \" $x\n"
+        head = "fn " $f "(fs mut list.List<fn&() I64>&, i I64) String {\n" $sbody "    fs.Push(fn() I64 { return I64(U8(s[0])) })\n    return s\n}\n"
+        probe = "    fs := list.List<fn&() I64>()\n    x := " $f "(fs, i)\n    x[0] = 'Q'\n    return $fs[0]() \" \" $x\n"
     } else {
         # a destructor of the helper's block writes what it holds as the scopes close - after the result was computed;
         # no global (a destructor is never run while compiling): the caller checks its own value instead

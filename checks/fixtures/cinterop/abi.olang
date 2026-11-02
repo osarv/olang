@@ -64,9 +64,9 @@ type Ctx struct() {
     sum I64 = 0
     calls I32 = 0
 }
-extern fn each(n I32, cb fn(i I32, ctx mut Ctx&), ctx mut Ctx&)
-extern fn each_on_thread(n I32, cb fn(i I32, ctx mut Ctx&), ctx mut Ctx&)
-extern fn apply(f fn(x F64) F64, x F64) F64
+extern fn each(n I32, cb fn&(i I32, ctx mut Ctx&), ctx mut Ctx&)
+extern fn each_on_thread(n I32, cb fn&(i I32, ctx mut Ctx&), ctx mut Ctx&)
+extern fn apply(f fn&(x F64) F64, x F64) F64
 
 export fn add(i I32, ctx mut Ctx&) {
     ctx.sum += I64(i)

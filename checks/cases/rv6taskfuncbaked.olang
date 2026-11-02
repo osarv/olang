@@ -2,7 +2,7 @@
 # flags: -debug -sanitize
 # P2 (decision 48): a task calling a closure held in a struct it is handed, building into the scope the closure captured -
 # computed while compiling (K1 runs a join's tasks in order) for a global, and at run time, alike
-type H struct(f fn(i I64)) { f }
+type H struct(f fn&(i I64)) { f }
 fn work(h H&, n I64) {
     for i in range n { h.f(i) }
 }

@@ -12,7 +12,7 @@ type R struct(n I64) {
 type Holder struct() {
     res mut R?& = null
 }
-fn pass(f fn()) fn() { return f }
+fn pass(f fn&()) fn&() { return f }
 fn run() {
     h mut Holder& = Holder()
     c mut Vec<I64>& = Vec<I64>()
@@ -20,7 +20,7 @@ fn run() {
         c.Push(1)
         h.res = R(c.Len())
     }
-    k fn() = g
+    k fn&() = g
     join {
         spawn k = pass(g)
     }

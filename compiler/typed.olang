@@ -400,7 +400,7 @@ fn AnyItemNew(t types.Table&, x Expr?&) Bool {
 # own bits (Views: a function that hands back views of what it is given, as check recorded them, load.ViewResults)
 # - and the locals it hands back holding views of its parameters' arguments in their parts (Held: the
 # parameters a local views, -1 for none - Settle), a constructor's fields its instance is made of
-type ViewWalk struct(T types.Table&, B Body&, Elig I64, Views fn(id BodyId) I64, Held fn(id LocalId) I64) {
+type ViewWalk struct(T types.Table&, B Body&, Elig I64, Views fn&(id BodyId) I64, Held fn&(id LocalId) I64) {
     T, B, Elig, Views, Held
 }
 

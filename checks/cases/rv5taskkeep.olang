@@ -13,14 +13,14 @@ fn churn() I64 {
     }
     return t
 }
-fn id(f fn() I64) fn() I64 { return f }
+fn id(f fn&() I64) fn&() I64 { return f }
 fn main() ? {
     n mut Node& = Node(1)
     g := fn() I64 {
         n.next = Node(n.v + 41)
         return n.next!.v
     }
-    r fn() I64 = g
+    r fn&() I64 = g
     join {
         spawn r = id(g)
     }

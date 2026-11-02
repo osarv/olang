@@ -12,7 +12,7 @@ type View struct(ns Array<mut Node&>&) {
 type Bag struct(ns Array<mut Node&>&) {
     ns
 }
-fn visit(w View&, g fn(x mut Node&)) {
+fn visit(w View&, g fn&(x mut Node&)) {
     for x in w.at { g(x) }
 }
 fn (b Bag&) Str() String {

@@ -7,7 +7,7 @@ type Node struct(v I32) {
 fn hang(a mut Node&, b Node&) {
     a.next = b
 }
-fn apply(f fn(a mut Node&, b Node&), a mut Node&, b Node&) {
+fn apply(f fn&(a mut Node&, b Node&), a mut Node&, b Node&) {
     f(a, b)
 }
 type E error { X }

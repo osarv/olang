@@ -5832,6 +5832,10 @@ fn (fe mut fnEm&) exportNamed(x mir.Operand) String {
                                 case _ { }
                             }
                         }
+                        # T21: converted to a C function pointer that may be null ("fn?&") - the value it was made of
+                        case mir.Rvalue.Prim(op, _, args) {
+                            if op == typed.PrimOp.Convert and args.N == I32(1) { return fe.exportNamed(fe.F.Ops[I64(args.At)]) }
+                        }
                         case _ { }
                     }
                 }

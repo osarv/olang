@@ -9,7 +9,7 @@ fn (c mut Counter&) Call() I64 {
     c.n++
     return c.n
 }
-fn mkF(c Counter) fn() I64 {
+fn mkF(c Counter) fn&() I64 {
     return c
 }
 fn main() ? {

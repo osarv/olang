@@ -432,10 +432,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   is null`, after an `if p is null { leave }`, after an assert, in the right of `and`/`or`, in a loop on `p is not null`,
   after a `for p is null` loop with no break, after assigning a never-null value - or `x!`, which ends the program with
   "null reached". Nothing is read through a `T?&` before that; `x is null` on a never-null reference is an error. A
-  reference never null has no zero value (D13c). **An array is never null (mine)**: its zero value is the empty array,
-  which stands for its absence, so `Array<T>?&`/`String?&` are errors, `null` for an array names its empty one and `x
-  is null` on one names `x.Len() == 0` - where absent and empty must differ, a flag says so (the port's AST:
-  `Catch.Braced`, `Func.Bodied`). A null read traps (T2b); nothing is uninitialized: a declaration with no value takes
+  reference never null has no zero value (D13c). **An array may be null where it is written `?&` (QCI 4, the user's
+  "an array reference that isn't pointing at a valid array should be null", 2026-11-01, reversing my "an array is never
+  null"; built 2026-11-02)**: `Array<T>?&`, `String?&` may be absent, null distinct from empty, read only once narrowed
+  (S8e) or `x!`; an array written `&` and a value array are never null, `null` given one an error naming its empty array
+  and `?&`, `x is null` on one naming `x.Len() == 0`. Decided (the coordinator, 2026-11-02, and mine): its null is the
+  length -1 with no storage, `{ -1, null }` (`is null` tests it), all-zero bits staying the empty array - so the zero
+  value of `Array<T>?&` is the empty array too (no type's zero value changed: `null` is written where one is absent); a
+  null renders `null` (top-level text included), equals only a null. A null read traps (T2b); nothing is uninitialized: a declaration with no value takes
   its type's zero value, made by the constructor from its parameters' defaults (D13c, the user's design); a type whose
   constructor has effects has none. `tools/null_migrate.olang` migrates code from the compiler's own diagnostics.
 - **Arrays: one type, `Array<T>`, a length never written (T7-T7d, QP1-QP4, the user's design 2026-10-01 and 2026-10-17;
@@ -617,7 +621,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   token first)/ExecInPlace, http.Get/Post's headers, csv.Record; `tools/variadic_migrate.olang` (in `olang fix`).
 - **Lambdas (D16, the user's design).** `fn(x) { return ... }`, `return` always written; captures copied (plain values
   read-only, references still naming their instance, value arrays borrowed); types from the expected function type
-  (D16a) or the body (D16b). A function value is `{code, environment}`, nullable, identity by both words (T21).
+  (D16a) or the body (D16b). A function value is `{code, environment}`, identity by both words, never null unless its
+  type says `fn?&` (T21, below).
   `(args)` after any postfix expression calls (E13b). `spawn fn() { }` runs a lambda as a task (D16e).
 - **No shadowing (D3a, the user's call)**, types included: no local or parameter named like a global, a function, a
   build constant or a type; a type and a function or global of one module may not share a name (D2).
@@ -682,6 +687,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   in the target's scope; reference into value copies out; a reference to fixed storage is lent where a run-time one is
   wanted with no copy. All four
   combinations read the same for structs and arrays.
+- **Function types are reference-only (T21, QCI 3, the user's "g Handler should not be possible because a function can
+  never be a value" and "only function declarations don't have &", 2026-11-01; built 2026-11-02).** A place holding a
+  function value writes its marker on the `fn`: `fn&(e Event)` never null, `fn?&(e Event)` may be; a bare `fn(...)` on a
+  place is an error naming the `&` (said by the parser, so every file and every unreached generic is held to it);
+  declarations, lambdas and a type declaration's base carry none. `fn&` has no zero value (D13, D13d: assigned before any
+  read, or a default; `Array<fn&(..)>(n)` needs a fill); `fn?&` has every `?&` rule (null its zero, narrowing of locals
+  and parameters, `f!`, `f!(x)`, a `fn&` flowing in, nothing called through one before) - T21's "nullable by default"
+  gone. Decided (the coordinator): a flag on the function type entry (`types.Func`'s F, part of its identity and its
+  Canon `fn?(`), two words, a null code its null. Mine: the marker says nothing of permission (nothing writes through a
+  function value); `$f` renders `fn&(...)`; a C function pointer a header gives is `fn?&` (bindgen); explain prints a
+  declaration's signature `fn(...)` (no marker); MIR's verifier takes either nullability as one representation.
+  `tools/fnref_migrate.olang` (text, the compiler's parser saying where each bare type begins; in `olang fix` after the
+  other text tools, `null_migrate` then adding `?` and `!` from the diagnostics) migrated the repository - 376 types in
+  150 files, then 7 made `fn?&`, 5 `!` written, 4 by hand; the seed written twice (stage 1 reading both spellings).
 - **Function types (T22, T22a).** Errors compared in order, `mut` and permissions on T22's terms (read-only for
   writable parameters, writable for read-only results is safe); a function with scope obligations or a `Call` that
   keeps its argument cannot become a value; a type's `Call` fits a function type (E31), its errors the type's in order

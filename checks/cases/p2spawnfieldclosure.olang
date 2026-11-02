@@ -3,7 +3,7 @@
 # closure lives no shorter than the storage it was read from, here a loop body's, which closes while the task runs
 import "std/io"
 extern fn usleep(us U32) I32
-type Hold struct(f fn()) { f }
+type Hold struct(f fn&()) { f }
 fn main() ? {
     c mut Array<I64>& = Array<I64>(4, 0)
     join {

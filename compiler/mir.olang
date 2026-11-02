@@ -1071,6 +1071,8 @@ fn (v mut verifier&) fits(from types.TypeId, to types.TypeId) Bool {
     if from == types.UnknownT or to == types.UnknownT { return false }
     if v.sameRepr(from, to) { return true }
     if from == types.NullT { return t.IsRef(to) or t.KindOf(to) == types.Kind.Func }
+    # T21: a function value never null and one that may be - one representation, a narrowed read the other way
+    if t.KindOf(from) == types.Kind.Func and t.KindOf(to) == types.Kind.Func { return t.Same(t.OrNull(from), t.OrNull(to)) }
     if t.IsRef(from) and t.IsRef(to) {
         # T2c: never null into may be null too - one representation, and a narrowed read the other way; D8g: a variadic
         # parameter's array is the read-only one its argument is

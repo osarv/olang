@@ -17,7 +17,7 @@ fn (c mut Counter&) Call() I64 {
     c.n++
     return c.n
 }
-fn counter() fn() I64 {
+fn counter() fn&() I64 {
     c mut Counter& = Counter(41)
     return c
 }

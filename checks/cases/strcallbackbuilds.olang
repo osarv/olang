@@ -5,7 +5,7 @@ import "std/io"
 type Bag struct(words Array<String&>&) {
     words
 }
-fn via(a Array<String&>&, f fn(x String&) Bool) I64 { return a.Count(f) }
+fn via(a Array<String&>&, f fn&(x String&) Bool) I64 { return a.Count(f) }
 fn (b Bag&) Str() String {
     n := b.words.Count(fn(s String&) Bool {
         t String& = $s "x"

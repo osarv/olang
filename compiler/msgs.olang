@@ -1923,7 +1923,7 @@ fn ReadOnlyCopyRef() Msg { return Msg(Diag.ReadOnlyCopyRef, "T25c", "a reference
 fn ReadOnlyFuncValue(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.ReadOnlyFuncValue, "T25c", $text1 " writes through or keeps its by-value parameter '" $text2 "', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made " $text3) }
 
 # NOTE_GROUP_FUNCTION_TYPE
-fn NoteGroupFunctionType() Msg { return Msg(Diag.NoteGroupFunctionType, "", "a function type of several results or error items is parenthesized whole in a list: '(fn(x I64) I64, I64)'") }
+fn NoteGroupFunctionType() Msg { return Msg(Diag.NoteGroupFunctionType, "", "a function type of several results or error items is parenthesized whole in a list: '(fn&(x I64) I64, I64)'") }
 
 # NOTE_READ_ONLY_COPY
 fn NoteReadOnlyCopy(text String&) Msg { return Msg(Diag.NoteReadOnlyCopy, "", "'" $text "' copies a place reached read-only, so it is read-only") }

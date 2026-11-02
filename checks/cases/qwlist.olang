@@ -3,7 +3,7 @@
 # type's parameters bare
 type Box<T> struct(v T) { v }
 fn (b Box<T>&) Get() T { return b.v }
-fn (b Box<T>&) Map<U>(f fn(x T) U) Box<U> { return Box(f(b.v)) }
+fn (b Box<T>&) Map<U>(f fn&(x T) U) Box<U> { return Box(f(b.v)) }
 fn pick<T>(a T, b T) T { return a }
 fn count(a Array<I32>) I64 { return a.Len() }
 fn biggest<T Hashable<T>>(a T) I64 { return a.Hash() }

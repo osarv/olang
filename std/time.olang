@@ -141,7 +141,7 @@ fn Sleep(d Duration) {
 # waiting too. Virtual inside Virtual runs on the clock already running. Anywhere but a test build a call of it is a
 # compile-time error (the assert below, decided while compiling for the call's instance), and nothing of the virtual
 # clock is compiled into Now, Wall or Sleep. f's errors are Virtual's
-fn Virtual<? E>(f fn() ? E) ? E {
+fn Virtual<? E>(f fn&() ? E) ? E {
     assert TestBuild, "time.Virtual runs only in a test build ('olang test') - a program's clock is the real one"
     if virtualDepth.AtomicAdd(1) == 0: virtualNs.AtomicStore(VirtualStart)
     defer virtualDepth.AtomicAdd(-1)

@@ -8,7 +8,7 @@ type Box enum {
     Has(n Node&)
     No
 }
-GF mut fn() I32 = null
+GF mut fn?&() I32 = null
 fn stash(b Box) {
     match b {
         case Box.Has(n) { GF = fn() { return n.v } }

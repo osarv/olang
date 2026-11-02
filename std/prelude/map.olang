@@ -115,7 +115,7 @@ fn (m mut Map<K, V>&) Put(key K, value V) {
 
 # the value for key made f(its value) - or, where key has none, f(init) put for it: counting is
 # "m.Update(word, 0, fn(n) { return n + 1 })". One hash and one walk of key's chain, where Get then Put take two
-fn (m mut Map<K, V>&) Update(key K, init V, f fn(v V) V) {
+fn (m mut Map<K, V>&) Update(key K, init V, f fn&(v V) V) {
     if m.buckets.Len() == 0 { m.buckets = Array<I64>(8, -1) }
     b := m.bucketOf(key)
     for i := m.buckets[b], i >= 0, i = m.next[i] {

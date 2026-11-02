@@ -7,7 +7,7 @@ type Counter struct() {
 }
 type Button struct(label String&) {
     label
-    onClick fn() = null
+    onClick fn?&() = null
 }
 fn wire(b mut Button&, c mut Counter&) {
     b.onClick = fn() { c.n++ }
@@ -18,5 +18,5 @@ fn main() ? {
         c mut Counter& = Counter()
         wire(ok, c)
     }
-    ok.onClick()
+    ok.onClick!()
 }

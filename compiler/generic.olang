@@ -5047,7 +5047,7 @@ test "every reference parameter has a scope variable of its own, a reference res
     defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("type N struct(v I64) {\n    v\n}\ntype Box<T> struct(v T) {\n    v\n}\n"
                        "fn link(a mut N&, b N&) { }\nfn first(l N&) N& { return l }\nfn make() N& { return N(1) }\n"
-                       "fn (l mut N&) Put(x N&) { }\nfn apply(f fn(a mut N&, b N&), x mut N&, y N&) { }\n"
+                       "fn (l mut N&) Put(x N&) { }\nfn apply(f fn&(a mut N&, b N&), x mut N&, y N&) { }\n"
                        "fn id<T>(x T) T { return x }\nfn count(a I64, l N&) I64 { return a }\nfn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()

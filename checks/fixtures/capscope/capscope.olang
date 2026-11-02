@@ -28,10 +28,10 @@ type Adder struct(n mut Node&) {
 fn (a Adder) Call(i I64) { a.n.next = a.n.next if i < 0 else Node(i) }
 
 N I64 = 20000
-fn work(f fn(i I64)) {
+fn work(f fn&(i I64)) {
     for i in range N { f(i) }
 }
-fn both(f fn(i I64), g fn(i I64)) {
+fn both(f fn&(i I64), g fn&(i I64)) {
     c mut Node& = Node(0)
     join {
         spawn work(f)

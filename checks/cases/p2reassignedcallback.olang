@@ -6,7 +6,7 @@ type Node struct(v I64) {
     v
     next mut Node?& = null
 }
-fn hook(g fn(x mut Node&), n mut Node&) {
+fn hook(g fn&(x mut Node&), n mut Node&) {
     g = fn(x mut Node&) { x.next = Node(x.v + 1) }
     for _ in range 300 { g(n) }
 }

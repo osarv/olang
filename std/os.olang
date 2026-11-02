@@ -27,7 +27,7 @@ extern {
     fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
     fn __olang_exec(path Array<U8>, args Array<U8>, count I64) I32
     fn __olang_mkdtemp(template Array<U8>) I32
-    fn __olang_run_on_stack(bytes I64, f fn())
+    fn __olang_run_on_stack(bytes I64, f fn&())
     fn __olang_on_crash(message Array<U8>, len I64)
 }
 
@@ -65,7 +65,7 @@ fn check(result I64) ? Error {
 # text a runtime function copies out (X6): fill(buf) copies what fits of it into buf and gives its whole length, or
 # a negative one when it fails. Measured, then filled at that length - again if it grew in between, as a directory
 # being written to can.
-fn copyOut(fill fn(buf mut Array<U8>&) I64) mut String& ? Error {
+fn copyOut(fill fn&(buf mut Array<U8>&) I64) mut String& ? Error {
     n := fill(Array<U8>(0))
     for {
         try check(n)
@@ -115,7 +115,7 @@ fn Exit(code I32) noreturn {
 # the least the system allows a thread - which counts the thread-local storage it also holds - is made that size; one
 # the system will not make stops the program as a failed check does. While compiling, and under -i, f is simply called,
 # the evaluator's own limits on depth standing for the stack's
-fn RunOnStack(bytes I64, f fn()) {
+fn RunOnStack(bytes I64, f fn&()) {
     __olang_run_on_stack(bytes, f)
 }
 

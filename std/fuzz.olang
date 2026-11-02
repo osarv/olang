@@ -38,7 +38,7 @@ fn Input() Array<U8> ? Error {
 # f run on what there is to run it on: under -fuzz, the one input the fuzzer gives this run; else the empty input, then
 # each input saved for this test (Saved), in name order, each named on the standard error before it runs - so a failing
 # one is the last named. Fails with what f fails with, as the test then does
-fn Check<? E>(f fn(data Array<U8>&) ? E) ? E {
+fn Check<? E>(f fn&(data Array<U8>&) ? E) ? E {
     data := try Input() catch Error {
         try f(Array<U8>(0))
         for path in Saved() {

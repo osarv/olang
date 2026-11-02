@@ -2,5 +2,5 @@
 # also: note: a function type of several results or error items is parenthesized whole in a list
 # L18c: unparenthesized in a list, a function type takes one result, and the comma after it is the list's
 fn main() {
-    m Map<String&, fn(x I64) I64, I64>
+    m Map<String&, fn&(x I64) I64, I64>
 }

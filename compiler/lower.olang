@@ -4431,7 +4431,7 @@ fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span, top B
 }
 
 # for each case of an enum with a payload: the code each gives, run where the tag tag (an I64) is that case's
-fn (ln mut lowering&) payloads(cases Array<types.TypeId>&, tag mir.Operand, sp source.Span, each fn(tag I64, rec types.TypeId)) {
+fn (ln mut lowering&) payloads(cases Array<types.TypeId>&, tag mir.Operand, sp source.Span, each fn&(tag I64, rec types.TypeId)) {
     with Vec<I64>
     for i in range cases.Len() {
         if cases[i] != types.TypeId(0) and ln.T.Items(ln.T.Parts(cases[i])).Len() > 0 { with.Push(i) }
@@ -4454,7 +4454,7 @@ fn (ln mut lowering&) payloads(cases Array<types.TypeId>&, tag mir.Operand, sp s
 }
 
 # a counted loop, i from 0 below n: the code each gives run for each i
-fn (ln mut lowering&) eachIndex(n mir.Operand, sp source.Span, each fn(i mir.LocalId)) {
+fn (ln mut lowering&) eachIndex(n mir.Operand, sp source.Span, each fn&(i mir.LocalId)) {
     i := ln.temp(mir.I64T, sp)
     ln.emit(mir.Stmt.Assign(sp, mir.L(i), mir.Rvalue.Use(ln.constI64(0))))
     head, body, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
@@ -4867,7 +4867,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.word(b, "null", sp)
         ln.goto(after)
         ln.start(some)
-        ln.word(b, ln.spell(ty, true, not top), sp)
+        ln.word(b, ln.spell(ln.T.NonNull(ty), true, not top), sp)   # the function a value holds is never null
         ln.goto(after)
         ln.start(after)
         return
@@ -5082,7 +5082,7 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
         # L18c: an item of a list holding a comma of its own, or a result before its signature's "?", whole
         wrap := fnWord and (group or (item and several))
         if wrap { out.PushChar('(') }
-        if fnWord { out.Push("fn") }
+        if fnWord { out.Push("fn?&" if t.FuncNullable(ty) else "fn&") }   # T21: held only by reference
         out.PushChar('(')
         ps := t.Items(t.Params(ty))
         ns := t.NamesOf(ty)

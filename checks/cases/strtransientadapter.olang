@@ -6,7 +6,7 @@ type Ctr struct(v I64) {
     v
 }
 fn (c Ctr&) Call() I64 { return c.v }
-fn apply(f fn() I64) I64 { return f() }
+fn apply(f fn&() I64) I64 { return f() }
 type Bag struct(c Ctr&) {
     c
 }

@@ -11,7 +11,7 @@ type Node struct(v I64) {
 type View struct(ns Array<mut Node&>&) {
     at Array<mut Node&>& = ns
 }
-fn run(f fn()) { f() }
+fn run(f fn&()) { f() }
 fn visit(w View&) {
     x := w.at[0]
     run(fn() { x.next = Node(x.v + 100) })

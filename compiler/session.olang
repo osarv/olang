@@ -1305,7 +1305,7 @@ fn WriteFramed(fd I32, body String&) {
 
 # what work writes, run in a child process: the text, and the child's status (ExitStatus's); where no child can be
 # made, work runs here
-fn ChildOutput(work fn() String) String, I32 {
+fn ChildOutput(work fn&() String) String, I32 {
     rd, wr := Pipe()
     if rd < 0 { return work(), 0 }
     pid := unistd.fork()
@@ -1330,7 +1330,7 @@ fn ChildOutput(work fn() String) String, I32 {
 
 # work run in a child process - a copy of this one - and waited for: the status it ends with, 128 and its signal where
 # one ends it. Where no process can be made, work runs here
-fn InChild(work fn() I32) I32 {
+fn InChild(work fn&() I32) I32 {
     pid := unistd.fork()
     if pid < 0 { return work() }
     if pid == 0 { unistd._exit(work()) }

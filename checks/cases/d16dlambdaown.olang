@@ -4,7 +4,7 @@
 type Counter struct() {
     n I64 = 0
 }
-fn mk(f fn(x I64) I64) fn(x I64) I64 {
+fn mk(f fn&(x I64) I64) fn&(x I64) I64 {
     c mut Counter& = Counter()
     return fn(x I64) I64 {
         c.n++

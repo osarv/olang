@@ -75,9 +75,9 @@ BakedValues := I64[kindValue(1), kindValue(2), kindValue(3), kindValue(9)]
 BakedTwice := I64[try twice(0) catch ParseErr e default (10 if e == ParseErr.Empty else 20), try twice(1) catch default -9, try twice(3) catch default -9]
 
 test "an error type and a set are declared as types, and a set stands for its members" {
-    f fn(n I64) I64 ? os.Error, ParseErr, LoadErr = load
+    f fn&(n I64) I64 ? os.Error, ParseErr, LoadErr = load
     assert (try f(4) catch default 0) == 40
-    g fn(n I64) I64 ? LoadErr = loadAgain
+    g fn&(n I64) I64 ? LoadErr = loadAgain
     assert (try g(1 + Live) catch ParseErr.Bad default -1 catch default 0) == -1
     assert (try fetch(9 + Live) catch AnyErr default 1) == 1
     assert (try fetch(Live) catch LoadErr default 2 catch NetErr default 3) == 2

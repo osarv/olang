@@ -16,10 +16,10 @@ type Box struct() {
     tag I64 = 0
 }
 fn idBox(seed mut Box&) Box { return seed }
-fn leak(b Box&) fn() I64 { return fn() I64 { return b.head.v } }
+fn leak(b Box&) fn&() I64 { return fn() I64 { return b.head.v } }
 fn main() ? {
     seed := Box()
-    fs := Vec<fn() I64>()
+    fs := Vec<fn&() I64>()
     for _ in range 3 {
         fs.Push(leak(idBox(seed)))
         churn()

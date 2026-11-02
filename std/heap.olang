@@ -11,7 +11,7 @@ type Error error {
     Empty
 }
 
-type Heap<T> struct(less fn(a T, b T) Bool) {
+type Heap<T> struct(less fn&(a T, b T) Bool) {
     less
     items Vec<T> = Vec<T>()
 }

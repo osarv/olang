@@ -5,7 +5,7 @@ type Item struct(key I32, tag U8) {
     tag
 }
 
-extern fn qsort(base mut Array<Item>&, n I64, size I64, cmp fn(a Item&, b Item&) I32)
+extern fn qsort(base mut Array<Item>&, n I64, size I64, cmp fn&(a Item&, b Item&) I32)
 
 export fn byKey(a Item&, b Item&) I32 { return a.key - b.key }
 

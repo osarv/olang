@@ -13,7 +13,7 @@ extern {
     fn bind_open(name Array<U8>, out mut Array<bind_counter?&>&) I32
     fn bind_count(c bind_counter?&, by U8)
     fn bind_total(c bind_counter?&) U64
-    fn bind_each(c bind_counter?&, visit fn(a0 CVoid?&, a1 I32) I32, ctx mut CVoid?&) I32
+    fn bind_each(c bind_counter?&, visit fn?&(a0 CVoid?&, a1 I32) I32, ctx mut CVoid?&) I32
     fn bind_close(c bind_counter?&)
     fn bind_even(m I32, n I64) Bool
     fn bind_printf(format Array<U8>, ...) I32

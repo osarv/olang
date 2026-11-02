@@ -2,7 +2,7 @@
 # QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
 # program runs - read after what it was built in closes, as the description below says it would be
 # O14a: a function value returned from a parameter must outlive where the result lands
-fn id(f fn() I32) fn() I32 { return f }
+fn id(f fn&() I32) fn&() I32 { return f }
 fn main() ? {
     s String& = "x"
     keep := fn() I32 { return 0 }

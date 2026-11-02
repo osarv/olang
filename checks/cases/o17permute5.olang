@@ -17,7 +17,7 @@ type H struct() {
 }
 fn mkText(k I64) String& { return "t" $k }
 fn setName(r mut Rec&, s String&) { r.name = s }
-fn each(a mut Array<Rec>&, g fn(x mut Rec&)) {
+fn each(a mut Array<Rec>&, g fn&(x mut Rec&)) {
     for i in range a.Len() { g(a[i]) }
 }
 fn run(h mut H&, s String&) {
