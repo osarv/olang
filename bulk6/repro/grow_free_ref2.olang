@@ -1,0 +1,20 @@
+# round 8: a Vec held by value as a Map's value grows; a Ref into its old buffer kept across the growth
+import "std/io"
+
+type blk struct(n I64, s String) { n, s }
+
+fn work(m mut Map<I64, Vec<blk>>&, k I64) I64 {
+    m.Put(k % 8, Vec<blk>())
+    v := try m.RefMut(k % 8) catch { return 0 }
+    v.Push(blk(k, "first"))
+    r := v.Ref(0)
+    for i in range 100 { v.Push(blk(i, "x")) }
+    return r.n
+}
+
+fn main() {
+    m := Map<I64, Vec<blk>>()
+    s := 0
+    for k in range 1000 { s += work(m, k) }
+    io.Println($s " (499500)")!
+}

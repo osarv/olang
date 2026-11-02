@@ -1,0 +1,12 @@
+# explain: a result handed back from a by-value parameter's references - no '# scopes' relation between parameters,
+# yet not a value (open point 5 covers reference parameters only)
+import "std/io"
+
+type holder struct(s String&) { s }
+
+fn pick(h holder) String& { return h.s }
+
+fn main() {
+    t := "x"
+    io.Println(pick(holder(t)))!
+}

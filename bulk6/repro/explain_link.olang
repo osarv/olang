@@ -1,0 +1,10 @@
+# explain: a function whose obligations relate its arguments' scopes
+type node struct(v I64, next node?& = null) { v, next }
+
+fn link(a mut node&, b node&) { a.next = b }
+
+fn main() {
+    x := node(1)
+    y := node(2)
+    link(x, y)
+}

@@ -1,0 +1,14 @@
+# M19g and a Map's Ref: a reference into a Map's slot kept across Puts that grow it
+import "std/io"
+
+type rec struct(n I64) { n }
+
+fn main() {
+    m := Map<I64, rec>()
+    m.Put(0, rec(1))
+    r := try m.RefMut(0) catch { return }
+    for i in range 1, 1000 { m.Put(i, rec(i)) }
+    r.n = 77
+    x := try m.Get(0) catch { return }
+    io.Println("m[0].n " $x.n " r.n " $r.n " (77 77 in place)")!
+}
