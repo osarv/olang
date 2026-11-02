@@ -2426,3 +2426,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   bulk review's fix round; (2) declared function types take no type parameters for now (additive later; the tag can
   carry an instance). The agent's other seven details stand; 3 (fnref_migrate a text tool, `?&`/`!` left to
   null_migrate) and 8 (`Catch.Braced`/`Func.Bodied` stay flags) for the bulk review.
+- Front-end refactor (wt-refront 4296278) - its three questions DECIDED by me 2026-11-02 (theirs to review): (1) the
+  dead scope-argument field (`typed.Call.Scoped`, `ScopedCall`, `ScopedArray`) and `types.Owning` (from the removed
+  `own`) are removed in a joint pass once the back-end refactor merges, with interp's copy of `writtenMut` and the stale
+  `Iterator<T&p>` comments; (2) checkdiff and scopediff (stage-0 parity tools, not in verify) are deleted in that pass,
+  emitdiff/evaldiff merged where verify runs them; (3) continuation lines keep the files' alignment under the open
+  bracket - the limit counts blocks, not wrapped lines.

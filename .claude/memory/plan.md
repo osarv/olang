@@ -753,3 +753,8 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   fnref_migrate marked 376 function types in 150 files; bench unchanged. The rework is done. Next: the compiler/
   refactor (Opus: nesting <= 3-4, duplicated and dead code, best constructs), then bulk review 6 over the rework
   (Opus, high) with its fix round (including `Array<T>?&`'s zero as null), then the final verify - the first version.
+- 2026-11-02 CET: front-end refactor merged (4296278, fast-forward, full verify passed on its tip; bench IR and the
+  compiler's own 505 .ll files byte-identical): lines deeper than four blocks 473 -> 61 (2 by brace depth), 14 dead
+  functions and ~9 duplicate walks gone (-270 lines), an explain bug fixed (it printed a removed scope spelling).
+  Back-end refactor running. Then a joint cleanup pass (dead scope-argument field, types.Owning, stage-0 tools), bulk
+  review 6, its fix round, the final verify.
