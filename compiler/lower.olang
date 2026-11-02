@@ -4009,8 +4009,10 @@ fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp 
     ln.start(ok)
 }
 
-# T2c: text that may be null rendered at the top of a rendering - "null" where it is, else the text itself
-fn (ln mut lowering&) renderMaybeText(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp source.Span) {
+# T2c: text that may be null rendered - "null" where it is, else the text itself, as how writes it (at the top of a
+# rendering its bytes, inside another's quoted)
+fn (ln mut lowering&) renderMaybeText(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp source.Span
+                                      how mir.WriteKind = mir.WriteKind.Bytes) {
     x := ln.local(v, ty, sp)
     isNull := ln.prim(typed.PrimOp.Same, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, -1)], sp)
     none, some, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
@@ -4019,7 +4021,7 @@ fn (ln mut lowering&) renderMaybeText(b mir.ScopeRef, v mir.Operand, ty types.Ty
     ln.word(b, "null", sp)
     ln.goto(after)
     ln.start(some)
-    ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Bytes, mir.Operand.Copy(mir.L(x))))
+    ln.emit(mir.Stmt.Write(sp, b, how, mir.Operand.Copy(mir.L(x))))
     ln.goto(after)
     ln.start(after)
 }
@@ -4934,7 +4936,10 @@ fn (ln mut lowering&) inner(a pl, ty types.TypeId, b mir.ScopeRef, sp source.Spa
         return
     }
     if ln.isText(ty) and not ln.hasStr(ty) {
-        ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Quoted, ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)))
+        x := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+        # T2c: text that may be null renders "null" where it is, an element of an array too
+        if t.IsNullable(r) and t.ArrayRef(r): ln.renderMaybeText(b, x, ty, sp, mir.WriteKind.Quoted)
+        else: ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Quoted, x))
         return
     }
     if t.KindOf(ty) == types.Kind.ErrVal {

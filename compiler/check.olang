@@ -7158,12 +7158,16 @@ fn (c mut Checker&) neverNull(t types.TypeId) Bool {
     return c.isRef(t) and not c.P.T.IsNullable(t) and not c.P.T.ArrayRef(t) and c.deref(t) != types.UnknownT
 }
 
+# T2c: an array reference that may be null, "Array<T>?&", "String?&" - its zero value its null
+fn (c mut Checker&) nullableArray(t types.TypeId) Bool { return c.isRef(t) and c.P.T.IsNullable(t) and c.P.T.ArrayRef(t) }
+
 # null as a value of a type that may be null (T2a): zero bits - a reference's null pointer, a function value's null code
 # - but an array's, which are the empty array: its null is the length -1 with no storage (T2c)
 fn (c mut Checker&) nullOf(sp source.Span, t types.TypeId) typed.Expr& { return c.lit(sp, t, -1 if c.P.T.ArrayRef(t) else 0) }
 
-# the zero value of a type (D13c): zero bits for a number, a Bool, a reference that may be null, one that may be null,
-# an array; a struct's constructor on its defaults
+# the zero value of a type (D13c): zero bits for a number, a Bool, a reference that may be null, a function value that
+# may be null, an array; null for an array that may be null (T2c: its null is no zero bits); a struct's constructor on
+# its defaults
 fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr& {
     # T2c: a reference never null has no zero value, nor a function value never null (T21)
     if c.neverNull(t) {
@@ -7171,6 +7175,7 @@ fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr& {
         c.declNote(rec)
         return c.unknown(sp)
     }
+    if c.nullableArray(t): return c.nullOf(sp, t)
     if c.isStruct(t) {
         id := c.ctorBody(t)
         # each parameter its default, else its own type's zero value - none where the constructor has no parameter,
@@ -10703,6 +10708,8 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
         if not none and c.zeroCalls(elem) {
             c.exprs.Push(c.zero(sp, elem))
             c.askValue(ValueKind.Fill, sp, elem, null)
+        } else if not none and c.nullableArray(elem) {
+            c.exprs.Push(c.nullOf(sp, elem))   # T2c: each element null, as a declaration with no value is
         } else if not none {
             c.zero(sp, elem)   # T2c: a never-null reference element has no zero value to fill with
         }

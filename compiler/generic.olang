@@ -4896,7 +4896,7 @@ test "declared types and instances: laid out as C lays them out, their canonical
     assert p.Layout(bf) and p.T.Size(bf) == 5 and p.T.Align(bf) == 1
     for text in String&["I32", "Array<U8>", "Array<I64, 4>", $m ":Box<mut " $m ":P&>", "fn(I32, std/prelude/text:String&) I64 ? " $m ":E"
                         "fn() (I32, Bool) ?", "(I32, Bool)", "struct(I64, F32)", "enum{A(I32) B}"
-                        "own mut Array<std/prelude/text:String&>&", $m ":Box<" $m ":Box<Array<F64>>>"] {
+                        "mut Array<std/prelude/text:String&>&", $m ":Box<" $m ":Box<Array<F64>>>"] {
         assert p.roundTrip(text), text
     }
     # no such type

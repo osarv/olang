@@ -88,7 +88,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   request.
 - **Comments: `#` to the line's end, `## ... ##` a block (L4/L4a, the user's call).**
 - **One-line bodies (S1b, the user's decision 2026-10-24).** `if x < 0: return 0`, `for x in xs: total += x`,
-  `else: count++`: `:` and one simple statement on the colon's line - an assignment, a call or increment, `return`,
+  `else: count++`: `:` and one simple statement on the colon's line - an assignment (a parallel one too, `if a > b: a, b
+  = b, a` - the parser had refused it as a declaration until 2026-11-02), a call or increment, `return`,
   `break`, `continue`, `error`, `unreachable`, `assert` or `spawn` (the last two mine). It is the block holding that
   statement; a declaration, an `if`, a loop, a `match`, a `join`, a `defer` or a block is an error naming the block
   form. The statement ends at its line's end or at an `else`/`catch` on its line; `else` may begin the next line, as
@@ -437,9 +438,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   null"; built 2026-11-02)**: `Array<T>?&`, `String?&` may be absent, null distinct from empty, read only once narrowed
   (S8e) or `x!`; an array written `&` and a value array are never null, `null` given one an error naming its empty array
   and `?&`, `x is null` on one naming `x.Len() == 0`. Decided (the coordinator, 2026-11-02, and mine): its null is the
-  length -1 with no storage, `{ -1, null }` (`is null` tests it), all-zero bits staying the empty array - so the zero
-  value of `Array<T>?&` is the empty array too (no type's zero value changed: `null` is written where one is absent); a
-  null renders `null` (top-level text included), equals only a null. A null read traps (T2b); nothing is uninitialized: a declaration with no value takes
+  length -1 with no storage, `{ -1, null }` (`is null` tests it), all-zero bits staying the empty array; the zero value
+  of `Array<T>?&` is null, as every `?&`'s is (the coordinator, 2026-11-02, reversing the agent's empty; built
+  2026-11-02, wt-tidy): a declaration with no value - a local, a global, a field, a constructor's zero - starts null, and
+  `Array<T>(n)` with no fill writes null into each element, an array written `&` or held by value starting empty; a
+  null renders `null` wherever it stands (an element of an array or Vec too: it rendered `""`, found 2026-11-02), equals
+  only a null. A null read traps (T2b); nothing is uninitialized: a declaration with no value takes
   its type's zero value, made by the constructor from its parameters' defaults (D13c, the user's design); a type whose
   constructor has effects has none. `tools/null_migrate.olang` migrates code from the compiler's own diagnostics.
 - **Arrays: one type, `Array<T>`, a length never written (T7-T7d, QP1-QP4, the user's design 2026-10-01 and 2026-10-17;
@@ -1618,7 +1622,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   over `eval.olang`: the build's conditions and asserts decided by evaluation, fixed locals included (S8c), `olang
   interpret` running main placed by the scope pass, each scope reclaimed and its destructors run as it closes, immutable globals baked into emitted data by the driver too (K2, K2c), what two baked globals reach written once per module (K2b), a local condition decided reading no build constant an error (S8a), a top-level condition that does not decide an error (B9c), T29d's literals and D13c's zero values decided, a global that aborts an error (K2), a stale Vec view stopping evaluation (M19g), tasks run in sequence at the join under interpret too (B3e, decided: interp's tasks.olang pins it), array lengths computed by calls (QP1), the
   error trace (S18d); `make evaldiff`; HISTORY.md "Port M8: evaluation in the pipeline"). M6, `compiler/scope.olang` (section 8 over the typed core, filling each body's
-  plan, which lowering reads; `make scopediff` measures it against stage 0's goldens - round 7: every program stage 0
+  plan, which lowering reads; scopediff measured it against stage 0's goldens (deleted 2026-11-02) - round 7: every program stage 0
   accepts is scope clean (307 of 307), 275 of 280 refused cases give stage 0's first error, 1 still gets none (s5mapgetreturn, 0 since 2026-10-23: it runs; kept on
   purpose), call results and constructors' fields carry instance records (O13c, O23a); the port built `-debug
   -sanitize` runs the compiler's, std's and the corpus's tests with no use after a scope closed; HISTORY.md "Port M6"). M9, `compiler/emit.olang` (MIR written as LLVM IR, one object per module - each module's, the root's
