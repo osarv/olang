@@ -1168,11 +1168,7 @@ fn (t Table&) Embedded(id TypeId) Array<TypeId> {
                 case DeclKind.Struct {
                     for f in t.Items(t.Fields(id)) { out.Push(f) }
                 }
-                case DeclKind.Enum {
-                    for c in t.Items(t.Cases(id)) {
-                        if c != TypeId(0) { out.Push(c) }
-                    }
-                }
+                case DeclKind.Enum { pushPayloads(t.Items(t.Cases(id)), out) }
                 case DeclKind.Over { out.Push(t.Base(id)) }
                 case _ { }
             }
@@ -1183,14 +1179,17 @@ fn (t Table&) Embedded(id TypeId) Array<TypeId> {
         case Kind.Tuple, Kind.Record {
             for f in t.Items(t.Parts(id)) { out.Push(f) }
         }
-        case Kind.AnonEnum {
-            for c in t.Items(t.ShapeCases(id)) {
-                if c != TypeId(0) { out.Push(c) }
-            }
-        }
+        case Kind.AnonEnum { pushPayloads(t.Items(t.ShapeCases(id)), out) }
         case _ { }
     }
     return out.ToArray()
+}
+
+# the payload types of a list of cases, the cases carrying one (0 for none)
+fn pushPayloads(cs Array<TypeId>&, out mut Vec<TypeId>&) {
+    for c in cs {
+        if c != TypeId(0) { out.Push(c) }
+    }
 }
 
 # computes a type's layout from its embedded parts' (Embedded), which are laid out already - as LLVM lays out a struct
@@ -1515,12 +1514,7 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
             errs := t.Items(t.Errors(id))
             if errs.Len() > 0 {
                 b.Push(" ?")
-                if not (errs.Len() == 1 and errs[0] == DefaultErrT) {
-                    for i in range errs.Len() {
-                        b.Push(" + " if i > 0 else " ")
-                        t.canon(b, errs[i])
-                    }
-                }
+                if not (errs.Len() == 1 and errs[0] == DefaultErrT) { t.canonErrs(b, errs) }
             }
             if t.canonNames and d.E != 0 {
                 b.PushChar('{')
@@ -1589,12 +1583,16 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
         }
         case Kind.ErrSet {
             b.PushChar('?')
-            es := t.Items(t.ErrSetItems(id))
-            for i in range es.Len() {
-                b.Push(" + " if i > 0 else " ")
-                t.canon(b, es[i])
-            }
+            t.canonErrs(b, t.Items(t.ErrSetItems(id)))
         }
+    }
+}
+
+# an error list as Canon spells it, each item after " " or " + "
+fn (t mut Table&) canonErrs(b mut StringBuilder&, es Array<TypeId>&) {
+    for i in range es.Len() {
+        b.Push(" + " if i > 0 else " ")
+        t.canon(b, es[i])
     }
 }
 
