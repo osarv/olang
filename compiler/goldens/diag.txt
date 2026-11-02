@@ -5694,10 +5694,20 @@ t22aobligation.olang:17:11: error[T22a]: 'hang' relates its arguments' scopes, w
    17 |     apply(hang, a, b)
       |           ^~~~
 compilation failed with 2 errors
+=== t22avalueexact.olang
+t22avalueexact.olang:12:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   12 |         w := g(v, t)
+      |              ^
+compilation failed with 1 error
+=== t22aviewkept.olang
+t22aviewkept.olang:11:13: error[O27]: this keeps a view of 't', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Clone()'
+   11 |         r = g(t)
+      |             ^
+compilation failed with 1 error
 === t22borrowedresult.olang
-t22borrowedresult.olang:15:10: error[T22a]: 'self' relates its arguments' scopes, which a call through a function value cannot check - call it directly
-   15 |     keep(self, x, 42)
-      |          ^~~~
+t22borrowedresult.olang:11:16: error[O27]: this keeps a view of 't', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Clone()'
+   11 |     out.next = f(t)
+      |                ^
 compilation failed with 1 error
 === t22callunsafe.olang
 t22callunsafe.olang:20:29: error[E12]: expected fn(n P&) I64, found fn(n mut P&) I64
@@ -6625,11 +6635,6 @@ vec19listconv.olang:12:20: error[M19g]: 'l' holds a view of 'v' taken before 'v'
 vec19listconv.olang:11:28: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
    11 |     for _ in range 100 { v.Push('b') }
       |                            ^~~~
-compilation failed with 1 error
-=== vec20byname.olang
-vec20byname.olang:34:10: error[T22a]: 'first' relates its arguments' scopes, which a call through a function value cannot check - call it directly
-   34 |     f := first
-      |          ^~~~~
 compilation failed with 1 error
 === vec27cloneshort.olang
 vec27cloneshort.olang:9:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
