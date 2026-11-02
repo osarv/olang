@@ -3556,7 +3556,14 @@ fn (s mut Scoper&) kwCall(c typed.Call&) {
         a := c.Args[k]
         r := s.handedRegion(a)
         if r < 0 {
-            s.kwArg(c, k, a, ps)
+            # a reference into a region handed on, or a copy out of one: kept where the callee keeps it (kwOutOfRegion)
+            ua := s.unAway(a)
+            rr := flRootExpr(ua)
+            if rr >= 0 and flThroughRefExpr(ua) { s.kwOutOfRegion(c, k, ua, rr, ps) }
+            # a capturing lambda made for a callee keeping nothing of it never leaves the call (D16c)
+            if s.capturingLambda(a) and s.transient(s.bodyOf(c.Target), k) { s.kwTransient = true }
+            s.kwExpr(a, false)
+            s.kwTransient = false
             continue
         }
         # a handle in the region lent as its reference to a callee using it only through that reference (O17b): the
@@ -3579,31 +3586,25 @@ fn (s mut Scoper&) kwCall(c typed.Call&) {
     }
 }
 
-# argument k of call c, handed out of no parameter's region (handedRegion), walked - what it reads out of one kept
-# where the callee keeps it (ps the callee's parameter types)
-fn (s mut Scoper&) kwArg(c typed.Call&, k I64, a typed.Expr&, ps Array<types.TypeId>&) {
+# argument k of call c (ua, its value) read through a reference out of parameter rr's region - handed out of no region
+# itself (handedRegion): kept in the region where the callee keeps it (ps the callee's parameter types)
+fn (s mut Scoper&) kwOutOfRegion(c typed.Call&, k I64, ua typed.Expr&, rr I64, ps Array<types.TypeId>&) {
     byValue := c.Target == typed.Callee.Value
-    # a reference into a region handed on: kept where the callee keeps it - through a function value, where something
-    # can be stored through its parameter (T22a)
-    ua := s.unAway(a)
-    rr := flRootExpr(ua)
-    if rr >= 0 and flThroughRefExpr(ua) and s.isRef(ua.Type()) {
-        # a reference read out of the region names storage that lives where the region's does: kept in it only by a
-        # callee storing into what it names, not by one keeping the reference
+    if s.isRef(ua.Type()) {
+        # a reference into a region handed on: kept where the callee keeps it - through a function value, where something
+        # can be stored through its parameter (T22a). A reference read out of the region names storage that lives where
+        # the region's does: kept in it only by a callee storing into what it names, not by one keeping the reference
         if byValue {
             if k < ps.Len() and s.storeThrough(ps[k]) { s.storeParam(rr, true) }
         } else if s.calleeStoresArg(c, k) {
             s.storeParam(rr, s.calleePutsArg(c, k))
         }
+        return
     }
     # a copy of a value read out of the region holding writable references, given to a function value: its body, not
     # known, can store through those references into the region (O17 - a by-value parameter holding writable references
     # is a store from outside)
-    if rr >= 0 and flThroughRefExpr(ua) and not s.isRef(ua.Type()) and s.storeThrough(ua.Type()) and byValue { s.storeParam(rr, true) }
-    # a capturing lambda made for a callee keeping nothing of it never leaves the call (D16c)
-    if s.capturingLambda(a) and s.transient(s.bodyOf(c.Target), k) { s.kwTransient = true }
-    s.kwExpr(a, false)
-    s.kwTransient = false
+    if s.storeThrough(ua.Type()) and byValue { s.storeParam(rr, true) }
 }
 
 # an argument handing over a region's storage: its place's subexpressions, navigated and looked at
