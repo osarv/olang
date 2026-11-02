@@ -2432,3 +2432,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `Iterator<T&p>` comments; (2) checkdiff and scopediff (stage-0 parity tools, not in verify) are deleted in that pass,
   emitdiff/evaldiff merged where verify runs them; (3) continuation lines keep the files' alignment under the open
   bracket - the limit counts blocks, not wrapped lines.
+- Back-end refactor (wt-reback) - its three questions DECIDED by me 2026-11-02 (theirs to review): (1) the joint
+  cleanup pass rewords `msgs.NoteMakeWhere` (it still names `f&x(...)`) and fixes the parser refusing `if c: a, b = x, y`
+  (a parallel assignment read as a declaration under S1b); (2) the same pass takes `Call.Scoped`/`ScopedCall`/
+  `ScopedArray` out of typed.olang and moves the three cross-module duplicates (partOf/partLvalue, calleeOf/calleeBody,
+  callOf/callOfExpr) into typed.olang; (3) +0.11% scope-phase instructions for the split `Scoper.call` is accepted.

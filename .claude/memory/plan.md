@@ -758,3 +758,7 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   functions and ~9 duplicate walks gone (-270 lines), an explain bug fixed (it printed a removed scope spelling).
   Back-end refactor running. Then a joint cleanup pass (dead scope-argument field, types.Owning, stage-0 tools), bulk
   review 6, its fix round, the final verify.
+- 2026-11-02 CET: back-end refactor merged (wt-reback, full verify passed on its tip; bench IR byte-identical): no back-end
+  line deeper than four blocks (408 before), depth-four lines 1,038 -> 288, -308 lines, `Scoper.call` split. Merged
+  with the front end by taking the golden rows per file (no code overlap); the merged tip is verified by the joint
+  cleanup pass, next. Then bulk review 6, its fix round, the final verify.
