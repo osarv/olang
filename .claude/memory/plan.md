@@ -767,3 +767,7 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   typed.olang, NoteMakeWhere reworded, `if c: a, b = x, y` parses, `Array<T>?&`'s zero null, nested null text renders
   null; bench IR identical. Bulk review 6 done (no use-after-free; 7 wrong results...). Next: its fix round, then the
   final verify - the first version.
+- 2026-11-02 CET: bulk review 6's fix round merged (6797652, verify on master 3b51cc9 passed in full). Narrow review
+  6b of its relaxations: they held; found 1 older soundness bug (a generator's lambda capturing a built call's
+  reference), 3 wrong results (externs calling back, destructors in effects, M19g through an index), 1 over-rejection,
+  diagnostics. Next: fix round 6b, then the final verify - the first version.

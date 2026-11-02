@@ -2462,3 +2462,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   soundness review before the first version is called done, with F13's FreshCtorAt (which read freed storage in an
   earlier version); (2) `held/gen_walkkept`'s two errors for one cause collapse in a later round (a diagnostic). The
   agent's six details stand.
+- Bulk review 6b (/home/user/review/bulk6b, narrow, at 3b51cc9: the fix round's relaxations held) - directions DECIDED
+  by me 2026-11-02: F3 (soundness, older) a generator's lambda capturing a reference local from a built call lands that
+  call's result where the generator lives, not in the first Next's scope; F1 a non-math, non-runtime extern is Unknown
+  in the effect summaries wherever the program has an export fn (as free.olang already says); F2 destructors count in
+  the effect summaries (WritesGlobals, Allocates, the effects line, in-place calls); F4 M19g follows a Ref reached
+  through an index or a call's result held across a growth by the same route (unsure: refused), and the Map's copy
+  helper allocates on the own-chunk path so -sanitize protects a retired array; F5 F9's capture flow follows captured
+  function values; F6 the three diagnostics (C2d naming Clone for a Vec, M19g twice, M19g's Map note).
