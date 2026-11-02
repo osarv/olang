@@ -164,6 +164,36 @@ type summary struct() {
     Judging Bool = false # its component is being judged to a fixed point: Builds is what the rounds so far found
 }
 
+# one judging of a component of the call graph, set aside so a later round of the field inference can take it again
+# where everything it read is as it was (docs/rework.md 21): its bodies' plans and summaries, what it reported, the
+# functions it made values, its gaps and what it asked of the field inference - and what it read: the marks of the
+# constructor fields it read (fieldMark, its own constructors' fields), and the summaries of the callees and
+# constructors it read (calls, a field's construction bindings) as they were
+type compRun struct() {
+    Plans Vec<typed.Plan>
+    Sums Vec<mut summary&>
+    Judged Vec<Bool>
+    Diags diag.Taken
+    FnUses Vec<fnUse>
+    Gaps Vec<Gap>
+    WantDecl Vec<I64>
+    WantField Vec<pair.Pair<I64, I64>>
+    WantHits I64 = 0
+    Marks Vec<markRead>
+    Read Vec<sumRead>
+}
+
+type markRead struct(Ctor I64, Field I64, Mark typed.Mark) {
+    Ctor
+    Field
+    Mark
+}
+
+type sumRead struct(Body I64, Sum summary&) {
+    Body
+    Sum
+}
+
 # a function made a value (T22a): where, which body, and how - Named, Lambda, or an instance through its Call (Of)
 type fnUse struct(File I64, Sp source.Span, F I64, Kind I64, Of types.TypeId) {
     File
@@ -355,6 +385,23 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     demotedF Map<pair.Pair<I64, I64>, Bool>
     Unplaced Vec<String&>                     # fields a refusal needed promoted that have no parameter to bind to (open point 4)
     Trace Bool = false                     # OLANG_INFERDUMP: every lift written to TraceLog, for a person
+    # a round of the field inference taking again the judging of every component whose inputs are as they were
+    # (judgeAll): by component, its judgings so far, the latest last; markReads, sumReads, wantsDecl and wantsField
+    # what the component being judged reads and asks
+    covered Map<I64, Bool>                 # the bodies whose obligations are what a call through a value holds (valueCovered)
+    reuse Bool = false
+    NoReuse Bool = false
+    gaveBack Bool = false                  # a round of the field inference gave a declaration's fields back as it went
+    ReuseCheck Bool = false                # OLANG_SCOPECHECK: a component taken again judged anyway, its outcome compared
+    Redone I64 = 0                         # how many lone bodies judgeOnce judged again, for OLANG_SCOPESTATS
+    Reused I64 = 0                         # how many components the rounds took again, for OLANG_SCOPESTATS
+    runs Vec<Vec<mut compRun&>>
+    markReads Map<pair.Pair<I64, I64>, typed.Mark>
+    sumReads Map<I64, Bool>
+    wantsDecl Vec<I64>
+    wantsField Vec<pair.Pair<I64, I64>>
+    wantNew Vec<I64>                       # ... those first asked by it, for judgeOnce to forget
+    wantNewField Vec<pair.Pair<I64, I64>>
     TraceLog Vec<String&>
 }
 
@@ -373,13 +420,19 @@ fn (s mut Scoper&) Run() {
     }
     s.components()
     if not s.inferFields() { s.judgeAll(true) }
+    for b in range s.sums.Len() {
+        if s.sums[b].Rels.Len() > 0 and s.valueCovered(b, s.sums[b].Rels) { s.covered.Put(b, true) }
+    }
     s.fnValues()
     s.anyTables()
     s.exports()
 }
 
-# every body judged, a component at a time, callees first - its errors said where report holds
+# every body judged, a component at a time, callees first - its errors said where report holds. In a later round of the
+# field inference (reuse) a component is judged again only where something it read is not what it was in one of its
+# judgings so far - a constructor field's mark, a callee's summary, a constructor's - else that judging is taken again
 fn (s mut Scoper&) judgeAll(report Bool) {
+    reusing := s.reuse and s.runs.Len() == s.compFrom.Len()
     s.Plans.Clear()
     s.sums.Clear()
     s.judged.Clear()
@@ -388,11 +441,15 @@ fn (s mut Scoper&) judgeAll(report Bool) {
     s.trMemo.Clear()
     s.useMemo.Clear()
     s.useWhy.Clear()
-    s.lifts.Clear()
-    s.siteLifts.Clear()
-    s.liftStor.Clear()
-    s.wLocals.Clear()
-    s.partLifts.Clear()
+    s.lateBody = -1
+    if not reusing {
+        s.lifts.Clear()
+        s.siteLifts.Clear()
+        s.liftStor.Clear()
+        s.wLocals.Clear()
+        s.partLifts.Clear()
+        s.runs.Clear()
+    }
     for i in range s.Bodies.Len() {
         s.Plans.Push(typed.NewPlan(s.Bodies[i]))
         s.sums.Push(summary())
@@ -402,8 +459,210 @@ fn (s mut Scoper&) judgeAll(report Bool) {
         end := s.compFrom[k + 1] if k + 1 < s.compFrom.Len() else s.compNodes.Len()
         comp := Array<I64>(end - s.compFrom[k])
         for i in range comp.Len() { comp[i] = s.compNodes[s.compFrom[k] + i] }
-        s.component(comp, report)
+        if not reusing {
+            s.runs.Push(Vec<mut compRun&>())
+            s.runs.RefMut(k).Push(s.judgeComp(comp, report))
+            continue
+        }
+        prior := s.takeable(k)
+        if prior is not null {
+            s.Reused++
+            if s.ReuseCheck {
+                # OLANG_SCOPECHECK: judged anyway, and held to what taking it again would have given
+                s.dropLifts(comp)
+                s.checkReuse(k, comp, prior, s.judgeComp(comp, report))
+            }
+            s.retake(prior, comp)
+            continue
+        }
+        s.dropLifts(comp)
+        if s.Trace { s.TraceLog.Push($"rejudged " $k " size " $comp.Len() " first " $comp[0] " " $s.Bodies[comp[0]].Of " sites " $s.Bodies[comp[0]].Sites.Len() " why " $s.whyNot(k)) }
+        hist := s.runs.RefMut(k)
+        if hist.Len() >= 4 { hist.RemoveAt(0)! }
+        hist.Push(s.judgeComp(comp, report))
+        # a promoted field built through where its binding is not known goes back for good (inferFields): given back
+        # now, the components judged after this one read it as the round after would - most taken again as they were
+        # before it was promoted, rather than judged once with it and once without
+        if not s.fieldGather { continue }
+        for w in s.wantsField {
+            if s.giveBackDecl(w.First) { s.gaveBack = true }
+        }
     }
+}
+
+# a component judged, what the judging gave and read set aside (compRun)
+fn (s mut Scoper&) judgeComp(comp Array<I64>&, report Bool) mut compRun& {
+    mark := s.P.L.Diags.Count()
+    uses := s.fnUses.Len()
+    gaps := s.Gaps.Len()
+    hits := s.wantHits
+    s.markReads.Clear()
+    s.sumReads.Clear()
+    s.wantsDecl.Clear()
+    s.wantsField.Clear()
+    s.component(comp, report)
+    run mut compRun& = compRun()
+    for b in comp {
+        run.Plans.Push(s.Plans[b])
+        run.Sums.Push(s.sums[b])
+        run.Judged.Push(s.judged[b])
+    }
+    run.Diags = s.P.L.Diags.Since(mark)
+    for i in range uses, s.fnUses.Len() { run.FnUses.Push(s.fnUses[i]) }
+    for i in range gaps, s.Gaps.Len() { run.Gaps.Push(s.Gaps[i]) }
+    for d in s.wantsDecl { run.WantDecl.Push(d) }
+    for w in s.wantsField { run.WantField.Push(w) }
+    run.WantHits = s.wantHits - hits
+    # what it read: the marks of the constructor fields (its own constructors' every field), and the summaries of
+    # its callees outside it and of the constructors whose bindings it read, as they are now
+    mine Map<I64, Bool>
+    for b in comp { mine.Put(b, true) }
+    for b in comp {
+        if not s.isCtorBody(b) { continue }
+        for i in range s.Bodies[b].Fields.Len() { s.markReads.Put(pair.Pair<I64, I64>(b, i), s.fieldMarkOf(b, i)) }
+    }
+    for f in s.markReads.Keys() { run.Marks.Push(markRead(f.First, f.Second, try s.markReads.Get(f) catch default typed.Mark.None)) }
+    for b in comp {
+        for e in range s.edgeFrom[b], s.edgeFrom[b + 1] {
+            if not mine.Has(s.edgeTo[e]) { s.sumReads.Put(s.edgeTo[e], true) }
+        }
+    }
+    for c in s.sumReads.Keys() {
+        if not mine.Has(c) { run.Read.Push(sumRead(c, s.sums[c])) }
+    }
+    return run
+}
+
+fn (s Scoper&) isCtorBody(b I64) Bool {
+    return match s.Bodies[b].Of {
+        case typed.BodyOf.Ctor(_, _): true
+        case _: false
+    }
+}
+
+fn (s Scoper&) fieldMarkOf(b I64, i I64) typed.Mark { return s.Bodies[b].Locals[I64(s.Bodies[b].Fields[i])].Marked }
+
+# the latest of component k's judgings everything read is as it was for - each constructor field's mark, each
+# summary - and, in the judging that reports after the field inference, which left no refusal for the inference unsaid
+# (a refusal said there, counted in a gathering); null for none
+fn (s mut Scoper&) takeable(k I64) mut compRun?& {
+    hist := s.runs.Ref(k)
+    for j in range hist.Len() {
+        run := hist[hist.Len() - 1 - j]
+        if s.asItWas(run) { return run }
+    }
+    return null
+}
+
+fn (s mut Scoper&) asItWas(run compRun&) Bool {
+    if run.WantHits > 0 and not s.fieldGather { return false }
+    for m in run.Marks {
+        if s.fieldMarkOf(m.Ctor, m.Field) != m.Mark { return false }
+    }
+    for r in run.Read {
+        if not sameSummary(s.sums[r.Body], r.Sum) { return false }
+    }
+    return true
+}
+
+fn (s mut Scoper&) whyNot(k I64) String {
+    hist := s.runs.Ref(k)
+    run := hist[hist.Len() - 1]
+    if run.WantHits > 0 and not s.fieldGather { return "hits" }
+    for m in run.Marks {
+        if s.fieldMarkOf(m.Ctor, m.Field) != m.Mark { return $"mark " $m.Ctor "." $m.Field " " $s.Bodies[m.Ctor].Of }
+    }
+    for r in run.Read {
+        if not sameSummary(s.sums[r.Body], r.Sum) { return $"sum " $r.Body " " $s.Bodies[r.Body].Of " " $summaryDiff(s.sums[r.Body], r.Sum) }
+    }
+    return "?"
+}
+
+# a judging of a component taken again: its plans, summaries and what it gave
+fn (s mut Scoper&) retake(run mut compRun&, comp Array<I64>&) {
+    for i in range comp.Len() {
+        b := comp[i]
+        s.Plans[b] = run.Plans[i]
+        s.sums[b] = run.Sums[i]
+        s.judged[b] = run.Judged[i]
+    }
+    s.P.L.Diags.Replay(run.Diags)
+    for u in run.FnUses { s.fnUses.Push(u) }
+    for g in run.Gaps { s.Gaps.Push(g) }
+    for d in run.WantDecl { s.wantDecl.Put(d, true) }
+    for w in run.WantField { s.wantField.Put(w, true) }
+    s.wantHits += run.WantHits
+}
+
+# whether two summaries say the same for a caller's judging - where a body's first build is (BuildFile, BuildAt) only
+# places an E11c error's note, and a caller's judging taken again keeps a site that builds there for it
+fn sameSummary(a summary&, b summary&) Bool {
+    av summary = a
+    av.BuildFile = b.BuildFile
+    av.BuildAt = b.BuildAt
+    return av == b
+}
+
+# which part of two summaries differs first, for OLANG_SCOPECHECK
+fn summaryDiff(a summary&, b summary&) String {
+    av summary = a
+    bv summary = b
+    if not (av.Rels == bv.Rels) { return "Rels" }
+    if not (av.Builds == bv.Builds) { return "Builds" }
+    if not (av.Real == bv.Real) { return "Real" }
+    if not (av.Keeps == bv.Keeps) { return "Keeps" }
+    if not (av.Stores == bv.Stores) { return "Stores" }
+    if not (av.Puts == bv.Puts) { return "Puts" }
+    if not (av.CapKeeps == bv.CapKeeps) { return "CapKeeps" }
+    if not (av.ResBind == bv.ResBind) { return "ResBind" }
+    if not (av.FieldFrom == bv.FieldFrom) { return "FieldFrom" }
+    if not (av.FieldTerms == bv.FieldTerms) { return "FieldTerms" }
+    if av.Done != bv.Done or av.HandsBack != bv.HandsBack or av.Judging != bv.Judging { return "flags" }
+    av.BuildFile = bv.BuildFile
+    av.BuildAt = bv.BuildAt
+    return "" if av == bv else "the rest"
+}
+
+# the inference's findings for a component's bodies forgotten, before it is judged again
+fn (s mut Scoper&) dropLifts(comp Array<I64>&) {
+    mine Map<I64, Bool>
+    for b in comp { mine.Put(b, true) }
+    dropKeyed<Term>(s.lifts, mine)
+    dropKeyed<Term>(s.siteLifts, mine)
+    dropKeyed<Bool>(s.liftStor, mine)
+    dropKeyed<Bool>(s.wLocals, mine)
+    dropKeyed<Bool>(s.partLifts, mine)
+}
+
+fn dropKeyed<V>(m mut Map<pair.Pair<I64, I64>, V>&, mine Map<I64, Bool>&) {
+    gone Vec<pair.Pair<I64, I64>>
+    for key in m.Keys() {
+        if mine.Has(key.First) { gone.Push(key) }
+    }
+    for key in gone { m.Remove(key) }
+}
+
+# OLANG_SCOPECHECK: a component's judging taken again, against the component judged now - its plans, summaries and
+# diagnostics must be the same, else taking it again misses something the judging reads. The new judging's own
+# diagnostics are forgotten, the taken one's said in their place
+fn (s mut Scoper&) checkReuse(k I64, comp Array<I64>&, old compRun&, now compRun&) {
+    what := StringBuilder()
+    if not now.Diags.Same(old.Diags) { what.Push(" diagnostics") }
+    if now.WantHits != old.WantHits { what.Push(" refusals") }
+    if now.FnUses.Len() != old.FnUses.Len() { what.Push(" values") }
+    for i in range comp.Len() {
+        if not sameSummary(now.Sums[i], old.Sums[i]) { what.Push($" summary of " $comp[i] ": " $summaryDiff(now.Sums[i], old.Sums[i])) }
+        if not (now.Plans[i] == old.Plans[i]) { what.Push($" plan of " $comp[i]) }
+    }
+    if what.Len() == 0 {
+        s.P.L.Diags.Forget(s.P.L.Diags.Count() - now.Diags.Count())
+        s.fnUses.Truncate(s.fnUses.Len() - now.FnUses.Len())
+        s.Gaps.Truncate(s.Gaps.Len() - now.Gaps.Len())
+        s.wantHits -= now.WantHits
+        return
+    }
+    for b in comp { what.Push($" " $b "@" $s.Bodies[b].File ":" $s.Bodies[b].Sp.Start " " $s.Bodies[b].Of) }
+    assert false, "OLANG_SCOPECHECK: component " $k " taken again but judged differently -" $what.ToString()
 }
 
 # X12: an export fn is called by C, which no obligation of its body can be held to (O10b) - it requires nothing of its
@@ -465,7 +724,7 @@ fn (s mut Scoper&) instContexts(inst I64) I64 {
 fn (s mut Scoper&) fnValues() {
     for u in s.fnUses {
         rels := s.sums[u.F].Rels
-        if rels.Len() == 0 { continue }
+        if rels.Len() == 0 or u.Kind != FnCall and s.covered.Has(u.F) { continue }
         at := diag.Where.Span(u.File, I64(u.Sp.Start), I64(u.Sp.End))
         if u.Kind == FnCall {
             t := u.Of
@@ -519,6 +778,71 @@ fn (s mut Scoper&) fnValues() {
     }
 }
 
+# open point 5 (docs/rework.md 21): what a function type says of a call through a value - a result holding references
+# may hand back what its reference parameters refer to, so each of their arguments outlives the call's result scope,
+# exactly where something can be stored through the parameter and the result (O25g, as a direct call is held to such a
+# callee) - the result landing there (O18c) - and
+# as a view: never met by building the argument longer (O27 - the callee may hand back a view of its storage); a
+# function whose obligations are only these is a value of the type (valueCovered)
+fn (s mut Scoper&) valueRels(fty types.TypeId, vars Array<I64>&, rv I64, sp source.Span) Vec<rel> {
+    rs Vec<rel>
+    if rv < 0 { return rs }
+    ps := s.P.T.Items(s.P.T.Params(fty))
+    through := s.storeThrough(s.P.T.Result(fty))
+    for v in range vars.Len() {
+        i := vars[v]
+        if i < 0 or i >= ps.Len() or not s.isRef(ps[i]) { continue }
+        rs.Push(rel(Term.Var(v), Term.Var(rv), false, sp, 0, true))
+        # exactly where the result hands back what something can be stored through: the other half, as a direct
+        # call's callee has it
+        if through and s.storeThrough(ps[i]) { rs.Push(rel(Term.Var(rv), Term.Var(v), false, sp, 0, true)) }
+    }
+    return rs
+}
+
+# whether body b's obligations are only what its type says of a call through a value (valueRels): each a reference
+# parameter's scope outliving its result scope, exactly only where something can be stored through it - so it is a value
+# (decided once every body is judged, for explain's "not a value")
+fn (s Scoper&) ValueCovered(b I64) Bool { return s.covered.Has(b) }
+
+fn (s mut Scoper&) valueCovered(b I64, rels Vec<rel>&) Bool {
+    body := s.Bodies[b]
+    for r in rels {
+        if not s.coveredRel(body, r) { return false }
+    }
+    return true
+}
+
+fn (s mut Scoper&) coveredRel(body typed.Body&, r rel) Bool {
+    hi := varOf(r.Hi)
+    lo := varOf(r.Lo)
+    if hi < 0 or lo < 0 or hi >= body.Vars.Len() or lo >= body.Vars.Len() { return false }
+    # a parameter outliving the result - or, the other half of their being exactly one, the result outliving a parameter
+    # something can be stored through
+    if body.Vars[lo] == typed.ScopeVar.Result {
+        t := s.paramVarType(body, hi)
+        return t != types.UnknownT and s.isRef(t) and not r.Exact
+    }
+    if body.Vars[hi] != typed.ScopeVar.Result { return false }
+    t := s.paramVarType(body, lo)
+    return t != types.UnknownT and s.isRef(t) and s.storeThrough(t) and not r.Exact
+}
+
+# the type of the parameter scope variable k stands for, Unknown for another kind of variable
+fn (s Scoper&) paramVarType(body typed.Body&, k I64) types.TypeId {
+    return match body.Vars[k] {
+        case typed.ScopeVar.Param(l): body.Locals[I64(l)].Ty
+        case _: types.UnknownT
+    }
+}
+
+fn varOf(t Term) I64 {
+    return match t {
+        case Term.Var(k): k
+        case _: -1
+    }
+}
+
 # T32a: a method an "any" calls through its table may require nothing of its arguments' scopes its trait's signature
 # does not say - a call through the table discharges nothing, as one through a function value does not (T22a). Said
 # where the table was first needed, once a table
@@ -546,30 +870,74 @@ fn (s mut Scoper&) component(comp Array<I64>&, report Bool) {
         # what the component's bodies may build into is a least fixed point: none at first, each round what the last
         # found (docs/scope-model.md 7.2)
         # to the fixed point, never cut short (as free.olang's, bulk review 1's F3): what a body may build into, keep or
-        # store and its obligations only grow, and each is finite, so the rounds end
+        # store and its obligations only grow, and each is finite, so the rounds end. Each round's judgings gather the
+        # inference's claims too, so the last round - where nothing grew - leaves them as the reporting judging reads them
         for b in comp { s.sums[b].Judging = true }
         for {
             grew := false
             for b in comp {
                 before := s.sums[b].Rels.Len()
                 built := s.facts(b)
-                s.judge(b, false)
                 s.inferClaims(b)
                 if s.sums[b].Rels.Len() != before or s.facts(b) != built { grew = true }
             }
             if not grew { break }
         }
     }
-    # the inference's claims, then the judging that reports - or, quietly, the one whose refusals the
-    # field inference reads
-    for b in comp { s.inferClaims(b) }
+    # the judging that reports - or, quietly, the one whose refusals the field inference reads; a lone body judged once,
+    # gathering the inference's claims as it reports (judgeOnce), else after inferClaims
+    if not cyclic and s.judgeOnce(comp[0], report) {
+        s.done(comp)
+        return
+    }
+    if not cyclic { s.inferClaims(comp[0]) }
     s.finalQuiet = not report or s.fieldGather
     for b in comp { s.judge(b, report) }
     s.finalQuiet = false
+    s.done(comp)
+}
+
+fn (s mut Scoper&) done(comp Array<I64>&) {
     for b in comp {
         s.sums[b].Done = true
         s.sums[b].Judging = false
     }
+}
+
+# a body alone in its component judged once, reporting and gathering the inference's claims at once: kept where the
+# judging proposed no claim and said nothing - then it is the judging the claims' gathering would have been followed
+# by, as the claims stand. Else everything it gave is forgotten and the body judged as inferClaims and the reporting
+# judging do (one judging of most bodies saved: the compiler's own lift something in about one body of fifty)
+fn (s mut Scoper&) judgeOnce(b I64, report Bool) Bool {
+    mark := s.P.L.Diags.Count()
+    uses := s.fnUses.Len()
+    gaps := s.Gaps.Len()
+    hits := s.wantHits
+    wants := s.wantsDecl.Len()
+    fields := s.wantsField.Len()
+    added := s.wantNew.Len()
+    addedF := s.wantNewField.Len()
+    s.finalQuiet = not report or s.fieldGather
+    s.liftGather = true
+    s.liftGrew = false
+    s.judge(b, report)
+    s.liftGather = false
+    s.finalQuiet = false
+    if not s.liftGrew and s.P.L.Diags.Count() == mark { return true }
+    s.Redone++
+    s.P.L.Diags.Forget(mark)
+    s.fnUses.Truncate(uses)
+    s.Gaps.Truncate(gaps)
+    s.wantHits = hits
+    s.wantsDecl.Truncate(wants)
+    s.wantsField.Truncate(fields)
+    for i in range added, s.wantNew.Len() { s.wantDecl.Remove(s.wantNew[i]) }
+    for i in range addedF, s.wantNewField.Len() { s.wantField.Remove(s.wantNewField[i]) }
+    s.wantNew.Truncate(added)
+    s.wantNewField.Truncate(addedF)
+    s.dropLifts(I64[b])
+    s.sums[b] = summary()
+    return false
 }
 
 # how many of a body's may-facts hold: what it builds into, keeps and stores (each only grows over a component's rounds)
@@ -608,7 +976,10 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
         s.lateNone.Clear()
         s.lateDecl.Clear()
         s.lateGather = true
+        gathering := s.liftGather
+        s.liftGather = false
         s.judge(b, false)
+        s.liftGather = gathering
         s.lateGather = false
     }
     s.judged[b] = true
@@ -939,7 +1310,9 @@ fn (s mut Scoper&) fieldMark(t types.TypeId, i I64) typed.Mark {
     if id < 0 { return typed.Mark.None }
     b := s.Bodies[id]
     if i >= b.Fields.Len() { return typed.Mark.None }
-    return b.Locals[I64(b.Fields[i])].Marked
+    m := b.Locals[I64(b.Fields[i])].Marked
+    s.markReads.Put(pair.Pair<I64, I64>(id, i), m)
+    return m
 }
 
 # ---- the call graph and its components (Tarjan) ----
@@ -1245,7 +1618,7 @@ fn (s mut Scoper&) run() {
     # D9b: a by-value run-time array parameter the body writes, slices or borrows writably, is the callee's own copy,
     # made in the frame (the code generator's prologue copies it into the frame's arena): its elements are there, not
     # where the caller's argument has them - anything that would outlive the call is refused (O10d)
-    if b!.Root is not null {
+    if b!.Root is not null and s.runArrayParam(b!) {
         w walked
         collectBlock(b!.Root, w)
         for l in b!.Params {
@@ -1264,6 +1637,16 @@ fn (s mut Scoper&) run() {
     s.stmts(b!.Root!.Stmts)
     s.landHeld()
     try s.blocks.Pop() catch { }
+}
+
+# whether a body has a by-value parameter that is an array of a run-time length (D9b) - the walk for what it writes
+# is made only then
+fn (s mut Scoper&) runArrayParam(b typed.Body&) Bool {
+    for l in b.Params {
+        r := s.P.T.Repr(b.Locals[I64(l)].Ty)
+        if not s.isRef(r) and s.P.T.KindOf(r) == types.Kind.Array and s.P.T.Length(r) == types.TypeId(0) { return true }
+    }
+    return false
 }
 
 fn (s mut Scoper&) block(bl typed.Block?&) {
@@ -1387,6 +1770,12 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
         s.landPart = true
     }
     callee := s.bodyOf(c!.Target)
+    if c!.Target == typed.Callee.Value {
+        # a call through a function value lands where its type's obligations need it (valueRels)
+        vr := s.resultVarOf(s.calleeType(c!))
+        s.landOK = vr >= 0 and s.forcedBy(s.callRels(c!), vr)
+        return
+    }
     if callee < 0 or not s.summed(callee) { return }
     # D18e: a generator a for-in makes and finishes lives in the loop's block, whatever it was given - nothing else can
     # reach the walk, which is dropped as that block is left
@@ -1622,8 +2011,10 @@ fn (s mut Scoper&) buildsSum(callee I64, v I64) Bool {
 }
 
 # whether a callee's obligations need its result scope to outlive, or to be, one an argument gives (O18c, O25g)
-fn (s mut Scoper&) forced(callee I64, rv I64) Bool {
-    for r in s.sums[callee].Rels {
+fn (s mut Scoper&) forced(callee I64, rv I64) Bool { return s.forcedBy(s.sums[callee].Rels, rv) }
+
+fn (s mut Scoper&) forcedBy(rels Vec<rel>&, rv I64) Bool {
+    for r in rels {
         if r.Hi == Term.Var(rv) and r.Lo != Term.Var(rv) { return true }
         if r.Exact and r.Lo == Term.Var(rv) and r.Hi != Term.Var(rv) { return true }
     }
@@ -1635,9 +2026,9 @@ fn (s mut Scoper&) forced(callee I64, rv I64) Bool {
 # program's, a derived one or not known here
 fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) Term {
     callee := s.bodyOf(c.Target)
-    if callee < 0 or not s.summed(callee) { return Term.None }
+    if c.Target != typed.Callee.Value and (callee < 0 or not s.summed(callee)) { return Term.None }
     best := Term.None
-    for r in s.sums[callee].Rels {
+    for r in s.callRels(c) {
         if r.Lo != Term.Var(rv) or r.Hi == Term.Var(rv) { continue }
         to := Term.None
         match r.Hi {
@@ -1664,7 +2055,7 @@ fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) T
             case Term.Block(_), Term.Var(_) { }
             # the program's, only where the callee builds nothing there: nothing is then kept to the end
             case Term.Program {
-                if s.sumBuilds(callee, rv) { return Term.None }
+                if callee < 0 or s.sumBuilds(callee, rv) { return Term.None }
             }
             case _ { return Term.None }
         }
@@ -1736,6 +2127,18 @@ fn (s mut Scoper&) staticVar(c typed.Call&, v I64) Bool {
 # whether a call's result passed on as an argument lands by its obligations (O18c): its arguments' terms, read without
 # judging them, give it a scope to land in
 fn (s mut Scoper&) argLands(a typed.Expr&) Bool { return s.landTerm(a) != Term.None }
+
+# the obligations a call is held to: its callee body's, or what its function type says of a call through a value
+# (valueRels); none for another callee
+fn (s mut Scoper&) callRels(c typed.Call&) Vec<rel> {
+    callee := s.bodyOf(c.Target)
+    if callee >= 0 { return s.sums[callee].Rels }
+    if c.Target != typed.Callee.Value { return Vec<rel>() }
+    fty := s.calleeType(c)
+    if fty == types.UnknownT { return Vec<rel>() }
+    vars := s.P.T.ScopeVarsOf(fty)
+    return s.valueRels(fty, vars, s.resultVarOf(fty), source.Span(0, 0))
+}
 
 # where a call's result lands by its obligations (O18c), read off its arguments without judging them - an argument that
 # is itself such a call where that one lands ("v.RefMut(i).RefMut(j)": where v lives); None where it does not
@@ -4590,6 +4993,7 @@ fn (s mut Scoper&) fieldRec(base typed.Lvalue&, i I64) I64 {
     # a bare field: the instance its constructor gave it, its bindings in that constructor's terms - its parameters'
     # bindings this instance's record has, its instance scope where this instance's references are
     cb := try s.ctorOf.Get(bt) catch default -1
+    if cb >= 0 { s.sumReads.Put(cb, true) }
     if cb < 0 or not s.summed(cb) or i >= s.sums[cb].FieldFrom.Len() { return -1 }
     ff := s.sums[cb].FieldFrom[i]
     if ff < 0 { return -1 }
@@ -6684,7 +7088,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                 if s.P.T.Role(fty) == types.RoleCtor { land = false }
                 if not land and (dest == Term.None or partD) and s.P.T.Role(fty) != types.RoleCtor {
                     cb := s.bodyOf(c.Target)
-                    land = cb >= 0 and s.summed(cb) and s.forced(cb, rv)
+                    land = cb >= 0 and s.summed(cb) and s.forced(cb, rv) or c.Target == typed.Callee.Value and s.forcedBy(s.callRels(c), rv)
                 }
                 if land {
                     t := s.landByObligations(c, rv, beta)
@@ -6792,6 +7196,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         agreed = s.argsAgree(c, callee, rv, owner, vals, beta)
     }
     if callee >= 0 { s.discharge(sp, callee, beta, c, agreed) }
+    if callee < 0 and c.Target == typed.Callee.Value { s.dischargeRels(sp, s.valueRels(fty, vars, rv, sp), -1, beta, c, agreed) }
     s.resAt = beta[rv] if rv >= 0 else here
     # a result a scope argument put where it says (E25) is existing storage there - an array of numbers or text too, whose
     # storage lives there whatever it holds - judged where it is stored, passed, returned or made an any as the same value
@@ -7115,7 +7520,12 @@ fn (s mut Scoper&) requiredBy(callee I64, v I64, beta Array<Term>&) Term {
 # a callee's obligations judged through a call's bindings (O10c): each held, recorded as the caller's own, or an error
 # at the call naming the callee's statement that required it
 fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c typed.Call&, agreed Bool) {
-    for r in s.sums[callee].Rels {
+    s.dischargeRels(sp, s.sums[callee].Rels, callee, beta, c, agreed)
+}
+
+# ... rels judged so - a body's (callee), or what a function type says of a call through a value (-1, valueRels)
+fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, beta Array<Term>&, c typed.Call&, agreed Bool) {
+    for r in rels {
         hi := s.through(r.Hi, beta, c, true)
         lo := s.through(r.Lo, beta, c, false)
         if hi == Term.None or lo == Term.None { continue }
@@ -7205,8 +7615,10 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         # a "&p" field of an argument reached through an element: its binding is not known through this path (O23, O11)
         if s.derivedThroughElem(r.Lo, c) or s.derivedThroughElem(r.Hi, c) { m = msgs.FieldBindingUnknown() }
         rec := s.err(s.nameSpan(sp), m)
-        cb := s.Bodies[callee]
-        s.note(rec, cb.File, s.firstToken(cb.File, r.At), msgs.NoteObligationOrigin())
+        if callee >= 0 {
+            cb := s.Bodies[callee]
+            s.note(rec, cb.File, s.firstToken(cb.File, r.At), msgs.NoteObligationOrigin())
+        }
         # the argument too short a loop's copy of an element (B11, r06)
         ai := s.argOfVar(c, r.Hi)
         li := s.argOfVar(c, r.Lo)
@@ -8597,24 +9009,38 @@ fn (s mut Scoper&) inferFields() Bool {
         s.judgeAll(true)
         s.fieldGather = false
         grew := false
+        # what a round that gave fields back as it went asked was asked with marks some components read before the
+        # giving back and some after: the next round, all judged with the marks given back, asks again
         for d in s.wantDecl.Keys() {
-            if s.promoteDecl(d) { grew = true }
+            if not s.gaveBack and s.promoteDecl(d) { grew = true }
         }
-        # a declaration a promoted field of was built through: its promoted fields given back, for good
+        # a declaration a promoted field of was built through: its promoted fields given back, for good - those a
+        # round gave back as it went included (judgeAll)
         for w in s.wantField.Keys() {
-            for k in s.promotedF.Keys() {
-                if k.First != w.First or s.demotedF.Has(k) { continue }
-                s.demotedF.Put(k, true)
-                s.setFieldMark(k.First, k.Second, typed.Mark.Bare)
-                grew = true
-            }
+            if s.giveBackDecl(w.First) { grew = true }
         }
+        if s.gaveBack { grew = true }
+        s.gaveBack = false
         s.FieldRounds.Push(-1 if grew else s.wantHits)
         if not grew and s.wantHits == 0 { return true }
         s.P.L.Diags.Forget(mark)
+        # the next round judges again only the components something they read changed for (judgeAll)
+        s.reuse = not s.NoReuse
         if not grew { return false }
     }
     return false
+}
+
+# declaration d's promoted fields given back to their container's scope, for good: true where one was promoted
+fn (s mut Scoper&) giveBackDecl(d I64) Bool {
+    back := false
+    for k in s.promotedF.Keys() {
+        if k.First != d or s.demotedF.Has(k) { continue }
+        s.demotedF.Put(k, true)
+        s.setFieldMark(k.First, k.Second, typed.Mark.Bare)
+        back = true
+    }
+    return back
 }
 
 # the declaration of the struct a value of type t is, or refers to, whose constructor the pass knows; -1 for none
@@ -8714,7 +9140,14 @@ fn (s mut Scoper&) wantPromotion(x typed.Expr&) {
     if not s.fieldGather or not s.finalQuiet { return }
     d := s.fieldDecl(x)
     if d < 0 { d = s.declOf(x.Type()) }
-    if d >= 0 { s.wantDecl.Put(d, true) }
+    if d >= 0 { s.want(d) }
+}
+
+# declaration d asked to have its fields promoted, by the component being judged too
+fn (s mut Scoper&) want(d I64) {
+    if not s.wantDecl.Has(d) { s.wantNew.Push(d) }
+    s.wantDecl.Put(d, true)
+    s.wantsDecl.Push(d)
 }
 
 # whether term t of a callee's relation, at call c, is the callee's result scope
@@ -8727,13 +9160,16 @@ fn (s mut Scoper&) onResult(c typed.Call&, t Term) Bool {
 fn (s mut Scoper&) wantPromotionOf(t types.TypeId) {
     if not s.fieldGather or not s.finalQuiet or t == types.UnknownT { return }
     d := s.declOf(t)
-    if d >= 0 { s.wantDecl.Put(d, true) }
+    if d >= 0 { s.want(d) }
 }
 
 # the field inference: declaration d's promoted fields built through, or claimed, where their binding is not known -
 # given back to their container's scope, for good (2.6, step 4)
 fn (s mut Scoper&) giveBack(d I64) {
-    if s.fieldGather and s.finalQuiet and not s.standIn and d >= 0 { s.wantField.Put(pair.Pair<I64, I64>(d, -1), true) }
+    if not (s.fieldGather and s.finalQuiet and not s.standIn and d >= 0) { return }
+    if not s.wantField.Has(pair.Pair<I64, I64>(d, -1)) { s.wantNewField.Push(pair.Pair<I64, I64>(d, -1)) }
+    s.wantField.Put(pair.Pair<I64, I64>(d, -1), true)
+    s.wantsField.Push(pair.Pair<I64, I64>(d, -1))
 }
 
 # ... the field a refusal reads through at a derived term t: the declaration it is read out of, and the parameter's
@@ -8791,7 +9227,7 @@ fn (s mut Scoper&) giveBackDerived(t Term) {
 fn (s mut Scoper&) wantExact(t types.TypeId) {
     if not s.fieldGather or t == types.UnknownT { return }
     d := s.declOf(t)
-    if d >= 0 { s.wantDecl.Put(d, true) }
+    if d >= 0 { s.want(d) }
 }
 
 # the declaration whose field value x is read out of (the outermost such field), -1 for none
@@ -9058,6 +9494,22 @@ fn isNameChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
 
 # whether body b's scopes were judged: it has code, and no type in it is unknown (a check error)
 fn (s Scoper&) Judged(b I64) Bool { return s.judged[b] }
+
+# how many components the call graph has, for OLANG_SCOPESTATS
+fn (s Scoper&) Components() I64 { return s.compFrom.Len() }
+
+fn (s Scoper&) RunStats() String {
+    runs, marks, reads, diags := 0, 0, 0, 0
+    for h in s.runs {
+        for r in h {
+            runs++
+            marks += r.Marks.Len()
+            reads += r.Read.Len()
+            diags += r.Diags.Count()
+        }
+    }
+    return $"runs " $runs " marks " $marks " reads " $reads " diags " $diags
+}
 
 # body b's summary as text, for compiler/tools/scopedump.olang: its obligations, what it builds into, keeps and stores
 fn (s Scoper&) Summary(b I64) String {

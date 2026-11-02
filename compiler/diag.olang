@@ -368,6 +368,54 @@ fn (d mut Diagnostics&) Forget(mark I64) {
         }
     }
     d.notes.Truncate(k)
+    y I64 = 0
+    for i in range d.yielding.Len() {
+        if d.yielding[i] < mark {
+            d.yielding[y] = d.yielding[i]
+            y++
+        }
+    }
+    d.yielding.Truncate(y)
+}
+
+# what was reported since Count gave mark - the records, their notes and which yield - set aside to be said again by
+# Replay: a pass doing a step again whose outcome it knows unchanged (the scope pass's field inference, taking a
+# component's judging again)
+type Taken struct() {
+    records Vec<record>
+    notes Vec<note>        # each on the record numbered from the first taken
+    yielding Vec<I64>
+}
+
+fn (d Diagnostics&) Since(mark I64) Taken {
+    t := Taken()
+    for i in range mark, d.records.Len() { t.records.Push(d.records[i]) }
+    for n in d.notes {
+        if n.rec >= mark { t.notes.Push(note(n.rec - mark, n.at, n.text)) }
+    }
+    for y in d.yielding {
+        if y >= mark { t.yielding.Push(y - mark) }
+    }
+    return t
+}
+
+fn (d mut Diagnostics&) Replay(t Taken&) {
+    base := d.records.Len()
+    for r in t.records { d.records.Push(r) }
+    for n in t.notes { d.notes.Push(note(n.rec + base, n.at, n.text)) }
+    for y in t.yielding { d.yielding.Push(y + base) }
+}
+
+fn (t Taken&) Count() I64 { return t.records.Len() }
+
+# whether two takings say the same: their records' rules, texts and places, in order
+fn (t Taken&) Same(o Taken&) Bool {
+    if t.records.Len() != o.records.Len() or t.notes.Len() != o.notes.Len() { return false }
+    for i in range t.records.Len() {
+        a, b := t.records[i], o.records[i]
+        if a.rule != b.rule or a.text != b.text or a.at != b.at { return false }
+    }
+    return true
 }
 
 # opens group g again: what is reported until EndHold belongs to it, as what the parser met in a branch does - a later
