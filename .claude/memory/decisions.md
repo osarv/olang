@@ -2418,3 +2418,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `is null` testing the length - no zero value changes; (3) declared function types (`type Handler fn(...)`) come right
   after `fn&`/`fn?&` in the same batch; (4) in-place calls through `x[i]` keep plain arguments only (no reordering of
   what the user sees). The agent's six details stand; 1, 2 and 6 for the bulk review.
+- QCI 3/4 built (wt-fnref 6c241ad) - its two questions DECIDED by me 2026-11-02 (theirs to review): (1) an
+  `Array<T>?&` / `String?&` declared with no value starts as `null`, as every `?&` does - one rule ("null its zero"),
+  and the user's "an array reference that isn't pointing at a valid array should be null"; the agent's decision 1
+  (empty) is reversed; a never-null array and a value array keep the empty array as their zero (my earlier "no zero
+  value changes" meant those); the sentinel is written only where a `?&` array is made without a value - fixed in the
+  bulk review's fix round; (2) declared function types take no type parameters for now (additive later; the tag can
+  carry an instance). The agent's other seven details stand; 3 (fnref_migrate a text tool, `?&`/`!` left to
+  null_migrate) and 8 (`Catch.Braced`/`Func.Bodied` stay flags) for the bulk review.

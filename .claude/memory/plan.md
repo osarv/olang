@@ -747,3 +747,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   in place via RefMut; found: no program importing std/os freed anything early (RunOnStack's function value counted as a
   task everywhere), fuzz free had run nothing since round 4. Next: QCI 3/4 (fn&/fn?&, declared function types, nullable
   arrays) - two bootstrap stages; then the refactor (Opus), bulk review, final verify.
+- 2026-11-02 CET: QCI 3/4 merged (6c241ad, fast-forward; full verify passed on its tip, seed regenerated twice,
+  bootstrap a fixed point; scopesan clean): function types reference-only (`fn&`/`fn?&`, bare an error, T21), declared
+  function types (`type Handler fn(...)`, `Handler&`, nominal, methods - T21b), nullable arrays (`{-1, null}`);
+  fnref_migrate marked 376 function types in 150 files; bench unchanged. The rework is done. Next: the compiler/
+  refactor (Opus: nesting <= 3-4, duplicated and dead code, best constructs), then bulk review 6 over the rework
+  (Opus, high) with its fix round (including `Array<T>?&`'s zero as null), then the final verify - the first version.
