@@ -48,6 +48,15 @@ fn RunShowing(args Array<String&>&, env Array<String&>& = Array<String&>(0), dir
     return o
 }
 
+# what a tool printed for the files, given a mode first where there is one, its own diagnostics passed on
+fn RunTool(tool String&, mode String&, files Vec<String&>&) String {
+    args := Vec<String&>()
+    args.Push(tool)
+    if mode != "" { args.Push(mode) }
+    for f in files { args.Push(f) }
+    return $RunShowing(args.ToArray()).Stdout
+}
+
 # the value of an environment variable, else fallback
 fn Env(name String&, fallback String&) String {
     v := try os.Env(name) catch os.Error { return $fallback }
