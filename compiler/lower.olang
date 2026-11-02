@@ -4327,27 +4327,12 @@ fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span, top B
         return ln.prim(typed.PrimOp.Same, types.BoolT, mir.Operand[x, y], sp)
     }
     if t.IsRef(r) {
-        # a reference to an array: both null, or neither and the arrays equal
+        # a reference to an array: the arrays equal - an array is never null (T2c), its zero value the empty array, so a
+        # zero reference and one to an empty array made elsewhere are equal, which their lengths say before anything is
+        # read (a null test first had made an empty Vec unequal to its copy)
         x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
         y := ln.local(mir.Operand.Copy(ln.mk(b)), ty, sp)
-        res := ln.flag(false, sp)
-        xn := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
-        yn := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(y)), mir.Operand.Const(ty, 0)], sp)
-        both := ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[xn, yn], sp)
-        either := ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[xn, yn], sp)
-        bothB, notBoth, neither, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
-        ln.end(mir.Term.Branch(both, bothB, notBoth))
-        ln.start(bothB)
-        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(ln.constBool(true, sp))))
-        ln.goto(after)
-        ln.start(notBoth)
-        ln.end(mir.Term.Branch(either, after, neither))
-        ln.start(neither)
-        e := ln.equalAt(ln.at(x), ln.at(y), t.Referent(r), sp)
-        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(e)))
-        ln.goto(after)
-        ln.start(after)
-        return mir.Operand.Copy(mir.L(res))
+        return ln.equalAt(ln.at(x), ln.at(y), t.Referent(r), sp)
     }
     if not top {
         return ln.helperCall(mir.HelperKind.Equal, ty, mir.Operand[ln.refTo(a, ty, sp), ln.refTo(b, ty, sp)], mir.ScopeRef[]
@@ -4491,6 +4476,11 @@ fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = f
             return ln.mix(ln.prim(typed.PrimOp.BitXor, mir.I64T, mir.Operand[lo, ln.mix(ln.asI64(hi, ty, sp), sp)], sp), sp)
         }
         return ln.mix(ln.asI64(x, ty, sp), sp)
+    }
+    if t.IsRef(r) and ln.arrayOf(t.Referent(r)) != types.UnknownT {
+        # a reference to an array hashes the array: never null (T2c), so hashing follows equality (equalAt)
+        x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
+        return ln.hashAt(ln.at(x), t.Referent(r), sp)
     }
     if t.IsRef(r) {
         x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)

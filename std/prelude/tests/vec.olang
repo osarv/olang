@@ -424,3 +424,23 @@ vecVacatedBaked := vecVacated()
 test "Vec: removals empty what they no longer use and shifts move, evaluated while compiling as at run time" {
     assert vecVacatedBaked == 2000 + 100 + 10 + 1 and vecVacated() == vecVacatedBaked
 }
+
+# E10: an array is never null - a zero Vec's buffer and the empty one its copy holds are equal, and hash alike (an empty
+# Vec was unequal to its copy: a reference to an array was tested for null first)
+fn emptyEqual(k I64) I64 {
+    a Vec<I64>
+    b := a
+    s Vec<String&>
+    t := s
+    n := 0
+    if a == b and b == a and a.View() == b.View() and s == t { n++ }
+    if a.Hash() == b.Hash() and s.Hash() == t.Hash() { n++ }
+    a.Push(k)
+    if a != b { n++ }
+    return n
+}
+EmptyEqual I64 = emptyEqual(4)                          # K2: the evaluator agrees
+
+test "Vec: an empty one equals its copy and hashes alike - while compiling and at run time" {
+    assert emptyEqual(Run) == 3 and EmptyEqual == 3
+}
