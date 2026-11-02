@@ -1775,19 +1775,31 @@ fn (c mut Checker&) listHoldsBy(l types.ListId, d types.DeclId, depth I64) Bool 
     return false
 }
 
+# a struct's field declarations, in their order (C2a)
+fn fieldDecls(sb ast.StructBody&) Iterator<ast.VarDecl&> {
+    for st in sb.Body {
+        match st {
+            case ast.Stmt.Var(_, v) { if v.Field: yield v }
+            case _ { }
+        }
+    }
+}
+
+# a declared type's struct body, null where it has none - an enum, a type over another, one that did not parse
+fn (c mut Checker&) structBody(d types.DeclId) ast.StructBody?& {
+    td := c.P.TypeDecl(d)
+    if td is null or td.Body is null { return null }
+    match td.Body {
+        case ast.TypeBody.Struct(sb) { return sb }
+        case _ { return null }
+    }
+}
+
 # a struct's fields' names' spans, in their order (C2a)
 fn fieldSpans(sb ast.StructBody&) Vec<source.Span> {
     out := Vec<source.Span>()
-    if sb.Body.Len() == 0 { return out }
-    for st in sb.Body {
-        match st {
-            case ast.Stmt.Var(_, v) {
-                if v.Field {
-                    for sp in v.NameSps { out.Push(sp) }
-                }
-            }
-            case _ { }
-        }
+    for v in fieldDecls(sb) {
+        for sp in v.NameSps { out.Push(sp) }
     }
     return out
 }
@@ -1801,32 +1813,24 @@ fn (c mut Checker&) ctorVarRules(td ast.TypeDecl&, sb ast.StructBody&) {
         return
     }
     v := c.text(sb.TypeParams[0].Name)
-    if sb.Body.Len() == 0 { return }
-    for st in sb.Body {
-        match st {
-            case ast.Stmt.Var(_, vd) {
-                if not vd.Field { continue }
-                for i in range vd.Names.Len() {
-                    if vd.Ty is null and vd.Values.Len() > 0 {
-                        c.err(vd.NameSps[i], msgs.CtorGenericInferredField(c.tok(vd.Names[i]), v))
-                        return
-                    }
-                    ty := vd.Ty
-                    if ty is null and vd.Values.Len() == 0 and sb.Params.Len() > 0 {
-                        for prm in sb.Params {
-                            if prm.Name == vd.Names[i] { ty = prm.Ty }
-                        }
-                    }
-                    if ty is null { continue }
-                    for tp in sb.TypeParams {
-                        if c.wordIn(ty.Span(), c.text(tp.Name)).Start >= 0 {
-                            c.err(vd.NameSps[i], msgs.CtorFieldNamesVar(c.tok(vd.Names[i]), c.text(tp.Name), c.text(td.Name), c.text(tp.Name)))
-                            return
-                        }
-                    }
+    for vd in fieldDecls(sb) {
+        for i in range vd.Names.Len() {
+            if vd.Ty is null and vd.Values.Len() > 0 {
+                c.err(vd.NameSps[i], msgs.CtorGenericInferredField(c.tok(vd.Names[i]), v))
+                return
+            }
+            ty := vd.Ty
+            if ty is null and vd.Values.Len() == 0 and sb.Params.Len() > 0 {
+                for prm in sb.Params {
+                    if prm.Name == vd.Names[i] { ty = prm.Ty }
                 }
             }
-            case _ { }
+            if ty is null { continue }
+            for tp in sb.TypeParams {
+                if c.wordIn(ty.Span(), c.text(tp.Name)).Start < 0 { continue }
+                c.err(vd.NameSps[i], msgs.CtorFieldNamesVar(c.tok(vd.Names[i]), c.text(tp.Name), c.text(td.Name), c.text(tp.Name)))
+                return
+            }
         }
     }
 }
@@ -10380,89 +10384,7 @@ fn (c mut Checker&) runArrayValue(t types.TypeId) Bool {
 fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
     if tr is null { return true }
     match tr {
-        case ast.TypeRef.Named(nsp, path, args) {
-            if path.Len() == 1 and not c.fr().Ctx.Vars.Has(path[0]) and c.P.R.Use(c.fr().File, nsp.Start).Kind == names.What.None {
-                c.unknownType(nsp, path[0])
-                return false
-            }
-            # G1a: an error-set parameter is no type - it stands where an error set is written
-            if path.Len() == 1 and c.fr().Ctx.Vars.Has(path[0]) {
-                v := try c.fr().Ctx.Vars.Get(path[0]) catch default types.UnknownT
-                if c.P.IsErrVar(v) or c.P.T.KindOf(v) == types.Kind.ErrSet {
-                    c.err(nsp, msgs.ErrVarNotType(c.tok(path[0]), c.text(path[0])))
-                    return false
-                }
-            }
-            if c.traitWritten(tr, tr) { return false }
-            if not c.underRef and c.funcNamed(tr) {
-                # T21b: a declared function type is held by reference alone, as every function type is (T21)
-                c.err(nsp, msgs.FuncDeclBare(c.src(tr.Span())))
-                return false
-            }
-            c.underRef = false   # its type arguments are places of their own
-
-            if c.foreignNamed(tr) {
-                # X10: an extern type is held by reference alone
-                c.err(nsp, msgs.ForeignByValue(c.src(tr.Span())))
-                return false
-            }
-            ref := c.P.R.Use(c.fr().File, nsp.Start)
-            if ref.Kind == names.What.Type and ref.Index >= 0 and not c.fr().Ctx.Vars.Has(path[path.Len() - 1]) {
-                # G7: a generic type's arguments, as many as its parameters; a type with none takes none
-                dd := c.P.DeclFor(ref.Module, ref.Index)
-                np := c.P.T.DeclParams(dd)
-                tn := c.text(path[path.Len() - 1])
-                # G1a: an error-set argument closes the list, given where the type's list ends in an error-set parameter
-                na := args.Len()
-                if na > 0 and generic.IsErrsArgOf(args[na - 1]) {
-                    if not c.P.HasErrParam(dd) {
-                        c.err(args[na - 1].Span(), msgs.ErrSetArgUnwanted(tn))
-                        return false
-                    }
-                    na--
-                }
-                if c.P.HasErrParam(dd) { np-- }
-                if np == 0 and na > 0 {
-                    c.err(args[0].Span(), msgs.TypeArgsOnNonGeneric(tn))
-                    return false
-                }
-                if np > 0 and na > 0 and np != na {
-                    rec := c.err(args[0].Span(), msgs.TypeArgCount(tn, np, na))
-                    # L18c: a function type of several results, unparenthesized, took the arguments after it as its own
-                    if np < args.Len() {
-                        for i in range args.Len() - 1 {
-                            if isFuncTypeRef(args[i]) {
-                                c.P.L.Diags.Note(rec, c.at(args[i].Span()), msgs.NoteGroupFunctionType())
-                                break
-                            }
-                        }
-                    }
-                    return false
-                }
-            }
-            if args.Len() == 0 { return true }
-            # G8, T7: Array's one argument is its element type - a length is never written
-            if path.Len() == 1 and args.Len() > 1 and c.text(path[0]) == "Array" and ref.Kind == names.What.Builtin {
-                c.err(args[1].Span(), msgs.ArrayTooManyArgs(args.Len()))
-                return false
-            }
-            for a in args {
-                if generic.IsErrsArgOf(a) { continue }   # its items are read where it is resolved (ErrorItemKnown)
-                # T25b: "mut" before a type argument is a reference's permission
-                match a {
-                    case ast.TypeRef.Perm(psp, of, w, _) {
-                        if w and not c.refWritten(of!) {
-                            c.err(source.Span(psp.Start, psp.Start + 3), msgs.MutOnValueType(c.ty(c.P.Resolve(c.fr().Ctx, of))))
-                            return false
-                        }
-                    }
-                    case _ { }
-                }
-                if not c.writtenMet(a) { return false }
-            }
-            rt := c.P.Resolve(c.fr().Ctx, tr)
-            return c.instancesMet(rt, args[0].Span())
-        }
+        case ast.TypeRef.Named(nsp, path, args) { return c.namedMet(tr, nsp, path, args) }
         case ast.TypeRef.Ref(_, of, _) {
             match of {
                 case ast.TypeRef.Any(_, trt) { return c.anyWritten(trt) }
@@ -10506,6 +10428,98 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
         case ast.TypeRef.Func(_, s) { return c.sigWritten(s) }
         case _ { return true }
     }
+}
+
+# writtenMet of a named type tr: its name known and a type, held as its kind must be, its arguments as many as its
+# parameters and each met in turn
+fn (c mut Checker&) namedMet(tr ast.TypeRef&, nsp source.Span, path Array<source.NameId>&, args Array<ast.TypeRef&>&) Bool {
+    if path.Len() == 1 and not c.fr().Ctx.Vars.Has(path[0]) and c.P.R.Use(c.fr().File, nsp.Start).Kind == names.What.None {
+        c.unknownType(nsp, path[0])
+        return false
+    }
+    # G1a: an error-set parameter is no type - it stands where an error set is written
+    if path.Len() == 1 and c.fr().Ctx.Vars.Has(path[0]) {
+        v := try c.fr().Ctx.Vars.Get(path[0]) catch default types.UnknownT
+        if c.P.IsErrVar(v) or c.P.T.KindOf(v) == types.Kind.ErrSet {
+            c.err(nsp, msgs.ErrVarNotType(c.tok(path[0]), c.text(path[0])))
+            return false
+        }
+    }
+    if c.traitWritten(tr, tr) { return false }
+    if not c.underRef and c.funcNamed(tr) {
+        # T21b: a declared function type is held by reference alone, as every function type is (T21)
+        c.err(nsp, msgs.FuncDeclBare(c.src(tr.Span())))
+        return false
+    }
+    c.underRef = false   # its type arguments are places of their own
+
+    if c.foreignNamed(tr) {
+        # X10: an extern type is held by reference alone
+        c.err(nsp, msgs.ForeignByValue(c.src(tr.Span())))
+        return false
+    }
+    ref := c.P.R.Use(c.fr().File, nsp.Start)
+    if ref.Kind == names.What.Type and ref.Index >= 0 and not c.fr().Ctx.Vars.Has(path[path.Len() - 1]) and
+       not c.typeArgCountMet(path, args, ref) {
+        return false
+    }
+    if args.Len() == 0 { return true }
+    # G8, T7: Array's one argument is its element type - a length is never written
+    if path.Len() == 1 and args.Len() > 1 and c.text(path[0]) == "Array" and ref.Kind == names.What.Builtin {
+        c.err(args[1].Span(), msgs.ArrayTooManyArgs(args.Len()))
+        return false
+    }
+    for a in args {
+        if generic.IsErrsArgOf(a) { continue }   # its items are read where it is resolved (ErrorItemKnown)
+        if not c.typeArgMet(a) { return false }
+    }
+    rt := c.P.Resolve(c.fr().Ctx, tr)
+    return c.instancesMet(rt, args[0].Span())
+}
+
+# G7: a generic type's arguments, as many as its parameters; a type with none takes none - whether so, said where not
+fn (c mut Checker&) typeArgCountMet(path Array<source.NameId>&, args Array<ast.TypeRef&>&, ref names.Ref) Bool {
+    dd := c.P.DeclFor(ref.Module, ref.Index)
+    np := c.P.T.DeclParams(dd)
+    tn := c.text(path[path.Len() - 1])
+    # G1a: an error-set argument closes the list, given where the type's list ends in an error-set parameter
+    na := args.Len()
+    if na > 0 and generic.IsErrsArgOf(args[na - 1]) {
+        if not c.P.HasErrParam(dd) {
+            c.err(args[na - 1].Span(), msgs.ErrSetArgUnwanted(tn))
+            return false
+        }
+        na--
+    }
+    if c.P.HasErrParam(dd) { np-- }
+    if np == 0 and na > 0 {
+        c.err(args[0].Span(), msgs.TypeArgsOnNonGeneric(tn))
+        return false
+    }
+    if not (np > 0 and na > 0 and np != na) { return true }
+    rec := c.err(args[0].Span(), msgs.TypeArgCount(tn, np, na))
+    if np >= args.Len() { return false }
+    # L18c: a function type of several results, unparenthesized, took the arguments after it as its own
+    for i in range args.Len() - 1 {
+        if not isFuncTypeRef(args[i]) { continue }
+        c.P.L.Diags.Note(rec, c.at(args[i].Span()), msgs.NoteGroupFunctionType())
+        break
+    }
+    return false
+}
+
+# a type argument met: "mut" before one is a reference's permission (T25b), then writtenMet
+fn (c mut Checker&) typeArgMet(a ast.TypeRef&) Bool {
+    match a {
+        case ast.TypeRef.Perm(psp, of, w, _) {
+            if w and not c.refWritten(of!) {
+                c.err(source.Span(psp.Start, psp.Start + 3), msgs.MutOnValueType(c.ty(c.P.Resolve(c.fr().Ctx, of))))
+                return false
+            }
+        }
+        case _ { }
+    }
+    return c.writtenMet(a)
 }
 
 # a function type's signature, as written: its parameters' and results' types (T21)
@@ -12842,29 +12856,16 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Lvalue&, n so
 
 # a field's position among a struct's: its constructor body's field declarations, in order (C2)
 fn (c mut Checker&) fieldIndex(t types.TypeId, n source.NameId) I64 {
-    td := c.P.TypeDecl(c.P.T.DeclOf(t))
-    if td is null or td.Body is null { return -1 }
-    match td.Body {
-        case ast.TypeBody.Struct(s) {
-            if s.Body.Len() == 0 { return -1 }
-            k I64 = 0
-            for st in s.Body {
-                match st {
-                    case ast.Stmt.Var(_, v) {
-                        if v.Field {
-                            for vn in v.Names {
-                                if vn == n { return k }
-                                k++
-                            }
-                        }
-                    }
-                    case _ { }
-                }
-            }
-            return -1
+    sb := c.structBody(c.P.T.DeclOf(t))
+    if sb is null { return -1 }
+    k I64 = 0
+    for v in fieldDecls(sb) {
+        for vn in v.Names {
+            if vn == n { return k }
+            k++
         }
-        case _ { return -1 }
     }
+    return -1
 }
 
 # B11: " - did you mean 'x'?" for a member t has no n of - the nearest of its methods (its type's, a trait default
@@ -12881,27 +12882,12 @@ fn (c mut Checker&) memberHint(t types.TypeId, n source.NameId, fields Bool) Str
         }
         if c.text(m)[0].IsUpper() or c.P.FnModule(f) == c.fr().Mi { near.Offer(c.text(m)) }
     }
-    if fields and c.isStruct(dt) {
-        td := c.P.TypeDecl(c.P.T.DeclOf(dt))
-        mine := c.P.DeclModule(c.P.T.DeclOf(dt)) == c.fr().Mi
-        if td is not null and td.Body is not null {
-            match td.Body {
-                case ast.TypeBody.Struct(sb) {
-                    for st in sb.Body {
-                        match st {
-                            case ast.Stmt.Var(_, v) {
-                                if v.Field {
-                                    for vn in v.Names {
-                                        if mine or c.text(vn)[0].IsUpper() { near.Offer(c.text(vn)) }
-                                    }
-                                }
-                            }
-                            case _ { }
-                        }
-                    }
-                }
-                case _ { }
-            }
+    sb := c.structBody(c.P.T.DeclOf(dt)) if fields and c.isStruct(dt) else null
+    if sb is null { return near.Hint() }
+    mine := c.P.DeclModule(c.P.T.DeclOf(dt)) == c.fr().Mi
+    for v in fieldDecls(sb) {
+        for vn in v.Names {
+            if mine or c.text(vn)[0].IsUpper() { near.Offer(c.text(vn)) }
         }
     }
     return near.Hint()
@@ -13298,15 +13284,12 @@ fn (c mut Checker&) reflFold(x ast.Expr&) reflVal {
         }
         case ast.Expr.Paren(_, y) { return c.reflFold(y) }
         case ast.Expr.Name(sp, n) {
-            if c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.Local and c.localNamed(n) < 0 {
-                r := try c.fr().Ctx.Refl.Get(n) catch default types.TypeId(-1)
-                if r >= types.TypeId(0) and c.P.T.KindOf(r) == types.Kind.Const {
-                    c.reflTouched = true
-                    if c.P.T.ConstType(r) == types.BoolT { return rvBool(c.P.T.ConstValue(r) != 0) }   # K3a
-                    return rvInt(c.P.T.ConstValue(r))
-                }
-            }
-            return noRefl()
+            if c.P.R.Use(c.fr().File, sp.Start).Kind != names.What.Local or c.localNamed(n) >= 0 { return noRefl() }
+            r := try c.fr().Ctx.Refl.Get(n) catch default types.TypeId(-1)
+            if r < types.TypeId(0) or c.P.T.KindOf(r) != types.Kind.Const { return noRefl() }
+            c.reflTouched = true
+            if c.P.T.ConstType(r) == types.BoolT { return rvBool(c.P.T.ConstValue(r) != 0) }   # K3a
+            return rvInt(c.P.T.ConstValue(r))
         }
         case ast.Expr.Unary(_, op, y) {
             v := c.reflFold(y)
@@ -13341,36 +13324,11 @@ fn (c mut Checker&) reflFold(x ast.Expr&) reflVal {
             }
         }
         case ast.Expr.Call(_, f, args) {
-            match f {
-                case ast.Expr.Generic(_, g, targs) {
-                    # G40, G35: "x.HasAttr<A>()" is known while compiling
-                    ax, name, _ := c.attrCallee(g)
-                    if name == "HasAttr" and targs.Len() == 1 and args.Len() == 0 {
-                        holder := c.attrHolder(ax)
-                        if holder >= types.TypeId(0) {
-                            c.reflTouched = true
-                            if holder == types.UnknownT { return noRefl() }
-                            a := c.resolve(targs[0])
-                            if a == types.UnknownT { return noRefl() }
-                            mi, _ := c.attrFound(holder, a)
-                            return rvBool(mi >= 0)
-                        }
-                    }
-                }
-                case ast.Expr.Member(_, y, n) {
-                    if c.text(n) == "Len" and args.Len() == 0 {
-                        l := c.listOf(y)
-                        if l.Ok {
-                            c.reflTouched = true
-                            if l.Of == types.UnknownT { return noRefl() }
-                            items, why := c.P.ReflItems(l.Of, l.Which, l.Case, c.fr().Mi)
-                            return rvInt(items.Len()) if why == "" else noRefl()
-                        }
-                    }
-                }
-                case _ { }
+            return match f {
+                case ast.Expr.Generic(_, g, targs): c.reflHasAttr(g, targs, args)
+                case ast.Expr.Member(_, y, n): c.reflLen(y, n, args)
+                case _: noRefl()
             }
-            return noRefl()
         }
         case ast.Expr.Member(_, y, n) {
             # an enum's case with no payload written by its name: TypeKind.Struct
@@ -13385,6 +13343,31 @@ fn (c mut Checker&) reflFold(x ast.Expr&) reflVal {
         }
         case _ { return noRefl() }
     }
+}
+
+# G40, G35: "x.HasAttr<A>()" is known while compiling
+fn (c mut Checker&) reflHasAttr(g ast.Expr&, targs Array<ast.TypeRef&>&, args Array<ast.Expr&>&) reflVal {
+    ax, name, _ := c.attrCallee(g)
+    if name != "HasAttr" or targs.Len() != 1 or args.Len() != 0 { return noRefl() }
+    holder := c.attrHolder(ax)
+    if holder < types.TypeId(0) { return noRefl() }
+    c.reflTouched = true
+    if holder == types.UnknownT { return noRefl() }
+    a := c.resolve(targs[0])
+    if a == types.UnknownT { return noRefl() }
+    mi, _ := c.attrFound(holder, a)
+    return rvBool(mi >= 0)
+}
+
+# a reflected list's "Len()" is known while compiling (G32)
+fn (c mut Checker&) reflLen(y ast.Expr&, n source.NameId, args Array<ast.Expr&>&) reflVal {
+    if c.text(n) != "Len" or args.Len() != 0 { return noRefl() }
+    l := c.listOf(y)
+    if not l.Ok { return noRefl() }
+    c.reflTouched = true
+    if l.Of == types.UnknownT { return noRefl() }
+    items, why := c.P.ReflItems(l.Of, l.Which, l.Case, c.fr().Mi)
+    return rvInt(items.Len()) if why == "" else noRefl()
 }
 
 # a reflected member known while compiling (G32, G34): a type's Name, Kind, Size, Align, Length; a descriptor's Name,
@@ -13781,36 +13764,42 @@ fn (c mut Checker&) spreadArgs(args Array<ast.Expr&>&) Array<ast.Expr&>& {
                     out.Push(a)
                     continue
                 }
-                l := c.listOf(cm.Source)
-                if not l.Ok {
-                    c.err(cm.Source.Span(), msgs.ReflArgCompr())
-                    c.spreadBad = true
-                    continue
-                }
-                items := c.listItems(cm.Source.Span(), l)
-                for k in range items.Len() {
-                    keep := true
-                    if cm.Filter is not null {
-                        wasName := c.reflBind(cm.Name, c.descriptor(l, items[k]))
-                        wasKey := c.reflBind(cm.Key, c.P.T.Const(c.i64(), k))
-                        d := c.reflDecide(cm.Filter)
-                        c.reflUnbind(cm.Key, wasKey)
-                        c.reflUnbind(cm.Name, wasName)
-                        if d < 0 {
-                            c.err(cm.Filter!.Span(), msgs.ReflFilterUndecided())
-                            c.spreadBad = true
-                        }
-                        keep = d == 1
-                    }
-                    if keep {
-                        out.Push(ast.Expr.Compr(csp, ast.Compr(cm.Elem, cm.Value, cm.Key, cm.Name, cm.Source, null, true, k)))
-                    }
-                }
+                c.spreadCompr(csp, cm, out)
             }
             case _ { out.Push(a) }
         }
     }
     return out.ToArray()
+}
+
+# G37: a comprehension written as a call's arguments - one argument per reflected item its filter keeps, onto out
+fn (c mut Checker&) spreadCompr(csp source.Span, cm ast.Compr&, out mut Vec<ast.Expr&>&) {
+    l := c.listOf(cm.Source)
+    if not l.Ok {
+        c.err(cm.Source.Span(), msgs.ReflArgCompr())
+        c.spreadBad = true
+        return
+    }
+    items := c.listItems(cm.Source.Span(), l)
+    for k in range items.Len() {
+        if cm.Filter is not null and not c.reflKeeps(cm, l, items[k], k) { continue }
+        out.Push(ast.Expr.Compr(csp, ast.Compr(cm.Elem, cm.Value, cm.Key, cm.Name, cm.Source, null, true, k)))
+    }
+}
+
+# whether a spread comprehension's filter keeps the reflected item at, the k-th - decided while compiling, said where
+# it cannot be
+fn (c mut Checker&) reflKeeps(cm ast.Compr&, l reflList, at I64, k I64) Bool {
+    wasName := c.reflBind(cm.Name, c.descriptor(l, at))
+    wasKey := c.reflBind(cm.Key, c.P.T.Const(c.i64(), k))
+    d := c.reflDecide(cm.Filter)
+    c.reflUnbind(cm.Key, wasKey)
+    c.reflUnbind(cm.Name, wasName)
+    if d < 0 {
+        c.err(cm.Filter!.Span(), msgs.ReflFilterUndecided())
+        c.spreadBad = true
+    }
+    return d == 1
 }
 
 # one argument a spread comprehension gave (G37): its value with the comprehension's names bound to its item
@@ -13991,82 +13980,86 @@ fn (c mut Checker&) rawTable(d types.DeclId, report Bool) rawTable& {
     td := c.P.TypeDecl(d)
     if td is null or td.Body is null { return none }
     match td.Body {
-        case ast.TypeBody.Enum(cases, raw) {
-            if raw is null {
-                if report {
-                    for cd in cases {
-                        if cd.Value is not null { c.err(cd.Value!.Span(), msgs.RawWithoutType()) }
-                    }
-                }
-                return none
-            }
-            rt := c.P.Resolve(c.P.DeclContext(d), raw)
-            if rt == types.UnknownT { return none }
-            text := c.P.T.Same(rt, c.textType())
-            if not text and not c.isInt(rt) {
-                if report { c.err(raw.Span(), msgs.RawType(c.ty(rt))) }
-                return none
-            }
-            n := cases.Len()
-            bits := Array<I64>(n)
-            bytes := Array<Array<U8>&>(n, Array<U8>(0))
-            set := Array<Bool>(n)    # the values worked out: only those are compared
-            prev := intLit(-1)
-            for i in range n {
-                cd := cases[i]
-                if report and c.text(cd.Name) == "From" { c.err(c.caseNameSpan(cd), msgs.FromCaseName()) }
-                at := c.caseNameSpan(cd) if cd.Value is null else cd.Value!.Span()
-                if text {
-                    if cd.Value is null {
-                        bytes[i] = textBytes(c.text(cd.Name))
-                    } else {
-                        sp := try c.textValue(cd.Value!) catch NotText {
-                            if report { c.err(at, msgs.RawNotLiteral(c.ty(rt))) }
-                            continue
-                        }
-                        bytes[i] = c.strBytes(sp)
-                    }
-                    set[i] = true
-                    for j in range i {
-                        if set[j] and bytes[j] == bytes[i] {
-                            if report { c.err(at, msgs.RawRepeated(c.text(cd.Name), "\"" $String(bytes[i]) "\"", c.text(cases[j].Name))) }
-                            break
-                        }
-                    }
-                    continue
-                }
-                v := noLit()
-                if cd.Value is null {
-                    aMag := magOf(prev)
-                    na, ma := aMag.Neg, aMag.M
-                    v = addMag(na, ma, false, U128(1)) if prev.Ok else noLit()
-                } else if numberLitsOnly(cd.Value!) or isCharLit(cd.Value!) {
-                    v = c.foldPart(cd.Value!)
-                }
-                if not v.Ok or v.IsFloat {
-                    # a written value that is no integer literal, or one counted past U64's maximum
-                    if report { c.err(at, msgs.RawNotLiteral(c.ty(rt)) if cd.Value is not null else msgs.RawNoFit("18446744073709551616", c.ty(rt))) }
-                    prev = noLit()
-                    continue
-                }
-                prev = v
-                if not c.rawFits(v, rt) {
-                    if report { c.err(at, msgs.RawNoFit(litText(v), c.ty(rt))) }
-                    continue
-                }
-                bits[i] = v.I
-                set[i] = true
-                for j in range i {
-                    if set[j] and bits[j] == bits[i] {
-                        if report { c.err(at, msgs.RawRepeated(c.text(cd.Name), litText(v), c.text(cases[j].Name))) }
-                        break
-                    }
-                }
-            }
-            return rawTable(rt, text, bits, bytes)
-        }
+        case ast.TypeBody.Enum(cases, raw) { return c.rawEnum(d, cases, raw, report) }
         case _ { return none }
     }
+}
+
+# rawTable of an enum declaration's cases and raw type
+fn (c mut Checker&) rawEnum(d types.DeclId, cases Array<ast.CaseDecl&>&, raw ast.TypeRef?&, report Bool) rawTable& {
+    none := rawTable(types.UnknownT, false, Array<I64>(0), Array<Array<U8>&>(0))
+    if raw is null {
+        if report {
+            for cd in cases {
+                if cd.Value is not null { c.err(cd.Value!.Span(), msgs.RawWithoutType()) }
+            }
+        }
+        return none
+    }
+    rt := c.P.Resolve(c.P.DeclContext(d), raw)
+    if rt == types.UnknownT { return none }
+    text := c.P.T.Same(rt, c.textType())
+    if not text and not c.isInt(rt) {
+        if report { c.err(raw.Span(), msgs.RawType(c.ty(rt))) }
+        return none
+    }
+    n := cases.Len()
+    bits := Array<I64>(n)
+    bytes := Array<Array<U8>&>(n, Array<U8>(0))
+    set := Array<Bool>(n)    # the values worked out: only those are compared
+    prev := intLit(-1)
+    for i in range n {
+        cd := cases[i]
+        if report and c.text(cd.Name) == "From" { c.err(c.caseNameSpan(cd), msgs.FromCaseName()) }
+        at := c.caseNameSpan(cd) if cd.Value is null else cd.Value!.Span()
+        if text {
+            if cd.Value is null {
+                bytes[i] = textBytes(c.text(cd.Name))
+            } else {
+                sp := try c.textValue(cd.Value!) catch NotText {
+                    if report { c.err(at, msgs.RawNotLiteral(c.ty(rt))) }
+                    continue
+                }
+                bytes[i] = c.strBytes(sp)
+            }
+            set[i] = true
+            for j in range i {
+                if set[j] and bytes[j] == bytes[i] {
+                    if report { c.err(at, msgs.RawRepeated(c.text(cd.Name), "\"" $String(bytes[i]) "\"", c.text(cases[j].Name))) }
+                    break
+                }
+            }
+            continue
+        }
+        v := noLit()
+        if cd.Value is null {
+            aMag := magOf(prev)
+            na, ma := aMag.Neg, aMag.M
+            v = addMag(na, ma, false, U128(1)) if prev.Ok else noLit()
+        } else if numberLitsOnly(cd.Value!) or isCharLit(cd.Value!) {
+            v = c.foldPart(cd.Value!)
+        }
+        if not v.Ok or v.IsFloat {
+            # a written value that is no integer literal, or one counted past U64's maximum
+            if report { c.err(at, msgs.RawNotLiteral(c.ty(rt)) if cd.Value is not null else msgs.RawNoFit("18446744073709551616", c.ty(rt))) }
+            prev = noLit()
+            continue
+        }
+        prev = v
+        if not c.rawFits(v, rt) {
+            if report { c.err(at, msgs.RawNoFit(litText(v), c.ty(rt))) }
+            continue
+        }
+        bits[i] = v.I
+        set[i] = true
+        for j in range i {
+            if set[j] and bits[j] == bits[i] {
+                if report { c.err(at, msgs.RawRepeated(c.text(cd.Name), litText(v), c.text(cases[j].Name))) }
+                break
+            }
+        }
+    }
+    return rawTable(rt, text, bits, bytes)
 }
 
 fn (c mut Checker&) caseNameSpan(cd ast.CaseDecl&) source.Span {
@@ -15724,6 +15717,52 @@ fn (c mut Checker&) caughtLast(m ast.Match&, covered Bool) I64 {
 # "_"; the cases without guards cover every error the subject can be, and null where it may be null; a
 # case after they have, or naming nothing it can be, is never reached. Whether the cases cover everything - failing
 # with Unread where it may not be read, said why
+# what one case of a match over a caught error covers: the errors its alternatives name, whether one is null or "_"
+# (Wild where the case is unguarded), and whether each is a test it may make (Ok), said where not
+type altsCovered struct(Xs Vec<types.TypeId>, Nulls Bool, Wild Bool, Ok Bool) { Xs, Nulls, Wild, Ok }
+
+fn (c mut Checker&) caughtAlts(cs ast.Case&, what String&, now Vec<types.TypeId>&, nullable Bool) altsCovered {
+    xs Vec<types.TypeId>
+    nulls := false
+    wild := false
+    ok := true
+    for p in cs.Alts {
+        match p {
+            case ast.Pattern.Wild(_) {
+                if cs.Guard is null { wild = true }
+                nulls = true
+                xs = c.setUnion(xs, now)
+            }
+            case ast.Pattern.Path(_, y), ast.Pattern.Value(_, y) {
+                if isNullLit(y) {
+                    if not nullable {
+                        c.err(p.Span(), msgs.ErrNeverNull(what))
+                        ok = false
+                    }
+                    nulls = true
+                    continue
+                }
+                ys := try c.caughtItems(y) catch NotError {
+                    c.err(p.Span(), msgs.CaughtCaseForm())
+                    ok = false
+                    continue
+                }
+                if c.setMeet(now, ys).Len() == 0 {
+                    c.err(p.Span(), msgs.CaughtNeverIs(what, c.setText(ys), c.setText(now)))
+                    ok = false
+                } else {
+                    xs = c.setUnion(xs, ys)
+                }
+            }
+            case _ {
+                c.err(p.Span(), msgs.CaughtCaseForm())
+                ok = false
+            }
+        }
+    }
+    return altsCovered(xs, nulls, wild, ok)
+}
+
 fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool ? Unread {
     fr := c.fr()
     what := "'" $c.src(m.Subject.Span()) "'"
@@ -15749,45 +15788,12 @@ fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool ? Unread {
             ok = false
             continue
         }
-        xs Vec<types.TypeId>
-        nulls := false
-        for p in cs.Alts {
-            match p {
-                case ast.Pattern.Wild(_) {
-                    if cs.Guard is null { wild = true }
-                    nulls = true
-                    xs = c.setUnion(xs, now)
-                }
-                case ast.Pattern.Path(_, y), ast.Pattern.Value(_, y) {
-                    if isNullLit(y) {
-                        if not nullable {
-                            c.err(p.Span(), msgs.ErrNeverNull(what))
-                            ok = false
-                        }
-                        nulls = true
-                        continue
-                    }
-                    ys := try c.caughtItems(y) catch NotError {
-                        c.err(p.Span(), msgs.CaughtCaseForm())
-                        ok = false
-                        continue
-                    }
-                    if c.setMeet(now, ys).Len() == 0 {
-                        c.err(p.Span(), msgs.CaughtNeverIs(what, c.setText(ys), c.setText(now)))
-                        ok = false
-                    } else {
-                        xs = c.setUnion(xs, ys)
-                    }
-                }
-                case _ {
-                    c.err(p.Span(), msgs.CaughtCaseForm())
-                    ok = false
-                }
-            }
-        }
+        a := c.caughtAlts(cs, what, now, nullable)
+        if a.Wild { wild = true }
+        if not a.Ok { ok = false }
         if cs.Guard is null {
-            covered = c.setUnion(covered, c.setMeet(xs, now))
-            if nulls { nullDone = true }
+            covered = c.setUnion(covered, c.setMeet(a.Xs, now))
+            if a.Nulls { nullDone = true }
         }
     }
     all := wild or (c.setLess(now, covered).Len() == 0 and nullDone)
@@ -16081,22 +16087,7 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     fr.leaks.Truncate(lm)
     if task is null { return }
     if dispatched(task) {
-        if targets.Len() == 0 {
-            c.err(inner.Span(), msgs.AnySpawned(c.src(inner.Span())))
-        } else {
-            # the lambda giving what the target is set to (P1g): "spawn r = fn() I64 { return a.Peek() }()"
-            rt := typeOf(task)
-            res := c.ty(rt)
-            if c.P.T.KindOf(rt) == types.Kind.Tuple {
-                b := StringBuilder()
-                for x in c.P.T.Items(c.P.T.Parts(rt)) {
-                    if b.Len() > 0 { b.Push(", ") }
-                    b.Push(c.ty(x))
-                }
-                res = b.ToString()
-            }
-            c.err(inner.Span(), msgs.AnySpawnedResult(c.src(source.Span(targets[0].Span().Start, call.Span().Start)), res, c.src(inner.Span())))
-        }
+        c.anySpawned(targets, call, inner, typeOf(task))
         return
     }
     errs := c.P.T.Items(c.lastErrs)
@@ -16139,41 +16130,60 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     c.dropTaken(fr.joinErrs, em, taken)
     # P4d: a task binding targets that can fail into its join leaves them unwritten
     if places.Len() > 0 and fr.joinErrs.Len() > em { fr.TargetFails++ }
-    # the targets: exactly the call's result (P1g)
-    rt := typeOf(task)
-    if places.Len() > 0 {
-        if rt == types.VoidT {
-            c.err(call.Span(), msgs.SpawnResultVoid())
-        } else {
-            parts := Array<types.TypeId>(1)
-            parts[0] = rt
-            if places.Len() > 1 and c.P.T.KindOf(rt) == types.Kind.Tuple { parts = c.P.T.Items(c.P.T.Parts(rt)) }
-            if parts.Len() != places.Len() {
-                c.err(sp, msgs.DestructCount(places.Len(), parts.Len()))
-            } else {
-                for i in range places.Len() {
-                    pt := places[i]!.Type() if places[i] is not null else types.UnknownT
-                    same := c.P.T.Same(pt, parts[i]) or
-                            (c.isRef(pt) and c.isRef(parts[i]) and c.P.T.Same(c.deref(pt), c.deref(parts[i])))
-                    if places[i] is not null and not same {
-                        if c.isRef(pt) and not c.isRef(parts[i]) and c.P.T.Same(c.deref(pt), parts[i]) {
-                            # the fix is the function's result, built where its result lands (study 4's r16)
-                            c.err(c.operandAt(targets[i]), msgs.SpawnResultAsRef(c.ty(parts[i]), c.ty(pt), c.src(c.calleeSpan(call)), c.ty(pt)))
-                        } else {
-                            rec := c.err(c.operandAt(targets[i]), msgs.SpawnResultType(c.ty(parts[i]), c.ty(places[i]!.Type())))
-                            match places[i] {
-                                case typed.Lvalue.Local(_, _, lid) {
-                                    if c.litLocals.Has(pair.Pair(c.fr().Body, I64(lid))) { c.literalLocalNote(rec, I64(lid), parts[i]) }
-                                }
-                                case _ { }
-                            }
-                        }
-                    }
-                }
+    if places.Len() > 0 { c.spawnTargets(sp, call, targets, places, typeOf(task)) }
+    c.emit(typed.Stmt.Spawn(sp, typed.Spawn(places.ToArray(), task, tcs.ToArray(), c.site(typed.SiteKind.Task, sp))))
+}
+
+# T32: a call through an "any" is no task - said with the lambda to write, giving what the targets are set to where
+# there are some (P1g): "spawn r = fn() I64 { return a.Peek() }()"
+fn (c mut Checker&) anySpawned(targets Array<ast.Expr&>&, call ast.Expr&, inner ast.Expr&, rt types.TypeId) {
+    if targets.Len() == 0 {
+        c.err(inner.Span(), msgs.AnySpawned(c.src(inner.Span())))
+        return
+    }
+    res := c.ty(rt)
+    if c.P.T.KindOf(rt) == types.Kind.Tuple {
+        b := StringBuilder()
+        for x in c.P.T.Items(c.P.T.Parts(rt)) {
+            if b.Len() > 0 { b.Push(", ") }
+            b.Push(c.ty(x))
+        }
+        res = b.ToString()
+    }
+    c.err(inner.Span(), msgs.AnySpawnedResult(c.src(source.Span(targets[0].Span().Start, call.Span().Start)), res, c.src(inner.Span())))
+}
+
+# a spawn's targets: exactly its call's result, rt (P1g)
+fn (c mut Checker&) spawnTargets(sp source.Span, call ast.Expr&, targets Array<ast.Expr&>&, places Vec<typed.Lvalue?&>&, rt types.TypeId) {
+    if rt == types.VoidT {
+        c.err(call.Span(), msgs.SpawnResultVoid())
+        return
+    }
+    parts := Array<types.TypeId>(1)
+    parts[0] = rt
+    if places.Len() > 1 and c.P.T.KindOf(rt) == types.Kind.Tuple { parts = c.P.T.Items(c.P.T.Parts(rt)) }
+    if parts.Len() != places.Len() {
+        c.err(sp, msgs.DestructCount(places.Len(), parts.Len()))
+        return
+    }
+    for i in range places.Len() {
+        pt := places[i]!.Type() if places[i] is not null else types.UnknownT
+        same := c.P.T.Same(pt, parts[i]) or
+                (c.isRef(pt) and c.isRef(parts[i]) and c.P.T.Same(c.deref(pt), c.deref(parts[i])))
+        if places[i] is null or same { continue }
+        if c.isRef(pt) and not c.isRef(parts[i]) and c.P.T.Same(c.deref(pt), parts[i]) {
+            # the fix is the function's result, built where its result lands (study 4's r16)
+            c.err(c.operandAt(targets[i]), msgs.SpawnResultAsRef(c.ty(parts[i]), c.ty(pt), c.src(c.calleeSpan(call)), c.ty(pt)))
+            continue
+        }
+        rec := c.err(c.operandAt(targets[i]), msgs.SpawnResultType(c.ty(parts[i]), c.ty(places[i]!.Type())))
+        match places[i] {
+            case typed.Lvalue.Local(_, _, lid) {
+                if c.litLocals.Has(pair.Pair(c.fr().Body, I64(lid))) { c.literalLocalNote(rec, I64(lid), parts[i]) }
             }
+            case _ { }
         }
     }
-    c.emit(typed.Stmt.Spawn(sp, typed.Spawn(places.ToArray(), task, tcs.ToArray(), c.site(typed.SiteKind.Task, sp))))
 }
 
 # a task's clause as a lambda run on the task's thread (P4a): its block, then its default - the targets' value, a tuple
@@ -19146,33 +19156,24 @@ fn (c mut Checker&) calledAt(x typed.Expr&) diag.Where {
 # the parameter it takes
 fn (c mut Checker&) fieldDeclAt(t types.TypeId, i I64) diag.Where {
     d := c.P.T.DeclOf(t)
-    td := c.P.TypeDecl(d)
-    if td is null or td.Body is null { return diag.Where.Nowhere }
+    st := c.structBody(d)
+    if st is null { return diag.Where.Nowhere }
     mi := c.P.DeclModule(d)
-    match td.Body {
-        case ast.TypeBody.Struct(st) {
-            if st.Body.Len() == 0 { return diag.Where.Nowhere }
-            k I64 = 0
-            for stmt in st.Body {
-                match stmt {
-                    case ast.Stmt.Var(_, v) {
-                        if not v.Field { continue }
-                        for n in v.Names {
-                            if k == i {
-                                if v.Ty is not null { return c.markAt(mi, v.Ty) }
-                                if st.Params.Len() > 0 and not v.Infer {
-                                    for prm in st.Params { if prm.Name == n { return c.markAt(mi, prm.Ty) } }
-                                }
-                                return diag.Where.Nowhere
-                            }
-                            k++
-                        }
-                    }
-                    case _ { }
-                }
-            }
+    k I64 = 0
+    for v in fieldDecls(st) {
+        for n in v.Names {
+            if k == i { return c.fieldTypeWritten(mi, st, v, n) }
+            k++
         }
-        case _ { }
+    }
+    return diag.Where.Nowhere
+}
+
+# where field n's type is written: its declaration's, else its parameter's where it is a pun
+fn (c mut Checker&) fieldTypeWritten(mi I64, st ast.StructBody&, v ast.VarDecl&, n source.NameId) diag.Where {
+    if v.Ty is not null { return c.markAt(mi, v.Ty) }
+    if st.Params.Len() > 0 and not v.Infer {
+        for prm in st.Params { if prm.Name == n { return c.markAt(mi, prm.Ty) } }
     }
     return diag.Where.Nowhere
 }
@@ -21082,78 +21083,18 @@ fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Lvalue&, t types.TypeId,
     match p {
         case ast.Pattern.Wild(sp) { return c.lit(sp, types.BoolT, 1) }
         case ast.Pattern.Type(sp, tyr, n, nsp) { return c.typeCase(sp, tyr, n, nsp, place, t, binds) }
-        case ast.Pattern.Bind(sp, n) {
-            id := c.localNamed(n)
-            if id < 0 or I64(c.cur().Locals[id].In) != arm or c.cur().Locals[id].Kind != typed.LocalKind.Binding {
-                id = c.local(n, sp, t, typed.LocalKind.Binding, typed.Mark.Infer)
-                at := c.placeAt(place)     # T2c: where its type is written, for declNote
-                if at != diag.Where.Nowhere { c.fr().typeAt.Put(id, at) }
-            } else if not c.P.T.Same(c.cur().Locals[id].Ty, t) and t != types.UnknownT {
-                lt := c.cur().Locals[id].Ty
-                if c.isRef(lt) and c.isRef(t) and c.P.T.Same(c.P.T.Referent(lt), c.P.T.Referent(t)) {
-                    # S13c: references of one type meet - writable only where every alternative's is
-                    l := c.cur().Locals[id]
-                    l.Ty = c.P.T.Ref(c.P.T.Referent(lt), meetPerm(c.P.T.PermOf(lt), c.P.T.PermOf(t)))
-                    c.cur().Locals[id] = l
-                } else {
-                    # S13c: a name several alternatives bind has one type
-                    c.err(sp, msgs.AltBindingType(c.tok(n), c.ty(lt)))
-                }
-            }
-            c.roLet(id, c.read(sp, place))   # T25c: a binding of a place reached read-only is a read-only copy
-            binds.Push(typed.Bind(typed.LocalId(I32(id)), c.read(sp, place)))
-            return c.lit(sp, types.BoolT, 1)
-        }
+        case ast.Pattern.Bind(sp, n) { return c.bindPattern(sp, n, place, t, binds, arm) }
         case ast.Pattern.Path(sp, x) {
             et := c.deref(t)
             k := c.caseTag(x, et)
             if k >= 0 { return c.isCase(sp, place, k) }
-            if c.typeNamed(x) < types.TypeId(0) {
-                match x {
-                    case ast.Expr.Member(_, prefix, n) {
-                        pt := c.typeNamed(prefix)
-                        if c.isEnum(et) and pt >= types.TypeId(0) and c.P.T.DeclOf(pt) == c.P.T.DeclOf(et) {
-                            c.err(memberSpan(sp, c.text(n).Len()), c.noCase(et, n))
-                            return c.lit(sp, types.BoolT, 0)
-                        }
-                        if pt >= types.TypeId(0) and c.isEnum(pt) and not (c.isEnum(et) and c.P.T.DeclOf(pt) == c.P.T.DeclOf(et)) {
-                            # S13b: a case of another enum where the payload holds something else
-                            c.err(prefix.Span(), msgs.PatternType(c.ty(et), msgs.Tok(c.src(prefix.Span()))))
-                            return c.lit(sp, types.BoolT, 0)
-                        }
-                    }
-                    case _ { }
-                }
-            }
+            if c.typeNamed(x) < types.TypeId(0) and c.wrongCasePath(sp, x, et) { return c.lit(sp, types.BoolT, 0) }
             return c.valueTest(sp, place, x, t)
         }
         case ast.Pattern.Case(sp, path, subs) {
             et := c.deref(t)
             k := c.caseTag(path, et)
-            if k < 0 {
-                match path {
-                    case ast.Expr.Member(msp, prefix, n) {
-                        pt := c.typeNamed(prefix)
-                        if c.isEnum(et) and pt >= types.TypeId(0) and c.P.T.DeclOf(pt) == c.P.T.DeclOf(et) {
-                            c.err(memberSpan(msp, c.text(n).Len()), c.noCase(et, n))
-                            return c.lit(sp, types.BoolT, 0)
-                        }
-                    }
-                    case _ { }
-                }
-                # no case: a call, its value compared by "==" (S13d) - Point(1, 2), Label("x")
-                xs Vec<ast.Expr&>
-                for q in subs {
-                    match q {
-                        case ast.Pattern.Value(_, x), ast.Pattern.Path(_, x) { xs.Push(x) }
-                        case _ {
-                            c.gap(q.Span(), "a binding in a call compared as a value (S13d)")
-                            return c.lit(sp, types.BoolT, 0)
-                        }
-                    }
-                }
-                return c.valueTest(sp, place, ast.Expr.Call(sp, path, xs.ToArray()), t)
-            }
+            if k < 0 { return c.callPattern(sp, path, subs, place, t, et) }
             tst := c.isCase(sp, place, k)
             sig := c.P.CaseSig(et, k)
             ps := c.P.T.Items(c.P.T.Params(sig))
@@ -21178,6 +21119,80 @@ fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Lvalue&, t types.TypeId,
             return c.lit(sp, types.BoolT, 0)
         }
     }
+}
+
+# a name a pattern binds, a read of place: a binding local of this arm, or one another alternative of it bound (S13c)
+fn (c mut Checker&) bindPattern(sp source.Span, n source.NameId, place typed.Lvalue&, t types.TypeId, binds mut Vec<typed.Bind&>&
+                                arm I64) typed.Expr& {
+    id := c.localNamed(n)
+    if id < 0 or I64(c.cur().Locals[id].In) != arm or c.cur().Locals[id].Kind != typed.LocalKind.Binding {
+        id = c.local(n, sp, t, typed.LocalKind.Binding, typed.Mark.Infer)
+        at := c.placeAt(place)     # T2c: where its type is written, for declNote
+        if at != diag.Where.Nowhere { c.fr().typeAt.Put(id, at) }
+    } else if not c.P.T.Same(c.cur().Locals[id].Ty, t) and t != types.UnknownT {
+        c.altBinding(sp, n, id, t)
+    }
+    c.roLet(id, c.read(sp, place))   # T25c: a binding of a place reached read-only is a read-only copy
+    binds.Push(typed.Bind(typed.LocalId(I32(id)), c.read(sp, place)))
+    return c.lit(sp, types.BoolT, 1)
+}
+
+# S13c: a name several alternatives bind has one type - references of one type meet, writable only where every
+# alternative's is
+fn (c mut Checker&) altBinding(sp source.Span, n source.NameId, id I64, t types.TypeId) {
+    lt := c.cur().Locals[id].Ty
+    if not (c.isRef(lt) and c.isRef(t) and c.P.T.Same(c.P.T.Referent(lt), c.P.T.Referent(t))) {
+        c.err(sp, msgs.AltBindingType(c.tok(n), c.ty(lt)))
+        return
+    }
+    l := c.cur().Locals[id]
+    l.Ty = c.P.T.Ref(c.P.T.Referent(lt), meetPerm(c.P.T.PermOf(lt), c.P.T.PermOf(t)))
+    c.cur().Locals[id] = l
+}
+
+# a path pattern naming no type and no case of et: a case its own enum lacks, or a case of another enum where the
+# payload holds something else (S13b) - said; whether it was
+fn (c mut Checker&) wrongCasePath(sp source.Span, x ast.Expr&, et types.TypeId) Bool {
+    match x {
+        case ast.Expr.Member(_, prefix, n) {
+            pt := c.typeNamed(prefix)
+            if c.isEnum(et) and pt >= types.TypeId(0) and c.P.T.DeclOf(pt) == c.P.T.DeclOf(et) {
+                c.err(memberSpan(sp, c.text(n).Len()), c.noCase(et, n))
+                return true
+            }
+            if not (pt >= types.TypeId(0) and c.isEnum(pt) and not (c.isEnum(et) and c.P.T.DeclOf(pt) == c.P.T.DeclOf(et))) { return false }
+            c.err(prefix.Span(), msgs.PatternType(c.ty(et), msgs.Tok(c.src(prefix.Span()))))
+            return true
+        }
+        case _: return false
+    }
+}
+
+# a case pattern whose path names no case of et: a case its own enum lacks, said; else a call, its value compared by
+# "==" (S13d) - Point(1, 2), Label("x")
+fn (c mut Checker&) callPattern(sp source.Span, path ast.Expr&, subs Array<ast.Pattern&>&, place typed.Lvalue&, t types.TypeId
+                                et types.TypeId) typed.Expr& {
+    match path {
+        case ast.Expr.Member(msp, prefix, n) {
+            pt := c.typeNamed(prefix)
+            if c.isEnum(et) and pt >= types.TypeId(0) and c.P.T.DeclOf(pt) == c.P.T.DeclOf(et) {
+                c.err(memberSpan(msp, c.text(n).Len()), c.noCase(et, n))
+                return c.lit(sp, types.BoolT, 0)
+            }
+        }
+        case _ { }
+    }
+    xs Vec<ast.Expr&>
+    for q in subs {
+        match q {
+            case ast.Pattern.Value(_, x), ast.Pattern.Path(_, x) { xs.Push(x) }
+            case _ {
+                c.gap(q.Span(), "a binding in a call compared as a value (S13d)")
+                return c.lit(sp, types.BoolT, 0)
+            }
+        }
+    }
+    return c.valueTest(sp, place, ast.Expr.Call(sp, path, xs.ToArray()), t)
 }
 
 # ---- array patterns (S13h) ----
