@@ -1,0 +1,52 @@
+# D9h: a for-in over a read-only reference parameter's Vec, its element read in place; a call changes the Vec through a
+# writable reference held in a struct the call is given - a copy of the element must not see it
+import "std/io"
+
+type blk struct(xs Vec<I64>) { xs }
+type hold struct(v mut Vec<blk>&) { v }
+
+fn pokeRef(h mut hold&) { h.v.RefMut(0).xs.ViewMut()[0] = 99 }
+fn pokeVal(h hold) { h.v.RefMut(0).xs.ViewMut()[0] = 98 }
+
+fn walkRef(v Vec<blk>&, h mut hold&) I64 {
+    s := 0
+    for e in v {
+        pokeRef(h)
+        s += e.xs[0]
+    }
+    return s
+}
+
+fn walkVal(v Vec<blk>&, h hold) I64 {
+    s := 0
+    for e in v {
+        pokeVal(h)
+        s += e.xs[0]
+    }
+    return s
+}
+
+fn elemVal(v Vec<blk>&, h hold) I64 {
+    e := v[0]
+    pokeVal(h)
+    return e.xs[0]
+}
+
+fn fresh() Vec<blk> {
+    v := Vec<blk>()
+    xs := Vec<I64>()
+    xs.Push(1)
+    v.Push(blk(xs))
+    return v
+}
+
+fn main() {
+    a := fresh()
+    ha := hold(a)
+    x := walkRef(a, ha)
+    b := fresh()
+    y := walkVal(b, hold(b))
+    c := fresh()
+    z := elemVal(c, hold(c))
+    io.Println("walkRef " $x " walkVal " $y " elemVal " $z " (copies: 1 1 1)")!
+}

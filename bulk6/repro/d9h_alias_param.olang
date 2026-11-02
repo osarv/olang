@@ -1,0 +1,47 @@
+# D9h: an element copy read in place through a reference local naming a read-only reference parameter's Vec, while a
+# call changes that Vec through another (writable) name for it
+import "std/io"
+
+type blk struct(xs Vec<I64>) { xs }
+
+fn poke(w mut Vec<blk>&) { w.RefMut(0).xs.ViewMut()[0] = 99 }
+
+fn viaLocal(v Vec<blk>&, w mut Vec<blk>&) I64 {
+    r := v
+    e := r[0]
+    poke(w)
+    return e.xs[0]
+}
+
+fn viaParam(v Vec<blk>&, w mut Vec<blk>&) I64 {
+    e := v[0]
+    poke(w)
+    return e.xs[0]
+}
+
+fn viaWalk(v Vec<blk>&, w mut Vec<blk>&) I64 {
+    s := 0
+    for e in v {
+        poke(w)
+        s += e.xs[0]
+    }
+    return s
+}
+
+fn fresh() Vec<blk> {
+    v := Vec<blk>()
+    xs := Vec<I64>()
+    xs.Push(1)
+    v.Push(blk(xs))
+    return v
+}
+
+fn main() {
+    a := fresh()
+    x := viaLocal(a, a)
+    b := fresh()
+    y := viaParam(b, b)
+    c := fresh()
+    z := viaWalk(c, c)
+    io.Println("viaLocal " $x " viaParam " $y " viaWalk " $z " (copies: 1 1 1)")!
+}
