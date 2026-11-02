@@ -1,0 +1,36 @@
+# a reference to a value local owning storage, kept in a mutable global from a loop in a function: the local's own
+# storage is a frame slot of that function
+import "std/io"
+
+type rec struct(s String) { s }
+type rh struct(r rec&) { r }
+
+G mut Vec<rh> = Vec<rh>()
+
+fn fill() {
+    for k in range 1, 6 {
+        r := rec($k "-th")
+        G.Push(rh(r))
+    }
+}
+
+fn fillOne(k I64) {
+    r := rec($k "-one")
+    G.Push(rh(r))
+}
+
+fn stomp(n I64) I64 {
+    a := Array<I64>(64, n)
+    s := 0
+    for x in a { s += x }
+    return s
+}
+
+fn main() {
+    fill()
+    fillOne(9)
+    x := stomp(0x4141414141)
+    out := ""
+    for h in G { out = $out " " $h.r.s }
+    io.Println("recs" $out " " $x)!
+}

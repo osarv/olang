@@ -1,0 +1,273 @@
+=== assertfalsewritten.olang
+1c1
+< checks/cases/assertfalsewritten.olang:6:14: error[S18c]: this assertion is false, evaluated while compiling; its message reads what only the running program knows, so it is shown as written: "n is " $n
+---
+> checks/cases/assertfalsewritteX.olang:6:14: error[S18c]: this assertion is false, evaluated while compiling; its message reads what only the running program knows, so it is shown as written: "n is " $n
+=== attrbuiltin.olang
+1c1
+< checks/cases/attrbuiltin.olang:3:2: error[G39]: an attribute is a value of a declared type - a struct, an enum's case or a declared number type - and this is I64
+---
+> checks/cases/attrbuiltiX.olang:3:2: error[G39]: an attribute is a value of a declared type - a struct, an enum's case or a declared number type - and this is I64
+=== attrpun.olang
+1c1
+< checks/cases/attrpun.olang:5:5: error[G39]: field 'x' is a pun of its parameter, and has the parameter's attributes - write the attribute on the parameter
+---
+> checks/cases/attrpuX.olang:5:5: error[G39]: field 'x' is a pun of its parameter, and has the parameter's attributes - write the attribute on the parameter
+=== b10version.olang
+1c1
+< checks/cases/b10version.olang:4:22: error: unknown name 'Version'
+---
+> checks/cases/b10versioX.olang:4:22: error: unknown name 'Version'
+=== b7atargetunknown.olang
+1c1
+< checks/cases/b7atargetunknown.olang:4:6: error[B7a]: a test names a function, a type or Type.Method of its file, and 'twise' is none - did you mean 'twice'?
+---
+> checks/cases/b7atargetunknowX.olang:4:6: error[B7a]: a test names a function, a type or Type.Method of its file, and 'twise' is none - did you mean 'twice'?
+=== becomejoin.olang
+1c1
+< checks/cases/becomejoin.olang:7:9: error[S21]: 'become' leaves the function at once, so not from a join block, whose tasks it would leave behind - write 'return' and the call
+---
+> checks/cases/becomejoiX.olang:7:9: error[S21]: 'become' leaves the function at once, so not from a join block, whose tasks it would leave behind - write 'return' and the call
+=== becomemain.olang
+1c1
+< checks/cases/becomemain.olang:4:13: error[S21]: 'become' ends a function declared with fn, never main - write 'return' and the call
+---
+> checks/cases/becomemaiX.olang:4:13: error[S21]: 'become' ends a function declared with fn, never main - write 'return' and the call
+=== c2dreturn.olang
+1c1
+< checks/cases/c2dreturn.olang:10:12: error[O26]: this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Clone()')
+---
+> checks/cases/c2dreturX.olang:10:12: error[O26]: this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Clone()')
+=== d11amutfn.olang
+1c1
+< checks/cases/d11amutfn.olang:6:10: error[D9]: a by-value parameter is the callee's own copy, always writable - 'mut' is for a reference, and fn&(x I64) I64 is none
+---
+> checks/cases/d11amutfX.olang:6:10: error[D9]: a by-value parameter is the callee's own copy, always writable - 'mut' is for a reference, and fn&(x I64) I64 is none
+4c4
+< checks/cases/d11amutfn.olang:8:7: error[D11a]: a local is always writable - 'mut' is for a reference, and fn&(x I64) I64 is none
+---
+> checks/cases/d11amutfX.olang:8:7: error[D11a]: a local is always writable - 'mut' is for a reference, and fn&(x I64) I64 is none
+=== d16dlambdaown.olang
+1c1
+< checks/cases/d16dlambdaown.olang:9:12: error[O26]: this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Clone()')
+---
+> checks/cases/d16dlambdaowX.olang:9:12: error[O26]: this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Clone()')
+=== d16espawn.olang
+1c1
+< checks/cases/d16espawn.olang:11:19: error[P2, D16e]: this function value closes before the join does - make it outside, or spawn the lambda itself
+---
+> checks/cases/d16espawX.olang:11:19: error[P2, D16e]: this function value closes before the join does - make it outside, or spawn the lambda itself
+=== d16return.olang
+1c1
+< checks/cases/d16return.olang:6:26: error[S3]: this computes a value and discards it - only a call, '++' or '--' stands alone
+---
+> checks/cases/d16returX.olang:6:26: error[S3]: this computes a value and discards it - only a call, '++' or '--' stands alone
+4c4
+< checks/cases/d16return.olang:6:16: error[D10a]: the end can be reached without returning I32 - return on every path, or end it with 'unreachable'
+---
+> checks/cases/d16returX.olang:6:16: error[D10a]: the end can be reached without returning I32 - return on every path, or end it with 'unreachable'
+=== d18yieldjoin.olang
+1c1
+< checks/cases/d18yieldjoin.olang:9:9: error[S20]: a join block may not yield - its tasks are waited for before it is left
+---
+> checks/cases/d18yieldjoiX.olang:9:9: error[S20]: a join block may not yield - its tasks are waited for before it is left
+=== d18yieldown.olang
+1c1
+< checks/cases/d18yieldown.olang:7:15: error[S20, O26]: this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Clone()', '$x')
+---
+> checks/cases/d18yieldowX.olang:7:15: error[S20, O26]: this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Clone()', '$x')
+=== d2duplicatefn.olang
+1c1
+< checks/cases/d2duplicatefn.olang:4:4: error[D2]: 'f' is already declared in this module
+---
+> checks/cases/d2duplicatefX.olang:4:4: error[D2]: 'f' is already declared in this module
+=== d8ereturn.olang
+1c1
+< checks/cases/d8ereturn.olang:4:16: error[D8e]: a 'noreturn' function never returns - end this path with a noreturn call or 'unreachable'
+---
+> checks/cases/d8ereturX.olang:4:16: error[D8e]: a 'noreturn' function never returns - end this path with a noreturn call or 'unreachable'
+=== d8gextern.olang
+1c1
+< checks/cases/d8gextern.olang:4:16: error[D8g]: a variadic parameter is a function's, not an extern's - C's variable arguments are '...'
+---
+> checks/cases/d8gexterX.olang:4:16: error[D8g]: a variadic parameter is a function's, not an extern's - C's variable arguments are '...'
+=== d8gtwo.olang
+1c1
+< checks/cases/d8gtwX.olang:3:19: error[D8g]: a variadic parameter is the last one but defaulted ones - one variadic parameter, and only parameters with a default after it, given by name
+---
+> checks/cases/d8gtwo.olang:3:19: error[D8g]: a variadic parameter is the last one but defaulted ones - one variadic parameter, and only parameters with a default after it, given by name
+=== d9alambdawritten.olang
+1c1
+< checks/cases/d9alambdawritten.olang:8:31: error[D16a]: this lambda's signature disagrees with fn&(x Array<I32>) Bool ? E - leave that part out, or make them agree
+---
+> checks/cases/d9alambdawritteX.olang:8:31: error[D16a]: this lambda's signature disagrees with fn&(x Array<I32>) Bool ? E - leave that part out, or make them agree
+=== e11blongchain.olang
+1c1
+< checks/cases/e11blongchain.olang:9:20: error[E11b]: a join piece is a text literal or a '$' rendering - write '$(...)'
+---
+> checks/cases/e11blongchaiX.olang:9:20: error[E11b]: a join piece is a text literal or a '$' rendering - write '$(...)'
+=== e13bfieldnotfn.olang
+1c1
+< checks/cases/e13bfieldnotfn.olang:6:10: error[E13b]: I32 is not a function, and declares no Call
+---
+> checks/cases/e13bfieldnotfX.olang:6:10: error[E13b]: I32 is not a function, and declares no Call
+=== e13bnotfn.olang
+1c1
+< checks/cases/e13bnotfn.olang:4:22: error[E13b]: I32 is not a function, and declares no Call
+---
+> checks/cases/e13bnotfX.olang:4:22: error[E13b]: I32 is not a function, and declares no Call
+=== e14bunknown.olang
+1c1
+< checks/cases/e14bunknown.olang:4:31: error[E14b]: 'timout' names no parameter of 'connect' - did you mean 'timeout'?
+---
+> checks/cases/e14bunknowX.olang:4:31: error[E14b]: 'timout' names no parameter of 'connect' - did you mean 'timeout'?
+=== e33opnan.olang
+1c1
+< checks/cases/e33opnan.olang:4:4: error[B9c]: this top-level condition cannot be decided while compiling: it reads the bits of a NaN an operation made, whose sign and payload are unspecified (checks/cases/e33opnan.olang:4)
+---
+> checks/cases/e33opnaX.olang:4:4: error[B9c]: this top-level condition cannot be decided while compiling: it reads the bits of a NaN an operation made, whose sign and payload are unspecified (checks/cases/e33opnaX.olang:4)
+=== e33snan.olang
+1c1
+< checks/cases/e33snan.olang:4:4: error[B9c]: this top-level condition cannot be decided while compiling: it reads the bits of a signalling NaN, which moving it may have quieted (checks/cases/e33snan.olang:4)
+---
+> checks/cases/e33snaX.olang:4:4: error[B9c]: this top-level condition cannot be decided while compiling: it reads the bits of a signalling NaN, which moving it may have quieted (checks/cases/e33snaX.olang:4)
+=== g10dnozero.olang
+1c1
+< checks/cases/g10dnozerX.olang:12:5: error[D13c]: D has no zero value, so this needs one - its constructor does not run on zeros while compiling: it introduces a type variable, which no zero binds
+---
+> checks/cases/g10dnozero.olang:12:5: error[D13c]: D has no zero value, so this needs one - its constructor does not run on zeros while compiling: it introduces a type variable, which no zero binds
+4c4
+< checks/cases/g10dnozerX.olang:14:10: error[D13c]: D has no zero value, so this needs one - its constructor does not run on zeros while compiling: it introduces a type variable, which no zero binds
+---
+> checks/cases/g10dnozero.olang:14:10: error[D13c]: D has no zero value, so this needs one - its constructor does not run on zeros while compiling: it introduces a type variable, which no zero binds
+=== g19permission.olang
+1c1
+< checks/cases/g19permission.olang:12:3: error[G19]: S does not satisfy the constraint Filler on T: it has no method Fill that fits
+---
+> checks/cases/g19permissioX.olang:12:3: error[G19]: S does not satisfy the constraint Filler on T: it has no method Fill that fits
+4c4
+< checks/cases/g19permission.olang:9:11: note: 'Fill' is declared here, with another signature
+---
+> checks/cases/g19permissioX.olang:9:11: note: 'Fill' is declared here, with another signature
+=== g21divzero.olang
+1c1
+< checks/cases/g21divzerX.olang:5:26: error[E6a]: division by zero
+---
+> checks/cases/g21divzero.olang:5:26: error[E6a]: division by zero
+=== g8bunknown.olang
+1c1
+< checks/cases/g8bunknown.olang:4:17: error: unknown type 'T'
+---
+> checks/cases/g8bunknowX.olang:4:17: error: unknown type 'T'
+=== ifacetwo.olang
+1c1
+< checks/cases/ifacetwX.olang:17:12: error[M19e]: two traits P satisfies both declare a default 'Shout' - the call cannot choose
+---
+> checks/cases/ifacetwo.olang:17:12: error[M19e]: two traits P satisfies both declare a default 'Shout' - the call cannot choose
+=== l16unknown.olang
+1c1
+< checks/cases/l16unknown.olang:6:8: error[L16]: unexpected character '`'
+---
+> checks/cases/l16unknowX.olang:6:8: error[L16]: unexpected character '`'
+=== l18semicolon.olang
+1c1
+< checks/cases/l18semicolon.olang:7:36: error[L18]: olang has no ';' - a statement ends where its line does; put the next one on a line of its own
+---
+> checks/cases/l18semicoloX.olang:7:36: error[L18]: olang has no ';' - a statement ends where its line does; put the next one on a line of its own
+=== lanethroughatro.olang
+1c1
+< checks/cases/lanethroughatrX.olang:7:5: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+---
+> checks/cases/lanethroughatro.olang:7:5: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+=== m19g06chain.olang
+1c1
+< checks/cases/m19g06chain.olang:14:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+---
+> checks/cases/m19g06chaiX.olang:14:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+4c4
+< checks/cases/m19g06chain.olang:13:5: note: 'v' may grow here, in 'outer' - take the view after it, or copy the elements first: 'v.ToArray()'
+---
+> checks/cases/m19g06chaiX.olang:13:5: note: 'v' may grow here, in 'outer' - take the view after it, or copy the elements first: 'v.ToArray()'
+7c7
+< checks/cases/m19g06chain.olang:8:29: note: 'outer' may grow it here
+---
+> checks/cases/m19g06chaiX.olang:8:29: note: 'outer' may grow it here
+=== m19g16forin.olang
+1c1
+< checks/cases/m19g16forin.olang:7:5: error[M19g]: this reads a view of 'v' taken before 'v' may have grown
+---
+> checks/cases/m19g16foriX.olang:7:5: error[M19g]: this reads a view of 'v' taken before 'v' may have grown
+4c4
+< checks/cases/m19g16forin.olang:7:27: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
+---
+> checks/cases/m19g16foriX.olang:7:27: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
+=== m21twiceplain.olang
+1c1
+< checks/cases/m21twiceplain.olang:7:11: error[M21]: 'Area' is declared twice for P - declare one per instance
+---
+> checks/cases/m21twiceplaiX.olang:7:11: error[M21]: 'Area' is declared twice for P - declare one per instance
+4c4
+< checks/cases/m21twiceplain.olang:6:11: note: 'Area' is declared here
+---
+> checks/cases/m21twiceplaiX.olang:6:11: note: 'Area' is declared here
+=== m6bprivatelen.olang
+1c1
+< checks/cases/m6bprivatelen.olang:9:14: error[E31]: Len gives an I64
+---
+> checks/cases/m6bprivateleX.olang:9:14: error[E31]: Len gives an I64
+4c4
+< checks/cases/m6bprivatelen.olang:9:14: note: 'len' is Len's private spelling with Len's parameters, so it is held to its shape
+---
+> checks/cases/m6bprivateleX.olang:9:14: note: 'len' is Len's private spelling with Len's parameters, so it is held to its shape
+=== nomainhidden.olang
+1c1
+< checks/cases/nomainhidden.olang:3:12: error[R1a]: '?' alone is what the body can fail with - write '?', or name the types: '? io.Error'
+---
+> checks/cases/nomainhiddeX.olang:3:12: error[R1a]: '?' alone is what the body can fail with - write '?', or name the types: '? io.Error'
+=== o26own.olang
+1c1
+< checks/cases/o26own.olang:8:12: error[O10d]: this value lives in this function's own scope, which closes first
+---
+> checks/cases/o26owX.olang:8:12: error[O10d]: this value lives in this function's own scope, which closes first
+4c4
+< checks/cases/o26own.olang:7:6: note: 'n' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'n N&'
+---
+> checks/cases/o26owX.olang:7:6: note: 'n' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'n N&'
+=== qwnointro.olang
+1c1
+< checks/cases/qwnointrX.olang:4:11: error: expected a name, found '<'
+---
+> checks/cases/qwnointro.olang:4:11: error: expected a name, found '<'
+=== r11blonetypo.olang
+1c1
+< checks/cases/r11blonetypX.olang:6:19: error[R11b]: 'PErr' names no error type, so it names the error this clause took - and nothing uses it: write the error type meant, or 'catch' alone - did you mean 'PEr'?
+---
+> checks/cases/r11blonetypo.olang:6:19: error[R11b]: 'PErr' names no error type, so it names the error this clause took - and nothing uses it: write the error type meant, or 'catch' alone - did you mean 'PEr'?
+=== r1functypeunknown.olang
+1c1
+< checks/cases/r1functypeunknown.olang:3:16: error[R1]: unknown error type 'Nope'
+---
+> checks/cases/r1functypeunknowX.olang:3:16: error[R1]: unknown error type 'Nope'
+=== r9atrydefaultassign.olang
+1c1
+< checks/cases/r9atrydefaultassign.olang:15:42: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write into the collection itself, 'x[i].f = v'
+---
+> checks/cases/r9atrydefaultassigX.olang:15:42: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write into the collection itself, 'x[i].f = v'
+4c4
+< checks/cases/r9atrydefaultassign.olang:16:5: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write into the collection itself, 'x[i].f = v'
+---
+> checks/cases/r9atrydefaultassigX.olang:16:5: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write into the collection itself, 'x[i].f = v'
+=== rangezero.olang
+1c1
+< checks/cases/rangezerX.olang:4:27: error[S9b]: a range only counts upward, so its step is positive
+---
+> checks/cases/rangezero.olang:4:27: error[S9b]: a range only counts upward, so its step is positive
+=== rv3roforin.olang
+1c1
+< checks/cases/rv3roforin.olang:21:10: error[T25c]: 'look' writes through or keeps its parameter 'x', and this B is a read-only copy - pass one of its own, made from its parts
+---
+> checks/cases/rv3roforiX.olang:21:10: error[T25c]: 'look' writes through or keeps its parameter 'x', and this B is a read-only copy - pass one of its own, made from its parts
+4c4
+< checks/cases/rv3roforin.olang:17:9: note: 'x' is declared here
+---
+> checks/cases/rv3roforiX.olang:17:9: note: 'x' is declared here

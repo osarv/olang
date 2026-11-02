@@ -1,0 +1,24 @@
+# ahs turn_local_kept_ref, with a struct owning storage (a String held by value) and with a plain array
+import "std/io"
+
+type rec struct(s String) { s }
+type rh struct(r rec&) { r }
+type ah struct(a Array<I64>&) { a }
+
+fn main() {
+    hs := Vec<rh>()
+    for k in range 1, 6 {
+        r := rec($k)
+        hs.Push(rh(r))
+    }
+    out := ""
+    for h in hs { out = $out $h.r.s }
+    ahs := Vec<ah>()
+    for k in range 1, 6 {
+        a := Array<I64>(k, k)
+        ahs.Push(ah(a))
+    }
+    s := 0
+    for h in ahs { s += h.a.Len() }
+    io.Println("recs " $out " (12345) arrays " $s " (15)")!
+}

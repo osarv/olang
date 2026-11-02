@@ -1,0 +1,19 @@
+# T2c: a null array renders 'null' at the top level; inside a struct, an array, a Vec, an enum payload?
+import "std/io"
+
+type rec struct(s String?&, a Array<I64>?&) { s, a }
+type opt enum { Some(s String?&), None }
+
+fn main() {
+    z String?& = null
+    za Array<I64>?& = null
+    v := Vec<String?&>()
+    v.Push(z)
+    v.Push("x")
+    arr := String?&[z, "y"]
+    io.Println("top " $z " " $za)!
+    io.Println("struct " $rec(z, za))!
+    io.Println("vec " $v)!
+    io.Println("array " $arr)!
+    io.Println("payload " $opt.Some(z))!
+}

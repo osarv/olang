@@ -1,0 +1,28 @@
+# QCB inference: a local given a call's built result, flowing into what the function returns - directly, in a struct
+import "std/io"
+
+type node struct(v I64) { v }
+type wrap struct(n node&) { n }
+
+fn mk(k I64) node& { return node(k) }
+
+fn direct(k I64) node& {
+    r := mk(k)
+    return r
+}
+
+fn inStruct(k I64) wrap {
+    r := mk(k)
+    return wrap(r)
+}
+
+fn inVec(k I64) Vec<node&> {
+    r := mk(k)
+    v := Vec<node&>()
+    v.Push(r)
+    return v
+}
+
+fn main() {
+    io.Println($direct(1).v " " $inStruct(2).n.v " " $inVec(3)[0].v)!
+}

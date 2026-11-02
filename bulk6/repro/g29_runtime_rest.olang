@@ -1,0 +1,34 @@
+# D9a lifted, G29: arrays by value - a run-time length given to a body deciding on the length; writes stay the callee's
+import "std/io"
+import "std/os"
+
+fn kind(a Array<I64>) String {
+    if a.Len() == 3: return "three"
+    return "other"
+}
+
+fn bump(a Array<I64>) I64 {
+    a[0] = 100
+    return a[0]
+}
+
+fn bumpv(v Vec<I64>) I64 {
+    v.Push(5)
+    v.ViewMut()[0] = 100
+    return v.Len()
+}
+
+K3 := kind(I64[1, 2, 3])
+K4 := kind(I64[1, 2, 3, 4])
+
+fn main() {
+    n := os.Args().Len() + 2
+    r := Array<I64>(n, 7)
+    f := I64[1, 2, 3]
+    io.Println("fixed " $kind(f) " baked " $K3 " " $K4)!
+    b := bump(r)
+    io.Println("bump " $b " caller " $r[0] " (7)")!
+    v := Vec<I64>()
+    v.Push(1)
+    io.Println("bumpv " $bumpv(v) " caller " $v " (Vec[1])")!
+}

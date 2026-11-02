@@ -1,0 +1,17 @@
+# round 4's detail 3: '&' followed by an operand on its line is the bitwise operator; across a line break?
+import "std/io"
+
+type node struct(v I64) { v }
+
+fn f(a I64, b I64) I64 { return a &b }
+
+fn main() {
+    a := 6
+    b := 3
+    x := a &b
+    y := a &
+        b
+    z := I64[a &b, a & b]
+    w := Vec<node&>()
+    io.Println($x " " $y " " $z " " $f(6, 3) " " $w.Len())!
+}

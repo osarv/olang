@@ -1,0 +1,20 @@
+# QCB inference (O26a): a local given a call's built result, captured by a returned lambda
+import "std/io"
+
+type node struct(v I64) { v }
+
+fn mk(k I64) node& { return node(k) }
+
+fn mkfn(k I64) fn&() I64 {
+    r := mk(k)
+    return fn() I64 { return r.v }
+}
+
+fn mkfn2(k I64) fn&() I64 {
+    r := node(k)
+    return fn() I64 { return r.v }
+}
+
+fn main() {
+    io.Println($mkfn(3)() " " $mkfn2(4)())!
+}

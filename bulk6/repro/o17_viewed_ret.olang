@@ -1,0 +1,44 @@
+# a loop turn's value local (a Vec) lent to a callee keeping a reference to it, the keeper returned out of the function:
+# where does the local's own storage live?
+import "std/io"
+
+type walk struct(v Vec<String&>&) { v }
+
+fn over(v Vec<String&>&) walk { return walk(v) }
+
+fn mkv(k I64, t String&) Vec<String&> {
+    v := Vec<String&>()
+    for _ in range k { v.Push(t) }
+    return v
+}
+
+fn collect(t String&) Vec<walk> {
+    ws := Vec<walk>()
+    for k in range 1, 6 {
+        v := mkv(k, t)
+        ws.Push(over(v))
+    }
+    return ws
+}
+
+fn one(t String&) walk {
+    v := mkv(3, t)
+    return over(v)
+}
+
+fn stomp(n I64) I64 {
+    a := Array<I64>(64, n)
+    s := 0
+    for x in a { s += x }
+    return s
+}
+
+fn main() {
+    t := "long-lived"
+    ws := collect(t)
+    w1 := one(t)
+    x := stomp(7)
+    s := 0
+    for w in ws { s += w.v.Len() }
+    io.Println("sum " $s " (15) one " $w1.v.Len() " (3) " $w1.v " " $x)!
+}

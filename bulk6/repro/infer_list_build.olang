@@ -1,0 +1,30 @@
+# QCB inference (O26a): a list built in a loop, a cursor repointed to each new node, the last node returned
+import "std/io"
+
+type node struct(v I64, next node?& = null) { v, next }
+
+fn build(k I64) node& {
+    head := node(0)
+    cur := head
+    for i in range 1, k {
+        nn := node(i)
+        cur.next = nn
+        cur = nn
+    }
+    return cur
+}
+
+fn buildHead(k I64) node& {
+    head := node(0)
+    cur := head
+    for i in range 1, k {
+        nn := node(i)
+        cur.next = nn
+        cur = nn
+    }
+    return head
+}
+
+fn main() {
+    io.Println($build(5).v " " $buildHead(5).next!.v)!
+}

@@ -1,0 +1,21 @@
+# T2c: a nullable array given null - a constructor parameter's default, an argument, a field assigned - stays null
+import "std/io"
+
+type rec struct(s String?& = null) { s }
+
+fn take(a String?& = null) Bool { return a is null }
+
+R := rec()
+RN := R.s is null
+assert RN, "decided while compiling: a default null field is null"
+
+fn main() {
+    r := rec()
+    io.Println("default field null: " $(r.s is null) " (true)")!
+    r2 := rec(null)
+    io.Println("null argument field null: " $(r2.s is null) " (true)")!
+    io.Println("default parameter null: " $take() " (true)")!
+    io.Println("baked: " $RN)!
+    r.s = null
+    io.Println("assigned null: " $(r.s is null) " (true)")!
+}
