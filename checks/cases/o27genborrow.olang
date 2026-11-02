@@ -1,0 +1,33 @@
+# check: fail error[O27]: this keeps a view of 't', which lives only until its block or loop turn ends
+# also: error[O27]: this keeps a view of 'u', which lives only until its block or loop turn ends
+# O27 (bulk review 6 F14): a loop turn's text kept past the turn through a generator's borrowed elements is said as
+# the same keep through a plain function is - O27 naming the text, a walk held in a local too (it was O10c)
+import "std/io"
+
+fn words(t String&) Iterator<String&> {
+    s := 0
+    for i in range t.Len() {
+        if t[i] == ' ' {
+            yield t[s:i]
+            s = i + 1
+        }
+    }
+    yield t[s:]
+}
+
+fn main() {
+    out := Vec<String&>()
+    for i in range 5 {
+        t := $i " a" " b"
+        for w in words(t) { out.Push(w) }
+    }
+    g := Vec<String&>()
+    for i in range 3 {
+        u := $i " c d"
+        it := words(u)
+        for w in it { g.Push(w) }
+    }
+    junk := Vec<String>()
+    for i in range 50 { junk.Push("zzzzzzzzzzzzzzzzzzzzzzz" $i) }
+    io.Println($out " " $g " " $junk.Len())!
+}

@@ -283,6 +283,8 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     homeVar I64 = -1                      # D18c: a generator's Next whose elements live where it does - its capture of that
     walkElem Map<I64, Term>               # D18e, D18c: a for-in's own walk of a generator borrowing parameter p - where p's argument lives
     lastGenArg Term = Term.None           # ... the last such call's, for the walk's local it initializes
+    walkSrc Map<I64, I64>                 # ... and the local that argument is, by walk (O27's words: a view of it)
+    lastGenLocal I64 = -1
     onFrame Bool = false                   # the lambda val judges next is made for a call that keeps nothing of it (D16c)
     anyBox Bool = false                    # the promotion val judges next is an "any"'s box (T32a): a copy
     anyItems Bool = false                  # the make val judges next is what an "any"'s box holds (T32a)
@@ -1005,6 +1007,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.homeVar = -1
     if body.Gen and body.GenHome and body.GenElem >= typed.LocalId(0) { s.homeVar = s.captureVar(b, body.GenElem) }
     s.walkElem.Clear()
+    s.walkSrc.Clear()
     s.lastGenArg = Term.None
     s.report = report
     s.plan = typed.NewPlan(body)
@@ -4612,7 +4615,18 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         s.noteOrigin(I64(l), x!, v)
         # D18c: a walk of a generator whose elements borrow from a parameter - each element lives where its argument does
         if s.lastGenArg.Runs() and s.walkLocal(I64(l)) { s.walkElem.Put(I64(l), s.lastGenArg) }
+        # (a walk of such a generator, held, viewing what its argument is - O27's words, through copies of it too)
+        if s.lastGenLocal >= 0 { s.walkSrc.Put(I64(l), s.lastGenLocal) }
+        wr := s.wholeRoot(x!)
+        if wr >= 0 and s.walkSrc.Has(wr) { s.walkSrc.Put(I64(l), try s.walkSrc.Get(wr) catch default -1) }
         s.lastGenArg = Term.None
+        s.lastGenLocal = -1
+        # (and the element its Next gives, as its view - O27's words)
+        ec := typed.CallOf(unPassed(s.unAway(x!)))
+        if ec is not null and ec.Args.Len() > 0 {
+            wk := s.argLocal(ec.Args[0])
+            if wk >= 0 and s.walkSrc.Has(wk): s.walkSrc.Put(I64(l), try s.walkSrc.Get(wk) catch default -1)
+        }
         s.bindLocal(l, x!)
         s.terms[I64(l)] = s.valTerm(v, dest)
         # QCE: a call's value owning storage and sharing no reference is the local's own copy (D9h's caller copies it,
@@ -6843,7 +6857,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         return s.liftedVal(fresh(beta[rv] if rv >= 0 else here), sl, want)
     }
     # D18c: a generator whose elements borrow from parameter p: where p's argument lives, for the walk it may make
-    if callee >= 0 { s.noteGenArg(callee, beta, owner) }
+    if callee >= 0 { s.noteGenArg(callee, beta, owner, c) }
     e := s.P.T.ResultFrom(fty, 0)
     # D18c: the Next of a walk a for-in makes of such a generator gives elements living where that argument does
     if n > 0 and s.isRef(ty) {
@@ -7068,13 +7082,14 @@ fn (s mut Scoper&) becomeBinds(c typed.Call&, vars Array<I64>&, beta Array<Term>
 
 # D18c: a call of a generator whose elements borrow from a parameter: where that parameter's argument lives, for the
 # walk it may make (lastGenArg)
-fn (s mut Scoper&) noteGenArg(callee I64, beta Array<Term>&, owner Array<I64>&) {
+fn (s mut Scoper&) noteGenArg(callee I64, beta Array<Term>&, owner Array<I64>&, c typed.Call&) {
     of := s.Bodies[callee].Of
     if of != typed.BodyOf.Fn { return }
     f := s.P.InstanceFn(of.instance)
     if not s.P.IsGenerator(f) { return }
     el := s.P.GenElem(f)
     s.lastGenArg = beta[owner[el]] if el >= 0 and el < owner.Len() and owner[el] >= 0 else Term.None
+    s.lastGenLocal = s.wholeRoot(c.Args[el]) if el >= 0 and el < c.Args.Len() else -1
 }
 
 # whether x is a call of a body that may hand back existing storage (summary.HandsBack) - one of the component being
@@ -8515,11 +8530,12 @@ fn (s mut Scoper&) viewRoot(x typed.Expr&) I64 {
 # for none
 fn (s mut Scoper&) viewSource(x typed.Expr&) I64 {
     v := s.viewRoot(x)
-    if v >= 0 { return v }
+    if v >= 0 { return try s.walkSrc.Get(v) catch default v }    # (a walk's elements view what its generator borrows)
     l := s.wholeRoot(x)
     for _ in range 16 {
         if l < 0 or l >= s.viewOf.Len() { return -1 }
-        if s.viewOf[l] >= 0 { return s.viewOf[l] }
+        if s.walkSrc.Has(l) { return try s.walkSrc.Get(l) catch default -1 }
+        if s.viewOf[l] >= 0 { return try s.walkSrc.Get(s.viewOf[l]) catch default s.viewOf[l] }
         if s.origin[l] < 0 { return -1 }
         l = s.origin[l]
     }
