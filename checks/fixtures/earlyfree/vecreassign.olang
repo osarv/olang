@@ -1,0 +1,44 @@
+import "std/io"
+
+# O8d (bulk review 6 F13): a Vec local given a new value each turn of a loop, and a Vec field of a struct the function
+# constructed - each an owner place, all of its storage in a region of its own, released as it is given another (620 MB
+# kept before, over 200,000 turns of a 100-element Vec each)
+N I64 = 200000
+
+type box struct(v Vec<I64>) { v }
+
+fn sum(v Vec<I64>&) I64 {
+    s := 0
+    for x in v { s += x }
+    return s
+}
+
+fn mk(k I64) Vec<I64> {
+    v := Vec<I64>()
+    for i in range 100 { v.Push(i + k) }
+    return v
+}
+
+fn local() I64 {
+    v := mk(0)
+    t := 0
+    for k in range N {
+        v = mk(k)
+        t += sum(v)
+    }
+    return t
+}
+
+fn field() I64 {
+    b := box(mk(0))
+    t := 0
+    for k in range N {
+        b.v = mk(k)
+        t += sum(b.v)
+    }
+    return t
+}
+
+fn main() {
+    io.Println($local() " " $field())!
+}

@@ -653,6 +653,8 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<Array<I
     }
     fr := ln.L.Free!
     k := fr.SolePlace(p)
+    # (an owner local given another value: its place's old value, held whole)
+    if p == typed.Lvalue.Local and assign { k = fr.SoleLocal(I64(ln.B.Id), I64(p.id)) }
     if k >= 0 {
         out.Push(I64[0] if fr.IsHandle(k) else Array<I64>(0))
         return out

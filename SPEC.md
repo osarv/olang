@@ -5960,11 +5960,14 @@ closes - when the place was its **only holder**:
 6. no reference read from what the place holds is in use across a call that may make the place let go.
 
 A **value owning storage held in place** - a `Vec`, a `Map`, a `StringBuilder` held by value in a field, a `Map`'s
-value - is a place's value as a referent is: what it owns (its arrays, and what is built where they are) is reclaimed when
+value, or a local of the function given another value somewhere in its body (`v = mk(k)` each turn) - is a place's
+value as a referent is: what it owns (its arrays, and what is built where they are) is reclaimed when
 the place lets go of it, under the same conditions, made for the place meaning all of its storage built for it, and
 nothing else is built into it while the place holds it - so a value of it changed in place (a store into it, a writable
 reference to it handed to a call) makes the place keep, and so does a value holding it made with no store into the place
-(a copy of a struct, a `Map` or an array holding it; a value a call hands back as a view, copied where it is kept, D9h).
+(a copy of a struct, a `Map` or an array holding it; a value a call hands back as a view, copied where it is kept, D9h -
+but not a constructor's instance viewing only storage made for the call, which owns it), and a local's value handed
+back.
 A collection's **own storage** - a `Vec`'s buffer, a `Map`'s slot arrays, any array of a run-time length a struct holds
 by value - is a place too: what the collection's growth replaces is reclaimed as it grows, where the conditions hold -
 no view of the old storage in use across the growth (`View()`, `Ref()`, an element's reference, condition 6), every

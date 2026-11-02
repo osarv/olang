@@ -270,6 +270,10 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     dLoop Vec<Bool>
     dOk Vec<Bool>
     dIn Vec<Bool>             # by body: whether it has a destroy target
+    # owner locals (keyField -3): a local holding an owner by value (ownerCand) - a Vec, a Map - given another value
+    # somewhere in its body, a place of its own: by (body, local), and by body whether it has one
+    ownLocalOf Map<pair.Pair<I64, I64>, I64>
+    olIn Vec<Bool>
     dtorVal Vec<Bool>         # by place: what it holds has a destructor - never Sole (O15); a Destroy() takes one out
     destroySole Vec<Bool>     # by place: sole but for its values' destructors (condition 4) and condition 5
     destroyUse Vec<Bool>      # by place: an accepted Destroy() moves out of it - its values are built in regions
@@ -512,6 +516,9 @@ fn (f mut Free&) newPlace(ty types.TypeId, field I64, hd Bool, vt types.TypeId, 
 # whether a candidate place is a destroy target (C9b)
 fn (f Free&) isDestroy(k I64) Bool { return k >= 0 and k < f.keyField.Len() and f.keyField[k] == -2 }
 
+# whether a candidate place is an owner local
+fn (f Free&) isOwnLocal(k I64) Bool { return k >= 0 and k < f.keyField.Len() and f.keyField[k] == -3 }
+
 # whether a field or element type is a reference to a struct whose own destructor is all freeing cannot meet: a dtor
 # place's values (C9b), never freed by a let-go
 fn (f mut Free&) dtorCand(ty types.TypeId) Bool {
@@ -672,6 +679,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64, destroys Bool = true) {
         f.saved.Push(Array<I64>(0))
         f.savedAt.Push(Array<I64>(0))
         f.dIn.Push(false)
+        f.olIn.Push(false)
     }
     # with no root nothing is freed early, but each Destroy() is still decided (C9b) - where it can be, by facts this
     # module's code and its imports' give alone: a value built for its local
@@ -835,6 +843,7 @@ fn (f mut Free&) findStmt(st typed.Stmt&) {
     match st {
         case typed.Stmt.Assign(_, p, x) {
             f.candTarget(p)
+            f.ownLocalCand(p)
             f.findExpr(x)
         }
         case typed.Stmt.Let(_, _, x) { f.findExpr(x) }
@@ -873,6 +882,24 @@ fn (f mut Free&) findDestroy(sp source.Span, x typed.Expr&) {
             f.dSp[d] = sp
             f.dIn[f.curBody] = true
             f.destroys++
+        }
+        case _ { }
+    }
+}
+
+# an assignment's target that is a plain local holding an owner by value: an owner local of the body (keyField -3),
+# whose every value - its declaration's and each assignment's - is built in a region of its own where it is sole, the
+# one it held released as it is given another (O8d: a Vec local given a new value each turn of a loop)
+fn (f mut Free&) ownLocalCand(p typed.Lvalue&) {
+    match p {
+        case typed.Lvalue.Local(_, ty, l) {
+            key := pair.Pair(f.curBody, I64(l))
+            if f.ownLocalOf.Has(key) or f.Bodies[f.curBody].Locals[I64(l)].Kind != typed.LocalKind.Var: return
+            if not f.ownerCand(ty): return
+            k := f.newPlace(ty, -3, false, ty, false)
+            f.owner[k] = true
+            f.ownLocalOf.Put(key, k)
+            f.olIn[f.curBody] = true
         }
         case _ { }
     }
@@ -1268,6 +1295,8 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             k := try w.fields.Get(I64(l)) catch default -1
             if k >= 0 { w.storeField(k, x, o, sp) }
             w.destroyStore(I64(l), x, sp)
+            ol := w.ownLocal(I64(l))
+            if ol >= 0 { w.store(ol, x, o, sp, w.localName(I64(l))) }
         }
         case typed.Stmt.Assign(sp, p, x) { w.assign(sp, p, x) }
         case typed.Stmt.Eval(sp, x) { w.eval(sp, x) }
@@ -1298,6 +1327,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
                 o := w.expr(x)
                 if not w.Final { w.result(o) }
                 if w.Final and w.F.dIn[w.Id] { w.returnedDestroys(o, n) }
+                if w.Final and w.F.olIn[w.Id] { w.returnedOwnLocals(o, st.Span()) }
             }
             # between a yield and the next Next the consumer runs what it likes: a let-go of any place, for every view
             # the body holds across it
@@ -1380,6 +1410,11 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
             k := try w.fields.Get(I64(l)) catch default -1
             if k >= 0 { w.storeField(k, x, o, sp) }
             w.destroyStore(I64(l), x, sp)
+            ol := w.ownLocal(I64(l))
+            if ol >= 0 {
+                w.store(ol, x, o, sp, w.localName(I64(l)))
+                w.go(ol, LAssign, p.Span(), source.Span(0, 0), -1)
+            }
             return
         }
         case _ { }
@@ -1851,6 +1886,9 @@ fn (w mut walker&) reach(p typed.Lvalue&) Vec<I64> {
                 pk := f.placeKey(w.ctorTy, k)
                 if pk >= 0: addTo(o, orig(OPl, pk))
             }
+            # (an owner local's value is its place's)
+            ol := w.ownLocal(I64(l))
+            if ol >= 0: addTo(o, orig(OPl, ol))
             return o
         }
         case typed.Lvalue.Deref(_, _, r) { return w.expr(r) }
@@ -2759,6 +2797,20 @@ fn readLocalOf(x typed.Expr&) I64 {
             case _: -1
         }
         case _: -1
+    }
+}
+
+# the owner local place local l of this body is, -1 for none
+fn (w mut walker&) ownLocal(l I64) I64 {
+    if l < 0 or not w.F.olIn[w.Id] { return -1 }
+    return try w.F.ownLocalOf.Get(pair.Pair(w.Id, l)) catch default -1
+}
+
+# an owner local's value handed back (a return, a yield): it lives on where the result goes, which no let-go of the
+# place may release - the place keeps
+fn (w mut walker&) returnedOwnLocals(o Vec<I64>&, sp source.Span) {
+    for y in o {
+        if okind(y) == OPl and w.F.isOwnLocal(oval(y)): w.F.keep(oval(y), RStore, w.body().File, sp, "its value is handed back here")
     }
 }
 
@@ -3903,6 +3955,13 @@ fn (f mut Free&) SolePlace(p typed.Lvalue&) I64 {
     return k if f.IsSole(k) else -1
 }
 
+# the sole owner local place local l of body b is, -1 for none
+fn (f mut Free&) SoleLocal(b I64, l I64) I64 {
+    if not f.Done or b < 0 or b >= f.olIn.Len() or not f.olIn[b] { return -1 }
+    k := try f.ownLocalOf.Get(pair.Pair(b, l)) catch default -1
+    return k if f.IsSole(k) else -1
+}
+
 # the sole places inside a value of type ty held in place, by the fields that reach them - and for a handle the
 # reference it holds, field 0
 fn (f mut Free&) SoleLeaves(ty types.TypeId) Vec<leaf> {
@@ -3992,7 +4051,7 @@ fn (f mut Free&) Report() String {
         # a row at a call - one that may let go of anything too - says the place as its own let-go writes it
         if g.Kind == LCall and f.goes[first].Kind != LCall { g = f.goes[first] }
         what := ""
-        if f.keyField[k] < 0 or f.isContents(k) {
+        if (f.keyField[k] < 0 and not f.isOwnLocal(k)) or f.isContents(k) {
             what = $"removed elements of '" $f.collection(k, g.Body, g) "' are kept until " $f.scopeName(g, k) " closes"
         } else {
             what = $"'" $f.placeName(g) "' keeps what it lets go of until " $f.scopeName(g, k) " closes"
@@ -4036,6 +4095,7 @@ fn (f mut Free&) reported(k I64) Bool {
     }
     if not owns { return false }
     if f.isContents(k) { return true }
+    if f.isOwnLocal(k) { return true }
     if f.keyField[k] < 0 { return false }
     t := f.T()
     r := t.Repr(f.keyTy[k])
@@ -4086,8 +4146,8 @@ fn (f mut Free&) collection(k I64, b I64, row letGo) String {
 # its type names it ("the Server's scope"), or a local's function's ("main's scope")
 fn (f mut Free&) scopeName(g letGo, k I64) String {
     rv := f.recvOf(g)
-    text := rv if f.keyField[k] < 0 and rv != "" else f.placeName(g)
-    if f.keyField[k] < 0 {
+    text := rv if f.keyField[k] < 0 and rv != "" and not f.isOwnLocal(k) else f.placeName(g)
+    if f.keyField[k] < 0 and not f.isOwnLocal(k) {
         for g2 in f.goes {
             if g2.PlaceId == k and g2.Body == g.Body {
                 r2 := f.recvOf(g2)
