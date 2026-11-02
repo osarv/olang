@@ -1277,7 +1277,7 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
         }
         case Stmt.Settle(_, _, p) {
             pt := v.placeType(p)
-            if pt != types.UnknownT and t.Anchors(pt).Len() == 0 { v.bad("a settle of a " $v.canon(pt) ", not an owner") }
+            if pt != types.UnknownT and t.Anchors(pt).Len() == 0 and not t.OwnedPart(pt) { v.bad("a settle of a " $v.canon(pt) ", not an owner") }
         }
         case Stmt.Write(_, b, how, x) {
             v.builder(b)

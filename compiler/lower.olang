@@ -1856,10 +1856,12 @@ fn (ln mut lowering&) val(x typed.Expr?&) mir.Operand {
     return ln.settled(rs, held, v, x.Type(), x.Span())
 }
 
-# an owner's value built in a region of its own (O8d, types.Anchors): the region released at once where none of its
-# anchors names it - it holds nothing - so a place given an empty value keeps no region for it
+# an owner's value built in a region of its own (O8d, types.Anchors) - or an array place's, its one anchor itself: the
+# region released at once where none of its anchors names it - it holds nothing - so a place given an empty value keeps
+# no region for it
 fn (ln mut lowering&) settled(rs I64, held mir.ScopeRef, v mir.Operand, ty types.TypeId, sp source.Span) mir.Operand {
-    if ln.dead or v == mir.Operand.None or ln.plan.RegionKind[rs] != 1 or ln.T.Anchors(ty).Len() == 0 { return v }
+    if ln.dead or v == mir.Operand.None or ln.plan.RegionKind[rs] != 1 { return v }
+    if ln.T.Anchors(ty).Len() == 0 and not ln.T.OwnedPart(ty) { return v }
     h := match held {
         case mir.ScopeRef.Held(l): l
         case _: mir.NoLocal

@@ -4140,6 +4140,7 @@ fn (fe mut fnEm&) anchorRegion(at String&, ty types.TypeId) String {
     fe.E.runtime("__olang_region_or")
     r := "null"
     anchors := t.Anchors(ty)
+    if t.OwnedPart(ty) { anchors.Push(Array<I64>(0)) }   # (an array place's value: its own one anchor)
     for i := anchors.Len() - 1, i >= 0, i-- {
         q := at
         qt := ty
