@@ -1316,7 +1316,9 @@ fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
             match p {
                 # a local living in the result scope is the result as it is only where nothing else can name it
                 # (O26a: Plan.RetSole); every other one is copied
-                case typed.Lvalue.Local(_, _, id) { return ln.F.Locals[I64(id)].Home != ln.resultScope() or not ln.plan.RetSole[I64(id)] }
+                # (a value owning parts is handed back from a whole local as it is, as before retOwns: its local is the
+                # function's own storage - only an array's second names are proved, RetSole)
+                case typed.Lvalue.Local(_, _, id) { return ln.F.Locals[I64(id)].Home != ln.resultScope() or (ln.valueArray(ty) and not ln.plan.RetSole[I64(id)]) }
                 case _ { }
             }
         }
