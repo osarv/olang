@@ -1581,7 +1581,7 @@ fn vecalias(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0, "good", dir)
     try r.expect(outOf(dir) == "30 60 7\n", "good output", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret good.olang > out.txt 2>&1") == 0 and outOf(dir) == "30 60 7\n", "good under -i", dir)
-    try oneError(r, dir, "p1", "error[T22a]: 'Stash' relates its arguments' scopes")
+    try oneError(r, dir, "p1", "error[T22a]: 'Stash' ties where what it is given lives to what it keeps or gives back")
     try oneError(r, dir, "p3", "error[G12]: generic function 'Id' is not a value")
     try oneError(r, dir, "n2", "error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown")
     try oneError(r, dir, "f3", "error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown")

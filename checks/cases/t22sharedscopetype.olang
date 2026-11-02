@@ -1,4 +1,4 @@
-# check: fail error[T22a]: 'link' relates its arguments' scopes, which a call through a function value cannot check - call it directly
+# check: fail error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it directly
 # T22: a function type may say its parameters share a scope ('b N&a'), and a call through a value of it is held to that
 # as a direct call is
 type N struct(v I64) {

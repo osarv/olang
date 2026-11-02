@@ -289,7 +289,7 @@ fn noValue(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, f I
 
 # why function f cannot become a value (T21) - "" where it can: a method is called as one, an extern by its name; one
 # taking an array by value is compiled per length (G29); a generic is a value only named with its type arguments
-# (G12); and one whose scope obligations relate its arguments' scopes cannot be checked through a function value (T22a)
+# (G12); and one whose scope obligations tie where what it is given lives to what it keeps or gives back cannot be checked through a function value (T22a)
 fn NoValueWhy(c mut typecheck.Checker&, sc scope.Scoper&, f I64, body I64) String {
     decl := c.P.FnDecl(f)
     name := c.P.L.Names.Text(decl.Name)
@@ -301,7 +301,7 @@ fn NoValueWhy(c mut typecheck.Checker&, sc scope.Scoper&, f I64, body I64) Strin
     }
     if c.P.VarCount(owner) > 0 { return $"a generic is a value only named with its type arguments, '" $name "<...>' (G12)" }
     if body >= 0 and sc.Obligations(body, c.P.L.Names).Len() > 0 and not sc.ValueCovered(body) {
-        return "its scope obligations (# scopes, above) relate its arguments' scopes, which a call through a function value cannot check (T22a) - call it directly"
+        return "its scope obligations (# scopes, above) tie where what it is given lives to what it keeps or gives back, which a call through a function value cannot check (T22a) - call it directly"
     }
     return ""
 }

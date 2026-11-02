@@ -1,4 +1,4 @@
-# check: fail error[T32a, T22a]: aBox's 'Get' relates its arguments' scopes, which a call through an 'any aHas&' cannot check - call it directly, or through generic code
+# check: fail error[T32a, T22a]: aBox's 'Get' ties where what it is given lives to what it keeps or gives back, which a call through an 'any aHas&' cannot check - call it directly, or through generic code
 # T32a, T22: run-time trait values
 type aItem struct(v I64) { v }
 type aHas trait {

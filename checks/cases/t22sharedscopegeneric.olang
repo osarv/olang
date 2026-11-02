@@ -1,4 +1,4 @@
-# check: fail error[T22a]: 'link' relates its arguments' scopes, which a call through a function value cannot check - call it directly
+# check: fail error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it directly
 # flags: -debug -sanitize
 # T22/G16a: a type variable bound to a function type whose parameters share a scope is another instantiation than one
 # bound to the same type with the scopes apart - spelled apart too ("-s0"), where the two used to define one symbol twice

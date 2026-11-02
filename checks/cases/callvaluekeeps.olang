@@ -1,4 +1,4 @@
-# check: fail error[T22a, E31]: Keeper's Call relates its arguments' scopes, which a call through a function value cannot check
+# check: fail error[T22a, E31]: Keeper's Call ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check
 # T22a/E31: a value adapted through a Call that keeps its argument beyond the call is called through a function value,
 # which checks nothing of it - refused as a lambda keeping its parameter is (PE1a)
 import "std/io"

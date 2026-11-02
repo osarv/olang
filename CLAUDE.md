@@ -716,7 +716,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   keeps its argument cannot become a value; a type's `Call` fits a function type (E31), its errors the type's in order
   (2026-10-25: never compared, so a `Call` with a contract read its error code as a result). A
   function value returned from a parameter is an obligation (O14a). No function type says where references live (QCB,
-  2026-11-02): a function whose inferred obligations relate its arguments' scopes - `fn link(a mut N&, b N&)` storing b
+  2026-11-02): a function whose inferred obligations tie where what they are given lives to what they keep or give back (the T22a error's words since bulk review 6) - `fn link(a mut N&, b N&)` storing b
   into a - is no value (T22a), said by explain/doc/hover (`# not a value`) and at the conversion; a lambda calling it
   is one. (Until 2026-11-02 a type could write `b N&a` or `T&p`.) **A result holding references reads as borrowed from
   the reference parameters (open point 5, the user's approval; built 2026-11-02, round 4b)**: a call through a value

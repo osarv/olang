@@ -1592,7 +1592,7 @@ fn AnyNotMember(ty String&, tr String&, list String&) Msg { return Msg(Diag.AnyN
 fn AnyMethodScopes(ty String&, tok String&, tr String&) Msg { return Msg(Diag.AnyMethodScopes, "T32a, T22", $ty "'s " $tok " says where its references live as " $tr "'s signature does not - it cannot be called through an 'any " $tr "&'") }
 
 # ERR_ANY_METHOD_OBLIGATIONS
-fn AnyMethodObligations(ty String&, tok String&, tr String&) Msg { return Msg(Diag.AnyMethodObligations, "T32a, T22a", $ty "'s " $tok " relates its arguments' scopes, which a call through an 'any " $tr "&' cannot check - call it directly, or through generic code") }
+fn AnyMethodObligations(ty String&, tok String&, tr String&) Msg { return Msg(Diag.AnyMethodObligations, "T32a, T22a", $ty "'s " $tok " ties where what it is given lives to what it keeps or gives back, which a call through an 'any " $tr "&' cannot check - call it directly, or through generic code") }
 
 # ERR_ANY_NO_METHOD
 fn AnyNoCopy(tok String&, ty String&) Msg { return Msg(Diag.AnyNoCopy, "T32", $tok " keeps a copy of the value it is called on, and an " $ty " has none - call it on the instance's own type") }
@@ -2915,13 +2915,13 @@ fn SpawnResultTooShort() Msg { return Msg(Diag.SpawnResultTooShort, "P1g", "this
 fn SpawnResultsDisagree() Msg { return Msg(Diag.SpawnResultsDisagree, "P1g", "these targets live in different scopes, and the results are built in one") }
 
 # ERR_FUNC_VALUE_OBLIGATIONS
-fn FuncValueObligations(text String&) Msg { return Msg(Diag.FuncValueObligations, "T22a", "'" $text "' relates its arguments' scopes, which a call through a function value cannot check - call it directly") }
+fn FuncValueObligations(text String&) Msg { return Msg(Diag.FuncValueObligations, "T22a", "'" $text "' ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it directly") }
 
 # ERR_LAMBDA_VALUE_OBLIGATIONS
 fn LambdaValueObligations(text String&) Msg { return Msg(Diag.LambdaValueObligations, "T22a", "this lambda keeps '" $text "' beyond the call, which a call through a function value cannot check - keep a copy instead") }
 
 # ERR_LAMBDA_VALUE_RELATES
-fn LambdaValueRelates() Msg { return Msg(Diag.LambdaValueRelates, "T22a", "this lambda relates its arguments' scopes, which a call through a function value cannot check") }
+fn LambdaValueRelates() Msg { return Msg(Diag.LambdaValueRelates, "T22a", "this lambda ties where what it is given lives to what it keeps or gives back - its captures included - which a call through a function value cannot check") }
 
 # ERR_CALL_VALUE_OBLIGATIONS
 # type arguments written apart from the name or the "(" (G12)
@@ -2930,7 +2930,7 @@ fn TypeArgsSpaced(name String&) Msg { return Msg(Diag.TypeArgsSpaced, "G12", "ty
 # a Call failing with other errors than the function type it is wanted as
 fn CallValueErrors(ty String&, has String&, wants String&, fix String&) Msg { return Msg(Diag.CallValueErrors, "T22, E31", $ty "'s Call fails with " $has " where the function type says " $wants " - the same errors in the same order: " $fix) }
 
-fn CallValueObligations(ty String&) Msg { return Msg(Diag.CallValueObligations, "T22a, E31", $ty "'s Call relates its arguments' scopes, which a call through a function value cannot check - call it by name") }
+fn CallValueObligations(ty String&) Msg { return Msg(Diag.CallValueObligations, "T22a, E31", $ty "'s Call ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it by name") }
 
 # ERR_LAMBDA_RESULT_UNINFERABLE
 fn LambdaResultUninferable() Msg { return Msg(Diag.LambdaResultUninferable, "D16b", "this value gives the lambda no result type - write one") }

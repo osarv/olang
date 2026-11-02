@@ -1,4 +1,4 @@
-# check: fail error[T22a, E31]: Keeper's Call relates its arguments' scopes, which a call through a function value cannot check
+# check: fail error[T22a, E31]: Keeper's Call ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check
 # T22a/E31: the same Call adapter keeping a closure over a block-local node past its block (PE1b)
 import "std/io"
 type Node struct(v I64) {

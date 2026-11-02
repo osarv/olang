@@ -1,4 +1,4 @@
-# check: fail aBag's 'Put' relates its arguments' scopes, which a call through an 'any aSink&' cannot check - call it directly, or through generic code
+# check: fail aBag's 'Put' ties where what it is given lives to what it keeps or gives back, which a call through an 'any aSink&' cannot check - call it directly, or through generic code
 # T32a, T22a: run-time trait values
 type aNode struct(v I64) { v }
 type aSink trait {

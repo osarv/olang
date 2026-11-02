@@ -1,4 +1,4 @@
-# check: fail error[T22a]: 'link' relates its arguments' scopes, which a call through a function value cannot check - call it directly
+# check: fail error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it directly
 # T22: where a function's references live is part of its type - 'link' says b's argument lives where a's does, which a
 # call through a value of type fn(a mut N&, b N&) never establishes (it stored b where a lives with nothing checked, and
 # passed one hidden scope argument where link expected another: a segfault)

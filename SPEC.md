@@ -7501,7 +7501,7 @@ function value or an `any` is `anything`; a body that did not check is `not know
 `# T needs: Less, a walk ...` for each type variable says what its body asks of it beyond its written constraint
 (G18a). Under a function that cannot become a value (T21), a line `# not a value: ...` says why: a method is called as
 one (M19), an extern by its name (X1), a generic is a value only named with its type arguments (G12), one compiled per
-length of an array it takes by value (G29) has none, and one whose scope obligations relate its arguments' scopes cannot
+length of an array it takes by value (G29) has none, and one whose scope obligations tie where what it is given lives to what it keeps or gives back cannot
 be called through a function value (T22a). `doc` (B14) and the language server's hover (B15) show the same lines.
 
 **B11c (what imports reach).** `explain -caps FILE` prints, for the program `FILE` is the root of once it has checked,
