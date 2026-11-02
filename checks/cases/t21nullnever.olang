@@ -1,0 +1,6 @@
+# check: fail error[T2c]: fn&(x I64) I64 is never null - a reference that may be is written fn?&(x I64) I64
+# T21: a function value written "fn&" is never null - one that may be says so, "fn?&"
+fn main() {
+    f fn&(x I64) I64 = null
+    assert f(1) == 1
+}

@@ -381,7 +381,9 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
             }
         }
         case types.DeclKind.Over {
-            b.Push($"type " $name $(" extends " if c.P.Extends(self) else " ") $c.Ty(c.P.T.Base(self)))
+            # T21b: a declared function type's base as its declaration writes it, with no marker
+            bt := c.P.T.Base(self)
+            b.Push($"type " $name $(" extends " if c.P.Extends(self) else " ") $(declSig(c, bt) if c.P.T.KindOf(bt) == types.Kind.Func else c.Ty(bt)))
             # T29d: its constructor's parameter and errors
             match c.P.TypeDecl(d)!.Body {
                 case ast.TypeBody.Over(_, ctor) {

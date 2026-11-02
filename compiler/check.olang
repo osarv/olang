@@ -278,6 +278,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     unknownTypes Map<pair.Pair<I64, I64>, Bool>    # (module, name): an unknown type said there once (B11)
     unknownSaid Map<pair.Pair<I64, I64>, Bool>     # (body, name): an unknown name said there (S13f's), not again
     paramTypes Bool = false                         # a declared function's parameters' types being checked (G29)
+    underRef Bool = false                           # a written type under a reference marker being checked (T21b)
     declMade Bool = false                           # a declaration's type, its value given: what T7d's lengths come from
     syntaxMark I64 = -1                             # the diagnostics said before checking began: the syntax errors
     # B9c, S8b: the local ifs whose condition the build decides that evaluation decided, by (file, the condition's
@@ -1249,7 +1250,8 @@ fn (c mut Checker&) inheritClash(f I64) {
     rt := c.deref(ps[0])
     c.push(-1, c.P.FnModule(f), types.VoidT, types.ListId(0))
     # M19d: a built-in type's methods are the prelude's alone
-    if not c.isNamed(rt) and rt != types.UnknownT and c.P.T.KindOf(rt) != types.Kind.Var and not c.P.L.Mods[c.P.FnModule(f)].Prelude {
+    if not c.isNamed(rt) and rt != types.UnknownT and c.P.T.KindOf(rt) != types.Kind.Var and c.P.T.FuncTag(rt) == types.UnknownT and
+       not c.P.L.Mods[c.P.FnModule(f)].Prelude {
         c.err(c.nameSpan(fd), msgs.MethodOnBuiltinType(c.ty(rt)))
         c.pop()
         return
@@ -1671,6 +1673,8 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
                 }
             } else if c.P.T.KindOf(b) == types.Kind.Array and c.holdsSelf(d, b) {
                 c.err(nsp, msgs.ArrayTypeHoldsItself(name, name, c.ty(b)))
+            } else if c.P.T.KindOf(b) == types.Kind.Func {
+                c.writtenMet(base)   # T21b: a declared function type's signature, its types known ones
             }
         }
         case _ { }
@@ -5584,6 +5588,14 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
             c.spellGroup = false
             wasItem := c.spellItem
             c.spellItem = true
+            if c.P.T.FuncTag(t) != types.UnknownT {
+                # T21b: a declared function type, as it is held - "Handler&", "Handler?&"
+                c.spell(b, c.P.T.FuncTag(t), false)
+                b.Push("?&" if c.P.T.FuncNullable(t) else "&")
+                c.spellGroup = false
+                c.spellItem = wasItem
+                return
+            }
             if wrap { b.PushChar('(') }
             b.Push("fn?&(" if c.P.T.FuncNullable(t) else "fn&(")   # T21: always held by reference, its marker on its "fn"
             ps := c.P.T.Items(c.P.T.Params(t))
@@ -6617,6 +6629,12 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
     }
     # a function value where one of looser permissions is wanted (T22): a read-only parameter for a writable one, a
     # writable result for a read-only one
+    if hk == types.Kind.Func and wk == types.Kind.Func and c.P.T.FuncTag(have) != c.P.T.FuncTag(want) and
+       c.P.T.FuncTag(have) != types.UnknownT and c.P.T.FuncTag(want) != types.UnknownT {
+        # T21b, T29: two declared function types are two types, however alike - one is made the other by its name
+        c.err(sp, msgs.FuncDeclMismatch(c.ty(want), c.ty(have), c.ty(c.P.T.FuncTag(want))))
+        return x
+    }
     if hk == types.Kind.Func and wk == types.Kind.Func and c.funcFits(have, want, namedFn(x)) { return c.convert(sp, x, want) }
     # an instance whose type declares Call, where a function value is wanted (E31): an adapter holding it
     if wk == types.Kind.Func and hk != types.Kind.Func and have != types.NullT {
@@ -10309,6 +10327,30 @@ fn (c mut Checker&) anyWritten(tr ast.TypeRef&) Bool {
     }
 }
 
+# T21b, T29a: "Handler(f)" - a function value of Handler's signature made a Handler, whatever declared function type it
+# was; one that may be null stays one that may be
+fn (c mut Checker&) toDeclaredFunc(sp source.Span, t types.TypeId, args Array<ast.Expr&>&) typed.Expr& {
+    f := c.P.DeclaredFunc(t)
+    if args.Len() != 1 {
+        c.err(sp, msgs.ArgCount(1, "", args.Len()))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    x := c.expr(args[0], f)
+    xt := typeOf(x)
+    if xt == types.UnknownT { return x }
+    if c.P.T.FuncTag(xt) != types.UnknownT and c.P.T.FuncTag(xt) != t { x = c.convert(sp, x, c.P.T.Untagged(xt)) }
+    return c.fit(x, c.P.T.OrNull(f) if c.P.T.FuncNullable(xt) else f, args[0].Span())
+}
+
+# T21b: whether a written type names a declared function type, as written ("Handler", which is held as "Handler&")
+fn (c mut Checker&) funcNamed(tr ast.TypeRef&) Bool {
+    match tr {
+        case ast.TypeRef.Named(_, _, _) { return c.P.DeclaredFunc(c.P.Resolve(c.fr().Ctx, tr)) != types.UnknownT }
+        case _ { return false }
+    }
+}
+
 # X10: whether a written type names an extern type, as written (a reference to one is the only way to hold one)
 fn (c mut Checker&) foreignNamed(tr ast.TypeRef&) Bool {
     match tr {
@@ -10380,6 +10422,13 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
                 }
             }
             if c.traitWritten(tr, tr) { return false }
+            if not c.underRef and c.funcNamed(tr) {
+                # T21b: a declared function type is held by reference alone, as every function type is (T21)
+                c.err(nsp, msgs.FuncDeclBare(c.src(tr.Span())))
+                return false
+            }
+            c.underRef = false   # its type arguments are places of their own
+
             if c.foreignNamed(tr) {
                 # X10: an extern type is held by reference alone
                 c.err(nsp, msgs.ForeignByValue(c.src(tr.Span())))
@@ -10450,7 +10499,11 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
             }
             if c.traitWritten(of, tr) { return false }
             if c.foreignNamed(of) { return true }    # X10: "Db&", "Db?&"
-            if not c.writtenMet(of) { return false }
+            was := c.underRef
+            c.underRef = true
+            met := c.writtenMet(of)
+            c.underRef = was
+            if not met { return false }
             # T24: only a struct, an enum or an array is held by reference
             rt := c.P.Resolve(c.fr().Ctx, of)
             if not c.referable(rt) {
@@ -10972,6 +11025,7 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
         c.dropArgs(args)
         return c.unknown(sp)
     }
+    if k == types.DeclKind.Over and c.P.DeclaredFunc(t) != types.UnknownT { return c.toDeclaredFunc(sp, t, args) }
     if k == types.DeclKind.Over {
         sig := c.P.CtorSig(t)
         if sig != types.UnknownT {

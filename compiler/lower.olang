@@ -4867,7 +4867,8 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.word(b, "null", sp)
         ln.goto(after)
         ln.start(some)
-        ln.word(b, ln.spell(ln.T.NonNull(ty), true, not top), sp)   # the function a value holds is never null
+        # the function a value holds is never null, and renders as its signature, whatever declared type it is (T21b)
+        ln.word(b, ln.spell(ln.T.Untagged(ln.T.NonNull(ty)), true, not top), sp)
         ln.goto(after)
         ln.start(after)
         return
@@ -5073,6 +5074,10 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
         }
         out.PushChar(')')
         return out.ToString()
+    }
+    if k == types.Kind.Func and t.FuncTag(ty) != types.UnknownT {
+        # T21b: a declared function type, as it is held - "Handler&"
+        return $ln.spell(t.FuncTag(ty), true) $("?&" if t.FuncNullable(ty) else "&")
     }
     if k == types.Kind.Func {
         out := StringBuilder()

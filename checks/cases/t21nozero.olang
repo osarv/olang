@@ -1,0 +1,6 @@
+# check: fail error[T2c]: fn&(x I64) I64 is never null, so it has no zero value - give it a value, or write fn?&(x I64) I64
+# T21, D13: a function value never null has no zero value - an array of them is given a fill
+fn main() {
+    fs := Array<fn&(x I64) I64>(2)
+    fs[0] = fn(x): return x
+}

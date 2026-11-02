@@ -701,6 +701,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `tools/fnref_migrate.olang` (text, the compiler's parser saying where each bare type begins; in `olang fix` after the
   other text tools, `null_migrate` then adding `?` and `!` from the diagnostics) migrated the repository - 376 types in
   150 files, then 7 made `fn?&`, 5 `!` written, 4 by hand; the seed written twice (stage 1 reading both spellings).
+  **Declared function types (T21b, the coordinator's, same batch)**: `type Handler fn(e Event)` - no marker in the
+  declaration - held as `Handler&`/`Handler?&`, a bare `Handler` an error; nominal (a `Handler&` is no `Filter&`;
+  `Filter(h)` makes it one), a lambda or plain function value fitting it directly and it fitting its base; methods its
+  own (M19). Built (mine) as the function type carrying its declaration in the same flag word, so calls, §8's closure
+  tracking, layout and the evaluator need nothing new; no type parameters (G6) or `extends`; `$h` renders the signature,
+  a type is spelled `Handler&`.
 - **Function types (T22, T22a).** Errors compared in order, `mut` and permissions on T22's terms (read-only for
   writable parameters, writable for read-only results is safe); a function with scope obligations or a `Call` that
   keeps its argument cannot become a value; a type's `Call` fits a function type (E31), its errors the type's in order

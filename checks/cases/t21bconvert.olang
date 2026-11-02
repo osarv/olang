@@ -1,0 +1,13 @@
+# check: run
+# T21b: a declared function type is held as its function value - a lambda and a plain function value fit it directly,
+# another declared type through its name, and it fits its plain function type; its methods are its own (M19)
+type Handler fn(e I64) I64
+type Filter fn(e I64) I64
+fn (h Handler&) Twice(e I64) I64 { return h(h(e)) }
+fn main() {
+    h Handler& = fn(e): return e + 1
+    plain fn&(e I64) I64 = h
+    f Filter& = Filter(h)
+    g Handler& = plain
+    assert h.Twice(1) == 3 and plain(1) == 2 and f(2) == 3 and g(3) == 4
+}

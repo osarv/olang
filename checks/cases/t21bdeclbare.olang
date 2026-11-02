@@ -1,0 +1,7 @@
+# check: fail error[T21b]: Handler is a function type, held only by reference - write 'Handler&', or 'Handler?&' where it may be null
+# T21b: a declared function type is held by reference, as every function type is - its declaration writes none
+type Handler fn(e I64) I64
+fn main() {
+    h Handler = fn(e): return e
+    assert h(1) == 1
+}

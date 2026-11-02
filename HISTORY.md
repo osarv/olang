@@ -28177,3 +28177,66 @@ the one owner leaf it fills, none where it fills several; a call through `x[i]` 
 arguments (no call but a constructor's, nothing reaching a writable reference, a function value or an `any`) and never
 spawned - the error's text unchanged, its advice still right for the rest; a task counts only where code that may run
 reaches it; a walk of a Map of owners keeps (a recorded limit).
+
+## Function types reference-only, declared function types, arrays that may be null (2026-11-02, QCI 3, QCI 4)
+
+**The rule.** A function value had been the one null no type marked (T21: "nullable by default"): any function-typed
+field, local or parameter could hold null, and a call through one trapped. The user's QCI 3 (2026-11-01: "g Handler
+should not be possible because a function can never be a value", "only function declarations don't have &") made
+function types reference-only, as `any`, destructor types and extern types already were: every place holding a function
+value writes its marker on the `fn` - `fn&(e Event)` never null, `fn?&(e Event)` may be - and a bare `fn(...)` there is
+an error naming the `&`. Declarations and lambdas carry none; the correction the same day ("a type declarations never
+declared reference markers") put declared function types beside them: `type Handler fn(e Event)`, held as `Handler&` /
+`Handler?&`. QCI 4 ("an array reference that isn't pointing at a valid array should be null") reversed my "an array is
+never null": `Array<T>?&`, `String?&` may be absent, null distinct from empty.
+
+**Representation (the coordinator's, from Part B's plan).** A nullable function type is a flag on the function type
+entry - `types.data` gained an `F` word: `Nullable`, and above its low byte the declared function type it is (the Named
+instance's id) - so a `fn?&` is a different type of the same layout, two words, its null a null code; `IsNullable`,
+`NonNull`, `OrNull` take function types, and every rebuilding of a value's function type (`Refunc`, substitution, plain
+forms, names) carries the flag. Canon spells `fn?(` and `fn[m:Handler](`, read back by the canon parser (B3i). A null
+array is the length -1 with no storage, `{ -1, null }`: all-zero bits stay the empty array, so no type's zero value
+changed - the zero value of `Array<T>?&` is the empty array too (mine: `null` is written where one is absent). The
+checker gives null as `nullOf` (a constant of bits -1 for an array), emit writes `{ i64 -1, ptr null }`, the evaluator
+writes -1 in the length word; `is null`, `x!`, `==` and the null test of `$` follow from the one `Same` comparison;
+text that may be null renders `null` at the top of a rendering through its own branch (`renderMaybeText`; the direct
+write of its bytes had read a length of -1 - a crash found by the first test).
+
+**Where the bare form is said.** First in `writtenMet`, which only checks the signatures of functions the program
+reaches - an unreached generic in std kept its bare type unsaid. So the parser says it (`FuncTypeBare`, T21), where it
+reads every file: `typeBase` takes `&`/`?&` after `fn`, gives `Ref(Func, nullable)`, and reports a bare one but for a
+type declaration's base (`Parser.fnBase`), recording each in `Parser.BareFuncs` for the migration.
+
+**The checker.** `neverNull` (a reference or a function value with no zero value) where the reference-only tests were;
+null adapts to `fn?&` only, `NullToNonNull` naming `fn?&(...)` otherwise; a `fn&` meeting a `fn?&` or null in a
+conditional or a match gives the nullable one; `callValue` refuses a call through a `fn?&` (`ReadMaybeNull`, quoting the
+callee - a field's read span now ends at its name, so the message says `b.on!`, not `b.on(3)!`); `f!` unwraps one;
+`f is null` on a `fn&` is `NeverNull`; `markAt` finds a function type's marker on its `fn` (the note said where its
+result's `&` was). An export fn given for a C pointer that may be null is converted to it, which X13's check and emit's
+`exportNamed` look through. bindgen writes a C function pointer `fn?&(...)`. MIR's verifier takes the two nullabilities
+as one representation (a narrowed read stored where the other is wanted). explain prints a declaration's signature
+`fn(...)` (it had cut `fn(` off the spelled type by length); `$f` renders `fn&(...)`.
+
+**Declared function types (T21b).** Built as the function type carrying its declaration (the `F` word's tag), not as a
+Named type over one: every rule for function values - calls, captures and §8's tracking of them (D16d), layout, the
+evaluator - applies with nothing new, where a Named type would have needed each to look through it (and a missed one
+would have lost a closure's environment to §8). `refType` turns `Handler&` into the tagged function type
+(`DeclaredFunc`); a bare `Handler` is `FuncDeclBare`; two tags meeting is `FuncDeclMismatch` naming `Filter(h)`, which
+`toDeclaredFunc` makes; an untagged function value fits a tagged one and back (its base); `MethodOf`/`typeKey` find a
+tagged type's methods under its declaration (M19d's built-in rule lets them be declared). Decided (mine): no type
+parameters (G6, as every type declared over another) and no `extends`; `$h` renders the signature, a type spelling
+`Handler&` (`Vec<Handler&>[fn&(I64) I64]`).
+
+**Migration (two stages, as the plan said).** Stage 1 (a6d928c): the parser read `fn&(` and `fn?&(` as today's
+function type, the bare form unchanged, and the seed was written again (d75d168). Stage 2 made the bare form an error and
+migrated the repository with `tools/fnref_migrate.olang` - a text tool reading each file with the compiler's parser,
+which says where each bare type begins, and writing `&` after its `fn` (376 types in 150 files: compiler/ 63, std 74,
+tests, checks, bench, tools, fuzz) - then `null_migrate`, which the nullability notes now point at the right `&`: 7 types
+made `fn?&` (the scope pass's `InstNote` and `Spell` among them, read with `!`), 5 `!`s, and by hand two
+`Array<fn&(..)>(n)` given a fill and two checks cases. `olang fix` runs fnref_migrate among the text tools and
+null_migrate, as before, among the driven ones after it. The tests and cases spelling function types in messages and
+renderings (`fn(` to `fn&(`) were updated by hand; the generators (fuzz/gen, fuzz/scopegen) write `fn&(`.
+
+**Found on the way.** null_migrate's array fixes read the old messages ("an array is never null"); with nullable arrays
+the messages say "an array written '&' is never null ... or '?&' where it may be null", and its `dropq` kind went with
+ArrayNullable.

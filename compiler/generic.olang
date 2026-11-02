@@ -827,7 +827,21 @@ fn (p mut Program&) refType(c Context&, sp source.Span, r types.TypeId, nullable
     # T21: a function type is held only by reference, its marker on the "fn" - the function value itself, "?&" one that
     # may be null
     if p.T.KindOf(r) == types.Kind.Func { return p.T.OrNull(r) if nullable else r }
+    # T21b: a declared function type ("type Handler fn(e Event)") is held as its function type, which says it is one
+    f := p.DeclaredFunc(r)
+    if f != types.UnknownT { return p.T.OrNull(f) if nullable else f }
     return p.T.Ref(r, types.Nullable if nullable else types.ReadOnly)
+}
+
+# T21b: the function type a declared function type's instance is held as - its base, never null, saying the type it
+# is - or Unknown where t is none
+fn (p mut Program&) DeclaredFunc(t types.TypeId) types.TypeId {
+    if p.T.KindOf(t) != types.Kind.Named or p.T.DeclKindOf(p.T.DeclOf(t)) != types.DeclKind.Over { return types.UnknownT }
+    p.overBodies(t)
+    if not p.Body(t) { return types.UnknownT }
+    b := p.T.Base(t)
+    if p.T.KindOf(b) != types.Kind.Func { return types.UnknownT }
+    return p.T.Func(p.T.Params(b), p.T.Result(b), p.T.Errors(b), p.T.ScopesOf(b), p.T.NamesIdOf(b), tag = t)
 }
 
 # whether a global's written type says "mut" - a writable global (its binding, which only a global's "mut" decides)
@@ -1982,8 +1996,11 @@ fn (p mut Program&) Subst(t types.TypeId, owner I64, args types.ListId) types.Ty
         case types.Kind.Array { return p.T.Array(p.Subst(p.T.Elem(t), owner, args), p.Subst(p.T.Length(t), owner, args)) }
         case types.Kind.Ref { return p.T.Ref(p.Subst(p.T.Referent(t), owner, args), p.T.PermOf(t)) }
         case types.Kind.Func {
-            return p.T.Refunc(t, p.substList(p.T.Params(t), owner, args), p.Subst(p.T.Result(t), owner, args)
-                              p.substErrs(p.T.Errors(t), owner, args), p.T.ScopesOf(t), p.T.NamesIdOf(t))
+            tag := p.T.FuncTag(t)
+            if tag != types.UnknownT { tag = p.Subst(tag, owner, args) }   # T21b: "Pred<T>&" in an instance
+            return p.T.Func(p.substList(p.T.Params(t), owner, args), p.Subst(p.T.Result(t), owner, args)
+                            p.substErrs(p.T.Errors(t), owner, args), p.T.ScopesOf(t), p.T.NamesIdOf(t)
+                            p.T.FuncNullable(t), tag)
         }
         case types.Kind.ErrSet { return p.ErrSetOf(p.substErrs(p.T.ErrSetItems(t), owner, args)) }
         case types.Kind.Tuple { return p.T.Tuple(p.substList(p.T.Parts(t), owner, args)) }
@@ -2577,6 +2594,7 @@ fn (p mut Program&) recvKey(mi I64, t ast.TypeRef?&, tps Array<ast.TypeParam&>&)
 # a type's key as a receiver; -1 for none
 fn (p mut Program&) typeKey(t types.TypeId) I64 {
     x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
+    if p.T.FuncTag(x) != types.UnknownT { x = p.T.FuncTag(x) }   # T21b: a declared function type's methods (M19)
     return match p.T.KindOf(x) {
         case types.Kind.Named: keyDecl(p.T.DeclOf(x))
         case types.Kind.Array: ArrayKey
@@ -2609,6 +2627,7 @@ fn (p mut Program&) MethodNames() Vec<source.NameId> {
 fn (p mut Program&) MethodOf(t types.TypeId, name source.NameId) I64 {
     p.allFns()
     x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
+    if p.T.FuncTag(x) != types.UnknownT { x = p.T.FuncTag(x) }   # T21b: a declared function type's methods (M19)
     for _ in range 16 {
         key := p.typeKey(x)
         if key < 0 { return -1 }
@@ -4335,6 +4354,12 @@ fn (p mut Program&) reflName(b mut StringBuilder&, t types.TypeId) {
             b.Push("?&" if (pm & types.Nullable) != 0 else "&")
         }
         case types.Kind.Func {
+            if p.T.FuncTag(t) != types.UnknownT {
+                # T21b: a declared function type, as it is held
+                p.reflName(b, p.T.FuncTag(t))
+                b.Push("?&" if p.T.FuncNullable(t) else "&")
+                return
+            }
             b.Push("fn?&(" if p.T.FuncNullable(t) else "fn&(")
             ps := p.T.Items(p.T.Params(t))
             for i in range ps.Len() {
@@ -4715,6 +4740,13 @@ fn (p mut Program&) canonType(c mut cursor&) types.TypeId ? BadCanon, Undeclared
 fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? BadCanon, Undeclared {
     if c.eat("fn(") { return try p.canonFunc(c, false) }
     if c.eat("fn?(") { return try p.canonFunc(c, true) }
+    # T21b: a declared function type, "fn[m:Handler](...)"
+    for nullable in Bool[false, true] {
+        if not c.eat("fn?[" if nullable else "fn[") { continue }
+        tag := try p.canonType(c)
+        if not c.eat("](") { error BadCanon.Text }
+        return try p.canonFunc(c, nullable, tag)
+    }
     if c.eat("struct(") { return p.T.Record(try p.canonList(c, ")")) }
     if c.eat("enum{") { return try p.canonEnum(c) }
     if c.eat("(") { return p.T.Tuple(try p.canonList(c, ")")) }
@@ -4778,7 +4810,7 @@ fn (p mut Program&) canonList(c mut cursor&, close String&) types.ListId ? {
     return p.T.List(xs.ToArray())
 }
 
-fn (p mut Program&) canonFunc(c mut cursor&, nullable Bool) types.TypeId ? {
+fn (p mut Program&) canonFunc(c mut cursor&, nullable Bool, tag types.TypeId = types.UnknownT) types.TypeId ? {
     params := try p.canonList(c, ")")
     result := types.VoidT
     if c.eat(" (") {
@@ -4817,7 +4849,7 @@ fn (p mut Program&) canonFunc(c mut cursor&, nullable Bool) types.TypeId ? {
         all := xs.ToArray()
         scopes = p.T.Scopes(all[0], all[2:2 + n], all[2 + n:])
     }
-    return p.T.Func(params, result, p.T.List(es.ToArray()), scopes, nullable = nullable)
+    return p.T.Func(params, result, p.T.List(es.ToArray()), scopes, nullable = nullable, tag = tag)
 }
 
 fn (p mut Program&) canonEnum(c mut cursor&) types.TypeId ? {

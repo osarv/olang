@@ -1,0 +1,9 @@
+# check: fail error[T21b, T29]: expected Filter&, found Handler& - a declared function type is a type of its own: write 'Filter(f)' to make one the other
+# T21b, T29: two declared function types of one signature are two types - one is made the other by its name
+type Handler fn(e I64) I64
+type Filter fn(e I64) I64
+fn main() {
+    h Handler& = fn(e): return e
+    f Filter& = h
+    assert f(1) == 1
+}

@@ -1,0 +1,9 @@
+# check: fail error[T2c]: 'b.on' is a fn?&(n I64) I64, which may be null - read through it where a test says it is not ('if x is not null'), or write 'b.on!'
+# T21: nothing is called through a function value that may be null before a test says it is not
+type Btn struct(on fn?&(n I64) I64) {
+    on
+}
+fn main() {
+    b := Btn(fn(n): return n)
+    assert b.on(1) == 1
+}

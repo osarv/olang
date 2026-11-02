@@ -1,0 +1,96 @@
+# T21, T21b, T2c (QCI 3, QCI 4): function types are reference-only - "fn&(...)" never null, "fn?&(...)" may be - a
+# declared function type is held as one ("Handler&", "Handler?&"), and an array may be null where it is written "?&",
+# its null no empty array. Each computation is baked while compiling (K2) or decided there (S18c) beside the run time
+
+type Event struct(n I64) {
+    n
+}
+
+type Handler fn(e Event) I64
+type Filter fn(e Event) I64
+
+# a method of a declared function type (M19)
+fn (h Handler&) Twice(e Event) I64 { return h(e) + h(e) }
+
+type Button struct(name String&, on Handler?&, must fn&(n I64) I64 = fn(n): return n) {
+    name
+    on
+    must
+}
+
+# a function value that may be null, tested before it is called (S8e)
+fn press(b Button&, n I64) I64 {
+    on := b.on
+    if on is null { return b.must(n) }
+    return on(Event(n))
+}
+
+fn fire(h Handler&, e Event) I64 { return h(e) }
+
+# an array that may be absent: null, not empty, where nothing is found
+fn longest(words Array<String&>&) String?& {
+    best String?& = null
+    for w in words {
+        if best is null or w.Len() > best.Len() { best = w }
+    }
+    return best
+}
+
+fn lenOr(s String?&, d I64) I64 {
+    if s is null { return d }
+    return s.Len()
+}
+
+fn sample() String {
+    a := Button("a", null)
+    b := Button("b", fn(e): return e.n + 100)
+    h Handler& = fn(e): return e.n * 2
+    f Filter& = Filter(h)
+    plain fn&(e Event) I64 = h
+    none String?& = null
+    empty String?& = ""
+    hs Vec<Handler&>
+    hs.Push(h)
+    return ($press(a, 1) " " $press(b, 1) " " $fire(h, Event(3)) " " $h.Twice(Event(4)) " " $f(Event(5)) " "
+            $plain(Event(6)) " " $(longest(String&["a", "ccc", "bb"])!) " " $(longest(String&[]) is null) " "
+            $lenOr(none, -1) " " $lenOr(empty, -1) " " $(none == empty) " " $none " " $empty "|" " " $hs.Len() " "
+            $(b.on!(Event(2))))
+}
+
+Sampled String = sample()
+NullBaked String?& = null
+EmptyBaked String?& = ""
+
+test fire "a declared function type is held as its function value, a lambda fitting it directly" {
+    h Handler& = fn(e): return e.n + 1
+    assert fire(h, Event(1)) == 2 and fire(fn(e): return e.n * 10, Event(2)) == 20
+    assert h.Twice(Event(3)) == 8
+    assert $h == "fn&(e Event) I64" and $Vec<Handler&>() == "Vec<Handler&>[]"
+}
+
+test press "a function value that may be null is called once a test says it is not" {
+    assert press(Button("a", null), 7) == 7 and press(Button("b", fn(e): return -e.n), 7) == -7
+    on Handler?& = null
+    assert on is null and $on == "null"
+    on = fn(e): return e.n                       # narrowed by the assignment (S8e)
+    assert on(Event(4)) == 4
+    b := Button("c", fn(e): return e.n + 1)
+    assert b.on!(Event(5)) == 6                  # a field never narrows: "!" unwraps it
+}
+
+test longest "an array that may be null: null distinct from empty, read once narrowed" {
+    assert longest(String&["x", "yyy"])! == "yyy" and longest(String&[]) is null
+    n String?& = null
+    e String?& = ""
+    assert n is null and e is not null and n != e and e.Len() == 0
+    assert lenOr(n, -1) == -1 and lenOr(e, -1) == 0 and lenOr("abc", -1) == 3
+    z String?&                                   # an array's zero value is the empty array, whether or not it may be null
+    assert z is not null and z.Len() == 0
+    assert $n == "null" and $e == "" and $Array<I64>?&[] == "Array<I64>?&[]"
+}
+
+test sample "the evaluator agrees: baked while compiling as at run time" {
+    assert Sampled == sample()
+    assert Sampled == "1 101 6 16 10 12 ccc true -1 0 false null | 1 102"
+    assert NullBaked is null and EmptyBaked is not null and EmptyBaked != NullBaked
+}

@@ -1095,6 +1095,17 @@ variable like any other, holding a function value: `F(x)` calls the function `F`
 a `mut` one may be assigned another - a named function's value, or a lambda's capturing nothing, is made once for the
 whole program and so lives in the program's scope (O1b).
 
+**T21b (declared function types).** `type Handler fn(e Event)` declares a function type of its own - the one
+place a function type is written with no marker: a type declaration writes none (T29's form, its base a `func-type`
+written bare). Like every function type it is held only by reference: a place writes `Handler&` (never null) or
+`Handler?&` (may be null), with every rule T21 gives `fn&` and `fn?&`, and a bare `Handler` as a place's type is a
+compile-time error naming `Handler&`. It is **nominal** (T29): a `Handler&` is not a `Filter&` of the same signature,
+which `Filter(h)` makes it (T29a, a conversion that changes nothing of the value); a function value of its signature
+otherwise - a lambda, a named function, a `fn&(e Event)` - fits a `Handler&` directly, nothing converted, and a
+`Handler&` fits a `fn&(e Event)`, its base. Its methods are its own (M19: `fn (h Handler&) Fire(e Event) { h(e) }`);
+it takes no type parameters (G6) and does not `extend` (T29f). A value of one is a function value - two words, called
+as `h(e)` - and renders as its signature (E11a); its type is spelled `Handler&`.
+
 **T22.** Two function types are the same type (§2.10) only if they agree on parameter count, each
 parameter's type, permission included (T25b), in order, presence and identity of a return type, `noreturn` (D8e), and their error lists - the
 same error types **in the same order**, since a fallible call reports an error by its position in the
@@ -1309,7 +1320,8 @@ of `I32` remain the same type.
 
 Nominality is what gives a named type an identity to attach methods to (§4.4 M19).
 
-A type may be declared over a primitive, an array, or another declared type over one of those (`type Pct2 Pct`):
+A type may be declared over a primitive, an array, a function type (T21b: `type Handler fn(e Event)`, held as
+`Handler&`), or another declared type over one of those (`type Pct2 Pct`):
 it is then a new name over the same representation and takes **none** of the other type's constructor (T29d),
 destructor, `extends` (T29f) or methods. Declaring one over a struct, an enum, a trait or a generic type's instance
 (`type Names List<String&>`) is a compile-time error - such a type has no representation apart from its identity; a

@@ -26,6 +26,8 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `lanes.olang` - lane-by-lane array operators, totals, lane comparisons and masks (E39), baked and decided while
   compiling beside the run time.
 - `intwidths.olang` - integers of every width, I1 to I128 and U1 to U128 (T4a), at compile time and at run time.
+- `fnref.olang` - function types reference-only (`fn&`, `fn?&`, T21), declared function types (`Handler&`, T21b) and
+  arrays that may be null (`String?&`, T2c), baked and decided while compiling beside the run time.
 - `attrs.olang`, `attrmod.olang` - typed attributes (G39, G40) on every declaration they take and functions reflected
   (G41): a router and a command table collected while compiling from `attrmod`'s handlers, baked beside the run time.
 - `valueparts.olang` - QCE: arrays of a run-time length held by value inside values (fields, elements, payloads, type

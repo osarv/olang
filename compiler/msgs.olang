@@ -260,6 +260,8 @@ type Diag enum {
     AnyNotTrait
     AnyNeedsMarker
     FuncTypeBare
+    FuncDeclBare
+    FuncDeclMismatch
     AnyNotConverted
     AnyCopyOutlived
     AnyUnmet
@@ -1560,6 +1562,12 @@ fn AnyNeedsMarker(ty String&) Msg { return Msg(Diag.AnyNeedsMarker, "T32", "an '
 # ERR_FUNC_TYPE_BARE
 fn FuncTypeBare(rest String&) Msg { return Msg(Diag.FuncTypeBare, "T21", "a function type is held only by reference - write 'fn&" $rest "', or 'fn?&" $rest "' where it may be null") }
 
+# ERR_FUNC_DECL_BARE
+fn FuncDeclBare(ty String&) Msg { return Msg(Diag.FuncDeclBare, "T21b", $ty " is a function type, held only by reference - write '" $ty "&', or '" $ty "?&' where it may be null") }
+
+# ERR_FUNC_DECL_MISMATCH
+fn FuncDeclMismatch(want String&, have String&, name String&) Msg { return Msg(Diag.FuncDeclMismatch, "T21b, T29", "expected " $want ", found " $have " - a declared function type is a type of its own: write '" $name "(f)' to make one the other") }
+
 # ERR_ANY_NOT_CONVERTED
 fn AnyCopyOutlived() Msg { return Msg(Diag.AnyCopyOutlived, "T32a", "the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes") }
 
@@ -1739,7 +1747,7 @@ fn ExtendsNotBase() Msg { return Msg(Diag.ExtendsNotBase, "T29f", "only a type o
 fn GenericNotStruct() Msg { return Msg(Diag.GenericNotStruct, "G6", "only a struct, an enum or a trait takes type parameters") }
 
 # ERR_DECLARED_OVER_AGGREGATE
-fn DeclaredOverAggregate(ty String&) Msg { return Msg(Diag.DeclaredOverAggregate, "T29", "a type is declared over a number or an array, not over " $ty " - hold it in a struct's field instead") }
+fn DeclaredOverAggregate(ty String&) Msg { return Msg(Diag.DeclaredOverAggregate, "T29", "a type is declared over a number, an array or a function type, not over " $ty " - hold it in a struct's field instead") }
 
 # ERR_NOT_THE_OPERATOR
 fn NotTheOperator(ty String&, text1 String&, text2 String&, text3 String&, text4 String&) Msg { return Msg(Diag.NotTheOperator, "E31", $ty "'s " $text1 " takes " $text2 " besides its receiver - an ordinary method, not the one " $text3 " calls, which takes " $text4) }

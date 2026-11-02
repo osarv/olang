@@ -1,0 +1,6 @@
+# check: fail error[T2c]: 'f' is a fn&(x I64) I64, never null, so this is always false
+# T21, E10c: "is null" of a function value never null decides nothing
+fn main() {
+    f fn&(x I64) I64 = fn(x): return x
+    assert not (f is null)
+}

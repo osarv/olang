@@ -62,7 +62,8 @@ type Kind enum {
     Ref         # A what it refers to, B its permission (Perm): T24, T25b, T25e
     Func        # A its parameters (a ListId), B its result (Void for none, a Tuple for several, D8c), C its errors, D its
                 # scopes (a ScopesId), E its parameters' names where it is written (rendering only: E11a, Unnamed), F
-                # Nullable where it may be null ("fn?&(...)", T21) - a function value is never null otherwise
+                # Nullable where it may be null ("fn?&(...)", T21) - a function value is never null otherwise - and, above
+                # its low byte, the declared function type it is (T21b: "Handler&"), as its Named instance's id, 0 none
     Tuple       # several results (D8c): A its elements
     Record      # an anonymous struct - an enum case's payload: A its fields
     AnonEnum    # an anonymous enum (T27): A its shape (cases and payloads)
@@ -357,15 +358,15 @@ fn (t mut Table&) Ref(of TypeId, perm I64) TypeId {
 # scopes - what its markers say, which T22's identity leaves out (Plain) - and whether it may be null ("fn?&", T21),
 # which is part of its identity as "?&" is a reference's (T2c)
 fn (t mut Table&) Func(params ListId, result TypeId, errors ListId, scopes ScopesId = ScopesId(0), names I64 = 0
-                       nullable Bool = false) TypeId {
+                       nullable Bool = false, tag TypeId = TypeId(0)) TypeId {
     d := t.deepest(params)
     if t.depthOf(result) > d { d = t.depthOf(result) }
-    fl := Nullable if nullable else 0
+    fl := (Nullable if nullable else 0) | I64(tag) << 8
     id := t.intern(data(Kind.Func, I64(params), I64(result), I64(errors), I64(scopes), names, fl), d + 1)
     pp := t.PlainList(params)
     pr := t.Plain(result)
     if scopes != ScopesId(0) or names != 0 or pp != params or pr != result {
-        t.plains[I64(id)] = t.Func(pp, pr, errors, nullable = nullable)
+        t.plains[I64(id)] = t.Func(pp, pr, errors, nullable = nullable, tag = tag)
     }
     return id
 }
@@ -373,10 +374,20 @@ fn (t mut Table&) Func(params ListId, result TypeId, errors ListId, scopes Scope
 # whether a function type may be null ("fn?&(...)", T21)
 fn (t Table&) FuncNullable(f TypeId) Bool { return t.KindOf(f) == Kind.Func and (t.at(f).F & Nullable) != 0 }
 
-# a function type with other parts, as nullable as f is: what every rebuilding of a value's function type keeps
+# the declared function type a function type is (T21b: the Named instance "Handler" of "Handler&"), Unknown for none
+fn (t Table&) FuncTag(f TypeId) TypeId { return TypeId(I32(t.at(f).F >> 8)) if t.KindOf(f) == Kind.Func else UnknownT }
+
+# a function type with other parts, as nullable as f is and the same declared type: what every rebuilding of a value's
+# function type keeps
 fn (t mut Table&) Refunc(f TypeId, params ListId, result TypeId, errors ListId, scopes ScopesId = ScopesId(0)
                          names I64 = 0) TypeId {
-    return t.Func(params, result, errors, scopes, names, t.FuncNullable(f))
+    return t.Func(params, result, errors, scopes, names, t.FuncNullable(f), t.FuncTag(f))
+}
+
+# the function type a declared one stands for, its declaration left out (T21b) - as nullable as it is
+fn (t mut Table&) Untagged(f TypeId) TypeId {
+    if t.FuncTag(f) == UnknownT { return f }
+    return t.Func(t.Params(f), t.Result(f), t.Errors(f), t.ScopesOf(f), t.NamesIdOf(f), t.FuncNullable(f))
 }
 
 # a written function type's parameter names, interned (0 for none: a type no source wrote, or one with no parameters)
@@ -571,13 +582,15 @@ fn (t Table&) IsNullable(id TypeId) Bool {
 }
 fn (t mut Table&) NonNull(id TypeId) TypeId {
     if not t.IsNullable(id) { return id }
-    if t.KindOf(id) == Kind.Func { return t.Func(t.Params(id), t.Result(id), t.Errors(id), t.ScopesOf(id), t.NamesIdOf(id)) }
+    if t.KindOf(id) == Kind.Func {
+        return t.Func(t.Params(id), t.Result(id), t.Errors(id), t.ScopesOf(id), t.NamesIdOf(id), tag = t.FuncTag(id))
+    }
     return t.Ref(t.Referent(id), t.PermOf(id) & ~Nullable)
 }
 fn (t mut Table&) OrNull(id TypeId) TypeId {
     if t.IsNullable(id) { return id }
     if t.KindOf(id) == Kind.Func {
-        return t.Func(t.Params(id), t.Result(id), t.Errors(id), t.ScopesOf(id), t.NamesIdOf(id), true)
+        return t.Func(t.Params(id), t.Result(id), t.Errors(id), t.ScopesOf(id), t.NamesIdOf(id), true, t.FuncTag(id))
     }
     if t.KindOf(id) != Kind.Ref { return id }
     return t.Ref(t.Referent(id), t.PermOf(id) | Nullable)
@@ -1482,7 +1495,14 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
             b.Push("?&" if (p & Nullable) != 0 else "&")
         }
         case Kind.Func {
-            b.Push("fn?(" if (d.F & Nullable) != 0 else "fn(")
+            b.Push("fn?" if (d.F & Nullable) != 0 else "fn")
+            if (d.F >> 8) != 0 {
+                # T21b: the declared function type it is, "fn[m:Handler](...)"
+                b.PushChar('[')
+                t.canon(b, TypeId(I32(d.F >> 8)))
+                b.PushChar(']')
+            }
+            b.PushChar('(')
             t.joined(b, t.Params(id))
             b.PushChar(')')
             r := t.Result(id)
