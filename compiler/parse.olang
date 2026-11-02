@@ -2426,16 +2426,7 @@ fn (p mut Parser&) matchBody(value Bool) ast.Match& ? Fail {
                     # none)
                     nat := p.here()
                     n := try p.name()
-                    from := p.ids.Len()
-                    targs := Array<ast.TypeRef&>(0)
-                    match x {
-                        case ast.Expr.Generic(_, gx, ga) {
-                            pathIds(gx, p.ids)
-                            targs = ga
-                        }
-                        case _ { pathIds(x, p.ids) }
-                    }
-                    ty := ast.TypeRef.Named(x.Span(), gather(p.ids, from), targs)
+                    ty := p.caseTypeRef(x)
                     p.pats.Push(ast.Pattern.Type(source.Span(x.Span().Start, p.prevEnd), ty, n, p.from(nat)))
                 } else {
                     p.pats.Push(p.pattern(x, true))
@@ -2524,11 +2515,9 @@ fn (p mut Parser&) pattern(x ast.Expr&, top Bool) ast.Pattern& {
                 for a in args {
                     sub := p.pattern(a, false)
                     match sub {
-                        case ast.Pattern.Value(_, v) {
-                            if not isLiteral(v) {
-                                p.pats.Truncate(from)
-                                return ast.Pattern.Value(sp, x)
-                            }
+                        case ast.Pattern.Value(_, v) if not isLiteral(v) {
+                            p.pats.Truncate(from)
+                            return ast.Pattern.Value(sp, x)
                         }
                         case _ { }
                     }
@@ -2591,6 +2580,19 @@ fn pathIds(x ast.Expr&, out mut Vec<source.NameId>&) {
 }
 
 # a type case's type (T34): a path, with type arguments or none
+fn (p mut Parser&) caseTypeRef(x ast.Expr&) ast.TypeRef& {
+    from := p.ids.Len()
+    targs := Array<ast.TypeRef&>(0)
+    match x {
+        case ast.Expr.Generic(_, gx, ga) {
+            pathIds(gx, p.ids)
+            targs = ga
+        }
+        case _ { pathIds(x, p.ids) }
+    }
+    return ast.TypeRef.Named(x.Span(), gather(p.ids, from), targs)
+}
+
 # whether a for-in's source is a reflected list (G33): a path ending in Fields, Cases, Params or Results
 fn (p mut Parser&) reflListPath(x ast.Expr&) Bool {
     match x {
@@ -3254,24 +3256,8 @@ fn (p mut Parser&) literalAfterType(at I32, x ast.Expr&) ast.Expr& ? Fail {
     match x {
         case ast.Expr.Generic(sp, base, targs) {
             from := p.ids.Len()
-            e ast.Expr& = base
-            for {
-                match e {
-                    case ast.Expr.Name(_, n) {
-                        p.ids.Push(n)
-                        break
-                    }
-                    case ast.Expr.Member(_, b, n) {
-                        p.ids.Push(n)
-                        e = b
-                    }
-                    case _ { break }
-                }
-            }
-            parts := gather(p.ids, from)
-            rev mut Array<source.NameId>& = Array<source.NameId>(parts.Len())
-            for i in range parts.Len() { rev[i] = parts[parts.Len() - 1 - i] }
-            nt ast.TypeRef& = ast.TypeRef.Named(sp, rev, targs)
+            pathIds(base, p.ids)
+            nt ast.TypeRef& = ast.TypeRef.Named(sp, gather(p.ids, from), targs)
             elem := p.markers(at, nt)
             return try p.arrayLit(at, elem)
         }
