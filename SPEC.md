@@ -1089,14 +1089,20 @@ the result writable where the type gives a read-only one - so `fn(acc I32, b Box
 the function can fail with, in any order and with more beside them (§7 R1b): its value re-encodes its codes for the
 type's list. A `noreturn` function value also fits a type with the same parameters, no result, no error
 list and no `noreturn`: never returning, it does all such a type promises (D8e). Every other part must be the same. A
-function type says nothing of where its references live (QCB): every parameter its own scope, a reference result built
-in the result scope - so a function whose body relates them is no value at all (T22a).
+function type says nothing more of where its references live (QCB): every parameter its own scope, and a result holding
+references may hand back what its reference parameters refer to - whole, or a view of it (T22a). So a call through a
+value of the type holds each reference argument to outlive the scope the result lands in (§8 O10c), exactly that scope
+where something can be stored through both the parameter and the result (O25g), and as a view: met by where the argument
+already lives, never by building it longer (O27).
 
 **T22a.** A function whose signature carries a **scope obligation** (§8 O10b) - a relation between its
 parameters' scopes that every caller must establish - cannot be used as a function value: a call through a
 value of function type checks nothing of the kind, so the obligation would go unchecked. Using such a function
 as a value is a compile-time error naming the obligation (an inferred one: none is written), and `olang explain`
-says of every function that cannot become a value that it cannot and why (B11b). The exception is a function type whose result is written as
+says of every function that cannot become a value that it cannot and why (B11b). An obligation its type says of every
+call (T22) is none of these: a function whose obligations are only each reference parameter's scope outliving its
+result's - exactly where something can be stored through both - hands back what an argument refers to and is a value
+(`fn first(a Array<I64>&) Array<I64>& { return a[0:1] }`, `g := first`). The exception is a function type whose result is written as
 a **type variable** bound to a reference, or to a value holding references (a callback's `fn(acc U, x T) U`):
 such a result may hand back one of the arguments (O14b), so the type itself requires each reference argument to
 outlive its result scope - and to be exactly it where something can be stored through the argument (O25g) - and a call

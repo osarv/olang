@@ -1,0 +1,16 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# T22a, open point 5: through a function value, a reference argument outlives where the result lands - a loop turn's text
+# given beside a list the result is (exactly where something is stored through both) is refused, called by name it is
+# built where the list keeps it
+import "std/io"
+fn pick(a mut Vec<String&>&, b String&) mut Vec<String&>& { return a }
+fn main() {
+    g := pick
+    v Vec<String&>
+    for i in range 3 {
+        t := $i
+        w := g(v, t)
+        w.Push(t)
+    }
+    io.Println($v.Len())!
+}

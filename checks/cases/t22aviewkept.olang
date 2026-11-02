@@ -1,0 +1,14 @@
+# check: fail error[O27]: this keeps a view of 't', which lives only until its block or loop turn ends
+# T22a, open point 5: a call through a function value may hand back a view of what its reference argument refers to - the
+# result kept past the loop turn its argument lives in is refused, never the argument built longer
+import "std/io"
+fn same(a String&) String& { return a }
+fn main() {
+    g := same
+    r String& = "x"
+    for i in range 3 {
+        t := $i
+        r = g(t)
+    }
+    io.Println(r)!
+}

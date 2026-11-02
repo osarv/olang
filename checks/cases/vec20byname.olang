@@ -1,8 +1,9 @@
-# check: fail error[T22a]: 'first' relates its arguments' scopes, which a call through a function value cannot check - call it directly
+# check: run
 # what stays legal: a borrowed result handing back a Vec's view, called by name and used before the Vec grows, whether
 # its type is the buffer's or a declared array type converted from it; a conversion copied into a value (a typed value
 # declaration - ':=' declares the reference the conversion names, T29a) is the copy's own; a function giving a plain
-# borrowed result is still a value
+# borrowed result is still a value - a view of its argument too (T22a, open point 5: its type's result reads as borrowed
+# from its reference parameters)
 import "std/io"
 type Ix Array<I64>
 fn view(v Vec<I64>&) Array<I64>& { return v.View() }

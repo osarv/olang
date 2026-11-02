@@ -302,7 +302,7 @@ fn NoValueWhy(c mut typecheck.Checker&, sc scope.Scoper&, f I64, body I64) Strin
         return "it is compiled once per length of an array it takes by value (G29) - pass a lambda calling it"
     }
     if c.P.VarCount(owner) > 0 { return $"a generic is a value only named with its type arguments, '" $name "<...>' (G12)" }
-    if body >= 0 and sc.Obligations(body, c.P.L.Names).Len() > 0 {
+    if body >= 0 and sc.Obligations(body, c.P.L.Names).Len() > 0 and not sc.ValueCovered(body) {
         return "its scope obligations (# scopes, above) relate its arguments' scopes, which a call through a function value cannot check (T22a) - call it directly"
     }
     return ""

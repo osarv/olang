@@ -1,6 +1,6 @@
-# check: fail error[T22a]: 'self' relates its arguments' scopes, which a call through a function value cannot check - call it directly
-# T22: a borrowed result ('N&a', where a lives) is not a built one ('N&', where the call's result is put) - the caller of
-# a value of the built type would keep the result past its argument
+# check: fail error[O27]: this keeps a view of 't', which lives only until its block or loop turn ends
+# T22, T22a: a function handing back its argument is a value (open point 5), and a call through the value holds the
+# argument to outlive where the result lands - kept past the argument, refused (it was T22a's error, the function no value)
 type N struct(v I64) {
     v
     next N?& = null

@@ -1,0 +1,69 @@
+# T22a, open point 5: a function type's reference result reads as borrowed from its reference parameters, so a function
+# handing back what an argument refers to - whole or a view of it - is a value of its type, and a call through the value
+# holds each reference argument to outlive where the result lands. Each test beside a global the evaluator bakes (K2)
+
+fn first(a Array<I64>&) Array<I64>& { return a[0:1] }
+fn whole(a Array<I64>&) Array<I64>& { return a }
+fn longer(a String&, b String&) String& { return a if a.Len() >= b.Len() else b }
+fn grab(v mut Vec<String&>&) mut Vec<String&>& { return v }
+fn built(n I64) Array<I64> { return Array<I64>(n, 7) }
+
+fn apply(f fn(a Array<I64>&) Array<I64>&, xs Array<I64>&) I64 {
+    r := f(xs)
+    return r[0] + r.Len()
+}
+
+fn pickWith(f fn(a String&, b String&) String&, a String&, b String&) String { return $f(a, b) }
+
+# baked while compiling: the evaluator calls through the same values
+Baked I64 = apply(first, I64[5, 6, 7]) + apply(whole, I64[1, 2])
+BakedText String = pickWith(longer, "ab", "abc")
+
+test "a function handing back a view of its argument is a value" {
+    xs := I64[5, 6, 7]
+    g := first
+    assert g(xs)[0] == 5 and g(xs).Len() == 1
+    assert apply(first, xs) == 6 and apply(whole, xs) == 8
+    assert Baked == 6 + 3
+}
+
+test "a lambda handing back its argument is a value" {
+    f := fn(a String&, b String&) String& { return b if b.Len() > a.Len() else a }
+    assert pickWith(f, "xy", "x") == "xy" and pickWith(longer, "a", "bcd") == "bcd"
+    assert BakedText == "abc"
+}
+
+test "a result handed back through a value lands where its argument lives" {
+    v Vec<String&>
+    h := grab
+    for _ in range 3 {
+        w := h(v)
+        w.Push("z")
+    }
+    churn(200)
+    assert v.Len() == 3 and v[2] == "z"
+}
+
+test "text made in a loop, picked through a value and read in the turn" {
+    g := longer
+    total := 0
+    for i in range 50 {
+        t := $"#" $i
+        r := g(t, "1")
+        total += r.Len()
+    }
+    churn(200)
+    assert total == 10 * 2 + 40 * 3
+}
+
+test "a value of a type whose result is built is unchanged" {
+    b := built
+    assert b(3)[2] == 7
+}
+
+# allocates and drops arenas, so a use of freed storage reads something else (under -sanitize: a fault)
+fn churn(d I64) I64 {
+    a := I64[d, d, d, d]
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[2] - d
+}
