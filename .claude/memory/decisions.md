@@ -2437,3 +2437,18 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   (a parallel assignment read as a declaration under S1b); (2) the same pass takes `Call.Scoped`/`ScopedCall`/
   `ScopedArray` out of typed.olang and moves the three cross-module duplicates (partOf/partLvalue, calleeOf/calleeBody,
   callOf/callOfExpr) into typed.olang; (3) +0.11% scope-phase instructions for the split `Scoper.call` is accepted.
+- Bulk review 6 (/home/user/review/bulk6, at 5357ee7: no use-after-free; 7 wrong results, 5 over-rejections, 1 memory,
+  diagnostics) - directions DECIDED by me 2026-11-02 for the fix round (theirs to review), "when in doubt, refuse or
+  copy - never a wrong answer": F1 an in-place call through `x[i]` (RefMut) also judges the method's and plain
+  constructors' bodies (may they grow/write the collection, through a global, a closure, an `any`) - unsure keeps the
+  E31b error; F2 D9h's life check counts a call reaching a `mut` reference to the held view's storage type through any
+  argument's fields as a write (by type), unsure copies; F3 `owns`/`viewed` apply only where the callee keeps nothing -
+  a loop turn's owning value lent to a constructor that keeps it is refused (as C2d refuses one owning nothing), naming
+  a value field or a written copy; F4 a nested null `?&` array renders `null` (run and evaluator); F5 is the tidy pass's;
+  F6 SPEC follows the code - a stale view or Ref after growth reads the retired buffer, whose moved-out owning elements
+  are empty (memory-safe; -sanitize and the evaluator stop on it), M19d and interpret's message reworded; F7 M19g
+  refuses a `Ref`/`RefMut` (Vec, Map) used after a growth of the same collection in the same function, as it refuses a
+  view; F8-F12 the over-rejections fixed where the rule allows it (G29 by a run-time length per SPEC, with the G9
+  message corrected); F13 early freeing reaches a Vec local reassigned in a loop and a Vec field of a constructed struct
+  (the `-memory` reason "a call's value copied" for a constructor call is the bug); F14 errors said at the program's
+  call, not inside std, and one error per cause (D3b not beside O27). The reviewer's decision reviews stand.
