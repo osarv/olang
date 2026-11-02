@@ -12,7 +12,8 @@
 #
 # Growth replaces the buffer: a new one, twice the size (8 at first), the elements moved into it, and the old one
 # retired - nothing in a Vec uses it again. The old buffer stays where the Vec lives until that scope closes, so a view of
-# it taken before the growth ("d := v.View()") reads the elements as they were then, never freed memory. That is a
+# it taken before the growth ("d := v.View()", or a Ref/RefMut) reads that retired buffer - the elements' plain data as
+# it was, those owning storage of their own emptied (growth moved them out) - never freed memory. That is a
 # correctness hazard rather than a memory one, and it is written where it can happen: View() is the one way to have a
 # Vec's elements as an array. The compile-time evaluator stops on a use of such a view, and under -sanitize the old
 # buffer is made unreadable, so a run reports one (B2f). The buffers growth leaves add up to less than the last one (8 +

@@ -2727,8 +2727,10 @@ value), and an iterator's `ToVec()` one of every value it gives; `Pop`, `Clear` 
 `Vec` each step, so a walk that pushes sees what it pushed; `v.Iter()` is an `Indexable`'s (M19e). `View()` is the one
 way to have its elements as an array - `Array<T>&`, `ViewMut()` writably - a window on the buffer as it is now, good
 until the `Vec` grows (a `Push`, `PushAll`, `Insert` or `Reserve` that replaces the buffer). The buffer a growth
-replaces is kept where the `Vec` lives until that scope closes, so a view used after a growth reads the elements as
-they were - never storage that was freed - and what the elements refer to lives where the `Vec` does, not in the buffer,
+replaces is kept where the `Vec` lives until that scope closes, so a view (or a `Ref`/`RefMut`) used after a growth
+reads that retired buffer - the elements' plain data as it was, but each element owning storage of its own (an array of
+a run-time length by value, a struct holding one) emptied, since the growth moved it out into the new buffer - never
+storage that was freed; and what the elements refer to lives where the `Vec` does, not in the buffer,
 so an element read out of it (`s := v[0]`) is kept across growth. Such a stale view is a compile-time error where the
 same `Vec` is seen on both sides (M19g), and elsewhere a mistake the compile-time evaluator stops on (K1) and the scope
 sanitizer reports (B2f). `==` compares its elements (E10), it hashes as they do
@@ -2752,7 +2754,7 @@ element of it borrowed in place by a reference parameter (E12c), a value holding
 capturing it, a collection a call is known to keep it in), and a function's result where the function's body hands
 back a view of a `Vec` its argument reaches. A view is **stale** from a growth of its `Vec` on: a `Push`, `PushAll`,
 `Insert` or `Reserve`, or any call whose body may make one of those - the buffer is replaced, and the view goes on
-showing the old one. Using a stale view - reading it, writing through it, calling a lambda holding it - is a
+showing the retired one (M19d: its owning elements moved out). Using a stale view - reading it, writing through it, calling a lambda holding it - is a
 compile-time error **where the same `Vec` is visible on both sides**, and nowhere else:
 
 1. **In one function**: between the view and its use - on any path, a loop's next turn included - the function grows
@@ -7030,7 +7032,8 @@ since the evaluator never reclaims storage. A sanitized object is a distinct art
 
 A **Vec's replaced buffer** (M19d) is treated the same way before its scope closes: a buffer a growth replaced is
 overwritten with the pattern and, where the system allows it, made unreadable, so a view of the `Vec` taken before the
-growth and used after it - which without `-sanitize` reads the elements as they were - is reported as `stale view: ...`
+growth and used after it - which without `-sanitize` reads the retired buffer, its moved-out elements emptied (M19d) - is
+reported as `stale view: ...`
 and ends the program as a failed check does. The buffer stays held until its scope closes, and is then held back as
 the scope's other storage is.
 
@@ -8774,8 +8777,8 @@ attempted (a local `if`'s condition, S8b), the code is left to the run time.
 
 A **stale view** - a read or write through a view of a `Vec`'s elements (`View()`, M19d) taken before a growth that
 replaced its buffer, or through a slice of one - ends the evaluation there too, with both places named: the use, and
-the growth (the program's call, where the growth is made inside the prelude). At run time such a view reads the old
-elements, which no program means, so where a value is required it is a compile-time error as reaching an abort is, and
+the growth (the program's call, where the growth is made inside the prelude). At run time such a view reads the retired
+buffer - the old elements' plain data, the ones owning storage emptied (M19d) - which no program means, so where a value is required it is a compile-time error as reaching an abort is, and
 under `interpret` the program stops there.
 
 A length known while compiling (T7c) is a constant whatever holds it, so reading it - `a.Len()` on a by-value

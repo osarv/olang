@@ -1095,7 +1095,7 @@ fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
             # M19g: a stale view - and where the program grew its Vec
             if why == eval.WhyStale {
                 gf, gsp := x.M.StaleGrewAt()
-                if gf >= 0 { sayErr("olang interpret: " $line(d, gf, gsp) ": the Vec grew here\n") }
+                if gf >= 0 { sayErr("olang interpret: " $line(d, gf, gsp) ": the collection grew here\n") }
             }
             return 1
         }

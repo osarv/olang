@@ -1613,8 +1613,8 @@ fn vechandle(r mut report&) ? Failed {
                      "stale " $flags " was not reported", dir)
     }
     try r.expect(sh(dir, "\"$OLANG\" interpret stale.olang > out.txt 2>&1") == 1 and
-                 outOf(dir).Contains("stale.olang:12: it uses a view of a Vec's elements taken before the Vec grew") and
-                 outOf(dir).Contains("stale.olang:8: the Vec grew here"), "stale interpreted", dir)
+                 outOf(dir).Contains("stale.olang:12: it uses a view of a collection's elements taken before the collection grew") and
+                 outOf(dir).Contains("stale.olang:8: the collection grew here"), "stale interpreted", dir)
 }
 
 # P4-P4d: tasks that fail - the earliest spawned failure is the join's, a task's clauses run on its thread, defaults land
