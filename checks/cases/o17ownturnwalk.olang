@@ -1,4 +1,4 @@
-# check: fail error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
 # O17 (bulk review 6 F3): a loop turn's value owning storage, lent to a callee keeping a reference to it, binds where
 # its own storage is - one slot every turn reuses - so keeping it past the turn is refused (every kept reference named
 # the last turn's value)
