@@ -2913,9 +2913,11 @@ fn (s mut Scoper&) carried(x typed.Expr?&, out mut Vec<I64>&) {
             match f {
                 case typed.FnVal.Lambda(_, caps, _) {
                     # (but for a reference it captures: what that names must outlive the lambda, which it does where the
-                    # local's referent is built where the result goes - a reference local from a built call)
+                    # local's referent is built where the result goes - a reference local from a built call; and so for a
+                    # function value it captures, a lambda local whose own captures flow so in turn - review 6b F5)
                     for cp in caps {
-                        if s.flCaps or s.isRef(cp.Outer.Type()): s.carried(cp.Outer, out)
+                        ct := cp.Outer.Type()
+                        if s.flCaps or s.isRef(ct) or s.isFunc(ct): s.carried(cp.Outer, out)
                     }
                 }
                 case typed.FnVal.Adapter(_, r, _) { s.carried(r, out) }

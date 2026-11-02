@@ -6344,7 +6344,8 @@ keeps that storage's scope (O25a).
 For either kind, a local is returned also when, in the rest of its block, a value mentioning it **flows** into what is
 returned: it is assigned to a local (or a field or an element of one) that is returned or already in the result scope,
 or is a local declared from it that is, or is handed to a method called on such a local (`l.Push(x)` with `l`
-returned), or is a reference a returned lambda captures (what it names must outlive the lambda), or is the local a part
+returned), or is a reference or a function value a returned lambda captures (what it names must outlive the lambda - a lambda
+local so captured flows as returning it would), or is the local a part
 of a call's value returned borrows (`return v.View()[2:4]`). A plain copy of a value local into a value (`f := e`, `b = a`) is no flow of it: the copy keeps its
 references where its source's are (O25h), and the source stays where it is; a reference declared from it borrows it,
 which is. The flow is read off the program's text, as written - it is an over-approximation, whose cost is only that

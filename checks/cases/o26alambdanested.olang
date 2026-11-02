@@ -1,0 +1,38 @@
+# check: run
+# flags: -debug -sanitize
+# O26a/D16d (review 6b F5): a returned lambda calling a lambda local that captures a reference from a built call - the
+# local's closure flows where the result goes as returning the local itself does, so what it captured is built there
+# (it was O10d), read back after an arena churn; the evaluator agrees (a baked global, a decided assert)
+import "std/io"
+type node struct(v I64) { v }
+fn mk(k I64) node& { return node(k) }
+fn direct(k I64) fn&() I64 {
+    r := mk(k)
+    g := fn() I64 { return r.v + 1 }
+    return g
+}
+fn nested(k I64) fn&() I64 {
+    r := mk(k)
+    g := fn() I64 { return r.v + 1 }
+    return fn() I64 { return g() * 2 }
+}
+fn twice(k I64) fn&() I64 {
+    r := mk(k)
+    g := fn() I64 { return r.v }
+    h := fn() I64 { return g() + 1 }
+    return fn() I64 { return h() * 3 }
+}
+fn churn() I64 {
+    junk := Vec<String>()
+    for i in range 2000 { junk.Push($i "abcdefghijklmnopqrstuvwxyz") }
+    return junk.Len() - 2000
+}
+Baked := nested(6)() + twice(2)()
+assert Baked == 14 + 9
+fn main() {
+    a := direct(3)
+    b := nested(6)
+    c := twice(2)
+    n := churn()
+    io.Println($a() " " $b() " " $c() " " $(Baked + n))!
+}
