@@ -3971,8 +3971,8 @@ other argument of the call is a **plain value**: a literal, constant data, a rea
 them (an element of an array indexed by such), an operation over plain values, a constructor called on plain values -
 none of them holding a writable reference, a function value or an `any` (through which the callee could reach the
 collection: `l[0].Mark(l)` lends `l` itself) - and where nothing the call runs before its write lands could change the
-collection either: the element's type reaches no writable reference, function value or `any` (a closure the element
-holds over its own collection), and neither the method's body nor that of a constructor an argument calls - with
+collection either: the element's type reaches no function value or `any` (a closure the element holds over its own
+collection) and no writable reference to storage a collection it is in may be or hold (by type), and neither the method's body nor that of a constructor an argument calls - with
 everything each may call - writes a global (or what a global refers to), calls through a function value or an `any`, or
 reaches a body that did not check. Judged once every body is checked (B1.1's effect summaries); where it does not hold,
 the call is the copy's, and the error below.
