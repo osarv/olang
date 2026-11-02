@@ -1504,6 +1504,14 @@ fn (b mut Body&) AddSite(kind SiteKind, sp source.Span) SiteId {
 
 fn (b Body&) Local(id LocalId) Local { return b.Locals[I64(id)] }
 
+# the function instance this body checks, -1 for none (a lambda's, a constructor's, a global's, a test's)
+fn (b Body&) Inst() I64 {
+    return match b.Of {
+        case BodyOf.Fn(inst): inst
+        case _: -1
+    }
+}
+
 # the scope variables a call passes, from types.ScopeVarsOf of the body's type (one function for every pass, so a
 # call, the body and a function value's adapter agree): a parameter's index its Param, ResultVar the result scope - a
 # constructor's instance - and ClosingVar a destructor's closing scope. A lambda's captures follow, added by check

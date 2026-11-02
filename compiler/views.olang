@@ -27,7 +27,6 @@
 # - The prelude's own Vec bodies are walked for their summaries only: they read a replaced buffer on purpose.
 
 import "source"
-import "ast"
 import "diag"
 import "msgs"
 import "types"
@@ -368,26 +367,7 @@ fn (v mut Viewer&) fieldName(t types.TypeId, i I64) String {
         v.nameLists.Push(Vec<source.NameId>())
         k = v.nameLists.Len() - 1
         v.fieldsOf.Put(d, k)
-        td := v.P.TypeDecl(d)
-        if td is not null and td.Body is not null {
-            match td.Body {
-                case ast.TypeBody.Struct(s) {
-                    if s.Body.Len() > 0 {
-                        for st in s.Body {
-                            match st {
-                                case ast.Stmt.Var(_, vd) {
-                                    if vd.Field {
-                                        for n in vd.Names { v.nameLists.RefMut(k).Push(n) }
-                                    }
-                                }
-                                case _ { }
-                            }
-                        }
-                    }
-                }
-                case _ { }
-            }
-        }
+        for n in v.P.FieldNames(t) { v.nameLists.RefMut(k).Push(n) }
     }
     ns := v.nameLists.Ref(k)
     return $v.text(ns[i]) if i < ns.Len() else $i

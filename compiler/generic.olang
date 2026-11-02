@@ -2124,29 +2124,33 @@ fn (p mut Program&) fields(c Context&, s ast.StructBody&) types.ListId {
     }
     out Vec<types.TypeId>
     if s.Body.Len() == 0 { return types.ListId(0) }
-    for st in s.Body {
-        match st {
-            case ast.Stmt.Var(_, v) {
-                if not v.Field { continue }
-                for i in range v.Names.Len() {
-                    ft := types.UnknownT
-                    if v.Infer {
-                        x := v.Values[i] if i < v.Values.Len() else null
-                        ft = p.Infer(c, known, x)
-                    } else if v.Ty is not null {
-                        # T7d, C2e: a value array field given a known length by its initializer is held in the instance
-                        ft = p.StorageOf(c, p.Resolve(c, v.Ty), v.Values[i] if i < v.Values.Len() else null)
-                    } else {
-                        ft = try known.Get(v.Names[i]) catch default types.UnknownT
-                    }
-                    known.Put(v.Names[i], ft)
-                    out.Push(ft)
-                }
+    for v in FieldDecls(s) {
+        for i in range v.Names.Len() {
+            ft := types.UnknownT
+            if v.Infer {
+                x := v.Values[i] if i < v.Values.Len() else null
+                ft = p.Infer(c, known, x)
+            } else if v.Ty is not null {
+                # T7d, C2e: a value array field given a known length by its initializer is held in the instance
+                ft = p.StorageOf(c, p.Resolve(c, v.Ty), v.Values[i] if i < v.Values.Len() else null)
+            } else {
+                ft = try known.Get(v.Names[i]) catch default types.UnknownT
             }
-            case _ { }
+            known.Put(v.Names[i], ft)
+            out.Push(ft)
         }
     }
     return p.T.List(out.ToArray())
+}
+
+# a struct's field declarations, in their order (C2a)
+fn FieldDecls(sb ast.StructBody&) Iterator<ast.VarDecl&> {
+    for st in sb.Body {
+        match st {
+            case ast.Stmt.Var(_, v) { if v.Field: yield v }
+            case _ { }
+        }
+    }
 }
 
 # the type of a value a ":=" declaration takes (D15), where it is plain from the expression written: a literal, a name
@@ -2199,26 +2203,26 @@ fn (p mut Program&) literalOf(c Context&, y ast.Expr&, items Array<ast.Expr&>&) 
 fn (p mut Program&) madeType(c Context&, known Map<source.NameId, types.TypeId>&, f ast.Expr&, args Array<ast.Expr&>&) types.TypeId {
     t := p.callType(c, known, f)
     match f {
-        case ast.Expr.Generic(_, g, targs) {
-            match g {
-                case ast.Expr.Name(sp, n) {
-                    if p.R.Use(p.file(c.Mi), sp.Start).Kind == names.What.Builtin and p.text(n) == "Array" and targs.Len() == 1 and
-                       args.Len() > 0 and args.Len() >= 1 and p.T.KindOf(t) == types.Kind.Array {
-                        # T7d: elements held by value take their length from the fill, as the checker's arrayMake does
-                        el := p.T.Elem(t)
-                        if args.Len() == 2 and p.T.KindOf(el) == types.Kind.Array and p.T.Length(el) == types.TypeId(0) {
-                            ft := p.Infer(c, known, args[1])
-                            if p.T.KindOf(ft) == types.Kind.Array and p.T.Length(ft) != types.TypeId(0) and p.LengthsOnly(ft, el) { el = ft }
-                        }
-                        return p.T.Array(el, p.FoldLength(c, args[0]))
-                    }
-                }
-                case _ { }
+        case ast.Expr.Generic(_, ast.Expr.Name(sp, n), targs) {
+            if p.R.Use(p.file(c.Mi), sp.Start).Kind == names.What.Builtin and p.text(n) == "Array" and targs.Len() == 1 and
+               args.Len() > 0 and p.T.KindOf(t) == types.Kind.Array {
+                return p.arrayMade(c, known, t, args)
             }
         }
         case _ { }
     }
     return t
+}
+
+# an Array<T>(n[, fill]) made, of type t: elements held by value take their length from the fill (T7d), as the
+# checker's arrayMake does
+fn (p mut Program&) arrayMade(c Context&, known Map<source.NameId, types.TypeId>&, t types.TypeId, args Array<ast.Expr&>&) types.TypeId {
+    el := p.T.Elem(t)
+    if args.Len() == 2 and p.T.KindOf(el) == types.Kind.Array and p.T.Length(el) == types.TypeId(0) {
+        ft := p.Infer(c, known, args[1])
+        if p.T.KindOf(ft) == types.Kind.Array and p.T.Length(ft) != types.TypeId(0) and p.LengthsOnly(ft, el) { el = ft }
+    }
+    return p.T.Array(el, p.FoldLength(c, args[0]))
 }
 
 # a name's type outside the declaration's own: a global's - its written type, or its initializer's (D15)
@@ -2554,6 +2558,18 @@ fn (p mut Program&) DefaultMethods(t types.TypeId, name source.NameId) Vec<I64> 
     return out
 }
 
+# the key of the trait a type variable's constraint written in module mi names, -1 for none
+fn (p mut Program&) constraintKey(mi I64, k ast.TypeRef&) I64 {
+    match k {
+        case ast.TypeRef.Named(ksp, _, _) {
+            kref := p.R.Use(p.file(mi), ksp.Start)
+            if kref.Kind == names.What.Type and kref.Index >= 0 { return keyTrait(p.DeclFor(kref.Module, kref.Index)) }
+            return -1
+        }
+        case _ { return -1 }
+    }
+}
+
 # a written receiver's key: a type variable's by the trait its list item constrains it to (M19e)
 fn (p mut Program&) recvKey(mi I64, t ast.TypeRef?&, tps Array<ast.TypeParam&>&) I64 {
     if t is null { return -1 }
@@ -2565,16 +2581,7 @@ fn (p mut Program&) recvKey(mi I64, t ast.TypeRef?&, tps Array<ast.TypeParam&>&)
             if ref.Kind == names.What.TypeVar {
                 k := listed(tps, path[0])
                 if k is null { return -1 }
-                match k {
-                    case ast.TypeRef.Named(ksp, _, _) {
-                        kref := p.R.Use(p.file(mi), ksp.Start)
-                        if kref.Kind == names.What.Type and kref.Index >= 0 {
-                            return keyTrait(p.DeclFor(kref.Module, kref.Index))
-                        }
-                    }
-                    case _ { }
-                }
-                return -1
+                return p.constraintKey(mi, k)
             }
             if ref.Kind == names.What.Type and ref.Index >= 0 { return keyDecl(p.DeclFor(ref.Module, ref.Index)) }
             if ref.Kind == names.What.Builtin {
@@ -4390,17 +4397,8 @@ fn (p mut Program&) FieldNames(t types.TypeId) Array<source.NameId> {
     if td is null or td.Body is null { return out.ToArray() }
     match td.Body {
         case ast.TypeBody.Struct(s) {
-            if s.Body.Len() > 0 {
-                for st in s.Body {
-                    match st {
-                        case ast.Stmt.Var(_, v) {
-                            if v.Field {
-                                for vn in v.Names { out.Push(vn) }
-                            }
-                        }
-                        case _ { }
-                    }
-                }
+            for v in FieldDecls(s) {
+                for vn in v.Names { out.Push(vn) }
             }
         }
         case _ { }
@@ -4444,6 +4442,16 @@ fn (p mut Program&) CtorParams(t types.TypeId) Array<ast.Param&>& {
 # the attributes written on what a type or a descriptor names (G39, G40), and the module declaring them: a declared
 # type's own, a field's (a pun's its parameter's), a case's (a struct's one case its type's), a constructor's parameter's;
 # none for anything else - a type no program declares, a result, an error value's word, a function type's parameter
+# the attributes field vn of v's declaration has, none where it has none: its declaration's, a pun's its parameter's
+# (C2a)
+fn fieldAttrs(sb ast.StructBody&, v ast.VarDecl&, vn source.NameId, none Array<ast.Attr&>&) Array<ast.Attr&>& {
+    if v.Ty is not null or v.Values.Len() > 0 { return v.Attrs }
+    for prm in sb.Params {
+        if prm.Name == vn { return prm.Attrs }
+    }
+    return none
+}
+
 fn (p mut Program&) AttrsOf(t types.TypeId) I64, Array<ast.Attr&>& {
     none Array<ast.Attr&>& = Array<ast.Attr&>(0)
     ds := p.DescOf(t)
@@ -4478,23 +4486,10 @@ fn (p mut Program&) AttrsOf(t types.TypeId) I64, Array<ast.Attr&>& {
         case ast.TypeBody.Struct(sb) {
             if ds.K == DescCase { return mi, td.Attrs }
             k I64 = 0
-            for st in sb.Body {
-                match st {
-                    case ast.Stmt.Var(_, v) {
-                        if not v.Field { continue }
-                        for vn in v.Names {
-                            if k == ds.At {
-                                if v.Ty is not null or v.Values.Len() > 0 { return mi, v.Attrs }
-                                # a pun is its parameter (C2a), whose attributes it has
-                                for prm in sb.Params {
-                                    if prm.Name == vn { return mi, prm.Attrs }
-                                }
-                                return mi, none
-                            }
-                            k++
-                        }
-                    }
-                    case _ { }
+            for v in FieldDecls(sb) {
+                for vn in v.Names {
+                    if k == ds.At { return mi, fieldAttrs(sb, v, vn, none) }
+                    k++
                 }
             }
         }
