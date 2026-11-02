@@ -1652,6 +1652,24 @@ fn (m Machine&) fnOfFrame(fi I64) mir.Fn& { return m.fns.Ref(m.fs[fi].Fn) }
 
 # statement i of frame fi's function (fk) in its flat form (cfn.Fast): what assign makes of it, its operands read
 # and its destination written through the same checks
+# a word operation (wordOp) on two I64s
+fn wordValue(op typed.PrimOp, a I64, b I64) I64 {
+    return match op {
+        case typed.PrimOp.Add: a + b
+        case typed.PrimOp.Sub: a - b
+        case typed.PrimOp.Mul: a * b
+        case typed.PrimOp.BitAnd: a & b
+        case typed.PrimOp.BitOr: a | b
+        case typed.PrimOp.BitXor: a ^ b
+        case typed.PrimOp.Eq: 1 if a == b else 0
+        case typed.PrimOp.Ne: 1 if a != b else 0
+        case typed.PrimOp.Lt: 1 if a < b else 0
+        case typed.PrimOp.Le: 1 if a <= b else 0
+        case typed.PrimOp.Gt: 1 if a > b else 0
+        case _: 1 if a >= b else 0
+    }
+}
+
 fn (m mut Machine&) flat(fi I64, fk I64, i I64, kind I64) {
     fast := m.cf[fk].Fast
     o := i * fastStride
@@ -1680,24 +1698,7 @@ fn (m mut Machine&) flat(fi I64, fk I64, i I64, kind I64) {
         } else {
             b := m.flatValue(fi, fast, o + 5)
             if m.halted { return }
-            if fast[o + 10] == 1 {
-                v = match op {
-                    case typed.PrimOp.Add: a + b
-                    case typed.PrimOp.Sub: a - b
-                    case typed.PrimOp.Mul: a * b
-                    case typed.PrimOp.BitAnd: a & b
-                    case typed.PrimOp.BitOr: a | b
-                    case typed.PrimOp.BitXor: a ^ b
-                    case typed.PrimOp.Eq: 1 if a == b else 0
-                    case typed.PrimOp.Ne: 1 if a != b else 0
-                    case typed.PrimOp.Lt: 1 if a < b else 0
-                    case typed.PrimOp.Le: 1 if a <= b else 0
-                    case typed.PrimOp.Gt: 1 if a > b else 0
-                    case _: 1 if a >= b else 0
-                }
-            } else {
-                v = m.numOp(op, a, b, at, types.TypeId(I32(fast[o + 8])), m.shape(at))
-            }
+            v = wordValue(op, a, b) if fast[o + 10] == 1 else m.numOp(op, a, b, at, types.TypeId(I32(fast[o + 8])), m.shape(at))
         }
     }
     if m.halted { return }
