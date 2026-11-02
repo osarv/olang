@@ -1,0 +1,40 @@
+# check: run
+# flags: -debug -sanitize
+# D18 (review 6b F3): a coroutine's stack slots put into an aggregate value - a lambda's environment, made before the
+# loop, in its function value; a fixed array lent as a run-time one - stay in the generator's frame across yields. LLVM's
+# coroutine split follows a slot's uses through loads, stores, GEPs and calls but not through insertvalue, so such a slot
+# stayed on the resume function's stack: under -debug the second Next read freed storage (the lambda's capture) or an
+# array a later call had written over
+import "std/io"
+type node struct(v I64) { v }
+fn mk(k I64) node& { return node(k) }
+fn viaLambda(k I64) Iterator<I64> {
+    r := mk(k)
+    f := fn() I64 { return r.v }
+    for i in range 3 {
+        x := f()
+        yield x + i
+    }
+}
+fn sumOf(r Array<I64>&) I64 {
+    t := 0
+    for x in r { t += x }
+    return t
+}
+fn viaArray(k I64) Iterator<I64> {
+    a := I64[k, k + 1, k + 2]
+    r Array<I64>& = a
+    for i in range 3 { yield r[i] + sumOf(r) }
+}
+fn churn() I64 {
+    junk := Vec<String>()
+    for i in range 2000 { junk.Push($i "abcdefghijklmnopqrstuvwxyz") }
+    return junk.Len() - 2000
+}
+fn main() {
+    t := 0
+    for x in viaLambda(5) { t += x + churn() }
+    u := 0
+    for x in viaArray(5) { u += x + churn() }
+    io.Println($t " " $u)!
+}

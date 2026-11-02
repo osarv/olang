@@ -2352,7 +2352,7 @@ fn (e mut Emitter&) writeBody(k mir.FnKey, f mir.Fn&, symbol String&, passed I64
         nx := e.genNext(k, f, symbol, passed, fe.promTy, false)
         wn := e.genNext(k, f, symbol, passed, fe.promTy, true)
         dr := e.genDrop(symbol, fe.promTy)
-        e.fnItem(k, f.Ty, symbol, passed, env, $nx $wn $foldSlots(b.ToString(), f.Locals.Len()) $dr)
+        e.fnItem(k, f.Ty, symbol, passed, env, $nx $wn $frameKept(foldSlots(b.ToString(), f.Locals.Len())) $dr)
         return true
     }
     e.fnItem(k, f.Ty, symbol, passed, env, foldSlots(b.ToString(), f.Locals.Len()))
@@ -2451,6 +2451,43 @@ fn (e mut Emitter&) isGen(k mir.FnKey) Bool {
         case mir.FnKey.Body(id): e.Lw.Bodies[I64(id)].Gen
         case _: false
     }
+}
+
+# D18: a coroutine's stack slots whose address is put into an aggregate value (a lambda's environment in a function
+# value's pair, a fixed array lent as a run-time one's {length, pointer}) - each said to escape, so LLVM's coroutine
+# split keeps it in the frame. Its alloca analysis follows a slot's uses through loads, stores, GEPs and calls but not
+# through insertvalue, and a slot read only through the aggregate after a yield stayed on the resume function's stack,
+# reused once the Next returned (-debug read a lambda's captures from the stack of a call long gone - review 6b F3)
+fn frameKept(body String&) String {
+    slots Map<String, Bool>
+    kept Vec<String>
+    done Map<String, Bool>
+    for line in body.Lines() {
+        at := try line.Find(" = alloca ") catch default -1
+        if at > 2 and line.StartsWith("  %"): slots.Put($line[2:at], true)
+        if not line.Contains(" = insertvalue ") { continue }
+        name := insertedSlot(line)
+        if name.Len() == 0 or not slots.Has(name) or done.Has(name) { continue }
+        done.Put(name, true)
+        kept.Push(name)
+    }
+    marks := StringBuilder()
+    for name in kept { marks.Push("  call void asm sideeffect \"\", \"r\"(ptr " $name ")\n") }
+    begin := "%hdl = call ptr @llvm.coro.begin("
+    at := try body.Find(begin) catch default -1
+    if marks.Len() == 0 or at < 0 { return $body }
+    z := try body[at:].Find("\n") catch default 0
+    return $body[:at + z + 1] $marks.ToString() $body[at + z + 1:]
+}
+
+# the value an insertvalue line puts in when it is a named pointer ("%t10" of "... ptr %t10, 1"), else ""
+fn insertedSlot(line String&) String {
+    at := try line.Find(", ptr %") catch default -1
+    if at < 0 { return "" }
+    i := at + 6
+    j := i + 1
+    for j < line.Len() and symbolChar(line[j]) { j++ }
+    return $line[i:j]
 }
 
 # ---- single-use slots ----

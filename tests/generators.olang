@@ -514,3 +514,52 @@ test "D18e: a generator held in a local and walked once there is dropped as the 
     assert heldDropped("constant") == 8 and Dropped == d + 1
     for _ in range 1000 { assert heldCompr() == 506 }
 }
+
+# review 6b F3: a coroutine's stack slots put into an aggregate value - a lambda's environment, made before the loop, in
+# its function value; a fixed array lent as a run-time one - are kept in its frame across yields (-debug had read them
+# from the stack of a Next call long returned)
+type keptNode struct(v I64) { v }
+
+fn mkKept(k I64) keptNode& { return keptNode(k) }
+
+fn lambdaBefore(k I64) Iterator<I64> {
+    r := mkKept(k)
+    f := fn() I64 { return r.v }
+    for i in range 3 {
+        x := f()
+        yield x + i
+    }
+}
+
+fn sumOf(r Array<I64>&) I64 {
+    t I64 = 0
+    for x in r { t += x }
+    return t
+}
+
+fn arrayLent(k I64) Iterator<I64> {
+    a := I64[k, k + 1, k + 2]
+    r Array<I64>& = a
+    for i in range 3 { yield r[i] + sumOf(r) }
+}
+
+# a call's frame written over where a Next call's frame was
+fn stackChurn(k I64) I64 {
+    a := Array<I64>(64, 0)
+    for i in range 64 { a[i] = i * 7777 + k }
+    return a[63] - a[63]
+}
+
+fn keptWalks() I64 {
+    t I64 = 0
+    for x in lambdaBefore(5) { t += x + stackChurn(x) + churnText() - churnText() }
+    for x in arrayLent(5) { t += 1000 * x + stackChurn(x) + churnText() - churnText() }
+    return t
+}
+
+KeptBaked := keptWalks()
+
+test "D18: a lambda's environment and a lent array held across yields stay in the generator's frame" {
+    assert keptWalks() == 18 + 72000
+    assert KeptBaked == 18 + 72000
+}
