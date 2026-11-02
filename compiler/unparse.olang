@@ -269,10 +269,8 @@ fn (w mut writer&) contractItem(st ast.Stmt&) {
 
 # whether a type is a function type with no error set of its own
 fn noErrorsOf(t ast.TypeRef&) Bool {
-    return match t {
-        case ast.TypeRef.Func(_, s): not s.HasErrors
-        case _: false
-    }
+    s := t.FuncSig()
+    return s is not null and not s.HasErrors
 }
 
 fn (w mut writer&) errors(s ast.Sig&) {
@@ -476,6 +474,20 @@ fn (w mut writer&) types(ts Array<ast.TypeRef&>&) {
     w.item = was
 }
 
+# a function type: "fn", its marker, its signature - L18c: whole where it is an item of a list holding a comma of its own,
+# or a result before its signature's "?"
+fn (w mut writer&) funcType(s ast.Sig&, marker String&) {
+    wrap := w.group or (w.item and (s.Results.Len() > 1 or s.Errors.Len() > 1))
+    w.group = false
+    w.put("(fn" if wrap else "fn")
+    w.put(marker)
+    was := w.item
+    w.item = false
+    w.sig(s)
+    w.item = was
+    if wrap { w.put(")") }
+}
+
 fn (w mut writer&) ty(t ast.TypeRef&) {
     match t {
         case ast.TypeRef.Named(_, path, args) {
@@ -489,21 +501,17 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
                 w.put(">")
             }
         }
-        case ast.TypeRef.Func(_, s) {
-            # L18c: an item of a list holding a comma of its own, or a result before its signature's "?", whole
-            wrap := w.group or (w.item and (s.Results.Len() > 1 or s.Errors.Len() > 1))
-            w.group = false
-            w.put("(fn" if wrap else "fn")
-            was := w.item
-            w.item = false
-            w.sig(s)
-            w.item = was
-            if wrap { w.put(")") }
-        }
+        case ast.TypeRef.Func(_, s) { w.funcType(s, "") }
         case ast.TypeRef.Shape(_, body) { w.typeBody(body) }
         case ast.TypeRef.Ref(_, of, nullable) {
-            w.ty(of)
-            w.put("?&" if nullable else "&")
+            # T21: a function type's marker is on its "fn"
+            s := of.FuncSig()
+            if s is not null {
+                w.funcType(s, "?&" if nullable else "&")
+            } else {
+                w.ty(of)
+                w.put("?&" if nullable else "&")
+            }
         }
         case ast.TypeRef.Any(_, of) {
             w.put("any ")

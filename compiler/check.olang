@@ -5660,12 +5660,7 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
 }
 
 # whether a type is written as a function type
-fn isFuncTypeRef(t ast.TypeRef&) Bool {
-    return match t {
-        case ast.TypeRef.Func(_, _): true
-        case _: false
-    }
-}
+fn isFuncTypeRef(t ast.TypeRef&) Bool { return t.IsFunc() }
 
 fn (c mut Checker&) spellList(b mut StringBuilder&, l types.ListId, open String&, end String&) {
     xs := c.P.T.Items(l)
@@ -14441,7 +14436,7 @@ fn (c mut Checker&) bang(sp source.Span, y ast.Expr&, want types.TypeId) typed.E
     covered := fr.Fallible != before
     fr.Fallible = before
     # T2c: on a reference that may be null, "x!" is it known not to be - after what can fail, where something can
-    nullable := c.P.T.IsNullable(typeOf(x))
+    nullable := c.P.T.IsNullable(typeOf(x)) or c.P.T.KindOf(typeOf(x)) == types.Kind.Func   # STAGE1: "f!" on a bare one
     if not covered and typeOf(x) != types.UnknownT and not c.copiesDiffer() {
         if nullable { return c.unwrapNull(sp, x) }
         c.err(source.Span(sp.End - 1, sp.End), msgs.BangNothingFails())

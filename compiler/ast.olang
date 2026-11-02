@@ -408,6 +408,23 @@ fn (e Expr&) IsNamed() Bool {
     }
 }
 
+# T21: the signature of a function type as written - bare ("fn(...)") or with its marker ("fn&(...)", "fn?&(...)") - and
+# whether the type is one
+fn (t TypeRef&) FuncSig() Sig?& {
+    match t {
+        case TypeRef.Func(_, s) { return s }
+        case TypeRef.Ref(_, of, _) {
+            match of {
+                case TypeRef.Func(_, s) { return s }
+                case _ { return null }
+            }
+        }
+        case _ { return null }
+    }
+}
+
+fn (t TypeRef&) IsFunc() Bool { return t.FuncSig() is not null }
+
 fn (t TypeRef&) Span() source.Span {
     return match t {
         case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _): sp

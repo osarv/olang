@@ -1338,9 +1338,15 @@ fn (p mut Parser&) typeBase() ast.TypeRef& ? Fail {
     at := p.here()
     match p.peek() {
         case token.Tok.Fn {
+            # T21: a function type is reference-only - "fn&(...)" never null, "fn?&(...)" may be - its marker on the "fn"
             p.advance()
+            marked := p.sees(token.Tok.Amp) or p.nullMark()
+            nullable := p.sees(token.Tok.Question)
+            if nullable { p.advance() }
+            if marked { p.advance() }
             s := try p.sig(false, true)
-            return ast.TypeRef.Func(p.from(at), s)
+            f := ast.TypeRef.Func(p.from(at), s)
+            return ast.TypeRef.Ref(p.from(at), f, nullable) if marked else f
         }
         case token.Tok.Enum, token.Tok.Struct, token.Tok.Trait {
             body := try p.typeBody()
@@ -1404,23 +1410,15 @@ fn (p Parser&) anyHere() Bool {
     return t.End - t.Start == 3 and p.src.Text[I64(t.Start):I64(t.End)] == "any"
 }
 
-fn isFuncType(t ast.TypeRef&) Bool {
-    return match t {
-        case ast.TypeRef.Func(_, _): true
-        case _: false
-    }
-}
+fn isFuncType(t ast.TypeRef&) Bool { return t.IsFunc() }
 
 # L18c: whether a parenthesized type is grouped as it may be - a function type holding a comma of its own (several
 # results or several error items), or one with no error set before the "?" of the signature it is a result of
 fn (p Parser&) grouped(t ast.TypeRef&) Bool {
-    match t {
-        case ast.TypeRef.Func(_, s) {
-            if s.Results.Len() > 1 or s.Errors.Len() > 1 { return true }
-            return not s.HasErrors and p.sees(token.Tok.Question)
-        }
-        case _ { return false }
-    }
+    s := t.FuncSig()
+    if s is null: return false
+    if s.Results.Len() > 1 or s.Errors.Len() > 1 { return true }
+    return not s.HasErrors and p.sees(token.Tok.Question)
 }
 
 # reference markers after a type - "&", "?&" (T2c); a second one is the checker's to report (T24). No scope is written

@@ -825,6 +825,8 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
 # array, so "?&" on one is said once and read as "&" (a type declared over another asked for its body first: a signature
 # may be signed before anything else has)
 fn (p mut Program&) refType(c Context&, sp source.Span, r types.TypeId, nullable Bool) types.TypeId {
+    # T21: a function type is held only by reference, its marker on the "fn" - the function value itself
+    if p.T.KindOf(r) == types.Kind.Func { return r }
     if nullable { p.overBodies(r) }
     if nullable and p.T.KindOf(p.T.Repr(r)) == types.Kind.Array {
         key := pair.Pair(c.Mi, I64(sp.Start))

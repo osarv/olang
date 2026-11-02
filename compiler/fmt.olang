@@ -426,7 +426,7 @@ fn (f formatter&) operandEnd(j I64) Bool {
     return match k {
         case token.Tok.Iden, token.Tok.IntLit, token.Tok.FloatLit, token.Tok.CharLit, token.Tok.StrLit: true
         case token.Tok.BoolLit, token.Tok.NullLit, token.Tok.RParen, token.Tok.RBrack, token.Tok.RBrace: true
-        case token.Tok.Inc, token.Tok.Dec: true
+        case token.Tok.Inc, token.Tok.Dec, token.Tok.Bang: true   # "f!(x)": a call through what "!" unwrapped (E35)
         case _: false
     }
 }
