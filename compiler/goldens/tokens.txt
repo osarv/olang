@@ -1864,7 +1864,7 @@ b93846ee6cfd610c 800f07497a3a20c1 compiler/olang.olang
 b0ce9a097f48ce1f 81b6e44030d0209a compiler/profile.olang
 672b63f9a00d870a 2f96a413518788c8 compiler/runtime.olang
 c58eed38e4cd5f40 1d904b9ec6790913 compiler/scan.olang
-c09cc7f0c0da673c 1f7281752f4ce8f8 compiler/scope.olang
+72e79327d75352b1 3c29a9b32640d0db compiler/scope.olang
 0a05e752605c64f6 8a35c1bc5d91b473 compiler/session.olang
 f6975e0c80778183 a143b4a2b7369ed5 compiler/source.olang
 e8eb3d2e60f7bb31 3ca34f650732d326 compiler/target.olang
