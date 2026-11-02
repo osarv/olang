@@ -12312,9 +12312,14 @@ fn (c mut Checker&) atCallee(x typed.Expr&) Bool {
     }
 }
 
-# whether an argument evaluates nothing that could change a collection: a literal, constant data, a read or borrow of a
-# place reached through no call, an operation over such, a constructor called on such (a value of its own being made)
+# whether an argument evaluates nothing that could change a collection, and gives the callee nothing to change it
+# through: a literal, constant data, a read or borrow of a place reached through no call, an operation over such, a
+# constructor called on such (a value of its own being made) - none holding a writable reference, a function value or
+# an any
 fn (c mut Checker&) plainArg(x typed.Expr&) Bool {
+    # (nothing reaching a writable reference, a function value or an any: through one a callee could change the
+    # collection - the collection itself lent, a closure over it)
+    if c.P.T.ReachesWrite(typeOf(x)): return false
     return match x {
         case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _): true
         case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q): plainPlace(q)

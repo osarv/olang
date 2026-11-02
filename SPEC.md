@@ -3929,7 +3929,9 @@ into `t`, then `x[i] = t`).
 receiver called on `x[i]` itself, `x[i].M(args)` (or on `x[i][j]`, every level taken in place), where the collection
 declares `RefMut` (as a store needs) and is reached writably - a writable place, or a writable reference - and every
 other argument of the call is a **plain value**: a literal, constant data, a read of a local, a global or a field of
-them (an element of an array indexed by such), an operation over plain values, a constructor called on plain values.
+them (an element of an array indexed by such), an operation over plain values, a constructor called on plain values -
+none of them holding a writable reference, a function value or an `any` (through which the callee could reach the
+collection: `l[0].Mark(l)` lends `l` itself).
 The receiver is then `x.RefMut(i)`, taken before the arguments are evaluated, which nothing they do can change:
 `v[i].Push(x)`, `accs[i % 3].Add(2 * n)`, `grid[0][0].Push(4)`, `rows[k].Truncate(0)`. Not in a spawned call (a task
 holding the element's reference while the collection could grow under it), not for an argument read through `x[i]` (a

@@ -524,7 +524,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   user's decision 2026-10-25)** after a `Plus Mul BitAnd BitOr BitXor`'s result lets `2.0 * v` call `v.Mul(2.0)` when the
   left type has none, operands still evaluated left first; the parameter's type must differ from the receiver's, and a
   clash with the other type's operator is an error at the commuting (the later) declaration. A store through `x[i]`
-  reads, writes and writes back by `SetAt` (E31b); a `mut` method on `x[i]` is an error unless the element is a handle,
+  reads, writes and writes back by `SetAt` (E31b); a `mut` method on `x[i]` is made on the element in place through the collection's `RefMut` where it has one, is reached writably and the call's other arguments are plain values - literals, reads of locals, globals and their fields, operations over them, constructors called on them - taken before them (2026-11-02, mine: not in a spawned call), else an error unless the element is a handle,
   and so is a compound store there through an operator method, which would run between the read and the write-back
   (2026-10-26: it was dropped unseen). No user-declared
   operator symbols; `==` and `$` overridable only by `Eq`/`Str`. A handle field of `x[i]`, or a handle a call gives
@@ -1147,6 +1147,23 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   a place by its own let-go; a captured caught name is one error (R11b) (F10). A built result returning a global's
   storage (bulk review over-rejection 13) stays refused - a built result is writable (T25c), so it would write the
   global - but at the return now (O14), naming the by-value result, not as O10c at a call with no arguments.
+  **Round 8 (2026-11-02, wt-free5; mine, an optimization):** an **owner held in place** - a struct by value whose fields
+  are plain data, arrays of a run-time length (its anchors, `types.Anchors`) or such structs, a Vec or a Map held by
+  value in a field or as a Map's value - is a place: all its storage built in one region, released through its first
+  anchor holding storage, and a value built empty has its region released at once (MIR `Settle`, runtime
+  `__olang_region_drop`/`_settle`); it keeps where its value is changed in place (a store into it, a writable reference
+  to it handed on: what that builds lands where the container lives) or a value holding it is made with no store into
+  it (a copy of a struct, Map or array holding it, a D9h view's caller copy) - but a view constructor's caller copy
+  stored straight into the one owner leaf of a struct (Map.add's entry) is made for it, at the call's site. An **array a
+  struct holds by value** - a Vec's buffer, a Map's slots - is a place too: a collection's growth releases the array it
+  replaced where no view of it is in use (its `retire()` left out, `RetireDropped`), every array it is given a
+  comprehension of moved elements (grown) or of plain-data elements, so an element read by value out of one is no view
+  of it; owners win (an array an owner in a sole place holds keeps). And `tasks` (condition 3) is now a task reached
+  from where code may begin - a plain function nothing calls or names starts none: std/os's `RunOnStack` handing C a
+  function value had stopped every early free in any program importing std/os. Measured: the earlyfree fixtures by
+  value again, server 145 -> 2.3 MB, mapvec 66 -> 1.9 MB; knucleotide's peak 13.6 -> 10.0 MB (+1.05% instructions);
+  bench otherwise within 0.5%. The early-free fuzzer's programs had stopped compiling since round 4 (a read-only result,
+  std/list not imported) - fixed.
 - **Recorded limits:** long-lived mutated structures holding values a task can reach still only grow (ledger QF), and
   values with destructors are freed only where a `Destroy()` ends them; a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
   port's §8 pass.
@@ -1353,7 +1370,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   and keeps it). In place: `v.Ref(i)` `T&v` and `v.RefMut(i)` `mut T&v` (unchecked as `v[i]`), `try m.Ref(k)` /
   `try m.RefMut(k)` (`MapError.Missing`); a number in a Map through `Update`. A store through `x[i]` on a collection
   declaring `RefMut` is made in place, its value evaluated first (E31b, `check.inPlace` - a Vec of Vecs' `v[i].n += 1`
-  had copied the element twice); a mutating call through `x[i]` stays E31b's error naming `x.RefMut(i)`. A join's
+  had copied the element twice); a mutating call through `x[i]` is made in place through `RefMut` too where its other arguments are plain values (2026-11-02, E31b), else E31b's error naming `x.RefMut(i)`. A join's
   operand owning storage is its own copy (E11b: a later operand clearing it showed a half-emptied snapshot). Decided (mine): Ref/RefMut, mirroring
   View/ViewMut, rather than `m.At(k)` giving `mut V&` (At stays the value read); Map rebuilt over slot arrays (entries,
   a next-chain, buckets made at the first Put) keeping insertion-of-slot walks; a moved-out owning part is left empty
@@ -1371,8 +1388,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   out of range - a crash), `mir.Fn`/`level` values copied per access (regex's test build 13.9 GB -> 330 MB); a Ref
   into a Vec goes stale as a view does, and M19g does not see it (a recorded limit). Early freeing: a grown buffer stored
   back is no escape (free.olang's Collect yields - every Push/Put had escaped its receiver: frames.olang 311 -> 1.9 MB);
-  **recorded limit**: a value owning storage held in place (a Map field by value, a Vec as a Map's value) is no place of
-  early freeing - held by reference it is (the earlyfree fixtures hold them so).
+  a value owning storage held in place (a Map field by value, a Vec as a Map's value) is a place of early freeing since
+  round 8 (O8d, above) - a walk of a Map of them (`for e in m`, its entries copied out) makes it keep.
 - **`Vec<T>` is the default growable array (M19d, round 1 of `docs/memory.md`, 2026-10-17; the user's
   QAB, approved in advance; a value since 2026-11-01, above).** Its record (buffer and count) is made where it is constructed; it is a type argument, field, global, capture or task argument like any value. Growth
   doubles (8 first), the new buffer made by the prelude-only `a.grown(n)` - the elements moved in, the room past them

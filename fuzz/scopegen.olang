@@ -1414,7 +1414,7 @@ fn Program(seed U64, n I64, keep Array<Bool>&) String& {
 # stops), the two must print the same.
 
 FreePrelude := (
-    "import \"std/io\"\nimport \"std/list\"\n"
+    "import \"std/io\"\n"
     "extern fn getpid() I32\n"
     "fn say(t String&) { try io.Println(t) catch io.Error { } }\n"
     "Run mut I64 = 1\n"
@@ -1605,5 +1605,8 @@ fn FreeProgram(seed U64, n I64, keep Array<Bool>&) String& {
         if keep.Len() == 0 or keep[k] { b.Push("    say(\"" $k ": \" $s" $k "())\n") }
     }
     b.Push("}\n")
-    return b.ToString()
+    # (std/list imported only where a scenario holds one: an import nothing is reached through is an error, M5a)
+    text := b.ToString()
+    if text.Contains("list."): return $"import \"std/list\"\n" $text
+    return text
 }

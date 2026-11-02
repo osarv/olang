@@ -28094,3 +28094,76 @@ changed no bench row (+596 instructions a program, at startup) and the compiler'
 blocks where it would pay hold a call building its result there, whose size no summary bounds; a size summary per body
 (what a callee may build in its result scope, bounded) would be the next step if code shows the cost. Recorded in
 docs/rework.md 21; every block keeps its scope.
+
+## Early freeing, round 8: owners held in place, a collection's own arrays, calls through x[i] in place (2026-11-02)
+
+The round the handles-as-values work left (docs/rework.md section 19's "open"), on wt-free5; mine, the user absent - all
+of it optimization but the E31b relaxation, which the coordinator's direction asked for.
+
+**Owners held in place.** Since Vec and Map became values, a Map held by value in a field (the earlyfree fixture
+`server`: a connection's header map replaced per request) or a Vec as a Map's value (`mapvec`) was no place of early
+freeing: what a replaced one owned stayed until the container's scope closed - 145 MB and 66 MB, the fixtures switched to
+holding them by reference to stay under 8 MB. An **owner** is now a candidate place (free.olang's `ownerCand`): a struct
+by value whose every field is plain data, an array of a run-time length or such a struct - its **anchors**
+(`types.Anchors`, the field paths to its arrays) - so everything a value of it reaches it reaches through them. Where the
+place is sole, each value made for it is built in a region of its own, as a reference's referent is; a let-go releases
+the region its first anchor holding storage names (emit computes each anchor's region while all are live and takes the
+first, so no word of freed storage is read; the evaluator the same); a value built holding nothing (every anchor empty
+or constant data) has its region released at once, by a new MIR statement `Settle(h, p)` after the value is made -
+without it a place reset with `Vec<T>()` would have kept a region header per reset. The runtime gained
+`__olang_region_drop` (release by region; `__olang_region_release` is now its lookup) and `__olang_region_settle`.
+
+What makes such a place keep, beyond O8d's six conditions: its value **changed in place** - a store into it, a writable
+reference to it handed to a call - since what that builds lands where the container lives (the receiver's scope), so
+an anchor would name another region than the value's own (`inOwner`); and a value holding it **made with no store into
+it** (`untracked`) - a copy of a struct, a Map or an array holding it (MakeKind.Copy, Fill), a whole value array stored
+from existing storage (T7b), a call whose value D9h copies at the caller (a callee handing back views) or a call nothing
+is known of - since such a copy's owner storage is built where the copy lands, in no region of its own, and a later
+let-go of it would release whatever region (or arena bytes) its anchor's word names. Found the hard way: the first
+version crashed on `mapvec` with a region release of arena bytes - Map.add stores `MapEntry(key, value)`, a constructor
+whose field copy D9h elides (its result a view of its argument), the caller copying the entry instead where it keeps it,
+outside any region. The rule kept for it (`viewCtor`): a view constructor's instance stored straight into a struct held
+in place whose one owner leaf it fills is made for that leaf at the call's site - the caller's copy is built in the
+call's result scope, which the region is - and with several owner leaves none is (one region would hold them all).
+A walk of a Map of owners (`for e in m`) copies each entry out (MapIter.Next's view constructor) and keeps; the fixture
+reads by key, as it did for references. Measured: server 145 MB -> 2.3 MB, mapvec 66 MB -> 1.9 MB; both by value again.
+
+**A collection's own arrays.** An array of a run-time length a struct holds by value (`arrayCand`) - a Vec's buffer, a
+Map's `ents`, `next`, `buckets` - is a place: a collection's growth (`v.data = old[:v.n].grown(r)`, `m.buckets =
+Array<I64>(n, -1)`) lets go of the array it replaces, released then where no view of it is in use across the growth
+(`View()`, `Ref()`, `RefMut()`: condition 6). Three things made it work. (1) The prelude's `old.retire()` after the
+store is no use of the view (the walker records it, `RetireDropped`, and lowering leaves it out where the place is sole -
+under -sanitize it would poison a released chunk). (2) An element read by value out of an array place's value is no view
+of it (`elemRead`), which needs every array such a place is given to hold no element reaching into its own region: a
+comprehension whose yields only move or read existing elements (grown's, `movesOnly`) or one of plain-data elements;
+an array whose elements may hold storage built with it (a fill of new objects, a comprehension building them) makes the
+place keep. (3) `grown`'s value is a Seq of its hidden lets and the comprehension, now looked through by `made`. Owners
+win: an array an owner held in a sole place holds keeps, the owner's one region reclaiming it whole (else its anchors
+would name other regions than its own). Found on the way: `elemRead` first rebound its reference parameter (`o =
+kept` repoints, S4a) and changed nothing - written in place.
+
+**Tasks reached, not merely written.** Condition 3 (nothing reached by more than one thread) had been "the program has
+a join, a spawn or gives C a function value anywhere": std/os's `RunOnStack` hands C a function value, so every program
+importing std/os - every bench program - freed nothing early at all, whatever it did. It is now a body starting a task
+reached from where code may begin (`reachedTasks`: every body but a plain function no one calls, names as a value or
+exports - main, tests, initializers, lambdas, methods a table may call, constructors, destructors) through the scope
+pass's callees and the walks' calls. knucleotide's maps then free their old slots as they grow: peak 13.6 MB -> 10.0 MB
+(the +4 MB handles-as-values had added), instructions +1.05% (a region per slot array); the rest of bench within +0.5%
+of instructions (vecfields +0.5, vecpush +0.22, dispdirect +0.2), peaks level or lower.
+
+**E31b: a call through `x[i]` in place.** `v[i].Push(x)` on a Vec of Vecs had been E31b's error (the element read is a
+copy the call would write and lose), naming `x.RefMut(i)`. Stores through `x[i]` were already made in place through
+`RefMut` (round "handles as values"); calls now are too (`check.inPlaceCall`), where the collection declares RefMut, is
+reached writably, and every other argument is a plain value - literals, constant data, reads of locals, globals and
+their fields, operations over them, constructors called on them: the element's reference is taken before them, and
+nothing they do can change the collection (an argument growing the Vec would leave the reference naming the old buffer -
+the reason the step had been left out, docs/rework.md 19). Nested levels (`grid[0][0].Push(4)`) are each taken in
+place. Not in a spawned call (a task holding the element's reference while the collection may grow), not for an
+argument read through `x[i]` (a call of At) or any other call: those stay the error, which says to hold the argument in
+a local first. Two checks cases refused for the copy's sake (s5atbuilds, s5handlerepoint) are run cases now, asserting
+the element itself changed; e31bcallinplace and e31bcallargs are new; tests/shared.olang's test runs it and bakes it
+(the evaluator's agreement).
+
+**The gate.** `fuzz free` had been generating programs that no longer compiled since round 4 (`mkChain` returning a
+read-only `Node&` it then wrote through; `std/list` used and not imported), so it ran nothing - every run reported "does
+not compile, and no scenario is to blame". Both fixed in fuzz/scopegen.olang.
