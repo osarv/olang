@@ -266,7 +266,7 @@ b5aself.olang:3:1: error[B5a]: C's initializer reads C, which is not set until t
       | ^
 compilation failed with 1 error
 === b6elemvalue.olang
-b6elemvalue.olang:15:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+b6elemvalue.olang:15:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
    15 |         wv := W(x)
       |                 ^
 compilation failed with 1 error
@@ -525,22 +525,27 @@ c2dcapturebuild.olang:18:29: note: built here, where the receiver's part it was 
       |                             ^~~~~~~~~~~~~
 compilation failed with 1 error
 === c2dcondfield.olang
-c2dcondfield.olang:16:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+c2dcondfield.olang:16:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
    16 |         ms.Push(M(2, d))
       |                      ^
 compilation failed with 1 error
 === c2de25once.olang
-c2de25once.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+c2de25once.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
    16 |         x := Env(local)
       |                  ^~~~~
 compilation failed with 1 error
+=== c2dfieldentry.olang
+c2dfieldentry.olang:13:20: error[C2d]: this instance would outlive what its field refers to - keep it in that block, hold the value by value in the field, or give the field a copy ('$x', 'x.Clone()')
+   13 |         s = FeSlot(l)
+      |                    ^
+compilation failed with 1 error
 === c2dmatchfield.olang
-c2dmatchfield.olang:18:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+c2dmatchfield.olang:18:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
    18 |         ms.Push(M(2, d))
       |                      ^
 compilation failed with 1 error
 === c2dmixedscopes.olang
-c2dmixedscopes.olang:19:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+c2dmixedscopes.olang:19:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
    19 |         c = Ctx(d, nums)
       |                 ^
 compilation failed with 1 error
@@ -725,17 +730,17 @@ callrecvreadonly.olang:12:38: error[T25c]: a read-only reference cannot become w
       |                                      ^
 compilation failed with 1 error
 === callvaluekeeps.olang
-callvaluekeeps.olang:20:13: error[T22a, E31]: Keeper's Call relates its arguments' scopes, which a call through a function value cannot check - call it by name
+callvaluekeeps.olang:20:13: error[T22a, E31]: Keeper's Call ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it by name
    20 |     keepVia(kp, fn() I64 { return n.v + k })
       |             ^~
 compilation failed with 1 error
 === callvaluekeepsblock.olang
-callvaluekeepsblock.olang:21:26: error[T22a, E31]: Keeper's Call relates its arguments' scopes, which a call through a function value cannot check - call it by name
+callvaluekeepsblock.olang:21:26: error[T22a, E31]: Keeper's Call ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it by name
    21 |     s fn&(x fn&() I64) = kp
       |                          ^~
 compilation failed with 1 error
 === callvaluekeepsframe.olang
-callvaluekeepsframe.olang:22:13: error[T22a, E31]: Keeper's Call relates its arguments' scopes, which a call through a function value cannot check - call it by name
+callvaluekeepsframe.olang:22:13: error[T22a, E31]: Keeper's Call ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it by name
    22 |     keepVia(kp, c)
       |             ^~
 compilation failed with 1 error
@@ -885,17 +890,17 @@ copyoutrefs.olang:15:9: error[T25c]: a copy of a read-only Box cannot be stored 
       |         ^~~
 compilation failed with 1 error
 === ctorlambdafieldloop.olang
-ctorlambdafieldloop.olang:16:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+ctorlambdafieldloop.olang:16:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
    16 |         ms.Push(M(2, d))
       |                      ^
 compilation failed with 1 error
 === ctorlambdafieldout.olang
-ctorlambdafieldout.olang:16:19: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+ctorlambdafieldout.olang:16:19: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
    16 |         ds.Push(D(ct))
       |                   ^~
 compilation failed with 1 error
 === ctorlambdafieldval.olang
-ctorlambdafieldval.olang:17:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+ctorlambdafieldval.olang:17:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
    17 |         m = M(W(b))
       |                 ^
 compilation failed with 1 error
@@ -983,16 +988,6 @@ d16cborrow.olang:6:18: error[D16c]: a lambda's captures are read-only - capture 
     6 |     f := fn() { a[0] = 9 }
       |                  ^
 compilation failed with 1 error
-=== d16cborrowescape.olang
-d16cborrowescape.olang:5:12: error[O10d]: this value lives in this function's own scope, which closes first
-    5 |     return fn(x) { return a[0] + x }
-      |            ^~
-compilation failed with 1 error
-=== d16cescape.olang
-d16cescape.olang:6:12: error[O10d]: this value lives in this function's own scope, which closes first
-    6 |     return fn(n) { return n + p.x }
-      |            ^~
-compilation failed with 1 error
 === d16creadonly.olang
 d16creadonly.olang:5:17: error[D16c]: a lambda's captures are read-only - capture a reference to change what is outside it
     5 |     f := fn() { n = 2 }
@@ -1015,11 +1010,6 @@ d16dcomposeshort.olang:19:16: error[O10c]: the callee needs one argument's scope
 d16dcomposeshort.olang:8:5: note: the callee requires it because of this statement
     8 |     return fn(x I64) I64 { return g(f(x)) }
       |     ^~~~~~
-compilation failed with 1 error
-=== d16dlambdaown.olang
-d16dlambdaown.olang:9:12: error[O26]: this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Clone()')
-    9 |     return fn(x I64) I64 {
-      |            ^~
 compilation failed with 1 error
 === d16espawn.olang
 d16espawn.olang:11:19: error[P2, D16e]: this function value closes before the join does - make it outside, or spawn the lambda itself
@@ -1055,21 +1045,15 @@ d17condfails.olang:3:25: error[R9]: ParseError can escape here, and this functio
       |                         ^~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === d17convfit.olang
-d17convfit.olang:4:5: error[D3b]: 'b' is declared and never read - read it, or leave the declaration out
-    4 |     b := U8(300)
-      |     ^
 d17convfit.olang:4:10: error[D17g]: 300 does not fit U8 - write a value that fits, or 'try x.Narrow<U8>()' to fail with an error
     4 |     b := U8(300)
       |          ^~~~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === d17convglobal.olang
-d17convglobal.olang:6:5: error[D3b]: 'n' is declared and never read - read it, or leave the declaration out
-    6 |     n := I32(Big)
-      |     ^
 d17convglobal.olang:6:10: error[D17g]: Big does not fit I32 - write a value that fits, or 'try x.Narrow<I32>()' to fail with an error
     6 |     n := I32(Big)
       |          ^~~~~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === d17needsargerror.olang
 d17needsargerror.olang:4:16: error[D17]: half has conditions, so a call fails with ArgumentError where one is false - add it after '?'
     4 | fn half(n I64) [n >= 0] I64 ? Odd {
@@ -1084,16 +1068,13 @@ d17notbool.olang:6:5: error[E15]: this call can fail - write 'try', and catch or
       |     ^
 compilation failed with 2 errors
 === d17reqfalse.olang
-d17reqfalse.olang:10:5: error[D3b]: 'p' is declared and never read - read it, or leave the declaration out
-   10 |     p := percent(5, Whole)!
-      |     ^
 d17reqfalse.olang:10:10: error[D17e]: this call breaks percent's requirement 'whole > 0'
    10 |     p := percent(5, Whole)!
       |          ^~~~~~~
 d17reqfalse.olang:5:34: note: the condition
     5 | fn percent(part I64, whole I64) [whole > 0, 0 <= part <= whole] I64 ? { return part * 100 / whole }
       |                                  ^~~~~~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === d18canyborrowed.olang
 d18canyborrowed.olang:16:32: error[T32a, T22]: ViewGenerator<String>'s 'Next' says where its references live as Iterator<String&>'s signature does not - it cannot be called through an 'any Iterator<String&>&'
    16 |     a any Iterator<String&>& = words(t)
@@ -1106,8 +1087,8 @@ compilation failed with 1 error
 d18cheldfield.olang:18:29: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    18 |         for w in h.g { kept.Push(w) }
       |                             ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     v.data[v.n] = x
       |     ^
 d18cheldfield.olang:18:34: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
    18 |         for w in h.g { kept.Push(w) }
@@ -1115,8 +1096,8 @@ d18cheldfield.olang:18:34: note: this text lives in a block that closes first - 
 d18cheldfield.olang:19:29: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    19 |         for w in h.g { kept.Push(w) }
       |                             ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     v.data[v.n] = x
       |     ^
 d18cheldfield.olang:19:34: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
    19 |         for w in h.g { kept.Push(w) }
@@ -1126,8 +1107,8 @@ compilation failed with 2 errors
 d18cheldlocal.olang:14:27: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    14 |         for w in g { kept.Push(w) }
       |                           ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     v.data[v.n] = x
       |     ^
 d18cheldlocal.olang:14:32: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
    14 |         for w in g { kept.Push(w) }
@@ -1135,23 +1116,17 @@ d18cheldlocal.olang:14:32: note: this text lives in a block that closes first - 
 d18cheldlocal.olang:15:27: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |         for w in g { kept.Push(w) }
       |                           ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     v.data[v.n] = x
       |     ^
 d18cheldlocal.olang:15:32: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
    15 |         for w in g { kept.Push(w) }
       |                                ^
 compilation failed with 2 errors
 === d18cinputoutlived.olang
-d18cinputoutlived.olang:18:34: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+d18cinputoutlived.olang:18:34: error[O27]: this keeps a view of 't', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Clone()'
    18 |         for w in words(t) { kept.Push(w) }
       |                                  ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
-      |     ^
-d18cinputoutlived.olang:18:39: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
-   18 |         for w in words(t) { kept.Push(w) }
-      |                                       ^
 compilation failed with 1 error
 === d18contract.olang
 d18contract.olang:3:17: error[D18, D17]: evens has conditions, so its first Next fails with ArgumentError where one is false - add it to its result's errors, 'Iterator<T ? ArgumentError>'
@@ -1162,8 +1137,8 @@ compilation failed with 1 error
 d18cviewkept.olang:13:31: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    13 |     for w in labels(3) { kept.Push(w) }
       |                               ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     v.data[v.n] = x
       |     ^
 d18cviewkept.olang:13:36: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
    13 |     for w in labels(3) { kept.Push(w) }
@@ -1750,8 +1725,8 @@ compilation failed with 9 errors
 e31bcallargs.olang:12:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    12 |     v[0].Push(grow(v))
       |      ^
-$ROOT/std/prelude/vec.olang:58:5: note: the callee is no view of the element because of this statement
-   58 |     if v.n == v.data.Len() { v.room(v.n + 1) }
+$ROOT/std/prelude/vec.olang:59:5: note: the callee is no view of the element because of this statement
+   59 |     if v.n == v.data.Len() { v.room(v.n + 1) }
       |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === e31bfieldviewbuild.olang
@@ -1792,6 +1767,41 @@ e31bfnresult.olang:10:15: error[E31b]: x[i] gives a copy of the element, which t
    10 |     bumper()(l[0])
       |               ^
 compilation failed with 1 error
+=== e31binplaceclosure.olang
+e31binplaceclosure.olang:19:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   19 |     v[0].Run()
+      |      ^
+e31binplaceclosure.olang:10:5: note: the callee is no view of the element because of this statement
+   10 |     b.n = 99
+      |     ^~~~~~~~
+compilation failed with 1 error
+=== e31binplacector.olang
+e31binplacector.olang:21:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   21 |     G[0].Set(w(42))
+      |      ^
+e31binplacector.olang:17:28: note: the callee is no view of the element because of this statement
+   17 | fn (b mut blk&) Set(a w) { b.n = a.y }
+      |                            ^~~~~~~~~
+compilation failed with 1 error
+=== e31binplaceglobal.olang
+e31binplaceglobal.olang:17:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   17 |     G[0].Bump()
+      |      ^
+e31binplaceglobal.olang:12:5: note: the callee is no view of the element because of this statement
+   12 |     b.n = 99
+      |     ^~~~~~~~
+compilation failed with 1 error
+=== e31binplacehome.olang
+e31binplacehome.olang:14:6: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
+   14 |     v[0].Bump()
+      |      ^
+e31binplacehome.olang:14:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   14 |     v[0].Bump()
+      |      ^
+e31binplacehome.olang:8:5: note: the callee is no view of the element because of this statement
+    8 |     b.n = 99
+      |     ^~~~~~~~
+compilation failed with 2 errors
 === e31btryat.olang
 e31btryat.olang:13:10: error[R8]: nothing here can fail - write it without 'try'
    13 |     bump(try l[0])
@@ -1974,10 +1984,7 @@ compilation failed with 1 error
 e31calllocal.olang:13:12: error[O10d]: this value lives in this function's own scope, which closes first
    13 |     return c
       |            ^
-e31calllocal.olang:16:5: error[D3b]: 'g' is declared and never read - read it, or leave the declaration out
-   16 |     g := mkF(Counter(41))
-      |     ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === e31ccommutesbothways.olang
 e31ccommutesbothways.olang:6:10: error[E31c]: with 'commutes' here, '+' between B and A would call this method or A.Plus - remove 'commutes'
     6 | fn (b B) Plus(a A) B commutes { return b }
@@ -3060,7 +3067,7 @@ compilation failed with 1 error
 m19g01push.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    11 |     try io.Println($d[0])
       |                     ^
-m19g01push.olang:10:28: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
+m19g01push.olang:10:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
    10 |     for i in range 100 { v.Push(i) }
       |                            ^~~~
 compilation failed with 1 error
@@ -3068,7 +3075,7 @@ compilation failed with 1 error
 m19g02secondname.olang:12:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    12 |     try io.Println($d[0])
       |                     ^
-m19g02secondname.olang:11:28: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
+m19g02secondname.olang:11:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
    11 |     for i in range 100 { w.Push(i) }
       |                            ^~~~
 compilation failed with 1 error
@@ -3076,7 +3083,7 @@ compilation failed with 1 error
 m19g03callgrows.olang:12:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    12 |     try io.Println($d[0])
       |                     ^
-m19g03callgrows.olang:11:5: note: 'v' may grow here, in 'fill' - take the view after it, or copy the elements first: 'v.ToArray()'
+m19g03callgrows.olang:11:5: note: 'v' may grow here, in 'fill' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
    11 |     fill(v, 100)
       |     ^~~~
 m19g03callgrows.olang:6:56: note: 'fill' may grow it here
@@ -3087,7 +3094,7 @@ compilation failed with 1 error
 m19g04struct.olang:15:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
    15 |     try io.Println($d[0])
       |                     ^
-m19g04struct.olang:14:5: note: 'l.toks' may grow here, in 'scan' - take the view after it, or copy the elements first: 'l.toks.ToArray()'
+m19g04struct.olang:14:5: note: 'l.toks' may grow here, in 'scan' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()' for a Vec)
    14 |     scan(l)
       |     ^~~~
 m19g04struct.olang:9:53: note: 'scan' may grow it here
@@ -3098,7 +3105,7 @@ compilation failed with 1 error
 m19g05global.olang:11:21: error[M19g]: 'd' holds a view of 'Toks' taken before 'Toks' may have grown
    11 |     try io.Println($d[0])
       |                     ^
-m19g05global.olang:10:5: note: 'Toks' may grow here, in 'more' - take the view after it, or copy the elements first: 'Toks.ToArray()'
+m19g05global.olang:10:5: note: 'Toks' may grow here, in 'more' - take the view or the reference after it, or copy the elements first ('Toks.ToArray()' for a Vec)
    10 |     more()
       |     ^~~~
 m19g05global.olang:6:39: note: 'more' may grow it here
@@ -3109,7 +3116,7 @@ compilation failed with 1 error
 m19g06chain.olang:14:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    14 |     try io.Println($d[0])
       |                     ^
-m19g06chain.olang:13:5: note: 'v' may grow here, in 'outer' - take the view after it, or copy the elements first: 'v.ToArray()'
+m19g06chain.olang:13:5: note: 'v' may grow here, in 'outer' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
    13 |     outer(v)
       |     ^~~~~
 m19g06chain.olang:8:29: note: 'outer' may grow it here
@@ -3120,7 +3127,7 @@ compilation failed with 1 error
 m19g07funcvalue.olang:12:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    12 |     try io.Println($d[0])
       |                     ^
-m19g07funcvalue.olang:11:5: note: 'v' may grow here, in a call through a function value - take the view after it, or copy the elements first: 'v.ToArray()'
+m19g07funcvalue.olang:11:5: note: 'v' may grow here, in a call through a function value - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
    11 |     f(v)
       |     ^
 compilation failed with 1 error
@@ -3144,7 +3151,7 @@ compilation failed with 1 error
 m19g10through.olang:14:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
    14 |     try io.Println($d[0])
       |                     ^
-m19g10through.olang:13:12: note: 'l.toks' may grow here, in 'Push' - take the view after it, or copy the elements first: 'l.toks.ToArray()'
+m19g10through.olang:13:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()' for a Vec)
    13 |     l.toks.Push(2)
       |            ^~~~
 compilation failed with 1 error
@@ -3152,7 +3159,7 @@ compilation failed with 1 error
 m19g11lambda.olang:10:21: error[M19g]: 'f' holds a view of 'v' taken before 'v' may have grown
    10 |     try io.Println($f())
       |                     ^
-m19g11lambda.olang:9:28: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
+m19g11lambda.olang:9:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
     9 |     for i in range 100 { v.Push(i) }
       |                            ^~~~
 compilation failed with 1 error
@@ -3168,7 +3175,7 @@ compilation failed with 1 error
 m19g13kept.olang:10:20: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
    10 |     try io.Println(l[0])
       |                    ^
-m19g13kept.olang:9:28: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
+m19g13kept.olang:9:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
     9 |     for _ in range 100 { v.Push('b') }
       |                            ^~~~
 compilation failed with 1 error
@@ -3176,7 +3183,7 @@ compilation failed with 1 error
 m19g14byvalue.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    11 |     try io.Println($d[0])
       |                     ^
-m19g14byvalue.olang:10:5: note: 'v' may grow here, in 'add' - take the view after it, or copy the elements first: 'v.ToArray()'
+m19g14byvalue.olang:10:5: note: 'v' may grow here, in 'add' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
    10 |     add(v)
       |     ^~~
 m19g14byvalue.olang:5:50: note: 'add' may grow it here
@@ -3187,7 +3194,7 @@ compilation failed with 1 error
 m19g15loop.olang:10:14: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    10 |         t += d[0]
       |              ^
-m19g15loop.olang:11:11: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
+m19g15loop.olang:11:11: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
    11 |         v.Push(i)
       |           ^~~~
 compilation failed with 1 error
@@ -3195,9 +3202,33 @@ compilation failed with 1 error
 m19g16forin.olang:7:5: error[M19g]: this reads a view of 'v' taken before 'v' may have grown
     7 |     for x in v.View() { v.Push(x) }
       |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-m19g16forin.olang:7:27: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
+m19g16forin.olang:7:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
     7 |     for x in v.View() { v.Push(x) }
       |                           ^~~~
+compilation failed with 1 error
+=== m19gmapref.olang
+m19gmapref.olang:13:5: error[M19g]: 'r' holds a view of 'm' taken before 'm' may have grown
+   13 |     r.n = 77
+      |     ^
+m19gmapref.olang:12:32: note: 'm' may grow here, in 'Put' - take the view or the reference after it, or copy the elements first ('m.ToArray()' for a Vec)
+   12 |     for i in range 1, 1000 { m.Put(i, rec(i)) }
+      |                                ^~~
+compilation failed with 1 error
+=== m19grefgrow.olang
+m19grefgrow.olang:13:5: error[M19g]: 'r' holds a view of 'v' taken before 'v' may have grown
+   13 |     r.n = 77
+      |     ^
+m19grefgrow.olang:12:31: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+   12 |     for i in range 100000 { v.Push(blk(i)) }
+      |                               ^~~~
+compilation failed with 1 error
+=== m19grefloop.olang
+m19grefloop.olang:15:12: error[M19g]: 'r' holds a view of 'v' taken before 'v' may have grown
+   15 |     return r.n + r.s.Len() + junk.Len() - 5000
+      |            ^
+m19grefloop.olang:12:29: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+   12 |     for i in range 5000 { v.Push(blk(i, $i)) }
+      |                             ^~~~
 compilation failed with 1 error
 === m21twiceexact.olang
 m21twiceexact.olang:8:18: error[M21]: 'Describe' is declared twice for Box<I64> - declare one per instance
@@ -3378,7 +3409,13 @@ compilation failed with 1 error
 o14bfoldshort.olang:10:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    10 |         words.Push($i "abc")
       |         ^~~~~
-compilation failed with 1 error
+o14bfoldshort.olang:11:32: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   11 |         longest = words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
+      |                                ^~~~
+$ROOT/std/prelude/iterator.olang:70:9: note: the callee requires it because of this statement
+   70 |         acc = try f(acc, x)
+      |         ^~~
+compilation failed with 2 errors
 === o14byvalborrow.olang
 o14byvalborrow.olang:9:29: error[O10d]: this value lives in this function's own scope, which closes first
     9 | fn bor(p aPt) aPt& { return p }
@@ -3386,10 +3423,7 @@ o14byvalborrow.olang:9:29: error[O10d]: this value lives in this function's own 
 o14byvalborrow.olang:9:8: note: 'p' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'p aPt&'
     9 | fn bor(p aPt) aPt& { return p }
       |        ^
-o14byvalborrow.olang:12:5: error[D3b]: 'w' is declared and never read - read it, or leave the declaration out
-   12 |     w := bor(q)
-      |     ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === o14byvalborrowany.olang
 o14byvalborrowany.olang:12:36: error[O10d]: this value lives in this function's own scope, which closes first
    12 | fn bor(p aPt) any aNamed& { return p }
@@ -3397,11 +3431,6 @@ o14byvalborrowany.olang:12:36: error[O10d]: this value lives in this function's 
 o14byvalborrowany.olang:12:8: note: 'p' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'p aPt&'
    12 | fn bor(p aPt) any aNamed& { return p }
       |        ^
-compilation failed with 1 error
-=== o14ccopyslice.olang
-o14ccopyslice.olang:8:12: error[O26]: this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Clone()')
-    8 |     return b[0:1]
-      |            ^
 compilation failed with 1 error
 === o14returnglobal.olang
 o14returnglobal.olang:8:21: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
@@ -3458,6 +3487,21 @@ o17lambdastore.olang:19:5: error[O17]: this value's references live where its ow
    19 |     b.regrow(7)
       |     ^
 compilation failed with 1 error
+=== o17ownturnstruct.olang
+o17ownturnstruct.olang:15:20: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+   15 |         hs.Push(rh(r))
+      |                    ^
+compilation failed with 1 error
+=== o17ownturnvec.olang
+o17ownturnvec.olang:14:24: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+   14 |         hs.Push(holder(v))
+      |                        ^
+compilation failed with 1 error
+=== o17ownturnwalk.olang
+o17ownturnwalk.olang:28:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+   28 |         ws.Push(over(v))
+      |                      ^
+compilation failed with 1 error
 === o17permute14.olang
 o17permute14.olang:28:7: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    28 |     f(recs, mkText(7))
@@ -3491,7 +3535,7 @@ compilation failed with 3 errors
 o17permute5.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    25 |     each(recs, fn(x mut Rec&) { x.name = s })
       |          ^~~~
-o17permute5.olang:25:16: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
+o17permute5.olang:25:16: error[T22a]: this lambda ties where what it is given lives to what it keeps or gives back - its captures included - which a call through a function value cannot check
    25 |     each(recs, fn(x mut Rec&) { x.name = s })
       |                ^~
 compilation failed with 2 errors
@@ -3532,13 +3576,10 @@ o17settlestale.olang:31:8: error[O17]: this value's references live where its ow
       |        ^
 compilation failed with 1 error
 === o17spawntargets.olang
-o17spawntargets.olang:21:5: error[D3b]: 'k' is declared and never read - read it, or leave the declaration out
-   21 |     k I64 = 0
-      |     ^
 o17spawntargets.olang:26:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    26 |     grow(b)
       |          ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === o17tempcallresult.olang
 o17tempcallresult.olang:25:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    25 |         addRef(idBox(seed), i + 1)
@@ -3594,8 +3635,8 @@ compilation failed with 1 error
 o18cprojectionfresh.olang:15:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |         keep.Push(t)
       |              ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     v.data[v.n] = x
       |     ^
 o18cprojectionfresh.olang:14:9: note: 't' is declared here, in a block that closes first - declare it where 'keep' lives, 't String&', and assign it here
    14 |         t := p.mk().text
@@ -3645,6 +3686,14 @@ o26own.olang:7:6: note: 'n' is the call's own copy of its argument - take it by 
     7 | fn f(n N) N& {
       |      ^
 compilation failed with 1 error
+=== o27genborrow.olang
+o27genborrow.olang:22:33: error[O27]: this keeps a view of 't', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Clone()'
+   22 |         for w in words(t) { out.Push(w) }
+      |                                 ^~~~
+o27genborrow.olang:28:25: error[O27]: this keeps a view of 'u', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Clone()'
+   28 |         for w in it { g.Push(w) }
+      |                         ^~~~
+compilation failed with 2 errors
 === o4bmapvalueblock.olang
 o4bmapvalueblock.olang:14:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    14 |         inner.Put("x", Value.Num(F64(i)))
@@ -3765,7 +3814,7 @@ p2spawntemp.olang:17:34: error[P2]: this argument refers to storage that closes 
       |                                  ^
 compilation failed with 1 error
 === p2spawnvalue.olang
-p2spawnvalue.olang:16:21: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+p2spawnvalue.olang:16:21: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
    16 |             wv := W(a)
       |                     ^
 compilation failed with 1 error
@@ -4366,12 +4415,12 @@ reflunknownhead.olang:5:7: error[M10]: 'zz' is no import here
       |       ^~
 compilation failed with 1 error
 === rendercopyc2d.olang
-rendercopyc2d.olang:25:16: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+rendercopyc2d.olang:25:16: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
    25 |     s := $Wrap(x)
       |                ^
 compilation failed with 1 error
 === retire01assert.olang
-retire01assert.olang:21:20: error[S18c, K1]: evaluated while compiling, this assertion stops on a stale view: it uses a view of a Vec's elements taken before the Vec grew, which shows the old elements
+retire01assert.olang:21:20: error[S18c, K1]: evaluated while compiling, this assertion stops on a stale view: it uses a view of a collection's elements taken before the collection grew, which shows the retired buffer - its elements owning storage emptied
    21 |     assert work(5) == 5
       |                    ^~
 retire01assert.olang:13:12: note: here
@@ -4382,7 +4431,7 @@ retire01assert.olang:9:43: note: the Vec grew here, after the view was taken; ta
       |                                           ^~~~~~~~~~~~~~~
 compilation failed with 1 error
 === retire02global.olang
-retire02global.olang:21:1: error[K2, K1]: evaluated while compiling, this global's initializer stops on a stale view: it uses a view of a Vec's elements taken before the Vec grew, which shows the old elements
+retire02global.olang:21:1: error[K2, K1]: evaluated while compiling, this global's initializer stops on a stale view: it uses a view of a collection's elements taken before the collection grew, which shows the retired buffer - its elements owning storage emptied
    21 | G I64 = stale(4)
       | ^
 retire02global.olang:14:12: note: here
@@ -4414,19 +4463,16 @@ rv3condstore.olang:13:12: error[O12]: where this place's references live is not 
       |            ^
 compilation failed with 1 error
 === rv3payloadcopy.olang
-rv3payloadcopy.olang:15:5: error[D3b]: 'e' is declared and never read - read it, or leave the declaration out
-   15 |     e := E.A(r)
-      |     ^
 rv3payloadcopy.olang:15:14: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
    15 |     e := E.A(r)
       |              ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === rv3roat.olang
 rv3roat.olang:5:7: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
     5 |     ls[0].Push(9)
       |       ^
-$ROOT/std/prelude/vec.olang:58:5: note: the callee is no view of the element because of this statement
-   58 |     if v.n == v.data.Len() { v.room(v.n + 1) }
+$ROOT/std/prelude/vec.olang:59:5: note: the callee is no view of the element because of this statement
+   59 |     if v.n == v.data.Len() { v.room(v.n + 1) }
       |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === rv3roclone.olang
@@ -4862,8 +4908,8 @@ compilation failed with 1 error
 s5capturestruct.olang:15:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |         fs.Push(fn() I64 { return x.Sensor.Len() })
       |            ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     v.data[v.n] = x
       |     ^
 compilation failed with 1 error
 === s5clonepush.olang
@@ -4896,8 +4942,8 @@ compilation failed with 1 error
 s5handlenote.olang:10:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         names[0][0] = t
       |                     ^
-$ROOT/std/prelude/vec.olang:112:40: note: the callee requires it because of this statement
-  112 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
+$ROOT/std/prelude/vec.olang:113:40: note: the callee requires it because of this statement
+  113 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
       |                                        ^
 s5handlenote.olang:9:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives, 't mut String&', and assign it here
     9 |         t := $k "-loop-text-of-moderate-length"
@@ -4929,8 +4975,8 @@ compilation failed with 1 error
 s5projection.olang:16:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    16 |         bs.Push(pairish(t).a)
       |            ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     v.data[v.n] = x
       |     ^
 s5projection.olang:15:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives, 't mut String&', and assign it here
    15 |         t := $k "-text"
@@ -4940,8 +4986,8 @@ compilation failed with 1 error
 s5projectionelem.olang:10:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         bs.Push(boxes(t)[0])
       |            ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     v.data[v.n] = x
       |     ^
 compilation failed with 1 error
 === s5spawnhandle.olang
@@ -4953,8 +4999,8 @@ compilation failed with 1 error
 s6handlestore.olang:12:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         names[i][0] = t
       |                     ^
-$ROOT/std/prelude/vec.olang:112:40: note: the callee requires it because of this statement
-  112 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
+$ROOT/std/prelude/vec.olang:113:40: note: the callee requires it because of this statement
+  113 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
       |                                        ^
 s6handlestore.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives, 't mut String&', and assign it here
    11 |         t := $i "-loop-text"
@@ -5329,7 +5375,7 @@ stro20condstore.olang:47:13: error[O20]: the container outlives what this refers
       |             ^
 compilation failed with 1 error
 === strobligation.olang
-strobligation.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+strobligation.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
    16 |     x Res& = Res(b.head)
       |                  ^~~~~~
 compilation failed with 1 error
@@ -5384,7 +5430,7 @@ strspawnpart.olang:24:18: error[E11c, O12]: '$' does not say where a value it re
       |                  ^~~~
 compilation failed with 1 error
 === strstoredtor.olang
-strstoredtor.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+strstoredtor.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
    16 |     x Res& = Res(b.head)
       |                  ^~~~~~
 compilation failed with 1 error
@@ -5416,10 +5462,7 @@ strstoresreceiver.olang:13:5: error[E11c, O12]: '$' does not say where a value i
 strstoresreceiver.olang:8:33: note: built here, where the receiver's part it was handed lives
     8 | fn grow(n mut Node&) { n.next = Node(6, null) }
       |                                 ^~~~~~~~~~~~~
-strstoresreceiver.olang:18:5: error[D3b]: 's' is declared and never read - read it, or leave the declaration out
-   18 |     s := $b
-      |     ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === strtransientadapter.olang
 strtransientadapter.olang:13:48: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    13 | fn (b Bag&) Str() String { return "b" $apply(b.c) }
@@ -5569,13 +5612,10 @@ t17ewithouttype.olang:3:9: error[T17e]: a raw value needs the enum's raw type, w
       |         ^
 compilation failed with 1 error
 === t17payloadscopes.olang
-t17payloadscopes.olang:15:9: error[D3b]: 'l' is declared and never read - read it, or leave the declaration out
-   15 |         l Link& = Link.Two(x, y)
-      |         ^
 t17payloadscopes.olang:15:31: error[T17c]: this payload holds references into two scopes, and it lives in one - build what it holds in one scope
    15 |         l Link& = Link.Two(x, y)
       |                               ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === t17payloadwrite.olang
 t17payloadwrite.olang:16:29: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
    16 |         s Slot& = Slot.Held(outer)
@@ -5710,7 +5750,7 @@ compilation failed with 1 error
 t22aobligation.olang:8:12: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     8 |     a.next = b
       |            ^
-t22aobligation.olang:17:11: error[T22a]: 'hang' relates its arguments' scopes, which a call through a function value cannot check - call it directly
+t22aobligation.olang:17:11: error[T22a]: 'hang' ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it directly
    17 |     apply(hang, a, b)
       |           ^~~~
 compilation failed with 2 errors
@@ -5738,17 +5778,17 @@ t22callunsafe.olang:20:48: error[E12]: expected fn&(n P&) I64, found R
       |                                                ^~~~
 compilation failed with 2 errors
 === t22sharedscope.olang
-t22sharedscope.olang:13:9: error[T22a]: 'link' relates its arguments' scopes, which a call through a function value cannot check - call it directly
+t22sharedscope.olang:13:9: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it directly
    13 |     put(link, x, 42)
       |         ^~~~
 compilation failed with 1 error
 === t22sharedscopegeneric.olang
-t22sharedscopegeneric.olang:14:15: error[T22a]: 'link' relates its arguments' scopes, which a call through a function value cannot check - call it directly
+t22sharedscopegeneric.olang:14:15: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it directly
    14 |     f := keep(link)
       |               ^~~~
 compilation failed with 1 error
 === t22sharedscopetype.olang
-t22sharedscopetype.olang:15:9: error[T22a]: 'link' relates its arguments' scopes, which a call through a function value cannot check - call it directly
+t22sharedscopetype.olang:15:9: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it directly
    15 |     put(link, x)
       |         ^~~~
 compilation failed with 1 error
@@ -6052,6 +6092,11 @@ t2cfieldnarrow.olang:6:12: error[T2c]: 'h.next' is a N?&, which may be null - re
     6 |     return h.next.v
       |            ^~~~~~
 compilation failed with 1 error
+=== t2cmapkey.olang
+t2cmapkey.olang:5:14: error[T2c]: String?& may be null, so it meets no trait - K must meet Hashable here: write String&, which never is
+    5 |     m := Map<String?&, I64>()
+      |              ^~~~~~~~
+compilation failed with 1 error
 === t2cmaybenull.olang
 t2cmaybenull.olang:5:34: error[T2c]: 'm' is a N?&, which may be null, and N& never is - test it first ('if x is not null'), or write 'm!'
     5 | fn give(m N?&) I64 { return take(m) }
@@ -6227,7 +6272,7 @@ t32anynottrait.olang:3:12: error[T32]: 'any' takes a trait, and I64 is none
       |            ^~~
 compilation failed with 1 error
 === t32anyobligations.olang
-t32anyobligations.olang:14:7: error[T32a, T22a]: aBag's 'Put' relates its arguments' scopes, which a call through an 'any aSink&' cannot check - call it directly, or through generic code
+t32anyobligations.olang:14:7: error[T32a, T22a]: aBag's 'Put' ties where what it is given lives to what it keeps or gives back, which a call through an 'any aSink&' cannot check - call it directly, or through generic code
    14 |     f(b)
       |       ^
 compilation failed with 1 error
@@ -6242,7 +6287,7 @@ t32anyopenmatch.olang:11:14: error[T34]: any aShape&'s trait aShape is open, so 
       |              ^~~~~
 compilation failed with 1 error
 === t32anyscopes.olang
-t32anyscopes.olang:12:7: error[T32a, T22a]: aBox's 'Get' relates its arguments' scopes, which a call through an 'any aHas&' cannot check - call it directly, or through generic code
+t32anyscopes.olang:12:7: error[T32a, T22a]: aBox's 'Get' ties where what it is given lives to what it keeps or gives back, which a call through an 'any aHas&' cannot check - call it directly, or through generic code
    12 |     f(b)
       |       ^
 compilation failed with 1 error
@@ -6580,7 +6625,7 @@ compilation failed with 1 error
 vec01view.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    11 |     try io.Println($d[0])
       |                     ^
-vec01view.olang:10:28: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
+vec01view.olang:10:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
    10 |     for i in range 100 { v.Push(i) }
       |                            ^~~~
 compilation failed with 1 error
@@ -6604,7 +6649,7 @@ compilation failed with 1 error
 vec06through.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    11 |     try io.Println($d)
       |                     ^
-vec06through.olang:10:7: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
+vec06through.olang:10:7: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
    10 |     v.Push(5)
       |       ^~~~
 compilation failed with 1 error
@@ -6612,7 +6657,7 @@ compilation failed with 1 error
 vec103refview.olang:15:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
    15 |     try io.Println($d[0])
       |                     ^
-vec103refview.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view after it, or copy the elements first: 'l.toks.ToArray()'
+vec103refview.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()' for a Vec)
    14 |     l.toks.Push(2)
       |            ^~~~
 compilation failed with 1 error
@@ -6620,7 +6665,7 @@ compilation failed with 1 error
 vec104viewfn.olang:15:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
    15 |     try io.Println($d[0])
       |                     ^
-vec104viewfn.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view after it, or copy the elements first: 'l.toks.ToArray()'
+vec104viewfn.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()' for a Vec)
    14 |     l.toks.Push(2)
       |            ^~~~
 compilation failed with 1 error
@@ -6628,7 +6673,7 @@ compilation failed with 1 error
 vec13nominal.olang:18:20: error[M19g]: 't' holds a view of 'w' taken before 'w' may have grown
    18 |     try io.Println(t)
       |                    ^
-vec13nominal.olang:16:29: note: 'w' may grow here, in 'Push' - take the view after it, or copy the elements first: 'w.ToArray()'
+vec13nominal.olang:16:29: note: 'w' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('w.ToArray()' for a Vec)
    16 |     for _ in range 1000 { w.Push('b') }   # may grow the Vec, replacing its buffer
       |                             ^~~~
 compilation failed with 1 error
@@ -6636,7 +6681,7 @@ compilation failed with 1 error
 vec14nominalconv.olang:18:21: error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown
    18 |     try io.Println($d[0] " " $d[1])
       |                     ^
-vec14nominalconv.olang:16:29: note: 'w' may grow here, in 'Push' - take the view after it, or copy the elements first: 'w.ToArray()'
+vec14nominalconv.olang:16:29: note: 'w' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('w.ToArray()' for a Vec)
    16 |     for i in range 1000 { w.Push(i + 100) }
       |                             ^~~~
 compilation failed with 1 error
@@ -6652,7 +6697,7 @@ compilation failed with 1 error
 vec19listconv.olang:12:20: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
    12 |     try io.Println(l[0])
       |                    ^
-vec19listconv.olang:11:28: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
+vec19listconv.olang:11:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
    11 |     for _ in range 100 { v.Push('b') }
       |                            ^~~~
 compilation failed with 1 error
@@ -6670,7 +6715,7 @@ compilation failed with 1 error
 vec88fieldviewpush.olang:14:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
    14 |     try io.Println($d[0])
       |                     ^
-vec88fieldviewpush.olang:13:12: note: 'l.toks' may grow here, in 'Push' - take the view after it, or copy the elements first: 'l.toks.ToArray()'
+vec88fieldviewpush.olang:13:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()' for a Vec)
    13 |     l.toks.Push(9)
       |            ^~~~
 compilation failed with 1 error
@@ -6678,7 +6723,7 @@ compilation failed with 1 error
 vec92methodgrows.olang:15:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
    15 |     try io.Println($d[0])
       |                     ^
-vec92methodgrows.olang:14:7: note: 'l.toks' may grow here, in 'grow' - take the view after it, or copy the elements first: 'l.toks.ToArray()'
+vec92methodgrows.olang:14:7: note: 'l.toks' may grow here, in 'grow' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()' for a Vec)
    14 |     l.grow()
       |       ^~~~
 vec92methodgrows.olang:9:35: note: 'grow' may grow it here
@@ -6689,7 +6734,7 @@ compilation failed with 1 error
 vec94lambdakeeps.olang:15:21: error[M19g]: 'f' holds a view of 'l.toks' taken before 'l.toks' may have grown
    15 |     try io.Println($f())
       |                     ^
-vec94lambdakeeps.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view after it, or copy the elements first: 'l.toks.ToArray()'
+vec94lambdakeeps.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()' for a Vec)
    14 |     l.toks.Push(4)
       |            ^~~~
 compilation failed with 1 error
@@ -6713,7 +6758,7 @@ compilation failed with 1 error
 vec97globalfieldgrows.olang:15:21: error[M19g]: 'd' holds a view of 'GL.toks' taken before 'GL.toks' may have grown
    15 |     try io.Println($d[0])
       |                     ^
-vec97globalfieldgrows.olang:14:5: note: 'GL.toks' may grow here, in 'bump' - take the view after it, or copy the elements first: 'GL.toks.ToArray()'
+vec97globalfieldgrows.olang:14:5: note: 'GL.toks' may grow here, in 'bump' - take the view or the reference after it, or copy the elements first ('GL.toks.ToArray()' for a Vec)
    14 |     bump()
       |     ^~~~
 vec97globalfieldgrows.olang:10:21: note: 'bump' may grow it here

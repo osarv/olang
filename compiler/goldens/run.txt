@@ -128,6 +128,14 @@
 === test tests/filtered.olang
 | status 0
 | ok - a filtered comprehension's result is an array of its own
+=== test tests/fnref.olang
+| status 0
+| ok - nested: a null inside a value renders null, and an enum's zero holds its payload's zero values
+| ok - fire: a declared function type is held as its function value, a lambda fitting it directly
+| ok - press: a function value that may be null is called once a test says it is not
+| ok - longest: an array that may be null: null distinct from empty, read once narrowed
+| ok - sample: the evaluator agrees: baked while compiling as at run time
+| ok - zeros: an array that may be null, given no value, starts as null: baked while compiling as at run time
 === test tests/fnvalues.olang
 | status 0
 | ok - a function handing back a view of its argument is a value
@@ -717,11 +725,11 @@
 | ok - O18a: nested builders land with their caller's result
 | ok - O4a: &x on parameters, results and locals
 | ok - O4a: &x naming a block-scoped local builds there, from an inner block
-| ok - E25: f&x() builds the result where x lives
+| ok - E25 (inferred, QCB): a call's result built where what it is kept in lives
 | ok - O13/O26: built results and returned locals live where the result goes
 | ok - O18a: a by-value result is built where it lands - a loop body's own block, or straight into an outer value
 | ok - C2d/E25: a cursor over a longer-lived list, and a constructor built where a variable lives
-| ok - O26/O25a: &return as a scope argument, := adopting it, and a typed local naming its scope
+| ok - O26/O25a (inferred, QCB): a result built where the result goes, := adopting it, a typed local holding it
 | ok - T29d: a primitive type's constructor checks the way in, and arithmetic keeps working
 | ok - T29: a type over a declared number does not take its constructor
 | ok - D15: a cursor declared with := from a field read
@@ -1049,6 +1057,7 @@
 | ok - O8d, F4: a destructor a let-go would run early runs at its scope's close
 | ok - C9b: r.Destroy(); continue - and break - in the loop that declares r
 | ok - S6: text lent writably as an Array<Char> where it may be written
+| ok - E31b: a mutating call through x[i] is made on the element in place, as the evaluator makes it
 === test tests/textslot.olang
 | status 0
 | ok - a text local from a literal starts from the literal every turn, and is written as any array
@@ -1631,8 +1640,6 @@
 | ok
 === run c2dexactobliged.olang
 | status 0
-=== run c2dfieldentry.olang
-| status 0
 === run c2dfieldoutlives.olang
 | status 0
 === run c2dheldpush.olang
@@ -1685,6 +1692,12 @@
 | status 0
 === run d16blambdaorder.olang
 | status 0
+=== run d16cborrowescape.olang
+| status 0
+=== run d16cescape.olang
+| status 0
+=== run d16dlambdaown.olang
+| status 0
 === run d16dtwoscopes.olang
 | status 0
 === run d17entrycheck.olang
@@ -1720,6 +1733,8 @@
 === run d9apayloadstring.olang
 | status 0
 | 1-payload
+=== run d9hheldwrite.olang
+| status 0
 === run deeparray.olang
 | status 0
 | 3
@@ -1748,6 +1763,8 @@
 | status 0
 === run e16dgetbang.olang
 | status 0
+=== run e31bcallinplace.olang
+| status 0
 === run e31bhandlefieldloop.olang
 | status 0
 === run e31bhandlefieldnested.olang
@@ -1759,6 +1776,8 @@
 === run e31bhandlefieldtwolevel.olang
 | status 0
 === run e31bhandlereplaced.olang
+| status 0
+=== run e31binplaceown.olang
 | status 0
 === run e31btryelem.olang
 | status 0
@@ -1800,6 +1819,8 @@
 | status 0
 === run g21mutable.olang
 | status 0
+=== run g29runtime.olang
+| status 0
 === run g4resultwritten.olang
 | status 0
 === run gemmflat.olang
@@ -1830,6 +1851,8 @@
 === run listscopetext.olang
 | status 0
 === run m19g20allowed.olang
+| status 0
+=== run m19grefok.olang
 | status 0
 === run m5askipped.olang
 | status 0
@@ -1877,6 +1900,8 @@
 | status 0
 === run o14btypevar.olang
 | status 0
+=== run o14ccopyslice.olang
+| status 0
 === run o14returnglobalvalue.olang
 | status 0
 | Zonstant text constant text
@@ -1902,6 +1927,8 @@
 | status 0
 | 1133
 === run o17lambdareads.olang
+| status 0
+=== run o17ownkept.olang
 | status 0
 === run o17templambdaarg.olang
 | status 0
@@ -1980,6 +2007,8 @@
 | alpha3
 === run o26acallkeeps.olang
 | status 0
+=== run o26acopyflow.olang
+| status 0
 === run o26acyclemethod.olang
 | status 0
 === run o26acycleplain.olang
@@ -2034,6 +2063,8 @@
 | status 0
 === run preludeuse.olang
 | status 0
+=== run qceretglobal.olang
+| status 0
 === run qcevaluearg.olang
 | status 0
 | amy Xmy Amy
@@ -2049,6 +2080,8 @@
 === run r11bnotavalue.olang
 | status 0
 === run r11bpassed.olang
+| status 0
+=== run r11fndefault.olang
 | status 0
 === run r1cwords.olang
 | status 0
@@ -2189,9 +2222,13 @@
 | status 0
 === run s1bline.olang
 | status 0
+=== run s1bparallel.olang
+| status 0
 === run s3busy.olang
 | status 0
 | 1 5 1
+=== run s5atbuilds.olang
+| status 0
 === run s5callresultfield.olang
 | status 0
 | 0-text
@@ -2209,6 +2246,8 @@
 | 1
 | 2
 | 3
+=== run s5handlerepoint.olang
+| status 0
 === run s5helperlist.olang
 | status 0
 | 0-text
@@ -2317,6 +2356,8 @@
 === run t20errorparam.olang
 | status 0
 | null
+=== run t21bconvert.olang
+| status 0
 === run t25ccopydecl.olang
 | status 0
 | 2
