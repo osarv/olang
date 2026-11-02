@@ -2470,3 +2470,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   through an index or a call's result held across a growth by the same route (unsure: refused), and the Map's copy
   helper allocates on the own-chunk path so -sanitize protects a retired array; F5 F9's capture flow follows captured
   function values; F6 the three diagnostics (C2d naming Clone for a Vec, M19g twice, M19g's Map note).
+- Fix round 6b (wt-bfix6b 11b8d38) - its two questions DECIDED by me 2026-11-02: (1) the reference-local
+  over-rejection (`x String& = ""` then assigning a shorter-lived view infers the program's scope) is fixed after the
+  first version - such a local's scope inferred from all its assignments, not its initializer's constant - which also
+  makes compiler/tools' scopedump/lowerdump/emitdump build again; (2) in a program with an export fn, a C call outside
+  C's math, the runtime and the quick list stays "anything" (free.olang's condition 3) - no widening to read/write. The
+  agent's four details stand (F3 fixed in emit: the environment slot kept in the coroutine frame).

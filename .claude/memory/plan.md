@@ -771,3 +771,10 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   6b of its relaxations: they held; found 1 older soundness bug (a generator's lambda capturing a built call's
   reference), 3 wrong results (externs calling back, destructors in effects, M19g through an index), 1 over-rejection,
   diagnostics. Next: fix round 6b, then the final verify - the first version.
+- 2026-11-02 ~17:00 CET: THE COMPILER'S FIRST VERSION (the user's 2026-10-31 directive: rework, large refactor, verify).
+  Fix round 6b merged (11b8d38, fast-forward; full verify passed on its tip, scopesan, scopefuzz, fuzz free clean, bench
+  IR byte-identical): a generator lambda's environment kept in the coroutine frame (soundness), externs calling back
+  and destructors counted in effects, M19g through an index, F9 through captured function values, three diagnostics.
+  Weekly ~0.77. Left for after: the reference-local over-rejection (and the three dump tools), held/gen_walkkept's two
+  errors, oann's catch-up (handles_migrate, fnref/scopes migrations - oann waits for the user), the settling
+  experiments (QBY - the user's to start).
