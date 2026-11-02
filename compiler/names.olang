@@ -886,22 +886,25 @@ fn (r mut Resolver&) receiverVars(t ast.TypeRef?&, inArgs Bool) {
     if t is null { return }
     match t {
         case ast.TypeRef.Named(_, _, args) {
-            for a in args {
-                match a {
-                    # QAH: "? E" in a receiver's arguments introduces its error-set variable, as a bare name does
-                    case ast.TypeRef.Errs(_, items) {
-                        for e in items {
-                            if e.Parts.Len() == 1 { r.introduceVar(e.Sp, e.Parts[0]) }
-                        }
-                    }
-                    case ast.TypeRef.Named(asp, ap, aargs) if ap.Len() == 1 and aargs.Len() == 0 { r.introduceVar(asp, ap[0]) }
-                    case _ { r.receiverVars(a, true) }
-                }
-            }
+            for a in args { r.receiverArg(a) }
         }
         case ast.TypeRef.Ref(_, of, _) { r.receiverVars(of, inArgs) }
         case ast.TypeRef.Perm(_, of, _, _) { r.receiverVars(of, inArgs) }
         case _ { }
+    }
+}
+
+# one of a receiver's type arguments: a bare name introduces a variable, as "? E" introduces its error-set variable
+# (QAH); anything else is walked for its own arguments
+fn (r mut Resolver&) receiverArg(a ast.TypeRef&) {
+    match a {
+        case ast.TypeRef.Errs(_, items) {
+            for e in items {
+                if e.Parts.Len() == 1 { r.introduceVar(e.Sp, e.Parts[0]) }
+            }
+        }
+        case ast.TypeRef.Named(asp, ap, aargs) if ap.Len() == 1 and aargs.Len() == 0 { r.introduceVar(asp, ap[0]) }
+        case _ { r.receiverVars(a, true) }
     }
 }
 
