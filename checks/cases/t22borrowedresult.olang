@@ -1,4 +1,4 @@
-# check: fail error[E12]: expected fn(a mut N&) mut N&, found fn(a mut N&) mut N&a
+# check: fail error[T22a]: 'self' relates its arguments' scopes, which a call through a function value cannot check - call it directly
 # T22: a borrowed result ('N&a', where a lives) is not a built one ('N&', where the call's result is put) - the caller of
 # a value of the built type would keep the result past its argument
 type N struct(v I64) {

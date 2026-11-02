@@ -1,4 +1,6 @@
-# check: fail the callee needs one argument's scope to outlive another's
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # E31b/O17b (the follow-up review of study 5's fixes, G1): a call on a handle element read out of another handle element
 # - "users[0][0].Push(t)" - holds and lends every level, so what Push keeps lives where the inner list's state does,
 # which a loop's text does not (std/list's List, a handle; a Vec is a value since 2026-11-01)

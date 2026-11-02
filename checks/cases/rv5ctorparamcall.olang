@@ -1,4 +1,4 @@
-# check: fail error[O10]: this reference lives in a scope that may not outlive where it is put
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
 # C2g (review of rv3fix, #6): nor a borrowed result of a call given it
 import "std/io"
 type P struct(v I64) { v }

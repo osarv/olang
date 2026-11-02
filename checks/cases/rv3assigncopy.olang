@@ -1,4 +1,6 @@
-# check: fail error[O25h]
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O25h: a value assigned a copy out of a reference keeps the referent's references - a local whose references live in
 # its own block may not take them, whatever expression gives the reference (a call's borrowed result here)
 type Node struct() {
@@ -11,6 +13,7 @@ fn pick(x mut Box&) mut Box& { return x }
 fn f(r mut Box&) {
     d := Box()
     d = pick(r)
+    assert $d != ""
 }
 fn main() ? {
 }

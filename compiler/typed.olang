@@ -2226,7 +2226,7 @@ test "a plan: what each site builds into and each call passes, Unset where nothi
     assert pl.Passed(call, 0) == Scope.Var(0) and pl.Passed(call, 1) == Scope.Program and pl.Passed(call, 2) == Scope.Unset
 }
 
-# "fn link(a mut N&, b N&a) N&a { return b }" and its pieces: marks and scope variables read off the type alone
+# link(a mut N&, b N&) N&, b and the result living where a does, and its pieces: marks and scope variables read off the type alone
 test "a body's marks and scope variables come from its type; constants, temporaries and matches as check makes them" {
     names := source.Names()
     t := types.NewTable(names)

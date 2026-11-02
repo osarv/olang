@@ -1,4 +1,6 @@
-# check: fail error[O20]
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O20/E28: a conditional of an existing reference and a new value lives where the existing one does, so it is stored
 # only where that outlives the slot (the local's node was freed and read back)
 import "std/io"

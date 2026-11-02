@@ -1,4 +1,4 @@
-# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
+# check: fail error[O25h]: this value holds references into a scope the target outlives - build it where the target is
 # C2d/O23a: a callback handed elements read through a "&p" field of a view over the receiver's array would build where
 # the element's derived scope resolves at the call - an underestimate - so it is refused (C3)
 import "std/io"

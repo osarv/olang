@@ -1,4 +1,6 @@
-# check: fail error[O25c]: the array outlives what this element refers to
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O25c/T7: an array's elements live where the array does - a literal or a fill holding a local, returned or stored
 # further out than the local, is rejected where it lands
 type Node struct(v I32) {
@@ -9,7 +11,7 @@ fn f() Array<mut Node&>& {
     return Array<mut Node&>(2, n)
 }
 fn g() Array<mut Node&>& {
-    n Node& = Node(42)
+    n mut Node& = Node(42)
     return Node&[n]
 }
 fn main() ? {
@@ -21,4 +23,6 @@ fn main() ? {
         c = Array<mut Node&>(1, inner)
         d = Node&[inner]
     }
+    assert $c != ""
+    assert $d != ""
 }

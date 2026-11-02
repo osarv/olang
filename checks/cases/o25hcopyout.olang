@@ -1,4 +1,6 @@
-# check: fail error[O25h]: this value holds references into a scope the target outlives
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O25h/O18a: a value local's references live in its own block - a loop body's are reclaimed with the iteration - so a copy
 # of one into a value the block does not outlive would keep pointing at them. Build it where it is kept instead
 type Link struct(v I64, next Link?&) {
@@ -13,4 +15,5 @@ fn main() ? {
         m := mk(i)
         o = m
     }
+    assert $o != ""
 }

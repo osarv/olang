@@ -1,6 +1,6 @@
-# check: fail the callee needs one argument's scope to outlive another's
-# also: 'b' is bound here to what the matched value holds, which lives in a block that closes first - make that where 'keep' lives
-# never: 'b mut aBtn&keep
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # T34, O10c, B11 (the any review, finding 6): a type case's binding has no declaration to name a scope in - the note
 # says to make what it is bound to elsewhere
 type aW trait for aBtn, aSl {

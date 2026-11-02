@@ -3,7 +3,7 @@
 # also:     builders
 # also:     fn FromHex(t String&) Color ? ColorError
 # also:         a color from "RRGGBB"
-# also:     fn Gray(level U8) mut Color&
+# also:     fn Gray(level U8) Color&
 # also:     fn (c Color&) Hex() String
 # also: fn Luminance(c Color&) F64
 # also: fn Both(c Color&) Color, Color

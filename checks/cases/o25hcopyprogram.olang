@@ -1,4 +1,6 @@
-# check: fail error[O25h]: this value holds references into a scope the target outlives
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O25h/O1b: a copy of a global's element holds what lives in the program's scope, and keeps claiming it - so what is
 # assigned to it must live there too. It used to forget the claim, and the copy, stored back into the global, dangled
 type WC struct(word String&, count I64) {

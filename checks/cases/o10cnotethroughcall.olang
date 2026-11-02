@@ -1,5 +1,6 @@
-# check: fail note: 'base' is declared here, in a block that closes first - declare it where 'keep' lives
-# also: 'path' is declared here, in a block that closes first - declare it where 'keep' lives
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # B11/O10c: a value reaching a longer-lived list through a call that keeps its arguments names every argument made in
 # a block that closes first - each is a fault (study 6's r14: one note, for the first argument only)
 import "std/io"

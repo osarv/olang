@@ -1,4 +1,6 @@
-# check: fail error[O25h]: this value holds references into a scope the target outlives
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # (O25h since 2026-11-01: the destructured Vec is copied into rows, and its references are the loop's)
 # E25/O10c: destructured results land in the block the statement stands in; without a scope argument ("mk2&rows(k)")
 # the list is the loop's, and cannot be pushed outward

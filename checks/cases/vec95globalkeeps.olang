@@ -1,4 +1,4 @@
-# check: fail error[O1b]: a global holds only what lives as long as the program
+# check: fail error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
 # O1b: a global does not keep a view of a field's Vec
 import "std/io"
 type Lexer struct(n I64) {

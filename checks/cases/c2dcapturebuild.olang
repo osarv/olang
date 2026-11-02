@@ -1,4 +1,4 @@
-# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
 # C2d/O23a: a lambda capturing an instance builds through its "&p" field - inside the lambda the instance's bindings are
 # not known, only the capture's own scope, which is the frame here while what the field refers to is the receiver's:
 # refused (it was a silent gap of the scope pass, and the new node lived in the frame - a use after free)

@@ -1,4 +1,6 @@
-# check: fail error[T17c]: this value's payload refers to storage the value would outlive
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # T17c: an enum's payload lives where the enum value does - storing one built from a reference that dies at the end of
 # each iteration into a reference that outlives the loop would leave the payload dangling
 type Expr enum {

@@ -1,4 +1,6 @@
-# check: fail error[O23, O11]: this stores into a '&p' field whose binding is not known through this path
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O23/O11: a '&of' field reached through a field of a parameter - its binding is the inner instance's, which nothing in
 # setDeep can see, so the store is unverifiable
 type N struct(v I32) {

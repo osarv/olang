@@ -1665,7 +1665,7 @@ if TestBuild {
             "    d := v.View()\n"
             "    v.Push(2)\n"
             "    assert first(d) == 1\n"
-            "    w mut Vec<I64>&v = v\n"
+            "    w mut Vec<I64>& = v\n"
             "    e := v.View()\n"
             "    w.Push(3)\n"
             "    assert e[0] == 1\n"

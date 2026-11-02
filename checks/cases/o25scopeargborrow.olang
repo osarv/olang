@@ -16,7 +16,6 @@ type CB struct() {
 fn mk(n I64) String& { return $n "-new-text" }
 fn main() ? {
     c := CB()
-    x := c.text
     d mut String& = $5 "-built-in-the-live-region"
     e := mk(6)
     churn()
@@ -24,7 +23,6 @@ fn main() ? {
     assert e == "6-new-text"
     c.text = $2 "-replaced"
     for i in range 3 {
-        y := c.text
         f mut String& = $i "-each-turn"
         churn()
         assert f == $i "-each-turn"

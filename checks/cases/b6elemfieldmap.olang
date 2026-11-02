@@ -1,4 +1,6 @@
-# check: fail error[O20]: the container outlives what this refers to
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O18c (the batch 6 review): ...through what a Map's Get hands back
 type Cell struct() {
     s String& = ""

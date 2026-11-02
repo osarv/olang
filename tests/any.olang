@@ -635,7 +635,6 @@ fn sArgStash(l mut Vec<any Named&>&, i I64) String {
 fn scopeArgs(n I64) String {
     xs := Vec<any Named&>()
     for i in range n {
-        t := "inner" $i
         xs.Push(Label(sArg(i)))
         xs.Push(Label(sArg(i) if i >= 0 else "x" $i))
         sArgStash(xs, i)
@@ -719,16 +718,13 @@ fn saText(p String&, i I64) String { return sArg(i) }
 fn saChain(p String&, i I64) String { return saText(p, i) }
 fn saNums(p String&, i I64) Array<I64> { return saArr(i) }
 fn saLocal(i I64) String {
-    t := "local" $i
     r := sArg(i)
     return r
 }
 fn saTuple(i I64) String, I64 {
-    t := "tuple" $i
     return sArg(i), i
 }
 fn saTry(i I64) String {
-    t := "try" $i
     return try saFail(i) catch default "no"
 }
 fn saFail(i I64) String ? ChOops {
@@ -840,12 +836,11 @@ test "O26a, T7b: a returned array local something else names is copied at its re
     assert secondNames(Live - 2) == want
 }
 
-# E25, P1g (the fourth any review, D): a spawn target set from a call given a scope argument is the same call declared
-# first - built where the argument says, here a local living past the join
+# E25, P1g (the fourth any review, D): a spawn target set from a call is the same call declared
+# first - built where the target lives, here a local living past the join
 type SpP struct(n I64) { n }
 fn spMk(i I64) SpP& { return SpP(i) }
 fn spawnScoped(k I64) String {
-    t := "outer" $k
     x SpP?& = null
     y SpP?& = null
     join {
@@ -877,7 +872,6 @@ fn spawnStores(k I64) String {
     same := "xxxxxxx"
     before := same[0:3]
     for i in range k + 1 {
-        u := "inner" $i
         join {
             spawn a, n = spTwo(i)
             spawn b = try spTry(i) catch default "dflt"
@@ -885,7 +879,6 @@ fn spawnStores(k I64) String {
         }
     }
     {
-        w := "w"
         join { spawn same = sArg(1) }
     }
     churn()

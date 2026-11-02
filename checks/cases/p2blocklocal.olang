@@ -1,4 +1,6 @@
-# check: fail error[P2]: this argument's storage closes before the join does
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # a local of a block inside the join closes at that block's end, before the task it was lent to is joined: must fail
 import "std/io"
 type Node struct(n I64) {

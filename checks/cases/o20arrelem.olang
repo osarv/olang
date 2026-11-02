@@ -1,4 +1,6 @@
-# check: fail error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # an array element's text that dies before the array's container: must fail
 import "std/io"
 type B struct() {

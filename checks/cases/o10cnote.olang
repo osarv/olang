@@ -1,6 +1,8 @@
-# check: fail note: the callee requires it because of this statement
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O10c: a call that fails an inferred obligation names the statement in the callee that required it
-type SSlot struct(key String&, val I32, next SSlot?&) {
+type SSlot struct(key String&, val I32, next mut SSlot?&) {
     key
     val
     next
@@ -28,3 +30,4 @@ test "inner key" {
         m.Put(k, 1)
     }
 }
+fn main() { }

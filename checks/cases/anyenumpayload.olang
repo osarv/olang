@@ -1,5 +1,6 @@
-# check: fail error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
-# never: this array's elements
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # T17c, T32a (the second any review, finding 6): an enum case made an any is put in the box as it is, so what its payload
 # refers to is judged as a payload's - not as the elements of an array copied into the box
 type Named trait {

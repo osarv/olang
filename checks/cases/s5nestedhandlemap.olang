@@ -1,4 +1,6 @@
-# check: fail the callee needs one argument's scope to outlive another's
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # E31b/O17b (G1): the same through the List a Map gives - "(try mm.Get(0))[0].Push(t)" - and through a plain function
 # (std/list's List, a handle; a Vec is a value since 2026-11-01)
 import "std/list"

@@ -1,5 +1,6 @@
-# M19g: a view handed back through a function value made through an import alias ("f := vlib.View2") - a body not
-# known handing back an array borrowed from a Vec it was given counts as a view of it
+# M19g: a view handed back through an import alias ("vlib.View2(w)") - an array borrowed from a Vec it was given counts
+# as a view of it. (Made a value, "f := vlib.View2" is T22a's error: what it hands back lives where its argument does,
+# an obligation a call through a function value cannot check - QCB)
 import "vlib"
 import "std/io"
 fn churn() I64 {
@@ -11,8 +12,7 @@ fn churn() I64 {
     return t
 }
 fn grow(w mut Vec<I64>&) ? io.Error {
-    f := vlib.View2
-    d := f(w)
+    d := vlib.View2(w)
     for i in range 1000 { w.Push(i + 100) }
     churn()
     try io.Println($d[0] " " $d[1])

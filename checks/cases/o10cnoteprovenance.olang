@@ -1,5 +1,6 @@
-# check: fail note: 'line' is declared here, in a block that closes first - declare it where 's' lives: 'line mut String&s = ...'
-# never: parse&s(...)
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # B11/O10c: an entry parsed from a line made each turn is kept in a longer-lived table. The entry's references are the
 # line's (parse requires its argument to outlive its result), so the note points at the line, not at a scope argument
 # for parse - which would only move the error into parse

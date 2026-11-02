@@ -1427,13 +1427,25 @@ fn (p Parser&) grouped(t ast.TypeRef&) Bool {
 # (QCB): a name after the "&" is whatever comes next, never part of the type
 fn (p mut Parser&) markers(at I32, t ast.TypeRef&) ast.TypeRef& {
     r ast.TypeRef& = t
-    for p.half == token.Tok.Eof and (p.sees(token.Tok.Amp) or p.nullMark()) {
+    for p.half == token.Tok.Eof and (p.sees(token.Tok.Amp) and not p.ampOperator() or p.nullMark()) {
         nullable := p.sees(token.Tok.Question)
         if nullable { p.advance() }
         p.advance()
         r = ast.TypeRef.Ref(p.from(at), r, nullable)
     }
     return r
+}
+
+# whether the "&" next is the operator rather than a reference marker: an operand follows it on its line, which no
+# type does now that no scope is written after one (QCB) - so "b as Box.Val & mask" is "(b as Box.Val) & mask"
+fn (p Parser&) ampOperator() Bool {
+    t := p.lookTok(1)
+    if t.Has(token.LineBreak) { return false }
+    return match t.Kind {
+        case token.Tok.Iden, token.Tok.IntLit, token.Tok.FloatLit, token.Tok.CharLit, token.Tok.StrLit: true
+        case token.Tok.BoolLit, token.Tok.NullLit, token.Tok.Dollar: true
+        case _: false
+    }
 }
 
 # T2c: "?&", the "?" written directly before the "&" - never an error set's "?", which no "&" follows

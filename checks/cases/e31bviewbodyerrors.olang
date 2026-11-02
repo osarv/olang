@@ -1,4 +1,4 @@
-# check: fail this builds through a '&p' field whose scope is not known here
+# check: fail error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
 # never: x[i] gives a copy of the element
 # B11 (D2): one cause, one error - the callee's own C2d error, and no E31b at the call because a body with errors is
 # no view

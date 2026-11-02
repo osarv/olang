@@ -1,4 +1,6 @@
-# check: fail error[O25c]: the array outlives what this element refers to
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # E28/O12/O25c (the batch 6 review): ...an element of an array literal kept outside the loop
 import "std/io"
 fn main() ? {

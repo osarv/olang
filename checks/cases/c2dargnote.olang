@@ -1,6 +1,6 @@
-# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
-# also: 16:46: error[C2d]
-# also: declare it where 'r' lives: 'src mut String&r = ...'
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # B11/C2d: the error names the argument the instance would outlive, and the note says where to make it
 import "std/io"
 type Module struct(Path String&, Dir String&, Src String&) {

@@ -1,4 +1,6 @@
-# check: fail error[D18c, S20]: this generator's elements live where the generator does, and this value is not shown to last as long - yield a part of what lives there, or values ('Iterator<T>') and a copy ('$x', 'x.Clone()')
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # D18c: an element kept by the walk lives where the generator does - not in a block of the generator's body,
 # closed as the walk goes on
 fn texts(n I64) Iterator<String&> {

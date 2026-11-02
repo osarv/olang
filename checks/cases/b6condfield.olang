@@ -1,5 +1,6 @@
-# check: fail error[O20]: the container outlives what this refers to
-# also: note: this is the value that does not fit
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # E28/O12 (the batch 6 review): a conditional of references from different scopes stored into a field is judged value by
 # value - "x" lives in this call's block, and the field lives where the caller's bag does. It was taken for a temporary,
 # judged against nothing, and the caller read freed text

@@ -1,4 +1,4 @@
-# check: fail error[R11, O25]: a reference default lives where the call's result does
+# check: fail error[O25]: a reference never narrows - declare it with ':=' from what it is given
 # R9a: a default is judged where the call's result lands - here the outer variable keep - not where the try is
 # written; inner dies with the loop body, so keep would be left pointing into a reclaimed arena
 type Stop error {
@@ -18,4 +18,5 @@ fn main() ? {
         inner mut Node& = Node(42)
         keep = try mk(i) catch default inner
     }
+    assert $keep != ""
 }

@@ -1,4 +1,6 @@
-# check: fail error[C2d]: this instance would outlive what its '&p' field refers to
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # vec5 (r2a_ctor_field_no_own_block): a constructor field built in a parameter's scope ('y String&x = new text') holds
 # that parameter - the instance may not outlive the argument's block (C2d)
 import "std/io"

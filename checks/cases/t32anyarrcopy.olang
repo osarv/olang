@@ -1,4 +1,6 @@
-# check: fail the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # T32a (the any review, finding 1): an array copied into an any keeps its elements' references - text a loop body built,
 # kept in an outer list, would dangle once the body closed
 type aSized trait {

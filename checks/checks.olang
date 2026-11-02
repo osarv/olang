@@ -256,7 +256,7 @@ fn outOf(dir String&) String& {
 }
 
 # a failed check, with what the compiler said
-fn failure(what String&, dir String&) String& {
+fn failure(what String&, dir String&) mut String& {
     return "check FAIL: " $what "\n" $outOf(dir) "\n"
 }
 
@@ -962,7 +962,7 @@ fn interp(r mut report&) ? Failed {
                  "-i prog.olang output", dir)
     # B3e: what a build refuses is not run - section 8's errors reported as a build reports them
     try r.expect(sh(dir, "\"$OLANG\" interpret refused.olang > out.txt 2>&1") == 1, "-i refused.olang ran", dir)
-    try r.expect(outOf(dir).Contains("error[O10c]") and not outOf(dir).Contains("assertion"), "-i refused.olang output", dir)
+    try r.expect(outOf(dir).Contains("error[O27]") and not outOf(dir).Contains("assertion"), "-i refused.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret ub.olang > out.txt 2>&1") == 1, "-i ub.olang did not stop", dir)
     try r.expect(outOf(dir).Contains("ub.olang:6: it indexes outside the array"), "-i ub.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret cyclic.olang > out.txt 2>&1") == 1, "-i cyclic.olang did not stop", dir)
@@ -2433,7 +2433,7 @@ fn words(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" help > out.txt 2>&1") == 0 and outOf(dir).Contains("  interpret ") and
                  outOf(dir).Contains("  format "), "help", dir)
     try r.expect(sh(dir, "\"$OLANG\" help format > out.txt 2>&1") == 0 and outOf(dir).Contains("-check"), "help format", dir)
-    try r.expect(sh(dir, "\"$OLANG\" explain b.olang Color > out.txt 2>&1") == 0 and outOf(dir).Contains("    fn FromHex(t String&) Color ? ColorError\n    fn Gray(level U8) mut Color&\n    fn (c Color&) Hex()")
+    try r.expect(sh(dir, "\"$OLANG\" explain b.olang Color > out.txt 2>&1") == 0 and outOf(dir).Contains("    fn FromHex(t String&) Color ? ColorError\n    fn Gray(level U8) Color&\n    fn (c Color&) Hex()")
                  "explain lists a type's builders before its methods (B11b)", dir)
     try r.expect(sh(dir, "\"$OLANG\" explain B3g > out.txt 2>&1") == 0 and outOf(dir).Contains("running a file"), "explain", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret prog.olang > out.txt 2>&1") == 0 and

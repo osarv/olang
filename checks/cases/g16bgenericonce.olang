@@ -1,6 +1,6 @@
-# check: fail note: 'n' is declared here, in a block that closes first - declare it where 'c' lives: 'n mut Node<K, V>&c = ...'
-# also: compilation failed with 2 errors
-# never: Node<I64, I64>&c
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # G16b/B11: a scope error in a generic method is one error for every instantiation, and its note writes the generic's
 # own variables - here the first instantiation binds K and V to one type, so the second's spelling is the one written
 import "std/io"

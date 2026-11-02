@@ -3,7 +3,7 @@
 # also:     builders
 # also:     fn FromHex(t String&) Color ? ColorError
 # also:         a color from "RRGGBB"
-# also:     fn Gray(level U8) mut Color&
+# also:     fn Gray(level U8) Color&
 # also:     fn parse(t String&) Color
 # also:     fn (c Color&) Hex() String
 # a module whose functions that build a type are listed under it (B14): the type's one constructor, then the others

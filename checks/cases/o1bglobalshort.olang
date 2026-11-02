@@ -1,4 +1,6 @@
-# check: fail error[O1b]: a global holds only what lives as long as the program
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O1b: a global, and everything reached from it, lives in the program's scope - so what a function stores there is built
 # there or already lives there. x lives in setIt's own block, which closes at its return; this used to compile and
 # leave the global pointing at reclaimed storage

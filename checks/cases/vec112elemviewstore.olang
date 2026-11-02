@@ -1,4 +1,6 @@
-# check: fail error[O20]: the container outlives what this refers to
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O20: an element's field written through a view keeps what lives where the Vec does - not a
 # loop turn's text
 import "std/io"

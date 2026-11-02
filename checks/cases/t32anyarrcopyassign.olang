@@ -1,4 +1,6 @@
-# check: fail the 'any' outlives what this array's elements refer to
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # T32a (the any review, finding 1): an outer any, and an outer struct's any field, assigned a copy of an inner block's
 # array of text
 type aSized trait {

@@ -1,4 +1,4 @@
-# check: fail error[O23, O11]: this stores into a '&p' field whose binding is not known through this path
+# check: fail error[O20]: 'c.at' lives where 'c' does, which closes first - keep a copy ('$c.at'), or keep what 'c' was made from
 # O23/O11: a field written '&of' lives where the instance's constructor argument did, which every reader of c believes
 # (c.at reads at outer's scope) - storing through an element that aliases c could falsify that, so it is rejected
 type N struct(v I32) {
@@ -17,4 +17,5 @@ fn main() ? {
         arr[0].at = x
         keep = c.at
     }
+    assert $keep != ""
 }

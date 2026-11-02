@@ -1,4 +1,4 @@
-# check: fail error[D18c, S20]: this generator's elements live with what 't' refers to, and this value is not shown to last as long - yield a part of what lives there, or values ('Iterator<T>') and a copy ('$x', 'x.Clone()')
+# check: fail error[O27]: this returns a view of 'l', which this function builds - return the value (a result written without '&' copies it), or a copy: '$x'
 # D18c: an element borrowed from what 't' refers to is no part of a local the generator made
 fn words(t String&) Iterator<String&> {
     i I64 = 0

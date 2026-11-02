@@ -1,4 +1,6 @@
-# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # C2d/O23a: a reference read through a "&p" field - copied into a local, or a for-in element - captured by a lambda that
 # builds through it, handed to a callee: refused as the direct form is
 import "std/io"

@@ -24,7 +24,7 @@ fn lex(src String&) Vec<Tok> {
     return out
 }
 fn prec(c Char) I64 { return 2 if c == '*' else 1 if c == '+' else 0 }
-fn (p mut Parser&) primary() Expr& {
+fn (p mut Parser&) primary() mut Expr& {
     t := p.toks[p.at]
     p.at++
     if t.kind == '(' {

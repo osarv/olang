@@ -1,4 +1,4 @@
-# check: fail keep copies of what it reads instead of references
+# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
 # B11/E11c: the note for a list in a Str that cannot hold references to the receiver's nodes does not suggest declaring it
 # where they live, which a Str cannot do
 import "std/io"
@@ -10,7 +10,7 @@ type Bag struct(head mut Node&) {
     head
 }
 fn (b Bag&) Str() String {
-    l := Vec<mut Node&>()
+    l := Vec<Node&>()
     for n Node?& = b.head, n is not null, n = n.next { l.Push(n) }
     return $l.Len() " " $l[0].v
 }

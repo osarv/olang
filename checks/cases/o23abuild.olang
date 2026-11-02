@@ -1,4 +1,6 @@
-# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O23a: a field written "&p" of a parameter reads at a derived scope - where the caller's argument bound it - which no
 # code here has to build into, so a local naming where it lives may hold what lives there but not anything new
 type Node struct(v I64) {

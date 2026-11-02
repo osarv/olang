@@ -1,4 +1,4 @@
-# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
+# check: fail error[O25h]: this value holds references into a scope the target outlives - build it where the target is
 # C2d/O23a: a reference read through a "&p" field and copied into a local is built through as the direct form
 # "grow(w.at[0])" is - refused: what grow builds would be reclaimed with the view's scope, not where the element lives
 import "std/io"

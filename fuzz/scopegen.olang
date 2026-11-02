@@ -1574,7 +1574,7 @@ fn (g mut SG&) freeOp(h String&, ind String&, clean Bool) String& {
 
 fn (g mut SG&) freeScenario(k I64) String& {
     h := "h"
-    head mut String& = freeHolder(k)
+    head String& = freeHolder(k)
     decl mut String& = $"    h := Hold" $k "()\n"
     if g.chance(25) {    # the holder a global
         head = $head "G" $k " mut Hold" $k "& = Hold" $k "()\n"

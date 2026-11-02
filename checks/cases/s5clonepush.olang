@@ -1,4 +1,4 @@
-# check: fail error[O25h]: this value holds references into a scope the target outlives
+# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
 # O18c, O25h: a copy of a loop's Vec<String&> (a value since 2026-11-01; it was a Clone) holds what the loop's block holds
 # - the references - and cannot be kept past it
 import "std/io"

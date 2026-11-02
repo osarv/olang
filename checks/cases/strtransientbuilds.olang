@@ -1,4 +1,6 @@
-# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # E11c/D16c: a lambda passed to a callee that keeps nothing of it lives in the frame, but what its body builds where its
 # capture lives is still asked
 import "std/io"

@@ -1,4 +1,6 @@
-# check: fail error[O25]: a reference never narrows
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O25/O23a: a field written '&p' of a parameter lives at a derived scope - where the argument bound it - which a local
 # naming the parameter's own scope would narrow; ':=' takes the derived scope as it is
 type N struct(v I32, nx mut N&) {

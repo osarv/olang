@@ -1,4 +1,6 @@
-# check: fail error[O26]: this value refers to this function's own storage
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O13a/O25h: a copy of a value keeps its references where the original's are - in this block, since the original is not
 # what the return reads (O26a moves only that) - so the copy returned inside another value refers to dying text
 type H struct(r mut String&) {

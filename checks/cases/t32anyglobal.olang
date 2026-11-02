@@ -1,4 +1,6 @@
-# check: fail a global holds only what lives as long as the program - store something built here, or another global's
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O1b: run-time trait values
 type aShape trait {
     Area() I64

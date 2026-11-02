@@ -9594,12 +9594,8 @@ fn (c mut Checker&) roCallCopy(cl typed.Call&) Bool {
 fn (c mut Checker&) roBorrowedFrom(cl typed.Call&) I64 {
     id := c.bodyOfCallee(cl.Target)
     if id < 0 or not c.instanceBody(id) { return -1 }
-    sig := c.Bodies[id].Ty
-    e := c.P.T.ResultFrom(sig, 0)
-    if e < 0 { return -1 }
     for k in range cl.Args.Len() {
-        j := c.P.T.ShareOf(sig, k)
-        if (k == e or j == e) and c.roByArg(id, k) { return k }
+        if c.roByArg(id, k) and c.roFollows(id, k) { return k }
     }
     return -1
 }
@@ -9671,18 +9667,9 @@ fn (c mut Checker&) roDeepIn(b I64, x typed.Expr?&, out mut Vec<I64>&, seen mut 
         case typed.Expr.Prim(_, _, op, _, args) {
             if typed.PassesRefs(op) and args.Len() > 0 { c.roDeepIn(b, args[0], out, seen, depth + 1) }
         }
-        case typed.Expr.Call(_, ty, cl) {
+        case typed.Expr.Call(_, _, cl) {
             id := c.bodyOfCallee(cl.Target)
             if id < 0 { return }
-            if c.isRef(ty) {
-                sig := c.Bodies[id].Ty
-                e := c.P.T.ResultFrom(sig, 0)
-                if e < 0 { return }
-                for k in range cl.Args.Len() {
-                    if (k == e or c.P.T.ShareOf(sig, k) == e) and c.isRef(typeOf(cl.Args[k])) { c.roDeepIn(b, cl.Args[k], out, seen, depth + 1) }
-                }
-                return
-            }
             for k in range cl.Args.Len() {
                 if c.roFollows(id, k) { c.roDeepIn(b, cl.Args[k], out, seen, depth + 1) }
             }
@@ -9802,6 +9789,14 @@ fn (c mut Checker&) roDeepNeed(x typed.Expr?&) {
 # result their argument's permission, settled at the body's end
 fn (c mut Checker&) roResult(x typed.Expr?&) {
     if x is null or not c.instanceBody(c.fr().Body) or not c.holdsWritable(typeOf(x)) { return }
+    c.roResults.Push(pair.Pair(c.fr().Body, x))
+}
+
+# a reference an instance's body returns: what it hands back of a read-only reference parameter (roDeep) makes a
+# call's result as read-only as that argument, as a by-value result copied out of one is (roToResult) - no result
+# says whose storage it hands back, so its returns do (QCB)
+fn (c mut Checker&) roRefResult(x typed.Expr?&) {
+    if x is null or not c.instanceBody(c.fr().Body) { return }
     c.roResults.Push(pair.Pair(c.fr().Body, x))
 }
 
@@ -19021,7 +19016,7 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         x := c.exprTo(values[0], rt)
         c.nullDecl = wasNull
         if rt == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Lvalue.Deref(sp, rt, x)) }
-        if not c.isRef(rt) { c.roStore(x, values[0].Span(), RoReturned) } # T25c: the caller holds it writably
+        if not c.isRef(rt) { c.roStore(x, values[0].Span(), RoReturned) } else { c.roRefResult(x) } # T25c
         c.emit(typed.Stmt.Return(sp, x))
         return
     }

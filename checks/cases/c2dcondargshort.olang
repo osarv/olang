@@ -1,4 +1,6 @@
-# check: fail this instance holds a reference to an argument it would outlive
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # C2d, E28: a constructor argument given a conditional of new text and an inner block's text - the instance holds the
 # inner text through it, so kept outside that block it must be refused, the new value notwithstanding
 type E struct(A String&, B String&) {

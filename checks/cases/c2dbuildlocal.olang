@@ -1,4 +1,6 @@
-# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # C2d/O23: a field written '&p' lives where its argument did - unknown through an element of an array, where only its
 # container's scope is known, an underestimate a local would wrongly claim as its own
 type N struct(v I32, nx mut N&) {

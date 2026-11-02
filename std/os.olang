@@ -65,7 +65,7 @@ fn check(result I64) ? Error {
 # text a runtime function copies out (X6): fill(buf) copies what fits of it into buf and gives its whole length, or
 # a negative one when it fails. Measured, then filled at that length - again if it grew in between, as a directory
 # being written to can.
-fn copyOut(fill fn(buf mut Array<U8>&) I64) String& ? Error {
+fn copyOut(fill fn(buf mut Array<U8>&) I64) mut String& ? Error {
     n := fill(Array<U8>(0))
     for {
         try check(n)
@@ -94,7 +94,7 @@ fn Args() mut Array<String&>& {
 }
 
 # the value of the environment variable "name" - failing with NOT_FOUND when it is not set (one set to nothing is "")
-fn Env(name String&) String& ? Error {
+fn Env(name String&) mut String& ? Error {
     key := $name "\0"
     return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_env(key, buf, buf.Len()) })
         catch Error { error Error.NotFound }
@@ -362,7 +362,7 @@ fn readBack(fd I32) mut String& ? Error {
 
 # the whole of the file at "path", built where the caller puts it, or where the scope argument says
 # ("os.ReadFile&x(p)" builds it where x lives)
-fn ReadFile(path String&) String& ? Error {
+fn ReadFile(path String&) mut String& ? Error {
     if IsDir(path) { error Error.IsDir }            # a directory opens, and its size means nothing
     fd := fcntl.open($path "\0", 0)
     try check(fd)
@@ -517,7 +517,7 @@ fn removeTree(path String&) ? Error {
 # "dir", or where the environment's TMPDIR says when "dir" is "" (and in /tmp when that is not set or empty), named
 # "prefix" followed by six characters chosen to make the name unused. Only this user may read, write or enter it
 # (mode 0700). Removing it once done is the caller's - RemoveAll
-fn MkTemp(dir String& = "", prefix String& = "") String& ? Error {
+fn MkTemp(dir String& = "", prefix String& = "") mut String& ? Error {
     if prefix.Contains("/") { error Error.Failed }      # a name, never a path below "dir"
     base := tempDir(dir)
     sep := "" if base.EndsWith("/") else "/"
@@ -561,13 +561,13 @@ fn ReadLink(path String&) mut String& ? Error {
 }
 
 # "path" made absolute, with every symbolic link, "." and ".." resolved - what it really names, which must exist
-fn RealPath(path String&) String& ? Error {
+fn RealPath(path String&) mut String& ? Error {
     p := $path "\0"
     return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_realpath(p, buf, buf.Len()) })
 }
 
 # the directory the program is working in, as an absolute path
-fn Cwd() String& ? Error {
+fn Cwd() mut String& ? Error {
     return try RealPath(".")
 }
 
@@ -582,7 +582,7 @@ fn ReadDir(path String&) Array<String&>& ? Error {
 }
 
 # text quoted for the shell: one argument whatever it holds
-fn Quote(t String&) String& {
+fn Quote(t String&) mut String& {
     out String& = "'"
     start I64 = 0
     for i in range t.Len() {

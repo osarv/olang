@@ -10,7 +10,7 @@ type Parser struct(src String&) {
     src
     pos I64 = 0
 }
-fn (p mut Parser&) parse() Ast& {
+fn (p mut Parser&) parse() mut Ast& {
     p.pos++
     return Ast.Pair(Ast.Leaf(p.src.Len()), Ast.Leaf(p.pos))
 }

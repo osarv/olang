@@ -1,5 +1,6 @@
-# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
-# also: note: 'c' is declared here, in a block that closes first - declare it where 'ok' lives: 'c mut Counter&ok = ...'
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # B11: an obligation an argument from a loop body cannot meet - the note names the declaration to change
 type Counter struct() {
     n I64 = 0

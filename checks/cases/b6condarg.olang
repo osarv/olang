@@ -1,4 +1,6 @@
-# check: fail error[O25e]: these arguments live in different scopes
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # E28/O12/O25e (the batch 6 review): a conditional whose values live in different scopes, passed for a parameter whose scope
 # variable another argument determines - where it lives is not known here, so it determines nothing. It was taken for a
 # temporary, and the callee stored the loop body's text into the caller's bag

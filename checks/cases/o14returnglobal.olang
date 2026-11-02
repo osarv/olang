@@ -1,4 +1,4 @@
-# check: fail error[O14, T25c]: this returns a global's storage, and a built result is new storage its caller may write
+# check: fail error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
 # O14: a built result is new storage its caller may write (T25c) - a reference to an immutable global's storage handed
 # out as one would let "x mut String& = Show()" write the global, so it is refused where it is returned, naming the
 # by-value result, which copies it

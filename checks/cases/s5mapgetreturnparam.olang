@@ -1,4 +1,6 @@
-# check: fail the callee needs one argument's scope to outlive another's
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O10c beside s5mapgetreturn: the map is a parameter, so what the returned list holds is where the caller's map lives -
 # an obligation the call must meet. The map here dies with its block while the list is kept after it
 import "std/io"

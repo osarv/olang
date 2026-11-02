@@ -1,4 +1,4 @@
-# check: fail error[O25h]: this value holds references into a scope the target outlives
+# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
 # vec2, O25h: a copy's elements refer where the original's do (a Vec a value since 2026-11-01; it was a Clone) - kept
 # past the block they were made in, it would read them after that block's scope closes
 import "std/io"

@@ -1,4 +1,4 @@
-# check: fail a reference never narrows
+# check: fail error[O20]: 'v.n' lives where 'v' does, which closes first - keep a copy ('$v.n'), or keep what 'v' was made from
 # O2a/O23a: a field written "&p" read through a local reads at the block its argument lives in - which depth that is was
 # dropped on the way through the member, so v.n read as the function's outermost block and keep took a reference into
 # the loop body's arena
@@ -16,4 +16,6 @@ fn main() ? {
         v := View(inner)
         keep = v.n
     }
+    assert $base != ""
+    assert $keep != ""
 }

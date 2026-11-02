@@ -1,4 +1,4 @@
-# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
 # O14b/T22a: a lambda handing back one of its arguments fits Fold's callback - whose type-variable result requires each
 # argument to outlive the result - so Fold's result lives no longer than the words; kept past their block, it would not
 fn main() ? {
@@ -10,4 +10,5 @@ fn main() ? {
         words.Push($i "abc")
         longest = words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
     }
+    assert $longest != ""
 }

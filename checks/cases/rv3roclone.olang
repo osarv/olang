@@ -1,4 +1,4 @@
-# check: fail error[T25c]: 'Clone' keeps what its parameter 'l' reaches where it can be written
+# check: fail error[T25c]: 'Clone' keeps what its parameter 'l' reaches where it can be written, and this List<List<I64>> is read-only - pass a writable one
 # T25c: a clone of a List of Lists shares the inner lists, writable - so Clone needs a writable list in that
 # instantiation (with I64 elements it takes a read-only one)
 # (std/list's List, a handle; a Vec, a value since 2026-11-01, has no Clone)

@@ -1,4 +1,6 @@
-# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # C2d/O23a, an over-rejection kept for now: an iterator helper hands its callback elements read through the iterator's
 # "&p" field - a scope derived from the iterator's - and a callback, a body not known there, may build through an element
 # something can be stored through; refused at the program's use even where the callback only reads

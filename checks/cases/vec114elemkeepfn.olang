@@ -1,4 +1,6 @@
-# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # Vec phase 2a (O10c): a function pushing a Tok of its text argument into a Vec it is given needs the text to outlive
 # the Vec
 import "std/io"

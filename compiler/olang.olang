@@ -1239,7 +1239,7 @@ test "explain FILE NAME prints an item as the compiler sees it: inferred errors,
             "    [part >= 0]\n    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
     assert explained("link") == ("fn link(a mut N&, b N&)\n    # scopes: b outlives a\n" $
             "    # not a value: its scope obligations (# scopes, above) relate its arguments' scopes, which a call through a function value cannot check (T22a) - call it directly\n" $
-            "    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
+            "    # effects: writes through 'a'; allocates nothing; never blocks; always ends; may be computed while compiling\n")
     assert explained("nope").Contains("error[B11b]: 'nope' is no top-level item of ")
 }
 

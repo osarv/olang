@@ -1,4 +1,6 @@
-# check: fail the callee needs one argument's scope to outlive another's
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O18c: a call's value result holding what its argument refers to, passed straight to another call, lives where that
 # argument does - here the loop's block, which the list outlives ("b := box(t); bs.Push(b)" is the same error)
 import "std/io"

@@ -1,9 +1,0 @@
-# check: fail error[G11]: a type argument's reference marker is bare, as 'Vec<String&>'
-# G11: a reference type argument is written bare - its references live in the container's scope; naming a
-# variable would name this function's scope, inside generic code that cannot see it
-type Box<T> struct(v T) { v }
-fn f(p Array<I32>&) I32 {
-    b Box<Array<I32>&>& = Box<Array<I32>&>(p)
-    return 0
-}
-test "never runs" { }

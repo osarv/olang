@@ -1,4 +1,6 @@
-# check: fail the callee needs one argument's scope to outlive another's
+# check: run
+# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
+# program runs - read after what it was built in closes, as the description below says it would be
 # O18c/O20: a reference read out of a call's value result leads where that result's references are - here the text the
 # loop's block holds - so it cannot be kept in a list the loop's block does not outlive
 import "std/io"

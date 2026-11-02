@@ -1,9 +1,10 @@
-# B3e: interpret refuses what a build refuses, section 8's errors included - a block's text kept in a list outside it
+# B3e: interpret refuses what a build refuses, section 8's errors included - a view of a block's text kept in a list
+# outside it (O27: no storage is extended for a view)
 fn main() {
     keep := Vec<String&>()
     for i in range 3 {
         t := "inner" $i
-        keep.Push(t)
+        keep.Push(t[0:2])
     }
     assert keep.Len() == 3
 }
