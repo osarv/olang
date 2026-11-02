@@ -1,7 +1,7 @@
-# check: fail x[i] gives a copy, and the call can build into what it holds where the copy is
-# E31b/O17: a "mut" method called on x[i] - an element that is no handle. Tag writes nothing of the copy's own
-# storage (it pushes through the List the element holds), so the copy is lent with nothing written back - but it builds
-# the text where the copy is, the statement's block, not where the collection's list lives (O17's split value)
+# check: run
+# E31b/O17: a "mut" method called on x[i] - an element that is no handle - its other argument a plain value: made on the
+# element in place, through the Vec's RefMut, so what Tag builds lands where the element lives and every push is the
+# element's (it was refused while the call was the copy's: the copy built where the statement's block is, O17)
 type Rec struct(name String&) {
     name
     tags Vec<String&> = Vec<String&>()
@@ -12,4 +12,5 @@ fn main() ? {
     l := Vec<Rec>()
     l.Push(Rec("a"))
     for _ in range 3 { l[0].Tag("lit") }
+    assert l[0].tags.Len() == 3 and l[0].tags[2] == "lit"
 }

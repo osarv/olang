@@ -219,6 +219,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     atRecs Vec<atRec>                     # each x[i] read through At as a place: what writing back through it needs
     laneNodes Vec<laneNode>               # E39: the lane operations not built yet, a placeholder naming each
     laneAccept Bool = false                # E39: the expression checked next may be left as lanes for its taker
+    spawning I64 = 0                       # E31b: inside a spawn's task, where no call through x[i] is made in place
     lastErrs types.ListId = types.ListId(0)   # the errors of the call checked last (P4: a task's)
     tryStmt Bool = false                      # the try being built is a statement: its clauses give no value (R11)
     decided Bool = false                      # the call being built is a declared number's constructor run on a literal (T29d)
@@ -12190,7 +12191,184 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
     }
     # M6: a method is public by its first letter - another module's private one is said, and called still
     if not name[0].IsUpper() and c.P.FnModule(m) != c.fr().Mi { c.err(nsp, msgs.MethodIsPrivate(c.tok(n))) }
-    return c.invoke(sp, nsp, m, rx, args, Array<typed.Expr&>(0))
+    return c.inPlaceCall(sp, c.invoke(sp, nsp, m, rx, args, Array<typed.Expr&>(0)))
+}
+
+# E31b: a call writing through x[i] - its receiver a writable borrow of the element At gives - made on the element in
+# place, through the collection's RefMut, where it has one and nothing the call's other arguments do could change the
+# collection before the call: they are plain values (literals, reads, operations over them), so the element's
+# reference, taken first, is the element's still when the call runs - and it is no spawned task's, which the
+# collection's growth while it runs would leave writing the old storage. Otherwise the call stays the copy's (section
+# 8's error, naming x.RefMut(i))
+fn (c mut Checker&) inPlaceCall(sp source.Span, call typed.Expr&) typed.Expr& {
+    cl := match call {
+        case typed.Expr.Call(_, _, k): k
+        case _: null
+    }
+    if c.spawning > 0 or cl is null or cl.Args.Len() == 0: return call
+    tv := c.atTemp(cl.Args[0])
+    if tv is null: return call
+    for j in range 1, cl.Args.Len() {
+        if not c.plainArg(cl.Args[j]): return call
+    }
+    ref := c.inPlaceRef(sp, tv)
+    if ref is null: return call
+    args mut Array<typed.Expr&>& = Array<typed.Expr&>(cl.Args.Len(), ref)
+    for j in range 1, cl.Args.Len() { args[j] = cl.Args[j] }
+    return typed.Expr.Call(call.Span(), typeOf(call), typed.Call(cl.Target, args, cl.Scoped, cl.Site, cl.Zero, cl.Tail))
+}
+
+# the At call whose value a writable borrow lends - a temporary's storage, or one made for it (E12) - null for any other
+fn (c mut Checker&) atTemp(x typed.Expr&) typed.Expr?& {
+    v := match pastAway(x) {
+        case typed.Expr.Borrow(_, bt, bp): c.writableTemp(bt, bp)
+        case typed.Expr.Promote(_, pt, pr): pastAway(pr.X) if c.writable(pt) else null
+        case _: null
+    }
+    if v is null or not c.atCallee(v): return null
+    return v
+}
+
+# the At call whose value an argument lends - its temporary's storage borrowed, or storage made for it - null for any other
+fn (c mut Checker&) atValue(x typed.Expr&) typed.Expr?& {
+    v := match pastAway(x) {
+        case typed.Expr.Borrow(_, bt, bp): c.writableTemp(c.P.T.Ref(c.deref(bt), types.Writable), bp)
+        case typed.Expr.Promote(_, _, pr): pastAway(pr.X)
+        case _: null
+    }
+    if v is null or not c.atCallee(v): return null
+    return v
+}
+
+# the element an At call gives, as a writable reference to it in place - its collection's RefMut on the same indices,
+# the collection a writable place, a writable reference, or an element given so in turn (x[i][j]) - null where there is
+# none
+fn (c mut Checker&) inPlaceRef(sp source.Span, tv typed.Expr&) typed.Expr?& {
+    at := c.callArgs(tv)
+    if at.Len() == 0: return null
+    recv := at[0]
+    of := types.UnknownT
+    inner := c.atValue(recv)
+    bp := match recv {
+        case typed.Expr.Borrow(_, _, q): q
+        case typed.Expr.Read(_, _, q, _): q if not c.isRef(typeOf(recv)) else null
+        case _: null
+    }
+    if inner is not null {
+        r := c.inPlaceRef(sp, inner)
+        if r is null: return null
+        recv = r
+        of = c.deref(typeOf(recv))
+    } else if bp is not null {
+        if bp == typed.Lvalue.Temp or not c.placeWritable(bp): return null
+        recv = c.read(sp, bp)
+        of = c.deref(bp.Type())
+    } else {
+        if not c.writable(typeOf(recv)): return null
+        of = c.deref(typeOf(recv))
+    }
+    rm := c.inPlace(of, at.Len() - 1, typeOf(tv))
+    if rm < 0: return null
+    idx mut Array<typed.Expr&>& = Array<typed.Expr&>(at.Len() - 1, c.hole(sp))
+    for i in range idx.Len() { idx[i] = at[i + 1] }
+    return c.invoke(sp, sp, rm, recv, Array<ast.Expr&>(0), idx)
+}
+
+# x, past the Away nodes a value given away is wrapped in
+fn pastAway(x typed.Expr&) typed.Expr& {
+    return match x {
+        case typed.Expr.Away(_, _, y): pastAway(y)
+        case _: x
+    }
+}
+
+# the value a writable borrow of a temporary's storage borrows, null for any other
+fn (c mut Checker&) writableTemp(bt types.TypeId, bp typed.Lvalue&) typed.Expr?& {
+    if not c.isRef(bt) or (c.P.T.PermOf(bt) & types.Writable) == 0: return null
+    return match bp {
+        case typed.Lvalue.Temp(_, _, v, _): v
+        case _: null
+    }
+}
+
+# whether a call is of a method At (E31)
+fn (c mut Checker&) atCallee(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Call(_, _, k) {
+            match k.Target {
+                case typed.Callee.Body(id) {
+                    match c.Bodies[I64(id)].Of {
+                        case typed.BodyOf.Fn(inst) {
+                            fd := c.P.FnDecl(c.P.InstanceFn(inst))
+                            return fd.Recv is not null and c.text(fd.Name) == "At"
+                        }
+                        case _ { return false }
+                    }
+                }
+                case _ { return false }
+            }
+        }
+        case _ { return false }
+    }
+}
+
+# whether an argument evaluates nothing that could change a collection: a literal, constant data, a read or borrow of a
+# place reached through no call, an operation over such, a constructor called on such (a value of its own being made)
+fn (c mut Checker&) plainArg(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _): true
+        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q): plainPlace(q)
+        case typed.Expr.Prim(_, _, op, _, args): op != typed.PrimOp.Retire and c.plainArgs(args)
+        case typed.Expr.Call(_, _, k): c.ctorCall(k) and c.plainArgs(k.Args)
+        case typed.Expr.Away(_, _, y): c.plainArg(y)
+        case _: false
+    }
+}
+
+fn (c mut Checker&) plainArgs(xs Array<typed.Expr&>&) Bool {
+    for x in xs {
+        if not c.plainArg(x): return false
+    }
+    return true
+}
+
+# whether a call is of a constructor
+fn (c mut Checker&) ctorCall(k typed.Call&) Bool {
+    return match k.Target {
+        case typed.Callee.Body(id): match c.Bodies[I64(id)].Of {
+            case typed.BodyOf.Ctor(_, _): true
+            case _: false
+        }
+        case _: false
+    }
+}
+
+# a read reached through no call: a literal, a read of such a place, an operation over such
+fn plainIndex(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _): true
+        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q): plainPlace(q)
+        case typed.Expr.Prim(_, _, op, _, args): op != typed.PrimOp.Retire and plainIndexes(args)
+        case _: false
+    }
+}
+
+fn plainIndexes(xs Array<typed.Expr&>&) Bool {
+    for x in xs {
+        if not plainIndex(x): return false
+    }
+    return true
+}
+
+fn plainPlace(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Local(_, _, _), typed.Lvalue.Global(_, _, _, _): true
+        case typed.Lvalue.Field(_, _, b, _): plainPlace(b)
+        case typed.Lvalue.Payload(_, _, pl): plainPlace(pl.Base)
+        case typed.Lvalue.Elem(_, _, e): plainPlace(e.Base) and plainIndex(e.Index)
+        case typed.Lvalue.Deref(_, _, r): plainIndex(r)
+        case _: false
+    }
 }
 
 # f(args) through a value (E13b): a function value, or an instance whose type declares Call (E31)
@@ -15787,6 +15965,8 @@ fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
 # spawn f(a) / spawn x, y = try f(a) catch E ... / spawn fn() { } (P1, P1g, P4, D16e): a call run as a task of the
 # innermost join; what its clauses do not take reaches the join (P4b)
 fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call ast.Expr&) {
+    c.spawning++
+    defer c.spawning--
     fr := c.fr()
     if fr.DeferLoops >= 0 and fr.joins.Len() <= fr.DeferJoins {
         c.err(sp, msgs.SpawnInDefer())

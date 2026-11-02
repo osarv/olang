@@ -1,6 +1,6 @@
-# check: fail x[i] gives a copy of the element, which this call would write
-# E31b/O17b (G2): a handle element is lent as its reference only to a callee that uses it through that reference alone -
-# Reset assigns the handle's own field, which would write the copy and be lost
+# check: run
+# E31b/O17b (G2): Reset assigns the element's own field - which, made on a copy, would be lost - so the call is made on
+# the element in place, through the Vec's RefMut (its arguments plain values): the element itself is reset
 type State struct() {
     n I64 = 0
 }
@@ -15,4 +15,6 @@ fn main() ? {
     bags.Push(Bag())
     bags[0].Add(5)
     bags[0].Reset()
+    bags[0].Add(2)
+    assert bags[0].s.n == 2
 }

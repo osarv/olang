@@ -1271,7 +1271,7 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
         # O8d: what a sole place let go of - a reference, its object in a region (or none: null, constant data)
         case Stmt.Release(_, p) {
             pt := v.placeType(p)
-            if pt != types.UnknownT and not t.IsRef(pt) and t.Anchors(pt).Len() == 0 {
+            if pt != types.UnknownT and not t.IsRef(pt) and not t.OwnedPart(pt) and t.Anchors(pt).Len() == 0 {
                 v.bad("a release of a " $v.canon(pt) ", not a reference or an owner")
             }
         }

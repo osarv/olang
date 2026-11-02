@@ -3538,7 +3538,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
             # O8d: the region the reference p holds was built in released (none for null or constant data), p left null;
             # an owner's, the region its first anchor holding storage names
             at, pty := fe.addr(p)
-            if not t.IsRef(pty) {
+            if not t.IsRef(pty) and not t.OwnedPart(pty) {
                 fe.E.runtime("__olang_region_drop")
                 fe.w("call void @__olang_region_drop(ptr " $fe.anchorRegion(at, pty) ")")
                 fe.store(fe.ty(pty), "zeroinitializer", at)

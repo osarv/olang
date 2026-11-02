@@ -3925,7 +3925,17 @@ shrinks the collection leaves the held index out of range when the access runs -
 between the read and the write-back, and is a compile-time error naming the written-out form (`t := x[i]`, the store
 into `t`, then `x[i] = t`).
 
-**A call that could write the copy is an error**: a method with a writable receiver called on `x[i]` (or on a field or
+**A call writing through `x[i]` is made in place** where it can be, by the store's rule above: a method with a writable
+receiver called on `x[i]` itself, `x[i].M(args)` (or on `x[i][j]`, every level taken in place), where the collection
+declares `RefMut` (as a store needs) and is reached writably - a writable place, or a writable reference - and every
+other argument of the call is a **plain value**: a literal, constant data, a read of a local, a global or a field of
+them (an element of an array indexed by such), an operation over plain values, a constructor called on plain values.
+The receiver is then `x.RefMut(i)`, taken before the arguments are evaluated, which nothing they do can change:
+`v[i].Push(x)`, `accs[i % 3].Add(2 * n)`, `grid[0][0].Push(4)`, `rows[k].Truncate(0)`. Not in a spawned call (a task
+holding the element's reference while the collection could grow under it), not for an argument read through `x[i]` (a
+call of `At`) or any other call - hold such an argument in a local first.
+
+**A call that could write the copy is an error** otherwise: a method with a writable receiver called on `x[i]` (or on a field or
 an element of it), `x[i].M()`, or `x[i]` passed for a writable reference parameter, `g(x[i])` - where the element is not a **handle** (O17b) - the callee runs between the read and the write-back and may reach the collection another way,
 so one of the two writes would be lost. The error names the written-out form, `t := x[i]`, the call on `t`, then
 `x[i] = t`, which says which write wins, or holding the elements by reference (`List<mut T&>`). A method with a
@@ -5900,6 +5910,18 @@ closes - when the place was its **only holder**:
 5. the place can let go again before its scope closes: it is let go of in a loop, or in a function that can run again
    while the place lives;
 6. no reference read from what the place holds is in use across a call that may make the place let go.
+
+A **value owning storage held in place** - a `Vec`, a `Map`, a `StringBuilder` held by value in a field, a `Map`'s
+value - is a place's value as a referent is: what it owns (its arrays, and what is built where they are) is reclaimed when
+the place lets go of it, under the same conditions, made for the place meaning all of its storage built for it, and
+nothing else is built into it while the place holds it - so a value of it changed in place (a store into it, a writable
+reference to it handed to a call) makes the place keep, and so does a value holding it made with no store into the place
+(a copy of a struct, a `Map` or an array holding it; a value a call hands back as a view, copied where it is kept, D9h).
+A collection's **own storage** - a `Vec`'s buffer, a `Map`'s slot arrays, any array of a run-time length a struct holds
+by value - is a place too: what the collection's growth replaces is reclaimed as it grows, where the conditions hold -
+no view of the old storage in use across the growth (`View()`, `Ref()`, an element's reference, condition 6), every
+array it is given built for it with no element reaching into its own storage - except where the collection is itself
+such a value held in a place that reclaims it whole.
 
 A reference read from what a place holds that is still in use after the place lets go - in the function holding the
 reference, or across a call that may make it let go (condition 6) - makes the place keep what it lets go of. Each

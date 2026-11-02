@@ -1,0 +1,25 @@
+# check: run
+# E31b: calls writing through x[i] made on the element in place through the Vec's RefMut - a Vec of structs and a Vec
+# of Vecs, two levels - their arguments plain values (literals, locals, fields, arithmetic over them)
+type Acc struct() {
+    n I64 = 0
+    log Vec<I64> = Vec<I64>()
+}
+fn (a mut Acc&) Add(x I64) {
+    a.n += x
+    a.log.Push(x)
+}
+fn main() ? {
+    accs := Vec<Acc>()
+    for _ in range 3 { accs.Push(Acc()) }
+    for i in range 30 { accs[i % 3].Add(i * 2 + 1) }
+    assert accs[0].n == 1 + 7 + 13 + 19 + 25 + 31 + 37 + 43 + 49 + 55
+    assert accs[2].log.Len() == 10 and accs[2].log[9] == 59
+    grid := Vec<Vec<Vec<I64>>>()
+    grid.Push(Vec<Vec<I64>>())
+    grid[0].Push(Vec<I64>())
+    grid[0][0].Push(4)
+    n1 := accs[1].n          # (an argument read through x[i] is a call of At: held in a local first)
+    grid[0][0].Push(n1)
+    assert grid[0][0].Len() == 2 and grid[0][0][1] == n1
+}

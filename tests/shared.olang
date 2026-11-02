@@ -18681,3 +18681,27 @@ test "S6: text lent writably as an Array<Char> where it may be written" {
     assert bulk3Texts() == "zello zutable"
     assert Bulk3TextsBaked == "zello zutable"
 }
+
+# E31b: a call writing through x[i] - a "mut" method on the element - made on the element in place through the
+# collection's RefMut, where its other arguments are plain values; the evaluator makes it the same way (a baked global)
+fn inPlaceCalls() String {
+    v := Vec<Vec<I64>>()
+    for _ in range 3 { v.Push(Vec<I64>()) }
+    for i in range 3 {
+        for j in range 4 { v[i].Push(i * 10 + j) }
+    }
+    k := 2
+    v[k].Push(99)
+    v[1].Truncate(2)
+    return $v
+}
+InPlaceCallsBaked String = inPlaceCalls()
+test "E31b: a mutating call through x[i] is made on the element in place, as the evaluator makes it" {
+    want := "Vec<Vec<I64>>[Vec<I64>[0, 1, 2, 3], Vec<I64>[10, 11], Vec<I64>[20, 21, 22, 23, 99]]"
+    assert inPlaceCalls() == want
+    assert InPlaceCallsBaked == want
+    # read back after an arena churn: the elements' buffers grew where the elements live
+    churn := Vec<String>()
+    for i in range 200 { churn.Push($"churn " $i) }
+    assert churn.Len() == 200 and inPlaceCalls() == want
+}

@@ -10,8 +10,10 @@
 # are its chunks' or buckets' (2.1, 2.6). It is sole when every value stored into it was made for it (built where the
 # store is, null, constant data, or moved out of the same place), no reference read from it is stored anywhere else,
 # none is in use across a let-go of it, no task can reach it, and what it holds has no destructor (O8d's conditions).
-# A value owning storage held in place - a Vec or a Map field by value (QCE) - is no place: what a replaced one owned is
-# kept until its container's scope closes (a recorded limit; held by reference, "m mut Map<K, V>&", it is one).
+# A value owning storage held in place - a Vec or a Map field by value (QCE) - is an owner place (ownerCand): all of its
+# storage built in one region, released through its anchors (types.Anchors); and an array a struct holds by value - a
+# Vec's buffer, a Map's slots - is an array place (arrayCand), what a collection's growth replaces released as it grows.
+# Owners win: an array an owner held in a sole place holds keeps, its owner's one region reclaiming it.
 # The same proof decides each x.Destroy() (C9b): the local x is a place of its own (a destroy target), sole when every
 # value it is given was made for it - built at a site of a block of its body, or moved out of a collection's place
 # whose values have destructors (a dtor place: never freed by a let-go, O15, but its values built in regions when a
@@ -99,7 +101,7 @@ RView I64 = 3     # a view in use across a let-go of it (condition 6)
 RTask I64 = 4     # the program has tasks (condition 3)
 RDtor I64 = 5     # a destructor (condition 4)
 RInPlace I64 = 6  # an owner's value changed in place (ownerCand)
-RCopied I64 = 7   # a value holding an owner's copied where no store is made for it (ownerLeaves)
+RCopied I64 = 7   # a value holding an owner's copied where no store is made for it (heldPlaces)
 
 # a store into a candidate place: the value's classification, and where it is built if made for the place
 type store struct(PlaceId I64, Body I64, File I64, Sp source.Span, Kind I64, Of I64, Site I64, X typed.Expr?&, Root typed.Expr?&) {
@@ -168,6 +170,13 @@ type orStore struct(Body I64, PlaceId I64, X typed.Expr&, Root typed.Expr&) {
 }
 
 # a leaf of a value held in place: a candidate place inside it, by the fields that reach it
+# a retire() of a local's array (M19d) in a body, at sp, with what the local may refer into
+type retire struct(Body I64, Sp source.Span, Orig Vec<I64>) {
+    Body
+    Sp
+    Orig
+}
+
 type leaf struct(Path Array<I64>, PlaceId I64) {
     Path
     PlaceId
@@ -190,12 +199,14 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     keyField Vec<I64>
     handle Vec<Bool>
     owner Vec<Bool>           # by place: an owner held in place (types.Anchors) - a Vec, a Map held by value
+    arr Vec<Bool>             # by place: an array of a run-time length a struct holds by value - a Map's slots
+    retires Vec<retire>       # the prelude's retire() of a view of an array place's old value (arrayCand)
     valTy Vec<types.TypeId>
     placeOf Map<pair.Pair<I64, I64>, I64>
     typeAsked Map<pair.Pair<I64, I64>, I64>    # a key asked: 1 no candidate, 2 a candidate (place in placeOf)
     safeAsked Map<types.TypeId, I64>             # contents asked: 1 being asked, 2 no, 3 yes
     leafAsked Map<types.TypeId, Vec<leaf>>
-    ownersAsked Map<types.TypeId, Vec<I64>>    # ownerLeaves, by type
+    ownersAsked Map<types.TypeId, Vec<I64>>    # heldPlaces, by type
     # by body: its module, whether its code is emitted in the root's object, whether it is the program's own (not std)
     module Vec<I64>
     rootEmitted Vec<Bool>
@@ -221,6 +232,8 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # the program: whether it has tasks (or an extern given a function value), whether a destructor, Str, Eq or Hash
     # lets go of something (they run where no call is written)
     tasks Bool = false
+    taskAt Vec<Bool>          # by body: it starts a task, or gives C a function value (reachedTasks)
+    named Vec<Bool>           # by body: named as a function value somewhere
     hidden Bool = false
     hiddenAt Vec<I64>         # the places a destructor, Str, Eq or Hash may let go of (where hidden is not set)
     # the final pass's events
@@ -305,11 +318,16 @@ fn (f mut Free&) ownerCand(ty types.TypeId) Bool {
     return t.Anchors(ty).Len() > 0 and f.safe(ty)
 }
 
+# whether a field's type is an array of a run-time length held by value, its elements holding nothing an early free
+# cannot meet: its own storage - a Vec's buffer, a Map's slots - built in a region of its own where the place is sole,
+# so the array a collection's growth replaces is released as it grows (its retire() is then left out: rmRetire)
+fn (f mut Free&) arrayCand(ty types.TypeId) Bool { return f.T().OwnedPart(ty) and f.safe(ty) }
+
 # the owner places a value of type ty holds by value - a struct's own owner fields and what its by-value fields, an
 # array's elements and an enum's payloads hold in turn. A copy of such a value makes values of those places with no
 # store into them, built where the copy is - outside any region of their own - so a place a copy reaches keeps
 # (RCopied), but where the copy is itself the value a store makes for the place (copyInto's view constructor)
-fn (f mut Free&) ownerLeaves(ty types.TypeId) Vec<I64> {
+fn (f mut Free&) heldPlaces(ty types.TypeId) Vec<I64> {
     t := f.T()
     r := t.Plain(t.Repr(ty))
     if f.ownersAsked.Has(r) { return try f.ownersAsked.Get(r) catch default Vec<I64>() }
@@ -317,24 +335,24 @@ fn (f mut Free&) ownerLeaves(ty types.TypeId) Vec<I64> {
     f.ownersAsked.Put(r, out)        # (none while asked: a type holds itself by value only through an array)
     k := t.KindOf(r)
     if k == types.Kind.Array {
-        out = f.ownerLeaves(t.Elem(r))
+        out = f.heldPlaces(t.Elem(r))
     } else if k == types.Kind.Named and t.HasBody(r) {
         dk := t.DeclKindOf(t.DeclOf(r))
         if dk == types.DeclKind.Struct {
             fs := t.Items(t.Fields(r))
             for i in range fs.Len() {
                 q := f.placeKey(r, i)
-                if q >= 0 and f.owner[q] { addTo(out, q) }
-                if not t.IsRef(fs[i]) { addAllTo(out, f.ownerLeaves(fs[i])) }
+                if q >= 0 and (f.owner[q] or f.arr[q]) { addTo(out, q) }
+                if not t.IsRef(fs[i]) { addAllTo(out, f.heldPlaces(fs[i])) }
             }
         } else if dk == types.DeclKind.Enum {
             for c in t.Items(t.Cases(r)) {
-                if not t.IsRef(c) { addAllTo(out, f.ownerLeaves(c)) }
+                if not t.IsRef(c) { addAllTo(out, f.heldPlaces(c)) }
             }
         }
     } else if k == types.Kind.Record or k == types.Kind.Tuple {
         for c in t.Items(t.Parts(r)) {
-            if not t.IsRef(c) { addAllTo(out, f.ownerLeaves(c)) }
+            if not t.IsRef(c) { addAllTo(out, f.heldPlaces(c)) }
         }
     }
     f.ownersAsked.Put(r, out)
@@ -412,6 +430,7 @@ fn (f mut Free&) placeKey(ty types.TypeId, i I64) I64 {
     vt := types.UnknownT
     hd := false
     ow := false
+    ar := false
     dt := false
     if i < 0 {
         if t.KindOf(r) == types.Kind.Array {
@@ -435,6 +454,10 @@ fn (f mut Free&) placeKey(ty types.TypeId, i I64) I64 {
                 cand = true
                 ow = true
             }
+            if not cand and f.arrayCand(vt) {
+                cand = true
+                ar = true
+            }
             if not cand and f.dtorCand(vt) {
                 cand = true
                 dt = true
@@ -447,6 +470,7 @@ fn (f mut Free&) placeKey(ty types.TypeId, i I64) I64 {
     }
     n := f.newPlace(r, i, hd, vt, dt)
     f.owner[n] = ow
+    f.arr[n] = ar
     f.placeOf.Put(k, n)
     f.typeAsked.Put(k, 2)
     return n
@@ -460,6 +484,7 @@ fn (f mut Free&) newPlace(ty types.TypeId, field I64, hd Bool, vt types.TypeId, 
     f.keyField.Push(field)
     f.handle.Push(hd)
     f.owner.Push(false)
+    f.arr.Push(false)
     f.valTy.Push(vt)
     f.whyKind.Push(RNone)
     f.libTaken.Push(false)
@@ -635,6 +660,8 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64, destroys Bool = true) {
         f.withinLocals.Push(Vec<I64>())
         f.freshLocals.Push(Vec<Bool>())
         f.callers.Push(Vec<I64>())
+        f.taskAt.Push(false)
+        f.named.Push(false)
         f.saved.Push(Array<I64>(0))
         f.savedAt.Push(Array<I64>(0))
         f.dIn.Push(false)
@@ -721,12 +748,61 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64, destroys Bool = true) {
     t3 := time.Now()
     for b in range n { f.walk(b, true) }
     t4 := time.Now()
+    f.tasks = f.reachedTasks()
     f.decide()
     f.Done = true
     f.writePlans()
     f.destroyErrors()
     t5 := time.Now()
     if f.Debug { try io.PrintErr($"free: final " $((t4 - t3) / 1000000) " ms, " $f.goes.Len() " let-goes, " $f.stores.Len() " stores; decide " $((t5 - t4) / 1000000) " ms\n") catch io.Error { } }
+}
+
+# whether the program may start a task (condition 3): a body that starts one, or gives C a function value, reached from
+# where the program's code may begin - every body but a plain function's (main, a test, an initializer, a lambda, a
+# method a table may call, a constructor, a destructor), a function named as a value or exported - through the calls
+# the scope pass and the walks found. A function nothing reaches starts nothing (std/os's RunOnStack, never called)
+fn (f mut Free&) reachedTasks() Bool {
+    n := f.Bodies.Len()
+    seen := Array<Bool>(n)
+    work Vec<I64>
+    for b in range n {
+        if not f.entry(b): continue
+        seen[b] = true
+        work.Push(b)
+    }
+    callees Vec<Vec<I64>>
+    for _ in range n { callees.Push(Vec<I64>()) }
+    for b in range n {
+        for c in f.callers[b] {
+            if c >= 0 and c < n: callees.RefMut(c).Push(b)
+        }
+    }
+    for at := 0, at < work.Len(), at++ {
+        b := work[at]
+        if f.taskAt[b]: return true
+        for c in f.Sc.CalleesOf(b) {
+            if c < 0 or c >= n or seen[c]: continue
+            seen[c] = true
+            work.Push(c)
+        }
+        for c in callees[b] {
+            if seen[c]: continue
+            seen[c] = true
+            work.Push(c)
+        }
+    }
+    return false
+}
+
+# whether a body is where the program's code may begin (reachedTasks): anything but a plain function no one names
+fn (f mut Free&) entry(b I64) Bool {
+    i := match f.Bodies[b].Of {
+        case typed.BodyOf.Fn(inst): inst
+        case _: -1
+    }
+    if i < 0 or f.named[b]: return true
+    d := f.P.FnDecl(f.P.InstanceFn(i))
+    return d.Recv is not null or d.Export or f.P.L.Names.Text(d.Name) == "main"
 }
 
 # whether a body runs where no call is written: a destructor, or a method lowering calls by its name (E11c, E10a)
@@ -1151,7 +1227,7 @@ fn (w mut walker&) inOwner(o Vec<I64>&, but I64, sp source.Span, how String&) {
 # a value holding owners made with no store into their places (a copy, a call's value copied, D9h): those places keep
 fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&) {
     if not w.Final or w.quiet > 0 { return }
-    for k in w.F.ownerLeaves(ty) {
+    for k in w.F.heldPlaces(ty) {
         w.F.keep(k, RCopied, w.body().File, sp, $"a value holding it is made with no store into it, by " $how ": '" $w.text(sp) "'")
     }
 }
@@ -1246,14 +1322,14 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             w.inDefer--
         }
         case typed.Stmt.Join(_, j) {
-            w.F.tasks = true
+            w.F.taskAt[w.Id] = true
             w.block(j.Code)
             for c in j.Clauses {
                 if c.Code is not null: w.block(c.Code!)
             }
         }
         case typed.Stmt.Spawn(sp, s) {
-            w.F.tasks = true
+            w.F.taskAt[w.Id] = true
             w.expr(s.Task)
             if w.Final and w.F.dIn[w.Id] { w.handedToTask(sp, s.Task) }
             for c in s.Clauses {
@@ -1582,6 +1658,69 @@ fn (w mut walker&) eval(sp source.Span, x typed.Expr&) {
 }
 
 # the call an expression is, under a try, null for none
+# an array place's elements hold no reference and own nothing (arrayCand): none can reach into an array's own region
+fn (f mut Free&) plainElems(k I64) Bool {
+    t := f.T()
+    el := t.Elem(t.Repr(f.valTy[k]))
+    return not t.HoldsRefs(el) and not t.OwnsParts(el)
+}
+
+# whether a value made for an array place is a comprehension each of whose elements is one already there - moved or
+# read out of other storage (grown()'s), never one built with it in its region: so no element of an array place's
+# value reaches into that value's region, which is why an element read out of one is no view of it (elemRead)
+fn movesOnly(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Collect(_, _, c): yieldsMoved(c.Loop)
+        case typed.Expr.Seq(_, _, q): q.X is not null and movesOnly(q.X!)
+        case typed.Expr.Away(_, _, y): movesOnly(y)
+        case _: false
+    }
+}
+
+fn yieldsMoved(b typed.Block&) Bool {
+    for st in b.Stmts {
+        if not stmtMoves(st): return false
+    }
+    return true
+}
+
+fn stmtMoves(st typed.Stmt&) Bool {
+    return match st {
+        case typed.Stmt.Yield(_, x): match x {
+            case typed.Expr.Take(_, _, _), typed.Expr.Read(_, _, _, _): true
+            case _: false
+        }
+        case typed.Stmt.Loop(_, body, post): yieldsMoved(body) and (post is null or yieldsMoved(post))
+        case typed.Stmt.Block(_, b): yieldsMoved(b)
+        case typed.Stmt.If(_, i): yieldsMoved(i.Then) and (i.Else is null or yieldsMoved(i.Else!))
+        case _: true
+    }
+}
+
+# whether a place is part of an element of an array, read by value: through fields and payloads of an element
+fn inElement(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Elem(_, _, _): true
+        case typed.Lvalue.Field(_, _, b, _): inElement(b)
+        case typed.Lvalue.Payload(_, _, pl): inElement(pl.Base)
+        case _: false
+    }
+}
+
+# what an element read out of an array place's value by value may refer into: not that value's region, which holds
+# none of what its elements reach (movesOnly) - so its place is dropped from the origins
+fn (w mut walker&) elemRead(p typed.Lvalue&, o mut Vec<I64>&) {
+    if not inElement(p) { return }
+    f := w.F
+    n := 0
+    for i in range o.Len() {
+        if okind(o[i]) == OPl and f.arr[oval(o[i])]: continue
+        o[n] = o[i]
+        n++
+    }
+    o.Truncate(n)
+}
+
 # whether a value stored whole is existing storage, which a store of a value array copies (T7b)
 fn copiedStore(x typed.Expr&) Bool {
     return match x {
@@ -1787,6 +1926,7 @@ fn (w mut walker&) reachTo(p typed.Lvalue&) Vec<I64> {
 fn (w mut walker&) readOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
     f := w.F
     o := w.reach(p)
+    w.elemRead(p, o)
     k := f.placeOfPlace(p)
     if k >= 0 {
         addTo(o, orig(OPl, k))
@@ -1812,6 +1952,7 @@ fn (w mut walker&) borrowOf(p typed.Lvalue&) Vec<I64> {
 fn (w mut walker&) takeOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
     f := w.F
     o := w.reachTo(p)
+    w.elemRead(p, o)
     k := f.placeOfPlace(p)
     lib := not f.programCode[w.Id]
     if k >= 0 {
@@ -1860,8 +2001,18 @@ fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
             addAllTo(out, ys)
             addTo(out, orig(ONew, I64(c.Site)))
         }
-        case typed.Expr.Prim(_, _, _, _, args) {
-            for a in args { addAllTo(out, w.expr(a)) }
+        case typed.Expr.Prim(psp, _, op, _, args) {
+            # the prelude's retire() of the array a collection replaced: no use of it - where its place is sole the
+            # array is released as it is replaced and the retire() left out (rmRetire)
+            l := readLocalOf(args[0]) if op == typed.PrimOp.Retire and args.Len() == 1 else -1
+            if l >= 0 {
+                if w.Final {
+                    o Vec<I64> = w.origins[l]
+                    w.F.retires.Push(retire(w.Id, psp, o))
+                }
+            } else {
+                for a in args { addAllTo(out, w.expr(a)) }
+            }
         }
         case typed.Expr.Slice(_, _, s) {
             out = w.readOf(s.Base, s.Base.Type())
@@ -1904,6 +2055,7 @@ fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
                     }
                     addTo(out, orig(ONew, I64(site)))
                 }
+                case typed.FnVal.Named(b) { w.F.named[I64(b)] = true }
                 case typed.FnVal.Adapter(_, r, site) {
                     if not w.Final { w.F.setRegOut(w.Id) }
                     o := w.expr(r)
@@ -2057,7 +2209,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     addTo(out, orig(OUnk, 0))
     if foreign {
         for a in c.Args {
-            if w.T().KindOf(w.T().Repr(a.Type())) == types.Kind.Func: f.tasks = true
+            if w.T().KindOf(w.T().Repr(a.Type())) == types.Kind.Func: f.taskAt[w.Id] = true
         }
         # C may call any export fn (X12) before it returns: where one may let go, the extern call may let go of
         # anything (F6) - walked again when an export fn's summary changes
@@ -2398,6 +2550,13 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
             w.made(k, y, sp, multi)
             return
         }
+        # (statements before the value - grown()'s hidden locals - build nothing of it)
+        case typed.Expr.Seq(_, _, q) {
+            if q.X is not null {
+                w.made(k, q.X!, sp, multi)
+                return
+            }
+        }
         case typed.Expr.Try(_, _, t) {
             plain := t.X is not null
             for c in t.Clauses {
@@ -2424,6 +2583,10 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
                 if kind == SFail: why = $"its new value is existing storage: '" $w.text(x.Span()) "'; give it new storage - a constructor call, '$...', 'Clone()'"
             }
         }
+    }
+    if kind == SFresh and f.arr[k] and not f.plainElems(k) and not movesOnly(x) {
+        kind = SFail
+        why = $"its elements may hold storage built with it: '" $w.text(x.Span()) "'"
     }
     if kind == SFresh and multi {
         kind = SFail
@@ -3277,6 +3440,17 @@ fn (f mut Free&) decide() {
         }
     }
     for k in range n { f.Sole[k] = letsHere[k] and f.whyKind[k] == RNone and not f.isDestroy(k) }
+    # an owner held in a sole place has its storage in one region, released through its anchors (types.Anchors): the
+    # arrays it holds keep - each in a region of its own would leave that one's anchors naming other regions
+    for k in range n {
+        if not f.Sole[k] or not f.owner[k]: continue
+        for a in f.heldPlaces(f.valTy[k]) {
+            if f.arr[a] and f.Sole[a] {
+                f.Sole[a] = false
+                f.keep(a, RCopied, -1, source.Span(0, 0), "what holds it is an owner held in a place of early freeing, whose storage is one region")
+            }
+        }
+    }
     # a move from a place that is not sole moves nothing a region holds
     for {
         any := false
@@ -3755,6 +3929,19 @@ fn (f mut Free&) SoleLeaves(ty types.TypeId) Vec<leaf> {
 }
 
 fn (f Free&) IsHandle(k I64) Bool { return k >= 0 and k < f.handle.Len() and f.handle[k] }
+
+# whether a retire() (M19d) in body b at sp is left out: its array is the old value of a sole array place, released as
+# it was replaced - no view of it is used after (condition 6)
+fn (f mut Free&) RetireDropped(b I64, sp source.Span) Bool {
+    if not f.Done { return false }
+    for r in f.retires {
+        if r.Body != b or r.Sp != sp: continue
+        for y in r.Orig {
+            if okind(y) == OPl and f.arr[oval(y)] and f.Sole[oval(y)]: return true
+        }
+    }
+    return false
+}
 
 # whether a candidate place holds an owner (types.Anchors): its let-go releases the region its anchors name
 fn (f Free&) IsOwner(k I64) Bool { return k >= 0 and k < f.owner.Len() and f.owner[k] }

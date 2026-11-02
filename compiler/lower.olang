@@ -3673,6 +3673,8 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
                               sp source.Span) mir.Operand {
     t := ln.T
     if op == typed.PrimOp.AnyMake { return ln.anyMake(args, ty, sp) }
+    # O8d: the array a sole place let go of, released as it was replaced - nothing left to retire
+    if op == typed.PrimOp.Retire and ln.freeing and ln.L.Free!.RetireDropped(I64(ln.B.Id), sp) { return mir.Operand.None }
     if op == typed.PrimOp.AnyIs {
         x := ln.val(args[0])
         if ln.dead { return mir.Operand.None }

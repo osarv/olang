@@ -1534,7 +1534,7 @@ fn (m mut Machine&) stepClose() {
 # data - and p left null. A read through the reference afterwards finds its allocation freed and stops (K1): the
 # evaluator's own check of an early free
 fn (m mut Machine&) releaseHeld(p Ptr, ty types.TypeId) {
-    region := m.anchorRegion(p, ty) if not m.T.IsRef(ty) else m.regionOfObject(m.objectAt(p, ty))
+    region := m.regionOfObject(m.objectAt(p, ty)) if m.T.IsRef(ty) or m.T.OwnedPart(ty) else m.anchorRegion(p, ty)
     if m.halted { return }
     m.zero(p, m.size(ty))
     if region == 0 { return }

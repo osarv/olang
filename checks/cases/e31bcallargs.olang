@@ -1,0 +1,13 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b: a call writing through x[i] is made on the element in place only where its other arguments are plain values -
+# here one is a call that grows the collection, which would leave the element's reference, taken first, naming the
+# old buffer: the call stays the copy's, refused
+fn grow(v mut Vec<Vec<I64>>&) I64 {
+    v.Push(Vec<I64>())
+    return 1
+}
+fn main() ? {
+    v := Vec<Vec<I64>>()
+    v.Push(Vec<I64>())
+    v[0].Push(grow(v))
+}
