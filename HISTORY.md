@@ -28353,7 +28353,10 @@ break's patch list). Each takes the reference again after the call, or copies.
 (`cur := head`, then `cur = nn`, `return cur`) is movable (its own storage made here - `copiedRead`); a reference a
 returned lambda captures flows (its referent must outlive the lambda - a reference local from a built call, which the
 mode-0 flow had ignored with every capture); and a part of a call's value returned (`return v.View()[2:4]`, a slice of a
-temporary) carries what the call carries (`carriedPlace`'s Temp). `checks/cases/o26acopyflow.olang`.
+temporary) carries what the call carries (`carriedPlace`'s Temp). `checks/cases/o26acopyflow.olang`. Four cases that
+pinned the refusals - `d16cborrowescape`, `d16cescape` (a lambda capturing a local array or reference, returned),
+`d16dlambdaown`, `o14ccopyslice` (a slice of a copy returned) - now compile, the captured or copied storage built where
+the result goes: they are run cases under `-sanitize`, each reading its value back after an arena churn.
 
 **F11 (G29): the run-time instance.** The code meant to bind a length variable to "known only at run time" set it to
 `TypeId(0)` - which is `UnknownT` - so every such call was G9's "type arguments cannot be inferred" for a function with
@@ -28373,8 +28376,10 @@ its value is handed back, viewed across the assignment, or copied elsewhere, and
 `-sanitize`). `b := box(mk(0))` then `b.v = mk(k)` kept everything because the constructor's view of its by-value
 argument was copied where kept (D9h), a value holding the place made with no store into it; a constructor's instance
 viewing only call results that are their own and land, by the plan, where the instance does (`typed.FreshViews`) is no
-longer copied - lowering and early freeing ask the same predicate. (A first version took every fresh argument,
-whatever scope it landed in: Map's rendering then read freed storage - strwalks and std's tests under `-sanitize`.)
+longer copied. (A first version took every fresh argument, whatever scope it landed in: Map's rendering then read
+freed storage - strwalks and std's tests under `-sanitize`. A second asked the plan in lowering too, after early
+freeing had written its regions into it, so the two disagreed and a released region held a copy - vecreassign
+segfaulted; lowering now takes early freeing's judgement where it decided, `Free.FreshCtorAt`.)
 `checks/fixtures/earlyfree/vecreassign.olang`: 620 MB -> 1.6 MB and 1.7 MB.
 
 **F14.** T24 for a type argument a program's call bound (`Vec<I64>.Ref`) is said at that call (`InstanceNotReferable`,
