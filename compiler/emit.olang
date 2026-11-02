@@ -284,6 +284,33 @@ fn (e mut Emitter&) Objects() Vec<Object> {
 # instances go into a group of their own module's: the other groups' objects - which every module's ThinLTO backend
 # imports from - stay as they were, where with the instances cut by their symbols' hashes alone a new instance changed
 # a part every module imported, and the link redid nearly every module's code
+# the instances module m's items (work) reach, through items shared or local to a module on the way, put in m's group
+# where no group before has them
+fn (e mut Emitter&) groupReached(m I64, work mut Vec<I64>&) {
+    seen Map<I64, Bool>
+    w I64 = 0
+    for w < work.Len() {
+        i := work[w]
+        w++
+        text := e.itemText[i]
+        rs := e.refs(i)
+        for r in range 0, rs.Len(), 3 {
+            if rs[r] != 0 { continue }
+            j := e.itemNamed(text[rs[r + 1]:rs[r + 2]])
+            if j < 0 { continue }
+            h := e.itemHome[j]
+            if h == HomeInst {
+                if e.instGroup.Has(j) { continue }
+                e.instGroup.Put(j, m)
+                work.Push(j)
+            } else if (h == HomeShared or h == HomeLocal) and not seen.Has(j) {
+                seen.Put(j, true)
+                work.Push(j)
+            }
+        }
+    }
+}
+
 fn (e mut Emitter&) instGroups() {
     mods Vec<mut load.Module&>& = e.P.L.Mods
     root := e.P.L.Root
@@ -317,28 +344,7 @@ fn (e mut Emitter&) instGroups() {
         } else {
             for i := first[m], i >= 0, i = next[i] { work.Push(i) }
         }
-        seen Map<I64, Bool>
-        w I64 = 0
-        for w < work.Len() {
-            i := work[w]
-            w++
-            text := e.itemText[i]
-            rs := e.refs(i)
-            for r in range 0, rs.Len(), 3 {
-                if rs[r] != 0 { continue }
-                j := e.itemNamed(text[rs[r + 1]:rs[r + 2]])
-                if j < 0 { continue }
-                h := e.itemHome[j]
-                if h == HomeInst {
-                    if e.instGroup.Has(j) { continue }
-                    e.instGroup.Put(j, m)
-                    work.Push(j)
-                } else if (h == HomeShared or h == HomeLocal) and not seen.Has(j) {
-                    seen.Put(j, true)
-                    work.Push(j)
-                }
-            }
-        }
+        e.groupReached(m, work)
     }
     have Map<I64, Bool>
     for i in range e.itemSym.Len() {
@@ -2955,27 +2961,7 @@ fn (fe mut fnEm&) fillInPlace(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool
                 if fe.arg(args, i) != fe.arg(args, 0) { same = false }
             }
             if same {
-                v := fe.val(fe.arg(args, 0), el)
-                at, _ := fe.addr(p)
-                head := fe.fresh("fill")
-                body := fe.fresh("fill")
-                done := fe.fresh("fill")
-                pre := fe.fresh("fill")
-                fe.w("br label %" $pre)
-                fe.label(pre)
-                fe.w("br label %" $head)
-                fe.label(head)
-                i := fe.tmp()
-                next := fe.tmp()
-                fe.w($i " = phi i64 [ 0, %" $pre " ], [ " $next ", %" $body " ]")
-                more := fe.let("icmp slt i64 " $i ", " $n)
-                fe.w("br i1 " $more ", label %" $body ", label %" $done)
-                fe.label(body)
-                e := fe.let("getelementptr " $lt ", ptr " $at ", i64 0, i64 " $i)
-                fe.store(et, v, e)
-                fe.w($next " = add i64 " $i ", 1")
-                fe.w("br label %" $head)
-                fe.label(done)
+                fe.fillLoop(p, lt, et, fe.val(fe.arg(args, 0), el), n)
                 return true
             }
             vs Vec<String&>
@@ -2987,24 +2973,48 @@ fn (fe mut fnEm&) fillInPlace(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool
             }
             return true
         }
-        case mir.Rvalue.Use(x) {
-            match x {
-                case mir.Operand.Copy(q) {
-                    k := t.KindOf(t.Repr(pt))
-                    if k != types.Kind.Array and k != types.Kind.Named and k != types.Kind.AnonEnum { return false }
-                    if t.KindOf(t.Repr(pt)) == types.Kind.Array and not fe.fixed(t.Repr(pt)) { return false }
-                    if fe.size(pt) <= 128 or fe.placeType(q) != pt { return false }
-                    src, _ := fe.addr(q)
-                    dst, _ := fe.addr(p)
-                    fe.E.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
-                    fe.w("call void @llvm.memmove.p0.p0.i64(ptr " $dst ", ptr " $src ", i64 " $fe.size(pt) ", i1 false)")
-                    return true
-                }
-                case _ { return false }
-            }
-        }
+        case mir.Rvalue.Use(x) { return x == mir.Operand.Copy and fe.moveInPlace(p, pt, x.p) }
         case _ { return false }
     }
+}
+
+# n copies of one value v (of LLVM type et) stored into the fixed array at p (lt its type), by a loop
+fn (fe mut fnEm&) fillLoop(p mir.Lvalue, lt String&, et String&, v String&, n I64) {
+    at, _ := fe.addr(p)
+    head := fe.fresh("fill")
+    body := fe.fresh("fill")
+    done := fe.fresh("fill")
+    pre := fe.fresh("fill")
+    fe.w("br label %" $pre)
+    fe.label(pre)
+    fe.w("br label %" $head)
+    fe.label(head)
+    i := fe.tmp()
+    next := fe.tmp()
+    fe.w($i " = phi i64 [ 0, %" $pre " ], [ " $next ", %" $body " ]")
+    more := fe.let("icmp slt i64 " $i ", " $n)
+    fe.w("br i1 " $more ", label %" $body ", label %" $done)
+    fe.label(body)
+    e := fe.let("getelementptr " $lt ", ptr " $at ", i64 0, i64 " $i)
+    fe.store(et, v, e)
+    fe.w($next " = add i64 " $i ", 1")
+    fe.w("br label %" $head)
+    fe.label(done)
+}
+
+# a large value of type pt copied from place q to p in place, memory to memory - an array of a fixed length, a struct
+# or an enum over 128 bytes; false where it is no such copy
+fn (fe mut fnEm&) moveInPlace(p mir.Lvalue, pt types.TypeId, q mir.Lvalue) Bool {
+    t := fe.E.T
+    k := t.KindOf(t.Repr(pt))
+    if k != types.Kind.Array and k != types.Kind.Named and k != types.Kind.AnonEnum { return false }
+    if t.KindOf(t.Repr(pt)) == types.Kind.Array and not fe.fixed(t.Repr(pt)) { return false }
+    if fe.size(pt) <= 128 or fe.placeType(q) != pt { return false }
+    src, _ := fe.addr(q)
+    dst, _ := fe.addr(p)
+    fe.E.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
+    fe.w("call void @llvm.memmove.p0.p0.i64(ptr " $dst ", ptr " $src ", i64 " $fe.size(pt) ", i1 false)")
+    return true
 }
 
 # a lambda's environment: its captures in order
