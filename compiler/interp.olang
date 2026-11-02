@@ -56,6 +56,7 @@ fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
     condErrs Vec<CondErr>
     for {
         mark := l.Diags.Count()
+        firm := l.Diags.Firm()
         r := names.Resolver(l)
         r.Resolve()
         p := generic.Program(l, r)
@@ -69,7 +70,7 @@ fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
         c.CheckProgram()
         if decide(l, c, decided, dead, lengths, embeds, unrolls, unrollWhy, condErrs) == 0 {
             for e in condErrs { l.Diags.Error(e.At, e.M) }
-            if l.Diags.Count() == mark { judgeViews(c) }
+            if l.Diags.Firm() - firm == 0 { judgeViews(c) }
             return c
         }
         l.Diags.Forget(mark)

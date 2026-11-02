@@ -908,7 +908,12 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     if clean { interp.DecideValues(c) }
     interp.DecideAsserts(c, asserts)
     if clean { interp.Bake(c) }
-    if d.Errors() > 0 { error build.Failed.Reported }
+    if d.Errors() > 0 {
+        # section 8 judges what checked too, as a build reports its errors beside the checker's (one said only alone,
+        # D3b, then left out)
+        if not d.HasFatal() { try placement(c, cfg, l.Root) }
+        error build.Failed.Reported
+    }
     # X9: the libraries the program links, loaded into this process for its externs to be found (B3e)
     for ln in l.Links() {
         why := interp.LoadLibrary(ln)

@@ -367,9 +367,11 @@ fn (f mut Free&) heldPlaces(ty types.TypeId) Vec<I64> {
 # copies it (lowering), where it lands
 # D9h: a constructor's call whose instance views only storage made for the call - not copied where it is kept (the
 # lowering's freshCtor)
-fn (f mut Free&) freshCtor(c typed.Call&, b I64) Bool {
-    if f.Bodies[b].Of != typed.BodyOf.Ctor: return false
-    return typed.FreshViews(c, f.viewsOf(b), fn(id typed.BodyId) I64 { return f.viewsOf(I64(id)) })
+fn (f mut Free&) freshCtor(c typed.Call&, b I64, within I64) Bool {
+    if f.Bodies[b].Of != typed.BodyOf.Ctor or within < 0 or within >= f.Plans.Len(): return false
+    fr := f
+    return typed.FreshViews(f.Plans[within], c, f.viewsOf(b), fn(id typed.BodyId) I64 { return fr.viewsOf(I64(id)) }
+                            fn(id typed.BodyId) Array<I64> { return fr.P.T.ScopeVarsOf(fr.Bodies[I64(id)].Ty) })
 }
 
 fn (f Free&) viewsOf(b I64) I64 {
@@ -894,7 +896,9 @@ fn (f mut Free&) ownLocalCand(p typed.Lvalue&) {
     match p {
         case typed.Lvalue.Local(_, ty, l) {
             key := pair.Pair(f.curBody, I64(l))
-            if f.ownLocalOf.Has(key) or f.Bodies[f.curBody].Locals[I64(l)].Kind != typed.LocalKind.Var: return
+            # (one declared with no value, D13d, holds nothing written before its first assignment - no old value)
+            loc := f.Bodies[f.curBody].Locals[I64(l)]
+            if f.ownLocalOf.Has(key) or loc.Kind != typed.LocalKind.Var or loc.Unset: return
             if not f.ownerCand(ty): return
             k := f.newPlace(ty, -3, false, ty, false)
             f.owner[k] = true
@@ -2176,7 +2180,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     if w.holds(ty) and c.Site >= typed.SiteId(0) { addTo(out, orig(ONew, I64(c.Site))) }
     # (a callee handing back a view its caller copies where it keeps it (D9h) - but the value of a store, whose copy is
     # made where the place's value is; a callee not known may hand back any copy)
-    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not f.freshCtor(c, b2))) and I64(c.Site) != w.exemptSite { w.untracked(ty, sp, "a call's value copied") }
+    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not f.freshCtor(c, b2, w.Id))) and I64(c.Site) != w.exemptSite { w.untracked(ty, sp, "a call's value copied") }
     if b2 >= 0 and not unknown {
         if f.isCase(b2) {
             for a in args { addAllTo(out, a) }

@@ -2434,9 +2434,10 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
 # early freeing reads it too (free.olang's call)
 fn (ln mut lowering&) freshCtor(c typed.Call&) Bool {
     id := typed.CalleeBody(c)
-    if id < 0 or ln.L.Bodies[id].Of != typed.BodyOf.Ctor: return false
+    if not ln.planned or id < 0 or ln.L.Bodies[id].Of != typed.BodyOf.Ctor: return false
     lw := ln.L
-    return typed.FreshViews(c, lw.ViewsOf(typed.BodyId(I32(id))), fn(b typed.BodyId) I64 { return lw.ViewsOf(b) })
+    return typed.FreshViews(ln.plan, c, lw.ViewsOf(typed.BodyId(I32(id))), fn(b typed.BodyId) I64 { return lw.ViewsOf(b) }
+                            fn(b typed.BodyId) Array<I64> { return lw.P.T.ScopeVarsOf(lw.Bodies[I64(b)].Ty) })
 }
 
 # ---- value results handed over uncopied (D9h) ----

@@ -10465,7 +10465,17 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
             # T24: only a struct, an enum or an array is held by reference
             rt := c.P.Resolve(c.fr().Ctx, of)
             if not c.referable(rt) {
-                c.err(source.Span(of.Span().End, of.Span().End + 1), msgs.InvalidReferenceTarget(c.ty(rt)))
+                at := source.Span(of.Span().End, of.Span().End + 1)
+                # (a type argument the program's own call bound: said at that call, as a generic's needs are - G18a)
+                inst := c.boundBy(c.deref(rt))
+                if inst < 0 {
+                    c.err(at, msgs.InvalidReferenceTarget(c.ty(rt)))
+                    return false
+                }
+                o := c.P.InstanceOrigin(inst)
+                called := c.text(c.P.FnDecl(c.P.InstanceFn(inst)).Name)
+                rec := c.P.L.Diags.ErrorBare(diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End)), msgs.InstanceNotReferable(called, c.ty(rt)))
+                c.P.L.Diags.Note(rec, c.at(at), msgs.NoteInstanceRef())
                 return false
             }
             return true
@@ -21979,13 +21989,14 @@ fn (c mut Checker&) settleUnread() {
     }
     for u in c.P.R.Unreads {
         where := diag.Where.Span(u.File, I64(u.Sp.Start), I64(u.Sp.End))
+        # (said alone: an error a later pass reports - section 8's, a Vec's views - takes its place)
         if u.Bare {
-            c.P.L.Diags.Error(where, msgs.LocalUnusedBare(c.tok(u.Name)))
+            c.P.L.Diags.ErrorAlone(where, msgs.LocalUnusedBare(c.tok(u.Name)))
             continue
         }
         k := pair.Pair(u.File, (I64(u.Sp.Start) << 32) | I64(u.Sp.End))
         if not (try held.Get(k) catch default false) { continue }
-        c.P.L.Diags.Error(where, msgs.LocalUnused(c.tok(u.Name)))
+        c.P.L.Diags.ErrorAlone(where, msgs.LocalUnused(c.tok(u.Name)))
     }
 }
 

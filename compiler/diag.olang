@@ -73,6 +73,7 @@ type Diagnostics struct(Color Bool) {
     scopeOn Bool = false            # inside a statement's group of errors about where things live (ScopeGroupStart)
     scopeSeen Bool = false
     yielding := Vec<I64>()         # errors a later one of the same text at the same place replaces (Yield)
+    alone := Vec<I64>()            # errors said only where no other is (ErrorAlone)
     fatalAt Where = Where.Nowhere
     fatalRule String& = ""
     fatalText String& = ""
@@ -193,6 +194,14 @@ fn (d mut Diagnostics&) report(at Where, m msgs.Msg, oncePerLine Bool) I64 {
 
 # an error said at at alone, with none of the open contexts' notes: what a generic needs of a type (G18), said at the
 # call that bound it, which those notes would only repeat
+# an error said only of a program with no other: one any other error takes the place of, wherever that is reported -
+# earlier or later, by another pass (D3b: an unread local is most often what another mistake left out)
+fn (d mut Diagnostics&) ErrorAlone(at Where, m msgs.Msg) I64 {
+    r := d.Error(at, m)
+    d.alone.Push(r)
+    return r
+}
+
 fn (d mut Diagnostics&) ErrorBare(at Where, m msgs.Msg) I64 {
     if d.Quiet { return -1 }
     group I64 = -1 if d.held.Len() == 0 else d.held[d.held.Len() - 1]
@@ -355,6 +364,9 @@ fn (d mut Diagnostics&) EndHold() { try d.held.Pop() catch { } }
 # how many diagnostics have been reported, held ones included - whether a step reported one
 fn (d Diagnostics&) Count() I64 { return d.records.Len() }
 
+# how many diagnostics there are but those said only alone (ErrorAlone)
+fn (d Diagnostics&) Firm() I64 { return d.records.Len() - d.alone.Len() }
+
 # forgets every diagnostic reported since Count gave mark, and the notes on them - a step done again from the start
 # (the checker's attempts, R1a)
 fn (d mut Diagnostics&) Forget(mark I64) {
@@ -376,6 +388,14 @@ fn (d mut Diagnostics&) Forget(mark I64) {
         }
     }
     d.yielding.Truncate(y)
+    a I64 = 0
+    for i in range d.alone.Len() {
+        if d.alone[i] < mark {
+            d.alone[a] = d.alone[i]
+            a++
+        }
+    }
+    d.alone.Truncate(a)
 }
 
 # what was reported since Count gave mark - the records, their notes and which yield - set aside to be said again by
@@ -385,6 +405,7 @@ type Taken struct() {
     records Vec<record>
     notes Vec<note>        # each on the record numbered from the first taken
     yielding Vec<I64>
+    alone Vec<I64>
 }
 
 fn (d Diagnostics&) Since(mark I64) Taken {
@@ -396,6 +417,9 @@ fn (d Diagnostics&) Since(mark I64) Taken {
     for y in d.yielding {
         if y >= mark { t.yielding.Push(y - mark) }
     }
+    for a in d.alone {
+        if a >= mark { t.alone.Push(a - mark) }
+    }
     return t
 }
 
@@ -404,6 +428,7 @@ fn (d mut Diagnostics&) Replay(t Taken&) {
     for r in t.records { d.records.Push(r) }
     for n in t.notes { d.notes.Push(note(n.rec + base, n.at, n.text)) }
     for y in t.yielding { d.yielding.Push(y + base) }
+    for a in t.alone { d.alone.Push(a + base) }
 }
 
 fn (t Taken&) Count() I64 { return t.records.Len() }
@@ -547,6 +572,16 @@ fn (d mut Diagnostics&) written() Array<I64> {
             }
         }
         if not repeated { keep.Push(r) }
+    }
+    # (one said only alone goes where another error is kept)
+    if d.alone.Len() > 0 {
+        others := false
+        for k in keep { others = others or k not in d.alone }
+        if others {
+            rest Vec<I64>
+            for k in keep { if k not in d.alone: rest.Push(k) }
+            keep = rest
+        }
     }
     rank := Array<I64>(d.paths.Len() + 1, -1)  # per file (and the last for none): the order it was first reported in
     next I64 = 0

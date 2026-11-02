@@ -254,6 +254,8 @@ type Diag enum {
     ArrayTooManyArgs
     ConstraintNotTrait
     InvalidReferenceTarget
+    InstanceNotReferable
+    NoteInstanceRef
     DoubleReferenceMarker
     DestructTypeByValue
     TraitNotAType
@@ -1544,6 +1546,8 @@ fn ArrayTooManyArgs(n I64) Msg { return Msg(Diag.ArrayTooManyArgs, "G8, T7", "Ar
 fn ConstraintNotTrait(ty String&) Msg { return Msg(Diag.ConstraintNotTrait, "G6, G19", $ty " is not a trait, so it cannot constrain a type variable - a type parameter's constraint is a trait, and a length is no parameter (T7)") }
 
 # ERR_INVALID_REFERENCE_TARGET
+fn InstanceNotReferable(text String&, ty String&) Msg { return Msg(Diag.InstanceNotReferable, "T24", $text " gives a reference here, and " $ty " cannot be one - only a struct, an enum or an array can: read the value instead (as 'x[i]' does)") }
+fn NoteInstanceRef() Msg { return Msg(Diag.NoteInstanceRef, "", "the reference it would give is written here") }
 fn InvalidReferenceTarget(ty String&) Msg { return Msg(Diag.InvalidReferenceTarget, "T24", $ty " cannot be a reference - only a struct, an enum or an array can") }
 
 # ERR_DOUBLE_REFERENCE_MARKER

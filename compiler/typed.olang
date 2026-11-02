@@ -603,29 +603,41 @@ fn (w ViewWalk&) ElidedCopy(x Expr?&) Bool { return w.copyViews(x) > 0 }
 # (exported for lowering's views kept in place of copies)
 fn CopiedOf(t types.Table&, x Expr&) Expr?& { return copied(t, x) }
 
-# D9h, O8d: whether a constructor's call hands back views of storage nothing else holds - each argument its instance may
-# view (bit k of views) a value made for the call, or a call's result that is its own (no view of what that call is
-# given): the instance then owns what it views, and no copy of it is needed where it is kept. viewsOf gives a body's
-# view bits (the lowering's, or early freeing's, reading of check's)
-fn FreshViews(c Call&, views I64, viewsOf fn&(id BodyId) I64) Bool {
-    if views <= 0 or (views & ViewOther) != 0: return false
+# D9h, O8d: whether a constructor's call hands back views of storage nothing else holds and that lives where the
+# instance does - each argument its instance may view (bit k of views) the result of a call that is its own (no view of
+# what that call is given, viewsOf) landing, by the plan, in the scope the instance lands in: the instance then owns what
+# it views, and no copy of it is needed where it is kept. varsOf gives a body's function type's scope variables
+fn FreshViews(plan Plan&, c Call&, views I64, viewsOf fn&(id BodyId) I64, varsOf fn&(id BodyId) Array<I64>) Bool {
+    if views <= 0 or (views & ViewOther) != 0 or c.Site < SiteId(0): return false
+    home := resultScope(plan, c.Site, varsOf(BodyId(I32(CalleeBody(c)))))
+    if home == Scope.Unset: return false
     for k in range c.Args.Len().Min(ViewBits) {
-        if (views & (I64(1) << k)) != 0 and not freshArg(c.Args[k], viewsOf, 0): return false
+        if (views & (I64(1) << k)) == 0: continue
+        a := freshCall(c.Args[k], 0)
+        if a is null or a.Site < SiteId(0): return false
+        id := CalleeBody(a)
+        if id < 0 or viewsOf(BodyId(I32(id))) != 0: return false
+        if resultScope(plan, a.Site, varsOf(BodyId(I32(id)))) != home: return false
     }
     return true
 }
 
-fn freshArg(x Expr&, viewsOf fn&(id BodyId) I64, depth I64) Bool {
-    if depth > 8: return false
+# where a call at site lands its result by the plan: the scope it passes for its callee's result scope, Unset for none
+fn resultScope(plan Plan&, site SiteId, vs Array<I64>&) Scope {
+    for j in range vs.Len() {
+        if vs[j] == types.ResultVar: return plan.Passed(site, j)
+    }
+    return Scope.Unset
+}
+
+# the call an argument is, past the wrappers that give it storage, null for any other argument
+fn freshCall(x Expr&, depth I64) Call?& {
+    if depth > 8: return null
     return match x {
-        case Expr.Make(_, _, _), Expr.Collect(_, _, _), Expr.Text(_, _, _), Expr.Lit(_, _, _): true
-        case Expr.Call(_, _, c): match c.Target {
-            case Callee.Body(id): viewsOf(id) == 0
-            case _: false
-        }
-        case Expr.Promote(_, _, pr): freshArg(pr.X, viewsOf, depth + 1)
-        case Expr.Away(_, _, y): freshArg(y, viewsOf, depth + 1)
-        case _: false
+        case Expr.Call(_, _, c): c
+        case Expr.Promote(_, _, pr): freshCall(pr.X, depth + 1)
+        case Expr.Away(_, _, y): freshCall(y, depth + 1)
+        case _: null
     }
 }
 

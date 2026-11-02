@@ -1,5 +1,5 @@
 # check: fail error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
-# also: note: 'v' may grow here, in 'fill' - take the view after it
+# also: note: 'v' may grow here, in 'fill' - take the view or the reference after it
 # also: note: 'fill' may grow it here
 # M19g: a call given the Vec through a parameter its body may grow, between the view and its use
 import "std/io"
