@@ -4600,12 +4600,17 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         }
     }
     if moved != Term.None {
-        # a local the function returns lives where the result goes, its own storage too (O26a)
+        # a local the function returns lives where the result goes, its own storage too (O26a) - but a reference's: its
+        # own storage is a slot nothing can name (no reference to a reference, T11), which stays in its block, a stack
+        # slot (a returned 'm mut Map<K, V>& = Map()' read its slot through the result scope's arena in every turn of a
+        # loop - knucleotide +0.9% of instructions after the flip, which inferred such a local where '&seq' was written)
         s.terms[I64(l)] = moved
-        s.stors[I64(l)] = moved
-        s.plan.Stored[I64(l)] = s.scopeOf(moved)
-        # its slot made there is a build there (E11c: in a borrowed result's home, where a Str's receiver lives)
-        s.buildsInto(moved, x!.Span(), s.B!.File, x!.Span())
+        if not s.isRef(t) {
+            s.stors[I64(l)] = moved
+            s.plan.Stored[I64(l)] = s.scopeOf(moved)
+            # its slot made there is a build there (E11c: in a borrowed result's home, where a Str's receiver lives)
+            s.buildsInto(moved, x!.Span(), s.B!.File, x!.Span())
+        }
         v := s.val(x, moved)
         s.bindLocal(l, x!)
         if v.K == ValKind.Existing { s.fit(v.T, moved, s.isRef(t) or s.storeThrough(t), x!, FitLocal) }
@@ -9276,7 +9281,30 @@ fn (s mut Scoper&) FoldStats() String {
             }
         }
     }
-    return $"blocks built into: " $built ", of them plain (what folding could reach): " $reach
+    kinds Map<String, I64>
+    for b in range s.Plans.Len() {
+        body := s.Bodies[b]
+        by Map<I64, String>
+        for k in range s.Plans[b].Built.Len() {
+            match s.Plans[b].Built[k] {
+                case typed.Scope.Block(blk) {
+                    if I64(blk) >= body.Blocks.Len() or body.Blocks[I64(blk)].Kind != typed.BlockKind.Plain { continue }
+                    cur := try by.Get(I64(blk)) catch default ""
+                    by.Put(I64(blk), $cur " " $body.Sites[k].Kind)
+                }
+                case _ { }
+            }
+        }
+        for e in by {
+            n := try kinds.Get(e.Value) catch default 0
+            kinds.Put(e.Value, n + 1)
+        }
+    }
+    dump := StringBuilder()
+    for e in kinds {
+        if e.Value >= 20 { dump.Push($"\n  " $e.Value ":" $e.Key) }
+    }
+    return $"blocks built into: " $built ", of them plain (what folding could reach): " $reach $dump.ToString()
 }
 
 # the fields the field inference promoted, "Declaration.field" each, for OLANG_SCOPESTATS
