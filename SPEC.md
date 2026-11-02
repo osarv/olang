@@ -2047,7 +2047,9 @@ function's value result holding storage of its own by value - an array (text inc
 such arrays as parts (T7a), a constructor's instance - is, or holds in its parts, views of what its arguments reach,
 the views may be handed back with no copy and the caller copies them where it keeps them - unless it reads the result
 where it stands (an argument for a read-only parameter, a text piece, a discarded value) and nothing the statement does
-can change what it views - no call in it given a writable reference or a value reaching a function value or an `any`,
+can change what it views - no call in it given a writable reference, a value or a read-only reference holding one at any
+depth of its fields (judged by the type of the storage viewed where a local holds the views), or a value reaching a
+function value or an `any`,
 in a program no global of which can be written so (a `mut` global of anything but a number, a `Bool` or an enum of no
 payload, or a global reaching a writable reference, a function value or an `any`) - or holds it in a local that nothing could tell from a copy: a local never written but in a
 scalar field, lent writably only to bodies that keep its parts as they are (a walk's `Next`), never escaping, never
@@ -2056,7 +2058,9 @@ immutable global's, a local's own storage nothing writes, lends or keeps, or ano
 the copies a function makes itself where nothing could tell: a value local made from existing storage, a walk's
 element, a temporary lent whole to such a body, and the part stores and fields of a value the function hands back made
 of its parameters' views. A function value, an `any`'s table and an operator's adapter copy at the call, since their
-caller cannot know. Unobservable in what a program computes: the compile-time evaluator copies every time and agrees.
+caller cannot know. A value result owning parts that is no such view - existing storage of another's, a global's - is
+copied by the function itself where it hands it back. Unobservable in what a program computes: the compile-time
+evaluator copies every time and agrees.
 
 **D16 (lambdas).** A **lambda** is a function written as an expression, with no name:
 

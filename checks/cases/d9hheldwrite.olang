@@ -1,0 +1,68 @@
+# check: run
+# D9h (bulk review 6 F2): an element copy - a for-in's element, `e := v[0]` - is held as a view of the element only
+# where nothing could tell; a call given a writable reference to the collection inside a struct, by value or through a
+# read-only reference, may write the element, so the copy is made - and the evaluator, baking and deciding, agrees
+type blk struct(xs Vec<I64>) { xs }
+type hold struct(v mut Vec<blk>&) { v }
+
+fn pokeRef(h mut hold&) { h.v.RefMut(0).xs.ViewMut()[0] = 99 }
+fn pokeVal(h hold) { h.v.RefMut(0).xs.ViewMut()[0] = 98 }
+fn pokeRo(h hold&) { h.v.RefMut(0).xs.ViewMut()[0] = 97 }
+
+fn walkRef(v Vec<blk>&, h mut hold&) I64 {
+    s := 0
+    for e in v {
+        pokeRef(h)
+        s += e.xs[0]
+    }
+    return s
+}
+
+fn walkVal(v Vec<blk>&, h hold) I64 {
+    s := 0
+    for e in v {
+        pokeVal(h)
+        s += e.xs[0]
+    }
+    return s
+}
+
+fn walkRo(v Vec<blk>&, h hold&) I64 {
+    s := 0
+    for e in v {
+        pokeRo(h)
+        s += e.xs[0]
+    }
+    return s
+}
+
+fn elemVal(v Vec<blk>&, h hold) I64 {
+    e := v[0]
+    pokeVal(h)
+    return e.xs[0]
+}
+
+fn fresh() Vec<blk> {
+    v := Vec<blk>()
+    xs := Vec<I64>()
+    xs.Push(1)
+    v.Push(blk(xs))
+    return v
+}
+
+fn all() I64 {
+    a := fresh()
+    ha := hold(a)
+    b := fresh()
+    c := fresh()
+    d := fresh()
+    return walkRef(a, ha) + 10 * walkVal(b, hold(b)) + 100 * elemVal(c, hold(c)) + 1000 * walkRo(d, hold(d))
+}
+
+Baked := all()
+
+assert all() == 1111, "every copy reads what it was copied from"
+
+fn main() {
+    assert all() == 1111 and Baked == 1111
+}

@@ -1,0 +1,34 @@
+# check: run
+# QCE (found by bulk review 6's fix round): a value owning parts handed back from existing storage that is no view of
+# what the function is given - a global's - is the caller's own copy; while compiling, where no result is a view its
+# callers copy, an element read out of a Vec is too (the evaluator had shared both with their source)
+type blk struct(xs Vec<I64>) { xs }
+
+Gl mut blk = blk(Vec<I64>())
+
+fn g() blk { return Gl }
+
+fn fromGlobal() I64 {
+    Gl.xs.Push(1)
+    e := g()
+    Gl.xs.ViewMut()[0] = 9
+    return e.xs[0]
+}
+
+fn fromElem() I64 {
+    l := blk(Vec<I64>())
+    l.xs.Push(1)
+    v := Vec<blk>()
+    v.Push(l)
+    e := v[0]
+    v.RefMut(0).xs.ViewMut()[0] = 5
+    return e.xs[0] + 10 * l.xs[0]
+}
+
+Elem := fromElem()
+
+assert fromElem() == 11, "an element read out is a copy"
+
+fn main() {
+    assert fromGlobal() == 1 and fromElem() == 11 and Elem == 11
+}

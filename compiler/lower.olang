@@ -340,6 +340,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     noCopy Map<I64, Bool>
     qCover Map<I64, Bool>      # quietLife: the types whose storage the view held covers (its by-value parts)
     qRoot types.TypeId = types.TypeId(0)   # ... and the type of the object it is a view into
+    qWrites Map<I64, Bool>     # ... and writesCover's answers for it, by type (false while a type is being walked)
     noLetCopy Map<I64, Bool>
     vlSites Map<I64, Bool>
     vlIn typed.BlockId = typed.BlockId(0)   # ... the block of the local being asked about (viewLocals)
@@ -1246,17 +1247,32 @@ fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Exp
         }
         return
     }
+    # (QCE: a struct or an enum owning parts - existing storage not handed back as a view its callers copy, D9h - is
+    # copied as an array is; while compiling no body's result is such a view, so each is copied here)
+    if ln.retOwns(res) {
+        if ln.retCopies(value, res) {
+            cp := ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp, ln.resultScope())
+            ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(cp)))
+        }
+        return
+    }
     r := t.Repr(res)
     if t.KindOf(r) != types.Kind.Tuple { return }
     parts := t.Items(t.Parts(r))
     items := tupleItems(value)
     for i in range parts.Len() {
-        if not ln.valueArray(parts[i]) { continue }
+        if not ln.valueArray(parts[i]) and not ln.retOwns(parts[i]) { continue }
         if items.Len() > 0 and i < items.Len() and not ln.retCopies(items[i], parts[i]) { continue }
         at := ln.mk(ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(i)))
         cp := ln.arrayCopy(mir.Operand.Copy(at), parts[i], sp, ln.resultScope())
         ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(cp)))
     }
+}
+
+# whether a result of type ty, no array, is a value owning parts the function itself copies where it hands back
+# existing storage (retArrays): not where the body's result is a view its callers copy (D9h)
+fn (ln mut lowering&) retOwns(ty types.TypeId) Bool {
+    return not ln.valueArray(ty) and not ln.T.IsRef(ty) and ln.T.OwnsParts(ty) and ln.L.ViewsOf(ln.B.Id) <= 0
 }
 
 # whether a returned array value is copied into the result scope: existing storage, but for a local living there - a
@@ -1283,7 +1299,7 @@ fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
             case _ { }
         }
     }
-    if not ln.copiesArray(x, ty) { return false }
+    if not ln.copiesArray(x, ty) and not (ln.retOwns(ty) and ln.copiesValue(x)) { return false }
     # nothing placed (while compiling): every existing array is copied
     if not ln.planned { return true }
     # deferred code or a join's tasks still to run on the way out may write the local after the result is computed
@@ -2654,9 +2670,12 @@ fn (ln mut lowering&) quietCall(c typed.Call&) Bool {
     for k in range c.Args.Len() {
         a := c.Args[k].Type()
         writable := k < ps.Len() and t.IsRef(ps[k]) and (t.PermOf(ps[k]) & types.Writable) != 0
-        # (quietLife: a callee given what reaches none of the view's storage writably leaves it as it is)
+        # (quietLife: a callee given what reaches none of the view's storage writably leaves it as it is - a value or a
+        # read-only reference holding a writable reference to such storage, at any depth, is a way to write it; in a
+        # statement judged alone, with no view's storage known, any writable reference it holds is)
         if writable and (ln.qCover.Len() == 0 or ln.writesCover(a, 0)): return false
-        if not writable and ln.qCover.Len() > 0 and not t.IsRef(a) and ln.writesCover(a, 0): return false
+        if not writable and ln.qCover.Len() == 0 and t.ReachesWrite(a): return false
+        if not writable and ln.qCover.Len() > 0 and ln.writesCover(t.Referent(a) if t.IsRef(a) else a, 0): return false
         if t.ReachesCode(a) or not ln.quietX(c.Args[k]): return false
     }
     return true
@@ -2987,6 +3006,7 @@ fn (ln mut lowering&) quietLife(of types.TypeId) Bool {
     # (what can write the view's storage: a write of storage of one of the types its by-value parts are, or reaching one
     # through writable references - no type of olang is another's storage, so any other write leaves it as it is)
     ln.qCover.Clear()
+    ln.qWrites.Clear()
     ln.coverAdd(of, 0)
     ln.qRoot = of
     # (any call may write a mutable global, and what it reaches writably)
@@ -2997,6 +3017,7 @@ fn (ln mut lowering&) quietLife(of types.TypeId) Bool {
     }
     ok = ok and ln.quietBlock(b)
     ln.qCover.Clear()
+    ln.qWrites.Clear()
     return ok
 }
 
@@ -3019,6 +3040,7 @@ fn (ln mut lowering&) heldParts(t types.TypeId, out mut Map<I64, Bool>&, depth I
     match tt.KindOf(r) {
         case types.Kind.Array { ln.heldParts(tt.Elem(r), out, depth + 1) }
         case types.Kind.Tuple, types.Kind.Record { for x in tt.Items(tt.Parts(r)) { if x != types.TypeId(0): ln.heldParts(x, out, depth + 1) } }
+        case types.Kind.Named { for x in tt.Embedded(r) { ln.heldParts(x, out, depth + 1) } }
         case _ { }
     }
 }
@@ -3034,6 +3056,7 @@ fn (ln mut lowering&) coverAdd(t types.TypeId, depth I64) {
     match tt.KindOf(r) {
         case types.Kind.Array { ln.coverAdd(tt.Elem(r), depth + 1) }
         case types.Kind.Tuple, types.Kind.Record { for x in tt.Items(tt.Parts(r)) { if x != types.TypeId(0): ln.coverAdd(x, depth + 1) } }
+        case types.Kind.Named { for x in tt.Embedded(r) { ln.coverAdd(x, depth + 1) } }
         case _ { }
     }
 }
@@ -3044,6 +3067,17 @@ fn (ln mut lowering&) writesCover(t types.TypeId, depth I64) Bool {
     tt := ln.T
     if depth > 16: return true
     r := tt.Repr(t)
+    known := try ln.qWrites.Get(I64(r)) catch {
+        ln.qWrites.Put(I64(r), false)    # (a type reaching itself again adds nothing to what its other parts say)
+        w := ln.writesOf(r, depth)
+        ln.qWrites.Put(I64(r), w)
+        return w
+    }
+    return known
+}
+
+fn (ln mut lowering&) writesOf(r types.TypeId, depth I64) Bool {
+    tt := ln.T
     return match tt.KindOf(r) {
         case types.Kind.Func, types.Kind.Var, types.Kind.Any: true
         # (a writable reference: its object may be the view's, else what it holds writably)
@@ -3051,6 +3085,8 @@ fn (ln mut lowering&) writesCover(t types.TypeId, depth I64) Bool {
         case types.Kind.Array: ln.writesCover(tt.Elem(r), depth + 1)
         case types.Kind.Tuple, types.Kind.Record: ln.someWrites(tt.Items(tt.Parts(r)), depth)
         case types.Kind.AnonEnum: ln.someWrites(tt.Items(tt.ShapeCases(r)), depth)
+        # (a struct's or an enum's parts held in place: a writable reference among a field's is one the value holds)
+        case types.Kind.Named: ln.someWrites(tt.Embedded(r), depth)
         case _: false
     }
 }
