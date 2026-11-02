@@ -14,8 +14,8 @@
 # borrows explicit (T6b, E12c), a compound assignment's old value read through Lvalue.Target (S4), loops one Loop with
 # Jumps (S9).
 #
-# What the checker meets and does not check yet is recorded as a gap (Gaps), never said as a diagnostic: the acceptance
-# (compiler/tools/checkdiff.olang) counts a program as checked clean only when it has neither errors nor gaps.
+# What the checker meets and does not check yet is recorded as a gap (Gaps), never said as a diagnostic: a build stops
+# at one, and compiler/tools/checkdump.olang lists them.
 
 import "std/pair"
 import "std/os"
@@ -63,7 +63,7 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     Gapped Bool = false    # a construct not checked yet was met: what is derived from the whole body is not said
     Parent I64 = -1        # a lambda's: the frame of the body it is written in (D16c)
     Gen Bool = false       # a generator's body, its Next's (D18): a lambda whose yields give its values (S20)
-    GenHome I64 = -1       # ... whose elements live where it does (D18c): the capture "&return" names there
+    GenHome I64 = -1       # ... whose elements live where it does (D18c): the hidden capture of that scope
     deferBlocks Vec<I64>  # the blocks around with deferred code registered so far, innermost last (S19, S20)
     InferResult Bool = false   # a lambda's result taken from its first return (D16b)
     InferErrors Bool = false   # a lambda's errors taken from its body (D16b), an inferred set's (R1a)
@@ -758,12 +758,11 @@ fn (c mut Checker&) settleUnset() {
     }
 }
 
-# D13d: whether lowering may leave a local definitely assigned unwritten until then - not a run-time array value nor an
-# owner, whose first store reads what it replaces (T11b's storage reuse, O8d's release)
+# D13d: whether lowering may leave a local definitely assigned unwritten until then - not a run-time array value,
+# whose first store reads what it replaces (T11b's storage reuse, O8d's release)
 fn (c mut Checker&) unsetLowers(t types.TypeId) Bool {
     r := c.P.T.Repr(t)
-    if c.P.T.KindOf(r) == types.Kind.Array and c.P.T.Length(r) == types.TypeId(0) { return false }
-    return not c.owning(t)
+    return not (c.P.T.KindOf(r) == types.Kind.Array and c.P.T.Length(r) == types.TypeId(0))
 }
 
 # S8c: whether a local an asked condition or assert read as fixed is written by its body after all - the condition is
@@ -4397,7 +4396,7 @@ fn (c mut Checker&) ctSourceOf(b I64) ctSource?& {
             if m is null or m.S.Contract is null { return null }
             d := c.P.T.DeclOf(c.P.AnySlots(tr)[k].Trait)
             recv := m.Recv
-            if recv is null { recv = ast.Param(m.Sp, source.NameId(0), ast.TypeRef.Perm(m.Sp, null, false, false), null) }
+            if recv is null { recv = ast.Param(m.Sp, source.NameId(0), ast.TypeRef.Perm(m.Sp, null, false), null) }
             return ctSource(m.S.Contract!, recv, m.S.Params, c.P.T.DeclModule(d), $c.ty(tr) "." $c.text(m.Name))
         }
         case _ { return null }
@@ -4674,7 +4673,7 @@ fn (c mut Checker&) dispatchChecks(sp source.Span, r types.TypeId, target typed.
     }
     efrom := c.exprs.Len()
     for i in range args.Len() { c.exprs.Push(c.heldArg(args, held, i)) }
-    inner := typed.Expr.Call(sp, r, typed.Call(target, gather(c.exprs, efrom), typed.Mark.None, site))
+    inner := typed.Expr.Call(sp, r, typed.Call(target, gather(c.exprs, efrom), site))
     if r == types.VoidT or r == types.NoreturnT {
         c.emit(typed.Stmt.Eval(sp, inner))
         return typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), null))
@@ -4694,7 +4693,7 @@ fn (c mut Checker&) askBody(mi I64, sp source.Span, old I64, body I64, args Arra
     efrom := c.exprs.Len()
     for a in args { c.exprs.Push(c.copyExpr(a, old)) }
     call mut typed.Expr& = typed.Expr.Call(sp, types.BoolT, typed.Call(typed.Callee.Body(typed.BodyId(I32(body))), gather(c.exprs, efrom)
-                                                                       typed.Mark.None, c.site(typed.SiteKind.Call, sp)))
+                                                                       c.site(typed.SiteKind.Call, sp)))
     c.stmts.Push(typed.Stmt.Return(sp, call))
     c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
     c.pop()
@@ -4735,7 +4734,7 @@ fn closedAll(xs Array<typed.Expr&>&) Bool {
 }
 
 fn closedCall(cl typed.Call&) Bool {
-    if cl.Zero or cl.Scoped != typed.Mark.None { return false }
+    if cl.Zero { return false }
     match cl.Target {
         case typed.Callee.Body(_), typed.Callee.Helper(_, _) { return closedAll(cl.Args) }
         case _ { return false }
@@ -4763,7 +4762,7 @@ fn (c mut Checker&) copyExpr(x typed.Expr&, old I64) typed.Expr& {
         case typed.Expr.Borrow(sp, ty, p) { return typed.Expr.Borrow(sp, ty, c.copyPlace(p, old)) }
         case typed.Expr.Promote(sp, ty, pr) { return typed.Expr.Promote(sp, ty, typed.Promote(c.copyExpr(pr.X, old), c.reSite(pr.Site, old))) }
         case typed.Expr.Call(sp, ty, cl) {
-            return typed.Expr.Call(sp, ty, typed.Call(cl.Target, c.copyAll(cl.Args, old), cl.Scoped, c.reSite(cl.Site, old), cl.Zero))
+            return typed.Expr.Call(sp, ty, typed.Call(cl.Target, c.copyAll(cl.Args, old), c.reSite(cl.Site, old), cl.Zero))
         }
         case typed.Expr.Make(sp, ty, m) {
             items := c.copyAll(m.Items, old)
@@ -4841,7 +4840,7 @@ fn (c mut Checker&) readLocal(sp source.Span, l I64) typed.Expr& {
 
 # a call of body giving ty - a zero value's constructor call where zero says (D13c)
 fn (c mut Checker&) callOfBody(sp source.Span, ty types.TypeId, body I64, args Array<typed.Expr&>&, zero Bool = false) typed.Expr& {
-    return typed.Expr.Call(sp, ty, typed.Call(typed.Callee.Body(typed.BodyId(I32(body))), args, typed.Mark.None, c.site(typed.SiteKind.Call, sp), zero))
+    return typed.Expr.Call(sp, ty, typed.Call(typed.Callee.Body(typed.BodyId(I32(body))), args, c.site(typed.SiteKind.Call, sp), zero))
 }
 
 fn (c mut Checker&) bodyCall(sp source.Span, body I64, ty types.TypeId, args Array<typed.Expr&>&, held Vec<I64>&
@@ -5374,8 +5373,8 @@ fn (c mut Checker&) bracketIn(sp source.Span) source.Span {
 # "mut" says it is writable when bound to a reference (T2); with no type known (":="), any "mut" is one
 fn (c mut Checker&) mutBefore(tr ast.TypeRef&, t types.TypeId) source.Span {
     match tr {
-        case ast.TypeRef.Perm(psp, of, writable, owned) {
-            if not writable or owned { return source.Span(-1, -1) }
+        case ast.TypeRef.Perm(psp, of, writable) {
+            if not writable { return source.Span(-1, -1) }
             if c.namesTypeVar(of) { return source.Span(-1, -1) }
             if t != types.UnknownT and (c.isRef(t) or c.P.T.KindOf(t) == types.Kind.Var) { return source.Span(-1, -1) }
             if t == types.UnknownT and tr.Span().End > psp.Start + 3 and c.writtenRefOrVar(tr) { return source.Span(-1, -1) }
@@ -5401,7 +5400,7 @@ fn (c mut Checker&) namesTypeVar(t ast.TypeRef?&) Bool {
 # whether a "mut T" written with no type resolved names a reference or a variable: its type after "mut"
 fn (c mut Checker&) writtenRefOrVar(tr ast.TypeRef&) Bool {
     match tr {
-        case ast.TypeRef.Perm(_, of, _, _) {
+        case ast.TypeRef.Perm(_, of, _) {
             if of is null { return false }
             t := c.resolve(of)
             return c.isRef(t) or c.P.T.KindOf(t) == types.Kind.Var or t == types.UnknownT
@@ -5520,7 +5519,6 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
                 c.spell(b, c.P.T.Elem(c.P.T.Referent(t)), false)
                 return
             }
-            if (perm & types.Owning) != 0 { b.Push("own ") }
             if not top and (perm & types.Writable) != 0 { b.Push("mut ") }
             c.spell(b, c.P.T.Referent(t), false)
             b.Push("?&" if (perm & types.Nullable) != 0 else "&")
@@ -5787,7 +5785,7 @@ fn (c mut Checker&) markOf(t ast.TypeRef?&) typed.Mark {
     if t is null { return typed.Mark.Infer }
     return match t {
         case ast.TypeRef.Ref(_, _, _): typed.Mark.Bare
-        case ast.TypeRef.Perm(_, of, _, _): c.markOf(of)
+        case ast.TypeRef.Perm(_, of, _): c.markOf(of)
         # a local written as a bare type variable takes its initializer's scope (O25a)
         case ast.TypeRef.Named(_, _, _): typed.Mark.Infer if c.namesTypeVar(t) else typed.Mark.None
         case _: typed.Mark.None
@@ -6008,7 +6006,7 @@ fn (c mut Checker&) convert(sp source.Span, x typed.Expr&, want types.TypeId) ty
 
 # a call of a known target with checked arguments
 fn (c mut Checker&) callOf(sp source.Span, t types.TypeId, target typed.Callee&, args Array<typed.Expr&>&) typed.Expr& {
-    return typed.Expr.Call(sp, t, typed.Call(target, args, typed.Mark.None, c.site(typed.SiteKind.Call, sp)))
+    return typed.Expr.Call(sp, t, typed.Call(target, args, c.site(typed.SiteKind.Call, sp)))
 }
 
 # ---- literals (L10-L14, T6, T6a, E4a) ----
@@ -6667,11 +6665,8 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
         wr := c.P.T.Referent(want)
         if c.P.T.Same(hr, wr) or c.flowsInto(hr, wr) {
             # X10: nothing is read or written through an extern type's reference, so its permission says nothing
-            if c.foreignRef(have) and c.P.T.Same(hr, wr) and (c.P.T.PermOf(want) & types.Owning) == 0 {
+            if c.foreignRef(have) and c.P.T.Same(hr, wr) {
                 return c.convert(sp, x, want) if c.P.T.PermOf(have) != c.P.T.PermOf(want) else x
-            }
-            if (c.P.T.PermOf(want) & types.Owning) != (c.P.T.PermOf(have) & types.Owning) and not ((c.P.T.PermOf(want) & types.Writable) != 0 and (c.P.T.PermOf(have) & types.Writable) == 0) {
-                return c.fit(c.convert(sp, x, c.P.T.Ref(hr, (c.P.T.PermOf(have) & types.Writable) | (c.P.T.PermOf(want) & types.Owning))), want, sp)
             }
             if (c.P.T.PermOf(want) & types.Writable) != 0 and (c.P.T.PermOf(have) & types.Writable) == 0 {
                 if isData(x) {
@@ -7163,12 +7158,16 @@ fn (c mut Checker&) neverNull(t types.TypeId) Bool {
     return c.isRef(t) and not c.P.T.IsNullable(t) and not c.P.T.ArrayRef(t) and c.deref(t) != types.UnknownT
 }
 
+# T2c: an array reference that may be null, "Array<T>?&", "String?&" - its zero value its null
+fn (c mut Checker&) nullableArray(t types.TypeId) Bool { return c.isRef(t) and c.P.T.IsNullable(t) and c.P.T.ArrayRef(t) }
+
 # null as a value of a type that may be null (T2a): zero bits - a reference's null pointer, a function value's null code
 # - but an array's, which are the empty array: its null is the length -1 with no storage (T2c)
 fn (c mut Checker&) nullOf(sp source.Span, t types.TypeId) typed.Expr& { return c.lit(sp, t, -1 if c.P.T.ArrayRef(t) else 0) }
 
-# the zero value of a type (D13c): zero bits for a number, a Bool, a reference that may be null, one that may be null,
-# an array; a struct's constructor on its defaults
+# the zero value of a type (D13c): zero bits for a number, a Bool, a reference that may be null, a function value that
+# may be null, an array; null for an array that may be null (T2c: its null is no zero bits); a struct's constructor on
+# its defaults
 fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr& {
     # T2c: a reference never null has no zero value, nor a function value never null (T21)
     if c.neverNull(t) {
@@ -7176,6 +7175,7 @@ fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr& {
         c.declNote(rec)
         return c.unknown(sp)
     }
+    if c.nullableArray(t): return c.nullOf(sp, t)
     if c.isStruct(t) {
         id := c.ctorBody(t)
         # each parameter its default, else its own type's zero value - none where the constructor has no parameter,
@@ -8760,7 +8760,7 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
 }
 
 # where two references meet (E28, S12b): writable where both are, nullable where either is (T2c)
-fn meetPerm(a I64, b I64) I64 { return (a & b & (types.Writable | types.Owning)) | ((a | b) & types.Nullable) }
+fn meetPerm(a I64, b I64) I64 { return (a & b & types.Writable) | ((a | b) & types.Nullable) }
 
 # a if c else b (E28): one type for both values, a literal adapting
 fn (c mut Checker&) cond(sp source.Span, a ast.Expr&, k ast.Expr&, b ast.Expr&, want types.TypeId) typed.Expr& {
@@ -10347,7 +10347,7 @@ fn (c mut Checker&) errorResult(tr ast.TypeRef?&) Bool {
             return true
         }
         case ast.TypeRef.Ref(_, of, _) { return c.errorResult(of) }
-        case ast.TypeRef.Perm(_, of, _, _) { return c.errorResult(of) }
+        case ast.TypeRef.Perm(_, of, _) { return c.errorResult(of) }
         case _ { return false }
     }
 }
@@ -10396,7 +10396,7 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
             }
             return true
         }
-        case ast.TypeRef.Perm(_, of, _, _) { return c.writtenMet(of) }
+        case ast.TypeRef.Perm(_, of, _) { return c.writtenMet(of) }
         case ast.TypeRef.Any(asp, trt) {
             # T32: an "any" is always a reference
             c.err(asp, msgs.AnyNeedsMarker(c.src(trt.Span())))
@@ -10498,7 +10498,7 @@ fn (c mut Checker&) typeArgMet(a ast.TypeRef&) Bool { return not c.mutOnValue(a)
 # whether it was
 fn (c mut Checker&) mutOnValue(a ast.TypeRef&) Bool {
     match a {
-        case ast.TypeRef.Perm(psp, of, w, _) {
+        case ast.TypeRef.Perm(psp, of, w) {
             if not w or c.refWritten(of!) { return false }
             c.err(source.Span(psp.Start, psp.Start + 3), msgs.MutOnValueType(c.ty(c.P.Resolve(c.fr().Ctx, of))))
             return true
@@ -10708,6 +10708,8 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
         if not none and c.zeroCalls(elem) {
             c.exprs.Push(c.zero(sp, elem))
             c.askValue(ValueKind.Fill, sp, elem, null)
+        } else if not none and c.nullableArray(elem) {
+            c.exprs.Push(c.nullOf(sp, elem))   # T2c: each element null, as a declaration with no value is
         } else if not none {
             c.zero(sp, elem)   # T2c: a never-null reference element has no zero value to fill with
         }
@@ -10716,7 +10718,7 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
     items := gather(c.exprs, from)
     # its length checked once (D14b)
     lchk := typed.Check.Abort
-    nc := c.noClear and args.Len() == 1 and not c.owning(elem) and c.P.T.KindOf(c.P.T.Repr(elem)) != types.Kind.Array
+    nc := c.noClear and args.Len() == 1 and c.P.T.KindOf(c.P.T.Repr(elem)) != types.Kind.Array
     c.noClear = false
     return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Fill, 0, items, n0
                                               c.site(typed.SiteKind.Make, sp), lchk, nc))
@@ -11536,7 +11538,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     c.roCheckCallee(target, r)
     targs := gather(c.exprs, from)
     site := c.site(typed.SiteKind.Call, sp)
-    call := typed.Expr.Call(sp, r, typed.Call(target, targs, typed.Mark.None, site))
+    call := typed.Expr.Call(sp, r, typed.Call(target, targs, site))
     # D17e: its callee's contract, decided by the evaluator where it can be, or checked under checked
     cb := c.bodyOfCallee(target)
     if cb < 0 { cb = c.slotContract(target) }
@@ -12249,7 +12251,7 @@ fn (c mut Checker&) inPlaceCall(sp source.Span, call typed.Expr&) typed.Expr& {
     if ref is null: return call
     args mut Array<typed.Expr&>& = Array<typed.Expr&>(cl.Args.Len(), ref)
     for j in range 1, cl.Args.Len() { args[j] = cl.Args[j] }
-    return typed.Expr.Call(call.Span(), typeOf(call), typed.Call(cl.Target, args, cl.Scoped, cl.Site, cl.Zero, cl.Tail))
+    return typed.Expr.Call(call.Span(), typeOf(call), typed.Call(cl.Target, args, cl.Site, cl.Zero, cl.Tail))
 }
 
 # the At call whose value a writable borrow lends - a temporary's storage, or one made for it (E12) - null for any other
@@ -17504,30 +17506,6 @@ fn (c mut Checker&) iterShaped(m I64) Bool {
     return c.infersErrs(sig)
 }
 
-# ---- take (E34) ----
-
-# whether a value of type t owns: an own reference, or a value holding one by value (O30, O31)
-fn (c mut Checker&) owning(t types.TypeId) Bool { return c.owningIn(t, 0) }
-
-fn (c mut Checker&) owningIn(t types.TypeId, depth I64) Bool {
-    if depth > 16 or t == types.UnknownT { return false }
-    k := c.P.T.KindOf(t)
-    if k == types.Kind.Ref { return (c.P.T.PermOf(t) & types.Owning) != 0 }
-    if k == types.Kind.Tuple or k == types.Kind.Record {
-        for x in c.P.T.Items(c.P.T.Parts(t)) {
-            if c.owningIn(x, depth + 1) { return true }
-        }
-        return false
-    }
-    if k == types.Kind.Array and c.P.T.Length(t) != types.TypeId(0) { return c.owningIn(c.P.T.Elem(t), depth + 1) }
-    if k == types.Kind.Named and c.P.Body(t) and c.P.T.DeclKindOf(c.P.T.DeclOf(t)) == types.DeclKind.Struct {
-        for x in c.P.T.Items(c.P.T.Fields(t)) {
-            if c.owningIn(x, depth + 1) { return true }
-        }
-    }
-    return false
-}
-
 # ---- lambdas (D16) ----
 
 # whether t mentions a type variable of owner - one a generic call has not bound yet
@@ -18617,7 +18595,7 @@ fn (c mut Checker&) borrowedSource(sp source.Span, src typed.Expr&) I64 {
     st := typeOf(src)
     rt := st if c.isRef(st) else c.P.T.Ref(st, types.ReadOnly)
     # T25c: a writable reference a read-only copy holds is walked read-only
-    if c.isRef(st) and (c.P.T.PermOf(st) & types.Writable) != 0 and c.roRef(src) { rt = c.P.T.Ref(c.P.T.Referent(st), c.P.T.PermOf(st) & types.Owning) }
+    if c.isRef(st) and (c.P.T.PermOf(st) & types.Writable) != 0 and c.roRef(src) { rt = c.P.T.Ref(c.P.T.Referent(st), types.ReadOnly) }
     coll := c.hidden(sp, rt)
     # T25c: a value borrowed is as read-only as the place it is (its elements read-only copies exactly then)
     c.roBorrows.Put(c.roKey(coll), c.roRef(src) if c.isRef(st) else c.roPlace(readPlace(src)))
@@ -19484,7 +19462,7 @@ fn (c mut Checker&) becomeStmt(sp source.Span, x ast.Expr&) {
     c.tails.Push(tailAsk(fr.Body, callee, sp, fr.Mi))
     match v {
         case typed.Expr.Call(csp, ty, cl) {
-            c.emit(typed.Stmt.Return(sp, typed.Expr.Call(csp, ty, typed.Call(cl.Target, cl.Args, cl.Scoped, cl.Site, cl.Zero, true))))
+            c.emit(typed.Stmt.Return(sp, typed.Expr.Call(csp, ty, typed.Call(cl.Target, cl.Args, cl.Site, cl.Zero, true))))
         }
         case _ { }
     }
@@ -19680,7 +19658,7 @@ fn (c mut Checker&) genLambda(fd ast.Func&, ft types.TypeId, el I64, home I64) t
     from := c.stmts.Len()
     pb := c.Bodies[parent.Body]
     if home >= 0 {
-        # D18c: where the generator lives, captured - the scope "&return" names in its body, its elements' (GenHome)
+        # D18c: where the generator lives, captured - its result scope, where its kept elements live (GenHome)
         ht := pb.Locals[home].Ty
         b := c.Bodies[id]
         inner := I64(b.AddLocal(typed.Local(source.NameId(0), sp, ht, typed.BlockId(0), typed.LocalKind.Capture, typed.Mark.Infer)))
@@ -20159,7 +20137,7 @@ fn (c mut Checker&) patternNames(tr ast.TypeRef?&, out mut Vec<source.NameId>&, 
             }
         }
         case ast.TypeRef.Ref(_, of, _) { c.patternNames(of, out, inArgs) }
-        case ast.TypeRef.Perm(_, of, _, _) { c.patternNames(of, out, inArgs) }
+        case ast.TypeRef.Perm(_, of, _) { c.patternNames(of, out, inArgs) }
         case _ { }
     }
 }

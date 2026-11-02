@@ -24,9 +24,9 @@ type Generator<T ? E> struct(next (fn&() T ? E, Exhausted)) {
 
 fn (g mut Generator<T ? E>&) Next() T ? E, Exhausted { return try g.next() }
 
-# what a generator whose elements are borrowed gives (D18c): one whose result is written Iterator<T&p ? E> - each element
-# a reference into what its parameter p refers to - or Iterator<T&return ? E> - into storage its walk keeps, where the
-# generator lives - gives a ViewGenerator<T ? E>, T the elements' referent. Its Next gives a read-only reference that
+# what a generator whose elements are borrowed gives (D18c): one whose result is Iterator<T& ? E> and whose yields hand
+# back a reference into what a parameter refers to, or into storage its walk keeps where the generator lives (read off
+# its yields, O28) - gives a ViewGenerator<T ? E>, T the elements' referent. Its Next gives a read-only reference that
 # lives where the generator does, at least: no shorter than what Next is called on
 type ViewGenerator<T ? E> struct(next (fn&() T& ? E, Exhausted)) {
     next

@@ -569,7 +569,7 @@ fn refElem(a ast.TypeRef&) Bool {
 fn byValueParam(prm ast.Param&) Bool {
     if prm.Ty is null: return true
     return match prm.Ty! {
-        case ast.TypeRef.Ref(_, _, _), ast.TypeRef.Perm(_, _, _, _): false
+        case ast.TypeRef.Ref(_, _, _), ast.TypeRef.Perm(_, _, _): false
         case _: true
     }
 }
@@ -812,7 +812,7 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
         case ast.TypeRef.Func(sp, s): p.funcType(c, sp, s)
         case ast.TypeRef.Shape(_, body): p.shape(c, body)
         case ast.TypeRef.Ref(sp, of, nullable): p.refType(c, sp, p.Resolve(c, of), nullable)
-        case ast.TypeRef.Perm(_, of, writable, owned): p.perm(p.Resolve(c, of), writable, owned)
+        case ast.TypeRef.Perm(_, of, writable): p.perm(p.Resolve(c, of), writable)
         # T32: what "any R&" refers to - the trait R names, the checker saying where it names none (writtenMet)
         case ast.TypeRef.Any(_, of): p.T.Any(p.Resolve(c, of))
         case ast.TypeRef.Errs(_, _): types.UnknownT     # only where Apply reads it, a list's last argument (G1a)
@@ -854,10 +854,10 @@ fn (p mut Program&) DeclaredFunc(t types.TypeId) types.TypeId {
 # whether a global's written type says "mut" - a writable global (its binding, which only a global's "mut" decides)
 fn WrittenMut(tr ast.TypeRef?&) Bool { return names.WrittenMut(tr) }
 
-# "mut"/"own" before a type: a reference's permission (T25b, T25e), a variable's where it is bound to a reference (T2);
-# before a value type it says nothing the type holds (the checker's D9/D11a)
-fn (p mut Program&) perm(t types.TypeId, writable Bool, owned Bool) types.TypeId {
-    bits := (types.Writable if writable else types.ReadOnly) | (types.Owning if owned else types.ReadOnly)
+# "mut" before a type: a reference's permission (T25b), a variable's where it is bound to a reference (T2); before a
+# value type it says nothing the type holds (the checker's D9/D11a)
+fn (p mut Program&) perm(t types.TypeId, writable Bool) types.TypeId {
+    bits := types.Writable if writable else types.ReadOnly
     return match p.T.KindOf(t) {
         case types.Kind.Ref: p.T.Ref(p.T.Referent(t), p.T.PermOf(t) | bits)
         case types.Kind.Var: p.T.Var(p.T.A(t), p.T.B(t), p.T.C(t) | bits)
@@ -1106,7 +1106,7 @@ fn (p mut Program&) flagBans(c Context&, s ast.Sig&, sig types.TypeId, recv Bool
 fn (p mut Program&) viewNext(row fnRow&) Bool {
     if row.F.Recv is null or p.L.Names.Text(row.F.Name) != "Next" or p.L.Mods[row.Mi].Identity != "std/prelude/iterator" { return false }
     return match row.F.Recv!.Ty {
-        case ast.TypeRef.Perm(_, of, _, _): of is not null and viewGenTy(p, of)
+        case ast.TypeRef.Perm(_, of, _): of is not null and viewGenTy(p, of)
         case _: viewGenTy(p, row.F.Recv!.Ty!)
     }
 }
@@ -1824,7 +1824,7 @@ fn (p mut Program&) globalDecl(mi I64, n source.NameId) ast.VarDecl?& {
 fn mutableGlobal(v ast.VarDecl&) Bool {
     if v.Ty is null { return false }
     return match v.Ty {
-        case ast.TypeRef.Perm(_, _, writable, _): writable
+        case ast.TypeRef.Perm(_, _, writable): writable
         case _: false
     }
 }
@@ -2568,7 +2568,7 @@ fn (p mut Program&) constraintKey(mi I64, k ast.TypeRef&) I64 {
 fn (p mut Program&) recvKey(mi I64, t ast.TypeRef?&, tps Array<ast.TypeParam&>&) I64 {
     if t is null { return -1 }
     match t {
-        case ast.TypeRef.Perm(_, of, _, _) { return p.recvKey(mi, of, tps) }
+        case ast.TypeRef.Perm(_, of, _) { return p.recvKey(mi, of, tps) }
         case ast.TypeRef.Ref(_, of, _) { return p.recvKey(mi, of, tps) }
         case ast.TypeRef.Named(sp, path, _) {
             ref := p.R.Use(p.file(mi), sp.Start)
@@ -2865,7 +2865,7 @@ fn mentionsName(t ast.TypeRef?&, n source.NameId) Bool {
             return false
         }
         case ast.TypeRef.Ref(_, of, _) { return mentionsName(of, n) }
-        case ast.TypeRef.Perm(_, of, _, _) { return mentionsName(of, n) }
+        case ast.TypeRef.Perm(_, of, _) { return mentionsName(of, n) }
         case ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { return mentionsName(of, n) }
         case ast.TypeRef.Errs(_, items) {
             for e in items {
@@ -2978,7 +2978,7 @@ fn (p mut Program&) introductions(mi I64, t ast.TypeRef?&, ns mut Vec<source.Nam
             for a in args { p.introductions(mi, a, ns, true) }
         }
         case ast.TypeRef.Ref(_, of, _) { p.introductions(mi, of, ns, inArgs) }
-        case ast.TypeRef.Perm(_, of, _, _) { p.introductions(mi, of, ns, inArgs) }
+        case ast.TypeRef.Perm(_, of, _) { p.introductions(mi, of, ns, inArgs) }
         case ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { p.introductions(mi, of, ns, inArgs) }
         # QAH: "? E" among a receiver's arguments introduces its error-set variable
         case ast.TypeRef.Errs(_, items) {
@@ -3000,7 +3000,7 @@ fn errIntroductions(t ast.TypeRef?&, out mut Vec<source.NameId>&) {
             for a in args { errIntroductions(a, out) }
         }
         case ast.TypeRef.Ref(_, of, _) { errIntroductions(of, out) }
-        case ast.TypeRef.Perm(_, of, _, _) { errIntroductions(of, out) }
+        case ast.TypeRef.Perm(_, of, _) { errIntroductions(of, out) }
         case ast.TypeRef.Errs(_, items) {
             for e in items {
                 if e.Parts.Len() == 1 { out.Push(e.Parts[0]) }
@@ -3446,7 +3446,7 @@ fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Boo
     if p.T.KindOf(cur) == types.Kind.Ref and p.T.KindOf(v) == types.Kind.Ref and p.T.Referent(cur) == p.T.Referent(v) {
         # writable where both are, nullable where either is (T2c)
         pc, pv := p.T.PermOf(cur), p.T.PermOf(v)
-        if not b.Fixed[i] { b.Vals[i] = p.T.Ref(p.T.Referent(v), (pc & pv & (types.Writable | types.Owning)) | ((pc | pv) & types.Nullable)) }
+        if not b.Fixed[i] { b.Vals[i] = p.T.Ref(p.T.Referent(v), (pc & pv & types.Writable) | ((pc | pv) & types.Nullable)) }
         return
     }
     error Mismatch
@@ -4701,7 +4701,6 @@ fn (c cursor&) peek() Char { return c.Text[c.At] if c.At < c.Text.Len() else Cha
 
 fn (p mut Program&) canonType(c mut cursor&) types.TypeId ? BadCanon, Undeclared {
     perm := types.ReadOnly
-    if c.eat("own ") { perm = perm | types.Owning }
     if c.eat("mut ") { perm = perm | types.Writable }
     t := try p.canonInner(c)
     if c.eat("&") { return p.T.Ref(t, perm) }
@@ -4897,7 +4896,7 @@ test "declared types and instances: laid out as C lays them out, their canonical
     assert p.Layout(bf) and p.T.Size(bf) == 5 and p.T.Align(bf) == 1
     for text in String&["I32", "Array<U8>", "Array<I64, 4>", $m ":Box<mut " $m ":P&>", "fn(I32, std/prelude/text:String&) I64 ? " $m ":E"
                         "fn() (I32, Bool) ?", "(I32, Bool)", "struct(I64, F32)", "enum{A(I32) B}"
-                        "own mut Array<std/prelude/text:String&>&", $m ":Box<" $m ":Box<Array<F64>>>"] {
+                        "mut Array<std/prelude/text:String&>&", $m ":Box<" $m ":Box<Array<F64>>>"] {
         assert p.roundTrip(text), text
     }
     # no such type

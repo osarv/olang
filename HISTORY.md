@@ -28240,3 +28240,48 @@ renderings (`fn(` to `fn&(`) were updated by hand; the generators (fuzz/gen, fuz
 **Found on the way.** null_migrate's array fixes read the old messages ("an array is never null"); with nullable arrays
 the messages say "an array written '&' is never null ... or '?&' where it may be null", and its `dropq` kind went with
 ArrayNullable.
+
+## The cleanup after the two refactors; an `Array<T>?&` with no value starts as null (2026-11-02)
+
+The front-end (wt-refront) and back-end (wt-reback) refactors merged side by side with no code overlap; their merged
+tip passed `make quick` but for nothing (the only failure was the AST golden of this pass's own first edit). The
+coordinator's decisions for both left a joint pass, done here (wt-tidy):
+
+**Dead code from removed spellings.** `typed.Call.Scoped` - a written scope argument `f&x(...)`, E25 - had been
+`Mark.None` at every one of its eight constructions since round 4 (O28), so `typed.ScopedCall`, `typed.ScopedArray`
+(never called) and the scoped-call tests in `AnyItemNew` and `ViewWalk.CallRoots` were dead; all gone, `Call` 56 -> 32
+bytes. `typed.Mark` stays (the inference's placements are marks) with its comments saying where a declaration was
+placed rather than what was written; `Mark.Global` (`&G`) was never made and went. `types.Owning` (the removed `own`)
+was set nowhere - the parser never set `ast.TypeRef.Perm`'s `owned`, and `generic.canonType`'s `"own "` read only texts
+nothing wrote - so it went with the field, `generic.perm`'s parameter, `check.owning` (always false: its two callers
+simplified), the fit's and the meets' own bits, and MIR's `Give` and `RegisterOwner` (never lowered: emit had them as
+gaps) with the verifier's own-slot checks, the evaluator's `lastOwnScope`, `gOwner` and `releaseSlot`. interp's own
+`writtenMut` gave way to `generic.WrittenMut`. Three duplicates moved into typed.olang: `CallOf` (free's `callOf`,
+lower's `callOfExpr`, scope's `Scoper.callOf`), `CalleeBody` (free's `calleeBody`, lower's `calleeOf`) and `PartOf`
+(lower's `partLvalue`, scope's `partOf`). compiler/tools/checkdiff and scopediff, stage 0's parity measures and in no
+verify, were deleted with their make targets (checkdump and scopedump stay as dumps). parse.olang's test of an `&` read
+as a scope argument (`p.half != Eof and k == Amp`) could never hold - a split token's half is a `>`, `=` or `>=` - and
+went.
+
+**S1b.** `if a > b: a, b = b, a` was refused as "a declaration": the one-line body refused every `Stmt.Multi`, which is
+both `a, b := ...` (a declaration) and `a, b = ...` (an assignment). Only the `:=` form is refused now
+(`checks/cases/s1bparallel.olang`, a run case decided while compiling too; `s1bmultidecl.olang` for the refusal). SPEC
+S1b says it.
+
+**Notes naming removed spellings.** `NoteMakeWhere` told the user to write `f&x(...)` and `NoteDeclareWhere` `t mut
+String&names = ...`; both now say to declare the local where what keeps it lives and assign it there (which compiles:
+declared outside the loop, `t = $k ...` stored into `names` is accepted). diag.txt's five rows recaptured.
+
+**`Array<T>?&` / `String?&` given no value starts as null (T2c, D13; the coordinator's decision 2026-11-02, reversing
+QCI 4's "its zero value is the empty array").** One rule for every `?&`: null its zero. `check.zero` gives null for a
+nullable array, so a local, a global, a field declared in a constructor, a constructor parameter's zero and a
+struct's zero value start null; `Array<T>(n)` with no fill of such elements writes null into each (null is no zero
+bits, so a fill is given). An array written `&` and one held by value still start empty; an enum's zero value is its
+first case with zero bits, so a payload field of a nullable array there is empty (a recorded limit). The evaluator
+agrees by construction (it runs the same typed core) - `tests/fnref.olang`'s `zeros` is baked (K2) and decided by a
+top-level assert (S17a). **Found on the way:** a null text inside another value's rendering - `String?&["a", null]`, a
+`Vec<String?&>` - rendered `""`: `lowering.inner` wrote it quoted without the null test the top level makes; it renders
+`null` now (`renderMaybeText` takes the write kind).
+
+**Measured.** bench's IR (18 programs, every module's .ll) byte-identical across the cleanup (the IR of std/prelude's
+reworded comment keeps its lines); the nullable-array zero changes no bench program (none declares one).

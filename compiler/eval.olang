@@ -179,11 +179,9 @@ type scope struct() {
     DRegs I64 = -1       # a region's registrations, newest first, through their RNext - also in its owner's list
 }
 
-# a registration in a scope, run when it closes: a destructor of a type for the instance at P, or an own slot at P; or
-# a generator living in the scope (D18), by its index in gens (Ty), whose walk's scopes close with it if it stopped
-# part way
+# a registration in a scope, run when it closes: a destructor of a type for the instance at P; or a generator living in
+# the scope (D18), by its index in gens (Ty), whose walk's scopes close with it if it stopped part way
 gDtor I64 = 0
-gOwner I64 = 1
 gGen I64 = 2
 
 type reg struct() {
@@ -428,7 +426,6 @@ type Machine struct(T mut types.Table&, When Mode) {
     scratch I64 = 0
     tmps mut Array<I64>& = Array<I64>(3)
     initGlobal I64 = -1
-    lastOwnScope I64 = 0
     offAt Map<types.TypeId, I64>
     offs Vec<I64>
     writableOf Map<types.TypeId, Bool>
@@ -1474,8 +1471,6 @@ fn (m mut Machine&) stepClose() {
             m.runDtor(id, types.TypeId(I32(g.Ty)), Ptr(g.Id, g.Off))
         } else if g.Kind == gGen {
             m.closeGen(g.Ty)
-        } else {
-            m.releaseSlot(Ptr(g.Id, g.Off))
         }
         return
     }
@@ -1538,17 +1533,6 @@ fn (m mut Machine&) settle(h I64, p Ptr, ty types.TypeId) {
 fn (m mut Machine&) closeRegion(region I64) {
     m.disown(region)
     m.scopes[region & slotMask].Early = true
-    m.closing.Push(region)
-}
-
-# the own slot at p let go of: its object's region closed and the slot left null (O35)
-fn (m mut Machine&) releaseSlot(p Ptr) {
-    q := m.rdPtr(p)
-    if m.halted or q.Id == 0 { return }
-    m.wrPtr(p, NullPtr)
-    region := m.al[q.Id & slotMask].Scope
-    if not m.live(region) { return }
-    m.disown(region)
     m.closing.Push(region)
 }
 
@@ -2092,8 +2076,6 @@ fn (m mut Machine&) putData(fi I64, dst Ptr, ty types.TypeId, c I32, file I64, s
 fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
     dst, dt := m.place(fi, p)
     if m.halted { return }
-    t := m.T
-    if t.IsRef(t.Repr(dt)) and (t.PermOf(t.Repr(dt)) & types.Owning) != 0 { m.lastOwnScope = m.al[dst.Id & slotMask].Scope }
     match rv {
         case mir.Rvalue.Use(x) { m.put(fi, dst, dt, x) }
         case mir.Rvalue.Ref(q, ty) { m.ref(fi, dst, q, ty) }
@@ -3544,11 +3526,6 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
                 m.defB.Push(I64(entry))
             }
         }
-        case mir.Stmt.Give(_, s) {
-            id := m.ws[m.fs[fi].Scopes + I64(s)]
-            m.ws[m.fs[fi].Scopes + I64(s)] = 0
-            m.adopt(id, m.lastOwnScope)
-        }
         case mir.Stmt.RegisterDtor(sp, s, ty, x) {
             m.atK(fk, sp)
             sc := m.scopeOf(fi, s)
@@ -3558,11 +3535,6 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
             }
             p := m.rdPtr(m.addr(fi, x, 1))
             m.addReg(sc, gDtor, I64(ty), p)
-        }
-        case mir.Stmt.RegisterOwner(sp, s, p) {
-            m.atK(fk, sp)
-            slot, _ := m.place(fi, p)
-            m.addReg(m.scopeOf(fi, s), gOwner, 0, slot)
         }
         case mir.Stmt.Release(sp, p) {
             m.atK(fk, sp)

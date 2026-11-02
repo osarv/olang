@@ -3051,7 +3051,7 @@ fn MainSignature() Msg { return Msg(Diag.MainSignature, "B4", "main takes no par
 fn NoteObligationOrigin() Msg { return Msg(Diag.NoteObligationOrigin, "", "the callee requires it because of this statement") }
 
 # NOTE_MAKE_WHERE
-fn NoteMakeWhere(text1 String&, text2 String&, text3 String&, text4 String&) Msg { return Msg(Diag.NoteMakeWhere, "", "'" $text1 "' is made here, in a block that closes first - make it where '" $text2 "' lives: '" $text3 "&" $text4 "(...)'") }
+fn NoteMakeWhere(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.NoteMakeWhere, "", "'" $text1 "' is made here by '" $text3 "', in a block that closes first - declare it where '" $text2 "' lives and assign it here") }
 
 # NOTE_REFILL_KEPT
 fn NoteRefillKept(text1 String&, text2 String&) Msg { return Msg(Diag.NoteRefillKept, "", "or refill the one kept - '" $text1 ".Clear()', then put the elements in: one made where '" $text2 "' lives stays there, beside every one made before it, until that scope closes") }
@@ -3061,7 +3061,7 @@ fn NoteParamCopy(text1 String&, text2 String&) Msg { return Msg(Diag.NoteParamCo
 
 fn NoteBindingWhere(text1 String&, text2 String&) Msg { return Msg(Diag.NoteBindingWhere, "", "'" $text1 "' is bound here to what the matched value holds, which lives in a block that closes first - make that where '" $text2 "' lives") }
 
-fn NoteDeclareWhere(text1 String&, text2 String&, text3 String&, text4 String&, text5 String&) Msg { return Msg(Diag.NoteDeclareWhere, "", "'" $text1 "' is declared here, in a block that closes first - declare it where '" $text2 "' lives: '" $text3 " " $text4 "&" $text5 " = ...'") }
+fn NoteDeclareWhere(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.NoteDeclareWhere, "", "'" $text1 "' is declared here, in a block that closes first - declare it where '" $text2 "' lives, '" $text1 " " $text3 "&', and assign it here") }
 
 # NOTE_LOOP_COPY_LENT
 fn NoteLoopCopyLent(text String&) Msg { return Msg(Diag.NoteLoopCopyLent, "", "'" $text "' is the loop's copy of an element, in the loop's block - a call it is lent to by reference ties what it builds to that copy: take that parameter by value, or build from its fields here") }

@@ -71,7 +71,7 @@ fn (w mut walker&) varOf(t ast.TypeRef?&) I64 {
             return try w.vars.Get(path[0]) catch default -1
         }
         case ast.TypeRef.Ref(_, of, _) { return w.varOf(of) }
-        case ast.TypeRef.Perm(_, of, _, _) { return w.varOf(of) }
+        case ast.TypeRef.Perm(_, of, _) { return w.varOf(of) }
         case _ { return -1 }
     }
 }
@@ -86,7 +86,7 @@ fn (w mut walker&) elemOf(t ast.TypeRef?&) I64 {
             return w.varOf(args[0])
         }
         case ast.TypeRef.Ref(_, of, _) { return w.elemOf(of) }
-        case ast.TypeRef.Perm(_, of, _, _) { return w.elemOf(of) }
+        case ast.TypeRef.Perm(_, of, _) { return w.elemOf(of) }
         case _ { return -1 }
     }
 }

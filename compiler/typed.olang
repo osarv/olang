@@ -45,17 +45,17 @@ type SiteId extends I32
 
 # ---- declarations' scopes ----
 
-# where a declaration says its reference lives (O3, O4, O25a): a parameter's, a local's, a field's (C2d) or a payload
-# parameter's (T17c), as written; a result's, as its function type says (ResultMark)
+# where a declaration's reference lives (O3, O4, O25a, O28): a parameter's, a local's, a field's (C2d) or a payload
+# parameter's (T17c), as the inference placed it - no scope is written (QCB); a result's, as its function type holds it
+# (ResultMark)
 type Mark enum {
-    None              # no marker written: a value. A parameter so marked holding references has a scope variable of
-                      # its own for them (O4b), a local's references are its block's (O18a)
-    Bare              # "&": a parameter's own scope variable (O4b), a local's block (O25a), a field's instance (C2d), a
-                      # result built in the result scope (O13)
-    Of(local LocalId) # "&x": where x lives (O4a) - a parameter written before (one so marked shares x's scope variable
-                      # and has none of its own), a local or parameter for a local or a result
-    Global(module I64, name source.NameId)  # "&G": where a global lives, the program's scope (O1b) - a local's only
-    Return            # "&return": the result scope (O26)
+    None              # a value. A parameter so marked holding references has a scope variable of its own for them
+                      # (O4b), a local's references are its block's (O18a)
+    Bare              # a reference of its own scope: a parameter's own scope variable (O4b), a local's block (O25a), a
+                      # field's instance (C2d), a result built in the result scope (O13)
+    Of(local LocalId) # where local lives (O4a) - a parameter before it (one so placed shares its scope variable and has
+                      # none of its own), a local or parameter for a local or a result
+    Return            # the result scope (O26): a generator's hidden home (D18c)
     Infer             # ":=", or a local written as a bare type variable: where its initializer lives (O25a, O25h)
     TypeVar           # a result written as a bare type variable: a result scope where it became a reference (O14b, T22a)
 }
@@ -287,10 +287,9 @@ type Helper enum {
 # parameter's argument is a reference - a Borrow, a Promote, or a reference's value - and a by-value one's a value.
 # A call to a fallible callee stands inside a Try, the innermost of which takes its errors - but a task's call, whose
 # errors go to its Spawn's clauses and then its join (P4)
-type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId, Zero Bool = false, Tail Bool = false) {
+type Call struct(Target Callee&, Args Array<Expr&>&, Site SiteId, Zero Bool = false, Tail Bool = false) {
     Target
     Args
-    Scoped     # a written scope argument, "f&x(...)" (E25): Of(x), or Return; None for none
     Site
     # a type's zero value (D13c): its constructor on its parameters' defaults or zeros. Which it is - all zero bits, the
     # call, or none (an error at the declaration) - is decided once per type after check, by eval (DESIGN.md 1.8)
@@ -351,23 +350,30 @@ fn CalledBody(x Expr&) I64 {
     }
 }
 
-# whether a call is given a scope argument, "f&x(...)" or "f&return(...)" (E25): its result is built where that says,
-# never where the call stands - so it is no temporary there, and is judged where it is put as existing storage is
-fn ScopedCall(c Call&) Bool {
-    return match c.Scoped {
-        case Mark.Of(_), Mark.Return: true
-        case _: false
+# the call an expression is - itself, or under a try or an Away - null for none
+fn CallOf(x Expr?&) Call?& {
+    if x is null: return null
+    return match x {
+        case Expr.Call(_, _, c): c
+        case Expr.Try(_, _, t): CallOf(t.X)
+        case Expr.Away(_, _, y): CallOf(y)
+        case _: null
     }
 }
 
-# whether an expression is a call given a scope argument, converted or not: an array value whose storage is where the
-# scope argument says (E25), never built where the expression stands
-fn ScopedArray(x Expr&) Bool {
-    return match x {
-        case Expr.Call(_, _, c): ScopedCall(c)
-        case Expr.Prim(_, _, op, _, args): PassesRefs(op) and args.Len() > 0 and ScopedArray(args[0])
-        case Expr.Away(_, _, y): ScopedArray(y)
-        case Expr.Seq(_, _, q): q.X is not null and ScopedArray(q.X!)
+# the body a call's callee is, -1 for any other callee (a function value, an extern, a helper)
+fn CalleeBody(c Call&) I64 {
+    return match c.Target {
+        case Callee.Body(id): I64(id)
+        case _: -1
+    }
+}
+
+# whether a place is a part of a value - a field, an element, a payload's field - rather than a whole local, global or
+# referent
+fn PartOf(p Lvalue&) Bool {
+    return match p {
+        case Lvalue.Field(_, _, _, _), Lvalue.Elem(_, _, _), Lvalue.Payload(_, _, _): true
         case _: false
     }
 }
@@ -375,14 +381,13 @@ fn ScopedArray(x Expr&) Bool {
 # T32a: whether the array an "any"'s box holds is provably new storage, built where the box is - then the box holds it
 # as it is; anything else the box copies. One answer for every pass that makes a box - the scope pass, lowering with or
 # without a plan, so the compile-time evaluator too. A conditional, a match or a try is new only if every value it can
-# give is, a default included - a constant is not, since a writable any could write through it; a call only where its
-# result is built where it lands: no scope argument puts it elsewhere, and an array value returned is the caller's own
-# (T7b - a returned local a borrow kept elsewhere names is copied at its return, O26a)
+# give is, a default included - a constant is not, since a writable any could write through it; a call where its
+# result is an array value, which is the caller's own (T7b - a returned local a borrow kept elsewhere names is copied at its return, O26a)
 fn AnyItemNew(t types.Table&, x Expr?&) Bool {
     if x is null { return false }
     match x {
         case Expr.Make(_, _, _), Expr.Promote(_, _, _), Expr.Collect(_, _, _), Expr.Text(_, _, _) { return true }
-        case Expr.Call(_, ty, c) { return not ScopedCall(c) and arenaArray(t, ty) }
+        case Expr.Call(_, ty, _) { return arenaArray(t, ty) }
         case Expr.Cond(_, _, c) { return AnyItemNew(t, c.A) and AnyItemNew(t, c.B) }
         case Expr.Match(_, _, m) {
             if not m.IsValue { return false }
@@ -464,10 +469,8 @@ fn (w ViewWalk&) tryRoots(tr Try&) I64 {
 }
 
 # a call handed back as it is (ViewRoots): the parameters here its viewed arguments reach - 0 where it views nothing, or
-# one of them reaches anything else (the call copies its result, which is new storage here); a scoped call's (E25)
-# storage is where its scope argument says: existing, copied
+# one of them reaches anything else (the call copies its result, which is new storage here)
 fn (w ViewWalk&) CallRoots(c Call&) I64 {
-    if ScopedCall(c): return -1
     v := w.CallViews(c)
     if v <= 0 or (v & ViewOther) != 0: return 0
     r I64 = 0
@@ -2279,7 +2282,7 @@ test "a body's marks and scope variables come from its type; constants, temporar
     # a read of an own slot borrows it at a Region site; a temporary place has a site; text arrays are constants
     region := b.AddSite(SiteKind.Region, sp)
     tmp := b.AddSite(SiteKind.Temp, sp)
-    owner := t.Ref(n, types.Owning | types.Writable)
+    owner := t.Ref(n, types.Writable)
     w mut printer& = printer(t)
     borrow := Expr.Read(sp, roN, Lvalue.Local(sp, owner, a), region)
     assert w.expr(borrow) == "(read L0 site 0)", w.expr(borrow)

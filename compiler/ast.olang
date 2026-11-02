@@ -18,8 +18,8 @@ type TypeRef enum {
     Shape(sp source.Span, body TypeBody&)
     # a reference marker after a type: "&" (T24); "?&" nullable (T2c)
     Ref(sp source.Span, of TypeRef&, nullable Bool)
-    # the permission before a type: "mut" (T25b) - owned never set by the parser, own being gone from the language
-    Perm(sp source.Span, of TypeRef?&, writable Bool, owned Bool)
+    # the permission before a type: "mut" (T25b)
+    Perm(sp source.Span, of TypeRef?&, writable Bool)
     # "any Trait": a run-time trait value's referent (T32) - the reference marker after it a Ref around it
     Any(sp source.Span, of TypeRef&)
     # "? A, B" closing a type-argument list (G8, QAH): the error set given for the type's error-set parameter
@@ -428,7 +428,7 @@ fn (t TypeRef&) IsFunc() Bool { return t.FuncSig() is not null }
 fn (t TypeRef&) Span() source.Span {
     return match t {
         case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _): sp
-        case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _), TypeRef.Perm(sp, _, _, _), TypeRef.Any(sp, _): sp
+        case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _), TypeRef.Perm(sp, _, _), TypeRef.Any(sp, _): sp
         case TypeRef.Errs(sp, _), TypeRef.Spread(sp, _): sp
     }
 }
@@ -601,7 +601,7 @@ fn RecvTarget(f Func&, names source.Names&) String {
     t := f.Recv!.Ty
     for t is not null {
         match t {
-            case TypeRef.Perm(_, of, _, _) { t = of }
+            case TypeRef.Perm(_, of, _) { t = of }
             case TypeRef.Ref(_, of, _) { t = of }
             case TypeRef.Named(_, path, _) {
                 n := path[path.Len() - 1]

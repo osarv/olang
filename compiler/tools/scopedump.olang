@@ -7,9 +7,8 @@
 # For each file, "== FILE", then the program it is the root of loaded, its names resolved, every body checked and its
 # scopes judged: the diagnostics said, rendered as the compiler renders them, then "gap PATH:LINE:COL WHAT" for each
 # construct the scope pass met and does not judge yet, and "bodies N judged J unjudged U" - U the bodies with code the pass
-# skipped, a type in them left unknown by the checker. compiler/tools/scopediff.olang compares
-# them with stage 0's goldens. -D defines build constants; -t makes TestBuild true and checks the root module's test
-# blocks. -plan prints the plan of each body whose place (PATH:LINE) contains PATTERN.
+# skipped, a type in them left unknown by the checker. -D defines build constants; -t makes TestBuild true and checks
+# the root module's test blocks. -plan prints the plan of each body whose place (PATH:LINE) contains PATTERN.
 
 import "std/os"
 import "std/io"

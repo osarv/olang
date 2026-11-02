@@ -489,15 +489,17 @@ null: its zero value is the empty array. One written `?&` - `Array<T>?&`, `Strin
 and its null is not the empty array: `x is null` is false of an empty one, a null renders as `null` and an empty one as
 `""` or `I64[]` (E11a), and a null equals only a null (E10). It follows every rule of a `T?&` above: nothing is read
 through it - no element, slice, `Len()` or method - until it is known not to be null (S8e, or `x!`, E35). Its **zero
-value is the empty array**, all zero bits, as every array's is (D13): a declaration with no value is empty, and `null`
-is written where it is absent. `null` given for an array written `&` is a compile-time error naming its empty array
+value is null**, as every `?&`'s is (D13): a declaration with no value starts as null - a local, a global, a field, a
+constructor parameter's zero, each element of an `Array<T>(n)` with no fill (written there, since null is not its
+all-zero bits) - where an array written `&`, and one held by value, starts empty. `null` given for an array written `&` is a compile-time error naming its empty array
 (`""` for a `String`, `Array<T>(0)` otherwise) and `?&`, and `x is null` / `x is not null` on one is an error naming
 `x.Len() == 0` / `x.Len() > 0` and `?&`.
 
 Its representation is **all-zero bits**, at every nullable type but an array. For a single-pointer type that is the null
 pointer; for a function value the pair of words zeroed. An array's all-zero bits are its zero value, the empty array
 `{ 0, null }` — `Len()` (E23) of it is `0` and it reads as genuinely empty - so a null array is the length `-1` with no
-storage, `{ -1, null }`, which `x is null` tests.
+storage, `{ -1, null }`, which `x is null` tests; a null array, text included, renders `null` wherever it stands, an
+element of another's rendering too (E11a).
 
 `null` carries **no scope** (§8): there is nothing for it to outlive, so it flows into a target of any
 scope without a containment check. Whether a reference holds none is asked with `p is null` (E10c). A null equals
@@ -2281,7 +2283,7 @@ also be puns (`x, y`) or inferred (`p, q := a, b`).
 `0`/`0.0` for numeric types, `null` (T2a) for anything nullable - a `T?&`, a `fn?&(...)`; a `T&` and a `fn&(...)` have **no
 zero value**, so a declaration of one with no initializer that is not definitely initialised (D13d), an `Array<T&>(n)`
 with no fill, and a struct field of one with no default or parameter to give it are compile-time errors naming `T?&` -
-an empty array (0 elements, T7c) for `Array<T>` and for an `Array<T>?&` alike (T2c),
+an empty array (0 elements, T7c) for `Array<T>` and an array written `&`, `null` for an `Array<T>?&` (T2c),
 the first-declared case for an enum — an enum has no other meaningful "zero", so this is the type's
 first case by representation, not by any declared meaning - and `null`, no error, for an error value (T20). A type with a **constructor** - every struct (T13), and a
 declared number with one (T29d) - makes its own zero value (D13c). Nothing is ever uninitialized. For a **global**
@@ -4327,11 +4329,11 @@ its own: what it declares, what it allocates (§8 O2) and the destructors of wha
 a long function may give memory back before it returns. No expression begins with `{`, so a statement that does is a
 block. It runs once, and it leaves (D10a) when its statements do.
 
-**S1b (a one-line body).** `body ::= block | ":" line-stmnt`, where `line-stmnt` is one assignment (S4), expression
-statement (S3, an increment included), `return`, `break`, `continue`, `error`, `unreachable`, `assert` or `spawn`
-statement, beginning on the line of its `:`. An `if`'s and an `else`'s body and a `for` loop's body (but not the
-forever form's, nor a `do` loop's) may be one, and so may a lambda's (D16): `if x < 0: return 0`, `for x in xs: total
-+= x`, `else: count++`, `fn(x): return x > 3`; so may a match statement's clause, `case 0: n++` (S12), and a
+**S1b (a one-line body).** `body ::= block | ":" line-stmnt`, where `line-stmnt` is one assignment (S4, a parallel one
+included: `if a > b: a, b = b, a`), expression statement (S3, an increment included), `return`, `break`, `continue`,
+`error`, `unreachable`, `assert` or `spawn` statement, beginning on the line of its `:`. An `if`'s and an `else`'s
+body and a `for` loop's body (but not the forever form's, nor a `do` loop's) may be one, and so may a lambda's (D16):
+`if x < 0: return 0`, `for x in xs: total += x`, `else: count++`, `fn(x): return x > 3`; so may a match statement's clause, `case 0: n++` (S12), and a
 match used as a value takes the same `:` for its clauses' values (S12b). It is
 exactly the block holding that one statement - a scope of its own (S1), so a declaration in one would name nothing
 after it and is a compile-time error, as are an `if`, a loop, a `match`, a `join`, a `defer` and a block (write the

@@ -22,8 +22,8 @@
 # variable passed the program's. A plan's block is the MIR scope its typed block opened; an Inert scope (O12, E11c) is
 # the program's until lowering opens Inert scopes of its own.
 #
-# Memory is one model (docs/memory.md): scopes and destructor registration. Owned references are being removed, so a
-# Take lowers to MIR's Take and nothing is released, held or given (no Release, RegisterOwner, Region or Give).
+# Memory is one model (docs/memory.md): scopes and destructor registration; a Take lowers to MIR's Take, and what a sole
+# place lets go of is released where early freeing says (O8d: Release, Settle).
 #
 # What lowering meets and does not lower yet is recorded as a gap (Gaps), with where and what; a body with one is not
 # verified (compiler/tools/lowerdump.olang counts them).
@@ -855,7 +855,7 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             # D18e: a for-in's own generator, made by a direct call - the call marked as the walk this block finishes
             ln.walkSite = typed.SiteId(-1)
             if indexOf(ln.B.Walks, l) >= 0 {
-                c := callOfExpr(init)
+                c := typed.CallOf(init)
                 if c is not null { ln.walkSite = c.Site }
             }
             # a fixed array widened is made where the local keeps it, the local's own (T7b, T7c)
@@ -875,7 +875,7 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             try ln.targets.Pop() catch { }
             # (QCE: a part holding an array by value takes the copy check made, or the new storage
             # it is given, as it is - never written over in place, since the part may be room a Vec has not filled)
-            if ln.valueArray(target.Type()) and not ln.dead and not partLvalue(target) {
+            if ln.valueArray(target.Type()) and not ln.dead and not typed.PartOf(target) {
                 copies := ln.copiesArray(value, target.Type())
                 ln.arrayStore(ln.mk(p), v, target.Type(), copies, sp, ln.placeStorage(target))
             } else {
@@ -1001,14 +1001,6 @@ fn (ln mut lowering&) unconvert(x typed.Expr&) typed.Expr& {
         case _ { }
     }
     return x
-}
-
-# whether a place is a part of a value - a field, an element, a payload's field - rather than a whole local or global
-fn partLvalue(p typed.Lvalue&) Bool {
-    return match p {
-        case typed.Lvalue.Field(_, _, _, _), typed.Lvalue.Elem(_, _, _), typed.Lvalue.Payload(_, _, _): true
-        case _: false
-    }
 }
 
 # the reference a read of what it names reads through, else null
@@ -2051,7 +2043,7 @@ fn (ln mut lowering&) evalStmt(sp source.Span, x typed.Expr&) {
     match x {
         case typed.Expr.Take(_, _, p) { rel = ln.releases(p) }
         case _ {
-            c := callOfExpr(x)
+            c := typed.CallOf(x)
             if ln.freeing and c is not null {
                 k := ln.L.Free!.DroppedMove(c)
                 handle := k >= 0 and ln.L.Free!.IsHandle(k)
@@ -2086,16 +2078,6 @@ fn collectOf(x typed.Expr&) typed.Collect?& {
     return match x {
         case typed.Expr.Collect(_, _, c): c
         case typed.Expr.Seq(_, _, sq): collectOf(sq.X!) if sq.X is not null else null
-        case _: null
-    }
-}
-
-# the call an expression is, under a try, null for none
-fn callOfExpr(x typed.Expr&) typed.Call?& {
-    return match x {
-        case typed.Expr.Call(_, _, c): c
-        case typed.Expr.Try(_, _, t): callOfExpr(t.X!) if t.X is not null else null
-        case typed.Expr.Away(_, _, y): callOfExpr(y)
         case _: null
     }
 }
@@ -3305,19 +3287,12 @@ fn (lw mut Lowerer&) freshRet(b typed.Body&, u typed.LocalUses&, x typed.Expr&) 
         case typed.Expr.Promote(_, _, pr): lw.freshMade(pr.X)
         case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and lw.freshRet(b, u, args[0])
         case typed.Expr.Away(_, _, y): lw.freshRet(b, u, y)
-        case typed.Expr.Call(_, _, c): c.Target == typed.Callee.Body and lw.freshResult(lw.calleeOf(c))
+        case typed.Expr.Call(_, _, c): c.Target == typed.Callee.Body and lw.freshResult(typed.CalleeBody(c))
         case typed.Expr.Read(_, _, p, _): match p {
             case typed.Lvalue.Local(_, _, id): lw.freshLocal(b, u, I64(id))
             case _: false
         }
         case _: false
-    }
-}
-
-fn (lw mut Lowerer&) calleeOf(c typed.Call&) I64 {
-    return match c.Target {
-        case typed.Callee.Body(id): I64(id)
-        case _: -1
     }
 }
 
@@ -4034,8 +4009,10 @@ fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp 
     ln.start(ok)
 }
 
-# T2c: text that may be null rendered at the top of a rendering - "null" where it is, else the text itself
-fn (ln mut lowering&) renderMaybeText(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp source.Span) {
+# T2c: text that may be null rendered - "null" where it is, else the text itself, as how writes it (at the top of a
+# rendering its bytes, inside another's quoted)
+fn (ln mut lowering&) renderMaybeText(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp source.Span
+                                      how mir.WriteKind = mir.WriteKind.Bytes) {
     x := ln.local(v, ty, sp)
     isNull := ln.prim(typed.PrimOp.Same, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, -1)], sp)
     none, some, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
@@ -4044,7 +4021,7 @@ fn (ln mut lowering&) renderMaybeText(b mir.ScopeRef, v mir.Operand, ty types.Ty
     ln.word(b, "null", sp)
     ln.goto(after)
     ln.start(some)
-    ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Bytes, mir.Operand.Copy(mir.L(x))))
+    ln.emit(mir.Stmt.Write(sp, b, how, mir.Operand.Copy(mir.L(x))))
     ln.goto(after)
     ln.start(after)
 }
@@ -4959,7 +4936,10 @@ fn (ln mut lowering&) inner(a pl, ty types.TypeId, b mir.ScopeRef, sp source.Spa
         return
     }
     if ln.isText(ty) and not ln.hasStr(ty) {
-        ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Quoted, ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)))
+        x := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+        # T2c: text that may be null renders "null" where it is, an element of an array too
+        if t.IsNullable(r) and t.ArrayRef(r): ln.renderMaybeText(b, x, ty, sp, mir.WriteKind.Quoted)
+        else: ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Quoted, x))
         return
     }
     if t.KindOf(ty) == types.Kind.ErrVal {

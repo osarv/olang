@@ -144,8 +144,8 @@ fn classifyPoint(p Point) I32 {
     return result
 }
 
-# O13/O26: a bare "&" result is built where the caller puts it, and "&return" names that scope - so the Point
-# is allocated there rather than in makePoint's, which closes at the return.
+# O13/O26: a bare "&" result is built where the caller puts it, the result scope - so the Point is allocated
+# there rather than in makePoint's, which closes at the return.
 fn makePoint(x I32, y I32) Point& {
     p mut Point& = Point(x, y)
     return p
@@ -437,10 +437,10 @@ fn useHandleArrayLocallyRuntimeLength() I32 {
     return arr[0].id + arr[1].id + arr[2].id
 }
 
-# constructors give a struct field a real, type-level scope: a field written "&p" lives where the
-# constructor's argument for p does (C2d), tracked per instance, so a ScopedBox may refer into storage that
-# outlives it. The "Checked" functions below build their intermediates where their result lives, "&return"
-# (O26), and return a part of them.
+# constructors give a struct field a real, type-level scope: a field holding what an argument refers to lives
+# where the constructor's argument does (C2d, O28), tracked per instance, so a ScopedBox may refer into storage
+# that outlives it. The "Checked" functions below build their intermediates where their result lives, the
+# result scope (O26), and return a part of them.
 type ScopedBox struct(seed mut Point&) {
     inner mut Point& = seed
 }
@@ -9151,8 +9151,8 @@ test "C2d/E25: a cursor over a longer-lived list, and a constructor built where 
     assert list.next!.next!.next!.v == 7
 }
 
-# O26/E25: "f&return()" builds a call's result in this function's result scope, and ":=" takes that scope, so
-# the local can be built on and returned. A typed local says where it lives - "x OxN&l" - and never adopts.
+# O26/O28: a call's result returned is built in this function's result scope, and ":=" takes that scope, so
+# the local can be built on and returned. A typed local's scope is inferred, and it never adopts.
 fn oChainRet(n I32) mut OxN& {
     x := oxMk(n)
     x.next = oxMk(n + 1)

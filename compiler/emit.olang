@@ -1649,8 +1649,8 @@ fn (fe mut fnEm&) declareVars(b mut StringBuilder&) {
 fn stmtSpan(s mir.Stmt&) source.Span {
     return match s {
         case mir.Stmt.Assign(sp, _, _), mir.Stmt.Live(sp, _), mir.Stmt.Dead(sp, _), mir.Stmt.Open(sp, _): sp
-        case mir.Stmt.Close(sp, _), mir.Stmt.Give(sp, _), mir.Stmt.RegisterDtor(sp, _, _, _): sp
-        case mir.Stmt.RegisterOwner(sp, _, _), mir.Stmt.Release(sp, _), mir.Stmt.Settle(sp, _, _), mir.Stmt.Write(sp, _, _, _): sp
+        case mir.Stmt.Close(sp, _), mir.Stmt.RegisterDtor(sp, _, _, _), mir.Stmt.Release(sp, _): sp
+        case mir.Stmt.Settle(sp, _, _), mir.Stmt.Write(sp, _, _, _): sp
         case mir.Stmt.CopyElems(sp, _, _, _), mir.Stmt.Spawn(sp, _, _), mir.Stmt.Raised(sp): sp
         case mir.Stmt.Deferred(sp, _, _): sp
     }
@@ -3480,7 +3480,6 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
                 if fe.E.Tests { fe.unwindPop(sc) }
             }
         }
-        case mir.Stmt.Give(_, _) { fe.gap("Give") }
         case mir.Stmt.Raised(sp) { fe.trace(sp) }
         case mir.Stmt.Deferred(_, _, _) { fe.gap("a cleanup (interpret's)") }
         case mir.Stmt.RegisterDtor(_, sr, ty, x) {
@@ -3498,7 +3497,6 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
             fe.E.runtime("__olang_scope_register_dtor")
             fe.w("call void @__olang_scope_register_dtor(ptr " $fe.scope(sr) ", ptr " $fe.val(x) ", ptr @" $fe.E.sym(k) "_rt)")
         }
-        case mir.Stmt.RegisterOwner(_, _, _) { fe.gap("RegisterOwner") }
         case mir.Stmt.Release(_, p) {
             # O8d: the region the reference p holds was built in released (none for null or constant data), p left null;
             # an owner's, the region its first anchor holding storage names
@@ -3809,9 +3807,8 @@ type scopeUse struct(used mut Array<Bool>&) {
 # the scopes a statement uses, marked: what it registers in, writes into, starts a task in, gives back to, builds in
 fn (u mut scopeUse&) stmt(st mir.Stmt) {
     match st {
-        case mir.Stmt.RegisterDtor(_, r, _, _), mir.Stmt.RegisterOwner(_, r, _), mir.Stmt.Write(_, r, _, _) { u.use(r) }
+        case mir.Stmt.RegisterDtor(_, r, _, _), mir.Stmt.Write(_, r, _, _) { u.use(r) }
         case mir.Stmt.Spawn(_, j, _) { u.used[I64(j)] = true }
-        case mir.Stmt.Give(_, x) { u.used[I64(x)] = true }
         case mir.Stmt.Assign(_, _, rv) {
             match rv {
                 case mir.Rvalue.New(r, _, _), mir.Rvalue.NewArray(r, _, _, _), mir.Rvalue.Closure(_, _, r, _, _) { u.use(r) }

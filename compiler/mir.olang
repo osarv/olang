@@ -120,8 +120,7 @@ type ScopeKind enum {
     Block      # a block's arena (O2): opened where the block is entered, closed on every way out of it
     Loop       # a loop body's: opened and closed every turn (O2b)
     Join       # a join block's arena: tasks are spawned into it, and it is waited for before it closes (P1b)
-    # an own object's region (O30): opened where the object is built, then given to the slot that owns it (Give), or
-    # closed where the object is never stored (the expression it is built in left first, O35)
+    # a region of its own (from the removed own, O30): no lowering opens one; the evaluator still runs it as a scope
     Region
     Inert      # a live scope nothing is built in: passed where a callee only reads (O12, a Str's receiver, E11c)
     Builder    # a text builder and its scratch arena (E11a, E11b): written into, finished into text built elsewhere
@@ -265,11 +264,8 @@ type Stmt enum {
     # s closes: its owners released and its destructors run, last registered first (O15, O35), its storage
     # reclaimed. The scope opened last that is still open, and for a join one waited for since its last Spawn
     Close(sp source.Span, s ScopeId)
-    Give(sp source.Span, s ScopeId)    # region s now belongs to the owner just stored: no longer this function's
     RegisterDtor(sp source.Span, s ScopeRef, t types.TypeId, x Operand)   # the instance x refers to, a t, destructed
                                                                           # when s closes (O16)
-    RegisterOwner(sp source.Span, s ScopeRef, p Lvalue)    # the owner slot p released when s closes, if it holds one:
-                                                          # an owner local (O35), a hold (F3), a result in flight (N3)
     Release(sp source.Span, p Lvalue)   # the object the own slot p holds, if any, released, and p left null (O35);
                                         # an owner's value (types.Anchors): the region its anchors name released
     Settle(sp source.Span, h LocalId, p Lvalue)   # O8d: the region local h holds released unless an anchor of the
@@ -936,14 +932,10 @@ fn (v mut verifier&) stmtShape(st Stmt&) {
             v.rvalueShape(rv)
         }
         case Stmt.Live(_, l), Stmt.Dead(_, l) { v.local(l) }
-        case Stmt.Open(_, s), Stmt.Close(_, s), Stmt.Give(_, s) { v.scope(s) }
+        case Stmt.Open(_, s), Stmt.Close(_, s) { v.scope(s) }
         case Stmt.RegisterDtor(_, s, _, x) {
             v.ref(s)
             v.operand(x)
-        }
-        case Stmt.RegisterOwner(_, s, p) {
-            v.ref(s)
-            v.place(p)
         }
         case Stmt.Release(_, p) { v.place(p) }
         case Stmt.Settle(_, h, p) {
@@ -1288,10 +1280,6 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
             rt := v.rvalueType(rv)
             if rv == Rvalue.Use(Operand.None) { rt = types.UnknownT }   # declared, nothing written (D13d)
             if pt != types.UnknownT and rt != types.UnknownT { v.want(rt, pt, "the value stored") }
-            # a store into an own slot takes an owner: one moved (Take), made (New in a region) or carried
-            if t.IsRef(pt) and (t.PermOf(pt) & types.Owning) != 0 and t.IsRef(rt) and (t.PermOf(rt) & types.Owning) == 0 {
-                v.bad("an own slot given a borrow, not an owner")
-            }
         }
         case Stmt.RegisterDtor(_, _, ty, x) {
             xt := v.operandType(x)
@@ -1299,12 +1287,6 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
                 v.bad("a destructor registered for a " $v.canon(xt) ", not a reference to a " $v.canon(ty))
             } else if not t.Destructs(ty) {
                 v.bad("a destructor registered for a " $v.canon(ty) ", which declares none")
-            }
-        }
-        case Stmt.RegisterOwner(_, _, p) {
-            pt := v.placeType(p)
-            if pt != types.UnknownT and not (t.IsRef(pt) and (t.PermOf(pt) & types.Owning) != 0) {
-                v.bad("an owner slot of a " $v.canon(pt) ", not an own reference")
             }
         }
         # O8d: what a sole place let go of - a reference, its object in a region (or none: null, constant data)
@@ -2011,17 +1993,9 @@ fn (v mut verifier&) stmtFlow(s Stmt&) {
             v.pop(x, "closed")
             if v.pend[I64(x)] { v.bad("join S" $x " closed with tasks not waited for") }
         }
-        case Stmt.Give(_, x) {
-            if f.Scopes[I64(x)].Kind != ScopeKind.Region { v.bad("S" $x " given away, but it is no region") }
-            v.pop(x, "given away")
-        }
         case Stmt.RegisterDtor(_, sc, _, x) {
             v.usesScope(sc)
             v.reads(x)
-        }
-        case Stmt.RegisterOwner(_, sc, p) {
-            v.usesScope(sc)
-            v.readPlace(p)
         }
         case Stmt.Release(_, p) { v.readPlace(p) }
         case Stmt.Settle(_, h, p) {
@@ -2354,9 +2328,7 @@ fn (w mut dumper&) stmt(s Stmt&) String {
         case Stmt.Dead(_, l): "dead L" $l
         case Stmt.Open(_, x): "open S" $x
         case Stmt.Close(_, x): "close S" $x
-        case Stmt.Give(_, x): "give S" $x
         case Stmt.RegisterDtor(_, sc, ty, x): "register dtor " $w.T.Canon(ty) " " $w.operand(x) " in " $w.ref(sc)
-        case Stmt.RegisterOwner(_, sc, p): "register owner " $w.place(p) " in " $w.ref(sc)
         case Stmt.Release(_, p): "release " $w.place(p)
         case Stmt.Settle(_, h, p): "settle L" $I64(h) " by " $w.place(p)
         case Stmt.Write(_, b, how, x): "write " $short($how) " " $w.operand(x) " to " $w.ref(b)
@@ -2649,23 +2621,11 @@ test "a malformed function: every malformation is caught" {
     try f14.Blocks.RefMut(0).Stmts.Insert(2, Stmt.Assign(Sp0, L(r14), Rvalue.New(ScopeRef.Scope(s14), Operand.Const(i32, 1), ri)))
     try f14.Blocks.RefMut(0).Stmts.Insert(3, Stmt.Close(Sp0, s14))
     expect(t, f14, "bb0[2]: built in S1, which is inert")
-    f15 := addFn(t)
-    f15.Blocks[0].Stmts[2] = Stmt.Give(Sp0, ScopeId(0))
-    expect(t, f15, "S0 given away, but it is no region")
     # an arena local stored into before its storage is made
     f16 := addFn(t)
     a16 := f16.AddLocal(Local(source.NameId(0), Sp0, i32, LocalKind.Temp, ScopeRef.Scope(ScopeId(0))))
     try f16.Blocks.RefMut(0).Stmts.Insert(1, Stmt.Assign(Sp0, L(a16), Rvalue.Use(Operand.Const(i32, 3))))
     expect(t, f16, "bb0[1]: L3 stored into with no storage: its Live not reached")
-    # an own slot given a borrow
-    m := t.AddModule("t")
-    q := t.Named(t.AddDecl(m, names.Intern("Q"), types.DeclKind.Struct, 0), types.ListId(0))
-    t.SetStructBody(q, t.List1(i64), false)
-    f17 := addFn(t)
-    ow := f17.AddTemp(t.Ref(q, types.Owning | types.Writable), Sp0)
-    brw := f17.AddTemp(t.Ref(q, types.Writable), Sp0)
-    try f17.Blocks.RefMut(0).Stmts.Insert(1, Stmt.Assign(Sp0, L(ow), Rvalue.Use(Operand.Copy(L(brw)))))
-    expect(t, f17, "bb0[1]: an own slot given a borrow, not an owner")
     # a check written as an operation; a switch with a value twice
     f18 := addFn(t)
     f18.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, L(LocalId(2)), Rvalue.Prim(typed.PrimOp.Holds, i32

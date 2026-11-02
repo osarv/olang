@@ -388,6 +388,9 @@
 === checks/cases/s1blambdaline.olang
 | -- diagnostics
 | error S1b 4:23
+=== checks/cases/s1bmultidecl.olang
+| -- diagnostics
+| error S1b 5:23
 === checks/cases/s1bnested.olang
 | -- diagnostics
 | error S1b 5:15

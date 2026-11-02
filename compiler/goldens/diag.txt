@@ -1929,7 +1929,7 @@ e31bviewnoindexnote.olang:39:24: error[O10c]: the callee needs one argument's sc
 e31bviewnoindexnote.olang:35:37: note: the callee requires it because of this statement
    35 | fn f(c mut V&, out mut Vec<Pt&>&) { out.Push(id(c.p)) }
       |                                     ^~~
-e31bviewnoindexnote.olang:37:5: note: 's' is declared here, in a block that closes first - declare it where 'out' lives: 's mut Vs&out = ...'
+e31bviewnoindexnote.olang:37:5: note: 's' is declared here, in a block that closes first - declare it where 'out' lives, 's mut Vs&', and assign it here
    37 |     s := Vs(Array<I64>(4))
       |     ^
 compilation failed with 1 error
@@ -3597,7 +3597,7 @@ o18cprojectionfresh.olang:15:14: error[O10c]: the callee needs one argument's sc
 $ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
    59 |     v.data[v.n] = x
       |     ^
-o18cprojectionfresh.olang:14:9: note: 't' is declared here, in a block that closes first - declare it where 'keep' lives: 't String&keep = ...'
+o18cprojectionfresh.olang:14:9: note: 't' is declared here, in a block that closes first - declare it where 'keep' lives, 't String&', and assign it here
    14 |         t := p.mk().text
       |         ^
 o18cprojectionfresh.olang:15:19: note: this text lives in a block that closes first - pass a copy, which is made where 'keep' lives: write '$' before it
@@ -4810,6 +4810,11 @@ s1blambdaline.olang:4:23: error[S1b]: a one-line body stands on the line of its 
     4 |     f := fn(x I64) I64:
       |                       ^
 compilation failed with 1 error
+=== s1bmultidecl.olang
+s1bmultidecl.olang:5:23: error[S1b]: a one-line body is one simple statement, not a declaration - write a block, '{ ... }'
+    5 |     for i in range 3: a, b := i, i + 1
+      |                       ^~~~~~~~~~~~~~~~
+compilation failed with 1 error
 === s1bnested.olang
 s1bnested.olang:5:15: error[S1b]: a one-line body is one simple statement, not an if - write a block, '{ ... }'
     5 |     if x > 0: if x > 1 { x = 2 }
@@ -4894,7 +4899,7 @@ s5handlenote.olang:10:21: error[O10c]: the callee needs one argument's scope to 
 $ROOT/std/prelude/vec.olang:112:40: note: the callee requires it because of this statement
   112 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
       |                                        ^
-s5handlenote.olang:9:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives: 't mut String&names = ...'
+s5handlenote.olang:9:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives, 't mut String&', and assign it here
     9 |         t := $k "-loop-text-of-moderate-length"
       |         ^
 s5handlenote.olang:10:23: note: this text lives in a block that closes first - pass a copy, which is made where 'names' lives: write '$' before it
@@ -4927,7 +4932,7 @@ s5projection.olang:16:12: error[O10c]: the callee needs one argument's scope to 
 $ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
    59 |     v.data[v.n] = x
       |     ^
-s5projection.olang:15:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives: 't mut String&bs = ...'
+s5projection.olang:15:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives, 't mut String&', and assign it here
    15 |         t := $k "-text"
       |         ^
 compilation failed with 1 error
@@ -4951,7 +4956,7 @@ s6handlestore.olang:12:21: error[O10c]: the callee needs one argument's scope to
 $ROOT/std/prelude/vec.olang:112:40: note: the callee requires it because of this statement
   112 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
       |                                        ^
-s6handlestore.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives: 't mut String&names = ...'
+s6handlestore.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives, 't mut String&', and assign it here
    11 |         t := $i "-loop-text"
       |         ^
 s6handlestore.olang:12:23: note: this text lives in a block that closes first - pass a copy, which is made where 'names' lives: write '$' before it
