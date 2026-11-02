@@ -525,29 +525,34 @@ c2dcapturebuild.olang:18:29: note: built here, where the receiver's part it was 
       |                             ^~~~~~~~~~~~~
 compilation failed with 1 error
 === c2dcondfield.olang
-c2dcondfield.olang:16:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+c2dcondfield.olang:16:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('x.Clone()')
    16 |         ms.Push(M(2, d))
       |                      ^
 compilation failed with 1 error
 === c2de25once.olang
-c2de25once.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+c2de25once.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
    16 |         x := Env(local)
       |                  ^~~~~
 compilation failed with 1 error
 === c2dfieldentry.olang
-c2dfieldentry.olang:13:20: error[C2d]: this instance would outlive what its field refers to - keep it in that block, hold the value by value in the field, or give the field a copy ('$x', 'x.Clone()')
+c2dfieldentry.olang:13:20: error[C2d]: this instance would outlive what its field refers to - keep it in that block, or hold the value by value in the field
    13 |         s = FeSlot(l)
       |                    ^
 compilation failed with 1 error
 === c2dmatchfield.olang
-c2dmatchfield.olang:18:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+c2dmatchfield.olang:18:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('x.Clone()')
    18 |         ms.Push(M(2, d))
       |                      ^
 compilation failed with 1 error
 === c2dmixedscopes.olang
-c2dmixedscopes.olang:19:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+c2dmixedscopes.olang:19:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
    19 |         c = Ctx(d, nums)
       |                 ^
+compilation failed with 1 error
+=== c2dnoclone.olang
+c2dnoclone.olang:12:21: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
+   12 |         w := holder(v)
+      |                     ^
 compilation failed with 1 error
 === c2dreturn.olang
 c2dreturn.olang:10:12: error[O26]: this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Clone()')
@@ -890,17 +895,17 @@ copyoutrefs.olang:15:9: error[T25c]: a copy of a read-only Box cannot be stored 
       |         ^~~
 compilation failed with 1 error
 === ctorlambdafieldloop.olang
-ctorlambdafieldloop.olang:16:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+ctorlambdafieldloop.olang:16:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('x.Clone()')
    16 |         ms.Push(M(2, d))
       |                      ^
 compilation failed with 1 error
 === ctorlambdafieldout.olang
-ctorlambdafieldout.olang:16:19: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+ctorlambdafieldout.olang:16:19: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
    16 |         ds.Push(D(ct))
       |                   ^~
 compilation failed with 1 error
 === ctorlambdafieldval.olang
-ctorlambdafieldval.olang:17:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+ctorlambdafieldval.olang:17:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
    17 |         m = M(W(b))
       |                 ^
 compilation failed with 1 error
@@ -1728,6 +1733,22 @@ e31bcallargs.olang:12:6: error[E31b]: x[i] gives a copy of the element, which th
 $ROOT/std/prelude/vec.olang:59:5: note: the callee is no view of the element because of this statement
    59 |     if v.n == v.data.Len() { v.room(v.n + 1) }
       |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== e31bdtor.olang
+e31bdtor.olang:19:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   19 |     G[0].Bump()
+      |      ^
+e31bdtor.olang:15:5: note: the callee is no view of the element because of this statement
+   15 |     b.n = 99
+      |     ^~~~~~~~
+compilation failed with 1 error
+=== e31bexportback.olang
+e31bexportback.olang:19:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   19 |     G[0].Bump()
+      |      ^
+e31bexportback.olang:15:5: note: the callee is no view of the element because of this statement
+   15 |     b.n = 99
+      |     ^~~~~~~~
 compilation failed with 1 error
 === e31bfieldviewbuild.olang
 e31bfieldviewbuild.olang:28:31: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
@@ -2602,6 +2623,11 @@ g23narrow.olang:4:14: error[T6b]: I64 does not flow into U8 - convert it, as U8(
     4 |     x U8 = a.Len()
       |              ^~~
 compilation failed with 1 error
+=== g42exportback.olang
+g42exportback.olang:8:8: error[S17a]: this top-level assert is false, decided while compiling
+    8 | assert not bump.WritesGlobals
+      |        ^~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
 === g42factfalse.olang
 g42factfalse.olang:5:8: error[S17a]: this top-level assert is false, decided while compiling: the callback must not allocate
     5 | assert not Label.Allocates, "the callback must not allocate"
@@ -3067,7 +3093,7 @@ compilation failed with 1 error
 m19g01push.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    11 |     try io.Println($d[0])
       |                     ^
-m19g01push.olang:10:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+m19g01push.olang:10:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    10 |     for i in range 100 { v.Push(i) }
       |                            ^~~~
 compilation failed with 1 error
@@ -3075,7 +3101,7 @@ compilation failed with 1 error
 m19g02secondname.olang:12:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    12 |     try io.Println($d[0])
       |                     ^
-m19g02secondname.olang:11:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+m19g02secondname.olang:11:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    11 |     for i in range 100 { w.Push(i) }
       |                            ^~~~
 compilation failed with 1 error
@@ -3083,7 +3109,7 @@ compilation failed with 1 error
 m19g03callgrows.olang:12:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    12 |     try io.Println($d[0])
       |                     ^
-m19g03callgrows.olang:11:5: note: 'v' may grow here, in 'fill' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+m19g03callgrows.olang:11:5: note: 'v' may grow here, in 'fill' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    11 |     fill(v, 100)
       |     ^~~~
 m19g03callgrows.olang:6:56: note: 'fill' may grow it here
@@ -3094,7 +3120,7 @@ compilation failed with 1 error
 m19g04struct.olang:15:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
    15 |     try io.Println($d[0])
       |                     ^
-m19g04struct.olang:14:5: note: 'l.toks' may grow here, in 'scan' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()' for a Vec)
+m19g04struct.olang:14:5: note: 'l.toks' may grow here, in 'scan' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()')
    14 |     scan(l)
       |     ^~~~
 m19g04struct.olang:9:53: note: 'scan' may grow it here
@@ -3105,7 +3131,7 @@ compilation failed with 1 error
 m19g05global.olang:11:21: error[M19g]: 'd' holds a view of 'Toks' taken before 'Toks' may have grown
    11 |     try io.Println($d[0])
       |                     ^
-m19g05global.olang:10:5: note: 'Toks' may grow here, in 'more' - take the view or the reference after it, or copy the elements first ('Toks.ToArray()' for a Vec)
+m19g05global.olang:10:5: note: 'Toks' may grow here, in 'more' - take the view or the reference after it, or copy the elements first ('Toks.ToArray()')
    10 |     more()
       |     ^~~~
 m19g05global.olang:6:39: note: 'more' may grow it here
@@ -3116,7 +3142,7 @@ compilation failed with 1 error
 m19g06chain.olang:14:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    14 |     try io.Println($d[0])
       |                     ^
-m19g06chain.olang:13:5: note: 'v' may grow here, in 'outer' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+m19g06chain.olang:13:5: note: 'v' may grow here, in 'outer' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    13 |     outer(v)
       |     ^~~~~
 m19g06chain.olang:8:29: note: 'outer' may grow it here
@@ -3127,12 +3153,12 @@ compilation failed with 1 error
 m19g07funcvalue.olang:12:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    12 |     try io.Println($d[0])
       |                     ^
-m19g07funcvalue.olang:11:5: note: 'v' may grow here, in a call through a function value - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+m19g07funcvalue.olang:11:5: note: 'v' may grow here, in a call through a function value - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    11 |     f(v)
       |     ^
 compilation failed with 1 error
 === m19g08givenboth.olang
-m19g08givenboth.olang:12:31: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first: 'v.ToArray()'
+m19g08givenboth.olang:12:31: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
    12 |     try io.Println($grow(v, v.View()))
       |                               ^~~~
 m19g08givenboth.olang:6:28: note: 'grow' may grow it here
@@ -3140,7 +3166,7 @@ m19g08givenboth.olang:6:28: note: 'grow' may grow it here
       |                            ^~~~
 compilation failed with 1 error
 === m19g09element.olang
-m19g09element.olang:12:37: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first: 'v.ToArray()'
+m19g09element.olang:12:37: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
    12 |     try io.Println($grow(v, v.View()[0]))
       |                                     ^
 m19g09element.olang:6:28: note: 'grow' may grow it here
@@ -3151,7 +3177,7 @@ compilation failed with 1 error
 m19g10through.olang:14:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
    14 |     try io.Println($d[0])
       |                     ^
-m19g10through.olang:13:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()' for a Vec)
+m19g10through.olang:13:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()')
    13 |     l.toks.Push(2)
       |            ^~~~
 compilation failed with 1 error
@@ -3159,7 +3185,7 @@ compilation failed with 1 error
 m19g11lambda.olang:10:21: error[M19g]: 'f' holds a view of 'v' taken before 'v' may have grown
    10 |     try io.Println($f())
       |                     ^
-m19g11lambda.olang:9:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+m19g11lambda.olang:9:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
     9 |     for i in range 100 { v.Push(i) }
       |                            ^~~~
 compilation failed with 1 error
@@ -3175,7 +3201,7 @@ compilation failed with 1 error
 m19g13kept.olang:10:20: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
    10 |     try io.Println(l[0])
       |                    ^
-m19g13kept.olang:9:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+m19g13kept.olang:9:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
     9 |     for _ in range 100 { v.Push('b') }
       |                            ^~~~
 compilation failed with 1 error
@@ -3183,7 +3209,7 @@ compilation failed with 1 error
 m19g14byvalue.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    11 |     try io.Println($d[0])
       |                     ^
-m19g14byvalue.olang:10:5: note: 'v' may grow here, in 'add' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+m19g14byvalue.olang:10:5: note: 'v' may grow here, in 'add' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    10 |     add(v)
       |     ^~~
 m19g14byvalue.olang:5:50: note: 'add' may grow it here
@@ -3194,7 +3220,7 @@ compilation failed with 1 error
 m19g15loop.olang:10:14: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    10 |         t += d[0]
       |              ^
-m19g15loop.olang:11:11: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+m19g15loop.olang:11:11: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    11 |         v.Push(i)
       |           ^~~~
 compilation failed with 1 error
@@ -3202,23 +3228,58 @@ compilation failed with 1 error
 m19g16forin.olang:7:5: error[M19g]: this reads a view of 'v' taken before 'v' may have grown
     7 |     for x in v.View() { v.Push(x) }
       |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-m19g16forin.olang:7:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+m19g16forin.olang:7:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
     7 |     for x in v.View() { v.Push(x) }
       |                           ^~~~
+compilation failed with 1 error
+=== m19gelemroute.olang
+m19gelemroute.olang:13:5: error[M19g]: 'r' holds a view of 'vs[...]' taken before 'vs[...]' may have grown
+   13 |     r.n = 77
+      |     ^
+m19gelemroute.olang:12:27: note: 'vs[...]' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('vs[...].ToArray()')
+   12 |     for i in range 1000 { vs[0].Push(blk(i, i)) }
+      |                           ^~
+compilation failed with 1 error
+=== m19gelemroutemap.olang
+m19gelemroutemap.olang:17:5: error[M19g]: 'r' holds a view of 'ss[...].m' taken before 'ss[...].m' may have grown
+   17 |     r.n = 77
+      |     ^
+m19gelemroutemap.olang:16:5: note: 'ss[...].m' may grow here, in 'fill' - take the view or the reference after it, or copy the value first ('ss[...].m.Get(k)')
+   16 |     fill(ss.RefMut(0).m)
+      |     ^~~~
+m19gelemroutemap.olang:6:60: note: 'fill' may grow it here
+    6 | fn fill(m mut Map<I64, blk>&) { for i in range 2, 5000 { m.Put(i, blk(i, i)) } }
+      |                                                            ^~~
+compilation failed with 1 error
+=== m19gmapnote.olang
+m19gmapnote.olang:12:22: error[M19g]: 'r' holds a view of 'm' taken before 'm' may have grown
+   12 |     io.Println("r " $r.n)!
+      |                      ^
+m19gmapnote.olang:11:32: note: 'm' may grow here, in 'Put' - take the view or the reference after it, or copy the value first ('m.Get(k)')
+   11 |     for k in range 2, 3000 { m.Put(k, blk(k)) }
+      |                                ^~~
 compilation failed with 1 error
 === m19gmapref.olang
 m19gmapref.olang:13:5: error[M19g]: 'r' holds a view of 'm' taken before 'm' may have grown
    13 |     r.n = 77
       |     ^
-m19gmapref.olang:12:32: note: 'm' may grow here, in 'Put' - take the view or the reference after it, or copy the elements first ('m.ToArray()' for a Vec)
+m19gmapref.olang:12:32: note: 'm' may grow here, in 'Put' - take the view or the reference after it, or copy the value first ('m.Get(k)')
    12 |     for i in range 1, 1000 { m.Put(i, rec(i)) }
       |                                ^~~
+compilation failed with 1 error
+=== m19gonce.olang
+m19gonce.olang:19:14: error[M19g]: 'g' holds a view of 'v' taken before 'v' may have grown
+   19 |     for x in g: s += x
+      |              ^
+m19gonce.olang:17:29: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+   17 |     for i in range 1000 { v.Push(blk(i)) }
+      |                             ^~~~
 compilation failed with 1 error
 === m19grefgrow.olang
 m19grefgrow.olang:13:5: error[M19g]: 'r' holds a view of 'v' taken before 'v' may have grown
    13 |     r.n = 77
       |     ^
-m19grefgrow.olang:12:31: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+m19grefgrow.olang:12:31: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    12 |     for i in range 100000 { v.Push(blk(i)) }
       |                               ^~~~
 compilation failed with 1 error
@@ -3226,7 +3287,7 @@ compilation failed with 1 error
 m19grefloop.olang:15:12: error[M19g]: 'r' holds a view of 'v' taken before 'v' may have grown
    15 |     return r.n + r.s.Len() + junk.Len() - 5000
       |            ^
-m19grefloop.olang:12:29: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+m19grefloop.olang:12:29: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    12 |     for i in range 5000 { v.Push(blk(i, $i)) }
       |                             ^~~~
 compilation failed with 1 error
@@ -3488,17 +3549,17 @@ o17lambdastore.olang:19:5: error[O17]: this value's references live where its ow
       |     ^
 compilation failed with 1 error
 === o17ownturnstruct.olang
-o17ownturnstruct.olang:15:20: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+o17ownturnstruct.olang:15:20: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
    15 |         hs.Push(rh(r))
       |                    ^
 compilation failed with 1 error
 === o17ownturnvec.olang
-o17ownturnvec.olang:14:24: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+o17ownturnvec.olang:14:24: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
    14 |         hs.Push(holder(v))
       |                        ^
 compilation failed with 1 error
 === o17ownturnwalk.olang
-o17ownturnwalk.olang:28:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+o17ownturnwalk.olang:28:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
    28 |         ws.Push(over(v))
       |                      ^
 compilation failed with 1 error
@@ -3814,7 +3875,7 @@ p2spawntemp.olang:17:34: error[P2]: this argument refers to storage that closes 
       |                                  ^
 compilation failed with 1 error
 === p2spawnvalue.olang
-p2spawnvalue.olang:16:21: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+p2spawnvalue.olang:16:21: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('x.Clone()')
    16 |             wv := W(a)
       |                     ^
 compilation failed with 1 error
@@ -4415,7 +4476,7 @@ reflunknownhead.olang:5:7: error[M10]: 'zz' is no import here
       |       ^~
 compilation failed with 1 error
 === rendercopyc2d.olang
-rendercopyc2d.olang:25:16: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+rendercopyc2d.olang:25:16: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
    25 |     s := $Wrap(x)
       |                ^
 compilation failed with 1 error
@@ -5375,7 +5436,7 @@ stro20condstore.olang:47:13: error[O20]: the container outlives what this refers
       |             ^
 compilation failed with 1 error
 === strobligation.olang
-strobligation.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+strobligation.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
    16 |     x Res& = Res(b.head)
       |                  ^~~~~~
 compilation failed with 1 error
@@ -5430,7 +5491,7 @@ strspawnpart.olang:24:18: error[E11c, O12]: '$' does not say where a value it re
       |                  ^~~~
 compilation failed with 1 error
 === strstoredtor.olang
-strstoredtor.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
+strstoredtor.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
    16 |     x Res& = Res(b.head)
       |                  ^~~~~~
 compilation failed with 1 error
@@ -6625,12 +6686,12 @@ compilation failed with 1 error
 vec01view.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    11 |     try io.Println($d[0])
       |                     ^
-vec01view.olang:10:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+vec01view.olang:10:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    10 |     for i in range 100 { v.Push(i) }
       |                            ^~~~
 compilation failed with 1 error
 === vec04lend.olang
-vec04lend.olang:12:31: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first: 'v.ToArray()'
+vec04lend.olang:12:31: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
    12 |     try io.Println($grow(v, v.View()))
       |                               ^~~~
 vec04lend.olang:6:28: note: 'grow' may grow it here
@@ -6638,7 +6699,7 @@ vec04lend.olang:6:28: note: 'grow' may grow it here
       |                            ^~~~
 compilation failed with 1 error
 === vec05elem.olang
-vec05elem.olang:13:37: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first: 'v.ToArray()'
+vec05elem.olang:13:37: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
    13 |     try io.Println($grow(v, v.View()[0]))
       |                                     ^
 vec05elem.olang:7:28: note: 'grow' may grow it here
@@ -6649,7 +6710,7 @@ compilation failed with 1 error
 vec06through.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    11 |     try io.Println($d)
       |                     ^
-vec06through.olang:10:7: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+vec06through.olang:10:7: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    10 |     v.Push(5)
       |       ^~~~
 compilation failed with 1 error
@@ -6657,7 +6718,7 @@ compilation failed with 1 error
 vec103refview.olang:15:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
    15 |     try io.Println($d[0])
       |                     ^
-vec103refview.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()' for a Vec)
+vec103refview.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()')
    14 |     l.toks.Push(2)
       |            ^~~~
 compilation failed with 1 error
@@ -6665,7 +6726,7 @@ compilation failed with 1 error
 vec104viewfn.olang:15:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
    15 |     try io.Println($d[0])
       |                     ^
-vec104viewfn.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()' for a Vec)
+vec104viewfn.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()')
    14 |     l.toks.Push(2)
       |            ^~~~
 compilation failed with 1 error
@@ -6673,7 +6734,7 @@ compilation failed with 1 error
 vec13nominal.olang:18:20: error[M19g]: 't' holds a view of 'w' taken before 'w' may have grown
    18 |     try io.Println(t)
       |                    ^
-vec13nominal.olang:16:29: note: 'w' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('w.ToArray()' for a Vec)
+vec13nominal.olang:16:29: note: 'w' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('w.ToArray()')
    16 |     for _ in range 1000 { w.Push('b') }   # may grow the Vec, replacing its buffer
       |                             ^~~~
 compilation failed with 1 error
@@ -6681,7 +6742,7 @@ compilation failed with 1 error
 vec14nominalconv.olang:18:21: error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown
    18 |     try io.Println($d[0] " " $d[1])
       |                     ^
-vec14nominalconv.olang:16:29: note: 'w' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('w.ToArray()' for a Vec)
+vec14nominalconv.olang:16:29: note: 'w' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('w.ToArray()')
    16 |     for i in range 1000 { w.Push(i + 100) }
       |                             ^~~~
 compilation failed with 1 error
@@ -6697,7 +6758,7 @@ compilation failed with 1 error
 vec19listconv.olang:12:20: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
    12 |     try io.Println(l[0])
       |                    ^
-vec19listconv.olang:11:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()' for a Vec)
+vec19listconv.olang:11:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    11 |     for _ in range 100 { v.Push('b') }
       |                            ^~~~
 compilation failed with 1 error
@@ -6715,7 +6776,7 @@ compilation failed with 1 error
 vec88fieldviewpush.olang:14:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
    14 |     try io.Println($d[0])
       |                     ^
-vec88fieldviewpush.olang:13:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()' for a Vec)
+vec88fieldviewpush.olang:13:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()')
    13 |     l.toks.Push(9)
       |            ^~~~
 compilation failed with 1 error
@@ -6723,7 +6784,7 @@ compilation failed with 1 error
 vec92methodgrows.olang:15:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
    15 |     try io.Println($d[0])
       |                     ^
-vec92methodgrows.olang:14:7: note: 'l.toks' may grow here, in 'grow' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()' for a Vec)
+vec92methodgrows.olang:14:7: note: 'l.toks' may grow here, in 'grow' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()')
    14 |     l.grow()
       |       ^~~~
 vec92methodgrows.olang:9:35: note: 'grow' may grow it here
@@ -6734,7 +6795,7 @@ compilation failed with 1 error
 vec94lambdakeeps.olang:15:21: error[M19g]: 'f' holds a view of 'l.toks' taken before 'l.toks' may have grown
    15 |     try io.Println($f())
       |                     ^
-vec94lambdakeeps.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()' for a Vec)
+vec94lambdakeeps.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()')
    14 |     l.toks.Push(4)
       |            ^~~~
 compilation failed with 1 error
@@ -6758,7 +6819,7 @@ compilation failed with 1 error
 vec97globalfieldgrows.olang:15:21: error[M19g]: 'd' holds a view of 'GL.toks' taken before 'GL.toks' may have grown
    15 |     try io.Println($d[0])
       |                     ^
-vec97globalfieldgrows.olang:14:5: note: 'GL.toks' may grow here, in 'bump' - take the view or the reference after it, or copy the elements first ('GL.toks.ToArray()' for a Vec)
+vec97globalfieldgrows.olang:14:5: note: 'GL.toks' may grow here, in 'bump' - take the view or the reference after it, or copy the elements first ('GL.toks.ToArray()')
    14 |     bump()
       |     ^~~~
 vec97globalfieldgrows.olang:10:21: note: 'bump' may grow it here

@@ -1,16 +1,17 @@
 # check: fail error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way
 # E31b (review 6b F1): a method called through x[i] that calls C is not made on the element in place where the program
-# has an export fn - C may call it (X13), and this one grows the collection, which left the element's reference naming
-# the buffer the growth retired: the write was lost
+# has an export fn - C may call it before it returns (X13), and one that grows the collection left the element's
+# reference naming the buffer the growth retired: the write was lost. (Here C is usleep, which calls nothing back: the
+# rule is by what may happen, as a call through a function value's is)
 import "std/io"
-import poke "../fixtures/callback/poke.c"
+import unistd "unistd.h"
 type blk struct(n I64) { n }
 G mut Vec<blk>
 export fn olang_grow(n I64) {
     for i in range n { G.Push(blk(i)) }
 }
 fn (b mut blk&) Bump() {
-    poke.c_poke(1000)
+    unistd.usleep(0)
     b.n = 99
 }
 fn main() {

@@ -1,9 +1,9 @@
 # check: fail error[S17a]: this top-level assert is false, decided while compiling
 # G42 (review 6b F1): where the program has an export fn, a call of C may call it back (X13), so a function calling C
-# may do what the export fn does - here write a global
-import poke "../fixtures/callback/poke.c"
+# may do what an export fn does - here write a global
+import unistd "unistd.h"
 G mut I64 = 0
 export fn olang_grow(n I64) { G = G + n }
-fn bump() { poke.c_poke(1000) }
+fn bump() { unistd.usleep(0) }
 assert not bump.WritesGlobals
 fn main() { bump() }
