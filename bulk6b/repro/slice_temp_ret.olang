@@ -1,0 +1,38 @@
+# O26a carriedPlace(Temp): slices of temporaries returned - a new array, a rendering, a call's fresh result, a View in a loop
+import "std/io"
+
+fn newArr(k I64) Array<I64>& { return Array<I64>(10, k)[2:4] }
+
+fn render(k I64) String& { return ($k "-abcdefgh")[1:5] }
+
+fn fresh(k I64) Array<I64> {
+    v Vec<I64>
+    for i in range 10 { v.Push(k + i) }
+    return v.ToArray()
+}
+
+fn freshSlice(k I64) Array<I64>& { return fresh(k)[3:6] }
+
+fn inLoop(k I64) Array<I64>& {
+    for j in range 5 {
+        v := Vec<I64>()
+        for i in range 10 { v.Push(k * 10 + i + j) }
+        if j == 3: return v.View()[1:3]
+    }
+    return I64[]
+}
+
+fn churn() I64 {
+    junk := Vec<String>()
+    for i in range 2000 { junk.Push($i "abcdefghijklmnopqrstuvwxyz") }
+    return junk.Len()
+}
+
+fn main() {
+    a := newArr(7)
+    b := render(42)
+    c := freshSlice(5)
+    d := inLoop(2)
+    n := churn()
+    io.Println($a " " b " " $c " " $d " " $n)!
+}

@@ -1,0 +1,31 @@
+# M19g (F7): Ref/RefMut across a growth by a second name the function made, a method of a holding struct, a Map's Put
+import "std/io"
+
+type blk struct(n I64) { n }
+type st struct() {
+    v Vec<blk>
+}
+
+fn (s mut st&) Add(k I64) { for i in range k { s.v.Push(blk(i)) } }
+
+fn viaAlias() I64 {
+    v := Vec<blk>()
+    v.Push(blk(1))
+    pv mut Vec<blk>& = v
+    r := v.RefMut(0)
+    for i in range 100 { pv.Push(blk(i)) }
+    r.n = 5
+    return v[0].n
+}
+
+fn viaMethod() I64 {
+    s := st()
+    s.v.Push(blk(1))
+    r := s.v.Ref(0)
+    s.Add(100)
+    return r.n
+}
+
+fn main() {
+    io.Println($viaAlias() " " $viaMethod())!
+}

@@ -1,0 +1,40 @@
+# D9h's held views (F2) against E31b's in-place calls (F1): an element copy, then a call made in place on its element
+import "std/io"
+
+type blk struct(xs Vec<I64>, n I64) { xs, n }
+
+fn (b mut blk&) SetFirst(k I64) { b.xs[0] = k }
+fn (b mut blk&) Refill(k I64) {
+    b.xs = Vec<I64>()
+    for i in range 40 { b.xs.Push(k) }
+}
+
+fn mk(k I64) blk {
+    v Vec<I64>
+    for i in range 8 { v.Push(k * 100 + i) }
+    return blk(v, k)
+}
+
+fn main() {
+    v := Vec<blk>()
+    v.Push(mk(1))
+    v.Push(mk(2))
+    e := v[0]
+    v[0].SetFirst(-5)
+    io.Println("e.xs[0] " $e.xs[0] " (100) v[0].xs[0] " $v[0].xs[0])!
+    f := v[1]
+    v[1].Refill(-9)
+    junk := Vec<blk>()
+    for i in range 300 { junk.Push(mk(i)) }
+    io.Println("f.xs " $f.xs " (200..207) " $junk.Len())!
+    s := 0
+    for x in v {
+        v[0].SetFirst(1000)
+        s += x.xs[0]
+    }
+    io.Println("walk sum " $s " (-14 where x is a copy taken each turn)")!
+    r := v.RefMut(1)
+    g := v[1]
+    r.xs[1] = 4242
+    io.Println("g.xs[1] " $g.xs[1] " (-9)")!
+}

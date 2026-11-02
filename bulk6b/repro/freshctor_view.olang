@@ -1,0 +1,24 @@
+# F13 FreshCtorAt: a constructor's instance viewing a call's result that is a view of an argument (D9h), not its own
+import "std/io"
+
+type box struct(v Vec<I64>) { v }
+
+fn same(x Vec<I64>&) Vec<I64> { return x }
+
+fn mk(k I64) Vec<I64> {
+    v Vec<I64>
+    for i in range 5 { v.Push(k * 10 + i) }
+    return v
+}
+
+fn main() {
+    src := mk(1)
+    b := box(same(src))
+    b.v[0] = 99
+    src[1] = 77
+    io.Println($src " " $b.v)!
+    for k in range 3 { b.v = mk(k + 5) }
+    junk := Vec<Vec<I64>>()
+    for i in range 200 { junk.Push(mk(i + 5)) }
+    io.Println($src " " $b.v " " $junk.Len())!
+}

@@ -1,0 +1,20 @@
+# M19g (F7) and round 8's release of a replaced buffer at growth: a RefMut held across a growth through a hidden route
+# (a closure over a writable reference, called with no argument), then written and read
+import "std/io"
+
+type blk struct(n I64, s String) { n, s }
+
+fn main() {
+    v := Vec<blk>()
+    v.Push(blk(1, "one"))
+    pv mut Vec<blk>& = v
+    grow := fn() {
+        for i in range 1000 { pv.Push(blk(i, $i "-padding-padding-padding")) }
+    }
+    r := v.RefMut(0)
+    grow()
+    junk := Vec<String>()
+    for i in range 2000 { junk.Push($i "-junk-junk-junk-junk-junk") }
+    r.n = 77
+    io.Println("v[0].n " $v[0].n " r.n " $r.n " r.s '" r.s "' len " $v.Len() " " $junk.Len())!
+}

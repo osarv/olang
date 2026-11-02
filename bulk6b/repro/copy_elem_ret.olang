@@ -1,0 +1,38 @@
+# O26a copiedRead + D9h: a value local copied from a local Vec's element, returned by reference and by value
+import "std/io"
+
+type blk struct(xs Vec<I64>, n I64) { xs, n }
+
+fn mk(k I64) blk {
+    v Vec<I64>
+    for i in range 8 { v.Push(k * 100 + i) }
+    return blk(v, k)
+}
+
+fn firstRef(k I64) blk& {
+    v := Vec<blk>()
+    v.Push(mk(k))
+    v.Push(mk(k + 1))
+    e := v[0]
+    return e
+}
+
+fn firstVal(k I64) blk {
+    v := Vec<blk>()
+    v.Push(mk(k))
+    e := v[0]
+    return e
+}
+
+fn churn() I64 {
+    junk := Vec<String>()
+    for i in range 2000 { junk.Push($i "abcdefghijklmnopqrstuvwxyz") }
+    return junk.Len()
+}
+
+fn main() {
+    a := firstRef(3)
+    b := firstVal(5)
+    n := churn()
+    io.Println($a.n " " $a.xs[7] " " $b.n " " $b.xs[7] " " $n)!
+}
