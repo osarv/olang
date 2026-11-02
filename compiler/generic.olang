@@ -852,13 +852,7 @@ fn (p mut Program&) DeclaredFunc(t types.TypeId) types.TypeId {
 }
 
 # whether a global's written type says "mut" - a writable global (its binding, which only a global's "mut" decides)
-fn WrittenMut(tr ast.TypeRef?&) Bool {
-    if tr is null: return false
-    return match tr {
-        case ast.TypeRef.Perm(_, _, w, _): w
-        case _: false
-    }
-}
+fn WrittenMut(tr ast.TypeRef?&) Bool { return names.WrittenMut(tr) }
 
 # "mut"/"own" before a type: a reference's permission (T25b, T25e), a variable's where it is bound to a reference (T2);
 # before a value type it says nothing the type holds (the checker's D9/D11a)

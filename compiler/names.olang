@@ -412,7 +412,7 @@ fn (r mut Resolver&) collect(mi I64, decls Array<ast.Decl&>&) {
             case ast.Decl.Type(sp, t) { r.addType(mi, t.Name, r.nameSpan(mi, sp.Start, t.Name), t) }
             case ast.Decl.Errors(sp, name, _, _) { r.addType(mi, name, r.nameSpan(mi, sp.Start, name), null) }
             case ast.Decl.Global(_, v) {
-                for i in range v.Names.Len() { r.addValue(mi, v.Names[i], v.NameSps[i], writable(v.Ty), false, false, v) }
+                for i in range v.Names.Len() { r.addValue(mi, v.Names[i], v.NameSps[i], WrittenMut(v.Ty), false, false, v) }
             }
             case ast.Decl.ExternBlock(_, _, ds) { r.collect(mi, ds) }
             case _ { }
@@ -474,7 +474,7 @@ fn externDeclName(x ast.Decl&) source.NameId {
 }
 
 # whether a declaration's written type makes it assignable: "mut" at its top (T2)
-fn writable(t ast.TypeRef?&) Bool {
+fn WrittenMut(t ast.TypeRef?&) Bool {
     if t is null { return false }
     return match t {
         case ast.TypeRef.Perm(_, _, w, _): w

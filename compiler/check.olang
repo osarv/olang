@@ -3450,7 +3450,7 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
             if d is not null { x = d }
         }
         # T25c: a mutable global is stored where it can be written
-        if writtenMut(v.Ty) and not c.isRef(want) { c.roStore(x, v.Values[k].Span(), RoGlobal) }
+        if generic.WrittenMut(v.Ty) and not c.isRef(want) { c.roStore(x, v.Values[k].Span(), RoGlobal) }
     } else if v.Values.Len() == 1 and v.Names.Len() > 1 {
         c.gap(sp, "several globals given one value (D8c)")
     } else {
@@ -3458,7 +3458,7 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
         set := c.topSetOf(mi, n, sp)
         if set is not null {
             x = c.exprTo(set, want)
-            if writtenMut(v.Ty) and not c.isRef(want) { c.roStore(x, set.Span(), RoGlobal) }
+            if generic.WrittenMut(v.Ty) and not c.isRef(want) { c.roStore(x, set.Span(), RoGlobal) }
         } else {
             # its zero value - none said where top-level ifs assign it, whose branches say what is missing (D13e)
             dg := c.P.L.Diags
@@ -5075,7 +5075,7 @@ fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
         }
         case typed.Lvalue.Global(_, _, mi, n) {
             v := c.P.GlobalDecl(mi, n)
-            if v is not null and not writtenMut(v.Ty) { c.err(sp, msgs.Immutable(c.text(n))) }
+            if v is not null and not generic.WrittenMut(v.Ty) { c.err(sp, msgs.Immutable(c.text(n))) }
         }
         case typed.Lvalue.Deref(_, _, ref) {
             rt := typeOf(ref)
@@ -5122,7 +5122,7 @@ fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
 fn (c mut Checker&) placeWritable(p typed.Lvalue&) Bool {
     return match p {
         case typed.Lvalue.Local(_, _, id): not (c.cur().Local(id).Kind == typed.LocalKind.Capture and not c.isRef(c.cur().Local(id).Ty)) and not c.roLocal(I64(id))
-        case typed.Lvalue.Global(_, _, mi, n): c.P.GlobalDecl(mi, n) is null or writtenMut(c.P.GlobalDecl(mi, n)!.Ty)
+        case typed.Lvalue.Global(_, _, mi, n): c.P.GlobalDecl(mi, n) is null or generic.WrittenMut(c.P.GlobalDecl(mi, n)!.Ty)
         case typed.Lvalue.Deref(_, _, ref): (c.P.T.PermOf(typeOf(ref)) & types.Writable) != 0
         case typed.Lvalue.Field(_, _, base, _): c.placeWritable(base)
         case typed.Lvalue.Elem(_, _, e): c.placeWritable(e.Base)
@@ -5149,14 +5149,6 @@ fn (c mut Checker&) capturedValue(ref typed.Expr&) Bool {
         case _ { }
     }
     return false
-}
-
-fn writtenMut(t ast.TypeRef?&) Bool {
-    if t is null { return false }
-    return match t {
-        case ast.TypeRef.Perm(_, _, w, _): w
-        case _: false
-    }
 }
 
 # a local declared in the current block, and bound to its name (none for a hidden one, or "_")
@@ -7601,7 +7593,7 @@ fn (c mut Checker&) adapter(sp source.Span, x typed.Expr&, want types.TypeId) ty
 # std, its name defined
 fn (c mut Checker&) buildDefaulted(mi I64, n source.NameId, v ast.VarDecl&) Bool {
     m := c.P.L.Mods[mi]
-    if m.Prelude or m.Identity.StartsWith("std/") or writtenMut(v.Ty) { return false }
+    if m.Prelude or m.Identity.StartsWith("std/") or generic.WrittenMut(v.Ty) { return false }
     return c.P.L.Consts.Defined(c.text(n))
 }
 
@@ -8920,7 +8912,7 @@ fn (c mut Checker&) sliceOf(sp source.Span, b typed.Lvalue&, lo ast.Expr?&, hi a
 fn (c mut Checker&) slicedWritable(p typed.Lvalue&) Bool {
     return match p {
         case typed.Lvalue.Local(_, _, id): not (c.cur().Local(id).Kind == typed.LocalKind.Capture and not c.isRef(c.cur().Local(id).Ty))
-        case typed.Lvalue.Global(_, _, mi, n): c.P.GlobalDecl(mi, n) is null or writtenMut(c.P.GlobalDecl(mi, n)!.Ty)
+        case typed.Lvalue.Global(_, _, mi, n): c.P.GlobalDecl(mi, n) is null or generic.WrittenMut(c.P.GlobalDecl(mi, n)!.Ty)
         case typed.Lvalue.Deref(_, _, ref): not c.isRef(typeOf(ref)) or (c.P.T.PermOf(typeOf(ref)) & types.Writable) != 0
         case typed.Lvalue.Field(_, _, base, _): c.slicedWritable(base)
         case typed.Lvalue.Elem(_, _, e): c.slicedWritable(e.Base)
@@ -9252,7 +9244,7 @@ fn (c mut Checker&) roLocal(id I64) Bool { return c.roCopies.Has(c.roKey(id)) }
 
 fn (c mut Checker&) immutableGlobal(mi I64, n source.NameId) Bool {
     v := c.P.GlobalDecl(mi, n)
-    return v is not null and not writtenMut(v.Ty)
+    return v is not null and not generic.WrittenMut(v.Ty)
 }
 
 # whether a reference is read-only where it is read: by its type - save a call's, which is fresh or borrowed from an
@@ -12082,7 +12074,7 @@ fn (c mut Checker&) defaultReads(x typed.Expr?&) {
     match x {
         case typed.Expr.Read(rsp, _, typed.Lvalue.Global(_, _, mi, n), _) {
             v := c.P.GlobalDecl(mi, n)
-            if v is not null and writtenMut(v.Ty) {
+            if v is not null and generic.WrittenMut(v.Ty) {
                 c.P.L.Diags.ErrorOncePerLine(c.at(rsp), msgs.DefaultNotComputable("it reads a mutable global, whose value is the running program's"))
             }
         }
@@ -16370,10 +16362,8 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         if inferred and not v.Field and c.isNumber(t) and c.litLike(v.Values[i]) { c.litLocals.Put(pair.Pair(c.fr().Body, id), true) }
         # S8c: a plain scalar with a value of its own may be fixed - if its body never writes it
         if not v.Field and i < v.Values.Len() and c.plainScalar(t) { c.fixedInits.Put(pair.Pair(c.fr().Body, id), fixedInit(v.Values[i], t)) }
-        # (QCE: a value whose parts own storage, given existing storage, is its own copy - but a call's value a scope
-        # argument placed (E25) is made for this declaration alone, and the local takes it where it was put, as an
-        # array's local does, T7b)
-        if i < v.Values.Len() and not c.isRef(t) and c.P.T.OwnsParts(t) and not scopedValue(x!) { x = c.ownCopy(x!) }
+        # (QCE: a value whose parts own storage, given existing storage, is its own copy)
+        if i < v.Values.Len() and not c.isRef(t) and c.P.T.OwnsParts(t) { x = c.ownCopy(x!) }
         c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x!))
         if v.Field { c.cur().Fields.Push(typed.LocalId(I32(id))) }
     }
@@ -19370,16 +19360,6 @@ fn (c mut Checker&) ownCopy(x typed.Expr&) typed.Expr& {
                                                      c.site(typed.SiteKind.Make, sp), typed.Check.None))
 }
 
-# whether x is the value of a call given a scope argument (E25), through a try or a statement-less sequence
-fn scopedValue(x typed.Expr&) Bool {
-    return match x {
-        case typed.Expr.Call(_, _, cl): typed.ScopedCall(cl)
-        case typed.Expr.Try(_, _, tr): tr.X is not null and scopedValue(tr.X!)
-        case typed.Expr.Away(_, _, y): scopedValue(y)
-        case _: false
-    }
-}
-
 # whether a place is a part of a value - a field, an element, a payload's field - rather than a whole local, global or
 # referent
 fn partPlace(p typed.Lvalue&) Bool {
@@ -19401,7 +19381,6 @@ fn existingValue(x typed.Expr&) Bool {
         case typed.Expr.Seq(_, _, q): q.X is not null and existingValue(q.X!)
         case typed.Expr.Away(_, _, y): existingValue(y)
         case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and existingValue(args[0])
-        case typed.Expr.Call(_, _, cl): typed.ScopedCall(cl)
         case _: false
     }
 }
