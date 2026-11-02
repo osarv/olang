@@ -1,0 +1,18 @@
+# check: run
+# S1b, S4c: a parallel assignment is an assignment, so a one-line body may be one - "if a > b: a, b = b, a" - where a
+# declaration of several names, "a, b := ...", stays refused (s1bdecl.olang). Decided while compiling (S17a) as at run
+# time
+fn ordered(x I64, y I64) I64 {
+    a, b := x, y
+    if a > b: a, b = b, a
+    for _ in range 1: a, b = b - a, a
+    return a * 100 + b
+}
+
+assert ordered(5, 2) == 302 and ordered(2, 5) == 302, "decided while compiling"
+
+fn main() {
+    lo, hi := 9, 4
+    if lo > hi: lo, hi = hi, lo
+    assert lo == 4 and hi == 9 and ordered(7, 3) == 403
+}

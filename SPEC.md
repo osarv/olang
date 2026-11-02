@@ -4327,11 +4327,11 @@ its own: what it declares, what it allocates (§8 O2) and the destructors of wha
 a long function may give memory back before it returns. No expression begins with `{`, so a statement that does is a
 block. It runs once, and it leaves (D10a) when its statements do.
 
-**S1b (a one-line body).** `body ::= block | ":" line-stmnt`, where `line-stmnt` is one assignment (S4), expression
-statement (S3, an increment included), `return`, `break`, `continue`, `error`, `unreachable`, `assert` or `spawn`
-statement, beginning on the line of its `:`. An `if`'s and an `else`'s body and a `for` loop's body (but not the
-forever form's, nor a `do` loop's) may be one, and so may a lambda's (D16): `if x < 0: return 0`, `for x in xs: total
-+= x`, `else: count++`, `fn(x): return x > 3`; so may a match statement's clause, `case 0: n++` (S12), and a
+**S1b (a one-line body).** `body ::= block | ":" line-stmnt`, where `line-stmnt` is one assignment (S4, a parallel one
+included: `if a > b: a, b = b, a`), expression statement (S3, an increment included), `return`, `break`, `continue`,
+`error`, `unreachable`, `assert` or `spawn` statement, beginning on the line of its `:`. An `if`'s and an `else`'s
+body and a `for` loop's body (but not the forever form's, nor a `do` loop's) may be one, and so may a lambda's (D16):
+`if x < 0: return 0`, `for x in xs: total += x`, `else: count++`, `fn(x): return x > 3`; so may a match statement's clause, `case 0: n++` (S12), and a
 match used as a value takes the same `:` for its clauses' values (S12b). It is
 exactly the block holding that one statement - a scope of its own (S1), so a declaration in one would name nothing
 after it and is a compile-time error, as are an `if`, a loop, a `match`, a `join`, a `defer` and a block (write the

@@ -111,23 +111,9 @@ layoutdiff: build/compiler_tools_dump build/compiler_tools_layoutdiff
 build/compiler_tools_checkdump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/checkdump.olang
 	$(OLANG) build compiler/tools/checkdump.olang
 
-# M5b/M5c's acceptance, measured: refused checks cases give stage 0's first error, accepted programs check clean
-# (compiler/tools/checkdiff.olang; under a minute, not in verify until it is required)
-build/compiler_tools_checkdiff: $(OLANG) compiler/tools/checkdiff.olang
-	$(OLANG) build compiler/tools/checkdiff.olang
-checkdiff: build/compiler_tools_checkdump build/compiler_tools_checkdiff
-	build/compiler_tools_checkdiff -v
-
 # the self-hosted scope pass's errors, unjudged constructs and plans on files (compiler/tools/scopedump.olang)
 build/compiler_tools_scopedump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/scopedump.olang
 	$(OLANG) build compiler/tools/scopedump.olang
-
-# M6's acceptance, measured: refused checks cases whose first error is section 8's give it, accepted programs are scope
-# clean (compiler/tools/scopediff.olang; not in verify until it is required)
-build/compiler_tools_scopediff: $(OLANG) compiler/tools/scopediff.olang
-	$(OLANG) build compiler/tools/scopediff.olang
-scopediff: build/compiler_tools_scopedump build/compiler_tools_scopediff
-	build/compiler_tools_scopediff -v
 
 # M7's acceptance, measured: every body of the corpus, std, the compiler and the checks' run and build cases checked,
 # lowered to MIR and held to the MIR verifier (compiler/tools/lowerdump.olang; the rows in build/lowerdump.txt, not in
@@ -481,4 +467,4 @@ clean:
 	rm -rf build
 
 # FORCE stands in for .PHONY on the test@FILE pattern targets, whose names are no files either
-.PHONY: consistency all build bootstrap boot seed run runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold checkdiff scopediff lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz clean
+.PHONY: consistency all build bootstrap boot seed run runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz clean

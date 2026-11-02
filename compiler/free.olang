@@ -1357,7 +1357,7 @@ fn (w mut walker&) result(o Vec<I64>&) {
 
 fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     w.targets.Push(p)
-    c0 := callOf(x)
+    c0 := typed.CallOf(x)
     outer := w.exemptSite
     w.exemptSite = I64(c0.Site) if c0 is not null and p != typed.Lvalue.Local else -1
     o := w.expr(x)
@@ -1427,8 +1427,8 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
 fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mut Vec<I64>&, sp source.Span) Vec<I64> {
     f := w.F
     t := w.T()
-    c := callOf(x)
-    b2 := f.calleeBody(c) if c is not null else -1
+    c := typed.CallOf(x)
+    b2 := typed.CalleeBody(c) if c is not null else -1
     if b2 >= 0 and f.Bodies[b2].Root is not null and t.Role(f.Bodies[b2].Ty) == types.RoleCtor and
        t.Results(f.Bodies[b2].Ty).Len() == 1 and t.Same(t.Repr(t.Results(f.Bodies[b2].Ty)[0]), t.Repr(ty)) {
         if f.viewsOf(b2) != 0 { w.viewCtor(lvs, c!, x, sp) }
@@ -1633,10 +1633,10 @@ fn (w mut walker&) eval(sp source.Span, x typed.Expr&) {
         }
         case _ { }
     }
-    c := callOf(x)
+    c := typed.CallOf(x)
     if c is not null {
         for y in o {
-            if okind(y) == OMov { w.go(oval(y), LDrop, x.Span(), receiverSpan(c), w.F.calleeBody(c)) }
+            if okind(y) == OMov { w.go(oval(y), LDrop, x.Span(), receiverSpan(c), typed.CalleeBody(c)) }
         }
     }
 }
@@ -1712,22 +1712,6 @@ fn copiedStore(x typed.Expr&) Bool {
         case typed.Expr.Cond(_, _, k): (k.A is not null and copiedStore(k.A!)) or copiedStore(k.B)
         case typed.Expr.Away(_, _, y): copiedStore(y)
         case _: false
-    }
-}
-
-fn callOf(x typed.Expr&) typed.Call?& {
-    return match x {
-        case typed.Expr.Call(_, _, c): c
-        case typed.Expr.Try(_, _, t): callOf(t.X!) if t.X is not null else null
-        case typed.Expr.Away(_, _, y): callOf(y)
-        case _: null
-    }
-}
-
-fn (f mut Free&) calleeBody(c typed.Call&) I64 {
-    return match c.Target {
-        case typed.Callee.Body(id): I64(id)
-        case _: -1
     }
 }
 
@@ -2564,8 +2548,8 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
                 kind = SFresh
             } else if why == "" {
                 # a call handing out a value moved out of the place
-                c := callOf(x)
-                b2 := f.calleeBody(c) if c is not null else -1
+                c := typed.CallOf(x)
+                b2 := typed.CalleeBody(c) if c is not null else -1
                 if b2 >= 0 and f.Bodies[b2].Root is not null and f.mustRes[b2] == MovBase + k {
                     kind = SMove
                     of = k
@@ -2608,7 +2592,7 @@ fn (w mut walker&) freshSite(x typed.Expr&) I64, String {
         case typed.Expr.Text(_, _, tx) { return I64(tx.Site), "" }
         case typed.Expr.Collect(_, _, c) { return I64(c.Site), "" }
         case typed.Expr.Call(_, _, c) {
-            b2 := f.calleeBody(c)
+            b2 := typed.CalleeBody(c)
             if b2 < 0 or c.Site < typed.SiteId(0) { return -1, "" }
             body := f.Bodies[b2]
             if body.Root is null { return -1, "" }
@@ -2824,8 +2808,8 @@ fn (w mut walker&) destroyMade(x typed.Expr&) I64, I64, I64, String {
     }
     site, why := w.freshSite(x)
     if site >= 0 { return SFresh, -1, site, "" }
-    c := callOf(x)
-    b2 := f.calleeBody(c) if c is not null else -1
+    c := typed.CallOf(x)
+    b2 := typed.CalleeBody(c) if c is not null else -1
     if b2 >= 0 and f.Bodies[b2].Root is not null and f.mustRes[b2] >= MovBase {
         return SMove, f.mustRes[b2] - MovBase, -1, ""
     }
@@ -3214,7 +3198,7 @@ fn (m mut mustW&) placeMust(p typed.Lvalue&) I64 {
 }
 
 fn (m mut mustW&) callMust(c typed.Call&) I64 {
-    b2 := m.F.calleeBody(c)
+    b2 := typed.CalleeBody(c)
     if b2 < 0 or m.F.Bodies[b2].Root is null { return MustNone }
     return m.F.mustRes[b2]
 }
@@ -3248,7 +3232,7 @@ fn (m mut mustW&) fresh(x typed.Expr&, depth I64) Bool {
             return true
         }
         case typed.Expr.Call(_, _, c) {
-            b2 := f.calleeBody(c)
+            b2 := typed.CalleeBody(c)
             if b2 < 0 or f.Bodies[b2].Root is null { return false }
             body := f.Bodies[b2]
             if t.Role(body.Ty) == types.RoleCtor { return true }
@@ -3533,7 +3517,7 @@ fn (f mut Free&) siteScope(b I64, x typed.Expr&) typed.Scope {
         case typed.Expr.Make(_, _, m): pl.Built[I64(m.Site)] if m.Site >= typed.SiteId(0) else typed.Scope.Unset
         case typed.Expr.Text(_, _, tx): pl.Built[I64(tx.Site)]
         case typed.Expr.Collect(_, _, c): pl.Built[I64(c.Site)]
-        case typed.Expr.Call(_, _, c): pl.Passed(c.Site, f.resultVar(f.calleeBody(c))) if c.Site >= typed.SiteId(0) else typed.Scope.Unset
+        case typed.Expr.Call(_, _, c): pl.Passed(c.Site, f.resultVar(typed.CalleeBody(c))) if c.Site >= typed.SiteId(0) else typed.Scope.Unset
         case typed.Expr.Away(_, _, y): f.siteScope(b, y)
         case typed.Expr.Seq(_, _, sq): f.siteScope(b, sq.X!) if sq.X is not null else typed.Scope.Unset
         case _: typed.Scope.Unset
@@ -3580,7 +3564,7 @@ fn runs(sc typed.Scope) Bool {
 fn (f mut Free&) placeable(st store) Bool {
     x := st.X!
     if not runs(f.siteScope(st.Body, x)) { return false }
-    c := callOf(x)
+    c := typed.CallOf(x)
     match x {
         case typed.Expr.Promote(_, _, pr) { c = ctorCall(pr.X) }
         case typed.Expr.Away(_, _, y) { return f.placeable(store(st.PlaceId, st.Body, st.File, st.Sp, st.Kind, st.Of, st.Site, y, null)) }
@@ -3588,7 +3572,7 @@ fn (f mut Free&) placeable(st store) Bool {
         case _ { return true }
     }
     if c is null { return true }
-    b2 := f.calleeBody(c)
+    b2 := typed.CalleeBody(c)
     if b2 < 0 { return true }
     return f.varsFit(st.Body, c, b2, f.siteScope(st.Body, x), f.resultVar(b2)) >= 0
 }
@@ -3871,7 +3855,7 @@ fn (f mut Free&) redirect(b I64, x typed.Expr&, top I64, at typed.Scope, self Bo
             if self or pl.Built[I64(c.Site)] == at { pl.Built[I64(c.Site)] = region }
         }
         case typed.Expr.Call(_, _, c) {
-            b2 := f.calleeBody(c)
+            b2 := typed.CalleeBody(c)
             if b2 < 0 or c.Site < typed.SiteId(0) or f.Bodies[b2].Root is null { return }
             rv := f.resultVar(b2)
             # a constructor's instance is part of the value; a call's result copied by a promotion is garbage in it
@@ -3945,7 +3929,7 @@ fn (f Free&) IsOwner(k I64) Bool { return k >= 0 and k < f.owner.Len() and f.own
 # for none
 fn (f mut Free&) DroppedMove(c typed.Call&) I64 {
     if not f.Done { return -1 }
-    b2 := f.calleeBody(c)
+    b2 := typed.CalleeBody(c)
     if b2 < 0 or f.Bodies[b2].Root is null { return -1 }
     m := f.mustRes[b2]
     if m < MovBase { return -1 }
@@ -4164,7 +4148,7 @@ fn (f mut Free&) withinExpr(locals Vec<I64>&, x typed.Expr&) I64 {
         case typed.Expr.Read(_, _, p, _) { return f.withinPl(locals, p) }
         case typed.Expr.Borrow(_, _, p) { return f.withinPl(locals, p) }
         case typed.Expr.Call(_, _, c) {
-            b2 := f.calleeBody(c)
+            b2 := typed.CalleeBody(c)
             if b2 < 0 or f.Bodies[b2].Root is null or t.Results(f.Bodies[b2].Ty).Len() != 1 { return MustNone }
             e := t.ResultFrom(f.Bodies[b2].Ty, 0)
             if e < 0 or e >= c.Args.Len() { return MustNone }

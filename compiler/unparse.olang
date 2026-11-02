@@ -528,9 +528,7 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
                 w.path(e)
             }
         }
-        case ast.TypeRef.Perm(_, of, writable, owned) {
-            if owned { w.put("own") }
-            if owned and writable { w.put(" ") }
+        case ast.TypeRef.Perm(_, of, writable) {
             if writable { w.put("mut") }
             if of is not null {
                 w.put(" ")

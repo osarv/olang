@@ -937,7 +937,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
                     mt := p.tk()
                     p.advance()
                     msp := source.Span(mt.Start, mt.End)
-                    recv = ast.Param(msp, source.NameId(0), ast.TypeRef.Perm(msp, null, true, false), null)
+                    recv = ast.Param(msp, source.NameId(0), ast.TypeRef.Perm(msp, null, true), null)
                 }
                 mn := try p.methodName()
                 # D17f: a trait's method may state the contract every call through an "any" is held to
@@ -1011,7 +1011,7 @@ fn (p mut Parser&) receiverVars(t ast.TypeRef&, inArgs Bool) {
             for a in args { p.receiverVars(a, true) }
         }
         case ast.TypeRef.Ref(_, of, _) { p.receiverVars(of, inArgs) }
-        case ast.TypeRef.Perm(_, of, _, _) {
+        case ast.TypeRef.Perm(_, of, _) {
             if of is not null { p.receiverVars(of, inArgs) }
         }
         case _ { }
@@ -1328,7 +1328,7 @@ fn (p mut Parser&) typeExpr() ast.TypeRef& ? Fail {
     writable := p.accept(token.Tok.Mut)
     t := try p.typeBase()
     t = p.markers(at, t)
-    if writable { return ast.TypeRef.Perm(p.from(at), t, writable, false) }
+    if writable { return ast.TypeRef.Perm(p.from(at), t, writable) }
     return t
 }
 
@@ -1954,7 +1954,7 @@ fn (p mut Parser&) declRest(names NameList&, field Bool) ast.VarDecl& ? Fail {
     if p.sees(token.Tok.Mut) and p.look(1) == token.Tok.Define {
         # "x mut := v": ":=" already gives the permission, which the checker says (D11a, C3)
         mat := p.advance()
-        perm := ast.TypeRef.Perm(source.Span(mat, p.prevEnd), null, true, false)
+        perm := ast.TypeRef.Perm(source.Span(mat, p.prevEnd), null, true)
         p.advance()
         values := try p.values(names, field)
         return ast.VarDecl(names.Names, names.Sps, perm, values, true, field)
@@ -2247,7 +2247,12 @@ fn (p mut Parser&) lineBody() Array<ast.Stmt&>& ? Fail {
     defer { p.inCtor = wasCtor }
     st := try p.stmt()
     match st {
-        case ast.Stmt.Var(sp, _), ast.Stmt.Multi(sp, _) {
+        case ast.Stmt.Var(sp, _) {
+            p.report(sp.Start, sp.End, msgs.LineBodyNotSimple("a declaration"))
+            error Fail.Syntax
+        }
+        # a parallel assignment, "a, b = b, a", is an assignment; "a, b := ..." declares (S4c)
+        case ast.Stmt.Multi(sp, m) if m.Define {
             p.report(sp.Start, sp.End, msgs.LineBodyNotSimple("a declaration"))
             error Fail.Syntax
         }
@@ -2757,8 +2762,6 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&, min I64) ast.Expr& ? Fail {
         if k == token.Tok.At and not p.skip and p.breakBefore() { return left }
         # "not" in infix position can only be "not in"
         if k == token.Tok.Not and p.look(1) != token.Tok.In { return left }
-        # E25: f&x(...) is a call, read by postfix; an "&" there is no operator
-        if p.half != token.Tok.Eof and k == token.Tok.Amp { return left }
         p.advance()
         if k == token.Tok.Not {
             p.advance()

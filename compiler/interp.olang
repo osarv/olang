@@ -531,13 +531,14 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
         of := x.Bodies[i].Of
         if of != typed.BodyOf.Global { continue }
         m, n := of.module, of.name
-        if writtenMut(c.P.GlobalDecl(m, n)) {
+        gd := c.P.GlobalDecl(m, n)
+        if gd is not null and generic.WrittenMut(gd.Ty) {
             mimg := try x.bakeMutable(m, n) catch eval.NotBaked { continue }
             out.Put(i, mimg)
             continue
         }
         img := try x.M.Image(m, n) catch eval.NotBaked {
-            unbaked(x, c, d, i, c.P.GlobalDecl(m, n), abortsAt, whyNot)
+            unbaked(x, c, d, i, gd, abortsAt, whyNot)
             continue
         }
         out.Put(i, img)
@@ -830,8 +831,10 @@ fn (x mut Exec&) start() {
                 ty := globalType(b, m, n)
                 if ty == types.UnknownT { continue }
                 k := mir.FnKey.Body(typed.BodyId(I32(i)))
-                x.M.DefineGlobal(m, n, ty, writtenMut(x.P.GlobalDecl(m, n)), k)
-                if x.buildDefault(m, ty, writtenMut(x.P.GlobalDecl(m, n))) { x.M.BuildGlobal(m, n) }
+                gd := x.P.GlobalDecl(m, n)
+                mutable := gd is not null and generic.WrittenMut(gd.Ty)
+                x.M.DefineGlobal(m, n, ty, mutable, k)
+                if x.buildDefault(m, ty, mutable) { x.M.BuildGlobal(m, n) }
                 x.Globals.Push(i)
             }
             case _ { }
@@ -883,14 +886,6 @@ fn (x mut Exec&) bakeMutable(m I64, n source.NameId) eval.Image ? eval.NotBaked 
     if img.Blobs.Len() != 1 or img.Blobs[0].At.Len() != 0 { error eval.NotBaked.Refused }
     img.Mutable = true
     return img
-}
-
-fn writtenMut(v ast.VarDecl?&) Bool {
-    if v is null or v.Ty is null { return false }
-    return match v.Ty {
-        case ast.TypeRef.Perm(_, _, w, _): w
-        case _: false
-    }
 }
 
 # k and everything its code can reach lowered and defined in the machine

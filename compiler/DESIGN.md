@@ -390,11 +390,11 @@ and a generic's body is checked once per instance. Each body has:
   captured scopes, carried in its environment (D16c).
 - `Fields`: what a constructor's instance is assembled from, in field order (C2a).
 
-**Marks.** A mark is what a declaration's written type says about where it lives: `None` (no marker, a value), `Bare`
-(`&`), `Of(x)` (`&x`), `Global(module, name)` (`&G`: the program's scope, O1b - a local's only; a scope argument naming a
-global is E25's error), `Return` (`&return`), `Infer` (`:=`, and a local written as a bare type variable, which takes its
+**Marks.** A mark is where a declaration lives, as its type says and the inference places it (no scope is written,
+O28): `None` (a value), `Bare` (a reference of its own scope), `Of(x)` (where x lives), `Return` (the result scope - a
+generator's hidden home, D18c), `Infer` (`:=`, and a local written as a bare type variable, which takes its
 initializer's scope, O25a), and `TypeVar` (a result written as a bare type variable, O14b). Types carry no scope tags, so
-marks and function types' scopes are §8's whole record of what was written:
+marks and function types' scopes are §8's whole record of where things live:
 - a **parameter's** mark is as written - `Bare` gives it a scope variable of its own (O4b), `Of(x)` shares parameter
   `x`'s (one written before it, the receiver included, O4a), `None` a value, which still has one where it holds
   references (O4b). It agrees with `Ty` (`Body.ParamMark`);
@@ -699,10 +699,8 @@ of the object a local's reference names (`RegionOf`, O32/O33).
 **Statements.** `Assign(p, v)`: the place's projections (their index locals) are computed before, then v, then the store
 (S4). `Live(l)`/`Dead(l)`: l's storage made (in its home's arena) or ended. `Open(s)`/`Close(s)`: s opens inside the
 scope opened last that is still open, its `Parent`; it closes with its owners released and its destructors run, last
-registered first (O15, O35), its storage reclaimed. `Give(s)`: region s now belongs to the owner just stored (O30) and
-is no longer this function's to close. `RegisterDtor(s, t, x)`: x's instance destructed when s closes (O16).
-`RegisterOwner(s, p)`: the own slot p released when s closes if it still holds one - an owner local (O35), a hold
-(F3), a result in flight (N3). `Release(p)`: the object the own slot p holds, if any, released and p left null (O35);
+registered first (O15, O35), its storage reclaimed. `RegisterDtor(s, t, x)`: x's instance destructed when s closes
+(O16). (`Give` and `RegisterOwner`, own's, went with it.) `Release(p)`: the object the own slot p holds, if any, released and p left null (O35);
 a store into an own slot is preceded by one where the slot held one. `Write(b, how, x)`: x appended to builder b, as
 E11a writes it (`Bytes`, `Char`, `Int`, `Uint`, `Float`, `Bool`). `CopyElems(dst, src, n)`: n elements copied (T11b,
 T7c). `Spawn(j, task)`: a task started in join j (P1).
@@ -745,8 +743,7 @@ error list (R6), every scope closed; `Wait(j, ok, code, failed)`; and `Exit(kind
   each block it leaves, innermost first: the block's deferred code, copied onto that exit (S19, last registered first,
   only what was reached); then, for a join, its `Wait` (P1b; a failure replaces the way out, P4b, unless an error is
   already leaving); then its `Close` (O15, O35). A `return` computes its value into a local first (a returned array
-  copied first where deferred code is pending, S19), and an owned result in flight is held (`RegisterOwner` of its slot,
-  N3) until the function returns. `done`, `fail`, `abort`, `unreachable` and a failed check are `Exit`s and run none
+  copied first where deferred code is pending, S19). `done`, `fail`, `abort`, `unreachable` and a failed check are `Exit`s and run none
   of it.
 - **Ownership events** (section 1.6.1): every move is a `Take`; a store into an own slot is preceded by its `Release`;
   an owner local, a hold (F3: an owner held across a later operand that can leave - in a test build a guaranteed check
@@ -823,7 +820,7 @@ behind the MIR's back.
 - **Flow**, to a fixed point over the CFG: every local initialized on every path before it is read (a call's result
   only on its ok edge, its error code only on its error edge, a wait's code only on its failed edge); an arena local
   stored into only after its `Live`; the open scopes the same on every path into a block, every `Open` in its parent,
-  every `Close` and `Give` of the scope opened last, none open at a `Return` or `Raise`; nothing built in a scope that
+  every `Close` of the scope opened last, none open at a `Return` or `Raise`; nothing built in a scope that
   is not open or is inert; no join closed with tasks not waited for.
 
 `Fn.Dump` writes a function as text (the stage dump of section 4): its header, locals, scopes and blocks, a statement a
@@ -999,7 +996,8 @@ repository (25.7k lines of corpus and std). "study2 uses" counts how often study
    - lists follow point 3.
 
    study2 uses: 448.
-6. **`f&x(` scope arguments: (a), two tokens, using adjacency flags.** In postfix position, an `&` is a scope
+6. **`f&x(` scope arguments (removed 2026-11-02 with every written scope, O28): (a), two tokens, using adjacency
+   flags.** In postfix position, an `&` is a scope
    argument (E25) when all three hold:
    - the `&` has no space before it;
    - it is followed by an identifier or `return` with no space before it;

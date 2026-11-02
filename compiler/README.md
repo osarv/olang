@@ -69,9 +69,8 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
   (running a program without a shell, reading a tool's output as rows, a scratch directory, `diff`). Each is built and
   run by its make target (`make tokdiff`), or by hand from the repository root: `build/olang build
   compiler/tools/tokdiff.olang && build/compiler_tools_tokdiff [FILE...]`. Also `dump.olang` (prints what the passes
-  make of a file), `checkdump.olang` (what the checker says of a program), `checkdiff.olang` (the
-  checker against stage 0's goldens), `scopedump.olang` (what the scope pass says of a program, `-plan` for its
-  placement), `scopediff.olang` (the scope pass against stage 0's goldens), `drvdiff.olang` (the driver's command lines
+  make of a file), `checkdump.olang` (what the checker says of a program), `scopedump.olang` (what the
+  scope pass says of a program, `-plan` for its placement), `drvdiff.olang` (the driver's command lines
   and whole builds against stage 0's), `lowerdump.olang` (every function of a program lowered and verified, `-mir` to dump, `-standin`
   for the placement of before the scope pass), `emitdump.olang` (a program written as LLVM IR), `emitdiff.olang`
   (programs built by stage 0 and by the pipeline, run, and their outcomes compared), `evaldump.olang` (a program or its
@@ -101,8 +100,6 @@ make diaggold      # capture diag.txt again from the port
 make drvgold       # capture drv.txt again; rungold run.txt (minutes); tokgold, astgold, modgold the rest
                    # (all from the port; GOLD_OLANG names its driver)
 make fmtdiff       # every file formatted reads back as the same tree, keeps its comments, and is its own layout
-make checkdiff     # the checker's first errors equal stage 0's on refused cases; accepted programs check clean
-make scopediff     # the scope pass's first errors equal stage 0's on cases refused by section 8; accepted programs are clean
 make drvdiff       # the driver says what stage 0 says: command lines decided before code generation, and whole builds
 make lowerdump     # every body and helper of the corpus and the checks' run cases lowered to MIR and verified
 make emitdiff      # the corpus and std's tests built through emit, run, and each test's outcome compared with stage 0's

@@ -1,5 +1,5 @@
-# D18c: generators handing out views - borrowed from what they were given (Iterator<T&t>) and kept by their walk
-# (Iterator<T&return>) - walked by for-ins left every way, held in locals, given to the helpers, the views kept and read
+# D18c: generators handing out views - borrowed from what they were given and kept by their walk (Iterator<T&>, which
+# of the two read off the yields) - walked by for-ins left every way, held in locals, given to the helpers, the views kept and read
 # after churns; D18e: a walk over a generator given program-scope storage is dropped with its loop's block. Built,
 # -d -s and interpreted, the three print alike
 import "std/io"

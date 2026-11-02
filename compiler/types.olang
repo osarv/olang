@@ -87,10 +87,9 @@ type Kind enum {
     ErrVal
 }
 
-# a reference's permission: read-only, writable ("mut"), owning ("own"), both (T25b, T25e)
+# a reference's permission: read-only or writable ("mut", T25b); 2, once owning ("own"), is unused
 ReadOnly I64 = 0
 Writable I64 = 1
-Owning I64 = 2
 Nullable I64 = 4    # "?&": a reference that may be null (T2c) - none is unless its type says so
 Spread I64 = 8      # "xs ...T": a variadic parameter's read-only array, as its function's signature holds it (D8g)
 
@@ -1488,7 +1487,6 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
                 t.canon(b, t.Elem(t.Referent(id)))
                 return
             }
-            if (p & Owning) != 0 { b.Push("own ") }
             if (p & Writable) != 0 { b.Push("mut ") }
             t.canon(b, t.Referent(id))
             b.Push("?&" if (p & Nullable) != 0 else "&")
@@ -1719,7 +1717,7 @@ test "canonical texts name every kind of type" {
     li := t.Named(list, t.List1(i64))
     assert t.Canon(li) == "std/prelude/list:List<I64>"
     assert t.Canon(t.Ref(li, Writable)) == "mut std/prelude/list:List<I64>&"
-    assert t.Canon(t.Ref(t.Array(i64, TypeId(0)), Owning | Writable)) == "own mut Array<I64>&"
+    assert t.Canon(t.Ref(t.Array(i64, TypeId(0)), Writable)) == "mut Array<I64>&"
     assert t.Canon(t.Array(t.Prim("U8"), t.Const(i64, 16))) == "Array<U8, 16>"
     f := t.Func(t.List(TypeId[i64, t.Prim("F32")]), t.Tuple(t.List(TypeId[i64, i64])), t.List1(DefaultErrT))
     assert t.Canon(f) == "fn(I64, F32) (I64, I64) ?"
