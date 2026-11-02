@@ -1823,7 +1823,9 @@ fn (s mut Scoper&) qualifiesMove(loc typed.Local, x typed.Expr&) Bool {
         case typed.Mark.None, typed.Mark.Infer { }
         case _ { return false }
     }
-    if not s.madeHere(x) { return false }
+    # (a value local declared from a read of another's place is a copy made here, its own storage - "cur := head",
+    # which a later "cur = nn" and "return cur" hand back)
+    if not s.madeHere(x) and not copiedRead(x) { return false }
     if s.holds(t) { return true }
     # a number or a Bool is never moved; storage a borrow can name may be
     k := s.P.T.KindOf(t)
@@ -1870,6 +1872,15 @@ fn (s mut Scoper&) madeHere(x typed.Expr?&) Bool {
         # a conditional or a value match each of whose values makes it (E28, S12b; stage 0's copiesExistingRefs)
         case typed.Expr.Cond(_, _, c): s.madeHere(c.A) and s.madeHere(c.B)
         case typed.Expr.Match(_, _, m): s.matchMadeHere(m)
+        case _: false
+    }
+}
+
+# whether a value is a read of a place, whole: as a value local's initializer, a copy into the local's own storage
+fn copiedRead(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Read(_, _, p, _): p != typed.Lvalue.Temp
+        case typed.Expr.Away(_, _, y): copiedRead(y)
         case _: false
     }
 }
@@ -2898,8 +2909,11 @@ fn (s mut Scoper&) carried(x typed.Expr?&, out mut Vec<I64>&) {
             # an instance adapted through its Call is the value itself (E31)
             match f {
                 case typed.FnVal.Lambda(_, caps, _) {
-                    if not s.flCaps { return }
-                    for cp in caps { s.carried(cp.Outer, out) }
+                    # (but for a reference it captures: what that names must outlive the lambda, which it does where the
+                    # local's referent is built where the result goes - a reference local from a built call)
+                    for cp in caps {
+                        if s.flCaps or s.isRef(cp.Outer.Type()): s.carried(cp.Outer, out)
+                    }
                 }
                 case typed.FnVal.Adapter(_, r, _) { s.carried(r, out) }
                 case _ { }
@@ -2914,6 +2928,8 @@ fn (s mut Scoper&) carriedPlace(p typed.Lvalue&, out mut Vec<I64>&) {
     if r >= 0 and not flHas(out, r) { out.Push(r) }
     match p {
         case typed.Lvalue.Deref(_, _, e) { s.carried(e, out) }
+        # (a part of a call's value - a slice of what "v.View()" gives: what the call carries)
+        case typed.Lvalue.Temp(_, _, e, _) { s.carried(e, out) }
         case _ { }
     }
 }
