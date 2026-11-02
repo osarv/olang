@@ -1,0 +1,16 @@
+# check: fail error[E31, O17]: x[i] gives a copy, and the call can build into what it holds
+# E31b (bulk review 6 F1): an element holding a writable reference to a collection of its own type - its method may grow
+# the collection the element is in through it - is not made in place through RefMut: the copy's error
+type blk struct(n I64, home mut Vec<blk>&) { n, home }
+
+fn (b mut blk&) Bump() {
+    for i in range 1000 { b.home.Push(blk(i, b.home)) }
+    b.n = 99
+}
+
+fn main() {
+    v := Vec<blk>()
+    v.Push(blk(1, v))
+    v[0].Bump()
+    assert v[0].n == 99
+}

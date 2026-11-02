@@ -4469,7 +4469,8 @@ fn (c mut Checker&) entryChecks() {
 # beginning: its parameters' locals, its first Next failing where one is false (D18)
 fn (c mut Checker&) contractChecks(b I64, args Vec<I64>&, gen Bool) {
     if not c.hasContract(b) { return }
-    info := try c.Contracts.Ref(b) catch { return }
+    # (a copy: checking a requirement's body may ask for another contract, growing c.Contracts - M19g)
+    info := try c.Contracts.Get(b) catch { return }
     if info.Reqs.Len() == 0 { return }
     fr := c.fr()
     ae := c.P.PreludeType("std/prelude/argument", "ArgumentError")
@@ -4625,7 +4626,7 @@ fn (c mut Checker&) ctErr(mi I64, sp source.Span, m msgs.Msg) I64 {
 # function checks its own on entry
 fn (c mut Checker&) contractAt(sp source.Span, nsp source.Span, r types.TypeId, call typed.Expr&, target typed.Callee&
     args Array<typed.Expr&>&, site typed.SiteId, cb I64) typed.Expr& {
-    info := try c.Contracts.Ref(cb) catch { return call }
+    info := try c.Contracts.Get(cb) catch { return call }    # (a copy: see contractChecks)
     # a body only the evaluator runs (an assert's condition, S18c) asks nothing: its call is asked where it is written
     if info.Reqs.Len() == 0 or c.fr().Body < 0 or c.evalOnly() { return call }
     # a generator's are its first Next's (D18), which this call does not run
@@ -12262,9 +12263,13 @@ fn (c mut Checker&) inPlaceCall(sp source.Span, call typed.Expr&) typed.Expr& {
     if c.spawning > 0 or cl is null or cl.Args.Len() == 0: return call
     tv := c.atTemp(cl.Args[0])
     if tv is null: return call
-    # an element reaching a writable reference, a function value or an any: through it the method could change the
-    # collection (a closure over it, a reference to it)
-    if c.P.T.ReachesWrite(c.deref(typeOf(tv))): return call
+    # an element reaching a function value, an any, or a writable reference to storage a collection it is in may be
+    # part of: through it the method could change the collection (a closure over it, a reference to it)
+    el := c.deref(typeOf(tv))
+    for coll in c.atColls(tv) {
+        w := collWalk(c.P.T, coll)
+        if w.reaches(el): return call
+    }
     for j in range 1, cl.Args.Len() {
         if not c.plainArg(cl.Args[j]): return call
     }
@@ -12278,6 +12283,70 @@ fn (c mut Checker&) inPlaceCall(sp source.Span, call typed.Expr&) typed.Expr& {
     args mut Array<typed.Expr&>& = Array<typed.Expr&>(cl.Args.Len(), ref)
     for j in range 1, cl.Args.Len() { args[j] = cl.Args[j] }
     return typed.Expr.Call(call.Span(), typeOf(call), typed.Call(cl.Target, args, cl.Site, cl.Zero, cl.Tail))
+}
+
+# the collections an At call's element is in: its receiver's type, and those of the levels it is an element of in turn
+# (x[i][j])
+fn (c mut Checker&) atColls(tv typed.Expr&) Vec<types.TypeId> {
+    out Vec<types.TypeId>
+    at := c.callArgs(tv)
+    if at.Len() == 0: return out
+    out.Push(c.deref(typeOf(at[0])))
+    inner := c.atValue(at[0])
+    if inner is not null { for t in c.atColls(inner): out.Push(t) }
+    return out
+}
+
+# whether a value of a type reaches a function value, an any, a type variable, or a writable reference - at any depth,
+# through read-only ones too (a shallow mut field is written through them) - to storage that may be Coll's or hold it
+type collWalk struct(T types.Table&, Coll types.TypeId) {
+    T
+    Coll
+    seen Vec<types.TypeId>
+}
+
+fn (w mut collWalk&) reaches(t types.TypeId) Bool {
+    tt := w.T
+    r := tt.Repr(t)
+    if tt.ForeignRef(r) or w.seen.Has(r): return false
+    w.seen.Push(r)
+    return match tt.KindOf(r) {
+        case types.Kind.Func, types.Kind.Var, types.Kind.Any: true
+        case types.Kind.Ref: ((tt.PermOf(r) & types.Writable) != 0 and w.holds(tt.Referent(r), 0)) or w.reaches(tt.Referent(r))
+        case types.Kind.Array: w.reaches(tt.Elem(r))
+        case types.Kind.Tuple, types.Kind.Record: w.some(tt.Items(tt.Parts(r)))
+        case types.Kind.AnonEnum: w.some(tt.Items(tt.ShapeCases(r)))
+        case types.Kind.Named: not tt.HasBody(r) or w.some(tt.Embedded(r))
+        case _: false
+    }
+}
+
+fn (w mut collWalk&) some(xs Array<types.TypeId>&) Bool {
+    for x in xs {
+        if x != types.TypeId(0) and w.reaches(x): return true
+    }
+    return false
+}
+
+# whether storage of type t may be Coll's own, or hold it by value
+fn (w mut collWalk&) holds(t types.TypeId, depth I64) Bool {
+    tt := w.T
+    r := tt.Repr(t)
+    if depth > 16 or r == tt.Repr(w.Coll): return true
+    return match tt.KindOf(r) {
+        case types.Kind.Var: true
+        case types.Kind.Array: w.holds(tt.Elem(r), depth + 1)
+        case types.Kind.Tuple, types.Kind.Record: w.someHolds(tt.Items(tt.Parts(r)), depth)
+        case types.Kind.Named: tt.HasBody(r) and w.someHolds(tt.Embedded(r), depth)
+        case _: false
+    }
+}
+
+fn (w mut collWalk&) someHolds(xs Array<types.TypeId>&, depth I64) Bool {
+    for x in xs {
+        if x != types.TypeId(0) and not w.T.IsRef(x) and w.holds(x, depth + 1): return true
+    }
+    return false
 }
 
 # the bodies a call made in place runs before its write lands: the method's, then those of the constructors its other

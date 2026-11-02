@@ -1,6 +1,6 @@
-# check: run
-# QCB: refused while scopes were written; inferred, each value is built where it is kept (O28), and the
-# program runs - read after what it was built in closes, as the description below says it would be
+# check: fail error[C2d]: this instance would outlive what its field refers to
+# QCB: refused while scopes were written; inferred it ran (O28) - but a loop turn's value owning storage is one slot
+# every turn reuses, and an instance keeping a reference to it past the turn is refused (O17, bulk review 6 F3)
 # C2d: a value a constructor field builds from the constructor's parameter lands in the instance, so the parameter's
 # argument is held to wherever the instance lands - here it dies with each iteration while the instance outlives it
 type FeEnt struct(v mut Vec<I64>&) { V mut Vec<I64>& = v }

@@ -361,7 +361,14 @@ fn (f mut Free&) heldPlaces(ty types.TypeId) Vec<I64> {
 
 # D9h: the parameters body b's result may be a view of (check's load.ViewResults or CtorViews) - a caller keeping it
 # copies it (lowering), where it lands
-fn (f mut Free&) viewsOf(b I64) I64 {
+# D9h: a constructor's call whose instance views only storage made for the call - not copied where it is kept (the
+# lowering's freshCtor)
+fn (f mut Free&) freshCtor(c typed.Call&, b I64) Bool {
+    if f.Bodies[b].Of != typed.BodyOf.Ctor: return false
+    return typed.FreshViews(c, f.viewsOf(b), fn(id typed.BodyId) I64 { return f.viewsOf(I64(id)) })
+}
+
+fn (f Free&) viewsOf(b I64) I64 {
     if b < 0 or b >= f.Bodies.Len() { return 0 }
     return match f.Bodies[b].Of {
         case typed.BodyOf.Fn(inst): try f.P.L.ViewResults.Get(inst) catch default I64(0)
@@ -2131,7 +2138,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     if w.holds(ty) and c.Site >= typed.SiteId(0) { addTo(out, orig(ONew, I64(c.Site))) }
     # (a callee handing back a view its caller copies where it keeps it (D9h) - but the value of a store, whose copy is
     # made where the place's value is; a callee not known may hand back any copy)
-    if (b2 < 0 or unknown or f.viewsOf(b2) != 0) and I64(c.Site) != w.exemptSite { w.untracked(ty, sp, "a call's value copied") }
+    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not f.freshCtor(c, b2))) and I64(c.Site) != w.exemptSite { w.untracked(ty, sp, "a call's value copied") }
     if b2 >= 0 and not unknown {
         if f.isCase(b2) {
             for a in args { addAllTo(out, a) }

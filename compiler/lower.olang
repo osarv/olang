@@ -1156,9 +1156,10 @@ fn (ln mut lowering&) loop(sp source.Span, body typed.Block&, post typed.Block?&
 
 fn (ln mut lowering&) jump(sp source.Span, kind typed.JumpKind, loop typed.BlockId) {
     for k := ln.loops.Len() - 1, k >= 0, k-- {
-        lc := ln.loops.RefMut(k)
-        if lc.Body == loop {
-            ln.leave(lc.Depth)
+        if ln.loops.Ref(k).Body == loop {
+            ln.leave(ln.loops.Ref(k).Depth)
+            # (the deferred code leave lowered may have grown ln.loops: the record taken after it - M19g)
+            lc := ln.loops.RefMut(k)
             if kind == typed.JumpKind.Break { ln.leaveOpen(lc.brk) } else { ln.leaveOpen(lc.conts) }
             return
         }
@@ -1715,10 +1716,12 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
     covered := Array<Bool>(xs.Len())
     left := xs.Len()
     for ti := ln.tries.Len() - 1, ti >= 0, ti-- {
-        tc := ln.tries.RefMut(ti)
-        for ci in range tc.Clauses.Len() {
+        # (each read of the try's record taken anew: a clause reached runs the deferred code it leaves, which may lower
+        # tries of its own and grow ln.tries - M19g)
+        clauses := ln.tries[ti].Clauses
+        for ci in range clauses.Len() {
             if ln.dead { return }
-            cl := tc.Clauses[ci]
+            cl := clauses[ci]
             test1 := mir.Operand.None
             always := cl.All
             for it in cl.Items {
@@ -1744,22 +1747,22 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
             }
             if not always and test1 == mir.Operand.None { continue }
             if always or left == 0 {
-                ln.toClause(tc, ci, code, from)
+                ln.toClause(ti, ci, code, from)
                 return
             }
             yes, no := ln.F.NewBlock(), ln.F.NewBlock()
             ln.end(mir.Term.Branch(test1, yes, no))
             ln.start(yes)
-            ln.toClause(tc, ci, code, from)
+            ln.toClause(ti, ci, code, from)
             ln.start(no)
         }
         # what this try's clauses do not take leaves the body - past a "!", it ends the program
-        if tc.Ends {
+        if ln.tries.Ref(ti).Ends {
             if raised { ln.emit(mir.Stmt.Raised(sp)) }
             ln.bang(code, from, sp)
             return
         }
-        if not tc.Passes { break }
+        if not ln.tries.Ref(ti).Passes { break }
     }
     # with no try at all, the call is a T29d literal's constructor - decided while compiling not to fail (Key.Literal),
     # its error edge never taken
@@ -1783,17 +1786,19 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
 
 # from here to clause ci of try tc: the error, where the clause names it, recoded from its list to the clause's own set
 # (R11b), then the scopes opened since the try closed, then a jump to the clause's entry
-fn (ln mut lowering&) toClause(tc mut tryCtx&, ci I64, code mir.Operand, from types.ListId) {
-    cl := tc.Clauses[ci]
+fn (ln mut lowering&) toClause(ti I64, ci I64, code mir.Operand, from types.ListId) {
+    cl := ln.tries.Ref(ti).Clauses[ci]
     if cl.Caught >= 0 {
         bind := mir.L(mir.LocalId(I32(cl.Caught)))
         ln.emit(mir.Stmt.Assign(cl.Sp, bind, mir.Rvalue.Recode(code, from, cl.CaughtSet)))
     }
     was := ln.erroring
     ln.erroring = true
-    ln.leave(tc.Depth)
+    ln.leave(ln.tries.Ref(ti).Depth)
     ln.erroring = was
     if ln.dead { return }
+    # (the deferred code leave lowered may have grown ln.tries: the record taken after it - M19g)
+    tc := ln.tries.RefMut(ti)
     if tc.entries[ci] == mir.NoBlock { tc.entries[ci] = ln.F.NewBlock() }
     ln.goto(tc.entries[ci])
 }
@@ -2413,7 +2418,7 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     # function would have, unless the value is only read here before anything can change what it views
     if ln.viewCall(c, ty) {
         if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) ": " $("read" if ln.reads.Has(I64(c.Site)) else "kept") $(" stable" if ln.stableViews(c) else "")) }
-        if ln.vlSites.Has(I64(c.Site)) or (ln.reads.Has(I64(c.Site)) and ln.stableViews(c)) {
+        if ln.vlSites.Has(I64(c.Site)) or (ln.reads.Has(I64(c.Site)) and ln.stableViews(c)) or ln.freshCtor(c) {
             ln.L.ViewReads++
         } else {
             ln.L.ViewCopies++
@@ -2421,6 +2426,15 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
         }
     }
     return mir.Operand.Copy(mir.L(dest))
+}
+
+# D9h: a constructor's call whose instance views only storage made for the call (typed.FreshViews) - its own, as
+# early freeing reads it too (free.olang's call)
+fn (ln mut lowering&) freshCtor(c typed.Call&) Bool {
+    id := typed.CalleeBody(c)
+    if id < 0 or ln.L.Bodies[id].Of != typed.BodyOf.Ctor: return false
+    lw := ln.L
+    return typed.FreshViews(c, lw.ViewsOf(typed.BodyId(I32(id))), fn(b typed.BodyId) I64 { return lw.ViewsOf(b) })
 }
 
 # ---- value results handed over uncopied (D9h) ----

@@ -582,8 +582,11 @@ fn (g mut gen&) plain(i I64) Bool {
 # whether a struct or a union is held as opaque words (X18): complete, given back by no function, not plain data - its
 # size and alignment asked of clang, an alignment of 8 at most
 fn (g mut gen&) opaque(i I64) Bool {
+    c := g.recs.Ref(i)
+    if not c.Complete or c.Returned { return false }
+    # (plain may read more records, growing g.recs: the reference taken again after it - M19g)
+    if g.plain(i) { return false }
     r := g.recs.Ref(i)
-    if not r.Complete or r.Returned or g.plain(i) { return false }
     return r.Size > 0 and r.Align > 0 and r.Align <= 8 and r.Size % r.Align == 0
 }
 
@@ -846,9 +849,11 @@ fn resultText(t String&) String {
 
 fn (g mut gen&) structDecl(i I64) String {
     b := StringBuilder()
-    r := g.recs.Ref(i)
+    # (a copy of the record: plain, parseType and fieldType may read more records, growing g.recs - M19g)
+    plain := g.plain(i)
+    r := g.recs[i]
     b.Push("type " $r.Name " struct() {\n")
-    if not g.plain(i) {
+    if not plain {
         # opaque words of its size and alignment (X18): C's to read, the program's to hold in place
         elem := "I64" if r.Align == 8 else "I32" if r.Align == 4 else "I16" if r.Align == 2 else "U8"
         b.Push($"    bytes := Array<" $elem ">(" $(r.Size / r.Align) ")\n}\n")
@@ -927,12 +932,12 @@ fn (g mut gen&) write(head String&) String {
     opaque := StringBuilder()
     plains := StringBuilder()
     for i in range g.recs.Len() {
-        r := g.recs.Ref(i)
-        if r.Name == "" or not g.wantRecord(i) { continue }
+        # (wantRecord and holdable may grow g.recs: each read of a record takes its reference anew - M19g)
+        if g.recs.Ref(i).Name == "" or not g.wantRecord(i) { continue }
         if g.holdable(i) {
             plains.Push($"\n" $g.structDecl(i))
         } else {
-            opaque.Push("    type " $r.Name "\n")
+            opaque.Push("    type " $g.recs.Ref(i).Name "\n")
         }
     }
     if opaque.Len() > 0 or fns.Len() > 0 { out.Push($"\nextern {\n" $opaque.ToString() $fns.ToString() "}\n") }
@@ -1695,8 +1700,10 @@ fn (g mut gen&) sizes(clang String&, flags Array<String&>&, probe String&, inclu
     }
     want Vec<I64>
     for i in range g.recs.Len() {
-        r := g.recs.Ref(i)
-        if not r.Complete or r.Returned or g.plain(i) { continue }
+        c := g.recs.Ref(i)
+        if not c.Complete or c.Returned { continue }
+        if g.plain(i) { continue }
+        r := g.recs.Ref(i)    # (plain may have grown g.recs - M19g)
         if r.Key == "" and r.Typedef == "" { continue }
         want.Push(i)
     }

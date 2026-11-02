@@ -603,6 +603,32 @@ fn (w ViewWalk&) ElidedCopy(x Expr?&) Bool { return w.copyViews(x) > 0 }
 # (exported for lowering's views kept in place of copies)
 fn CopiedOf(t types.Table&, x Expr&) Expr?& { return copied(t, x) }
 
+# D9h, O8d: whether a constructor's call hands back views of storage nothing else holds - each argument its instance may
+# view (bit k of views) a value made for the call, or a call's result that is its own (no view of what that call is
+# given): the instance then owns what it views, and no copy of it is needed where it is kept. viewsOf gives a body's
+# view bits (the lowering's, or early freeing's, reading of check's)
+fn FreshViews(c Call&, views I64, viewsOf fn&(id BodyId) I64) Bool {
+    if views <= 0 or (views & ViewOther) != 0: return false
+    for k in range c.Args.Len().Min(ViewBits) {
+        if (views & (I64(1) << k)) != 0 and not freshArg(c.Args[k], viewsOf, 0): return false
+    }
+    return true
+}
+
+fn freshArg(x Expr&, viewsOf fn&(id BodyId) I64, depth I64) Bool {
+    if depth > 8: return false
+    return match x {
+        case Expr.Make(_, _, _), Expr.Collect(_, _, _), Expr.Text(_, _, _), Expr.Lit(_, _, _): true
+        case Expr.Call(_, _, c): match c.Target {
+            case Callee.Body(id): viewsOf(id) == 0
+            case _: false
+        }
+        case Expr.Promote(_, _, pr): freshArg(pr.X, viewsOf, depth + 1)
+        case Expr.Away(_, _, y): freshArg(y, viewsOf, depth + 1)
+        case _: false
+    }
+}
+
 # what a stored value copies: a MakeKind.Copy's item where it keeps the type (an array of references read as values is
 # no view - its elements are copied out, E12), a value array or part read as it is (copied by T7b where it is stored); null
 # where nothing is copied
