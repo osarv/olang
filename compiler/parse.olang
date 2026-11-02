@@ -457,14 +457,6 @@ fn (p mut Parser&) syncItem(start I64) {
     }
 }
 
-# whether the token at i begins a declaration: "type", "test", "import", "extern", or "fn" and a name
-fn (p Parser&) declStarts(i I64) Bool {
-    k := p.ts.Toks[i].Kind
-    if k == token.Tok.Type or k == token.Tok.Test or k == token.Tok.Import or k == token.Tok.Extern { return true }
-    if k == token.Tok.Iden and i + 1 < p.ts.Toks.Len() and p.text(p.ts.Toks[i]) == "export" and p.ts.Toks[i + 1].Kind == token.Tok.Fn { return true }
-    return k == token.Tok.Fn and i + 1 < p.ts.Toks.Len() and p.ts.Toks[i + 1].Kind == token.Tok.Iden
-}
-
 # whether the next token starts a declaration where a statement was wanted - an unclosed block's end
 fn (p Parser&) declHere() Bool {
     k := p.peek()

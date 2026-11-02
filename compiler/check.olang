@@ -1195,23 +1195,6 @@ fn (c mut Checker&) varsIn(t types.TypeId, owner I64, seen mut Array<Bool>&, dep
     }
 }
 
-# where a variable is first written in a signature, past its introduction: the parameters', then the results' types
-fn (c mut Checker&) writtenAt(fd ast.Func&, n source.NameId) source.Span {
-    for prm in fd.S.Params {
-        if prm.Ty is not null {
-            sp := c.wordIn(prm.Ty!.Span(), c.text(n))
-            if sp.Start >= 0 { return sp }
-        }
-    }
-    if fd.S.Results.Len() > 0 {
-        for r in fd.S.Results {
-            sp := c.wordIn(r.Span(), c.text(n))
-            if sp.Start >= 0 { return sp }
-        }
-    }
-    return c.nameSpan(fd)
-}
-
 # the first whole-word w within a span of the current module's source, Start -1 for none
 fn (c mut Checker&) wordIn(sp source.Span, w String&) source.Span {
     t := c.P.L.Mods[c.fr().Mi].Src!.Text
@@ -5831,15 +5814,6 @@ fn (c mut Checker&) resolve(t ast.TypeRef?&) types.TypeId {
     return r
 }
 
-# whether the body being checked has a result scope (O13): a result it builds
-fn (c mut Checker&) hasResultScope() Bool {
-    if c.fr().Body < 0 { return false }
-    for v in c.P.T.ScopeVarsOf(c.cur().Ty) {
-        if v == types.ResultVar { return true }
-    }
-    return false
-}
-
 # what a written type says about where its reference lives (O25a): a reference, a bare "&" - its scope inferred (QCB) -
 # a bare type variable its initializer's, anything else none
 fn (c mut Checker&) markOf(t ast.TypeRef?&) typed.Mark {
@@ -8532,8 +8506,6 @@ fn (c mut Checker&) typeHasEq(t types.TypeId, depth I64) Bool {
     if c.isRef(t) and not (c.P.T.KindOf(d) == types.Kind.Array) { return false }
     return c.partsHaveEq(d, depth + 1)
 }
-
-fn (c mut Checker&) tyOrNull(t types.TypeId) String { return "null" if t == types.NullT else c.ty(t) }
 
 # "a is b": two references naming one instance (E10c)
 fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated Bool) typed.Expr& {
@@ -15516,12 +15488,6 @@ fn (c mut Checker&) errValues(sp source.Span, opSp source.Span, op token.Tok, x 
         y = c.errRecode(y, u)
     }
     return c.prim(sp, types.BoolT, typed.PrimOp.Eq if op == token.Tok.EqEq else typed.PrimOp.Ne, x, y)
-}
-
-fn (c mut Checker&) textConst(sp source.Span, t String&, tt types.TypeId) typed.Expr& {
-    bs := Array<U8>(t.Len())
-    for i in range t.Len() { bs[i] = U8(t[i]) }
-    return typed.Expr.Data(sp, tt, c.fr().File, typed.Const.Bytes(bs))
 }
 
 # R11b, T20: what a condition says of an error local, held for a block - where it holds (holds) or does not

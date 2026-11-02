@@ -2,9 +2,9 @@
 # resolved against it (D2, D3, D3a, D8c, M10, M14, M20, B10, B10c; compiler/DESIGN.md 1.5).
 #
 # A module's table holds its types, functions, globals and error types - those of the branches of its top-level ifs
-# that are chosen; a branch still pending (B9c) waits aside, and DecideTop resolves it once the checker has decided
-# it. Parameters and locals live in one flat map with an undo log: D3 and D3a forbid shadowing, so a name means one
-# thing at every point of a body and leaving a block only takes back what it declared.
+# that are chosen; a branch still pending (B9c) waits aside until the checker has decided it (load's Decide) and the
+# program is resolved again. Parameters and locals live in one flat map with an undo log: D3 and D3a forbid
+# shadowing, so a name means one thing at every point of a body and leaving a block only takes back what it declared.
 #
 # What a name is is recorded by where it is written (Use). An unknown name is recorded as None and left to the checker
 # (M5), which knows a type's members and reports one error per name with its suggestion; names reports here only the
@@ -198,33 +198,6 @@ fn Mentions(text String&, sp source.Span, name String&) Bool {
 
 fn identChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
 
-# the checker's decision for a pending top-level if (B9c): its imports loaded, its branch's declarations entered and
-# resolved
-fn (r mut Resolver&) DecideTop(mi I64, condStart I32, chosen I64) {
-    before := r.L.Mods.Len()
-    r.L.Decide(mi, condStart, chosen)
-    for _ in range before, r.L.Mods.Len() { r.Tables.Push(Table()) }
-    for k in range before, r.L.Mods.Len() { r.tableOf(k) }
-    r.aliasesOf(mi)
-    m := r.L.Mods[mi]
-    for d in m.Decls {
-        match d {
-            case ast.Decl.If(_, ti) {
-                if ti.Cond!.Span().Start == condStart {
-                    r.collectIf(mi, ti, chosen, 0)
-                    r.raisedIf(mi, ti, chosen, 0)
-                    r.bodiesIf(mi, ti, chosen, 0)
-                }
-            }
-            case _ { }
-        }
-    }
-    for k in range before, r.L.Mods.Len() { r.raisedErrors(k, r.L.Mods[k].Decls) }
-    for k in range before, r.L.Mods.Len() {
-        if r.L.Mods[k].Decls.Len() > 0 { r.bodies(k, r.L.Mods[k].Decls) }
-    }
-}
-
 # ---- errors raised by name (R3b) ----
 
 # the errors module mi raises by name that nothing declares - every "error X" in decls whose X names no local there,
@@ -239,13 +212,6 @@ fn (r mut Resolver&) raisedErrors(mi I64, decls Array<ast.Decl&>&) {
     r.declareRaised(mi, firsts)
     for f in firsts { r.nearRaise(mi, f, firsts) }
     r.raises.Clear()
-}
-
-# the chosen branch of a pending top-level if, decided now (B9c)
-fn (r mut Resolver&) raisedIf(mi I64, ti ast.TopIf&, chosen I64, index I64) {
-    if chosen == index and ti.Then!.Decls.Len() > 0 { r.raisedErrors(mi, ti.Then!.Decls) }
-    if ti.ElseIf is not null { r.raisedIf(mi, ti.ElseIf!, chosen, index + 1) }
-    if ti.Else is not null and chosen == index + 1 { r.raisedErrors(mi, ti.Else!.Decls) }
 }
 
 # decls' bodies walked with nothing reported or recorded, the raises collected
