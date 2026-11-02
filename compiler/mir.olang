@@ -511,7 +511,34 @@ fn (f mut Fn&) Add(b BlockId, s Stmt&) {
 
 fn (f mut Fn&) End(b BlockId, t Term) { f.Blocks[I64(b)].T = t }
 
-fn (f Fn&) TermOf(b BlockId) Term { return f.Blocks[I64(b)].T }
+# whether the place is local l or a part of what l holds
+fn (p Lvalue) BaseIs(l LocalId) Bool { return p.B == Base.Local(l) }
+
+# whether f writes into what local l holds: a store or a copy into a place reached from it, or a writable reference made
+# to it (D9b) - one judgement for emit and the evaluator
+fn (f Fn&) WritesInto(t types.Table&, l LocalId) Bool {
+    for blockIx in range f.Blocks.Len() {
+        bb := f.Blocks.Ref(blockIx)
+        for st in bb.Stmts {
+            if writesInto(t, st, l): return true
+        }
+    }
+    return false
+}
+
+fn writesInto(t types.Table&, st Stmt, l LocalId) Bool {
+    match st {
+        case Stmt.Assign(_, p, rv) {
+            if p.Path.N > I32(0) and p.BaseIs(l) { return true }
+            return match rv {
+                case Rvalue.Ref(q, ty), Rvalue.Slice(q, _, _, ty): q.BaseIs(l) and (t.PermOf(t.Repr(ty)) & types.Writable) != 0
+                case _: false
+            }
+        }
+        case Stmt.CopyElems(_, d, _, _) { return d.BaseIs(l) }
+        case _ { return false }
+    }
+}
 
 # a place: a local, or a base and its projections
 fn (f mut Fn&) Place(base Base, projs Array<Proj>&) Lvalue {

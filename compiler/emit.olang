@@ -2709,7 +2709,7 @@ fn (fe mut fnEm&) run() {
     for i in range f.Params.Len() {
         l := f.Params[i]
         lt := f.Locals[I64(l)].Ty
-        if fe.runTime(lt) and fe.writesInto(l) {
+        if fe.runTime(lt) and fe.F.WritesInto(fe.E.T, l) {
             fe.bigArena()
             v := fe.load("{ i64, ptr }", "%l" $l)
             fe.store("{ i64, ptr }", fe.copyArrayIn("%big", v, lt), "%l" $l)
@@ -2905,7 +2905,7 @@ fn (fe mut fnEm&) apart(p mir.Lvalue, args mir.Range) Bool {
     for i in range args.N {
         match fe.arg(args, i) {
             case mir.Operand.Copy(q) {
-                if fe.derefs(q) or fe.baseIs(q, dst) { return false }
+                if fe.derefs(q) or q.BaseIs(dst) { return false }
                 match q.B {
                     case mir.Base.Local(_) { }
                     case _ { return false }
@@ -3014,43 +3014,6 @@ fn (fe mut fnEm&) fillInPlace(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool
             }
         }
         case _ { return false }
-    }
-}
-
-# whether the function writes into what local l holds: a store or a copy into a place reached from it, or a writable
-# reference made to it
-fn (fe mut fnEm&) writesInto(l mir.LocalId) Bool {
-    f := fe.F
-    for blockIx in range f.Blocks.Len() {
-        bb := f.Blocks.Ref(blockIx)
-        for st in bb.Stmts {
-            match st {
-                case mir.Stmt.Assign(_, p, rv) {
-                    if p.Path.N > I32(0) and fe.baseIs(p, l) { return true }
-                    match rv {
-                        case mir.Rvalue.Ref(q, ty) {
-                            if fe.baseIs(q, l) and (fe.E.T.PermOf(fe.E.T.Repr(ty)) & types.Writable) != 0 { return true }
-                        }
-                        case mir.Rvalue.Slice(q, _, _, ty) {
-                            if fe.baseIs(q, l) and (fe.E.T.PermOf(fe.E.T.Repr(ty)) & types.Writable) != 0 { return true }
-                        }
-                        case _ { }
-                    }
-                }
-                case mir.Stmt.CopyElems(_, d, _, _) {
-                    if fe.baseIs(d, l) { return true }
-                }
-                case _ { }
-            }
-        }
-    }
-    return false
-}
-
-fn (fe mut fnEm&) baseIs(p mir.Lvalue, l mir.LocalId) Bool {
-    return match p.B {
-        case mir.Base.Local(k): k == l
-        case _: false
     }
 }
 
@@ -5819,7 +5782,7 @@ fn (fe mut fnEm&) exportNamed(x mir.Operand) String {
         for st in bb.Stmts {
             match st {
                 case mir.Stmt.Assign(_, pl, rv) {
-                    if pl.Path.N != I32(0) or not fe.baseIs(pl, l) { continue }
+                    if pl.Path.N != I32(0) or not pl.BaseIs(l) { continue }
                     match rv {
                         case mir.Rvalue.Closure(code, _, _, _, _) {
                             match code {
