@@ -4221,10 +4221,10 @@ fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
     # its bytes, then each owning part copied over the part it shares
     d := ln.local(ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp), ty, sp)
     dp := pl(mir.Base.Local(d))
-    if ln.hasParts(ty) {
+    if mir.HasFields(ln.T, ty) {
         parts := ln.partsOf(ty)
         for i in range parts.Len() { ln.copyPart(ln.with(dp, mir.Proj.Field(i)), parts[i], at, sp) }
-    } else if ln.hasCases(ty) {
+    } else if mir.HasCases(ln.T, ty) {
         tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(dp)), sp)
         ln.payloads(ln.casesOf(ty), tag, sp, fn(c I64, rec types.TypeId) {
             fs := ln.items(ln.T.Parts(rec))
@@ -4291,21 +4291,8 @@ fn (ln mut lowering&) helperCall(kind mir.HelperKind, ty types.TypeId, args Arra
     return mir.Operand.None if dest == mir.NoLocal else mir.Operand.Copy(mir.L(dest))
 }
 
-# whether a type's value is made of parts, for the helpers: a struct, a tuple or a record
-fn (ln mut lowering&) hasParts(ty types.TypeId) Bool {
-    t := ln.T
-    r := t.Repr(ty)
-    k := t.KindOf(r)
-    return k == types.Kind.Tuple or k == types.Kind.Record or
-           (k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct and t.HasBody(r))
-}
-
 # a struct's, a tuple's or a record's fields; none for anything else
-fn (ln mut lowering&) partsOf(ty types.TypeId) Array<types.TypeId> {
-    if not ln.hasParts(ty) { return Array<types.TypeId>(0) }
-    r := ln.T.Repr(ty)
-    return ln.items(ln.T.Parts(r) if ln.T.KindOf(r) != types.Kind.Named else ln.T.Fields(r))
-}
+fn (ln mut lowering&) partsOf(ty types.TypeId) Array<types.TypeId> { return ln.items(mir.FieldsOf(ln.T, ty)) }
 
 fn (ln mut lowering&) items(l types.ListId) Array<types.TypeId> {
     xs := ln.T.Items(l)
@@ -4314,20 +4301,8 @@ fn (ln mut lowering&) items(l types.ListId) Array<types.TypeId> {
     return out
 }
 
-# whether a type is an enum
-fn (ln mut lowering&) hasCases(ty types.TypeId) Bool {
-    t := ln.T
-    r := t.Repr(ty)
-    return t.KindOf(r) == types.Kind.AnonEnum or
-           (t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum and t.HasBody(r))
-}
-
 # an enum's cases' payloads (a record, or 0 for none); none for anything else
-fn (ln mut lowering&) casesOf(ty types.TypeId) Array<types.TypeId> {
-    if not ln.hasCases(ty) { return Array<types.TypeId>(0) }
-    r := ln.T.Repr(ty)
-    return ln.items(ln.T.ShapeCases(r) if ln.T.KindOf(r) == types.Kind.AnonEnum else ln.T.Cases(r))
-}
+fn (ln mut lowering&) casesOf(ty types.TypeId) Array<types.TypeId> { return ln.items(mir.CasesOf(ln.T, ty)) }
 
 # whether a value of the type is compared, hashed and rendered as itself: a number, a Bool, a Char
 fn (ln mut lowering&) scalar(ty types.TypeId) Bool {
@@ -4374,8 +4349,8 @@ fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span, top B
     res := ln.flag(true, sp)
     no := ln.F.NewBlock()
     ends Vec<mir.BlockId>
-    parts, isParts := ln.partsOf(ty), ln.hasParts(ty)
-    cases, isEnum := ln.casesOf(ty), ln.hasCases(ty)
+    parts, isParts := ln.partsOf(ty), mir.HasFields(ln.T, ty)
+    cases, isEnum := ln.casesOf(ty), mir.HasCases(ln.T, ty)
     if isParts {
         for i in range parts.Len() {
             e := ln.equalAt(ln.with(a, mir.Proj.Field(i)), ln.with(b, mir.Proj.Field(i)), parts[i], sp)
@@ -4532,8 +4507,8 @@ fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = f
     if not top { return ln.helperCall(mir.HelperKind.Hash, ty, mir.Operand[ln.refTo(a, ty, sp)], mir.ScopeRef[], mir.I64T, sp) }
     h := ln.temp(mir.I64T, sp)
     ln.emit(mir.Stmt.Assign(sp, mir.L(h), mir.Rvalue.Use(ln.constI64(0))))
-    parts, isParts := ln.partsOf(ty), ln.hasParts(ty)
-    cases, isEnum := ln.casesOf(ty), ln.hasCases(ty)
+    parts, isParts := ln.partsOf(ty), mir.HasFields(ln.T, ty)
+    cases, isEnum := ln.casesOf(ty), mir.HasCases(ln.T, ty)
     if isParts {
         for i in range parts.Len() { ln.combine(h, ln.hashAt(ln.with(a, mir.Proj.Field(i)), parts[i], sp), sp) }
     } else if isEnum {
@@ -4886,8 +4861,8 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.helperCall(mir.HelperKind.Render, ty, mir.Operand[ln.refTo(a, ty, sp), ln.depth()], mir.ScopeRef[b], types.VoidT, sp)
         return
     }
-    parts, isParts := ln.partsOf(ty), ln.hasParts(ty)
-    cases, isEnum := ln.casesOf(ty), ln.hasCases(ty)
+    parts, isParts := ln.partsOf(ty), mir.HasFields(ln.T, ty)
+    cases, isEnum := ln.casesOf(ty), mir.HasCases(ln.T, ty)
     if isParts {
         if t.KindOf(r) == types.Kind.Named { ln.word(b, ln.T.Names.Text(t.DeclName(t.DeclOf(r))), sp) }
         ln.word(b, "(", sp)
