@@ -874,33 +874,11 @@ fn (v mut Viewer&) stmt(s typed.Stmt?&, st mut state&) {
             st.Dead = true
         }
         case typed.Stmt.Return(sp, x) {
-            refs := Vec<view>()
-            v.expr(x, st, refs)
-            if not v.check {
-                for r in refs {
-                    match r.P.R {
-                        case Root.Param(i) { v.factPut(v.sums[v.Id].Views, i, -1, source.NameId(0), r.P, sp) }
-                        case Root.Mark(_) { v.passes(r) }
-                        case _ { }
-                    }
-                }
-            }
+            v.handOut(sp, x, st)
             st.Dead = true
         }
-        case typed.Stmt.Suspend(sp, x) {
-            # a generator's value (S20): handed out as a return's is, the walk going on after it
-            refs := Vec<view>()
-            v.expr(x, st, refs)
-            if not v.check {
-                for r in refs {
-                    match r.P.R {
-                        case Root.Param(i) { v.factPut(v.sums[v.Id].Views, i, -1, source.NameId(0), r.P, sp) }
-                        case Root.Mark(_) { v.passes(r) }
-                        case _ { }
-                    }
-                }
-            }
-        }
+        # a generator's value (S20): handed out as a return's is, the walk going on after it
+        case typed.Stmt.Suspend(sp, x) { v.handOut(sp, x, st) }
         case typed.Stmt.Raise(_, _, _), typed.Stmt.Reraise(_, _, _) { st.Dead = true }
         case typed.Stmt.Exit(_, _, m) {
             if m is not null { v.expr(m, st, scratch) }
@@ -923,6 +901,21 @@ fn (v mut Viewer&) stmt(s typed.Stmt?&, st mut state&) {
         }
         case typed.Stmt.Spawn(sp, t) { v.spawn(sp, t, st) }
         case typed.Stmt.Yield(_, x) { v.expr(x, st, scratch) }
+    }
+}
+
+# a value handed out of the body, a return's or a yield's: a view of a parameter's is the summary's, a marked one's
+# passed on
+fn (v mut Viewer&) handOut(sp source.Span, x typed.Expr?&, st mut state&) {
+    refs := Vec<view>()
+    v.expr(x, st, refs)
+    if v.check { return }
+    for r in refs {
+        match r.P.R {
+            case Root.Param(i) { v.factPut(v.sums[v.Id].Views, i, -1, source.NameId(0), r.P, sp) }
+            case Root.Mark(_) { v.passes(r) }
+            case _ { }
+        }
     }
 }
 
@@ -1340,22 +1333,12 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
     # a view given to the very call that may grow its Vec
     if v.check and not v.quiet and not v.skip {
         for i in range n {
-            done := false
             for r in argRefs[i] {
-                if done { break }
-                for g in range grows.Len() {
-                    if not v.meets(r.P, grows[g]) { continue }
-                    done = true
-                    at := v.tokOf(c.Args[i])
-                    if v.seen(at) { break }
-                    w := v.where(r.P)
-                    rec := v.P.L.Diags.Error(v.at(at), msgs.VecViewGivenGrowing(w, v.strs[name], w, w))
-                    if known and innerFile[g] >= 0 and not v.library.Has(innerFile[g]) {
-                        v.P.L.Diags.Note(rec, diag.Where.Span(innerFile[g], I64(innerAt[g].Start), I64(innerAt[g].End))
-                            msgs.NoteVecGrowsInside(v.strs[name]))
-                    }
-                    break
-                }
+                g := v.grownAt(r.P, grows)
+                if g < 0 { continue }
+                at := v.tokOf(c.Args[i])
+                if not v.seen(at) { v.givenGrowing(at, r.P, name, innerFile[g] if known else -1, innerAt[g]) }
+                break
             }
         }
     }
@@ -1397,6 +1380,23 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
             v.keepIn(argPlace(a), a.Type(), argRefs[k.Param], st)
         }
     }
+}
+
+# the first growth g of grows that may grow the Vec a view of p is of, -1 for none
+fn (v mut Viewer&) grownAt(p place, grows Vec<place>&) I64 {
+    for g in range grows.Len() {
+        if v.meets(p, grows[g]) { return g }
+    }
+    return -1
+}
+
+# M19g: a view of p given to the very call that may grow its Vec, said - with where inside the callee it grows, in a
+# file of the program's own
+fn (v mut Viewer&) givenGrowing(at source.Span, p place, name I64, file I64, inner source.Span) {
+    w := v.where(p)
+    rec := v.P.L.Diags.Error(v.at(at), msgs.VecViewGivenGrowing(w, v.strs[name], w, w))
+    if file < 0 or v.library.Has(file) { return }
+    v.P.L.Diags.Note(rec, diag.Where.Span(file, I64(inner.Start), I64(inner.End)), msgs.NoteVecGrowsInside(v.strs[name]))
 }
 
 # the function type a call is made through
