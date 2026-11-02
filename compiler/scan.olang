@@ -178,20 +178,18 @@ fn (s mut scanner&) run() {
             } else if c == '\n' {
                 nl = true
                 i++
+            } else if c == '#' and (i + 1 >= n or t[i + 1] != '#') {
+                i = lineEnd(t, i)
+                if i == n { nl = true }
             } else if c == '#' {
-                if i + 1 < n and t[i + 1] == '#' {
-                    end := blockComment(t, i + 2)
-                    if end < 0 {
-                        s.diag(LexError.UnclosedComment, i, i + 2)
-                        i = n
-                    } else {
-                        if hasLineEnd(t, i + 2, end) { nl = true }
-                        i = end
-                    }
-                } else {
-                    i = lineEnd(t, i)
-                    if i == n { nl = true }
+                end := blockComment(t, i + 2)
+                if end < 0 {
+                    s.diag(LexError.UnclosedComment, i, i + 2)
+                    i = n
+                    continue
                 }
+                if hasLineEnd(t, i + 2, end) { nl = true }
+                i = end
             } else {
                 break
             }
@@ -221,11 +219,10 @@ fn (s mut scanner&) run() {
                 if c == ';' {
                     s.diag(LexError.Semicolon, i, i + 1)
                     i++
-                    if last.EndsStatement() {
-                        at := lastEnd if nl else start
-                        s.toks.Push(token.Token(token.Tok.StmtEnd, 0, I32(at), I32(at)))
-                        last = token.Tok.StmtEnd
-                    }
+                    if not last.EndsStatement() { continue }
+                    at := lastEnd if nl else start
+                    s.toks.Push(token.Token(token.Tok.StmtEnd, 0, I32(at), I32(at)))
+                    last = token.Tok.StmtEnd
                 } else if c == '\r' {
                     if not s.reportedCR { s.diag(LexError.CarriageReturn, i, i + 1) }
                     s.reportedCR = true
