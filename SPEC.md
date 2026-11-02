@@ -7496,7 +7496,8 @@ call may do beyond computing its result, read off its body and every body it may
 parameters it writes through (`writes through 'out'`), `writes a global`, `allocates` or `allocates nothing`, `may grow a
 Vec`, `starts tasks`, the classes of B11c it reaches (`files`, `network`, `processes`, `environment`, `threads`, `C`),
 else `calls C`, `may end the program`, `may block` or `never blocks`, `recursive`, `always ends` (G42's `Terminates`),
-and `may be computed while compiling` (K1a: no C but C's math, no mutable global read or written). A call through a
+and `may be computed while compiling` (K1a: no C but C's math, no mutable global read or written) - a destructor the body
+registers or runs counted as G42's facts count it. A call through a
 function value or an `any` is `anything`, and so is a call of C (G42's) where the program has an export fn - `anything -
 it calls C, which may call the program's export fns`; a body that did not check is `not known`. Under a generic function, a line
 `# T needs: Less, a walk ...` for each type variable says what its body asks of it beyond its written constraint
@@ -8715,7 +8716,8 @@ fn routes() Map<String&, fn&(r Request&) Response> {
 `dsp.mix.Allocates` through an import's alias, `pick<I64>.Allocates` for a generic's instance (a generic named without
 its type arguments has no facts: an error naming that form) - and on a function's descriptor (G41, `f.Allocates` in a
 walk of `m.Functions` or `T.Methods`, each copy its own function's). Each is a `Bool`, true where the function or any
-body it may call:
+body it may call - a destructor among them where a body registers one (a constructor of a type with one, a value of one
+given storage of its own, O16) or runs it (`x.Destroy()`, C9b):
 
 | fact | holds where it may |
 |---|---|

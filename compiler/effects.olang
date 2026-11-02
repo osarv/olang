@@ -14,6 +14,7 @@
 import "source"
 import "generic"
 import "typed"
+import "types"
 
 # the classes of what a body may reach outside the program (B1.2), one bit each of Facts.Caps
 CapFiles I64 = 1
@@ -158,6 +159,7 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     bounded Map<I64, Bool>
     curMod I64 = -1
     exports I64 = -1              # how many export fns the program has (X12), -1 until counted
+    dtorOf Map<types.TypeId, I64> # by type: its destructor's body (C9)
 }
 
 type pair struct(A I64, B I64) {
@@ -176,7 +178,13 @@ fn (e mut Effects&) grow() {
         e.tLow.Push(0)
         e.tOn.Push(false)
     }
-    if e.exports < 0 { e.exports = e.countExports() }
+    if e.exports < 0 {
+        e.exports = e.countExports()
+        for i in range e.Bodies.Len() {
+            of := e.Bodies[i].Of
+            if of == typed.BodyOf.Dtor: e.dtorOf.Put(of.t, i)
+        }
+    }
     if e.fileMod.Len() == 0 {
         for mi in range e.P.L.Mods.Len() {
             if e.P.L.Mods[mi].File >= 0 { e.fileMod.Put(e.P.L.Mods[mi].File, mi) }
@@ -359,6 +367,10 @@ fn (e mut Effects&) walk(b I64) {
     } else {
         e.block(body.Root)
     }
+    # a constructor of a type with a destructor registers it, run as the instance's scope closes (O16): what it does is
+    # what calling the constructor may lead to - in place, a block of the caller closing (C9)
+    of := body.Of
+    if of == typed.BodyOf.Ctor: e.dtorCalled(of.t)
     # a body's lambdas are its own: what they do is what making and calling them may do
     e.own[b] = e.cur
     e.calls[b] = e.curCalls
@@ -427,8 +439,10 @@ fn (e mut Effects&) expr(x typed.Expr?&) {
     match x {
         case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { }
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { e.place(p, false) }
-        case typed.Expr.Promote(_, _, pr) {
+        case typed.Expr.Promote(_, ty, pr) {
             e.cur.Allocates = true
+            # a value of a type with a destructor given storage of its own registers it there (O16)
+            if e.P.T.IsRef(ty): e.dtorCalled(e.P.T.Referent(ty))
             e.expr(pr.X)
         }
         case typed.Expr.Text(_, _, t) {
@@ -514,6 +528,8 @@ fn (e mut Effects&) fnVal(f typed.FnVal&) {
 fn (e mut Effects&) prim(op typed.PrimOp, args Array<typed.Expr&>&) {
     match op {
         case typed.PrimOp.Retire { e.cur.Grows = true }
+        # x.Destroy() (C9b) runs the destructor now
+        case typed.PrimOp.Destroy { if args.Len() > 0: e.dtorCalled(e.P.T.Referent(args[0].Type()) if e.P.T.IsRef(args[0].Type()) else args[0].Type()) }
         case typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap, typed.PrimOp.AtomicCompareSwap {
             # args[0] borrows the integer place written
             if args.Len() > 0 { e.written(args[0]) }
@@ -555,6 +571,13 @@ fn (e mut Effects&) call(cl typed.Call&) {
         case typed.Callee.Helper(_, _) { }
     }
     for a in cl.Args { e.expr(a) }
+}
+
+# the destructor of type t, where it has one, as a body this one may call (C9, O16)
+fn (e mut Effects&) dtorCalled(t types.TypeId) {
+    id := try e.dtorOf.Get(t) catch default -1
+    if id < 0: id = try e.dtorOf.Get(e.P.T.Repr(t)) catch default -1
+    if id >= 0: e.curCalls.Push(id)
 }
 
 # a place read (store false) or stored into

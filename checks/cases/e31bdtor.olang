@@ -1,0 +1,21 @@
+# check: fail error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way
+# E31b (review 6b F2): a method called through x[i] whose inner block closes a destructor growing the collection is not
+# made on the element in place - the destructor is part of what the call runs, and the write landed in the buffer the
+# growth retired
+import "std/io"
+type blk struct(n I64) { n }
+G mut Vec<blk>
+type guard struct() { } destruct {
+    for i in range 1000 { G.Push(blk(i)) }
+}
+fn (b mut blk&) Bump() {
+    {
+        g := guard()
+    }
+    b.n = 99
+}
+fn main() {
+    G.Push(blk(1))
+    G[0].Bump()
+    io.Println("G[0].n = " $G[0].n " len " $G.Len())!
+}
