@@ -1,9 +1,25 @@
-# check: fail error[O10d]: this value lives in this function's own scope, which closes first
-# D16d: a lambda capturing a local reference lives where that local's referent does, so it cannot be returned
+# check: run
+# flags: -sanitize
+# D16d, O26a (bulk review 6 F9: refused until then): a lambda capturing a local reference, returned - what the
+# reference names is built where the result goes; read back after an arena churn
 type Point struct(x I32) { x }
 fn leak() fn&(n I32) I32 {
     p Point& = Point(5)
     return fn(n) { return n + p.x }
 }
-type E error { X }
-fn main() ? E { }
+
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+fn main() {
+    f := leak()
+    churn()
+    assert f(1) == 6
+}

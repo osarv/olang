@@ -2436,6 +2436,9 @@ fn (ln mut lowering&) freshCtor(c typed.Call&) Bool {
     id := typed.CalleeBody(c)
     if not ln.planned or id < 0 or ln.L.Bodies[id].Of != typed.BodyOf.Ctor: return false
     lw := ln.L
+    # (where early freeing decided, its judgement - made before it wrote its regions into the plans - is the one both
+    # follow: a copy it took for left out must be left out, as a region released holds what was not copied)
+    if lw.Free is not null and lw.Free!.Done: return lw.Free!.FreshCtorAt(I64(ln.B.Id), I64(c.Site))
     return typed.FreshViews(ln.plan, c, lw.ViewsOf(typed.BodyId(I32(id))), fn(b typed.BodyId) I64 { return lw.ViewsOf(b) }
                             fn(b typed.BodyId) Array<I64> { return lw.P.T.ScopeVarsOf(lw.Bodies[I64(b)].Ty) })
 }

@@ -274,6 +274,9 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # somewhere in its body, a place of its own: by (body, local), and by body whether it has one
     ownLocalOf Map<pair.Pair<I64, I64>, I64>
     olIn Vec<Bool>
+    # D9h: the constructor calls whose instance views only storage made for it (typed.FreshViews), by (body, site), as
+    # this analysis judged them before its regions were written into the plans - lowering leaves out their copy here
+    freshAt Map<pair.Pair<I64, I64>, Bool>
     dtorVal Vec<Bool>         # by place: what it holds has a destructor - never Sole (O15); a Destroy() takes one out
     destroySole Vec<Bool>     # by place: sole but for its values' destructors (condition 4) and condition 5
     destroyUse Vec<Bool>      # by place: an accepted Destroy() moves out of it - its values are built in regions
@@ -2180,7 +2183,9 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     if w.holds(ty) and c.Site >= typed.SiteId(0) { addTo(out, orig(ONew, I64(c.Site))) }
     # (a callee handing back a view its caller copies where it keeps it (D9h) - but the value of a store, whose copy is
     # made where the place's value is; a callee not known may hand back any copy)
-    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not f.freshCtor(c, b2, w.Id))) and I64(c.Site) != w.exemptSite { w.untracked(ty, sp, "a call's value copied") }
+    fresh := b2 >= 0 and not unknown and f.viewsOf(b2) != 0 and f.freshCtor(c, b2, w.Id)
+    if fresh and w.Final: f.freshAt.Put(pair.Pair(w.Id, I64(c.Site)), true)
+    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not fresh)) and I64(c.Site) != w.exemptSite { w.untracked(ty, sp, "a call's value copied") }
     if b2 >= 0 and not unknown {
         if f.isCase(b2) {
             for a in args { addAllTo(out, a) }
@@ -3958,6 +3963,9 @@ fn (f mut Free&) SolePlace(p typed.Lvalue&) I64 {
     k := f.placeOfPlace(p)
     return k if f.IsSole(k) else -1
 }
+
+# D9h: whether the constructor call at site of body b is one whose copy is left out (freshAt)
+fn (f Free&) FreshCtorAt(b I64, site I64) Bool { return f.freshAt.Has(pair.Pair(b, site)) }
 
 # the sole owner local place local l of body b is, -1 for none
 fn (f mut Free&) SoleLocal(b I64, l I64) I64 {

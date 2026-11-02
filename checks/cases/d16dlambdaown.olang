@@ -1,6 +1,8 @@
-# check: fail error[O26]: this value refers to this function's own storage
-# D16d: a lambda returned where it is made is built in the result scope, each scope it captures from outliving that -
-# which this function's own block does not
+# check: run
+# flags: -sanitize
+# D16d, O26a (bulk review 6 F9: refused until then): a lambda returned where it is made is built in the result scope,
+# each scope it captures from outliving that - the reference it captures, built here, flows into the result and is
+# built there too; read back after an arena churn
 type Counter struct() {
     n I64 = 0
 }
@@ -11,7 +13,18 @@ fn mk(f fn&(x I64) I64) fn&(x I64) I64 {
         return f(x) + c.n
     }
 }
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
 fn main() ? {
     g := mk(fn(x I64) I64 { return x })
-    assert g(1) == 2
+    churn()
+    assert g(1) == 2 and g(1) == 3
 }
