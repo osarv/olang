@@ -1803,7 +1803,7 @@ fn (g mut Gen&) refStmt(ind String&) String& {
             k := g.reserve()
             g.declare(k, t, -1, true)
             g.vhome[k] = g.vblk[src]
-            return $ind "x" $k " " $g.tn(t) $x " = " $x "\n"
+            return $ind "x" $k " " $g.tn(t) " = " $x "\n"
         }
         k := g.reserve()
         e := g.construct(I32(100 + st), 3)
@@ -1852,7 +1852,7 @@ fn (g mut Gen&) refStmt(ind String&) String& {
             k := g.reserve()
             g.declare(k, t, n, true)
             g.vhome[k] = home
-            return $ind "x" $k " " $g.tn(t) $x " = " $init "\n"
+            return $ind "x" $k " " $g.tn(t) " = " $init "\n"
         }
     }
     if p == 10 {                                    # a fixed-length reference: a borrow, or a view of a run-time array
@@ -1869,7 +1869,7 @@ fn (g mut Gen&) refStmt(ind String&) String& {
             text mut String& = $ind "x" $g.nv " := " $x "\n"
             if g.chance(40) {
                 t = I32(3000 + elemOf(s)) if isRefArr(s) else I32(4100 + structOf(s))
-                text = $ind "x" $g.nv " " $g.tn(t) $x " = " $x "\n"
+                text = $ind "x" $g.nv " " $g.tn(t) " = " $x "\n"
             }
             k := g.reserve()
             g.declare(k, t, g.vlen[src], true)
@@ -1963,7 +1963,7 @@ fn (g mut Gen&) frefDecl(ind String&) String& {
     k := g.reserve()
     g.declare(k, t, n, true)
     g.vhome[k] = g.vhome[src] if isRefArr(s) else g.vblk[src]
-    return $ind "x" $k " " $g.tn(t) $x " = " $init "\n"
+    return $ind "x" $k " " $g.tn(t) " = " $init "\n"
 }
 
 # ---- fixed storage (T7c/T7d) and functions taking an array by value (G29, G30) ----

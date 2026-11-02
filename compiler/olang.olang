@@ -844,6 +844,7 @@ fn inferStats(sc mut scope.Scoper&) {
     b := StringBuilder()
     b.Push($"olang: " $sc.InferStats() "\n")
     b.Push($"olang: " $sc.FoldStats() "\n")
+    b.Push($"olang: field rounds " $sc.FieldRounds "\n")
     for f in sc.PromotedFields() { b.Push($"olang: promoted " $f "\n") }
     for f in sc.Unplaced { b.Push($"olang: unplaced " $f "\n") }
     if to[0] != '/' {

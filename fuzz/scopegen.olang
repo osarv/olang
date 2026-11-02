@@ -226,29 +226,29 @@ Prelude := (
     "    return 0\n"
     "}\n"
     "fn mkNode(v I64) mut Node& { return Node(v) }\n"
-    "# for scope arguments (E25): a call's result built where \"&t\" or \"&return\" says, never where it stands\n"
+    "# a call's result built where it lands (O18a)\n"
     "fn mkText(v I64) String { return \"t\" $v \"-\" $(v * 3) }\n"
-    "fn putRet(p mut Node&, v I64) String {\n    p.next = mkNode&return(v)\n    return \"r\" $v\n}\n"
-    "fn stashLab(l mut list.List<any Ag&>&, v I64) String {\n    l.Push(Lab(mkText&return(v)))\n    return \"r\" $v\n}\n"
+    "fn putRet(p mut Node&, v I64) String {\n    p.next = mkNode(v)\n    return \"r\" $v\n}\n"
+    "fn stashLab(l mut list.List<any Ag&>&, v I64) String {\n    l.Push(Lab(mkText(v)))\n    return \"r\" $v\n}\n"
     "# for text scenarios (the fourth any review's A): arrays of plain data a scope argument puts elsewhere, returned on\n"
     "fn mkNums(v I64) Array<I64> { return I64[v, v * 2, v * 3] }\n"
-    "fn retAt(p String&, v I64) String { return mkText&p(v) }\n"
+    "fn retAt(p String&, v I64) String { return mkText(v) }\n"
     "fn retAtChain(p String&, v I64) String { return retAt(p, v) }\n"
-    "fn retNumsAt(p String&, v I64) Array<I64> { return mkNums&p(v) }\n"
-    "fn retLocal(v I64) String {\n    t := \"loc\" $v\n    r := mkText&t(v)\n    return r\n}\n"
-    "fn retDirect(v I64) String {\n    t := \"dir\" $v\n    return mkText&t(v)\n}\n"
-    "fn retTup(v I64) String, I64 {\n    t := \"tup\" $v\n    return mkText&t(v), v\n}\n"
-    "fn retCond(p String&, v I64) String { return mkText&p(v) if Run > 0 else mkText(v) }\n"
-    "fn retTry(v I64) String {\n    t := \"try\" $v\n    return try textFail&t(v) catch default mkText&t(v + 1)\n}\n"
+    "fn retNumsAt(p String&, v I64) Array<I64> { return mkNums(v) }\n"
+    "fn retLocal(v I64) String {\n    t := \"loc\" $v\n    r := mkText(v)\n    return r\n}\n"
+    "fn retDirect(v I64) String {\n    t := \"dir\" $v\n    return mkText(v)\n}\n"
+    "fn retTup(v I64) String, I64 {\n    t := \"tup\" $v\n    return mkText(v), v\n}\n"
+    "fn retCond(p String&, v I64) String { return mkText(v) if Run > 0 else mkText(v) }\n"
+    "fn retTry(v I64) String {\n    t := \"try\" $v\n    return try textFail(v) catch default mkText(v + 1)\n}\n"
     "fn hashNums(a Array<I64>&) I64 {\n    t I64 = 0\n    for x in a { t = t * 31 + x }\n    return t\n}\n"
     "# for second-name scenarios (the fourth any review's B): a returned text local something else names\n"
     "type TK struct(s String&) { s }\n"
     "fn (k mut TK&) Set(t String&) { k.s = t }\n"
     "# the fifth review's: parameters sharing a scope, which a callee may store one into the other with no obligation\n"
     "type TH struct(l mut list.List<String&>&) { l }\n"
-    "fn (h mut TH&) Add(x String&h) I64 {\n    h.l.Push(x)\n    return 1\n}\n"
-    "fn (x String&) AddTo(h mut TH&x) I64 {\n    h.l.Push(x)\n    return 3\n}\n"
-    "fn tieTo(l mut list.List<String&>&, x String&l) I64 {\n    l.Push(x)\n    return 2\n}\n"
+    "fn (h mut TH&) Add(x String&) I64 {\n    h.l.Push(x)\n    return 1\n}\n"
+    "fn (x String&) AddTo(h mut TH&) I64 {\n    h.l.Push(x)\n    return 3\n}\n"
+    "fn tieTo(l mut list.List<String&>&, x String&) I64 {\n    l.Push(x)\n    return 2\n}\n"
     "# conversions of a place to a type over String (T29a), returned\n"
     "fn retConv(v I64) Lab {\n    s := \"cv\" $v\n    return Lab(s)\n}\n"
     "fn retConvCond(v I64) Lab {\n    s := \"cc\" $v\n    u := \"cu\" $v\n    return Lab(s) if Run > 0 else Lab(u)\n}\n"
@@ -262,15 +262,15 @@ Prelude := (
     "    f := fn(x I64) mut Node& { return Node(x) }\n"
     "    return f(v)\n"
     "}\n"
-    "fn nodeOf(e E) mut Node&e { return (e as E.N)! }\n"
-    "fn pickNode(x mut Node&) mut Node&x { return x }\n"
-    "fn pickBox(x mut Box&) mut Box&x { return x }\n"
+    "fn nodeOf(e E) mut Node& { return (e as E.N)! }\n"
+    "fn pickNode(x mut Node&) mut Node& { return x }\n"
+    "fn pickBox(x mut Box&) mut Box& { return x }\n"
     "fn build(b Box) { b.head.next = Node(42) }\n"
     "fn byAs(e E) {\n"
     "    b := (e as E.A)!\n"
     "    b.head.next = Node(43)\n"
     "}\n"
-    "fn link(a mut Node&, b mut Node?&a) { a.next = b }\n"
+    "fn link(a mut Node&, b mut Node?&) { a.next = b }\n"
     "fn grow(a mut Node&, v I64) { a.next = Node(v) }\n"
     "fn growDeep(a mut Node&, v I64) {\n"
     "    if v > 0 {\n"
@@ -321,7 +321,7 @@ Prelude := (
     "    return Node(v)\n"
     "}\n"
     "# for Str scenarios: a borrowed result that fails, callbacks, a generic, call cycles, a local moved into a borrowed result's home\n"
-    "fn borrowF(n mut Node&) mut Node&n ? {\n"
+    "fn borrowF(n mut Node&) mut Node& ? {\n"
     "    if Run > 0 { error SgErr.E }\n"
     "    return n\n"
     "}\n"
@@ -338,11 +338,11 @@ Prelude := (
     "}\n"
     "fn cycGrow2(n mut Node&, c I64) { cycGrow(n, c) }\n"
     "type P2 struct(n mut Node&) { n }\n"
-    "fn moveH(n mut Node&) mut Node&n {\n"
+    "fn moveH(n mut Node&) mut Node& {\n"
     "    p := P2(n)\n"
     "    return p.n\n"
     "}\n"
-    "fn pickDef(n mut Node&, v I64) mut Node&n { return try borrowF(n) catch default mkNode(v) }\n"
+    "fn pickDef(n mut Node&, v I64) mut Node& { return try borrowF(n) catch default mkNode(v) }\n"
     "fn readN(n Node&) I64 { return chain(n) }\n"
 )
 
@@ -477,15 +477,15 @@ fn (g mut SG&) nodeOp(a String&, ind String&, d I64) String& {
 
 # E25: a statement storing through the node a a result a scope argument places - in an inner block's scope (refused:
 # the result lives there, judged where it is stored as the same value declared first is), or through a callee's
-# "&return" whose result lands in a loop body
+# "&" whose result lands in a loop body
 fn (g mut SG&) scopeArgNode(a String&, ind String&) String& {
     v := g.val()
     t := g.name("t")
     k := g.r(4)
-    if k == 0 { return $ind "{\n" $ind "    " $t " := \"in\" $" $v "\n" $ind "    " $a ".next = mkNode&" $t "(" $v ")\n" $ind "}\n" }
+    if k == 0 { return $ind "{\n" $ind "    " $t " := \"in\" $" $v "\n" $ind "    " $a ".next = mkNode(" $t ".Len() + " $v ")\n" $ind "}\n" }
     if k == 1 {
         q := g.name("q")
-        return ($ind "{\n" $ind "    " $t " := \"in\" $" $v "\n" $ind "    " $q " := mkNode&" $t "(" $v ")\n" $ind "    churn()\n"
+        return ($ind "{\n" $ind "    " $t " := \"in\" $" $v "\n" $ind "    " $q " := mkNode(" $t ".Len() + " $v ")\n" $ind "    churn()\n"
                 $ind "    " $a ".next = " $q "\n" $ind "}\n")
     }
     if k == 2 {
@@ -493,7 +493,7 @@ fn (g mut SG&) scopeArgNode(a String&, ind String&) String& {
         r := g.name("r")
         return $ind "for " $i " in range 2 {\n" $ind "    " $r " := putRet(" $a ", " $v " + " $i ")\n" $ind "}\n"
     }
-    return $ind $t " := \"out\" $" $v "\n" $ind $a ".next = mkNode&" $t "(" $v ")\n"
+    return $ind $t " := \"out\" $" $v "\n" $ind $a ".next = mkNode(" $t ".Len() + " $v ")\n"
 }
 
 # a statement storing a conditional or a match of references through the node a - values from different scopes: one
@@ -555,7 +555,7 @@ fn (g mut SG&) dtorOp(a String&, ind String&) String& {
     y := g.name("y")
     if k == 0 and not g.global {    # over the target, destructed when its scope closes
         h := g.name("h")
-        return $ind $h " := pickNode(" $a ")\n" $ind $r " " $rt "&" $h " = " $rt "(" $h ", " $v ")\n"
+        return $ind $h " := pickNode(" $a ")\n" $ind $r " " $rt "& = " $rt "(" $h ", " $v ")\n"
     }
     if k == 1 {
         i := g.name("i")
@@ -649,7 +649,7 @@ fn (g mut SG&) listOp(l String&, ind String&) String& {
     if g.chance(8) {    # E25: a node a scope argument places in an inner block, pushed outward (refused)
         t := g.name("t")
         v := g.val()
-        return $ind "{\n" $ind "    " $t " := \"in\" $" $v "\n" $ind "    " $l ".Push(mkNode&" $t "(" $v "))\n" $ind "}\n"
+        return $ind "{\n" $ind "    " $t " := \"in\" $" $v "\n" $ind "    " $l ".Push(mkNode(" $t ".Len() + " $v "))\n" $ind "}\n"
     }
     k := g.r(9)
     v := g.val()
@@ -832,7 +832,7 @@ fn (g mut SG&) anyOp(b String&, ind String&) String& {
             r := g.name("r")
             return $ind "for " $i " in range 2 {\n" $ind "    " $r " := stashLab(" $b ".anys, " $v " + " $i ")\n" $ind "}\n"
         }
-        item := $"Lab(mkText&" $t "(" $v "))" if k == 20 else $"mkText&" $t "(" $v ")"
+        item := $"Lab(mkText(" $t ".Len() + " $v "))" if k == 20 else $"mkText(" $t ".Len() + " $v ")"
         list := ".anys" if k == 20 else ".szs"
         return $ind "{\n" $ind "    " $t " := \"in\" $" $v "\n" $ind "    " $b $list ".Push(" $item ")\n" $ind "    churn()\n" $ind "}\n"
     }
@@ -911,8 +911,8 @@ fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
     return g.twoOp(a, ind, d)
 }
 
-# vec5 R2a (C2d): a constructor whose field is new text built in a parameter's scope ("y String&p = ..."), or made by a
-# call given a scope argument naming the parameter ("y := mk&p(n)"), or held through a function returning the instance -
+# vec5 R2a (C2d): a constructor whose field is new text built in a parameter's scope ("y String& = ..."), or made by a
+# call given a scope argument naming the parameter ("y := mk(n)"), or held through a function returning the instance -
 # the instance holds what the argument refers to, so one given an inner block's text and kept outside it must be refused
 # (C2d); one read inside that block, or one whose field lives with the instance, is accepted. Or the field is a
 # conditional or a match choosing the parameter or new text: the instance holds the argument through it all the same.
@@ -928,7 +928,7 @@ fn (g mut SG&) ctorScopeOp(a String&, ind String&, k I64) String& {
     mkh := g.name("csh")
     hh := g.name("hh")
     tt := g.name("tt")
-    field := "    y String&p = $n \"-new-text-in-p\"\n"
+    field := "    y String& = $n \"-new-text-in-p\"\n"
     if k == 2 { field = "    y := " $mkt "&p(n)\n" }
     if k == 4 { field = "    y String& = $n \"-new-text-in-the-instance\"\n" }
     if k == 5 { field = "    y String& = (p if n >= 0 else $n \"-new-text-in-the-instance\")\n" }
@@ -1106,7 +1106,7 @@ fn (g mut SG&) textScenario(k I64) String& {
 fn (g mut SG&) textOp(ind String&) String& {
     v := g.val()
     q := g.name("q")
-    texts := String&["retAt(t, ", "retAtChain(t, ", "retLocal(", "retDirect(", "retCond(t, ", "retTry(", "mkText&t(", "retConv("
+    texts := String&["retAt(t, ", "retAtChain(t, ", "retLocal(", "retDirect(", "retCond(t, ", "retTry(", "mkText(", "retConv("
                      "retConvCond("]
     call String& = $texts[g.r(texts.Len())] $v ")"
     k := g.r(10)
@@ -1118,12 +1118,12 @@ fn (g mut SG&) textOp(ind String&) String& {
             n := g.name("n")
             g.outer = $g.outer "    " $n " := Array<I64>(0)\n"
             g.after = $g.after "    acc = acc * 31 + hashNums(" $n ")\n"
-            return $ind "join {\n" $ind "    spawn " $z " = mkText&t(" $v ")\n" $ind "    spawn " $n " = mkNums&t(" $v ")\n" $ind "}\n"
+            return $ind "join {\n" $ind "    spawn " $z " = mkText(" $v ")\n" $ind "    spawn " $n " = mkNums(" $v ")\n" $ind "}\n"
         }
-        return $ind "join { spawn " $z " = mkText&t(" $v ") }\n"
+        return $ind "join { spawn " $z " = mkText(" $v ") }\n"
     }
     if k == 0 {    # numbers a scope argument puts in the loop body, returned on or made here
-        nums mut String& = $"mkNums&t(" $v ")"
+        nums mut String& = $"mkNums(" $v ")"
         if g.chance(50) { nums = $"retNumsAt(t, " $v ")" }
         return $ind $q " := " $nums "\n" $ind "churn()\n" $ind "acc = acc * 31 + hashNums(" $q ")\n"
     }
@@ -1162,12 +1162,12 @@ fn (g mut SG&) genScenario(k I64) String& {
              "    return acc\n}\n"
              # D18c: views borrowed from what it was given, and views kept by the walk - a text and a node each turn,
              # kept in a list of the walk's, handed out as made and all again after
-             "fn bw" $k "(t String&, n I64) Iterator<String&t> {\n    x := Node(n)\n" $tr "    for i in range n {\n"
+             "fn bw" $k "(t String&, n I64) Iterator<String&> {\n    x := Node(n)\n" $tr "    for i in range n {\n"
              "        a := i % (t.Len() + 1)\n        yield t[a:]\n        x.next = Node(i)\n    }\n}\n"
-             "fn fw" $k "(v I64, n I64) Iterator<String&return> {\n    all mut list.List<String&>&return = list.List<String&>()\n" $tr
-             "    for i in range n {\n        s String&return = $\"f\" $v \"-\" $i\n        all.Push(s)\n        yield s\n"
+             "fn fw" $k "(v I64, n I64) Iterator<String&> {\n    all mut list.List<String&>& = list.List<String&>()\n" $tr
+             "    for i in range n {\n        s String& = $\"f\" $v \"-\" $i\n        all.Push(s)\n        yield s\n"
              "        junk := $i \"j\"\n    }\n    for s in all {\n        yield s\n    }\n}\n"
-             "fn nw" $k "(v I64, n I64) Iterator<Node&return> {\n    for i in range n {\n        x mut Node&return = Node(v + i)\n"
+             "fn nw" $k "(v I64, n I64) Iterator<Node&> {\n    for i in range n {\n        x mut Node& = Node(v + i)\n"
              "        x.next = Node(i)\n        yield x\n    }\n}\n")
     body mut String& = ""
     for _ in range 2 + g.r(4) {
@@ -1269,7 +1269,7 @@ fn (g mut SG&) secondScenario(k I64) String& {
         refs mut String& = ""
         loop mut String& = ""
         if kind == 3 {
-            for j in range n { refs = $refs "    r" $(j + 1) " String&s = \"\"\n" }
+            for j in range n { refs = $refs "    r" $(j + 1) " String& = \"\"\n" }
             loop = "        k.s = r" $n "\n"
             for j in range n - 1 { loop = $loop "        r" $(n - j) " = r" $(n - j - 1) "\n" }
             loop = "    for j in range " $(n + 2) " {\n" $loop "        r1 = s\n    }\n"
@@ -1289,7 +1289,7 @@ fn (g mut SG&) secondScenario(k I64) String& {
         probe = "    keep := list.List<String&>()\n    x := " $f "(keep, i)\n    x[0] = 'Q'\n    return $keep \" \" $x\n"
     } else if kind == 11 {
         # a returned conditional, match or catch default of a parameter's text (the fifth review's 4)
-        ret String& = String&["p if i > 0 else q", "match i { case 0: p case _: q }", "try textNo&p(i) catch default q"][g.r(3)]
+        ret String& = String&["p if i > 0 else q", "match i { case 0: p case _: q }", "try textNo(i) catch default q"][g.r(3)]
         head = "fn " $f "(p String&, q String&, i I64) String { return " $ret " }\n"
         probe = ("    s := \"abc\" $i\n    u := \"def\" $i\n    x := " $f "(s, u, i)\n    x[0] = 'Q'\n"
                  "    return $s \" \" $u \" \" $x\n")
@@ -1535,7 +1535,7 @@ fn (g mut SG&) freeOp(h String&, ind String&, clean Bool) String& {
     if k == 17 { return $ind "grow" $kk "(" $h ", i)\n" }
     if k == 18 { return $ind "reset" $kk "(" $h ", i)\n" }
     if k == 19 {    # a node made where the holder lives, its chain grown, then given to the place
-        return ($ind "{\n" $ind "    " $x " mut Node&h = Node(i)\n" $ind "    " $x ".next = Node(" $v ")\n" $ind "    " $h ".n = " $x
+        return ($ind "{\n" $ind "    " $x " mut Node& = Node(i)\n" $ind "    " $x ".next = Node(" $v ")\n" $ind "    " $h ".n = " $x
                 "\n" $ind "}\n")
     }
     if k == 20 { return $ind $h ".t = $" $h ".t.Len() \"x\"\n" }

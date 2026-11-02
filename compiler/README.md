@@ -35,7 +35,7 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 | `check.olang` | the checker: the resolved tree elaborated into the typed core (M5b/M5c, in progress) |
 | `definit.olang` | D13d: whether a local or field with no value is read before every path assigns it, judged structurally as D10a judges leaving |
 | `free.olang` | early freeing (O8d, docs/memory.md): which places are the only holders of what they hold, so a let-go frees at once; the `-memory` report; `x.Destroy()` (C9b) |
-| `scope.olang` | section 8: scope terms, obligations over the call graph's components, the O rules, placement (M6, in progress); under `OLANG_SCOPES=infer` the rework's round 1 - markers read as bare, placements and field bindings inferred (docs/rework.md 9; `OLANG_SCOPESTATS`, `OLANG_INFERDUMP`; `make verify-infer`) |
+| `scope.olang` | section 8: scope terms, obligations over the call graph's components, the O rules, placement (M6, in progress); placements and field bindings inferred, no scope written (O28; docs/rework.md 9 and 20; `OLANG_SCOPESTATS`, `OLANG_INFERDUMP`) |
 | `views.olang` | M19g: a Vec's view used after the same Vec may have grown, from summaries over the call graph's components and a dataflow walk of each body, once a program has checked cleanly |
 | `lower.olang` | lowering: each typed body, helper, adapter and module initialization made a MIR function (M7, in progress) |
 | `eval.olang` | the MIR abstract machine (M8): allocations, scopes and K1's refusals, while compiling or running |

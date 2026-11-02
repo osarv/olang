@@ -163,9 +163,8 @@ ending in one ends its statement there. In its constructor's body such a field i
 and a later statement reading it by the word alone is a compile-time error (a constructor's other fields are its locals,
 C2a). Anywhere else - a parameter, a local, a function, a type - the words stay reserved.
 
-**L9b (words of one place).** `outlives` is a word only inside a contract's brackets (D17): `a outlives b` there,
-an ordinary name everywhere else.
-`commutes` is a word only right after a method's result (E31c), an ordinary name everywhere else.
+**L9b (words of one place).** `commutes` is a word only right after a method's result (E31c), an ordinary name
+everywhere else.
 
 **L9c (`any`).** `any` is a word only where a type is written and the name of a type follows it on its line (T32):
 `s any Shape&`, `List<any Shape&>`, `fn f() any Shape&`; anywhere else it is an ordinary name.
@@ -473,7 +472,7 @@ against an array, a value or a reference (`String&` included), it is one naming 
 array's absence is (`""`, `Array<T>(0)`, T2c). Calling through a null function value is a null dereference (T2b).
 
 **T2c (nullable references).** A reference marker is `&` or `?&` (T24): `Node&` is never null, `Node?&` may be -
-`mut Node?&`, `Node?&x`, `List<Node?&>`, `Array<Node?&>&`. The two are different types of one representation: a
+`mut Node?&`, `List<Node?&>`, `Array<Node?&>&`. The two are different types of one representation: a
 `T&` fits wherever a `T?&` is wanted (E12), and a `T?&` fits a `T&` only where it is known not to be null - narrowed
 by a test (S8e), or unwrapped by `x!` (E35), which ends the program on a null. Through a `T?&` nothing is read or written
 - no field, element, slice, method call or `Len()` - and it is not passed for a `T&` parameter, until it is known not to be
@@ -655,8 +654,8 @@ allocating, say) can reach it. A local the result scope already holds (O26a) is 
 storage**: the local is only read, indexed and measured, its elements copied out, sliced or viewed only into values that
 are gone by the return, and lent only to calls that provably keep nothing of it: a function whose body is checked and settled
 (not one still being judged in a cycle of calls), whose obligations hold nothing of it (O10b), none of whose results, in
-any position, is borrowed from it (O13), and none of whose other parameters - its receiver included - shares a scope
-with it (`fn tie(l mut List<String&>&, x String&l)` may store `x` in `l` with no obligation). Anything else - a borrow of
+any position, hands back storage of it (O13), and none of whose obligations relates it with another parameter's
+scope. Anything else - a borrow of
 it stored in a field, a list or a local reference, pushed through one, handed to a method on another value, to a call
 that may keep it or whose body is not known, a lambda, a task or a destructor-bearing value of its block - may be a
 second name of its storage, and the local is copied then too, so the caller's value is its own and writing it writes neither (`log.Push(s); return s`).
@@ -831,9 +830,7 @@ somewhere is stored as it is, and the value may not outlive it: it must live in 
 something can be stored through it (O25g, O25c), and otherwise outlive it. That is checked wherever the value lands - a
 declaration, an assignment, a return, an argument, another payload - and two such arguments from two scopes hold the
 value to the shorter-lived where only outliving is asked, and are an error where exactness is. A payload parameter may
-name an earlier one of the same case (`&p`, O4a), which is the same scope. A scope argument written between the case
-name and its arguments (`Parcel.Held&x(Crate(3))`, E25) puts the value — and the temporaries built for it — where `x`
-lives.
+name nothing - where each lives is inferred (O28).
 
 A reference read out of a payload (a match binding, S13b, or `as`, E32) lives where the payload does: exactly in the
 reference's scope for an enum held by reference (T17d), and for one held by value where the argument it was built from
@@ -1091,19 +1088,15 @@ the result writable where the type gives a read-only one - so `fn(acc I32, b Box
 `fn(acc I32, b mut Box&) I32`. A **named function** used as a value fits a type whose error list holds every error
 the function can fail with, in any order and with more beside them (§7 R1b): its value re-encodes its codes for the
 type's list. A `noreturn` function value also fits a type with the same parameters, no result, no error
-list and no `noreturn`: never returning, it does all such a type promises (D8e). Every other part must be the same,
-**where its references live** included: a parameter written `b N&a` lives where `a` does and a result written `T&p` where
-`p` does (O4a, O14), so `fn link(a mut N&, b N&a)` is a value of `fn(a mut N&, b N&a)` and of no type whose `b` lives
-apart - a call through `fn(a mut N&, b N&)` would establish nothing `link` requires (T22a) - and a function borrowing its
-result is no value of a type building one. A result written as a type variable (O14b) is a built one here.
+list and no `noreturn`: never returning, it does all such a type promises (D8e). Every other part must be the same. A
+function type says nothing of where its references live (QCB): every parameter its own scope, a reference result built
+in the result scope - so a function whose body relates them is no value at all (T22a).
 
 **T22a.** A function whose signature carries a **scope obligation** (§8 O10b) - a relation between its
 parameters' scopes that every caller must establish - cannot be used as a function value: a call through a
 value of function type checks nothing of the kind, so the obligation would go unchecked. Using such a function
-as a value is a compile-time error naming the obligation - an inferred one, or one its contract writes (D17d). A
-relation the signature writes - a parameter living where
-another does (`b N&a`) - is one a function type can write too, so such a function is a value of a type saying the same,
-and a call through it is held to that as a direct call is (T22). The exception is a function type whose result is written as
+as a value is a compile-time error naming the obligation (an inferred one: none is written), and `olang explain`
+says of every function that cannot become a value that it cannot and why (B11b). The exception is a function type whose result is written as
 a **type variable** bound to a reference, or to a value holding references (a callback's `fn(acc U, x T) U`):
 such a result may hand back one of the arguments (O14b), so the type itself requires each reference argument to
 outlive its result scope - and to be exactly it where something can be stored through the argument (O25g) - and a call
@@ -1115,14 +1108,13 @@ best })` keeps the longest element.
 
 **T23.** A **scope** is a region of memory (§8 O1). It is not a type and not a value, and it has **no
 name**: there is no `scope` type, no expression of scope kind, and nothing of scope kind may be declared,
-stored, compared, or passed as an argument. A program refers to a scope only by naming a variable that lives
-in it — inside a reference marker (`&x`, T24) or as a call's scope argument (E25) — or by a bare marker,
-whose scope is fixed by its position. The full semantics are specified in §8.
+stored, compared, or passed as an argument. A program never names or writes one: where every reference lives is
+inferred by the compiler from what the program does with it (§8 O28). The full semantics are specified in §8.
 
 ### 2.9 Type references and reference markers
 
 **T24.** `type-ref ::= alias-chain IDEN [ type-args ] [ reference-marker ]`, where
-`reference-marker ::= [ "?" ] "&" [ IDEN | "return" ]` (`?&`: nullable, T2c), `type-args` is defined in §12.3 G8 (required when, and only when, the
+`reference-marker ::= [ "?" ] "&"` (`?&`: nullable, T2c), `type-args` is defined in §12.3 G8 (required when, and only when, the
 named type is generic, and always for `Array`, T7), and `alias-chain IDEN` (§4.4 M8) names a primitive
 type, `Array`, or a struct/enum/error type (or, in a constraint, a trait) declared in the referencing module or reached through
 an import alias chain. This is the `type-ref` alternative of `type-expr` (T2). A struct, enum or array type may
@@ -1137,18 +1129,14 @@ Array<Array<I32>&>   an array of references to arrays, each its own length
 ```
 
 There is no reference-to-a-reference: at most one marker may be written on a type, so two in a row
-(`Point&a&b`) is a compile-time error rather than a double reference — it is one position written twice,
-and one of the two scope tags could only be discarded.
+(`Point&&`) is a compile-time error rather than a double reference — it is one position written twice.
 
-A marker's optional `IDEN` names a variable that lives where the reference does (§8 O4a). Each marker's optional `IDEN` must begin on the same source line as
-that `&`; an identifier on a later line is not part of the marker, which therefore reads as bare.
-(Without this, a bare marker ending a line would silently absorb the identifier opening the next one,
-since `&` triggers no `STMNT_END` under L18 — see L20a.)
+A marker names no scope: a name after the `&` is no part of the type, so `x Node&a = n` is a syntax error, as any
+unknown form is.
 
-**T25.** A bare marker (`&`) and one naming a variable (`&x`) both make the type reference-shaped; the
-distinction between the two (which region of memory the reference belongs to) is an ownership
-concept with no effect on type identity (T12, T27) or on which operations are valid — see
-§8.
+**T25.** A marker makes the type reference-shaped. Which region of memory the reference belongs to - its scope - is
+never written: the compiler infers it (§8 O28), and it has no effect on type identity (T12, T27) or on which
+operations are valid.
 
 **T25a.** Reference-shapedness itself **is** part of type identity (T27): `Point` and `Point&` are
 different types, one an aggregate and the other a pointer to one, and likewise `Array<Cell>` and
@@ -1167,8 +1155,8 @@ result:
 Array<String&>         an array of read-only references - it may be filled; what they refer to may not be written
 Array<mut String&>     an array of writable references
 List<mut Node&>        a list of writable references
-fn first(l List&) Node&l           a read-only result borrowed from l
-fn grab(l mut List&) mut Node&l    a writable one
+fn first(l List&) Node&            a read-only result
+fn grab(l mut List&) mut Node&     a writable one
 ```
 
 It is **shallow**: a reference stored inside a referent keeps the permission its own type gives, whichever
@@ -1185,9 +1173,9 @@ writable global reference. A global that may be assigned while holding a read-on
 
 A local's **written type** says what its reference permits: `x T& = e` is read-only and `x mut T& = e` writable, which
 `e` must then be (T25c); one declared with no initializer is null, read-only or writable as written. `x := e` gives it
-`e`'s type, permission included. A function's **built** result (§8 O13, a reference type naming no parameter) is writable,
-since it is new storage only the caller holds; a result **borrowed** from a parameter (`T&p`) is read-only
-unless written `mut T&p`. A result written as a **type variable** (`U`) is neither: it may hand back existing
+`e`'s type, permission included. A function's reference result is as writable as it is written - `T&` read-only,
+`mut T&` writable - whether its body builds it (§8 O13) or hands back storage it was given (O14); a **constructor's**
+instance, new storage only its caller holds, is writable. A result written as a **type variable** (`U`) is neither: it may hand back existing
 storage (O14b), so it has the permission its type argument has - in a function type too, a callback's
 `fn(acc U, x T) U` with `U` bound to `String&` returns a read-only `String&` - and a lambda written for such a
 type with a result of its own (`fn(a String&, w String&) String& { ... }`) has the expected type's.
@@ -1225,8 +1213,8 @@ parameter (below). A read-only copy:
 
 A **written type declares a writable value**, so `x List<I64> = G` from a read-only `G` is an error: `x := G` is the
 read-only copy, `x List<I64>& = G` a read-only borrow, and a copy of its own is made by the type (`G.Clone()`) or from
-its parts. A fresh value - a call's result, a literal, an instance - is writable as always (save the call results
-below), and so is a copy of anything reached writably. A **mutable global's initializer** is stored where it can be
+its parts. A fresh value - a literal, an instance a constructor makes - is writable as always, a call's result as its
+callee's result is written (T25b; save the call results below), and so is a copy of anything reached writably. A **mutable global's initializer** is stored where it can be
 written, so it is never a read-only copy (`Copy mut List<I32> = G` is an error; an immutable global may hold one). A
 **slice** of a read-only copy, and a loop's walk over one, read the copy: what they
 give is read-only, as indexing it is. So does a walk over a reference a read-only copy holds (`for d in mods[i].deps`,
@@ -1542,8 +1530,9 @@ a binary search; and `BinarySearch(x)`, the first position whose element is `==`
 The prelude also declares `type Generator<T ? E> struct(next (fn() T ? E, Exhausted)) { next }`, whose `Next()` calls
 `next`: what a generator gives (D18), and an iterator made of any such function value. A copy of a `Generator` is a
 second name for the same walk, as a `Vec`'s copy is the same `Vec`. Beside it, `type ViewGenerator<T ? E> struct(next
-(fn() T& ? E, Exhausted)) { next }`, whose `Next() T&g ? E, Exhausted` gives a read-only reference borrowed from the
-value it is called on (O13): what a generator whose elements are borrowed gives (D18c).
+(fn() T& ? E, Exhausted)) { next }`, whose `Next() T& ? E, Exhausted` gives a read-only reference living where the value
+it is called on does (the one result the compiler knows to be handed back from its receiver, which its body - a call
+through a function value - cannot show): what a generator whose elements are borrowed gives (D18c).
 
 **T35c (the numeric traits).** The prelude declares three closed traits (T31a) naming the built-in numbers (T4):
 `type Float trait for F16, BF16, F32, F64 { }`; `Integer`, every integer type of every width, `I1` to `I128` and `U1` to
@@ -1576,7 +1565,7 @@ storage.
 `mut any Widget&` (writable: its `mut` methods may be called, T31), `any Shape?&` (nullable, T2c). The `type-ref` names a
 trait - an application of one, with its arguments (T35a) - and carries the reference marker, which is required: an
 `any` is always a reference, and `any Shape` with no marker is a compile-time error, as is `any` before anything but a
-trait. The marker is the instance's, as on any reference: bare, `&x` or `&return` (§8), `?&` for one that may be null.
+trait. The marker is the instance's, as on any reference: `&`, or `?&` for one that may be null; where it lives is inferred (§8).
 `any` is a word only where a type is written and a type's name follows it on its line (L9c); elsewhere it is an ordinary
 name.
 
@@ -1601,7 +1590,7 @@ member, T31a) becomes one, `T` its instance's type:
   their value, from a variable too, is put in new storage built where the `any` lands - there are no references to
   numbers (T24), and an array's elements are copied with it (T7b). An array is copied unless it is provably new
   storage built where the `any` lands - an array literal, a fill, a comprehension, written text, a call's array result
-  (T7b) where no scope argument (E25) puts it elsewhere, a conversion of one of these - so a variable, a slice, a conversion of either to a type declared over it
+  (T7b), a conversion of one of these - so a variable, a slice, a conversion of either to a type declared over it
   (`Lab(s)`, which elsewhere names its argument's storage, T29a), and a conditional, a match or a `try` any of whose
   values (a `catch default` among them) is one of those, or constant data, are copied. The
   copy's elements still name what they named, so what they refer to must outlive where the `any` lands, as an array
@@ -1612,9 +1601,8 @@ from its own type, once. A type that does not satisfy `R` is a compile-time erro
 method it lacks.
 
 A call through the table knows only `R`'s signature, so where `T` meets `R` for an `any`, each method the table holds
-must say no more than the signature: one whose references live elsewhere than the signature says (a result borrowed
-from its receiver, a parameter sharing another's scope, T22), or that carries a scope obligation (O10b, D17d - storing
-an argument into its receiver among them), is a compile-time error at the conversion naming the method; called
+must say no more than the signature: one that carries a scope obligation (O10b - storing an argument into its receiver,
+or handing back storage of one, among them), is a compile-time error at the conversion naming the method; called
 directly, or from generic code (G19), it is fine. A default of `R` introducing type variables of its own (M19e) is not
 in the table (T35): it is reached as T32c says. A default whose result holds its receiver by value - an adapter that
 keeps a copy of the iterator it is made from (`Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `TakeWhile`, `SkipWhile`,
@@ -1914,23 +1902,19 @@ bracketed block, its **contract**, written right after its parameter list - befo
 body:
 
 ```
-contract       ::= "[" list(contract-item) "]"                    (L18a)
-contract-item  ::= expr | outlives
-outlives       ::= scope-name "outlives" scope-name { "outlives" scope-name }
-scope-name     ::= IDEN | "return"
+contract       ::= "[" list(expr) "]"                    (L18a)
 ```
 
 ```
 fn pick(x I32, y I32) [y > x] I32 ? ArgumentError { return y - x }
 fn between(lo I64, hi I64, x I64) [hi >= lo, x >= lo and x <= hi] Bool { return x - lo < hi - x }
-fn link(a mut List<Node&>&, b Node&) [b outlives a] { a.Push(b) }
 type Percent struct(v I64) [v >= 0 and v <= 100] { v }
 ```
 
-Items follow the listing rule (L18a): `,` between items on one line, a line's end between lines. `outlives` is a word
-of a contract only (L9b).
+Items follow the listing rule (L18a): `,` between items on one line, a line's end between lines. A scope relation is
+never written (QCB): what a body needs of its parameters' scopes is inferred from it (§8 O10b).
 
-**D17a (conditions).** Every item but an `outlives` one is a **condition**: an expression of type `Bool` over the
+**D17a (conditions).** Every item is a **condition**: an expression of type `Bool` over the
 receiver, the parameters and anything a function body reads at its top level (globals, constants, functions) - a call
 in it, a fallible one, a lambda among its arguments included. It writes nothing: the parameters are read-only in it.
 Each condition is checked **on entry**, in every build, in the order written, before the body runs: a false one makes
@@ -1942,20 +1926,15 @@ own error, as a call in the body would (R6), and the conditions after it are not
 `?` (R1a) infers it with the rest, and a written set must list `ArgumentError` - a compile-time error naming it
 otherwise; a function with conditions writing no `?` is a compile-time error naming `?`. A trait's method with
 conditions lists `ArgumentError` in its set (R1b). Every call is then handled as any
-fallible call is (R8): `try`, a `catch`, or `!`. A function whose only items are `outlives` ones has no conditions and
-fails with nothing more.
+fallible call is (R8): `try`, a `catch`, or `!`.
 
 **D17c (constructors).** A constructor's contract follows its parameter list (`type Percent struct(v I64) [v >= 0] {
 v }`, a declared primitive's too, T29d) and is checked before its body, so an instance a constructor makes always met
 it. A literal running a constructor (T29d) and a zero value made by one (D13c) are decided while compiling: a false
 condition there is a compile-time error.
 
-**D17d (scope relations).** `a outlives b` says the scope argument `a`'s storage lives in outlives `b`'s, `return`
-standing for the result scope; a chain `a outlives b outlives c` is each pair in turn, and so `a outlives c` too. Each
-name is a parameter that is a reference or holds references, the receiver included, or `return`; another is a
-compile-time error. It is an **obligation** (§8 O10b) as an inferred one is: every call is held to it where the call is
-checked (O10c), and a function writing one is no function value (T22a). It is decided while compiling only - nothing
-of it runs.
+**D17d (scope relations).** A contract states no scope relation: a function's scope obligations are inferred from its
+body (§8 O10b) and held at every call (O10c); `olang explain` shows them (B11b).
 
 **D17e (deciding a contract while compiling).** At a call whose arguments are all values the evaluator computes -
 literals, constants, immutable globals, calls of such - and no local, each condition is decided while compiling (K1):
@@ -1967,9 +1946,9 @@ are checked as at run time, failing the same way. A condition the evaluator cann
 
 **D17f (contracts and function values).** A function with conditions may be made a function value (T21); its type's
 error set holds `ArgumentError`, and a call through the value checks the conditions on entry as a direct call does.
-One writing a scope relation may not (D17d, T22a). Lambdas, `extern fn`s and destructors take no contract. A trait's
+One carrying a scope obligation may not (T22a). Lambdas, `extern fn`s and destructors take no contract. A trait's
 method may take one, written after its parameter list as a function's is (`mut Withdraw(n I64) [n > 0] I64`), reading
-the parameters alone and stating no `outlives`: a call through an `any` of the trait (T32b) checks it before the
+the parameters alone: a call through an `any` of the trait (T32b) checks it before the
 dispatch, and then the method the instance's type supplies checks its own on entry. A call through generic code (G19)
 is a direct call of the method the type argument supplies, held to that method's contract.
 
@@ -2024,8 +2003,8 @@ reference, `p mut T&` (T25b), and only a writable argument may be passed to it (
 parameter's type is a compile-time error: the copy is always the callee's to write, so it would say nothing - though
 where it holds writable references and the body writes through them, lends it writably or keeps it, the argument
 may not be a read-only copy (T25c). Whether a call writes to the caller's value is therefore readable from the
-signature alone: `&` says whose instance it is, `mut` says whether it may be written, and the two are independent. A parameter's reference marker may
-name an earlier parameter (`b N&a`, §8 O4a), and the two arguments must then live in one scope; see §8.
+signature alone: `&` says whose instance it is, `mut` says whether it may be written, and the two are independent. Where
+a parameter's referent lives is its own scope variable (§8 O4b); what the body relates them by is inferred (O10b).
 
 **D9h (a value result handed over).** A value result is the caller's own: it may write it and what it holds. Where a
 function's value result holding storage of its own by value - an array (text included), a struct or an enum holding
@@ -2164,34 +2143,34 @@ scopes it has open while it is stopped - is made where the generator lands, as a
 (D16d): `for x in evens(10)` makes it in the loop's block. Its arguments must outlive it (O14a): they are held in it for
 as long as it is walked. A walk stopped part way and never finished is dropped with the scope it lives in: the scopes
 it holds open close then, innermost first, their destructors running (O15). The value a `yield` gives is built where
-that `Next()`'s result goes, which no local of the generator outlives: `&return` in a generator is a compile-time error
-but where its elements are kept by its walk (D18c), and no local is moved into the result scope (O26a) - a yielded
+that `Next()`'s result goes, which no local of the generator outlives - but where its elements are kept by its walk
+(D18c) - and no local is moved into the result scope (O26a) - a yielded
 local whose references are the generator's own storage is O26's error, and the value to yield is a copy built where it
 goes (`$x`, `x.Clone()`). A value array yielded is copied there (T7b).
 
-**D18c (what a generator may yield).** A generator's element type says where its elements live, and a `yield` is
-judged as a `return` of that kind (O13, O14):
+**D18c (what a generator may yield).** Where a generator's elements live is inferred from what its `yield`s give -
+read off its body before it is checked, nothing written (QCB) - and a `yield` is judged as a `return` of that kind (O13,
+O14):
 - **Values, built per value**: an element type with no scope in it (`Iterator<I64>`, `Iterator<String>`,
-  `Iterator<Node&>`). A yielded reference is judged as a built result: new storage, built where the `Next()`'s result
-  goes, or storage that outlives every place a `Next()` result may go. A reference into what the generator's arguments
-  refer to (`yield t[a:b]` of a parameter `t String&`) is a compile-time error (T22a: a call through the `Next` it is
-  cannot show it outlives where its result goes) - yield a copy, or write the elements borrowed (below). Values
-  (`Iterator<String>`, `Iterator<I64>`) are the caller's own.
-- **Borrowed from a parameter**: `Iterator<T&p ? E>`, `p` a reference parameter of the generator's - `fn words(t
-  String&) Iterator<String&t>`. Each element is a reference living where what `p` refers to does, as a result borrowed
-  from `p` (O13): a yielded value must outlive that (`yield t[i:j]`, constant data, a global's), and a temporary yielded
+  `Iterator<Node&>`). A yielded reference is judged as a result: new storage, built where the `Next()`'s result
+  goes, or storage that outlives every place a `Next()` result may go. Values (`Iterator<String>`, `Iterator<I64>`) are
+  the caller's own.
+- **Borrowed from a parameter**: a read-only, never-null reference element every `yield` of which gives a view of
+  what one reference parameter `p` refers to - `fn words(t String&) Iterator<String&> { ... yield t[i:j] ... }`. Each
+  element is a reference living where what `p` refers to does, as a result handed back from `p` (O13): a yielded value
+  must outlive that (`yield t[i:j]`, constant data, a global's), and a temporary yielded
   is built there. Where a `for` or a comprehension walks such a generator called right there (D18e), each element lives
   where the argument for `p` does: `for w in words(t) { kept.Push(w) }` keeps them as long as what `t` refers to lives.
-- **Kept by its walk**: `Iterator<T&return ? E>`. Each element is a reference living where the generator does - its
-  result scope (D18b) - which `&return` names in its body (O26). A local declared `x T&return` lives there, and so do
-  what is built into one and a temporary yielded; what its arguments refer to outlives it. What is kept there stays
+- **Kept by its walk**: a read-only, never-null reference element some `yield` of which gives storage the generator's
+  own locals hold (a local yielded, a view of one, what is stored into one - `all.Push(p)` then `yield p`), or views of
+  two parameters'. Each element is a reference living where the generator does - its result scope (D18b) - and so do
+  those locals, what is built into them and a temporary yielded; what its arguments refer to outlives it. What is kept there stays
   until the generator's scope closes, however many values the walk gives, and no element outlives the generator.
 
 Either borrowed form gives a `ViewGenerator<T ? E>` (T35b), `T` the elements' referent: its `Next()` gives a reference
 borrowed from the generator value it is called on, so wherever else it is walked - held in a local, a field, given to
-the iterator helpers - an element lives where that value does. Its elements are read-only, and never null: `mut` or
-`?&` in such an element is a compile-time error, and so is a scope naming no reference parameter (a by-value
-parameter's own storage is the walk's copy, O14). A `ViewGenerator` is no `any Iterator<T&>&`: its `Next()` says where
+the iterator helpers - an element lives where that value does. Its elements are read-only, and never null; a by-value
+parameter's own storage is the walk's copy (O14), so a view of it is storage the walk keeps. A `ViewGenerator` is no `any Iterator<T&>&`: its `Next()` says where
 its references live, as the trait's does not (T32a).
 
 **D18d (a generator's cost).** A `Next()` is a call through a function value that resumes the body where it stopped -
@@ -2677,7 +2656,8 @@ one part of each entry, in `Iter()`'s order and under its rule for changes made 
 key, keeping the slots and buckets for the keys put next. A `Map` holds its storage **by value**, as a `Vec` does (QCE): a
 copy of a `Map` value (`b := a` of a place, a field, an element, a by-value argument, a capture, a task's argument) is a
 map of its own with the same keys and values, walked in the same order, and two names for one map are written with `&`
-(`m mut Map<K, V>&`). `Ref(k)` and `RefMut(k)` give the value for `k` in place - `V&m` and `mut V&m`, failing with
+(`m mut Map<K, V>&`). `Ref(k)` and `RefMut(k)` give the value for `k` in place - `V&` and `mut V&`, living where
+the map does - failing with
 `MapError.Missing` - so a collection held in a map is changed where it is (`(try m.RefMut(k)).Push(x)`), a value that is
 no reference's referent (a number) through `Update`. `$` renders a `Map` (E11c) as its entries in `Iter()`'s
 order, each `key: value` with the key and the value rendered as inside any other value, in braces after its type:
@@ -2688,7 +2668,7 @@ indexing it and walking it cost what an array's do, past one load of the buffer 
 buffer **by value**, as a `Map` does (QCE): a copy of a `Vec` value (`b := a` of a place, a field, an element, a by-value
 argument, a capture, a task's argument) is a `Vec` of its own with the same elements, copied as values (shallow at a
 `&`); two names for one `Vec` are written with `&` (`v mut Vec<T>&`, a `Vec<T>&` field); `Array<Vec<T>>(n, Vec<T>())` is
-`n` separate `Vec`s (T8). `Ref(i)` gives element `i` in place, `T&v`, and `RefMut(i)` writably, `mut T&v` - unchecked as
+`n` separate `Vec`s (T8). `Ref(i)` gives element `i` in place, `T&`, and `RefMut(i)` writably, `mut T&` - unchecked as
 `v[i]` is - so an element holding storage of its own is read and changed where it is: `v.RefMut(i).xs.Push(x)`. Like a
 view (below), such a reference is good until the `Vec` grows or shrinks. A copy no program can tell from the value it
 copies is not made (D9h): an element read where it stands (`v[i].xs.Len()`), a `for x in v` whose body changes nothing
@@ -2704,7 +2684,7 @@ unchecked), `Get` (checked), `First`, `Last`, `Pop`, `Insert`, `TakeAt`, `Remove
 or `Vec<String>`) and `ToArray` - a `List`'s `Clone` is a `Vec`'s copy; an array's `ToVec()` is a new `Vec` of its elements (`Array<I32>(n, v).ToVec()` for `n` copies of one
 value), and an iterator's `ToVec()` one of every value it gives; `Pop`, `Clear` and `Truncate` keep the buffer. `for x in v` walks it by `At` and `Len` (S9d), reading the
 `Vec` each step, so a walk that pushes sees what it pushed; `v.Iter()` is an `Indexable`'s (M19e). `View()` is the one
-way to have its elements as an array - `Array<T>&v`, `ViewMut()` writably - a window on the buffer as it is now, good
+way to have its elements as an array - `Array<T>&`, `ViewMut()` writably - a window on the buffer as it is now, good
 until the `Vec` grows (a `Push`, `PushAll`, `Insert` or `Reserve` that replaces the buffer). The buffer a growth
 replaces is kept where the `Vec` lives until that scope closes, so a view used after a growth reads the elements as
 they were - never storage that was freed - and what the elements refer to lives where the `Vec` does, not in the buffer,
@@ -3049,8 +3029,7 @@ A bare `IDEN` immediately followed by `member` is additionally checked, before o
 resolution, against every rule in §4.4 for a cross-module alias
 chain; if it resolves as one, ordinary member resolution does not apply to that leading identifier.
 
-**E3.** `call-expr ::= alias-chain IDEN [ type-args ] [ scope-arg ] "(" list(arg) ")"`,
-where `scope-arg` is E25's own adjacency-constrained `"&" IDEN`, and
+**E3.** `call-expr ::= alias-chain IDEN [ type-args ] "(" list(arg) ")"`, and
 `arg ::= expr | "default" | expr "for" IDEN [ "," IDEN ] "in" binary [ "if" binary ]` (E14a; the last, an argument
 comprehension, G37) (§4.4 M8),
 covered in §5.4. The optional `type-args` (§12.3 G8) is valid only when the name is a generic struct
@@ -3501,9 +3480,8 @@ value type means), **reference into value** copies out (D9a's way for a callee t
 module-level function; or a struct type's own constructor
 (§9) — a bare type name (or
 alias chain naming a type) in call position is a constructor call exactly when that type declares
-one. When that type is generic (§12.3), it may carry a type argument list (G10a), or leave it to be inferred (G10c). A call whose
-target has a result scope (§8 O13) — a constructor always has one, its instance's — may carry a scope
-argument (E25) between the target name and the `(`; a call whose target has none may not.
+one. When that type is generic (§12.3), it may carry a type argument list (G10a), or leave it to be inferred (G10c).
+Where its result lives is the compiler's (E25).
 
 **E13b.** A `call-on` after any postfix expression of function type calls the function value it gives:
 `id(dbl)(3)`, `fs[i](x)`, `(pick(c))(x)`. The expression is evaluated first, then the arguments, and the call
@@ -3731,43 +3709,13 @@ what is parenthesized: `2 * (try f()) + 1`. Parentheses directly around the whol
 type is expected; its full semantics (error propagation, signature requirements, and catch clauses in value position)
 are specified in §7.
 
-### 5.10 The scope argument
+### 5.10 Where a call's result lives
 
-**E25.** `scope-arg ::= "&" ( IDEN | "return" )`, written between a call's target name and its opening `(` — at most
-one:
-
-```
-makeVec&x()
-Buf<I32>&x(4)
-```
-
-`IDEN` names a local or parameter of the **calling** function, and binds the callee's result scope (§8 O13,
-O18) to where that variable lives (O4a); `return` binds it to the calling function's own result scope (O26). A variable living in the program's scope — a global, or a local
-holding a global's referent — is a compile-time error here: a result reaches that scope by being put there,
-assigning it to a global or into something reached from one (O1b), not by a scope argument. So is a variable whose
-scope is not known (O12). On a constructor call it is where
-the instance lands (C2c), and what the instance holds is judged there (C2d) - `local := Env&c(c.env)` as `local mut
-Env&c = Env(c.env)` is. Without one, the result scope follows the result (O18a). A call whose several results are
-destructured (S4b) is the same: `rec, next := mk2&rows(k)` builds the results where `rows` lives, and what each target
-holds lives there, so `rows.Push(rec)` keeps it.
-
-The `&` must be **adjacent** to what precedes it and the `IDEN` adjacent to the `&` — no whitespace or
-comment anywhere in the run, and all on one line. Without that requirement `f&a(x)` could not be
-told from the binary `&` of `f & a(x)` (E7), which is a legal expression.
-
-A call given a scope argument builds its result where that says, never where the call stands: the result is **existing
-storage** there, judged wherever it is put - stored, pushed, passed, returned, made an `any`, set as a task's target
-(P1g) - exactly as the same value declared first would be (`x := mkp&t(i); h.p = x`, O25h). So `h.p = mkp&t(i)` with
-`t` an inner block's local is the same compile-time error, and `return mkp&t(...)` with `t` the function's own local is
-O10d's. This holds for a run-time-length array holding nothing - text, an array of numbers, a type declared over one -
-too: its storage is where the argument says, so a function returning one (`fn g(p String&) String { return mk&p(1) }`)
-copies it into its own result scope (T7b), a box of one is a copy (T32a), and a local declared from one is not moved to
-the result scope (O26a) - it lives where the argument says.
-
-A scope argument on a call whose target has no result scope — one returning nothing, a number, a struct or an enum
-holding no references (by value, or a constructor's instance, which is copied where it lands), or a result borrowed from
-a parameter (O13) — is a compile-time error, and so is one naming no local or parameter where it is written (a
-parameter's default included: a default has no locals, D8a).
+**E25.** A call names no scope: there is no scope argument, and nothing between a call's target and its `(` says where
+its result is built. A call's result is built where it is put (§8 O18a) - the place a declaration, an assignment, a
+store, an argument, a `return` gives it - or, where nothing puts it anywhere, where its callee's obligations need it to
+be (O18c); a result its callee hands back from what it was given lives where that does (O13). Which, the compiler
+infers (O28). `f&x(a)` is no form of the language: it reads as `f & x(a)`, the binary `&` (E5).
 
 ### 5.11 Explicit numeric conversion
 
@@ -3958,7 +3906,7 @@ compound assignment's operand, held); only then is the element read through `At`
 would read it, the store made into that local, and the local written back through `SetAt` (`x[i] = t`). A collection
 read out of another (`l[i][j].f = v`, `rows[0][1] = v`) is read and written back the same way one level out, after the
 inner write-back. Where the collection also declares `RefMut` over `At`'s indices, giving a writable reference to the
-element (`fn (v mut Vec<T>&) RefMut(i I64) mut T&v`) and failing with nothing, a level whose element can be a
+element (`fn (v mut Vec<T>&) RefMut(i I64) mut T&`) and failing with nothing, a level whose element can be a
 reference's referent (T24) is taken **in place** instead: after the value is evaluated, `x.RefMut(i)` gives the element
 where the collection holds it, the store is made into it, and nothing is written back - so a Vec of values holding
 storage of their own (`v[i].n += 1`, `v[i].xs = ys`) copies no element. A write through a reference read out of `x[i]`
@@ -4019,8 +3967,7 @@ held in the spawner's block, which closes (or is made again by the next turn of 
 compile-time error: the task is a function taking the collection that calls `x[i].M(...)` itself. What a copy's
 references hold is checked as for any such copy (O17): a store that lends the copy to a call that can build into what
 the element holds (an element type's `SetAt` pushing onto a `List` field of the copy) would build where the copy is,
-and is an error saying to hold the elements by reference or to make the copy where the collection lives (`t mut T&l =
-l[i]`). Written by name (`x.At(i).f = v`) the element is still a copy no one holds, and writing it an error.
+and is an error saying to hold the elements by reference or to take the element in place (`x.RefMut(i)`). Written by name (`x.At(i).f = v`) the element is still a copy no one holds, and writing it an error.
 
 A type declaring `SetAt` and no `At` is stored into (`x[i] = v`) and not read. A method named `CheckedAt`,
 `CheckedPlus` or the like is an ordinary method: no operation calls one by itself. A type whose index can be checked
@@ -4049,7 +3996,7 @@ that becomes the receiver, `a` still evaluated before `b` - and they chain (E30)
 indices are passed in the order written, after `x` and before `v`: `m[i, j] = v` is `m.SetAt(i, j, v)`, and
 `m[i, j] += v` evaluates `m`, `i` and `j` once each. A built-in array takes one index; several on one are a
 compile-time error. An `At`
-returning a writable borrowed reference (`At(i I64) mut T&x`) makes `x[i].f = v` write the element; with an `At`
+returning a writable reference into its receiver (`At(i I64) mut T&`) makes `x[i].f = v` write the element; with an `At`
 returning a value, `x[i].f = v` is a compile-time error, since it would write only a copy - as is any write into a
 value a call returned. In `x[lo:hi]`
 an absent `lo` is `0` and an absent `hi` is `x.Len()`, which the type must then declare.
@@ -4079,9 +4026,8 @@ an **enum value** (T17) - or of what a reference to one names (T17d): `type-ref`
 and `x as Shape.Circle` is its payload - its one field, the payload written whole (T17a), or, for several fields, as many
 results as it has, received as a call's several results are (`w, h := s as Shape.Rect`, D8c). `as` on a case with no
 payload is an error (`==` is the question it asks). On anything else - an array included, whose known length a slice
-gives (T7c, E16a) - `as` is a compile-time error. What follows `as` is a `type-ref`, so an `&` touching it with a name
-after it is that type's reference marker (§2.9): `b as Box.Val & mask` is an `as` to the type `Box.Val&mask`, and a
-compile-time error saying so - `(b as Box.Val) & mask` applies `&` to the result.
+gives (T7c, E16a) - `as` is a compile-time error. What follows `as` is a `type-ref`, so an `&` touching it is that
+type's reference marker (§2.9): `(b as Box.Val) & mask` applies `&` to the result.
 
 An `as` **can fail as written**: one whose answer is no fails with `CaseError.WrongCase` (the prelude's), so it is
 covered by a `try` or a `!` (R8, E35) as a fallible call is - `try e as Shape.Circle catch default c0`, `(e as
@@ -4983,8 +4929,8 @@ starts one **task**: the call runs on its own thread, and the statement itself c
 `join` block is an ordinary block in every other respect, and its end is where every task spawned in it is
 waited for.
 
-The operand of `spawn` is a **call** (§5.4) — ordinary, method, dispatched, through a function value, or given a scope
-argument (E25), its result then judged as the same call's declared first (`x := mkp&t(i)`) — or a
+The operand of `spawn` is a **call** (§5.4) — ordinary, method, dispatched or through a function value, its result
+judged as the same call's declared first (`x := mkp(i)`) — or a
 **lambda** taking no parameters (D16e), whose body is then the task: what it needs, it captures (D16c), each
 value copied when the `spawn` runs. Neither states everything a task can *reach*: a task reaches globals, and
 anything reachable through a reference it was handed or captured (P3).
@@ -5083,8 +5029,7 @@ thread: a result built where it lands (§8 O18a) is built where the target is; s
 must all be in one scope, or it is a compile-time error - and one that already lives somewhere must suit the target as an
 assignment's value would (§8 O25, O1b). A target holding a run-time-length array by value takes it as that assignment
 does (T11b): its elements written into the storage the target holds where the length is unchanged, else the result's
-storage - or, where the assignment copies (a call given a scope argument builds its array where that says, E25), a copy
-made where the target's storage is. With several targets each is judged as the assignment of its own result, as a
+storage - or, where the assignment copies, a copy made where the target's storage is. With several targets each is judged as the assignment of its own result, as a
 destructuring's are (S4b), and each is a store into what its target is in (§8 O17).
 
 The target's address is taken **at the `spawn`**, not when the task runs, which is what makes
@@ -5460,8 +5405,8 @@ steps, two functions becoming each other, a state machine of functions), in a bu
 a statement that leaves (D10a), and may stand in a one-line body (S1b): `else: become step(s, i + 1)`.
 
 Its operand is a **call of a function or a method declared with `fn`** - a generic's instance included - written
-whole: not a function value's call, a constructor's, an `extern fn`'s, an `export fn`'s, a call through an `any`, nor a
-call given a scope argument (E25); and no `try`, since what the call fails with is the function's own. A `become`
+whole: not a function value's call, a constructor's, an `extern fn`'s, an `export fn`'s, nor a call through an `any`;
+and no `try`, since what the call fails with is the function's own. A `become`
 stands only in a function or a method declared with `fn`, never `main`, an `export fn`, a lambda, a generator's body, a
 test, a constructor or a destructor. Each of these is a compile-time error naming what to write instead (`return` and
 the call); and so is each of the following, since a jump cannot keep a promise the function's end makes:
@@ -5791,13 +5736,14 @@ of that shape. An `extern fn` and an `export fn` keep C's conventions (X1, X13) 
 
 ## 8. Scopes
 
-This section specifies scopes, the `&`/`&x` reference marker's scope meaning (distinct from its purely
+This section specifies scopes, the scope a reference-shaped value lives in (distinct from the marker's purely
 type-level effect, §2.9), the allocation model for reference-shaped values, and the static compile-time check
 that constrains how a scope tag may flow from one place to another.
 
-A scope is **never named**. Where a program has to say which scope a reference lives in, it names a
-**variable** that already lives there (`&x`, O4a), or writes a bare `&` whose meaning is fixed by its position
-(O4). Every scope a function can relate to is reached through one of its own variables or through its result.
+A scope is **never named and never written**: no marker, call or contract says where a reference lives. The compiler
+places every value in the shortest-lived scope every use of it allows (O28) - the rules below are what that placement
+must satisfy, and a program they cannot be satisfied for is refused with an error naming what to write instead.
+Every scope a function can relate to is reached through one of its own parameters or through its result.
 
 A scope tag is a **claim about lifetime**, not a record of where a value was allocated: it says the value is
 valid at least until that scope closes, and O25 makes the claim exact for every reference.
@@ -5825,8 +5771,7 @@ anything shorter-lived is a compile-time error - a function value is never short
 or is a lambda capturing nothing, being made once for the whole program (T21). A global passed as an argument
 determines the callee's scope variable to be the program's scope (O25e): an element pushed into a global list is built
 there. Each thread reaches the program's scope through a part of it of its own (§6.8 P2). Destructors registered in it do
-not run at exit. `&g`, for a global `g`, names
-it (O4a).
+not run at exit.
 
 **O2.** Every **block** (§6.1 S1) implicitly opens a scope on entry and closes it when the block ends — a
 function or test body included, that being its outermost block. The outermost block's scope is the
@@ -5863,67 +5808,53 @@ the body reaches only through the variable or result it belongs to.
 
 ### 8.2 Scope tags
 
-**O4.** A reference-shaped type (T24) carries a **scope tag**: bare (`&`) or naming a variable (`&x`, O4a).
-What a bare tag means depends on where it is written:
+**O4.** A reference-shaped type (T24) carries a **scope tag**, inferred (O28) and never written. Where it is not
+inferred further, a position gives it:
 
-| position | a bare `&` means |
+| position | its scope |
 |---|---|
 | a parameter | that parameter's own scope variable (O4b) |
 | the result type | the result scope (O13) |
-| a local | its block's (O25a) — `x := e` instead takes `e`'s scope |
+| a local | its block's (O25a) — `x := e` instead takes `e`'s scope, and the inference may place it longer |
 | a constructor field, or an element/field of something reference-shaped | its container's scope (O5, C2d) |
 | a bare-pun field | the instance's scope, as any bare field (C2d) |
 | a generic type argument | its container's scope (G11) |
 
-**O4a.** `&x` says **"lives where `x` lives"**, `x` being a variable visible at the marker:
-
-- in a parameter's type, a parameter written before it in the same `param-list`, the receiver included
-  (`fn link(a mut N&, b N&a)`);
-- in the result type, any parameter (`fn (l List&) First() Node&l`);
-- in a local's type, any local or parameter in scope, or a global — or the word `return`, for the result
-  scope (O26);
-- in a constructor field's type, a parameter of that constructor or an earlier field.
-
-Where `x` lives is:
+**O4a.** Where a value lives - the scope its tag names - is:
 
 - for a reference: the scope its referent lives in — its own tag's scope;
 - for a value: the scope references stored into it go into — the block it is declared in, or the function's
   own scope for a value parameter;
 - for a global: the program's scope (O1b).
 
-`x` must be reference-shaped or hold references (§8.4 O25); naming any other variable is a compile-time error,
-as is a local naming itself. Since no name may be shadowed (D3a), `&x` always means exactly one variable.
-
-**O4b.** Every parameter written with a bare reference marker is passed together with the scope its referent
-lives in, as an anonymous **scope variable** of the signature. An argument determines it (O17); a temporary
-argument is built where the call's other rules put it (O18a); the function may allocate into it and store
-references through the parameter; and any relation the body needs between it and another scope is an
-obligation its callers discharge (O10b, O10c). A method's receiver is such a parameter. A parameter written
-`&x` has no scope variable of its own: it shares `x`'s, so the two arguments must agree (O17). The hidden
-scopes are passed in the parameters' order, the receiver's first.
+**O4b.** Every reference parameter is passed together with the scope its referent lives in, as an anonymous **scope
+variable** of the signature. An argument determines it (O17); a temporary argument is built where the call's other
+rules put it (O18a); the function may allocate into it and store references through the parameter; and any relation the
+body needs between it and another scope is an obligation its callers discharge (O10b, O10c). A method's receiver is
+such a parameter. The hidden scopes are passed in the parameters' order, the receiver's first.
 
 A parameter passed **by value** whose type holds references (T17c, C2d: a struct, enum or array value holding them,
-or a type variable bound to one) has a scope variable too, `&x` for parameter `x`: where the references it holds live,
+or a type variable bound to one) has a scope variable too: where the references it holds live,
 bound by the argument - an existing value's references' scope (O25h), or, for a temporary, wherever the call places
 it. A reference read out of the parameter - a field, an element, a payload bound by `match` or taken by `as` - lives
 there, never in the program's scope nor in the function's own: a temporary stored through one (`fn grow(b Box) {
 b.n.next = N(9) }`) is built in that scope. So a callee may build into a by-value parameter's scope variable as into a
 reference parameter's - wherever something can be stored through what the parameter holds (O25g), decided by its type as
 a reference parameter's is by its permission, whether its body writes the parameter itself or not - and an argument
-whose references live where the caller cannot say (O12, a `&p` field, O23a) is not passed for one (O25e). A by-value
-result handing such references back is O14c's obligation.
+whose references live where the caller cannot say (O12, a field with a binding of its own, O23a) is not passed for one
+(O25e). A by-value result handing such references back is O14c's obligation.
 
 **O5.** A scope tag has no effect on type identity (T27) and does not change which operations (field access,
 indexing, calls) are valid; it only constrains where the value may be allocated (§8.3) and where a reference
-to it may subsequently flow (§8.4). A bare tag reached through a container — a field, an element, a payload,
-a type argument — is the container's scope.
+to it may subsequently flow (§8.4). A tag reached through a container — a field, an element, a payload,
+a type argument — is the container's scope, unless the inference gives a field a binding of its own (O28).
 
 ### 8.3 Allocation
 
 **O6.** A value with no storage of its own — a temporary (§5.3 E12c) — is allocated at the point it is stored
 into a reference-shaped slot: a variable declaration, an assignment, a function argument, a return value, or
 a field or element of a larger value being itself allocated this way. The scope it is allocated into is the
-slot's scope as O4 and O4a give it, bound at the relevant call (§8.6); a nested slot's scope is never
+slot's scope as O4 gives it and O28 places it, bound at the relevant call (§8.6); a nested slot's scope is never
 independent of its immediate container's.
 
 **O7.** An array's storage (T11) is always allocated this way, whether or not the array carries a marker:
@@ -6039,8 +5970,7 @@ both `X` and `Y` are scope variables of the function being checked, the relation
 **obligation** of that function rather than reported as an error. A function's obligation set is the
 transitive closure of everything so recorded across its whole body, and is part of its signature exactly as
 its parameter types are: it is what the function requires of every caller, derived from what the body
-actually does. A relation written in the signature (`b N&a`, O4a) is not an obligation: it is part of the
-parameter's type and is checked as an argument agreeing (O17).
+actually does. Nothing is written in a signature about scopes (QCB): every relation is an obligation.
 
 A function whose body makes no such demand has an empty obligation set, which is the common case.
 
@@ -6096,15 +6026,14 @@ reference is read rather than assigned - through alternatives of a `match` bindi
 (S13c), a conditional or a `match` value whose values already live in different scopes (E28), or through anything else
 whose scope was not traced - **where it lives is not known**: it may be read,
 walked and compared, but it never equals an exact scope (O25), never determines a scope variable of a parameter
-through which something can be stored (O25g) or which a borrowed result names (the callee could build there), and a
-scope argument (E25) may not name it. Nothing new is built into a place holding such a reference by value either - a
+through which something can be stored (O25g) or which a call's result is equated with (the callee could build there).
+Nothing new is built into a place holding such a reference by value either - a
 value local copied from a conditional or a match whose values' references live in different scopes, say: what is
 assigned there is a value whose references already live somewhere, never a temporary, since a temporary would be built
 in one scope and kept where the place's references really are. A conditional or a `match` gives such a reference when
 the values it can give live - or, for values held by value, hold their references - in different scopes, or in one not
 traced: `w((i if k else o).m.inner)` with `i` and `o` from different blocks lends a value whose scope is not known
-(a value built for the conditional lands with it, and decides nothing). A declaration naming such a local's scope as
-where it lives (`x T&l`) is a compile-time error: nothing is declared to live where that is not known.
+(a value built for the conditional lands with it, and decides nothing).
 
 **O20.** A bare reference slot reached **through** a reference-shaped container — a field or element of a
 value that is itself `&`-marked — lives in the **container's** scope (O5), not in the scope of the function
@@ -6127,10 +6056,9 @@ merely one it outlives. Anything written through a reference is allocated into t
 and stored where its referent lives, so a reference carrying a shorter tag than its referent's would place a
 value where it dangles. Accordingly:
 
-- **O25a.** A local's type says where it lives, and an initializer never changes that: `x T&` lives in its
-  block (O2), `x T&y` where `y` does, `x T&return` in the result scope (O26). An initializer that already lives
-  somewhere must live in exactly that scope; a temporary is built there. `x := e` writes no scope, and takes
-  `e`'s exact scope — the one way a local adopts where its value lives. A type written as a **bare type variable**
+- **O25a.** A local lives where the inference places it (O28) - its block (O2) unless what it holds must outlive
+  that - and an initializer never changes it: one that already lives somewhere must live in exactly that scope; a
+  temporary is built there. `x := e` takes `e`'s exact scope — the way a local adopts where its value lives. A type written as a **bare type variable**
   (`acc U = init`) writes no scope either: where the variable is bound to a reference, or to a value holding
   references, the local takes its initializer's scope as `:=` does - the spelling generic code has for "a local of this
   variable's type, where its initializer lives" beside `:=` itself. A local declared from a field
@@ -6149,7 +6077,7 @@ value where it dangles. Accordingly:
 - **O25e.** A scope variable determined by arguments (O17) is bound to their **exact** scope, and two
   arguments determining it must agree exactly — depth included. An argument living in the program's scope
   (a global's referent) binds the variable to the program's scope (O1b): what the callee builds into it - an element
-  pushed into a global list, a result borrowed from it - is built there, and an obligation that something outlive or
+  pushed into a global list, a result handed back from it - is built there, and an obligation that something outlive or
   equal it is met only by the program's scope. An argument whose scope is not known (O12) cannot determine a variable
   the callee may build into.
 - **O25f.** A derived obligation (O22) recorded for a value through which something can be stored (O25g) is one
@@ -6167,8 +6095,8 @@ value where it dangles. Accordingly:
   references are where its initializer put them - its own block for a result or an instance built there (O18a), where
   its initializer's are when it is a copy of one that already lives somewhere, whether the declaration writes its type
   or not (`t := a[i]`, a loop's copy of an element, a hidden local of a parallel assignment), where the referent is for a
-  copy out of a reference (`d Box = r`, O20) - whatever expression gives the reference: a call's borrowed result, a
-  method's, a `try`, a conditional or a match of references, an assignment's value, a loop's initializer, a reference
+  copy out of a reference (`d Box = r`, O20) - whatever expression gives the reference: a call's result handed back from
+  an argument, a method's, a `try`, a conditional or a match of references, an assignment's value, a loop's initializer, a reference
   handed to a by-value parameter (O4b's scope variable binds to the referent's scope), a constructor's argument or an enum
   case's payload (C2d, T17c), a match binding or an `as` of a payload held by value - the program's scope for a copy of a
   global's, and, for a conditional or a match whose values' references live in different scopes, one not known here
@@ -6208,9 +6136,9 @@ it tagged with the scope variable `V` of `p`'s type reads at a **derived scope**
 for `p` bound `V`". A derived scope behaves as one of the function's own scope variables (O3) - it outlives every block
 of the body (O10a), and a relation between it and another scope variable is an obligation (O10b) - except that
 nothing is built into it (C2d's restriction on such a field): a temporary put where a derived scope's referent lives, a
-result that would land there, a scope argument naming one, a reference living in one - read through the field, or a copy
+result that would land there, a reference living in one - read through the field, or a copy
 of that reference in a local, a `for ... in` element or a lambda's capture - passed for a parameter of a callee that may
-build into it (something can be stored through the parameter and the callee may write it, or its borrowed result names
+build into it (something can be stored through the parameter and the callee may write it, or its result is equated with
 it, or its body builds there), or a copy out of such a field handed by value to a callee that can build through what it
 holds (the copy's references being where the field's referent is), is a compile-time error: what the callee built would
 be in the scope the field was read through, which the referent outlives. At each call it
@@ -6244,83 +6172,64 @@ nothing was traced at all.
 
 ### 8.5 Results
 
-**O13.** A function's result is either **built** or **borrowed**, and its type says which:
+**O13.** A function whose result is a reference, or a by-value type holding references (`fn mk() Holder`, where
+`Holder` has a reference field), has a **result scope**: a scope variable bound at each call to wherever the result is
+put (O18a), or where its obligations land it (O18c). What a return hands back is either built there - a temporary, or
+a local living there (O26) - or **existing** storage it was given: a parameter's data, or what lives in the program's
+scope. Nothing written says which (QCB): existing storage handed back is the obligation that it outlive the result
+scope - exactly be it where something can be stored through it (O25g) - recorded as any other (O10b) and checked at
+every call (O10c), and a call's result is then the argument's storage, where that lives. Several results (D8c) share
+one result scope. A function whose results hold no reference has none. The result is as writable as it is written
+(T25b).
 
-- **Built** — the result type carries a bare `&` (`fn number() Expr&`), or is a by-value type holding
-  references (`fn mk() Holder`, where `Holder` has a reference field). The function has a **result scope**: a
-  scope variable bound at each call to wherever the result is put (O18a), or where a scope argument names
-  (E25). Whatever the result is built from that has no storage of its own is built there.
-- **Borrowed** — the result type carries `&p`, `p` a parameter (`fn (l List&) First() Node&l`). Nothing is
-  built: the result is part of `p`'s data and lives in `p`'s scope, and the function has no result scope.
+**O14.** What a `return` may hand back: a temporary, built in the result scope; a value whose exact scope is the
+result scope (O26); storage of a parameter's scope, or one a parameter's references reach - the obligation of O13; and
+storage of the program's scope (a global's, constant data, T25d), which outlives every result scope. Not storage of the
+function's own scope or of one of its blocks, which closes at the return - a compile-time error naming a copy to return
+instead (`$x`, `x.Clone()`) - and not a view of storage such a block built (O27). A by-value parameter's own storage is
+the call's copy, in the function's own scope: a reference into it, or to a part of it reached without a reference, is
+one into the function's own storage - and a by-value parameter whose type holds no reference has no scope (O4b), so
+only what lives in the program's scope is handed back from it.
 
-Several results (D8c) share one result scope; each built result is in it, and each borrowed one names its own
-parameter. A function whose results are neither has no result scope. The body reaches the result scope by
-returning a temporary, or by naming it: `&return` (O26).
+**O14a.** A **function value** (T21) returned - a parameter's, or one reached through a parameter's data - needs only
+that what it captured outlive the result scope (nothing is written through a function value, D16d); it is an
+obligation of the function (O10b), checked at every call once the result has landed (O18a). `fn id(f fn() I32) fn()
+I32 { return f }` is legal, and `keep = id(y)` is a compile-time error where `y`'s closure lives in a block `keep`
+outlives.
 
-**O14.** What a `return` may hand back:
+**O14b.** A result written as a **type variable** (G1) - a reference, or a value holding references, by instantiation
+- may hand back existing storage of one of the function's scopes on the same terms, per instantiation: `fn id<T>(x T)
+T { return x }` is legal for every `T`, and with `T` a reference, `y = id(n)` is a compile-time error where `n` dies
+before `y`.
 
-- for a **built** result: a temporary, built in the result scope, or a value whose exact scope is the
-  result scope (`&return`, O26). A reference into a parameter's data is a compile-time error that names the
-  borrowed form (`T&p`) - but for a function value (O14a), a result written as a type variable (O14b) and a value holding references (O14c) - and so is
-  one into the function's own storage, which closes at the return, and one into the program's storage - a global's, or
-  constant data (T25d): it would outlive every result scope, but a built result is new storage its caller may write
-  (T25c), and that would write the global, so a global is returned by value, which copies it (T7b);
-- for a **borrowed** result `&p`: a value in exactly `p`'s scope where something can be stored through it (O25g),
-  and otherwise one that outlives it (O10) — a relation between `p` and another parameter being an obligation
-  (O10b). A temporary is built in `p`'s scope. A by-value parameter's own storage is the call's copy, in the function's
-  own scope: returning it, or a part of it reached without a reference, as borrowed from `p` is a compile-time error
-  naming `p T&` - and a by-value `p` whose type holds no reference has no scope (O4b), so only what lives in the
-  program's scope is borrowed from it.
+**O14c.** A **by-value** result holding references (T17c), returned from a by-value parameter holding them (O4b) or
+from storage reached through one, holds what its parameter's references reach: a reference copied out into such a
+result (E12: `return p`, `return a[0:1]`) holds what its referent holds, which lives where the referent does - or, for
+a slice of a value, where that value's references are: in one of the function's own blocks it is an error, in a
+parameter's scope O13's obligation. `fn id(h Holder) Holder { return h }` is legal, and `keep = id(Holder(inner))` a
+compile-time error where `inner` dies before `keep`.
 
-**O14a.** A **function value** (T21) is the exception to O14's first case: a built result of function type may
-return a parameter's value, or a function value reached through a parameter's data, with no borrowed form. Nothing
-is ever written through a function value (D16d), so such a return needs only that the parameter outlive the
-result scope; it is an obligation of the function (O10b), and every call checks it once the result has landed
-(O18a). `fn id(f fn() I32) fn() I32 { return f }` is then legal, and `keep = id(y)` is a compile-time error
-where `y`'s closure lives in a block `keep` outlives.
-
-**O14b.** A built result whose type was written as a **type variable** (G1) - and became a reference, or a value
-holding references, by instantiation - is another exception: there is no borrowed form to write for it (`T&p`
-would be a reference to what `T` is). Such a result may hand back existing storage of one of the function's scopes;
-that storage must outlive the result scope - be exactly it where something can be stored through it (O25g) - as an
-obligation of the instantiation, checked at every call once the result has landed (O18a). `fn id<T>(x T) T {
-return x }` is legal for every `T`, and with `T` a reference, `y = id(n)` is a compile-time error where `n` dies before
-`y`.
-
-**O14c.** A **by-value** built result holding references (T17c), returned from a by-value parameter holding them (O4b)
-or from storage reached through one, is the third exception: there is no borrowed form for a value. A reference copied
-out into such a result (E12: `return p`, `return a[0:1]`) holds what its referent holds, which lives where the referent
-does - or, for a slice of a value, where that value's references are: in one of the function's own blocks it is an
-error, in a parameter's scope this obligation. The parameter's
-scope must outlive the result scope - be exactly it where something can be stored through one of the references
-(O25g) - as an obligation of the function, checked at every call once the result has landed (O18a). `fn id(h Holder)
-Holder { return h }` is legal, and `keep = id(Holder(inner))` a compile-time error where `inner` dies before `keep`.
-
-**O26 (`&return`).** The word `return` after a reference marker names the **result scope** of the enclosing
-function (O13): `n Node&return = Node(1, null)` declares a local living where the result will be put, and
-`f&return(...)` builds a call's result there (E25). It is how a body builds something in the result scope
-other than by returning it directly — a value it fills in first, or one it returns a part of:
+**O26 (the result scope, never named).** A body builds something in the result scope other than by returning it
+directly - a value it fills in first, one it returns a part of - by declaring the local holding it and returning it:
+the local lives in the result scope (O26a), and what is built through it is built there.
 
 ```
-fn build() Node& {
-    n Node&return = Node(1, null)
+fn build() mut Node& {
+    n mut Node& = Node(1, null)
     n.next = Node(2, null)        # built where n lives - the result scope
     return n
 }
 fn inner() Point& {
-    b := Box&return(Point(7, 8))
+    b := Box(Point(7, 8))
     return b.inner
 }
 ```
 
-It is valid only inside a function that has a result scope; anywhere else — a function with no result, a
-borrowed result, a test, a generator (whose `Next()` has one per call, D18b) — it names nothing and is a compile-time
-error. In a generator whose elements are kept by its walk (`Iterator<T&return>`, D18c) it names where the generator
-lives, which every element and every `Next()` result lives no longer than.
+A generator's `Next()` has a result scope of its own per call (D18b); its elements, where the inference finds they are
+views of storage its walk keeps, live where the generator lives (D18c).
 
 **O26a (a returned local lives where the result goes).** A value local the function returns lives in the **result
-scope** - its own storage, and everything built into it - with nothing written: `&return` is implied, and `&l` of such
-a local `l` (a scope argument, E25, or a marker, O25a) names the result scope, where it lives. A local is
+scope** - its own storage, and everything built into it - with nothing written. A local is
 returned when, in the rest of the block declaring it, a `return` gives it (or a field read through it, `return b.items`)
 as its value, as one of its results (D8c), or as a value a conditional (E28) or a `match` (S12b) there gives. It applies
 to a local whose value its declaration makes - a call's result, a constructor's instance, an array or literal built
@@ -6334,15 +6243,13 @@ module's function - that can keep it nowhere: not in its result, nor in its rece
 body's obligations (O10b) say, once they are all known (a callee in a cycle of calls, whose obligations grow until every
 body is checked, O10c, keeps it) (`i := g.infos[k]; return View(g.mem, g.count(i))` leaves the copy `i` in the frame):
 what is built from it holds what it holds, which must live where the result does. A local that can hold nothing and
-whose storage nothing can name - a number, a `Bool` - is never moved, whatever the result is. Where the result is put is the
-result scope for a built result, and for a borrowed one (`T&p`, `p` a reference parameter, O14) the scope `p`'s
-referent lives in, which the function builds into (O4b).
+whose storage nothing can name - a number, a `Bool` - is never moved, whatever the result is.
 
 A **reference** local the function returns follows it too, where what it names is **built here**: one declared by `:=`
-or with a bare `&` (no scope written), whose initializer is a temporary - a call's built result, a constructor's
-instance, a case of an enum (T17d) - or `null`, lives in the result scope, as if written `&return`; so does what a later
-assignment to it builds there. One initialized from existing storage (a parameter, a field read out of one, a borrowed
-result) keeps that storage's scope (O25a).
+or with a bare `&`, whose initializer is a temporary - a call's result built where it is put, a constructor's instance,
+a case of an enum (T17d) - or `null`, lives in the result scope; so does what a later assignment to it builds there.
+One initialized from existing storage (a parameter, a field read out of one, a call handing back what it was given)
+keeps that storage's scope (O25a).
 
 For either kind, a local is returned also when, in the rest of its block, a value mentioning it **flows** into what is
 returned: it is assigned to a local (or a field or an element of one) that is returned or already in the result scope,
@@ -6404,12 +6311,11 @@ fn Scan(src String&) Scanner {
 are correct as written. What follows from it is the rules for any place in the result scope: a temporary assigned to
 it, into a field or an element of it, or given to a call that keeps it there is built there (O18a, O18b, O25h);
 existing storage stored there must be there exactly where something can be stored through it, and outlive it
-otherwise (O25c, C2d); a borrowed value's callee binds its scope variable to the result scope (O17). A copy of storage
+otherwise (O25c, C2d); a value lent to a callee binds its scope variable to the result scope (O17). A copy of storage
 that already lives somewhere (`t := a[i]`) keeps its references where they are (O25h) and is not moved: returning it is
 O14c's. An array value so returned (T7b) is handed back as it is only where nothing else can name its storage, else as a
 new array - copied into the result scope at the return, where its storage already is - so nothing that refers to the
-local refers to the caller's array. A local a call given a scope argument (E25) declares, of an array holding nothing -
-text, numbers - is not moved: its storage is where the argument says.
+local refers to the caller's array.
 
 Its limit, refused and never unsound: a borrow of a moved local read back out of a value holding it - a `match`
 binding of an enum case holding it, an `as` payload, a `for ... in` element of an array literal or a local `List` of
@@ -6421,16 +6327,37 @@ registered in it (O15, run when the caller's scope closes) see it; a local decla
 is built in the result scope on every turn; and a call that fails leaves what it built in the caller's scope until that
 scope closes.
 
-**O27 (no storage extended for a view; provisional - the rework's round 1, `OLANG_SCOPES=infer` only).** With every
-scope marker read as bare, the compiler places each local, and each call's result, in the shortest-lived scope every
-use allows: a value kept whole somewhere longer-lived than its block is built where it is kept from the start. Only a
-whole value's flow lengthens where it is built. A **view** of storage - a slice, a borrow of a part, what a callee hands
-back of an argument's storage - kept where that storage does not already live (past the loop turn or the block that
-built it, or through a reference result past the function) is a compile-time error naming a copy of what the view
-shows (`$x`, `x.Clone()`): `for k in range n { t := $k "-x"; keep.Push(t[0:1]) }` is refused, `keep.Push($t[0:1])`
-accepted. Likewise a **part** of an instance a local's constructor built - a value read out of its field or element -
-kept longer never lengthens where the instance is built: the field takes the binding of the constructor parameter it
-was given (as a field written `&q`, C2d), or the read is O20's error naming a copy (`$p.last`).
+**O27 (no storage extended for a view).** Only a whole value's flow lengthens where it is built (O28). A **view** of
+storage - a slice, a borrow of a part, what a callee hands back of an argument's storage - kept where that storage does
+not already live (past the loop turn or the block that built it, or through a reference result past the function) is
+a compile-time error naming a copy of what the view shows (`$x`, `x.Clone()`), never a copy made for it and never the
+storage held longer for a part of it: `for k in range n { t := $k "-x"; keep.Push(t[0:1]) }` is refused,
+`keep.Push($t[0:1])` accepted. Likewise a **part** of an instance a local's constructor built - a value read out of its
+field or element - kept longer never lengthens where the instance is built: the field takes a binding of its own (O28),
+or the read is O20's error naming a copy (`$p.last`).
+
+**O28 (scopes inferred).** No scope is written (QCB): the compiler places each local, each call's result, each
+temporary and each constructor field in the shortest-lived scope every use of it allows, over the whole program, as it
+infers obligations (O10b) and error sets (R1a). What a use asks is a lower bound - what flows into a slot of scope `t`
+must outlive `t` - or, where something can be stored through it (O25g), an equality; the placement is the least one all
+of them allow, and every judgment of this section is then made of it. So:
+
+- a local lives in its block unless what it holds is kept longer - stored into a longer-lived place, returned (O26a),
+  handed to a task (P2), given to a call whose obligations need it to outlive an argument - and then where it is kept,
+  built there from the start, not copied there;
+- a call's result is built where it is put (O18a), where its callee's obligations need it (O18c) or, handed back from
+  what the callee was given, lives where that does (O13);
+- a constructor field is its instance's, unless the field holds a view of what a reference parameter refers to and an
+  instance must outlive itself to keep it - read out of the field, or held by an instance a function returns or a
+  constructor builds into its own field - when it lives where that parameter's argument does: a **binding of its own**
+  (O23a), decided over the whole program;
+- a generator's elements live where its yields say (D18c).
+
+The placement never extends storage past the loop turn or the block that made it for a part of it (O27), and nothing is
+copied that the program did not write: where no placement satisfies every use, the program is refused with the error of
+the rule that fails, saying what to write instead - a copy (`$x`, `x.Clone()`), the value built where it is kept, or a
+call made directly rather than through a function value (T22a). A block stays a scope (O2): what it built that nothing
+outside keeps is reclaimed at its close. `olang explain` shows a function's obligations (B11b).
 
 **O13a.** A returned value whose **type** declares scope variables (T17c, or a constructor-bearing struct's
 tagged field) carries whatever those were bound to where the value was built. If one of them was bound to one
@@ -6453,9 +6380,9 @@ result where every `return` agrees:
   lives, as `it := ListIter(l)` would. That is all a result carries: what an argument was bound to is a constructor's
   instance's (C2d, through its bare-pun fields), never an ordinary function's result's, so `return copyOf(id.Data)`
   returns what `copyOf` built, whatever `id` is;
-- for a result **borrowed** from a parameter (`T&p`), the derived scope (O23a) every `return` gave a value in: the
-  call's result then lives where that resolves to - the referent of the argument's own field - rather than where
-  the argument does, which it outlives.
+- for a result handed back from a parameter's field with a binding of its own, the derived scope (O23a) every `return`
+  gave a value in: the call's result then lives where that resolves to - the referent of the argument's own field -
+  rather than where the argument does, which it outlives.
 
 A function whose body is not wholly checked (in a cycle of calls, O10c) adds nothing, and a call falls back to its
 signature.
@@ -6464,17 +6391,15 @@ signature.
 
 **O17.** *Determination by arguments.* An argument that is **already reference-shaped** carries a scope tag
 of its own, and binds the scope variable of the parameter it is passed for to that scope. Every argument
-binding the same variable — a parameter and those written `&` it (O4a) — must agree on one scope, or the call
-is a compile-time error.
+binding the same variable must agree on one scope, or the call is a compile-time error.
 
 A **value** lvalue passed for a reference parameter is borrowed (E12c): the callee receives that very storage,
 so it binds the variable to where that storage is - a value local's block, wherever its references were built, or
 the result scope for a local the function returns (O26a). Where
-those live elsewhere (a value built in the result scope by a scope argument, `b := Box&return(n)`, or a copy of an
-element, O25h) and the callee can keep something it builds in the value's own slots - a field it may assign a reference
+those live elsewhere (a copy of an element, O25h) and the callee can keep something it builds in the value's own slots - a field it may assign a reference
 to, or one referring to something that can be stored through (O25g) - what it built would be in the storage's scope under
-a value claiming the other: a compile-time error naming the fix, to declare it a reference where its references live
-(`b Box&return = Box(n)`). A field written `&p` is no such slot (its referent is where the instance's binding says, which
+a value claiming the other: a compile-time error naming the fix, to declare it a reference (`b Box& = Box(n)`). A field
+with a binding of its own is no such slot (its referent is where the instance's binding says, which
 a callee is held to, O23a); lent read-only, or for its fields' referents, the value is fine; a handle is lent as its
 reference (O17b).
 What the callee can do is read off its **body**, never its signature's types: it keeps something it builds in the lent
@@ -6506,7 +6431,7 @@ the block it is a temporary of (a call's result landed where its obligations say
 O25h; the element a `try` reads): the call binds the variable where those references live, so what the callee builds
 through them is built there, while its own copy is a temporary of the block the call is written in. Where something can
 be stored through the parameter and the callee keeps something in the value (its body, as above), the same error is
-reported - `addRef(idBox(seed), v)` building through `b.head` is `b Box&seed = idBox(seed)` written out; a callee that
+reported - `addRef(idBox(seed), v)` building through `b.head` is `b := idBox(seed)` written out; a callee that
 only reads may be given it. A callee **capturing the parameter itself** in a lambda that can outlive the call - returned,
 stored, handed to a callee that may keep it - keeps the lent value's own storage in the closure, which counts as keeping
 something in it (through a call cycle too); a lambda only called in the callee's frame (held in a local every use of
@@ -6517,7 +6442,7 @@ allocated is decided as for any temporary (O18a).
 
 **O17a.** *A split value is not held by reference.* A value whose references live where its own storage does not - a
 copy of existing storage (O25h, a copy out of a reference included: its references are where the referent is, O20), a
-by-value parameter (O4b), a value built where a scope argument says (O25a), a copy in an inner block of an outer one's
+by-value parameter (O4b), a copy in an inner block of an outer one's
 value - is borrowed into a reference only as a call's argument, which O17 judges by the callee's body. Anywhere else - a
 reference local's initializer (`br mut Box& = b`), an assignment to a reference (`r = b`, `a[0] = b`), a constructor's
 reference parameter (whose instance keeps it, which counts as handing the region out, O17) - it is a compile-time error
@@ -6562,20 +6487,17 @@ it in a lambda, walks it with `for`, assigns its field, or hands it where the bo
 `extern`, a trait's default) - is judged as O17 judges any lent value, by where the handle's storage is. A handle is still
 not held by reference (O17a), and a task's argument still lives until its join (P2).
 
-**O18.** *Supplying the result scope.* A scope argument (E25) binds the callee's result scope to where a
-variable of the caller lives. Without one, the result scope **follows the result** (O18a).
+**O18.** *Supplying the result scope.* No call names one (E25): the result scope **follows the result** (O18a).
 
-**O18a.** *Landing.* A result scope a call is not given is bound to the scope the call's result **lands** in,
-as a temporary is built where it lands (E12c):
+**O18a.** *Landing.* A call's result scope is bound to the scope the call's result **lands** in, as a temporary is
+built where it lands (E12c):
 
 | the result goes into | the result scope binds to |
 |---|---|
-| a declaration written with a bare `&` | the local's block |
-| a declaration written `&x` | where `x` lives |
-| a declaration written `&return` | the result scope (O26) |
+| a declaration of a reference | where the local lives (its block, unless the inference places it longer, O28) |
 | a declaration of a value holding references | the local's own block, as the local is (O25h) - the result scope, for one the function returns (O26a) |
 | an assignment's target | the scope the target's referent lives in (O25) |
-| `return f()` | the returning function's result scope, or `p`'s scope for a result borrowed from `p` |
+| `return f()` | the returning function's result scope |
 | an argument for a parameter of another call | that parameter's binding — and, where that is itself still landing, wherever the outer call's result lands |
 | a constructor's field or bare-pun parameter | the instance's scope (C2d) |
 | several targets of a destructuring (S4b) | their one scope, where they all agree (the program's, for globals); new locals, or targets that disagree: the caller's own block, where the call stands |
@@ -6648,8 +6570,7 @@ lambda's body - discharges its own obligations at its end and leaves the enclosi
 `n := try m.Get(k) catch { error }` lands as `n := try m.Get(k)` does.
 
 **O19.** Binding is per call. In `fn pick(v Vec<I32>&) Point&`, `v`'s scope is determined by the argument
-and the result scope lands or is supplied: `pick&x(v)` builds the result where `x` lives, `pick(v)` where it
-lands. A scope variable's binding is not a value the program can observe; whether a callee needs the region at
+and the result scope lands: `pick(v)` builds the result where it lands. A scope variable's binding is not a value the program can observe; whether a callee needs the region at
 run time (because it allocates into it, O6) is an implementation matter with no user-visible parameter.
 
 ### 8.7 Destructors and scope closing
@@ -6730,8 +6651,7 @@ bare pun, where matching one is the whole point) or with an earlier field's name
 
 **C2c.** A constructor's scope variables (§8 O3) are implicit: one per reference parameter (O4b), and the
 **instance scope** — where the instance lands, which a constructor has as a function has its result scope
-(O13): bound to wherever the call's result is put (O18a), or supplied by a scope argument (E25) —
-`Buf<I32>&x(4)` builds the instance where `x` lives.
+(O13): bound to wherever the call's result is put (O18a).
 
 **C2d.** In a constructor:
 
@@ -6740,10 +6660,10 @@ bare pun, where matching one is the whole point) or with an earlier field's name
   long as the instance does;
 - a **bare-pun** field of a bare reference parameter lives in the instance scope too, and the argument stored
   in it must outlive the instance (below);
-- a field written `&p`, naming a reference parameter, lives where that parameter's argument lives, and one
-  written `&f` where an earlier field `f` does (O4a). A reference field declared with `:=` writes no scope and takes its
-  initializer's (O25a): `x := text.Trim()` lives where `text`'s argument does, as `x String&text = text.Trim()` would,
-  and one initialized with a new value or anything else lives with the instance, as a bare field does. The constructed value carries these bindings, so a
+- a field the inference gives a **binding of its own** (O28: one whose initializer reads a reference parameter, holding
+  a view of what the parameter refers to and kept longer than the instance would let it) lives where that parameter's
+  argument lives - `x := text.Trim()` lives where `text`'s argument does - and one initialized with a new value or
+  anything else lives with the instance, as a bare field does. The constructed value carries these bindings, so a
   short-lived instance may refer into longer-lived storage — a cursor or a view into a structure. A function
   receiving such a value as a parameter reads the field at a derived scope standing for that binding (O23a), which
   each call resolves, so it may read, walk, relate and repoint through the field but not **build** through it: a
@@ -6773,9 +6693,8 @@ A violation is a compile-time error at that point, reported at the argument.
 An argument binds the instance this way only when the instance **may hold** what it refers to, as read off the
 constructor's checked body: the parameter is stored in a field (a bare pun included), built into one, passed to a call
 together with a field (which could keep one in the other), or shares what it refers to - through a local, a slice, a
-borrowed result - with something that is. **Building in the parameter's scope** shares it too: a field or local written
-`y String&p = ...`, one given a value a scope argument built there (`y := mk&p(n)`, E25), or anything holding such a
-value - new storage where the argument lives, which the argument's scope must outlive as the argument itself. A value that cannot carry a reference (a count, a flag, a new array of
+call's result handed back from it - with something that is. **Building in the parameter's scope** shares it too: a
+field or local placed where `p`'s argument lives (O28), or anything holding such a value - new storage where the argument lives, which the argument's scope must outlive as the argument itself. A value that cannot carry a reference (a count, a flag, a new array of
 numbers, T17c) carries nothing, so a constructor that only reads an argument binds nothing for it:
 `type Counts struct(text String&) { letters I64 = count(text) }` built from a local may be returned. A constructor
 whose body is being checked when its call is (a call inside its own body) binds every such argument.
@@ -6788,7 +6707,7 @@ own storage where a reference to it or a slice of it (E16a) is taken. Its nested
 but a call through a field written in one - `for i in range n { left.Push(i) }` - builds where the field is, in the
 instance's scope, as at the top level. A constructor's **by-value parameters** are slots of its frame, which closes at
 its return: shorter-lived than the instance, they are read as storage of an inner block, so a reference field is not
-given a borrow of one (`keep P& = p`, or a result borrowed from `p`) - a field punning one, or copying one (`q := p`),
+given a borrow of one (`keep P& = p`, or a call's result handed back from `p`) - a field punning one, or copying one (`q := p`),
 is a copy into the instance, which a reference field may be given. Storage a stack frame would hold but for its size (§2
 T7d, over 64KB) is the frame's, not the instance's: it comes from the constructor's own scope, the instance copied out
 before it closes - and so does a temporary made at its top level, so a field keeping a slice of one
@@ -6802,7 +6721,7 @@ type Link struct(v I32, next Link&) {
     next                                                   # lives wherever the Link does
 }
 l Link& = Link(1, Link(2, null))                           # the inner Link is a temporary: built in l's scope
-type Cursor struct(of List&) { list List&of = of }        # a Cursor may be shorter-lived than its List
+type Cursor struct(of List&) { list List& = of }          # a Cursor may be shorter-lived than its List
 ```
 
 **C2e (inline array fields).** An array stored in the instance itself is a value array field whose declaration gives
@@ -7448,8 +7367,7 @@ found wrong is wrong for every check that reads it after, and the first says wha
 (a clause's block, a lambda's body) is one of its own. Where such an error is about an argument or a value made in a
 block of this function that closes too soon, and the place it has to live is where another variable lives, a note at
 the local it was made as - following what it was read or borrowed from - says to make it there:
-`'text' is made here, in a block that closes first - make it where 'st' lives: 'ReadFile&st(...)'`, or, for one not
-made by a call, to declare it there (`'c Counter&ok = ...'`).
+`'text' is made here, in a block that closes first - keep a copy where it is kept ('$x', 'x.Clone()')`.
 An error met in the **standard library's** code (the prelude or `std`) while it is checked for one of the program's uses
 of it - a generic instantiated with the program's types - is the program's, since the library cannot be changed where
 it is used: it is reported at that use, the innermost one in the program's own files, with a note at the library's line
@@ -7468,9 +7386,9 @@ error.
 **B11b.** `explain FILE NAME` prints one top-level item of `FILE` as the compiler sees it, once the program `FILE` is the
 root of has checked: nothing is built, and a program with errors reports them instead. `NAME` is a function, a type, an
 error type, a global, or `Type.Method`. A function is printed with its whole signature - its receiver, parameters with
-their scope markers, results, and its error set, an inferred one (`?` alone, R1a) written out - then its contract's
+their types, results, and its error set, an inferred one (`?` alone, R1a) written out - then its contract's
 conditions (D17), each a line `[cond]` as written, and its scope
-obligations (O10b), each a line `[a outlives b]`, `return` standing for its result scope; a generic one is printed as
+obligations (O10b), each a line `# scopes: a outlives b`, `return` standing for its result scope; a generic one is printed as
 declared, then each instance the program made with its own errors and obligations. A struct is printed with its
 constructor's signature, its fields, its builders (B14), its methods and the traits with no type parameters it meets; an enum with its
 cases, an error type with its words, a trait with its methods; a constructor's contract follows its signature. A
@@ -7521,8 +7439,7 @@ layout, which has no options:
   operator (`-x`, `~x`, `$x`, `++x`); before a call's `(` and an index's `[`, a lambda's or function type's `fn(` and a
   constructor's `struct(` included - but `fn (receiver)`, and `) (results)` after a parameter list, take one. A type
   variable is a type like any other (`a T`), and a type parameter list sits against the name it follows (`fn
-  max<T>(`, `struct<T>(`). A reference marker `&`, and a scope after it (`T&x`,
-  `f&x(`), keeps the spacing it was written with, since that spacing decides what it is (T24, E25).
+  max<T>(`, `struct<T>(`). A reference marker `&` touches its type (`T&`, `T?&`).
 - A `{` has one space before it; a block on one line has one space inside each brace (`{ }` when empty).
 - A comment stays where it is, as written; a line comment's trailing spaces go. Consecutive lines each ending in a line
   comment have their comments start in one column, one space past the longest of their code.
@@ -8309,8 +8226,7 @@ and `Buf<I64>` are different types (T27); two instantiations are the same type e
 named type and every type argument are the same.
 
 **G10a.** A generic struct type that declares a constructor (§9.1) is constructed by writing its type
-arguments before the argument list, and a scope argument (E25) after them to build the instance where
-a variable lives: `Buf<I32>&x(4)`, or `Buf<I32>(4)` to build it where it lands (§8 O18a). The type
+arguments before the argument list: `Buf<I32>(4)` builds it where it lands (§8 O18a). The type
 arguments select the instantiation exactly as G8
 does in a type reference, and the call then targets **that instantiation's own** constructor: the
 generic's own constructor is never a call target, its parameter types still being type variables.
@@ -8354,9 +8270,7 @@ variable of its own - one its parameters name that is not in the type's list is 
 **G11.** A type argument may be a **reference**, written with a bare marker (`List<String&>`): wherever
 the instantiation holds a value of that type, the reference lives in its container's scope (O5), as an
 array's element reference does, and a parameter of that type is passed with its scope (O4b). A type
-argument naming a variable (`List<String&x>`, `any Iterator<String&x>&`) is a compile-time error: the variable belongs to the
-function writing it, inside generic code that cannot see it (O11). A generator's element is the one exception: its
-result `Iterator<T&p ? E>` or `Iterator<T&return ? E>` says where its elements live (D18c). A type variable written without a marker
+argument names no scope (none is written, O28). A type variable written without a marker
 (`x T`) and bound to a reference is that reference; written with one (`x T&`), `T` is the referent's type.
 Reference-shapedness is part of an instantiation's identity (G16a), so `List<String>` and `List<String&>`
 are two types.
@@ -8429,7 +8343,7 @@ for the type or call that asked for that instantiation, with its arguments, and 
 there in turn: of a long chain the innermost few, and always the outermost - the program's own use that began it.
 An error about where something lives (§8) found at one place of a generic's body is the same error for every
 instantiation, and is reported once; what its notes suggest writing is spelled with the generic's own variables
-(`n mut Node<K, V>&c`), as the declaration writes them.
+(`n mut Node<K, V>&`), as the declaration writes them.
 
 ### 12.7 Instances per array length
 

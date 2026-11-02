@@ -27955,3 +27955,59 @@ g12explicitlength, derivedhelpercountvec); cases whose refusal moved to another 
 s5destructnoscope and vec27cloneshort O25h, c2dmixedscopes C2d, d9alambdawritten D16a, d9cgrowing G17); the stale-view
 cases (retire01assert, retire02global, vechandle's stale) take the Vec by reference, as a value parameter is the callee's
 own copy and never stale; e31bvecinplace is new (RefMut in place, a store through `v[i]` with a growing value).
+
+## The rework, round 4: the flip - scopes inferred, none written (2026-11-02)
+
+QCB's last round (docs/rework.md section 20): the inference built behind `OLANG_SCOPES=infer` in round 1 is the only
+path, and every spelling of a scope leaves the grammar - a marker after a reference's `&` (`T&x`, `T&return`, `T?&x`), a
+scope argument (`f&x(...)`), an `outlives` item of a contract. A removed spelling is simply gone (principle 4): `x T&y`
+is a syntax error like any unknown form. Built on `wt-flip` in three commits (the tool, the grammar and the migration, the
+checks).
+
+**The migration.** `tools/scopes_migrate.olang` (token-based, idempotent; .olang files and the olang blocks of Markdown;
+a contract block over several lines listed `by hand:`) is the last text tool of `olang fix`. Over the repository it
+changed ~1,550 lines in 287 files (compiler/ had 748 markers, 24 `&return`, 18 scope arguments and 52 `outlives` as
+counted for QCB; std 80/33/2/7); `--check` over every folder now changes nothing. Strings the
+compiler's own tests build programs from, the fuzzers' generators (fuzz/gen.olang, fuzz/scopegen.olang - scope arguments
+became plain calls reading the local they named) and two fixtures outside .olang files (format's `ugly.want`) were done
+by hand.
+
+**What changed in the compiler.** `ast.TypeRef.Ref` lost its mark, `ContractBlock` its outlives, the parser `scopeDecl`;
+`KeptPerm`, `source.InferScopes` and every branch on them went; a signature's scopes are all its own (OwnScope), a
+borrowed result is no longer a fact of a type. Decided with it (mine, the user absent):
+1. **A reference result is as writable as written** (B'): `fn mk() mut Node&` gives a writable one, `fn mk() Node&` a
+   read-only one - a result built fresh is no longer writable for being built, since nothing in the signature says it
+   was. A constructor's result is always writable (`check.heldResult`). Tried first and reverted: inferring each result's
+   permission from its returns over re-attempts (permission proxies) - it turned over-rejections up in O10c and T17c
+   wherever a body's permission fed a caller's placement. About 25 of std's and the tests' builders became `mut`;
+   std/os's Env, ReadFile, MkTemp, RealPath, Cwd, Quote give `mut String&`.
+2. **D18c's element forms are inferred**: whether a generator's elements are built per turn, borrowed from a reference
+   parameter or kept by its walk is read off its yields (`generic.genElemOf`); the prelude's `ViewGenerator.Next` is the
+   one compiler-known borrowed result (from its receiver).
+3. **'&' before an operand on its line is the operator**: `b as Box.Val & mask` is `(b as Box.Val) & mask` - with no
+   scope after a type, an operand cannot follow a reference marker (the old E32 hint, `IsAsMarker`, was dead code).
+4. **explain/doc/hover print the inferred obligations** as `# scopes: a outlives b` under a signature, and keep `# not a
+   value: why` (T22a).
+
+**Found on the way.**
+- *A permission hole* (checks' rv3roclone): T25c's tracking of what an instance hands back of a read-only reference
+  parameter read the borrowed result off the type (`ResultFrom`), which no type says now - so a read-only
+  `List<List<I64>>` cloned gave writable inner lists (`c[0].Push(99)` wrote the caller's list). The checker now ties a
+  reference result to the parameters its returns reach (`roRefResult`, settled with the by-value results), conservatively
+  for a body not checked yet.
+- *A RefMut chain in a loop* (`users.RefMut(0).RefMut(0).Push(kept)`) was refused (O10c): landTerm now follows a call
+  handing back an argument through nested calls.
+- *A tuple result* failed MIR's verifier (fits compared tuples whole); compared element-wise.
+- Removing the marker errors uncovered latent errors in old checks cases (D3b unused locals that held only a scope
+  argument's name, T25c read-only constructor parameters stored into `mut` fields), fixed in the cases.
+
+**The checks.** Of the 182 cases the flip changed, 32 were about a written scope (O3/O4a names, D17d/f outlives, E25
+scope arguments, G11/D18c written element forms, a T22 written type, O26 `&return`) and went; 115 had been refused only
+because a written scope said too little - inferred, each value is built where it is kept, and each now runs clean under
+`-debug -sanitize` as a run case; 35 name today's error for the same program (O27 a kept view, T22a, O10c, O20, O25h,
+C2d, O17, T25c). The interpret scenario's refused program is a kept view (O27); vecalias's n2 calls `View2` by name (made
+a value it is T22a's error now).
+
+**Left.** docs/rework.md's open point 5 (a function type's `T&` result read as borrowed from its `&` parameters) is not
+built: a function handing back what an argument refers to is no value. The small-block folding (O2's tiny block folded
+into its parent) is not built. The field loop's quiet rounds (scope.inferFields) still judge the whole program each round.

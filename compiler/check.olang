@@ -21658,7 +21658,6 @@ fn (c mut Checker&) settleUnread() {
         }
         k := pair.Pair(u.File, (I64(u.Sp.Start) << 32) | I64(u.Sp.End))
         if not (try held.Get(k) catch default false) { continue }
-        # the rework's round 1 (OLANG_SCOPES=infer): a local named by a marker read as bare was read by it
         c.P.L.Diags.Error(where, msgs.LocalUnused(c.tok(u.Name)))
     }
 }

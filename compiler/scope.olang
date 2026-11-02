@@ -87,7 +87,7 @@ type rel struct(Hi Term, Lo Term, Exact Bool, At source.Span, Why I64, View Bool
     Exact
     At
     Why      # a constructor's: WhyHolds where its instance holds an argument (C2d), WhyField where a "&q" field names one
-    View     # the inference's (OLANG_SCOPES=infer): what Lo's slot keeps of Hi is a view of storage, never lifted (O27)
+    View     # the inference's: what Lo's slot keeps of Hi is a view of storage, never lifted (O27)
 }
 
 WhyHolds I64 = 1
@@ -325,7 +325,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     atDest Bool = false                    # the choice val judges next builds its new values at its destination (E28)
     landSite I64 = -1                      # the call an assignment's value is, and its "=" (C2d through a result)
     landSp source.Span = source.Span(0, 0)
-    # the rework's round 1 (OLANG_SCOPES=infer, docs/rework.md 2.3-2.5): quiet judgings gathering what each local's uses
+    # the inference (O28, docs/rework.md 2.3-2.5): quiet judgings gathering what each local's uses
     # need of it - a fit or a callee's obligation the local's claim fails proposing a longer one, liftGrew set where a
     # proposal lengthened one - then the judging that reports, with the claims the gathering found
     liftGather Bool = false
@@ -346,6 +346,8 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # the field inference (2.6): quiet judgings of the program collecting the declarations whose fields a refusal needs
     # given a binding of their own, by declaration; what was promoted and given back, by (declaration, field)
     fieldGather Bool = false
+    wantHits I64 = 0                          # a field-gathering judging's refusals left unsaid for the field inference
+    FieldRounds Vec<I64>                      # each field-gathering round's wantHits, -1 after one that promoted
     finalQuiet Bool = false                   # the quiet judging after a body's claims are inferred: its refusals count
     wantDecl Map<I64, Bool>
     wantField Map<pair.Pair<I64, I64>, Bool>
@@ -370,8 +372,7 @@ fn (s mut Scoper&) Run() {
         if m.Src is not null and m.File >= 0 { s.texts.Put(m.File, m.Src!.Text) }
     }
     s.components()
-    s.inferFields()
-    s.judgeAll(true)
+    if not s.inferFields() { s.judgeAll(true) }
     s.fnValues()
     s.anyTables()
     s.exports()
@@ -559,10 +560,10 @@ fn (s mut Scoper&) component(comp Array<I64>&, report Bool) {
             if not grew { break }
         }
     }
-    # the inference's claims (OLANG_SCOPES=infer), then the judging that reports - or, quietly, the one whose refusals the
+    # the inference's claims, then the judging that reports - or, quietly, the one whose refusals the
     # field inference reads
     for b in comp { s.inferClaims(b) }
-    s.finalQuiet = not report
+    s.finalQuiet = not report or s.fieldGather
     for b in comp { s.judge(b, report) }
     s.finalQuiet = false
     for b in comp {
@@ -6505,6 +6506,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                     # callee's obligations then judge (O10c), as stage 0 binds it
                     v = existing(s.here())
                 } else if s.fieldGather and s.finalQuiet {
+                    s.wantHits++   # a refusal not said, so this judging cannot be the reporting one (inferFields)
                     s.wantPromotion(pr.X)
                 } else if s.report {
                     # x[i]'s copy, said at its "[" (E31b)
@@ -8224,7 +8226,7 @@ fn (s mut Scoper&) fitErrorAt(sp source.Span, kind I64, exact Bool) I64 {
     return s.err(sp, m)
 }
 
-# ---- the inference (OLANG_SCOPES=infer, the rework's round 1, docs/rework.md 2.3-2.5) ----
+# ---- the inference (O28, QCB; docs/rework.md 2.3-2.5 and section 20) ----
 #
 # The judgment stays; only who proposes a local's claim changes. With every written marker read as bare, a local's claim
 # starts where a written "&" put it - its block, or its initializer's term for ":=" - and quiet judgings of the body
@@ -8581,14 +8583,18 @@ fn (s mut Scoper&) traceAt(at I32) String {
 # the declarations a refusal needs promoted - a value read out of one of their fields kept longer than its container,
 # an instance of one lent where its references and its own storage differ (O17) - and each field of theirs that holds what
 # a constructor parameter was given is given that parameter's binding; then the program is judged again. A promoted field
-# some body builds through where no binding is known (O23a) goes back for good. Promotions only grow, so the rounds end
-
-fn (s mut Scoper&) inferFields() {
+# some body builds through where no binding is known (O23a) goes back for good. Promotions only grow, so the rounds end.
+# Each round is a whole judging that reports, its diagnostics forgotten when it promoted or gave back a field; the round
+# that changes nothing and left no refusal unsaid for the inference (wantHits) is the reporting judging itself - true
+# then, and Run judges no more (one whole judging saved: the compiler's scope phase 6.5 -> 5.3 s)
+fn (s mut Scoper&) inferFields() Bool {
     for _ in range 16 {
         s.wantDecl.Clear()
         s.wantField.Clear()
+        s.wantHits = 0
+        mark := s.P.L.Diags.Count()
         s.fieldGather = true
-        s.judgeAll(false)
+        s.judgeAll(true)
         s.fieldGather = false
         grew := false
         for d in s.wantDecl.Keys() {
@@ -8603,8 +8609,12 @@ fn (s mut Scoper&) inferFields() {
                 grew = true
             }
         }
-        if not grew { break }
+        s.FieldRounds.Push(-1 if grew else s.wantHits)
+        if not grew and s.wantHits == 0 { return true }
+        s.P.L.Diags.Forget(mark)
+        if not grew { return false }
     }
+    return false
 }
 
 # the declaration of the struct a value of type t is, or refers to, whose constructor the pass knows; -1 for none
@@ -9301,11 +9311,15 @@ if TestBuild {
         # nt is lent for mark's t, which shares p's scope, the scope build's result is borrowed from: it lives there
         b := bodyAt(l, c.Bodies, 9)
         assert b >= 0
+        # nt is handed back through mark, so it lives where build's result goes - outside build's frame
         stored := false
         for x in s.Plans[b].Stored {
-            if x == typed.Scope.Var(0) { stored = true }
+            match x {
+                case typed.Scope.Var(_): stored = true
+                case _ { }
+            }
         }
-        assert stored, "nt is stored where p lives"
+        assert stored, "nt is stored where the result goes"
         # shout's array and label's text are what they return: each built in its function's result scope, the one
         # scope variable an array value's result gives it
         for n in I64[13, 17] {
@@ -9346,8 +9360,9 @@ if TestBuild {
         assert building == 1 and reading == 1, $building " " $reading
     }
 
-    # a task's built result into a "&p" field of a parameter (a derived scope) judged as the plain assignment it is
-    # (C2d) - it was stored with none of an assignment's checks, built in the join's scope (review port1 l03)
+    # a task's built result into a field of a parameter (a derived scope) judged as the plain assignment it is (C2d) - it
+    # was stored with none of an assignment's checks, built in the join's scope (review port1 l03); inferred, both are
+    # built where the field lives (O28)
     spDerived String& = ("type Node struct(v I64) {\n"
                          "    v\n"
                          "    next mut Node?& = null\n"
@@ -9363,7 +9378,7 @@ if TestBuild {
                          "    h.r = mkNode(i)\n"
                          "}\n")
 
-    test "C2d, P1g: a task's built result stored into a '&p' field of a parameter is refused as the assignment is" {
+    test "C2d, P1g: a task's built result stored into a field of a parameter is built where the field lives, as the assignment's is" {
         dir := try os.MkTemp() catch os.Error { unreachable }
         defer { try os.RemoveAll(dir) catch os.Error { } }
         try os.WriteFile($dir "/main.olang", spDerived) catch os.Error { }
@@ -9379,6 +9394,6 @@ if TestBuild {
         c.CheckProgram()
         s := Scoper(p, c.Bodies)
         s.Run()
-        assert rootRules(l) == "C2d C2d ", rootRules(l)
+        assert rootRules(l) == "", rootRules(l)
     }
 }

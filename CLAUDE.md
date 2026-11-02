@@ -105,7 +105,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   The default stays `-O3` + LTO (B2c).
 - **`explain FILE NAME` (B11b, the user's call 2026-10-24).** Beside `explain RULE`: one top-level item of FILE as the
   compiler sees it, once the program checks - a function's whole signature, an inferred error set written out (marked
-  `# its error set inferred`), its scope obligations as `[a outlives b]` lines (`return` the result scope), a generic's
+  `# its error set inferred`), its scope obligations as `# scopes: a outlives b` lines (inferred, QCB) (`return` the result scope), a generic's
   instances each with their own; a type's constructor, fields, own methods and the parameterless traits it meets; an
   enum's cases, an error type's words, a trait's methods; a global's type and its baked value (`$` of it, through the
   evaluator), else `# set at startup`. `Type.Method` names a method. `-target`, `-define` and `-update` apply.
@@ -255,7 +255,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   a build (every mode: -debug, -race, -sanitize, test), a frame replaced in the evaluator (`Machine.tail`: the callee's
   frame pushed, moved into the caller's slot, the caller's storage closed), so ten million steps of mutual recursion
   run in one frame, built and interpreted. Its errors are the function's own, so no `try`. Decided (mine): only a call
-  of a function or method declared with `fn` (no function value, constructor, extern, export fn, any, scope argument),
+  of a function or method declared with `fn` (no function value, constructor, extern, export fn, any),
   only in one (never main, an export fn, a lambda, a generator, a test, a constructor or destructor); one signature -
   parameters (types, permissions, scopes, T22), result - and, once sets are final, one error set in one order (R6's
   codes); nothing passed through memory (over 128 bytes); not in deferred code, a message, a task clause or a join, nor
@@ -685,10 +685,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   writable parameters, writable for read-only results is safe); a function with scope obligations or a `Call` that
   keeps its argument cannot become a value; a type's `Call` fits a function type (E31), its errors the type's in order
   (2026-10-25: never compared, so a `Call` with a contract read its error code as a result). A
-  function value returned from a parameter is an obligation (O14a). Where its references live is part of a function
-  type (T22, 2026-10-18): a parameter sharing another's scope (`b N&a`) or a borrowed result (`T&p`) makes a function a
-  value only of a type saying the same, so `fn link(a mut N&, b N&a)` is no `fn(a mut N&, b N&)` (it was accepted, and
-  crashed: the call passed other hidden scope arguments and established nothing link requires).
+  function value returned from a parameter is an obligation (O14a). No function type says where references live (QCB,
+  2026-11-02): a function whose inferred obligations relate its arguments' scopes - `fn link(a mut N&, b N&)` storing b
+  into a, or one handing back what an argument refers to - is no value (T22a), said by explain/doc/hover (`# not a
+  value`) and at the conversion; a lambda calling it is one. (Until 2026-11-02 a type could write `b N&a` or `T&p`; docs/rework.md's
+  open point 5 - a function type's `T&` result read as borrowed from its `&` parameters - is not built.)
 - **Static literals (T25d).** A literal known while compiling reaching a read-only reference is the constant data
   itself; an immutable global no writable reference reaches is `constant`, and importers see its value (K2).
 - **A number type's limits through its name (E36, the user's decision 2026-10-24).** `I64.Max`, `U8.Min`, `T.Max`
@@ -807,19 +808,21 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   Next call passed, a `.drop` registered there destroying a walk stopped part way - closing the scopes it holds - and a
   wrapper that is the function value's code); eval keeps the suspended frame's words and scopes and restores them.
   **Decided (mine)**: the value yielded is built in each `Next` call's result scope - so `for w in words(t)` reclaims
-  each value per turn - which no local outlives: `&return` is an error in such a generator, O26a moves nothing there, a
-  yielded local holding the generator's own storage is O26 worded for yield (write `$x`/`x.Clone()`), and a yielded
-  borrow of a parameter's referent is T22a's (the walk's Next is a function value; the error names `Iterator<T&p>`).
-  **Borrowed elements (D18c, QBB, the user's decisions 2026-10-26; built 2026-10-26)**: `fn words(t String&)
-  Iterator<String&t>` yields views of what `t` refers to, `Iterator<T&return>` views of storage its walk keeps where the
-  generator lives (`x T&return` locals, what they hold, a temporary yielded) - read-only, never null, `p` a reference
-  parameter. The call gives the prelude's `ViewGenerator<T ? E>`, whose `Next() T&g` is borrowed from the receiver, so
+  each value per turn - which no local outlives: O26a moves nothing there, and a yielded local holding the generator's
+  own storage is O26 worded for yield (write `$x`/`x.Clone()`).
+  **Borrowed elements (D18c, QBB, the user's decisions 2026-10-26; built 2026-10-26; inferred since 2026-11-02, QCB)**:
+  `fn words(t String&) Iterator<String&>` yielding views of what `t` refers to, or views of storage its walk keeps where
+  the generator lives (locals kept for the walk, what they hold, a temporary yielded) - read-only, never null. Which of
+  the three a generator's elements are (built per turn, borrowed from a reference parameter, kept by the walk) is read
+  off its yields (`generic.genElemOf`; once written `Iterator<T&t>` / `Iterator<T&return>`); one mixing them is an
+  error naming a copy. The call gives the prelude's `ViewGenerator<T ? E>`, whose `Next() T&g` is borrowed from the receiver, so
   any consumer reads an element where the generator value lives (G11's container); a for-in's own walk of a direct
   `&t` call reads it where the argument for `t` lives (`Scoper.walkElem`), so `for w in words(t) { kept.Push(w) }`
   keeps them as long as `t`'s text. Built (mine) on the lambda: `Body.GenElem` names the capture the elements live
   with and a yield is judged as a result borrowed from it (built there if new); `&return` is a hidden null capture of
   the generator's result scope (`GenHome`), which every capture is assumed to outlive in that body; such a generator
-  is no `any Iterator<T&>&` (T32a). Limit: a generator held in a local of an inner block reads its `&t` elements there.
+  is no `any Iterator<T&>&` (T32a). Limit: a generator held in a local of an inner block reads its borrowed elements
+  there.
   **The walk dropped with its loop (D18e, mine)**: a for-in's own walk never lands by obligations - it is made in the
   loop's block whatever it was given (constant text, a global's array) and dropped as that block is left: 552 MB ->
   1.7 MB over 4M walks of a generator over a global array; the evaluator reuses a closed generator's record
@@ -1042,8 +1045,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   before (O8c); globals live in the program's scope (O1b). Allocas are in the entry block (O2c). The arena aligns by
   size, 64 at 64 bytes (O8a); aggregates take their own alignment. The chunk pool is per-thread size classes bounded
   by RAM/8 with an LRU, parked workers sharing the rest (O8b).
-- **Scopes inferred, none written (QCB, the user's decision 2026-10-30: "Yes, do this scoping rework"; not built
-  yet).** Every scope marker goes - `&x`, `&return`, scope arguments `f&x()`, `outlives` - and the compiler places each
+- **Scopes inferred, none written (QCB, O28, the user's decision 2026-10-30: "Yes, do this scoping rework"; built
+  2026-11-02, round 4 of docs/rework.md).** Every scope marker goes - `&x`, `&return`, scope arguments `f&x()`, `outlives` - and the compiler places each
   value in the shortest-lived scope every use allows (region inference over the whole program, as obligations already
   are; field and result scopes hidden parameters), a value kept longer built directly where it is kept. One rule keeps
   memory at today's best hand placement: no storage is extended past the loop turn or block that made it - a view of such
@@ -1055,13 +1058,17 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   user, 2026-10-31): what a block built that nothing outside keeps is freed at its close, guaranteed - the one
   structural handle on memory left. Optimization (the user: a tiny block's overhead may be skipped): a block whose
   allocations are bounded and small, with no loop between it and the enclosing scope, is folded into that scope (no
-  header, no close) - its memory freed at most one scope later, by a bounded amount (mine: the bound and the rule). The rules below are
-  today's until it lands. **Round 1 is built behind `OLANG_SCOPES=infer`** (2026-10-31, `wt-rework`, measured in
-  docs/rework.md section 9; without the switch bench's IR and the compiler are byte-identical).
-- **No scope names (O3, O4a, O13, O14, O26, the user's design 2026-10-05).** A marker is bare `&`, `&x` (lives where
-  `x` does) or `&return`. Every reference parameter has an implicit scope (O4b), a by-value parameter holding
-  references too; a scope argument `f&x()` (E25). A result is built (`T&`, in the result scope, which lands where the
-  call's result is put - O18a) or borrowed (`T&p`).
+  header, no close) - its memory freed at most one scope later, by a bounded amount (mine: the bound and the rule). (Not built: the folding - every block keeps its scope; recorded in docs/rework.md section 20.) Round 1 was
+  built behind `OLANG_SCOPES=infer` (2026-10-31); round 4 made it the only path (2026-11-02): the switch, every marker,
+  scope argument and `outlives` gone from the grammar, the repository migrated by `tools/scopes_migrate.olang` (in `olang
+  fix`), explain/doc/hover printing the inferred obligations as `# scopes: a outlives b`. Decided with it (mine, the user
+  absent): a function's reference result is as writable as written (`mut T&` where the caller may write it; a
+  constructor's always) - a built result is no longer writable by being built; the checks that were refused only for a
+  written scope's sake now run under `-sanitize` (115 of them), the rest name today's errors (O27, T22a, O10c, ...).
+- **No scope written (O28, QCB, 2026-11-02; replacing the user's 2026-10-05 scope names).** A reference is a bare
+  `&`. Every reference parameter has an implicit scope (O4b), a by-value parameter holding references too, a hidden
+  parameter the compiler binds at each call; a result lands where the call's result is put (O18a) or, handed back from
+  what an argument refers to, lives where that does (O13) - read off the body, shown by explain.
 - **A reference never narrows (O25, the user's decision).** A local's type says where it lives (O25a); `:=` takes its
   initializer's scope; exactness is required only where something can be stored through (O25g), else outliving. Copies
   of reference-holding values keep their references where the source's are (O25h).
@@ -1077,8 +1084,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   constructor, with the instance (2026-10-24, uafcc).
 - **Lending (O17, O17a, O17b).** A value whose references live elsewhere than its storage is lent only to callees that
   keep nothing in it, read off their bodies; a handle (a struct of one reference) is lent as its reference.
-- **Derived and unknown scopes (O12, O23, O23a).** A `&p` field of a parameter reads at a derived scope resolved per
-  call; a scope not known here (alternatives from different scopes) is read but never built into.
+- **Derived and unknown scopes (O12, O23, O23a).** A field holding a view of what a constructor's reference parameter
+  refers to has a binding of its own (inferred, O28), read at a derived scope resolved per call; a scope not known here (alternatives from different scopes) is read but never built into.
 - **Constructors (C2d, C2g).** A bare field lives with the instance; an argument binds the instance only where the
   body can make it hold it; a constructor's top level allocates into the instance scope. A field given a lambda or an
   adapter is never "a local only ever called" (D16d's frame latitude): the instance is assembled from it, so the
@@ -1638,7 +1645,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   named with that trait (`Rooms (House's)`); no inline type lists (additive later, decided).
 - **Contracts (D17-D17g; the user's design 2026-10-24, revised by the user 2026-10-25; details mine).** One bracketed
   block right after the parameter list: `fn pick(x I32, y I32) [y > x] I32 ? ArgumentError { }`, `fn between(lo I64,
-  hi I64, x I64) [hi >= lo, x >= lo and x <= hi] Bool`, `fn link(a mut List<Node&>&, b Node&) [b outlives a]`,
+  hi I64, x I64) [hi >= lo, x >= lo and x <= hi] Bool`,
   `type Percent struct(v I64) [v >= 0 and v <= 100] { v }`. A condition is any `Bool` expression over the parameters and
   what a body reads at its top level - calls, fallible calls, lambdas included. **Checked on entry in every build**, in
   order: a false one fails the call with the prelude's `ArgumentError.Invalid`, its trace line and `!`'s message naming
@@ -1649,8 +1656,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   at a call whose arguments are all values it computes a false condition is an error at the call - unless a `catch`
   there takes its `ArgumentError`, when it fails at run time as written (a test of the failure path; 2026-10-25, the
   lang25 review, reversing "whatever handles it"); where the evaluator runs a call (a baked global, a decided assert) the conditions are checked as at run time.
-  `outlives` chains are compile-time obligations only (O10b), so such a function is no value (T22a); one with value
-  conditions is a value, checked on entry through it. A trait method's contract is checked before a call through an
+  Scope relations are no condition: they are inferred obligations (O10b; `outlives` items removed 2026-11-02, QCB). A
+  function with value conditions is a value, checked on entry through it. A trait method's contract is checked before a call through an
   `any` dispatches, then the implementation checks its own. **Removed 2026-10-25**: the position after the signature,
   guarantees, named results, `return x` entry values, `for`/`if`/`fits` items, `checked f(x)`. D17g stays: a
   conversion of a value the evaluator computes that does not fit (`U8(300)`) is a compile error naming
