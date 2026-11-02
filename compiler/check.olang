@@ -4839,13 +4839,17 @@ fn (c mut Checker&) readLocal(sp source.Span, l I64) typed.Expr& {
     return typed.Expr.Read(sp, t, typed.Lvalue.Local(sp, t, typed.LocalId(I32(l))), typed.SiteId(-1))
 }
 
+# a call of body giving ty - a zero value's constructor call where zero says (D13c)
+fn (c mut Checker&) callOfBody(sp source.Span, ty types.TypeId, body I64, args Array<typed.Expr&>&, zero Bool = false) typed.Expr& {
+    return typed.Expr.Call(sp, ty, typed.Call(typed.Callee.Body(typed.BodyId(I32(body))), args, typed.Mark.None, c.site(typed.SiteKind.Call, sp), zero))
+}
+
 fn (c mut Checker&) bodyCall(sp source.Span, body I64, ty types.TypeId, args Array<typed.Expr&>&, held Vec<I64>&
     extra Vec<I64>&) typed.Expr& {
     from := c.exprs.Len()
     for i in range args.Len() { c.exprs.Push(c.heldArg(args, held, i)) }
     for l in extra { c.exprs.Push(c.readLocal(sp, l)) }
-    return typed.Expr.Call(sp, ty, typed.Call(typed.Callee.Body(typed.BodyId(I32(body))), gather(c.exprs, from), typed.Mark.None
-                                              c.site(typed.SiteKind.Call, sp)))
+    return c.callOfBody(sp, ty, body, gather(c.exprs, from))
 }
 
 # D17g: a conversion to a number type of a value the evaluator computes is asked of it, so a constant out of range is
@@ -7197,8 +7201,7 @@ fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr& {
             c.nullDecl = wasNull
         }
         c.ctorCalled = was
-        return typed.Expr.Call(sp, t, typed.Call(typed.Callee.Body(typed.BodyId(I32(id))), args, typed.Mark.None
-                                                 c.site(typed.SiteKind.Call, sp), true))
+        return c.callOfBody(sp, t, id, args, zero = true)
     }
     # T2c: an enum's zero value is its first case with its payload's zero bits - none where a part of it is a reference
     # never null
@@ -7218,8 +7221,7 @@ fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr& {
     if c.zeroCalls(t) {
         id := c.ctorBody(t)
         p0 := c.P.T.Items(c.P.T.Params(c.P.CtorSig(t)))[0]
-        return typed.Expr.Call(sp, t, typed.Call(typed.Callee.Body(typed.BodyId(I32(id))), c.one(c.zero(sp, p0)), typed.Mark.None
-                                                 c.site(typed.SiteKind.Call, sp), true))
+        return c.callOfBody(sp, t, id, c.one(c.zero(sp, p0)), zero = true)
     }
     return c.lit(sp, t, 0)
 }
