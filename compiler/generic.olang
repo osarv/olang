@@ -837,7 +837,14 @@ fn (p mut Program&) refType(c Context&, sp source.Span, r types.TypeId, nullable
 # is - or Unknown where t is none
 fn (p mut Program&) DeclaredFunc(t types.TypeId) types.TypeId {
     if p.T.KindOf(t) != types.Kind.Named or p.T.DeclKindOf(p.T.DeclOf(t)) != types.DeclKind.Over { return types.UnknownT }
-    p.overBodies(t)
+    # told by its declaration's text - asking for any other's body here would follow a cycle of types over arrays of
+    # each other (T29) around
+    td := p.typeDecl(p.T.DeclOf(t))
+    if td is null or td.Body is null { return types.UnknownT }
+    match td.Body {
+        case ast.TypeBody.Over(base, _) { if not base.IsFunc(): return types.UnknownT }
+        case _ { return types.UnknownT }
+    }
     if not p.Body(t) { return types.UnknownT }
     b := p.T.Base(t)
     if p.T.KindOf(b) != types.Kind.Func { return types.UnknownT }

@@ -107,9 +107,9 @@ attrbuiltin.olang:3:2: error[G39]: an attribute is a value of a declared type - 
       |  ^~~~~~
 compilation failed with 1 error
 === attrfntype.olang
-attrfntype.olang:4:14: error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one
-    4 | fn call(f fn(@Key("x") n I64) I64) I64 { return f(1) }
-      |              ^~~~~~~~~
+attrfntype.olang:4:15: error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one
+    4 | fn call(f fn&(@Key("x") n I64) I64) I64 { return f(1) }
+      |               ^~~~~~~~~
 compilation failed with 1 error
 === attrglobal.olang
 attrglobal.olang:4:1: error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one
@@ -431,7 +431,7 @@ becomenotcall.olang:3:26: error[S21]: 'become' takes a call of a function or a m
       |                          ^~~~~
 compilation failed with 1 error
 === becomesig.olang
-becomesig.olang:4:28: error[S21]: 'become' calls a function of this one's own signature, and this is fn(I64) I64, the callee fn(I64, I64) I64 - write 'return' and the call, or give them one signature
+becomesig.olang:4:28: error[S21]: 'become' calls a function of this one's own signature, and this is fn&(I64) I64, the callee fn&(I64, I64) I64 - write 'return' and the call, or give them one signature
     4 | fn one(n I64) I64 { become add(n, 1) }
       |                            ^~~
 compilation failed with 1 error
@@ -715,7 +715,7 @@ c9byield.olang:34:11: note: it is taken out of a collection whose values are not
       |           ^
 compilation failed with 1 error
 === callparammut.olang
-callparammut.olang:12:9: error[E12]: expected fn(n Node&), found Writer
+callparammut.olang:12:9: error[E12]: expected fn&(n Node&), found Writer
    12 |   apply(w, n)
       |         ^
 compilation failed with 1 error
@@ -730,9 +730,9 @@ callvaluekeeps.olang:20:13: error[T22a, E31]: Keeper's Call relates its argument
       |             ^~
 compilation failed with 1 error
 === callvaluekeepsblock.olang
-callvaluekeepsblock.olang:21:24: error[T22a, E31]: Keeper's Call relates its arguments' scopes, which a call through a function value cannot check - call it by name
-   21 |     s fn(x fn() I64) = kp
-      |                        ^~
+callvaluekeepsblock.olang:21:26: error[T22a, E31]: Keeper's Call relates its arguments' scopes, which a call through a function value cannot check - call it by name
+   21 |     s fn&(x fn&() I64) = kp
+      |                          ^~
 compilation failed with 1 error
 === callvaluekeepsframe.olang
 callvaluekeepsframe.olang:22:13: error[T22a, E31]: Keeper's Call relates its arguments' scopes, which a call through a function value cannot check - call it by name
@@ -918,11 +918,11 @@ d10aforbreak.olang:3:4: error[D10a]: the end can be reached without returning I3
       |    ^
 compilation failed with 1 error
 === d11amutfn.olang
-d11amutfn.olang:6:10: error[D9]: a by-value parameter is the callee's own copy, always writable - 'mut' is for a reference, and fn(x I64) I64 is none
-    6 | fn use(f mut fn(x I64) I64) I64 { return f(1) }
+d11amutfn.olang:6:10: error[D9]: a by-value parameter is the callee's own copy, always writable - 'mut' is for a reference, and fn&(x I64) I64 is none
+    6 | fn use(f mut fn&(x I64) I64) I64 { return f(1) }
       |          ^~~
-d11amutfn.olang:8:7: error[D11a]: a local is always writable - 'mut' is for a reference, and fn(x I64) I64 is none
-    8 |     f mut fn(x I64) I64 = dbl
+d11amutfn.olang:8:7: error[D11a]: a local is always writable - 'mut' is for a reference, and fn&(x I64) I64 is none
+    8 |     f mut fn&(x I64) I64 = dbl
       |       ^~~
 compilation failed with 2 errors
 === d11amutinferred.olang
@@ -974,7 +974,7 @@ d15null.olang:12:31: error[T6a, E4a]: this literal expression's value needs more
       |                               ^
 compilation failed with 4 errors
 === d16arity.olang
-d16arity.olang:5:16: error[D16a]: fn(x I32) I32 takes 1 parameter, and this lambda 2
+d16arity.olang:5:16: error[D16a]: fn&(x I32) I32 takes 1 parameter, and this lambda 2
     5 |     n := apply(fn(a, b) { return a })
       |                ^~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
@@ -1035,7 +1035,7 @@ d16return.olang:6:16: error[D10a]: the end can be reached without returning I32 
       |                ^~~~~~~~~~~~~~~
 compilation failed with 2 errors
 === d16sig.olang
-d16sig.olang:5:19: error[D16a]: this lambda's signature disagrees with fn(x I32) I32 - leave that part out, or make them agree
+d16sig.olang:5:19: error[D16a]: this lambda's signature disagrees with fn&(x I32) I32 - leave that part out, or make them agree
     5 |     n := apply(fn(x I64) { return 1 })
       |                   ^~~~~
 compilation failed with 1 error
@@ -1394,7 +1394,7 @@ d8gtwo.olang:3:19: error[D8g]: a variadic parameter is the last one but defaulte
       |                   ^~~~~~~~~
 compilation failed with 1 error
 === d9alambdawritten.olang
-d9alambdawritten.olang:8:31: error[D16a]: this lambda's signature disagrees with fn(x Array<I32>) Bool ? E - leave that part out, or make them agree
+d9alambdawritten.olang:8:31: error[D16a]: this lambda's signature disagrees with fn&(x Array<I32>) Bool ? E - leave that part out, or make them agree
     8 |     try io.Println($a.Some(fn(x Array<I32>) Bool { return x[0] == 5 }))
       |                               ^~~~~~~~~~~~
 compilation failed with 1 error
@@ -1746,6 +1746,14 @@ e28condlocallent.olang:25:7: error[E31b]: x[i] gives a copy of the element, whic
    25 |     (l[0] if k > 0 else x).Bump()
       |       ^
 compilation failed with 9 errors
+=== e31bcallargs.olang
+e31bcallargs.olang:12:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   12 |     v[0].Push(grow(v))
+      |      ^
+$ROOT/std/prelude/vec.olang:58:5: note: the callee is no view of the element because of this statement
+   58 |     if v.n == v.data.Len() { v.room(v.n + 1) }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
 === e31bfieldviewbuild.olang
 e31bfieldviewbuild.olang:28:31: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
    28 |     for i in range 3 { g(l[0].w, i + 10) }
@@ -1878,9 +1886,9 @@ e31bviewfnvalue.olang:15:8: error[E31, O17]: x[i] gives a copy, and the call can
 e31bviewfnvalue.olang:15:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    15 |     f(s[0], fn(x mut V&) { })
       |        ^
-e31bviewfnvalue.olang:11:34: note: the callee is no view of the element because of this statement
-   11 | fn f(v mut V&, h fn(x mut V&)) { h(v) }
-      |                                  ^~~~
+e31bviewfnvalue.olang:11:35: note: the callee is no view of the element because of this statement
+   11 | fn f(v mut V&, h fn&(x mut V&)) { h(v) }
+      |                                   ^~~~
 compilation failed with 2 errors
 === e31bviewinc.olang
 e31bviewinc.olang:15:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -1953,7 +1961,7 @@ e31bviewvalue.olang:15:18: note: the callee is no view of the element because of
       |                  ^~~~~~~~~
 compilation failed with 1 error
 === e31callerrs.olang
-e31callerrs.olang:10:16: error[T22, E31]: Gate's Call fails with ArgumentError where the function type says nothing - the same errors in the same order: write the function type 'fn(I64) I64 ? ArgumentError', or pass a lambda handling them
+e31callerrs.olang:10:16: error[T22, E31]: Gate's Call fails with ArgumentError where the function type says nothing - the same errors in the same order: write the function type 'fn&(I64) I64 ? ArgumentError', or pass a lambda handling them
    10 |     assert run(g, 1) == 1
       |                ^
 compilation failed with 1 error
@@ -2280,8 +2288,8 @@ extendsstruct.olang:3:8: error[T29f]: only a type over a number or an array exte
       |        ^~~~~~~
 compilation failed with 1 error
 === externfnshape.olang
-externfnshape.olang:3:43: error[X2]: fn(x I32) cannot cross the C boundary - an extern parameter is a number of the twelve primitives, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
-    3 | extern fn __olang_run_on_stack(bytes I64, f fn(x I32))
+externfnshape.olang:3:43: error[X2]: fn&(x I32) cannot cross the C boundary - an extern parameter is a number of the twelve primitives, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
+    3 | extern fn __olang_run_on_stack(bytes I64, f fn&(x I32))
       |                                           ^
 compilation failed with 1 error
 === externfnvalue.olang
@@ -2398,9 +2406,9 @@ g12spaced.olang:6:23: error[G12]: type arguments are written touching the name a
       |                       ^
 compilation failed with 1 error
 === g12value.olang
-g12value.olang:7:21: error[G12]: generic function 'id' is not a value - call it, or name an instance by its type arguments, as 'id<I64>'
-    7 |   f fn(x I32) I32 = id
-      |                     ^~
+g12value.olang:7:22: error[G12]: generic function 'id' is not a value - call it, or name an instance by its type arguments, as 'id<I64>'
+    7 |   f fn&(x I32) I32 = id
+      |                      ^~
 g12value.olang:8:14: error[G12]: generic function 'id' is not a value - call it, or name an instance by its type arguments, as 'id<I64>'
     8 |   n := apply(id, 3)
       |              ^~
@@ -2901,11 +2909,11 @@ l18coldresults.olang:3:25: error[L18c]: parentheses group only a function type h
 compilation failed with 1 error
 === l18cungrouped.olang
 l18cungrouped.olang:5:11: error[G7]: type arguments for Map: expected 2, found 3
-    5 |     m Map<String&, fn(x I64) I64, I64>
+    5 |     m Map<String&, fn&(x I64) I64, I64>
       |           ^~~~~~~
-l18cungrouped.olang:5:20: note: a function type of several results or error items is parenthesized whole in a list: '(fn(x I64) I64, I64)'
-    5 |     m Map<String&, fn(x I64) I64, I64>
-      |                    ^~~~~~~~~~~~~
+l18cungrouped.olang:5:20: note: a function type of several results or error items is parenthesized whole in a list: '(fn&(x I64) I64, I64)'
+    5 |     m Map<String&, fn&(x I64) I64, I64>
+      |                    ^~~~~~~~~~~~~~
 compilation failed with 1 error
 === l18endofline.olang
 l18endofline.olang:9:14: error: expected '{', found end of line
@@ -3553,9 +3561,9 @@ o17templambdacond.olang:22:25: error[O17]: this value's references live where it
 o17templambdacond.olang:22:17: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    22 |         fs.Push(leak(b1 if i >= 0 else b2))
       |                 ^~~~
-o17templambdacond.olang:16:28: note: the callee requires it because of this statement
-   16 | fn leak(b Box&) fn() I64 { return fn() I64 { return b.head.v } }
-      |                            ^~~~~~
+o17templambdacond.olang:16:29: note: the callee requires it because of this statement
+   16 | fn leak(b Box&) fn&() I64 { return fn() I64 { return b.head.v } }
+      |                             ^~~~~~
 compilation failed with 2 errors
 === o17templambdacycle.olang
 o17templambdacycle.olang:26:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
@@ -3597,9 +3605,9 @@ o18cprojectionfresh.olang:15:19: note: this text lives in a block that closes fi
       |                   ^
 compilation failed with 1 error
 === o1blambdaglobal.olang
-o1blambdaglobal.olang:14:32: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+o1blambdaglobal.olang:14:30: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
    14 |         case Box.Has(n) { GF = fn() { return n.v } }
-      |                                ^~
+      |                              ^
 compilation failed with 1 error
 === o23adepth.olang
 o23adepth.olang:17:14: error[O20]: 'v.n' lives where 'v' does, which closes first - keep a copy ('$v.n'), or keep what 'v' was made from
@@ -4025,11 +4033,11 @@ r1apromise.olang:14:5: error[R9]: B can escape here, and this function does not 
 compilation failed with 1 error
 === r1bfunctype.olang
 r1bfunctype.olang:3:12: error[R1b]: a function type writes its error set - '? io.Error' - since no body says what it is
-    3 | fn apply(f fn(x I64) I64 ?, x I64) I64 ? { return try f(x) }
+    3 | fn apply(f fn&(x I64) I64 ?, x I64) I64 ? { return try f(x) }
       |            ^~
-r1bfunctype.olang:3:51: error[R8]: nothing here can fail - write it without 'try'
-    3 | fn apply(f fn(x I64) I64 ?, x I64) I64 ? { return try f(x) }
-      |                                                   ^~~
+r1bfunctype.olang:3:52: error[R8]: nothing here can fail - write it without 'try'
+    3 | fn apply(f fn&(x I64) I64 ?, x I64) I64 ? { return try f(x) }
+      |                                                    ^~~
 compilation failed with 2 errors
 === r1btrait.olang
 r1btrait.olang:4:5: error[R1b]: a trait's method writes its error set - '? io.Error' - since no body says what it is
@@ -4042,7 +4050,7 @@ r1ccatchword.olang:11:36: error[R14]: the call does not fail with LE.Empty - it 
       |                                    ^~~~~
 compilation failed with 1 error
 === r1cfuncword.olang
-r1cfuncword.olang:12:22: error[E12]: expected fn(n I64) I64 ? LE.Empty, found fn(n I64) I64 ? LE.Gone
+r1cfuncword.olang:12:22: error[E12]: expected fn&(n I64) I64 ? LE.Empty, found fn&(n I64) I64 ? LE.Gone
    12 | fn main() { x := run(g) }
       |                      ^
 compilation failed with 1 error
@@ -4072,9 +4080,9 @@ r1dtry.olang:5:5: error[R1d]: io.Error can escape here, and this function writes
       |     ^~~
 compilation failed with 1 error
 === r1functypeunknown.olang
-r1functypeunknown.olang:3:15: error[R1]: unknown error type 'Nope'
-    3 | fn g(f fn() ? Nope) { }
-      |               ^~~~
+r1functypeunknown.olang:3:16: error[R1]: unknown error type 'Nope'
+    3 | fn g(f fn&() ? Nope) { }
+      |                ^~~~
 compilation failed with 1 error
 === r1nosuchword.olang
 r1nosuchword.olang:4:10: error[T19]: C has no word 'W'
@@ -4102,9 +4110,9 @@ r23boolresult.olang:3:37: error[R23]: a Bool among several results is a flag bes
       |                                     ^~~~
 compilation failed with 1 error
 === r23functype.olang
-r23functype.olang:3:28: error[R23]: a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)
-    3 | fn apply(f (fn(x I64) I64, Bool), x I64) I64 {
-      |                            ^~~~
+r23functype.olang:3:29: error[R23]: a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)
+    3 | fn apply(f (fn&(x I64) I64, Bool), x I64) I64 {
+      |                             ^~~~
 compilation failed with 1 error
 === r23reattempt.olang
 r23reattempt.olang:11:20: error[R23]: a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)
@@ -4837,17 +4845,6 @@ s3joinnextline.olang:6:9: error[S3, E11b]: text on a line of its own does nothin
     6 |         " more"
       |         ^~~~~~~
 compilation failed with 1 error
-=== s5atbuilds.olang
-s5atbuilds.olang:14:25: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
-   14 |     for _ in range 3 { l[0].Tag("lit") }
-      |                         ^
-s5atbuilds.olang:14:25: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   14 |     for _ in range 3 { l[0].Tag("lit") }
-      |                         ^
-s5atbuilds.olang:9:34: note: the callee is no view of the element because of this statement
-    9 | fn (r mut Rec&) Tag(t String&) { r.tags.Push(t) }
-      |                                  ^~~~~~~~~~~~~~
-compilation failed with 2 errors
 === s5atnosetat.olang
 s5atnosetat.olang:15:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    15 |     r[0].Add()
@@ -4891,15 +4888,6 @@ s5e31bspawn.olang:12:16: error[E31b]: x[i] gives a copy of the element, which th
       |                ^
 compilation failed with 1 error
 === s5handlenote.olang
-s5handlenote.olang:7:10: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
-    7 |     names[0].Push("x")
-      |          ^
-s5handlenote.olang:7:10: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-    7 |     names[0].Push("x")
-      |          ^
-$ROOT/std/prelude/vec.olang:58:5: note: the callee is no view of the element because of this statement
-   58 |     if v.n == v.data.Len() { v.room(v.n + 1) }
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 s5handlenote.olang:10:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         names[0][0] = t
       |                     ^
@@ -4912,15 +4900,7 @@ s5handlenote.olang:9:9: note: 't' is declared here, in a block that closes first
 s5handlenote.olang:10:23: note: this text lives in a block that closes first - pass a copy, which is made where 'names' lives: write '$' before it
    10 |         names[0][0] = t
       |                       ^
-compilation failed with 3 errors
-=== s5handlerepoint.olang
-s5handlerepoint.olang:17:9: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
-   17 |     bags[0].Reset()
-      |         ^
-s5handlerepoint.olang:17:9: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   17 |     bags[0].Reset()
-      |         ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === s5handlerepointfn.olang
 s5handlerepointfn.olang:13:17: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
    13 |     resetFn(bags[0])
@@ -4965,15 +4945,6 @@ s5spawnhandle.olang:10:43: error[E31b, P2]: a task is not handed x[i]: the eleme
       |                                           ^~~~
 compilation failed with 1 error
 === s6handlestore.olang
-s6handlestore.olang:8:14: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
-    8 |         names[i].Push("init")
-      |              ^
-s6handlestore.olang:8:14: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-    8 |         names[i].Push("init")
-      |              ^
-$ROOT/std/prelude/vec.olang:58:5: note: the callee is no view of the element because of this statement
-   58 |     if v.n == v.data.Len() { v.room(v.n + 1) }
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 s6handlestore.olang:12:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         names[i][0] = t
       |                     ^
@@ -4986,7 +4957,7 @@ s6handlestore.olang:11:9: note: 't' is declared here, in a block that closes fir
 s6handlestore.olang:12:23: note: this text lives in a block that closes first - pass a copy, which is made where 'names' lives: write '$' before it
    12 |         names[i][0] = t
       |                       ^
-compilation failed with 3 errors
+compilation failed with 1 error
 === s6immutableglobalfield.olang
 s6immutableglobalfield.olang:6:7: error[S6]: G cannot be written - only a local, a parameter or a 'mut' global can
     6 |     G.x = 2
@@ -5676,8 +5647,52 @@ t20valuenotheld.olang:9:7: error[T20]: expected P, found PQ, which can be Q - te
     9 |     g(v)
       |       ^
 compilation failed with 1 error
+=== t21bare.olang
+t21bare.olang:3:12: error[T21]: a function type is held only by reference - write 'fn&(x I64) I64', or 'fn?&(x I64) I64' where it may be null
+    3 | fn apply(f fn(x I64) I64, v I64) I64 { return f(v) }
+      |            ^~
+compilation failed with 1 error
+=== t21bdeclbare.olang
+t21bdeclbare.olang:5:7: error[T21b]: Handler is a function type, held only by reference - write 'Handler&', or 'Handler?&' where it may be null
+    5 |     h Handler = fn(e): return e
+      |       ^~~~~~~
+t21bdeclbare.olang:5:20: error[D16a]: lambda parameter 'e' has no type, and nothing gives it one - write it
+    5 |     h Handler = fn(e): return e
+      |                    ^
+compilation failed with 2 errors
+=== t21bmismatch.olang
+t21bmismatch.olang:7:17: error[T21b, T29]: expected Filter&, found Handler& - a declared function type is a type of its own: write 'Filter(f)' to make one the other
+    7 |     f Filter& = h
+      |                 ^
+compilation failed with 1 error
+=== t21callmaybenull.olang
+t21callmaybenull.olang:8:12: error[T2c]: 'b.on' is a fn?&(n I64) I64, which may be null - read through it where a test says it is not ('if x is not null'), or write 'b.on!'
+    8 |     assert b.on(1) == 1
+      |            ^~~~
+compilation failed with 1 error
+=== t21isnullnever.olang
+t21isnullnever.olang:5:19: error[T2c]: 'f' is a fn&(x I64) I64, never null, so this is always false
+    5 |     assert not (f is null)
+      |                   ^~
+t21isnullnever.olang:4:9: note: the type is written here - write '?&' for '&' where it may be null
+    4 |     f fn&(x I64) I64 = fn(x): return x
+      |         ^
+compilation failed with 1 error
+=== t21nozero.olang
+t21nozero.olang:4:11: error[T2c]: fn&(x I64) I64 is never null, so it has no zero value - give it a value, or write fn?&(x I64) I64
+    4 |     fs := Array<fn&(x I64) I64>(2)
+      |           ^~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== t21nullnever.olang
+t21nullnever.olang:4:24: error[T2c]: fn&(x I64) I64 is never null - a reference that may be is written fn?&(x I64) I64
+    4 |     f fn&(x I64) I64 = null
+      |                        ^~~~
+t21nullnever.olang:4:9: note: the type is written here - write '?&' for '&' where it may be null
+    4 |     f fn&(x I64) I64 = null
+      |         ^
+compilation failed with 1 error
 === t22afallible.olang
-t22afallible.olang:10:16: error[E12]: expected fn(n I32) I32, found fn(n I32) I32 ? E
+t22afallible.olang:10:16: error[E12]: expected fn&(n I32) I32, found fn&(n I32) I32 ? E
    10 |     k := apply(bad, 5)
       |                ^~~
 compilation failed with 1 error
@@ -5710,10 +5725,10 @@ t22borrowedresult.olang:11:16: error[O27]: this keeps a view of 't', which lives
       |                ^
 compilation failed with 1 error
 === t22callunsafe.olang
-t22callunsafe.olang:20:29: error[E12]: expected fn(n P&) I64, found fn(n mut P&) I64
+t22callunsafe.olang:20:29: error[E12]: expected fn&(n P&) I64, found fn&(n mut P&) I64
    20 |     try io.Println($applyRo(w, p) " " $applyRo(R(3), p))
       |                             ^
-t22callunsafe.olang:20:48: error[E12]: expected fn(n P&) I64, found R
+t22callunsafe.olang:20:48: error[E12]: expected fn&(n P&) I64, found R
    20 |     try io.Println($applyRo(w, p) " " $applyRo(R(3), p))
       |                                                ^~~~
 compilation failed with 2 errors
@@ -5966,7 +5981,7 @@ t29dvalue.olang:8:17: error[T6b]: I32 does not flow into Percent - convert it, a
 compilation failed with 1 error
 === t29eclash.olang
 t29eclash.olang:4:14: error[T29e]: Ints& inherits a method Count from its base - choose another name
-    4 | fn (a Ints&) Count(keep fn(x I32) Bool) I64 { return 9 }
+    4 | fn (a Ints&) Count(keep fn&(x I32) Bool) I64 { return 9 }
       |              ^~~~~
 compilation failed with 1 error
 === t29eeqhash.olang
@@ -5988,7 +6003,7 @@ t29fcompound2.olang:7:5: error[T29f]: Pct does not extend its base, so it takes 
       |     ^~
 compilation failed with 1 error
 === t29overgeneric.olang
-t29overgeneric.olang:4:12: error[T29]: a type is declared over a number or an array, not over Vec<String&> - hold it in a struct's field instead
+t29overgeneric.olang:4:12: error[T29]: a type is declared over a number, an array or a function type, not over Vec<String&> - hold it in a struct's field instead
     4 | type Names Vec<String&>
       |            ^~~~~~~~~~~~
 compilation failed with 1 error
@@ -5998,12 +6013,12 @@ t29overnoextends.olang:7:11: error[T29f]: B does not extend its base, so it take
       |           ^
 compilation failed with 1 error
 === t29overstruct.olang
-t29overstruct.olang:5:8: error[T29]: a type is declared over a number or an array, not over P - hold it in a struct's field instead
+t29overstruct.olang:5:8: error[T29]: a type is declared over a number, an array or a function type, not over P - hold it in a struct's field instead
     5 | type Q P
       |        ^
 compilation failed with 1 error
 === t2carrayisnull.olang
-t2carrayisnull.olang:3:41: error[T2c]: an array is never null - test whether it is empty: write 'a.Len() == 0'
+t2carrayisnull.olang:3:41: error[T2c]: an array written '&' is never null - test whether it is empty: write 'a.Len() == 0', or '?&' where it may be null
     3 | fn empty(a Array<I64>&) Bool { return a is null }
       |                                         ^~
 compilation failed with 1 error
@@ -6013,9 +6028,9 @@ t2carraynofill.olang:5:10: error[T2c]: N& is never null, so it has no zero value
       |          ^~~~~~~~~~~~
 compilation failed with 1 error
 === t2carraynullable.olang
-t2carraynullable.olang:3:18: error[T2c]: an array is never null - its zero value is the empty array: write '&', not '?&'
+t2carraynullable.olang:3:35: error[T2c]: 's' is a String?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 's!'
     3 | fn count(s String?&) I64 { return s.Len() }
-      |                  ^
+      |                                   ^
 compilation failed with 1 error
 === t2cbreakloop.olang
 t2cbreakloop.olang:12:12: error[T2c]: 'p' is a N?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'p!'
@@ -6056,7 +6071,7 @@ t2cnozero.olang:5:1: error[T2c]: N& is never null, so it has no zero value - giv
       | ^
 compilation failed with 1 error
 === t2cnulltoarray.olang
-t2cnulltoarray.olang:4:17: error[T2c]: an array is never null - its zero value is the empty array: write '""', or no value, for an empty String
+t2cnulltoarray.olang:4:17: error[T2c]: an array written '&' is never null - write '""' for an empty String, or '?&' where it may be null
     4 |     s String& = null
       |                 ^~~~
 compilation failed with 1 error
