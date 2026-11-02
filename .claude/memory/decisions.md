@@ -2406,3 +2406,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   compiler/ - must come down: the user's compile-speed priority), the vec gather +6.6%, small-block folding and the
   115 new run cases' stored outputs (rungold). The agent's four details stand; 3 (`&` followed by an operand on its
   line is the bitwise operator) for the bulk review.
+- Rework round 4b (921498e) - its two questions DECIDED by me 2026-11-02 (theirs to review): (1) no callee
+  result-size summary for folding: the prototype folding every temporary-only block moved no bench row, so every block
+  keeps its scope unless real code shows the cost; (2) the inference's new fixed point on compiler/ (208 locals lifted
+  instead of 234, `Server` field 0 promoted) is accepted - it is checked by a full reporting judging, and fewer lifts.
+  The agent's six details stand; 3 (a call through a function value may refuse where the direct call builds the
+  argument longer) and 5 (the reuse comparison ignoring E11c's build-site note) for the bulk review.

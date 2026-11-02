@@ -735,3 +735,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   writable inner lists). Costs: scope phase 0.98 -> 3.39 s on compiler/, peak 2.28 -> 2.49 GB, vec gather +6.6%,
   dispatch +0.7-1.3%. Next: round 4b (open point 5, scope phase speed, gather, folding, rungold); then the early-freeing
   round; then QCI 3/4; then the refactor (Opus), bulk review, final verify.
+- 2026-11-02 CET: rework round 4b merged (921498e, fast-forward, full verify passed on its tip; scopesan, scopefuzz
+  clean): scope phase 3.39 -> ~1.35 s on compiler/ (components' judging reused), self-build peak 2.49 -> 2.37 GB,
+  open point 5 built (a function type's result borrowed from its reference parameters), O26a placement regression fixed
+  (every bench row back to the base or below), folding measured and not built, rungold captured (404 run cases), E10 bug
+  fixed (an empty Vec unequal to its copy, evaluator too). Next: the early-freeing round (parts held in place, Map
+  growth, x[i] mutating calls through RefMut); then QCI 3/4; then the refactor (Opus), bulk review, final verify.
