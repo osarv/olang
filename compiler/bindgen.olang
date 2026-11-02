@@ -184,10 +184,7 @@ fn (g mut gen&) track(j json.Json&, probe String&) {
                 v := o.Values[i]
                 if o.Keys[i] == "includedFrom" { continue }     # the file that included this one: no location
                 if o.Keys[i] == "file" {
-                    match v {
-                        case json.Json.Str(s) { g.file = 1 if s == g.header else 2 if s == probe else 0 }
-                        case _ { }
-                    }
+                    g.trackFile(v, probe)
                     continue
                 }
                 g.track(v, probe)
@@ -196,6 +193,14 @@ fn (g mut gen&) track(j json.Json&, probe String&) {
         case json.Json.Arr(items) {
             for x in items { g.track(x, probe) }
         }
+        case _ { }
+    }
+}
+
+# a location's file: the header's own (1), the probe's (2), another (0)
+fn (g mut gen&) trackFile(v json.Json&, probe String&) {
+    match v {
+        case json.Json.Str(s) { g.file = 1 if s == g.header else 2 if s == probe else 0 }
         case _ { }
     }
 }
@@ -737,11 +742,11 @@ fn (g mut gen&) nameRecord(i I64, td String&) {
     g.taken.Put($n, 0)
 }
 
-# a name every module sees bare, which a C module may not declare: the prelude's types and constants
-fn preludeName(n String&) Bool {
-    return n in String&["String", "Array", "Bool", "Char", "Vec", "Map", "StringBuilder", "CStr", "CVoid", "Iterator"
+# the names every module sees bare, which a C module may not declare: the prelude's types and constants
+preludeNames := String&["String", "Array", "Bool", "Char", "Vec", "Map", "StringBuilder", "CStr", "CVoid", "Iterator"
                         "Exhausted", "Pi", "Euler", "Inf", "NaN", "Float", "Integer", "Number", "Generator"]
-}
+
+fn preludeName(n String&) Bool { return n in preludeNames }
 
 # how a C type is spelled for a size probe (X18): the typedef naming it, else its tag
 fn (g gen&) spell(i I64) String {

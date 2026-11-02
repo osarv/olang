@@ -368,15 +368,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
                 b.Push("    ")
                 b.Push(attrsBefore(c, c.P.Descriptor(generic.DescCase, self, k, 0)))
                 b.Push(nm.Text(ns[k]))
-                if k < cases.Len() and cases[k] != types.TypeId(0) {
-                    if caseWhole(c.P.TypeDecl(d)!, k) {
-                        # T17a: a payload written whole is its one type
-                        b.Push($" " $c.Ty(c.P.T.Items(c.P.T.Params(c.P.CaseSig(self, k)))[0]))
-                    } else {
-                        sig := declSig(c, named(c, c.P.CaseSig(self, k), null, casePayload(c.P.TypeDecl(d)!, k)))
-                        b.Push(sig[2:firstClose(sig) + 1])
-                    }
-                }
+                if k < cases.Len() and cases[k] != types.TypeId(0) { pushPayload(b, c, d, self, k) }
                 b.PushChar('\n')
             }
         }
@@ -386,12 +378,10 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
             b.Push($"type " $name $(" extends " if c.P.Extends(self) else " ") $(declSig(c, bt) if c.P.T.KindOf(bt) == types.Kind.Func else c.Ty(bt)))
             # T29d: its constructor's parameter and errors
             match c.P.TypeDecl(d)!.Body {
-                case ast.TypeBody.Over(_, ctor) {
-                    if ctor is not null {
-                        sig := declSig(c, named(c, c.P.CtorSig(self), null, ctor.S.Params))
-                        close := firstClose(sig)
-                        b.Push($sig[2:close + 1] $errorsAfter(sig[close + 1:]))
-                    }
+                case ast.TypeBody.Over(_, ctor) if ctor is not null {
+                    sig := declSig(c, named(c, c.P.CtorSig(self), null, ctor.S.Params))
+                    close := firstClose(sig)
+                    b.Push($sig[2:close + 1] $errorsAfter(sig[close + 1:]))
                 }
                 case _ { }
             }
@@ -415,6 +405,16 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
     methods(b, c, self)
     traitsMet(b, c, self)
     return b.ToString()
+}
+
+# case k's payload as the enum's declaration d writes it: one type written whole (T17a), else its fields
+fn pushPayload(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId, self types.TypeId, k I64) {
+    if caseWhole(c.P.TypeDecl(d)!, k) {
+        b.Push($" " $c.Ty(c.P.T.Items(c.P.T.Params(c.P.CaseSig(self, k)))[0]))
+        return
+    }
+    sig := declSig(c, named(c, c.P.CaseSig(self, k), null, casePayload(c.P.TypeDecl(d)!, k)))
+    b.Push(sig[2:firstClose(sig) + 1])
 }
 
 fn casePayload(td ast.TypeDecl&, k I64) Array<ast.Param&>& {

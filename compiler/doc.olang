@@ -7,6 +7,7 @@
 # always have. A signature is what `explain FILE NAME` gives (B11b), so the documentation shows each item as the
 # compiler sees it - inferred error sets written out, scope obligations included.
 
+import "source"
 import "ast"
 import "types"
 import "names"
@@ -520,20 +521,23 @@ fn memberAt(c mut typecheck.Checker&, mi I64, d types.DeclId, name String&) I64 
                 if f.Name == id { return I64(f.Sp.Start) }
             }
         }
-        case ast.TypeBody.Struct(sb) {
-            if sb.Body.Len() == 0 { return -1 }
-            for s in sb.Body {
-                match s {
-                    case ast.Stmt.Var(_, v) {
-                        for k in range v.Names.Len() {
-                            if v.Names[k] == id { return I64(v.NameSps[k].Start) }
-                        }
-                    }
-                    case _ { }
+        case ast.TypeBody.Struct(sb) { return varNamed(sb.Body, id) }
+        case _ { }
+    }
+    return -1
+}
+
+# where a declaration among a constructor body's statements names id, -1 for none
+fn varNamed(body Array<ast.Stmt&>&, id source.NameId) I64 {
+    for s in body {
+        match s {
+            case ast.Stmt.Var(_, v) {
+                for k in range v.Names.Len() {
+                    if v.Names[k] == id { return I64(v.NameSps[k].Start) }
                 }
             }
+            case _ { }
         }
-        case _ { }
     }
     return -1
 }

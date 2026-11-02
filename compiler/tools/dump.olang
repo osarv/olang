@@ -433,14 +433,7 @@ fn (w mut walker&) decl(d ast.Decl&) {
             if w.skipped(sp.Start) { return }
             w.line("TYPE", sp)
             match t.Body {
-                case ast.TypeBody.Struct(s) {
-                    w.params(s.Params)
-                    if s.Body.Len() > 0 { w.stmts(s.Body) }
-                    if s.Dtor.Len() > 0 {
-                        w.line("DTOR", s.DtorSp)
-                        w.stmts(s.Dtor)
-                    }
-                }
+                case ast.TypeBody.Struct(s) { w.structBody(s) }
                 case ast.TypeBody.Over(_, ctor) {
                     if ctor is not null { w.func(ctor) }
                 }
@@ -480,6 +473,14 @@ fn (w mut walker&) decl(d ast.Decl&) {
             if msg is not null { w.expr(msg) }
         }
     }
+}
+
+fn (w mut walker&) structBody(s ast.StructBody&) {
+    w.params(s.Params)
+    if s.Body.Len() > 0 { w.stmts(s.Body) }
+    if s.Dtor.Len() == 0 { return }
+    w.line("DTOR", s.DtorSp)
+    w.stmts(s.Dtor)
 }
 
 fn (w mut walker&) topIf(i ast.TopIf?&) {
@@ -561,13 +562,8 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
             w.expr(i.Cond)
             if i.Then is not null { w.stmts(i.Then!.Body) }
             match i.Else {
-                case ast.Stmt.If(_, e) {
-                    if e.Cond is null {
-                        w.stmts(e.Then!.Body)
-                    } else {
-                        w.stmt(i.Else)
-                    }
-                }
+                # a plain else: its block's statements
+                case ast.Stmt.If(_, e) if e.Cond is null { w.stmts(e.Then!.Body) }
                 case _ { w.stmt(i.Else) }
             }
         }

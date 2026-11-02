@@ -610,27 +610,32 @@ fn (f formatter&) write() String {
             e++
         }
         if e == i { e = i + 1 }
-        for l in range i, e {
-            if f.lKind[l] == 0 {
-                code := codes[f.lCodeS[l]:f.lCodeE[l]]
-                if code.Len() > 0 or f.lComS[l] >= 0 {
-                    for _ in range f.lIndent[l] { out.Push("    ") }
-                }
-                out.Push(code)
-                if f.lComS[l] >= 0 {
-                    if code.Len() > 0 {
-                        w := f.lIndent[l] * 4 + code.Len()
-                        pad := col - w + 1 if col > 0 else 1
-                        for _ in range pad { out.PushChar(' ') }
-                    }
-                    out.Push(f.text[f.lComS[l]:f.lComE[l]])
-                }
-            }
-            out.PushChar('\n')
-        }
+        for l in range i, e { f.writeLine(out, codes, l, col) }
         i = e
     }
     return out.ToString()
+}
+
+# line l, its code indented and its comment after it at column col (0: one space after the code)
+fn (f formatter&) writeLine(out mut StringBuilder&, codes String&, l I64, col I64) {
+    if f.lKind[l] != 0 {
+        out.PushChar('\n')
+        return
+    }
+    code := codes[f.lCodeS[l]:f.lCodeE[l]]
+    if code.Len() > 0 or f.lComS[l] >= 0 {
+        for _ in range f.lIndent[l] { out.Push("    ") }
+    }
+    out.Push(code)
+    if f.lComS[l] >= 0 {
+        if code.Len() > 0 {
+            w := f.lIndent[l] * 4 + code.Len()
+            pad := col - w + 1 if col > 0 else 1
+            for _ in range pad { out.PushChar(' ') }
+        }
+        out.Push(f.text[f.lComS[l]:f.lComE[l]])
+    }
+    out.PushChar('\n')
 }
 
 
