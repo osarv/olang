@@ -28403,3 +28403,74 @@ test part that defined no such type, and clang refused the part under `-debug -s
 objects' file paths aside - so no instruction count or peak moved. `make scopesan` passed (the first run was stopped
 by a full disk after compiler/scope.olang; the rest was run again), `make scopefuzz` (150 programs, 688 scenarios) and
 `fuzz free 1 400 3 6` (1,402 scenarios, 1,875 places freeing at once) found nothing.
+
+## Bulk review 6b, fixed (2026-11-02)
+
+The narrow review of bulk review 6's fix round (/home/user/review/bulk6b, at 3b51cc9) found its relaxations held, and
+one older use after free, three wrong results, an over-rejection and three diagnostics. The coordinator's directions
+(decisions.md, "Bulk review 6b ... directions DECIDED"; when in doubt, refuse or copy) were built in wt-bfix6b, one
+commit a finding.
+
+**F3 (D18): a generator's stack slots put into an aggregate value stay in its frame.** The review read it as the
+landing of `r := mk(k)` in the first Next's scope; it was not - `mk(k)`'s result was built in the generator body's
+block scope, which lives across yields. What was freed was the lambda's *environment*: `f := fn() I64 { return r.v }`,
+made before the loop and only ever called, has its environment in a stack slot of the frame (D16c), and the frame of a
+generator's body is the coroutine's. LLVM's coroutine split moves to the coroutine frame every alloca live across a
+suspend point, but its alloca analysis follows a slot's uses through loads, stores, GEPs and calls and not through
+`insertvalue`: the environment went into the function value's `{code, environment}` pair and was read only through the
+pair after the yield, so it stayed on the resume function's stack, reused once that Next returned. -debug read the
+capture from a dead frame (gdb: a garbage pointer in the lambda); the plain build passed because by the time the split
+runs at -O3 SROA has folded the pair away. The same hole held a fixed array lent as a run-time one (`r Array<I64>& =
+a`, the `{length, pointer}` pair) - read across a yield, -debug summed garbage. Fixed in emit (`frameKept`): in a
+coroutine, each stack slot an `insertvalue` puts in is given an empty `asm sideeffect` use after `coro.begin`, which the
+analysis takes as an escape, so the slot lives in the frame; nothing else changes (bench's IR byte-identical - no bench
+program has such a slot). `tests/generators.olang` (with a baked global), `checks/cases/d18framekept.olang` (run, -debug
+-sanitize).
+
+**F1 (G42, E31b): a C call may call the program's export fns back.** effects.olang counted a C function as CallsC,
+Blocks and Opaque, never as anything more; X13 lets C call an export fn at any time, so `G[0].Bump()` with a Bump calling
+C that called back an export fn growing `G` was made in place (settleInPlace reads WritesGlobals/Unknown) and lost its
+write. Now, where the program has an export fn, a call of C - but C's math (X8), the runtime's own and the C functions
+known to return at once (`quickC`: memcpy, clock_gettime, unlocking ...) - is Unknown in the summaries, free.olang's
+condition 3 already; the effects line says `anything - it calls C, which may call the program's export fns`.
+`checks/cases/e31bexportback.olang`, `g42exportback.olang` (a C import of unistd.h: a case is built alone, so no C file
+of its own).
+
+**F2 (G42, B11b, E31b): destructors in the effect summaries.** A body's facts did not include the destructors it
+registers, so a function whose only effect was a destructor growing a global was `not WritesGlobals`, `not Allocates`
+and "may be computed while compiling", and an in-place call whose inner block closed such a destructor lost its write.
+Now a constructor of a type with a destructor (O16: it registers it), a value of one given storage of its own
+(Promote), and `x.Destroy()` count the destructor's body as one the body may call (`Effects.dtorCalled`).
+`checks/cases/g42dtor.olang` (run, top-level asserts decided by the evaluator), `e31bdtor.olang`.
+
+**F4 (M19g, B2f): an element a Ref hands back is a place.** A place reached through a call's result met no other, so
+`r := vs.RefMut(0).RefMut(0)` held across `vs[0].Push(...)` (in place through RefMut, E31b) compiled and wrote the
+retired buffer; so did a Map in a Vec's element. Now a call handing back a view of its receiver's buffer (a summary's
+Views fact: Ref, RefMut) gives a place of its own below the collection's, any element of it - `vs[...]` - so the view
+and a growth through the same route meet whatever the indexes (unsure: refused); fields below it follow
+(`ss[...].m`). And under -sanitize a Map's slots copied with the struct holding it (the Copy helper, QCE) were made by
+the plain allocator, so retiring them at the copy's growth poisoned them without protecting them: the read gave the
+poison silently. A Vec's or a Map's buffer made by its record's Copy helper now takes the own-chunk path
+(`fnEm.bufferCopy`). `checks/cases/m19gelemroute.olang`, `m19gelemroutemap.olang`; the vechandle scenario's
+`stalecopy.olang` (built -sanitize and -debug -sanitize: reported).
+
+**F5 (O26a): a captured function value flows.** F9's capture flow followed a captured reference, not a captured
+function value: `g := fn() { r.v }` then `return fn() { g() * 2 }` was O10d while `return g` compiled. A function value
+a returned lambda captures now flows as returning it would. `checks/cases/o26alambdanested.olang` (run, -debug
+-sanitize, a baked global and a decided assert).
+
+**F6 (B11).** C2d names `x.Clone()` (and `$x` for text) only for a type with a Clone - a Vec or a struct is told to hold
+it by value in a field; one stale use is one M19g error (a for-in over a holder read the view through its hidden walk
+too - `reportedViews`); the note on a Map's reference names its value (`m.Get(k)`), a Vec's `v.ToArray()` (the "for a
+Vec" aside gone). `checks/cases/c2dnoclone.olang`, `m19gonce.olang`, `m19gmapnote.olang`; 17 cases' rows in diag.txt
+reworded.
+
+**Found on the way, not fixed:** compiler/tools' scopedump, lowerdump and emitdump no longer build - `fn run(args
+Array<String&>&)` declares `planAt String& = ""` and later assigns `args[k]` to it, which infers "args outlives the
+program" (explain says so), so the lambda handed to os.RunOnStack is T22a's. A reference local declared from constant
+data takes the program's scope, and a later assignment of a shorter-lived view holds the view to it - an
+over-rejection in section 8's inference (`planAt := args[0]` compiles). Left for the coordinator (a section-8 change);
+the tools are outside verify.
+
+**Measured.** bench's IR (15 programs, every module's .ll, `-target x86-64-v3`) byte-identical to master's after every
+fix.

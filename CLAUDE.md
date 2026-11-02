@@ -893,8 +893,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   branches, twice, or borrowing elements (D18c) keeps the arena path, a recorded limit. Result: the range generator
   folds to the hand iterator's closed form (0.35 s -> 0.003 s), the filter generator 0.30 -> 0.15 s, below the iterator
   struct's 0.22 s. Limit: a walk made inside a loop whose exit leaves that loop too (a `return`, an error) keeps an
-  arena frame - CoroElide does not see a destroy behind the exit's LCSSA phi - still destroyed by the caller.
-  **Found on the way (pre-existing)**: D10a counted a `for x in it` over an iterator as a loop that never ends (its
+  arena frame - CoroElide does not see a destroy behind the exit's LCSSA phi - still destroyed by the caller. A stack
+  slot of a generator's body put into an aggregate value (a lambda's environment in its function value, a fixed array
+  lent as a run-time one) is said to escape (an empty `asm` use after `coro.begin`, emit's `frameKept`), so LLVM's
+  coroutine split keeps it in the frame - its alloca analysis does not follow `insertvalue`, and `-debug` read such a
+  slot from a returned Next's stack (bulk review 6b F3; bench IR unchanged). **Found on the way (pre-existing)**: D10a counted a `for x in it` over an iterator as a loop that never ends (its
   `break` is in the Next call's `catch Exhausted`, inside an expression), so a function ending in one compiled and
   aborted with "unreachable reached" - `breaks` now looks inside expressions' clauses; since bulk review 3 one walk,
   `typed.BreaksOut`, over every statement, expression and place kind (a do-while's post clause too), read by D10a and
@@ -951,7 +954,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   first attempt and the program is checked again with what the bodies found until reads and findings agree (as R1a's
   sets, `factPresets`), one that changes the code it is read from an error (FactUndecided); a fact in a plain body's
   `if` is S8a's dead branch, as any constant condition (in an unrolled walk it differs per copy and is fine); check
-  marks the bounded loops (`typed.Body.Bounded`: counted for-ins, unrolled walks). tests/facts.olang.
+  marks the bounded loops (`typed.Body.Bounded`: counted for-ins, unrolled walks). tests/facts.olang. Since bulk
+  review 6b (the summaries every reader shares - facts, the effects line, `-caps`, E31b's in-place calls): a destructor
+  is a body a constructor of its type, a value of it given storage, or `x.Destroy()` may call (O16, C9b); and where the
+  program has an export fn a call of C - but C's math, the runtime's own and the C known to return at once - may do
+  anything (C may call the export fn back, X13 - free.olang's condition 3), said `anything - it calls C, which may call
+  the program's export fns`.
 
 ### Errors
 
@@ -1123,7 +1131,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   copied from stage 0 for parity reverted, HISTORY.md "Port: the parity readings reverted"). A constructor field
   given a conditional or a match is the instance's slot, each value judged as stored there alone (C2d, E28); a choice
   of new values and constants passed as an argument is a temporary, built where the parameter's scope is bound - for a
-  constructor, with the instance (2026-10-24, uafcc).
+  constructor, with the instance (2026-10-24, uafcc). A reference or a function value a returned lambda captures flows
+  too (bulk reviews 6 F9 and 6b F5): a lambda local so captured flows as returning it would.
 - **Lending (O17, O17a, O17b).** A value whose references live elsewhere than its storage is lent only to callees that
   keep nothing in it, read off their bodies; a handle (a struct of one reference) is lent as its reference.
 - **Derived and unknown scopes (O12, O23, O23a).** A field holding a view of what a constructor's reference parameter
@@ -1437,7 +1446,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   elements, never freed memory. `View()` is the one way to have the elements as an array (`ViewMut()` writable - so `v.ViewMut().Chunks(n)` is how tasks split a Vec, with no Vec `Chunks` of its own). `for x in v` walks by `At`
   and `Len` (S9d), seeing what the body pushes; `RunFrom` and `VecIter` went (`v.Iter()` is `Indexable`'s). `a.retire()`
   (prelude-only, no method elsewhere) is nothing at run time but under `-sanitize`, where an array made in a module
-  that retires has a chunk of its own and retiring poisons and protects it (`stale view: ...`, B2f); the evaluator marks
+  that retires has a chunk of its own - and so has a Vec's or Map's buffer copied with its record (a Copy helper, bulk
+  review 6b F4) - and retiring poisons and protects it (`stale view: ...`, B2f); the evaluator marks
   the node and stops on a later read or write with both places - the use and the program's growing call (K1: an error
   where a value is required, a stop under `interpret`). **M19g (round 2, 2026-10-18)**: using a view after the same Vec
   may have grown is a compile-time error where the compiler sees the same Vec on both sides - grown in the function

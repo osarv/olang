@@ -7047,7 +7047,8 @@ under `-sanitize` as without it, but for time and memory. It is a **detector, no
 a use of storage no longer held back reads whatever the allocator has put there since. Under `interpret` it changes nothing,
 since the evaluator never reclaims storage. A sanitized object is a distinct artifact (B4), named with `.san`.
 
-A **Vec's replaced buffer** (M19d) is treated the same way before its scope closes: a buffer a growth replaced is
+A **Vec's replaced buffer** (M19d), or a Map's, is treated the same way before its scope closes - however the buffer
+was made, a copy of the collection's (QCE) included: a buffer a growth replaced is
 overwritten with the pattern and, where the system allows it, made unreadable, so a view of the `Vec` taken before the
 growth and used after it - which without `-sanitize` reads the retired buffer, its moved-out elements emptied (M19d) - is
 reported as `stale view: ...`
