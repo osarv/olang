@@ -2510,21 +2510,7 @@ fn (p mut Parser&) pattern(x ast.Expr&, top Bool) ast.Pattern& {
         }
         case ast.Expr.Member(sp, _, _) { return ast.Pattern.Path(sp, x) }
         case ast.Expr.Call(sp, f, args) {
-            if isPath(f) {
-                from := p.pats.Len()
-                for a in args {
-                    sub := p.pattern(a, false)
-                    match sub {
-                        case ast.Pattern.Value(_, v) if not isLiteral(v) {
-                            p.pats.Truncate(from)
-                            return ast.Pattern.Value(sp, x)
-                        }
-                        case _ { }
-                    }
-                    p.pats.Push(sub)
-                }
-                return ast.Pattern.Case(sp, f, gather(p.pats, from))
-            }
+            if isPath(f) { return p.casePattern(sp, x, f, args) }
             return ast.Pattern.Value(sp, x)
         }
         case ast.Expr.Index(sp, ty, items) {
@@ -2541,6 +2527,24 @@ fn (p mut Parser&) pattern(x ast.Expr&, top Bool) ast.Pattern& {
         }
         case _ { return ast.Pattern.Value(x.Span(), x) }
     }
+}
+
+# a call x of path f as a pattern: a case with patterns for its arguments, or - where one is a value no literal - a
+# value compared by "==" (S13d)
+fn (p mut Parser&) casePattern(sp source.Span, x ast.Expr&, f ast.Expr&, args Array<ast.Expr&>&) ast.Pattern& {
+    from := p.pats.Len()
+    for a in args {
+        sub := p.pattern(a, false)
+        match sub {
+            case ast.Pattern.Value(_, v) if not isLiteral(v) {
+                p.pats.Truncate(from)
+                return ast.Pattern.Value(sp, x)
+            }
+            case _ { }
+        }
+        p.pats.Push(sub)
+    }
+    return ast.Pattern.Case(sp, f, gather(p.pats, from))
 }
 
 # S13h: an array literal's form as a pattern - each item an element's pattern, "...name" its rest; one item that is no
