@@ -6,7 +6,7 @@ must **not** compile, whole builds, rebuilds, the code generated. They are writt
 | path | what it is |
 |---|---|
 | `checks.olang` | the driver. It runs every case and every scenario, four side by side, and reports them as tests. |
-| `cases/` | about 1,250 small programs, one file each. The first lines say what the compiler must do with it. |
+| `cases/` | about 1,600 small programs, one file each. The first lines say what the compiler must do with it. |
 | `fixtures/` | files the multi-step scenarios in `checks.olang` use (a remote repository, `-D` values, goldens, ...). |
 
 ## A case

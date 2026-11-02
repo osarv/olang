@@ -1769,7 +1769,7 @@ name what an implementation does not read), a constructor's fields (C2a), a catc
 local whose type has a destructor (C7) - the close of its scope is what it is held for - or whose declaration did not
 check (its error said already), and a local of a body nothing checks (a branch the build leaves out, a generic never
 instantiated). A name in the text of a branch the build leaves out (S8b) counts as read. These errors are said only of a
-program the checker finds no other error in: a read may be what another mistake left out, or sit in code that mistake
+program in which no other error is found - by the checker or by a later pass (section 8's, M19g's): a read may be what another mistake left out, or sit in code that mistake
 keeps from being checked.
 
 ### 3.3 Type and error declarations
