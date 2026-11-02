@@ -715,6 +715,14 @@ fn (v mut verifier&) run() {
 
 # ---- shape: ids and ranges in bounds, every block terminated ----
 
+# constant i's items (r of f.ConstItems), each a constant made before it
+fn (v mut verifier&) itemsBefore(r Range, i I64) {
+    for k in range r.N {
+        c := v.F.ConstItems[I64(r.At) + k]
+        if c < I32(0) or c >= I32(i) { v.bad("constant " $i " holds constant " $c ", not made before it") }
+    }
+}
+
 fn (v mut verifier&) shape() Bool {
     f := v.F
     start := v.out.Len()
@@ -796,12 +804,7 @@ fn (v mut verifier&) shape() Bool {
         match f.Consts[i] {
             case ConstNode.Bytes(r) { v.within(r, f.Bytes.Len(), "bytes") }
             case ConstNode.Items(r) {
-                if v.within(r, f.ConstItems.Len(), "constant items") {
-                    for k in range r.N {
-                        c := f.ConstItems[I64(r.At) + k]
-                        if c < I32(0) or c >= I32(i) { v.bad("constant " $i " holds constant " $c ", not made before it") }
-                    }
-                }
+                if v.within(r, f.ConstItems.Len(), "constant items") { v.itemsBefore(r, i) }
             }
             case _ { }
         }
@@ -1270,6 +1273,11 @@ fn (v mut verifier&) operandType(x Operand) types.TypeId {
 
 fn (v mut verifier&) arg(r Range, i I64) Operand { return v.F.Ops[I64(r.At) + i] }
 
+# each of a task's targets of the type of its result
+fn (v mut verifier&) taskTargets(task Task&, rs Array<types.TypeId>&) {
+    for i in range task.Targets.N { v.want(rs[i], v.placeType(v.F.Places[I64(task.Targets.At) + i]), "a task's result " $i) }
+}
+
 fn (v mut verifier&) stmtTypes(s Stmt&) {
     t := v.T
     match s {
@@ -1342,9 +1350,7 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
                 if task.Targets.N > I32(0) and I64(task.Targets.N) != rs.Len() {
                     v.bad("a task with " $task.Targets.N " targets for " $rs.Len() " results")
                 } else {
-                    for i in range task.Targets.N {
-                        v.want(rs[i], v.placeType(v.F.Places[I64(task.Targets.At) + i]), "a task's result " $i)
-                    }
+                    v.taskTargets(task, rs)
                 }
                 if task.Clauses.N > I32(0) and t.Items(t.Errors(ty)).Len() == 0 {
                     v.bad("a task's clauses for a call that cannot fail")
@@ -1695,6 +1701,16 @@ fn (v mut verifier&) args(c Callee, ty types.TypeId, args Range, scopes Range) {
     }
 }
 
+# each of a switch's case values (r of f.Cases) once
+fn (v mut verifier&) casesOnce(r Range) {
+    f := v.F
+    for i in range r.N {
+        for j in range i {
+            if f.Cases[I64(r.At) + i].Value == f.Cases[I64(r.At) + j].Value { v.bad("a switch with the value " $f.Cases[I64(r.At) + i].Value " twice") }
+        }
+    }
+}
+
 fn (v mut verifier&) termTypes(term Term) {
     t := v.T
     f := v.F
@@ -1706,13 +1722,7 @@ fn (v mut verifier&) termTypes(term Term) {
         case Term.Switch(x, r, _) {
             xt := v.operandType(x)
             if not t.IsInt(t.Repr(xt)) { v.bad("a switch on a " $v.canon(xt)) }
-            for i in range r.N {
-                for j in range i {
-                    if f.Cases[I64(r.At) + i].Value == f.Cases[I64(r.At) + j].Value {
-                        v.bad("a switch with the value " $f.Cases[I64(r.At) + i].Value " twice")
-                    }
-                }
-            }
+            v.casesOnce(r)
         }
         case Term.Call(_, k) {
             c := f.Calls[I64(k)]
