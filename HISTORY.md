@@ -28285,3 +28285,106 @@ top-level assert (S17a). **Found on the way:** a null text inside another value'
 
 **Measured.** bench's IR (18 programs, every module's .ll) byte-identical across the cleanup (the IR of std/prelude's
 reworded comment keeps its lines); the nullable-array zero changes no bench program (none declares one).
+
+## Bulk review 6, fixed (2026-11-02)
+
+Bulk review 6 (/home/user/review/bulk6, at 5357ee7) found no use after free over the rework but seven wrong results,
+five over-rejections, a memory finding and a group of diagnostics. The coordinator's directions (decisions.md, "when in
+doubt, refuse or copy - never a wrong answer") were built in wt-bfix6, one commit a finding.
+
+**F1 (E31b): a call made in place through `x[i]` judged by what it runs.** Round 8's in-place form (`x[i].M(args)` on
+`x.RefMut(i)`) looked only at the call's other arguments; the method itself - growing the collection through a mutable
+global (`G[0].Bump()` pushing onto `G`), through a closure the element holds over its own Vec, or a constructor a
+"plain" argument calls (`G[0].Set(w(42))`, `w`'s body growing `G`) - left the element's reference naming the retired
+buffer, and the write was lost. Now: the element's type may reach no function value, no `any` and no writable reference
+to storage a collection it is in may be or hold (judged by type - `collWalk`: a `Bag` holding `mut State&` stays in
+place, a `blk` holding `mut Vec<blk>&` does not), and after each attempt the method's body and every constructor body an
+argument calls are read off the effect summaries (`settleInPlace`): one that writes a global or what a global refers to,
+calls through a function value or an `any`, or reaches a body that did not check, refuses the site the in-place form
+and the program is checked again - the copy's E31b error, its message unchanged. Optimistic first (in place) and moving
+only to the copy, so a program with no such site is checked once; a site still moving at the attempt cap is a gap that
+stops the build. **Found on the way:** effects.olang never counted a call lent a global's storage as a store into the
+global - `fn Note(x I64) { Seen.Push(x) }` was `not Note.WritesGlobals` (G42 read it so); a link to a global
+(`globalParam`) now makes the caller WritesGlobals where the callee writes through that parameter, and a store through
+a reference a global holds counts too (`globalReached`).
+
+**F2 (D9h): a held view ended by a write through a struct's writable reference.** lowering's quietCall skipped
+reference arguments and never walked a struct's fields: `writesCover` took a named struct for "holds nothing", so a call
+given `hold(v mut Vec<blk>&)` by value or through a read-only reference wrote the element a for-in's copy viewed. Now
+struct and enum parts are walked (`types.Embedded`, memoized per view - `qWrites`), a read-only reference's referent is
+judged, and a statement judged alone (no view's storage known) is not quiet where an argument reaches any writable
+reference. **Found on the way (a wrong result on the default path, and an evaluator disagreement):** a function handing
+back a value owning parts from existing storage that is no view of its arguments - a mutable global's (`fn g() blk {
+return Gl }`) - shared it with the caller: `retArrays` copied only arrays. And while compiling no body's result is a view
+(ViewsOf is 0 there), so every `e := v[0]` of a Vec of owning elements shared the element's buffer in the evaluator - a
+baked `Elem := fromElem()` read the element's later write. `retOwns` copies such a value where the body's result is no
+view its callers copy (`checks/cases/qceretglobal.olang`, `d9hheldwrite.olang`, each with a baked global and a decided
+assert).
+
+**F3 (O17): a value owning storage kept by reference binds where its own storage is.** `owns` and `viewed` let such a
+value go "lent where its references are" even where the callee keeps a reference to it - `holder(v)` with `holder
+struct(v Vec<I64>&)` pushed onto a Vec outside the loop: every turn's holder named one frame slot. Where the callee keeps
+the argument (calleeKeepsArg) such a value is now lent as the storage it is (`v`), so a loop turn's local kept past the
+turn is C2d's error; the messages name holding it by value in a field (`InstanceOutlivesArg`, `InstanceOutlivesReferent`
+reworded - `x.Clone()` no longer exists on a Vec). `checks/cases/c2dfieldentry.olang`, which QCB had turned into a run
+case (its slot reused each turn, one holder only), is a fail case again.
+
+**F4, F5, and the tidy pass's question 1.** The tidy pass had fixed the top-level `Array<T>?&` zero and nested text;
+the nested cases (a struct field, a Vec's and an array's element, a payload) render `null`. An enum's zero value was its
+first case's zero bits, so a nullable array there was empty and a struct payload ignored its constructor's defaults:
+`check.caseZero` builds the case of its payload fields' zero values where any is no zero bits (`tests/fnref.olang`'s
+`nested`, baked and decided).
+
+**F6 (M19d): SPEC follows the code.** A stale view, or Ref, reads the retired buffer, whose elements owning storage were
+moved out by the growth (emptied) - memory-safe, and `-sanitize` and the evaluator stop on it. SPEC M19d/M19g/B2f/K1,
+std/prelude/vec.olang's comment and the evaluator's WhyStale say so; interpret says "the collection grew here".
+
+**F7 (M19g): a Ref/RefMut is a view.** `v.Ref(i)`, `v.RefMut(i)` and a Map's (`m.ents`, its slots) are views of their
+collection's buffer (views.olang: a borrow of a buffer's element, `bufferElem`, as a slice of it is), so one used after a
+growth of the same collection in the same function is refused, the note naming the reference too. **Found on the way:
+seven stale references in the compiler itself** - bindgen's `opaque`, `structDecl` (reading `r.Names[k]` while
+`parseType` could add records: emptied fields, an out-of-range read), its record loop and probe; check's `contractChecks`
+and its call-site twin reading a `ContractInfo` while requirement bodies were checked (a growth of `c.Contracts` would
+have emptied `info.Reqs` mid-loop, dropping contract checks); lowering's `jump` and the try-clause walk holding a
+`loopCtx`/`tryCtx` across `leave`, which lowers deferred code that may push loops and tries (a growth would have lost a
+break's patch list). Each takes the reference again after the call, or copies.
+
+**F8-F10 (O26a): over-rejections of what flows into the result.** A value local declared from a copy of another's place
+(`cur := head`, then `cur = nn`, `return cur`) is movable (its own storage made here - `copiedRead`); a reference a
+returned lambda captures flows (its referent must outlive the lambda - a reference local from a built call, which the
+mode-0 flow had ignored with every capture); and a part of a call's value returned (`return v.View()[2:4]`, a slice of a
+temporary) carries what the call carries (`carriedPlace`'s Temp). `checks/cases/o26acopyflow.olang`.
+
+**F11 (G29): the run-time instance.** The code meant to bind a length variable to "known only at run time" set it to
+`TypeId(0)` - which is `UnknownT` - so every such call was G9's "type arguments cannot be inferred" for a function with
+none. `types.RunLength()` is that binding now; `Array` built over it is an array of a run-time length, and `paramLen`
+reads no constant from it. A length no argument gives says G29 (`LengthNotInferable`).
+
+**F12.** R11: a declared function named as a catch's default holds nothing to build (`namedFn`). T21/T21b: `==` meets a
+declared function type at its base and a never-null function value at the nullable one - `h == g` and `k == g` were E12
+both ways. T2c/G19: a reference that may be null meets no trait, said at the binding (`Map<String?&, V>` - its key must
+be `Hashable`) rather than inside the prelude's Map.
+
+**F13 (O8d): owner locals, and a constructor's fresh views uncopied.** A local holding an owner by value (a Vec, a Map)
+given another value somewhere in its body is a place of early freeing (keyField -3, `ownLocalCand`): its declaration's
+and each assignment's value built in a region of its own, the one it held released at the assignment; it keeps where
+its value is handed back, viewed across the assignment, or copied elsewhere, and one declared with no value is no place
+(D13d writes nothing there, which the first assignment's release read - the definit scenario segfaulted under
+`-sanitize`). `b := box(mk(0))` then `b.v = mk(k)` kept everything because the constructor's view of its by-value
+argument was copied where kept (D9h), a value holding the place made with no store into it; a constructor's instance
+viewing only call results that are their own and land, by the plan, where the instance does (`typed.FreshViews`) is no
+longer copied - lowering and early freeing ask the same predicate. (A first version took every fresh argument,
+whatever scope it landed in: Map's rendering then read freed storage - strwalks and std's tests under `-sanitize`.)
+`checks/fixtures/earlyfree/vecreassign.olang`: 620 MB -> 1.6 MB and 1.7 MB.
+
+**F14.** T24 for a type argument a program's call bound (`Vec<I64>.Ref`) is said at that call (`InstanceNotReferable`,
+as G18a's needs are); D3b is said only alone (`Diagnostics.ErrorAlone`: dropped wherever another error is written, by
+any pass), and interpret runs section 8 on a program the checker refused as a build does, so both report O27 alone for
+`direct_borrow2`; a loop turn's text kept through a generator's borrowed elements (`for w in words(t) { out.Push(w) }`,
+and a walk held in a local) is O27 naming the text, as the same keep through a plain function is (`walkSrc`); T22a's
+words say what is tied ("ties where what it is given lives to what it keeps or gives back") - no two arguments need be
+related (a lambda handing back its capture's view, `pick(h holder) String&`); the stale-view note names the reference
+too and `.ToArray()` only for a Vec. Not done: the generator body's own O27 and the consumer's O10c for one cause
+(`held/gen_walkkept.olang`) stay two errors.
+
+**Also:** shared.olang's two test names spelling `f&x()` and `&return` renamed (the tidy pass's question 2).

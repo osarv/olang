@@ -196,7 +196,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   name holding a place only (a loop's, a binding's, one of several results) is written `_` (`for _ in range n` now
   allowed). Exempt: parameters, constructor fields, catch names, destructor-typed locals, a name in a branch the build
   leaves out (by text). Decided (mine): D3b is said only of a program with no other error (one mistake, one error - an
-  unread local is most often what the mistake left out); an import nothing is reached through is said at once, never of
+  unread local is most often what the mistake left out; `Diagnostics.ErrorAlone` since bulk review 6, so an error a
+  later pass reports - section 8's - takes its place too); an import nothing is reached through is said at once, never of
   a C import or a re-exporting alias. `tools/unused_migrate.olang` (driven; `--bare` for must-fail files) migrated the
   repository and is `olang fix`'s last tool.
 - **Assignment (S4, S4a, S4c, S4d).** Left to right: the target's place, then the value; a compound place is evaluated
@@ -416,7 +417,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   of its copy where its body proves nothing could tell (`typed.ViewWalk`, lowering's `viewLocals`) - an optimization, no
   meaning; on the default path a reference parameter is taken to keep what it is given and its referent to be changeable
   by another `mut` name, and a view is read where it stands only where no call in its statement could write it (no
-  closure or `any` reached through an argument, no global through which storage may be written - `check.mutStorage`).
+  closure or `any` reached through an argument, no global through which storage may be written - `check.mutStorage` -
+  and no argument holding, at any depth of its fields, a writable reference to the viewed storage's type: bulk review 6).
+  A value owning parts handed back from storage that is no view of the arguments (a global's) is copied by the function
+  (`retOwns`; while compiling every such value, so the evaluator agrees).
   Rows laid out in place given where run-time rows are wanted are widened each in turn (they were read as pairs). **T25d** (found by round 3b, on the default path too): text written in the program given a
   `mut` reference of the type it is declared over was handed over as the constant itself - refused, naming `$"abc"`.
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31, the user reversing the day
@@ -442,7 +446,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   of `Array<T>?&` is null, as every `?&`'s is (the coordinator, 2026-11-02, reversing the agent's empty; built
   2026-11-02, wt-tidy): a declaration with no value - a local, a global, a field, a constructor's zero - starts null, and
   `Array<T>(n)` with no fill writes null into each element, an array written `&` or held by value starting empty; a
-  null renders `null` wherever it stands (an element of an array or Vec too: it rendered `""`, found 2026-11-02), equals
+  null renders `null` wherever it stands (an element of an array or Vec too: it rendered `""`, found 2026-11-02; a field,
+  a payload), an enum's zero is its first case of its payload fields' zero values (bulk review 6), a `T?&` meets no
+  trait (said at the binding: `Map<String?&, V>`), equals
   only a null. A null read traps (T2b); nothing is uninitialized: a declaration with no value takes
   its type's zero value, made by the constructor from its parameters' defaults (D13c, the user's design); a type whose
   constructor has effects has none. `tools/null_migrate.olang` migrates code from the compiler's own diagnostics.
@@ -532,7 +538,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   user's decision 2026-10-25)** after a `Plus Mul BitAnd BitOr BitXor`'s result lets `2.0 * v` call `v.Mul(2.0)` when the
   left type has none, operands still evaluated left first; the parameter's type must differ from the receiver's, and a
   clash with the other type's operator is an error at the commuting (the later) declaration. A store through `x[i]`
-  reads, writes and writes back by `SetAt` (E31b); a `mut` method on `x[i]` is made on the element in place through the collection's `RefMut` where it has one, is reached writably and the call's other arguments are plain values - literals, reads of locals, globals and their fields, operations over them, constructors called on them - taken before them (2026-11-02, mine: not in a spawned call), else an error unless the element is a handle,
+  reads, writes and writes back by `SetAt` (E31b); a `mut` method on `x[i]` is made on the element in place through the collection's `RefMut` where it has one, is reached writably and the call's other arguments are plain values - literals, reads of locals, globals and their fields, operations over them, constructors called on them - taken before them (2026-11-02, mine: not in a spawned call) - and nothing the call runs before its write lands may change the collection (bulk review 6: the element's type reaches no function value, `any` or writable reference to storage the collection may be, and the method's and argument constructors' bodies write no global and call through no value or `any`, read off the effect summaries after each attempt, `settleInPlace`), else an error unless the element is a handle,
   and so is a compound store there through an operator method, which would run between the read and the write-back
   (2026-10-26: it was dropped unseen). No user-declared
   operator symbols; `==` and `$` overridable only by `Eq`/`Str`. A handle field of `x[i]`, or a handle a call gives
@@ -801,7 +807,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   still doesn't give more information than inferring a known size at compile time").** A by-value array parameter
   (at any level under a reference too) binds its length per call; each instance checks, decides asserts on lengths
   (S18c, with G16b's note naming the lengths) - made only where the body decides something on the length (D9a); G17
-  bounds a growing length. A length `Array<T>(n)` gives is folded exactly as
+  bounds a growing length. An argument of a run-time length is the one instance for those (`types.RunLength()`, built
+  2026-11-02: the marker had been UnknownT, so every such call was G9's error). A length `Array<T>(n)` gives is folded exactly as
   the program computes (in its operands' types, wrapping), else evaluated, else run-time - never an error.
 - **Generics composition (G8a, G15).** A type variable may be a type argument (`Vec<T>`); a still-generic receiver
   matches any application; an application with unknown arguments is a pattern, never laid out. `match T` is
@@ -1192,7 +1199,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   function value had stopped every early free in any program importing std/os. Measured: the earlyfree fixtures by
   value again, server 145 -> 2.3 MB, mapvec 66 -> 1.9 MB; knucleotide's peak 13.6 -> 9.9 MB (+0.76% instructions);
   bench otherwise within 0.5%. The early-free fuzzer's programs had stopped compiling since round 4 (a read-only result,
-  std/list not imported) - fixed.
+  std/list not imported) - fixed. **Owner locals (bulk review 6 F13):** a local holding a Vec or a Map by value given
+  another value in its body is a place too (`v = mk(k)` each turn: 620 MB -> 1.6 MB); a constructor's instance viewing
+  only call results landing where it does is not copied where kept (`typed.FreshViews`), so `b := box(mk(0))` then
+  `b.v = mk(k)` frees as it goes.
 - **Recorded limits:** long-lived mutated structures holding values a task can reach still only grow (ledger QF), and
   values with destructors are freed only where a `Destroy()` ends them; a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
   port's §8 pass.
@@ -1434,7 +1444,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (by name or a second name it made), by a call given the Vec or a struct holding it through a parameter whose body may
   grow it (summaries read off bodies, a fixed point; a function value grows what it is given writably), a global grown
   by name, or while a task holds the view; never by element type, and a place through an index or a call's result
-  meets no other (mine). Hidden routes stay the evaluator's and `-sanitize`'s. Vec had been abandoned in 2026-09 for `List` (a bump allocator could not free a grown
+  meets no other (mine). Since bulk review 6 a `Ref(i)`/`RefMut(i)` (and a Map's) is a view too, and a stale view or Ref
+  reads the retired buffer, its owning elements emptied by the growth (SPEC follows the code). Hidden routes stay the
+  evaluator's and `-sanitize`'s. Vec had been abandoned in 2026-09 for `List` (a bump allocator could not free a grown
   buffer), then built on `own` (QH), and is now neither.
 - **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Print`, `io.Println(t = "")`,
   `io.PrintErr`, `io.PrintErrln` fail with `io.Error` and are written with `try`; no std function ends the program on
