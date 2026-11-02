@@ -28392,4 +28392,14 @@ related (a lambda handing back its capture's view, `pick(h holder) String&`); th
 too and `.ToArray()` only for a Vec. Not done: the generator body's own O27 and the consumer's O10c for one cause
 (`held/gen_walkkept.olang`) stay two errors.
 
-**Also:** shared.olang's two test names spelling `f&x()` and `&return` renamed (the tidy pass's question 2).
+**Also:** shared.olang's two test names spelling `f&x()` and `&return` renamed (the tidy pass's question 2). **Found
+on the way, emit:** a declaration of another object's item did not bring the types it names - a mutable global of a
+named type baked as data (`Seen mut Vec<I64>` in tests/facts.olang) was declared `external global %"...Vec..."` in a
+test part that defined no such type, and clang refused the part under `-debug -sanitize` (`Emitter.declTypes`).
+`retOwns` hands a whole local moved where the result goes back as it is, as before (it had copied std/regex's
+`FindAll` result).
+
+**Measured.** bench's IR (15 programs, every module's .ll, `-target x86-64-v3`) byte-identical to master's, the `.loc`
+objects' file paths aside - so no instruction count or peak moved. `make scopesan` passed (the first run was stopped
+by a full disk after compiler/scope.olang; the rest was run again), `make scopefuzz` (150 programs, 688 scenarios) and
+`fuzz free 1 400 3 6` (1,402 scenarios, 1,875 places freeing at once) found nothing.
