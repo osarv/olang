@@ -1,0 +1,20 @@
+# check: run
+# G29 (bulk review 6 F11): a body deciding on the length of an array it takes by value, given one whose length is known
+# only at run time, is the one instance for those - the length no constant there, the if decided as it runs; fixed
+# lengths keep an instance each, decided while compiling
+import "std/os"
+
+fn kind(a Array<I64>) I64 {
+    if a.Len() == 3: return 3
+    return a.Len() * 10
+}
+
+K3 := kind(I64[1, 2, 3])
+K4 := kind(I64[1, 2, 3, 4])
+
+fn main() {
+    n := os.Args().Len() + 2
+    r := Array<I64>(n, 7)
+    assert kind(r) == 3 and kind(r[0:2]) == 20 and K3 == 3 and K4 == 40
+    assert kind(Array<I64>(n + 2, 1)) == 50
+}

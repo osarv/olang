@@ -11237,7 +11237,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
                 if pl != types.TypeId(0) and c.P.T.KindOf(pl) == types.Kind.Var and c.P.T.A(pl) == owner and c.P.T.B(pl) == i and aa != types.UnknownT and c.P.T.Length(aa) == types.TypeId(0) {
                     # (D9a lifted: an array of a run-time length given where the body decides on its length - an instance
                     # whose length is known only at run time, deciding there)
-                    b.Vals[i] = types.TypeId(0)
+                    b.Vals[i] = c.P.T.RunLength()
                     break
                 }
             }
@@ -11246,8 +11246,12 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
             seen := Array<Bool>(nv, false)
             for q in ps { c.varsIn(q, owner, seen, 0) }
             fname := c.text(c.P.FnDecl(f).Name)
+            vn := c.text(c.P.VarAt(owner, i).Name)
             if not seen[i] {
-                c.err(nsp, msgs.TypeVarNotInferable(c.text(c.P.VarAt(owner, i).Name), fname))
+                c.err(nsp, msgs.TypeVarNotInferable(vn, fname))
+            } else if vn.EndsWith(".Len()") {
+                # G29: a length variable, which only an array's length binds - no type argument the program writes
+                c.err(nsp, msgs.LengthNotInferable(fname, vn))
             } else {
                 c.err(nsp, msgs.TypeArgsNotInferable(fname))
             }

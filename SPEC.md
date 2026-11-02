@@ -8447,8 +8447,10 @@ array **by value** at some level (D9a) - the parameter itself (`a Array<F32>`), 
 reference (`m Array<Array<F64>>&`) - and whose body decides something on that level's length (D9a) is compiled once for
 each distinct set of **lengths** its calls give those levels, an **instance**; a generic one once for each
 instantiation and set of lengths. Each call gives the lengths its arguments have where they are known while compiling
-(T7c), and a length known only at run time otherwise (one instance for those). In an instance every such level is fixed storage of its length,
-so its `Len()` is a constant (T7c) and loops over it have a known count. Every rule of this specification applies to
+(T7c), and a length known only at run time otherwise (one instance for those, in which that level is an array of a
+run-time length, its `Len()` read as it runs and what it decides decided there). In any other instance every such level
+is fixed storage of its length, so its `Len()` is a constant (T7c) and loops over it have a known count. An argument
+giving no length at all is an error naming the parameter's length and `&`. Every rule of this specification applies to
 each instance as to a generic's instantiation (G16): each is checked against its lengths, errors found in one carry
 G16b's notes, a chain of instances each asking for the next is bounded by G17, and an instance is named by its function and its lengths, told apart as G16a tells instantiations apart and
 defined only by the program's root object (§10 B3d), since a module's own object cannot know what lengths its callers

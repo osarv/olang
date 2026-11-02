@@ -342,6 +342,8 @@ fn (t mut Table&) Named(d DeclId, args ListId) TypeId {
 }
 
 fn (t mut Table&) Array(elem TypeId, length TypeId) TypeId {
+    # (a length bound to "known only at run time" - G29's one instance for those - is no length: a run-time array)
+    if length != TypeId(0) and length == t.RunLength() { return t.Array(elem, TypeId(0)) }
     id := t.intern(data(Kind.Array, I64(elem), I64(length), 0), t.depthOf(elem) + 1)
     if t.Plain(elem) != elem { t.plains[I64(id)] = t.Array(t.Plain(elem), length) }
     return id
@@ -486,6 +488,10 @@ fn (t mut Table&) Var(owner I64, index I64, perm I64) TypeId { return t.intern(d
 
 # a constant: its type and its value (G29, T7c)
 fn (t mut Table&) Const(ty TypeId, value I64) TypeId { return t.intern(data(Kind.Const, I64(ty), value, 0), 1) }
+
+# G29: what a length variable is bound to where an array of a length known only at run time is given for it - the one
+# instance for every such call, in which the length is no constant (an array made of it is of a run-time length)
+fn (t mut Table&) RunLength() TypeId { return t.intern(data(Kind.Const, 0, -1, 0), 1) }
 
 # a constant still to be computed: its pattern, by a key naming its owner and its expression (T7c)
 fn (t mut Table&) ConstExpr(key String&) TypeId {

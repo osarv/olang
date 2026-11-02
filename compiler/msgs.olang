@@ -408,6 +408,7 @@ type Diag enum {
     ReferenceNarrowedReturned
     RefTypevarNotAggregate
     TypeArgsNotInferable
+    LengthNotInferable
     CtorTypeArgsNotInferable
     CtorVarsNotInferable
     CtorFieldNamesVar
@@ -2004,6 +2005,7 @@ fn RefTypevarNotAggregate(ty String&, text String&) Msg { return Msg(Diag.RefTyp
 
 # ERR_TYPE_ARGS_NOT_INFERABLE
 fn TypeArgsNotInferable(text String&) Msg { return Msg(Diag.TypeArgsNotInferable, "G9", "the type arguments of " $text " cannot be inferred from these arguments") }
+fn LengthNotInferable(text1 String&, text2 String&) Msg { return Msg(Diag.LengthNotInferable, "G29", "'" $text1 "' takes an array by value whose length its body decides on, and this argument gives none ('" $text2 "') - give it an array, or take the parameter as '&'") }
 
 # ERR_CTOR_TYPE_ARGS_NOT_INFERABLE
 fn CtorTypeArgsNotInferable(text1 String&, text2 String&) Msg { return Msg(Diag.CtorTypeArgsNotInferable, "G10c", "the type arguments of " $text1 " cannot be inferred from these arguments - write them: " $text2 "<...>(...)") }
