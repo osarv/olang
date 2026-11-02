@@ -6253,7 +6253,9 @@ whose storage nothing can name - a number, a `Bool` - is never moved, whatever t
 
 A **reference** local the function returns follows it too, where what it names is **built here**: one declared by `:=`
 or with a bare `&`, whose initializer is a temporary - a call's result built where it is put, a constructor's instance,
-a case of an enum (T17d) - or `null`, lives in the result scope; so does what a later assignment to it builds there.
+a case of an enum (T17d) - or `null`, names what lives in the result scope; so does what a later assignment to it builds
+there. Its own slot - the reference itself, which nothing can name (T11: no reference to a reference) - stays in its
+block.
 One initialized from existing storage (a parameter, a field read out of one, a call handing back what it was given)
 keeps that storage's scope (O25a).
 

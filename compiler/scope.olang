@@ -9281,30 +9281,7 @@ fn (s mut Scoper&) FoldStats() String {
             }
         }
     }
-    kinds Map<String, I64>
-    for b in range s.Plans.Len() {
-        body := s.Bodies[b]
-        by Map<I64, String>
-        for k in range s.Plans[b].Built.Len() {
-            match s.Plans[b].Built[k] {
-                case typed.Scope.Block(blk) {
-                    if I64(blk) >= body.Blocks.Len() or body.Blocks[I64(blk)].Kind != typed.BlockKind.Plain { continue }
-                    cur := try by.Get(I64(blk)) catch default ""
-                    by.Put(I64(blk), $cur " " $body.Sites[k].Kind)
-                }
-                case _ { }
-            }
-        }
-        for e in by {
-            n := try kinds.Get(e.Value) catch default 0
-            kinds.Put(e.Value, n + 1)
-        }
-    }
-    dump := StringBuilder()
-    for e in kinds {
-        if e.Value >= 20 { dump.Push($"\n  " $e.Value ":" $e.Key) }
-    }
-    return $"blocks built into: " $built ", of them plain (what folding could reach): " $reach $dump.ToString()
+    return $"blocks built into: " $built ", of them plain (what folding could reach): " $reach
 }
 
 # the fields the field inference promoted, "Declaration.field" each, for OLANG_SCOPESTATS
