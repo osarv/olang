@@ -1859,9 +1859,7 @@ fn (s mut Scoper&) isNullLit(x typed.Expr&) Bool {
 fn (s mut Scoper&) madeHere(x typed.Expr?&) Bool {
     if x is null { return false }
     return match x {
-        # an array a call given a scope argument builds is where that says, not here (E25, T7b)
-        case typed.Expr.Call(_, ty, c): not typed.ScopedCall(c) or not s.arenaValue(ty)
-        case typed.Expr.Make(_, _, _), typed.Expr.Collect(_, _, _): true
+        case typed.Expr.Call(_, _, _), typed.Expr.Make(_, _, _), typed.Expr.Collect(_, _, _): true
         case typed.Expr.Promote(_, _, _), typed.Expr.Text(_, _, _): true
         case typed.Expr.Lit(_, ty, _): s.holds(ty)
         case typed.Expr.Try(_, _, t): s.madeHere(t.X)
@@ -4518,13 +4516,7 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         return
     }
     if not s.holds(t) {
-        v := s.val(x, Term.None)
-        # a local a call given a scope argument declares is that call's array, where the argument puts it (E25, T7b):
-        # its storage lives there, not in its block
-        if x is not null and v.K == ValKind.Existing and s.arenaValue(t) and typed.ScopedArray(x) and v.T.Runs() {
-            s.stors[I64(l)] = v.T
-            s.plan.Stored[I64(l)] = s.scopeOf(v.T)
-        }
+        s.val(x, Term.None)
         return
     }
     # a held local: its temporary is built where its one use puts it (typed.LocalKind.Held) - a call's several results
@@ -5923,8 +5915,7 @@ fn (s mut Scoper&) isFresh(x typed.Expr?&) Bool {
     return match x {
         case typed.Expr.Promote(_, _, _), typed.Expr.Make(_, _, _), typed.Expr.Collect(_, _, _): true
         case typed.Expr.Text(_, _, _): true
-        # a call given a scope argument builds its result where that says, not where it stands (E25)
-        case typed.Expr.Call(_, ty, c): s.callBuilds(c, ty) and not typed.ScopedCall(c)
+        case typed.Expr.Call(_, ty, c): s.callBuilds(c, ty)
         case typed.Expr.Seq(_, _, q): s.isFresh(q.X)
         case typed.Expr.Away(_, _, y): s.isFresh(y)
         case typed.Expr.Try(_, _, t): s.isFresh(t.X)
@@ -7817,7 +7808,6 @@ fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr?&, w I64, wname Strin
         if s.noteThroughResult(rec, ic, w, wname, depth) { return }
         if s.isMethodCall(ic) or s.indexCall(ic) { return }
         # a result the callee builds: made where its scope argument says (E25)
-        # (one given a scope argument already is made where that says: the argument is what to change)
         fname := s.calleeName(ic)
         if fname.Len() > 0 and s.resultVarOf(s.calleeType(ic)) >= 0 {
             s.note(rec, s.B!.File, at, msgs.NoteMakeWhere(name, wname, fname, wname))
