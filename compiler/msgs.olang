@@ -408,6 +408,7 @@ type Diag enum {
     ReferenceNarrowedReturned
     RefTypevarNotAggregate
     TypeArgsNotInferable
+    NullableMeetsNoTrait
     LengthNotInferable
     CtorTypeArgsNotInferable
     CtorVarsNotInferable
@@ -2004,6 +2005,7 @@ fn ReferenceNarrowedReturned() Msg { return Msg(Diag.ReferenceNarrowedReturned, 
 fn RefTypevarNotAggregate(ty String&, text String&) Msg { return Msg(Diag.RefTypevarNotAggregate, "G11", $ty " cannot be held through '" $text "&' - only a struct, an enum or an array can") }
 
 # ERR_TYPE_ARGS_NOT_INFERABLE
+fn NullableMeetsNoTrait(text1 String&, text2 String&, text3 String&, text4 String&) Msg { return Msg(Diag.NullableMeetsNoTrait, "T2c", $text1 " may be null, so it meets no trait - " $text3 " must meet " $text2 " here: write " $text4 ", which never is") }
 fn TypeArgsNotInferable(text String&) Msg { return Msg(Diag.TypeArgsNotInferable, "G9", "the type arguments of " $text " cannot be inferred from these arguments") }
 fn LengthNotInferable(text1 String&, text2 String&) Msg { return Msg(Diag.LengthNotInferable, "G29", "'" $text1 "' takes an array by value whose length its body decides on, and this argument gives none ('" $text2 "') - give it an array, or take the parameter as '&'") }
 

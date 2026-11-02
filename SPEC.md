@@ -477,7 +477,9 @@ written `&` or held by value, it is one naming the empty array and the nullable 
 `T&` fits wherever a `T?&` is wanted (E12), and a `T?&` fits a `T&` only where it is known not to be null - narrowed
 by a test (S8e), or unwrapped by `x!` (E35), which ends the program on a null. Through a `T?&` nothing is read or written
 - no field, element, slice, method call or `Len()` - and it is not passed for a `T&` parameter, until it is known not to be
-null; `==`, `is null`, assignment and passing it on as a `T?&` need nothing. `x is null` and `x is not null` on a
+null; `==`, `is null`, assignment and passing it on as a `T?&` need nothing. So a `T?&` meets no trait (G19): bound to a
+type variable a trait constrains (`Map<String?&, V>`, whose key must be `Hashable`), it is a compile-time error at that
+binding naming the type that is never null. `x is null` and `x is not null` on a
 reference that is never null are compile-time errors (always false, always true). Where `null` and a `T&` meet - the
 values of a conditional or a match (E28, S12b), a `catch default null` beside a call giving `T&` (R11) - the result is
 `T?&`. A function value follows the same rules where its type is written `fn?&(...)`, and is never null where it is
@@ -5688,7 +5690,8 @@ written would be kept by neither.
   (E12c). A by-value result that holds
   references (a struct or payload carrying scope variables) takes a default that **builds all it holds**: a
   constructor call whose every argument is a number, a `Bool`, `null`, text written in the program (static, T25d) or
-  such a call again - `try validate(t) catch default List<String&>()`. It is built where the call's result is, so its
+  such a call again - `try validate(t) catch default List<String&>()` - or a declared function named as a value (T21:
+  made once for the program, it holds nothing). It is built where the call's result is, so its
   references are where the result's are, and what is later put into it lands there too. A default naming existing
   storage, or built from it, is a compile-time error: its references would have to agree with every scope the
   result's live in.

@@ -8309,6 +8309,27 @@ fn (c mut Checker&) equality(sp source.Span, op token.Tok, x typed.Expr&, y type
     }
     da := c.deref(ta)
     db := c.deref(tb)
+    # T21b: a declared function type beside a plain one meets it at its base, which it fits (a plain function value
+    # fits only the other way round where it is a lambda or a function named)
+    if c.P.T.KindOf(da) == types.Kind.Func and c.P.T.KindOf(db) == types.Kind.Func and c.P.T.FuncTag(da) != c.P.T.FuncTag(db) {
+        if c.P.T.FuncTag(db) == types.UnknownT {
+            x = c.fit(x, c.P.T.Untagged(da), sp)
+            ta, da = typeOf(x), typeOf(x)
+        } else if c.P.T.FuncTag(da) == types.UnknownT {
+            y = c.fit(y, c.P.T.Untagged(db), sp)
+            tb, db = typeOf(y), typeOf(y)
+        }
+    }
+    # T21: a function value never null beside one that may be meets it there (as a reference does, T2c)
+    if c.P.T.KindOf(da) == types.Kind.Func and c.P.T.KindOf(db) == types.Kind.Func and c.P.T.IsNullable(da) != c.P.T.IsNullable(db) {
+        if c.P.T.IsNullable(db) {
+            x = c.fit(x, c.P.T.OrNull(da), sp)
+            ta, da = typeOf(x), typeOf(x)
+        } else {
+            y = c.fit(y, c.P.T.OrNull(db), sp)
+            tb, db = typeOf(y), typeOf(y)
+        }
+    }
     if not c.P.T.Same(da, db) {
         # one flowing into the other meets it at the other's type (T6b, T7c: an array of a fixed length beside one of a
         # run-time length)
@@ -9893,6 +9914,17 @@ RoGlobal I64 = 3
 # a binding of owner's variables checked against their constraints where they are bound, reported at sp: whether
 # every one is met
 fn (c mut Checker&) bound(owner I64, args types.ListId, sp source.Span) Bool {
+    # T2c: a reference that may be null meets no trait - nothing is called through it before a test narrows it - said
+    # here, at the program's call, rather than at the generic's first call through the value
+    xs := c.P.T.Items(args)
+    for i in range xs.Len() {
+        x := xs[i]
+        if not c.isRef(x) or not c.P.T.IsNullable(x) or i >= c.P.VarCount(owner) { continue }
+        bd := c.P.VarAt(owner, i).Bound
+        if c.P.T.KindOf(bd) != types.Kind.Named or c.declKind(bd) != types.DeclKind.Trait { continue }
+        c.err(sp, msgs.NullableMeetsNoTrait(c.ty(x), c.text(c.P.T.DeclName(c.P.T.DeclOf(bd))), c.text(c.P.VarAt(owner, i).Name), c.ty(c.P.T.NonNull(x))))
+        return false
+    }
     u := c.P.FirstUnmet(owner, args)
     if u.Var < 0 { return true }
     x := c.P.T.Items(args)[u.Var]
@@ -14766,7 +14798,8 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool, got Array<
                 if i < ps.Len() { pt = ps[i] }
             }
             # R11: a default for a value holding references builds all it holds - nothing existing in it
-            if value and not c.isRef(pt) and c.P.T.HoldsRefs(pt) and not builtAst(cl.Defaults[i]) {
+            # (a declared function named - made once for the program, T21 - holds nothing either)
+            if value and not c.isRef(pt) and c.P.T.HoldsRefs(pt) and not builtAst(cl.Defaults[i]) and not c.namedFn(cl.Defaults[i]) {
                 c.err(cl.Defaults[i].Span(), msgs.DefaultHoldsReferences())
             }
             c.exprs.Push(c.exprTo(cl.Defaults[i], pt))
@@ -14828,6 +14861,15 @@ fn (c mut Checker&) existingIn(x typed.Expr?&) source.Span {
 }
 
 # whether an expression builds all it holds (R11): literals, written text, calls and array literals of such, a case
+# whether an expression names a declared function (or an import's) as a value: its environment none (T21)
+fn (c mut Checker&) namedFn(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Name(sp, _): c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.Func
+        case ast.Expr.Paren(_, y): c.namedFn(y)
+        case _: false
+    }
+}
+
 fn builtAst(x ast.Expr&) Bool {
     return match x {
         case ast.Expr.Lit(_, _), ast.Expr.Join(_, _), ast.Expr.Member(_, _, _): true

@@ -1,0 +1,29 @@
+# check: run
+# R11, T21b (bulk review 6 F12): a declared function named as a catch's default holds nothing to build (T21: made once
+# for the program), and a declared function type compared with its base meets it there, a function value never null
+# beside one that may be where it may (T21; both were E12)
+import "std/deque"
+
+type Handler fn(x I64) I64
+
+fn inc(x I64) I64 { return x + 1 }
+
+fn main() {
+    m := Map<I64, fn&(x I64) I64>()
+    for i in range 100 { m.Put(i, inc) }
+    m.Remove(5)
+    v := Vec<fn&(x I64) I64>()
+    for _ in range 100 { v.Push(inc) }
+    f := try v.Pop() catch default inc
+    d := deque.Deque<fn&(x I64) I64>()
+    for _ in range 50 { d.PushBack(inc) }
+    g := try m.Get(5) catch default inc
+    assert m.Len() == 99 and v.Len() == 99 and f(1) == 2 and g(2) == 3 and d.Len() == 50
+    h Handler?& = inc
+    k fn?&(x I64) I64 = inc
+    b fn?&(x I64) I64 = h
+    assert h == k and b == k
+    n fn&(x I64) I64 = inc
+    hn Handler& = n
+    assert n == k and k == n and hn == h and h == hn
+}
