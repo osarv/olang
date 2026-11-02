@@ -2576,6 +2576,9 @@ values" has the whole story. In short:
   walked with `for e in m` makes its value place no sole holder. A Ref into a Vec goes stale as a view does, unseen by
   M19g. Mutating calls through `x[i]` are still E31b's error (write `x.RefMut(i).M()`): taking them in place would let an
   argument evaluated after the receiver grow the Vec under it.
+  **Since early freeing's round 8 (2026-11-02, HISTORY.md):** owners held in place are places (one region each,
+  released through their anchors), a collection's own arrays are places (released as it grows), and a call through
+  `x[i]` is made in place where its other arguments are plain values; a walk of a Map of owners still makes it keep.
 
 ## 20. Round 4: the flip (wt-flip)
 
