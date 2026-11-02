@@ -1,0 +1,18 @@
+# a lambda handing back a view of its capture, called through a value whose result reads as borrowed from its argument
+import "std/io"
+
+fn apply(g fn&(a Array<I64>&) Array<I64>&, a Array<I64>&) Array<I64>& { return g(a) }
+
+fn main() {
+    long := Array<I64>(4, 7)
+    out := Vec<Array<I64>&>()
+    for i in range 5 {
+        cap := Array<I64>(4, i)
+        h := fn(a Array<I64>&) Array<I64>& { return cap[0:1] }
+        out.Push(apply(h, long))
+        out.Push(h(long))
+    }
+    junk := Vec<Array<I64>>()
+    for _ in range 50 { junk.Push(Array<I64>(4, 999)) }
+    io.Println($out " " $junk.Len())!
+}

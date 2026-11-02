@@ -1,0 +1,20 @@
+# a Ref kept across growth, in a function run again: is the replaced buffer released early under it?
+import "std/io"
+
+type blk struct(n I64, s String) { n, s }
+
+fn work(k I64) I64 {
+    v := Vec<blk>()
+    v.Push(blk(k, $k))
+    r := v.Ref(0)
+    for i in range 5000 { v.Push(blk(i, $i)) }
+    junk := Vec<blk>()
+    for _ in range 5000 { junk.Push(blk(-1, "zzzzzzzzzzzzzzzz")) }
+    return r.n + r.s.Len() + junk.Len() - 5000
+}
+
+fn main() {
+    s := 0
+    for k in range 200 { s += work(k) }
+    io.Println("sum " $s)!
+}

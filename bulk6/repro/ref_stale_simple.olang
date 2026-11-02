@@ -1,0 +1,19 @@
+# a Ref kept across growth: what does it read in a build?
+import "std/io"
+
+type blk struct(n I64, s String) { n, s }
+
+fn work(k I64) I64 {
+    v := Vec<blk>()
+    v.Push(blk(k + 1000, "abc"))
+    r := v.Ref(0)
+    for i in range 5000 { v.Push(blk(i, $i)) }
+    io.Println("r.n = " $r.n " r.s = " $r.s)!
+    return r.n
+}
+
+fn main() {
+    s := 0
+    for k in range 3 { s += work(k) }
+    io.Println("sum " $s)!
+}

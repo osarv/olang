@@ -1,0 +1,19 @@
+# E31b stores through x[i] in place: a compound store and a nested element's mutating call whose value grows the Vec
+import "std/io"
+
+type blk struct(n I64, xs Vec<I64>) { n, xs }
+
+G mut Vec<blk> = Vec<blk>()
+
+fn grow(x I64) I64 {
+    for i in range 1000 { G.Push(blk(i, Vec<I64>())) }
+    return x
+}
+
+fn main() {
+    G.Push(blk(1, Vec<I64>()))
+    G[0].n += grow(5)
+    io.Println("compound: G[0].n = " $G[0].n " (by value: 6)")!
+    G[0].n = grow(9) + G[0].n
+    io.Println("store: G[0].n = " $G[0].n)!
+}

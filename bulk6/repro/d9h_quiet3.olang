@@ -1,0 +1,26 @@
+# D9h: a for-in element over a reference parameter's Vec read in place over a "quiet" body; the body's call, given a
+# read-only reference only, writes the Vec through a writable reference that reference's referent holds
+import "std/io"
+
+type blk struct(xs Vec<I64>) { xs }
+type hold struct(v mut Vec<blk>&) { v }
+
+fn poke(h hold&) { h.v.RefMut(0).xs.ViewMut()[0] = 99 }
+
+fn walk(v Vec<blk>&, h hold&) I64 {
+    s := 0
+    for e in v {
+        poke(h)
+        s += e.xs[0]
+    }
+    return s
+}
+
+fn main() {
+    v := Vec<blk>()
+    xs := Vec<I64>()
+    xs.Push(1)
+    v.Push(blk(xs))
+    hd := hold(v)
+    io.Println("walk " $walk(v, hd) " (elements are copies: 1)")!
+}

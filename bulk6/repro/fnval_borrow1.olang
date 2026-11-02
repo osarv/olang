@@ -1,0 +1,27 @@
+# open point 5: a call through a function value whose result is read as borrowed from its reference arguments
+import "std/io"
+
+fn first(a Array<I64>&) Array<I64>& { return a[0:1] }
+
+fn mk(n I64) Array<I64> { return Array<I64>(4, n) }
+
+fn keep(g fn&(a Array<I64>&) Array<I64>&, n I64) Array<I64>& {
+    t := mk(n)
+    return g(t)
+}
+
+fn keep2(g fn&(a Array<I64>&) Array<I64>&, n I64) Array<I64>& {
+    return g(mk(n))
+}
+
+fn main() {
+    g := first
+    out := Vec<Array<I64>&>()
+    for i in range 5 {
+        out.Push(keep(g, i))
+        out.Push(keep2(g, i * 10))
+    }
+    junk := Vec<Array<I64>>()
+    for _ in range 5 { junk.Push(Array<I64>(4, 999)) }
+    io.Println($out " " $junk.Len())!
+}

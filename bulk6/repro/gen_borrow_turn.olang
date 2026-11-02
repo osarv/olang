@@ -1,0 +1,30 @@
+# D18c inferred: a generator borrowing its parameter's text, given a loop turn's text, its elements kept past the turn
+import "std/io"
+
+fn words(t String&) Iterator<String&> {
+    s := 0
+    for i in range t.Len() {
+        if t[i] == ' ' {
+            yield t[s:i]
+            s = i + 1
+        }
+    }
+    yield t[s:]
+}
+
+fn main() {
+    out := Vec<String&>()
+    for i in range 5 {
+        t := $i " a" " b"
+        for w in words(t) { out.Push(w) }
+    }
+    g := Vec<String&>()
+    for i in range 3 {
+        u := $i " c d"
+        it := words(u)
+        for w in it { g.Push(w) }
+    }
+    junk := Vec<String>()
+    for i in range 50 { junk.Push("zzzzzzzzzzzzzzzzzzzzzzz" $i) }
+    io.Println($out " " $g " " $junk.Len())!
+}

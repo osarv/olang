@@ -1,0 +1,19 @@
+# E31b in place through RefMut: the element's method runs a closure that grows the Vec the element is in
+import "std/io"
+
+type blk struct(n I64, f fn&()) { n, f }
+
+fn (b mut blk&) Run() {
+    b.f()
+    b.n = 99
+}
+
+fn main() {
+    v := Vec<blk>()
+    vr mut Vec<blk>& = v
+    v.Push(blk(1, fn() { }))
+    g := fn() { for i in range 1000 { vr.Push(blk(i, fn() { })) } }
+    v[0].f = g
+    v[0].Run()
+    io.Println("v[0].n = " $v[0].n " len " $v.Len())!
+}

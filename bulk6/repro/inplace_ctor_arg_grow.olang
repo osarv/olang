@@ -1,0 +1,21 @@
+# E31b in place: the RefMut is taken before the call's "plain" arguments; a constructor argument grows the collection
+import "std/io"
+
+type blk struct(n I64) { n }
+
+G mut Vec<blk> = Vec<blk>()
+
+fn grow(x I64) I64 {
+    for i in range 1000 { G.Push(blk(i)) }
+    return x
+}
+
+type w struct(x I64) { y := grow(x) }
+
+fn (b mut blk&) Set(a w) { b.n = a.y }
+
+fn main() {
+    G.Push(blk(1))
+    G[0].Set(w(42))
+    io.Println("G[0].n = " $G[0].n " len " $G.Len())!
+}
