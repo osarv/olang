@@ -1,8 +1,3 @@
-=== anyenumpayload.olang
-anyenumpayload.olang:17:25: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
-   17 |         xs.Push(Tag.Txt(s))
-      |                         ^
-compilation failed with 1 error
 === anynocopy.olang
 anynocopy.olang:16:17: error[T32]: 'Take' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
    16 |     for x in it.Take(2) { n += x }
@@ -246,34 +241,6 @@ b11near.olang:24:12: error: module std/io declares no 'Prinln' - did you mean 'P
    24 |     try io.Prinln($n $s)
       |            ^~~~~~
 compilation failed with 6 errors
-=== b11notehandle.olang
-b11notehandle.olang:13:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   13 |         l.Push(t)
-      |           ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
-      |     ^
-b11notehandle.olang:12:9: note: 't' is declared here, in a block that closes first - declare it where 'l' lives: 't mut String&l = ...'
-   12 |         t := "x" $i
-      |         ^
-b11notehandle.olang:13:16: note: this text lives in a block that closes first - pass a copy, which is made where 'l' lives: write '$' before it
-   13 |         l.Push(t)
-      |                ^
-compilation failed with 1 error
-=== b11notevalue.olang
-b11notevalue.olang:13:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   13 |         out.Push(p)
-      |             ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
-      |     ^
-b11notevalue.olang:12:9: note: 'p' is made here, in a block that closes first - make it where 'out' lives: 'glue&out(...)'
-   12 |         p := glue&t(dir, name)
-      |         ^
-b11notevalue.olang:13:18: note: this text lives in a block that closes first - pass a copy, which is made where 'out' lives: write '$' before it
-   13 |         out.Push(p)
-      |                  ^
-compilation failed with 1 error
 === b11unknownonce.olang
 b11unknownonce.olang:11:11: error: unknown type 'Json' - did you mean 'json.Json'?
    11 | fn kind(j Json&) String {
@@ -298,77 +265,10 @@ b5aself.olang:3:1: error[B5a]: C's initializer reads C, which is not set until t
     3 | C I32 = C + 1
       | ^
 compilation failed with 1 error
-=== b6condarg.olang
-b6condarg.olang:15:9: error[O25e]: these arguments live in different scopes, and the signature requires one ('&p')
-   15 |         keep(b, x if i == 1 else outer)
-      |         ^~~~
-compilation failed with 1 error
-=== b6condelem.olang
-b6condelem.olang:9:26: error[O25c]: the array outlives what this element refers to - build the element where the array goes
-    9 |         keep = String&[x if i == 1 else outer]
-      |                          ^~
-b6condelem.olang:9:24: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
-    9 |         keep = String&[x if i == 1 else outer]
-      |                        ^
-compilation failed with 1 error
-=== b6condfield.olang
-b6condfield.olang:12:12: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   12 |     b.last = x if i == 1 else "z"
-      |            ^
-b6condfield.olang:12:14: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
-   12 |     b.last = x if i == 1 else "z"
-      |              ^
-compilation failed with 1 error
-=== b6condtyped.olang
-b6condtyped.olang:14:16: error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
-   14 |         q.next = Nd(100 + i)
-      |                ^
-compilation failed with 1 error
-=== b6elemfield.olang
-b6elemfield.olang:14:20: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   14 |         cells[i].s = x
-      |                    ^
-compilation failed with 1 error
-=== b6elemfieldmap.olang
-b6elemfieldmap.olang:11:26: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   11 |         (try m.Get(i)).s = x
-      |                          ^
-compilation failed with 1 error
-=== b6elemfirst.olang
-b6elemfirst.olang:11:31: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   11 |         (try cells.First()).s = x
-      |                               ^
-compilation failed with 1 error
-=== b6elemgeneric.olang
-b6elemgeneric.olang:17:20: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   17 |         cells[i].s = x
-      |                    ^
-compilation failed with 1 error
-=== b6elemparallel.olang
-b6elemparallel.olang:11:9: error[D3b]: 'k' is declared and never read - read it, or leave the declaration out
-   11 |         k I64 = 0
-      |         ^
-b6elemparallel.olang:12:23: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   12 |         cells[i].s, k = x, 1
-      |                       ^
-compilation failed with 2 errors
-=== b6elemrows.olang
-b6elemrows.olang:8:20: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-    8 |         rows[i][0] = x
-      |                    ^
-compilation failed with 1 error
 === b6elemvalue.olang
-b6elemvalue.olang:15:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+b6elemvalue.olang:15:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
    15 |         wv := W(x)
       |                 ^
-compilation failed with 1 error
-=== b6matchfield.olang
-b6matchfield.olang:12:16: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   12 |         b.last = match i { case 1: x case _: "z" }
-      |                ^
-b6matchfield.olang:12:36: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
-   12 |         b.last = match i { case 1: x case _: "z" }
-      |                                    ^
 compilation failed with 1 error
 === b7atargetelsewhere.olang
 b7atargetelsewhere.olang:3:6: error[B7a]: 'String.Trim' is declared in another file - a test is an example of its own file's code, written beside it
@@ -616,151 +516,42 @@ c2afieldparam.olang:5:15: note: 'n' is declared here
     5 | type T struct(n I32) {
       |               ^~~~~
 compilation failed with 1 error
-=== c2dargnote.olang
-c2dargnote.olang:16:46: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   16 |     m mut Module&r = Module(path, path[0:1], src)
-      |                                              ^~~
-c2dargnote.olang:15:5: note: 'src' is declared here, in a block that closes first - declare it where 'r' lives: 'src mut String&r = ...'
-   15 |     src := "text" $path
-      |     ^~~
-compilation failed with 1 error
-=== c2dblock.olang
-c2dblock.olang:9:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-    9 |         nb = NB(q)
-      |                 ^
-c2dblock.olang: error[B4]: no main function - a program starts at 'fn main() { }'
-compilation failed with 2 errors
-=== c2dbuildarg.olang
-c2dbuildarg.olang:5:20: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    5 |     next mut N?& = nx
-      |                    ^~
-c2dbuildarg.olang:7:40: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    7 | type Cur struct(of N&) { at mut N&of = of }
-      |                                        ^~
-c2dbuildarg.olang:9:30: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
-    9 | fn fill(c mut Cur&) { grow(c.at) }
-      |                              ^~
-compilation failed with 3 errors
-=== c2dbuildassign.olang
-c2dbuildassign.olang:5:20: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    5 |     next mut N?& = nx
-      |                    ^~
-c2dbuildassign.olang:7:40: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    7 | type Cur struct(of N&) { at mut N&of = of }
-      |                                        ^~
-c2dbuildassign.olang:8:33: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
-    8 | fn fill(c mut Cur&) { c.at.next = N(9, null) }
-      |                                 ^
-compilation failed with 3 errors
-=== c2dbuildlocal.olang
-c2dbuildlocal.olang:10:16: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
-   10 |     x := cs[0].at
-      |                ^~
-compilation failed with 1 error
 === c2dcapturebuild.olang
-c2dcapturebuild.olang:18:27: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
+c2dcapturebuild.olang:18:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    18 |     f := fn() { w.hh.next = Node(5, null) }
-      |                           ^
-compilation failed with 1 error
-=== c2dcondargshort.olang
-c2dcondargshort.olang:15:26: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   15 |         e = E("a", mk(t) if i > 5 else t)
-      |                          ^~
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+c2dcapturebuild.olang:18:29: note: built here, where the receiver's part it was handed lives
+   18 |     f := fn() { w.hh.next = Node(5, null) }
+      |                             ^~~~~~~~~~~~~
 compilation failed with 1 error
 === c2dcondfield.olang
-c2dcondfield.olang:16:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+c2dcondfield.olang:16:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
    16 |         ms.Push(M(2, d))
       |                      ^
 compilation failed with 1 error
-=== c2dctorarg.olang
-c2dctorarg.olang:14:21: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   14 |         l.Push(Wrap(inner))
-      |                     ^~~~~
-compilation failed with 1 error
-=== c2de25blocklocal.olang
-c2de25blocklocal.olang:20:28: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   20 |             local := Env&c(other)
-      |                            ^~~~~
-c2de25blocklocal.olang:19:13: note: 'other' is declared here, in a block that closes first - declare it where 'f' lives: 'other mut Env&f = ...'
-   19 |             other := Env(null)
-      |             ^~~~~
-compilation failed with 1 error
 === c2de25once.olang
-c2de25once.olang:16:20: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   16 |         x := Env&c(local)
-      |                    ^~~~~
-c2de25once.olang:15:9: note: 'local' is declared here, in a block that closes first - declare it where 'c' lives: 'local mut Info&c = ...'
-   15 |         local := Info(k + 100)
-      |         ^~~~~
+c2de25once.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+   16 |         x := Env(local)
+      |                  ^~~~~
 compilation failed with 1 error
-=== c2dexactobliged.olang
-c2dexactobliged.olang:24:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   24 |         m.set(1, l)
-      |           ^~~
-c2dexactobliged.olang:17:25: note: the callee requires it because of this statement
-   17 |     if m.slot is null { m.slot = MS<K, V>(key, value) }
-      |                         ^
-c2dexactobliged.olang:23:9: note: 'l' is declared here, in a block that closes first - declare it where 'm' lives: 'l mut Vec<I32>&m = ...'
-   23 |         l mut Vec<I32>& = Vec<I32>()
-      |         ^
-compilation failed with 1 error
-=== c2dfieldentry.olang
-c2dfieldentry.olang:8:5: error[D3b]: 's' is declared and never read - read it, or leave the declaration out
-    8 |     s FeSlot& = FeSlot(Vec<I64>())
-      |     ^
-c2dfieldentry.olang:11:20: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   11 |         s = FeSlot(l)
-      |                    ^
-compilation failed with 2 errors
-=== c2dfieldoutlives.olang
-c2dfieldoutlives.olang:12:5: error[D3b]: 'bi' is declared and never read - read it, or leave the declaration out
-   12 |     bi View& = View(base)
-      |     ^~
-c2dfieldoutlives.olang:15:19: error[C2d]: this instance would outlive what its '&p' field refers to - keep it in that block, or build it there ('T&x(...)')
-   15 |         bi = View(inner)
-      |                   ^~~~~
-compilation failed with 2 errors
-=== c2dheldpush.olang
-c2dheldpush.olang:13:12: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
-   13 |     return Words(t)
-      |            ^~~~~
-c2dheldpush.olang:16:5: error[D3b]: 'w' is declared and never read - read it, or leave the declaration out
-   16 |     w := fromLocal()
-      |     ^
-compilation failed with 2 errors
 === c2dmatchfield.olang
-c2dmatchfield.olang:18:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+c2dmatchfield.olang:18:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
    18 |         ms.Push(M(2, d))
       |                      ^
 compilation failed with 1 error
 === c2dmixedscopes.olang
-c2dmixedscopes.olang:19:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+c2dmixedscopes.olang:19:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
    19 |         c = Ctx(d, nums)
       |                 ^
 compilation failed with 1 error
-=== c2downarr.olang
-c2downarr.olang:12:15: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   12 |         w = W(x)
-      |               ^
-compilation failed with 1 error
-=== c2downfield.olang
-c2downfield.olang:12:15: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   12 |         w = W(x)
-      |               ^
-compilation failed with 1 error
-=== c2downfieldread.olang
-c2downfieldread.olang:19:15: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   19 |         w = W(h)
-      |               ^
-compilation failed with 1 error
 === c2dreturn.olang
-c2dreturn.olang:10:12: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
+c2dreturn.olang:10:12: error[O26]: this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Clone()')
    10 |     return NB(p)
       |            ^~
 c2dreturn.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === c2dunnamed.olang
-c2dunnamed.olang:12:12: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
+c2dunnamed.olang:12:12: error[O26]: this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Clone()')
    12 |     return wrap(q)
       |            ^~~~
 c2dunnamed.olang: error[B4]: no main function - a program starts at 'fn main() { }'
@@ -829,16 +620,13 @@ c9bclash.olang:9:13: error[C9b]: the compiler supplies Destroy() for Res&, which
       |             ^~~~~~~
 compilation failed with 1 error
 === c9bdefault.olang
-c9bdefault.olang:12:38: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
-   12 |     c := try m.Take(1) catch default Spare
-      |                                      ^~~~~
 c9bdefault.olang:13:5: error[C9b]: 'c.Destroy()' needs 'c' to be the only way left to reach its instance
    13 |     c.Destroy()
       |     ^~~~~~~~~~~
 c9bdefault.olang:12:5: note: its value may be a try's default, not built for it
    12 |     c := try m.Take(1) catch default Spare
       |     ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === c9bdeferret.olang
 c9bdeferret.olang:11:11: error[C9b]: 'r.Destroy()' needs 'r' to be the only way left to reach its instance
    11 |     defer r.Destroy()
@@ -1056,11 +844,6 @@ condliteralunfit.olang:8:12: error[T6]: '300' does not fit U8
     8 |     b U8 = 300 if C else 1
       |            ^~~
 compilation failed with 1 error
-=== condmixedstore.olang
-condmixedstore.olang:23:13: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   23 |         h.f = local if i == 0 else Node(7)
-      |             ^
-compilation failed with 1 error
 === condmut.olang
 condmut.olang:4:4: error[B9a]: 'Level' is mutable, so a top-level condition cannot read it
     4 | if Level == 1 {
@@ -1100,22 +883,19 @@ compilation failed with 1 error
 copyoutrefs.olang:15:9: error[T25c]: a copy of a read-only Box cannot be stored where it can be written - store one of its own, made from its parts
    15 |     d = src
       |         ^~~
-copyoutrefs.olang:15:7: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-   15 |     d = src
-      |       ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === ctorlambdafieldloop.olang
-ctorlambdafieldloop.olang:16:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+ctorlambdafieldloop.olang:16:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
    16 |         ms.Push(M(2, d))
       |                      ^
 compilation failed with 1 error
 === ctorlambdafieldout.olang
-ctorlambdafieldout.olang:16:19: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+ctorlambdafieldout.olang:16:19: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
    16 |         ds.Push(D(ct))
       |                   ^~
 compilation failed with 1 error
 === ctorlambdafieldval.olang
-ctorlambdafieldval.olang:17:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+ctorlambdafieldval.olang:17:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
    17 |         m = M(W(b))
       |                 ^
 compilation failed with 1 error
@@ -1224,7 +1004,7 @@ d16cshadow.olang:7:19: error: 'x' is already declared here
       |                   ^
 compilation failed with 1 error
 === d16cstore.olang
-d16cstore.olang:7:9: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+d16cstore.olang:7:9: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Clone()')
     7 |     b.f = fn(n) { return n + p.x }
       |         ^
 compilation failed with 1 error
@@ -1237,17 +1017,9 @@ d16dcomposeshort.olang:8:5: note: the callee requires it because of this stateme
       |     ^~~~~~
 compilation failed with 1 error
 === d16dlambdaown.olang
-d16dlambdaown.olang:9:12: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
+d16dlambdaown.olang:9:12: error[O26]: this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Clone()')
     9 |     return fn(x I64) I64 {
       |            ^~
-compilation failed with 1 error
-=== d16dtwoscopes.olang
-d16dtwoscopes.olang:12:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   12 |         g = both(a, b)
-      |             ^~~~
-d16dtwoscopes.olang:4:5: note: the callee requires it because of this statement
-    4 |     return fn() { return $a $b }
-      |     ^~~~~~
 compilation failed with 1 error
 === d16espawn.olang
 d16espawn.olang:11:19: error[P2, D16e]: this function value closes before the join does - make it outside, or spawn the lambda itself
@@ -1298,11 +1070,6 @@ d17convglobal.olang:6:10: error[D17g]: Big does not fit I32 - write a value that
     6 |     n := I32(Big)
       |          ^~~~~~~~
 compilation failed with 2 errors
-=== d17fnvalue.olang
-d17fnvalue.olang:10:10: error[T22a]: 'keep' relates its arguments' scopes, which a call through a function value cannot check - call it directly
-   10 |     f := keep
-      |          ^~~~
-compilation failed with 1 error
 === d17needsargerror.olang
 d17needsargerror.olang:4:16: error[D17]: half has conditions, so a call fails with ArgumentError where one is false - add it after '?'
     4 | fn half(n I64) [n >= 0] I64 ? Odd {
@@ -1316,27 +1083,6 @@ d17notbool.olang:6:5: error[E15]: this call can fail - write 'try', and catch or
     6 |     f(3)
       |     ^
 compilation failed with 2 errors
-=== d17outlivescall.olang
-d17outlivescall.olang:13:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   13 |         keep(a, b)
-      |         ^~~~
-d17outlivescall.olang:7:43: note: the callee requires it because of this statement
-    7 | fn keep(a mut Node&, b Node&) [b outlives a] { }
-      |                                           ^
-d17outlivescall.olang:12:9: note: 'b' is declared here, in a block that closes first - declare it where 'a' lives: 'b mut Node&a = ...'
-   12 |         b := Node(i)
-      |         ^
-compilation failed with 1 error
-=== d17outlivesnoscope.olang
-d17outlivesnoscope.olang:7:30: error[D17d]: 'k' names no scope - an 'outlives' item names a reference parameter, a parameter holding references, or 'return'
-    7 | fn link(a mut Node&, k I64) [k outlives a] { }
-      |                              ^
-compilation failed with 1 error
-=== d17outlivesnotparam.olang
-d17outlivesnotparam.olang:8:43: error[D17d]: 'q' is no parameter of this function - an 'outlives' item names its parameters and 'return'
-    8 | fn link(a mut Node&, b Node&) [b outlives q] { }
-      |                                           ^
-compilation failed with 1 error
 === d17reqfalse.olang
 d17reqfalse.olang:10:5: error[D3b]: 'p' is declared and never read - read it, or leave the declaration out
    10 |     p := percent(5, Whole)!
@@ -1348,43 +1094,13 @@ d17reqfalse.olang:5:34: note: the condition
     5 | fn percent(part I64, whole I64) [whole > 0, 0 <= part <= whole] I64 ? { return part * 100 / whole }
       |                                  ^~~~~~~~~
 compilation failed with 2 errors
-=== d18argoutlived.olang
-d18argoutlived.olang:11:11: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   11 |         g = chars(s)
-      |           ^
-compilation failed with 1 error
 === d18canyborrowed.olang
 d18canyborrowed.olang:16:32: error[T32a, T22]: ViewGenerator<String>'s 'Next' says where its references live as Iterator<String&>'s signature does not - it cannot be called through an 'any Iterator<String&>&'
    16 |     a any Iterator<String&>& = words(t)
       |                                ^~~~~~~~
 $ROOT/std/prelude/iterator.olang:35:34: note: 'Next' is declared here
-   35 | fn (g mut ViewGenerator<T ? E>&) Next() T&g ? E, Exhausted { return try g.next() }
+   35 | fn (g mut ViewGenerator<T ? E>&) Next() T& ? E, Exhausted { return try g.next() }
       |                                  ^~~~
-compilation failed with 1 error
-=== d18canyscoped.olang
-d18canyscoped.olang:16:20: error[G11]: a type argument's reference marker is bare, as 'Vec<String&>' - its references live in the container
-   16 |     a any Iterator<String&t>& = words(t)
-      |                    ^~~~~~~~
-compilation failed with 1 error
-=== d18celembyvalue.olang
-d18celembyvalue.olang:5:33: error[D18c, O14]: 'n' is a value, its own storage the walk's copy - its elements can borrow only from what a reference parameter refers to: 'n Node&'
-    5 | fn firsts(n Node) Iterator<Node&n> {
-      |                                 ^
-compilation failed with 1 error
-=== d18celemmut.olang
-d18celemmut.olang:3:35: error[D18c]: a generator's borrowed elements are read-only - write its element without 'mut'
-    3 | fn firsts(t mut String&) Iterator<mut String&t> {
-      |                                   ^~~~~~~~~~~~
-compilation failed with 1 error
-=== d18celemnull.olang
-d18celemnull.olang:5:29: error[D18c]: a generator's borrowed element is never null - write it 'T&p' or 'T&return'
-    5 | fn firsts(n Node&) Iterator<Node?&n> {
-      |                             ^~~~~~~
-compilation failed with 1 error
-=== d18celemunknown.olang
-d18celemunknown.olang:3:38: error[D18c]: 'u' is no parameter of this generator - its elements borrow from a reference parameter ('Iterator<T&p>') or live where it does ('Iterator<T&return>')
-    3 | fn firsts(t String&) Iterator<String&u> {
-      |                                      ^
 compilation failed with 1 error
 === d18cheldfield.olang
 d18cheldfield.olang:18:29: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -1442,11 +1158,6 @@ d18contract.olang:3:17: error[D18, D17]: evens has conditions, so its first Next
     3 | fn evens(n I64) [n >= 0] Iterator<I64> {
       |                 ^~~~~~~~
 compilation failed with 1 error
-=== d18cotherparam.olang
-d18cotherparam.olang:3:1: error[D18c, T22a]: this generator yields what 'u' refers to, which outlives no Next call it can be shown to - write its elements as borrowed from it ('Iterator<T&u>'), or yield a copy ('$x', 'x.Clone()')
-    3 | fn other(t String&, u String&) Iterator<String&t> {
-      | ^~
-compilation failed with 1 error
 === d18cviewkept.olang
 d18cviewkept.olang:13:31: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    13 |     for w in labels(3) { kept.Push(w) }
@@ -1464,19 +1175,14 @@ d18cviewwrite.olang:13:27: error[T25b]: this writes through a read-only referenc
       |                           ^
 compilation failed with 1 error
 === d18cyieldframe.olang
-d18cyieldframe.olang:7:15: error[D18c, S20]: this generator's elements live where the generator does, and this value is not shown to last as long - yield a part of what lives there, or values ('Iterator<T>') and a copy ('$x', 'x.Clone()')
+d18cyieldframe.olang:7:15: error[O27]: this returns a view of 'buf', which this function builds - return the value (a result written without '&' copies it), or a copy: '$x'
     7 |         yield buf[0:1]
       |               ^~~
 compilation failed with 1 error
 === d18cyieldlocal.olang
-d18cyieldlocal.olang:16:12: error[D18c, S20]: this generator's elements live with what 't' refers to, and this value is not shown to last as long - yield a part of what lives there, or values ('Iterator<T>') and a copy ('$x', 'x.Clone()')
+d18cyieldlocal.olang:16:12: error[O27]: this returns a view of 'l', which this function builds - return the value (a result written without '&' copies it), or a copy: '$x'
    16 |     yield l[0:1]
       |            ^
-compilation failed with 1 error
-=== d18cyieldturn.olang
-d18cyieldturn.olang:7:15: error[D18c, S20]: this generator's elements live where the generator does, and this value is not shown to last as long - yield a part of what lives there, or values ('Iterator<T>') and a copy ('$x', 'x.Clone()')
-    7 |         yield s
-      |               ^
 compilation failed with 1 error
 === d18errors.olang
 d18errors.olang:5:4: error[D18]: a generator fails as its Next does - write its errors in its result: 'Iterator<I64 ? E>'
@@ -1488,25 +1194,10 @@ d18errundeclared.olang:10:11: error[R9, D18]: Bad can escape here, and this gene
    10 |     yield try g()
       |           ^~~
 compilation failed with 1 error
-=== d18returnscope.olang
-d18returnscope.olang:4:7: error[D18b]: a generator's result scope is one Next call's, which its locals outlive - '&return' marks storage its walk keeps only where its elements live there: 'Iterator<T&return>'
-    4 |     s String&return = $3
-      |       ^~~~~~~~~~~~~
-compilation failed with 1 error
 === d18returnvalue.olang
 d18returnvalue.olang:5:5: error[D18a]: a generator gives its values by 'yield' - 'return' ends it and takes none
     5 |     return 2
       |     ^~~~~~
-compilation failed with 1 error
-=== d18twoscopes.olang
-d18twoscopes.olang:13:11: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   13 |         g = both(a, b)
-      |           ^
-compilation failed with 1 error
-=== d18yieldborrow.olang
-d18yieldborrow.olang:3:1: error[D18c, T22a]: this generator yields what 't' refers to, which outlives no Next call it can be shown to - write its elements as borrowed from it ('Iterator<T&t>'), or yield a copy ('$x', 'x.Clone()')
-    3 | fn parts(t String&) Iterator<String&> {
-      | ^~
 compilation failed with 1 error
 === d18yielddefer.olang
 d18yielddefer.olang:8:5: error[S20]: a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block
@@ -1597,14 +1288,6 @@ d8adefault.olang:5:14: error[D8a]: a default is computed while compiling, and th
     5 | fn f(n I32 = counter) I32 { return n }
       |              ^~~~~~~
 d8adefault.olang: error[B4]: no main function - a program starts at 'fn main() { }'
-compilation failed with 2 errors
-=== d8cdestructinner.olang
-d8cdestructinner.olang:13:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
-   13 |     keep Node& = outer
-      |     ^~~~
-d8cdestructinner.olang:16:14: error[O10]: this reference lives in a scope that may not outlive where it is put
-   16 |         keep = a
-      |              ^
 compilation failed with 2 errors
 === d8dcount.olang
 d8dcount.olang:6:15: error[D8d]: these results are passed as the arguments, so there must be as many - destructure them first: 'a, b := g()'
@@ -1852,28 +1535,9 @@ definitloop.olang:7:5: note: this loop may run no times - assigning in its body 
       |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === derivedcopybuild.olang
-derivedcopybuild.olang:15:10: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
-   15 |     grow(x)
-      |          ^
-compilation failed with 1 error
-=== derivedcopycapture.olang
-derivedcopycapture.olang:15:9: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
-   15 |     run(fn() { x.next = Node(x.v + 100) })
-      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-derivedcopycapture.olang:18:25: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
-   18 |     for x in w.at { run(fn() { x.next = Node(x.v + 200) }) }
-      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-compilation failed with 2 errors
-=== derivedhelpercount.olang
-derivedhelpercount.olang:13:33: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
-   13 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
-      |                                 ^~~~~
-$ROOT/std/list.olang:475:25: note: in the standard library's code, here
-  475 |             if try keep(x) { c++ }
-      |                         ^
-derivedhelpercount.olang:13:33: note: instantiated here, with T = Bag&, E = nothing
-   13 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
-      |                                 ^~~~~
+derivedcopybuild.olang:17:38: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   17 | fn work(a Array<mut Node&>&) { visit(View(a)) }
+      |                                      ^~~~
 compilation failed with 1 error
 === e10aprivateeq.olang
 e10aprivateeq.olang:12:5: error[M6b]: '==' needs K's eq, which is private to its module - declare it Eq to use it here
@@ -1998,15 +1662,15 @@ e15atryonlychecks.olang:3:37: error[R8]: nothing here can fail - write it withou
       |                                     ^~~
 compilation failed with 1 error
 === e16atrydefaultslice.olang
-e16atrydefaultslice.olang:11:53: error[O10d]: this value lives in this function's own scope, which closes first
-   11 | fn view(a Array<Array<I64>>&) Array<I64>&a { return (try a.Get(0) catch default Array<I64>(2))[0:2] }
-      |                                                     ^
+e16atrydefaultslice.olang:11:52: error[O10d]: this value lives in this function's own scope, which closes first
+   11 | fn view(a Array<Array<I64>>&) Array<I64>& { return (try a.Get(0) catch default Array<I64>(2))[0:2] }
+      |                                                    ^
 e16atrydefaultslice.olang:22:10: note: instantiated here, with a[0].Len() = 2
    22 |     v := view(a)
       |          ^~~~
-e16atrydefaultslice.olang:11:95: note: this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that
-   11 | fn view(a Array<Array<I64>>&) Array<I64>&a { return (try a.Get(0) catch default Array<I64>(2))[0:2] }
-      |                                                                                               ^
+e16atrydefaultslice.olang:11:94: note: this borrows a value made here, which lives only in this block - keep a copy of what the slice shows ('$x', 'x.Clone()')
+   11 | fn view(a Array<Array<I64>>&) Array<I64>& { return (try a.Get(0) catch default Array<I64>(2))[0:2] }
+      |                                                                                              ^
 compilation failed with 1 error
 === e16constnotry.olang
 e16constnotry.olang:9:12: error[E16]: index 5 is outside the array's 2 elements
@@ -2032,63 +1696,6 @@ compilation failed with 1 error
 e24tryparens.olang:6:14: error[E24]: these parentheses group nothing - a 'try' covers the whole expression after it, so write it without them
     6 |     x := try (f(1) + 2)
       |              ^~~~~~~~~~
-compilation failed with 1 error
-=== e25defaultunknown.olang
-e25defaultunknown.olang:6:25: error[E25]: 'q' is no local or parameter here - a scope argument names where the result is built
-    6 | fn use(q P&, p P& = mkp&q(5)) I64 { return q.n + p.n }
-      |                         ^
-compilation failed with 1 error
-=== e25global.olang
-e25global.olang:8:14: error[E25, O1b]: 'G' lives in the program's scope, which a result reaches by being stored there, not by a scope argument
-    8 |     x := gmk&G(2)
-      |              ^
-compilation failed with 1 error
-=== e25noresultctor.olang
-e25noresultctor.olang:8:14: error[E25]: P builds no result a scope argument could place
-    8 |     out.Push(P&t(1))
-      |              ^~~~~~
-compilation failed with 1 error
-=== e25noresultscope.olang
-e25noresultscope.olang:9:10: error[E25]: num builds no result a scope argument could place
-    9 |     a := num&t(1)
-      |          ^~~~~~~~
-compilation failed with 1 error
-=== e25scopeargfield.olang
-e25scopeargfield.olang:11:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-   11 |         h.p = mkp&t(i)
-      |             ^
-compilation failed with 1 error
-=== e25scopeargpush.olang
-e25scopeargpush.olang:10:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   10 |         xs.Push(mkp&t(i))
-      |            ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
-      |     ^
-compilation failed with 1 error
-=== e25scopeargreturn.olang
-e25scopeargreturn.olang:8:16: error[O10d]: this value lives in this function's own scope, which closes first
-    8 |     return mkp&t(i)
-      |                ^
-e25scopeargreturn.olang:11:5: error[D3b]: 'p' is declared and never read - read it, or leave the declaration out
-   11 |     p := leak(3)
-      |     ^
-compilation failed with 2 errors
-=== e25scopeargreturnstore.olang
-e25scopeargreturnstore.olang:14:9: error[D3b]: 'r' is declared and never read - read it, or leave the declaration out
-   14 |         r := put(h, i)
-      |         ^
-e25scopeargreturnstore.olang:14:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   14 |         r := put(h, i)
-      |              ^~~
-e25scopeargreturnstore.olang:8:5: note: the callee requires it because of this statement
-    8 |     h.p = mkp&return(i)
-      |     ^
-compilation failed with 2 errors
-=== e25spawninner.olang
-e25spawninner.olang:11:13: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   11 |             spawn x = mkp&t(i * 11 + 1)
-      |             ^~~~~
 compilation failed with 1 error
 === e26bnarrownotnumber.olang
 e26bnarrownotnumber.olang:5:23: error[E26b]: 'Narrow' converts to a number type, and Bool is none
@@ -2140,12 +1747,12 @@ e28condlocallent.olang:25:7: error[E31b]: x[i] gives a copy of the element, whic
       |       ^
 compilation failed with 9 errors
 === e31bfieldviewbuild.olang
-e31bfieldviewbuild.olang:28:31: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+e31bfieldviewbuild.olang:28:31: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
    28 |     for i in range 3 { g(l[0].w, i + 10) }
       |                               ^
 compilation failed with 1 error
 === e31bfieldviewmethod.olang
-e31bfieldviewmethod.olang:28:41: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+e31bfieldviewmethod.olang:28:41: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
    28 | fn add(l mut Vec<Layer>&, v I64) { l[0].w.Build(v) }
       |                                         ^
 compilation failed with 1 error
@@ -2160,7 +1767,7 @@ e31bfnfield.olang:14:11: error[E31b]: x[i] gives a copy of the element, which th
       |           ^
 compilation failed with 1 error
 === e31bfnhandle.olang
-e31bfnhandle.olang:11:11: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+e31bfnhandle.olang:11:11: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
    11 |     h.fv(l[0])
       |           ^
 e31bfnhandle.olang:11:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -2217,15 +1824,12 @@ e31bviewalias.olang:12:5: note: the callee is no view of the element because of 
       |     ^
 compilation failed with 1 error
 === e31bviewbodyerrors.olang
-e31bviewbodyerrors.olang:18:40: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
-   18 | fn hang(e mut E&, k I64) { e.head.next = Node(k) }
-      |                                        ^
-e31bviewbodyerrors.olang:29:15: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+e31bviewbodyerrors.olang:29:15: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
    29 |         hang(s[k], 100 + k)
       |               ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === e31bviewbuilds.olang
-e31bviewbuilds.olang:18:27: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+e31bviewbuilds.olang:18:27: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
    18 |     for k in range 3 { f(s[k]) }
       |                           ^
 e31bviewbuilds.olang:18:27: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -2268,7 +1872,7 @@ e31bviewfield.olang:12:18: note: the callee is no view of the element because of
       |                  ^~~~~~~
 compilation failed with 1 error
 === e31bviewfnvalue.olang
-e31bviewfnvalue.olang:15:8: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+e31bviewfnvalue.olang:15:8: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
    15 |     f(s[0], fn(x mut V&) { })
       |        ^
 e31bviewfnvalue.olang:15:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -2330,7 +1934,7 @@ e31bviewpass.olang:16:18: note: the callee is no view of the element because of 
       |                  ^~~~
 compilation failed with 1 error
 === e31bviewrepoint.olang
-e31bviewrepoint.olang:15:8: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+e31bviewrepoint.olang:15:8: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
    15 |     f(s[0])
       |        ^
 e31bviewrepoint.olang:15:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -2450,11 +2054,6 @@ compilation failed with 8 errors
 e32asnotry.olang:10:13: error[E32]: 'as' fails where the value holds another case - write 'try' before it and catch CaseError, or '(x as C)!'
    10 |     r := sh as Shape.Circle
       |             ^~
-compilation failed with 1 error
-=== e32marker.olang
-e32marker.olang:11:28: error[E32]: '&mask' after the type is read as a reference marker, not the operator '&' - parenthesize: '(x as T) & mask'
-   11 |     x I32 = b as Box.Val & mask
-      |                            ^~~~
 compilation failed with 1 error
 === e33args.olang
 e33args.olang:4:17: error[E14]: 'Bits' takes no arguments
@@ -2768,15 +2367,6 @@ g10dtypeargs.olang:9:22: error[G7]: D is not generic, so it takes no type argume
     9 | fn main() ? { d := D<I64>(G<I64>()) }
       |                      ^~~
 compilation failed with 1 error
-=== g11named.olang
-g11named.olang:6:11: error[G11]: a type argument's reference marker is bare, as 'Vec<String&>' - its references live in the container
-    6 |     b Box<Array<I32>&p>& = Box<Array<I32>&p>(p)
-      |           ^~~~~~~~~~~~
-g11named.olang:6:32: error[G11]: a type argument's reference marker is bare, as 'Vec<String&>' - its references live in the container
-    6 |     b Box<Array<I32>&p>& = Box<Array<I32>&p>(p)
-      |                                ^~~~~~~~~~~~
-g11named.olang: error[B4]: no main function - a program starts at 'fn main() { }'
-compilation failed with 3 errors
 === g12explicitbound.olang
 g12explicitbound.olang:5:10: error[G19, T31a]: Bool does not satisfy the constraint Number on T: Number is closed, met by I1 to I128, U1 to U128, F16, BF16, F32, F64 alone
     5 |     b := sum<Bool>(true)
@@ -2820,32 +2410,6 @@ g16arrayname.olang:9:12: error[M19]: Array<Char>& has no method 'Trim'
     9 |   t := b.v.Trim()
       |            ^~~~
 compilation failed with 1 error
-=== g16bgenericonce.olang
-g16bgenericonce.olang:23:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   23 |     c.nodes.Put(key, n)
-      |             ^~~
-g16bgenericonce.olang:30:7: note: instantiated here, with K = String&, V = I32
-   30 |     b.Put("x", 3)
-      |       ^~~
-$ROOT/std/prelude/map.olang:109:13: note: the callee requires it because of this statement
-  109 |             m.ents[i].Value = value
-      |             ^
-g16bgenericonce.olang:22:5: note: 'n' is declared here, in a block that closes first - declare it where 'c' lives: 'n mut Node<K, V>&c = ...'
-   22 |     n := Node(key, value)
-      |     ^
-g16bgenericonce.olang:24:7: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   24 |     c.pushFront(n)
-      |       ^~~~~~~~~
-g16bgenericonce.olang:30:7: note: instantiated here, with K = String&, V = I32
-   30 |     b.Put("x", 3)
-      |       ^~~
-g16bgenericonce.olang:18:5: note: the callee requires it because of this statement
-   18 |     n.next = c.head
-      |     ^
-g16bgenericonce.olang:22:5: note: 'n' is declared here, in a block that closes first - declare it where 'c' lives: 'n mut Node<K, V>&c = ...'
-   22 |     n := Node(key, value)
-      |     ^
-compilation failed with 2 errors
 === g16boutermost.olang
 g16boutermost.olang:7:14: error[E16]: index 1 is outside the array's 1 elements
     7 |     return a[1] + Total(a[1:])
@@ -3773,32 +3337,10 @@ numtraitsqrtint.olang:7:10: error[G19, T31a]: I64 does not satisfy the constrain
     7 |     r := nsRoot(n)
       |          ^~~~~~
 compilation failed with 1 error
-=== o10arrlocal.olang
-o10arrlocal.olang:8:11: error[O10]: this reference lives in a scope that may not outlive where it is put
-    8 |         y = x
-      |           ^
-compilation failed with 1 error
-=== o10ccycle.olang
-o10ccycle.olang:21:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   21 |         g(h, it, 2)
-      |         ^
-o10ccycle.olang:15:43: note: the callee requires it because of this statement
-   15 | fn g(x mut Holder&, y mut Item&, n I64) { f(x, y, n) }
-      |                                           ^
-o10ccycle.olang:20:9: note: 'it' is declared here, in a block that closes first - declare it where 'h' lives: 'it mut Item&h = ...'
-   20 |         it mut Item& = Item(i)
-      |         ^~
-compilation failed with 1 error
 === o10celementstash.olang
-o10celementstash.olang:15:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   15 |         stash(g, h)
+o10celementstash.olang:14:9: error[O27]: this keeps a view of 'g', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Clone()'
+   14 |         stash(g, h)
       |         ^~~~~
-o10celementstash.olang:9:33: note: the callee requires it because of this statement
-    9 | fn stash(g G&, h mut Keeper&) { h.e = g.arr[0] }
-      |                                 ^
-o10celementstash.olang:13:9: note: 'g' is declared here, in a block that closes first - declare it where 'h' lives: 'g mut G&h = ...'
-   13 |         g := G()
-      |         ^
 compilation failed with 1 error
 === o10cloopcopy.olang
 o10cloopcopy.olang:27:22: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -3811,81 +3353,10 @@ o10cloopcopy.olang:27:9: note: 'p' is the loop's copy of an element, made in the
    27 |     for p in parts { merge(sum, p) }
       |         ^
 compilation failed with 1 error
-=== o10cnote.olang
-o10cnote.olang:10:51: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-   10 |     for s mut SSlot?& = m.first, s is not null, s = s.next {
-      |                                                   ^
-o10cnote.olang:10:27: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   10 |     for s mut SSlot?& = m.first, s is not null, s = s.next {
-      |                           ^~~~~
-o10cnote.olang:19:23: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   19 |     for s SSlot?& = m.first, s is not null, s = s.next {
-      |                       ^~~~~
-o10cnote.olang:28:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   28 |         m.Put(k, 1)
-      |           ^~~
-o10cnote.olang:16:5: note: the callee requires it because of this statement
-   16 |     m.first = SSlot(key, val, m.first)
-      |     ^
-o10cnote.olang:27:9: note: 'k' is declared here, in a block that closes first - declare it where 'm' lives: 'k String&m = ...'
-   27 |         k String& = $1
-      |         ^
-o10cnote.olang:28:15: note: this text lives in a block that closes first - pass a copy, which is made where 'm' lives: write '$' before it
-   28 |         m.Put(k, 1)
-      |               ^
-o10cnote.olang: error[B4]: no main function - a program starts at 'fn main() { }'
-compilation failed with 5 errors
-=== o10cnotedecl.olang
-o10cnotedecl.olang:18:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   18 |         wire(ok, c)
-      |         ^~~~
-o10cnotedecl.olang:12:5: note: the callee requires it because of this statement
-   12 |     b.onClick = fn() { c.n++ }
-      |     ^
-o10cnotedecl.olang:17:9: note: 'c' is declared here, in a block that closes first - declare it where 'ok' lives: 'c mut Counter&ok = ...'
-   17 |         c mut Counter& = Counter()
-      |         ^
-compilation failed with 1 error
-=== o10cnoteprovenance.olang
-o10cnoteprovenance.olang:20:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   20 |         s.add(e)
-      |           ^~~
-o10cnoteprovenance.olang:14:34: note: the callee requires it because of this statement
-   14 | fn (s mut Stats&) add(e Entry) { s.names.Put(e.service, 1) }
-      |                                  ^
-o10cnoteprovenance.olang:18:9: note: 'line' is declared here, in a block that closes first - declare it where 's' lives: 'line mut String&s = ...'
-   18 |         line := $l "!"
-      |         ^~~~
-compilation failed with 1 error
-=== o10cnotethroughcall.olang
-o10cnotethroughcall.olang:16:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   16 |         keep.Push(m)
-      |              ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
-      |     ^
-o10cnotethroughcall.olang:12:5: note: 'base' is declared here, in a block that closes first - declare it where 'keep' lives: 'base mut String&keep = ...'
-   12 |     base := $dir "/"
-      |     ^~~~
-o10cnotethroughcall.olang:14:9: note: 'path' is declared here, in a block that closes first - declare it where 'keep' lives: 'path mut String&keep = ...'
-   14 |         path := $base $i
-      |         ^~~~
-compilation failed with 1 error
-=== o10cresultlanding.olang
-o10cresultlanding.olang:20:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   20 |         keep(h, mk(x))
-      |         ^~~~
-o10cresultlanding.olang:15:33: note: the callee requires it because of this statement
-   15 | fn keep(s mut H&, r mut Rec&) { s.k = r }
-      |                                 ^
-o10cresultlanding.olang:19:9: note: 'x' is declared here, in a block that closes first - declare it where 'h' lives: 'x mut String&h = ...'
-   19 |         x := $i
-      |         ^
-compilation failed with 1 error
 === o10dd9bslice.olang
-o10dd9bslice.olang:5:42: error[O10d]: this value lives in this function's own scope, which closes first
-    5 | fn headOf<T>(x T) Array<Char>&x { return x[0:3] }
-      |                                          ^
+o10dd9bslice.olang:5:41: error[O10d]: this value lives in this function's own scope, which closes first
+    5 | fn headOf<T>(x T) Array<Char>& { return x[0:3] }
+      |                                         ^
 o10dd9bslice.olang:8:10: note: instantiated here, with T = String
     8 |     h := headOf(t)
       |          ^~~~~~
@@ -3895,153 +3366,121 @@ o12spawntarget.olang:12:29: error[O12]: where this place's references live is no
    12 |         join { spawn arr[0] = mkNode(i + 50) }
       |                             ^
 compilation failed with 1 error
-=== o13acopywrap.olang
-o13acopywrap.olang:14:12: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
-   14 |     return W(f)
-      |            ^
-compilation failed with 1 error
-=== o14afn.olang
-o14afn.olang:6:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
-    6 |     keep := fn() I32 { return 0 }
-      |     ^~~~
-o14afn.olang:10:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   10 |         keep = id(y)
-      |                ^~
-o14afn.olang:3:30: note: the callee requires it because of this statement
-    3 | fn id(f fn() I32) fn() I32 { return f }
-      |                              ^~~~~~
-compilation failed with 2 errors
 === o14bfoldshort.olang
-o14bfoldshort.olang:7:5: error[D3b]: 'longest' is declared and never read - read it, or leave the declaration out
-    7 |     longest String&keep = keep[0]
-      |     ^~~~~~~
-o14bfoldshort.olang:11:32: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   11 |         longest = words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
-      |                                ^~~~
-$ROOT/std/prelude/iterator.olang:72:5: note: the callee requires it because of this statement
-   72 |     return acc
-      |     ^~~~~~
-compilation failed with 2 errors
-=== o14btypevar.olang
-o14btypevar.olang:10:5: error[D3b]: 'y' is declared and never read - read it, or leave the declaration out
-   10 |     y Node& = Node(0)
-      |     ^
-o14btypevar.olang:13:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   13 |         y = id(n)
-      |             ^~
-o14btypevar.olang:8:19: note: the callee requires it because of this statement
-    8 | fn id<T>(x T) T { return x }
-      |                   ^~~~~~
-compilation failed with 2 errors
+o14bfoldshort.olang:10:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
+   10 |         words.Push($i "abc")
+      |         ^~~~~
+compilation failed with 1 error
 === o14byvalborrow.olang
-o14byvalborrow.olang:9:30: error[O10d]: this value lives in this function's own scope, which closes first
-    9 | fn bor(p aPt) aPt&p { return p }
-      |                              ^
+o14byvalborrow.olang:9:29: error[O10d]: this value lives in this function's own scope, which closes first
+    9 | fn bor(p aPt) aPt& { return p }
+      |                             ^
 o14byvalborrow.olang:9:8: note: 'p' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'p aPt&'
-    9 | fn bor(p aPt) aPt&p { return p }
+    9 | fn bor(p aPt) aPt& { return p }
       |        ^
 o14byvalborrow.olang:12:5: error[D3b]: 'w' is declared and never read - read it, or leave the declaration out
    12 |     w := bor(q)
       |     ^
 compilation failed with 2 errors
 === o14byvalborrowany.olang
-o14byvalborrowany.olang:12:37: error[O10d]: this value lives in this function's own scope, which closes first
-   12 | fn bor(p aPt) any aNamed&p { return p }
-      |                                     ^
+o14byvalborrowany.olang:12:36: error[O10d]: this value lives in this function's own scope, which closes first
+   12 | fn bor(p aPt) any aNamed& { return p }
+      |                                    ^
 o14byvalborrowany.olang:12:8: note: 'p' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'p aPt&'
-   12 | fn bor(p aPt) any aNamed&p { return p }
+   12 | fn bor(p aPt) any aNamed& { return p }
       |        ^
 compilation failed with 1 error
 === o14ccopyslice.olang
-o14ccopyslice.olang:8:12: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
+o14ccopyslice.olang:8:12: error[O26]: this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Clone()')
     8 |     return b[0:1]
       |            ^
 compilation failed with 1 error
-=== o14param.olang
-o14param.olang:4:24: error[O14]: this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'
-    4 | fn f(p P&) P& { return p }
-      |                        ^
-compilation failed with 1 error
 === o14returnglobal.olang
-o14returnglobal.olang:6:28: error[O14, T25c]: this returns a global's storage, and a built result is new storage its caller may write - return the value, which copies it (a result written without '&', T7b)
-    6 | fn Show() String& { return Data }
-      |                            ^~~~
+o14returnglobal.olang:8:21: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+    8 |     x mut String& = Show()
+      |                     ^~~~~~
 compilation failed with 1 error
 === o17bbitand.olang
-o17bbitand.olang:20:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17bbitand.olang:20:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    20 |         b.stash()
       |         ^
 compilation failed with 1 error
 === o17bkeeps.olang
-o17bkeeps.olang:15:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17bkeeps.olang:15:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    15 |         c.backlink()
       |         ^
 compilation failed with 1 error
 === o17bkeepsother.olang
-o17bkeepsother.olang:13:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17bkeepsother.olang:13:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    13 |         r := c.me()
       |              ^
 compilation failed with 1 error
 === o17blambdakeep.olang
-o17blambdakeep.olang:18:22: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17blambdakeep.olang:18:22: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    18 |         fs.Push(leak(idList(base)))
       |                      ^~~~~~~~~~~~
 compilation failed with 1 error
 === o17bnoand.olang
-o17bnoand.olang:14:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17bnoand.olang:14:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    14 |         b.stash()
       |         ^
 compilation failed with 1 error
 === o17bnonhandle.olang
-o17bnonhandle.olang:20:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17bnonhandle.olang:20:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    20 |         b.stash()
       |         ^
 compilation failed with 1 error
 === o17bpending.olang
-o17bpending.olang:15:11: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17bpending.olang:15:11: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    15 |     try g(b, m, n)
       |           ^
 compilation failed with 1 error
 === o17copylent.olang
-o17copylent.olang:19:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17copylent.olang:19:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    19 |     b.regrow(7)
       |     ^
 compilation failed with 1 error
 === o17handout.olang
-o17handout.olang:21:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17handout.olang:21:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    21 |     h := b.headOf()
       |          ^
 compilation failed with 1 error
 === o17lambdastore.olang
-o17lambdastore.olang:19:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17lambdastore.olang:19:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    19 |     b.regrow(7)
       |     ^
 compilation failed with 1 error
 === o17permute14.olang
-o17permute14.olang:28:7: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17permute14.olang:28:7: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    28 |     f(recs, mkText(7))
       |       ^~~~
 compilation failed with 1 error
 === o17permute15.olang
-o17permute15.olang:27:7: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17permute15.olang:27:7: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    27 |     f(recs, mkText(7))
       |       ^~~~
 compilation failed with 1 error
 === o17permute3.olang
-o17permute3.olang:27:7: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17permute3.olang:27:7: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    27 |     f(recs, mkText(7))
       |       ^~~~
 compilation failed with 1 error
 === o17permute4.olang
-o17permute4.olang:22:13: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17permute4.olang:22:13: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    22 |     setName(t, s)
       |             ^
-o17permute4.olang:27:7: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17permute4.olang:22:5: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   22 |     setName(t, s)
+      |     ^~~~~~~
+o17permute4.olang:19:37: note: the callee requires it because of this statement
+   19 | fn setName(r mut Rec&, s String&) { r.name = s }
+      |                                     ^
+o17permute4.olang:27:7: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    27 |     f(recs, mkText(7))
       |       ^~~~
-compilation failed with 2 errors
+compilation failed with 3 errors
 === o17permute5.olang
-o17permute5.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17permute5.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    25 |     each(recs, fn(x mut Rec&) { x.name = s })
       |          ^~~~
 o17permute5.olang:25:16: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
@@ -4052,12 +3491,12 @@ compilation failed with 2 errors
 o17permute6.olang:25:14: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
    25 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
       |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-o17permute6.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17permute6.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    25 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
       |          ^~
 compilation failed with 2 errors
 === o17permute6b.olang
-o17permute6b.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17permute6b.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    25 |     each(ns, g)
       |          ^~
 o17permute6b.olang:29:12: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
@@ -4065,22 +3504,22 @@ o17permute6b.olang:29:12: error[T25c]: this lambda writes through or keeps its b
       |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 2 errors
 === o17readonlycapture.olang
-o17readonlycapture.olang:21:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17readonlycapture.olang:21:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    21 |     b.grow()
       |     ^
 compilation failed with 1 error
 === o17selfstore.olang
-o17selfstore.olang:22:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17selfstore.olang:22:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    22 |     tie(b)
       |         ^
 compilation failed with 1 error
 === o17selfview.olang
-o17selfview.olang:19:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17selfview.olang:19:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    19 |     tie(b)
       |         ^
 compilation failed with 1 error
 === o17settlestale.olang
-o17settlestale.olang:31:8: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17settlestale.olang:31:8: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    31 |     zs(b, 1)
       |        ^
 compilation failed with 1 error
@@ -4088,27 +3527,27 @@ compilation failed with 1 error
 o17spawntargets.olang:21:5: error[D3b]: 'k' is declared and never read - read it, or leave the declaration out
    21 |     k I64 = 0
       |     ^
-o17spawntargets.olang:26:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17spawntargets.olang:26:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    26 |     grow(b)
       |          ^
 compilation failed with 2 errors
 === o17tempcallresult.olang
-o17tempcallresult.olang:25:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17tempcallresult.olang:25:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    25 |         addRef(idBox(seed), i + 1)
       |                ^~~~~~~~~~~
 compilation failed with 1 error
 === o17tempcond.olang
-o17tempcond.olang:28:19: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17tempcond.olang:28:19: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    28 |         addVia(b1 if i >= 0 else b2, i + 1)
       |                   ^~
 compilation failed with 1 error
 === o17tempcondarray.olang
-o17tempcondarray.olang:28:21: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17tempcondarray.olang:28:21: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    28 |         addVia(a[0] if i >= 0 else a[1], i + 1)
       |                     ^~
 compilation failed with 1 error
 === o17templambdacond.olang
-o17templambdacond.olang:22:25: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17templambdacond.olang:22:25: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    22 |         fs.Push(leak(b1 if i >= 0 else b2))
       |                         ^~
 o17templambdacond.olang:22:17: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -4119,22 +3558,22 @@ o17templambdacond.olang:16:28: note: the callee requires it because of this stat
       |                            ^~~~~~
 compilation failed with 2 errors
 === o17templambdacycle.olang
-o17templambdacycle.olang:26:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17templambdacycle.olang:26:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    26 |         even(idBox(seed), 2, fs)
       |              ^~~~~~~~~~~
 compilation failed with 1 error
 === o17templambdakeep.olang
-o17templambdakeep.olang:24:22: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17templambdakeep.olang:24:22: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    24 |         fs.Push(leak(idBox(seed)))
       |                      ^~~~~~~~~~~
 compilation failed with 1 error
 === o17tempreadonly.olang
-o17tempreadonly.olang:28:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o17tempreadonly.olang:28:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    28 |         addVia(mkBox(seed), i + 1)
       |                ^~~~~~~~~~~
 compilation failed with 1 error
 === o18claterkept.olang
-o18claterkept.olang:24:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+o18claterkept.olang:24:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    24 |         retext(s, j)
       |                ^
 compilation failed with 1 error
@@ -4157,209 +3596,38 @@ o18cprojectionfresh.olang:15:19: note: this text lives in a block that closes fi
    15 |         keep.Push(t)
       |                   ^
 compilation failed with 1 error
-=== o18cstorage.olang
-o18cstorage.olang:7:25: error[O10d]: this value lives in this function's own scope, which closes first
-    7 |     for e in m { return e }
-      |                         ^
-o18cstorage.olang:14:5: error[D3b]: 'k' is declared and never read - read it, or leave the declaration out
-   14 |     k := keep(m)
-      |     ^
-compilation failed with 2 errors
-=== o1bglobalarg.olang
-o1bglobalarg.olang:12:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   12 |         put(GL, inner)
-      |         ^~~
-o1bglobalarg.olang:8:38: note: the callee requires it because of this statement
-    8 | fn put(l mut Vec<Leaf&>&, n Leaf&) { l.Push(n) }
-      |                                      ^
-compilation failed with 1 error
-=== o1bglobalshort.olang
-o1bglobalshort.olang:11:8: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
-   11 |     GA = x
-      |        ^
-compilation failed with 1 error
 === o1blambdaglobal.olang
 o1blambdaglobal.olang:14:32: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
    14 |         case Box.Has(n) { GF = fn() { return n.v } }
       |                                ^~
 compilation failed with 1 error
-=== o20arrelem.olang
-o20arrelem.olang:11:19: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   11 |         b.data[i] = t
-      |                   ^
-compilation failed with 1 error
-=== o20fieldofresultstored.olang
-o20fieldofresultstored.olang:17:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   17 |         keep(g, local.params().Data)
-      |         ^~~~
-o20fieldofresultstored.olang:13:40: note: the callee requires it because of this statement
-   13 | fn keep(g mut G&, p mut Array<F64>&) { g.kept = p }
-      |                                        ^
-o20fieldofresultstored.olang:16:9: note: 'local' is declared here, in a block that closes first - declare it where 'g' lives: 'local mut G&g = ...'
-   16 |         local := G(2)
-      |         ^~~~~
-compilation failed with 1 error
-=== o20innertext.olang
-o20innertext.olang:23:13: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   23 |         b.s = s
-      |             ^
-compilation failed with 1 error
-=== o23abuild.olang
-o23abuild.olang:12:16: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
-   12 |     x Node&r = Node(5)
-      |                ^~~~
-compilation failed with 1 error
 === o23adepth.olang
-o23adepth.olang:13:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
-   13 |     keep Node&base = Node(0)
-      |     ^~~~
-o23adepth.olang:17:14: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+o23adepth.olang:17:14: error[O20]: 'v.n' lives where 'v' does, which closes first - keep a copy ('$v.n'), or keep what 'v' was made from
    17 |         keep = v.n
       |              ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === o23aliasmethod.olang
-o23aliasmethod.olang:12:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
-   12 |     keep N& = outer
-      |     ^~~~
-o23aliasmethod.olang:17:16: error[O23, O11]: this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance
+o23aliasmethod.olang:17:16: error[O23, O11]: this stores into a field whose binding is not known through this path - store through a variable holding the instance
    17 |         arr[0].Set(x)
       |                ^~~
 o23aliasmethod.olang:9:33: note: the callee requires it because of this statement
     9 | fn (c mut Cur&) Set(x mut N&) { c.at = x }
       |                                 ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === o23aliaswrite.olang
-o23aliaswrite.olang:12:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
-   12 |     keep N& = outer
-      |     ^~~~
-o23aliaswrite.olang:17:19: error[O23, O11]: this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance
-   17 |         arr[0].at = x
-      |                   ^
-compilation failed with 2 errors
-=== o23awrite.olang
-o23awrite.olang:21:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   21 |         bi.Set(n)
-      |            ^~~
-o23awrite.olang:15:40: note: the callee requires it because of this statement
-   15 | fn (c mut Cursor&) Set(n mut Node&c) { c.cur = n }
-      |                                        ^
-compilation failed with 1 error
-=== o23paramfield.olang
-o23paramfield.olang:13:45: error[O23, O11]: this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance
-   13 | fn setDeep(o mut Outer&, x mut N&) { o.c.at = x }
-      |                                             ^
-compilation failed with 1 error
-=== o25abare.olang
-o25abare.olang:5:19: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    5 |     next mut N& = nx
-      |                   ^~
-o25abare.olang:8:14: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-    8 |     c N& = l.next
-      |              ^~~~
-compilation failed with 2 errors
-=== o25atypevar.olang
-o25atypevar.olang:15:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   15 |         put(l, n)
-      |         ^~~
-o25atypevar.olang:9:5: note: the callee requires it because of this statement
-    9 |     l.Push(v)
-      |     ^
-o25atypevar.olang:14:9: note: 'n' is declared here, in a block that closes first - declare it where 'l' lives: 'n Node&l = ...'
-   14 |         n Node& = Node(i)
-      |         ^
-compilation failed with 1 error
-=== o25carrayelem.olang
-o25carrayelem.olang:13:18: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-   13 |     return Node&[n]
-      |                  ^
-o25carrayelem.olang:21:33: error[O25c]: the array outlives what this element refers to - build the element where the array goes
-   21 |         c = Array<mut Node&>(1, inner)
-      |                                 ^~~~~
-o25carrayelem.olang:22:19: error[O25c]: the array outlives what this element refers to - build the element where the array goes
-   22 |         d = Node&[inner]
-      |                   ^~~~~
-compilation failed with 3 errors
-=== o25derived.olang
-o25derived.olang:11:15: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   11 |     x N&c = c.at
-      |               ^~
+o23aliaswrite.olang:18:14: error[O20]: 'c.at' lives where 'c' does, which closes first - keep a copy ('$c.at'), or keep what 'c' was made from
+   18 |         keep = c.at
+      |              ^
 compilation failed with 1 error
 === o25enote.olang
-o25enote.olang:20:5: error[O25e]: these arguments live in different scopes, and the signature requires one ('&p')
-   20 |     put(st, text[:1], text[1:])
+o25enote.olang:19:5: error[O27]: this keeps a view of 'text', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Clone()'
+   19 |     put(st, text[:1], text[1:])
       |     ^~~
-o25enote.olang:19:5: note: 'text' is made here, in a block that closes first - make it where 'st' lives: 'mk&st(...)'
-   19 |     text := mk(n)
-      |     ^~~~
 compilation failed with 1 error
 === o25gfieldbinding.olang
-o25gfieldbinding.olang:17:15: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+o25gfieldbinding.olang:17:15: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
    17 |         c.cur = g
       |               ^
-compilation failed with 1 error
-=== o25hcopyelem.olang
-o25hcopyelem.olang:12:13: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
-   12 |     return b[0]
-      |             ^
-compilation failed with 1 error
-=== o25hcopyout.olang
-o25hcopyout.olang:11:5: error[D3b]: 'o' is declared and never read - read it, or leave the declaration out
-   11 |     o := Link(0, null)
-      |     ^
-o25hcopyout.olang:14:11: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-   14 |         o = m
-      |           ^
-compilation failed with 2 errors
-=== o25hcopyouter.olang
-o25hcopyouter.olang:14:18: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-   14 |         outer[0] = t
-      |                  ^
-compilation failed with 1 error
-=== o25hcopyprogram.olang
-o25hcopyprogram.olang:12:10: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-   12 |     best = t
-      |          ^
-compilation failed with 1 error
-=== o25hpairpush.olang
-o25hpairpush.olang:14:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   14 |         fields.Push(p)
-      |                ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
-      |     ^
-o25hpairpush.olang:13:9: note: 'p' is declared here, in a block that closes first - declare it where 'fields' lives: 'p mut Pair<String&, Node&>&fields = ...'
-   13 |         p := pair.Pair<String&, Node&>("k", value)
-      |         ^
-compilation failed with 1 error
-=== o25replacelist.olang
-o25replacelist.olang:15:13: error[O25]: a reference never narrows - 'still' lives in a block that closes first, and this keeps it longer
-   15 |     w.alive = still
-      |             ^
-o25replacelist.olang:11:5: note: 'still' is declared here, in a block that closes first - declare it where 'w' lives: 'still mut Vec<I64>&w = ...'
-   11 |     still := Vec<I64>()
-      |     ^~~~~
-o25replacelist.olang:11:5: note: or refill the one kept - 'w.alive.Clear()', then put the elements in: one made where 'w' lives stays there, beside every one made before it, until that scope closes
-   11 |     still := Vec<I64>()
-      |     ^~~~~
-compilation failed with 1 error
-=== o26aborrowparam.olang
-o26aborrowparam.olang:10:12: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   10 |     p.name = a
-      |            ^
-compilation failed with 1 error
-=== o26anumberstore.olang
-o26anumberstore.olang:19:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   19 |         v := sneak(line, s)
-      |              ^~~~~
-o26anumberstore.olang:12:5: note: the callee requires it because of this statement
-   12 |     s.names.Push(t)
-      |     ^
-o26anumberstore.olang:18:9: note: 'line' is made here, in a block that closes first - make it where 's' lives: 'mk&s(...)'
-   18 |         line := mk(i)
-      |         ^~~~
-o26anumberstore.olang:19:20: note: this text lives in a block that closes first - pass a copy, which is made where 's' lives: write '$' before it
-   19 |         v := sneak(line, s)
-      |                    ^~~~
 compilation failed with 1 error
 === o26own.olang
 o26own.olang:8:12: error[O10d]: this value lives in this function's own scope, which closes first
@@ -4369,93 +3637,13 @@ o26own.olang:7:6: note: 'n' is the call's own copy of its argument - take it by 
     7 | fn f(n N) N& {
       |      ^
 compilation failed with 1 error
-=== o26param.olang
-o26param.olang:5:20: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    5 |     next mut N?& = nx
-      |                    ^~
-o26param.olang:8:7: error[O26]: '&return' names the result scope, and this function has none
-    8 |     x mut N&return = N(1, null)
-      |       ^~~~~~~~~~~~
-o26param.olang:9:12: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-    9 |     l.next = x
-      |            ^
-compilation failed with 3 errors
-=== o26two.olang
-o26two.olang:5:20: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    5 |     next mut N?& = nx
-      |                    ^~
-o26two.olang:8:7: error[O26]: '&return' names the result scope, and this function has none
-    8 |     x N&return = N(1, null)
-      |       ^~~~~~~~
-o26two.olang:9:12: error[O10d]: this value lives in this function's own scope, which closes first
-    9 |     return x
-      |            ^
-compilation failed with 3 errors
-=== o3aremoved.olang
-o3aremoved.olang:4:5: error[O3]: a scope has no name to declare - write a bare '&', or '&x' for where 'x' lives
-    4 | fn f&s(x I32) I32 { return x }
-      |     ^
-compilation failed with 1 error
-=== o3noname.olang
-o3noname.olang:4:10: error[O4a]: 's' names no variable visible here - a marker names where the reference lives, as '&x'
-    4 | fn f(p P&s) I32 { return p.x }
-      |          ^
-compilation failed with 1 error
-=== o4bblock.olang
-o4bblock.olang:11:51: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-   11 |     for s mut SSlot?& = m.first, s is not null, s = s.next {
-      |                                                   ^
-o4bblock.olang:11:27: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   11 |     for s mut SSlot?& = m.first, s is not null, s = s.next {
-      |                           ^~~~~
-o4bblock.olang:20:23: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   20 |     for s SSlot?& = m.first, s is not null, s = s.next {
-      |                       ^~~~~
-o4bblock.olang:29:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   29 |         m.Put(k, 1)
-      |           ^~~
-o4bblock.olang:17:5: note: the callee requires it because of this statement
-   17 |     m.first = SSlot(key, val, m.first)
-      |     ^
-o4bblock.olang:28:9: note: 'k' is declared here, in a block that closes first - declare it where 'm' lives: 'k String&m = ...'
-   28 |         k String& = $1
-      |         ^
-o4bblock.olang:29:15: note: this text lives in a block that closes first - pass a copy, which is made where 'm' lives: write '$' before it
-   29 |         m.Put(k, 1)
-      |               ^
-o4bblock.olang: error[B4]: no main function - a program starts at 'fn main() { }'
-compilation failed with 5 errors
-=== o4bbyvaluebuild.olang
-o4bbyvaluebuild.olang:13:24: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
-   13 |     growFirst(local, c.at)
-      |                        ^~
-compilation failed with 1 error
 === o4bmapvalueblock.olang
+o4bmapvalueblock.olang:14:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
+   14 |         inner.Put("x", Value.Num(F64(i)))
+      |         ^~~~~
 o4bmapvalueblock.olang:15:37: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
    15 |         outer.Put("k" $i, Value.Obj(inner))
       |                                     ^~~~~
-compilation failed with 1 error
-=== o4bvalueparam.olang
-o4bvalueparam.olang:13:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
-   13 |     keep Holder = Holder(outer)
-      |     ^~~~
-o4bvalueparam.olang:17:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   17 |         keep = idh(h2)
-      |                ^~~
-o4bvalueparam.olang:10:27: note: the callee requires it because of this statement
-   10 | fn idh(x Holder) Holder { return x }
-      |                           ^~~~~~
-compilation failed with 2 errors
-=== o4bvalueparamgeneric.olang
-o4bvalueparamgeneric.olang:12:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
-   12 |     keep Holder = Holder(outer)
-      |     ^~~~
-o4bvalueparamgeneric.olang:16:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   16 |         keep = id(h2)
-      |                ^~
-o4bvalueparamgeneric.olang:9:19: note: the callee requires it because of this statement
-    9 | fn id<T>(x T) T { return x }
-      |                   ^~~~~~
 compilation failed with 2 errors
 === oparity.olang
 oparity.olang:9:15: error[E31]: V's Plus takes 2 parameters besides its receiver - an ordinary method, not the one '+' calls, which takes one
@@ -4517,28 +3705,18 @@ p1gresultref.olang:13:39: error[P1g]: a spawn target has exactly the call's type
    13 |         for t in range 2 { spawn parts[t] = part(t * 4, t * 4 + 4) }
       |                                       ^
 compilation failed with 1 error
-=== p1gtargetscope.olang
-p1gtargetscope.olang:10:5: error[D3b]: 'r' is declared and never read - read it, or leave the declaration out
-   10 |     r Node?& = null
-      |     ^
-p1gtargetscope.olang:14:13: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   14 |             spawn r = keepOf(l)
-      |             ^~~~~
-compilation failed with 2 errors
 === p1gtargetsnarrow.olang
-p1gtargetsnarrow.olang:15:9: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+p1gtargetsnarrow.olang:15:22: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |         spawn x, k = pick(m)
-      |         ^~~~~
+      |                      ^~~~
+p1gtargetsnarrow.olang:8:31: note: the callee requires it because of this statement
+    8 | fn pick(n Node&) Node&, I64 { return n, 1 }
+      |                               ^~~~~~
 compilation failed with 1 error
 === p1gtargetstwoblocks.olang
 p1gtargetstwoblocks.olang:18:13: error[P1g]: these targets live in different scopes, and the results are built in one
    18 |             spawn a, b = two(i + 5)
       |             ^~~~~
-compilation failed with 1 error
-=== p2blocklocal.olang
-p2blocklocal.olang:17:24: error[P2]: this argument's storage closes before the join does - declare it at the join's level or wider
-   17 |             spawn look(o)
-      |                        ^
 compilation failed with 1 error
 === p2fieldofresult.olang
 p2fieldofresult.olang:18:47: error[P2]: this argument's storage closes before the join does - declare it at the join's level or wider
@@ -4579,9 +3757,9 @@ p2spawntemp.olang:17:34: error[P2]: this argument refers to storage that closes 
       |                                  ^
 compilation failed with 1 error
 === p2spawnvalue.olang
-p2spawnvalue.olang:17:34: error[P2]: this argument refers to storage that closes before the join does - declare that at the join's level or wider
-   17 |             spawn out[i] = total(wv)
-      |                                  ^~
+p2spawnvalue.olang:16:21: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+   16 |             wv := W(a)
+      |                     ^
 compilation failed with 1 error
 === p4aclausebreak.olang
 p4aclausebreak.olang:12:50: error[P4a]: 'break' may not leave a task's clause - it runs on the task, outside the spawner's loops
@@ -4992,27 +4170,15 @@ r8trynothing.olang:4:20: error[R8]: nothing here can fail - write it without 'tr
       |                    ^~~
 compilation failed with 1 error
 === r9adefaultinner.olang
-r9adefaultinner.olang:16:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
-   16 |     keep Node& = outer
-      |     ^~~~
-r9adefaultinner.olang:19:40: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
-   19 |         keep = try mk(i) catch default inner
-      |                                        ^~~~~
-r9adefaultinner.olang:19:14: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+r9adefaultinner.olang:19:14: error[O25]: a reference never narrows - declare it with ':=' from what it is given
    19 |         keep = try mk(i) catch default inner
       |              ^
-compilation failed with 3 errors
+compilation failed with 1 error
 === r9adefaultlocal.olang
-r9adefaultlocal.olang:15:36: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
-   15 |     return try mk(1) catch default seed
-      |                                    ^~~~
 r9adefaultlocal.olang:15:12: error[O10d]: this value lives in this function's own scope, which closes first
    15 |     return try mk(1) catch default seed
       |            ^~~
-r9adefaultlocal.olang:18:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
-   18 |     keep := get(Node(42))
-      |     ^~~~
-compilation failed with 3 errors
+compilation failed with 1 error
 === r9arithpartial.olang
 r9arithpartial.olang:5:13: error[R1d]: arith.Error.Overflow can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it
     5 |     r I32 = try arith.Div(a, b) catch arith.Error.DivideByZero default 0
@@ -5192,7 +4358,7 @@ reflunknownhead.olang:5:7: error[M10]: 'zz' is no import here
       |       ^~
 compilation failed with 1 error
 === rendercopyc2d.olang
-rendercopyc2d.olang:25:16: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+rendercopyc2d.olang:25:16: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
    25 |     s := $Wrap(x)
       |                ^
 compilation failed with 1 error
@@ -5234,22 +4400,9 @@ roglobaltext.olang:14:14: error[S6]: V cannot be written - only a local, a param
    14 |     c.strcpy(V, "ab")
       |              ^
 compilation failed with 3 errors
-=== rv3assigncopy.olang
-rv3assigncopy.olang:12:5: error[D3b]: 'd' is declared and never read - read it, or leave the declaration out
-   12 |     d := Box()
-      |     ^
-rv3assigncopy.olang:13:7: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-   13 |     d = pick(r)
-      |       ^
-compilation failed with 2 errors
 === rv3condstore.olang
 rv3condstore.olang:13:12: error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
    13 |     d.head = Node()
-      |            ^
-compilation failed with 1 error
-=== rv3ctorcopy.olang
-rv3ctorcopy.olang:14:12: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   14 |     h := H(r)
       |            ^
 compilation failed with 1 error
 === rv3payloadcopy.olang
@@ -5308,7 +4461,7 @@ rv3viewsplit.olang:12:17: error[O17a]: this value's references live where its ow
       |                 ^
 compilation failed with 1 error
 === rv5condas.olang
-rv5condas.olang:34:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+rv5condas.olang:34:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    34 |         grow(y)
       |              ^
 compilation failed with 1 error
@@ -5317,15 +4470,13 @@ rv5condmember.olang:37:15: error[O11, O12]: where this reference's referent live
    37 |         growv(h)
       |               ^
 compilation failed with 1 error
-=== rv5ctorblock.olang
-rv5ctorblock.olang:16:14: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   16 |         keep = borrow(x)
-      |              ^
-compilation failed with 1 error
 === rv5ctormatch.olang
-rv5ctormatch.olang:19:28: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+rv5ctormatch.olang:19:30: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    19 |         case E.A(y) { keep = borrow(y) }
-      |                            ^
+      |                              ^~~~~~
+rv5ctormatch.olang:9:22: note: the callee requires it because of this statement
+    9 | fn borrow(b P&) P& { return b }
+      |                      ^~~~~~
 compilation failed with 1 error
 === rv5ctorparam.olang
 rv5ctorparam.olang:6:15: error[O10]: this reference lives in a scope that may not outlive where it is put
@@ -5333,19 +4484,20 @@ rv5ctorparam.olang:6:15: error[O10]: this reference lives in a scope that may no
       |               ^
 compilation failed with 1 error
 === rv5ctorparamcall.olang
-rv5ctorparamcall.olang:13:15: error[O10]: this reference lives in a scope that may not outlive where it is put
+rv5ctorparamcall.olang:13:15: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    13 |     keep P& = borrow(p)
       |               ^~~~~~
-compilation failed with 1 error
-=== rv5derivedbyvalue.olang
-rv5derivedbyvalue.olang:21:27: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
-   21 | fn f(h Holder&) { growv(h.b) }
-      |                           ^
+rv5ctorparamcall.olang:5:22: note: the callee requires it because of this statement
+    5 | fn borrow(b P&) P& { return b }
+      |                      ^~~~~~
 compilation failed with 1 error
 === rv5matchborrow.olang
-rv5matchborrow.olang:15:44: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+rv5matchborrow.olang:15:46: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |             case E.A(y) { if i == 0 { keep = borrow(y) } }
-      |                                            ^
+      |                                              ^~~~~~
+rv5matchborrow.olang:9:22: note: the callee requires it because of this statement
+    9 | fn borrow(b P&) P& { return b }
+      |                      ^~~~~~
 compilation failed with 1 error
 === rv5matchkeep.olang
 rv5matchkeep.olang:15:44: error[O10]: this reference lives in a scope that may not outlive where it is put
@@ -5353,18 +4505,18 @@ rv5matchkeep.olang:15:44: error[O10]: this reference lives in a scope that may n
       |                                            ^
 compilation failed with 1 error
 === rv9slicetemp.olang
-rv9slicetemp.olang:18:9: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+rv9slicetemp.olang:18:9: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Clone()')
    18 |     h.r = mk(n).a[0:2]
       |         ^
-rv9slicetemp.olang:18:18: note: this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that
+rv9slicetemp.olang:18:18: note: this borrows a value made here, which lives only in this block - keep a copy of what the slice shows ('$x', 'x.Clone()')
    18 |     h.r = mk(n).a[0:2]
       |                  ^
 compilation failed with 1 error
 === rv9slicetempas.olang
-rv9slicetempas.olang:22:9: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+rv9slicetempas.olang:22:9: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Clone()')
    22 |     h.r = (mkE(n) as E.C)!.a[0:2]
       |         ^
-rv9slicetempas.olang:22:29: note: this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that
+rv9slicetempas.olang:22:29: note: this borrows a value made here, which lives only in this block - keep a copy of what the slice shows ('$x', 'x.Clone()')
    22 |     h.r = (mkE(n) as E.C)!.a[0:2]
       |                             ^
 compilation failed with 1 error
@@ -5372,15 +4524,15 @@ compilation failed with 1 error
 rv9slicetempctor.olang:12:21: error[O10]: this reference lives in a scope that may not outlive where it is put
    12 |     r Array<I64>& = Big(n).a[0:2]
       |                     ^~~
-rv9slicetempctor.olang:12:29: note: this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that
+rv9slicetempctor.olang:12:29: note: this borrows a value made here, which lives only in this block - keep a copy of what the slice shows ('$x', 'x.Clone()')
    12 |     r Array<I64>& = Big(n).a[0:2]
       |                             ^
 compilation failed with 1 error
 === rv9slicetempview.olang
-rv9slicetempview.olang:11:9: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+rv9slicetempview.olang:11:9: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Clone()')
    11 |     h.r = Array<I64>(4, n)[0:4]
       |         ^
-rv9slicetempview.olang:11:27: note: this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that
+rv9slicetempview.olang:11:27: note: this borrows a value made here, which lives only in this block - keep a copy of what the slice shows ('$x', 'x.Clone()')
    11 |     h.r = Array<I64>(4, n)[0:4]
       |                           ^
 compilation failed with 1 error
@@ -5444,14 +4596,6 @@ s13caltperm.olang:13:37: error[T25b]: this writes through a read-only reference 
    13 |         case Box.W(x), Box.R(x) { x.v = 99 }
       |                                     ^
 compilation failed with 1 error
-=== s13caltscope.olang
-s13caltscope.olang:15:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
-   15 |     keep := ro(outer)
-      |     ^~~~
-s13caltscope.olang:21:51: error[O10]: this reference lives in a scope that may not outlive where it is put
-   21 |             case Box.Two(x, _), Box.Has(x) { keep = x }
-      |                                                   ^
-compilation failed with 2 errors
 === s13calttype.olang
 s13calttype.olang:9:26: error[S13c]: 'x' is bound as I32 by an earlier alternative - split the case
     9 |         case S.A(x), S.B(x) { return 1 }
@@ -5694,7 +4838,7 @@ s3joinnextline.olang:6:9: error[S3, E11b]: text on a line of its own does nothin
       |         ^~~~~~~
 compilation failed with 1 error
 === s5atbuilds.olang
-s5atbuilds.olang:14:25: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+s5atbuilds.olang:14:25: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
    14 |     for _ in range 3 { l[0].Tag("lit") }
       |                         ^
 s5atbuilds.olang:14:25: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -5712,28 +4856,6 @@ s5atnosetat.olang:7:25: note: the callee is no view of the element because of th
     7 | fn (a mut Acc&) Add() { a.N++ }
       |                         ^~~~~
 compilation failed with 1 error
-=== s5callresultfield.olang
-s5callresultfield.olang:12:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   12 |         ss.Push(box(t).s)
-      |            ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
-      |     ^
-s5callresultfield.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'ss' lives: 't mut String&ss = ...'
-   11 |         t := $k "-text"
-      |         ^
-compilation failed with 1 error
-=== s5callresultpush.olang
-s5callresultpush.olang:12:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   12 |         bs.Push(box(t))
-      |            ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
-      |     ^
-s5callresultpush.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives: 't mut String&bs = ...'
-   11 |         t := $k "-text"
-      |         ^
-compilation failed with 1 error
 === s5capturestruct.olang
 s5capturestruct.olang:15:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |         fs.Push(fn() I64 { return x.Sensor.Len() })
@@ -5743,14 +4865,9 @@ $ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this s
       |     ^
 compilation failed with 1 error
 === s5clonepush.olang
-s5clonepush.olang:10:19: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-   10 |         rows.Push(rec)
-      |                   ^~~
-compilation failed with 1 error
-=== s5destructnoscope.olang
-s5destructnoscope.olang:16:19: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-   16 |         rows.Push(rec)
-      |                   ^~~
+s5clonepush.olang:9:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
+    9 |         rec.Push($k "-text")
+      |         ^~~
 compilation failed with 1 error
 === s5e31bargs.olang
 s5e31bargs.olang:16:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -5774,7 +4891,7 @@ s5e31bspawn.olang:12:16: error[E31b]: x[i] gives a copy of the element, which th
       |                ^
 compilation failed with 1 error
 === s5handlenote.olang
-s5handlenote.olang:7:10: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+s5handlenote.olang:7:10: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
     7 |     names[0].Push("x")
       |          ^
 s5handlenote.olang:7:10: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -5797,7 +4914,7 @@ s5handlenote.olang:10:23: note: this text lives in a block that closes first - p
       |                       ^
 compilation failed with 3 errors
 === s5handlerepoint.olang
-s5handlerepoint.olang:17:9: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+s5handlerepoint.olang:17:9: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
    17 |     bags[0].Reset()
       |         ^
 s5handlerepoint.olang:17:9: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -5805,7 +4922,7 @@ s5handlerepoint.olang:17:9: error[E31b]: x[i] gives a copy of the element, which
       |         ^
 compilation failed with 2 errors
 === s5handlerepointfn.olang
-s5handlerepointfn.olang:13:17: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+s5handlerepointfn.olang:13:17: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
    13 |     resetFn(bags[0])
       |                 ^
 s5handlerepointfn.olang:13:17: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -5823,67 +4940,6 @@ s5heldindexnote.olang:21:37: note: the index is held here, for both the read and
    21 |     for k in range 3 { m[$k "-key"] += 100 }
       |                                     ^~
 compilation failed with 1 error
-=== s5helperlist.olang
-s5helperlist.olang:14:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   14 |         rows.Push(one(t))
-      |              ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
-      |     ^
-s5helperlist.olang:13:9: note: 't' is declared here, in a block that closes first - declare it where 'rows' lives: 't mut String&rows = ...'
-   13 |         t := $k "-text"
-      |         ^
-compilation failed with 1 error
-=== s5keepcall.olang
-s5keepcall.olang:12:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   12 |         keep(bs, box(t))
-      |         ^~~~
-s5keepcall.olang:5:35: note: the callee requires it because of this statement
-    5 | fn keep(l mut Vec<Box>&, b Box) { l.Push(b) }
-      |                                   ^
-s5keepcall.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives: 't mut String&bs = ...'
-   11 |         t := $k "-text"
-      |         ^
-s5keepcall.olang:13:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   13 |         m.Put(k, box(t))
-      |           ^~~
-$ROOT/std/prelude/map.olang:109:13: note: the callee requires it because of this statement
-  109 |             m.ents[i].Value = value
-      |             ^
-s5keepcall.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'm' lives: 't mut String&m = ...'
-   11 |         t := $k "-text"
-      |         ^
-compilation failed with 2 errors
-=== s5mapgetreturnparam.olang
-s5mapgetreturnparam.olang:16:20: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   16 |         keep = try get(m)
-      |                    ^~~
-s5mapgetreturnparam.olang:7:5: note: the callee requires it because of this statement
-    7 |     l := try m.Get(1)
-      |     ^
-compilation failed with 1 error
-=== s5nestedhandle.olang
-s5nestedhandle.olang:12:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   12 |         users[0][0].Push(t)
-      |                     ^~~~
-$ROOT/std/list.olang:72:27: note: the callee requires it because of this statement
-   72 |     if s.used == s.room { s.grow(x) }
-      |                           ^
-compilation failed with 1 error
-=== s5nestedhandlemap.olang
-s5nestedhandlemap.olang:13:28: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   13 |         (try mm.Get(0))[0].Push(t)
-      |                            ^~~~
-$ROOT/std/list.olang:72:27: note: the callee requires it because of this statement
-   72 |     if s.used == s.room { s.grow(x) }
-      |                           ^
-s5nestedhandlemap.olang:14:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   14 |         pushFn((try mm.Get(0))[0], t)
-      |         ^~~~~~
-s5nestedhandlemap.olang:5:51: note: the callee requires it because of this statement
-    5 | fn pushFn(l mut list.List<String&>&, s String&) { l.Push(s) }
-      |                                                   ^
-compilation failed with 2 errors
 === s5projection.olang
 s5projection.olang:16:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    16 |         bs.Push(pairish(t).a)
@@ -5909,7 +4965,7 @@ s5spawnhandle.olang:10:43: error[E31b, P2]: a task is not handed x[i]: the eleme
       |                                           ^~~~
 compilation failed with 1 error
 === s6handlestore.olang
-s6handlestore.olang:8:14: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+s6handlestore.olang:8:14: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
     8 |         names[i].Push("init")
       |              ^
 s6handlestore.olang:8:14: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -6082,7 +5138,7 @@ sliceimmutableglobal.olang:12:6: error[T25b]: this writes through a read-only re
       |      ^
 compilation failed with 2 errors
 === splitborrowctor.olang
-splitborrowctor.olang:17:12: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+splitborrowctor.olang:17:12: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    17 |     h := H(b)
       |            ^
 compilation failed with 1 error
@@ -6110,14 +5166,6 @@ compilation failed with 1 error
 stradapter.olang:30:22: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    30 |     return $applyI(b.g)
       |                      ^
-compilation failed with 1 error
-=== stradapterbody.olang
-stradapterbody.olang:16:20: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   16 |     g fn() I64 = b.c
-      |                    ^
-stradapterbody.olang:9:15: note: built here, where the receiver's part it was handed lives
-    9 |     x Ctr&c = Ctr(c.v + 1)
-      |               ^~~~~~~~~~~~
 compilation failed with 1 error
 === strarraycallback.olang
 strarraycallback.olang:9:21: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -6258,9 +5306,9 @@ strdefaultspawned.olang:31:32: note: built here, where the receiver's part it wa
       |                                ^~~~~~~
 compilation failed with 1 error
 === strderivedcallback.olang
-strderivedcallback.olang:16:23: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
-   16 |     for x in w.at { g(x) }
-      |                       ^
+strderivedcallback.olang:19:11: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   19 |     visit(View(b.ns), fn(x mut Node&) { x.next = Node(x.v + 100) })
+      |           ^~~~
 compilation failed with 1 error
 === strescapinglambda.olang
 strescapinglambda.olang:16:40: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -6287,51 +5335,27 @@ strmovedlocalkept.olang:24:10: note: built here, where the receiver's part it wa
       |          ^~~~~
 compilation failed with 1 error
 === strnotecopies.olang
-strnotecopies.olang:14:64: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-   14 |     for n Node?&b = b.head, n is not null, n = n.next { l.Push(n) }
-      |                                                                ^
-strnotecopies.olang:14:59: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   14 |     for n Node?&b = b.head, n is not null, n = n.next { l.Push(n) }
-      |                                                           ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
-      |     ^
-strnotecopies.olang:13:5: note: 'l' cannot be made where 'n' lives: a Str builds nothing where its receiver does - keep copies of what it reads instead of references
-   13 |     l := Vec<mut Node&>()
-      |     ^
-compilation failed with 2 errors
+strnotecopies.olang:13:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+   13 |     l := Vec<Node&>()
+      |          ^~~~~~~~~~~~
+compilation failed with 1 error
 === stro17captures.olang
-stro17captures.olang:36:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+stro17captures.olang:36:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    36 |     b.grow2()
       |     ^
-stro17captures.olang:40:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+stro17captures.olang:40:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    40 |     b.grow3()
       |     ^
 compilation failed with 2 errors
 === stro20condstore.olang
-stro20condstore.olang:25:13: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   25 |         h.f = match i {
-      |             ^
-stro20condstore.olang:34:18: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   34 |         h.arr[0] = local if i == 0 else P(7)
-      |                  ^
-stro20condstore.olang:40:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   40 |         put(h, local if i == 0 else P(7))
-      |         ^~~
-stro20condstore.olang:12:29: note: the callee requires it because of this statement
-   12 | fn put(h mut Hold&, n P&) { h.f = n }
-      |                             ^
-stro20condstore.olang:47:13: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+stro20condstore.olang:47:13: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Clone()')
    47 |         h.f = x
       |             ^
-stro20condstore.olang:53:13: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   53 |         h.f = (local if i == 0 else P(7)) if i < 5 else P(8)
-      |             ^
-compilation failed with 5 errors
+compilation failed with 1 error
 === strobligation.olang
-strobligation.olang:16:5: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   16 |     x Res&return = Res(b.head)
-      |     ^
+strobligation.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+   16 |     x Res& = Res(b.head)
+      |                  ^~~~~~
 compilation failed with 1 error
 === strofnothing.olang
 strofnothing.olang:5:10: error[E11a]: '$' has nothing to render - this call returns no value
@@ -6358,9 +5382,9 @@ compilation failed with 1 error
 strspawnbuilds.olang:21:40: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    21 | fn (b Bag&) Str() String { return "b" $hjoin(b.head) }
       |                                        ^~~~~
-strspawnbuilds.olang:13:16: note: built here, where the receiver's part it was handed lives
-   13 |     m Node&n = Node(n.v + 1, null)
-      |                ^~~~~~~~~~~~~~~~~~~
+strspawnbuilds.olang:18:22: note: built here, where the receiver's part it was handed lives
+   18 |     join { spawn x = grow(n) }
+      |                      ^~~~
 compilation failed with 1 error
 === strspawnclausedefault.olang
 strspawnclausedefault.olang:18:46: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -6384,9 +5408,9 @@ strspawnpart.olang:24:18: error[E11c, O12]: '$' does not say where a value it re
       |                  ^~~~
 compilation failed with 1 error
 === strstoredtor.olang
-strstoredtor.olang:16:15: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   16 |     x Res&b = Res(b.head)
-      |               ^~~
+strstoredtor.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+   16 |     x Res& = Res(b.head)
+      |                  ^~~~~~
 compilation failed with 1 error
 === strstorelambda.olang
 strstorelambda.olang:13:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -6397,9 +5421,9 @@ strstorelambda.olang:13:31: note: built here, where the receiver's part it was h
       |                               ^~~~~~~~~~~~~
 compilation failed with 1 error
 === strstorelocal.olang
-strstorelocal.olang:15:14: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   15 |     w Wr&b = Wr(b.head)
-      |              ^~~~~~~~~~
+strstorelocal.olang:15:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+   15 |     w Wr& = Wr(b.head)
+      |             ^~~~~~~~~~
 compilation failed with 1 error
 === strstorespawn.olang
 strstorespawn.olang:12:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -6424,14 +5448,6 @@ compilation failed with 2 errors
 strtransientadapter.olang:13:48: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    13 | fn (b Bag&) Str() String { return "b" $apply(b.c) }
       |                                                ^
-compilation failed with 1 error
-=== strtransientbuilds.olang
-strtransientbuilds.olang:29:41: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   29 | fn (b Bag2&) Str() String { return "b" $peek2(b.head) }
-      |                                         ^~~~~
-strtransientbuilds.olang:20:20: note: built here, where the receiver's part it was handed lives
-   20 |         m Node&n = Node(n.v + 1)
-      |                    ^~~~~~~~~~~~~
 compilation failed with 1 error
 === strtransientinner.olang
 strtransientinner.olang:13:16: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -6516,24 +5532,6 @@ t17casemeant.olang:6:22: error[T17]: FileKind has no case 'Other' - did you mean
     6 |     k := os.FileKind.Other
       |                      ^~~~~
 compilation failed with 1 error
-=== t17cheadline.olang
-t17cheadline.olang:16:34: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
-   16 |     b.undos.Push(Edit.Delete(at, gone))
-      |                                  ^~~~
-t17cheadline.olang:15:5: note: 'gone' is declared here, in a block that closes first - declare it where 'b' lives: 'gone mut String&b = ...'
-   15 |     gone := $b.text[at:at + n]
-      |     ^~~~
-compilation failed with 1 error
-=== t17cparamas.olang
-t17cparamas.olang:17:23: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
-   17 |         stash(Box.Has(inner), l)
-      |                       ^~~~~
-compilation failed with 1 error
-=== t17cparambinding.olang
-t17cparambinding.olang:21:23: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
-   21 |         stash(Box.Has(inner), l)
-      |                       ^~~~~
-compilation failed with 1 error
 === t17eanonymous.olang
 t17eanonymous.olang:2:16: error[T17e]: only a declared enum has raw values - declare the enum with 'type'
     2 | fn pick(x enum String { A, B }) I64 {
@@ -6593,11 +5591,6 @@ compilation failed with 1 error
 t17ewithouttype.olang:3:9: error[T17e]: a raw value needs the enum's raw type, written after 'enum': 'enum String {' or 'enum U8 {'
     3 |     A = 1
       |         ^
-compilation failed with 1 error
-=== t17payloadoutlived.olang
-t17payloadoutlived.olang:12:31: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
-   12 |         keep = Expr.Add(keep, t)
-      |                               ^
 compilation failed with 1 error
 === t17payloadscopes.olang
 t17payloadscopes.olang:15:9: error[D3b]: 'l' is declared and never read - read it, or leave the declaration out
@@ -6702,7 +5695,7 @@ t22aobligation.olang:17:11: error[T22a]: 'hang' relates its arguments' scopes, w
       |           ^~~~
 compilation failed with 2 errors
 === t22borrowedresult.olang
-t22borrowedresult.olang:15:10: error[E12]: expected fn(a mut N&) mut N&, found fn(a mut N&) mut N&a
+t22borrowedresult.olang:15:10: error[T22a]: 'self' relates its arguments' scopes, which a call through a function value cannot check - call it directly
    15 |     keep(self, x, 42)
       |          ^~~~
 compilation failed with 1 error
@@ -6715,28 +5708,19 @@ t22callunsafe.olang:20:48: error[E12]: expected fn(n P&) I64, found R
       |                                                ^~~~
 compilation failed with 2 errors
 === t22sharedscope.olang
-t22sharedscope.olang:13:9: error[E12]: expected fn(a mut N&, b N&), found fn(a mut N&, b N&a)
-   13 |     put(link, x, 42)
-      |         ^~~~
-t22sharedscope.olang:13:9: note: a function type says where each reference argument and the result live, as the function does - write 'fn(a mut N&, b N&a)', or pass a lambda calling it
+t22sharedscope.olang:13:9: error[T22a]: 'link' relates its arguments' scopes, which a call through a function value cannot check - call it directly
    13 |     put(link, x, 42)
       |         ^~~~
 compilation failed with 1 error
-=== t22sharedscopenote.olang
-t22sharedscopenote.olang:9:28: error[E12]: expected fn(a mut N&, b N&), found fn(a mut N&, b N&a)
-    9 |     f fn(a mut N&, b N&) = link
-      |                            ^~~~
-t22sharedscopenote.olang:9:28: note: a function type says where each reference argument and the result live, as the function does - write 'fn(a mut N&, b N&a)', or pass a lambda calling it
-    9 |     f fn(a mut N&, b N&) = link
-      |                            ^~~~
+=== t22sharedscopegeneric.olang
+t22sharedscopegeneric.olang:14:15: error[T22a]: 'link' relates its arguments' scopes, which a call through a function value cannot check - call it directly
+   14 |     f := keep(link)
+      |               ^~~~
 compilation failed with 1 error
 === t22sharedscopetype.olang
-t22sharedscopetype.olang:11:5: error[O25e]: these arguments live in different scopes, and the signature requires one ('&p')
-   11 |     f(a, t)
-      |     ^
-t22sharedscopetype.olang:10:5: note: 't' is declared here, in a block that closes first - declare it where 'a' lives: 't mut N&a = ...'
-   10 |     t := N(5)
-      |     ^
+t22sharedscopetype.olang:15:9: error[T22a]: 'link' relates its arguments' scopes, which a call through a function value cannot check - call it directly
+   15 |     put(link, x)
+      |         ^~~~
 compilation failed with 1 error
 === t24primref.olang
 t24primref.olang:4:10: error[T24]: I32 cannot be a reference - only a struct, an enum or an array can
@@ -6765,10 +5749,7 @@ compilation failed with 1 error
 t25blocalmutinit.olang:5:16: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     5 |     w mut P& = p
       |                ^
-t25blocalmutinit.olang:5:16: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-    5 |     w mut P& = p
-      |                ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === t25blocalreadonly.olang
 t25blocalreadonly.olang:7:7: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
     7 |     r.x = 2
@@ -6816,11 +5797,6 @@ t25caswrite.olang:18:22: error[T25b]: this writes through a read-only reference 
    18 |     (try w.items[0]).v = 82
       |                      ^
 compilation failed with 3 errors
-=== t25cbuiltresult.olang
-t25cbuiltresult.olang:7:13: error[T25c, O14]: a built result is new storage and writable, and this reference is read-only - borrow it: 'Item&l'
-    7 |     return l[0]
-      |             ^
-compilation failed with 1 error
 === t25ccondwrite.olang
 t25ccondwrite.olang:7:21: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
     7 |     (p if c else q).v = 92
@@ -6938,7 +5914,7 @@ t29aconvglobal.olang:7:11: error[T25c]: a read-only reference cannot become writ
       |           ^
 compilation failed with 1 error
 === t29aconvlifetime.olang
-t29aconvlifetime.olang:8:7: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+t29aconvlifetime.olang:8:7: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Clone()')
     8 |   h.s = String(local)
       |       ^
 compilation failed with 1 error
@@ -7138,16 +6114,6 @@ t31noreturnmeets.olang:8:11: note: 'Quit' is declared here, with another signatu
     8 | fn (q Q&) Quit() { os.Exit(1) }
       |           ^~~~
 compilation failed with 1 error
-=== t32anyarrcopy.olang
-t32anyarrcopy.olang:12:17: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
-   12 |         xs.Push(a)
-      |                 ^
-compilation failed with 1 error
-=== t32anyarrcopyassign.olang
-t32anyarrcopyassign.olang:15:15: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
-   15 |         h.s = a
-      |               ^
-compilation failed with 1 error
 === t32anyarrofany.olang
 t32anyarrofany.olang:17:18: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
    17 |         xs.Push(a[0:2])
@@ -7197,26 +6163,10 @@ t32anydefaultunmet.olang:18:20: note: 'Sum' is called through an 'any Iterator<S
    18 |     io.Println($it.Sum())!
       |                    ^~~
 compilation failed with 1 error
-=== t32anyglobal.olang
-t32anyglobal.olang:12:7: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
-   12 |     G = q
-      |       ^
-compilation failed with 1 error
 === t32anyhash.olang
 t32anyhash.olang:10:14: error[G19]: any aShape& does not satisfy the constraint Hashable on K
    10 |     m := Map<any aShape&, I64>()
       |              ^~~~~~~~~~~
-compilation failed with 1 error
-=== t32anyleak.olang
-t32anyleak.olang:11:8: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   11 |     xs.Push(q)
-      |        ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
-      |     ^
-t32anyleak.olang:10:5: note: 'q' is declared here, in a block that closes first - declare it where 'xs' lives: 'q mut aSq&xs = ...'
-   10 |     q := aSq(2)
-      |     ^
 compilation failed with 1 error
 === t32anymarker.olang
 t32anymarker.olang:9:8: error[T32]: an 'any' is always a reference - write 'any aShape&'
@@ -7262,12 +6212,9 @@ t32anyopenmatch.olang:11:14: error[T34]: any aShape&'s trait aShape is open, so 
       |              ^~~~~
 compilation failed with 1 error
 === t32anyscopes.olang
-t32anyscopes.olang:12:7: error[T32a, T22]: aBox's 'Get' says where its references live as aHas's signature does not - it cannot be called through an 'any aHas&'
+t32anyscopes.olang:12:7: error[T32a, T22a]: aBox's 'Get' relates its arguments' scopes, which a call through an 'any aHas&' cannot check - call it directly, or through generic code
    12 |     f(b)
       |       ^
-t32anyscopes.olang:8:14: note: 'Get' is declared here
-    8 | fn (b aBox&) Get() aItem&b { return b.it }
-      |              ^~~
 compilation failed with 1 error
 === t32anyspawned.olang
 t32anyspawned.olang:11:15: error[T32b, P1]: a task calls a function or a function value, never through an 'any''s table - write 'spawn fn() { x.Area() }'
@@ -7288,22 +6235,6 @@ compilation failed with 1 error
 t32anyunmet.olang:13:7: error[T32a, T31]: aRound cannot be an 'any aShape&': it has no method 'Area' that fits
    13 |     f(r)
       |       ^
-compilation failed with 1 error
-=== t32traitoutlives.olang
-t32traitoutlives.olang:5:24: error[D17f, D17d]: a trait's method states no 'outlives' - a call through an 'any' cannot check one; write it on the type's method
-    5 |     mut Set(n aNode&) [n outlives return]
-      |                        ^~~~~~~~~~~~~~~~~
-compilation failed with 1 error
-=== t34casebindnote.olang
-t34casebindnote.olang:18:32: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   18 |             case aBtn b { keep.Push(b) }
-      |                                ^~~~
-$ROOT/std/prelude/vec.olang:59:5: note: the callee requires it because of this statement
-   59 |     v.data[v.n] = x
-      |     ^
-t34casebindnote.olang:18:23: note: 'b' is bound here to what the matched value holds, which lives in a block that closes first - make that where 'keep' lives
-   18 |             case aBtn b { keep.Push(b) }
-      |                       ^
 compilation failed with 1 error
 === t34casegenericbare.olang
 t34casegenericbare.olang:17:14: error[G7]: type arguments for aBox: expected 1, found 0
@@ -7418,16 +6349,6 @@ t7dsize.olang:6:9: error[T7d]: an array of 2 elements stored where 3 are laid ou
       |         ^
 t7dsize.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
-=== t7elemnamed.olang
-t7elemnamed.olang:5:24: error[T24]: a nested reference lives in its container's scope - write a bare '&' here
-    5 | fn f(p P&) { a Array<P&p>& = null }
-      |                        ^
-compilation failed with 1 error
-=== tagunknownscope.olang
-tagunknownscope.olang:14:16: error[O12]: where 'l' lives is not known here, so nothing is declared to live there - read it through 'l', or declare the local with ':='
-   14 |         x Node&l = Node(3)
-      |                ^
-compilation failed with 1 error
 === tdcount.olang
 tdcount.olang:8:38: error[R11]: expected 2 defaults, one per result, found 1
     8 | fn count() { _, _ := try two() catch default 1 }
@@ -7437,19 +6358,6 @@ compilation failed with 1 error
 tdnovalue.olang:8:32: error[R11]: this call returns no value, so there is nothing for a default to stand in for
     8 | fn novalue() { x := try none() catch default 1 }
       |                                ^~~~~
-compilation failed with 1 error
-=== tdscope.olang
-tdscope.olang:10:8: error[S8a]: this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it
-   10 |     if true {
-      |        ^~~~
-tdscope.olang:12:47: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
-   12 |         r := try pick(a, false) catch default c
-      |                                               ^
-compilation failed with 2 errors
-=== tdscope2.olang
-tdscope2.olang:8:68: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
-    8 | fn other(p B&, q B&) B&p { return try pick(p, false) catch default q }
-      |                                                                    ^
 compilation failed with 1 error
 === timevirtualbuild.olang
 $ROOT/std/time.olang:145:12: error[S18c]: this assertion is false, evaluated while compiling: time.Virtual runs only in a test build ('olang test') - a program's clock is the real one
@@ -7686,35 +6594,6 @@ vec104viewfn.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the vie
    14 |     l.toks.Push(2)
       |            ^~~~
 compilation failed with 1 error
-=== vec110elemtextloop.olang
-vec110elemtextloop.olang:12:20: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   12 |         v.Push(Tok(t, i))
-      |                    ^
-compilation failed with 1 error
-=== vec112elemviewstore.olang
-vec112elemviewstore.olang:15:19: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   15 |         m[0].text = t
-      |                   ^
-compilation failed with 1 error
-=== vec113elemsetloop.olang
-vec113elemsetloop.olang:13:20: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   13 |         v[0] = Tok(t, 2)
-      |                    ^
-compilation failed with 1 error
-=== vec114elemkeepfn.olang
-vec114elemkeepfn.olang:16:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   16 |         keep(v, t)
-      |         ^~~~
-vec114elemkeepfn.olang:10:5: note: the callee requires it because of this statement
-   10 |     v.Push(Tok(t, 0))
-      |     ^
-vec114elemkeepfn.olang:15:9: note: 't' is declared here, in a block that closes first - declare it where 'v' lives: 't mut String&v = ...'
-   15 |         t := "w" $i
-      |         ^
-vec114elemkeepfn.olang:16:17: note: this text lives in a block that closes first - pass a copy, which is made where 'v' lives: write '$' before it
-   16 |         keep(v, t)
-      |                 ^
-compilation failed with 1 error
 === vec13nominal.olang
 vec13nominal.olang:18:20: error[M19g]: 't' holds a view of 'w' taken before 'w' may have grown
    18 |     try io.Println(t)
@@ -7747,35 +6626,20 @@ vec19listconv.olang:11:28: note: 'v' may grow here, in 'Push' - take the view af
    11 |     for _ in range 100 { v.Push('b') }
       |                            ^~~~
 compilation failed with 1 error
+=== vec20byname.olang
+vec20byname.olang:34:10: error[T22a]: 'first' relates its arguments' scopes, which a call through a function value cannot check - call it directly
+   34 |     f := first
+      |          ^~~~~
+compilation failed with 1 error
 === vec27cloneshort.olang
-vec27cloneshort.olang:10:16: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-   10 |         keep = w
-      |                ^
+vec27cloneshort.olang:9:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
+    9 |         w.Push($i "x")
+      |         ^
 compilation failed with 1 error
 === vec54assertmsgreturn.olang
 vec54assertmsgreturn.olang:26:51: error[S17]: an assert's message may not return - it is evaluated only where it is used, and gives text
    26 |     assert a.Len() > 100, (try h(a.Len()) catch { return pick(true, a, b) })
       |                                                   ^~~~~~
-compilation failed with 1 error
-=== vec70ctorfieldblock.olang
-vec70ctorfieldblock.olang:12:15: error[C2d]: this instance would outlive what its '&p' field refers to - keep it in that block, or build it there ('T&x(...)')
-   12 |         h = H(t, 5 + i)
-      |               ^
-compilation failed with 1 error
-=== vec71ctorfieldfunc.olang
-vec71ctorfieldfunc.olang:13:11: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   13 |         h = mk(t)
-      |           ^
-compilation failed with 1 error
-=== vec72ctorscopearg.olang
-vec72ctorscopearg.olang:13:15: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
-   13 |         h = H(t, 5 + i)
-      |               ^
-compilation failed with 1 error
-=== vec73ctorlocaltyped.olang
-vec73ctorlocaltyped.olang:13:15: error[C2d]: this instance would outlive what its '&p' field refers to - keep it in that block, or build it there ('T&x(...)')
-   13 |         h = H(s, 5 + i)
-      |               ^
 compilation failed with 1 error
 === vec88fieldviewpush.olang
 vec88fieldviewpush.olang:14:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
@@ -7808,7 +6672,7 @@ compilation failed with 1 error
 vec95globalkeeps.olang:12:7: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
    12 |     G = l.toks.View()
       |       ^
-vec95globalkeeps.olang:12:16: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+vec95globalkeeps.olang:12:16: error[O27]: this keeps a view of 'l', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Clone()'
    12 |     G = l.toks.View()
       |                ^~~~
 compilation failed with 2 errors
@@ -7863,9 +6727,12 @@ x12method.olang:5:1: error[X12]: an export fn is one C calls by its name, and a 
 compilation failed with 1 error
 === x12result.olang
 x12result.olang:4:28: error[X12]: String& cannot go back to C - an export fn gives one number, Bool, extern type's reference, plain-data struct, or an array of these by value
-    4 | export fn first(t String&) String&t { return t[:1] }
-      |                            ^~~~~~~~
-compilation failed with 1 error
+    4 | export fn first(t String&) String& { return t[:1] }
+      |                            ^~~~~~~
+x12result.olang:4:1: error[X12]: an export fn's caller is C, which nothing holds to what its body requires (t outlives return) - keep what it is given only for the call
+    4 | export fn first(t String&) String& { return t[:1] }
+      | ^~~~~~
+compilation failed with 2 errors
 === x12type.olang
 x12type.olang:3:17: error[X12]: Vec<I64> cannot come from C - an export fn's parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array by reference
     3 | export fn total(l Vec<I64>) I64 { return l.Len() }

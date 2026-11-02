@@ -2576,3 +2576,25 @@ values" has the whole story. In short:
   walked with `for e in m` makes its value place no sole holder. A Ref into a Vec goes stale as a view does, unseen by
   M19g. Mutating calls through `x[i]` are still E31b's error (write `x.RefMut(i).M()`): taking them in place would let an
   argument evaluated after the receiver grow the Vec under it.
+
+## 20. Round 4: the flip (wt-flip)
+
+QCB's last round: the inference is the only path and no scope is written - every marker (`T&x`, `T&return`, `T?&x`),
+scope argument (`f&x(...)`) and `outlives` item left the grammar (a removed spelling is simply gone: `x T&y` is a syntax
+error). HISTORY.md "The rework, round 4" has the whole story; in short:
+
+- **Migration.** `tools/scopes_migrate.olang`, the last text tool of `olang fix`; ~1,550 lines in 287 files. The checks: 32
+  cases about a written scope went, 115 refused only for a written scope's sake now run clean under `-debug -sanitize`,
+  35 name today's error for the same program.
+- **Decided (mine, the user absent).** A reference result is as writable as written (`mut T&`), a constructor's always;
+  D18c's element forms are read off the yields; `&` followed on its line by an operand is the operator; explain prints the
+  inferred obligations as `# scopes: a outlives b`.
+- **Found.** A T25c hole (a read-only `List<List<I64>>` cloned gave writable inner lists - the borrowed result was read off
+  the type, which says nothing now; `check.roRefResult` reads the returns); RefMut chains in loops (landTerm); a tuple
+  result in MIR's verifier.
+- **Compile time.** The field inference's last round is the reporting judging when it changed nothing and left no refusal
+  unsaid (`inferFields`, `wantHits`): the compiler's scope phase 6.5 -> 5.3 s (the base, written markers: 0.98 s).
+  Three whole judgings remain (two that promote, one that reports); caching the judgings of components no promotion
+  touches is the next step.
+- **Not built.** Folding (2.9): every block keeps its scope. Open point 5: a function type's `T&` result is not read as
+  borrowed from its `&` parameters, so a function handing back what an argument refers to is no value (T22a).
