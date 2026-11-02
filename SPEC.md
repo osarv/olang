@@ -6510,6 +6510,11 @@ only reads may be given it. A callee **capturing the parameter itself** in a lam
 stored, handed to a callee that may keep it - keeps the lent value's own storage in the closure, which counts as keeping
 something in it (through a call cycle too); a lambda only called in the callee's frame (held in a local every use of
 which is a call), or made for a callee keeping nothing of it (D16c), keeps nothing. A read-only parameter is no exception: a shallow `mut` field is stored through as surely.
+A value **owning storage** (an array of a run-time length by value, a struct or enum holding one, T7a) lent to a callee
+that keeps a reference to it - an instance holding it (`holder(v)` with `holder struct(v Vec<I64>&)`), a result
+borrowing it - binds the variable where that value's own storage is, never where its parts are: a loop turn's local is
+one slot every turn reuses, so keeping it past the turn is the error C2d names (make it where the instance goes, hold it
+by value in a field, or give a copy); lent to a callee keeping nothing of it, it binds where its parts are.
 Any other argument that is not already reference-shaped binds nothing: it is a temporary (O6), and the tag on
 its parameter is where it is about to be *allocated*, not a fact about where it already lives. Where it is
 allocated is decided as for any temporary (O18a).

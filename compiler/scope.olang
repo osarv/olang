@@ -6962,18 +6962,19 @@ fn (s mut Scoper&) argExisting(c typed.Call&, i I64, owner Array<I64>&, beta Arr
     # obligations cannot tell its storage from what it holds)
     handle := rf.Runs() and s.handleLent(c, i, a)
     loop := cr == Term.None and s.lentLoopCopy(a)
-    # (QCE: a value owning storage and sharing no reference - a by-value parameter's own copy - holds nothing a callee
-    # could keep but its parts, which the callee builds where they are: lent there)
     at := s.P.T.Referent(a.Type()) if s.isRef(a.Type()) else a.Type()
     owns := s.ownsUnshared(at)
-    # (... and one owning storage a callee keeps only a reference to - its result borrowing it, nothing stored into it, as
-    # a walk of a Map value is made - is lent as the storage it is, so what keeps it lives no longer)
-    viewed := s.P.T.OwnsParts(at) and s.calleeKeepsArg(c, i) and not s.calleeStoresArg(c, i) and not s.calleePutsArg(c, i)
-    if s.calleeKeepsArg(c, i) and not handle and not owns and not viewed {
+    if s.calleeKeepsArg(c, i) and not handle {
+        # (one owning storage a callee keeps a reference to - an instance holding it, its result borrowing it, nothing
+        # stored into it, as a walk of a Map value is made - is lent as the storage it is, so what keeps it lives no
+        # longer than that storage: a loop turn's local's, one slot every turn reuses, refused where kept past the turn)
+        if owns or s.P.T.OwnsParts(at) and not s.calleeStoresArg(c, i) and not s.calleePutsArg(c, i): return v
         s.wantPromotion(a)
         if s.report { s.splitRefused(a) }
         return v
     }
+    # (QCE: a value owning storage and sharing no reference - a by-value parameter's own copy - lent to a callee keeping
+    # nothing of it holds nothing but its parts, which the callee builds where they are: lent there)
     if cr != Term.None or handle or owns or not loop { return existing(rf) }
     return v
 }

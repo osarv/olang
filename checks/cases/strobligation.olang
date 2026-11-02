@@ -1,4 +1,4 @@
-# check: fail error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
 # E11c/O12: built in the result scope, the value is held to live where the receiver's node does - an obligation on a
 # scope '$' gives none of (it stored through the node when the result scope closed)
 import "std/io"

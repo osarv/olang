@@ -1,4 +1,4 @@
-# check: fail error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or give it a copy ('$x', 'x.Clone()')
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('$x', 'x.Clone()')
 # P2: a by-value argument is copied to the task, but what it refers to is the loop body's
 type W struct(a Array<I64>&) {
     a

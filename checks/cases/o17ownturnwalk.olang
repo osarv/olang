@@ -1,0 +1,38 @@
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field
+# O17 (bulk review 6 F3): a loop turn's value owning storage, lent to a callee keeping a reference to it, binds where
+# its own storage is - one slot every turn reuses - so keeping it past the turn is refused (every kept reference named
+# the last turn's value)
+import "std/io"
+
+type walk struct(v Vec<String&>&, i I64 = 0) { v, i }
+
+fn (w mut walk&) Next() String& ? Exhausted {
+    if w.i >= w.v.Len(): error Exhausted.End
+    w.i++
+    return w.v[w.i - 1]
+}
+
+fn over(v Vec<String&>&) walk { return walk(v) }
+
+fn mkv(k I64, t String&) Vec<String&> {
+    v := Vec<String&>()
+    for _ in range k { v.Push(t) }
+    return v
+}
+
+fn main() {
+    t := "long-lived"
+    ws := Vec<walk>()
+    for k in range 1, 6 {
+        v := mkv(k, t)
+        ws.Push(over(v))
+    }
+    junk := Vec<Vec<I64>>()
+    for i in range 200 {
+        junk.Push(Vec<I64>())
+        junk.RefMut(i).Push(i)
+    }
+    s := 0
+    for w in ws { s += w.v.Len() }
+    io.Println("sum " $s " (15)")!
+}

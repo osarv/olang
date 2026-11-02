@@ -1,0 +1,34 @@
+# check: run
+# O17 (bulk review 6 F3): the shapes beside the refused ones - a value owning storage kept by value in a field (a copy
+# per turn), a reference to one kept no longer than the turn, and one kept where both live in one block
+type holder struct(v Vec<I64>) { v }
+type ref struct(v Vec<I64>&) { v }
+
+fn lens() I64 {
+    hs := Vec<holder>()
+    for k in range 1, 6 {
+        v := Vec<I64>()
+        for i in range k { v.Push(i) }
+        hs.Push(holder(v))
+    }
+    s := 0
+    for h in hs { s += h.v.Len() }
+    t := 0
+    for k in range 1, 6 {
+        v := Vec<I64>()
+        for i in range k { v.Push(i) }
+        r := ref(v)
+        t += r.v.Len()
+    }
+    w := Vec<I64>()
+    w.Push(7)
+    rs := Vec<ref>()
+    rs.Push(ref(w))
+    return s + 100 * t + 10000 * rs[0].v[0]
+}
+
+Lens := lens()
+
+fn main() {
+    assert lens() == 71515 and Lens == 71515
+}
