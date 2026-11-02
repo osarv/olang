@@ -1834,8 +1834,8 @@ cbc3a2177fe2fb78 0b3c3bd0de6c1dd9 compiler/cond.olang
 bc24729ec262f04b 2f646d2805937aec compiler/diag.olang
 fbabe9ce5d3c0c3b 30e087f8beafbcae compiler/doc.olang
 819263091cdf1139 693d0725495fac1e compiler/effects.olang
-1008e5d038918548 e1713141af091287 compiler/emit.olang
-345c819a2423890a 0b9bb95ef628d93e compiler/eval.olang
+5499c697fe1f072c 954cd0f865e9876f compiler/emit.olang
+cc3732558b332dc8 68e4a08b6d95b311 compiler/eval.olang
 d767213a6d566951 9aeafef0e206ab94 compiler/explain.olang
 99d60932c832eb80 9cb09f2e9ef4383a compiler/fetch.olang
 edcfa4c4a69c1a83 020af9539bbc57d3 compiler/fix.olang
@@ -1844,10 +1844,10 @@ c47bc831d131b953 92a87d0de2d6db71 compiler/fmt.olang
 e76f60f2fa1161cd f16144da03a34fa6 compiler/generic.olang
 de944605abe82740 8d966b64bc383641 compiler/interp.olang
 64775bb322e353e8 1fc13cc3f919e33a compiler/load.olang
-5ad45b05e1f62021 20791b42c3ae8b02 compiler/lower.olang
+b461ebc464e588b7 3a679d36598ef77b compiler/lower.olang
 025928255c54707a 00f128b9dc00c9f4 compiler/lsp.olang
 84e8f9a4af57a411 22416d707a32e4f1 compiler/mcp.olang
-8bfe73913926ea72 9943932b0954da39 compiler/mir.olang
+cb2ac864ebf2020f de91983da4e62c0a compiler/mir.olang
 cefd4bd5baa97414 335c0d3985b42e0a compiler/msgs.olang
 6a7ae1765c29b23d b49a86773c8080b1 compiler/names.olang
 82084cff5b3fe50e 1deca2fc6214c3ce compiler/needs.olang

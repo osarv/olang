@@ -28166,4 +28166,14 @@ the element itself changed; e31bcallinplace and e31bcallargs are new; tests/shar
 
 **The gate.** `fuzz free` had been generating programs that no longer compiled since round 4 (`mkChain` returning a
 read-only `Node&` it then wrote through; `std/list` used and not imported), so it ran nothing - every run reported "does
-not compile, and no scenario is to blame". Both fixed in fuzz/scopegen.olang.
+not compile, and no scenario is to blame". Both fixed in fuzz/scopegen.olang (and std/list imported only where a
+scenario holds one, M5a). Then: `fuzz free` 400 programs, 1,402 scenarios run, 1,875 places freeing at once (its holders
+keep Maps by value - owner and array places), no finding; `OLANG_DEADREGIONS=1 make quick` passes; `make scopesan` 1,692
+passed, 0 failed. An array place given an empty array (a reset to `Array<T>(0)`) has its region released at once as an
+owner's is (Settle on the array): 200k resets 3.9 MB -> 1.8 MB.
+
+**Decided (mine, the user absent):** owners win over the arrays they hold; a view constructor's caller copy is made for
+the one owner leaf it fills, none where it fills several; a call through `x[i]` is made in place only with plain
+arguments (no call but a constructor's, nothing reaching a writable reference, a function value or an `any`) and never
+spawned - the error's text unchanged, its advice still right for the rest; a task counts only where code that may run
+reaches it; a walk of a Map of owners keeps (a recorded limit).
