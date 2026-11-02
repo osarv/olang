@@ -2416,6 +2416,7 @@ fn words(r mut report&) ? Failed {
     dir := fresh("words")
     os.Run("cp checks/fixtures/output/prog.olang " $os.Quote(dir))
     os.Run("cp checks/cases/b14docbuilders.olang " $os.Quote(dir) "/b.olang")
+    os.Run("cp checks/fixtures/output/words.olang " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" > out.txt 2>&1") == 1 and outOf(dir).Contains("error[B1]: nothing to do"), "no arguments", dir)
     try r.expect(sh(dir, "\"$OLANG\" bild prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("'bild' is not a mode - the modes are build, compile"), "an unknown mode", dir)
@@ -2436,6 +2437,10 @@ fn words(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" explain b.olang Color > out.txt 2>&1") == 0 and outOf(dir).Contains("    fn FromHex(t String&) Color ? ColorError\n    fn Gray(level U8) Color&\n    fn (c Color&) Hex()")
                  "explain lists a type's builders before its methods (B11b)", dir)
     try r.expect(sh(dir, "\"$OLANG\" explain B3g > out.txt 2>&1") == 0 and outOf(dir).Contains("running a file"), "explain", dir)
+    # D18c, QCB: a generator's borrowed elements are written as a reference - no scope written - and their scope said
+    try r.expect(sh(dir, "\"$OLANG\" explain words.olang words > out.txt 2>&1") == 0 and
+                 outOf(dir).Contains("fn words(t String&) Iterator<String&>   # a generator") and
+                 outOf(dir).Contains("# scopes: t outlives return"), "explain writes a borrowing generator's result as it is written", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret prog.olang > out.txt 2>&1") == 0 and
                  outOf(dir) == "written where -output said\n", "interpret", dir)
 }

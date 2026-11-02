@@ -1,0 +1,14 @@
+# a generator borrowing its elements from what it is given (D18c), for explain's signature of it
+fn words(t String&) Iterator<String&> {
+    i := 0
+    for i < t.Len() {
+        j := i
+        for j < t.Len() and t[j] != ' ' { j++ }
+        yield t[i:j]
+        i = j + 1
+    }
+}
+
+fn main() {
+    for w in words("a b") { assert w.Len() > 0 }
+}
