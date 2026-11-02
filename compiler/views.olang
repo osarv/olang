@@ -1,6 +1,7 @@
 # views - a Vec's views (M19g), judged over the typed core (typed.olang) once a program has checked cleanly.
 #
-# A view (Vec.View, Vec.ViewMut) is a window on a Vec's buffer as it is when it is taken; a growth replaces the buffer,
+# A view (Vec.View, Vec.ViewMut, and a reference into the buffer - Vec.Ref, Vec.RefMut, Map.Ref, Map.RefMut) is a
+# window on a Vec's (or a Map's) buffer as it is when it is taken; a growth replaces the buffer,
 # and the view goes on showing the old one. M19g refuses a use of a view after its Vec may have grown where the same
 # Vec is visible on both sides: grown in the body holding the view - by the name it was taken through, or through a
 # second name the body made - or by a call given the Vec (or a writable value holding it) through a parameter whose
@@ -465,12 +466,19 @@ fn (v mut Viewer&) structish(t types.TypeId) Bool {
 
 fn (v mut Viewer&) arrayish(t types.TypeId) Bool { return v.P.T.KindOf(v.deref(t)) == types.Kind.Array }
 
-# a Vec (it holds its buffer by value - its own record, QCE), or a reference to one
-fn (v mut Viewer&) isRecord(t types.TypeId) Bool {
+# a Vec or a Map (each holds its buffer by value - its own record, QCE), or a reference to one
+fn (v mut Viewer&) isRecord(t types.TypeId) Bool { return v.bufferField(t) != "" }
+
+# the field a Vec's or a Map's record holds its buffer in - "data", "ents" - and "" for any other type
+fn (v mut Viewer&) bufferField(t types.TypeId) String {
     d := v.deref(t)
-    if v.P.T.KindOf(d) != types.Kind.Named { return false }
+    if v.P.T.KindOf(d) != types.Kind.Named { return "" }
     decl := v.P.T.DeclOf(d)
-    return v.text(v.P.T.DeclName(decl)) == "Vec" and v.P.T.Modules[v.P.T.DeclModule(decl)] == "std/prelude/vec"
+    name := v.text(v.P.T.DeclName(decl))
+    mod := v.P.T.Modules[v.P.T.DeclModule(decl)]
+    if name == "Vec" and mod == "std/prelude/vec": return "data"
+    if name == "Map" and mod == "std/prelude/map": return "ents"
+    return ""
 }
 
 # ---- places ----
@@ -556,10 +564,32 @@ fn (v mut Viewer&) bufferOf(p typed.Lvalue&, st state&, out mut Vec<place>&) ? N
             }
         }
         case typed.Lvalue.Field(_, _, b, i) {
-            if v.isRecord(b.Type()) and v.fieldName(v.deref(b.Type()), i) == "data" {
+            f := v.bufferField(b.Type())
+            if f != "" and v.fieldName(v.deref(b.Type()), i) == f {
                 v.recordPlaces(b, st, out)
                 return
             }
+        }
+        case _ { }
+    }
+    error NotBuffer
+}
+
+# the record's places in out where a place is an element of a Vec's or a Map's buffer, or a part of one - what Ref and
+# RefMut hand back (M19g: a view as a slice of the buffer is) - failing with NotBuffer where it is none
+fn (v mut Viewer&) bufferElem(p typed.Lvalue&, st state&, out mut Vec<place>&) ? NotBuffer {
+    match p {
+        case typed.Lvalue.Elem(_, _, e) {
+            try v.bufferOf(e.Base, st, out)
+            return
+        }
+        case typed.Lvalue.Field(_, _, b, _) {
+            try v.bufferElem(b, st, out)
+            return
+        }
+        case typed.Lvalue.Payload(_, _, pl) {
+            try v.bufferElem(pl.Base, st, out)
+            return
         }
         case _ { }
     }
@@ -1123,7 +1153,13 @@ fn (v mut Viewer&) expr(x typed.Expr?&, st mut state&, out mut Vec<view>&) {
     scratch := Vec<view>()
     match x {
         case typed.Expr.Read(_, _, p, _) { v.placeRefs(p, false, st, mine) }
-        case typed.Expr.Borrow(_, _, p) { v.placeRefs(p, true, st, mine) }
+        case typed.Expr.Borrow(sp, _, p) {
+            v.placeRefs(p, true, st, mine)
+            # an element of a buffer borrowed in place is a view of its record, as a slice of the buffer is (Ref, RefMut)
+            rec Vec<place>
+            try v.bufferElem(p, st, rec) catch NotBuffer { }
+            for q in rec { viewAdd(mine, view(q, I64(sp.Start))) }
+        }
         case typed.Expr.Take(_, _, p) { v.placeRefs(p, false, st, mine) }
         case typed.Expr.Promote(_, _, pr) { v.expr(pr.X, st, mine) }
         case typed.Expr.Call(sp, ty, c) { v.call(sp, ty, c, st, mine) }

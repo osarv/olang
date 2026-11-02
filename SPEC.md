@@ -2749,7 +2749,9 @@ the collection is left empty. These are no part of the language; they say which 
 are live, which the compiler cannot infer.
 
 **M19g (a Vec's views).** A **view** is what `v.View()` or `v.ViewMut()` gives - the elements of `v`'s buffer as it is
-when the view is taken - and so is what is made of one: a slice of it, a conversion of it (`String(v.View())`), an
+when the view is taken - and so is a reference into the buffer, what `v.Ref(i)` and `v.RefMut(i)` give (and a `Map`'s
+`m.Ref(k)`, `m.RefMut(k)`, a reference into its slots, which a `Put` that grows them replaces just as a `Vec`'s growth
+does), and what is made of one: a slice of it, a conversion of it (`String(v.View())`), an
 element of it borrowed in place by a reference parameter (E12c), a value holding one (a struct built from it, a lambda
 capturing it, a collection a call is known to keep it in), and a function's result where the function's body hands
 back a view of a `Vec` its argument reaches. A view is **stale** from a growth of its `Vec` on: a `Push`, `PushAll`,

@@ -1,0 +1,27 @@
+# check: run
+# M19g (bulk review 6 F7): a Ref/RefMut used before any growth, taken again after one, or changed in place where it is
+# taken, is no stale view
+type blk struct(n I64, xs Vec<I64>) { n, xs }
+
+fn work() I64 {
+    v := Vec<blk>()
+    v.Push(blk(1, Vec<I64>()))
+    r := v.RefMut(0)
+    r.n = 5
+    for i in range 100 { v.Push(blk(i, Vec<I64>())) }
+    r2 := v.RefMut(0)
+    r2.xs.Push(3)
+    v.RefMut(1).xs.Push(4)
+    m := Map<I64, blk>()
+    m.Put(1, blk(2, Vec<I64>()))
+    (try m.RefMut(1) catch { return -1 }).n = 9
+    for i in range 2, 100 { m.Put(i, blk(i, Vec<I64>())) }
+    q := try m.Ref(1) catch { return -1 }
+    return v[0].n + v[0].xs[0] * 10 + v[1].xs[0] * 100 + q.n * 1000
+}
+
+Work := work()
+
+fn main() {
+    assert work() == 9435 and Work == 9435
+}

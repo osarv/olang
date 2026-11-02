@@ -1,0 +1,22 @@
+# check: fail error[M19g]: 'r' holds a view of 'v' taken before 'v' may have grown
+# M19g (bulk review 6 F7): a Ref/RefMut is a view of its collection's buffer - one used after the same collection may
+# have grown in the same function is refused, as a View() is (it wrote the retired buffer)
+import "std/io"
+
+type blk struct(n I64, s String) { n, s }
+
+fn work(k I64) I64 {
+    v := Vec<blk>()
+    v.Push(blk(k, $k))
+    r := v.Ref(0)
+    for i in range 5000 { v.Push(blk(i, $i)) }
+    junk := Vec<blk>()
+    for _ in range 5000 { junk.Push(blk(-1, "zzzzzzzzzzzzzzzz")) }
+    return r.n + r.s.Len() + junk.Len() - 5000
+}
+
+fn main() {
+    s := 0
+    for k in range 200 { s += work(k) }
+    io.Println("sum " $s)!
+}

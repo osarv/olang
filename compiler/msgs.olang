@@ -2177,7 +2177,7 @@ fn NoteFuncTypeScopes(ty String&) Msg { return Msg(Diag.NoteFuncTypeScopes, "", 
 fn NoteVecGrewHere() Msg { return Msg(Diag.NoteVecGrewHere, "", "the Vec grew here, after the view was taken; take the view after the growth, or copy the elements first: 'v.ToArray()'") }
 
 # NOTE_VEC_GROWS_HERE
-fn NoteVecGrowsHere(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.NoteVecGrowsHere, "", "'" $text1 "' may grow here, in " $text2 " - take the view after it, or copy the elements first: '" $text3 ".ToArray()'") }
+fn NoteVecGrowsHere(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.NoteVecGrowsHere, "", "'" $text1 "' may grow here, in " $text2 " - take the view or the reference after it, or copy the elements first ('" $text3 ".ToArray()' for a Vec)") }
 
 # NOTE_VEC_GROWS_INSIDE
 fn NoteVecGrowsInside(text String&) Msg { return Msg(Diag.NoteVecGrowsInside, "", $text " may grow it here") }
