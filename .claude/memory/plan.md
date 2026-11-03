@@ -818,3 +818,14 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   ~/.local/bin); dev-stash.txt and boot.rc (agents' leftovers swept into migration commits) removed, gitignored, and
   `make consistency` fails on any root file not in its list. The user's own failure was not seen - asked to send the
   `prereq:` line if `make` still stops.
+- 2026-11-03 CET: String immutable merged (wt-strimmut 0af07a3, full verify passed on b1cb691, HISTORY-only after;
+  scopesan, scopefuzz clean; seed regenerated, bootstrap a fixed point): `type String immut extends Array<Char>`, written
+  text an `Array<Char>` or a StringBuilder (`String(chars)` converts), textbuild_migrate in olang fix; S4c's parallel
+  store of Vec elements through SetAt (the refs study's bug 1). Fixed on the way (pre-existing): `s Array<Char> = "ab"`
+  aliased the constant (a lost write at -O3), Array<Char> == literal, M19g's views pass skipping Ref/RefMut views (seven
+  cases compiled that must fail). Machine code: each main +18 instructions (os.Args copies each argument - item 17
+  removes it), text -1.2%, regex -0.7%. FOR THE NEXT BULK REVIEW: its two D9i widenings (a loop mention counted where it
+  stands; a returned whole-local copy placing the local where the result goes), a type over an immut type immut,
+  immut-to-mutable conversion copying, `mut` globals of `String&`. Left of the build batch: unique + destructor timing,
+  item 17 (the kept local built where it is kept) - then the section-8 round (NLL, O27 placement, T22a relations),
+  reuse in place, a bulk review.
