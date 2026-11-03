@@ -1337,6 +1337,11 @@ ace20d667f66abb4 e2d0517ca046f628 checks/cases/strstoresreceiver.olang
 53656c82b4bbe38c 187cbdb2b9043db3 checks/cases/strwalks.olang
 0cd2d93d8dfbac89 266668ae5ff57b87 checks/cases/sweepeval.olang
 0559cc591a26ac39 06615b8d385d239e checks/cases/t10len.olang
+b30b3dc07ff131af 38ce91ad5efef47d checks/cases/t13aimmutcopy.olang
+1ad03b496febaf3a c0a46801dbb402a6 checks/cases/t13aimmutelem.olang
+86821ac841db94b1 f1847b889f4cce6d checks/cases/t13aimmutfield.olang
+dce044aead3615fd 040bfd4456a089b9 checks/cases/t13aimmutlent.olang
+11e46e0866754da4 8aea12705679552c checks/cases/t13aimmutmutref.olang
 56c283745247f016 b47498a99d1469c7 checks/cases/t13holdsitself.olang
 2da4e55d1144b9e5 44124a04e79bb5ab checks/cases/t16inlinearray.olang
 f35f108f5e5c762c e55ee88b915f64bf checks/cases/t16inlineenum.olang
@@ -2071,6 +2076,7 @@ c3154015ef1cc50e 1477cf615d58d5df tests/geom/measure.olang
 f2b260d388afa356 549b64a7fa716a9e tests/globalstart.olang
 0450f21f8b0a7a91 e1b01524c327e3e6 tests/handover.olang
 9cca674e36c7b99c 7559dc7ddca3b5c3 tests/handoverglobal.olang
+8d1ada7cddd0959f 5b41da3c75055153 tests/immut.olang
 3668233251bac7c0 785fa671869bfa96 tests/inplace.olang
 e3212b4e8e50fcbe 1b62d614d973c616 tests/intsweep.olang
 10b6b92beb0c3879 8c7228e13f1adcb1 tests/intwidths.olang
@@ -2126,6 +2132,7 @@ ff251e4c9525afc8 8796db86a7c4c6e3 tools/scopes_migrate.olang
 0a055494262ea9bf 4fbe2846eb52b600 tools/srcmask.olang
 74551bf9709382ce fb6bf5bc8a597d87 tools/stutter_rename.olang
 0a7a4a1f339bec07 205f990f2192b73a tools/syntax_migrate.olang
+b2f676f139add3ec c3d1d8d0bfcab594 tools/textbuild_migrate.olang
 281f1bd45b444122 21d7b16fd3b38c94 tools/try_migrate.olang
 3116c4a35876d2c6 d9b3ca04d78e1abf tools/unused_migrate.olang
 392a22d2a5b539b3 e9540c4b29e2952b tools/variadic_migrate.olang
