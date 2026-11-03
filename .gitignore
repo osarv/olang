@@ -2,5 +2,5 @@ build
 usertest.olang
 *.log
 .bootcache
-verify.rc
-quick.rc
+/*.rc
+/dev-stash.txt

@@ -135,7 +135,7 @@ emit changes what a bootstrap needs, `make seed`); `docs/optsurvey.md` / `bench/
 
 Each of these names the files of its folder and is checked **[checked]**: `std/README.md`, `docs/README.md`,
 `compiler/README.md` (the modules and `compiler/tools/`), `tools/README.md`. `tests/README.md` and `bench/README.md`
-group their programs and are by hand. Every top-level folder has a `README.md` (and `editors/nvim`) **[checked]**.
+group their programs and are by hand. Every top-level folder has a `README.md` (and `editors/nvim`) **[checked]**. The files the repository's root holds are listed in compiler/tools/consistency.olang and checked **[checked]**: a new root file goes into that list in the same commit.
 `SPEC.md`'s MCP tool list (B16), `editors/README.md` and `compiler/mcp.olang`'s tool list agree **[checked]**; the LSP's
 capabilities are described in SPEC B15 and `editors/README.md` by hand.
 
