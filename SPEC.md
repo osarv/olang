@@ -786,8 +786,15 @@ value **holding** an immut part need not be immut itself: its part is replaced w
 written into. A copy of an immut value is the same value - nothing can tell it from the original - so an immut type
 declares no Copy (E31d), an error at its name. A conversion to an immut type from an existing value of a type that is
 not (`Name(a)` over an `Array<Char>`, T29a) is a copy of what it converts, which nothing else can change after - left
-out where nothing could tell (a fresh value, a local at its last use, D9i). `immut` is a word only in that position
-(L9b); it names nothing.
+out where nothing could tell (a fresh value, a local at its last use, D9i); and so is a conversion the other way, to a
+type that is not immut from an immut value (`Chars(s)` over a `String`), whose writes would otherwise change what never
+changes. A type declared over an immut type (`type Label extends String`) is immut itself: its values are the base's.
+A `mut` global whose type is a reference to an immut type (`Name mut String&`) is a binding that may be assigned, and
+the reference it holds is read-only - nothing is written through it, so any reference to that type fits it. A
+read-only reference to an immut type given where a writable one is wanted - a `String` or a slice of one handed to a
+`mut Array<Char>&` - is this rule's error, naming what may be written. The prelude's `String` is immut (T29c): text
+written into is an `Array<Char>` (or a declared type over one, or built by a `StringBuilder`), made a `String` with
+`String(chars)`. `immut` is a word only in that position (L9b); it names nothing.
 
 **T14.** A struct type is a value type: assignment, parameter passing, and return copy the whole value
 member-wise, and `==`/`!=` compare structurally (see §5.2 E10), unless referenced through a marker
@@ -1206,7 +1213,7 @@ result:
 
 ```
 Array<String&>         an array of read-only references - it may be filled; what they refer to may not be written
-Array<mut String&>     an array of writable references
+Array<mut Point&>      an array of writable references
 List<mut Node&>        a list of writable references
 fn first(l List&) Node&            a read-only result
 fn grab(l mut List&) mut Node&     a writable one
@@ -1391,13 +1398,14 @@ Three rules govern getting values in and out, and they are deliberately asymmetr
 - **A value does not.** One that already has a type keeps it; `String(v)` is how it changes, and the
   conversion is admitted whenever `v` would fit the underlying type — so it covers E12's promotions, not
   merely identical shapes. It moves nothing. **A conversion names its argument's storage**: where `v` is a
-  variable, a field, an element, a slice or a reference a call gives (`String(v.View())`), `Name(v)`
+  variable, a field, an element, a slice or a reference a call gives (`Name(v.View())`), `Name(v)`
   is that storage read as `Name` - it may be written exactly
   where `v` may (T25c), a reference made from it borrows `v`'s storage and is checked against how long that storage
   lives (E12c), and a value declaration from it copies as any value declaration does (T7b). It is not a place an
   assignment may name. Fixed storage (T7d) is lent as a slice of it, and the conversion keeps a known length
   (T7c). Only a temporary `v` makes the conversion a value of its own - a conditional or a `match` of references
-  among them (E28, S12b), whose values keep their own types.
+  among them (E28, S12b), whose values keep their own types. A conversion between an immut type and one that is not
+  (`String(chars)`) is the exception: a copy (T13a).
 - **A named type flows freely into its own underlying type**, with no conversion written: a `String` is
   usable wherever a `Array<U8>` is wanted. That direction discards a claim rather than making one, which is
   always safe — and it is the same latitude `I32(m)` already gives a named numeric, without needing a
@@ -1434,18 +1442,24 @@ over it, where a `U8` renders as a number, has `U8`'s arithmetic (`'a' + 1` is `
 An array whose element type is a declared number with **no constructor** flows into an array of that number (E12) -
 the same bits, and no constructor a write could bypass - so an `Array<Char>`, and a `String`, go wherever an
 `Array<U8>` is wanted, as a reference (a view of the same storage) or a value; and `Name(x)` converts the other way
-between two such arrays as it does between a declared type and its base (`String(bytes)`), copying nothing.
+between two such arrays as it does between a declared type and its base, copying nothing - but to or from an immut
+type (`String(bytes)`, T13a), where it is a copy. A `String` goes where an `Array<U8>` is wanted only as a value or a
+read-only reference: nothing of a `String` is written (T29c).
 
-**T29c (`String`, text).** The prelude (§4 M19d) declares `type String extends Array<Char>`, the text type, and
-the text operations are its methods. Text written in the program — a string literal, a `$` rendering
+**T29c (`String`, text).** The prelude (§4 M19d) declares `type String immut extends Array<Char>`, the text type, and
+the text operations are its methods. A `String` **never changes once it is made** (T13a): no character of one is
+written, and no `mut String&` is written; text that is written is an `Array<Char>` - text written in the program adapts
+to one, a value its own copy (`chars Array<Char> = "abc"`) - or is built by a `StringBuilder`, and becomes a `String`
+by `String(chars)`, a copy (left out where nothing could tell, D9i). An `Array<Char>` is no `String`: it goes where a
+`String` is wanted only converted. Text written in the program — a string literal, a `$` rendering
 (E11a), a join (E11b) — **is a `String` by type**: where nothing adapts it, its type is `String`, as an integer
 literal's is `I64` (T6a) - as a declaration's initializer with `:=`, as a method's receiver (`"  x ".Trim()`),
 bound to a type variable (G9a), as the other operand of a `String` value in `==` or `!=` (`unit == "cm"`), and as an
 operand of an operator a type declares (E31), so `"a" < s` calls `String`'s `Less` as `s > "a"` does.
 Like a literal (T29a) it is a temporary with no type worth defending, so it still **adapts** to any other array of
-bytes it is written against - an `Array<U8>`, or a declared type over one. Any other bytes become a `String`
-only by `String(bytes)`, which copies nothing. A slice of a `String` is a `String` (E16a), and a `String`
-goes wherever an `Array<U8>` is wanted. A `String` is bytes: no encoding is checked. `String` declares `Eq`
+bytes it is written against - an `Array<U8>`, an `Array<Char>`, or a declared type over one, in `==` too (`chars ==
+"ab"`). Any other bytes become a `String` only by `String(bytes)`, a copy (T13a). A slice of a `String` is a
+`String` (E16a), read-only, and a `String` goes wherever an `Array<U8>` is wanted to be read. A `String` is bytes: no encoding is checked. `String` declares `Eq`
 (E10a), so `==` compares what two texts say, through a reference too.
 A search that finds nothing fails rather than giving a position that is not one: `t.Find(sub)` and `t.FindByte(c)` give
 where the first occurrence starts (`t.FindLast(sub)` the last), and fail with `TextError.NotFound` when there is none -
@@ -4536,7 +4550,9 @@ target written `_` discards its result. The call is evaluated once, before any t
 "," expr { "," expr }`. With `=`, **every value is evaluated, left to right, before any target is written**, so
 `a, b = b, a` swaps and `x, y = y, x + y` steps a pair; each target is then assigned as by S4, in order - its place
 evaluated, then the value it was given stored there. So every value comes before every target's place, and within that
-the order is left to right, as S4's is; a destructuring (S4b) composes the same way, its one call first. A value with
+the order is left to right, as S4's is; a destructuring (S4b) composes the same way, its one call first. A target
+`x[i]` on a type declaring `SetAt` (E31) is stored through it as S4 alone does - its index evaluated where the target's
+place is, then `x.SetAt(i, value)` - so `ps[i], ps[j] = ps[j], ps[i]` swaps two elements of a `Vec`. A value with
 no storage of its own (§5.3 E12c) going into a reference target is built, when it is evaluated, where that target's
 referent lives - where S4 alone would build it: the program's scope for a global, or a field reached from one (O1b),
 so `G.next, k = Node(i), i` is `G.next = Node(i)` beside `k = i`. With `:=` each name is
