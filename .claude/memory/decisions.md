@@ -2567,3 +2567,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   not a guarantee. The recommendation (assignment never a user call) stands on its other reason: an overridable `=`
   hides a copy's cost (principle 2), and for a unique type it would turn the refused copy into a silent one. ASKED
   again with `immut`.
+- Assignment, the user 2026-11-03 (2): "isn't normal value copying already a copy? ... copying references, we're not
+  doing any O(n) copying either way", and "a unique type simply cannot be copied ... or cloned rather". Conceded: a
+  plain value's assignment already copies (deep through value arrays since QCE), so cost is no argument against an
+  override. Reading taken (stated to the user): unique types are never copied by assignment, only by a `Clone()` the type
+  writes. With that, PROPOSED: no overridable assignment because nothing is left for one to do - a plain type copies
+  structurally, a reference copies a pointer, a unique type refuses and offers Clone(); an override is C++'s copy
+  constructor (user code on every assignment and by-value pass). ASKED with `immut`.
