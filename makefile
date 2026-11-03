@@ -1,3 +1,13 @@
+# Building the compiler from a checkout (README.md has the prerequisites):
+#
+#   make             build/olang, built from the committed seed (seed/) with nothing but clang and xz - a few minutes;
+#                    it first checks what the build needs (make prereq) and names what is missing
+#   make install     a link to build/olang in ~/.local/bin (PREFIX=... for another place), so "olang" runs anywhere
+#   make clean       removes build/
+#
+# Everything else here is for working on the compiler: make quick (the suite on the compiler already built), make
+# verify (the gate: a clean bootstrap and the whole suite), the acceptance diffs and their goldens, the fuzzers.
+
 # M1: a module is one file, and a directory only groups them - the std modules and the prelude's files (with the
 # tests of some prelude files in std/prelude/tests, a directory of ordinary modules - only std/prelude's own files are
 # the prelude),
@@ -33,6 +43,9 @@ TEST_RUNS = $(TEST_RUNS_HEAVY) $(TEST_RUNS_REST)
 # each file of a lane after the one before it (an order-only prerequisite)
 lane = $(if $(word 2,$1),$(eval test@$(word 2,$1): | test@$(word 1,$1))$(call lane,$(wordlist 2,$(words $1),$1)))
 
+# the default: the compiler, build/olang (bootstrapped from the seed by boot, below, when missing or older than its
+# sources)
+all: build
 build: build/olang
 
 # what the self-hosted compiler's passes make of a file (compiler/tools/dump.olang), built by the compiler under test
@@ -183,7 +196,10 @@ modgold: build/compiler_tools_dump build/compiler_tools_modgraph
 SEED_DIR = seed
 SEED_FILES = $(wildcard $(SEED_DIR)/*.ll.xz)
 SEED_OBJ = $(patsubst $(SEED_DIR)/%.ll.xz,build/seed/%.o,$(SEED_FILES))
-SEED_CLANG ?= clang
+# the clang the seed is compiled with: the one the compiler itself builds with (B12d, target.Clangs) - OLANG_CLANG where
+# it is set, else the newest of clang-20, clang-19, clang-18 and clang on PATH - looked for once
+SEED_CLANG ?= $(or $(OLANG_CLANG),$(firstword $(foreach c,clang-20 clang-19 clang-18 clang,$(shell command -v $(c) 2> /dev/null))))
+SEED_CLANG := $(SEED_CLANG)
 # the compiler that builds the seed tool: the one make bootstrap installed (made by its steps when missing). Which one it
 # is changes nothing in the seed - the tool runs the current source's passes over the current source
 SEED_OLANG = build/olang
@@ -206,8 +222,40 @@ define BOOTSTRAP
 	@echo "bootstrap: build/olang.2 and build/olang.3 are byte for byte equal; build/olang installed"
 endef
 
+# what the bootstrap needs, checked before anything is compiled so that what is missing is named, with the Debian/Ubuntu
+# package that has it: x86-64 Linux (the seed's target), clang 18 or newer, the C library's headers (the compiler
+# imports them, X17), libffi to link against (the compiler's interpreter calls C through it), clang's LTO plugin (every
+# build links with -flto) and xz. Too little memory is said, not refused
+PREREQ_PROBE = build/prereq.c build/prereq.o build/prereq build/prereq.log
+prereq:
+	@[ "$$(uname -s) $$(uname -m)" = "Linux x86_64" ] || \
+		{ echo "prereq: the seed is the compiler for x86-64 Linux; this machine is $$(uname -s) $$(uname -m)"; exit 1; }
+	@[ -n "$(SEED_CLANG)" ] && command -v "$(SEED_CLANG)" > /dev/null || { echo "prereq: no clang found -" \
+		"install clang 18 or newer (Ubuntu 24.04: sudo apt install clang-18; older releases: https://apt.llvm.org)" \
+		"or name one with OLANG_CLANG=..."; exit 1; }
+	@v=$$("$(SEED_CLANG)" --version | sed -n 's/.*clang version \([0-9][0-9]*\).*/\1/p' | head -n 1); \
+	[ -n "$$v" ] && [ "$$v" -ge 18 ] || { echo "prereq: $(SEED_CLANG) is clang $${v:-of a version it does not say};" \
+		"olang needs clang 18 or newer (Ubuntu 24.04: sudo apt install clang-18; older releases: https://apt.llvm.org)," \
+		"on PATH as clang-18, clang-19 or clang-20, or named with OLANG_CLANG=..."; exit 1; }; \
+	command -v xz > /dev/null || { echo "prereq: xz is missing (sudo apt install xz-utils)"; exit 1; }; \
+	mkdir -p build && printf '#include <unistd.h>\nint main(void) { return getpid() < 0; }\n' > build/prereq.c; \
+	"$(SEED_CLANG)" -c build/prereq.c -o build/prereq.o 2> build/prereq.log || { cat build/prereq.log; \
+		echo "prereq: $(SEED_CLANG) cannot compile C against the C library's headers (sudo apt install libc6-dev)"; \
+		exit 1; }; \
+	"$(SEED_CLANG)" build/prereq.o -o build/prereq -lffi -lm -lpthread -ldl 2> build/prereq.log || \
+		{ cat build/prereq.log; echo "prereq: $(SEED_CLANG) cannot link against libffi (sudo apt install libffi-dev)"; \
+		exit 1; }; \
+	"$(SEED_CLANG)" -O2 -flto build/prereq.c -o build/prereq 2> build/prereq.log || { cat build/prereq.log; \
+		echo "prereq: $(SEED_CLANG) cannot link with -flto - its linker plugin is missing" \
+		"(sudo apt install llvm-$$v-linker-tools)"; exit 1; }; \
+	rm -f $(PREREQ_PROBE); \
+	m=$$(sed -n 's/^MemTotal: *\([0-9]*\).*/\1/p' /proc/meminfo); [ -z "$$m" ] || [ "$$m" -ge 3500000 ] || \
+		echo "prereq: this machine has $$((m / 1048576)) GB of memory; the compiler's build of itself takes about" \
+		"3 GB (WSL: raise memory= in .wslconfig)"; \
+	echo "prereq: clang $$v ($(SEED_CLANG)), xz, libffi, the C headers and LTO linking are all here"
+
 # the seed's objects compiled side by side, then the three builds: the bootstrap from nothing, every time it is asked for
-bootstrap:
+bootstrap: prereq
 	$(MAKE) -j$(PARALLEL) build/olang.seed
 	$(BOOTSTRAP)
 
@@ -461,10 +509,16 @@ diagtest: $(OLANG)
 diaggold: $(GOLD_OLANG) build/compiler_tools_diaggold_capture
 	build/compiler_tools_diaggold_capture $(GOLD_OLANG)
 
-all: clean build run
-
 clean:
 	rm -rf build
 
+# build/olang linked into PREFIX/bin as olang: the compiler finds the standard library beside where its file is
+# (load.StdDir, through the link), so the link keeps working while the checkout stays where it is
+PREFIX ?= $(HOME)/.local
+install: build/olang
+	mkdir -p $(PREFIX)/bin
+	ln -sf $(abspath build/olang) $(PREFIX)/bin/olang
+	@echo "install: $(PREFIX)/bin/olang is build/olang - put $(PREFIX)/bin on PATH if it is not"
+
 # FORCE stands in for .PHONY on the test@FILE pattern targets, whose names are no files either
-.PHONY: consistency all build bootstrap boot seed run runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz clean
+.PHONY: consistency all build prereq install bootstrap boot seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz clean
