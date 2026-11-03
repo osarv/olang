@@ -1,0 +1,27 @@
+# D9i: a value local handed to a constructor at its last use is moved, not copied - under 90 MB for a Vec of 4M
+# elements (a copy needed 110 MB and more)
+import "std/io"
+import "std/os"
+
+type P struct(toks Vec<I64>) {
+    toks
+    i I64 = 0
+}
+
+fn mk(n I64) Vec<I64> {
+    v := Vec<I64>()
+    for i in range n: v.Push(i)
+    return v
+}
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() > 1 and args[1] == "fresh" {
+        p := P(mk(4000000))
+        try io.Println($p.toks.Len())
+        return
+    }
+    t := mk(4000000)
+    p := P(t)
+    try io.Println($p.toks.Len())
+}

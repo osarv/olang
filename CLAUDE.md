@@ -428,7 +428,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   a call keeping nothing is a stack slot (`stackArg`); a D9h copy a local keeps is built in the local's block (the scope
   pass's Built for the call site, `viewCopyAt`), so a loop turn's copy goes with the turn (it went where the viewed
   storage lives). The study's widget tree written with plain reads: 3.9 s / 1.33 GB -> 0.29 s / 27 MB (hand `Ref`s
-  0.22 s / 27 MB); turncopy 517 MB -> 1.9 MB; bench machine code byte-identical.
+  0.22 s / 27 MB); turncopy 517 MB -> 1.9 MB; bench machine code byte-identical. **Moves at last use (D9i, the
+  study's B1, mine):** a value local's copy (a by-value argument's, a store's, a part's - check's MakeKind.Copy of a
+  read of it) is left out where it is the local's last mention in evaluation order (`lastUses`: deferred code, tasks,
+  join clauses and a loop not around the declaration count as after), the local's storage its own (no view held, no
+  alias, no escape, never assigned whole, no O8d region) and outliving the copy's block; a constructor viewing only
+  moved locals owns what it views (`movedViews`). `t := mk(20M); P(t)` 682 MB / 0.44 s -> 420 MB / 0.23 s, as
+  `P(mk(20M))`.
   A value owning parts handed back from storage that is no view of the arguments (a global's) is copied by the function
   (`retOwns`; while compiling every such value, so the evaluator agrees).
   Rows laid out in place given where run-time rows are wanted are widened each in turn (they were read as pairs). **T25d** (found by round 3b, on the default path too): text written in the program given a

@@ -2080,6 +2080,15 @@ parameter that the callee keeps nothing of, whose result holds no reference, is 
 x, y)`), not in an arena of the block. Where a copy is made, it is built where the value is kept: a local's copy in the
 local's block - so a loop turn's copy is reclaimed with the turn (O2) - whatever storage it was read from.
 
+**D9i (a value moved at its last use).** A value local's copy made where it is handed on - a by-value argument, a store,
+a part of a value made (QCE) - is left out where that copy is the local's last mention, in the order the function
+evaluates, and the destination takes the local's own storage: `t := mk(n)` then `p := P(t)` costs what `p := P(mk(n))`
+costs. Only where nothing could tell: no mention of the local comes after (deferred code, a task, a join's clauses and a
+loop around the copy but not around the local's declaration count as after), the local's storage is its own - no view
+held in place of its copy (D9h) - named by no other local, escaping nowhere, never assigned whole, in no region early
+freeing made (O8d), and lives at least as long as where the copy would be built; a constructor's instance viewing only
+such moved locals is its own (no D9h copy where it is kept). Unobservable: the evaluator copies and agrees.
+
 **D16 (lambdas).** A **lambda** is a function written as an expression, with no name:
 
 ```

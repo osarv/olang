@@ -28511,3 +28511,24 @@ byte-identical (the text sections of all fifteen compared), so no row moves. Tes
 writing roll beside them, a later argument that does change the element - `total(v[0].kids, grow(v))` keeps its copy -,
 a view through a reference local, turn copies, a top-level assert and a baked global the evaluator decides), the landing
 scenario's turncopy under 8 MB.
+
+## Moves at last use (2026-11-03, the values study's B1)
+
+A last use was never a move (docs/values-study/findings/lastuse.olang): `t := mk(20000000)` then `p := P(t)` - a
+constructor keeping the Vec in a field - copied all 20M elements, 682 MB and 0.44 s against `P(mk(20000000))`'s 420 MB
+and 0.20 s. Built (mine; Rust's move and Hylo's `sink`, inferred, D9i in SPEC): lowering walks each planned body once in
+evaluation order (`lastUses`), numbering every mention of a local and recording each MakeKind.Copy of a whole local's
+read; a mention inside deferred code, a task, a join's clauses, or a loop around the copy but not around the local's
+declaration, counts as after everything. A copy whose read is the local's last mention is left out (`noCopy`) where the
+local is a plain value local (not a parameter, a capture or a reference), its storage its own (not a view held in place
+of its copy, D9h's `vl`/`rvl`, nor its declaration's copy left out), no other local an alias of it or a view of it,
+escaping nowhere (`escapes`), never assigned whole, its declaration's call and the copy in no region early freeing made
+(O8d - a region released at the local's let-go would hold what the destination now does), and its block enclosing the
+block the copy would have been built in (the plan's `Built`), so the destination dies no later than the storage it
+takes. A constructor whose instance views only such moved locals is its own (`movedViews` in `freshCtor`: no D9h copy
+where `p` keeps it) where it lands in a block inside theirs. Not in a generator's Next (its frame across yields kept out
+of it). `-memory`'s view line counts the moves.
+
+Measured: lastuse 682 MB / 0.44 s -> 420 MB / 0.23 s (the fresh form 420 MB / 0.21 s). bench: machine code
+byte-identical. Tests: tests/reads.olang's moved, copied-then-used, each-turn and deferred cases (the evaluator decides
+the same values at the top level), the landing scenario's lastuse under 90 MB; `-sanitize` and `-debug` clean on both.

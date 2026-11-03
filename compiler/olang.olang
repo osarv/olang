@@ -551,7 +551,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     # D9h: value results handed over as views (of what this build lowered)
     if cfg.Memory {
         for line in lw.CopyLog { try io.Println(line) catch io.Error { } }
-        try io.Println($lw.ViewReturns " returns hand back a view, " $lw.ViewReads " calls read one where it stands, " $lw.ViewCopies " calls copy one, " $lw.ArgViews " by-value arguments are read where they are") catch io.Error { }
+        try io.Println($lw.ViewReturns " returns hand back a view, " $lw.ViewReads " calls read one where it stands, " $lw.ViewCopies " calls copy one, " $lw.ArgViews " by-value arguments are read where they are, " $lw.Moves " copies are moves at a last use") catch io.Error { }
     }
     for v in lw.ViewLog { try io.PrintErr($v "\n") catch io.Error { } }
     if e.Gaps.Len() > 0 or lw.Gaps.Len() > 0 {
