@@ -2533,3 +2533,18 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   becomes written); collections, extern types, `any` and function types are ref; the compiler lays a ref instance out
   inline in its container where the container is its only holder (an optimization, as early freeing is), which gives
   "a File inside a struct by value" its speed without a no-copy value kind. ASKED.
+- QCN reshaped by the user 2026-11-03 ("we still need to be able to ... lay this destructor struct out in memory ...
+  the restriction should go the other way ... every type that has a destructor should need the owned word ... not
+  copyable ... only exist at one place ... references to it, where it's declared as a value, should be fine ... ref is
+  the wrong word, and shared is also the wrong word ... it can only be a value in one place ... a better idea?").
+  PROPOSED (rec): the word `unique` (alternatives `owned`, `single`, `sole`) - `type File unique struct(...)`: a value
+  of it lives in exactly one place (a local, field, element, global), held by value and laid out there; references to
+  it are fine (scopes keep them shorter); it is never copied - `w := f`, `w File = f`, passing it by value or storing a
+  named one is an error naming a reference or a written `Clone()` the type declares; a fresh value lands where it is
+  put (a constructor call, a call's result, `v.Push(File(...))`, `return f`, `m.Take(k)`), so no move tracking (no
+  `take`); a destructor requires `unique` and runs once; a struct holding a unique field by value is unique itself;
+  generics that copy a `T` are refused for a unique `T` at the call (G18a). With it the collections become unique
+  instead of reference-only (QCL's aims kept - no hidden copies, every reference sees the current buffer and length -
+  plus inline layout, so the 7.7% indirection does not come back); reference-only stays only what has no value form by
+  nature (any, function types, extern handles) - no `ref` keyword. Immutable String copies free (its buffer shared).
+  ASKED.
