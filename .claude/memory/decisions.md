@@ -2674,3 +2674,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   for inout, C#'s `ref x`, Rust's `&mut x`), the user's own reason for keeping `mut` ("knowing whether a function you
   pass things into mutates what you passed"); receivers unmarked (`c.Grow()` acts on c by its look). Recommended (C).
   In effect: (A).
+- QCP DECIDED 2026-11-03 (the user: "Nah, we keep them as they are"): references taken and read through implicitly, as
+  today (A); no call-site marker. Answered the user's question: `mut` in signatures is more than documentation - the
+  compiler leans on it (read-only arguments passed by pointer with no copy and D9h's handover, constant data and
+  immutable globals emitted as `constant` and never lent writably, T25d's static literals, LLVM `readonly` on such
+  parameters; what removing it cost was rounds 2a-3b's proof machinery and hidden copies - QCK).
