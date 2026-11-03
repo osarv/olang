@@ -2718,3 +2718,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   current buffer and length, and a copy the program never writes on either side is left out, so `w := v` costs nothing
   unless one of them changes. What unique bought for collections (no accidental O(n) copy) is kept by that elision.
   ASKED.
+- Collections DECIDED 2026-11-03 (the user: "Number 2 is correct" - read as agreeing that elision keeps copies of
+  collections cheap, so collections are not unique; reading stated to the user): collections are ordinary types with a
+  Copy (a new buffer, elements by their own Copy), unique exactly when their elements are (rule 5); ToVec not needed
+  for copying. The copy design is settled: rules 1-3, 5, 6; unique types declare no Copy; collections follow their
+  elements.
