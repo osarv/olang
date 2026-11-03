@@ -18711,7 +18711,7 @@ test "E31b: a mutating call through x[i] is made on the element in place, as the
 }
 
 # S4c, E31: a parallel assignment's target x[i] on a type declaring SetAt stores through it, as "x[i] = v" alone does -
-# each target's index read first, then every value, then the stores in order (found by docs/refs-study.md: the
+# every value first, then each target in order, its index and its store (found by docs/refs-study.md: the
 # parallel form was refused, writing into the copy At gives back); baked while compiling as at run time
 type s4cPt struct(x I64, y I64) {
     x, y
@@ -18721,7 +18721,7 @@ fn s4cSwaps(n I64) String {
     for i in range n { ps.Push(s4cPt(i, i * 10)) }
     ps[0], ps[n - 1] = ps[n - 1], ps[0]
     i I64 = 1
-    ps[i], i = ps[0], 2                         # ps[1]: the index is read before i is written
+    ps[i], i = ps[0], 2                         # ps[1]: the first target's index is read before i is written
     v := Vec<I32>()
     v.Push(0)
     v.Push(0)
