@@ -2494,3 +2494,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   and length (no stale Vec, only stale views/element references into the buffer, as today). Costs: one indirection
   per access (measured 7.7% on a Vec-heavy bench when it went away), a record allocated per collection; arrays stay
   values (QCE). Recommended yes. In effect: collections as values.
+- 2026-11-03 (the user: "The rest are fine, by the way"): every other call of the 30-item overview stands. Still asked:
+  QCL (collections reference-only, recommended yes), 26 (C function pointers `fn?&` as now, or `fn&`), 27's sharper
+  rule (C calls "anything" only where an export fn was handed to C or the program is a -library; libc's I/O, string,
+  memory, time exempt even then - recommended).
