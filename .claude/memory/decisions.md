@@ -2521,3 +2521,15 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   immutable types), so a `Config&` is safe to share across tasks and as a Map key by contents, `mut Config&` an error,
   baked freely by the evaluator; open: deep vs shallow, whether String becomes immutable (QCE option c), how it meets
   collections now reference-only, whether `immutable` also applies to a single place. Not decided.
+- QCO, the user 2026-11-03: String becomes immutable ("especially important for map with strings"), with runtime
+  building as methods on the String type; field immutability follows the field's type (immutable fields not needed);
+  the reference-only word: `ref` ("short"). PROPOSED for building: String's methods give new Strings (`s.Append(x)`,
+  Replace, Join, adjacency as today), and `s = s.Append(x)` reuses s's buffer in place where the compiler proves s's
+  old value has no other holder (the early-freeing analysis), so a loop of appends is amortised O(1) like a Vec's push
+  - immutable in meaning, growth in place as an optimization; StringBuilder then goes. ASKED.
+- QCN, the user 2026-11-03 asked for one mechanism instead of reference-only plus destructors. PROPOSED (rec): `ref` is
+  the one concept - a type with identity: never copied, only held through `&`/`?&`, may have a destructor; a destructor
+  is allowed only on a `ref` type (an error naming `ref` otherwise - C11's "a destructor makes a type reference-only"
+  becomes written); collections, extern types, `any` and function types are ref; the compiler lays a ref instance out
+  inline in its container where the container is its only holder (an optimization, as early freeing is), which gives
+  "a File inside a struct by value" its speed without a no-copy value kind. ASKED.
