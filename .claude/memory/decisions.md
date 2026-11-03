@@ -2849,3 +2849,13 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `&` at the use lets one type be flat in a list and shared elsewhere); (3) a std structure-of-arrays container by
   reflection (`soa.Of<P>(n)`, `s.X[i]`, lane operators per field; 1.65x time, 6.5x fewer instructions than flat
   records here) now or when a program asks (rec when asked). In effect: values by default.
+- QCS ANSWERED 2026-11-03 (the user: "even if we did whole program compilation, we still wouldn't actually be able to
+  get that much out of references ... we still would need to have values back somehow for some cases. Yeah, don't do
+  the object thing. If we don't go with the references path, references are always shown with ampersand"): (1) values
+  stay the default, a reference always written `&`, `immut`/`unique` as decided; (2) no declared object kind. (3) the
+  structure-of-arrays container: the user asked what it would look like - explained (AoS vs SoA memory, `xs += vxs *
+  dt`, a `soa.Table<Particle>` with Push/`t[i]`/Sort/Column), with a correction: it cannot be built by reflection in
+  std (reflection reads types, cannot make them - Zig's MultiArrayList can because Zig makes types), so it would be
+  compiler-supplied (as Odin's `#soa`), a language feature. ASKED: record it as not now, revisit when a program needs
+  it (rec yes). In effect: none built; separate arrays + lane operators by hand.
+

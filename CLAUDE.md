@@ -389,7 +389,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   question").
 - **Integer arithmetic wraps (E6c, the user's call, re-confirmed 2026-10-09 knowing its `nsw` cost).** Division by
   zero and MIN / -1 are undefined (E6a); `std/arith` checks: `try arith.Add(a, b)`, `try arith.Checked(a) * b` (E15a).
-- **Value or reference is decided by the `&` marker alone (T11, T25a).** `&` is scope-tagged heap indirection, not an
+- **Value or reference is decided by the `&` marker alone (T11, T25a); references by default declined (QCS, the user
+  2026-11-03, after docs/refs-study.md: "don't do the object thing ... references are always shown with ampersand").**
+  `&` is scope-tagged heap indirection, not an
   address-of: no pointer type, no unary `&`, no reference to a reference. Reference-shape is part of type identity;
   value<->reference conversion is assignability at the outermost level only (E12): an lvalue into a reference borrows
   (E12c), a temporary is built in the target's scope. No primitive references (the user's call: assignment to a

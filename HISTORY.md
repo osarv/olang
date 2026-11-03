@@ -28627,3 +28627,23 @@ of its own; nothing of it is committed but the compiler's support. StringBuilder
 run-time length lent to a `mut Array<U8>&` parameter - legal, as Char extends U8 (T29h) - went through `fit`'s promote
 path, a copy lent, so the callee's writes were lost (a fixed-length one was borrowed). `fit` now borrows the place for
 any array whose elements are held alike (`sameRepr`), as it did for fixed storage. tests/immut.olang.
+
+## References by default, studied and declined (2026-11-03, QCS)
+
+The user asked whether everything could be a reference - no `&` or `?&`, only `mut` and `immut` - without losing
+performance. docs/refs-study.md measured it on the values study's programs. An olang object has no header, one bump
+allocation and never moves, so data built once and walked in order costs nothing as objects (the compiler slice -2.0%
+instructions and -11% peak memory, the settle -0.3%); small mutable records cost (a widget's rectangle as objects
++16.6% instructions; 4M particles as pointers twice the memory and 12.6x the time once walked out of creation order).
+Inference cannot win that back safely: laying a mutable record flat in its holder is decidable only conservatively,
+needs the whole program, and makes a type's layout change with code far from it - against C layouts, files, separate
+compilation and `olang api` (Java's object inlining research never became HotSpot's answer; Valhalla made it
+declared). The data case needs a flat, mutable, copyable type anyway, which is two kinds of type again - what olang
+has, chosen at each use by `&`. The user: values stay the default and a reference is always written `&`; no
+declared object kind (`type Widget object struct(...)`, which would have implied `&` at every use). A structure-of-
+arrays collection (one array per field of a record type) was explained; it cannot be a std library in olang as it
+stands (reflection reads a type's fields but cannot make a type of them), so it would be compiler-supplied - asked,
+recommended for when a program needs it. Found by the study and queued: a parallel assignment of two Vec elements
+refused (E31), a whole-element store of a record 1.8x slower than writing its fields, an array of small structs not
+vectorizing where the same data as one array per field does.
+
