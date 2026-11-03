@@ -804,3 +804,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   (Array<Char> lent as mut Array<U8>&). Left: String immutable (flip works, ~80 test sites + two-stage bootstrap +
   seed; tools/textbuild_migrate.olang committed, not in fix), unique + destructor timing, item 17. Agent's questions:
   declared Copy never elided (mine: keep), list.List stays a handle (mine: keep), StringBuilder.Push not renamed (mine).
+- 2026-11-03 CET: the references study merged (docs/refs-study.md; QCS's three questions asked). Found by it, queued for
+  the next compiler round: (1) BUG - `ps[i], ps[j] = ps[j], ps[i]` on Vec elements refused with E31 while `ps[i] =
+  ps[j]` is accepted (the parallel form does not go through SetAt); (2) a whole-element store of a record (`ps[i] =
+  P(...)`) costs +23% instructions / 1.8x time against writing its fields (the loop compiled branch-free - look at the
+  store's lowering); (3) an array of small structs does not vectorize where the same data as separate arrays does
+  (1.65x time) - check LLVM's interleaved-access vectorizing of the AoS loop.

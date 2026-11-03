@@ -2836,3 +2836,16 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   Costs: every program's meaning flips (`b := a; b.x = 1` changes a for a mutable type) - a full migration again;
   speed of mutable struct-heavy code rests on inference where neither word is written. PROPOSED: the same study as the
   values one on the same three programs before deciding. ASKED.
+- QCS STUDIED 2026-11-03 (docs/refs-study.md, wt-refs-study a5d40f0, merged): references by default measured on the
+  values study's programs. Objects cost nothing where data is built once and walked in order (compiler slice -2.0%
+  instructions, -11% peak; settle -0.3%), so no speed reason to avoid `&`; small mutable records cost (widget rects
+  +16.6% instructions, +10% memory; 4M particles as pointers 2.0x memory and 12.6x time once walked out of creation
+  order); inference cannot win it back safely (object/array inlining needs the whole program and gives a layout that
+  changes with distant code - against C layout, files, separate compilation, `olang api`; Valhalla made it declared);
+  the data case needs a flat mutable copyable type anyway, i.e. two kinds of type again. Migration ~2,500 by-value
+  positions, every copying `:=` and record `==` flipped. ASKED, numbered: (1) references by default not taken - values
+  stay the default, `&` marks sharing, `immut`/`unique` as decided (rec yes); (2) an opt-in object kind declared on the
+  type, `type Widget object struct(...)` with `&` implied at every use (rec no - a second kind of type and spelling;
+  `&` at the use lets one type be flat in a list and shared elsewhere); (3) a std structure-of-arrays container by
+  reflection (`soa.Of<P>(n)`, `s.X[i]`, lane operators per field; 1.65x time, 6.5x fewer instructions than flat
+  records here) now or when a program asks (rec when asked). In effect: values by default.
