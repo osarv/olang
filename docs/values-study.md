@@ -313,7 +313,10 @@ already meant): this changes what assignment and parameter passing mean.
 
 The base is SPEC section 8 as it stands: scopes inferred, nothing written, a block a scope, early freeing (O8d) where a
 sole place lets go. For each technique: what it would make work or free earlier, its compile-time cost, how it composes
-with the scope model, early freeing (`free.olang`), the evaluator and `interpret`, and a verdict.
+with the scope model, early freeing (`free.olang`), the evaluator and `interpret`, and a verdict. None of them changes
+what a program computes, so `interpret` (stage 1, which reclaims nothing before a scope closes) needs nothing for any;
+for those that free earlier the gate is free.olang's - the evaluator's dead-region mode (`OLANG_DEADREGIONS=1`) over the
+suite, the suite under `-sanitize`, and the early-free fuzzer.
 
 ### 4.1 Move at last use (Rust's moves, Hylo's `sink`, inferred)
 
@@ -354,7 +357,8 @@ E31b makes a mutating call on `x[i]` in place through `RefMut` when the call's o
 widget tree met its neighbour: `u.nodes[p].kids.Push(c)` - a call on a field of the element - is refused. Rust's
 two-phase borrows evaluate the arguments before the writable lend is taken; olang can do the same for a field path
 `x[i].f.g.M(args)`: arguments into temporaries, then `RefMut(i)` and the field path, then the call. Compile-time only,
-the existing E31b machinery extended to paths. **Build** (small).
+the existing E31b machinery extended to paths; the evaluator makes the same call in place (it has `RefMut`). **Build**
+(small).
 
 ### 4.5 `unique` as the ownership spine: exact early freeing, and drop at let-go
 
@@ -387,7 +391,8 @@ A value whose storage is bounded (a struct, a fixed array, a small text) and doe
 slot instead of an arena allocation, so LLVM can keep it in registers (SROA) - the arena bump is cheap but opaque to the
 optimizer. Already done for text copied from a literal (optsurvey item 9); plan.md parks the general case "needs a
 benchmark first". It frees nothing earlier and accepts nothing new; it is speed. Cost: the scope pass already knows each
-value's home; a size bound per type. **Build** as an optimization (mine to decide), measured on bench.
+value's home; a size bound per type; the evaluator has no stack to place it on and needs none. **Build** as an
+optimization (mine to decide), measured on bench.
 
 ### 4.8 Last-use freeing of large values (ASAP for memory)
 
@@ -518,4 +523,3 @@ modes); Reinking, Xie, de Moura, Leijen, "Perceus: garbage free reference counti
 FBIP); Proust, "ASAP: As Static As Possible memory management", Cambridge TR-908, 2017; Grossman et al., "Region-based
 memory management in Cyclone", PLDI 2002; Matsakis, RFC 2094 "Non-lexical lifetimes" (2017) and two-phase borrows (RFC
 2025); Vale's generational references (vale.dev); Mojo's ASAP destruction (the Mojo manual, "Death of a value").
-
