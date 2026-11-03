@@ -2066,6 +2066,20 @@ caller cannot know. A value result owning parts that is no such view - existing 
 copied by the function itself where it hands it back. Unobservable in what a program computes: the compile-time
 evaluator copies every time and agrees.
 
+*Reads by evaluation order.* Whether something can change what such a view names is judged over what is evaluated while
+the view is alive, not over its whole statement: a view read where it stands by a call given it read-only whose result
+holds no reference lives until that call returns - the call's other arguments and its body are all that run meanwhile -
+and one read out into a value owning nothing (`v[i].w`, `v[i].xs.Len()`) lives while the place's indices are evaluated.
+What runs then is judged by the storage the view covers - the types of its by-value parts: a call writing only what
+can reach none of them (a writable `Rand&` beside a read of a `Vec<Node>`'s element), with no mutable global reaching
+them, leaves it as it is - so `at = u.nodes[at].kids[r.roll(u.nodes[at].kids.Len())]` copies no element, and
+`total(v[0].kids, grow(v))`, whose second argument changes the first's element while the view is alive, copies it. A
+reference local given what a call hands back from such a view (`kids := v[i].xs.View()`) reads the element in place
+where nothing changes what the view covers while the local lives. A value given storage only for a call's read-only
+parameter that the callee keeps nothing of, whose result holds no reference, is given it in the frame (`inside(v[k],
+x, y)`), not in an arena of the block. Where a copy is made, it is built where the value is kept: a local's copy in the
+local's block - so a loop turn's copy is reclaimed with the turn (O2) - whatever storage it was read from.
+
 **D16 (lambdas).** A **lambda** is a function written as an expression, with no name:
 
 ```

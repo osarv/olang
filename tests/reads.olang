@@ -1,0 +1,156 @@
+# Element reads judged by evaluation order (D9h), copies made in a loop turn reclaimed by the turn, and value locals
+# moved at their last use (D9i): none of them changes what a program computes - each test reads back what the copy
+# semantics say, the evaluator (which copies every time) deciding the same values while compiling.
+
+type Node struct(w I64) {
+    w
+    kids Vec<I32> = Vec<I32>()
+}
+
+type Rand struct(state U64) { state }
+
+fn (r mut Rand&) roll(n I64) I64 {
+    r.state = r.state * 6364136223846793005 + 1442695040888963407
+    return I64((r.state >> 33) % U64(n))
+}
+
+fn tree(n I64) Vec<Node> {
+    v := Vec<Node>()
+    for i in range n {
+        v.Push(Node(i))
+        for k in range i % 4: v.RefMut(i).kids.Push(I32((i + k + 1) % n))
+    }
+    return v
+}
+
+# a walk down the kids, each step a read of an element whose statement also rolls: the read is done before the roll
+fn walk(v Vec<Node>&, r mut Rand&, steps I64) I64 {
+    at := I32(0)
+    s := 0
+    for _ in range steps {
+        if v[at].kids.Len() == 0: at = I32(r.roll(v.Len()))
+        else: at = v[at].kids[r.roll(v[at].kids.Len())]
+        s += v[at].w
+    }
+    return s
+}
+
+fn total(xs Vec<I32>&, n I64) I64 { return xs.Len() * 1000 + n }
+
+# writes the element a read in the same call views, while the view is alive: the read keeps its own copy
+fn grow(v mut Vec<Node>&) I64 {
+    v.RefMut(0).kids.Push(7)
+    return v[0].kids.Len()
+}
+
+fn kidsOf(v Vec<Node>&, at I32) I64 {
+    kids := v[at].kids.View()
+    s := 0
+    for k in kids: s += I64(k)
+    return s
+}
+
+fn heavier(a Node&, b I64) Bool { return a.w > b }
+
+test walk "reads elements in place where a call shares the statement, and gives the copies' values" {
+    v := tree(50)
+    r := Rand(3)
+    s := walk(v, r, 1000)
+    r2 := Rand(3)
+    assert s == walk(v, r2, 1000)
+    assert s > 0
+}
+
+test grow "keeps a copy of an element a later argument changes before the read is used" {
+    v := tree(4)
+    before := v[0].kids.Len()
+    t := total(v[0].kids, grow(v))
+    assert t == before * 1000 + before + 1, $t
+}
+
+test kidsOf "reads an element's array in place through a view a local holds" {
+    v := tree(8)
+    s := 0
+    for i in range 8: s += kidsOf(v, I32(i))
+    assert s == 40, $s
+    n := 0
+    for i in range 8 {
+        if heavier(v[i], 3): n++
+    }
+    assert n == 4
+}
+
+test "copies made in a loop turn are each the element's" {
+    v := tree(6)
+    s := 0
+    for i in range 10000 {
+        n := v[i % 6]
+        n.kids.Push(1)
+        s += n.kids.Len()
+    }
+    assert v[5].kids.Len() == 1
+    assert s == 21668, $s
+}
+
+type Holder struct(toks Vec<I64>) {
+    toks
+    i I64 = 0
+}
+
+fn mk(n I64) Vec<I64> {
+    v := Vec<I64>()
+    for i in range n: v.Push(i)
+    return v
+}
+
+fn moved(n I64) I64 {
+    t := mk(n)
+    p := Holder(t)
+    p.toks.Push(99)
+    return p.toks.Len()
+}
+
+fn copiedThenUsed(n I64) I64 {
+    t := mk(n)
+    p := Holder(t)
+    p.toks.Push(99)
+    return t.Len() * 1000 + p.toks.Len()
+}
+
+fn eachTurn(n I64) I64 {
+    t := mk(n)
+    s := 0
+    for _ in range 3 {
+        p := Holder(t)
+        p.toks.Push(5)
+        s += p.toks.Len()
+    }
+    return s * 1000 + t.Len()
+}
+
+fn deferred(n I64) I64 {
+    out := Vec<I64>()
+    {
+        t := mk(n)
+        defer out.Push(t.Len())
+        p := Holder(t)
+        p.toks.Push(1)
+        out.Push(p.toks.Len())
+    }
+    return out[0] * 1000 + out[1]
+}
+
+test moved "hands a local to a constructor at its last use, and copies it where it is used again" {
+    assert moved(10) == 11
+    assert copiedThenUsed(10) == 10011
+    assert eachTurn(4) == 15004
+    assert deferred(3) == 4003
+}
+
+# the same, computed while compiling: the evaluator copies every time and decides the same values
+assert moved(10) == 11 and copiedThenUsed(10) == 10011 and eachTurn(4) == 15004 and deferred(3) == 4003
+Walked := walk(tree(50), Rand(3), 200)
+
+test walk "is the value the evaluator baked" {
+    assert Walked == walk(tree(50), Rand(3), 200)
+}

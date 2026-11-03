@@ -419,6 +419,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   by another `mut` name, and a view is read where it stands only where no call in its statement could write it (no
   closure or `any` reached through an argument, no global through which storage may be written - `check.mutStorage` -
   and no argument holding, at any depth of its fields, a writable reference to the viewed storage's type: bulk review 6).
+  **Reads by evaluation order (2026-11-03, the values study's B2; mine, an optimization stated in SPEC as a rule):** a
+  view read where it stands is judged over what runs while it is alive - its consumer call (given it read-only, a
+  result holding no reference) and that call's arguments, or the indices of a place read out into a value owning
+  nothing (`v[i].w`) - by the viewed storage's types, as a held local's block is (`windowQuiet`, quietLife's cover), not
+  over its whole statement: `r.roll(u.nodes[at].kids.Len())` copies no element; a reference local given `v[i].xs.View()`
+  reads the element in place where its block is quiet (`heldThroughTemps`); a promote only for a read-only parameter of
+  a call keeping nothing is a stack slot (`stackArg`); a D9h copy a local keeps is built in the local's block (the scope
+  pass's Built for the call site, `viewCopyAt`), so a loop turn's copy goes with the turn (it went where the viewed
+  storage lives). The study's widget tree written with plain reads: 3.9 s / 1.33 GB -> 0.29 s / 27 MB (hand `Ref`s
+  0.22 s / 27 MB); turncopy 517 MB -> 1.9 MB; bench machine code byte-identical.
   A value owning parts handed back from storage that is no view of the arguments (a global's) is copied by the function
   (`retOwns`; while compiling every such value, so the evaluator agrees).
   Rows laid out in place given where run-time rows are wanted are widened each in turn (they were read as pairs). **T25d** (found by round 3b, on the default path too): text written in the program given a

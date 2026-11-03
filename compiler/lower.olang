@@ -346,6 +346,11 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     vlIn typed.BlockId = typed.BlockId(0)   # ... the block of the local being asked about (viewLocals)
     stmts Vec<typed.Stmt&>       # ... the statements being lowered, innermost last, and whether each writes nothing
     stmtSafe Vec<I64>            # it reaches but through its own last store (quietStmt): -1 not yet asked, 0 no, 1 yes
+    # D9h by evaluation order: the view calls read where they stand whose window - what is evaluated while the value
+    # is alive, its consumer's call or the place read out of it - writes nothing the view covers (windowQuiet), by
+    # site; and the answer for the call stableViews is judging
+    readWin Map<I64, Bool>
+    winOk Bool = false
 }
 
 fn (ln mut lowering&) gap(sp source.Span, what String&) {
@@ -2040,6 +2045,7 @@ fn (ln mut lowering&) away(file I64, y typed.Expr&) mir.Operand {
 }
 
 fn (ln mut lowering&) read(p typed.Lvalue&, ty types.TypeId, sp source.Span) mir.Operand {
+    ln.readOut(p, ty)
     q := ln.place(p)
     if ln.dead { return mir.Operand.None }
     return ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(q))), sp)
@@ -2337,9 +2343,11 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
     }
     for i in range c.Args.Len() {
         a := c.Args[i]
-        if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) { ln.readHere(a) }
+        if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) { ln.readHere(a, c) }
         if not task: ln.argView(a, body, i)
-        v := ln.val(a)
+        ro := i < ps.Len() and t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) == 0
+        v := ln.stackArg(a, body, i) if reads and ro else mir.Operand.None
+        if v == mir.Operand.None { v = ln.val(a) }
         if i < ps.Len() { v = ln.fit(v, a, ps[i], a.Span()) }
         # (a helper of a reference type, E10's null-aware "==" of two array references, takes references to them)
         held := t.IsRef(a.Type()) and t.Same(t.Plain(t.Referent(a.Type())), t.Plain(t.Referent(ps[i]))) if i < ps.Len() and t.IsRef(ps[i]) else true
@@ -2350,6 +2358,26 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         ops[i] = v
     }
     return ln.F.Args(ops)
+}
+
+# a value given storage for a read-only reference parameter of a call that keeps nothing of it and hands back nothing
+# holding a reference (`inside(v[k], x, y)`): the storage a stack slot of this frame, needed only while the call runs,
+# rather than an arena's, which a loop turn would allocate and close every turn. A struct's or an enum's value, with no
+# destructor (O16), in no region early freeing made (O8d); None where the argument is no such promote
+fn (ln mut lowering&) stackArg(a typed.Expr&, body I64, i I64) mir.Operand {
+    if not ln.planned or body < 0 or a != typed.Expr.Promote: return mir.Operand.None
+    pr := a.pr
+    t := ln.T
+    rt := a.ty
+    o := t.Referent(rt) if t.IsRef(rt) else types.UnknownT
+    if o == types.UnknownT or t.KindOf(t.Repr(o)) != types.Kind.Named: return mir.Operand.None
+    if t.KindOf(o) == types.Kind.Named and t.HasBody(o) and t.Destructs(o): return mir.Operand.None
+    if pr.Site < typed.SiteId(0) or I64(pr.Site) >= ln.plan.Built.Len() or ln.plan.Built[I64(pr.Site)] == typed.Scope.Region: return mir.Operand.None
+    if not ln.L.keepsNoRef(body, i): return mir.Operand.None
+    v := ln.val(pr.X)
+    if ln.dead { return mir.Operand.None }
+    l := ln.local(v, o, a.Span())
+    return ln.into(rt, mir.Rvalue.Ref(mir.L(l), rt), a.Span())
 }
 
 # a rendered operand's own copy (check's, of a value owning storage) left out where nothing in its statement could
@@ -2426,10 +2454,22 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
             ln.L.ViewReads++
         } else {
             ln.L.ViewCopies++
-            return ln.arrayCopy(mir.Operand.Copy(mir.L(dest)), ty, sp, ln.resultOf(fty, scopes))
+            return ln.arrayCopy(mir.Operand.Copy(mir.L(dest)), ty, sp, ln.viewCopyAt(c.Site, ln.resultOf(fty, scopes)))
         }
     }
     return mir.Operand.Copy(mir.L(dest))
+}
+
+# where a view call's copy is made (D9h): where the scope pass put the value (its Built - a local's block, so a copy made
+# in a loop turn goes with the turn, O2), else where the callee's result would live; a region early freeing made for
+# the value (O8d) wins
+fn (ln mut lowering&) viewCopyAt(site typed.SiteId, at mir.ScopeRef) mir.ScopeRef {
+    if not ln.planned or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len(): return at
+    if ln.plan.Built[I64(site)] == typed.Scope.Unset: return at
+    return match at {
+        case mir.ScopeRef.Held(_): at
+        case _: ln.built(site)
+    }
 }
 
 # D9h: a constructor's call whose instance views only storage made for the call (typed.FreshViews) - its own, as
@@ -2521,28 +2561,76 @@ fn (ln mut lowering&) viewCall(c typed.Call&, ty types.TypeId) Bool {
 fn (ln mut lowering&) viewValue(ty types.TypeId) Bool { return not ln.T.IsRef(ty) and typed.HoldsOwned(ln.T, ty) }
 
 # x, where it stands, is only read before its statement ends: the call of a function handing back views it is (through
-# a conversion or a temporary's storage given to it) may give its view as it is (call)
-fn (ln mut lowering&) readHere(x typed.Expr&) {
+# a conversion or a temporary's storage given to it) may give its view as it is (call). Its consumer, where known - k, a
+# call given it read-only whose result holds no reference, or the place p read out of it into a value owning nothing -
+# bounds what is evaluated while the view is alive (windowQuiet); else its whole statement does (quiet)
+fn (ln mut lowering&) readHere(x typed.Expr&, k typed.Call?& = null, p typed.Lvalue?& = null) {
     match x {
-        case typed.Expr.Call(_, _, c) { ln.reads.Put(I64(c.Site), true) }
-        case typed.Expr.Promote(_, _, pr) { ln.readHere(pr.X) }
-        case typed.Expr.Prim(_, _, op, _, args) { if op == typed.PrimOp.Convert and args.Len() == 1: ln.readHere(args[0]) }
-        case typed.Expr.Away(_, _, y) { ln.readHere(y) }
-        case typed.Expr.Seq(_, _, q) { if q.X is not null and q.Stmts.Len() == 0: ln.readHere(q.X!) }
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) { ln.readPlace(p) }
+        case typed.Expr.Call(_, _, c) {
+            ln.reads.Put(I64(c.Site), true)
+            ln.readWin.Put(I64(c.Site), (k is not null or p is not null) and ln.windowQuiet(c, k, p))
+        }
+        case typed.Expr.Promote(_, _, pr) { ln.readHere(pr.X, k, p) }
+        case typed.Expr.Prim(_, _, op, _, args) { if op == typed.PrimOp.Convert and args.Len() == 1: ln.readHere(args[0], k, p) }
+        case typed.Expr.Away(_, _, y) { ln.readHere(y, k, p) }
+        case typed.Expr.Seq(_, _, q) { if q.X is not null and q.Stmts.Len() == 0: ln.readHere(q.X!, k, p) }
+        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q) { ln.readPlace(q, k, p) }
         case _ { }
     }
 }
 
 # (a part of a temporary read or borrowed where it stands - `v[i].xs.Len()`: the temporary is only read too)
-fn (ln mut lowering&) readPlace(p typed.Lvalue&) {
-    match p {
-        case typed.Lvalue.Field(_, _, base, _) { ln.readPlace(base) }
-        case typed.Lvalue.Payload(_, _, py) { ln.readPlace(py.Base) }
-        case typed.Lvalue.Elem(_, _, e) { ln.readPlace(e.Base) }
-        case typed.Lvalue.Temp(_, _, x, _) { ln.readHere(x) }
+fn (ln mut lowering&) readPlace(q typed.Lvalue&, k typed.Call?& = null, p typed.Lvalue?& = null) {
+    match q {
+        case typed.Lvalue.Field(_, _, base, _) { ln.readPlace(base, k, p) }
+        case typed.Lvalue.Payload(_, _, py) { ln.readPlace(py.Base, k, p) }
+        case typed.Lvalue.Elem(_, _, e) { ln.readPlace(e.Base, k, p) }
+        case typed.Lvalue.Temp(_, _, x, _) { ln.readHere(x, k, p) }
         case _ { }
     }
+}
+
+# a value owning nothing read out of a place made of a view call's temporary (`v[i].w`): the view is alive only while
+# the place's indices are evaluated and the read is made (D9h by evaluation order)
+fn (ln mut lowering&) readOut(p typed.Lvalue&, ty types.TypeId) {
+    if not ln.planned or ln.viewValue(ty): return
+    match p {
+        case typed.Lvalue.Field(_, _, _, _), typed.Lvalue.Payload(_, _, _), typed.Lvalue.Elem(_, _, _) { ln.readPlace(p, null, p) }
+        case _ { }
+    }
+}
+
+# D9h by evaluation order: whether nothing evaluated while view call c's value is alive may write storage it views -
+# its consumer k's arguments and k itself (a call given the view read-only, whose result holds no reference: the view
+# is dead once k returns), or the indices of place p read out of it. Judged per argument c may view, as a local's block
+# is (quietLife): by the types of that storage's by-value parts, a call writing only what reaches none of them, and no
+# mutable global reaching them
+fn (ln mut lowering&) windowQuiet(c typed.Call&, k typed.Call?&, p typed.Lvalue?&) Bool {
+    v := ln.L.ViewsOf(typed.BodyId(I32(typed.CalleeBody(c))))
+    if v <= 0 or (v & typed.ViewOther) != 0: return false
+    for j in range c.Args.Len().Min(typed.ViewBits) {
+        if (v & (I64(1) << j)) == 0: continue
+        a := c.Args[j].Type()
+        if not ln.windowFor(ln.T.Referent(a) if ln.T.IsRef(a) else a, k, p): return false
+    }
+    return true
+}
+
+fn (ln mut lowering&) windowFor(of types.TypeId, k typed.Call?&, p typed.Lvalue?&) Bool {
+    ln.qCover.Clear()
+    ln.qWrites.Clear()
+    ln.coverAdd(of, 0)
+    ln.qRoot = of
+    ok := true
+    for g in ln.L.P.L.MutGlobals {
+        gt := types.TypeId(I32(g))
+        if ln.objHits(gt) or ln.writesCover(gt, 0): ok = false
+    }
+    if ok and k is not null: ok = ln.quietCall(k)
+    if ok and p is not null: ok = ln.quietPlace(p)
+    ln.qCover.Clear()
+    ln.qWrites.Clear()
+    return ok
 }
 
 # whether every argument a call may hand back a view of is storage nothing in this function can change before the view
@@ -2555,6 +2643,8 @@ fn (ln mut lowering&) stableViews(c typed.Call&) Bool {
     }
     v := ln.L.ViewsOf(id)
     if (v & typed.ViewOther) != 0: return false
+    ln.winOk = try ln.readWin.Get(I64(c.Site)) catch default false
+    defer ln.winOk = false
     for k in range c.Args.Len().Min(typed.ViewBits) {
         if (v & (I64(1) << k)) != 0 and not ln.stableRef(c.Args[k]): return false
     }
@@ -2563,7 +2653,8 @@ fn (ln mut lowering&) stableViews(c typed.Call&) Bool {
 
 fn (ln mut lowering&) stableRef(r typed.Expr&) Bool {
     # (what any place of this function reaches, where the statement the view is read in writes nothing until its end)
-    if ln.quiet() and ln.placeRooted(r): return true
+    # (or where nothing evaluated while the view is alive writes it - its consumer's window, windowQuiet)
+    if (ln.winOk or ln.quiet()) and ln.placeRooted(r): return true
     return match r {
         case typed.Expr.Read(_, _, p, _): ln.stableHolder(p)
         case typed.Expr.Borrow(_, _, p): ln.stablePlace(p)
@@ -2920,6 +3011,8 @@ fn (ln mut lowering&) viewInit(u typed.LocalUses&, x typed.Expr&, i I64) Bool {
             if c is not null: return ln.heldViews(u, c)
             return true   # (a value of its own given storage for the local: what it names is its own)
         }
+        k := viewCallIn(x)
+        if k is not null: ln.heldThroughTemps(u, k)
         return ln.heldSrc(u, x)
     }
     c := viewCallIn(x)
@@ -2931,6 +3024,43 @@ fn (ln mut lowering&) viewInit(u typed.LocalUses&, x typed.Expr&, i I64) Bool {
         case _ { if ln.copiesArray(x, ty): ln.noLetCopy.Put(i, true) }
     }
     return true
+}
+
+# a reference local given what a call k hands back (`kids := v[i].xs.View()`): a view call whose temporary k is lent
+# read-only (a part of it borrowed) is read where it stands where what it views is stable while the local lives - the
+# local may name the temporary's storage, which is then the viewed storage itself (heldViews)
+fn (ln mut lowering&) heldThroughTemps(u typed.LocalUses&, k typed.Call&) {
+    t := ln.T
+    ty := match k.Target {
+        case typed.Callee.Body(id): ln.L.Bodies[I64(id)].Ty
+        case _: types.TypeId(-1)
+    }
+    if ty == types.TypeId(-1): return
+    ps := t.Items(t.Params(ty))
+    for i in range k.Args.Len().Min(ps.Len()) {
+        if t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0: continue
+        c := tempViewCall(k.Args[i])
+        if c is not null: ln.heldViews(u, c)
+    }
+}
+
+# the view call whose temporary a borrow or a read is a part of (`v[i].xs`), through what passes a value on as it is
+fn tempViewCall(x typed.Expr&) typed.Call?& {
+    return match x {
+        case typed.Expr.Borrow(_, _, p), typed.Expr.Read(_, _, p, _): tempRoot(p)
+        case typed.Expr.Away(_, _, y): tempViewCall(y)
+        case _: null
+    }
+}
+
+fn tempRoot(p typed.Lvalue&) typed.Call?& {
+    return match p {
+        case typed.Lvalue.Field(_, _, base, _): tempRoot(base)
+        case typed.Lvalue.Payload(_, _, py): tempRoot(py.Base)
+        case typed.Lvalue.Elem(_, _, e): tempRoot(e.Base)
+        case typed.Lvalue.Temp(_, _, x, _): viewCallIn(x)
+        case _: null
+    }
 }
 
 # whether every argument a view call may hand back a view of is stable while the local reading it lives: the call then

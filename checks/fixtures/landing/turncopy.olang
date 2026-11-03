@@ -1,0 +1,20 @@
+# D9h: a value local declared in a loop as a copy of an element of a Vec the same function holds - the copy is made
+# in the turn's block and reclaimed with it (O2), so 1M turns stay under 8 MB (they kept every copy: 517 MB)
+import "std/io"
+
+type Node struct(w I64) {
+    w
+    kids Vec<I32> = Vec<I32>()
+}
+
+fn main() ? {
+    v := Vec<Node>()
+    v.Push(Node(1))
+    for k in range 100: v.RefMut(0).kids.Push(I32(k))
+    s := 0
+    for _ in range 1000000 {
+        n := v[0]
+        s += n.w
+    }
+    try io.Println($s)
+}

@@ -28474,3 +28474,40 @@ the tools are outside verify.
 
 **Measured.** bench's IR (15 programs, every module's .ll, `-target x86-64-v3`) byte-identical to master's after every
 fix.
+
+## Element reads by evaluation order, turn copies reclaimed (2026-11-03, the values study's B2)
+
+The values study (docs/values-study.md 2.4) found two costs in today's olang, both in D9h. **Reads judged by statement.**
+A view call read where it stands - `u.nodes[at].kids.Len()`, an element of a `Vec` read through `At` - was handed over
+uncopied only where its whole statement was quiet (no call given a writable reference, `lowering.quiet`), so
+`r.roll(u.nodes[at].kids.Len())` copied the whole element, its `kids` Vec included, because `roll` takes `r mut Rand&` -
+though `Len()` returns before `roll` runs. And a scalar read out of a view call's temporary (`pw := u.nodes[p].w`) was
+never "read where it stands" at all (only arguments, discarded values and text pieces were), so it copied too.
+**Turn copies kept.** Where a copy was needed, lowering made it in the callee's result scope, which for a view call is
+where the viewed storage lives - the function's frame for `n := v[0]` in a loop over a local `v`: 1M turns kept 517 MB.
+
+Built (mine; an optimization, so the evaluator, which copies every time, needed nothing):
+- `readHere` carries the view's consumer: the call it is an argument of (read-only, its result holding no reference),
+  or - new, `readOut` - the place a value owning nothing is read out of. `windowQuiet` judges what runs while the view is
+  alive (the consumer call and each of its arguments, or the place's indices) by the viewed storage's by-value types, as
+  `quietLife` judges a local's block: a call given a writable reference to what reaches none of those types, with no
+  mutable global reaching them, writes nothing the view covers. `stableViews` accepts that window where it used to need
+  the statement.
+- `heldThroughTemps`: a reference local given what a call hands back from a view call's temporary (`kids :=
+  u.nodes[at].kids.View()`) has the view call read where it stands where the local's block writes nothing the view
+  covers (`heldViews`) - the local then names the element's own array.
+- `stackArg`: a promote only for a read-only reference parameter of a call that keeps nothing of it (`keepsNoRef`) and
+  hands back nothing holding a reference (`inside(u.nodes[k], px, py)`) is a stack slot of the frame, not arena storage
+  of the block - a loop turn had allocated and closed a scope for it every turn (the profile's `__olang_scope_alloc_slow`
+  and `__olang_scope_close`, 20% of the run). A struct's or an enum's value with no destructor, in no region of O8d.
+- The scope pass records, for a call a local declares whose value owns storage (`ownCall`), the local's block as the
+  call site's `Built`; lowering's D9h copy (`viewCopyAt`) is made there, a region early freeing made for the value still
+  winning.
+
+Measured (docs/values-study/findings, the compiler at master f75a163 against this): gui_natural `100000 1000000 0` 3.9 s
+/ 1.33 GB -> 0.29 s / 27 MB (vals.olang with hand `Ref`s: 0.22 s / 27 MB; the profile's CPU 0.229 s), `... 20000` (it
+was killed at 14 GB) 0.52 s / 31.7 MB; turncopy 1.44 s / 517 MB -> 0.00 s / 1.9 MB. bench: every program's machine code
+byte-identical (the text sections of all fifteen compared), so no row moves. Tests: tests/reads.olang (reads with a
+writing roll beside them, a later argument that does change the element - `total(v[0].kids, grow(v))` keeps its copy -,
+a view through a reference local, turn copies, a top-level assert and a baked global the evaluator decides), the landing
+scenario's turncopy under 8 MB.

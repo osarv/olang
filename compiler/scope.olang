@@ -4633,7 +4633,13 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         s.terms[I64(l)] = s.valTerm(v, dest)
         # QCE: a call's value owning storage and sharing no reference is the local's own copy (D9h's caller copies it,
         # T7b's return did) - its parts live where it does, whatever storage the callee read it from
-        if s.ownCall(t, x!) { s.terms[I64(l)] = dest }
+        if s.ownCall(t, x!) {
+            s.terms[I64(l)] = dest
+            # (D9h: where the call hands back a view, this function copies it where the local keeps it - in the local's
+            # block, wherever the viewed storage lives - so a copy made in a loop turn goes with the turn, O2)
+            oc := typed.CallOf(x!)
+            if oc is not null { s.build(oc.Site, dest) }
+        }
         h := try s.splitHome.Get(I64(l)) catch default Term.None
         if h != Term.None { s.terms[I64(l)] = h }
         # a field viewing p's referent read through an element: only its container's scope is known, which the local would claim as its

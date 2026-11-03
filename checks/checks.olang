@@ -526,6 +526,10 @@ fn landing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build genlocal.olang > out.txt 2>&1") == 0, "genlocal build", dir)
     try r.expect(sh(dir, "(ulimit -v 8192 && ./build/genlocal) > out.txt 2>&1") == 0, "genlocal under 8 MB", dir)
     try r.expect(outOf(dir) == "36000000\n", "genlocal output", dir)
+    # D9h: a loop turn's copy of an element goes with the turn
+    try r.expect(sh(dir, "\"$OLANG\" build turncopy.olang > out.txt 2>&1") == 0, "turncopy build", dir)
+    try r.expect(sh(dir, "(ulimit -v 8192 && ./build/turncopy) > out.txt 2>&1") == 0, "turncopy under 8 MB", dir)
+    try r.expect(outOf(dir) == "1000000\n", "turncopy output", dir)
     #O26a: a number carries nothing into the result - the master compiler's build needed 96 MB here
     try r.expect(sh(dir, "\"$OLANG\" build numberflow.olang > out.txt 2>&1") == 0, "numberflow build", dir)
     try r.expect(sh(dir, "(ulimit -v 50000 && ./build/numberflow) > out.txt 2>&1") == 0, "numberflow", dir)
