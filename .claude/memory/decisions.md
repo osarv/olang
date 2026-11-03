@@ -2548,3 +2548,17 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   plus inline layout, so the 7.7% indirection does not come back); reference-only stays only what has no value form by
   nature (any, function types, extern handles) - no `ref` keyword. Immutable String copies free (its buffer shared).
   ASKED.
+- QCN DECIDED 2026-11-03 (the user: "unique is a very good solution to this"): `unique` as proposed (one place, held by
+  value, references fine, never copied, fresh values land, a destructor requires it, a holder of one by value is
+  unique, generics copying T refused at the call); collections become unique values instead of reference-only (QCL's
+  reference-only form superseded the same day); no `ref` keyword.
+- Asked with it 2026-11-03: (1) `Clone()` is an ordinary method, not an overridden assignment - PROPOSED: `=` stays
+  never a user call (a copy is written, `x = y` means `x == y`), so no overridable assignment; the operators left fixed:
+  `=`/`:=`, `and`/`or`/`not`/`xor` (short-circuit), `is null`, `as`, `!`, `try`, `a if c else b`, `.`, text adjacency
+  (`$x` overridable through Str); `!=`, `>`, `<=`, `>=` derived from Eq/Less - ASKED; (2) the immutable keyword: a
+  different thing from unique (unique: one place, may change, has identity; immutable: never changes, so any number of
+  copies are indistinguishable and a copy is a pointer copy sharing the storage - String immutable and not unique, its
+  copies free); spelling PROPOSED `immut` (the user: "immute, not immutable"; reading taken: `immut`, pairing with
+  `mut`), deep (everything a value reaches through its fields fixed after the constructor), `mut T&` of an immut type
+  an error, a type may be both unique and immut (a destructor needs unique); String its own immut type, `Array<Char>`
+  staying mutable for in-place editing - ASKED.
