@@ -2788,3 +2788,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   a shorter view, `planAt = args[k]`; compile time only; an xhigh round after the build batch (new section-8 design:
   a term for a field of the cursor's referent, or per-version terms - /home/user/review/nll-wip.patch). It was my
   queueing before; now the user's.
+- Reuse in place DECIDED 2026-11-03 (the user: "don't study it, just build it ... Is there a reason to not build
+  it?"): no reason against beyond effort - the gain is smaller than it looks where allocation is a bump pointer and the
+  old value is already freed early, and it applies only where the old value is dead before the new one's building
+  writes (`t = t.Rebuilt()` reads t while building, so it cannot reuse there); the risk is a wrong reuse condition,
+  caught by -sanitize, the dead-region evaluator and fuzz free. Built after the NLL round (it touches free.olang beside
+  it): a value whose owned storage dies where a new value of the same shape is built into the same place reuses that
+  storage when it fits (the made-for values, Perceus/Koka's reuse without counts).

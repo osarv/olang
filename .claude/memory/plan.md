@@ -794,3 +794,5 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   imprecision (an element of a constant literal scoped to the literal's temporary block) with it. Weekly 0.81. Next:
   the build batch (unique, Copy, immut, String/StringBuilder, collections following elements, item 17, unique freed
   exactly).
+- QUEUED 2026-11-03 (the user): after the build batch, the NLL round (xhigh), then reuse in place (the user: "just
+  build it") - then a bulk review over the three.
