@@ -2653,3 +2653,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   laid out for the value cannot hold a reference instead); (2) a by-value parameter given a fresh value is itself fresh
   and may land once more at its last use (how `Vec.Push(x T)` stores a unique element); (3) copying a unique
   collection is building one - `v.ToVec()`.
+- unique, the user 2026-11-03 (settling 1 and 2 yes; then "I want a way to hold the unique items as values where they
+  are created. I want every other reference to them to be by reference. So they should not be copyable. And then I
+  want a custom copy that can copy the way we want them to copy to create a new value"). PROPOSED as the whole design:
+  `Copy()` is always the method that makes a new value from an existing one; for an ordinary type the compiler calls
+  it at every copy (assignment, by-value pass, store - the assignment operator); for a unique type nothing calls it
+  implicitly - a copy of a unique value is a reference - and writing `f.Copy()` calls it, its result fresh and landing by
+  value where it is put (`g := f.Copy()` holds a new File by value); a unique type without a Copy cannot be duplicated
+  at all; so a Vec (unique) is duplicated by `v.Copy()`, and ToVec is not needed for it. ASKED to confirm.
