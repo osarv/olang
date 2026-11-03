@@ -2711,3 +2711,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   reference, so `w := f` makes `w` a `File&` (mine, reading taken); a non-unique struct holding a unique part writes a
   Copy that makes that part anew (rule 5 kept, mine). Collections are unique and have no Copy - a Vec is duplicated by
   building one (`v.ToVec()`, `Vec<T>.FromIter(v.Iter())`).
+- Collections, the user 2026-11-03: "Do we need collections to be unique? ... when we want to copy, we don't want it to
+  be unique. And that's where the confusion comes from." PROPOSED (rec): no - collections are ordinary types with a
+  Copy (a new buffer, each element copied by its own Copy), and uniqueness follows the elements by rule 5: `Vec<I64>`
+  copies, `Vec<File>` (unique elements) is unique and cannot be copied; references to a collection always see its
+  current buffer and length, and a copy the program never writes on either side is left out, so `w := v` costs nothing
+  unless one of them changes. What unique bought for collections (no accidental O(n) copy) is kept by that elision.
+  ASKED.
