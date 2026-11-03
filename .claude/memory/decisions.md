@@ -2736,3 +2736,13 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   removed (proposed, not yet confirmed); (2) item 17 - a struct local kept by reference past its loop turn built where
   it is kept, a new object per turn, instead of refused (proposed); (3) my reading `w := f` of a unique `f` gives a
   `File&` (stated, not objected to).
+- Loose ends DECIDED 2026-11-03: (1) Strings (the user: "do what works out, what makes sense, what's efficient and
+  effective") - mine: String is immutable and its methods give new Strings for one-shot work (Replace, Join, Repeat,
+  Trim, slices, adjacency `"a" $x`); incremental building is StringBuilder (a Vec<Char> inside, `b.Append(x)`,
+  `b.ToString()` handing its buffer over without a copy) - the one way to build in a loop, so an append loop is never
+  quadratic by accident (an in-place `s.Append` would be, wherever the sole-holder proof failed); (2) item 17 (the user:
+  "If we store something that we create in a loop ... we should be creating it at the scope of the thing we're storing
+  it in. Basically just the already existing scoping rules") - a value local whose reference is kept past its block is
+  built in the scope where it is kept, a new object each turn; bulk review 6's F3 refusal goes (it came from the local's
+  own slot staying in the frame while only its parts were placed); (3) `w := f` of a unique `f` makes a reference -
+  the user: "it's fine". The copy, unique, immut and collection design is settled.
