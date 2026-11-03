@@ -1,0 +1,198 @@
+# common - the mini language both front ends read: its generator (a fixed program of N statements) and its scanner.
+#
+#   stmt := "let" name "=" expr | "print" expr | "{" stmt* "}"
+#   expr := term (("+" | "-" | "*" | "<" | "==") term)*      (left to right, one precedence: the study needs a tree,
+#   term := num | name | "true" | "false" | "(" expr ")"       not a grammar)
+#         | "if" expr "then" expr "else" expr
+#
+# A block opens a scope; a name means the nearest let before it in an open scope (shadowing allowed).
+import "std/os"
+
+type Tok enum { Num, Name, Let, Print, If, Then, Else, True, False, Plus, Minus, Star, Less, Same, LParen, RParen
+    LBrace, RBrace, Assign, End }
+
+# a token: its kind, its span in the text, and a number's value or a name's interned id
+type Token struct(Kind Tok, Start I32, End I32, Id I64) { Kind, Start, End, Id }
+
+# the size asked for on the command line, else n
+fn SizeArg(n I64) I64 {
+    args := os.Args()
+    if args.Len() < 2: return n
+    return try args[1].ParseInt() catch default n
+}
+
+# ---- the generator -------------------------------------------------------------------------------------------------
+
+type GVar struct(Num I64, IsBool Bool) { Num, IsBool }
+
+type Gen struct(seed U64) {
+    r U64 = seed
+    out StringBuilder = StringBuilder()
+    vars Vec<GVar> = Vec<GVar>()
+    marks Vec<I64> = Vec<I64>()
+    next I64 = 0
+}
+
+fn (g mut Gen&) roll(n I64) I64 {
+    g.r = g.r * 6364136223846793005 + 1442695040888963407
+    return I64((g.r >> 33) % U64(n))
+}
+
+# a variable of the wanted type in scope, else -1
+fn (g mut Gen&) pickVar(wantBool Bool) I64 {
+    if g.vars.Len() == 0: return -1
+    for _ in range 4 {
+        v := g.vars[g.vars.Len() - 1 - g.roll(g.vars.Len().Min(16))]
+        if v.IsBool == wantBool: return v.Num
+    }
+    return -1
+}
+
+fn (g mut Gen&) leaf(wantBool Bool) {
+    v := g.pickVar(wantBool)
+    if v >= 0 and g.roll(3) > 0 {
+        g.out.Push("v" $v)
+        return
+    }
+    if wantBool {
+        g.out.Push("true" if g.roll(2) == 0 else "false")
+        return
+    }
+    g.out.Push($g.roll(100))
+}
+
+fn (g mut Gen&) expr(depth I64, wantBool Bool) {
+    if depth == 0 or g.roll(4) == 0 {
+        g.leaf(wantBool)
+        return
+    }
+    if g.roll(5) == 0 {
+        g.out.Push("(if ")
+        g.expr(depth - 1, true)
+        g.out.Push(" then ")
+        g.expr(depth - 1, wantBool)
+        g.out.Push(" else ")
+        g.expr(depth - 1, wantBool)
+        g.out.Push(")")
+        return
+    }
+    ops := String&[" < ", " == ", " + ", " - ", " * "]
+    op := ops[g.roll(2)] if wantBool else ops[2 + g.roll(3)]
+    g.out.Push("(")
+    g.expr(depth - 1, false)
+    g.out.Push(op)
+    g.expr(depth - 1, false)
+    g.out.Push(")")
+}
+
+fn (g mut Gen&) stmt() {
+    k := g.roll(10)
+    if k < 5 {
+        b := g.roll(4) == 0
+        g.out.Push("let v" $g.next " = ")
+        g.expr(3, b)
+        g.vars.Push(GVar(g.next, b))
+        g.next++
+    } else if k < 8 {
+        g.out.Push("print ")
+        g.expr(3, g.roll(4) == 0)
+    } else if k == 8 and g.marks.Len() < 3 {
+        g.out.Push("{")
+        g.marks.Push(g.vars.Len())
+    } else if g.marks.Len() > 0 {
+        g.out.Push("}")
+        g.vars.Truncate(try g.marks.Pop() catch default 0)
+    } else {
+        return
+    }
+    g.out.Push("\n")
+}
+
+# the program text of about n statements
+fn Generate(n I64) String {
+    g := Gen(42)
+    for _ in range n: g.stmt()
+    for g.marks.Len() > 0 {
+        g.out.Push("}\n")
+        g.marks.Pop()!
+    }
+    return g.out.ToString()
+}
+
+# ---- the scanner ---------------------------------------------------------------------------------------------------
+
+fn keyword(w String&) Tok {
+    match w {
+        case "let": return Tok.Let
+        case "print": return Tok.Print
+        case "if": return Tok.If
+        case "then": return Tok.Then
+        case "else": return Tok.Else
+        case "true": return Tok.True
+        case "false": return Tok.False
+        case _: return Tok.Name
+    }
+}
+
+fn punct(c Char) Tok {
+    match c {
+        case '+': return Tok.Plus
+        case '-': return Tok.Minus
+        case '*': return Tok.Star
+        case '<': return Tok.Less
+        case '(': return Tok.LParen
+        case ')': return Tok.RParen
+        case '{': return Tok.LBrace
+        case '}': return Tok.RBrace
+        case _: return Tok.Assign
+    }
+}
+
+# the tokens of text, names interned into names (their ids from 0)
+fn Scan(text String&, names mut Map<String, I64>&) Vec<Token> {
+    toks := Vec<Token>()
+    i := 0
+    for i < text.Len() {
+        c := text[i]
+        if c.IsSpace() {
+            i++
+            continue
+        }
+        start := i
+        if c.IsDigit() {
+            n := 0
+            for i < text.Len() and text[i].IsDigit() {
+                n = n * 10 + I64(text[i] - '0')
+                i++
+            }
+            toks.Push(Token(Tok.Num, I32(start), I32(i), n))
+            continue
+        }
+        if c.IsLetter() {
+            for i < text.Len() and (text[i].IsLetter() or text[i].IsDigit()): i++
+            toks.Push(word(text, start, i, names))
+            continue
+        }
+        if c == '=' and i + 1 < text.Len() and text[i + 1] == '=' {
+            i += 2
+            toks.Push(Token(Tok.Same, I32(start), I32(i), 0))
+            continue
+        }
+        i++
+        toks.Push(Token(punct(c), I32(start), I32(i), 0))
+    }
+    toks.Push(Token(Tok.End, I32(i), I32(i), 0))
+    return toks
+}
+
+fn word(text String&, start I64, end I64, names mut Map<String, I64>&) Token {
+    w := text[start:end]
+    k := keyword(w)
+    if k != Tok.Name: return Token(k, I32(start), I32(end), 0)
+    id := try names.Get(w) catch {
+        fresh := names.Len()
+        names.Put(w, fresh)
+        return Token(Tok.Name, I32(start), I32(end), fresh)
+    }
+    return Token(Tok.Name, I32(start), I32(end), id)
+}

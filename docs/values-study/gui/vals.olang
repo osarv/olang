@@ -1,0 +1,194 @@
+# vals - the same widget tree with values only: the widgets are plain values in one Vec, a parent or a child is an
+# index there, and a slot a detached subtree gave up goes on a free list for the next widget. The program, not the
+# compiler, decides when a slot is dead (free): an index kept past that names whatever the slot holds next - a stale
+# index is a logic error no rule catches, where a stale reference cannot exist. Same work and checksum as refs.olang.
+#
+# An element is read through `u.nodes.Ref(i)` and written through `u.nodes.RefMut(i)`, lends of the element in place:
+# today a plain `u.nodes[i].f` gives a copy of the element, kept from being made only where D9h proves nothing could
+# tell, and where a call shares the statement it is made - its kids Vec too (findings/gui_natural.olang). A
+# values-only olang would make the plain form that lend (Hylo's projection), so Ref here stands for `u.nodes[i]`.
+import "std/io"
+import "std/os"
+
+type Kind enum { Panel, Button, Label }
+
+type Node struct(kind Kind, x I64, y I64, w I64, h I64, parent I32) {
+    kind
+    x
+    y
+    w
+    h
+    parent     # -1 for none
+    kids Vec<I32> = Vec<I32>()
+    ax I64 = 0
+    ay I64 = 0
+    clicks I64 = 0
+}
+
+type Ui struct() {
+    nodes Vec<Node> = Vec<Node>()
+    free Vec<I32> = Vec<I32>()
+}
+
+type Rand struct(state U64) { state }
+
+fn (r mut Rand&) roll(n I64) I64 {
+    r.state = r.state * 6364136223846793005 + 1442695040888963407
+    return I64((r.state >> 33) % U64(n))
+}
+
+fn arg(k I64, n I64) I64 {
+    args := os.Args()
+    if args.Len() <= k: return n
+    return try args[k].ParseInt() catch default n
+}
+
+# a slot for n: a freed one if there is one, else a new one
+fn (u mut Ui&) add(n Node) I32 {
+    i := try u.free.Pop() catch {
+        u.nodes.Push(n)
+        return I32(u.nodes.Len() - 1)
+    }
+    u.nodes[i] = n
+    return i
+}
+
+fn (u mut Ui&) child(r mut Rand&, p I32) I32 {
+    pw, ph := u.nodes.Ref(p).w, u.nodes.Ref(p).h
+    w := 4 + r.roll(pw / 3 + 1)
+    h := 4 + r.roll(ph / 3 + 1)
+    k := Kind.Panel if r.roll(3) == 0 else (Kind.Button if r.roll(2) == 0 else Kind.Label)
+    c := u.add(Node(k, r.roll(pw - w + 1), r.roll(ph - h + 1), w, h, p))
+    u.nodes.RefMut(p).kids.Push(c)
+    return c
+}
+
+fn (u mut Ui&) grow(r mut Rand&, p I32, n I64) {
+    panels := Vec<I32>()
+    panels.Push(p)
+    k := 0
+    for k < n and panels.Len() > 0 {
+        i := r.roll(panels.Len())
+        q := panels[i]
+        if u.nodes.Ref(q).w < 12 or u.nodes.Ref(q).h < 12 {
+            panels.SwapRemove(i)!
+            continue
+        }
+        c := u.child(r, q)
+        if u.nodes.Ref(c).kind == Kind.Panel: panels.Push(c)
+        k++
+    }
+}
+
+fn (u mut Ui&) layout(i I32, ax I64, ay I64) {
+    w := u.nodes.RefMut(i)
+    w.ax = ax + w.x
+    w.ay = ay + w.y
+    x, y := w.ax, w.ay
+    for k in range u.nodes.Ref(i).kids.Len(): u.layout(u.nodes.Ref(i).kids[k], x, y)
+}
+
+fn inside(w Node&, px I64, py I64) Bool { return px >= w.ax and px < w.ax + w.w and py >= w.ay and py < w.ay + w.h }
+
+fn (u Ui&) hit(px I64, py I64) I32 {
+    at := I32(0)
+    for {
+        kids := u.nodes.Ref(at).kids.View()
+        next := I32(-1)
+        for i in range kids.Len() {
+            k := kids[kids.Len() - 1 - i]
+            if inside(u.nodes.Ref(k), px, py) {
+                next = k
+                break
+            }
+        }
+        if next < 0: return at
+        at = next
+    }
+}
+
+fn (u mut Ui&) click(target I32) I64 {
+    at := target
+    depth := 0
+    for at >= 0 {
+        w := u.nodes.RefMut(at)
+        if w.kind == Kind.Button {
+            w.clicks++
+            return depth
+        }
+        if w.kind == Kind.Panel: w.clicks++
+        depth++
+        at = w.parent
+    }
+    return depth
+}
+
+# no element is read in a statement that also calls r.roll: there the read would copy the element, its kids included
+# (D9h reads an element where it stands only where no call in the statement could write it)
+fn (u Ui&) pick(r mut Rand&) I32 {
+    at := I32(0)
+    for {
+        n := u.nodes.Ref(at).kids.Len()
+        if n == 0 or r.roll(4) == 0: return at
+        k := r.roll(n)
+        at = u.nodes.Ref(at).kids[k]
+    }
+}
+
+fn (u Ui&) panel(r mut Rand&) I32 {
+    for _ in range 8 {
+        p := u.pick(r)
+        if u.nodes.Ref(p).kind == Kind.Panel and u.nodes.Ref(p).w >= 12 and u.nodes.Ref(p).h >= 12: return p
+    }
+    return 0
+}
+
+fn (u Ui&) count(i I32) I64 {
+    n := 1
+    for k in range u.nodes.Ref(i).kids.Len(): n += u.count(u.nodes.Ref(i).kids[k])
+    return n
+}
+
+# take i's subtree out of the tree: every slot in it goes on the free list
+fn (u mut Ui&) detach(i I32) {
+    p := u.nodes.Ref(i).parent
+    if p < 0: return
+    k := try u.nodes.Ref(p).kids.IndexOf(i) catch { return }
+    try u.nodes.RefMut(p).kids.RemoveAt(k) catch { return }
+    u.release(i)
+}
+
+fn (u mut Ui&) release(i I32) {
+    for k in range u.nodes.Ref(i).kids.Len(): u.release(u.nodes.Ref(i).kids[k])
+    u.nodes.RefMut(i).kids.Clear()
+    u.nodes.RefMut(i).parent = -1
+    u.free.Push(i)
+}
+
+fn (u Ui&) sum(i I32) I64 {
+    s := u.nodes.Ref(i).clicks + 1
+    for k in range u.nodes.Ref(i).kids.Len(): s += u.sum(u.nodes.Ref(i).kids[k])
+    return s
+}
+
+fn main() ? {
+    n, clicks, rounds := arg(1, 100000), arg(2, 1000000), arg(3, 20000)
+    r := Rand(7)
+    u := Ui()
+    u.add(Node(Kind.Panel, 0, 0, 4096, 4096, -1))
+    u.grow(r, 0, n)
+    u.layout(0, 0, 0)
+    depth := 0
+    for _ in range clicks: depth += u.click(u.hit(r.roll(4096), r.roll(4096)))
+    for _ in range rounds {
+        w := u.pick(r)
+        if u.nodes.Ref(w).parent < 0: continue
+        m := u.count(w)
+        u.detach(w)
+        u.grow(r, u.panel(r), m)
+    }
+    u.layout(0, 0, 0)
+    for _ in range clicks: depth += u.click(u.hit(r.roll(4096), r.roll(4096)))
+    try io.Println(("vals: depth " $depth ", sum " $u.sum(0) ", live " $(u.nodes.Len() - u.free.Len()) ", slots "
+        $u.nodes.Len()))
+}

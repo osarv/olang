@@ -1,0 +1,248 @@
+# refs - the mini language's front end in today's style (compiler/ast.olang, typed.olang): the syntax tree and the
+# typed tree are recursive enums held by reference, every node built once and never written; names and locals are
+# numbers (interned ids, slots), as in the compiler. Scan, parse, resolve and type, run; prints a checksum.
+import "std/io"
+import "common"
+
+type Op enum { Add, Sub, Mul, Less, Same }
+
+type Expr enum {
+    Num(v I64)
+    Lit(b Bool)
+    Name(id I64)
+    Bin(op Op, a Expr&, b Expr&)
+    If(c Expr&, t Expr&, e Expr&)
+}
+
+type Stmt enum {
+    Let(id I64, x Expr&)
+    Print(x Expr&)
+    Block(body Array<Stmt&>&)
+}
+
+# ---- parsing -------------------------------------------------------------------------------------------------------
+
+type Parser struct(toks Vec<common.Token>&) {
+    toks
+    i I64 = 0
+}
+
+fn (p Parser&) peek() common.Tok { return p.toks[p.i].Kind }
+
+fn (p mut Parser&) take() common.Token {
+    t := p.toks[p.i]
+    p.i++
+    return t
+}
+
+fn (p mut Parser&) expect(k common.Tok) ? Unexpected {
+    if p.peek() != k: error Unexpected
+    p.i++
+}
+
+fn opOf(k common.Tok) Op ? NotOp {
+    match k {
+        case common.Tok.Plus: return Op.Add
+        case common.Tok.Minus: return Op.Sub
+        case common.Tok.Star: return Op.Mul
+        case common.Tok.Less: return Op.Less
+        case common.Tok.Same: return Op.Same
+        case _: error NotOp
+    }
+}
+
+fn (p mut Parser&) expr() Expr& ? Unexpected {
+    a := try p.term()
+    for {
+        op := try opOf(p.peek()) catch { break }
+        p.i++
+        b := try p.term()
+        a = Expr.Bin(op, a, b)
+    }
+    return a
+}
+
+fn (p mut Parser&) term() Expr& ? Unexpected {
+    t := p.take()
+    match t.Kind {
+        case common.Tok.Num: return Expr.Num(t.Id)
+        case common.Tok.Name: return Expr.Name(t.Id)
+        case common.Tok.True: return Expr.Lit(true)
+        case common.Tok.False: return Expr.Lit(false)
+        case common.Tok.LParen {
+            x := try p.expr()
+            try p.expect(common.Tok.RParen)
+            return x
+        }
+        case common.Tok.If {
+            c := try p.expr()
+            try p.expect(common.Tok.Then)
+            a := try p.expr()
+            try p.expect(common.Tok.Else)
+            return Expr.If(c, a, try p.expr())
+        }
+        case _: error Unexpected
+    }
+}
+
+fn (p mut Parser&) stmt() Stmt& ? Unexpected {
+    t := p.take()
+    match t.Kind {
+        case common.Tok.Let {
+            n := p.take()
+            if n.Kind != common.Tok.Name: error Unexpected
+            try p.expect(common.Tok.Assign)
+            return Stmt.Let(n.Id, try p.expr())
+        }
+        case common.Tok.Print: return Stmt.Print(try p.expr())
+        case common.Tok.LBrace: return Stmt.Block(try p.stmts(common.Tok.RBrace))
+        case _: error Unexpected
+    }
+}
+
+fn (p mut Parser&) stmts(until common.Tok) Array<Stmt&>& ? Unexpected {
+    body := Vec<Stmt&>()
+    for p.peek() != until: body.Push(try p.stmt())
+    p.i++
+    return body.ToArray()
+}
+
+# ---- names and types: the typed tree -------------------------------------------------------------------------------
+
+type Ty enum { Int, Bool }
+
+type TExpr enum {
+    Const(v I64)
+    Var(slot I64)
+    Bin(op Op, a TExpr&, b TExpr&)
+    If(c TExpr&, t TExpr&, e TExpr&)
+}
+
+type TStmt enum {
+    Set(slot I64, x TExpr&)
+    Print(x TExpr&)
+    Block(body Array<TStmt&>&)
+}
+
+# what a name means now, and what it meant before a let in an inner block hid it (Had false: nothing)
+type Binding struct(Slot I64, Type Ty) { Slot, Type }
+type Undo struct(Id I64, Old Binding, Had Bool) { Id, Old, Had }
+
+type Checker struct() {
+    scope Map<I64, Binding> = Map<I64, Binding>()
+    undo Vec<Undo> = Vec<Undo>()
+    slots I64 = 0
+    errors I64 = 0
+}
+
+fn binTy(op Op) Ty { return Ty.Bool if op == Op.Less or op == Op.Same else Ty.Int }
+
+fn (c mut Checker&) expr(e Expr&) TExpr&, Ty {
+    match e {
+        case Expr.Num(v): return TExpr.Const(v), Ty.Int
+        case Expr.Lit(b): return TExpr.Const(1 if b else 0), Ty.Bool
+        case Expr.Name(id) {
+            b := try c.scope.Get(id) catch {
+                c.errors++
+                return TExpr.Const(0), Ty.Int
+            }
+            return TExpr.Var(b.Slot), b.Type
+        }
+        case Expr.Bin(op, a, b) {
+            ta, ya := c.expr(a)
+            tb, yb := c.expr(b)
+            if ya != Ty.Int and op != Op.Same or ya != yb: c.errors++
+            return TExpr.Bin(op, ta, tb), binTy(op)
+        }
+        case Expr.If(k, a, b) {
+            tk, yk := c.expr(k)
+            ta, ya := c.expr(a)
+            tb, yb := c.expr(b)
+            if yk != Ty.Bool or ya != yb: c.errors++
+            return TExpr.If(tk, ta, tb), ya
+        }
+    }
+}
+
+fn (c mut Checker&) stmt(s Stmt&) TStmt& {
+    match s {
+        case Stmt.Let(id, x) {
+            tx, ty := c.expr(x)
+            old := try c.scope.Get(id) catch default Binding(-1, Ty.Int)
+            c.undo.Push(Undo(id, old, old.Slot >= 0))
+            slot := c.slots
+            c.slots++
+            c.scope.Put(id, Binding(slot, ty))
+            return TStmt.Set(slot, tx)
+        }
+        case Stmt.Print(x) {
+            tx, _ := c.expr(x)
+            return TStmt.Print(tx)
+        }
+        case Stmt.Block(body): return TStmt.Block(c.block(body))
+    }
+}
+
+fn (c mut Checker&) block(body Array<Stmt&>&) Array<TStmt&>& {
+    mark := c.undo.Len()
+    out := Vec<TStmt&>()
+    for s in body: out.Push(c.stmt(s))
+    for c.undo.Len() > mark {
+        u := c.undo.Pop()!
+        if u.Had: c.scope.Put(u.Id, u.Old)
+        else: c.scope.Remove(u.Id)
+    }
+    return out.ToArray()
+}
+
+# ---- running -------------------------------------------------------------------------------------------------------
+
+type Machine struct(n I64) {
+    frame Array<I64> = Array<I64>(n)
+    sum I64 = 0
+    prints I64 = 0
+}
+
+fn (m Machine&) eval(e TExpr&) I64 {
+    match e {
+        case TExpr.Const(v): return v
+        case TExpr.Var(slot): return m.frame[slot]
+        case TExpr.Bin(op, a, b): return apply(op, m.eval(a), m.eval(b))
+        case TExpr.If(k, a, b): return m.eval(a) if m.eval(k) != 0 else m.eval(b)
+    }
+}
+
+fn apply(op Op, x I64, y I64) I64 {
+    match op {
+        case Op.Add: return x + y
+        case Op.Sub: return x - y
+        case Op.Mul: return x * y
+        case Op.Less: return 1 if x < y else 0
+        case Op.Same: return 1 if x == y else 0
+    }
+}
+
+fn (m mut Machine&) run(s TStmt&) {
+    match s {
+        case TStmt.Set(slot, x): m.frame[slot] = m.eval(x)
+        case TStmt.Print(x) {
+            m.sum = m.sum * 31 + m.eval(x)
+            m.prints++
+        }
+        case TStmt.Block(body) { for t in body: m.run(t) }
+    }
+}
+
+fn main() ? {
+    text := common.Generate(common.SizeArg(200000))
+    names := Map<String, I64>()
+    toks := common.Scan(text, names)
+    p := Parser(toks)
+    prog := try p.stmts(common.Tok.End)
+    c := Checker()
+    typed := c.block(prog)
+    m := Machine(c.slots)
+    for t in typed: m.run(t)
+    try io.Println(("refs: " $toks.Len() " tokens, " $c.slots " slots, " $c.errors " errors, " $m.prints " prints, sum "
+        $m.sum))
+}

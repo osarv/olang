@@ -1,0 +1,113 @@
+# refs - a settling network's inner loop in today's style (oann/docs/settling.md 1.2, 2.4): each region an object
+# holding its potentials, activities and totals; each block of weights holds references to the two regions it joins
+# and to its weight array. Per sweep: every region's total starts from its constant part, every block adds W s_pre into
+# post (and W^T s_post into pre if reciprocal), then every region relaxes - r = total - v, v += dt r, s = tanh(v) - and
+# reports max |r|. One-way input blocks are folded into the constant part once per settle. Fixed sweeps per settle;
+# arguments: settles, sweeps. Prints a checksum.
+import "std/io"
+import "std/os"
+
+type Region struct(n I64) {
+    n
+    v Array<F32> = Array<F32>(n, 0.0)
+    s Array<F32> = Array<F32>(n, 0.0)
+    total Array<F32> = Array<F32>(n, 0.0)
+    c Array<F32> = Array<F32>(n, 0.0)     # drive + bias + folded input blocks, set once per settle
+    b Array<F32> = Array<F32>(n, 0.0)     # bias
+}
+
+# weights [post, pre], row-major: post.n rows of pre.n
+type Block struct(pre mut Region&, post mut Region&, w Array<F32>&, recip Bool) { pre, post, w, recip }
+
+type Circuit struct() {
+    regions Vec<mut Region&> = Vec<mut Region&>()
+    blocks Vec<Block> = Vec<Block>()
+}
+
+type Rand struct(state U64) { state }
+
+fn (r mut Rand&) uniform(a F32) F32 {
+    r.state = r.state * 6364136223846793005 + 1442695040888963407
+    return a * (F32(I64(r.state >> 40)) / F32(1 << 23) - 1.0)
+}
+
+fn arg(k I64, n I64) I64 {
+    args := os.Args()
+    if args.Len() <= k: return n
+    return try args[k].ParseInt() catch default n
+}
+
+fn weights(r mut Rand&, rows I64, cols I64, a F32) mut Array<F32>& { return F32[r.uniform(a) for _ in range rows * cols] }
+
+# y += W x, W of y.Len() rows
+fn gemv(y mut Array<F32>&, w Array<F32>&, x Array<F32>&) {
+    cols := x.Len()
+    for i in range y.Len() {
+        acc := F32(0.0)
+        for j in range cols: acc += w[i * cols + j] * x[j]
+        y[i] += acc
+    }
+}
+
+# y += W^T x, W of x.Len() rows
+fn gemvT(y mut Array<F32>&, w Array<F32>&, x Array<F32>&) {
+    cols := y.Len()
+    for i in range x.Len() {
+        xi := x[i]
+        for j in range cols: y[j] += w[i * cols + j] * xi
+    }
+}
+
+fn relax(g mut Region&, dt F32) F32 {
+    res := F32(0.0)
+    for i in range g.n {
+        d := g.total[i] - g.v[i]
+        res = res.Max(d.Abs())
+        g.v[i] += dt * d
+        g.s[i] = g.v[i].Tanh()
+    }
+    return res
+}
+
+fn (c mut Circuit&) sweep(dt F32) F32 {
+    for g in c.regions {
+        for i in range g.n: g.total[i] = g.c[i]
+    }
+    for b in c.blocks {
+        gemv(b.post.total, b.w, b.pre.s)
+        if b.recip: gemvT(b.pre.total, b.w, b.post.s)
+    }
+    res := F32(0.0)
+    for g in c.regions: res = res.Max(relax(g, dt))
+    return res
+}
+
+fn main() ? {
+    settles, sweeps := arg(1, 200), arg(2, 64)
+    r := Rand(11)
+    inp := Region(64)
+    h1, h2, out := Region(128), Region(64), Region(16)
+    c := Circuit()
+    c.regions.Push(h1)
+    c.regions.Push(h2)
+    c.regions.Push(out)
+    win := weights(r, 128, 64, 0.05)
+    c.blocks.Push(Block(h1, h1, weights(r, 128, 128, 0.02), true))
+    c.blocks.Push(Block(h1, h2, weights(r, 64, 128, 0.02), true))
+    c.blocks.Push(Block(h2, out, weights(r, 16, 64, 0.03), true))
+    for g in c.regions {
+        for i in range g.n: g.b[i] = r.uniform(0.1)
+    }
+    check := F32(0.0)
+    for _ in range settles {
+        for i in range inp.n: inp.s[i] = r.uniform(1.0)
+        for g in c.regions {
+            for i in range g.n: g.c[i] = g.b[i]
+        }
+        gemv(h1.c, win, inp.s)
+        res := F32(0.0)
+        for _ in range sweeps: res = c.sweep(1.0)
+        check += res + out.s[0] + out.s[15]
+    }
+    try io.Println("refs: " $check)
+}

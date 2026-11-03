@@ -1,0 +1,114 @@
+# vals - the same settle with values only: the circuit owns every array, a block names its regions by index, and a
+# region's state is split by role into collections of its own (v, s, total, c, b: one array per region in each) - a
+# block reads s of one region while writing total of another, the same one for a lateral block, which a values-only
+# language allows only where the two are different values (Hylo's and Swift's exclusivity: no writable lend of a
+# region beside a read of it). Same work and checksum as refs.olang.
+import "std/io"
+import "std/os"
+
+type Block struct(pre I64, post I64, w Array<F32>, recip Bool) { pre, post, w, recip }
+
+type Circuit struct() {
+    v Vec<Array<F32>> = Vec<Array<F32>>()
+    s Vec<Array<F32>> = Vec<Array<F32>>()
+    total Vec<Array<F32>> = Vec<Array<F32>>()
+    c Vec<Array<F32>> = Vec<Array<F32>>()
+    b Vec<Array<F32>> = Vec<Array<F32>>()
+    blocks Vec<Block> = Vec<Block>()
+}
+
+fn (c mut Circuit&) region(n I64) I64 {
+    c.v.Push(Array<F32>(n, 0.0))
+    c.s.Push(Array<F32>(n, 0.0))
+    c.total.Push(Array<F32>(n, 0.0))
+    c.c.Push(Array<F32>(n, 0.0))
+    c.b.Push(Array<F32>(n, 0.0))
+    return c.v.Len() - 1
+}
+
+type Rand struct(state U64) { state }
+
+fn (r mut Rand&) uniform(a F32) F32 {
+    r.state = r.state * 6364136223846793005 + 1442695040888963407
+    return a * (F32(I64(r.state >> 40)) / F32(1 << 23) - 1.0)
+}
+
+fn arg(k I64, n I64) I64 {
+    args := os.Args()
+    if args.Len() <= k: return n
+    return try args[k].ParseInt() catch default n
+}
+
+fn weights(r mut Rand&, rows I64, cols I64, a F32) Array<F32> { return F32[r.uniform(a) for _ in range rows * cols] }
+
+fn gemv(y mut Array<F32>&, w Array<F32>&, x Array<F32>&) {
+    cols := x.Len()
+    for i in range y.Len() {
+        acc := F32(0.0)
+        for j in range cols: acc += w[i * cols + j] * x[j]
+        y[i] += acc
+    }
+}
+
+fn gemvT(y mut Array<F32>&, w Array<F32>&, x Array<F32>&) {
+    cols := y.Len()
+    for i in range x.Len() {
+        xi := x[i]
+        for j in range cols: y[j] += w[i * cols + j] * xi
+    }
+}
+
+fn relax(v mut Array<F32>&, s mut Array<F32>&, total Array<F32>&, dt F32) F32 {
+    res := F32(0.0)
+    for i in range v.Len() {
+        d := total[i] - v[i]
+        res = res.Max(d.Abs())
+        v[i] += dt * d
+        s[i] = v[i].Tanh()
+    }
+    return res
+}
+
+fn (c mut Circuit&) sweep(dt F32) F32 {
+    for k in range c.total.Len() {
+        t := c.total.RefMut(k)
+        for i in range t.Len(): t[i] = c.c.Ref(k)[i]
+    }
+    for k in range c.blocks.Len() {
+        b := c.blocks.Ref(k)
+        gemv(c.total.RefMut(b.post), b.w, c.s.Ref(b.pre))
+        if b.recip: gemvT(c.total.RefMut(b.pre), b.w, c.s.Ref(b.post))
+    }
+    res := F32(0.0)
+    for k in range c.v.Len(): res = res.Max(relax(c.v.RefMut(k), c.s.RefMut(k), c.total.Ref(k), dt))
+    return res
+}
+
+fn main() ? {
+    settles, sweeps := arg(1, 200), arg(2, 64)
+    r := Rand(11)
+    sIn := Array<F32>(64, 0.0)
+    c := Circuit()
+    h1, h2, out := c.region(128), c.region(64), c.region(16)
+    win := weights(r, 128, 64, 0.05)
+    c.blocks.Push(Block(h1, h1, weights(r, 128, 128, 0.02), true))
+    c.blocks.Push(Block(h1, h2, weights(r, 64, 128, 0.02), true))
+    c.blocks.Push(Block(h2, out, weights(r, 16, 64, 0.03), true))
+    for k in range c.b.Len() {
+        bias := c.b.RefMut(k)
+        for i in range bias.Len(): bias[i] = r.uniform(0.1)
+    }
+    check := F32(0.0)
+    for _ in range settles {
+        for i in range sIn.Len(): sIn[i] = r.uniform(1.0)
+        for k in range c.c.Len() {
+            ck := c.c.RefMut(k)
+            for i in range ck.Len(): ck[i] = c.b.Ref(k)[i]
+        }
+        gemv(c.c.RefMut(h1), win, sIn)
+        res := F32(0.0)
+        for _ in range sweeps: res = c.sweep(1.0)
+        check += res + c.s.Ref(out)[0] + c.s.Ref(out)[15]
+    }
+    try io.Println("vals: " $check)
+}

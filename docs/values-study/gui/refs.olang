@@ -1,0 +1,156 @@
+# refs - a widget tree in today's style: each widget is an object held by reference, its children a Vec of references
+# and its parent a nullable reference back. Build a tree, lay it out, dispatch clicks (hit-test down from the root,
+# bubble up through parents), and churn it - detach a random subtree, grow a fresh one - as a long session does.
+# Arguments: widgets, clicks, churn rounds. Prints a checksum.
+import "std/io"
+import "std/os"
+
+type Kind enum { Panel, Button, Label }
+
+type Widget struct(kind Kind, x I64, y I64, w I64, h I64, parent mut Widget?&) {
+    kind
+    x          # position in the parent
+    y
+    w
+    h
+    parent
+    kids Vec<mut Widget&> = Vec<mut Widget&>()
+    ax I64 = 0 # absolute position, set by layout
+    ay I64 = 0
+    clicks I64 = 0
+}
+
+type Rand struct(state U64) { state }
+
+fn (r mut Rand&) roll(n I64) I64 {
+    r.state = r.state * 6364136223846793005 + 1442695040888963407
+    return I64((r.state >> 33) % U64(n))
+}
+
+fn arg(k I64, n I64) I64 {
+    args := os.Args()
+    if args.Len() <= k: return n
+    return try args[k].ParseInt() catch default n
+}
+
+# a child of p at a random place inside it
+fn (r mut Rand&) child(p mut Widget&) mut Widget& {
+    w := 4 + r.roll(p.w / 3 + 1)
+    h := 4 + r.roll(p.h / 3 + 1)
+    k := Kind.Panel if r.roll(3) == 0 else (Kind.Button if r.roll(2) == 0 else Kind.Label)
+    c := Widget(k, r.roll(p.w - w + 1), r.roll(p.h - h + 1), w, h, p)
+    p.kids.Push(c)
+    return c
+}
+
+# n widgets under p, each under a panel of the subtree made before it (p first)
+fn grow(r mut Rand&, p mut Widget&, n I64) {
+    panels := Vec<mut Widget&>()
+    panels.Push(p)
+    k := 0
+    for k < n and panels.Len() > 0 {
+        i := r.roll(panels.Len())
+        q := panels[i]
+        if q.w < 12 or q.h < 12 {
+            panels.SwapRemove(i)!
+            continue
+        }
+        c := r.child(q)
+        if c.kind == Kind.Panel: panels.Push(c)
+        k++
+    }
+}
+
+fn layout(w mut Widget&, ax I64, ay I64) {
+    w.ax = ax + w.x
+    w.ay = ay + w.y
+    for k in w.kids: layout(k, w.ax, w.ay)
+}
+
+fn inside(w Widget&, px I64, py I64) Bool { return px >= w.ax and px < w.ax + w.w and py >= w.ay and py < w.ay + w.h }
+
+# the deepest widget at the point: the topmost child holding it, at every level
+fn hit(root mut Widget&, px I64, py I64) mut Widget& {
+    at := root
+    for {
+        next mut Widget?& = null
+        for i in range at.kids.Len() {
+            k := at.kids[at.kids.Len() - 1 - i]
+            if inside(k, px, py) {
+                next = k
+                break
+            }
+        }
+        if next is null: return at
+        at = next
+    }
+}
+
+# a click bubbles from the target up: a button takes it, a panel counts it and passes it on. Written as a recursion:
+# the loop with a cursor `at = w.parent` is refused (O25 - a reference local takes the scope of what it is declared from)
+fn click(w mut Widget&) I64 {
+    if w.kind == Kind.Button {
+        w.clicks++
+        return 0
+    }
+    if w.kind == Kind.Panel: w.clicks++
+    p := w.parent
+    if p is null: return 1
+    return 1 + click(p)
+}
+
+# a widget a random walk down from the root reaches
+fn (r mut Rand&) pick(root mut Widget&) mut Widget& {
+    at := root
+    for at.kids.Len() > 0 and r.roll(4) > 0: at = at.kids[r.roll(at.kids.Len())]
+    return at
+}
+
+# a panel with room for children, found by random walks (the root at the eighth miss)
+fn (r mut Rand&) panel(root mut Widget&) mut Widget& {
+    for _ in range 8 {
+        p := r.pick(root)
+        if p.kind == Kind.Panel and p.w >= 12 and p.h >= 12: return p
+    }
+    return root
+}
+
+fn detach(w mut Widget&) {
+    p := w.parent
+    if p is null: return
+    i := try p.kids.IndexOf(w) catch { return }
+    try p.kids.RemoveAt(i) catch { return }
+    w.parent = null
+}
+
+fn count(w Widget&) I64 {
+    n := 1
+    for k in w.kids: n += count(k)
+    return n
+}
+
+fn sum(w Widget&) I64 {
+    s := w.clicks + 1
+    for k in w.kids: s += sum(k)
+    return s
+}
+
+fn main() ? {
+    n, clicks, rounds := arg(1, 100000), arg(2, 1000000), arg(3, 20000)
+    r := Rand(7)
+    root := Widget(Kind.Panel, 0, 0, 4096, 4096, null)
+    grow(r, root, n)
+    layout(root, 0, 0)
+    depth := 0
+    for _ in range clicks: depth += click(hit(root, r.roll(4096), r.roll(4096)))
+    for _ in range rounds {
+        w := r.pick(root)
+        if w.parent is null: continue
+        m := count(w)
+        detach(w)
+        grow(r, r.panel(root), m)
+    }
+    layout(root, 0, 0)
+    for _ in range clicks: depth += click(hit(root, r.roll(4096), r.roll(4096)))
+    try io.Println("refs: depth " $depth ", sum " $sum(root) ", live " $count(root))
+}

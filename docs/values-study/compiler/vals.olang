@@ -1,0 +1,274 @@
+# vals - the same front end with values only: no node is held by reference. The syntax tree and the typed tree are
+# arrays of plain nodes (Vec<Node>), a child is its index there and a block's statements a run of a list (Zig's
+# design); the parser and the checker own what they build and hand it on by value. The only references left are the
+# lends of parameters and receivers (`p mut Parser&`, `t Tree&`): today's olang spells a lend with `&`, which a
+# values-only olang would not (a parameter is lent read-only, `mut` lends it writably).
+import "std/io"
+import "common"
+
+type Op enum { Add, Sub, Mul, Less, Same }
+
+type Kind enum { Num, Lit, Name, Bin, If }
+
+# an expression node: A, B, C its children's indices; V a number, a Bool (0, 1) or a name's id
+type Node struct(K Kind, O Op, A I32, B I32, C I32, V I64) { K, O, A, B, C, V }
+
+type SKind enum { Let, Print, Block }
+
+# a statement: X its expression; a Block's statements are List[From:To]
+type SNode struct(K SKind, X I32, Id I64, From I32, To I32) { K, X, Id, From, To }
+
+# room for n nodes reserved up front (the parser and the checker reserve the token count: a node per token at most)
+type Tree struct(n I64 = 0) {
+    Nodes Vec<Node> = Vec<Node>(n)
+    Stmts Vec<SNode> = Vec<SNode>(n / 4)
+    List Vec<I32> = Vec<I32>(n / 4)
+}
+
+fn (t mut Tree&) node(n Node) I32 {
+    t.Nodes.Push(n)
+    return I32(t.Nodes.Len() - 1)
+}
+
+fn (t mut Tree&) block(body Vec<I32>&) SNode {
+    from := I32(t.List.Len())
+    for s in body: t.List.Push(s)
+    return SNode(SKind.Block, 0, 0, from, I32(t.List.Len()))
+}
+
+fn (t mut Tree&) stmt(s SNode) I32 {
+    t.Stmts.Push(s)
+    return I32(t.Stmts.Len() - 1)
+}
+
+# ---- parsing -------------------------------------------------------------------------------------------------------
+
+type Parser struct(toks Vec<common.Token>) {
+    toks
+    i I64 = 0
+    T Tree = Tree(toks.Len())
+}
+
+fn (p Parser&) peek() common.Tok { return p.toks[p.i].Kind }
+
+fn (p mut Parser&) take() common.Token {
+    t := p.toks[p.i]
+    p.i++
+    return t
+}
+
+fn (p mut Parser&) expect(k common.Tok) ? Unexpected {
+    if p.peek() != k: error Unexpected
+    p.i++
+}
+
+fn opOf(k common.Tok) Op ? NotOp {
+    match k {
+        case common.Tok.Plus: return Op.Add
+        case common.Tok.Minus: return Op.Sub
+        case common.Tok.Star: return Op.Mul
+        case common.Tok.Less: return Op.Less
+        case common.Tok.Same: return Op.Same
+        case _: error NotOp
+    }
+}
+
+fn (p mut Parser&) expr() I32 ? Unexpected {
+    a := try p.term()
+    for {
+        op := try opOf(p.peek()) catch { break }
+        p.i++
+        b := try p.term()
+        a = p.T.node(Node(Kind.Bin, op, a, b, 0, 0))
+    }
+    return a
+}
+
+fn (p mut Parser&) term() I32 ? Unexpected {
+    t := p.take()
+    match t.Kind {
+        case common.Tok.Num: return p.T.node(Node(Kind.Num, Op.Add, 0, 0, 0, t.Id))
+        case common.Tok.Name: return p.T.node(Node(Kind.Name, Op.Add, 0, 0, 0, t.Id))
+        case common.Tok.True: return p.T.node(Node(Kind.Lit, Op.Add, 0, 0, 0, 1))
+        case common.Tok.False: return p.T.node(Node(Kind.Lit, Op.Add, 0, 0, 0, 0))
+        case common.Tok.LParen {
+            x := try p.expr()
+            try p.expect(common.Tok.RParen)
+            return x
+        }
+        case common.Tok.If {
+            c := try p.expr()
+            try p.expect(common.Tok.Then)
+            a := try p.expr()
+            try p.expect(common.Tok.Else)
+            b := try p.expr()
+            return p.T.node(Node(Kind.If, Op.Add, c, a, b, 0))
+        }
+        case _: error Unexpected
+    }
+}
+
+fn (p mut Parser&) stmt() I32 ? Unexpected {
+    t := p.take()
+    match t.Kind {
+        case common.Tok.Let {
+            n := p.take()
+            if n.Kind != common.Tok.Name: error Unexpected
+            try p.expect(common.Tok.Assign)
+            x := try p.expr()
+            return p.T.stmt(SNode(SKind.Let, x, n.Id, 0, 0))
+        }
+        case common.Tok.Print {
+            x := try p.expr()
+            return p.T.stmt(SNode(SKind.Print, x, 0, 0, 0))
+        }
+        case common.Tok.LBrace {
+            b := try p.stmts(common.Tok.RBrace)
+            return p.T.stmt(b)
+        }
+        case _: error Unexpected
+    }
+}
+
+fn (p mut Parser&) stmts(until common.Tok) SNode ? Unexpected {
+    body := Vec<I32>()
+    for p.peek() != until: body.Push(try p.stmt())
+    p.i++
+    return p.T.block(body)
+}
+
+# ---- names and types: the typed tree, the same layout ---------------------------------------------------------------
+
+type Ty enum { Int, Bool }
+
+type Binding struct(Slot I64, Type Ty) { Slot, Type }
+type Undo struct(Id I64, Old Binding, Had Bool) { Id, Old, Had }
+
+# the typed tree: Kind.Num is a constant (V), Kind.Name a slot (V); a Let is a store into slot Id
+type Checker struct(n I64) {
+    scope Map<I64, Binding> = Map<I64, Binding>()
+    undo Vec<Undo> = Vec<Undo>()
+    slots I64 = 0
+    errors I64 = 0
+    T Tree = Tree(n)
+}
+
+fn binTy(op Op) Ty { return Ty.Bool if op == Op.Less or op == Op.Same else Ty.Int }
+
+fn (c mut Checker&) expr(src Tree&, i I32) I32, Ty {
+    n := src.Nodes[i]
+    match n.K {
+        case Kind.Num: return c.T.node(n), Ty.Int
+        case Kind.Lit: return c.T.node(Node(Kind.Num, Op.Add, 0, 0, 0, n.V)), Ty.Bool
+        case Kind.Name {
+            b := try c.scope.Get(n.V) catch {
+                c.errors++
+                return c.T.node(Node(Kind.Num, Op.Add, 0, 0, 0, 0)), Ty.Int
+            }
+            return c.T.node(Node(Kind.Name, Op.Add, 0, 0, 0, b.Slot)), b.Type
+        }
+        case Kind.Bin {
+            ta, ya := c.expr(src, n.A)
+            tb, yb := c.expr(src, n.B)
+            if ya != Ty.Int and n.O != Op.Same or ya != yb: c.errors++
+            return c.T.node(Node(Kind.Bin, n.O, ta, tb, 0, 0)), binTy(n.O)
+        }
+        case Kind.If {
+            tk, yk := c.expr(src, n.A)
+            ta, ya := c.expr(src, n.B)
+            tb, yb := c.expr(src, n.C)
+            if yk != Ty.Bool or ya != yb: c.errors++
+            return c.T.node(Node(Kind.If, Op.Add, tk, ta, tb, 0)), ya
+        }
+    }
+}
+
+fn (c mut Checker&) stmt(src Tree&, i I32) I32 {
+    s := src.Stmts[i]
+    match s.K {
+        case SKind.Let {
+            tx, ty := c.expr(src, s.X)
+            old := try c.scope.Get(s.Id) catch default Binding(-1, Ty.Int)
+            c.undo.Push(Undo(s.Id, old, old.Slot >= 0))
+            slot := c.slots
+            c.slots++
+            c.scope.Put(s.Id, Binding(slot, ty))
+            return c.T.stmt(SNode(SKind.Let, tx, slot, 0, 0))
+        }
+        case SKind.Print {
+            tx, _ := c.expr(src, s.X)
+            return c.T.stmt(SNode(SKind.Print, tx, 0, 0, 0))
+        }
+        case SKind.Block {
+            b := c.block(src, s)
+            return c.T.stmt(b)
+        }
+    }
+}
+
+fn (c mut Checker&) block(src Tree&, s SNode) SNode {
+    mark := c.undo.Len()
+    out := Vec<I32>()
+    for k in range I64(s.From), I64(s.To): out.Push(c.stmt(src, src.List[k]))
+    for c.undo.Len() > mark {
+        u := c.undo.Pop()!
+        if u.Had: c.scope.Put(u.Id, u.Old)
+        else: c.scope.Remove(u.Id)
+    }
+    return c.T.block(out)
+}
+
+# ---- running -------------------------------------------------------------------------------------------------------
+
+type Machine struct(n I64) {
+    frame Array<I64> = Array<I64>(n)
+    sum I64 = 0
+    prints I64 = 0
+}
+
+fn apply(op Op, x I64, y I64) I64 {
+    match op {
+        case Op.Add: return x + y
+        case Op.Sub: return x - y
+        case Op.Mul: return x * y
+        case Op.Less: return 1 if x < y else 0
+        case Op.Same: return 1 if x == y else 0
+    }
+}
+
+fn (m Machine&) eval(t Tree&, i I32) I64 {
+    n := t.Nodes[i]
+    match n.K {
+        case Kind.Num: return n.V
+        case Kind.Name: return m.frame[n.V]
+        case Kind.Bin: return apply(n.O, m.eval(t, n.A), m.eval(t, n.B))
+        case Kind.If: return m.eval(t, n.B) if m.eval(t, n.A) != 0 else m.eval(t, n.C)
+        case Kind.Lit: return n.V
+    }
+}
+
+fn (m mut Machine&) run(t Tree&, i I32) {
+    s := t.Stmts[i]
+    match s.K {
+        case SKind.Let: m.frame[s.Id] = m.eval(t, s.X)
+        case SKind.Print {
+            m.sum = m.sum * 31 + m.eval(t, s.X)
+            m.prints++
+        }
+        case SKind.Block { for k in range I64(s.From), I64(s.To): m.run(t, t.List[k]) }
+    }
+}
+
+fn main() ? {
+    text := common.Generate(common.SizeArg(200000))
+    names := Map<String, I64>()
+    p := Parser(common.Scan(text, names))
+    ntoks := p.toks.Len()
+    prog := try p.stmts(common.Tok.End)
+    c := Checker(ntoks)
+    top := c.block(p.T, prog)
+    m := Machine(c.slots)
+    for k in range I64(top.From), I64(top.To): m.run(c.T, c.T.List[k])
+    try io.Println(("vals: " $ntoks " tokens, " $c.slots " slots, " $c.errors " errors, " $m.prints " prints, sum "
+        $m.sum))
+}
