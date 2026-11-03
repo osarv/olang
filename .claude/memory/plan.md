@@ -798,3 +798,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   build it") - then a bulk review over the three.
 - QUEUED 2026-11-03: after the build batch, one xhigh section-8 round - NLL + O27 as placement + T22a's function values
   carrying inferred relations; then reuse in place; then a bulk review over them.
+- 2026-11-03 CET: build batch part 1 merged (wt-unique 547adfe, verified on its tip; scopesan, scopefuzz, fuzz free
+  clean; bench machine code byte-identical): E31d Copy() supplied for every type and declarable, called at every copy,
+  Clone gone (tools/clone_migrate.olang); collections follow their elements; T13a `immut` types; a lost write fixed
+  (Array<Char> lent as mut Array<U8>&). Left: String immutable (flip works, ~80 test sites + two-stage bootstrap +
+  seed; tools/textbuild_migrate.olang committed, not in fix), unique + destructor timing, item 17. Agent's questions:
+  declared Copy never elided (mine: keep), list.List stays a handle (mine: keep), StringBuilder.Push not renamed (mine).
