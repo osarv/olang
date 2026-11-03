@@ -28685,3 +28685,25 @@ place, the method and the index expressions (`setAtTarget`); every value is eval
 its index checked and held there, as SPEC orders a target's place after every value - and stored by `x.SetAt(i, v)`, the
 value fitted to SetAt's element parameter as the receiver binds it (`paramsOn`). tests/shared.olang swaps Vec elements,
 writes two literals to a `Vec<I32>`, and a two-index grid, baked while compiling and at run time.
+
+**What the conversions cost, and the two moves that pay it back (mine, an optimization).** `return String(out)` copies
+by T13a unless D9i leaves the copy out, and at first it never did: (a) a mention of a local inside a loop not around its
+declaration counted as after everything (`lastUses`), so a local written by a loop - every text builder - was never at
+its last use afterwards; a loop runs before what follows it, so such a mention now counts where it stands (a copy inside
+the loop is still never a move: `CopyAt` -1); (b) the copy was built in the result scope while the local lived in the
+frame, so a move was not allowed - the scope pass now homes a local whose whole copy is returned where the result goes
+(`returnedArrays`, as a returned local is, O26a), and lowering's `movable` takes a copy built in the very scope variable
+the local is stored in. ToUpper, ToLower, Join, PadStart/PadEnd and Format compile to what they compiled to before
+(one allocation in the result scope, no copy). `StringBuilder.ToString` gives a `String` value now, its characters
+copied once by a counted loop into an `Array<Char>` the String takes (it was `String(b.chars.ToArray())`, a ToArray
+filling then copying; `String(b.chars.View())` was tried and refused at callers by O17 - a view of the receiver handed
+back through the conversion read as kept). For the next bulk review: (a) and (b) widen D9i's moves.
+
+**Measured.** bench's machine code (baseline x86-64) against master 3317c30: every program's `main` holds about 18
+more instructions - std/os's `Args` copies each argument into a String (one memcpy at startup per argument: the text is
+made in the loop's turn and kept in the result, which a move cannot reach - a local built where it is kept, the batch's
+item 17, would remove it); knucleotide's `frequencies` is 35 instructions smaller, regex's `Compile` 23 larger and
+`ToString` 19, nothing else differs. Callgrind: text 252.6M -> 249.4M instructions (-1.2%), regex 159.5M -> 158.5M
+(-0.7%), knucleotide and sha256 within 300 instructions. The compiler's self-build (from an empty build/, -O3 + LTO):
+46.4 s -> 46.7 s wall, 155 s -> 156 s of CPU, check 1.39 -> 1.46 s, scope 1.19 -> 1.31 s, peak 3.00 GB -> 3.08 GB;
+`make bootstrap` from the new seed 0:51 wall, its peak 3.08 GB.
