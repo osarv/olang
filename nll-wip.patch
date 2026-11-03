@@ -1,0 +1,192 @@
+diff --git a/compiler/scope.olang b/compiler/scope.olang
+index d7b9c6a..26efbcf 100644
+--- a/compiler/scope.olang
++++ b/compiler/scope.olang
+@@ -263,6 +263,14 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
+     fieldsAssigned Map<pair.Pair<I64, I64>, Bool> # (struct type, field) any body assigns after construction, -1 all
+     # a local assigned after its declaration: the record every value it is given has, merged over a quiet judging of
+     # the body first (lateBody) - Untraced where they disagree, none where one has no record (O23a)
++    # O25b, reference locals typed per assignment (the values study's B3): a reference local assigned after its
++    # declaration a value its own scope does not take exactly is a cursor - judged first by probes of the body
++    # (cursorProbe), its term every value it is ever given (cursors, by local), each of which must outlive its block
++    cursorBody I64 = -1
++    cursorProbe Bool = false
++    cursors Map<I64, Vec<Term>>
++    probeTerms Map<I64, Vec<Term>>
++    probeFails Map<I64, Bool>
+     lateBody I64 = -1
+     lateGather Bool = false
+     late Map<I64, Vec<Term>>
+@@ -966,6 +974,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
+     for l in body.Locals {
+         if l.Ty == types.UnknownT { return }
+     }
++    if s.cursorBody != b and s.hasRefReassigned(b) { s.probeCursors(b) }
+     if report and s.lateBody != b and s.hasLateLocals(b) {
+         # what each assigned local is given, gathered before the judging that reports reads it
+         s.lateBody = b
+@@ -4424,8 +4433,18 @@ fn (s mut Scoper&) stmt(st typed.Stmt?&) {
+     saved := s.stmtSp
+     s.stmtSp = st.Span()
+     match st {
+-        case typed.Stmt.Let(sp, l, x) { s.let(sp, l, x) }
+-        case typed.Stmt.Assign(sp, p, x) { s.assign(sp, p, x) }
++        case typed.Stmt.Let(sp, l, x) {
++            s.let(sp, l, x)
++            s.cursorTerm(I64(l))
++        }
++        case typed.Stmt.Assign(sp, p, x) {
++            l := wholeLocal(p)
++            if l >= 0 and s.cursors.Has(l) and s.cursorBody == s.Id and s.cursorKind(s.B!, l) {
++                s.cursorAssign(l, p, x)
++            } else {
++                s.assign(sp, p, x)
++            }
++        }
+         case typed.Stmt.Eval(_, x) { s.val(x, Term.None) }
+         case typed.Stmt.If(_, i) {
+             s.val(i.Test, Term.None)
+@@ -4806,6 +4825,135 @@ fn (s mut Scoper&) hasLateLocals(b I64) Bool {
+     return false
+ }
+ 
++# whether body b assigns a reference local of its own after its declaration
++fn (s mut Scoper&) hasRefReassigned(b I64) Bool {
++    for k in range s.assignedFrom[b], s.assignedFrom[b + 1] {
++        l := s.assignedTo[k]
++        if l >= 0 and l < s.Bodies[b].Locals.Len() and s.cursorKind(s.Bodies[b], l) { return true }
++    }
++    return false
++}
++
++fn (s mut Scoper&) cursorKind(b typed.Body&, l I64) Bool {
++    loc := b.Locals[l]
++    return loc.Kind == typed.LocalKind.Var and s.isRef(loc.Ty) and not s.isFunc(loc.Ty)
++}
++
++# O25b: body b judged quietly until its cursors settle - each probe gathering every value each reference local assigned
++# after its declaration is given and whether one of them fits its term exactly no more; those that do not are cursors
++# in the next probe and the judging after, their terms all the values gathered. At most four probes: where the values
++# still differ, the judging after refuses what they do not cover (cursorAssign)
++fn (s mut Scoper&) probeCursors(b I64) {
++    s.cursorBody = b
++    s.cursors.Clear()
++    for _ in range 4 {
++        s.probeTerms.Clear()
++        s.probeFails.Clear()
++        s.cursorProbe = true
++        s.judge(b, false)
++        s.cursorProbe = false
++        next Map<I64, Vec<Term>>
++        for l in s.probeFails.Keys() {
++            next.Put(l, try s.probeTerms.Get(l) catch default Vec<Term>())
++        }
++        if s.Trace { s.TraceLog.Push($"cursors of body " $b ": " $next.Len() " fails " $s.probeFails.Len() " terms " $s.probeTerms.Len()) }
++        if s.sameCursors(next) { return }
++        s.cursors = next
++    }
++}
++
++fn (s mut Scoper&) sameCursors(next Map<I64, Vec<Term>>&) Bool {
++    if next.Len() != s.cursors.Len(): return false
++    for l in next.Keys() {
++        have := try s.cursors.Get(l) catch { return false }
++        want := try next.Get(l) catch { return false }
++        if have.Len() != want.Len(): return false
++        for t in want {
++            if not have.Has(t): return false
++        }
++    }
++    return true
++}
++
++# O25b: a cursor's term once its declaration is judged - what it was given there and every value it is given after
++fn (s mut Scoper&) cursorTerm(l I64) {
++    if s.cursorBody != s.Id or not s.cursorKind(s.B!, l): return
++    ms := try s.cursors.Get(l) catch { return }
++    t := s.terms[l]
++    if s.Trace { s.TraceLog.Push($"cursor " $l " term " $t " members " $ms.Len()) }
++    if t == Term.None: return
++    for m in ms { t = s.setOf(t, m) }
++    s.terms[l] = t
++}
++
++# the terms a term stands for: a set's members, else itself - a scope derived through an element or an instance whose
++# bindings are not known here (an underestimate, named by this judging's own count) as Untraced, which no other judging
++# could read the same way
++fn (s mut Scoper&) flatTerms(t Term, into mut Vec<Term>&) {
++    match t {
++        case Term.Set(id) {
++            for k in range s.setFrom[id], s.setEnd(id) { s.flatTerms(s.setTerms[k], into) }
++            return
++        }
++        case Term.Derived(p, _) {
++            if p < 0 {
++                if not into.Has(Term.Untraced): into.Push(Term.Untraced)
++                return
++            }
++        }
++        case _ { }
++    }
++    if not into.Has(t): into.Push(t)
++}
++
++# whether term t fits a reference local's term exactly (fit's rules for an exact local, no obligation)
++fn (s mut Scoper&) fitsExactly(t Term, slot Term) Bool {
++    if t == slot: return true
++    if s.derivedTerm(t) or s.derivedTerm(slot): return false
++    return s.order(t, slot) == Holds and s.order(slot, t) == Holds
++}
++
++# O25b: while probing, what an assignment gives a whole reference local, and whether it fits the local's term exactly
++fn (s mut Scoper&) probeNote(p typed.Lvalue&, v Val, slot Term) {
++    l := wholeLocal(p)
++    if l < 0 or not s.cursorKind(s.B!, l): return
++    t := s.valTerm(v, s.here())
++    if s.Trace { s.TraceLog.Push($"probe " $l " " $t " into " $slot " kind " $v.K " exact " $s.fitsExactly(t, slot) " order " $s.order(t, slot)) }
++    s.probeAdd(l, t, v.K == ValKind.Existing and not s.fitsExactly(t, slot))
++}
++
++fn (s mut Scoper&) probeAdd(l I64, t Term, fails Bool) {
++    if t == Term.None: return
++    if not s.probeTerms.Has(l): s.probeTerms.Put(l, Vec<Term>())
++    if fails: s.probeFails.Put(l, true)
++    ts := try s.probeTerms.RefMut(l) catch { return }
++    s.flatTerms(t, ts)
++}
++
++# O25b: an assignment to cursor l: a new value built in the local's block; existing storage one of the values its term
++# covers (else judged exactly, as a reference local's never-narrowing value is - O25), outliving that block
++fn (s mut Scoper&) cursorAssign(l I64, p typed.Lvalue&, x typed.Expr&) {
++    loc := s.B!.Locals[l]
++    blk := s.blockTerm(loc.In)
++    s.targets.Push(p)
++    s.splitBorrow(x)
++    v := s.val(x, blk)
++    if s.cursorProbe { s.probeAdd(l, s.valTerm(v, blk), true) }
++    if v.K == ValKind.Existing {
++        have Vec<Term>
++        s.flatTerms(s.terms[l], have)
++        got Vec<Term>
++        s.flatTerms(v.T, got)
++        covered := true
++        for g in got { if not have.Has(g): covered = false }
++        savedAt, savedSp := s.fitAt, s.fitSp
++        s.fitAt, s.fitSp = true, s.eqAfter(p.Span())
++        s.fit(v.T, blk if covered else s.terms[l], not covered, x, FitLocal)
++        s.fitAt, s.fitSp = savedAt, savedSp
++    }
++    try s.targets.Pop() catch { }
++}
++
+ # while gathering, the record value x gives local l merged into what the local's other values gave (O23a)
+ fn (s mut Scoper&) noteLate(l I64, x typed.Expr&) {
+     if not s.lateGather or s.lateNone.Has(l) { return }
+@@ -5057,6 +5205,7 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
+     if ac is not null { s.landSite, s.landSp = I64(ac.Site), s.eqAfter(p.Span()) }
+     v := s.val(x, slot if slot.Runs() else s.here())
+     s.landSite, s.landSp = savedLand, savedLandSp
++    if s.cursorProbe and s.isRef(t) { s.probeNote(p, v, slot) }
+     if wholeLocal(p) >= 0 { s.noteLate(wholeLocal(p), x) }
+     if v.K == ValKind.Existing and s.bindingUnknown(p, slot) {
+         # existing storage stored into a field viewing p's referent of an instance whose construction binding is not known through this
