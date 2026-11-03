@@ -810,3 +810,11 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   P(...)`) costs +23% instructions / 1.8x time against writing its fields (the loop compiled branch-free - look at the
   store's lowering); (3) an array of small structs does not vectorize where the same data as separate arrays does
   (1.65x time) - check LLVM's interleaved-access vectorizing of the AoS loop.
+- 2026-11-03 CET: the build made clear for a user (wt-build ec27b9f, full verify passed; wt-rootcheck 79e390a,
+  consistency passed): a root README (prerequisites, `make`, use, the repository's map), `make` checks its
+  prerequisites first (`make prereq`: x86-64 Linux, clang >= 18, C headers, libffi, LTO plugin, xz, memory - each
+  failure naming its package), the seed's clang chosen as the compiler's (OLANG_CLANG, else clang-20/19/18/clang -
+  plain `clang` only before), `all` the default target (was clean + build + run), `make install` (a link in
+  ~/.local/bin); dev-stash.txt and boot.rc (agents' leftovers swept into migration commits) removed, gitignored, and
+  `make consistency` fails on any root file not in its list. The user's own failure was not seen - asked to send the
+  `prereq:` line if `make` still stops.
