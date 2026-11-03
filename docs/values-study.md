@@ -98,8 +98,8 @@ Per phase at N = 50,000 (callgrind, inclusive): parse 39.2M against 49.3M, resol
 10.6M against 12.7M - indices cost about a fifth more in every phase. olang's arena is the reason: a node held by
 reference is a bump allocation that never moves, while a node in a `Vec` pays the push's capacity test, the copy of each
 doubling and an index through the Vec's record on every read; in Rust or Zig, where the alternative to an index arena is
-`malloc` per node, indices win, and in olang they do not. A Vec left to grow also keeps the buffers it outgrew until its
-scope closes, which doubles the tree's memory; reserving room fixes that, when the size is known.
+`malloc` per node, indices win, and in olang they do not. A Vec left to grow doubles the tree's peak memory here (the
+slack of its last doubling and the buffers it outgrew); reserving room fixes that, when the size is known.
 
 **Clearer with values**: nothing in a tree can be shared or changed by accident; a tree is flat data that could be
 written to a file as it is; resolution to indices is what the compiler does already. **Worse**: positional fields
