@@ -10,7 +10,7 @@ You need x86-64 Linux (WSL works: keep the checkout in the Linux file system, su
 with:
 
 - clang 18, 19 or 20. On Ubuntu 24.04 that is `sudo apt install clang-18`; older releases get it from
-  https://apt.llvm.org.
+  https://apt.llvm.org: `wget https://apt.llvm.org/llvm.sh && sudo bash llvm.sh 18`.
 - make, xz, libffi and the C library's headers: `sudo apt install make xz-utils libffi-dev libc6-dev`.
 - About 3 GB of memory and 1 GB of disk.
 

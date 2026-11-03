@@ -10,6 +10,7 @@
 #   - the tools of the MCP server (compiler/mcp.olang) against SPEC B16 and editors/README.md
 #   - every top-level folder with a README.md, and the README of std, docs, compiler and tools naming each file of its
 #     folder
+#   - the files the repository's root tracks against the list of the root's files
 #
 # Run from the repository root (make consistency). Reads files only, and runs COMPILER help.
 
@@ -31,12 +32,13 @@ fn main() {
     checkFixTools(p)
     checkMcpTools(p)
     checkReadmes(p)
+    checkRoot(p)
     for row in p.Rows { toolkit.Say($row "\n") }
     if p.Rows.Len() > 0 {
         toolkit.Say("consistency: " $p.Rows.Len() " places out of step (DEPENDENTS.md says what goes with what)\n")
         os.Exit(1)
     }
-    toolkit.Say("consistency: the keywords, the command line, the fix tools, the MCP tools and the READMEs are in step\n")
+    toolkit.Say("consistency: the keywords, the command line, the fix tools, the MCP tools, the READMEs and the root's files are in step\n")
 }
 
 # ---- small helpers ----
@@ -523,5 +525,16 @@ fn listedIn(p mut Problems&, dir String&, suffix String&, readme String&) {
         if name == "README.md" { continue }
         stem := name[:name.Len() - suffix.Len()]
         if not mentions(text, stem if dir == "compiler/tools" else name) { p.Add($readme " does not name " $f) }
+    }
+}
+
+# the files the repository's root holds; any other tracked file there was committed by mistake
+RootFiles := String&[".gitignore", "CLAUDE.md", "DEPENDENTS.md", "HISTORY.md", "PRINCIPLES.md", "README.md", "SPEC.md", "makefile"]
+
+# each tracked file of the root that is not in RootFiles
+fn checkRoot(p mut Problems&) {
+    for f in toolkit.Tracked("*") {
+        if f.Contains("/") or f in RootFiles: continue
+        p.Add($f " is none of the root's files - committed by mistake, or add it to RootFiles in compiler/tools/consistency.olang")
     }
 }
