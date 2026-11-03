@@ -785,3 +785,12 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   operator, Clone gone, immut, String immutable + StringBuilder, Array<Char> the mutable text, collections following
   their elements, item 17 (a kept local built where it is kept), unique freed exactly; (3) later: a design note for
   reference counting owner trees (a limited carve-out), reuse in place, stack placement.
+- 2026-11-03 CET: hybrid round 1 merged (0f194c5, fast-forward, full verify passed on its tip; scopesan, scopefuzz,
+  fuzz free clean; bench machine code byte-identical): element reads never copy (D9h by evaluation order - widget tree
+  3.9 s/1.33 GB -> 0.29 s/27 MB), loop-turn copies reclaimed (517 -> 1.9 MB), move at last use (D9i, 682 -> 420 MB),
+  in-place calls through an element's field (two-phase, elements sharing no reference). NOT done: reference locals typed
+  per assignment (NLL) - needs new section-8 design (a term for "a field of the cursor's referent" or per-version SSA
+  terms; WIP patch /home/user/wt/mut/nll-wip.patch, untracked) - an xhigh round after the build batch; the T25d
+  imprecision (an element of a constant literal scoped to the literal's temporary block) with it. Weekly 0.81. Next:
+  the build batch (unique, Copy, immut, String/StringBuilder, collections following elements, item 17, unique freed
+  exactly).
