@@ -28704,9 +28704,10 @@ more instructions - std/os's `Args` copies each argument into a String (one memc
 made in the loop's turn and kept in the result, which a move cannot reach - a local built where it is kept, the batch's
 item 17, would remove it); knucleotide's `frequencies` is 35 instructions smaller, regex's `Compile` 23 larger and
 `ToString` 19, nothing else differs. Callgrind: text 252.6M -> 249.4M instructions (-1.2%), regex 159.5M -> 158.5M
-(-0.7%), knucleotide and sha256 within 300 instructions. The compiler's self-build (from an empty build/, -O3 + LTO):
-46.4 s -> 46.7 s wall, 155 s -> 156 s of CPU, check 1.39 -> 1.46 s, scope 1.19 -> 1.31 s, peak 3.00 GB -> 3.08 GB;
-`make bootstrap` from the new seed 0:51 wall, its peak 3.08 GB.
+(-0.7%), knucleotide and sha256 within 300 instructions. The compiler's self-build (from an empty build/, -O3 + LTO), master
+against this round's last compiler: 46.4 s -> 46.4 s wall, 155 s -> 154 s of CPU, check 1.39 -> 1.47 s, scope 1.19 ->
+1.27 s, peak 3.00 GB -> 2.94 GB (3.08 GB before the moves above); `make bootstrap` from the new seed 0:51 wall.
+`make verify`, `make scopesan` and `make scopefuzz` (100 programs, 436 scenarios, 0 findings) passed.
 
 **Found on the way by the round's verify (pre-existing, fixed).** M19g's pass is skipped where no body outside the Vec
 module takes an array from it (View, ViewMut, ToArray) - but a view also leaves as a reference into the buffer (Ref,
