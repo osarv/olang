@@ -194,6 +194,7 @@
 | ok - letters: pieces kept in a Vec are its own
 | ok - total: a built result read where it stands, then kept as a copy
 | ok - letters: the run time agrees with what the evaluator baked
+| ok - Tree.child: pushes onto a field of an element in place, an argument that grows the collection taken first
 === test tests/intsweep.olang
 | status 0
 | ok - T4a: 1 to 9 bits, signed and unsigned - baked, decided while compiling and run agree
@@ -255,6 +256,14 @@
 | ok - another module's: named through its alias, private ones caught whole, a set listing them
 === test tests/raisedlex.olang
 | status 0
+=== test tests/reads.olang
+| status 0
+| ok - walk: reads elements in place where a call shares the statement, and gives the copies' values
+| ok - grow: keeps a copy of an element a later argument changes before the read is used
+| ok - kidsOf: reads an element's array in place through a view a local holds
+| ok - copies made in a loop turn are each the element's
+| ok - moved: hands a local to a constructor at its last use, and copies it where it is used again
+| ok - walk: is the value the evaluator baked
 === test tests/reflect.olang
 | status 0
 | ok - a type's name, kind and layout are constants of each instance
@@ -1767,8 +1776,13 @@
 | status 0
 === run e16dgetbang.olang
 | status 0
+=== run e31bcallargs.olang
+| status 0
 === run e31bcallinplace.olang
 | status 0
+=== run e31bfieldviewmethod.olang
+| status 0
+| 12
 === run e31bhandlefieldloop.olang
 | status 0
 === run e31bhandlefieldnested.olang
@@ -2256,6 +2270,8 @@
 | 1
 | 2
 | 3
+=== run s5e31bfield.olang
+| status 0
 === run s5handlerepoint.olang
 | status 0
 === run s5helperlist.olang

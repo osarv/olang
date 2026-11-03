@@ -1726,14 +1726,17 @@ e28condlocallent.olang:25:7: error[E31b]: x[i] gives a copy of the element, whic
    25 |     (l[0] if k > 0 else x).Bump()
       |       ^
 compilation failed with 9 errors
-=== e31bcallargs.olang
-e31bcallargs.olang:12:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   12 |     v[0].Push(grow(v))
-      |      ^
-$ROOT/std/prelude/vec.olang:59:5: note: the callee is no view of the element because of this statement
-   59 |     if v.n == v.data.Len() { v.room(v.n + 1) }
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-compilation failed with 1 error
+=== e31bcallargsowned.olang
+e31bcallargsowned.olang:15:7: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
+   15 |     bs[0].Take(grow(bs))
+      |       ^
+e31bcallargsowned.olang:15:7: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   15 |     bs[0].Take(grow(bs))
+      |       ^
+e31bcallargsowned.olang:7:34: note: the callee is no view of the element because of this statement
+    7 | fn (b mut B&) Take(v Vec<I64>) { b.xs = v }
+      |                                  ^~~~~~~~
+compilation failed with 2 errors
 === e31bdtor.olang
 e31bdtor.olang:19:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    19 |     G[0].Bump()
@@ -1754,11 +1757,6 @@ compilation failed with 1 error
 e31bfieldviewbuild.olang:28:31: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
    28 |     for i in range 3 { g(l[0].w, i + 10) }
       |                               ^
-compilation failed with 1 error
-=== e31bfieldviewmethod.olang
-e31bfieldviewmethod.olang:28:41: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
-   28 | fn add(l mut Vec<Layer>&, v I64) { l[0].w.Build(v) }
-      |                                         ^
 compilation failed with 1 error
 === e31bfnelem.olang
 e31bfnelem.olang:10:12: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -4985,14 +4983,6 @@ s5e31bargs.olang:16:11: error[E31b]: x[i] gives a copy of the element, which thi
 s5e31bargs.olang:10:5: note: the callee is no view of the element because of this statement
    10 |     a.N++
       |     ^~~~~
-compilation failed with 1 error
-=== s5e31bfield.olang
-s5e31bfield.olang:14:10: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   14 |     l[0].In.Move(4)
-      |          ^~
-s5e31bfield.olang:6:31: note: the callee is no view of the element because of this statement
-    6 | fn (p mut Pt&) Move(dx I64) { p.X += dx }
-      |                               ^~~~~~~~~
 compilation failed with 1 error
 === s5e31bspawn.olang
 s5e31bspawn.olang:12:16: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
