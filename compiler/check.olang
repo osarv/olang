@@ -3479,6 +3479,9 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
         want = c.resolve(v.Ty)
         c.globalTop = false
         if want != types.UnknownT { want = c.P.GlobalStorage(generic.Context(mi, -1), v, n) }   # T7d
+        # T13a: a "mut" global holding what never changes (text - "Name mut String&") is a binding that may be
+        # assigned: nothing is ever written through it, so it takes any reference to one, read-only or not
+        if c.isRef(want) and c.P.Immut(c.deref(want)) { want = c.P.T.Ref(c.P.T.Referent(want), c.P.T.PermOf(want) & ~types.Writable) }
     }
     from := c.stmts.Len()
     x typed.Expr?& = null
@@ -6754,6 +6757,11 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
                 if isData(x) {
                     v := c.fit(c.read(sp, typed.Lvalue.Deref(sp, hr, x)), wr, sp)
                     return typed.Expr.Promote(sp, want, typed.Promote(v, c.site(typed.SiteKind.Promote, sp)))
+                }
+                # T13a: what is read-only because it never changes (a String, a slice of one) says what may be written
+                if c.P.Immut(hr) {
+                    c.err(sp, msgs.TextWrite() if hr == c.textType() else msgs.ImmutWrite(c.ty(hr)))
+                    return x
                 }
                 c.err(sp, msgs.ReadOnlyToWritable())
                 return x
