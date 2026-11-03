@@ -2817,3 +2817,22 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   relations in their function type (T22a's refusal shrinks to what a written function type cannot match). One xhigh
   section-8 round after the build batch, then reuse in place. QCR (2) - widening the reference-counting carve-out to
   values with several holders - still ASKED; the audit not run (the user went straight to building).
+- QCR (2) DECIDED 2026-11-03 (the user: "adding reference counting to this is okay ... it has to be limited ... I don't
+  want a bunch of memory overhead ... in the cases where memory would blow up ... a way to free it early ... rely on the
+  scope system and compile time evaluation as much as possible"): reference counting only as an early-freeing
+  addition for values the compiler finds with several holders that may outlive one another, where scopes and
+  single-holder freeing cannot free them; nothing written; the arena stays the backstop - a counted value is still
+  reclaimed when its scope closes, so a cycle of counted links is freed then and no cycle collector is needed (mine;
+  explained to the user); counts kept only on those values. Built after the section-8 round, with a design note first.
+  QCR (1) re-confirmed ("just build them all, extend the scope system to that").
+- QCS ASKED 2026-11-03 (the user: "we tried everything as values. We didn't think about everything as references ...
+  there would be no & or ?&, just mut and immut ... Can we do this without losing performance? ... in structs ... to know
+  how the struct is laid out if we want to write to files ... I'm more concerned about performance if everything is a
+  reference"). Answered with a sketch (Java Valhalla's lesson): references by meaning, layout by inference - an immut
+  type has no identity, so the compiler lays it out flat (arrays of immut structs as C lays them out, copies are byte
+  copies); a unique value is held inline by its one holder; numbers and arrays of numbers stay flat; only a mutable,
+  shared, non-unique object is a pointer, where the sharing is real; struct layout guaranteed for immut and unique
+  types (files, C); `mut` stays on parameters, `?` would still mark absence (`Node?`), copies written `a.Copy()`.
+  Costs: every program's meaning flips (`b := a; b.x = 1` changes a for a mutable type) - a full migration again;
+  speed of mutable struct-heavy code rests on inference where neither word is written. PROPOSED: the same study as the
+  values one on the same three programs before deciding. ASKED.
