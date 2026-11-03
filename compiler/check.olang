@@ -5134,7 +5134,8 @@ fn (c mut Checker&) notCapture(p typed.Lvalue&, sp source.Span) { c.mustWrite(p,
 fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
     c.noteWrite(p)
     if c.writesImmut(p, store) {
-        c.err(sp, msgs.ImmutWrite(c.ty(c.immutOf(p, store))))
+        it := c.immutOf(p, store)
+        c.err(sp, msgs.TextWrite() if it == c.textType() else msgs.ImmutWrite(c.ty(it)))
         return
     }
     match p {
@@ -6609,10 +6610,13 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
         r := c.P.T.Referent(have)
         w := c.P.T.Referent(want) if wk == types.Kind.Ref else want
         if not c.P.T.Same(r, w) and c.sameRepr(r, c.under(w)) {
-            y := c.convert(sp, x, c.P.T.Ref(w, c.P.T.PermOf(have)) if wk == types.Kind.Ref else w)
+            # a value of its own where one is wanted: the text read out of the constant, a copy (E12) - converted
+            # whole, the value was the constant's storage, so what was written into it was lost
+            if wk != types.Kind.Ref: return c.fit(c.convert(sp, x, c.P.T.Ref(w, c.P.T.PermOf(have))), want, sp)
+            y := c.convert(sp, x, c.P.T.Ref(w, c.P.T.PermOf(have)))
             # T25d: going where it may be written, it is judged as text at its own type is - handed over as the
             # constant itself, a write through it would land in the program's constant data
-            if wk != types.Kind.Ref or not c.writable(want): return y
+            if not c.writable(want): return y
             c.err(sp, msgs.ConstToMutRef("'$" $c.src(sp) "'" if c.P.T.Same(r, c.textType()) else "'" $c.src(sp) ".Copy()'"))
             return y
         }
@@ -8401,10 +8405,10 @@ fn (c mut Checker&) equality(sp source.Span, op token.Tok, x typed.Expr&, y type
             tb = typeOf(y)
             db = da
         } else if c.P.T.KindOf(da) == types.Kind.Array and c.P.T.KindOf(db) == types.Kind.Array and
-                  c.P.T.Same(c.P.T.Elem(da), c.P.T.Elem(db)) {
+                  c.P.T.Same(c.P.T.Elem(da), c.P.T.Elem(db)) or c.textBeside(da, y, db) or c.textBeside(db, x, da) {
             # E10, T7c: arrays of two known lengths meet at the run-time length both flow into - unequal, as their
-            # lengths differ
-            rt := c.P.T.Array(c.P.T.Elem(da), types.TypeId(0))
+            # lengths differ; text written in the program beside an array of characters of a known length too (T29c)
+            rt := c.P.T.Array(c.P.T.Elem(c.under(da)), types.TypeId(0))
             x = c.fit(x, c.P.T.Ref(rt, types.ReadOnly) if c.isRef(ta) and c.isRef(tb) else rt, sp)
             y = c.fit(y, c.P.T.Ref(rt, types.ReadOnly) if c.isRef(ta) and c.isRef(tb) else rt, sp)
             ta, tb = typeOf(x), typeOf(y)
@@ -8465,6 +8469,13 @@ fn (c mut Checker&) equality(sp source.Span, op token.Tok, x typed.Expr&, y type
     c.exprs.Push(vb)
     r := c.callOf(sp, types.BoolT, typed.Callee.Helper(typed.Helper.Equal, ht), gather(c.exprs, from))
     return c.negate(sp, r) if op == token.Tok.NotEq else r
+}
+
+# whether b is text written in the program beside a, an array of characters (T29c): they meet as arrays of a run-time
+# length, as two arrays of one element type do
+fn (c mut Checker&) textBeside(ta types.TypeId, b typed.Expr&, tb types.TypeId) Bool {
+    if not isData(b) or c.P.T.KindOf(ta) != types.Kind.Array or c.P.T.KindOf(c.under(tb)) != types.Kind.Array { return false }
+    return c.sameRepr(c.P.T.Elem(ta), c.P.T.Elem(c.under(tb)))
 }
 
 # the Eq a type declares for "==" (E10a): its Eq, or its private eq where the code being checked is in that eq's module
@@ -10580,7 +10591,8 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
             top := c.globalTop
             c.globalTop = false
             if w and not top and c.immutRef(of) {
-                c.err(source.Span(psp.Start, psp.Start + 3), msgs.ImmutMutRef(c.ty(c.deref(c.P.Resolve(c.fr().Ctx, of)))))
+                it := c.deref(c.P.Resolve(c.fr().Ctx, of))
+                c.err(source.Span(psp.Start, psp.Start + 3), msgs.TextMutRef() if it == c.textType() else msgs.ImmutMutRef(c.ty(it)))
                 return false
             }
             return c.writtenMet(of)

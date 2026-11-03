@@ -340,7 +340,9 @@ type Diag enum {
     CopyOnWhat
     CopyDoesMore
     ImmutWrite
+    TextWrite
     ImmutMutRef
+    TextMutRef
     ImmutCopy
     StrShape
     EqStrWrites
@@ -1812,8 +1814,14 @@ fn CopyDoesMore(what String&) Msg { return Msg(Diag.CopyDoesMore, "E31d", "a Cop
 # ERR_IMMUT_WRITE
 fn ImmutWrite(ty String&) Msg { return Msg(Diag.ImmutWrite, "T13a", "nothing of " $ty " changes after its constructor (it is immut) - make a new one") }
 
+# ERR_TEXT_WRITE
+fn TextWrite() Msg { return Msg(Diag.TextWrite, "T13a, T29c", "a String never changes once it is made - write the text as an Array<Char> and make the String with String(chars), or build it with a StringBuilder") }
+
 # ERR_IMMUT_MUT_REF
 fn ImmutMutRef(ty String&) Msg { return Msg(Diag.ImmutMutRef, "T13a", "'mut' makes a reference writable, and nothing of " $ty " changes after its constructor (it is immut) - read it through '" $ty "&'") }
+
+# ERR_TEXT_MUT_REF
+fn TextMutRef() Msg { return Msg(Diag.TextMutRef, "T13a, T29c", "'mut' makes a reference writable, and a String never changes once it is made - write text through 'mut Array<Char>&', read it through 'String&'") }
 
 # ERR_IMMUT_COPY
 fn ImmutCopy(ty String&) Msg { return Msg(Diag.ImmutCopy, "T13a, E31d", "a copy of " $ty " shares it, as nothing of it changes (it is immut) - it declares no Copy") }
