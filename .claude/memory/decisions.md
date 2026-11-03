@@ -2476,3 +2476,21 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   makes compiler/tools' scopedump/lowerdump/emitdump build again; (2) in a program with an export fn, a C call outside
   C's math, the runtime and the quick list stays "anything" (free.olang's condition 3) - no widening to read/write. The
   agent's four details stand (F3 fixed in emit: the environment slot kept in the coroutine frame).
+- My calls REVIEWED 2026-11-03 (the user, by number, over the 30-item overview): 6 kept ("since we lose information,
+  can become stricter"); 24 the user: declared function types "should be parameterizable, probably" - agreed,
+  `type Pred<T> fn(x T) Bool` queued; 27 the user: "extend this to some other known functions" - PROPOSED: C can call
+  the program only through an export fn whose address it was given, so a C call is "anything" only in a program that
+  hands an export fn to C (or is built -library), and even then not for C functions that take no function pointer and
+  are known not to keep one (libc's I/O, string, memory, time) - ASKED to confirm. 3: tested - the shape it refused
+  (`last String& = ""` set later from one of two parameters) compiles now (round 4b's field inference) and runs clean
+  under -sanitize; only the "no run-time scope word" part stands. 14/15 (RefMut, in-place calls), 16 (stale views:
+  "some kind of null thing", performance first), 17, 18, 25 and 26 (C function pointers nullable) explained.
+- QCL ASKED 2026-11-03 (the user: "maybe we should make Vecs only be holdable as a reference ... any reference to a Vec
+  can always know the length ... I think the Deque/HashMap/Vec thing might have made things worse"): reverse handles
+  as values for the growable collections - Vec, Map, Set, Deque, Heap, StringBuilder reference-only, as destructor
+  types, `any` and function types are (`v Vec<I64>&`, a bare `Vec<I64>` an error naming `&`), a copy written
+  `v.Clone()` (List's form, Clone back), sharing visible as `&`; then `v[i].Push(x)` on a `Vec<Vec<I64>&>` and
+  `try m.Get(k)` changing the map's Vec just work, `Ref`/`RefMut` go, and every holder sees the Vec's current buffer
+  and length (no stale Vec, only stale views/element references into the buffer, as today). Costs: one indirection
+  per access (measured 7.7% on a Vec-heavy bench when it went away), a record allocated per collection; arrays stay
+  values (QCE). Recommended yes. In effect: collections as values.
