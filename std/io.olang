@@ -142,7 +142,7 @@ fn FormatInt(n I64, buf mut Array<U8>&) I32 {
 # can be read between them as two lines; one that writes each line whole, its newline included, is read line by line.
 type Lines struct(fd I32, size I64 = 65536) {
     fd
-    buf mut String& = String(Array<U8>(size if size > 0 else 1))
+    buf := Array<U8>(size if size > 0 else 1)
     start I64 = 0                    # buf[start:end] is what has been read and not yet given as a line
     end I64 = 0
 }
@@ -182,11 +182,11 @@ fn (l mut Lines&) Next() String& ? Error, Exhausted {
 }
 
 # buf[first:last] as new text, a carriage return at its end dropped
-fn (l Lines&) line(first I64, last I64) mut String& {
+fn (l Lines&) line(first I64, last I64) String& {
     n I64 = last - first - (1 if last > first and l.buf[last - 1] == '\r' else 0)
-    text mut String& = String(Array<U8>(n))
+    text := Array<U8>(n)
     for k in range n { text[k] = l.buf[first + k] }
-    return text
+    return String(text)
 }
 
 # text and bytes gathered and written to a descriptor in large pieces - the way to write a lot (a compiler's output, a
@@ -352,9 +352,9 @@ fn reading(text String&) I32 {
 }
 
 # the lines of "text", read through Lines with a buffer of "size" bytes, each in brackets
-fn bracketed(text String&, size I64) mut String& {
+fn bracketed(text String&, size I64) String& {
     fd := reading(text)
-    out mut String& = ""
+    out String& = ""
     for line in try Lines(fd, size) {
         out = $out "[" $line "]"
     } catch Error { unreachable }
@@ -438,8 +438,8 @@ test "a line kept is built where it is kept" {
 }
 
 # what a pipe's read end holds once its write end is closed, as text
-fn drained(fd I32) mut String& {
-    out mut String& = ""
+fn drained(fd I32) String& {
+    out String& = ""
     for line in try Lines(fd) {
         out = $out $line "\n"
     } catch Error { unreachable }

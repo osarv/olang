@@ -11208,8 +11208,9 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
         if c.isNumber(xt) and c.isNumber(t) { return c.convert(sp, x, t) }
         if c.flowsInto(c.deref(xt), base) or c.sameRepr(c.deref(xt), base) {
             # T13a: what never changes is made of storage nothing else can change - an existing value it is made from is
-            # copied (left out where nothing could tell: a fresh value, a local at its last use, D9i)
-            if c.P.Immut(t) and not c.P.Immut(c.deref(xt)) {
+            # copied (left out where nothing could tell: a fresh value, a local at its last use, D9i); and what may change
+            # is made of none that never does - a value of a type that may be written, made from an immut one, a copy
+            if c.P.Immut(t) != c.P.Immut(c.deref(xt)) {
                 v := c.read(sp, typed.Lvalue.Deref(sp, c.deref(xt), x)) if c.isRef(xt) else x
                 return c.convert(sp, c.ownCopy(v), t)
             }

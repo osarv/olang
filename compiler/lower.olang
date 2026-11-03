@@ -1047,6 +1047,13 @@ fn (ln mut lowering&) slotLen(l typed.LocalId, init typed.Expr&) I64 {
     r := derefOf(ln.unconvert(init))
     if r is null { return -1 }
     match r {
+        # (text read out as an array of characters: the reference to the constant converted, T29c)
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op == typed.PrimOp.Convert and args.Len() == 1 { r = args[0] }
+        }
+        case _ { }
+    }
+    match r {
         case typed.Expr.Data(_, _, _, c) {
             match c {
                 case typed.Const.Bytes(b) { return b.Len() if b.Len() > 0 and b.Len() <= SlotMax else -1 }

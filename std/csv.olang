@@ -129,7 +129,7 @@ fn fieldEnd(t String&, i I64, sep Char) I64 ? Error {
 
 # the inside of a quoted field holding "pairs" doubled quotes, each made one: new text
 fn unquote(inner String&, pairs I64) String {
-    out := String(Array<Char>(inner.Len() - pairs))
+    out := Array<Char>(inner.Len() - pairs)
     w I64 = 0
     i I64 = 0
     for i < inner.Len() {
@@ -137,7 +137,7 @@ fn unquote(inner String&, pairs I64) String {
         w++
         i += 2 if inner[i] == '"' else 1
     }
-    return out
+    return String(out)
 }
 
 # the fields as one record: separated by sep, ending with "\n", each quoted when it must be - when it holds the
@@ -151,7 +151,7 @@ fn Record(fields ...String&, sep Char = ',') String ? Error {
         n += f.Len()
         if quoted(f, sep) { n += 2 + f.CountOf("\"") }
     }
-    out := String(Array<Char>(n))
+    out := Array<Char>(n)
     w I64 = 0
     for k, f in fields {
         if k > 0 {
@@ -177,7 +177,7 @@ fn Record(fields ...String&, sep Char = ',') String ? Error {
         }
     }
     out[w] = '\n'
-    return out
+    return String(out)
 }
 
 # ---- records as structs (G39, G40) ----

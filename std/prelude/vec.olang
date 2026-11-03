@@ -229,7 +229,7 @@ fn (v Vec<String&>&) Join(sep String&) String { return v.data[:v.n].Join(sep) }
 fn (v Vec<String>&) Join(sep String&) String {
     n I64 = sep.Len() * (v.n - 1) if v.n > 1 else 0
     for i in range v.n { n += v.data[i].Len() }
-    out := String(Array<Char>(n))
+    out := Array<Char>(n)
     w I64 = 0
     for i in range v.n {
         if i > 0 {
@@ -243,7 +243,7 @@ fn (v Vec<String>&) Join(sep String&) String {
             w++
         }
     }
-    return out
+    return String(out)
 }
 
 # the elements copied into one array in the CALLER's scope - independent of the Vec, which may grow

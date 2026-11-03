@@ -16,7 +16,7 @@ fn encodeWith(data Array<U8>&, alphabet String&, pad Bool) String {
     rest := data.Len() % 3
     n := full * 4
     if rest > 0: n += 4 if pad else rest + 1
-    out := String(Array<Char>(n))
+    out := Array<Char>(n)
     o I64 = 0
     for i in range full {
         v := (U32(data[3 * i]) << 16) | (U32(data[3 * i + 1]) << 8) | U32(data[3 * i + 2])
@@ -38,7 +38,7 @@ fn encodeWith(data Array<U8>&, alphabet String&, pad Bool) String {
         }
         if pad: out[o + 3] = '='
     }
-    return out
+    return String(out)
 }
 
 # a character's value in the alphabet, or -1

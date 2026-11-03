@@ -105,9 +105,9 @@ fn Clean(path String&) String& {
         }
     }
     if same { return path[:w] }
-    text mut String& = String(Array<Char>(w))
+    text := Array<Char>(w)
     for i in range w { text[i] = out[i] }
-    return text
+    return String(text)
 }
 
 # the parts made one path, a '/' between each two, and cleaned (Clean): Join("a", "b/c") is "a/b/c", Join("a/", "../b")
@@ -122,7 +122,7 @@ fn Join(parts ...String&) String {
         }
     }
     if n == 0 { return "" }
-    joined := String(Array<Char>(n))
+    joined := Array<Char>(n)
     w I64 = 0
     for p in parts {
         if p.Len() == 0 { continue }
@@ -135,7 +135,7 @@ fn Join(parts ...String&) String {
             w++
         }
     }
-    return Clean(joined)
+    return Clean(String(joined))
 }
 
 # what Rel fails with: no relative path can be known from the text alone
@@ -175,7 +175,7 @@ fn Rel(base String&, target String&) String ? Error {
         if b[i] == '/' { ups++ }
     }
     rest := t[t0:]
-    out := String(Array<Char>(ups * 3 - 1 + (rest.Len() + 1 if rest.Len() > 0 else 0)))
+    out := Array<Char>(ups * 3 - 1 + (rest.Len() + 1 if rest.Len() > 0 else 0))
     w I64 = 0
     for k in range ups {
         if k > 0 {
@@ -194,7 +194,7 @@ fn Rel(base String&, target String&) String ? Error {
             w++
         }
     }
-    return out
+    return String(out)
 }
 
 # allocates and lets go of a few hundred texts, so storage a closed scope gave back is handed out again - anything

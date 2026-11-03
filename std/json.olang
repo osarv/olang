@@ -611,7 +611,7 @@ fn (r mut reader&) string() String& ? Error {
         c := r.src[r.pos]
         if c == '"' { break }
         if c == '\\' {
-            size += try r.escape(start, "")
+            size += try r.escape(start, Array<Char>(0))
         } else if c < 0x20 {
             error Error.Unexpected
         } else if c < 0x80 {
@@ -624,7 +624,7 @@ fn (r mut reader&) string() String& ? Error {
         }
     }
     end I64 = r.pos
-    out mut String& = String(Array<U8>(size))
+    out := Array<Char>(size)
     w I64 = 0
     r.pos = start
     for r.pos < end {
@@ -638,12 +638,12 @@ fn (r mut reader&) string() String& ? Error {
         }
     }
     r.pos = end + 1
-    return out
+    return String(out)
 }
 
 # the escape at pos: moves past it and gives how many bytes it stands for - writing them into out at w, when out is
 # given. \u escapes are UTF-8 there, a surrogate pair (😀) one character of four bytes
-fn (r mut reader&) escape(w I64, out mut String&) I64 ? Error {
+fn (r mut reader&) escape(w I64, out mut Array<Char>&) I64 ? Error {
     if r.pos + 1 == r.src.Len() {
         r.pos++
         error Error.Unterminated
@@ -718,7 +718,7 @@ fn (r mut reader&) hex4(i I64) I64 ? Error {
 }
 
 # code point cp's UTF-8 bytes, written into out at w when out is given, and how many there are
-fn putUtf8(cp I64, w I64, out mut String&) I64 {
+fn putUtf8(cp I64, w I64, out mut Array<Char>&) I64 {
     if cp < 0x80 {
         if out.Len() > 0 { out[w] = Char(cp) }
         return 1
@@ -1563,7 +1563,7 @@ if TestBuild {
 
     # K1: Parse and Encode run while compiling - this global is baked, and agrees with the same work done at run time
     bakedText String& = Encode(try Parse("{\"a\": [1, 2.5e-3, \"\\u00e9\"], \"b\": {\"c\": null}}") catch default Json.Null)
-    sourceText mut String& = "{\"a\": [1, 2.5e-3, \"\\u00e9\"], \"b\": {\"c\": null}}"
+    sourceText String& = "{\"a\": [1, 2.5e-3, \"\\u00e9\"], \"b\": {\"c\": null}}"
 
     test "Parse and Encode give the same while compiling as at run time" {
         assert bakedText == "{\"a\":[1,0.0025,\"é\"],\"b\":{\"c\":null}}"

@@ -374,16 +374,18 @@ test "Vec: elements that are values holding references, kept across growth and r
     assert v[0].text == "last" and v[109].text == "e0"
 }
 
-# T29a (vec6 x1): a conversion of the view a call gives names the Vec's buffer, while compiling and at run time alike
+# T29a, T13a (vec6 x1): a conversion of the view a call gives to a String is a copy of the Vec's buffer, while compiling
+# and at run time alike - a String never changes, and the Vec is written after (it named the buffer until String was
+# immut, when the write showed through it)
 fn vecViewNamed(n I64) I64 {
     v := Vec<Char>()
     for _ in range n { v.Push('a') }
     w String& = String(v.View())
     v[0] = 'z'
-    return 1 if w[0] == 'z' and w.Len() == n else 0
+    return 1 if w[0] == 'a' and w.Len() == n and v[0] == 'z' else 0
 }
 VecViewBaked I64 = vecViewNamed(2)              # K2: computed while compiling
-test "Vec: a conversion of a view names the buffer, not a copy of it" {
+test "Vec: a conversion of a view to a String copies the buffer" {
     assert VecViewBaked == 1 and vecViewNamed(2 * Run) == 1
 }
 

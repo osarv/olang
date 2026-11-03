@@ -39,7 +39,7 @@ test "Repeat and Reverse" {
     one := I32[7]
     one.Reverse()
     assert one[0] == 7 and e.Len() == 0
-    s := String(Array<Char>(3, 'x'))
+    s := Array<Char>(3, 'x')
     s[0] = 'a'
     s.Reverse()                                          # text reverses byte by byte
     assert s == "xxa"
@@ -162,7 +162,7 @@ test "Chunks cuts an array into consecutive pieces, the last holding what is lef
     assert p[1][0] == 4 and p[2][1] == 9 and $p[2] == "I64[8, 9]"
     p[1][0] = 40                                         # a piece is a view: writing it writes the array
     assert a[4] == 40
-    t := "abcdefg"
+    t Array<Char> = "abcdefg"                            # (writable pieces: text that may be written, T13a)
     s := t.Chunks(3)
     assert s.Len() == 3 and String(s[2]) == "g" and String(s[0]) == "abc"     # text cut into pieces of Chars
 }

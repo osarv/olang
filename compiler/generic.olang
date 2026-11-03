@@ -2732,7 +2732,13 @@ fn (p mut Program&) DeclWord(t types.TypeId) ast.DeclWord {
     return td.Word if td is not null else ast.DeclWord.Plain
 }
 
-fn (p mut Program&) Immut(t types.TypeId) Bool { return p.DeclWord(t) == ast.DeclWord.Immut }
+# T13a: whether nothing of a value of t changes after it is made - its declaration says immut, or it is declared over a
+# type that does (`type Label extends String`): its values are the base's, which never change
+fn (p mut Program&) Immut(t types.TypeId) Bool {
+    if p.DeclWord(t) == ast.DeclWord.Immut { return true }
+    if p.T.KindOf(t) != types.Kind.Named or not p.Body(t) or p.T.DeclKindOf(p.T.DeclOf(t)) != types.DeclKind.Over { return false }
+    return p.Immut(p.T.Base(t))
+}
 
 fn (p mut Program&) extends(d types.DeclId) Bool {
     td := p.typeDecl(d)

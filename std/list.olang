@@ -557,7 +557,7 @@ fn (l List<String&>&) Join(sep String&) String {
     n I64 = 0
     for p in l { n += p.Len() }
     if l.Len() > 1 { n += sep.Len() * (l.Len() - 1) }
-    out := String(Array<Char>(n))
+    out := Array<Char>(n)
     w I64 = 0
     for i, p in l {
         if i > 0 {
@@ -571,7 +571,7 @@ fn (l List<String&>&) Join(sep String&) String {
             w++
         }
     }
-    return out
+    return String(out)
 }
 
 # whether x is one of the elements, compared with "==" - what "x in l" asks (E29)
