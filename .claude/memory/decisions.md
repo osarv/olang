@@ -2723,3 +2723,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   Copy (a new buffer, elements by their own Copy), unique exactly when their elements are (rule 5); ToVec not needed
   for copying. The copy design is settled: rules 1-3, 5, 6; unique types declare no Copy; collections follow their
   elements.
+- CORRECTION 2026-11-03 (the user: "No, the two was about non-unique structs ... if you hold a unique thing and you
+  copy by value, then you implicitly copy the unique thing, which you can't, so you must write your own copy around
+  it"): the entry "Collections DECIDED" above was my misreading - the user's "Number 2 is correct" confirmed only that a
+  struct holding a unique part by value has no implicit copy and must write its own Copy around it to be copyable
+  (rule 5, now the user's); whether collections are unique is still ASKED (recommended: not unique, unique exactly when
+  their elements are).
