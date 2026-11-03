@@ -778,3 +778,10 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   Weekly ~0.77. Left for after: the reference-local over-rejection (and the three dump tools), held/gen_walkkept's two
   errors, oann's catch-up (handles_migrate, fnref/scopes migrations - oann waits for the user), the settling
   experiments (QBY - the user's to start).
+- 2026-11-03 CET: the values study merged (docs/values-study.md); the copy/unique/immut/collections design settled with
+  the user. Order: (1) the study's bugs and B1-B4 - element reads never copy (D9h by evaluation order), loop-turn copies
+  reclaimed, move at last use, reference locals typed per assignment (NLL: O25's three refusals, the dump tools), in-place
+  calls through an element's field; (2) the build batch - unique (Rust's destructor timing), Copy as the assignment
+  operator, Clone gone, immut, String immutable + StringBuilder, Array<Char> the mutable text, collections following
+  their elements, item 17 (a kept local built where it is kept), unique freed exactly; (3) later: a design note for
+  reference counting owner trees (a limited carve-out), reuse in place, stack placement.

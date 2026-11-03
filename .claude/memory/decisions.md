@@ -2779,3 +2779,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   V>), one holding a reference keeps the reference (Map<String&, V>), immut values included - no counting. 2 (when a
   unique value that lands nowhere runs its destructor) explained - Rust: at the end of the scope of whoever owns it
   last; Mojo: right after its last use - ASKED again.
+- Unique destructor timing DECIDED 2026-11-03 (the user: "rusts way"): a unique value runs its destructor at the end of
+  the scope of whoever holds it last - a value handed to a by-value parameter and stored nowhere is destroyed when that
+  function's body ends; O15's order otherwise; `x.Destroy()` still ends one earlier.
