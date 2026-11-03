@@ -2757,3 +2757,16 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   would be really nice ... our scoping memory model is the base structure ... don't start doing things like garbage
   collecting or ref counting ... unless you have a really good case to do ref counting in very specific places, and
   then you ask me first. The things with performance overhead should not be done lightly." Folded into the study.
+- Values study (docs/values-study.md, merged 2026-11-03): A - values-only not recommended (indices +17% instructions on
+  a compiler slice, +25% on a widget tree whose flat memory needs a hand free list, level on the settle; 12,301 `&` in
+  compiler/, ~4,000 stored references; Mutex, channels, C handles and `any` need a reference kind anyway); take three
+  parts instead: element reads never copy, a value moved at its last use, `unique` as ownership freed exactly. Found
+  in today's olang: D9h judges element copies per statement, not by evaluation order (a widget tree 5.8 s/1.3 GB vs
+  0.23 s/27 MB); copies made in a loop turn kept until the frame closes (1M turns 517 MB); a last use never moves
+  (`t := mk(20M); P(t)` copies); three O25 refusals (a reference local reassigned a shorter value); E31b refusing
+  `u.nodes[p].kids.Push(c)`. B ranked: move at last use; copies by evaluation order + the per-turn bug; reference
+  locals typed per assignment (NLL); in-place calls through an element's field (two-phase); unique freed at let-go;
+  reuse in place; stack placement; last-use freeing of large values; double-buffered regions. ASKED (the study's
+  numbering): 1 take the hybrid, keep `&` (rec yes); 2 a unique value that leaves its place and lands nowhere runs its
+  destructor right there (rec yes, unique only) or keeps O15; 3 reference counting for owner trees with back-pointers -
+  no now, revisit with a GUI library (rec); 4 immut values kept in long-lived places copied there (rec) or counted.
