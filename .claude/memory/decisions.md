@@ -2770,3 +2770,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   numbering): 1 take the hybrid, keep `&` (rec yes); 2 a unique value that leaves its place and lands nowhere runs its
   destructor right there (rec yes, unique only) or keeps O15; 3 reference counting for owner trees with back-pointers -
   no now, revisit with a GUI library (rec); 4 immut values kept in long-lived places copied there (rec) or counted.
+- Values study answered 2026-11-03 (the user): 1 yes - values-only not worth it, `&` stays for sharing, the hybrid's
+  three parts taken (reads never copy, move at last use, unique as ownership); 3 reference counting for owner trees with
+  back-pointers allowed as "a limited compiler carveout and not anything that propagates throughout the language" -
+  design note first (count only the owning child links, the parent link non-owning; where it applies said by the
+  compiler, nothing written), built when a GUI library needs it; 4 the user: "when the map has a value copy, when the
+  map has a ref, keep the ref" - a long-lived place holding a value type copies into its own storage (QCE, Map<String,
+  V>), one holding a reference keeps the reference (Map<String&, V>), immut values included - no counting. 2 (when a
+  unique value that lands nowhere runs its destructor) explained - Rust: at the end of the scope of whoever owns it
+  last; Mojo: right after its last use - ASKED again.
