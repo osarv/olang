@@ -2679,3 +2679,13 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   compiler leans on it (read-only arguments passed by pointer with no copy and D9h's handover, constant data and
   immutable globals emitted as `constant` and never lent writably, T25d's static literals, LLVM `readonly` on such
   parameters; what removing it cost was rounds 2a-3b's proof machinery and hidden copies - QCK).
+- QCQ ASKED 2026-11-03 (the user: "do we want to get rid of references completely and just let the compiler infer
+  everything? Could this be done reasonably?" - QCC's option C again). Answered: the representation can be inferred,
+  the meaning cannot - after `b := a; b.x = 1`, whether `a` changed is observable, so one meaning must hold for all
+  values: all references (Java, Python - loses C's layout of arrays of structs, principle 2) or all values (mutable
+  value semantics: Hylo, Swift's structs - every value its own, a parameter may be lent writably, the compiler turns
+  copies into borrows, moves and in-place writes). The second fits olang's principles and makes scopes nearly trivial,
+  but shared mutable structures (a widget tree's parent pointers, graphs, doubly linked lists, the compiler's own
+  shared AST - ~9,000 `&`) are rewritten around indices into collections, and it is a rewrite of the language and all
+  code. Recommended: not now - inferred scopes already removed the marker burden and the `&` left marks real sharing;
+  if wanted, a study on real code first (the compiler, a GUI sketch, the settle loop). In effect: references as today.
