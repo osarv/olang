@@ -1,14 +1,15 @@
 # QCE (T7a, docs/rework.md sections 16 and 18): an array of a run-time length held by value inside another value - a
 # struct's field, an array's element, an enum's payload, a type argument - is that value's own, its elements stored
 # where the value is. A store copies what it is given in, a copy of the whole copies them too, a by-value parameter is
-# its callee's own copy, and nothing another name holds changes it.
+# its callee's own copy, and nothing another name holds changes it. The text the tests write to show it is an
+# Array<Char> (a String never changes, T13a).
 
-type person struct(name String, age I64) {
+type person struct(name Array<Char>, age I64) {
     name, age
 }
 
 type shape enum {
-    Named(label String, n I64)
+    Named(label Array<Char>, n I64)
     Plain
 }
 
@@ -19,27 +20,27 @@ type team struct(title String) {
 }
 
 # a holder of what it is given: its own copy, not the caller's storage kept
-type holder struct(s String) {
+type holder struct(s Array<Char>) {
     s
 }
 
-fn mk(t String&) holder { return holder(t) }
+fn mk(t Array<Char>&) holder { return holder(t) }
 
 # a part stored from a block's own text outlives the block, and a later write to that text is not seen
 fn stored() person {
     p := person($"x", 1)
     {
-        t := $"inner"
+        t Array<Char> = $"inner"
         p.name = t
         t[0] = 'X'
     }
     return p
 }
 
-fn words() Array<String> {
-    out := Array<String>(3)
+fn words() Array<Array<Char>> {
+    out := Array<Array<Char>>(3)
     for i in range 3 {
-        w := $"w" $i
+        w Array<Char> = $"w" $i
         out[i] = w
         w[0] = 'z'
     }
@@ -65,35 +66,35 @@ test "a part store copies its value in" {
     assert a[0] == "w0" and a[2] == "w2"
     h := mk($"kept")
     assert h.s == "kept"
-    t := $"abc"
+    t Array<Char> = $"abc"
     g := mk(t)
     t[0] = 'x'
     assert g.s == "abc"
 }
 
 test "a Vec and a Map own what they hold" {
-    v := Vec<String>()
+    v := Vec<Array<Char>>()
     for i in range 4 {
-        t := $"n" $i
+        t Array<Char> = $"n" $i
         v.Push(t)
         t[0] = '?'
     }
     assert v[0] == "n0" and v[3] == "n3" and v.Len() == 4
-    m := Map<String, I64>()
-    k := $"abc"
+    m := Map<Array<Char>, I64>()
+    k Array<Char> = $"abc"
     m.Put(k, 1)
     k[0] = 'x'
     assert m.Has("abc") and not m.Has("xbc") and (try m.Get("abc")) == 1
 }
 
 test "payloads, literals and fills" {
-    t := $"lab"
+    t Array<Char> = $"lab"
     s := shape.Named(t, 2)
     t[0] = 'L'
     assert s == shape.Named("lab", 2)
     xs := String["a", "bc", "def"]
     assert xs[2] == "def" and xs.Len() == 3
-    f := Array<String>(3, "ab")
+    f := Array<Array<Char>>(3, "ab")
     f[0][0] = 'X'
     assert f[0] == "Xb" and f[1] == "ab"
 }
@@ -122,10 +123,10 @@ fn churn() I64 {
 }
 
 test "a comprehension's elements are its own" {
-    ws := String["ab", "c", "def"]
+    ws := Array<Char>["ab", "c", "def"]
     up := String[$w "!" for w in ws]
-    same := String[w for w in ws]
-    some := String[w for w in ws if w.Len() > 1]
+    same := Array<Char>[w for w in ws]
+    some := Array<Char>[w for w in ws if w.Len() > 1]
     ns := node[node(i) for i in range 3]
     ws[0][0] = 'X'
     assert churn() > 0
@@ -134,7 +135,7 @@ test "a comprehension's elements are its own" {
 }
 
 # a by-value parameter is its callee's own copy, its parts too
-fn shout(p person) String {
+fn shout(p person) Array<Char> {
     p.name[0] = 'X'
     return p.name
 }
@@ -185,7 +186,7 @@ test "a clone of an array is its own, its elements' parts too" {
     a := I64[1, 2, 3]
     b := a.Copy()
     b[0] = 9
-    ws := String["ab", "c"]
+    ws := Array<Char>["ab", "c"]
     vs := ws.Copy()
     vs[0][0] = 'X'
     assert a[0] == 1 and b[0] == 9 and ws[0] == "ab" and vs[0] == "Xb"

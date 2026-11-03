@@ -2035,7 +2035,7 @@ test "E11b: text pieces side by side are joined" {
 # E11a: every value renders, from what it holds and the way it would be written: a struct as Name(fields),
 # an array as Type[items], an enum case as Type.Case(payload). Text inside a composite is quoted, so its
 # boundaries show; at the top level a byte array is simply its bytes. Nothing overrides a rendering.
-type RenderPair struct(label mut String&, n I32, c Char, on Bool) {
+type RenderPair struct(label String&, n I32, c Char, on Bool) {
     label
     n
     c
@@ -2049,7 +2049,7 @@ type RenderLink struct(v I32, n mut RenderLink?&) {
 
 type RenderMeters I32
 
-type RenderHolder struct(at mut Pt3&, tag mut String&) {
+type RenderHolder struct(at mut Pt3&, tag String&) {
     at
     tag
 }
@@ -2067,7 +2067,7 @@ test "E11a: a struct, an array and an enum render from their parts" {
     assert bytesEq($m, "5")
 }
 
-type RenderQuoted struct(t mut String&, q Char, b Char) {
+type RenderQuoted struct(t String&, q Char, b Char) {
     t
     q
     b
@@ -2134,9 +2134,9 @@ test "E11a/QY: a function's error set renders with commas" {
 test "E11a: '$' on text is a copy - it is a value, not a second name for the storage" {
     buf := Array<Char>(2, 'a')
     t := $buf
-    t[0] = 'b'
-    assert buf[0] == 'a'
-    assert bytesEq(t, "ba")
+    buf[0] = 'b'                          # (the array written: a String never changes, T13a)
+    assert t[0] == 'a'
+    assert bytesEq(t, "aa")
 }
 
 # E11a/E11b: a rendering and a join are TEMPORARIES - they have no storage of their own, so they
@@ -7443,7 +7443,7 @@ fn rangeSum(n I32) I32 {
 RangeSumTen := rangeSum(10)
 
 fn rangeText(end I32, start I32, step I32) String& {
-    t mut String& = ""
+    t String& = ""
     for v in range start, end, step { t = $t $v "," }
     return t
 }
@@ -9576,26 +9576,28 @@ test "Split's pieces live with the text, and the evaluator splits as the run tim
 
 # T29c: written text beside a String value in "==" is a String too - compared by content, since a String
 # value is a value (E10); decided at compile time (the global above) and at run time alike
-# T29a: "String(b)" names b's storage - a borrow of it is that storage, written where b may be and living as long as
-# b's does; a value declaration from it is a copy - of fixed storage (a local, an inline field) as of any other (T7d)
+# T29a: "CtChars(b)" names b's storage - a borrow of it is that storage, written where b may be and living as long as
+# b's does; a value declaration from it is a copy - of fixed storage (a local, an inline field) as of any other (T7d).
+# (A type over text that may be written: "String(b)" is a copy, since a String never changes - T13a)
+type CtChars extends Array<Char>
 type CtConvBox struct() {
     buf := Array<Char>(3, 'q')
 }
 type CtConvHolder struct() {
-    s mut String& = ""
+    s mut CtChars& = CtChars(Array<Char>(0))
 }
-fn ctConvWrite(s mut String&) { s[0] = 'Z' }
+fn ctConvWrite(s mut CtChars&) { s[0] = 'Z' }
 fn ctConv(n I32) String& {
     raw := Array<U8>(2, U8(104 + n))
     copied := String(raw)
     h := CtConvHolder()
-    h.s = String(raw)
-    ctConvWrite(String(raw))
+    h.s = CtChars(raw)
+    ctConvWrite(CtChars(raw))
     raw[1] = 65
     b := CtConvBox()
-    v := String(b.buf)
+    v := CtChars(b.buf)
     b.buf[1] = 'z'
-    return $copied " " $h.s " " $String(raw) " " $v
+    return $copied " " $h.s " " $CtChars(raw) " " $v
 }
 CtConvBaked := ctConv(1)
 
@@ -10254,7 +10256,7 @@ test "E28/S12b: a conditional of literals takes its target's type; a value made 
 type AdoptHolder struct() {
     a mut Array<I64>& = Array<I64>(0)
     rows mut Array<mut Array<I64>&>& = Array<mut Array<I64>&>(0)
-    s mut String& = ""
+    s String& = ""
 }
 fn adoptFresh(n I64) I64 {
     h := AdoptHolder()
@@ -12178,7 +12180,7 @@ test "E10a: a call's String value compared with a String reference" {
 # the very one an lvalue is, or one temporary built for them all (fuzz/repro/fillliteral.olang, fillref.olang)
 fn fzFill(n I64) String {
     a := Array<String&>(n, "ab")
-    b := Array<mut String&>(n, "cd")
+    b := Array<mut Array<Char>&>(n, $"cd")            # (text written: an Array<Char>, T13a)
     b[0][0] = 'x'
     c := Array<I32>(n, 7)
     d := Array<mut Array<I32>&>(n, c)
@@ -12187,7 +12189,7 @@ fn fzFill(n I64) String {
 }
 FzFillBaked String = fzFill(3)
 test "T8: an array filled with a reference names one instance in every element" {
-    want String& = "String&[\"ab\", \"ab\", \"ab\"] String&[\"xd\", \"xd\", \"xd\"] true Array<I32>&[I32[7, 9, 7], I32[7, 9, 7], I32[7, 9, 7]] true I32[7, 9, 7]"
+    want String& = "String&[\"ab\", \"ab\", \"ab\"] Array<Char>&[\"xd\", \"xd\", \"xd\"] true Array<I32>&[I32[7, 9, 7], I32[7, 9, 7], I32[7, 9, 7]] true I32[7, 9, 7]"
     assert FzFillBaked == want and fzFill(3) == want
     assert fzFill(fzRun + 2) == want
 }
@@ -13298,13 +13300,15 @@ fn gvBumpNums<K>(x K) I64 {
     return x[0] + x.Len()
 }
 GvSeen mut I64 = 0
-GvBaked I64 = gvPass("abc") + gvBump("hey")
+GvHey Array<Char> = "hey"         # (text a body writes: an Array<Char>, T13a)
+GvBaked I64 = gvPass("abc") + gvBump(GvHey)
 test "a generic's by-value array parameter: borrowed for a call, and its own copy where its body writes it" {
     assert gvEq("x", "x") and not gvEq("x", "y") and gvPass("abcd") == 4 and GvBaked == 6
     GvSeen = GvSeen + 1
     s String = $GvSeen "bc"
     assert gvEq("1bc", s) and gvPass(s) == 3
-    assert gvBump(s) == 3 and s == "1bc"
+    w Array<Char> = s
+    assert gvBump(w) == 3 and w == "1bc"
     n := I64[GvSeen, 2]
     assert gvBumpNums(n) == 11 and n[0] == 1
     m Array<I64> = Array<I64>(3, GvSeen)
@@ -16196,7 +16200,7 @@ fn s5Kept(n I64) I64 {
     rows := Vec<Vec<String&>>()
     outer := "outer"
     for k in range n {
-        t mut String& = $k "-kept-text"
+        t String& = $k "-kept-text"
         bs.Push(s5MkBox(t))
         bs.Push(s5MkBox(outer))
         rows.Push(s5One(t))
@@ -16220,7 +16224,7 @@ fn s5KeptField(n I64) I64 {
     ss := Vec<String&>()
     outer := "outer-field"
     for k in range n {
-        t mut String& = $k "-field"
+        t String& = $k "-field"
         ss.Push(s5MkBox(t).s)
         ss.Push(s5MkBox(outer).s)
         sbChurn()
@@ -17807,7 +17811,7 @@ test "E27, D9b: a grown comprehension and a written by-value String, read back a
         t = t + a[299]
         keep = a
     }
-    s := "abcdefgh"
+    s Array<Char> = "abcdefgh"            # (text a body writes: an Array<Char>, T13a)
     u I64 = 0
     for _ in range 50 { u = u + rvUpper(s) }
     c2dChurn()
@@ -18661,14 +18665,14 @@ test "C9b: r.Destroy(); continue - and break - in the loop that declares r" {
     assert bulkSkipOne(I64(ctRuntimeZero)) == 24 and BulkDestroyed == 4
 }
 
-# S6, T29a: a writable local's text and a 'mut' global's lent as a writable Array<Char> are written; an immutable
+# S6, T29a: a writable local's characters and a 'mut' global's lent as a writable Array<Char> are written; an immutable
 # global's would be refused (checks/cases/roglobaltext.olang)
-Bulk3Text mut String = "mutable"
+Bulk3Text mut Array<Char> = "mutable"
 
 fn bulk3Zap(b mut Array<Char>&) { b[0] = 'z' }
 
 fn bulk3Texts() String {
-    t := "hello"
+    t Array<Char> = "hello"
     bulk3Zap(t)
     bulk3Zap(Bulk3Text)
     return $t " " $Bulk3Text

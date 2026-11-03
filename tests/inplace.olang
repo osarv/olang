@@ -34,9 +34,10 @@ fn total(a Array<I64>&) I64 {
     return s + a.Iter().Fold(I64(0), fn(acc I64, x I64) I64 { return acc + x })
 }
 
-# a piece kept past the text it was cut from changing: its own copy
-fn firstWord(t String&) String {
-    ps := t.Split(" ")
+# a piece kept past the text it was cut from changing: its own copy (text that changes is an Array<Char>, a String never
+# does - T13a - so its pieces are cut by Windows)
+fn firstWord(t Array<Char>&) Array<Char> {
+    ps := t.Windows(3)
     return ps[0]
 }
 
@@ -45,7 +46,7 @@ test letters "reads Split's pieces and walks over them where they stand" {
 }
 
 test firstWord "a piece handed back is a copy the caller keeps" {
-    t := $"one two"
+    t Array<Char> = $"one two"
     w := firstWord(t)
     t[0] = 'O'
     assert settle() > 0 and w == "one" and t == "One two"
@@ -63,9 +64,9 @@ test letters "elements of an array of text written in the walk are the elements 
 }
 
 test letters "pieces kept in a Vec are its own" {
-    t := $"p q r"
-    kept := Vec<String>()
-    for w in t.Split(" ") { kept.Push(w) }
+    t Array<Char> = $"pqr"
+    kept := Vec<Array<Char>>()
+    for w in t.Windows(1) { kept.Push(w) }
     t[0] = 'P'
     assert settle() > 0 and kept.Len() == 3 and kept[0] == "p" and kept[2] == "r"
 }
@@ -84,7 +85,7 @@ test total "a built result read where it stands, then kept as a copy" {
 Baked I64 = letters("a bb ccc") + lineLengths("x\nyy\n") + total(I64[1, 2, 3])
 assert Baked == 48
 
-KeptWord String = firstWord("one two")
+KeptWord Array<Char> = firstWord("one two")
 assert KeptWord == "one"
 
 test letters "the run time agrees with what the evaluator baked" {

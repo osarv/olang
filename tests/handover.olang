@@ -1,44 +1,45 @@
 # D9h (docs/rework.md sections 13 and 18): value results that are views of what a function is given, handed over
-# without a copy where the caller only reads them and copied where it keeps them.
+# without a copy where the caller only reads them and copied where it keeps them. The text is an Array<Char>, which the
+# tests write to show a copy is the caller's own (a String never changes, T13a).
 
-type entry struct(name mut String&, next entry?&) {
+type entry struct(name mut Array<Char>&, next entry?&) {
     name
     next
 }
 
 # a value result that is a view of what a parameter reaches
-fn nameOf(e entry) String { return e.name }
+fn nameOf(e entry) Array<Char> { return e.name }
 
-fn inner(t String&) String { return t[1:t.Len() - 1] }
+fn inner(t Array<Char>&) Array<Char> { return t[1:t.Len() - 1] }
 
 # a view of a view, handed back as it is
-fn twice(t String&) String { return inner(inner(t)) }
+fn twice(t Array<Char>&) Array<Char> { return inner(inner(t)) }
 
 # one of two views, or new text
-fn pick(a String&, b String&, k I64) String {
+fn pick(a Array<Char>&, b Array<Char>&, k I64) Array<Char> {
     if k == 0: return a
     if k == 1: return b[1:]
     return $a $b
 }
 
-fn count(t String&) I64 { return t.Len() }
+fn count(t Array<Char>&) I64 { return t.Len() }
 
 type named trait {
-    Label() String
+    Label() Array<Char>
 }
 
-type tag struct(text mut String&) {
+type tag struct(text mut Array<Char>&) {
     text
 }
 
 # a method an "any" calls through its table: the table's slot copies what it hands back
-fn (g tag) Label() String { return g.text[1:] }
+fn (g tag) Label() Array<Char> { return g.text[1:] }
 
 # a function a value calls: its copying wrapper copies what it hands back
-fn apply(f fn&(t String&) String, t String&) String { return f(t) }
+fn apply(f fn&(t Array<Char>&) Array<Char>, t Array<Char>&) Array<Char> { return f(t) }
 
 test inner "hands a view over where the caller only reads it, and copies it where the caller keeps it" {
-    s := $"[abcd]"
+    s Array<Char> = $"[abcd]"
     assert inner(s) == "abcd"
     assert count(twice(s)) == 2
     kept := twice(s)
@@ -49,8 +50,9 @@ test inner "hands a view over where the caller only reads it, and copies it wher
 }
 
 test pick "copies a view kept beside new text, whatever it gives" {
-    a, b := $"one", $"two"
-    xs := Vec<String&>()
+    a Array<Char> = $"one"
+    b Array<Char> = $"two"
+    xs := Vec<Array<Char>&>()
     for k in range 3 { xs.Push(pick(a, b, k)) }
     a[0] = 'O'
     b[1] = 'W'
@@ -65,7 +67,7 @@ test nameOf "keeps a view of a field's text its own when the entry changes" {
 }
 
 test apply "copies a view handed back through a function value and through an any" {
-    t := $"<xy>"
+    t Array<Char> = $"<xy>"
     r := apply(inner, t)
     t[1] = 'Q'
     assert r == "xy"
@@ -81,28 +83,28 @@ type cutter struct(n I64) {
     n
 }
 
-fn (k cutter) Call(t String&) String { return t[k.n:] }
+fn (k cutter) Call(t Array<Char>&) Array<Char> { return t[k.n:] }
 
-fn cutWith(f fn&(t String&) String, t String&) String { return f(t) }
+fn cutWith(f fn&(t Array<Char>&) Array<Char>, t Array<Char>&) Array<Char> { return f(t) }
 
 # a guaranteed tail call of a function handing back a view of its own argument: handed back as it is too
-fn skipSpaces(t String&, i I64) String {
+fn skipSpaces(t Array<Char>&, i I64) Array<Char> {
     if i < t.Len() and t[i] == ' ': become skipSpaces(t, i + 1)
     return t[i:]
 }
 
 # ... and one viewing new text, which no caller can know: copied at every call (ViewOther)
-fn spacedOut(t String&, i I64) String { become skipSpaces($" " $t, i) }
+fn spacedOut(t Array<Char>&, i I64) Array<Char> { become skipSpaces($" " $t, i) }
 
 test cutWith "copies the view an adapter's Call hands back" {
-    t := $"abcdef"
+    t Array<Char> = $"abcdef"
     r := cutWith(cutter(2), t)
     t[3] = 'D'
     assert r == "cdef"
 }
 
 test skipSpaces "hands a tail call's view back, and copies one of new text" {
-    t := $"   ok"
+    t Array<Char> = $"   ok"
     k := skipSpaces(t, 0)
     t[3] = 'O'
     assert k == "ok" and skipSpaces(t, 0) == "Ok"
@@ -112,7 +114,7 @@ test skipSpaces "hands a tail call's view back, and copies one of new text" {
 }
 
 # the evaluator copies every returned array value: a baked global and a decided assert agree with the run time
-Twice String = twice("((ok))")
+Twice Array<Char> = twice("((ok))")
 assert Twice == "ok"
 assert pick("ab", "cd", 1) == "d"
 assert skipSpaces("  hi", 0) == "hi" and spacedOut("ab", 0) == "ab"
@@ -123,17 +125,17 @@ type sink struct(f fn&()) {
     f
 }
 
-fn fired(s sink&) String {
+fn fired(s sink&) Array<Char> {
     s.f()
     return "!"
 }
 
 # a join's operands are evaluated before any piece renders (E11b): mid's result is its own copy before fired runs
-fn joinedFired(t String&, s sink&) String { return $inner(t) $fired(s) }
+fn joinedFired(t Array<Char>&, s sink&) Array<Char> { return $inner(t) $fired(s) }
 
 test joinedFired "copies a view where a closure an argument holds may write what it views before it is read" {
-    text := $"[abcd]"
-    r mut String& = text
+    text Array<Char> = $"[abcd]"
+    r mut Array<Char>& = text
     s := sink(fn() { r[1] = 'X' })
     assert joinedFired(text, s) == "abcd!"
     assert text == "[Xbcd]"
