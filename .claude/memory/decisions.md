@@ -2625,3 +2625,14 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   held by value in its one place and laid out there (a struct field, a Vec's buffer element, a local); every other use is
   a reference to that place; `T.Size` of a holder includes it inline; a collection's growth relocates its unique
   elements (a move of storage, never a copy - the old buffer's slots emptied).
+- unique vs immut settled 2026-11-03 (the user: "the reason we need unique to be unique is in case the unique object
+  changes, we cannot have copies of it. For the immutable ones, they can't change, so we can copy them all we want"):
+  unique - may change, so one value and references to it; immut - cannot change, so copies are free (map entries, short
+  strings inline). A unique value is held by value only where it is created - the place its constructor's (or a call's)
+  fresh value lands, which may be a local, a field, a collection's slot, an argument; from there on only references
+  ("the holding as value only comes with the constructor"); if it must live longer it is built in the arena where it
+  is kept (inference). A destructor needs unique; immut has none.
+- Asked 2026-11-03: a by-value unique parameter (`fn keep(f File)` given `keep(File(...))`) - may the body store it
+  once more (into a field or a collection) at its last use? PROPOSED yes: a parameter given a fresh value is itself
+  fresh, so it may land once, the checker refusing any use of it after (a local check, no general move tracking);
+  that is how `Vec.Push(x T)` keeps a unique element. Copying a unique collection still asked: `v.ToVec()` recommended.
