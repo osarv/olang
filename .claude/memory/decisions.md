@@ -2795,3 +2795,18 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   caught by -sanitize, the dead-region evaluator and fuzz free. Built after the NLL round (it touches free.olang beside
   it): a value whose owned storage dies where a new value of the same shape is built into the same place reuses that
   storage when it fits (the made-for values, Perceus/Koka's reuse without counts).
+- QCR ASKED 2026-11-03 (the user: "we basically try to abstract memory management away from the user ... like Python
+  ... There are still some rough edges ... Is there a way to round those out and make it basically act completely like
+  Python, but without a garbage collector, using scopes as much as possible?"). Answered: the edges left are (1)
+  refusals Python accepts - a view of short-lived storage kept longer (O27, the no-extension rule), reference locals
+  reassigned (NLL, queued), function values whose captures relate scopes (T22a); (2) memory a program keeps that Python
+  would free - a value with several holders losing its last one mid-scope (graphs, parent-pointer trees, caches),
+  which no scope or single-holder analysis frees; (3) words Python has none of - `&`, `mut`, `?&`, `unique`, `immut`.
+  PROPOSED: (a) O27 becomes placement - storage a kept view needs is built where the view is kept (the scope rule
+  applied, as item 17), no refusal, its memory listed by -memory - reversing QCB follow-up 2's no-extension rule
+  (the user's call); (b) NLL as decided; (c) T22a's function values carry their inferred captures' scopes in the
+  function type (compile time); (d) the multi-holder case is the one place without a compile-time answer - the
+  limited reference-counting carve-out already allowed for owner trees, widened to "a value the compiler finds with
+  several holders that may outlive one another", still nothing written, or kept as it is; (e) (3) stays - those words
+  carry meaning Python lacks (sharing, writing, absence, identity), each inferred where it can be. Offered: an audit
+  of every refusal in checks/cases Python would accept, counted by cause, before deciding (a)-(d). ASKED.
