@@ -2661,3 +2661,16 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   implicitly - a copy of a unique value is a reference - and writing `f.Copy()` calls it, its result fresh and landing by
   value where it is put (`g := f.Copy()` holds a new File by value); a unique type without a Copy cannot be duplicated
   at all; so a Vec (unique) is duplicated by `v.Copy()`, and ToVec is not needed for it. ASKED to confirm.
+- unique/Copy SHELVED 2026-11-03 (the user: "let's shelf it for a while"): the last proposal (Copy always the method
+  making a new value; implicit for ordinary types, only written for unique ones, a copy of a unique value a reference)
+  waits; nothing built.
+- QCP ASKED 2026-11-03 (the user: "whether or not when we make references of things or dereference them we want to
+  actually mark that in the language, like C does ... we would need both an address of and a deref"). Today both are
+  implicit (E12: a place lent to a `&` parameter or bound to a reference borrows, a reference read into a value place
+  copies, `p.x` reads through). Options laid out: (A) keep implicit (Go, Swift, Java); (B) mark both, `&x` and a
+  deref (C, Rust's `&`/`*`, Zig's `&x`/`p.*`) - noise on every field read and against principle 3, and it buys little
+  where scopes are checked and there is no pointer arithmetic; (C) mark only where it decides something the reader
+  cannot see: a writable lend at the call site, `grow(mut c)` - the call shows the callee may change `c` (Swift's `&x`
+  for inout, C#'s `ref x`, Rust's `&mut x`), the user's own reason for keeping `mut` ("knowing whether a function you
+  pass things into mutates what you passed"); receivers unmarked (`c.Grow()` acts on c by its look). Recommended (C).
+  In effect: (A).
