@@ -15,7 +15,7 @@ fn (b Big&) Str() String {
     return sb.ToString()
 }
 G String& = $Big(1) "g"
-type Res struct(k I64) {
+type Res unique struct(k I64) {
     k
 } destruct { try io.Println("dtor " $Big(k) "!") catch io.Error { } }
 type Holder struct(k I64) {

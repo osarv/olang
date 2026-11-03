@@ -861,10 +861,14 @@ fn (p mut Parser&) typeDeclRest(at I32, name source.NameId) ast.Decl& ? Fail {
         params = try p.typeParams()
         p.typeParamsRead = params
     }
-    # T13a: "immut" before the body - a word only there (L9b), so no name is taken from programs
+    # T13a, T13b: "immut" or "unique" before the body - words only there (L9b), so no name is taken from programs; the
+    # two are never one type's, an error where both are written
     word := ast.DeclWord.Plain
-    if p.sees(token.Tok.Iden) and p.text(p.tk()) == "immut" and declWordBody(p.ts.Toks[p.after(1)].Kind) {
-        word = ast.DeclWord.Immut
+    for p.sees(token.Tok.Iden) and declWordBody(p.ts.Toks[p.after(1)].Kind) {
+        w := declWord(p.text(p.tk()))
+        if w == ast.DeclWord.Plain: break
+        if word != ast.DeclWord.Plain: p.report(p.here(), p.tk().End, msgs.UniqueImmut())
+        word = w
         p.advance()
     }
     extending := p.accept(token.Tok.Extends)
@@ -872,6 +876,13 @@ fn (p mut Parser&) typeDeclRest(at I32, name source.NameId) ast.Decl& ? Fail {
     sp := p.from(at)
     if p.sees(token.Tok.StmtEnd) { p.advance() }
     return ast.Decl.Type(sp, ast.TypeDecl(name, params, extending, body, Array<ast.Attr&>(0), word))
+}
+
+# the word a type declaration's word spells (T13a, T13b) - Plain for a name that is none
+fn declWord(t String&) ast.DeclWord {
+    if t == "immut": return ast.DeclWord.Immut
+    if t == "unique": return ast.DeclWord.Unique
+    return ast.DeclWord.Plain
 }
 
 # what may follow a type declaration's word (T13a) - so "type X immut" alone is X declared over a type named immut

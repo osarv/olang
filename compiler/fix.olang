@@ -32,8 +32,8 @@ ToolNames Array<String&> = String&["bare_typevars", "perm_mut", "int_literal_i64
     "helper_rename", "null_migrate", "checkerror_rename", "stutter_rename", "checked_migrate", "contracts_migrate"
     "try_migrate", "as_migrate", "errortype_migrate", "list_vec", "link_migrate", "match_migrate", "question_migrate"
     "unused_migrate", "errorcase_rename", "variadic_migrate", "scopes_migrate", "fnref_migrate", "clone_migrate"
-    "textbuild_migrate"]
-ToolKinds Array<I64> = I64[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0]
+    "textbuild_migrate", "unique_migrate"]
+ToolKinds Array<I64> = I64[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0]
 
 fn driven(kind I64) Bool { return kind >= DrivenOpt }
 

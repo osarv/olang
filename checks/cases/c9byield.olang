@@ -5,7 +5,7 @@ import "std/io"
 
 Ends mut I64 = 0
 
-type Res struct(n I64) {
+type Res unique struct(n I64) {
     n
     t String& = $"resource " $n " - its text, padded out to a fair length ................."
 } destruct {

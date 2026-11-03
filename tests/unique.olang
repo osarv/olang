@@ -1,0 +1,134 @@
+# T13b: a value of a unique type exists in one place - a fresh value (a constructor's or a call's result) lands by value
+# where it is put, and any other copy of it is a reference: "w := f" names f, a walk's name and a binding name the
+# element where it is held. A by-value parameter given a fresh value hands it on once, where it is mentioned last
+# (a Vec's Push); a returned local is the result itself. A holder of a unique part by value is unique, and so is a
+# collection of them - an element is reached where the collection holds it (x[i] through RefMut, a walk through Ref).
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn (t mut Token&) Use() { t.uses++ }
+
+fn (t Token&) Uses() I64 { return t.uses }
+
+# a holder of one by value - unique itself
+type Slot struct(tok Token, label String) {
+    tok, label
+}
+
+# a case carrying one
+type Held enum {
+    Empty
+    One(tok Token)
+}
+
+# made where it is used, handed back fresh: a returned local is the result
+fn mint(id I64) Token {
+    t := Token(id)
+    t.Use()
+    return t
+}
+
+# a by-value parameter handed on at its last mention - into a value made
+fn slotOf(t Token, label String) Slot { return Slot(t, label) }
+
+# ... or on one path, not the other
+fn keepIf(v mut Vec<Token>&, t Token, keep Bool) I64 {
+    if keep {
+        v.Push(t)
+        return 1
+    }
+    return t.id
+}
+
+fn names(f mut Token&) I64 {
+    w := f # a reference to f, never a copy
+    w.Use()
+    w.Use()
+    return f.uses
+}
+
+fn walked(v Vec<Token>&) I64 {
+    n I64 = 0
+    for t in v { n += t.id * 10 + t.uses }
+    return n
+}
+
+fn kept() I64 {
+    v := Vec<Token>()
+    v.Push(Token(1))
+    v.Push(mint(2))
+    keepIf(v, Token(3), true)
+    left := keepIf(v, Token(4), false)
+    v[0].Use() # in place, through RefMut
+    v.RefMut(2).Use()
+    first := v[0] # a reference to the element
+    first.Use()
+    p := try v.Pop() catch VecError { return -1 }
+    return walked(v) * 100 + p.id * 10 + left
+}
+
+fn held() I64 {
+    s := Slot(mint(7), "seven")
+    r := s # Slot is unique: a reference
+    r.tok.Use()
+    h := Held.One(Token(8))
+    n I64 = 0
+    match h {
+        case Held.One(t) {
+            t.Use() # the payload's own, where h holds it
+            n = t.id
+        }
+        case _ { }
+    }
+    if h == Held.One: n = n * 10 + h.tok.uses
+    return s.tok.uses * 1000 + n
+}
+
+fn tokenUses() I64 {
+    t := Token(9)
+    return names(t) * 10 + slotOf(Token(5), "five").tok.id
+}
+
+# while compiling as at run time (K2, S17a)
+Kept := kept()
+Held_ := held()
+Uses := tokenUses()
+assert Kept == 3334 and Held_ == 2081 and Uses == 25
+
+test "a unique value is one place: copies are references, fresh values land by value" {
+    assert tokenUses() == Uses
+    a := Token(1)
+    b := a
+    b.Use()
+    assert a.uses == 1 and a.Uses() == 1
+    s := slotOf(mint(3), "x")
+    assert s.tok.uses == 1 and s.label == "x"
+}
+
+test "a Vec of unique values: Push takes fresh ones, x[i] is the element in place, a walk names each where it is" {
+    assert kept() == Kept
+    v := Vec<Token>()
+    for i in range 4 { v.Push(Token(i)) }
+    for i in range 4 { v[i].Use() }
+    total I64 = 0
+    for t in v { total += t.uses }
+    assert total == 4 and v.Len() == 4
+    t := try v.TakeAt(1)
+    assert t.id == 1 and v.Len() == 3 and v.Ref(1).id == 2
+}
+
+test "a holder of a unique part is unique: its copies are references too, its payload bound in place" {
+    assert held() == Held_
+}
+
+test "a Map of unique values: Put takes fresh ones, Take hands one back" {
+    m := Map<String, Token>()
+    m.Put("a", Token(1))
+    m.Put("b", Token(2))
+    m.Put("a", Token(3))
+    t := try m.Take("a")
+    assert t.id == 3 and m.Len() == 1 and (try m.Ref("b")).id == 2
+}

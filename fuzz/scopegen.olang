@@ -47,13 +47,13 @@ fn HasDtors(seed U64) Bool { return seed % 4 == 3 }
 DtorPrelude := (
     "Made mut I64 = 0\n"
     "Dropped mut I64 = 0\n"
-    "type Tracker struct() {\n"
+    "type Tracker unique struct() {\n"
     "    Made = Made + 1\n"
     "} destruct {\n"
     "    Dropped = Dropped + 1\n"
     "}\n"
     "# builds through its field as it is destructed\n"
-    "type ResA struct(n mut Node&, k I64) {\n"
+    "type ResA unique struct(n mut Node&, k I64) {\n"
     "    n\n"
     "    k\n"
     "    Made = Made + 1\n"
@@ -62,7 +62,7 @@ DtorPrelude := (
     "    n.next = Node(k)\n"
     "}\n"
     "# a task it spawns builds destructor-bearing values into the scope being closed (C9a, P2)\n"
-    "type ResB struct(n mut Node&, k I64) {\n"
+    "type ResB unique struct(n mut Node&, k I64) {\n"
     "    n\n"
     "    k\n"
     "    Made = Made + 1\n"
@@ -75,7 +75,7 @@ DtorPrelude := (
     "    n.next = Node(kk + keep.Len())\n"
     "}\n"
     "# a task it spawns builds through its field; a value it makes is destructed as it returns\n"
-    "type ResC struct(n mut Node&, k I64) {\n"
+    "type ResC unique struct(n mut Node&, k I64) {\n"
     "    n\n"
     "    k\n"
     "    Made = Made + 1\n"
@@ -1303,7 +1303,7 @@ fn (g mut SG&) secondScenario(k I64) String& {
         # a destructor of the helper's block writes what it holds as the scopes close - after the result was computed;
         # no global (a destructor is never run while compiling): the caller checks its own value instead
         rz := "Rz" $k
-        return ("type " $rz " struct(r mut Tx&) { r } destruct { r[0] = 'Z' }\n" "fn " $f "(i I64) Tx {\n" $sbody
+        return ("type " $rz " unique struct(r mut Tx&) { r } destruct { r[0] = 'Z' }\n" "fn " $f "(i I64) Tx {\n" $sbody
                 "    d := " $rz "(s)\n    return s\n}\n" "fn s" $k "() I64 {\n    x := " $f "(Run + " $v ")\n    churn()\n"
                 "    if x[0] != 'a' { say(\"BAD dtor " $k ": \" $x) }\n    return x.Hash()\n}\n")
     }
@@ -1448,7 +1448,7 @@ FreePrelude := (
     "}\n"
     "# a resource: its destructor reads what it holds, so one run on storage reclaimed too soon is a use after it\n"
     "Ends mut I64 = 0\n"
-    "type Res struct(n I64) {\n"
+    "type Res unique struct(n I64) {\n"
     "    n\n"
     "    t String& = $\"res \" $n \" - text it holds\"\n"
     "} destruct {\n"

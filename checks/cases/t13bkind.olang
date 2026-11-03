@@ -1,0 +1,6 @@
+# check: fail error[T13b]: 'unique' says a value exists in one place - a trait has no values of its own
+# T13b: a trait is no type of values
+type Closer unique trait {
+    Close()
+}
+fn main() { }

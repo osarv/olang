@@ -1,6 +1,6 @@
 # G9d/T25c: a temporary and a read-only reference meet at read-only in either order
 import "std/io"
-type Res struct(k I64) {
+type Res unique struct(k I64) {
     k
 } destruct { try io.Println("d" $k) catch io.Error { } }
 fn pick<T>(a T, b T, c Bool) T { return a if c else b }

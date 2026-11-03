@@ -3,7 +3,7 @@
 # build leaves out; "_" holds a name's place; a local whose type has a destructor is held for its scope's close
 import "std/io"
 Closed mut I64 = 0
-type Guard struct(n I64) { n } destruct { Closed++ }
+type Guard unique struct(n I64) { n } destruct { Closed++ }
 type Box struct() { v I64 = 0 }
 fn divmod(a I64, b I64) I64, I64 { return a / b, a % b }
 fn hold() {

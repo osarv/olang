@@ -2,7 +2,7 @@
 # C9b: a call that provably keeps nothing of what it is given leaves its argument the only way to reach the instance -
 # the Destroy() compiles, runs the destructor at once, and every other one still runs at its scope's close, newest first
 Log mut I64 = 0
-type Res struct(id I64) {
+type Res unique struct(id I64) {
     id
     t String& = $"res " $id
 } destruct {

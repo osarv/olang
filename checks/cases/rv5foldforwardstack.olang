@@ -4,7 +4,7 @@
 # a folded stand-in is folded into what that one forwards to, so R(1) and R(2) are destructed with run's scope.
 import "std/os"
 Dtors mut I64 = 0
-type R struct(n I64) {
+type R unique struct(n I64) {
     n
 } destruct {
     Dtors += n

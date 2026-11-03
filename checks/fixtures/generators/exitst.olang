@@ -2,7 +2,7 @@
 # its drop registered with the block, which the test's unwinding closes), and the next test runs
 import "std/io"
 
-type Res struct(id I64) {
+type Res unique struct(id I64) {
     id
 } destruct {
     try io.Println("drop " $id) catch { }

@@ -1,7 +1,7 @@
 # C11/O16: a try's catch default promoted with the try - one constructor call, one destruction
 import "std/io"
 type E error { X }
-type FRes struct(k I64) ? E {
+type FRes unique struct(k I64) ? E {
     k
     gone Bool = false
     if k < 0 { error E.X }

@@ -28735,3 +28735,62 @@ RefMut - the latter wherever a call is made on an element in place, E31b - and M
 the prelude's `StringBuilder.ToString` called `ToArray` and so every program took an array from Vec; once ToString
 stopped, seven M19g cases (m19gonce, m19grefgrow ...) compiled. `viewsHeld` now counts the Vec and Map modules' arrays
 and references alike.
+
+## unique types (2026-11-03, T13b): Part A, the type rules
+
+The user settled `unique` on 2026-11-03 (decisions.md "unique DECIDED", "Copy and unique DECIDED", "Collections
+DECIDED", "unique vs immut settled", "Unique destructor timing DECIDED"): a value of a unique type exists in one place;
+a fresh value lands by value where it is put; any other copy of it is a reference (`w := f` makes `w` a `File&`); a slot
+laid out for the value given an existing one is an error naming `&`; a by-value parameter given a fresh value lands
+once more at its last use; a unique type declares no Copy; a holder of a unique part by value is unique unless its own
+Copy makes the part anew, collections following their elements; a destructor requires unique; unique and immut never
+both; a generic copying a value of its type variable is refused at the call. Built on wt-uniq as Part A (the rules);
+Part B is the destructor timing ("Rust's way").
+
+**How.** `unique` is a word of one place beside `immut` (`ast.DeclWord.Unique`; the parser reads either word, an error
+where both are written). `generic.DeclFor` registers a declaration that says it (`types.Table.MarkUnique`), and
+`types.Table.Unique` answers structurally - declared, or holding a unique part by value through fields, payloads, an
+array's elements or a type's base, never through a reference, and never for a type declaring its own Copy - kept once
+every part was typed (`generic.Program.Unique` readies the parts' bodies first). The rules sit where copies are already
+decided: check's `storeCopy` (a store), `valueArg` (a by-value argument, the receiver included), `partCopy` (a payload, an
+element of an array made, a comprehension's value), the returns, and a local's declaration call `uniqueLand`, which lets
+a fresh value through, records a by-value parameter's whole value (or a returned local's) as a **landing**, and says
+anything else existing - where the type mentions a unique type argument of the instance being checked, at the program's
+call that bound it (`boundMention`, as G18a's `needErr` does, `UniqueNeedsCopy`), else where it is. A `:=` from an
+existing unique value - and a walk's element over an array, a match's binding, a capture - is made a reference to the
+place (`uniqueRef`: E12's borrow, writable where `placeWritable` says), so nothing new below check knows of unique: a
+reference is what lowering, the scope pass, early freeing and the evaluator already handle. After each attempt,
+`settleLandings` walks each body with `typed.Landings` - path-sensitive, unlike D9i's `lastUses` (whose linear order
+would refuse `if keep { v.Push(t) } else { ... t ... }` and Map.Put's two landings): a branch's mentions are another
+branch's; a loop is walked twice so its next turn's mentions follow a landing in it, a break or a return ending a path
+there (Map.Put's landing in its probe loop, followed by `return`, is fine); deferred code, a task and a join's clauses
+mention after everything. A landing a later mention follows is `UniqueAfter`.
+
+**Collections of unique values.** `x[i]` on a type declaring At copies, so for a unique element At's instance would be
+refused (`At needs a copy`) - and E31b's in-place store first elaborates the read through At. `uniqueElem` takes the
+element where the collection holds it instead: `x.RefMut(i)` where `x` is reached writably, else `x.Ref(i)` - so
+`v[0].Use()`, `v[0].fd = 7` and `f := v[0]` (a reference) act on the element in place; and S9d's walk of an indexable
+holding unique elements names each through `Ref` (`uniqueWalk`), the walk's name a read-only reference. Push, Insert,
+Put and Update take their elements as by-value parameters handed on once; Pop, TakeAt, SwapTake and Map.Take hand a
+value back through `vacate`, a fresh value (a Take). What copies an element out - Get, First, Last, IndexOf's and Has's
+by-value parameter given an existing value, PushAll's elements - is refused at the call, which names the method.
+
+**Decided (mine).** (1) Only a by-value parameter lands again, and a local only by being returned whole (O26a: the local
+is the result) - the user's "taking a unique value by value doesn't work either, whether by a parameter or a new local";
+a local at its last use in a store or an argument is not handed on. (2) A `:=` field of a constructor is a slot of the
+instance, so it takes a value (a parameter's landing) rather than becoming a reference to the parameter. (3) In a
+generic instance, a `:=` copy written in the body is the generic's need; a walk's element and a binding become references
+there as in any code (the generic's author wrote no copy). (4) A rendering, `==` and field reads treat a unique value
+as any value - nothing is copied by reading it. (5) **Destructor types stay reference-only (C11) in this part**, now
+enforced where a type is written as a place holding a value: a variable, a parameter (a constructor's too - they were
+checked nowhere), a result, a field, a type argument (`Vec<Res>` names `Vec<Res&>`); the type named in an expression
+(`Res(1)`, `Box<Res>(...)`, `check.resolveNamed`) is no such place. Rule 7's "a unique destructor type may now be held by
+value in one place" is Part B's: a destructor registered with its scope at its constructor (O16) runs on the instance
+the constructor built, while a by-value value moves - a by-value parameter, a result, a Vec's growth - so holding one by
+value needs the destructor to follow its one holder (a drop obligation with the value, Rust's way), which is Part B.
+
+**Found on the way (pre-existing, fixed).** C11 said a destructor-bearing type is reference-only, but nothing enforced
+it: `x Res = Res(2)`, `fn f(r Res)`, `type Box struct(r Res)` compiled, each a bitwise copy of the constructor's arena
+instance whose destructor ran on that instance - a write to the copy was never seen (a probe summed 6039 where the
+copies held 10133), and the copy could outlive the instance's scope (use after release). Enforced now; nothing in the
+repository relied on it.

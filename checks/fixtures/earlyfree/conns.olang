@@ -5,7 +5,7 @@ import "std/io"
 N I64 = 1000000
 Closed mut I64 = 0
 
-type Conn struct(fd I64) {
+type Conn unique struct(fd I64) {
     fd
     hits I64 = 0
 } destruct {

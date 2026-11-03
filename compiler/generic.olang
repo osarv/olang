@@ -234,6 +234,7 @@ fn (p mut Program&) DeclFor(mi I64, ei I64) types.DeclId {
         if td.Params.Len() > 0 { n = I32(td.Params.Len()) }
     }
     d = p.T.AddDecl(mi, e.Name, kind, n)
+    if td is not null and td.Word == ast.DeclWord.Unique { p.T.MarkUnique(d) }   # T13b
     p.declAt.Put(key, d)
     p.declMi.Push(mi)
     p.declEi.Push(ei)
@@ -2738,6 +2739,32 @@ fn (p mut Program&) Immut(t types.TypeId) Bool {
     if p.DeclWord(t) == ast.DeclWord.Immut { return true }
     if p.T.KindOf(t) != types.Kind.Named or not p.Body(t) or p.T.DeclKindOf(p.T.DeclOf(t)) != types.DeclKind.Over { return false }
     return p.Immut(p.T.Base(t))
+}
+
+# T13b: whether a value of t exists in one place (types.Unique) - the parts it holds by value resolved first, so the
+# answer is the whole one
+fn (p mut Program&) Unique(t types.TypeId) Bool {
+    if not p.T.AnyUnique(): return false
+    if not p.T.UniqueSettled(t): p.partsReady(t, 0)
+    return p.T.Unique(t)
+}
+
+fn (p mut Program&) partsReady(t types.TypeId, depth I64) {
+    if depth > 16 or p.T.IsRef(t): return
+    match p.T.KindOf(t) {
+        case types.Kind.Named {
+            if not p.Body(t): return
+            match p.T.DeclKindOf(p.T.DeclOf(t)) {
+                case types.DeclKind.Struct { for f in p.T.Items(p.T.Fields(t)) { p.partsReady(f, depth + 1) } }
+                case types.DeclKind.Enum { for f in p.T.Items(p.T.Cases(t)) { p.partsReady(f, depth + 1) } }
+                case types.DeclKind.Over { p.partsReady(p.T.Base(t), depth + 1) }
+                case _ { }
+            }
+        }
+        case types.Kind.Array { p.partsReady(p.T.Elem(t), depth + 1) }
+        case types.Kind.Record { for f in p.T.Items(p.T.Parts(t)) { p.partsReady(f, depth + 1) } }
+        case _ { }
+    }
 }
 
 fn (p mut Program&) extends(d types.DeclId) Bool {

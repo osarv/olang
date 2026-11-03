@@ -248,6 +248,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # E31b: the calls made in place through x[i] (inPlaceCall), as each attempt made them, and the sites found, after an
     # attempt, to reach what could change the collection - kept from one attempt to the next, as factPresets is
     inPlaceReads Vec<inPlaceRead>
+    landings Vec<landing>                  # T13b: unique values handed on out of a parameter or a returned local
     globalTop Bool = false                 # resolving a global's written type: its "mut" is the binding's (S6)
     copyBodies Vec<I64>                    # E31d: the bodies of the declared Copies a copy calls, made by wantCopy
     copyWanted Map<types.TypeId, Bool>     # ... the types wantCopy has walked
@@ -565,6 +566,17 @@ type roFn struct(Body I64, First I64, At diag.Where, What String&) {
 
 # an element read through At where a place is wanted (E31, E31b): its body and site, the collection's place, and the
 # type declaring At and SetAt
+# T13b: a unique value handed on by value out of a local - a by-value parameter's, or a returned local's - which must be
+# its last mention (settleLandings): the body, the local, the read, its type, and the outermost instance whose call
+# bound the type when it is a generic's need (-1 for none)
+type landing struct(Body I64, Local I64, At source.Span, Ty types.TypeId, Inst I64) {
+    Body
+    Local
+    At
+    Ty
+    Inst
+}
+
 type atRec struct(Body I64, Site I64, Base typed.Lvalue&, Of types.TypeId) {
     Body
     Site
@@ -588,6 +600,7 @@ fn (c mut Checker&) CheckProgram() {
         mark := c.P.L.Diags.Count()
         c.attempt()
         c.settleUnset()
+        c.settleLandings()
         c.settleHeldWalks()
         c.settleIdle()
         c.settleUnread()
@@ -640,6 +653,7 @@ fn (c mut Checker&) CheckMain() {
 fn (c mut Checker&) reset() {
     c.Bodies = Vec<mut typed.Body&>()
     c.copyBodies = Vec<I64>()
+    c.landings = Vec<landing>()
     c.copyWanted = Map<types.TypeId, Bool>()
     c.viewBodies = Vec<pair.Pair<I64, I64>>()
     c.testKeys = StringBuilder()   # B7a's targets are said once an attempt (another attempt had found every one twice)
@@ -1378,6 +1392,8 @@ fn (c mut Checker&) copyShape(f I64, fd ast.Func&) {
     res := c.P.T.Result(sig)
     if c.P.Immut(rt) {
         c.err(at, msgs.ImmutCopy(c.ty(rt)))
+    } else if c.P.T.DeclaredUnique(rt) {
+        c.err(at, msgs.UniqueCopy(c.ty(rt)))
     } else if not c.isNamed(rt) or not (c.isStruct(rt) or c.isEnum(rt)) {
         c.err(at, msgs.CopyOnWhat(c.ty(rt)))
     } else if not c.isRef(ps[0]) or c.writable(ps[0]) or c.isRef(res) or not c.P.T.Same(c.P.T.Plain(res), c.P.T.Plain(rt)) {
@@ -1668,6 +1684,7 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
     match td.Body {
         case ast.TypeBody.Struct(sb) {
             c.ctorVarRules(td, sb)
+            for prm in sb.Params { c.dtorWritten(prm.Ty, false) }   # C11: a parameter's type is checked nowhere else
         }
         case ast.TypeBody.Enum(cases, _) {
             # T4, T17: a payload's types are known ones, said where they are written
@@ -1736,7 +1753,78 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
         at := try text.Find("extends") catch default nat
         c.err(source.Span(sp.Start + I32(at), sp.Start + I32(at + 7)), msgs.ExtendsNotBase())
     }
+    c.uniqueRules(sp, td, d)
     c.pop()
+}
+
+# T13b: what "unique" is said of - a struct, an enum or a type over another, never with what is immut (written over one,
+# or holding a unique part) - and C11: a type declaring a destructor says it
+fn (c mut Checker&) uniqueRules(sp source.Span, td ast.TypeDecl&, d types.DeclId) {
+    self := c.P.SelfType(d)
+    text := c.src(sp)
+    if td.Word == ast.DeclWord.Unique {
+        at := try text.Find("unique") catch default 0
+        wsp := source.Span(sp.Start + I32(at), sp.Start + I32(at + 6))
+        what := c.uniqueOn(td)
+        if what != "" { c.err(wsp, msgs.UniqueKind(what)) } else if c.overImmut(td) { c.err(wsp, msgs.UniqueImmut()) }
+    }
+    match td.Body {
+        case ast.TypeBody.Struct(sb) {
+            if c.P.Immut(self) { c.immutHoldsUnique(self, fieldSpans(sb)) }
+            if sb.Dtor.Len() > 0 and td.Word != ast.DeclWord.Unique {
+                c.err(source.Span(sb.DtorSp.Start, sb.DtorSp.Start + 8), msgs.DestructNotUnique(c.text(td.Name)))
+            }
+        }
+        case ast.TypeBody.Enum(cases, _) {
+            if not c.P.Immut(self) or c.P.T.Items(c.P.T.Args(self)).Len() > 0 or not c.P.Body(self): return
+            for cd in cases {
+                for prm in cd.Payload {
+                    pt := c.P.Resolve(c.fr().Ctx, prm.Ty)
+                    if c.isRef(pt) or not c.P.Unique(pt): continue
+                    c.err(source.Span(prm.Sp.Start, prm.Sp.Start + I32(c.text(prm.Name).Len())), msgs.UniqueImmutPart(c.ty(self), c.ty(pt)))
+                    return
+                }
+            }
+        }
+        case ast.TypeBody.Over(_, _) {
+            if td.Word == ast.DeclWord.Immut and c.P.Unique(c.P.T.Base(self)) {
+                at := try text.Find("immut") catch default 0
+                c.err(source.Span(sp.Start + I32(at), sp.Start + I32(at + 5)), msgs.UniqueImmut())
+            }
+        }
+        case _ { }
+    }
+}
+
+# T13b: what a "unique" type declaration says it of that has no values of its own - "" for a struct, an enum, a type
+# over a number or an array
+fn (c mut Checker&) uniqueOn(td ast.TypeDecl&) String {
+    return match td.Body {
+        case ast.TypeBody.Trait(_, _, _): "a trait"
+        case ast.TypeBody.Foreign: "an extern type"
+        case ast.TypeBody.Over(base, _): "a function type" if base == ast.TypeRef.Func else ""
+        case _: ""
+    }
+}
+
+# T13b: whether a unique type is declared over an immut one (`type L unique extends String`)
+fn (c mut Checker&) overImmut(td ast.TypeDecl&) Bool {
+    return match td.Body {
+        case ast.TypeBody.Over(base, _): c.P.Immut(c.P.Resolve(c.fr().Ctx, base))
+        case _: false
+    }
+}
+
+# T13b: an immut struct's field holding a unique part by value - said at the first; a generic's per instance is left to
+# the copies its values make
+fn (c mut Checker&) immutHoldsUnique(self types.TypeId, sps Vec<source.Span>&) {
+    if c.P.T.Items(c.P.T.Args(self)).Len() > 0 or not c.P.Body(self): return
+    fs := c.P.T.Items(c.P.T.Fields(self))
+    for i in range fs.Len() {
+        if i >= sps.Len() or c.isRef(fs[i]) or not c.P.Unique(fs[i]): continue
+        c.err(sps[i], msgs.UniqueImmutPart(c.ty(self), c.ty(fs[i])))
+        return
+    }
 }
 
 # whether a value of type t holds a value of declaration d by value: itself, or through a struct's fields, an enum's
@@ -5280,7 +5368,8 @@ fn (c mut Checker&) captureIn(fi I64, n source.NameId, sp source.Span) I64 {
     ox typed.Expr?& = null
     # a generator's Next holds a copy of a value array it is given, made where the generator lives (D18b): it is walked
     # after the call that gave it has returned
-    if not c.isRef(ot) and c.arrayOf(ot) != types.UnknownT and not fr.Gen {
+    # T13b: a unique value is named where it is held, as a value array is
+    if not c.isRef(ot) and (c.arrayOf(ot) != types.UnknownT or c.P.Unique(ot)) and not fr.Gen {
         it = c.P.T.Ref(ot, types.ReadOnly)
         ox = typed.Expr.Borrow(sp, it, op)
     } else {
@@ -5841,6 +5930,17 @@ fn (c mut Checker&) isEnum(t types.TypeId) Bool {
 }
 
 # a written type read in the current body's context
+# a type named where an expression is - a constructor called, a case of an instance, a type read through its name -
+# resolved as a written type is, the type itself no place that would hold its value (C11's held only by reference); its
+# arguments are
+fn (c mut Checker&) resolveNamed(t ast.TypeRef&) types.TypeId {
+    was := c.underRef
+    c.underRef = true
+    r := c.resolve(t)
+    c.underRef = was
+    return r
+}
+
 fn (c mut Checker&) resolve(t ast.TypeRef?&) types.TypeId {
     if t is null { return types.UnknownT }
     # G16b: a type instance written here is asked for at its first type argument
@@ -5900,7 +6000,7 @@ fn (c mut Checker&) typeNamed(x ast.Expr&) types.TypeId {
             path := typePathOf(g)
             if path.Len() == 0 { return types.TypeId(-1) }
             if path.Len() == 1 {
-                t := c.resolve(ast.TypeRef.Named(sp, path, targs))
+                t := c.resolveNamed(ast.TypeRef.Named(sp, path, targs))
                 return t if t != types.UnknownT else types.TypeId(-1)
             }
             # through an import ("lib.Opt<I64>.None"): the declaration is known, its arguments applied (G8)
@@ -10504,6 +10604,45 @@ fn (c mut Checker&) foreignNamed(tr ast.TypeRef&) Bool {
     }
 }
 
+# C11: a type declaring a destructor written where a value of it would be held - said at it; under a reference marker
+# the type itself is its referent, its arguments places of their own
+fn (c mut Checker&) dtorWritten(tr ast.TypeRef?&, under Bool) {
+    if tr is null: return
+    match tr {
+        case ast.TypeRef.Named(nsp, _, args) {
+            if not under and c.destructNamed(tr) {
+                c.err(nsp, msgs.DestructTypeByValue(c.src(tr.Span()), c.src(tr.Span())))
+                return
+            }
+            for a in args { c.dtorWritten(a, false) }
+        }
+        case ast.TypeRef.Ref(_, of, _) { c.dtorWritten(of, true) }
+        case ast.TypeRef.Perm(_, of, _) { c.dtorWritten(of, under) }
+        case ast.TypeRef.Spread(_, of) { c.dtorWritten(of, false) }
+        case _ { }
+    }
+}
+
+# C11: whether a written type names a struct declaring a destructor
+fn (c mut Checker&) destructNamed(tr ast.TypeRef&) Bool {
+    match tr {
+        case ast.TypeRef.Named(nsp, path, _) {
+            ref := c.P.R.Use(c.fr().File, nsp.Start)
+            if path.Len() > 1 { ref = c.P.R.Member(c.fr().File, nsp.End) }
+            if ref.Kind != names.What.Type or ref.Index < 0 { return false }
+            d := c.P.DeclFor(ref.Module, ref.Index)
+            if c.P.T.DeclKindOf(d) != types.DeclKind.Struct: return false
+            td := c.P.TypeDecl(d)
+            if td is null: return false
+            return match td.Body {
+                case ast.TypeBody.Struct(sb): sb.Dtor.Len() > 0
+                case _: false
+            }
+        }
+        case _ { return false }
+    }
+}
+
 # T20: an error type or a named set written as a function's result - an error is raised, never returned: said at its
 # name, whether it is one
 fn (c mut Checker&) errorResult(tr ast.TypeRef?&) Bool {
@@ -10642,6 +10781,11 @@ fn (c mut Checker&) namedMet(tr ast.TypeRef&, nsp source.Span, path Array<source
         c.err(nsp, msgs.FuncDeclBare(c.src(tr.Span())))
         return false
     }
+    if not c.underRef and c.destructNamed(tr) {
+        # C11: a type declaring a destructor is held by reference alone, its instance built where it lands
+        c.err(nsp, msgs.DestructTypeByValue(c.src(tr.Span()), c.src(tr.Span())))
+        return false
+    }
     c.underRef = false   # its type arguments are places of their own
 
     if c.foreignNamed(tr) {
@@ -10649,6 +10793,7 @@ fn (c mut Checker&) namedMet(tr ast.TypeRef&, nsp source.Span, path Array<source
         c.err(nsp, msgs.ForeignByValue(c.src(tr.Span())))
         return false
     }
+
     ref := c.P.R.Use(c.fr().File, nsp.Start)
     if ref.Kind == names.What.Type and ref.Index >= 0 and not c.fr().Ctx.Vars.Has(path[path.Len() - 1]) and
        not c.typeArgCountMet(path, args, ref) {
@@ -10983,7 +11128,7 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
             }
             if ref.Kind == names.What.Type and ref.Index >= 0 {
                 # written as a type is
-                t := c.resolve(ast.TypeRef.Named(gsp, Array<source.NameId>(1, n), targs))
+                t := c.resolveNamed(ast.TypeRef.Named(gsp, Array<source.NameId>(1, n), targs))
                 if t == types.UnknownT { return c.unknown(sp) }
                 return c.construct(sp, nsp, t, args)
             }
@@ -13101,6 +13246,11 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         # E31d: the supplied Copy - a value of its own, made as a copy of it is: field by field, deep through values,
         # shared at references
         t := typeOf(rx)
+        if c.P.Unique(c.deref(t)) {
+            # T13b: a unique value is never copied
+            c.err(nsp, msgs.UniqueCopy(c.ty(c.deref(t))))
+            return c.unknown(sp)
+        }
         v := c.read(sp, typed.Lvalue.Deref(sp, c.P.T.Referent(t), rx)) if c.isRef(t) else rx
         if not existingValue(v) { return v }
         c.wantCopy(typeOf(v), 0)
@@ -13465,7 +13615,7 @@ fn (c mut Checker&) reflType(x ast.Expr&) types.TypeId {
             }
             path := typePathOf(g)
             if path.Len() == 0 or (not builtin and c.genericNamed(g) < types.DeclId(0)) { return types.TypeId(-1) }
-            if path.Len() == 1 { return c.resolve(ast.TypeRef.Named(sp, path, targs)) }
+            if path.Len() == 1 { return c.resolveNamed(ast.TypeRef.Named(sp, path, targs)) }
             d := c.genericNamed(g)
             if not c.P.ArgsFit(d, targs) {
                 c.err(targs[0].Span() if targs.Len() > 0 else sp, msgs.TypeArgCount(c.text(path[path.Len() - 1]), c.P.WrittenArity(d), generic.WrittenTypes(targs)))
@@ -14609,6 +14759,8 @@ fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) 
     }
     dt := c.deref(base.Type())
     if c.arrayOf(dt) == types.UnknownT and dt != types.UnknownT {
+        ue := c.uniqueElem(sp, base, dt, items)
+        if ue is not null { return c.read(sp, ue) }
         m := c.roleUse(dt, "At", items.Len(), c.bracketIn(sp), "'['")
         if m >= 0 { return c.invoke(sp, sp, m, c.read(sp, base), items, Array<typed.Expr&>(0)) }
         c.noIndex(sp, dt, base.Type(), items.Len())
@@ -14617,6 +14769,24 @@ fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) 
     p := c.elemPlace(sp, base, items)
     if p is null { return c.unknown(sp) }
     return c.read(sp, p)
+}
+
+# T13b: x[i] of a collection whose element is unique - never copied out by At - is the element where the collection
+# holds it: through its RefMut where x is reached writably, else its Ref (a Vec's, a Map's); null where the element is
+# no unique one or the collection gives no reference to it
+fn (c mut Checker&) uniqueElem(sp source.Span, base typed.Lvalue&, t types.TypeId, items Array<ast.Expr&>&) typed.Lvalue?& {
+    if not c.P.T.AnyUnique(): return null
+    n := items.Len()
+    m := c.roleMethod(t, "RefMut", n) if c.placeWritable(base) else -1
+    if m < 0: m = c.roleMethod(t, "Ref", n)
+    if m < 0: return null
+    sig := c.P.MethodSig(m, t)
+    if sig == types.UnknownT: return null
+    r := c.P.T.Result(sig)
+    if not c.isRef(r) or not c.P.Unique(c.deref(r)): return null
+    call := c.invoke(sp, sp, m, c.read(sp, base), items, Array<typed.Expr&>(0))
+    if typeOf(call) == types.UnknownT: return null
+    return typed.Lvalue.Deref(sp, c.deref(typeOf(call)), call)
 }
 
 fn (c mut Checker&) indexPlace(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) typed.Lvalue?& {
@@ -14639,6 +14809,8 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Lvalue&, items Array<ast.E
     at := c.arrayOf(t)
     if at == types.UnknownT {
         if t == types.UnknownT { return null }
+        ue := c.uniqueElem(sp, base, t, items)
+        if ue is not null { return ue }
         # x[i] on a type with At (E31): the element read, a value with no storage - written through, it is written
         # back by SetAt (E31b, writeBack)
         m := c.roleUse(t, "At", items.Len(), c.bracketIn(sp), "'['")
@@ -16794,6 +16966,16 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         # T25c: ":=" of a read-only copy is one, and a reference read out of one is read-only; a written type declares
         # a writable value
         inferred := i < v.Values.Len() and (v.Ty is null or v.Infer)
+        # T13b: a unique value existing elsewhere - a reference to it, where nothing written says what holds it; a slot
+        # laid out for the value (a written type, a constructor's field) takes only a fresh one
+        if i < v.Values.Len() and not c.isRef(t) and c.uniqueExisting(x!) {
+            if inferred and not v.Field {
+                x = c.uniqueRef(x!, v.Values[i].Span())
+                t = typeOf(x)
+            } else {
+                x = c.uniqueLand(x!, "'" $c.text(v.Names[i]) "'")
+            }
+        }
         if inferred and c.isRef(t) and (c.P.T.PermOf(t) & types.Writable) != 0 and c.P.T.KindOf(c.deref(t)) != types.Kind.Func and c.roRef(x) {
             t = c.P.T.Ref(c.P.T.Referent(t), c.P.T.PermOf(t) & ~types.Writable)   # (a "?&" stays one)
         }
@@ -19160,9 +19342,13 @@ fn (c mut Checker&) walkIndexed(sp source.Span, f ast.ForIn&, src typed.Expr&, a
     if f.Tried { c.fr().Tries++ }
     n := c.invoke(sp, sp, lm, c.readLocal(sp, coll), Array<ast.Expr&>(0), Array<typed.Expr&>(0))
     c.emit(c.breakUnless(sp, c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, k), n), id))
-    e := c.invoke(sp, sp, atm, c.readLocal(sp, coll), Array<ast.Expr&>(0), c.one(c.readLocal(sp, k)))
+    # T13b: a unique element named where the collection holds it, through its Ref - At would copy it
+    rm := c.uniqueWalk(c.deref(c.localType(coll)))
+    am := atm if rm < 0 else rm
+    e := c.invoke(sp, sp, am, c.readLocal(sp, coll), Array<ast.Expr&>(0), c.one(c.readLocal(sp, k)))
+    if rm >= 0 { e = c.read(sp, typed.Lvalue.Deref(sp, c.deref(typeOf(e)), e)) }
     if f.Tried { c.fr().Tries-- }
-    c.elementLocals(sp, f, k, e)
+    c.elementLocals(sp, f, k, c.uniqueRef(e, sp, false))
     c.walkBody(f, cm, ce)
     try c.fr().loops.Pop() catch { }
     try c.fr().exits.Pop() catch { }
@@ -19172,6 +19358,18 @@ fn (c mut Checker&) walkIndexed(sp source.Span, f ast.ForIn&, src typed.Expr&, a
     c.emit(c.addTo(sp, k, c.lit(sp, c.i64(), 1)))
     pb := c.close(pid, pouter, pmark, pfrom)
     c.emit(typed.Stmt.Loop(sp, b, pb))
+}
+
+# T13b: the Ref a walk of an indexable collection holding unique elements names each one with - one index, a reference
+# to a unique element - -1 for none
+fn (c mut Checker&) uniqueWalk(t types.TypeId) I64 {
+    if not c.P.T.AnyUnique(): return -1
+    m := c.roleMethod(t, "Ref", 1)
+    if m < 0: return -1
+    sig := c.P.MethodSig(m, t)
+    if sig == types.UnknownT: return -1
+    r := c.P.T.Result(sig)
+    return m if c.isRef(r) and c.P.Unique(c.deref(r)) and c.P.T.Items(c.P.T.Errors(sig)).Len() == 0 else -1
 }
 
 # for i in range [start,] end [, step] (S9b): upward, a count worked out once
@@ -19303,6 +19501,7 @@ fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64
         ct := c.localType(coll)
         base typed.Lvalue& = typed.Lvalue.Deref(sp, c.P.T.Referent(ct), c.readLocal(sp, coll))
         e = c.read(sp, typed.Lvalue.Elem(sp, c.P.T.Elem(at), typed.Elem(base, c.readLocal(sp, k), typed.Check.None)))
+        e = c.uniqueRef(e, sp, false)   # T13b: a unique element is named where the array holds it
     } else {
         e = c.prim(sp, kt, typed.PrimOp.Add, c.readLocal(sp, lo), c.prim(sp, kt, typed.PrimOp.Mul, c.readLocal(sp, k), c.readLocal(sp, st)))
     }
@@ -19638,6 +19837,7 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         c.nullDecl = wasNull
         if rt == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Lvalue.Deref(sp, rt, x)) }
         if not c.isRef(rt) { c.roStore(x, values[0].Span(), RoReturned) } else { c.roRefResult(x) } # T25c
+        if not c.isRef(rt) { x = c.uniqueLand(x, "the result", true) }   # T13b
         c.emit(typed.Stmt.Return(sp, x))
         return
     }
@@ -19654,7 +19854,9 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
     for i in range values.Len() {
         wasNull := c.nullDecl
         c.nullDecl = c.resultAt(i)
-        c.exprs.Push(c.exprTo(values[i], ps[i]))
+        x := c.exprTo(values[i], ps[i])
+        if not c.isRef(ps[i]) { x = c.uniqueLand(x, "a result", true) }   # T13b
+        c.exprs.Push(x)
         c.nullDecl = wasNull
     }
     xs := gather(c.exprs, from)
@@ -19794,6 +19996,176 @@ fn (c Checker&) ViewsOf(id typed.BodyId) I64 {
     }
 }
 
+# ---- unique values (T13b) ----
+
+# whether a value of a unique type names storage that exists apart from it - one never copied
+fn (c mut Checker&) uniqueExisting(x typed.Expr&) Bool {
+    t := typeOf(x)
+    return not c.isRef(t) and t != types.UnknownT and c.P.Unique(t) and existingValue(x)
+}
+
+# T13b: x given to a slot laid out for its value (what names the slot): a unique value only where it is fresh, or handed
+# on out of a by-value parameter at its last mention (own: or a returned local, which is the result itself, O26a); any
+# other existing one is an error naming the reference form
+fn (c mut Checker&) uniqueLand(x typed.Expr&, what String&, own Bool = false) typed.Expr& {
+    if not c.uniqueExisting(x): return x
+    l := c.handedOn(x, own)
+    if l >= 0 {
+        c.landings.Push(landing(c.fr().Body, l, x.Span(), typeOf(x), c.boundMention(typeOf(x))))
+        return x
+    }
+    c.uniqueErr(x.Span(), typeOf(x), what)
+    return x
+}
+
+# the local whose whole value x reads where that value may be handed on - a by-value parameter's, or (own) a value
+# local's - else -1
+fn (c mut Checker&) handedOn(x typed.Expr&, own Bool) I64 {
+    p := readPlace(x)
+    if p is null or p != typed.Lvalue.Local: return -1
+    id := I64(p.id)
+    if id < 0 or id >= c.cur().Locals.Len(): return -1
+    loc := c.cur().Locals[id]
+    if c.isRef(loc.Ty): return -1
+    if loc.Kind == typed.LocalKind.Param: return id
+    return id if own and loc.Kind == typed.LocalKind.Var else -1
+}
+
+# T13b: a unique value copied - said where it is, or, where its type is one a generic's binding gave it (G18a), at the
+# program's call that bound it: the generic needs a copy
+fn (c mut Checker&) uniqueErr(sp source.Span, t types.TypeId, what String&) {
+    inst := c.boundMention(t)
+    if inst < 0 {
+        c.err(sp, msgs.UniqueByValue(c.ty(t), what))
+        return
+    }
+    c.needsCopy(inst, sp, t)
+}
+
+fn (c mut Checker&) needsCopy(inst I64, sp source.Span, t types.TypeId) {
+    o := c.P.InstanceOrigin(inst)
+    called := c.text(c.P.FnDecl(c.P.InstanceFn(inst)).Name)
+    u := c.uniqueArg(inst, t)
+    rec := c.P.L.Diags.ErrorBare(diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End)), msgs.UniqueNeedsCopy(called, c.ty(u)))
+    here := c.checkedInst()
+    asks := c.text(c.P.FnDecl(c.P.InstanceFn(here)).Name) if here >= 0 else called
+    c.P.L.Diags.Note(rec, c.at(sp), msgs.NoteGenericNeeds(asks, "a copy"))
+}
+
+# the unique type argument of instance inst that t mentions - t itself where none does
+fn (c mut Checker&) uniqueArg(inst I64, t types.TypeId) types.TypeId {
+    for a in c.P.T.Items(c.P.InstanceArgs(inst)) {
+        if c.mentions(t, c.deref(a), 0) and c.P.Unique(c.deref(a)): return c.deref(a)
+    }
+    return t
+}
+
+# G18a for T13b: the outermost instance of the generics being checked - the program's own call that began the chain -
+# one of whose type arguments t mentions, a unique one; -1 where none is being checked or t mentions none
+fn (c mut Checker&) boundMention(t types.TypeId) I64 {
+    cur := c.checkedInst()
+    outer I64 = -1
+    for _ in range 64 {
+        if cur < 0 or c.P.T.Items(c.P.InstanceArgs(cur)).Len() == 0 { break }
+        o := c.P.InstanceOrigin(cur)
+        if o.File < 0 { break }
+        outer = cur
+        cur = o.Within
+    }
+    if outer < 0: return -1
+    for a in c.P.T.Items(c.P.InstanceArgs(outer)) {
+        if c.mentions(t, c.deref(a), 0) and c.P.Unique(c.deref(a)): return outer
+    }
+    return -1
+}
+
+# whether a type is u, or holds it - as an instance's argument, an array's element, a reference's referent
+fn (c mut Checker&) mentions(t types.TypeId, u types.TypeId, depth I64) Bool {
+    if depth > 8 or t == types.UnknownT: return false
+    if c.P.T.Same(t, u): return true
+    match c.P.T.KindOf(t) {
+        case types.Kind.Named {
+            for a in c.P.T.Items(c.P.T.Args(t)) {
+                if c.mentions(a, u, depth + 1): return true
+            }
+        }
+        case types.Kind.Array { return c.mentions(c.P.T.Elem(t), u, depth + 1) }
+        case types.Kind.Ref { return c.mentions(c.P.T.Referent(t), u, depth + 1) }
+        case _ { }
+    }
+    return false
+}
+
+# T13b: a unique value read where no type says what holds it (a ":=", a walk's name, a binding, a capture) - a
+# reference to its place, writable where the place may be written; any other value as it is
+fn (c mut Checker&) uniqueRef(x typed.Expr&, sp source.Span, written Bool = true) typed.Expr& {
+    if not c.uniqueExisting(x): return x
+    t := typeOf(x)
+    # (a copy written in a generic is its need, said at the call that bound the type; a walk's or a binding's name is a
+    # reference in any instance)
+    if written and c.boundMention(t) >= 0 {
+        c.uniqueErr(sp, t, "a local made from it")
+        return x
+    }
+    p := readPlace(x)
+    perm := types.Writable if p is not null and c.placeWritable(p) else types.ReadOnly
+    return c.fit(x, c.P.T.Ref(t, perm), sp)
+}
+
+# T13b: what a slot a store gives a value is, for its diagnostic
+fn (c mut Checker&) slotWhat(p typed.Lvalue&) String {
+    return match p {
+        case typed.Lvalue.Local(_, _, id): "'" $c.text(c.cur().Local(id).Name) "'"
+        case typed.Lvalue.Global(_, _, _, n): "the global '" $c.text(n) "'"
+        case typed.Lvalue.Field(_, _, _, _): "a field"
+        case typed.Lvalue.Elem(_, _, _): "an element"
+        case typed.Lvalue.Payload(_, _, _): "a payload"
+        case _: "the place"
+    }
+}
+
+# T13b: every by-value parameter's or returned local's value handed on, at its last mention - the order its body
+# evaluates in, a mention in deferred code, a task, a join's clauses or a loop not around the local counting as after
+fn (c mut Checker&) settleLandings() {
+    if c.landings.Len() == 0: return
+    done Map<I64, Bool>
+    for k in range c.landings.Len() {
+        b := c.landings[k].Body
+        if done.Has(b): continue
+        done.Put(b, true)
+        c.landingsOf(b)
+    }
+}
+
+fn (c mut Checker&) landingsOf(b I64) {
+    body := c.Bodies[b]
+    if body.Root is null: return
+    mine Vec<landing>
+    for ld in c.landings {
+        if ld.Body == b: mine.Push(ld)
+    }
+    ls := Array<I64>(mine.Len())
+    at := Array<I64>(mine.Len())
+    for k in range mine.Len() {
+        ls[k] = mine[k].Local
+        at[k] = I64(mine[k].At.Start)
+    }
+    w := typed.Landings(ls, at)
+    w.Body(body.Root!)
+    for k in range mine.Len() {
+        if not w.Bad[k]: continue
+        ld := mine[k]
+        if ld.Inst < 0 {
+            c.P.L.Diags.Error(diag.Where.Span(body.File, I64(ld.At.Start), I64(ld.At.End)), msgs.UniqueAfter(c.text(body.Locals[ld.Local].Name), c.ty(ld.Ty)))
+            continue
+        }
+        o := c.P.InstanceOrigin(ld.Inst)
+        called := c.text(c.P.FnDecl(c.P.InstanceFn(ld.Inst)).Name)
+        rec := c.P.L.Diags.ErrorBare(diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End)), msgs.UniqueNeedsCopy(called, c.ty(c.uniqueArg(ld.Inst, ld.Ty))))
+        c.P.L.Diags.Note(rec, diag.Where.Span(body.File, I64(ld.At.Start), I64(ld.At.End)), msgs.NoteGenericNeeds(called, "a copy"))
+    }
+}
+
 # ---- values that own their parts (QCE: T7a relaxed) ----
 
 # x stored into p as its own copy where p owns what it holds: a part of a value - a field, an element, a payload's field -
@@ -19802,6 +20174,7 @@ fn (c Checker&) ViewsOf(id typed.BodyId) I64 {
 fn (c mut Checker&) storeCopy(p typed.Lvalue&, x typed.Expr&) typed.Expr& {
     t := p.Type()
     if c.isRef(t) { return x }
+    x = c.uniqueLand(x, c.slotWhat(p))
     if c.P.T.OwnsParts(t) or (c.P.T.OwnedPart(t) and partPlace(p)) { return c.ownCopy(x) }
     return x
 }
@@ -19810,14 +20183,18 @@ fn (c mut Checker&) storeCopy(p typed.Lvalue&, x typed.Expr&) typed.Expr& {
 # an enum holding arrays of a run-time length), so nothing the callee writes of it reaches the caller's. A plain array
 # is D9b's (copied by the callee where its body writes it)
 fn (c mut Checker&) valueArg(x typed.Expr&, want types.TypeId) typed.Expr& {
-    if want == types.UnknownT or c.isRef(want) or not c.P.T.OwnsParts(want) { return x }
+    if want == types.UnknownT or c.isRef(want) { return x }
+    x = c.uniqueLand(x, "the parameter")
+    if not c.P.T.OwnsParts(want) { return x }
     return c.ownCopy(x)
 }
 
 # x given to a part of a value being made - an element, a payload's field - as its own copy where it owns storage
 fn (c mut Checker&) partCopy(x typed.Expr&) typed.Expr& {
     t := typeOf(x)
-    if c.isRef(t) or not (c.P.T.OwnsParts(t) or c.P.T.OwnedPart(t)) { return x }
+    if c.isRef(t) { return x }
+    x = c.uniqueLand(x, "a part of a value made")
+    if not (c.P.T.OwnsParts(t) or c.P.T.OwnedPart(t)) { return x }
     return c.ownCopy(x)
 }
 
@@ -21531,6 +21908,8 @@ fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Lvalue&, t types.TypeId,
 
 # a name a pattern binds, a read of place: a binding local of this arm, or one another alternative of it bound (S13c)
 fn (c mut Checker&) bindPattern(sp source.Span, n source.NameId, place typed.Lvalue&, t types.TypeId, binds mut Vec<typed.Bind&>&, arm I64) typed.Expr& {
+    bv := c.uniqueRef(c.read(sp, place), sp, false)   # T13b: a unique part bound where it is held
+    if c.isRef(typeOf(bv)) and not c.isRef(t) { t = typeOf(bv) }
     id := c.localNamed(n)
     if id < 0 or I64(c.cur().Locals[id].In) != arm or c.cur().Locals[id].Kind != typed.LocalKind.Binding {
         id = c.local(n, sp, t, typed.LocalKind.Binding, typed.Mark.Infer)
@@ -21539,8 +21918,8 @@ fn (c mut Checker&) bindPattern(sp source.Span, n source.NameId, place typed.Lva
     } else if not c.P.T.Same(c.cur().Locals[id].Ty, t) and t != types.UnknownT {
         c.altBinding(sp, n, id, t)
     }
-    c.roLet(id, c.read(sp, place))   # T25c: a binding of a place reached read-only is a read-only copy
-    binds.Push(typed.Bind(typed.LocalId(I32(id)), c.read(sp, place)))
+    c.roLet(id, bv)   # T25c: a binding of a place reached read-only is a read-only copy
+    binds.Push(typed.Bind(typed.LocalId(I32(id)), bv))
     return c.lit(sp, types.BoolT, 1)
 }
 
@@ -23343,7 +23722,7 @@ test "writes: an immutable global, a read-only reference, a value a call gave ba
 test "a destructor reads its fields bare (C9, C10)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("Closed mut I64 = 0\ntype R struct(n I64) { n } destruct {\n    Closed = Closed + n\n    bad Bool = n\n    if bad { Closed = 0 }\n}\n"
+    l := testLoad(dir, ("Closed mut I64 = 0\ntype R unique struct(n I64) { n } destruct {\n    Closed = Closed + n\n    bad Bool = n\n    if bad { Closed = 0 }\n}\n"
                        "fn main() ? {\n    r := R(3)\n    assert r.n == 3\n}\n"))
     r := names.Resolver(l)
     r.Resolve()

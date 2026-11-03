@@ -8,7 +8,7 @@ type Node struct(v I64) {
     v
     next mut Node?& = null
 }
-type Res struct(n mut Node&, k I64) {
+type Res unique struct(n mut Node&, k I64) {
     n
     k
 } destruct {

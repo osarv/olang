@@ -1,7 +1,7 @@
 # check: fail error[C9b]: 'a.Destroy()' needs 'a' to be the only way left to reach its instance
 # C9b: a reference to the instance stored in a field is a second way to reach it - the Destroy() is refused, a note at
 # the store
-type Res struct(id I64) {
+type Res unique struct(id I64) {
     id
 } destruct {
     Closed += 1

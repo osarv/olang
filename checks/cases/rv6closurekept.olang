@@ -3,7 +3,7 @@
 # P2 (decision 48): a closure made on a task, capturing the stand-in it was handed, kept past the join, then called on the
 # main thread and on two tasks at once - each thread builds into its own part of the scope the stand-in was folded into,
 # and the destructors of what they built run as that scope closes
-type R struct(id I64) {
+type R unique struct(id I64) {
     id
 } destruct {
     Dtors = Dtors + id

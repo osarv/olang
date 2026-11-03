@@ -1,0 +1,9 @@
+# check: fail error[T13b]: File is unique: this value is held elsewhere, and the result holds one of its own
+# T13b: a result handing back a value held elsewhere - a part of what the function was given
+type File unique struct(fd I32) { fd }
+type Box struct(f File) { f }
+fn inner(b Box&) File { return b.f }
+fn main() {
+    b := Box(File(3))
+    assert inner(b).fd == 3
+}

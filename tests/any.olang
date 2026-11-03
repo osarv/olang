@@ -803,7 +803,7 @@ fn snChain(k mut SnK&, i I64) Array<Char> {
     }
     return s
 }
-type SnRes struct(r mut Array<Char>&) { r } destruct { r[0] = 'Z' }
+type SnRes unique struct(r mut Array<Char>&) { r } destruct { r[0] = 'Z' }
 fn snDtor(i I64) Array<Char> {
     s Array<Char> = "dtr" $i
     d := SnRes(s)

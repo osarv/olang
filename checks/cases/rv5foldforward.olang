@@ -5,7 +5,7 @@
 # first one, and builds R(2) there. Folded into the forwarder itself, R(2) - and R(3), built after it on this thread -
 # sat in a header no one closes and were never destructed; all three run when run's scope closes.
 Dtors mut I64 = 0
-type R struct(id I64) {
+type R unique struct(id I64) {
     id
 } destruct {
     Dtors += id

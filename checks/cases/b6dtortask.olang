@@ -5,7 +5,7 @@
 # scope. It was left linked to a closed header: no Tracker was ever destructed
 Count mut I64 = 0
 Log mut I64 = 0
-type Tracker struct(k I64) {
+type Tracker unique struct(k I64) {
     k
 } destruct {
     Count = Count + 1
@@ -13,7 +13,7 @@ type Tracker struct(k I64) {
 type Node struct(v I64) {
     v
 }
-type Res struct(k I64) {
+type Res unique struct(k I64) {
     k
 } destruct {
     kk := k
@@ -35,12 +35,12 @@ type Box struct(v I64) {
     node mut Node& = Node(v)
     keep mut Vec<Held&>& = Vec<Held&>()
 }
-type Held struct(n Node&) {
+type Held unique struct(n Node&) {
     n
 } destruct {
     Log = Log + n.v
 }
-type Res2 struct(k I64) {
+type Res2 unique struct(k I64) {
     k
 } destruct {
     b mut Box& = Box(k * 1000 + 7)

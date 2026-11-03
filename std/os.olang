@@ -1014,7 +1014,7 @@ if TestBuild {
     # how many stackRes instances have been destructed
     stackDrops mut I64 = 0
 
-    type stackRes struct() {
+    type stackRes unique struct() {
     } destruct { stackDrops += 1 }
 
     type stackCell struct() {

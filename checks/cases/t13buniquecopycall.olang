@@ -1,0 +1,8 @@
+# check: fail error[T13b, E31d]: File is unique, so it is never copied and has no Copy - make a new one with a function or its constructor
+# T13b: x.Copy() of a unique value - its supplied Copy is none
+type File unique struct(fd I32) { fd }
+fn main() {
+    f := File(3)
+    g := f.Copy()
+    assert g.fd == 3
+}

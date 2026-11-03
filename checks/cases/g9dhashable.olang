@@ -1,7 +1,7 @@
 # check: fail error[G19, E10b]: Res& does not satisfy the constraint Hashable on T
 # G9d/C11: a destructor temporary binds a reference - a Hashable constraint holds only where the type declares Hash
 import "std/io"
-type Res struct(k I64) {
+type Res unique struct(k I64) {
     k
 } destruct { try io.Println("d" $k) catch io.Error { } }
 fn same<T>(a T, b T) Bool { return a == b }

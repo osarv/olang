@@ -403,14 +403,14 @@ fn Resolve(t String&) Addr ? Error.Address, Error.UnknownHost, Error.Unreachable
 
 # a connection, either side's: read and written as a stream of bytes until it is destroyed (its scope's end, or
 # Destroy())
-type Conn struct(fd I32) {
+type Conn unique struct(fd I32) {
     fd
 } destruct {
     unistd.close(fd)
 }
 
 # a listening socket: Accept gives each connection made to it
-type Listener struct(fd I32) {
+type Listener unique struct(fd I32) {
     fd
 } destruct {
     unistd.close(fd)
@@ -510,7 +510,7 @@ fn (c Conn&) Remote() Addr ? Error { return try nameOf(c.fd, true) }
 # ---- UDP ----
 
 # a UDP socket: datagrams sent to and received from any address, each whole or not at all
-type UDP struct(fd I32) {
+type UDP unique struct(fd I32) {
     fd
 } destruct {
     unistd.close(fd)

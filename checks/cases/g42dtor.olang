@@ -4,7 +4,7 @@
 # global the destructor writes and allocates what it allocates; the facts said neither, and computable while compiling
 import "std/io"
 G mut Vec<I64>
-type guard struct() { } destruct {
+type guard unique struct() { } destruct {
     for i in range 1000 { G.Push(i) }
 }
 fn touch() {

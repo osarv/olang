@@ -5,7 +5,7 @@ type Bad error {
     Neg
 }
 
-type Res struct(id I64) {
+type Res unique struct(id I64) {
     id
 } destruct {
     Dropped++

@@ -20,7 +20,7 @@ test "the join's task had finished" { assert Finished == 1 }
 
 # S18b: the destructors of every scope a failing test abandons run - its own, a callee's, a block in that callee
 Closed mut I64 = 0
-type Handle struct(id I64) {
+type Handle unique struct(id I64) {
     id
 } destruct { Closed += 1 }
 fn deeper() {
@@ -52,7 +52,7 @@ test "no deferred code ran" { assert DeferLog == 0 }
 
 # E11c: failing inside a Str - the scope "$" opened for its result and its own block are closed, their destructors run
 StrDestructs mut I64 = 0
-type res struct(k I64) {
+type res unique struct(k I64) {
     k
 } destruct { StrDestructs += k }
 type bag struct(n I64) {
@@ -72,7 +72,7 @@ test "both of the Str's destructors ran" { assert StrDestructs == 3 }
 
 # C9a: a destructor failing its test leaves the scope's other destructors to the unwind, which runs them, each once
 Steps mut I64 = 0
-type step struct(k I64) {
+type step unique struct(k I64) {
     k
 } destruct {
     Steps = Steps * 10 + k

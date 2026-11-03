@@ -1,0 +1,107 @@
+# unique_migrate - a type declaring a destructor is declared "unique" (2026-11-03, SPEC.md T13b, C11): a destructor
+# releases what one value holds, so a value of such a type exists in one place and every other use of it is a reference.
+# "type Conn struct(fd I32) { fd } destruct { ... }" becomes "type Conn unique struct(fd I32) { fd } destruct { ... }".
+#
+# Each "destruct" in code finds the declaration it closes - the nearest line above it (or its own) beginning with
+# "type" - and the word goes before that declaration's "struct" where it has none (an "immut" one, which a destructor
+# cannot have, is left for the compiler to say). Code only: comments and text are left alone. Re-runnable: a declaration
+# saying "unique" changes nothing.
+#
+#     olang build tools/unique_migrate.olang && build/tools_unique_migrate FILE...    rewrites the files, naming each one changed
+
+import "std/os"
+import "std/io"
+import "srcmask"
+
+fn main() ? io.Error {
+    args := os.Args()
+    for k in range 1, args.Len() {
+        path := args[k]
+        text := try os.ReadFile(path) catch os.Error {
+            try io.PrintErrln("unique_migrate: " $path ": cannot be read")
+            continue
+        }
+        out := migrate(text)
+        if out == text: continue
+        try os.WriteFile(path, out) catch os.Error { try io.PrintErrln("unique_migrate: " $path ": cannot be written") }
+        try io.Println(path)
+    }
+}
+
+# the text with every destructor-declaring type declared unique
+fn migrate(text String&) String {
+    mask := srcmask.Mask(text, false)
+    at Vec<I64> # where "unique " goes, in order
+    for i in range text.Len() {
+        if not destructAt(text, mask, i): continue
+        s := structOf(text, mask, i)
+        if s >= 0 and (at.Len() == 0 or at[at.Len() - 1] != s): at.Push(s)
+    }
+    if at.Len() == 0: return $text
+    b := StringBuilder()
+    from I64 = 0
+    for s in at {
+        b.Push(text[from:s])
+        b.Push("unique ")
+        from = s
+    }
+    b.Push(text[from:])
+    return b.ToString()
+}
+
+# whether the word "destruct" in code starts at i, a block following it
+fn destructAt(text String&, mask String&, i I64) Bool {
+    if mask[i] != 'c' or not text[i:].StartsWith("destruct"): return false
+    if i > 0 and srcmask.IsWord(text[i - 1]): return false
+    j := i + 8
+    if j < text.Len() and srcmask.IsWord(text[j]): return false
+    for j < text.Len() and text[j] == ' ' { j++ }
+    return j < text.Len() and text[j] == '{'
+}
+
+# where "struct" stands in the declaration the destructor at i closes - the nearest line at or above it beginning with
+# "type" - when that declaration says neither "unique" nor "immut"; -1 for none
+fn structOf(text String&, mask String&, i I64) I64 {
+    ls := lineStart(text, i)
+    for {
+        t := ls
+        for t < text.Len() and (text[t] == ' ' or text[t] == '\t') { t++ }
+        if mask[t] == 'c' and text[t:].StartsWith("type ") {
+            st := try text[t:].Find(" struct") catch { return -1 }
+            head := text[t:t + st + 1]
+            if wordIn(head, "unique") or wordIn(head, "immut"): return -1
+            return t + st + 1
+        }
+        if ls == 0: return -1
+        ls = lineStart(text, ls - 1)
+    }
+    return -1
+}
+
+fn lineStart(text String&, i I64) I64 {
+    k := i
+    for k > 0 and text[k - 1] != '\n' { k-- }
+    return k
+}
+
+# whether w stands in t as a word of its own
+fn wordIn(t String&, w String&) Bool {
+    for i in range t.Len() {
+        if not t[i:].StartsWith(w): continue
+        if i > 0 and srcmask.IsWord(t[i - 1]): continue
+        if i + w.Len() < t.Len() and srcmask.IsWord(t[i + w.Len()]): continue
+        return true
+    }
+    return false
+}
+
+test migrate "a destructor's type gains unique, once; one saying it, comments and text left as they are" {
+    assert migrate("type Conn struct(fd I32) {\n    fd\n} destruct {\n    close(fd)\n}\n") == "type Conn unique struct(fd I32) {\n    fd\n} destruct {\n    close(fd)\n}\n"
+    assert migrate("type C struct(n I32) { n } destruct { x++ }\n") == "type C unique struct(n I32) { n } destruct { x++ }\n"
+    assert migrate("type B<T> struct(v T) { v } destruct { x++ }\n") == "type B<T> unique struct(v T) { v } destruct { x++ }\n"
+    assert migrate("    type s struct() {\n    } destruct { d += 1 }\n") == "    type s unique struct() {\n    } destruct { d += 1 }\n"
+    done := "type C unique struct(n I32) { n } destruct { x++ }\n"
+    assert migrate(done) == done
+    assert migrate("# type C struct(n I32) { n } destruct { }\nx := \"destruct {\"\n") == "# type C struct(n I32) { n } destruct { }\nx := \"destruct {\"\n"
+    assert migrate("type P struct(n I32) { n }\n") == "type P struct(n I32) { n }\n"
+}

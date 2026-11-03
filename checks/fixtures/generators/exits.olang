@@ -5,7 +5,7 @@
 # result, a generator given text from a block around the loop it is walked in) beside them
 import "std/io"
 
-type Res struct(id I64) {
+type Res unique struct(id I64) {
     id
 } destruct {
     try io.Println("drop " $id) catch { }

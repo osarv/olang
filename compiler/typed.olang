@@ -2377,3 +2377,329 @@ fn freshValue(x Expr&) Bool {
         case _: false
     }
 }
+
+# ---- unique values handed on (T13b) ----
+
+# whether each watched read of a whole local - a unique value handed on out of a by-value parameter, or a returned
+# local - is its local's last mention on every path from it, in the order the body evaluates: Bad[k] where some path
+# mentions the local after read k. A branch's mentions are no other branch's; a loop running again reaches its body's
+# mentions before the read; a mention in deferred code, a task or a join's clauses runs after everything
+type Landings struct(Locals Array<I64>&, Starts Array<I64>&) {
+    Locals                                                       # each watched read's local
+    Starts                                                       # ... and where it starts
+    Bad mut Array<Bool>& = Array<Bool>(Locals.Len(), false)
+    open mut Array<Bool>& = Array<Bool>(Locals.Len(), false)     # read already, on some path reaching here
+    dead Bool = false                                            # no path reaches here
+    loops Vec<landLoop>
+    later I64 = 0                                                # > 0 inside code that runs after
+    laterLocals Map<I64, Bool>                                   # the locals mentioned there
+}
+
+# a loop being walked: its body block, and what its breaks and continues leave open
+type landLoop struct(Id BlockId, N I64) {
+    Id
+    N
+    breaks mut Array<Bool>& = Array<Bool>(N, false)
+    conts mut Array<Bool>& = Array<Bool>(N, false)
+    broke Bool = false
+    continued Bool = false
+}
+
+# a path's state, kept to walk another branch from the same place
+type landState struct(Open Array<Bool>&, Dead Bool) {
+    Open
+    Dead
+}
+
+fn (w mut Landings&) save() landState {
+    o := Array<Bool>(w.open.Len(), false)
+    for k in range o.Len() { o[k] = w.open[k] }
+    return landState(o, w.dead)
+}
+
+fn (w mut Landings&) restore(s landState&) {
+    for k in range w.open.Len() { w.open[k] = s.Open[k] }
+    w.dead = s.Dead
+}
+
+# the state where two paths meet: read on either, dead where both are
+fn (w mut Landings&) meet(s landState&) {
+    if w.dead {
+        w.restore(s)
+        return
+    }
+    if s.Dead: return
+    for k in range w.open.Len() { w.open[k] = w.open[k] or s.Open[k] }
+}
+
+fn orInto(to mut Array<Bool>&, from Array<Bool>&) {
+    for k in range to.Len() { to[k] = to[k] or from[k] }
+}
+
+# the whole walk: a body's root, then what later code mentions
+fn (w mut Landings&) Body(b Block&) {
+    w.block(b)
+    for k in range w.Locals.Len() {
+        if w.laterLocals.Has(w.Locals[k]): w.Bad[k] = true
+    }
+}
+
+fn (w mut Landings&) mention(id LocalId, at I64, read Bool) {
+    l := I64(id)
+    if w.later > 0 {
+        w.laterLocals.Put(l, true)
+        return
+    }
+    if w.dead: return
+    for k in range w.Locals.Len() {
+        if w.Locals[k] == l and w.open[k]: w.Bad[k] = true
+    }
+    if not read: return
+    for k in range w.Locals.Len() {
+        if w.Locals[k] == l and w.Starts[k] == at: w.open[k] = true
+    }
+}
+
+fn (w mut Landings&) block(b Block?&) {
+    if b is null: return
+    for s in b.Stmts { w.stmt(s) }
+}
+
+fn (w mut Landings&) stmt(s Stmt&) {
+    match s {
+        case Stmt.Let(_, _, x), Stmt.Eval(_, x), Stmt.Yield(_, x), Stmt.Reraise(_, x, _): w.expr(x)
+        case Stmt.Assign(_, p, x) {
+            w.place(p)
+            w.expr(x)
+        }
+        case Stmt.Suspend(_, x): w.expr(x)
+        case Stmt.Return(_, x) {
+            w.expr(x)
+            w.dead = true
+        }
+        case Stmt.Raise(_, _, _): w.dead = true
+        case Stmt.Exit(_, _, x) {
+            w.expr(x)
+            w.dead = true
+        }
+        case Stmt.If(_, f): w.ifStmt(f)
+        case Stmt.Loop(_, body, post): w.loop(body.Id, body, post)
+        case Stmt.Jump(_, kind, loop): w.jump(kind, loop)
+        case Stmt.Assert(_, c, m) {
+            w.expr(c)
+            s0 := w.save()
+            w.expr(m)
+            w.restore(s0)
+        }
+        case Stmt.Block(_, b): w.block(b)
+        case Stmt.Defer(_, b): w.laterBlock(b)
+        case Stmt.Join(_, j) {
+            w.block(j.Code)
+            w.later++
+            w.clauses(j.Clauses)
+            w.later--
+        }
+        case Stmt.Spawn(_, sw) {
+            w.later++
+            for tg in sw.Targets {
+                if tg is not null: w.place(tg)
+            }
+            w.expr(sw.Task)
+            for c in sw.Clauses { w.expr(c.Handler) }
+            w.later--
+        }
+    }
+}
+
+fn (w mut Landings&) laterBlock(b Block?&) {
+    w.later++
+    w.block(b)
+    w.later--
+}
+
+fn (w mut Landings&) ifStmt(f If&) {
+    w.expr(f.Test)
+    s0 := w.save()
+    w.block(f.Then)
+    s1 := w.save()
+    w.restore(s0)
+    w.block(f.Else)
+    w.meet(s1)
+}
+
+# a loop walked twice, the second turn starting where the first's continues and its end leave it - so a read in it is
+# followed by the mentions the next turn makes before it; after it, what its breaks leave
+fn (w mut Landings&) loop(id BlockId, body Block&, post Block?&) {
+    w.loops.Push(landLoop(id, w.open.Len()))
+    for turn in range 2 {
+        w.block(body)
+        lp := w.loops[w.loops.Len() - 1]
+        if lp.continued {
+            if w.dead {
+                for k in range w.open.Len() { w.open[k] = lp.conts[k] }
+                w.dead = false
+            } else {
+                orInto(w.open, lp.conts)
+            }
+        }
+        w.block(post)
+        if turn == 1: break
+    }
+    lp := try w.loops.Pop() catch { return }
+    if not lp.broke {
+        w.dead = true
+        return
+    }
+    for k in range w.open.Len() { w.open[k] = lp.breaks[k] }
+    w.dead = false
+}
+
+fn (w mut Landings&) jump(kind JumpKind, loop BlockId) {
+    if w.dead: return
+    for i := w.loops.Len() - 1, i >= 0, i-- {
+        if w.loops[i].Id != loop: continue
+        lp := w.loops[i]
+        if kind == JumpKind.Break {
+            orInto(lp.breaks, w.open)
+            lp.broke = true
+        } else {
+            orInto(lp.conts, w.open)
+            lp.continued = true
+        }
+        w.loops[i] = lp
+        break
+    }
+    w.dead = true
+}
+
+fn (w mut Landings&) clauses(cs Array<Clause&>&) {
+    for c in cs {
+        w.block(c.Code)
+        w.exprs(c.Defaults)
+    }
+}
+
+fn (w mut Landings&) exprs(xs Array<Expr&>&) {
+    for x in xs { w.expr(x) }
+}
+
+fn (w mut Landings&) expr(x Expr?&) {
+    if x is null: return
+    match x {
+        case Expr.Lit(_, _, _), Expr.Data(_, _, _, _) { }
+        case Expr.Read(sp, _, p, _) {
+            if p == Lvalue.Local { w.mention(p.id, I64(sp.Start), true) } else { w.place(p) }
+        }
+        case Expr.Borrow(_, _, p), Expr.Take(_, _, p): w.place(p)
+        case Expr.Promote(_, _, pr): w.expr(pr.X)
+        case Expr.Call(_, _, c) {
+            match c.Target {
+                case Callee.Value(f) { w.expr(f) }
+                case _ { }
+            }
+            w.exprs(c.Args)
+        }
+        case Expr.Make(_, _, m) {
+            w.exprs(m.Items)
+            w.expr(m.Length)
+        }
+        case Expr.Collect(_, _, c) {
+            w.expr(c.Reserve)
+            w.loop(c.Loop.Id, c.Loop, null)
+            w.dead = false   # (a comprehension's walk always ends: its value is made)
+        }
+        case Expr.Prim(_, _, _, _, args): w.exprs(args)
+        case Expr.Slice(_, _, sl) {
+            w.place(sl.Base)
+            w.expr(sl.Lo)
+            w.expr(sl.Hi)
+        }
+        case Expr.Cond(_, _, k) {
+            w.expr(k.C)
+            s0 := w.save()
+            w.expr(k.A)
+            s1 := w.save()
+            w.restore(s0)
+            w.expr(k.B)
+            w.meet(s1)
+        }
+        case Expr.Seq(_, _, q) {
+            for s in q.Stmts { w.stmt(s) }
+            w.expr(q.X)
+        }
+        case Expr.Match(_, _, m): w.matchExpr(m)
+        case Expr.Try(_, _, tr) {
+            s0 := w.save()
+            w.expr(tr.X)
+            sx := w.save()
+            for cl in tr.Clauses {
+                w.restore(s0)
+                w.meet(sx)
+                w.block(cl.Code)
+                w.exprs(cl.Defaults)
+                ends := w.save()
+                w.restore(sx)
+                w.meet(ends)
+                sx = w.save()
+            }
+            w.restore(sx)
+        }
+        case Expr.Fn(_, _, f) {
+            match f {
+                case FnVal.Lambda(_, caps, _) { for cp in caps { w.expr(cp.Outer) } }
+                case FnVal.Adapter(_, recv, _) { w.expr(recv) }
+                case FnVal.Named(_) { }
+            }
+        }
+        case Expr.Text(_, _, tx) {
+            for pc in tx.Pieces {
+                if pc == Piece.Render: w.expr(pc.x)
+            }
+        }
+        case Expr.Away(_, _, y): w.expr(y)
+    }
+}
+
+fn (w mut Landings&) matchExpr(m Match&) {
+    for s in m.Held { w.stmt(s) }
+    s0 := w.save()
+    joined := landState(Array<Bool>(w.open.Len(), false), true)
+    for a in m.Arms {
+        w.restore(s0)
+        w.arm(a)
+        w.meet(joined)
+        joined = w.save()
+    }
+    if m.NoMatch is not null {
+        w.restore(s0)
+        w.arm(m.NoMatch!)
+        w.meet(joined)
+        joined = w.save()
+    }
+    w.restore(joined)
+}
+
+fn (w mut Landings&) arm(a Arm&) {
+    for alt in a.Alts {
+        w.expr(alt.Test)
+        for bd in alt.Binds { w.expr(bd.From) }
+    }
+    w.expr(a.Guard)
+    w.block(a.Code)
+    w.expr(a.Value)
+}
+
+fn (w mut Landings&) place(p Lvalue&) {
+    match p {
+        case Lvalue.Local(sp, _, id): w.mention(id, I64(sp.Start), false)
+        case Lvalue.Deref(_, _, r): w.expr(r)
+        case Lvalue.Field(_, _, base, _): w.place(base)
+        case Lvalue.Elem(_, _, e) {
+            w.place(e.Base)
+            w.expr(e.Index)
+        }
+        case Lvalue.Payload(_, _, py): w.place(py.Base)
+        case Lvalue.Temp(_, _, v, _): w.expr(v)
+        case Lvalue.Global(_, _, _, _), Lvalue.Target(_, _) { }
+    }
+}

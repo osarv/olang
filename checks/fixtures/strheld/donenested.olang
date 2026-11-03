@@ -1,7 +1,7 @@
 # E11b/E11c: a test failing inside a Str reached through a List element and a struct field - what the Str made is
 # destructed on the way out
 import "std/io"
-type Res struct(k I64) {
+type Res unique struct(k I64) {
     k
 } destruct { try io.Println("Res destructed " $k) catch io.Error { } }
 type Bag struct(n I64) {

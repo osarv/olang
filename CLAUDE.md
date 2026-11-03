@@ -522,7 +522,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   parameter; `return` is rejected. Defaults are compile-time expressions (D8a). `destruct { }` makes a type
   reference-only (C11) and runs once per constructor call, when the instance's scope closes (O16); an empty one is an
   error (C7a). Reference-only because §8 tracks references, not by-value copies: a copy would carry a released
-  resource where no rule sees it (use after release, not double release).
+  resource where no rule sees it (use after release, not double release). A destructor's type is declared `unique`
+  (T13b, 2026-11-03), and C11 is enforced where a type is written as a place holding a value - a variable, a parameter
+  (a constructor's too), a result, a field, a type argument (`Vec<Res&>`); the type named in an expression (`Res(1)`)
+  holds nothing there. It had been accepted silently: a by-value copy of the constructor's instance, whose destructor
+  ran on the instance and never saw the copy's writes.
 - **`immut` types (T13a, the user's decisions 2026-11-03 "immut DECIDED", "unique vs immut settled"; built 2026-11-03,
   wt-unique, details mine).** `type Config immut struct(...)` (an enum or a type over another alike; `immut` a word of
   one place, L9b - before the body, a type name or `struct`/`enum`/`extends`/`trait`/`error`/`fn` after it): nothing of
@@ -551,6 +555,31 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   **Found earlier (pre-existing, fixed):** an `Array<Char>` of a run-time length lent to a `mut
   Array<U8>&` parameter (Char extends U8) was copied and the copy lent, so what the callee wrote was lost (E12's
   borrow taken now for any array whose elements are held alike - tests/immut.olang).
+- **`unique` types (T13b, the user's decisions 2026-11-03 "unique DECIDED", "Copy and unique DECIDED", "Collections
+  DECIDED", "unique vs immut settled"; built 2026-11-03, wt-uniq, details mine).** `type File unique struct(fd I32) { fd
+  }` (a word of one place, L9b, as `immut`): a value exists in one place. A fresh value (a constructor's or a call's
+  result, a value made) lands by value where it is put; any other copy is a reference - `w := f` is `w mut File&` naming
+  `f` (read-only where the place is), and so are a walk's name over an array (S9a), a match's binding (S13b) and a
+  capture (D16c); `x[i]` of a collection of unique elements is the element in place through its `RefMut` (reached
+  writably) or `Ref` (E31b), and S9d walks one through `Ref`. A slot laid out for the value (`x File`, a field, an element
+  or payload of a value made, a by-value parameter or receiver, a result) given an existing one is an error naming
+  `File&`. A by-value parameter, fresh at every call, hands its value on once where it is mentioned last - judged on every
+  path (`typed.Landings`: another branch is no "after", a loop's next turn is, deferred code, tasks and join clauses run
+  after everything) - so `Vec.Push(x T)` and `Map.Put` store unique elements as written; a returned whole local is the
+  result itself (O26a). A unique type declares no Copy, and `x.Copy()` of one is an error; a struct, enum, array or
+  collection holding a unique part by value is unique unless it declares a Copy (`types.Unique`, structural, cached once
+  every part is typed; `Table.MarkUnique` from `generic.DeclFor`); unique and immut are never one type's (both words, one
+  over the other, an immut type holding a unique part); not on a trait, an extern type or a function type. A generic
+  copying a value of a type its binding made unique is refused at the program's call that bound it - "Push needs a copy,
+  and File is unique" (G18a's rerouting, `check.boundMention`: the type mentions a unique argument); a walk's or a
+  binding's name is a reference in an instance too. Decided (mine): only the parameter lands again, never a local but
+  a returned one (the user: "taking a unique value by value doesn't work either, whether by a parameter or a new
+  local"); a `:=` constructor field is a slot (a value), never a reference; a unique value renders, compares and is
+  read through its fields as any value. **Destructors stay reference-only for now (C11, Part B of the round):** holding
+  one by value in its one place needs its destructor to follow the value where it moves (a Vec's growth, a by-value
+  parameter, a result) - Rust's drop with a holder's obligation - where today's runs on the instance the constructor
+  registered; until then a destructor type is unique and held through the reference its constructor gives.
+  `tools/unique_migrate.olang` (in `olang fix`) declared std's and the corpus's destructor types unique.
 - **Declared types are nominal (T29).** `type Meters I32`, `type Name Array<T>`; `extends` inherits the base's methods
   and operators (T29f, the user's design); `Name(x)` converts and names the argument's storage (T29a) - a copy to or
   from an immut type (T13a); a declared

@@ -1,7 +1,7 @@
 # G9d: the evaluator and the run time agree on generic calls of destructor temporaries
 import "std/io"
 Made mut I64 = 0
-type Res struct(k I64) {
+type Res unique struct(k I64) {
     k
 } destruct {
     Made++

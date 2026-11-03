@@ -508,6 +508,24 @@ builtinmethod.olang:2:12: error[M19d]: only the prelude declares methods of I32 
     2 | fn (n I32) Tw() I32 { return n * 2 }
       |            ^~
 compilation failed with 1 error
+=== c11destructnotunique.olang
+c11destructnotunique.olang:6:3: error[C11, T13b]: a destructor releases what one value holds, so Conn is unique - declare it 'type Conn unique struct(...)'
+    6 | } destruct { Closed++ }
+      |   ^~~~~~~~
+compilation failed with 1 error
+=== c11dtorbyvalue.olang
+c11dtorbyvalue.olang:7:20: error[C11]: Conn has a destructor, so it is held only by reference - write Conn&
+    7 | type Pool struct(c Conn) { c }
+      |                    ^~~~
+c11dtorbyvalue.olang:8:23: error[T13b]: Conn is unique: this value is held elsewhere, and the parameter holds one of its own - write a reference ('Conn&'), or make a new Conn here
+    8 | fn main() { p := Pool(Conn(3)) }
+      |                       ^~~~~~~
+compilation failed with 2 errors
+=== c11dtortypearg.olang
+c11dtortypearg.olang:8:14: error[C11]: Conn has a destructor, so it is held only by reference - write Conn&
+    8 |     v := Vec<Conn>()
+      |              ^~~~
+compilation failed with 1 error
 === c2afieldparam.olang
 c2afieldparam.olang:6:5: error[C2a]: field 'n' has a parameter's name - write it bare to take the parameter's value, or name it apart
     6 |     n I32 = n + 1
@@ -590,13 +608,13 @@ c4punmut.olang:4:30: error: expected a type, found '}'
       |                              ^
 compilation failed with 1 error
 === c7aempty.olang
-c7aempty.olang:3:39: error[C7a]: this destructor does nothing - remove it
-    3 | type Big struct(n I32) { n } destruct { }
-      |                                       ^
+c7aempty.olang:3:46: error[C7a]: this destructor does nothing - remove it
+    3 | type Big unique struct(n I32) { n } destruct { }
+      |                                              ^
 c7aempty.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === c7destructinbody.olang
-c7destructinbody.olang:5:5: error[C7]: 'destruct' follows the constructor's body - close the body first: 'type T struct(...) { ... } destruct { ... }'
+c7destructinbody.olang:5:5: error[C7]: 'destruct' follows the constructor's body - close the body first: 'type T unique struct(...) { ... } destruct { ... }'
     5 |     destruct { assert n >= 0 }
       |     ^~~~~~~~
 compilation failed with 1 error
@@ -5654,6 +5672,92 @@ compilation failed with 1 error
 t13atextwrite.olang:5:6: error[T13a, T29c]: a String never changes once it is made - write the text as an Array<Char> and make the String with String(chars), or build it with a StringBuilder
     5 |     s[0] = 'x'
       |      ^
+compilation failed with 1 error
+=== t13bafter.olang
+t13bafter.olang:6:14: error[T13b]: 'f' is handed on here, and File is unique - a unique value given by value lands once more only at its last mention, and 'f' is mentioned after
+    6 |     b := Box(f)
+      |              ^
+compilation failed with 1 error
+=== t13bafterdefer.olang
+t13bafterdefer.olang:7:12: error[T13b]: 'f' is handed on here, and File is unique - a unique value given by value lands once more only at its last mention, and 'f' is mentioned after
+    7 |     v.Push(f)
+      |            ^
+compilation failed with 1 error
+=== t13bafterloop.olang
+t13bafterloop.olang:5:31: error[T13b]: 'f' is handed on here, and File is unique - a unique value given by value lands once more only at its last mention, and 'f' is mentioned after
+    5 |     for _ in range 2 { v.Push(f) }
+      |                               ^
+compilation failed with 1 error
+=== t13bbyvaluefield.olang
+t13bbyvaluefield.olang:10:11: error[T13b]: File is unique: this value is held elsewhere, and a field holds one of its own - write a reference ('File&'), or make a new File here
+   10 |     b.f = f
+      |           ^
+compilation failed with 1 error
+=== t13bbyvaluelocal.olang
+t13bbyvaluelocal.olang:6:14: error[T13b]: File is unique: this value is held elsewhere, and 'g' holds one of its own - write a reference ('File&'), or make a new File here
+    6 |     g File = f
+      |              ^
+compilation failed with 1 error
+=== t13bbyvalueparam.olang
+t13bbyvalueparam.olang:7:16: error[T13b]: File is unique: this value is held elsewhere, and the parameter holds one of its own - write a reference ('File&'), or make a new File here
+    7 |     assert use(f) == 3
+      |                ^
+compilation failed with 1 error
+=== t13bbyvalueresult.olang
+t13bbyvalueresult.olang:5:32: error[T13b]: File is unique: this value is held elsewhere, and the result holds one of its own - write a reference ('File&'), or make a new File here
+    5 | fn inner(b Box&) File { return b.f }
+      |                                ^~~
+compilation failed with 1 error
+=== t13bimmutholdsunique.olang
+t13bimmutholdsunique.olang:4:43: error[T13b]: File is unique, so it is no part of Config, which is immut - an immut value is copied freely, a unique one never; hold a reference, 'File&'
+    4 | type Config immut struct(f File, n I64) { f, n }
+      |                                           ^
+compilation failed with 1 error
+=== t13bkind.olang
+t13bkind.olang:3:13: error[T13b]: 'unique' says a value exists in one place - a trait has no values of its own
+    3 | type Closer unique trait {
+      |             ^~~~~~
+compilation failed with 1 error
+=== t13bneedscopy.olang
+t13bneedscopy.olang:12:10: error[T13b, G18]: twice needs a copy, and File is unique - its values are never copied: call twice with a reference ('File&') or with a type that copies
+   12 |     v := twice(File(3))
+      |          ^~~~~
+t13bneedscopy.olang:7:10: note: twice needs a copy here
+    7 |     y := x
+      |          ^
+compilation failed with 1 error
+=== t13bpushexisting.olang
+t13bpushexisting.olang:7:12: error[T13b]: File is unique: this value is held elsewhere, and the parameter holds one of its own - write a reference ('File&'), or make a new File here
+    7 |     v.Push(f)
+      |            ^
+compilation failed with 1 error
+=== t13buniquecopycall.olang
+t13buniquecopycall.olang:6:12: error[T13b, E31d]: File is unique, so it is never copied and has no Copy - make a new one with a function or its constructor
+    6 |     g := f.Copy()
+      |            ^~~~
+compilation failed with 1 error
+=== t13buniquecopydecl.olang
+t13buniquecopydecl.olang:4:14: error[T13b, E31d]: File is unique, so it is never copied and has no Copy - make a new one with a function or its constructor
+    4 | fn (f File&) Copy() File { return File(f.fd) }
+      |              ^~~~
+compilation failed with 1 error
+=== t13buniqueimmut.olang
+t13buniqueimmut.olang:3:17: error[T13b]: 'unique' and 'immut' are never one type's - an immut value is copied freely, a unique one never
+    3 | type Key unique immut struct(n I64) { n }
+      |                 ^~~~~
+compilation failed with 1 error
+=== t13buniqueoverimmut.olang
+t13buniqueoverimmut.olang:3:12: error[T13b]: 'unique' and 'immut' are never one type's - an immut value is copied freely, a unique one never
+    3 | type Label unique extends String
+      |            ^~~~~~
+compilation failed with 1 error
+=== t13bvecat.olang
+t13bvecat.olang:7:16: error[T13b, G18]: Get needs a copy, and File is unique - its values are never copied: call Get with a reference ('File&') or with a type that copies
+    7 |     f := try v.Get(0) catch VecError { return }
+      |                ^~~
+$ROOT/std/prelude/vec.olang:102:12: note: Get needs a copy here
+  102 |     return v.data[i]
+      |            ^~~~~~~~~
 compilation failed with 1 error
 === t13holdsitself.olang
 t13holdsitself.olang:4:7: error[T16]: E cannot hold itself by value - hold it through a reference ('&')

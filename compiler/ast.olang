@@ -335,14 +335,15 @@ type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool
     Extends
     Body       # null for a type whose declaration did not parse past its name - declared by its name alone
     Attrs      # the attributes written before it (G39)
-    Word       # the word before its body (T13a): immut, or none
+    Word       # the word before its body (T13a, T13b): immut, unique, or none
 }
 
-# what a type declaration says of its values before its body (T13a): nothing, or never changing after their
-# constructor (immut)
+# what a type declaration says of its values before its body: nothing, never changing after their constructor (immut,
+# T13a), or existing in one place (unique, T13b)
 type DeclWord enum {
     Plain
     Immut
+    Unique
 }
 
 # a top-level if (B9): each branch's declarations and the group holding its diagnostics, the else a TopIf or a branch

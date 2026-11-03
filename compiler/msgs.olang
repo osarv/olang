@@ -344,6 +344,14 @@ type Diag enum {
     ImmutMutRef
     TextMutRef
     ImmutCopy
+    UniqueImmut
+    UniqueImmutPart
+    UniqueCopy
+    UniqueByValue
+    UniqueAfter
+    UniqueKind
+    UniqueNeedsCopy
+    DestructNotUnique
     StrShape
     EqStrWrites
     ProtocolBothSpellings
@@ -1183,7 +1191,7 @@ fn KeywordAsName(tok String&) Msg { return Msg(Diag.KeywordAsName, "L9", $tok " 
 fn KeywordFieldRead(tok String&) Msg { return Msg(Diag.KeywordFieldRead, "L9a", $tok " is a keyword, not a name - a field named by one is reached only after '.', never by the name alone") }
 
 # ERR_DESTRUCT_IN_BODY
-fn DestructInBody() Msg { return Msg(Diag.DestructInBody, "C7", "'destruct' follows the constructor's body - close the body first: 'type T struct(...) { ... } destruct { ... }'") }
+fn DestructInBody() Msg { return Msg(Diag.DestructInBody, "C7", "'destruct' follows the constructor's body - close the body first: 'type T unique struct(...) { ... } destruct { ... }'") }
 
 # ERR_JOIN_PIECE
 fn JoinPiece(text String&) Msg { return Msg(Diag.JoinPiece, "E11b", "a join piece is a text literal or a '$' rendering - write '$" $text "'") }
@@ -1825,6 +1833,30 @@ fn TextMutRef() Msg { return Msg(Diag.TextMutRef, "T13a, T29c", "'mut' makes a r
 
 # ERR_IMMUT_COPY
 fn ImmutCopy(ty String&) Msg { return Msg(Diag.ImmutCopy, "T13a, E31d", "a copy of " $ty " shares it, as nothing of it changes (it is immut) - it declares no Copy") }
+
+# ERR_UNIQUE_IMMUT
+fn UniqueImmut() Msg { return Msg(Diag.UniqueImmut, "T13b", "'unique' and 'immut' are never one type's - an immut value is copied freely, a unique one never") }
+
+# ERR_UNIQUE_IMMUT_PART
+fn UniqueImmutPart(ty String&, part String&) Msg { return Msg(Diag.UniqueImmutPart, "T13b", $part " is unique, so it is no part of " $ty ", which is immut - an immut value is copied freely, a unique one never; hold a reference, '" $part "&'") }
+
+# ERR_UNIQUE_COPY
+fn UniqueCopy(ty String&) Msg { return Msg(Diag.UniqueCopy, "T13b, E31d", $ty " is unique, so it is never copied and has no Copy - make a new one with a function or its constructor") }
+
+# ERR_UNIQUE_BY_VALUE
+fn UniqueByValue(ty String&, what String&) Msg { return Msg(Diag.UniqueByValue, "T13b", $ty " is unique: this value is held elsewhere, and " $what " holds one of its own - write a reference ('" $ty "&'), or make a new " $ty " here") }
+
+# ERR_UNIQUE_AFTER
+fn UniqueAfter(name String&, ty String&) Msg { return Msg(Diag.UniqueAfter, "T13b", "'" $name "' is handed on here, and " $ty " is unique - a unique value given by value lands once more only at its last mention, and '" $name "' is mentioned after") }
+
+# ERR_UNIQUE_KIND
+fn UniqueKind(what String&) Msg { return Msg(Diag.UniqueKind, "T13b", "'unique' says a value exists in one place - " $what " has no values of its own") }
+
+# ERR_UNIQUE_NEEDS_COPY
+fn UniqueNeedsCopy(text String&, ty String&) Msg { return Msg(Diag.UniqueNeedsCopy, "T13b, G18", $text " needs a copy, and " $ty " is unique - its values are never copied: call " $text " with a reference ('" $ty "&') or with a type that copies") }
+
+# ERR_DESTRUCT_NOT_UNIQUE
+fn DestructNotUnique(ty String&) Msg { return Msg(Diag.DestructNotUnique, "C11, T13b", "a destructor releases what one value holds, so " $ty " is unique - declare it 'type " $ty " unique struct(...)'") }
 
 # ERR_STR_SHAPE
 fn StrShape() Msg { return Msg(Diag.StrShape, "E11c", "Str gives a String") }

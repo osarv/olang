@@ -1,6 +1,6 @@
 # check: fail error[C9b]: 'd' is used after 'd.Destroy()' (line 12)
 # C9b: the local is not read after its Destroy() - its instance is gone
-type Res struct(id I64) {
+type Res unique struct(id I64) {
     id
 } destruct {
     Closed += 1

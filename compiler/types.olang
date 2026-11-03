@@ -200,6 +200,8 @@ type Table struct(Names mut source.Names&) {
     holdsUnsure Bool = false            # HoldsRefs met a part whose type is not known yet: nothing it found is kept
     ints Vec<TypeId>                   # T4a: the integer type of each width, I1 .. I128 at 1 .. 128, U1 .. U128 above
     copyDecls Map<I64, Bool>           # E31d: the declared types (by DeclId) that declare their own Copy
+    uniqueDecls Map<I64, Bool>         # T13b: the declared types (by DeclId) declared unique
+    uniqueKnown Map<I64, Bool>         # ... and whether a type is unique, once every part of it was typed (Unique)
 }
 
 # a table holding the types every program has, each at a fixed id: Unknown 0, Void 1, Bool 2, the numbers in T4's order
@@ -863,6 +865,67 @@ fn (t Table&) DeclaresCopy(id TypeId) Bool { return t.KindOf(id) == Kind.Named a
 # whether a copy of a value of a type runs a declared Copy (E31d): the type's own, or a part's it holds by value - deep
 # through values, never through a reference (whose referent a copy shares)
 fn (t mut Table&) RunsCopy(id TypeId) Bool { return t.copyDecls.Len() > 0 and t.runsCopy(id, 0) }
+
+# T13b: a declared type declared unique - registered as declarations are, before anything is judged by it
+fn (t mut Table&) MarkUnique(d DeclId) { t.uniqueDecls.Put(I64(d), true) }
+
+fn (t Table&) AnyUnique() Bool { return t.uniqueDecls.Len() > 0 }
+
+# whether Unique's answer for a type is known already
+fn (t Table&) UniqueSettled(id TypeId) Bool { return t.uniqueKnown.Has(I64(id)) }
+
+fn (t Table&) DeclaredUnique(id TypeId) Bool { return t.KindOf(id) == Kind.Named and t.uniqueDecls.Has(I64(t.DeclOf(id))) }
+
+# T13b: whether a value of a type exists in one place: its type declared unique, or holding by value a part that is -
+# a field, a payload, an element of an array held by value, deep through values, never through a reference - unless it
+# declares a Copy of its own (E31d), which makes that part anew. A collection holds its elements by value, so it follows
+# them (Vec<File> is unique)
+fn (t mut Table&) Unique(id TypeId) Bool {
+    if t.uniqueDecls.Len() == 0: return false
+    if t.uniqueKnown.Has(I64(id)): return try t.uniqueKnown.Get(I64(id)) catch default false
+    outer := t.holdsUnsure
+    t.holdsUnsure = false
+    u := t.unique(id, 0)
+    if not t.holdsUnsure: t.uniqueKnown.Put(I64(id), u)
+    t.holdsUnsure = outer
+    return u
+}
+
+fn (t mut Table&) unique(id TypeId, depth I64) Bool {
+    if depth > 16: return false
+    if t.KindOf(id) == Kind.Named {
+        if t.uniqueDecls.Has(I64(t.DeclOf(id))): return true
+        if t.DeclaresCopy(id): return false
+        if not t.HasBody(id) {
+            t.holdsUnsure = true
+            return false
+        }
+        return match t.DeclKindOf(t.DeclOf(id)) {
+            case DeclKind.Struct: t.partsUnique(t.Fields(id), depth)
+            case DeclKind.Enum: t.partsUnique(t.Cases(id), depth, true)
+            case DeclKind.Over: t.unique(t.Base(id), depth + 1)
+            case _: false
+        }
+    }
+    return match t.KindOf(id) {
+        case Kind.Array: t.unique(t.Elem(id), depth + 1)
+        case Kind.Record: t.partsUnique(t.Parts(id), depth)
+        case Kind.AnonEnum: t.partsUnique(t.ShapeCases(id), depth, true)
+        case _: false
+    }
+}
+
+# a list's: a part's 0 is one not typed yet - among cases, a case with no payload
+fn (t mut Table&) partsUnique(l ListId, depth I64, cases Bool = false) Bool {
+    for x in t.Items(l) {
+        if x == TypeId(0) {
+            if not cases: t.holdsUnsure = true
+        } else if not t.IsRef(x) and t.unique(x, depth + 1) {
+            return true
+        }
+    }
+    return false
+}
 
 fn (t mut Table&) runsCopy(id TypeId, depth I64) Bool {
     if depth > 16 { return false }

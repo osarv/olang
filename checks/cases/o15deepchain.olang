@@ -5,7 +5,7 @@ import "std/os"
 
 RelNext mut I64 = 0
 RelBad mut I64 = 0
-type Deep struct(v I64) {
+type Deep unique struct(v I64) {
     v
     next mut Deep?& = null
 } destruct {

@@ -1,0 +1,4 @@
+# check: fail error[T13b]: 'unique' and 'immut' are never one type's
+# T13b: an immut value is copied freely, a unique one never - the two words never on one type
+type Key unique immut struct(n I64) { n }
+fn main() { }

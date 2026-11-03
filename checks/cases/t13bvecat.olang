@@ -1,0 +1,9 @@
+# check: fail error[T13b, G18]: Get needs a copy, and File is unique
+# T13b: Get copies an element out - a Vec of unique elements gives one through Ref/RefMut (x[i]) or hands one over (Pop, TakeAt)
+type File unique struct(fd I32) { fd }
+fn main() {
+    v := Vec<File>()
+    v.Push(File(3))
+    f := try v.Get(0) catch VecError { return }
+    assert f.fd == 3
+}

@@ -369,7 +369,7 @@ fn alwaysCloses() Bool ? CloseError {
 }
 
 # bare field names inside destruct (like "id" below) read as that field directly, no "self."-style prefix
-type Handle struct(id I32) {
+type Handle unique struct(id I32) {
     id
 } destruct {
     alwaysCloses()!
@@ -1237,7 +1237,7 @@ test "a generic type's constructor calling a generic function" {
 # (The instantiated constructor's return type must be the copy's own stable slot, not a snapshot taken
 # before its destructor was attached - a snapshot froze the GENERIC's destructor into the constructed
 # value's type, so every construction registered a symbol that was never emitted.)
-type Tracked<T> struct(v T) {
+type Tracked<T> unique struct(v T) {
     val T = v
 } destruct {
     resourcesClosed = resourcesClosed + 1
@@ -1265,7 +1265,7 @@ test "a generic type's destructor is monomorphized per instantiation" {
 # it is passed to, however the storage was laid out (a promoted instance's slot is reserved before its arguments are
 # built, so the outermost sits first)
 OrderLog mut I64 = 0
-type OrderedRes struct(id I64, inner OrderedRes?&) {
+type OrderedRes unique struct(id I64, inner OrderedRes?&) {
     id
     inner
 } destruct {
@@ -2280,7 +2280,7 @@ test "T29b: arrays satisfy traits" {
 # The rejected program can only be named here:
 #   h Handle11 = Handle11(1)   # by value - C11 rejects it
 closes11 mut I32 = 0
-type Handle11 struct(id I32) { id } destruct { closes11 = closes11 + 1 }
+type Handle11 unique struct(id I32) { id } destruct { closes11 = closes11 + 1 }
 fn take11(h Handle11&) I32 { return h.id }
 type Holder11 struct(h Handle11&) { h }
 
@@ -7260,7 +7260,7 @@ test "S8c: a fixed local read through another decides an if, and an assert" {
 # would be lost - so this global is set at startup, and its destructor runs then
 ktDtorRuns mut I32 = 0
 
-type KtDropped struct(v I32) {
+type KtDropped unique struct(v I32) {
     v
 } destruct {
     ktDtorRuns++
@@ -7283,7 +7283,7 @@ test "K1: a global whose initializer runs a destructor is set at startup, destru
 # initializer calls is not (KtFromDropped above)
 k2cDtorRuns mut I32 = 0
 
-type K2cHandle struct(v I32) {
+type K2cHandle unique struct(v I32) {
     v
 } destruct {
     k2cDtorRuns++
@@ -7336,7 +7336,7 @@ test "S9: for with no clauses and with only a condition" {
 # block closes (it was the block around the loop's, so every evaluation's stayed until the loop's block ended). The
 # three-clause form's and a do loop's likewise; a do loop's first turn evaluates none, and continue still re-checks
 LcDrops mut I64 = 0
-type lcProbe struct(n I64) {
+type lcProbe unique struct(n I64) {
     n
 } destruct {
     LcDrops++
@@ -10939,7 +10939,7 @@ test "...and was not run" {
 # there - and before the destructors registered there (a join block's, before it waits for its tasks: std/cancel's
 # tests show a deferred Cancel). Run time only: building a value with a destructor is not evaluated (K1).
 dfClosed mut I64 = 0
-type DfRes struct(id I64) {
+type DfRes unique struct(id I64) {
     id
 } destruct {
     dfClosed = dfClosed * 10 + id       # C9: a destructor reads its own instance's fields
@@ -11099,7 +11099,7 @@ test "a long text literal is not truncated" {
 # a destructor registered in one runs at its closing brace, where it used to run at the function's return
 fn cgResId(r CgRes&) I64 { return r.id }
 cgResLog mut I64 = 0
-type CgRes struct(id I64) {
+type CgRes unique struct(id I64) {
     id
 } destruct {
     cgResLog = cgResLog * 10 + id
@@ -11393,7 +11393,7 @@ type WlLink struct(v I64, next WlLink?&) {
 wlRun mut I64 = 5
 wlSink mut I64 = 0
 
-type WlDrop struct(n I32) {
+type WlDrop unique struct(n I32) {
     n
 } destruct {
     junk := Array<I32>(64, 99)          # a destructor allocating while its scope closes
@@ -12537,7 +12537,7 @@ test "L18a: lists, literals, comprehensions and joins run over several lines ins
 
 # S1a: a block written as a statement is a scope of its own - what it allocates and its destructors end at its "}"
 cbClosed mut I32 = 0
-type cbHandle struct(n I32) {
+type cbHandle unique struct(n I32) {
     n
 } destruct { cbClosed = cbClosed + n }
 fn cbBlocks() I32 {
@@ -14675,7 +14675,7 @@ type c4Dense struct<T>(g mut c4G<T>&, inputs I64, label String&) {
     label
     tag String& = g.name
 }
-type c4Res struct<T>(g mut c4G<T>&) {
+type c4Res unique struct<T>(g mut c4G<T>&) {
     id I64 = g.Param(g.seed)
 } destruct {
     C4Dropped++
@@ -15882,7 +15882,7 @@ test "E11c: a Str walking a Map and a List of its receiver renders the same afte
 # C11/O16: every constructor call of a type declaring a destructor is one instance, destructed once when the scope it was
 # built in closes - one standing as a statement, read through, rendered, passed, stored, in a conditional, pushed alike
 CtorTempDestructs mut I64 = 0
-type ctorTempWrap struct(a Crate2&) {
+type ctorTempWrap unique struct(a Crate2&) {
     a
 } destruct { CtorTempDestructs++ }
 type ctorTempBox struct(w ctorTempWrap&) {
@@ -16709,12 +16709,12 @@ type Rv9Node struct(v I64) {
     v
     next mut Rv9Node?& = null
 }
-type Rv9Loud struct(id I64) {
+type Rv9Loud unique struct(id I64) {
     id
 } destruct {
     rv9Log = rv9Log * 10 + id
 }
-type Rv9Res struct(n mut Rv9Node&, k I64) {
+type Rv9Res unique struct(n mut Rv9Node&, k I64) {
     n
     k
 } destruct {
@@ -17419,12 +17419,12 @@ test "E28/O12: a conditional of references from different scopes, each value fit
 # C9a/P2: what a task a destructor spawns builds into the scope being closed is folded into it as the destructor
 # returns - its destructors run then, before the scope's next one, and its storage is reclaimed with the scope's
 B6Count mut I64 = 0
-type b6Tracker struct(k I64) {
+type b6Tracker unique struct(k I64) {
     k
 } destruct {
     B6Count = B6Count + 1
 }
-type b6Res struct(k I64) {
+type b6Res unique struct(k I64) {
     k
 } destruct {
     kk := k
@@ -17454,7 +17454,7 @@ test "C9a/P2: what a destructor's task builds is destructed with the scope being
 # C10: a method called on a field read bare in a destructor - "l.Push(k)" - is called on the instance's field, as a bare
 # read of it reads it
 B6Sum mut I64 = 0
-type b6Keeper struct(k I64) {
+type b6Keeper unique struct(k I64) {
     k
     l mut Vec<I64>& = Vec<I64>()
 } destruct {
@@ -17591,7 +17591,7 @@ test "P4a/D16d: a task's default may hold a lambda capturing only values" {
 # arena churns while the block is open
 ChainNext mut I64 = 0
 ChainBad mut I64 = 0
-type ChainNode struct(v I64, next ChainNode?&) {
+type ChainNode unique struct(v I64, next ChainNode?&) {
     v
     next
 } destruct {
@@ -17599,7 +17599,7 @@ type ChainNode struct(v I64, next ChainNode?&) {
     ChainNext--
 }
 TreeLog mut I64 = 0
-type TreeNode struct(v I64, a TreeNode?&, b TreeNode?&) {
+type TreeNode unique struct(v I64, a TreeNode?&, b TreeNode?&) {
     v
     a
     b
@@ -18348,7 +18348,7 @@ test "E24: a try covers the whole expression after it, and the evaluator agrees"
 # ---- C9b: x.Destroy() runs an instance's destructor now and reclaims it; every other destructor keeps O15's order ----
 
 DestroyLog mut I64 = 0
-type DestroyRes struct(id I64) {
+type DestroyRes unique struct(id I64) {
     id
     text String& = $"res " $id " - its text built where it lives"
 } destruct {
@@ -18603,7 +18603,7 @@ test "O8d, F2: a value of a place stored inside another value of that place keep
 # lands: run when that scope closes, never when the place lets go of the node
 BulkEnds mut I64 = 0
 
-type BulkRes struct(n I64) {
+type BulkRes unique struct(n I64) {
     n
 } destruct {
     BulkEnds += 1
@@ -18637,7 +18637,7 @@ test "O8d, F4: a destructor a let-go would run early runs at its scope's close" 
 # C9b: a break or a continue of the loop whose body declares the local ends its path, as a return does
 BulkDestroyed mut I64 = 0
 
-type BulkConn struct(n I64) {
+type BulkConn unique struct(n I64) {
     n
 } destruct {
     BulkDestroyed += 1

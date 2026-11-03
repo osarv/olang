@@ -2,7 +2,7 @@
 import "std/io"
 Made mut I64 = 0
 Gone mut I64 = 0
-type Res struct(k I64) {
+type Res unique struct(k I64) {
     k
     Made++
 } destruct { Gone++ }

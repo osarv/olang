@@ -163,9 +163,10 @@ ending in one ends its statement there. In its constructor's body such a field i
 and a later statement reading it by the word alone is a compile-time error (a constructor's other fields are its locals,
 C2a). Anywhere else - a parameter, a local, a function, a type - the words stay reserved.
 
-**L9b (words of one place).** `commutes` is a word only right after a method's result (E31c), and `immut` only right
-before a type declaration's body (T13a: `type Config immut struct(...)`, a type name - or `struct`, `enum`, `extends`,
-`trait`, `error`, `fn` - following it), an ordinary name everywhere else.
+**L9b (words of one place).** `commutes` is a word only right after a method's result (E31c), and `immut` and `unique`
+only right before a type declaration's body (T13a: `type Config immut struct(...)`, T13b: `type File unique
+struct(...)`, a type name - or `struct`, `enum`, `extends`, `trait`, `error`, `fn` - following it), an ordinary name
+everywhere else. The two are never written together (T13b).
 
 **L9c (`any`).** `any` is a word only where a type is written and the name of a type follows it on its line (T32):
 `s any Shape&`, `List<any Shape&>`, `fn f() any Shape&`; anywhere else it is an ordinary name.
@@ -795,6 +796,38 @@ read-only reference to an immut type given where a writable one is wanted - a `S
 `mut Array<Char>&` - is this rule's error, naming what may be written. The prelude's `String` is immut (T29c): text
 written into is an `Array<Char>` (or a declared type over one, or built by a `StringBuilder`), made a `String` with
 `String(chars)`. `immut` is a word only in that position (L9b); it names nothing.
+
+**T13b (`unique`).** A type declared with the word `unique` before its body - `type File unique struct(fd I32) { fd
+}`, an enum or a type over a number or an array alike - holds values that **exist in exactly one place**. A **fresh
+value** - a constructor's or a call's result, a value made (E31d) - lands by value where it is put: a local (`f :=
+File(3)`), a field or an element typed `File` (`Box(File(3))`, `v.Push(File(3))`), a by-value parameter (`use(File(3))`),
+a result. **Any other copy of a unique value is a reference to it**: a unique place read where nothing written says what
+holds the value - a `:=` (`w := f` makes `w` a `File&` naming `f`), a `for` walk's name over an array of them (S9a), a
+match's binding (S13b), a lambda's capture (D16c) - is a reference to that place, writable where the place may be
+written (a local, a by-value parameter, a part reached writably), read-only otherwise; an element `x[i]` of a collection
+holding unique elements is the element where the collection holds it, through its `RefMut` (where `x` is reached
+writably) or its `Ref` (E31b). A slot laid out for the value - a local written `x File`, a field, an element or a payload
+of a value made, a by-value parameter or receiver, a result - given an existing one is a compile-time error naming the
+reference form (`File&`): the slot cannot hold a reference instead. Two places hand on what they hold, since nothing
+reads it after: a **by-value parameter**, given a fresh value at every call, may land once more where it is mentioned
+**last** - stored, given to a by-value parameter, made a part of a value, returned (`fn (v mut Vec<T>&) Push(x T)` stores
+`x` so) - and a **local returned whole** (`return f`) is the result itself (O26a). Last is judged on every path from the
+landing, in the order the function evaluates: another branch's mentions are not after it, a loop running again
+reaches its body's mentions before it, and a mention in deferred code, a task or a join's clauses runs after
+everything; a mention after the landing is a compile-time error. A unique type declares no Copy (E31d), an error at its
+name, and `x.Copy()` of a unique value is an error: a new value from an existing one is made by an ordinary function
+or constructor (`File(dup(f.fd))`). A struct or an enum holding a unique part by value - a field, a payload, an element
+of an array it holds by value - is **unique itself**, unless it declares a Copy (E31d), which then makes that part anew
+(copying it there is this rule's error); an array of unique elements is unique, and so is a collection holding them by
+value (`Vec<File>`, `Map<String, File>`) - each follows its elements (E31d). A type declaring a destructor is declared
+`unique` (C11). `unique` and `immut` (T13a) are never one type's: written together, written over one another (`type L
+unique extends String`, `type Fs immut Array<File>`) or an immut type holding a unique part, each a compile-time error -
+an immut value is copied freely, a unique one never. `unique` on a trait, an extern type or a function type is an error:
+none has values of its own. A generic whose body copies a value of a type its call's binding makes unique - a `:=` or `=`
+from an existing value, a by-value argument, a store, a part, a result (but a by-value parameter handed on as above, and
+a walk's or a binding's name, which are references) - is refused at the program's call that bound it, as a generic's
+needs are (G18a): `Push needs a copy, and File is unique`, the note where the body copies. `unique` is a word only in
+that position (L9b); it names nothing.
 
 **T14.** A struct type is a value type: assignment, parameter passing, and return copy the whole value
 member-wise, and `==`/`!=` compare structurally (see §5.2 E10), unless referenced through a marker
@@ -1803,7 +1836,7 @@ keeps from being checked.
 ### 3.3 Type and error declarations
 
 **D4.** `type-decl ::= "type" IDEN [ type-params ] [ decl-word ] [ "extends" ] type-expr [ prim-ctor ] [ STMNT_END ]`
-(`extends`: T29f; `decl-word ::= "immut"`, T13a - a word only there, L9b), with
+(`extends`: T29f; `decl-word ::= "immut" | "unique"`, T13a, T13b - a word only there, L9b), with
 `prim-ctor ::= "(" param-list ")" [ "?" error-list ] block` valid only over a primitive (T29d), where `type-params`
 (§12.3 G6) declares type parameters and is valid only for a
 struct type, and `type-expr` is defined in
@@ -2156,7 +2189,8 @@ written in. Each one it uses is **captured** when the lambda is made, as though 
 own type:
 
 - a **value** is copied, and the lambda's copy is **read-only**, unlike a parameter's - changing the variable
-  afterwards does not change the lambda, and writing to the copy is a compile-time error;
+  afterwards does not change the lambda, and writing to the copy is a compile-time error; a value of a unique type
+  (T13b), never copied, is borrowed as a value array is;
 - a **reference** keeps naming the very instance it names (the copy is of the reference), and may be written
   through exactly when its type is writable (T25b) - this is how a lambda changes state outside itself;
 - a value **array** - text included - is **borrowed**, not copied, since copying one is never implicit (T7b):
@@ -2450,7 +2484,10 @@ stored in it. A reference-shaped result writes
 no scope tag into the declaration: the local takes its
 initializer's exact scope (§8 O25a). A value of a type declaring a destructor, which is held only by reference
 (C11), declares that reference - what `x T& = expr` declares: the instance lives where the declaration does, and is
-destructed when that scope closes.
+destructed when that scope closes. An existing value of a unique type (T13b) - a place's, read where the initializer
+names it - declares a reference to that place, writable where the place may be written (`w := f` is `w mut File& =
+f`); a fresh one (a constructor's or a call's) its value. In a generic, a `:=` copying a value of a type its binding
+made unique is the generic's need, said at the call (T13b).
 A global declared with `:=` has its initializer's type wherever it is read - above its declaration too, which B5a
 allows, since the global is set after the globals its initializer reads; `:=` globals whose initializers read each
 other are B5a's cycle, reported as one.
@@ -4011,7 +4048,7 @@ supplied**: the value's copy, part by part - deep through what it holds by value
 or an enum held by value, each by its own Copy), shared at references (a reference copies as itself, naming the same
 instance; so does a function value). `x.Copy()` written gives that copy - of a reference's referent where `x` is a
 reference - a value of its own: `r.Copy()` of an `Array<I64>&` is an `Array<I64>`. A **struct or an enum** the program
-declares may declare its own, `fn (x T&) Copy() T`: reading its receiver through a read-only reference, taking nothing
+declares - not a unique one (T13b), whose values are never copied - may declare its own, `fn (x T&) Copy() T`: reading its receiver through a read-only reference, taking nothing
 else, giving a value of its type and never failing (no `?`, never `noreturn`) - with the receiver by value, written,
 another result or an error set it is a compile-time error naming that form, and on any other type (a declared
 number, an array type) an error naming the supplied one; a method `Copy` taking parameters is an ordinary method
@@ -4028,7 +4065,11 @@ declared Copy is never run on a value whose first never-null reference there is 
 declared Copy, the copy is made wherever the program copies a value of it - none is left out (D9h, D9i); the
 compile-time evaluator makes the same calls (K1).
 
-**E31b (writing through `x[i]`).** `x[i]` on a type declaring `At` gives a copy of the element. A **store** through
+**E31b (writing through `x[i]`).** `x[i]` on a type declaring `At` gives a copy of the element - but an element of a
+unique type (T13b), never copied, is the element where the collection holds it: `x[i]` is `x.RefMut(i)`'s referent where
+`x` is reached writably and the type declares `RefMut` over `At`'s indices giving a writable reference, else
+`x.Ref(i)`'s (a read-only one), so a read, a store and a method call through it act on the element in place, and a
+type declaring neither copies through `At` (the generic's need, T13b). A **store** through
 it - a field (or an inline element) of it assigned, `x[i].f = v` or `x[i].f op= v`; an increment `x[i].f++`; an
 element of it assigned, `x[i][j] = v` - is a **read-modify-write** with nothing run between the read and the write:
 first the place is held - `x` as a place and each index evaluated once, left to right; then the value is evaluated (a
@@ -4667,7 +4708,8 @@ holding it; `for i, x in e` also declares `i`, an `I64` counting iterations from
 scoped to the body. `e` is evaluated once, before the first iteration, and must be one of:
 
 - an **array**, of any shape (T11, including a slice and a declared array type): `x` is each element in
-  order, **copied** — assigning to `x` does not change the array; `a[i] = ...` through the index form does.
+  order, **copied** — assigning to `x` does not change the array; `a[i] = ...` through the index form does. An element
+  of a unique type (T13b), never copied, is named where the array holds it: `x` is a read-only reference to it.
   The array is borrowed for the loop (E12c), never copied, so its length is read once per iteration from
   the same storage.
 - an **`Iterator<T>`** (T35b): a value whose type satisfies the built-in trait - or whose type declares the private
@@ -4687,7 +4729,9 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   `Iter()` nor a `RunFrom` of its own - each of which says how the type wants to be walked (a `List` has them all,
   and is walked run by run). The `Iter()` that `Indexable<T>` supplies as a default (T35b) is not the type's own. It is walked as an array is: a
   counted loop over positions `0` to `Len() - 1`, `x` each `At(i)`, `Len()` read every iteration, the collection
-  borrowed (E12c), never copied. The loop calls `At`, `for x in try c` included (S9e).
+  borrowed (E12c), never copied. The loop calls `At`, `for x in try c` included (S9e) - but where the element is unique
+  (T13b) and the type declares a one-index `Ref(i)` giving a reference to it and failing with nothing (a Vec's), `x` is a
+  read-only reference to each element, through `Ref(i)`, At giving copies.
 - an **iterable** (S9c): a value with no `Next()` of its own and a method `Iter()`, taking no arguments, whose
   result is an iterator. The loop walks `e.Iter()`. An iterable keeps no position — every loop, nested or
   repeated, gets a fresh iterator — which is why a collection is an iterable rather than an iterator itself.
@@ -4849,7 +4893,8 @@ naming every field. A position is one of:
 - a **name**: a fresh local bound to a copy of that field, visible to the clause's guard and body only, and
   assignable as any local is (D11) - an identifier there is always a binding, never a value read, so the form never
   means "compare against a variable". Its storage is the clause's, as a local of the clause body is: a borrow of it does
-  not leave the clause;
+  not leave the clause. A field of a unique type (T13b), never copied, is bound as a reference to it where the payload
+  holds it - writable where the matched place may be written;
 - `_`: the field, ignored;
 - a nested **pattern**, naming a case of the enum that field holds (S13d);
 - a **literal** (or a negated number), compared with that field by `==` as a value alternative is (S13d).
@@ -6957,7 +7002,7 @@ never evaluated.
 every fallible call within it must be fully caught by a `catch` that leaves nothing uncaught
 (§7.5),
 since a destructor is never invoked by ordinary calling code and so has no caller to propagate an
-error to. Declaring this block also makes the type reference-only — see C11.
+error to. Declaring this block is declaring the type `unique` (T13b), and makes it reference-only — see C11.
 
 **C8.** Inside a `destruct` block, a bare identifier that names one of the type's own fields (and is
 not itself shadowed by a local of the same name) reads that field of the instance being destructed
@@ -7013,11 +7058,14 @@ not declare a method named `Destroy`.
 than once for the same instance, and never runs for storage no constructor call ever produced an
 instance in (O16).
 
-**C11.** A struct type that declares a `destruct` block is **reference-only**: every `type-ref` (T24)
-naming it must carry a reference marker, and a bare `type-ref` naming it is a compile-time error —
-as a variable's declared type, a parameter type, a return type, a struct field's type, or an array's
-element type alike. The type may therefore never be embedded by value in any aggregate, and never
-passed or returned by value.
+**C11.** A struct type that declares a `destruct` block is declared `unique` (T13b) - one without the word is a
+compile-time error naming it: a destructor releases what one value holds - and is **reference-only**: every `type-ref`
+(T24) naming it as a place that would hold its value must carry a reference marker, and a bare `type-ref` naming it is a
+compile-time error — as a variable's declared type, a parameter type (a constructor's included), a return type, a
+struct field's type, or a type argument (`Vec<Res>`, where `Vec<Res&>` holds them) alike; the type named where an
+expression is - a constructor called (`Res(1)`, `Box<Res>(r)` naming its own arguments), a case of it - holds no value
+there. The type may therefore never be embedded by value in any aggregate, and never passed or returned by value; its
+constructor's instance is built where it lands and held through the reference it gives (D15).
 
 A destructor releases something at the moment the scope holding its instance closes, so every name that
 can still reach the released thing afterwards must be one that §8 can see. §8 checks **references**: a

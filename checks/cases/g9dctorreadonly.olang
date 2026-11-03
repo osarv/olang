@@ -1,7 +1,7 @@
 # check: fail error[T25b]: this writes through a read-only reference
 # G9d/G10c: a generic constructor binds a destructor temporary read-only, as every reference
 import "std/io"
-type Res struct(k I64) {
+type Res unique struct(k I64) {
     k
 } destruct { try io.Println("d") catch io.Error { } }
 type Box<T> struct(x T) {

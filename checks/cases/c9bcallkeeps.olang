@@ -1,6 +1,6 @@
 # check: fail error[C9b]: 'b.Destroy()' needs 'b' to be the only way left to reach its instance
 # C9b: a call whose body stores what it is given may have kept it - read off the callee's body
-type Res struct(id I64) {
+type Res unique struct(id I64) {
     id
 } destruct {
     Closed += 1

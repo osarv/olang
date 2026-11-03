@@ -1,0 +1,4 @@
+# check: fail error[T13b]: 'unique' and 'immut' are never one type's
+# T13b: a type declared over an immut type is immut itself (T13a), so it cannot be unique
+type Label unique extends String
+fn main() { }

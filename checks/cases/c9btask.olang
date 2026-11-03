@@ -1,6 +1,6 @@
 # check: fail error[C9b]: 't.Destroy()' needs 't' to be the only way left to reach its instance
 # C9b: a task given the instance may still use it after the Destroy()
-type Res struct(id I64) {
+type Res unique struct(id I64) {
     id
 } destruct {
     Closed += 1

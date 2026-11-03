@@ -31,7 +31,7 @@ fn looped() Bool {
 }
 Looped Bool = looped()                  # E10c: identity, while compiling
 closed mut I32 = 0
-type Loud struct(id I32) { id } destruct { closed = closed + 1 }
+type Loud unique struct(id I32) { id } destruct { closed = closed + 1 }
 fn loudOnce() I32 {
     l Loud& = Loud(1)
     return l.id

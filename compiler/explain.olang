@@ -308,6 +308,13 @@ fn NoValueWhy(c mut typecheck.Checker&, sc scope.Scoper&, f I64, body I64) Strin
 
 # ---- types ----
 
+# T13a, T13b: the word a type's declaration writes before its body, as explain shows it
+fn declWord(c mut typecheck.Checker&, t types.TypeId) String {
+    if c.P.Immut(t): return " immut"
+    if c.P.T.DeclaredUnique(t): return " unique"
+    return ""
+}
+
 fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
     b := StringBuilder()
     self := c.P.SelfType(d)
@@ -352,7 +359,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
             return b.ToString()
         }
         case types.DeclKind.Enum {
-            b.Push($"type " $name $(" immut" if c.P.Immut(self) else "") " enum\n")
+            b.Push($"type " $name $declWord(c, self) " enum\n")
             cases := c.P.T.Items(c.P.T.Cases(self))
             ns := c.P.T.CaseNames(self)
             for k in range ns.Len() {
@@ -366,7 +373,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
         case types.DeclKind.Over {
             # T21b: a declared function type's base as its declaration writes it, with no marker
             bt := c.P.T.Base(self)
-            b.Push($"type " $name $(" immut" if c.P.Immut(self) else "") $(" extends " if c.P.Extends(self) else " ") $(declSig(c, bt) if c.P.T.KindOf(bt) == types.Kind.Func else c.Ty(bt)))
+            b.Push($"type " $name $declWord(c, self) $(" extends " if c.P.Extends(self) else " ") $(declSig(c, bt) if c.P.T.KindOf(bt) == types.Kind.Func else c.Ty(bt)))
             # T29d: its constructor's parameter and errors
             match c.P.TypeDecl(d)!.Body {
                 case ast.TypeBody.Over(_, ctor) if ctor is not null {
@@ -382,7 +389,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
             sig := declSig(c, named(c, c.P.CtorSig(self), null, ctorParams(c.P.TypeDecl(d)!)))
             close := firstClose(sig)
             ps := withDefaults(c, sig[3:close], ctorParams(c.P.TypeDecl(d)!), c.P.DeclModule(d), 0)
-            b.Push($"type " $name $(" immut" if c.P.Immut(self) else "") " struct(" $ps ")" $errorsAfter(sig[close + 1:]) "\n")
+            b.Push($"type " $name $declWord(c, self) " struct(" $ps ")" $errorsAfter(sig[close + 1:]) "\n")
             match c.P.TypeDecl(d)!.Body {
                 case ast.TypeBody.Struct(sb) {
                     if sb.Errs is not null { contract(b, c, sb.Errs!, c.P.DeclModule(d), "    ") }

@@ -2,7 +2,7 @@
 # any - printed built, built -d -s and interpreted, all three alike
 import "std/io"
 
-type Res struct(id I64) {
+type Res unique struct(id I64) {
     id
 } destruct {
     try io.Println("drop " $id) catch { }

@@ -4,7 +4,7 @@ import "std/io"
 Made mut I64 = 0
 Gone mut I64 = 0
 Twice mut I64 = 0
-type Res struct(k I64) {
+type Res unique struct(k I64) {
     k
     gone Bool = false
     Made++
@@ -14,7 +14,7 @@ type Res struct(k I64) {
     Gone++
 }
 type E error { X }
-type FRes struct(k I64) ? E {
+type FRes unique struct(k I64) ? E {
     k
     gone Bool = false
     if k < 0 { error E.X }

@@ -1,0 +1,14 @@
+# check: fail error[T13b, G18]: twice needs a copy, and File is unique - its values are never copied: call twice with a reference ('File&') or with a type that copies
+# also: note: twice needs a copy here
+# T13b, G18a: a generic copying a value of its type variable is refused at the call binding it to a unique type
+type File unique struct(fd I32) { fd }
+fn twice<T>(x T) Vec<T> {
+    v := Vec<T>()
+    y := x
+    v.Push(x)
+    return v
+}
+fn main() {
+    v := twice(File(3))
+    assert v.Len() == 1
+}

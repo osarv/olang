@@ -1,6 +1,6 @@
 # check: fail error[C9b]: 'c.Destroy()' needs 'c' to be the only way left to reach its instance
 # C9b: an instance held in two collections - taken out of one, it is still in the other
-type Res struct(id I64) {
+type Res unique struct(id I64) {
     id
 } destruct {
     Closed += 1
