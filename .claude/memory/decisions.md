@@ -2574,3 +2574,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   writes. With that, PROPOSED: no overridable assignment because nothing is left for one to do - a plain type copies
   structurally, a reference copies a pointer, a unique type refuses and offers Clone(); an override is C++'s copy
   constructor (user code on every assignment and by-value pass). ASKED with `immut`.
+- Assignment, the user 2026-11-03 (3): "we've basically relaxed the hidden control flow, with destructors and stuff ...
+  and some of the no hidden copies rules are basically overridden". Conceded: destructors run unwritten at a scope's
+  close, `$x` calls Str, operators call methods, QCE/E11b/valueArg copy at stores and calls - so principle is no bar.
+  Answered on need instead: an overridable assignment (C++'s copy constructor) has no use left - a plain type copies
+  structurally, a reference shares, a unique type refuses and writes Clone(), and wanting deep copies is holding by
+  value (QCE); Rust, Swift, Go and Zig have none, and C++'s is a known source of bugs. Recommended: keep it fixed,
+  additive later if code shows a need. ASKED.
