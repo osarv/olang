@@ -2636,3 +2636,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   once more (into a field or a collection) at its last use? PROPOSED yes: a parameter given a fresh value is itself
   fresh, so it may land once, the checker refusing any use of it after (a local check, no general move tracking);
   that is how `Vec.Push(x T)` keeps a unique element. Copying a unique collection still asked: `v.ToVec()` recommended.
+- unique, the user 2026-11-03: "maybe we don't need a unique keyword, just overriding the copy function in an
+  appropriate way is enough to make them unique". PROPOSED (rec): no keyword - every type is copied by its `Copy`; the
+  compiler supplies a structural Copy for a type unless it has a destructor or holds by value a part with no Copy; such
+  a type is uncopyable (the "unique" rules: held by value where its fresh value lands, references after) until it
+  writes a Copy (which must build fresh what cannot be copied). Consequence: the collections hold no destructor, so they
+  copy - `w Vec<I64> = v` copies its elements, left out wherever nothing could tell - and copying a collection needs no
+  `ToVec`; an uncopyable type with no resource to release has no spelling (none found that needs one). Alternative:
+  keep `unique` as a word, explicit at the declaration. ASKED.
