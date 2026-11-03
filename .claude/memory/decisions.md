@@ -2689,3 +2689,14 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   shared AST - ~9,000 `&`) are rewritten around indices into collections, and it is a rewrite of the language and all
   code. Recommended: not now - inferred scopes already removed the marker burden and the `&` left marks real sharing;
   if wanted, a study on real code first (the compiler, a GUI sketch, the settle loop). In effect: references as today.
+- Copy resumed 2026-11-03 (the user: "Let's settle the copy question and then get to it"). The whole design put for a
+  yes, as numbered rules: (1) `Copy()` is the one method making a new value from an existing one, Clone gone; (2) an
+  ordinary type gets a field-by-field Copy (references shared, immut parts shared) unless it declares its own, and
+  every copy calls it - assignment, compound assignment, a by-value argument, a store; a declared Copy only builds (its
+  only effect allocation) and is left out where neither side is written afterwards; (3) a unique type is never copied
+  implicitly - a fresh value lands by value where it is put (a constructor's or call's result, through a parameter at
+  its last use), any other copy is a reference, a slot holding the value in place takes only a fresh one; (4) a unique
+  type may declare Copy, called only when written (`f.Copy()`), its result fresh; without one it cannot be duplicated;
+  (5) a struct holding a unique part by value is unique, unless it declares a Copy that builds that part fresh; (6) a
+  destructor requires unique; unique and immut never both; immut copies are shares; (7) the collections are unique,
+  duplicated by `v.Copy()`. ASKED.
