@@ -99,6 +99,15 @@ labeled, "Fox" = fix, "grap the lady commits" = grab the latest commits). A sent
 genuinely ambiguous and the choice matters, state the reading taken (and record it as such in the ledger, per
 rules.md, "How to decide and record") rather than stalling.
 
+**More voice from 2026-11-03 (the user: "get used to me using the voice function a bit more, which is going to make
+the text more fragmented, and with some words having a phonetic similar structure, but then spelled very differently,
+and then kind of compensate for that ... erratic text structure that comes from speaking rather than writing and
+editing is to be expected as well").** Expect fragments, restarts and self-corrections in one message ("14, no, not
+14, 14", "26, no, not 6"), sentences that stop and resume, and words heard rather than spelled - read each by its sound
+against the context (a type or rule name, a number, an olang keyword): "VEX" = Vec, "DQ" = Deque, "cloud" = declared,
+"igjt" = tonight, "F-O-R" spelled out = the word "for". Act on the corrected reading; state it only where it changes
+what is done.
+
 ## Times
 
 The user lives in Gothenburg: give every time in reports as Swedish local time - CEST (UTC+2) until 2026-10-25, CET
