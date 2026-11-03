@@ -2562,3 +2562,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `mut`), deep (everything a value reaches through its fields fixed after the constructor), `mut T&` of an immut type
   an error, a type may be both unique and immut (a destructor needs unique); String its own immut type, `Array<Char>`
   staying mutable for in-place editing - ASKED.
+- Assignment, the user 2026-11-03: "the equals means equals promise already broken, because equals is overwritable".
+  Conceded: with a user's `Eq`, `x = y` then `x == y` holds only as far as that Eq is a real equality - a convention,
+  not a guarantee. The recommendation (assignment never a user call) stands on its other reason: an overridable `=`
+  hides a copy's cost (principle 2), and for a unique type it would turn the refused copy into a silent one. ASKED
+  again with `immut`.
