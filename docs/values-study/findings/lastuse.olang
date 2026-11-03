@@ -1,0 +1,29 @@
+# lastuse - found by the values study (2026-11-03): a value handed on at its last use is copied, not moved. `t` is never
+# read after `P(t)`, yet the constructor's field store copies its 20M elements: 682 MB and 0.39 s, against 420 MB and
+# 0.19 s for `P(mk(20000000))` (argument "fresh"), where the fresh result lands in the field. A move at last use (Rust's
+# move, Hylo's `sink`, inferred by liveness) would make the two the same program.
+import "std/io"
+import "std/os"
+
+type P struct(toks Vec<I64>) {
+    toks
+    i I64 = 0
+}
+
+fn mk(n I64) Vec<I64> {
+    v := Vec<I64>()
+    for i in range n: v.Push(i)
+    return v
+}
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() > 1 and args[1] == "fresh" {
+        p := P(mk(20000000))
+        try io.Println($p.toks.Len())
+        return
+    }
+    t := mk(20000000)
+    p := P(t)
+    try io.Println($p.toks.Len())
+}

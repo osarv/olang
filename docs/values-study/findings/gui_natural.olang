@@ -1,13 +1,9 @@
-# gui_natural - found by the values study (2026-11-03): docs/values-study/gui/vals.olang as first written, every
-# element read in the plain form `u.nodes[i].f`. Where a call shares the statement (`u.sum(u.nodes[i].kids[k])`,
-# `r.roll(u.nodes[at].kids.Len())`) the read copies the whole element - its kids Vec too - and in a loop the copies are
-# not reclaimed per turn (turncopy.olang): `guivals 100000 0 2000` peaks at 176 MB, `100000 1000000 20000` at 13 GB in
-# 39 s, where the Ref/RefMut form of vals.olang stays at a few MB.
-#
-# The values study's widget tree with values only: the widgets are plain values in one Vec, a parent or a child is an
-# index there, and a slot a detached subtree gave up goes on a free list for the next widget. The program, not the
-# compiler, decides when a slot is dead (free): an index kept past that names whatever the slot holds next - a stale
-# index is a logic error no rule catches, where a stale reference cannot exist. Same work and checksum as refs.olang.
+# gui_natural - found by the values study (2026-11-03): docs/values-study/gui/vals.olang with its element reads written
+# plainly, `u.nodes[i].f`, as values-style code would write them (writes stay `RefMut`: `u.nodes[p].kids.Push(c)` is
+# E31b's refusal). Where a call shares the statement - `r.roll(u.nodes[at].kids.Len())`, `u.sum(u.nodes[i].kids[k])` -
+# the read copies the whole element, its kids Vec included, and in a loop the copies are not reclaimed per turn
+# (turncopy.olang). Same checksums as vals.olang; measured (values-study.md 2.4): `100000 1000000 0` 5.8 s and 1.3 GB
+# against vals.olang's 0.23 s and 27 MB, `100000 1000000 2000` 32 s and 9.0 GB, `100000 1000000 20000` killed at 14 GB.
 import "std/io"
 import "std/os"
 
@@ -56,8 +52,8 @@ fn (u mut Ui&) add(n Node) I32 {
 
 fn (u mut Ui&) child(r mut Rand&, p I32) I32 {
     pw, ph := u.nodes[p].w, u.nodes[p].h
-    w := 4 + r.roll(pw / 2 + 1)
-    h := 4 + r.roll(ph / 2 + 1)
+    w := 4 + r.roll(pw / 3 + 1)
+    h := 4 + r.roll(ph / 3 + 1)
     k := Kind.Panel if r.roll(3) == 0 else (Kind.Button if r.roll(2) == 0 else Kind.Label)
     c := u.add(Node(k, r.roll(pw - w + 1), r.roll(ph - h + 1), w, h, p))
     u.nodes.RefMut(p).kids.Push(c)
@@ -67,11 +63,17 @@ fn (u mut Ui&) child(r mut Rand&, p I32) I32 {
 fn (u mut Ui&) grow(r mut Rand&, p I32, n I64) {
     panels := Vec<I32>()
     panels.Push(p)
-    for _ in range n {
-        q := panels[panels.Len() - 1 - r.roll(panels.Len().Min(8))]
-        if u.nodes[q].w < 12 or u.nodes[q].h < 12: continue
+    k := 0
+    for k < n and panels.Len() > 0 {
+        i := r.roll(panels.Len())
+        q := panels[i]
+        if u.nodes[q].w < 12 or u.nodes[q].h < 12 {
+            panels.SwapRemove(i)!
+            continue
+        }
         c := u.child(r, q)
         if u.nodes[c].kind == Kind.Panel: panels.Push(c)
+        k++
     }
 }
 
@@ -88,11 +90,11 @@ fn inside(w Node&, px I64, py I64) Bool { return px >= w.ax and px < w.ax + w.w 
 fn (u Ui&) hit(px I64, py I64) I32 {
     at := I32(0)
     for {
-        kids := u.nodes.Ref(at).kids.View()
+        kids := u.nodes[at].kids.View()
         next := I32(-1)
         for i in range kids.Len() {
             k := kids[kids.Len() - 1 - i]
-            if inside(u.nodes.Ref(k), px, py) {
+            if inside(u.nodes[k], px, py) {
                 next = k
                 break
             }
@@ -122,6 +124,20 @@ fn (u Ui&) pick(r mut Rand&) I32 {
     at := I32(0)
     for u.nodes[at].kids.Len() > 0 and r.roll(4) > 0: at = u.nodes[at].kids[r.roll(u.nodes[at].kids.Len())]
     return at
+}
+
+fn (u Ui&) panel(r mut Rand&) I32 {
+    for _ in range 8 {
+        p := u.pick(r)
+        if u.nodes[p].kind == Kind.Panel and u.nodes[p].w >= 12 and u.nodes[p].h >= 12: return p
+    }
+    return 0
+}
+
+fn (u Ui&) count(i I32) I64 {
+    n := 1
+    for k in range u.nodes[i].kids.Len(): n += u.count(u.nodes[i].kids[k])
+    return n
 }
 
 # take i's subtree out of the tree: every slot in it goes on the free list
@@ -157,11 +173,13 @@ fn main() ? {
     for _ in range clicks: depth += u.click(u.hit(r.roll(4096), r.roll(4096)))
     for _ in range rounds {
         w := u.pick(r)
-        if u.nodes[w].parent >= 0: u.detach(w)
-        p := u.pick(r)
-        if u.nodes[p].kind == Kind.Panel and u.nodes[p].w >= 12 and u.nodes[p].h >= 12: u.grow(r, p, 30)
+        if u.nodes[w].parent < 0: continue
+        m := u.count(w)
+        u.detach(w)
+        u.grow(r, u.panel(r), m)
     }
     u.layout(0, 0, 0)
     for _ in range clicks: depth += u.click(u.hit(r.roll(4096), r.roll(4096)))
-    try io.Println("vals: depth " $depth ", sum " $u.sum(0))
+    try io.Println(("vals: depth " $depth ", sum " $u.sum(0) ", live " $(u.nodes.Len() - u.free.Len()) ", slots "
+        $u.nodes.Len()))
 }
