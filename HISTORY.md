@@ -28707,3 +28707,10 @@ item 17, would remove it); knucleotide's `frequencies` is 35 instructions smalle
 (-0.7%), knucleotide and sha256 within 300 instructions. The compiler's self-build (from an empty build/, -O3 + LTO):
 46.4 s -> 46.7 s wall, 155 s -> 156 s of CPU, check 1.39 -> 1.46 s, scope 1.19 -> 1.31 s, peak 3.00 GB -> 3.08 GB;
 `make bootstrap` from the new seed 0:51 wall, its peak 3.08 GB.
+
+**Found on the way by the round's verify (pre-existing, fixed).** M19g's pass is skipped where no body outside the Vec
+module takes an array from it (View, ViewMut, ToArray) - but a view also leaves as a reference into the buffer (Ref,
+RefMut - the latter wherever a call is made on an element in place, E31b - and Map's). The skip had never fired, since
+the prelude's `StringBuilder.ToString` called `ToArray` and so every program took an array from Vec; once ToString
+stopped, seven M19g cases (m19gonce, m19grefgrow ...) compiled. `viewsHeld` now counts the Vec and Map modules' arrays
+and references alike.
