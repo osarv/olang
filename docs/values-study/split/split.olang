@@ -1,0 +1,74 @@
+# split - what a stored view is worth: 4M words of text kept as views of the text (today's `Vec<String&>`), as copies of
+# their own (`Vec<String>` - what a values-only olang without stored views keeps), or as spans (start, end) into the
+# text (the index form). Argument 1: view, copy, span, or none (the text alone); argument 2: words. Each keeps every
+# word, then hashes them all.
+import "std/io"
+import "std/os"
+
+type Span struct(Start I64, End I64) { Start, End }
+
+fn text(n I64) String {
+    b := StringBuilder()
+    for i in range n {
+        b.Push("w" $(i * 7919 % 100003))
+        b.PushChar(' ')
+    }
+    return b.ToString()
+}
+
+fn hash(h U64, w String&) U64 {
+    x := h
+    for c in w: x = (x ^ U64(c)) * 1099511628211
+    return x
+}
+
+fn views(t String&) U64 {
+    kept := Vec<String&>()
+    s := 0
+    for i in range t.Len() {
+        if t[i] != ' ': continue
+        kept.Push(t[s:i])
+        s = i + 1
+    }
+    h := U64(14695981039346656037)
+    for w in kept: h = hash(h, w)
+    return h
+}
+
+fn copies(t String&) U64 {
+    kept := Vec<String>()
+    s := 0
+    for i in range t.Len() {
+        if t[i] != ' ': continue
+        kept.Push($t[s:i])
+        s = i + 1
+    }
+    h := U64(14695981039346656037)
+    for k in range kept.Len(): h = hash(h, kept.Ref(k))
+    return h
+}
+
+fn spans(t String&) U64 {
+    kept := Vec<Span>()
+    s := 0
+    for i in range t.Len() {
+        if t[i] != ' ': continue
+        kept.Push(Span(s, i))
+        s = i + 1
+    }
+    h := U64(14695981039346656037)
+    for sp in kept: h = hash(h, t[sp.Start:sp.End])
+    return h
+}
+
+fn main() ? {
+    args := os.Args()
+    mode := args[1] if args.Len() > 1 else "view"
+    n := try args[2].ParseInt() catch default 4000000 if args.Len() > 2 else 4000000
+    t := text(n)
+    h := U64(t.Len())
+    if mode == "view": h = views(t)
+    if mode == "copy": h = copies(t)
+    if mode == "span": h = spans(t)
+    try io.Println($mode ": " $h)
+}

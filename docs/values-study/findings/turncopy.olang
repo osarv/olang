@@ -1,7 +1,10 @@
 # turncopy - found by the values study (2026-11-03): a value local declared in a loop body as a copy of an element
-# that owns storage (a struct holding a Vec) keeps every turn's copy until main's frame closes - 1M turns of a
-# 100-element copy peak at ~500 MB, where the turn's block should reclaim each copy (O2). The same read in a function
-# of its own copies nothing at all (D9h sees that nothing could tell). Run: peak RSS should stay a few MB.
+# of a Vec the same function holds, the element owning storage (a struct holding a Vec), keeps every turn's copy until
+# the function's frame closes - 1M turns of a 100-element copy peak at ~500 MB, where the turn's block should reclaim
+# each copy (O2). Where the Vec is a parameter instead (`walk(v Vec<Node>&, ...)`), or the read is a field of the element
+# (`v[0].w`), nothing is copied (D9h) and the run stays at 2 MB. The copy is made (D9h cannot leave it out: the body
+# writes the Vec) but seemingly built where the Vec lives - its parts placed as a reference-holding copy's are (O25h)?
+# Run it: the peak should stay a few MB.
 import "std/io"
 
 type Node struct(w I64) {
