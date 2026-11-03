@@ -4014,7 +4014,8 @@ change: `v[i].Push(x)`, `accs[i % 3].Add(2 * n)`, `grid[0][0].Push(4)`, `rows[k]
 `Bool`, a plain struct a call gives (`t.nodes[0].kids.Push(t.add(k))`, `add` growing the collection) - is evaluated
 first, into a local of its own, before the receiver: the element is reached after it, so whatever it ran, the
 reference names the element where it now is. Then the element's indices (of one level) must be plain values, evaluated
-after such arguments. Not in a spawned call (a task holding the element's reference while the collection could grow
+after such arguments, and the element shares no reference (all it holds is its own): one that does is written through
+by the copy's call as the original's would be, so its call stays the copy's, as left to right reads it. Not in a spawned call (a task holding the element's reference while the collection could grow
 under it), not for an argument owning storage or holding a reference that is read through `x[i]` (a call of `At`) or
 given by any other call - hold such an argument in a local first.
 

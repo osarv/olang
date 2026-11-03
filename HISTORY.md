@@ -28547,4 +28547,8 @@ the one level's indices must be plain. The effect check after each attempt (`set
 may write a global, call through a value or an `any`, or reach an unchecked body still keeps the copy and its error.
 Cases: e31bcallargs (refused until now) runs - 50 pushes each growing the outer Vec first; e31bfieldviewmethod (refused)
 runs, as `l.RefMut(0).w.Build(v)` written out does on master; e31bcallargsowned is the refusal that stays (an argument
-owning a Vec). tests/inplace.olang's `Tree.child` and a top-level assert the evaluator decides.
+owning a Vec). tests/inplace.olang's `Tree.child` and a top-level assert the evaluator decides. Found by the suite:
+two-phase first held arguments for any element, which changed what e31bviewlaterarg - an accepted program - computes
+(its element shares an array reference, so the copy's call writes the old element's array, as left to right says);
+holding is now only for an element sharing no reference (`SharesRefs`), whose copy's call was always refused, so no
+program that compiled reads otherwise. s5e31bfield (a method on `l[0].In`, refused) runs.

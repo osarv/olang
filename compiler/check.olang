@@ -12341,12 +12341,14 @@ fn (c mut Checker&) inPlaceCall(sp source.Span, call typed.Expr&) typed.Expr& {
     }
     # (two-phase, Rust's: an argument that is no plain value but owns nothing and holds no reference - a number a call
     # gives - is evaluated first, into a local of its own, and the element reached after it, so what it runs cannot
-    # leave the element's reference stale; the element's indices are then plain values too)
+    # leave the element's reference stale; the element's indices are then plain values too. Only for an element holding
+    # no reference: a write to its copy would be lost, so the call through the copy is refused and no program reads
+    # otherwise - one holding a reference writes through the copy's reference what the original's names too)
     hold mut Array<Bool>& = Array<Bool>(cl.Args.Len(), false)
     held := false
     for j in range 1, cl.Args.Len() {
         if c.plainArg(cl.Args[j]): continue
-        if not c.holdable(cl.Args[j]): return call
+        if not c.holdable(cl.Args[j]) or c.P.T.SharesRefs(el): return call
         hold[j] = true
         held = true
     }

@@ -1,5 +1,6 @@
-# check: fail x[i] gives a copy of the element, which this call would write
-# E31b: a "mut" method on a field of x[i], and on an element of an element, is a call on the copy too
+# check: run
+# E31b: a "mut" method on a field of x[i] is made on the element's field in place through RefMut (since 2026-11-03, the
+# values study's B4 - it was a call on the copy, refused), as on an element of an element
 type Pt struct() {
     X I64 = 0
 }
@@ -12,4 +13,6 @@ fn main() ? {
     l := Vec<Acc>()
     l.Push(Acc())
     l[0].In.Move(4)
+    l[0].In.Move(1)
+    assert l[0].In.X == 5
 }
