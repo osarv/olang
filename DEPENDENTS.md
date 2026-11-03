@@ -25,6 +25,12 @@ Records for every change: `SPEC.md` (the rule), `CLAUDE.md` (current-state entry
 | `tests/`, `checks/cases/` | a run test, an evaluator-decided test, a must-fail case naming the diagnostic |
 | `docs/README.md` / `std/README.md` | only if a doc teaches the form |
 
+## A word of one place (L9b: `commutes`, `immut`)
+
+Not reserved, so no `Keyword`/session/nvim entry: `compiler/parse.olang` reads it as an identifier where it stands (and
+`unparse.olang` writes it back); `ast.olang` holds what it says; `SPEC.md` L9b names it; `explain.olang` shows it in an
+item's signature; `tests/`, `checks/cases/`.
+
 ## An operator or punctuation
 
 As a keyword, minus `Keyword`/session/nvim (those carry words only), plus: `Tok.Text` for its text; `parse.olang`'s
@@ -83,7 +89,7 @@ intrinsic; `std/README.md` if a file is added; `SPEC.md` (M19d) when the method 
 ## A built-in type or supplied method
 
 `compiler/types.olang` (`PrimInfo`, layout), `generic.olang`, `check.olang` (supplied methods: `Narrow`, `Len`, `Bits`,
-`Value`, E36/E37), `eval.olang` (must compute it exactly at every width), `emit.olang`; the C boundary
+`Value`, `Copy` - E31d, whose declared form `lower.olang`'s Copy helper calls and `types.MarkCopy` registers -, E36/E37), `eval.olang` (must compute it exactly at every width), `emit.olang`; the C boundary
 (`compiler/cabi.olang`, `bindgen.olang`, SPEC X2); reflection (`TypeKind`, descriptors in `std/prelude/reflect.olang`);
 `std/json`, `std/prop` (generate and encode by reflection); `$` rendering; `editors/nvim/syntax/olang.vim` type names
 (widths are a pattern; named types are listed); `tests/intsweep.olang` for numeric types; `fuzz/` generators.

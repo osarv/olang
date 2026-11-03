@@ -1,0 +1,9 @@
+# check: fail error[T13a, E31d]: a copy of Config shares it, as nothing of it changes (it is immut) - it declares no Copy
+# T13a, E31d: an immut type's copy is the same value - it declares no Copy
+type Config immut struct(n I64) { n }
+fn (c Config&) Copy() Config { return Config(c.n) }
+fn main() {
+    c := Config(1)
+    d := c
+    assert d.n == 1
+}

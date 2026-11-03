@@ -329,12 +329,20 @@ type TypeParam struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Also Arr
 }
 
 type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool, Body TypeBody?&
-                     Attrs Array<Attr&>& = Array<Attr&>(0)) {
+                     Attrs Array<Attr&>& = Array<Attr&>(0), Word DeclWord = DeclWord.Plain) {
     Name
     Params
     Extends
     Body       # null for a type whose declaration did not parse past its name - declared by its name alone
     Attrs      # the attributes written before it (G39)
+    Word       # the word before its body (T13a): immut, or none
+}
+
+# what a type declaration says of its values before its body (T13a): nothing, or never changing after their
+# constructor (immut)
+type DeclWord enum {
+    Plain
+    Immut
 }
 
 # a top-level if (B9): each branch's declarations and the group holding its diagnostics, the else a TopIf or a branch

@@ -2724,6 +2724,16 @@ fn (p mut Program&) Extends(t types.TypeId) Bool {
            p.extends(p.T.DeclOf(t))
 }
 
+# T13a: the word a declared type's declaration writes before its body - immut, or none (Plain); a type that is no
+# declared one has none
+fn (p mut Program&) DeclWord(t types.TypeId) ast.DeclWord {
+    if p.T.KindOf(t) != types.Kind.Named { return ast.DeclWord.Plain }
+    td := p.typeDecl(p.T.DeclOf(t))
+    return td.Word if td is not null else ast.DeclWord.Plain
+}
+
+fn (p mut Program&) Immut(t types.TypeId) Bool { return p.DeclWord(t) == ast.DeclWord.Immut }
+
 fn (p mut Program&) extends(d types.DeclId) Bool {
     td := p.typeDecl(d)
     return td is not null and td.Extends

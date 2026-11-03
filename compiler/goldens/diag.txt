@@ -5612,6 +5612,31 @@ t10len.olang:5:15: error[T6b]: I64 does not flow into I32 - convert it, as I32(x
       |               ^~~
 t10len.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
+=== t13aimmutcopy.olang
+t13aimmutcopy.olang:4:16: error[T13a, E31d]: a copy of Config shares it, as nothing of it changes (it is immut) - it declares no Copy
+    4 | fn (c Config&) Copy() Config { return Config(c.n) }
+      |                ^~~~
+compilation failed with 1 error
+=== t13aimmutelem.olang
+t13aimmutelem.olang:6:9: error[T13a]: nothing of Config changes after its constructor (it is immut) - make a new one
+    6 |     c.xs[0] = 5
+      |         ^
+compilation failed with 1 error
+=== t13aimmutfield.olang
+t13aimmutfield.olang:6:7: error[T13a]: nothing of Config changes after its constructor (it is immut) - make a new one
+    6 |     c.n = 2
+      |       ^
+compilation failed with 1 error
+=== t13aimmutlent.olang
+t13aimmutlent.olang:7:10: error[T13a]: nothing of Config changes after its constructor (it is immut) - make a new one
+    7 |     grow(c.xs)
+      |          ^~~~
+compilation failed with 1 error
+=== t13aimmutmutref.olang
+t13aimmutmutref.olang:4:7: error[T13a]: 'mut' makes a reference writable, and nothing of Config changes after its constructor (it is immut) - read it through 'Config&'
+    4 | fn (c mut Config&) Bump() { }
+      |       ^~~
+compilation failed with 1 error
 === t13holdsitself.olang
 t13holdsitself.olang:4:7: error[T16]: E cannot hold itself by value - hold it through a reference ('&')
     4 |     A(e E)

@@ -1,0 +1,8 @@
+# check: fail error[T13a]: 'mut' makes a reference writable, and nothing of Config changes after its constructor (it is immut) - read it through 'Config&'
+# T13a: no writable reference to an immut type - a method with a writable receiver included
+type Config immut struct(n I64) { n }
+fn (c mut Config&) Bump() { }
+fn main() {
+    c := Config(1)
+    assert c.n == 1
+}

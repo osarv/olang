@@ -1,0 +1,9 @@
+# check: fail error[T13a]: nothing of Config changes after its constructor (it is immut) - make a new one
+# T13a: nothing of an immut value is lent writably - a part reached through it either
+type Config immut struct(xs Vec<I64>) { xs }
+fn grow(v mut Vec<I64>&) { v.Push(1) }
+fn main() {
+    c := Config(Vec<I64>())
+    grow(c.xs)
+    assert c.xs.Len() == 1
+}

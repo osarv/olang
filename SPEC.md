@@ -163,8 +163,9 @@ ending in one ends its statement there. In its constructor's body such a field i
 and a later statement reading it by the word alone is a compile-time error (a constructor's other fields are its locals,
 C2a). Anywhere else - a parameter, a local, a function, a type - the words stay reserved.
 
-**L9b (words of one place).** `commutes` is a word only right after a method's result (E31c), an ordinary name
-everywhere else.
+**L9b (words of one place).** `commutes` is a word only right after a method's result (E31c), and `immut` only right
+before a type declaration's body (T13a: `type Config immut struct(...)`, a type name - or `struct`, `enum`, `extends`,
+`trait`, `error`, `fn` - following it), an ordinary name everywhere else.
 
 **L9c (`any`).** `any` is a word only where a type is written and the name of a type follows it on its line (T32):
 `s any Shape&`, `List<any Shape&>`, `fn f() any Shape&`; anywhere else it is an ordinary name.
@@ -774,6 +775,19 @@ type; where storage is fixed, T7d says what may be stored in it.
 instance is built by calling it (§9.3 C6). There is no field-list form and no struct literal. A struct
 whose fields are meant to be set by its user declares an empty parameter list and fields that take their zero
 values (D13) — `type P struct() { x I32 }`, built as `P()` - and sets them through a writable instance (C3).
+
+**T13a (`immut`).** A type declared with the word `immut` before its body - `type Config immut struct(name String, n
+I64) { name, n }`, an enum or a type over another alike - holds values that **never change after their constructor**:
+nothing of one is written - a field, an element of an array it holds by value, a payload's field, at any depth through
+what it holds by value - and nothing of it is lent writably (a `mut` method's receiver, a writable reference
+argument), each a compile-time error naming the type; a `mut` reference to an immut type (`mut Config&`, a writable
+receiver `fn (c mut Config&)`) is a compile-time error where it is written. A slice of an immut value is read-only. A
+value **holding** an immut part need not be immut itself: its part is replaced whole (`s.cfg = Config(...)`), never
+written into. A copy of an immut value is the same value - nothing can tell it from the original - so an immut type
+declares no Copy (E31d), an error at its name. A conversion to an immut type from an existing value of a type that is
+not (`Name(a)` over an `Array<Char>`, T29a) is a copy of what it converts, which nothing else can change after - left
+out where nothing could tell (a fresh value, a local at its last use, D9i). `immut` is a word only in that position
+(L9b); it names nothing.
 
 **T14.** A struct type is a value type: assignment, parameter passing, and return copy the whole value
 member-wise, and `==`/`!=` compare structurally (see §5.2 E10), unless referenced through a marker
@@ -1774,8 +1788,8 @@ keeps from being checked.
 
 ### 3.3 Type and error declarations
 
-**D4.** `type-decl ::= "type" IDEN [ type-params ] [ "extends" ] type-expr [ prim-ctor ] [ STMNT_END ]` (`extends`:
-T29f), with
+**D4.** `type-decl ::= "type" IDEN [ type-params ] [ decl-word ] [ "extends" ] type-expr [ prim-ctor ] [ STMNT_END ]`
+(`extends`: T29f; `decl-word ::= "immut"`, T13a - a word only there, L9b), with
 `prim-ctor ::= "(" param-list ")" [ "?" error-list ] block` valid only over a primitive (T29d), where `type-params`
 (§12.3 G6) declares type parameters and is valid only for a
 struct type, and `type-expr` is defined in

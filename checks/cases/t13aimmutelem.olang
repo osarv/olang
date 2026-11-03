@@ -1,0 +1,8 @@
+# check: fail error[T13a]: nothing of Config changes after its constructor (it is immut) - make a new one
+# T13a: nor an element of an array it holds by value
+type Config immut struct(xs Array<I64>) { xs }
+fn main() {
+    c := Config(I64[1, 2])
+    c.xs[0] = 5
+    assert c.xs[0] == 5
+}

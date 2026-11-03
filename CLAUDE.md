@@ -519,6 +519,23 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   reference-only (C11) and runs once per constructor call, when the instance's scope closes (O16); an empty one is an
   error (C7a). Reference-only because §8 tracks references, not by-value copies: a copy would carry a released
   resource where no rule sees it (use after release, not double release).
+- **`immut` types (T13a, the user's decisions 2026-11-03 "immut DECIDED", "unique vs immut settled"; built 2026-11-03,
+  wt-unique, details mine).** `type Config immut struct(...)` (an enum or a type over another alike; `immut` a word of
+  one place, L9b - before the body, a type name or `struct`/`enum`/`extends`/`trait`/`error`/`fn` after it): nothing of
+  a value of it changes after its constructor - a field, an element held by value, a payload's field written, or any
+  of it lent writably, is an error naming the type (check's `mustWrite`, the one write check: `writesImmut`); `mut T&`
+  of one an error where written (a global's own `mut` is its binding's, S6, and stays); a slice of one is read-only; a
+  holder of an immut part need not be immut (the part replaced whole); an immut type declares no Copy (its copy is the
+  same value); a conversion to an immut type from an existing value of a mutable one copies it (left out where nothing
+  could tell, D9i). Decided (mine): its copies are still made as copies (sharing is unobservable - an optimization for
+  later). **Not done (left of part 4): String immut** - tried: `type String immut extends Array<Char>` makes the
+  compiler and std build after migrating ~45 sites (text built by writing characters -> an `Array<Char>` converted at
+  its last use; `mut String&` -> `String&`; C-filled byte buffers stay `Array<U8>`), but ~80 tests and checks cases
+  write text to test copy semantics and each needs rewriting, and the flip needs the seed regenerated - left for a round
+  of its own (its migration tool written, `tools/textbuild_migrate.olang`, not in `olang fix` until the flip); StringBuilder's `Append`
+  rename not made. **Found on the way (pre-existing, fixed):** an `Array<Char>` of a run-time length lent to a `mut
+  Array<U8>&` parameter (Char extends U8) was copied and the copy lent, so what the callee wrote was lost (E12's
+  borrow taken now for any array whose elements are held alike - tests/immut.olang).
 - **Declared types are nominal (T29).** `type Meters I32`, `type Name Array<T>`; `extends` inherits the base's methods
   and operators (T29f, the user's design); `Name(x)` converts and names the argument's storage (T29a); a declared
   primitive may have a constructor, which a literal runs while compiling (T29d, the user's design). Over a struct,

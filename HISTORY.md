@@ -28596,3 +28596,34 @@ and lists the lines of files importing std/list for a person, since only they ca
 declares a Copy, and the supplied one is the copy already made. Messages that suggested `x.Clone()` say `x.Copy()`
 (text, any array, a type declaring Copy - a supplied Copy of a value holding references shares them, so it is no
 "copy of its own" there).
+
+## immut types (2026-11-03, T13a); String's immutability tried and left for its own round
+
+The user decided `immut` on 2026-11-03 ("immut DECIDED": per type, nothing of it changes after its constructor, a
+holder of an immut part need not be immut, a copy is a share, `mut T&` of one an error, String immut; "unique vs immut
+settled": unique may change so it has one value and references, immut cannot so copies are free). Built as the second
+part of wt-unique.
+
+**How.** `immut` is a word of one place, as `commutes` is (L9b): read before a type declaration's body when a type name
+or a body's word follows, so no program's name is taken (`ast.TypeDecl.Word`, `generic.Immut`). Every write the checker
+judges goes through `mustWrite` (a store, or a writable borrow): it now refuses a store into a part of an immut value -
+a field, an element, a payload's field - and a writable borrow of one (`writesImmut`), and the written type `mut T&` of
+an immut T is refused in `writtenMet` (a global's top `mut` is its binding, S6, and is skipped). A slice of an immut
+value is read-only (`slicedWritable`). An immut type declaring Copy is an error (its copy is the same value). A
+conversion to an immut declared type from an existing mutable value copies (T29a names storage otherwise, and the
+source could change it after); D9i leaves the copy out at the source's last use.
+
+**String.** `type String immut extends Array<Char>` was tried: with the conversion copy and read-only slices the
+compiler and std built again after ~45 sites moved - text built by writing its characters into an `Array<Char>`
+converted at the end (`out := Array<Char>(n) ... return String(out)`, a draft tool rewriting that shape and every
+`mut String&` to `String&`), C-filled byte buffers kept as `Array<U8>` (std/os, std/io), `String(...)` at the returns
+of what reads files and the environment, json's escape writer taking a `mut Array<Char>&`. But ~80 corpus tests and
+checks cases write text on purpose - they test that copies of text are independent (QCE, D9h, handover, any) - and
+each needs its own rewrite onto `Array<Char>`, the S18c-decided `vecViewNamed` changes meaning (a conversion of a
+view now copies), and the flip needs the seed regenerated (the seed's compiler does not read `immut`). Left for a round
+of its own; nothing of it is committed but the compiler's support. StringBuilder's `Append` rename was not made either.
+
+**Found on the way (pre-existing, fixed).** With the std migration, `os.Env` gave blanks: an `Array<Char>` of a
+run-time length lent to a `mut Array<U8>&` parameter - legal, as Char extends U8 (T29h) - went through `fit`'s promote
+path, a copy lent, so the callee's writes were lost (a fixed-length one was borrowed). `fit` now borrows the place for
+any array whose elements are held alike (`sameRepr`), as it did for fixed storage. tests/immut.olang.

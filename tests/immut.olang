@@ -1,0 +1,58 @@
+# T13a: a type declared immut never changes after its constructor - no field of a value of it is written, no element of
+# an array it holds by value, nothing of it lent writably, no "mut" reference to it; a value holding one need not be
+# immut (the part is replaced whole), and a copy of one is the same value.
+
+type Config immut struct(name String, limits Array<I64>, n I64) {
+    name, limits, n
+}
+
+fn (c Config&) Total() I64 { return c.limits.Sum() + c.n }
+
+# a holder of an immut part, itself changeable: its part is replaced, never written into
+type Server struct(cfg Config, hits I64) {
+    cfg, hits
+}
+
+fn (s mut Server&) Retune(n I64) {
+    s.cfg = Config(s.cfg.name, s.cfg.limits, n)
+    s.hits++
+}
+
+fn tuned(n I64) I64 {
+    s := Server(Config("a", I64[1, 2, 3], 4), 0)
+    before := s.cfg
+    s.Retune(n)
+    return before.Total() * 1000 + s.cfg.Total() * 10 + s.hits
+}
+
+# while compiling as at run time (K2, S17a)
+Tuned := tuned(10)
+assert Tuned == 10161
+
+test "an immut value is read, held and replaced whole, never changed" {
+    c := Config("cfg", I64[5], 1)
+    d := c
+    assert d.name == "cfg" and d.Total() == 6
+    s := Server(c, 0)
+    s.Retune(2)
+    assert c.n == 1 and s.cfg.n == 2 and s.hits == 1
+    assert tuned(10) == Tuned
+}
+
+# E12, T29h (found with T13a): an Array<Char> of a run-time length lent as a writable Array<U8>& is the caller's
+# storage - it had been copied and the copy lent, so what the callee wrote was lost
+fn fill(b mut Array<U8>&) I64 {
+    for i in range b.Len() { b[i] = 65 + U8(i) }
+    return b.Len()
+}
+
+test "an Array<Char> lent as a writable Array<U8>& is written in place" {
+    n := fill(Array<U8>(0)) + 3
+    text := Array<Char>(n)
+    fill(text)
+    assert text == "ABC"
+    run fn&(b mut Array<U8>&) I64 = fill
+    t2 := Array<Char>(n)
+    run(t2)
+    assert t2 == "ABC"
+}

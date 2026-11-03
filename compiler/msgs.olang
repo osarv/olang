@@ -339,6 +339,9 @@ type Diag enum {
     CopyShape
     CopyOnWhat
     CopyDoesMore
+    ImmutWrite
+    ImmutMutRef
+    ImmutCopy
     StrShape
     EqStrWrites
     ProtocolBothSpellings
@@ -1805,6 +1808,15 @@ fn CopyOnWhat(ty String&) Msg { return Msg(Diag.CopyOnWhat, "E31d", "only a stru
 
 # ERR_COPY_DOES_MORE
 fn CopyDoesMore(what String&) Msg { return Msg(Diag.CopyDoesMore, "E31d", "a Copy only builds the new value, and this one " $what " - every copy of the value runs it, so it may do nothing else") }
+
+# ERR_IMMUT_WRITE
+fn ImmutWrite(ty String&) Msg { return Msg(Diag.ImmutWrite, "T13a", "nothing of " $ty " changes after its constructor (it is immut) - make a new one") }
+
+# ERR_IMMUT_MUT_REF
+fn ImmutMutRef(ty String&) Msg { return Msg(Diag.ImmutMutRef, "T13a", "'mut' makes a reference writable, and nothing of " $ty " changes after its constructor (it is immut) - read it through '" $ty "&'") }
+
+# ERR_IMMUT_COPY
+fn ImmutCopy(ty String&) Msg { return Msg(Diag.ImmutCopy, "T13a, E31d", "a copy of " $ty " shares it, as nothing of it changes (it is immut) - it declares no Copy") }
 
 # ERR_STR_SHAPE
 fn StrShape() Msg { return Msg(Diag.StrShape, "E11c", "Str gives a String") }
