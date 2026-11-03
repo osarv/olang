@@ -1,0 +1,36 @@
+# shuffled - ptrs.olang with the pointers shuffled once after the particles are made: the loop walks the objects in an
+# order unrelated to where they lie, as it does once a list of objects has been sorted, filtered or churned. A flat
+# array shuffled the same way stays sequential (its values move with it). Arguments: particles, steps.
+import "std/io"
+import "common"
+
+fn step(ps mut Vec<mut common.P&>&) {
+    for i in range ps.Len() {
+        p := ps[i]
+        p.Vy -= 9.8 * common.Dt
+        p.X += p.Vx * common.Dt
+        p.Y += p.Vy * common.Dt
+        if p.Y < 0.0 {
+            p.Y = -p.Y
+            p.Vy = -p.Vy * 0.9
+        }
+    }
+}
+
+fn main() ? {
+    n, steps := common.Arg(1, 4000000), common.Arg(2, 25)
+    r := common.Rand(5)
+    ps := Vec<mut common.P&>()
+    for _ in range n: ps.Push(r.Particle())
+    shuf := common.Rand(9)
+    for i in range n - 1 {
+        j := i + shuf.Roll(n - i)
+        t := ps[i] # a parallel assignment of two elements, ps[i], ps[j] = ps[j], ps[i], is refused today (E31)
+        ps[i] = ps[j]
+        ps[j] = t
+    }
+    for _ in range steps: step(ps)
+    sum := F64(0.0)
+    for p in ps: sum += F64(p.X + p.Y)
+    try io.Println("shuffled: " $sum)
+}

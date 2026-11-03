@@ -1,0 +1,29 @@
+# ptrs - the same particles as objects, each behind a pointer (`Vec<mut P&>`): a references-by-default olang with no
+# layout inference. The objects are made in order, so they lie in memory in the order the loop walks them - the best
+# case for pointers. Arguments: particles, steps.
+import "std/io"
+import "common"
+
+fn step(ps mut Vec<mut common.P&>&) {
+    for i in range ps.Len() {
+        p := ps[i]
+        p.Vy -= 9.8 * common.Dt
+        p.X += p.Vx * common.Dt
+        p.Y += p.Vy * common.Dt
+        if p.Y < 0.0 {
+            p.Y = -p.Y
+            p.Vy = -p.Vy * 0.9
+        }
+    }
+}
+
+fn main() ? {
+    n, steps := common.Arg(1, 4000000), common.Arg(2, 25)
+    r := common.Rand(5)
+    ps := Vec<mut common.P&>()
+    for _ in range n: ps.Push(r.Particle())
+    for _ in range steps: step(ps)
+    sum := F64(0.0)
+    for p in ps: sum += F64(p.X + p.Y)
+    try io.Println("ptrs: " $sum)
+}

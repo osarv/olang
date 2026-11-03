@@ -1,0 +1,29 @@
+# common - what the particle programs share: a particle (a small mutable struct of four F32s), the random numbers that
+# place them, the command line. Each program steps n particles under gravity with a bouncing floor for some steps and
+# prints the same checksum; they differ only in how the particles are laid out.
+import "std/os"
+
+type P struct(X F32, Y F32, Vx F32, Vy F32) { X, Y, Vx, Vy }
+
+type Rand struct(state U64) { state }
+
+fn (r mut Rand&) Uniform(a F32) F32 {
+    r.state = r.state * 6364136223846793005 + 1442695040888963407
+    return a * F32(I64(r.state >> 40)) / F32(1 << 24)
+}
+
+fn (r mut Rand&) Roll(n I64) I64 {
+    r.state = r.state * 6364136223846793005 + 1442695040888963407
+    return I64((r.state >> 33) % U64(n))
+}
+
+# a particle at a random place with a random velocity
+fn (r mut Rand&) Particle() P { return P(r.Uniform(100.0), r.Uniform(100.0), r.Uniform(2.0) - 1.0, r.Uniform(2.0) - 1.0) }
+
+fn Arg(k I64, n I64) I64 {
+    args := os.Args()
+    if args.Len() <= k: return n
+    return try args[k].ParseInt() catch default n
+}
+
+Dt := F32(0.01)

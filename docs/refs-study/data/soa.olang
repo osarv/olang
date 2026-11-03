@@ -1,0 +1,37 @@
+# soa - the particles as four arrays of numbers, one per field (structure of arrays): what a language with no flat
+# mutable struct makes data code write by hand. Arguments: particles, steps.
+import "std/io"
+import "common"
+
+type Particles struct(n I64) {
+    X Array<F32> = Array<F32>(n, 0.0)
+    Y Array<F32> = Array<F32>(n, 0.0)
+    Vx Array<F32> = Array<F32>(n, 0.0)
+    Vy Array<F32> = Array<F32>(n, 0.0)
+}
+
+fn step(s mut Particles&) {
+    for i in range s.X.Len() {
+        s.Vy[i] -= 9.8 * common.Dt
+        s.X[i] += s.Vx[i] * common.Dt
+        s.Y[i] += s.Vy[i] * common.Dt
+        if s.Y[i] < 0.0 {
+            s.Y[i] = -s.Y[i]
+            s.Vy[i] = -s.Vy[i] * 0.9
+        }
+    }
+}
+
+fn main() ? {
+    n, steps := common.Arg(1, 4000000), common.Arg(2, 25)
+    r := common.Rand(5)
+    s := Particles(n)
+    for i in range n {
+        p := r.Particle()
+        s.X[i], s.Y[i], s.Vx[i], s.Vy[i] = p.X, p.Y, p.Vx, p.Vy
+    }
+    for _ in range steps: step(s)
+    sum := F64(0.0)
+    for i in range n: sum += F64(s.X[i] + s.Y[i])
+    try io.Println("soa: " $sum)
+}
