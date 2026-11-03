@@ -796,3 +796,5 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   exactly).
 - QUEUED 2026-11-03 (the user): after the build batch, the NLL round (xhigh), then reuse in place (the user: "just
   build it") - then a bulk review over the three.
+- QUEUED 2026-11-03: after the build batch, one xhigh section-8 round - NLL + O27 as placement + T22a's function values
+  carrying inferred relations; then reuse in place; then a bulk review over them.

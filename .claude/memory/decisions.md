@@ -2810,3 +2810,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   several holders that may outlive one another", still nothing written, or kept as it is; (e) (3) stays - those words
   carry meaning Python lacks (sharing, writing, absence, identity), each inferred where it can be. Offered: an audit
   of every refusal in checks/cases Python would accept, counted by cause, before deciding (a)-(d). ASKED.
+- QCR (1) DECIDED 2026-11-03 (the user: "for all the one cases, we basically can just build it out, right? The
+  structure is already there"): build all three - (a) O27 becomes placement: storage a kept view needs is built where
+  the view is kept, as item 17's local, listed by -memory - QCB follow-up 2's no-extension rule REVERSED by the user;
+  (b) NLL (already decided); (c) function values whose captures relate their arguments' scopes carry the inferred
+  relations in their function type (T22a's refusal shrinks to what a written function type cannot match). One xhigh
+  section-8 round after the build batch, then reuse in place. QCR (2) - widening the reference-counting carve-out to
+  values with several holders - still ASKED; the audit not run (the user went straight to building).
