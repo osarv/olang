@@ -3139,8 +3139,9 @@ fn (ln mut lowering&) heldPlace(u typed.LocalUses&, p typed.Lvalue&) Bool {
 # ---- moves at last use (D9i) ----
 
 # where each local of a body is mentioned last, in the order the body evaluates them, and the copies of a value local
-# check made (MakeKind.Copy of a read of it) - a mention inside deferred code, a task, a join's clauses or a loop not
-# around the local's declaration counts as after everything (it may run again, or later)
+# check made (MakeKind.Copy of a read of it) - a mention inside deferred code, a task or a join's clauses counts as
+# after everything (it may run later); one inside a loop is where it stands, the loop running before what follows it,
+# and a copy inside a loop not around the local's declaration is never its last use (it may run again)
 type lastUses struct(N I64) {
     N
     last mut Array<I64>& = Array<I64>(N, -1)
@@ -3157,8 +3158,7 @@ fn (w mut lastUses&) mention(id typed.LocalId) {
     i := I64(id)
     if i < 0 or i >= w.N: return
     w.seq++
-    late := w.later > 0 or (w.depth[i] >= 0 and w.loops > w.depth[i])
-    w.last[i] = I64.Max if late else w.last[i].Max(w.seq)
+    w.last[i] = I64.Max if w.later > 0 else w.last[i].Max(w.seq)
 }
 
 fn (w mut lastUses&) declare(id typed.LocalId) {
@@ -3420,6 +3420,11 @@ fn (ln mut lowering&) movable(u typed.LocalUses&, l I64, site I64) Bool {
     init := typed.CallOf(u.Init[l])
     if init is not null and init.Site >= typed.SiteId(0) and ln.plan.RegionKind[I64(init.Site)] != 0: return false
     dest := ln.plan.Built[site]
+    # (a local the scope pass homed in the result scope a returned copy of it is built in: O26a's, T13a's String(out))
+    if dest == typed.Scope.Var and l < ln.plan.Stored.Len() {
+        st := ln.plan.Stored[l]
+        if st == typed.Scope.Var: return dest.i == st.i
+    }
     return dest == typed.Scope.Block and ln.B.Encloses(ln.storageBlock(l), dest.b)
 }
 

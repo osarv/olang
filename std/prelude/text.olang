@@ -1172,7 +1172,12 @@ fn (b StringBuilder&) Len() I64 { return b.chars.Len() }
 
 # everything added so far, as one String in the CALLER's scope - a copy, so the builder may be discarded, or keep
 # growing, without affecting it
-fn (b StringBuilder&) ToString() String& { return String(b.chars.ToArray()) }
+fn (b StringBuilder&) ToString() String {
+    n := b.chars.Len()
+    out := Array<Char>(n)
+    for i in range n { out[i] = b.chars[i] }
+    return String(out)         # (the characters copied once: the String takes the array's storage, T13a, D9i)
+}
 
 # empties it, keeping its storage for what is added next - so a builder used again and again (once per line, per
 # request) allocates nothing after it has held its longest text. Replacing it with a new StringBuilder() instead
