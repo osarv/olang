@@ -2700,3 +2700,14 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   (5) a struct holding a unique part by value is unique, unless it declares a Copy that builds that part fresh; (6) a
   destructor requires unique; unique and immut never both; immut copies are shares; (7) the collections are unique,
   duplicated by `v.Copy()`. ASKED.
+- Copy and unique DECIDED 2026-11-03 (the user: "everything here is fine, except unique types should never declare a
+  copy ... we don't want copy to mean two different things ... you can create things from it ... but copy should not be
+  possible ... taking a unique value by value doesn't work either, whether by a parameter or a new local ... we can still
+  allow to pass unique types by value when they are constructed in the pass ... this settles the unique keyword"):
+  rules 1-3 and 5-7 as put, rule 4 replaced: a unique type declares no Copy - making a new one from an existing one is an
+  ordinary function or constructor (`File(dup(f.fd))`), never Copy; a unique value is taken by value only where it is
+  fresh (constructed in the pass - `v.Push(File(...))`, `use(File(...))`, a call's result); a by-value parameter, a local
+  written `x File` or a field typed `File` given an existing one is an error naming `&`; reading a unique place gives a
+  reference, so `w := f` makes `w` a `File&` (mine, reading taken); a non-unique struct holding a unique part writes a
+  Copy that makes that part anew (rule 5 kept, mine). Collections are unique and have no Copy - a Vec is duplicated by
+  building one (`v.ToVec()`, `Vec<T>.FromIter(v.Iter())`).
