@@ -2644,3 +2644,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   copy - `w Vec<I64> = v` copies its elements, left out wherever nothing could tell - and copying a collection needs no
   `ToVec`; an uncopyable type with no resource to release has no spelling (none found that needs one). Alternative:
   keep `unique` as a word, explicit at the declaration. ASKED.
+- unique DECIDED 2026-11-03 (the user: "we want unique as the keyword ... a copy of a value of a unique type is a
+  reference ... you can create a unique value through its constructor, but anytime you try to copy beyond that, you
+  will always just take a reference instead"): a fresh value (a constructor's or a call's result) lands by value where
+  it is put; any other copy of a unique value is a reference to it - `w := f` makes `w` a `File&`, `use(f)` passes a
+  reference. Settling (mine, ASKED): (1) a slot that holds the value in place - a field or element typed `File`, a
+  local written `x File` - can only be given a fresh value; given an existing one it is an error naming `File&` (a slot
+  laid out for the value cannot hold a reference instead); (2) a by-value parameter given a fresh value is itself fresh
+  and may land once more at its last use (how `Vec.Push(x T)` stores a unique element); (3) copying a unique
+  collection is building one - `v.ToVec()`.
