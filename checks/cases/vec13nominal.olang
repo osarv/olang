@@ -1,5 +1,5 @@
 # check: fail error[M19g]: 't' holds a view of 'w' taken before 'w' may have grown
-# a borrowed result of a declared array type (String) through a Vec parameter is a view of the Vec
+# a borrowed result of a declared array type (Txt) through a Vec parameter is a view of the Vec
 # M19g, round 2 (brought back from round 1's deletion): the same Vec is seen on both sides, so the view is refused
 import "std/io"
 fn churn() I64 {
@@ -10,12 +10,13 @@ fn churn() I64 {
     }
     return t
 }
-fn asText(v Vec<Char>&) String& { return String(v.View()) }
+type Txt extends Array<Char>          # text that may be written (a String never changes, T13a)
+fn asText(v Vec<Char>&) Txt& { return Txt(v.View()) }
 fn grow(w mut Vec<Char>&) ? io.Error {
-    t := asText(w)                        # a borrowed result; its type is String (nominal), not Array<Char>
+    t := asText(w)                        # a borrowed result; its type is Txt (nominal), not Array<Char>
     for _ in range 1000 { w.Push('b') }   # may grow the Vec, replacing its buffer
     churn()                               # reuse what was freed
-    try io.Println(t)
+    try io.Println($t)
 }
 fn main() ? {
     v := Vec<Char>()

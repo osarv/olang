@@ -185,10 +185,10 @@ type Gen struct(seed U64) {
     constN Bool = false                             # a function generic over a constant N is being made
     ng I64 = 0                                      # this case's functions generic over a constant
     # what one case adds, read by Program
-    decls mut String& = ""                          # its types and helpers, then the case itself
-    lits mut String& = ""                           # its literal arguments
-    vars mut String& = ""                           # its input globals, as arguments
-    resets mut String& = ""                         # main's assignments making those genuinely mutable
+    decls String& = ""                          # its types and helpers, then the case itself
+    lits String& = ""                           # its literal arguments
+    vars String& = ""                           # its input globals, as arguments
+    resets String& = ""                         # main's assignments making those genuinely mutable
 }
 
 # xorshift64
@@ -1866,7 +1866,7 @@ fn (g mut Gen&) refStmt(ind String&) String& {
             s := g.vt[src]
             x := g.use(src)
             t I32 = s
-            text mut String& = $ind "x" $g.nv " := " $x "\n"
+            text String& = $ind "x" $g.nv " := " $x "\n"
             if g.chance(40) {
                 t = I32(3000 + elemOf(s)) if isRefArr(s) else I32(4100 + structOf(s))
                 text = $ind "x" $g.nv " " $g.tn(t) " = " $x "\n"

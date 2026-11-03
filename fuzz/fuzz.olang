@@ -293,7 +293,7 @@ fn scopeMain(args Array<String&>&) ? io.Error {
     join {
         for w in range jobs { spawn scopeWorker(queue, w) }
     }
-    summary mut String& = "fuzz scope: " $Ran " programs, " $Total " scenarios run, " $Refused " refused by the compiler"
+    summary String& = "fuzz scope: " $Ran " programs, " $Total " scenarios run, " $Refused " refused by the compiler"
     if FreeMode { summary = $"fuzz free: " $Ran " programs, " $Total " scenarios run, " $Refused " refused, " $Frees " places freeing at once" }
     try io.Print($summary ", " $Found " findings" $endRun() "\n")
     if Found > 0 { os.Exit(1) }

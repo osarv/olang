@@ -25,7 +25,7 @@ type Holder struct(k I64) {
 } 
 type Holder2 struct(k I64) {
     k
-    t mut String& = "none"
+    t String& = "none"
     if k > 0 {
         t = $Big(k) "nested"
     }

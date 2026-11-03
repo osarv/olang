@@ -1,0 +1,8 @@
+# check: fail error[T13a, T29c]: a String never changes once it is made - write the text as an Array<Char> and make the String with String(chars), or build it with a StringBuilder
+# T13a, T29c: a slice of a String is read-only - what is written through it would change the String
+fn zap(b mut Array<Char>&) { b[0] = 'z' }
+fn main() {
+    s := $"abcdef"
+    zap(s[2:4])
+    assert s == "abzdef"
+}

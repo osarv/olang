@@ -10,7 +10,7 @@ type E error { X }
 fn main() ? E {
     assert total(I32[3, 4, 5]) + Live == 13
     assert lenOf("static text") + I64(Live) == 12
-    mine := "copied"
+    mine Array<Char> = "copied"      # (written: an Array<Char> - a String never changes, T13a)
     mine[0] = 'C'
-    assert mine.Eq("Copied")
+    assert mine == "Copied"
 }

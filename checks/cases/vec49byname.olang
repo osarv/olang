@@ -11,7 +11,7 @@ fn churn() I64 {
 }
 type CB struct() {
     data mut Array<Char>& = Array<Char>(2, 'a')
-    text mut String& = "bb"
+    text String& = "bb"
 }
 fn (c CB&) Text() String& { return c.text }
 fn (c CB&) Pick(trim Bool) String& {

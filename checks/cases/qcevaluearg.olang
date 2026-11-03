@@ -3,16 +3,16 @@
 # its part too: a write to it in the callee reaches nothing of the caller's (D9, the argument copied)
 import "std/io"
 
-type person struct(name String, age I64) {
+type person struct(name Array<Char>, age I64) {        # (text written: an Array<Char>, T13a)
     name, age
 }
 
-fn shout(p person) String {
+fn shout(p person) Array<Char> {
     p.name[0] = 'X'
     return p.name
 }
 
-fn (p person) Upper() String {
+fn (p person) Upper() Array<Char> {
     p.name[0] = 'A'
     return p.name
 }

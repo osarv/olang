@@ -1,8 +1,8 @@
 # check: run
 # O14, T7b: a global returned by value is a copy of it, which its caller may change without changing the global
 import "std/io"
-Data := String("constant text")
-fn Show() String { return Data }
+Data Array<Char> = "constant text"         # (text written: an Array<Char>, T13a)
+fn Show() Array<Char> { return Data }
 fn main() {
     x := Show()
     x[0] = 'Z'
