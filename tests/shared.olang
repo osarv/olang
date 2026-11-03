@@ -18709,3 +18709,30 @@ test "E31b: a mutating call through x[i] is made on the element in place, as the
     for i in range 200 { churn.Push($"churn " $i) }
     assert churn.Len() == 200 and inPlaceCalls() == want
 }
+
+# S4c, E31: a parallel assignment's target x[i] on a type declaring SetAt stores through it, as "x[i] = v" alone does -
+# each target's index read first, then every value, then the stores in order (found by docs/refs-study.md: the
+# parallel form was refused, writing into the copy At gives back); baked while compiling as at run time
+type s4cPt struct(x I64, y I64) {
+    x, y
+}
+fn s4cSwaps(n I64) String {
+    ps := Vec<s4cPt>()
+    for i in range n { ps.Push(s4cPt(i, i * 10)) }
+    ps[0], ps[n - 1] = ps[n - 1], ps[0]
+    i I64 = 1
+    ps[i], i = ps[0], 2                         # ps[1]: the index is read before i is written
+    v := Vec<I32>()
+    v.Push(0)
+    v.Push(0)
+    v[0], v[1] = 7, v[0] + 1                    # literals fitted to the element; v[0] read before it is written
+    g := mxGrid(2, 2)
+    g[0, 1], g[1, 0] = 5, 6
+    g[0, 1], g[1, 0] = g[1, 0], g[0, 1]         # two indices each
+    return $ps " " $v " " $g[0, 1] " " $g[1, 0] " " $i
+}
+S4cSwapsBaked := s4cSwaps(3)
+test "S4c, E31: a parallel assignment of elements stores through SetAt" {
+    want := "Vec<s4cPt>[s4cPt(2, 20), s4cPt(2, 20), s4cPt(0, 0)] Vec<I32>[7, 1] 6 5 2"
+    assert S4cSwapsBaked == want and s4cSwaps(3 + I64(ctRuntimeZero)) == want
+}

@@ -16892,17 +16892,25 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
         }
         return
     }
-    # S4c: the targets' places, then every value held, then the stores
+    # S4c: the targets' places, then every value held, then the stores - a target x[i] of a declared type its index held
+    # and the store its SetAt (E31), as "x[i] = v" alone is
     held Vec<I64>
     places mut Vec<typed.Lvalue?&>& = Vec<typed.Lvalue?&>()
-    for i in range n { places.Push(c.discardOr(m.Targets[i])) }
+    sets mut Vec<setAt?&>& = Vec<setAt?&>()
+    for i in range n {
+        st := c.setAtTarget(m.Targets[i])
+        sets.Push(st)
+        p := c.discardOr(m.Targets[i]) if st is null else null
+        places.Push(p)
+    }
     # S4d: a borrow in any value of any target's storage takes its old value
     s4d := c.s4d.Len()
     for pl in places {
         if pl is not null and not c.isRef(pl.Type()) and c.P.T.HoldsRefs(pl.Type()) { c.s4d.Push(pl) }
     }
     for i in range n {
-        want := places[i]!.Type() if places[i] is not null else types.UnknownT
+        st := sets[i]
+        want := st.Elem if st is not null else places[i]!.Type() if places[i] is not null else types.UnknownT
         v := c.exprTo(m.Values[i], want)
         h := c.local(source.NameId(0), m.Values[i].Span(), typeOf(v), typed.LocalKind.Held, typed.Mark.None)
         c.emit(typed.Stmt.Let(m.Values[i].Span(), typed.LocalId(I32(h)), v))
@@ -16910,7 +16918,48 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
     }
     c.s4d.Truncate(s4d)
     for i in range n {
-        if places[i] is not null { c.emit(typed.Stmt.Assign(sp, places[i]!, c.readLocal(sp, held[i]))) }
+        st := sets[i]
+        if st is not null {
+            args := Vec<typed.Expr&>()
+            for k in st.Idx { args.Push(c.readLocal(sp, k)) }
+            args.Push(c.readLocal(sp, held[i]))
+            c.emit(typed.Stmt.Eval(sp, c.invoke(sp, st.Sp, st.M, c.read(st.Sp, st.Base), Array<ast.Expr&>(0), args.ToArray())))
+        } else if places[i] is not null {
+            c.emit(typed.Stmt.Assign(sp, places[i]!, c.readLocal(sp, held[i])))
+        }
+    }
+}
+
+# a target x[i] of a parallel assignment whose store is a SetAt (S4c, E31): x's place, the method, the indices checked
+# and held, and the element type its value is fitted to
+type setAt struct(Base typed.Lvalue&, M I64, Idx Array<I64>, Sp source.Span, Elem types.TypeId) {
+    Base, M, Idx, Sp, Elem
+}
+
+# a parallel assignment's target x[i] on a declared type with a SetAt (assignAt's), its index evaluated and held now -
+# a target's place comes before every value; null for any other target, whose place discardOr gives
+fn (c mut Checker&) setAtTarget(target ast.Expr&) setAt?& {
+    match target {
+        case ast.Expr.Index(isp, x, items) {
+            if c.typeNamed(x) >= types.TypeId(0) { return null }
+            base := c.place(x)
+            if base is null { return null }
+            dt := c.deref(base.Type())
+            if dt == types.UnknownT or c.arrayOf(dt) != types.UnknownT { return null }
+            m := c.roleMethod(dt, "SetAt", items.Len() + 1)
+            # (x[i] read through At, E31b: its write-back is the single form's, writeBack)
+            if m < 0 or c.valueTemp(base) >= 0 { return null }
+            ps := c.paramsOn(m, base.Type())
+            idx Vec<I64>
+            for k, it in items {
+                v := c.exprTo(it, ps[k + 1] if k + 1 < ps.Len() else types.UnknownT)
+                h := c.local(source.NameId(0), it.Span(), typeOf(v), typed.LocalKind.Held, typed.Mark.None)
+                c.emit(typed.Stmt.Let(it.Span(), typed.LocalId(I32(h)), v))
+                idx.Push(h)
+            }
+            return setAt(base, m, idx.ToArray(), isp, ps[items.Len() + 1] if items.Len() + 1 < ps.Len() else types.UnknownT)
+        }
+        case _ { return null }
     }
 }
 
