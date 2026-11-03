@@ -2597,3 +2597,19 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   unobservable; a unique type declares no Copy (it is what forbids copies; its Clone stays explicit); generics and the
   evaluator call it as any method. Option A: no override, deep copies written as an explicit Clone(). Recommended B
   with those limits. ASKED.
+- Copy DECIDED 2026-11-03 (the user): `Copy()` is the assignment operator's method (E31) - called wherever a value of
+  the type is copied; the word Clone leaves the language ("clone should be copy, and where it doesn't make sense ... the
+  structure is probably not optimal"); a unique type declares no Copy; a compound assignment computes its operator
+  (Plus ...) first and the fresh result lands, so no Copy runs for it (mine: a fresh value is never copied); a struct
+  holding a unique part may be non-unique only by declaring a Copy that builds that part fresh - copying the unique part
+  inside it is an error (the user: "the copy has to not copy the unique part"); Copy builds only (allocation is its
+  only effect), so the compiler leaves it out wherever neither side is written afterwards.
+- immut DECIDED 2026-11-03 (the user: "pretty straightforward"): per type - nothing of an immut type changes after its
+  constructor; a type may hold an immut part without being immut itself; a copy of a holder shares its immut parts
+  (sharing is copying, as nobody can tell) - by the built-in copy, so no Copy method is needed for it (mine; the user had
+  thought one would be); an immut type declares no Copy (its copy is a share); `mut T&` of an immut type an error;
+  String immut.
+- Asked 2026-11-03: how a unique collection (Vec, Map, ...) is copied now that Clone is gone and unique types have no
+  Copy. PROPOSED: unique values are never copied, only built afresh from another - `v.ToVec()` (exists), `m.ToMap()`,
+  `s.ToSet()` - so the cost is a written call; alternative: collections non-unique with a Copy (value semantics, copies
+  elided where unobservable). Recommended the first.
