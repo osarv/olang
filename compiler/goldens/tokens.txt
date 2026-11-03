@@ -1906,7 +1906,7 @@ b48efcf1d1f29453 c8dcaffdee32e6ce compiler/fmt.olang
 9aca2c46d29f2368 eac517608056b91c compiler/generic.olang
 2104bc58a4e4acd9 a49bc3a928714e02 compiler/interp.olang
 64775bb322e353e8 f9d3dd3c8154a58f compiler/load.olang
-eaf09afa5f170f3e d14431e30d92f23e compiler/lower.olang
+3fda18cdcd997e7a 906d9af71c28f1ae compiler/lower.olang
 025928255c54707a 8b086d200f0cc2e7 compiler/lsp.olang
 84e8f9a4af57a411 17b5c8771e0b23b8 compiler/mcp.olang
 5ba77499dcb70b5f e2ccd467b1d3282d compiler/mir.olang
@@ -1918,7 +1918,7 @@ d608eaba5a71209c 89847690e6760193 compiler/parse.olang
 b0ce9a097f48ce1f 81b6e44030d0209a compiler/profile.olang
 672b63f9a00d870a 2f96a413518788c8 compiler/runtime.olang
 68b3e4897b8f7683 d070d05805a87a92 compiler/scan.olang
-9d9e68a852edd397 ec17eda3f2e73fa1 compiler/scope.olang
+8be351641d812844 c24c042e84216749 compiler/scope.olang
 0a05e752605c64f6 8a35c1bc5d91b473 compiler/session.olang
 f6975e0c80778183 a143b4a2b7369ed5 compiler/source.olang
 e8eb3d2e60f7bb31 3ca34f650732d326 compiler/target.olang
@@ -1963,7 +1963,7 @@ aaf9b5b98ee1c059 89a0a60b420553ce compiler/tools/seed.olang
 548bd849ed56cd34 f1bfec7edb543bed compiler/typed.olang
 bce5e6948cde7171 b3132db3751d9a22 compiler/types.olang
 d20cb841149ededa 9c55d589dc57e2b8 compiler/unparse.olang
-e38623c78c33832b f85fab6e082ef137 compiler/views.olang
+c275711ef7980489 2bd55404f3632214 compiler/views.olang
 1d5c7674df181be6 f8980ee777b01dbd docs/refs-study/compiler/allrefs.olang
 08bdee5ba8c8df83 2b8f3666f3221ec1 docs/refs-study/compiler/baseref.olang
 834ea245788927ad 473e8eebb2e82146 docs/refs-study/compiler/scanref.olang
@@ -2054,7 +2054,7 @@ ed97dcba16f59b2e 7bfbe1ad951428db std/prelude/tests/map.olang
 6598ecdc4507cbef d2c3060510e28570 std/prelude/tests/pow.olang
 33f7cd5765dfc206 5c05d540cb197908 std/prelude/tests/text.olang
 756d197b3398d6ae 09961fdcbd097da0 std/prelude/tests/vec.olang
-f445ef0eb13458a4 eed55ad599994e55 std/prelude/text.olang
+9a8ac7f5ed7a23bf 1a847d019593414e std/prelude/text.olang
 9c5676633a06b6ba eec784db705a7a52 std/prelude/vec.olang
 66d0feefdfdb30b8 627e0f21cfcce2ff std/prop.olang
 2847f4f652f578e6 e56e54b51d7a5f54 std/rand.olang
