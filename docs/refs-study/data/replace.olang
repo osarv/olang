@@ -1,0 +1,25 @@
+# replace - flat.olang written as an immut particle type would be: an element is never written in place, each step
+# reads it and stores a new particle over it. Same layout as flat.olang; the question is whether the compiler makes the
+# same loop of it. Arguments: particles, steps.
+import "std/io"
+import "common"
+
+fn step(ps mut Array<common.P>&) {
+    for i in range ps.Len() {
+        p := ps[i]
+        vy := p.Vy - 9.8 * common.Dt
+        y := p.Y + vy * common.Dt
+        x := p.X + p.Vx * common.Dt
+        ps[i] = common.P(x, -y, p.Vx, -vy * 0.9) if y < 0.0 else common.P(x, y, p.Vx, vy)
+    }
+}
+
+fn main() ? {
+    n, steps := common.Arg(1, 4000000), common.Arg(2, 25)
+    r := common.Rand(5)
+    ps := common.P[r.Particle() for _ in range n]
+    for _ in range steps: step(ps)
+    sum := F64(0.0)
+    for p in ps: sum += F64(p.X + p.Y)
+    try io.Println("replace: " $sum)
+}

@@ -1,0 +1,26 @@
+# replace2 - replace.olang with the new particle stored by an if and an else instead of a conditional: the same 201.3M
+# instructions (1M particles, 10 steps), so the cost of replacing whole elements is not the conditional - the update
+# is compiled branch-free (both particles computed, one stored) where flat.olang's in-place writes keep a branch.
+import "std/io"
+import "common"
+
+fn step(ps mut Array<common.P>&) {
+    for i in range ps.Len() {
+        p := ps[i]
+        vy := p.Vy - 9.8 * common.Dt
+        y := p.Y + vy * common.Dt
+        x := p.X + p.Vx * common.Dt
+        if y < 0.0: ps[i] = common.P(x, -y, p.Vx, -vy * 0.9)
+        else: ps[i] = common.P(x, y, p.Vx, vy)
+    }
+}
+
+fn main() ? {
+    n, steps := common.Arg(1, 4000000), common.Arg(2, 25)
+    r := common.Rand(5)
+    ps := common.P[r.Particle() for _ in range n]
+    for _ in range steps: step(ps)
+    sum := F64(0.0)
+    for p in ps: sum += F64(p.X + p.Y)
+    try io.Println("replace2: " $sum)
+}
