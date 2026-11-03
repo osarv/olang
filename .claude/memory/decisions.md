@@ -2729,3 +2729,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   struct holding a unique part by value has no implicit copy and must write its own Copy around it to be copyable
   (rule 5, now the user's); whether collections are unique is still ASKED (recommended: not unique, unique exactly when
   their elements are).
+- Collections DECIDED 2026-11-03 (the user: "Yes, collections should work that way"): collections are ordinary types
+  with a Copy (a new buffer, elements by their own Copy), unique exactly when their elements are (rule 5), copies left
+  out where neither side is written afterwards. Loose ends asked with it: (1) String building - `s.Append(x)` and
+  String's other methods give new Strings, growing in place where the old value has no other holder, StringBuilder
+  removed (proposed, not yet confirmed); (2) item 17 - a struct local kept by reference past its loop turn built where
+  it is kept, a new object per turn, instead of refused (proposed); (3) my reading `w := f` of a unique `f` gives a
+  `File&` (stated, not objected to).
