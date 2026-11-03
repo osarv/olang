@@ -2613,3 +2613,15 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   Copy. PROPOSED: unique values are never copied, only built afresh from another - `v.ToVec()` (exists), `m.ToMap()`,
   `s.ToSet()` - so the cost is a written call; alternative: collections non-unique with a Copy (value semantics, copies
   elided where unobservable). Recommended the first.
+- Copy, corrected by the user 2026-11-03: a compound assignment is `x = x + y` and calls Copy like any assignment
+  (mine reversed); the compiler leaves a Copy of a fresh value out where nothing could tell, as any Copy.
+- immut and unique, the user 2026-11-03: never both on one type ("they mean overlapping things ... I don't want
+  workarounds around the unique keyword") - an error; immut values may sit as values in map entries ("especially for
+  short strings"). Read and PROPOSED: an immut value has one storage that every holder shares (that is its "unique"
+  side), and since nothing can change it the compiler holds it as it chooses - inline in the holder when small (a short
+  String in a Map entry, no pointer), shared by a pointer when large - unobservable either way.
+- unique's storage, the user 2026-11-03 ("unique things can only be held by reference ... but we also want them to
+  have a storage ... a structure we want to write to a file and need the size of"): answered - unique as decided IS
+  held by value in its one place and laid out there (a struct field, a Vec's buffer element, a local); every other use is
+  a reference to that place; `T.Size` of a holder includes it inline; a collection's growth relocates its unique
+  elements (a move of storage, never a copy - the old buffer's slots emptied).
