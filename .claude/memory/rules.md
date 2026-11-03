@@ -64,6 +64,16 @@ of work in different areas at the same time".
 HISTORY.md, SPEC.md) written by the agent, memory/ledger left to me; I merge, resolve the append conflicts, run
 `make verify` and push. Pure searches go to a cheaper model. Judge per situation; there is no fixed rule.
 
+**The main session coordinates; agents do the hands-on work (the user, 2026-11-03: "are you running most tasks with
+background agents? ... do you want me to put your effort up to like maximum so that you don't actually do the tasks,
+but you just send them off to background agents the way I did it with my health VM?").** The session already runs at
+max effort, and effort does not decide delegation; what costs is whose context does the work - the main session's is
+hundreds of thousands of tokens, re-read at every step, an agent's starts small. So anything beyond a quick lookup, a
+merge, a gate run or a record goes to an agent with a brief - build and tooling fixes included (the build cleanup of
+2026-11-03 was done in the main session; it should not have been). Every brief also says: commit only the paths you
+changed, never `git add -A` over the whole tree (two agents swept `boot.rc` and `dev-stash.txt` into 250-file
+migration commits, 2026-10-25/26) - and `make consistency` fails on a root file it does not know.
+
 ## Model and effort per task
 The user, 2026-10-11: "Can you adapt the effort level dynamically to match the problem you are solving?" This is the
 explicit request the Agent tool's `effort` parameter needs, so I set it per agent. My own turns' effort is the user's
