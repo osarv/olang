@@ -2746,3 +2746,14 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   built in the scope where it is kept, a new object each turn; bulk review 6's F3 refusal goes (it came from the local's
   own slot staying in the frame while only its parts were placed); (3) `w := f` of a unique `f` makes a reference -
   the user: "it's fine". The copy, unique, immut and collection design is settled.
+- 2026-11-03 (the user): a mutable string is an `Array<Char>` ("then we just use an array of chars, and it's basically
+  a mutable string") - StringBuilder builds, String stays immutable, Array<Char> is the editable text. The user: "Yeah"
+  to building the settled design; and "I want the everything is a value study, and I want you to do it now". Order
+  (mine): the study first, the build batch after it - the study may change the memory model the batch would build on.
+- Memory model additions, the user 2026-11-03: "since we are no longer manually scoping things, adding another memory
+  model that works in some places, where the old model works in others ... is not off the table. The compiler handles
+  placing memory ... if you want another addition to the memory model that makes some cases that today are refused
+  work, or that makes us free things earlier ... that doesn't have performance overhead, just compiler overhead, that
+  would be really nice ... our scoping memory model is the base structure ... don't start doing things like garbage
+  collecting or ref counting ... unless you have a really good case to do ref counting in very specific places, and
+  then you ask me first. The things with performance overhead should not be done lightly." Folded into the study.

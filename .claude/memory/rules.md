@@ -564,3 +564,9 @@ Then (the same evening): "You can use sonnet for building smaller code pieces if
 restructuring using opus". So: Sonnet may build small, self-contained code pieces where I judge it effective (a std
 function, a migration tool, a test, a contained fix); any restructuring - the compiler/ refactor, moving code between
 modules, changing how a pass is organised - and all validation run on Opus.
+
+## The memory model may grow, without run-time cost
+The user, 2026-11-03: the scoping model is the base; additions on top that let refused programs work or free memory
+earlier are welcome when their cost is compile time only. No garbage collection or reference counting; reference
+counting only with a really good case in very specific places, and then asked first. Anything with a run-time cost is
+not done lightly.
