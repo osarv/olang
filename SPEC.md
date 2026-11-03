@@ -3996,7 +3996,8 @@ between the read and the write-back, and is a compile-time error naming the writ
 into `t`, then `x[i] = t`).
 
 **A call writing through `x[i]` is made in place** where it can be, by the store's rule above: a method with a writable
-receiver called on `x[i]` itself, `x[i].M(args)` (or on `x[i][j]`, every level taken in place), where the collection
+receiver called on `x[i]` itself, `x[i].M(args)` (or on `x[i][j]`, every level taken in place), or on a field of it at
+any depth, `x[i].f.g.M(args)` (the field of the element in place), where the collection
 declares `RefMut` (as a store needs) and is reached writably - a writable place, or a writable reference - and every
 other argument of the call is a **plain value**: a literal, constant data, a read of a local, a global or a field of
 them (an element of an array indexed by such), an operation over plain values, a constructor called on plain values -
@@ -4007,10 +4008,15 @@ collection) and no writable reference to storage a collection it is in may be or
 everything each may call - writes a global (or what a global refers to), calls through a function value or an `any`, or
 reaches a body that did not check. Judged once every body is checked (B1.1's effect summaries); where it does not hold,
 the call is the copy's, and the error below.
-The receiver is then `x.RefMut(i)`, taken before the arguments are evaluated, which nothing they do can change:
-`v[i].Push(x)`, `accs[i % 3].Add(2 * n)`, `grid[0][0].Push(4)`, `rows[k].Truncate(0)`. Not in a spawned call (a task
-holding the element's reference while the collection could grow under it), not for an argument read through `x[i]` (a
-call of `At`) or any other call - hold such an argument in a local first.
+The receiver is then `x.RefMut(i)` (or its field), taken before the arguments are evaluated, which nothing they do can
+change: `v[i].Push(x)`, `accs[i % 3].Add(2 * n)`, `grid[0][0].Push(4)`, `rows[k].Truncate(0)`, `u.nodes[p].kids.Push(c)`.
+**Two-phase:** an argument that is no plain value but whose value owns nothing and holds no reference - a number, a
+`Bool`, a plain struct a call gives (`t.nodes[0].kids.Push(t.add(k))`, `add` growing the collection) - is evaluated
+first, into a local of its own, before the receiver: the element is reached after it, so whatever it ran, the
+reference names the element where it now is. Then the element's indices (of one level) must be plain values, evaluated
+after such arguments. Not in a spawned call (a task holding the element's reference while the collection could grow
+under it), not for an argument owning storage or holding a reference that is read through `x[i]` (a call of `At`) or
+given by any other call - hold such an argument in a local first.
 
 **A call that could write the copy is an error** otherwise: a method with a writable receiver called on `x[i]` (or on a field or
 an element of it), `x[i].M()`, or `x[i]` passed for a writable reference parameter, `g(x[i])` - where the element is not a **handle** (O17b) - the callee runs between the read and the write-back and may reach the collection another way,

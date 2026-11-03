@@ -1,5 +1,7 @@
-# check: fail x[i] gives a copy, and the call can build into what it holds where the copy is
-# E31b/O17 (F1): as e31bfieldviewbuild, the view a method on the field, "l[0].w.Build(v)"
+# check: run
+# E31b/O17 (F1): as e31bfieldviewbuild, the view a method on the field, "l[0].w.Build(v)" - made on the element's field
+# in place through RefMut since 2026-11-03 (two-phase, the values study's B4), so what Build makes lands where the
+# element's reference reaches, as "l.RefMut(0).w.Build(v)" written out does (it was refused, the call the copy's)
 import "std/io"
 type Node struct(v I64, next mut Node?&) {
     v

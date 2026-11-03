@@ -1,7 +1,8 @@
-# check: fail x[i] gives a copy of the element, which this call would write
-# E31b: a call writing through x[i] is made on the element in place only where its other arguments are plain values -
-# here one is a call that grows the collection, which would leave the element's reference, taken first, naming the
-# old buffer: the call stays the copy's, refused
+# check: run
+# E31b, two-phase (2026-11-03, the values study's B4): a call writing through x[i] whose other argument is a call that
+# grows the collection - a number its value - has the argument evaluated first, into a local of its own, and the
+# element reached after it, so the element's reference names the buffer the growth left (it was refused, the call
+# staying the copy's)
 fn grow(v mut Vec<Vec<I64>>&) I64 {
     v.Push(Vec<I64>())
     return 1
@@ -9,5 +10,6 @@ fn grow(v mut Vec<Vec<I64>>&) I64 {
 fn main() ? {
     v := Vec<Vec<I64>>()
     v.Push(Vec<I64>())
-    v[0].Push(grow(v))
+    for _ in range 50: v[0].Push(grow(v))
+    assert v.Len() == 51 and v[0].Len() == 50 and v[0][49] == 1
 }

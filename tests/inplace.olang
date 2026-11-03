@@ -90,3 +90,50 @@ assert KeptWord == "one"
 test letters "the run time agrees with what the evaluator baked" {
     assert Baked == letters("a bb ccc") + lineLengths("x\nyy\n") + total(I64[1, 2, 3]) and KeptWord == firstWord("one two")
 }
+
+type Kid struct(w I64) {
+    w
+    kids Vec<I32> = Vec<I32>()
+}
+
+type Tree struct() {
+    nodes Vec<Kid> = Vec<Kid>()
+}
+
+fn (t mut Tree&) add(w I64) I32 {
+    t.nodes.Push(Kid(w))
+    return I32(t.nodes.Len() - 1)
+}
+
+fn (t mut Tree&) child(p I32, w I64) I32 {
+    c := t.add(w)
+    t.nodes[p].kids.Push(c)
+    return c
+}
+
+fn kidSum(t Tree&) I64 {
+    s := 0
+    for n in t.nodes {
+        for k in n.kids: s += t.nodes[k].w
+    }
+    return s
+}
+
+fn grown() I64 {
+    t := Tree()
+    t.add(1)
+    for k in range 20: t.nodes[0].kids.Push(t.add(k))
+    t.child(1, 100)
+    return kidSum(t) * 1000 + t.nodes[0].kids.Len()
+}
+
+test Tree.child "pushes onto a field of an element in place, an argument that grows the collection taken first" {
+    t := Tree()
+    t.add(1)
+    for k in range 10: t.child(I32(k % 3), k)
+    assert t.nodes[0].kids.Len() == 4 and t.nodes[1].kids.Len() == 3 and t.nodes[2].kids.Len() == 3
+    assert grown() == 290020, $grown()
+}
+
+# the evaluator, which takes the element in place as the run time does, decides the same
+assert grown() == 290020

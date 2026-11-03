@@ -12339,9 +12339,18 @@ fn (c mut Checker&) inPlaceCall(sp source.Span, call typed.Expr&) typed.Expr& {
         w := collWalk(c.P.T, coll)
         if w.reaches(el): return call
     }
+    # (two-phase, Rust's: an argument that is no plain value but owns nothing and holds no reference - a number a call
+    # gives - is evaluated first, into a local of its own, and the element reached after it, so what it runs cannot
+    # leave the element's reference stale; the element's indices are then plain values too)
+    hold mut Array<Bool>& = Array<Bool>(cl.Args.Len(), false)
+    held := false
     for j in range 1, cl.Args.Len() {
-        if not c.plainArg(cl.Args[j]): return call
+        if c.plainArg(cl.Args[j]): continue
+        if not c.holdable(cl.Args[j]): return call
+        hold[j] = true
+        held = true
     }
+    if held and (not c.plainArgs(c.atIndices(tv)) or c.callArgs(tv).Len() == 0 or c.atValue(c.callArgs(tv)[0]) is not null): return call
     key := $c.fr().File ":" $sp.Start
     if c.inPlaceRefused.Has(key): return call
     bodies := c.inPlaceBodies(cl)
@@ -12349,9 +12358,45 @@ fn (c mut Checker&) inPlaceCall(sp source.Span, call typed.Expr&) typed.Expr& {
     ref := c.inPlaceRef(sp, tv)
     if ref is null: return call
     c.inPlaceReads.Push(inPlaceRead(key, bodies, c.fr().File, sp))
-    args mut Array<typed.Expr&>& = Array<typed.Expr&>(cl.Args.Len(), ref)
-    for j in range 1, cl.Args.Len() { args[j] = cl.Args[j] }
-    return typed.Expr.Call(call.Span(), typeOf(call), typed.Call(cl.Target, args, cl.Site, cl.Zero, cl.Tail))
+    # (a call on a field of the element, `x[i].f.M()`: that field of the element in place)
+    recv := ref
+    match pastAway(cl.Args[0]) {
+        case typed.Expr.Borrow(bsp, bt, bp) { if bp != typed.Lvalue.Temp: recv = typed.Expr.Borrow(bsp, bt, rebased(bp, ref)) }
+        case _ { }
+    }
+    sfrom := c.stmts.Len()
+    args mut Array<typed.Expr&>& = Array<typed.Expr&>(cl.Args.Len(), recv)
+    for j in range 1, cl.Args.Len() { args[j] = c.heldFirst(cl.Args[j]) if hold[j] else cl.Args[j] }
+    made := typed.Expr.Call(call.Span(), typeOf(call), typed.Call(cl.Target, args, cl.Site, cl.Zero, cl.Tail))
+    if not held: return made
+    r := typeOf(call)
+    if r == types.VoidT or r == types.NoreturnT {
+        c.emit(typed.Stmt.Eval(sp, made))
+        return typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), null))
+    }
+    return typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), made))
+}
+
+# whether an argument may be evaluated before the element a call made in place is reached (two-phase): its value owns
+# nothing and holds no reference, so a local of its own holds all of it
+fn (c mut Checker&) holdable(x typed.Expr&) Bool {
+    t := typeOf(x)
+    return not c.isRef(t) and not c.P.T.HoldsRefs(t) and not typed.HoldsOwned(c.P.T, t) and not c.P.T.ReachesWrite(t)
+}
+
+# an argument evaluated first, into a held local, read where the call is made
+fn (c mut Checker&) heldFirst(x typed.Expr&) typed.Expr& {
+    h := c.local(source.NameId(0), x.Span(), typeOf(x), typed.LocalKind.Held, typed.Mark.None)
+    c.emit(typed.Stmt.Let(x.Span(), typed.LocalId(I32(h)), x))
+    return c.readLocal(x.Span(), h)
+}
+
+# an At call's indices (its arguments after the collection)
+fn (c mut Checker&) atIndices(tv typed.Expr&) Array<typed.Expr&> {
+    at := c.callArgs(tv)
+    out mut Array<typed.Expr&>& = Array<typed.Expr&>(at.Len().Max(1) - 1, tv)
+    for i in range out.Len() { out[i] = at[i + 1] }
+    return out
 }
 
 # the collections an At call's element is in: its receiver's type, and those of the levels it is an element of in turn
@@ -12488,7 +12533,7 @@ fn (c mut Checker&) atTemp(x typed.Expr&) typed.Expr?& {
 # the At call whose value an argument lends - its temporary's storage borrowed, or storage made for it - null for any other
 fn (c mut Checker&) atValue(x typed.Expr&) typed.Expr?& {
     v := match pastAway(x) {
-        case typed.Expr.Borrow(_, bt, bp): c.writableTemp(c.P.T.Ref(c.deref(bt), types.Writable), bp)
+        case typed.Expr.Borrow(_, _, bp): wholeTemp(bp)
         case typed.Expr.Promote(_, _, pr): pastAway(pr.X)
         case _: null
     }
@@ -12538,12 +12583,34 @@ fn pastAway(x typed.Expr&) typed.Expr& {
     }
 }
 
-# the value a writable borrow of a temporary's storage borrows, null for any other
+# the value a writable borrow of a temporary's storage borrows - of it whole or of a field of it, at any depth (E31b
+# through an element's field, `x[i].f.M()`) - null for any other
 fn (c mut Checker&) writableTemp(bt types.TypeId, bp typed.Lvalue&) typed.Expr?& {
     if not c.isRef(bt) or (c.P.T.PermOf(bt) & types.Writable) == 0: return null
-    return match bp {
+    return tempUnder(bp)
+}
+
+fn wholeTemp(p typed.Lvalue&) typed.Expr?& {
+    return match p {
         case typed.Lvalue.Temp(_, _, v, _): v
         case _: null
+    }
+}
+
+fn tempUnder(p typed.Lvalue&) typed.Expr?& {
+    return match p {
+        case typed.Lvalue.Temp(_, _, v, _): v
+        case typed.Lvalue.Field(_, _, base, _): tempUnder(base)
+        case _: null
+    }
+}
+
+# a place of fields over a temporary, its temporary replaced by what reference ref names (the element in place)
+fn rebased(p typed.Lvalue&, ref typed.Expr&) typed.Lvalue& {
+    return match p {
+        case typed.Lvalue.Field(sp, ty, base, i): typed.Lvalue.Field(sp, ty, rebased(base, ref), i)
+        case typed.Lvalue.Temp(sp, ty, _, _): typed.Lvalue.Deref(sp, ty, ref)
+        case _: p
     }
 }
 

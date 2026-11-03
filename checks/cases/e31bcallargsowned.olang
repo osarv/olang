@@ -1,0 +1,16 @@
+# check: fail x[i] gives a copy, and the call can build into what it holds where the copy is
+# E31b, two-phase: an argument evaluated first must own nothing and hold no reference - one owning storage a call makes
+# (a Vec) is no such value, so the call through x[i] stays the copy's and is refused
+type B struct() {
+    xs Vec<I64> = Vec<I64>()
+}
+fn (b mut B&) Take(v Vec<I64>) { b.xs = v }
+fn grow(bs mut Vec<B>&) Vec<I64> {
+    bs.Push(B())
+    return Vec<I64>()
+}
+fn main() ? {
+    bs := Vec<B>()
+    bs.Push(B())
+    bs[0].Take(grow(bs))
+}

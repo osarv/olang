@@ -28532,3 +28532,19 @@ of it). `-memory`'s view line counts the moves.
 Measured: lastuse 682 MB / 0.44 s -> 420 MB / 0.23 s (the fresh form 420 MB / 0.21 s). bench: machine code
 byte-identical. Tests: tests/reads.olang's moved, copied-then-used, each-turn and deferred cases (the evaluator decides
 the same values at the top level), the landing scenario's lastuse under 90 MB; `-sanitize` and `-debug` clean on both.
+
+## In-place calls through an element's field, two-phase (2026-11-03, the values study's B4)
+
+E31b made a writing call on `x[i]` in place through the collection's `RefMut` only where the receiver was the element
+itself and every other argument a plain value. The study's widget tree met both limits: `u.nodes[p].kids.Push(c)` - a
+call on a field of the element - was refused, and so was `t.nodes[0].kids.Push(t.add(k))`, whose argument grows the
+collection. Built (mine, Rust's two-phase borrows): check's `inPlaceCall` accepts a writable borrow of a field path over
+At's temporary (`writableTemp` through fields; the nested-level lookup `atValue` stays whole-element only, as a field of
+an outer element is no collection of the inner level) and rebuilds the path over the RefMut reference (`rebased`); an
+argument that is no plain value but owns nothing and holds no reference (`holdable`) is evaluated first into a held
+local (`heldFirst`), the call made after it in a `Seq`, so the element is reached after whatever the argument ran - then
+the one level's indices must be plain. The effect check after each attempt (`settleInPlace`) is unchanged: a method that
+may write a global, call through a value or an `any`, or reach an unchecked body still keeps the copy and its error.
+Cases: e31bcallargs (refused until now) runs - 50 pushes each growing the outer Vec first; e31bfieldviewmethod (refused)
+runs, as `l.RefMut(0).w.Build(v)` written out does on master; e31bcallargsowned is the refusal that stays (an argument
+owning a Vec). tests/inplace.olang's `Tree.child` and a top-level assert the evaluator decides.
