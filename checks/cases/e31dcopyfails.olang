@@ -1,0 +1,12 @@
+# check: fail error[E31d]: Copy takes nothing but its receiver, read through a read-only reference, gives a new tree and cannot fail
+# E31d: a copy is made wherever a value is copied, with nowhere to handle an error - so a Copy cannot fail
+type tree struct(n I64) { n }
+fn (t tree&) Copy() tree ? Overflow {
+    if t.n > 9: error Overflow
+    return tree(t.n)
+}
+fn main() {
+    a := tree(1)
+    b := a
+    assert b.n == 1
+}

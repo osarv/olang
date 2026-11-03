@@ -1,0 +1,9 @@
+# check: fail error[E31d]: Copy takes nothing but its receiver, read through a read-only reference, gives a new tree and cannot fail - write 'fn (x tree&) Copy() tree'
+# E31d: a type's own Copy - what every copy of a value of it calls - reads its receiver through a read-only reference
+type tree struct(n I64) { n }
+fn (t mut tree&) Copy() tree { return tree(t.n) }
+fn main() {
+    a := tree(1)
+    b := a
+    assert b.n == 1
+}

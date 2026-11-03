@@ -355,7 +355,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   compiler's); `Array<T, N>`, constant type parameters `<N I64>` and `x as Array<T, N>&` views (2026-10-24, QP1-QP4: a
   length is inferred where an array is made, a view is a slice); `checked`, `CheckError` and the `Checked...` forms
   (2026-10-25: `try a.Get(i)`, `x.Narrow<T>()`, `std/arith`); contract guarantees, named results and `fits` (2026-10-25); `error IoError { ... }` declarations (2026-10-25, `type
-  IoError error { ... }`, T19); `nomatch` and `=>` (2026-10-31, QBQ/QBR: `case _`, `case P: v`).
+  IoError error { ... }`, T19); `nomatch` and `=>` (2026-10-31, QBQ/QBR: `case _`, `case P: v`); `Clone` (2026-11-03,
+  E31d: `Copy()`).
 
 ### Types
 
@@ -518,6 +519,23 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   reference-only (C11) and runs once per constructor call, when the instance's scope closes (O16); an empty one is an
   error (C7a). Reference-only because §8 tracks references, not by-value copies: a copy would carry a released
   resource where no rule sees it (use after release, not double release).
+- **`immut` types (T13a, the user's decisions 2026-11-03 "immut DECIDED", "unique vs immut settled"; built 2026-11-03,
+  wt-unique, details mine).** `type Config immut struct(...)` (an enum or a type over another alike; `immut` a word of
+  one place, L9b - before the body, a type name or `struct`/`enum`/`extends`/`trait`/`error`/`fn` after it): nothing of
+  a value of it changes after its constructor - a field, an element held by value, a payload's field written, or any
+  of it lent writably, is an error naming the type (check's `mustWrite`, the one write check: `writesImmut`); `mut T&`
+  of one an error where written (a global's own `mut` is its binding's, S6, and stays); a slice of one is read-only; a
+  holder of an immut part need not be immut (the part replaced whole); an immut type declares no Copy (its copy is the
+  same value); a conversion to an immut type from an existing value of a mutable one copies it (left out where nothing
+  could tell, D9i). Decided (mine): its copies are still made as copies (sharing is unobservable - an optimization for
+  later). **Not done (left of part 4): String immut** - tried: `type String immut extends Array<Char>` makes the
+  compiler and std build after migrating ~45 sites (text built by writing characters -> an `Array<Char>` converted at
+  its last use; `mut String&` -> `String&`; C-filled byte buffers stay `Array<U8>`), but ~80 tests and checks cases
+  write text to test copy semantics and each needs rewriting, and the flip needs the seed regenerated - left for a round
+  of its own (its migration tool written, `tools/textbuild_migrate.olang`, not in `olang fix` until the flip); StringBuilder's `Append`
+  rename not made. **Found on the way (pre-existing, fixed):** an `Array<Char>` of a run-time length lent to a `mut
+  Array<U8>&` parameter (Char extends U8) was copied and the copy lent, so what the callee wrote was lost (E12's
+  borrow taken now for any array whose elements are held alike - tests/immut.olang).
 - **Declared types are nominal (T29).** `type Meters I32`, `type Name Array<T>`; `extends` inherits the base's methods
   and operators (T29f, the user's design); `Name(x)` converts and names the argument's storage (T29a); a declared
   primitive may have a constructor, which a literal runs while compiling (T29d, the user's design). Over a struct,
@@ -546,6 +564,31 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `7.Hash()`, `255.Format(16)`, `(1 + 2).Hash()` take the literal's own type (T6a: `I64`, `F64`, `U64` above `I64`'s
   largest), since a call is no place a literal adapts; another type is a conversion (`F32(2).Sqrt()`). `-2.0.Sqrt()` is
   `-(2.0.Sqrt())`. L12's lexing is unchanged.
+- **`Copy()` makes a new value from an existing one (E31d, the user's decisions 2026-11-03 "Copy DECIDED", "Copy and
+  unique DECIDED", "Collections DECIDED"; built 2026-11-03, wt-unique, details mine).** Every type has one supplied -
+  part by part, deep through values (each part by its own Copy), shared at references and function values - and `x.Copy()`
+  written gives it (a reference's referent's: `r.Copy()` of an `Array<I64>&` is an `Array<I64>`); a struct or an enum
+  may declare its own, `fn (x T&) Copy() T` (read-only receiver, no parameters, its own type, no `?`, else an error naming
+  the form; on another type an error naming the supplied one), and every copy of a value calls its type's - a `:=` or
+  `=` from an existing value, a compound assignment, a by-value argument, a store into a part, a value put into a
+  collection, a collection's copy (each element by its Copy: collections follow their elements, no Copy of their own); a
+  fresh value (a constructor's or call's result) is no copy. A declared Copy only builds: an effect beyond allocation
+  (a global or a parameter written, C, a function value or an `any`, tasks, waiting, ending the program) is an error at
+  its name, read off its effects after the last attempt (`check.copyEffects`). `Clone` is gone: the prelude's
+  `Array.Clone` (the supplied Copy is it) and std/list's `List.Clone` (a List is a handle, its Copy shares it - a list of
+  its own is `list.From(l.Iter())`); `tools/clone_migrate.olang` (text, last of `olang fix`'s text tools) rewrites
+  `.Clone()` to `.Copy()` and lists the lines of a file importing std/list (status 1). Decided (mine): built on QCE's copy
+  machinery - a type declaring Copy counts as owning parts (`types.OwnsParts`, the declaring decls registered with the
+  methods, `Table.MarkCopy`), so check's copy sites make the same `MakeKind.Copy` and lowering's Copy helper calls the
+  declared body (`declaredCopy`; check makes its instance, `wantCopy`, as `$` does Str's) with its result scope the
+  copy's and the program's for the rest - so the evaluator, `interpret` and section 8 (a copy's references judged as
+  shared with the source's) need nothing new; a collection's room (zeros) is never given to a declared Copy - a value
+  whose first never-null reference is null there is copied as its bytes; D9h's caller copy of a view a callee handed
+  back copies parts only (`HelperKind.Parts`), never the declared Copy (which the callee's own constructor call inside a
+  Copy would otherwise reach: it recursed); **no copy running a declared Copy is left out** (D9h, D9i) - a Copy deep
+  through references makes what the value refers to anew, and the move/view proofs speak of the value's own storage only
+  (a recorded limit and question: copies of such types are never elided); facts and B5a's order do not see through a
+  declared Copy (it allocates only). bench machine code byte-identical.
 - **Operators are methods named for them (E31, the user's design).** `Plus Minus Mul Div Rem MatMul Neg Less BitAnd
   ... Inc Dec At SetAt Slice Call`, a lowercase spelling being module-private (M6b); `> <= >=` derive from `Less`. A
   method is the operator only in the operator's shape - another shape is an ordinary method. Any operator's
@@ -871,7 +914,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   wrapper that is the function value's code); eval keeps the suspended frame's words and scopes and restores them.
   **Decided (mine)**: the value yielded is built in each `Next` call's result scope - so `for w in words(t)` reclaims
   each value per turn - which no local outlives: O26a moves nothing there, and a yielded local holding the generator's
-  own storage is O26 worded for yield (write `$x`/`x.Clone()`).
+  own storage is O26 worded for yield (write `$x`/`x.Copy()`).
   **Borrowed elements (D18c, QBB, the user's decisions 2026-10-26; built 2026-10-26; inferred since 2026-11-02, QCB)**:
   `fn words(t String&) Iterator<String&>` yielding views of what `t` refers to, or views of storage its walk keeps where
   the generator lives (locals kept for the walk, what they hold, a temporary yielded) - read-only, never null. Which of
@@ -1120,7 +1163,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   value in the shortest-lived scope every use allows (region inference over the whole program, as obligations already
   are; field and result scopes hidden parameters), a value kept longer built directly where it is kept. One rule keeps
   memory at today's best hand placement: no storage is extended past the loop turn or block that made it - a view of such
-  storage kept longer is an error naming `.Clone()`/`$x`, never a hidden copy. A bare `&` (a reference) stays.
+  storage kept longer is an error naming `.Copy()`/`$x`, never a hidden copy. A bare `&` (a reference) stays.
   **No manual scopes at all (the user, 2026-10-30: "make manual scopes impossible")**: there is no way to write a
   scope - no marker, scope argument or relation in the grammar; a removed spelling is simply gone (principle 4), so `&x`
   after a type is a syntax error like any unknown form, not a diagnostic about scopes. Markers are optional only inside
@@ -1434,8 +1477,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Vec, Map, Set, Deque, Heap and StringBuilder are values (QCE, the user's "Handles DECIDED 2026-11-01"; built
   2026-11-01, wt-values, details mine).** Each holds its storage by value: a copy (`b := a` of a place, a field, an
   element, a by-value argument, a capture, a task's argument) is a collection of its own, shallow at every `&`; sharing
-  is written `&` (`v mut Vec<T>&`, a `Vec<T>&` field); `Clone()` is gone from them (std/list's `List` stays a handle
-  and keeps it). In place: `v.Ref(i)` `T&v` and `v.RefMut(i)` `mut T&v` (unchecked as `v[i]`), `try m.Ref(k)` /
+  is written `&` (`v mut Vec<T>&`, a `Vec<T>&` field); `Clone()` is gone from them (and since E31d from the language:
+  std/list's `List` stays a handle, built anew by `list.From(l.Iter())`). In place: `v.Ref(i)` `T&v` and `v.RefMut(i)` `mut T&v` (unchecked as `v[i]`), `try m.Ref(k)` /
   `try m.RefMut(k)` (`MapError.Missing`); a number in a Map through `Update`. A store through `x[i]` on a collection
   declaring `RefMut` is made in place, its value evaluated first (E31b, `check.inPlace` - a Vec of Vecs' `v[i].n += 1`
   had copied the element twice); a mutating call through `x[i]` is made in place through `RefMut` too where its other arguments are plain values (2026-11-02, E31b), else E31b's error naming `x.RefMut(i)`. A join's
@@ -1568,9 +1611,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   refusing a struct by value (B3e). Still no extern variables, and
   the X1a hole stands. C math functions with their exact prototypes are known and evaluated while compiling (X8).
 - **std API details.** `Vec`, and std/list's `List`: `Push PushAll Pop First Last Clear Truncate Insert RemoveAt
-  SwapRemove IndexOf Remove Reverse Sort Join ToArray Clone`, `v[i]` unchecked, `try v.Get(i)` checked (a List's first
+  SwapRemove IndexOf Remove Reverse Sort Join ToArray`, `v[i]` unchecked, `try v.Get(i)` checked (a List's first
   chunk held on its own). `Map`: `Put Get
-  Has Remove Update Keys Values Clear Clone`, removed slots reused, a key needs `Hash` and `==`. Text: `Split` borrows
+  Has Remove Update Keys Values Clear`, removed slots reused, a key needs `Hash` and `==`. Text: `Split` borrows
   the receiver, an empty separator splits into characters; `Replace("", x)` inserts at every position; `ParseInt(0)`
   reads olang literal syntax; every base is a `Radix` (`TextError.BadBase`, a literal one decided while compiling);
   `x.Fixed(n)` as `%.*f`, exact; `n.Format(base)`. `io.Writer` never fails on Write - the

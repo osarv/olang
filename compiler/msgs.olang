@@ -336,6 +336,12 @@ type Diag enum {
     LessNotBool
     LenShape
     EqShape
+    CopyShape
+    CopyOnWhat
+    CopyDoesMore
+    ImmutWrite
+    ImmutMutRef
+    ImmutCopy
     StrShape
     EqStrWrites
     ProtocolBothSpellings
@@ -1794,6 +1800,24 @@ fn LenShape() Msg { return Msg(Diag.LenShape, "E31", "Len gives an I64") }
 # ERR_EQ_SHAPE
 fn EqShape() Msg { return Msg(Diag.EqShape, "E10a", "Eq takes one parameter of its receiver's own type and gives a Bool") }
 
+# ERR_COPY_SHAPE
+fn CopyShape(ty String&) Msg { return Msg(Diag.CopyShape, "E31d", "Copy takes nothing but its receiver, read through a read-only reference, gives a new " $ty " and cannot fail - write 'fn (x " $ty "&) Copy() " $ty "'") }
+
+# ERR_COPY_ON_WHAT
+fn CopyOnWhat(ty String&) Msg { return Msg(Diag.CopyOnWhat, "E31d", "only a struct or an enum the program declares has a Copy of its own, not " $ty " - its supplied Copy is the one") }
+
+# ERR_COPY_DOES_MORE
+fn CopyDoesMore(what String&) Msg { return Msg(Diag.CopyDoesMore, "E31d", "a Copy only builds the new value, and this one " $what " - every copy of the value runs it, so it may do nothing else") }
+
+# ERR_IMMUT_WRITE
+fn ImmutWrite(ty String&) Msg { return Msg(Diag.ImmutWrite, "T13a", "nothing of " $ty " changes after its constructor (it is immut) - make a new one") }
+
+# ERR_IMMUT_MUT_REF
+fn ImmutMutRef(ty String&) Msg { return Msg(Diag.ImmutMutRef, "T13a", "'mut' makes a reference writable, and nothing of " $ty " changes after its constructor (it is immut) - read it through '" $ty "&'") }
+
+# ERR_IMMUT_COPY
+fn ImmutCopy(ty String&) Msg { return Msg(Diag.ImmutCopy, "T13a, E31d", "a copy of " $ty " shares it, as nothing of it changes (it is immut) - it declares no Copy") }
+
 # ERR_STR_SHAPE
 fn StrShape() Msg { return Msg(Diag.StrShape, "E11c", "Str gives a String") }
 
@@ -2631,7 +2655,7 @@ fn DestructOneValue(ty String&) Msg { return Msg(Diag.DestructOneValue, "D8c", "
 fn DestructCount(n1 I64, n2 I64) Msg { return Msg(Diag.DestructCount, "D8c", $n1 " targets for " $n2 " results - write '_' for one not wanted") }
 
 # ERR_STORED_REF_OUTLIVED
-fn StoredRefOutlived() Msg { return Msg(Diag.StoredRefOutlived, "O20", "the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Clone()')") }
+fn StoredRefOutlived() Msg { return Msg(Diag.StoredRefOutlived, "O20", "the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Copy()')") }
 
 # ERR_PAYLOAD_SCOPES_DISAGREE
 fn PayloadScopesDisagree() Msg { return Msg(Diag.PayloadScopesDisagree, "T17c", "this payload holds references into two scopes, and it lives in one - build what it holds in one scope") }
@@ -2760,10 +2784,10 @@ fn CaseUnknownName(tok String&) Msg { return Msg(Diag.CaseUnknownName, "S13f", "
 fn CaseIsSubject(tok String&) Msg { return Msg(Diag.CaseIsSubject, "S13f", $tok " is the value being matched, so this compares it with itself - to take any value and test it, write 'case _ if ...'") }
 
 # ERR_RETURN_OWN_STORAGE
-fn ReturnOwnStorage() Msg { return Msg(Diag.ReturnOwnStorage, "O26", "this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Clone()')") }
+fn ReturnOwnStorage() Msg { return Msg(Diag.ReturnOwnStorage, "O26", "this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Copy()')") }
 
 # ERR_VIEW_KEPT
-fn ViewKept(name String&) Msg { return Msg(Diag.ViewKept, "O27", "this keeps a view of '" $name "', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Clone()'") }
+fn ViewKept(name String&) Msg { return Msg(Diag.ViewKept, "O27", "this keeps a view of '" $name "', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Copy()'") }
 
 # ERR_VIEW_RETURNED
 fn ViewReturned(name String&) Msg { return Msg(Diag.ViewReturned, "O27", "this returns a view of '" $name "', which this function builds - return the value (a result written without '&' copies it), or a copy: '$x'") }
@@ -2780,9 +2804,9 @@ fn YieldInDefer() Msg { return Msg(Diag.YieldInDefer, "S19b, S20", "deferred cod
 fn YieldInJoin() Msg { return Msg(Diag.YieldInJoin, "S20", "a join block may not yield - its tasks are waited for before it is left") }
 fn YieldPastDefer() Msg { return Msg(Diag.YieldPastDefer, "S20", "a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block") }
 fn GenReturnValue() Msg { return Msg(Diag.GenReturnValue, "D18a", "a generator gives its values by 'yield' - 'return' ends it and takes none") }
-fn GenYieldsBorrow(name String&) Msg { return Msg(Diag.GenYieldsBorrow, "D18c, T22a", "this generator yields what " $("'" $name "'" if name != "" else "a parameter") " refers to, which outlives no Next call it can be shown to - yield a copy ('$x', 'x.Clone()')") }
-fn YieldOwnStorage() Msg { return Msg(Diag.YieldOwnStorage, "S20, O26", "this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Clone()', '$x')") }
-fn GenYieldShorter(where String&) Msg { return Msg(Diag.GenYieldShorter, "D18c, S20", "this generator's elements live " $where ", and this value is not shown to last as long - yield a part of what lives there, or values ('Iterator<T>') and a copy ('$x', 'x.Clone()')") }
+fn GenYieldsBorrow(name String&) Msg { return Msg(Diag.GenYieldsBorrow, "D18c, T22a", "this generator yields what " $("'" $name "'" if name != "" else "a parameter") " refers to, which outlives no Next call it can be shown to - yield a copy ('$x', 'x.Copy()')") }
+fn YieldOwnStorage() Msg { return Msg(Diag.YieldOwnStorage, "S20, O26", "this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Copy()', '$x')") }
+fn GenYieldShorter(where String&) Msg { return Msg(Diag.GenYieldShorter, "D18c, S20", "this generator's elements live " $where ", and this value is not shown to last as long - yield a part of what lives there, or values ('Iterator<T>') and a copy ('$x', 'x.Copy()')") }
 fn GenErrors(elem String&) Msg { return Msg(Diag.GenErrors, "D18", "a generator fails as its Next does - write its errors in its result: 'Iterator<" $elem " ? E>'") }
 
 # ERR_RETURN_COUNT
@@ -3084,7 +3108,7 @@ fn NoteHeldIndexWhere(text String&) Msg { return Msg(Diag.NoteHeldIndexWhere, ""
 fn NoteCondValue() Msg { return Msg(Diag.NoteCondValue, "", "this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)") }
 
 # NOTE_SLICE_OF_TEMPORARY
-fn NoteSliceOfTemporary() Msg { return Msg(Diag.NoteSliceOfTemporary, "", "this borrows a value made here, which lives only in this block - keep a copy of what the slice shows ('$x', 'x.Clone()')") }
+fn NoteSliceOfTemporary() Msg { return Msg(Diag.NoteSliceOfTemporary, "", "this borrows a value made here, which lives only in this block - keep a copy of what the slice shows ('$x', 'x.Copy()')") }
 
 # NOTE_TEXT_COPY_WHERE
 fn NoteTextCopyWhere(text String&) Msg { return Msg(Diag.NoteTextCopyWhere, "", "this text lives in a block that closes first - pass a copy, which is made where '" $text "' lives: write '$' before it") }

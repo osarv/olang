@@ -248,6 +248,9 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # E31b: the calls made in place through x[i] (inPlaceCall), as each attempt made them, and the sites found, after an
     # attempt, to reach what could change the collection - kept from one attempt to the next, as factPresets is
     inPlaceReads Vec<inPlaceRead>
+    globalTop Bool = false                 # resolving a global's written type: its "mut" is the binding's (S6)
+    copyBodies Vec<I64>                    # E31d: the bodies of the declared Copies a copy calls, made by wantCopy
+    copyWanted Map<types.TypeId, Bool>     # ... the types wantCopy has walked
     inPlaceRefused Map<String&, Bool>
     Attempts I64 = 0
     viewsGrew Bool = false  # D9h: a body's views grew - settleAllViews goes round again (growViews)
@@ -603,6 +606,7 @@ fn (c mut Checker&) CheckProgram() {
             if moved { c.factsUndecided() }
             if inPlaceMoved { c.inPlaceUndecided() }
             c.settleFixed()
+            c.copyEffects()
             c.orderGlobals()
             c.settleAllViews()
             c.P.L.MutStorage = c.mutStorage()
@@ -635,6 +639,8 @@ fn (c mut Checker&) CheckMain() {
 # every collection a check of the program fills, empty again for another attempt (R1a)
 fn (c mut Checker&) reset() {
     c.Bodies = Vec<mut typed.Body&>()
+    c.copyBodies = Vec<I64>()
+    c.copyWanted = Map<types.TypeId, Bool>()
     c.viewBodies = Vec<pair.Pair<I64, I64>>()
     c.testKeys = StringBuilder()   # B7a's targets are said once an attempt (another attempt had found every one twice)
     c.fx = null
@@ -1359,12 +1365,39 @@ fn (c mut Checker&) shapeErr(at source.Span, fd ast.Func&, cap String&, m msgs.M
     if name != cap { c.P.L.Diags.Note(rec, c.at(at), msgs.NoteProtocolSpelling(name, cap, cap)) }
 }
 
+# E31d: a type's own Copy - what every copy of a value of it calls - takes nothing but its receiver, read through a
+# read-only reference to a struct or an enum the program declares, gives a value of that type, and cannot fail. A
+# Copy taking parameters is an ordinary method (E31: a method is the operator only in the operator's shape)
+fn (c mut Checker&) copyShape(f I64, fd ast.Func&) {
+    sig := c.P.Sig(f)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    if ps.Len() != 1: return
+    c.push(-1, c.P.FnModule(f), types.VoidT, types.ListId(0))
+    at := c.nameSpan(fd)
+    rt := c.deref(ps[0])
+    res := c.P.T.Result(sig)
+    if c.P.Immut(rt) {
+        c.err(at, msgs.ImmutCopy(c.ty(rt)))
+    } else if not c.isNamed(rt) or not (c.isStruct(rt) or c.isEnum(rt)) {
+        c.err(at, msgs.CopyOnWhat(c.ty(rt)))
+    } else if not c.isRef(ps[0]) or c.writable(ps[0]) or c.isRef(res) or not c.P.T.Same(c.P.T.Plain(res), c.P.T.Plain(rt)) {
+        c.err(at, msgs.CopyShape(c.ty(rt)))
+    } else if fd.S.NoReturn or c.infersErrs(sig) or c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 {
+        c.err(at, msgs.CopyShape(c.ty(rt)))
+    }
+    c.pop()
+}
+
 fn (c mut Checker&) operatorMethod(f I64) {
     fd := c.P.FnDecl(f)
     name := c.text(fd.Name)
     if name.Len() == 0 { return }
     cap := c.operatorRole(name)
     if fd.S.Commutes { c.commutesRule(f, fd, cap) }
+    if name == "Copy" {
+        c.copyShape(f, fd)
+        return
+    }
     k := opShapeOf(cap)
     if k < 0 { return }
     sh := OpShapes[k]
@@ -3442,7 +3475,9 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
     }
     want := types.UnknownT
     if v.Ty is not null {
+        c.globalTop = true   # (a global's own "mut" is its binding's, S6 - never a reference's permission T13a judges)
         want = c.resolve(v.Ty)
+        c.globalTop = false
         if want != types.UnknownT { want = c.P.GlobalStorage(generic.Context(mi, -1), v, n) }   # T7d
     }
     from := c.stmts.Len()
@@ -4877,7 +4912,7 @@ fn (c mut Checker&) conversionAt(sp source.Span, argSp source.Span, x typed.Expr
     if fr.Contract != 0 or fr.Body < 0 or c.evalOnly() or not closedExpr(x) { return }
     mi, file := fr.Mi, fr.File
     old := fr.Body
-    text mut String& = $c.src(argSp)
+    text String& = $c.src(argSp)
     id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), types.BoolT, types.ListId(0)), mi, sp)
     c.state[id] = 1
     nf := c.push(id, mi, types.BoolT, types.ListId(0))
@@ -5073,6 +5108,24 @@ fn (c mut Checker&) unwind(mark I64) {
     }
 }
 
+# T13a: whether a store into p, or a writable borrow of it, would change a value of an immut type - a part of one (a
+# field, an element, a payload's field), or the whole value lent writably
+fn (c mut Checker&) writesImmut(p typed.Lvalue&, store Bool) Bool { return c.immutOf(p, store) != types.UnknownT }
+
+# the immut type a store into p, or a writable borrow of it, would change; Unknown for none
+fn (c mut Checker&) immutOf(p typed.Lvalue&, store Bool) types.TypeId {
+    if not store and c.P.Immut(c.deref(p.Type())) { return c.deref(p.Type()) }
+    base typed.Lvalue?& = match p {
+        case typed.Lvalue.Field(_, _, b, _): b
+        case typed.Lvalue.Elem(_, _, e): e.Base
+        case typed.Lvalue.Payload(_, _, pl): pl.Base
+        case _: null
+    }
+    if base is null { return types.UnknownT }
+    bt := c.deref(base.Type())
+    return bt if c.P.Immut(bt) else types.UnknownT
+}
+
 # a store into p, or a writable borrow of it (store false): a local or parameter may be written, a global only when
 # "mut" (S6), what a reference names only when it is writable (T25b), a lambda's copy of a value never (D16c), and a
 # value a call gave back only where it is lent (E31)
@@ -5080,6 +5133,10 @@ fn (c mut Checker&) notCapture(p typed.Lvalue&, sp source.Span) { c.mustWrite(p,
 
 fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
     c.noteWrite(p)
+    if c.writesImmut(p, store) {
+        c.err(sp, msgs.ImmutWrite(c.ty(c.immutOf(p, store))))
+        return
+    }
     match p {
         case typed.Lvalue.Local(_, _, id) {
             if c.narrowOwner(I64(id)) >= 0 {
@@ -6556,7 +6613,7 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
             # T25d: going where it may be written, it is judged as text at its own type is - handed over as the
             # constant itself, a write through it would land in the program's constant data
             if wk != types.Kind.Ref or not c.writable(want): return y
-            c.err(sp, msgs.ConstToMutRef("'$" $c.src(sp) "'" if c.P.T.Same(r, c.textType()) else "'" $c.src(sp) ".Clone()'"))
+            c.err(sp, msgs.ConstToMutRef("'$" $c.src(sp) "'" if c.P.T.Same(r, c.textType()) else "'" $c.src(sp) ".Copy()'"))
             return y
         }
         u := c.under(w)
@@ -6654,8 +6711,10 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
         if c.flowsInto(have, r) or (c.isNumber(have) and c.isNumber(r) and c.P.Flows(have, r)) {
             p := readPlace(x)
             # a fixed array where a reference to one of a run-time length is wanted: the place itself borrowed and the
-            # reference widened, nothing copied (E12, T7c) - the callee writes the caller's elements
-            if p is not null and hk == types.Kind.Array and c.P.T.Length(have) != types.TypeId(0) {
+            # reference widened, nothing copied (E12, T7c) - the callee writes the caller's elements; and an array whose
+            # elements are held as the wanted one's are (an Array<Char> lent as an Array<U8>&: Char extends U8, T29h) -
+            # it had been copied and the copy lent, so what the callee wrote was lost
+            if p is not null and hk == types.Kind.Array and (c.P.T.Length(have) != types.TypeId(0) or c.sameRepr(have, r)) {
                 if (c.P.T.PermOf(want) & types.Writable) != 0 {
                     c.mustWrite(p, sp, false)
                     c.roDeepNeed(x)
@@ -8972,9 +9031,11 @@ fn (c mut Checker&) sliceOf(sp source.Span, b typed.Lvalue&, lo ast.Expr?&, hi a
 }
 
 # whether the array a value place holds may be written through a slice of it (E16a): not an immutable global's, nor
-# one reached through a read-only reference, nor a lambda's copy of a captured value (D16c) - what mustWrite refuses a
+# one reached through a read-only reference, nor a lambda's copy of a captured value (D16c), nor an immut value's (T13a)
+# - what mustWrite refuses a
 # store into. A read-only copy's (T25c) is judged where the slice is used, as a store into it is
 fn (c mut Checker&) slicedWritable(p typed.Lvalue&) Bool {
+    if c.writesImmut(p, false) { return false }   # T13a: a slice of what never changes is read-only
     return match p {
         case typed.Lvalue.Local(_, _, id): not (c.cur().Local(id).Kind == typed.LocalKind.Capture and not c.isRef(c.cur().Local(id).Ty))
         case typed.Lvalue.Global(_, _, mi, n): c.P.GlobalDecl(mi, n) is null or generic.WrittenMut(c.P.GlobalDecl(mi, n)!.Ty)
@@ -9443,11 +9504,12 @@ fn (c mut Checker&) roLet(id I64, x typed.Expr&) {
     c.roTrack(id, x)
 }
 
-# how a copy of its own is made, for a diagnostic: through the type's Clone where it has one
+# how a copy of its own is made, for a diagnostic: through the type's own Copy where it declares one (E31d: a supplied
+# Copy shares what the value refers to)
 fn (c mut Checker&) roFix(n source.NameId, t types.TypeId) String {
-    if c.P.MethodOf(c.deref(t), c.P.L.Names.Intern("Clone")) < 0 { return "from its parts" }
-    if n != source.NameId(0) { return "with '" $c.text(n) ".Clone()'" }
-    return "with 'Clone()'"
+    if not c.P.T.DeclaresCopy(c.deref(t)) { return "from its parts" }
+    if n != source.NameId(0) { return "with '" $c.text(n) ".Copy()'" }
+    return "with 'Copy()'"
 }
 
 # the note at the read-only copy a place is part of
@@ -9473,7 +9535,7 @@ fn (c mut Checker&) noteRo(rec I64, p typed.Lvalue?&) {
     if l.Name == source.NameId(0) { return }
     src := try c.roCopies.Get(c.roKey(id)) catch default source.NameId(0)
     w := c.at(l.Sp)
-    if src != source.NameId(0) and c.P.MethodOf(c.deref(l.Ty), c.P.L.Names.Intern("Clone")) >= 0 {
+    if src != source.NameId(0) and c.P.T.DeclaresCopy(c.deref(l.Ty)) {
         c.P.L.Diags.Note(rec, w, msgs.NoteReadOnlyCopyOf(c.text(l.Name), c.text(src), c.text(l.Name), c.text(src)))
     } else {
         c.P.L.Diags.Note(rec, w, msgs.NoteReadOnlyCopy(c.text(l.Name)))
@@ -10281,6 +10343,24 @@ fn (c mut Checker&) wantStr(t types.TypeId, seen mut Map<types.TypeId, Bool>&, d
     }
 }
 
+# the body of method m's instance for a receiver of type t (its one parameter), made here - -1 where none can be
+fn (c mut Checker&) methodInstance(m I64, t types.TypeId) I64 {
+    if c.P.FnIsExtern(m): return -1
+    sig := c.P.Sig(m)
+    owner := generic.FnOwner(m)
+    nv := c.P.VarCount(owner)
+    if nv == 0: return c.fnBody(c.P.FnInstance(m, types.ListId(0)))
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    if ps.Len() == 0: return -1
+    b := generic.Binding(owner, nv)
+    c.unify(ps[0], t, b, false, true)
+    c.P.InferThroughBounds(b)
+    for v in b.Vals {
+        if v == types.UnknownT: return -1
+    }
+    return c.fnBody(c.P.FnInstance(m, c.P.T.List(b.Vals)))
+}
+
 fn (c mut Checker&) strInstance(m I64, t types.TypeId) {
     if c.P.FnIsExtern(m) { return }
     sig := c.P.Sig(m)
@@ -10445,6 +10525,21 @@ fn (c mut Checker&) runArrayValue(t types.TypeId) Bool {
     return not c.isRef(t) and c.P.T.KindOf(u) == types.Kind.Array and c.P.T.Length(u) == types.TypeId(0)
 }
 
+# T13a: whether a written type is a reference to an immut type
+fn (c mut Checker&) immutRef(of ast.TypeRef?&) Bool {
+    if of is null { return false }
+    match of {
+        case ast.TypeRef.Ref(_, inner, _) {
+            match inner {
+                case ast.TypeRef.Any(_, _), ast.TypeRef.Func(_, _) { return false }
+                case _ { }
+            }
+            return c.P.Immut(c.deref(c.P.Resolve(c.fr().Ctx, of)))
+        }
+        case _ { return false }
+    }
+}
+
 fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
     if tr is null { return true }
     match tr {
@@ -10480,7 +10575,16 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
             }
             return true
         }
-        case ast.TypeRef.Perm(_, of, _) { return c.writtenMet(of) }
+        case ast.TypeRef.Perm(psp, of, w) {
+            # T13a: no writable reference to what never changes
+            top := c.globalTop
+            c.globalTop = false
+            if w and not top and c.immutRef(of) {
+                c.err(source.Span(psp.Start, psp.Start + 3), msgs.ImmutMutRef(c.ty(c.deref(c.P.Resolve(c.fr().Ctx, of)))))
+                return false
+            }
+            return c.writtenMet(of)
+        }
         case ast.TypeRef.Any(asp, trt) {
             # T32: an "any" is always a reference
             c.err(asp, msgs.AnyNeedsMarker(c.src(trt.Span())))
@@ -11091,6 +11195,12 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
         if xt == t or xt == types.UnknownT { return x }
         if c.isNumber(xt) and c.isNumber(t) { return c.convert(sp, x, t) }
         if c.flowsInto(c.deref(xt), base) or c.sameRepr(c.deref(xt), base) {
+            # T13a: what never changes is made of storage nothing else can change - an existing value it is made from is
+            # copied (left out where nothing could tell: a fresh value, a local at its last use, D9i)
+            if c.P.Immut(t) and not c.P.Immut(c.deref(xt)) {
+                v := c.read(sp, typed.Lvalue.Deref(sp, c.deref(xt), x)) if c.isRef(xt) else x
+                return c.convert(sp, c.ownCopy(v), t)
+            }
             if c.isRef(xt) { return c.convert(sp, x, c.P.T.Ref(t, c.P.T.PermOf(xt))) }
             # T29a: an array named by a place converted names its storage - a place of the declared type, whose read is
             # a copy where one is made and whose borrow is that storage, written where it may be - where its elements
@@ -12965,6 +13075,19 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         for a in args { c.exprs.Push(c.exprTo(a, rt)) }
         r := types.VoidT if op == typed.PrimOp.AtomicStore else rt
         return typed.Expr.Prim(sp, r, op, typed.Check.None, gather(c.exprs, from))
+    }
+    if name == "Copy" and args.Len() == 0 {
+        # E31d: the supplied Copy - a value of its own, made as a copy of it is: field by field, deep through values,
+        # shared at references
+        t := typeOf(rx)
+        v := c.read(sp, typed.Lvalue.Deref(sp, c.P.T.Referent(t), rx)) if c.isRef(t) else rx
+        if not existingValue(v) { return v }
+        c.wantCopy(typeOf(v), 0)
+        sp0 := v.Span()
+        from := c.exprs.Len()
+        c.exprs.Push(v)
+        return typed.Expr.Make(sp0, typeOf(v), typed.Make(typed.MakeKind.Copy, 0, gather(c.exprs, from), null
+                                                         c.site(typed.SiteKind.Make, sp0), typed.Check.None))
     }
     if name == "Hash" and args.Len() == 0 {
         c.hashAt = nsp
@@ -19632,11 +19755,77 @@ fn (c mut Checker&) partCopy(x typed.Expr&) typed.Expr& {
 # site, as any value made is)
 fn (c mut Checker&) ownCopy(x typed.Expr&) typed.Expr& {
     if not existingValue(x) { return x }
+    c.wantCopy(typeOf(x), 0)
     sp := x.Span()
     from := c.exprs.Len()
     c.exprs.Push(x)
     return typed.Expr.Make(sp, typeOf(x), typed.Make(typed.MakeKind.Copy, 0, gather(c.exprs, from), null
                                                      c.site(typed.SiteKind.Make, sp), typed.Check.None))
+}
+
+# E31d: the declared Copies a copy of a value of type t calls - its own, or its parts' held by value, deep through
+# values - their bodies made here, where the types are known (as wantStr's are), for lowering's Copy helper to call
+fn (c mut Checker&) wantCopy(t types.TypeId, depth I64) {
+    if depth > 16 or t == types.UnknownT or t == types.TypeId(0) or c.isRef(t) or c.copyWanted.Has(t) or not c.P.T.RunsCopy(t): return
+    c.copyWanted.Put(t, true)
+    if c.P.T.DeclaresCopy(t) {
+        m := c.P.MethodOf(t, c.P.T.Names.Intern("Copy"))
+        if m < 0: return
+        id := c.methodInstance(m, t)
+        if id >= 0: c.copyBodies.Push(id)
+        return
+    }
+    r := c.P.T.Repr(t)
+    match c.P.T.KindOf(r) {
+        case types.Kind.Array { c.wantCopy(c.P.T.Elem(r), depth + 1) }
+        case types.Kind.Tuple, types.Kind.Record { for f in c.P.T.Items(c.P.T.Parts(r)) { c.wantCopy(f, depth + 1) } }
+        case types.Kind.Named { c.wantCopyParts(r, depth) }
+        case _ { }
+    }
+}
+
+fn (c mut Checker&) wantCopyParts(r types.TypeId, depth I64) {
+    if not c.P.Body(r): return
+    k := c.declKind(r)
+    if k == types.DeclKind.Struct {
+        for f in c.P.T.Items(c.P.T.Fields(r)) { c.wantCopy(f, depth + 1) }
+    } else if k == types.DeclKind.Enum {
+        for f in c.P.T.Items(c.P.T.Cases(r)) { c.wantCopy(f, depth + 1) }
+    }
+}
+
+# E31d: a declared Copy only builds - allocation is the one effect allowed it, since every copy of the value runs it
+# (read off its effects, once the program is checked)
+fn (c mut Checker&) copyEffects() {
+    if c.copyBodies.Len() == 0 or c.P.L.Diags.Errors() > 0: return
+    c.fx = null
+    seen Map<I64, Bool>
+    for b in c.copyBodies {
+        if seen.Has(b): continue
+        seen.Put(b, true)
+        what := copyDoes(c.Effects().Of(b))
+        if what == "": continue
+        f := match c.Bodies[b].Of {
+            case typed.BodyOf.Fn(inst): c.P.InstanceFn(inst)
+            case _: I64(-1)
+        }
+        if f < 0: continue
+        c.push(-1, c.P.FnModule(f), types.VoidT, types.ListId(0))
+        c.err(c.nameSpan(c.P.FnDecl(f)), msgs.CopyDoesMore(what))
+        c.pop()
+    }
+}
+
+# what a Copy does beyond building its value, "" for nothing
+fn copyDoes(f effects.Facts&) String {
+    if f.WritesGlobals: return "writes a global"
+    if f.Writes != 0: return "writes through what it is given"
+    if f.Unknown or f.Back: return "calls through a function value or an 'any'"
+    if f.CallsC or f.Caps != 0: return "calls C"
+    if f.Spawns: return "starts tasks"
+    if f.Blocks: return "may wait"
+    if f.Exits: return "may end the program"
+    return ""
 }
 
 # whether a place is a part of a value - a field, an element, a payload's field - rather than a whole local, global or

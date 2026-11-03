@@ -4191,7 +4191,7 @@ fn (fe mut fnEm&) arrayStorage(sc String&, bytes String&, el types.TypeId, zeroe
 # helper of such a record, making the array its buffer field holds
 fn (fe mut fnEm&) bufferCopy(ty types.TypeId) Bool {
     k := fe.F.Of
-    if k != mir.FnKey.Helper or k.kind != mir.HelperKind.Copy: return false
+    if k != mir.FnKey.Helper or (k.kind != mir.HelperKind.Copy and k.kind != mir.HelperKind.Parts): return false
     t := fe.E.T
     r := t.Repr(k.t)
     if t.KindOf(r) != types.Kind.Named: return false

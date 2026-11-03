@@ -646,7 +646,7 @@ fn (p mut Parser&) attributed() ast.Decl?& ? Fail {
         }
         case ast.Decl.Type(sp, td) {
             p.declareAttrs(attrs)
-            return ast.Decl.Type(sp, ast.TypeDecl(td.Name, td.Params, td.Extends, td.Body, attrs))
+            return ast.Decl.Type(sp, ast.TypeDecl(td.Name, td.Params, td.Extends, td.Body, attrs, td.Word))
         }
         case _ { return d }
     }
@@ -861,11 +861,23 @@ fn (p mut Parser&) typeDeclRest(at I32, name source.NameId) ast.Decl& ? Fail {
         params = try p.typeParams()
         p.typeParamsRead = params
     }
+    # T13a: "immut" before the body - a word only there (L9b), so no name is taken from programs
+    word := ast.DeclWord.Plain
+    if p.sees(token.Tok.Iden) and p.text(p.tk()) == "immut" and declWordBody(p.ts.Toks[p.after(1)].Kind) {
+        word = ast.DeclWord.Immut
+        p.advance()
+    }
     extending := p.accept(token.Tok.Extends)
     body := try p.typeBody()
     sp := p.from(at)
     if p.sees(token.Tok.StmtEnd) { p.advance() }
-    return ast.Decl.Type(sp, ast.TypeDecl(name, params, extending, body))
+    return ast.Decl.Type(sp, ast.TypeDecl(name, params, extending, body, Array<ast.Attr&>(0), word))
+}
+
+# what may follow a type declaration's word (T13a) - so "type X immut" alone is X declared over a type named immut
+fn declWordBody(k token.Tok) Bool {
+    return k == token.Tok.Struct or k == token.Tok.Enum or k == token.Tok.Extends or k == token.Tok.Trait or k == token.Tok.Error or
+           k == token.Tok.Iden or k == token.Tok.Fn
 }
 
 fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {

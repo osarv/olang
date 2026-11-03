@@ -1,4 +1,4 @@
-# check: fail error[O27]: this keeps a view of 'g', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Clone()'
+# check: fail error[O27]: this keeps a view of 'g', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Copy()'
 # O20/O10c: an element borrowed out of a reference parameter's array field lives where that parameter's instance does,
 # so storing it into another parameter's holder is an obligation - a caller whose instance dies first is refused
 import "std/io"

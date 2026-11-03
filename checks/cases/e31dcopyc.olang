@@ -1,0 +1,10 @@
+# check: fail error[E31d]: a Copy only builds the new value, and this one calls C
+# E31d: a Copy calls nothing outside the program
+import c "stdlib.h"
+type tree struct(n I64) { n }
+fn (t tree&) Copy() tree { return tree(I64(c.rand())) }
+fn main() {
+    a := tree(1)
+    b := a
+    assert b.n >= 0
+}

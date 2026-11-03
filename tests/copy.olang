@@ -1,0 +1,106 @@
+# E31d: Copy() is the one method making a new value from an existing one. Every type has one supplied - field by field,
+# deep through values, shared at references - and a struct or an enum may declare its own; every copy of a value of
+# the type calls it: a declaration or an assignment from an existing value, a by-value argument, a store into a part,
+# an element of a collection copied with the collection. A fresh value - a constructor's or a call's result - is no
+# copy, so none is made of it.
+
+type node struct(v I64) {
+    v
+}
+
+# a value holding a reference, whose own Copy makes what it refers to anew: a deep copy, so two trees never share a node
+type tree struct(root mut node&, tag String) {
+    root, tag
+}
+
+fn (t tree&) Copy() tree { return tree(node(t.root.v), t.tag) }
+
+# holding a tree by value, it copies by the tree's Copy - and so does an array or a Vec of them
+type forest struct(main tree, n I64) {
+    main, n
+}
+
+fn deepened(t tree) I64 {
+    t.root.v = 100
+    return t.root.v
+}
+
+fn mk(v I64) tree { return tree(node(v), "t") }
+
+# while compiling (K2, S17a): a copy runs the Copy, and writing the copy leaves the original
+fn bumped(v I64) I64 {
+    t := mk(v)
+    c := t.Copy()
+    c.root.v++
+    d := t
+    d.root.v += 2
+    return c.root.v * 100 + d.root.v * 10 + t.root.v
+}
+Bumped := bumped(5)
+assert Bumped == 675
+
+test "an assignment copies by the declared Copy" {
+    a := mk(1)
+    b := a
+    b.root.v = 9
+    assert a.root.v == 1 and b.root.v == 9
+    c tree = mk(2)
+    c = a
+    c.root.v = 7
+    assert a.root.v == 1 and c.root.v == 7
+}
+
+test "a by-value argument is the callee's own copy" {
+    a := mk(3)
+    assert deepened(a) == 100
+    assert a.root.v == 3
+}
+
+test "a value holding one by value copies it by its Copy" {
+    f := forest(mk(4), 1)
+    g := f
+    g.main.root.v = 40
+    assert f.main.root.v == 4 and g.main.root.v == 40
+}
+
+test "a collection's elements are copied by their own Copy" {
+    v := Vec<tree>()
+    v.Push(mk(1))
+    v.Push(mk(2))
+    w := v
+    w.RefMut(0).root.v = 10
+    assert v[0].root.v == 1 and w[0].root.v == 10
+    arr := tree[mk(5), mk(6)]
+    brr := arr
+    brr[1].root.v = 60
+    assert arr[1].root.v == 6 and brr[1].root.v == 60
+}
+
+test "a Map's values are copied by their own Copy, its empty slots as they are" {
+    m := Map<I64, tree>()
+    for k in range 5 { m.Put(k, mk(k)) }
+    m.Remove(2)
+    n := m
+    try n.RefMut(3).root.v = 30
+    assert (try m.Get(3)).root.v == 3 and (try n.Get(3)).root.v == 30
+    assert n.Len() == 4 and not n.Has(2)
+}
+
+test "Copy() written calls it, supplied or declared" {
+    a := mk(8)
+    b := a.Copy()
+    b.root.v = 80
+    assert a.root.v == 8
+    n := node(2)
+    m := n.Copy()
+    assert m.v == 2
+    xs := I64[1, 2, 3]
+    r Array<I64>& = xs
+    ys := r.Copy()
+    ys[0] = 9
+    assert xs[0] == 1 and ys[0] == 9
+}
+
+test "while compiling, as at run time" {
+    assert Bumped == bumped(5)
+}

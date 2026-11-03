@@ -1,0 +1,127 @@
+# textbuild_migrate - text built by writing its characters, rewritten for T13a (2026-11-03): String is immut - nothing
+# of a String changes after it is made - and Array<Char> is the text that is written. A local made as the String of a
+# new array of characters, written element by element and handed back,
+#
+#     out := String(Array<Char>(n))             out := Array<Char>(n)
+#     for i, c in t { out[i] = c.ToUpper() }    for i, c in t { out[i] = c.ToUpper() }
+#     return out                                return String(out)
+#
+# becomes the array, and each "return NAME" of its function "return String(NAME)" - the conversion copies nothing at the
+# array's last use (D9i). A declaration "NAME mut String& = String(Array<Char>(...))" becomes the array too. And every
+# "mut String&" (and "mut String?&") is written "String&" ("String?&"): no writable reference to a String is left - most
+# were repointed, never written through (an assignment to a reference repoints, S4a). Any write into a String is the
+# compiler's to say (T13a's error), never made silently; what a person must look at - another use of a local that wants
+# a String, text written through - the compiler says too. Code only; idempotent (a rewritten file has neither form).
+#
+#     olang build tools/textbuild_migrate.olang && build/tools_textbuild_migrate FILE...    rewrites the files, naming each one changed
+
+import "std/os"
+import "std/io"
+import "srcmask"
+
+fn main() ? io.Error {
+    args := os.Args()
+    for k in range 1, args.Len() {
+        path := args[k]
+        text := try os.ReadFile(path) catch os.Error {
+            try io.PrintErrln("textbuild_migrate: " $path ": cannot be read")
+            continue
+        }
+        out := migrate(text)
+        if out == text: continue
+        try os.WriteFile(path, out) catch os.Error { try io.PrintErrln("textbuild_migrate: " $path ": cannot be written") }
+        try io.Println(path)
+    }
+}
+
+# the name a line declares as the String of a new array of characters, and the line rewritten to declare the array -
+# "" and the line as it is for any other
+fn declared(line String&) String, String {
+    t := line.TrimStart()
+    ind := line[:line.Len() - t.Len()]
+    i := 0
+    for i < t.Len() and srcmask.IsWord(t[i]) { i++ }
+    if i == 0: return "", $line
+    name := t[:i]
+    rest := t[i:]
+    for pre in String&[" := String(Array<Char>(", " mut String& = String(Array<Char>(", " String& = String(Array<Char>(", " := String(Array<U8>("
+                       " mut String& = String(Array<U8>(", " String& = String(Array<U8>("] {
+        if not rest.StartsWith(pre) or not rest.EndsWith("))"): continue
+        args := rest[pre.Len():rest.Len() - 2]
+        el := "U8" if pre.Contains("U8") else "Char"   # (a buffer of bytes C fills stays one)
+        return $name, $ind $name " := Array<" $el ">(" $args ")"
+    }
+    return "", $line
+}
+
+# "return NAME" for one of names, with the value made String(NAME); the line as it is otherwise
+fn returned(line String&, names Vec<String&>&) String {
+    t := line.TrimStart()
+    ind := line[:line.Len() - t.Len()]
+    if not t.StartsWith("return "): return $line
+    v := t[7:].TrimEnd()
+    for n in names {
+        if v == n: return $ind "return String(" $n ")"
+    }
+    return $line
+}
+
+# whether the "mut" at i is a global's binding (S6: "Name mut String& = ..." at a line's start), which stays
+fn globalAt(text String&, i I64) Bool {
+    ls := i
+    for ls > 0 and text[ls - 1] != '\n' { ls-- }
+    pre := text[ls:i]
+    if pre.Len() < 2 or not pre.EndsWith(" ") or not srcmask.IsIdStart(pre[0]): return false
+    for c in pre[:pre.Len() - 1] {
+        if not srcmask.IsWord(c): return false
+    }
+    return true
+}
+
+# every "mut String&" and "mut String?&" in code written without its "mut"
+fn readOnly(text String&) String {
+    mask := srcmask.Mask(text, false)
+    b := StringBuilder()
+    i I64 = 0
+    for i < text.Len() {
+        if mask[i] == 'c' and (i == 0 or not srcmask.IsWord(text[i - 1])) and (text[i:].StartsWith("mut String&") or text[i:].StartsWith("mut String?&")) and not globalAt(text, i) {
+            i += 4
+            continue
+        }
+        b.PushChar(text[i])
+        i++
+    }
+    return b.ToString()
+}
+
+fn migrate(text0 String&) String {
+    text := readOnly(text0)
+    lines := text.Split("\n")
+    mask := srcmask.Mask(text, false)
+    b := StringBuilder()
+    names Vec<String&>
+    at I64 = 0
+    for i, l in lines {
+        code := at < mask.Len() and mask[at] == 'c'
+        at += l.Len() + 1
+        if l.StartsWith("fn ") or l.StartsWith("}"): names = Vec<String&>()
+        n, nl := declared(l)
+        out := l
+        if code and n != "" {
+            names.Push(n)
+            out = nl
+        } else if code {
+            out = returned(l, names)
+        }
+        b.Push(out)
+        if i < lines.Len() - 1: b.PushChar('\n')
+    }
+    return b.ToString()
+}
+
+test migrate "a String built by its characters becomes an Array<Char>, its returns its String" {
+    assert migrate("fn f(t String&) String {\n    out := String(Array<Char>(t.Len()))\n    for i, c in t { out[i] = c }\n    return out\n}\n") == "fn f(t String&) String {\n    out := Array<Char>(t.Len())\n    for i, c in t { out[i] = c }\n    return String(out)\n}\n"
+    assert migrate("fn g() String {\n    t mut String& = String(Array<Char>(3))\n    t[0] = 'a'\n    return t\n}\n") == "fn g() String {\n    t := Array<Char>(3)\n    t[0] = 'a'\n    return String(t)\n}\n"
+    assert migrate("fn r(x mut String&) mut String?& {\n    s mut String& = x\n    return s\n}\n") == "fn r(x String&) String?& {\n    s String& = x\n    return s\n}\n"
+    assert migrate("fn h() String {\n    return out\n}\n") == "fn h() String {\n    return out\n}\n"
+}

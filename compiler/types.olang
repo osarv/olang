@@ -199,6 +199,7 @@ type Table struct(Names mut source.Names&) {
     refHolds Vec<U8>                    # HoldsRefs, once asked, by type: 1 being asked, 2 no, 3 yes (0 not asked)
     holdsUnsure Bool = false            # HoldsRefs met a part whose type is not known yet: nothing it found is kept
     ints Vec<TypeId>                   # T4a: the integer type of each width, I1 .. I128 at 1 .. 128, U1 .. U128 above
+    copyDecls Map<I64, Bool>           # E31d: the declared types (by DeclId) that declare their own Copy
 }
 
 # a table holding the types every program has, each at a fixed id: Unknown 0, Void 1, Bool 2, the numbers in T4's order
@@ -853,6 +854,44 @@ fn (t Table&) OwnedPart(x TypeId) Bool {
 # several results (a Tuple), nor a plain run-time array, whose copy is its elements'
 fn (t mut Table&) OwnsParts(id TypeId) Bool { return t.ownsParts(id, 0) }
 
+# E31d: a declared type declaring its own Copy - which every copy of a value of it calls, so a copy of it, or of a value
+# holding it by value, is more than its bytes (OwnsParts)
+fn (t mut Table&) MarkCopy(d DeclId) { t.copyDecls.Put(I64(d), true) }
+
+fn (t Table&) DeclaresCopy(id TypeId) Bool { return t.KindOf(id) == Kind.Named and t.copyDecls.Has(I64(t.DeclOf(id))) }
+
+# whether a copy of a value of a type runs a declared Copy (E31d): the type's own, or a part's it holds by value - deep
+# through values, never through a reference (whose referent a copy shares)
+fn (t mut Table&) RunsCopy(id TypeId) Bool { return t.copyDecls.Len() > 0 and t.runsCopy(id, 0) }
+
+fn (t mut Table&) runsCopy(id TypeId, depth I64) Bool {
+    if depth > 16 { return false }
+    if t.DeclaresCopy(id) { return true }
+    r := t.Repr(id)
+    if t.DeclaresCopy(r) { return true }
+    match t.KindOf(r) {
+        case Kind.Array { return t.runsCopy(t.Elem(r), depth + 1) }
+        case Kind.Record { return t.partsRunCopy(t.Parts(r), depth) }
+        case Kind.AnonEnum { return t.partsRunCopy(t.ShapeCases(r), depth) }
+        case Kind.Named {
+            if not t.HasBody(r) { return false }
+            return match t.DeclKindOf(t.DeclOf(r)) {
+                case DeclKind.Struct: t.partsRunCopy(t.Fields(r), depth)
+                case DeclKind.Enum: t.partsRunCopy(t.Cases(r), depth)
+                case _: false
+            }
+        }
+        case _ { return false }
+    }
+}
+
+fn (t mut Table&) partsRunCopy(l ListId, depth I64) Bool {
+    for x in t.Items(l) {
+        if x != TypeId(0) and not t.IsRef(x) and t.runsCopy(x, depth + 1) { return true }
+    }
+    return false
+}
+
 fn (t mut Table&) ownsParts(id TypeId, depth I64) Bool {
     if depth > 16 { return true }
     r := t.Repr(id)
@@ -861,6 +900,7 @@ fn (t mut Table&) ownsParts(id TypeId, depth I64) Bool {
         case Kind.Record { return t.partsOwn(t.Parts(r), depth) }
         case Kind.AnonEnum { return t.partsOwn(t.ShapeCases(r), depth) }
         case Kind.Named {
+            if t.copyDecls.Has(I64(t.DeclOf(r))) { return true }   # E31d: its own Copy makes every copy of it
             if not t.HasBody(r) { return false }
             return match t.DeclKindOf(t.DeclOf(r)) {
                 case DeclKind.Struct: t.partsOwn(t.Fields(r), depth)

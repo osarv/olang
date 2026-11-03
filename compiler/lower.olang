@@ -69,6 +69,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     wanted Map<mir.FnKey, Bool>
     ctorOf Map<types.TypeId, I64>   # a type's constructor's body (twin 0), once looked up
     strOf Map<types.TypeId, I64>    # a type's Str's body, -1 for none, once looked up
+    copyOf Map<types.TypeId, I64>   # a type's own Copy's body (E31d), -1 for none, once looked up
     indexed Bool = false
     failT Vec<types.TypeId>        # each check word's error type (failure)
     failCode Vec<I64>              # and its code under that type alone
@@ -1025,9 +1026,9 @@ fn derefOf(x typed.Expr&) typed.Expr?& {
 }
 
 # an array value's elements copied into storage of its own (T7b), made in scope at
-fn (ln mut lowering&) arrayCopy(v mir.Operand, ty types.TypeId, sp source.Span, at mir.ScopeRef) mir.Operand {
+fn (ln mut lowering&) arrayCopy(v mir.Operand, ty types.TypeId, sp source.Span, at mir.ScopeRef, parts Bool = false) mir.Operand {
     # (QCE: elements owning storage of their own - arrays of a run-time length - copied too)
-    if ln.T.OwnsParts(ty) { return ln.ownCopyOf(v, ty, at, sp) }
+    if ln.T.OwnsParts(ty) { return ln.ownCopyOf(v, ty, at, sp, parts) }
     src := ln.local(v, ty, sp)
     n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
     buf := ln.temp(ty, sp)
@@ -1310,6 +1311,7 @@ fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
         }
     }
     if not ln.copiesArray(x, ty) and not (ln.retOwns(ty) and ln.copiesValue(x)) { return false }
+    if typed.FreshTemp(x) { return false }   # (a temporary of a value made for it - a call's, a constructor's)
     # nothing placed (while compiling): every existing array is copied
     if not ln.planned { return true }
     # deferred code or a join's tasks still to run on the way out may write the local after the result is computed
@@ -2452,11 +2454,13 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     # function would have, unless the value is only read here before anything can change what it views
     if ln.viewCall(c, ty) {
         if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) ": " $("read" if ln.reads.Has(I64(c.Site)) else "kept") $(" stable" if ln.stableViews(c) else "")) }
-        if ln.vlSites.Has(I64(c.Site)) or (ln.reads.Has(I64(c.Site)) and ln.stableViews(c)) or ln.freshCtor(c) {
+        # (E31d: a value whose copy runs a declared Copy is copied whatever reads it)
+        inPlace := not t.RunsCopy(ty) and (ln.vlSites.Has(I64(c.Site)) or (ln.reads.Has(I64(c.Site)) and ln.stableViews(c)))
+        if inPlace or ln.freshCtor(c) {
             ln.L.ViewReads++
         } else {
             ln.L.ViewCopies++
-            return ln.arrayCopy(mir.Operand.Copy(mir.L(dest)), ty, sp, ln.viewCopyAt(c.Site, ln.resultOf(fty, scopes)))
+            return ln.arrayCopy(mir.Operand.Copy(mir.L(dest)), ty, sp, ln.viewCopyAt(c.Site, ln.resultOf(fty, scopes)), true)
         }
     }
     return mir.Operand.Copy(mir.L(dest))
@@ -2871,6 +2875,8 @@ fn (ln mut lowering&) markWalk(k I32, callee mir.Callee, fty types.TypeId, scope
 # the type a helper is made for: one helper per type but for its function types' parameter names (types.Unnamed) - a
 # Render helper per type with them, which its function values render with (E11a)
 fn (lw mut Lowerer&) helperTy(kind mir.HelperKind, ty types.TypeId) types.TypeId {
+    # (E31d: a type declaring its own Copy is copied by it - its helper is its own, never its layout's)
+    if (kind == mir.HelperKind.Copy or kind == mir.HelperKind.Parts) and lw.P.T.DeclaresCopy(ty) { return ty }
     return ty if kind == mir.HelperKind.Render else lw.P.T.Unnamed(ty)
 }
 
@@ -3913,8 +3919,9 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             v := ln.val(x)
             if ln.dead { return mir.Operand.None }
             if not t.Same(x.Type(), ty) { return ln.derefCopy(v, x.Type(), ty, ln.built(m.Site), sp) }
-            # (a view kept in place of this copy, where nothing could tell the two apart)
-            if ln.noCopy.Has(I64(m.Site)) { return v }
+            # (a view kept in place of this copy, where nothing could tell the two apart - never one running a declared
+            # Copy, E31d, which may make what the value refers to anew)
+            if ln.noCopy.Has(I64(m.Site)) and not t.RunsCopy(ty) { return v }
             return ln.ownCopyOf(v, ty, ln.built(m.Site), sp)
         }
     }
@@ -4652,9 +4659,9 @@ fn (ln mut lowering&) helper(kind mir.HelperKind, ty types.TypeId) {
             ln.renderAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp, true)
             ln.epilogue(mir.Operand.None)
         }
-        case mir.HelperKind.Copy {
+        case mir.HelperKind.Copy, mir.HelperKind.Parts {
             ln.prologue(mir.VarKind[mir.VarKind.Result])
-            ln.epilogue(ln.copyAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp, true))
+            ln.epilogue(ln.copyAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp, true, kind == mir.HelperKind.Parts))
         }
     }
 }
@@ -4668,9 +4675,14 @@ fn (ln mut lowering&) ownsStorage(ty types.TypeId) Bool { return ln.T.OwnedPart(
 # v, a value of type ty, as one of its own made in scope at (typed.MakeKind.Copy): an array value's elements copied, and
 # every part of it that is an array of a run-time length - deep through values, shallow at references - through the
 # type's Copy helper where a part owns any
-fn (ln mut lowering&) ownCopyOf(v mir.Operand, ty types.TypeId, at mir.ScopeRef, sp source.Span) mir.Operand {
+# parts: a copy of what the value holds rather than of the value (D9h's, where a callee handed back a view of what it was
+# given: that copy is the callee's own, which a declared Copy at the top would not be - and calls itself through, E31d)
+fn (ln mut lowering&) ownCopyOf(v mir.Operand, ty types.TypeId, at mir.ScopeRef, sp source.Span, parts Bool = false) mir.Operand {
     if not ln.T.OwnsParts(ty) { return ln.arrayCopy(v, ty, sp, at) if ln.T.OwnedPart(ty) else v }
     src := ln.local(v, ty, sp)
+    if parts and ln.T.DeclaresCopy(ty) {
+        return ln.helperCall(mir.HelperKind.Parts, ty, mir.Operand[ln.refTo(pl(mir.Base.Local(src)), ty, sp)], mir.ScopeRef[at], ty, sp)
+    }
     return ln.helperCall(mir.HelperKind.Copy, ty, mir.Operand[ln.refTo(pl(mir.Base.Local(src)), ty, sp)], mir.ScopeRef[at]
                          ty, sp)
 }
@@ -4678,9 +4690,10 @@ fn (ln mut lowering&) ownCopyOf(v mir.Operand, ty types.TypeId, at mir.ScopeRef,
 # the copy of what place a holds, of type ty, made in scope at - a part owning nothing its bytes, an array of a run-time
 # length a new one there, and a value's owning parts each copied in turn, an aggregate's through its own Copy helper (so
 # a type that comes round to itself through an array is one function); top: in that helper, its own parts
-fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.Span, top Bool = false) mir.Operand {
+fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.Span, top Bool = false, own Bool = false) mir.Operand {
     t := ln.T
     if not ln.ownsStorage(ty) { return ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp) }
+    if t.DeclaresCopy(ty) and not own { return ln.declaredCopy(a, ty, at, sp) }
     r := t.Repr(ty)
     if t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0) {
         if not t.OwnsParts(ty) { return ln.arrayCopy(mir.Operand.Copy(ln.mk(a)), ty, sp, at) }
@@ -4717,6 +4730,88 @@ fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
         ln.gap(sp, "a Copy helper for a type with no parts")
     }
     return mir.Operand.Copy(mir.L(d))
+}
+
+# E31d: the copy of what place a holds, of a type declaring its own Copy, made in scope at - its Copy called on it, the
+# new value built where the copy goes (Copy only builds, so nothing else it reaches needs a scope: the program's). A
+# buffer's room (a Vec's past its count, a Map's empty slots) is held as zeros, never an element (M19d): a value whose
+# never-null reference is null there is room, copied as its bytes - Copy is never run on what is no value
+fn (ln mut lowering&) declaredCopy(a pl, ty types.TypeId, at mir.ScopeRef, sp source.Span) mir.Operand {
+    t := ln.T
+    id := ln.copyBody(ty)
+    if id < 0 {
+        ln.gap(sp, "a declared Copy whose body check did not make (E31d)")
+        return ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+    }
+    callee, fty := ln.bodyCallee(typed.BodyId(I32(id)))
+    dest := ln.temp(ty, sp)
+    path := ln.neverNullPath(ty, 0)
+    after := mir.NoBlock
+    if path.Len() > 0 {
+        q := a
+        for k in path { q = ln.with(q, mir.Proj.Field(k)) }
+        rt := ln.fieldAt(ty, path)
+        ref := ln.into(rt, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(q))), sp)
+        live := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[ref, mir.Operand.Const(rt, 0)], sp)
+        some, room := ln.F.NewBlock(), ln.F.NewBlock()
+        after = ln.F.NewBlock()
+        ln.end(mir.Term.Branch(live, some, room))
+        ln.start(room)
+        ln.emit(mir.Stmt.Assign(sp, mir.L(dest), mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a)))))
+        ln.goto(after)
+        ln.start(some)
+    }
+    p0 := t.Items(t.Params(fty))[0]
+    recv := ln.into(p0, mir.Rvalue.Ref(ln.mk(a), p0), sp)
+    vs := t.ScopeVarsOf(fty)
+    xs := Array<mir.ScopeRef>(vs.Len())
+    for i in range vs.Len() { xs[i] = at if vs[i] == types.ResultVar else mir.ScopeRef.Program }
+    ok := ln.F.NewBlock()
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.F.ScopeRefs(xs), mir.L(dest), true, ok, mir.NoLocal
+                               mir.NoBlock))
+    ln.end(mir.Term.Call(sp, k))
+    ln.start(ok)
+    if after != mir.NoBlock {
+        ln.goto(after)
+        ln.start(after)
+    }
+    return mir.Operand.Copy(mir.L(dest))
+}
+
+# the body of the Copy a type declares (E31d), -1 for none
+fn (ln mut lowering&) copyBody(ty types.TypeId) I64 {
+    got := try ln.L.copyOf.Get(ty) catch default -2
+    if got != -2 { return got }
+    id := ln.methodBody(ty, "Copy", "Copy")
+    ln.L.copyOf.Put(ty, id)
+    return id
+}
+
+# the fields leading, by value, to a reference that is never null (T2c) in a struct of type ty - none where there is
+# no such reference
+fn (ln mut lowering&) neverNullPath(ty types.TypeId, depth I64) Array<I64> {
+    t := ln.T
+    if depth > 8 or not mir.HasFields(t, ty) { return Array<I64>(0) }
+    parts := ln.partsOf(ty)
+    for i in range parts.Len() {
+        f := parts[i]
+        if t.IsRef(f) and not t.IsNullable(f) and ln.arrayOf(t.Referent(f)) == types.UnknownT { return I64[i] }
+        if t.IsRef(f) or t.KindOf(t.Repr(f)) == types.Kind.Func { continue }
+        rest := ln.neverNullPath(f, depth + 1)
+        if rest.Len() == 0 { continue }
+        out := Array<I64>(rest.Len() + 1)
+        out[0] = i
+        for j in range rest.Len() { out[j + 1] = rest[j] }
+        return out
+    }
+    return Array<I64>(0)
+}
+
+# the type of the field a path of field positions leads to from type ty
+fn (ln mut lowering&) fieldAt(ty types.TypeId, path Array<I64>&) types.TypeId {
+    cur := ty
+    for k in path { cur = ln.partsOf(cur)[k] }
+    return cur
 }
 
 # v, an array of references to arrays (of type from, or a reference to one), as an array of those arrays' values of

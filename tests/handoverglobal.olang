@@ -3,11 +3,11 @@
 # global reaches - a "mut" global's, or what a global's writable reference names - so a program with such a global
 # keeps every such view a copy.
 
-heldText mut String& = "abcd".Clone()
+heldText mut String& = "abcd".Copy()
 
 # an immutable global reaching writable storage
 type cell struct() {
-    a mut String& = "efgh".Clone()
+    a mut String& = "efgh".Copy()
 }
 
 Held cell& = cell()

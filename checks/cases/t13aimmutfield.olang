@@ -1,0 +1,8 @@
+# check: fail error[T13a]: nothing of Config changes after its constructor (it is immut) - make a new one
+# T13a: no field of an immut type's value is written after its constructor
+type Config immut struct(n I64) { n }
+fn main() {
+    c := Config(1)
+    c.n = 2
+    assert c.n == 2
+}

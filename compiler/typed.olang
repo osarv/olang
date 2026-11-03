@@ -2352,3 +2352,28 @@ fn MathExtern(name String&, arity I64) Bool {
     }
     return false
 }
+
+# whether x reads a temporary holding a value made for it - a call's result, a value built - rather than one reading
+# existing storage (E31d: returning it is no copy)
+fn FreshTemp(x Expr&) Bool {
+    match x {
+        case Expr.Read(_, _, p, _) {
+            match p {
+                case Lvalue.Temp(_, _, v, _): return freshValue(v)
+                case _ { }
+            }
+        }
+        case Expr.Away(_, _, y) { return FreshTemp(y) }
+        case _ { }
+    }
+    return false
+}
+
+fn freshValue(x Expr&) Bool {
+    return match x {
+        case Expr.Call(_, _, _): true
+        case Expr.Make(_, _, m): m.Kind != MakeKind.Copy
+        case Expr.Away(_, _, y): freshValue(y)
+        case _: false
+    }
+}
