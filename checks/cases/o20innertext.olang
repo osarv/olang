@@ -12,7 +12,7 @@ fn churn() I64 {
     return t
 }
 type Box struct() {
-    s mut String& = "none"
+    s String& = "none"
 }
 type CB struct() {
     box mut Box& = Box()

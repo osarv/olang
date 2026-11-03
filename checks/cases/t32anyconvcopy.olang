@@ -1,7 +1,7 @@
 # check: run
 # flags: -debug -sanitize
-# T32a (the any review, finding 2): a local's text converted to a type declared over String (T29a names its argument's
-# storage) is copied into the any's box like any array: the box outlives the loop body the text was made in, and
+# T32a (the any review, finding 2): a local's text converted to a type declared over characters (an Array<Char>, which
+# may be written; T29a names its argument's storage) is copied into the any's box like any array: the box outlives the loop body the text was made in, and
 # writing through a mut any leaves the local alone
 import "std/io"
 type aSized trait {
@@ -10,7 +10,7 @@ type aSized trait {
 type aBump trait {
     mut Bump()
 }
-type aLab extends String
+type aLab extends Array<Char>
 fn (l mut aLab&) Bump() { l[0] = 'Z' }
 type aNums extends Array<I64>
 fn main() {

@@ -3231,9 +3231,9 @@ m19g12task.olang:10:9: note: the task holding a view of 'v' is started here
       |         ^~~~~~~~~~~~~
 compilation failed with 1 error
 === m19g13kept.olang
-m19g13kept.olang:10:20: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
-   10 |     try io.Println(l[0])
-      |                    ^
+m19g13kept.olang:10:21: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
+   10 |     try io.Println($l[0])
+      |                     ^
 m19g13kept.olang:9:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
     9 |     for _ in range 100 { v.Push('b') }
       |                            ^~~~
@@ -3527,9 +3527,9 @@ o14byvalborrowany.olang:12:8: note: 'p' is the call's own copy of its argument -
       |        ^
 compilation failed with 1 error
 === o14returnglobal.olang
-o14returnglobal.olang:8:21: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    8 |     x mut String& = Show()
-      |                     ^~~~~~
+o14returnglobal.olang:8:26: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+    8 |     x mut Array<Char>& = Show()
+      |                          ^~~~~~
 compilation failed with 1 error
 === o17bbitand.olang
 o17bbitand.olang:20:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
@@ -4541,14 +4541,14 @@ retire03outside.olang:5:7: error[M19]: Array<I64> has no method 'retire'
       |       ^~~~~~
 compilation failed with 1 error
 === roglobaltext.olang
-roglobaltext.olang:12:7: error[S6]: T cannot be written - only a local, a parameter or a 'mut' global can
-   12 |     w(T)
+roglobaltext.olang:13:7: error[S6]: T cannot be written - only a local, a parameter or a 'mut' global can
+   13 |     w(T)
       |       ^
-roglobaltext.olang:13:7: error[S6]: U cannot be written - only a local, a parameter or a 'mut' global can
-   13 |     w(U)
+roglobaltext.olang:14:7: error[S6]: U cannot be written - only a local, a parameter or a 'mut' global can
+   14 |     w(U)
       |       ^
-roglobaltext.olang:14:14: error[S6]: V cannot be written - only a local, a parameter or a 'mut' global can
-   14 |     c.strcpy(V, "ab")
+roglobaltext.olang:15:14: error[S6]: V cannot be written - only a local, a parameter or a 'mut' global can
+   15 |     c.strcpy(V, "ab")
       |              ^
 compilation failed with 3 errors
 === rv3condstore.olang
@@ -5637,6 +5637,24 @@ t13aimmutmutref.olang:4:7: error[T13a]: 'mut' makes a reference writable, and no
     4 | fn (c mut Config&) Bump() { }
       |       ^~~
 compilation failed with 1 error
+=== t13atextmutref.olang
+t13atextmutref.olang:3:12: error[T13a, T29c]: 'mut' makes a reference writable, and a String never changes once it is made - write text through 'mut Array<Char>&', read it through 'String&'
+    3 | fn upper(t mut String&) {
+      |            ^~~
+t13atextmutref.olang:4:31: error[T13a, T29c]: a String never changes once it is made - write the text as an Array<Char> and make the String with String(chars), or build it with a StringBuilder
+    4 |     for i in range t.Len() { t[i] = t[i].ToUpper() }
+      |                               ^
+compilation failed with 2 errors
+=== t13atextslice.olang
+t13atextslice.olang:6:9: error[T13a, T29c]: a String never changes once it is made - write the text as an Array<Char> and make the String with String(chars), or build it with a StringBuilder
+    6 |     zap(s[2:4])
+      |         ^~~~~~
+compilation failed with 1 error
+=== t13atextwrite.olang
+t13atextwrite.olang:5:6: error[T13a, T29c]: a String never changes once it is made - write the text as an Array<Char> and make the String with String(chars), or build it with a StringBuilder
+    5 |     s[0] = 'x'
+      |      ^
+compilation failed with 1 error
 === t13holdsitself.olang
 t13holdsitself.olang:4:7: error[T16]: E cannot hold itself by value - hold it through a reference ('&')
     4 |     A(e E)
@@ -5920,8 +5938,8 @@ t25bfield.olang:4:36: error[T25c]: a read-only reference cannot become writable 
       |                                    ^
 compilation failed with 1 error
 === t25bglobal.olang
-t25bglobal.olang:7:6: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
-    7 |     x[0] = 'z'
+t25bglobal.olang:8:6: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
+    8 |     x[0] = 'z'
       |      ^
 compilation failed with 1 error
 === t25biface.olang
@@ -6101,14 +6119,14 @@ t29aconvglobal.olang:7:11: error[T25c]: a read-only reference cannot become writ
       |           ^
 compilation failed with 1 error
 === t29aconvlifetime.olang
-t29aconvlifetime.olang:8:7: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Copy()')
-    8 |   h.s = String(local)
+t29aconvlifetime.olang:10:7: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Copy()')
+   10 |   h.s = Bytes(local)
       |       ^
 compilation failed with 1 error
 === t29aconvreadonly.olang
-t29aconvreadonly.olang:5:12: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    5 |   w(String(b))
-      |            ^
+t29aconvreadonly.olang:6:11: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+    6 |   w(Bytes(b))
+      |           ^
 compilation failed with 1 error
 === t29cbytes.olang
 t29cbytes.olang:5:16: error[M19]: Array<U8> has no method 'Eq'
@@ -6787,11 +6805,11 @@ vec104viewfn.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the vie
       |            ^~~~
 compilation failed with 1 error
 === vec13nominal.olang
-vec13nominal.olang:18:20: error[M19g]: 't' holds a view of 'w' taken before 'w' may have grown
-   18 |     try io.Println(t)
-      |                    ^
-vec13nominal.olang:16:29: note: 'w' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('w.ToArray()')
-   16 |     for _ in range 1000 { w.Push('b') }   # may grow the Vec, replacing its buffer
+vec13nominal.olang:19:21: error[M19g]: 't' holds a view of 'w' taken before 'w' may have grown
+   19 |     try io.Println($t)
+      |                     ^
+vec13nominal.olang:17:29: note: 'w' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('w.ToArray()')
+   17 |     for _ in range 1000 { w.Push('b') }   # may grow the Vec, replacing its buffer
       |                             ^~~~
 compilation failed with 1 error
 === vec14nominalconv.olang
@@ -6811,11 +6829,11 @@ vec160genericselfhold.olang:9:12: note: instantiated here, with T = I64
       |            ^~~
 compilation failed with 1 error
 === vec19listconv.olang
-vec19listconv.olang:12:20: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
-   12 |     try io.Println(l[0])
-      |                    ^
-vec19listconv.olang:11:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
-   11 |     for _ in range 100 { v.Push('b') }
+vec19listconv.olang:13:21: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
+   13 |     try io.Println($l[0])
+      |                     ^
+vec19listconv.olang:12:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+   12 |     for _ in range 100 { v.Push('b') }
       |                            ^~~~
 compilation failed with 1 error
 === vec27cloneshort.olang

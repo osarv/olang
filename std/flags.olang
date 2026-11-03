@@ -56,8 +56,8 @@ type flag struct(name String&, short Char, kind Kind, help String&) {
     b Bool = false
     i I64 = 0
     f F64 = 0.0
-    t mut String& = ""
-    shown mut String& = ""                    # the default, as Help writes it
+    t String& = ""
+    shown String& = ""                    # the default, as Help writes it
 }
 
 # the declared flags and, after Parse, the positional arguments. A handle: a copy names the same parser
@@ -70,7 +70,7 @@ type state struct(program String&, about String&) {
     about
     all Vec<mut flag&> = Vec<mut flag&>()
     args Vec<String&> = Vec<String&>()
-    message mut String& = ""
+    message String& = ""
 }
 
 # handles to declared flags: Get() is the value, IsSet() whether the command line gave it

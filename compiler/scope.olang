@@ -2839,6 +2839,9 @@ fn (s mut Scoper&) returnedArrays(x typed.Expr?&, out mut Vec<I64>&) {
             if m.Kind == typed.MakeKind.Tuple {
                 for it in m.Items { s.returnedArrays(it, out) }
             }
+            # a copy of a whole local returned (a conversion to what never changes, T13a - "return String(out)") lives
+            # where the result goes too: at the local's last use lowering takes its storage for the copy (D9i)
+            if m.Kind == typed.MakeKind.Copy and m.Items.Len() == 1 { s.returnedArrays(m.Items[0], out) }
         }
         case typed.Expr.Cond(_, _, c) {
             s.returnedArrays(c.A, out)

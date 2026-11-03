@@ -3,20 +3,20 @@
 # program runs - read after what it was built in closes, as the description below says it would be
 # O13a/O25h: a copy of a value keeps its references where the original's are - in this block, since the original is not
 # what the return reads (O26a moves only that) - so the copy returned inside another value refers to dying text
-type H struct(r mut String&) {
+type H struct(r String&) {
     r
 }
 type W struct(h H) {
     h
 }
-fn mk(n I64, s mut String&) W {
+fn mk(n I64, s String&) W {
     e := H(s)
     e.r = $n $n
     f := e
     return W(f)
 }
 fn main() ? {
-    q mut String& = "x"
+    q String& = "x"
     w := mk(12, q)
     assert w.h.r.Len() == 4
 }

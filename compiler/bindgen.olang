@@ -282,7 +282,7 @@ fn (g mut gen&) read(root json.Json&, probe String&) {
             static := text(n, "storageClass") == "static" or flag(n, "inline")
             if where == 1 and static { g.ownFile.Put($name, 0) }
             mangled := text(n, "mangledName")
-            sym mut String& = $("" if mangled == "" or mangled == name else mangled)
+            sym String& = $("" if mangled == "" or mangled == name else mangled)
             g.funcs.Push(cFunc($name, typeOf(n), ps.ToArray(), pts.ToArray(), static, sym))
             continue
         }

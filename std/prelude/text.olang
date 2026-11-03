@@ -20,7 +20,7 @@ fn (c Char) IsSpace() Bool { return c == ' ' or c == '\t' or c == '\n' or c == '
 fn (c Char) ToUpper() Char { return c - 32 if c.IsLower() else c }
 fn (c Char) ToLower() Char { return c + 32 if c.IsUpper() else c }
 
-type String extends Array<Char>
+type String immut extends Array<Char>
 
 type ParseError error {
     Empty
@@ -225,16 +225,16 @@ fn (t String&) TrimEnd() String& {
 # the text with every ASCII lower-case letter made upper-case, as new text. Every other byte - those of a UTF-8 sequence
 # for a character beyond ASCII included - is left as it is
 fn (t String&) ToUpper() String {
-    out := String(Array<Char>(t.Len()))
+    out := Array<Char>(t.Len())
     for i, c in t { out[i] = c.ToUpper() }
-    return out
+    return String(out)
 }
 
 # the text with every ASCII upper-case letter made lower-case, as new text, every other byte left as it is
 fn (t String&) ToLower() String {
-    out := String(Array<Char>(t.Len()))
+    out := Array<Char>(t.Len())
     for i, c in t { out[i] = c.ToLower() }
-    return out
+    return String(out)
 }
 
 # ---- text and C (X15) ----
@@ -317,7 +317,7 @@ fn joinTexts<T>(parts Array<T>&, sep String&) String {
     n I64 = 0
     for p in parts { n += p.Len() }
     if parts.Len() > 1 { n += sep.Len() * (parts.Len() - 1) }
-    out := String(Array<Char>(n))
+    out := Array<Char>(n)
     w I64 = 0
     for i, p in parts {
         if i > 0 {
@@ -331,7 +331,7 @@ fn joinTexts<T>(parts Array<T>&, sep String&) String {
             w++
         }
     }
-    return out
+    return String(out)
 }
 
 # ---- padding, for columns ----
@@ -341,19 +341,19 @@ fn joinTexts<T>(parts Array<T>&, sep String&) String {
 # it is put. A character here is a Char, one byte, as everywhere in a String: text beyond ASCII counts its UTF-8 bytes
 fn (t String&) PadStart(width I64, fill Char = ' ') String {
     if t.Len() >= width { return t }
-    out := String(Array<Char>(width, fill))
+    out := Array<Char>(width, fill)
     at := width - t.Len()
     for i, c in t { out[at + i] = c }
-    return out
+    return String(out)
 }
 
 # the text made "width" characters wide by "fill" after it, so it stands at the left of a column: "ab".PadEnd(4, '.')
 # is "ab..". Given whole when already that wide, as PadStart's is
 fn (t String&) PadEnd(width I64, fill Char = ' ') String {
     if t.Len() >= width { return t }
-    out := String(Array<Char>(width, fill))
+    out := Array<Char>(width, fill)
     for i, c in t { out[i] = c }
-    return out
+    return String(out)
 }
 
 # the integers made text and padded, for a column of numbers: "$n.PadStart(5)" right-aligns n in five characters, and
@@ -435,9 +435,9 @@ fn (n T) Format<T Integer>(base Radix = 10) String {
         at -= 1
         room[at] = '-'
     }
-    out := String(Array<Char>(130 - at))
+    out := Array<Char>(130 - at)
     for i in range out.Len() { out[i] = room[at + i] }
-    return out
+    return String(out)
 }
 
 # a signed integer's digits: its magnitude, which for I64's most negative is one more than I64 holds - U64 holds it
@@ -462,9 +462,9 @@ fn formatDigits(v U64, neg Bool, base Radix) String {
         at -= 1
         room[at] = '-'
     }
-    out := String(Array<Char>(65 - at))
+    out := Array<Char>(65 - at)
     for i in range out.Len() { out[i] = room[at + i] }
-    return out
+    return String(out)
 }
 
 # ---- integers from their text ----
@@ -1172,7 +1172,12 @@ fn (b StringBuilder&) Len() I64 { return b.chars.Len() }
 
 # everything added so far, as one String in the CALLER's scope - a copy, so the builder may be discarded, or keep
 # growing, without affecting it
-fn (b StringBuilder&) ToString() mut String& { return String(b.chars.ToArray()) }
+fn (b StringBuilder&) ToString() String {
+    n := b.chars.Len()
+    out := Array<Char>(n)
+    for i in range n { out[i] = b.chars[i] }
+    return String(out)         # (the characters copied once: the String takes the array's storage, T13a, D9i)
+}
 
 # empties it, keeping its storage for what is added next - so a builder used again and again (once per line, per
 # request) allocates nothing after it has held its longest text. Replacing it with a new StringBuilder() instead

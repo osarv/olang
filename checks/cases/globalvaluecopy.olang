@@ -11,7 +11,7 @@ fn churn() I64 {
     return t
 }
 type Doc struct() {
-    title mut String& = $1 "-title-built-at-run-time"
+    title String& = $1 "-title-built-at-run-time"
 }
 Docs mut Doc& = Doc()
 T String = Docs.title

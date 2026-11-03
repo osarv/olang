@@ -5,7 +5,7 @@
 # the array was written past the end of its text: "I64[123457" and the arena overrun), built (-b, -d) and interpreted
 # (-i) alike; a Str runs as its piece renders, after every operand
 G mut Array<I64> = I64[1, 2]
-Name mut String& = "ab"
+Name mut Array<Char> = "ab"                 # (text written: an Array<Char>, T13a)
 X mut I64 = 1
 type S struct(v I64) { v }
 P mut S = S(5)

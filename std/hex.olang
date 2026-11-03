@@ -8,12 +8,12 @@ type Error error {
 digits String = "0123456789abcdef"
 
 fn Encode(data Array<U8>&) String {
-    out := String(Array<Char>(data.Len() * 2))
+    out := Array<Char>(data.Len() * 2)
     for i in range data.Len() {
         out[2 * i] = digits[data[i] >> 4]
         out[2 * i + 1] = digits[data[i] & 15]
     }
-    return out
+    return String(out)
 }
 
 fn digit(c Char) U8 ? Error.Invalid {

@@ -68,7 +68,7 @@ fn Decode(t String&, at I64) Rune, I64 ? Error.Invalid {
 fn Encode(r Rune) String ? Error.Invalid {
     if not r.IsValid() { error Error.Invalid }
     n := r.Len()
-    out := String(Array<Char>(n))
+    out := Array<Char>(n)
     v := U32(r)
     if n == 1 {
         out[0] = Char(v)
@@ -85,7 +85,7 @@ fn Encode(r Rune) String ? Error.Invalid {
         out[2] = Char(0x80 | ((v >> 6) & 0x3F))
         out[3] = Char(0x80 | (v & 0x3F))
     }
-    return out
+    return String(out)
 }
 
 # whether t is UTF-8 all through (the empty text is)
@@ -165,10 +165,10 @@ fn FromRunes(a Array<Rune>&) String ? Error.Invalid {
 if TestBuild {
 
 # text from its bytes, for bytes no text literal writes
-fn bytes(a Array<U8>&) mut String& {
-    t mut String& = String(Array<Char>(a.Len()))
+fn bytes(a Array<U8>&) String& {
+    t := Array<Char>(a.Len())
     for i in range a.Len() { t[i] = Char(a[i]) }
-    return t
+    return String(t)
 }
 
 # a code point written out and read back, while compiling as at run time

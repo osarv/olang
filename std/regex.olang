@@ -84,7 +84,7 @@ type prog struct(pattern String&) {
     z Vec<I64> = Vec<I64>()
     ranges Vec<U32> = Vec<U32>()            # [lo, hi] pairs, the classes' code point ranges
     names Vec<String&> = Vec<String&>()       # each group's name, "" for none; [0] the whole match
-    prefix mut String& = ""                  # literal text every match starts with, when the pattern begins with one
+    prefix String& = ""                  # literal text every match starts with, when the pattern begins with one
     anchored Bool = false                    # whether every match starts at the start of the text
     code mut Array<I64>& = Array<I64>(0)     # the instructions as matching reads them: op, x, y, z for each
     rcode mut Array<I64>& = Array<I64>(0)    # the reversed program, as code, for finding where a match starts

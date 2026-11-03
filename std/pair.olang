@@ -40,7 +40,7 @@ test "a pair of things with no Hash is still a pair" {
 # reference - the text built where the pair lands, a variable's array borrowed
 fn pairOfText(k I32) Bool {
     p := Pair(1 + k, "x")
-    s String = "ab"
+    s Array<Char> = "ab"      # (text that is written is an Array<Char>: a String never changes, T13a)
     q := Pair(k, s)
     s[0] = 'z'
     return p.Second == "x" and q.Second == "zb"

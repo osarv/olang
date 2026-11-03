@@ -28647,3 +28647,91 @@ recommended for when a program needs it. Found by the study and queued: a parall
 refused (E31), a whole-element store of a record 1.8x slower than writing its fields, an array of small structs not
 vectorizing where the same data as one array per field does.
 
+
+## String immutable (2026-11-03, T13a, T29c); a parallel assignment of elements through SetAt (S4c)
+
+The user decided on 2026-11-03 that text written as `String` is immutable and mutable text is `Array<Char>` (or a
+StringBuilder, which stays as it is - its `Push`/`PushChar` are not renamed). The previous round had built `immut`
+(T13a) and tried this flip; this round made it (wt-strimmut).
+
+**The flip and its order.** `type String immut extends Array<Char>` (std/prelude/text.olang). A compiler from the
+unflipped sources was built and installed first (the seed's compiler reads no `immut` in the prelude), then the prelude
+flipped and std migrated, the compiler rebuilt by that compiler, and at the end the seed written again from the flipped
+source and `make bootstrap` run from it to its fixed point (one seed write was enough: the seed is the IR of a compiler
+that already reads `immut`).
+
+**Migration.** `tools/textbuild_migrate.olang` (written by the previous round, now in `olang fix`'s table after
+`clone_migrate`) did most of it: text built by writing characters into `String(Array<Char>(n))` became the
+`Array<Char>` converted at each `return`, and every `mut String&` `String&` - 54 such lines in std and compiler/, and
+the tests, checks, fuzzers and bench. By hand: std/os's buffers C fills stay `Array<U8>` and are made text at the
+returns (`String(text[:got])` - ReadFile, Args, copyOut), MkTemp's path is an `Array<Char>` (mkdtemp writes its six
+characters; its prototype now says `mut Array<U8>&`, where it had said a by-value `Array<U8>` C wrote into),
+filepath's `Clean(String(joined))`, json's escape writer and putUtf8 take a `mut Array<Char>&` (`Array<Char>(0)` for
+"measure only"). The tool also rewrites a declaration that is never written (c2dheldreturned's `t := String(...)`), which
+the compiler then reports and a person puts back - its documented limit. About 80 test and checks sites wrote text on
+purpose, mostly to show that a copy is its own (D9h's handover, QCE's value parts, the any reviews' returned locals,
+T29a's conversions naming storage): each was rewritten to write an `Array<Char>`, or a declared type over one where a
+method or a conversion naming storage was the point (`ShTxt`, `CvLab`, `CtChars`, `Txt`, `Bytes`), so every test still
+tests what it tested; a few whose premise was text changing under a view were moved onto views of an `Array<Char>`
+(tests/inplace.olang's Split pieces became `Windows`). The renderings they compare changed where a container's type is
+written (`Vec<Array<Char>&>[...]`). `vecViewNamed` (std/prelude/tests/vec.olang) now expects a copy: `String(v.View())`
+is one, since the Vec is written after. The scope fuzzer's second-name scenarios write a `Tx` (a type over
+`Array<Char>`), the differential fuzzer was unaffected.
+
+**Decided with it (mine).** (1) A type declared over an immut type is immut itself - `type BLab extends String` with a
+`mut` method wrote the String it was converted from (tests/any.olang's BLab), so `Immut` follows `Over` declarations to
+their base. (2) A conversion from an immut value to a type that is not immut copies, as the reverse already did:
+`mut CvLab& = CvLab(s)` over a String wrote `s`. (3) An `Array<Char>` never flows into a `String` unwritten: a read-only
+view would be text that changes under its reader, so `String(x)` is written, a copy unless D9i leaves it out (a few
+call sites gained it - `c3Counts(String(...))`). (4) A `mut` global whose type is a reference to an immut type is a
+binding: `Name mut String&` had become a writable reference to what is never written, which refused every read-only
+`String&` assigned to it (fuzz.olang's `Root = try os.Cwd()`); its reference is now read-only, so any fits. (5) The
+errors name what to write: writing a String or a slice of one, lending one writably, and `mut String&` say `Array<Char>`
+or a StringBuilder (`TextWrite`, `TextMutRef`, rule `T13a, T29c`); a read-only reference to an immut type handed where a
+writable one is wanted is T13a's error rather than T25c's. (6) Text written in the program beside an `Array<Char>` of a
+known length in `==` meets it as an array of a run-time length (it was a type mismatch, and the rewritten tests compare
+arrays of characters with literals).
+
+**Found on the way (pre-existing, fixed).** `s Array<Char> = "ab"` made the local the constant's storage itself:
+`fit` converted the read-only text reference into an `Array<Char>` value without reading it out, so `s[0] = 'z'` was
+lost at -O3 (a store into a constant LLVM deletes), and `interpret` stopped with "it writes constant data". The data is
+now converted as a reference and read out (E12's copy), and lowering's frame slot for a text literal (optsurvey item 9)
+looks through that conversion, so the local still lives in a stack slot.
+
+**S4c (the references study's first finding).** `ps[i], ps[j] = ps[j], ps[i]` on a `Vec` was refused with E31 ("writes
+into a value a call gave back") while `ps[i] = ps[j]` alone worked: the parallel form took each target as a place, and
+the place of `x[i]` on a declared type is At's copy. A target `x[i]` on a type declaring `SetAt` is now held as its base
+place, the method and the index expressions (`setAtTarget`); every value is evaluated first, then each target in order -
+its index checked and held there, as SPEC orders a target's place after every value - and stored by `x.SetAt(i, v)`, the
+value fitted to SetAt's element parameter as the receiver binds it (`paramsOn`). tests/shared.olang swaps Vec elements,
+writes two literals to a `Vec<I32>`, and a two-index grid, baked while compiling and at run time.
+
+**What the conversions cost, and the two moves that pay it back (mine, an optimization).** `return String(out)` copies
+by T13a unless D9i leaves the copy out, and at first it never did: (a) a mention of a local inside a loop not around its
+declaration counted as after everything (`lastUses`), so a local written by a loop - every text builder - was never at
+its last use afterwards; a loop runs before what follows it, so such a mention now counts where it stands (a copy inside
+the loop is still never a move: `CopyAt` -1); (b) the copy was built in the result scope while the local lived in the
+frame, so a move was not allowed - the scope pass now homes a local whose whole copy is returned where the result goes
+(`returnedArrays`, as a returned local is, O26a), and lowering's `movable` takes a copy built in the very scope variable
+the local is stored in. ToUpper, ToLower, Join, PadStart/PadEnd and Format compile to what they compiled to before
+(one allocation in the result scope, no copy). `StringBuilder.ToString` gives a `String` value now, its characters
+copied once by a counted loop into an `Array<Char>` the String takes (it was `String(b.chars.ToArray())`, a ToArray
+filling then copying; `String(b.chars.View())` was tried and refused at callers by O17 - a view of the receiver handed
+back through the conversion read as kept). For the next bulk review: (a) and (b) widen D9i's moves.
+
+**Measured.** bench's machine code (baseline x86-64) against master 3317c30: every program's `main` holds about 18
+more instructions - std/os's `Args` copies each argument into a String (one memcpy at startup per argument: the text is
+made in the loop's turn and kept in the result, which a move cannot reach - a local built where it is kept, the batch's
+item 17, would remove it); knucleotide's `frequencies` is 35 instructions smaller, regex's `Compile` 23 larger and
+`ToString` 19, nothing else differs. Callgrind: text 252.6M -> 249.4M instructions (-1.2%), regex 159.5M -> 158.5M
+(-0.7%), knucleotide and sha256 within 300 instructions. The compiler's self-build (from an empty build/, -O3 + LTO), master
+against this round's last compiler: 46.4 s -> 46.4 s wall, 155 s -> 154 s of CPU, check 1.39 -> 1.47 s, scope 1.19 ->
+1.27 s, peak 3.00 GB -> 2.94 GB (3.08 GB before the moves above); `make bootstrap` from the new seed 0:51 wall.
+`make verify`, `make scopesan` and `make scopefuzz` (100 programs, 436 scenarios, 0 findings) passed.
+
+**Found on the way by the round's verify (pre-existing, fixed).** M19g's pass is skipped where no body outside the Vec
+module takes an array from it (View, ViewMut, ToArray) - but a view also leaves as a reference into the buffer (Ref,
+RefMut - the latter wherever a call is made on an element in place, E31b - and Map's). The skip had never fired, since
+the prelude's `StringBuilder.ToString` called `ToArray` and so every program took an array from Vec; once ToString
+stopped, seven M19g cases (m19gonce, m19grefgrow ...) compiled. `viewsHeld` now counts the Vec and Map modules' arrays
+and references alike.

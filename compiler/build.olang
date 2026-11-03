@@ -1071,7 +1071,7 @@ fn (s mut stubFrontend&) Analyze(root String&, kind Kind, cfg mut Config&, prog 
     tt := $"target triple = \"" $cfg.Target.Triple "\"\n"
     prog.Units.Push(Unit("lib", UnitKind.Module, $tt "define i32 @lib_n() #0 {\n  ret i32 " $n "\n}\n" $attrs))
     prog.Units.Push(Unit("util", UnitKind.Module, $tt "define i32 @util_k() #0 {\n  ret i32 " $s.Edit "\n}\n" $attrs))
-    main mut String& = ($tt "declare i32 @lib_n()\ndeclare i32 @util_k()\ndeclare i32 @inst_z()\ndeclare void @olang_rt()\n" $
+    main String& = ($tt "declare i32 @lib_n()\ndeclare i32 @util_k()\ndeclare i32 @inst_z()\ndeclare void @olang_rt()\n" $
             "define i32 @main() #0 {\n  call void @olang_rt()\n  %a = call i32 @lib_n()\n" $
             "  %b = call i32 @util_k()\n  %c = call i32 @inst_z()\n  %s = add i32 %a, %b\n  %t = add i32 %s, %c\n" $
             "  ret i32 %t\n}\n" $attrs)

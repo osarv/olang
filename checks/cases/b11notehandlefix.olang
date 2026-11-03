@@ -15,7 +15,7 @@ fn main() ? {
     m.Put(1, Vec<String&>())
     for i in range 40 {
         l := try m.RefMut(i % 2)
-        t mut String& = "x" $i
+        t String& = "x" $i
         l.Push(t)
     }
     assert churn() > 0

@@ -1,7 +1,8 @@
 # check: fail error[T25c]: a read-only reference cannot become writable
-# T29a/T25c: "String(b)" is b's bytes under another name - writable only where b is
-fn w(s mut String&) { s[0] = 'Z' }
+# T29a/T25c: "Bytes(b)" is b's bytes under another name - writable only where b is (a String's is a copy, T13a)
+type Bytes Array<U8>
+fn w(s mut Bytes&) { s[0] = 90 }
 fn touch(b Array<U8>&) {
-  w(String(b))
+  w(Bytes(b))
 }
 fn main() ? { }

@@ -4,7 +4,7 @@
 import "std/io"
 type CB struct() {
     data mut Array<Char>& = Array<Char>(2, 'a')
-    text mut String& = "bb"
+    text String& = "bb"
 }
 fn a(c CB&, n I64) String& {
     if n == 0 { return String(c.data) }

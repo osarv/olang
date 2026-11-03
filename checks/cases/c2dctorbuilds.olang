@@ -12,7 +12,7 @@ fn churn() I64 {
     return t
 }
 type CB struct() {
-    text mut String& = $1 "-ttttttttttttttt"
+    text String& = $1 "-ttttttttttttttt"
 }
 type H struct(x String&, n I64) {
     y String& = $n "-in-x"

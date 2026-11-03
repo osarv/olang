@@ -1,10 +1,10 @@
 # check: fail error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
 # O14: a built result is new storage its caller may write (T25c) - a reference to an immutable global's storage handed
-# out as one would let "x mut String& = Show()" write the global, so it is refused where it is returned, naming the
-# by-value result, which copies it
-Data := String("constant text")
-fn Show() String& { return Data }
+# out as one would let "x mut Array<Char>& = Show()" write the global, so it is refused where it is returned, naming
+# the by-value result, which copies it
+Data Array<Char> = "constant text"
+fn Show() Array<Char>& { return Data }
 fn main() {
-    x mut String& = Show()
+    x mut Array<Char>& = Show()
     x[0] = 'Z'
 }

@@ -48,7 +48,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `scopes_migrate.olang` | QCB/O28: every written scope dropped - a marker after `&` (`T&x`, `T&return`, `T?&x`), a scope argument (`f&x(...)`), an `outlives` item of a contract (the brackets dropped where nothing else is left) - in .olang files and the olang blocks of Markdown; a contract block over several lines listed `by hand:` (status 1); idempotent | `build/tools_scopes_migrate [--check] [-v] FILE\|DIR...` |
 | `fnref_migrate.olang` | T21 (QCI 3): function types are reference-only - every function type written with no marker on a place (`f fn(x I64) I64`, `Vec<fn(e E)>`) is given its `&` (`fn&(x I64) I64`), read with the compiler's own parser; a type declaration's base, a function's declaration and a lambda are left as they are; which of them may be null (`fn?&`) is null_migrate's, run after it by `olang fix`; the olang blocks of Markdown too; idempotent | `build/tools_fnref_migrate [--check] [-v] FILE\|DIR...` |
 | `clone_migrate.olang` | E31d: `Clone` left the language - `x.Clone()` becomes `x.Copy()` (Copy is supplied for every type, an array's being its copy); in a file importing std/list each rewritten line is listed for a person (status 1), since a `list.List`'s `Copy()` names the same list where its `Clone()` made one - `list.From(l.Iter())` builds one; code only; idempotent | `build/tools_clone_migrate FILE...` |
-| `textbuild_migrate.olang` | T13a, for String's immutability (decided, not yet made - CLAUDE.md "immut types"): text built by writing its characters becomes an `Array<Char>` converted at its returns (`out := String(Array<Char>(n))` -> `out := Array<Char>(n)` ... `return String(out)`; a byte buffer `String(Array<U8>(n))` an `Array<U8>`), and every `mut String&` `String&` (a global's binding kept) - any other write into text the compiler says; idempotent | `build/tools_textbuild_migrate FILE...` |
+| `textbuild_migrate.olang` | T13a, T29c: a String never changes - text built by writing its characters becomes an `Array<Char>` converted at its returns (`out := String(Array<Char>(n))` -> `out := Array<Char>(n)` ... `return String(out)`; a byte buffer `String(Array<U8>(n))` an `Array<U8>`), and every `mut String&` `String&` (a global's binding kept) - any other write into text the compiler says; idempotent | `build/tools_textbuild_migrate FILE...` |
 | `handles_migrate.olang` | QCE (handles as values): Vec, Map, Set, Deque, Heap and StringBuilder hold their storage by value - a copy the program relied on sharing becomes a `&` place (a local, a parameter, a field), a `Clone()` a value copy, an element changed through a copy `x.Ref(i)`/`x.RefMut(i)` (`try m.RefMut(k)` for a Map) - driven by the compiler's `OLANG_HANDLES=1` report, M19's missing-`Clone` and E31b's element rows, in rounds | `build/tools_handles_migrate [--via PATH] [--olang PATH] [-j N] FILE\|DIR...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
@@ -95,15 +95,14 @@ compiler has nothing to say about it until the text tools have run:
 `math_methods`, `arrays_migrate`, `results_migrate`, `equality_migrate`, `helper_rename`, `null_migrate`,
 `checkerror_rename`, `stutter_rename`, `checked_migrate`, `contracts_migrate`, `try_migrate`, `as_migrate`,
 `errortype_migrate`, `list_vec`, `link_migrate`, `match_migrate`, `question_migrate`, `unused_migrate`, `errorcase_rename`,
-`variadic_migrate`, `scopes_migrate`, `fnref_migrate`, `clone_migrate` (the table's order; the tools that read the text run first and those driven by diagnostics after,
+`variadic_migrate`, `scopes_migrate`, `fnref_migrate`, `clone_migrate`, `textbuild_migrate` (the table's order; the tools that read the text run first and those driven by diagnostics after,
 so `unused_migrate` runs last: D3b is said only of a file with no other error).
 
 **Not run by `fix`**, because they are not idempotent - on code of today they would damage it: `io_print`, `io_try` and
 `io_fix` (M19f: they take `try` and `catch` off a call of `io.Print` and put `try` back without the `catch`, and `!`
 forms are lost), `precedence_migrate` (E5: it reads every `a & b == c` as written for the old precedence and wraps
 the comparison), `handles_migrate` (QCE: a reference it made of a copy reads back as a sharing to keep, and a
-copy of today's code it would make a reference), and `textbuild_migrate` (T13a: written for String's immutability,
-which is not made yet - run on code of today it would make text read-only that is written). Run them by hand, on a tree written under the old rule, as before.
+copy of today's code it would make a reference). Run them by hand, on a tree written under the old rule, as before.
 
 The compiler's own tools are in `compiler/tools/` (the acceptance diffs and golden captures, which were shell scripts and
 are olang programs now, run by their make targets - `compiler/README.md`); the benchmark drivers are in `bench/`

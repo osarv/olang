@@ -202,7 +202,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   repository and is `olang fix`'s last tool.
 - **Assignment (S4, S4a, S4c, S4d).** Left to right: the target's place, then the value; a compound place is evaluated
   once. Assignment to a reference repoints, in every position (S4a). Parallel assignment `a, b = b, a` evaluates every
-  value first; `a, b := 1, 2` and `x, y I32` declare several names (S4c/D12b, the user's call). An assigned value
+  value first; `a, b := 1, 2` and `x, y I32` declare several names (S4c/D12b, the user's call); a target `x[i]` on a type declaring
+  `SetAt` stores through it, its index evaluated at its place (2026-11-03: `ps[i], ps[j] = ps[j], ps[i]` on a Vec was
+  E31's refusal - the references study's bug). An assigned value
   borrowing storage within the place takes its old value as a copy, decided by types (S4d) - in stage 0 too since
   2026-10-18 (it had asked the callee's body, `calleeMayKeepArg`).
 - **Every path of a function with a result must return (D10a)** - structural, loops never count, `for { }` with no
@@ -530,16 +532,28 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   holder of an immut part need not be immut (the part replaced whole); an immut type declares no Copy (its copy is the
   same value); a conversion to an immut type from an existing value of a mutable one copies it (left out where nothing
   could tell, D9i). Decided (mine): its copies are still made as copies (sharing is unobservable - an optimization for
-  later). **Not done (left of part 4): String immut** - tried: `type String immut extends Array<Char>` makes the
-  compiler and std build after migrating ~45 sites (text built by writing characters -> an `Array<Char>` converted at
-  its last use; `mut String&` -> `String&`; C-filled byte buffers stay `Array<U8>`), but ~80 tests and checks cases
-  write text to test copy semantics and each needs rewriting, and the flip needs the seed regenerated - left for a round
-  of its own (its migration tool written, `tools/textbuild_migrate.olang`, not in `olang fix` until the flip); StringBuilder's `Append`
-  rename not made. **Found on the way (pre-existing, fixed):** an `Array<Char>` of a run-time length lent to a `mut
+  later). **String is immut (the user's decision 2026-11-03; built 2026-11-03, wt-strimmut):** `type String immut
+  extends Array<Char>`; text that is written is an `Array<Char>` (a literal adapts to one, a value its own copy) or a
+  StringBuilder (unchanged, its `Push`/`PushChar` not renamed), made a String by `String(chars)`; writing a String or
+  writing `mut String&` is an error naming them (`TextWrite`, `TextMutRef`, rule `T13a, T29c`), a String or a slice of
+  one handed to a `mut Array<Char>&` too. Decided with it (mine): a type declared over an immut type is immut (`type
+  Label extends String` could otherwise write the String); a conversion from an immut value to a mutable type copies,
+  as the reverse does (`Chars(s)` wrote `s`); an `Array<Char>` never flows into a `String` unwritten (`String(x)`); a
+  `mut` global of an immut referent is a binding, its reference read-only (`Name mut String&` takes any `String&`).
+  Migration: `tools/textbuild_migrate.olang` (now in `olang fix`) over std, compiler/, tests, checks, fuzz, bench - text
+  built by writing characters an `Array<Char>` converted at its returns, `mut String&` -> `String&`; by hand std/os's
+  C-filled buffers (`Array<U8>`, `String(text[:got])` at returns, MkTemp's path an `Array<Char>`, mkdtemp's prototype
+  `mut Array<U8>&`), json's escape writer, ~80 test sites rewritten onto `Array<Char>` or a type over one, each still
+  testing what it tested (the fuzzers' generated programs too); `vecViewNamed` now expects a copy. Seed regenerated.
+  **Found on the way (pre-existing, fixed):** text written in the program given to a value `Array<Char>` (`s
+  Array<Char> = "ab"`) was the constant's storage itself - a write into it was lost at run time and refused by
+  `interpret`; it is a copy now (E12). `==` of an `Array<Char>` of a known length with a literal was a type mismatch.
+  **Found earlier (pre-existing, fixed):** an `Array<Char>` of a run-time length lent to a `mut
   Array<U8>&` parameter (Char extends U8) was copied and the copy lent, so what the callee wrote was lost (E12's
   borrow taken now for any array whose elements are held alike - tests/immut.olang).
 - **Declared types are nominal (T29).** `type Meters I32`, `type Name Array<T>`; `extends` inherits the base's methods
-  and operators (T29f, the user's design); `Name(x)` converts and names the argument's storage (T29a); a declared
+  and operators (T29f, the user's design); `Name(x)` converts and names the argument's storage (T29a) - a copy to or
+  from an immut type (T13a); a declared
   primitive may have a constructor, which a literal runs while compiling (T29d, the user's design). Over a struct,
   enum or generic instance it is an error. `Char` extends `U8`, `String` extends `Array<Char>` (T29h/T29c, the user's
   design); text written in the program is a `String`.
@@ -1438,7 +1452,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 - **Text is plain `String` with methods, no wrapper type (`std/prelude/text.olang`).** A literal, a slice and every
   rendering already are one, so methods reach all of them with nothing converted. `Eq`, `Find` (fails on a miss),
-  `Split`, `Trim`, `Replace`, `ParseInt(base)`, `ParseFloat`, `PadStart`, `Lines`, `<` by bytes.
+  `Split`, `Trim`, `Replace`, `ParseInt(base)`, `ParseFloat`, `PadStart`, `Lines`, `<` by bytes. A String never changes
+  (T13a): text being written is an `Array<Char>` or a StringBuilder.
 - **Math is the numbers' methods (M19d, 2026-10-18, the user's decision: "Yes let's do this. I want an integer power as
   well", "Also abs for integers"; std/math removed).** Every C math function is a method of every float, written once as
   a default over `Float` (`fn (x T) Sqrt<T Float>() T`, `match T` inside, X8's libm calls, so the evaluator computes

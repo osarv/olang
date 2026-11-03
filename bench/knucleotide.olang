@@ -25,14 +25,14 @@ fn sequence(n I64) String {
         cumulative[i] = total
     }
     rng := Random()
-    s := String(Array<Char>(n))
+    s := Array<Char>(n)
     for i in range n {
         r := rng.Next(1.0)
         k I64 = 0
         for k < 3 and r >= cumulative[k] { k++ }
         s[i] = letters[k]
     }
-    return s
+    return String(s)
 }
 
 # every k-long run of seq and how often it occurs

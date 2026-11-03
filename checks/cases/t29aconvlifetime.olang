@@ -1,10 +1,12 @@
 # check: fail error[O20]: the container outlives what this refers to
-# T29a/E12c: a conversion of a local array names the local's storage, which dies at the return - not a temporary
+# T29a/E12c: a conversion of a local array names the local's storage, which dies at the return - not a temporary (a
+# String's is a copy, T13a: Bytes may be written)
+type Bytes Array<U8>
 type Holder struct() {
-  s mut String& = ""
+  s Bytes& = Bytes(Array<U8>(0))
 }
 fn keep(h mut Holder&) {
   local Array<U8> = U8[104, 105, 106]
-  h.s = String(local)
+  h.s = Bytes(local)
 }
 fn main() ? { }

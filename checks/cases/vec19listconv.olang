@@ -1,13 +1,14 @@
 # check: fail error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
-# a conversion names its argument's storage (T29a), so "String(v.View())" is a view - pushed into a List of text
+# a conversion names its argument's storage (T29a), so "Txt(v.View())" is a view - pushed into a List of text
 # it would be read after the next Push replaces the buffer
 # M19g, round 2 (brought back from round 1's deletion): the same Vec is seen on both sides, so the view is refused
 import "std/io"
+type Txt extends Array<Char>          # text that may be written (a String never changes, T13a)
 fn main() ? {
     v := Vec<Char>()
     v.Push('a')
-    l := Vec<String&>()
-    l.Push(String(v.View()))
+    l := Vec<Txt&>()
+    l.Push(Txt(v.View()))
     for _ in range 100 { v.Push('b') }
-    try io.Println(l[0])
+    try io.Println($l[0])
 }

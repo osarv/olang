@@ -1,0 +1,6 @@
+# check: fail error[T13a, T29c]: 'mut' makes a reference writable, and a String never changes once it is made - write text through 'mut Array<Char>&', read it through 'String&'
+# T13a, T29c: no writable reference to a String - a parameter that would write text takes an Array<Char>
+fn upper(t mut String&) {
+    for i in range t.Len() { t[i] = t[i].ToUpper() }
+}
+fn main() { }

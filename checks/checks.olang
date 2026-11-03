@@ -194,7 +194,7 @@ fn reported(outcome String&) Bool {
 
 # what went wrong in a scenario, once something has: the first check of it that failed ends it
 type report struct() {
-    text mut String& = ""
+    text String& = ""
 }
 
 type Failed error {
@@ -232,7 +232,7 @@ fn store() String& {
 
 # a fresh, empty directory for one check, as an absolute path
 fn fresh(tag String&) String& {
-    dir mut String& = $root() "/build/checks/" $tag
+    dir String& = $root() "/build/checks/" $tag
     os.Run("rm -rf " $os.Quote(dir) " && mkdir -p " $os.Quote(dir))
     return dir
 }
@@ -256,7 +256,7 @@ fn outOf(dir String&) String& {
 }
 
 # a failed check, with what the compiler said
-fn failure(what String&, dir String&) mut String& {
+fn failure(what String&, dir String&) String& {
     return "check FAIL: " $what "\n" $outOf(dir) "\n"
 }
 

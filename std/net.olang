@@ -609,7 +609,7 @@ fn echoOnce(l mut Listener&, served mut counted&) ? Error {
     buf := Array<U8>(64)
     for {
         got := try c.Read(buf) catch Error.Closed { break }
-        out := String(Array<Char>(got.Len()))
+        out := Array<Char>(got.Len())
         for i in range got.Len() { out[i] = Char(got[i]).ToUpper() }
         c.Write(out)!
         served.n += got.Len()

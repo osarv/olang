@@ -3,17 +3,17 @@
 # global reaches - a "mut" global's, or what a global's writable reference names - so a program with such a global
 # keeps every such view a copy.
 
-heldText mut String& = "abcd".Copy()
+heldText mut Array<Char>& = "abcd".Copy()
 
 # an immutable global reaching writable storage
 type cell struct() {
-    a mut String& = "efgh".Copy()
+    a mut Array<Char>& = "efgh".Copy()
 }
 
 Held cell& = cell()
 
 # a value result that is a view of its argument
-fn mid(t String&) String { return t[1:3] }
+fn mid(t Array<Char>&) Array<Char> { return t[1:3] }
 
 # write what the globals reach - each given nothing writable
 fn bumped() String {
@@ -27,9 +27,9 @@ fn bumpedHeld() String {
 }
 
 # a join's operands are evaluated before any piece renders (E11b): mid's result is its own copy before bumped runs
-fn joined(t String&) String { return $mid(t) $bumped() }
+fn joined(t Array<Char>&) String { return $mid(t) $bumped() }
 
-fn joinedHeld(t String&) String { return $mid(t) $bumpedHeld() }
+fn joinedHeld(t Array<Char>&) String { return $mid(t) $bumpedHeld() }
 
 test mid "a view of a mutable global's storage is copied where a call may write the global before it is read" {
     assert joined(heldText) == "bc!"

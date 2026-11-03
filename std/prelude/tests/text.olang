@@ -267,7 +267,7 @@ test "PadStart and PadEnd make text a column wide" {
     assert "".PadStart(2) == "  " and "".PadEnd(0) == "" and "x".PadStart(-5) == "x"
     assert ("-7").PadStart(4, '0') == "00-7"                     # text has no sign: padded as it is
     s String& = "kept"
-    p := s.PadStart(6)
+    p Array<Char> = s.PadStart(6)                                 # (written below: an Array<Char>, T13a)
     p[0] = '>'
     assert s == "kept" and p == "> kept"                          # new text: the receiver is unchanged
 }

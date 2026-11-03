@@ -3479,6 +3479,9 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
         want = c.resolve(v.Ty)
         c.globalTop = false
         if want != types.UnknownT { want = c.P.GlobalStorage(generic.Context(mi, -1), v, n) }   # T7d
+        # T13a: a "mut" global holding what never changes (text - "Name mut String&") is a binding that may be
+        # assigned: nothing is ever written through it, so it takes any reference to one, read-only or not
+        if c.isRef(want) and c.P.Immut(c.deref(want)) { want = c.P.T.Ref(c.P.T.Referent(want), c.P.T.PermOf(want) & ~types.Writable) }
     }
     from := c.stmts.Len()
     x typed.Expr?& = null
@@ -5134,7 +5137,8 @@ fn (c mut Checker&) notCapture(p typed.Lvalue&, sp source.Span) { c.mustWrite(p,
 fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
     c.noteWrite(p)
     if c.writesImmut(p, store) {
-        c.err(sp, msgs.ImmutWrite(c.ty(c.immutOf(p, store))))
+        it := c.immutOf(p, store)
+        c.err(sp, msgs.TextWrite() if it == c.textType() else msgs.ImmutWrite(c.ty(it)))
         return
     }
     match p {
@@ -6609,10 +6613,13 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
         r := c.P.T.Referent(have)
         w := c.P.T.Referent(want) if wk == types.Kind.Ref else want
         if not c.P.T.Same(r, w) and c.sameRepr(r, c.under(w)) {
-            y := c.convert(sp, x, c.P.T.Ref(w, c.P.T.PermOf(have)) if wk == types.Kind.Ref else w)
+            # a value of its own where one is wanted: the text read out of the constant, a copy (E12) - converted
+            # whole, the value was the constant's storage, so what was written into it was lost
+            if wk != types.Kind.Ref: return c.fit(c.convert(sp, x, c.P.T.Ref(w, c.P.T.PermOf(have))), want, sp)
+            y := c.convert(sp, x, c.P.T.Ref(w, c.P.T.PermOf(have)))
             # T25d: going where it may be written, it is judged as text at its own type is - handed over as the
             # constant itself, a write through it would land in the program's constant data
-            if wk != types.Kind.Ref or not c.writable(want): return y
+            if not c.writable(want): return y
             c.err(sp, msgs.ConstToMutRef("'$" $c.src(sp) "'" if c.P.T.Same(r, c.textType()) else "'" $c.src(sp) ".Copy()'"))
             return y
         }
@@ -6750,6 +6757,11 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
                 if isData(x) {
                     v := c.fit(c.read(sp, typed.Lvalue.Deref(sp, hr, x)), wr, sp)
                     return typed.Expr.Promote(sp, want, typed.Promote(v, c.site(typed.SiteKind.Promote, sp)))
+                }
+                # T13a: what is read-only because it never changes (a String, a slice of one) says what may be written
+                if c.P.Immut(hr) {
+                    c.err(sp, msgs.TextWrite() if hr == c.textType() else msgs.ImmutWrite(c.ty(hr)))
+                    return x
                 }
                 c.err(sp, msgs.ReadOnlyToWritable())
                 return x
@@ -8401,10 +8413,10 @@ fn (c mut Checker&) equality(sp source.Span, op token.Tok, x typed.Expr&, y type
             tb = typeOf(y)
             db = da
         } else if c.P.T.KindOf(da) == types.Kind.Array and c.P.T.KindOf(db) == types.Kind.Array and
-                  c.P.T.Same(c.P.T.Elem(da), c.P.T.Elem(db)) {
+                  c.P.T.Same(c.P.T.Elem(da), c.P.T.Elem(db)) or c.textBeside(da, y, db) or c.textBeside(db, x, da) {
             # E10, T7c: arrays of two known lengths meet at the run-time length both flow into - unequal, as their
-            # lengths differ
-            rt := c.P.T.Array(c.P.T.Elem(da), types.TypeId(0))
+            # lengths differ; text written in the program beside an array of characters of a known length too (T29c)
+            rt := c.P.T.Array(c.P.T.Elem(c.under(da)), types.TypeId(0))
             x = c.fit(x, c.P.T.Ref(rt, types.ReadOnly) if c.isRef(ta) and c.isRef(tb) else rt, sp)
             y = c.fit(y, c.P.T.Ref(rt, types.ReadOnly) if c.isRef(ta) and c.isRef(tb) else rt, sp)
             ta, tb = typeOf(x), typeOf(y)
@@ -8465,6 +8477,13 @@ fn (c mut Checker&) equality(sp source.Span, op token.Tok, x typed.Expr&, y type
     c.exprs.Push(vb)
     r := c.callOf(sp, types.BoolT, typed.Callee.Helper(typed.Helper.Equal, ht), gather(c.exprs, from))
     return c.negate(sp, r) if op == token.Tok.NotEq else r
+}
+
+# whether b is text written in the program beside a, an array of characters (T29c): they meet as arrays of a run-time
+# length, as two arrays of one element type do
+fn (c mut Checker&) textBeside(ta types.TypeId, b typed.Expr&, tb types.TypeId) Bool {
+    if not isData(b) or c.P.T.KindOf(ta) != types.Kind.Array or c.P.T.KindOf(c.under(tb)) != types.Kind.Array { return false }
+    return c.sameRepr(c.P.T.Elem(ta), c.P.T.Elem(c.under(tb)))
 }
 
 # the Eq a type declares for "==" (E10a): its Eq, or its private eq where the code being checked is in that eq's module
@@ -10580,7 +10599,8 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
             top := c.globalTop
             c.globalTop = false
             if w and not top and c.immutRef(of) {
-                c.err(source.Span(psp.Start, psp.Start + 3), msgs.ImmutMutRef(c.ty(c.deref(c.P.Resolve(c.fr().Ctx, of)))))
+                it := c.deref(c.P.Resolve(c.fr().Ctx, of))
+                c.err(source.Span(psp.Start, psp.Start + 3), msgs.TextMutRef() if it == c.textType() else msgs.ImmutMutRef(c.ty(it)))
                 return false
             }
             return c.writtenMet(of)
@@ -11196,8 +11216,9 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
         if c.isNumber(xt) and c.isNumber(t) { return c.convert(sp, x, t) }
         if c.flowsInto(c.deref(xt), base) or c.sameRepr(c.deref(xt), base) {
             # T13a: what never changes is made of storage nothing else can change - an existing value it is made from is
-            # copied (left out where nothing could tell: a fresh value, a local at its last use, D9i)
-            if c.P.Immut(t) and not c.P.Immut(c.deref(xt)) {
+            # copied (left out where nothing could tell: a fresh value, a local at its last use, D9i); and what may change
+            # is made of none that never does - a value of a type that may be written, made from an immut one, a copy
+            if c.P.Immut(t) != c.P.Immut(c.deref(xt)) {
                 v := c.read(sp, typed.Lvalue.Deref(sp, c.deref(xt), x)) if c.isRef(xt) else x
                 return c.convert(sp, c.ownCopy(v), t)
             }
@@ -16871,17 +16892,25 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
         }
         return
     }
-    # S4c: the targets' places, then every value held, then the stores
+    # S4c: every value held, then each target's place and its store, in order - a target x[i] of a declared type its
+    # index evaluated there and the store its SetAt (E31), as "x[i] = v" alone is
     held Vec<I64>
     places mut Vec<typed.Lvalue?&>& = Vec<typed.Lvalue?&>()
-    for i in range n { places.Push(c.discardOr(m.Targets[i])) }
+    sets mut Vec<setAt?&>& = Vec<setAt?&>()
+    for i in range n {
+        st := c.setAtTarget(m.Targets[i])
+        sets.Push(st)
+        p := c.discardOr(m.Targets[i]) if st is null else null
+        places.Push(p)
+    }
     # S4d: a borrow in any value of any target's storage takes its old value
     s4d := c.s4d.Len()
     for pl in places {
         if pl is not null and not c.isRef(pl.Type()) and c.P.T.HoldsRefs(pl.Type()) { c.s4d.Push(pl) }
     }
     for i in range n {
-        want := places[i]!.Type() if places[i] is not null else types.UnknownT
+        st := sets[i]
+        want := st.Elem if st is not null else places[i]!.Type() if places[i] is not null else types.UnknownT
         v := c.exprTo(m.Values[i], want)
         h := c.local(source.NameId(0), m.Values[i].Span(), typeOf(v), typed.LocalKind.Held, typed.Mark.None)
         c.emit(typed.Stmt.Let(m.Values[i].Span(), typed.LocalId(I32(h)), v))
@@ -16889,7 +16918,48 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
     }
     c.s4d.Truncate(s4d)
     for i in range n {
-        if places[i] is not null { c.emit(typed.Stmt.Assign(sp, places[i]!, c.readLocal(sp, held[i]))) }
+        st := sets[i]
+        if st is not null {
+            args := Vec<typed.Expr&>()
+            for k, it in st.Items {
+                v := c.exprTo(it, st.Params[k + 1] if k + 1 < st.Params.Len() else types.UnknownT)
+                h := c.local(source.NameId(0), it.Span(), typeOf(v), typed.LocalKind.Held, typed.Mark.None)
+                c.emit(typed.Stmt.Let(it.Span(), typed.LocalId(I32(h)), v))
+                args.Push(c.readLocal(sp, h))
+            }
+            args.Push(c.readLocal(sp, held[i]))
+            c.emit(typed.Stmt.Eval(sp, c.invoke(sp, st.Sp, st.M, c.read(st.Sp, st.Base), Array<ast.Expr&>(0), args.ToArray())))
+        } else if places[i] is not null {
+            c.emit(typed.Stmt.Assign(sp, places[i]!, c.readLocal(sp, held[i])))
+        }
+    }
+}
+
+# a target x[i] of a parallel assignment whose store is a SetAt (S4c, E31): x's place, the method, the indices (checked
+# where the target's place is evaluated, after every value), SetAt's parameters as x binds them, and the element type
+# its value is fitted to
+type setAt struct(Base typed.Lvalue&, M I64, Items Array<ast.Expr&>&, Params Array<types.TypeId>, Sp source.Span
+                  Elem types.TypeId) {
+    Base, M, Items, Params, Sp, Elem
+}
+
+# a parallel assignment's target x[i] on a declared type with a SetAt (assignAt's); null for any other target, whose
+# place discardOr gives
+fn (c mut Checker&) setAtTarget(target ast.Expr&) setAt?& {
+    match target {
+        case ast.Expr.Index(isp, x, items) {
+            if c.typeNamed(x) >= types.TypeId(0) { return null }
+            base := c.place(x)
+            if base is null { return null }
+            dt := c.deref(base.Type())
+            if dt == types.UnknownT or c.arrayOf(dt) != types.UnknownT { return null }
+            m := c.roleMethod(dt, "SetAt", items.Len() + 1)
+            # (x[i] read through At, E31b: its write-back is the single form's, writeBack)
+            if m < 0 or c.valueTemp(base) >= 0 { return null }
+            ps := c.paramsOn(m, base.Type())
+            return setAt(base, m, items, ps, isp, ps[items.Len() + 1] if items.Len() + 1 < ps.Len() else types.UnknownT)
+        }
+        case _ { return null }
     }
 }
 

@@ -26,7 +26,7 @@ extern {
     fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
     fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
     fn __olang_exec(path Array<U8>, args Array<U8>, count I64) I32
-    fn __olang_mkdtemp(template Array<U8>) I32
+    fn __olang_mkdtemp(template mut Array<U8>&) I32
     fn __olang_run_on_stack(bytes I64, f fn&())
     fn __olang_on_crash(message Array<U8>, len I64)
 }
@@ -65,15 +65,15 @@ fn check(result I64) ? Error {
 # text a runtime function copies out (X6): fill(buf) copies what fits of it into buf and gives its whole length, or
 # a negative one when it fails. Measured, then filled at that length - again if it grew in between, as a directory
 # being written to can.
-fn copyOut(fill fn&(buf mut Array<U8>&) I64) mut String& ? Error {
+fn copyOut(fill fn&(buf mut Array<U8>&) I64) String& ? Error {
     n := fill(Array<U8>(0))
     for {
         try check(n)
-        text mut String& = String(Array<U8>(n))
+        text := Array<U8>(n)
         got := fill(text)
         if got <= n {
             try check(got)
-            return text[:got]
+            return String(text[:got])
         }
         n = got
     }
@@ -86,15 +86,15 @@ fn Args() mut Array<String&>& {
     n := __olang_arg_count()
     args mut Array<String&>& = Array<String&>(n, "")     # each written below
     for i in range n {
-        text String& = String(Array<U8>(__olang_arg(i, Array<U8>(0), 0)))
+        text := Array<U8>(__olang_arg(i, Array<U8>(0), 0))
         __olang_arg(i, text, text.Len())
-        args[i] = text
+        args[i] = String(text)
     }
     return args
 }
 
 # the value of the environment variable "name" - failing with NOT_FOUND when it is not set (one set to nothing is "")
-fn Env(name String&) mut String& ? Error {
+fn Env(name String&) String& ? Error {
     key := $name "\0"
     return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_env(key, buf, buf.Len()) })
         catch Error { error Error.NotFound }
@@ -345,11 +345,11 @@ fn memFile() I32 ? Error {
 }
 
 # everything written to the file fd, from its start, as text built where the caller puts it
-fn readBack(fd I32) mut String& ? Error {
+fn readBack(fd I32) String& ? Error {
     size := unistd.lseek(fd, 0, 2)
     if size < 0 { try raise(__olang_err()) }
     unistd.lseek(fd, 0, 0)
-    text mut String& = String(Array<U8>(size))
+    text := Array<U8>(size)
     got I64 = 0
     for got < size {
         n := unistd.read(fd, text[got:], U64(size - got))
@@ -357,12 +357,12 @@ fn readBack(fd I32) mut String& ? Error {
         if n == 0 { error Error.Failed }
         got += n
     }
-    return text
+    return String(text)
 }
 
 # the whole of the file at "path", built where the caller puts it, or where the scope argument says
 # ("os.ReadFile&x(p)" builds it where x lives)
-fn ReadFile(path String&) mut String& ? Error {
+fn ReadFile(path String&) String& ? Error {
     if IsDir(path) { error Error.IsDir }            # a directory opens, and its size means nothing
     fd := fcntl.open($path "\0", 0)
     try check(fd)
@@ -371,11 +371,11 @@ fn ReadFile(path String&) mut String& ? Error {
     # has no size to give (lseek fails or says 0), and a file may grow while it is read
     size := unistd.lseek(fd, 0, 2)
     if size < 0 { size = 0 } else { unistd.lseek(fd, 0, 0) }
-    text mut String& = String(Array<U8>(size + 1))
+    text := Array<U8>(size + 1)
     got I64 = 0
     for {
         if got == text.Len() {
-            more mut String& = String(Array<U8>(text.Len() * 2))
+            more := Array<U8>(text.Len() * 2)
             for i in range got { more[i] = text[i] }
             text = more
         }
@@ -385,7 +385,7 @@ fn ReadFile(path String&) mut String& ? Error {
         got += n
     }
     unistd.close(fd)
-    return text[:got]        # the file's bytes, read as text (T29c)
+    return String(text[:got])        # the file's bytes, read as text (T29c)
 }
 
 # closes fd and fails with the Error naming "code" - for a call that failed on an open descriptor, whose errno has
@@ -517,13 +517,13 @@ fn removeTree(path String&) ? Error {
 # "dir", or where the environment's TMPDIR says when "dir" is "" (and in /tmp when that is not set or empty), named
 # "prefix" followed by six characters chosen to make the name unused. Only this user may read, write or enter it
 # (mode 0700). Removing it once done is the caller's - RemoveAll
-fn MkTemp(dir String& = "", prefix String& = "") mut String& ? Error {
+fn MkTemp(dir String& = "", prefix String& = "") String& ? Error {
     if prefix.Contains("/") { error Error.Failed }      # a name, never a path below "dir"
     base := tempDir(dir)
     sep := "" if base.EndsWith("/") else "/"
-    path mut String& = $base $sep $prefix "XXXXXX\0"
+    path Array<Char> = $base $sep $prefix "XXXXXX\0"      # (mkdtemp writes the six characters: no String's)
     if __olang_mkdtemp(path) != 0 { try raise(__olang_err()) }
-    return path[:path.Len() - 1]
+    return String(path[:path.Len() - 1])
 }
 
 # where MkTemp makes a directory: "dir", else TMPDIR, else /tmp
@@ -546,7 +546,7 @@ fn Link(from String&, to String&) ? Error {
 }
 
 # what the symbolic link at "path" holds, as it was written - not resolved further
-fn ReadLink(path String&) mut String& ? Error {
+fn ReadLink(path String&) String& ? Error {
     p := $path "\0"
     cap I64 = 256
     buf mut Array<U8>& = Array<U8>(cap)
@@ -561,13 +561,13 @@ fn ReadLink(path String&) mut String& ? Error {
 }
 
 # "path" made absolute, with every symbolic link, "." and ".." resolved - what it really names, which must exist
-fn RealPath(path String&) mut String& ? Error {
+fn RealPath(path String&) String& ? Error {
     p := $path "\0"
     return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_realpath(p, buf, buf.Len()) })
 }
 
 # the directory the program is working in, as an absolute path
-fn Cwd() mut String& ? Error {
+fn Cwd() String& ? Error {
     return try RealPath(".")
 }
 
@@ -582,7 +582,7 @@ fn ReadDir(path String&) Array<String&>& ? Error {
 }
 
 # text quoted for the shell: one argument whatever it holds
-fn Quote(t String&) mut String& {
+fn Quote(t String&) String& {
     out String& = "'"
     start I64 = 0
     for i in range t.Len() {
