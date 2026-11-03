@@ -2498,3 +2498,26 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   QCL (collections reference-only, recommended yes), 26 (C function pointers `fn?&` as now, or `fn&`), 27's sharper
   rule (C calls "anything" only where an export fn was handed to C or the program is a -library; libc's I/O, string,
   memory, time exempt even then - recommended).
+- QCL DECIDED 2026-11-03 (the user: "collections as references only"): Vec, Map, Set, Deque, Heap, StringBuilder are
+  reference-only (`v Vec<I64>&`, a bare type an error naming `&`), `Clone()` back on them, `Ref`/`RefMut` and the
+  in-place `x[i]` machinery go; arrays stay values (QCE). 26 DECIDED (the user: "I get it now. You're right"): C
+  function pointers stay `fn?&`. 27 DECIDED (the user: "do the sharper rule"): a C call is "anything" only in a program
+  that hands an export fn to C or is built -library, and then not for libc's I/O, string, memory and time functions.
+- 17 revisited 2026-11-03 (the user: "Shouldn't 17 construct a new array object for every loop iteration?"): answered -
+  each turn does make a new Vec, but `v` is a frame slot reused every turn and the Holder keeps a reference to the slot;
+  under QCL the Vec is an object built where it is kept, so the example just works; for a plain struct local kept by
+  reference past its turn, PROPOSED (rec): build it where the reference is kept (QCB's "a value kept longer is built
+  directly where it is kept"), a new object per turn, instead of bulk review 6's F3 refusal. ASKED.
+- QCN ASKED 2026-11-03 (the user: "a way to declare structs, maybe types in general, as only holdable by reference ...
+  destructors that can be held as values as well ... different mechanics"): PROPOSED (rec): a word in the declaration
+  making a type reference-only (`type Window shared struct(...)` - spelling open: shared / object / ref), the
+  collections and extern types reference-only through it; destructor types no longer reference-only by that alone but
+  never copied - a value of one is built where it lives, passed by `&` or as a bare parameter (read, never copied), and
+  any copy of it is an error (so the destructor still runs once, O16); a struct holding one by value inherits the
+  no-copy rule. ASKED.
+- QCO TO EXPLORE 2026-11-03 (the user: "I still want to explore having immutable as a keyword for the structs, or
+  maybe for types in general" - QCE had declined immutable types): sketch given - `type Config immutable struct(...)`,
+  no field written after its constructor through any reference, deep (fields values, arrays, or references to
+  immutable types), so a `Config&` is safe to share across tasks and as a Map key by contents, `mut Config&` an error,
+  baked freely by the evaluator; open: deep vs shallow, whether String becomes immutable (QCE option c), how it meets
+  collections now reference-only, whether `immutable` also applies to a single place. Not decided.
