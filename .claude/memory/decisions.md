@@ -2581,3 +2581,19 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   structurally, a reference shares, a unique type refuses and writes Clone(), and wanting deep copies is holding by
   value (QCE); Rust, Swift, Go and Zig have none, and C++'s is a known source of bugs. Recommended: keep it fixed,
   additive later if code shows a need. ASKED.
+- `immut` DECIDED as the spelling (the user 2026-11-03: "The spelling of immut is good"). The user's point: an immut
+  type may hold a reference to a mutable thing, and copying it copies that reference. PROPOSED, reversing my "deep"
+  lean: immut is per type and shallow - an immut type's own fields never change after its constructor; what a field
+  refers to follows that field's own type (a String or another immut type is fixed, a `mut Buffer&` stays a mutable
+  buffer); so a type made only of immut parts is immutable all the way down by composition. Safe as a Map key, since
+  `==` and Hash on a reference are identity unless its type declares Eq; sharing such a value between tasks shares its
+  mutable referents as any reference does (-race). ASKED.
+- Assignment, the user 2026-11-03 (4): a use - "if you override assignment through the clone ... you can do a deep copy
+  through references" (value semantics for data holding references: trees, graphs). Conceded as a real use. PROPOSED
+  (option B): a type may declare `Copy()` - an operator method named for its operator as E31's are, called wherever a
+  value of the type is copied (assignment to a value place, a by-value argument, a store, `:=` from a value place) -
+  held to giving a fresh value and doing nothing but build it (its effects summary: allocation only, else an error), so
+  the compiler leaves a copy out wherever neither side is written afterwards (D9h's two guarantees) and the elision is
+  unobservable; a unique type declares no Copy (it is what forbids copies; its Clone stays explicit); generics and the
+  evaluator call it as any method. Option A: no override, deep copies written as an explicit Clone(). Recommended B
+  with those limits. ASKED.
