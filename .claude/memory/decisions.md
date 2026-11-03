@@ -2782,3 +2782,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - Unique destructor timing DECIDED 2026-11-03 (the user: "rusts way"): a unique value runs its destructor at the end of
   the scope of whoever holds it last - a value handed to a by-value parameter and stored nowhere is destroyed when that
   function's body ends; O15's order otherwise; `x.Destroy()` still ends one earlier.
+- NLL DECIDED 2026-11-03 (the user: "Yes, there's no point in omitting this" - dictated "all timing", read as
+  omitting): a reference local takes the scope of what each assignment gives it, every use judged against the value it
+  holds there (Rust's non-lexical lifetimes) - the cursor `at = at.parent`, a local declared from a constant then given
+  a shorter view, `planAt = args[k]`; compile time only; an xhigh round after the build batch (new section-8 design:
+  a term for a field of the cursor's referent, or per-version terms - /home/user/review/nll-wip.patch). It was my
+  queueing before; now the user's.
