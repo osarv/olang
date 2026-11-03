@@ -70,6 +70,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     ctorOf Map<types.TypeId, I64>   # a type's constructor's body (twin 0), once looked up
     strOf Map<types.TypeId, I64>    # a type's Str's body, -1 for none, once looked up
     copyOf Map<types.TypeId, I64>   # a type's own Copy's body (E31d), -1 for none, once looked up
+    dtorOf Map<types.TypeId, I64>   # a type's destructor's body (C9)
     indexed Bool = false
     failT Vec<types.TypeId>        # each check word's error type (failure)
     failCode Vec<I64>              # and its code under that type alone
@@ -2185,9 +2186,7 @@ fn (ln mut lowering&) promoteNew(pr typed.Promote&, ty types.TypeId, sp source.S
     s := ln.built(pr.Site)
     r := ln.into(ty, mir.Rvalue.New(s, v, ty), sp)
     t := ln.T
-    if t.IsRef(ty) and t.KindOf(t.Referent(ty)) == types.Kind.Named and t.HasBody(t.Referent(ty)) and t.Destructs(t.Referent(ty)) {
-        ln.emit(mir.Stmt.RegisterDtor(sp, s, t.Referent(ty), r))
-    }
+    if t.IsRef(ty) and t.NeedsDrop(t.Referent(ty)) { ln.emit(mir.Stmt.RegisterDtor(sp, s, t.Referent(ty), r)) }
     return r
 }
 
@@ -4190,6 +4189,18 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         }
         return ln.prim(op, ty, mir.Operand[x], sp)
     }
+    if op == typed.PrimOp.Drop {
+        # O15, T13b: a by-value holder letting go - the value's destructors run in the closing block's scope (C9a)
+        match args[0] {
+            case typed.Expr.Borrow(_, _, p) {
+                a := ln.place(p)
+                if ln.dead { return mir.Operand.None }
+                ln.dropAt(a, p.Type(), ln.innermost(), sp)
+            }
+            case _ { ln.gap(sp, "a drop of no place") }
+        }
+        return mir.Operand.None
+    }
     if op == typed.PrimOp.Destroy {
         # C9b: the region the local's instance was built in released - its destructors run, newest first, and its
         # storage reclaimed (std/runtime's __olang_region_release) - and the local left null; free.olang made every
@@ -4615,6 +4626,7 @@ fn (lw mut Lowerer&) index() {
             case typed.BodyOf.Ctor(t, twin) {
                 if twin == types.ListId(0) { lw.ctorOf.Put(t, i) }
             }
+            case typed.BodyOf.Dtor(t) { lw.dtorOf.Put(t, i) }
             case _ { }
         }
     }
@@ -4675,6 +4687,55 @@ fn (ln mut lowering&) helper(kind mir.HelperKind, ty types.TypeId) {
             ln.prologue(mir.VarKind[mir.VarKind.Result])
             ln.epilogue(ln.copyAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp, true, kind == mir.HelperKind.Parts))
         }
+        case mir.HelperKind.Drop {
+            ln.prologue(mir.VarKind[mir.VarKind.Closing])
+            ln.dropAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp, true)
+            ln.epilogue(mir.Operand.None)
+        }
+    }
+}
+
+# ---- destructors run where a holder lets go (O15, T13b) ----
+
+# the destructors a value of type ty in place a has to run, run in scope at (C9a: the scope being closed): its type's own
+# first, then each part's held by value, last first (O15's reverse construction) - a part's through its type's Drop
+# helper, so a type that comes round to itself is one function; top: in that helper, its own parts
+fn (ln mut lowering&) dropAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.Span, top Bool = false) {
+    t := ln.T
+    if t.IsRef(ty) or not t.NeedsDrop(ty) { return }
+    if not top {
+        ref := ln.into(t.Ref(ty, types.Writable), mir.Rvalue.Ref(ln.mk(a), t.Ref(ty, types.Writable)), sp)
+        ln.helperCall(mir.HelperKind.Drop, ty, mir.Operand[ref], mir.ScopeRef[at], types.VoidT, sp)
+        return
+    }
+    ln.L.index()
+    id := try ln.L.dtorOf.Get(t.Repr(ty)) catch default -1
+    if id >= 0 and t.Destructs(t.Repr(ty)) {
+        callee, fty := ln.bodyCallee(typed.BodyId(I32(id)))
+        p0 := t.Items(t.Params(fty))[0]
+        recv := ln.into(p0, mir.Rvalue.Ref(ln.mk(a), p0), sp)
+        vs := t.ScopeVarsOf(fty)
+        xs := Array<mir.ScopeRef>(vs.Len(), at)
+        ok := ln.F.NewBlock()
+        k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.F.ScopeRefs(xs), mir.NoPlace, false, ok, mir.NoLocal
+                                   mir.NoBlock))
+        ln.end(mir.Term.Call(sp, k))
+        ln.start(ok)
+    }
+    r := t.Repr(ty)
+    if mir.HasFields(t, ty) {
+        parts := ln.partsOf(ty)
+        for i := parts.Len() - 1, i >= 0, i-- { ln.dropAt(ln.with(a, mir.Proj.Field(i)), parts[i], at, sp) }
+    } else if mir.HasCases(t, ty) {
+        tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(a)), sp)
+        ln.payloads(ln.casesOf(ty), tag, sp, fn(c I64, rec types.TypeId) {
+            fs := ln.items(ln.T.Parts(rec))
+            for i := fs.Len() - 1, i >= 0, i-- { ln.dropAt(ln.with(ln.with(a, mir.Proj.Payload(c)), mir.Proj.Field(i)), fs[i], at, sp) }
+        })
+    } else if t.KindOf(r) == types.Kind.Array and t.Length(r) != types.TypeId(0) {
+        el := t.Elem(r)
+        n := t.ConstValue(t.Length(r))
+        for i := n - 1, i >= 0, i-- { ln.dropAt(ln.with(a, mir.Proj.Index(ln.local(ln.constI64(i), mir.I64T, sp))), el, at, sp) }
     }
 }
 

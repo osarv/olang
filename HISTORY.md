@@ -28800,3 +28800,67 @@ in the FILE:LINE text differ in length). The compiler's self-build from an empty
 master 22d3edf 43.96 s wall, 148 s of CPU, 2.94 GB peak; this round 45.23 s, 152 s, 2.96 GB; on a warm rebuild check
 1.52 -> 1.47 s and scope 1.28 -> 1.24 s (noise: nothing new runs unless a program declares a unique type, and
 `settleLandings` walks only bodies that hand one on). `make verify` passed.
+
+## unique types (2026-11-03, T13b): Part B, destructors where the holder lets go (O15)
+
+Rule 10 of the user's design ("Rust's way"): a destructor runs at the end of the scope of whoever holds the value last;
+a by-value parameter's value stored nowhere is destroyed at the callee's end; a value stored into a field lives as long
+as its holder; O15's order otherwise; `x.Destroy()` still earlier. Until now a destructor's instance was registered with
+a scope at its constructor's end (O16) and the type was reference-only (C11, enforced in Part A), so a destructor ran on
+the instance where the constructor built it, however the program then held it.
+
+**The model.** A value with a destructor to run - a struct declaring one, or a value holding one by value as a part
+(`types.NeedsDrop`: fields, payloads, fixed arrays, deep through values, never through a reference) - has exactly one
+holder, which T13b already guarantees (any other copy of a unique value is a reference to its place). A place written
+for the value - a variable `f File`, a parameter `fn use(f File)`, a result, a field, a payload - is that holder, and
+its destructors run where it lets go: the block declaring the variable left (its function's body for a parameter), a
+store over it, its `Destroy()`; unless it handed the value on - a by-value parameter's landing at its last mention
+(T13b), a whole local returned (O26a), a constructor's pun. A value a call gives that no such place takes (`r :=
+Res(1)`, an argument for a reference parameter, a call as a statement) is held where the call lands, registered with
+that scope exactly as O16 did - so every program that compiled before means what it meant.
+
+**How (mine).** (1) Constructors give values (`CtorSigAt`'s result is the type, no longer a reference to it); a call
+whose value needs drop is wrapped where it is checked in a `Promote` - a temporary given storage where the call lands,
+which lowering's `promoteNew` registers (`check.held`) - and fit takes the value out of it where a slot laid out for the
+value wants it (`heldValue`: "the slot takes it as it is, and its destructors with it"). Registration moved from the
+constructor's end to its caller's landing - the same scope, the same order (O16 said "where the constructor's call
+completes"). (2) Each by-value variable or parameter of such a type gets a hidden Bool flag, set while it holds a value,
+and deferred code registered at its declaration, `if flag { Drop(x) }` (`check.dropOnExit`): lowering's `runDefers`
+already runs deferred code on every way out of a block - return, break, continue, an error - so nothing new was needed
+for the paths; where nothing hands the value on the flag is a constant LLVM folds. A landing clears the flag
+(`check.handOn`, a `Seq` of the assignment and the read), so a value handed on in one branch is dropped on the other.
+A store over such a place makes the new value into a hidden local, drops the old one (a variable's only while its flag
+says it holds one) and stores; a place reached through what a call gives is a gap for now (no program needs it). A
+variable's `Destroy()` drops now, clears the flag and is recorded as a landing (`destroyedAt`), so a later mention is
+an error (`DestroyedAfter`, C9b). A constructor's fields carry flags too, cleared at its end (an error leaving it part
+way drops the fields built so far). (3) `typed.PrimOp.Drop` (a borrow of the place) lowers to the type's Drop helper -
+`mir.HelperKind.Drop`, fn(mut T&) with the closing scope (C9a): the type's destructor body, then each part's Drop, the
+last part first - and a registration of a holder with no destructor of its own runs that helper (`mir.DropFn`, emit's
+`_rt` thunk, interp's `DefineDestructor`), so the evaluator and `interpret` call it as any function: a top-level assert
+in tests/drops.olang decides the whole order while compiling. (4) The analyses that would mistake the deferred drop for
+a use skip a Drop's borrow - T13b's Landings walk (it would call every landing "mentioned after") and definit (a D13d
+variable would read as read before assigned); effects count a holder's parts' destructors (`dropsCalled`), early
+freeing treats a holder of parts with destructors as it treats the type that declares one (`destructs`), and a D13d zero
+is never left out for such a type (its holder ends it, so it must be there).
+
+**Where a holder cannot let go (C11 narrowed).** A type argument (`Vec<File>`: a collection's elements are moved and
+let go of by the collection's own code, which runs no drop - `Vec<File&>` holds them, as before; a holder of one by
+value, `Vec<Pool>`, is caught where its parts are known), a global (the program's scope has no holder that lets go -
+`G File&`), and a generator's parameter (a walk left part way runs no deferred code) hold such a value by reference,
+each a compile-time error naming the form. And a variable holding one by value may not be pending around a `yield`
+(S20) or a `become` (S21) - both already refused deferred code there; the messages now say a variable holds a value
+with a destructor (`YieldPastHeld`, the S21 wording).
+
+**Decided (mine).** (1) Collections of values with destructors by value (`Vec<File>`) are not built: the Vec's own
+moves, growth and room (zeros past its count) would need drop glue walking its count, and a `Map` its slots - a round
+of its own; references in collections keep O16's placement. (2) `r := Res(1)` stays a reference to a value held where
+the call lands (D15), as before, rather than a by-value variable: the two let go at the same block's end, and every
+existing program keeps its meaning; `r Res = Res(1)` is the by-value form. (3) By-value variables let go among their
+block's deferred code, before the scope's registered values - O15 states the order. (4) Rule names: the old C11 message
+"held only by reference" is reworded for type arguments, globals and generator parameters.
+
+**Found on the way (pre-existing, not fixed - recorded).** (1) A destructor that calls a method writing through its
+instance's reference field (`log.Saw(id)` growing a Vec there) makes every instance holding a local's reference an O27/C2d
+error ("this instance holds a reference to an argument it would outlive"), where the same write written inline is
+accepted - on master too; tests/drops.olang writes it inline. (2) A by-value parameter holding a reference put into an
+enum case (`Maybe.Some(r)`) is T17c's "refers to storage the value would outlive" - also on master, for plain structs.

@@ -1,0 +1,109 @@
+# O15, T13b: a value with a destructor is held by value in one place written for it - a variable, a parameter, a
+# result, a field, a payload - and its destructor runs once, where its last holder lets go: a block's variable as the
+# block is left, a by-value parameter's at the callee's end unless it handed the value on, a holder's parts with it, an
+# old value where a store replaces it, a variable's at its Destroy(). A value nothing holds by value is held where its
+# call lands (O16), as before.
+
+# what the destructors saw, in order
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+fn (t Tally&) Text() String {
+    b := StringBuilder()
+    for x in t.seen { b.Push($x) }
+    return b.ToString()
+}
+
+type Res unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct { log.seen.Push(id) }
+
+# a holder of one by value, with no destructor of its own: its part's runs with it
+type Pair struct(a Res, b Res) {
+    a, b
+}
+
+# a case carrying one
+type Maybe enum {
+    None
+    Some(r Res)
+}
+
+fn take(r Res) I64 { return r.id }
+
+fn give(r Res) Res { return r }
+
+fn make(id I64, log mut Tally&) Res { return Res(id, log) }
+
+# handed on into a value made on one path only: the other's ends with the callee
+fn wrapIf(r Res, keep Bool) I64 {
+    if keep {
+        k Res = give(r)
+        return k.id
+    }
+    return 0
+}
+
+fn failing(r Res) ? Gone {
+    if r.id > 0: error Gone
+}
+
+# the order the destructors run in, while compiling (K2) and running alike
+fn order() String {
+    t := Tally()
+    take(Res(1, t))
+    {
+        k Res = give(Res(2, t))
+        assert t.Text() == "1"
+        k = make(3, t)
+        assert t.Text() == "12"
+    }
+    {
+        p Pair = Pair(Res(4, t), Res(5, t))
+        assert p.a.id == 4
+    }
+    wrapIf(Res(6, t), true)
+    wrapIf(Res(7, t), false)
+    try failing(Res(8, t)) catch Gone { }
+    {
+        d Res = Res(9, t)
+        d.Destroy()
+        assert t.Text() == "123546789"
+    }
+    for i in range 2 {
+        x Res = Res(10 + i, t)
+        if i == 0: continue
+    }
+    return t.Text()
+}
+
+Order := order()
+
+assert Order == "1235467891011", "decided while compiling: " $Order
+
+test "a by-value holder's destructors run where it lets go, once each" {
+    assert order() == "1235467891011"
+    assert Order == order()
+}
+
+test "a value a call gave that nothing holds by value is held where the call lands (O16)" {
+    t := Tally()
+    {
+        r := Res(1, t)
+        assert r.id == 1 and t.Text() == ""
+        make(2, t)
+        assert t.Text() == ""
+    }
+    assert t.Text() == "21" or t.Text() == "12"
+}
+
+test "a reference to a by-value variable is no holder" {
+    t := Tally()
+    {
+        v Res = Res(3, t)
+        w := v
+        assert w.id == 3
+    }
+    assert t.Text() == "3"
+}

@@ -927,9 +927,7 @@ fn (x mut Exec&) reachStmt(f mir.Fn&, s mir.Stmt, work mut Vec<mir.FnKey>&) {
             }
         }
         case mir.Stmt.RegisterDtor(_, _, ty, _) {
-            d := try x.dtorOf.Get(ty) catch default -1
-            if d < 0 { return }
-            dk := mir.FnKey.Body(typed.BodyId(I32(d)))
+            dk := try mir.DropFn(x.P.T, ty, try x.dtorOf.Get(ty) catch default -1) catch { return }
             x.M.DefineDestructor(ty, dk)
             work.Push(dk)
         }

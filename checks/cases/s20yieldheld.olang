@@ -1,0 +1,13 @@
+# check: fail error[S20, O15]: a yield while a variable around it holds a value with a destructor - a walk stopped there would never run it; hold the value in a block that ends before the yield, or by reference
+# S20, O15: a variable holding a value with a destructor runs it as its block is left - a walk left at a yield never is
+Closed mut I64 = 0
+type Conn unique struct(fd I64) {
+    fd
+} destruct { Closed++ }
+fn ids() Iterator<I64> {
+    c Conn = Conn(1)
+    yield c.fd
+}
+fn main() {
+    for x in ids() { assert x == 1 }
+}

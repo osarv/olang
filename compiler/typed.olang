@@ -1291,6 +1291,10 @@ type PrimOp enum {
     # "x.Destroy()" (C9b): args [a read of the local x] - the instance x names destructed now and its storage reclaimed,
     # where early freeing's analysis (compiler/free.olang) proves x the only way left to reach it; lowered as a Release
     Destroy
+    # O15, T13b: args [a borrow of a place holding a value by value] - the destructors that value has to run run now, in
+    # the closing block's scope (its own, then its parts', C9): a by-value holder letting go of what it holds - its
+    # block's end, a store over it. Lowered as a call of the type's Drop helper
+    Drop
     # an integer's bits (E37): the three counts give an I64; the rotations take args [x, n], n converted to I64 and taken
     # modulo the width; ByteSwap gives x's type
     LeadingZeros
@@ -2608,7 +2612,8 @@ fn (w mut Landings&) expr(x Expr?&) {
             w.loop(c.Loop.Id, c.Loop, null)
             w.dead = false   # (a comprehension's walk always ends: its value is made)
         }
-        case Expr.Prim(_, _, _, _, args): w.exprs(args)
+        # (a holder's destructors run where it lets go, O15 - its own mention of what it holds, no use of it)
+        case Expr.Prim(_, _, op, _, args) { if op != PrimOp.Drop: w.exprs(args) }
         case Expr.Slice(_, _, sl) {
             w.place(sl.Base)
             w.expr(sl.Lo)

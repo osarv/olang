@@ -1,0 +1,11 @@
+# check: fail error[C9b]: 'c' is destructed here, and mentioned after - nothing reaches a value its Destroy() ended
+# C9b, O15: a by-value variable's Destroy() ends its value there, as a handed-on value is gone - nothing mentions it after
+Closed mut I64 = 0
+type Conn unique struct(fd I32) {
+    fd
+} destruct { Closed++ }
+fn main() {
+    c Conn = Conn(3)
+    c.Destroy()
+    assert c.fd == 3
+}

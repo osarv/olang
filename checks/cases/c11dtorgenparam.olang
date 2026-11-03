@@ -1,0 +1,10 @@
+# check: fail error[C11, S20]: Conn has a destructor to run, so a generator takes it by reference - write Conn&: a walk left part way runs no code of its body to end it
+# C11, S20: no holder of a generator's walk lets go of a parameter's value - one with a destructor is taken by reference
+Closed mut I64 = 0
+type Conn unique struct(fd I64) {
+    fd
+} destruct { Closed++ }
+fn ids(c Conn) Iterator<I64> { yield c.fd }
+fn main() {
+    for x in ids(Conn(1)) { assert x == 1 }
+}

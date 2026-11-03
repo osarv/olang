@@ -820,7 +820,7 @@ or constructor (`File(dup(f.fd))`). A struct or an enum holding a unique part by
 of an array it holds by value - is **unique itself**, unless it declares a Copy (E31d), which then makes that part anew
 (copying it there is this rule's error); an array of unique elements is unique, and so is a collection holding them by
 value (`Vec<File>`, `Map<String, File>`) - each follows its elements (E31d). A type declaring a destructor is declared
-`unique` (C11). `unique` and `immut` (T13a) are never one type's: written together, written over one another (`type L
+`unique` (C11), and its value's one place is the holder that runs its destructor as it lets go (O15). `unique` and `immut` (T13a) are never one type's: written together, written over one another (`type L
 unique extends String`, `type Fs immut Array<File>`) or an immut type holding a unique part, each a compile-time error -
 an immut value is copied freely, a unique one never. `unique` on a trait, an extern type or a function type is an error:
 none has values of its own. A generic whose body copies a value of a type its call's binding makes unique - a `:=` or `=`
@@ -1135,7 +1135,7 @@ expected is recoded (R7).
 
 **T21.** `func-type ::= "fn" reference-marker func-sig`, where `reference-marker` is T24's (`&` or `?&`, written directly
 after the `fn`) and `func-sig` is the parameter list, optional return type, and optional error list described in §3.4.
-A function type is **reference-only**, as an `any` (T32), a type with a destructor (C11) and an extern type (X10) are:
+A function type is **reference-only**, as an `any` (T32) and an extern type (X10) are:
 every place holding a function value - a variable's, field's, parameter's or result's type, an element's, a type
 argument - writes its marker, `fn&(e Event)` a function value that is never null and `fn?&(e Event)` one that may be,
 making a function (named or, wherever a value of function type is otherwise obtained, referenced by that value) a
@@ -2103,7 +2103,8 @@ reference parameter names - the **caller's own instance** - may be written only 
 reference, `p mut T&` (T25b), and only a writable argument may be passed to it (T25c). `mut` before a by-value
 parameter's type is a compile-time error: the copy is always the callee's to write, so it would say nothing - though
 where it holds writable references and the body writes through them, lends it writably or keeps it, the argument
-may not be a read-only copy (T25c). Whether a call writes to the caller's value is therefore readable from the
+may not be a read-only copy (T25c). A value with a destructor given by value is the callee's to end: its destructors
+run as the callee's body is left, unless the callee handed it on (O15, T13b). Whether a call writes to the caller's value is therefore readable from the
 signature alone: `&` says whose instance it is, `mut` says whether it may be written, and the two are independent. Where
 a parameter's referent lives is its own scope variable (§8 O4b); what the body relates them by is inferred (O10b).
 
@@ -2482,9 +2483,9 @@ call, a field or a conditional of arrays alike: a length is never part of a type
 `x Array<U8> = Array<U8>(4)` declare the same local, and whether its storage is fixed is T7d's, decided by every value
 stored in it. A reference-shaped result writes
 no scope tag into the declaration: the local takes its
-initializer's exact scope (§8 O25a). A value of a type declaring a destructor, which is held only by reference
-(C11), declares that reference - what `x T& = expr` declares: the instance lives where the declaration does, and is
-destructed when that scope closes. An existing value of a unique type (T13b) - a place's, read where the initializer
+initializer's exact scope (§8 O25a). A call's value with a destructor to run (O15), held where the call lands (O16,
+C11), declares that reference - what `x T& = expr` declares: the instance lives where the declaration does, and is
+destructed when that scope closes; `x T = expr` takes the value itself, and its holder ends it (O15). An existing value of a unique type (T13b) - a place's, read where the initializer
 names it - declares a reference to that place, writable where the place may be written (`w := f` is `w mut File& =
 f`); a fresh one (a constructor's or a call's) its value. In a generic, a `:=` copying a value of a type its binding
 made unique is the generic's need, said at the call (T13b).
@@ -4531,8 +4532,8 @@ rule, and the third is useful in its own right — a reference parameter doubles
 without needing a separate local declared from it.
 
 This is why assignment does *not* copy contents through a reference: `x = y` must imply `x == y`, and
-T26 compares references by identity. Write-through would satisfy neither that nor C11, which makes a
-destructor-declaring type reference-only precisely so that "which instance owns this" has an answer.
+T26 compares references by identity. Write-through would satisfy neither that nor O15, which runs a value's
+destructors where its one holder lets go precisely so that "which holder ends this" has an answer.
 Copying a reference's contents is written explicitly, field by field.
 
 **S4.** `assign-stmnt ::= lvalue assign-op expr STMNT_END`, where `lvalue` is a postfix expression
@@ -5590,7 +5591,8 @@ whose result is not written `Iterator<T ? E>`, a lambda, a test - is a compile-t
 - in deferred code (S19b: it runs while its block is left, and runs to its end);
 - in a `join` block (P1b: its tasks are waited for before it is left, which a stop part way would not do);
 - with deferred code pending in a block around it - a walk stopped there and dropped would never run it (relaxable:
-  a dropped walk could run it). An `errdefer`'s counts too (S19e), for one rule over the one list.
+  a dropped walk could run it). An `errdefer`'s counts too (S19e), for one rule over the one list, and so does a
+  variable around it holding a value with a destructor by value (O15), said as such.
 
 A `Next()` asked while the generator's own walk runs - its body, or what it calls, asking the very generator it is
 walked as - fails a check the language guarantees (S18a): `FILE:LINE: a generator asked for its next value inside its
@@ -5619,7 +5621,8 @@ the call); and so is each of the following, since a jump cannot keep a promise t
 - a parameter or the result is passed **through memory** (over 128 bytes, an aggregate's or a bare type variable's):
   the function's frame would hold it;
 - it is written in **deferred code**, an assert's or an `unreachable`'s message, a task's clause or a `join` block, or
-  with **deferred code pending** in a block around it - which would run before the call (S19, S19e);
+  with **deferred code pending** in a block around it - which would run before the call (S19, S19e), a variable
+  holding a value with a destructor by value included (O15);
 - an **argument is storage of a scope the become closes** (§8): what is handed on is a value, or lives where the
   function was given it (its parameters' scopes, its result scope - a temporary for the callee is built there, as a
   `return f(x)`'s would be), or in the program's. `become walk(b, i + 1)` with `b` a local array of the function is
@@ -6804,16 +6807,31 @@ run time (because it allocates into it, O6) is an implementation matter with no 
 
 ### 8.7 Destructors and scope closing
 
-**O15.** If a struct type declares a destructor (§9), every instance of it allocated into a given
-scope (§8.3) has its destructor invoked when that scope closes (O1), in the reverse order the
-instances were constructed - the order their constructor calls completed (O16) - unless a `Destroy()` ran it before
-(C9b). Where in the scope an
-instance's storage lies, and whether it was reserved before its constructor's arguments were built, is not
-observable. A destructor-declaring type is reference-only (C11), so this is the sole
-rule governing when a destructor runs: there is no plain-local, function-return-governed case.
+**O15.** A **value with a destructor to run** - an instance of a struct type declaring one (§9), or a value holding one
+by value as a part (a field, a payload, an element of an array held by value), deep through values and never through a
+reference - has its destructors run exactly once, **where its holder lets go of it**:
+- a variable or a parameter holding it by value (`f File = File(3)`, `fn use(f File)`, a copy where its type declares
+  Copy, E31d) lets go as the block declaring it is left - its function's body for a parameter - on every way out but the
+  process-ending ones (S19c), as deferred code registered at its declaration does (S19); unless it no longer holds the
+  value there: a by-value parameter handed on at its last mention (T13b), a whole variable returned (O26a) or made a
+  constructor's field (a pun, C4), a variable's `Destroy()` (C9b). A variable declared with no value and no zero value
+  (D13d) holds one once it is assigned;
+- a value holding parts lets go of them with itself: its own destructor first, then each part's, the last part first;
+- a store over a place holding such a value (S4) lets go of the old one after the new value is made and before it is
+  stored (a variable's only while it holds one); a place reached through what a call gives is not stored over so;
+- a value a call gives that no place written for its value takes (`r := Res(1)`, an argument for a reference parameter,
+  a call standing as a statement, a part read through `open(1).fd`) is held where the call lands (O16): registered with
+  that scope, and its destructors run when the scope closes (O1), in the reverse order of the registrations - unless a
+  `Destroy()` ran them before (C9b).
+A block's variables let go before its scope closes - in the reverse order they were declared, among its deferred code -
+and the scope's registered values after. Where in the scope an instance's storage lies, and whether it was reserved
+before its constructor's arguments were built, is not observable. A global, a type argument and a generator's
+parameter hold such a value by reference (C11): the program's scope, a collection's elements and a walk left part way
+have no holder that lets go; and no variable holds one by value across a `yield` (S20).
 
-**O16.** An instance is registered with its scope at the point its **constructor call** completes
-(C6) — not at any later assignment, copy, or binding of the resulting reference. Registration is
+**O16.** A value with a destructor that no place written for its value takes (O15) is registered with the scope its
+call lands in at the point the call - its **constructor call** (C6), or a call giving it by value - completes, not at
+any later assignment, copy, or binding of the resulting reference. Registration is
 therefore one-per-construction: a value that reaches a variable, field, or array element by being
 copied from an already-constructed instance is the same instance, registers nothing further, and is
 destructed exactly once (C10). No storage location is registered on its own account, and no
@@ -7002,7 +7020,8 @@ never evaluated.
 every fallible call within it must be fully caught by a `catch` that leaves nothing uncaught
 (§7.5),
 since a destructor is never invoked by ordinary calling code and so has no caller to propagate an
-error to. Declaring this block is declaring the type `unique` (T13b), and makes it reference-only — see C11.
+error to. Declaring this block is declaring the type `unique` (T13b) - see C11 and O15 for where its values are held
+and destructed.
 
 **C8.** Inside a `destruct` block, a bare identifier that names one of the type's own fields (and is
 not itself shadowed by a local of the same name) reads that field of the instance being destructed
@@ -7011,11 +7030,10 @@ not itself shadowed by a local of the same name) reads that field of the instanc
 **C7a.** A `destruct` block with no statements is a compile-time error: a destructor exists to release
 something when its instance's scope closes, and an empty one releases nothing.
 
-**C9.** A destructor runs, for a given instance, exactly once: when the scope the instance was
-allocated into closes (§8.3, §8.6 O15), or earlier at a `Destroy()` of it (C9b), regardless of which function
-allocated it or which function happens to be executing at that point. Because a destructor-declaring type is reference-only (C11),
-an instance always has a scope of its own and this is the only case; the enclosing function's return
-governs nothing here beyond closing that function's own scope (O1).
+**C9.** A destructor runs, for a given instance, exactly once: where its holder lets go of it (O15) - the scope it was
+registered in closing (O16), the block of the variable or parameter holding it by value left, a store over the place
+holding it - or earlier at a `Destroy()` of it (C9b), regardless of which function made it or which function happens to
+be executing at that point. The scope being closed (C9a) is, for a by-value holder's, the block it is left from.
 
 **C9a.** A destructor runs as part of closing its instance's scope, and that scope is its own: what its body
 allocates at its top level is allocated in the scope being closed, where the instance lives, which stays alive until
@@ -7028,8 +7046,10 @@ nested blocks keep scopes of their own (O2). Each destructor is taken off its sc
 failing inside one while a test runs (S18) ends that destructor alone: the test's unwind closes the scope, and the
 scope's destructors not yet run still run, each once (C10).
 
-**C9b (Destroy).** `x.Destroy()`, a statement on a local `x` holding a reference to an instance of a struct type that
-declares a destructor, runs that instance's destructor now - and the destructors of what was built where it lives, newest
+**C9b (Destroy).** On a variable `x` holding a value with a destructor by value (O15), `x.Destroy()` runs its
+destructors now - its holder letting go - and `x` holds no value after it: a mention of `x` after the call on any path
+(T13b's rule for a landing) is a compile-time error. On a local `x` holding a reference to an instance of a struct type
+that declares a destructor, `x.Destroy()` runs that instance's destructor now - and the destructors of what was built where it lives, newest
 first, as its scope's close would - and reclaims its storage; nothing runs for it when its scope closes. It compiles
 only where the compiler proves `x` the only way left to reach the instance, by the analysis that frees early (O8d):
 - every value `x` is given was made for it: built where `x` is given it (a constructor call, or a call whose result is
@@ -7059,27 +7079,21 @@ than once for the same instance, and never runs for storage no constructor call 
 instance in (O16).
 
 **C11.** A struct type that declares a `destruct` block is declared `unique` (T13b) - one without the word is a
-compile-time error naming it: a destructor releases what one value holds - and is **reference-only**: every `type-ref`
-(T24) naming it as a place that would hold its value must carry a reference marker, and a bare `type-ref` naming it is a
-compile-time error — as a variable's declared type, a parameter type (a constructor's included), a return type, a
-struct field's type, or a type argument (`Vec<Res>`, where `Vec<Res&>` holds them) alike; the type named where an
-expression is - a constructor called (`Res(1)`, `Box<Res>(r)` naming its own arguments), a case of it - holds no value
-there. The type may therefore never be embedded by value in any aggregate, and never passed or returned by value; its
-constructor's instance is built where it lands and held through the reference it gives (D15).
+compile-time error naming it: a destructor releases what one value holds. A value with a destructor to run (O15) is held
+by value only in a place written for it whose holder lets go of it - a variable, a parameter (a constructor's included),
+a result, a struct field, an enum payload, an element of an array held by value - and its destructors run there (O15).
+A **type argument** (`Vec<Res>`, where `Vec<Res&>` holds them; a holder of one by value, `Vec<Pool>`, alike), a
+**global's** type and a **generator's parameter** hold it by reference: a bare `type-ref` naming it there is a
+compile-time error naming the reference form - a collection's elements, the program's scope and a walk left part way
+(S20) have no holder that lets go. The type named where an expression is - a constructor called (`Res(1)`, `Box<Res>(r)`
+naming its own arguments), a case of it - holds no value there; a call's value no place written for it takes is held
+where the call lands (O16, D15).
 
-A destructor releases something at the moment the scope holding its instance closes, so every name that
-can still reach the released thing afterwards must be one that §8 can see. §8 checks **references**: a
-reference carries a scope tag and scope-containment proves it cannot outlive what it names. A by-value
-copy carries no tag — it is plain data — so copying an instance would move the released resource into
-storage no rule tracks, and reading it after the destructor ran would be undetectable. Reference-only is
-what keeps every path to the resource inside the checker's reach.
-
-Note that this is *not* about how many times the destructor runs. Registration happens once per
-constructor call (C9), never per storage location, so exactly-once already holds however many names an
-instance has. The hazard a copy creates is use-**after** release, not double release. The marker is nonetheless written at every
-use, exactly as for any other reference: declaring a destructor makes the type reference-*only*, it
-does not make the marker implicit, so reading a `type-ref` never requires knowing whether the named
-type happens to declare a destructor.
+A destructor releases something at the moment its holder lets go, so every name that can still reach the released
+thing afterwards must be one that §8 can see. The value has one place (T13b: any other copy of it is a reference to that
+place), whose holder is the one that lets go; every reference to it is checked by §8 not to outlive that place - the
+by-value holder's block, or the scope it was registered in - and a variable's own mention after its value went on is
+an error (T13b, C9b). So nothing reaches a released resource, and exactly-once holds: one place, one letting go.
 
 ## 10. Compilation Model
 
@@ -8441,10 +8455,10 @@ gives it. A variable G9c reaches through such a binding's constraint binds then 
 its third and fourth cases' types to the defaults' never-ready case). A default that does not say a type (`null`) binds
 nothing, and G4 says what is missing.
 
-**G9d.** A value of a struct type declaring a destructor (C11) that reaches a bare type-variable parameter binds the
-variable to a reference to its type, writable as any built value is (T25c) - never to the value type. C11 holds no
-value of such a type anywhere else, so the argument is a temporary: it is promoted into the parameter (E12), built where
-the parameter's scope says (O18b), and its destructor registered there, once (O16). `fn id<T>(x T) T` called as
+**G9d.** A value with a destructor to run (O15) that a call gives and that reaches a bare type-variable parameter binds
+the variable to a reference to its type, writable as any built value is (T25c) - never to the value type: a type
+argument holds such a value by reference (C11), so the argument is a temporary held where the call lands: promoted into
+the parameter (E12), built where the parameter's scope says (O18b), and its destructor registered there, once (O16). `fn id<T>(x T) T` called as
 `id(Res(1))` is `id` at `mut Res&`. A generic constructor binds it read-only, as it binds every reference (G10c), so
 `Box(Res(1))` is a `Box<Res&>`.
 
@@ -8453,7 +8467,7 @@ read-only one whichever comes first (T25c) - as two numbers meet at the wider (T
 `pick(r, Res(1))`, with `r` a read-only `Res&`, are both `pick` at `Res&`. A variable a method's receiver bound is the
 receiver's type and is not met (G9b).
 
-Since `T` is then a reference, the generic's code is a reference's, as C11 makes it for the type everywhere: `==` on two
+Since `T` is then a reference, the generic's code is a reference's, as C11 makes it for every type argument: `==` on two
 `T`s is identity unless the type declares `Eq` (E10), and no `Hash` is supplied for it (E10b), so a `Hashable`
 constraint on `T` holds only where the type declares one (G19).
 
@@ -8486,9 +8500,9 @@ arguments (G6).
 
 **G10b.** A generic struct type's constructor and destructor are monomorphized with it (G16): each
 instantiation gets its own, built from the generic's own field list and `destruct` block against that
-instantiation's substituted types. C11 applies unchanged — an instantiation of a type declaring
-`destruct` is reference-only, and each instantiation's destructor is a distinct one, running for the
-instances of that instantiation only.
+instantiation's substituted types. C11 and O15 apply unchanged — an instantiation of a type declaring
+`destruct` is held by value only in a place written for it, and each instantiation's destructor is a distinct one,
+running for the values of that instantiation only.
 
 **G10d (a generic constructor).** The constructor of a struct type that declares **no** type parameters is generic
 when it introduces a type variable, in a list after `struct` (G1, G8b): `type Dense struct<T>(g mut Graph<T>&, n I64) { ...

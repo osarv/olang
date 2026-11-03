@@ -1,8 +1,15 @@
-# check: fail error[C11]: Conn has a destructor, so it is held only by reference - write Conn&
-# C11: a value of a destructor-bearing type is never held by value - a constructor's parameter included
+# check: run
+# O15, T13b: a value with a destructor is held by value in one place written for it - a constructor's parameter and a
+# field included (C11 was "reference only" until 2026-11-03); its destructor runs once, where its last holder lets go
 Closed mut I64 = 0
 type Conn unique struct(fd I32) {
     fd
 } destruct { Closed++ }
 type Pool struct(c Conn) { c }
-fn main() { p := Pool(Conn(3)) }
+fn main() {
+    {
+        p := Pool(Conn(3))
+        assert Closed == 0 and p.c.fd == 3
+    }
+    assert Closed == 1
+}

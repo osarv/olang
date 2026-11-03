@@ -519,14 +519,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   for null first, so a zero Vec and its copy compared unequal - an array is never null, its lengths decide now.
 - **Structs are built only by their constructor (T13, C2d, the user's call).** No struct literals, no field-list
   structs. A constructor body is a block whose top-level locals are the fields (C2a); a bare name is a pun of a
-  parameter; `return` is rejected. Defaults are compile-time expressions (D8a). `destruct { }` makes a type
-  reference-only (C11) and runs once per constructor call, when the instance's scope closes (O16); an empty one is an
-  error (C7a). Reference-only because §8 tracks references, not by-value copies: a copy would carry a released
-  resource where no rule sees it (use after release, not double release). A destructor's type is declared `unique`
-  (T13b, 2026-11-03), and C11 is enforced where a type is written as a place holding a value - a variable, a parameter
-  (a constructor's too), a result, a field, a type argument (`Vec<Res&>`); the type named in an expression (`Res(1)`)
-  holds nothing there. It had been accepted silently: a by-value copy of the constructor's instance, whose destructor
-  ran on the instance and never saw the copy's writes.
+  parameter; `return` is rejected. Defaults are compile-time expressions (D8a). `destruct { }` runs once per value,
+  where its holder lets go of it (O15, below); an empty one is an error (C7a). A destructor's type is declared `unique`
+  (T13b, 2026-11-03) - one place, so one holder. Until 2026-11-03 it was reference-only (C11), registered at its
+  constructor and run as that scope closed (O16); C11 had been unenforced - a by-value copy of the constructor's
+  instance, whose destructor ran on the instance and never saw the copy's writes.
 - **`immut` types (T13a, the user's decisions 2026-11-03 "immut DECIDED", "unique vs immut settled"; built 2026-11-03,
   wt-unique, details mine).** `type Config immut struct(...)` (an enum or a type over another alike; `immut` a word of
   one place, L9b - before the body, a type name or `struct`/`enum`/`extends`/`trait`/`error`/`fn` after it): nothing of
@@ -575,11 +572,29 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   binding's name is a reference in an instance too. Decided (mine): only the parameter lands again, never a local but
   a returned one (the user: "taking a unique value by value doesn't work either, whether by a parameter or a new
   local"); a `:=` constructor field is a slot (a value), never a reference; a unique value renders, compares and is
-  read through its fields as any value. **Destructors stay reference-only for now (C11, Part B of the round):** holding
-  one by value in its one place needs its destructor to follow the value where it moves (a Vec's growth, a by-value
-  parameter, a result) - Rust's drop with a holder's obligation - where today's runs on the instance the constructor
-  registered; until then a destructor type is unique and held through the reference its constructor gives.
-  `tools/unique_migrate.olang` (in `olang fix`) declared std's and the corpus's destructor types unique.
+  read through its fields as any value. `tools/unique_migrate.olang` (in `olang fix`) declared std's and the corpus's
+  destructor types unique.
+- **Destructors run where the holder lets go - Rust's drop (O15, O16, C9, C9b, C11, T13b rule 10, the user's decision
+  2026-11-03 "unique DECIDED"; built 2026-11-03, wt-uniq Part B, details mine).** A value with a destructor to run (a
+  struct declaring one, or a value holding one by value - `types.NeedsDrop`, deep through values) is held by value in a
+  place written for it - a variable (`f File = File(3)`), a parameter, a result, a field, a payload - and its
+  destructors run once where that holder lets go: a variable's or parameter's as its block (its function's body) is left
+  on any way out, a by-value parameter's at the callee's end unless it handed the value on at its last mention (T13b), a
+  returned whole local and a constructor's pun moving it on; a holder's parts with it, its own destructor first, then the
+  parts last first; a store over a place after the new value is made (Rust's order); `x.Destroy()` of a variable now,
+  nothing mentioning it after. A call's value no place written for it takes (`r := Res(1)`, an argument for a reference
+  parameter) is held where the call lands, registered there as before (O16): constructors give values, a call of a
+  type with destructors to run is held at the call (`check.held`, a Promote) and a slot laid out for the value takes it as
+  it is (`heldValue`, fit's peel). A type argument (`Vec<Res&>`, a holder of one too - `Vec<Pool>` refused), a global
+  and a generator's parameter hold one by reference (C11, the error naming `T&`); no variable holds one across a `yield`
+  (S20) or a `become` (S21), said as such. Built (mine) as deferred code: each such variable gets a hidden Bool flag and
+  a deferred `if flag { Drop(x) }` registered at its declaration (`check.dropOnExit`), a landing clearing the flag
+  (`handOn`); `typed.PrimOp.Drop` lowers to the type's Drop helper (`mir.HelperKind.Drop`: its destructor's body, then
+  its parts'), which a registration of a holder with no destructor of its own runs too (`mir.DropFn`) - so lowering,
+  emit, the evaluator, `interpret` and section 8 needed nothing else (the flags fold where nothing hands the value on). A
+  D13d zero is never left out for such a type (its holder ends it); the Landings walk and definit skip a Drop's
+  borrow (no use); effects and early freeing count a holder's parts' destructors. Measured: bench machine code
+  byte-identical; tests/drops.olang's order decided while compiling (a top-level assert) as at run time.
 - **Declared types are nominal (T29).** `type Meters I32`, `type Name Array<T>`; `extends` inherits the base's methods
   and operators (T29f, the user's design); `Name(x)` converts and names the argument's storage (T29a) - a copy to or
   from an immut type (T13a); a declared

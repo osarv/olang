@@ -866,6 +866,37 @@ fn (t Table&) DeclaresCopy(id TypeId) Bool { return t.KindOf(id) == Kind.Named a
 # through values, never through a reference (whose referent a copy shares)
 fn (t mut Table&) RunsCopy(id TypeId) Bool { return t.copyDecls.Len() > 0 and t.runsCopy(id, 0) }
 
+# C11, O15: whether a value of a type has a destructor to run when its holder lets go of it - a struct declaring one,
+# or a value holding such a part by value (a field, a payload, an element of a fixed array), deep through values,
+# never through a reference (whose referent's own place has it)
+fn (t Table&) NeedsDrop(id TypeId) Bool { return t.needsDrop(id, 0) }
+
+fn (t Table&) needsDrop(id TypeId, depth I64) Bool {
+    if depth > 16: return false
+    r := t.Repr(id)
+    match t.KindOf(r) {
+        case Kind.Named {
+            if not t.HasBody(r): return false
+            return match t.DeclKindOf(t.DeclOf(r)) {
+                case DeclKind.Struct: t.Destructs(r) or t.partsDrop(t.Fields(r), depth)
+                case DeclKind.Enum: t.partsDrop(t.Cases(r), depth)
+                case _: false
+            }
+        }
+        case Kind.Array { return t.Length(r) != TypeId(0) and t.needsDrop(t.Elem(r), depth + 1) }
+        case Kind.Record, Kind.Tuple { return t.partsDrop(t.Parts(r), depth) }
+        case Kind.AnonEnum { return t.partsDrop(t.ShapeCases(r), depth) }
+        case _ { return false }
+    }
+}
+
+fn (t Table&) partsDrop(l ListId, depth I64) Bool {
+    for x in t.Items(l) {
+        if x != TypeId(0) and not t.IsRef(x) and t.needsDrop(x, depth + 1): return true
+    }
+    return false
+}
+
 # T13b: a declared type declared unique - registered as declarations are, before anything is judged by it
 fn (t mut Table&) MarkUnique(d DeclId) { t.uniqueDecls.Put(I64(d), true) }
 

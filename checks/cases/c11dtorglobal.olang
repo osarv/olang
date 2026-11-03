@@ -1,0 +1,8 @@
+# check: fail error[C11]: Conn has a destructor to run, so a global holds it by reference - write Conn&, its destructor run as the program ends
+# C11, O15: the program's scope has no holder that lets go of a global's value - one with a destructor is held by reference
+Closed mut I64 = 0
+type Conn unique struct(fd I32) {
+    fd
+} destruct { Closed++ }
+G Conn = Conn(3)
+fn main() { assert G.fd == 3 }

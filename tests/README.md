@@ -39,6 +39,11 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `fnvalues.olang` - T22a's open point 5: functions handing back what a reference argument refers to - whole, a view of
   it, through a lambda - as function values, a call through one landing where its argument lives; baked beside the run
   time.
+- `unique.olang` - unique types (T13b): fresh values land by value, any other copy is a reference, a by-value parameter
+  handed on at its last mention, holders and collections following their parts; baked and decided while compiling.
+- `drops.olang` - destructors run where the holder lets go (O15): a by-value variable's as its block is left, a
+  parameter's at the callee's end unless handed on, a holder's parts, a store over a place, a variable's Destroy(); the
+  whole order decided while compiling beside the run time.
 
 Imports are relative to the importing file. A module's identity is its path from the
 working directory (M22), so these are `tests/shared`, `tests/geom/rect` and so on.

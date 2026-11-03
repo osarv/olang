@@ -513,17 +513,24 @@ c11destructnotunique.olang:6:3: error[C11, T13b]: a destructor releases what one
     6 | } destruct { Closed++ }
       |   ^~~~~~~~
 compilation failed with 1 error
-=== c11dtorbyvalue.olang
-c11dtorbyvalue.olang:7:20: error[C11]: Conn has a destructor, so it is held only by reference - write Conn&
-    7 | type Pool struct(c Conn) { c }
-      |                    ^~~~
-c11dtorbyvalue.olang:8:23: error[T13b]: Conn is unique: this value is held elsewhere, and the parameter holds one of its own - write a reference ('Conn&'), or make a new Conn here
-    8 | fn main() { p := Pool(Conn(3)) }
-      |                       ^~~~~~~
-compilation failed with 2 errors
+=== c11dtorgenparam.olang
+c11dtorgenparam.olang:7:8: error[C11, S20]: Conn has a destructor to run, so a generator takes it by reference - write Conn&: a walk left part way runs no code of its body to end it
+    7 | fn ids(c Conn) Iterator<I64> { yield c.fd }
+      |        ^~~~~~
+compilation failed with 1 error
+=== c11dtorglobal.olang
+c11dtorglobal.olang:7:3: error[C11]: Conn has a destructor to run, so a global holds it by reference - write Conn&, its destructor run as the program ends
+    7 | G Conn = Conn(3)
+      |   ^~~~
+compilation failed with 1 error
 === c11dtortypearg.olang
-c11dtortypearg.olang:8:14: error[C11]: Conn has a destructor, so it is held only by reference - write Conn&
+c11dtortypearg.olang:8:14: error[C11]: Conn has a destructor to run, so a type argument holds it by reference - write Conn&
     8 |     v := Vec<Conn>()
+      |              ^~~~
+compilation failed with 1 error
+=== c11holdertypearg.olang
+c11holdertypearg.olang:9:14: error[C11]: Pool has a destructor to run, so a type argument holds it by reference - write Pool&
+    9 |     v := Vec<Pool>()
       |              ^~~~
 compilation failed with 1 error
 === c2afieldparam.olang
@@ -662,6 +669,11 @@ c9bdeferret.olang:11:11: error[C9b]: 'r.Destroy()' needs 'r' to be the only way 
 c9bdeferret.olang:11:11: note: it is returned (line 12), and its Destroy() is deferred: it runs as the function leaves
    11 |     defer r.Destroy()
       |           ^~~~~~~~~~~
+compilation failed with 1 error
+=== c9bdestroyedafter.olang
+c9bdestroyedafter.olang:9:5: error[C9b]: 'c' is destructed here, and mentioned after - nothing reaches a value its Destroy() ended
+    9 |     c.Destroy()
+      |     ^
 compilation failed with 1 error
 === c9berrdefer.olang
 c9berrdefer.olang:24:12: error[C9b]: 'r' is used after 'r.Destroy()' (line 21)
@@ -4995,6 +5007,16 @@ s1bsameline.olang:5:10: error[S8a]: this condition is the same on every build, s
     5 |     if x > 0:
       |          ^
 compilation failed with 2 errors
+=== s20yieldheld.olang
+s20yieldheld.olang:9:5: error[S20, O15]: a yield while a variable around it holds a value with a destructor - a walk stopped there would never run it; hold the value in a block that ends before the yield, or by reference
+    9 |     yield c.fd
+      |     ^~~~~
+compilation failed with 1 error
+=== s21becomeheld.olang
+s21becomeheld.olang:9:5: error[S21]: 'become' leaves the function at once, so not from a block whose variable holds a value with a destructor, which would run before the call - write 'return' and the call
+    9 |     become down(c, n - 1)
+      |     ^~~~~~
+compilation failed with 1 error
 === s3idle.olang
 s3idle.olang:11:5: error[S3]: 'x.Abs()' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out
    11 |     x.Abs()

@@ -2268,12 +2268,13 @@ fn isVar(sc typed.Scope) Bool {
     }
 }
 
-# whether a type is, or is a reference to, a struct whose instances have a destructor
+# whether a type is, or is a reference to, one whose values have destructors to run - a struct declaring one, or a value
+# holding one by value (O15)
 fn (f mut Free&) destructs(ty types.TypeId) Bool {
     t := f.T()
     r := t.Repr(ty)
     if t.IsRef(r) { r = t.Repr(t.Referent(r)) }
-    return t.KindOf(r) == types.Kind.Named and t.HasBody(r) and t.Destructs(r)
+    return t.NeedsDrop(r)
 }
 
 # whether a call passes one of body b's scope variables for one of its callee's

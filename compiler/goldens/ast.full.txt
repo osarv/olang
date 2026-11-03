@@ -411,6 +411,10 @@
 | -- diagnostics
 | error  4:14
 | error L16 4:12
+=== checks/cases/t13buniqueimmut.olang
+| FN 4:1-4:14
+| -- diagnostics
+| error T13b 3:17
 === checks/cases/t19emptywords.olang
 | FN 4:1-4:14
 | -- diagnostics

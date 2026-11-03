@@ -77,6 +77,10 @@ type HelperKind enum {
     # E31d: the same, but for a type declaring its own Copy its parts copied rather than its Copy called - the copy D9h's
     # caller makes of a view a callee handed back, which is the callee's own copy of what it was given
     Parts
+    # O15, T13b: a value's destructors run, fn(x mut T&) with the scope being closed its one scope (C9a): its type's own,
+    # then each part's held by value that has any (a field, a payload) - what a by-value holder letting go of it runs,
+    # and what the scope closing runs for an instance whose parts have destructors of their own
+    Drop
 }
 
 # a decision taken about a node after check made it, by eval (or check) and read by lowering and emit: kept under
@@ -655,7 +659,30 @@ fn HelperType(t mut types.Table&, kind HelperKind, ty types.TypeId) types.TypeId
         case HelperKind.Hash: t.Func(t.List1(r), I64T, types.ListId(0))
         case HelperKind.Zero: t.Func(types.ListId(0), ty, types.ListId(0))
         case HelperKind.Copy, HelperKind.Parts: t.Func(t.List1(r), ty, types.ListId(0))
+        case HelperKind.Drop: t.Func(t.List1(t.Ref(ty, types.Writable)), types.VoidT, types.ListId(0))
     }
+}
+
+# O15: the function a registration of an instance of type ty runs as its scope closes - its destructor's body (dtor, -1
+# for none) where nothing it holds by value has one of its own, else its Drop helper; NoDrop for neither
+fn DropFn(t types.Table&, ty types.TypeId, dtor I64) FnKey ? NoDrop {
+    if dtor >= 0 and not DropsParts(t, ty): return FnKey.Body(typed.BodyId(I32(dtor)))
+    if not t.NeedsDrop(ty): error NoDrop
+    return FnKey.Helper(HelperKind.Drop, ty)
+}
+
+# whether a value of type ty holds by value a part with destructors of its own to run (a field, a payload)
+fn DropsParts(t types.Table&, ty types.TypeId) Bool {
+    for f in t.Items(FieldsOf(t, ty)) {
+        if not t.IsRef(f) and t.NeedsDrop(f): return true
+    }
+    for c in t.Items(CasesOf(t, ty)) {
+        if c == types.TypeId(0): continue
+        for f in t.Items(t.Parts(c)) {
+            if not t.IsRef(f) and t.NeedsDrop(f): return true
+        }
+    }
+    return false
 }
 
 I32T types.TypeId = types.TypeId(5)
@@ -667,6 +694,7 @@ fn PassedCount(t mut types.Table&, c Callee, ty types.TypeId) I64 {
     return match c {
         case Callee.Fn(FnKey.Helper(HelperKind.Render, _), _), Callee.Fn(FnKey.AnyRender(_, _), _): 1
         case Callee.Fn(FnKey.Helper(HelperKind.Copy, _), _), Callee.Fn(FnKey.Helper(HelperKind.Parts, _), _): 1
+        case Callee.Fn(FnKey.Helper(HelperKind.Drop, _), _): 1
         case Callee.Fn(FnKey.Helper(HelperKind.Equal, _), _), Callee.Fn(FnKey.Helper(HelperKind.Hash, _), _): 0
         case Callee.Extern(_, _): 0
         case Callee.Dispatch(_, sl, _) if sl < 0: 1     # $'s rendering, through the table: a Render helper's builder

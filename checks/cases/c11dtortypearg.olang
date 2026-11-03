@@ -1,4 +1,4 @@
-# check: fail error[C11]: Conn has a destructor, so it is held only by reference - write Conn&
+# check: fail error[C11]: Conn has a destructor to run, so a type argument holds it by reference - write Conn&
 # C11: a type argument is a place of its own - a Vec of them holds references, Vec<Conn&>
 Closed mut I64 = 0
 type Conn unique struct(fd I32) {

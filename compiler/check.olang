@@ -65,6 +65,8 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     Gen Bool = false       # a generator's body, its Next's (D18): a lambda whose yields give its values (S20)
     GenHome I64 = -1       # ... whose elements live where it does (D18c): the hidden capture of that scope
     deferBlocks Vec<I64>  # the blocks around with deferred code registered so far, innermost last (S19, S20)
+    dropFlags Map<I64, I64>   # O15: a by-value local holding a value with destructors - its hidden flag, set while it holds one
+    dropBlocks Vec<I64>       # ... the blocks among deferBlocks whose deferred code is only such a local's destructors
     InferResult Bool = false   # a lambda's result taken from its first return (D16b)
     InferErrors Bool = false   # a lambda's errors taken from its body (D16b), an inferred set's (R1a)
     Settles Bool = false       # a function's or constructor's body whose set is inferred (R1a)
@@ -287,6 +289,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     unknownSaid Map<pair.Pair<I64, I64>, Bool>     # (body, name): an unknown name said there (S13f's), not again
     paramTypes Bool = false                         # a declared function's parameters' types being checked (G29)
     underRef Bool = false                           # a written type under a reference marker being checked (T21b)
+    argPlace Bool = false                           # a written type in a type argument being checked (C11)
     declMade Bool = false                           # a declaration's type, its value given: what T7d's lengths come from
     syntaxMark I64 = -1                             # the diagnostics said before checking began: the syntax errors
     # B9c, S8b: the local ifs whose condition the build decides that evaluation decided, by (file, the condition's
@@ -569,6 +572,9 @@ type roFn struct(Body I64, First I64, At diag.Where, What String&) {
 # T13b: a unique value handed on by value out of a local - a by-value parameter's, or a returned local's - which must be
 # its last mention (settleLandings): the body, the local, the read, its type, and the outermost instance whose call
 # bound the type when it is a generic's need (-1 for none)
+# a landing's Inst for a variable's Destroy() (C9b): its value ended there, not handed on
+destroyedAt := -2
+
 type landing struct(Body I64, Local I64, At source.Span, Ty types.TypeId, Inst I64) {
     Body
     Local
@@ -765,7 +771,8 @@ fn (c mut Checker&) settleUnset() {
         if not found {
             d.Drop(u.Group)
             if u.ValueAt >= 0 { c.ValueAsks[u.ValueAt].Gone = true }
-            if c.unsetLowers(u.Ty) { b.Locals[u.Local].Unset = true }
+            # (a zero with destructors to run is a value its holder lets go of - written, but where there is none)
+            if c.unsetLowers(u.Ty) and (u.NoZero or not c.P.T.NeedsDrop(u.Ty)) { b.Locals[u.Local].Unset = true }
             continue
         }
         if not u.NoZero {
@@ -3570,6 +3577,12 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
         # T13a: a "mut" global holding what never changes (text - "Name mut String&") is a binding that may be
         # assigned: nothing is ever written through it, so it takes any reference to one, read-only or not
         if c.isRef(want) and c.P.Immut(c.deref(want)) { want = c.P.T.Ref(c.P.T.Referent(want), c.P.T.PermOf(want) & ~types.Writable) }
+        # C11, O15: the program's scope has no holder that lets go - a global holds a value with destructors by reference,
+        # its destructors run as the program ends
+        if want != types.UnknownT and not c.isRef(want) and c.P.T.NeedsDrop(want) {
+            c.err(v.Ty!.Span(), msgs.DestructGlobal(c.src(v.Ty!.Span())))
+            want = c.P.T.Ref(want, types.ReadOnly)
+        }
     }
     from := c.stmts.Len()
     x typed.Expr?& = null
@@ -4332,9 +4345,14 @@ fn (c mut Checker&) src2(file I64, sp source.Span) String { return $c.P.L.Diags.
 fn (c mut Checker&) rootStmts(body Array<ast.Stmt&>&) typed.Block& {
     from := c.stmts.Len()
     c.entryChecks()
+    for p in c.cur().Params { c.dropOnExit(I64(p), c.cur().Local(p).Sp, true) }   # O15: a by-value parameter's
     storedIn(body, c.fr().stored)
     if body.Len() > 0 {
         c.stmtsOf(body)
+    }
+    # O15: a constructor's fields go on into its instance at its end
+    if c.fr().InCtor {
+        for f in c.cur().Fields { c.dropsGone(c.cur().Local(f).Sp, I64(f)) }
     }
     return typed.Block(typed.BlockId(0), gather(c.stmts, from))
 }
@@ -5183,6 +5201,7 @@ fn (c mut Checker&) close(id I64, outer I64, mark I64, from I64) typed.Block& {
     for fr.nulls.Len() > 0 and (try fr.nulls.Last() catch { unreachable }).Block == id { try fr.nulls.Pop() catch { } }
     for fr.errNarrows.Len() > 0 and (try fr.errNarrows.Last() catch { unreachable }).Block == id { fr.errNarrows.Pop()! }
     for fr.deferBlocks.Len() > 0 and (try fr.deferBlocks.Last() catch { unreachable }) == id { fr.deferBlocks.Pop()! }
+    for fr.dropBlocks.Len() > 0 and (try fr.dropBlocks.Last() catch { unreachable }) == id { fr.dropBlocks.Pop()! }
     c.fr().Block = outer
     return typed.Block(typed.BlockId(I32(id)), stmts)
 }
@@ -6776,6 +6795,10 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
     }
     # a reference where a value is wanted: the value copied out (E12)
     if hk == types.Kind.Ref and wk != types.Kind.Ref {
+        # O15, T13b: a value with destructors to run a call gave, held where the call lands - a slot laid out for the
+        # value takes it as it is, and its destructors with it
+        v := heldValue(x)
+        if v is not null and c.P.T.NeedsDrop(want) and c.P.T.Same(typeOf(v), want): return v
         r := c.P.T.Referent(have)
         if c.P.T.Same(r, want) or c.flowsInto(r, want) {
             if c.P.T.IsNullable(have) { c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(have), bangOf(c.src(x.Span())))) }
@@ -10604,21 +10627,21 @@ fn (c mut Checker&) foreignNamed(tr ast.TypeRef&) Bool {
     }
 }
 
-# C11: a type declaring a destructor written where a value of it would be held - said at it; under a reference marker
-# the type itself is its referent, its arguments places of their own
-fn (c mut Checker&) dtorWritten(tr ast.TypeRef?&, under Bool) {
+# C11: a type declaring a destructor written as a type argument by value - said at it; under a reference marker the type
+# itself is its referent, its arguments places of their own (arg)
+fn (c mut Checker&) dtorWritten(tr ast.TypeRef?&, under Bool, arg Bool = false) {
     if tr is null: return
     match tr {
         case ast.TypeRef.Named(nsp, _, args) {
-            if not under and c.destructNamed(tr) {
+            if arg and not under and c.destructNamed(tr) {
                 c.err(nsp, msgs.DestructTypeByValue(c.src(tr.Span()), c.src(tr.Span())))
                 return
             }
-            for a in args { c.dtorWritten(a, false) }
+            for a in args { c.dtorWritten(a, false, true) }
         }
-        case ast.TypeRef.Ref(_, of, _) { c.dtorWritten(of, true) }
-        case ast.TypeRef.Perm(_, of, _) { c.dtorWritten(of, under) }
-        case ast.TypeRef.Spread(_, of) { c.dtorWritten(of, false) }
+        case ast.TypeRef.Ref(_, of, _) { c.dtorWritten(of, true, arg) }
+        case ast.TypeRef.Perm(_, of, _) { c.dtorWritten(of, under, arg) }
+        case ast.TypeRef.Spread(_, of) { c.dtorWritten(of, false, arg) }
         case _ { }
     }
 }
@@ -10781,8 +10804,9 @@ fn (c mut Checker&) namedMet(tr ast.TypeRef&, nsp source.Span, path Array<source
         c.err(nsp, msgs.FuncDeclBare(c.src(tr.Span())))
         return false
     }
-    if not c.underRef and c.destructNamed(tr) {
-        # C11: a type declaring a destructor is held by reference alone, its instance built where it lands
+    if c.argPlace and not c.underRef and c.destructNamed(tr) {
+        # C11: a collection's or a generic's value of a type declaring a destructor is held by reference (O15: its
+        # destructor follows a value held in one place written for it - a variable, a parameter, a result, a field)
         c.err(nsp, msgs.DestructTypeByValue(c.src(tr.Span()), c.src(tr.Span())))
         return false
     }
@@ -10844,8 +10868,20 @@ fn (c mut Checker&) typeArgCountMet(path Array<source.NameId>&, args Array<ast.T
     return false
 }
 
-# a type argument met: no "mut" before a value type (mutOnValue), then writtenMet
-fn (c mut Checker&) typeArgMet(a ast.TypeRef&) Bool { return not c.mutOnValue(a) and c.writtenMet(a) }
+# a type argument met: no "mut" before a value type (mutOnValue), then writtenMet - a value with destructors to run by
+# reference only (C11), a holder of one too where its parts are known
+fn (c mut Checker&) typeArgMet(a ast.TypeRef&) Bool {
+    if c.mutOnValue(a): return false
+    was := c.argPlace
+    c.argPlace = true
+    met := c.writtenMet(a)
+    c.argPlace = was
+    if not met: return false
+    rt := c.P.Resolve(c.fr().Ctx, a)
+    if rt == types.UnknownT or c.isRef(rt) or not c.P.T.NeedsDrop(rt) or c.destructNamed(a): return true
+    c.err(a.Span(), msgs.DestructTypeByValue(c.src(a.Span()), c.src(a.Span())))
+    return false
+}
 
 # T25b: "mut" before a type argument is a reference's permission - written before one that is no reference, said;
 # whether it was
@@ -10862,6 +10898,9 @@ fn (c mut Checker&) mutOnValue(a ast.TypeRef&) Bool {
 
 # a function type's signature, as written: its parameters' and results' types (T21)
 fn (c mut Checker&) sigWritten(s ast.Sig&) Bool {
+    was := c.argPlace
+    c.argPlace = false   # a function type's parameters and results are its own places
+    defer c.argPlace = was
     for prm in s.Params {
         if not c.writtenMet(prm.Ty) { return false }
     }
@@ -11907,8 +11946,23 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     cb := c.bodyOfCallee(target)
     if cb < 0 { cb = c.slotContract(target) }
     if cb >= 0 and c.fr().Contract == 0 and c.hasContract(cb) { call = c.contractAt(sp, nsp, r, call, target, targs, site, cb) }
-    if c.stmts.Len() > sfrom { return typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), call)) }
-    return call
+    if c.stmts.Len() > sfrom { call = typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), call)) }
+    return c.held(sp, call)
+}
+
+# C11, O16: a call's value with a destructor to run - a constructor's instance, a function's value result holding one -
+# is held where the call lands: given storage there and registered there, as a temporary given to a reference is (E12c),
+# a reference to it the call's value. A slot laid out for the value takes it as it is (fit's held value)
+fn (c mut Checker&) held(sp source.Span, call typed.Expr&) typed.Expr& {
+    r := typeOf(call)
+    if r == types.UnknownT or r == types.VoidT or c.isRef(r) or not c.P.T.NeedsDrop(r): return call
+    return typed.Expr.Promote(sp, c.P.T.Ref(r, types.Writable), typed.Promote(call, c.site(typed.SiteKind.Promote, sp)))
+}
+
+# the value a temporary was given storage for (held's, E12c's), else null
+fn heldValue(x typed.Expr&) typed.Expr?& {
+    if x == typed.Expr.Promote: return x.pr.X
+    return null
 }
 
 # ---- variadic parameters (D8g) ----
@@ -13171,17 +13225,15 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
             return c.unknown(sp)
         }
         p := readPlace(rx)
-        local := false
-        if p is not null {
-            match p {
-                case typed.Lvalue.Local(_, _, _) { local = true }
-                case _ { }
-            }
-        }
-        if not local {
+        lid := -1
+        if p is not null and p == typed.Lvalue.Local: lid = I64(p.id)
+        if lid < 0 {
             c.err(c.operandAt(x), msgs.DestroyNotLocal())
             return c.unknown(sp)
         }
+        # O15: a by-value variable's value destructed now - given up there as a handed-on one is (T13b's landing:
+        # nothing mentions it after)
+        if c.fr().dropFlags.Has(lid): return c.destroyHeld(sp, rx, lid)
         return c.prim(sp, types.VoidT, typed.PrimOp.Destroy, rx, null)
     }
     if name == "vacate" and args.Len() == 0 and c.P.L.Mods[c.fr().Mi].Prelude {
@@ -16870,8 +16922,12 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
             # T7a: a parameter a type variable bound to a run-time array (G18) - held by reference in an instance
             id := c.local(source.NameId(0), nsp, c.localType(pid), typed.LocalKind.Field, c.cur().Locals[pid].Marked)
             c.roNeed(typed.Lvalue.Local(nsp, c.localType(pid), typed.LocalId(I32(pid))))   # T25c: the instance keeps it
-            c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), c.readLocal(nsp, pid)))
+            # (T13b, O15: a parameter's unique value, and its destructors, handed on into the instance)
+            x := c.uniqueLand(c.readLocal(nsp, pid), "'" $c.text(v.Names[i]) "'")
+            if c.fr().dropFlags.Has(pid) and not c.P.Unique(c.localType(pid)): x = c.handOn(x, pid)
+            c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x))
             c.cur().Fields.Push(typed.LocalId(I32(id)))
+            c.dropOnExit(id, nsp, true)
         }
         return
     }
@@ -16995,6 +17051,7 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         if i < v.Values.Len() and not c.isRef(t) and c.P.T.OwnsParts(t) { x = c.ownCopy(x!) }
         c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x!))
         if v.Field { c.cur().Fields.Push(typed.LocalId(I32(id))) }
+        c.dropOnExit(id, nsp, not pend.NoZero or pend.Group < 0)   # O15: held until its block is left
     }
 }
 
@@ -17310,7 +17367,7 @@ fn (c mut Checker&) storeInto(sp source.Span, p typed.Lvalue&, value ast.Expr&, 
     if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Lvalue.Deref(sp, t, x)) }
     # T25c: a read-only copy is not stored where it can be written - save into a read-only copy itself
     if not c.isRef(t) and c.roRoot(p) < 0 { c.roStore(x, value.Span(), RoStored) }
-    c.emit(typed.Stmt.Assign(sp, p, c.storeCopy(p, x)))
+    c.storeOver(sp, p, c.storeCopy(p, x))
 }
 
 fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value ast.Expr&) {
@@ -19837,7 +19894,7 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         c.nullDecl = wasNull
         if rt == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Lvalue.Deref(sp, rt, x)) }
         if not c.isRef(rt) { c.roStore(x, values[0].Span(), RoReturned) } else { c.roRefResult(x) } # T25c
-        if not c.isRef(rt) { x = c.uniqueLand(x, "the result", true) }   # T13b
+        if not c.isRef(rt) { x = c.retLand(c.uniqueLand(x, "the result", true)) }   # T13b, O15
         c.emit(typed.Stmt.Return(sp, x))
         return
     }
@@ -19855,7 +19912,7 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         wasNull := c.nullDecl
         c.nullDecl = c.resultAt(i)
         x := c.exprTo(values[i], ps[i])
-        if not c.isRef(ps[i]) { x = c.uniqueLand(x, "a result", true) }   # T13b
+        if not c.isRef(ps[i]) { x = c.retLand(c.uniqueLand(x, "a result", true)) }   # T13b, O15
         c.exprs.Push(x)
         c.nullDecl = wasNull
     }
@@ -20012,7 +20069,7 @@ fn (c mut Checker&) uniqueLand(x typed.Expr&, what String&, own Bool = false) ty
     l := c.handedOn(x, own)
     if l >= 0 {
         c.landings.Push(landing(c.fr().Body, l, x.Span(), typeOf(x), c.boundMention(typeOf(x))))
-        return x
+        return c.handOn(x, l)
     }
     c.uniqueErr(x.Span(), typeOf(x), what)
     return x
@@ -20155,6 +20212,10 @@ fn (c mut Checker&) landingsOf(b I64) {
     for k in range mine.Len() {
         if not w.Bad[k]: continue
         ld := mine[k]
+        if ld.Inst == destroyedAt {
+            c.P.L.Diags.Error(diag.Where.Span(body.File, I64(ld.At.Start), I64(ld.At.End)), msgs.DestroyedAfter(c.text(body.Locals[ld.Local].Name)))
+            continue
+        }
         if ld.Inst < 0 {
             c.P.L.Diags.Error(diag.Where.Span(body.File, I64(ld.At.Start), I64(ld.At.End)), msgs.UniqueAfter(c.text(body.Locals[ld.Local].Name), c.ty(ld.Ty)))
             continue
@@ -20164,6 +20225,91 @@ fn (c mut Checker&) landingsOf(b I64) {
         rec := c.P.L.Diags.ErrorBare(diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End)), msgs.UniqueNeedsCopy(called, c.ty(c.uniqueArg(ld.Inst, ld.Ty))))
         c.P.L.Diags.Note(rec, diag.Where.Span(body.File, I64(ld.At.Start), I64(ld.At.End)), msgs.NoteGenericNeeds(called, "a copy"))
     }
+}
+
+# ---- destructors where a holder lets go (O15, T13b) ----
+
+# a by-value variable or parameter holding a value with destructors to run lets go of it as its block is left, on every
+# way out (deferred code, S19) - unless it handed the value on or gave it up, which a hidden flag says: set while it
+# holds a value (set: from its declaration), cleared where the value goes on
+fn (c mut Checker&) dropOnExit(l I64, sp source.Span, set Bool) {
+    t := c.localType(l)
+    if t == types.UnknownT or c.isRef(t) or not c.P.T.NeedsDrop(t): return
+    flag := c.hidden(sp, types.BoolT)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(flag)), c.lit(sp, types.BoolT, 1 if set else 0)))
+    c.fr().dropFlags.Put(l, flag)
+    c.fr().deferBlocks.Push(c.fr().Block)
+    c.fr().dropBlocks.Push(c.fr().Block)
+    from := c.stmts.Len()
+    id, outer, mark := c.open(typed.BlockKind.Defer, sp)
+    c.emit(c.dropIfHeld(sp, typed.Lvalue.Local(sp, t, typed.LocalId(I32(l))), flag))
+    b := c.close(id, outer, mark, from)
+    c.emit(typed.Stmt.Defer(sp, b))
+}
+
+# the destructors place p's value has to run, run where flag (-1: always) says it holds one
+fn (c mut Checker&) dropIfHeld(sp source.Span, p typed.Lvalue&, flag I64) typed.Stmt& {
+    drop := typed.Stmt.Eval(sp, c.prim(sp, types.VoidT, typed.PrimOp.Drop, typed.Expr.Borrow(sp, c.P.T.Ref(p.Type(), types.Writable), p), null))
+    if flag < 0: return drop
+    from := c.stmts.Len()
+    id, outer, mark := c.open(typed.BlockKind.Plain, sp)
+    c.emit(drop)
+    then := c.close(id, outer, mark, from)
+    return typed.Stmt.If(sp, typed.If(c.readLocal(sp, flag), then, null))
+}
+
+# local l's value gone on - its destructors with it (its flag cleared)
+fn (c mut Checker&) dropsGone(sp source.Span, l I64) {
+    flag := try c.fr().dropFlags.Get(l) catch default -1
+    if flag >= 0: c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Local(sp, types.BoolT, typed.LocalId(I32(flag))), c.lit(sp, types.BoolT, 0)))
+}
+
+# x, the whole value of local l, handed on - its destructors go with it
+fn (c mut Checker&) handOn(x typed.Expr&, l I64) typed.Expr& {
+    if not c.fr().dropFlags.Has(l): return x
+    from := c.stmts.Len()
+    c.dropsGone(x.Span(), l)
+    return typed.Expr.Seq(x.Span(), typeOf(x), typed.Seq(gather(c.stmts, from), x))
+}
+
+# "x.Destroy()" of by-value local l, rx its read: its destructors run now, where it still holds a value, and it holds none
+fn (c mut Checker&) destroyHeld(sp source.Span, rx typed.Expr&, l I64) typed.Expr& {
+    c.landings.Push(landing(c.fr().Body, l, rx.Span(), typeOf(rx), destroyedAt))
+    from := c.stmts.Len()
+    t := c.localType(l)
+    c.emit(typed.Stmt.Eval(rx.Span(), rx))
+    c.emit(c.dropIfHeld(sp, typed.Lvalue.Local(sp, t, typed.LocalId(I32(l))), try c.fr().dropFlags.Get(l) catch default -1))
+    c.dropsGone(sp, l)
+    return typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
+}
+
+# a whole by-value local returned, its type no unique one's (whose landing says it, T13b): the result itself (O26a)
+fn (c mut Checker&) retLand(x typed.Expr&) typed.Expr& {
+    t := typeOf(x)
+    if t == types.UnknownT or c.isRef(t) or c.P.Unique(t) or not c.P.T.NeedsDrop(t): return x
+    l := c.handedOn(x, true)
+    return c.handOn(x, l) if l >= 0 else x
+}
+
+# x stored into p (S4): where p holds a value with destructors to run by value, x made first, then the old value's run
+# (a variable's only while it holds one), then the store - Rust's order
+fn (c mut Checker&) storeOver(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
+    t := p.Type()
+    if t == types.UnknownT or c.isRef(t) or not c.P.T.NeedsDrop(t) {
+        c.emit(typed.Stmt.Assign(sp, p, x))
+        return
+    }
+    if not purePlace(p) {
+        c.gap(sp, "a store over a value with destructors to run, reached through what a call gives (O15)")
+        return
+    }
+    h := c.hidden(sp, t)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), x))
+    flag := -1
+    if p == typed.Lvalue.Local: flag = try c.fr().dropFlags.Get(I64(p.id)) catch default -1
+    c.emit(c.dropIfHeld(sp, p, flag))
+    c.emit(typed.Stmt.Assign(sp, p, c.read(sp, typed.Lvalue.Local(sp, t, typed.LocalId(I32(h))))))
+    if flag >= 0: c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Local(sp, types.BoolT, typed.LocalId(I32(flag))), c.lit(sp, types.BoolT, 1)))
 }
 
 # ---- values that own their parts (QCE: T7a relaxed) ----
@@ -20347,6 +20493,8 @@ fn (c mut Checker&) becomeStmt(sp source.Span, x ast.Expr&) {
         inner = "a task's clause"
     } else if fr.joins.Len() > 0 {
         inner = "a join block, whose tasks it would leave behind"
+    } else if fr.deferBlocks.Len() > 0 and fr.deferBlocks.Len() == fr.dropBlocks.Len() {
+        inner = "a block whose variable holds a value with a destructor, which would run before the call"
     } else if fr.deferBlocks.Len() > 0 {
         inner = "a block with deferred code registered, which would run before the call"
     }
@@ -20512,7 +20660,7 @@ fn (c mut Checker&) yieldStmt(sp source.Span, x ast.Expr&) {
         return
     }
     if fr.deferBlocks.Len() > 0 {
-        c.err(ysp, msgs.YieldPastDefer())
+        c.err(ysp, msgs.YieldPastHeld() if fr.deferBlocks.Len() == fr.dropBlocks.Len() else msgs.YieldPastDefer())
         return
     }
     rt := fr.Result
@@ -20556,6 +20704,12 @@ fn (c mut Checker&) genRoot(fd ast.Func&, sig types.TypeId, el I64) typed.Block&
         return typed.Block(typed.BlockId(0), gather(c.stmts, from))
     }
     ft := c.P.T.Items(c.P.T.Params(csig))[0]
+    # O15, S20: no holder of the walk lets go of a parameter's value - a walk may be left part way, running no deferred
+    # code - so one with destructors to run is taken by reference
+    for p in c.cur().Params {
+        t := c.localType(I64(p))
+        if t != types.UnknownT and not c.isRef(t) and c.P.T.NeedsDrop(t): c.err(c.cur().Local(p).Sp, msgs.DestructGenParam(c.ty(t)))
+    }
     # D18c: elements living where the generator does are kept in storage of its result scope - which its Next reaches
     # through a capture of a reference living there, null, made for it
     home I64 = -1

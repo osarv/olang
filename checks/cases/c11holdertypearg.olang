@@ -1,0 +1,11 @@
+# check: fail error[C11]: Pool has a destructor to run, so a type argument holds it by reference - write Pool&
+# C11: a holder of a value with a destructor by value has its destructor to run too - a type argument holds it by reference
+Closed mut I64 = 0
+type Conn unique struct(fd I32) {
+    fd
+} destruct { Closed++ }
+type Pool struct(c Conn) { c }
+fn main() {
+    v := Vec<Pool>()
+    assert v.Len() == 0
+}

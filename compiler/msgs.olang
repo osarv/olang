@@ -258,6 +258,8 @@ type Diag enum {
     NoteInstanceRef
     DoubleReferenceMarker
     DestructTypeByValue
+    DestructGlobal
+    DestructGenParam
     TraitNotAType
     AnyNotTrait
     AnyNeedsMarker
@@ -349,6 +351,7 @@ type Diag enum {
     UniqueCopy
     UniqueByValue
     UniqueAfter
+    DestroyedAfter
     UniqueKind
     UniqueNeedsCopy
     DestructNotUnique
@@ -672,6 +675,7 @@ type Diag enum {
     YieldInDefer
     YieldInJoin
     YieldPastDefer
+    YieldPastHeld
     GenReturnValue
     GenErrors
     YieldOwnStorage
@@ -1570,7 +1574,9 @@ fn InvalidReferenceTarget(ty String&) Msg { return Msg(Diag.InvalidReferenceTarg
 fn DoubleReferenceMarker() Msg { return Msg(Diag.DoubleReferenceMarker, "T24", "a type takes at most one reference marker") }
 
 # ERR_DESTRUCT_TYPE_BY_VALUE
-fn DestructTypeByValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.DestructTypeByValue, "C11", $ty1 " has a destructor, so it is held only by reference - write " $ty2 "&") }
+fn DestructTypeByValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.DestructTypeByValue, "C11", $ty1 " has a destructor to run, so a type argument holds it by reference - write " $ty2 "&") }
+fn DestructGlobal(ty String&) Msg { return Msg(Diag.DestructGlobal, "C11", $ty " has a destructor to run, so a global holds it by reference - write " $ty "&, its destructor run as the program ends") }
+fn DestructGenParam(ty String&) Msg { return Msg(Diag.DestructGenParam, "C11, S20", $ty " has a destructor to run, so a generator takes it by reference - write " $ty "&: a walk left part way runs no code of its body to end it") }
 
 # ERR_TRAIT_NOT_A_TYPE
 fn TraitNotAType(ty String&) Msg { return Msg(Diag.TraitNotAType, "T30, T32", $ty " is a trait - a constraint on a type variable; a value of any type meeting it is an 'any " $ty $("" if ty.EndsWith("&") else "&") "'") }
@@ -1848,6 +1854,7 @@ fn UniqueByValue(ty String&, what String&) Msg { return Msg(Diag.UniqueByValue, 
 
 # ERR_UNIQUE_AFTER
 fn UniqueAfter(name String&, ty String&) Msg { return Msg(Diag.UniqueAfter, "T13b", "'" $name "' is handed on here, and " $ty " is unique - a unique value given by value lands once more only at its last mention, and '" $name "' is mentioned after") }
+fn DestroyedAfter(name String&) Msg { return Msg(Diag.DestroyedAfter, "C9b", "'" $name "' is destructed here, and mentioned after - nothing reaches a value its Destroy() ended") }
 
 # ERR_UNIQUE_KIND
 fn UniqueKind(what String&) Msg { return Msg(Diag.UniqueKind, "T13b", "'unique' says a value exists in one place - " $what " has no values of its own") }
@@ -2843,6 +2850,7 @@ fn YieldInLambda() Msg { return Msg(Diag.YieldInLambda, "S20", "a lambda is no g
 fn YieldInDefer() Msg { return Msg(Diag.YieldInDefer, "S19b, S20", "deferred code may not yield - it runs while its block is left") }
 fn YieldInJoin() Msg { return Msg(Diag.YieldInJoin, "S20", "a join block may not yield - its tasks are waited for before it is left") }
 fn YieldPastDefer() Msg { return Msg(Diag.YieldPastDefer, "S20", "a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block") }
+fn YieldPastHeld() Msg { return Msg(Diag.YieldPastHeld, "S20, O15", "a yield while a variable around it holds a value with a destructor - a walk stopped there would never run it; hold the value in a block that ends before the yield, or by reference") }
 fn GenReturnValue() Msg { return Msg(Diag.GenReturnValue, "D18a", "a generator gives its values by 'yield' - 'return' ends it and takes none") }
 fn GenYieldsBorrow(name String&) Msg { return Msg(Diag.GenYieldsBorrow, "D18c, T22a", "this generator yields what " $("'" $name "'" if name != "" else "a parameter") " refers to, which outlives no Next call it can be shown to - yield a copy ('$x', 'x.Copy()')") }
 fn YieldOwnStorage() Msg { return Msg(Diag.YieldOwnStorage, "S20, O26", "this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Copy()', '$x')") }

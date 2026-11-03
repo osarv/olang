@@ -442,7 +442,7 @@ fn (e mut Effects&) expr(x typed.Expr?&) {
         case typed.Expr.Promote(_, ty, pr) {
             e.cur.Allocates = true
             # a value of a type with a destructor given storage of its own registers it there (O16)
-            if e.P.T.IsRef(ty): e.dtorCalled(e.P.T.Referent(ty))
+            if e.P.T.IsRef(ty): e.dropsCalled(e.P.T.Referent(ty), 0)
             e.expr(pr.X)
         }
         case typed.Expr.Text(_, _, t) {
@@ -530,6 +530,8 @@ fn (e mut Effects&) prim(op typed.PrimOp, args Array<typed.Expr&>&) {
         case typed.PrimOp.Retire { e.cur.Grows = true }
         # x.Destroy() (C9b) runs the destructor now
         case typed.PrimOp.Destroy { if args.Len() > 0: e.dtorCalled(e.P.T.Referent(args[0].Type()) if e.P.T.IsRef(args[0].Type()) else args[0].Type()) }
+        # O15: a holder letting go runs the value's destructors, its parts' too
+        case typed.PrimOp.Drop { if args.Len() > 0: e.dropsCalled(e.P.T.Referent(args[0].Type()), 0) }
         case typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap, typed.PrimOp.AtomicCompareSwap {
             # args[0] borrows the integer place written
             if args.Len() > 0 { e.written(args[0]) }
@@ -578,6 +580,29 @@ fn (e mut Effects&) dtorCalled(t types.TypeId) {
     id := try e.dtorOf.Get(t) catch default -1
     if id < 0: id = try e.dtorOf.Get(e.P.T.Repr(t)) catch default -1
     if id >= 0: e.curCalls.Push(id)
+}
+
+# the destructors a value of type t has to run where its holder lets go (O15): its type's own, its parts' held by value
+fn (e mut Effects&) dropsCalled(t types.TypeId, depth I64) {
+    if depth > 16 or e.P.T.IsRef(t) or not e.P.T.NeedsDrop(t): return
+    r := e.P.T.Repr(t)
+    match e.P.T.KindOf(r) {
+        case types.Kind.Named {
+            if e.P.T.Destructs(r): e.dtorCalled(r)
+            if e.P.T.DeclKindOf(e.P.T.DeclOf(r)) == types.DeclKind.Struct {
+                for p in e.P.T.Items(e.P.T.Fields(r)) { e.dropsCalled(p, depth + 1) }
+                return
+            }
+            for c in e.P.T.Items(e.P.T.Cases(r)) {
+                if c != types.TypeId(0): e.dropsCalled(c, depth + 1)
+            }
+        }
+        case types.Kind.Record, types.Kind.Tuple {
+            for p in e.P.T.Items(e.P.T.Parts(r)) { e.dropsCalled(p, depth + 1) }
+        }
+        case types.Kind.Array { e.dropsCalled(e.P.T.Elem(r), depth + 1) }
+        case _ { }
+    }
 }
 
 # a place read (store false) or stored into

@@ -2362,7 +2362,7 @@ fn (p mut Program&) calleeType(ref names.Ref, n source.NameId) types.TypeId {
         if f < 0 { return types.UnknownT }
         sig := p.Sig(f)
         if p.VarCount(FnOwner(f)) > 0 { return types.UnknownT }   # inferred from the arguments: the checker's
-        return p.T.Result(sig)
+        return p.held(p.T.Result(sig))
     }
     return types.UnknownT
 }
@@ -2390,10 +2390,11 @@ fn (p mut Program&) genericCall(c Context&, g ast.Expr&, args Array<ast.TypeRef&
     return p.held(p.Instance(d, p.T.List(vs)))
 }
 
-# a constructor's value as ":=" holds it: a destructor-declaring type's by reference (C11)
+# a call's value as ":=" holds it: one with a destructor to run by reference (C11) - its caller holds it where the call
+# lands, as check's held does
 fn (p mut Program&) held(t types.TypeId) types.TypeId {
     if p.T.KindOf(t) != types.Kind.Named or not p.Body(t) { return t }
-    if p.T.DeclKindOf(p.T.DeclOf(t)) == types.DeclKind.Struct and p.T.Destructs(t) { return p.T.Ref(t, types.ReadOnly) }
+    if p.T.NeedsDrop(t) { return p.T.Ref(t, types.ReadOnly) }
     return t
 }
 
@@ -3221,8 +3222,8 @@ fn (p mut Program&) PreludeFn(identity String&, name String&) I64 {
     return p.FnNamed(mi, p.L.Names.Intern(name))
 }
 # a struct's constructor's signature (C2, G10b), or a declared number's (T29d): its parameters as written, its type the
-# result - a destructor-declaring struct's by reference (C11) - and its errors, with RoleCtor's scopes (C2d); Unknown for
-# a type with no constructor
+# result (a value - a destructor-declaring struct's too, which its caller holds where its call lands, C11) - and its
+# errors, with RoleCtor's scopes (C2d); Unknown for a type with no constructor
 fn (p mut Program&) CtorSig(t types.TypeId) types.TypeId { return p.CtorSigAt(t, types.ListId(0)) }
 
 # the variables a struct's constructor lists after "struct" (G10d, QW: "struct<T>(g Graph<T>&)") - none for a generic
@@ -3273,7 +3274,7 @@ fn (p mut Program&) CtorSigAt(t types.TypeId, args types.ListId) types.TypeId {
     if td is null or td.Body is null { return types.UnknownT }
     c := p.CtorContext(t, args)
     match td.Body {
-        case ast.TypeBody.Struct(s) { return p.paramsSig(c, s.Params, s.Errs, p.held(t)) }
+        case ast.TypeBody.Struct(s) { return p.paramsSig(c, s.Params, s.Errs, t) }
         case ast.TypeBody.Over(_, ctor) {
             if ctor is null { return types.UnknownT }
             return p.paramsSig(c, ctor.S.Params, ctor.S, t)

@@ -1,0 +1,11 @@
+# check: fail error[S21]: 'become' leaves the function at once, so not from a block whose variable holds a value with a destructor, which would run before the call - write 'return' and the call
+# S21, O15: a by-value parameter's destructor runs as its function ends - before a tail call would be made
+Closed mut I64 = 0
+type Conn unique struct(fd I64) {
+    fd
+} destruct { Closed++ }
+fn down(c Conn, n I64) I64 {
+    if n == 0: return c.fd
+    become down(c, n - 1)
+}
+fn main() { assert down(Conn(1), 3) == 1 }

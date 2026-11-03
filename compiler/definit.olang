@@ -251,7 +251,8 @@ fn (w mut Walker&) expr1(x typed.Expr&, s State) State {
             w.block(c.Loop, s1)
             return s1
         }
-        case typed.Expr.Prim(_, _, _, _, args) { return w.exprs(args, s) }
+        # (a holder's destructors run where it lets go - flagged by whether it holds a value, no read of it, O15)
+        case typed.Expr.Prim(_, _, op, _, args) { return s if op == typed.PrimOp.Drop else w.exprs(args, s) }
         case typed.Expr.Slice(_, _, sl) { return w.expr(sl.Hi, w.expr(sl.Lo, w.place(sl.Base, s))) }
         case typed.Expr.Cond(_, _, c) {
             s1 := w.expr(c.C, s)
@@ -465,7 +466,7 @@ fn (w mut heldWalker&) expr(x typed.Expr?&, a Bool) {
             w.expr(cl.Reserve, a)
             w.block(cl.Loop, a)
         }
-        case typed.Expr.Prim(_, _, _, _, args) { w.exprs(args, a) }
+        case typed.Expr.Prim(_, _, op, _, args) { if op != typed.PrimOp.Drop: w.exprs(args, a) }
         case typed.Expr.Slice(_, _, sl) {
             w.place(sl.Base, a)
             w.expr(sl.Lo, a)
