@@ -28552,3 +28552,47 @@ two-phase first held arguments for any element, which changed what e31bviewlater
 (its element shares an array reference, so the copy's call writes the old element's array, as left to right says);
 holding is now only for an element sharing no reference (`SharesRefs`), whose copy's call was always refused, so no
 program that compiled reads otherwise. s5e31bfield (a method on `l[0].In`, refused) runs.
+
+## Copy() the one way to make a value from another, Clone gone (2026-11-03, E31d)
+
+The user settled the copy design on 2026-11-03 (decisions.md "Copy DECIDED", "Copy and unique DECIDED", "Collections
+DECIDED"): `Copy()` is the method that makes a new value from an existing one, the word `Clone` leaves the language;
+every ordinary type gets a field-by-field Copy (references shared) unless it declares one, and every copy calls it -
+assignment, compound assignment, a by-value argument, a store; a declared Copy only builds; collections are ordinary
+types copying their elements by their Copy. Built on wt-unique as the first part of the batch (unique, immut and
+String's immutability follow).
+
+**How it is built.** QCE had already made every copy of a value owning storage a typed `MakeKind.Copy` made at each copy
+site (check's storeCopy, valueArg, partCopy, a rendering's operand, a capture) and lowered through a per-type Copy helper
+(deep through values, shallow at references). A type declaring Copy is made to count as owning parts
+(`types.OwnsParts`): `generic.addFn` registers the declaring type's decl in the table (`Table.MarkCopy`) as methods are
+registered, before any copy is judged, so every site already found makes the same node, and lowering's `copyAt` calls
+the declared body where it reaches such a type - at the top or as a part (a struct's field, a Vec's or a Map's slots,
+an array's elements). check makes the instance each copy needs (`wantCopy`, walking by value as `wantStr` does for `$`);
+lowering finds it as it finds Str's (`methodBody`) and calls it with the copy's result scope and the program's for the
+receiver's (a Copy writes nothing, so nothing else is built anywhere). The supplied `x.Copy()` is a `MakeKind.Copy` of
+the value (of a reference's referent). The evaluator runs the lowered helpers, so it makes the same calls - a global
+baked through a copy and a top-level assert over it agree with the run time (tests/copy.olang).
+
+**Found on the way, and decided.** (1) The first build recursed forever: inside `fn (t tree&) Copy() tree { return
+tree(...) }`, the constructor's result views its text argument (D9h), so its caller copied it - through the helper,
+which now called the declared Copy, whose constructor's result its caller copied... D9h's caller copy is the callee's
+own copy of what it was given - the parts viewing the arguments - not a copy of the value: it is now a helper of its own
+kind, `HelperKind.Parts` (parts copied, the declared Copy never run at the top; deeper parts by their own Copy).
+(2) A collection's room - a Vec's slots past its count, a Map's empty slots - is held as zeros for an element owning
+storage (M19d), and the Copy helper copies the whole buffer: a declared Copy given a zero value with a never-null
+reference would read through null. The helper tests the value's first never-null reference (`neverNullPath`) and copies
+a null one as its bytes - room is never an element. (3) D9h's left-out copies and D9i's moves are not applied to a type
+whose copy runs a declared Copy: their proofs speak of the value's own storage, and a Copy deep through references makes
+what the value refers to anew (moving `t` at its last use while `r := t.root` is held would let `r` write the moved
+value, where the copy would not have) - so such copies are always made; the brief asked for the elision too, and it is
+left as a question for the user (a sound rule needs the quietness judged over every type the Copy reaches through
+references). (4) The Copy's effects are read off its body after the last attempt (`check.copyEffects`): allocation only.
+(5) std/list's `List` is a handle: its supplied Copy shares the record (a struct of one reference), and its Clone - a
+list of its own - is now built by `list.From(l.Iter())`; `tools/clone_migrate.olang` rewrites `.Clone()` to `.Copy()`
+and lists the lines of files importing std/list for a person, since only they can tell a List's Clone from an array's.
+
+**Measured.** bench's machine code (baseline x86-64, every program) byte-identical before and after: no program in it
+declares a Copy, and the supplied one is the copy already made. Messages that suggested `x.Clone()` say `x.Copy()`
+(text, any array, a type declaring Copy - a supplied Copy of a value holding references shares them, so it is no
+"copy of its own" there).

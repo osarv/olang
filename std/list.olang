@@ -28,7 +28,7 @@
 # A List is a HANDLE: everything it holds - the chunks and the counts - is one record, made where the List is
 # constructed (C2d), and a List value is one reference to it. So a copy of a List value ("b := a", a field, an element, a
 # by-value argument) is a second name for the same list, as a Go map is, and a Push through either is seen through both;
-# Clone() is the copy with storage of its own. (A List whose counts were copied beside shared chunks would be two lists
+# From(l.Iter()) builds a list with storage of its own. (A List whose counts were copied beside shared chunks would be two lists
 # overwriting each other's elements.) "Array<List<T>>(n, List<T>())" is n names for one list, as a fill copies one value
 # (T8).
 #
@@ -242,7 +242,7 @@ fn (l mut List<T>&) Clear() {
 # keeps the first n elements and removes the rest - nothing changes when the list holds n or fewer, so "l.Truncate(k)"
 # after a Sort leaves the top k whatever the length (Rust's Vec::truncate), and none is kept for an n of 0 or less.
 # Moves nothing; the chunks it empties are kept for the Pushes that follow, as Pop's are. (A copy of the first k is
-# "c := l.Clone()" and "c.Truncate(k)"; of an array, the slice "a[:k]".)
+# "c := From(l.Iter())" and "c.Truncate(k)"; of an array, the slice "a[:k]".)
 fn (l mut List<T>&) Truncate(n I64) {
     s := l.s
     if n >= s.count { return }
@@ -349,19 +349,6 @@ fn (l mut List<T>&) Sort<? E>(less fn&(x T, y T) Bool ? E) ? E {
     }
 }
 
-# a new List - built where the result lands - holding the same elements in the same order, with storage of its own:
-# the copy a List value's own copy is not (a copy of the value names the same list). The elements are copied as values,
-# so a List of references gives a list of the same references
-fn (l List<T>&) Clone() List<T> {
-    c := List<T>()
-    s := l.s
-    for k in range s.nChunks {
-        n I64 = s.chunk(k).Len()
-        if k == s.nChunks - 1 { n = s.used }
-        c.PushAll(s.chunk(k)[:n])
-    }
-    return c
-}
 
 # a new List holding the elements of a, in order: "list.Of(I32[3, 1, 2])", or n copies of one value,
 # "list.Of(Array<I32>(n, v))". The reverse of ToArray
@@ -1289,7 +1276,7 @@ if TestBuild {
 
     # a List is a handle: its chunks and its counts are one record, so a copy of a List value is another name for the same
     # list - a Push through either is seen through both, where the copy used to keep counts of its own beside the shared
-    # chunks and the two overwrote each other's elements. Clone() is the copy with storage of its own
+    # chunks and the two overwrote each other's elements. From(l.Iter()) builds one with storage of its own
     type listHolder struct() {
         items List<I64>
     }
@@ -1301,7 +1288,7 @@ if TestBuild {
         b.Push(2)
         a.Push(3)
         assert b.Len() == 3 and a.Len() == 3 and b[1] == 2 and a[2] == 3
-        c := a.Clone() # a list of its own
+        c := From(a.Iter()) # a list of its own
         c.Push(4)
         a[0] = 10
         assert a.Len() == 3 and c.Len() == 4 and c[0] == 1 and c[3] == 4 and a[0] == 10
@@ -1320,13 +1307,13 @@ if TestBuild {
     }
     listCopiesBaked := listCopies()
 
-    test "a copy of a List value names the same list, and Clone makes another" {
+    test "a copy of a List value names the same list, and From makes another" {
         assert listCopiesBaked == (15 + 10) * 1000 + 22
         assert listCopies() == listCopiesBaked
     }
 
-    # Clone copies every chunk, walked in order, and builds where its result lands - here past the block of the list it
-    # copies, read back after the arena that list lived in was reused
+    # From(l.Iter()) copies every element, walked in order, and builds where its result lands - here past the block of the
+    # list it copies, read back after the arena that list lived in was reused
     fn listChurnArena() I64 {
         t I64 = 0
         for i in range 500 {
@@ -1336,11 +1323,11 @@ if TestBuild {
         return t
     }
 
-    test "a List's Clone outlives the list it copies, across chunk boundaries" {
+    test "a List built from another outlives the list it copies, across chunk boundaries" {
         kept := List<I64>()
         if kept.Len() == 0 {
             src := listUpTo(100) # chunks of 8, 16, 32 and 64
-            kept = src.Clone()
+            kept = From(src.Iter())
             src.Push(100)
             src[0] = -1
         }
@@ -1349,28 +1336,28 @@ if TestBuild {
         words := List<String&>()
         line String& = "a bb ccc"
         for w in line.Split(" ") { words.Push(w) }
-        copy := words.Clone() # a List of references clones to the same references
+        copy := From(words.Iter()) # a List of references copies to the same references
         assert copy.Len() == 3 and copy[2] == words[2]
     }
 
-    # Clone of a List of every length around the first chunk's edge - held on its own, with no array of chunks until a second
-    # is made - and the next chunks': the clone holds the same elements and grows apart from the list
-    fn listCloneEdges() I64 {
+    # a List built from one of every length around the first chunk's edge - held on its own, with no array of chunks until
+    # a second is made - and the next chunks': the new list holds the same elements and grows apart from the list
+    fn listFromEdges() I64 {
         s I64 = 0
         for n in I64[0, 1, 7, 8, 9, 23, 24, 25, 56, 57] {
             l := listUpTo(n)
-            c := l.Clone()
+            c := From(l.Iter())
             c.Push(1000)
             l.Push(2000)
-            assert c.Len() == n + 1 and l.Len() == n + 1 and c[n] == 1000 and l[n] == 2000, "Clone of " $n
+            assert c.Len() == n + 1 and l.Len() == n + 1 and c[n] == 1000 and l[n] == 2000, "From of " $n
             for i, x in c { s += x * (i + 1) }
         }
         return s
     }
-    listCloneEdgesBaked := listCloneEdges()
+    listFromEdgesBaked := listFromEdges()
 
-    test "Clone at every chunk boundary, evaluated while compiling as at run time" {
-        assert listCloneEdges() == listCloneEdgesBaked
+    test "From at every chunk boundary, evaluated while compiling as at run time" {
+        assert listFromEdges() == listFromEdgesBaked
     }
 
     test "Truncate keeps the first n, across chunk boundaries, and Push carries on after them" {

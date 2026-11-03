@@ -67,7 +67,7 @@ every module's own. `tools/stutter_rename.olang` renames the old names in other 
   (`Vec`, the growable array), `map` and `text`'s `StringBuilder`; every other container is a module above (QZ2). Vec,
   Map, StringBuilder, Set, Deque and Heap hold their storage by value - a copy is one of their own, shared only through
   `&`, an element changed in place with `Ref`/`RefMut` - and std/list's `List` is the one handle (a copy names the
-  same list; its `Clone()` is a list of its own).
+  same list - its `Copy()` shares it, `list.From(l.Iter())` builds a list of its own). Every value has a `Copy()` (E31d).
   `array`, `text` (`String`), `vec`, `map`, `iterator` (the helpers - `Map`, `Filter` and `ToVec` building a Vec - and the adapters `Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `TakeWhile`, `SkipWhile`, `StepBy`, `FlatMap`, `Sum`, `Min`/`Max`, `MinBy`/`MaxBy`, and `Partition` into two Vecs, `Scan`, `GroupBy`, `ChunkBy`, `Dedup`, `Unzip`, `Product`, `Last`, `Nth`; `Reversed`, `Cycle`, `LowerBound` and `BinarySearch` for a Vec or any type with `At` and `Len`; an array's `Reversed`, `Windows`, `TakeWhile`/`SkipWhile` views, `Partition`, `Cycle`, `LowerBound`, `BinarySearch` and `ChunkBy` views), `hash`, `number` (the numeric traits,
   the constants `Pi`, `Euler`, `Inf`, `NaN`, and the numbers' methods: every C math function on the floats -
   `x.Sqrt()`, `y.Atan2(x)` - and `Abs`, `Min`, `Max`, `Clamp`, `Pow`, `Sqrt` on the integers), `float`, `complex`, `f8`,

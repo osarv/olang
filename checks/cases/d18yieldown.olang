@@ -1,4 +1,4 @@
-# check: fail error[S20, O26]: this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Clone()', '$x')
+# check: fail error[S20, O26]: this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Copy()', '$x')
 # D18b: a yielded value holding what the generator's own blocks hold would outlive it - yield a copy
 fn lists(n I64) Iterator<Vec<I64>> {
     l := Vec<I64>()

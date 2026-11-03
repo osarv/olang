@@ -1501,7 +1501,7 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
     if w.Final and w.quiet == 0 {
         for lf in lvs {
             f.stores.Push(store(lf.PlaceId, w.Id, w.body().File, sp, SFail, -1, -1, x, null))
-            f.keep(lf.PlaceId, RMade, w.body().File, sp, $"its new value is existing storage: '" $w.text(x.Span()) "'; give it new storage - a constructor call, '$...', 'Clone()'")
+            f.keep(lf.PlaceId, RMade, w.body().File, sp, $"its new value is existing storage: '" $w.text(x.Span()) "'; give it new storage - a constructor call, '$...', 'Copy()'")
         }
     }
     return o
@@ -2608,7 +2608,7 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
                     kind = SMove
                     of = k
                 }
-                if kind == SFail: why = $"its new value is existing storage: '" $w.text(x.Span()) "'; give it new storage - a constructor call, '$...', 'Clone()'"
+                if kind == SFail: why = $"its new value is existing storage: '" $w.text(x.Span()) "'; give it new storage - a constructor call, '$...', 'Copy()'"
             }
         }
     }

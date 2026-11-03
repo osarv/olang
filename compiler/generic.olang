@@ -2504,6 +2504,8 @@ fn (p mut Program&) addFn(mi I64, f ast.Func&, isExtern Bool) {
     }
     k := p.recvKey(mi, f.Recv!.Ty, f.TypeParams)
     if k < 0 { return }
+    # E31d: a declared type's own Copy - every copy of a value of it calls it, so the table knows of it before any is made
+    if (k >> 40) == 1 and p.text(f.Name) == "Copy" and f.S.Params.Len() == 0 { p.T.MarkCopy(types.DeclId(I32(k & ((I64(1) << 40) - 1)))) }
     mk := pair.Pair(k, I64(f.Name))
     head := try p.methods.Get(mk) catch default -1
     if head < 0 {

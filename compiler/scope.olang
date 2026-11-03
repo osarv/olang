@@ -7728,14 +7728,14 @@ fn (s mut Scoper&) indexCall(c typed.Call&) Bool {
     return false
 }
 
-# how C2d's message says to copy an argument (B11): "'$x', 'x.Clone()'" for text, "'x.Clone()'" for a type with a
-# Clone, "" for one with none - a Vec's or a Map's copy is a value held by value, which the message names already
-# (review 6b F6: it named 'x.Clone()' for a Vec)
+# how C2d's message says to copy an argument (B11): "'$x', 'x.Copy()'" for text, "'x.Copy()'" for any other array and a
+# type with a Copy of its own (E31d, a copy that makes what it refers to anew), "" for any other - a supplied Copy shares what the value
+# refers to, and a Vec's or a Map's copy is a value held by value, which the message names already (review 6b F6)
 fn (s mut Scoper&) copyHint(x typed.Expr&) String {
     d := s.P.T.Referent(x.Type()) if s.isRef(x.Type()) else x.Type()
-    if s.isText(d) { return "'$x', 'x.Clone()'" }
-    if s.P.MethodOf(d, s.P.L.Names.Intern("Clone")) < 0 { return "" }
-    return "'x.Clone()'"
+    if s.isText(d) { return "'$x', 'x.Copy()'" }
+    if s.P.T.KindOf(s.P.T.Repr(d)) == types.Kind.Array or s.P.T.DeclaresCopy(d) { return "'x.Copy()'" }
+    return ""
 }
 
 fn (s mut Scoper&) isText(ty types.TypeId) Bool {

@@ -1,0 +1,9 @@
+# check: fail error[E31d]: only a struct or an enum the program declares has a Copy of its own, not meters - its supplied Copy is the one
+# E31d: a declared type over a number copies as its number does
+type meters I64
+fn (m meters) Copy() meters { return meters(1) }
+fn main() {
+    a := meters(3)
+    b := a
+    assert b == meters(3)
+}

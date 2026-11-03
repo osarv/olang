@@ -1,0 +1,7 @@
+# check: fail error[M19]: Array<I64> has no method 'Clone'
+# E31d: Clone left the language - a value's copy is Copy(), supplied for every type
+fn main() {
+    a := I64[1, 2]
+    b := a.Clone()
+    assert b[0] == 1
+}

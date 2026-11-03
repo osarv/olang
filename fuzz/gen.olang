@@ -13,7 +13,7 @@
 # is in range or under try, a NaN's bits are never read, and a literal always fits the type it meets. A local if's
 # condition always reads a parameter, so no branch is dead (S8a).
 #
-# Besides numbers, a case holds Lists and Maps - handles: a copy names the same collection (T8), Clone makes another,
+# Besides numbers, a case holds Lists and Maps - handles: a Vec or a Map copied is a collection of its own (QCE, E31d),
 # and nothing changes one a loop is walking - with Pop/First/Last/RemoveAt/Insert/Reverse/Sort/Clear, l[i], walks run
 # by run (S9f) and Map Update/Remove/Keys/Values, keyed by numbers, structs (a supplied or declared Hash, E10b) or enums;
 # array and struct references, writable or read-only by their written type (T25b), borrowed, aliased and repointed
@@ -1532,8 +1532,8 @@ fn (g mut Gen&) mapT() I32 {
 fn (g mut Gen&) idxT() I32 { return I32(g.r(7)) }
 
 # a copy of list or map l with storage of its own - a Vec and a Map are values (QCE, 2026-11-01: a copy is no second
-# name, and their Clone() is gone)
-fn (g mut Gen&) sameOrClone(l I64, ind String&) String& {
+# name, and a copy is their Copy, E31d)
+fn (g mut Gen&) sameOrCopy(l I64, ind String&) String& {
     t := g.vt[l]
     x := g.use(l)
     k := g.reserve()
@@ -1560,7 +1560,7 @@ fn (g mut Gen&) listStmt(d I64, ind String&) String& {
     # a List a helper is handed never shrinks there: the helper may run in the middle of a caller's expression that has
     # tested the List's length (an index "% Len()", an Insert position)
     if g.vref[l] and (p == 5 or p == 6 or p == 8) { p = 2 }
-    if p == 1 { return g.sameOrClone(l, ind) }
+    if p == 1 { return g.sameOrCopy(l, ind) }
     if p == 2 or p == 3 { return $ind $x ".Push(" $g.fit(et, 2) ")\n" }
     if p == 4 { return $ind $x ".Insert(I64(" $g.solid(g.intT(), 2) " & 7) % (" $x ".Len() + 1), " $g.fit(et, 2) ")!\n" }
     if p == 5 {
@@ -1697,7 +1697,7 @@ fn (g mut Gen&) mapStmt(d I64, ind String&) String& {
     kt := mapK(t)
     vty := mapV(t)
     x := g.use(m)
-    if p == 1 { return g.sameOrClone(m, ind) }
+    if p == 1 { return g.sameOrCopy(m, ind) }
     if p < 6 { return $ind $x ".Put(" $g.fit(kt, 2) ", " $g.fit(vty, 2) ")\n" }
     if p == 6 { return $ind $x ".Remove(" $g.fit(kt, 2) ")\n" }
     if p == 7 {

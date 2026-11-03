@@ -1251,8 +1251,8 @@ parameter (below). A read-only copy:
   writably).
 
 A **written type declares a writable value**, so `x List<I64> = G` from a read-only `G` is an error: `x := G` is the
-read-only copy, `x List<I64>& = G` a read-only borrow, and a copy of its own is made by the type (`G.Clone()`) or from
-its parts. A fresh value - a literal, an instance a constructor makes - is writable as always, a call's result as its
+read-only copy, `x List<I64>& = G` a read-only borrow, and a copy of its own is made by the type's own Copy (`G.Copy()`,
+E31d) or from its parts. A fresh value - a literal, an instance a constructor makes - is writable as always, a call's result as its
 callee's result is written (T25b; save the call results below), and so is a copy of anything reached writably. A **mutable global's initializer** is stored where it can be
 written, so it is never a read-only copy (`Copy mut List<I32> = G` is an error; an immutable global may hold one). A
 **slice** of a read-only copy, and a loop's walk over one, read the copy: what they
@@ -1275,7 +1275,7 @@ instantiation, what is copied out of what such a parameter reaches - through any
 read-only as the **argument** a call gives it: a by-value **result** copied out of it is a read-only copy at a call
 whose argument is reached read-only, and writable where the argument is (so `ls[0]` on a read-only
 `List<List<I32>>&` is a read-only copy, as `for x in ls` gives, and `Map.Get` on a read-only map likewise); and where the
-body **keeps** such a copy writable - stores it where it can be written (`Clone`, `ToArray`, `ToVec`, `Filter`), lends
+body **keeps** such a copy writable - stores it where it can be written (`From`, `ToArray`, `ToVec`, `Filter`), lends
 it writably, or passes it to a callee that does - the parameter takes only a writable argument, an error at a call
 passing a read-only one. Settled once every body is checked; where the element type holds no writable reference,
 nothing of this applies.
@@ -2087,7 +2087,10 @@ costs. Only where nothing could tell: no mention of the local comes after (defer
 loop around the copy but not around the local's declaration count as after), the local's storage is its own - no view
 held in place of its copy (D9h) - named by no other local, escaping nowhere, never assigned whole, in no region early
 freeing made (O8d), and lives at least as long as where the copy would be built; a constructor's instance viewing only
-such moved locals is its own (no D9h copy where it is kept). Unobservable: the evaluator copies and agrees.
+such moved locals is its own (no D9h copy where it is kept). Unobservable: the evaluator copies and agrees. Neither
+D9h's left-out copies nor D9i's moves apply to a value whose copy runs a declared Copy (E31d), which may make what the
+value refers to anew: it is copied wherever the program copies it. A copy D9h's caller makes of a view a callee handed
+back is the callee's own copy of what it was given - the parts it views copied, never the value's declared Copy.
 
 **D16 (lambdas).** A **lambda** is a function written as an expression, with no name:
 
@@ -2213,7 +2216,7 @@ it holds open close then, innermost first, their destructors running (O15). The 
 that `Next()`'s result goes, which no local of the generator outlives - but where its elements are kept by its walk
 (D18c) - and no local is moved into the result scope (O26a) - a yielded
 local whose references are the generator's own storage is O26's error, and the value to yield is a copy built where it
-goes (`$x`, `x.Clone()`). A value array yielded is copied there (T7b).
+goes (`$x`, `x.Copy()`). A value array yielded is copied there (T7b).
 
 **D18c (what a generator may yield).** Where a generator's elements live is inferred from what its `yield`s give -
 read off its body before it is checked, nothing written (QCB) - and a `yield` is judged as a `return` of that kind (O13,
@@ -2704,9 +2707,10 @@ position) the next step is its end.
 A `List` is a **handle**: its chunks and its counts are one record, made where the `List` is constructed (C2d), and
 a `List` value is one reference to that record. So a copy of the value - `b := a`, an assignment, a field, an element,
 a by-value argument - is a second name for the same list: a `Push` through either is seen through both, as through
-two references (and as with a Go map). `Clone()` gives a new `List` with the same elements in the same order and
-storage of its own, built where its result lands; elements are copied as values, so a list of references clones to
-a list of the same references. Being an ordinary module, `std/list` says nothing of the positions it empties
+two references (and as with a Go map) - its supplied `Copy()` (E31d) shares the record, as a copy of a value holding a
+reference does. `list.From(l.Iter())` builds a new `List` with the same elements in the same order and storage of its
+own, built where its result lands; elements are copied as values (each by its own Copy), so a list of references
+gives a list of the same references. Being an ordinary module, `std/list` says nothing of the positions it empties
 (`vacate` is the prelude's): a position past a `List`'s end may still hold what was there, so early freeing (O8d) takes
 a `List`'s removals for no let-go, and what they removed is reclaimed with the list's scope.
 
@@ -2749,7 +2753,7 @@ room for `n` more the same way; `Len()` and `Cap()` count. It has the operations
 names and on the same terms but `RunFrom`, failing with `VecError`'s words (`Empty`, `NotFound`, `OutOfRange`) - `v[i]` and `v[i] = x` (E31,
 unchecked), `Get` (checked), `First`, `Last`, `Pop`, `Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`,
 `Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`, `Join` (of a `Vec` of texts, `Vec<String&>`
-or `Vec<String>`) and `ToArray` - a `List`'s `Clone` is a `Vec`'s copy; an array's `ToVec()` is a new `Vec` of its elements (`Array<I32>(n, v).ToVec()` for `n` copies of one
+or `Vec<String>`) and `ToArray` - a `List` built by `list.From(l.Iter())` is a `Vec`'s copy; an array's `ToVec()` is a new `Vec` of its elements (`Array<I32>(n, v).ToVec()` for `n` copies of one
 value), and an iterator's `ToVec()` one of every value it gives; `Pop`, `Clear` and `Truncate` keep the buffer. `for x in v` walks it by `At` and `Len` (S9d), reading the
 `Vec` each step, so a walk that pushes sees what it pushed; `v.Iter()` is an `Indexable`'s (M19e). `View()` is the one
 way to have its elements as an array - `Array<T>&`, `ViewMut()` writably - a window on the buffer as it is now, good
@@ -3973,6 +3977,28 @@ the receiver), whose parameter's type is not the receiver's (where they are the 
 ways); anywhere else it is a compile-time error. A type `A` whose `Mul` takes a `B`, beside a `B` whose `Mul` takes an
 `A` and commutes, would give `a * b` two meanings: the commuting declaration - the later of two that both commute -
 is a compile-time error naming the other. `commutes` is a word only in that position (L9b); it names nothing.
+
+**E31d (`Copy`).** `Copy()` is the one method that makes a new value from an existing one. **Every type has one
+supplied**: the value's copy, part by part - deep through what it holds by value (a value array's elements, a struct
+or an enum held by value, each by its own Copy), shared at references (a reference copies as itself, naming the same
+instance; so does a function value). `x.Copy()` written gives that copy - of a reference's referent where `x` is a
+reference - a value of its own: `r.Copy()` of an `Array<I64>&` is an `Array<I64>`. A **struct or an enum** the program
+declares may declare its own, `fn (x T&) Copy() T`: reading its receiver through a read-only reference, taking nothing
+else, giving a value of its type and never failing (no `?`, never `noreturn`) - with the receiver by value, written,
+another result or an error set it is a compile-time error naming that form, and on any other type (a declared
+number, an array type) an error naming the supplied one; a method `Copy` taking parameters is an ordinary method
+(E31). **Every copy of a value calls its type's Copy** - its own where it declares one, else the supplied one, which
+calls its parts' own in turn: a declaration or an assignment from an existing value (`b := a`, `b = a`), a compound
+assignment (`x op= y` is `x = x op y`), a by-value argument, a store into a field, an element or a payload, a value
+put into a collection, a collection's copy (a new buffer, each element copied by its Copy), a capture, a rendering's
+operand. A **fresh value** - a constructor's or a call's result, a value made - is no copy: it lands where it is put,
+and no Copy runs for it. A declared Copy **only builds**: allocating the value it gives is its one effect - writing a
+global or through what it is given, calling C, a function value or an `any`, starting tasks, waiting or ending the
+program is a compile-time error at its name, read off its body's effects (B11b's). A collection's **room** - a Vec's
+slots past its count, a Map's empty slots, held as zeros (M19d) - holds no element and is copied as its bytes: a
+declared Copy is never run on a value whose first never-null reference there is null. Where a type's copy runs a
+declared Copy, the copy is made wherever the program copies a value of it - none is left out (D9h, D9i); the
+compile-time evaluator makes the same calls (K1).
 
 **E31b (writing through `x[i]`).** `x[i]` on a type declaring `At` gives a copy of the element. A **store** through
 it - a field (or an inline element) of it assigned, `x[i].f = v` or `x[i].f op= v`; an increment `x[i].f++`; an
@@ -6304,7 +6330,7 @@ one result scope. A function whose results hold no reference has none. The resul
 result scope (O26); storage of a parameter's scope, or one a parameter's references reach - the obligation of O13; and
 storage of the program's scope (a global's, constant data, T25d), which outlives every result scope. Not storage of the
 function's own scope or of one of its blocks, which closes at the return - a compile-time error naming a copy to return
-instead (`$x`, `x.Clone()`) - and not a view of storage such a block built (O27). A by-value parameter's own storage is
+instead (`$x`, `x.Copy()`) - and not a view of storage such a block built (O27). A by-value parameter's own storage is
 the call's copy, in the function's own scope: a reference into it, or to a part of it reached without a reference, is
 one into the function's own storage - and a by-value parameter whose type holds no reference has no scope (O4b), so
 only what lives in the program's scope is handed back from it.
@@ -6453,7 +6479,7 @@ scope closes.
 **O27 (no storage extended for a view).** Only a whole value's flow lengthens where it is built (O28). A **view** of
 storage - a slice, a borrow of a part, what a callee hands back of an argument's storage - kept where that storage does
 not already live (past the loop turn or the block that built it, or through a reference result past the function) is
-a compile-time error naming a copy of what the view shows (`$x`, `x.Clone()`), never a copy made for it and never the
+a compile-time error naming a copy of what the view shows (`$x`, `x.Copy()`), never a copy made for it and never the
 storage held longer for a part of it: `for k in range n { t := $k "-x"; keep.Push(t[0:1]) }` is refused,
 `keep.Push($t[0:1])` accepted. Likewise a **part** of an instance a local's constructor built - a value read out of its
 field or element - kept longer never lengthens where the instance is built: the field takes a binding of its own (O28),
@@ -6478,7 +6504,7 @@ of them allow, and every judgment of this section is then made of it. So:
 
 The placement never extends storage past the loop turn or the block that made it for a part of it (O27), and nothing is
 copied that the program did not write: where no placement satisfies every use, the program is refused with the error of
-the rule that fails, saying what to write instead - a copy (`$x`, `x.Clone()`), the value built where it is kept, or a
+the rule that fails, saying what to write instead - a copy (`$x`, `x.Copy()`), the value built where it is kept, or a
 call made directly rather than through a function value (T22a). A block stays a scope (O2): what it built that nothing
 outside keeps is reclaimed at its close. `olang explain` shows a function's obligations (B11b).
 
@@ -6677,7 +6703,7 @@ so in `h := ll[0][0].S`, `e := ll[0][0]` and `h := lll[0][0]` the outer `At`'s r
 are, and so is what is read through it. A **value** result so landed holds what its
 callee's obligations say it holds of its arguments, so it then determines the parameter's scope where its result scope
 landed, as existing storage does: `bs.Push(box(t))`, `box` giving a struct holding `t`, is `b := box(t); bs.Push(b)`, and
-with `t` in a loop's block and `bs` outside it the call is an error, as is `rows.Push(rec.Clone())` for a loop's list `rec`
+with `t` in a loop's block and `bs` outside it the call is an error, as is `rows.Push(list.From(rec.Iter()))` for a loop's list `rec`
 - never a value taken for a temporary and built where the list lives while what it holds stays in the loop. A field, an
 element or a slice read out of such a result and passed on by value is a copy out of it whose references are where the
 result landed: `bs.Push(pair(t).a)`, `bs.Push(boxes(t)[0])` and `bs.Push(wrap(pair(t).a))` are
@@ -7497,7 +7523,7 @@ found wrong is wrong for every check that reads it after, and the first says wha
 (a clause's block, a lambda's body) is one of its own. Where such an error is about an argument or a value made in a
 block of this function that closes too soon, and the place it has to live is where another variable lives, a note at
 the local it was made as - following what it was read or borrowed from - says to make it there:
-`'text' is made here, in a block that closes first - keep a copy where it is kept ('$x', 'x.Clone()')`.
+`'text' is made here, in a block that closes first - keep a copy where it is kept ('$x', 'x.Copy()')`.
 An error met in the **standard library's** code (the prelude or `std`) while it is checked for one of the program's uses
 of it - a generic instantiated with the program's types - is the program's, since the library cannot be changed where
 it is used: it is reported at that use, the innermost one in the program's own files, with a note at the library's line

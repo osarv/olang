@@ -1,0 +1,80 @@
+# clone_migrate - "x.Clone()" becomes "x.Copy()": Clone left the language in the Copy batch (2026-11-03, SPEC.md E31d) -
+# Copy() is the one method making a new value from an existing one, supplied for every type (field by field, deep
+# through values, shared at references) and declared by a type that copies otherwise. An array's Clone() was its copy,
+# which Copy() is.
+#
+# One meaning changes, and is listed for a person rather than rewritten silently: std/list's List is a handle, so its
+# Copy() is a second name for the same list where its Clone() was a list of its own - write "list.From(l.Iter())" for
+# that. A file importing std/list has each line it rewrote listed (status 1 then), since only a person can tell a List's
+# Clone() from an array's. Code only: comments and literals are left alone. Re-runnable: a file with no ".Clone()"
+# changes nothing.
+#
+#     olang build tools/clone_migrate.olang && build/tools_clone_migrate FILE...    rewrites the files, naming each one changed
+
+import "std/os"
+import "std/io"
+import "srcmask"
+
+fn main() ? io.Error {
+    args := os.Args()
+    listed := 0
+    for k in range 1, args.Len() {
+        path := args[k]
+        text := try os.ReadFile(path) catch os.Error {
+            try io.PrintErrln("clone_migrate: " $path ": cannot be read")
+            continue
+        }
+        out := migrate(text)
+        if out == text: continue
+        try os.WriteFile(path, out) catch os.Error { try io.PrintErrln("clone_migrate: " $path ": cannot be written") }
+        try io.Println(path)
+        if not text.Contains("\"std/list\""): continue
+        for n in changedLines(text, out) {
+            if listed == 0: try io.PrintErrln("for a person: a list.List's Clone() was a list of its own, its Copy() names the same list - write list.From(l.Iter()) where a List is meant:")
+            try io.PrintErrln("  " $path ":" $n)
+            listed++
+        }
+    }
+    if listed > 0: os.Exit(1)
+}
+
+# the text with every ".Clone()" in code written ".Copy()"
+fn migrate(text String&) String {
+    mask := srcmask.Mask(text, false)
+    b := StringBuilder()
+    i I64 = 0
+    for i < text.Len() {
+        if mask[i] == 'c' and text[i:].StartsWith(".Clone()") and (i + 8 >= text.Len() or not srcmask.IsWord(text[i + 8])) {
+            b.Push(".Copy()")
+            i += 8
+            continue
+        }
+        b.PushChar(text[i])
+        i++
+    }
+    return b.ToString()
+}
+
+# the line numbers (from 1) where two texts of as many lines differ
+fn changedLines(a String&, b String&) Vec<I64> {
+    xs := a.Split("\n")
+    ys := b.Split("\n")
+    out Vec<I64>
+    for i in range xs.Len().Min(ys.Len()) {
+        if xs[i] != ys[i]: out.Push(i + 1)
+    }
+    return out
+}
+
+test migrate "a Clone() in code becomes Copy(), comments and text left as they are" {
+    assert migrate("b := a.Clone()\n") == "b := a.Copy()\n"
+    assert migrate("# a.Clone() here\nx := \"y.Clone()\"\n") == "# a.Clone() here\nx := \"y.Clone()\"\n"
+    assert migrate("c := f(a.Clone(), b.Clone())\n") == "c := f(a.Copy(), b.Copy())\n"
+    assert migrate("x.CloneAll()\n") == "x.CloneAll()\n"
+    assert migrate("x := 1\n") == "x := 1\n"
+}
+
+test changedLines "the lines a rewrite changed" {
+    ns := changedLines("a\nb.Clone()\nc\n", "a\nb.Copy()\nc\n")
+    assert ns.Len() == 1 and ns[0] == 2
+}

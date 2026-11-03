@@ -1,7 +1,7 @@
 # check: fail error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
-# never: Clone
+# never: x.Copy()
 # C2d, B11 (review 6b F6): an argument of a type with no Clone - a Vec, a value copied by assignment - is not told to
-# give a copy by 'x.Clone()' or '$x'
+# give a copy by 'x.Copy()' or '$x'
 import "std/io"
 type holder struct(v Vec<I64>&) { v }
 fn main() {

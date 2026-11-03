@@ -183,10 +183,10 @@ test "a part stored through a parameter outlives the call" {
 
 test "a clone of an array is its own, its elements' parts too" {
     a := I64[1, 2, 3]
-    b := a.Clone()
+    b := a.Copy()
     b[0] = 9
     ws := String["ab", "c"]
-    vs := ws.Clone()
+    vs := ws.Copy()
     vs[0][0] = 'X'
     assert a[0] == 1 and b[0] == 9 and ws[0] == "ab" and vs[0] == "Xb"
 }
