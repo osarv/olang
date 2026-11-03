@@ -28794,3 +28794,9 @@ it: `x Res = Res(2)`, `fn f(r Res)`, `type Box struct(r Res)` compiled, each a b
 instance whose destructor ran on that instance - a write to the copy was never seen (a probe summed 6039 where the
 copies held 10133), and the copy could outlive the instance's scope (use after release). Enforced now; nothing in the
 repository relied on it.
+
+**Measured.** bench's machine code (baseline x86-64, all sixteen programs) is master's but for addresses (the std paths
+in the FILE:LINE text differ in length). The compiler's self-build from an empty build/ (-O3 + LTO, one run each):
+master 22d3edf 43.96 s wall, 148 s of CPU, 2.94 GB peak; this round 45.23 s, 152 s, 2.96 GB; on a warm rebuild check
+1.52 -> 1.47 s and scope 1.28 -> 1.24 s (noise: nothing new runs unless a program declares a unique type, and
+`settleLandings` walks only bodies that hand one on). `make verify` passed.
