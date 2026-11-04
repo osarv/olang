@@ -187,8 +187,9 @@ work stops at ~0.92 weekly (nothing new starts near it; running agents finish an
 that week on. Read as a hard stop: the last-hours burn before a reset is not taken unless the user says so. The week
 ending Sat 2026-10-31 keeps the 0.95 rule and its queued end-of-week batch.
 
-**The week ending Sat 2026-11-07 (the user, 2026-11-04: "You can run up to 95% this week").** This week's stop is
-~0.95; the standing 0.92 stop holds again from the week starting 2026-11-07.
+**The week ending Sat 2026-11-07 (the user, 2026-11-04: "You can run up to 95% this week", then minutes later
+"Actually, scrap that").** Read as withdrawing the 95%: the standing 0.92 stop holds this week too. The bulk review
+started on the 95% was stopped at once (it had not yet built anything).
 
 ## Waking up after a reset, and never losing work to a limit
 **Standing rule** (the user 2026-10-08: "Always schedule yourself to resume when tokens are back as your usage runs

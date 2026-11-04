@@ -841,3 +841,7 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   constructor refused). Found, pre-existing, unfixed: a destructor growing a Vec through a reference field's method
   turns holders of a local's reference into C2d errors (inline write accepted); T17c refuses a by-value parameter
   holding a reference put into an enum case. FOR THE BULK REVIEW: typed.Landings (per-path landing), the drop flags.
+- 2026-11-04 CET: bulk review 7 (11b8d38..db71837: hybrid round 1, Copy, immut, String immutable, unique, O15 drop
+  flags) started when the user allowed 95% this week, stopped minutes later when they withdrew it ("Actually, scrap
+  that") - queued for after the 2026-11-07 reset, FIRST, before building more on these rounds (review checkout
+  /home/user/wt/review7 at db71837, notes dir /home/user/review/bulk7, its brief in this session's transcript).
