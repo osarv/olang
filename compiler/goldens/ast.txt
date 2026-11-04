@@ -169,7 +169,10 @@ d81b87da62c09223 05984b3e14ff3e60 checks/cases/blockunclosed.olang
 b01e57865cb6b78f 4f4f214a18817407 checks/cases/builtinmethod.olang
 7f55e30206609d9e d0b4c1a31c6b79cb checks/cases/c11destructnotunique.olang
 efdadd5b5d6a18df b339ebfdab404a6a checks/cases/c11dtorbyvalue.olang
+31e90d0d7617bb7b 62003a089b103cc7 checks/cases/c11dtorgenparam.olang
+3ec6d73ac4ec5150 67041b1826fa5bf8 checks/cases/c11dtorglobal.olang
 ec454b96fde0f86d f35f8e11a770decd checks/cases/c11dtortypearg.olang
+31c1bdc50436fd20 1728ac6f6eb431cb checks/cases/c11holdertypearg.olang
 d6cf37382bfc9f9f 473b524a177c1a19 checks/cases/c2afieldparam.olang
 15cd868f87474d30 4e746d1c7756dafd checks/cases/c2dargnote.olang
 8e66eb918f59e305 83c7021fa2407f34 checks/cases/c2dblock.olang
@@ -211,6 +214,7 @@ c9a9c5c899953972 2b28edc6b0121fb4 checks/cases/c7destructinbody.olang
 3a667f07a23ad373 84f20e5a40bc7fa7 checks/cases/c9bclash.olang
 5bf8e2390d227cc3 845e0b93aed410fc checks/cases/c9bdefault.olang
 2be659007a6a1c01 f8f9862f7f7c4908 checks/cases/c9bdeferret.olang
+e5bdec1f42180516 82b529555359dfb3 checks/cases/c9bdestroyedafter.olang
 e7abe041d8b6ed37 febd341671b34d33 checks/cases/c9berrdefer.olang
 d05a3c26a11ebdc6 a2048e8540f76ff4 checks/cases/c9bfnvalue.olang
 c55efc6a921008ed 895aeadebd2db1ab checks/cases/c9bkeepsnothing.olang
@@ -1203,6 +1207,8 @@ ab0abd2d5b092f2d 66bd26b59ef1f9e7 checks/cases/s19ereturn.olang
 4a36da5c29d2a822 803f4a9e55fa7fb8 checks/cases/s1bnested.olang
 669db0507a1009d1 3b1729ee86f20876 checks/cases/s1bparallel.olang
 d4e2190baab6f4c8 802aea9e55e9338e checks/cases/s1bsameline.olang
+f3c44e78e5f47772 9d4118930f82216d checks/cases/s20yieldheld.olang
+db98e63e4d12d3e4 a9d37c8b9fabc800 checks/cases/s21becomeheld.olang
 673d9ee12fb4a344 92e6031bbb67e951 checks/cases/s3busy.olang
 38f550194cc5952b dab0cf0b87b27582 checks/cases/s3idle.olang
 b8c07d3e375ec10e 62988b6717e754c3 checks/cases/s3joinnextline.olang
@@ -2097,6 +2103,7 @@ ccc425b5f75c0fa0 4a49f49fcb325abe tests/comptime.olang
 aff470fbd1162002 078a5ed18c7afe7c tests/copy.olang
 3618e735be7a2102 75556ecc13e59a3b tests/defaultbinds.olang
 170f505f9450ac68 57d092256c30a4b4 tests/definit.olang
+b7cc6a56cac7b323 6ca2064e766e205e tests/drops.olang
 952c72b08a535da6 c7705ce7f8e28fe9 tests/embed.olang
 fae6562b3c74b843 6acef30a376f9f7d tests/errsetparams.olang
 4180d4ff21a16a80 23f626955c105958 tests/errsets.olang
