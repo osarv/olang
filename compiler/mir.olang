@@ -1317,8 +1317,8 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
             xt := v.operandType(x)
             if not t.IsRef(xt) or not t.Same(t.Referent(xt), ty) {
                 v.bad("a destructor registered for a " $v.canon(xt) ", not a reference to a " $v.canon(ty))
-            } else if not t.Destructs(ty) {
-                v.bad("a destructor registered for a " $v.canon(ty) ", which declares none")
+            } else if not t.NeedsDrop(ty) {
+                v.bad("a destructor registered for a " $v.canon(ty) ", which has none to run")
             }
         }
         # O8d: what a sole place let go of - a reference, its object in a region (or none: null, constant data)

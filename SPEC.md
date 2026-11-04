@@ -2191,7 +2191,8 @@ own type:
 
 - a **value** is copied, and the lambda's copy is **read-only**, unlike a parameter's - changing the variable
   afterwards does not change the lambda, and writing to the copy is a compile-time error; a value of a unique type
-  (T13b), never copied, is borrowed as a value array is;
+  (T13b), never copied, is borrowed as a value array is, and so is a value with a destructor to run (O15), whose holder
+  is the variable;
 - a **reference** keeps naming the very instance it names (the copy is of the reference), and may be written
   through exactly when its type is writable (T25b) - this is how a lambda changes state outside itself;
 - a value **array** - text included - is **borrowed**, not copied, since copying one is never implicit (T7b):
@@ -6814,8 +6815,9 @@ reference - has its destructors run exactly once, **where its holder lets go of 
   Copy, E31d) lets go as the block declaring it is left - its function's body for a parameter - on every way out but the
   process-ending ones (S19c), as deferred code registered at its declaration does (S19); unless it no longer holds the
   value there: a by-value parameter handed on at its last mention (T13b), a whole variable returned (O26a) or made a
-  constructor's field (a pun, C4), a variable's `Destroy()` (C9b). A variable declared with no value and no zero value
-  (D13d) holds one once it is assigned;
+  constructor's field (a pun, C4), a variable's `Destroy()` (C9b). A constructor's fields go into its instance at its
+  end, and one failing part way lets go of those it built. A variable declared with no value and no zero value (D13d)
+  holds one once it is assigned. A lambda capturing such a variable names it where it is held (D16c);
 - a value holding parts lets go of them with itself: its own destructor first, then each part's, the last part first;
 - a store over a place holding such a value (S4) lets go of the old one after the new value is made and before it is
   stored (a variable's only while it holds one); a place reached through what a call gives is not stored over so;

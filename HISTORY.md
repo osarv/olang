@@ -28859,6 +28859,25 @@ existing program keeps its meaning; `r Res = Res(1)` is the by-value form. (3) B
 block's deferred code, before the scope's registered values - O15 states the order. (4) Rule names: the old C11 message
 "held only by reference" is reworded for type arguments, globals and generator parameters.
 
+**A constructor's own values.** A constructor's by-value parameter and its fields hold values too: a field is cleared
+at the constructor's end (its instance takes it), a pun hands the parameter's flag on to the field, and a constructor
+failing part way ends the fields it built, the last first (tests/drops.olang). In a constructor that cannot fail
+neither a punned parameter nor a field gets a flag at all - the instance takes them on every way out - which also keeps
+a holder's declared Copy (`Kept(Res(k.r.id + 100, k.r.log))`) within E31d's "only builds": effects count a drop
+wherever its code stands, flag or no flag, and a constructor's error-path drops would otherwise read as the Copy running
+a destructor. For the same reason effects no longer charge a constructor with its type's destructor: a constructor's
+value is held by its caller - registered at the caller's Promote or ended at the holder's Drop, each counted where it
+is. A pun is no T13b landing (Part A did not make it one either): the field and the parameter are one name in the body
+(C4), and a field computed from the parameter after the pun reads it. Found by the test: MIR's verifier refused a
+registration of a holder with no destructor of its own (`which declares none`) - test builds verify MIR, plain builds
+do not, so only the test file met it.
+
+**Measured.** bench's machine code (baseline x86-64, all sixteen programs) is master's instruction for instruction,
+addresses masked. The compiler's self-build from an empty build/ (-O3 + LTO): 46.04 s wall, 154 s of CPU, 2.97 GB peak,
+against Part A's 46.37 s, 154 s, 2.94 GB in the same setup - no program in the compiler holds a destructor type. `make
+verify` passed but for the token and tree goldens of the new files (captured while they were untracked - recaptured,
+then tokdiff and astdiff clean); `make scopesan` passed, `make scopefuzz` found nothing (100 programs, 436 scenarios).
+
 **Found on the way (pre-existing, not fixed - recorded).** (1) A destructor that calls a method writing through its
 instance's reference field (`log.Saw(id)` growing a Vec there) makes every instance holding a local's reference an O27/C2d
 error ("this instance holds a reference to an argument it would outlive"), where the same write written inline is

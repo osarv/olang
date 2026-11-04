@@ -4345,7 +4345,12 @@ fn (c mut Checker&) src2(file I64, sp source.Span) String { return $c.P.L.Diags.
 fn (c mut Checker&) rootStmts(body Array<ast.Stmt&>&) typed.Block& {
     from := c.stmts.Len()
     c.entryChecks()
-    for p in c.cur().Params { c.dropOnExit(I64(p), c.cur().Local(p).Sp, true) }   # O15: a by-value parameter's
+    # O15: a by-value parameter's - in a constructor that cannot fail, none for one its fields take whole (a pun): the
+    # instance takes it on every way out
+    punned := c.puns(body) if c.fr().InCtor and c.P.T.Items(c.P.T.Errors(c.cur().Ty)).Len() == 0 else Map<source.NameId, Bool>()
+    for p in c.cur().Params {
+        if not punned.Has(c.cur().Local(p).Name): c.dropOnExit(I64(p), c.cur().Local(p).Sp, true)
+    }
     storedIn(body, c.fr().stored)
     if body.Len() > 0 {
         c.stmtsOf(body)
@@ -5387,8 +5392,9 @@ fn (c mut Checker&) captureIn(fi I64, n source.NameId, sp source.Span) I64 {
     ox typed.Expr?& = null
     # a generator's Next holds a copy of a value array it is given, made where the generator lives (D18b): it is walked
     # after the call that gave it has returned
-    # T13b: a unique value is named where it is held, as a value array is
-    if not c.isRef(ot) and (c.arrayOf(ot) != types.UnknownT or c.P.Unique(ot)) and not fr.Gen {
+    # T13b: a unique value is named where it is held, as a value array is - and one with destructors to run (O15),
+    # whose holder is the variable captured
+    if not c.isRef(ot) and (c.arrayOf(ot) != types.UnknownT or c.P.Unique(ot) or c.P.T.NeedsDrop(ot)) and not fr.Gen {
         it = c.P.T.Ref(ot, types.ReadOnly)
         ox = typed.Expr.Borrow(sp, it, op)
     } else {
@@ -16922,9 +16928,9 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
             # T7a: a parameter a type variable bound to a run-time array (G18) - held by reference in an instance
             id := c.local(source.NameId(0), nsp, c.localType(pid), typed.LocalKind.Field, c.cur().Locals[pid].Marked)
             c.roNeed(typed.Lvalue.Local(nsp, c.localType(pid), typed.LocalId(I32(pid))))   # T25c: the instance keeps it
-            # (T13b, O15: a parameter's unique value, and its destructors, handed on into the instance)
-            x := c.uniqueLand(c.readLocal(nsp, pid), "'" $c.text(v.Names[i]) "'")
-            if c.fr().dropFlags.Has(pid) and not c.P.Unique(c.localType(pid)): x = c.handOn(x, pid)
+            # (O15: the parameter's destructors handed on into the instance with its value - the field and the
+            # parameter are one name in the body, C4)
+            x := c.handOn(c.readLocal(nsp, pid), pid)
             c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x))
             c.cur().Fields.Push(typed.LocalId(I32(id)))
             c.dropOnExit(id, nsp, true)
@@ -20229,12 +20235,27 @@ fn (c mut Checker&) landingsOf(b I64) {
 
 # ---- destructors where a holder lets go (O15, T13b) ----
 
+# the parameters a constructor's body takes whole into fields at its top level (C4's puns)
+fn (c mut Checker&) puns(body Array<ast.Stmt&>&) Map<source.NameId, Bool> {
+    out Map<source.NameId, Bool>
+    for st in body {
+        if st != ast.Stmt.Var: continue
+        v := st.v
+        if not v.Field or v.Ty is not null or v.Values.Len() > 0 or v.Infer: continue
+        for n in v.Names { out.Put(n, true) }
+    }
+    return out
+}
+
 # a by-value variable or parameter holding a value with destructors to run lets go of it as its block is left, on every
 # way out (deferred code, S19) - unless it handed the value on or gave it up, which a hidden flag says: set while it
 # holds a value (set: from its declaration), cleared where the value goes on
 fn (c mut Checker&) dropOnExit(l I64, sp source.Span, set Bool) {
     t := c.localType(l)
     if t == types.UnknownT or c.isRef(t) or not c.P.T.NeedsDrop(t): return
+    # (a constructor's field goes into its instance on every way out of one that cannot fail)
+    if c.cur().Local(typed.LocalId(I32(l))).Kind == typed.LocalKind.Field and c.fr().InCtor and
+       c.P.T.Items(c.P.T.Errors(c.cur().Ty)).Len() == 0: return
     flag := c.hidden(sp, types.BoolT)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(flag)), c.lit(sp, types.BoolT, 1 if set else 0)))
     c.fr().dropFlags.Put(l, flag)

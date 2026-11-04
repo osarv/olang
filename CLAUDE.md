@@ -593,8 +593,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   its parts'), which a registration of a holder with no destructor of its own runs too (`mir.DropFn`) - so lowering,
   emit, the evaluator, `interpret` and section 8 needed nothing else (the flags fold where nothing hands the value on). A
   D13d zero is never left out for such a type (its holder ends it); the Landings walk and definit skip a Drop's
-  borrow (no use); effects and early freeing count a holder's parts' destructors. Measured: bench machine code
-  byte-identical; tests/drops.olang's order decided while compiling (a top-level assert) as at run time.
+  borrow (no use); effects and early freeing count a holder's parts' destructors, a constructor no longer charged with
+  its type's (its caller holds the value); a constructor that cannot fail gives its punned parameters and fields no
+  flag (the instance takes them on every way out), one that may fail ends the fields it built. A capture of such a
+  variable borrows it (D16c, as a unique one). Measured: bench machine code identical (addresses masked), the
+  self-build unchanged; tests/drops.olang's order decided while compiling (a top-level assert) as at run time. Not
+  built: collections holding such values by value (`Vec<File>`: their own moves, growth and room would need a drop
+  walking their count - a round of its own).
 - **Declared types are nominal (T29).** `type Meters I32`, `type Name Array<T>`; `extends` inherits the base's methods
   and operators (T29f, the user's design); `Name(x)` converts and names the argument's storage (T29a) - a copy to or
   from an immut type (T13a); a declared

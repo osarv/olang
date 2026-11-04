@@ -367,10 +367,8 @@ fn (e mut Effects&) walk(b I64) {
     } else {
         e.block(body.Root)
     }
-    # a constructor of a type with a destructor registers it, run as the instance's scope closes (O16): what it does is
-    # what calling the constructor may lead to - in place, a block of the caller closing (C9)
-    of := body.Of
-    if of == typed.BodyOf.Ctor: e.dtorCalled(of.t)
+    # (a constructor's value with a destructor is held by its caller - registered where the call lands, a Promote, or
+    # ended where a by-value holder lets go, a Drop: each counted where it is, O15, O16)
     # a body's lambdas are its own: what they do is what making and calling them may do
     e.own[b] = e.cur
     e.calls[b] = e.curCalls

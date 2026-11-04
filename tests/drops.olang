@@ -24,6 +24,20 @@ type Pair struct(a Res, b Res) {
     a, b
 }
 
+# a holder declaring Copy makes its part anew: no unique type, each copy a value of its own, ended by its own holder
+type Kept struct(r Res) {
+    r
+}
+
+fn (k Kept&) Copy() Kept { return Kept(Res(k.r.id + 100, k.r.log)) }
+
+# a constructor that may fail ends the fields it built where it fails, the last first
+type Two struct(a Res, n I64) ? Bad {
+    a
+    b Res = Res(n, a.log)
+    if n > 5: error Bad
+}
+
 # a case carrying one
 type Maybe enum {
     None
@@ -106,4 +120,23 @@ test "a reference to a by-value variable is no holder" {
         assert w.id == 3
     }
     assert t.Text() == "3"
+}
+
+test "a holder declaring Copy is no unique type: each copy its own, ended by its own holder" {
+    t := Tally()
+    {
+        k Kept = Kept(Res(1, t))
+        c := k
+        assert c.r.id == 101 and t.Text() == ""
+    }
+    assert t.Text() == "1011"
+}
+
+test "a constructor failing part way ends the fields it built, the last first" {
+    t := Tally()
+    {
+        x := try Two(Res(1, t), 9) catch default Two(Res(7, t), 3)!
+        assert x.a.id == 7 and t.Text() == "91"
+    }
+    assert t.Text() == "9137"
 }
