@@ -829,3 +829,15 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   immut-to-mutable conversion copying, `mut` globals of `String&`. Left of the build batch: unique + destructor timing,
   item 17 (the kept local built where it is kept) - then the section-8 round (NLL, O27 placement, T22a relations),
   reuse in place, a bulk review.
+- 2026-11-04 CET: unique merged (wt-uniq cdb92ea, fast-forward; full verify, scopesan, scopefuzz passed on its tip;
+  no seed needed; bench instructions identical, self-build unchanged): T13b `unique` (a fresh value lands by value,
+  any other copy a reference, a slot given an existing one an error naming &, a by-value parameter hands its value on
+  once, no Copy, holders and collections follow their parts, never with immut, a generic copying one refused at the
+  call; tools/unique_migrate.olang in olang fix) and O15 destructor timing, Rust's (a value with destructors held by
+  value runs them where its holder lets go - block exit, a callee's end unless handed on, a store over it, Destroy();
+  a call's value no slot takes still registered where it lands, O16). Agent decisions 1-12 in HISTORY. Stopped at the
+  week's 0.89: LEFT - Part C (a unique value's storage freed exactly at its destructor, free.olang, fuzz free),
+  collections of destructor values by value, effects ignoring drop flags (a holder's Copy calling a fallible
+  constructor refused). Found, pre-existing, unfixed: a destructor growing a Vec through a reference field's method
+  turns holders of a local's reference into C2d errors (inline write accepted); T17c refuses a by-value parameter
+  holding a reference put into an enum case. FOR THE BULK REVIEW: typed.Landings (per-path landing), the drop flags.
