@@ -175,7 +175,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   else its own (E13c); `arith.Checked<T>` gained `Pow`; a type with none is an error naming it. A call in check
   (`power`), so the evaluator and QBV's folding apply unchanged.
 - **Logic is in words: `and`/`or`/`not`/`xor` (E7/E7a, the user's design).** `and`/`or` short-circuit (the user's
-  call); `not` binds looser than comparisons, as in Python. No compound logic assignments.
+  call); `not` binds looser than comparisons, as in Python. No compound logic assignments. Comparisons stay symbols,
+  `== != < <= > >=` (the user's call 2026-11-05, QCT, `eq`/`lt` words declined): arithmetic's own notation, read at a
+  glance and apart from the names around them; a word said aloud would be a phrase (`is less than`).
 - **One loop keyword, `for` (S9, S9a, the user's direction).** `for { }`, `for cond { }`, three clauses (post clause a
   simple statement), `for x in e`, `for i, x in e`, `do { } for cond`. `for ... in` walks an array, a type with
   `RunFrom` (run by run, S9f), a type's own `Iter()`/`Next()`, else `At`+`Len` (S9d) - in that order of preference, an

@@ -2873,3 +2873,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   Never both spellings (one way). Noted: `!=` keeps the C `!` olang otherwise dropped (postfix `!` ends the program),
   but every replacement is worse (`/=` is divide-assign, `<>` meets generics, `≠` cannot be typed, `is not` is the null
   test). In effect: the symbols.
+- QCT ANSWERED 2026-11-05 (the user: "Ye, keep everything as is"): the comparisons stay `== != < <= > >=`, `!=`
+  included; no word forms. Recorded in CLAUDE.md (the logic-in-words entry) and HISTORY.md.

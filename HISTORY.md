@@ -28883,3 +28883,20 @@ instance's reference field (`log.Saw(id)` growing a Vec there) makes every insta
 error ("this instance holds a reference to an argument it would outlive"), where the same write written inline is
 accepted - on master too; tests/drops.olang writes it inline. (2) A by-value parameter holding a reference put into an
 enum case (`Maybe.Some(r)`) is T17c's "refers to storage the value would outlive" - also on master, for plain structs.
+
+## Comparisons as words, declined (2026-11-05, QCT)
+
+The user asked whether `== != < <= > >=` should become words (`eq`, `le`, `gt` ...), as `and`/`or`/`not` replaced C's
+`&&`/`||`/`!`. I recommended against, and the user kept them ("Ye, keep everything as is"). The reasons given: the
+abbreviations are codes to learn rather than words said aloud - the spoken form would be a phrase (`is less than`,
+COBOL's style); the comparison symbols are arithmetic's notation, not C's inventions, read at a glance in any spoken
+language and standing apart from the names around them (`i < n and xs[i] != 0` against `i lt n and xs[i] ne 0`), and
+they keep chains reading as mathematics (`lo <= x < hi`); data and AI code is formulas (the reason `**` was added).
+Other languages point the same way: Fortran's `.LT.` existed because early character sets had no `<` or `>` (Fortran 90
+added the symbols), Perl's `lt`/`eq` and the shell's `-lt` because the symbols meant something else there (numbers,
+redirection). The one gain would have been `<` and `>` as type-argument brackets only (G12's touching rule gone), which
+the touching rule and the formatter's spacing already make unambiguous in formatted code, and the shifts `<<`/`>>`
+would have kept the clash. `!=` keeps the C `!` olang otherwise dropped, but every alternative is worse (`/=` is
+divide-assign, `<>` meets generics, `≠` is hard to type, `is not` is the null test). Counted: about 30,700 spaced
+comparisons in the repository, a tool's migration had it been taken. Found on the way: PRINCIPLES.md still gave `x is
+T` as a word form; `is` tests only for null since E10c, so the example reads `x is null`.
