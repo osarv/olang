@@ -21,7 +21,7 @@ So the design has to be **solid and smooth**: rules that compose, no rough edges
    written at the use site: atomics are named operations, an operator is a named method, a copy of an array is an
    assignment someone wrote.
 3. **Natural language, as much as possible.** Prefer a word you can say aloud to a symbol: `for x in a`, `and`/`or`/
-   `not`, `a if c else b`, `x in c`, `x is T`, `x as T`, `noreturn`, `unreachable`, `extends`. A symbol earns its
+   `not`, `a if c else b`, `x in c`, `x is null`, `x as T`, `noreturn`, `unreachable`, `extends`. A symbol earns its
    place when a word would be longer to read without being clearer (`+`, `[]`, `:=`).
 4. **Minimal syntax.** One way to write each thing. No semicolons; blocks always have braces; conditions have no
    parentheses; one loop keyword (`for`); one spelling of an error set (`?`); `mut` only where it decides something.

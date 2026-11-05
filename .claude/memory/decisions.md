@@ -2858,4 +2858,18 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   std (reflection reads types, cannot make them - Zig's MultiArrayList can because Zig makes types), so it would be
   compiler-supplied (as Odin's `#soa`), a language feature. ASKED: record it as not now, revisit when a program needs
   it (rec yes). In effect: none built; separate arrays + lane operators by hand.
-
+- QCT ASKED 2026-11-05 (the user: "What if we replace the comparison operators with natural language versions (eq,
+  le, gt, etc)?"): counted ~30,700 spaced comparisons in compiler/, std, tests, checks, tools (`==` 18,900, `!=` 3,500,
+  `<` 3,000, `>` 2,900, `>=` 2,000, `<=` 360) - a tool's migration either way. Weighed: (a) keep `== != < <= > >=`
+  (rec): the abbreviations are codes to learn, not words said aloud - the spoken form is a phrase (`is less than`,
+  COBOL's); the symbols are arithmetic's own notation, read at a glance in any spoken language, keep operators apart
+  from names inside an expression (`i < n and xs[i] != 0` against `i lt n and xs[i] ne 0`) and chains reading as
+  mathematics (`lo <= x < hi`); data and AI code writes formulas (why `**` was added); Fortran's `.LT.` existed only
+  because early character sets had no `<`/`>` (Fortran 90 added the symbols), Perl's `lt`/`eq` and the shell's `-lt`
+  because the symbols meant something else there (numbers, redirection). (b) abbreviations `eq ne lt le gt ge`: the
+  one real gain is `<`/`>` becoming only type-argument brackets, G12's touching rule gone (the shifts `<<`/`>>` would
+  stay unless they became words too); today's rule plus the formatter's spacing already leave formatted code
+  unambiguous. (c) phrases (`is less than`, `is at least`): long, `is` overloaded (null only, E10c), chains unreadable.
+  Never both spellings (one way). Noted: `!=` keeps the C `!` olang otherwise dropped (postfix `!` ends the program),
+  but every replacement is worse (`/=` is divide-assign, `<>` meets generics, `≠` cannot be typed, `is not` is the null
+  test). In effect: the symbols.
