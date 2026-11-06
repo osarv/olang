@@ -2914,4 +2914,15 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   compiler support for a difference the compiler can infer: Array and Vec are two because Array is the base type
   (text, slices, lane operators, C calls), and each column already is an Array. The one cost: a column view taken
   before a Push goes stale as a Vec's view does (M19g reports it within a function). In effect: one type.
+- QCV ASKED 2026-11-06 (the user: "should we make arrays and vex the same type as well? Not vex as in vex, but
+  vectors."): rec no - Array and Vec stay two; what makes one Columns type right does not hold for arrays: (1) views -
+  a slice of an array is free and safe because an array never moves; if every array could grow, every slice could go
+  stale, the hazard the user had Vec make explicit with `v.View()` (2026-10-17) - Go merged growth into its slices and
+  `append` writing into elements another slice still sees is its classic aliasing bug; (2) layout - an array in a
+  struct is laid out in place, which C interop and plain-data structs rely on: a guarantee, not an inference (Swift
+  had one growable Array and added a separate fixed `InlineArray` in 6.2 for it); (3) lengths known while compiling -
+  G29's per-length instances, decided asserts, lane lengths checked while compiling exist because an array's length
+  cannot change; text, slices, lane operators and C calls rest on all three. Columns can be one type because none
+  applies: it is not sliced into sub-tables, does not cross to C, and its fixed layout is only an optimization. In
+  effect: two types.
 
