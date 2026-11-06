@@ -2894,3 +2894,16 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   rows; a field named like one of its methods is an error at the instantiation (M19's rule); a private field's column
   only in T's module (M6a). Measured against hand-written columns and an `Array<Particle>` on the refs study's
   particle program; spec first, then build (opus high).
+- QCU ASKED 2026-11-06 (the user: "Do you think we should do build types like Zig? Also, is columns the right name or
+  should it be something else?"): (1) Zig-style type creation (functions returning types, `@Type`-like reification) -
+  rec no for now: every olang type is a declaration the tools read (hover, doc, explain, `olang api`), a computed type
+  exists only after code runs (tools must run it, errors point into type-building code - Zig's language server's weak
+  spot); it is macros by another name (PRINCIPLES: no macros); the need is small (type parameters, reflection reading
+  types and `comptime` cover Zig's common uses; derived types are few - Columns the first); and it is the largest
+  change left (types computed by the evaluator mid-check, through section 8, effects, layout and every tool). Revisit
+  with a narrow declarative form - a struct whose fields come from a walk over another type's fields (`for f in
+  T.Fields: f.Name Array<f.Type>`) - if a second and third derived type turn up; never pointer casts. (2) the name:
+  keep `Columns` (rec) - it names the layout, pairs with Vec (rows), and as a prelude name (reserved everywhere) it is
+  one programs rarely want for their own types; `Table` (the data-science word, but a very common user type name),
+  `SoA` (jargon, an abbreviation), `ColumnVec` (clearer about growth, longer). In effect: no type creation; `Columns`.
+
