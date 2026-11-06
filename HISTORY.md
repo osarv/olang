@@ -28914,3 +28914,15 @@ layout keyword on arrays keeping `a[i].x` (advised against: `a[i]` would stop be
 reference, every call through it a read-change-write). The user chose the built-in type ("Do the columns solution"),
 for next week's final batch; its shape (decided by me with it) is in decisions.md, "QCS (3) DECIDED".
 
+## Array and Vec kept as two types (2026-11-06, QCV)
+
+With `Columns<T>` decided as one type whose fixed layout the compiler infers where it never grows, the user asked
+whether Array and Vec should become one type the same way. Recommended against, and the user kept them ("Yeah, okay,
+keep them"). Arrays promise what a growing type cannot: a slice is free and safe because an array never moves (if
+every array could grow, every slice could go stale - the hazard Vec makes explicit with `v.View()`, and Go's `append`
+writing into elements another slice still sees); an array inside a struct is laid out in place, which C interop and
+plain-data structs rely on, so it must be a guarantee rather than an inference (Swift had one growable Array and added a
+separate fixed `InlineArray` in 6.2 for it); and per-length instances (G29), asserts decided on lengths and lane lengths
+checked while compiling exist because an array's length cannot change. Columns can be one type because none of these
+applies to it.
+

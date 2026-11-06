@@ -2925,4 +2925,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   cannot change; text, slices, lane operators and C calls rest on all three. Columns can be one type because none
   applies: it is not sliced into sub-tables, does not cross to C, and its fixed layout is only an optimization. In
   effect: two types.
+- QCV ANSWERED 2026-11-06 (the user: "Yeah, okay, keep them"): Array and Vec stay two types. Recorded in CLAUDE.md
+  (the Vec entry) and HISTORY.md. Asked with it, for the record: QCL's "collections as references only" (2026-11-03)
+  was superseded the same day by "Collections DECIDED" (ordinary types with a Copy, unique exactly when their elements
+  are, copies left out where neither side is written) and never built - a Vec is a value, shared by writing `&`.
 

@@ -1588,7 +1588,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   element a Ref/RefMut hands back, any index of it (`vs[...]` - bulk review 6b F4; unsure means refused). Since bulk review 6 a `Ref(i)`/`RefMut(i)` (and a Map's) is a view too, and a stale view or Ref
   reads the retired buffer, its owning elements emptied by the growth (SPEC follows the code). Hidden routes stay the
   evaluator's and `-sanitize`'s. Vec had been abandoned in 2026-09 for `List` (a bump allocator could not free a grown
-  buffer), then built on `own` (QH), and is now neither.
+  buffer), then built on `own` (QH), and is now neither. Array and Vec stay two types (QCV, the user's call 2026-11-06): a growing array
+  would make every slice a possible stale view, its in-place layout an inference rather than a guarantee (C and plain
+  structs rely on it), and its length no longer known while compiling.
 - **`Columns<T>`, a structure of arrays (QCS 3, the user's decision 2026-11-06; not built yet).** A prelude type the
   compiler lays out as one array per field of a struct T: `c.x` is a column, an array (lane operators apply, as fast as
   hand-written columns); `c[i]` reads a row as a T (a copy) and `c[i] = v` writes it back; pushing, removing and
