@@ -2906,4 +2906,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   keep `Columns` (rec) - it names the layout, pairs with Vec (rows), and as a prelude name (reserved everywhere) it is
   one programs rarely want for their own types; `Table` (the data-science word, but a very common user type name),
   `SoA` (jargon, an abbreviation), `ColumnVec` (clearer about growth, longer). In effect: no type creation; `Columns`.
+- QCU (3) ASKED 2026-11-06 (the user: "But should there then be one column vector and one column array?"): rec ONE
+  type, `Columns<T>`: made with a length (`Columns<P>(n)`, rows zero as `Array<T>(n)` gives them, or `(n, fill)`) or
+  empty to push into (`Columns<P>()`); it grows only by Push/Insert; where the compiler proves it never grows and knows
+  its length where it is made, its columns are laid out fixed in place as T7c lays out arrays (no handle, no view to go
+  stale; what a later FPGA subset needs) - an optimization, the compiler's. Two types would double the methods and the
+  compiler support for a difference the compiler can infer: Array and Vec are two because Array is the base type
+  (text, slices, lane operators, C calls), and each column already is an Array. The one cost: a column view taken
+  before a Push goes stale as a Vec's view does (M19g reports it within a function). In effect: one type.
 
