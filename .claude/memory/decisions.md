@@ -2885,4 +2885,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   operators apply), `ps[i]` a row assembled as a copy and written back, Push/Sort/for moving rows together; one
   feature round, convenience rather than speed; (3) a layout keyword on arrays keeping `a[i].x` - rec against: `a[i]`
   stops being a place (no lending as a reference, calls through read-modify-write). ASKED. In effect: none built.
-
+- QCS (3) DECIDED 2026-11-06 (the user: "Do the columns solution"): option 2 - a built-in `Columns<T>`, a structure of
+  arrays, in next week's final batch. Details (mine, recorded with it): a prelude type the compiler lays out as one
+  array per field of a struct T (T as a `Vec<T>` would take it); `c.x` is field x's column, an array view (lane
+  operators apply; stale after growth as a Vec view, M19g); `c[i]` reads row i as a T (a copy), `c[i] = v` writes it
+  back; Push, Pop, Insert, RemoveAt, SwapRemove, Swap, Truncate, Clear and Sort(less) move rows together; `for row in
+  c` walks rows; FromIter (QBW) gives `Columns<Particle>[...]` literals and comprehensions; Copy, `==`, Hash and `$` by
+  rows; a field named like one of its methods is an error at the instantiation (M19's rule); a private field's column
+  only in T's module (M6a). Measured against hand-written columns and an `Array<Particle>` on the refs study's
+  particle program; spec first, then build (opus high).

@@ -1589,6 +1589,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   reads the retired buffer, its owning elements emptied by the growth (SPEC follows the code). Hidden routes stay the
   evaluator's and `-sanitize`'s. Vec had been abandoned in 2026-09 for `List` (a bump allocator could not free a grown
   buffer), then built on `own` (QH), and is now neither.
+- **`Columns<T>`, a structure of arrays (QCS 3, the user's decision 2026-11-06; not built yet).** A prelude type the
+  compiler lays out as one array per field of a struct T: `c.x` is a column, an array (lane operators apply, as fast as
+  hand-written columns); `c[i]` reads a row as a T (a copy) and `c[i] = v` writes it back; pushing, removing and
+  sorting move rows together; `for row in c` walks rows; literals by FromIter. Built in by the compiler because
+  reflection reads types but cannot make one (Zig's MultiArrayList, Odin's `#soa`). Details in the ledger.
 - **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Print`, `io.Println(t = "")`,
   `io.PrintErr`, `io.PrintErrln` fail with `io.Error` and are written with `try`; no std function ends the program on
   its own. `io.Show<T>(v T, at Place = Place.Here) T` (QBP 4, 2026-10-27; built 2026-10-31) writes `FILE:LINE:COLUMN:

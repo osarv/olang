@@ -28900,3 +28900,17 @@ would have kept the clash. `!=` keeps the C `!` olang otherwise dropped, but eve
 divide-assign, `<>` meets generics, `≠` is hard to type, `is not` is the null test). Counted: about 30,700 spaced
 comparisons in the repository, a tool's migration had it been taken. Found on the way: PRINCIPLES.md still gave `x is
 T` as a word form; `is` tests only for null since E10c, so the example reads `x is null`.
+
+## Columns<T>, a structure of arrays, decided (2026-11-06, QCS 3)
+
+The references study (QCS) measured a structure of arrays 1.65x faster than records held flat, with 6.5x fewer
+instructions, on its particle program. Hand-written columns (a struct of arrays, lane operators over them) already get
+that speed but lose the record: no `ps[i]` giving a Particle, and every push, removal, swap or sort written once per
+field and kept in step as fields are added. A library cannot give the record back - olang's reflection reads a type's
+fields but cannot create the type "one array per field of T" (Zig's MultiArrayList can, since Zig's comptime makes
+types; Odin built `#soa` into the language) - so it is the compiler's. Three options were laid out: not now (my
+recommendation, since it adds convenience rather than speed and nothing needed it), a built-in `Columns<T>`, or a
+layout keyword on arrays keeping `a[i].x` (advised against: `a[i]` would stop being a place - no lending as a
+reference, every call through it a read-change-write). The user chose the built-in type ("Do the columns solution"),
+for next week's final batch; its shape (decided by me with it) is in decisions.md, "QCS (3) DECIDED".
+

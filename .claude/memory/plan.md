@@ -856,4 +856,6 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   done; then oann's port and the settling experiments. The 0.92 stop holds; the week read 0.97 at 21:45 CET on
   2026-11-06 (the coordinator's own long-context turns), so nothing more ran before the reset. The wake-up
   trig_01UpkSP1CvFmvUotAUWuyYCt carries these steps.
+- 2026-11-06: QCS 3 decided (the user: "Do the columns solution") - `Columns<T>`, the built-in structure of arrays,
+  is step 8 of the final batch (decisions.md "QCS (3) DECIDED" has its shape; spec first).
 
