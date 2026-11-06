@@ -2875,3 +2875,14 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   test). In effect: the symbols.
 - QCT ANSWERED 2026-11-05 (the user: "Ye, keep everything as is"): the comparisons stay `== != < <= > >=`, `!=`
   included; no word forms. Recorded in CLAUDE.md (the logic-in-words entry) and HISTORY.md.
+- QBY timing ANSWERED 2026-11-06 (the user: "next week (tomorrow) we build the entire compiler with the remaining
+  features, verify, and then the compiler is done. then we do oann and settling experiments"): oann's port and the
+  settling experiments start once the compiler is done, after next week's final batch and verify.
+- QCS (3) LAID OUT 2026-11-06 (the user: "the structure of arrays question, lay it out"): options (1) not now -
+  hand-written structs of arrays with lane operators already get the layout's speed, a built-in type added later
+  breaks nothing, the settling work keeps its data in tensors (rec); (2) a built-in generic `Columns<Particle>` (name
+  open) in next week's batch - one array per field laid out by the compiler, `ps.x` a column as an array (lane
+  operators apply), `ps[i]` a row assembled as a copy and written back, Push/Sort/for moving rows together; one
+  feature round, convenience rather than speed; (3) a layout keyword on arrays keeping `a[i].x` - rec against: `a[i]`
+  stops being a place (no lending as a reference, calls through read-modify-write). ASKED. In effect: none built.
+

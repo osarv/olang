@@ -845,3 +845,15 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   flags) started when the user allowed 95% this week, stopped minutes later when they withdrew it ("Actually, scrap
   that") - queued for after the 2026-11-07 reset, FIRST, before building more on these rounds (review checkout
   /home/user/wt/review7 at db71837, notes dir /home/user/review/bulk7, its brief in this session's transcript).
+- DIRECTIVE 2026-11-06 CET (the user: "next week (tomorrow) we build the entire compiler with the remaining features,
+  verify, and then the compiler is done. then we do oann and settling experiments"): from the reset (2026-11-07 05:00
+  CET), one agent at a time: (1) list every decided-but-unbuilt item - the ledger's decisions, CLAUDE.md's "not built
+  yet", this file's queue - and add what is missing to the queue; (2) bulk review 7 and its fix round; (3) the build
+  batch's rest (item 17, unique Part C, collections of destructor values by value, drop flags in effects); (4) the
+  section-8 round (NLL, O27 as placement, T22a relations); (5) reuse in place; (6) the refs study's two items; (7)
+  wt-uniq's two pre-existing bugs; (8) what (1) finds, and the structure-of-arrays container only if the user picks it
+  (QCS 3); (9) a final bulk review with its fixes and a full verify (verify, scopesan, scopefuzz, fuzz) - the compiler
+  done; then oann's port and the settling experiments. The 0.92 stop holds; the week read 0.97 at 21:45 CET on
+  2026-11-06 (the coordinator's own long-context turns), so nothing more ran before the reset. The wake-up
+  trig_01UpkSP1CvFmvUotAUWuyYCt carries these steps.
+
