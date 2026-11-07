@@ -889,232 +889,66 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 ### The C compiler and the port
 
 - **The C compiler, stage 0, is removed (2026-10-23; the user's decision: remove `bootstrap/` once the port passes
-  everything).** It was `bootstrap/*.c` (the user's call, 2026-10-10), built to `build/out`; its last commit is tagged
-  `stage0-final` (also a branch), and `git checkout stage0-final -- bootstrap` brings it back. What replaced it as the
-  oracle is `compiler/goldens/` (what it said, captured once) and, for building from nothing, the seed. The compiler is
-  `build/olang`, `OLANG ?= build/olang`. The generated seed (`seed/`, LLVM IR the olang compiler writes of itself for baseline
-  x86-64, `make seed`) rebuilds the compiler from nothing in one run, `make bootstrap`, with clang alone (the user,
-  2026-10-18; built 2026-10-22, compiler/DESIGN.md section 5). The refactor was modest: no splitting files for size (the user).
-  A construct the checker does not check yet stops a build, as one lowering or emission does not handle does ("it does
-  not check ... yet", 2026-10-26: a checker gap used to be left out of the program silently - a lost write).
+  everything).** Its last commit is tagged `stage0-final`. The oracle is `compiler/goldens/`; building from nothing is
+  the generated seed (`seed/`, LLVM IR of the olang compiler for baseline x86-64, `make seed`, `make bootstrap`, with
+  clang alone - the user, 2026-10-18). The compiler is `build/olang`. No splitting files for size (the user).
 - **The port is a redesign (the user's rule):** a hand-written scanner, recursive descent with Pratt expressions, a
-  demand-driven checker over an AST of enums, §8 as its own pass, MIR, one evaluator for comptime and `interpret`
-  (`compiler/DESIGN.md`). Acceptance is the test suite plus per-stage diffs against stage 0 (tokdiff, astdiff,
-  namesdiff, layoutdiff, diaggold) and stage 1 rebuilding itself. Merged: M1 scanner, M2 diagnostics, M3 parser, M4
-  loading and names, M5a types and the typed contract, M7's MIR contract, M10's driver (`compiler/build.olang`,
-  `target.olang`, `olang.olang` - the word command line over the whole pipeline, the runtime filled in by
-  `runtime.olang`; `make drvdiff`; lowering by the scope pass's plans, its errors reported, the port builds itself at
-  `-debug`, one object per module (stage 1 == stage 2 == stage 3, 1.6 GB; a clean self-build 46 s, an edit
-  recompiling only its module's object) and passes compiler/'s and std's tests, HISTORY.md "Port M10: the pipeline
-  behind the driver", "Port M6 round 5" and "Port M10: per-module objects under the scope pass's placement"); the compiler under test is `OLANG ?= build/olang`. In progress: M5b/M5c, `compiler/check.olang` (the checker
-  elaborating the resolved AST into typed core; HISTORY.md "Port M5b/M5c"); M7, `compiler/lower.olang` (the typed core
-  lowered to MIR with the scope pass's placement - the stand-in, everything in the program's scope, where a body has no
-  plan - helpers, adapters and initializations made as MIR functions; `make
-  lowerdump` verifies every function of the corpus, std, compiler and the checks' run cases - all clean but what check
-  leaves wrong; a try's leftovers leave the body (R13) but for a loop's own Exhausted try, which passes them to the try around it, a T29d literal's error edge is never taken, no releases or
-  holds since own is being removed; HISTORY.md "Port M7: lowering"); M8, evaluation in the pipeline (`compiler/interp.olang`
-  over `eval.olang`: the build's conditions and asserts decided by evaluation, fixed locals included (S8c), `olang
-  interpret` running main placed by the scope pass, each scope reclaimed and its destructors run as it closes, immutable globals baked into emitted data by the driver too (K2, K2c), what two baked globals reach written once per module (K2b), a local condition decided reading no build constant an error (S8a), a top-level condition that does not decide an error (B9c), T29d's literals and D13c's zero values decided, a global that aborts an error (K2), a stale Vec view stopping evaluation (M19g), tasks run in sequence at the join under interpret too (B3e, decided: interp's tasks.olang pins it), array lengths computed by calls (QP1), the
-  error trace (S18d); `make evaldiff`; HISTORY.md "Port M8: evaluation in the pipeline"). M6, `compiler/scope.olang` (section 8 over the typed core, filling each body's
-  plan, which lowering reads; scopediff measured it against stage 0's goldens (deleted 2026-11-02) - round 7: every program stage 0
-  accepts is scope clean (307 of 307), 275 of 280 refused cases give stage 0's first error, 1 still gets none (s5mapgetreturn, 0 since 2026-10-23: it runs; kept on
-  purpose), call results and constructors' fields carry instance records (O13c, O23a); the port built `-debug
-  -sanitize` runs the compiler's, std's and the corpus's tests with no use after a scope closed; HISTORY.md "Port M6"). M9, `compiler/emit.olang` (MIR written as LLVM IR, one object per module - each module's, the root's
-  instances', the root's with main or the harness - its text depending only on what it holds, so an edit recompiles
-  only what changed (at -O3 the instances in the root's, as stage 0's); the error trace S18d; TBAA, DWARF and the runtime's
-  declarations read from its text (round 4); aggregates over 128 bytes through memory, -race and -sanitize, DWARF for
-  aggregates and arrays (round 5); every module's bodies but the root's emitted, so programs built in one directory
-  share its object, objects over 2 MB cut into parts compiled side by side (-debug and ThinLTO builds), single-use
-  stack slots folded, the test harness as tables (round 6: the port-run verify 40.7 -> 28.4 min); instances and helpers
-  whose code is the same written once, a generic struct's instances named by layout so they meet, the ThinLTO import
-  limit 70, compiles started heaviest first, MIR verified only in test and -debug builds (round 7, compile speed: the
-  -O3 self-build 238 -> 176 s of CPU, `OLANG_TIMES` reports the phases); a module whose inputs did not change neither
-  lowered nor emitted again, its IR reused from `build/rec` (B3i, `OLANG_CHECKREUSE` compares with a fresh emission), a
-  test named by its name and the instances and a test build's tests in parts of their own, what clang says of the target
-  kept (B12b), MIR verified only in test builds (round 8: a leaf edit of the compiler 5.0 -> 3.5 s and 1.16 GB -> 614 MB,
-  a -debug leaf edit 5.1 -> 2.4 s, an edit to a test of tests/shared.olang 10.5 -> 4.1 s); a failed check's `FILE:LINE:` text in a `.loc` object of its
-  own per home, compiled without LTO (B3l), the root's instances grouped by the first module reaching them with
-  same-code functions merged across groups by tail-calling wrappers, parts of 1 MB (-O3) and 512 KB (-quick, -debug),
-  the views pass skipped where no body takes a Vec's view (round 9: a line added in a shared.olang test 14.7 -> 4.0 s,
-  an edit making a new instance 89.8 -> 29.9 s of CPU, a -quick mid-module edit 15.6 -> 2.7 s); `make emitdiff`; HISTORY.md
-  "Port M9"). M19g is `compiler/views.olang`, a pass of its own after check
-  (summaries over the call graph's components, then a dataflow walk of each body; every M19g case as stage 0 gives
-  it - HISTORY.md "Port M5b/M5c", fourth round).
-  M12, the suite through stage 1 (`build/stage1`, the port built by stage 0, as `$OLANG`): the test files pass;
-  checks/checks.olang is the open part - after the fourth round 19 of its 1,069 cases and 4 of its 56 scenarios, all the
-  evaluator's (HISTORY.md "Port M12", four rounds, the third with what replacing the stage-0 comparisons by stored
-  outputs takes; the fourth reads stage 0's flow - a local named right after a written "try", a later module's
-  function - as stage 0 does, so nothing it refuses is accepted (both reverted once stage 0 went); the fifth, parity before bootstrap/ goes: of the
-  repository's 1,422 files the port builds every one stage 0 builds and refuses every one it refuses - a later module's
-  callee read by its body where a local's landing is decided (O18c), interpret running the deferred code of the blocks a
-  stop leaves and aborting on a failed check as stage 0 does (B3e), a dropped branch's syntax error hiding nothing (B4,
-  D10a)). The scenarios that grepped stage 0's IR state the same facts in either compiler's spelling, as alternatives
-  of one expression (`irHas`, `gsym` - decided by me, never loosened); the port now orders globals (B5a), bakes them
-  (K2), enforces M6/M6a/M6b across modules, and calls X8's exact math functions as intrinsics. **The stage-0
-  comparisons read stored goldens** (compiler/goldens/, 2026-10-22, HISTORY.md "Port M12: the stage-0 comparisons
-  stored"): drvdiff, tokdiff, astdiff, modgraph, emitdiff and evaldiff hold the port to what stage 0 gave, captured once
-  by a make target each (drvgold, tokgold, astgold, modgold, rungold; captured from the port since stage 0 went) - tokens
-  and trees as a hash per file, a file edited since reported as stale until captured again - and a checks run
-  case is held to its stored output too. **Stage 0 was removed in one commit (2026-10-23, HISTORY.md "Stage 0
-  removed")**: compiler/msgs.olang is the diagnostics table's source, and `make verify` runs everything with the port. `make bootstrap` compares
-  the second and third builds, so a seed older than the code generator still bootstraps. With the port built by itself
-  (2026-10-23) every test file passes and checks/checks.olang fails only known cases (25, 20 the evaluator's) and the 6 known
-  scenarios of stage 1's third round; its
-  crash on every condition the build decides was check.olang's own out-of-range index (`c.fr()` with no frame, E16e),
-  which the two compilers' arenas laid out differently - not a miscompile (HISTORY.md, "Port M12: the self-built
-  compiler's crash").
-- **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** (Closed traits since
-  2026-10-24, T31a - the entry "Traits: extends, closed, intersections" below; the private-method sealing is gone.)
-  Sealed prelude traits
-  (`std/prelude/number.olang`, one private method each) satisfied by the four floats, the eight integers, and all twelve;
-  `Bool` none. **A declared type never satisfies one, `extends` included (mine)**: T31 now says a private method is
-  supplied only for a type its own module declares (or a built-in one), so `Char` and `type Dist extends F64` inherit
-  the method and satisfy nothing - that is what lets a body pick by `match T` over the built-ins, which would have no
-  case for them. Stage 0 and the port both enforce it; the error is `G19, T31` "... is sealed". Used by the numbers'
-  methods (`<T Float>`, `<T Number>`, `<T Integer>`, M19d), std/stats (`<T Number>`).
+  demand-driven checker over an AST of enums, §8 as its own pass (compiler/scope.olang), MIR (lower.olang), one
+  evaluator for comptime and `interpret` (eval.olang, interp.olang), LLVM IR emission per module (emit.olang), M19g in
+  views.olang, early freeing in free.olang (`compiler/DESIGN.md`). Acceptance is the test suite plus stage 1 rebuilding
+  itself; the stage-0 comparisons read stored goldens (`compiler/goldens/`, one make target each: drvgold, tokgold,
+  astgold, modgold, rungold). Compile speed is a first-class goal (the user, 2026-10-23); per-module objects, B3i reuse,
+  parts compiled side by side. The port builds itself (stage 1 == 2 == 3); `OLANG ?= build/olang`.
+- **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Closed prelude traits
+  (`std/prelude/number.olang`) satisfied by the four floats, the eight integers, and all twelve; `Bool` none. **A
+  declared type never satisfies one, `extends` included (mine)**: `Char` and `type Dist extends F64` inherit the
+  methods and satisfy nothing, which lets a body pick by `match T`. Used by the numbers' methods and std/stats.
 - **A literal reaching a constrained variable takes a type its constraint allows (G9a, G19, T35c, 2026-10-18, the
-  user: "math.Sqrt(4) should not be an error").** A variable only numeric literals reach is bound to the widest of their
-  types unless that fails its constraint; then to the first of `F64, I64, U64, F32, I32, U32, F16, BF16, I16, U16, I8,
-  U8` (my order: widest first, a float before an integer of its width) that meets it and that every literal adapts to
-  (T6) - `root(4)` with `fn root<T Float>(x T) T` is `root` at `F64`; none fitting, G19's error stays (`whole(2.5)`). A typed argument binds its
-  own type: `root(n)` with `n I64` stays an error (no implicit integer-to-float). Both compilers; the evaluator
-  sees the bound type.
+  user: "math.Sqrt(4) should not be an error").** A variable only numeric literals reach binds the widest of their types
+  unless that fails the constraint, then the first of `F64, I64, U64, F32, I32, U32, F16, BF16, I16, U16, I8, U8` that
+  meets it and every literal adapts to. A typed argument binds its own type (`root(n)` with `n I64` stays an error).
 - **Traits: extends, closed, intersections (T30a, T31a, G19, T35c, 2026-10-24, the user's decisions).** `type Dwelling
-  trait extends Shape, House { ... }` has its methods and every extended trait's, so satisfying it is satisfying each.
-  `type Float trait for F16, BF16, F32, F64 { }` is **closed**: met by the very types it lists (a declared type over
-  one, or extending one, is another type), each of which must have the trait's methods (checked at the declaration),
-  and by nothing else; a closed trait listed takes its types in (`type Number trait for Integer, Float { }`), an open
-  one is an error there. `<T Shape House>` is an intersection, met by a type satisfying both. The prelude's numeric
-  traits are closed now, their private-method sealing removed; a `match T` over a closed trait's types needs no
-  `case _` (G15 already checks per instance). Decided (mine): the keywords go after `trait`, `extends` before `for`;
-  an intersection is held as a tuple of traits, each checked; a method a binding lacks from an extended trait is
-  named with that trait (`Rooms (House's)`); no inline type lists (additive later, decided).
-- **Contracts (D17-D17g; the user's design 2026-10-24, revised by the user 2026-10-25; details mine).** One bracketed
-  block right after the parameter list: `fn pick(x I32, y I32) [y > x] I32 ? ArgumentError { }`, `fn between(lo I64,
-  hi I64, x I64) [hi >= lo, x >= lo and x <= hi] Bool`,
-  `type Percent struct(v I64) [v >= 0 and v <= 100] { v }`. A condition is any `Bool` expression over the parameters and
-  what a body reads at its top level - calls, fallible calls, lambdas included. **Checked on entry in every build**, in
-  order: a false one fails the call with the prelude's `ArgumentError.Invalid`, carrying the function and the condition
-  as its payload (`ArgumentError.Invalid("pick: y > x")` in `$e`, `!`'s message and `main`'s, in every build - the
-  thread-local slot of 2026-10-25 went with errors carrying data, 2026-11-07), the trace naming it too; an error from a call inside a condition leaves as itself. So
-  `ArgumentError` is in the function's set: a bare `?` infers it, a function with no `?` has it, a written set must list
-  it (an error naming it otherwise); every call needs `try`/`catch`/`!`. Decided while compiling where the evaluator can:
-  at a call whose arguments are all values it computes a false condition is an error at the call - unless a `catch`
-  there takes its `ArgumentError`, when it fails at run time as written (a test of the failure path; 2026-10-25, the
-  lang25 review, reversing "whatever handles it"); where the evaluator runs a call (a baked global, a decided assert) the conditions are checked as at run time.
-  Scope relations are no condition: they are inferred obligations (O10b; `outlives` items removed 2026-11-02, QCB). A
-  function with value conditions is a value, checked on entry through it. A trait method's contract is checked before a call through an
-  `any` dispatches, then the implementation checks its own. **Removed 2026-10-25**: the position after the signature,
-  guarantees, named results, `return x` entry values, `for`/`if`/`fits` items, `checked f(x)`. D17g stays: a
-  conversion of a value the evaluator computes that does not fit (`U8(300)`) is a compile error naming
-  `x.Narrow<T>()`. Decided (mine): a requirement body per condition, its error set inferred; a trait's conditions held
-  caller-side before dispatch; the compile-time decision reports the first false condition per call; a false
-  requirement's trace line is the condition's (`FILE:LINE: f: cond`), `!`'s own line `ArgumentError.Invalid`.
-  `tools/contracts_migrate.olang` moves old blocks and lists the dropped items. Found on the way (2026-10-24): the
-  port's resolver accepted two functions of one name in a module (D2) - an error now.
+  trait extends Shape, House { ... }` has its methods and every extended trait's. `type Float trait for F16, BF16, F32,
+  F64 { }` is **closed**: met by the very types it lists and nothing else; a closed trait listed takes its types in. `<T
+  Shape House>` is an intersection. A `match T` over a closed trait's types needs no `case _`.
+- **Contracts (D17-D17g; the user's design 2026-10-24, revised by the user 2026-10-25).** One bracketed block after the
+  parameter list: `fn pick(x I32, y I32) [y > x] I32 ? ArgumentError { }`, `type Percent struct(v I64) [v >= 0 and v <=
+  100] { v }`. A condition is any `Bool` expression over the parameters and what a body reads at its top level.
+  **Checked on entry in every build**: a false one fails the call with `ArgumentError.Invalid` carrying the function
+  and condition; `ArgumentError` is in the function's set (a written `?` set must list it). Decided while compiling
+  where the evaluator can (a false condition at a call with computable arguments is an error at the call unless a
+  `catch` takes it). Scope relations are no condition (O10b). A trait method's contract is checked before dispatch.
+  D17g: a conversion the evaluator computes that does not fit (`U8(300)`) is a compile error naming `x.Narrow<T>()`.
+  `tools/contracts_migrate.olang`.
 - **std names never repeat their module's (the user's naming rule, 2026-10-24: "we don't integrate the knowledge that
-  modules have namespaces"; refined: "chan.Chan can stay no?").** `io.IoError` is `io.Error`, and likewise `os.Error`,
-  `json.Error`, `csv.Error`, `stats.Error`, `rand.Error`, `http.Error`, `chan.Error`, `ffi.Error` and
-  `filepath.Error` (was `PathError`); `net`, `base64`, `hex`, `deque`, `heap`, `flags`, `time`, `utf8` already were. A module named for its main
-  type keeps that type's name (`chan.Chan`, `json.Json`, `set.Set`, `rand.Rand`, as Go's `list.List`); a module with
-  several error types names the others by subject (`http.HeaderError`, `regex.SyntaxError`). The
-  prelude is the exception (its names are bare everywhere: `ListError`, `MapError`, `TextError`, `ArgumentError`,
-  `CaseError`) and must never declare a plain `Error` - a rule in std/README.md. An error escaping `main` now prints
-  its type qualified as source writes it outside the module (`unhandled error: io.Error.Failed`, B5; see the next entry). `tools/stutter_rename.olang`
-  renames the old names (idempotent; a qualified use anywhere, the bare name only in the module's own std file) and
-  `olang fix` runs it. Migrated: std, compiler, tests, checks, fuzz, bench, docs, SPEC; goldens recaptured (diag.txt
-  by `make diaggold`, tokens/ast/layout by their targets).
-- **`olang fix FILE|DIR...` (B17, B1, 2026-10-24, the user: "runs every idempotent migration tool in order; no version
-  marker").** A mode of the driver (`compiler/fix.olang`) that runs the migration tools of `tools/` over the files in
-  the order the changes were made, so a file from any earlier time reads in today's language in one command; `-check`
-  lists what would change and writes nothing (the files are put back as they were), the status 1 where any would, 2 where
-  a file cannot be read or a tool built or run. **Decisions (mine).** (1) The tools are *built into the cache* (`fix/KEY` in
-  `OLANG_CACHE`, KEY the compiler's and the tools' paths - 2026-10-27: one shared `fix/` let a checkout run tools another
-  compiler built from other sources) by the running compiler on first use - and again when the compiler that built a
-  tool changed or its sources (tools/, compiler/, std/) are newer - rather than
-  linked in: they are standalone programs with their own `main`, tests and the module `srcmask` they share, and several
-  call the compiler themselves; a program is built into a temporary directory and renamed into place, so runs
-  sharing the cache never run one half written (bulk review 8); `olang format` is a linked module only because the formatter is a library of the compiler
-  too. The tools sit beside the compiler's `std/` (`../tools`, `OLANG_TOOLS` names another place). (2) **Two phases:** the
-  tools that read the text alone first, in the order of introduction, then those driven by the compiler's diagnostics
-  (`perm_mut`, `int_literal_i64`, `errors_migrate`, `null_migrate`) - an old file does not parse, so the compiler has
-  nothing to say about it until the text tools have run. (3) **Not every tool is idempotent, which the decision assumed:**
-  `io_print`/`io_try`/`io_fix` (they strip a `try ... catch` and the `!` forms from code of today) and `precedence_migrate`
-  (it reads every `a & b == c` as written for the old precedence - nine comparisons of tests/shared.olang) are left out
-  of the table and said so in tools/README.md and SPEC B17; every other text tool was run over the whole repository (the driven
-  ones over a sample) and changed nothing but the files written in the old form on purpose. (4) **Found on the way:** `errors_migrate` ran the
-  compiler as `olang -t FILE` - a flag B1 removed - and so did nothing since; it runs `olang test`. `bare_typevars` found
-  std's type names from where its binary sits; it takes `--std DIR` now (the cache is not the repository). A tool's output is shown
-  (to the standard error) when it left something for a person (its `by hand:` lines, a `for a person:` block) or failed,
-  and then fix says to look at them and ends with status 1, `-check` or not (2026-10-25; the test of "more than one line"
-  had read `Lines().Len()`, which an iterator has none of, and so never showed anything). A check
-  scenario (`fix`) fixes an old program (type variables, an error set with `+`, `io.IoError`) and runs it.
-- **Error names print qualified (B5, S16, S18d, E35, 2026-10-24, the coordinator's follow-up to the naming pass).** With
-  every module's error named `Error`, a bare name said nothing: wherever the compiler or runtime prints an error's name -
-  `unhandled error:` from `main`, a failed test's `FAIL - NAME: T.W`, the error trace, `!`'s FILE:LINE message, built
-  or interpreted - it is written as source writes it outside its module, the module's alias (its identity's base name)
-  before it: `io.Error.Failed`, `http.HeaderError.Missing`. **Decided (mine):** the prelude's types stay bare
-  (`ListError.EMPTY`), and so do the root program's own (`Bad.Word` for a `Bad` in the file being run - from outside it
-  would be `main.Bad`, which no program writes for its own); the rule is one function, `lower.ErrQualifier`, used by `!`'s
-  names, `main`'s message (emit) and the interpreter. Before, `!` qualified relative to the module the code is in (a
-  bang inside std/io said `Error.X`). The error a catch clause names renders the same way (`$e`, R11b); the rule is
-  `load.ErrQualifier` (moved from lower, 2026-10-25).
-- **C headers and C files are imported as modules (X17-X22, X9, X3a, QBE, 2026-10-26, the user's design; details
-  mine).** `import z "zlib.h" link "z"` gives a module of what clang reads in the header and everything it includes,
-  translated while compiling (bindgen's path) and kept in `OLANG_CACHE/cimport` under a key of the import, clang, the
-  compiler and the flags, made again when a file it read changes; a header beside the importer is that file, any other
-  the system's; libc's headers need no `link`. `import fast "fast.c"` compiles the file's own C as IR with the program's
-  target attributes, so the LTO link inlines C into olang and olang into C (measured: no call left); a header's static
-  inline functions are reached through wrappers compiled the same way; `interpret` compiles it into a shared library and
-  dlopens it. `extern link "golib" { fn ... type Handle }` declares a header-less library in one place, `extern { }`
-  what is already linked (the runtime's `__olang_` functions); the standalone `link` declaration is gone
-  (tools/link_migrate.olang, in `olang fix`). Variadic C calls pass C's default promotions, the format unchecked (X1a's
-  hole, stated); olang functions are never variadic. **Translation (mine):** numbers' typedefs are the numbers; a plain
-  record a plain struct, any other complete one opaque words of its exact size and alignment (unions, bitfields); a
-  transparent union parameter its first member; integer macros constants (I32 where they fit), float and text macros
-  too, an expression macro a generic function over its arguments; everything left out is listed with why, and naming one
-  says it (X19's `the C import has no olang form of 'stdin': a variable`); C's reserved names (`__x`, `_X`) are left out.
-  **Pointers (X22, mine):** `void *` is the prelude's `CVoid?&`, taking any array, a plain struct in place, an extern
-  handle or null; a struct pointer also takes an array of numbers (C's cast of a buffer - socket addresses, timespecs)
-  or a pointer C gave. **One C import per library:** a `.c` import exposes everything its file includes, and two
-  headers declaring one C struct give two olang types (`sysstat.timespec`, `ctime.timespec`). **Migration:** std and
-  compiler/ import the system headers they call - 166 hand `extern fn` gone; chan/sync hold `pthread_mutex_t` and its
-  kin at their exact size (X3a's upper-bound reservation is only for types no header declares). The wrapper tag comes
-  from the import alone, so the compiler's build of itself stays a fixed point; the seed was regenerated. **Left:** a C
-  extern variable (`stdin`, `errno`) and a cast macro (`SIG_IGN`) have no form (signal is hand-declared in session);
-  named constants do not adapt like literals (`I16(cpoll.POLLIN)`); a struct by value under interpret is refused; a large
-  header costs its check on every build (openssl/ssl.h: 940 KB of declarations, 3 s per build after a 6 s first
-  translation; the prelude's math.h and string.h add ~0.05 s to a hello world).
+  modules have namespaces"; refined: "chan.Chan can stay no?").** `io.Error`, `os.Error`, `json.Error` and so on; a
+  module named for its main type keeps that type's name (`chan.Chan`, `json.Json`, `set.Set`); a module with several
+  error types names the others by subject (`http.HeaderError`, `regex.SyntaxError`). The prelude is the exception and
+  must never declare a plain `Error`. `tools/stutter_rename.olang`.
+- **`olang fix FILE|DIR...` (B17, B1, 2026-10-24, the user: "runs every idempotent migration tool in order; no
+  version marker").** Runs the migration tools of `tools/` (built into the cache on first use) over the files in the
+  order the changes were made, text tools first, then those driven by the compiler's diagnostics; `-check` lists what
+  would change, status 1 where any would or a tool left something for a person, 2 on failure. Not every tool is
+  idempotent: `io_print`/`io_try`/`io_fix` and `precedence_migrate` are left out (tools/README.md, SPEC B17).
+- **Error names print qualified (B5, S16, S18d, E35, 2026-10-24, the coordinator's follow-up).** Wherever the compiler
+  or runtime prints an error's name it is written as source writes it outside its module (`io.Error.Failed`); the
+  prelude's and the root program's own stay bare (`lower.ErrQualifier`, `load.ErrQualifier`).
+- **C headers and C files are imported as modules (X17-X22, X9, X3a, QBE, 2026-10-26, the user's design).** `import z
+  "zlib.h" link "z"` gives a module of what clang reads, translated while compiling and cached; `import fast "fast.c"`
+  compiles the file's C as IR so the LTO link inlines across; `extern link "golib" { fn ... }` declares a header-less
+  library, `extern { }` what is already linked. Variadic C calls pass C's default promotions. `void *` is the prelude's
+  `CVoid?&` (X22). Plain records are plain structs, others opaque words. One C import per library. std and compiler/
+  import the system headers they call. Left: C extern variables and cast macros have no form.
 - **std/linalg is gone (2026-10-26, the user: "No linalg in stdlib ... Tensors are part of oann and they declare
-  everything themselves").** oann owns its tensors and kernels; std has no matrix type. The last linalg (Matrix views,
-  Goto GEMM, batched products, epilogues, convolutions) is in git history, and the kernel-tuning work in progress is on
-  branch `backup/wt-tensor`. Its tests and benchmarks went with it; the checks that tested the compiler through it
-  (O8b's flat products, O26a across modules) were rewritten over a small local matrix.
-- **Definite initialisation; arrays written once with no clear (D13d, D13e, D14d, E27, T7c, 2026-10-26, the user's
-  QBA and QBJ; details mine).** Zero values stay (D13c). A local or constructor field declared with no value whose type
-  has no zero value (a never-null reference, a constructor with an effect) must be assigned on every path before any
-  read - judged structurally as D10a judges leaving (compiler/definit.olang): an `if` without `else` meets its failing
-  condition, a loop never assigns (it may run no times), a try's clauses run from where it began, a capture is read where
-  the lambda is made, deferred code where it is registered, a field at the constructor's end, a spawn target and a
-  compound or element store assign nothing. The error names the read and, in a note, the path (no else, a loop, a branch,
-  an arm, a clause, the declaration); for a constructor whose zero only the evaluator can refuse it stays D13c's error
-  with a note at the read. Wherever every path assigns first, nothing at all is written for the declaration (a run-time
-  array value and an owner keep their zero, which allocates nothing) - a Vec local assigned in branches makes no zero
-  Vec. **Globals (D13e):** a global declared with no value is assigned by `NAME = expr` inside a top-level `if` below it
-  (`Backend String` / `if TargetOs == "linux" { Backend = "epoll" } else { Backend = "kqueue" }`); the chosen branch's
-  value is its initializer (B5a order, K2 baked), nothing written first; twice in one build, a missing branch for a type
-  with no zero value (judged as written, nested ifs too), a condition reading the global, any other top-level assignment
-  - each a compile error. **Arrays:** a comprehension never clears its storage; with no `if` over a range or an array
-  of known length it allocates exactly its length and writes each element once, a known count giving a fixed length
-  (T7c, no longer "not yet implemented"); `Array<T>(n)` declared and filled by the very next `for i in range n` (or
-  `range 0, n`, same `n`) storing `a[i]` once at the body's top level, mentioning `a` nowhere else, never assigning `i`,
-  with no break/continue/return, is not cleared (D14d) - every other shape keeps the clear. MIR: `Assign(L, Use(None))`
-  marks a local set with nothing written. Measured: 1,000 `Array<F32>(262144)` filled by a loop on recycled memory 0.073
-  -> 0.049 s; the same as a comprehension 0.90 -> 0.25 s; bench instruction counts unchanged elsewhere. Found on the
-  way: the pre-scan did not take an `if` after a line ending in a bare `&` for a statement start, so a top-level `if`
-  after `X Node&` (or `X Node?&`) was never decided (pre-existing).
+  everything themselves").** oann owns its tensors and kernels; the last linalg is in git history and branch
+  `backup/wt-tensor`.
+- **Definite initialisation; arrays written once with no clear (D13d, D13e, D14d, E27, T7c, 2026-10-26, the user's QBA
+  and QBJ).** A local or constructor field with no value whose type has no zero value must be assigned on every path
+  before any read (compiler/definit.olang). **Globals (D13e):** a global declared with no value is assigned by `NAME =
+  expr` inside a top-level `if` below it; twice in one build or a missing branch is an error. **Arrays:** a
+  comprehension never clears its storage; `Array<T>(n)` filled by the very next `for i in range n` storing `a[i]` once
+  is not cleared (D14d).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
-  reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
-  history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made
-  spec-first: write or revise the relevant rule(s) in `SPEC.md`, then implement so the code conforms to what was just
-  written, then record the *why* here (extending HISTORY.md too, if there's a longer story worth keeping).
+  reference manual (rules numbered `<prefix><n>`; EBNF grammar) - no narrative, no history, and no mention of CLAUDE.md,
+  Claude, or the design process. A language change is made spec-first: write the rule in `SPEC.md`, implement so the
+  code conforms, then record the *why* here (and in HISTORY.md).
