@@ -159,6 +159,10 @@
 | ok - an error type's methods read what it carries
 | ok - a false requirement's ArgumentError carries the condition
 | ok - a payload is matched by position and by name
+| ok - a join block's own error leaves with its own payload, the tasks' dropped
+| ok - a narrowed payload's array field is indexed in place
+| ok - text inside a payload's structs, enums, arrays and errors is its own
+| ok - the first raise in source order settles a raised error's fields
 === test tests/errsetparams.olang
 | status 0
 | ok - G1a: an error-set parameter takes what the callback fails with, nothing where it cannot fail
@@ -1734,6 +1738,9 @@
 | status 0
 === run b12level.olang
 | status 0
+=== run b4methodmain.olang
+| status 0
+| caught -3
 === run b6condarg.olang
 | status 0
 | w1

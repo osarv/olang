@@ -4334,6 +4334,11 @@ r3bareerror.olang:4:22: error: expected a name, found '}'
     4 |     if n < 0 { error }
       |                      ^
 compilation failed with 1 error
+=== r3bfirstraiseorder.olang
+r3bfirstraiseorder.olang:10:17: error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
+   10 |     error X(v = n)
+      |                 ^
+compilation failed with 1 error
 === r3bnear.olang
 r3bnear.olang:12:22: error[R3b]: no error of this module is named 'NotFond' - did you mean 'NotFound'? To raise a new error of that name, name it after this function's '?'
    12 |     if k < 0 { error NotFond }
