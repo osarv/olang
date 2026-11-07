@@ -30759,3 +30759,529 @@ test.
 - **Stale texts:** SPEC's error words written upper case (`ListError.EMPTY`, `io.Error.FULL` - io.Error has no such
   word) are CamelCase (`ListError.Empty`, `io.Error.Failed`); std/json's comments alike; std/net's and std/time's
   headers name `IP.Parse`, `Addr.Parse`, `Date.Of`.
+
+
+## From CLAUDE.md's settled decisions, moved 2026-11-07
+
+The entries as they stood before the trim of 2026-11-07, verbatim, by subsection of "Settled decisions".
+
+### Syntax and statements
+
+#### Statements end at a line break (L18), never `;`
+
+- **Statements end at a line break (L18), never `;`** (a `;` is one error). A `}` ends the statement before it (L20),
+  so any block may be one line. Outside brackets a line starting with `if` starts a statement (L18b). Braces kept over
+  indentation (the user's call, 2026-10-17, QN).
+
+#### One listing rule (QY, L18a, the user's call 2026-10-17).
+
+- **One listing rule (QY, L18a, the user's call 2026-10-17).** Everywhere a list appears - parameters, arguments,
+  results, error sets, error words, enum cases, constructor fields, type parameters and arguments, array literals,
+  indexes, case alternatives, catch items - items on one line are separated by `,`, items on different lines by the
+  line break. A line break separates where L18 would end a statement (so a line ending in an operator continues the
+  item), or after an item ending in `}`, `>` or a bare `&` when the next token starts a later line. A comma before a
+  line break is an error (reversing L18a's trailing comma and T17/T19/C2's comma-is-an-error), and so is one before the
+  closing bracket on its line. `+` is gone from error sets and catch items (`? io.Error, ParseError`, `catch A, B.X`). A
+  function type's or a lambda's error set is one item or parenthesized (`fn(I64) ? (A, B)`) - always, so a `,` after
+  it separates the list it stands in (mine). A parenthesized expression and a comprehension are one item, not lists:
+  line breaks inside separate nothing (mine). `x, y I64` (D12b) is unchanged. `tools/syntax_migrate.olang` migrates.
+
+#### `fn` is the function keyword (D7, the user's call).
+
+- **`fn` is the function keyword (D7, the user's call).** Retired spellings (`func`, `while`, `&&`, `||`, `!`,
+  `choice`, `+` on arrays, lowercase primitives) are simply unknown - their diagnostics were removed at the user's
+  request.
+
+#### Comments: `#` to the line's end, `## ... ##` a block (L4/L4a, the user's call).
+
+- **Comments: `#` to the line's end, `## ... ##` a block (L4/L4a, the user's call).**
+
+#### One-line bodies (S1b, the user's decision 2026-10-24).
+
+- **One-line bodies (S1b, the user's decision 2026-10-24).** `if x < 0: return 0`, `for x in xs: total += x`,
+  `else: count++`: `:` and one simple statement on the colon's line - an assignment (a parallel one too, `if a > b: a, b
+  = b, a` - the parser had refused it as a declaration until 2026-11-02), a call or increment, `return`,
+  `break`, `continue`, `error`, `unreachable`, `assert` or `spawn` (the last two mine). It is the block holding that
+  statement; a declaration, an `if`, a loop, a `match`, a `join`, a `defer` or a block is an error naming the block
+  form. The statement ends at its line's end or at an `else`/`catch` on its line; `else` may begin the next line, as
+  `catch` does. Not for the forever `for` or a `do` loop. `:` inside brackets stays a slice's. The formatter keeps
+  either form and spaces `: ` (and no longer writes `f() !`). **A lambda's body too (D16, the user's decision
+  2026-10-24):** `xs.Count(fn(x): return x > 3)` - its statement also ends where the bracket around the lambda closes or
+  at a `,` of its list, so a lambda that is a list item returns one value (L18c wraps one returning several, mine).
+
+#### The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).
+
+- **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build
+  compile test interpret format explain help doc lsp mcp fix bindgen profile`; options `-output -debug -race -sanitize -target -define -update
+  -check -quick -html -library -memory -fuzz -fuzztime -caps -asm -ir -interpret`,
+  each checked against the modes it applies to (one table, also `help`'s); old flags simply gone (`tools/cli_words.olang`).
+
+#### `-quick` (B2g, the user's call 2026-10-24).
+
+- **`-quick` (B2g, the user's call 2026-10-24).** For build, compile, test and running a file: `-O2` without
+  link-time optimization, objects apart (`.quick`); an error beside `-debug` or `-race`, which set their own levels.
+  The default stays `-O3` + LTO (B2c).
+
+#### `explain FILE NAME` (B11b, the user's call 2026-10-24).
+
+- **`explain FILE NAME` (B11b, the user's call 2026-10-24).** Beside `explain RULE`: one top-level item of FILE as the
+  compiler sees it, once the program checks - a function's whole signature, an inferred error set written out (marked
+  `# its error set inferred`), its scope obligations as `# scopes: a outlives b` lines (inferred, QCB) (`return` the result scope), a generic's
+  instances each with their own; a type's constructor, fields, own methods and the parameterless traits it meets; an
+  enum's cases, an error type's words, a trait's methods; a global's type and its baked value (`$` of it, through the
+  evaluator), else `# set at startup`. `Type.Method` names a method - one on a type its file does not declare (an
+  array's, a trait's default) by the receiver its declaration writes, as a test names it (`Array.Windows`,
+  `Iterator.TakeWhile`, `Float.Sqrt`; 2026-11-07). `-target`, `-define` and `-update` apply.
+  compiler/explain.olang.
+
+#### - **Effects, needs and "not a value" under a signature; `explain -caps` (B11b, B
+
+- **Effects, needs and "not a value" under a signature; `explain -caps` (B11b, B11c, QBP 6, QBP 11, A2.3, B1.2, the
+  user's "build it" 2026-10-27 and "if it doesn't cost compile time" 2026-10-31; built 2026-10-31, details mine).**
+  explain, doc and hover print under each function (each instance, each method under its type) `# effects: ...` -
+  `none`, or the parameters written through, `writes a global`, `allocates`/`allocates nothing`, `may grow a Vec`,
+  `starts tasks`, the classes reached, else `calls C`, `may end the program`, `may block`/`never blocks`, `recursive`,
+  `always ends`, `may be computed while compiling` (`anything` through a function value or an `any`); under a generic
+  `# T needs: Less, a walk` (G18a, read off its text); under a function that cannot become a value `# not a value: why`
+  (a method, an extern, a generic named bare, a G29 instance - docs/rework.md point 1), and `# as a value: held in
+  locals and results only - ...` under one whose scope obligations are more than a written function type says (T22a).
+  `olang explain -caps FILE`: each module the program loads, the root first, with the classes its code may reach
+  through everything it calls - files, network, processes, environment, threads, C (the program's own) - and the
+  module where each is first reached. Decided (mine): one summary pass over the typed core, compiler/effects.olang
+  (each body's own facts, then Tarjan's components callees first), made only when something asks - explain, doc, the
+  language server, `-caps`, a fact read in code - so no other build computes it (the self-build's check phase measured
+  unchanged); a capability counted where it is gained, by the C function gaining it (open, socket, posix_spawn,
+  getenv, pthread_create ...), never where a descriptor already open is read or written, so printing is no capability;
+  "C" only for C the program's own modules call (std's is said by what it gains); a C function not on a short list
+  of known quick ones (memcpy, clock_gettime, unlocking ...) may block and may not return; a lambda's body counts as
+  called where it is made; a module's caps line covers all its own code, so a function value's target is said on its
+  own module's line (calls through values are no "anything" there). Needs are a reading for people (compiler/needs.olang:
+  values of a variable's type through parameters, locals, Array/Vec elements, for-in, and into other generics the program
+  calls, `match T` arms and reflection-decided `if`s left out, the written constraint's methods and a closed trait's
+  operators dropped); what the checker holds a call to is G18a below.
+
+#### - **`explain -asm FILE NAME` and `explain -ir FILE NAME` (B11d, QBP 7, the user'
+
+- **`explain -asm FILE NAME` and `explain -ir FILE NAME` (B11d, QBP 7, the user's "build it" 2026-10-27; built
+  2026-11-07, details mine).** A function's machine code or optimized LLVM IR as build compiles it (`-O3` + LTO: the
+  link's code; `-quick`: each module's; any `-target`, `-define`, `-update`), each run of instructions headed by the
+  source line it comes from (the innermost: an inlined function's own line) and LLVM's optimization remarks beneath
+  (inliner, vectorizers, unrollers, LICM, GVN, loop idiom/deletion, tail calls, spills, the stack - passed, missed,
+  analysis, each once with a count); a generic's instances in turn; a function with no code of its own says where it
+  was inlined (one function's code shown in its place) or that nothing calls it. Decided (mine): the objects are
+  `.listing` artifacts - line tables (emit's `Lines`, B20's names without the sampler or frame pointers) and remarks
+  kept beside each (`-fsave-optimization-record`, `OBJ.yaml`) - so no other build's IR changes (bench IR byte-identical);
+  the code is taken from the link itself by the LTO plugin's `emit-asm`/`emit-llvm` (`opt-remarks-filename` for its
+  remarks; a ThinLTO link's tasks each a file), bitcode turned to text by clang - the asm the link really generates,
+  needing nothing beyond the clang a build uses (no llvm-objdump or llvm-dis to ship), LLVM 18-20 alike; remarks read
+  as YAML in olang (compiler/listing.olang); comments in the code's own language (`#`, AArch64 `//`, IR `;`); `-asm`,
+  `-ir`, `-caps` exclude one another, `-quick` and a foreign `-target` apply to explain only with `-asm`/`-ir`. The
+  checks scenario `listing`.
+
+#### - **`olang api OLD NEW PATH` (B21
+
+- **`olang api OLD NEW PATH` (B21
+, QBP 15/B1.6, the user's "do it" 2026-10-31; built 2026-10-31, details mine).** Two
+  versions - commits (their trees through `git archive`, PATH relative to where it runs) or directories - of the
+  modules at PATH (a file, or every .olang below a directory), each checked as doc checks it in a process of its own,
+  their exported items and members compared by name and B11b's signature; a row each, `breaking` or `ok`, the count
+  last; status 0, 1 where something breaks, 2 where a side cannot be read or does not check. Breaking: a name removed,
+  a signature, field type, constructor or global type changed, an error set grown, an enum case, error word or trait
+  method added (B1.5's open enums declined: a new case breaks on purpose), a trait no longer met. Not: an addition
+  otherwise, a narrower error set, a global's value, a trait newly met. Decided (mine): both sides are checked with
+  this compiler and its std; an added defaulted parameter counts as a changed signature (it breaks a use as a value);
+  effects and doc comments are no part of the interface. compiler/api.olang; the checks scenario `apicaps`.
+
+#### Doc comments (L4b) and `olang doc` (B14).
+
+- **Doc comments (L4b) and `olang doc` (B14).** Go's rule, no new syntax: the `#` lines directly above a declaration,
+  member or global are its documentation (a member or global with none takes its line's trailing comment; an aligned
+  continuation of a trailing comment is no doc comment; a block comment never is); a module's is the comment lines its
+  file begins with. Read from the text by the declaration's span (`compiler/doc.olang`) - scanner and parser unchanged.
+  `olang doc FILE [NAME]` prints them with explain's signatures; `doc -html DIR [FILE...]` writes static HTML (all of
+  std when no file is named). Exported items only in a listing (mine).
+
+#### - **Deprecation is a doc-comment convention, read by tools only (L4b, QCW, the u
+
+- **Deprecation is a doc-comment convention, read by tools only (L4b, QCW, the user's "add deprecation only as a comment
+  and kind of surrounding tools thing. It should not break the compiler", 2026-11-07; built 2026-11-07, details mine).** A
+  doc-comment paragraph beginning `Deprecated:` marks its declaration; the compiler gives it no meaning (every diagnostic
+  stays an error). `olang doc` ends the item's first line with `# deprecated` (HTML: the listing struck through, the
+  note bold; `mcp`'s `doc` the same text); `olang lsp` hovers the note with the doc comment, tags the completion item
+  (`"tags":[1]`) and publishes each use in the open file as a Hint (severity 4, `"tags":[2]`) - the one non-error it
+  publishes; `olang api` lists an item newly deprecated as a `deprecated` row, not breaking, status unchanged. Removing
+  between versions stays the main way (std/README.md, "Deprecation"); no std item is deprecated. Decided (mine): a use
+  is a word in the open file naming a declaration whose line is read from a `Deprecated:` comment anywhere in the
+  program, resolved by the resolver's target (`Analysis.target`, no scope pass needed, so the hints arrive with the
+  checker's diagnostics), skipping the declaration's own line; a program with no such comment pays one scan of its
+  modules' texts. `doc.Deprecation`, `doc.DeprecatedNames`, `session.DeprecatedUses`.
+
+#### - **`olang lsp` (B15) and `olang mcp` (B16), 2026-10-24 (the user: "we need this
+
+- **`olang lsp` (B15) and `olang mcp` (B16), 2026-10-24 (the user: "we need this, both for MCP and neovim
+  integration").** LSP over stdio - diagnostics, hover, definition, symbols, completion, formatting; MCP over stdio -
+  `check`, `explain`, `doc`, `format`, `test`. Each analysis runs in a forked process (mine): a compiler crash never
+  ends the server and an analysis's memory goes with its process (the compiler reclaims nothing before a scope closes);
+  the language server forks a worker once the open files have settled for 40 ms, checks the changed files and the open
+  files importing them, publishes the checker's diagnostics before section 8's, then answers requests from that
+  analysis. Not incremental per module - the checker is whole-program; measured 70-100 ms from an edit to diagnostics
+  on a small program, 0.7-1.4 s on one of the compiler's modules. `compiler/session.olang` holds what both share; the
+  Neovim plugin and editor notes are `editors/`.
+
+#### A file is built and run (B3g):
+
+- **A file is built and run (B3g):** `olang [options] f.olang args...` builds as `build` does, then runs in the
+  compiler's place (its status, `#!/usr/bin/env olang` scripts); `-output PATH` names build's/compile's output (B3h).
+
+#### `olang format [-check]` (B13)
+
+- **`olang format [-check]` (B13)** rewrites files in one gofmt-style layout, no options; an olang program
+  (`compiler/fmt.olang`, on the port's scanner and parser) linked into the compiler since stage 0 went - no cache;
+  only whitespace changes. A method's receiver keeps its space before its own type list too (`fn (p T&) Read<Q>(`,
+  2026-10-27: it was written `fn(p`, std/list's seven such methods included).
+
+#### The bitwise operators bind tighter than the comparisons (E5, mine 2026-10-24, found by the std breadth batch).
+
+- **The bitwise operators bind tighter than the comparisons (E5, mine 2026-10-24, found by the std breadth batch).**
+  `x & 1 == 0` is `(x & 1) == 0` - Go's and Rust's order, C's mistake not copied: `| ^ &` sit between the comparisons and
+  the shifts. `tools/precedence_migrate.olang` parenthesizes every comparison under `& | ^` at the old precedence (none
+  in the repository - `&`/`|` never took Bools, so no valid code mixed them) and `--verify` shows each file reads alike.
+
+#### `
+
+- **`**`, the power (E5a, QCG, the user's "Yes add the operator", 2026-10-31; built 2026-10-31).** `a ** b` calls
+  `a`'s type's `Pow` (E31, `Pow` joining the shapes), tighter than the prefix operators and to the right (`-x ** 2` is
+  `-(x ** 2)`, `2 ** 3 ** 2` is `2 ** 9`), `**=` with it, lane by lane on arrays. Decided (mine): the exponent adapts to
+  `Pow`'s parameter (a float's own type, an integer's `U32` - `n ** U32(k)`), a literal base to the number type wanted,
+  else its own (E13c); `arith.Checked<T>` gained `Pow`; a type with none is an error naming it. A call in check
+  (`power`), so the evaluator and QBV's folding apply unchanged.
+
+#### Logic is in words: `and`/`or`/`not`/`xor` (E7/E7a, the user's design).
+
+- **Logic is in words: `and`/`or`/`not`/`xor` (E7/E7a, the user's design).** `and`/`or` short-circuit (the user's
+  call); `not` binds looser than comparisons, as in Python. No compound logic assignments. Comparisons stay symbols,
+  `== != < <= > >=` (the user's call 2026-11-05, QCT, `eq`/`lt` words declined): arithmetic's own notation, read at a
+  glance and apart from the names around them; a word said aloud would be a phrase (`is less than`).
+
+#### One loop keyword, `for` (S9, S9a, the user's direction).
+
+- **One loop keyword, `for` (S9, S9a, the user's direction).** `for { }`, `for cond { }`, three clauses (post clause a
+  simple statement), `for x in e`, `for i, x in e`, `do { } for cond`. `for ... in` walks an array, a type with
+  `RunFrom` (run by run, S9f), a type's own `Iter()`/`Next()`, else `At`+`Len` (S9d) - in that order of preference, an
+  iterator winning over indexing; elements are copies. `range end` / `range s, e` / `range s, e, step` counts upward
+  only (S9b, the user's design). `for x in try c { } catch ...` covers the loop's own calls (S9e). A for-in's names
+  are new (D3a), so `for x in m` is never membership. No labeled `break`/`continue` (the user's call, 2026-10-08). A
+  loop's condition is evaluated in the turn it decides, a post clause in a block of its own, so what either builds is
+  reclaimed each turn (2026-10-18, E31b's M1 - the block around the loop kept every evaluation's: 745MB for 5,000 reads
+  of a 72KB element); stage 0 lowers `do { } for c` to the three-clause form, its condition read from the second turn.
+
+#### An expression statement must do something (S3):
+
+- **An expression statement must do something (S3):** a call or an increment. `++`/`--` are statements only, never
+  operands (S3a, the user's call). A bare `{ }` is a scope (S1a). **A call statement giving a value that does nothing
+  else is an error (2026-10-26, the user's yes to docs/survey2.md's nodiscard replacement)** - read off the bodies it
+  reaches (`settleIdle`, a least fixed point): a store to a global or through a reference, an extern but C's math, a
+  function value or an `any`, storage made, a destructor value, spawn/join, assert or an end count as doing something.
+  Mine: a call giving nothing, a fallible call and a generic's body are never judged.
+
+#### - **Every local is read and every import used (D3b, M5a, 2026-10-26, the user: "
+
+- **Every local is read and every import used (D3b, M5a, 2026-10-26, the user: "extend this to unused variables
+  too").** A read is any appearance but as what an assignment, compound assignment or increment changes (Go's rule); a
+  name holding a place only (a loop's, a binding's, one of several results) is written `_` (`for _ in range n` now
+  allowed). Exempt: parameters, constructor fields, catch names, destructor-typed locals, a name in a branch the build
+  leaves out (by text). Decided (mine): D3b is said only of a program with no other error (one mistake, one error - an
+  unread local is most often what the mistake left out; `Diagnostics.ErrorAlone` since bulk review 6, so an error a
+  later pass reports - section 8's - takes its place too); an import nothing is reached through is said at once, never of
+  a C import or a re-exporting alias. `tools/unused_migrate.olang` (driven; `--bare` for must-fail files) migrated the
+  repository and is `olang fix`'s last tool.
+
+#### Assignment (S4, S4a, S4c, S4d).
+
+- **Assignment (S4, S4a, S4c, S4d).** Left to right: the target's place, then the value; a compound place is evaluated
+  once. Assignment to a reference repoints, in every position (S4a). Parallel assignment `a, b = b, a` evaluates every
+  value first; `a, b := 1, 2` and `x, y I32` declare several names (S4c/D12b, the user's call); a target `x[i]` on a type declaring
+  `SetAt` stores through it, its index evaluated at its place (2026-11-03: `ps[i], ps[j] = ps[j], ps[i]` on a Vec was
+  E31's refusal - the references study's bug). An assigned value
+  borrowing storage within the place takes its old value as a copy, decided by types (S4d) - in stage 0 too since
+  2026-10-18 (it had asked the callee's body, `calleeMayKeepArg`). A parallel declaration or assignment copies each value as
+  one alone does (bulk review 7, F7: `m, n := g, g` had shared g's array).
+
+#### Every path of a function with a result must return (D10a)
+
+- **Every path of a function with a result must return (D10a)** - structural, loops never count, `for { }` with no
+  `break` of its own leaves, a leaving `join` counts, a `noreturn` call counts. `unreachable` is checked, never assumed
+  (S16d), and behaves as a failed assert. `os.Exit(code)` for any status (B5b), process-wide, tests included.
+
+#### `unreachable "why"` (S16d, mine 2026-10-24).
+
+- **`unreachable "why"` (S16d, mine 2026-10-24).** An optional message, any text expression, evaluated only where the
+  statement is reached: `FILE:LINE: unreachable reached: why` (a plain one says `unreachable reached`; the old
+  wording "reached unreachable code" changed with it, everywhere). Not a statement that leaves its function (no
+  `return`, error or loop jump inside the message's lambdas), as an assert's message. **As a value (S16e, survey2 item
+  6, the user's yes 2026-10-27; built 2026-10-31)**: `d := t[k] if k in t else unreachable "checked above"` - wherever a
+  value of any type is expected, as a noreturn call fits (D8e), `:=` from it an error naming it. Decided (mine): its
+  message is the expression starting on its line with a literal, `$`, a name or `(` (anything else ends it); built as a
+  typed `Seq` of S16d's exit typed `noreturn`, so lowering, section 8, the evaluator and `interpret` needed nothing new.
+
+#### A test passes by ending, fails by what fails (S15/S16, QU, the user's design 2026-10-17).
+
+- **A test passes by ending, fails by what fails (S15/S16, QU, the user's design 2026-10-17).** A test passes by
+  reaching its end or a bare `return` (deferred code runs); it fails by a failed assert or check, `unreachable`, a `!`,
+  or an error leaving its body - a `try` in a test need not catch everything (`FAIL - name: T.W`, then the trace).
+  `done`, `fail` and `abort` are gone, ordinary names now (they were the test/process enders; `crash` had been renamed
+  `fail` by the user).
+
+#### `noreturn` (D8e, QU, the user's design).
+
+- **`noreturn` (D8e, QU, the user's design).** `fn Exit(code I32) noreturn`, `fn(I32) noreturn`: the body is checked
+  never to return or fall off its end (no `?`; every path a noreturn call, `unreachable` or `for { }`); a call leaves for
+  D10a and fits where a value of any type is expected (`catch default os.Exit(2)`, a conditional's value). Not a type:
+  no variable, parameter or type argument is `noreturn`, and `:=` from one is an error. A noreturn function fits a
+  function type with no result (my call). Lambdas, constructors, operator methods and `main` may not be `noreturn`.
+  A noreturn call fits any value position - a match value, beside a conditional's other value - and takes no part in
+  generic inference (G9a); a noreturn trait method is met only by a noreturn method (T31); `extern fn` may be one (X1).
+
+#### The error return trace (S18d, decided by the coordinator for the user).
+
+- **The error return trace (S18d, decided by the coordinator for the user).** Test and `-d` builds keep each thread's
+  last 32 places an error went - `raised here`, `try passed it on`, `left the test` - cleared where a clause takes it,
+  nothing on the success path, nothing at all in other builds; printed after an error ends a test, escapes `main`, or
+  reaches a `!`, and by `-i`. Other builds print `(build with -debug to see where it came from)` instead.
+
+#### `assert cond[, message]` is a statement (S17/S18, the user's call for the message).
+
+- **`assert cond[, message]` is a statement (S17/S18, the user's call for the message).** Outside `test` a failure
+  aborts; in a test it fails that test. Every failed check prints `FILE:LINE:` and what failed (S18a).
+
+#### A top-level `assert cond[, message]` (S17a, docs/survey2.md 2.6, the user's "Yes" 2026-10-26; built 2026-10-27
+
+- **A top-level `assert cond[, message]` (S17a, docs/survey2.md 2.6, the user's "Yes" 2026-10-26; built 2026-10-27).** A
+  declaration (at a module's top level or in a branch of a top-level `if` the build takes) decided while compiling and
+  never run: true emits nothing; false, aborting, a stale view or **undecidable** (a mutable global, an extern, an
+  error nothing handles, a budget) is a compile error - `this top-level assert is false, decided while compiling[:
+  MSG]`, `... cannot be: WHY - assert it in a function or a test`. Decided (mine): condition and message checked as a
+  global's initializer is, in the module's context (globals, build constants, functions, lambdas - `ast.Decl.Assert`,
+  `check.topAssert`, `interp.decideTopAsserts`), every module's in every build reaching it; the false/aborts wordings
+  are S18c's.
+
+#### `Place.Here` (E40, D8a, docs/survey2.md 2.2, the user's "Yes do that" 2026-10-26; built 2026-10-27).
+
+- **`Place.Here` (E40, D8a, docs/survey2.md 2.2, the user's "Yes do that" 2026-10-26; built 2026-10-27).** The prelude's
+  `Place(File String&, Line I64, Column I64)` (std/prelude/place.olang), `$p` `FILE:LINE:COLUMN`; `Place.Here` is the
+  place it is written, and in a parameter's default the place of the call leaving the argument off (`fn log(m String&,
+  at Place = Place.Here)`) - no keyword, a compiler fact read through the type's name (the user's three-way rule,
+  PRINCIPLES.md). Decided (mine): File as diagnostics write it; the call's place is its called name (a method's after
+  the `.`), the outermost call's where a default's own call leaves one off; a generic's body gives one place for every
+  instance; any other member through `Place` is an error naming `Place.Here`. Built as the constructor called on
+  constant arguments (`check.placeHere`, `callDefault` setting the call's place), so the evaluator, `interpret`, named
+  arguments and `default` need nothing new. **Found on the way**: D3a reserves prelude names, so the compiler's own
+  `typed.Place` and `mir.Place` became `Lvalue` (free.olang's `Place` fields `PlaceId`).
+
+#### `become f(x)` (S21, docs/survey2.md 2.3, the user's "Build it now" 2026-10-26; built 2026-10-27).
+
+- **`become f(x)` (S21, docs/survey2.md 2.3, the user's "Build it now" 2026-10-26; built 2026-10-27).** A guaranteed
+  tail call, `become` a keyword: every scope closed, then the call made in the function's place - LLVM's `musttail` in
+  a build (every mode: -debug, -race, -sanitize, test), a frame replaced in the evaluator (`Machine.tail`: the callee's
+  frame pushed, moved into the caller's slot, the caller's storage closed), so ten million steps of mutual recursion
+  run in one frame, built and interpreted. Its errors are the function's own, so no `try`. Decided (mine): only a call
+  of a function or method declared with `fn` (no function value, constructor, extern, export fn, any),
+  only in one (never main, an export fn, a lambda, a generator, a test, a constructor or destructor); one signature -
+  parameters (types, permissions, scopes, T22), result - and, once sets are final, one error set in one order (R6's
+  codes); nothing passed through memory (over 128 bytes); not in deferred code, a message, a task clause or a join, nor
+  with deferred code pending; section 8: no argument is storage of a closing scope - the callee's scope variables bind
+  only the function's own and the program's, a temporary for it built in the result scope; an argument whose own
+  storage is an arena's (a run-time array or text bound to a by-value type variable, which no scope variable names) is
+  a parameter with no D9b copy, a global's, constant data or a slice of one (bulk review 4); no destructor-bearing value
+  held (a local whose type may hold one, `any` included) or built in a block - a call's result whose type may reach
+  one through references too, `Wrap(r Res&)` by value (the scope pass's `dtorAt`, noted where it is built). typed:
+  `Return` of a `Call` with `Tail`; MIR: `Term.Tail` after `leave(0)`, its arguments held in frame temporaries.
+
+#### `defer` is block-scoped (S19, the user's decision).
+
+- **`defer` is block-scoped (S19, the user's decision).** Last registered first, on every way out but the
+  process-ending ones; deferred code runs before a join's wait and before the scope closes; it may not leave.
+
+#### `errdefer` (S19e, the user's decision 2026-10-18; built 2026-10-25).
+
+- **`errdefer` (S19e, the user's decision 2026-10-18; built 2026-10-25).** `errdefer STATEMENT` / `errdefer { }`: deferred
+  code of its block run only when an error leaves the block outward - out of the function, to a clause outside it, a
+  join's tasks failing; never on its end, `return`, `break`, `continue`, an error a clause inside takes, or what S19c
+  lists. One list with `defer`, last registered first. **Decided (mine)**: a join block's errdefer code runs after its
+  wait when its tasks fail - after its defers, the one place the order bends, since the failure is known only then (a
+  failure of its own statements runs both before the wait, in order); one may not be pending around a `yield` (S20's
+  rule over the one list - relaxable with defer's); no interpret cleanup (a stop is no error). Built in lowering: the
+  block's kind (`typed.BlockKind.ErrDefer`), `lowering.runDefers` taking it only where `erroring` (raise, a clause) or
+  after a failed wait - nothing new in the evaluator or emit.
+
+#### `match` (S12-S13f).
+
+- **`match` (S12-S13f).** Several values per case, guards (`case P if c`), nested patterns, literals in payload
+  positions, `case _` (alone, last); exhaustiveness over the patterns (S13a, Maranget). Binding alternatives bind the
+  same names and types. `match T` dispatches on a type variable (G15). **`case _` is the one catch-all, `case P: v` the
+  value form (S12, S12b, S13f; the user's QBQ "case _ is the best" and QBR "Ye agree", 2026-10-27; built 2026-10-31)**:
+  `nomatch` and `=>` are gone from the language (no diagnostic kept for either); a match used as a value gives each
+  clause's value on its `:`'s line - the value running on as a statement does - and a clause there may instead leave by
+  one statement (`case _: return 0`, mine: what S1b's one-line body allows, so leaving needs no block); a `{ }` clause in
+  a value match is an error naming `case P: v`; a statement match's clause is a block or `case P: stmt` (S1b). A guard's
+  test narrows in its clause as an if's condition does (S13e, QBP 1, the user's yes; the one narrowing walk,
+  `pushFacts`). `tools/match_migrate.olang` (tokens, idempotent, in `olang fix` before unused_migrate) migrated the
+  repository - 135 files. Found on the way (pre-existing): in a match on an error value a guarded `case _` was taken as
+  the chain's else, its guard dropped (`caughtLast`, `caughtCases`).
+
+#### Array patterns (S13h, QBP 10, the user's "Do it" and the rest spelled `...`, 2026-10-31; built 2026-10-31).
+
+- **Array patterns (S13h, QBP 10, the user's "Do it" and the rest spelled `...`, 2026-10-31; built 2026-10-31).**
+  `case Array<String&>["test", file, ...words]`: a literal compares an element, a name binds one (always new; a local's value
+  is a guard), `...name` binds the rest as a view of the array (a slice), a bare `...` skips it, no `...` is the exact
+  length; items after the rest count from the end; the length is tested first. Decided (mine): the type is written as
+  a literal making the subject writes it (QBU: `Array<I64>[...]`, `Vec<I64>[...]`, a declared array type as its base's
+  `Array<Char>[...]`), its elements the subject's; arrays, text (`Array<Char>[...]`, the rest a `String`) and an
+  At+Len type (a Vec - a named rest needs its `Slice`); at a case's top or in a payload; lengths are S13a's
+  constructors (`Array<I64>[]` + `Array<I64>[x, ...r]` cover every array), a value match missing a length names it. Built as the
+  parser's `Pattern.Elems`/`Rest` and the checker's tests and bindings (`elemsPattern`) - nothing new below check.
+
+#### - **Struct patterns by field name; payload fields by name too (S13i, S13b, the u
+
+- **Struct patterns by field name; payload fields by name too (S13i, S13b, the user's decision 2026-11-07: "structs
+  by name, arrays by position, and enums by both"; built 2026-11-07).** `case Point(x = 0, y)`: in a pattern a struct
+  type's parentheses list FIELDS, never constructor parameters, and nothing runs (Python's class patterns) - `name = p`
+  matches a field (a literal compares, a name binds fresh, a nested pattern goes inside), a bare `name` binds the field
+  to a local of its name, fields not mentioned are ignored; only fields readable there (M6a); no item by position (field
+  order was never a struct's interface). An enum case's payload by position as before, then by name
+  (`Shape.Rect(w, h = 0)`, E14b's order), unmentioned fields ignored once one is named; a case carrying one whole type
+  (T17a) has one position, matched by a struct pattern (`Shape.Round(Circle(r))`). Nested in payloads, array patterns
+  and each other; through references, a null `T?&` matching none; a generic struct bare against the value's instance.
+  S13a: a struct is one constructor whose columns are its fields, so names cover it (a value match needs no `case _`).
+  Decided (mine): payload fields have no privacy (readable by position anyway); a whole case takes no names (an error
+  naming the struct pattern); a field matched by a computed value compares by `==`, as a payload position does; a
+  generic struct may be written with its arguments, which must be the value's; a field twice, by position and by name,
+  a position after a name are S13b's errors for both kinds; a struct matched by a constructor's value (`case Point(1,
+  2)`) is gone - two tests/shared.olang matches moved to fields and to guards; a declared type over a primitive or array
+  (`Label("x")`) stays a value. Built as `ast.Pattern.Field` and one normalizer (`check.byField`: items to one pattern
+  per field, quiet for exhaustiveness), struct reads by `check.field` - nothing new below check. **Found on the way
+  (pre-existing)**: a case with a computed position beside a name (`case Shape.Rect(k + 1, h)`) said "unknown name 'h'",
+  and a generic enum's case written with its arguments (`case Opt<I64>.Some(x)`) bound nothing - the parser now keeps
+  such a call a pattern, its computed positions values.
+
+#### Expressions read as words (E28-E30, E32, the user's designs).
+
+- **Expressions read as words (E28-E30, E32, the user's designs).** `a if c else b`; `x in c`/`x not in c` call
+  `Has`/`Contains`; comparison chains for `< <= > >=` only, each operand once; `x as E.Case` gives the payload
+  (fails as written with `CaseError.WrongCase`, so `try e as C` or `(e as C)!`). `is` tests for null and nothing else: `x is null`, `x is not
+  null` (E10c, the user's decision 2026-10-24); `x == null`, `a is b` and `x is E.Case` are errors naming the form.
+
+#### - **Case tests and narrowing (E32, S8d, the user's decision 2026-10-24: "I want 
+
+- **Case tests and narrowing (E32, S8d, the user's decision 2026-10-24: "I want == always. It generalizes better into
+  the payload case").** `e == Shape.Circle` tests the case, `e == Shape.Circle(3.0)` compares its payload too, `_`
+  matches any part, nested cases test through references (a null holds no case). After `if e == C { }` - and in the else
+  of `if e != C`, and after an `if e != C { leave }` - a local or parameter is narrowed to C, so `e.r` reads the payload
+  field (mine: only locals and parameters, never fields - a field may change under a call); a field read where nothing
+  narrows is S8d's error. **One narrowing walk (2026-10-26, the user's "Do narrowing")**: case tests, null tests and
+  error-value tests narrow in the same places - `and`/`or`/`not`, a conditional, after an assert, in a loop on the test,
+  after a loop with no break (check's `pushFacts`); a narrowing holds until a statement assigns the local (mine; it had
+  needed nothing to assign it in the whole block), assigning a case value narrows nothing, and a whole-payload narrowing
+  reads as the enum where the enum is wanted (an argument of its type, a case test's or a match's subject). Since bulk
+  review 4: deferred code is checked without a narrowing a later statement of its block ends (it runs after them), and
+  a narrowed payload's copy is never lent writably either (`e.Grow()`, `grow(e)`, `e.c.Grow()` - the write would be
+  lost), S8d's message naming the local and its case; lending the payload place itself was not taken (another
+  reference to the enum's storage could change its case under it).
+
+#### Comprehensions `Array<T>[e for x in c if p]` (E27, the user's design)
+
+- **Comprehensions `Array<T>[e for x in c if p]` (E27, the user's design)** - the made type required (QBU, below),
+  brackets; an array's reserved up front from a known length, else 100 and doubling (the user's numbers).
+
+#### - **The type before a literal's `[` is the type it makes; `FromIter` builds the 
+
+- **The type before a literal's `[` is the type it makes; `FromIter` builds the rest (E19-E21, E27, S13h, D19, QBU and
+  QBW, the user's decisions 2026-10-27: "type in front for sure", "do only fromIter"; QBX's target-typed literals
+  declined; built 2026-11-07, wt-literals, details mine).** `Array<I64>[1, 2]`, `Array<String&>["a"]`, `Array<any
+  Shape&>[c]`, `Array<Array<F32>>[Array<F32>[1, 2]]`, `Vec<I64>[1, 2]`, `set.Set<I64>[1, 2]`, `Map<String, I64>["a":
+  1]` (the keyed form: entries `k: v`, each a `MapEntry<K, V>`), `C[]` empty; a comprehension alike (`Vec<I64>[x * x for
+  x in a]`). An `Array<T>` is laid out as before (bench code unchanged); any other type is `C.FromIter(walk)` - the one
+  protocol, a type-level builder (D19) taking an iterator, its element type read off its parameter (a variable
+  constrained by `Iterator<E ? Err>`, or a concrete iterator's Next), its errors the literal's (`try lib.Strict[1, 2]`);
+  `T.FromIter(it)` an ordinary call. A literal's walk is its items' array's `ArrayIter`, so a builder reserves their count
+  (`it.Rest().Len()`); a comprehension made into a `Vec` is the array then its FromIter, into any other type a generator
+  of the elements (`check.comprWalk`: a coroutine lambda, Suspend per element, no array made) - one that may fail by calls
+  of its own an error (E27, ComprWalkFails: write a generator function). The prelude declares Array's, Vec's and Map's
+  FromIter, std List's (From renamed), Set's, Deque's, BitSet's, Columns', ColumnVec's; Heap's takes its ordering too,
+  so a Heap has no literal (FromIterShape). A primitive, a reference, a struct with no FromIter in front is an error
+  naming `Array<T>[...]`. **`$` renders the literal making it (E11a)**: `Array<I64>[1, 2]`, `Map<K, V>[k: v]`,
+  `list.List<I64>[...]`, `set.Set<I64>[...]`, `deque.Deque<T>[...]`, `bitset.BitSet<T>[...]` (the collections' Str
+  through the compiler's own spelling of their type); and every declared type's name - in a rendering's types and in
+  struct and enum values - is written as source writes it outside its module (`pair.Pair("k", 0.5)`, B5's rule for
+  errors, `ErrQualifier`), the prelude's and the running program's own bare. Decided (mine): no trait requires FromIter
+  (no Collection trait - QBW), so T35 is not relaxed; the keyed form held in the AST as a binary `:` (the parser decides
+  it by the first item); a declared array type (String) has no literal of its own; the formatter writes `k: v`; a
+  checks case failing with E19 keeps the old form. Array patterns write the matched value's type (`case
+  Array<I64>[x, ...r]`, `case Vec<I64>[...]`, text `case Array<Char>['-', ...r]`). `tools/literal_migrate.olang` (a std
+  tool in `olang fix`: an old front - a known type with only a marker after it, or any marked one - written as the array
+  it made; a generic front unmarked, a type declaring FromIter (the file's or an import's) and a type variable
+  read as new, so idempotent on today's code (bulk review 8); re-export chains followed; Markdown code spans too)
+  migrated std, compiler/, tests, checks, tools, bench, fuzz and SPEC; old arrays of generic values held by value were
+  written by hand. Limits: a Vec's literal copies its items' array into its buffer (reserved once); comments keep old
+  forms. Since bulk review 8: a literal or comprehension through FromIter of unique elements is E19's error naming
+  Push/Put (its walk gives references); a comprehension into a FromIter taking a concrete iterator is handed the array
+  its elements make (E27).
+
+#### Error words, enum cases and constructor fields follow the listing rule (T17/T19/C2, QY):
+
+- **Error words, enum cases and constructor fields follow the listing rule (T17/T19/C2, QY):** commas on a line, line
+  breaks between lines; a named set's members are on its line (T19a).
+
+#### Keywords as names (L9/L9a):
+
+- **Keywords as names (L9/L9a):** any keyword names a method after a receiver or `.`; statement-like and non-value
+  keywords may name fields (typed, never punned). `_` discards and is never a name.
+
+#### Numeric literals (L10-L12b).
+
+- **Numeric literals (L10-L12b).** `_` only between digits (L10b); a decimal above `I64`'s max is `U64`, one past 64
+  bits adapts only to a type wide enough for it, beyond 128 an error (L10); a hex/binary pattern adapting to an unsigned type is its bits (L10a); a float literal beyond
+  its target's range is an error (L12b). Escapes include `\0` and `\r`; a literal never crosses its line (L13).
+
+#### - **Text literals by number, and raw text (L13-L15, L14a, the user's decision 20
+
+- **Text literals by number, and raw text (L13-L15, L14a, the user's decision 2026-10-24: "add all if they are
+  standard").** `\x41` (a byte, two hex digits), `\u{1F600}` (a code point, 1-6 hex digits, written as UTF-8; a
+  surrogate or above 10FFFF an error; in a character literal only below 0x80). `"""` is the one raw form: no escapes,
+  one line or several; across lines the opening `"""` ends its line, the closing one stands alone and its indentation
+  is removed from every line (a line indented less, or text after the opening, is an error - mine: Swift's rules); a
+  blank line is empty. One token, a `STR_LIT` otherwise; decoded once (`scan.LiteralBytes`) for the checker, build
+  conditions and import paths; the formatter keeps a raw token as written.
+
+#### Text joins by adjacency; `$x` renders any value (E11a/E11b, the user's design).
+
+- **Text joins by adjacency; `$x` renders any value (E11a/E11b, the user's design).** A piece is a literal or a `$`
+  rendering, so a missing comma never joins silently. Values render as source writes them (`Point(1, -2)`, `Array<I64>[1,
+  2]`, `list.List<I64>[1]`, `Map<K, V>[k: v]` - E19's literals); floats shortest round-trip (Schubfach); a `Char` (and a type over one) as a
+  character, `U8` as a number. A type's `Str()` overrides it (E11c, the user's call) and is called exactly once per
+  rendering, in order, and may have effects (decision 49) - but builds nothing where its receiver lives. A join's
+  operands are evaluated before any piece renders (Go's rule).
+
+#### More syntax rules worth knowing.
+
+- **More syntax rules worth knowing.** `catch` may begin a following line (R9b); a join continues onto a new line only
+  inside parentheses (E11b); a shift of a literal by a value takes its target's type (E8b) and a literal shift is
+  computed exactly (E4a); `x := 1 + 2` is an `I64`. A one-line declaration of several names shares one type (D12b),
+  parsed as one declaration per name.
+
+#### Removed spellings, for anyone tempted to bring them back:
+
+- **Removed spellings, for anyone tempted to bring them back:** struct literals `T{...}` and field-list structs
+  (2026-10-01, T13 - a plain struct is a special case of a constructor struct); `T[]`/`T[N]`/`T[expr]` arrays and 2-D
+  arrays (2026-10-01, `Array<T>`); `len(a)` (2026-10-01, `a.Len()`); scope names `&s` and scope declarations
+  (2026-10-05); UFCS method calls (M19); `same(a, b)` and the `atomicLoad`-style builtins (2026-10-09); `compif` (B9);
+  `while` (S9); `a is b` identity, `x is E.Case` and `x == null` (2026-10-24: `==` tests cases, `is` only null); the
+  helpers `Any`/`All` (2026-10-24, `Some`/`Every`); a `size()` builtin (2026-09-30, serialization is future work); an `Iterable` interface (T35b:
+  `xs.Iter()`); labeled break (2026-10-08); interface switch dispatch (dropped by the user, "it gains very little and
+  causes a lot of problems"); Str purity (E11c, decision 49); `done`, `fail`, `abort` (2026-10-17, QU: a test ends by
+  returning, a program by `os.Exit`); `own` and `take` (2026-10-18, `docs/memory.md` round 3: freeing early is the
+  compiler's); `Array<T, N>`, constant type parameters `<N I64>` and `x as Array<T, N>&` views (2026-10-24, QP1-QP4: a
+  length is inferred where an array is made, a view is a slice); `checked`, `CheckError` and the `Checked...` forms
+  (2026-10-25: `try a.Get(i)`, `x.Narrow<T>()`, `std/arith`); contract guarantees, named results and `fits` (2026-10-25); `error IoError { ... }` declarations (2026-10-25, `type
+  IoError error { ... }`, T19); `nomatch` and `=>` (2026-10-31, QBQ/QBR: `case _`, `case P: v`); `Clone` (2026-11-03,
+  E31d: `Copy()`).
