@@ -929,3 +929,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   dead regions, goldens" left. Asked the user whether to restart them. Started round structpat (wt-structpat, opus
   high, /home/user/review/rounds/structpat-brief.md): struct patterns by field name, enums by both. Errors carrying
   data is decided; its build follows drops and structpat (same check.olang areas; the named payload items reused).
+- 2026-11-07 ~09:10 CET (the user: "Yeah, keep building" - the stopped rounds restarted): deprec merged (97f95cc;
+  its verify passed on its tip, master had changed only memory since, so no re-verify): `Deprecated:` doc-comment
+  paragraphs read by olang doc (text mark, HTML struck through), mcp, the language server (hover, completion tag, a
+  hint at uses) and olang api (a `deprecated` row, not breaking). Round drops continued by a fresh agent (opus xhigh,
+  from f24af92's PROGRESS.md). asm's verify running; merge when it passes (golden rows resolved per file, then a verify
+  on the merged tip). Running: structpat, drops. Next free slot: round interp (#86).
