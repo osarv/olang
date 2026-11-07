@@ -335,3 +335,15 @@ room after 1-11, enum layout before the final review (it changes T.Size, layout-
   relinking the scope's chunk list) is a runtime round. No semantic change, so no question.
 - (e) The LICENCE stays the user's ("the last thing we do"): ask when the compiler is declared done.
 - QCU 1-3 are open; Columns<T> waits for them and for FromIter (QBU/QBW).
+
+## Added 2026-11-07 (QCX, the user: "Add it then, not done")
+
+- N1. Errors carrying data (deferred 2026-10-24): design note docs/errdata.md (wt-errdata) -> the user's direction
+  questions -> build round (check, lower, emit, eval, scope; std migration).
+- N2. Packed / declared-layout structs (`type H packed struct(version U4, ihl U4, length U16)`): types layout, emit
+  field access by shifts and masks, eval, reflection (T.Size, f.Offset), cabi/C imports of packed C structs, `$`, ==.
+- N3. Benchmarks in the test runner (`olang test -bench`, std/bench): auto-scaled iterations, time and allocations per
+  operation, a saved run to compare with.
+- N4. Coverage (`olang test -cover`): counters per MIR block in objects of their own, a line report and HTML.
+- N5. A REPL (`olang` with no file: statements of a growing main, run by the evaluator) and a Jupyter kernel on it.
+- N6. Saturating arithmetic in std/arith (`arith.Saturating<T>` or functions), for quantized ML, DSP, spiking nets.
