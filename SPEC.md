@@ -7229,7 +7229,7 @@ mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" 
             | "bindgen" | "profile" | "api"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir"
+            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-interpret"
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -7252,6 +7252,7 @@ beginning with `-` that is no option is an error:
 | `-library` | build | §11 X14 |
 | `-memory` | running a file, build, test | B18 |
 | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
+| `-interpret` | test | B3e |
 | `-caps` | explain | B11c |
 | `-asm`, `-ir` | explain | B11d |
 
@@ -7404,12 +7405,14 @@ whose tasks only compute, or hand values on through a channel with room for them
 each other at once cannot: a wait for another thread - a condition variable waited on, as a channel's `Send` to a full
 channel or `Recv` from an empty one does - made by a task, or while tasks wait to run, or without a time limit at all,
 stops the interpreter, saying so and naming the task, since nothing else runs to end it. (A wait with a time limit
-and no task in sight waits that time out, as the built program would with nothing to wake it.) Values whose type
-declares a destructor are **not yet interpreted** - except directly in a global's own initializer, whose instance
-lands in the program's scope and is never destructed (K2c); reaching one stops the same way, as does an `extern`
-function with an `F16` or `BF16` parameter or result (an array of either is passed, X3), or with a struct or an extern
-type's reference for one (X10, X11). The libraries the program links (X9) are loaded into the interpreting process before
-`main` runs, a library's name as its shared library (`libNAME.so`), so its functions are found as the built program
+and no task in sight waits that time out, as the built program would with nothing to wake it.) Each scope is
+reclaimed as it closes (§8) and each destructor runs where its holder lets go of its value (O15, O16), as in the built
+program. An `extern` function is called with numbers, `Bool`s, arrays, structs of numbers by reference (X10, X11), an
+extern type's reference and pointers C gave; one with any other parameter or result - a struct by value, a struct
+holding a reference, a function value C would call (X13) - stops the interpreter the same way. The libraries the
+program links (X9) are loaded into the interpreting process before
+`main` runs, a library's name as its shared library (`libNAME.so`, or the library a linker script of that name names
+first), so its functions are found as the built program
 finds them; one that cannot be loaded - a static library, an object, a library not there - is an error naming it and
 why. Whenever the interpreter
 stops a program on something it does not run, the blocks it is in are still left as the built program, which would
@@ -7418,10 +7421,21 @@ program itself ends - `os.Exit`, a check failing - deferred code runs only where
 does (S19c), and an error leaving `main` runs it on the way out, as in the built program. `-race`, `-debug` and `-sanitize` choose how code is generated, and `interpret` generates none, so they are not its
 options (B1); `-update` and `-define` apply as to any build, and `-target` sets the build constants it decides (B10a) - naming this machine's architecture
 and system (B12a). The runtime's own functions (§11 X6) are provided by the interpreter itself, over the
-interpreted program's command line (B3f). Interpreting is much slower than running the built program, and in this
-implementation memory is not reclaimed while the program runs, so `interpret` suits short runs. Recursing deeper than the
-interpreter's stack holds stops it, naming the call, with status 1 - never a crash; so does a comparison of data that
-holds itself (E10).
+interpreted program's command line (B3f). Interpreting is much slower than running the built program, and each frame
+costs the interpreter more memory than the built program's stack does, so `interpret` suits short runs. Recursing deeper
+than the interpreter's stack holds stops it, naming the call, with status 1 - never a crash; so does a comparison of
+data that holds itself (E10).
+
+`test -interpret <file> [<file> ...] [<word> ...]` runs each file's tests by the same evaluation instead of building
+them: the file analyzed as `test` analyzes it (`TestBuild` true, its tests checked), then its tests the words name (B7a,
+every test where none is given) run as its test binary runs them (B3a) - each global set first, each test `ok - NAME`
+or what stopped it and `FAIL - NAME` (`FAIL - NAME: T.W` and the trace where an error left it, S16, S18d), then the
+counts, the status 1 where one failed and 3 where the words name none of its tests. The test binary's command line
+(B4a) is its path as `test` builds it, then the words; the running test's name and file are given to std as the
+harness gives them (B19), and no fuzzer runs (`std/fuzz`'s input is the empty one). A forked child that takes its
+test's recovery point away ends on a failed check as the built child does. `-define` and `-update` apply; an option
+saying how to build - `-debug`, `-race`, `-sanitize`, `-quick`, `-memory`, `-fuzz` - is an error beside it, and so is a
+`-target` naming another machine (B12a).
 
 **B3f.** `interpret <file> [<argument> ...]`: every argument after `<file>` belongs to the interpreted program and is
 passed on to it as written — one beginning with `-` included, which is never read as a flag of the compiler's. The
@@ -9110,7 +9124,7 @@ are evaluated as a function's body is (D17e): decided at a call whose arguments 
 every call the evaluator runs.
 
 Under `interpret` (B3e) the same evaluation runs a whole program, and the effects above are performed rather than
-refused - tasks excepted, which `interpret` does not run yet (B3e).
+refused - tasks run one after another at their join, as while compiling (B3e).
 
 **K1a.** Whether a call of a function can ever be evaluated is a property of the **function**, not of the
 arguments one call passes: a function whose body — or anything it calls, or the initializer of an

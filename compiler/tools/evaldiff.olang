@@ -3,13 +3,14 @@
 # program's run as compiler/goldens/run.txt stores it (captured by compiler/tools/rungold.olang, make rungold).
 #
 #     evaldiff [-v] [FILE...]
+#     evaldiff [-v] -cases K N
 #
 # A file of tests is compared test by test: a row per file, "same N" where every test ends as the stored run's does,
 # else what each said - "built P ok F fail; interpreted P ok F fail; D differ" - and with -v each test that differs. A
 # checks case is a program, copied into a directory of its own under build/evaldiff and interpreted there with its
 # -define and -target flags (its -debug and -sanitize choose how code is generated, which interpret does not, B3e), its
 # output and status compared (its status alone where the stored output was unstable). With no FILE, every file of
-# tests and every case. Each run is stopped after $EVALTIMEOUT seconds (600).
+# tests and every case; with -cases K N, every Nth case from the Kth (K from 1), so N runs share them. Each run is stopped after $EVALTIMEOUT seconds (600).
 #
 # The differences the interpreter is known to have are listed below by name (Expected), each with why; one listed that
 # no longer differs is said, so the list is kept short. The status: 1 where a file differs and is not listed, else 0 -
@@ -52,21 +53,29 @@ fn main() {
     # absolute, since a case is interpreted in a directory of its own
     olang := try os.RealPath(toolkit.Compiler()) catch os.Error { toolkit.Die("evaldiff: no compiler " $toolkit.Compiler()) }
     verbose := false
+    part, parts I64 = 0, 0
     files Vec<String&>
-    for k in range 1, args.Len() {
+    k I64 = 1
+    for k < args.Len() {
         if args[k] == "-v" {
             verbose = true
+        } else if args[k] == "-cases" and k + 2 < args.Len() {
+            part = try args[k + 1].ParseInt() catch default 0
+            parts = try args[k + 2].ParseInt() catch default 0
+            k += 2
         } else {
             files.Push(args[k])
         }
+        k++
     }
-    if files.Len() == 0 {
+    if parts > 0 {
+        cases := runCases()
+        for i in range part - 1, cases.Len(), parts { files.Push(cases[i]) }
+    } else if files.Len() == 0 {
         for d in String&["tests", "std", "std/prelude/tests"] {
             for f in toolkit.Matching(d, ".olang") { files.Push($f) }
         }
-        for f in toolkit.Matching("checks/cases", ".olang") {
-            if headerLine(toolkit.Read(f), "# check: ") == "run" { files.Push($f) }
-        }
+        for f in runCases() { files.Push(f) }
     }
     gold := toolkit.GoldenRead("compiler/goldens/run.txt", "rungold")
     same, differ, known I64 = 0, 0, 0
@@ -200,6 +209,15 @@ fn program(s0 toolkit.StoredRun&, olang String&, f String&) result {
     r.Row = ($f ": differs - status built " $s0.Status ", interpreted " $p.Status $what $(" as listed" if r.Known else "")
              " - " $firstLine(p.Stderr) "\n")
     return r
+}
+
+# the checks cases that must run ("# check: run"), in name order
+fn runCases() Vec<String&> {
+    out := Vec<String&>()
+    for f in toolkit.Matching("checks/cases", ".olang") {
+        if headerLine(toolkit.Read(f), "# check: ") == "run" { out.Push($f) }
+    }
+    return out
 }
 
 fn limit() String { return toolkit.Env("EVALTIMEOUT", "600") }

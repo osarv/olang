@@ -1104,7 +1104,12 @@ fn (x mut Exec&) RunTests(d mut diag.Diagnostics&, words Array<String&>& = Array
             continue
         }
         fail++
-        # S16: an error left the test - its FAIL line names it, the trace after it, as the harness's (S18d)
+        # S16: an error left the test - its FAIL line names it, the trace after it with the place it left, as the
+        # harness's (S18d)
+        if s == eval.Stop.Exited(mir.ExitKind.Escaped, _, _, _) {
+            say("FAIL - " $name ": " $s.msg "\n" $x.TraceText(d) $line(d, s.file, s.sp) ": left the test\n")
+            continue
+        }
         if s == eval.Stop.Raised {
             say("FAIL - " $name ": " $x.errorName(s.code, x.Bodies[t].Ty) "\n" $x.TraceText(d))
             continue

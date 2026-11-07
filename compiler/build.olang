@@ -864,7 +864,7 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
         return 1
     }
     Phase("link")
-    if not c.Quiet { sayln(c.paint("36", $"== " $file " ==")) }
+    c.TestHeader(file)
     run := try c.runner(d) catch Failed { return finish(d) }
     cmd Vec<String&>
     for w in run { cmd.Push($w) }
@@ -993,6 +993,11 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
     return 1 if failed else 0
 }
 
+# the line a file's test run begins with, once it is built or checked (B3a)
+fn (c Config&) TestHeader(file String&) {
+    if not c.Quiet { sayln(c.paint("36", $"== " $file " ==")) }
+}
+
 # test -interpret FILE with one file: its tests run by the front end's evaluator, as interpret runs a program (B3e) -
 # said as TestFile says them; 0 when every test passed, 3 where the words name none of its tests
 fn InterpretTests<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&
@@ -1000,7 +1005,6 @@ fn InterpretTests<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag
     info := try os.Stat(file) catch os.Error { return c.unusable(file, msgs.CannotOpen(), d) }
     if info.Kind == os.FileKind.DIR { return c.unusable(file, msgs.IsDirectory(), d) }
     if info.Kind != os.FileKind.FILE { return c.unusable(file, msgs.NotRegular(), d) }
-    if not c.Quiet { sayln(c.paint("36", $"== " $file " ==")) }
     status := try fe.Interpret(file, filters, c, d) catch Failed.Reported { return c.skipped(file, d) } catch Failed.Unbuilt { return unbuilt() }
     if status == 3 and filters.Len() > 0 {
         sayln(noTestNamed(file, filters, Vec<String&>()))

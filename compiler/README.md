@@ -74,8 +74,9 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
   scope pass says of a program, `-plan` for its placement), `drvdiff.olang` (the driver's command lines
   and whole builds against stage 0's), `lowerdump.olang` (every function of a program lowered and verified, `-mir` to dump, `-standin`
   for the placement of before the scope pass), `emitdump.olang` (a program written as LLVM IR), `emitdiff.olang`
-  (programs built by stage 0 and by the pipeline, run, and their outcomes compared), `evaldump.olang` (a program or its
-  tests run by the evaluator), `evaldiff.olang` (stage 0's runs against the evaluator's),
+  (programs built by stage 0 and by the pipeline, run, and their outcomes compared), `evaldiff.olang` (the built runs
+  against `olang test -interpret`'s and `olang interpret`'s, the interpreter's known differences listed by name - in
+  `make verify`, a file a target: `interp@FILE`),
   `consistency.olang` (the parts that must agree, held to each other: `make consistency`, DEPENDENTS.md), `seed.olang` (writes the bootstrap seed, `make seed` - `seed/README.md`), `diaggold.olang`.
 - `goldens/` - what stage 0 gave, captured: `drv.txt` (the driver's command lines and whole builds), `run.txt` (the
   corpus's and std's test runs and the checks' run cases, for emitdiff and evaldiff), `tokens.txt`/`tokens.full.txt` and
@@ -104,7 +105,7 @@ make fmtdiff       # every file formatted reads back as the same tree, keeps its
 make drvdiff       # the driver says what stage 0 says: command lines decided before code generation, and whole builds
 make lowerdump     # every body and helper of the corpus and the checks' run cases lowered to MIR and verified
 make emitdiff      # the corpus and std's tests built through emit, run, and each test's outcome compared with stage 0's
-make evaldiff      # the corpus, std's tests and the checks' run cases run by the evaluator, compared with stage 0's runs
+make evaldiff      # the corpus, std's tests and the checks' run cases interpreted, compared with the built runs
 ```
 
 The `*diff` targets build `build/compiler_tools_dump` first. `make verify` and `make quick` run tokdiff, astdiff,

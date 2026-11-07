@@ -991,6 +991,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     os.OnCrash(eval.InterpCrash)
     status I32 = 0
     if tests {
+        cfg.TestHeader(root)
         # the test binary's command line: its path, as test builds it, then the words
         x.M.Args.Push($"./build/" $build.Readable(l.Mods[l.Root].Identity) "_test")
         for a in args { x.M.Args.Push($a) }
@@ -1181,6 +1182,14 @@ test "a command line's mistakes are said as stage 0 says them" {
     assert mistake(String&["interpret", "-quick", "m.olang"]) ==
         "olang: error[B1]: -quick applies to running a file, build, compile, test, explain and profile, not to interpret\n"
     assert mistake(String&["build", "-quick", "m.olang"]) == "no mistake: build"
+    # B3e: test -interpret builds nothing, so no option saying how to build goes beside it
+    assert mistake(String&["test", "-interpret", "m.olang", "Box"]) == "no mistake: test"
+    assert mistake(String&["test", "-interpret", "-quick", "m.olang"]) ==
+        "olang: error[B3e]: -interpret builds nothing, and -quick says how to build - give one\n"
+    assert mistake(String&["test", "-sanitize", "-interpret", "m.olang"]) ==
+        "olang: error[B3e]: -interpret builds nothing, and -sanitize says how to build - give one\n"
+    assert mistake(String&["build", "-interpret", "m.olang"]) ==
+        "olang: error[B1]: -interpret applies to test, not to build\n"
 }
 
 test "-quick builds at -O2 with no link-time optimization, its objects apart (B2g)" {

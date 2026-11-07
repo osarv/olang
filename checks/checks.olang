@@ -1004,6 +1004,19 @@ fn interp(r mut report&) ? Failed {
     try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i ran exec.olang unlike the built program", dir)
     try r.expect(outOf(dir).Contains("4 [fed in] [err") and outOf(dir).Contains("missing yes") and
                  outOf(dir).Contains("in /\nlate yes [started] 137\n"), "-i exec.olang output", dir)
+    # test -interpret: a file's tests run as its test binary runs them - the same lines and status, an error leaving a
+    # test named with its trace; the words choose tests as the harness's do, none named the status 3
+    try r.expect(sh(dir, "\"$OLANG\" test tests.olang > want.txt 2>&1") == 1, "tests.olang's built tests passed", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -interpret tests.olang > out.txt 2>&1") == 1, "test -interpret passed", dir)
+    try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "test -interpret ran the tests unlike their binary", dir)
+    try r.expect(outOf(dir).Contains("FAIL - fails: lets its error out: Oops.Bad\ntests.olang:10: raised here\n") and
+                 outOf(dir).Contains("2 passed, 2 failed"), "test -interpret output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -interpret tests.olang doubles > out.txt 2>&1") == 0 and
+                 outOf(dir).Contains("1 passed, 0 failed"), "test -interpret doubles", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -interpret tests.olang nothin > out.txt 2>&1") == 3 and
+                 outOf(dir).Contains("no test is named by 'nothin'"), "test -interpret nothin", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -interpret -debug tests.olang > out.txt 2>&1") == 1 and
+                 outOf(dir).Contains("error[B3e]: -interpret builds nothing, and -debug says how to build"), "test -interpret -debug", dir)
 }
 
 # B4a/B3f/X6: a program reads its command line and environment through the runtime, and std/os's file calls work -

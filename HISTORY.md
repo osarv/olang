@@ -29517,3 +29517,67 @@ closed). Memory-safe today (the storage lives until the scope closes), but C11's
 released resource") does not hold, and it is what blocks freeing at drops. Rust's dropck refuses the store (a value with
 a destructor may not hold a reference to one ended before it); olang's equivalent would refuse a by-value holder storing
 a reference to a holder declared later in its block - for the user.
+
+## The interpreter held to the built programs, in the suite (2026-11-07, wt-interp, B3e, M8)
+
+The user asked "is the interpreter up to date?" - and wants plain `olang` to open it as a prompt later, with a Jupyter
+kernel on it, so it has to be right first. The comparison that would have said (`make evaldiff`: evaldump running the
+corpus and std through the evaluator against compiler/goldens/run.txt) was outside `make verify`, last measured
+2026-10-23, and evaldump had not built since 2026-10-26 (`Exec has no method 'Place'`). Worse, evaldump was a second
+copy of interpret's pipeline that had drifted from it: no scope-pass placement (the stand-in, everything in the
+program's scope), no DecideValues, no baking, no cleanups - so even built it measured something interpret no longer was.
+
+**One code path (mine).** `olang test -interpret FILE [WORD...]` runs a file's tests through `Passes.Interpret` itself,
+`cfg.Tests` choosing `RunTests` over `RunMain`: checked as `test` checks (`TestBuild`, `Analyze(l, true)`, the
+lowerer's `Tests`), the test binary's command line (its path as `test` builds it, then the words), the words choosing
+tests as the harness's `olang.harness.selected` does (a target, its type, text of a description; none named - status
+3, the driver's "no test is named by" line), the header after the check (a shared `Config.TestHeader`), a test an error
+left said `FAIL - NAME: T.W` with its trace and `left the test` (the eval stops `Exited(Escaped)` as the harness's
+`__olang_test_error`), so its output is the built binary's line for line (the checks scenario `interp`'s tests.olang,
+`cmp`). An option and not a mode, since a mode would be a second way to say "run tests"; `-debug`, `-race`,
+`-sanitize`, `-quick`, `-memory`, `-fuzz` beside it are B3e's error (`InterpretBuilds`), a foreign `-target` B12a's.
+evaldiff now runs `olang test -interpret` and `olang interpret` (a case in a directory of its own, its `-define` and
+`-target` flags) and evaldump is deleted.
+
+**What the sweep found** (92 files of tests, 448 run cases; the corpus's shared.olang 515 tests in 24 s, 2.6 GB):
+- *A generator built a caller's text where it died* (tests/generators, D18b, pre-existing): `log.Push($i "!")` in a
+  generator walked by a for-in read freed storage after the loop under interpret, never in the build. The MIR was right
+  (the text built in the lambda's `Capture(1)` scope variable, `log`'s); eval's `enter`/`loadCaptures` filled the
+  scope variables from the environment by position - capture i into variable i - but a capture holding no reference
+  (`n`) has no variable, so `log`'s variable got `n`'s scope, the loop block where the generator lived. Now bound by the
+  capture each `Capture(c)` names. Tasks' captures (loadCaptures) had the same bug.
+- *A whole `mir.Fn` copied per caught error*: `jump`'s `b in m.fns[i].Taken` (and `traced`'s `RaiseText`) read an
+  element of `Vec<mir.Fn>` as a receiver - since handles became values, a deep copy of every Vec the function holds -
+  and the copies were kept in the machine's memory: 46 KB per raise, 2.3 GB over 50,000 caught errors, and std/chan's
+  Select polling (a `catch Exhausted { continue }` loop) grew to 13 GB before the OOM killer. Every `m.fns[i].X` is
+  `m.fns.Ref(i).X` now: 86 MB, five times faster, and std/json's run 3.4 GB -> 0.6 GB. Not reduced to a small program outside the evaluator (two tries
+  kept nothing): a compiler-side question for a later round - why a temporary copy of an element there outlived its
+  frame.
+- *Missing runtime functions*: `__olang_test_running`, `__olang_test_source`, `__olang_fuzz_input` (-1: no fuzzer),
+  `__olang_test_detach` (std/fuzz, std/prop - a forked child that detached ends on its failed check with 134, as the
+  built child aborts), and `__olang_dyncall_var`/`_var_check` (std/ffi's variadic calls, X21).
+- *A linker-script library*: `extern link "m"` dlopened `libm.so`, which on glibc is a GNU ld script (`invalid ELF
+  header`); the first library its GROUP/INPUT names is loaded instead (x9linkmath).
+- *Stale words*: two stops said "-i" (`WhyRunDepth`, `WhyFfiFind`), the flag B1 removed; B3e still said values with
+  destructors were not interpreted and memory not reclaimed (both done by M8 long ago); CLAUDE.md's "stage 1" line too.
+- *The golden*: std/os's "Exec without capture" was stored as failing (it passes built and interpreted now), and
+  tests/structpat had no stored run; recaptured by `make rungold` after checking each difference.
+- *A key that collapsed tests*: toolkit's `TestEndings` cut a FAIL line at its first ": " to drop the error's name,
+  which also cut every targeted test's name (`FAIL - Map.Get: fails on a miss` stored as `Map.Get`); evaldiff had cut ok
+  lines the same way, so all of a target's tests were one key. `toolkit.TestName` drops only a last ": X" of one word.
+
+**What is listed** (B3e's limits, each with its reason in evaldiff's `Expected`/`Skipped`): std/chan's five tests whose
+tasks wait for each other (the interpreter stops, naming the task) and its Select test polling for a task (never ends:
+skipped); std/cancel's busy task spinning until another cancels it (skipped); std/net's TCP test, whose Accept blocks in C
+for a task (skipped), and its name lookup (getaddrinfo takes a struct holding pointers, which the interpreter does not
+pass to C); chunkpool and mapchurn, which measure their own process's peak memory (the compiler's, interpreted);
+x13qsort, an export fn handed to C to call back; gemmflat, over ten minutes interpreted (skipped). Everything else - 89
+files of tests and 442 run cases - ends as built.
+
+**In the suite (mine).** One target per file of tests (`interp@FILE`, after its built `test@FILE`, since both write the
+same scratch files) and the run cases in four parts (`interp@casesK`, `evaldiff -cases K 4`); the runs holding
+gigabytes - std/os (a million-deep recursion: the interpreter's frames cost ~3.7 KB each, 5.4 GB) and
+shared.olang (2.6 GB) - wait at the end of the two heavy lanes. Measured: about 9 minutes of CPU (the slowest
+tests/become, 10 million tail calls, 100 s; std/regex 39 s), about 2.5 minutes of a 4-core suite's wall time. A
+difference not listed fails the suite naming `interp@FILE`; a listed one that no longer differs is said on its row so the
+list stays short.
