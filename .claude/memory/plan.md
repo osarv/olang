@@ -864,4 +864,16 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   and bulk review 7 (building in /home/user/wt/review7, notes in /home/user/review/bulk7/NOTES.md); each keeps a
   "## Progress" section so it can be continued if the limit stops it. The wake-up after the reset resumes them. Disk
   was 94% full after a container restart: freed to ~10 GB by deleting wt/uniq/build (7 GB) and wt/rework/build.
+- 2026-11-07 CET: the audit finished - /home/user/review/remaining/LIST.md (outside the repo): (a) 19 decided by the
+  user, 8 of them never queued: QBT type-level builders (`fn Color.FromHex`, `String.FromC`, `F64.FromBits`, std moves,
+  `T.Functions`, trait-required builders), QBU + QBW (the type in front of every literal and comprehension -
+  `Array<I64>[1, 2]` - built through `FromIter`, every std collection declaring one, `$` writing valid source; a
+  repository-wide migration), QBP 7 `olang explain -asm/-ir` with LLVM's remarks, item 27's sharper C-call rule
+  (effects.olang, free.olang), QBP 8 lane-comprehension fusion (measure first), D8f inferred result lengths and
+  constructors taking arrays by value; (b) 14 of mine; (c) 24 limits and bugs; (e) QCU 1-3 open, the licence asked
+  when the compiler is done. Spot-checked: no `FromIter` anywhere, CLAUDE.md still says "no type-level functions", no
+  `-asm` option. The week follows LIST.md's proposed order: bulk review 7 + fixes; item 17, drop flags in effects and
+  wt-uniq's two bugs; unique Part C then destructor collections; the section-8 round (design note first); reuse in
+  place and the C-call rule; QBT then QBU + QBW (check.olang, after the section-8 round); Columns<T> (needs FromIter
+  and QCU's answers); explain -asm beside them; then the smaller items, the final review and verify.
 
