@@ -246,3 +246,57 @@ test handOver "ends a value handed on to a call that is never made" {
 LeftBehind := leftBehind()
 
 assert LeftBehind == "1/12/123", "decided while compiling: " $LeftBehind
+
+# a requirement failing the call ends the by-value parameters it took (D17; bulk review 7, F10)
+type Guarded struct(r Res, n I64) [n > 0] ? {
+    r
+}
+
+fn guarded(r Res, n I64) [n > 0] I64 ? { return r.id }
+
+fn refused() String {
+    t := Tally()
+    k := try guarded(Res(3, t), 0) catch ArgumentError default -1
+    a := t.Text()
+    {
+        g Guarded = try Guarded(Res(1, t), 0) catch ArgumentError default Guarded(Res(2, t), 1)!
+        a = $a "/" $t.Text() "/" $g.r.id
+    }
+    return $k "/" $a "/" $t.Text()
+}
+
+test guarded "ends what a failed requirement's call was given" {
+    assert refused() == "-1/3/31/2/312"
+}
+
+Refused := refused()
+
+assert Refused == "-1/3/31/2/312", "decided while compiling: " $Refused
+
+# a store over a holder - or a declaration - from what a try, a "!" or a catch default gives is a fresh value, as from
+# the call alone: the old value ended after the new one is made (bulk review 7, F14)
+fn mkFresh(id I64, bad Bool, t mut Tally&) Res ? Gone {
+    if bad: error Gone
+    return Res(id, t)
+}
+
+fn storedOver() String {
+    t := Tally()
+    {
+        x Res = Res(1, t)
+        x = mkFresh(2, false, t)!
+        x = try mkFresh(3, true, t) catch Gone default Res(4, t)
+        y Res = try mkFresh(5, true, t) catch Gone default Res(6, t)
+        x = try mkFresh(7, false, t) catch Gone default Res(8, t)
+        assert x.id == 7 and y.id == 6
+    }
+    return t.Text()
+}
+
+test mkFresh "stores over a holder what a try gives" {
+    assert storedOver() == "12467"
+}
+
+StoredOver := storedOver()
+
+assert StoredOver == "12467", "decided while compiling: " $StoredOver

@@ -4344,13 +4344,15 @@ fn (c mut Checker&) src2(file I64, sp source.Span) String { return $c.P.L.Diags.
 # a body's outermost block, its parameters already in it: its statements
 fn (c mut Checker&) rootStmts(body Array<ast.Stmt&>&) typed.Block& {
     from := c.stmts.Len()
-    c.entryChecks()
     # O15: a by-value parameter's - in a constructor that cannot fail, none for one its fields take whole (a pun): the
     # instance takes it on every way out
     punned := c.puns(body) if c.fr().InCtor and c.P.T.Items(c.P.T.Errors(c.cur().Ty)).Len() == 0 else Map<source.NameId, Bool>()
     for p in c.cur().Params {
         if not punned.Has(c.cur().Local(p).Name): c.dropOnExit(I64(p), c.cur().Local(p).Sp, true)
     }
+    # (D17, after the holders are registered: a requirement failing the call ends the by-value parameters it took -
+    # bulk review 7, F10)
+    c.entryChecks()
     storedIn(body, c.fr().stored)
     if body.Len() > 0 {
         c.stmtsOf(body)
@@ -11969,10 +11971,31 @@ fn (c mut Checker&) held(sp source.Span, call typed.Expr&) typed.Expr& {
     return typed.Expr.Promote(sp, c.P.T.Ref(r, types.Writable), typed.Promote(call, c.site(typed.SiteKind.Promote, sp)))
 }
 
-# the value a temporary was given storage for (held's, E12c's), else null
+# the value a temporary was given storage for (held's, E12c's), else null - under a try or a "!" too, its defaults each
+# such a value (bulk review 7, F14: "x = try mk()" is as fresh as "x = mk()")
 fn heldValue(x typed.Expr&) typed.Expr?& {
-    if x == typed.Expr.Promote: return x.pr.X
-    return null
+    return match x {
+        case typed.Expr.Promote(_, _, pr): pr.X
+        case typed.Expr.Try(sp, _, tr): heldTry(sp, tr)
+        case _: null
+    }
+}
+
+fn heldTry(sp source.Span, tr typed.Try&) typed.Expr?& {
+    if tr.X is null: return null
+    v := heldValue(tr.X!)
+    if v is null: return null
+    cls := Vec<typed.Clause&>()
+    for cl in tr.Clauses {
+        ds := Vec<typed.Expr&>()
+        for d in cl.Defaults {
+            h := heldValue(d)
+            if h is null: return null
+            ds.Push(h)
+        }
+        cls.Push(typed.Clause(cl.Sp, cl.Items, cl.All, cl.Code, ds.ToArray(), cl.Caught, cl.CaughtSet))
+    }
+    return typed.Expr.Try(sp, typeOf(v), typed.Try(v, cls.ToArray(), tr.Ends, tr.Passes, tr.Left))
 }
 
 # ---- variadic parameters (D8g) ----
