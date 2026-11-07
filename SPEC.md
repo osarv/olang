@@ -6834,7 +6834,8 @@ reference - has its destructors run exactly once, **where its holder lets go of 
   that scope, and its destructors run when the scope closes (O1), in the reverse order of the registrations - unless a
   `Destroy()` ran them before (C9b).
 A block's variables let go before its scope closes - in the reverse order they were declared, among its deferred code -
-and the scope's registered values after. Where in the scope an instance's storage lies, and whether it was reserved
+and the scope's registered values after; a join block's variables let go after its wait (P1b), where its tasks have
+ended, after its deferred code. Where in the scope an instance's storage lies, and whether it was reserved
 before its constructor's arguments were built, is not observable. A global, a type argument and a generator's
 parameter hold such a value by reference (C11): the program's scope, a collection's elements and a walk left part way
 have no holder that lets go; and no variable holds one by value across a `yield` (S20).

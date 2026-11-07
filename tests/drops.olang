@@ -140,3 +140,26 @@ test "a constructor failing part way ends the fields it built, the last first" {
     }
     assert t.Text() == "9137"
 }
+
+# a holder declared in a join block lets go after the join's wait: its tasks still read it until then (bulk review 7,
+# F2)
+fn seenBy(r Res&) I64 {
+    s := 0
+    for i in range 200000 { s += i % 7 }
+    return r.id + s - s + r.log.seen.Len() * 1000
+}
+
+fn joinHeld() I64 {
+    t := Tally()
+    n := 0
+    join {
+        x Res = Res(1, t)
+        spawn n = seenBy(x)
+    }
+    return n * 10 + t.seen.Len()
+}
+
+test seenBy "reads a join block's holder while its task runs, ended after the wait" {
+    assert joinHeld() == 11
+}
+assert joinHeld() == 11

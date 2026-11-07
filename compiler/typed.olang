@@ -149,6 +149,7 @@ type BlockKind enum {
     Join       # a join block: on every way out it waits for its tasks (P1b) and fails with theirs (P4b)
     Defer      # deferred code, run on every way out of the block it is registered in (S19)
     ErrDefer   # an errdefer's: run only on the ways out of that block an error takes (S19e)
+    Drop       # a by-value holder's drop (O15): deferred code run on every way out, in a join block after its wait
     Collect    # a comprehension's loop (E27)
 }
 

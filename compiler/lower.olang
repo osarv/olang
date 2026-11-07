@@ -743,13 +743,21 @@ fn (ln mut lowering&) leave(to I64) {
 # whether deferred code k is an errdefer's (S19e): run only on a way out an error takes
 fn (ln lowering&) onError(k I64) Bool { return ln.B.Blocks[I64(ln.defers[k].Id)].Kind == typed.BlockKind.ErrDefer }
 
+# whether deferred code k is a by-value holder's drop (O15): in a join block, run after its wait - a task may still use
+# what it holds until then (bulk review 7, F2)
+fn (ln lowering&) isDrop(k I64) Bool { return ln.B.Blocks[I64(ln.defers[k].Id)].Kind == typed.BlockKind.Drop }
+
+# which of a level's deferred code runs on a way out: before a join's wait (or a plain block's close), after a join's
+# wait that failed, after one that did not
+type deferPhase enum { Before, Failed, Waited }
+
 # level i left - every level above it already left on this path: its deferred code (lowered as if the levels above
 # were closed, which they are here) - an errdefer's only where an error is leaving (S19e) -, its wait if it is a join,
 # its close
 fn (ln mut lowering&) exitLevel(i I64) {
     if ln.dead { return }
     lv := ln.levels[i]
-    ln.runDefers(i, false)
+    ln.runDefers(i, deferPhase.Before)
     if ln.dead { return }
     sp := ln.B.Blocks[I64(lv.Block)].Sp if lv.Block >= typed.BlockId(0) else ln.B.Sp
     if lv.Kind == mir.ScopeKind.Join {
@@ -766,11 +774,14 @@ fn (ln mut lowering&) exitLevel(i I64) {
             ln.end(mir.Term.Wait(sp, lv.S, ok, code, failed))
             ln.start(failed)
             # S19e: the join failed, which is known only once it has waited - its errdefers run now, after its defers
-            ln.runDefers(i, true)
+            # (and its holders' drops, O15)
+            ln.runDefers(i, deferPhase.Failed)
             ln.emit(mir.Stmt.Close(sp, lv.S))
             ln.joinFailed(i, lv.S, mir.Operand.Copy(mir.L(code)), errs, sp)
         }
         ln.start(ok)
+        ln.runDefers(i, deferPhase.Waited)
+        if ln.dead { return }
     }
     ln.emit(mir.Stmt.Close(sp, lv.S))
 }
@@ -778,16 +789,15 @@ fn (ln mut lowering&) exitLevel(i I64) {
 # level i's deferred code, last registered first, lowered as the block's last statements with the levels above it set
 # aside: what runs on this way out - every defer's, and an errdefer's where an error is leaving (S19e) - or, failed,
 # only the errdefers' (a join failing after its wait)
-fn (ln mut lowering&) runDefers(i I64, failed Bool) {
+fn (ln mut lowering&) runDefers(i I64, phase deferPhase) {
     lv := ln.levels[i]
     # the levels above i, set aside while i's deferred code is lowered
     saved Vec<level>
     for ln.levels.Len() > i + 1 { saved.Push(try ln.levels.Pop() catch { unreachable }) }
     mine Vec<I64>
+    joined := lv.Kind == mir.ScopeKind.Join
     for k in range ln.defers.Len() {
-        if ln.deferAt[k] != lv.S { continue }
-        e := ln.onError(k)
-        if (e and (ln.erroring or failed)) or (not e and not failed) { mine.Push(k) }
+        if ln.deferAt[k] == lv.S and ln.runsIn(k, phase, joined): mine.Push(k)
     }
     # what runs here is no longer pending while it runs: a path leaving from inside deferred code (one that cannot be
     # taken - S19 lets none leave - or is caught there) does not run it again, which would lower it without end
@@ -802,6 +812,16 @@ fn (ln mut lowering&) runDefers(i I64, failed Bool) {
     }
     for k in mine { ln.deferAt[k] = lv.S }
     for saved.Len() > 0 { ln.levels.Push(try saved.Pop() catch { unreachable }) }
+}
+
+# whether deferred code k runs in this phase of its level's way out
+fn (ln lowering&) runsIn(k I64, phase deferPhase, joined Bool) Bool {
+    e, d := ln.onError(k), ln.isDrop(k)
+    return match phase {
+        case deferPhase.Before: not (joined and d) and (not e or ln.erroring)
+        case deferPhase.Failed: e or d
+        case deferPhase.Waited: d
+    }
 }
 
 # B3e: deferred code k, just registered, lowered once more as its cleanup - blocks nothing but the registration reaches

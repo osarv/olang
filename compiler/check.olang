@@ -20281,7 +20281,7 @@ fn (c mut Checker&) dropOnExit(l I64, sp source.Span, set Bool) {
     c.fr().deferBlocks.Push(c.fr().Block)
     c.fr().dropBlocks.Push(c.fr().Block)
     from := c.stmts.Len()
-    id, outer, mark := c.open(typed.BlockKind.Defer, sp)
+    id, outer, mark := c.open(typed.BlockKind.Drop, sp)
     c.emit(c.dropIfHeld(sp, typed.Lvalue.Local(sp, t, typed.LocalId(I32(l))), flag))
     b := c.close(id, outer, mark, from)
     c.emit(typed.Stmt.Defer(sp, b))
