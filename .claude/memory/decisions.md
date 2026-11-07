@@ -2970,3 +2970,21 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   no code) - kept unmerged as the basis if (1) is chosen; its three direction questions (payload types of an error
   raised by name inferred from its first raise; methods on error types; ArgumentError carrying its failed condition)
   wait until then. In effect: none queued.
+- QCX ANSWERED 2026-11-07 (the user, by number: "1)why did we drop this? 2)yes 3)dont understand, talk to me 4)sure,
+  I dont get it tho 5)sure 6)olang purely should run the interpreter no? 7)yes, 8)yes but it doesnt really change syntax
+  so that can be added afterwards."): (2) packed / declared-layout structs YES, in the compiler's remaining work;
+  (4) benchmarks in the test runner YES (explained; mine: std/bench used inside tests, no keyword); (5) coverage YES;
+  (6) a REPL and a Jupyter kernel - reading taken and stated: yes, plain `olang` opens the interpreter at a prompt;
+  (7) saturating arithmetic YES; (8) platforms YES, after the compiler is done. Mine, stated, by the user's own rule for
+  (8): (4)-(7) change no syntax either, so they come after "done" too ((4) and (7) first), unless the user wants one
+  sooner. (1) the user asked why it was dropped: their own deferral, 2026-10-24 ("4)what would errors carrying data
+  mean? If you mean debug info that is done with -debug no?", then after the explanation "4) defer this"), two days
+  before errors became values (T20) - re-asked, rec yes, docs/errdata.md ready. (3) explained (no struct patterns
+  today; a struct's constructor parameters are not its fields, so a pattern would need field names - a form of its
+  own) - re-asked, rec not now.
+- The user, 2026-11-07: "also, is the interpreter up to date?" Answered: the evaluator's semantics are held by each
+  change's compile-time tests and the checks' `interpret` runs, but the whole corpus and std run under `olang
+  interpret` and compared with the built programs (evaldiff) is outside `make verify` - last measured 2026-10-23, 23 of
+  26 files alike, its tool (evaldump) noted as not building since 2026-10-26. Decided (mine): a round brings it back -
+  the tool fixed, every difference but the stated limit (tasks run one after another, B3e) fixed, the comparison put
+  into `make verify` - before the compiler is called done; the REPL builds on it.

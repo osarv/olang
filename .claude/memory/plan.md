@@ -917,3 +917,8 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   rule; QBT then QBU+QBW; Columns<T> (needs FromIter and QCU 1-3); the smaller items and tidy; the final review and
   verify. What the user picks from QCX slots in by its files (errors carrying data on check.olang after the section-8
   round; packed structs beside it; the tooling items in free slots).
+- 2026-11-07 CET: QCX answered (decisions.md): packed structs into the compiler's remaining work (beside the section-8
+  round, disjoint files); benchmarks, coverage, the REPL + Jupyter kernel, saturating arithmetic and platforms after
+  the compiler is done (no syntax - the user's rule); errors carrying data and struct patterns re-asked. Queued, next
+  free slot (the machine was full: drops, asm, deprec running, load ~10): round "interp" - evaldump/evaldiff fixed, the
+  corpus and std run under interpret, differences fixed, the comparison into make verify.
