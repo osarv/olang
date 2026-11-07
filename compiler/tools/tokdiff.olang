@@ -25,10 +25,10 @@ fn main() {
         return
     }
     files := toolkit.FilesOr(args, toolkit.Tracked("*.olang"))
-    g := toolkit.HashGoldenRead(Golden, "tokgold")
+    g := toolkit.HashGolden.Read(Golden, "tokgold")
     work := toolkit.Scratch("tokdiff")
     defer toolkit.Clean(work)
-    olang := toolkit.DumpSections(toolkit.RunTool(Dump, "tokens", files))
+    olang := toolkit.Golden.DumpSections(toolkit.RunTool(Dump, "tokens", files))
     if olang.Keys.Len() != files.Len() { toolkit.Die("tokdiff: " $Dump " printed " $olang.Keys.Len() " of " $files.Len() " files") }
     stale := toolkit.HashGoldenStale(g, files)
     isStale := Map<String&, Bool>()
@@ -55,7 +55,7 @@ fn main() {
 fn capture() {
     files := toolkit.Tracked("*.olang")
     if not toolkit.Built(Dump) { toolkit.Die("tokdiff: " $Dump " is not built (make " $Dump ")") }
-    s := toolkit.DumpSections(toolkit.RunTool(Dump, "tokens", files))
+    s := toolkit.Golden.DumpSections(toolkit.RunTool(Dump, "tokens", files))
     if s.Keys.Len() != files.Len() { toolkit.Die("tokdiff: " $Dump " printed " $s.Keys.Len() " of " $files.Len() " files") }
     toolkit.HashGoldenWrite(Golden, "the C tokenizer's stream (compiler/tools/tokdiff.olang)", files, s, fn(body String&) Bool {
         return body.Len() < 8192 and (body.StartsWith("error ") or (try body.Find("\nerror ") catch default -1) >= 0)

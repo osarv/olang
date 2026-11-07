@@ -24,9 +24,9 @@ fn simplify(e Expr&) Expr& {
     }
 }
 
-fn build(d I64) Expr& {
+fn Expr.build(d I64) Expr& {
     if d == 0 { return Expr.Neg(Expr.Lit(1)) }
-    return Expr.Add(build(d - 1), build(d - 1))
+    return Expr.Add(Expr.build(d - 1), Expr.build(d - 1))
 }
 
 fn count(e Expr&) I64 {
@@ -35,7 +35,7 @@ fn count(e Expr&) I64 {
 
 fn main() {
     p := Program()
-    p.root = build(4)
+    p.root = Expr.build(4)
     for _ in range 100 {
         p.root = simplify(p.root)
     }

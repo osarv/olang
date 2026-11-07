@@ -93,7 +93,7 @@ type options struct() {
 
 # the command line as getopts "r:xq" reads it: options up to the first word that is none, or "--"; a bad option is
 # status 2
-fn parse(args Array<String&>&) options {
+fn options.parse(args Array<String&>&) options {
     o := options()
     i I64 = 1
     for i < args.Len() {
@@ -135,7 +135,7 @@ fn parse(args Array<String&>&) options {
 }
 
 fn main() {
-    o := parse(os.Args())
+    o := options.parse(os.Args())
     rows := Vec<String&>()
     for row in table() {
         name := row.Split("|")[0]
@@ -176,7 +176,7 @@ fn build(olang String&, rows Vec<String&>&, base Bool) {
             if base {
                 # baseline x86-64
                 buildOlang(olang, prog, String&["-target", "x86-64"])
-                try os.Exec("cp", "build/" $prog, "build/" $prog ".base", dir = benchlib.Dir) catch os.Error { }
+                try os.Output.Exec("cp", "build/" $prog, "build/" $prog ".base", dir = benchlib.Dir) catch os.Error { }
             }
             buildOlang(olang, prog, Array<String&>(0))
             built.Put("o." $prog, true)

@@ -9,7 +9,7 @@ fn (b Box&) size() I64 { return b.Data.Len() }
 fn (b mut Box&) regrow(v I64) {
     b.Data = Array<I64>(8, v)
 }
-fn make(n I64) Box {
+fn Box.make(n I64) Box {
     b := Box(n)
     assert b.size() == n
     b.regrow(7)
@@ -24,7 +24,7 @@ fn churn() I64 {
     return t
 }
 fn main() ? {
-    b := make(3)
+    b := Box.make(3)
     churn()
     assert b.Data[0] == 7 and b.Data.Len() == 8
 }

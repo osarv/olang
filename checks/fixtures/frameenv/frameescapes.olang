@@ -13,7 +13,7 @@ fn passed(n Node&) I64 {
     f := fn() I64 { return n.v }
     return apply(f) + f()
 }
-fn stored(n Node&) Holder {
+fn Holder.stored(n Node&) Holder {
     f := fn() I64 { return n.v + 1 }
     return Holder(f)
 }
@@ -48,7 +48,7 @@ fn churn(d I64) I64 {
 }
 fn main() ? {
     n := Node(10)
-    h := stored(n)
+    h := Holder.stored(n)
     c := captured(n)
     a := assigned(n)
     r := returned(n)

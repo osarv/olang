@@ -141,7 +141,7 @@ fn (it mut RuneIter&) Next() Rune ? Exhausted {
     return r
 }
 
-fn Runes(t String&) RuneIter { return RuneIter(t) }
+fn RuneIter.Runes(t String&) RuneIter { return RuneIter(t) }
 
 # t's code points, each its own element - failing with Invalid when t is not UTF-8
 fn ToRunes(t String&) Array<Rune> ? Error.Invalid {
@@ -207,7 +207,7 @@ test "what is not UTF-8 is refused, and walked as replacement characters" {
     assert (try Encode(Rune(0xD800)) catch Error.Invalid default "x") == "x"
     assert (try Encode(Rune(0x110000)) catch Error.Invalid default "y") == "y"
     seen := Vec<Rune>()
-    for r in Runes(bytes(U8[0x61, 0xFF, 0x62, 0xE2, 0x82])) { seen.Push(r) }
+    for r in RuneIter.Runes(bytes(U8[0x61, 0xFF, 0x62, 0xE2, 0x82])) { seen.Push(r) }
     assert seen.Len() == 5 and seen[0] == Rune('a') and seen[1] == Replacement and seen[2] == Rune('b')
     assert seen[3] == Replacement and seen[4] == Replacement
 }

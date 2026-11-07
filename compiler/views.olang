@@ -138,7 +138,7 @@ fn (s mut state&) unname(id I64) {
     }
 }
 
-fn dead() state {
+fn state.dead() state {
     s := state()
     s.Dead = true
     return s
@@ -995,7 +995,7 @@ fn (v mut Viewer&) loop(body typed.Block&, post typed.Block?&, st mut state&) {
     v.loops.Push(loopFrame(body.Id))
     frame := v.loops[v.loops.Len() - 1]
     head := st.copy()
-    exits := dead()
+    exits := state.dead()
     for _ in range 12 {
         frame.Breaks.Clear()
         frame.Conts.Clear()
@@ -1317,7 +1317,7 @@ fn (v mut Viewer&) placeRefs(p typed.Lvalue?&, inPlace Bool, st mut state&, out 
 
 fn (v mut Viewer&) matchOf(m typed.Match&, st mut state&, out mut Vec<view>&) {
     for s in m.Held { v.stmt(s, st) }
-    after := dead()
+    after := state.dead()
     for a in m.Arms {
         s := st.copy()
         v.arm(a, s, out)

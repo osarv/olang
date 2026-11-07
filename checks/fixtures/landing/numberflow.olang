@@ -9,7 +9,7 @@ type Summary struct() {
 }
 fn line(i I64) String& { return "line " $i " took " $(i % 97) "ms" }
 fn measure(t String&) I64 { return t.Len() }
-fn scan(n I64) Summary {
+fn Summary.scan(n I64) Summary {
     s := Summary()
     for i in range n {
         l := line(i)
@@ -19,5 +19,5 @@ fn scan(n I64) Summary {
     return s
 }
 fn main() ? {
-    try io.Println($scan(4000000).best)
+    try io.Println($Summary.scan(4000000).best)
 }

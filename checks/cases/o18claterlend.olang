@@ -14,7 +14,7 @@ type Src struct(Path String&, Text String&) {
 
 fn starts(t String&) Array<I32>& { return Array<I32>(t.Len() + 1) }
 
-fn read(path String&) Src { return Src(path, $path "!") }
+fn Src.read(path String&) Src { return Src(path, $path "!") }
 
 type P struct(s Src&) {
     s
@@ -32,7 +32,7 @@ fn main() {
     dir String& = "d"
     total I64 = 0
     for k in range args.Len() {
-        s := read(args[k])
+        s := Src.read(args[k])
         j := filepath.Join(dir, s.Path)
         churn := Array<I64>(64, k)
         total += verify(s) + j.Len() + churn[0]

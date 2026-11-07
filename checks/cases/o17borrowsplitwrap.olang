@@ -12,14 +12,14 @@ fn (b Box&) size() I64 { return b.Data.Len() }
 fn (b mut Box&) regrow(v I64) {
     b.Data = Array<I64>(8, v)
 }
-fn make(n I64) W {
+fn W.make(n I64) W {
     b := Box(n)
     assert b.size() == n
     b.regrow(7)
     return W(b)
 }
 fn main() ? {
-    w := make(3)
+    w := W.make(3)
     churn()
     assert w.b.Data[0] == 7
 }

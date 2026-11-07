@@ -3,13 +3,13 @@
 # clause reading the target reads it unassigned
 type N struct(v I64) { v }
 type E error { Bad }
-fn g(k I64) N& ? E {
+fn N.g(k I64) N& ? E {
     if k < 0 { error E.Bad }
     return N(k)
 }
 fn a(k I64) I64 {
     x N&
-    x = try g(k) catch E {
+    x = try N.g(k) catch E {
         y := x.v
         return y
     }

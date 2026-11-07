@@ -16,7 +16,7 @@ import "../compiler/token"
 type Count struct() { n I64 = 0 }
 
 fn migrate(src String&, c mut Count&) String {
-    ts := scan.Scan(src).Toks
+    ts := scan.Tokens.Scan(src).Toks
     out := StringBuilder()
     at I64 = 0
     for i in range ts.Len() - 2 {

@@ -39,7 +39,7 @@ fn run(dir String&) I32 {
     if not os.Exists("compiler/olang.olang") { die("run it from the repository root: no compiler/olang.olang here") }
     d := diag.Diagnostics(false)
     c := build.Config()
-    cl := try olang.Prepare(String&["olang", "build", "-target", "x86-64", "compiler/olang.olang"], c, d) catch olang.Bad {
+    cl := try olang.CommandLine.Prepare(String&["olang", "build", "-target", "x86-64", "compiler/olang.olang"], c, d) catch olang.Bad {
         try io.Print(d.Render()) catch io.Error { }
         return 1
     }

@@ -75,11 +75,11 @@ seed mut I64 = 5
 type Holder struct(a mut Array<I64>&) {
     a
 }
-fn mkHolder() Holder {
+fn Holder.mkHolder() Holder {
     arr mut Array<I64>& = Array<I64>(3)
     return Holder(arr)
 }
-Hold Holder = mkHolder()
+Hold Holder = Holder.mkHolder()
 fn poke() I64 {
     x := Hold.a
     x[1] = 5

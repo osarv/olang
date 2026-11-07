@@ -520,10 +520,10 @@ test "D18e: a generator held in a local and walked once there is dropped as the 
 # from the stack of a Next call long returned)
 type keptNode struct(v I64) { v }
 
-fn mkKept(k I64) keptNode& { return keptNode(k) }
+fn keptNode.mkKept(k I64) keptNode& { return keptNode(k) }
 
 fn lambdaBefore(k I64) Iterator<I64> {
-    r := mkKept(k)
+    r := keptNode.mkKept(k)
     f := fn() I64 { return r.v }
     for i in range 3 {
         x := f()

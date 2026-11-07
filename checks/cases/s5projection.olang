@@ -7,12 +7,12 @@ type Pairish struct(a Box, n I64) {
     a
     n
 }
-fn pairish(s String&) Pairish { return Pairish(Box(s), 1) }
+fn Pairish.pairish(s String&) Pairish { return Pairish(Box(s), 1) }
 
 fn main() ? {
     bs := Vec<Box>()
     for k in range 4 {
         t := $k "-text"
-        bs.Push(pairish(t).a)
+        bs.Push(Pairish.pairish(t).a)
     }
 }

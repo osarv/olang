@@ -187,7 +187,7 @@ fn (w walker&) clauseHeader(i I64) Bool {
 
 # a source's migration: the text with its edits made, and what was left for a person
 fn migrate(src String&, hand mut Vec<String&>&, path String&) String {
-    w := walker(src, scan.Scan(src).Toks)
+    w := walker(src, scan.Tokens.Scan(src).Toks)
     w.walk()
     for h in w.r.hand { hand.Push($path ":" $h) }
     if w.r.edits.Len() == 0: return src

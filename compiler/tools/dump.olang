@@ -82,7 +82,7 @@ fn run(mode String&, args Array<String&>&) ? io.Error {
     for k in range 2, args.Len() {
         path := args[k]
         out.Write("== " $path "\n")
-        src := try source.Read(path) catch {
+        src := try source.Source.Read(path) catch {
             out.Write("error IO 0:0\n")
             continue
         }
@@ -236,7 +236,7 @@ fn joinOffsets(xs Array<I64>&) String {
 
 # a file's tokens and lexical errors, as "dump tokens" prints them
 fn tokens(out mut io.Writer&, src source.Source&) {
-    ts := scan.Scan(src.Text)
+    ts := scan.Tokens.Scan(src.Text)
     for tk in ts.Toks {
         if tk.Kind == token.Tok.Eof { break }
         out.Write($src.Line(tk.Start))
@@ -260,7 +260,7 @@ fn speed(out mut io.Writer&, src source.Source&) {
     count I64 = 0
     for k in range 10 {
         t := time.Now()
-        ts := scan.Scan(src.Text)
+        ts := scan.Tokens.Scan(src.Text)
         d := time.Since(t)
         count = ts.Toks.Len()
         if k == 0 or d < best { best = d }
@@ -312,8 +312,8 @@ fn (l mut loader&) load(path String&) I64 {
     for i in range l.paths.Len() {
         if l.paths[i] == real { return i }
     }
-    src := try source.Read(real) catch os.Error { return -1 }
-    ts := scan.Scan(src.Text)
+    src := try source.Source.Read(real) catch os.Error { return -1 }
+    ts := scan.Tokens.Scan(src.Text)
     m := l.paths.Len()
     l.paths.Push($real)
     b := StringBuilder()
@@ -744,7 +744,7 @@ fn astDump(out mut io.Writer&, src source.Source&, std String&, prelude String&)
     if m >= 0 { l.oracle(o, names, m, prelude) }
     diags := diag.Diagnostics(false)
     file := diags.AddFile(src.Path, src.Text)
-    ts := scan.Scan(src.Text)
+    ts := scan.Tokens.Scan(src.Text)
     p := parse.Parser(src, ts, names, o, diags, file)
     decls := p.File()
     diags.ChooseAll()
@@ -800,7 +800,7 @@ fn parseSpeed(out mut io.Writer&, src source.Source&, std String&, prelude Strin
         diags := diag.Diagnostics(false)
         file := diags.AddFile(src.Path, src.Text)
         t := time.Now()
-        ts := scan.Scan(src.Text)
+        ts := scan.Tokens.Scan(src.Text)
         p := parse.Parser(src, ts, names, o, diags, file)
         decls := p.File()
         d := time.Since(t)
@@ -822,7 +822,7 @@ fn roundTrip(out mut io.Writer&, src source.Source&, std String&, prelude String
     if m >= 0 { l.oracle(o, names, m, prelude) }
     diags := diag.Diagnostics(false)
     file := diags.AddFile(src.Path, src.Text)
-    ts := scan.Scan(src.Text)
+    ts := scan.Tokens.Scan(src.Text)
     p := parse.Parser(src, ts, names, o, diags, file)
     decls := p.File()
     # what a branch the build may decide met is held, and a branch that did not parse is written back as its text
@@ -832,7 +832,7 @@ fn roundTrip(out mut io.Writer&, src source.Source&, std String&, prelude String
     }
     once := unparse.Unparse(decls, names, src.Text, diags)
     written := source.Source(src.Path, once)
-    ts2 := scan.Scan(once)
+    ts2 := scan.Tokens.Scan(once)
     a := tokenTexts(src.Text, ts)
     b := tokenTexts(once, ts2)
     n := a.Len() if a.Len() < b.Len() else b.Len()

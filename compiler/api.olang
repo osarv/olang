@@ -98,7 +98,7 @@ fn side(name String&, at String&, d mut diag.Diagnostics&) String ? Unread {
 
 # what a command writes, its last line break taken off; "" where it fails
 fn git(args ...String&) String ? Unread {
-    o := try os.Exec(...args) catch os.Error { error Unread.Side }
+    o := try os.Output.Exec(...args) catch os.Error { error Unread.Side }
     if o.Status != 0 { return "" }
     return $o.Stdout.TrimEnd()
 }
@@ -150,12 +150,12 @@ fn entries(root String&, rel String&, scratch String&, cfg mut build.Config&) Ve
 # in the child: the module checked, its exported items and members written a line each, "key TAB kind TAB line"
 fn writeSigs(file String&, scratch String&, cfg mut build.Config&) I32 {
     d mut diag.Diagnostics& = diag.Diagnostics(false)
-    a := session.Analyze(file, cfg, d, Map<String&, String&>())
+    a := session.Analysis.Analyze(file, cfg, d, Map<String&, String&>())
     if d.Errors() > 0 or a.C is null or a.Sc is null {
         say(d.Render())
         return 1
     }
-    md := doc.Of(a.C!, a.Sc!, a.X!, a.L.Root, false)
+    md := doc.Module.Of(a.C!, a.Sc!, a.X!, a.L.Root, false)
     b := StringBuilder()
     for it in md.Items { itemSigs(b, it) }
     try os.WriteFile(scratch, b.ToString()) catch os.Error { return 1 }
@@ -219,8 +219,8 @@ fn compare(olds Vec<sig>&, news Vec<sig>&) Vec<change> {
             out.Push(change(addBreaks(n.Kind), $"added " $n.Kind, "", $n.Line))
             continue
         }
-        if o.Line != n.Line { out.Push(changed(o, n)) }
-        if n.Dep and not o.Dep { out.Push(deprecation(n)) }
+        if o.Line != n.Line { out.Push(change.changed(o, n)) }
+        if n.Dep and not o.Dep { out.Push(change.deprecation(n)) }
     }
     now Map<String&, Bool>
     for n in news { now.Put($n.Key, true) }
@@ -231,7 +231,7 @@ fn compare(olds Vec<sig>&, news Vec<sig>&) Vec<change> {
 }
 
 # an item newly marked deprecated: listed, not breaking
-fn deprecation(n sig) change {
+fn change.deprecation(n sig) change {
     c := change(false, $n.Kind, "", $n.Line)
     c.Deprecated = true
     return c
@@ -243,7 +243,7 @@ fn addBreaks(kind String&) Bool { return kind == "case" or kind == "word" or kin
 
 # what a changed line is: a function's or a constructor's error set only - narrower breaks nothing, anything else does -
 # a global's value only, which breaks nothing; any other change breaks
-fn changed(o sig, n sig) change {
+fn change.changed(o sig, n sig) change {
     oh, oe := splitErrors(o.Line)
     nh, ne := splitErrors(n.Line)
     if oh == nh and oe != ne {

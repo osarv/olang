@@ -22,7 +22,7 @@ type BitSet<T> struct(bits U64 = 0) [bits & ~mask<T>() == 0] ? {
 
 # the set of the case-index bits b, which hold no bit past the last case: the module's own way to a BitSet - every
 # caller's bits are within the cases, so the requirement holds and "!" never ends anything
-fn of<T>(b U64) BitSet<T> { return BitSet<T>(b)! }
+fn BitSet<T>.of(b U64) BitSet<T> { return BitSet<T>(b)! }
 
 # the check every instance makes: an enum, at most 64 cases, none with a payload
 fn check<T>() {
@@ -59,28 +59,28 @@ fn mask<T>() U64 {
 }
 
 # the empty set
-fn Empty<T>() BitSet<T> { return of<T>(0) }
+fn BitSet<T>.Empty() BitSet<T> { return BitSet<T>.of(0) }
 
 # every case
-fn Full<T>() BitSet<T> { return of<T>(mask<T>()) }
+fn BitSet<T>.Full() BitSet<T> { return BitSet<T>.of(mask<T>()) }
 
 # the set of the cases in a
-fn Of<T>(a Array<T>&) BitSet<T> {
-    s := of<T>(0)
+fn BitSet<T>.Of(a Array<T>&) BitSet<T> {
+    s := BitSet<T>.of(0)
     for x in a { s.bits |= U64(1) << index(x) }
     return s
 }
 
 # the set whose case-index bits are b; bits past the last case fail
-fn FromBits<T>(b U64) BitSet<T> ? Error.OutOfRange {
+fn BitSet<T>.FromBits(b U64) BitSet<T> ? Error.OutOfRange {
     if b & ~mask<T>() != 0 { error Error.OutOfRange }
-    return of<T>(b)
+    return BitSet<T>.of(b)
 }
 
 # the cases whose raw value (T17e, an integer) is not zero and lies wholly in w: a C flag word read as a set
-fn FromFlags<T>(w U64) BitSet<T> {
+fn BitSet<T>.FromFlags(w U64) BitSet<T> {
     check<T>()
-    s := of<T>(0)
+    s := BitSet<T>.of(0)
     for k, c in T.Cases {
         r := U64(c().Value())
         if r != 0 and r & w == r { s.bits |= U64(1) << k }
@@ -124,19 +124,19 @@ fn (s BitSet<T>&) Flags() U64 {
 }
 
 # the cases in s or in o
-fn (s BitSet<T>&) BitOr(o BitSet<T>&) BitSet<T> { return of<T>(s.bits | o.bits) }
+fn (s BitSet<T>&) BitOr(o BitSet<T>&) BitSet<T> { return BitSet<T>.of(s.bits | o.bits) }
 
 # the cases in both
-fn (s BitSet<T>&) BitAnd(o BitSet<T>&) BitSet<T> { return of<T>(s.bits & o.bits) }
+fn (s BitSet<T>&) BitAnd(o BitSet<T>&) BitSet<T> { return BitSet<T>.of(s.bits & o.bits) }
 
 # the cases in s and not in o
-fn (s BitSet<T>&) Minus(o BitSet<T>&) BitSet<T> { return of<T>(s.bits & ~o.bits) }
+fn (s BitSet<T>&) Minus(o BitSet<T>&) BitSet<T> { return BitSet<T>.of(s.bits & ~o.bits) }
 
 # the cases in exactly one of s and o
-fn (s BitSet<T>&) BitXor(o BitSet<T>&) BitSet<T> { return of<T>(s.bits ^ o.bits) }
+fn (s BitSet<T>&) BitXor(o BitSet<T>&) BitSet<T> { return BitSet<T>.of(s.bits ^ o.bits) }
 
 # the cases not in s
-fn (s BitSet<T>&) Complement() BitSet<T> { return of<T>(mask<T>() & ~s.bits) }
+fn (s BitSet<T>&) Complement() BitSet<T> { return BitSet<T>.of(mask<T>() & ~s.bits) }
 
 # whether every case of s is in o
 fn (s BitSet<T>&) IsSubset(o BitSet<T>&) Bool { return s.bits & ~o.bits == 0 }
@@ -177,43 +177,43 @@ type Color enum { Red, Green, Blue }
 type Perm enum U32 { READ = 1, WRITE = 2, EXEC = 4 }
 
 test BitSet "holds the cases of an enum" {
-    s := Of(Color[Color.Red, Color.Blue])
+    s := BitSet.Of(Color[Color.Red, Color.Blue])
     assert Color.Red in s and Color.Green not in s and s.Len() == 2
     assert s.Add(Color.Green) and not s.Add(Color.Green)
     assert s.Remove(Color.Red) and not s.Remove(Color.Red)
     assert s.Len() == 2 and s.Bits() == 6
     s.Clear()
-    assert s.Len() == 0 and s == Empty<Color>()
+    assert s.Len() == 0 and s == BitSet<Color>.Empty()
 }
 
 test BitSet "set algebra by operators" {
-    a := Of(Color[Color.Red, Color.Green])
-    b := Of(Color[Color.Green, Color.Blue])
-    assert a | b == Full<Color>() and a & b == Of(Color[Color.Green])
-    assert a - b == Of(Color[Color.Red]) and a ^ b == Of(Color[Color.Red, Color.Blue])
-    assert a.Complement() == Of(Color[Color.Blue]) and (a & b).IsSubset(a) and not a.IsSubset(b)
-    assert a.Hash() == Of(Color[Color.Green, Color.Red]).Hash()
+    a := BitSet.Of(Color[Color.Red, Color.Green])
+    b := BitSet.Of(Color[Color.Green, Color.Blue])
+    assert a | b == BitSet<Color>.Full() and a & b == BitSet.Of(Color[Color.Green])
+    assert a - b == BitSet.Of(Color[Color.Red]) and a ^ b == BitSet.Of(Color[Color.Red, Color.Blue])
+    assert a.Complement() == BitSet.Of(Color[Color.Blue]) and (a & b).IsSubset(a) and not a.IsSubset(b)
+    assert a.Hash() == BitSet.Of(Color[Color.Green, Color.Red]).Hash()
 }
 
 test BitSet "a walk gives the cases in declaration order" {
-    s := Of(Color[Color.Blue, Color.Red])
+    s := BitSet.Of(Color[Color.Blue, Color.Red])
     seen := ""
     for c in s { seen = $seen $c " " }
     assert seen == "Color.Red Color.Blue "
-    assert $s == "BitSet{Color.Red, Color.Blue}" and $Empty<Color>() == "BitSet{}"
+    assert $s == "BitSet{Color.Red, Color.Blue}" and $BitSet<Color>.Empty() == "BitSet{}"
 }
 
-test FromBits "round trips Bits and fails past the last case" {
-    s := Of(Color[Color.Green, Color.Blue])
-    assert (try FromBits<Color>(s.Bits())) == s
-    try FromBits<Color>(8) catch Error.OutOfRange { return }
+test BitSet.FromBits "round trips Bits and fails past the last case" {
+    s := BitSet.Of(Color[Color.Green, Color.Blue])
+    assert (try BitSet<Color>.FromBits(s.Bits())) == s
+    try BitSet<Color>.FromBits(8) catch Error.OutOfRange { return }
     assert false, "FromBits(8) gave a set past the last case"
 }
 
 test BitSet "flag words from raw values" {
-    s := Of(Perm[Perm.READ, Perm.EXEC])
+    s := BitSet.Of(Perm[Perm.READ, Perm.EXEC])
     assert s.Flags() == 5
-    assert FromFlags<Perm>(6) == Of(Perm[Perm.WRITE, Perm.EXEC]) and FromFlags<Perm>(0) == Empty<Perm>()
+    assert BitSet<Perm>.FromFlags(6) == BitSet.Of(Perm[Perm.WRITE, Perm.EXEC]) and BitSet<Perm>.FromFlags(0) == BitSet<Perm>.Empty()
 }
 
 # whether the constructor makes a set of the bits b
@@ -227,21 +227,21 @@ test BitSet "its constructor refuses bits past the last case" {
     assert not madeFrom(12) and not madeFrom(8) and madeFrom(5) and madeFrom(0)
     assert BakedRefused, "the evaluator agrees"
     s := try BitSet<Color>(5) catch { return }
-    assert s.Len() == 2 and s == Of(Color[Color.Red, Color.Blue])
+    assert s.Len() == 2 and s == BitSet.Of(Color[Color.Red, Color.Blue])
 }
 
 # computed while compiling (K2): the evaluator agrees with the run time
-fn evalSet() BitSet<Color> {
-    s := Of(Color[Color.Red])
+fn BitSet<Color>.evalSet() BitSet<Color> {
+    s := BitSet.Of(Color[Color.Red])
     s.Add(Color.Blue)
     return s
 }
-BakedSet := evalSet()
-BakedFlags U64 = Of(Perm[Perm.WRITE, Perm.EXEC]).Flags()
+BakedSet := BitSet<Color>.evalSet()
+BakedFlags U64 = BitSet.Of(Perm[Perm.WRITE, Perm.EXEC]).Flags()
 
 test "the compile-time evaluator computes a BitSet" {
-    assert BakedSet == Of(Color[Color.Red, Color.Blue]) and BakedFlags == 6
-    assert evalSet().Len() == 2
+    assert BakedSet == BitSet.Of(Color[Color.Red, Color.Blue]) and BakedFlags == 6
+    assert BitSet<Color>.evalSet().Len() == 2
 }
 
 }

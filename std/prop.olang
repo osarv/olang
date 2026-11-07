@@ -47,7 +47,7 @@ type source struct(seed U64) {
     random Bool = seed != 0
 }
 
-fn newSource(given Array<U8>&, seed U64) source {
+fn source.newSource(given Array<U8>&, seed U64) source {
     s := source(seed)
     s.bytes.PushAll(given)
     return s
@@ -199,7 +199,7 @@ type outcome enum {
 
 # f run on the bytes in a child process, a copy of this one, saying nothing: whether it passed, failed (a failed check,
 # an error) or was dropped (a value refused)
-fn inChild<F>(f F, bytes Array<U8>&) outcome {
+fn outcome.inChild<F>(f F, bytes Array<U8>&) outcome {
     cstdio.fflush(null)
     pid := unistd.fork()
     if pid < 0 { return outcome.Passed }
@@ -210,14 +210,14 @@ fn inChild<F>(f F, bytes Array<U8>&) outcome {
             unistd.dup2(quiet, 1)
             unistd.dup2(quiet, 2)
         }
-        s := newSource(bytes, 0)
+        s := source.newSource(bytes, 0)
         try run(f, s) catch skip { unistd._exit(3) } catch { unistd._exit(1) }
         unistd._exit(0)
     }
-    return waited(pid)
+    return outcome.waited(pid)
 }
 
-fn waited(pid I32) outcome {
+fn outcome.waited(pid I32) outcome {
     st := Array<I32>(1)
     if syswait.waitpid(pid, st, 0) < 0 { return outcome.Passed }
     raw := st[0]
@@ -247,7 +247,7 @@ fn search<F>(f F, base U64, cases I64) U64 {
             note := Array<U8>(8)
             for j in range 8 { note[j] = U8((seed >> U64(8 * j)) & 255) }
             unistd.write(fds[1], note, 8)
-            s := newSource(Array<U8>(0), seed)
+            s := source.newSource(Array<U8>(0), seed)
             try run(f, s) catch skip { } catch { unistd._exit(1) }
         }
         unistd._exit(0)
@@ -260,12 +260,12 @@ fn search<F>(f F, base U64, cases I64) U64 {
         for j in range 8 { last = last | (U64(note[j]) << U64(8 * j)) }
     }
     unistd.close(fds[0])
-    return last if waited(pid) == outcome.Failed else 0
+    return last if outcome.waited(pid) == outcome.Failed else 0
 }
 
 # the bytes the case of a seed draws, made again here (no function called)
 fn record<F>(f F, seed U64) Array<U8> {
-    s := newSource(Array<U8>(0), seed)
+    s := source.newSource(Array<U8>(0), seed)
     for p in F.Params {
         if p.Type.Kind == TypeKind.Reference {
             try paramRef(p, s) catch skip { break }
@@ -302,7 +302,7 @@ fn shrink<F>(f F, start Array<U8>&, budget I64) Array<U8> {
                 for j in range i { cand[j] = best[j] }
                 for j in range i + size, best.Len() { cand[j - size] = best[j] }
                 tries++
-                if inChild(f, cand) == outcome.Failed {
+                if outcome.inChild(f, cand) == outcome.Failed {
                     best.Clear()
                     best.PushAll(cand)
                     better = true
@@ -322,7 +322,7 @@ fn shrink<F>(f F, start Array<U8>&, budget I64) Array<U8> {
                 cand := best.ToArray()
                 cand[i] = U8(mid)
                 tries++
-                if inChild(f, cand) == outcome.Failed {
+                if outcome.inChild(f, cand) == outcome.Failed {
                     hi = mid
                 } else {
                     lo = mid + 1
@@ -342,7 +342,7 @@ fn shrink<F>(f F, start Array<U8>&, budget I64) Array<U8> {
             cand[i] = cand[i] - 1
             cand[i + 1] = 255
             tries++
-            if inChild(f, cand) == outcome.Failed {
+            if outcome.inChild(f, cand) == outcome.Failed {
                 best.Clear()
                 best.PushAll(cand)
                 better = true
@@ -361,21 +361,21 @@ fn Check<F>(f F, cases I64 = 100) ? F.Errors {
         for path in fuzz.Saved() {
             saved := try os.ReadFile(path) catch os.Error { continue }
             try io.PrintErr($"prop: replaying " $path "\n") catch io.Error { }
-            s := newSource(saved, 0)
+            s := source.newSource(saved, 0)
             try run(f, s) catch skip { }
         }
         base := U64(fuzz.Slug(fuzz.Running()).Hash()) | 1
         failed := search(f, base, cases)
         if failed == 0 { return }
         found := shrink(f, record(f, failed), 2000)
-        shown2 := newSource(found, 0)
+        shown2 := source.newSource(found, 0)
         where := fuzz.Save(found)
         try io.PrintErr($"prop: a failing case, shrunk to:\n" $shown(f, shown2) $("" if where == "" else $"  saved as " $where "\n")) catch io.Error { }
-        s := newSource(found, 0)
+        s := source.newSource(found, 0)
         try run(f, s) catch skip { unreachable "prop: the smallest failing case was refused here" }
         unreachable "prop: the case failed in its own process but not here"
     }
-    s := newSource(data, 0)
+    s := source.newSource(data, 0)
     try run(f, s) catch skip { }
 }
 
@@ -404,7 +404,7 @@ test search "finds a failing case, which shrink makes smallest" {
     seed := search(f, 7, 100)
     assert seed != 0
     small := shrink(f, record(f, seed), 2000)
-    s := newSource(small, 0)
+    s := source.newSource(small, 0)
     assert (try gen<Array<I64>>(s) catch skip default I64[]) == I64[50]
 }
 
@@ -413,9 +413,9 @@ test search "finds nothing where every case passes" {
 }
 
 test gen "draws the least values from zero bytes" {
-    s := newSource(U8[0, 0, 0, 0], 0)
+    s := source.newSource(U8[0, 0, 0, 0], 0)
     assert (try gen<I64>(s)) == 0 and not (try gen<Bool>(s)) and (try gen<String>(s)) == ""
     assert (try gen<Array<I64>>(s)).Len() == 0 and (try gen<Shape>(s)) == Shape.Dot
-    r := newSource(U8[1, 5], 0)
+    r := source.newSource(U8[1, 5], 0)
     assert (try gen<Percent>(r).v catch skip default -1) == -1    # -5, which the contract refuses
 }

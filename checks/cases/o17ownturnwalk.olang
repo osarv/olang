@@ -13,7 +13,7 @@ fn (w mut walk&) Next() String& ? Exhausted {
     return w.v[w.i - 1]
 }
 
-fn over(v Vec<String&>&) walk { return walk(v) }
+fn walk.over(v Vec<String&>&) walk { return walk(v) }
 
 fn mkv(k I64, t String&) Vec<String&> {
     v := Vec<String&>()
@@ -26,7 +26,7 @@ fn main() {
     ws := Vec<walk>()
     for k in range 1, 6 {
         v := mkv(k, t)
-        ws.Push(over(v))
+        ws.Push(walk.over(v))
     }
     junk := Vec<Vec<I64>>()
     for i in range 200 {

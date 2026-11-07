@@ -42,7 +42,7 @@ fn run(mode String&, args Array<String&>&) I32 {
     failed I64 = 0
     for k in range 2, args.Len() {
         path := args[k]
-        src := try source.Read(path) catch os.Error {
+        src := try source.Source.Read(path) catch os.Error {
             try io.PrintErr("olang: " $path ": cannot be read\n") catch io.Error { }
             status = 1
             continue
@@ -76,14 +76,14 @@ fn verify(src source.Source&, text String&, std String&, prelude String&) String
     o := layout.OracleFor(src.Path, std, prelude, names)
     diags := diag.Diagnostics(false)
     file := diags.AddFile(src.Path, src.Text)
-    ts := scan.Scan(src.Text)
+    ts := scan.Tokens.Scan(src.Text)
     p := parse.Parser(src, ts, names, o, diags, file)
     decls := p.File()
     before := unparse.Unparse(decls, names, src.Text, diags)
     written := source.Source(src.Path, text)
     diags2 := diag.Diagnostics(false)
     file2 := diags2.AddFile(src.Path, text)
-    ts2 := scan.Scan(text)
+    ts2 := scan.Tokens.Scan(text)
     p2 := parse.Parser(written, ts2, names, o, diags2, file2)
     decls2 := p2.File()
     if ts2.Diags.Len() > 0 or diags2.AllSaid().Len() > 0 { return "the text written does not parse" }

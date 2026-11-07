@@ -13,7 +13,7 @@ fn sneak(t String&, s mut S&) I64 {
     s.names.Push(t)
     return t.Len()
 }
-fn scan(n I64) S {
+fn S.scan(n I64) S {
     s := S()
     for i in range n {
         line := mk(i)
@@ -22,4 +22,4 @@ fn scan(n I64) S {
     }
     return s
 }
-fn main() ? { try io.Println($scan(3).names.Len()) }
+fn main() ? { try io.Println($S.scan(3).names.Len()) }

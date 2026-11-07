@@ -7,33 +7,33 @@ type Res unique struct(k I64) {
     Made++
 } destruct { Gone++ }
 fn id<T>(x T) T { return x }
-fn r1(c Bool) Res& { return Res(1) if c else id(Res(2)) }
-fn r2(c Bool) Res& { return id(Res(1) if c else Res(2)) }
-fn r3(c Bool) Res& {
+fn Res.r1(c Bool) Res& { return Res(1) if c else id(Res(2)) }
+fn Res.r2(c Bool) Res& { return id(Res(1) if c else Res(2)) }
+fn Res.r3(c Bool) Res& {
     return match c {
         case true: id(Res(3))
         case _: Res(4)
     }
 }
-fn mk(c Bool) Res& { return Res(5) if c else Res(6) }
+fn Res.mk(c Bool) Res& { return Res(5) if c else Res(6) }
 fn show(i I64) ? io.Error { try io.Println($i ": " $(Made - Gone)) }
 fn main() ? {
     c := false
-    { x := r1(c) }
+    { x := Res.r1(c) }
     try show(0)
-    { x := r2(c) }
+    { x := Res.r2(c) }
     try show(1)
-    { x := r3(c) }
+    { x := Res.r3(c) }
     try show(2)
     {
         x Res& = Res(0)
-        join { spawn x = mk(c) }
+        join { spawn x = Res.mk(c) }
     }
     try show(3)
     {
         a := Array<Res&>(3, Res(7))
         join {
-            for i in range 3 { spawn a[i] = mk(c) }
+            for i in range 3 { spawn a[i] = Res.mk(c) }
         }
     }
     try show(4)

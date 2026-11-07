@@ -36,11 +36,11 @@ fn main() {
         for f in toolkit.Matching("std", ".olang") { files.Push($f) }
         for f in toolkit.Matching("std/prelude/tests", ".olang") { files.Push($f) }
     }
-    gold := toolkit.GoldenRead("compiler/goldens/run.txt", "rungold")
+    gold := toolkit.Golden.Read("compiler/goldens/run.txt", "rungold")
     same, differ, broken I64 = 0, 0, 0
     tests, testsSame I64 = 0, 0
     for f in files {
-        r := compare(gold, olang, evaldump, f, verbose, interpret)
+        r := result.compare(gold, olang, evaldump, f, verbose, interpret)
         toolkit.Say(r.Row)
         tests += r.Tests
         testsSame += r.Same
@@ -64,10 +64,10 @@ type result struct() {
     Same I64 = 0
 }
 
-fn compare(gold toolkit.Golden&, olang String&, evaldump String&, f String&, v Bool, interpret Bool) result {
+fn result.compare(gold toolkit.Golden&, olang String&, evaldump String&, f String&, v Bool, interpret Bool) result {
     r := result()
     program := f.StartsWith("checks/")
-    s0 := toolkit.RunStored(gold, f)
+    s0 := toolkit.StoredRun.RunStored(gold, f)
     if not s0.Found {
         r.Broken = true
         r.Row = $f ": no stored run in compiler/goldens/run.txt (make rungold)\n"

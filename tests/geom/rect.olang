@@ -9,12 +9,12 @@ type Rect struct(W I32, H I32) {
     H
 }
 
-fn Square(side I32) Rect {
+fn Rect.Square(side I32) Rect {
     return Rect(side, side)
 }
 
 test "a function in one file calls one declared in its neighbour, through an import" {
-    assert measure.Area(Square(3)) == 9
+    assert measure.Area(Rect.Square(3)) == 9
 }
 
 # B9a: a top-level condition reads a global of an imported module (measure.olang)

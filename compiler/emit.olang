@@ -3290,7 +3290,7 @@ fn (e mut Emitter&) constText(ty types.TypeId, bits I64) String {
         k := t.Bits(r)
         if r == types.TypeId(11) { return "0xH" $U64(bits & 0xFFFF).Format(16).PadStart(4, '0') }
         if r == types.TypeId(12) { return "0xR" $U64(bits & 0xFFFF).Format(16).PadStart(4, '0') }
-        if k == 32 { return "0x" $F64(U32(U64(bits) & U64(0xFFFFFFFF)).F32FromBits()).Bits().Format(16).PadStart(16, '0') }
+        if k == 32 { return "0x" $F64(F32.FromBits(U32(U64(bits) & U64(0xFFFFFFFF)))).Bits().Format(16).PadStart(16, '0') }
         return "0x" $U64(bits).Format(16).PadStart(16, '0')
     }
     s := e.ty(ty)
@@ -3537,7 +3537,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
         case mir.Stmt.Raised(sp) { fe.trace(sp) }
         case mir.Stmt.Deferred(_, _, _) { fe.gap("a cleanup (interpret's)") }
         case mir.Stmt.RegisterDtor(_, sr, ty, x) {
-            k := try mir.DropFn(t, ty, try fe.E.dtorOf.Get(ty) catch default -1) catch {
+            k := try mir.FnKey.DropFn(t, ty, try fe.E.dtorOf.Get(ty) catch default -1) catch {
                 fe.gap("a destructor not found: " $t.Canon(ty))
                 return
             }
@@ -5662,7 +5662,7 @@ fn (e mut Emitter&) cHeader(ty types.TypeId) String {
     r := e.T.Result(ty)
     if r == types.VoidT or r == types.NoreturnT { return "void" }
     e.P.Layout(r)
-    w := cabi.Result(e.T, e.Arch, r)
+    w := cabi.Way.Result(e.T, e.Arch, r)
     return match w.Kind {
         case cabi.Pass.Direct: $($w.Attr " " if w.Attr != "" else "") $e.ty(r)
         case cabi.Pass.Parts: cabi.PartsType(w)
@@ -5677,7 +5677,7 @@ fn (e mut Emitter&) cParamList(ty types.TypeId, runtime Bool) String {
     first := true
     regs := cabi.Regs(6, 8)
     r := t.Result(ty)
-    if r != types.VoidT and r != types.NoreturnT and e.P.Layout(r) and cabi.Result(e.T, e.Arch, r).Kind == cabi.Pass.Sret {
+    if r != types.VoidT and r != types.NoreturnT and e.P.Layout(r) and cabi.Way.Result(e.T, e.Arch, r).Kind == cabi.Pass.Sret {
         b.Push($"ptr sret(" $e.ty(r) ") align " $t.Align(r))
         first = false
         regs.Int--
@@ -5708,7 +5708,7 @@ fn (e mut Emitter&) cParamSpelled(p types.TypeId, regs mut cabi.Regs&, runtime B
         return "ptr"
     }
     e.P.Layout(p)
-    w := cabi.Param(e.T, e.Arch, p, regs)
+    w := cabi.Way.Param(e.T, e.Arch, p, regs)
     return match w.Kind {
         case cabi.Pass.Direct: $e.ty(p) $(" " $w.Attr if w.Attr != "" else "")
         case cabi.Pass.Parts: cabi.PartsList(w)
@@ -5728,7 +5728,7 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId, variadic Bo
     rw := cabi.Way(cabi.Pass.Direct, Vec<String&>(), Vec<I64>(), Vec<I64>(), "")
     if res != types.VoidT and res != types.NoreturnT {
         fe.E.P.Layout(res)
-        rw = cabi.Result(t, fe.E.Arch, res)
+        rw = cabi.Way.Result(t, fe.E.Arch, res)
         if rw.Kind == cabi.Pass.Sret {
             sret = fe.slot(res)
             args.Push($"ptr sret(" $fe.ty(res) ") align " $t.Align(res) " " $sret)
@@ -5763,7 +5763,7 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId, variadic Bo
             continue
         }
         fe.E.P.Layout(p)
-        w := cabi.Param(t, fe.E.Arch, p, regs)
+        w := cabi.Way.Param(t, fe.E.Arch, p, regs)
         match w.Kind {
             case cabi.Pass.Direct {
                 args.Push($fe.ty(p) $(" " $w.Attr if w.Attr != "" else "") " " $fe.val(x, p))
@@ -5945,7 +5945,7 @@ fn (e mut Emitter&) exportEntry(i I64) {
     errs := t.Items(t.Errors(ty)).Len() > 0
     arr := hasRes and e.exportArrayResult(res)
     rw := cabi.Way(cabi.Pass.Direct, Vec<String&>(), Vec<I64>(), Vec<I64>(), "")
-    if hasRes and not errs and not arr { rw = cabi.Result(t, e.Arch, res) }
+    if hasRes and not errs and not arr { rw = cabi.Way.Result(t, e.Arch, res) }
     cps Vec<String&>          # C's parameters
     regs := cabi.Regs(6, 8)
     if rw.Kind == cabi.Pass.Sret {
@@ -5975,7 +5975,7 @@ fn (e mut Emitter&) exportEntry(i I64) {
             }
             continue
         }
-        w := cabi.Param(t, e.Arch, pt, regs)
+        w := cabi.Way.Param(t, e.Arch, pt, regs)
         match w.Kind {
             case cabi.Pass.Direct {
                 cps.Push($e.ty(pt) $(" " $w.Attr if w.Attr != "" else "") " " $v)

@@ -9,7 +9,7 @@ type Src struct(Path String&, Text String&) {
     Text
 }
 
-fn read(path String&) Src { return Src(path, $path "!") }
+fn Src.read(path String&) Src { return Src(path, $path "!") }
 
 fn retext(s mut Src&, t String&) { s.Text = t }
 
@@ -18,7 +18,7 @@ fn main() {
     dir String& = "d"
     kept Vec<String&>
     for k in range args.Len() {
-        s := read(args[k])
+        s := Src.read(args[k])
         kept.Push(s.Path)
         j := filepath.Join(dir, s.Path)
         retext(s, j)

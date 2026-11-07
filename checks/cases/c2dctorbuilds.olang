@@ -20,7 +20,7 @@ type H struct(x String&, n I64) {
 type K struct(x String&, n I64) {
     y String& = $n "-in-the-instance"
 }
-fn mk(p String&) H { return H(p, 5) }
+fn H.mk(p String&) H { return H(p, 5) }
 fn main() ? {
     k := K("outer", 1)
     for i in range 2 {
@@ -33,7 +33,7 @@ fn main() ? {
     assert k.y == "6-in-the-instance"
     c := CB()
     x := c.text
-    h := mk(x)
+    h := H.mk(x)
     h2 := H(x, 6)
     churn()
     assert h.y == "5-in-x"

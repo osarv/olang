@@ -17,7 +17,7 @@ fn main() ? {
         b.PushChar(' ' if (x >> 8) % 7 != 0 else '\n')
     }
     text := b.ToString()
-    ing := regex.Compile("[a-z]+ing")!
-    num := regex.Compile("error [0-9]+")!
+    ing := regex.Regex.Compile("[a-z]+ing")!
+    num := regex.Regex.Compile("error [0-9]+")!
     try io.Println($ing.Count(text) " " $num.Count(text))
 }

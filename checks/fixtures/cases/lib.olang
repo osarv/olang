@@ -18,7 +18,7 @@ fn Fail(n I32) ? Err {
   if n == 1 { error Err.quiet }
   error Err.Loud
 }
-fn South() Dir { return Dir.south }
+fn Dir.South() Dir { return Dir.south }
 fn helper() I32 { return 1 }
 count I32 = 2
 type Box struct(v I32) {

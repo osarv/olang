@@ -20,7 +20,7 @@ fn main() ? {
     ms := Vec<mat.Mat<F64>>()
     for i in range 3 {
         d := Array<F64>(4, F64(i))
-        ms.Push(try mat.View(d, 0, 2, 2))
+        ms.Push(try mat.Mat.View(d, 0, 2, 2))
     }
     churn()
     io.Println($ms[0].Get(1, 1) " " $ms[2].Get(1, 1))!

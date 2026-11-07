@@ -3,7 +3,7 @@
 # return V(s)" is "return V(a[1:4])" - lives in the result scope; read back after the arena has been churned
 import "std/io"
 type V struct(xs Array<I64>&) { xs }
-fn mk(n I64) V {
+fn V.mk(n I64) V {
     a := I64[1, 2, 3, 4, 5]
     a[0] = n
     s := a[1:4]
@@ -18,7 +18,7 @@ fn churn() I64 {
     return t
 }
 fn main() ? {
-    v := mk(77)
+    v := V.mk(77)
     assert churn() > 0
     try io.Println($v.xs.Len() " " $v.xs[0] " " $v.xs[2])
 }

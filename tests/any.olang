@@ -839,13 +839,13 @@ test "O26a, T7b: a returned array local something else names is copied at its re
 # E25, P1g (the fourth any review, D): a spawn target set from a call is the same call declared
 # first - built where the target lives, here a local living past the join
 type SpP struct(n I64) { n }
-fn spMk(i I64) SpP& { return SpP(i) }
+fn SpP.spMk(i I64) SpP& { return SpP(i) }
 fn spawnScoped(k I64) String {
     x SpP?& = null
     y SpP?& = null
     join {
-        spawn x = spMk(k * 11 + 1)
-        spawn y = spMk(k * 11 + 2)
+        spawn x = SpP.spMk(k * 11 + 1)
+        spawn y = SpP.spMk(k * 11 + 2)
     }
     churn()
     return $x!.n " " $y!.n
@@ -909,7 +909,7 @@ fn shTie(l mut Vec<ShTxt&>&, x ShTxt&) I64 {
     l.Push(x)
     return 2
 }
-fn shAdd(h mut ShHolder&, i I64) ShTxt {
+fn ShTxt.shAdd(h mut ShHolder&, i I64) ShTxt {
     s := ShTxt("abc" $i)
     h.Add(s)
     return s
@@ -919,12 +919,12 @@ fn shTieRet(keep mut Vec<ShTxt&>&, i I64) ShTxt {
     shTie(keep, s)
     return s
 }
-fn shSlice(h mut ShHolder&, i I64) ShTxt {
+fn ShTxt.shSlice(h mut ShHolder&, i I64) ShTxt {
     s := ShTxt("ghi" $i)
     h.Add(s[0:2])
     return s
 }
-fn shMethod(h mut ShHolder&, i I64) ShTxt {
+fn ShTxt.shMethod(h mut ShHolder&, i I64) ShTxt {
     s := ShTxt("jkl" $i)
     s.AddTo(h)
     return s
@@ -932,13 +932,13 @@ fn shMethod(h mut ShHolder&, i I64) ShTxt {
 fn sharedKeep(i I64) String {
     keep := Vec<ShTxt&>()
     h := ShHolder(keep)
-    v := shAdd(h, i)
+    v := ShTxt.shAdd(h, i)
     v[0] = 'Q'
     w := shTieRet(keep, i)
     w[0] = 'R'
-    x := shSlice(h, i)
+    x := ShTxt.shSlice(h, i)
     x[0] = 'S'
-    y := shMethod(h, i)
+    y := ShTxt.shMethod(h, i)
     y[0] = 'T'
     churn()
     return $keep " " $v " " $w " " $x " " $y
@@ -960,46 +960,46 @@ type CvLab extends Array<Char>
 fn (l CvLab&) Name() String { return "cv " $String(l) }
 type CvPath Array<Char>
 CvG := "global"
-fn cvLocal(i I64) CvLab {
+fn CvLab.cvLocal(i I64) CvLab {
     s Array<Char> = "abc" $i
     return CvLab(s)
 }
-fn cvCond(i I64) CvLab {
+fn CvLab.cvCond(i I64) CvLab {
     s Array<Char> = "cond" $i
     u Array<Char> = "else" $i
     return CvLab(s) if i % 2 == 0 else CvLab(u)
 }
-fn cvMatch(i I64) CvLab {
+fn CvLab.cvMatch(i I64) CvLab {
     s Array<Char> = "match" $i
     return match i { case 0: CvLab(s) case _: CvLab(s) }
 }
-fn cvBad(k I64) CvLab ? ChOops {
+fn CvLab.cvBad(k I64) CvLab ? ChOops {
     if k < 100 { error ChOops.Bad }
     return CvLab("never")
 }
-fn cvTry(i I64) CvLab {
+fn CvLab.cvTry(i I64) CvLab {
     s Array<Char> = "dflt" $i
-    return try cvBad(i) catch default CvLab(s)
+    return try CvLab.cvBad(i) catch default CvLab(s)
 }
 fn cvTup(i I64) CvLab, I64 {
     s Array<Char> = "tup" $i
     return CvLab(s), i
 }
-fn cvGlobal() CvPath { return CvPath(CvG) }
+fn CvPath.cvGlobal() CvPath { return CvPath(CvG) }
 fn cvWr(l mut CvLab&) { l[0] = 'W' }
 fn conversions(i I64) String {
     cvKept := Vec<CvLab&>()
     xs := Vec<any Named&>()
     for k in range 3 {
-        cvKept.Push(cvLocal(k + i))
-        xs.Push(cvLocal(k + i))
+        cvKept.Push(CvLab.cvLocal(k + i))
+        xs.Push(CvLab.cvLocal(k + i))
         churn()
     }
-    a := cvCond(i + 1)
-    b := cvMatch(i + 2)
-    c := cvTry(i + 3)
+    a := CvLab.cvCond(i + 1)
+    b := CvLab.cvMatch(i + 2)
+    c := CvLab.cvTry(i + 3)
     d, n := cvTup(i + 4)
-    g := cvGlobal()
+    g := CvPath.cvGlobal()
     g[0] = 'Q'
     s Array<Char> = "abc"
     x := CvLab(s)

@@ -89,7 +89,7 @@ type Fact enum {
     Unknown
 }
 
-fn FactNamed(name String&) Fact {
+fn Fact.Named(name String&) Fact {
     return match name {
         case "Allocates": Fact.Allocates
         case "Blocks": Fact.Blocks

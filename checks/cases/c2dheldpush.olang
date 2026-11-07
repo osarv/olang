@@ -9,7 +9,7 @@ type Words struct(text String&) {
     items mut Vec<String&>& = Vec<String&>()
     items.Push(text)
 }
-fn fromLocal() Words {
+fn Words.fromLocal() Words {
     buf := Array<Char>(3, 'a')
     t := String(buf)
     return Words(t)

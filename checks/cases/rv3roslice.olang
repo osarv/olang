@@ -6,13 +6,13 @@ type Node struct() {
 type B struct() {
     arr := Array<mut Node?&>(2)
 }
-fn mk() B {
+fn B.mk() B {
     b := B()
     b.arr[0] = Node()
     b.arr[1] = Node()
     return b
 }
-G B = mk()
+G B = B.mk()
 fn main() ? {
     x := G
     s := x.arr[0:2]

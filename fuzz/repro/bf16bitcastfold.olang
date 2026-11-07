@@ -1,8 +1,8 @@
 import "std/io"
 run mut I32 = 5
 fn reinterp(x I32) String {
-    hb := F16(x).Bits().BF16FromBits()
-    bh := BF16(x).Bits().F16FromBits()
+    hb := BF16.FromBits(F16(x).Bits())
+    bh := F16.FromBits(BF16(x).Bits())
     return $hb " " $I32(hb) " " $bh " " $I32(bh)
 }
 fn main() ? io.Error {

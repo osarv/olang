@@ -194,7 +194,7 @@ test "the prelude's methods on a built-in type are visible without an import" {
 }
 
 test "M23: a file in a directory imports by its path, its alias the last element" {
-    assert measure.Area(rect.Square(4)) == 16
+    assert measure.Area(rect.Rect.Square(4)) == 16
     r rect.Rect = rect.Rect(3, 7)
     assert measure.Area(r) == 21
 }

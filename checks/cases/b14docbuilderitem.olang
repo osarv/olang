@@ -15,16 +15,16 @@ type Color struct(R U8, G U8, B U8) { }
 type Pair<T> struct(A T, B T) { }
 
 # a color from "RRGGBB"
-fn FromHex(t String&) Color ? ColorError {
+fn Color.FromHex(t String&) Color ? ColorError {
     if t.Len() != 6 { error ColorError.Bad }
     return Color(0, 0, 0)
 }
 
-fn Gray(level U8) Color& { return Color(level, level, level) }
+fn Color.Gray(level U8) Color& { return Color(level, level, level) }
 
-fn Of<T>(x T) Pair<T> { return Pair(x, x) }
+fn Pair<T>.Of(x T) Pair<T> { return Pair(x, x) }
 
-fn parse(t String&) Color { return Color(0, 0, 0) }
+fn Color.parse(t String&) Color { return Color(0, 0, 0) }
 
 fn Luminance(c Color&) F64 { return 0.5 }
 

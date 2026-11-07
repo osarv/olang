@@ -584,7 +584,7 @@ fn (f mut Fn&) Place(base Base, projs Array<Proj>&) Lvalue {
     return Lvalue(base, Range(I32(at), I32(projs.Len())))
 }
 
-fn L(l LocalId) Lvalue { return Lvalue(Base.Local(l), Empty) }
+fn Lvalue.L(l LocalId) Lvalue { return Lvalue(Base.Local(l), Empty) }
 
 fn (f mut Fn&) Args(xs Array<Operand>&) Range {
     at := f.Ops.Len()
@@ -682,7 +682,7 @@ fn GuardOf(t types.Table&, ty types.TypeId) types.TypeId {
 
 # O15: the function a registration of an instance of type ty runs as its scope closes - its destructor's body (dtor, -1
 # for none) where nothing it holds by value has one of its own, else its Drop helper; NoDrop for neither
-fn DropFn(t types.Table&, ty types.TypeId, dtor I64) FnKey ? NoDrop {
+fn FnKey.DropFn(t types.Table&, ty types.TypeId, dtor I64) FnKey ? NoDrop {
     if GuardOf(t, ty) != types.UnknownT: return FnKey.Helper(HelperKind.Guard, ty)
     if dtor >= 0 and not DropsParts(t, ty): return FnKey.Body(typed.BodyId(I32(dtor)))
     if not t.NeedsDrop(ty): error NoDrop
@@ -2469,7 +2469,7 @@ fn short(t String&) String& {
 Sp0 source.Span = source.Span(0, 0)
 
 # a test's function of type ty: its parameters, its frame scope S0, and block 0 opening it
-fn tfn(t mut types.Table&, ty types.TypeId) Fn {
+fn Fn.tfn(t mut types.Table&, ty types.TypeId) Fn {
     f := Fn(FnKey.Body(typed.BodyId(9)), ty, 0, Sp0)
     for p in t.Items(t.Params(ty)) { f.AddParam(source.NameId(0), Sp0, p) }
     f.AddScope(ScopeKind.Frame, NoScope, typed.BlockId(0), Sp0)
@@ -2486,24 +2486,24 @@ fn expect(t mut types.Table&, f Fn&, want String&) {
 }
 
 # "fn add(a I32, b I32) I32 { s := a + b; return s }", as lower would make it
-fn addFn(t mut types.Table&) Fn {
+fn Fn.add(t mut types.Table&) Fn {
     i32 := t.Prim("I32")
-    f := tfn(t, t.Func(t.List(types.TypeId[i32, i32]), i32, types.ListId(0)))
+    f := Fn.tfn(t, t.Func(t.List(types.TypeId[i32, i32]), i32, types.ListId(0)))
     f.Locals[0] = Local(t.Names.Intern("a"), Sp0, i32, LocalKind.Param, ScopeRef.Frame)
     f.Locals[1] = Local(t.Names.Intern("b"), Sp0, i32, LocalKind.Param, ScopeRef.Frame)
     s := f.AddLocal(Local(t.Names.Intern("s"), Sp0, i32, LocalKind.Var, ScopeRef.Frame))
     b0 := BlockId(0)
-    f.Add(b0, Stmt.Assign(Sp0, L(s), Rvalue.Prim(typed.PrimOp.Add, i32, f.Args(Operand[Operand.Copy(L(LocalId(0)))
-                                                                                        Operand.Copy(L(LocalId(1)))]))))
+    f.Add(b0, Stmt.Assign(Sp0, Lvalue.L(s), Rvalue.Prim(typed.PrimOp.Add, i32, f.Args(Operand[Operand.Copy(Lvalue.L(LocalId(0)))
+                                                                                        Operand.Copy(Lvalue.L(LocalId(1)))]))))
     f.Add(b0, Stmt.Close(Sp0, ScopeId(0)))
-    f.End(b0, Term.Return(Sp0, Operand.Copy(L(s))))
+    f.End(b0, Term.Return(Sp0, Operand.Copy(Lvalue.L(s))))
     return f
 }
 
 test "a function: built, verified and dumped" {
     names := source.Names()
-    t := types.NewTable(names)
-    f := addFn(t)
+    t := types.Table.New(names)
+    f := Fn.add(t)
     assert f.Verify(t) == "", f.Verify(t)
     got := f.Dump(t)
     want := ("fn B9: fn(I32, I32) I32\n  L0 Param a: I32\n  L1 Param b: I32\n  L2 Var s: I32\n  S0 Frame block 0\nbb0:\n"
@@ -2513,10 +2513,10 @@ test "a function: built, verified and dumped" {
 
 # "fn sum(n I64) I64 ? { i := 0; for i < n { g(i); i = i + 1 }; return i }", g fallible: a loop whose body is a scope
 # of its own every turn, a call with its error edge, the error re-encoded and raised once every scope is closed
-fn loopFn(t mut types.Table&) Fn {
+fn Fn.loop(t mut types.Table&) Fn {
     i64 := t.Prim("I64")
     def := t.List1(types.DefaultErrT)
-    f := tfn(t, t.Func(t.List1(i64), i64, def))
+    f := Fn.tfn(t, t.Func(t.List1(i64), i64, def))
     g := t.Func(t.List1(i64), i64, def)
     n := LocalId(0)
     i := f.AddLocal(Local(t.Names.Intern("i"), Sp0, i64, LocalKind.Var, ScopeRef.Frame))
@@ -2526,32 +2526,32 @@ fn loopFn(t mut types.Table&) Fn {
     mine := f.AddTemp(I32T, Sp0)
     body := f.AddScope(ScopeKind.Loop, ScopeId(0), typed.BlockId(1), Sp0)
     head, turn, next, exit, failed := f.NewBlock(), f.NewBlock(), f.NewBlock(), f.NewBlock(), f.NewBlock()
-    f.Add(BlockId(0), Stmt.Assign(Sp0, L(i), Rvalue.Use(Operand.Const(i64, 0))))
+    f.Add(BlockId(0), Stmt.Assign(Sp0, Lvalue.L(i), Rvalue.Use(Operand.Const(i64, 0))))
     f.End(BlockId(0), Term.Goto(head))
-    f.Add(head, Stmt.Assign(Sp0, L(c), Rvalue.Prim(typed.PrimOp.Lt, types.BoolT
-                                                   f.Args(Operand[Operand.Copy(L(i)), Operand.Copy(L(n))]))))
-    f.End(head, Term.Branch(Operand.Copy(L(c)), turn, exit))
+    f.Add(head, Stmt.Assign(Sp0, Lvalue.L(c), Rvalue.Prim(typed.PrimOp.Lt, types.BoolT
+                                                   f.Args(Operand[Operand.Copy(Lvalue.L(i)), Operand.Copy(Lvalue.L(n))]))))
+    f.End(head, Term.Branch(Operand.Copy(Lvalue.L(c)), turn, exit))
     f.Add(turn, Stmt.Open(Sp0, body))
-    call := f.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), g), f.Args(Operand[Operand.Copy(L(i))]), Empty
-                           L(r), true, next, code, failed))
+    call := f.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), g), f.Args(Operand[Operand.Copy(Lvalue.L(i))]), Empty
+                           Lvalue.L(r), true, next, code, failed))
     f.End(turn, Term.Call(Sp0, call))
-    f.Add(next, Stmt.Assign(Sp0, L(i), Rvalue.Prim(typed.PrimOp.Add, i64
-                                                   f.Args(Operand[Operand.Copy(L(i)), Operand.Const(i64, 1)]))))
+    f.Add(next, Stmt.Assign(Sp0, Lvalue.L(i), Rvalue.Prim(typed.PrimOp.Add, i64
+                                                   f.Args(Operand[Operand.Copy(Lvalue.L(i)), Operand.Const(i64, 1)]))))
     f.Add(next, Stmt.Close(Sp0, body))
     f.End(next, Term.Goto(head))
     f.Add(exit, Stmt.Close(Sp0, ScopeId(0)))
-    f.End(exit, Term.Return(Sp0, Operand.Copy(L(i))))
-    f.Add(failed, Stmt.Assign(Sp0, L(mine), Rvalue.Recode(Operand.Copy(L(code)), def, def)))
+    f.End(exit, Term.Return(Sp0, Operand.Copy(Lvalue.L(i))))
+    f.Add(failed, Stmt.Assign(Sp0, Lvalue.L(mine), Rvalue.Recode(Operand.Copy(Lvalue.L(code)), def, def)))
     f.Add(failed, Stmt.Close(Sp0, body))
     f.Add(failed, Stmt.Close(Sp0, ScopeId(0)))
-    f.End(failed, Term.Raise(Sp0, Operand.Copy(L(mine))))
+    f.End(failed, Term.Raise(Sp0, Operand.Copy(Lvalue.L(mine))))
     return f
 }
 
 test "control flow: a loop's scope every turn, a call's error edge, an error raised with every scope closed" {
     names := source.Names()
-    t := types.NewTable(names)
-    f := loopFn(t)
+    t := types.Table.New(names)
+    f := Fn.loop(t)
     assert f.Verify(t) == "", f.Verify(t)
     got := f.Dump(t)
     want := ("fn B9: fn(I64) I64 ?\n  L0 Param: I64\n  L1 Var i: I64\n  L2 Temp: Bool\n  L3 Temp: I64\n  L4 Temp: I32\n"
@@ -2562,32 +2562,32 @@ test "control flow: a loop's scope every turn, a call's error edge, an error rai
              "  close S1\n  close S0\n  raise copy L5\n")
     assert got == want, got
     # the loop's turn left with its scope open: two paths reach the head with different scopes
-    g := loopFn(t)
+    g := Fn.loop(t)
     g.Blocks.RefMut(3).Stmts.Clear()
-    g.Add(BlockId(3), Stmt.Assign(Sp0, L(LocalId(1)), Rvalue.Use(Operand.Const(t.Prim("I64"), 2))))
+    g.Add(BlockId(3), Stmt.Assign(Sp0, Lvalue.L(LocalId(1)), Rvalue.Use(Operand.Const(t.Prim("I64"), 2))))
     expect(t, g, "enters bb1 with scopes [S0 S1], where another path has [S0]")
     # the result read on the error edge, where the call stored nothing
-    h := loopFn(t)
+    h := Fn.loop(t)
     h.Blocks.RefMut(5).Stmts.Clear()
-    h.Add(BlockId(5), Stmt.Assign(Sp0, L(LocalId(1)), Rvalue.Use(Operand.Copy(L(LocalId(3))))))
+    h.Add(BlockId(5), Stmt.Assign(Sp0, Lvalue.L(LocalId(1)), Rvalue.Use(Operand.Copy(Lvalue.L(LocalId(3))))))
     expect(t, h, "L3 read before it is initialized on every path")
 }
 
 # "fn f() { x := 1; defer { x = 2 }; x = 3 }" as interpret's lowering makes it (B3e): the deferred code registered with
 # its cleanup - a copy reached from nothing else, ending in resume - then the registration dropped where the inline copy
 # runs on the way out
-fn deferFn(t mut types.Table&) Fn {
+fn Fn.defer(t mut types.Table&) Fn {
     i32 := t.Prim("I32")
-    f := tfn(t, t.Func(types.ListId(0), types.VoidT, types.ListId(0)))
+    f := Fn.tfn(t, t.Func(types.ListId(0), types.VoidT, types.ListId(0)))
     x := f.AddLocal(Local(t.Names.Intern("x"), Sp0, i32, LocalKind.Var, ScopeRef.Frame))
     b0, clean := BlockId(0), f.NewBlock()
-    f.Add(b0, Stmt.Assign(Sp0, L(x), Rvalue.Use(Operand.Const(i32, 1))))
+    f.Add(b0, Stmt.Assign(Sp0, Lvalue.L(x), Rvalue.Use(Operand.Const(i32, 1))))
     f.Add(b0, Stmt.Deferred(Sp0, ScopeId(0), clean))
-    f.Add(clean, Stmt.Assign(Sp0, L(x), Rvalue.Use(Operand.Const(i32, 2))))
+    f.Add(clean, Stmt.Assign(Sp0, Lvalue.L(x), Rvalue.Use(Operand.Const(i32, 2))))
     f.End(clean, Term.Resume(Sp0))
-    f.Add(b0, Stmt.Assign(Sp0, L(x), Rvalue.Use(Operand.Const(i32, 3))))
+    f.Add(b0, Stmt.Assign(Sp0, Lvalue.L(x), Rvalue.Use(Operand.Const(i32, 3))))
     f.Add(b0, Stmt.Deferred(Sp0, ScopeId(0), NoBlock))
-    f.Add(b0, Stmt.Assign(Sp0, L(x), Rvalue.Use(Operand.Const(i32, 2))))
+    f.Add(b0, Stmt.Assign(Sp0, Lvalue.L(x), Rvalue.Use(Operand.Const(i32, 2))))
     f.Add(b0, Stmt.Close(Sp0, ScopeId(0)))
     f.End(b0, Term.Return(Sp0, Operand.None))
     return f
@@ -2595,8 +2595,8 @@ fn deferFn(t mut types.Table&) Fn {
 
 test "a cleanup: reached from where its deferred code is registered, inside the scope registering it" {
     names := source.Names()
-    t := types.NewTable(names)
-    f := deferFn(t)
+    t := types.Table.New(names)
+    f := Fn.defer(t)
     assert f.Verify(t) == "", f.Verify(t)
     got := f.Dump(t)
     want := ("fn B9: fn()\n  L0 Var x: I32\n  S0 Frame block 0\nbb0:\n  open S0\n  L0 = const I32 1\n"
@@ -2604,93 +2604,93 @@ test "a cleanup: reached from where its deferred code is registered, inside the 
              "  return\nbb1:\n  L0 = const I32 2\n  resume\n")
     assert got == want, got
     # registered at a scope that is not open
-    g := deferFn(t)
+    g := Fn.defer(t)
     g.Blocks[0].Stmts[2] = Stmt.Deferred(Sp0, g.AddScope(ScopeKind.Block, ScopeId(0), typed.BlockId(1), Sp0), BlockId(1))
     expect(t, g, "deferred code registered at S1, which is not open")
 }
 
 test "a malformed function: every malformation is caught" {
     names := source.Names()
-    t := types.NewTable(names)
+    t := types.Table.New(names)
     i32, i64 := t.Prim("I32"), t.Prim("I64")
     b0 := BlockId(0)
     # shape: no terminator, a target that is no block, a local that is none
-    f1 := addFn(t)
+    f1 := Fn.add(t)
     f1.End(b0, Term.None)
     expect(t, f1, "bb0[term]: no terminator")
-    f2 := addFn(t)
+    f2 := Fn.add(t)
     f2.End(b0, Term.Goto(BlockId(9)))
     expect(t, f2, "no block bb9")
-    f3 := addFn(t)
+    f3 := Fn.add(t)
     f3.Add(b0, Stmt.Live(Sp0, LocalId(7)))
     expect(t, f3, "no local L7")
     # a block no path reaches
-    f4 := addFn(t)
+    f4 := Fn.add(t)
     f4.End(f4.NewBlock(), Term.Exit(Sp0, ExitKind.Abort, Operand.None))
     expect(t, f4, "bb1[term]: unreachable: no path from the entry")
     # types: a store, a return, a branch's condition
-    f5 := addFn(t)
-    f5.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, L(LocalId(2)), Rvalue.Use(Operand.Const(types.BoolT, 1)))
+    f5 := Fn.add(t)
+    f5.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, Lvalue.L(LocalId(2)), Rvalue.Use(Operand.Const(types.BoolT, 1)))
     expect(t, f5, "bb0[1]: the value stored is a Bool, where a I32 is wanted")
-    f6 := addFn(t)
+    f6 := Fn.add(t)
     f6.End(b0, Term.Return(Sp0, Operand.None))
     expect(t, f6, "a return with no value from a function giving a I32")
-    f7 := addFn(t)
-    f7.End(b0, Term.Branch(Operand.Copy(L(LocalId(0))), b0, b0))
+    f7 := Fn.add(t)
+    f7.End(b0, Term.Branch(Operand.Copy(Lvalue.L(LocalId(0))), b0, b0))
     expect(t, f7, "a branch on a I32")
     # a local read before anything is stored in it
-    f8 := addFn(t)
-    f8.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, L(LocalId(2)), Rvalue.Use(Operand.Copy(L(LocalId(2)))))
+    f8 := Fn.add(t)
+    f8.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, Lvalue.L(LocalId(2)), Rvalue.Use(Operand.Copy(Lvalue.L(LocalId(2)))))
     expect(t, f8, "bb0[1]: L2 read before it is initialized on every path")
     # scopes: left open at a return, closed out of order, opened outside their parent, reopened
-    f9 := addFn(t)
+    f9 := Fn.add(t)
     f9.Blocks.RefMut(0).Stmts.Truncate(2)
     expect(t, f9, "bb0[term]: leaves the function with [S0] open")
-    f10 := addFn(t)
+    f10 := Fn.add(t)
     s1 := f10.AddScope(ScopeKind.Block, ScopeId(0), typed.BlockId(1), Sp0)
     f10.Blocks[0].Stmts[1] = Stmt.Open(Sp0, s1)
     expect(t, f10, "bb0[2]: S0 closed while S1, opened in it, is open")
-    f11 := addFn(t)
+    f11 := Fn.add(t)
     s11 := f11.AddScope(ScopeKind.Block, ScopeId(0), typed.BlockId(1), Sp0)
     f11.Blocks[0].Stmts[0] = Stmt.Open(Sp0, s11)
     expect(t, f11, "bb0[0]: S1 opened in none, not in its parent S0")
-    f12 := addFn(t)
+    f12 := Fn.add(t)
     f12.Blocks[0].Stmts[1] = Stmt.Open(Sp0, ScopeId(0))
     expect(t, f12, "bb0[1]: S0 opened while it is open")
     # building: into a scope that is not open, into an inert one, into a give of what is no region
     ri := t.Ref(i32, types.Writable)
-    f13 := addFn(t)
+    f13 := Fn.add(t)
     s13 := f13.AddScope(ScopeKind.Block, ScopeId(0), typed.BlockId(1), Sp0)
     r13 := f13.AddTemp(ri, Sp0)
-    f13.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, L(r13), Rvalue.New(ScopeRef.Scope(s13), Operand.Const(i32, 1), ri))
+    f13.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, Lvalue.L(r13), Rvalue.New(ScopeRef.Scope(s13), Operand.Const(i32, 1), ri))
     expect(t, f13, "bb0[1]: built in S1, which is not open")
-    f14 := addFn(t)
+    f14 := Fn.add(t)
     s14 := f14.AddScope(ScopeKind.Inert, ScopeId(0), typed.BlockId(-1), Sp0)
     r14 := f14.AddTemp(ri, Sp0)
     f14.Blocks[0].Stmts[1] = Stmt.Open(Sp0, s14)
-    try f14.Blocks.RefMut(0).Stmts.Insert(2, Stmt.Assign(Sp0, L(r14), Rvalue.New(ScopeRef.Scope(s14), Operand.Const(i32, 1), ri)))
+    try f14.Blocks.RefMut(0).Stmts.Insert(2, Stmt.Assign(Sp0, Lvalue.L(r14), Rvalue.New(ScopeRef.Scope(s14), Operand.Const(i32, 1), ri)))
     try f14.Blocks.RefMut(0).Stmts.Insert(3, Stmt.Close(Sp0, s14))
     expect(t, f14, "bb0[2]: built in S1, which is inert")
     # an arena local stored into before its storage is made
-    f16 := addFn(t)
+    f16 := Fn.add(t)
     a16 := f16.AddLocal(Local(source.NameId(0), Sp0, i32, LocalKind.Temp, ScopeRef.Scope(ScopeId(0))))
-    try f16.Blocks.RefMut(0).Stmts.Insert(1, Stmt.Assign(Sp0, L(a16), Rvalue.Use(Operand.Const(i32, 3))))
+    try f16.Blocks.RefMut(0).Stmts.Insert(1, Stmt.Assign(Sp0, Lvalue.L(a16), Rvalue.Use(Operand.Const(i32, 3))))
     expect(t, f16, "bb0[1]: L3 stored into with no storage: its Live not reached")
     # a check written as an operation; a switch with a value twice
-    f18 := addFn(t)
-    f18.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, L(LocalId(2)), Rvalue.Prim(typed.PrimOp.Holds, i32
-                                         f18.Args(Operand[Operand.Copy(L(LocalId(0)))])))
+    f18 := Fn.add(t)
+    f18.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, Lvalue.L(LocalId(2)), Rvalue.Prim(typed.PrimOp.Holds, i32
+                                         f18.Args(Operand[Operand.Copy(Lvalue.L(LocalId(0)))])))
     expect(t, f18, "Holds is a check: a test and a branch in MIR")
-    f19 := addFn(t)
-    f19.End(b0, Term.Switch(Operand.Copy(L(LocalId(0))), f19.AddCases(Case[Case(1, b0), Case(1, b0)]), b0))
+    f19 := Fn.add(t)
+    f19.End(b0, Term.Switch(Operand.Copy(Lvalue.L(LocalId(0))), f19.AddCases(Case[Case(1, b0), Case(1, b0)]), b0))
     expect(t, f19, "a switch with the value 1 twice")
     # calls: arguments counted and typed, an error edge exactly where the callee can fail; a raise only where this can
     g := t.Func(t.List1(i32), i32, t.List1(types.DefaultErrT))
-    f20 := addFn(t)
+    f20 := Fn.add(t)
     b20 := f20.NewBlock()
     f20.Blocks.RefMut(0).Stmts.Truncate(2)
     k20 := f20.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), g), f20.Args(Operand[Operand.Const(i64, 1)]), Empty
-                            L(LocalId(2)), true, b20, NoLocal, NoBlock))
+                            Lvalue.L(LocalId(2)), true, b20, NoLocal, NoBlock))
     f20.End(b0, Term.Call(Sp0, k20))
     f20.Add(b20, Stmt.Close(Sp0, ScopeId(0)))
     f20.End(b20, Term.Raise(Sp0, Operand.Const(i32, 65536)))
@@ -2700,16 +2700,16 @@ test "a malformed function: every malformation is caught" {
         assert (try got20.Find(w) catch default -1) >= 0, got20
     }
     h := t.Func(t.List1(i32), i32, types.ListId(0))
-    f24 := addFn(t)
+    f24 := Fn.add(t)
     b24, e24 := f24.NewBlock(), f24.NewBlock()
     f24.Blocks.RefMut(0).Stmts.Truncate(2)
     c24 := f24.AddTemp(I32T, Sp0)
     k24 := f24.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), h), f24.Args(Operand[Operand.Const(i32, 1)
                                                                                        Operand.Const(i32, 2)])
-                            Empty, L(LocalId(2)), true, b24, c24, e24))
+                            Empty, Lvalue.L(LocalId(2)), true, b24, c24, e24))
     f24.End(b0, Term.Call(Sp0, k24))
     f24.Add(b24, Stmt.Close(Sp0, ScopeId(0)))
-    f24.End(b24, Term.Return(Sp0, Operand.Copy(L(LocalId(2)))))
+    f24.End(b24, Term.Return(Sp0, Operand.Copy(Lvalue.L(LocalId(2)))))
     f24.Add(e24, Stmt.Close(Sp0, ScopeId(0)))
     f24.End(e24, Term.Exit(Sp0, ExitKind.Unreachable, Operand.None))
     got24 := f24.Verify(t)
@@ -2718,14 +2718,14 @@ test "a malformed function: every malformation is caught" {
     }
     # joins: a spawn outside a join, a join closed with its tasks not waited for, a wait missing its failed edge
     unit := t.Func(types.ListId(0), types.VoidT, types.ListId(0))
-    f21 := addFn(t)
+    f21 := Fn.add(t)
     j21 := f21.AddScope(ScopeKind.Join, ScopeId(0), typed.BlockId(1), Sp0)
     k21 := f21.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Lvalue[], TaskClause[])
     try f21.Blocks.RefMut(0).Stmts.Insert(1, Stmt.Open(Sp0, j21))
     try f21.Blocks.RefMut(0).Stmts.Insert(2, Stmt.Spawn(Sp0, j21, k21))
     try f21.Blocks.RefMut(0).Stmts.Insert(3, Stmt.Close(Sp0, j21))
     expect(t, f21, "bb0[3]: join S1 closed with tasks not waited for")
-    f22 := addFn(t)
+    f22 := Fn.add(t)
     j22 := f22.AddScope(ScopeKind.Join, ScopeId(0), typed.BlockId(1), Sp0, t.List1(types.DefaultErrT))
     b22 := f22.NewBlock()
     f22.Blocks.RefMut(0).Stmts.Truncate(2)
@@ -2733,9 +2733,9 @@ test "a malformed function: every malformation is caught" {
     f22.End(b0, Term.Wait(Sp0, j22, b22, NoLocal, NoBlock))
     f22.Add(b22, Stmt.Close(Sp0, j22))
     f22.Add(b22, Stmt.Close(Sp0, ScopeId(0)))
-    f22.End(b22, Term.Return(Sp0, Operand.Copy(L(LocalId(2)))))
+    f22.End(b22, Term.Return(Sp0, Operand.Copy(Lvalue.L(LocalId(2)))))
     assert f22.Verify(t) == "bb0[term]: a wait for a join that can fail with no failed edge\n", f22.Verify(t)
-    f23 := addFn(t)
+    f23 := Fn.add(t)
     k23 := f23.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Lvalue[], TaskClause[])
     try f23.Blocks.RefMut(0).Stmts.Insert(1, Stmt.Spawn(Sp0, ScopeId(0), k23))
     expect(t, f23, "a spawn into S0, which is no join")
@@ -2743,7 +2743,7 @@ test "a malformed function: every malformation is caught" {
 
 test "error codes are each function's own: an error's type's position from 1, its word; the default error for the rest" {
     names := source.Names()
-    t := types.NewTable(names)
+    t := types.Table.New(names)
     m := t.AddModule("t")
     e := t.Named(t.AddDecl(m, names.Intern("E"), types.DeclKind.Error, 0), types.ListId(0))
     o := t.Named(t.AddDecl(m, names.Intern("O"), types.DeclKind.Error, 0), types.ListId(0))
@@ -2757,8 +2757,8 @@ test "error codes are each function's own: an error's type's position from 1, it
 
 test "constants are flattened into the function's tables; helpers' ABI is their kind's" {
     names := source.Names()
-    t := types.NewTable(names)
-    f := addFn(t)
+    t := types.Table.New(names)
+    f := Fn.add(t)
     c := f.AddConst(typed.Const.Items(typed.Const&[typed.Const.Bytes(U8[104, 105]), typed.Const.Bits(7)]))
     w mut dumper& = dumper(f, t)
     assert w.constant(c) == "[text 2 7]" and f.Bytes.Len() == 2 and f.ConstItems.Len() == 2

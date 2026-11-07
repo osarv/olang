@@ -11,7 +11,7 @@ import "std/os"
 
 type P struct(x I64, y I64) { x, y }
 fn (p P&) Sum() I64 { return p.x + p.y }
-fn mk(i I64) P& { return P(i, i + 1) }
+fn P.mk(i I64) P& { return P(i, i + 1) }
 fn norm(p P&) I64 { return p.x * p.x + p.y * p.y }
 
 fn main() ? {
@@ -29,7 +29,7 @@ fn main() ? {
             s += p.Sum()
         }
     } else if args[1] == "built" {
-        for i in range n { s += mk(i).Sum() }
+        for i in range n { s += P.mk(i).Sum() }
     } else if args[1] == "arg" {
         for i in range n { s += norm(P(i, i + 1)) }
     } else if args[1] == "arglocal" {

@@ -7,7 +7,7 @@ import "mat"
 
 fn mk(n I64) mat.Mat<F64> ? {
     d := Array<F64>(n * n, 1.5)
-    m := try mat.View(d, 0, n, n)
+    m := try mat.Mat.View(d, 0, n, n)
     return m
 }
 
@@ -15,7 +15,7 @@ fn last(n I64) mat.Mat<F64> ? {
     m mat.Mat<F64>
     for i in range 3 {
         d := Array<F64>(n * n, F64(i))
-        m = try mat.View(d, 0, n, n)
+        m = try mat.Mat.View(d, 0, n, n)
     }
     return m
 }

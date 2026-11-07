@@ -8,22 +8,22 @@ type Box struct(rows Array<Array<I64>>) {
     rows
 }
 fn (g Grid&) Show() String { return "g " $g[0][0] $g[1][1] }
-fn grid() Grid {
+fn Grid.grid() Grid {
     a := Array<Array<I64>>(2, Array<I64>(2, 5))
     a[1][1] = 7
     return Grid(a)
 }
-fn boxed() Box {
+fn Box.boxed() Box {
     a := Array<Array<I64>>(2, Array<I64>(2, 3))
     a[0][1] = 4
     return Box(a)
 }
-Shown String = grid().Show()
-Kept I64 = boxed().rows[0][1]
+Shown String = Grid.grid().Show()
+Kept I64 = Box.boxed().rows[0][1]
 assert Shown == "g 57" and Kept == 4
 fn main() {
     a := Array<Array<I64>>(2, Array<I64>(2, 5))
     g := Grid(a)
     assert g.Show() == "g 55"
-    assert grid().Show() == Shown and boxed().rows[0][1] == Kept and boxed().rows[1].Len() == 2
+    assert Grid.grid().Show() == Shown and Box.boxed().rows[0][1] == Kept and Box.boxed().rows[1].Len() == 2
 }

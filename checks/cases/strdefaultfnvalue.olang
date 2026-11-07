@@ -28,7 +28,7 @@ fn f(n mut Node&) mut Node& ? {
     if n.v > 0 { error Stop.Here }
     return n
 }
-fn g(v I64) mut Node& { return Node(v) }
+fn Node.g(v I64) mut Node& { return Node(v) }
 fn id(n mut Node&) mut Node& { return n }
 fn (b Bag&) Str() String {
     h := fn() mut Node& { return Node(5) }

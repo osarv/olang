@@ -5,19 +5,19 @@
 # (it was O10d), read back after an arena churn; the evaluator agrees (a baked global, a decided assert)
 import "std/io"
 type node struct(v I64) { v }
-fn mk(k I64) node& { return node(k) }
+fn node.mk(k I64) node& { return node(k) }
 fn direct(k I64) fn&() I64 {
-    r := mk(k)
+    r := node.mk(k)
     g := fn() I64 { return r.v + 1 }
     return g
 }
 fn nested(k I64) fn&() I64 {
-    r := mk(k)
+    r := node.mk(k)
     g := fn() I64 { return r.v + 1 }
     return fn() I64 { return g() * 2 }
 }
 fn twice(k I64) fn&() I64 {
-    r := mk(k)
+    r := node.mk(k)
     g := fn() I64 { return r.v }
     h := fn() I64 { return g() + 1 }
     return fn() I64 { return h() * 3 }

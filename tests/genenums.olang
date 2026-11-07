@@ -54,7 +54,7 @@ fn firstLeaf<T>(t Tree<T>&) T {
 }
 
 # a nested pattern through a reference, and a case of the instance named with its arguments
-fn leftLeaf<T>(t Tree<T>&) Opt<T> {
+fn Opt<T>.leftLeaf(t Tree<T>&) Opt<T> {
     return match t {
         case Tree.Node(Tree.Leaf(a), _): Opt.Some(a)
         case _: Opt<T>.None
@@ -68,9 +68,9 @@ fn (o Opt<T>) Or(d T) T {
     }
 }
 
-fn build(n I64) Tree<I64>& {
+fn Tree<I64>.build(n I64) Tree<I64>& {
     if n == 0 { return Tree.Leaf(0) }
-    return Tree.Node(build(n - 1), Tree.Leaf(n))
+    return Tree.Node(Tree<I64>.build(n - 1), Tree.Leaf(n))
 }
 
 fn side(e Either<I64, String&>) String {
@@ -88,7 +88,7 @@ fn wrapSum(w Wrap<I64>) I64 {
 }
 
 fn all(k I64) Bool {
-    t := build(k)
+    t := Tree<I64>.build(k)
     trees Bool = t.Size() == k + 1 and depth(t) == k + 1 and firstLeaf(t) == 0
     s Tree<String&>& = Tree.Node(Tree.Leaf("a"), Tree.Leaf("b"))
     strs Bool = firstLeaf(s) == "a" and s.Size() == 2 and $s == "Tree.Node(Tree.Leaf(\"a\"), Tree.Leaf(\"b\"))"
@@ -97,7 +97,7 @@ fn all(k I64) Bool {
     opts Bool = o != p and p == Opt<I64>.Some(k) and p.Or(0) == k and o.Or(9) == 9 and $p == $"Opt.Some(" $k ")"
     q := Opt.Some(2.5)                  # an Opt<F64>, from its argument
     floats Bool = q.Or(0.0) == 2.5
-    ll Bool = leftLeaf(build(1)) == Opt.Some(I64(0)) and leftLeaf(Tree<I64>.Leaf(5)) == Opt<I64>.None
+    ll Bool = Opt.leftLeaf(Tree<I64>.build(1)) == Opt.Some(I64(0)) and Opt.leftLeaf(Tree<I64>.Leaf(5)) == Opt<I64>.None
     sides Bool = side(Either.Left(3)) == "left 3" and side(Either.Right("x")) == "right x"
     w Wrap<I64> = Wrap.One(3)
     wraps Bool = wrapSum(w) + wrapSum(Wrap.Two(4, 5)) == 12
@@ -108,7 +108,7 @@ fn all(k I64) Bool {
 }
 
 AllBaked := all(3)
-SizeBaked := build(4).Size()
+SizeBaked := Tree<I64>.build(4).Size()
 LeafBaked Opt<I64> = Opt.Some(7)
 
 Three mut I64 = 3 # read at run time, so all() runs as the program as well as in the evaluator
@@ -140,7 +140,7 @@ fn churn() I64 {
     return t
 }
 
-fn leafOf(i I64) Tree<String&>& {
+fn Tree<String&>.leafOf(i I64) Tree<String&>& {
     s := $"x" $i
     return Tree.Leaf(s)
 }
@@ -154,8 +154,8 @@ fn leaves(n I64) Vec<Tree<String&>&> {
 test "G6b, T17c: payloads holding references live where the value does - read back after an arena churn" {
     l := leaves(4)
     v Vec<Tree<String&>&>
-    for i in range 3 { v.Push(leafOf(i)) }
-    p Tree<String&>& = Tree.Node(leafOf(8), Tree.Leaf("y"))
+    for i in range 3 { v.Push(Tree<String&>.leafOf(i)) }
+    p Tree<String&>& = Tree.Node(Tree<String&>.leafOf(8), Tree.Leaf("y"))
     assert churn() > 0
     assert $l[3] == "Tree.Leaf(\"leaf 3\")" and $v[2] == "Tree.Leaf(\"x2\")"
     assert $p == "Tree.Node(Tree.Leaf(\"x8\"), Tree.Leaf(\"y\"))"

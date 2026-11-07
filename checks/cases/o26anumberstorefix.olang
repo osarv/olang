@@ -10,7 +10,7 @@ fn sneak(t String&, s mut S&) I64 {
     s.names.Push(t)
     return t.Len()
 }
-fn scan(n I64) S {
+fn S.scan(n I64) S {
     s := S()
     for i in range n {
         line := mk(i)
@@ -28,7 +28,7 @@ fn churn() I64 {
     return t
 }
 fn main() ? {
-    s := scan(12)
+    s := S.scan(12)
     churn()
     assert s.names.Len() == 12 and s.names[11] == "line 11" and s.best == 7
 }

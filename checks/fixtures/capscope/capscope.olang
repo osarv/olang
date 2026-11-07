@@ -20,7 +20,7 @@ fn setNext(n mut Node&, i I64) { n.next = n.next if i < 0 else Node(i) }
 fn orNew(n mut Node&, i I64) mut Node& { return n.next! if i < 0 else Node(i) }
 fn keep(a mut Node&, n mut Node&) { a.next = n }
 fn two(a mut Node&, i I64) mut Node&, I64 { return a.next! if i < 0 else Node(i), i }
-fn mk(i I64) Node { return Node(i) }
+fn Node.mk(i I64) Node { return Node(i) }
 fn rd(n Node&) I64 { return n.v }
 type Adder struct(n mut Node&) {
     n
@@ -68,7 +68,7 @@ fn main() ? {
         b8.next = n
         b8.v = k
     })
-    both(fn(i I64) { a9.next = a9.next if i < 0 else mk(i) }, fn(i I64) { b9.next = b9.next if i < 0 else mk(i) })
+    both(fn(i I64) { a9.next = a9.next if i < 0 else Node.mk(i) }, fn(i I64) { b9.next = b9.next if i < 0 else Node.mk(i) })
     # a "catch default" built where a callee that builds nothing puts its result - into a local, an argument, a condition
     # (tonight9's ICE: codegen resolved the captured scope only for reading there, and the prologue never asked for it)
     c0, c1, c2, d0, d1, d2 := nodes[20], nodes[21], nodes[22], nodes[23], nodes[24], nodes[25]

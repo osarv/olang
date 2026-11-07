@@ -36,7 +36,7 @@ type State struct(On Bool, Set Bool, Why Cause, At source.Span) {
     At
 }
 
-fn dead() State { return State(false, false, Cause.Decl, source.Span(0, 0)) }
+fn State.dead() State { return State(false, false, Cause.Decl, source.Span(0, 0)) }
 
 fn meet(a State, b State) State {
     if not a.On { return b }
@@ -68,7 +68,7 @@ type Walker struct(B typed.Body&, L typed.LocalId) {
 
 # the judgment for local l of body b: whether a path reads it before assigning it (a constructor's field read again at
 # the body's end, where its instance is assembled); where; and why that path has not assigned it, and where
-fn Judge(b typed.Body&, l typed.LocalId, field Bool) Verdict {
+fn Verdict.Judge(b typed.Body&, l typed.LocalId, field Bool) Verdict {
     w := Walker(b, l)
     s := w.Run()
     if field and s.On and not s.Set { w.read(s, b.Sp) }
@@ -93,7 +93,7 @@ fn (w mut Walker&) read(s State, sp source.Span) {
 
 # the whole body walked: the state at its end
 fn (w mut Walker&) Run() State {
-    s := w.block(w.B.Root, dead())
+    s := w.block(w.B.Root, State.dead())
     return s
 }
 
@@ -157,23 +157,23 @@ fn (w mut Walker&) stmt(st typed.Stmt&, s State) State {
             a := w.block(body, s)
             w.block(post, s)
             # a do-while's condition, and so its break, is in its post clause
-            if not typed.BreaksOut(body, body.Id) and not typed.BreaksOut(post, body.Id) { return dead() }
+            if not typed.BreaksOut(body, body.Id) and not typed.BreaksOut(post, body.Id) { return State.dead() }
             if a.On and a.Set { return retag(s, s, a, Cause.Loop, sp) }
             return s
         }
-        case typed.Stmt.Jump(_, _, _) { return dead() }
+        case typed.Stmt.Jump(_, _, _) { return State.dead() }
         case typed.Stmt.Return(_, value) {
             w.expr(value, s)
-            return dead()
+            return State.dead()
         }
-        case typed.Stmt.Raise(_, _, _) { return dead() }
+        case typed.Stmt.Raise(_, _, _) { return State.dead() }
         case typed.Stmt.Reraise(_, code, _) {
             w.expr(code, s)
-            return dead()
+            return State.dead()
         }
         case typed.Stmt.Exit(_, _, msg) {
             w.expr(msg, s)
-            return dead()
+            return State.dead()
         }
         case typed.Stmt.Assert(_, c, msg) {
             s1 := w.expr(c, s)
@@ -228,7 +228,7 @@ fn (w mut Walker&) exprs(xs Array<typed.Expr&>&, s State) State {
 fn (w mut Walker&) expr(x typed.Expr?&, s State) State {
     if x is null { return s }
     r := w.expr1(x, s)
-    if x.Type() == types.NoreturnT { return dead() }
+    if x.Type() == types.NoreturnT { return State.dead() }
     return r
 }
 
@@ -263,7 +263,7 @@ fn (w mut Walker&) expr1(x typed.Expr&, s State) State {
         case typed.Expr.Seq(_, _, q) { return w.expr(q.X, w.stmts(q.Stmts, s)) }
         case typed.Expr.Match(_, _, m) {
             s1 := w.stmts(m.Held, s)
-            r := dead()
+            r := State.dead()
             for a in m.Arms { r = w.arm(a, s1, r) }
             if m.NoMatch is not null { r = w.arm(m.NoMatch!, s1, r) }
             return r

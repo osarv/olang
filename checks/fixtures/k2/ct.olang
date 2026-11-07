@@ -17,15 +17,15 @@ type Node struct(v I32, next mut Node?&) {
     v
     next
 }
-fn ring() Node& {
+fn Node.ring() Node& {
     a mut Node& = Node(1, null)
     a.next = a
     return a
 }
 Chain Node& = Node(1, Node(2, null))
-Ring Node& = ring()
+Ring Node& = Node.ring()
 fn looped() Bool {
-    r := ring()
+    r := Node.ring()
     c Node& = Node(1, Node(2, null))
     return r.next == r and c.next != c and c.next!.next is null
 }

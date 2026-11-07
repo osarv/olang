@@ -5,6 +5,6 @@
 import "std/bitset"
 type P struct(x I64) { x }
 fn main() {
-    s := bitset.Empty<P>()
+    s := bitset.BitSet<P>.Empty()
     assert s.Len() == 0
 }

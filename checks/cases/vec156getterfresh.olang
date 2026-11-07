@@ -8,7 +8,7 @@ type Lexer struct() {
 type Parser struct() {
     lx mut Lexer?& = null
 }
-fn fresh(n I64) mut Lexer& {
+fn Lexer.fresh(n I64) mut Lexer& {
     l mut Lexer& = Lexer()
     for i in range n { l.toks.Push($i "-fresh") }
     return l
@@ -24,7 +24,7 @@ fn churn() I64 {
 fn main() ? {
     d := Parser()
     d.lx = Lexer()
-    q := fresh(3)
+    q := Lexer.fresh(3)
     d.lx!.toks = q.toks
     churn()
     assert d.lx!.toks.Len() == 3 and d.lx!.toks[1] == "1-fresh" and q.toks.Len() == 3

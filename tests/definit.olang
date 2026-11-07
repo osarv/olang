@@ -23,7 +23,7 @@ type DiShape enum {
 
 type DiErr error { Bad }
 
-fn diFind(k I64) DiNode& ? DiErr {
+fn DiNode.diFind(k I64) DiNode& ? DiErr {
     if k < 0 { error DiErr.Bad }
     return DiNode(k)
 }
@@ -53,7 +53,7 @@ fn diArea(s DiShape) I64 {
 # a try whose clause leaves, and an else-if chain
 fn diTried(k I64) I64 {
     n DiNode&
-    n = try diFind(k) catch DiErr { return -1 }
+    n = try DiNode.diFind(k) catch DiErr { return -1 }
     m DiNode&
     if k > 10 {
         m = DiNode(10)

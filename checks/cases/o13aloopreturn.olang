@@ -5,7 +5,7 @@
 type H struct(r String&) {
     r
 }
-fn mk(n I64, s String&) H {
+fn H.mk(n I64, s String&) H {
     e := H(s)
     for i in range 3 {
         if i == 2 { return e }
@@ -22,7 +22,7 @@ fn churn() I64 {
     return t
 }
 fn main() ? {
-    w := mk(12, "x")
+    w := H.mk(12, "x")
     churn()
     assert w.r == "1212"
 }

@@ -5,7 +5,7 @@ import "std/io"
 type Holder struct() {
     names := Array<String&>(2)
 }
-fn make() Holder {
+fn Holder.make() Holder {
     a := "alpha" $3
     h := Holder()
     h.names[0] = a
@@ -21,7 +21,7 @@ fn churn() I64 {
     return t
 }
 fn main() ? {
-    h := make()
+    h := Holder.make()
     assert churn() > 0
     assert h.names[0] == "alpha3"
     try io.Println($h.names[0])

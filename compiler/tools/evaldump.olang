@@ -52,7 +52,7 @@ fn run(args Array<String&>&) I32 {
     d := diag.Diagnostics(false)
     consts := cond.Consts()
     # B12: for this machine, as interpret is (the target constants of what clang would build, without clang if none)
-    tg := try target.Resolve("native", target.FindClang(), false, d) catch target.Bad {
+    tg := try target.Target.Resolve("native", target.FindClang(), false, d) catch target.Bad {
         try io.PrintErr(d.Render()) catch io.Error { }
         return 1
     }

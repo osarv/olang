@@ -6,11 +6,11 @@ type blk struct(xs Vec<I64>) { xs }
 
 Gl mut blk = blk(Vec<I64>())
 
-fn g() blk { return Gl }
+fn blk.g() blk { return Gl }
 
 fn fromGlobal() I64 {
     Gl.xs.Push(1)
-    e := g()
+    e := blk.g()
     Gl.xs.ViewMut()[0] = 9
     return e.xs[0]
 }

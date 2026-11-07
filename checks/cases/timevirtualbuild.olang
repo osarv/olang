@@ -3,5 +3,5 @@
 # std/time: a virtual clock is for tests - called in a program, it is an error at the call's instance
 import "std/time"
 fn main() {
-    time.Virtual(fn() { time.Sleep(time.Seconds(1)) })
+    time.Virtual(fn() { time.Sleep(time.Duration.Seconds(1)) })
 }

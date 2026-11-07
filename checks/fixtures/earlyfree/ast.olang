@@ -23,9 +23,9 @@ fn simplify(e Expr&) Expr& {          # a built result: every node is new
     }
 }
 
-fn build(d I64) Expr& {
+fn Expr.build(d I64) Expr& {
     if d == 0 { return Expr.Neg(Expr.Lit(1)) }
-    return Expr.Add(build(d - 1), build(d - 1))
+    return Expr.Add(Expr.build(d - 1), Expr.build(d - 1))
 }
 
 fn count(e Expr&) I64 {
@@ -38,7 +38,7 @@ fn count(e Expr&) I64 {
 
 fn main() {
     p := Program()
-    p.root = build(10)
+    p.root = Expr.build(10)
     for _ in range N { p.root = simplify(p.root) }
     io.Println($count(p.root))!
 }

@@ -229,7 +229,7 @@ type CommandLine struct() {
     Applies Vec<String&>
 }
 
-fn commandLine(compiler String&) CommandLine {
+fn CommandLine.commandLine(compiler String&) CommandLine {
     c := CommandLine()
     c.Modes = modesOf(toolkit.Run(String&[compiler, "help"]).Stdout)
     names := Vec<String&>()
@@ -367,7 +367,7 @@ fn checkCommand(c CommandLine&, where String&, command String&, p mut Problems&)
 }
 
 fn checkCommandLine(compiler String&, p mut Problems&) {
-    c := commandLine(compiler)
+    c := CommandLine.commandLine(compiler)
     checkSpecB1(c, p)
     for f in commandFiles() {
         n I64 = 0

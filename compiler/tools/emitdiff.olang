@@ -47,7 +47,7 @@ fn main() {
     dir := "build/emitdiff"
     try os.MkDirAll($dir "/rt") catch os.Error { toolkit.Die("emitdiff: cannot make " $dir) }
     rt := runtime(olang, emitdump, dir)
-    gold := toolkit.GoldenRead("compiler/goldens/run.txt", "rungold")
+    gold := toolkit.Golden.Read("compiler/goldens/run.txt", "rungold")
     same, differ, broken I64 = 0, 0, 0
     tests, testsSame I64 = 0, 0
     for i in range files.Len() {
@@ -58,7 +58,7 @@ fn main() {
         try os.MkDirAll(sub) catch os.Error { toolkit.Die("emitdiff: cannot make " $sub) }
         base := f[:f.Len() - 6] if f.EndsWith(".olang") else f
         out := $sub "/" $base.Replace("/", "_") $("" if program else "_test")
-        r := compare(gold, emitdump, level, rt, f, out, program, verbose, standin)
+        r := result.compare(gold, emitdump, level, rt, f, out, program, verbose, standin)
         toolkit.Say(r.Row)
         tests += r.Tests
         testsSame += r.Same
@@ -116,10 +116,10 @@ type result struct() {
     Same I64 = 0
 }
 
-fn compare(gold toolkit.Golden&, emitdump String&, level String&, rt Array<String&>&, f String&, out String&, program Bool, v Bool, standin Bool) result {
+fn result.compare(gold toolkit.Golden&, emitdump String&, level String&, rt Array<String&>&, f String&, out String&, program Bool, v Bool, standin Bool) result {
     r := result()
     # the stored run
-    s0 := toolkit.RunStored(gold, f)
+    s0 := toolkit.StoredRun.RunStored(gold, f)
     if not s0.Found {
         r.Broken = true
         r.Row = $f ": no stored run in compiler/goldens/run.txt (make rungold)\n"

@@ -115,7 +115,7 @@ fn main() {
         requests Vec<diagedit.Request>
         for o in diagedit.CompileAll(olang, fileArray, work, true) {
             for row in o.Split("\n") {
-                parsed := try diagedit.ParseRow(row) catch { continue }
+                parsed := try diagedit.Row.Parse(row) catch { continue }
                 full := diagedit.RealPathOf(parsed.Path)
                 if not parsed.IsError or not parsed.Msg.Contains(Message) or not diagedit.Allowed(full, allowed): continue
                 requests.Push(diagedit.Request($full, parsed.Line, parsed.Col, "question", "", $row))

@@ -6,9 +6,9 @@ type Res unique struct(id I64) {
     Closed += 1
 }
 Closed mut I64 = 0
-fn open() Res& {
+fn Res.open() Res& {
     r := Res(1)
     defer r.Destroy()
     return r
 }
-fn main() { assert open().id == 1 }
+fn main() { assert Res.open().id == 1 }

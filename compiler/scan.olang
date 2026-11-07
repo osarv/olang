@@ -133,7 +133,7 @@ fn (ts Tokens&) Match(open I32) I32 {
 }
 
 # scans a file's text. A text longer than an I32 can index is the caller's to refuse (source.Read does)
-fn Scan(text String&) Tokens {
+fn Tokens.Scan(text String&) Tokens {
     s := scanner(text)
     s.run()
     toks Array<token.Token>& = s.toks.ToArray()
@@ -202,7 +202,7 @@ fn (s mut scanner&) run() {
         end I64 = i + 1
         if isLetter(c) or c == '_' {
             end = wordEnd(t, i + 1)
-            k = token.Tok.Iden if last == token.Tok.Dot else token.Keyword(t, i, end - i)
+            k = token.Tok.Iden if last == token.Tok.Dot else token.Tok.Keyword(t, i, end - i)
         } else if isDigit(c) {
             k, end = s.number(i)
         } else if c == '"' {
@@ -832,14 +832,14 @@ fn spelled(text String&, ts Tokens&) String {
 
 test "words, numbers and operators take the longest token that starts there" {
     t := "x := a<<=b >>= c >= d >> e<f << g != h == i => j:k ... ++ -- += @ $s ~ ? 0x1F 0b101 1_000 2.5 1e3 1e 7.Hash()"
-    ts := Scan(t)
+    ts := Tokens.Scan(t)
     assert spelled(t, ts) == "x := a <<= b >>= c >= d >> e < f << g != h == i = > j : k . . . ++ -- += @ $ s ~ ? 0x1F 0b101 1_000 2.5 1e3 1 e 7 . Hash ( ) ;"
     assert ts.Diags.Len() == 0
 }
 
 test "keywords, literals, and a word after a dot is a name" {
     t := "if s.if or true and null not x.null"
-    ts := Scan(t)
+    ts := Tokens.Scan(t)
     assert ts.Toks[0].Kind == token.Tok.If and ts.Toks[3].Kind == token.Tok.Iden and ts.Toks[4].Kind == token.Tok.Or
     assert ts.Toks[5].Kind == token.Tok.BoolLit and ts.Toks[7].Kind == token.Tok.NullLit and ts.Toks[8].Kind == token.Tok.Not
     assert ts.Toks[11].Kind == token.Tok.Iden
@@ -847,14 +847,14 @@ test "keywords, literals, and a word after a dot is a name" {
 
 test "a line's end ends a statement after a token that can end one, inside brackets too" {
     t := "x := f(a\n  b)\ny := 1 +\n  2\nreturn\nif c {\n  z++\n}\n"
-    assert spelled(t, Scan(t)) == "x := f ( a ; b ) ; y := 1 + 2 ; return ; if c { z ++ ; }"
+    assert spelled(t, Tokens.Scan(t)) == "x := f ( a ; b ) ; y := 1 + 2 ; return ; if c { z ++ ; }"
     u := "a := [\n  1\n  2\n]\nb := try f()\ncatch { }\nfn g() { h(fn() {\n  q()\n}) }"
-    assert spelled(u, Scan(u)) == "a := [ 1 ; 2 ; ] ; b := try f ( ) catch { } fn g ( ) { h ( fn ( ) { q ( ) ; } ) }"
+    assert spelled(u, Tokens.Scan(u)) == "a := [ 1 ; 2 ; ] ; b := try f ( ) catch { } fn g ( ) { h ( fn ( ) { q ( ) ; } ) }"
 }
 
 test "a comma never ends a line (L18a)" {
     t := "f(a,\n  b, # why\n  c)\ng(d,"
-    ts := Scan(t)
+    ts := Tokens.Scan(t)
     assert spelled(t, ts) == "f ( a , b , c ) ; g ( d ,"
     assert ts.Diags.Len() == 3 and ts.Diags[0].Kind == LexError.CommaEndsLine and ts.Diags[0].Rule() == "L18a"
     assert ts.Diags[0].Start == 3 and ts.Diags[1].Start == 8 and ts.Diags[2].Start == I32(t.Len()) - 1
@@ -862,20 +862,20 @@ test "a comma never ends a line (L18a)" {
 
 test "a declaration at a line's start ends the brackets left open before it" {
     t := "x := f(a\nfn g() { y(\n}\ntype T struct() { }\n"
-    assert spelled(t, Scan(t)) == "x := f ( a ; fn g ( ) { y ( } type T struct ( ) { }"
+    assert spelled(t, Tokens.Scan(t)) == "x := f ( a ; fn g ( ) { y ( } type T struct ( ) { }"
     u := "x := f(a\ntest \"t\" { }\n"
-    assert spelled(u, Scan(u)) == "x := f ( a ; test \"t\" { }"
+    assert spelled(u, Tokens.Scan(u)) == "x := f ( a ; test \"t\" { }"
     v := "x := f(a\nfn (r R) m() { }\n"
-    assert spelled(v, Scan(v)) == "x := f ( a ; fn ( r R ) m ( ) { }"
+    assert spelled(v, Tokens.Scan(v)) == "x := f ( a ; fn ( r R ) m ( ) { }"
 }
 
 test "comments end lines; a block comment only where it spans one" {
     t := "a # note\nb ## inline ## c\nd ## two\nlines ## e"
-    assert spelled(t, Scan(t)) == "a ; b c ; d ; e ;"
+    assert spelled(t, Tokens.Scan(t)) == "a ; b c ; d ; e ;"
 }
 
 test "flags say what stood before a token" {
-    ts := Scan("f&x(y)\n  g ##\n## h")
+    ts := Tokens.Scan("f&x(y)\n  g ##\n## h")
     assert not ts.Toks[1].Has(token.Space) and not ts.Toks[2].Has(token.Space) and ts.Toks[0].Has(token.LineStart)
     assert ts.Toks[7].Has(token.LineBreak) and ts.Toks[7].Has(token.Space) and not ts.Toks[7].Has(token.LineStart)
     assert ts.Toks[9].Has(token.LineBreak) and not ts.Toks[9].Has(token.LineStart)
@@ -883,23 +883,23 @@ test "flags say what stood before a token" {
 
 test "a semicolon is reported and ends a statement where one could end" {
     t := "a := 1; b := 2\nf(x; y)"
-    ts := Scan(t)
+    ts := Tokens.Scan(t)
     assert spelled(t, ts) == "a := 1 ; b := 2 ; f ( x ; y ) ;"
     assert ts.Diags.Len() == 2 and ts.Diags[0].Kind == LexError.Semicolon and ts.Diags[0].Rule() == "L18"
     u := "a\n;\nb"
-    assert spelled(u, Scan(u)) == "a ; b ;"
+    assert spelled(u, Tokens.Scan(u)) == "a ; b ;"
 }
 
 test "bytes that begin no token are reported once a run and passed over" {
-    ts := Scan("a `` b\r\nc\r\nd")
+    ts := Tokens.Scan("a `` b\r\nc\r\nd")
     assert spelled("a `` b\r\nc\r\nd", ts) == "a b ; c ; d ;"
     assert ts.Diags.Len() == 2 and ts.Diags[0].Kind == LexError.UnknownChar and ts.Diags[0].End - ts.Diags[0].Start == 2
     assert ts.Diags[1].Kind == LexError.CarriageReturn
     u := "x\n`\ny"
-    assert spelled(u, Scan(u)) == "x ; y ;"
+    assert spelled(u, Tokens.Scan(u)) == "x ; y ;"
     v := "f(x)!\ny != z!"                   # E35: a postfix '!' ends a statement at a line's end, and "!=" is one token
-    assert spelled(v, Scan(v)) == "f ( x ) ! ; y != z ! ;"
-    assert spelled(u, Scan(u)) == "x ; y ;"
+    assert spelled(v, Tokens.Scan(v)) == "f ( x ) ! ; y != z ! ;"
+    assert spelled(u, Tokens.Scan(u)) == "x ; y ;"
 }
 
 test "literals are checked as they are read" {
@@ -910,19 +910,19 @@ test "literals are checked as they are read" {
                      LexError.HexNoDigits, LexError.BinDigit, LexError.DigitSeparator, LexError.DigitSeparator
                      LexError.PointNoDigit, LexError.TwoPoints, LexError.DigitSeparator, LexError.UnclosedComment]
     for k, c in cases {
-        ts := Scan(c)
+        ts := Tokens.Scan(c)
         assert ts.Diags.Len() == 1 and ts.Diags[0].Kind == want[k], "literal " $k ": " $c
     }
-    assert Scan("1.5.Hash() 1e_x").Diags.Len() == 0
+    assert Tokens.Scan("1.5.Hash() 1e_x").Diags.Len() == 0
 }
 
 test "a literal never runs past its line" {
     t := "x := \"abc\ny := 'q\nz := '\\\nw"
-    assert spelled(t, Scan(t)) == "x := \"abc ; y := 'q ; z := '\\ ; w ;"
+    assert spelled(t, Tokens.Scan(t)) == "x := \"abc ; y := 'q ; z := '\\ ; w ;"
 }
 
 test "the brace table matches braces alone" {
-    ts := Scan("{ ( { } [ } }")
+    ts := Tokens.Scan("{ ( { } [ } }")
     assert ts.Match(0) == 5 and ts.Match(5) == -1 and ts.Match(2) == 3 and ts.Match(1) == -1
     assert ts.Opens.Len() == 2
 }
@@ -933,12 +933,12 @@ test "escapes by number and raw text (L15, L14a)" {
     want := LexError[LexError.BadHexEscape, LexError.BadUnicodeEscape, LexError.BadCodePoint, LexError.WideCharEscape
                      LexError.RawAfterOpen, LexError.RawIndent, LexError.RawCloseNotAlone, LexError.RawUnclosed]
     for k, c in cases {
-        ts := Scan(c)
+        ts := Tokens.Scan(c)
         assert ts.Diags.Len() == 1 and ts.Diags[0].Kind == want[k], "literal " $k ": " $c
     }
     assert String(LiteralBytes("\"\\x41\\u{E9}\\n\"")) == "A" $Char(0xC3) $Char(0xA9) "\n"
     assert String(LiteralBytes("\"\"\"a\\n\"\"\"")) == "a\\n" and LiteralBytes("'\\x7F'")[0] == 127
     assert String(LiteralBytes("\"\"\"\n    x\n\n      y\n    \"\"\"")) == "x\n\n  y"
     t := "s := \"\"\"\n  a\n  \"\"\"\nn := 1"
-    assert spelled(t, Scan(t)) == "s := \"\"\"\n  a\n  \"\"\" ; n := 1 ;"
+    assert spelled(t, Tokens.Scan(t)) == "s := \"\"\"\n  a\n  \"\"\" ; n := 1 ;"
 }

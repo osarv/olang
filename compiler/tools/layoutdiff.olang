@@ -34,7 +34,7 @@ fn main() {
     for r in toolkit.Rows(toolkit.Read(deferred)) {
         if not r.StartsWith("#") and r != "" { allowed.Push($r) }
     }
-    report := compare(toolkit.Rows(toolkit.Read(golden)), toolkit.Rows(o.Stdout), allowed.ToArray())
+    report := outcome.compare(toolkit.Rows(toolkit.Read(golden)), toolkit.Rows(o.Stdout), allowed.ToArray())
     toolkit.Say(report.text)
     toolkit.Say("layoutdiff: " $report.same " types as stage 0 lays them out, " $report.deferred " deferred to the evaluator\n")
     if report.bad > 0 { os.Exit(1) }
@@ -50,7 +50,7 @@ type outcome struct() {
 }
 
 # the self-hosted rows against the golden's, row by row
-fn compare(golden Vec<String&>&, got Vec<String&>&, allowed Array<String&>&) outcome {
+fn outcome.compare(golden Vec<String&>&, got Vec<String&>&, allowed Array<String&>&) outcome {
     ok := Map<String&, Bool>()
     for a in allowed { ok.Put(a, true) }
     seen := Map<String&, Bool>()
@@ -164,7 +164,7 @@ fn laidOut(row String&, names Map<String&, String&>&, depth I64) String {
 test "equal rows count, a deferred row is allowed where listed, anything else is a difference" {
     golden := toolkit.Rows("== A\nint\t4 4\nlist\t16 8\nmap\t8 8\n")
     got := toolkit.Rows("== A\nint\t4 4\nlist\tdeferred\nmap\tdeferred\n")
-    r := compare(golden, got, String&["list"])
+    r := outcome.compare(golden, got, String&["list"])
     assert r.same == 1
     assert r.deferred == 1
     assert r.bad == 1
@@ -173,23 +173,23 @@ test "equal rows count, a deferred row is allowed where listed, anything else is
 
 test "a listed type that is laid out, and a different number of rows, are differences" {
     golden := toolkit.Rows("== A\nint\t4 4\n")
-    r := compare(golden, toolkit.Rows("== A\nint\t4 4\nextra\t1 1\n"), String&["int"])
+    r := outcome.compare(golden, toolkit.Rows("== A\nint\t4 4\nextra\t1 1\n"), String&["int"])
     assert r.bad == 3
 }
 
 test "an instance named differently but laid out alike is the same; laid out differently it is a difference" {
     golden := toolkit.Rows("== A\nm:V<I64>\t8 8\t%\"m:V<I64>\"\t{ ptr }\tfields 0\nm:W\t16 8\t%\"m:W\"\t{ i64, %\"m:V<I64>\" }\tfields 0 8\n")
     got := toolkit.Rows("== A\nm:V<I64>\t8 8\t%\"m:V.0123456789abcdef0123456789abcdef\"\t{ ptr }\tfields 0\nm:W\t16 8\t%\"m:W\"\t{ i64, %\"m:V.0123456789abcdef0123456789abcdef\" }\tfields 0 8\n")
-    r := compare(golden, got, String&[])
+    r := outcome.compare(golden, got, String&[])
     assert r.same == 2, r.text
     assert r.bad == 0, r.text
     broken := toolkit.Rows("== A\nm:V<I64>\t8 8\t%\"m:V.0123456789abcdef0123456789abcdef\"\t{ i64 }\tfields 0\nm:W\t16 8\t%\"m:W\"\t{ i64, %\"m:V.0123456789abcdef0123456789abcdef\" }\tfields 0 8\n")
-    r2 := compare(golden, broken, String&[])
+    r2 := outcome.compare(golden, broken, String&[])
     assert r2.bad == 2, r2.text
     assert r2.text.Contains("layoutdiff: m:V<I64>\n")
     assert r2.text.Contains("layoutdiff: m:W\n")
     offset := toolkit.Rows("== A\nm:V<I64>\t8 8\t%\"m:V.0123456789abcdef0123456789abcdef\"\t{ ptr }\tfields 0\nm:W\t16 8\t%\"m:W\"\t{ i64, %\"m:V.0123456789abcdef0123456789abcdef\" }\tfields 0 4\n")
-    assert compare(golden, offset, String&[]).bad == 1
+    assert outcome.compare(golden, offset, String&[]).bad == 1
     other := toolkit.Rows("== A\nm:V<I64>\t8 8\t%\"m:V.0123456789abcdef0123456789abcdef\"\t{ ptr }\tfields 0\nm:W\t16 8\t%\"m:W\"\t{ i64, %\"m:U.0123456789abcdef0123456789abcdef\" }\tfields 0 8\n")
-    assert compare(golden, other, String&[]).bad == 1
+    assert outcome.compare(golden, other, String&[]).bad == 1
 }

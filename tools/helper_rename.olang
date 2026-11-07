@@ -14,7 +14,7 @@ import "../compiler/token"
 type VT struct(k token.Tok, start I64, end I64) { k, start, end }
 
 fn vtokens(src String&) Vec<VT> {
-    ts := scan.Scan(src)
+    ts := scan.Tokens.Scan(src)
     out Vec<VT>
     for tk in ts.Toks {
         if tk.Kind == token.Tok.StmtEnd { continue }

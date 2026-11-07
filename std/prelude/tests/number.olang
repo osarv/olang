@@ -65,7 +65,7 @@ test "huge and tiny arguments" {
     assert 3.0.Hypot(4.0) == 5.0
     assert 1e-20.Expm1() == 1e-20 and 1e-20.Log1p() == 1e-20       # where Exp(x) - 1 and Log(1 + x) give 0
     assert 1e-20.Exp() - 1.0 == 0.0
-    tiny := U64(1).F64FromBits()                                 # the smallest subnormal
+    tiny := F64.FromBits(U64(1))                                 # the smallest subnormal
     assert tiny.Sqrt() == 2.2227587494850775e-162
     assert tiny.Log2() == -1074.0 and (-1074.0).Exp2() == tiny
 }

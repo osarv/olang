@@ -25,14 +25,14 @@ type Held enum {
 }
 
 # made where it is used, handed back fresh: a returned local is the result
-fn mint(id I64) Token {
+fn Token.mint(id I64) Token {
     t := Token(id)
     t.Use()
     return t
 }
 
 # a by-value parameter handed on at its last mention - into a value made
-fn slotOf(t Token, label String) Slot { return Slot(t, label) }
+fn Slot.slotOf(t Token, label String) Slot { return Slot(t, label) }
 
 # ... or on one path, not the other
 fn keepIf(v mut Vec<Token>&, t Token, keep Bool) I64 {
@@ -59,7 +59,7 @@ fn walked(v Vec<Token>&) I64 {
 fn kept() I64 {
     v := Vec<Token>()
     v.Push(Token(1))
-    v.Push(mint(2))
+    v.Push(Token.mint(2))
     keepIf(v, Token(3), true)
     left := keepIf(v, Token(4), false)
     v[0].Use() # in place, through RefMut
@@ -71,7 +71,7 @@ fn kept() I64 {
 }
 
 fn held() I64 {
-    s := Slot(mint(7), "seven")
+    s := Slot(Token.mint(7), "seven")
     r := s # Slot is unique: a reference
     r.tok.Use()
     h := Held.One(Token(8))
@@ -89,7 +89,7 @@ fn held() I64 {
 
 fn tokenUses() I64 {
     t := Token(9)
-    return names(t) * 10 + slotOf(Token(5), "five").tok.id
+    return names(t) * 10 + Slot.slotOf(Token(5), "five").tok.id
 }
 
 # while compiling as at run time (K2, S17a)
@@ -104,7 +104,7 @@ test "a unique value is one place: copies are references, fresh values land by v
     b := a
     b.Use()
     assert a.uses == 1 and a.Uses() == 1
-    s := slotOf(mint(3), "x")
+    s := Slot.slotOf(Token.mint(3), "x")
     assert s.tok.uses == 1 and s.label == "x"
 }
 
@@ -136,7 +136,7 @@ test "a Map of unique values: Put takes fresh ones, Take hands one back" {
 # a name made from a by-value parameter (a reference, a closure over it) used before the value is handed on, and a
 # plain read of a part beside the hand-on in one call - none of them reaches the value once it is handed on (bulk
 # review 7, F15, F16)
-fn aliasBefore(t Token) Slot {
+fn Slot.aliasBefore(t Token) Slot {
     alias := t
     seen := fn() I64 { return t.id }
     alias.Use()
@@ -144,15 +144,15 @@ fn aliasBefore(t Token) Slot {
     return Slot(t, $n)
 }
 
-fn tagged(n I64, t Token) Slot { return Slot(t, $n) }
+fn Slot.tagged(n I64, t Token) Slot { return Slot(t, $n) }
 
-fn idBeside(t Token) Slot { return tagged(t.id, t) }
+fn Slot.idBeside(t Token) Slot { return Slot.tagged(t.id, t) }
 
-test aliasBefore "hands a parameter on after the names made from it are done" {
-    s := aliasBefore(Token(4))
+test Slot.aliasBefore "hands a parameter on after the names made from it are done" {
+    s := Slot.aliasBefore(Token(4))
     assert s.tok.uses == 1 and s.label == "4"
-    u := idBeside(Token(6))
+    u := Slot.idBeside(Token(6))
     assert u.label == "6"
 }
 
-assert aliasBefore(Token(4)).tok.uses == 1 and idBeside(Token(6)).label == "6"
+assert Slot.aliasBefore(Token(4)).tok.uses == 1 and Slot.idBeside(Token(6)).label == "6"

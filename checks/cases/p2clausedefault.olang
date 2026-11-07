@@ -6,7 +6,7 @@ type Node struct(v I64) {
     v
 }
 type Odd error { No }
-fn f(i I64) mut Node?& ? Odd {
+fn Node.f(i I64) mut Node?& ? Odd {
     if i >= 0 { error Odd.No }
     return null
 }
@@ -15,7 +15,7 @@ fn main() ? {
     for r in range 400 {
         out := Array<mut Node?&>(16, null)
         join {
-            for i in range 16 { spawn out[i] = try f(i) catch default Node(i + r) }
+            for i in range 16 { spawn out[i] = try Node.f(i) catch default Node(i + r) }
         }
         for i in range 16 { total += out[i]!.v }
     }

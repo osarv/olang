@@ -6,7 +6,7 @@ type E error {
 type Node struct(v I64) {
     v
 }
-fn mk(n I64) Node& ? E {
+fn Node.mk(n I64) Node& ? E {
     if n < 0 { error E.Bad }
     return Node(n)
 }
@@ -14,6 +14,6 @@ fn main() ? {
     fallback Node& = Node(0)
     r Node?& = null
     join {
-        spawn r = try mk(-1) catch default fallback
+        spawn r = try Node.mk(-1) catch default fallback
     }
 }

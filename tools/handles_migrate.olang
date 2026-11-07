@@ -37,7 +37,7 @@ type edit struct(Path String, Line I64, Col I64, Kind String, Name String, Type 
 }
 
 # a report row "handles: PATH:LINE:COL: KIND NAME|TYPE|ROOT" as an edit, failing with NoRow for any other
-fn reportRow(row String&) edit ? NoRow {
+fn edit.reportRow(row String&) edit ? NoRow {
     if not row.StartsWith("handles: "): error NoRow
     rest := row[9:]
     # the place's end: ": " before the kind
@@ -62,16 +62,16 @@ fn reportRow(row String&) edit ? NoRow {
 }
 
 # a diagnostic "TYPE has no method 'Clone'" on one of the six as an edit
-fn cloneRow(row String&) edit ? NoRow {
-    r := try diagedit.ParseRow(row) catch { error NoRow }
+fn edit.cloneRow(row String&) edit ? NoRow {
+    r := try diagedit.Row.Parse(row) catch { error NoRow }
     if not r.IsError or not r.Msg.EndsWith(" has no method 'Clone'"): error NoRow
     ty := r.Msg[:r.Msg.Len() - 22]
     return edit($r.Path, r.Line, r.Col, "clone", "", $ty, "")
 }
 
 # a diagnostic that a call would write the copy "x[i]" gives (E31b) - an element of a Vec changed in place - as an edit
-fn elemRow(row String&) edit ? NoRow {
-    r := try diagedit.ParseRow(row) catch { error NoRow }
+fn edit.elemRow(row String&) edit ? NoRow {
+    r := try diagedit.Row.Parse(row) catch { error NoRow }
     if not r.IsError or not r.Msg.StartsWith("x[i] gives a copy"): error NoRow
     return edit($r.Path, r.Line, r.Col, "elem", "", "", "")
 }
@@ -80,9 +80,9 @@ fn elemRow(row String&) edit ? NoRow {
 fn editsFrom(out String&, allowed Vec<String&>&, expected Vec<String&>&, eds mut Vec<edit>&) {
     for row in out.Lines() {
         if diagedit.ContainsAny(row, expected): continue
-        e := try reportRow(row) catch {
-            c := try cloneRow(row) catch {
-                x := try elemRow(row) catch { continue }
+        e := try edit.reportRow(row) catch {
+            c := try edit.cloneRow(row) catch {
+                x := try edit.elemRow(row) catch { continue }
                 if diagedit.Allowed(diagedit.RealPathOf(x.Path), allowed): eds.Push(x)
                 continue
             }
@@ -307,7 +307,7 @@ fn changed(line String&, e edit&) String ? NoEdit {
 fn compileOne(olang String&, file String&, dir String&) String {
     src := try srcmask.ReadText(file) catch { return "" }
     mode := "test" if src.Contains("TestBuild") or src.Contains("\ntest ") or src.StartsWith("test ") else "compile"
-    out := try os.ExecUntil(cancel.After(900000), "env", "OLANG_HANDLES=1", olang, mode, file, dir = dir) catch { return "" }
+    out := try os.Output.ExecUntil(cancel.Token.After(900000), "env", "OLANG_HANDLES=1", olang, mode, file, dir = dir) catch { return "" }
     return $out.Stdout $out.Stderr
 }
 
@@ -392,11 +392,11 @@ fn main() ? {
     }
 }
 
-test reportRow "reads a report row" {
-    e := try reportRow("handles: a/b.olang:12:5: mut t|Vec<I64>|c")
+test edit.reportRow "reads a report row" {
+    e := try edit.reportRow("handles: a/b.olang:12:5: mut t|Vec<I64>|c")
     assert e.Path == "a/b.olang" and e.Line == 12 and e.Col == 5 and e.Kind == "mut" and e.Name == "t" and e.Type == "Vec<I64>" and e.Root == "c"
     ok := true
-    try reportRow("x.olang:1:2: error: no") catch { ok = false }
+    try edit.reportRow("x.olang:1:2: error: no") catch { ok = false }
     assert not ok
 }
 

@@ -26,7 +26,7 @@ Taken mut I64 = 0
 # as its parts: the path, line, column, whether it is an error (else a note), the rule ("" when it names none) and the
 # message. Any other row fails with NotARow. The path is the shortest start of the row that leaves the rest matching, as
 # the Python scripts' non-greedy (.*?) read it
-fn ParseRow(row String&) Row ? {
+fn Row.Parse(row String&) Row ? {
     n := row.Len()
     for k in range n {
         if row[k] != ':' { continue }
@@ -261,16 +261,16 @@ fn CompileAll(olang String&, files Array<String&>&, workDirs Array<String&>&, te
 }
 
 test "ParseRow reads errors and notes" {
-    r := try ParseRow("a/b.olang:12:34: error[D9]: a: b")
+    r := try Row.Parse("a/b.olang:12:34: error[D9]: a: b")
     assert r.Path == "a/b.olang" and r.Line == 12 and r.Col == 34 and r.IsError and r.Rule == "D9" and r.Msg == "a: b"
-    r2 := try ParseRow("x.olang:1:2: note: 'x' is declared")
+    r2 := try Row.Parse("x.olang:1:2: note: 'x' is declared")
     assert r2.Path == "x.olang" and r2.Line == 1 and r2.Col == 2 and not r2.IsError and r2.Rule == "" and r2.Msg == "'x' is declared"
-    r3 := try ParseRow("x:1:2: error: plain")
+    r3 := try Row.Parse("x:1:2: error: plain")
     assert r3.Path == "x" and r3.Line == 1 and r3.Col == 2 and r3.IsError and r3.Rule == "" and r3.Msg == "plain"
     ok := true
-    try ParseRow("compilation failed with 1 error") catch { ok = false }
+    try Row.Parse("compilation failed with 1 error") catch { ok = false }
     assert not ok
-    try ParseRow("x.olang:1:2: warning: no") catch { ok = false }
+    try Row.Parse("x.olang:1:2: warning: no") catch { ok = false }
     assert not ok
 }
 

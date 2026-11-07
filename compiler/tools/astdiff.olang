@@ -44,13 +44,13 @@ fn main() {
         if keep == "" { toolkit.Clean(work) }
     }
     if not toolkit.Built(dump) { toolkit.Die("astdiff: " $dump " is not built (make " $dump ")") }
-    g := toolkit.HashGoldenRead(Golden, "astgold")
+    g := toolkit.HashGolden.Read(Golden, "astgold")
     oraw := toolkit.RunTool(dump, "ast", files)
     toolkit.Write($work "/olang.raw", oraw)
     sections(oraw, files.Len(), $dump " ast")
     olang := normalize(oraw)
     toolkit.Write($work "/olang", olang)
-    o := toolkit.DumpSections(olang)
+    o := toolkit.Golden.DumpSections(olang)
     stale := toolkit.HashGoldenStale(g, files)
     isStale := Map<String&, Bool>()
     for f in stale { isStale.Put(f, true) }
@@ -98,7 +98,7 @@ fn capture(dump String&) {
     if not toolkit.Built(dump) { toolkit.Die("astdiff: " $dump " is not built (make " $dump ")") }
     raw := toolkit.RunTool(dump, "ast", files)
     sections(raw, files.Len(), dump)
-    s := toolkit.DumpSections(normalize(raw))
+    s := toolkit.Golden.DumpSections(normalize(raw))
     toolkit.HashGoldenWrite(Golden, "the C parser's trees, normalized (compiler/tools/astdiff.olang)", files, s, fn(body String&) Bool {
         return body.Len() < 8192 and (try body.Find("\nerror") catch default -1) >= 0
     })

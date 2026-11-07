@@ -352,12 +352,12 @@ fn CalledBody(x Expr&) I64 {
 }
 
 # the call an expression is - itself, or under a try or an Away - null for none
-fn CallOf(x Expr?&) Call?& {
+fn Call.Of(x Expr?&) Call?& {
     if x is null: return null
     return match x {
         case Expr.Call(_, _, c): c
-        case Expr.Try(_, _, t): CallOf(t.X)
-        case Expr.Away(_, _, y): CallOf(y)
+        case Expr.Try(_, _, t): Call.Of(t.X)
+        case Expr.Away(_, _, y): Call.Of(y)
         case _: null
     }
 }
@@ -610,21 +610,21 @@ fn CopiedOf(t types.Table&, x Expr&) Expr?& { return copied(t, x) }
 # it views, and no copy of it is needed where it is kept. varsOf gives a body's function type's scope variables
 fn FreshViews(plan Plan&, c Call&, views I64, viewsOf fn&(id BodyId) I64, varsOf fn&(id BodyId) Array<I64>) Bool {
     if views <= 0 or (views & ViewOther) != 0 or c.Site < SiteId(0): return false
-    home := resultScope(plan, c.Site, varsOf(BodyId(I32(CalleeBody(c)))))
+    home := Scope.result(plan, c.Site, varsOf(BodyId(I32(CalleeBody(c)))))
     if home == Scope.Unset: return false
     for k in range c.Args.Len().Min(ViewBits) {
         if (views & (I64(1) << k)) == 0: continue
-        a := freshCall(c.Args[k], 0)
+        a := Call.fresh(c.Args[k], 0)
         if a is null or a.Site < SiteId(0): return false
         id := CalleeBody(a)
         if id < 0 or viewsOf(BodyId(I32(id))) != 0: return false
-        if resultScope(plan, a.Site, varsOf(BodyId(I32(id)))) != home: return false
+        if Scope.result(plan, a.Site, varsOf(BodyId(I32(id)))) != home: return false
     }
     return true
 }
 
 # where a call at site lands its result by the plan: the scope it passes for its callee's result scope, Unset for none
-fn resultScope(plan Plan&, site SiteId, vs Array<I64>&) Scope {
+fn Scope.result(plan Plan&, site SiteId, vs Array<I64>&) Scope {
     for j in range vs.Len() {
         if vs[j] == types.ResultVar: return plan.Passed(site, j)
     }
@@ -632,12 +632,12 @@ fn resultScope(plan Plan&, site SiteId, vs Array<I64>&) Scope {
 }
 
 # the call an argument is, past the wrappers that give it storage, null for any other argument
-fn freshCall(x Expr&, depth I64) Call?& {
+fn Call.fresh(x Expr&, depth I64) Call?& {
     if depth > 8: return null
     return match x {
         case Expr.Call(_, _, c): c
-        case Expr.Promote(_, _, pr): freshCall(pr.X, depth + 1)
-        case Expr.Away(_, _, y): freshCall(y, depth + 1)
+        case Expr.Promote(_, _, pr): Call.fresh(pr.X, depth + 1)
+        case Expr.Away(_, _, y): Call.fresh(y, depth + 1)
         case _: null
     }
 }
@@ -770,7 +770,7 @@ type LocalUses struct(T types.Table&, B Body&) {
 }
 
 # the uses of b's locals
-fn Uses(t types.Table&, b Body&) LocalUses {
+fn LocalUses.Uses(t types.Table&, b Body&) LocalUses {
     u := LocalUses(t, b)
     for _ in range b.Locals.Len() {
         u.WrOther.Push(false)
@@ -1691,7 +1691,7 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     passed Vec<Scope>
 }
 
-fn NewPlan(b Body&) Plan { return Plan(b.Sites.Len(), b.Locals.Len(), b.Vars.Len()) }
+fn Plan.New(b Body&) Plan { return Plan(b.Sites.Len(), b.Locals.Len(), b.Vars.Len()) }
 
 # what a call at a site passes, one scope per callee variable that is not a Capture, in order
 fn (pl mut Plan&) Pass(site SiteId, scopes Array<Scope>&) {
@@ -2613,7 +2613,7 @@ fn reached(b Block?&, sp source.Span) I64 {
     if b is null { return 0 }
     for s in b.Stmts {
         if isAssertAt(s, sp) { return 1 }
-        inner := within(s)
+        inner := Block.within(s)
         if inner is not null and reached(inner, sp) != 0 { return reached(inner, sp) }
         w := leaveWalk()
         if w.stmtLeaves(s) { return -1 if holds(b, sp) else 0 }
@@ -2629,7 +2629,7 @@ fn isAssertAt(s Stmt&, sp source.Span) Bool {
 }
 
 # the block a statement runs whenever it is reached: a block's, a loop's body (run once at least), a join's code
-fn within(s Stmt&) Block?& {
+fn Block.within(s Stmt&) Block?& {
     return match s {
         case Stmt.Block(_, b): b
         case Stmt.Loop(_, body, _): body
@@ -2642,7 +2642,7 @@ fn within(s Stmt&) Block?& {
 fn holds(b Block?&, sp source.Span) Bool {
     if b is null { return false }
     for s in b.Stmts {
-        if isAssertAt(s, sp) or holds(within(s), sp) { return true }
+        if isAssertAt(s, sp) or holds(Block.within(s), sp) { return true }
     }
     return false
 }
@@ -2951,7 +2951,7 @@ fn (w mut printer&) place(p Lvalue&) String {
 # "fn add(a I32, b I32) I32 { s := a + b; return s }", as check would make it
 test "a body: locals, blocks and sites, read back and printed" {
     names := source.Names()
-    t := types.NewTable(names)
+    t := types.Table.New(names)
     i32 := t.Prim("I32")
     sp := source.Span(0, 10)
     b := Body(BodyId(0), BodyOf.Fn(0), t.Func(t.List(types.TypeId[i32, i32]), i32, types.ListId(0)), 0, sp)
@@ -2973,7 +2973,7 @@ test "a body: locals, blocks and sites, read back and printed" {
 
 test "a plan: what each site builds into and each call passes, Unset where nothing is decided" {
     names := source.Names()
-    t := types.NewTable(names)
+    t := types.Table.New(names)
     sp := source.Span(0, 1)
     b := Body(BodyId(0), BodyOf.Test(0), t.Func(types.ListId(0), types.VoidT, types.ListId(0)), 0, sp)
     root := b.AddBlock(BlockId(-1), BlockKind.Body, sp)
@@ -2982,7 +2982,7 @@ test "a plan: what each site builds into and each call passes, Unset where nothi
     mk := b.AddSite(SiteKind.Make, sp)
     b.Vars.Push(ScopeVar.Result)
     assert b.Encloses(root, loop) and not b.Encloses(loop, root)
-    pl := NewPlan(b)
+    pl := Plan.New(b)
     assert pl.Built[I64(mk)] == Scope.Unset and pl.Passed(call, 0) == Scope.Unset and pl.Stored.Len() == 0
     pl.Built[I64(mk)] = Scope.Block(loop)
     pl.Pass(call, Scope[Scope.Var(0), Scope.Program])
@@ -2993,7 +2993,7 @@ test "a plan: what each site builds into and each call passes, Unset where nothi
 # link(a mut N&, b N&) N&, b and the result living where a does, and its pieces: marks and scope variables read off the type alone
 test "a body's marks and scope variables come from its type; constants, temporaries and matches as check makes them" {
     names := source.Names()
-    t := types.NewTable(names)
+    t := types.Table.New(names)
     m := t.AddModule("t")
     n := t.Named(t.AddDecl(m, names.Intern("N"), types.DeclKind.Struct, 0), types.ListId(0))
     i64 := t.Prim("I64")
