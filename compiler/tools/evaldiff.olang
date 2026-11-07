@@ -81,7 +81,7 @@ fn main() {
         }
         for f in runCases() { files.Push(f) }
     }
-    gold := toolkit.GoldenRead("compiler/goldens/run.txt", "rungold")
+    gold := toolkit.Golden.Read("compiler/goldens/run.txt", "rungold")
     same, differ, known I64 = 0, 0, 0
     for f in files {
         r := result.compare(gold, olang, f, verbose)

@@ -1791,7 +1791,7 @@ fn lineCol(text String&, at I64) I64, I64 {
 test "D2, D3a and M20: a name means one thing in a module; nothing is reached bare that no import gave" {
     got := testRules(Array<String&>["main.olang", "import \"util\"\nfn Circle() I32 { return 3 }\ntype Circle struct() { }\nCount I32 = 1\nfn f(Count I32, I32 I32) { for c in Array<I32>[1] { c := 2 } }\nfn print() { }\nutil := 3\nfn main() ? { }\n", "util.olang", ""], Array<String&>[])
     assert got.Contains("D2 3:6\n") and got.Contains("D3a 5:6\n") and got.Contains("D3a 5:17\n"), got
-    assert got.Contains(" 5:46\n") and not got.Contains("M19f") and got.Contains("M20 7:1\n"), got
+    assert got.Contains(" 5:53\n") and not got.Contains("M19f") and got.Contains("M20 7:1\n"), got
 }
 
 test "B10, B10c: build constants and their defaults, and an unknown name in a condition" {
