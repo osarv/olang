@@ -2028,7 +2028,9 @@ in it, a fallible one, a lambda among its arguments included. It writes nothing:
 Each condition is checked **on entry**, in every build, in the order written, before the body runs: a false one makes
 the call fail with the prelude's `ArgumentError.Invalid` (§7.6), its trace (S18d) and a `!`'s message naming the
 function and the condition as written (`pick: y > x`). A call in a condition that fails leaves the function with its
-own error, as a call in the body would (R6), and the conditions after it are not evaluated.
+own error, as a call in the body would (R6), and the conditions after it are not evaluated. The call has taken its
+arguments by then: a by-value parameter holding a value with a destructor lets go of it as the failing call leaves
+(O15), as on any other way out.
 
 **D17b (the error set).** A function with conditions can fail with `ArgumentError`, so it writes `?` (R1d): a bare
 `?` (R1a) infers it with the rest, and a written set must list `ArgumentError` - a compile-time error naming it
