@@ -814,7 +814,12 @@ reads it after: a **by-value parameter**, given a fresh value at every call, may
 `x` so) - and a **local returned whole** (`return f`) is the result itself (O26a). Last is judged on every path from the
 landing, in the order the function evaluates: another branch's mentions are not after it, a loop running again
 reaches its body's mentions before it, and a mention in deferred code, a task or a join's clauses runs after
-everything; a mention after the landing is a compile-time error. A unique type declares no Copy (E31d), an error at its
+everything; a mention after the landing is a compile-time error. A **name made from** the parameter - a reference local
+or a binding naming it (`alias := t`), a lambda capturing it - counts as a mention of it, so using that name after the
+landing is the same error, naming it; and a landing that is one argument of a call (or one part of a value made) whose
+other arguments reach the same parameter - lend it (`both(s, s)` with `fn both(r Res&, x Res)`), slice it, or go through a
+name made from it - is a compile-time error too: the value would be in two places at once. A plain read of a part beside
+it (`tagged(t.id, t)`) reaches nothing of the value and is no such mention. A unique type declares no Copy (E31d), an error at its
 name, and `x.Copy()` of a unique value is an error: a new value from an existing one is made by an ordinary function
 or constructor (`File(dup(f.fd))`). A struct or an enum holding a unique part by value - a field, a payload, an element
 of an array it holds by value - is **unique itself**, unless it declares a Copy (E31d), which then makes that part anew
@@ -2139,14 +2144,17 @@ them, leaves it as it is - so `at = u.nodes[at].kids[r.roll(u.nodes[at].kids.Len
 reference local given what a call hands back from such a view (`kids := v[i].xs.View()`) reads the element in place
 where nothing changes what the view covers while the local lives. A value given storage only for a call's read-only
 parameter that the callee keeps nothing of, whose result holds no reference, is given it in the frame (`inside(v[k],
-x, y)`), not in an arena of the block. Where a copy is made, it is built where the value is kept: a local's copy in the
+x, y)`), not in an arena of the block - but never a spawned call's argument, which its task reads beside the spawner
+(and each turn's task its own). Where a copy is made, it is built where the value is kept: a local's copy in the
 local's block - so a loop turn's copy is reclaimed with the turn (O2) - whatever storage it was read from.
 
 **D9i (a value moved at its last use).** A value local's copy made where it is handed on - a by-value argument, a store,
 a part of a value made (QCE) - is left out where that copy is the local's last mention, in the order the function
 evaluates, and the destination takes the local's own storage: `t := mk(n)` then `p := P(t)` costs what `p := P(mk(n))`
 costs. Only where nothing could tell: no mention of the local comes after (deferred code, a task, a join's clauses and a
-loop around the copy but not around the local's declaration count as after), the local's storage is its own - no view
+loop around the copy but not around the local's declaration count as after), no other argument of the same call - or
+other part of the same value made - mentions the local (`peek(t, t)` lends `t` beside its copy, `part(t.a, t)` reads
+in it, `t.Peek(t)` is its receiver: those stay alive for the very call the copy is given to), the local's storage is its own - no view
 held in place of its copy (D9h) - named by no other local, escaping nowhere, never assigned whole, in no region early
 freeing made (O8d), and lives at least as long as where the copy would be built; a constructor's instance viewing only
 such moved locals is its own (no D9h copy where it is kept). Unobservable: the evaluator copies and agrees. Neither
