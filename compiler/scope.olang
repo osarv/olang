@@ -197,8 +197,9 @@ type summary struct() {
     # whether a return may hand back existing storage - a result outliving its scope by an obligation (O13, 2.7) -
     # rather than what the body builds
     HandsBack Bool = false
-    # C4 (docs/sec8.md 6): its judging that reports said a section-8 error of its own - its callers do not discharge the
-    # obligations it recorded, so one cause is one error (it did not check; a caller would only repeat it)
+    # C4 (docs/sec8.md 6): its judging that reports said a section-8 error of its own - its callers do not say again what
+    # it requires, so one cause is one error (it did not check; a caller would only repeat it). No part of what a judging
+    # of a caller reads for reuse (sameSummary leaves it out)
     Erred Bool = false
     Done Bool = false
     Judging Bool = false # its component is being judged to a fixed point: Builds is what the rounds so far found
@@ -489,6 +490,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # unmade asks for the next (viewWanted, partWanted). placed: by (body, local, or -1 - site), the placement made for
     # one, which -memory lists (B18); viewKind, viewAt what the proposal being made is for (0 none, else a PlaceView...)
     viewPhase Bool = false
+    ViewPhases I64 = 0                      # how many bodies' gatherings took the second phase, for OLANG_SCOPESTATS
     partsOn Bool = false
     viewWanted Bool = false
     partWanted Bool = false
@@ -728,6 +730,7 @@ fn sameSummary(a summary&, b summary&) Bool {
     av summary = a
     av.BuildFile = b.BuildFile
     av.BuildAt = b.BuildAt
+    av.Erred = b.Erred
     return av == b
 }
 
@@ -1052,10 +1055,7 @@ fn (s mut Scoper&) judgeOnce(b I64, report Bool) Bool {
     s.finalQuiet = not report or s.fieldGather
     s.liftGather = true
     s.liftGrew = false
-    # (views propose here too: a judging that proposes anything is done again as inferClaims' phases do it)
-    s.viewPhase = true
     s.judge(b, report)
-    s.viewPhase = false
     s.liftGather = false
     s.finalQuiet = false
     if not s.liftGrew and s.P.L.Diags.Count() == mark { return true }
@@ -8278,7 +8278,6 @@ fn (s mut Scoper&) requiredBy(callee I64, v I64, beta Array<Term>&) Term {
 # a callee's obligations judged through a call's bindings (O10c): each held, recorded as the caller's own, or an error
 # at the call naming the callee's statement that required it
 fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c typed.Call&, agreed Bool) {
-    if s.sums[callee].Erred { return }
     s.dischargeRels(sp, s.sums[callee].Rels, callee, beta, c, agreed)
 }
 
@@ -8341,6 +8340,11 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
             continue
         }
         if not s.report { continue }
+        # C4: a callee whose judging that reports said a section-8 error of its own did not check - what it required is
+        # not said again at its calls (one cause, one error); its obligations still pass up and still lift, so what is
+        # judged is as it would be (a callee that erred in one round of the field inference and not the next costs the
+        # rounds nothing)
+        if callee >= 0 and s.sums[callee].Erred { continue }
         if s.taskTemp and lo == s.taskSlot {
             # a temporary a task is handed, holding what does not last until the join (P2)
             s.err(s.taskAt, msgs.SpawnFuncTooShort() if s.taskFunc else msgs.SpawnArgHoldsShort())
@@ -9596,19 +9600,20 @@ fn (s mut Scoper&) proposeView(u typed.Expr&, t Term) Bool {
         case _ { }
     }
     # what a callee hands back borrowed from an argument (O13: a result written 'T&p') is a view of what that argument
-    # names: the argument proposed, its storage with it where it is a value local's
+    # names: the argument proposed, its storage with it where it is a value local's - and the call proposed as before
+    # (false: its landing is a whole value's lift, made in either phase)
     bc := s.borrowedCall(u)
     if bc is not null {
         if not s.viewPhase {
             s.viewWanted = true
-            return true
+            return false
         }
         e := s.P.T.ResultFrom(s.calleeType(bc), 0)
         if e >= 0 and e < bc.Args.Len() and not s.mayHoldDtor(bc.Args[e].Type()) {
             s.viewing(PlaceView, u.Span())
             s.proposeIn(bc.Args[e], t)
         }
-        return true
+        return false
     }
     base := s.viewBase(u)
     if base is null {
@@ -9839,11 +9844,7 @@ fn (s mut Scoper&) proposeFrom(l I64, t Term, stor Bool, key I64, first Bool) {
     # each value, proposed - E28)
     if l >= 0 and l < s.origin.Len() and s.origin[l] == -2 and s.viewedBy(l) < 0 {
         init := try s.inits.Get(l) catch default null
-        if init is not null and s.borrowedCall(init) is not null {
-            s.proposeIn(init, t)
-            return
-        }
-        if init is not null and s.choiceInit(init) {
+        if init is not null and (s.borrowedCall(init) is not null or s.choiceInit(init)) {
             if not s.viewPhase {
                 s.viewWanted = true
                 return
@@ -9968,6 +9969,7 @@ fn (s mut Scoper&) inferClaims(b I64) {
     s.viewWanted = false
     s.inferRounds(b)
     if not s.viewWanted { return }
+    s.ViewPhases++
     s.viewPhase = true
     s.inferRounds(b)
     s.viewPhase = false
@@ -10296,7 +10298,7 @@ fn (s mut Scoper&) placeDecl(p typed.Lvalue&) I64 {
 
 # what the inference found, for OLANG_SCOPESTATS: the locals it lifted, their storage too, and the W's (2.4)
 fn (s Scoper&) InferStats() String {
-    return $"inferred: " $s.lifts.Len() " locals lifted (" $s.partLifts.Len() " for a part of them kept), " $s.liftStor.Len() " with their storage, " $s.siteLifts.Len() " calls landed, " $s.wLocals.Len() " needing a W, " $(s.promotedF.Len() - s.demotedF.Len()) " fields promoted (" $s.demotedF.Len() " given back)"
+    return $"inferred: " $s.lifts.Len() " locals lifted (" $s.partLifts.Len() " for a part of them kept), " $s.liftStor.Len() " with their storage, " $s.siteLifts.Len() " calls landed, " $s.wLocals.Len() " needing a W, " $(s.promotedF.Len() - s.demotedF.Len()) " fields promoted (" $s.demotedF.Len() " given back), " $s.ViewPhases " second phases for views"
 }
 
 # what folding (2.9, not built in round 1) could reach, for OLANG_SCOPESTATS: the plain blocks - a "{ }", a branch, an
