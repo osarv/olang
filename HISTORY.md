@@ -29225,3 +29225,9 @@ the root's object differs from a fresh emission: with worker's object reused (B3
 the root's own function the tests call. A clean build (`make verify`) never meets it; a second `make rungold` did, and
 recorded runner as failing - its stored lines were restored from the first capture. Not reduced to a small program (a
 two-module cycle with a test and a main builds again cleanly); left for the next round on objects reused.
+
+**The round's gate.** `make verify` passed on c5e751b (the clean build, the bootstrap from the seed - no seed needed,
+nothing the seed's compiler cannot build - and the suite); the next commit only reorders the scope pass's new fields
+and moves two functions above another's comment (its tokens, tree and layout goldens recaptured), and `make quick`
+passed on it, then `make scopesan` and `make scopefuzz` (100 programs, 474 scenarios, 726 refused by the compiler, 0
+findings).
