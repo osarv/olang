@@ -336,7 +336,13 @@ runner: FORCE
 	@./build/tests_runner || $(NOTE_FAILED)
 
 # the port's diffs against the goldens, each named in build/failed.txt when it fails
-DIFFS = tokdiff astdiff namesdiff layoutdiff fmtdiff drvdiff consistency
+DIFFS = tokdiff astdiff namesdiff layoutdiff fmtdiff drvdiff consistency dumptool
+
+# the compiler's dump tools still check (docs/sec8.md decision 19): scopedump's own module compiled - the whole program
+# checked and judged by section 8, ~12 s - which an option kept from a parameter's array once refused (O25i)
+dumptool: $(OLANG)
+	@$(OLANG) compile -quick -output build/dumptool.o compiler/tools/scopedump.olang > build/dumptool.txt 2>&1 \
+		|| { cat build/dumptool.txt; $(NOTE_FAILED); }
 
 # builds and runs the gitignored usertest.olang scratch file directly - never part of the suite above.
 usertest: $(OLANG)
@@ -524,4 +530,4 @@ install: build/olang
 	@echo "install: $(PREFIX)/bin/olang is build/olang - put $(PREFIX)/bin on PATH if it is not"
 
 # FORCE stands in for .PHONY on the test@FILE pattern targets, whose names are no files either
-.PHONY: consistency all build prereq install bootstrap boot seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz clean
+.PHONY: consistency dumptool all build prereq install bootstrap boot seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz clean
