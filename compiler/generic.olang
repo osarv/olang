@@ -87,6 +87,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     R
     T := types.NewTable(L.Names)
     declAt Map<I64, types.DeclId>      # by module and entry, (module << 32) | entry
+    unifyDepth I64 = 0                 # how far inside a type's arguments Unify is (G9d binds a value given whole alone)
     declMi Vec<I64>                   # by DeclId: its module and its entry in the module's name table
     declEi Vec<I64>
     varsAt Map<I64, I64>               # by owner: where its variables start in vars, and how many
@@ -235,11 +236,86 @@ fn (p mut Program&) DeclFor(mi I64, ei I64) types.DeclId {
     }
     d = p.T.AddDecl(mi, e.Name, kind, n)
     if td is not null and td.Word == ast.DeclWord.Unique { p.T.MarkUnique(d) }   # T13b
+    if td is not null and p.EndsHeld(mi, td) { p.T.MarkEnds(d) }                 # C11
     p.declAt.Put(key, d)
     p.declMi.Push(mi)
     p.declEi.Push(ei)
     return d
 }
+
+# C11, O15: a collection of the library's - a generic struct of the prelude or std, not declared unique, declaring a
+# destructor - whose destructor ends the elements it holds, and exists only in its instances holding values with
+# destructors to run (types.Table.Ends): the library's alone, as vacate is, since it says which positions are live
+fn (p Program&) EndsHeld(mi I64, td ast.TypeDecl&) Bool {
+    if td.Word == ast.DeclWord.Unique or td.Params.Len() == 0 or td.Body is null or not p.Library(mi): return false
+    return match td.Body {
+        case ast.TypeBody.Struct(sb): sb.Dtor.Len() > 0
+        case _: false
+    }
+}
+
+# C11: where a type holds a value with destructors to run that no holder ends - an array of a run-time length of such
+# values (nothing knows which of its elements are live) anywhere it reaches, through its parts and through references
+# alike, but one that is a field of a collection whose destructor ends what it holds (Ends): the element type of the
+# first found, else types.UnknownT. So Vec<File>, Map<K, File>, Box<File> are held where their holders let go of them, and
+# std/list's List<File>, whose chunks are reached through a reference, is not
+fn (p mut Program&) UnendedDrop(id types.TypeId) types.TypeId {
+    seen Map<types.TypeId, Bool>
+    return p.unended(id, seen, 0)
+}
+
+# ...the named types the walk went through added to seen
+fn (p mut Program&) Unended(id types.TypeId, seen mut Map<types.TypeId, Bool>&) types.TypeId { return p.unended(id, seen, 0) }
+
+fn (p mut Program&) unended(id types.TypeId, seen mut Map<types.TypeId, Bool>&, depth I64) types.TypeId {
+    if depth > 32: return types.UnknownT
+    r := p.T.Repr(id)
+    return match p.T.KindOf(r) {
+        case types.Kind.Ref: p.unended(p.T.Referent(r), seen, depth + 1)
+        case types.Kind.Array: p.T.Elem(r) if p.T.Length(r) == types.TypeId(0) and p.T.NeedsDrop(p.T.Elem(r)) else p.unended(p.T.Elem(r), seen, depth + 1)
+        case types.Kind.Record, types.Kind.Tuple: p.unendedIn(p.T.Items(p.T.Parts(r)), seen, depth)
+        case types.Kind.AnonEnum: p.unendedIn(p.T.Items(p.T.ShapeCases(r)), seen, depth)
+        case types.Kind.Named: p.unendedNamed(r, seen, depth)
+        case _: types.UnknownT
+    }
+}
+
+fn (p mut Program&) unendedNamed(r types.TypeId, seen mut Map<types.TypeId, Bool>&, depth I64) types.TypeId {
+    if seen.Has(r) or not p.Body(r): return types.UnknownT
+    seen.Put(r, true)
+    return match p.T.DeclKindOf(p.T.DeclOf(r)) {
+        case types.DeclKind.Struct: p.unendedFields(r, seen, depth)
+        case types.DeclKind.Enum: p.unendedIn(p.T.Items(p.T.Cases(r)), seen, depth)
+        case types.DeclKind.Over: p.unended(p.T.Base(r), seen, depth + 1)
+        case _: types.UnknownT
+    }
+}
+
+# a struct's fields - a collection's own buffer (Ends) judged by its elements alone: its destructor ends the live ones,
+# and what they hold in turn is judged as anything held
+fn (p mut Program&) unendedFields(r types.TypeId, seen mut Map<types.TypeId, Bool>&, depth I64) types.TypeId {
+    ends := p.T.Ends(r)
+    for x in p.T.Items(p.T.Fields(r)) {
+        if x == types.TypeId(0): continue
+        xr := p.T.Repr(x)
+        u := p.unended(p.T.Elem(xr), seen, depth + 1) if ends and p.T.KindOf(xr) == types.Kind.Array else p.unended(x, seen, depth + 1)
+        if u != types.UnknownT: return u
+    }
+    return types.UnknownT
+}
+
+fn (p mut Program&) unendedIn(xs Array<types.TypeId>&, seen mut Map<types.TypeId, Bool>&, depth I64) types.TypeId {
+    for x in xs {
+        if x == types.TypeId(0): continue
+        u := p.unended(x, seen, depth + 1)
+        if u != types.UnknownT: return u
+    }
+    return types.UnknownT
+}
+
+# whether a module is the prelude or std: the library shipped with the compiler, which alone may say which positions of
+# a collection hold values (vacate, occupy, grown, retire) and end them (EndsHeld)
+fn (p Program&) Library(mi I64) Bool { return mi >= 0 and p.L.Mods[mi].Identity.StartsWith("std/") }
 
 fn (p Program&) typeDecl(d types.DeclId) ast.TypeDecl?& { return p.R.Tables[p.declMi[I64(d)]].Entries[p.declEi[I64(d)]].Decl }
 
@@ -2068,7 +2144,7 @@ fn (p mut Program&) Body(t types.TypeId) Bool {
         owner := DeclOwner(d)
         args := p.T.Args(t)
         match p.T.DeclKindOf(d) {
-            case types.DeclKind.Struct { p.T.SetStructBody(t, p.substList(p.T.Fields(self), owner, args), p.T.Destructs(self)) }
+            case types.DeclKind.Struct { p.T.SetStructBody(t, p.substList(p.T.Fields(self), owner, args), p.T.DtorWritten(self)) }
             case types.DeclKind.Enum { p.T.SetEnumBody(t, p.T.CaseNames(self), p.substList(p.T.Cases(self), owner, args)) }
             case types.DeclKind.Over { p.T.SetOverBody(t, p.Subst(p.T.Base(self), owner, args)) }
             case _ { p.T.SetEmptyBody(t) }
@@ -3407,6 +3483,8 @@ fn (p mut Program&) Unify(pat types.TypeId, actual types.TypeId, b mut Binding&,
 
 # Unify's pattern and type of one kind
 fn (p mut Program&) unifyKind(pk types.Kind, pat types.TypeId, actual types.TypeId, b mut Binding&, receiver Bool) ? Mismatch {
+    p.unifyDepth++
+    defer p.unifyDepth--
     match pk {
         case types.Kind.Named {
             if p.T.DeclOf(pat) != p.T.DeclOf(actual) { error Mismatch }
@@ -3455,8 +3533,9 @@ fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Boo
     # a function type argument keeps where its references live (G16a, T22): fn(a mut N&, b N&a) is another argument
     # than fn(mut N&, N&); what holds one by its parts' identity (a declared type's arguments) is held plain
     v := actual if p.T.KindOf(actual) == types.Kind.Func else p.T.Plain(actual)
-    if p.T.KindOf(v) == types.Kind.Named and p.Body(v) and p.T.DeclKindOf(p.T.DeclOf(v)) == types.DeclKind.Struct and
-       p.T.Destructs(v) {
+    # (G9d: a value given whole, for a bare variable - inside a type's arguments, Vec<File>'s, the type is as written)
+    if p.unifyDepth == 0 and p.T.KindOf(v) == types.Kind.Named and p.Body(v) and
+       p.T.DeclKindOf(p.T.DeclOf(v)) == types.DeclKind.Struct and p.T.Destructs(v) {
         v = p.T.Ref(v, types.Writable)
     }
     cur := b.Vals[i]

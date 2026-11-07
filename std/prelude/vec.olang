@@ -22,7 +22,13 @@
 # "Vec<T>(cap)" starts with room for cap elements (none by default), made by its first Push. The elements are the
 # buffer's first Len(); the rest is room - never read as elements, and where an element owns storage (a String, a Vec)
 # left empty (grown clears it, vacate empties what it moves out), so a copy of the whole buffer copies nothing that is
-# no longer an element.
+# no longer an element. An element is stored into room with occupy (nothing there to end) and over an element with "="
+# (the old one ended, O15).
+#
+# A Vec of values with destructors to run (Vec<File>) is unique, as its elements are (T13b), and ends them: a removal
+# that gives nothing (Truncate, Clear, RemoveAt, SwapRemove, Remove) ends what it removes, a store over an element ends
+# the old one, and the Vec's holder letting go of it ends every element, the last first (C11, O15) - its destructor,
+# which a Vec of anything else has not.
 
 # what a Vec's operations fail with: a First, Last or Pop of an empty Vec (Empty), an IndexOf finding nothing
 # (NotFound), and a position outside it given to TakeAt, RemoveAt, SwapTake, SwapRemove or Insert (OutOfRange)
@@ -36,6 +42,8 @@ type Vec<T> struct(cap I64 = 0) {
     data Array<T>                                            # the buffer (of a run-time length, T7d); its first n elements are the Vec's
     n I64 = 0
     want I64 = cap                                           # the room asked for (Vec<T>(cap), Reserve) while there is no buffer
+} destruct {
+    for i := n - 1, i >= 0, i-- { data[i].vacate() }         # every element ended, the last first (C11: Vec<File> only)
 }
 
 # a buffer of room for at least need elements, the elements moved into it when the one there is smaller: twice the size
@@ -57,7 +65,7 @@ fn (v mut Vec<T>&) room(need I64) {
 # x after the last element - into the room left, or into a buffer twice the size, the elements moved into it
 fn (v mut Vec<T>&) Push(x T) {
     if v.n == v.data.Len() { v.room(v.n + 1) }
-    v.data[v.n] = x
+    v.data[v.n].occupy(x)
     v.n++
 }
 
@@ -69,7 +77,7 @@ fn (v mut Vec<T>&) PushAll(a Array<T>&) {
         if r < v.n + a.Len() { r = v.n + a.Len() }
         v.room(r)
     }
-    for i in range a.Len() { v.data[v.n + i] = a[i] }
+    for i in range a.Len() { v.data[v.n + i].occupy(a[i]) }
     v.n += a.Len()
 }
 
@@ -134,12 +142,12 @@ fn (v mut Vec<T>&) Pop() T ? VecError.Empty {
 # removes every element, keeping the buffer for the Pushes that follow
 fn (v mut Vec<T>&) Clear() { v.Truncate(0) }
 
-# keeps the first k elements and removes the rest - nothing changes when there are k or fewer, and none is kept for a k of
-# 0 or less
+# keeps the first k elements and removes the rest, ending them the last first - nothing changes when there are k or
+# fewer, and none is kept for a k of 0 or less
 fn (v mut Vec<T>&) Truncate(k I64) {
     if k >= v.n { return }
     n I64 = k if k > 0 else 0
-    for i in range n, v.n { v.data[i].vacate() }
+    for i := v.n - 1, i >= n, i-- { v.data[i].vacate() }
     v.n = n
 }
 
@@ -150,9 +158,14 @@ fn (v Vec<T>&) View() Array<T>& { return v.data[:v.n] }
 # ...writable
 fn (v mut Vec<T>&) ViewMut() mut Array<T>& { return v.data[:v.n] }
 
-# removes the element at position i, giving nothing (Remove lets go, Take gives - TakeAt below), the elements after it each
-# moving down one place as TakeAt moves them
-fn (v mut Vec<T>&) RemoveAt(i I64) ? VecError.OutOfRange { try v.TakeAt(i) }
+# removes the element at position i, giving nothing - it is ended there (Remove lets go, Take gives - TakeAt below) -, the
+# elements after it each moving down one place as TakeAt moves them
+fn (v mut Vec<T>&) RemoveAt(i I64) ? VecError.OutOfRange {
+    if i < 0 or i >= v.n { error VecError.OutOfRange }
+    v.data[i].vacate()
+    for k in range i, v.n - 1 { v.data[k].occupy(v.data[k + 1].vacate()) }
+    v.n--
+}
 
 # removes the element at position i and gives it, the elements after it each moving down one place - so it costs the
 # number of elements after i. i must be a position, from 0 to Len() - 1: one that is not fails with OutOfRange,
@@ -160,13 +173,18 @@ fn (v mut Vec<T>&) RemoveAt(i I64) ? VecError.OutOfRange { try v.TakeAt(i) }
 fn (v mut Vec<T>&) TakeAt(i I64) T ? VecError.OutOfRange {
     if i < 0 or i >= v.n { error VecError.OutOfRange }
     x := v.data[i].vacate()
-    for k in range i, v.n - 1 { v.data[k] = v.data[k + 1].vacate() }
+    for k in range i, v.n - 1 { v.data[k].occupy(v.data[k + 1].vacate()) }
     v.n--
     return x
 }
 
-# removes the element at position i as SwapTake does, giving nothing
-fn (v mut Vec<T>&) SwapRemove(i I64) ? VecError.OutOfRange { try v.SwapTake(i) }
+# removes the element at position i as SwapTake does, giving nothing - it is ended there
+fn (v mut Vec<T>&) SwapRemove(i I64) ? VecError.OutOfRange {
+    if i < 0 or i >= v.n { error VecError.OutOfRange }
+    v.data[i].vacate()
+    v.n--
+    if i < v.n { v.data[i].occupy(v.data[v.n].vacate()) }   # the last element moved into the gap
+}
 
 # removes the element at position i and gives it, the last element taking its place - so it moves one element, and the
 # order is not kept. i must be a position, checked once per call: one that is not fails with OutOfRange
@@ -174,7 +192,7 @@ fn (v mut Vec<T>&) SwapTake(i I64) T ? VecError.OutOfRange {
     if i < 0 or i >= v.n { error VecError.OutOfRange }
     x := v.data[i].vacate()
     v.n--
-    if i < v.n { v.data[i] = v.data[v.n].vacate() }         # the last element moved into the gap
+    if i < v.n { v.data[i].occupy(v.data[v.n].vacate()) }   # the last element moved into the gap
     return x
 }
 
@@ -185,10 +203,10 @@ fn (v mut Vec<T>&) Insert(i I64, x T) ? VecError.OutOfRange {
     if v.n == v.data.Len() { v.room(v.n + 1) }
     k I64 = v.n
     for k > i {
-        v.data[k] = v.data[k - 1].vacate()
+        v.data[k].occupy(v.data[k - 1].vacate())
         k--
     }
-    v.data[i] = x
+    v.data[i].occupy(x)
     v.n++
 }
 

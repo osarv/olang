@@ -19,6 +19,11 @@
 # A key or value that is a reference ("Map<String&, I32>") is stored as the reference - it must outlive the
 # map, which every call checks (O10b). A key held by value ("Map<String, I32>") is the map's own copy, made when the key
 # is first put (MapEntry's constructor); an update or a lookup copies nothing.
+#
+# A Map of values with destructors to run (Map<String, File>) is unique, as they are (T13b), and ends them: Remove ends
+# the key and its value, Take the key (the value it gives), Clear every entry, a Put over a key the old value, and the
+# map's holder letting go of it every entry, by slot from the last one used (C11, O15) - its destructor, which a Map of
+# anything else has not. A slot a removed key emptied holds nothing to end.
 
 # what a Map's Get and Take fail with: no value for the key
 type MapError error {
@@ -39,6 +44,10 @@ type Map<K Hashable<K>, V> struct() {
     n I64 = 0                                   # the slots used
     count I64 = 0
     free I64 = -1                               # the emptied slot a key put next takes, -1 for none
+} destruct {
+    for i := n - 1, i >= 0, i-- {               # every entry ended, by slot from the last (C11: only where K or V has one)
+        if next[i] >= -1: ents[i].vacate()       # (an emptied slot holds none, live)
+    }
 }
 
 fn (m Map<K, V>&) Len() I64 { return m.count }
@@ -70,7 +79,7 @@ fn (m mut Map<K, V>&) add(b I64, key K, value V) {
         i = m.n
         m.n++
     }
-    m.ents[i] = MapEntry<K, V>(key, value)
+    m.ents[i].occupy(MapEntry<K, V>(key, value))   # (a slot past n, or one a removal emptied: nothing there to end)
     m.next[i] = m.buckets[b]
     m.buckets[b] = i
     m.count++
@@ -178,10 +187,12 @@ fn (m mut Map<K, V>&) Take(key K) V ? MapError {
     return m.ents[i].Value.vacate()
 }
 
-# removes every key and its value. The slot arrays are kept for the keys put next, and the buckets stay as many as they
-# were, so emptying a map and filling it again allocates nothing
+# removes every key and its value, ending them by slot from the last. The slot arrays are kept for the keys put next,
+# and the buckets stay as many as they were, so emptying a map and filling it again allocates nothing
 fn (m mut Map<K, V>&) Clear() {
-    for i in range m.n { m.ents[i].vacate() }
+    for i := m.n - 1, i >= 0, i-- {
+        if m.live(i): m.ents[i].vacate()       # (an emptied slot holds nothing to end)
+    }
     for b in range m.buckets.Len() { m.buckets[b] = -1 }
     m.n = 0
     m.count = 0

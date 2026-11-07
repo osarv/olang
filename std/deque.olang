@@ -6,6 +6,11 @@
 # A Deque is a VALUE, as Vec and Map are: a copy of a Deque ("e := d", a field, an argument) is a deque of its own
 # holding the same elements, and sharing one is written "&" ("d mut deque.Deque<T>&"). As a Vec's, a replaced buffer
 # stays where the Deque lives until that scope closes.
+#
+# The ring's elements are stored into room with occupy and taken out with vacate (as the prelude's collections do), so
+# a Deque of values with destructors to run (Deque<File>, unique as they are, T13b) ends them: Clear ends every element,
+# a store over one the old one, and the deque's holder letting go of it every element, back to front (C11, O15) - its
+# destructor, which a Deque of anything else has not.
 
 # what a Deque's operations fail with: a Front, Back or Pop of an empty deque
 type Error error {
@@ -16,16 +21,19 @@ type Deque<T> struct() {
     buf Array<T>                                   # the ring (of a run-time length, T7d)
     head I64 = 0                                   # where the front element is
     n I64 = 0
+} destruct {
+    for k := n - 1, k >= 0, k-- { buf[(head + k) % buf.Len()].vacate() }   # back to front (C11: Deque<File> only)
 }
 
-# room for one more, the elements moved into a buffer twice the size when the ring is full - filled with x, the
-# element about to be stored, so no zero value is needed (D13c)
-fn (d mut Deque<T>&) room(x T) {
+# room for one more, the elements moved into a buffer twice the size when the ring is full, front first - the rest of
+# it never filled, so no zero value is needed (D13c): each position is written by a Push before it is read
+fn (d mut Deque<T>&) room() {
     if d.n < d.buf.Len() { return }
-    old Array<T>& = d.buf
+    old mut Array<T>& = d.buf
     size I64 = 8 if old.Len() == 0 else old.Len() * 2
-    d.buf = Array<T>(size, x)
-    for i in range d.n { d.buf[i] = old[(d.head + i) % old.Len()] }
+    d.buf = old[:0].grown(size)
+    for i in range d.n { d.buf[i].occupy(old[(d.head + i) % old.Len()].vacate()) }
+    old.retire()
     d.head = 0
 }
 
@@ -33,23 +41,23 @@ fn (d Deque<T>&) Len() I64 { return d.n }
 
 # x after the back
 fn (d mut Deque<T>&) PushBack(x T) {
-    d.room(x)
-    d.buf[(d.head + d.n) % d.buf.Len()] = x
+    d.room()
+    d.buf[(d.head + d.n) % d.buf.Len()].occupy(x)
     d.n++
 }
 
 # x before the front
 fn (d mut Deque<T>&) PushFront(x T) {
-    d.room(x)
+    d.room()
     d.head = (d.head + d.buf.Len() - 1) % d.buf.Len()
-    d.buf[d.head] = x
+    d.buf[d.head].occupy(x)
     d.n++
 }
 
 # the front element, taken off
 fn (d mut Deque<T>&) PopFront() T ? Error.Empty {
     if d.n == 0 { error Error.Empty }
-    x := d.buf[d.head]
+    x := d.buf[d.head].vacate()
     d.head = (d.head + 1) % d.buf.Len()
     d.n--
     return x
@@ -59,7 +67,7 @@ fn (d mut Deque<T>&) PopFront() T ? Error.Empty {
 fn (d mut Deque<T>&) PopBack() T ? Error.Empty {
     if d.n == 0 { error Error.Empty }
     d.n--
-    return d.buf[(d.head + d.n) % d.buf.Len()]
+    return d.buf[(d.head + d.n) % d.buf.Len()].vacate()
 }
 
 fn (d Deque<T>&) Front() T ? Error.Empty {
@@ -81,9 +89,12 @@ fn (d mut Deque<T>&) SetAt(i I64, x T) {
     d.buf[(d.head + i) % d.buf.Len()] = x
 }
 
-# removes every element, keeping the buffer for the next ones
+# removes every element, ending them back to front, keeping the buffer for the next ones
 fn (d mut Deque<T>&) Clear() {
-    d.n = 0
+    for d.n > 0 {
+        d.n--
+        d.buf[(d.head + d.n) % d.buf.Len()].vacate()
+    }
     d.head = 0
 }
 
