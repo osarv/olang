@@ -44,6 +44,60 @@ fn Item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
     error Missing.Name
 }
 
+# ---- a function's code (B11d) ----
+
+# a function's code as explain -asm and -ir show it: its signature as Item prints it (an instance's, for a generic),
+# where it is declared (its file as diagnostics name it, and its line), and the symbol its code is known by
+type Code struct(Label String&, File String&, Line I64, Symbol String&) {
+    Label
+    File
+    Line
+    Symbol
+}
+
+# the code of the function or method ("Type.Method") name names in module mi - each instance's, for a generic, in the
+# order the program made them; fails where name names no function of mi
+fn Codes(c mut typecheck.Checker&, mi I64, name String&) Vec<Code> ? Missing {
+    c.SpellFrom(mi)
+    f := fnNamed(c, mi, name)
+    if f < 0 { error Missing.Name }
+    decl := c.P.FnDecl(f)
+    dg := c.P.L.Diags
+    file := c.P.L.Mods[c.P.FnModule(f)].File
+    path := dg.PathOf(file)
+    line := dg.LineAt(file, I64(decl.Sp.Start))
+    out Vec<Code>
+    if c.P.VarCount(generic.FnOwner(f)) == 0 {
+        inst := c.P.FnInstance(f, types.ListId(0))
+        out.Push(Code(fnLine(c, f, c.P.InstanceSig(inst), c.BodyOfInstance(inst)), path, line, c.P.InstanceName(inst)))
+        return out
+    }
+    for i in range c.P.InstanceCount() {
+        if c.P.InstanceFn(i) != f: continue
+        body := c.BodyOfInstance(i)
+        if body < 0: continue
+        sig := named(c, c.P.InstanceSig(i), decl.Recv, decl.S.Params)
+        label := $"instance " $c.P.L.Names.Text(decl.Name) $typeArgs(c, c.P.InstanceArgs(i)) ": " $sigOf(c, sig, body)
+        out.Push(Code(label, path, line, c.P.InstanceName(i)))
+    }
+    return out
+}
+
+# the function or method ("Type.Method") name names in module mi, -1 for none
+fn fnNamed(c mut typecheck.Checker&, mi I64, name String&) I64 {
+    nm := c.P.L.Names
+    dot := try name.Find(".") catch default -1
+    if dot > 0 {
+        d := typeNamed(c, mi, name[:dot])
+        return -1 if d < types.DeclId(0) else c.P.MethodOf(c.P.SelfType(d), nm.Intern(name[dot + 1:]))
+    }
+    id := nm.Intern(name)
+    for e in c.P.R.Tables[mi].Entries {
+        if e.Name == id and e.Kind == names.What.Func { return c.P.FnNamed(mi, id) }
+    }
+    return -1
+}
+
 fn typeNamed(c mut typecheck.Checker&, mi I64, name String&) types.DeclId {
     ei := c.P.TypeEntry(mi, c.P.L.Names.Intern(name))
     return types.DeclId(-1) if ei < 0 else c.P.DeclFor(mi, ei)

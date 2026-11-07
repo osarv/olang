@@ -1,0 +1,707 @@
+# listing - "olang explain -asm FILE NAME" and "olang explain -ir FILE NAME" (SPEC.md B11d): one function's code as
+# build compiles it, each run of it headed by the line of source it comes from, LLVM's optimization remarks beneath.
+#
+# The program is built as build builds it, with line tables in its objects (emit's Lines: the names and lines of a
+# profile build, B20a, with nothing else of one) and each object's remarks kept beside it (build.CompileFlags, want);
+# then linked by the linker's LTO plugin told to write, in place of a program, the code it generates - or the IR it
+# generates it from - and its own remarks (build.ListingCode); under -quick each module is compiled again to assembly or
+# IR. Here: the function's symbols, from the front end (Program.Named); its code found in what was written; each run of
+# instructions headed by the line it comes from (".loc" in assembly, "!dbg" in IR - the innermost place, so code inlined
+# from another function shows that function's line); the remarks LLVM made in the function, read from the YAML files,
+# under their lines.
+import "std/os"
+import "std/io"
+import "build"
+import "diag"
+import "load"
+import "types"
+
+# ---- the mode ----
+
+# explain -asm/-ir FILE NAME: the code of each instance of the function NAME names, or the build's diagnostics
+fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, name String&, ir Bool, d mut diag.Diagnostics&) I32 {
+    c.Listing = true
+    c.ListName = $name
+    c.Quiet = true
+    prog := build.Program()
+    files := try build.ListingCode(fe, c, file, ir, prog, d) catch build.Failed.Reported {
+        return build.Finish(d)
+    } catch build.Failed.Unbuilt { return 1 }
+    say(Render(Inputs(prog, files, how(c, ir), commentOf(c, ir), ir)))
+    return 0
+}
+
+fn say(text String&) { try io.Print(text) catch io.Error { } }
+
+# what a listing says of how its code was made
+fn how(c build.Config&, ir Bool) String {
+    what := "optimized LLVM IR" if ir else $c.Target.Arch " machine code"
+    level := "-O2, each module on its own (-quick)" if c.Quick else "-O3, optimized again as the program is linked"
+    return $what " as build compiles it: " $level ", for " $c.Target.Cpu
+}
+
+# how the code's own language writes a comment: IR's ";", AArch64 assembly's "//", x86-64's "#"
+fn commentOf(c build.Config&, ir Bool) String {
+    if ir { return ";" }
+    return "//" if c.Target.Arch == "aarch64" else "#"
+}
+
+# ---- what a listing reads ----
+
+# the code shown and what it is read with: each instance's label and symbol, the parts of code written (their text),
+# the remarks files, the program's module identities (to name a symbol as source does) and its root's
+type Inputs struct(Prog build.Program&, Files build.Listed&, How String&, Comment String&, Ir Bool) {
+    Prog
+    Files
+    How
+    Comment
+    Ir
+}
+
+# ---- remarks ----
+
+# one optimization remark: whether the pass did it (passed), declined it (missed) or found something (analysis), the
+# pass and the remark's name, its place, the function it was made in, the function a remark of the inliner is about,
+# and its message
+type Remark struct() {
+    Kind String& = ""
+    Pass String& = ""
+    Name String& = ""
+    File String& = ""
+    Line I64 = 0
+    Function String& = ""
+    Callee String& = ""
+    Message String& = ""
+}
+
+# a YAML scalar as LLVM's remark writer writes one: plain, in single quotes ('' for a quote) or in double quotes (with
+# backslash escapes)
+fn unquote(v String&) String {
+    t := v.Trim()
+    if t.Len() >= 2 and t[0] == '\'' and t[t.Len() - 1] == '\'' { return t[1:t.Len() - 1].Replace("''", "'") }
+    if t.Len() < 2 or t[0] != '"' or t[t.Len() - 1] != '"' { return $t }
+    out Vec<Char>
+    i I64 = 1
+    for i < t.Len() - 1 {
+        ch := t[i]
+        if ch == '\\' and i + 1 < t.Len() - 1 {
+            i++
+            n := t[i]
+            out.Push('\n' if n == 'n' else ('\t' if n == 't' else n))
+        } else {
+            out.Push(ch)
+        }
+        i++
+    }
+    return String(out.ToArray())
+}
+
+# the value of key in a flow map as the remark writer writes a place: "{ File: v.olang, Line: 6, Column: 31 }"
+fn field(m String&, key String&) String {
+    at := try m.Find($key ": ") catch default -1
+    if at < 0 { return "" }
+    rest := m[at + key.Len() + 2:]
+    if rest.StartsWith("'") or rest.StartsWith("\"") {
+        q := rest[0]
+        i I64 = 1
+        for i < rest.Len() {
+            if rest[i] == q and (q != '\'' or i + 1 >= rest.Len() or rest[i + 1] != '\'') { break }
+            i += 2 if q == '\'' and rest[i] == q else 1
+        }
+        return unquote(rest[:i + 1 if i < rest.Len() else i])
+    }
+    end := try rest.Find(",") catch default -1
+    if end < 0 { end = try rest.Find(" }") catch default rest.Len() }
+    return $rest[:end].Trim()
+}
+
+# a line "Key: value", as its key and its value
+fn keyValue(line String&) String, String {
+    colon := try line.Find(":") catch default -1
+    if colon < 0 { return "", "" }
+    return $line[:colon].Trim(), $line[colon + 1:].Trim()
+}
+
+# whether name - a function a remark names, a label - is sym's own code: sym, or a part of it the compiler split off or
+# renamed ("sym.cold.1", ThinLTO's "sym.llvm.123")
+fn ofSym(name String&, sym String&) Bool { return name == sym or name.StartsWith($sym ".") }
+
+fn ofAny(name String&, syms Array<String&>&) Bool {
+    for s in syms {
+        if ofSym(name, s) { return true }
+    }
+    return false
+}
+
+# the remarks of the files that matter for syms: those made in one of them, and the inliner's of one inlined somewhere
+fn Remarks(files Vec<String&>&, syms Array<String&>&, names Namer&) Vec<Remark> {
+    out Vec<Remark>
+    for f in files {
+        text := try os.ReadFile(f) catch os.Error default ""
+        readRemarks(text, syms, names, out)
+    }
+    return out
+}
+
+# the remarks of one YAML file kept in out, as Remarks keeps them
+fn readRemarks(text String&, syms Array<String&>&, names Namer&, out mut Vec<Remark>&) {
+    r mut Remark& = Remark()
+    msg Vec<Char>
+    cut := false                    # the inliner's " at callsite F:L:C;" left out: its place is shown already
+    for line in text.Lines() {
+        if line.StartsWith("--- !") {
+            r = Remark()
+            msg = Vec<Char>()
+            cut = false
+            r.Kind = kindWord(line[5:])
+            continue
+        }
+        if line == "..." {
+            r.Message = String(msg.ToArray()).Trim()
+            if ofAny(r.Function, syms) or (ofAny(r.Callee, syms) and r.Kind == "passed" and r.Pass == "inline") { out.Push(r) }
+            continue
+        }
+        if line.StartsWith(" ") and not line.StartsWith("  - ") { continue }     # an argument's own place
+        if not line.StartsWith("  - ") {
+            topLevel(line, r)
+            continue
+        }
+        k, v := keyValue(line[4:])
+        value := unquote(v)
+        if k == "String" and value == " at callsite " { cut = true }
+        if k == "Callee" { r.Callee = $value }
+        if k == "Callee" or k == "Caller" { value = names.Name(value) }
+        if not cut {
+            for ch in value { msg.Push(ch) }
+        }
+    }
+}
+
+# a remark's own lines: its pass, name, place and function
+fn topLevel(line String&, r mut Remark&) {
+    k, v := keyValue(line)
+    if k == "Pass" { r.Pass = unquote(v) }
+    if k == "Name" { r.Name = unquote(v) }
+    if k == "Function" { r.Function = unquote(v) }
+    if k == "DebugLoc" {
+        r.File = field(v, "File")
+        r.Line = try field(v, "Line").ParseInt(10) catch default 0
+    }
+}
+
+# a remark's kind as the listing says it
+fn kindWord(tag String&) String {
+    if tag.StartsWith("Passed") { return "passed" }
+    if tag.StartsWith("Missed") { return "missed" }
+    if tag.StartsWith("Analysis") { return "analysis" }
+    return tag.ToLower()
+}
+
+# ---- names ----
+
+# the program's modules, to name a symbol as source writes it outside its module (B20a): the root's and the prelude's
+# bare, any other's after its alias
+type Namer struct() {
+    ids Vec<String&>        # longest first
+    root String& = ""
+}
+
+fn MakeNamer(prog build.Program&) Namer {
+    n := Namer()
+    for u in prog.Units {
+        if u.Holds == build.UnitKind.Main or u.Holds == build.UnitKind.Tests { n.root = $u.Identity }
+        if u.Identity not in n.ids and not u.Identity.StartsWith("c_") { n.ids.Push($u.Identity) }
+    }
+    n.ids.Sort(fn(a String&, b String&) Bool { return a.Len() > b.Len() })
+    return n
+}
+
+# sym, a symbol olang wrote, as source names what it is the code of ("io.Println", "Vec<I64>.Push", "scale"); any
+# other symbol (C's, the runtime's) as it is
+fn (n Namer&) Name(sym String&) String {
+    if sym == "main" { return "startup" }       # the program's entry, as a profile names it (B20a)
+    # a function made a value (emit's thunkSym), an adapter of one, a copy of one, by what it is of
+    fv := try sym.Find("_fv_") catch default -1
+    if fv > 0 { return $n.Name(sym[:fv]) " as a function value" }
+    if sym.EndsWith("_adapter") { return $n.Name(sym[:sym.Len() - 8]) " adapted" }
+    if sym.EndsWith("_copied") { return n.Name(sym[:sym.Len() - 7]) }
+    text := types.Demangle(sym)
+    if text == sym { return $sym }
+    for id in n.ids {
+        q := load.ErrQualifier(id, id == n.root)
+        if text.StartsWith($id ".") { text = $q $text[id.Len() + 1:] }
+        text = text.Replace($id ":", q)
+    }
+    return text
+}
+
+# ---- source lines ----
+
+# the program's source, read once a file: a line's text, where the build names the file (relative to where it ran, or
+# absolute), and a file's name as the listing shows it - the standard library's as "std/..."
+type Sources struct() {
+    lines Map<String&, Array<String&>&>
+    std String& = ""
+}
+
+fn MakeSources() Sources {
+    s := Sources()
+    s.std = $(try os.RealPath(load.StdDir()) catch default load.StdDir())
+    return s
+}
+
+# the text of line n of the file at path, "" where there is none
+fn (s mut Sources&) Text(path String&, n I64) String {
+    if not s.lines.Has(path) {
+        got Vec<String&>
+        text := try os.ReadFile(path) catch os.Error default ""
+        for l in text.Lines() { got.Push($l) }
+        s.lines.Put($path, got.ToArray())
+    }
+    ls := try s.lines.Get(path) catch default Array<String&>(0)
+    return $ls[n - 1].TrimEnd() if n >= 1 and n <= ls.Len() else ""
+}
+
+# a file as the listing names it
+fn (s Sources&) Shown(name String&) String {
+    return $"std/" $name[s.std.Len() + 1:] if s.std != "" and name.StartsWith($s.std "/") else $name
+}
+
+# ---- rendering ----
+
+# the listing: each of the function's instances in turn, a blank line between
+fn Render(li Inputs&) String {
+    b := StringBuilder()
+    names := MakeNamer(li.Prog)
+    src := MakeSources()
+    parts := readParts(li.Files.Parts)
+    if li.Prog.Named.Len() == 0 {
+        b.Push($li.Comment " " $li.Prog.Named.Len() " instances: the program makes no instance of it, so it has no code\n")
+        return b.ToString()
+    }
+    for i, code in li.Prog.Named {
+        if i > 0 { b.PushChar('\n') }
+        b.Push(instance(li, code, parts, names, src))
+    }
+    return b.ToString()
+}
+
+# the text of each part of code written
+fn readParts(paths Vec<String&>&) Vec<String&> {
+    out Vec<String&>
+    for p in paths { out.Push(try os.ReadFile(p) catch os.Error default "") }
+    return out
+}
+
+# one instance: its header, then its code - or why it has none: inlined at every call, into the one function whose code
+# follows (followed through functions inlined in turn, as main is into the program's entry), or into several, or
+# never called
+fn instance(li Inputs&, code build.Code&, parts Vec<String&>&, names Namer&, src mut Sources&) String {
+    b := StringBuilder()
+    cm := li.Comment
+    b.Push($cm " " $code.Label "\n")
+    b.Push($cm " " $src.Shown(code.File) ":" $code.Line " - " $li.How "\n")
+    chain Vec<String&>
+    chain.Push($code.Symbol)
+    sym := found(parts, code.Symbol, li.Ir)
+    if sym != "" {
+        b.Push(body(li, sym, code.Symbol, chain.ToArray(), parts, names, src))
+        return b.ToString()
+    }
+    said := ""
+    for sym == "" and chain.Len() <= 8 {
+        last := chain[chain.Len() - 1]
+        callers := callersOf(Remarks(li.Files.Remarks, String&[$last], names), last)
+        if callers.Len() != 1 {
+            b.Push(noCode(cm, said, callers, names))
+            return b.ToString()
+        }
+        said = $said $(" inlined at every call, into " if said == "" else ", and that into ") $names.Name(callers[0])
+        chain.Push($callers[0])
+        sym = found(parts, callers[0], li.Ir)
+    }
+    if sym == "" {
+        b.Push($cm " no code of its own:" $said "\n")
+        return b.ToString()
+    }
+    b.Push($cm " no code of its own:" $said ", whose code follows\n")
+    b.Push(body(li, sym, sym, chain.ToArray(), parts, names, src))
+    return b.ToString()
+}
+
+# why a function has no code where the functions it went into (said, so far) end in none or several
+fn noCode(cm String&, said String&, callers Vec<String&>&, names Namer&) String {
+    shown Vec<String&>
+    for k in callers { shown.Push(names.Name(k)) }
+    if said == "" and callers.Len() == 0 { return $cm " no code: nothing in the program calls it, so the link kept none\n" }
+    if said == "" { return $cm " no code of its own: inlined at every call, into " $shown.Join(", ") "\n" }
+    if callers.Len() == 0 { return $cm " no code of its own:" $said ", which has none either\n" }
+    return $cm " no code of its own:" $said ", which is inlined in turn into " $shown.Join(", ") "\n"
+}
+
+# the functions the inliner put sym into, in the order its remarks name them
+fn callersOf(remarks Vec<Remark>&, sym String&) Vec<String&> {
+    out Vec<String&>
+    for r in remarks {
+        if r.Pass != "inline" or r.Kind != "passed" or not ofSym(r.Callee, sym) { continue }
+        if r.Function not in out { out.Push($r.Function) }
+    }
+    return out
+}
+
+# the symbol whose code stands for sym in the parts: sym itself, or the function an alias of it names (merged
+# instances, emit's mergeSame), "" for none
+fn found(parts Vec<String&>&, sym String&, ir Bool) String {
+    for p in parts {
+        target := definedIn(p, sym, ir)
+        if target != "" { return target }
+    }
+    return ""
+}
+
+# sym's code in one part of code: sym where it is defined there, the function it is an alias of, else ""
+fn definedIn(text String&, sym String&, ir Bool) String {
+    for line in text.Lines() {
+        if ir and line.StartsWith("define ") and line.Contains($"@" $sym "(") { return $sym }
+        if ir and line.StartsWith($"@" $sym " = ") and line.Contains(" alias ") { return aliasee(line) }
+        if not ir and line.StartsWith($sym ":") { return $sym }
+        if not ir and line.Trim().StartsWith($".set\t" $sym ", ") { return $line.Trim()[sym.Len() + 7:].Trim() }
+    }
+    return ""
+}
+
+# the function an IR alias line names: its last "@name"
+fn aliasee(line String&) String {
+    at := try line.FindLast("@") catch default -1
+    if at < 0 { return "" }
+    end := at + 1
+    for end < line.Len() and (line[end].IsLetter() or line[end].IsDigit() or line[end] == '_' or line[end] == '.') { end++ }
+    return $line[at + 1:end]
+}
+
+# the code of sym - own's, which is sym or an alias of it, and that of the functions of chain inlined into it - with its
+# lines and the remarks made in any of them: a header line counting its instructions and naming what was inlined into
+# it, then the code, then the remarks no line of it held
+fn body(li Inputs&, sym String&, own String&, chain Array<String&>&, parts Vec<String&>&, names Namer&, src mut Sources&) String {
+    syms Vec<String&>
+    for s in chain { syms.Push($s) }
+    syms.Push($sym)
+    remarks := Remarks(li.Files.Remarks, syms.ToArray(), names)
+    w := Writer(li.Comment, src, remarks, syms.ToArray())
+    for p in parts {
+        if li.Ir {
+            w.irPart(p, sym)
+        } else {
+            w.asmPart(p, sym)
+        }
+        if w.out.Len() > 0 { break }
+    }
+    b := StringBuilder()
+    inlined Vec<String&>
+    for r in remarks {
+        if r.Pass == "inline" and r.Kind == "passed" and ofAny(r.Function, w.syms) and names.Name(r.Callee) not in inlined {
+            inlined.Push(names.Name(r.Callee))
+        }
+    }
+    head := $li.Comment " " $w.count $(" IR instructions" if li.Ir else " instructions")
+    if sym != own { head = $head " (its code merged with " $names.Name(sym) "'s, which is the same)" }
+    if inlined.Len() > 0 { head = $head "; inlined into it: " $inlined.Join(", ") }
+    b.Push($head "\n")
+    b.Push(w.out.ToString())
+    b.Push(w.leftover())
+    return b.ToString()
+}
+
+# ---- the code, with its lines and remarks ----
+
+# what writes a function's code: the comment's spelling, the source, the function's remarks (each said once, with how
+# many times it was made) by the place they are made at, the places whose remarks are said, the place last named before
+# code (a file's name and a line, 0 for code no line holds, -1 for none yet), and what is written - instructions counted
+type Writer struct(Comment String&, src mut Sources&, remarks Vec<Remark>&, syms Array<String&>&) {
+    Comment
+    src
+    remarks
+    syms
+    said Vec<Bool>          # by remark: said already
+    lastFile String& = ""
+    lastLine I64 = -1
+    pendFile String& = ""
+    pendPath String& = ""
+    pendLine I64 = -1
+    out StringBuilder = StringBuilder()
+    count I64 = 0
+}
+
+# a place reached in the code (pendFile's line pendLine of the file at pendPath): named before the next instruction
+fn (w mut Writer&) reach(name String&, path String&, line I64) {
+    w.pendFile = $name
+    w.pendPath = $path
+    w.pendLine = line
+}
+
+# one line of code: the place it comes from named first, where it is not the last one named
+fn (w mut Writer&) code(line String&, instruction Bool) {
+    if instruction and w.pendLine >= 0 and (w.pendLine != w.lastLine or w.pendFile != w.lastFile) { w.place() }
+    if instruction { w.count++ }
+    w.out.Push($line "\n")
+}
+
+# the pending place as a comment - its file, line and text, or that no line of the program holds the code - and the
+# remarks made there that are not said yet
+fn (w mut Writer&) place() {
+    cm := w.Comment
+    generated := w.pendLine == 0 or w.pendFile == "" or w.pendFile.StartsWith("<")
+    if generated and w.lastLine != 0 { w.out.Push($cm " (no line of the program)\n") }
+    if not generated {
+        w.out.Push($cm " " $w.src.Shown(w.pendFile) ":" $w.pendLine "  " $w.src.Text(w.pendPath, w.pendLine).Trim() "\n")
+        w.out.Push(w.remarksAt($w.pendFile ":" $w.pendLine, "    "))
+    }
+    w.lastFile = $w.pendFile
+    w.lastLine = 0 if generated else w.pendLine
+}
+
+# where a remark was made, as "FILE:LINE" - "" where no line of the program holds it (no place, the compiler's own
+# code, line 0)
+fn placeOf(r Remark&) String { return "" if r.File == "" or r.File.StartsWith("<") or r.Line <= 0 else $r.File ":" $r.Line }
+
+# the remarks made at place (placeOf's) not said yet, each once with how many times it was made, marked said
+fn (w mut Writer&) remarksAt(place String&, indent String&) String {
+    if w.said.Len() == 0 {
+        for _ in w.remarks { w.said.Push(false) }
+    }
+    b := StringBuilder()
+    for i, r in w.remarks {
+        if w.said[i] or placeOf(r) != place or not ofAny(r.Function, w.syms) { continue }
+        n I64 = 0
+        for j, s in w.remarks {
+            if same(r, s) and ofAny(s.Function, w.syms) and not w.said[j] {
+                w.said[j] = true
+                n++
+            }
+        }
+        b.Push($w.Comment $indent $r.Kind.PadEnd(9) $r.Pass ": " $r.Message $(" (x" $n ")" if n > 1 else "") "\n")
+    }
+    return b.ToString()
+}
+
+# whether two remarks say the same thing at the same place
+fn same(a Remark&, b Remark&) Bool {
+    return a.Kind == b.Kind and a.Pass == b.Pass and a.Name == b.Name and placeOf(a) == placeOf(b) and a.Message == b.Message
+}
+
+# the function's remarks no line of its code held, by their places
+fn (w mut Writer&) leftover() String {
+    places Vec<String&>
+    for i, r in w.remarks {
+        if (w.said.Len() > 0 and w.said[i]) or not ofAny(r.Function, w.syms) { continue }
+        key := placeOf(r)
+        if key not in places { places.Push(key) }
+    }
+    if places.Len() == 0 { return "" }
+    # by file and line, what no line holds last
+    places.Sort(fn(a String&, b String&) Bool { return b == "" and a != "" or (a != "" and b != "" and placeLess(a, b)) })
+    b := StringBuilder()
+    b.Push($w.Comment " remarks on lines left with no code here:\n")
+    for key in places {
+        colon := try key.FindLast(":") catch default 0
+        where := "(no line of the program)" if key == "" else $w.src.Shown(key[:colon]) $key[colon:]
+        b.Push($w.Comment "   " $where "\n")
+        b.Push(w.remarksAt(key, "      "))
+    }
+    return b.ToString()
+}
+
+# whether place a ("FILE:LINE") comes before b: by file, then by line
+fn placeLess(a String&, b String&) Bool {
+    ca := try a.FindLast(":") catch default 0
+    cb := try b.FindLast(":") catch default 0
+    if a[:ca] != b[:cb] { return a[:ca] < b[:cb] }
+    return (try a[ca + 1:].ParseInt(10) catch default 0) < (try b[cb + 1:].ParseInt(10) catch default 0)
+}
+
+# ---- assembly ----
+
+# sym's code in a part of assembly - from its label to its end (".Lfunc_end"), and any part split off from it
+# ("sym.cold.1"): ".loc" naming each line, the directives that only describe the code (".cfi", ".file", temporaries'
+# labels, alignment) left out
+fn (w mut Writer&) asmPart(text String&, sym String&) {
+    files Map<I64, String&>         # ".file N": the name as the build named it
+    dirs Map<I64, String&>          # and the directory it was named from
+    inside := false
+    for line in text.Lines() {
+        t := line.Trim()
+        if t.StartsWith(".file\t") or t.StartsWith(".file ") {
+            fileLine(t, files, dirs)
+            continue
+        }
+        comment := line.StartsWith("#") or line.StartsWith("//")
+        if not line.StartsWith("\t") and not line.StartsWith(" ") and line.Contains(":") and not comment {
+            label := line[:(try line.Find(":") catch default 0)]
+            if not label.StartsWith(".") { inside = ofSym(label, sym) }
+            if label.StartsWith(".Lfunc_end") { inside = false }
+            if inside and not label.StartsWith(".Ltmp") and not label.StartsWith(".Lfunc_begin") and not label.Contains("$local") { w.code(line, false) }
+            continue
+        }
+        if inside { w.asmLine(line, t, files, dirs) }
+    }
+}
+
+# one line inside the function: a place named, a directive left out, or code written
+fn (w mut Writer&) asmLine(line String&, t String&, files Map<I64, String&>&, dirs Map<I64, String&>&) {
+    if t.StartsWith(".loc\t") or t.StartsWith(".loc ") {
+        f, n := locOf(t)
+        name := try files.Get(f) catch default ""
+        dir := try dirs.Get(f) catch default ""
+        w.reach(name, name if name.StartsWith("/") or dir == "" else $dir "/" $name, n)
+        return
+    }
+    for skip in String&[".cfi_", ".p2align", "#DEBUG_VALUE", ".file", ".type", ".size"] {
+        if t.StartsWith(skip) { return }
+    }
+    if t == "" { return }
+    w.code(line, not t.StartsWith(".") and not t.StartsWith("#") and not t.StartsWith("//"))
+}
+
+# a ".file N "dir" "name" [md5 ...]" (or ".file N "name"") directive read into files and dirs
+fn fileLine(t String&, files mut Map<I64, String&>&, dirs mut Map<I64, String&>&) {
+    words := t[5:].Trim()
+    sp := try words.Find(" ") catch default -1
+    tab := try words.Find("\t") catch default -1
+    end := sp if sp >= 0 and (tab < 0 or sp < tab) else tab
+    if end < 0 { return }
+    n := try words[:end].ParseInt(10) catch default -1
+    if n < 0 { return }
+    quoted Vec<String&>
+    rest := words[end:]
+    for rest.Contains("\"") and quoted.Len() < 2 {
+        a := try rest.Find("\"") catch default 0
+        z := try rest[a + 1:].Find("\"") catch default -1
+        if z < 0 { break }
+        quoted.Push($rest[a + 1:a + 1 + z])
+        rest = rest[a + 2 + z:]
+    }
+    if quoted.Len() == 0 { return }
+    files.Put(n, $quoted[quoted.Len() - 1])
+    dirs.Put(n, $quoted[0] if quoted.Len() == 2 else "")
+}
+
+# a ".loc FILE LINE ..." directive's file number and line
+fn locOf(t String&) I64, I64 {
+    words Vec<String&>
+    for wd in t.Replace("\t", " ").Split(" ") {
+        if wd != "" { words.Push($wd) }
+    }
+    if words.Len() < 3 { return -1, 0 }
+    return (try words[1].ParseInt(10) catch default -1), (try words[2].ParseInt(10) catch default 0)
+}
+
+# ---- IR ----
+
+# sym's definition in a part of IR, its places read off each instruction's !dbg (a DILocation, its scope's file), the
+# attachment itself left out of what is written
+fn (w mut Writer&) irPart(text String&, sym String&) {
+    meta Map<I64, String&>
+    for line in text.Lines() {
+        if line.StartsWith("!") and (line.Contains("DILocation(") or line.Contains("DIFile(") or line.Contains("DISubprogram(") or line.Contains("DILexicalBlock")) {
+            n := try line[1:(try line.Find(" ") catch default 1)].ParseInt(10) catch default -1
+            if n >= 0 { meta.Put(n, $line) }
+        }
+    }
+    inside := false
+    for line in text.Lines() {
+        if line.StartsWith("define ") and line.Contains($"@" $sym "(") { inside = true }
+        if not inside { continue }
+        w.irLine(line, meta)
+        if line == "}" { inside = false }
+    }
+}
+
+# one line of the function: its place named first where it has one, written without its !dbg
+fn (w mut Writer&) irLine(line String&, meta Map<I64, String&>&) {
+    at := try line.Find("!dbg !") catch default -1
+    shown := $line
+    if at >= 0 {
+        end := at + 6
+        for end < line.Len() and line[end].IsDigit() { end++ }
+        n := try line[at + 6:end].ParseInt(10) catch default -1
+        from := at - 2 if at >= 2 and line[at - 2] == ',' else at - 1
+        shown = $line[:from] $line[end:]
+        if line.StartsWith("  ") { w.irPlace(n, meta) }
+    }
+    w.code(shown, line.StartsWith("  ") and not line.Trim().StartsWith(";"))
+}
+
+# DILocation n made the pending place: its line, its scope's file
+fn (w mut Writer&) irPlace(n I64, meta Map<I64, String&>&) {
+    loc := try meta.Get(n) catch default ""
+    if not loc.Contains("DILocation(") { return }
+    line := try metaField(loc, "line").ParseInt(10) catch default 0
+    scope := try metaField(loc, "scope")[1:].ParseInt(10) catch default -1
+    sc := try meta.Get(scope) catch default ""
+    file := try meta.Get(try metaField(sc, "file")[1:].ParseInt(10) catch default -1) catch default ""
+    name := metaField(file, "filename")
+    dir := metaField(file, "directory")
+    w.reach(name, name if name.StartsWith("/") or dir == "" else $dir "/" $name, line)
+}
+
+# the value of key in a metadata node's text: "line: 6" -> "6", "file: !12" -> "!12", "filename: "v.olang"" -> v.olang
+fn metaField(text String&, key String&) String {
+    at := try text.Find($key ": ") catch default -1
+    for at > 0 and (text[at - 1].IsLetter() or text[at - 1].IsDigit()) {
+        next := try text[at + 1:].Find($key ": ") catch default -1
+        at = -1 if next < 0 else at + 1 + next
+    }
+    if at < 0 { return "" }
+    rest := text[at + key.Len() + 2:]
+    if rest.StartsWith("\"") {
+        z := try rest[1:].Find("\"") catch default -1
+        return $rest[1:] if z < 0 else $rest[1:1 + z]
+    }
+    end I64 = 0
+    for end < rest.Len() and rest[end] != ',' and rest[end] != ')' { end++ }
+    return $rest[:end].Trim()
+}
+
+# ---- tests ----
+
+test "a remark's YAML read: its kind, pass, place, function and message, the inliner's call site left out" {
+    yaml := ("--- !Passed\nPass:            inline\nName:            Inlined\nDebugLoc:        { File: v.olang, Line: 6, Column: 31 }\n" $
+             "Function:        v_2escale\nArgs:\n  - String:          ''''\n  - Callee:          v_2etwice\n" $
+             "    DebugLoc:        { File: v.olang, Line: 3, Column: 0 }\n  - String:          ''' inlined into '''\n" $
+             "  - Caller:          v_2escale\n  - String:          ''''\n  - String:          ' with '\n" $
+             "  - String:          '(cost='\n  - Cost:            '-15000'\n  - String:          ')'\n" $
+             "  - String:          ' at callsite '\n  - String:          scale\n  - String:          ';'\n...\n" $
+             "--- !Missed\nPass:            gvn\nName:            LoadClobbered\nFunction:        other\nArgs:\n  - String: x\n...\n")
+    out Vec<Remark>
+    n := Namer()
+    n.root = "v"
+    n.ids.Push("v")
+    readRemarks(yaml, String&["v_2escale"], n, out)
+    assert out.Len() == 1
+    r := out[0]
+    assert r.Kind == "passed" and r.Pass == "inline" and r.File == "v.olang" and r.Line == 6 and r.Callee == "v_2etwice"
+    assert r.Message == "'twice' inlined into 'scale' with (cost=-15000)"
+}
+
+test "YAML scalars and places as the remark writer writes them" {
+    assert unquote("'it''s'") == "it's" and unquote("plain ") == "plain" and unquote("\"a\\\"b\"") == "a\"b"
+    assert field("{ File: '/a b/c.olang', Line: 12, Column: 1 }", "File") == "/a b/c.olang"
+    assert field("{ File: v.olang, Line: 12, Column: 1 }", "Line") == "12"
+}
+
+test "assembly's .file and .loc directives read" {
+    files Map<I64, String&>
+    dirs Map<I64, String&>
+    fileLine(".file\t2 \"/home/x\" \"v.olang\" md5 0x00", files, dirs)
+    assert (try files.Get(2) catch default "") == "v.olang" and (try dirs.Get(2) catch default "") == "/home/x"
+    f, n := locOf(".loc\t2 13 1 prologue_end")
+    assert f == 2 and n == 13
+}
+
+test "metadata fields read by key, not by a key ending in it" {
+    loc := "!7 = !DILocation(line: 13, column: 1, scope: !5)"
+    assert metaField(loc, "line") == "13" and metaField(loc, "scope") == "!5"
+    sp := "!5 = distinct !DISubprogram(name: \"f\", scope: !3, file: !3, line: 4, scopeLine: 4)"
+    assert metaField(sp, "line") == "4" and metaField(sp, "file") == "!3"
+    assert metaField("!3 = !DIFile(filename: \"v.olang\", directory: \"/d\")", "filename") == "v.olang"
+}

@@ -906,6 +906,10 @@ type Diag enum {
     ApiNoFiles
     CapsOneFile
     ApiUsage
+    ListingUsage
+    ListingNoFunction
+    ListingAlone
+    ListingQuick
 }
 
 # one function each, under the id it is known by
@@ -3221,6 +3225,18 @@ fn FactNoFunction(fact String&) Msg { return Msg(Diag.FactNoFunction, "G42", $fa
 
 # ERR_CAPS_ONE_FILE
 fn CapsOneFile() Msg { return Msg(Diag.CapsOneFile, "B11c", "explain -caps takes one program's file, as 'olang explain -caps main.olang'") }
+
+# ERR_LISTING_USAGE
+fn ListingUsage(opt String&) Msg { return Msg(Diag.ListingUsage, "B11d", $"explain " $opt " takes a program's file and the name of one of its functions, as 'olang explain " $opt " main.olang main'") }
+
+# ERR_LISTING_NO_FUNCTION
+fn ListingNoFunction(name String&, file String&) Msg { return Msg(Diag.ListingNoFunction, "B11d", $"'" $name "' is no function of " $file " - explain -asm and -ir show a function's code, or a method's as 'Type.Method'") }
+
+# ERR_LISTING_ALONE
+fn ListingAlone() Msg { return Msg(Diag.ListingAlone, "B11d", "-asm, -ir and -caps exclude one another - explain shows one of them at a time") }
+
+# ERR_LISTING_QUICK
+fn ListingQuick(opt String&) Msg { return Msg(Diag.ListingQuick, "B11d", $opt " applies to explain only with -asm or -ir, which show code as a build makes it") }
 
 # ERR_API_USAGE
 fn ApiUsage() Msg { return Msg(Diag.ApiUsage, "B21", "api takes two versions and a path, as 'olang api HEAD~1 HEAD std/io.olang' - each version a commit or a directory") }
