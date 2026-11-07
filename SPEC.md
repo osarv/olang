@@ -4043,12 +4043,11 @@ error naming `Array<I64>[1, 2]`. What the literal is depends on the made type:
   arrays `r0` and `r1`, each with its own length - and an `Array<T>` as a value: items of one known length are laid out
   in place (T7d), `Array<Array<F32>>[Array<F32>[1, 2], Array<F32>[3, 4]]` two rows of two; items of different lengths
   are each the array's own copy (T7a), `Array<String>["a", "bc"]`.
-- **`Vec<T>`** (M19d): a `Vec` of exactly those elements, its buffer the array the same items would make, handed to it
-  with no copy - `Vec<I64>[1, 2, 3]`, `Vec<I64>[]` (no buffer, as `Vec<I64>()`).
-- **any other type `C`** declaring a builder `FromIter` (D19, below): `C.FromIter(it)`, `it` a walk of the items -
-  `Array<E>[items].Iter()`, an `ArrayIter<E>` over an array made where the call is, so the builder may read their count
-  before the first (`it.Rest().Len()`) - where `E` is the element type its `FromIter` takes: the element its parameter's type
-  is an `Iterator` of (a type variable constrained by `Iterator<E ? Err>`, or an iterator type whose `Next` gives `E`).
+- **`Vec<T>`** (M19d) and **any other type `C`** declaring a builder `FromIter` (D19, below): `C.FromIter(it)`, `it` a
+  walk of the items - `Array<E>[items].Iter()`, an `ArrayIter<E>` over an array made where the call is, so the builder
+  may read their count before the first (`it.Rest().Len()`; a `Vec` reserves it, its buffer made once) - where `E` is
+  the element type its `FromIter` takes: the element its parameter's type is an `Iterator` of (a type variable
+  constrained by `Iterator<E ? Err>`, or an iterator type whose `Next` gives `E`). `Vec<I64>[1, 2, 3]`, `Vec<I64>[]`.
   Each item is checked against `E` as an array literal's is, a literal adapting to it. What `FromIter` can fail with is
   what the literal can: `try lib.Strict<I64>[1, 2]`. A type with no `FromIter` - a struct, a primitive, a declared array
   type - is a compile-time error naming the builder.
@@ -4173,8 +4172,8 @@ no `if` and a known length, the storage allocated is the array itself, exactly i
 nothing is an empty array - whose storage, as every empty array's, nothing can tell apart from another's: there is
 nothing in it to read or write, and arrays compare by what they hold (E10).
 
-Made into a **`Vec<T>`**, it is built as the array would be and that storage is the `Vec`'s buffer, handed over with no
-copy (its length the elements kept). Made into **any other type** declaring `FromIter` (E19), it is
+Made into a **`Vec<T>`**, it is built as the array would be and handed to `Vec`'s `FromIter` as an array literal's items
+are (E19), its count reserved once. Made into **any other type** declaring `FromIter` (E19), it is
 `C.FromIter(walk)`, the walk a generator (D18) of the elements - each element computed when the builder asks for the
 next, the condition first, no array made: `set.Set<I64>[x % 7 for x in xs]`. A comprehension made so may not fail by
 calls of its own (a walk handing errors to a builder is written as a generator function and its `FromIter` called).
