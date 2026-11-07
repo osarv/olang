@@ -173,6 +173,7 @@ type scope struct() {
     Tasks I64 = -1       # a join's tasks in spawn order: the first and the last
     TasksEnd I64 = -1
     Kept I64 = 0         # a join's earliest kept error, under its own list; 0 for none
+    KeptBase I64 = 0     # T19b: the payload stack's depth as that task started - its record above it, if it has one
     Errors I64 = 0       # a join's error list (a ListId)
     Early Bool = false   # a region a release closed (O8d): what it held is recorded in dead-region mode
     Owner I64 = 0        # a region's: its parent where that is no region, whose list its registrations go in (C9b)
@@ -4936,7 +4937,10 @@ fn (m mut Machine&) wait(fi I64, j mir.ScopeId, ok mir.BlockId, code mir.LocalId
     }
     kept := m.scopes[sc].Kept
     m.scopes[sc].Kept = 0
-    if kept != 0 and failed != mir.NoBlock {
+    # P4b, T19b: a wait whose failed edge is its ok one takes no failure - an error of the block's own is leaving: the
+    # kept task's payload dropped, as __olang_join_tasks_keep drops it, the leaving error's own record the one under it
+    if kept != 0 and failed == ok { m.payDrop(m.scopes[sc].KeptBase) }
+    if kept != 0 and failed != mir.NoBlock and failed != ok {
         m.wr(m.localPtr(fi, code), 4, kept)
         m.failedHere(fi, tJoin)
         m.jump(fi, failed)
@@ -5158,6 +5162,7 @@ fn (m mut Machine&) taskEnded(fr frame) {
             sc := js & slotMask
             if m.scopes[sc].Kept == 0 {
                 m.scopes[sc].Kept = m.recode(fr.Code, errs, types.ListId(I32(m.scopes[sc].Errors)))
+                m.scopes[sc].KeptBase = tk.PayBase
             } else {
                 m.payDrop(tk.PayBase)   # T19b: a later-spawned failure's payload dropped, the join keeping the earliest's
             }

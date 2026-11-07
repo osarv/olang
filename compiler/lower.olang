@@ -822,6 +822,8 @@ fn (ln mut lowering&) exitLevel(i I64) {
         if ln.T.Items(errs).Len() == 0 {
             ln.end(mir.Term.Wait(sp, lv.S, ok, mir.NoLocal, mir.NoBlock))
         } else if ln.erroring {
+            # (P4b: the block's own error leaves - the tasks' failure is no one's, its failed edge the ok one, its
+            # payload dropped by the wait - T19b)
             code := ln.temp(mir.I32T, sp)
             ln.end(mir.Term.Wait(sp, lv.S, ok, code, ok))
         } else {

@@ -238,3 +238,58 @@ test "a payload is matched by position and by name" {
     assert KindBaked == "line -1" and kind(Live - 1) == KindBaked
     assert kind(Live - 9) == "bad -9:7" and kind(Live + 200) == "big 200" and kind(Live) == "eof" and kind(Live + 1) == "ok"
 }
+
+# P4b, T19b (bulk review 8): an error of a join block's own leaves with its own payload - the tasks' failures, payloads
+# and all, dropped by the join's wait (it had put the earliest task's record on top, which the clause then read)
+type JoinErr error { Task(msg String), Own(n I64, msg String) }
+type Halt error { Now }
+
+fn task(i I64) I64 ? JoinErr { error JoinErr.Task("task " $i) }
+
+fn ownFails(n I64) ? JoinErr { error JoinErr.Own(n, "own") }
+
+fn joinOwn(n I64) String ? JoinErr {
+    out := Array<I64>(4)
+    try join {
+        for i in range 4 {
+            spawn out[i] = try task(i + n)
+        }
+        try ownFails(n)
+    } catch JoinErr e {
+        return "inner " $e
+    }
+    return "none"
+}
+
+fn joinedOwn(n I64) String { return try joinOwn(n) catch JoinErr e default "outer " $e }
+
+# the block's own error carrying nothing: the tasks' payloads dropped all the same, so the next payload read is its own
+fn joinHalts(n I64) String ? Halt {
+    out := Array<I64>(4)
+    try join {
+        for i in range 4 {
+            spawn out[i] = try task(i + n) catch JoinErr default 0
+        }
+        spawn out[0] = try task(n)
+        if n >= 0: error Halt.Now
+    } catch JoinErr e {
+        return "inner " $e
+    }
+    return "none"
+}
+
+fn haltedThenRead(n I64) String {
+    a := try joinHalts(n) catch Halt e default $e
+    return $a " " $(try $parse(-n - 1) catch ParseErr e default $e)
+}
+
+JoinOwnBaked String = joinedOwn(3)
+assert haltedThenRead(2) == "Halt.Now ParseErr.Bad(-3, 7)"
+
+test "a join block's own error leaves with its own payload, the tasks' dropped" {
+    assert JoinOwnBaked == "outer JoinErr.Own(3, \"own\")" and joinedOwn(Live + 3) == JoinOwnBaked
+    for i in range 50 {
+        assert joinedOwn(Live + i) == "outer JoinErr.Own(" $i ", \"own\")"
+        assert haltedThenRead(Live + i) == "Halt.Now ParseErr.Bad(" $(-i - 1) ", 7)"
+    }
+}

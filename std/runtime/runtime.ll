@@ -1699,8 +1699,17 @@ got:
 }
 
 ; P4b: returns the error of the task spawned earliest among those that failed, 0 when none did. The list is
-; newest first, so the last failure the walk meets is that one
+; newest first, so the last failure the walk meets is that one. T19b: its payload goes on top of the payload stack
+; where the caller takes the failure (keep), else it is dropped - an error of the join block's own is leaving, whose
+; record is the one on top, or a failed check unwinds. (__olang_join_tasks, keeping, is the form a compiler before the
+; flag calls - the seed's)
 define i64 @__olang_join_tasks(ptr %headslot) {
+entry:
+  %r = call i64 @__olang_join_tasks_keep(ptr %headslot, i1 true)
+  ret i64 %r
+}
+
+define i64 @__olang_join_tasks_keep(ptr %headslot, i1 %keep) {
 entry:
   %head = load ptr, ptr %headslot
   store ptr null, ptr %headslot
@@ -1742,7 +1751,7 @@ aftermerge:
 done:
   %res = phi i64 [ 0, %entry ], [ %acc1, %aftermerge ]
   %resrec = phi ptr [ null, %entry ], [ %accrec1, %aftermerge ]
-  call void @__olang_errpay_attach(ptr %resrec, i1 true)
+  call void @__olang_errpay_attach(ptr %resrec, i1 %keep)
   ret i64 %res
 }
 
@@ -1997,7 +2006,7 @@ step:
   %nojoin = icmp eq ptr %j, null
   br i1 %nojoin, label %closeit, label %joinit
 joinit:
-  call i64 @__olang_join_tasks(ptr %j)
+  call i64 @__olang_join_tasks_keep(ptr %j, i1 false)
   br label %closeit
 closeit:
   %sslot = getelementptr %olang.unwind, ptr %cur, i32 0, i32 1

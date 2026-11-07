@@ -5438,8 +5438,11 @@ fn (fe mut fnEm&) term(tm mir.Term) {
             fe.w("br label %ret")
         }
         case mir.Term.Wait(_, j, ok, code, failed) {
-            fe.E.declare("__olang_join_tasks", "i64 @__olang_join_tasks(ptr)")
-            e := fe.let("call i64 @__olang_join_tasks(ptr %jh" $j ")")
+            # T19b: the earliest failure's payload kept on the payload stack only where a failed edge of its own takes
+            # it - one that is the ok edge is a wait an error of the block's own is leaving through (P4b)
+            keep := failed != mir.NoBlock and failed != ok
+            fe.E.declare("__olang_join_tasks_keep", "i64 @__olang_join_tasks_keep(ptr, i1)")
+            e := fe.let("call i64 @__olang_join_tasks_keep(ptr %jh" $j ", i1 " $("true" if keep else "false") ")")
             if failed == mir.NoBlock {
                 fe.w("br label %" $blockName(ok))
             } else {
