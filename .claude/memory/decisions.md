@@ -2962,3 +2962,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   the test runner (`olang test -bench`) - yes, small; (5) coverage (`olang test -cover`) - yes, medium; (6) a REPL and
   a Jupyter kernel on it - yes, after the compiler is done; (7) saturating arithmetic in std/arith - yes, small (fixed
   point waits for FPGA). Platforms (macOS, Windows, WASM) later. In effect: none queued.
+- QCX ANSWERED 2026-11-07 (the user: "Add it then, not done." - reading taken and stated: add the recommended items to
+  the remaining work, the compiler not done until they are in, the REPL moved before "done"; struct patterns (3) and
+  platforms stay later): (1) errors carrying data - a design note first (wt-errdata, docs/errdata.md), its direction
+  questions to the user, then a build round; (2) packed / declared-layout structs; (4) benchmarks in the test runner
+  (`olang test -bench`); (5) coverage (`olang test -cover`); (6) a REPL and a Jupyter kernel on it; (7) saturating
+  arithmetic in std/arith.
