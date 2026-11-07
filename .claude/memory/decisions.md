@@ -3061,4 +3061,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   rec yes, after the std migration; default: not built; (3) `ArgumentError.Invalid` carrying the failed condition's
   text - rec not now (the thread-local slot stays); default: not built. QCU 1-3 (Columns<T>) re-raised the same day.
 - The user, 2026-11-07, on the /tmp leftovers: "Yes, you made a little" (read as yes, delete them) - the permission
-  classifier refused the deletion again ("Shared Scratch Sweep"); not worked around; told the user. Disk had 12 GB free.
+  classifier refused the deletion again ("Shared Scratch Sweep"); not worked around; told the user. Disk had 12 GB free. The user then: "Yes, you may delete them, not made a little" -
+  deleted (/tmp entries older than a day, ~3.7 GB); disk 14 GB free.
