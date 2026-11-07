@@ -30450,6 +30450,7 @@ IR byte-identical to the base compiler, the scope phase on compiler/ 3.53 s agai
 (`g := link; g(x, n)`, `n N` by value) was refused (O17, O10c) where the direct call compiles - `calleeKeepsArg` said
 "keeps" for every value; with records it reads the body, as the direct call does. fuzz/scopegen's kept-view leaf wrote
 `t := $"12" 12` (E11b's error), so round 2's kept-view scenario was refused whenever that leaf was drawn - written as a
-join now. Not fixed (seen in the smoke runs): several of scopegen's older scenarios make helpers that are D19a's error
-since the builders round (`mk8`, `csh8_3`, `cch4_6` - a scenario's own helpers, not the header's), and one writes
-`abort` (gone since 2026-10-17) - those scenarios are refused and left out, as the driver does with any refusal.
+join now. Several of scopegen's older scenarios made helpers that are D19a's error since the builders round (`mk8`,
+`csh8_3`, `cch4_6` - a scenario's own helpers, not the header's), one wrote a scope argument (`mkt&p(n)`, gone since
+2026-11-02) and one `abort` (gone since 2026-10-17) - so those scenarios were refused whenever drawn; they are builders,
+a plain call and `unreachable` now.
