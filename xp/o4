@@ -1,0 +1,1 @@
+    return a.Kind == b.Kind and a.Pass == b.Pass and a.Name == b.Name and a.File == b.File and a.Line == b.Line and a.Message == b.Message

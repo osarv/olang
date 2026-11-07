@@ -1,0 +1,15 @@
+        key := $r.File ":" $r.Line
+        if key not in places { places.Push(key) }
+    }
+    if places.Len() == 0 { return "" }
+    b := StringBuilder()
+    b.Push($w.Comment " remarks on lines left with no code here:\n")
+    for key in places {
+        colon := try key.FindLast(":") catch default 0
+        file := key[:colon]
+        line := try key[colon + 1:].ParseInt(10) catch default 0
+        where := "(no line)" if file == "" else $w.src.Shown(file) ":" $line
+        b.Push($w.Comment "   " $where "\n")
+        b.Push(w.remarksAt(file, line, "      "))
+    }
+    return b.ToString()

@@ -1,0 +1,5 @@
+        args.Push("-gline-tables-only")
+    } else if cfg.Listing {
+        # B11d: C's lines named where explain -asm shows code inlined from it
+        args.Push("-gline-tables-only")
+    }

@@ -1,0 +1,18 @@
+import "std/os"
+import "std/io"
+
+fn sub(s String&, a String&, b String&) String {
+    if not s.Contains(a) {
+        io.PrintErr($"MISSING: " $a "\n")!
+        os.Exit(1)
+    }
+    return s.Replace(a, b)
+}
+
+fn main() {
+    s := String(os.ReadFile("compiler/build.olang")!)
+    s = sub(s, "    Profile Bool = false    # olang profile: frame pointers, line tables and the runtime's sampler (B20)\n",
+        "    Profile Bool = false    # olang profile: frame pointers, line tables and the runtime's sampler (B20)\n    Listing Bool = false    # explain -asm/-ir: line tables and LLVM's optimization remarks kept (B11d)\n    ListName String& = \"\"   # and the function it shows, which the front end resolves into its symbols\n")
+    s = sub(s, " $(\".prof\" if c.Profile else \"\")\n}", " $(\".prof\" if c.Profile else \"\") $(\".listing\" if c.Listing else \"\")\n}")
+    os.WriteFile("compiler/build.olang", s)!
+}

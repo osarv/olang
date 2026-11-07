@@ -1,0 +1,6 @@
+    # B11d: -quick asks how code is built, which explain shows only of a function's code
+    if cl.Mode == Explain and c.Quick and cl.Listing == "" { try usage(d, msgs.ListingQuick("-quick")) }
+    if cl.Mode == Explain and cl.Listing != "" {
+        # a program's file, then the name of one of its functions
+        if cl.Files.Len() != 1 or not cl.HasWord or not endsWithOlang(cl.Files[0]) { try usage(d, msgs.ListingUsage(cl.Listing)) }
+    } else if cl.Mode == Explain and cl.Caps {

@@ -1,0 +1,2 @@
+    if cl.Mode == Explain and cl.Caps { return session.CapsMode(cl.Files[0], c) }
+    if cl.Mode == Explain and cl.Listing != "" { return listing.Run(fe, c, cl.Files[0], cl.Word, cl.Listing == "-ir", d) }

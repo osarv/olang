@@ -1,0 +1,12 @@
+        if not line.StartsWith("  - ") {
+            topLevel(line, r)
+            continue
+        }
+        k, v := keyValue(line[4:])
+        value := unquote(v)
+        if k == "String" and value == " at callsite " { cut = true }
+        if k == "Callee" { r.Callee = $value }
+        if k == "Callee" or k == "Caller" { value = names.Name(value) }
+        if not cut {
+            for ch in value { msg.Push(ch) }
+        }

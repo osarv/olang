@@ -1,0 +1,18 @@
+import "std/os"
+import "std/io"
+
+fn twice(x F32) F32 { return x * 2.0 + 1.0 }
+
+fn scale(a mut Array<F32>&, b Array<F32>&) {
+    for i in range a.Len() { a[i] = twice(b[i]) }
+}
+
+fn main() {
+    n := os.Args().Len() * 1000
+    a := Array<F32>(n)
+    b := Array<F32>(n, 1.5)
+    steps := Vec<fn&(a mut Array<F32>&, b Array<F32>&)>()
+    for _ in range n % 7 + 2 { steps.Push(scale) }
+    for f in steps { f(a, b) }
+    io.Println($a[0])!
+}

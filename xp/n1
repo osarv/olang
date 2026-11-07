@@ -1,0 +1,14 @@
+        if not line.StartsWith("  - ") {
+            topLevel(line, r)
+            continue
+        }
+        # the message only of a remark made in one of syms (Function comes before the arguments); the callee always
+        k, v := keyValue(line[4:])
+        if k == "Callee" { r.Callee = unquote(v) }
+        if cut or not ofAny(r.Function, syms) { continue }
+        value := unquote(v)
+        if k == "String" and value == " at callsite " { cut = true }
+        if k == "Callee" or k == "Caller" { value = names.Name(value) }
+        if not cut {
+            for ch in value { msg.Push(ch) }
+        }

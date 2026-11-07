@@ -1,0 +1,18 @@
+# a scratch editor: FILE then pairs of files holding the text replaced and its replacement
+import "std/os"
+import "std/io"
+
+fn main() {
+    a := os.Args()
+    s := String(os.ReadFile(a[1])!)
+    for i := 2, i + 1 < a.Len(), i += 2 {
+        old := String(os.ReadFile(a[i])!)
+        new := String(os.ReadFile(a[i + 1])!)
+        if not s.Contains(old) {
+            io.PrintErr($"missing: " $a[i] "\n")!
+            os.Exit(1)
+        }
+        s = s.Replace(old, new)
+    }
+    os.WriteFile(a[1], s)!
+}

@@ -1,0 +1,1 @@
+    return a.Kind == b.Kind and a.Pass == b.Pass and a.Name == b.Name and placeOf(a) == placeOf(b) and a.Message == b.Message

@@ -1,0 +1,2 @@
+        args.Push("-gline-tables-only")
+    }

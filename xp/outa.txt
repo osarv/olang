@@ -1,0 +1,70 @@
+// fn scale(a mut Array<F32>&, b Array<F32>&)
+// w.olang:6 - aarch64 machine code as build compiles it: -O3, optimized again as the program is linked, for generic
+// no code of its own: inlined at every call, into scale as a function value, whose code follows
+// 37 instructions; inlined into it: twice, scale
+w_2escale_fv_fn_28mut_20Array_3cF32_3e_26_2c_20Array_3cF32_3e_26_29: // @w_2escale_fv_fn_28mut_20Array_3cF32_3e_26_2c_20Array_3cF32_3e_26_29
+// %bb.0:
+// w.olang:7  for i in range a.Len() { a[i] = twice(b[i]) }
+//    passed   inline: 'twice' inlined into 'scale' with (cost=-25, threshold=375)
+//    passed   licm: hoisting extractvalue
+//    passed   loop-vectorize: vectorized loop (vectorization width: 4, interleaved count: 2) (x2)
+//    missed   slp-vectorizer: List vectorization was possible but not beneficial with cost 0 >= 0 (x3)
+//    analysis loop-vectorize: loop not vectorized: vectorization and interleaving are explicitly disabled, or the loop has already been vectorized (x2)
+//    missed   slp-vectorizer: Cannot SLP vectorize list: vectorization was impossible with available vectorization factors
+	cmp	x3, #1
+	b.lt	.LBB2_8
+// %bb.1:
+	cmp	x3, #8
+	mov	x8, xzr
+	b.lo	.LBB2_6
+// %bb.2:
+	sub	x9, x4, x6
+	cmp	x9, #32
+	b.lo	.LBB2_6
+// %bb.3:
+// (no line of the program)
+	fmov	v0.4s, #1.00000000
+// w.olang:7  for i in range a.Len() { a[i] = twice(b[i]) }
+	and	x8, x3, #0x7ffffffffffffff8
+	add	x9, x4, #16
+	add	x10, x6, #16
+	mov	x11, x8
+.LBB2_4:                                // =>This Inner Loop Header: Depth=1
+	ldp	q1, q2, [x10, #-16]
+	subs	x11, x11, #8
+	add	x10, x10, #32
+// w.olang:4  fn twice(x F32) F32 { return x * 2.0 + 1.0 }
+	fadd	v1.4s, v1.4s, v1.4s
+	fadd	v2.4s, v2.4s, v2.4s
+	fadd	v1.4s, v1.4s, v0.4s
+	fadd	v2.4s, v2.4s, v0.4s
+// w.olang:7  for i in range a.Len() { a[i] = twice(b[i]) }
+	stp	q1, q2, [x9, #-16]
+	add	x9, x9, #32
+	b.ne	.LBB2_4
+// %bb.5:
+	cmp	x3, x8
+	b.eq	.LBB2_8
+.LBB2_6:
+	lsl	x10, x8, #2
+	fmov	s0, #1.00000000
+	sub	x8, x3, x8
+	add	x9, x4, x10
+	add	x10, x6, x10
+.LBB2_7:                                // =>This Inner Loop Header: Depth=1
+	ldr	s1, [x10], #4
+	subs	x8, x8, #1
+// w.olang:4  fn twice(x F32) F32 { return x * 2.0 + 1.0 }
+	fadd	s1, s1, s1
+	fadd	s1, s1, s0
+// w.olang:7  for i in range a.Len() { a[i] = twice(b[i]) }
+	str	s1, [x9], #4
+	b.ne	.LBB2_7
+.LBB2_8:
+// (no line of the program)
+	ret
+// remarks on lines left with no code here:
+//   (no line of the program)
+//      passed   inline: 'scale' inlined into 'scale as a function value' with (cost=-5, threshold=250)
+//      missed   regalloc: 2 virtual registers copies 9.375000e-01 total copies cost generated in function
+//      analysis prologepilog: 0 stack bytes in function 'w_2escale_fv_fn_28mut_20Array_3cF32_3e_26_2c_20Array_3cF32_3e_26_29'

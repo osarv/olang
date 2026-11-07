@@ -1,0 +1,1 @@
+    foreignOk := cl.Mode == Compile or cl.Mode == Build or cl.Mode == Test or cl.Mode == Run

@@ -1,0 +1,6 @@
+            if o == 14 { cl.Caps = true }
+            if o == 15 or o == 16 {
+                if cl.Listing != "" { try usage(d, msgs.ListingAlone()) }
+                cl.Listing = $a
+            }
+            if cl.Caps and cl.Listing != "" { try usage(d, msgs.ListingAlone()) }

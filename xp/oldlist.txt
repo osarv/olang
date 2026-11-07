@@ -1,0 +1,139 @@
+# ---- a function's code (B11d) ----
+
+# what explain -asm and -ir read: the code's text - assembly or IR, a file a part (the link's one under full link-time
+# optimization, one a ThinLTO task, one a module under -quick) - and the files of LLVM's remarks, the objects' and the
+# link's
+type Listed struct() {
+    Parts Vec<String&>
+    Remarks Vec<String&>
+}
+
+# explain -asm/-ir FILE NAME (B11d): the program FILE is the root of built as build builds it - its objects, each with
+# its remarks (c.Listing) - and its code generated as the link generates it, into build/listing/NAME/, written afresh:
+# the assembly the link's code generator writes or the IR it reads, which the linker's LTO plugin writes in place of a
+# program (emit-asm, emit-llvm), its remarks beside it. Under -quick, where code is final once a module is compiled, each
+# module is compiled again to assembly or IR, with its remarks. Fails, having reported why, where it does not build
+fn ListingCode<F Frontend>(fe mut F&, c mut Config&, file String&, ir Bool, prog mut Program&, d mut diag.Diagnostics&) Listed ? Failed {
+    try fe.Analyze(file, Kind.Program, c, prog, d)
+    if d.Errors() > 0 or prog.Units.Len() == 0 { error Failed.Reported }
+    try c.ensureDir(d)
+    dir := $c.Dir "/listing/" $Readable(prog.rootIdentity())
+    try os.RemoveAll(dir) catch os.Error { }
+    try os.MkDirAll(dir) catch os.Error {
+        fileFatal(dir, msgs.CannotOpen(), d)
+        error Failed.Reported
+    }
+    out := Listed()
+    if c.Quick {
+        try c.listQuick(prog, dir, ir, out, d)
+        return out
+    }
+    objs := try c.Objects(prog, d)
+    Phase("compile")
+    for o in objs {
+        if os.Exists(RemarksOf(o)) { out.Remarks.Push(RemarksOf(o)) }
+    }
+    try c.listLink(objs, prog, dir, ir, out, d)
+    return out
+}
+
+# B11d: the objects linked as Link links them, the plugin writing the code it generates (or, ir, the IR it generates
+# it from) into dir as code, code1 ... - a ThinLTO link's tasks each their own - and its remarks as link.yaml...; IR
+# written as bitcode is turned into text by clang, which reads bitcode and writes it back as text unchanged
+fn (c mut Config&) listLink(objs Vec<String&>&, prog Program&, dir String&, ir Bool, out mut Listed&, d mut diag.Diagnostics&) ? Failed {
+    args Vec<String&>
+    args.Push($c.Clang)
+    for f in c.ModeFlags() { args.Push($f) }
+    if c.Thin {
+        # a ThinLTO link's code kept by what it is made from, as Link's is - apart from a program's, and asm from IR
+        args.Push($"-Wl,-plugin-opt,cache-dir=" $c.Dir "/thinlto-" $("ir" if ir else "asm"))
+        args.Push($"-Wl,-plugin-opt,-import-instr-limit=" $ImportLimit)
+    }
+    args.Push("-Wl,-plugin-opt=emit-llvm" if ir else "-Wl,-plugin-opt=emit-asm")
+    args.Push($"-Wl,-plugin-opt=opt-remarks-filename=" $dir "/link.yaml")
+    args.Push($"-Wl,-plugin-opt=opt-remarks-passes=" $RemarkPasses)
+    args.Push("-o")
+    args.Push($dir "/code")
+    for o in objs { args.Push($o) }
+    for x in prog.Links { args.Push($x) }
+    for x in String&["-lm", "-lpthread", "-ldl"] { args.Push($x) }
+    if prog.Dyncall != "" { args.Push("-lffi") }
+    if c.Clang == "" { error Failed.Unbuilt }
+    ran := try os.Exec(...args.ToArray()) catch os.Error default os.Output(127, "", "")
+    if ran.Status != 0 {
+        sayErr($ran.Stdout $ran.Stderr)
+        d.Fatal(diag.Where.Nowhere, msgs.LinkFailed($dir "/code"))
+        error Failed.Reported
+    }
+    c.Linked++
+    names Vec<String&>
+    listed := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
+    for n in listed { names.Push($n) }
+    names.Sort(fn(a String&, b String&) Bool { return a.Len() < b.Len() or (a.Len() == b.Len() and a < b) })
+    for n in names {
+        if n.StartsWith("link.yaml") { out.Remarks.Push($dir "/" $n) }
+        if not n.StartsWith("code") { continue }
+        if not ir {
+            out.Parts.Push($dir "/" $n)
+            continue
+        }
+        out.Parts.Push(try c.bitcodeText($dir "/" $n, d))
+    }
+}
+
+# B11d: the bitcode at bc written as text beside it (bc.ll) by clang, no pass run over it
+fn (c Config&) bitcodeText(bc String&, d mut diag.Diagnostics&) String ? Failed {
+    args Vec<String&>
+    args.Push($c.Clang)
+    if c.Target.Foreign { args.Push($"--target=" $c.Target.Triple) }
+    for a in String&["-S", "-emit-llvm", "-x", "ir", "-Xclang", "-disable-llvm-passes", "-o", $bc ".ll", bc] { args.Push($a) }
+    ran := try os.Exec(...args.ToArray()) catch os.Error default os.Output(127, "", "")
+    if ran.Status != 0 {
+        sayErr($ran.Stdout $ran.Stderr)
+        d.Fatal(diag.Where.Nowhere, msgs.ClangFailed(bc))
+        error Failed.Reported
+    }
+    return $bc ".ll"
+}
+
+# B11d, -quick: each module's IR (its code - the places a Locations unit holds are data) and the runtime's compiled
+# again as its object was, side by side, to assembly or (ir) optimized IR in dir, each with its remarks
+fn (c mut Config&) listQuick(prog Program&, dir String&, ir Bool, out mut Listed&, d mut diag.Diagnostics&) ? Failed {
+    texts Vec<String&>
+    for u in prog.Units {
+        if u.Holds != UnitKind.Locations { texts.Push(u.Ir) }
+    }
+    if prog.Runtime != "" { texts.Push(prog.Runtime) }
+    if prog.Dyncall != "" { texts.Push(prog.Dyncall) }
+    if c.Clang == "" { error Failed.Unbuilt }
+    cmds Vec<Array<String&>&>
+    sizes Vec<I64>
+    for i, text in texts {
+        input := $dir "/u" $i ".in.ll"
+        try os.WriteFile(input, text) catch os.Error {
+            fileFatal(input, msgs.CannotOpen(), d)
+            error Failed.Reported
+        }
+        part := $dir "/u" $i $(".ll" if ir else ".s")
+        args mut Vec<String&>& = Vec<String&>()
+        args.Push($c.Clang)
+        for f in c.CompileFlags(text) { args.Push($f) }
+        args.Push("-S")
+        if ir { args.Push("-emit-llvm") }
+        for a in String&["-o", part, input, $"-foptimization-record-file=" $dir "/u" $i ".yaml"] { args.Push($a) }
+        cmds.Push(args.ToArray())
+        sizes.Push(text.Len())
+        out.Parts.Push(part)
+        out.Remarks.Push($dir "/u" $i ".yaml")
+    }
+    status, said := RunAll(cmds.ToArray(), c.width(), sizes.ToArray())
+    c.Compiled += cmds.Len()
+    for i in range status.Len() {
+        if status[i] == 0 { continue }
+        sayErr(said[i])
+        d.Fatal(diag.Where.Nowhere, msgs.ClangFailed($dir "/u" $i ".in.ll"))
+        error Failed.Reported
+    }
+    for i in range texts.Len() { try os.Remove($dir "/u" $i ".in.ll") catch os.Error { } }
+}
+

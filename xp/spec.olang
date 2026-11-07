@@ -1,0 +1,11 @@
+import "std/os"
+import "std/io"
+
+fn main() {
+    s := String(os.ReadFile("SPEC.md")!)
+    s = s.Replace("            | \"-fuzz\" NAME | \"-fuzztime\" SECONDS | \"-caps\"\n", "            | \"-fuzz\" NAME | \"-fuzztime\" SECONDS | \"-caps\" | \"-asm\" | \"-ir\"\n")
+    s = s.Replace("| `-quick` | running a file, build, compile, test, profile | B2g, B20 |", "| `-quick` | running a file, build, compile, test, profile, explain | B2g, B20, B11d |")
+    s = s.Replace("| `-caps` | explain | B11c |\n", "| `-caps` | explain | B11c |\n| `-asm`, `-ir` | explain | B11d |\n")
+    os.WriteFile("SPEC.md", s)!
+    io.Println("ok")!
+}

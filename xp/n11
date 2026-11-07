@@ -1,0 +1,1 @@
+ $(" prof" if cfg.Profile else "") $(" listing" if cfg.Listing else "") $(" fuzz"

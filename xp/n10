@@ -1,0 +1,2 @@
+    e.Prof = cfg.Profile
+    e.Lines = cfg.Profile or cfg.Listing

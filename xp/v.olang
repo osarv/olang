@@ -1,0 +1,14 @@
+import "std/io"
+
+fn twice(x F32) F32 { return x * 2.0 + 1.0 }
+
+fn scale(a mut Array<F32>&, b Array<F32>&) {
+    for i in range a.Len() { a[i] = twice(b[i]) }
+}
+
+fn main() {
+    a := Array<F32>(1000)
+    b := Array<F32>(1000, 1.5)
+    scale(a, b)
+    io.Println($a[3])!
+}
