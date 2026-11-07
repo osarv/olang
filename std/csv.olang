@@ -29,12 +29,14 @@
 
 # why a text is not CSV
 type Error error {
-    BareQuote          # a quote inside a field that does not start with one: a"b - quote the field, "a""b"
-    TextAfterQuote    # something other than a separator or a line break after a field's closing quote: "a"b
-    BadSeparator       # a separator that is a quote or a line break, which could never be told apart from the text
-    UnclosedQuote      # the text ends inside a quoted field
-    NoColumn           # Decode: the header names no column for a parameter with no default
-    BadValue           # Decode: a field that is no value of its column's type (a number, a Bool, a Char)
+    BareQuote(line I64)        # a quote inside a field that does not start with one: a"b - quote the field, "a""b"
+    TextAfterQuote(line I64)   # something other than a separator or a line break after a field's closing quote: "a"b
+    BadSeparator               # a separator that is a quote or a line break, which could never be told apart from text
+    UnclosedQuote(line I64)    # the text ends inside a quoted field
+    NoColumn(name String)      # Decode: the header names no column for a parameter with no default
+    # Decode: a field that is no value of its column's type (a number, a Bool, a Char) - the record's line, the column,
+    # the field's text
+    BadValue(line I64, column String, text String)
 }
 
 # a text's records, one at a time: "for row in try csv.Rows(text) { ... } catch csv.Error { ... }". Each is an
@@ -63,16 +65,16 @@ fn (r mut Rows&) Next() Array<String&> ? Error, Exhausted {
     if r.at >= n { error Exhausted.End }
     r.Line = r.next
     count I64 = 1                    # first the fields are counted, and the record checked, so the row is made once
-    i I64 = try fieldEnd(t, r.at, r.sep)
+    i I64 = try fieldEnd(t, r.at, r.sep, r.Line)
     for i < n and t[i] == r.sep {
         count++
-        i = try fieldEnd(t, i + 1, r.sep)
+        i = try fieldEnd(t, i + 1, r.sep, r.Line)
     }
     row := Array<String&>(count, "")
     lines I64 = 1
     i = r.at
     for k in range count {
-        e := try fieldEnd(t, i, r.sep) catch { unreachable }   # checked by the count above
+        e := try fieldEnd(t, i, r.sep, r.Line) catch { unreachable }   # checked by the count above
         if t[i] == '"' if i < n else false {
             inner := t[i + 1:e - 1]
             quotes I64 = 0
@@ -97,13 +99,13 @@ fn (r mut Rows&) Next() Array<String&> ? Error, Exhausted {
 }
 
 # where the field starting at t[i] ends: just past its closing quote, or at the separator, line break or text end
-# after it - checking that it is CSV
-fn fieldEnd(t String&, i I64, sep Char) I64 ? Error {
+# after it - checking that it is CSV, a record starting on line "line"
+fn fieldEnd(t String&, i I64, sep Char, line I64) I64 ? Error {
     n I64 = t.Len()
     if i < n and t[i] == '"' {
         j I64 = i + 1
         for {
-            if j >= n { error Error.UnclosedQuote }
+            if j >= n { error Error.UnclosedQuote(line) }
             if t[j] == '"' {
                 if j + 1 < n and t[j + 1] == '"' {
                     j += 2
@@ -115,13 +117,13 @@ fn fieldEnd(t String&, i I64, sep Char) I64 ? Error {
         }
         j++                          # past the closing quote: a separator, a line break or the end must follow
         if j < n and t[j] != sep and t[j] != '\n' and not (t[j] == '\r' and (j + 1 == n or t[j + 1] == '\n')) {
-            error Error.TextAfterQuote
+            error Error.TextAfterQuote(line)
         }
         return j
     }
     j I64 = i
     for j < n and t[j] != sep and t[j] != '\n' {
-        if t[j] == '"' { error Error.BareQuote }
+        if t[j] == '"' { error Error.BareQuote(line) }
         j++
     }
     return j
@@ -253,13 +255,13 @@ fn Decode<T>(text String&, sep Char = ',') Vec<T> ? {
     header := try rows.Next() catch Exhausted { return out }
     for {
         row := try rows.Next() catch Exhausted { break }
-        out.Push(try T(try argument(header, row, p) for p in T.Params))
+        out.Push(try T(try argument(header, row, p, rows.Line) for p in T.Params))
     }
     return out
 }
 
 # a constructor parameter's argument from a record: its column's field, read as its type, else its default
-fn argument<P>(header Array<String&>&, row Array<String&>&, p P) P.Type ? Error {
+fn argument<P>(header Array<String&>&, row Array<String&>&, p P, line I64) P.Type ? Error {
     if p.HasAttr<Skip>() {
         assert p.HasDefault, "a parameter csv.Skip leaves out takes its default, and this one has none"
         return p.Default
@@ -271,37 +273,37 @@ fn argument<P>(header Array<String&>&, row Array<String&>&, p P) P.Type ? Error 
         }
         if at < 0 or at >= row.Len() {
             if p.HasDefault { return p.Default }
-            error Error.NoColumn
+            error Error.NoColumn(name)
         }
         if P.Type.Kind == TypeKind.Reference {
             # text read as new text and moved where the argument lands (O26a), as json's member does
-            v := try value<P.Type.Target>(row[at])
+            v := try value<P.Type.Target>(row[at]) catch badValue { error Error.BadValue(line, name, row[at]) }
             return v
         } else {
-            return try value<P.Type>(row[at])
+            return try value<P.Type>(row[at]) catch badValue { error Error.BadValue(line, name, row[at]) }
         }
     }
 }
 
 # a field read as a value of type V
-fn value<V>(f String&) V ? Error {
+fn value<V>(f String&) V ? badValue {
     match V {
         case String { return $f }
         case Bool {
             if f == "true" { return true }
             if f == "false" { return false }
-            error Error.BadValue
+            error badValue
         }
         case Char {
-            if f.Len() != 1 { error Error.BadValue }
+            if f.Len() != 1 { error badValue }
             return f[0]
         }
         case _ {
             if V.Kind == TypeKind.Integer {
-                return V(try f.ParseAs<V.Base>() catch ParseError { error Error.BadValue })
+                return V(try f.ParseAs<V.Base>() catch ParseError { error badValue })
             } else {
                 assert V.Kind == TypeKind.Float, "a csv column is text, a Char, a Bool or a number"
-                return V(V.Base(try f.ParseFloat() catch ParseError { error Error.BadValue }))
+                return V(V.Base(try f.ParseFloat() catch ParseError { error badValue }))
             }
         }
     }
@@ -437,4 +439,18 @@ test Decode "records read as structs by their header's names, written back by En
     try Decode<item>("Name\nink\n") catch Error.NoColumn { bad = $bad " column" }
     assert bad == "value column"
     assert (try Decode<item>("")).Len() == 0
+}
+
+# T19b: what went wrong where, carried by the error - a record's line, a column's name, a field's text
+fn said(text String&) String {
+    return try $Decode<item>(text) catch Error e default $e
+}
+
+saidBaked String = said("Name,price\nink,1\npen,lots\n")
+
+test Error "an error carries where the text went wrong" {
+    assert saidBaked == "Error.BadValue(3, \"price\", \"lots\")" and said("Name,price\nink,1\npen,lots\n") == saidBaked
+    assert said("Name\nink\n") == "Error.NoColumn(\"price\")"
+    assert said("Name,price\nink,1\n\"pen\"x,2\n") == "Error.TextAfterQuote(3)"
+    assert said("Name,price\nink,1\npen,2\nb\"ad,3\n") == "Error.BareQuote(4)"
 }
