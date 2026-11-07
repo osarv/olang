@@ -478,219 +478,71 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 ### Generics
 
 - **Generic enums (G6b, the user's decision 2026-10-18: "generic enums go in for sure"; built 2026-10-25).** `type
-  Tree<T> enum { Leaf(v T)  Node(l Tree<T>&, r Tree<T>&) }` is instantiated as a generic struct is - payloads, layout,
-  `==`, Hash, `$` and section 8 (T17c) per instance, which the type machinery already did once G6 stopped refusing it.
-  A case is written with its arguments (`Tree<I64>.Leaf(3)`, `lib.Opt<I64>.None`) or bare (`Tree.Leaf(3)`): then the
-  instance is the type it lands in, else inferred from its arguments as G10c does (`check.genericCase`); `x :=
-  Opt.None` is an error naming the fix. Patterns, case tests and `as` name a case bare against the subject's instance
-  (`namesEnumOf`), a case of another instance is S13's error. **Decided (mine)**: `$` writes the case without the
-  arguments (`Opt.Some(4)`), as it is written; a raw-value enum may be generic (nothing forbids it, nothing needs a
-  rule); std gets no `Option`/`Result` (the decision); reflection's `T.Cases` reads an instance's cases. **Found on the way
-  (pre-existing)**: `if t == Shape.Rect(_, _)` - a `_` in a local if's case test - was B10's "unknown name '_'"
-  (names.name).
+  Tree<T> enum { Leaf(v T)  Node(l Tree<T>&, r Tree<T>&) }` is instantiated as a generic struct is. A case is written
+  with its arguments (`Tree<I64>.Leaf(3)`) or bare (`Tree.Leaf(3)`, the instance inferred); `x := Opt.None` is an
+  error naming the fix. Patterns name a case bare against the subject's instance. `$` writes `Opt.Some(4)`. std has no
+  `Option`/`Result` (the decision).
 - **Explicit type arguments (G12, E3, the user's calls 2026-10-24 and 2026-10-25).** `big<I64>` names a generic
-  function's instance, as a value or at a call (`big<I64>(1, 2)`, `lib.Pick<I64>`), its arguments fitted as written
-  ones are (count, bounds, T7c lengths); a method takes them at a call too (`x.Narrow<I32>()`, `xs.Map<U>(f)`), naming
-  its own variables - those its list introduces that its receiver does not name (mine). After any name, a `<` reading
-  as type arguments on one line, touching the name, with `(` touching its `>`, is type arguments (C#'s rule); spaced, it
-  compares, so `k < m > (0)` is a chain (2026-10-25, the lang25 review), and `x.f <T> ()` is an error naming the form. A variable no parameter
-  names is no error at the declaration; a call writes it (G4, relaxed 2026-10-25). `U(x)` in an instance is the bound
-  type's conversion or constructor (G8b, mine). A generic still is no value unless named so; one taking
-  an array by value makes an instance per length (G29) and is never a value - the error says to pass a lambda. A
-  type name read as a value (`I64 > 3`) is an error (it silently compiled to `false`).
-- **Type parameter lists (QW, G3, G8b, the user's decision 2026-10-17, reversing G8b's `<T>` introductions and
-  G3's no-list rule).** A function's type variables are a list after its name, constraints in it: `fn
-  max<T>(a T, b T) T`, `fn area<T Shape>(x T)`; a constraint is a trait (G6, G19); a method gets its type's
-  parameters from its receiver's type arguments, bare (`fn (l List<T>&) Push(x T)` - names there that are no type
-  introduce), plus a list for variables of its own (`fn (l List<T>&) Map<U>(f fn(x T) U) List<U>`). A constrained
-  receiver is listed after the method name, a listed name taking the list's constraint (`fn (it mut I&) Count<I
-  Iterator<T>, T>(...)` - mine: one place for lists, the receiver clause staying a parameter). A constructor's own
-  variables (G10d) are `struct<T>(...)`; a generic type's constructor may not have one. Type declarations are
-  unchanged; calls still infer their arguments (G4: every variable must be inferable); there is no `<<` opening a
-  list and `<T>` in a type is no type. A function type is never generic of its own (G3a).
-- **Monomorphized; the instantiation's name is its identity, spelled injectively (G16a).** Instantiations are defined
-  by the root object only (B3d). Rules about what a type contains are re-checked per instantiation (G18); errors carry
-  where the instantiation was asked for (G16b); G17 bounds depth.
+  function's instance, as a value or at a call; a method takes them at a call too (`x.Narrow<I32>()`). After a name, a
+  `<` on one line touching the name, with `(` touching its `>`, is type arguments (C#'s rule); spaced, it compares. A
+  generic is no value unless named so; one taking an array by value is never a value. A type name read as a value is
+  an error.
+- **Type parameter lists (QW, G3, G8b, the user's decision 2026-10-17).** A function's type variables are a list after
+  its name, constraints in it: `fn max<T>(a T, b T) T`, `fn area<T Shape>(x T)`; a method gets its type's parameters
+  from its receiver's type arguments, bare, plus a list for its own; a constructor's own variables are `struct<T>(...)`
+  (G10d). Calls infer their arguments (G4); a function type is never generic of its own (G3a).
+- **Monomorphized; the instantiation's name is its identity, spelled injectively (G16a).** Instantiations are defined by
+  the root object only (B3d). Rules about contents are re-checked per instantiation (G18); errors carry where the
+  instantiation was asked for (G16b); G17 bounds depth.
 - **A generic's needs are its requirement, said at the call (G18a, QBP 13/B1.4 option d, the user's "do D"
-  2026-10-31; built 2026-10-31).** What a generic's body asks of a type variable's binding - a method, an operator's
-  method, an index, a slice, a walk, a membership test, a field - is its need; no written constraint is required, and a
-  call whose type lacks one is an error at the program's own call that began the chain, `Max needs Less ('<'), and
-  Point has none - declare it for Point, or call Max with a type that has it`, with a note where the body asks, never
-  an error in the generic with G16b's notes. Decided (mine): judged by each instance's check, as before (no archetype
-  check), so `match T` arms and reflection-decided branches stay per instance; the error is rerouted where the type
-  lacking the member is one of the outermost instance's type arguments (`check.needErr`, `boundBy`), else it stays
-  where it is (a concrete type inside the generic is the generic's own mistake); `diag.ErrorBare` says it without the
-  context notes.
+  2026-10-31; built 2026-10-31).** What a body asks of a type variable's binding (a method, operator, index, slice,
+  walk, membership, field) is its need; no constraint is required, and a call whose type lacks one is an error at the
+  program's own call (`Max needs Less ('<'), and Point has none`), with a note where the body asks. Judged per instance.
 - **Inference (G9a-G9d).** Literals adapt after other arguments bind; text binds `String`; `null` takes no part; a
   value of a destructor type binds the reference; reference arguments of differing permission meet read-only.
 - **Constructors infer type arguments (G10c)** and a plain type's constructor may introduce variables its fields do
   not name (G10d).
 - **References as type arguments (G11), bare marker only.** `<T>&` on a type variable (G11a).
 - **Constraints (G19)** checked where a variable is bound; written types' constraints checked after all signatures.
-- **Instances per array length (G29-G31; constant parameters G20-G28 removed 2026-10-24, QP2, the user's call: "This
-  still doesn't give more information than inferring a known size at compile time").** A by-value array parameter
-  (at any level under a reference too) binds its length per call; each instance checks, decides asserts on lengths
-  (S18c, with G16b's note naming the lengths) - made only where the body decides something on the length (D9a); G17
-  bounds a growing length. An argument of a run-time length is the one instance for those (`types.RunLength()`, built
-  2026-11-02: the marker had been UnknownT, so every such call was G9's error). A length `Array<T>(n)` gives is folded exactly as
-  the program computes (in its operands' types, wrapping), else evaluated, else run-time - never an error.
+- **Instances per array length (G29-G31; constant parameters removed 2026-10-24, QP2, the user's call: "This still
+  doesn't give more information than inferring a known size at compile time").** A by-value array parameter binds its
+  length per call; each instance checks and decides asserts on lengths (S18c) - made only where the body decides
+  something on the length. A run-time-length argument is the one instance for those; G17 bounds a growing length.
 - **Generics composition (G8a, G15).** A type variable may be a type argument (`Vec<T>`); a still-generic receiver
-  matches any application; an application with unknown arguments is a pattern, never laid out. `match T` is
-  exhaustiveness-checked and compiles only the chosen arm; inside it the variable is the concrete type.
+  matches any application. `match T` is exhaustiveness-checked and compiles only the chosen arm.
 - **A literal default for a type-variable parameter is fitted per call (G18).**
-- **Error-set parameters (G1a, QAH, the user's decision 2026-10-18; built 2026-10-25).** A type's, trait's, function's
-  or method's list may end in `? E` (`type Iterator<T ? E> trait { mut Next() T ? E, Exhausted }`, `fn apply<T, U ?
-  E>(x T, f fn(x T) U ? E) U ? E`, `fn (a Array<T>&) Some<? E>(...)`); a receiver introduces one written as its type's
-  error-set argument (`fn (t mut TakeIter<I, T ? E>&) Next() T ? E, Exhausted`). `E` stands only where an error set is
-  written - signatures, function types, trait methods, a type's error-set argument (`Iterator<I64 ? io.Error>`, a
-  named set too), catch items - and is spliced in where it stands; written as a type it is an error, and so is a type
-  variable written as a set. A call binds `E` to the **union** of what the function values and iterators matched against
-  it fail with (beyond the other items of its set; mine: a union never conflicts), to the empty set where nothing
-  fallible binds it - then the instance cannot fail and is called without `try`; a type's argument left out is the
-  empty set (`Iterator<I64>`). A lambda given for a parameter naming `E` infers its set from its body and is then
-  given the parameter's set (mine). Satisfaction is "held by" (T31 as written, which the code had as equality): a Next
-  failing with only `Exhausted` meets `Iterator<T ? Bad>`. `catch E` takes what the instance binds `E` to. Explicit type
-  arguments may give the set after `?` (`apply<I64, I64 ? Bad>`); left out, a call infers it and a value takes the empty
-  set (mine). std: `Iterator<T ? E>`; its helpers, adapters (`TakeIter<I, T ? E>` ...), an array's
-  `Some/Every/FindIndex/Count/Map/Filter/Fold/Sort`, List/Vec `Sort` and ListIter's overrides
-  fail with what their callbacks and iterators fail with. Not a stored error: no value holds one
-  (T20). Representation: `types.Kind.ErrSet` (a canonical, merged entry list) for an argument or binding, the variable
-  itself an entry of an error list until substituted. Not for a G10d constructor's own list (mine: no use yet). Found
-  on the way: section 8's alias analysis did not look inside `for x in try p` (a try statement), so a helper walking its
-  receiver under `try` was refused by O17 (`scope.aliasExpr`).
+- **Error-set parameters (G1a, QAH, the user's decision 2026-10-18; built 2026-10-25).** A list may end in `? E`
+  (`type Iterator<T ? E> trait { mut Next() T ? E, Exhausted }`, `fn apply<T, U ? E>(x T, f fn(x T) U ? E) U ? E`).
+  `E` stands only where an error set is written and is spliced in; a call binds it to the union of what the matched
+  function values and iterators fail with, the empty set where nothing fallible binds it (then no `try`). Satisfaction
+  is "held by" (T31). Not a stored error (T20).
 - **Generators (D18-D18d, S20, QAG revised, the user's decision 2026-10-18; built 2026-10-25).** A `fn` whose result
-  is written `Iterator<T ? E>` and whose body holds a `yield` of its own is a generator - no keyword, `yield` the one
-  new word. A call runs none of the body and gives the prelude's `Generator<T ? E>` (a struct holding `next (fn() T ? E,
-  Exhausted)`; its `Next` calls `next`), so `for`, the iterator helpers, constraints and `any Iterator<T>&` take it as
-  any iterator; it is nameable (a field holds a `Generator<I64>`) and a copy is the same walk, as a List's. Its errors
-  are `E` and `Exhausted`, written in its result (a `?` on the signature is an error naming that); its end, a bare
-  `return` (`return v` an error) and an error leaving it end the walk, every later `Next` failing with `Exhausted`.
-  **How it is built (mine): its body is a lambda's** - check makes the generator's own body `return Generator(next)`,
-  `next` a lambda of the body capturing the parameters, which become its own writable locals set once at its start
-  (a value array given is copied where the generator lives) - so captures (D16c), placement and every scope rule apply
-  with nothing new; a `yield` is checked and judged by section 8 as that lambda's `return` (a typed `Suspend`). The
-  lambda's MIR is a coroutine (`mir.Fn.Gen`, `Term.Suspend` holding the open scopes): emit writes an LLVM coroutine
-  (`llvm.coro.*`, its frame from the arena where the generator lands, its promise the result slot plus the scopes the
-  Next call passed, a `.drop` registered there destroying a walk stopped part way - closing the scopes it holds - and a
-  wrapper that is the function value's code); eval keeps the suspended frame's words and scopes and restores them.
-  **Decided (mine)**: the value yielded is built in each `Next` call's result scope - so `for w in words(t)` reclaims
-  each value per turn - which no local outlives: O26a moves nothing there, and a yielded local holding the generator's
-  own storage is O26 worded for yield (write `$x`/`x.Copy()`).
-  **Borrowed elements (D18c, QBB, the user's decisions 2026-10-26; built 2026-10-26; inferred since 2026-11-02, QCB)**:
-  `fn words(t String&) Iterator<String&>` yielding views of what `t` refers to, or views of storage its walk keeps where
-  the generator lives (locals kept for the walk, what they hold, a temporary yielded) - read-only, never null. Which of
-  the three a generator's elements are (built per turn, borrowed from a reference parameter, kept by the walk) is read
-  off its yields (`generic.genElemOf`; once written `Iterator<T&t>` / `Iterator<T&return>`); one mixing them is an
-  error naming a copy. The call gives the prelude's `ViewGenerator<T ? E>`, whose `Next() T&g` is borrowed from the receiver, so
-  any consumer reads an element where the generator value lives (G11's container); a for-in's own walk of a direct
-  `&t` call reads it where the argument for `t` lives (`Scoper.walkElem`), so `for w in words(t) { kept.Push(w) }`
-  keeps them as long as `t`'s text. Built (mine) on the lambda: `Body.GenElem` names the capture the elements live
-  with and a yield is judged as a result borrowed from it (built there if new); `&return` is a hidden null capture of
-  the generator's result scope (`GenHome`), which every capture is assumed to outlive in that body; such a generator
-  is no `any Iterator<T&>&` (T32a). Limit: a generator held in a local of an inner block reads its borrowed elements
-  there.
-  **The walk dropped with its loop (D18e, mine)**: a for-in's own walk never lands by obligations - it is made in the
-  loop's block whatever it was given (constant text, a global's array) and dropped as that block is left: 552 MB ->
-  1.7 MB over 4M walks of a generator over a global array; the evaluator reuses a closed generator's record
-  (`interpret` 634 -> 31 MB). A generator held in a local still lands by its obligations (a recorded limit). **Found on
-  the way (pre-existing, D16d)**: a closure was held to where it is put only through its innermost capture - a lambda or
-  generator over two parameters' referents, returned, read the second after it was freed; its term is now the set of
-  its captures' (UNK), and an obligation over a set is one per member. Not allowed:
-  `yield` in a lambda, deferred code, a join block, or with deferred code pending around it (a dropped walk would never
-  run it - relaxable). Cost (2026-10-26): about 1.7 ns a value summing a range, the resume inlined where the walk is made, with the
-  frame's fields in memory per step (the frame comes from the arena and its handle is registered for the drop, so
-  CoroElide cannot take it); a filter generator is 1.2x a hand-written iterator struct. A loop scope nothing uses
-  gets no header (`idle`, as frame and block scopes), and a scope held at a yield is not used by being held.
-  **A walk made and finished in one place (D18e, 2026-10-26)**: a `for` or comprehension over a generator called
-  right there calls the generator's `.walk` form - its frame from `llvm.coro.alloc` (so CoroElide can put it in the
-  caller's frame and SROA in registers), no drop registered, its Generator's code a `.wnext` testing neither re-entry
-  nor its end (nothing else holds it) - and the caller destroys it on every way out of the loop's block, through that
-  Next (a promise flag of 2), so the destroy is visible beside the resumes once both are inlined. Decided (mine,
-  conservative): the call must be a direct call to a generator function at the for-in's own source, its result scope
-  the loop's block, loop or frame, the walk made and closed on every path that closes the scope (a dataflow in emit,
-  else the arena path), and never in a test build (a failed check closes scopes from outside, through the
-  registration); a generator in a field, a result, an argument or an `any`, and an iterator helper's walk
-  (`gen(n).Sum()`), keep D18b's arena path. **A local held so (2026-10-26, bulk review 3, mine)**: `g := gen(x)` whose
-  elements are built per turn, walked by one for-in or comprehension later in its block, in no loop or deferred code
-  there, and named nowhere else, is that walk's own (check's settleHeldWalks, definit.HeldWalk) - made where it is
-  declared, dropped as its block closes (139 MB -> 1.6 MB over 1M calls over a global's array); a local walked in two
-  branches, twice, or borrowing elements (D18c) keeps the arena path, a recorded limit. Result: the range generator
-  folds to the hand iterator's closed form (0.35 s -> 0.003 s), the filter generator 0.30 -> 0.15 s, below the iterator
-  struct's 0.22 s. Limit: a walk made inside a loop whose exit leaves that loop too (a `return`, an error) keeps an
-  arena frame - CoroElide does not see a destroy behind the exit's LCSSA phi - still destroyed by the caller. A stack
-  slot of a generator's body put into an aggregate value (a lambda's environment in its function value, a fixed array
-  lent as a run-time one) is said to escape (an empty `asm` use after `coro.begin`, emit's `frameKept`), so LLVM's
-  coroutine split keeps it in the frame - its alloca analysis does not follow `insertvalue`, and `-debug` read such a
-  slot from a returned Next's stack (bulk review 6b F3; bench IR unchanged). **Found on the way (pre-existing)**: D10a counted a `for x in it` over an iterator as a loop that never ends (its
-  `break` is in the Next call's `catch Exhausted`, inside an expression), so a function ending in one compiled and
-  aborted with "unreachable reached" - `breaks` now looks inside expressions' clauses; since bulk review 3 one walk,
-  `typed.BreaksOut`, over every statement, expression and place kind (a do-while's post clause too), read by D10a and
-  D13d alike.
+  is `Iterator<T ? E>` and whose body holds a `yield` is a generator - no keyword. A call runs none of the body and
+  gives the prelude's `Generator<T ? E>`; its end (a bare `return`) or an error ends the walk, later `Next` failing with
+  `Exhausted`. Built as a lambda coroutine. **Borrowed elements (D18c, QBB, 2026-10-26; inferred since 2026-11-02)**:
+  `fn words(t String&) Iterator<String&>` yields views, read-only, never null (`ViewGenerator`). A for-in's walk made
+  and finished in one place is elided into the caller (D18e). Not allowed: `yield` in a lambda, deferred code, a join
+  block, or with deferred code pending around it.
 - **Compile-time reflection (G32-G38, G13, docs/ideas.md #2, the user's decisions 2026-10-18; built 2026-10-25).** A
-  type's structure read through its name, while compiling only: `T.Name`, `T.Kind` (the prelude's `TypeKind`: `Struct
-  Enum Integer Float Bool Array Reference Function Error`, a declared type its base's, an error value's type `Error`),
-  `T.Base`, `T.Element`, `T.Length`, `T.Target`, `T.Nullable` (a `Bool`: a `?&` reference or `fn?&`; 2026-11-07,
-  mine), `T.Size`, `T.Align`, the lists `T.Fields`, `T.Cases` (a struct's one
-  case; an error value's words, each named as `$` writes it, `c()` its value - 2026-10-26, mine), `T.Params` (a
-  constructor's or a function type's), `T.Results`, and `T.Errors` where an error set is written. A list is no value: a
-  `for` over it is unrolled (the body checked per element, `break` leaving the walk), `.Len()` and a constant index are
-  constants, a comprehension makes an array. Its elements are **descriptors** - prelude structs of no fields typed by
-  the member
-  (`FieldInfo<T, C, I>` ...), so a generic taking one is instantiated per member: `f.Name`, `f.Type`, `f.Offset`,
-  `f.Of(v)` (a place; a case's field where `v` is narrowed to it), `c.Name`, `c.Fields`, `v == c`, `c(args)` building
-  the case (mine), `p.HasDefault`, `p.Default`. Conditions over reflected constants decide `if`, conditionals, asserts
-  and `match` per instance (G35). `match T` takes trait cases and generic cases binding arguments (`case List<E>`), the
-  first that holds chosen, an unreachable case an error (G36); `case X&` holds for `mut X&` too (mine). `T(arg(p) for
-  p in T.Params)` builds through the constructor, its checks running (G37). A reflected type is a type (`P.Type`,
-  `T.Base.Element`), and called converts or constructs (G38). A struct's private fields are in `T.Fields` only in its
-  module (M6a); a case's fields everywhere (mine). Mine too: `TypeKind`, not `Kind` (a prelude name is reserved
-  everywhere); `T.Name` without the module's alias; a function type's parameters unnamed (names are no part of it).
-  `json.Encode(v)` and `json.Decode<T>(text)` take any value (structs as objects, enums externally tagged as serde,
-  decoding through constructors). The evaluator sees only unrolled, decided code, so it agrees by construction.
+  type's structure read through its name while compiling: `T.Name`, `T.Kind` (`TypeKind`), `T.Base`, `T.Element`,
+  `T.Length`, `T.Target`, `T.Nullable`, `T.Size`, `T.Align`, and the lists `T.Fields`, `T.Cases`, `T.Params`,
+  `T.Results`, `T.Errors`. A list is no value: a `for` over it is unrolled, `.Len()` and a constant index are
+  constants. Elements are descriptors (`f.Name`, `f.Type`, `f.Offset`, `f.Of(v)`, `c(args)`). Conditions over
+  reflected constants decide `if`s, asserts and `match` per instance (G35); `match T` takes trait and generic cases
+  (G36); `T(arg(p) for p in T.Params)` builds through the constructor (G37). A struct's private fields are in
+  `T.Fields` only in its module. `json.Encode(v)`/`json.Decode<T>(text)` take any value.
 - **Typed attributes and function reflection (G39-G41, R8, QBN, QBO, the user's decisions 2026-10-26; built
-  2026-10-27, details mine).** `@Type(args)` / `@Type` (a constructor of no arguments, or an enum's case `@Level.High`)
-  before a type, a function or method, an enum's case, a constructor's field or a parameter - on lines above or on its
-  line; anywhere else an error. A value of a struct, an enum or a declared number type a program declares (not a
-  built-in's, not the prelude's), one per type per declaration, built while compiling (an error otherwise; what it can
-  fail with ends it as `!` does); the compiler gives none a meaning. Read-only data: a type holding a `mut` reference is
-  no attribute's, an error where it is written (bulk review 4; it was T25c's at the reader, naming the prelude's
-  `attrGot`). Built as a hidden immutable global beside the item
-  (`VarDecl.Hidden`, named `@` and its offset), so names, check, K2 and the evaluator do it all. Read by reflection:
-  `try x.Attr<A>()` (fails with the prelude's `AttrError.Missing`; elaborates to the prelude's `attrGot`/`attrMissing`)
-  and `x.HasAttr<A>()` (a Bool decided while compiling, G35) on a type or a field/case/parameter/function descriptor; a
-  pun field has its parameter's attributes (written on a pun: an error). `alias.Functions` (an import's plain, non-generic
-  functions; another module's exported ones - a module walks its own through an import of itself, `import me "main"`) and
-  `T.Methods` give `FuncInfo<F, K>` descriptors (K a hash of module, receiver type and name: stable across compilations)
-  with Name, Type, Params, Results, Errors, Attr, HasAttr, and `f(args)` calls it (a method's receiver first). A `try`/`!`
-  covering nothing in one copy of an unrolled walk is no error, as in a generic's body (R8). doc/explain/lsp show
-  attributes with what they are on. std: `json.Naming` (Exact, Camel, Snake, Kebab - not `Keys`, which `json.Object`'s
-  field holds) via `keys = ...` on Encode/Decode/From, `@json.Key`, `@json.Skip`, a type's `@json.Naming.X` winning over
-  the call's - each member's key under each policy converted while compiling (`comptime`, 2026-11-07: an encode
-  1.73G -> 1.22G instructions); std/csv records as structs (`Header`, `RecordOf`, `Encode`, `Decode`, `@csv.Column`, `@csv.Skip`);
-  std/flags `p.Read<T>(args)` from a struct's parameters with `@flags.Help`, `@flags.Short`.
-- **Function facts (G42, QBP 9, B1.1, the user's "yes build with item 6" 2026-10-27, and the declared facts of
-  2026-10-27; built 2026-10-31, details mine).** `mix.Allocates`, `dsp.mix.Blocks`, `pick<I64>.Terminates` through a
-  function's name, and `f.Allocates` on G41's descriptors (each copy of a walk its own function's): `Allocates`,
-  `Blocks`, `WritesGlobals`, `CallsC`, `Spawns`, `Recursive`, `Terminates` - a Bool constant, true where the function or
-  anything it may call may (Terminates: every loop a for-in over an array or a range, an unrolled walk, no recursion,
-  nothing that waits, no C not known to return); a call through a function value or an `any`, or a body that did not
-  check, has every fact but Terminates; so `assert not mix.Allocates` (S17a) pins one. Descriptors also say `NoReturn`,
-  `Exported`, `Extern`, `Commutes`. A generic named without type arguments is an error naming `f<T>.Fact`. Decided
-  (mine): read off the same summaries as the effects line (effects.olang); a fact is read as its cautious value in the
-  first attempt and the program is checked again with what the bodies found until reads and findings agree (as R1a's
-  sets, `factPresets`), one that changes the code it is read from an error (FactUndecided); a fact in a plain body's
-  `if` is S8a's dead branch, as any constant condition (in an unrolled walk it differs per copy and is fine); check
-  marks the bounded loops (`typed.Body.Bounded`: counted for-ins, unrolled walks). tests/facts.olang. Since bulk
-  review 6b (the summaries every reader shares - facts, the effects line, `-caps`, E31b's in-place calls): a destructor
-  is a body a constructor of its type, a value of it given storage, or `x.Destroy()` may call (O16, C9b); and in a
-  program C may call back a call of C - but C's math, the runtime's own, the C known to return at once and the C
-  library's input and output, text, memory and time functions (`typed.NoCallbackExtern`) - may do anything (C may call
-  the export fn back, X13 - free.olang's condition 3), said `anything - it calls C, which may call the program's export
-  fns`. **The sharper rule (item 27, the user's "do the sharper rule" 2026-11-03; built 2026-11-07, wt-dropord):** a
-  program C may call back is one giving an export fn to a C function (X13 - check records each, `Loader.HandedToC`),
-  built `-library` (X14), or - mine, since C linked in can call an export fn by its name (the cinterop scenario's
-  callback.o does) - having one and linking C of its own (a `.c` import or a `link`, `Loader.LinksOwnC`); an export fn
-  merely declared no longer makes every C call "anything" or stops early freeing.
+  2026-10-27).** `@Type(args)` / `@Type` before a type, function, enum case, constructor field or parameter: a value of
+  a type the program declares, built while compiling; the compiler gives none a meaning. Read by `try x.Attr<A>()`
+  and `x.HasAttr<A>()`. `alias.Functions` and `T.Methods` give `FuncInfo` descriptors; `f(args)` calls one. std:
+  `json.Naming`, `@json.Key`, `@json.Skip`, std/csv records as structs, std/flags `p.Read<T>(args)`.
+- **Function facts (G42, QBP 9, B1.1, the user's "yes build with item 6" 2026-10-27; built 2026-10-31).**
+  `mix.Allocates`, `Blocks`, `WritesGlobals`, `CallsC`, `Spawns`, `Recursive`, `Terminates` through a function's name or
+  a descriptor: a Bool constant, true where the function or anything it may call may; so `assert not mix.Allocates`
+  (S17a) pins one. Read off the effect summaries; a fact that changes the code it is read from is an error. **The
+  sharper rule (item 27, the user's "do the sharper rule" 2026-11-03; built 2026-11-07):** a C call is "anything" only
+  in a program that hands an export fn to C, is built `-library`, or links C of its own, and then not for libc's I/O,
+  string, memory and time functions.
 
 ### Errors
 
