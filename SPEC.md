@@ -5323,7 +5323,8 @@ closing the scopes on the way out as any `return` does; a test has no result, so
 fails (S18), a check the language guarantees fails (S18a), `unreachable` is reached (S16d), a `!` handles a failure
 (E35), or an error leaves its body: a `try` in a test body need not catch everything it covers (R8), and an error it
 lets through ends the test as failed, its `FAIL` line naming the error - `FAIL - NAME: TypeName.WORD`, the type named
-as a `!` names it (E35) - and the error's trace following (S18d). Each of these is decided at run time, not by where it is
+as a `!` names it (E35) - and the error's trace following (S18d). Such an error leaves the test's blocks as an error
+leaves a function's: their deferred code, errdefers and destructors run first (S19, S19e, O15), then the `FAIL` line. Each of these is decided at run time, not by where it is
 written, so a failed assert inside a helper called from a test fails *that test*. Outside a test a program ends by
 returning from `main` (or letting an error escape it, §10 B5), by calling a `noreturn` function such as `os.Exit`
 (D8e, B5b), or by an abort.

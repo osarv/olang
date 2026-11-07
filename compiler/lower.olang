@@ -2296,9 +2296,16 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
     mineErrs := ln.T.Errors(ln.B.Ty)
     match ln.B.Of {
         case typed.BodyOf.Test(_) {
-            # S16: an error a try lets out of a test body fails the test, named on its FAIL line
+            # S16: an error a try lets out of a test body fails the test, named on its FAIL line - once every scope of
+            # the test is closed, its deferred code, errdefers and drops run first, as an error leaving a function
+            # runs them (S19, S19e, O15); the payload's record is on its own stack, which they leave as they found it
             if ln.tries.Len() > 0 {
-                ln.bang(code, from, sp, mir.ExitKind.Escaped)
+                l := ln.local(code, mir.I32T, sp)
+                was := ln.erroring
+                ln.erroring = true
+                ln.leave(0)
+                ln.erroring = was
+                if not ln.dead: ln.bang(mir.Operand.Copy(mir.Lvalue.L(l)), from, sp, mir.ExitKind.Escaped, true)
                 return
             }
         }
