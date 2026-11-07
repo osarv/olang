@@ -969,7 +969,7 @@ fn ByteSwapWidth(ty String&, bits I64) r.Msg { return r.Msg(Diag.ByteSwapWidth, 
 fn AtomicWidth(ty String&) r.Msg { return r.Msg(Diag.AtomicWidth, "P9, T4a", "the atomic operations take integers of 8, 16, 32 or 64 bits, and " $ty " is none - hold the value as one of those") }
 
 # compile-time reflection (G32-G38)
-fn ReflNoMember(ty String&, name String&) r.Msg { return r.Msg(Diag.ReflNoMember, "G32", $ty " has no reflected member '" $name "' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Size and Align") }
+fn ReflNoMember(ty String&, name String&) r.Msg { return r.Msg(Diag.ReflNoMember, "G32", $ty " has no reflected member '" $name "' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Nullable, Size and Align") }
 fn ReflNoKind(ty String&) r.Msg { return r.Msg(Diag.ReflNoKind, "G32", $ty " has no TypeKind - only a struct, an enum, a number, Bool, an array, a reference, a function type and an error value have one") }
 fn ReflNoLength(ty String&) r.Msg { return r.Msg(Diag.ReflNoLength, "G32", $ty " has no Length - only an array whose length is known while compiling has one") }
 fn ReflNoLayout(ty String&, name String&) r.Msg { return r.Msg(Diag.ReflNoLayout, "G32", $ty " has no " $name " - it is not laid out (a trait, an error type, an extern type)") }
@@ -983,7 +983,10 @@ fn ReflNoDefault(name String&, ty String&) r.Msg { return r.Msg(Diag.ReflNoDefau
 fn ReflOfArgs(n I64) r.Msg { return r.Msg(Diag.ReflOfArgs, "G34", $"'Of' takes one value, found " $n) }
 fn ReflOfType(want String&, have String&) r.Msg { return r.Msg(Diag.ReflOfType, "G34", $"this field is " $want "'s, and the value is " $have) }
 fn ReflDescNoMember(what String&, name String&, have String&) r.Msg { return r.Msg(Diag.ReflDescNoMember, "G34", $"a " $what " has no '" $name "' - its members are " $have) }
-fn ReflTypeNotValue(name String&) r.Msg { return r.Msg(Diag.ReflTypeNotValue, "G38", $"'" $name "' is a type, not a value - write it where a type goes, as 'x " $name " = ...'") }
+fn ReflTypeNotValue(name String&) r.Msg { return r.Msg(Diag.ReflTypeNotValue, "G38", typeNotValue(name)) }
+
+# G38: a type written where a value goes - a reflected one, or a type's own name - one wording for both
+fn typeNotValue(name String&) String { return $"'" $name "' is a type, not a value - write it where a type goes: a declaration ('x " $name " = ...'), a type argument or a match's subject" }
 fn ReflCaseOther(c String&, ty String&) r.Msg { return r.Msg(Diag.ReflCaseOther, "G34", $"this case is " $c "'s, and the value is " $ty) }
 fn ReflCaseUnreachable() r.Msg { return r.Msg(Diag.ReflCaseUnreachable, "G36", "no type can reach this case - a case before it takes every type it does") }
 fn ReflArgCompr() r.Msg { return r.Msg(Diag.ReflArgCompr, "G37", "a comprehension written as a call's arguments walks a list known while compiling - 'T.Params', 'T.Fields' ...; another is written in brackets, 'T[e for x in c]'") }
@@ -1363,7 +1366,7 @@ fn TypedHole(ty String&, fits String&) r.Msg { return r.Msg(Diag.TypedHole, "E41
 fn TypedHoleUntyped() r.Msg { return r.Msg(Diag.TypedHoleUntyped, "E41", "'_' holds the place of a value, and nothing here says its type") }
 
 # ERR_TYPE_NOT_A_VALUE
-fn TypeNotAValue(tok String&) r.Msg { return r.Msg(Diag.TypeNotAValue, "", $tok " is a type, not a value") }
+fn TypeNotAValue(name String&) r.Msg { return r.Msg(Diag.TypeNotAValue, "G38", typeNotValue(name)) }
 
 # ERR_UNKNOWN_FUNCTION
 fn UnknownFunction(tok String&) r.Msg { return r.Msg(Diag.UnknownFunction, "", "unknown function or type " $tok) }

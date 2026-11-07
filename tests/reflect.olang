@@ -108,6 +108,24 @@ test "a type's name, kind and layout are constants of each instance" {
     assert Meters.Base.Name == "F64" and Point.Base.Name == "Point" and String.Element.Name == "Char"
 }
 
+# T.Nullable: a reference written "?&" may be null, every other type may not - decided per instance (G35)
+fn mayBeNull<T>() String { return "may be null" if T.Nullable else "never null" }
+
+assert not I64.Nullable and not String.Nullable and not Point.Nullable
+assert mayBeNull<Point?&>() == "may be null" and mayBeNull<Point&>() == "never null"
+
+test "a type's Nullable says whether a value of it may be null" {
+    assert not Point.Nullable and not Bool.Nullable
+    assert mayBeNull<Point?&>() == "may be null" and mayBeNull<Array<I64>>() == "never null"
+    assert mayBeNull<fn?&(x I64) I64>() == "may be null" and mayBeNull<fn&(x I64) I64>() == "never null"
+    for f in Pair2.Fields {
+        if f.Name == "next" { assert f.Type.Nullable }
+        if f.Name == "head" { assert not f.Type.Nullable }
+    }
+}
+
+type Pair2 struct(head Point&, next Point?&) { head, next }
+
 test "a value's fields walked and read; an enum's case found by ==, its fields read where it is narrowed" {
     assert fields(Point(3, 2.5, "q")) == "Point(x=3, Y=2.5, label=q)"
     assert caseOf(Shape.Rect(2.0, 3.0)) == "Rect w=2 h=3"

@@ -30144,3 +30144,16 @@ constant the evaluator reads), its 64-case assert likewise only of an enum, so a
 `Str` builds a case only where it carries no payload. checks/cases/bitsetpayloadlater, s18cinstancecall; bitsetnotenum
 pins where it is said. Left: an assert written in an unrolled walk is still decided for the first copy alone (per-copy
 identity of asks).
+
+**C9, reflection's three leftovers (refl batch, 2026-10-25).** (1) `T.Nullable` (G32): whether a value of the type may
+be null - `true` for a `?&` reference and a `fn?&` function value, `false` for every other type, a `Bool` constant of
+each instance like `T.Kind` (`types.IsNullable`), so `if T.Nullable` is decided per instance (G35) and the evaluator,
+which sees only the decided code, agrees (tests/reflect.olang: a generic deciding on it, top-level asserts decided while
+compiling, a field descriptor's `f.Type.Nullable`). Decided (mine): every type has it rather than only a reference (no
+`T.Kind == TypeKind.Reference and` guard needed), and a builder may not be named `Nullable` (it is a member reflection
+reads). (2) `x Tree.Cases`, a reflected list written as a type, was unknown silently; checked again, it is G38's error
+now ("'Cases' of Tree: a type's reflected types are ..."), fixed by an earlier round - nothing to do. (3) The wording: a
+reflected type read as a value said G38's "is a type, not a value - write it where a type goes, as 'x T = ...'", a
+type's own name read as a value (`a := I64`) said "is a type, not a value" with no rule. Both now say G38's, one
+sentence (`msgs.typeNotValue`) naming the three places a type goes - a declaration, a type argument, a match's subject
+- and SPEC G38 says a type's own name is no value either.

@@ -1230,7 +1230,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Compile-time reflection (G32-G38, G13, docs/ideas.md #2, the user's decisions 2026-10-18; built 2026-10-25).** A
   type's structure read through its name, while compiling only: `T.Name`, `T.Kind` (the prelude's `TypeKind`: `Struct
   Enum Integer Float Bool Array Reference Function Error`, a declared type its base's, an error value's type `Error`),
-  `T.Base`, `T.Element`, `T.Length`, `T.Target`, `T.Size`, `T.Align`, the lists `T.Fields`, `T.Cases` (a struct's one
+  `T.Base`, `T.Element`, `T.Length`, `T.Target`, `T.Nullable` (a `Bool`: a `?&` reference or `fn?&`; 2026-11-07,
+  mine), `T.Size`, `T.Align`, the lists `T.Fields`, `T.Cases` (a struct's one
   case; an error value's words, each named as `$` writes it, `c()` its value - 2026-10-26, mine), `T.Params` (a
   constructor's or a function type's), `T.Results`, and `T.Errors` where an error set is written. A list is no value: a
   `for` over it is unrolled (the body checked per element, `break` leaving the walk), `.Len()` and a constant index are

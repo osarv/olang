@@ -9104,6 +9104,8 @@ variable, or a type G38 names - these members are read with a `.`, alongside a n
 - `T.Element` - an array's element type, a `Columns`' or `ColumnVec`'s rows' type (T7e) (an error for another type); `T.Target` - a reference's referent (`Node&`'s
   `Node`).
 - `T.Length` - an array's length where it is known while compiling (T7c), an `I64`; for another type an error.
+- `T.Nullable` - whether a value of the type may be null (T2c): `true` for a reference written `?&` (`Node?&`) and a
+  function type that may be (`fn?&`, T21), `false` for every other type, a `Bool`.
 - `T.Size`, `T.Align` - the size and alignment in bytes as the type is laid out (C's `sizeof` and `_Alignof` of the C
   layout, §10), `I64`s - a packed struct's (T13c) its bits rounded up to bytes, and 1; a type that is not laid out (a
   trait, an error type, an extern type) has none.
@@ -9218,7 +9220,8 @@ fn build<T>(k I64) T { return T(arg(p, k) for p in T.Params) }
 **G38 (reflected types are types).** A type G32 or G34 names - `T.Base`, `T.Element`, `T.Target`, `f.Type`, `p.Type`,
 `r.Type`, and chains of them, `T.Element.Base` - is usable wherever a type is written (a declaration, a parameter, a
 result, a type argument, a `match`'s subject) and is a type of the instance it is read in (a result written `P.Type` is
-each instance's own). It is no value: written where a value goes it is an error naming the declaration form. One that
+each instance's own). It is no value: written where a value goes it is an error naming the declaration form - and so
+is any type's own name written there (`I64 > 3`, `a := Point`; an enum's name is where its cases are read, E32). One that
 does not exist (`I64.Element`) is an error where it is written, saying why.
 
 **G39 (attributes).** An **attribute** is a value of a declared type written on a declaration, data a library reads by

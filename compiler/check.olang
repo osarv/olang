@@ -1391,7 +1391,7 @@ fn (c mut Checker&) builderNameTaken(o types.TypeId, n source.NameId) String {
     if c.isEnum(o) and c.hasCase(o, n) { return "a case" }
     if generic.ProjectsType(name) or name == "Functions" or name == "Methods" or name == "Cases" or name == "Fields" or
        name == "Params" or name == "Results" or name == "Errors" or name == "Name" or name == "Kind" or name == "Size" or
-       name == "Align" or name == "Length" {
+       name == "Align" or name == "Length" or name == "Nullable" {
         return "a member reflection reads through a type's name"
     }
     if c.isNumber(o) and (name == "Max" or name == "Min" or name == "Inf" or name == "NaN" or name == "Epsilon" or name == "SmallestNormal") {
@@ -8108,13 +8108,13 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId, want types.TypeId = ty
     }
     if ref.Kind == names.What.Builtin {
         # a built-in type is no value (it was read as an unknown one, a comparison of it taken for false)
-        c.err(sp, msgs.TypeNotAValue(c.tok(n)))
+        c.err(sp, msgs.TypeNotAValue(c.text(n)))
         return c.unknown(sp)
     }
     if ref.Kind == names.What.Type {
         # an enum's name is where its cases are read; a generic's, refused at its declaration, says nothing more
         t := c.typeNamed(ast.Expr.Name(sp, n))
-        if t >= types.TypeId(0) and not c.isEnum(t) { c.err(sp, msgs.TypeNotAValue(c.tok(n))) }
+        if t >= types.TypeId(0) and not c.isEnum(t) { c.err(sp, msgs.TypeNotAValue(c.text(n))) }
         return c.unknown(sp)
     }
     if ref.Kind == names.What.Func { return c.fnValue(sp, c.P.FnNamed(ref.Module, n)) }
@@ -14828,7 +14828,7 @@ fn (c mut Checker&) reflLen(y ast.Expr&, n source.NameId, args Array<ast.Expr&>&
     return reflVal.rvInt(items.Len()) if why == "" else reflVal.noRefl()
 }
 
-# a reflected member known while compiling (G32, G34): a type's Name, Kind, Size, Align, Length; a descriptor's Name,
+# a reflected member known while compiling (G32, G34): a type's Name, Kind, Size, Align, Length, Nullable; a descriptor's Name,
 # Offset, BitOffset, Bits, HasDefault
 fn (c mut Checker&) reflConst(y ast.Expr&, n source.NameId) reflVal {
     name := c.text(n)
@@ -14844,6 +14844,12 @@ fn (c mut Checker&) reflConst(y ast.Expr&, n source.NameId) reflVal {
             k := c.P.ReflKind(t)
             if k < 0 { return reflVal.noRefl() }
             return reflVal(true, RvCase, k, "", c.typeKindType())
+        }
+        if name == "Nullable" {
+            # G32: whether a value of t may be null - a reference written "?&" (or a nullable function value); false for
+            # every other type
+            c.reflTouched = true
+            return reflVal.rvBool(c.P.T.IsNullable(t))
         }
         if name == "Size" or name == "Align" {
             c.reflTouched = true
@@ -14997,7 +15003,7 @@ fn (c mut Checker&) reflMember(sp source.Span, nsp source.Span, x ast.Expr&, n s
             c.err(sp, msgs.ReflTypeNotValue($c.src(sp)))
             return c.unknown(sp)
         }
-        if name == "Name" or name == "Kind" or name == "Size" or name == "Align" or name == "Length" {
+        if name == "Name" or name == "Kind" or name == "Size" or name == "Align" or name == "Length" or name == "Nullable" {
             v := c.reflConst(x, n)
             if v.Ok { return c.reflExpr(sp, v) }
             if name == "Kind" { c.err(nsp, msgs.ReflNoKind(c.ty(t))) }
