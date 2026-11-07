@@ -293,3 +293,27 @@ test "a join block's own error leaves with its own payload, the tasks' dropped" 
         assert haltedThenRead(Live + i) == "Halt.Now ParseErr.Bad(" $(-i - 1) ", 7)"
     }
 }
+
+# T19b (bulk review 8): a payload field narrowed to its word is read as any value is - indexed, sliced, measured
+type BufErr error { Short(data Array<I64>, msg String), Gone }
+
+fn third(n I64) I64 {
+    e BufErr = BufErr.Short(Array<I64>[n, n + 1, n + 2], "short")
+    if e == BufErr.Short: return e.data[2] + e.data.Len() + e.msg[1:3].Len() + e.data[0:2][1]
+    return -1
+}
+
+fn shortAt(n I64) I64 ? BufErr {
+    if n < 0: error BufErr.Short(Array<I64>[n, 2 * n], "neg")
+    return n
+}
+
+fn second(n I64) I64 { return try shortAt(n) catch BufErr.Short e default e.data[1] catch default 0 }
+
+ThirdBaked I64 = third(4)
+assert second(-5) == -10
+
+test "a narrowed payload's array field is indexed in place" {
+    assert ThirdBaked == 16 and third(Live + 4) == ThirdBaked
+    assert second(Live - 5) == -10 and second(Live + 2) == 2
+}

@@ -16042,6 +16042,13 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Lvalue?& {
                 # S8d: a narrowed local's payload field, read - never written, being the payload's copy
                 fl := c.narrowedName(y, n)
                 if fl >= 0 { return typed.Lvalue.Temp(sp, c.localType(fl), c.readLocal(sp, fl), c.site(typed.SiteKind.Temp, sp)) }
+                # T19b: a payload field of an error local narrowed to one word, read as the member expression reads it
+                # (indexed, sliced, measured) - never written
+                ef := c.errField(sp, memberSpan(sp, c.text(n).Len()), y, n)
+                if ef is not null {
+                    if typeOf(ef) == types.UnknownT: return null
+                    return typed.Lvalue.Temp(sp, typeOf(ef), ef, c.site(typed.SiteKind.Temp, sp))
+                }
                 p := c.place(y)
                 if p is null { return null }
                 return c.field(sp, memberSpan(sp, c.text(n).Len()), p, n)
