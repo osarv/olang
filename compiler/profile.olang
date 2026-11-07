@@ -848,7 +848,7 @@ fn sampleFile(words Array<I64>&, maps String&) Array<U8> {
 
 test Profile.Read "a record still pending as the program ended is stepped over, the records after it read" {
     pending := I64.Min | 1
-    p := try Profile.Read(sampleFile(I64[(1 << 8) | 1, 0x5010, pending, 0, (2 << 8) | 1, 0x5030], ""))
+    p := try Profile.Read(sampleFile(Array<I64>[(1 << 8) | 1, 0x5010, pending, 0, (2 << 8) | 1, 0x5030], ""))
     assert p.Samples.Len() == 2 and p.Addrs.Len() == 2 and p.Addrs[1] == 0x5030 and p.Total() == 3
 }
 

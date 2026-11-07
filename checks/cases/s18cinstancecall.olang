@@ -9,5 +9,5 @@ fn f(a Array<I64>) I64 {
     return a[0]
 }
 fn main() {
-    assert f(I64[1, 2, 3, 4]) == 1
+    assert f(Array<I64>[1, 2, 3, 4]) == 1
 }
