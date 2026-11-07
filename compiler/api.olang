@@ -190,6 +190,7 @@ fn sigLine(line String&) String {
 
 fn itemKind(line String&) String {
     if line.StartsWith("fn ") or line.StartsWith("extern fn ") { return "fn" }
+    if line.StartsWith("error ") { return "error" }     # R3b: an error raised by name, its payload after its name
     if not line.StartsWith("type ") { return "global" }
     for k in Array<String&>["enum", "error", "trait", "struct", "extends"] {
         if line.Contains($" " $k) { return k }
@@ -300,4 +301,14 @@ fn subset(a Array<String&>&, b Array<String&>&) Bool {
 fn valueless(line String&) String {
     at := try line.Find(" = ") catch default line.Len()
     return $line[:at]
+}
+
+if TestBuild {
+
+test itemKind "an error raised by name is an error, not a global (bulk review 8)" {
+    assert itemKind("error Raised(n I64)") == "error"
+    assert itemKind("Limit I64 = 3") == "global"
+    assert itemKind("type E error { Bad }") == "error" and itemKind("fn f() I64") == "fn"
+}
+
 }
