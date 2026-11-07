@@ -29313,6 +29313,18 @@ program's buffer, a bare `Array<Conn>` parameter, a copy of a `Vec<Conn>`, occup
 `Array<R>(n)` of destructor values, a copy of an array of them, a Vec of a Copy-declaring holder. The two cases pinning
 the old refusal (`c11dtortypearg`, `c11holdertypearg`: `Vec<Conn>`, `Vec<Pool>`) now pin what stays refused.
 
+**Measured and gated.** bench's machine code (baseline x86-64, all sixteen programs, addresses masked) is the base's
+(ab1253e's compiler, built from that tree) instruction for instruction. A scratch program calling every changed
+operation on `Vec<I64>`, `Map<I64, I64>` and `Deque<I64>`: each Vec and Map operation alone gives the base's code;
+RemoveAt, SwapRemove, TakeAt and Truncate in one program inline otherwise (RemoveAt no longer calls TakeAt, decision 5)
+- 2,481 lines of disassembly against 2,414, nothing added; a Deque's room is shorter (grown, no fill). The prelude's
+collections use `occupy` and a conditional destructor, which the old seed's compiler cannot build, so the seed was
+written again (the bootstrap's first build then equal to its second and third: the seed is current). `make verify`
+passed (the tokens, trees, layouts and diagnostics goldens captured again first - new and changed files, the prelude's
+lines moved, the compiler's grown types); `make scopesan` 1,765 passed, 0 failed; `OLANG_DEADREGIONS=1 make quick`
+passed; `make scopefuzz` 100 programs, 474 scenarios, 726 refused by the compiler, 0 findings; `fuzz free` 400
+programs, 1,402 scenarios, 998 refused, 1,875 places freeing at once, 0 findings.
+
 ## Unique Part C - storage freed where the destructor runs: measured, tried, not built (2026-11-07, wt-drops, O8d)
 
 LIST.md A3: destructors run where their holder lets go (Part B), but the storage the value owns stays until its scope
