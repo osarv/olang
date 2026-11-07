@@ -25,6 +25,14 @@ line in docs/README.md, committed on wt-sec8 (only those paths; no push). Experi
   (`make dumptool`), scope-fuzzer cursor scenarios - HISTORY.md "A reference local typed per assignment"; one finding
   beyond the note: a loop body's block is a new one each turn, so validity is judged at the parent of the outermost loop
   body a version crossed (`Across`, 3.4)
+- [x] **round 2 built** (wt-sec8r2, 2026-11-07): O27 as placement - views, parts, captures, borrowed calls,
+  conversions and slices of temporaries propose their storage in a second phase (only where the settled first phase
+  still met one kept too long), parts once the field inference has settled; the destructor refusal (question 2), C4's
+  one error, `-memory`'s rows and the language server's hint - HISTORY.md "Storage kept for a view"; found beyond the
+  note: a slice of a temporary needs the temporary homed by lowering (`Plan.TempKept`), the evaluator's stand-in
+  placement needed a viewed temporary in the program's scope, and emit's elision needed nothing (its dataflow already
+  refuses a walk placed outside its loop). Not built: the unique hand-on move (left for its own round - see the
+  hand-off PROGRESS.md)
 
 ## 0. Summary
 
