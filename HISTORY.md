@@ -30183,3 +30183,20 @@ it with no String made (`keyFor` gives a `String&`). Measured: 500,000 encodes o
 1.73G -> 1.22G instructions (callgrind). Decided (mine): all four policies' keys are made for every member a program
 encodes or decodes, rather than only the policies used - a few bytes each, and the call's policy is a run-time value.
 std/json's 20 tests pass, its baked encodes among them.
+
+**Cheaper region headers (the drop-order round's phase 3 measurement).** Early freeing builds each value a sole place
+holds in a region of its own (O8d), and a region cost a `malloc` of its 152-byte header and an `aligned_alloc` of its
+first block (up to 2 KB) - given back to the C allocator at its close: a Vec of a million destructor values pushed and
+truncated went 0.12 -> 0.23 s when it became 1.9 MB instead of 260 MB. The runtime now keeps closed regions' headers and
+first blocks on per-thread lists (`__olang_rfree_hdr`, `__olang_rfree_blk` by size, 64 bytes apart - a first block is
+256 to 2240 bytes), taken by the next region before the C allocator is asked (`__olang_region_hdr_new`,
+`__olang_region_blk_new`) and given back at a retiring worker's end with its chunk pool (`__olang_region_lists_drain`).
+Decided (mine): at most 256 headers and 32 blocks of each size kept per thread (under 3 MB held back at worst - the
+point of early freeing is memory, so the lists are bounded); per thread, as the chunk pool is, so no lock; a header
+closed on another thread than made it (a task's region folded at the join) goes to that thread's list. Measured,
+baseline x86-64 under callgrind (the native builds use instructions valgrind lacks): checks' dropvec 2.82G -> 1.16G
+instructions (best of seven, natively: 0.20 -> 0.09 s), the ast fixture 6.67G -> 6.59G; natively, frames 0.22 -> 0.07 s,
+mapvec 0.10 -> 0.04, session 0.07 -> 0.03, mapremove 0.22 -> 0.12, conns 0.09 -> 0.04, the rest level - but ast
+0.46 -> 0.51 s with 1% fewer instructions (a whole tree per pass in one region: memory reuse order, not work, the likely
+cause; left as measured). Every fixture's maximum resident size is unchanged (1.8-2.4 MB). bench: no row makes regions
+but regex (three of them; 623,002,854 -> 622,993,191 instructions).

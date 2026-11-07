@@ -1547,7 +1547,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `SwapTake` of the last element moves nothing into its own place; `List.Clear`/`Truncate` vacate by counted loops, which
   the optimizer can delete. **Round 6 (2026-10-25): early freeing, in the port** (compiler/free.olang, after the scope
   pass, at the program's root). Candidate places are per type - a reference field, a handle field, an array type's
-  elements; a sole one's values are built in regions of their own (a kid of the scope, the word before each object
+  elements; a sole one's values are built in regions of their own (a kid of the scope, its header and first block
+  taken from a per-thread list of closed ones - 2026-11-07, dropvec 2.82G -> 1.16G instructions -, the word before each object
   naming it) and each let-go releases one. Keep wherever a fact is missing: a function value, an extern, a module
   compiled on its own (B3i: only the root's object makes regions and releases), a task anywhere, a destructor or
   Str/Eq/Hash letting go; a view used after the let-go in the same function keeps too. `-memory` (B18) lists the

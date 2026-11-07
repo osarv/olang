@@ -825,12 +825,13 @@ entry:
   %class0 = load i64, ptr %classptr0
   %small = icmp eq i64 %class0, 0
   br i1 %small, label %spare, label %notspare
-  ; a region's first block (class -1, __olang_region_alloc): back to the C allocator
+  ; a region's first block (class -1, __olang_region_alloc): kept for the thread's next region, else back to the C
+  ; allocator
 notspare:
   %block = icmp eq i64 %class0, -1
   br i1 %block, label %toc, label %pool
 toc:
-  call void @free(ptr %given)
+  call void @__olang_region_blk_free(ptr %given)
   ret void
 spare:
   %s = load ptr, ptr @__olang_pool_spare
@@ -1608,6 +1609,7 @@ retire:
   call i32 @pthread_mutex_unlock(ptr @__olang_worker_lock)
   call i32 @pthread_mutex_unlock(ptr %m)
   call void @__olang_pool_drain()
+  call void @__olang_region_lists_drain()
   call void @__olang_alt_stack_free()
   call void @free(ptr %w)
 ; @prof call void @__olang_prof_thread_end()
@@ -2132,11 +2134,153 @@ link:
 ; %olang.region: its fields are said with the region functions below
 @__olang_region_chunk = global %olang.chunk zeroinitializer
 
+; the headers and first blocks of regions closed on this thread, kept for its next regions rather than given to the C
+; allocator and asked of it again - early freeing makes a region per value a sole place lets go of, and a malloc'd
+; header and block each was about half of what such a loop cost: a list of headers, and a list of blocks per size (a
+; first block is 256 to 2240 bytes, 64 apart: 32 sizes), each linked through its first word, at most 256 headers and 32
+; blocks of a size kept - what a thread may hold back is bounded (under 3MB); a retiring worker gives them all back
+@__olang_rfree_hdr = thread_local(initialexec) global ptr null
+@__olang_rfree_nhdr = thread_local(initialexec) global i64 0
+@__olang_rfree_blk = thread_local(initialexec) global [32 x ptr] zeroinitializer
+@__olang_rfree_nblk = thread_local(initialexec) global [32 x i64] zeroinitializer
+
+; a region's header: one this thread kept, else the C allocator's
+define ptr @__olang_region_hdr_new() {
+entry:
+  %h = load ptr, ptr @__olang_rfree_hdr
+  %none = icmp eq ptr %h, null
+  br i1 %none, label %fresh, label %reuse
+reuse:
+  %next = load ptr, ptr %h
+  store ptr %next, ptr @__olang_rfree_hdr
+  %n = load i64, ptr @__olang_rfree_nhdr
+  %n1 = sub i64 %n, 1
+  store i64 %n1, ptr @__olang_rfree_nhdr
+  ret ptr %h
+fresh:
+  %r = call ptr @malloc(i64 152)
+  call void @__olang_alloc_check(ptr %r)
+  ret ptr %r
+}
+
+; a closed region's header kept for the next, or given back where 256 are kept already
+define void @__olang_region_hdr_free(ptr %r) {
+entry:
+  %n = load i64, ptr @__olang_rfree_nhdr
+  %full = icmp uge i64 %n, 256
+  br i1 %full, label %give, label %keep
+keep:
+  %h = load ptr, ptr @__olang_rfree_hdr
+  store ptr %h, ptr %r
+  store ptr %r, ptr @__olang_rfree_hdr
+  %n1 = add i64 %n, 1
+  store i64 %n1, ptr @__olang_rfree_nhdr
+  ret void
+give:
+  call void @free(ptr %r)
+  ret void
+}
+
+; a region's first block of bbytes (256 to 2240, a multiple of 64): one this thread kept, else the C allocator's
+define ptr @__olang_region_blk_new(i64 %bbytes) {
+entry:
+  %q = lshr i64 %bbytes, 6
+  %k = sub i64 %q, 4
+  %inrange = icmp ult i64 %k, 32
+  br i1 %inrange, label %look, label %fresh
+look:
+  %slot = getelementptr [32 x ptr], ptr @__olang_rfree_blk, i64 0, i64 %k
+  %b = load ptr, ptr %slot
+  %none = icmp eq ptr %b, null
+  br i1 %none, label %fresh, label %reuse
+reuse:
+  %next = load ptr, ptr %b
+  store ptr %next, ptr %slot
+  %np = getelementptr [32 x i64], ptr @__olang_rfree_nblk, i64 0, i64 %k
+  %n = load i64, ptr %np
+  %n1 = sub i64 %n, 1
+  store i64 %n1, ptr %np
+  ret ptr %b
+fresh:
+  %m = call ptr @aligned_alloc(i64 64, i64 %bbytes)
+  call void @__olang_alloc_check(ptr %m)
+  ret ptr %m
+}
+
+; a closed region's first block (its capacity says its size) kept for the next, or given back where 32 of its size are
+; kept already
+define void @__olang_region_blk_free(ptr %b) {
+entry:
+  %capp = getelementptr %olang.chunk, ptr %b, i32 0, i32 2
+  %cap = load i64, ptr %capp
+  %bytes = add i64 %cap, 64
+  %q = lshr i64 %bytes, 6
+  %k = sub i64 %q, 4
+  %inrange = icmp ult i64 %k, 32
+  br i1 %inrange, label %count, label %give
+count:
+  %np = getelementptr [32 x i64], ptr @__olang_rfree_nblk, i64 0, i64 %k
+  %n = load i64, ptr %np
+  %full = icmp uge i64 %n, 32
+  br i1 %full, label %give, label %keep
+keep:
+  %slot = getelementptr [32 x ptr], ptr @__olang_rfree_blk, i64 0, i64 %k
+  %h = load ptr, ptr %slot
+  store ptr %h, ptr %b
+  store ptr %b, ptr %slot
+  %n1 = add i64 %n, 1
+  store i64 %n1, ptr %np
+  ret void
+give:
+  call void @free(ptr %b)
+  ret void
+}
+
+; everything this thread kept for its regions given back - a worker retiring (P2a), as its chunk pool is
+define void @__olang_region_lists_drain() {
+entry:
+  %h0 = load ptr, ptr @__olang_rfree_hdr
+  store ptr null, ptr @__olang_rfree_hdr
+  store i64 0, ptr @__olang_rfree_nhdr
+  br label %hdrs
+hdrs:
+  %h = phi ptr [ %h0, %entry ], [ %hn, %hfree ]
+  %hend = icmp eq ptr %h, null
+  br i1 %hend, label %sizes, label %hfree
+hfree:
+  %hn = load ptr, ptr %h
+  call void @free(ptr %h)
+  br label %hdrs
+sizes:
+  %k = phi i64 [ 0, %hdrs ], [ %k1, %blkdone ]
+  %kend = icmp eq i64 %k, 32
+  br i1 %kend, label %done, label %size
+size:
+  %slot = getelementptr [32 x ptr], ptr @__olang_rfree_blk, i64 0, i64 %k
+  %b0 = load ptr, ptr %slot
+  store ptr null, ptr %slot
+  %np = getelementptr [32 x i64], ptr @__olang_rfree_nblk, i64 0, i64 %k
+  store i64 0, ptr %np
+  br label %blks
+blks:
+  %b = phi ptr [ %b0, %size ], [ %bn, %bfree ]
+  %bend = icmp eq ptr %b, null
+  br i1 %bend, label %blkdone, label %bfree
+bfree:
+  %bn = load ptr, ptr %b
+  call void @free(ptr %b)
+  br label %blks
+blkdone:
+  %k1 = add i64 %k, 1
+  br label %sizes
+done:
+  ret void
+}
+
 ; a new region, a kid of parent: empty, closed with parent unless released before
 define ptr @__olang_region_make(ptr %parent) noinline {
 entry:
-  %r = call ptr @malloc(i64 152)
-  call void @__olang_alloc_check(ptr %r)
+  %r = call ptr @__olang_region_hdr_new()
   call void @llvm.memset.p0.i64(ptr %r, i8 0, i64 152, i1 false)
   store ptr @__olang_region_chunk, ptr %r
   %tailp = getelementptr %olang.scope, ptr %r, i32 0, i32 2
@@ -2186,8 +2330,7 @@ block:
   %tr = and i64 %t63, -64
   %bcap = add i64 %tr, 128
   %bbytes = add i64 %bcap, 64
-  %b = call ptr @aligned_alloc(i64 64, i64 %bbytes)
-  call void @__olang_alloc_check(ptr %b)
+  %b = call ptr @__olang_region_blk_new(i64 %bbytes)
   store ptr null, ptr %b
   %bused = getelementptr %olang.chunk, ptr %b, i32 0, i32 1
   store i64 0, ptr %bused
@@ -2491,7 +2634,7 @@ own:
   call void @__olang_scope_close(ptr %cur)
   %inner = getelementptr %olang.region, ptr %cur, i32 0, i32 1
   call void @__olang_scope_close(ptr %inner)
-  call void @free(ptr %cur)
+  call void @__olang_region_hdr_free(ptr %cur)
   br label %freed
 freed:
   br label %loop
@@ -3304,6 +3447,7 @@ cleared:
 out:
   call void @__olang_pool_share()
   call void @__olang_pool_drain()
+  call void @__olang_region_lists_drain()
   call void @__olang_alt_stack_free()
 ; @prof call void @__olang_prof_thread_end()
   ret ptr null
