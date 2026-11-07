@@ -35,6 +35,7 @@ import "source"
 import "parse"
 import "diag"
 import "msgs"
+import "diagmsg"
 import "unparse"
 
 # the file's text written in the layout: ts is its scan, the lists the parser's type brackets by token index, held the
@@ -652,9 +653,9 @@ fn FileLayout(given source.Source&, std String&, prelude String&, color Bool, sa
     d := diag.Diagnostics(color)
     o := OracleFor(src.Path, std, prelude, names)
     file := d.AddFile(src.Path, src.Text)
-    ts := scan.Scan(src.Text)
+    ts := scan.Tokens.Scan(src.Text)
     for x in ts.Diags {
-        d.Error(diag.Where.Span(file, I64(x.Start), I64(x.End)), msgs.Msg(msgs.Diag.UnknownChar, x.Rule(), x.Message()))
+        d.Error(diag.Where.Span(file, I64(x.Start), I64(x.End)), diagmsg.Msg(msgs.Diag.UnknownChar, x.Rule(), x.Message()))
     }
     p := parse.Parser(src, ts, names, o, d, file)
     decls := p.File()
@@ -676,7 +677,7 @@ fn Files(mode String&, files Array<String&>&, std String&) I32 {
     prelude := PreludeTypes(std)
     status I32 = 0
     for path in files {
-        src := try source.Read(path) catch os.Error {
+        src := try source.Source.Read(path) catch os.Error {
             errs.Write("olang: " $path ": cannot be read\n")
             status = 1
             continue
@@ -754,7 +755,7 @@ fn (l loader&) target(importer String&, ipath String&) String {
     first := ipath
     slash := try ipath.FindByte('/') catch default -1
     if slash >= 0 { first = ipath[:slash] }
-    if first.Contains(".") { return "" }
+    if (first.Contains(".") and first != "." and first != "..") { return "" }
     if ipath.StartsWith("std/") { return $filepath.Join(l.std, ipath[4:]) ".olang" }
     return $filepath.Join(filepath.Dir(importer), ipath) ".olang"
 }
@@ -765,8 +766,8 @@ fn (l mut loader&) load(path String&) I64 {
     for i in range l.paths.Len() {
         if l.paths[i] == real { return i }
     }
-    src := try source.Read(real) catch os.Error { return -1 }
-    ts := scan.Scan(src.Text)
+    src := try source.Source.Read(real) catch os.Error { return -1 }
+    ts := scan.Tokens.Scan(src.Text)
     m := l.paths.Len()
     l.paths.Push($real)
     b := StringBuilder()

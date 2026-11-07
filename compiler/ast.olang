@@ -268,10 +268,13 @@ type Stmt enum {
 # a function, method, lambda, extern or trait method: receiver (null for none; a trait method's "mut" is a receiver of
 # no name whose type is "mut" alone), name (0 for a lambda), signature, body (null for an extern, a trait method, and a
 # function whose body did not parse - declared by its signature alone: Bodied false), and the type variables its list
-# after the name introduces (G3, QW: "fn max<T>(...)"; empty for none); Export for "export fn" (X12): C may call it
+# after the name introduces (G3, QW: "fn max<T>(...)"; empty for none); Export for "export fn" (X12): C may call it.
+# A builder (D19, "fn Color.FromHex(...)") has its owner, the type written before the ".", in Owner (null for none),
+# the name after the "." in Member, and as Name the two joined, "Color.FromHex" - a name no source writes alone; in a
+# trait a builder required (T30b, "T.Parse(...)") likewise
 type Func struct(Sp source.Span, Recv Param?&, Name source.NameId, S Sig&, Body Array<Stmt&>&
                  TypeParams Array<TypeParam&>& = Array<TypeParam&>(0), Bodied Bool = true, Export Bool = false
-                 Attrs Array<Attr&>& = Array<Attr&>(0)) {
+                 Attrs Array<Attr&>& = Array<Attr&>(0), Owner TypeRef?& = null, Member source.NameId = source.NameId(0)) {
     Sp
     Recv
     Name
@@ -281,6 +284,20 @@ type Func struct(Sp source.Span, Recv Param?&, Name source.NameId, S Sig&, Body 
     Bodied
     Export
     Attrs      # the attributes written before it (G39)
+    Owner
+    Member
+}
+
+# D19: whether a function is a builder - declared on a type, "fn Color.FromHex(...)"
+fn (f Func&) IsBuilder() Bool { return f.Owner is not null }
+
+# D19: a builder's owner's name as written, "Color" for "fn Color.FromHex" and "List" for "fn List<T>.Of"; 0 for none
+fn (f Func&) OwnerName() source.NameId {
+    if f.Owner is null { return source.NameId(0) }
+    match f.Owner! {
+        case TypeRef.Named(_, path, _) { return path[path.Len() - 1] }
+        case _ { return source.NameId(0) }
+    }
 }
 
 # an enum case: name and payload
@@ -567,7 +584,7 @@ fn FindTest(ds Array<Decl&>&, sp source.Span) Decl?& {
                 if dsp == sp { return d }
             }
             case Decl.If(_, ti) {
-                found := findTestIf(ti, sp)
+                found := Decl.findTestIf(ti, sp)
                 if found is not null { return found }
             }
             case _ { }
@@ -576,7 +593,7 @@ fn FindTest(ds Array<Decl&>&, sp source.Span) Decl?& {
     return null
 }
 
-fn findTestIf(ti TopIf?&, sp source.Span) Decl?& {
+fn Decl.findTestIf(ti TopIf?&, sp source.Span) Decl?& {
     if ti is null { return null }
     if ti.Then is not null {
         f := FindTest(ti.Then!.Decls, sp)
@@ -586,7 +603,7 @@ fn findTestIf(ti TopIf?&, sp source.Span) Decl?& {
         f := FindTest(ti.Else!.Decls, sp)
         if f is not null { return f }
     }
-    return findTestIf(ti.ElseIf, sp)
+    return Decl.findTestIf(ti.ElseIf, sp)
 }
 
 # what a test is an example of, as written ("Map.Get"), "" for none (B7a)
@@ -630,6 +647,22 @@ fn RecvTarget(f Func&, names source.Names&) String {
         }
     }
     return ""
+}
+
+# B7a, D19: the name a test gives a builder's owner, as its declaration writes it - "Color" for "fn Color.FromHex",
+# "List" for "fn List<T>.Of", and for a default over a constrained type variable the trait that constrains it ("Integer"
+# for "fn T.Parse<T Integer>"); "" for no builder
+fn OwnerTarget(f Func&, names source.Names&) String {
+    n := f.OwnerName()
+    if n == source.NameId(0) { return "" }
+    for tp in f.TypeParams {
+        if tp.Name != n or tp.Ty is null { continue }
+        match tp.Ty! {
+            case TypeRef.Named(_, cpath, _) { return $names.Text(cpath[cpath.Len() - 1]) }
+            case _ { return "" }
+        }
+    }
+    return $names.Text(n)
 }
 
 # a test's description, between its quotes (B7)

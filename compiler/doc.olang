@@ -266,7 +266,7 @@ fn Exported(name String&) Bool { return name.Len() > 0 and name[0].IsUpper() }
 
 # module mi of a checked program: its documentation and its items in the order the file declares them - only the
 # exported ones where all is false, every one where it is true
-fn Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, all Bool) Module {
+fn Module.Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, all Bool) Module {
     m := c.P.L.Mods[mi]
     text := m.Src!.Text
     md := Module($m.Identity, $m.Path, ModuleDoc(text))
@@ -283,19 +283,27 @@ fn Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, al
         if e.Kind == names.What.Func {
             f := c.P.FnNamed(mi, e.Name)
             if f < 0 or c.P.FnDecl(f).Recv is not null { continue }
-            # a builder of a type listed here stands under that type instead
-            bt := explain.BuilderOf(c, f)
-            if bt >= types.DeclId(0) and (all or Exported($nm.Text(c.P.T.DeclName(bt)))) { continue }
         } else if e.Kind != names.What.Global and e.Kind != names.What.Type {
             continue
         }
-        it := try item(c, sc, x, mi, name, all) catch explain.Missing { continue }
+        it := try Entry.item(c, sc, x, mi, name, all) catch explain.Missing { continue }
         md.Items.Push(it)
     }
     # methods of types declared elsewhere - a built-in type's, in the prelude (M19d): each an item of its own
     c.P.AllFns()
     for f in range c.P.FnCount() {
         decl := c.P.FnDecl(f)
+        if decl.IsBuilder() and c.P.FnModule(f) == mi and explain.BuilderOf(c, f) < types.DeclId(0) {
+            # D19: a builder of a built-in type or a trait's default builder - an item of its own
+            bname := $nm.Text(decl.Member)
+            if not all and not Exported(bname) { continue }
+            bit := Entry(firstLines(explain.FnText(c, sc, f)), Above(text, I64(decl.Sp.Start)), bname)
+            bit.File = m.File
+            bit.At = I64(decl.Sp.Start)
+            bit.Target = $ast.OwnerTarget(decl, nm) "." $bname
+            md.Items.Push(bit)
+            continue
+        }
         if c.P.FnModule(f) != mi or decl.Recv is null { continue }
         name := $nm.Text(decl.Name)
         if not all and not Exported(name) { continue }
@@ -406,7 +414,7 @@ fn firstLines(text String&) String {
 
 # the item name of module mi (a top-level name, or "Type.Method"), documented: what explain gives it, each member with
 # its doc comment - every member where all is true, else the exported ones
-fn item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, name String&, all Bool) Entry ? explain.Missing {
+fn Entry.item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, name String&, all Bool) Entry ? explain.Missing {
     m := c.P.L.Mods[mi]
     text := m.Src!.Text
     nm := c.P.L.Names
@@ -484,7 +492,7 @@ fn item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
 fn pushBuilders(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, e mut Entry&, builders Vec<I64>, all Bool) {
     for f in builders {
         name := $c.P.L.Names.Text(c.P.FnDecl(f).Name)
-        bi := try item(c, sc, x, mi, name, all) catch explain.Missing { continue }
+        bi := try Entry.item(c, sc, x, mi, name, all) catch explain.Missing { continue }
         bi.Builder = true
         e.Members.Push(bi)
     }
@@ -626,7 +634,7 @@ fn wordChar(ch Char) Bool { return ch.IsLetter() or ch.IsDigit() or ch == '_' }
 
 # the item name of module mi as `doc FILE NAME` prints it
 fn ItemText(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, name String&) String ? explain.Missing {
-    e := attached(c, mi, try item(c, sc, x, mi, name, true), "")
+    e := attached(c, mi, try Entry.item(c, sc, x, mi, name, true), "")
     b := StringBuilder()
     entryText(b, e, "")
     return b.ToString()

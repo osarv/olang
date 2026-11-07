@@ -26,6 +26,7 @@ import "scan"
 import "ast"
 import "diag"
 import "msgs"
+import "diagmsg"
 import "cond"
 import "fetch"
 import "load"
@@ -768,7 +769,7 @@ fn (c mut Checker&) settleUnset() {
             continue
         }
         b := c.Bodies[u.Body]
-        v := definit.Judge(b, typed.LocalId(I32(u.Local)), u.Field)
+        v := definit.Verdict.Judge(b, typed.LocalId(I32(u.Local)), u.Field)
         found, readAt, why, whyAt := v.Found, v.ReadAt, v.Why, v.WhyAt
         if not found {
             d.Drop(u.Group)
@@ -957,6 +958,7 @@ fn (c mut Checker&) attempt() {
             c.overrideClash(f)
             c.methodOverlap(f)
         }
+        if c.P.FnDecl(f).IsBuilder() { c.builderRules(f) } else if c.P.FnDecl(f).Recv is null { c.placement(f) }   # D19, D19a
         c.fnTypeParams(f)
         if c.P.VarCount(generic.FnOwner(f)) > 0 { continue }
         c.fnBody(c.P.FnInstance(f, types.ListId(0)))
@@ -1258,6 +1260,142 @@ fn (c mut Checker&) namesType(mi I64, n source.NameId) Bool {
     return false
 }
 
+# D19: a builder's declaration - its owner a type its module declares (in the prelude a built-in or prelude type too)
+# or a constrained type variable; one result, a value of its owner; no parameter naming the owner; a name its owner's
+# namespace does not hold already
+fn (c mut Checker&) builderRules(f I64) {
+    fd := c.P.FnDecl(f)
+    mi := c.P.FnModule(f)
+    o := c.P.OwnerOf(f)
+    if o == types.UnknownT { return }   # said where the owner is written
+    c.push(-1, mi, types.VoidT, types.ListId(0))
+    defer c.pop()
+    nsp := c.nameSpan(fd)
+    if not c.builderOwnerOk(f, o, fd.Owner!.Span()) { return }
+    sig := c.P.Sig(f)
+    r := c.P.T.Result(sig)
+    if fd.S.Results.Len() != 1 or not c.makesOwner(r, o) {
+        got := c.ty(r) if fd.S.Results.Len() == 1 else "no result" if fd.S.Results.Len() == 0 else "several"
+        c.err(nsp, msgs.BuilderResult(c.ty(o), got))
+        return
+    }
+    for i, prm in fd.S.Params {
+        ps := c.P.T.Items(c.P.T.Params(sig))
+        if i < ps.Len() and c.typeNames(ps[i], o, 0) {
+            c.err(prm.Sp, msgs.BuilderTakesOwner(c.ty(o), c.text(prm.Name)))
+            return
+        }
+    }
+    taken := c.builderNameTaken(o, fd.Member)
+    if taken.Len() > 0 {
+        c.err(nsp, msgs.BuilderNameTaken(c.ty(o), c.tok(fd.Member), taken))
+        return
+    }
+    g := c.P.BuilderOverlap(f)
+    if g >= 0 { c.err(nsp, msgs.BuilderTwice(c.ty(o), c.tok(fd.Member))) }
+}
+
+# D19: whether a builder's owner is one its module may declare a builder of - said where it is not
+fn (c mut Checker&) builderOwnerOk(f I64, o types.TypeId, osp source.Span) Bool {
+    mi := c.P.FnModule(f)
+    prelude := c.P.L.Mods[mi].Prelude
+    if c.P.T.KindOf(o) == types.Kind.Var {
+        # a default of a trait: the variable constrained by one this module declares (the prelude: any of its own)
+        k := c.P.BuilderKey(f)
+        if k < 0 {
+            c.err(osp, msgs.BuilderOwnerKind(c.ty(o)))
+            return false
+        }
+        tm := c.P.DeclModule(types.DeclId(I32(k & ((I64(1) << 40) - 1))))
+        if tm == mi or (prelude and c.P.L.Mods[tm].Prelude) { return true }
+        c.err(osp, msgs.BuilderOwnerElsewhere(c.ty(o)))
+        return false
+    }
+    if c.P.T.KindOf(o) != types.Kind.Named {
+        if prelude and c.P.BuilderKey(f) >= 0 { return true }
+        c.err(osp, msgs.BuilderOwnerElsewhere(c.ty(o)) if c.P.BuilderKey(f) >= 0 else msgs.BuilderOwnerKind(c.ty(o)))
+        return false
+    }
+    k := c.declKind(o)
+    if k != types.DeclKind.Struct and k != types.DeclKind.Enum and k != types.DeclKind.Over and k != types.DeclKind.Foreign {
+        c.err(osp, msgs.BuilderOwnerKind(c.ty(o)))
+        return false
+    }
+    dm := c.P.DeclModule(c.P.T.DeclOf(o))
+    if dm == mi or (prelude and c.P.L.Mods[dm].Prelude) { return true }
+    c.err(osp, msgs.BuilderOwnerElsewhere(c.ty(o)))
+    return false
+}
+
+# D19: whether a builder's result is a value of its owner - the owner, a reference to it, an instance of it
+fn (c mut Checker&) makesOwner(r types.TypeId, o types.TypeId) Bool {
+    x := c.P.T.Plain(c.deref(r))
+    if c.P.T.KindOf(o) == types.Kind.Var { return c.P.T.Same(x, c.P.T.Plain(o)) }
+    if c.P.T.KindOf(o) != types.Kind.Named { return c.P.T.Same(x, c.P.T.Plain(o)) }
+    return c.P.T.KindOf(x) == types.Kind.Named and c.P.T.DeclOf(x) == c.P.T.DeclOf(o)
+}
+
+# D19, D19a: whether a type names t's declaration (t's variable, for a variable) anywhere in it - as itself, a
+# reference, an element, a type argument, a function type's part
+fn (c mut Checker&) typeNames(x types.TypeId, t types.TypeId, depth I64) Bool {
+    if depth > 16 or x == types.UnknownT { return false }
+    if c.P.T.KindOf(t) == types.Kind.Var { if c.P.T.Same(c.P.T.Plain(x), c.P.T.Plain(t)) { return true } }
+    match c.P.T.KindOf(x) {
+        case types.Kind.Named {
+            if c.P.T.KindOf(t) == types.Kind.Named and c.P.T.DeclOf(x) == c.P.T.DeclOf(t) { return true }
+            for a in c.P.T.Items(c.P.T.Args(x)) { if c.typeNames(a, t, depth + 1) { return true } }
+        }
+        case types.Kind.Ref { return c.typeNames(c.P.T.Referent(x), t, depth + 1) }
+        case types.Kind.Array { return c.typeNames(c.P.T.Elem(x), t, depth + 1) }
+        case types.Kind.Func {
+            for p in c.P.T.Items(c.P.T.Params(x)) { if c.typeNames(p, t, depth + 1) { return true } }
+            return c.typeNames(c.P.T.Result(x), t, depth + 1)
+        }
+        case types.Kind.Any { return c.typeNames(c.P.T.AnyTrait(x), t, depth + 1) }
+        case _ { }
+    }
+    return false
+}
+
+# D19: what a builder's name already is in its owner's namespace - "a case", "a member the language reads through a
+# type's name" - "" for nothing
+fn (c mut Checker&) builderNameTaken(o types.TypeId, n source.NameId) String {
+    name := c.text(n)
+    if c.isEnum(o) and c.hasCase(o, n) { return "a case" }
+    if generic.ProjectsType(name) or name == "Functions" or name == "Methods" or name == "Cases" or name == "Fields" or
+       name == "Params" or name == "Results" or name == "Errors" or name == "Name" or name == "Kind" or name == "Size" or
+       name == "Align" or name == "Length" {
+        return "a member reflection reads through a type's name"
+    }
+    if c.isNumber(o) and (name == "Max" or name == "Min" or name == "Inf" or name == "NaN" or name == "Epsilon" or name == "SmallestNormal") {
+        return "a limit of the number type"
+    }
+    if name == "From" and c.isEnum(o) and c.rawsOf(o).Ty != types.UnknownT { return "the raw value's reverse" }
+    return ""
+}
+
+# D19a: a function making a value of a type its module declares and taking none of it is that type's builder
+fn (c mut Checker&) placement(f I64) {
+    fd := c.P.FnDecl(f)
+    if fd.Export or fd.S.Results.Len() != 1 or c.P.FnIsExtern(f) { return }
+    mi := c.P.FnModule(f)
+    if c.text(fd.Name) == "main" and mi == c.P.L.Root { return }
+    if ast.FirstYield(fd.Body).Start >= I32(0) { return }   # a generator gives an iterator (D18)
+    sig := c.P.Sig(f)
+    r := c.P.T.Plain(c.deref(c.P.T.Result(sig)))
+    if c.P.T.KindOf(r) != types.Kind.Named { return }
+    k := c.declKind(r)
+    if k != types.DeclKind.Struct and k != types.DeclKind.Enum and k != types.DeclKind.Over { return }
+    d := c.P.T.DeclOf(r)
+    if c.P.DeclModule(d) != mi { return }
+    for p in c.P.T.Items(c.P.T.Params(sig)) {
+        if c.typeNames(p, r, 0) { return }
+    }
+    c.push(-1, mi, types.VoidT, types.ListId(0))
+    c.err(c.nameSpan(fd), msgs.BuilderExpected(c.tok(fd.Name), c.text(c.P.T.DeclName(d)), c.text(fd.Name)))
+    c.pop()
+}
+
 # T29e: a method of a type extending its base may not take a name an inherited one has - save the protocol methods the
 # compiler consults (Eq, Hash, Str), which replace the base's
 fn (c mut Checker&) inheritClash(f I64) {
@@ -1301,7 +1439,6 @@ fn (c mut Checker&) inheritClash(f I64) {
     if name == "Narrow" and c.isNumber(rt) { given = true }
     if c.P.Extends(rt) {
         if name == "Bits" and c.P.T.IsFloat(u) { given = true }
-        if name.EndsWith("FromBits") and c.P.T.IsUnsigned(u) { given = true }
         if (name.StartsWith("Atomic") or bitOp(name) != typed.PrimOp.Retire) and c.P.T.IsInt(u) { given = true }
     }
     if name == "Value" and c.isEnum(rt) and c.rawsOf(rt).Ty != types.UnknownT { given = true }   # T17e
@@ -1382,7 +1519,7 @@ fn protocolArity(cap String&) I64 {
 # E10a, E11c); its private spelling is held to the same (M6b)
 # an operator method's shape error at its name - a private spelling's with a note saying why it is held to the shape,
 # since its name does not (M6b)
-fn (c mut Checker&) shapeErr(at source.Span, fd ast.Func&, cap String&, m msgs.Msg) {
+fn (c mut Checker&) shapeErr(at source.Span, fd ast.Func&, cap String&, m diagmsg.Msg) {
     rec := c.err(at, m)
     name := c.text(fd.Name)
     if name != cap { c.P.L.Diags.Note(rec, c.at(at), msgs.NoteProtocolSpelling(name, cap, cap)) }
@@ -2429,6 +2566,12 @@ fn (c mut Checker&) testTarget(mi I64, nsp source.Span, target ast.Path?&) {
         elsewhere := false
         for f in range c.P.FnCount() {
             decl := c.P.FnDecl(f)
+            if decl.IsBuilder() and decl.Member == parts[1] and ast.OwnerTarget(decl, c.P.L.Names) == c.text(parts[0]) {
+                # D19: a builder, by the owner its declaration writes
+                if c.P.FnModule(f) == mi { return }
+                elsewhere = true
+                continue
+            }
             if decl.Recv is null or decl.Name != parts[1] { continue }
             ps := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
             if ps.Len() == 0 { continue }
@@ -2456,6 +2599,7 @@ fn (c mut Checker&) testTarget(mi I64, nsp source.Span, target ast.Path?&) {
     c.P.AllFns()
     for f in range c.P.FnCount() {
         decl := c.P.FnDecl(f)
+        if decl.IsBuilder() and c.P.FnModule(f) == mi { near.Offer($ast.OwnerTarget(decl, c.P.L.Names) "." $c.text(decl.Member)) }
         if decl.Recv is null or c.P.FnModule(f) != mi { continue }
         ps := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
         if ps.Len() == 0 { continue }
@@ -3421,6 +3565,11 @@ fn (c mut Checker&) nameSpan(fd ast.Func&) source.Span {
     name := c.text(fd.Name)
     from I64 = 2
     if fd.Recv is not null { from = I64(fd.Recv!.Sp.End - fd.Sp.Start) }
+    if fd.IsBuilder() {
+        # D19: a builder's name, after its owner's "."
+        name = c.text(fd.Member)
+        from = I64(fd.Owner!.Span().End - fd.Sp.Start)
+    }
     if from < 0 or from > text.Len() { from = 0 }
     at := try text[from:].Find(name) catch default -1
     if at < 0 { return fd.Sp }
@@ -4786,7 +4935,7 @@ fn (c mut Checker&) fitsTest(sp source.Span, x typed.Expr&, t types.TypeId) type
 }
 
 # an error said in a contract, in the module it is written in whatever frame asked for the contract
-fn (c mut Checker&) ctErr(mi I64, sp source.Span, m msgs.Msg) I64 {
+fn (c mut Checker&) ctErr(mi I64, sp source.Span, m diagmsg.Msg) I64 {
     return c.P.L.Diags.Error(diag.Where.Span(c.P.L.Mods[mi].File, I64(sp.Start), I64(sp.End)), m)
 }
 
@@ -5453,13 +5602,13 @@ fn (c mut Checker&) at(sp source.Span) diag.Where {
     return diag.Where.Span(c.fr().File, I64(sp.Start), I64(sp.End))
 }
 
-fn (c mut Checker&) err(sp source.Span, m msgs.Msg) I64 { return c.P.L.Diags.Error(c.at(sp), m) }
+fn (c mut Checker&) err(sp source.Span, m diagmsg.Msg) I64 { return c.P.L.Diags.Error(c.at(sp), m) }
 
 # G18 (B1.4): what a generic's body asks of the type a call bound one of its variables to - a method, an operator's
 # method, a field, a walk - where the type has none: said at the outermost call that bound it ("Max needs Less, and
 # Point has none"), with a note where the body asks for it, never as an error inside the generic; anything else is m,
 # said where it is
-fn (c mut Checker&) needErr(sp source.Span, t types.TypeId, need String&, m msgs.Msg) I64 {
+fn (c mut Checker&) needErr(sp source.Span, t types.TypeId, need String&, m diagmsg.Msg) I64 {
     inst := c.boundBy(c.deref(t))
     if inst < 0 { return c.err(sp, m) }
     o := c.P.InstanceOrigin(inst)
@@ -6257,7 +6406,7 @@ type litv struct(Ok Bool, IsFloat Bool, Big Bool, I I64, F F64) {
 }
 
 # an integer literal value past 64 bits, its sign and magnitude (E4a, T4a)
-fn wideLit(neg Bool, m U128) litv {
+fn litv.wideLit(neg Bool, m U128) litv {
     v := litv(true, false, true, I64(U64(m & U128(U64(0) - 1))), 0.0)
     v.Wide = true
     v.Neg = neg
@@ -6280,84 +6429,84 @@ fn numberLitsOnly(x ast.Expr?&) Bool {
     }
 }
 
-fn noLit() litv { return litv(false, false, false, 0, 0.0) }
+fn litv.noLit() litv { return litv(false, false, false, 0, 0.0) }
 
-fn intLit(v I64) litv { return litv(true, false, false, v, 0.0) }
+fn litv.intLit(v I64) litv { return litv(true, false, false, v, 0.0) }
 
-fn floatLit(f F64) litv { return litv(true, true, false, 0, f) }
+fn litv.floatLit(f F64) litv { return litv(true, true, false, 0, f) }
 
 fn (c mut Checker&) fold(x ast.Expr?&) litv {
-    if x is null { return noLit() }
+    if x is null { return litv.noLit() }
     match x {
         case ast.Expr.Lit(sp, kind) {
             text := c.src(sp)
             if kind == token.Tok.IntLit {
                 if text.Len() > 2 and text[0] == '0' and (text[1] == 'x' or text[1] == 'X' or text[1] == 'b' or text[1] == 'B') {
                     # L10a: a pattern of at most 64 bits keeps both readings; a wider one is its unsigned value
-                    u := try text.ParseUint(0) catch { return ofMag(false, try wideDigits(text) catch { return noLit() }) }
-                    h := intLit(I64(u))
+                    u := try text.ParseUint(0) catch { return litv.ofMag(false, try wideDigits(text) catch { return litv.noLit() }) }
+                    h := litv.intLit(I64(u))
                     h.Hex = true
                     return h
                 }
                 v := try text.ParseInt(0) catch {
-                    u := try text.ParseUint(0) catch { return ofMag(false, try wideDigits(text) catch { return noLit() }) }
+                    u := try text.ParseUint(0) catch { return litv.ofMag(false, try wideDigits(text) catch { return litv.noLit() }) }
                     return litv(true, false, true, I64(u), 0.0)
                 }
-                return intLit(v)
+                return litv.intLit(v)
             }
             if kind == token.Tok.FloatLit {
                 clean := text.Replace("_", "")
-                f := try clean.ParseFloat() catch { return noLit() }
-                return floatLit(f)
+                f := try clean.ParseFloat() catch { return litv.noLit() }
+                return litv.floatLit(f)
             }
-            return noLit()
+            return litv.noLit()
         }
         case ast.Expr.Paren(_, y) { return c.fold(y) }
         case ast.Expr.Unary(_, op, y) {
             v := c.fold(y)
-            if not v.Ok { return noLit() }
+            if not v.Ok { return litv.noLit() }
             if op == token.Tok.Minus {
-                if v.IsFloat { return floatLit(-v.F) }
-                vMag := magOf(v)
+                if v.IsFloat { return litv.floatLit(-v.F) }
+                vMag := signMag.magOf(v)
                 n, m := vMag.Neg, vMag.M
-                return ofMag(not n, m) if m != U128(0) else intLit(0)
+                return litv.ofMag(not n, m) if m != U128(0) else litv.intLit(0)
             }
             if op == token.Tok.Tilde and not v.IsFloat and not v.Big {
-                r := intLit(~v.I)
+                r := litv.intLit(~v.I)
                 r.Hex = v.Hex
                 return r
             }
-            return noLit()
+            return litv.noLit()
         }
         case ast.Expr.Binary(_, op, a, b) {
             va := c.foldPart(a)
             vb := c.foldPart(b)
-            if not va.Ok or not vb.Ok { return noLit() }
+            if not va.Ok or not vb.Ok { return litv.noLit() }
             if va.IsFloat or vb.IsFloat {
-                if va.Big or vb.Big { return noLit() }
+                if va.Big or vb.Big { return litv.noLit() }
                 fa := va.F if va.IsFloat else F64(va.I)
                 fb := vb.F if vb.IsFloat else F64(vb.I)
-                if op == token.Tok.Plus { return floatLit(fa + fb) }
-                if op == token.Tok.Minus { return floatLit(fa - fb) }
-                if op == token.Tok.Star { return floatLit(fa * fb) }
-                if op == token.Tok.Slash { return floatLit(fa / fb) }
-                return noLit()
+                if op == token.Tok.Plus { return litv.floatLit(fa + fb) }
+                if op == token.Tok.Minus { return litv.floatLit(fa - fb) }
+                if op == token.Tok.Star { return litv.floatLit(fa * fb) }
+                if op == token.Tok.Slash { return litv.floatLit(fa / fb) }
+                return litv.noLit()
             }
-            aMag := magOf(va)
+            aMag := signMag.magOf(va)
             na, ma := aMag.Neg, aMag.M
-            bMag := magOf(vb)
+            bMag := signMag.magOf(vb)
             nb, mb := bMag.Neg, bMag.M
-            if op == token.Tok.Plus { return addMag(na, ma, nb, mb) }
-            if op == token.Tok.Minus { return addMag(na, ma, not nb, mb) }
+            if op == token.Tok.Plus { return litv.addMag(na, ma, nb, mb) }
+            if op == token.Tok.Minus { return litv.addMag(na, ma, not nb, mb) }
             if op == token.Tok.Star {
-                if ma != U128(0) and mb > ~U128(0) / ma { return noLit() }
+                if ma != U128(0) and mb > ~U128(0) / ma { return litv.noLit() }
                 p := ma * mb
-                return ofMag(na != nb and p != U128(0), p)
+                return litv.ofMag(na != nb and p != U128(0), p)
             }
             if op == token.Tok.Amp or op == token.Tok.Pipe or op == token.Tok.Caret {
                 if va.Wide or vb.Wide { return wideBits(op, va, vb) }
                 r := va.I & vb.I if op == token.Tok.Amp else va.I | vb.I if op == token.Tok.Pipe else va.I ^ vb.I
-                out := intLit(r)
+                out := litv.intLit(r)
                 if (va.Big or vb.Big) and r < 0 { out = litv(true, false, true, r, 0.0) }
                 out.Hex = va.Hex or vb.Hex
                 return out
@@ -6367,33 +6516,33 @@ fn (c mut Checker&) fold(x ast.Expr?&) litv {
                 y := U128(vb.I)
                 if op == token.Tok.Shl {
                     if na and va.Hex and not va.Wide { na, ma = false, U128(U64(va.I)) }
-                    if na { return noLit() }
+                    if na { return litv.noLit() }
                     m := ma << y
-                    if (m >> y) != ma { return noLit() }
-                    return ofMag(false, m)
+                    if (m >> y) != ma { return litv.noLit() }
+                    return litv.ofMag(false, m)
                 }
                 if va.Wide or va.Big or vb.I >= 64 {
                     # the floor of x over 2^y: a negative one rounds away from zero
-                    if not na { return ofMag(false, ma >> y) }
-                    return ofMag(true, ((ma - 1) >> y) + 1)
+                    if not na { return litv.ofMag(false, ma >> y) }
+                    return litv.ofMag(true, ((ma - 1) >> y) + 1)
                 }
-                return intLit(va.I >> vb.I)
+                return litv.intLit(va.I >> vb.I)
             }
             if va.Wide or vb.Wide {
                 # E4a: a quotient or remainder past 64 bits, truncated toward zero as an integer type's is
-                if mb == U128(0) { return noLit() }
-                if op == token.Tok.Slash { return ofMag(na != nb, ma / mb) }
-                if op == token.Tok.Percent { return ofMag(na, ma % mb) }
-                return noLit()
+                if mb == U128(0) { return litv.noLit() }
+                if op == token.Tok.Slash { return litv.ofMag(na != nb, ma / mb) }
+                if op == token.Tok.Percent { return litv.ofMag(na, ma % mb) }
+                return litv.noLit()
             }
-            if va.Big or vb.Big { return noLit() }
+            if va.Big or vb.Big { return litv.noLit() }
             x1 := va.I
             y1 := vb.I
-            if op == token.Tok.Slash and y1 != 0 and not (x1 == I64(-9223372036854775807) - 1 and y1 == -1) { return intLit(x1 / y1) }
-            if op == token.Tok.Percent and y1 != 0 and y1 != -1 { return intLit(x1 % y1) }
-            return noLit()
+            if op == token.Tok.Slash and y1 != 0 and not (x1 == I64(-9223372036854775807) - 1 and y1 == -1) { return litv.intLit(x1 / y1) }
+            if op == token.Tok.Percent and y1 != 0 and y1 != -1 { return litv.intLit(x1 % y1) }
+            return litv.noLit()
         }
-        case _ { return noLit() }
+        case _ { return litv.noLit() }
     }
 }
 
@@ -6411,7 +6560,7 @@ fn (c mut Checker&) litU64(x ast.Expr&) Bool {
 fn (c mut Checker&) foldPart(x ast.Expr&) litv {
     match x {
         case ast.Expr.Lit(sp, kind) {
-            if kind == token.Tok.CharLit { return intLit(c.charValue(sp)) }
+            if kind == token.Tok.CharLit { return litv.intLit(c.charValue(sp)) }
         }
         case _ { }
     }
@@ -6419,7 +6568,7 @@ fn (c mut Checker&) foldPart(x ast.Expr&) litv {
 }
 
 # an integer literal value's sign and magnitude: exact for every value E4a computes, from I128's least to U128's greatest
-fn magOf(v litv) signMag {
+fn signMag.magOf(v litv) signMag {
     if v.Wide { return signMag(v.Neg, v.W) }
     if v.Big { return signMag(false, U128(U64(v.I))) }
     if v.I < 0 { return signMag(true, U128(U64(0) - U64(v.I))) }
@@ -6434,46 +6583,46 @@ type signMag struct(Neg Bool, M U128) {
 
 # the literal value of a sign and magnitude: an I64, a U64 above I64's maximum (L10), a value past both up to I128's
 # least and U128's greatest (E4a, T4a), or none beyond those
-fn ofMag(neg Bool, m U128) litv {
-    if m == U128(0) { return intLit(0) }
+fn litv.ofMag(neg Bool, m U128) litv {
+    if m == U128(0) { return litv.intLit(0) }
     lim := U128(1) << 63
     if not neg {
-        if m < lim { return intLit(I64(m)) }
+        if m < lim { return litv.intLit(I64(m)) }
         if m < (U128(1) << 64) { return litv(true, false, true, I64(m), 0.0) }
-        return wideLit(false, m)
+        return litv.wideLit(false, m)
     }
-    if m <= lim { return intLit(I64(U64(0) - U64(m))) }
-    if m <= (U128(1) << 127) { return wideLit(true, m) }
-    return noLit()
+    if m <= lim { return litv.intLit(I64(U64(0) - U64(m))) }
+    if m <= (U128(1) << 127) { return litv.wideLit(true, m) }
+    return litv.noLit()
 }
 
-fn addMag(na Bool, ma U128, nb Bool, mb U128) litv {
+fn litv.addMag(na Bool, ma U128, nb Bool, mb U128) litv {
     if na == nb {
         s := ma + mb
-        if s < ma { return noLit() }
-        return ofMag(na, s)
+        if s < ma { return litv.noLit() }
+        return litv.ofMag(na, s)
     }
-    if ma >= mb { return ofMag(na, ma - mb) }
-    return ofMag(nb, mb - ma)
+    if ma >= mb { return litv.ofMag(na, ma - mb) }
+    return litv.ofMag(nb, mb - ma)
 }
 
 # E4a: & | ^ on values past 64 bits, in two's complement wide enough for both: a 64-bit pattern is its bits there (L10a)
 fn wideBits(op token.Tok, va litv, vb litv) litv {
-    aBits := twos(va)
+    aBits := signMag.twos(va)
     ea, ba := aBits.Neg, aBits.M
-    bBits := twos(vb)
+    bBits := signMag.twos(vb)
     eb, bb := bBits.Neg, bBits.M
     e := ea and eb if op == token.Tok.Amp else ea or eb if op == token.Tok.Pipe else ea != eb
     r := ba & bb if op == token.Tok.Amp else ba | bb if op == token.Tok.Pipe else ba ^ bb
-    if not e { return ofMag(false, r) }
-    if r == U128(0) { return noLit() }
-    return ofMag(true, U128(0) - r)
+    if not e { return litv.ofMag(false, r) }
+    if r == U128(0) { return litv.noLit() }
+    return litv.ofMag(true, U128(0) - r)
 }
 
 # a value as its sign extension and its low 128 bits
-fn twos(v litv) signMag {
+fn signMag.twos(v litv) signMag {
     if v.Hex and not v.Wide { return signMag(false, U128(U64(v.I))) }
-    sm := magOf(v)
+    sm := signMag.magOf(v)
     if sm.Neg { return signMag(true, U128(0) - sm.M) }
     return sm
 }
@@ -6482,9 +6631,9 @@ fn twos(v litv) signMag {
 # the scanner (L10b)
 fn wideDigits(text String&) U128 ? ParseError {
     t := text.Replace("_", "")
-    if t.Len() > 2 and t[0] == '0' and (t[1] == 'x' or t[1] == 'X') { return try t[2:].ParseAs<U128>(16) }
-    if t.Len() > 2 and t[0] == '0' and (t[1] == 'b' or t[1] == 'B') { return try t[2:].ParseAs<U128>(2) }
-    return try t.ParseAs<U128>(10)
+    if t.Len() > 2 and t[0] == '0' and (t[1] == 'x' or t[1] == 'X') { return try U128.Parse(t[2:], 16) }
+    if t.Len() > 2 and t[0] == '0' and (t[1] == 'b' or t[1] == 'B') { return try U128.Parse(t[2:], 2) }
+    return try U128.Parse(t, 10)
 }
 
 # a literal-only expression's value as a literal of the type wanted, or of its own (T6a: I64, F64; a U64 above I64's
@@ -7778,6 +7927,137 @@ fn (c mut Checker&) explicitArgs(f I64, targs Array<ast.TypeRef&>&, sp source.Sp
     return out
 }
 
+# ---- builders (D19) ----
+
+# the type a builder's call or name writes before its ".", and whether it is a generic type named bare - its variables
+# then inferred from the call (G9); Unknown where x names no type
+type ownerAt struct(T types.TypeId, Bare Bool) {
+    T
+    Bare
+}
+
+fn (c mut Checker&) ownerOf(x ast.Expr&) ownerAt {
+    match x {
+        case ast.Expr.Generic(sp, g, targs) {
+            # an instance written with its arguments: "List<I64>.Of(a)", "lib.Box<I64>.New()", "Array<I64>.FromIter(it)"
+            path := typePathOf(g)
+            if path.Len() == 0 { return ownerAt(types.UnknownT, false) }
+            if path.Len() == 1 { return ownerAt(c.resolveNamed(ast.TypeRef.Named(sp, path, targs)), false) }
+            d := c.genericNamed(g)
+            if d < types.DeclId(0) { return ownerAt(types.UnknownT, false) }
+            return ownerAt(c.P.Apply(c.fr().Ctx, d, targs), false)
+        }
+        case _ { }
+    }
+    d := c.genericNamed(x)
+    if d >= types.DeclId(0) { return ownerAt(c.P.SelfType(d), true) }
+    t := c.typeNamed(x)
+    if t >= types.TypeId(0) { return ownerAt(t, false) }
+    # a reflected type (G38): "V.Base.Parse(t)", "f.Type.Parse(t)"
+    match x {
+        case ast.Expr.Member(_, _, n) if generic.ProjectsType(c.text(n)) {
+            rt := c.reflType(x)
+            if rt >= types.TypeId(0) { return ownerAt(rt, false) }
+        }
+        case _ { }
+    }
+    return ownerAt(types.UnknownT, false)
+}
+
+# D19: a builder called through its owner's name - its owner's variables bound by the instance written (or inferred, for
+# a generic named bare), its own by type arguments written after its name or by the call; null where x names no type
+# with a builder n - the caller goes on to cases, reflection and the rest
+fn (c mut Checker&) builderCall(sp source.Span, nsp source.Span, x ast.Expr&, n source.NameId, args Array<ast.Expr&>&
+                                targs Array<ast.TypeRef&>&, gsp source.Span) typed.Expr?& {
+    o := c.ownerOf(x)
+    if o.T == types.UnknownT { return null }
+    if c.isEnum(o.T) and c.hasCase(o.T, n) { return null }   # a case wins: a builder may not take its name
+    f := c.P.BuilderOf(o.T, n, o.Bare)
+    if f < 0 {
+        if c.text(n) == "FromBits" and c.P.T.IsFloat(o.T) and targs.Len() == 0 { return c.fromBits(sp, nsp, o.T, args) }   # E33
+        return null
+    }
+    c.builderVisible(f, nsp, o.T)
+    ex := Array<types.TypeId>(0) if o.Bare else c.P.OwnerBinding(f, o.T)
+    if targs.Len() > 0 {
+        own := c.explicitArgs(f, targs, gsp)
+        if own.Len() == 0 {
+            c.dropArgs(args)
+            return c.unknown(sp)
+        }
+        if ex.Len() < own.Len() {
+            wide := Array<types.TypeId>(own.Len(), types.UnknownT)
+            for i in range ex.Len() { wide[i] = ex[i] }
+            ex = wide
+        }
+        for i in range own.Len() {
+            if own[i] != types.UnknownT { ex[i] = own[i] }
+        }
+    }
+    return c.invoke(sp, nsp, f, null, args, Array<typed.Expr&>(0), ex)
+}
+
+# D19: a builder named without a call - the function value its name is (T21), a generic one only where the instance
+# written binds every variable it has; null where x names no type with a builder n
+fn (c mut Checker&) builderValue(sp source.Span, nsp source.Span, x ast.Expr&, n source.NameId) typed.Expr?& {
+    o := c.ownerOf(x)
+    if o.T == types.UnknownT { return null }
+    if c.isEnum(o.T) and c.hasCase(o.T, n) { return null }
+    f := c.P.BuilderOf(o.T, n, o.Bare)
+    if f < 0 { return null }
+    c.builderVisible(f, nsp, o.T)
+    nv := c.P.VarCount(generic.FnOwner(f))
+    if nv == 0 { return c.fnValue(nsp, f) }
+    ex := c.P.OwnerBinding(f, o.T) if not o.Bare else Array<types.TypeId>(nv, types.UnknownT)
+    for v in ex {
+        if v == types.UnknownT {
+            c.err(nsp, msgs.BuilderNotValue(c.tok(c.P.FnDecl(f).Name)))
+            return c.unknown(sp)
+        }
+    }
+    return c.fnValue(nsp, f, ex)
+}
+
+# M6: another module's private builder is said where it is named
+fn (c mut Checker&) builderVisible(f I64, nsp source.Span, o types.TypeId) {
+    fd := c.P.FnDecl(f)
+    if c.P.FnModule(f) == c.fr().Mi or load.Public(c.text(fd.Member)) { return }
+    if c.P.L.Mods[c.P.FnModule(f)].Prelude and c.P.L.Mods[c.fr().Mi].Prelude { return }
+    c.err(nsp, msgs.BuilderPrivate(c.ty(o), c.tok(fd.Member)))
+}
+
+# D19: T.n where T has no builder n and is no enum - a need of a type variable (G18a), else the type's builders and
+# members offered (B11)
+fn (c mut Checker&) noBuilder(nsp source.Span, x ast.Expr&, t types.TypeId, n source.NameId) {
+    near mut msgs.Nearest& = msgs.Nearest(c.text(n))
+    for f in c.P.BuildersOf(t) {
+        if c.P.FnModule(f) == c.fr().Mi or load.Public(c.text(c.P.FnDecl(f).Member)) { near.Offer(c.text(c.P.FnDecl(f).Member)) }
+    }
+    c.needErr(nsp, t, $"a builder " $c.tok(n), msgs.NoBuilder(c.ty(t), c.tok(n), near.Hint()))
+}
+
+# E33: F64.FromBits(u) - the float whose bit pattern an unsigned integer of its width is, nothing computed; an argument
+# of another type an error naming the one to convert to
+fn (c mut Checker&) fromBits(sp source.Span, nsp source.Span, ft types.TypeId, args Array<ast.Expr&>&) typed.Expr& {
+    bits := c.P.T.Bits(ft)
+    u := c.P.T.Prim("U64" if bits == 64 else "U32" if bits == 32 else "U16")
+    if args.Len() != 1 or args[0].IsNamed() {
+        c.err(sp, msgs.ArgCount(1, "", args.Len()))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    lit := c.fold(args[0]).Ok or c.litLike(args[0])
+    x := c.value(c.expr(args[0], u if lit else types.UnknownT), args[0].Span())
+    xt := typeOf(x)
+    if xt == types.UnknownT { return c.unknown(sp) }
+    if c.under(xt) != u {
+        # a narrower one widened would read as another float's pattern: the width is said, never assumed
+        c.err(args[0].Span(), msgs.FromBitsWidth(c.ty(ft), c.ty(u), c.ty(xt)))
+        return c.unknown(sp)
+    }
+    return c.prim(sp, ft, typed.PrimOp.Bitcast, c.convert(sp, x, u) if xt != u else x, null)
+}
+
 # a function named as a value (T21): its instance's body, no environment; a generic one only as an instance its type
 # arguments name, written (G12)
 fn (c mut Checker&) fnValue(sp source.Span, f I64, explicit Array<types.TypeId>& = Array<types.TypeId>(0)) typed.Expr& {
@@ -7786,6 +8066,7 @@ fn (c mut Checker&) fnValue(sp source.Span, f I64, explicit Array<types.TypeId>&
         owner := generic.FnOwner(f)
         d := c.P.FnDecl(f)
         written := d.TypeParams.Len() if d.TypeParams.Len() > 0 else 0
+        if d.IsBuilder() { written = c.P.VarCount(owner) }   # D19: its owner's variables are written where it is named
         # a variable no type argument names - a length an array taken by value gives (G29) - leaves it no value
         if c.P.VarCount(owner) > written {
             c.err(sp, msgs.LengthsNotAValue(c.text(d.Name)))
@@ -10187,6 +10468,12 @@ fn (c mut Checker&) bound(owner I64, args types.ListId, sp source.Span) Bool {
         shown = $name " (" $tn "'s)"
         tn = c.text(c.P.T.DeclName(c.P.T.DeclOf(top)))
     }
+    if name.Contains(".") {
+        # T30b: a builder the trait requires
+        dot := try name.FindByte('.') catch default -1
+        c.err(sp, msgs.ConstraintUnmetBuilder(c.ty(x), tn, v, msgs.Tok(name[dot + 1:])))
+        return false
+    }
     rec := c.err(sp, msgs.ConstraintUnmetHash(c.ty(x), tn, v) if name == "Hash" else msgs.ConstraintUnmetMethod(c.ty(x), tn, v, shown))
     # M6b: a tn's method is met by its own name, so a private spelling of it meets nothing; one of its name with
     # another signature is said too
@@ -10201,7 +10488,7 @@ fn (c mut Checker&) bound(owner I64, args types.ListId, sp source.Span) Bool {
     return false
 }
 
-fn (c mut Checker&) noteAt(rec I64, f I64, m msgs.Msg) {
+fn (c mut Checker&) noteAt(rec I64, f I64, m diagmsg.Msg) {
     fd := c.P.FnDecl(f)
     mi := c.P.FnModule(f)
     text := c.P.L.Mods[mi].Src!.Text
@@ -10364,7 +10651,7 @@ fn badSeparator(t String&) Bool {
 fn isHexDigit(c Char) Bool { return (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F') }
 
 # T17: an enum with no case of this name - the nearest one suggested
-fn (c mut Checker&) noCase(t types.TypeId, n source.NameId) msgs.Msg {
+fn (c mut Checker&) noCase(t types.TypeId, n source.NameId) diagmsg.Msg {
     name := c.text(n)
     cn := c.P.T.CaseNames(t)
     near mut msgs.Nearest& = msgs.Nearest(name)
@@ -10588,6 +10875,27 @@ fn (c mut Checker&) traitWritten(tr ast.TypeRef&, whole ast.TypeRef&) Bool {
 }
 
 # T32: "any R&" - R a trait, its arguments as many as its parameters
+# T30b: the first builder a trait requires, or one a trait it extends does; 0 for none
+fn (c mut Checker&) builderRequired(d types.DeclId, depth I64) source.NameId {
+    td := c.P.TypeDecl(d)
+    if depth > 16 or td is null or td.Body is null { return source.NameId(0) }
+    match td.Body {
+        case ast.TypeBody.Trait(ms, exts, _) {
+            for m in ms {
+                if m.IsBuilder() { return m.Member }
+            }
+            for e in exts {
+                et := c.P.Resolve(c.P.DeclContext(d), e)
+                if c.P.T.KindOf(et) != types.Kind.Named { continue }
+                n := c.builderRequired(c.P.T.DeclOf(et), depth + 1)
+                if n != source.NameId(0) { return n }
+            }
+        }
+        case _ { }
+    }
+    return source.NameId(0)
+}
+
 fn (c mut Checker&) anyWritten(tr ast.TypeRef&) Bool {
     match tr {
         case ast.TypeRef.Named(nsp, path, args) {
@@ -10610,6 +10918,12 @@ fn (c mut Checker&) anyWritten(tr ast.TypeRef&) Bool {
             for a in args {
                 if generic.IsErrsArgOf(a) { continue }
                 if not c.writtenMet(a) { return false }
+            }
+            # T30b: a trait requiring a builder has no run-time value - nothing to dispatch a builder on
+            bn := c.builderRequired(ad, 0)
+            if bn != source.NameId(0) {
+                c.err(tr.Span(), msgs.AnyOfBuilderTrait(c.src(tr.Span()), c.tok(bn)))
+                return false
             }
             return true
         }
@@ -11034,6 +11348,9 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
                 c.gap(nsp, "a call of this kind")
                 return c.unknown(sp)
             }
+            # D19: a builder, through its owner's name - "Color.FromHex(t)", "List<I64>.Of(a)", "T.Parse(t)"
+            bc := c.builderCall(sp, nsp, x, n, args, Array<ast.TypeRef&>(0), nsp)
+            if bc is not null { return bc }
             # G38: a reflected type called is the call its type's name is - "T.Base(x)", "p.Type(v)" - unless the
             # name is a case of the enum named ("ast.Decl.Type(...)")
             et0 := c.typeNamed(x)
@@ -11056,6 +11373,11 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
             }
             et := c.typeNamed(x)
             if et >= types.TypeId(0) and c.text(n) == "From" and c.isEnum(et) and not c.hasCase(et, n) { return c.enumFrom(sp, nsp, et, args) }
+            if et >= types.TypeId(0) and not c.isEnum(et) {
+                c.noBuilder(nsp, x, et, n)
+                c.dropArgs(args)
+                return c.unknown(sp)
+            }
             if et >= types.TypeId(0) { return c.enumCase(sp, nsp, et, n, args) }
             gd := c.genericNamed(x)
             if gd >= types.DeclId(0) and c.P.T.DeclKindOf(gd) == types.DeclKind.Enum { return c.genericCase(sp, nsp, gd, n, args, want) }
@@ -11241,6 +11563,11 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
         case ast.Expr.Member(msp, x, n) {
             # alias.Name<args>(...): a type another module declares (M10)
             ref := c.P.R.Member(c.fr().File, msp.End)
+            # D19: a builder given its own type arguments - "Vec<I64>.FromIter<ArrayIter<I64>>(it)"
+            if ref.Kind == names.What.None and not c.importPath(x) {
+                bc := c.builderCall(sp, memberSpan(msp, c.text(n).Len()), x, n, args, targs, gsp)
+                if bc is not null { return bc }
+            }
             if ref.Kind == names.What.Type and ref.Index >= 0 {
                 t := c.P.Apply(c.fr().Ctx, c.P.DeclFor(ref.Module, ref.Index), targs)
                 if t == types.UnknownT { return c.unknown(sp) }
@@ -13170,17 +13497,6 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         r := c.P.T.Prim("U64") if bits == 64 else c.P.T.Prim("U32") if bits == 32 else c.P.T.Prim("U16")
         return c.prim(sp, r, typed.PrimOp.Bitcast, c.value(rx, sp), null)
     }
-    if name.EndsWith("FromBits") and args.Len() == 0 and c.P.T.IsUnsigned(u) {
-        f := name[:name.Len() - 8]
-        ft := c.P.T.Prim(f)
-        if ft != types.UnknownT and c.P.T.IsFloat(ft) {
-            if c.P.T.Bits(ft) != c.P.T.Bits(u) {
-                c.err(nsp, msgs.FromBitsReceiver(msgs.Tok(name)))
-                return c.unknown(sp)
-            }
-            return c.prim(sp, ft, typed.PrimOp.Bitcast, c.value(rx, sp), null)
-        }
-    }
     if name == "Value" and c.isEnum(rt) { return c.rawValue(sp, nsp, rt, rx, args) }   # T17e
     if name == "Set" and c.arrayOf(rt) != types.UnknownT {
         # E16d: an element stored, its index checked - failing with ArrayError.OutOfRange, as Get's
@@ -13425,7 +13741,6 @@ fn (c mut Checker&) baseHas(t types.TypeId, n source.NameId) Bool {
     name := c.text(n)
     u := c.under(b)
     if name == "Bits" { return c.P.T.IsFloat(u) }
-    if name.EndsWith("FromBits") { return c.P.T.IsUnsigned(u) }
     if name.StartsWith("Atomic") or bitOp(name) != typed.PrimOp.Retire { return c.P.T.IsInt(u) }
     return false
 }
@@ -13459,11 +13774,17 @@ fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId, want ty
     }
     # E40: Place.Here, the one member Place gives through its name - before reflection, which reads every type's
     if c.namesPlace(x) { return c.placeHere(sp, nsp, n) }
+    # D19: a builder named without a call - a function value
+    if not generic.ProjectsType(c.text(n)) and not isLimitName(c.text(n)) {
+        bv := c.builderValue(sp, nsp, x, n)
+        if bv is not null { return bv }
+    }
     # G32, G34: a type's reflected members, a descriptor's
     rv := c.reflMember(sp, nsp, x, n)
     if rv is not null { return rv }
     et := c.typeNamed(x)
-    if et >= types.TypeId(0) and (c.isNumber(et) or (isLimitName(c.text(n)) and not c.isNamed(et))) { return c.limit(sp, nsp, et, n) }
+    if et >= types.TypeId(0) and isLimitName(c.text(n)) and (c.isNumber(et) or not c.isNamed(et)) { return c.limit(sp, nsp, et, n) }
+    if et >= types.TypeId(0) and c.isNumber(et) { return c.limit(sp, nsp, et, n) }
     if et >= types.TypeId(0) { return c.enumCase(sp, nsp, et, n, Array<ast.Expr&>(0)) }
     gd := c.genericNamed(x)
     if gd >= types.DeclId(0) and c.P.T.DeclKindOf(gd) == types.DeclKind.Enum { return c.genericCase(sp, nsp, gd, n, Array<ast.Expr&>(0), want) }
@@ -13685,7 +14006,7 @@ type reflList struct(Ok Bool, Of types.TypeId, Which I64, Case I64) {
     Ok, Of, Which, Case
 }
 
-fn noList() reflList { return reflList(false, types.UnknownT, 0, -1) }
+fn reflList.noList() reflList { return reflList(false, types.UnknownT, 0, -1) }
 
 # a list's position among Fields, Cases, Params, Results; -1 for a name that is none
 fn listIndex(name String&) I64 {
@@ -13699,7 +14020,7 @@ fn listIndex(name String&) I64 {
     }
 }
 
-fn listName(k I64) String { return String&["Fields", "Cases", "Params", "Results", "Functions", "Methods"][k] }
+fn listName(k I64) String { return String&["Fields", "Cases", "Params", "Results", "Functions", "Methods", "Functions"][k] }
 
 # the module an import's alias - or an alias chain - names, -1 where x is none (G41)
 fn (c mut Checker&) aliasModule(x ast.Expr&) I64 {
@@ -13796,10 +14117,13 @@ fn (c mut Checker&) listOf(x ast.Expr&) reflList {
             if c.text(n) == "Functions" {
                 m := c.aliasModule(b)
                 if m >= 0 and not c.declaresName(m, n) { return reflList(true, types.VoidT, generic.ListFunctions, m) }
-                return noList()
+                # D19: a type's builders, "Color.Functions"
+                bt := c.reflType(b) if m < 0 else types.TypeId(-1)
+                if bt >= types.TypeId(0) { return reflList(true, bt, generic.ListBuilders, -1) }
+                return reflList.noList()
             }
             k := listIndex(c.text(n))
-            if k < 0 { return noList() }
+            if k < 0 { return reflList.noList() }
             ds := c.descTypeOf(b)
             if ds >= types.TypeId(0) {
                 d := c.P.DescOf(ds)
@@ -13807,16 +14131,16 @@ fn (c mut Checker&) listOf(x ast.Expr&) reflList {
                 # G41: a function's parameters and results
                 if d.K == generic.DescFunc and k == generic.ListParams { return reflList(true, ds, k, -1) }
                 if d.K == generic.DescFunc and k == generic.ListResults { return reflList(true, d.Of, k, -1) }
-                return noList()
+                return reflList.noList()
             }
             t := c.reflType(b)
-            if t < types.TypeId(0) { return noList() }
+            if t < types.TypeId(0) { return reflList.noList() }
             # an enum's own case of that name, written through the enum's name, is the case (G32)
-            if c.isEnum(t) and not c.viaTypeVar(b) and c.hasCase(t, n) { return noList() }
+            if c.isEnum(t) and not c.viaTypeVar(b) and c.hasCase(t, n) { return reflList.noList() }
             return reflList(true, t, k, -1)
         }
         case ast.Expr.Paren(_, y) { return c.listOf(y) }
-        case _ { return noList() }
+        case _ { return reflList.noList() }
     }
 }
 
@@ -13846,6 +14170,7 @@ fn (c mut Checker&) listItem(sp source.Span, l reflList, k I64) types.TypeId {
 fn (c mut Checker&) descriptor(l reflList, at I64) types.TypeId {
     if l.Which == generic.ListFunctions { return c.P.FuncDescriptor(at, types.UnknownT) }
     if l.Which == generic.ListMethods { return c.P.FuncDescriptor(at, l.Of) }
+    if l.Which == generic.ListBuilders { return c.P.FuncDescriptor(at, types.UnknownT, l.Of) }
     kind := match l.Which {
         case generic.ListFields: generic.DescField
         case generic.ListCases: generic.DescCase
@@ -13868,15 +14193,15 @@ RvBool I64 = 1
 RvText I64 = 2
 RvCase I64 = 3
 
-fn noRefl() reflVal { return reflVal(false, 0, 0, "", types.UnknownT) }
-fn rvInt(v I64) reflVal { return reflVal(true, RvInt, v, "", types.UnknownT) }
-fn rvBool(v Bool) reflVal { return reflVal(true, RvBool, 1 if v else 0, "", types.UnknownT) }
-fn rvText(s String&) reflVal { return reflVal(true, RvText, 0, s, types.UnknownT) }
+fn reflVal.noRefl() reflVal { return reflVal(false, 0, 0, "", types.UnknownT) }
+fn reflVal.rvInt(v I64) reflVal { return reflVal(true, RvInt, v, "", types.UnknownT) }
+fn reflVal.rvBool(v Bool) reflVal { return reflVal(true, RvBool, 1 if v else 0, "", types.UnknownT) }
+fn reflVal.rvText(s String&) reflVal { return reflVal(true, RvText, 0, s, types.UnknownT) }
 
 fn (c mut Checker&) reflInt(x ast.Expr&) reflVal {
     v := c.reflFold(x)
     if v.Ok and v.K == RvInt { return v }
-    return noRefl()
+    return reflVal.noRefl()
 }
 
 # a message reflection renders while compiling (G35, S18c): text, or a join of text and "$" renderings of what
@@ -13948,58 +14273,58 @@ fn (c mut Checker&) reflDecide(x ast.Expr?&) I64 {
 fn (c mut Checker&) reflFold(x ast.Expr&) reflVal {
     match x {
         case ast.Expr.Lit(sp, kind) {
-            if kind == token.Tok.BoolLit { return rvBool(c.src(sp) == "true") }
-            if kind == token.Tok.StrLit { return rvText(String(c.strBytes(sp))) }
+            if kind == token.Tok.BoolLit { return reflVal.rvBool(c.src(sp) == "true") }
+            if kind == token.Tok.StrLit { return reflVal.rvText(String(c.strBytes(sp))) }
             v := c.fold(x)
-            if v.Ok and not v.IsFloat and not v.Big { return rvInt(v.I) }
-            return noRefl()
+            if v.Ok and not v.IsFloat and not v.Big { return reflVal.rvInt(v.I) }
+            return reflVal.noRefl()
         }
         case ast.Expr.Paren(_, y) { return c.reflFold(y) }
         case ast.Expr.Name(sp, n) {
-            if c.P.R.Use(c.fr().File, sp.Start).Kind != names.What.Local or c.localNamed(n) >= 0 { return noRefl() }
+            if c.P.R.Use(c.fr().File, sp.Start).Kind != names.What.Local or c.localNamed(n) >= 0 { return reflVal.noRefl() }
             r := try c.fr().Ctx.Refl.Get(n) catch default types.TypeId(-1)
-            if r < types.TypeId(0) or c.P.T.KindOf(r) != types.Kind.Const { return noRefl() }
+            if r < types.TypeId(0) or c.P.T.KindOf(r) != types.Kind.Const { return reflVal.noRefl() }
             c.reflTouched = true
-            if c.P.T.ConstType(r) == types.BoolT { return rvBool(c.P.T.ConstValue(r) != 0) }   # K3a
-            return rvInt(c.P.T.ConstValue(r))
+            if c.P.T.ConstType(r) == types.BoolT { return reflVal.rvBool(c.P.T.ConstValue(r) != 0) }   # K3a
+            return reflVal.rvInt(c.P.T.ConstValue(r))
         }
         case ast.Expr.Unary(_, op, y) {
             v := c.reflFold(y)
             if not v.Ok { return v }
-            if op == token.Tok.Not and v.K == RvBool { return rvBool(v.I == 0) }
-            if op == token.Tok.Minus and v.K == RvInt { return rvInt(-v.I) }
-            return noRefl()
+            if op == token.Tok.Not and v.K == RvBool { return reflVal.rvBool(v.I == 0) }
+            if op == token.Tok.Minus and v.K == RvInt { return reflVal.rvInt(-v.I) }
+            return reflVal.noRefl()
         }
         case ast.Expr.Binary(_, op, a, b) {
             va := c.reflFold(a)
             if op == token.Tok.And and va.Ok and va.K == RvBool and va.I == 0 { return va }
             if op == token.Tok.Or and va.Ok and va.K == RvBool and va.I == 1 { return va }
             vb := c.reflFold(b)
-            if not va.Ok or not vb.Ok or va.K != vb.K { return noRefl() }
-            if op == token.Tok.And or op == token.Tok.Or { return vb if va.K == RvBool else noRefl() }
+            if not va.Ok or not vb.Ok or va.K != vb.K { return reflVal.noRefl() }
+            if op == token.Tok.And or op == token.Tok.Or { return vb if va.K == RvBool else reflVal.noRefl() }
             if op == token.Tok.EqEq or op == token.Tok.NotEq {
                 same := va.I == vb.I
                 if va.K == RvText { same = va.S == vb.S }
                 if va.K == RvCase { same = same and va.Ty == vb.Ty }
-                return rvBool(same == (op == token.Tok.EqEq))
+                return reflVal.rvBool(same == (op == token.Tok.EqEq))
             }
-            if va.K != RvInt { return noRefl() }
+            if va.K != RvInt { return reflVal.noRefl() }
             return match op {
-                case token.Tok.Lt: rvBool(va.I < vb.I)
-                case token.Tok.Le: rvBool(va.I <= vb.I)
-                case token.Tok.Gt: rvBool(va.I > vb.I)
-                case token.Tok.Ge: rvBool(va.I >= vb.I)
-                case token.Tok.Plus: rvInt(va.I + vb.I)
-                case token.Tok.Minus: rvInt(va.I - vb.I)
-                case token.Tok.Star: rvInt(va.I * vb.I)
-                case _: noRefl()
+                case token.Tok.Lt: reflVal.rvBool(va.I < vb.I)
+                case token.Tok.Le: reflVal.rvBool(va.I <= vb.I)
+                case token.Tok.Gt: reflVal.rvBool(va.I > vb.I)
+                case token.Tok.Ge: reflVal.rvBool(va.I >= vb.I)
+                case token.Tok.Plus: reflVal.rvInt(va.I + vb.I)
+                case token.Tok.Minus: reflVal.rvInt(va.I - vb.I)
+                case token.Tok.Star: reflVal.rvInt(va.I * vb.I)
+                case _: reflVal.noRefl()
             }
         }
         case ast.Expr.Call(_, f, args) {
             return match f {
                 case ast.Expr.Generic(_, g, targs): c.reflHasAttr(g, targs, args)
                 case ast.Expr.Member(_, y, n): c.reflLen(y, n, args)
-                case _: noRefl()
+                case _: reflVal.noRefl()
             }
         }
         case ast.Expr.Member(_, y, n) {
@@ -14013,33 +14338,33 @@ fn (c mut Checker&) reflFold(x ast.Expr&) reflVal {
             }
             return c.reflConst(y, n)
         }
-        case _ { return noRefl() }
+        case _ { return reflVal.noRefl() }
     }
 }
 
 # G40, G35: "x.HasAttr<A>()" is known while compiling
 fn (c mut Checker&) reflHasAttr(g ast.Expr&, targs Array<ast.TypeRef&>&, args Array<ast.Expr&>&) reflVal {
     ax, name, _ := c.attrCallee(g)
-    if name != "HasAttr" or targs.Len() != 1 or args.Len() != 0 { return noRefl() }
+    if name != "HasAttr" or targs.Len() != 1 or args.Len() != 0 { return reflVal.noRefl() }
     holder := c.attrHolder(ax)
-    if holder < types.TypeId(0) { return noRefl() }
+    if holder < types.TypeId(0) { return reflVal.noRefl() }
     c.reflTouched = true
-    if holder == types.UnknownT { return noRefl() }
+    if holder == types.UnknownT { return reflVal.noRefl() }
     a := c.resolve(targs[0])
-    if a == types.UnknownT { return noRefl() }
+    if a == types.UnknownT { return reflVal.noRefl() }
     mi, _ := c.attrFound(holder, a)
-    return rvBool(mi >= 0)
+    return reflVal.rvBool(mi >= 0)
 }
 
 # a reflected list's "Len()" is known while compiling (G32)
 fn (c mut Checker&) reflLen(y ast.Expr&, n source.NameId, args Array<ast.Expr&>&) reflVal {
-    if c.text(n) != "Len" or args.Len() != 0 { return noRefl() }
+    if c.text(n) != "Len" or args.Len() != 0 { return reflVal.noRefl() }
     l := c.listOf(y)
-    if not l.Ok { return noRefl() }
+    if not l.Ok { return reflVal.noRefl() }
     c.reflTouched = true
-    if l.Of == types.UnknownT { return noRefl() }
+    if l.Of == types.UnknownT { return reflVal.noRefl() }
     items, why := c.P.ReflItems(l.Of, l.Which, l.Case, c.fr().Mi)
-    return rvInt(items.Len()) if why == "" else noRefl()
+    return reflVal.rvInt(items.Len()) if why == "" else reflVal.noRefl()
 }
 
 # a reflected member known while compiling (G32, G34): a type's Name, Kind, Size, Align, Length; a descriptor's Name,
@@ -14048,54 +14373,54 @@ fn (c mut Checker&) reflConst(y ast.Expr&, n source.NameId) reflVal {
     name := c.text(n)
     t := c.reflType(y)
     if t >= types.TypeId(0) and not (c.isEnum(t) and not c.viaTypeVar(y) and c.hasCase(t, n)) {
-        if t == types.UnknownT { return noRefl() }
+        if t == types.UnknownT { return reflVal.noRefl() }
         if name == "Name" {
             c.reflTouched = true
-            return rvText(c.P.ReflName(t))
+            return reflVal.rvText(c.P.ReflName(t))
         }
         if name == "Kind" {
             c.reflTouched = true
             k := c.P.ReflKind(t)
-            if k < 0 { return noRefl() }
+            if k < 0 { return reflVal.noRefl() }
             return reflVal(true, RvCase, k, "", c.typeKindType())
         }
         if name == "Size" or name == "Align" {
             c.reflTouched = true
-            if not c.P.Layout(t) { return noRefl() }
-            return rvInt(c.P.T.Size(t) if name == "Size" else c.P.T.Align(t))
+            if not c.P.Layout(t) { return reflVal.noRefl() }
+            return reflVal.rvInt(c.P.T.Size(t) if name == "Size" else c.P.T.Align(t))
         }
         if (name == "Min" or name == "Max") and c.P.T.IsInt(t) {
             # an integer type's limits (E36), where they are I64 values: so "T.Min < 0" tells signed from unsigned
             c.reflTouched = true
             w := c.P.T.Bits(t)
             if c.P.T.IsUnsigned(t) {
-                if name == "Min" { return rvInt(0) }
-                return rvInt((I64(1) << w) - 1) if w < 64 else noRefl()
+                if name == "Min" { return reflVal.rvInt(0) }
+                return reflVal.rvInt((I64(1) << w) - 1) if w < 64 else reflVal.noRefl()
             }
-            if w > 64 { return noRefl() }
+            if w > 64 { return reflVal.noRefl() }
             lo := I64(-9223372036854775807) - 1 if w == 64 else -(I64(1) << (w - 1))
-            return rvInt(lo if name == "Min" else -(lo + 1))
+            return reflVal.rvInt(lo if name == "Min" else -(lo + 1))
         }
         if name == "Length" {
             c.reflTouched = true
             r := c.under(t)
-            if c.P.T.KindOf(r) != types.Kind.Array or c.P.T.KindOf(c.P.T.Length(r)) != types.Kind.Const { return noRefl() }
-            return rvInt(c.P.T.ConstValue(c.P.T.Length(r)))
+            if c.P.T.KindOf(r) != types.Kind.Array or c.P.T.KindOf(c.P.T.Length(r)) != types.Kind.Const { return reflVal.noRefl() }
+            return reflVal.rvInt(c.P.T.ConstValue(c.P.T.Length(r)))
         }
-        return noRefl()
+        return reflVal.noRefl()
     }
     dt := c.descTypeOf(y)
-    if dt < types.TypeId(0) { return noRefl() }
-    if dt == types.UnknownT { return noRefl() }
+    if dt < types.TypeId(0) { return reflVal.noRefl() }
+    if dt == types.UnknownT { return reflVal.noRefl() }
     ds := c.P.DescOf(dt)
     c.reflTouched = true
-    if name == "Name" { return rvText(c.descName(ds)) }
-    if name == "HasDefault" and ds.K == generic.DescParam { return rvBool(c.paramDefault(ds) is not null) }
+    if name == "Name" { return reflVal.rvText(c.descName(ds)) }
+    if name == "HasDefault" and ds.K == generic.DescParam { return reflVal.rvBool(c.paramDefault(ds) is not null) }
     if name == "Offset" and ds.K == generic.DescField {
         off := c.fieldOffset(ds)
-        return rvInt(off) if off >= 0 else noRefl()
+        return reflVal.rvInt(off) if off >= 0 else reflVal.noRefl()
     }
-    return noRefl()
+    return reflVal.noRefl()
 }
 
 fn (c mut Checker&) typeKindType() types.TypeId { return c.P.PreludeType("std/prelude/reflect", "TypeKind") }
@@ -14118,7 +14443,10 @@ fn (c mut Checker&) descName(ds generic.Desc) String {
         cn := c.P.T.CaseNames(r)
         return $c.text(cn[ds.Case]) if ds.Case < cn.Len() else ""
     }
-    if ds.K == generic.DescFunc { return $c.text(c.P.FnDecl(ds.Case).Name) }
+    if ds.K == generic.DescFunc {
+        fd := c.P.FnDecl(ds.Case)
+        return $c.text(fd.Member if fd.IsBuilder() else fd.Name)   # D19: a builder by its name after the "."
+    }
     if ds.K == generic.DescParam {
         # a function type's parameter names are no part of its type (T22, G16a), so an instance cannot say them
         if c.P.T.KindOf(ds.Of) == types.Kind.Func { return "" }
@@ -14679,7 +15007,7 @@ fn (c mut Checker&) rawEnum(d types.DeclId, cases Array<ast.CaseDecl&>&, raw ast
     bits := Array<I64>(n)
     bytes := Array<Array<U8>&>(n, Array<U8>(0))
     set := Array<Bool>(n)    # the values worked out: only those are compared
-    prev := intLit(-1)
+    prev := litv.intLit(-1)
     for i in range n {
         cd := cases[i]
         if report and c.text(cd.Name) == "From" { c.err(c.caseNameSpan(cd), msgs.FromCaseName()) }
@@ -14703,18 +15031,18 @@ fn (c mut Checker&) rawEnum(d types.DeclId, cases Array<ast.CaseDecl&>&, raw ast
             }
             continue
         }
-        v := noLit()
+        v := litv.noLit()
         if cd.Value is null {
-            aMag := magOf(prev)
+            aMag := signMag.magOf(prev)
             na, ma := aMag.Neg, aMag.M
-            v = addMag(na, ma, false, U128(1)) if prev.Ok else noLit()
+            v = litv.addMag(na, ma, false, U128(1)) if prev.Ok else litv.noLit()
         } else if numberLitsOnly(cd.Value!) or isCharLit(cd.Value!) {
             v = c.foldPart(cd.Value!)
         }
         if not v.Ok or v.IsFloat {
             # a written value that is no integer literal, or one counted past U64's maximum
             if report { c.err(at, msgs.RawNotLiteral(c.ty(rt)) if cd.Value is not null else msgs.RawNoFit("18446744073709551616", c.ty(rt))) }
-            prev = noLit()
+            prev = litv.noLit()
             continue
         }
         prev = v
@@ -14878,7 +15206,7 @@ fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) 
     rl := c.listOf(x)
     if rl.Ok {
         if rl.Of == types.UnknownT { return c.unknown(sp) }
-        k := c.reflInt(items[0]) if items.Len() == 1 else noRefl()
+        k := c.reflInt(items[0]) if items.Len() == 1 else reflVal.noRefl()
         if not k.Ok {
             c.err(items[0].Span() if items.Len() > 0 else sp, msgs.ReflIndexNotConst())
             return c.unknown(sp)
@@ -20104,7 +20432,7 @@ fn (c Checker&) ctorViewKey(b typed.Body&) I64 {
 fn (c mut Checker&) settleViews(b typed.Body&, file I64) {
     key := c.ctorViewKey(b)
     inst := c.viewable(b)
-    u := typed.Uses(c.P.T, b)
+    u := typed.LocalUses.Uses(c.P.T, b)
     c.viewHeld.Clear()
     w := typed.ViewWalk(c.P.T, b, c.viewElig(b, file), fn(id typed.BodyId) I64 { return c.ViewsOf(id) }
                         fn(id typed.LocalId) I64 { return try c.viewHeld.Get(I64(id)) catch default I64(-1) })
@@ -22437,7 +22765,7 @@ fn nameIndex(ns Array<source.NameId>&, f source.NameId) I64 {
 }
 
 # said where say is set; the items fail either way
-fn (c mut Checker&) badItem(say Bool, sp source.Span, m msgs.Msg&) ? BadItems {
+fn (c mut Checker&) badItem(say Bool, sp source.Span, m diagmsg.Msg&) ? BadItems {
     if say { c.err(sp, m) }
     error BadItems
 }
@@ -22453,7 +22781,7 @@ fn (c mut Checker&) fieldReadable(fs fieldSet&, f source.NameId) Bool {
 
 # what a name no field of fs has says: a struct's, a private one's, a case payload's - with the nearest this module
 # may name (B11)
-fn (c mut Checker&) noItemField(fs fieldSet&, f source.NameId) msgs.Msg& {
+fn (c mut Checker&) noItemField(fs fieldSet&, f source.NameId) diagmsg.Msg& {
     if fs.Struct >= types.TypeId(0) and nameIndex(fs.Names, f) >= 0 { return msgs.MemberIsPrivate(c.text(f), fs.What) }
     near mut msgs.Nearest& = msgs.Nearest(c.text(f))
     for g in fs.Names {
@@ -23559,7 +23887,7 @@ fn leaves(s typed.Stmt&) Bool {
 # function's descriptor (G41); null where x.n is no such fact
 fn (c mut Checker&) fnFact(sp source.Span, nsp source.Span, x ast.Expr&, n source.NameId) typed.Expr?& {
     name := c.text(n)
-    k := effects.FactNamed(name)
+    k := effects.Fact.Named(name)
     declared := declaredFact(name)
     if k == effects.Fact.Unknown and not declared { return null }
     f := c.factFn(x)
@@ -23638,7 +23966,7 @@ fn (c mut Checker&) settleFacts() Bool {
     if c.factReads.Len() == 0 or c.P.L.Diags.Errors() > 0 { return false }
     moved := false
     for r in c.factReads {
-        found := c.Effects().Of(try c.fnBodies.Get(r.Inst) catch default -1).Holds(effects.FactNamed(r.Fact))
+        found := c.Effects().Of(try c.fnBodies.Get(r.Inst) catch default -1).Holds(effects.Fact.Named(r.Fact))
         if found == r.Value { continue }
         c.factPresets.Put($r.Inst ":" $r.Fact, found)
         moved = true
@@ -23649,7 +23977,7 @@ fn (c mut Checker&) settleFacts() Bool {
 # G42: facts still read as other than found after the last attempt - each changes the code it is read from
 fn (c mut Checker&) factsUndecided() {
     for r in c.factReads {
-        found := c.Effects().Of(try c.fnBodies.Get(r.Inst) catch default -1).Holds(effects.FactNamed(r.Fact))
+        found := c.Effects().Of(try c.fnBodies.Get(r.Inst) catch default -1).Holds(effects.Fact.Named(r.Fact))
         if found == r.Value { continue }
         c.P.L.Diags.Error(diag.Where.Span(r.File, I64(r.Sp.Start), I64(r.Sp.End)), msgs.FactUndecided(r.Text))
     }
@@ -24367,7 +24695,7 @@ fn (c mut Checker&) handleReport() {
         if b.Root is null: continue
         mi := c.modOfFile(b.File)
         if mi < 0 or c.P.L.Mods[mi].Prelude: continue
-        u := typed.Uses(c.P.T, b)
+        u := typed.LocalUses.Uses(c.P.T, b)
         for i in range b.Locals.Len() { c.handleLocal(b, u, mi, i) }
     }
 }

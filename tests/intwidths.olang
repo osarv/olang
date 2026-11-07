@@ -93,7 +93,7 @@ fn convCase(n I64) String {
         $U100(F32(n)))
 }
 
-# the methods every integer has: E37's bit operations, Format, Hash, Pow, Abs, Min, Max, ParseAs
+# the methods every integer has: E37's bit operations, Format, Hash, Pow, Abs, Min, Max, and the builder T.Parse
 fn methodCase(n I64) String {
     r := U24(0xABCDEF)
     q := U128(0x0102030405060708) << U128(n - 100)
@@ -104,13 +104,13 @@ fn methodCase(n I64) String {
 }
 
 fn parseCase(n I64) String {
-    a := try "-170141183460469231731687303715884105728".ParseAs<I128>() catch default I128(n)
-    b := try "340282366920938463463374607431768211455".ParseAs<U128>() catch default U128(n)
-    c := try "340282366920938463463374607431768211456".ParseAs<U128>() catch default U128(n)
-    d := try "127".ParseAs<U7>() catch default U7(0)
-    e := try "128".ParseAs<U7>() catch default U7(1)
-    f := try "-3".ParseAs<I2>() catch default I2(0)
-    g := try "0x_FF".ParseAs<U9>(0) catch default U9(2)
+    a := try I128.Parse("-170141183460469231731687303715884105728") catch default I128(n)
+    b := try U128.Parse("340282366920938463463374607431768211455") catch default U128(n)
+    c := try U128.Parse("340282366920938463463374607431768211456") catch default U128(n)
+    d := try U7.Parse("127") catch default U7(0)
+    e := try U7.Parse("128") catch default U7(1)
+    f := try I2.Parse("-3") catch default I2(0)
+    g := try U9.Parse("0x_FF", 0) catch default U9(2)
     return $a " " $b " " $c " " $d " " $e " " $f " " $g
 }
 
@@ -232,7 +232,7 @@ test "T4a: conversions between widths and to and from floats round once" {
     assert convCase(100) == WantConv # S18c: decided while compiling
 }
 
-test "T4a: bit operations, Format, Abs, Min, Pow and ParseAs at the new widths" {
+test "T4a: bit operations, Format, Abs, Min, Pow and T.Parse at the new widths" {
     assert MethodBaked == WantMethod
     assert methodCase(Hundred) == WantMethod
     assert methodCase(100) == WantMethod # S18c: decided while compiling
@@ -312,15 +312,15 @@ test "T4a: Pow at one bit wraps its 1 as I1 holds it" {
 # base 0 reads a prefixed literal of up to 128 bits as a program does (L10a): past 64 bits its value read unsigned,
 # fitting the type where that value does (the second bulk review's F9: it read only 64 bits)
 fn wideParseCase(n I64) String {
-    a := try "0x1FFFFFFFFFFFFFFFF".ParseAs<U128>(0) catch default U128(n)
-    b := try "-0x1_0000_0000_0000_0000".ParseAs<I128>(0) catch default I128(n)
-    c := try "0xFFFFFFFFFFFFFFFF".ParseAs<I128>(0) catch default I128(n)
-    d := try "0x1FFFFFFFFFFFFFFFF".ParseAs<I65>(0) catch ParseError.Overflow default I65(n) catch default I65(-1)
-    e := try "0x1FFFFFFFFFFFFFFFF".ParseAs<U65>(0) catch default U65(n)
-    f := try "0x100000000000000000000000000000000".ParseAs<U128>(0) catch ParseError.Overflow default U128(n) catch default U128(1)
-    g := try "-0x80000000000000000000000000000000".ParseAs<I128>(0) catch default I128(n)
-    h := try "0x80000000000000000000000000000000".ParseAs<I128>(0) catch ParseError.Overflow default I128(n) catch default I128(1)
-    k := try "-0x1FFFFFFFFFFFFFFFF".ParseAs<U128>(0) catch ParseError.Invalid default U128(n) catch default U128(1)
+    a := try U128.Parse("0x1FFFFFFFFFFFFFFFF", 0) catch default U128(n)
+    b := try I128.Parse("-0x1_0000_0000_0000_0000", 0) catch default I128(n)
+    c := try I128.Parse("0xFFFFFFFFFFFFFFFF", 0) catch default I128(n)
+    d := try I65.Parse("0x1FFFFFFFFFFFFFFFF", 0) catch ParseError.Overflow default I65(n) catch default I65(-1)
+    e := try U65.Parse("0x1FFFFFFFFFFFFFFFF", 0) catch default U65(n)
+    f := try U128.Parse("0x100000000000000000000000000000000", 0) catch ParseError.Overflow default U128(n) catch default U128(1)
+    g := try I128.Parse("-0x80000000000000000000000000000000", 0) catch default I128(n)
+    h := try I128.Parse("0x80000000000000000000000000000000", 0) catch ParseError.Overflow default I128(n) catch default I128(1)
+    k := try U128.Parse("-0x1FFFFFFFFFFFFFFFF", 0) catch ParseError.Invalid default U128(n) catch default U128(1)
     return $a " " $b " " $c " " $d " " $e " " $f " " $g " " $h " " $k
 }
 
@@ -328,7 +328,7 @@ WideParseBaked := wideParseCase(3)
 WantWideParse := ("36893488147419103231 -18446744073709551616 -1 3 36893488147419103231 3 "
     "-170141183460469231731687303715884105728 3 3")
 
-test "L10a: ParseAs reads a prefixed literal of up to 128 bits" {
+test "L10a: T.Parse reads a prefixed literal of up to 128 bits" {
     assert WideParseBaked == WantWideParse
     assert wideParseCase(Three) == WantWideParse
     assert wideParseCase(3) == WantWideParse # S18c: decided while compiling

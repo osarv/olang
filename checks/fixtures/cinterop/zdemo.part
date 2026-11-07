@@ -5,7 +5,7 @@ import "std/io"
 
 fn main() {
     v := zlibVersion()
-    if v is not null { io.Println("zlib " $v.StringFromC(32))! }
+    if v is not null { io.Println("zlib " $String.FromC(v, 32))! }
     text := String("hello hello hello hello hello hello, zlib!")
     src := text.ToC()
     dest := Array<U8>(I64(compressBound(U64(src.Len()))))

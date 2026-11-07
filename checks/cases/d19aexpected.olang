@@ -1,0 +1,5 @@
+# check: fail error[D19a]: 'gray' makes a Color its module declares and takes none - declare it as the type's builder, 'fn Color.gray(...)'
+# D19a: a function making a value of its module's type, taking none of it, is the type's builder
+type Color struct(R U8) { R }
+fn gray(v U8) Color { return Color(v) }
+fn main() { assert gray(3).R == 3 }

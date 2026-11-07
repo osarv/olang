@@ -14,6 +14,7 @@ import "scan"
 import "ast"
 import "diag"
 import "msgs"
+import "diagmsg"
 import "std/os"
 
 type Fail error { Syntax }
@@ -240,7 +241,7 @@ fn (p Parser&) found() String {
 
 # ---- diagnostics ----
 
-fn (p mut Parser&) report(start I32, end I32, m msgs.Msg) {
+fn (p mut Parser&) report(start I32, end I32, m diagmsg.Msg) {
     p.diags.Error(diag.Where.Span(p.file, I64(start), I64(end)), m)
     if not p.SaidIn.Has(start) { p.SaidIn.Put(start, p.ItemStarts.Len() - 1) }
 }
@@ -282,7 +283,7 @@ fn (p mut Parser&) methodName() source.NameId ? Fail {
 fn (p Parser&) memberNext() Bool {
     t := p.lookTok(1)
     if t.Kind != token.Tok.Iden { return false }
-    kw := token.Keyword(p.src.Text, I64(t.Start), I64(t.End - t.Start))
+    kw := token.Tok.Keyword(p.src.Text, I64(t.Start), I64(t.End - t.Start))
     if kw == token.Tok.Iden { return true }
     if kw == token.Tok.BoolLit or kw == token.Tok.NullLit { return false }
     return keywordNamesField(kw) or p.look(2) == token.Tok.LParen
@@ -607,7 +608,8 @@ fn (p mut Parser&) decl() ast.Decl?& ? Fail {
             if p.text(p.tk()) == "export" and p.look(1) == token.Tok.Fn {
                 p.advance()
                 xf := try p.function()
-                return ast.Decl.Fn(ast.Func(p.from(at), xf.Recv, xf.Name, xf.S, xf.Body, xf.TypeParams, xf.Bodied, true))
+                return ast.Decl.Fn(ast.Func(p.from(at), xf.Recv, xf.Name, xf.S, xf.Body, xf.TypeParams, xf.Bodied, true
+                                            xf.Attrs, xf.Owner, xf.Member))
             }
             if p.look(1) == token.Tok.Assign {
                 # D13e: a global's value given below its declaration - its place (a top-level if's branch) the checker's
@@ -642,7 +644,8 @@ fn (p mut Parser&) attributed() ast.Decl?& ? Fail {
     match d! {
         case ast.Decl.Fn(f) {
             p.declareAttrs(attrs)
-            return ast.Decl.Fn(ast.Func(f.Sp, f.Recv, f.Name, f.S, f.Body, f.TypeParams, f.Bodied, f.Export, attrs))
+            return ast.Decl.Fn(ast.Func(f.Sp, f.Recv, f.Name, f.S, f.Body, f.TypeParams, f.Bodied, f.Export, attrs, f.Owner
+                                        f.Member))
         }
         case ast.Decl.Type(sp, td) {
             p.declareAttrs(attrs)
@@ -962,10 +965,25 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
                     msp := source.Span(mt.Start, mt.End)
                     recv = ast.Param(msp, source.NameId(0), ast.TypeRef.Perm(msp, null, true), null)
                 }
+                # T30b: "T.Parse(...)" - a builder the type a parameter names must have
+                owner ast.TypeRef?& = null
+                member := source.NameId(0)
+                on := source.NameId(0)
+                if recv is null and p.sees(token.Tok.Iden) and p.look(1) == token.Tok.Dot {
+                    ot := p.tk()
+                    on = try p.name()
+                    owner = ast.TypeRef.Named(source.Span(ot.Start, ot.End), Array<source.NameId>(1, on), Array<ast.TypeRef&>(0))
+                    p.advance()
+                }
                 mn := try p.methodName()
+                if owner is not null {
+                    member = mn
+                    mn = p.names.Intern($p.names.Text(on) "." $p.names.Text(member))
+                }
                 # D17f: a trait's method may state the contract every call through an "any" is held to
                 s := try p.sig(false, false, true)
-                methods.Push(ast.Func(p.from(mat), recv, mn, s, Array<ast.Stmt&>(0), Array<ast.TypeParam&>(0), false))
+                methods.Push(ast.Func(p.from(mat), recv, mn, s, Array<ast.Stmt&>(0), Array<ast.TypeParam&>(0), false, false
+                                      Array<ast.Attr&>(0), owner, member))
                 try p.entryEnd()
             }
             p.advance()
@@ -995,6 +1013,8 @@ fn (p mut Parser&) function() ast.Func& ? Fail {
     at := try p.want(token.Tok.Fn)
     recv ast.Param?& = null
     name source.NameId = source.NameId(0)
+    owner ast.TypeRef?& = null
+    member := source.NameId(0)
     if p.accept(token.Tok.LParen) {
         p.noAttrs = true
         recv = try p.param(false) catch {
@@ -1004,6 +1024,17 @@ fn (p mut Parser&) function() ast.Func& ? Fail {
         p.noAttrs = false
         try p.want(token.Tok.RParen)
         name = try p.methodName()
+    } else if p.ownerAhead() {
+        # D19: "fn Color.FromHex(...)", "fn List<T>.Of(...)" - a builder, its owner the type before the "."
+        ot := p.tk()
+        on := try p.name()
+        oargs Array<ast.TypeRef&>& = Array<ast.TypeRef&>(0)
+        if p.sees(token.Tok.Lt) { oargs = try p.typeArgs() }
+        owner = ast.TypeRef.Named(p.from(ot.Start), Array<source.NameId>(1, on), oargs)
+        try p.want(token.Tok.Dot)
+        member = try p.methodName()
+        name = p.names.Intern($p.names.Text(on) "." $p.names.Text(member))
+        p.receiverVars(owner, false)
     } else {
         name = try p.name()
     }
@@ -1015,10 +1046,38 @@ fn (p mut Parser&) function() ast.Func& ? Fail {
     s := try p.sig(false, false, true)
     braced := p.sees(token.Tok.LBrace)
     body := try p.block() catch {
-        if braced { p.salvage.Push(ast.Decl.Fn(ast.Func(p.from(at), recv, name, s, Array<ast.Stmt&>(0), tps, false))) }
+        if braced {
+            p.salvage.Push(ast.Decl.Fn(ast.Func(p.from(at), recv, name, s, Array<ast.Stmt&>(0), tps, false, false
+                                                Array<ast.Attr&>(0), owner, member)))
+        }
         error Fail.Syntax
     }
-    return ast.Func(p.from(at), recv, name, s, body, tps)
+    return ast.Func(p.from(at), recv, name, s, body, tps, true, false, Array<ast.Attr&>(0), owner, member)
+}
+
+# D19: whether a builder's owner comes next, after "fn" - a name, its type arguments touching it, and "." touching what
+# is before it: "Color.FromHex", "List<T>.Of"
+fn (p Parser&) ownerAhead() Bool {
+    if not p.sees(token.Tok.Iden) { return false }
+    if p.look(1) == token.Tok.Dot { return true }
+    if p.look(1) != token.Tok.Lt { return false }
+    depth I64 = 0
+    i I64 = 1
+    for i < 256 {
+        k := p.look(i)
+        if k == token.Tok.Lt {
+            depth++
+        } else if k == token.Tok.Gt {
+            depth--
+        } else if k == token.Tok.Shr {
+            depth -= 2
+        } else if k == token.Tok.LParen or k == token.Tok.StmtEnd or k == token.Tok.Eof or k == token.Tok.LBrace {
+            return false
+        }
+        if depth <= 0 { return depth == 0 and p.look(i + 1) == token.Tok.Dot }
+        i++
+    }
+    return false
 }
 
 # the names a receiver's type arguments write that no type has: the variables it introduces (G3, QW)
@@ -3411,7 +3470,7 @@ fn (p Parser&) named(i I64) String {
     return msgs.Tok(p.text(p.ts.Toks[i]))
 }
 
-fn (p mut Parser&) reportAt(i I64, m msgs.Msg) {
+fn (p mut Parser&) reportAt(i I64, m diagmsg.Msg) {
     t := p.ts.Toks[i]
     p.report(t.Start, t.End, m)
 }
@@ -3745,7 +3804,7 @@ fn shapeOf(text String&, types String& = "", all Bool = false) String {
     }
     diags := diag.Diagnostics(false)
     file := diags.AddFile(src.Path, src.Text)
-    ts := scan.Scan(src.Text)
+    ts := scan.Tokens.Scan(src.Text)
     p := Parser(src, ts, names, o, diags, file)
     decls := p.File()
     if all { diags.ChooseAll() }

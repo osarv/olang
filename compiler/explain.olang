@@ -24,9 +24,7 @@ fn Item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
     nm := c.P.L.Names
     dot := try name.Find(".") catch default -1
     if dot > 0 {
-        d := typeNamed(c, mi, name[:dot])
-        if d < types.DeclId(0) { error Missing.Name }
-        f := c.P.MethodOf(c.P.SelfType(d), nm.Intern(name[dot + 1:]))
+        f := fnNamed(c, mi, name)
         if f < 0 { error Missing.Name }
         return fnItem(c, sc, f)
     }
@@ -89,7 +87,10 @@ fn fnNamed(c mut typecheck.Checker&, mi I64, name String&) I64 {
     dot := try name.Find(".") catch default -1
     if dot > 0 {
         d := typeNamed(c, mi, name[:dot])
-        return -1 if d < types.DeclId(0) else c.P.MethodOf(c.P.SelfType(d), nm.Intern(name[dot + 1:]))
+        if d < types.DeclId(0) { return -1 }
+        m := nm.Intern(name[dot + 1:])
+        f := c.P.MethodOf(c.P.SelfType(d), m)
+        return f if f >= 0 else c.P.BuilderOf(c.P.SelfType(d), m, true)   # D19: Type.Builder
     }
     id := nm.Intern(name)
     for e in c.P.R.Tables[mi].Entries {
@@ -144,6 +145,12 @@ fn fnItem(c mut typecheck.Checker&, sc scope.Scoper&, f I64) String {
 fn fnLine(c mut typecheck.Checker&, f I64, sig types.TypeId, body I64) String {
     decl := c.P.FnDecl(f)
     name := $c.P.L.Names.Text(decl.Name) $typeVars(c, generic.FnOwner(f), receiverVars(c, f))
+    if decl.IsBuilder() {
+        # D19: its owner as written, "List<T>.Of"
+        src := c.P.L.Mods[c.P.FnModule(f)].Src!.Text
+        osp := decl.Owner!.Span()
+        name = $src[I64(osp.Start):I64(osp.End)] "." $c.P.L.Names.Text(decl.Member) $typeVars(c, generic.FnOwner(f), c.P.OwnerVarCount(f))
+    }
     text := sigOf(c, named(c, sig, decl.Recv, decl.S.Params), body)
     if c.P.IsGenerator(f) {
         # D18: its result as written, the Generator a call gives said beside it
@@ -584,37 +591,23 @@ fn methods(b mut StringBuilder&, c mut typecheck.Checker&, self types.TypeId) {
 # all is true
 fn Builders(c mut typecheck.Checker&, d types.DeclId, all Bool) Vec<I64> {
     out Vec<I64>
-    mi := c.P.DeclModule(d)
-    tab := c.P.R.Tables[mi]
-    order Vec<I64>
-    for ei in range tab.Entries.Len() {
-        if tab.Entries[ei].Kind == names.What.Func { order.Push(ei) }
-    }
-    order.Sort(fn(a I64, b I64) Bool { return tab.Entries[a].Sp.Start < tab.Entries[b].Sp.Start })
-    for ei in order {
-        name := tab.Entries[ei].Name
-        f := c.P.FnNamed(mi, name)
-        if f < 0 or c.P.FnDecl(f).Recv is not null or c.P.FnIsExtern(f) { continue }
-        text := $c.P.L.Names.Text(name)
+    c.P.AllFns()
+    for f in range c.P.FnCount() {
+        decl := c.P.FnDecl(f)
+        if not decl.IsBuilder() or BuilderOf(c, f) != d { continue }
+        text := $c.P.L.Names.Text(decl.Member)
         if not all and not (text.Len() > 0 and text[0].IsUpper()) { continue }
-        if BuilderOf(c, f) == d { out.Push(f) }
+        out.Push(f)
     }
     return out
 }
 
-# the declared type a function builds (Builders), -1 for none: its one result's type, less a reference, where it is a
-# struct, an enum or a type declared over another, declared by the function's own module
+# the declared type a builder makes (D19) - its owner's declaration - -1 for a function that is none, or a builder of a
+# type variable or a built-in type
 fn BuilderOf(c mut typecheck.Checker&, f I64) types.DeclId {
-    none := types.DeclId(-1)
-    rs := c.P.T.Results(c.P.Sig(f))
-    if rs.Len() != 1 { return none }
-    r := rs[0]
-    if c.P.T.KindOf(r) == types.Kind.Ref { r = c.P.T.Referent(r) }
-    if c.P.T.KindOf(r) != types.Kind.Named { return none }
-    d := c.P.T.DeclOf(r)
-    k := c.P.T.DeclKindOf(d)
-    if k != types.DeclKind.Struct and k != types.DeclKind.Enum and k != types.DeclKind.Over { return none }
-    return d if c.P.DeclModule(d) == c.P.FnModule(f) else none
+    o := c.P.OwnerOf(f)
+    if o == types.UnknownT or c.P.T.KindOf(o) != types.Kind.Named { return types.DeclId(-1) }
+    return c.P.T.DeclOf(o)
 }
 
 # one line per builder, as methods are listed

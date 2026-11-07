@@ -1,0 +1,5 @@
+# check: fail error[D19]: Color has two builders named 'Gray'
+type Color struct(R U8) { R }
+fn Color.Gray(v U8) Color { return Color(v) }
+fn Color.Gray(v U8) Color { return Color(v + 1) }
+fn main() { assert Color.Gray(1).R == 1 }

@@ -1,0 +1,5 @@
+# check: fail error[D19]: Shape is no type a builder makes
+# D19: a trait has no values to make - a builder's owner is a struct, an enum, a type over another or an extern type
+type Shape trait { Area() I64 }
+fn Shape.Unit() I64 { return 1 }
+fn main() { }

@@ -11,6 +11,7 @@
 import "std/os"
 import "../diag"
 import "../msgs"
+import "diagmsg"
 import "std/io"
 
 # a case's golden output, row by row, and what diag makes of it
@@ -144,7 +145,7 @@ fn check(c golden&) String {
             }
             i += 2
         }
-        m := msgs.Msg(msgs.Diag.Expected, rule, text)
+        m := diagmsg.Msg(msgs.Diag.Expected, rule, text)
         if isNote { g.d.Note(rec, where, m) } else { rec = g.d.Error(where, m) }
     }
     got := $g.d.Render() $(g.d.Summary() if summary.Len() > 0 else "")

@@ -712,7 +712,7 @@ fn (g mut Gen&) fromBits(t I32, d I64) String& {
     } else if t == 10 {
         u = 6
     }
-    return "(" $Prims[u] "(" $g.ex(u, d - 1) ")." $Prims[t] "FromBits())"
+    return $Prims[t] ".FromBits(" $Prims[u] "(" $g.ex(u, d - 1) "))"
 }
 
 fn (g mut Gen&) exBool(d I64) String& {

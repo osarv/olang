@@ -267,7 +267,7 @@ std/linalg, removed 2026-10-26; they are in git history.)
 |---|---:|---:|
 | `BF16(x)` from F32, ns an element (4M) | 10.3-20.2 | 0.65-1.0 |
 | `b * b + b` in BF16, ns an element | 22.6-30.4 | 0.54-1.43 |
-| narrowing by bits, `U16(h).BF16FromBits()`, ns an element | 1.27-2.29 | 0.67-1.64 |
+| narrowing by bits, `BF16.FromBits(U16(h))`, ns an element | 1.27-2.29 | 0.67-1.64 |
 
 `fptrunc float to bfloat` was a call of `__truncsfbf2` (LLVM 18 has no other lowering on x86 once B12c takes
 AVX512-BF16 away); the code generator now narrows in integers on the F32's bits, inline, and every loop above

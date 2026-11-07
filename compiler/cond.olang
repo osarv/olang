@@ -14,6 +14,7 @@ import "source"
 import "token"
 import "ast"
 import "msgs"
+import "diagmsg"
 import "scan"
 import "diag"
 
@@ -39,8 +40,8 @@ type Value struct(Kind ValueKind, I I64, F F64, S I64, Bits I64, Uns Bool, Big B
     Big        # a -D integer above I64's maximum (a U64), I holding its bits
 }
 
-fn none() Value { return Value(ValueKind.None, 0, 0.0, 0, 0, false) }
-fn boolValue(b Bool) Value { return Value(ValueKind.Bool, 1 if b else 0, 0.0, 0, 0, false) }
+fn Value.none() Value { return Value(ValueKind.None, 0, 0.0, 0, 0, false) }
+fn Value.bool(b Bool) Value { return Value(ValueKind.Bool, 1 if b else 0, 0.0, 0, 0, false) }
 
 # T6a: an integer literal's own type is an I64; a float literal's an F64
 LiteralIntBits I64 = 64
@@ -106,10 +107,10 @@ fn (c mut Consts&) Builtins(os String&, arch String&, cpu String&, vectorBits I6
     c.add("TargetArch", Value(ValueKind.Text, 0, 0.0, c.text(arch), 0, false), true, false, arch != "")
     c.add("TargetCpu", Value(ValueKind.Text, 0, 0.0, c.text(cpu), 0, false), true, false, cpu != "")
     c.add("TargetVectorBits", Value(ValueKind.Int, vectorBits, 0.0, 0, LiteralIntBits, false), true, false, vectorBits > 0)
-    c.add("TargetHasFma", boolValue(hasFma == 1), true, false, hasFma >= 0)
-    c.add("DebugBuild", boolValue(debug), true, false, true)
-    c.add("RaceBuild", boolValue(race), true, false, true)
-    c.add("TestBuild", boolValue(testBuild), true, false, true)
+    c.add("TargetHasFma", Value.bool(hasFma == 1), true, false, hasFma >= 0)
+    c.add("DebugBuild", Value.bool(debug), true, false, true)
+    c.add("RaceBuild", Value.bool(race), true, false, true)
+    c.add("TestBuild", Value.bool(testBuild), true, false, true)
 }
 
 # what is wrong with a -D flag (B10, B10a)
@@ -145,7 +146,7 @@ fn (c mut Consts&) Define(flag String&, d mut diag.Diagnostics&) ? Bad {
 }
 
 # a -D flag's mistake, reported where the command line's are
-fn badDefine(d mut diag.Diagnostics&, m msgs.Msg) ? Bad {
+fn badDefine(d mut diag.Diagnostics&, m diagmsg.Msg) ? Bad {
     d.Error(diag.Where.Nowhere, m)
     error Bad.Flag
 }
@@ -212,13 +213,13 @@ fn isName(t String&) Bool {
         letter := ch.IsLetter() or ch == '_'
         if not letter and not (i > 0 and ch.IsDigit()) { return false }
     }
-    return token.Keyword(t, 0, t.Len()) == token.Tok.Iden
+    return token.Tok.Keyword(t, 0, t.Len()) == token.Tok.Iden
 }
 
 # a -D value as its literal would be read: true or false, one whole integer or float literal after an optional "-", or
 # else text - quoted text with its quotes taken off. An integer above I64's maximum (a U64) is Big
 fn (c mut Consts&) literal(value String&) Value ? DefineError {
-    if value == "true" or value == "false" { return boolValue(value == "true") }
+    if value == "true" or value == "false" { return Value.bool(value == "true") }
     if value.Len() >= 2 and value[0] == '"' and value[value.Len() - 1] == '"' {
         return Value(ValueKind.Text, 0, 0.0, c.text(value[1:value.Len() - 1]), 0, false)
     }
@@ -226,7 +227,7 @@ fn (c mut Consts&) literal(value String&) Value ? DefineError {
     digits := value[1:] if neg else value[:]
     hexBin := digits.Len() >= 2 and digits[0] == '0' and (digits[1] == 'x' or digits[1] == 'X' or digits[1] == 'b' or
                                                          digits[1] == 'B')
-    ts := scan.Scan(digits)
+    ts := scan.Tokens.Scan(digits)
     one := ts.Toks.Len() >= 2 and ts.Diags.Len() == 0 and ts.Toks[0].Start == 0 and ts.Toks[0].End == I32(digits.Len())
     kind := ts.Toks[0].Kind if one else token.Tok.Eof
     if kind != token.Tok.IntLit and kind != token.Tok.FloatLit {
@@ -317,7 +318,7 @@ type Eval struct(text String&, names source.Names&, scope Scope&, consts Consts&
     deferrable Bool = false
     runtime Bool = false
     errAt source.Span = source.Span(0, 0)
-    err msgs.Msg = msgs.CondNotBool("")
+    err diagmsg.Msg = msgs.CondNotBool("")
     depth I64 = 0
     skip I64 = 0
     UsedBuild Bool = false
@@ -352,25 +353,25 @@ fn (e Eval&) tokenAt(at I32) source.Span {
     return source.Span(I32(i), I32(j))
 }
 
-fn (e mut Eval&) fail(sp source.Span, m msgs.Msg) Value {
+fn (e mut Eval&) fail(sp source.Span, m diagmsg.Msg) Value {
     if not e.failed {
         e.failed = true
         e.errAt = sp
         e.err = m
     }
-    return none()
+    return Value.none()
 }
 
 # a value B9a cannot know: decided by compile-time evaluation (B9c). Where it would never be read (E7), nothing
 fn (e mut Eval&) defer(sp source.Span) Value {
-    if e.skip > 0 { return none() }
+    if e.skip > 0 { return Value.none() }
     if not e.failed { e.deferrable = true }
     return e.fail(sp, msgs.CondName(e.tokText(sp)))
 }
 
 # a value only the running program has - a local (S8b) or a mutable global (an error at the top level)
-fn (e mut Eval&) runtimeValue(sp source.Span, m msgs.Msg, local Bool) Value {
-    if e.skip > 0 { return none() }
+fn (e mut Eval&) runtimeValue(sp source.Span, m diagmsg.Msg, local Bool) Value {
+    if e.skip > 0 { return Value.none() }
     if local and not e.failed { e.runtime = true }
     return e.fail(sp, m)
 }
@@ -381,13 +382,13 @@ type Decision struct(Of Outcome, Holds Bool) {
     Holds
 }
 
-fn undecided(o Outcome) Decision { return Decision(o, false) }
+fn Decision.undecided(o Outcome) Decision { return Decision(o, false) }
 
 # a top-level condition: Decided with its value, Deferred, or Failed with the message and where
 fn (e mut Eval&) Top(c ast.Expr&) Decision {
     v := e.expr(c)
     if not e.failed and v.Kind != ValueKind.Bool { e.fail(e.first(c), msgs.CondNotBool(e.tokText(e.first(c)))) }
-    if e.failed { return undecided(Outcome.Deferred if e.deferrable else Outcome.Failed) }
+    if e.failed { return Decision.undecided(Outcome.Deferred if e.deferrable else Outcome.Failed) }
     return Decision(Outcome.Decided, v.I != 0)
 }
 
@@ -396,10 +397,10 @@ fn (e mut Eval&) Top(c ast.Expr&) Decision {
 fn (e mut Eval&) Local(c ast.Expr&) Decision {
     v := e.expr(c)
     if e.failed {
-        if e.runtime or e.mentionsLocal(c) { return undecided(Outcome.Runtime) }
-        return undecided(Outcome.Deferred if e.deferrable else Outcome.Runtime)
+        if e.runtime or e.mentionsLocal(c) { return Decision.undecided(Outcome.Runtime) }
+        return Decision.undecided(Outcome.Deferred if e.deferrable else Outcome.Runtime)
     }
-    if v.Kind != ValueKind.Bool { return undecided(Outcome.Runtime) }
+    if v.Kind != ValueKind.Bool { return Decision.undecided(Outcome.Runtime) }
     if not e.UsedBuild { return Decision(Outcome.Same, v.I != 0) }
     return Decision(Outcome.Decided, v.I != 0)
 }
@@ -469,7 +470,7 @@ fn (e mut Eval&) expr(x ast.Expr&) Value {
 fn (e mut Eval&) literal(sp source.Span, k token.Tok) Value {
     t := e.text[sp.Start:sp.End]
     match k {
-        case token.Tok.BoolLit { return boolValue(t == "true") }
+        case token.Tok.BoolLit { return Value.bool(t == "true") }
         case token.Tok.IntLit {
             # a U64 literal is beyond the 64-bit signed arithmetic here, and compile-time evaluation decides it (L10)
             u := try t.ParseUint(0) catch { return e.defer(sp) }
@@ -522,31 +523,31 @@ fn buildType(v Value) Bool {
 }
 
 # a written type's kind and width (Kind, Bits, Uns - no value), as far as B9a tells one from another
-fn declaredKind(t String&) Value {
-    if t == "I8" { return shape(ValueKind.Int, 8, false) }
-    if t == "I16" { return shape(ValueKind.Int, 16, false) }
-    if t == "I32" { return shape(ValueKind.Int, 32, false) }
-    if t == "I64" { return shape(ValueKind.Int, 64, false) }
-    if t == "U8" { return shape(ValueKind.Int, 8, true) }
-    if t == "U16" { return shape(ValueKind.Int, 16, true) }
-    if t == "U32" { return shape(ValueKind.Int, 32, true) }
-    if t == "U64" { return shape(ValueKind.Int, 64, true) }
-    if t == "F16" or t == "BF16" { return shape(ValueKind.Float, 16, false) }
-    if t == "F32" { return shape(ValueKind.Float, 32, false) }
-    if t == "F64" { return shape(ValueKind.Float, 64, false) }
-    if t == "Bool" { return shape(ValueKind.Bool, 0, false) }
-    if t == "String" { return shape(ValueKind.Text, 0, false) }
-    return shape(ValueKind.None, 0, false)
+fn Value.declaredKind(t String&) Value {
+    if t == "I8" { return Value.shape(ValueKind.Int, 8, false) }
+    if t == "I16" { return Value.shape(ValueKind.Int, 16, false) }
+    if t == "I32" { return Value.shape(ValueKind.Int, 32, false) }
+    if t == "I64" { return Value.shape(ValueKind.Int, 64, false) }
+    if t == "U8" { return Value.shape(ValueKind.Int, 8, true) }
+    if t == "U16" { return Value.shape(ValueKind.Int, 16, true) }
+    if t == "U32" { return Value.shape(ValueKind.Int, 32, true) }
+    if t == "U64" { return Value.shape(ValueKind.Int, 64, true) }
+    if t == "F16" or t == "BF16" { return Value.shape(ValueKind.Float, 16, false) }
+    if t == "F32" { return Value.shape(ValueKind.Float, 32, false) }
+    if t == "F64" { return Value.shape(ValueKind.Float, 64, false) }
+    if t == "Bool" { return Value.shape(ValueKind.Bool, 0, false) }
+    if t == "String" { return Value.shape(ValueKind.Text, 0, false) }
+    return Value.shape(ValueKind.None, 0, false)
 }
 
 # a value's kind and width alone
-fn shape(k ValueKind, bits I64, uns Bool) Value { return Value(k, 0, 0.0, 0, bits, uns) }
+fn Value.shape(k ValueKind, bits I64, uns Bool) Value { return Value(k, 0, 0.0, 0, bits, uns) }
 
 fn (e mut Eval&) global(sp source.Span, g Global&) Value {
     if e.depth > 64 { return e.fail(sp, msgs.CondCycle(e.tokText(sp))) }
     if g.Mut { return e.runtimeValue(sp, msgs.CondMutable(e.tokText(sp)), false) }
     defined := not e.scope.Std and e.consts.Defined(g.Name)
-    dk := declaredKind(g.Declared)
+    dk := Value.declaredKind(g.Declared)
     if not e.scope.Std and g.Declared != "" and dk.Kind != ValueKind.None {
         if buildType(dk) {
             if e.skip == 0 { e.UsedBuild = true }
@@ -561,11 +562,11 @@ fn (e mut Eval&) global(sp source.Span, g Global&) Value {
     innerFailed, innerDeferrable, innerErr := e.failed, e.deferrable, e.err
     e.failed, e.deferrable, e.runtime, e.errAt, e.err = wasFailed, wasDeferrable, wasRuntime, wasAt, wasErr
     if innerFailed {
-        if e.failed or e.skip > 0 { return none() }
+        if e.failed or e.skip > 0 { return Value.none() }
         cycle := innerErr.Kind == msgs.Diag.CondCycle
         e.fail(sp, msgs.CondCycle(e.tokText(sp)) if cycle else msgs.CondGlobalInit(e.tokText(sp)))
         e.deferrable = innerDeferrable   # a global computed by a call can still be evaluated
-        return none()
+        return Value.none()
     }
     # more than B9a evaluates - a method call, a member, an index: compile-time evaluation can (B9c)
     if not g.Whole { return e.defer(sp) }
@@ -604,7 +605,7 @@ fn (e mut Eval&) asDeclared(sp source.Span, g Global&, v Value) Value {
         if v.Kind == ValueKind.Float { return Value(v.Kind, v.I, v.F, v.S, 64, false) }
         return v
     }
-    dk := declaredKind(g.Declared)
+    dk := Value.declaredKind(g.Declared)
     return match dk.Kind {
         case ValueKind.Int: e.intDeclared(sp, v, dk.Bits, dk.Uns)
         case ValueKind.Float: e.floatDeclared(sp, v, dk.Bits)
@@ -648,21 +649,21 @@ fn flows(fromBits I64, fromUns Bool, toBits I64, toUns Bool) Bool {
 # they meet at none
 fn meet(a Value, b Value) Value ? NoMeet {
     if a.Bits != 0 and b.Bits != 0 {
-        if a.Bits == b.Bits and a.Uns == b.Uns { return shape(ValueKind.Int, a.Bits, a.Uns) }
-        if flows(a.Bits, a.Uns, b.Bits, b.Uns) { return shape(ValueKind.Int, b.Bits, b.Uns) }
-        if flows(b.Bits, b.Uns, a.Bits, a.Uns) { return shape(ValueKind.Int, a.Bits, a.Uns) }
+        if a.Bits == b.Bits and a.Uns == b.Uns { return Value.shape(ValueKind.Int, a.Bits, a.Uns) }
+        if flows(a.Bits, a.Uns, b.Bits, b.Uns) { return Value.shape(ValueKind.Int, b.Bits, b.Uns) }
+        if flows(b.Bits, b.Uns, a.Bits, a.Uns) { return Value.shape(ValueKind.Int, a.Bits, a.Uns) }
         error NoMeet
     }
     if a.Bits != 0 or b.Bits != 0 {
         typed := a if a.Bits != 0 else b
         lit := b if a.Bits != 0 else a
-        if fits(lit.I, typed.Bits, typed.Uns) { return shape(ValueKind.Int, typed.Bits, typed.Uns) }
+        if fits(lit.I, typed.Bits, typed.Uns) { return Value.shape(ValueKind.Int, typed.Bits, typed.Uns) }
         if not flows(typed.Bits, typed.Uns, LiteralIntBits, false) and not (typed.Bits == LiteralIntBits and not typed.Uns) {
             error NoMeet
         }
-        return shape(ValueKind.Int, LiteralIntBits, false)
+        return Value.shape(ValueKind.Int, LiteralIntBits, false)
     }
-    return shape(ValueKind.Int, 0, false)
+    return Value.shape(ValueKind.Int, 0, false)
 }
 
 # an integer literal adapting to a float (T6) - an integer of a type of its own does not meet one (T6b), and one past
@@ -680,7 +681,7 @@ fn (e mut Eval&) unary(sp source.Span, op token.Tok, x ast.Expr&) Value {
         v := e.expr(x)
         if v.Kind == ValueKind.None { return v }
         if v.Kind != ValueKind.Bool { return e.fail(opSp, msgs.CondTypes(e.tokText(opSp))) }
-        return boolValue(v.I == 0)
+        return Value.bool(v.I == 0)
     }
     if op != token.Tok.Minus { return e.defer(opSp) }
     v := e.expr(x)
@@ -723,13 +724,13 @@ fn (e mut Eval&) logic(opSp source.Span, op token.Tok, a ast.Expr&, b ast.Expr&)
     if (v.Kind != ValueKind.None and v.Kind != ValueKind.Bool) or (w.Kind != ValueKind.None and w.Kind != ValueKind.Bool) {
         return e.fail(opSp, msgs.CondTypes(e.tokText(opSp)))
     }
-    if v.Kind == ValueKind.None or w.Kind == ValueKind.None { return none() }
-    if op == token.Tok.Or { return boolValue(v.I != 0 or w.I != 0) }
-    return boolValue(v.I != 0 and w.I != 0)
+    if v.Kind == ValueKind.None or w.Kind == ValueKind.None { return Value.none() }
+    if op == token.Tok.Or { return Value.bool(v.I != 0 or w.I != 0) }
+    return Value.bool(v.I != 0 and w.I != 0)
 }
 
 fn (e mut Eval&) arith(opSp source.Span, op token.Tok, a Value, b Value) Value {
-    if a.Kind == ValueKind.None or b.Kind == ValueKind.None { return none() }
+    if a.Kind == ValueKind.None or b.Kind == ValueKind.None { return Value.none() }
     if not numeric(a) or not numeric(b) { return e.fail(opSp, msgs.CondTypes(e.tokText(opSp))) }
     if a.Kind == ValueKind.Int and b.Kind == ValueKind.Int {
         m := try meet(a, b) catch { return e.fail(opSp, msgs.CondNoMeet(e.tokText(opSp))) }
@@ -778,7 +779,7 @@ fn (e mut Eval&) arith(opSp source.Span, op token.Tok, a Value, b Value) Value {
 
 # text compares by content (B9); a NaN is unordered
 fn (e mut Eval&) compare(opSp source.Span, op token.Tok, a Value, b Value) Value {
-    if a.Kind == ValueKind.None or b.Kind == ValueKind.None { return boolValue(false) if e.skip > 0 else none() }
+    if a.Kind == ValueKind.None or b.Kind == ValueKind.None { return Value.bool(false) if e.skip > 0 else Value.none() }
     eqOp := op == token.Tok.EqEq or op == token.Tok.NotEq
     order I64 = 0
     if a.Kind == ValueKind.Text and b.Kind == ValueKind.Text and eqOp {
@@ -800,23 +801,23 @@ fn (e mut Eval&) compare(opSp source.Span, op token.Tok, a Value, b Value) Value
         if b.Kind == ValueKind.Int {
             y = try asFloat(b) catch { return e.defer(opSp) }
         }
-        if x != x or y != y { return boolValue(op == token.Tok.NotEq) }
+        if x != x or y != y { return Value.bool(op == token.Tok.NotEq) }
         order = -1 if x < y else 1 if x > y else 0
     } else {
         return e.fail(opSp, msgs.CondTypes(e.tokText(opSp)))
     }
     return match op {
-        case token.Tok.EqEq: boolValue(order == 0)
-        case token.Tok.NotEq: boolValue(order != 0)
-        case token.Tok.Lt: boolValue(order < 0)
-        case token.Tok.Le: boolValue(order <= 0)
-        case token.Tok.Gt: boolValue(order > 0)
-        case _: boolValue(order >= 0)
+        case token.Tok.EqEq: Value.bool(order == 0)
+        case token.Tok.NotEq: Value.bool(order != 0)
+        case token.Tok.Lt: Value.bool(order < 0)
+        case token.Tok.Le: Value.bool(order <= 0)
+        case token.Tok.Gt: Value.bool(order > 0)
+        case _: Value.bool(order >= 0)
     }
 }
 
 # where a failed evaluation went wrong, and what
-fn (e Eval&) Error() source.Span, msgs.Msg { return e.errAt, e.err }
+fn (e Eval&) Error() source.Span, diagmsg.Msg { return e.errAt, e.err }
 
 test "a -D value reads as its literal would" {
     c := Consts()

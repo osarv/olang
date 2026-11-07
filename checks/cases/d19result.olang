@@ -1,0 +1,4 @@
+# check: fail error[D19]: a builder of Color gives one value of it - its result is Color, a reference to it or an instance of it, not I64
+type Color struct(R U8) { R }
+fn Color.Count() I64 { return 3 }
+fn main() { assert Color.Count() == 3 }

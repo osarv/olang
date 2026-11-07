@@ -85,7 +85,7 @@ type Binding struct(Owner I64, N I64) {
 type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     L
     R
-    T := types.NewTable(L.Names)
+    T := types.Table.New(L.Names)
     declAt Map<I64, types.DeclId>      # by module and entry, (module << 32) | entry
     unifyDepth I64 = 0                 # how far inside a type's arguments Unify is (G9d binds a value given whole alone)
     declMi Vec<I64>                   # by DeclId: its module and its entry in the module's name table
@@ -114,6 +114,10 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     sameKey Map<I64, I64>              # by method: the next declared of its receiver key and name (M21: one per instance)
     defaultFns Vec<I64>               # the methods declared on a constrained type variable: traits' defaults (M19e)
     defaultTraits Vec<I64>            # beside each, its trait's DeclId
+    builders Map<pair.Pair<I64, I64>, I64>  # (owner key, name): the first builder declared (D19), the rest by sameKey
+    defaultBuilders Vec<I64>          # the builders declared on a constrained type variable: traits' defaults (D19, M19e)
+    defaultBuilderTraits Vec<I64>     # beside each, its trait's DeclId
+    ownerT Map<I64, types.TypeId>     # by builder: its owner over its variables (D19)
     instances Vec<instance>
     instanceOf Map<pair.Pair<I64, types.ListId>, I64>
     argReps Map<types.ListId, types.ListId>  # arguments told apart only by function types' parameter names: the first
@@ -1679,7 +1683,7 @@ type folded struct(St I64, V I64, Ty types.TypeId) {
     Ty
 }
 
-fn unfolded() folded { return folded(Unfolded, 0, types.UnknownT) }
+fn folded.unfolded() folded { return folded(Unfolded, 0, types.UnknownT) }
 
 fn (p mut Program&) fold(c Context&, e ast.Expr&, want types.TypeId) types.TypeId { return p.constOf(c, p.eval(c, e), want, e) }
 
@@ -1785,7 +1789,7 @@ fn (p mut Program&) eval(c Context&, e ast.Expr&) folded {
         case ast.Expr.Binary(_, op, a, b): p.evalBinary(c, op, a, b)
         case ast.Expr.Cond(_, a, k, b): p.evalCond(c, a, k, b)
         case ast.Expr.Call(_, f, args): p.evalCall(c, f, args)
-        case _: unfolded()
+        case _: folded.unfolded()
     }
 }
 
@@ -1836,13 +1840,13 @@ fn (p mut Program&) evalLit(mi I64, sp source.Span, kind token.Tok) folded {
     match kind {
         case token.Tok.IntLit {
             v := try txt.ParseInt(0) catch {
-                u := try txt.ParseUint(0) catch { return unfolded() }
+                u := try txt.ParseUint(0) catch { return folded.unfolded() }
                 return folded(Folded, I64(u), p.T.Prim("U64"))   # L10: a decimal literal above I64's maximum is a U64
             }
             return folded(Folded, v, types.UnknownT)
         }
         case token.Tok.BoolLit { return folded(Folded, 1 if txt == "true" else 0, types.BoolT) }
-        case _ { return unfolded() }
+        case _ { return folded.unfolded() }
     }
 }
 
@@ -1859,11 +1863,11 @@ fn (p mut Program&) foldPath(c Context&, sp source.Span, path Array<source.NameI
     mi := c.Mi
     if path.Len() > 1 {
         ref := p.R.Use(p.file(c.Mi), sp.Start)
-        if ref.Kind != names.What.Import { return unfolded() }
+        if ref.Kind != names.What.Import { return folded.unfolded() }
         mi = ref.Module
         for k in range 1, path.Len() - 1 {
             mi = p.aliasStep(mi, path[k])
-            if mi < 0 { return unfolded() }
+            if mi < 0 { return folded.unfolded() }
         }
     }
     return p.foldGlobal(mi, path[path.Len() - 1])
@@ -1871,21 +1875,21 @@ fn (p mut Program&) foldPath(c Context&, sp source.Span, path Array<source.NameI
 
 fn (p mut Program&) foldGlobal(mi I64, n source.NameId) folded {
     v := p.globalDecl(mi, n)
-    if v is null { return unfolded() }
+    if v is null { return folded.unfolded() }
     key := (mi << 32) | I64(n)
-    if try p.folding.Get(key) catch default false { return unfolded() }   # B5a's cycle: the checker says it
+    if try p.folding.Get(key) catch default false { return folded.unfolded() }   # B5a's cycle: the checker says it
     i := 0
     for k in range v.Names.Len() {
         if v.Names[k] == n { i = k }
     }
-    if i >= v.Values.Len() { return unfolded() }
+    if i >= v.Values.Len() { return folded.unfolded() }
     p.folding.Put(key, true)
     gc := Context(mi, -1)
     f := p.eval(gc, v.Values[i])
     p.folding.Put(key, false)
     if f.St != Folded or v.Ty is null { return f }
     t := p.Resolve(gc, v.Ty)
-    if p.wide(t) { return unfolded() }
+    if p.wide(t) { return folded.unfolded() }
     return folded(Folded, p.wrap(f.V, t), t)
 }
 
@@ -1917,17 +1921,17 @@ fn mutableGlobal(v ast.VarDecl&) Bool {
 
 # a conversion to a number type, "I64(x)": x's value in that type's width (E26: unchecked)
 fn (p mut Program&) evalConversion(c Context&, f ast.Expr&, args Array<ast.Expr&>&) folded {
-    if args.Len() != 1 { return unfolded() }
+    if args.Len() != 1 { return folded.unfolded() }
     match f {
         case ast.Expr.Name(sp, n) {
-            if p.R.Use(p.file(c.Mi), sp.Start).Kind != names.What.Builtin { return unfolded() }
+            if p.R.Use(p.file(c.Mi), sp.Start).Kind != names.What.Builtin { return folded.unfolded() }
             t := p.T.Prim(p.text(n))
-            if not p.T.IsInt(t) or p.wide(t) { return unfolded() }
+            if not p.T.IsInt(t) or p.wide(t) { return folded.unfolded() }
             x := p.eval(c, args[0])
             if x.St != Folded { return x }
             return folded(Folded, p.wrap(x.V, t), t)
         }
-        case _ { return unfolded() }
+        case _ { return folded.unfolded() }
     }
 }
 
@@ -1938,7 +1942,7 @@ fn (p mut Program&) evalUnary(c Context&, op token.Tok, x ast.Expr&) folded {
         case token.Tok.Minus: folded(Folded, p.wrap(-f.V, f.Ty), f.Ty)
         case token.Tok.Tilde: folded(Folded, p.wrap(~f.V, f.Ty), f.Ty)
         case token.Tok.Not: folded(Folded, 1 - f.V, types.BoolT)
-        case _: unfolded()
+        case _: folded.unfolded()
     }
 }
 
@@ -1984,10 +1988,10 @@ fn (p mut Program&) evalBinary(c Context&, op token.Tok, a ast.Expr&, b ast.Expr
     }
     fa := p.eval(c, a)
     fb := p.eval(c, b)
-    if fa.St == Unfolded or fb.St == Unfolded { return unfolded() }
+    if fa.St == Unfolded or fb.St == Unfolded { return folded.unfolded() }
     if fa.St == Pending or fb.St == Pending { return folded(Pending, 0, types.UnknownT) }
     t := p.meet(fa, fb)
-    if t == types.TypeId(-1) or p.wide(t) { return unfolded() }
+    if t == types.TypeId(-1) or p.wide(t) { return folded.unfolded() }
     x, y := fa.V, fb.V
     unsigned := t != types.UnknownT and p.T.IsUnsigned(p.numberOf(t))
     if op == token.Tok.EqEq or op == token.Tok.NotEq or op == token.Tok.Lt or op == token.Tok.Le or op == token.Tok.Gt or
@@ -2009,7 +2013,7 @@ fn (p mut Program&) evalBinary(c Context&, op token.Tok, a ast.Expr&, b ast.Expr
         case token.Tok.Minus { v = x - y }
         case token.Tok.Star { v = x * y }
         case token.Tok.Slash, token.Tok.Percent {
-            if y == 0 { return unfolded() }   # E6a: undefined, the checker's
+            if y == 0 { return folded.unfolded() }   # E6a: undefined, the checker's
             if unsigned {
                 v = I64(U64(x) / U64(y)) if op == token.Tok.Slash else I64(U64(x) % U64(y))
             } else {
@@ -2022,7 +2026,7 @@ fn (p mut Program&) evalBinary(c Context&, op token.Tok, a ast.Expr&, b ast.Expr
         case token.Tok.Shl, token.Tok.Shr {
             t = fa.Ty if fa.Ty != types.UnknownT else (fb.Ty if fb.Ty == types.UnknownT else types.UnknownT)   # E8b
             w := 64 if t == types.UnknownT else p.T.Bits(p.numberOf(t))
-            if y < 0 or y >= w { return unfolded() }
+            if y < 0 or y >= w { return folded.unfolded() }
             if op == token.Tok.Shl {
                 v = x << y
             } else {
@@ -2030,7 +2034,7 @@ fn (p mut Program&) evalBinary(c Context&, op token.Tok, a ast.Expr&, b ast.Expr
             }
         }
         case token.Tok.Xor { v = 1 if (x != 0) != (y != 0) else 0 }
-        case _ { return unfolded() }
+        case _ { return folded.unfolded() }
     }
     if op == token.Tok.Xor { return folded(Folded, v, types.BoolT) }
     return folded(Folded, p.wrap(v, t) if t != types.UnknownT else v, t)
@@ -2584,6 +2588,10 @@ fn (p mut Program&) addFnsIf(mi I64, ti ast.TopIf&, chosen I64, index I64) {
 fn (p mut Program&) addFn(mi I64, f ast.Func&, isExtern Bool) {
     i := p.fns.Len()
     p.fns.Push(fnRow(mi, f, isExtern))
+    if f.IsBuilder() {
+        p.addBuilder(mi, f, i)
+        return
+    }
     if f.Recv is null {
         key := pair.Pair(mi, I64(f.Name))
         if (try p.fnByName.Get(key) catch default -1) < 0 { p.fnByName.Put(key, i) }
@@ -2605,6 +2613,146 @@ fn (p mut Program&) addFn(mi I64, f ast.Func&, isExtern Bool) {
         p.defaultFns.Push(i)
         p.defaultTraits.Push(k & ((I64(1) << 40) - 1))
     }
+}
+
+# D19: a builder, keyed by its owner as a method is by its receiver (M21: one per instance, the rest chained)
+fn (p mut Program&) addBuilder(mi I64, f ast.Func&, i I64) {
+    k := p.recvKey(mi, f.Owner, f.TypeParams)
+    if k < 0 { return }
+    mk := pair.Pair(k, I64(f.Member))
+    head := try p.builders.Get(mk) catch default -1
+    if head < 0 {
+        p.builders.Put(mk, i)
+    } else {
+        for p.sameKey.Has(head) { head = try p.sameKey.Get(head) catch default -1 }
+        p.sameKey.Put(head, i)
+    }
+    if (k >> 40) == 4 {
+        p.defaultBuilders.Push(i)
+        p.defaultBuilderTraits.Push(k & ((I64(1) << 40) - 1))
+    }
+}
+
+# D19: a builder's key, its owner's as a receiver's would be (M19); -1 for a function that is none or an owner no key
+# names (a variable no trait constrains)
+fn (p mut Program&) BuilderKey(f I64) I64 {
+    row := p.fns[f]
+    if not row.F.IsBuilder() { return -1 }
+    return p.recvKey(row.Mi, row.F.Owner, row.F.TypeParams)
+}
+
+# D19: the builder declared before f with f's key and name whose owner some one type meets as f's does, alike in
+# precedence (M21) - f is then an error; -1 for none
+fn (p mut Program&) BuilderOverlap(f I64) I64 {
+    row := p.fns[f]
+    k := p.BuilderKey(f)
+    if k < 0 { return -1 }
+    g := try p.builders.Get(pair.Pair(k, I64(row.F.Member))) catch default -1
+    for g >= 0 and g != f {
+        if p.T.Closed(p.OwnerOf(g)) == p.T.Closed(p.OwnerOf(f)) and p.typesOverlap(p.OwnerOf(g), p.OwnerOf(f), 0) { return g }
+        g = try p.sameKey.Get(g) catch default -1
+    }
+    return -1
+}
+
+# D19: how many of a builder's variables its owner introduces ("fn List<T>.Of": one) - the first of its signature's
+fn (p mut Program&) OwnerVarCount(f I64) I64 {
+    row := p.fns[f]
+    if not row.F.IsBuilder() { return 0 }
+    ns Vec<source.NameId>
+    p.introductions(row.Mi, row.F.Owner, ns, false)
+    return ns.Len()
+}
+
+# D19: a builder's owner over its variables, as its signature names them; Unknown for a function that is none
+fn (p mut Program&) OwnerOf(f I64) types.TypeId {
+    if not p.fns[f].F.IsBuilder() { return types.UnknownT }
+    p.Sig(f)
+    return try p.ownerT.Get(f) catch default types.UnknownT
+}
+
+# D19: type t's builder of that name - its own (one written for t's instance exactly winning over one written with
+# variables, M21), else a default of a trait t satisfies (M19e); -1 for none. A builder is never inherited (T29f)
+# a generic type named bare (bare: x its declaration's own type, its variables to be inferred) takes the builder of
+# that name written with variables, else the first
+fn (p mut Program&) BuilderOf(t types.TypeId, name source.NameId, bare Bool = false) I64 {
+    p.allFns()
+    x := p.T.Plain(p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t)
+    key := p.typeKey(x)
+    if key >= 0 {
+        m := try p.builders.Get(pair.Pair(key, I64(name))) catch default -1
+        found := -1
+        for m >= 0 {
+            if bare {
+                if not p.T.Closed(p.OwnerOf(m)) { return m }
+                if found < 0 { found = m }
+            } else if p.ownerApplies(m, x) {
+                if p.T.Closed(p.OwnerOf(m)) { return m }
+                if found < 0 { found = m }
+            }
+            m = try p.sameKey.Get(m) catch default -1
+        }
+        if found >= 0 { return found }
+    }
+    for i in range p.defaultBuilders.Len() {
+        f := p.defaultBuilders[i]
+        if p.fns[f].F.Member != name { continue }
+        d := types.DeclId(I32(p.defaultBuilderTraits[i]))
+        if p.Satisfies(x, p.SelfType(d)) { return f }
+    }
+    return -1
+}
+
+# D19: every builder type t has, its own in order and then its traits' defaults - each name once
+fn (p mut Program&) BuildersOf(t types.TypeId) Vec<I64> {
+    p.allFns()
+    out Vec<I64>
+    x := p.T.Plain(p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t)
+    seen Map<I64, Bool>
+    for i in range p.fns.Len() {
+        row := p.fns[i]
+        if not row.F.IsBuilder() or seen.Has(I64(row.F.Member)) { continue }
+        if p.BuilderOf(x, row.F.Member) != i { continue }
+        seen.Put(I64(row.F.Member), true)
+        out.Push(i)
+    }
+    return out
+}
+
+# whether builder f's owner is written for x (M21): its arguments x's, or variables binding them
+fn (p mut Program&) ownerApplies(f I64, x types.TypeId) Bool {
+    o := p.OwnerOf(f)
+    if o == types.UnknownT { return false }
+    owner := FnOwner(f)
+    n := p.VarCount(owner)
+    if n == 0 { return p.T.Same(p.T.Plain(o), p.T.Plain(x)) }
+    return p.Matches(o, x, owner, n, true)
+}
+
+# D19: builder f's variables as type x gives them - those its owner names bound by x ("List<I64>.Of" binds List's T),
+# the rest Unknown; empty for a builder with none
+fn (p mut Program&) OwnerBinding(f I64, x types.TypeId) Array<types.TypeId> {
+    owner := FnOwner(f)
+    n := p.VarCount(owner)
+    b := Binding(owner, n)
+    o := p.OwnerOf(f)
+    if n > 0 and o != types.UnknownT { try p.UnifyArg(o, x, b, false, true) catch { } }
+    out := Array<types.TypeId>(n)
+    for i in range n { out[i] = b.Vals[i] }
+    return out
+}
+
+# D19: builder f's signature for owner type x, its owner's variables bound by x
+fn (p mut Program&) BuilderSig(f I64, x types.TypeId) types.TypeId {
+    sig := p.Sig(f)
+    owner := FnOwner(f)
+    n := p.VarCount(owner)
+    if n == 0 { return sig }
+    vals := p.OwnerBinding(f, x)
+    for i in range n {
+        if vals[i] == types.UnknownT { vals[i] = p.T.Var(owner, i, types.ReadOnly) }
+    }
+    return p.Subst(sig, owner, p.T.List(vals))
 }
 
 # a trait's default method of a name that a type's own methods meet the trait of (M19e), by its methods' names; -1 for
@@ -2631,6 +2779,10 @@ fn (p mut Program&) DefaultMethods(t types.TypeId, name source.NameId) Vec<I64> 
                 # T31a: a closed trait's defaults reach the types it lists alone
                 ok = members.Len() == 0 or p.Member(x, p.SelfType(d))
                 for m in methods {
+                    if m.IsBuilder() {
+                        if not p.meetsBuilder(d, p.T.Args(p.SelfType(d)), m) { ok = false }
+                        continue
+                    }
                     if p.MethodOf(x, m.Name) < 0 { ok = false }
                 }
             }
@@ -2874,6 +3026,7 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     c := Context(row.Mi, owner)
     ns Vec<source.NameId>
     if row.F.Recv is not null { p.introductions(row.Mi, row.F.Recv!.Ty, ns, false) }
+    if row.F.Owner is not null { p.introductions(row.Mi, row.F.Owner, ns, false) }   # D19
     if row.F.TypeParams.Len() > 0 {
         for tp in row.F.TypeParams {
             if not ns.Has(tp.Name) { ns.Push(tp.Name) }
@@ -2884,6 +3037,7 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     # G1a: the error-set variables - its list's "? E", and one its receiver's error-set argument introduces
     errNames Vec<source.NameId>
     if row.F.Recv is not null { errIntroductions(row.F.Recv!.Ty, errNames) }
+    if row.F.Owner is not null { errIntroductions(row.F.Owner, errNames) }
     if row.F.TypeParams.Len() > 0 {
         for tp in row.F.TypeParams {
             if tp.ErrSet { errNames.Push(tp.Name) }
@@ -2926,6 +3080,7 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
         recvName = row.F.Recv!.Name
     }
     sig := p.sigType(c, row.F.S, recv, recvName)
+    if row.F.Owner is not null { p.ownerT.Put(f, p.Resolve(c, row.F.Owner)) }   # D19
     if p.viewNext(row) { sig = p.T.Func(p.T.Params(sig), p.T.Result(sig), p.T.Errors(sig), p.T.Scopes(types.RoleFn, Array<I64>(p.T.Items(p.T.Params(sig)).Len(), types.OwnScope), I64[0])) }
     if not p.FnIsExtern(f) and not row.F.Export { p.flagBans(c, row.F.S, sig, recv != types.UnknownT) }
     # D18: a function whose result is written Iterator<T ? E> and whose body yields is a generator - its result the
@@ -2968,6 +3123,7 @@ fn (p mut Program&) OwnVarIndexes(f I64) Vec<I64> {
     row := p.fns[f]
     ns Vec<source.NameId>
     if row.F.Recv is not null { p.introductions(row.Mi, row.F.Recv!.Ty, ns, false) }
+    if row.F.Owner is not null { p.introductions(row.Mi, row.F.Owner, ns, false) }   # D19
     out Vec<I64>
     if row.F.TypeParams.Len() > 0 {
         for tp in row.F.TypeParams {
@@ -2975,6 +3131,7 @@ fn (p mut Program&) OwnVarIndexes(f I64) Vec<I64> {
         }
         for tp in row.F.TypeParams {
             if row.F.Recv is not null and mentionsName(row.F.Recv!.Ty, tp.Name) { continue }
+            if row.F.Owner is not null and mentionsName(row.F.Owner, tp.Name) { continue }   # D19: the owner's, given there
             if tp.ErrSet { continue }   # G1a: an error-set parameter is given after "?", or inferred
             for i, n in ns {
                 if n == tp.Name { out.Push(i) }
@@ -3637,6 +3794,7 @@ fn (p mut Program&) unifyBound(t types.TypeId, tr types.TypeId, b mut Binding&, 
                 p.unifyBound(t, p.Subst(p.Resolve(p.declContext(d), e), DeclOwner(d), p.T.Args(tr)), b, depth + 1)
             }
             for m in methods {
+                if m.IsBuilder() { continue }   # T30b: a builder binds nothing through a value
                 f := p.MethodOf(t, m.Name)
                 if f < 0 { continue }
                 have := p.MethodSig(f, t)
@@ -3686,25 +3844,25 @@ type Unmet struct(Var I64, Trait types.TypeId, Method source.NameId, Named Bool,
     Closed     # the trait is closed (T31a) and the type is none of those it lists
 }
 
-fn met() Unmet { return Unmet(-1, types.UnknownT, source.NameId(0), false, false) }
+fn Unmet.met() Unmet { return Unmet(-1, types.UnknownT, source.NameId(0), false, false) }
 
 # the first of a trait's methods a type does not meet (Var 0), or Var -1 where it satisfies the trait
 fn (p mut Program&) Missing(t types.TypeId, tr types.TypeId, membership Bool = true, depth I64 = 0) Unmet {
-    if depth > 32 { return met() }    # a trait extending itself, said at its declaration (T30a)
+    if depth > 32 { return Unmet.met() }    # a trait extending itself, said at its declaration (T30a)
     # G19: an intersection is met where each of its traits is
     if p.T.KindOf(tr) == types.Kind.Tuple {
         for x in p.T.Items(p.T.Parts(tr)) {
             u := p.Missing(t, x, membership, depth + 1)
             if u.Var >= 0 { return u }
         }
-        return met()
+        return Unmet.met()
     }
     if p.T.KindOf(tr) != types.Kind.Named { return Unmet(0, tr, source.NameId(0), false, false) }
     # T32c: an "any" satisfies its trait and what that extends, and nothing else
     ax := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
     if p.T.KindOf(ax) == types.Kind.Any {
         for e in p.AnyCovers(p.T.AnyTrait(ax)) {
-            if p.T.Same(e, tr) { return met() }
+            if p.T.Same(e, tr) { return Unmet.met() }
         }
         return Unmet(0, tr, source.NameId(0), false, false)
     }
@@ -3723,13 +3881,18 @@ fn (p mut Program&) Missing(t types.TypeId, tr types.TypeId, membership Bool = t
                 if u.Var >= 0 { return u }
             }
             for m in methods {
+                if m.IsBuilder() {
+                    # T30b: a builder the type a parameter names must have
+                    if p.meetsBuilder(d, p.T.Args(tr), m) { continue }
+                    return Unmet(0, tr, m.Name, true, false)
+                }
                 if p.meets(t, d, p.T.Args(tr), m) { continue }
                 priv := not load.Public(p.text(m.Name))
                 x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
                 foreign := p.T.KindOf(x) != types.Kind.Named or p.DeclModule(p.T.DeclOf(x)) != p.DeclModule(d)
                 return Unmet(0, tr, m.Name, true, priv and foreign)
             }
-            return met()
+            return Unmet.met()
         }
         case _ { return Unmet(0, tr, source.NameId(0), false, false) }
     }
@@ -3834,6 +3997,29 @@ fn (p mut Program&) meets(t types.TypeId, d types.DeclId, args types.ListId, m a
         if not p.sameUpToShape(hs[i + 1], ws[i]) { return false }
     }
     # D8e: a noreturn method meets one with no result
+    hr := p.T.Result(have)
+    wr := p.T.Result(want)
+    return (p.T.Same(hr, wr) or (hr == types.NoreturnT and wr == types.VoidT)) and p.ErrsHeld(p.T.Errors(have), p.T.Errors(want))
+}
+
+# T30b: whether the type a trait's builder requirement names - its owner, one of the trait's parameters, as the
+# application binds it - has that builder with the signature the trait writes: parameters alike up to reference shape,
+# the result the same, the errors held by the trait's
+fn (p mut Program&) meetsBuilder(d types.DeclId, args types.ListId, m ast.Func&) Bool {
+    c := p.declContext(d)
+    x := p.Subst(p.Resolve(c, m.Owner), DeclOwner(d), args)
+    if x == types.UnknownT or p.T.KindOf(x) == types.Kind.Var { return true }   # judged where it is bound
+    f := p.BuilderOf(x, m.Member)
+    if f < 0 { return false }
+    want := p.Subst(p.sigType(c, m.S, types.UnknownT, source.NameId(0)), DeclOwner(d), args)
+    have := p.BuilderSig(f, x)
+    if have == types.UnknownT { return false }
+    hs := p.T.Items(p.T.Params(have))
+    ws := p.T.Items(p.T.Params(want))
+    if hs.Len() != ws.Len() { return false }
+    for i in range ws.Len() {
+        if not p.sameUpToShape(hs[i], ws[i]) { return false }
+    }
     hr := p.T.Result(have)
     wr := p.T.Result(want)
     return (p.T.Same(hr, wr) or (hr == types.NoreturnT and wr == types.VoidT)) and p.ErrsHeld(p.T.Errors(have), p.T.Errors(want))
@@ -3997,7 +4183,7 @@ fn (p mut Program&) FirstUnmet(owner I64, args types.ListId) Unmet {
         u := p.Missing(xs[i], bound)
         if u.Var >= 0 { return Unmet(i, u.Trait, u.Method, u.Named, u.Sealed, u.Closed) }
     }
-    return met()
+    return Unmet.met()
 }
 
 # ---- run-time trait values (T32) ----
@@ -4032,7 +4218,7 @@ fn (p mut Program&) AnySlots(r types.TypeId) Array<AnySlot>& {
             case ast.TypeBody.Trait(methods, _, _) {
                 for k in range methods.Len() {
                     m := methods[k]
-                    if seen.Has(m.Name) { continue }
+                    if m.IsBuilder() or seen.Has(m.Name) { continue }   # T30b: no builder in a table
                     seen.Push(m.Name)
                     want := p.Subst(p.sigType(p.declContext(d), m.S, types.UnknownT, source.NameId(0)), DeclOwner(d), p.T.Args(tr))
                     writes := m.Recv is not null
@@ -4246,6 +4432,7 @@ ListParams I64 = 2
 ListResults I64 = 3
 ListFunctions I64 = 4
 ListMethods I64 = 5
+ListBuilders I64 = 6   # a type's builders, "T.Functions" (G41, D19)
 
 # what a descriptor's type says: its kind, the type it describes a member of, the case (a field's, a case's), the
 # position
@@ -4283,10 +4470,11 @@ fn (p mut Program&) Descriptor(k I64, t types.TypeId, cs I64, i I64) types.TypeI
 # a function's descriptor (G41): FuncInfo<F, K> - F its type (a method's for receiver recv, its receiver first), K its
 # key: a hash of its module's identity, its receiver's type's name and its own, the same in every compilation, so an
 # instance a descriptor names is named alike wherever it is made (B3i)
-fn (p mut Program&) FuncDescriptor(f I64, recv types.TypeId) types.TypeId {
+fn (p mut Program&) FuncDescriptor(f I64, recv types.TypeId, owner types.TypeId = types.UnknownT) types.TypeId {
     d := p.descDecl(DescFunc)
     if d < types.DeclId(0) { return types.UnknownT }
     sig := p.Sig(f) if recv == types.UnknownT else p.MethodSig(f, recv)
+    if owner != types.UnknownT { sig = p.BuilderSig(f, owner) }   # D19: a builder of the instance walked
     if sig == types.UnknownT { return types.UnknownT }
     key := p.FnKey(f)
     p.fnByKey.Put(key, f)
@@ -4317,7 +4505,7 @@ fn (p mut Program&) ModuleFns(m I64, mi I64) Array<I64> {
     out Vec<I64>
     for i in range p.fns.Len() {
         row := p.fns[i]
-        if row.Mi != m or row.Extern or row.F.Recv is not null or row.F.TypeParams.Len() > 0 { continue }
+        if row.Mi != m or row.Extern or row.F.Recv is not null or row.F.IsBuilder() or row.F.TypeParams.Len() > 0 { continue }
         if m != mi and not p.text(row.F.Name)[0].IsUpper() { continue }
         out.Push(i)
     }
@@ -4337,6 +4525,24 @@ fn (p mut Program&) TypeMethods(t types.TypeId, mi I64) Array<I64> {
         if row.F.Recv is null or row.Extern or row.F.TypeParams.Len() > 0 { continue }
         if p.recvKey(row.Mi, row.F.Recv!.Ty, row.F.TypeParams) != key or not p.recvApplies(i, t) { continue }
         if row.Mi != mi and not p.text(row.F.Name)[0].IsUpper() { continue }
+        out.Push(i)
+    }
+    return out.ToArray()
+}
+
+# a type's builders (G41, D19), seen from module mi: those declared with it as their owner that apply to it (M21), in
+# the order they are declared - no default of a trait's, none of a type list of its own - another module's private
+# ones left out
+fn (p mut Program&) TypeBuilders(t types.TypeId, mi I64) Array<I64> {
+    p.allFns()
+    out Vec<I64>
+    key := p.typeKey(t)
+    if key < 0 { return out.ToArray() }
+    for i in range p.fns.Len() {
+        row := p.fns[i]
+        if not row.F.IsBuilder() or row.Extern or row.F.TypeParams.Len() > 0 { continue }
+        if p.recvKey(row.Mi, row.F.Owner, row.F.TypeParams) != key or not p.ownerApplies(i, t) { continue }
+        if row.Mi != mi and not p.text(row.F.Member)[0].IsUpper() { continue }
         out.Push(i)
     }
     return out.ToArray()
@@ -4642,6 +4848,7 @@ fn (p mut Program&) ReflItems(t types.TypeId, list I64, cs I64, mi I64) Array<I6
         return out.ToArray(), ""
     }
     if list == ListFunctions { return p.ModuleFns(cs, mi), "" }
+    if list == ListBuilders { return p.TypeBuilders(t, mi), "" }
     if list == ListMethods {
         if p.T.KindOf(t) != types.Kind.Named or not p.Body(t) { return none, "only a type a program declares has methods to walk" }
         return p.TypeMethods(t, mi), ""

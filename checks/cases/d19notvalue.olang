@@ -1,0 +1,7 @@
+# check: fail error[T21]: the builder 'Box.Of' is generic, so it is no value by its name alone
+type Box<T> struct(V T) { V }
+fn Box<T>.Of(v T) Box<T> { return Box(v) }
+fn main() {
+    f := Box.Of
+    assert f(1).V == 1
+}

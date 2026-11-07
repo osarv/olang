@@ -15,6 +15,7 @@ import "source"
 import "ast"
 import "diag"
 import "msgs"
+import "diagmsg"
 import "load"
 import "names"
 import "types"
@@ -37,7 +38,7 @@ fn LoadLibrary(link String&) String {
     if path.EndsWith(".a") or path.EndsWith(".o") { return "a static library or an object, which only a link takes" }
     if dlfcn.dlopen(path.ToC(), 258) is not null { return "" }
     e := dlfcn.dlerror()
-    return e.StringFromC(400) if e is not null else "dlopen failed"
+    return String.FromC(e, 400) if e is not null else "dlopen failed"
 }
 
 # ---- checking with the build's decisions (B9c, S8b) ----
@@ -150,7 +151,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     for t in tops {
         ti := findIf(l.Mods[t.First].Decls, t.Second)
         if ti is null { continue }
-        ch := chain(x, c, t.First, ti)
+        ch := chained.chain(x, c, t.First, ti)
         chosen, ok, why, at := ch.Chosen, ch.Decided, ch.Why, ch.At
         # one whose check already said why (B10's unknown name) stays pending: the last check says it again
         if not ok and why == "" and condSaid(l.Diags, at) { continue }
@@ -182,7 +183,7 @@ fn condSaid(d diag.Diagnostics&, at diag.Where) Bool {
 }
 
 # a B9c condition decided as an error: where it is, and what is said
-type CondErr struct(At diag.Where, M msgs.Msg) {
+type CondErr struct(At diag.Where, M diagmsg.Msg) {
     At
     M
 }
@@ -191,7 +192,7 @@ type CondErr struct(At diag.Where, M msgs.Msg) {
 # them, load.NoBranch for none - and whether every condition read decided, or for the first that cannot, why: "" where it
 # does not check in its module, else what stopped its evaluation and where (stage 0's ERR_COND_UNDECIDABLE), and where
 # the condition is
-fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) chained {
+fn chained.chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) chained {
     d := c.P.L.Diags
     file := c.P.L.Mods[mi].File
     k I64 = 0
@@ -290,7 +291,7 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
                 n++
                 rec := d.Error(at, falseMessage(x, a))
                 # G30/G16b: the instance it was false for
-                if a.CtxText != "" { d.Note(rec, a.Ctx, msgs.Msg(msgs.NoteHere().Kind, "", a.CtxText)) }
+                if a.CtxText != "" { d.Note(rec, a.Ctx, diagmsg.Msg(msgs.NoteHere().Kind, "", a.CtxText)) }
             }
             case eval.Stop.Exited(kind, file, sp, _) {
                 n++
@@ -313,7 +314,7 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
 
 # a false assert's error: with its message rendered as the run time renders it - by reflection or by the evaluator -
 # else, where the message reads what only the running program knows, its text as written, saying so
-fn falseMessage(x mut Exec&, a typecheck.AssertAsk&) msgs.Msg {
+fn falseMessage(x mut Exec&, a typecheck.AssertAsk&) diagmsg.Msg {
     if a.Said { return msgs.AssertFalseMessage(a.SaidText) }
     if a.Msg >= 0 {
         text := try x.Text(a.Msg) catch NoValue { return writtenMessage(a) }
@@ -323,7 +324,7 @@ fn falseMessage(x mut Exec&, a typecheck.AssertAsk&) msgs.Msg {
 }
 
 # a false assert's error where its message has no value while compiling: its text as written, where it has one
-fn writtenMessage(a typecheck.AssertAsk&) msgs.Msg {
+fn writtenMessage(a typecheck.AssertAsk&) diagmsg.Msg {
     if a.Written != "" { return msgs.AssertFalseWritten(a.Written) }
     return msgs.AssertFalse()
 }
@@ -399,7 +400,7 @@ fn decideContracts(c mut typecheck.Checker&, x mut Exec&) I64 {
                 said.Put(call, true)
                 rec := d.Error(at, msgs.ContractFalse(a.Text, a.Name))
                 d.Note(rec, diag.Where.Span(a.CondFile, I64(a.CondSp.Start), I64(a.CondSp.End)), msgs.NoteContractCondition())
-                if a.CtxText != "" { d.Note(rec, a.Ctx, msgs.Msg(msgs.NoteHere().Kind, "", a.CtxText)) }
+                if a.CtxText != "" { d.Note(rec, a.Ctx, diagmsg.Msg(msgs.NoteHere().Kind, "", a.CtxText)) }
             }
             case _ { }
         }
@@ -803,7 +804,7 @@ type Exec struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&, When eval
     Bodies
     When
     Lw := lower.Lowerer(P, Bodies)
-    M := eval.NewMachine(P.T, When)
+    M := eval.Machine.New(P.T, When)
     Unlowered Vec<mir.FnKey>       # the functions a request reached that did not lower, each once
     defined Map<mir.FnKey, Bool>
     dtorOf Map<types.TypeId, I64>
@@ -927,7 +928,7 @@ fn (x mut Exec&) reachStmt(f mir.Fn&, s mir.Stmt, work mut Vec<mir.FnKey>&) {
             }
         }
         case mir.Stmt.RegisterDtor(_, _, ty, _) {
-            dk := try mir.DropFn(x.P.T, ty, try x.dtorOf.Get(ty) catch default -1) catch { return }
+            dk := try mir.FnKey.DropFn(x.P.T, ty, try x.dtorOf.Get(ty) catch default -1) catch { return }
             x.M.DefineDestructor(ty, dk)
             work.Push(dk)
         }

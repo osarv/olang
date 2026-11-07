@@ -239,7 +239,7 @@ fn (t String&) ToLower() String {
 
 # ---- text and C (X15) ----
 
-# a C string - "char *", NUL-terminated - as C gives one (X10): held by reference, read only through StringFromC
+# a C string - "char *", NUL-terminated - as C gives one (X10): held by reference, read only through String.FromC
 extern type CStr
 
 # what a C pointer of no type of olang's points to - "void *", and any other a C import gives no form of its own (X18):
@@ -258,7 +258,7 @@ fn (t String&) ToC() Array<U8> {
 
 # the text a C string holds, copied: its bytes up to the first NUL, or the first max of them where there is none
 # sooner. That p names a C string at all is the C function's word (X1a)
-fn (p CStr&) StringFromC(max I64) String {
+fn String.FromC(p CStr&, max I64) String {
     n := I64(cstring.strnlen(p, U64(max.Max(0))))
     out := Array<U8>(n)
     cstring.memcpy(out, p, U64(n))
@@ -403,21 +403,21 @@ type Radix I64(v I64) ? TextError.BadBase {
 # separators. It is what ParseInt and ParseUint read back in the same base: "x.Format(b).ParseInt(b)" is x for every
 # I64 x, and the unsigned types' for ParseUint - so U64(x).Format(16) is x's bits, two's complement. Base 10 is "$n".
 # Every integer type, U8 included, so a Char's is its code: 'A'.Format(16) is "41"
-fn (n I8) Format(base Radix = 10) String { return formatSigned(n, base) }
-fn (n I16) Format(base Radix = 10) String { return formatSigned(n, base) }
-fn (n I32) Format(base Radix = 10) String { return formatSigned(n, base) }
-fn (n I64) Format(base Radix = 10) String { return formatSigned(n, base) }
-fn (n U8) Format(base Radix = 10) String { return formatDigits(n, false, base) }
-fn (n U16) Format(base Radix = 10) String { return formatDigits(n, false, base) }
-fn (n U32) Format(base Radix = 10) String { return formatDigits(n, false, base) }
-fn (n U64) Format(base Radix = 10) String { return formatDigits(n, false, base) }
+fn (n I8) Format(base Radix = 10) String { return String.formatSigned(n, base) }
+fn (n I16) Format(base Radix = 10) String { return String.formatSigned(n, base) }
+fn (n I32) Format(base Radix = 10) String { return String.formatSigned(n, base) }
+fn (n I64) Format(base Radix = 10) String { return String.formatSigned(n, base) }
+fn (n U8) Format(base Radix = 10) String { return String.formatDigits(n, false, base) }
+fn (n U16) Format(base Radix = 10) String { return String.formatDigits(n, false, base) }
+fn (n U32) Format(base Radix = 10) String { return String.formatDigits(n, false, base) }
+fn (n U64) Format(base Radix = 10) String { return String.formatDigits(n, false, base) }
 
 # every other integer width's (T4a), as the eight's: one of at most 64 bits through I64 or U64, a wider one digit by
 # digit in its own type
 fn (n T) Format<T Integer>(base Radix = 10) String {
     if T.Size <= 8 {
-        if T.Min < 0 { return formatSigned(I64(n), base) }
-        return formatDigits(U64(n), false, base)
+        if T.Min < 0 { return String.formatSigned(I64(n), base) }
+        return String.formatDigits(U64(n), false, base)
     }
     letters String& = "0123456789abcdefghijklmnopqrstuvwxyz"
     room := Array<Char>(130)
@@ -441,13 +441,13 @@ fn (n T) Format<T Integer>(base Radix = 10) String {
 }
 
 # a signed integer's digits: its magnitude, which for I64's most negative is one more than I64 holds - U64 holds it
-fn formatSigned(n I64, base Radix) String {
-    if n < 0 { return formatDigits(U64(0) - U64(n), true, base) }
-    return formatDigits(U64(n), false, base)
+fn String.formatSigned(n I64, base Radix) String {
+    if n < 0 { return String.formatDigits(U64(0) - U64(n), true, base) }
+    return String.formatDigits(U64(n), false, base)
 }
 
 # v's digits in base, last first into room for the longest (64 binary digits and a sign), behind a '-' when neg
-fn formatDigits(v U64, neg Bool, base Radix) String {
+fn String.formatDigits(v U64, neg Bool, base Radix) String {
     letters String& = "0123456789abcdefghijklmnopqrstuvwxyz"
     room := Array<Char>(65)
     at I64 = 65
@@ -500,14 +500,14 @@ fn (t String&) ParseUint(base Radix = 10) U64 ? ParseError {
     return try readDigits(digits, base, ~U64(0))
 }
 
-# the integer the text writes as a T - any integer type, of any width (T4a): "255".ParseAs<U8>() is 255 and
-# "-5".ParseAs<I24>() is -5 - read as ParseInt reads a signed type's and ParseUint an unsigned one's, failing with
+# the integer text t writes, as a T - every integer type's builder, of any width (T4a, D19): U8.Parse("255") is 255 and
+# I24.Parse("-5") is -5 - read as ParseInt reads a signed type's and ParseUint an unsigned one's, failing with
 # Overflow outside T's range (and Invalid for a '-' before an unsigned one's). A type wider than 64 bits takes digits up
-# to its own range: "340282366920938463463374607431768211455".ParseAs<U128>() is U128's largest. Base 0's prefixed
+# to its own range: U128.Parse("340282366920938463463374607431768211455") is U128's largest. Base 0's prefixed
 # literal is read as a program reads one (L10a): a pattern of at most 64 bits as ParseInt or ParseUint reads it, then
 # fitting T; a wider one's value read unsigned, up to 128 bits, fitting T where that value does
-# ("0x1FFFFFFFFFFFFFFFF".ParseAs<U128>(0) is 2^65 - 1)
-fn (t String&) ParseAs<T Integer>(base Radix = 10) T ? ParseError {
+# (U128.Parse("0x1FFFFFFFFFFFFFFFF", 0) is 2^65 - 1)
+fn T.Parse<T Integer>(t String&, base Radix = 10) T ? ParseError {
     if t.Len() == 0 { error ParseError.Empty }
     neg := t[0] == '-'
     digits := t[1:] if neg or t[0] == '+' else t[:]
@@ -659,8 +659,8 @@ fn (t String&) ParseFloat() F64 ? ParseError {
     body := t[start:]
     sign U64 = U64(1) << 63 if neg else 0
     if body.Len() > 0 and body[0] != '.' and not body[0].IsDigit() {
-        if sameLetters(body, "inf") or sameLetters(body, "infinity") { return (sign | (U64(0x7FF) << 52)).F64FromBits() }
-        if sameLetters(body, "nan") { return (sign | (U64(0xFFF) << 51)).F64FromBits() }
+        if sameLetters(body, "inf") or sameLetters(body, "infinity") { return F64.FromBits(sign | (U64(0x7FF) << 52)) }
+        if sameLetters(body, "nan") { return F64.FromBits(sign | (U64(0xFFF) << 51)) }
         error ParseError.Invalid
     }
     man U64 = 0                 # the first 19 significant digits
@@ -766,7 +766,7 @@ fn toF64(man U64, exp10 I64, trunc Bool, neg Bool, text String&) F64 ? ParseErro
         if up != b { return try slowF64(text, neg) }
     }
     if neg { b = b | (U64(1) << 63) }
-    return b.F64FromBits()
+    return F64.FromBits(b)
 }
 
 # the low and high 64 bits of a * b
@@ -848,7 +848,7 @@ fn slowF64(text String&, neg Bool) F64 ? ParseError {
     a.set(text)
     b := try a.bits()
     if neg { b = b | (U64(1) << 63) }
-    return b.F64FromBits()
+    return F64.FromBits(b)
 }
 
 # a decimal of up to 800 significant digits, shifted by powers of two until its integer part is the mantissa
@@ -1397,7 +1397,7 @@ if TestBuild {
     }
 
     # the same, built while compiling (K2): the evaluator runs the builder as the run time does
-    fn builtText() String& {
+    fn String.builtText() String& {
         b := StringBuilder()
         for i in range 3 {
             b.Push($i)
@@ -1407,15 +1407,15 @@ if TestBuild {
         return b.ToString()
     }
 
-    builtBaked := builtText()
+    builtBaked := String.builtText()
 
     test "a StringBuilder, evaluated while compiling as at run time" {
         assert builtBaked == "0,1,2,end"
-        assert builtText() == builtBaked
+        assert String.builtText() == builtBaked
     }
 
     # Clear empties a builder and keeps its storage: what is added after it is all it holds
-    fn clearedText(n I64) String& {
+    fn String.clearedText(n I64) String& {
         b := StringBuilder()
         last String& = ""
         for i in range n {
@@ -1431,14 +1431,14 @@ if TestBuild {
         return b.ToString()
     }
 
-    clearedBaked := clearedText(300)
+    clearedBaked := String.clearedText(300)
 
     test "StringBuilder.Clear empties it for reuse, while compiling as at run time" {
         assert clearedBaked == "line 299!"
         n := 299
         n++
-        assert clearedText(n) == clearedBaked
-        assert clearedText(1) == "line 0!"
+        assert String.clearedText(n) == clearedBaked
+        assert String.clearedText(1) == "line 0!"
     }
 
     # mutable, so the check below is made at run time, where the arena is - and the reason it exists: ToString's text is

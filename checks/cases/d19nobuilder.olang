@@ -1,0 +1,4 @@
+# check: fail error[D19]: Color has no builder, case or member 'gray' - did you mean 'Gray'?
+type Color struct(R U8) { R }
+fn Color.Gray(v U8) Color { return Color(v) }
+fn main() { assert Color.gray(1).R == 1 }

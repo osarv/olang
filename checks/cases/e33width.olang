@@ -1,5 +1,6 @@
-# check: fail error[E33]: 'F64FromBits' is a method of the unsigned type of its float's width
+# check: fail error[E33]: F64.FromBits takes the U64 of its width, and this is a U32 - convert it first: 'U64(x)'
 type E error { X }
 fn main() ? E {
-    f := U32(1).F64FromBits()
+    f := F64.FromBits(U32(1))
+    assert f == f
 }
