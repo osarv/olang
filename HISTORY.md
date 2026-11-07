@@ -30210,3 +30210,14 @@ guards over a narrowed statement), `wholeColumn` (`columnSlice`), `caughtCaseTes
 `payloadPatternOk` (a guard on the pattern's case, `payloadItemOk`); unparse's `decl` (`externBlock`, `errorDecl`);
 effects' `settle` (`passWrites`, counting the facts it adds - no changed flag); ast's `RecvTarget` and `OwnerTarget`
 sharing `nameOrConstraint`; generic's `DefaultMethods` (`traitReaches`). No change in what any of them does.
+
+**B10, msgs.olang's echoes.** QAR (2026-10-24) decided compiler/msgs.olang's echo comments and blank lines go: the file
+is the table's source, edited by hand since stage 0 went (no generator - compiler/tools/genmsgs.olang is gone; other
+rounds edit it by hand), and it kept stage 0's `# ERR_...` / `# NOTE_...` id above each function, 743 of them -
+including ids of messages long removed, with no function under them (`# ERR_CONST_PARAM_TYPE` and the rest of the
+constant generics, `# ERR_CHECKED_...`) - and a blank line between every two one-line functions. Dropped: every id line,
+and a blank line between two one-line message functions (one blank kept before a comment, a multi-line function, a
+section); the header no longer speaks of ids. 3,448 -> 1,935 lines, nothing else changed (checks.olang's test of the
+table reads the Diag enum and the functions, never the ids). For a merge: a side that added a message under an id line
+resolves by taking that side's file and dropping `^# (ERR|NOTE)_[A-Z0-9_]+$` lines and the blank lines between one-line
+functions again. The decision's other half, "redundant integer casts cleaned up", was not looked at.
