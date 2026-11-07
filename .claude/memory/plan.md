@@ -876,4 +876,14 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   wt-uniq's two bugs; unique Part C then destructor collections; the section-8 round (design note first); reuse in
   place and the C-call rule; QBT then QBU + QBW (check.olang, after the section-8 round); Columns<T> (needs FromIter
   and QCU's answers); explain -asm beside them; then the smaller items, the final review and verify.
+- 2026-11-07 01:35 CET: bulk review 7 finished (11b8d38..db71837; /home/user/review/bulk7/NOTES.md): 16 confirmed
+  findings and a diagnostic - use after release or unsound acceptance: F1 a D9i move while the same call lends the value,
+  F2 a join block's by-value holder ended before the wait, F4 a holder ended though its storage flows out (returned
+  reference, stored, captured), F6 `Array<T>(n, fill)` duplicating a unique value, F12 spawned calls' arguments sharing
+  one stack slot (every task reads the last), F15/F16 a unique value lent and handed on, or handed on with an alias
+  live; wrong results: F3 a drop flag cleared before a later argument leaves, F7 parallel declarations not copying
+  (pre-existing), F8 captures shallow and skipping a declared Copy, F10 a failed contract skipping drops, F11
+  interpret running a check gap, F5 a failed test skipping by-value drops; over-rejections F9, F14 (+ d12); F13 a
+  diagnostic. Its fix round started at once (still the user's "use up the last weeks tokens"): wt-bfix7 in
+  /home/user/wt/bfix7, the directions in /home/user/review/bulk7/FIX-BRIEF.md, hand-off PROGRESS.md there.
 
