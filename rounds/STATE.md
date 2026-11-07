@@ -14,9 +14,12 @@ Goldens: conflicts take our side; ALL four goldens recaptured once at the end (n
 | round | worktree / branch | model | brief |
 |---|---|---|---|
 | sec8r2 | /home/user/wt/sec8r2, wt-sec8r2 | opus xhigh | rounds/sec8r2-brief.md (O27 placement + dropord's hand-on move, viewCtor) |
-| literals | /home/user/wt/literals, wt-literals | opus high | rounds/literals-brief.md (QBU/QBW FromIter + Columns literals; re-run its tool after merges) |
-| tidy2 | /home/user/wt/tidy2, wt-tidy2 | opus high | rounds/tidy2-brief.md (14 small items) |
 
+tidy2 merged (aff942b, ff) and literals merged (8eb88bd + cee098e seed). Re-run literal_migrate after merging sec8r2:
+  OLANG_STD=<a std in the new syntax> <new compiler> build -quick -output build/tools_literal_migrate tools/literal_migrate.olang
+  build/tools_literal_migrate --std std std compiler tests checks tools bench fuzz   (and builder_migrate likewise)
+BEFORE THE GATES: fuzz/scopegen.olang writes plain functions D19a refuses (scope fuzzer fails) - migrate it; B8
+(StringBuilder hand-over) after sec8r2; goldens all + rungold + drvgold recaptured.
 ALL SEVEN MORNING ROUNDS MERGED: master = 1877245 (interp, columns, packed, dropord, qbt, errdata2, nll). Merging the
 builders round needed builder_migrate re-run (build the tool against a pre-change std when std has new syntax:
 OLANG_STD=<old std> build/olx build tools/builder_migrate.olang); typed.CallOf -> typed.Call.Of by hand where the tool
