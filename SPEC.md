@@ -344,10 +344,10 @@ A line break separates exactly where it would end a statement (L18), so a line e
 on the next line, and a line ending in a name, a literal or a closing bracket ends it. A comma is never the last token on
 its line: one that is is a compile-time error - reported once, and then read as the line break it stands before. A list
 running over several lines may end with a line break before its closing bracket; a comma there, on the bracket's own
-line (`I32[1, 2,]`), is a compile-time error.
+line (`Array<I32>[1, 2,]`), is a compile-time error.
 
 ```
-xs := I32[
+xs := Array<I32>[
     1, 2, 3
     4, 5, 6
 ]
@@ -496,7 +496,7 @@ first case carries one, a struct whose constructor has no value for one - has no
 **An array may be null only where its type says so.** An array written `&` - and an array held by value - is never
 null: its zero value is the empty array. One written `?&` - `Array<T>?&`, `String?&`, `Array<Node&>?&` - may be absent,
 and its null is not the empty array: `x is null` is false of an empty one, a null renders as `null` and an empty one as
-`""` or `I64[]` (E11a), and a null equals only a null (E10). It follows every rule of a `T?&` above: nothing is read
+`""` or `Array<I64>[]` (E11a), and a null equals only a null (E10). It follows every rule of a `T?&` above: nothing is read
 through it - no element, slice, `Len()` or method - until it is known not to be null (S8e, or `x!`, E35). Its **zero
 value is null**, as every `?&`'s is (D13): a declaration with no value starts as null - a local, a global, a field, a
 constructor parameter's zero, each element of an `Array<T>(n)` with no fill (written there, since null is not its
@@ -642,7 +642,7 @@ argument — is held either by reference, `Array<T>&` (it names an array that li
 share and change), or **by value**, as **its container's own**. By value, its storage is laid out in the value where a
 length every such value shares is given (T7d): an inline field whose declaration gives its length, or the elements of
 an array made with a fill or a literal of one known length. Otherwise it is an array of a run-time length held by
-value - a field `name String`, an element of `Array<String>` or `String["a", "bc"]`, a payload `A(s String)`, a type
+value - a field `name String`, an element of `Array<String>` or `Array<String>["a", "bc"]`, a payload `A(s String)`, a type
 argument (`Vec<String>`, `Map<String, V>`), the rows of `type Grid extends Array<Array<I64>>` - whose elements are
 storage of the container's, living where the container's references do (§8), which nothing another name holds
 changes. A store into such a part - an assignment, a constructor's field, a case's payload, an element of a literal, a
@@ -1067,7 +1067,7 @@ declaration:
 type's name, as always, so a misspelled type stays an unknown type rather than becoming a variable - except in a
 receiver's type arguments, where a name no type has is the variable it introduces (G3b). A type variable is written
 bare wherever a type's name is: in a type, as a type argument (`Cell<T>`, `Pair<K, V>`), as an array literal's element
-type (`T[a, b]`, E19), after `as` (E32), as a type `match`'s operand (`match T`, G13), and called: `U(x)` is, in each
+type (`Array<T>[a, b]`, E19), after `as` (E32), as a type `match`'s operand (`match T`, G13), and called: `U(x)` is, in each
 instance, the call the bound type's name is - a conversion (E26) where it is a number type, its constructor where it is
 a struct type (C1), and an error otherwise. The closing `>>` of
 a nested type-argument list lexes as the shift token and is split where a type-argument list is being parsed, and only
@@ -1469,8 +1469,8 @@ plain data an immutable global holds is read-only data the same way. Any other t
 storage of its own, or a writable reference - gets a copy of its own. Which happens is not observable except as speed, and as identity:
 each **site** - a literal as written once in the source - is one instance however often it is reached, so the same
 site reached twice is the same storage, and two sites are two instances even when they hold the same data. An
-element of a static literal is static data too: walked by `for ... in` (`for nm in String&["ann", "bob"]`), read by an
-index or a slice, or bound by an array pattern (`String&["a", "b"][k]`), it lives in the program's scope (§8 O1b) and
+element of a static literal is static data too: walked by `for ... in` (`for nm in Array<String&>["ann", "bob"]`), read by an
+index or a slice, or bound by an array pattern (`Array<String&>["a", "b"][k]`), it lives in the program's scope (§8 O1b) and
 may be stored anywhere.
 
 **T26.** A reference-shaped struct, enum or array is heap-indirect: the value held by a variable, field,
@@ -2462,7 +2462,7 @@ no thread, no stack of its own, no allocation per value: the generator's storage
 state is a number saying where it stopped. Its value is a function value's two words.
 
 **D18e (a walk made and finished in one place).** Where a `for` or a comprehension walks a generator called right
-there (`for x in evens(10)`, `I64[x for x in evens(10)]`), nothing else can reach the walk: it ends where the loop's
+there (`for x in evens(10)`, `Array<I64>[x for x in evens(10)]`), nothing else can reach the walk: it ends where the loop's
 block is left, by its end, `break`, `continue`, `return` or an error, and its storage is made only if the optimizer
 cannot keep it in the caller's own frame - in registers, as a hand-written loop's. What D18b says of where values are
 built and when scopes close holds unchanged: the difference is cost alone. A local declared from such a call (`g :=
@@ -5008,7 +5008,7 @@ continues after the loop; an error no clause names propagates, as from any `try`
 ended, so a `break` or `continue` directly in one is a compile-time error.
 
 A **comprehension** (E27) makes the same calls and has no clauses of its own: one whose own calls can fail is
-written under `try` - `try I32[f(x) for x in lines] catch default I32[]` - which covers those calls and every
+written under `try` - `try Array<I32>[f(x) for x in lines] catch default Array<I32>[]` - which covers those calls and every
 fallible call in it (R8), `Exhausted` aside, which ends the walk. An error from them abandons the array being built.
 
 **S9b (`range`).** After a `for`'s `in` (and nowhere else), `range-expr ::= "range" expr [ "," expr [ "," expr ] ]`
@@ -5104,7 +5104,7 @@ written text or `null`, to which those adapt as in `a if c else b` (E28) - a con
 counting as a literal (E4a), so `case Activation.Relu: 1.0 if x > 0.0 else 0.0` beside an `F32` value is an `F32` -
 values that are all numeric literals (or such) take the widest, values that are all written text are a `String` (T29c),
 and values that are all array literals of one element type are an array of it whatever their lengths (`case 1:
-I64[1, 2, 3]` beside `case _: I64[4, 5]` is an `Array<I64>`), as in `a if c else b`; a match whose only value is its
+Array<I64>[1, 2, 3]` beside `case _: Array<I64>[4, 5]` is an `Array<I64>`), as in `a if c else b`; a match whose only value is its
 `case _`'s has that value's type (`match x { case _: I8(x) }` is an `I8`). Each value then fits the match's target on
 its own (E12), a value built in it - text, a constructor call - built where the match's value lands. A match used as a
 value declares its type for `:=` (D15), as a conditional does. Over a type variable
@@ -9089,7 +9089,7 @@ fn dot(a Array<F32>, b Array<F32>) F32 {
     for i in range a.Len() { s = s + a[i] * b[i] }
     return s
 }
-d := dot(F32[1.0, 2.0, 3.0], F32[4.0, 5.0, 6.0])   # dot at 3 and 3
+d := dot(Array<F32>[1.0, 2.0, 3.0], Array<F32>[4.0, 5.0, 6.0])   # dot at 3 and 3
 ```
 
 **G30 (decided per instance).** In an instance, an `if` whose condition reads the length of a by-value array parameter
@@ -9163,7 +9163,7 @@ passed or returned. It is used four ways:
 - `T.Fields.Len()` is the count, an `I64` constant.
 - `T.Fields[k]` with `k` a constant (K1) is that element; an index known only at run time, or one outside the list, is
   an error.
-- A comprehension `String&[f.Name for f in T.Fields if f.Type.Kind != TypeKind.Reference]` makes a run-time array of one
+- A comprehension `Array<String&>[f.Name for f in T.Fields if f.Type.Kind != TypeKind.Reference]` makes a run-time array of one
   element per list element its filter keeps; the filter is decided while compiling (G35), one that is not an error.
 
 **G34 (descriptors).** An element of a list is a **descriptor**: a value of no storage whose type says which member it
@@ -9238,7 +9238,7 @@ fn what<T>() String {
 element its filter keeps, in order: the value written, checked once per element with the names bound to that element.
 It may stand beside other arguments. Building a value this way runs its constructor, and with it the constructor's
 checks (§9): reflection never builds what the constructor would refuse. Over anything else it is an error naming the
-bracketed form, `T[e for x in c]` (E27).
+bracketed form, `Array<T>[e for x in c]` (E27).
 
 ```
 fn arg<P>(p P, k I64) P.Type {
