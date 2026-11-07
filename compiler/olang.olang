@@ -124,9 +124,10 @@ ModeWhat Array<String&> = String&[
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
 # what they do
 OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
-    "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime", "-caps", "-asm", "-ir"]
-OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", "", "NAME", "SECONDS", "", "", ""]
-OptModes Array<I64> = I64[12294, 15, 15, 15, 1887, 10079, 10079, 2080, 8271, 256, 2, 11, 8, 8, 64, 64, 64]
+    "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime", "-caps", "-asm", "-ir", "-interpret"]
+OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", "", "NAME", "SECONDS", "", "", ""
+    ""]
+OptModes Array<I64> = I64[12294, 15, 15, 15, 1887, 10079, 10079, 2080, 8271, 256, 2, 11, 8, 8, 64, 64, 64, 8]
 OptWhat Array<String&> = String&[
     "writes the executable, the object, bindgen's declarations or profile's flame graph to PATH (B3h, X16, B20)"
     "builds unoptimized, with debug information (B2c, B2e)"
@@ -145,6 +146,7 @@ OptWhat Array<String&> = String&[
     "prints what each module the program loads may reach - files, network, processes, environment, threads, C (B11c)"
     "prints a function's machine code as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)"
     "prints a function's optimized LLVM IR as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)"
+    "runs the tests by compile-time evaluation instead of building them, as interpret runs a program (B3e)"
 ]
 
 fn modeName(m I64) String { return "running a file" if m == Run else $ModeWords[m] }
@@ -251,6 +253,7 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
             if o == 11 { c.Memory = true }
             if o == 12 { c.Fuzz = $v }
             if o == 14 { cl.Caps = true }
+            if o == 17 { c.Interpreted = true }
             if o == 15 or o == 16 {
                 if cl.Listing != "" { try usage(d, msgs.ListingAlone()) }
                 cl.Listing = $a
@@ -263,6 +266,8 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
             }
             # B2g: -quick is a level of optimization, as -debug and -race set theirs
             if c.Quick and (c.Debug or c.Race) { try usage(d, msgs.QuickAlone("-debug" if c.Debug else "-race")) }
+            # B3e: interpreting builds nothing, so no option saying how to build goes with it
+            if c.Interpreted and buildWord(c) != "" { try usage(d, msgs.InterpretBuilds(buildWord(c))) }
             continue
         }
         if cl.Mode == Doc and cl.Html == "" and cl.Files.Len() == 1 and not endsWithOlang(a) {
@@ -305,6 +310,17 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
         }
     }
     return cl
+}
+
+# the option that says how to build which test -interpret is given with, "" for none (B3e)
+fn buildWord(c build.Config&) String {
+    if c.Debug { return "-debug" }
+    if c.Race { return "-race" }
+    if c.San { return "-sanitize" }
+    if c.Quick { return "-quick" }
+    if c.Memory { return "-memory" }
+    if c.Fuzz != "" { return "-fuzz" }
+    return ""
 }
 
 # the eight built-in constants (B10a), once the target is known; a -define naming one is a mistake, the first such in
@@ -371,12 +387,14 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     c.Store = try os.Env("OLANG_OBJECTS") catch default ""
     # the tools that only analyze need no clang, as interpret does not (B12)
     tool := cl.Mode == Doc or cl.Mode == Lsp or cl.Mode == Mcp or cl.Mode == Api
-    c.Target = try target.Resolve(cl.Spec, c.Clang, cl.Mode == Interp or (tool and c.Clang == ""), d) catch target.Bad {
+    interpreting := cl.Mode == Interp or c.Interpreted
+    c.Target = try target.Resolve(cl.Spec, c.Clang, interpreting or (tool and c.Clang == ""), d) catch target.Bad {
         error Bad.Usage
     }
     # B12a: another architecture is compiled, built and linked for with its C library, and its programs and tests run
     # through an emulator; what runs in this process - interpret, the tools - is for this machine only
-    foreignOk := cl.Mode == Compile or cl.Mode == Build or cl.Mode == Test or cl.Mode == Run or cl.Listing != ""
+    foreignOk := cl.Mode == Compile or cl.Mode == Build or (cl.Mode == Test and not c.Interpreted) or cl.Mode == Run or
+        cl.Listing != ""
     if c.Target.Foreign and not foreignOk { try usage(d, msgs.TargetForeignMode(modeName(cl.Mode), cl.Spec)) }
     c.Tests = cl.Mode == Test
     c.Profile = cl.Mode == Profile
@@ -468,6 +486,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
         for a in cl.Args { pargs.Push($a) }
         return build.Interpret(fe, c, files[0], pargs.ToArray(), d)
     }
+    if files.Len() == 1 and c.Interpreted { return build.InterpretTests(fe, c, files[0], d, cl.Filters.ToArray()) }
     if files.Len() == 1 { return build.TestFile(fe, c, files[0], d, cl.Filters.ToArray()) }
     exe := try os.ReadLink("/proc/self/exe") catch os.Error default $args[0]
     return build.TestFiles(c, exe, cl.Passed.ToArray(), files, cl.Filters.ToArray())
@@ -922,11 +941,13 @@ fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnost
 
 # interpret FILE ARGS (B3e): the program checked - its conditions and asserts the evaluator decides decided (B9c, S8b,
 # S18c) - and its main run by the evaluator, its globals set first, the program given its file and ARGS as its command
-# line; the status main ends with
+# line; the status main ends with. For test -interpret (cfg.Tests) the file's tests run instead, as its test binary
+# runs them - ARGS the words naming the tests to run (B7a)
 fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.Config&
     d mut diag.Diagnostics&) I32 ? build.Failed {
+    tests := cfg.Tests
     l mut load.Loader& = try p.load(root, cfg, d)
-    c mut typecheck.Checker& = interp.Analyze(l, false)
+    c mut typecheck.Checker& = interp.Analyze(l, tests)
     asserts mut Map<pair.Pair<I64, I64>, Bool>& = Map<pair.Pair<I64, I64>, Bool>()
     # T29d, D13c, K2: what the build decides while compiling is decided here too - its errors the same
     clean := d.Errors() == 0
@@ -959,6 +980,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     if d.Errors() > 0 { error build.Failed.Reported }
     x mut interp.Exec& = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
     x.Lw.AssertsTrue = asserts
+    x.Lw.Tests = tests
     x.Lw.Cleanups = true    # a stop runs the deferred code of the blocks it leaves (B3e)
     # where things live is the scope pass's (M6), its errors reported as a build reports them: what a build refuses is
     # not run
@@ -966,9 +988,17 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     if d.Errors() > 0 { error build.Failed.Reported }
     x.Lw.Plans = fr.Plans
     x.Lw.Free = fr
-    for a in args { x.M.Args.Push($a) }      # the file first (build.Interpret's)
     os.OnCrash(eval.InterpCrash)
-    status := x.RunMain(d)
+    status I32 = 0
+    if tests {
+        # the test binary's command line: its path, as test builds it, then the words
+        x.M.Args.Push($"./build/" $build.Readable(l.Mods[l.Root].Identity) "_test")
+        for a in args { x.M.Args.Push($a) }
+        status = x.RunTests(d, args)
+    } else {
+        for a in args { x.M.Args.Push($a) }      # the file first (build.Interpret's)
+        status = x.RunMain(d)
+    }
     # a failed check, or a "!", ends interpret as it ends the built program: by SIGABRT, after what it wrote - so a
     # shell sees the same signal as stage 0's abort gives it - the crash message emptied first, so the compiler's own
     # handler adds nothing

@@ -11,6 +11,7 @@
 
 import "std/pair"
 import "std/io"
+import "std/os"
 import "source"
 import "ast"
 import "diag"
@@ -991,6 +992,21 @@ fn (x mut Exec&) Entries() Vec<I64>, I64 {
     return tests, main
 }
 
+# B7a: whether a test runs - where no word is given, or a word is its target, its target's type, or text of its
+# description (as the test binary's harness reads them)
+fn (x mut Exec&) selected(id I64, words Array<String&>&) Bool {
+    if words.Len() == 0 { return true }
+    m := x.P.L.Mods[x.P.L.Root]
+    d := ast.FindTest(m.Decls, x.Bodies[id].Sp)
+    if d is null { return false }
+    tg := ast.TestTarget(d, x.P.L.Names)
+    ds := ast.TestDesc(d, m.Src!.Text)
+    for w in words {
+        if tg == w or (tg.StartsWith(w) and tg.Len() > w.Len() and tg[w.Len()] == '.') or ds.Contains(w) { return true }
+    }
+    return false
+}
+
 # a test's name as a run reports it: its target, then its description (B7a)
 fn (x mut Exec&) TestName(id I64) String {
     m := x.P.L.Mods[x.P.L.Root]
@@ -1042,17 +1058,27 @@ fn (x mut Exec&) InitGlobals() eval.Stop {
     return first
 }
 
-# the root module's tests run as "olang test" runs them (S15, S16): each global set, then each test "ok - NAME", or
-# what stopped it and "FAIL - NAME"; then the counts. The status: 1 where any failed
-fn (x mut Exec&) RunTests(d mut diag.Diagnostics&) I32 {
-    tests, _ := x.Entries()
+# the root module's tests run as "olang test" runs them (S15, S16): each global set, then each test the words name
+# (B7a; every test where there are none) "ok - NAME", or what stopped it and "FAIL - NAME"; then the counts. The
+# status: 3 where words were given and named no test, else 1 where any failed
+fn (x mut Exec&) RunTests(d mut diag.Diagnostics&, words Array<String&>& = Array<String&>(0)) I32 {
+    all, _ := x.Entries()
+    tests := Vec<I64>()
+    for t in all {
+        if x.selected(t, words) { tests.Push(t) }
+    }
+    if tests.Len() == 0 and words.Len() > 0 { return 3 }
     for t in tests { x.Need(mir.FnKey.Body(typed.BodyId(I32(t)))) }
     x.InitGlobals()
     pass, fail I64 = 0, 0
     none := Array<I64>(0)
+    x.M.TestFile = $x.P.L.Mods[x.P.L.Root].Path
     for t in tests {
         name := x.TestName(t)
+        x.M.TestName = name
         s := x.M.Eval(mir.FnKey.Body(typed.BodyId(I32(t))), none)
+        # B19: a forked child that took its test's recovery point away ends as the built child does, by its failed check
+        if s != eval.Stop.None and x.M.Detached { detachedEnd(x.StopText(s, t, d)) }
         if s == eval.Stop.None {
             pass++
             say("ok - " $name "\n")
@@ -1151,6 +1177,12 @@ fn (x mut Exec&) errorName(code I64, ty types.TypeId) String {
     dl := x.P.T.DeclOf(et)
     dm := x.P.T.DeclModule(dl)
     return $load.ErrQualifier(x.P.L.Mods[dm].Identity, dm == x.P.L.Root) $x.P.ErrorWordName(dl, code & 0xFFFF)   # B5
+}
+
+# a detached test's child stopped (B19): what stopped it said, then the process ends as an abort does
+fn detachedEnd(text String&) noreturn {
+    if text != "" { sayErr($text "\n") }
+    os.Exit(134)
 }
 
 fn say(t String&) { try io.Print(t) catch io.Error { } }
