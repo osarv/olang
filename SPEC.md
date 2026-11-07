@@ -1116,7 +1116,10 @@ error of an error type none of whose words carries a payload pushes nothing: suc
 without payloads. A payload is read where the error is named: a field of an error value narrowed to one word, `e.line`
 after `if e == ParseError.Bad` (T20) or in `catch ParseError.Bad e { e.line }` - a field read where the value may hold
 another word is a compile-time error naming the test, and a payload field is never written (an error is what was
-raised); `$e` renders the payload after the word as an enum case's (`ParseError.Bad(3, 7)`, text quoted, E11a); a "!"
+raised); in a `match` on the error value a local or a clause's name holds (R11b, T20) a payload is matched as an enum
+case's is (S13b) - `case ParseError.Bad(line, col = 0)`: fields by position, then by name, a name binding its field in
+the case's block, `_` anything, a value compared by `==` - a case comparing a field's value covering nothing for
+exhaustiveness (as a guard), a name bound only in a match statement and in a case of one alternative; `$e` renders the payload after the word as an enum case's (`ParseError.Bad(3, 7)`, text quoted, E11a); a "!"
 (E35), an error escaping `main` (B5) and a test's FAIL line (S16) say the error so too.
 
 **T19a (named error sets).** With an `error-list` after `error` the declaration names an **error set**: `type

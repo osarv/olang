@@ -216,3 +216,25 @@ test "a false requirement's ArgumentError carries the condition" {
     assert why(Live + 4) == "2"
     try half(Live + 5) catch ArgumentError.Invalid e { assert e.what == "half: n % 2 == 0" }
 }
+
+# T19b, S13b: a payload matched as an enum case's is - fields by position, then by name, a name binding, "_" anything,
+# a value compared - in a match on the error a clause named
+fn kind(n I64) String {
+    try parse(n) catch ParseErr e {
+        match e {
+            case ParseErr.Bad(_, col = 0): return "no column"
+            case ParseErr.Bad(-1, _): return "line -1"
+            case ParseErr.Bad(at, c) { return "bad " $at ":" $c }
+            case ParseErr.Named(what) { return what }
+            case ParseErr.Eof: return "eof"
+        }
+    }
+    return "ok"
+}
+
+KindBaked String = kind(-1)
+
+test "a payload is matched by position and by name" {
+    assert KindBaked == "line -1" and kind(Live - 1) == KindBaked
+    assert kind(Live - 9) == "bad -9:7" and kind(Live + 200) == "big 200" and kind(Live) == "eof" and kind(Live + 1) == "ok"
+}

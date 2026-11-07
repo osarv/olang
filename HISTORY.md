@@ -29517,3 +29517,86 @@ closed). Memory-safe today (the storage lives until the scope closes), but C11's
 released resource") does not hold, and it is what blocks freeing at drops. Rust's dropck refuses the store (a value with
 a destructor may not hold a reference to one ended before it); olang's equivalent would refuse a by-value holder storing
 a reference to a holder declared later in its block - for the user.
+
+## Errors carrying data (T19b, R3b, T20, D17; 2026-11-07, wt-errdata2 - docs/errdata.md rounds 1-4)
+
+**What was asked.** The design note (docs/errdata.md, wt-errdata) answered how an error says more than its word: a
+payload of plain data on a declared word, `type ParseError error { Bad(line I64, col I64), Eof }`, raised `error
+ParseError.Bad(l, c)`, read where the error is named (`catch ParseError.Bad e { e.line }`, after `if e == ParseError.Bad`)
+and rendered by `$e` (`ParseError.Bad(3, 7)`). Rounds 1, 3 and 4 were the brief; then the user answered the note's three
+direction questions on 2026-11-07: (1) errors raised by name carry data too, their fields' types from the module's first
+raise; (2) methods on error types, declared in the error type's module as for any type, a named set having none of its
+members'; (3) `ArgumentError.Invalid` carries the failed condition's text, replacing D17's thread-local slot (confirmed
+outright an hour later). Each is the user's decision of 2026-11-07.
+
+**How it is built.** The payload never enters the error union: a fallible call still returns `{ i32 code, T }` (R6), so
+the success path, the ABI and every program whose error types carry nothing are as before. Raising pushes the payload, a
+copy, on a per-thread LIFO **payload stack** (`std/runtime/runtime.ll`: `@__olang_errpay_top`, records `{prev, region,
+payload}` each in a region of its own under a thread-local dummy parent scope); `try` passing the error on touches
+nothing; whatever takes the error pops it - a clause (copying it into the value it names, then popping, named or not:
+lowering's `toClause`/`popIf`), a join (the earliest-spawned failure's record attached to the joining thread, the others
+dropped: the task node grew a fifth word, the trampoline detaches the record, `__olang_join_tasks` attaches it), an
+export fn's entry (dropped before the code goes to C). MIR: `Rvalue.ErrPush`, `Stmt.ErrSet`, `Rvalue.ErrTop`,
+`Stmt.ErrPop`; typed: `PrimOp.ErrPush`, `ErrCaught`, `ErrTaken`. The push is per type: an error of a type with any payload
+word pushes a record (its plain words a case of no fields), a type with none pushes nothing. Each error type with
+payload words has a hidden enum (`names.PayloadName`: `Name$payload`, a case per word, made by the resolver beside the
+declaration, never written by a program, kept out of doc/lsp listings); an error value whose set holds such types is laid
+out `{ i32 code, P_1 .. P_k }`, one payload enum per carrying member in set order, the others zero, `null` all zero
+(`types.SetErrRepr` from `generic.ErrValOf`) - so `==`, Hash, `$`, storage and recoding between sets all work on the
+record, and `HoldsRefs(ErrVal)` reads through it (a value assigned out of a clause had been copied into the clause's
+scope). The evaluator keeps its own stack (`payScopes`/`payPtrs`, a task's `PayBase`), so baked globals and decided
+asserts agree with the run time (tests/errdata.olang holds each beside its run-time test). `!`, a test's FAIL line and
+an error escaping `main` render the payload at run time (`__olang_bang_failed_text`, `__olang_test_error_text`,
+`__olang_unhandled_text`; `ExitKind.Unhandled`, main's trace kept by a `Stmt.Raised` before it). Measured: a raise,
+push and pop of `Bad(n, 7)` about 70 ns; 3M raises in a loop and 1,000 joins of failing tasks stay under 2 MB.
+
+**Errors raised by name (round 2).** `error OutOfRange(index = i, limit = n)`, `error NoKey(key)`: the resolver's survey
+keeps each raise's arguments and the first raise names the fields (a pun's name, or `name = value`'s), `Ty` left null in
+the synthesized declaration; the checker settles the types at the first raise it meets (`check.settleBy`: each value's
+own, a reference's referent, `payloadBad` held), forcing the first raise's body to be checked first where a later raise,
+a field read or a value written needs the shape (`settleRaised`, the body whose span holds the declaration's span), and
+`generic.SettleRaised` gives the hidden enum its case - `CaseSig` and `payload` read the settled types where a field has
+no written type. Later raises give the same names in the same order (RaisedFieldsDiffer), values fitted as arguments.
+
+**Methods on error types.** `fn (e ParseError) Where() String`: a receiver of an error type is an error value (T20);
+`generic.typeKey` keys an `ErrVal` by the named set it was written as, else its one error type (`ErrDeclOf`), so a
+clause's name over some words of a type calls the type's methods and a named set's value only the set's; declared only in
+the type's module (MethodOnForeignType, which no other path used), and never `Eq`/`Hash`/`Str`/`Copy` (ErrorMethodGiven:
+T20 says how an error compares, hashes, renders and copies - `$e` stays the error's name, so `!` and `main` say it alike).
+
+**ArgumentError carries the condition.** `ArgumentError.Invalid(what String)`; the entry check and the check before a
+call through an `any` (which had been `PrimOp.Holds`, now the same `if not cond { push; raise }` as on entry -
+`check.argumentPush`) push `"pick: y > x"`. The thread-local slot (`__olang_ert_req_set/clear/print`) is gone: a build
+keeping no trace prints the error with its payload, then the hint (`__olang_debug_hint`); the trace keeps naming the
+condition at its place. The runtime change needed one compiler build with stub definitions of the old calls (the
+installed compiler still emitted them), then a rebuild without them. `PrimOp.Holds` is left in typed/lower/eval/mir
+(MIR's own tests use it as a sample prim); nothing makes it now.
+
+**std (round 4).** os: every word carries `(path String)` - errno is not exposed (`Failed` too; decided, the note's
+`(path, errno)` reduced); json: reading words `(line I64, col I64)`, `Missing(key String)`, `json.Position` and every `at`
+parameter removed, a payload error value written as its `$` text and read back only for plain words; csv:
+`BareQuote/TextAfterQuote/UnclosedQuote(line)`, `NoColumn(name)`, `BadValue(line, column, text)`; flags:
+`Unknown/Missing/DeclaredTwice/Required(flag)`, `BadValue(flag, text)`; regex: every `SyntaxError` word `(at I64)`, the
+offset where reading stopped (`TooBig(0)`: the whole pattern); time: `Syntax(at I64)`; net: `Address(text String)` (the
+text refused, the address given for a socket call's class 12, `""` for none; the parsers raise a private `noAddress`
+caught at the public entry points), `UnknownHost(host String)`; io: `Partial(written I64)`, and a `Writer` keeps the
+refused error itself (`refused io.Error`, an error value) instead of a flag. `olang api` reports a payload added as a
+changed word, breaking (explain and doc print a word's payload, `wordPayload`; the apicaps scenario).
+
+**Decided (mine).** (1) The push is per error type, not per word. (2) Error values carry a record, one part per
+carrying member type. (3) os's errors carry the path only. (4) json writes payload error values as `$` text, reads back
+plain words only. (5) Reflection's `c()` on a payload word gives its zero fields. (6) A clause's name lives in the block
+it is declared in (the scope pass gave it no term, so `catch E e default $e` read freed storage). (7) An error escaping
+`main` is said by lowering (`ExitKind.Unhandled`), its payload rendered there. (8) A task's payload moves by detach and
+attach, never copied between threads' regions. (9) A raised error's field types settle at the first raise checked, the
+first raise's body checked first wherever the shape is asked - so it is the module's first raise in every program but
+one whose bodies reach each other in a cycle before either raise is met. (10) A raised error written as a value takes
+its fields by position, as a declared word does (`e == OutOfRange(-1, 10)`). (11) Methods on error types: `Eq`, `Hash`,
+`Str`, `Copy` refused. (12) regex/time offsets are where reading stopped.
+
+**Found and fixed on the way.** The resolver's survey kept no raise arguments; `explain` and `doc` printed a word
+without its payload and `doc` listed the hidden enum with the error's doc comment; did-you-mean could offer the hidden
+name; `MethodOnForeignType` existed and was never reported.
+
+**Left.** Patterns on payloads (`case ParseError.Bad(l, _)`, `e == ParseError.Bad(3, _)`) were not built - a payload is
+read by name after narrowing; a clause filters on words only (the note's decision 8).

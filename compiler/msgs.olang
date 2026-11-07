@@ -862,6 +862,9 @@ type Diag enum {
     RaisedFieldUnnamed
     RaisedFieldsDiffer
     ErrorMethodGiven
+    ErrPatternNeedsName
+    ErrPatternBindValue
+    ErrPatternBindAlts
     FlagAmongResults
     FlagWithOutParam
     RaiseNeedsQuestion
@@ -1412,6 +1415,15 @@ fn PayloadArgs(word String&, want I64, got I64) Msg { return Msg(Diag.PayloadArg
 
 # ERR_RAISED_FIELD_UNNAMED
 fn RaisedFieldUnnamed() Msg { return Msg(Diag.RaisedFieldUnnamed, "R3b, T19b", "a field an error raised by name carries is named by the raise: a bare name, or 'name = value'") }
+
+# ERR_ERR_PATTERN_NEEDS_NAME
+fn ErrPatternNeedsName(what String&) Msg { return Msg(Diag.ErrPatternNeedsName, "T19b, S13b", "a payload pattern reads the error a local or a catch clause's name holds, and " $what " is no name - write 'e := ...' first and match 'e'") }
+
+# ERR_ERR_PATTERN_BIND_VALUE
+fn ErrPatternBindValue() Msg { return Msg(Diag.ErrPatternBindValue, "T19b, S13b", "a payload pattern binds names only in a match statement - in a value match read the field after the test ('case W: e.field')") }
+
+# ERR_ERR_PATTERN_BIND_ALTS
+fn ErrPatternBindAlts() Msg { return Msg(Diag.ErrPatternBindAlts, "T19b, S13b", "a payload pattern binding a name stands alone in its case - give each alternative a case of its own") }
 
 # ERR_ERROR_METHOD_GIVEN
 fn ErrorMethodGiven(ty String&, name String&) Msg { return Msg(Diag.ErrorMethodGiven, "T20", "an error value's " $name " is the language's (T20) - " $ty " cannot declare one; choose another name") }

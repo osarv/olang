@@ -1,0 +1,10 @@
+# check: fail error[T19b, S13b]: a payload pattern reads the error a local or a catch clause's name holds
+# T19b, S13b: a payload pattern matches the error a name holds, never one an expression gives
+type ReadErr error { Bad(line I64), Eof }
+Last ReadErr = ReadErr.Bad(3)
+fn main() {
+    match Last {
+        case ReadErr.Bad(line) { assert line > 0 }
+        case _ { }
+    }
+}
