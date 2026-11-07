@@ -1,0 +1,7 @@
+# check: fail error[T13b]: Array<Token>(n, fill) copies its fill into every element, and Token is unique
+# T13b (bulk review 7, F6): a fill copies its value into every element - n copies of one unique value
+type Token unique struct(id I64) { id }
+fn main() {
+    c := Array<Token>(2, Token(5))
+    assert c[0].id == 5
+}

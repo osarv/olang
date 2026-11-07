@@ -81,6 +81,10 @@ type HelperKind enum {
     # then each part's held by value that has any (a field, a payload) - what a by-value holder letting go of it runs,
     # and what the scope closing runs for an instance whose parts have destructors of their own
     Drop
+    # O15 in a test build (bulk review 7, F5): fn(g mut G&) for G a guard (GuardType) - registered with a by-value
+    # holder's block, so a failed check's unwinding (P1d) ends what the holder still holds: where its flag is set, the
+    # holder's Drop, then the flag cleared (a holder letting go clears it, so the scope's close finds nothing to do)
+    Guard
 }
 
 # a decision taken about a node after check made it, by eval (or check) and read by lowering and emit: kept under
@@ -659,13 +663,27 @@ fn HelperType(t mut types.Table&, kind HelperKind, ty types.TypeId) types.TypeId
         case HelperKind.Hash: t.Func(t.List1(r), I64T, types.ListId(0))
         case HelperKind.Zero: t.Func(types.ListId(0), ty, types.ListId(0))
         case HelperKind.Copy, HelperKind.Parts: t.Func(t.List1(r), ty, types.ListId(0))
-        case HelperKind.Drop: t.Func(t.List1(t.Ref(ty, types.Writable)), types.VoidT, types.ListId(0))
+        case HelperKind.Drop, HelperKind.Guard: t.Func(t.List1(t.Ref(ty, types.Writable)), types.VoidT, types.ListId(0))
     }
+}
+
+# a by-value holder's guard (HelperKind.Guard): its flag's place and its own, both writable references
+fn GuardType(t mut types.Table&, held types.TypeId) types.TypeId {
+    return t.Tuple(t.List(types.TypeId[t.Ref(types.BoolT, types.Writable), t.Ref(held, types.Writable)]))
+}
+
+# the type a guard is of (its holder's), else UnknownT
+fn GuardOf(t types.Table&, ty types.TypeId) types.TypeId {
+    if t.KindOf(ty) != types.Kind.Tuple: return types.UnknownT
+    ps := t.Items(t.Parts(ty))
+    if ps.Len() != 2 or not t.IsRef(ps[0]) or not t.IsRef(ps[1]) or t.Referent(ps[0]) != types.BoolT: return types.UnknownT
+    return t.Referent(ps[1])
 }
 
 # O15: the function a registration of an instance of type ty runs as its scope closes - its destructor's body (dtor, -1
 # for none) where nothing it holds by value has one of its own, else its Drop helper; NoDrop for neither
 fn DropFn(t types.Table&, ty types.TypeId, dtor I64) FnKey ? NoDrop {
+    if GuardOf(t, ty) != types.UnknownT: return FnKey.Helper(HelperKind.Guard, ty)
     if dtor >= 0 and not DropsParts(t, ty): return FnKey.Body(typed.BodyId(I32(dtor)))
     if not t.NeedsDrop(ty): error NoDrop
     return FnKey.Helper(HelperKind.Drop, ty)
@@ -694,7 +712,7 @@ fn PassedCount(t mut types.Table&, c Callee, ty types.TypeId) I64 {
     return match c {
         case Callee.Fn(FnKey.Helper(HelperKind.Render, _), _), Callee.Fn(FnKey.AnyRender(_, _), _): 1
         case Callee.Fn(FnKey.Helper(HelperKind.Copy, _), _), Callee.Fn(FnKey.Helper(HelperKind.Parts, _), _): 1
-        case Callee.Fn(FnKey.Helper(HelperKind.Drop, _), _): 1
+        case Callee.Fn(FnKey.Helper(HelperKind.Drop, _), _), Callee.Fn(FnKey.Helper(HelperKind.Guard, _), _): 1
         case Callee.Fn(FnKey.Helper(HelperKind.Equal, _), _), Callee.Fn(FnKey.Helper(HelperKind.Hash, _), _): 0
         case Callee.Extern(_, _): 0
         case Callee.Dispatch(_, sl, _) if sl < 0: 1     # $'s rendering, through the table: a Render helper's builder
@@ -1317,7 +1335,7 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
             xt := v.operandType(x)
             if not t.IsRef(xt) or not t.Same(t.Referent(xt), ty) {
                 v.bad("a destructor registered for a " $v.canon(xt) ", not a reference to a " $v.canon(ty))
-            } else if not t.NeedsDrop(ty) {
+            } else if not t.NeedsDrop(ty) and GuardOf(t, ty) == types.UnknownT {
                 v.bad("a destructor registered for a " $v.canon(ty) ", which has none to run")
             }
         }

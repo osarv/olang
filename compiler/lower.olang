@@ -61,6 +61,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     # B3e: for interpret - each registration of deferred code made with a cleanup of its own (Stmt.Deferred), which
     # interpret runs for the blocks a stop leaves; never for a build (emit has no use for them)
     Cleanups Bool = false
+    Tests Bool = false        # a test build: a by-value holder's guard registered with its block (F5)
     # S18c (mir.Key.Assert): the asserts decided true while compiling, by body and where the assert starts - no test
     AssertsTrue Map<pair.Pair<I64, I64>, Bool>
     # the functions lowering refers to that are no typed body - helpers, adapters, modules' initializations - in the
@@ -365,6 +366,7 @@ fn (ln mut lowering&) gap(sp source.Span, what String&) {
 fn (ln mut lowering&) run() {
     b := ln.B
     t := ln.T
+    away := ln.standInAway()
     # locals: the typed body's, in its numbering
     for i in range b.Locals.Len() {
         l := b.Locals[i]
@@ -383,6 +385,7 @@ fn (ln mut lowering&) run() {
                 case _ { }
             }
         }
+        if away[i]: home = mir.ScopeRef.Program
         ln.F.AddLocal(mir.Local(l.Name, l.Sp, l.Ty, k, home))
     }
     for p in b.Params { ln.F.Params.Push(mir.LocalId(I32(p))) }
@@ -743,13 +746,21 @@ fn (ln mut lowering&) leave(to I64) {
 # whether deferred code k is an errdefer's (S19e): run only on a way out an error takes
 fn (ln lowering&) onError(k I64) Bool { return ln.B.Blocks[I64(ln.defers[k].Id)].Kind == typed.BlockKind.ErrDefer }
 
+# whether deferred code k is a by-value holder's drop (O15): in a join block, run after its wait - a task may still use
+# what it holds until then (bulk review 7, F2)
+fn (ln lowering&) isDrop(k I64) Bool { return ln.B.Blocks[I64(ln.defers[k].Id)].Kind == typed.BlockKind.Drop }
+
+# which of a level's deferred code runs on a way out: before a join's wait (or a plain block's close), after a join's
+# wait that failed, after one that did not
+type deferPhase enum { Before, Failed, Waited }
+
 # level i left - every level above it already left on this path: its deferred code (lowered as if the levels above
 # were closed, which they are here) - an errdefer's only where an error is leaving (S19e) -, its wait if it is a join,
 # its close
 fn (ln mut lowering&) exitLevel(i I64) {
     if ln.dead { return }
     lv := ln.levels[i]
-    ln.runDefers(i, false)
+    ln.runDefers(i, deferPhase.Before)
     if ln.dead { return }
     sp := ln.B.Blocks[I64(lv.Block)].Sp if lv.Block >= typed.BlockId(0) else ln.B.Sp
     if lv.Kind == mir.ScopeKind.Join {
@@ -766,11 +777,14 @@ fn (ln mut lowering&) exitLevel(i I64) {
             ln.end(mir.Term.Wait(sp, lv.S, ok, code, failed))
             ln.start(failed)
             # S19e: the join failed, which is known only once it has waited - its errdefers run now, after its defers
-            ln.runDefers(i, true)
+            # (and its holders' drops, O15)
+            ln.runDefers(i, deferPhase.Failed)
             ln.emit(mir.Stmt.Close(sp, lv.S))
             ln.joinFailed(i, lv.S, mir.Operand.Copy(mir.L(code)), errs, sp)
         }
         ln.start(ok)
+        ln.runDefers(i, deferPhase.Waited)
+        if ln.dead { return }
     }
     ln.emit(mir.Stmt.Close(sp, lv.S))
 }
@@ -778,16 +792,15 @@ fn (ln mut lowering&) exitLevel(i I64) {
 # level i's deferred code, last registered first, lowered as the block's last statements with the levels above it set
 # aside: what runs on this way out - every defer's, and an errdefer's where an error is leaving (S19e) - or, failed,
 # only the errdefers' (a join failing after its wait)
-fn (ln mut lowering&) runDefers(i I64, failed Bool) {
+fn (ln mut lowering&) runDefers(i I64, phase deferPhase) {
     lv := ln.levels[i]
     # the levels above i, set aside while i's deferred code is lowered
     saved Vec<level>
     for ln.levels.Len() > i + 1 { saved.Push(try ln.levels.Pop() catch { unreachable }) }
     mine Vec<I64>
+    joined := lv.Kind == mir.ScopeKind.Join
     for k in range ln.defers.Len() {
-        if ln.deferAt[k] != lv.S { continue }
-        e := ln.onError(k)
-        if (e and (ln.erroring or failed)) or (not e and not failed) { mine.Push(k) }
+        if ln.deferAt[k] == lv.S and ln.runsIn(k, phase, joined): mine.Push(k)
     }
     # what runs here is no longer pending while it runs: a path leaving from inside deferred code (one that cannot be
     # taken - S19 lets none leave - or is caught there) does not run it again, which would lower it without end
@@ -802,6 +815,16 @@ fn (ln mut lowering&) runDefers(i I64, failed Bool) {
     }
     for k in mine { ln.deferAt[k] = lv.S }
     for saved.Len() > 0 { ln.levels.Push(try saved.Pop() catch { unreachable }) }
+}
+
+# whether deferred code k runs in this phase of its level's way out
+fn (ln lowering&) runsIn(k I64, phase deferPhase, joined Bool) Bool {
+    e, d := ln.onError(k), ln.isDrop(k)
+    return match phase {
+        case deferPhase.Before: not (joined and d) and (not e or ln.erroring)
+        case deferPhase.Failed: e or d
+        case deferPhase.Waited: d
+    }
 }
 
 # B3e: deferred code k, just registered, lowered once more as its cleanup - blocks nothing but the registration reaches
@@ -946,6 +969,7 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             ln.deferAt.Push(ln.top().S)
             # B3e: a stop interpret meets is no error leaving, so an errdefer has no cleanup (S19c, S19e)
             if ln.L.Cleanups and not ln.onError(ln.defers.Len() - 1) { ln.cleanup(sp, ln.defers.Len() - 1) }
+            if ln.isDrop(ln.defers.Len() - 1) { ln.guardHolder(sp, bl) }
         }
         case typed.Stmt.Join(sp, j) { ln.join(sp, j) }
         case typed.Stmt.Spawn(sp, sw) { ln.spawn(sp, sw) }
@@ -1106,6 +1130,42 @@ fn (ln mut lowering&) placeStorage(p typed.Lvalue&) mir.ScopeRef {
         case typed.Lvalue.Local(_, _, id): ln.storageOf(id)
         case _: mir.ScopeRef.Program
     }
+}
+
+# the stand-in placement's locals (no plan: a body lowered while compiling, for the evaluator) whose own storage flows
+# out of the body - handed back, held by what is handed back, kept by a callee, captured: given the program's scope,
+# as everything the stand-in builds is, rather than the frame a return closes (the evaluator refused such a program as
+# reading closed storage, where the run time - placed by the scope pass - reads it; bulk review 7, found with F4).
+# EscHard and a reference-holding result's Ret only: a read-only reference given a call is no reason to move it
+fn (ln mut lowering&) standInAway() Array<Bool> {
+    b := ln.B
+    out := Array<Bool>(b.Locals.Len(), false)
+    if ln.planned or b.Root is null: return out
+    u := typed.Uses(ln.T, b)
+    refs := ln.T.HoldsRefs(ln.T.Result(b.Ty))
+    for i in range b.Locals.Len() {
+        l := b.Locals[i]
+        # (a holder of a value with destructors keeps its frame: one flowing out is refused while compiling all the
+        # same, K2c, and a task's borrow of one in a join block - EscHard - must not move its drop)
+        if l.Kind != typed.LocalKind.Var or ln.T.IsRef(l.Ty) or ln.T.NeedsDrop(l.Ty): continue
+        out[i] = u.EscHard[i] or (u.Ret[i] and refs)
+    }
+    return out
+}
+
+# where by-value local p's storage lives, where the scope pass moved it out of its own block (O26a: the result's, a
+# parameter's, the program's; an outer block's): Frame for a local held where it is declared, or any other place
+fn (ln mut lowering&) escapedHome(p typed.Lvalue&) mir.ScopeRef {
+    if p != typed.Lvalue.Local: return mir.ScopeRef.Frame
+    l := I64(p.id)
+    # (a constructor's field lives with the instance; it is let go of here only where the constructor fails, and
+    # then now - no instance holds it)
+    if ln.B.Locals[l].Kind == typed.LocalKind.Field: return mir.ScopeRef.Frame
+    if ln.F.Locals[l].Home != mir.ScopeRef.Frame: return ln.F.Locals[l].Home
+    if not ln.planned: return mir.ScopeRef.Frame
+    st := ln.plan.Stored[l] if l < ln.plan.Stored.Len() else typed.Scope.Unset
+    if st != typed.Scope.Block or st.b == ln.B.Locals[l].In: return mir.ScopeRef.Frame
+    return ln.scopeRef(st)
 }
 
 # where a function's result is built: its result scope, else the program's
@@ -1530,13 +1590,16 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
         case typed.Expr.Call(csp, _, c) {
             callee, ty := ln.callee(c.Target, csp)
             if ln.dead { return }
+            # (a task's arguments are read beside its spawner: no frame slot of the spawner's, no view in place of
+            # their copies - bulk review 7, F12: the flag had never been set, so every turn's task shared one slot)
+            ln.taskArgs = true
             args := ln.args(c, callee, ty)
             if ln.dead { return }
             match callee {
                 case mir.Callee.Dispatch(_, k, dty) { callee = mir.Callee.Dispatch(ln.F.Ops[I64(args.At)], k, dty) }
                 case _ { }
             }
-            cls := Array<mir.TaskClause>(sw.Clauses.Len())
+            cls :=Array<mir.TaskClause>(sw.Clauses.Len())
             for i in range sw.Clauses.Len() {
                 cl := sw.Clauses[i]
                 h := mir.Operand.None
@@ -2351,8 +2414,11 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         case typed.Callee.Body(id): I64(id)
         case _: I64(-1)
     }
+    # (bulk review 7, F3) the hand-ons among the arguments: each holder lets go once the call is made, after every
+    # argument - a later one leaving (an error passed on, a clause's return) leaves the value with its holder
+    gone mut Vec<typed.Stmt&>& = Vec<typed.Stmt&>()
     for i in range c.Args.Len() {
-        a := c.Args[i]
+        a := ln.handedOver(c.Args[i], gone)
         if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) { ln.readHere(a, c) }
         if not task: ln.argView(a, body, i)
         ro := i < ps.Len() and t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) == 0
@@ -2367,7 +2433,21 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         }
         ops[i] = v
     }
+    for st in gone { ln.stmt(st) }
     return ln.F.Args(ops)
+}
+
+# an argument that hands a holder's value on (a Gone Seq, under conversions): the value read, its flag's clearing kept in
+# gone for after every argument
+fn (ln mut lowering&) handedOver(a typed.Expr&, gone mut Vec<typed.Stmt&>&) typed.Expr& {
+    match a {
+        case typed.Expr.Seq(_, _, q) {
+            if not q.Gone or q.X is null: return a
+            for st in q.Stmts { gone.Push(st) }
+            return q.X!
+        }
+        case _ { return a }
+    }
 }
 
 # a value given storage for a read-only reference parameter of a call that keeps nothing of it and hands back nothing
@@ -3151,12 +3231,14 @@ type lastUses struct(N I64) {
     CopySite Vec<I64>
     CopyLocal Vec<I64>
     CopyAt Vec<I64>       # the copy's position, -1 where it is in a loop the local is declared outside, or in later code
+    Said Vec<I64>         # the local each mention named, by its position (seq - 1)
 }
 
 fn (w mut lastUses&) mention(id typed.LocalId) {
     i := I64(id)
     if i < 0 or i >= w.N: return
     w.seq++
+    w.Said.Push(i)
     w.last[i] = I64.Max if w.later > 0 else w.last[i].Max(w.seq)
 }
 
@@ -3246,16 +3328,20 @@ fn (w mut lastUses&) expr(x typed.Expr?&) {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p): w.place(p)
         case typed.Expr.Promote(_, _, pr): w.expr(pr.X)
         case typed.Expr.Call(_, _, c) {
+            s0, c0 := w.seq, w.CopySite.Len()
             match c.Target {
                 case typed.Callee.Value(f) { w.expr(f) }
                 case _ { }
             }
             w.exprs(c.Args)
+            w.apart(s0, c0)
         }
         case typed.Expr.Make(_, _, m) {
+            s0, c0 := w.seq, w.CopySite.Len()
             w.copyOf(m)
             w.exprs(m.Items)
             w.expr(m.Length)
+            w.apart(s0, c0)
         }
         case typed.Expr.Collect(_, _, c) {
             w.expr(c.Reserve)
@@ -3331,6 +3417,19 @@ fn (w mut lastUses&) place(p typed.Lvalue&) {
         case typed.Lvalue.Payload(_, _, py): w.place(py.Base)
         case typed.Lvalue.Temp(_, _, v, _): w.expr(v)
         case typed.Lvalue.Global(_, _, _, _), typed.Lvalue.Target(_, _) { }
+    }
+}
+
+# (bulk review 7, F1) a copy made in one call's (or one made value's) operands is no move where another operand of it
+# mentions the same local - `peek(t, t)` lends t beside its copy, `part(t.a, t)` reads a part of it, `t.Peek(t)` is its
+# receiver: those names are alive for the very call the copy is an argument of, so the copy stays a copy
+fn (w mut lastUses&) apart(s0 I64, c0 I64) {
+    for k in range c0, w.CopySite.Len() {
+        at := w.CopyAt[k]
+        if at < 0: continue
+        for q in range s0 + 1, w.seq + 1 {
+            if q != at and w.Said[q - 1] == w.CopyLocal[k]: w.CopyAt[k] = -1
+        }
     }
 }
 
@@ -4195,7 +4294,17 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
             case typed.Expr.Borrow(_, _, p) {
                 a := ln.place(p)
                 if ln.dead { return mir.Operand.None }
-                ln.dropAt(a, p.Type(), ln.innermost(), sp)
+                home := ln.escapedHome(p)
+                if home == mir.ScopeRef.Frame {
+                    ln.dropAt(a, p.Type(), ln.innermost(), sp)
+                    return mir.Operand.None
+                }
+                # (bulk review 7, F4) a holder whose storage the scope pass moved where it flows - the result's, a
+                # parameter's, an outer block's - lets go of nothing here: its value is registered where its storage
+                # lives, as a call's value no slot takes is (O16), and its destructors run as that scope closes
+                rt := ln.T.Ref(p.Type(), types.Writable)
+                r := ln.into(rt, mir.Rvalue.Ref(ln.mk(a), rt), sp)
+                ln.emit(mir.Stmt.RegisterDtor(sp, home, p.Type(), r))
             }
             case _ { ln.gap(sp, "a drop of no place") }
         }
@@ -4406,10 +4515,24 @@ fn (ln mut lowering&) lambda(body typed.BodyId, caps Array<typed.Capture&>&, sit
     for i in range caps.Len() {
         ops[i] = ln.val(caps[i].Outer)
         ct := caps[i].Outer.Type()
-        if gen and not ln.dead and ln.valueArray(ct) { ops[i] = ln.arrayCopy(ops[i], ct, sp, s) }
+        if ln.dead: continue
+        if gen and ln.valueArray(ct) { ops[i] = ln.arrayCopy(ops[i], ct, sp, s) }
+        # D16c, E31d (bulk review 7, F8): a value captured is the lambda's own copy - what it owns copied (a struct's
+        # arrays, a Vec's buffer), by its declared Copy - made where the lambda lives; a value array is borrowed (above)
+        if caps[i].Outer == typed.Expr.Read and not ln.T.IsRef(ct) and ln.T.OwnsParts(ct) { ops[i] = ln.ownCopyOf(ops[i], ct, ln.copyHome(s), sp) }
     }
     if ln.dead { return mir.Operand.None }
     return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, s, ln.F.Args(ops), ln.capScopes(site)), sp)
+}
+
+# where a closure's captured copies are made: its own scope - or, for one held in the frame (D16d's latitude), the
+# frame's scope, which lives as long as the frame does (a scope variable never stands for the frame itself)
+fn (ln mut lowering&) copyHome(s mir.ScopeRef) mir.ScopeRef {
+    if s != mir.ScopeRef.Frame: return s
+    for lv in ln.levels {
+        if lv.Kind == mir.ScopeKind.Frame: return mir.ScopeRef.Scope(lv.S)
+    }
+    return ln.innermost()
 }
 
 fn (ln mut lowering&) adapter(call typed.BodyId, recv typed.Expr&, site typed.SiteId, ty types.TypeId, sp source.Span) mir.Operand {
@@ -4692,6 +4815,84 @@ fn (ln mut lowering&) helper(kind mir.HelperKind, ty types.TypeId) {
             ln.dropAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp, true)
             ln.epilogue(mir.Operand.None)
         }
+        case mir.HelperKind.Guard {
+            ln.prologue(mir.VarKind[mir.VarKind.Closing])
+            ln.guardBody(ty, sp)
+            ln.epilogue(mir.Operand.None)
+        }
+    }
+}
+
+# a guard's body (HelperKind.Guard): where its holder's flag is set, the holder's destructors run and the flag cleared
+fn (ln mut lowering&) guardBody(gty types.TypeId, sp source.Span) {
+    g := ln.at(mir.LocalId(0))
+    flag := ln.with(ln.with(g, mir.Proj.Field(0)), mir.Proj.Deref)
+    held := ln.with(ln.with(g, mir.Proj.Field(1)), mir.Proj.Deref)
+    yes := ln.F.NewBlock()
+    done := ln.F.NewBlock()
+    ln.end(mir.Term.Branch(mir.Operand.Copy(ln.mk(flag)), yes, done))
+    ln.start(yes)
+    ln.dropAt(held, mir.GuardOf(ln.T, gty), mir.ScopeRef.Var(0), sp)
+    ln.emit(mir.Stmt.Assign(sp, ln.mk(flag), mir.Rvalue.Use(mir.Operand.Const(types.BoolT, 0))))
+    ln.end(mir.Term.Goto(done))
+    ln.start(done)
+}
+
+# a by-value holder's drop just registered (deferred code of kind Drop, "if flag { Drop(x) }"): in a test build its
+# guard registered with the block too, so a failed check's unwinding, which runs no deferred code, ends what the holder
+# still holds as it closes the block's scope (P1d; bulk review 7, F5)
+fn (ln mut lowering&) guardHolder(sp source.Span, b typed.Block&) {
+    if not ln.L.Tests or b.Stmts.Len() != 1: return
+    match b.Stmts[0] {
+        case typed.Stmt.If(_, f) { ln.guardIf(sp, f) }
+        case _ { }
+    }
+}
+
+fn (ln mut lowering&) guardIf(sp source.Span, f typed.If&) {
+    if f.Then.Stmts.Len() == 0: return
+    fp := readLocalPlace(f.Test)
+    hp := droppedPlace(f.Then.Stmts[0])
+    if fp is null or hp is null: return
+    t := ln.T
+    rf := t.Ref(types.BoolT, types.Writable)
+    rh := t.Ref(hp.Type(), types.Writable)
+    fv := ln.into(rf, mir.Rvalue.Ref(ln.mk(ln.place(fp)), rf), sp)
+    hv := ln.into(rh, mir.Rvalue.Ref(ln.mk(ln.place(hp)), rh), sp)
+    if ln.dead: return
+    gty := mir.GuardType(t, hp.Type())
+    gv := ln.into(gty, mir.Rvalue.Aggregate(gty, 0, ln.F.Args(mir.Operand[fv, hv])), sp)
+    s := ln.innermost()
+    gr := ln.into(t.Ref(gty, types.Writable), mir.Rvalue.New(s, gv, t.Ref(gty, types.Writable)), sp)
+    ln.emit(mir.Stmt.RegisterDtor(sp, s, gty, gr))
+}
+
+# the place a holder's drop statement ("Drop(&x)") ends, else null
+fn droppedPlace(s typed.Stmt&) typed.Lvalue?& {
+    return match s {
+        case typed.Stmt.Eval(_, x): droppedArg(x)
+        case _: null
+    }
+}
+
+fn droppedArg(x typed.Expr&) typed.Lvalue?& {
+    return match x {
+        case typed.Expr.Prim(_, _, op, _, args): borrowedPlace(args[0]) if op == typed.PrimOp.Drop and args.Len() == 1 else null
+        case _: null
+    }
+}
+
+fn borrowedPlace(x typed.Expr&) typed.Lvalue?& {
+    return match x {
+        case typed.Expr.Borrow(_, _, p): p
+        case _: null
+    }
+}
+
+fn readLocalPlace(x typed.Expr&) typed.Lvalue?& {
+    return match x {
+        case typed.Expr.Read(_, _, p, _): p if p == typed.Lvalue.Local else null
+        case _: null
     }
 }
 

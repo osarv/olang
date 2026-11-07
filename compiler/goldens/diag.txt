@@ -5710,6 +5710,11 @@ t13bafterloop.olang:5:31: error[T13b]: 'f' is handed on here, and File is unique
     5 |     for _ in range 2 { v.Push(f) }
       |                               ^
 compilation failed with 1 error
+=== t13baliasafter.olang
+t13baliasafter.olang:16:23: error[T13b]: 't' is handed on here, and Res is unique - 'alias', which reaches it, is used after: use 'alias' before handing 't' on, or no longer after
+   16 |     h Holder = Holder(t)
+      |                       ^
+compilation failed with 1 error
 === t13bbyvaluefield.olang
 t13bbyvaluefield.olang:10:11: error[T13b]: File is unique: this value is held elsewhere, and a field holds one of its own - write a reference ('File&'), or make a new File here
    10 |     b.f = f
@@ -5730,15 +5735,48 @@ t13bbyvalueresult.olang:5:32: error[T13b]: File is unique: this value is held el
     5 | fn inner(b Box&) File { return b.f }
       |                                ^~~
 compilation failed with 1 error
+=== t13bcaptureafter.olang
+t13bcaptureafter.olang:16:23: error[T13b]: 't' is handed on here, and Res is unique - 'f', which reaches it, is used after: use 'f' before handing 't' on, or no longer after
+   16 |     h Holder = Holder(t)
+      |                       ^
+compilation failed with 1 error
+=== t13bfillgeneric.olang
+t13bfillgeneric.olang:7:10: error[T13b, G18]: fill needs a copy, and Token is unique - its values are never copied: call fill with a reference ('Token&') or with a type that copies
+    7 |     a := fill(Token(1))
+      |          ^~~~
+t13bfillgeneric.olang:5:47: note: fill needs a copy here
+    5 | fn fill<T>(x T) Array<T> { return Array<T>(3, x) }
+      |                                               ^
+compilation failed with 1 error
+=== t13bfillunique.olang
+t13bfillunique.olang:5:26: error[T13b]: Array<Token>(n, fill) copies its fill into every element, and Token is unique - make each element with a comprehension ('Token[Token(...) for i in range n]'), or hold references ('Array<Token&>')
+    5 |     c := Array<Token>(2, Token(5))
+      |                          ^~~~~~~~
+compilation failed with 1 error
+=== t13bimmutgenericunique.olang
+t13bimmutgenericunique.olang:9:1: error[T13b]: Token is unique, so it is no part of Box<Token>, which is immut - an immut value is copied freely, a unique one never; hold a reference, 'Token&'
+    9 | fn main() {
+      | ^~~~~~~~~~~
+compilation failed with 1 error
 === t13bimmutholdsunique.olang
 t13bimmutholdsunique.olang:4:43: error[T13b]: File is unique, so it is no part of Config, which is immut - an immut value is copied freely, a unique one never; hold a reference, 'File&'
     4 | type Config immut struct(f File, n I64) { f, n }
       |                                           ^
 compilation failed with 1 error
+=== t13bkeptafter.olang
+t13bkeptafter.olang:17:23: error[T13b]: 't' is handed on here, and Res is unique - 'seen', which reaches it, is used after: use 'seen' before handing 't' on, or no longer after
+   17 |     h Holder = Holder(t)
+      |                       ^
+compilation failed with 1 error
 === t13bkind.olang
 t13bkind.olang:3:13: error[T13b]: 'unique' says a value exists in one place - a trait has no values of its own
     3 | type Closer unique trait {
       |             ^~~~~~
+compilation failed with 1 error
+=== t13blentandhanded.olang
+t13blentandhanded.olang:18:38: error[T13b]: 's' is handed on here while the same call also reaches it, and Res is unique - one value would be in two places: give the call 's' once, or hand it on in a call of its own
+   18 | fn pass(s Res) Bool { return both(s, s) }
+      |                                      ^
 compilation failed with 1 error
 === t13bneedscopy.olang
 t13bneedscopy.olang:12:10: error[T13b, G18]: twice needs a copy, and File is unique - its values are never copied: call twice with a reference ('File&') or with a type that copies

@@ -518,6 +518,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     }
     lw mut lower.Lowerer& = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
+    lw.Tests = tests
     lw.ViewDump = (try os.Env("OLANG_VIEWDUMP") catch default "") != ""
     # O8d: early freeing is decided for a program at its root - a module compiled on its own frees nothing early (B3i)
     fr := try placement(c, cfg, -1 if kind == build.Kind.Module else l.Root)
@@ -913,6 +914,12 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
         # D3b, then left out)
         if not d.HasFatal() { try placement(c, cfg, l.Root) }
         error build.Failed.Reported
+    }
+    # a construct the checker does not check yet stops interpret as it stops a build (B3e; bulk review 7, F11: a store
+    # over a value with destructors reached through a call ran with its old value never ended)
+    if c.Gaps.Len() > 0 {
+        for g in c.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) ": it does not check " $g.What " yet") }
+        error build.Failed.Unbuilt
     }
     # X9: the libraries the program links, loaded into this process for its externs to be found (B3e)
     for ln in l.Links() {

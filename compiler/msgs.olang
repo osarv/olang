@@ -351,6 +351,9 @@ type Diag enum {
     UniqueCopy
     UniqueByValue
     UniqueAfter
+    UniqueFill
+    UniqueLentHere
+    UniqueAlias
     DestroyedAfter
     UniqueKind
     UniqueNeedsCopy
@@ -1852,8 +1855,13 @@ fn UniqueCopy(ty String&) Msg { return Msg(Diag.UniqueCopy, "T13b, E31d", $ty " 
 # ERR_UNIQUE_BY_VALUE
 fn UniqueByValue(ty String&, what String&) Msg { return Msg(Diag.UniqueByValue, "T13b", $ty " is unique: this value is held elsewhere, and " $what " holds one of its own - write a reference ('" $ty "&'), or make a new " $ty " here") }
 
+# ERR_UNIQUE_FILL
+fn UniqueFill(ty String&) Msg { return Msg(Diag.UniqueFill, "T13b", "Array<" $ty ">(n, fill) copies its fill into every element, and " $ty " is unique - make each element with a comprehension ('" $ty "[" $ty "(...) for i in range n]'), or hold references ('Array<" $ty "&>')") }
+
 # ERR_UNIQUE_AFTER
 fn UniqueAfter(name String&, ty String&) Msg { return Msg(Diag.UniqueAfter, "T13b", "'" $name "' is handed on here, and " $ty " is unique - a unique value given by value lands once more only at its last mention, and '" $name "' is mentioned after") }
+fn UniqueLentHere(name String&, ty String&) Msg { return Msg(Diag.UniqueLentHere, "T13b", "'" $name "' is handed on here while the same call also reaches it, and " $ty " is unique - one value would be in two places: give the call '" $name "' once, or hand it on in a call of its own") }
+fn UniqueAlias(name String&, ty String&, alias String&) Msg { return Msg(Diag.UniqueAlias, "T13b", "'" $name "' is handed on here, and " $ty " is unique - '" $alias "', which reaches it, is used after: use '" $alias "' before handing '" $name "' on, or no longer after") }
 fn DestroyedAfter(name String&) Msg { return Msg(Diag.DestroyedAfter, "C9b", "'" $name "' is destructed here, and mentioned after - nothing reaches a value its Destroy() ended") }
 
 # ERR_UNIQUE_KIND

@@ -799,7 +799,8 @@ written into is an `Array<Char>` (or a declared type over one, or built by a `St
 
 **T13b (`unique`).** A type declared with the word `unique` before its body - `type File unique struct(fd I32) { fd
 }`, an enum or a type over a number or an array alike - holds values that **exist in exactly one place**. A **fresh
-value** - a constructor's or a call's result, a value made (E31d) - lands by value where it is put: a local (`f :=
+value** - a constructor's or a call's result, a value made (E31d), and so one a `try` or a `!` gives of such a call, its
+catch defaults each such a value - lands by value where it is put: a local (`f :=
 File(3)`), a field or an element typed `File` (`Box(File(3))`, `v.Push(File(3))`), a by-value parameter (`use(File(3))`),
 a result. **Any other copy of a unique value is a reference to it**: a unique place read where nothing written says what
 holds the value - a `:=` (`w := f` makes `w` a `File&` naming `f`), a `for` walk's name over an array of them (S9a), a
@@ -814,14 +815,24 @@ reads it after: a **by-value parameter**, given a fresh value at every call, may
 `x` so) - and a **local returned whole** (`return f`) is the result itself (O26a). Last is judged on every path from the
 landing, in the order the function evaluates: another branch's mentions are not after it, a loop running again
 reaches its body's mentions before it, and a mention in deferred code, a task or a join's clauses runs after
-everything; a mention after the landing is a compile-time error. A unique type declares no Copy (E31d), an error at its
+everything; a mention after the landing is a compile-time error. A **name made from** the parameter - a reference local
+or a binding naming it (`alias := t`), a lambda capturing it, a value lent to a call that is also given a reference to
+it (`seen.Push(t)` into a `Vec<Res&>`) - counts as a mention of it, so using that name after the
+landing is the same error, naming it; and a landing that is one argument of a call (or one part of a value made) whose
+other arguments reach the same parameter - lend it (`both(s, s)` with `fn both(r Res&, x Res)`), slice it, or go through a
+name made from it - is a compile-time error too: the value would be in two places at once. A plain read of a part beside
+it (`tagged(t.id, t)`) reaches nothing of the value and is no such mention. `Array<T>(n, fill)` copies its fill into
+every element, so a unique `T` is a compile-time error there, fresh fill or not (a comprehension makes each element:
+`Token[Token(i) for i in range n]`); in a generic, at the call that bound it, as below. A unique type declares no Copy (E31d), an error at its
 name, and `x.Copy()` of a unique value is an error: a new value from an existing one is made by an ordinary function
 or constructor (`File(dup(f.fd))`). A struct or an enum holding a unique part by value - a field, a payload, an element
 of an array it holds by value - is **unique itself**, unless it declares a Copy (E31d), which then makes that part anew
 (copying it there is this rule's error); an array of unique elements is unique, and so is a collection holding them by
 value (`Vec<File>`, `Map<String, File>`) - each follows its elements (E31d). A type declaring a destructor is declared
 `unique` (C11), and its value's one place is the holder that runs its destructor as it lets go (O15). `unique` and `immut` (T13a) are never one type's: written together, written over one another (`type L
-unique extends String`, `type Fs immut Array<File>`) or an immut type holding a unique part, each a compile-time error -
+unique extends String`, `type Fs immut Array<File>`) or an immut type holding a unique part - an instance of a generic
+immut type too, whose type argument makes it hold one (`Box<Token>` of `type Box<T> immut struct(x T)`), refused where
+the instance is asked for -, each a compile-time error -
 an immut value is copied freely, a unique one never. `unique` on a trait, an extern type or a function type is an error:
 none has values of its own. A generic whose body copies a value of a type its call's binding makes unique - a `:=` or `=`
 from an existing value, a by-value argument, a store, a part, a result (but a by-value parameter handed on as above, and
@@ -2021,7 +2032,9 @@ in it, a fallible one, a lambda among its arguments included. It writes nothing:
 Each condition is checked **on entry**, in every build, in the order written, before the body runs: a false one makes
 the call fail with the prelude's `ArgumentError.Invalid` (§7.6), its trace (S18d) and a `!`'s message naming the
 function and the condition as written (`pick: y > x`). A call in a condition that fails leaves the function with its
-own error, as a call in the body would (R6), and the conditions after it are not evaluated.
+own error, as a call in the body would (R6), and the conditions after it are not evaluated. The call has taken its
+arguments by then: a by-value parameter holding a value with a destructor lets go of it as the failing call leaves
+(O15), as on any other way out.
 
 **D17b (the error set).** A function with conditions can fail with `ArgumentError`, so it writes `?` (R1d): a bare
 `?` (R1a) infers it with the rest, and a written set must list `ArgumentError` - a compile-time error naming it
@@ -2139,14 +2152,17 @@ them, leaves it as it is - so `at = u.nodes[at].kids[r.roll(u.nodes[at].kids.Len
 reference local given what a call hands back from such a view (`kids := v[i].xs.View()`) reads the element in place
 where nothing changes what the view covers while the local lives. A value given storage only for a call's read-only
 parameter that the callee keeps nothing of, whose result holds no reference, is given it in the frame (`inside(v[k],
-x, y)`), not in an arena of the block. Where a copy is made, it is built where the value is kept: a local's copy in the
+x, y)`), not in an arena of the block - but never a spawned call's argument, which its task reads beside the spawner
+(and each turn's task its own). Where a copy is made, it is built where the value is kept: a local's copy in the
 local's block - so a loop turn's copy is reclaimed with the turn (O2) - whatever storage it was read from.
 
 **D9i (a value moved at its last use).** A value local's copy made where it is handed on - a by-value argument, a store,
 a part of a value made (QCE) - is left out where that copy is the local's last mention, in the order the function
 evaluates, and the destination takes the local's own storage: `t := mk(n)` then `p := P(t)` costs what `p := P(mk(n))`
 costs. Only where nothing could tell: no mention of the local comes after (deferred code, a task, a join's clauses and a
-loop around the copy but not around the local's declaration count as after), the local's storage is its own - no view
+loop around the copy but not around the local's declaration count as after), no other argument of the same call - or
+other part of the same value made - mentions the local (`peek(t, t)` lends `t` beside its copy, `part(t.a, t)` reads
+in it, `t.Peek(t)` is its receiver: those stay alive for the very call the copy is given to), the local's storage is its own - no view
 held in place of its copy (D9h) - named by no other local, escaping nowhere, never assigned whole, in no region early
 freeing made (O8d), and lives at least as long as where the copy would be built; a constructor's instance viewing only
 such moved locals is its own (no D9h copy where it is kept). Unobservable: the evaluator copies and agrees. Neither
@@ -2190,12 +2206,14 @@ written in. Each one it uses is **captured** when the lambda is made, as though 
 own type:
 
 - a **value** is copied, and the lambda's copy is **read-only**, unlike a parameter's - changing the variable
-  afterwards does not change the lambda, and writing to the copy is a compile-time error; a value of a unique type
+  afterwards does not change the lambda, and writing to the copy is a compile-time error. The copy is the lambda's own
+  as `x := v` makes one: what the value owns by value - an array of a run-time length in a field, a `Vec`'s or a `Map`'s
+  storage - is copied with it, by the type's declared Copy where it has one (E31d), made where the lambda lives; a value of a unique type
   (T13b), never copied, is borrowed as a value array is, and so is a value with a destructor to run (O15), whose holder
   is the variable;
 - a **reference** keeps naming the very instance it names (the copy is of the reference), and may be written
   through exactly when its type is writable (T25b) - this is how a lambda changes state outside itself;
-- a value **array** - text included - is **borrowed**, not copied, since copying one is never implicit (T7b):
+- a value **array** itself - text included - is **borrowed**, not copied, since copying one is never implicit (T7b):
   the lambda holds a read-only reference to the variable's own storage, sees later writes to it, and lives no
   longer than it (D16d);
 - a value **holding references** is copied too, read-only, with the scope its references live in - as a by-value
@@ -4598,8 +4616,10 @@ the order is left to right, as S4's is; a destructuring (S4b) composes the same 
 place is, then `x.SetAt(i, value)` - so `ps[i], ps[j] = ps[j], ps[i]` swaps two elements of a `Vec`. A value with
 no storage of its own (§5.3 E12c) going into a reference target is built, when it is evaluated, where that target's
 referent lives - where S4 alone would build it: the program's scope for a global, or a field reached from one (O1b),
-so `G.next, k = Node(i), i` is `G.next = Node(i)` beside `k = i`. With `:=` each name is
-declared from its value as by D15, in order. Any other count of values is a compile-time error. The list is not a
+so `G.next, k = Node(i), i` is `G.next = Node(i)` beside `k = i`. Each value is the target's own as S4 alone makes it -
+a copy where the target owns its parts (QCE), by the declared Copy (E31d), made when the values are, before any store;
+a unique one only fresh or handed on (T13b). With `:=` each name is declared from its value as by D15, in order, as
+`x := v` alone declares it: `m, n := g, g` gives each its own copy (a unique value existing elsewhere a reference). Any other count of values is a compile-time error. The list is not a
 value of its own - there is no tuple type - and exists only in this statement.
 
 **S8.** `if-stmnt ::= "if" expr body [ "else" ( if-stmnt | body ) ]` (`body`, S1b: a block, or `:` and one simple
@@ -6813,11 +6833,19 @@ by value as a part (a field, a payload, an element of an array held by value), d
 reference - has its destructors run exactly once, **where its holder lets go of it**:
 - a variable or a parameter holding it by value (`f File = File(3)`, `fn use(f File)`, a copy where its type declares
   Copy, E31d) lets go as the block declaring it is left - its function's body for a parameter - on every way out but the
-  process-ending ones (S19c), as deferred code registered at its declaration does (S19); unless it no longer holds the
-  value there: a by-value parameter handed on at its last mention (T13b), a whole variable returned (O26a) or made a
-  constructor's field (a pun, C4), a variable's `Destroy()` (C9b). A constructor's fields go into its instance at its
+  process-ending ones (S19c), as deferred code registered at its declaration does (S19) - and a test ended by a failed
+  check (P1d), which runs no deferred code, ends what such a variable still holds as it closes the variable's block,
+  among the values registered there (O16); unless it no longer holds the
+  value there: a by-value parameter handed on at its last mention (T13b) - as an argument, once the call is made, after
+  every argument is evaluated, so a later argument that leaves (an error passed on, a clause's `return`) leaves the
+  value with it, ended as the block is left -, a whole variable returned (O26a) or made a constructor's field (a pun,
+  C4), a variable's `Destroy()` (C9b). A constructor's fields go into its instance at its
   end, and one failing part way lets go of those it built. A variable declared with no value and no zero value (D13d)
-  holds one once it is assigned. A lambda capturing such a variable names it where it is held (D16c);
+  holds one once it is assigned. A lambda capturing such a variable names it where it is held (D16c). A variable whose
+  storage flows out of its block - returned as a reference or an `any`, held by a returned value's reference field,
+  stored by reference into what a parameter refers to, captured by a returned closure - lives where it flows (O26a),
+  and lets go there: as its block is left it is registered with the scope its storage lives in, as a value no place
+  takes is (O16), and its destructors run as that scope closes;
 - a value holding parts lets go of them with itself: its own destructor first, then each part's, the last part first;
 - a store over a place holding such a value (S4) lets go of the old one after the new value is made and before it is
   stored (a variable's only while it holds one); a place reached through what a call gives is not stored over so;
@@ -6826,7 +6854,8 @@ reference - has its destructors run exactly once, **where its holder lets go of 
   that scope, and its destructors run when the scope closes (O1), in the reverse order of the registrations - unless a
   `Destroy()` ran them before (C9b).
 A block's variables let go before its scope closes - in the reverse order they were declared, among its deferred code -
-and the scope's registered values after. Where in the scope an instance's storage lies, and whether it was reserved
+and the scope's registered values after; a join block's variables let go after its wait (P1b), where its tasks have
+ended, after its deferred code. Where in the scope an instance's storage lies, and whether it was reserved
 before its constructor's arguments were built, is not observable. A global, a type argument and a generator's
 parameter hold such a value by reference (C11): the program's scope, a collection's elements and a walk left part way
 have no holder that lets go; and no variable holds one by value across a `yield` (S20).
@@ -7050,7 +7079,10 @@ scope's destructors not yet run still run, each once (C10).
 
 **C9b (Destroy).** On a variable `x` holding a value with a destructor by value (O15), `x.Destroy()` runs its
 destructors now - its holder letting go - and `x` holds no value after it: a mention of `x` after the call on any path
-(T13b's rule for a landing) is a compile-time error. On a local `x` holding a reference to an instance of a struct type
+(T13b's rule for a landing) is a compile-time error, but giving `x` a new value whole (`x = Res(2)`), after which `x`
+holds that one. A `Destroy()` in deferred code (`defer x.Destroy()`, `errdefer x.Destroy()`) ends only what `x` still
+holds when it runs - nothing where `x` handed its value on (returned it, T13b) - so the statements before it may mention
+`x`; deferred code that runs after it (registered before it, S19) may not. On a local `x` holding a reference to an instance of a struct type
 that declares a destructor, `x.Destroy()` runs that instance's destructor now - and the destructors of what was built where it lives, newest
 first, as its scope's close would - and reclaims its storage; nothing runs for it when its scope closes. It compiles
 only where the compiler proves `x` the only way left to reach the instance, by the analysis that frees early (O8d):
@@ -7270,7 +7302,7 @@ file has a test the words name; where none has, the run fails, its last line `no
 **B3e.** `interpret <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
 program is analyzed exactly as under `build` - `main` is required (B4), and every compile-time error is reported the
 same way, section 8's included (where values live is the same scope pass's, so a program the build refuses is not
-run) - and then `main` is run by compile-time evaluation (§13 K1) with the effects K1 refuses performed:
+run, a construct this compiler does not check yet among what it refuses) - and then `main` is run by compile-time evaluation (§13 K1) with the effects K1 refuses performed:
 nothing is generated, nothing is linked and no file is written. It behaves as the built program would run (B5):
 globals are initialized imports first (B5a) and may be read and written, an `extern` function (§11) is called in
 the interpreting process, `os.Exit` ends it with its status, an error escaping `main` is reported as B5

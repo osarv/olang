@@ -1,0 +1,21 @@
+# check: fail error[T13b]: 't' is handed on here, and Res is unique - 'seen', which reaches it, is used after
+# T13b (bulk review 7, F16): a reference to a by-value parameter pushed into a collection, the collection used after the
+# parameter's value was handed on
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct { Ended++ }
+
+type Holder struct(r Res) {
+    r
+}
+
+fn keep(t Res) I64 {
+    seen := Vec<Res&>()
+    seen.Push(t)
+    h Holder = Holder(t)
+    return seen[0].id + h.r.id
+}
+
+fn main() { assert keep(Res(1)) == 2 }

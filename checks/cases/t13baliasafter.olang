@@ -1,0 +1,20 @@
+# check: fail error[T13b]: 't' is handed on here, and Res is unique - 'alias', which reaches it, is used after
+# T13b (bulk review 7, F16): a reference local made from a by-value parameter, used after the parameter's value was
+# handed on - the value it named is the holder's now
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct { Ended++ }
+
+type Holder struct(r Res) {
+    r
+}
+
+fn keep(t Res) I64 {
+    alias := t
+    h Holder = Holder(t)
+    return alias.id + h.r.id
+}
+
+fn main() { assert keep(Res(1)) == 2 }

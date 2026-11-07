@@ -1,0 +1,13 @@
+# check: fail error[T13b]: Token is unique, so it is no part of Box<Token>, which is immut
+# never: error[T13a]
+# T13b (bulk review 7, F13): a generic immut type instantiated with a unique type argument - unique and immut are never
+# one type's - refused where the instance is asked for, and said once
+type Token unique struct(id I64) { id }
+
+type Box<T> immut struct(x T) { x }
+
+fn main() {
+    d := Box(Token(2))
+    e := d
+    assert e.x.id == 2
+}

@@ -104,3 +104,69 @@ test "Copy() written calls it, supplied or declared" {
 test "while compiling, as at run time" {
     assert Bumped == bumped(5)
 }
+
+# a parallel declaration or assignment copies each value as one alone does (bulk review 7, F7): by the declared Copy,
+# deep through parts owning storage, a Vec its own buffer - every value made before any store (S4c)
+type Gen struct(v I64, gen I64 = 0) {
+    v, gen
+}
+
+fn (g Gen&) Copy() Gen { return Gen(g.v, g.gen + 1) }
+
+type Big struct(xs Array<I64>) {
+    xs
+}
+
+fn parallel() String {
+    g := Big(Array<I64>(2, 0))
+    m, n := g, g
+    m.xs[0] = 5
+    n.xs[1] = 6
+    v := Vec<I64>()
+    v.Push(1)
+    w, u := v, v
+    w.Push(2)
+    w[0] = 9
+    a := Gen(1)
+    p, q := a, a
+    r := Gen(0)
+    s := Gen(0)
+    r, s = a, p
+    b := Big(Array<I64>(2, 0))
+    c := Big(Array<I64>(2, 0))
+    b, c = g, g
+    b.xs[0] = 7
+    return $g.xs $m.xs $n.xs $v $w $u $p.gen $q.gen $r.gen $s.gen $b.xs $c.xs
+}
+
+Parallel := parallel()
+
+test parallel "copies each value of a parallel declaration and assignment" {
+    assert Parallel == parallel()
+    assert parallel() == "I64[0, 0]I64[5, 0]I64[0, 6]Vec<I64>[1]Vec<I64>[9, 2]Vec<I64>[1]1112I64[7, 0]I64[0, 0]"
+}
+
+# a lambda's capture of a value is its own copy, made as the lambda is: what the value owns copied too (a struct's
+# array, a Vec's buffer), by the declared Copy; a value array itself is borrowed (D16c, E31d; bulk review 7, F8)
+fn captured() String {
+    g := Big(Array<I64>(2, 0))
+    h := fn() I64 { return g.xs[0] }
+    g.xs[0] = 5
+    a := Array<I64>(2, 0)
+    k := fn() I64 { return a[0] }
+    a[0] = 6
+    v := Vec<I64>()
+    v.Push(0)
+    q := fn() I64 { return v[0] }
+    v[0] = 7
+    e := Gen(1)
+    f := fn() I64 { return e.gen }
+    return $h() $k() $q() $f()
+}
+
+Captured := captured()
+
+test captured "copies what a captured value owns, by its Copy" {
+    assert Captured == captured()
+    assert captured() == "0601"
+}

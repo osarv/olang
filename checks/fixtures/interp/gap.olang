@@ -1,0 +1,23 @@
+# B3e (bulk review 7, F11): a construct the checker does not check yet - a store over a value with destructors to run,
+# reached through what a call gives (O15) - stops interpret as it stops a build, never runs with its old value lost
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type Box struct(r Res) {
+    r
+}
+
+fn get(b mut Box&) mut Box& { return b }
+
+fn main() {
+    b Box = Box(Res(1))
+    get(b).r = Res(3)
+    io.Println("stored, ended " $Ended)!
+}

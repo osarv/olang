@@ -574,6 +574,7 @@ type roFn struct(Body I64, First I64, At diag.Where, What String&) {
 # bound the type when it is a generic's need (-1 for none)
 # a landing's Inst for a variable's Destroy() (C9b): its value ended there, not handed on
 destroyedAt := -2
+destroyedHeld := -3   # (a Destroy() its holder's flag guards, O15)
 
 type landing struct(Body I64, Local I64, At source.Span, Ty types.TypeId, Inst I64) {
     Body
@@ -1836,6 +1837,19 @@ fn (c mut Checker&) immutHoldsUnique(self types.TypeId, sps Vec<source.Span>&) {
 
 # whether a value of type t holds a value of declaration d by value: itself, or through a struct's fields, an enum's
 # payloads, a fixed array's elements or what a type is declared over - never through a reference or a run-time array
+# T13b for a generic immut struct (bulk review 7, F13): an instance holding a unique part by value - a unique type
+# argument - is refused where it was asked for, naming the rule: never both
+fn (c mut Checker&) instImmutUnique(t types.TypeId) {
+    if not c.P.Immut(t) or not c.P.Body(t): return
+    o := c.P.TypeOrigin(t)
+    if o.File < 0: return
+    for f in c.P.T.Items(c.P.T.Fields(t)) {
+        if c.isRef(f) or not c.P.Unique(f): continue
+        c.P.L.Diags.ErrorBare(diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End)), msgs.UniqueImmutPart(c.ty(t), c.ty(f)))
+        return
+    }
+}
+
 # T16 for a generic struct: each instance that holds itself by value, said at the field, named as the instance
 fn (c mut Checker&) instHoldsItself(t types.TypeId, d types.DeclId, sb ast.StructBody&) {
     if not c.P.Body(t) { return }
@@ -3442,7 +3456,10 @@ fn (c mut Checker&) ctorChecked(id I64, t types.TypeId, twin types.ListId) {
                     c.paramWritten(s.Params[i], ps[i])
                 }
                 c.cur().SetVars(c.P.ScopeVarsOf(sig))
-                if c.P.T.Items(c.P.T.Args(t)).Len() > 0 { c.instHoldsItself(t, d, s) }
+                if c.P.T.Items(c.P.T.Args(t)).Len() > 0 {
+                    c.instHoldsItself(t, d, s)
+                    c.instImmutUnique(t)
+                }
                 pushed := c.typeContexts(t, td)   # G16b: an instance's with where it was asked for
                 root := c.rootStmts(s.Body)
                 c.cur().Root = root
@@ -4344,13 +4361,15 @@ fn (c mut Checker&) src2(file I64, sp source.Span) String { return $c.P.L.Diags.
 # a body's outermost block, its parameters already in it: its statements
 fn (c mut Checker&) rootStmts(body Array<ast.Stmt&>&) typed.Block& {
     from := c.stmts.Len()
-    c.entryChecks()
     # O15: a by-value parameter's - in a constructor that cannot fail, none for one its fields take whole (a pun): the
     # instance takes it on every way out
     punned := c.puns(body) if c.fr().InCtor and c.P.T.Items(c.P.T.Errors(c.cur().Ty)).Len() == 0 else Map<source.NameId, Bool>()
     for p in c.cur().Params {
         if not punned.Has(c.cur().Local(p).Name): c.dropOnExit(I64(p), c.cur().Local(p).Sp, true)
     }
+    # (D17, after the holders are registered: a requirement failing the call ends the by-value parameters it took -
+    # bulk review 7, F10)
+    c.entryChecks()
     storedIn(body, c.fr().stored)
     if body.Len() > 0 {
         c.stmtsOf(body)
@@ -5399,6 +5418,9 @@ fn (c mut Checker&) captureIn(fi I64, n source.NameId, sp source.Span) I64 {
         ox = typed.Expr.Borrow(sp, it, op)
     } else {
         ox = typed.Expr.Read(sp, ot, op, typed.SiteId(-1))
+        # (bulk review 7, F8) the capture is the lambda's own copy, made as the lambda is (lowering's lambda): its
+        # declared Copy's body wanted here (E31d)
+        if not c.isRef(ot) and c.P.T.OwnsParts(ot) { c.wantCopy(ot, 0) }
     }
     b := c.Bodies[fr.Body]
     inner := I64(b.AddLocal(typed.Local(n, sp, it, typed.BlockId(0), typed.LocalKind.Capture, typed.Mark.Infer)))
@@ -11092,6 +11114,7 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
         x := filled if filled is not null else c.exprTo(args[1], elem)
         c.nullDecl = wasFill
         if not c.isRef(elem) { c.roStore(x, args[1].Span(), RoStored) }   # T25c: every element is writable
+        c.uniqueFill(args[1].Span(), elem)
         c.exprs.Push(x)
     }
     # no fill: each element its type's zero value (D13c), a struct's made by its constructor
@@ -11965,10 +11988,31 @@ fn (c mut Checker&) held(sp source.Span, call typed.Expr&) typed.Expr& {
     return typed.Expr.Promote(sp, c.P.T.Ref(r, types.Writable), typed.Promote(call, c.site(typed.SiteKind.Promote, sp)))
 }
 
-# the value a temporary was given storage for (held's, E12c's), else null
+# the value a temporary was given storage for (held's, E12c's), else null - under a try or a "!" too, its defaults each
+# such a value (bulk review 7, F14: "x = try mk()" is as fresh as "x = mk()")
 fn heldValue(x typed.Expr&) typed.Expr?& {
-    if x == typed.Expr.Promote: return x.pr.X
-    return null
+    return match x {
+        case typed.Expr.Promote(_, _, pr): pr.X
+        case typed.Expr.Try(sp, _, tr): heldTry(sp, tr)
+        case _: null
+    }
+}
+
+fn heldTry(sp source.Span, tr typed.Try&) typed.Expr?& {
+    if tr.X is null: return null
+    v := heldValue(tr.X!)
+    if v is null: return null
+    cls := Vec<typed.Clause&>()
+    for cl in tr.Clauses {
+        ds := Vec<typed.Expr&>()
+        for d in cl.Defaults {
+            h := heldValue(d)
+            if h is null: return null
+            ds.Push(h)
+        }
+        cls.Push(typed.Clause(cl.Sp, cl.Items, cl.All, cl.Code, ds.ToArray(), cl.Caught, cl.CaughtSet))
+    }
+    return typed.Expr.Try(sp, typeOf(v), typed.Try(v, cls.ToArray(), tr.Ends, tr.Passes, tr.Left))
 }
 
 # ---- variadic parameters (D8g) ----
@@ -17133,6 +17177,13 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
             # T29c: text written in the program declares a String value, as "x := text" does
             vsp := m.Values[i].Span()
             if t == c.textType() and c.isRef(typeOf(v)) { v = c.read(vsp, typed.Lvalue.Deref(vsp, t, v)) }
+            # (bulk review 7, F7) each name declared as "x := v" alone declares it: a unique value existing elsewhere a
+            # reference to it (T13b), a value owning parts its own copy (QCE, E31d)
+            if not c.isRef(t) and c.uniqueExisting(v) {
+                v = c.uniqueRef(v, vsp)
+                t = typeOf(v)
+            }
+            if not c.isRef(t) and c.P.T.OwnsParts(t) { v = c.ownCopy(v) }
             c.putTarget(m.Targets[i], true, v, t)
         }
         return
@@ -17157,6 +17208,9 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
         st := sets[i]
         want := st.Elem if st is not null else places[i]!.Type() if places[i] is not null else types.UnknownT
         v := c.exprTo(m.Values[i], want)
+        # (bulk review 7, F7) each value as "p = v" alone stores it: its own copy where p owns its parts (QCE, E31d),
+        # a unique one only fresh or handed on (T13b) - made when the values are, before any store (S4c)
+        if places[i] is not null { v = c.storeCopy(places[i]!, v) }
         h := c.local(source.NameId(0), m.Values[i].Span(), typeOf(v), typed.LocalKind.Held, typed.Mark.None)
         c.emit(typed.Stmt.Let(m.Values[i].Span(), typed.LocalId(I32(h)), v))
         held.Push(h)
@@ -20081,6 +20135,18 @@ fn (c mut Checker&) uniqueLand(x typed.Expr&, what String&, own Bool = false) ty
     return x
 }
 
+# T13b (bulk review 7, F6): Array<T>(n, fill) copies its fill into every element - never of a unique T, fresh or not;
+# in a generic, refused at the call that bound it (G18a)
+fn (c mut Checker&) uniqueFill(sp source.Span, elem types.TypeId) {
+    if elem == types.UnknownT or c.isRef(elem) or not c.P.Unique(elem): return
+    inst := c.boundMention(elem)
+    if inst >= 0 {
+        c.needsCopy(inst, sp, elem)
+        return
+    }
+    c.err(sp, msgs.UniqueFill(c.ty(elem)))
+}
+
 # the local whose whole value x reads where that value may be handed on - a by-value parameter's, or (own) a value
 # local's - else -1
 fn (c mut Checker&) handedOn(x typed.Expr&, own Bool) I64 {
@@ -20171,7 +20237,8 @@ fn (c mut Checker&) uniqueRef(x typed.Expr&, sp source.Span, written Bool = true
         return x
     }
     p := readPlace(x)
-    perm := types.Writable if p is not null and c.placeWritable(p) else types.ReadOnly
+    # (an immut type's reference is read-only: nothing of it changes, T13a - one unique too is F13's error already)
+    perm := types.Writable if p is not null and c.placeWritable(p) and not c.P.Immut(t) else types.ReadOnly
     return c.fit(x, c.P.T.Ref(t, perm), sp)
 }
 
@@ -20213,13 +20280,21 @@ fn (c mut Checker&) landingsOf(b I64) {
         ls[k] = mine[k].Local
         at[k] = I64(mine[k].At.Start)
     }
-    w := typed.Landings(ls, at)
+    holds := Array<Bool>(body.Locals.Len(), false)
+    for i in range body.Locals.Len() { holds[i] = c.P.T.HoldsRefs(body.Locals[i].Ty) }
+    guarded := Bool[mine[k].Inst == destroyedHeld for k in range mine.Len()]
+    w := typed.Landings(ls, at, holds, guarded)
     w.Body(body.Root!)
     for k in range mine.Len() {
         if not w.Bad[k]: continue
         ld := mine[k]
-        if ld.Inst == destroyedAt {
-            c.P.L.Diags.Error(diag.Where.Span(body.File, I64(ld.At.Start), I64(ld.At.End)), msgs.DestroyedAfter(c.text(body.Locals[ld.Local].Name)))
+        if (w.Lent[k] or w.Via[k] >= 0) and ld.Inst != destroyedAt and ld.Inst != destroyedHeld {
+            c.landedNamed(body, ld, w.Via[k] if not w.Lent[k] else -1)
+            continue
+        }
+        if ld.Inst == destroyedAt or ld.Inst == destroyedHeld {
+            named := w.Via[k] if w.Via[k] >= 0 else ld.Local
+            c.P.L.Diags.Error(diag.Where.Span(body.File, I64(ld.At.Start), I64(ld.At.End)), msgs.DestroyedAfter(c.text(body.Locals[named].Name)))
             continue
         }
         if ld.Inst < 0 {
@@ -20231,6 +20306,18 @@ fn (c mut Checker&) landingsOf(b I64) {
         rec := c.P.L.Diags.ErrorBare(diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End)), msgs.UniqueNeedsCopy(called, c.ty(c.uniqueArg(ld.Inst, ld.Ty))))
         c.P.L.Diags.Note(rec, diag.Where.Span(body.File, I64(ld.At.Start), I64(ld.At.End)), msgs.NoteGenericNeeds(called, "a copy"))
     }
+}
+
+# (bulk review 7, F15, F16) a unique value handed on - or destructed - while the same call lends it, or while a name
+# made from it (a reference, a closure capturing it) is used after: one value would be in two places
+fn (c mut Checker&) landedNamed(body typed.Body&, ld landing&, via I64) {
+    at := diag.Where.Span(body.File, I64(ld.At.Start), I64(ld.At.End))
+    name := c.text(body.Locals[ld.Local].Name)
+    if via < 0 {
+        c.P.L.Diags.Error(at, msgs.UniqueLentHere(name, c.ty(ld.Ty)))
+        return
+    }
+    c.P.L.Diags.Error(at, msgs.UniqueAlias(name, c.ty(ld.Ty), c.text(body.Locals[via].Name)))
 }
 
 # ---- destructors where a holder lets go (O15, T13b) ----
@@ -20262,7 +20349,7 @@ fn (c mut Checker&) dropOnExit(l I64, sp source.Span, set Bool) {
     c.fr().deferBlocks.Push(c.fr().Block)
     c.fr().dropBlocks.Push(c.fr().Block)
     from := c.stmts.Len()
-    id, outer, mark := c.open(typed.BlockKind.Defer, sp)
+    id, outer, mark := c.open(typed.BlockKind.Drop, sp)
     c.emit(c.dropIfHeld(sp, typed.Lvalue.Local(sp, t, typed.LocalId(I32(l))), flag))
     b := c.close(id, outer, mark, from)
     c.emit(typed.Stmt.Defer(sp, b))
@@ -20275,6 +20362,8 @@ fn (c mut Checker&) dropIfHeld(sp source.Span, p typed.Lvalue&, flag I64) typed.
     from := c.stmts.Len()
     id, outer, mark := c.open(typed.BlockKind.Plain, sp)
     c.emit(drop)
+    # (it holds nothing after - so a test build's guard of it, F5, finds nothing to end as the block's scope closes)
+    c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Local(sp, types.BoolT, typed.LocalId(I32(flag))), c.lit(sp, types.BoolT, 0)))
     then := c.close(id, outer, mark, from)
     return typed.Stmt.If(sp, typed.If(c.readLocal(sp, flag), then, null))
 }
@@ -20290,16 +20379,17 @@ fn (c mut Checker&) handOn(x typed.Expr&, l I64) typed.Expr& {
     if not c.fr().dropFlags.Has(l): return x
     from := c.stmts.Len()
     c.dropsGone(x.Span(), l)
-    return typed.Expr.Seq(x.Span(), typeOf(x), typed.Seq(gather(c.stmts, from), x))
+    return typed.Expr.Seq(x.Span(), typeOf(x), typed.Seq(gather(c.stmts, from), x, true))
 }
 
 # "x.Destroy()" of by-value local l, rx its read: its destructors run now, where it still holds a value, and it holds none
 fn (c mut Checker&) destroyHeld(sp source.Span, rx typed.Expr&, l I64) typed.Expr& {
-    c.landings.Push(landing(c.fr().Body, l, rx.Span(), typeOf(rx), destroyedAt))
+    flag := try c.fr().dropFlags.Get(l) catch default -1
+    c.landings.Push(landing(c.fr().Body, l, rx.Span(), typeOf(rx), destroyedHeld if flag >= 0 else destroyedAt))
     from := c.stmts.Len()
     t := c.localType(l)
     c.emit(typed.Stmt.Eval(rx.Span(), rx))
-    c.emit(c.dropIfHeld(sp, typed.Lvalue.Local(sp, t, typed.LocalId(I32(l))), try c.fr().dropFlags.Get(l) catch default -1))
+    c.emit(c.dropIfHeld(sp, typed.Lvalue.Local(sp, t, typed.LocalId(I32(l))), flag))
     c.dropsGone(sp, l)
     return typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
 }

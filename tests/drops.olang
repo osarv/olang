@@ -140,3 +140,206 @@ test "a constructor failing part way ends the fields it built, the last first" {
     }
     assert t.Text() == "9137"
 }
+
+# a holder declared in a join block lets go after the join's wait: its tasks still read it until then (bulk review 7,
+# F2)
+fn seenBy(r Res&) I64 {
+    s := 0
+    for i in range 200000 { s += i % 7 }
+    return r.id + s - s + r.log.seen.Len() * 1000
+}
+
+fn joinHeld() I64 {
+    t := Tally()
+    n := 0
+    join {
+        x Res = Res(1, t)
+        spawn n = seenBy(x)
+    }
+    return n * 10 + t.seen.Len()
+}
+
+test seenBy "reads a join block's holder while its task runs, ended after the wait" {
+    assert joinHeld() == 11
+}
+assert joinHeld() == 11
+
+# a holder whose storage flows out of its function - returned as a reference, held by a returned value's reference
+# field, pushed by reference into a parameter's collection, captured by a returned closure - lets go where that storage
+# lives, as a call's value no slot takes is held where it lands (O16), never at the function's end (bulk review 7, F4)
+type RefTo struct(r Res&) {
+    r
+}
+
+type Shelf struct() {
+    items := Vec<Res&>()
+}
+
+fn mkRef(n I64, t mut Tally&) Res& {
+    x Res = Res(n, t)
+    return x
+}
+
+fn wrapRef(n I64, t mut Tally&) RefTo {
+    x Res = Res(n, t)
+    return RefTo(x)
+}
+
+fn shelve(s mut Shelf&, n I64, t mut Tally&) {
+    x Res = Res(n, t)
+    s.items.Push(x)
+}
+
+fn closeOver(n I64, t mut Tally&) fn&() I64 {
+    x Res = Res(n, t)
+    return fn() I64 { return x.id }
+}
+
+fn flowedOut() String {
+    t := Tally()
+    seen := ""
+    {
+        a := mkRef(5, t)
+        b := wrapRef(6, t)
+        s := Shelf()
+        shelve(s, 7, t)
+        f := closeOver(8, t)
+        seen = $a.id $b.r.id $s.items[0].id $f() "/" $t.Text()
+    }
+    return $seen "/" $t.Text()
+}
+
+test mkRef "ends a holder whose storage flowed out where that storage lives" {
+    assert flowedOut() == "5678//8765"
+}
+
+# (decided only at run time: the values flowing out are registered where they land, which the evaluator refuses
+# while compiling - K2c)
+
+# a by-value parameter handed on as an argument lets go of its value only once the call is made: a later argument
+# leaving first - an error passed on, a clause's return - leaves the value with it, ended as it is (bulk review 7, F3)
+fn eat(r Res, n I64) I64 { return r.id + n }
+
+fn count(bad Bool) I64 ? Gone {
+    if bad: error Gone
+    return 4
+}
+
+fn handOver(r Res, bad Bool) I64 ? Gone { return eat(r, try count(bad)) }
+
+fn handOverClause(r Res, bad Bool) I64 { return eat(r, try count(bad) catch Gone { return -1 }) }
+
+fn leftBehind() String {
+    t := Tally()
+    try handOver(Res(1, t), true) catch Gone { }
+    a := t.Text()
+    handOverClause(Res(2, t), true)
+    b := t.Text()
+    handOverClause(Res(3, t), false)
+    return $a "/" $b "/" $t.Text()
+}
+
+test handOver "ends a value handed on to a call that is never made" {
+    assert leftBehind() == "1/12/123"
+}
+
+LeftBehind := leftBehind()
+
+assert LeftBehind == "1/12/123", "decided while compiling: " $LeftBehind
+
+# a requirement failing the call ends the by-value parameters it took (D17; bulk review 7, F10)
+type Guarded struct(r Res, n I64) [n > 0] ? {
+    r
+}
+
+fn guarded(r Res, n I64) [n > 0] I64 ? { return r.id }
+
+fn refused() String {
+    t := Tally()
+    k := try guarded(Res(3, t), 0) catch ArgumentError default -1
+    a := t.Text()
+    {
+        g Guarded = try Guarded(Res(1, t), 0) catch ArgumentError default Guarded(Res(2, t), 1)!
+        a = $a "/" $t.Text() "/" $g.r.id
+    }
+    return $k "/" $a "/" $t.Text()
+}
+
+test guarded "ends what a failed requirement's call was given" {
+    assert refused() == "-1/3/31/2/312"
+}
+
+Refused := refused()
+
+assert Refused == "-1/3/31/2/312", "decided while compiling: " $Refused
+
+# a store over a holder - or a declaration - from what a try, a "!" or a catch default gives is a fresh value, as from
+# the call alone: the old value ended after the new one is made (bulk review 7, F14)
+fn mkFresh(id I64, bad Bool, t mut Tally&) Res ? Gone {
+    if bad: error Gone
+    return Res(id, t)
+}
+
+fn storedOver() String {
+    t := Tally()
+    {
+        x Res = Res(1, t)
+        x = mkFresh(2, false, t)!
+        x = try mkFresh(3, true, t) catch Gone default Res(4, t)
+        y Res = try mkFresh(5, true, t) catch Gone default Res(6, t)
+        x = try mkFresh(7, false, t) catch Gone default Res(8, t)
+        assert x.id == 7 and y.id == 6
+    }
+    return t.Text()
+}
+
+test mkFresh "stores over a holder what a try gives" {
+    assert storedOver() == "12467"
+}
+
+StoredOver := storedOver()
+
+assert StoredOver == "12467", "decided while compiling: " $StoredOver
+
+# a holder's Destroy() deferred - by defer, or by errdefer with the holder returned - and a holder given a new value
+# after its Destroy() (C9b; bulk review 7, F9): the deferred one ends only what the holder still holds when it runs
+fn deferredEnd(id I64, t mut Tally&) I64 {
+    x Res = Res(id, t)
+    defer x.Destroy()
+    return x.id
+}
+
+fn opened(id I64, bad Bool, t mut Tally&) Res ? Gone {
+    x Res = Res(id, t)
+    errdefer x.Destroy()
+    if bad: error Gone
+    return x
+}
+
+fn ended() String {
+    t := Tally()
+    n := deferredEnd(1, t)
+    {
+        a Res = try opened(2, false, t) catch Gone default Res(0, t)
+        b Res = try opened(3, true, t) catch Gone default Res(4, t)
+        n += a.id + b.id
+    }
+    {
+        y Res = Res(5, t)
+        y.Destroy()
+        y = Res(6, t)
+        for i in range 2 {
+            y.Destroy()
+            y = Res(7 + i, t)
+        }
+    }
+    return $n "/" $t.Text()
+}
+
+test deferredEnd "ends a held value by a deferred Destroy, and a holder given a new one after its Destroy" {
+    assert ended() == "7/13425678"
+}
+
+Ended := ended()
+
+assert Ended == "7/13425678", "decided while compiling: " $Ended
