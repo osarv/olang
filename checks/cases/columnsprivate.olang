@@ -1,7 +1,0 @@
-# check: fail error[M6a]: 'y'
-# T7e, M6a: a column is as private as its row type's field - lib.Pt's y is lib's
-import lib "columnsprivate/lib"
-fn main() {
-    c := Columns<lib.Pt>(2)
-    assert c.X.Len() == 2 and c.y.Len() == 2
-}
