@@ -29517,3 +29517,74 @@ closed). Memory-safe today (the storage lives until the scope closes), but C11's
 released resource") does not hold, and it is what blocks freeing at drops. Rust's dropck refuses the store (a value with
 a destructor may not hold a reference to one ended before it); olang's equivalent would refuse a by-value holder storing
 a reference to a holder declared later in its block - for the user.
+
+## A reference local typed per assignment: NLL as versions (O25i, docs/sec8.md round 1, 2026-11-07, wt-nll)
+
+**What.** docs/sec8.md's round 1. Until now a reference local had one scope for its whole life: O25b required every
+assignment's value to be exactly in the local's scope, so a cursor walking a chain (`at = at.parent`, the parent with a
+binding of its own), an option kept from a parameter's array (`planAt = args[k + 1]` - an obligation `args outlives the
+program`, then T22a at the tools' `os.RunOnStack` lambda), or a node built in a loop turn and read after it were
+refused, and `c := q; c = p` made two parameters' scopes one. Now a reference local or parameter, and a local holding a
+function value, get a **version** at their declaration and at every whole assignment, holding the value's exact scope,
+and each read is judged by the versions reaching it (SPEC O25i, O25a/O25b revised, O12, T25d, O26a).
+
+**How.** `typed.Versions` (typed.olang, beside Landings) is one structured walk of a body with a cursor - every
+reference or function-valued local or parameter assigned whole (scope.olang's `assignedTo`) - computing reaching
+definitions keyed by statement start: through branches, loops (a loop's body walked again until its head's set
+settles), a `catch` clause from anywhere in what its `try` covers, deferred code (every version in its block), a
+lambda where it is made, a task where it is spawned. The scope pass sets each cursor's term at each statement to the
+terms of the versions reaching it (one, or a `Set` not known here, O12); an assignment to a cursor (`cursorAssign`)
+gives its version the value's term and asks nothing; a read (`readCursor`) holds each reaching version but the
+declaration's valid where the read stands - lifting what the version names where the read and the assignment meet
+(`proposeDef`, through `propose` following versions back, `reachCtx`), else ReadAfterScope with a note at the
+assignment; a store through versions of different scopes is VersionsDiffer (O12) naming each assignment. A version's
+term is kept between judgings as `verAtom`s (an underestimate interned by its base, so `at = at.next` settles), and a
+read that took a version not yet judged in its judging is held to what it took: where the version came to more, the
+body is judged again (`verEnd`, `liftGrew`). The keeps analysis (O17) counts a store through a cursor against every
+region any of its versions names (`cursorRegions`, `regionParam`), so nothing O25b's equality guarded is lost
+(checks/cases/nllkeepsunion1/2, section 1's probes).
+
+**A soundness hole in the first design, found while building.** Validity was first judged as "the version's block
+encloses the read". A loop body's block is a new instance every turn: `n mut Node& = Node(i); n.next = head; head = n`
+has the version `head = n` (n in the loop body) reaching `n.next = head` in the *next* turn, whose body block is not the
+one n was built in - the previous turn's was reclaimed. So the walker records, per reaching definition, the outermost
+loop body it crossed a back edge of (`Across`), and the validity block is lca(read, definition, parent of that loop
+body): such a version must live where the loop stands. With it o15deepchain's chain lives in the loop's block.
+
+**Decided (mine, within the note).** (1) Version 0 is the declaration's value (a parameter's: its entry); a null holds
+no scope (it had taken the declared block, so `head mut Deep?& = null` then `head = n` made a set of two scopes). (2)
+Storage reached only through a cursor lives where the reads need it, no longer: o15deepchain's 300,000 nodes, read
+nowhere after the loop, close with the loop and their destructors run as it ends - earlier than before, never later
+than their holder lets go; the case sets its count before the loop. (3) A version's term between judgings is the
+latest judging's (a union kept stale members), dropped where a lift really grew; a union only after 8 rounds of a body,
+as a bound. (4) A store through a reference local's own bare field (`q.next = cur`) that its value outlives, where it
+must be exact, lifts q's referent to where the value lives (`throughLocal`, O28's equality): before NLL the assignment
+`cur = q` lifted q as a side effect, so `q.next = cur; cur = q; cur = root` compiled and would have been refused (found
+by the new scope-fuzzer scenarios); a field with a binding of its own stays refused (o25gfieldbinding). (5) T25d with
+it: an element of a constant literal read by an index or a slice is constant data (readPart's `constLiteral`), so
+`keep.Push(String&["a", "b"][k])` and `op = String&[" + ", " - "][k]` compile.
+
+**Changed cases.** o18cprojectionborrow, o23adepth, o23aliaswrite, rv5matchkeep now give O25i at the read after the
+loop (the version reaching it names a block that closed; o23adepth and o23aliaswrite are round 2's, O27 as placement);
+r9adefaultinner (`inner` built in main's block, a new one each turn) and strcursornewnode (the new node a version of
+its own, built in Str's frame) are run cases under `-debug -sanitize`; new nllmerge, nllkeepsunion1/2, t25delement,
+c3secondname and c6selectjoin (C3 and C6, fixed on the way by earlier rounds, pinned). tests/nll.olang: the widget
+click loop, a list's tail appended through a cursor, planAt, ops, a catch clause, deferred code, a lambda, a loop then a
+read after it - read back after a churn, a baked global and top-level asserts deciding the same while compiling; a
+scope.olang test of the reaching sets. The dump tools build again; `make dumptool` (in the suite's DIFFS) compiles
+scopedump's module, ~12 s - a full `-quick` build of one was 80-100 s of CPU, over the note's 15 s. fuzz/scopegen.olang
+writes cursor scenarios (reassigned from two scopes, from blocks and loops, walked, built through, captured, read in
+deferred code and after the blocks), one scenario in twelve or so.
+
+**Cost.** Measured on compiler/ (`olang compile -quick compiler/olang.olang`, the same binary with versions switched off
+for the base, three runs each on a loaded machine): the first build cost +20% of the scope phase. Two causes, both
+fixed: each statement recomputed every cursor's term from its reaching definitions (504k computations, a map lookup
+and a set made each) - now rows reached by the same definitions share a class (`Versions.classify`) and a cursor's term
+is made once per class until a definition is judged (`defGen`), 44k computations; and the first judging of a body read a
+loop-carried definition it had not judged yet as nothing, so every such body was judged again (230 times) - now an
+unjudged definition giving new storage is read as where it builds it (`freshDest`, cursorAssign's own destination), and
+one giving new storage keeps its term across a lift that grew elsewhere (`freshDefs`): 68 judgings asked again. After
+both: scope 2,377 ms without versions, 2,446 ms with (+3%, within the noise of these runs); OLANG_SCOPESTATS prints
+`versions: 186 bodies with a cursor, 647 definitions, 68 judgings asked again`. Bench's IR changes only in std/os's and
+std/regex's: a text a cursor was given, built in the program's scope before (the cursor's one claim was a constant's,
+the program's) and now in the function's frame or the caller's scope, where its reads are.

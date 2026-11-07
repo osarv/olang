@@ -428,6 +428,17 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     defLifts Map<pair.Pair<I64, I64>, Term>          # ... where the inference builds its temporary (3.5)
     verUnion Map<I64, Bool>                 # bodies whose definitions' terms only grow (inferClaims' bound)
     verGrew Bool = false                    # a definition came to more than a read took (judged again, 3.3)
+    curReach Vec<I64>                       # cursorTerms' scratch: the definitions reaching a statement
+    lateMeet Vec<typed.BlockId>             # by late read (lateDef): the block its version must be open in, -1 none
+    defFresh Vec<Bool>                      # by definition: its value built here or null this judging (cursorAssign)
+    freshDefs Map<pair.Pair<I64, I64>, Bool> # by (body, definition): so in its last judging (dropDefs keeps them)
+    defGen I64 = 0                          # how many definitions this judging has judged (verDefine)
+    sigGen Vec<I64>                         # by statement class and cursor: the defGen its term was made at (sigTerms)
+    sigTerms Vec<Term>
+    defPrior Vec<Term>                      # by definition: its last judging's term, made this judging (defPriorMade)
+    defPriorMade Vec<Bool>
+    curTerms Vec<Term>                      # ... and their terms
+    VerRedone I64 = 0                       # how many judgings a version coming to more asked again, for OLANG_SCOPESTATS
     realGrew Bool = false                   # a lift grew - a claim, a call's landing, a definition's temporary
     underIntern Map<verAtom, I64>           # an underestimate made again from a kept term, by what it is: its index
     cursorSets Map<I64, I64>                # by set: the cursor whose versions it is (O25i's error)
@@ -525,6 +536,7 @@ fn (s mut Scoper&) judgeAll(report Bool) {
         s.partLifts.Clear()
         s.defLifts.Clear()
         s.defTerms.Clear()
+        s.freshDefs.Clear()
         s.runs.Clear()
     }
     for i in range s.Bodies.Len() {
@@ -5304,9 +5316,12 @@ fn (s mut Scoper&) verStart(b I64) {
     s.keys.Clear()
     s.defNow.Clear()
     s.defSeen.Clear()
+    s.defPrior.Clear()
+    s.defPriorMade.Clear()
     s.lateDef.Clear()
     s.lateFrom.Clear()
     s.lateTo.Clear()
+    s.lateMeet.Clear()
     s.lateAtoms.Clear()
     s.underIntern.Clear()
     s.cursorSets.Clear()
@@ -5324,6 +5339,17 @@ fn (s mut Scoper&) verStart(b I64) {
     for _ in range v.DefLocal.Len() {
         s.defNow.Push(Term.None)
         s.defSeen.Push(false)
+        s.defPrior.Push(Term.None)
+        s.defPriorMade.Push(false)
+    }
+    s.defGen = 0
+    s.defFresh.Clear()
+    for _ in range v.DefLocal.Len() { s.defFresh.Push(false) }
+    s.sigGen.Clear()
+    s.sigTerms.Clear()
+    for _ in range (v.Sigs + 1) * s.curList.Len() {
+        s.sigGen.Push(-1)
+        s.sigTerms.Push(Term.None)
     }
 }
 
@@ -5378,13 +5404,25 @@ fn (s mut Scoper&) nullLit(x typed.Expr?&) Bool {
 # a set not known here where they differ (O12); a null given gives none
 fn (s mut Scoper&) cursorTerms(key I64) {
     v := s.vers!
-    for l in s.curList {
-        xs Vec<Term>
-        for d in v.Reaching(key, l) {
-            dt := s.defTermAt(d)
-            if dt != Term.None { s.addToSet(xs, dt) }
+    row := v.RowOf(key)
+    sig := v.SigOf(row) + 1
+    for ci, l in s.curList {
+        # (statements reached by the same definitions read the same terms until a definition is judged: made once)
+        at := sig * s.curList.Len() + ci
+        if s.sigGen[at] == s.defGen {
+            s.terms[l] = s.sigTerms[at]
+            continue
         }
-        t := s.termOf(xs)
+        v.ReachRow(row, l, s.curReach)
+        s.curTerms.Clear()
+        for d in s.curReach {
+            dt := s.defTermAt(d)
+            if dt != Term.None { s.addToSet(s.curTerms, dt) }
+        }
+        # (the set the statement before had, where its members are these - not a new one each statement)
+        t := s.terms[l] if s.sameTerms(s.terms[l], s.curTerms) else s.termOf(s.curTerms)
+        s.sigGen[at] = s.defGen
+        s.sigTerms[at] = t
         s.terms[l] = t
         match t {
             case Term.Set(id) { s.cursorSets.Put(id, l) }
@@ -5393,16 +5431,53 @@ fn (s mut Scoper&) cursorTerms(key I64) {
     }
 }
 
+# t, the term of terms xs: none for none, the one, or a set of exactly those
+fn (s mut Scoper&) sameTerms(t Term, xs Vec<Term>&) Bool {
+    match t {
+        case Term.Set(id) {
+            if xs.Len() < 2 or s.setEnd(id) - s.setFrom[id] != xs.Len() { return false }
+            for k in range xs.Len() {
+                if s.setTerms[s.setFrom[id] + k] != xs[k] { return false }
+            }
+            return true
+        }
+        case Term.None: return xs.Len() == 0
+        case _: return xs.Len() == 1 and xs[0] == t
+    }
+}
+
 # the term definition d gives: this judging's where it is judged, else the last judging's (3.3) - none in the first
 fn (s mut Scoper&) defTermAt(d I64) Term {
     if s.defSeen[d] { return s.defNow[d] }
-    got := try s.defTerms.Get(pair.Pair<I64, I64>(s.Id, d)) catch { return Term.None }
-    return s.fromAtoms(got)
+    # (made once a judging: every statement before the definition reads it)
+    if s.defPriorMade[d] { return s.defPrior[d] }
+    s.defPriorMade[d] = true
+    got := try s.defTerms.Get(pair.Pair<I64, I64>(s.Id, d)) catch {
+        s.defPrior[d] = s.freshDest(d)
+        return s.defPrior[d]
+    }
+    s.defPrior[d] = s.fromAtoms(got)
+    return s.defPrior[d]
+}
+
+# where assignment d builds the value it gives, where that is new storage (isFresh): its term, judged or not (cursorAssign's
+# dest) - none for anything else. The first judging of a body takes it for a definition a read meets before it, so a
+# version built where the local's others live asks no second judging (3.3)
+fn (s mut Scoper&) freshDest(d I64) Term {
+    v := s.vers!
+    x := v.DefValue[d]
+    if v.DefFirst[d] or x is null or not s.isFresh(x) { return Term.None }
+    l := v.DefLocal[d]
+    dest := try s.curMoved.Get(l) catch default Term.None
+    if dest == Term.None { dest = s.blockTerm(s.B!.Locals[l].In) }
+    dl := try s.defLifts.Get(pair.Pair<I64, I64>(s.Id, d)) catch default Term.None
+    return s.joinTerm(dest, dl) if dl.Runs() else dest
 }
 
 # definition d judged, giving term t (a statement judged twice gives both)
 fn (s mut Scoper&) verDefine(d I64, t Term) {
     if d < 0 or d >= s.defNow.Len() { return }
+    s.defGen++
     if s.defSeen[d] and s.defNow[d] != t {
         xs Vec<Term>
         if s.defNow[d] != Term.None { s.addToSet(xs, s.defNow[d]) }
@@ -5432,7 +5507,15 @@ fn (s mut Scoper&) verEnd() {
         now Vec<verAtom>
         s.toAtoms(s.defNow[d], now)
         for a in now {
-            if not s.atomIn(a, s.lateFrom[i], s.lateTo[i]) { s.verGrew = true }
+            if s.atomIn(a, s.lateFrom[i], s.lateTo[i]) { continue }
+            s.verGrew = true
+            if s.Trace { s.TraceLog.Push($"version " $d " came to " $s.defNow[d] " | " $s.traceAt(s.vers!.DefSp[d].Start)) }
+        }
+        # (and valid where the read stood, which it was judged for with what was known then)
+        m := s.lateMeet[i]
+        if m >= typed.BlockId(0) and not s.openAt(s.defNow[d], m) {
+            s.verGrew = true
+            if s.Trace { s.TraceLog.Push($"version " $d " not valid at " $m " | " $s.traceAt(s.vers!.DefSp[d].Start)) }
         }
     }
     union := s.verUnion.Has(s.Id)
@@ -5446,8 +5529,10 @@ fn (s mut Scoper&) verEnd() {
         }
         s.toAtoms(s.defNow[d], kept)
         s.defTerms.Put(key, kept)
+        if s.defFresh[d] { s.freshDefs.Put(key, true) } else { s.freshDefs.Remove(key) }
     }
     if not s.verGrew { return }
+    s.VerRedone++
     s.liftGrew = true
     # the judging that reports reads what the quiet ones settled: a definition coming to more there would leave a read
     # judged with too little, so the build stops rather than trust it
@@ -5541,6 +5626,14 @@ fn (s mut Scoper&) readCursor(l I64, x typed.Expr&) {
     key := s.keys[s.keys.Len() - 1] if s.keys.Len() > 0 else -1
     from := -1
     for d in ds {
+        meet := typed.BlockId(-1)
+        if not v.DefFirst[d] {
+            meet = s.lcaBlock(at, v.DefIn[d])
+            # (reached through a loop's next turn, it lives where that loop stands at least: the turn it was given in has
+            # left the loop's blocks)
+            far := v.Across(key, d) if v.Named(key) else s.outermostLoop()
+            if far >= typed.BlockId(0) { meet = s.lcaBlock(meet, s.B!.Blocks[I64(far)].Parent) }
+        }
         if not s.defSeen[d] {
             if from < 0 {
                 got Vec<verAtom>
@@ -5551,14 +5644,9 @@ fn (s mut Scoper&) readCursor(l I64, x typed.Expr&) {
             s.lateDef.Push(d)
             s.lateFrom.Push(from)
             s.lateTo.Push(s.lateAtoms.Len())
+            s.lateMeet.Push(meet)
         }
-        if v.DefFirst[d] { continue }
-        meet := s.lcaBlock(at, v.DefIn[d])
-        # (reached through a loop's next turn, it lives where that loop stands at least: the turn it was given in has
-        # left the loop's blocks)
-        far := v.Across(key, d) if v.Named(key) else s.outermostLoop()
-        if far >= typed.BlockId(0) { meet = s.lcaBlock(meet, s.B!.Blocks[I64(far)].Parent) }
-        if s.openAt(s.defTermAt(d), meet) { continue }
+        if v.DefFirst[d] or s.openAt(s.defTermAt(d), meet) { continue }
         # (a refusal the field inference reads, as a fit's: a field read out of what the version names given a binding)
         dv := v.DefValue[d]
         if dv is not null { s.wantPromotion(dv) }
@@ -5685,6 +5773,8 @@ fn (s mut Scoper&) cursorAssign(sp source.Span, p typed.Lvalue&, x typed.Expr&) 
     s.noteLate(l, x)
     t := Term.None if got.K == ValKind.Null else s.valTerm(got, dest)
     s.verDefine(d, t)
+    # (a value built here, or none: its term reads no cursor's - kept for the next judging though a lift grew, inferClaims)
+    if d >= 0 and d < s.defFresh.Len() { s.defFresh[d] = got.K != ValKind.Existing }
     s.terms[l] = t
     try s.targets.Pop() catch { }
 }
@@ -5761,13 +5851,41 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
         # an assignment's own fit is said at its "=" (B11), a global's at the value (O1b)
         savedAt, savedSp := s.fitAt, s.fitSp
         s.fitAt, s.fitSp = kind != FitGlobal, s.eqAfter(p.Span())
-        s.fitTarget = wholeLocal(p)
+        s.fitTarget = wholeLocal(p) if wholeLocal(p) >= 0 else s.throughLocal(p, slot)
         s.fit(v.T, slot, exact, x, kind)
         s.fitTarget = -1
         s.fitAt, s.fitSp = savedAt, savedSp
     }
     if v.K == ValKind.Fresh and not slot.Runs() and slot != Term.None { s.freshIntoUnknown(sp, p, slot) }
     try s.targets.Pop() catch { }
+}
+
+# the reference local a store through whose referent's own fields p is (q.next, q.inner.next) - its slot where q's
+# referent lives: a value outliving that slot, exactly where it must be, places q's referent where the value lives (O28's
+# equality, as a whole local's claim is lengthened). -1 for anything else: a cursor (a version's term, not a claim), a
+# parameter, an element, a field with a binding of its own (its slot is not q's)
+fn (s mut Scoper&) throughLocal(p typed.Lvalue&, slot Term) I64 {
+    base := p
+    for _ in range 64 {
+        match base {
+            case typed.Lvalue.Field(_, _, b, _) { base = b }
+            case _ { break }
+        }
+    }
+    q := -1
+    match base {
+        case typed.Lvalue.Deref(_, _, r) {
+            match s.unAway(r) {
+                case typed.Expr.Read(_, _, rp, _) { q = wholeLocal(rp) }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    if q < 0 or s.isCursorLocal(q) { return -1 }
+    loc := s.B!.Locals[q]
+    if loc.Kind != typed.LocalKind.Var or not s.isRef(loc.Ty) or s.terms[q] != slot { return -1 }
+    return q
 }
 
 # C2d at a store: a local a constructor call made, stored whole where an argument its instance holds, made in a block of
@@ -9565,7 +9683,7 @@ fn (s mut Scoper&) liftAtCall(c typed.Call&, r rel, lo Term) {
 # the least the reads they reach need. Judged again where a definition came to more than a read took; past eight such
 # judgings in a row its definitions' terms keep what they had, so the rounds end whatever the shape
 fn (s mut Scoper&) inferClaims(b I64) {
-    s.dropDefs(b)
+    s.dropDefs(b, false)
     again := 0
     for {
         s.liftGather = true
@@ -9574,8 +9692,11 @@ fn (s mut Scoper&) inferClaims(b I64) {
         s.judge(b, false)
         s.liftGather = false
         if not s.liftGrew { break }
+        # (a lift that really grew drops the definitions' terms: kept, one could reproduce itself through a read of its own
+        # cursor - at = at.next - and the least placement would not be found; but one a value built here gives reads no
+        # cursor: kept, a judging is not asked again for it unless the lift moved it)
         if s.realGrew {
-            s.dropDefs(b)
+            s.dropDefs(b, true)
             again = 0
             continue
         }
@@ -9585,10 +9706,12 @@ fn (s mut Scoper&) inferClaims(b I64) {
 }
 
 # body b's cursors' definitions' terms forgotten: its next judging starts from nothing
-fn (s mut Scoper&) dropDefs(b I64) {
-    mine Map<I64, Bool>
-    mine.Put(b, true)
-    dropKeyed<Vec<verAtom>>(s.defTerms, mine)
+fn (s mut Scoper&) dropDefs(b I64, keepFresh Bool) {
+    gone Vec<pair.Pair<I64, I64>>
+    for key in s.defTerms.Keys() {
+        if key.First == b and not (keepFresh and s.freshDefs.Has(key)) { gone.Push(key) }
+    }
+    for key in gone { s.defTerms.Remove(key) }
 }
 
 # where offset at is in the body being judged's file, for the trace: its line's number and text
@@ -10120,6 +10243,16 @@ fn (s Scoper&) Judged(b I64) Bool { return s.judged[b] }
 
 # how many components the call graph has, for OLANG_SCOPESTATS
 fn (s Scoper&) Components() I64 { return s.compFrom.Len() }
+
+# the bodies with a cursor (O25i), their definitions and the judgings a version asked again, for OLANG_SCOPESTATS
+fn (s Scoper&) VerStats() String {
+    defs := 0
+    for b in s.versOf.Keys() {
+        vs := try s.versOf.Get(b) catch { continue }
+        defs += vs.DefLocal.Len()
+    }
+    return $"versions: " $s.versOf.Len() " bodies with a cursor, " $defs " definitions, " $s.VerRedone " judgings asked again"
+}
 
 fn (s Scoper&) RunStats() String {
     runs, marks, reads, diags := 0, 0, 0, 0

@@ -3571,8 +3571,11 @@ type Versions struct(B Body&, Cand Array<Bool>&) {
     DefValue Vec<Expr?&>       # ... the value it gives - null for a parameter's entry
     DefFirst Vec<Bool>         # ... whether it is its cursor's declaration or entry (its version 0)
     defKey Map<I64, I64>       # by statement start and cursor (defName): its definition
+    ofLocal Map<I64, Vec<I64>> # by cursor: its definitions, in order
     rowOf Map<I64, I64>        # by statement start: its row in reach
     reach Vec<I64>             # the rows, one entry a definition: what reaches each named statement (on's values)
+    sig Vec<I64>               # by row: its class - rows reached by the same definitions share one (Sigs of them)
+    Sigs I64 = 0
     # the walk's state: by definition, -2 where it does not reach here, -1 where it does on paths crossing no loop's turn,
     # else the outermost loop body whose turn ended on a path it reaches here by; and last, 1 where no path does
     on Vec<I64>
@@ -3601,8 +3604,28 @@ fn NewVersions(b Body&, cand Array<Bool>&) Versions?& {
     for d in range n { v.on.Push(-1 if v.DefSp[d].Start < I32(0) else -2) }
     v.on.Push(0)
     v.block(b.Root!)
+    v.classify()
     return v
 }
+
+# each row's class: rows reached by the same definitions, whatever loops they crossed, are one
+fn (v mut Versions&) classify() {
+    n := v.DefLocal.Len()
+    seen Map<String, I64>
+    for r in range v.reach.Len() / n {
+        b := StringBuilder()
+        for d in range n { b.PushChar('1' if v.reach[r * n + d] > -2 else '0') }
+        k := b.ToString()
+        if not seen.Has(k) {
+            seen.Put(k, v.Sigs)
+            v.Sigs++
+        }
+        v.sig.Push(try seen.Get(k) catch default 0)
+    }
+}
+
+# the class of the statement row reads (RowOf): -1 for a statement no walked path names, which every definition reaches
+fn (v Versions&) SigOf(row I64) I64 { return -1 if row < 0 else v.sig[row] }
 
 # the definitions of the candidates the first walk found no task's target, numbered again: whether there are any
 fn (v mut Versions&) settle() Bool {
@@ -3615,6 +3638,11 @@ fn (v mut Versions&) settle() Bool {
     v.defKey.Clear()
     for d in range loc.Len() {
         if v.Cursor[loc[d]]: v.addDef(sps[d], loc[d], ins[d], vals[d], firsts[d])
+    }
+    for d in range v.DefLocal.Len() {
+        l := v.DefLocal[d]
+        if not v.ofLocal.Has(l): v.ofLocal.Put(l, Vec<I64>())
+        v.ofLocal.RefMut(l)!.Push(d)
     }
     return v.DefLocal.Len() > 0
 }
@@ -3633,12 +3661,24 @@ fn (v mut Versions&) addDef(sp source.Span, l I64, inb BlockId, x Expr?&, first 
 # the definitions of cursor l reaching the statement starting at key: every one of l's where no walked path names it
 fn (v Versions&) Reaching(key I64, l I64) Vec<I64> {
     out Vec<I64>
-    row := try v.rowOf.Get(key) catch default -1
-    n := v.DefLocal.Len()
-    for d in range n {
-        if v.DefLocal[d] == l and (row < 0 or v.reach[row * n + d] > -2): out.Push(d)
-    }
+    v.ReachInto(key, l, out)
     return out
+}
+
+# ... into out (cleared first), with nothing made
+fn (v Versions&) ReachInto(key I64, l I64, out mut Vec<I64>&) { v.ReachRow(v.RowOf(key), l, out) }
+
+# the row the statement starting at key reads its reaching definitions from, -1 where no walked path names it
+fn (v Versions&) RowOf(key I64) I64 { return try v.rowOf.Get(key) catch default -1 }
+
+# ReachInto by the statement's row
+fn (v Versions&) ReachRow(row I64, l I64, out mut Vec<I64>&) {
+    out.Clear()
+    if not v.ofLocal.Has(l): return
+    n := v.DefLocal.Len()
+    for d in v.ofLocal.Ref(l)! {
+        if row < 0 or v.reach[row * n + d] > -2: out.Push(d)
+    }
 }
 
 # the outermost loop body definition d reaches the statement starting at key through a turn of - entered and left again

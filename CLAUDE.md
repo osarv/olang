@@ -1349,6 +1349,24 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **A reference never narrows (O25, the user's decision).** A local's type says where it lives (O25a); `:=` takes its
   initializer's scope; exactness is required only where something can be stored through (O25g), else outliving. Copies
   of reference-holding values keep their references where the source's are (O25h).
+- **A reference local typed per assignment (O25i, NLL as versions; docs/sec8.md round 1, built 2026-11-07, mine within
+  the note).** A reference local or parameter, and a local holding a function value, get a **version** at their
+  declaration and at every whole assignment, holding the value's exact scope - an assignment asks nothing (O25b
+  replaced: no equality between two parameters' scopes at `c = p`); each read is judged by the versions reaching it
+  (typed.Versions, reaching definitions over branches, loops, catch clauses, deferred code, lambdas): each must be open
+  where the read stands - else what it names is built where the read needs it (a lift), else ReadAfterScope; versions of
+  different scopes are O12's (VersionsDiffer naming the assignments) where something is built or stored through.
+  Decided (mine): a loop body's block is a new one every turn, so a version reaching a read from an earlier turn must
+  live where the loop stands (`Across`: found as a soundness hole in the first design); a null given holds no scope;
+  storage reached only through a cursor lives where the reads need it, no longer (o15deepchain's chain now closes with
+  its loop - its destructors run as the loop ends, earlier, never later); a version's term between judgings is the
+  latest judging's, a union only as an 8-round bound; a store through a reference local's own field that its value
+  outlives, exactly where it must, places the local's referent where the value lives (O28's equality - before NLL the
+  cursor assignment's equality lifted it as a side effect). T25d with it: an element of a constant literal read by an
+  index or a slice is constant data. Newly compiling: the widget click loop, a list's tail appended through a cursor,
+  `planAt` (scopedump, lowerdump and emitdump build - `make dumptool` compiles scopedump's module in the suite),
+  r9adefaultinner and strcursornewnode (run cases); the keeps analysis (O17) counts every version's regions
+  (nllkeepsunion1/2). tests/nll.olang.
 - **Obligations (O10b/O10c).** Inferred from the body, held at every call to the callee's whole body (checked on
   demand and at a fixed point); temporaries built where the obligation says (O18b/O18c). A `:=` from a call lands by
   obligations only where something is kept.
@@ -1773,7 +1791,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (spins, then sleeps to 1 ms, waking for its earliest timer). Two language rules came with it: **G9e** (a parameter
   left off binds its variable to its default's type: Select's unused cases) and **S13g** (a case carrying a value of an
   enum of no cases, T18 now allowing one, needs no clause: a match of two clauses over a two-case Select's `Ready` is
-  exhaustive). Limit: a `SendOf(c, v)` written inside a join block is refused by C2d (a local made before it works).
+  exhaustive). (A `SendOf(c, v)` written inside a join block, refused by C2d when built, compiles since the kept round -
+  checks/cases/c6selectjoin.)
 - **`a.Chunks(size)` (M19d, P8b, 2026-10-17).** Every array cut into consecutive writable slices of at most `size`,
   held in an array living where the receiver does (Split's shape: an iterator's pieces would live where the iterator
   does, which P2 rejects as a task argument), so `join { for part in a.Chunks(4) { spawn work(part) } }` cannot race.

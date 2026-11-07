@@ -21,6 +21,10 @@ line in docs/README.md, committed on wt-sec8 (only those paths; no push). Experi
 - [x] the design: sections 2-6
 - [x] the evaluator, the touch points, the build plan, decisions, questions: sections 7-11
 - [x] docs/README.md line; committed
+- [x] **round 1 built** (wt-nll, 2026-11-07): NLL as versions, T25d, O17 over versions, C3/C6 pinned, the dump tools
+  (`make dumptool`), scope-fuzzer cursor scenarios - HISTORY.md "A reference local typed per assignment"; one finding
+  beyond the note: a loop body's block is a new one each turn, so validity is judged at the parent of the outermost loop
+  body a version crossed (`Across`, 3.4)
 
 ## 0. Summary
 
