@@ -412,7 +412,7 @@ fn body(li Inputs&, sym String&, own String&, chain Array<String&>&, parts Vec<S
     for s in chain { syms.Push($s) }
     syms.Push($sym)
     remarks := Remarks(li.Files.Remarks, syms.ToArray(), names)
-    w := Writer(li.Comment, src, remarks, syms.ToArray())
+    w mut Writer& = Writer(li.Comment, src, remarks, syms.ToArray())
     for p in parts {
         if li.Ir {
             w.irPart(p, sym)

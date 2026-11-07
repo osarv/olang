@@ -1944,7 +1944,7 @@ b48efcf1d1f29453 c8dcaffdee32e6ce compiler/fmt.olang
 6c27ddd3a3333276 0ad08cd4a9b31140 compiler/free.olang
 da13dc33e9ceb65e eb58a90d9122a7ae compiler/generic.olang
 b734275a3e54bbb5 643e72712c5db515 compiler/interp.olang
-d6f03a220c1bb9ac 9ca7342ed7d90448 compiler/listing.olang
+39cc3b414b0ce585 e8e9ce1c44847463 compiler/listing.olang
 64775bb322e353e8 f9d3dd3c8154a58f compiler/load.olang
 6853125f6ea44cfb 51ae3fe2b6855e1c compiler/lower.olang
 025928255c54707a 8b086d200f0cc2e7 compiler/lsp.olang
