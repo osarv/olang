@@ -400,6 +400,7 @@ type Diag enum {
     BuilderNameTaken
     BuilderTwice
     BuilderExpected
+    BuilderOwnerBare
     NoBuilder
     BuilderPrivate
     BuilderNotValue
@@ -1375,7 +1376,8 @@ fn BuilderResult(owner String&, got String&) r.Msg { return r.Msg(Diag.BuilderRe
 fn BuilderTakesOwner(owner String&, param String&) r.Msg { return r.Msg(Diag.BuilderTakesOwner, "D19", "a builder of " $owner " takes no value of it, and " $param " does - make it a method, 'fn (x " $owner ") ...', or a function of the module") }
 fn BuilderNameTaken(owner String&, tok String&, what String&) r.Msg { return r.Msg(Diag.BuilderNameTaken, "D19", $tok " is already " $what " of " $owner " - name the builder otherwise") }
 fn BuilderTwice(owner String&, tok String&) r.Msg { return r.Msg(Diag.BuilderTwice, "D19", $owner " has two builders named " $tok) }
-fn BuilderExpected(tok String&, ty String&, name String&) r.Msg { return r.Msg(Diag.BuilderExpected, "D19a", $tok " makes a " $ty " its module declares and takes none - declare it as the type's builder, 'fn " $ty "." $name "(...)', and call it '" $ty "." $name "(...)'") }
+fn BuilderExpected(tok String&, ty String&, owner String&, name String&) r.Msg { return r.Msg(Diag.BuilderExpected, "D19a", $tok " makes a " $ty " its module declares and takes none - declare it as the type's builder, 'fn " $owner "." $name "(...)', and call it '" $ty "." $name "(...)'") }
+fn BuilderOwnerBare(ty String&, every String&, one String&, name String&) r.Msg { return r.Msg(Diag.BuilderOwnerBare, "D19", $ty " is generic, and a builder's owner is written with its arguments - 'fn " $every "." $name "(...)' for every instance, 'fn " $one "." $name "(...)' for one") }
 fn NoBuilder(ty String&, tok String&, hint String&) r.Msg { return r.Msg(Diag.NoBuilder, "D19", $ty " has no builder, case or member " $tok $hint) }
 fn BuilderPrivate(ty String&, tok String&) r.Msg { return r.Msg(Diag.BuilderPrivate, "M6", $ty "'s builder " $tok " is private to its module") }
 fn BuilderNotValue(tok String&) r.Msg { return r.Msg(Diag.BuilderNotValue, "T21", "the builder " $tok " is generic, so it is no value by its name alone - call it, or pass a lambda calling it") }

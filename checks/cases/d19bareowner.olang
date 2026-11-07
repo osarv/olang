@@ -1,0 +1,19 @@
+# check: fail error[D19]: Bag is generic, and a builder's owner is written with its arguments - 'fn Bag<T>.mk(...)' for every instance, 'fn Bag<String&>.mk(...)' for one
+# also: error[D19a]: 'two' makes a Bag its module declares and takes none - declare it as the type's builder, 'fn Bag<I64>.two(...)', and call it 'Bag.two(...)'
+# also: error[D19]: Bag<F64> has no builder, case or member 'one'
+# never: cannot build this yet
+# D19 (bulk review 8): a generic owner is written with its arguments - bare, it named nothing and the builder was taken
+# for every instance; D19a names the owner its result writes; a builder of one instance is no other's
+type Bag<T> struct(items Vec<T>) { items }
+
+fn Bag.mk(n I64) Bag<String&> { return Bag(Vec<String&>()) }
+
+fn two() Bag<I64> { return Bag(Vec<I64>[1, 2]) }
+
+fn Bag<I64>.one() Bag<I64> { return Bag(Vec<I64>[1]) }
+
+fn main() {
+    a := Bag.mk(1)
+    b := Bag<F64>.one()
+    assert a.items.Len() + b.items.Len() == 1
+}

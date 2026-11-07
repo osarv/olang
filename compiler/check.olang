@@ -1296,7 +1296,10 @@ fn (c mut Checker&) builderRules(f I64) {
     fd := c.P.FnDecl(f)
     mi := c.P.FnModule(f)
     o := c.P.OwnerOf(f)
-    if o == types.UnknownT { return }   # said where the owner is written
+    if o == types.UnknownT {
+        c.bareOwner(f, mi)   # a generic type named bare reads as nothing; anything else is said where it is written
+        return
+    }
     c.push(-1, mi, types.VoidT, types.ListId(0))
     defer c.pop()
     nsp := c.nameSpan(fd)
@@ -1351,8 +1354,51 @@ fn (c mut Checker&) builderOwnerOk(f I64, o types.TypeId, osp source.Span) Bool 
         return false
     }
     dm := c.P.DeclModule(c.P.T.DeclOf(o))
-    if dm == mi or (prelude and c.P.L.Mods[dm].Prelude) { return true }
-    c.err(osp, msgs.BuilderOwnerElsewhere(c.ty(o)))
+    if dm != mi and not (prelude and c.P.L.Mods[dm].Prelude) {
+        c.err(osp, msgs.BuilderOwnerElsewhere(c.ty(o)))
+        return false
+    }
+    return c.ownerWritten(f, o, osp)
+}
+
+# D19: "fn Bag.Of" with Bag generic: its owner, written with no arguments, names no type - said, naming the two forms
+fn (c mut Checker&) bareOwner(f I64, mi I64) {
+    fd := c.P.FnDecl(f)
+    match fd.Owner! {
+        case ast.TypeRef.Named(_, path, args) if path.Len() == 1 and args.Len() == 0 {
+            e := c.P.TypeEntry(mi, path[0])
+            if e < 0 { return }
+            d := c.P.DeclFor(mi, e)
+            c.push(-1, mi, types.VoidT, types.ListId(0))
+            defer c.pop()
+            c.ownerWritten(f, c.P.SelfType(d), fd.Owner!.Span())
+        }
+        case _ { }
+    }
+}
+
+# D19: a generic owner is written with its arguments - "fn Bag<T>.Of" for every instance, "fn Bag<String&>.Of" for one;
+# a bare "fn Bag.Of" said, naming both (the one its result gives where it gives an instance)
+fn (c mut Checker&) ownerWritten(f I64, o types.TypeId, osp source.Span) Bool {
+    fd := c.P.FnDecl(f)
+    td := c.P.TypeDecl(c.P.T.DeclOf(o))
+    if td is null or td.Params.Len() == 0 { return true }
+    match fd.Owner! {
+        case ast.TypeRef.Named(_, _, args) if args.Len() > 0 { return true }
+        case _ { }
+    }
+    name := c.text(td.Name)
+    vars Vec<String>
+    errs := ""
+    for tp in td.Params {
+        if tp.ErrSet: errs = $" ? " $c.text(tp.Name)
+        else: vars.Push($c.text(tp.Name))
+    }
+    every := $name "<" $vars.Join(", ") $errs ">"
+    r := c.P.T.Plain(c.deref(c.P.T.Result(c.P.Sig(f))))
+    one := c.ty(r) if c.P.T.KindOf(r) == types.Kind.Named and c.P.T.DeclOf(r) == c.P.T.DeclOf(o) and c.ty(r) != every else
+           $name "<I64>"
+    c.err(osp, msgs.BuilderOwnerBare(name, every, one, c.text(fd.Member)))
     return false
 }
 
@@ -1421,7 +1467,8 @@ fn (c mut Checker&) placement(f I64) {
         if c.typeNames(p, r, 0) { return }
     }
     c.push(-1, mi, types.VoidT, types.ListId(0))
-    c.err(c.nameSpan(fd), msgs.BuilderExpected(c.tok(fd.Name), c.text(c.P.T.DeclName(d)), c.text(fd.Name)))
+    # the owner as the result writes it: a generic type's instance, "fn Bag<String&>.mk(...)" (D19)
+    c.err(c.nameSpan(fd), msgs.BuilderExpected(c.tok(fd.Name), c.text(c.P.T.DeclName(d)), c.ty(r), c.text(fd.Name)))
     c.pop()
 }
 
@@ -8224,6 +8271,18 @@ fn (c mut Checker&) ownerOf(x ast.Expr&) ownerAt {
     return ownerAt(types.UnknownT, false)
 }
 
+# an instance of a generic struct written with its arguments before a "." - "Bag<I64>" in "Bag<I64>.mk(7)" - whose
+# builders the call looked among; -1 for anything else (an enum's instance names its cases, G6b)
+fn (c mut Checker&) instanceWritten(x ast.Expr&) types.TypeId {
+    match x {
+        case ast.Expr.Generic(_, _, _) { }
+        case _ { return types.TypeId(-1) }
+    }
+    o := c.ownerOf(x)
+    if o.T == types.UnknownT or o.Bare or c.isEnum(o.T) { return types.TypeId(-1) }
+    return o.T
+}
+
 # D19: a builder called through its owner's name - its owner's variables bound by the instance written (or inferred, for
 # a generic named bare), its own by type arguments written after its name or by the call; null where x names no type
 # with a builder n - the caller goes on to cases, reflection and the rest
@@ -11634,6 +11693,7 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
                 }
             }
             et := c.typeNamed(x)
+            if et < types.TypeId(0) { et = c.instanceWritten(x) }   # D19: "Bag<I64>.mk(7)" with no builder of that instance
             if et >= types.TypeId(0) and c.text(n) == "From" and c.isEnum(et) and not c.hasCase(et, n) { return c.enumFrom(sp, nsp, et, args) }
             if et >= types.TypeId(0) and not c.isEnum(et) and not (c.isNamed(et) and c.declKind(et) == types.DeclKind.Error) {   # an error word with a payload is built as its case (T19b)
                 c.noBuilder(nsp, x, et, n)
