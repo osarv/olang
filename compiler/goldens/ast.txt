@@ -245,6 +245,13 @@ cc3d6cb9f952c0e0 a9865440130e3ae4 checks/cases/cascademember.olang
 c70005089ecad85b f292e5e15a014d50 checks/cases/charnopad.olang
 98f788ce31e2943a ac3e109c83004756 checks/cases/choicename.olang
 92c451864dd0e747 de5b9fe39551b82d checks/cases/chunkpool.olang
+5ab88ca79922f0e5 87069d1122d7b1b6 checks/cases/columnassigned.olang
+a0e8931c5cdd6af2 0cf14c8f402a36f8 checks/cases/columnscontract.olang
+0e62201dc0308ff6 1aec162e42b947f8 checks/cases/columnsnamedmethod.olang
+21f133208f02cca8 451cf02363f08c09 checks/cases/columnsnotrecord.olang
+715821e6b536585b fd3954bd0af82be3 checks/cases/columnsnotstruct.olang
+d2417c632d0989e8 5419f47744fff9fe checks/cases/columnsnozero.olang
+4b696fff9deaf36c 3063a5654134d132 checks/cases/columnsrun.olang
 408ab252adedbcd2 ba57b323ca0ef2c4 checks/cases/commaendsline.olang
 7ea68203f07bb66e 640c34ac898999fb checks/cases/compoundnarrow.olang
 ed2336c6dac850e9 f9f5d006119183e5 checks/cases/comprfilter.olang
@@ -1065,7 +1072,7 @@ ba732f85437f16f2 4d8d692e7497d17a checks/cases/reflnokind.olang
 b0e00c121cbf062b d21d4aeeb84eb68e checks/cases/reflnolength.olang
 31edb5f88d7b5881 ddd045e8aa582217 checks/cases/reflnomember.olang
 9c8e32197e434a84 b07422fc91e3290e checks/cases/reflnotlist.olang
-4bb5440ca3083f64 d21d4aeeb84eb68e checks/cases/reflnotype.olang
+6cd5cdb9036c1e08 d21d4aeeb84eb68e checks/cases/reflnotype.olang
 2ed950295e2bb330 5bf0408299464884 checks/cases/reflofargs.olang
 4b64c8b779af8089 0d89c410f2c6ceb3 checks/cases/reflofttype.olang
 1edb5a12d21a76cd d827f3d249f3259a checks/cases/refltrylist.olang
@@ -1950,7 +1957,7 @@ efe336c8764b3874 aafa63e2e9dc5e5a checks/fixtures/vechandle/handle.olang
 0aacc8069c40ce81 964bf5519d8c91df compiler/bindgen.olang
 077eb1e824d798b0 6095782367519737 compiler/build.olang
 d31e1ac25d3903b0 aafdaa4ada8b4216 compiler/cabi.olang
-56d25a34837c6c6b d752af8bbf769bec compiler/check.olang
+c5036e3de0e549ed 7e77a77d4c27dbef compiler/check.olang
 cbc3a2177fe2fb78 0b3c3bd0de6c1dd9 compiler/cond.olang
 b0af2e84da3b68dd 5c96d8651e222cb2 compiler/definit.olang
 eef9dd6aaf47f2de 5b518bad631439fd compiler/diag.olang
@@ -1963,7 +1970,7 @@ e101aa37dd2640e5 28f7ebe214fa675f compiler/effects.olang
 a83aaaef891830b5 26106013158786ed compiler/fix.olang
 b48efcf1d1f29453 b0d50ab0c2d316fd compiler/fmt.olang
 6c27ddd3a3333276 d01aa0c1cd35aa74 compiler/free.olang
-55737f8d78f80e99 6986db20b800a752 compiler/generic.olang
+5ad1e444d83f4094 33c66cc6e282c26e compiler/generic.olang
 b734275a3e54bbb5 f58d54dd9df36cd3 compiler/interp.olang
 39cc3b414b0ce585 d044ebf3098e3c04 compiler/listing.olang
 64775bb322e353e8 1fc13cc3f919e33a compiler/load.olang
@@ -1971,7 +1978,7 @@ b734275a3e54bbb5 f58d54dd9df36cd3 compiler/interp.olang
 18452a1dbcd1168c 0d35f156cbf903e4 compiler/lsp.olang
 84e8f9a4af57a411 22416d707a32e4f1 compiler/mcp.olang
 2aefa4af728673a9 398fb5a23a1946c6 compiler/mir.olang
-d76f652210cbf35e 619fdeaedf60eb18 compiler/msgs.olang
+27388d23d25a8338 4e9a9190a5992565 compiler/msgs.olang
 bd3a1bcdcba8dc9c aa9a08952b270219 compiler/names.olang
 8c0a9826dc9e1602 83fa27aa3844b32e compiler/needs.olang
 295161ce66a4597a baca5e902ad43895 compiler/olang.olang
@@ -2028,6 +2035,8 @@ c275711ef7980489 40adc00e94c46521 compiler/views.olang
 1d5c7674df181be6 f46a01d8b96e1631 docs/refs-study/compiler/allrefs.olang
 08bdee5ba8c8df83 6802d2377428f42e docs/refs-study/compiler/baseref.olang
 834ea245788927ad 6bba3f9a4ee6a45a docs/refs-study/compiler/scanref.olang
+9d9115f807198813 74046a20c81b622d docs/refs-study/data/columns.olang
+487480c92e976a2d fab46e9f9df8244c docs/refs-study/data/columnslanes.olang
 1544d79467edb269 0ad0bf598313390c docs/refs-study/data/common.olang
 4719872add4c6c68 1953f891d84ca8b0 docs/refs-study/data/flat.olang
 14660f982c4d4716 9900953781a9ba75 docs/refs-study/data/ptrs.olang
@@ -2096,6 +2105,7 @@ f54351195bc8b856 48e1e0a421a2bece std/order.olang
 9129dea08b2e548d ebda96dbe9bee6cf std/pair.olang
 2cf2724133d3c0c3 d474bb8d5bf5d35e std/prelude/argument.olang
 b48d1d4af330939d d32af9e254fa2507 std/prelude/array.olang
+6d8c020b56f91c7d ee0eb55cbfa3c6f6 std/prelude/columns.olang
 7dd2a3dddcacf115 6cec84ba285311b5 std/prelude/complex.olang
 e0b087f8d8856973 395bc084f54bdb3d std/prelude/enums.olang
 9552199a3010f618 15edf11d741f835b std/prelude/f8.olang
@@ -2107,6 +2117,7 @@ c8285ddbf1cbb114 d51724c5d1eed978 std/prelude/float.olang
 b281768945e7440c a65d81a0e8f4a6a3 std/prelude/place.olang
 58a87f07ff6919f2 30a1bde190a33d38 std/prelude/reflect.olang
 94a5d11a449f46d0 710589f1549293af std/prelude/tests/array.olang
+137e88b585f87a74 db20c31793db0cce std/prelude/tests/columns.olang
 2e8e7e7860cdeecc 5a8d11a732fd3b04 std/prelude/tests/float.olang
 dae185bc62e9d8a9 fc4792018eae97fa std/prelude/tests/folds.olang
 61fd5fc8dbc18dad 45636ee59612751d std/prelude/tests/iterator.olang
