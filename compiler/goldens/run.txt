@@ -58,6 +58,21 @@
 | ok - references given are handed on, results built where they go
 | ok - a run-time array a generic was given is handed on
 | ok - the evaluator agrees
+=== test tests/builders.olang
+| status 0
+| ok - Color.Gray: makes three equal channels
+| ok - Color.FromHex: reads #rrggbb, failing on anything else
+| ok - a private builder is its module's
+| ok - a builder gives a reference, read back after an arena churn
+| ok - through an instance, bare and inferred, and one of an instance alone
+| ok - an enum's builder
+| ok - a builder is a value where nothing generic is left
+| ok - a trait requires a builder, and a generic calls it through its variable
+| ok - through the owner's variables
+| ok - another module's builders, through its alias
+| ok - reflection walks a type's builders
+| ok - the prelude's builders: T.Parse, F64.FromBits, String.FromC
+| ok - the evaluator bakes and decides what the run time computes
 === test tests/cimport.olang
 | status 0
 | ok - a header's integer, float and text macros are constants
@@ -67,6 +82,7 @@
 | ok - the C library: functions, a C string back, pointer arguments of any array
 | ok - a variadic call: each argument promoted as C promotes it
 | ok - a variadic call: integers of other widths promoted to the C type that holds them (X21, T4a)
+| ok - a packed record of bitfields is a packed struct, its bits C's (X18, X11a)
 === test tests/comptime.olang
 | status 0
 | ok - comptime gives constant data
@@ -109,12 +125,12 @@
 | ok - a holder declaring Copy is no unique type: each copy its own, ended by its own holder
 | ok - a constructor failing part way ends the fields it built, the last first
 | ok - seenBy: reads a join block's holder while its task runs, ended after the wait
-| ok - mkRef: ends a holder whose storage flowed out where that storage lives
+| ok - Res.mkRef: ends a holder whose storage flowed out where that storage lives
 | ok - handOver: ends a value handed on to a call that is never made
 | ok - guarded: ends what a failed requirement's call was given
-| ok - mkFresh: stores over a holder what a try gives
+| ok - Res.mkFresh: stores over a holder what a try gives
 | ok - deferredEnd: ends a held value by a deferred Destroy, and a holder given a new one after its Destroy
-| ok - wrapOn: hands its parameter on, so a declared Copy may call it
+| ok - Wrapped.wrapOn: hands its parameter on, so a declared Copy may call it
 | ok - gSome: runs its parameter's destructor where it does not hand it on
 | ok - Logged: builds through its field from its destructor, the instance made in an inner block
 | ok - heldTwo: holds a parameter's reference where the parameter's references live, ended at its end
@@ -126,10 +142,23 @@
 | ok - Named: a Vec of destructor values built in a loop reads its elements back after a churn
 | ok - getBox: a store over a holder's part through what a call gives ends the old value, once
 | ok - loopDestroyed: destroys a holder its loop's body declares, every turn
+| ok - a holder is ended before what it holds - stored, through a call, past deferred code, through a shelf, in a closure
 === test tests/embed.olang
 | status 0
 | ok - E38: embed gives the file's bytes, baked and decided while compiling, read at run time
 | ok - E38: an embed in a loop or a generic is its one instance's bytes each time
+=== test tests/errdata.olang
+| status 0
+| ok - a payload is read in the clause and where narrowing leaves one word
+| ok - error e raises the payload it holds
+| ok - a value kept outlives the clause and the scopes after it
+| ok - values compare and hash by word and payload
+| ok - a payload rides from a task to its join, the earliest-spawned failure's kept
+| ok - a loop raising and taking payloads stays flat
+| ok - an error raised by name carries what its raise names
+| ok - an error type's methods read what it carries
+| ok - a false requirement's ArgumentError carries the condition
+| ok - a payload is matched by position and by name
 === test tests/errsetparams.olang
 | status 0
 | ok - G1a: an error-set parameter takes what the callback fails with, nothing where it cannot fail
@@ -172,6 +201,15 @@
 | ok - longest: an array that may be null: null distinct from empty, read once narrowed
 | ok - sample: the evaluator agrees: baked while compiling as at run time
 | ok - zeros: an array that may be null, given no value, starts as null: baked while compiling as at run time
+=== test tests/fnrel.olang
+| status 0
+| ok - linked: keeps what a named function held in a local keeps
+| ok - added: keeps each turn's text a local lambda keeps
+| ok - made: keeps what a closure a call hands back keeps
+| ok - chosen: judges each function a conditional gives
+| ok - cursor: judges every version of a function-valued local
+| ok - adapted: keeps a closure an adapter held in a local keeps
+| ok - twice: keeps through a value a call through a value gives
 === test tests/fnvalues.olang
 | status 0
 | ok - a function handing back a view of its argument is a value
@@ -246,14 +284,14 @@
 | ok - T4a: one bit, seven bits and 24 bits wrap at their widths - baked, decided while compiling and run
 | ok - T4a: 63, 65 and 128 bits, past a word and to its double
 | ok - T4a: conversions between widths and to and from floats round once
-| ok - T4a: bit operations, Format, Abs, Min, Pow and ParseAs at the new widths
+| ok - T4a: bit operations, Format, Abs, Min, Pow and T.Parse at the new widths
 | ok - T4a: std/arith and Narrow fail where a new width cannot hold the result
 | ok - T4a: narrower widths flow into wider ones, and hashing agrees with ==
 | ok - E4a, L10: literals of up to 128 bits are computed exactly and adapt to a type wide enough
 | ok - T4a: Sqrt, PadStart and PadEnd at the new widths
 | ok - T4a: an array of a new width made in a function is read back after an arena churn, its lanes adding
 | ok - T4a: Pow at one bit wraps its 1 as I1 holds it
-| ok - L10a: ParseAs reads a prefixed literal of up to 128 bits
+| ok - L10a: T.Parse reads a prefixed literal of up to 128 bits
 === test tests/kept.olang
 | status 0
 | ok - everyTurn: keeps each turn's local, each its own
@@ -295,6 +333,25 @@
 | ok - constructors and methods take arguments by name
 | ok - a generic's, a reference's and an any's parameters by name
 | ok - arguments are evaluated in the order written
+=== test tests/nll.olang
+| status 0
+| ok - click: walks the parents to the button
+| ok - appendTail: appends at the tail a cursor found
+| ok - planAt: keeps an option from a parameter's array
+| ok - ops: keeps an element of a constant literal
+| ok - find: gives a version in a catch clause
+| ok - lastSeen: reads every version in deferred code
+| ok - captured: captures the version reaching the lambda
+| ok - afterLoop: reads after the loop what the last turn gave
+| ok - twoOfOne: builds through versions of one scope
+=== test tests/packed.olang
+| status 0
+| ok - Header: fields read and written by their bits alone, computed while compiling as at run time
+| ok - Header: a field's neighbours keep their bits when it is stored, signed fields keep their sign
+| ok - Header: a packed value held in a struct and an array, its fields written through them
+| ok - Header: reflection gives each field's bits
+| ok - Pub: json writes and reads a packed struct by its fields
+| ok - Header: an array field stored whole, and its copy's lanes
 === test tests/place.olang
 | status 0
 | ok - Place.Here is where it is written
@@ -325,10 +382,11 @@
 | ok - walk: is the value the evaluator baked
 | ok - peek: copies a by-value argument the same call also lends
 | ok - slowRead: gives each spawned task its own argument
-| ok - pinned: reads a returned local's storage where the result went
+| ok - Pt.pinned: reads a returned local's storage where the result went
 === test tests/reflect.olang
 | status 0
 | ok - a type's name, kind and layout are constants of each instance
+| ok - a type's Nullable says whether a value of it may be null
 | ok - a value's fields walked and read; an enum's case found by ==, its fields read where it is narrowed
 | ok - fields are places: written through a writable value
 | ok - a value built through its constructor, defaults taken where written
@@ -1147,7 +1205,8 @@
 | ok - a Vec of unique values: Push takes fresh ones, x[i] is the element in place, a walk names each where it is
 | ok - a holder of a unique part is unique: its copies are references too, its payload bound in place
 | ok - a Map of unique values: Put takes fresh ones, Take hands one back
-| ok - aliasBefore: hands a parameter on after the names made from it are done
+| ok - Slot.aliasBefore: hands a parameter on after the names made from it are done
+| ok - a unique value owning storage handed on by value is moved - into a Map, a Vec, a constructor's field
 === test tests/unreachable.olang
 | status 0
 | ok - unreachable gives way to the values beside it
@@ -1170,6 +1229,14 @@
 | ok - D8g, T22: a function fits a function type taking the array, or the arguments
 | ok - D8g: arguments evaluated in the order written
 | ok - D8g: a trait's variadic method, through a constraint and an any
+=== test tests/viewplace.olang
+| status 0
+| ok - firsts: keeps the first character of each turn's text
+| ok - head: hands back a view of what it builds
+| ok - setRow: keeps a slice of a temporary in a parameter's field
+| ok - pieces: keeps a generator's views of a local it made
+| ok - stash: keeps a closure over a turn's local
+| ok - partAfter: keeps a part of an instance past its turn
 === test tests/worker.olang
 | status 0
 | ok - Classify accepts values inside the range
@@ -1205,7 +1272,7 @@
 | ok - BitSet: holds the cases of an enum
 | ok - BitSet: set algebra by operators
 | ok - BitSet: a walk gives the cases in declaration order
-| ok - FromBits: round trips Bits and fails past the last case
+| ok - BitSet.FromBits: round trips Bits and fails past the last case
 | ok - BitSet: flag words from raw values
 | ok - BitSet: its constructor refuses bits past the last case
 | ok - the compile-time evaluator computes a BitSet
@@ -1213,7 +1280,7 @@
 | status 0
 | ok - a token fires on Cancel, and not before
 | ok - a token with a deadline fires by itself
-| ok - After: a deadline fires on the virtual clock
+| ok - Token.After: a deadline fires on the virtual clock
 | ok - a busy task stops when the token is cancelled
 | ok - a deferred Cancel lets a join block's tasks stop, on an error too
 === test std/chan.olang
@@ -1229,10 +1296,10 @@
 | ok - for v in c receives until the channel is closed and drained
 | ok - Close wakes every task waiting to receive, and RecvUntil sees it before its deadline
 | ok - a channel's capacity is an I64
-| ok - Select: takes the first case ready, in order
-| ok - Select: sends through SendOf, a rendezvous handing its value to a waiting receiver
-| ok - Select: times out on time.After, on the virtual clock in no time
-| ok - Select: fails with CLOSED once a channel it receives from is closed and drained
+| ok - Ready.Select: takes the first case ready, in order
+| ok - Ready.Select: sends through SendOf, a rendezvous handing its value to a waiting receiver
+| ok - Ready.Select: times out on time.After, on the virtual clock in no time
+| ok - Ready.Select: fails with CLOSED once a channel it receives from is closed and drained
 === test std/crc32.olang
 | status 0
 | ok - the CRC-32 check value, and pieces
@@ -1245,6 +1312,7 @@
 | ok - Record quotes what must be, and Rows reads it back
 | ok - Rows read while compiling as at run time
 | ok - Decode: records read as structs by their header's names, written back by Encode
+| ok - Error: an error carries where the text went wrong
 === test std/deque.olang
 | status 0
 | ok - a Deque is pushed and popped at both ends
@@ -1272,6 +1340,7 @@
 | ok - what the declarations do not allow fails, with a message
 | ok - Flags.Read: a struct's parameters are flags, its attributes their help
 | ok - the help text lists every flag
+| ok - Error: an error names the flag and what it was given
 === test std/fuzz.olang
 | status 0
 | ok - Slug: a test's name as a directory names it
@@ -1375,6 +1444,7 @@
 === test std/net.olang
 | status 0
 | ok - addresses are read and written as text
+| ok - Error: an address refused carries the text, a name not found the name
 | ok - names are resolved through the C library, numbers read as they are
 | ok - a TCP connection over loopback carries bytes both ways
 | ok - dialing where nothing listens is refused, and a taken address is in use
@@ -1452,6 +1522,7 @@
 | ok - matching takes linear time where backtracking takes exponential
 | ok - the DFAs find the matches the Pike VM finds
 | ok - a match is computed while compiling as at run time
+| ok - SyntaxError: an error carries the offset where the pattern went wrong
 === test std/set.olang
 | status 0
 | ok - a Set holds each value once
@@ -1484,6 +1555,7 @@
 | ok - Sleep waits at least what it is given
 | ok - dates are written as RFC 3339 and read back
 | ok - Parse refuses what is not a date
+| ok - Error: Syntax carries the offset where the text stopped being a date
 === test std/utf8.olang
 | status 0
 | ok - code points are written and read back
@@ -1500,6 +1572,14 @@
 | ok - Chunks cuts an array into consecutive pieces, the last holding what is left
 | ok - a size computed while running is a ChunkSize, refused below one
 | ok - tasks each write their own piece of an array, read back after the join
+=== test std/prelude/tests/columns.olang
+| status 0
+| ok - Columns: rows are read and written through the columns
+| ok - Columns: zero rows take the record's defaults, and a copy is a table of its own
+| ok - Columns.Sort: moves every column together, stably
+| ok - ColumnVec.Push: grows every column together
+| ok - ColumnVec: evaluated while compiling as at run time
+| ok - Columns: reflection sees a struct of columns, its rows' type its Element
 === test std/prelude/tests/float.olang
 | status 0
 | ok - Fixed rounds to n digits as %.*f does, while compiling as at run time
@@ -1754,10 +1834,24 @@
 | 5abc 9
 === run c2swap.olang
 | status 0
+=== run c3secondname.olang
+| status 0
+| 4 5 8 12 13
+=== run c4genwalkkept.olang
+| status 0
+| Vec<String&>["a", "b", "c", "a", "b", "c"] 100
+=== run c4genwalkkept2.olang
+| status 0
+| Vec<String&>["0-seen", "0-seen", "1-seen", "0-seen", "1-seen", "2-seen", "0-seen", "0-seen", "1-seen", "0-seen", "1-seen", "2-seen"] 100
+=== run c6selectjoin.olang
+| status 0
 === run c9bkeepsnothing.olang
 | status 0
 === run callcond.olang
 | status 0
+=== run callvaluekeepsblock.olang
+| status 0
+| 11 0
 === run chunkpool.olang
 | status 0
 === run columnsrun.olang
@@ -1802,6 +1896,9 @@
 | status 0
 === run d16cescape.olang
 | status 0
+=== run d16cstore.olang
+| status 0
+| 42
 === run d16dlambdaown.olang
 | status 0
 === run d16dtwoscopes.olang
@@ -1812,8 +1909,26 @@
 | status 0
 === run d18argoutlived.olang
 | status 0
+=== run d18cheldfield.olang
+| status 0
+| Vec<String&>["label 0", "label 1"]
+=== run d18cheldlocal.olang
+| status 0
+| Vec<String&>["label 0", "label 1"]
+=== run d18cinputoutlived.olang
+| status 0
+| Vec<String&>["a", "b"]
 === run d18cotherparam.olang
 | status 0
+=== run d18cviewkept.olang
+| status 0
+| Vec<String&>["label 0", "label 1", "label 2"]
+=== run d18cyieldframe.olang
+| status 0
+| 123
+=== run d18cyieldlocal.olang
+| status 0
+| Vec<String&>["a", "!"]
 === run d18cyieldturn.olang
 | status 0
 === run d18framekept.olang
@@ -1873,6 +1988,9 @@
 | status 0
 === run e13cparens.olang
 | status 0
+=== run e16atrydefaultslice.olang
+| status 0
+| v 11 22 t 15008
 === run e16dgetbang.olang
 | status 0
 === run e31bcallargs.olang
@@ -1991,6 +2109,9 @@
 | 0
 === run o10ccycle.olang
 | status 0
+=== run o10celementstash.olang
+| status 0
+| 2
 === run o10cnote.olang
 | status 0
 === run o10cnotedecl.olang
@@ -2099,6 +2220,8 @@
 | status 0
 === run o23abuild.olang
 | status 0
+=== run o23adepth.olang
+| status 0
 === run o23awrite.olang
 | status 0
 === run o23paramfield.olang
@@ -2111,6 +2234,9 @@
 | status 0
 === run o25derived.olang
 | status 0
+=== run o25enote.olang
+| status 0
+| Vec<String&>["4", "x"]
 === run o25harrayreturn.olang
 | status 0
 === run o25harrayslice.olang
@@ -2168,6 +2294,9 @@
 === run o26aviewflow.olang
 | status 0
 | 3 2 4
+=== run o27genborrow.olang
+| status 0
+| Vec<String&>["0", "a", "b", "1", "a", "b", "2", "a", "b", "3", "a", "b", "4", "a", "b"] Vec<String&>["0", "c", "d", "1", "c", "d", "2", "c", "d"] 50
 === run o4bblock.olang
 | status 0
 === run o4bbyvaluebuild.olang
@@ -2179,6 +2308,9 @@
 | status 0
 === run o4bvalueparamgeneric.olang
 | status 0
+=== run o8dviewctorarray.olang
+| status 0
+| 2015890 1999-name 1999
 === run opfallible.olang
 | status 0
 === run p1gtargetscope.olang
@@ -2201,6 +2333,9 @@
 | status 0
 === run p2transientinner.olang
 | status 0
+=== run p2viewtask.olang
+| status 0
+| Array<String&>["0", "1", "2", "3"]
 === run parkedpool.olang
 | status 0
 === run preludekv.olang
@@ -2236,6 +2371,8 @@
 === run r3bnearnamed.olang
 | status 0
 | 1 2
+=== run r9adefaultinner.olang
+| status 0
 === run reflfnoneself.olang
 | status 0
 === run renderoperandhere.olang
@@ -2353,6 +2490,18 @@
 | status 0
 === run rv9parallelglobal.olang
 | status 0
+=== run rv9slicetemp.olang
+| status 0
+| 8
+=== run rv9slicetempas.olang
+| status 0
+| 8
+=== run rv9slicetempctor.olang
+| status 0
+| 8
+=== run rv9slicetempview.olang
+| status 0
+| 7
 === run s12bleaves.olang
 | status 0
 === run s12bstmtline.olang
@@ -2388,6 +2537,11 @@
 | 1-text
 | 2-text
 | 3-text
+=== run s5capturestruct.olang
+| status 0
+| 6
+| 6
+| 6
 === run s5clonepush.olang
 | status 0
 | 0-text
@@ -2473,6 +2627,9 @@
 | 4
 === run strcondtext.olang
 | status 0
+=== run strcursornewnode.olang
+| status 0
+| 7
 === run strderivedcallback.olang
 | status 0
 | b3
@@ -2490,6 +2647,13 @@
 | 2000000
 === run strlambdahere.olang
 | status 0
+=== run stro20condstore.olang
+| status 0
+| 42
+| 43
+| 44
+| 45
+| 46
 === run strrenderchanges.olang
 | status 0
 === run strshape.olang
@@ -2499,6 +2663,9 @@
 | b2b5
 === run strwalks.olang
 | status 0
+=== run t13bhandonlambda.olang
+| status 0
+| 585 30
 === run t17ccaselocallifted.olang
 | status 0
 | 110 0
@@ -2520,6 +2687,24 @@
 | null
 === run t21bconvert.olang
 | status 0
+=== run t22acursorfn.olang
+| status 0
+| 10 12
+=== run t22alocal.olang
+| status 0
+| 5 true
+=== run t22aresult.olang
+| status 0
+| 0!,1!,2!,3! true
+=== run t22avalueexact.olang
+| status 0
+| Vec<String&>["0", "1", "2"]
+=== run t22aviewkept.olang
+| status 0
+| 2
+=== run t22borrowedresult.olang
+| status 0
+| 42
 === run t25ccopydecl.olang
 | status 0
 | 2
@@ -2527,8 +2712,14 @@
 | status 0
 === run t25ccopyreturn.olang
 | status 0
+=== run t25delement.olang
+| status 0
+| 5c * 
 === run t27anonsame.olang
 | status 0
+=== run t29aconvlifetime.olang
+| status 0
+| 105
 === run t29dradixcall.olang
 | status 0
 === run t29etrait.olang

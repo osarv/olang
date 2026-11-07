@@ -363,19 +363,13 @@ becomedefer.olang:7:5: error[S21]: 'become' leaves the function at once, so not 
       |     ^~~~~~
 compilation failed with 1 error
 === becomedtor.olang
-becomedtor.olang:12:5: error[S21]: 'become' closes this function's scopes before the call, and it holds a value of Res&, which may hold an instance whose destructor would run then, before the call - write 'return' and the call
-   12 |     become f(n - 1)
+becomedtor.olang:13:5: error[S21]: 'become' closes this function's scopes before the call, and it holds a value of Res&, which may hold an instance whose destructor would run then, before the call - write 'return' and the call
+   13 |     become f(n - 1)
       |     ^~~~~~
-becomedtor.olang:10:5: note: here
-   10 |     r := Res(n)
+becomedtor.olang:11:5: note: here
+   11 |     r := Res(n)
       |     ^
-becomedtor.olang:12:12: error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then, before the call - write 'return' and the call
-   12 |     become f(n - 1)
-      |            ^
-becomedtor.olang:10:10: note: here
-   10 |     r := Res(n)
-      |          ^~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === becomedtorpayload.olang
 becomedtorpayload.olang:17:16: error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then, before the call - write 'return' and the call
    17 |         become f(n - 1)
@@ -459,25 +453,45 @@ $ROOT/std/bitset.olang:18:38: note: the condition
       |                                      ^~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === bitsetnotenum.olang
-$ROOT/std/bitset.olang:29:19: error[S18c]: this assertion is false, evaluated while compiling: a BitSet is over an enum's cases
-   29 |     assert T.Kind == TypeKind.Enum, "a BitSet is over an enum's cases"
+bitsetnotenum.olang:10:10: error[S18c]: this assertion is false, evaluated while compiling: a BitSet is over an enum's cases
+   10 |     s := bitset.BitSet<P>.Empty()
+      |          ^~~~~~~~~~~~~~~~
+$ROOT/std/bitset.olang:30:19: note: in the standard library's code, here
+   30 |     assert T.Kind == TypeKind.Enum, "a BitSet is over an enum's cases"
       |                   ^~
 $ROOT/std/bitset.olang:19:5: note: instantiated here, with T = P
    19 |     check<T>()
       |     ^~~~~~~~
 compilation failed with 1 error
 === bitsetpayload.olang
-$ROOT/std/bitset.olang:32:31: error[S18c]: this assertion is false, evaluated while compiling: a BitSet is over cases that carry no payload
-   32 |         assert c.Fields.Len() == 0, "a BitSet is over cases that carry no payload"
-      |                               ^~
+bitsetpayload.olang:11:10: error[S18c]: this assertion is false, evaluated while compiling: a BitSet is over cases that carry no payload
+   11 |     s := bitset.BitSet<Shape>.Empty()
+      |          ^~~~~~~~~~~~~~~~~~~~
+$ROOT/std/bitset.olang:32:36: note: in the standard library's code, here
+   32 |     assert T.Kind != TypeKind.Enum or comptime plain<T>(), "a BitSet is over cases that carry no payload"
+      |                                    ^~
+$ROOT/std/bitset.olang:19:5: note: instantiated here, with T = Shape
+   19 |     check<T>()
+      |     ^~~~~~~~
+compilation failed with 1 error
+=== bitsetpayloadlater.olang
+bitsetpayloadlater.olang:13:10: error[S18c]: this assertion is false, evaluated while compiling: a BitSet is over cases that carry no payload
+   13 |     s := bitset.BitSet<Shape>.Empty()
+      |          ^~~~~~~~~~~~~~~~~~~~
+$ROOT/std/bitset.olang:32:36: note: in the standard library's code, here
+   32 |     assert T.Kind != TypeKind.Enum or comptime plain<T>(), "a BitSet is over cases that carry no payload"
+      |                                    ^~
 $ROOT/std/bitset.olang:19:5: note: instantiated here, with T = Shape
    19 |     check<T>()
       |     ^~~~~~~~
 compilation failed with 1 error
 === bitsettoomany.olang
-$ROOT/std/bitset.olang:30:26: error[S18c]: this assertion is false, evaluated while compiling: a BitSet holds at most 64 cases
-   30 |     assert T.Cases.Len() <= 64, "a BitSet holds at most 64 cases"
-      |                          ^~
+bitsettoomany.olang:74:10: error[S18c]: this assertion is false, evaluated while compiling: a BitSet holds at most 64 cases
+   74 |     s := bitset.BitSet<Big>.Empty()
+      |          ^~~~~~~~~~~~~~~~~~
+$ROOT/std/bitset.olang:31:36: note: in the standard library's code, here
+   31 |     assert T.Kind != TypeKind.Enum or T.Cases.Len() <= 64, "a BitSet holds at most 64 cases"
+      |                                    ^~
 $ROOT/std/bitset.olang:19:5: note: instantiated here, with T = Big
    19 |     check<T>()
       |     ^~~~~~~~
@@ -1061,11 +1075,6 @@ d16cshadow.olang:7:19: error: 'x' is already declared here
     7 |     n := apply(fn(x) { return x }, 2)
       |                   ^
 compilation failed with 1 error
-=== d16cstore.olang
-d16cstore.olang:7:9: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Copy()')
-    7 |     b.f = fn(n) { return n + p.x }
-      |         ^
-compilation failed with 1 error
 === d16dcomposeshort.olang
 d16dcomposeshort.olang:19:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    19 |         keep = compose(id, g)
@@ -1146,81 +1155,15 @@ $ROOT/std/prelude/iterator.olang:35:34: note: 'Next' is declared here
    35 | fn (g mut ViewGenerator<T ? E>&) Next() T& ? E, Exhausted { return try g.next() }
       |                                  ^~~~
 compilation failed with 1 error
-=== d18cheldfield.olang
-d18cheldfield.olang:18:29: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   18 |         for w in h.g { kept.Push(w) }
-      |                             ^~~~
-$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
-   68 |     v.data[v.n].occupy(x)
-      |     ^
-d18cheldfield.olang:18:34: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
-   18 |         for w in h.g { kept.Push(w) }
-      |                                  ^
-d18cheldfield.olang:19:29: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   19 |         for w in h.g { kept.Push(w) }
-      |                             ^~~~
-$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
-   68 |     v.data[v.n].occupy(x)
-      |     ^
-d18cheldfield.olang:19:34: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
-   19 |         for w in h.g { kept.Push(w) }
-      |                                  ^
-compilation failed with 2 errors
-=== d18cheldlocal.olang
-d18cheldlocal.olang:14:27: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   14 |         for w in g { kept.Push(w) }
-      |                           ^~~~
-$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
-   68 |     v.data[v.n].occupy(x)
-      |     ^
-d18cheldlocal.olang:14:32: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
-   14 |         for w in g { kept.Push(w) }
-      |                                ^
-d18cheldlocal.olang:15:27: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   15 |         for w in g { kept.Push(w) }
-      |                           ^~~~
-$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
-   68 |     v.data[v.n].occupy(x)
-      |     ^
-d18cheldlocal.olang:15:32: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
-   15 |         for w in g { kept.Push(w) }
-      |                                ^
-compilation failed with 2 errors
-=== d18cinputoutlived.olang
-d18cinputoutlived.olang:18:34: error[O27]: this keeps a view of 't', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Copy()'
-   18 |         for w in words(t) { kept.Push(w) }
-      |                                  ^~~~
-compilation failed with 1 error
 === d18contract.olang
 d18contract.olang:3:17: error[D18, D17]: evens has conditions, so its first Next fails with ArgumentError where one is false - add it to its result's errors, 'Iterator<T ? ArgumentError>'
     3 | fn evens(n I64) [n >= 0] Iterator<I64> {
       |                 ^~~~~~~~
 compilation failed with 1 error
-=== d18cviewkept.olang
-d18cviewkept.olang:13:31: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   13 |     for w in labels(3) { kept.Push(w) }
-      |                               ^~~~
-$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
-   68 |     v.data[v.n].occupy(x)
-      |     ^
-d18cviewkept.olang:13:36: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
-   13 |     for w in labels(3) { kept.Push(w) }
-      |                                    ^
-compilation failed with 1 error
 === d18cviewwrite.olang
 d18cviewwrite.olang:13:27: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
    13 |     for x in nodes(3) { x.v = 4 }
       |                           ^
-compilation failed with 1 error
-=== d18cyieldframe.olang
-d18cyieldframe.olang:7:15: error[O27]: this returns a view of 'buf', which this function builds - return the value (a result written without '&' copies it), or a copy: '$x'
-    7 |         yield buf[0:1]
-      |               ^~~
-compilation failed with 1 error
-=== d18cyieldlocal.olang
-d18cyieldlocal.olang:16:12: error[O27]: this returns a view of 'l', which this function builds - return the value (a result written without '&' copies it), or a copy: '$x'
-   16 |     yield l[0:1]
-      |            ^
 compilation failed with 1 error
 === d18errors.olang
 d18errors.olang:5:4: error[D18]: a generator fails as its Next does - write its errors in its result: 'Iterator<I64 ? E>'
@@ -1666,6 +1609,11 @@ e11bcalledtext.olang:7:17: error[E11b]: '(' after a piece of text calls it - to 
     7 |     x := $n "," ("stop" if c else $n)
       |                 ^
 compilation failed with 1 error
+=== e11bcharpad.olang
+e11bcharpad.olang:7:20: error[E11b]: a join piece is a text literal or a '$' rendering - write '$($'c').PadStart(3)'
+    7 |     io.Println("x" 'c'.PadStart(3) "y")!
+      |                    ^~~
+compilation failed with 1 error
 === e11bjoincall.olang
 e11bjoincall.olang:6:54: error[E11b]: '(' after a piece of text calls it - to join the value inside, write '$(...)'
     6 | fn a(tried Bool, op String&) String { return "(" $op (" try" if tried else "") }
@@ -1743,17 +1691,6 @@ compilation failed with 1 error
 e15atryonlychecks.olang:3:37: error[R8]: nothing here can fail - write it without 'try'
     3 | fn add(a I32, b I32) I32 ? { return try a + b }
       |                                     ^~~
-compilation failed with 1 error
-=== e16atrydefaultslice.olang
-e16atrydefaultslice.olang:11:52: error[O10d]: this value lives in this function's own scope, which closes first
-   11 | fn view(a Array<Array<I64>>&) Array<I64>& { return (try a.Get(0) catch default Array<I64>(2))[0:2] }
-      |                                                    ^
-e16atrydefaultslice.olang:22:10: note: instantiated here, with a[0].Len() = 2
-   22 |     v := view(a)
-      |          ^~~~
-e16atrydefaultslice.olang:11:94: note: this borrows a value made here, which lives only in this block - keep a copy of what the slice shows ('$x', 'x.Copy()')
-   11 | fn view(a Array<Array<I64>>&) Array<I64>& { return (try a.Get(0) catch default Array<I64>(2))[0:2] }
-      |                                                                                              ^
 compilation failed with 1 error
 === e16constnotry.olang
 e16constnotry.olang:9:12: error[E16]: index 5 is outside the array's 2 elements
@@ -2999,6 +2936,14 @@ k1matchnull.olang:10:5: note: here
    10 |     match e {
       |     ^~~~~~~~~
 compilation failed with 1 error
+=== k2abortsread.olang
+k2abortsread.olang:9:1: error[K2]: this global's initializer aborts the program, evaluated while compiling: an assertion in it fails, which aborts the program
+    9 | X := mk(5)
+      | ^
+k2abortsread.olang:6:5: note: here
+    6 |     assert n < 2, "too big"
+      |     ^~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
 === l10bdouble.olang
 l10bdouble.olang:4:11: error[L10b]: '_' in a number must stand between two digits
     4 |     x := 1__000
@@ -3634,11 +3579,6 @@ numtraitsqrtint.olang:7:10: error[G19, T31a]: I64 does not satisfy the constrain
     7 |     r := nsRoot(n)
       |          ^~~~~~
 compilation failed with 1 error
-=== o10celementstash.olang
-o10celementstash.olang:14:9: error[O27]: this keeps a view of 'g', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Copy()'
-   14 |         stash(g, h)
-      |         ^~~~~
-compilation failed with 1 error
 === o10cloopcopy.olang
 o10cloopcopy.olang:27:22: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    27 |     for p in parts { merge(sum, p) }
@@ -3777,7 +3717,7 @@ compilation failed with 3 errors
 o17permute5.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    25 |     each(recs, fn(x mut Rec&) { x.name = s })
       |          ^~~~
-o17permute5.olang:25:16: error[T22a]: this lambda ties where what it is given lives to what it keeps or gives back - its captures included - which a call through a function value cannot check
+o17permute5.olang:25:16: error[T22a]: this lambda ties where what it is given lives to what it keeps or gives back - its captures included - and this argument holds only what its written function type says of every call - hold it in a local and call it there
    25 |     each(recs, fn(x mut Rec&) { x.name = s })
       |                ^~
 compilation failed with 2 errors
@@ -3895,14 +3835,6 @@ o1blambdaglobal.olang:14:30: error[O1b]: a global holds only what lives as long 
    14 |         case Box.Has(n) { GF = fn() { return n.v } }
       |                              ^
 compilation failed with 1 error
-=== o23adepth.olang
-o23adepth.olang:22:13: error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
-   22 |     assert $keep != ""
-      |             ^~~~
-o23adepth.olang:19:9: note: 'keep' is given a value here
-   19 |         keep = v.n
-      |         ^~~~~~~~~~
-compilation failed with 1 error
 === o23aliasmethod.olang
 o23aliasmethod.olang:17:16: error[O23, O11]: this stores into a field whose binding is not known through this path - store through a variable holding the instance
    17 |         arr[0].Set(x)
@@ -3912,17 +3844,12 @@ o23aliasmethod.olang:9:33: note: the callee requires it because of this statemen
       |                                 ^
 compilation failed with 1 error
 === o23aliaswrite.olang
-o23aliaswrite.olang:22:13: error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
-   22 |     assert $keep != ""
+o23aliaswrite.olang:24:13: error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
+   24 |     assert $keep != ""
       |             ^~~~
-o23aliaswrite.olang:20:9: note: 'keep' is given a value here
-   20 |         keep = c.at
+o23aliaswrite.olang:22:9: note: 'keep' is given a value here
+   22 |         keep = c.at
       |         ^~~~~~~~~~~
-compilation failed with 1 error
-=== o25enote.olang
-o25enote.olang:19:5: error[O27]: this keeps a view of 'text', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Copy()'
-   19 |     put(st, text[:1], text[1:])
-      |     ^~~
 compilation failed with 1 error
 === o25gfieldbinding.olang
 o25gfieldbinding.olang:17:15: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
@@ -3937,14 +3864,16 @@ o26own.olang:7:6: note: 'n' is the call's own copy of its argument - take it by 
     7 | fn f(n N) N& {
       |      ^
 compilation failed with 1 error
-=== o27genborrow.olang
-o27genborrow.olang:22:33: error[O27]: this keeps a view of 't', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Copy()'
-   22 |         for w in words(t) { out.Push(w) }
-      |                                 ^~~~
-o27genborrow.olang:28:25: error[O27]: this keeps a view of 'u', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Copy()'
-   28 |         for w in it { g.Push(w) }
-      |                         ^~~~
-compilation failed with 2 errors
+=== o27destructorgen.olang
+o27destructorgen.olang:12:21: error[O27, O15]: this keeps a view of 'f', whose destructor runs when its block ends - its storage is not kept longer for a view: keep a copy of what it shows, '$x' or 'x.Copy()'
+   12 |         yield f.name[0:1]
+      |                     ^
+compilation failed with 1 error
+=== o27destructorview.olang
+o27destructorview.olang:12:14: error[O27, O15]: this keeps a view of 'f', whose destructor runs when its block ends - its storage is not kept longer for a view: keep a copy of what it shows, '$x' or 'x.Copy()'
+   12 |         keep.Push(f.name[0:1])
+      |              ^~~~
+compilation failed with 1 error
 === oparity.olang
 oparity.olang:9:15: error[E31]: V's Plus takes 2 parameters besides its receiver - an ordinary method, not the one '+' calls, which takes one
     9 |     t := V(1) + V(2)
@@ -3974,7 +3903,10 @@ opsetat.olang:9:10: error[E31]: R& declares At but not SetAt, which x[i] = v cal
       |          ^
 compilation failed with 1 error
 === orderarrayfield.olang
-$ROOT/std/order.olang:89:12: error[S18c]: this assertion is false, evaluated while compiling: field Cells (Array<I64>) has no order - ByFields compares numbers, Bool, Char, a type with Less, and structs and enums by their fields
+orderarrayfield.olang:12:22: error[S18c]: this assertion is false, evaluated while compiling: field Cells (Array<I64>) has no order - ByFields compares numbers, Bool, Char, a type with Less, and structs and enums by their fields
+   12 |     assert not order.ByFields<Row>(a, b)
+      |                      ^~~~~~~~
+$ROOT/std/order.olang:89:12: note: in the standard library's code, here
    89 |     assert false, "field " $f.Name " (" $V.Name ") has no order - ByFields compares nu...
       |            ^~~~~
 $ROOT/std/order.olang:81:17: note: instantiated here, with F = FieldInfo<Row, 0, 1>, V = Array<I64>
@@ -3982,19 +3914,16 @@ $ROOT/std/order.olang:81:17: note: instantiated here, with F = FieldInfo<Row, 0,
       |                 ^~~~~~~~~~~~
 compilation failed with 1 error
 === ordernotstruct.olang
-ordernotstruct.olang:6:12: error[S18c]: this assertion aborts the program, evaluated while compiling: an assertion in it fails, which aborts the program
+ordernotstruct.olang:6:22: error[S18c]: this assertion is false, evaluated while compiling: ByFields orders structs and enums, and this type is neither
     6 |     assert not order.ByFields<I64>(1, 2)
-      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-$ROOT/std/order.olang:20:9: note: here
-   20 |         assert false, "ByFields orders structs and enums, and this type is neither"
-      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-$ROOT/std/order.olang:20:16: error[S18c]: this assertion is false, evaluated while compiling: ByFields orders structs and enums, and this type is neither
+      |                      ^~~~~~~~
+$ROOT/std/order.olang:20:16: note: in the standard library's code, here
    20 |         assert false, "ByFields orders structs and enums, and this type is neither"
       |                ^~~~~
 ordernotstruct.olang:6:22: note: instantiated here, with T = I64
     6 |     assert not order.ByFields<I64>(1, 2)
       |                      ^~~~~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === overridesig.olang
 overridesig.olang:11:12: error[M19e]: Twice does not have the signature of the default it overrides - match it, or choose another name
    11 | fn (q Sq&) Twice(k I32) I32 { return k }
@@ -4607,7 +4536,7 @@ reflnolength.olang:9:24: error[G32]: Point has no Length - only an array whose l
       |                        ^~~~~~
 compilation failed with 1 error
 === reflnomember.olang
-reflnomember.olang:9:24: error[G32]: Point has no reflected member 'Width' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Size and Align
+reflnomember.olang:9:24: error[G32]: Point has no reflected member 'Width' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Nullable, Size and Align
     9 | fn main() { n := Point.Width }
       |                        ^~~~~
 compilation failed with 1 error
@@ -4637,7 +4566,7 @@ refltrylist.olang:10:5: error[G33]: a list known while compiling is walked with 
       |     ^~~
 compilation failed with 1 error
 === refltypenotvalue.olang
-refltypenotvalue.olang:9:18: error[G38]: 'Point.Fields[0].Type' is a type, not a value - write it where a type goes, as 'x Point.Fields[0].Type = ...'
+refltypenotvalue.olang:9:18: error[G38]: 'Point.Fields[0].Type' is a type, not a value - write it where a type goes: a declaration ('x Point.Fields[0].Type = ...'), a type argument or a match's subject
     9 | fn main() { t := Point.Fields[0].Type }
       |                  ^~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
@@ -4793,38 +4722,6 @@ rv5matchkeep.olang:21:21: error[O25i]: this reads 'keep', which an assignment ma
 rv5matchkeep.olang:17:39: note: 'keep' is given a value here
    17 |             case E.A(y) { if i == 0 { keep = y } }
       |                                       ^~~~~~~~
-compilation failed with 1 error
-=== rv9slicetemp.olang
-rv9slicetemp.olang:18:9: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Copy()')
-   18 |     h.r = Big.mk(n).a[0:2]
-      |         ^
-rv9slicetemp.olang:18:22: note: this borrows a value made here, which lives only in this block - keep a copy of what the slice shows ('$x', 'x.Copy()')
-   18 |     h.r = Big.mk(n).a[0:2]
-      |                      ^
-compilation failed with 1 error
-=== rv9slicetempas.olang
-rv9slicetempas.olang:22:9: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Copy()')
-   22 |     h.r = (E.mkE(n) as E.C)!.a[0:2]
-      |         ^
-rv9slicetempas.olang:22:31: note: this borrows a value made here, which lives only in this block - keep a copy of what the slice shows ('$x', 'x.Copy()')
-   22 |     h.r = (E.mkE(n) as E.C)!.a[0:2]
-      |                               ^
-compilation failed with 1 error
-=== rv9slicetempctor.olang
-rv9slicetempctor.olang:12:21: error[O10]: this reference lives in a scope that may not outlive where it is put
-   12 |     r Array<I64>& = Big(n).a[0:2]
-      |                     ^~~
-rv9slicetempctor.olang:12:29: note: this borrows a value made here, which lives only in this block - keep a copy of what the slice shows ('$x', 'x.Copy()')
-   12 |     r Array<I64>& = Big(n).a[0:2]
-      |                             ^
-compilation failed with 1 error
-=== rv9slicetempview.olang
-rv9slicetempview.olang:11:9: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Copy()')
-   11 |     h.r = Array<I64>(4, n)[0:4]
-      |         ^
-rv9slicetempview.olang:11:27: note: this borrows a value made here, which lives only in this block - keep a copy of what the slice shows ('$x', 'x.Copy()')
-   11 |     h.r = Array<I64>(4, n)[0:4]
-      |                           ^
 compilation failed with 1 error
 === s12bexhaustive.olang
 s12bexhaustive.olang:8:18: error[S13a]: case A of S is not covered - add it, or 'case _ { }'
@@ -5074,6 +4971,17 @@ s18cfalse.olang:6:21: error[S18c]: this assertion is false, evaluated while comp
     6 |     assert twice(k) == 9
       |                     ^~
 compilation failed with 1 error
+=== s18cinstancecall.olang
+s18cinstancecall.olang:12:12: error[S18c]: this assertion is false, evaluated while compiling: short
+   12 |     assert f(Array<I64>[1, 2, 3, 4]) == 1
+      |            ^
+s18cinstancecall.olang:8:20: note: here
+    8 |     assert a.Len() < 3, "short"
+      |                    ^
+s18cinstancecall.olang:12:12: note: instantiated here, with a.Len() = 4
+   12 |     assert f(Array<I64>[1, 2, 3, 4]) == 1
+      |            ^
+compilation failed with 1 error
 === s19break.olang
 s19break.olang:10:24: error[S19b]: 'break' may not leave deferred code - it runs while its block is left
    10 |             if t > 1 { break }
@@ -5209,14 +5117,6 @@ s5atnosetat.olang:15:6: error[E31b]: x[i] gives a copy of the element, which thi
 s5atnosetat.olang:7:25: note: the callee is no view of the element because of this statement
     7 | fn (a mut Acc&) Add() { a.N++ }
       |                         ^~~~~
-compilation failed with 1 error
-=== s5capturestruct.olang
-s5capturestruct.olang:15:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   15 |         fs.Push(fn() I64 { return x.Sensor.Len() })
-      |            ^~~~
-$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
-   68 |     v.data[v.n].occupy(x)
-      |     ^
 compilation failed with 1 error
 === s5e31bargs.olang
 s5e31bargs.olang:16:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -5652,11 +5552,6 @@ stro17captures.olang:40:5: error[O17]: this value's references live where its ow
    40 |     b.grow3()
       |     ^
 compilation failed with 2 errors
-=== stro20condstore.olang
-stro20condstore.olang:47:13: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Copy()')
-   47 |         h.f = x
-      |             ^
-compilation failed with 1 error
 === strobligation.olang
 strobligation.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
    16 |     x Res& = Res(b.head)
@@ -5929,6 +5824,8 @@ t13blentandhanded.olang:18:38: error[T13b]: 's' is handed on here while the same
    18 | fn pass(s Res) Bool { return both(s, s) }
       |                                      ^
 compilation failed with 1 error
+=== t13bmovedvalue.olang
+built ./build/t13bmovedvalue
 === t13bneedscopy.olang
 t13bneedscopy.olang:12:10: error[T13b, G18]: twice needs a copy, and File is unique - its values are never copied: call twice with a reference ('File&') or with a type that copies
    12 |     v := twice(File(3))
@@ -6354,21 +6251,6 @@ t22areturncycle.olang:10:24: error[T22a]: 'link' ties where what it is given liv
    10 |     if n == 0 { return link }
       |                        ^~~~
 compilation failed with 1 error
-=== t22avalueexact.olang
-t22avalueexact.olang:12:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   12 |         w := g(v, t)
-      |              ^
-compilation failed with 1 error
-=== t22aviewkept.olang
-t22aviewkept.olang:11:13: error[O27]: this keeps a view of 't', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Copy()'
-   11 |         r = g(t)
-      |             ^
-compilation failed with 1 error
-=== t22borrowedresult.olang
-t22borrowedresult.olang:11:16: error[O27]: this keeps a view of 't', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Copy()'
-   11 |     out.next = f(t)
-      |                ^
-compilation failed with 1 error
 === t22callunsafe.olang
 t22callunsafe.olang:20:29: error[E12]: expected fn&(n P&) I64, found fn&(n mut P&) I64
    20 |     try io.Println($applyRo(w, p) " " $applyRo(R(3), p))
@@ -6582,11 +6464,6 @@ compilation failed with 1 error
 t29aconvglobal.olang:7:11: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     7 |   w(Bytes(G))
       |           ^
-compilation failed with 1 error
-=== t29aconvlifetime.olang
-t29aconvlifetime.olang:10:7: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Copy()')
-   10 |   h.s = Bytes(local)
-      |       ^
 compilation failed with 1 error
 === t29aconvreadonly.olang
 t29aconvreadonly.olang:6:11: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
@@ -7045,7 +6922,10 @@ tdnovalue.olang:8:32: error[R11]: this call returns no value, so there is nothin
       |                                ^~~~~
 compilation failed with 1 error
 === timevirtualbuild.olang
-$ROOT/std/time.olang:145:12: error[S18c]: this assertion is false, evaluated while compiling: time.Virtual runs only in a test build ('olang test') - a program's clock is the real one
+timevirtualbuild.olang:6:10: error[S18c]: this assertion is false, evaluated while compiling: time.Virtual runs only in a test build ('olang test') - a program's clock is the real one
+    6 |     time.Virtual(fn() { time.Sleep(time.Duration.Seconds(1)) })
+      |          ^~~~~~~
+$ROOT/std/time.olang:145:12: note: in the standard library's code, here
   145 |     assert TestBuild, "time.Virtual runs only in a test build ('olang test') - a program's clock is the real one"
       |            ^~~~~~~~~
 timevirtualbuild.olang:6:10: note: instantiated here, with E = nothing
@@ -7136,7 +7016,7 @@ typenoctor.olang:8:8: error: type 'Color' has no constructor - an enum's values 
       |        ^~~~~
 compilation failed with 1 error
 === typenotvalue.olang
-typenotvalue.olang:4:10: error: 'I64' is a type, not a value
+typenotvalue.olang:4:10: error[G38]: 'I64' is a type, not a value - write it where a type goes: a declaration ('x I64 = ...'), a type argument or a match's subject
     4 |     e := I64 > 3
       |          ^~~
 compilation failed with 1 error
@@ -7347,10 +7227,7 @@ compilation failed with 1 error
 vec95globalkeeps.olang:12:7: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
    12 |     G = l.toks.View()
       |       ^
-vec95globalkeeps.olang:12:16: error[O27]: this keeps a view of 'l', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Copy()'
-   12 |     G = l.toks.View()
-      |                ^~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === vec96taskkeeps.olang
 vec96taskkeeps.olang:15:16: error[M19g]: 'l.toks' may grow here while a task holds a view of it - give the task a copy: 'l.toks.ToArray()'
    15 |         l.toks.Push(4)

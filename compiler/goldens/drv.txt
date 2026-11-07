@@ -273,7 +273,7 @@
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -library           builds a shared library libNAME.so of the export fns, and its C header NAME.h (X14)
-|   -memory            reports the places that keep what they let go of until their scope closes, and why (B18)
+|   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
 | stderr:
 | status 0
 === olang help run
@@ -289,7 +289,7 @@
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
-|   -memory            reports the places that keep what they let go of until their scope closes, and why (B18)
+|   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
 | stderr:
 | status 0
 === olang help compile
@@ -321,9 +321,10 @@
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
-|   -memory            reports the places that keep what they let go of until their scope closes, and why (B18)
+|   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
 |   -fuzz NAME         fuzzes the one test NAME names (as test's words do) with libFuzzer, failing inputs saved beside the file (B19)
 |   -fuzztime SECONDS  with -fuzz: stops fuzzing after SECONDS (B19)
+|   -interpret         runs the tests by compile-time evaluation instead of building them, as interpret runs a program (B3e)
 | stderr:
 | status 0
 === olang help interpret
@@ -435,7 +436,7 @@
 |             | "bindgen" | "profile" | "api"
 | option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
 |             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir"
+|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-interpret"
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -458,6 +459,7 @@
 | | `-library` | build | §11 X14 |
 | | `-memory` | running a file, build, test | B18 |
 | | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
+| | `-interpret` | test | B3e |
 | | `-caps` | explain | B11c |
 | | `-asm`, `-ir` | explain | B11d |
 | 
