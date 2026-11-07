@@ -30,7 +30,7 @@
 | ok - E25, P1g: a spawn target set by a call given a scope argument
 | ok - P1g, T11b: a spawn target holding an array by value is stored as its assignment
 | ok - O26a, T7b: a callee sharing a parameter's scope keeps it, so the returned local is copied
-| ok - T29a: a conversion of a place to a type over String names its storage
+| ok - T29a: a conversion of a place to a type over characters names its storage
 | ok - T7b, K1: a returned conditional, match or catch default is copied while compiling as at run time
 | ok - E25, O25a: a local a scoped call declares lives where the argument puts it
 === test tests/arraypat.olang
@@ -72,6 +72,17 @@
 | ok - comptime gives constant data
 | ok - comptime for unrolls
 | ok - the evaluator agrees
+=== test tests/copy.olang
+| status 0
+| ok - an assignment copies by the declared Copy
+| ok - a by-value argument is the callee's own copy
+| ok - a value holding one by value copies it by its Copy
+| ok - a collection's elements are copied by their own Copy
+| ok - a Map's values are copied by their own Copy, its empty slots as they are
+| ok - Copy() written calls it, supplied or declared
+| ok - while compiling, as at run time
+| ok - parallel: copies each value of a parallel declaration and assignment
+| ok - captured: copies what a captured value owns, by its Copy
 === test tests/defaultbinds.olang
 | status 0
 | ok - a default left off gives its variable a type
@@ -90,6 +101,23 @@
 | ok - Array<T>(n) filled by the loop after it (D14d)
 | ok - a counted fill whose counter is assigned keeps its clear (D14d)
 | ok - definitely assigned references read back after the arena churns (D13d, O2)
+=== test tests/drops.olang
+| status 0
+| ok - a by-value holder's destructors run where it lets go, once each
+| ok - a value a call gave that nothing holds by value is held where the call lands (O16)
+| ok - a reference to a by-value variable is no holder
+| ok - a holder declaring Copy is no unique type: each copy its own, ended by its own holder
+| ok - a constructor failing part way ends the fields it built, the last first
+| ok - seenBy: reads a join block's holder while its task runs, ended after the wait
+| ok - mkRef: ends a holder whose storage flowed out where that storage lives
+| ok - handOver: ends a value handed on to a call that is never made
+| ok - guarded: ends what a failed requirement's call was given
+| ok - mkFresh: stores over a holder what a try gives
+| ok - deferredEnd: ends a held value by a deferred Destroy, and a holder given a new one after its Destroy
+| ok - wrapOn: hands its parameter on, so a declared Copy may call it
+| ok - gSome: runs its parameter's destructor where it does not hand it on
+| ok - Logged: builds through its field from its destructor, the instance made in an inner block
+| ok - heldTwo: holds a parameter's reference where the parameter's references live, ended at its end
 === test tests/embed.olang
 | status 0
 | ok - E38: embed gives the file's bytes, baked and decided while compiling, read at run time
@@ -186,6 +214,10 @@
 | status 0
 | ok - mid: a view of a mutable global's storage is copied where a call may write the global before it is read
 | ok - mid: a view of what an immutable global's writable reference names is copied where a call may write it
+=== test tests/immut.olang
+| status 0
+| ok - an immut value is read, held and replaced whole, never changed
+| ok - an Array<Char> lent as a writable Array<U8>& is written in place
 === test tests/inplace.olang
 | status 0
 | ok - letters: reads Split's pieces and walks over them where they stand
@@ -214,6 +246,17 @@
 | ok - T4a: an array of a new width made in a function is read back after an arena churn, its lanes adding
 | ok - T4a: Pow at one bit wraps its 1 as I1 holds it
 | ok - L10a: ParseAs reads a prefixed literal of up to 128 bits
+=== test tests/kept.olang
+| status 0
+| ok - everyTurn: keeps each turn's local, each its own
+| ok - someTurns: keeps the turns that keep it, each its own
+| ok - vecs: keeps a Vec by reference and sees what is pushed after
+| ok - arrays: keeps an array lent whole
+| ok - nested: keeps in an outer turn's block
+| ok - reassigned: keeps the local's storage, which a later assignment writes
+| ok - rows: moves a whole local into what outlives its turn
+| ok - texts: builds text where the result keeps it
+| ok - caseLocals: gives locals an enum case holding a parameter's reference
 === test tests/lanes.olang
 | status 0
 | ok - E39: lane operators - built, fused, totalled, compared and chosen - baked, decided while compiling and run
@@ -264,6 +307,9 @@
 | ok - copies made in a loop turn are each the element's
 | ok - moved: hands a local to a constructor at its last use, and copies it where it is used again
 | ok - walk: is the value the evaluator baked
+| ok - peek: copies a by-value argument the same call also lends
+| ok - slowRead: gives each spawned task its own argument
+| ok - pinned: reads a returned local's storage where the result went
 === test tests/reflect.olang
 | status 0
 | ok - a type's name, kind and layout are constants of each instance
@@ -1068,6 +1114,7 @@
 | ok - C9b: r.Destroy(); continue - and break - in the loop that declares r
 | ok - S6: text lent writably as an Array<Char> where it may be written
 | ok - E31b: a mutating call through x[i] is made on the element in place, as the evaluator makes it
+| ok - S4c, E31: a parallel assignment of elements stores through SetAt
 === test tests/textslot.olang
 | status 0
 | ok - a text local from a literal starts from the literal every turn, and is written as any array
@@ -1075,6 +1122,13 @@
 === test tests/topassert.olang
 | status 0
 | ok - a file whose top-level asserts hold builds and runs
+=== test tests/unique.olang
+| status 0
+| ok - a unique value is one place: copies are references, fresh values land by value
+| ok - a Vec of unique values: Push takes fresh ones, x[i] is the element in place, a walk names each where it is
+| ok - a holder of a unique part is unique: its copies are references too, its payload bound in place
+| ok - a Map of unique values: Put takes fresh ones, Take hands one back
+| ok - aliasBefore: hands a parameter on after the names made from it are done
 === test tests/unreachable.olang
 | status 0
 | ok - unreachable gives way to the values beside it
@@ -1289,9 +1343,9 @@
 | ok - Join puts a separator between the texts of a List
 | ok - reshaping a List, evaluated while compiling as at run time
 | ok - a List of mutable references, reordered and emptied
-| ok - a copy of a List value names the same list, and Clone makes another
-| ok - a List's Clone outlives the list it copies, across chunk boundaries
-| ok - Clone at every chunk boundary, evaluated while compiling as at run time
+| ok - a copy of a List value names the same list, and From makes another
+| ok - a List built from another outlives the list it copies, across chunk boundaries
+| ok - From at every chunk boundary, evaluated while compiling as at run time
 | ok - Truncate keeps the first n, across chunk boundaries, and Push carries on after them
 | ok - Truncate evaluated while compiling as at run time
 | ok - IndexOf, Remove and SwapRemove, across chunk boundaries
@@ -1546,7 +1600,7 @@
 | ok - Vec: a Vec two structs deep, replaced through each level
 | ok - Vec: a global Vec, pushed to from functions, copied and replaced
 | ok - Vec: elements that are values holding references, kept across growth and read back after the arena churns
-| ok - Vec: a conversion of a view names the buffer, not a copy of it
+| ok - Vec: a conversion of a view to a String copies the buffer
 | ok - Vec: a Vec local that is returned, its text read back after the arena churns
 | ok - Vec: removals empty what they no longer use and shifts move, evaluated while compiling as at run time
 | ok - Vec: an empty one equals its copy and hashes alike - while compiling and at run time
@@ -1620,6 +1674,8 @@
 === run b9cmethod.olang
 | status 0
 === run b9scanbranch.olang
+| status 0
+=== run c11dtorbyvalue.olang
 | status 0
 === run c2dargnote.olang
 | status 0
@@ -1776,6 +1832,9 @@
 | status 0
 === run defstext.olang
 | status 0
+=== run derivedcopybuild.olang
+| status 0
+| 103 0
 === run derivedcopycapture.olang
 | status 0
 | 203
@@ -2390,6 +2449,10 @@
 | 4
 === run strcondtext.olang
 | status 0
+=== run strderivedcallback.olang
+| status 0
+| b3
+| 103 0
 === run streffect.olang
 | status 0
 === run strhelperiter.olang
@@ -2412,6 +2475,9 @@
 | b2b5
 === run strwalks.olang
 | status 0
+=== run t17ccaselocallifted.olang
+| status 0
+| 110 0
 === run t17cheadline.olang
 | status 0
 | 1
