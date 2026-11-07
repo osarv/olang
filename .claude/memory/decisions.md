@@ -3027,3 +3027,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   else must skip. Enum payloads keep their positional patterns (declared by position) and may take the named form too
   (`case Shape.Rect(h = 0)`). In `case` patterns only (nested in payloads and array elements); a destructuring
   declaration not now. Recommended yes. In effect: none.
+  The user then (2026-11-07): should arrays and enums lose positional matching too, or structs match by position over
+  the fields each module can see - "You said that adding things could break them. Isn't that the case for enums and
+  arrays too?" Answered: arrays have no names (a pattern matches the data, no declaration); an enum case is built by
+  position, so adding a field already breaks every building site - its pattern mirrors building and adds nothing;
+  only a struct builds in one shape (parameters) and stores in another (fields), so positional patterns would make the
+  field order, promised by nobody, part of every match elsewhere, and positions over visible fields would make one
+  pattern bind different fields inside and outside the module. Recommendation unchanged: structs by name, enums and
+  arrays by position. Still asked.
