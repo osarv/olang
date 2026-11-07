@@ -507,8 +507,151 @@ A record per `Fn` expression and per read of a function-valued local; a call thr
 discharge. Negligible. Newly compiling (run cases, read back after a churn): `g := link; g(x, N(5))` (the temporary built
 where `x` lives, O18b through link's relation); local closures keeping their arguments (`add := fn(k String&) {
 names.Push(k) }`, `add("a")`); `f := mk(gone); f("b")` with `mk` returning such a closure; a conditional of two
-functions with different relations, each judged; a function-valued cursor (3.1). Staying refused, said at the place:
-t22sharedscope, t22sharedscopetype, t22aobligation (an argument for a written parameter), t22alambdakeeps (a field),
-callvaluekeeps, callvaluekeepsblock, callvaluekeepsframe (an adapter given a written parameter, or a local written
-`s fn&(x fn&() I64) = kp` - a local's written type is no boundary, so that one stops at `s(...)`'s argument instead),
-t32anyscopes (an `any`), t22sharedscopegeneric (question 1).
+functions with different relations, each judged; a function-valued cursor (3.1); callvaluekeepsblock - its local is
+written `s fn&(x fn&() I64) = kp`, but a local's written type is no boundary (decision 15), so `s(fn() I64 { return m.v
++ 1 })` is judged as the direct call to `Keeper.Call` it is, and round 2 builds the closure's `m` where `kp` lives (a
+run case, read back after the churn it already has). Staying refused, said at the place: t22sharedscope,
+t22sharedscopetype, t22aobligation (an argument for a written parameter), t22alambdakeeps (a field), callvaluekeeps and
+callvaluekeepsframe (an adapter given to keepVia's written parameter), t32anyscopes (an `any`), t22sharedscopegeneric
+(question 1).
+
+## 6. The folded items
+
+- **C3** (`x2 := x1; return x2` of a constructed local, O10d): compiles today, with and without `x1` read after the
+  copy, clean under `-debug -sanitize` (section 1) - D9i's move at a last use and the returned whole-local copy placed
+  where the result goes closed it. Round 1 adds `checks/cases/c3secondname.olang` (run, both shapes, read back after a
+  churn) so it stays closed.
+- **C6** (`chan.Select(chan.SendOf(r, 9), ...)` inside a join block, C2d): compiles and runs clean under `-debug
+  -sanitize` today (the kept round's C1 and item 17). Round 1 adds `checks/cases/c6selectjoin.olang` (run: the std/chan
+  test's shape with both `SendOf`s written inside the join) and drops the "Limit" sentence from CLAUDE.md's std entry
+  and HISTORY's note.
+- **C4** (held/gen_walkkept: the generator body's O27 and the consumer's O10c for one cause): round 2 accepts the
+  program (4.7). For what stays refused, one cause gives one error: a body whose reporting judging said a section-8
+  error of its own is marked in its summary, and its callers do not discharge - and so do not report - the obligations
+  it recorded (it did not check; a caller judged against it would only repeat it). Round 2, with a case: a generator
+  yielding a view of a by-value parameter's storage and a consumer keeping it - one error, in the generator.
+- **The T25d imprecision** (an element of a constant literal scoped to the literal's temporary block): round 1. In
+  `val`/`read`, an element read by an index, a slice of, or a binding of an array pattern over an array literal of
+  constant data (`staticLiteral`'s test, without the promotion it asks today) is `ValKind.Static` - the program's
+  scope - whatever the literal's own storage is. It matters beyond NLL: without it, round 2 would build the literal's
+  array where its element is kept, every turn, for what is constant data. Cases: `t25delement.olang` (run: `keep.Push(
+  String&["a", "b", "c"][k])` in a loop, a cursor given one, read back after a churn).
+
+## 7. The evaluator and `interpret` (K1, B3e)
+
+- **Compile-time evaluation** runs before the scope pass on lowering's stand-in placement (everything in the program's
+  scope): versions, placements and records change nothing it computes. Each round still gives it tests it runs, beside
+  the run-time ones (checklist step 3): round 1 a global baked through a function walking a list with a cursor and
+  appending to its tail (K2), and a top-level assert over the widget's click loop (S17a); round 2 a global baked from
+  `fn head() String& { t := $"abc"; return t[0:2] }` (today O27's error) and an assert over words kept from a turn's
+  text; round 3 a global baked through `g := link; g(x, N(5))` and through a local closure keeping its argument.
+- **`interpret`** places by the plans (B3e) and refuses what a build refuses, since it runs the scope pass: placements
+  from rounds 1-2 are followed with nothing new; records are compile-time only. Its stand-in placement for item 17's
+  kept locals (the program's scope) covers placed views too.
+- **The dead-region evaluator** (`OLANG_DEADREGIONS=1`, early freeing's gate) runs over the new tests: placement moves
+  storage into longer scopes, where early freeing may then free it.
+
+## 8. Where this touches reuse in place, reference counting and the drop check
+
+- **Reuse in place** (next, free.olang). NLL's reaching definitions say when a reference local's version is dead (no
+  read reached by it remains): a value held only by dead versions and a place letting go of it is a reuse candidate the
+  version table can confirm - free.olang reads `typed.Versions` rather than its own "used after the let-go" scan for
+  reference locals. Placement for views makes storage live in longer scopes, where it is reclaimed only at the close or
+  by O8d; reuse in place can recycle it only where the view's holder lets go, which is O8d's question, unchanged.
+- **Reference counting for values with several holders** (QCR 2, after this round). The storage placed for views (the
+  `-memory` rows of 4.4) is exactly what neither scopes nor single-holder freeing reclaim before its scope closes - the
+  first candidates for a counted early free, and the measurement that design should start from.
+- **The drop order** (QCZ, decided 2026-11-07: the compiler orders ends - holders before what they hold - from the
+  store relations section 8 tracks). Versions are reference locals, which hold no destructor values; fields are not
+  versioned, so the store relations it reads are today's. Placement never lifts storage holding a destructor value for
+  a view (4.3), so ends move only where a whole value moves (item 17's, as today, registered where it lives - O15/O16),
+  and the drop-order round orders ends in the scope such a value lands in.
+
+## 9. The build plan
+
+One agent per round, each starting from this note and a PROGRESS.md hand-off, committing coherent pieces as it goes;
+`make quick` while developing, the full gates once at the end of each round. Rounds 1-3 touch scope.olang at the same
+places, so they run one after another, never beside each other or beside another check.olang/scope.olang batch.
+
+### Round 1 - NLL (opus, xhigh)
+
+- **Spec**: O25, O25a, O25b, new O25i, O12, T25d (3.1); O26a's sentence on a returned reference local mentions versions.
+- **Code**: `typed.Versions` (the walker, 3.2, with test blocks over every construct); scope.olang - cursors, `defTerms`
+  kept between judgings with underestimates interned by base, the per-statement entry state, the assignment's fit gone
+  for cursors, the validity fit at reads (`FitLive`), the merge's exactness error, `propose` through versions, the
+  re-judging rule, `aliasOf` and `regionOnly` over versions (3.6), T25d's element; compRun's reuse records the version
+  terms it read (`OLANG_SCOPECHECK=1` checks it); msgs.olang (`VersionsDiffer`, `ReadAfterScope`; O25's
+  `ReferenceNarrowed` kept for slots only) and `make diaggold`.
+- **Tests**: tests/nll.olang (the widget's click loop, a list tail appended through a cursor, `planAt`, `op`, a cursor in
+  a `catch` clause, in deferred code, captured by a lambda, assigned in a loop and read after it - every value read back
+  after an arena churn; the K2 global and S17a assert of section 7); checks cases - `nllmerge` (fail, O12 naming both
+  assignments), `nllkeepsunion1/2` (fail, O17: section 1's probes), `t25delement`, `c3secondname`, `c6selectjoin`
+  (run), r9adefaultinner becomes a run case (`-debug -sanitize`).
+- **Also**: compiler/tools' scopedump, lowerdump and emitdump build; the makefile checks one of them (a `-quick`
+  build) in `make verify`, if it costs under ~15 s (decision 19); fuzz/scopegen.olang gains cursor scenarios (reassigned
+  in loops, from two scopes, read after the loop, built through), so the scope fuzzer refuses fewer programs and tests
+  more.
+- **Gates**: verify (one slot, /home/user/vlock), scopesan, scopefuzz (`COUNT=300`), fuzz free, dead regions; bench IR
+  and compiler/'s own IR diffed against the base and every difference explained (only a cursor's temporary placed
+  shorter may differ, decision 6); the self-build a fixed point, its peak memory and scope phase (`OLANG_TIMES`) within
+  2% of the base.
+
+### Round 2 - O27 as placement (opus, xhigh)
+
+- **Spec**: O27, O28's paragraph, O14, T22's sentence, D18c, D18e, B18 (4.1).
+- **Code**: scope.olang - views propose (`propose`, `viewRoot`/`viewSource` with storage), `liftAtCall` on `View`
+  relations, closures propose their captures, the two phases (whole, then views; parts after `inferFields` settles), the
+  refusals of 4.3 with `viewKept`/`partKept` reworded, the placements recorded, C4's mark; D18e's walk landing where its
+  elements are kept (emit's elision conditions already refuse a walk whose result scope is not the loop's block, loop or
+  frame - checked, not changed); olang.olang prints the placements under `-memory`; session.olang publishes the hint;
+  msgs.olang reworded, `make diaggold`.
+- **Tests**: tests/viewplace.olang (words kept from a turn's text, slices of temporaries into a parameter's field, a
+  generator's views of a local kept by the consumer, a closure over a turn's local kept - read back after churns; K2 and
+  S17a of section 7); the cases of 4.7 become run cases (`-debug -sanitize`, each keeping its comment and saying what it
+  was), new fail cases for 4.3's destructor row and C4's one error; a checks scenario `memoryplaced` expecting the
+  `-memory` row for o27genborrow's shape.
+- **Gates**: as round 1, and: bench IR and compiler/'s own IR **byte-identical** to round 1's (4.2's phases promise
+  it); `wLocals` hits counted (joins of unordered scope variables - if they appear, rework 2.4's hidden variables `W` are
+  the next step); scopegen gains kept-view scenarios.
+
+### Round 3 - T22a's relations (opus, high)
+
+- **Spec**: T22a, T22, O13c, B11b (5.1, 5.5).
+- **Code**: scope.olang - records (`fnRecs` per version, `summary.ResFn`), calls through a known value judged as direct
+  calls (5.3), boundaries checked in the walk with `fnUses`/`fnValues` moved there (5.4); explain.olang and session.olang
+  (the `# as a value` line); msgs.olang reworded, `make diaggold`.
+- **Tests**: tests/fnrel.olang (5.7's shapes, read back after churns; K2 globals of section 7); checks - run cases for
+  the newly compiling shapes and callvaluekeepsblock, the staying T22a cases reworded to the place.
+- **Gates**: as round 1; scopegen gains function values with relations put into every kind of place (a boundary missed
+  would show as a use after free under `-sanitize`).
+
+### Round 4 - only if question 1 is answered yes
+
+Generic type variables carrying relations: an instance judged once per record its type variable is bound to (a
+*scope twin*: the same typed body, its own plan, emitted under a name carrying the record), captures' scopes as hidden
+scope variables of the twin. Its own design pass first.
+
+### The checklist, per round
+
+1 spec first (above); 2 scope.olang (check is untouched but for messages); 3 the evaluator computes nothing new, and
+each round gives it the tests of section 7; 4 tests and cases (above); 5 nothing to migrate - every change accepts more,
+and the cases that were refused become run cases (keeping old tests: only those whose rule changed are rewritten);
+6 diagnostics (above); 7 CLAUDE.md's "A reference never narrows", "Scopes inferred, none written" (its no-extension
+sentence reversed by the user's QCR 1a), "Function types (T22, T22a)" and the std entry's C6 limit; HISTORY.md; the
+ledger; 8 DEPENDENTS.md's "A rule number or a diagnostic" rows (SPEC paragraphs, msgs, diag.txt, cases, READMEs), and
+B18's `-memory` text in `help`; 9 verify.
+
+### Risks, and what catches them
+
+| risk | round | caught by |
+|---|---|---|
+| the reaching-definitions walker and the scope walk disagree about control flow (a desugared construct), so a read is judged with too few versions | 1 | one walker beside `Landings`, tested per construct; union on key collisions; a `-debug`-compiler check that every statement the scope walk judges with a cursor was keyed (else all definitions - flow-insensitive, sound); scopegen's cursor scenarios under `-sanitize` |
+| the keeps analysis loses O25b's equality and under-counts a cursor's stores | 1 | section 1's two probes as O17 cases; scopefuzz |
+| a component's judging taken again (compRun) with stale version terms, view phase or records | 1-3 | `OLANG_SCOPECHECK=1` over the suite; the inputs compRun records extended |
+| placement grows memory silently | 2 | `-memory`'s rows and the hint; the checks scenario; bench IR byte-identical |
+| a view proposal reorders joins of unordered scope variables in an accepted program | 2 | the phases; IR byte-identical; `wLocals` counted |
+| a destructor run later through a view | 2 | refused (question 2); a fail case |
+| a value carrying relations reaches a place judged once without the coverage check | 3 | boundaries listed by the place kinds `fit` and `call` already tell apart; a `-debug`-compiler check that every record reaching a written function type passed `valueCovered`; scopegen's relation scenarios |
+
+After the three rounds: a narrow soundness review (opus, high) of round 1's walker and round 3's boundaries before
+reuse in place builds on them - the change is large enough not to wait for the bulk review that follows reuse in place.
