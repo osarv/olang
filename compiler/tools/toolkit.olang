@@ -397,14 +397,19 @@ fn TestEndings(out String&) String {
             b.Push(row)
             b.PushChar('\n')
         } else if row.StartsWith("FAIL - ") {
-            n := row[7:]
-            k := try n.Find(": ") catch default -1
             b.Push("FAIL - ")
-            b.Push(n[:k] if k >= 0 else n)
+            b.Push(TestName(row[7:]))
             b.PushChar('\n')
         }
     }
     return b.ToString()
+}
+
+# a FAIL line's test, the error that ended it taken off ("NAME: io.Error.Failed" - S16): the text after its last ": "
+# where that is one word, as an error's name is and a test's description is not
+fn TestName(n String&) String {
+    k := try n.FindLast(": ") catch { return $n }
+    return $n if n[k + 2:].Contains(" ") else $n[:k]
 }
 
 test "a stored run reads back" {
@@ -414,7 +419,9 @@ test "a stored run reads back" {
     assert u.Status == 0 and not u.Stable and u.Out == ""
     assert RunKey("checks/cases/x.olang") == "run x.olang"
     assert RunKey("tests/shared.olang") == "test tests/shared.olang"
-    assert TestEndings("== f ==\nok - a b\nFAIL - c: assertion failed\nx\n") == "ok - a b\nFAIL - c\n"
+    assert TestEndings("== f ==\nok - a b\nFAIL - c: x.Error.Y\nx\n") == "ok - a b\nFAIL - c\n"
+    assert TestEndings("FAIL - Map.Get: fails on a miss\nFAIL - Map.Get: fails on a miss: MapError.Missing\n") ==
+        "FAIL - Map.Get: fails on a miss\nFAIL - Map.Get: fails on a miss\n"
 }
 
 # the run stored for a file in a golden; Found is false where it holds none

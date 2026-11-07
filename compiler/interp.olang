@@ -38,7 +38,26 @@ fn LoadLibrary(link String&) String {
     if path.EndsWith(".a") or path.EndsWith(".o") { return "a static library or an object, which only a link takes" }
     if dlfcn.dlopen(path.ToC(), 258) is not null { return "" }
     e := dlfcn.dlerror()
-    return e.StringFromC(400) if e is not null else "dlopen failed"
+    why := e.StringFromC(400) if e is not null else "dlopen failed"
+    # a library that is a linker script (glibc's libm.so: "GROUP ( /lib/.../libm.so.6 ... )"): the first library it
+    # names, as the link takes it
+    at := try why.Find(": invalid ELF header") catch { return why }
+    script := try os.ReadFile(why[:at]) catch os.Error { return why }
+    named := scriptLibrary(script)
+    if named == "" { return why }
+    if dlfcn.dlopen(named.ToC(), 258) is not null { return "" }
+    return why
+}
+
+# the first library a linker script's GROUP or INPUT names, "" for none
+fn scriptLibrary(text String&) String {
+    open := try text.Find("GROUP") catch default -1
+    if open < 0: open = try text.Find("INPUT") catch default -1
+    if open < 0: return ""
+    for w in text[open:].Split(" ") {
+        if w.StartsWith("/") or (w.StartsWith("lib") and w.Contains(".so")) { return $w }
+    }
+    return ""
 }
 
 # ---- checking with the build's decisions (B9c, S8b) ----
@@ -1082,12 +1101,17 @@ fn (x mut Exec&) RunTests(d mut diag.Diagnostics&, words Array<String&>& = Array
         if s == eval.Stop.None {
             pass++
             say("ok - " $name "\n")
-        } else {
-            fail++
-            text := x.StopText(s, t, d)
-            if text != "" { say($text "\n") }
-            say("FAIL - " $name "\n")
+            continue
         }
+        fail++
+        # S16: an error left the test - its FAIL line names it, the trace after it, as the harness's (S18d)
+        if s == eval.Stop.Raised {
+            say("FAIL - " $name ": " $x.errorName(s.code, x.Bodies[t].Ty) "\n" $x.TraceText(d))
+            continue
+        }
+        text := x.StopText(s, t, d)
+        if text != "" { say($text "\n") }
+        say("FAIL - " $name "\n")
     }
     say($pass " passed, " $fail " failed\n")
     return 1 if fail > 0 else 0
