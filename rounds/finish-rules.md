@@ -10,8 +10,10 @@ to be finished today. So no unnecessary reviews or verifications. Just do one at
 - At the end, one `make quick`, only through `/home/user/vlock make quick > quick.log 2>&1` (one at a time on this
   machine; the lock queues you). Fix what it shows that is yours. Recapture goldens (tokgold, astgold, layoutgold,
   diaggold) only after checking that each difference is yours.
-- One compiler build at a time in your worktree; no parallel make beyond the makefile's own. Memory is shared (15 GB)
-  with up to four other rounds.
+- Every compiler build and every test compile goes through `/home/user/blk CMD` (three slots on the machine, e.g.
+  `/home/user/blk make build/olang`, `/home/user/blk build/olang test FILE`) - memory is shared (15 GB) with up to six
+  other rounds, and builds outside the lock get killed by the out-of-memory killer. One build at a time in your
+  worktree; no parallel make beyond the makefile's own.
 - Spec first (SPEC.md, grammar included), then the code; the compile-time evaluator gets the same semantics (a test it
   decides beside the run-time test); records in CLAUDE.md and HISTORY.md; walk DEPENDENTS.md. Details are yours within
   the user's decisions - record them as decisions, marked mine.
