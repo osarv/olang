@@ -6499,6 +6499,10 @@ fn (e mut Emitter&) cType(ty types.TypeId, ds mut cDecls&) String {
         e.P.Layout(r)
         fs := t.Items(t.Fields(r))
         names := e.fieldNames(r, fs.Len())
+        if t.Packed(r) {
+            ds.Structs.Push($"typedef struct __attribute__((packed)) " $n " {\n" $e.cBitfields(fs, names) "} " $n ";\n\n")
+            return n
+        }
         b := StringBuilder()
         for k in range fs.Len() {
             ft := t.Repr(fs[k])
@@ -6513,6 +6517,36 @@ fn (e mut Emitter&) cType(ty types.TypeId, ds mut cDecls&) String {
     }
     return "void"
 }
+
+# X11a: a packed struct's fields as C bitfields, one each (an array's elements each one, name_0, name_1 ...): an unsigned
+# type of at least the width (a signed one for a signed integer), bool for a Bool - C lays bitfields of a packed struct
+# bit by bit, as T13c does
+fn (e mut Emitter&) cBitfields(fs Array<types.TypeId>&, names Array<String&>&) String {
+    t := e.T
+    b := StringBuilder()
+    for k in range fs.Len() {
+        ft := t.Repr(fs[k])
+        if t.KindOf(ft) != types.Kind.Array {
+            b.Push($"    " $e.cBitfield(ft) " " $names[k] " : " $t.PackedBits(ft) ";\n")
+            continue
+        }
+        el := t.Repr(t.Elem(ft))
+        for i in range t.ConstValue(t.Length(ft)) { b.Push($"    " $e.cBitfield(el) " " $names[k] "_" $i " : " $t.PackedBits(el) ";\n") }
+    }
+    return b.ToString()
+}
+
+fn (e mut Emitter&) cBitfield(ft types.TypeId) String {
+    t := e.T
+    if ft == types.BoolT { return "bool" }
+    w := t.PackedBits(ft)
+    signed := t.IsInt(ft) and not t.IsUnsigned(ft)
+    base := "int" if signed else "uint"
+    if w > 64 { return "__int128" if signed else "unsigned __int128" }
+    return $base $IntBytes8(w) "_t"
+}
+
+fn IntBytes8(w I64) I64 { return 8 if w <= 8 else 16 if w <= 16 else 32 if w <= 32 else 64 }
 
 # whether an export fn's result is an array copied out into C's buffer (X12)
 fn (e mut Emitter&) exportArrayResult(r types.TypeId) Bool {

@@ -990,12 +990,14 @@ fn (c mut Checker&) externRules(f I64) {
         if not runtime and c.callbackType(t) { continue }   # X13: an export fn, by its C name
         if runtime and c.P.T.KindOf(t) == types.Kind.Func and c.P.T.Items(c.P.T.Params(t)).Len() == 0 and c.P.T.Result(t) == types.VoidT and c.P.T.Items(c.P.T.Errors(t)).Len() == 0 { continue }
         sp := fd.S.Params[i].Sp
-        c.P.L.Diags.Error(diag.Where.Span(file, I64(sp.Start), I64(sp.Start) + c.text(fd.S.Params[i].Name).Len()), msgs.ExternType(c.ty(t)))
+        m := msgs.PackedByValueC(c.ty(t)) if c.P.T.Packed(c.under(t)) else msgs.ExternType(c.ty(t))
+        c.P.L.Diags.Error(diag.Where.Span(file, I64(sp.Start), I64(sp.Start) + c.text(fd.S.Params[i].Name).Len()), m)
     }
     r := c.P.T.Result(sig)
     if r == types.UnknownT or r == types.VoidT or r == types.NoreturnT or fd.S.Results.Len() == 0 { return }
     if fd.S.Results.Len() > 1 or not c.externValue(r) {
-        c.P.L.Diags.Error(diag.Where.Span(file, I64(fd.S.Results[0].Span().Start), I64(fd.S.Results[fd.S.Results.Len() - 1].Span().End)), msgs.ExternResult(c.ty(r)))
+        m := msgs.PackedByValueC(c.ty(r)) if c.P.T.Packed(c.under(r)) and fd.S.Results.Len() == 1 else msgs.ExternResult(c.ty(r))
+        c.P.L.Diags.Error(diag.Where.Span(file, I64(fd.S.Results[0].Span().Start), I64(fd.S.Results[fd.S.Results.Len() - 1].Span().End)), m)
     }
 }
 
@@ -1116,7 +1118,20 @@ fn (c mut Checker&) externValue(t types.TypeId) Bool {
     u := c.under(t)
     if c.cNumber(u) or u == types.BoolT { return true }
     if c.foreignRef(t) { return true }
+    if c.P.T.Packed(u) { return not c.holdsFloat(u) }   # X11a: by value only as integer bits
     return c.plainStruct(t, 0)
+}
+
+# X11a: whether a packed value holds a float, deep through its packed fields and arrays
+fn (c mut Checker&) holdsFloat(t types.TypeId) Bool {
+    u := c.P.T.Repr(t)
+    if c.P.T.IsFloat(u) { return true }
+    if c.P.T.KindOf(u) == types.Kind.Array { return c.holdsFloat(c.P.T.Elem(u)) }
+    if not c.P.T.Packed(u) { return false }
+    for f in c.P.T.Items(c.P.T.Fields(u)) {
+        if c.holdsFloat(f) { return true }
+    }
+    return false
 }
 
 # X10: whether a type is a reference to an extern type - "Db&", "Db?&"
@@ -1130,6 +1145,7 @@ fn (c mut Checker&) foreignRef(t types.TypeId) Bool {
 # type's reference, an array of a length known while compiling of plain data, or a plain-data struct held by value
 fn (c mut Checker&) plainStruct(t types.TypeId, depth I64) Bool {
     if depth > 16 or not c.isNamed(t) or c.declKind(t) != types.DeclKind.Struct or not c.P.Body(t) { return false }
+    if c.P.T.Packed(t) { return true }   # X11a: plain data, laid out as C's packed bitfields
     if c.P.T.Destructs(t) { return false }
     for fl in c.P.T.Items(c.P.T.Fields(t)) {
         if not c.plainField(fl, depth + 1) { return false }
