@@ -5711,7 +5711,7 @@ t13bafterloop.olang:5:31: error[T13b]: 'f' is handed on here, and File is unique
       |                               ^
 compilation failed with 1 error
 === t13baliasafter.olang
-t13baliasafter.olang:16:23: error[T13b]: 't' is handed on here, and Res is unique - 'alias', made from it, is used after: use 'alias' before handing 't' on, or no longer after
+t13baliasafter.olang:16:23: error[T13b]: 't' is handed on here, and Res is unique - 'alias', which reaches it, is used after: use 'alias' before handing 't' on, or no longer after
    16 |     h Holder = Holder(t)
       |                       ^
 compilation failed with 1 error
@@ -5736,7 +5736,7 @@ t13bbyvalueresult.olang:5:32: error[T13b]: File is unique: this value is held el
       |                                ^~~
 compilation failed with 1 error
 === t13bcaptureafter.olang
-t13bcaptureafter.olang:16:23: error[T13b]: 't' is handed on here, and Res is unique - 'f', made from it, is used after: use 'f' before handing 't' on, or no longer after
+t13bcaptureafter.olang:16:23: error[T13b]: 't' is handed on here, and Res is unique - 'f', which reaches it, is used after: use 'f' before handing 't' on, or no longer after
    16 |     h Holder = Holder(t)
       |                       ^
 compilation failed with 1 error
@@ -5762,6 +5762,11 @@ compilation failed with 1 error
 t13bimmutholdsunique.olang:4:43: error[T13b]: File is unique, so it is no part of Config, which is immut - an immut value is copied freely, a unique one never; hold a reference, 'File&'
     4 | type Config immut struct(f File, n I64) { f, n }
       |                                           ^
+compilation failed with 1 error
+=== t13bkeptafter.olang
+t13bkeptafter.olang:17:23: error[T13b]: 't' is handed on here, and Res is unique - 'seen', which reaches it, is used after: use 'seen' before handing 't' on, or no longer after
+   17 |     h Holder = Holder(t)
+      |                       ^
 compilation failed with 1 error
 === t13bkind.olang
 t13bkind.olang:3:13: error[T13b]: 'unique' says a value exists in one place - a trait has no values of its own

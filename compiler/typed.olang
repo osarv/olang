@@ -2583,6 +2583,21 @@ fn (w mut Landings&) holds(l I64, i0 I64) {
     }
 }
 
+# a call given a reference to a watched local's storage beside a local that may keep it (one reaching storage, lent to
+# the same call - a collection a reference is pushed into, `seen.Push(t)`): that local holds what the watched one is
+# from here on, as an alias does (bulk review 7, F16)
+fn (w mut Landings&) keptBy(i0 I64) {
+    for j in range i0, w.saidL.Len() {
+        if not w.saidRef[j] or not w.watched(w.saidL[j]): continue
+        for q in range i0, w.saidL.Len() {
+            l := w.saidL[q]
+            if l == w.saidL[j] or not w.saidLend[q] or l < 0 or l >= w.Holds.Len() or not w.Holds[l]: continue
+            w.holder.Push(l)
+            w.holderOf.Push(w.saidL[j])
+        }
+    }
+}
+
 fn (w Landings&) guardedAt(l I64, at I64) Bool {
     for k in range w.Locals.Len() {
         if w.Locals[k] == l and w.Starts[k] == at and w.Guarded[k]: return true
@@ -2719,6 +2734,7 @@ fn (w mut Landings&) expr(x Expr?&) {
             }
             w.exprs(c.Args)
             w.apart(i0)
+            w.keptBy(i0)
         }
         case Expr.Make(_, _, m) {
             i0 := w.saidL.Len()

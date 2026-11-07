@@ -28960,7 +28960,8 @@ whose making named a watched local by a reference (a reference local, a binding,
 `HoldsRefs` of its type) becomes its holder, and the holder's later mentions are the watched local's (transitively);
 and a landing among one call's operands where another operand reaches the same local is Bad (`apart`). Two new
 diagnostics name the cause: T13b `'s' is handed on here while the same call also reaches it` and `'t' is handed on here,
-and Res is unique - 'alias', made from it, is used after`. Decided (mine): a plain read of a part beside the hand-on
+and Res is unique - 'alias', which reaches it, is used after`. A local lent to a call that is also given a reference
+to the watched one (`seen.Push(t)` into a `Vec<Res&>`) becomes a holder too (`keptBy`). Decided (mine): a plain read of a part beside the hand-on
 (`tagged(t.id, t)`) is no mention of this kind - nothing of the value is reached; a value handed on into a local (a read
 of it whole) makes that local its new holder, never an alias.
 

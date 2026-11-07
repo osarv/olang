@@ -816,7 +816,8 @@ reads it after: a **by-value parameter**, given a fresh value at every call, may
 landing, in the order the function evaluates: another branch's mentions are not after it, a loop running again
 reaches its body's mentions before it, and a mention in deferred code, a task or a join's clauses runs after
 everything; a mention after the landing is a compile-time error. A **name made from** the parameter - a reference local
-or a binding naming it (`alias := t`), a lambda capturing it - counts as a mention of it, so using that name after the
+or a binding naming it (`alias := t`), a lambda capturing it, a value lent to a call that is also given a reference to
+it (`seen.Push(t)` into a `Vec<Res&>`) - counts as a mention of it, so using that name after the
 landing is the same error, naming it; and a landing that is one argument of a call (or one part of a value made) whose
 other arguments reach the same parameter - lend it (`both(s, s)` with `fn both(r Res&, x Res)`), slice it, or go through a
 name made from it - is a compile-time error too: the value would be in two places at once. A plain read of a part beside

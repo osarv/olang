@@ -1357,12 +1357,12 @@ dce044aead3615fd 040bfd4456a089b9 checks/cases/t13aimmutlent.olang
 7d50357caf38e9df 001829a8f1173a67 checks/cases/t13bafter.olang
 449ac80b570146c2 59cceab953df3d49 checks/cases/t13bafterdefer.olang
 f8863f6fea8ba16d 63a6a7b8060910ac checks/cases/t13bafterloop.olang
-a9a220fd9b79556a 181a76ff4000dcc6 checks/cases/t13baliasafter.olang
+99face43de3874d3 181a76ff4000dcc6 checks/cases/t13baliasafter.olang
 2222e80ff9b4a314 8a9978b42d46d82e checks/cases/t13bbyvaluefield.olang
 8d798941da1b2dee 51e609edefb251a6 checks/cases/t13bbyvaluelocal.olang
 aa1065f606e954b6 3cc5f69141269634 checks/cases/t13bbyvalueparam.olang
 cfe221dbdeb9a94d 0b0df7752cf406e8 checks/cases/t13bbyvalueresult.olang
-97d1869cf43ceb6d 0867a93e027f7dd0 checks/cases/t13bcaptureafter.olang
+b1cace9c714e3eaa 0867a93e027f7dd0 checks/cases/t13bcaptureafter.olang
 ae1529735e6c5c8f d6b64e121b2d6db7 checks/cases/t13bfillgeneric.olang
 a831d3e3eac2bae9 2344f222b1fae43e checks/cases/t13bfillunique.olang
 d77573936e9cf52e fb29573256d72dfc checks/cases/t13bimmutgenericunique.olang
@@ -1943,7 +1943,7 @@ ddbe1173cce83a27 daa9d08e48dac0d3 compiler/lower.olang
 025928255c54707a 8b086d200f0cc2e7 compiler/lsp.olang
 84e8f9a4af57a411 17b5c8771e0b23b8 compiler/mcp.olang
 2aefa4af728673a9 c9c02818a73f57aa compiler/mir.olang
-e5d81a5a79c57a71 18e933410e2ac7de compiler/msgs.olang
+457c282a86957306 fe07b43e6c588387 compiler/msgs.olang
 e5057fd9bd6edfb6 1de60a99a8d8cef1 compiler/names.olang
 8c0a9826dc9e1602 60936f2a01f651a7 compiler/needs.olang
 75e63c34ef400ad7 d9bdf199154cabe3 compiler/olang.olang
@@ -1993,7 +1993,7 @@ eb95a6d20044db9d fcfcd997e68bf7a9 compiler/tools/rungold.olang
 aaf9b5b98ee1c059 89a0a60b420553ce compiler/tools/seed.olang
 50f6565a4d098a4b bcec91548448f458 compiler/tools/tokdiff.olang
 80bf31c7ff51a365 badd053c72862436 compiler/tools/toolkit.olang
-b30e1745c3370923 9168b35af2a9b5b6 compiler/typed.olang
+1d3804d9aad527cd 7a1f26d0ed227f67 compiler/typed.olang
 d3c1a2228d276a3e e2896699c3852603 compiler/types.olang
 f25d1cade98c8a12 e1b805dfe50c6222 compiler/unparse.olang
 c275711ef7980489 2bd55404f3632214 compiler/views.olang

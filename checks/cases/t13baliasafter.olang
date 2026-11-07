@@ -1,4 +1,4 @@
-# check: fail error[T13b]: 't' is handed on here, and Res is unique - 'alias', made from it, is used after
+# check: fail error[T13b]: 't' is handed on here, and Res is unique - 'alias', which reaches it, is used after
 # T13b (bulk review 7, F16): a reference local made from a by-value parameter, used after the parameter's value was
 # handed on - the value it named is the holder's now
 Ended mut I64 = 0

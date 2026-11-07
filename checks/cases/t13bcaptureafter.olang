@@ -1,4 +1,4 @@
-# check: fail error[T13b]: 't' is handed on here, and Res is unique - 'f', made from it, is used after
+# check: fail error[T13b]: 't' is handed on here, and Res is unique - 'f', which reaches it, is used after
 # T13b (bulk review 7, F16): a lambda capturing a by-value parameter (a borrow, D16c), called after the parameter's
 # value was handed on
 Ended mut I64 = 0
