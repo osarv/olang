@@ -1149,7 +1149,8 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.verEnd()
     if report and str { s.strReceiver() }
     if report and s.tailSp.Start >= I32(0) and s.dtorAt.Start >= I32(0) {
-        rec := s.err(s.tailSp, msgs.BecomeDestructor("an instance is built in one of them"))
+        # one cause, one error: the checker's (a local holding such a value) said on this line first stands alone
+        rec := s.P.L.Diags.ErrorOncePerLine(diag.Where.Span(body.File, I64(s.tailSp.Start), I64(s.tailSp.End)), msgs.BecomeDestructor("an instance is built in one of them"))
         s.note(rec, body.File, s.dtorAt, msgs.NoteHere())
     }
     if report {

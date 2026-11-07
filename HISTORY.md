@@ -30104,3 +30104,11 @@ writes them all; profile.olang steps over a record still pending, its length kno
 was never stored (the instant between the reservation and the first store). Decided (mine): the alternate stack is
 shared with OnCrash's rather than a second one per thread. A test of Profile.Read reads past a pending record; a
 profile of a program with deep recursion and three tasks reads as before.
+
+**C5, becomedtor's two errors.** A `become` in a function holding a local made by a destructor type's constructor was
+refused twice for one cause: by the checker (a local whose type may hold an instance with a destructor, `tailSets`) and
+by the scope pass (an instance built in a closing scope, `dtorAt`). Both are now reported once per line
+(`ErrorOncePerLine`, B11's "one cause, one error"), so the checker's, said first and naming the local, stands alone;
+the scope pass's still says the cases the checker cannot see (an instance built in a block, a callee's built result, a
+payload). becomedtor pins `compilation failed with 1 error`. The scope pass's line is one call in scope.olang (sec8r2's
+file).

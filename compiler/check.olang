@@ -21878,7 +21878,7 @@ fn (c mut Checker&) tailSets() {
         for l in b.Locals {
             if l.Kind == typed.LocalKind.Param { continue }
             if w.Holds(l.Ty) {
-                rec := c.err(bsp, msgs.BecomeDestructor($"it holds a value of " $c.ty(l.Ty) ", which may hold an instance"))
+                rec := c.P.L.Diags.ErrorOncePerLine(c.at(bsp), msgs.BecomeDestructor($"it holds a value of " $c.ty(l.Ty) ", which may hold an instance"))
                 c.P.L.Diags.Note(rec, c.at(l.Sp), msgs.NoteHere())
                 break
             }

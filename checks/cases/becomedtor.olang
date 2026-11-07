@@ -1,4 +1,5 @@
 # check: fail error[S21]: 'become' closes this function's scopes before the call, and it holds a value of Res&, which may hold an instance whose destructor would run then, before the call - write 'return' and the call
+# also: compilation failed with 1 error
 # S21, O16: a destructor runs as its instance's scope closes - a become closes them before its call, too early
 import "std/io"
 type Res unique struct(n I64) {
