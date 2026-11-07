@@ -29123,3 +29123,31 @@ O26a already did for a local returned from a loop body - stated in O28 now). A `
 bytes a turn, kept or not (its buffer's first growth makes an early-freeing region - a 152-byte header and a chunk -
 in the outer scope, round 8's machinery; a Vec moved into a `Vec<Vec<I64>>` costs ~155): recorded as a limit, the
 region for a buffer nothing lets go of being an optimization for later.
+
+**Drop flags in the effect summaries (LIST.md A5).** wt-uniq's holders let go through deferred code registered at
+their declaration, `if flag { Drop(x) }` (check's `dropOnExit`), the flag cleared where the value is handed on. The
+effect summaries (compiler/effects.olang - explain's `# effects:` line, G42's facts, E31d's "a declared Copy only
+builds", E31b's in-place calls) walked that deferred code like any other and counted the drop wherever it stood, flag or
+no flag: `fn wrap(r Res) Kept { return Kept(r) }` read as running `Res`'s destructor, so a holder's declared Copy calling
+it was E31d's error though no path ever runs the drop. Now (`typed.DropsRun`, begun by the first agent, finished by the
+second) a forward walk over the body's typed core finds the flags set on some path reaching a way out of the block that
+registered the drop - its end, a return, a break or continue leaving it, an error that may leave it (a raise, a call or
+operation inside a try: the blocks inside its operand are left on the way to a clause, every open block where what no
+clause takes goes on; a try join) - and effects walk only those drops; the others are deferred code that never runs its
+body. **Decided (mine):** a hand-on's clearing comes after every argument of its call, as lowering clears it (F3), so an
+argument leaving before the call keeps the drop counted; an error going on is taken to leave every open block (an outer
+clause may take it - conservative); clearings in deferred code count for nothing; a Drop block in an arm's or a
+clause's code (none is made there today) counts as running; loops are walked until their state settles (breaks and
+continues carry their state, a continue reaching the next turn's start). A failed check is no way out here: outside a
+test it ends the process, and in a test build the unwind ends the holders still holding (bulk review 7, F5) of a test
+that is over - no caller resumes to observe it, and no reader of the summaries (E31b's in-place write, which never lands
+then) needs it. Fixed on the way in the first agent's draft: an error a try's clause takes left no block inside the
+try's operand (a drop registered there and still holding would have been missed - unsound for E31b), a lambda's
+captures and an adapter's receiver were not walked, and a continue from a turn whose end no path reached was lost.
+**Soundness:** the walk over-approximates where lowering's code runs a drop - every way out lowering's `runDefers` runs
+deferred code on is a `leave` here, every flag store is followed (a literal 0 clears, anything else may set), and every
+merge is a union - so a drop it leaves out runs on no path; what it leaves out is exactly what the flag never allows.
+tests/drops.olang: a declared Copy calling a function handing its parameter on (run and decided while compiling) and
+G42's `WritesGlobals` pinned on one handing it on in every branch (false) and in one (true);
+checks/cases/e31dcopydroperror.olang: a Copy calling one that may fail after the hand-on, the holder still holding, is
+still E31d's error.

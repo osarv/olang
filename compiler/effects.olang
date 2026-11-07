@@ -157,6 +157,8 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     paramAt Map<I64, I64>
     derived Map<I64, I64>         # by local: the parameters (Writes bits) what it holds is read out of (B11b)
     bounded Map<I64, Bool>
+    dropsRun Map<I64, Bool>      # the body's holders whose drop may run, by flag local (typed.DropsRun)
+    curBody I64 = -1             # the body walked
     curMod I64 = -1
     exports I64 = -1              # how many export fns the program has (X12), -1 until counted
     dtorOf Map<types.TypeId, I64> # by type: its destructor's body (C9)
@@ -357,6 +359,8 @@ fn (e mut Effects&) walk(b I64) {
     for i in range body.Params.Len() { e.paramAt.Put(I64(body.Params[i]), i) }
     e.bounded = Map<I64, Bool>()
     for id in body.Bounded { e.bounded.Put(I64(id), true) }
+    e.dropsRun = typed.DropsRun(body)
+    e.curBody = b
     e.curMod = try e.fileMod.Get(body.File) catch default -1
     if body.Root is null {
         # a payload's constructor has no code (T17c); a function, a constructor or a test with none did not check
@@ -404,7 +408,13 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
         case typed.Stmt.Return(_, v), typed.Stmt.Suspend(_, v) { e.expr(v) }
         case typed.Stmt.Reraise(_, code, _) { e.expr(code) }
         case typed.Stmt.Jump(_, _, _), typed.Stmt.Raise(_, _, _) { }
-        case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { e.block(b) }
+        case typed.Stmt.Block(_, b) { e.block(b) }
+        # (a holder's drop counted where it may run - its flag set on some way out, as the flags fold in lowering's
+        # code: a value handed on on every path runs none, A5)
+        case typed.Stmt.Defer(_, b) {
+            f := typed.DropFlag(e.Bodies[e.curBody], b)
+            if f < 0 or e.dropsRun.Has(f): e.block(b)
+        }
         case typed.Stmt.Exit(_, _, msg) { e.expr(msg) }
         case typed.Stmt.Assert(_, cond, msg) {
             e.expr(cond)

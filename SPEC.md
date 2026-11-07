@@ -8914,7 +8914,9 @@ fn routes() Map<String&, fn&(r Request&) Response> {
 its type arguments has no facts: an error naming that form) - and on a function's descriptor (G41, `f.Allocates` in a
 walk of `m.Functions` or `T.Methods`, each copy its own function's). Each is a `Bool`, true where the function or any
 body it may call - a destructor among them where a body registers one (a constructor of a type with one, a value of one
-given storage of its own, O16) or runs it (`x.Destroy()`, C9b):
+given storage of its own, O16) or runs it (`x.Destroy()`, C9b; a holder letting go, O15, where it may still hold its
+value - on a way out of its block that a path reaches holding it, so a by-value parameter handed on on every path runs
+none at its end, while one an error may leave with before the hand-on does):
 
 | fact | holds where it may |
 |---|---|

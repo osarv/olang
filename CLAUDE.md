@@ -602,7 +602,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   emit, the evaluator, `interpret` and section 8 needed nothing else (the flags fold where nothing hands the value on). A
   D13d zero is never left out for such a type (its holder ends it); the Landings walk and definit skip a Drop's
   borrow (no use); effects and early freeing count a holder's parts' destructors, a constructor no longer charged with
-  its type's (its caller holds the value); a constructor that cannot fail gives its punned parameters and fields no
+  its type's (its caller holds the value), and effects count a holder's drop only where a path reaches a way out of its
+  block still holding the value (`typed.DropsRun`, A5, 2026-11-07: a by-value parameter handed on on every path runs
+  none, so a declared Copy may call such a function); a constructor that cannot fail gives its punned parameters and fields no
   flag (the instance takes them on every way out), one that may fail ends the fields it built. A capture of such a
   variable borrows it (D16c, as a unique one). Measured: bench machine code identical (addresses masked), the
   self-build unchanged; tests/drops.olang's order decided while compiling (a top-level assert) as at run time. Since

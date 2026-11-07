@@ -1,0 +1,29 @@
+# check: fail error[E31d]: a Copy only builds the new value, and this one writes a global
+# E31d, O15 (A5): effects read a holder's drop where its flag may be set - here the callee hands its parameter on, then
+# an error may leave with the holder still holding it, whose destructor (writing a global) runs: a Copy calling it may do
+# more than build, however it handles the error
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct { Ended += id }
+
+type Kept struct(r Res) {
+    r
+}
+
+fn wrapThen(r Res, n I64) Kept ? Bad {
+    k Kept = Kept(r)
+    if n > 3: error Bad
+    return k
+}
+
+fn (k Kept&) Copy() Kept { return try wrapThen(Res(k.r.id + 200), k.r.id) catch Bad default Kept(Res(0)) }
+
+fn main() ? {
+    a Kept = Kept(Res(1))
+    b := a
+    try io.Println($b.r.id " " $Ended)
+}

@@ -343,3 +343,66 @@ test deferredEnd "ends a held value by a deferred Destroy, and a holder given a 
 Ended := ended()
 
 assert Ended == "7/13425678", "decided while compiling: " $Ended
+
+# a by-value parameter handed on on every path lets go of nothing at its end: effects read a holder's drop where its
+# flag may be set (A5), so a holder's declared Copy may call such a function - and one handing it on in one branch only
+# runs its destructor on the other (G42's facts say so)
+type Wrapped struct(r Res) {
+    r
+}
+
+fn wrapOn(r Res) Wrapped { return Wrapped(r) }
+
+fn (w Wrapped&) Copy() Wrapped { return wrapOn(Res(w.r.id + 50, w.r.log)) }
+
+fn wrappedCopies() String {
+    t := Tally()
+    {
+        a Wrapped = Wrapped(Res(1, t))
+        b := a
+        assert b.r.id == 51
+    }
+    return t.Text()
+}
+
+test wrapOn "hands its parameter on, so a declared Copy may call it" {
+    assert wrappedCopies() == "511"
+}
+
+assert wrappedCopies() == "511", "decided while compiling"
+
+Ends mut I64 = 0
+
+type GRes unique struct(id I64) {
+    id
+} destruct { Ends += id }
+
+type GHeld struct(r GRes) {
+    r
+}
+
+fn gEvery(r GRes, keep Bool) GHeld {
+    if keep: return GHeld(r)
+    return GHeld(r)
+}
+
+fn gSome(r GRes, keep Bool) I64 {
+    if keep {
+        h GHeld = GHeld(r)
+        return h.r.id
+    }
+    return 0
+}
+
+assert not gEvery.WritesGlobals and gSome.WritesGlobals, "decided while compiling (G42)"
+
+test gSome "runs its parameter's destructor where it does not hand it on" {
+    Ends = 0
+    assert gSome(GRes(3), true) == 3 and Ends == 3
+    assert gSome(GRes(4), false) == 0 and Ends == 7
+    {
+        h := gEvery(GRes(5), false)
+        assert h.r.id == 5 and Ends == 7
+    }
+    assert Ends == 12
+}
