@@ -1,12 +1,25 @@
-# check: fail error[T17c]: this value's payload refers to storage the value would outlive
-# O4b/T17c: a Map whose values hold Maps of themselves (study 6's r04) still keeps its values where it lives - one
-# holding a loop body's map is refused
+# check: run
+# flags: -sanitize
+# O4b/T17c: a Map whose values hold Maps of themselves (study 6's r04) keeps its values where it lives - one holding a
+# loop body's map was refused; since item 17 that map is built where the value holding it is kept, one each turn - read
+# back after an arena churn
 import "std/io"
 type Value enum {
     Nil
     Num(n F64)
     Obj(fields Map<String&, Value>&)
 }
+
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
 fn main() ? {
     outer := Map<String&, Value>()
     for i in range 3 {
@@ -14,5 +27,14 @@ fn main() ? {
         inner.Put("x", Value.Num(F64(i)))
         outer.Put("k" $i, Value.Obj(inner))
     }
-    try io.Println($outer.Len())
+    churn()
+    s := 0.0
+    for i in range 3 {
+        v := try outer.Get("k" $i)
+        if v == Value.Obj {
+            w := try v.fields.Get("x")
+            if w == Value.Num: s += w.n
+        }
+    }
+    try io.Println($outer.Len() " " $s)
 }

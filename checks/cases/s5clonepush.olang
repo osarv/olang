@@ -1,7 +1,20 @@
-# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-# O18c, O25h: a copy of a loop's Vec<String&> (a value since 2026-11-01; it was a Clone) holds what the loop's block holds
-# - the references - and cannot be kept past it
+# check: run
+# flags: -sanitize
+# O18c, O25h: a copy of a loop's Vec<String&> holds what the loop's block holds - the references. Refused while the
+# loop's Vec lived in its turn; since item 17 a local copied whole at its last mention into what outlives its block is
+# built where that copy goes (moved there, D9i), its text with it - read back after an arena churn
 import "std/io"
+
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
 fn main() ? {
     rows := Vec<Vec<String&>>()
     for k in range 4 {
@@ -9,5 +22,6 @@ fn main() ? {
         rec.Push($k "-text")
         rows.Push(rec)
     }
+    churn()
     for r in rows { try io.Println(r[0]) }
 }

@@ -880,6 +880,7 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
     match s {
         case typed.Stmt.Let(sp, l, init) {
             ty := ln.B.Locals[I64(l)].Ty
+            ln.homeKept(l)
             if ln.B.Locals[I64(l)].Unset {
                 # D13d: assigned on every path before any read - nothing is written for its declaration; its storage
                 # is marked set with no value (Use(None) writes nothing), so element stores may follow
@@ -1151,6 +1152,20 @@ fn (ln mut lowering&) standInAway() Array<Bool> {
         out[i] = u.EscHard[i] or (u.Ret[i] and refs)
     }
     return out
+}
+
+# item 17: a value local the scope pass stores in an outer block - a reference to it kept there - is homed in that
+# block's arena from its declaration on: its Live makes a new object there each time the declaration runs, a loop turn's
+# kept apart from the next one's. An array of a run-time length keeps its frame slot - a reference to it is the pair
+# naming its elements, which storageOf builds there already; a fixed one is laid out in its slot, which moves
+fn (ln mut lowering&) homeKept(l typed.LocalId) {
+    i := I64(l)
+    if not ln.planned or i >= ln.plan.Stored.Len() or ln.F.Locals[i].Home != mir.ScopeRef.Frame: return
+    st := ln.plan.Stored[i]
+    if st != typed.Scope.Block or st.b == ln.B.Locals[i].In: return
+    ty := ln.B.Locals[i].Ty
+    if ln.T.IsRef(ty) or ln.arrayOf(ty) != types.UnknownT and ln.fixedLen(ln.arrayOf(ty)) < 0: return
+    ln.F.Locals[i].Home = ln.scopeRef(st)
 }
 
 # where by-value local p's storage lives, where the scope pass moved it out of its own block (O26a: the result's, a
@@ -2228,9 +2243,50 @@ fn (ln mut lowering&) promotedInPlace(pr typed.Promote&, ty types.TypeId, sp sou
         ln.adoptSite, ln.adoptAt = sv, sa
         return r
     }
-    # a literal or a fill of a known length (T7c, held in place: no site) converted to the run-time-length array
-    # promoted: made where the reference goes - the conversion's storage of its own had no place but the program's, so a
-    # call given one in a loop grew it every turn (the uafcc review's leak)
+    if t0.Length(a0) == types.TypeId(0) and ln.copyInPlace(pr) { return ln.promotedCopy(pr, ty, sp) }
+    return try ln.promotedFill(pr, ty, sp, a0)
+}
+
+# a value's own copy (MakeKind.Copy), or a conversion of one (T13a's `String(chars)`), promoted to a run-time-length
+# array reference: made where the reference goes, the reference its pair, rather than made and copied there again (item
+# 17, os.Args). A copy D9i moved is the local's own storage: taken where that is the copy's scope - which the local
+# outlives (movable) - and the reference's too
+fn (ln mut lowering&) promotedCopy(pr typed.Promote&, ty types.TypeId, sp source.Span) mir.Operand {
+    x := pr.X
+    m := copyMade(x)!
+    sv, sa := ln.adoptSite, ln.adoptAt
+    ln.adoptSite = m.Site
+    ln.adoptAt = ln.built(pr.Site)
+    v := ln.val(x)
+    ln.adoptSite, ln.adoptAt = sv, sa
+    if ln.dead { return mir.Operand.None }
+    slot := ln.local(v, x.Type(), sp)
+    return ln.into(ty, mir.Rvalue.Ref(mir.L(slot), ty), sp)
+}
+
+# whether a promoted value is a copy promotedCopy makes where the reference goes: no region's (O8d) on either side, and a
+# moved one only where the copy's scope is the reference's
+fn (ln mut lowering&) copyInPlace(pr typed.Promote&) Bool {
+    m := copyMade(pr.X)
+    if m is null or m.Site < typed.SiteId(0) or not ln.planned: return false
+    if I64(m.Site) >= ln.plan.Built.Len() or I64(pr.Site) >= ln.plan.Built.Len(): return false
+    if ln.built(pr.Site) == mir.ScopeRef.Held or ln.built(m.Site) == mir.ScopeRef.Held: return false
+    return not ln.noCopy.Has(I64(m.Site)) or ln.plan.Built[I64(m.Site)] == ln.plan.Built[I64(pr.Site)]
+}
+
+# the value's own copy x is, or converts (T13a): null for any other
+fn copyMade(x typed.Expr&) typed.Make?& {
+    inner := x.args[0] if x == typed.Expr.Prim and x.op == typed.PrimOp.Convert and x.args.Len() == 1 else x
+    if inner != typed.Expr.Make or inner.m.Kind != typed.MakeKind.Copy: return null
+    return inner.m
+}
+
+# a literal or a fill of a known length (T7c, held in place: no site) converted to the run-time-length array promoted:
+# made where the reference goes - the conversion's storage of its own had no place but the program's, so a call given
+# one in a loop grew it every turn (the uafcc review's leak)
+fn (ln mut lowering&) promotedFill(pr typed.Promote&, ty types.TypeId, sp source.Span, a0 types.TypeId) mir.Operand ? NotInPlace {
+    t0 := ln.T
+    x := pr.X
     if x != typed.Expr.Prim or x.op != typed.PrimOp.Convert or x.args.Len() != 1 or t0.Length(a0) != types.TypeId(0) { error NotInPlace }
     arg := x.args[0]
     if arg != typed.Expr.Make { error NotInPlace }
@@ -3217,243 +3273,6 @@ fn (ln mut lowering&) heldPlace(u typed.LocalUses&, p typed.Lvalue&) Bool {
 
 # ---- moves at last use (D9i) ----
 
-# where each local of a body is mentioned last, in the order the body evaluates them, and the copies of a value local
-# check made (MakeKind.Copy of a read of it) - a mention inside deferred code, a task or a join's clauses counts as
-# after everything (it may run later); one inside a loop is where it stands, the loop running before what follows it,
-# and a copy inside a loop not around the local's declaration is never its last use (it may run again)
-type lastUses struct(N I64) {
-    N
-    last mut Array<I64>& = Array<I64>(N, -1)
-    depth mut Array<I64>& = Array<I64>(N, -1)   # the loop depth each local is declared at
-    seq I64 = 0
-    loops I64 = 0
-    later I64 = 0                                # > 0 inside code that runs after (defer, a task, a join's clauses)
-    CopySite Vec<I64>
-    CopyLocal Vec<I64>
-    CopyAt Vec<I64>       # the copy's position, -1 where it is in a loop the local is declared outside, or in later code
-    Said Vec<I64>         # the local each mention named, by its position (seq - 1)
-}
-
-fn (w mut lastUses&) mention(id typed.LocalId) {
-    i := I64(id)
-    if i < 0 or i >= w.N: return
-    w.seq++
-    w.Said.Push(i)
-    w.last[i] = I64.Max if w.later > 0 else w.last[i].Max(w.seq)
-}
-
-fn (w mut lastUses&) declare(id typed.LocalId) {
-    if I64(id) >= 0 and I64(id) < w.N and w.depth[I64(id)] < 0: w.depth[I64(id)] = w.loops
-}
-
-fn (w mut lastUses&) block(b typed.Block?&) {
-    if b is null: return
-    for s in b.Stmts { w.stmt(s) }
-}
-
-fn (w mut lastUses&) stmts(ss Array<typed.Stmt&>&) {
-    for s in ss { w.stmt(s) }
-}
-
-fn (w mut lastUses&) laterBlock(b typed.Block?&) {
-    w.later++
-    w.block(b)
-    w.later--
-}
-
-fn (w mut lastUses&) stmt(s typed.Stmt&) {
-    match s {
-        case typed.Stmt.Let(_, l, x) {
-            w.declare(l)
-            w.expr(x)
-            w.mention(l)
-        }
-        case typed.Stmt.Assign(_, p, x) {
-            w.place(p)
-            w.expr(x)
-        }
-        case typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x), typed.Stmt.Reraise(_, x, _): w.expr(x)
-        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x), typed.Stmt.Exit(_, _, x): w.expr(x)
-        case typed.Stmt.If(_, f) {
-            w.expr(f.Test)
-            w.block(f.Then)
-            w.block(f.Else)
-        }
-        case typed.Stmt.Loop(_, body, post) {
-            w.loops++
-            w.block(body)
-            w.block(post)
-            w.loops--
-        }
-        case typed.Stmt.Assert(_, c, m) {
-            w.expr(c)
-            w.expr(m)
-        }
-        case typed.Stmt.Block(_, b): w.block(b)
-        case typed.Stmt.Defer(_, b): w.laterBlock(b)
-        case typed.Stmt.Join(_, j) {
-            w.block(j.Code)
-            w.later++
-            w.clauses(j.Clauses)
-            w.later--
-        }
-        case typed.Stmt.Spawn(_, sw) {
-            w.later++
-            for tg in sw.Targets {
-                if tg is not null: w.place(tg)
-            }
-            w.expr(sw.Task)
-            for c in sw.Clauses { w.expr(c.Handler) }
-            w.later--
-        }
-        case typed.Stmt.Jump(_, _, _), typed.Stmt.Raise(_, _, _) { }
-    }
-}
-
-fn (w mut lastUses&) clauses(cs Array<typed.Clause&>&) {
-    for c in cs {
-        w.block(c.Code)
-        w.exprs(c.Defaults)
-    }
-}
-
-fn (w mut lastUses&) exprs(xs Array<typed.Expr&>&) {
-    for x in xs { w.expr(x) }
-}
-
-fn (w mut lastUses&) expr(x typed.Expr?&) {
-    if x is null: return
-    match x {
-        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { }
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p): w.place(p)
-        case typed.Expr.Promote(_, _, pr): w.expr(pr.X)
-        case typed.Expr.Call(_, _, c) {
-            s0, c0 := w.seq, w.CopySite.Len()
-            match c.Target {
-                case typed.Callee.Value(f) { w.expr(f) }
-                case _ { }
-            }
-            w.exprs(c.Args)
-            w.apart(s0, c0)
-        }
-        case typed.Expr.Make(_, _, m) {
-            s0, c0 := w.seq, w.CopySite.Len()
-            w.copyOf(m)
-            w.exprs(m.Items)
-            w.expr(m.Length)
-            w.apart(s0, c0)
-        }
-        case typed.Expr.Collect(_, _, c) {
-            w.expr(c.Reserve)
-            w.loops++
-            w.block(c.Loop)
-            w.loops--
-        }
-        case typed.Expr.Prim(_, _, _, _, args): w.exprs(args)
-        case typed.Expr.Slice(_, _, sl) {
-            w.place(sl.Base)
-            w.expr(sl.Lo)
-            w.expr(sl.Hi)
-        }
-        case typed.Expr.Cond(_, _, k) {
-            w.expr(k.C)
-            w.expr(k.A)
-            w.expr(k.B)
-        }
-        case typed.Expr.Seq(_, _, q) {
-            w.stmts(q.Stmts)
-            w.expr(q.X)
-        }
-        case typed.Expr.Match(_, _, m) {
-            w.stmts(m.Held)
-            for a in m.Arms { w.arm(a) }
-            if m.NoMatch is not null: w.arm(m.NoMatch!)
-        }
-        case typed.Expr.Try(_, _, tr) {
-            w.expr(tr.X)
-            w.clauses(tr.Clauses)
-        }
-        case typed.Expr.Fn(_, _, f) { w.fnVal(f) }
-        case typed.Expr.Text(_, _, tx) {
-            for pc in tx.Pieces {
-                if pc == typed.Piece.Render: w.expr(pc.x)
-            }
-        }
-        case typed.Expr.Away(_, _, y): w.expr(y)
-    }
-}
-
-fn (w mut lastUses&) fnVal(f typed.FnVal&) {
-    match f {
-        case typed.FnVal.Lambda(_, caps, _) { for cp in caps { w.expr(cp.Outer) } }
-        case typed.FnVal.Adapter(_, recv, _) { w.expr(recv) }
-        case typed.FnVal.Named(_) { }
-    }
-}
-
-fn (w mut lastUses&) arm(a typed.Arm&) {
-    for alt in a.Alts {
-        w.expr(alt.Test)
-        for bd in alt.Binds {
-            w.declare(bd.To)
-            w.expr(bd.From)
-            w.mention(bd.To)
-        }
-    }
-    w.expr(a.Guard)
-    w.block(a.Code)
-    w.expr(a.Value)
-}
-
-fn (w mut lastUses&) place(p typed.Lvalue&) {
-    match p {
-        case typed.Lvalue.Local(_, _, id): w.mention(id)
-        case typed.Lvalue.Deref(_, _, r): w.expr(r)
-        case typed.Lvalue.Field(_, _, base, _): w.place(base)
-        case typed.Lvalue.Elem(_, _, e) {
-            w.place(e.Base)
-            w.expr(e.Index)
-        }
-        case typed.Lvalue.Payload(_, _, py): w.place(py.Base)
-        case typed.Lvalue.Temp(_, _, v, _): w.expr(v)
-        case typed.Lvalue.Global(_, _, _, _), typed.Lvalue.Target(_, _) { }
-    }
-}
-
-# (bulk review 7, F1) a copy made in one call's (or one made value's) operands is no move where another operand of it
-# mentions the same local - `peek(t, t)` lends t beside its copy, `part(t.a, t)` reads a part of it, `t.Peek(t)` is its
-# receiver: those names are alive for the very call the copy is an argument of, so the copy stays a copy
-fn (w mut lastUses&) apart(s0 I64, c0 I64) {
-    for k in range c0, w.CopySite.Len() {
-        at := w.CopyAt[k]
-        if at < 0: continue
-        for q in range s0 + 1, w.seq + 1 {
-            if q != at and w.Said[q - 1] == w.CopyLocal[k]: w.CopyAt[k] = -1
-        }
-    }
-}
-
-# a copy of a whole local's value (`P(t)`'s argument, `x.f = t`): recorded with where its read is - the mention the
-# walk makes next
-fn (w mut lastUses&) copyOf(m typed.Make&) {
-    if m.Kind != typed.MakeKind.Copy or m.Items.Len() != 1 or m.Site < typed.SiteId(0): return
-    l := wholeLocal(m.Items[0])
-    if l < 0 or l >= w.N: return
-    w.CopySite.Push(I64(m.Site))
-    w.CopyLocal.Push(l)
-    late := w.later > 0 or (w.depth[l] >= 0 and w.loops > w.depth[l])
-    w.CopyAt.Push(-1 if late else w.seq + 1)
-}
-
-# the local whose whole value an expression reads, -1 for any other
-fn wholeLocal(x typed.Expr&) I64 {
-    return match x {
-        case typed.Expr.Read(_, _, p, _): I64(p.id) if p == typed.Lvalue.Local else -1
-        case typed.Expr.Away(_, _, y): wholeLocal(y)
-        case _: -1
-    }
-}
-
 # D9i: a value local's copy left out where that copy is the local's last mention - a by-value argument, a store, a part
 # of a value made (`t := mk(n)` then `p := P(t)`): the destination takes the local's storage, Rust's move made by
 # liveness. Only where nothing could tell: the local's storage is its own (no view held in place of its copy), named by
@@ -3461,11 +3280,11 @@ fn wholeLocal(x typed.Expr&) I64 {
 # the copy would be built (the copy's block inside the local's)
 fn (ln mut lowering&) movesAtLastUse(u typed.LocalUses&) {
     if not ln.planned or ln.B.Root is null or ln.B.Gen: return
-    w := lastUses(ln.B.Locals.Len())
-    w.block(ln.B.Root!)
+    w := typed.LastUses(ln.B.Locals.Len())
+    w.Block(ln.B.Root!)
     for k in range w.CopySite.Len() {
         l := w.CopyLocal[k]
-        if w.CopyAt[k] < 0 or w.last[l] != w.CopyAt[k] or not ln.movable(u, l, w.CopySite[k]): continue
+        if w.CopyAt[k] < 0 or w.Last[l] != w.CopyAt[k] or not ln.movable(u, l, w.CopySite[k]): continue
         ln.noCopy.Put(w.CopySite[k], true)
         ln.moved.Put(w.CopySite[k], l)
         ln.L.Moves++
@@ -4028,11 +3847,11 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             x := m.Items[0]
             v := ln.val(x)
             if ln.dead { return mir.Operand.None }
-            if not t.Same(x.Type(), ty) { return ln.derefCopy(v, x.Type(), ty, ln.built(m.Site), sp) }
+            if not t.Same(x.Type(), ty) { return ln.derefCopy(v, x.Type(), ty, ln.madeAt(m.Site), sp) }
             # (a view kept in place of this copy, where nothing could tell the two apart - never one running a declared
             # Copy, E31d, which may make what the value refers to anew)
             if ln.noCopy.Has(I64(m.Site)) and not t.RunsCopy(ty) { return v }
-            return ln.ownCopyOf(v, ty, ln.built(m.Site), sp)
+            return ln.ownCopyOf(v, ty, ln.madeAt(m.Site), sp)
         }
     }
 }

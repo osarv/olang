@@ -1,6 +1,8 @@
-# check: fail this instance holds a reference to an argument it would outlive
-# C2d, S12b: c2dcondfield with a match value, read-only - a field need only be outlived by what it holds, and here the
-# argument dies with the turn's block while the instance is kept in the list
+# check: run
+# flags: -sanitize
+# C2d, S12b: c2dcondfield with a match value, read-only - a field need only be outlived by what it holds; the argument,
+# a loop turn's local, is built where the instance keeping it is (item 17; refused until then), so it lives as long as
+# the list; read back after an arena churn
 import "std/io"
 
 type M struct(n I64, data Array<F64>& = null) {
@@ -11,11 +13,22 @@ type M struct(n I64, data Array<F64>& = null) {
     }
 }
 
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
 fn main() {
     ms := Vec<M>()
     for i in range 3 {
         d := Array<F64>(4, F64(i))
         ms.Push(M(2, d))
     }
+    churn()
     io.Println($ms[0].Data[1] " " $ms[2].Data[1])!
 }

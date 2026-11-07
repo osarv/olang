@@ -1,10 +1,21 @@
-# check: fail error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
-# O17 (bulk review 6 F3): a loop turn's value owning storage, lent to a callee keeping a reference to it, binds where
-# its own storage is - one slot every turn reuses - so keeping it past the turn is refused (every kept reference named
-# the last turn's value)
+# check: run
+# flags: -sanitize
+# O17 (bulk review 6 F3, item 17): a loop turn's Vec, lent to a holder keeping a reference to it - refused while it was one
+# slot every turn reused; since item 17 it is built where the holder is kept, a new Vec each turn - read back after an
+# arena churn
 import "std/io"
 
 type holder struct(v Vec<I64>&) { v }
+
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
 
 fn main() {
     hs := Vec<holder>()
@@ -13,7 +24,8 @@ fn main() {
         for i in range k { v.Push(i) }
         hs.Push(holder(v))
     }
+    churn()
     s := 0
-    for h in hs { s += h.v.Len() }
-    io.Println("vec lens " $s " (15)")!
+    for h in hs { s += h.v.Len() + h.v[h.v.Len() - 1] }
+    io.Println("vec lens and lasts " $s " (25)")!
 }

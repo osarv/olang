@@ -1,7 +1,8 @@
-# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
+# check: run
+# flags: -sanitize
 # C2g, D16d (the unpar review's neighbours): a constructor field's lambda captures a by-value parameter holding a
-# reference, which lives with what it refers to - a node made in an inner block - so the instance kept outside it is
-# refused
+# reference, which lives with what it refers to - a node made in an inner block, kept by an instance outside it.
+# Refused until item 17; the node is now built where the instance keeping it is; read back after an arena churn
 type Box struct(v I64) {
     v
 }
@@ -10,11 +11,22 @@ type M struct(w W) {
     F fn&() I64 = fn() I64 { return w.h.v }
 }
 
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
 fn main() {
     m := M(W(Box(1)))
     if m.F() == 1 {
         b := Box(5)
         m = M(W(b))
     }
+    churn()
     assert m.F() == 5
 }

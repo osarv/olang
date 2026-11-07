@@ -1,16 +1,33 @@
-# check: fail error[C2d]: this instance would outlive what its field refers to
-# QCB: refused while scopes were written; inferred it ran (O28) - but a loop turn's value owning storage is one slot
-# every turn reuses, and an instance keeping a reference to it past the turn is refused (O17, bulk review 6 F3)
+# check: run
+# flags: -sanitize
 # C2d: a value a constructor field builds from the constructor's parameter lands in the instance, so the parameter's
-# argument is held to wherever the instance lands - here it dies with each iteration while the instance outlives it
+# argument is held to wherever the instance lands - here a loop turn's Vec, kept by an instance outliving the loop. Refused
+# while it was one slot every turn reused (bulk review 6 F3); since item 17 the local is built where the instance keeping
+# it is, a new Vec each turn: each instance reads its own after an arena churn
+import "std/io"
+
 type FeEnt struct(v mut Vec<I64>&) { V mut Vec<I64>& = v }
 type FeSlot struct(v mut Vec<I64>&) { e FeEnt = FeEnt(v) }
 
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
 fn main() ? {
     s FeSlot& = FeSlot(Vec<I64>())
-    for _ in range 3 {
+    all := Vec<FeSlot>()
+    for i in range 3 {
         l := Vec<I64>()
+        l.Push(i * 10)
         s = FeSlot(l)
+        all.Push(FeSlot(l))
     }
-    assert $s != ""
+    churn()
+    try io.Println($s.e.V[0] " " $all[0].e.V[0] " " $all[1].e.V[0] " " $all[2].e.V[0])
 }

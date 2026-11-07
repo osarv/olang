@@ -1640,6 +1640,9 @@
 | 300 300
 === run c2dcondargshort.olang
 | status 0
+=== run c2dcondfield.olang
+| status 0
+| 0 2
 === run c2dcondfieldok.olang
 | status 0
 | 3 3 0
@@ -1650,12 +1653,21 @@
 | ok
 === run c2dexactobliged.olang
 | status 0
+=== run c2dfieldentry.olang
+| status 0
+| 20 0 10 20
 === run c2dfieldoutlives.olang
 | status 0
 === run c2dheldpush.olang
 | status 0
 === run c2dheldreturned.olang
 | status 0
+=== run c2dmatchfield.olang
+| status 0
+| 0 2
+=== run c2dmixedscopes.olang
+| status 0
+| 8
 === run c2downarr.olang
 | status 0
 | 5abc
@@ -1693,6 +1705,13 @@
 === run ctorlambdafieldkinds.olang
 | status 0
 | 5 10 4 4 11 4 4
+=== run ctorlambdafieldloop.olang
+| status 0
+| 1 3
+=== run ctorlambdafieldout.olang
+| status 0
+=== run ctorlambdafieldval.olang
+| status 0
 === run ctortempdestruct.olang
 | status 0
 === run d13crunlength.olang
@@ -1919,6 +1938,8 @@
 | status 0
 === run o14afn.olang
 | status 0
+=== run o14bfoldshort.olang
+| status 0
 === run o14btypevar.olang
 | status 0
 === run o14ccopyslice.olang
@@ -1951,6 +1972,15 @@
 | status 0
 === run o17ownkept.olang
 | status 0
+=== run o17ownturnstruct.olang
+| status 0
+| recs 12345 (12345) arrays 30 (30)
+=== run o17ownturnvec.olang
+| status 0
+| vec lens and lasts 25 (25)
+=== run o17ownturnwalk.olang
+| status 0
+| sum 15 (15)
 === run o17templambdaarg.olang
 | status 0
 === run o17templambdalocal.olang
@@ -2062,6 +2092,9 @@
 | status 0
 === run o4bbyvaluebuild.olang
 | status 0
+=== run o4bmapvalueblock.olang
+| status 0
+| 3 3
 === run o4bvalueparam.olang
 | status 0
 === run o4bvalueparamgeneric.olang
@@ -2070,6 +2103,9 @@
 | status 0
 === run p1gtargetscope.olang
 | status 0
+=== run p1gtargetsnarrow.olang
+| status 0
+| 42 1
 === run p2blocklocal.olang
 | status 0
 | node7
@@ -2078,6 +2114,10 @@
 === run p2cycledeps.olang
 | status 0
 === run p2reassignedcallback.olang
+| status 0
+=== run p2spawntemp.olang
+| status 0
+=== run p2spawnvalue.olang
 | status 0
 === run p2transientinner.olang
 | status 0
@@ -2260,6 +2300,12 @@
 | 2-text
 | 3-text
 === run s5callresultpush.olang
+| status 0
+| 0-text
+| 1-text
+| 2-text
+| 3-text
+=== run s5clonepush.olang
 | status 0
 | 0-text
 | 1-text
@@ -2504,6 +2550,9 @@
 === run vec26toarray.olang
 | status 0
 | a 1 101
+=== run vec27cloneshort.olang
+| status 0
+| Vec<String&>["2x"]
 === run vec48freshkept.olang
 | status 0
 === run vec49byname.olang

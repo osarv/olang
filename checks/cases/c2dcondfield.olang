@@ -1,12 +1,25 @@
-# check: fail this instance holds a reference to an argument it would outlive
+# check: run
+# flags: -sanitize
 # C2d, E28: a constructor field given a conditional is the instance's slot whatever value it gives - each value is
-# judged as stored there alone, so the slice of the argument must live where the instance does. It was not judged at
-# all: the instances kept in the list read arrays reclaimed with each turn's block
+# judged as stored there alone, so the slice of the argument must live where the instance does (it was not judged at
+# all, and the instances kept in the list read arrays reclaimed with each turn's block). Refused until item 17: the
+# argument, a loop turn's local, is built where the instance keeping it is - a new array each turn, in the list's block;
+# read back after an arena churn
 import "std/io"
 
 type M struct(n I64, data mut Array<F64>& = null) {
     n
     Data mut Array<F64>& = (data[0:n] if data.Len() > 0 else Array<F64>(n))
+}
+
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
 }
 
 fn main() {
@@ -15,5 +28,6 @@ fn main() {
         d := Array<F64>(4, F64(i))
         ms.Push(M(2, d))
     }
+    churn()
     io.Println($ms[0].Data[1] " " $ms[2].Data[1])!
 }

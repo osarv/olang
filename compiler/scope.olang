@@ -359,6 +359,10 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     lifts Map<pair.Pair<I64, I64>, Term>   # by (body, local): the term the inference gives its claim
     siteLifts Map<pair.Pair<I64, I64>, Term> # by (body, call site): where the inference lands the call
     liftStor Map<pair.Pair<I64, I64>, Bool> # ... and its own storage too (a value local borrowed whole and kept)
+    # item 17: by body, its copies of a whole value local made at that local's last mention (typed.LastCopies), by site:
+    # the local - found once a body, for the moves lowering may make (D9i)
+    lastCopied Map<pair.Pair<I64, I64>, I64>
+    lastSeen Map<I64, Bool>
     wLocals Map<pair.Pair<I64, I64>, Bool>  # ... a local whose uses need it to outlive two scope variables no obligation orders
     partLifts Map<pair.Pair<I64, I64>, Bool> # ... lifted because a part of it - a field, an element - is kept (counted, 2.6)
     partFlow Bool = false                   # the proposal being made is for a part of the local
@@ -6165,11 +6169,39 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
 # (types.SharesRefs), must outlive d, as an "any"'s copy's do (T32a)
 fn (s mut Scoper&) ownCopy(m typed.Make&, ty types.TypeId, d Term) Val {
     if m.Site >= typed.SiteId(0) { s.build(m.Site, d) }
+    if s.liftGather { s.liftCopied(m, d) }
     x := m.Items[0]
     v := s.val(x, Term.None)
     # (the copy's type, not what it copies: an array of references to text copied into an array of text shares nothing)
     if v.K == ValKind.Existing and s.P.T.SharesRefs(ty) { s.fit(v.T, d, s.storeThrough(ty), x, FitValue) }
     return fresh(d)
+}
+
+# item 17: a value local copied whole at its last mention into storage kept beyond its block - built where that copy
+# goes, so lowering moves it there (D9i) rather than copying it out of a block that closes first. Not a local named
+# another way (assigned whole, escaping, a second name): lowering would keep that copy, the local built longer for
+# nothing
+fn (s mut Scoper&) liftCopied(m typed.Make&, d Term) {
+    if not d.Runs() or m.Site < typed.SiteId(0): return
+    l := s.lastCopy(I64(m.Site))
+    if l < 0 or not s.liftable(l) or s.isRef(s.B!.Locals[l].Ty) or s.B!.Locals[l].Unset: return
+    own := s.blockTerm(s.B!.Locals[l].In)
+    if s.joinTerm(own, d) == own: return
+    s.liftLocal(l, d, true)
+}
+
+# the local copy site is a whole copy of at its last mention, plainly named (typed.LastCopies, LocalUses); -1 for none
+fn (s mut Scoper&) lastCopy(site I64) I64 {
+    if not s.lastSeen.Has(s.Id) {
+        s.lastSeen.Put(s.Id, true)
+        u := typed.Uses(s.P.T, s.B!)
+        for en in typed.LastCopies(s.B!) {
+            l := en.Value
+            if u.Whole[l] or u.EscHard[l] or u.AliasOf.View().Some(fn(a): return a == l): continue
+            s.lastCopied.Put(pair.Pair<I64, I64>(s.Id, en.Key), l)
+        }
+    }
+    return try s.lastCopied.Get(pair.Pair<I64, I64>(s.Id, site)) catch default -1
 }
 
 # whether a reference default dv lives where the call's result cv does (R11, O25): existing storage exactly there, a
@@ -8676,8 +8708,7 @@ fn (s mut Scoper&) siteLift(site I64) Term {
 }
 
 # a lift proposed for local l - for the local its claim was taken from, where ":=" took it - to outlive t, its storage
-# with it where stor: lowering homes a local's storage in its frame, a scope variable or the program's (O26a), so its
-# storage goes only to one of those
+# with it where stor (a value local kept whole: built where it is kept, item 17)
 fn (s mut Scoper&) proposeLocal(l I64, t Term, stor Bool) {
     for _ in range s.origin.Len() {
         if l < 0 or l >= s.origin.Len() or s.origin[l] < 0 { break }
@@ -8730,10 +8761,12 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
         s.wLocals.Put(key, true)
     }
     grows := nt != cur
-    # a run-time array's elements are built where lowering says it keeps them (storageOf), a block's arena included; any
-    # other local's own storage only in a scope variable or the program's (O26a's homes)
+    # its own storage goes with it where that is elsewhere than its own block (item 17): lowering homes a local's storage
+    # where the plan stores it - its frame, a scope variable, the program's or an outer block's arena (a new object each
+    # time its declaration runs), and a run-time array's elements where it says it keeps them (storageOf)
     arr := s.arenaValue(s.B!.Locals[l].Ty) and not s.isRef(s.B!.Locals[l].Ty)
-    if stor and (arr or not isBlockTerm(nt)) and not s.liftStor.Has(key) {
+    moves := not isBlockTerm(nt) or nt != s.blockTerm(s.B!.Locals[l].In)
+    if stor and (arr or moves) and not s.liftStor.Has(key) {
         s.liftStor.Put(key, true)
         grows = true
     }
