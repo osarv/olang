@@ -6180,6 +6180,9 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             dd := v.T if (v.K == ValKind.Existing or v.K == ValKind.Fresh) and v.T.Runs() else dest
             cv := v
             for c in t.Clauses {
+                # R11b, T19b: the error a clause names lives in the block it is declared in - what its payload holds
+                # is built there, for its block and its defaults alike
+                if c.Caught >= 0 and s.terms[c.Caught] == Term.None { s.terms[c.Caught] = s.blockTerm(s.B!.Locals[c.Caught].In) }
                 s.block(c.Code)
                 for df in c.Defaults {
                     dv := s.val(df, dd)
