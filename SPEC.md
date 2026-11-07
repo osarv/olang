@@ -4939,8 +4939,10 @@ A case that matched has the case it names, so its payload is read only where its
 makes reading it sound. A binding of a reference lives where the payload does (T17c) - exactly in the matched
 reference's scope for an enum held by reference, so a tree is walked, passed on and built beside recursively. The
 payload of an enum value a by-value parameter holds lives where that parameter's scope variable says (O4b), and a
-binding read out of it is built into there. A `case-alt` that does not parse as a pattern is a value:
-`case Shape.Circle(r + 1)` compares with the value that call builds.
+binding read out of it is built into there. A position holding any other expression is a value compared with its
+field by `==`: `case Shape.Circle(r + 1)`. A path may name a generic enum's instance with its arguments
+(`case Opt<I64>.Some(x)`), which must be the matched value's (G6b). A call of a path naming neither a case nor a struct
+(S13i) is a value alternative, compared with the value the call builds.
 
 **S13c (several alternatives).** `case A, B, ...` is selected when any one alternative matches, tried in order;
 `case 1, 2, 3`, `case Shape.Circle, Shape.Square`. Alternatives that bind names all bind **the same names, each

@@ -304,6 +304,26 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   At+Len type (a Vec - a named rest needs its `Slice`); at a case's top or in a payload; lengths are S13a's
   constructors (`I64[]` + `I64[x, ...r]` cover every array), a value match missing a length names it. Built as the
   parser's `Pattern.Elems`/`Rest` and the checker's tests and bindings (`elemsPattern`) - nothing new below check.
+- **Struct patterns by field name; payload fields by name too (S13i, S13b, the user's decision 2026-11-07: "structs
+  by name, arrays by position, and enums by both"; built 2026-11-07).** `case Point(x = 0, y)`: in a pattern a struct
+  type's parentheses list FIELDS, never constructor parameters, and nothing runs (Python's class patterns) - `name = p`
+  matches a field (a literal compares, a name binds fresh, a nested pattern goes inside), a bare `name` binds the field
+  to a local of its name, fields not mentioned are ignored; only fields readable there (M6a); no item by position (field
+  order was never a struct's interface). An enum case's payload by position as before, then by name
+  (`Shape.Rect(w, h = 0)`, E14b's order), unmentioned fields ignored once one is named; a case carrying one whole type
+  (T17a) has one position, matched by a struct pattern (`Shape.Round(Circle(r))`). Nested in payloads, array patterns
+  and each other; through references, a null `T?&` matching none; a generic struct bare against the value's instance.
+  S13a: a struct is one constructor whose columns are its fields, so names cover it (a value match needs no `case _`).
+  Decided (mine): payload fields have no privacy (readable by position anyway); a whole case takes no names (an error
+  naming the struct pattern); a field matched by a computed value compares by `==`, as a payload position does; a
+  generic struct may be written with its arguments, which must be the value's; a field twice, by position and by name,
+  a position after a name are S13b's errors for both kinds; a struct matched by a constructor's value (`case Point(1,
+  2)`) is gone - two tests/shared.olang matches moved to fields and to guards; a declared type over a primitive or array
+  (`Label("x")`) stays a value. Built as `ast.Pattern.Field` and one normalizer (`check.byField`: items to one pattern
+  per field, quiet for exhaustiveness), struct reads by `check.field` - nothing new below check. **Found on the way
+  (pre-existing)**: a case with a computed position beside a name (`case Shape.Rect(k + 1, h)`) said "unknown name 'h'",
+  and a generic enum's case written with its arguments (`case Opt<I64>.Some(x)`) bound nothing - the parser now keeps
+  such a call a pattern, its computed positions values.
 - **Expressions read as words (E28-E30, E32, the user's designs).** `a if c else b`; `x in c`/`x not in c` call
   `Has`/`Contains`; comparison chains for `< <= > >=` only, each operand once; `x as E.Case` gives the payload
   (fails as written with `CaseError.WrongCase`, so `try e as C` or `(e as C)!`). `is` tests for null and nothing else: `x is null`, `x is not
