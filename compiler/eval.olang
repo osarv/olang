@@ -352,6 +352,9 @@ type Machine struct(T mut types.Table&, When Mode) {
     MemBudget I64 = 1 << 28
     DepthBudget I64 = 2000
     eqDepth I64 = 0             # how many Equal helpers' frames are live (E10)
+    # T19b: the payload stack - each record's region and its payload, newest last (tasks run in sequence at their join)
+    payScopes Vec<I64>
+    payPtrs Vec<Ptr>
     Steps I64 = 0
     Live I64 = 0                 # bytes allocated and not freed
     # dead-region mode (OLANG_DEADREGIONS, docs/memory.md 3.6): the allocations a release reclaimed, so a read of one
@@ -2157,6 +2160,19 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
             if id == 0 { id = m.scopeOf(fi, s) }
             m.wr(dst, 8, id)
         }
+        case mir.Rvalue.ErrPush {
+            id := m.newScope(sRegion)
+            m.payScopes.Push(id)
+            m.payPtrs.Push(NullPtr)
+            m.wr(dst, 8, id)
+        }
+        case mir.Rvalue.ErrTop(_) {
+            if m.payPtrs.Len() == 0 {
+                m.refuse(WhyNotModelled)
+                return
+            }
+            m.wrPtr(dst, m.payPtrs[m.payPtrs.Len() - 1])
+        }
     }
 }
 
@@ -3559,6 +3575,28 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
         case mir.Stmt.Write(sp, b, how, x) {
             m.atK(fk, sp)
             m.write(fi, b, how, x)
+        }
+        case mir.Stmt.ErrSet(sp, x) {
+            m.atK(fk, sp)
+            if m.payPtrs.Len() == 0 {
+                m.refuse(WhyNotModelled)
+                return
+            }
+            m.payPtrs[m.payPtrs.Len() - 1] = m.rdPtr(m.addr(fi, x, 1))
+        }
+        case mir.Stmt.ErrPop(sp) {
+            m.atK(fk, sp)
+            id := try m.payScopes.Pop() catch {
+                m.refuse(WhyNotModelled)
+                return
+            }
+            m.payPtrs.Truncate(m.payPtrs.Len() - 1)
+            n := m.closing.Len()
+            m.closeRegion(id)
+            if m.closing.Len() > n {
+                m.fs[fi].Pending = true
+                return
+            }
         }
         case mir.Stmt.CopyElems(sp, d, src, n) {
             m.atK(fk, sp)

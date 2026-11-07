@@ -13496,6 +13496,9 @@ fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId, want ty
     # S8d: a payload field of a local known to hold one case
     fl := c.narrowedName(x, n)
     if fl >= 0 { return c.readLocal(sp, fl) }
+    # T19b: a payload field of an error local narrowed to one word
+    ef := c.errField(sp, nsp, x, n)
+    if ef is not null: return ef
     p := c.place(x)
     if p is null { return c.unknown(sp) }
     fp := c.field(sp, nsp, p, n)
@@ -13514,6 +13517,11 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Lvalue&, n so
         t = c.P.T.Referent(t)
     }
     if t == types.UnknownT { return null }
+    if c.P.T.IsErrVal(t) {
+        # T19b: a payload field is read off a local narrowed to one word, and never written
+        c.err(nsp, msgs.PayloadFieldUnnarrowed(c.src(sp)[:I64(nsp.Start - sp.Start) - 1], c.text(n)))
+        return null
+    }
     if c.isEnum(t) {
         # S8d: a payload's field is read where a test narrows the local to its case
         c.err(nsp, msgs.FieldOfEnum(c.ty(t), c.text(n)))
@@ -14596,11 +14604,25 @@ fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n 
     if not c.isEnum(t) {
         if c.isNamed(t) and c.declKind(t) == types.DeclKind.Error {
             # T20: an error word written is an error value of its type - never null
-            k := c.wordIndex(c.P.T.DeclOf(t), n)
-            if k < 0 or args.Len() > 0 or c.P.IsErrorSet(t) and c.P.ErrorWords(c.P.T.DeclOf(t)).Len() == 0 {
+            d := c.P.T.DeclOf(t)
+            k := c.wordIndex(d, n)
+            if k < 0 or c.P.IsErrorSet(t) and c.P.ErrorWords(d).Len() == 0 {
                 near mut msgs.Nearest& = msgs.Nearest(c.text(n))
-                for w in c.P.ErrorWords(c.P.T.DeclOf(t)) { near.Offer(c.text(w)) }
-                c.err(nsp, msgs.NoSuchErrorWord(c.text(c.P.T.DeclName(c.P.T.DeclOf(t))), c.tok(n), near.Hint()))
+                for w in c.P.ErrorWords(d) { near.Offer(c.text(w)) }
+                c.err(nsp, msgs.NoSuchErrorWord(c.text(c.P.T.DeclName(d)), c.tok(n), near.Hint()))
+                c.dropArgs(args)
+                return c.unknown(sp)
+            }
+            # T19b: a word carrying a payload is written with its fields, a plain word without
+            fields := c.P.WordFields(d, k)
+            if fields.Len() == 0 and args.Len() > 0 {
+                c.err(nsp, msgs.PlainWordCalled(c.P.ErrorWordName(d, k)))
+                c.dropArgs(args)
+                return c.unknown(sp)
+            }
+            if fields.Len() > 0 and args.Len() != fields.Len() {
+                if args.Len() == 0 { c.err(nsp, msgs.PayloadWordBare(c.P.ErrorWordName(d, k), fieldNames(c, fields))) }
+                if args.Len() > 0 { c.err(nsp, msgs.PayloadArgs(c.P.ErrorWordName(d, k), fields.Len(), args.Len())) }
                 c.dropArgs(args)
                 return c.unknown(sp)
             }
@@ -14610,7 +14632,13 @@ fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n 
             for q in range set.Len() {
                 if c.P.T.ErrOf(set[q]) == t { j = q }
             }
-            return c.lit(sp, vt, ((j + 1) << 16) | k)
+            pt := c.P.PayloadOf(t)
+            pv typed.Expr?& = null
+            if pt != types.UnknownT {
+                pv = c.enumCase(sp, nsp, pt, c.P.ErrorWords(d)[k], args)
+                if typeOf(pv) == types.UnknownT: return c.unknown(sp)
+            }
+            return c.errValue(sp, vt, j, ((j + 1) << 16) | k, pv)
         }
         # G32: a type's namespace holds its reflected members, its limits and an enum's cases - nothing by this name
         c.err(nsp, msgs.ReflNoMember(c.ty(t), c.text(n)))
@@ -15328,8 +15356,10 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool, got Array<
         fr.errUsed.Push(false)
     }
     code typed.Block?& = null
-    if cl.Braced {
-        body := cl.Body
+    # T19b: a clause naming an error whose type carries a payload is given it first, then its payload record popped
+    carries := bind >= 0 and c.P.T.ErrCarries(c.cur().Locals[bind].Ty)
+    if cl.Braced or carries {
+        body Array<ast.Stmt&>& = cl.Body if cl.Braced else Array<ast.Stmt&>(0)
         # R11: in value position a block's last value is not the clause's - its default is
         n := body.Len()
         if value and (cl.Defaults.Len() == 0) and n > 0 {
@@ -15341,7 +15371,11 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool, got Array<
                 case _ { }
             }
         }
-        code = c.blockOf(body, typed.BlockKind.Clause, cl.Sp)
+        cfrom := c.stmts.Len()
+        cid, couter, cmark := c.open(typed.BlockKind.Clause, cl.Sp)
+        if carries: c.caughtPayload(cl.Sp, bind)
+        c.stmtsOf(body)
+        code = c.close(cid, couter, cmark, cfrom)
     }
     from := c.exprs.Len()
     # several results take one default each (R11): a count that differs is said by clauseRules, the defaults unread
@@ -15370,6 +15404,19 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool, got Array<
         c.unwind(umark)
     }
     return typed.Clause(cl.Sp, items.ToArray(), all, code, defaults, bind, bset)
+}
+
+# T19b: a clause's error value given the payload its error carries - its own copy, made where the value lives, of what
+# the top of the payload stack holds - and the payload record popped
+fn (c mut Checker&) caughtPayload(sp source.Span, bind I64) {
+    bt := c.cur().Locals[bind].Ty
+    c.wantCopy(bt, 0)
+    from := c.exprs.Len()
+    c.exprs.Push(c.prim(sp, bt, typed.PrimOp.ErrCaught, c.readLocal(sp, bind), null))
+    got := typed.Expr.Make(sp, bt, typed.Make(typed.MakeKind.Copy, 0, gather(c.exprs, from), null
+                                              c.site(typed.SiteKind.Make, sp), typed.Check.None))
+    c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Local(sp, bt, typed.LocalId(I32(bind))), got))
+    c.emit(typed.Stmt.Eval(sp, c.prim(sp, types.VoidT, typed.PrimOp.ErrTaken, c.readLocal(sp, bind), null)))
 }
 
 # a task's default (P4a): built where the call's result lands, so one holding references builds all it holds - a part
@@ -16116,8 +16163,9 @@ fn (c mut Checker&) seqOf(sp source.Span, ty types.TypeId, from I64, x typed.Exp
 
 # whether error value code - read once, its type's set its set - holds one of xs: its code's type ordinal tested where
 # xs holds the type's every word it can be, its words compared one by one otherwise
-fn (c mut Checker&) errTest(sp source.Span, code typed.Expr&, xs Vec<types.TypeId>&) typed.Expr& {
-    set := c.P.T.Items(c.P.T.ErrValItems(typeOf(code)))
+fn (c mut Checker&) errTest(sp source.Span, held typed.Expr&, xs Vec<types.TypeId>&) typed.Expr& {
+    set := c.P.T.Items(c.P.T.ErrValItems(typeOf(held)))
+    code := c.errCode(held)
     i32 := c.P.T.Prim("I32")
     got typed.Expr?& = null
     for x in xs {
@@ -16145,6 +16193,88 @@ fn (c mut Checker&) errTest(sp source.Span, code typed.Expr&, xs Vec<types.TypeI
     }
     if got is null { return c.lit(sp, types.BoolT, 0) }
     return got
+}
+
+# T19b: error value of set vt holding word code of the type at position j of the set: its code alone, or for a set
+# carrying payloads its tuple - the code, then each payload part: the word's payload pv at j, every other its zero
+fn (c mut Checker&) errValue(sp source.Span, vt types.TypeId, j I64, code I64, pv typed.Expr?&) typed.Expr& {
+    if not c.P.T.ErrCarries(vt): return c.lit(sp, vt, code)
+    i32 := c.P.T.Prim("I32")
+    from := c.exprs.Len()
+    c.exprs.Push(c.lit(sp, i32, code))
+    set := c.P.T.Items(c.P.T.ErrValItems(vt))
+    for q in range set.Len() {
+        pt := c.P.PayloadOf(c.P.T.ErrOf(set[q]))
+        if pt == types.UnknownT: continue
+        if q == j and pv is not null {
+            c.exprs.Push(pv)
+        } else {
+            c.exprs.Push(c.lit(sp, pt, 0))
+        }
+    }
+    return typed.Expr.Make(sp, vt, typed.Make(typed.MakeKind.Tuple, 0, gather(c.exprs, from), null, typed.SiteId(-1), typed.Check.None))
+}
+
+# T19b: the code an error value holds (an I32) - the value itself where its set carries no payload, else its tuple's
+# first part; x a read of a local or a literal (errHeld)
+fn (c mut Checker&) errCode(x typed.Expr&) typed.Expr& {
+    t := typeOf(x)
+    if not c.P.T.ErrCarries(t): return x
+    i32 := c.P.T.Prim("I32")
+    sp := x.Span()
+    match x {
+        case typed.Expr.Read(_, _, p, _) { return c.read(sp, typed.Lvalue.Field(sp, i32, p, 0)) }
+        case _ { }
+    }
+    h := c.hidden(sp, t)
+    c.stmts.Push(typed.Stmt.Let(sp, typed.LocalId(I32(h)), x))
+    return c.read(sp, typed.Lvalue.Field(sp, i32, typed.Lvalue.Local(sp, t, typed.LocalId(I32(h))), 0))
+}
+
+# T19b: e.f, a payload field of an error value a local holds, read where narrowing leaves it one word - null where x is
+# no error local (the caller goes on)
+fn (c mut Checker&) errField(sp source.Span, nsp source.Span, x ast.Expr&, n source.NameId) typed.Expr?& {
+    ln := c.errLocalName(x)
+    if ln == source.NameId(0): return null
+    id := c.localNamed(ln)
+    t := c.localType(id)
+    now := c.errNow(ln, c.P.T.ErrValItems(t))
+    w I64 = -1
+    et := types.UnknownT
+    if now.Len() == 1 {
+        et = c.P.T.ErrOf(now[0])
+        mask := c.P.T.ErrMask(now[0]) & c.allWords(et) if c.P.T.KindOf(now[0]) == types.Kind.ErrWords else c.allWords(et)
+        if mask != 0 and (mask & (mask - 1)) == 0: w = I64(mask.TrailingZeros())
+    }
+    if w < 0 {
+        c.err(nsp, msgs.PayloadFieldUnnarrowed(c.text(ln), c.text(n)))
+        return c.unknown(sp)
+    }
+    d := c.P.T.DeclOf(et)
+    fields := c.P.WordFields(d, w)
+    i I64 = -1
+    for k in range fields.Len() {
+        if fields[k].Name == n: i = k
+    }
+    if i < 0 {
+        near mut msgs.Nearest& = msgs.Nearest(c.text(n))
+        for f in fields { near.Offer(c.text(f.Name)) }
+        c.err(nsp, msgs.NoSuchMember(c.P.ErrorWordName(d, w), c.text(n), near.Hint()))
+        return c.unknown(sp)
+    }
+    set := c.P.T.Items(c.P.T.ErrValItems(t))
+    pos I64 = -1
+    for q in range set.Len() {
+        if c.P.T.ErrOf(set[q]) == et: pos = q
+    }
+    pt := c.P.PayloadOf(et)
+    f := c.P.PayloadField(t, pos)
+    if pt == types.UnknownT or f == 0: return c.unknown(sp)
+    rec := c.P.T.Items(c.P.T.Cases(pt))[w]
+    ft := c.P.T.Items(c.P.T.Parts(rec))[i]
+    base := typed.Lvalue.Field(sp, pt, typed.Lvalue.Local(sp, t, typed.LocalId(I32(id))), f)
+    pp := typed.Lvalue.Payload(sp, rec, typed.Payload(base, w, typed.Check.None))
+    return c.read(sp, typed.Lvalue.Field(sp, ft, pp, i))
 }
 
 # R11b, T20: an error value compared with an error type, a named set or a word - "e == os.Error", "e != X.WORD" - a test
@@ -21134,6 +21264,10 @@ fn (c mut Checker&) raise(sp source.Span, word ast.Path?&, args Array<ast.Expr&>
     # R3a, T20: "error e", an error value raised - a local's or a global's
     hk := c.P.R.Use(c.fr().File, word.Sp.Start).Kind
     if word.Parts.Len() == 1 and (hk == names.What.Local or hk == names.What.Global) {
+        if args is not null {
+            c.err(word.Sp, msgs.PlainWordCalled(c.text(word.Parts[0])))
+            return
+        }
         x := c.name(word.Sp, word.Parts[0])
         if x is null { return }
         t := typeOf(x)
@@ -21166,7 +21300,48 @@ fn (c mut Checker&) raise(sp source.Span, word ast.Path?&, args Array<ast.Expr&>
         }
     }
     c.leaks1(raised)
+    c.pushPayload(sp, word, et, w, args)
     c.emit(typed.Stmt.Raise(sp, et, w))
+}
+
+# T19b: the payload an error raised carries, pushed on the payload stack before it is raised - for an error type with
+# payload words, every word's (a plain word's its case of no fields); its fields given where the word carries some, and
+# never where it carries none
+fn (c mut Checker&) pushPayload(sp source.Span, word ast.Path&, et types.TypeId, w I64, args Array<ast.Expr&>?&) {
+    d := c.P.T.DeclOf(et)
+    fields := c.P.WordFields(d, w)
+    wsp := c.pathPart(word, 0)
+    wtext := c.P.ErrorWordName(d, w)
+    if fields.Len() > 0 and args is null {
+        c.err(wsp, msgs.PayloadWordBare(wtext, fieldNames(c, fields)))
+        return
+    }
+    if fields.Len() == 0 and args is not null {
+        c.err(wsp, msgs.PlainWordCalled(wtext))
+        c.dropArgs(args)
+        return
+    }
+    pt := c.P.PayloadOf(et)
+    if pt == types.UnknownT: return
+    given := Array<ast.Expr&>(0) if args is null else args
+    if given.Len() != fields.Len() {
+        c.err(wsp, msgs.PayloadArgs(wtext, fields.Len(), given.Len()))
+        c.dropArgs(given)
+        return
+    }
+    pv := c.enumCase(sp, wsp, pt, c.P.ErrorWords(d)[w], given)
+    if typeOf(pv) == types.UnknownT: return
+    c.emit(typed.Stmt.Eval(sp, c.prim(sp, types.VoidT, typed.PrimOp.ErrPush, pv, null)))
+}
+
+# a word's payload fields as source writes their names: "line, col"
+fn fieldNames(c mut Checker&, fields Array<ast.Param&>&) String {
+    b := StringBuilder()
+    for i, f in fields {
+        if i > 0: b.Push(", ")
+        b.Push(c.text(f.Name))
+    }
+    return b.ToString()
 }
 
 # R3: what "error X" names when it names no word: a declared error type whole, else what the error-set item says

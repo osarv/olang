@@ -763,7 +763,7 @@ fn (p mut Program&) ErrValOf(entries Array<types.TypeId>&) types.TypeId {
             pt := p.PayloadOf(p.T.ErrOf(x))
             if pt != types.UnknownT: parts.Push(pt)
         }
-        if parts.Len() > 1: p.T.SetErrRepr(v, p.T.Tuple(p.T.List(parts.ToArray())))
+        if parts.Len() > 1: p.T.SetErrRepr(v, p.T.Record(p.T.List(parts.ToArray())))
     }
     return v
 }

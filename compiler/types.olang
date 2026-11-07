@@ -183,7 +183,7 @@ type Table struct(Names mut source.Names&) {
     bodies Map<TypeId, body>
     caseNames Map<TypeId, Array<source.NameId>&>
     errValNames Map<TypeId, DeclId>     # T20: the named set an error value's type was first written as, for spelling
-    errReprs Map<TypeId, TypeId>        # T19b: an error value's type whose set holds payload words, its tuple
+    errReprs Map<TypeId, TypeId>        # T19b: an error value's type whose set holds payload words, its record
     # layouts, per type
     state Vec<I64>
     sizes Vec<I64>
@@ -530,7 +530,7 @@ fn (t mut Table&) NameErrVal(id TypeId, d DeclId) {
     if not t.errValNames.Has(id) { t.errValNames.Put(id, d) }
 }
 
-# T19b: an error value's type whose set holds an error type with payload words is laid out as a tuple - its code (an
+# T19b: an error value's type whose set holds an error type with payload words is laid out as a record - its code (an
 # I32), then one payload enum per such member type, in the set's order, the one of the code's type holding the error's
 # data and the others their zero; generic's ErrValOf records it
 fn (t mut Table&) SetErrRepr(id TypeId, tuple TypeId) { t.errReprs.Put(id, tuple) }
@@ -787,6 +787,7 @@ fn (t Table&) ScopesFit(a TypeId, b TypeId) Bool {
 # counts as holding one
 fn (t mut Table&) HoldsRefs(id TypeId) Bool {
     k := t.KindOf(id)
+    if k == Kind.ErrVal { return t.errReprs.Has(id) and t.HoldsRefs(t.Repr(id)) }   # T19b: as its record
     if t.ForeignRef(id) { return false }   # X10: an extern type's reference is C's, in no scope of olang's
     # an any's instance is of a type not known here (T32): it may hold one
     if k == Kind.Ref or k == Kind.Func or k == Kind.Var or k == Kind.Any { return true }
@@ -1280,6 +1281,7 @@ fn (t Table&) Align(id TypeId) I64 { return t.aligns[I64(id)] }
 
 # a struct's, tuple's or record's field offsets, in order
 fn (t Table&) Offsets(id TypeId) Array<I64> {
+    if t.KindOf(id) == Kind.ErrVal and t.errReprs.Has(id): return t.Offsets(t.Repr(id))   # T19b
     n := t.Items(t.fieldList(id)).Len()
     out := Array<I64>(n)
     at := t.offsetsAt[I64(id)]
@@ -1295,6 +1297,7 @@ fn (t Table&) fieldList(id TypeId) ListId {
     return match t.KindOf(id) {
         case Kind.Named: t.Fields(id)
         case Kind.Tuple, Kind.Record: t.Parts(id)
+        case Kind.ErrVal: t.Parts(t.Repr(id)) if t.errReprs.Has(id) else ListId(0)
         case _: ListId(0)
     }
 }

@@ -217,6 +217,56 @@ hint:
   ret void
 }
 
+; T19b: the payload stack - what an error raised carries beside its code, last in first out per thread (errors in
+; flight nest: deferred code and destructors raise nothing that leaves them). A record is { prev, region, payload }, made
+; in a region of its own - a kid of this thread's parent scope below, never closed but by a pop - which the payload's own
+; copy is built in; a pop drops the region, everything in it with it. Nothing here runs on a success path
+@__olang_errpay_top = thread_local(initialexec) global ptr null
+@__olang_errpay_parent = thread_local(initialexec) global %olang.scope zeroinitializer
+
+; a new record on top: its region returned, the payload set by __olang_errpay_set once copied there
+define ptr @__olang_errpay_push() cold {
+entry:
+  %r = call ptr @__olang_region_make(ptr @__olang_errpay_parent)
+  %rec = call ptr @__olang_region_alloc(ptr %r, i64 24, i64 8)
+  %prev = load ptr, ptr @__olang_errpay_top
+  store ptr %prev, ptr %rec
+  %rp = getelementptr ptr, ptr %rec, i64 1
+  store ptr %r, ptr %rp
+  %pp = getelementptr ptr, ptr %rec, i64 2
+  store ptr null, ptr %pp
+  store ptr %rec, ptr @__olang_errpay_top
+  ret ptr %r
+}
+
+define void @__olang_errpay_set(ptr %payload) cold {
+entry:
+  %rec = load ptr, ptr @__olang_errpay_top
+  %pp = getelementptr ptr, ptr %rec, i64 2
+  store ptr %payload, ptr %pp
+  ret void
+}
+
+; the payload of the error in flight
+define ptr @__olang_errpay_top_get() {
+entry:
+  %rec = load ptr, ptr @__olang_errpay_top
+  %pp = getelementptr ptr, ptr %rec, i64 2
+  %p = load ptr, ptr %pp
+  ret ptr %p
+}
+
+define void @__olang_errpay_pop() {
+entry:
+  %rec = load ptr, ptr @__olang_errpay_top
+  %prev = load ptr, ptr %rec
+  store ptr %prev, ptr @__olang_errpay_top
+  %rp = getelementptr ptr, ptr %rec, i64 1
+  %r = load ptr, ptr %rp
+  tail call void @__olang_region_drop(ptr %r)
+  ret void
+}
+
 ; E35 in a build that keeps no trace: the "!"'s message, the requirement that raised the error where one did, the hint
 define void @__olang_bang_failed_plain(ptr %msg) cold noreturn {
 entry:
@@ -232,6 +282,64 @@ define void @__olang_test_error(ptr %name) cold noreturn {
 entry:
   store ptr %name, ptr @__olang_fail_error
   call void @__olang_check_end()
+  unreachable
+}
+
+; T19b: "!"'s message where the error carries a payload, rendered at run time: where, the text, then as
+; __olang_bang_failed (traced) or __olang_bang_failed_plain does
+define void @__olang_bang_failed_text(ptr %where, { i64, ptr } %text, i1 %traced) cold noreturn {
+entry:
+  %stream = call ptr @__olang_check_stream()
+  call i32 @fputs(ptr %where, ptr %stream)
+  %len = extractvalue { i64, ptr } %text, 0
+  %data = extractvalue { i64, ptr } %text, 1
+  call i64 @fwrite(ptr %data, i64 1, i64 %len, ptr %stream)
+  call i32 @fputc(i32 10, ptr %stream)
+  br i1 %traced, label %trace, label %plain
+trace:
+  call void @__olang_ert_print(ptr %stream)
+  br label %done
+plain:
+  call void @__olang_ert_req_print(ptr %stream)
+  br label %done
+done:
+  call void @__olang_check_end()
+  unreachable
+}
+
+; B5, T19b: an error carrying a payload escapes main: "unhandled error: TEXT", where it came from (or the hint), status 1
+@__olang_msg_unhandled = unnamed_addr constant [18 x i8] c"unhandled error: \00"
+define void @__olang_unhandled_text({ i64, ptr } %text, i1 %traced) cold noreturn {
+entry:
+  %stream = load ptr, ptr @stderr
+  call i32 @fputs(ptr @__olang_msg_unhandled, ptr %stream)
+  %len = extractvalue { i64, ptr } %text, 0
+  %data = extractvalue { i64, ptr } %text, 1
+  call i64 @fwrite(ptr %data, i64 1, i64 %len, ptr %stream)
+  call i32 @fputc(i32 10, ptr %stream)
+  br i1 %traced, label %trace, label %plain
+trace:
+  call void @__olang_ert_print(ptr %stream)
+  br label %done
+plain:
+  call void @__olang_ert_req_print(ptr %stream)
+  br label %done
+done:
+  call void @exit(i32 1)
+  unreachable
+}
+
+; T19b: S16's FAIL line naming an error that carries a payload, rendered at run time - kept as C text for the harness
+define void @__olang_test_error_text({ i64, ptr } %text) cold noreturn {
+entry:
+  %len = extractvalue { i64, ptr } %text, 0
+  %data = extractvalue { i64, ptr } %text, 1
+  %n = add i64 %len, 1
+  %c = call ptr @malloc(i64 %n)
+  call void @llvm.memcpy.p0.p0.i64(ptr %c, ptr %data, i64 %len, i1 false)
+  %end = getelementptr i8, ptr %c, i64 %len
+  store i8 0, ptr %end
+  call void @__olang_test_error(ptr %c)
   unreachable
 }
 

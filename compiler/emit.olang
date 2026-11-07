@@ -1667,7 +1667,7 @@ fn stmtSpan(s mir.Stmt&) source.Span {
         case mir.Stmt.Close(sp, _), mir.Stmt.RegisterDtor(sp, _, _, _), mir.Stmt.Release(sp, _): sp
         case mir.Stmt.Settle(sp, _, _), mir.Stmt.Write(sp, _, _, _): sp
         case mir.Stmt.CopyElems(sp, _, _, _), mir.Stmt.Spawn(sp, _, _), mir.Stmt.Raised(sp): sp
-        case mir.Stmt.Deferred(sp, _, _): sp
+        case mir.Stmt.Deferred(sp, _, _), mir.Stmt.ErrSet(sp, _), mir.Stmt.ErrPop(sp): sp
     }
 }
 
@@ -3535,6 +3535,14 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
             }
         }
         case mir.Stmt.Raised(sp) { fe.trace(sp) }
+        case mir.Stmt.ErrSet(_, x) {
+            fe.E.runtime("__olang_errpay_set")
+            fe.w("call void @__olang_errpay_set(ptr " $fe.val(x) ")")
+        }
+        case mir.Stmt.ErrPop(_) {
+            fe.E.runtime("__olang_errpay_pop")
+            fe.w("call void @__olang_errpay_pop()")
+        }
         case mir.Stmt.Deferred(_, _, _) { fe.gap("a cleanup (interpret's)") }
         case mir.Stmt.RegisterDtor(_, sr, ty, x) {
             k := try mir.DropFn(t, ty, try fe.E.dtorOf.Get(ty) catch default -1) catch {
@@ -4138,6 +4146,15 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             o := fe.objectPtr(fe.val(x), fe.otype(x))
             r := fe.let("call ptr @__olang_region_or(ptr " $o ", ptr " $fe.scope(s) ")")
             return fe.let("ptrtoint ptr " $r " to i64")
+        }
+        case mir.Rvalue.ErrPush {
+            fe.E.runtime("__olang_errpay_push")
+            r := fe.let("call ptr @__olang_errpay_push()")
+            return fe.let("ptrtoint ptr " $r " to i64")
+        }
+        case mir.Rvalue.ErrTop(_) {
+            fe.E.runtime("__olang_errpay_top_get")
+            return fe.let("call ptr @__olang_errpay_top_get()")
         }
     }
 }
@@ -5299,14 +5316,31 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
     if kind == mir.ExitKind.Escaped {
         # S16, S18d: "left the test" in the trace, the error named on the test's FAIL line
         text := ""
+        dyn := true
         match msg {
-            case mir.Operand.Data(_, c, _, _) { text = fe.constText(c) }
+            case mir.Operand.Data(_, c, _, _) {
+                text = fe.constText(c)
+                dyn = false
+            }
             case _ { }
         }
         fe.E.declare("__olang_ert_pass", "void @__olang_ert_pass(ptr)")
-        fe.E.declare("__olang_test_error", "void @__olang_test_error(ptr) cold noreturn")
         fe.w("call void @__olang_ert_pass(ptr " $fe.located(sp, ": left the test\n") ")")
-        fe.w("call void @__olang_test_error(ptr " $fe.E.cstr(text) ")")
+        if dyn {
+            # T19b: a name rendered with the payload its error carries
+            fe.E.runtime("__olang_test_error_text")
+            fe.w("call void @__olang_test_error_text({ i64, ptr } " $fe.textPair(msg) ")")
+        } else {
+            fe.E.declare("__olang_test_error", "void @__olang_test_error(ptr) cold noreturn")
+            fe.w("call void @__olang_test_error(ptr " $fe.E.cstr(text) ")")
+        }
+        fe.w("unreachable")
+        return
+    }
+    if kind == mir.ExitKind.Unhandled {
+        tr := "true" if fe.E.traced() else "false"
+        fe.E.runtime("__olang_unhandled_text")
+        fe.w("call void @__olang_unhandled_text({ i64, ptr } " $fe.textPair(msg) ", i1 " $tr ")")
         fe.w("unreachable")
         return
     }
@@ -5315,7 +5349,14 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
         text := ""
         match msg {
             case mir.Operand.Data(_, c, _, _) { text = fe.constText(c) }
-            case _ { }
+            case _ {
+                # T19b: a name rendered with the payload its error carries
+                fe.E.runtime("__olang_bang_failed_text")
+                tr := "true" if fe.E.traced() else "false"
+                fe.w("call void @__olang_bang_failed_text(ptr " $fe.located(sp, ": ") ", { i64, ptr } " $fe.textPair(msg) ", i1 " $tr ")")
+                fe.w("unreachable")
+                return
+            }
         }
         # where no trace is kept, the requirement that raised it is named, then the hint (D17)
         f := "__olang_bang_failed" if fe.E.traced() else "__olang_bang_failed_plain"
@@ -5339,6 +5380,14 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
         }
     }
     fe.w("unreachable")
+}
+
+# a text operand (an array of Chars, or a reference to one) as the pair { length, data } C's side reads
+fn (fe mut fnEm&) textPair(msg mir.Operand) String {
+    mt := fe.otype(msg)
+    v := fe.val(msg, mt)
+    data, n := fe.arrayParts(v, mt)
+    return fe.pair(n, data)
 }
 
 # a call (MIR's Call terminator): its arguments as its callee takes them, its result stored on its ok edge, its error
