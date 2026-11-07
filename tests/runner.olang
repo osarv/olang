@@ -142,7 +142,7 @@ test "a two-hop alias chain constructs a re-exported plain type via a struct lit
 }
 
 test "a two-hop alias chain constructs a re-exported plain type via an array literal" {
-    pts Array<wk.Base.BasePoint> = wk.Base.BasePoint[wk.Base.BasePoint(1, 2), wk.Base.BasePoint(3, 4)]
+    pts Array<wk.Base.BasePoint> = Array<wk.Base.BasePoint>[wk.Base.BasePoint(1, 2), wk.Base.BasePoint(3, 4)]
     assert pts[0].X == 1
     assert pts[1].Y == 4
 }
