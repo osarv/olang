@@ -30075,3 +30075,70 @@ both: scope 2,377 ms without versions, 2,446 ms with (+3%, within the noise of t
 `versions: 186 bodies with a cursor, 647 definitions, 68 judgings asked again`. Bench's IR changes only in std/os's and
 std/regex's: a text a cursor was given, built in the program's scope before (the cursor's one claim was a constant's,
 the program's) and now in the function's frame or the caller's scope, where its reads are.
+
+## Storage kept for a view: O27 as placement (docs/sec8.md round 2, 2026-11-07, wt-sec8r2)
+
+The user's QCR (1a) of 2026-11-03 reversed QCB's no-extension rule: a view of storage kept longer than the storage lives
+has the storage built where the view is kept, as item 17's local is - no refusal, its memory listed by `-memory`. Built
+in the scope pass's inference (compiler/scope.olang), with lowering's temporaries and the driver's report.
+
+**How it was built (mine, within docs/sec8.md 4).** The inference's proposals reach a view's storage: `proposeView`
+takes a slice of a local's storage or of what a reference local names, a borrow of a part, a slice of a temporary
+(E16a), a conversion naming a local's storage (T29a: `Borrow(Deref(Convert(Borrow(local))))`, `convertedLocal`), a call
+handing back a borrow of an argument (O13: the argument proposed, `borrowedCall`) and a closure (each capture proposed:
+a closure is a view of its captures); a local declared as a view (`viewOf`), or as a walk's element (`walkSrc` - the
+generator's argument), or from a borrowed call or a conditional/match (each value proposed as stored alone, E28), sends
+the proposal on at the end of its origin chain (`proposeFrom`); a callee's relation marked `View` lifts at the call
+(`dischargeRels`, `builtOK`). **Phases**: `inferClaims` gathers whole lifts to their fixed point exactly as before, and
+only if the last of those judgings met a view, part or capture kept too long (`viewWanted`) judges again with them
+proposing - so a program accepted before is placed as before and pays no extra judging (bench's 16 programs: IR
+byte-identical, every module); `judgeOnce` lets views propose (a judging that proposes is redone by the phases anyway).
+**Parts** (a field read out of what a local's constructor built) propose only once the field inference has settled: a
+settled round that still refused a part (`partWanted`, from the last judging of a body's gathering) turns `partsOn` on
+and judges every component afresh (no component taken again), part lifts then made only in a body's second phase -
+o23adepth's View instance and the Node it was made from built where the read after the loop needs them.
+**Temporaries**: a slice of one kept longer lifts the temporary's site (`proposeSite`); `tempTerm`/`storOf` place it
+there and `Plan.TempKept` tells lowering, whose `tempLocal` homes the temporary there (a new object each time, `Live`)
+instead of the frame - rv9slicetemp, rv9slicetempas, rv9slicetempview. **Generators** needed nothing of their own: a
+view of a walk-local yielded by a generator whose elements live where it does (D18c's third form) lifts the local to
+the generator's home capture, and a consumer keeping elements lifts the walk local (the receiver of `Next`, a borrowed
+result) to where they are kept; emit's elision dataflow already leaves a walk made in an outer block and called each
+turn on the arena path (D18e), so emit is unchanged.
+
+**What stays refused** - each a refusal of `liftLocal`/`proposeStorage`, said by `viewKept`/`partKept` with why:
+storage holding a value whose destructor is still to run (docs/sec8.md question 2, decided by me as recommended - a
+file would stay open as long as a list keeps a slice of its name: `ViewKeptDestructor`, `PartKeptDestructor`, rule
+`O27, O15`), a match binding's or a capture's copy (`ViewKeptCopy`), a derived or unknown scope (`ViewKept`, reworded:
+"where no storage can be built for it"), a by-value parameter's own storage (O14/C2d's errors, as before), a `Next()`
+result scope. **C4** (docs/sec8.md 6): a body whose reporting judging said an error has `summary.Erred`, and its callers
+do not discharge its obligations - one cause, one error; bulk 6's gen_walkkept itself now compiles (its generator
+builds its local where it lives, its consumer makes the walk where the words are kept), and a generator yielding views
+of a destructor-holding local gives its one O27 error in the generator (o27destructorgen).
+
+**-memory and the language server** (B18, docs/sec8.md 4.4): `Scoper.Placements()` - each lift made while a view, a
+part or a capture proposed (`placed`, recorded in `liftLocal`/`proposeSite`, dropped with the lifts) - printed after
+early freeing's rows, in source order: `FILE:L:C: memory: 't' is built in main's scope, a new one each time it is made,
+for a view of it kept here`, a note at the declaration naming the copy that would let it go with its turn, and a count;
+the language server publishes each as a hint (severity 4, code `O27`), beside deprecation's. The checks scenario
+`memoryplaced`.
+
+**The evaluator** (K1) runs on lowering's stand-in placement, before the scope pass: a view of a local is fine there
+(item 17 homes kept locals in the program's scope), but a slice of a temporary read the temporary's frame slot after
+its function returned - tests/viewplace.olang's top-level assert said "uses storage after the scope it was made in
+closed". The stand-in now homes a temporary a slice or a borrow is taken of in the program's scope (`lowering.viewing`),
+so baked globals and decided asserts agree with the run time; `interpret` places by the plans and agreed on every new
+run case.
+
+**Newly compiling** (run cases under `-debug -sanitize`, read back after a churn, the same output interpreted):
+d18cinputoutlived, d18cyieldframe, d18cyieldlocal, o10celementstash, o25enote, o27genborrow, t22aviewkept,
+t22borrowedresult, d16cstore, rv9slicetemp, rv9slicetempas, rv9slicetempview, t29aconvlifetime, o23adepth,
+stro20condstore, c4genwalkkept, c4genwalkkept2, and seven the full run of the cases found accepted: d18cheldfield and
+d18cheldlocal (a generator's kept elements, held in a field and in a local, kept past its block - the holder built where
+the list lives), d18cviewkept (a walk made where its kept elements are kept), e16atrydefaultslice (a slice of a try's
+temporary returned - the temporary homed in the result scope), rv9slicetempctor (a constructor field's slice of a
+temporary - homed with the instance), s5capturestruct (closures pushed into a list - what each captured built where the
+list lives) and t22avalueexact (a call through a value whose result is exactly where its argument must be). o23aliaswrite stays refused at its read (O25i: its part is read through
+an instance an element aliases - refused, as sound as accepted would be; pinned). tests/viewplace.olang: a turn's text
+kept through its first character, a view handed back of what a function builds (`head`), a slice of a temporary in a
+parameter's field, a generator's views of a local it made, a closure over a turn's local, a part of an instance past
+its turn - baked (`Heads`) and asserted at the top level beside the run-time tests.

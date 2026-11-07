@@ -1050,10 +1050,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   is one. (Until 2026-11-02 a type could write `b N&a` or `T&p`.) **A result holding references reads as borrowed from
   the reference parameters (open point 5, the user's approval; built 2026-11-02, round 4b)**: a call through a value
   holds each reference argument to outlive where the result lands - exactly there where something can be stored
-  through both, the result landing where that argument lives - and as a view (O27: never met by building the argument
-  longer), so a function whose obligations are only these hands back what an argument refers to and is a value (`fn
-  first(a Array<I64>&) Array<I64>& { return a[0:1] }; g := first`). Decided (mine): reference parameters only; a call
-  through a value is stricter than the direct call where that would build the argument longer.
+  through both, the result landing where that argument lives - and as a view (O27: an argument's storage the caller
+  builds is built where the result lands, since 2026-11-07), so a function whose obligations are only these hands back
+  what an argument refers to and is a value (`fn first(a Array<I64>&) Array<I64>& { return a[0:1] }; g := first`).
+  Decided (mine): reference parameters only.
 - **Static literals (T25d).** A literal known while compiling reaching a read-only reference is the constant data
   itself; an immutable global no writable reference reaches is `constant`, and importers see its value (K2).
 - **A number type's limits through its name (E36, the user's decision 2026-10-24).** `I64.Max`, `U8.Min`, `T.Max`
@@ -1449,9 +1449,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Scopes inferred, none written (QCB, O28, the user's decision 2026-10-30: "Yes, do this scoping rework"; built
   2026-11-02, round 4 of docs/rework.md).** Every scope marker goes - `&x`, `&return`, scope arguments `f&x()`, `outlives` - and the compiler places each
   value in the shortest-lived scope every use allows (region inference over the whole program, as obligations already
-  are; field and result scopes hidden parameters), a value kept longer built directly where it is kept. One rule keeps
-  memory at today's best hand placement: no storage is extended past the loop turn or block that made it - a view of such
-  storage kept longer is an error naming `.Copy()`/`$x`, never a hidden copy. A bare `&` (a reference) stays.
+  are; field and result scopes hidden parameters), a value kept longer built directly where it is kept - and, since the
+  user's QCR (1) of 2026-11-03 reversed the rule that no storage is extended past the loop turn or block that made it,
+  the storage a kept view shows built where the view is kept too (O27 as placement, below), never a hidden copy. A bare
+  `&` (a reference) stays.
   **No manual scopes at all (the user, 2026-10-30: "make manual scopes impossible")**: there is no way to write a
   scope - no marker, scope argument or relation in the grammar; a removed spelling is simply gone (principle 4), so `&x`
   after a type is a syntax error like any unknown form, not a diagnostic about scopes. Markers are optional only inside
@@ -1491,6 +1492,33 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `planAt` (scopedump, lowerdump and emitdump build - `make dumptool` compiles scopedump's module in the suite),
   r9adefaultinner and strcursornewnode (run cases); the keeps analysis (O17) counts every version's regions
   (nllkeepsunion1/2). tests/nll.olang.
+- **Storage kept for a view (O27 as placement, the user's QCR (1a) 2026-11-03 reversing QCB's no-extension rule;
+  docs/sec8.md round 2, built 2026-11-07, details mine).** A view of storage - a slice, a borrow of a part, what a callee
+  hands back of an argument's storage (O13), a conversion naming a local's storage (T29a), a closure of what it captured
+  - kept where that storage does not live has the storage built where the view is kept, as item 17's local is: a turn's
+  text kept through its words is built where the list lives, a new one each turn; a slice of a temporary has the
+  temporary homed there (lowering's `tempLocal`, `Plan.TempKept`); a generator's element viewing its argument has the
+  argument built there, one viewing what its walk keeps has the local built where the generator lives (D18c) and the
+  walk made where the elements are kept - emit's elision dataflow then leaves such a walk on the arena path by itself
+  (D18e); a part of an instance a local built, kept longer, has the instance built there once the field inference has
+  settled (O20). Still refused, the errors saying which: a by-value parameter's own storage, a match binding's or a
+  capture's copy (ViewKeptCopy), a `Next()` result scope, a derived or unknown scope (ViewKept, reworded), and storage
+  holding a value whose destructor is still to run (ViewKeptDestructor, PartKeptDestructor - docs/sec8.md question 2:
+  its end stays where its holder lets go). Decided (mine): the inference gathers whole lifts first, exactly as before,
+  and only where the settled judging still has a view, part or capture kept too long (`viewWanted`) judges again with
+  those proposing - so a program accepted before places byte-identically (bench IR checked) and pays no extra judging;
+  part lifts only once the field inference has settled (`partsOn`, a round judged afresh), and then only in that second
+  phase; a local declared from a conditional or a match proposes each value as stored alone (E28); `-memory` lists each
+  placement at the view with the copy that would let it go (B18, `Scoper.Placements`), and the language server shows it
+  as a hint (severity 4, code O27); C4 (docs/sec8.md 6): a body whose reporting judging said a section-8 error has its
+  obligations left undischarged at its callers (`summary.Erred`) - one cause, one error; the stand-in placement the
+  evaluator runs on homes a viewed temporary in the program's scope (it read a slice of one from a closed frame). Newly
+  compiling, run cases under `-debug -sanitize` read back after a churn and agreeing under `interpret`:
+  d18cinputoutlived, d18cyieldframe, d18cyieldlocal, o10celementstash, o25enote, o27genborrow, t22aviewkept,
+  t22borrowedresult, d16cstore, rv9slicetemp(-as, -view), t29aconvlifetime, o23adepth, stro20condstore, bulk 6's
+  gen_walkkept and gen_walkkept2 (c4genwalkkept, -2), d18cheldfield, d18cheldlocal, d18cviewkept, e16atrydefaultslice,
+  rv9slicetempctor, s5capturestruct, t22avalueexact; o23aliaswrite stays refused (sound). tests/viewplace.olang, the
+  checks scenario `memoryplaced`.
 - **Obligations (O10b/O10c).** Inferred from the body, held at every call to the callee's whole body (checked on
   demand and at a fixed point); temporaries built where the obligation says (O18b/O18c). A `:=` from a call lands by
   obligations only where something is kept.
