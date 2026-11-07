@@ -2450,7 +2450,7 @@ fn (d DropHolding&) Holds(h I64, v I64) Bool {
     return false
 }
 
-fn DropHolds(t types.Table&, b Body&) DropHolding {
+fn DropHolding.DropHolds(t types.Table&, b Body&) DropHolding {
     out := DropHolding()
     if b.Root is null: return out
     findHolders(b, b.Root!, out)

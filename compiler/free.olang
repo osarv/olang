@@ -1181,7 +1181,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     errDefers Vec<I64>
 }
 
-fn newWalker(f mut Free&, b I64, final Bool) mut walker& {
+fn walker.newWalker(f mut Free&, b I64, final Bool) mut walker& {
     if f.wk is null { f.wk = walker(f, b, final) }
     w := f.wk!
     w.Id = b
@@ -1266,7 +1266,7 @@ fn (f mut Free&) walk(b I64, final Bool) {
         if t.IsRef(r) { r = t.Repr(t.Referent(r)) }
         if t.KindOf(r) == types.Kind.Named and t.HasBody(r) and t.Destructs(r) { f.setRegOut(b) }
     }
-    w := newWalker(f, b, false)
+    w := walker.newWalker(f, b, false)
     # the locals' origins to a fixed point: a loop's later statements reach its earlier ones. Origins only grow and are
     # finitely many, so it converges; it is never cut short (F3) - an under-approximation would free what is in use
     for {
@@ -1589,7 +1589,7 @@ fn (w mut walker&) result(o Vec<I64>&) {
 
 fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     w.targets.Push(p)
-    c0 := typed.CallOf(x)
+    c0 := typed.Call.Of(x)
     outer := w.exemptSite
     w.exemptSite = I64(c0.Site) if c0 is not null and p != typed.Lvalue.Local else -1
     # Part C: a copy of a value handed on stored into a part held in place - made for its leaves (copyInto)
@@ -1679,7 +1679,7 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
         w.copyLeaves(lvs, cm, sp)
         return o
     }
-    c := typed.CallOf(x)
+    c := typed.Call.Of(x)
     b2 := typed.CalleeBody(c) if c is not null else -1
     if b2 >= 0 and f.Bodies[b2].Root is not null and t.Role(f.Bodies[b2].Ty) == types.RoleCtor and
        t.Results(f.Bodies[b2].Ty).Len() == 1 and t.Same(t.Repr(t.Results(f.Bodies[b2].Ty)[0]), t.Repr(ty)) {
@@ -1952,7 +1952,7 @@ fn (w mut walker&) eval(sp source.Span, x typed.Expr&) {
         }
         case _ { }
     }
-    c := typed.CallOf(x)
+    c := typed.Call.Of(x)
     if c is not null {
         for y in o {
             if okind(y) == OMov { w.go(oval(y), LDrop, x.Span(), receiverSpan(c), typed.CalleeBody(c)) }
@@ -2906,7 +2906,7 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
                 kind = SFresh
             } else if why == "" {
                 # a call handing out a value moved out of the place
-                c := typed.CallOf(x)
+                c := typed.Call.Of(x)
                 b2 := typed.CalleeBody(c) if c is not null else -1
                 if b2 >= 0 and f.Bodies[b2].Root is not null and f.mustRes[b2] == MovBase + k {
                     kind = SMove
@@ -3184,7 +3184,7 @@ fn (w mut walker&) destroyMade(x typed.Expr&) I64, I64, I64, String {
     }
     site, why := w.freshSite(x)
     if site >= 0 { return SFresh, -1, site, "" }
-    c := typed.CallOf(x)
+    c := typed.Call.Of(x)
     b2 := typed.CalleeBody(c) if c is not null else -1
     if b2 >= 0 and f.Bodies[b2].Root is not null and f.mustRes[b2] >= MovBase {
         return SMove, f.mustRes[b2] - MovBase, -1, ""
@@ -3941,7 +3941,7 @@ fn runs(sc typed.Scope) Bool {
 fn (f mut Free&) placeable(st store) Bool {
     x := st.X!
     if not runs(f.siteScope(st.Body, x)) { return false }
-    c := typed.CallOf(x)
+    c := typed.Call.Of(x)
     match x {
         case typed.Expr.Promote(_, _, pr) { c = ctorCall(pr.X) }
         case typed.Expr.Away(_, _, y) { return f.placeable(store(st.PlaceId, st.Body, st.File, st.Sp, st.Kind, st.Of, st.Site, y, null)) }

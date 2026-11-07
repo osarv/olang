@@ -21,11 +21,11 @@ type Header packed struct(Version U4, Ihl U4, Length U16, K Kind, F Flags, S I5,
     Lanes := Array<U3>(4)
 }
 
-fn header(n U16) Header { return Header(4, 5, n, Kind.Fin, Flags(true, false, true), -3, Op.Put, 1.5) }
+fn Header.header(n U16) Header { return Header(4, 5, n, Kind.Fin, Flags(true, false, true), -3, Op.Put, 1.5) }
 
 # fields written one by one - a nested packed struct's field, an array field's element, a raw-valued enum
-fn written(n U16) Header {
-    h := header(n)
+fn Header.written(n U16) Header {
+    h := Header.header(n)
     h.Ihl = 6
     h.Length += 100
     h.F.Ack = true
@@ -42,10 +42,10 @@ type Word packed struct(Lo U4, Mid U8, Hi U4) { Lo, Mid, Hi }
 
 fn wordBits(w Word) I64 { return I64(w.Lo) | I64(w.Mid) << 4 | I64(w.Hi) << 12 }
 
-Written Header = written(20)
-Equal Bool = written(7) == written(7) and written(7).Hash() == written(7).Hash()
-Unequal Bool = written(7) == written(8)
-Rendered String = $written(20)
+Written Header = Header.written(20)
+Equal Bool = Header.written(7) == Header.written(7) and Header.written(7).Hash() == Header.written(7).Hash()
+Unequal Bool = Header.written(7) == Header.written(8)
+Rendered String = $Header.written(20)
 
 assert Header.Size == 9 and Header.Align == 1 and Flags.Size == 1 and Word.Size == 2
 assert Written.Ihl == 6 and Written.Length == 120 and Written.F.Ack and Written.F.Syn and Written.Lanes[1] == 6
@@ -55,7 +55,7 @@ assert Rendered == "Header(4, 6, 120, Kind.Fin, Flags(true, true, true), -2, Op.
 assert wordBits(Word(0xA, 0xBC, 0xD)) == 0xDBCA
 
 test Header "fields read and written by their bits alone, computed while compiling as at run time" {
-    h := written(U16(20 + Live))
+    h := Header.written(U16(20 + Live))
     assert h == Written and h.Hash() == Written.Hash()
     assert $h == Rendered
     h.Lanes[3] = 7
@@ -72,7 +72,7 @@ test Header "a field's neighbours keep their bits when it is stored, signed fiel
     w.Lo = 0
     w.Hi = 1
     assert wordBits(w) == 0x1AB0
-    h := header(U16(Live))
+    h := Header.header(U16(Live))
     h.S = -16
     assert h.S == -16 and h.Code == Op.Put
     h.S--
@@ -91,11 +91,11 @@ fn bump() I64 {
 }
 
 test Header "a packed value held in a struct and an array, its fields written through them" {
-    f := Frame(1, header(9))
+    f := Frame(1, Header.header(9))
     f.hdr.F.Fin = false
     f.hdr.Lanes[0] = 5
     assert not f.hdr.F.Fin and f.hdr.Lanes[0] == 5 and f.hdr.Length == 9
-    hs := Array<Header>(3, header(1))
+    hs := Array<Header>(3, Header.header(1))
     hs[bump()].Length += 2
     assert Bumps == 1 and hs[0].Length == 3 and hs[1].Length == 1
 }
@@ -126,7 +126,7 @@ test Pub "json writes and reads a packed struct by its fields" {
 }
 
 test Header "an array field stored whole, and its copy's lanes" {
-    h := header(U16(Live))
+    h := Header.header(U16(Live))
     h.Lanes = U3[1, 2, 3, 4]
     l := h.Lanes
     l += U3[1, 1, 1, 1]

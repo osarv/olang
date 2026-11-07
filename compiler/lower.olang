@@ -897,7 +897,7 @@ fn (ln mut lowering&) holderOf(k I64) I64 { return typed.DropHolder(ln.B, ln.def
 
 fn (ln mut lowering&) holds() typed.DropHolding& {
     if not ln.holdingMade {
-        ln.holding = typed.DropHolds(ln.T, ln.B)
+        ln.holding = typed.DropHolding.DropHolds(ln.T, ln.B)
         ln.holdingMade = true
     }
     return ln.holding
@@ -1765,7 +1765,7 @@ fn (ln mut lowering&) borrow(p typed.Lvalue&, bt types.TypeId, sp source.Span) m
     if q.Pk < 0 or ln.dead { return ln.into(bt, mir.Rvalue.Ref(ln.mk(q), bt), sp) }
     if (ln.T.PermOf(bt) & types.Writable) != 0 { ln.gap(sp, "a field of a packed struct lent writably") }
     l := ln.local(ln.packedRead(q, p.Type(), sp), p.Type(), sp)
-    return ln.into(bt, mir.Rvalue.Ref(mir.L(l), bt), sp)
+    return ln.into(bt, mir.Rvalue.Ref(mir.Lvalue.L(l), bt), sp)
 }
 
 # p's field i, where p is a packed value: a step no place holds, read and written through the value
@@ -1833,7 +1833,7 @@ fn (ln mut lowering&) packedWrite(p pl, v mir.Operand, sp source.Span) {
         }
         a := ln.local(vs[k], tys[k], sp)
         ln.emit(mir.Stmt.Assign(sp, ln.F.Place(mir.Base.Local(a), mir.Proj[st]), mir.Rvalue.Use(cur)))
-        cur = mir.Operand.Copy(mir.L(a))
+        cur = mir.Operand.Copy(mir.Lvalue.L(a))
     }
     ln.emit(mir.Stmt.Assign(sp, ln.F.Place(p.B, p.Ps.View()[:p.Pk]), mir.Rvalue.Use(cur)))
 }

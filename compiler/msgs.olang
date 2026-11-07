@@ -1020,7 +1020,7 @@ fn OptionNeedsValue(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.Opti
 fn QuickAlone(text String&) r.Msg { return r.Msg(Diag.QuickAlone, "B2g", "-quick and " $text " each say how much to optimize - give one") }
 
 # ERR_INTERPRET_BUILDS
-fn InterpretBuilds(text String&) Msg { return Msg(Diag.InterpretBuilds, "B3e", "-interpret builds nothing, and " $text " says how to build - give one") }
+fn InterpretBuilds(text String&) r.Msg { return r.Msg(Diag.InterpretBuilds, "B3e", "-interpret builds nothing, and " $text " says how to build - give one") }
 
 # ERR_FUZZ_TIME_NOT_NUMBER
 fn FuzzTimeNotNumber(text String&) r.Msg { return r.Msg(Diag.FuzzTimeNotNumber, "B19", "-fuzztime takes a whole number of seconds, at least 1, and '" $text "' is none") }
@@ -1898,22 +1898,22 @@ fn UniqueByValue(ty String&, what String&) r.Msg { return r.Msg(Diag.UniqueByVal
 fn UniqueFill(ty String&) r.Msg { return r.Msg(Diag.UniqueFill, "T13b", "Array<" $ty ">(n, fill) copies its fill into every element, and " $ty " is unique - make each element with a comprehension ('" $ty "[" $ty "(...) for i in range n]'), or hold references ('Array<" $ty "&>')") }
 
 # ERR_PACKED_NOT_STRUCT
-fn PackedNotStruct() Msg { return Msg(Diag.PackedNotStruct, "T13c", "'packed' lays a struct out bit by bit - it is written right before 'struct', nothing else") }
+fn PackedNotStruct() r.Msg { return r.Msg(Diag.PackedNotStruct, "T13c", "'packed' lays a struct out bit by bit - it is written right before 'struct', nothing else") }
 
 # ERR_PACKED_FIELD
-fn PackedField(ty String&, what String&) Msg { return Msg(Diag.PackedField, "T13c", "a packed struct lays its fields out bit by bit, so " $ty " (" $what ") is no field of one - a field is an integer, Bool, Char, float, payload-free enum, packed struct, or an array of a known length of these") }
+fn PackedField(ty String&, what String&) r.Msg { return r.Msg(Diag.PackedField, "T13c", "a packed struct lays its fields out bit by bit, so " $ty " (" $what ") is no field of one - a field is an integer, Bool, Char, float, payload-free enum, packed struct, or an array of a known length of these") }
 
 # ERR_PACKED_PARAMS
-fn PackedParams() Msg { return Msg(Diag.PackedParams, "T13c", "a packed struct takes no type parameters - its layout is its declaration's") }
+fn PackedParams() r.Msg { return r.Msg(Diag.PackedParams, "T13c", "a packed struct takes no type parameters - its layout is its declaration's") }
 
 # ERR_PACKED_DESTRUCT
-fn PackedDestruct() Msg { return Msg(Diag.PackedDestruct, "T13c", "a packed struct holds plain data, so it declares no destructor") }
+fn PackedDestruct() r.Msg { return r.Msg(Diag.PackedDestruct, "T13c", "a packed struct holds plain data, so it declares no destructor") }
 
 # ERR_PACKED_LEND
-fn PackedLend(field String&) Msg { return Msg(Diag.PackedLend, "T13c", "'" $field "' is a field of a packed struct, at a bit offset, so no reference names it - copy it into a local first ('v := " $field "') and lend that") }
+fn PackedLend(field String&) r.Msg { return r.Msg(Diag.PackedLend, "T13c", "'" $field "' is a field of a packed struct, at a bit offset, so no reference names it - copy it into a local first ('v := " $field "') and lend that") }
 
 # ERR_PACKED_BY_VALUE_C
-fn PackedByValueC(ty String&) Msg { return Msg(Diag.PackedByValueC, "X11a", $ty " is packed and holds a float, so it crosses to C by reference only - write '" $ty "&'") }
+fn PackedByValueC(ty String&) r.Msg { return r.Msg(Diag.PackedByValueC, "X11a", $ty " is packed and holds a float, so it crosses to C by reference only - write '" $ty "&'") }
 
 # ERR_UNIQUE_AFTER
 fn UniqueAfter(name String&, ty String&) r.Msg { return r.Msg(Diag.UniqueAfter, "T13b", "'" $name "' is handed on here, and " $ty " is unique - a unique value given by value lands once more only at its last mention, and '" $name "' is mentioned after") }
@@ -1922,7 +1922,7 @@ fn UniqueAlias(name String&, ty String&, alias String&) r.Msg { return r.Msg(Dia
 fn DestroyedAfter(name String&) r.Msg { return r.Msg(Diag.DestroyedAfter, "C9b", "'" $name "' is destructed here, and mentioned after - nothing reaches a value its Destroy() ended") }
 
 # ERR_DROP_CYCLE
-fn DropCycle(a String&, b String&) Msg { return Msg(Diag.DropCycle, "O15", "'" $a "' and '" $b "' may each hold a reference to the other, and both have destructors to run - whichever is ended first, the other's destructor could read it: end one of them before the other refers to it (a block of its own, or its Destroy()), or hold one by reference") }
+fn DropCycle(a String&, b String&) r.Msg { return r.Msg(Diag.DropCycle, "O15", "'" $a "' and '" $b "' may each hold a reference to the other, and both have destructors to run - whichever is ended first, the other's destructor could read it: end one of them before the other refers to it (a block of its own, or its Destroy()), or hold one by reference") }
 
 # ERR_UNIQUE_KIND
 fn UniqueKind(what String&) r.Msg { return r.Msg(Diag.UniqueKind, "T13b", "'unique' says a value exists in one place - " $what " has no values of its own") }
@@ -3365,13 +3365,13 @@ fn ApiNoSide(text String&) r.Msg { return r.Msg(Diag.ApiNoSide, "B21", "'" $text
 fn ApiNoFiles(text String&) r.Msg { return r.Msg(Diag.ApiNoFiles, "B21", "'" $text "' names no .olang file on either side") }
 
 # ERR_COLUMNS_NOT_RECORD
-fn ColumnsNotRecord(ty String&, row String&, why String&) Msg { return Msg(Diag.ColumnsNotRecord, "T7e", $ty " takes a record for its rows, and " $row " " $why " - a record is a struct whose constructor declares exactly its fields, each a parameter written bare: 'type P struct(X F32, Y F32) { X, Y }'") }
+fn ColumnsNotRecord(ty String&, row String&, why String&) r.Msg { return r.Msg(Diag.ColumnsNotRecord, "T7e", $ty " takes a record for its rows, and " $row " " $why " - a record is a struct whose constructor declares exactly its fields, each a parameter written bare: 'type P struct(X F32, Y F32) { X, Y }'") }
 
 # ERR_COLUMN_NAMED_LIKE_METHOD
-fn ColumnNamedLikeMethod(ty String&, row String&, name String&) Msg { return Msg(Diag.ColumnNamedLikeMethod, "T7e", $row "'s field '" $name "' would be a column of " $ty " named like its method '" $name "' (M19) - rename the field") }
+fn ColumnNamedLikeMethod(ty String&, row String&, name String&) r.Msg { return r.Msg(Diag.ColumnNamedLikeMethod, "T7e", $row "'s field '" $name "' would be a column of " $ty " named like its method '" $name "' (M19) - rename the field") }
 
 # ERR_COLUMN_ASSIGNED
-fn ColumnAssigned() Msg { return Msg(Diag.ColumnAssigned, "T7e", "a column is assigned whole only alone - 'c.x = v', its length checked against its table's") }
+fn ColumnAssigned() r.Msg { return r.Msg(Diag.ColumnAssigned, "T7e", "a column is assigned whole only alone - 'c.x = v', its length checked against its table's") }
 
 test "a message is its text, its arguments in their places" {
     m := Expected("'}'", Tok("South"))

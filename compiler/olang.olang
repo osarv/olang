@@ -16,6 +16,7 @@ import "target"
 import "cond"
 import "diag"
 import "msgs"
+import "diagmsg"
 import "load"
 import "fetch"
 import "source"
@@ -196,7 +197,7 @@ type CommandLine struct() {
 # a mistake in the command line: reported to the diagnostics already
 type Bad error { Usage }
 
-fn usage(d mut diag.Diagnostics&, m msgs.Msg) ? Bad {
+fn usage(d mut diag.Diagnostics&, m diagmsg.Msg) ? Bad {
     d.Error(diag.Where.Nowhere, m)
     error Bad.Usage
 }
@@ -205,7 +206,7 @@ fn usage(d mut diag.Diagnostics&, m msgs.Msg) ? Bad {
 # the options and the files in any order, each option checked against the mode and a -define defined at once; for
 # running a file and for interpret, whatever follows the file is the program's own, an option's spelling included. The
 # first mistake is reported and the reading stopped
-fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) CommandLine ? Bad {
+fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) CommandLine ? Bad {
     cl := CommandLine()
     if args.Len() < 2 { try usage(d, msgs.Usage()) }
     i I64 = 1
@@ -345,8 +346,8 @@ fn checkOutput(out String&, d mut diag.Diagnostics&) ? Bad {
 # the command line args read and checked - its options in c, the target resolved and the built-in constants defined
 # for a mode that builds - before anything is analyzed: every mistake a command line can have, the first reported.
 # help and explain need nothing more; format only its files
-fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) CommandLine ? Bad {
-    cl := try Parse(args, c, d)
+fn CommandLine.Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) CommandLine ? Bad {
+    cl := try CommandLine.Parse(args, c, d)
     if cl.Mode == Help { return cl }
     # B11d: -quick asks how code is built, which explain shows only of a function's code
     if cl.Mode == Explain and c.Quick and cl.Listing == "" { try usage(d, msgs.ListingQuick("-quick")) }
@@ -388,7 +389,7 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     # the tools that only analyze need no clang, as interpret does not (B12)
     tool := cl.Mode == Doc or cl.Mode == Lsp or cl.Mode == Mcp or cl.Mode == Api
     interpreting := cl.Mode == Interp or c.Interpreted
-    c.Target = try target.Resolve(cl.Spec, c.Clang, interpreting or (tool and c.Clang == ""), d) catch target.Bad {
+    c.Target = try target.Target.Resolve(cl.Spec, c.Clang, interpreting or (tool and c.Clang == ""), d) catch target.Bad {
         error Bad.Usage
     }
     # B12a: another architecture is compiled, built and linked for with its C library, and its programs and tests run
@@ -450,7 +451,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     d := diag.Diagnostics(diag.ColorWanted())
     c := build.Config()
     c.Color = d.Color
-    cl := try Prepare(args, c, d) catch Bad { return said(d) }
+    cl := try CommandLine.Prepare(args, c, d) catch Bad { return said(d) }
     if cl.Mode == Help {
         text := try help(cl, d) catch Bad { return said(d) }
         return write(text)
@@ -723,7 +724,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
 # it was made), the build's modes, target and constants, where it runs and where the standard library is
 fn buildInputs(cfg build.Config&, tests Bool) String {
     exe := try os.RealPath("/proc/self/exe") catch default ""
-    info := try os.Stat(exe) catch os.Error { return "" }
+    info := try os.FileInfo.Stat(exe) catch os.Error { return "" }
     cwd := try os.Cwd() catch default ""
     t := cfg.Target
     return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests $(" prof" if cfg.Profile else "") $(" listing" if cfg.Listing else "") $(" fuzz" if cfg.Fuzz != "" else "") "\n" $
@@ -1040,7 +1041,7 @@ fn cIr(unit String&, text String&, cfg build.Config&) String {
     kept := try os.ReadFile(path) catch os.Error default ""
     if kept != "" { return kept }
     if cfg.Clang == "" { return "" }
-    out := try os.Exec(...args.ToArray(), input = text) catch os.Error { return "" }
+    out := try os.Output.Exec(...args.ToArray(), input = text) catch os.Error { return "" }
     if out.Status != 0 {
         try io.PrintErr(out.Stderr) catch io.Error { }
         return ""
@@ -1084,15 +1085,15 @@ fn retarget(ir String&, attrs String&) String {
 # and loaded; "" when it is loaded, else why not
 fn cLibrary(unit String&, cfg build.Config&) String {
     so := $unit[:unit.Len() - 2] ".so"
-    ui := try os.Stat(unit) catch os.Error { return "its code is lost" }
-    si := try os.Stat(so) catch os.Error default os.FileInfo(os.FileKind.OTHER, 0, 0)
+    ui := try os.FileInfo.Stat(unit) catch os.Error { return "its code is lost" }
+    si := try os.FileInfo.Stat(so) catch os.Error default os.FileInfo(os.FileKind.OTHER, 0, 0)
     if si.Kind != os.FileKind.FILE or si.ModTime < ui.ModTime {
         if cfg.Clang == "" { return "a C import's code needs clang to be compiled" }
         args Vec<String&>
         args.Push($cfg.Clang)
         for f in cfg.CFlags() { args.Push($f) }
         for a in String&["-shared", "-fPIC", "-O2", "-w", "-x", "c", "-o", $so ".tmp", unit] { args.Push($a) }
-        out := try os.Exec(...args.ToArray()) catch os.Error { return "clang could not be run" }
+        out := try os.Output.Exec(...args.ToArray()) catch os.Error { return "clang could not be run" }
         if out.Status != 0 { return $"clang could not compile it: " $out.Stderr.Trim() }
         try os.Rename($so ".tmp", so) catch os.Error { return "its library cannot be written" }
     }
@@ -1139,7 +1140,7 @@ fn commandLine(words Array<String&>&) Array<String&> {
 fn mistake(words Array<String&>&) String {
     d := diag.Diagnostics(false)
     c := build.Config()
-    cl := try Parse(commandLine(words), c, d) catch Bad { return d.Render() }
+    cl := try CommandLine.Parse(commandLine(words), c, d) catch Bad { return d.Render() }
     return $"no mistake: " $modeName(cl.Mode)
 }
 
@@ -1206,7 +1207,7 @@ test "-quick builds at -O2 with no link-time optimization, its objects apart (B2
 test "the options are recorded wherever they stand, and passed on as written" {
     d := diag.Diagnostics(false)
     c := build.Config()
-    cl := try Parse(String&["olang", "test", "-race", "a.olang", "-define", "N=3", "-target", "x86-64", "b.olang"
+    cl := try CommandLine.Parse(String&["olang", "test", "-race", "a.olang", "-define", "N=3", "-target", "x86-64", "b.olang"
         "-debug"], c, d) catch Bad { unreachable }
     assert cl.Mode == Test and cl.Files.Len() == 2 and cl.Files[0] == "a.olang" and cl.Files[1] == "b.olang"
     assert c.Race and c.Debug and not c.San and not c.Update and cl.Spec == "x86-64"
@@ -1215,11 +1216,11 @@ test "the options are recorded wherever they stand, and passed on as written" {
     assert p.Len() == 6 and p[0] == "-race" and p[1] == "-define" and p[2] == "N=3" and p[3] == "-target"
     assert p[4] == "x86-64" and p[5] == "-debug"
     c2 := build.Config()
-    i := try Parse(String&["olang", "interpret", "-update", "p.olang", "-sanitize", "x"], c2, d) catch Bad { unreachable }
+    i := try CommandLine.Parse(String&["olang", "interpret", "-update", "p.olang", "-sanitize", "x"], c2, d) catch Bad { unreachable }
     assert i.Mode == Interp and i.Files.Len() == 1 and i.Args.Len() == 2 and i.Args[0] == "-sanitize" and c2.Update and not c2.San
     # B20: profile's arguments after the file are the program's, -output its flame graph's path
     c3 := build.Config()
-    pr := try Parse(String&["olang", "profile", "-quick", "-output", "f.html", "p.olang", "-quick", "7"], c3, d) catch Bad { unreachable }
+    pr := try CommandLine.Parse(String&["olang", "profile", "-quick", "-output", "f.html", "p.olang", "-quick", "7"], c3, d) catch Bad { unreachable }
     assert pr.Mode == Profile and pr.Files.Len() == 1 and pr.Args.Len() == 2 and pr.Args[0] == "-quick" and c3.Quick
     assert pr.Output == "f.html"
 }
@@ -1228,7 +1229,7 @@ test "the options are recorded wherever they stand, and passed on as written" {
 fn prepared(words Array<String&>&) String {
     d := diag.Diagnostics(false)
     c := build.Config()
-    cl := try Prepare(commandLine(words), c, d) catch Bad { return d.Render() }
+    cl := try CommandLine.Prepare(commandLine(words), c, d) catch Bad { return d.Render() }
     return $"no mistake: " $modeName(cl.Mode)
 }
 
@@ -1269,7 +1270,7 @@ explainedSrc String& = ("type MathError error { Zero }\n"
                      "type N struct(v I64, next N?&) { v, next }\n"
                      "fn (n N&) Value() I64 { return n.v }\n"
                      "type H struct(n N&) { n }\n"
-                     "fn wrap(n N&) H { return H(n) }\n"
+                     "fn H.wrap(n N&) H { return H(n) }\n"
                      "fn divmod(a I64, b I64) I64, I64 ? {\n"
                      "    if b == 0 { error MathError.Zero }\n"
                      "    return a / b, a % b\n"
@@ -1283,7 +1284,7 @@ explainedSrc String& = ("type MathError error { Zero }\n"
                      "    nn := N(pct(1, 4)!, null)\n"
                      "    link(nn, nn)\n"
                      "    q, _ := try divmod(Answer, big(2, 3))\n"
-                     "    assert wrap(N(q, null)).n.Value() == 14\n"
+                     "    assert H.wrap(N(q, null)).n.Value() == 14\n"
                      "}\n")
 
 # what explain FILE NAME prints of name in the program above, or its diagnostics
@@ -1320,7 +1321,7 @@ test "explain FILE NAME prints an item as the compiler sees it: inferred errors,
     assert explained("divmod") == ("fn divmod(a I64, b I64) I64, I64 ? MathError.Zero   # its error set inferred\n" $
             "    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
     # T22a, open point 5: an obligation its type says of every call - n outliving the result - leaves it a value
-    assert explained("wrap") == ("fn wrap(n N&) H\n    # scopes: n outlives return\n" $
+    assert explained("H.wrap") == ("fn H.wrap(n N&) H\n    # scopes: n outlives return\n" $
             "    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
     # B11b, G18a: a generic's needs and why it is no value; each instance's effects
     assert explained("big") == ("fn big<T>(a T, b T) T\n    # T needs: Less\n" $

@@ -84,7 +84,7 @@ fn main() {
     gold := toolkit.GoldenRead("compiler/goldens/run.txt", "rungold")
     same, differ, known I64 = 0, 0, 0
     for f in files {
-        r := compare(gold, olang, f, verbose)
+        r := result.compare(gold, olang, f, verbose)
         toolkit.Say(r.Row)
         if r.Equal {
             same++
@@ -107,7 +107,7 @@ type result struct() {
     Known Bool = false  # differs, and every difference is listed
 }
 
-fn compare(gold toolkit.Golden&, olang String&, f String&, v Bool) result {
+fn result.compare(gold toolkit.Golden&, olang String&, f String&, v Bool) result {
     for e in Skipped {
         if not e.StartsWith($f " - ") { continue }
         r := result()
@@ -115,17 +115,17 @@ fn compare(gold toolkit.Golden&, olang String&, f String&, v Bool) result {
         r.Row = $f ": not interpreted - " $e[f.Len() + 3:] "\n"
         return r
     }
-    s0 := toolkit.RunStored(gold, f)
+    s0 := toolkit.StoredRun.RunStored(gold, f)
     if not s0.Found {
         r := result()
         r.Row = $f ": no stored run in compiler/goldens/run.txt (make rungold)\n"
         return r
     }
-    return program(s0, olang, f) if f.StartsWith("checks/") else tests(s0, olang, f, v)
+    return result.program(s0, olang, f) if f.StartsWith("checks/") else result.tests(s0, olang, f, v)
 }
 
 # a file of tests, interpreted, its tests' endings held to the stored run's
-fn tests(s0 toolkit.StoredRun&, olang String&, f String&, v Bool) result {
+fn result.tests(s0 toolkit.StoredRun&, olang String&, f String&, v Bool) result {
     r := result()
     a := outcomes(toolkit.Rows(s0.Out))
     skip := skipped(f, a)
@@ -179,7 +179,7 @@ fn tests(s0 toolkit.StoredRun&, olang String&, f String&, v Bool) result {
 
 # a checks case: a program, copied into a directory of its own and interpreted there with its -define and -target flags, its
 # output and status held to the stored run's
-fn program(s0 toolkit.StoredRun&, olang String&, f String&) result {
+fn result.program(s0 toolkit.StoredRun&, olang String&, f String&) result {
     r := result()
     root := try os.Cwd() catch os.Error { toolkit.Die("evaldiff: no working directory") }
     name := filepath.Base(f)

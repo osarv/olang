@@ -1003,7 +1003,7 @@ fn (c Config&) TestHeader(file String&) {
 # said as TestFile says them; 0 when every test passed, 3 where the words name none of its tests
 fn InterpretTests<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&
     filters Array<String&>& = Array<String&>(0)) I32 {
-    info := try os.Stat(file) catch os.Error { return c.unusable(file, msgs.CannotOpen(), d) }
+    info := try os.FileInfo.Stat(file) catch os.Error { return c.unusable(file, msgs.CannotOpen(), d) }
     if info.Kind == os.FileKind.DIR { return c.unusable(file, msgs.IsDirectory(), d) }
     if info.Kind != os.FileKind.FILE { return c.unusable(file, msgs.NotRegular(), d) }
     status := try fe.Interpret(file, filters, c, d) catch Failed.Reported { return c.skipped(file, d) } catch Failed.Unbuilt { return unbuilt() }
