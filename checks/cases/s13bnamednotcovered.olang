@@ -1,0 +1,14 @@
+# check: fail error[S13a]: case Rect of Shape is not covered - add it, or 'case _ { }'
+# S13a, S13b: a payload item by name covers its case only where its pattern covers every value
+type Shape enum {
+    Rect(w I64, h Bool)
+    Dot
+}
+fn f(s Shape) I64 {
+    match s {
+        case Shape.Rect(h = true) { return 1 }
+        case Shape.Dot { return 0 }
+    }
+    return 2
+}
+fn main() { assert f(Shape.Dot) == 0 }

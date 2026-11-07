@@ -1,0 +1,14 @@
+# check: fail error[S13b]: case Shape.Round carries one whole Point and has no field names - match its fields with a struct pattern, 'Shape.Round(Point(field = ...))'
+# S13b: a case carrying one whole type has no field names - its value is matched by a struct pattern
+type Point struct(x I64, y I64) { x, y }
+type Shape enum {
+    Rect(w I64, h I64)
+    Round Point
+}
+fn f(s Shape) I64 {
+    return match s {
+        case Shape.Round(x = 1): 1
+        case _: 0
+    }
+}
+fn main() { assert f(Shape.Rect(1, 1)) == 0 }

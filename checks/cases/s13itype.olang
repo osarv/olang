@@ -1,0 +1,11 @@
+# check: fail error[S13i]: the value matched here is Point, and this struct pattern matches 'Line'
+# S13i: a struct pattern names the matched value's type
+type Point struct(x I64, y I64) { x, y }
+type Line struct(a Point, b Point) { a, b }
+fn f(p Point) I64 {
+    return match p {
+        case Line(a): 1
+        case _: 0
+    }
+}
+fn main() { assert f(Point(1, 1)) == 0 }

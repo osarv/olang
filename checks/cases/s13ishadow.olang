@@ -1,0 +1,10 @@
+# check: fail error: 'x' is declared twice
+# S13i: a struct pattern's bare name binds a local of the field's name - always a fresh one (D3a)
+type Point struct(x I64, y I64) { x, y }
+fn f(p Point, x I64) I64 {
+    match p {
+        case Point(x) { return x }
+    }
+    return 0
+}
+fn main() { assert f(Point(1, 2), 3) == 1 }

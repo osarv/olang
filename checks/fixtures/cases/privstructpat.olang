@@ -1,0 +1,9 @@
+# M6a, S13i: a struct pattern names only the fields it may read - a public type's private field, from another module
+import "lib"
+fn main() ? {
+  b := lib.Box(1)
+  match b {
+    case lib.Box(inner = 1) { }
+    case _ { }
+  }
+}

@@ -1,0 +1,10 @@
+# check: fail error[S13b]: field 'x' is named twice in this pattern
+# S13i: a field is named once in a struct pattern
+type Point struct(x I64, y I64) { x, y }
+fn f(p Point) I64 {
+    match p {
+        case Point(x = 1, x) { return x }
+        case _ { return 0 }
+    }
+}
+fn main() { assert f(Point(1, 2)) == 2 }

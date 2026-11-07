@@ -1,0 +1,10 @@
+# check: fail error[S13i]: a struct pattern names the fields it matches - write 'field = pattern' or a field's name: the order of Point's fields is no part of it
+# S13i: a struct pattern has no item by position, whatever its constructor takes
+type Point struct(x I64, y I64) { x, y }
+fn f(p Point) I64 {
+    match p {
+        case Point(1, y) { return y }
+        case _ { return 0 }
+    }
+}
+fn main() { assert f(Point(1, 2)) == 2 }

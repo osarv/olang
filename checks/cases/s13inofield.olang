@@ -1,0 +1,10 @@
+# check: fail error[S13i]: Point has no field 'xx' - a struct pattern names the fields it matches, never its constructor's parameters - did you mean 'x'?
+# S13i: an unknown field in a struct pattern, the nearest one suggested
+type Point struct(x I64, y I64) { x, y }
+fn f(p Point) I64 {
+    return match p {
+        case Point(xx = 2): 1
+        case _: 0
+    }
+}
+fn main() { assert f(Point(1, 1)) == 0 }
