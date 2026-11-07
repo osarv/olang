@@ -2316,7 +2316,7 @@
 | status 0
 === run o8dremovedelemref.olang
 | status 0
-| 0 0
+| 0 0 15150
 === run o8dviewctorarray.olang
 | status 0
 | 2015890 1999-name 1999

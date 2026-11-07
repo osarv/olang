@@ -30557,7 +30557,9 @@ receiver. Both are D9h/D9i work of their own; the copy stays ~1% of a builder-he
   reference reads an element whose array is empty, and index 3 of it is the program's own out-of-range index (E16e) - a
   null data pointer in a build, which the interpreter names. Reading its fields and lengths gives 0 built, under
   `-debug -sanitize` and interpreted alike. Nothing changed; checks' `o8dremovedelemref` (a run case under `-debug
-  -sanitize`) pins what such a read gives - a release without the emptying would read freed storage there. Left as a
+  -sanitize`) pins what such a read gives - a release without the emptying would read freed storage there - and that a
+  view of the element's array taken before the removal (a Vec's, a Map's, a unique element's) still reads what it held
+  (O8d condition 6 keeps the place's storage: 15150 read back after a churn). Left as a
   question for the language, not taken here: a reference to an element read after its removal could be refused within
   a function as M19g refuses a stale view after growth.
 - **F2 (a holder that is an element of a collection) - the registered value, not holdWalk.** `gs := Vec<Grip>()` is a

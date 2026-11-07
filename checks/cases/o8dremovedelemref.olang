@@ -4,7 +4,9 @@
 # RemoveAt, SwapRemove, Pop, Clear, a Map's Remove) reads the position the removal left empty: an element owning
 # storage moved out of it leaves an empty value there (its arrays empty), never storage early freeing released - so
 # reading its parts gives zeros and lengths of 0, built, under the sanitizer and interpreted alike (indexing into the
-# empty array is the program's own out-of-range index, E16e). Read after the arena churned and other storage reused
+# empty array is the program's own out-of-range index, E16e). A view of a part of the element taken before the removal
+# keeps what it shows (O8d condition 6: the place keeps what it lets go of). Read after the arena churned and other
+# storage reused
 import "std/io"
 
 type Rec struct(id I64) {
@@ -79,6 +81,29 @@ fn blobs(n I64) I64 {
     return s
 }
 
+# a view of the removed element's array, taken before the removal, read after it
+fn viewed(n I64) I64 {
+    ls := Vec<Rec>()
+    m := Map<I64, Rec>()
+    bs := Vec<Blob>()
+    s := 0
+    for k in range n {
+        ls.Push(Rec(k + 1))
+        d Array<I64>& = ls.Ref(0).data
+        ls.Truncate(0)
+        m.Put(1, Rec(k + 1))
+        e Array<I64>& = m.Ref(1)!.data
+        m.Remove(1)
+        bs.Push(Blob(k + 1))
+        w := bs[0]
+        f Array<I64>& = w.data
+        bs.Clear()
+        churn()
+        s += d[3] + e[3] + f[3]
+    }
+    return s
+}
+
 fn main() {
-    io.Println($removals(100) " " $blobs(100))!
+    io.Println($removals(100) " " $blobs(100) " " $viewed(100))!
 }
