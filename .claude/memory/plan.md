@@ -886,4 +886,13 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   interpret running a check gap, F5 a failed test skipping by-value drops; over-rejections F9, F14 (+ d12); F13 a
   diagnostic. Its fix round started at once (still the user's "use up the last weeks tokens"): wt-bfix7 in
   /home/user/wt/bfix7, the directions in /home/user/review/bulk7/FIX-BRIEF.md, hand-off PROGRESS.md there.
+- 2026-11-07 ~06:00 CET: bulk review 7's fix round MERGED (wt-bfix7, 27 commits; merge 654d60d; pushed master, wt-merge,
+  designated branch): all 16 findings and d12 fixed (HISTORY.md "Bulk review 7, fixed"); the agent's own decisions: F1
+  decided by mention (a plain read beside the copy keeps it), F15 a part read beside a hand-on allowed and a whole read
+  into a local makes that local the holder, F4 registers where the storage lives (no new refusal), F9 a re-assignment
+  after Destroy()/a hand-on renews the local, F5's guard only in test builds; found and fixed on the way: compile-time
+  evaluation of a function returning a reference to its by-value local (lower.standInAway). Full verify on the merged tip
+  passed but compiler/lsp.olang, OOM-killed (5.2 GB) beside the next round's build - it passed alone. Full verifies go
+  through /home/user/vlock (one slot), agents told. Running: round "kept" (item 17, drop flags in effects, C1, C2,
+  HeldTwo's C2d; /home/user/wt/kept, brief /home/user/review/rounds/kept-brief.md).
 
