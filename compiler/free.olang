@@ -1705,7 +1705,9 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
     b2 := typed.CalleeBody(c) if c is not null else -1
     if b2 >= 0 and f.Bodies[b2].Root is not null and t.Role(f.Bodies[b2].Ty) == types.RoleCtor and
        t.Results(f.Bodies[b2].Ty).Len() == 1 and t.Same(t.Repr(t.Results(f.Bodies[b2].Ty)[0]), t.Repr(ty)) {
-        if f.viewsOf(b2) != 0 { w.viewCtor(lvs, c!, x, sp) }
+        # (an instance viewing only unique values moved out of parameters holds them whole, no copy: what their leaves
+        # are given is judged at the call, by the constructor's parWhole)
+        if f.viewsOf(b2) != 0 and not typed.ViewsMoved(c!, f.viewsOf(b2)) { w.viewCtor(lvs, c!, x, sp) }
         out Vec<I64>
         w.quiet++
         args Vec<Vec<I64>>

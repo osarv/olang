@@ -18262,8 +18262,9 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
             id := c.local(source.NameId(0), nsp, c.localType(pid), typed.LocalKind.Field, c.cur().Locals[pid].Marked)
             c.roNeed(typed.Lvalue.Local(nsp, c.localType(pid), typed.LocalId(I32(pid))))   # T25c: the instance keeps it
             # (O15: the parameter's destructors handed on into the instance with its value - the field and the
-            # parameter are one name in the body, C4)
-            x := c.handOn(c.readLocal(nsp, pid), pid)
+            # parameter are one name in the body, C4; a unique one moved, T13b, as every hand-on of it is)
+            pt := c.localType(pid)
+            x := c.handOn(c.readLocal(nsp, pid), pid, not c.isRef(pt) and pt != types.UnknownT and c.P.Unique(pt))
             c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x))
             c.cur().Fields.Push(typed.LocalId(I32(id)))
             c.dropOnExit(id, nsp, true)
