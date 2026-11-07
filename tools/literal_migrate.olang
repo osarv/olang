@@ -9,7 +9,8 @@
 # type with no marker in front (`Vec<I64>[1, 2]`, `Array<I64>[...]`) is read as new and left alone - which is what
 # makes the tool idempotent, and why an old literal of generic elements held by value (`Array<F32>[F32[1, 2]]`, an
 # array of arrays) is migrated by hand. A type of the file declaring a `FromIter` is new where it stands bare. Comments
-# and text are left alone. A Markdown file is migrated in its code: fenced blocks and inline `code`, std's types known.
+# and text are left alone, and so is a checks case failing with E19 (the old form held on purpose). A Markdown file is
+# migrated in its code: fenced blocks and inline `code`, std's types known.
 #
 #     olang build tools/literal_migrate.olang && build/tools_literal_migrate [--std DIR] [--check] [-v] FILE|DIR...
 
@@ -55,6 +56,7 @@ fn main() {
 type known struct() {
     bare Map<String, Bool>
     mods Map<String, Map<String, Bool>>       # a module's file path -> the types it declares
+    imports Map<String, Map<String, String>>  # a module's file path -> its aliases and their files
     std String = ""
 }
 
@@ -134,21 +136,41 @@ fn scope.of(path String&, text String&, mask String&, k mut known&) scope {
 # "import alias "path"" or "import "path"": the alias and the module's file - std's, or one beside the file; none for a C
 # import or a remote one
 fn (s mut scope&) addImport(path String&, line String&, k mut known&) {
-    q := try line.FindByte('"') catch { return }
+    alias, file := importOf(path, line, k.std)
+    if file.Len() > 0: s.aliases.Put(alias, file)
+}
+
+fn importOf(path String&, line String&, std String&) String, String {
+    q := try line.FindByte('"') catch { return "", "" }
     rest := line[q + 1:]
-    e := try rest.FindByte('"') catch { return }
+    e := try rest.FindByte('"') catch { return "", "" }
     mod := rest[:e]
-    if mod.EndsWith(".h") or mod.EndsWith(".c") { return }
+    if mod.EndsWith(".h") or mod.EndsWith(".c") { return "", "" }
     head := srcmask.Strip(line[7:q])
     alias := $head if head.Len() > 0 else $filepath.Base(mod)
     file := ""
     if mod.StartsWith("std/") {
-        file = $k.std "/" $mod[4:] ".olang"
+        file = $std "/" $mod[4:] ".olang"
     } else if not ("." in filepath.Base(mod) and "/" in mod) {
         file = $filepath.Join(filepath.Dir(path), mod) ".olang"
     }
-    if file.Len() == 0 or not os.Exists(file) { return }
-    s.aliases.Put(alias, file)
+    if file.Len() == 0 or not os.Exists(file) { return "", "" }
+    return alias, file
+}
+
+# the aliases a module's file imports under, read once - a capitalized one re-exports (M12), so "wk.Base.Pt" walks them
+fn (k mut known&) aliasesOf(file String&) Map<String, String>& {
+    if k.imports.Has($file) { return try k.imports.Ref($file) catch { unreachable } }
+    m Map<String, String>
+    text := try srcmask.ReadText(file) catch default ""
+    for line in text.Split("\n") {
+        t := srcmask.Strip(line)
+        if not t.StartsWith("import "): continue
+        alias, f := importOf(file, t, k.std)
+        if f.Len() > 0: m.Put(alias, f)
+    }
+    k.imports.Put($file, m)
+    return try k.imports.Ref($file) catch { unreachable }
 }
 
 # the capitalized names inside a declaration's angle brackets that name no type known - its type variables
@@ -243,15 +265,17 @@ fn (k mut known&) old(s scope&, f front&) Bool {
         if s.builders.Has(n) and not f.Marked { return false }
         return s.names(n, k)
     }
-    if f.Path.Len() == 2 and s.aliases.Has(f.Path[0]) {
-        file := try s.aliases.Get(f.Path[0]) catch { return false }
-        return k.typesOf(file).Has(f.Path[1])
+    if not s.aliases.Has(f.Path[0]) { return false }
+    file := try s.aliases.Get(f.Path[0]) catch { return false }
+    for i in range 1, f.Path.Len() - 1 {
+        file = try k.aliasesOf(file).Get(f.Path[i]) catch { return false }
     }
-    return false
+    return k.typesOf(file).Has(f.Path[f.Path.Len() - 1])
 }
 
 # a file's text with every old front written as the array it makes
 fn migrate(path String&, text String&, k mut known&) String {
+    if text.StartsWith("# check: fail error[E19]") { return $text }   # a case holding the old form on purpose
     mask := srcmask.Mask(text, false)
     s := scope.of(path, text, mask, k)
     return rewrite(text, mask, s, k)
