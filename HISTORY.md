@@ -31285,3 +31285,851 @@ The entries as they stood before the trim of 2026-11-07, verbatim, by subsection
   (2026-10-25: `try a.Get(i)`, `x.Narrow<T>()`, `std/arith`); contract guarantees, named results and `fits` (2026-10-25); `error IoError { ... }` declarations (2026-10-25, `type
   IoError error { ... }`, T19); `nomatch` and `=>` (2026-10-31, QBQ/QBR: `case _`, `case P: v`); `Clone` (2026-11-03,
   E31d: `Copy()`).
+
+### Types
+
+#### Numeric primitives `I8 I16 I32 I64 U8 U16 U32 U64 F16 BF16 F32 F64`, and `Bool` (T4/T5, the user's call).
+
+- **Numeric primitives `I8 I16 I32 I64 U8 U16 U32 U64 F16 BF16 F32 F64`, and `Bool` (T4/T5, the user's call).** Byte,
+  Int32 and the rest are gone. One table (`PrimInfo`) answers every question about a primitive. F8 (`F8E4M3`,
+  `F8E5M2`, saturating, IEEE equality - the user's calls) and complex `C16 C32 C64` (the user's names) are prelude
+  structs.
+
+#### - **Integers of every width, `I1`-`I128` and `U1`-`U128` (T4a, docs/ideas.md #5,
+
+- **Integers of every width, `I1`-`I128` and `U1`-`U128` (T4a, docs/ideas.md #5, the user's decision 2026-10-18; built
+  2026-10-26).** The eight are ordinary members: wrapping at the width, the T6b lattice, literals adapting, `T.Max`/`Min`,
+  `std/arith` and `Narrow`, `$`, a supplied `Hash`, `Format`, the builder `T.Parse(t)` (D19), E37's bit operations and the
+  `Integer` trait all hold at every width, computed exactly at compile time and under `interpret` (the evaluator's
+  two-word arithmetic). Storage is the next of 1, 2, 4, 8, 16 bytes (LLVM's `iN`, C's `_BitInt`). Decided (mine):
+  a literal holds up to 128 bits (2026-10-26: `x U128 = 340282366920938463463374607431768211455`, `x I128 = 1 << 100`;
+  E4a's exact computation runs from I128's least to U128's greatest, and a value past 64 bits has no type of its own,
+  so `x := 1 << 100` is an error naming the type); atomics take the 8/16/32/64-bit widths, `ByteSwap` whole bytes, and only the eight cross the C
+  boundary (X2); `Integer` lists every width, sixteen to a line; `Sqrt`, `PadStart` and `PadEnd`
+  are `Integer` defaults for the other widths (U8 gets the pads too; a Char reaches none), `T.Min`/`T.Max` deciding
+  conditions per instance (G35). A declared type may not be named `I2` (it is one now): the cinterop fixture's struct was renamed.
+  The second bulk review (2026-10-26, HISTORY.md "Bulk review 2, fixed"): the evaluator computes I33-I63 at their own
+  widths (its I64 fast path took them for I64s), std/arith and `Pow` read the width from `T.Max`/`T.Min` (no case list),
+  a literal shift amount is checked against the width (E8a), an array of 128-bit elements is 16-aligned (O8a), and
+  `T.Parse` reads a prefixed literal of up to 128 bits (L10a); `tests/intsweep.olang` holds every width class to the
+  run time.
+
+#### A literal's own type: an integer is `I64`, a float `F64` (T6a, the user's calls, 2026-10-08/10).
+
+- **A literal's own type: an integer is `I64`, a float `F64` (T6a, the user's calls, 2026-10-08/10).** A literal
+  adapts to a typed target (T6); an expression of literals only adapts as one literal, computed exactly (E4a); a
+  literal another operand cannot hold meets it at its own type (E6d).
+
+#### Numbers widen implicitly toward their base, never narrow (T6b, the user's design).
+
+- **Numbers widen implicitly toward their base, never narrow (T6b, the user's design).** Lattice: wider within a
+  signedness, unsigned into strictly wider signed, F16/BF16 -> F32 -> F64; a declared type into its base. Narrowing is
+  written (`I32(x)`), unchecked; `try x.Narrow<I32>()` checks it (E26b) - never a per-operation check (the user: "It's not even a
+  question").
+
+#### Integer arithmetic wraps (E6c, the user's call, re-confirmed 2026-10-09 knowing its `nsw` cost).
+
+- **Integer arithmetic wraps (E6c, the user's call, re-confirmed 2026-10-09 knowing its `nsw` cost).** Division by
+  zero and MIN / -1 are undefined (E6a); `std/arith` checks: `try arith.Add(a, b)`, `try arith.Checked(a) * b` (E15a).
+
+#### - **Value or reference is decided by the `&` marker alone (T11, T25a); reference
+
+- **Value or reference is decided by the `&` marker alone (T11, T25a); references by default declined (QCS, the user
+  2026-11-03, after docs/refs-study.md: "don't do the object thing ... references are always shown with ampersand").**
+  `&` is scope-tagged heap indirection, not an
+  address-of: no pointer type, no unary `&`, no reference to a reference. Reference-shape is part of type identity;
+  value<->reference conversion is assignability at the outermost level only (E12): an lvalue into a reference borrows
+  (E12c), a temporary is built in the target's scope. No primitive references (the user's call: assignment to a
+  reference repoints, and a number has no field to write through). Write-through assignment was rejected: `x = y` must
+  imply `x == y`.
+
+#### - **`&` on a parameter means it may write (QCC, the user's decision 2026-10-31) 
+
+- **`&` on a parameter means it may write (QCC, the user's decision 2026-10-31) - REVERSED by the user 2026-11-01
+  (QCK: "Yes, pause it and go back to mut") before it landed.** Built behind `OLANG_PARAMS=new` (rounds 2a-3b,
+  docs/rework.md sections 10-17), it held only as far as the compiler proved, for every bare argument it passed by
+  pointer, that the callee writes it not and nothing else changes it during the call - a large proof machinery with
+  hidden copies wherever a proof was missing, and most of rounds 2b-3b rebuilt what a read-only `T&` gives for free.
+  Removed in round 3d (docs/rework.md section 18): the switch, "every `&` may write", bare parameters by pointer,
+  D9d-D9g, per-level and per-field inferred permission, the entry, aliasing and caller copies, `param_migrate`. Today's
+  rule stands: `p mut T&` may write the caller's, `p T&` is a read-only shared view, `p T` a value (a copy by meaning);
+  globals immutable unless `mut`.
+
+#### - **A guarantee is declared by holding a value (QCE, the user's decision 2026-10
+
+- **A guarantee is declared by holding a value (QCE, the user's decision 2026-10-31; built 2026-11-01, on the default
+  path since round 3d).** What must not change from outside is declared by value and gets its own copy where it is
+  kept: an array of a run-time length may be a field, an element, a payload or a type argument by value (T7a relaxed:
+  `type person struct(name String, age I64)`, `Vec<String>`, `Array<String>(n, "ab")`, `Array<String>["a", "bc"]`) - the
+  container's own, a store copying into it (`typed.MakeKind.Copy`, lowering's Copy helper: deep through values, shallow
+  at references); `Map<String, V>` holds its own key text (a copy at Put of a new key, none on an update or a lookup),
+  `Map<String&, V>` shares the caller's, which the `&` says. A constructor's parameter may hold a run-time array by value
+  (its field's copy), and a value owning parts given a by-value parameter or receiver is copied at the call (mine, QCK's
+  meaning of `p T`). D9a's run-time-length error and D9c's 128-byte cap went with handles as values (below): a by-value
+  array of any length and a value of any size is copied at the call where something could tell (D9h). **D9h** (mine): a value result viewing what
+  a function is given is handed back uncopied, its callers copying where they keep it, and a local holds views in place
+  of its copy where its body proves nothing could tell (`typed.ViewWalk`, lowering's `viewLocals`) - an optimization, no
+  meaning; on the default path a reference parameter is taken to keep what it is given and its referent to be changeable
+  by another `mut` name, and a view is read where it stands only where no call in its statement could write it (no
+  closure or `any` reached through an argument, no global through which storage may be written - `check.mutStorage` -
+  and no argument holding, at any depth of its fields, a writable reference to the viewed storage's type: bulk review 6).
+  **Reads by evaluation order (2026-11-03, the values study's B2; mine, an optimization stated in SPEC as a rule):** a
+  view read where it stands is judged over what runs while it is alive - its consumer call (given it read-only, a
+  result holding no reference) and that call's arguments, or the indices of a place read out into a value owning
+  nothing (`v[i].w`) - by the viewed storage's types, as a held local's block is (`windowQuiet`, quietLife's cover), not
+  over its whole statement: `r.roll(u.nodes[at].kids.Len())` copies no element; a reference local given `v[i].xs.View()`
+  reads the element in place where its block is quiet (`heldThroughTemps`); a promote only for a read-only parameter of
+  a call keeping nothing is a stack slot (`stackArg`); a D9h copy a local keeps is built in the local's block (the scope
+  pass's Built for the call site, `viewCopyAt`), so a loop turn's copy goes with the turn (it went where the viewed
+  storage lives). The study's widget tree written with plain reads: 3.9 s / 1.33 GB -> 0.29 s / 27 MB (hand `Ref`s
+  0.22 s / 27 MB); turncopy 517 MB -> 1.9 MB; bench machine code byte-identical. **Moves at last use (D9i, the
+  study's B1, mine):** a value local's copy (a by-value argument's, a store's, a part's - check's MakeKind.Copy of a
+  read of it) is left out where it is the local's last mention in evaluation order (`lastUses`: deferred code, tasks,
+  join clauses and a loop not around the declaration count as after), the local's storage its own (no view held, no
+  alias, no escape, never assigned whole, no O8d region) and outliving the copy's block; a constructor viewing only
+  moved locals owns what it views (`movedViews`). `t := mk(20M); P(t)` 682 MB / 0.44 s -> 420 MB / 0.23 s, as
+  `P(mk(20M))`. Never where another operand of the same call (or value made) mentions the local - `peek(t, t)` lends
+  it beside its copy (bulk review 7, F1); a spawned call's arguments get no frame slot (`stackArg`, F12).
+  A value owning parts handed back from storage that is no view of the arguments (a global's) is copied by the function
+  (`retOwns`; while compiling every such value, so the evaluator agrees).
+  Rows laid out in place given where run-time rows are wanted are widened each in turn (they were read as pairs). **T25d** (found by round 3b, on the default path too): text written in the program given a
+  `mut` reference of the type it is declared over was handed over as the constant itself - refused, naming `$"abc"`.
+
+#### - **Permission is part of a reference's type (T25b/T25c, the user's design; kept
+
+- **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31, the user reversing the day
+  before's removal: "knowing whether or not a function you pass things into mutates what you passed is valuable", and
+  "globals shouldn't be mut unless you say so").** `mut T&` writable, `T&` read-only, at
+  every level, shallow. `mut` speaks only about what a reference reaches: locals and parameters are always assignable
+  (`mut` before a local's or parameter's value type is an error, D11a/D9), a field is assignable through a writable
+  instance (no per-field immutability, C3), a global keeps `mut` as its binding. Writable converts to read-only only
+  at the top. A copy of a value holding `mut` references taken from a place reached read-only is read-only itself (QC,
+  the user's decision); a function made a value may not need a writable copy.
+
+#### References are never null unless written `?&` (T2c, S8e, E35, the user's decision 2026-10-24).
+
+- **References are never null unless written `?&` (T2c, S8e, E35, the user's decision 2026-10-24).** `Node&` never
+  is null, `Node?&` may be (`mut Node?&`, `List<Node?&>`, `Node?&x`); `T&` flows into `T?&`, `T?&` into `T&` only where
+  a test narrows it - locals and parameters only, never fields (S8e, as S8d): in `if p is not null`, the `else` of `if p
+  is null`, after an `if p is null { leave }`, after an assert, in the right of `and`/`or`, in a loop on `p is not null`,
+  after a `for p is null` loop with no break, after assigning a never-null value - or `x!`, which ends the program with
+  "null reached". Nothing is read through a `T?&` before that; `x is null` on a never-null reference is an error. A
+  reference never null has no zero value (D13c). **An array may be null where it is written `?&` (QCI 4, the user's
+  "an array reference that isn't pointing at a valid array should be null", 2026-11-01, reversing my "an array is never
+  null"; built 2026-11-02)**: `Array<T>?&`, `String?&` may be absent, null distinct from empty, read only once narrowed
+  (S8e) or `x!`; an array written `&` and a value array are never null, `null` given one an error naming its empty array
+  and `?&`, `x is null` on one naming `x.Len() == 0`. Decided (the coordinator, 2026-11-02, and mine): its null is the
+  length -1 with no storage, `{ -1, null }` (`is null` tests it), all-zero bits staying the empty array; the zero value
+  of `Array<T>?&` is null, as every `?&`'s is (the coordinator, 2026-11-02, reversing the agent's empty; built
+  2026-11-02, wt-tidy): a declaration with no value - a local, a global, a field, a constructor's zero - starts null, and
+  `Array<T>(n)` with no fill writes null into each element, an array written `&` or held by value starting empty; a
+  null renders `null` wherever it stands (an element of an array or Vec too: it rendered `""`, found 2026-11-02; a field,
+  a payload), an enum's zero is its first case of its payload fields' zero values (bulk review 6), a `T?&` meets no
+  trait (said at the binding: `Map<String?&, V>`), equals
+  only a null. A null read traps (T2b); nothing is uninitialized: a declaration with no value takes
+  its type's zero value, made by the constructor from its parameters' defaults (D13c, the user's design); a type whose
+  constructor has effects has none. `tools/null_migrate.olang` migrates code from the compiler's own diagnostics.
+
+#### - **Arrays: one type, `Array<T>`, a length never written (T7-T7d, QP1-QP4, the u
+
+- **Arrays: one type, `Array<T>`, a length never written (T7-T7d, QP1-QP4, the user's design 2026-10-01 and 2026-10-17;
+  `Array<T, N>` and constant parameters removed 2026-10-24).** `Array<T>(n[, fill])` makes one, literals `Array<I32>[1, 2]`;
+  storage is **fixed** - laid out in place, `Len()` a constant - wherever its length is known where it is made (T7c: a
+  literal, text, `Array<T>(n)` with `n` the evaluator can compute, a slice with known bounds, `lo + k` included),
+  inferred, never written. A local is fixed when its value's length is known and nothing assigns it as a whole later (a
+  pre-scan of the body); an inline field when its declaration gives it a length (`m := Array<F32>(16)`); an immutable
+  global from its initializer; an array of arrays held by value takes its elements' length from its fill or literal. A
+  run-time value array elsewhere inside a value is the value's own (T7a, QCE below). Arrays may
+  be **passed by value** (D9a): a function is compiled once per argument length (an instance, G29), in which `a.Len()`
+  is a constant and an `if`, conditional or `match` on it is decided per instance (G30) - only where the body decides
+  something on the length (2026-11-01, `generic.LengthDecided`: `a.Len()` in an if/assert/match condition, a comptime,
+  an array's length, or the array handed on whole to a function of its module deciding on it - bulk review 8; else one
+  instance taking any length); a run-time-length argument is copied at the call where
+  something could tell (D9h). No size cap (D9c removed 2026-11-01). A run-time array stored into fixed field or element storage is an error naming a slice of its length (`s.m =
+  v[0:16]`, T7d) - no store is checked. Storage over 64KB is never on the stack. No 2-D arrays (the user's call) -
+  arrays of arrays. `x.Len()` is an `I64` (E23/T10, the user's design; `len` is gone). Not yet built: inferred result
+  lengths (D8f), constructors taking a fixed array by value (`tools/arrays_migrate.olang` migrates
+  code; `docs/arrays.md` section 7).
+
+#### Indexing is unchecked, slicing checked once per slice (E16, E16a-E16e)
+
+- **Indexing is unchecked, slicing checked once per slice (E16, E16a-E16e)** - a bad slice is a value that stays wrong
+  wherever it travels, a bad index one access; an index check cost ~50% on a data-dependent gather, so it went.
+  `a[lo:hi]` is a borrow tagged with the base's scope and permission (an immutable global's array slices read-only,
+  2026-10-26); `try a.Get(i)`, `try a.Set(i, v)` and `try a.SliceOf(lo, hi)` fail with `ArrayError.OutOfRange` instead (E16c/E16d); an out-of-range index, a
+  wrong `extern` prototype and a data race are the three unchecked holes, stated (E16e, X1a, P8b).
+
+#### - **Structures of arrays: `Columns<T>` and `ColumnVec<T>` (T7e, QCS 3 and QCU, t
+
+- **Structures of arrays: `Columns<T>` and `ColumnVec<T>` (T7e, QCS 3 and QCU, the user's decisions 2026-11-06/07:
+  "two column types", no computed types; built 2026-11-07, wt-columns, details mine).** A prelude struct the compiler
+  lays out as one `Array<F>` per field of the record `T`, named as the field (`generic.columnFields`,
+  `FieldNames`/`fieldIndex`), its constructor `Columns<P>(n[, fill])` written by the checker (each column `Array<F>(n,
+  fill.f)`, `columnsFields`); `ColumnVec<T>` a prelude struct over a `Columns<T>` buffer and a count, Vec's row
+  operations moving every column (`grown`/`retire`, occupy/vacate). Everything but the layout and the constructor is
+  prelude code over reflection (std/prelude/columns.olang: rows assembled through `T(cell(c, p, i) for p in T.Params)`,
+  written field by field), so lowering, emit, the evaluator, `interpret` and section 8 needed nothing new. Decided
+  (mine): T must be a **record** - a struct whose constructor only puns its fields (no computed field, condition or
+  destructor, at least one field, a zero value - no never-null reference field) - since columns are written element by element, refused where the instance is asked
+  for (`columnsMet`, at `instancesIn`), and so is a field named like the table type's method (M19); a run-time length,
+  not laid out in place even where known (a recorded limit - the brief's "in place like a fixed array" and G29's
+  per-length instances are not built); `cv.x` of a ColumnVec is a view of the first Len() elements (a slice, its
+  permission the table's), its own fields hidden outside the prelude; a column assigned whole (`c.x = v`) is written in
+  place lane by lane, `v`'s length checked once (E39's LaneLen abort), refused in a parallel assignment; a column is as
+  private as its field (M6a); the prelude's reflection sees every field (to supply Columns over any record);
+  `T.Element` of either is the rows' type; `$` renders `Columns<P>[P(1, 2)]` (its literal, through its
+  FromIter); conversions `ToArray ToVec ToColumnVec ToColumns` (on arrays and Vecs too). Measured on the references
+  study's particles: 2.0 instructions an update, as hand-written columns (an `Array<P>` 13.0). A column view used after a
+  growth is M19g's error, as a Vec's View() is (bulk review 8).
+
+#### Lane operators (E39, docs/ideas.md #4, the user's decision 2026-10-18; built 2026-10-26).
+
+- **Lane operators (E39, docs/ideas.md #4, the user's decision 2026-10-18; built 2026-10-26).** An array's operators
+  work lane by lane (`a * b + c`, `x * 2.0`, `-a`, `and`/`or`/`not` on `Bool` lanes), each lane as the operation on two
+  values (T6b, E6c, E31 - C64 and a user's types too); a whole expression is one loop, and `a.Sum()`, `Min()`/`Max()`
+  (`ArrayError.Empty` on an empty array, NaN propagating), `LanesEqual`/`LanesLess` (`Array<Bool>`), `mask.Select(a,
+  b)`, `mask.Some()`/`Every()` take one with no array made. Lengths: a compile-time error where known, else one check per
+  operation aborting with "lane lengths differ" (no checked form, mine). Fixed operands give a fixed result; run-time
+  ones a new array where it lands, made with no fill. `x op= v` is in place: each lane computed and stored before the
+  next is read, so an operand overlapping `x` reads what earlier lanes stored, as the hand loop does (mine, 2026-10-26:
+  what the fused loop guarantees, no run-time overlap check); through `x[i]` (E31b) an inline array is read, stored
+  into and written back, the operand's lanes evaluated first, and lanes calling an operator method there are an error.
+  Not for text, a non-extending declared
+  array type, or elements holding references (in place too); `a < b` on arrays is an error naming `LanesLess`. Built as a checker
+  elaboration (`laneNode`s materialized by whoever reads them), not prelude methods, so a user's own map-shaped
+  functions do not fuse (mine). std/stats' Sum/Min/Max went to it. Measured level with the hand loop and C at -O3.
+
+#### Equality (E10, E10a, E10b, the user's decision 2026-10-24).
+
+- **Equality (E10, E10a, E10b, the user's decision 2026-10-24).** `==` compares what is stored, never following a
+  reference: values structurally, a reference by identity - unless its type declares `Eq`, which `==` calls at every
+  depth (the user's call). The prelude declares `Eq` (and `Hash`) by contents on every array, `String`, `List`, `Map`
+  and `Vec`, so those compare by what they hold however held. A reference compared with a value of its referent's type
+  compares the value it names (mine: a value has no storage to be the same as). The compiler supplies `Hash` for plain
+  data; a type declaring `Eq` must declare `Hash`; hashing follows equality. Identity of two arrays or Lists is no longer
+  written (a capability removed with `a is b`). Found 2026-11-02 (round 4b): the arrays' helper tested two references
+  for null first, so a zero Vec and its copy compared unequal - an array is never null, its lengths decide now.
+
+#### Structs are built only by their constructor (T13, C2d, the user's call).
+
+- **Structs are built only by their constructor (T13, C2d, the user's call).** No struct literals, no field-list
+  structs. A constructor body is a block whose top-level locals are the fields (C2a); a bare name is a pun of a
+  parameter; `return` is rejected. Defaults are compile-time expressions (D8a). `destruct { }` runs once per value,
+  where its holder lets go of it (O15, below); an empty one is an error (C7a). A destructor's type is declared `unique`
+  (T13b, 2026-11-03) - one place, so one holder. Until 2026-11-03 it was reference-only (C11), registered at its
+  constructor and run as that scope closed (O16); C11 had been unenforced - a by-value copy of the constructor's
+  instance, whose destructor ran on the instance and never saw the copy's writes.
+
+#### - **`immut` types (T13a, the user's decisions 2026-11-03 "immut DECIDED", "uniqu
+
+- **`immut` types (T13a, the user's decisions 2026-11-03 "immut DECIDED", "unique vs immut settled"; built 2026-11-03,
+  wt-unique, details mine).** `type Config immut struct(...)` (an enum or a type over another alike; `immut` a word of
+  one place, L9b - before the body, a type name or `struct`/`enum`/`extends`/`trait`/`error`/`fn` after it): nothing of
+  a value of it changes after its constructor - a field, an element held by value, a payload's field written, or any
+  of it lent writably, is an error naming the type (check's `mustWrite`, the one write check: `writesImmut`); `mut T&`
+  of one an error where written (a global's own `mut` is its binding's, S6, and stays); a slice of one is read-only; a
+  holder of an immut part need not be immut (the part replaced whole); an immut type declares no Copy (its copy is the
+  same value); a conversion to an immut type from an existing value of a mutable one copies it (left out where nothing
+  could tell, D9i). Decided (mine): its copies are still made as copies (sharing is unobservable - an optimization for
+  later). **String is immut (the user's decision 2026-11-03; built 2026-11-03, wt-strimmut):** `type String immut
+  extends Array<Char>`; text that is written is an `Array<Char>` (a literal adapts to one, a value its own copy) or a
+  StringBuilder (unchanged, its `Push`/`PushChar` not renamed), made a String by `String(chars)`; writing a String or
+  writing `mut String&` is an error naming them (`TextWrite`, `TextMutRef`, rule `T13a, T29c`), a String or a slice of
+  one handed to a `mut Array<Char>&` too. Decided with it (mine): a type declared over an immut type is immut (`type
+  Label extends String` could otherwise write the String); a conversion from an immut value to a mutable type copies,
+  as the reverse does (`Chars(s)` wrote `s`); an `Array<Char>` never flows into a `String` unwritten (`String(x)`); a
+  `mut` global of an immut referent is a binding, its reference read-only (`Name mut String&` takes any `String&`).
+  Migration: `tools/textbuild_migrate.olang` (now in `olang fix`) over std, compiler/, tests, checks, fuzz, bench - text
+  built by writing characters an `Array<Char>` converted at its returns, `mut String&` -> `String&`; by hand std/os's
+  C-filled buffers (`Array<U8>`, `String(text[:got])` at returns, MkTemp's path an `Array<Char>`, mkdtemp's prototype
+  `mut Array<U8>&`), json's escape writer, ~80 test sites rewritten onto `Array<Char>` or a type over one, each still
+  testing what it tested (the fuzzers' generated programs too); `vecViewNamed` now expects a copy. Seed regenerated.
+  **Found on the way (pre-existing, fixed):** text written in the program given to a value `Array<Char>` (`s
+  Array<Char> = "ab"`) was the constant's storage itself - a write into it was lost at run time and refused by
+  `interpret`; it is a copy now (E12). `==` of an `Array<Char>` of a known length with a literal was a type mismatch.
+  **Found earlier (pre-existing, fixed):** an `Array<Char>` of a run-time length lent to a `mut
+  Array<U8>&` parameter (Char extends U8) was copied and the copy lent, so what the callee wrote was lost (E12's
+  borrow taken now for any array whose elements are held alike - tests/immut.olang).
+
+#### - **`unique` types (T13b, the user's decisions 2026-11-03 "unique DECIDED", "Cop
+
+- **`unique` types (T13b, the user's decisions 2026-11-03 "unique DECIDED", "Copy and unique DECIDED", "Collections
+  DECIDED", "unique vs immut settled"; built 2026-11-03, wt-uniq, details mine).** `type File unique struct(fd I32) { fd
+  }` (a word of one place, L9b, as `immut`): a value exists in one place. A fresh value (a constructor's or a call's
+  result, a value made) lands by value where it is put; any other copy is a reference - `w := f` is `w mut File&` naming
+  `f` (read-only where the place is), and so are a walk's name over an array (S9a), a match's binding (S13b) and a
+  capture (D16c); `x[i]` of a collection of unique elements is the element in place through its `RefMut` (reached
+  writably) or `Ref` (E31b), and S9d walks one through `Ref`. A slot laid out for the value (`x File`, a field, an element
+  or payload of a value made, a by-value parameter or receiver, a result) given an existing one is an error naming
+  `File&`. A by-value parameter, fresh at every call, hands its value on once where it is mentioned last - judged on every
+  path (`typed.Landings`: another branch is no "after", a loop's next turn is, deferred code, tasks and join clauses run
+  after everything, so a landing in deferred code that runs once is the last mention where nothing else later mentions
+  the parameter - `defer v.Push(l)`, bulk review 8 F4) - so `Vec.Push(x T)` and `Map.Put` store unique elements as written, moved, never copied (since
+  2026-11-07, "The unique hand-on is a move" below); a returned whole local is the result itself (O26a). A unique type declares no Copy, and `x.Copy()` of one is an error; a struct, enum, array or
+  collection holding a unique part by value is unique unless it declares a Copy (`types.Unique`, structural, cached once
+  every part is typed; `Table.MarkUnique` from `generic.DeclFor`); unique and immut are never one type's (both words, one
+  over the other, an immut type holding a unique part); not on a trait, an extern type or a function type. A generic
+  copying a value of a type its binding made unique is refused at the program's call that bound it - "Push needs a copy,
+  and File is unique" (G18a's rerouting, `check.boundMention`: the type mentions a unique argument); a walk's or a
+  binding's name is a reference in an instance too. Decided (mine): only the parameter lands again, never a local but
+  a returned one (the user: "taking a unique value by value doesn't work either, whether by a parameter or a new
+  local"); a `:=` constructor field is a slot (a value), never a reference; a unique value renders, compares and is
+  read through its fields as any value. `tools/unique_migrate.olang` (in `olang fix`) declared std's and the corpus's
+  destructor types unique. Since bulk review 7 (HISTORY.md "Bulk review 7, fixed"): a name made from a by-value
+  parameter - a reference local, a binding, a closure capturing it - counts as a mention of it, so its use after the
+  hand-on is an error naming it, and a hand-on beside a lend of the same value in one call is one too (`typed.Landings`
+  holders and `apart`); `Array<T>(n, fill)` of a unique T is refused (in a generic at the binding call); an immut generic
+  instance holding a unique part is refused where it is asked for; a try's value of a fresh call is fresh.
+
+#### - **Destructors run where the holder lets go - Rust's drop (O15, O16, C9, C9b, C
+
+- **Destructors run where the holder lets go - Rust's drop (O15, O16, C9, C9b, C11, T13b rule 10, the user's decision
+  2026-11-03 "unique DECIDED"; built 2026-11-03, wt-uniq Part B, details mine).** A value with a destructor to run (a
+  struct declaring one, or a value holding one by value - `types.NeedsDrop`, deep through values) is held by value in a
+  place written for it - a variable (`f File = File(3)`), a parameter, a result, a field, a payload - and its
+  destructors run once where that holder lets go: a variable's or parameter's as its block (its function's body) is left
+  on any way out, a by-value parameter's at the callee's end unless it handed the value on at its last mention (T13b), a
+  returned whole local and a constructor's pun moving it on; a holder's parts with it, its own destructor first, then the
+  parts last first; a store over a place after the new value is made (Rust's order); `x.Destroy()` of a variable now,
+  nothing mentioning it after. A call's value no place written for it takes (`r := Res(1)`, an argument for a reference
+  parameter) is held where the call lands, registered there as before (O16): constructors give values, a call of a
+  type with destructors to run is held at the call (`check.held`, a Promote) and a slot laid out for the value takes it as
+  it is (`heldValue`, fit's peel). A global and a generator's parameter hold one by reference (C11, the
+  error naming `T&`), a type argument by value only where its instance ends it (the next entry); no variable holds one across a `yield`
+  (S20) or a `become` (S21), said as such. Built (mine) as deferred code: each such variable gets a hidden Bool flag and
+  a deferred `if flag { Drop(x) }` registered at its declaration (`check.dropOnExit`), a landing clearing the flag
+  (`handOn`); `typed.PrimOp.Drop` lowers to the type's Drop helper (`mir.HelperKind.Drop`: its destructor's body, then
+  its parts'), which a registration of a holder with no destructor of its own runs too (`mir.DropFn`) - so lowering,
+  emit, the evaluator, `interpret` and section 8 needed nothing else (the flags fold where nothing hands the value on). A
+  D13d zero is never left out for such a type (its holder ends it); the Landings walk and definit skip a Drop's
+  borrow (no use); effects and early freeing count a holder's parts' destructors, a constructor no longer charged with
+  its type's (its caller holds the value); a call whose value a by-value holder takes as it is may be landed longer for
+  its callee's obligations unless it holds a destructor value through a reference (O16; C3, 2026-11-07: `h HeldTwo =
+  HeldTwo(r, 4)`), and effects count a holder's drop only where a path reaches a way out of its
+  block still holding the value (`typed.DropsRun`, A5, 2026-11-07: a by-value parameter handed on on every path runs
+  none, so a declared Copy may call such a function); a constructor that cannot fail gives its punned parameters and fields no
+  flag (the instance takes them on every way out), one that may fail ends the fields it built. A capture of such a
+  variable borrows it (D16c, as a unique one). Measured: bench machine code identical (addresses masked), the
+  self-build unchanged; tests/drops.olang's order decided while compiling (a top-level assert) as at run time. Since
+  bulk review 7: a join block's holders let go after its wait (`BlockKind.Drop`, lowering's three phases); a holder whose
+  storage the scope pass homes elsewhere (returned as a reference, captured by a returned closure, pushed into a
+  parameter's collection) registers its value where it lives (O16) instead of ending it (`escapedHome`); a hand-on's flag
+  clears once the call is made, after every argument (`Seq.Gone`); a failed requirement ends the by-value parameters
+  taken; a test ended by a failed check ends its holders (a guard registered with the block, test builds only,
+  `HelperKind.Guard`); a deferred `x.Destroy()` ends only what the holder still holds, and a holder may be given a new
+  value after its `Destroy()` (C9b).
+
+#### - **Collections hold values with destructors by value (C11 relaxed, O15, M19d, t
+
+- **Collections hold values with destructors by value (C11 relaxed, O15, M19d, the user's "Collections DECIDED"
+  2026-11-03; built 2026-11-07, wt-drops, LIST.md A4, details mine).** `Vec<File>`, `Map<String, File>`, std's
+  `Deque<File>` (and `Set`/`Heap` through the Map/Vec they hold, `Box<File>` of a plain field) are unique as their
+  elements are and end them: a removal giving nothing (Truncate, Clear, RemoveAt, SwapRemove, Remove, a Map's Remove and
+  Clear) ends what it removes, one that gives (Pop, TakeAt, SwapTake, Map.Take - which ends the key -, PopFront/PopBack)
+  hands it out, a store over an element (`v[i] = x`, Put of a key there) is O15's store over a place, growth moves and
+  ends nothing, and the holder letting go ends the live elements **the last first** (O15's parts order: a Vec from its last
+  position, a Map by slot from the last used, a Deque back to front). How (mine): the library says which positions are
+  live - `p.vacate()` as a statement now ENDS the value (a Drop of the place, then the old let-go), and the new
+  `p.occupy(x)` stores into room or a vacated slot ending nothing (for plain types both are the typed code they were, so
+  bench is byte-identical); a generic struct of the prelude or std not declared unique may declare `destruct` - a
+  **conditional destructor** (`types.Table.Ends`, marked at the declaration, `generic.EndsHeld`): it exists only in
+  instances holding a value with destructors by value through their parts, run-time arrays included
+  (`Table.Destructs` decides per instance; the body made only there), so `Vec<I64>` has none, stays copyable and pays
+  nothing; its body vacates the live positions. The primitives (vacate, occupy, grown, retire) are now the library's,
+  prelude and std (`generic.Library`: std/deque holds its ring itself) - reversing "vacate stays prelude-only until
+  real code needs it". C11 is judged on the instance (`generic.Program.UnendedDrop`, at the written type or the member
+  call's arguments, said once): refused where an array of a run-time length of such values is reached outside a
+  collection's own buffer - through parts or references - so std/list's `List<File>` (its copies are second holders of
+  its chunks) and a program's `Buf<T> { a Array<T> }` are errors naming `T&` or a Vec; and a collection holds them only
+  where they are unique (a copy copies its whole buffer, vacated positions too - a Copy-declaring holder is refused).
+  Found on the way (pre-existing, fixed): a comprehension of a run-time length, `Array<T>(n)` and `a.Copy()` of an array
+  made values with destructors that were never ended - each now that C11 error; G9d's reference binding applied inside a
+  type's arguments too (`Vec<T>` against `Vec<Res>` bound `T` to `mut Res&`) - now only to a value given whole
+  (`unifyDepth`); a store over a destructor value through an element was a checker gap - the place is evaluated once
+  (`check.stable`). Limits: Map keys and Heap's comparator take values (`bucketOf(key K)`, `less fn&(a T, b T)`), and a
+  unique value is lent to no by-value parameter, so `Set<File>`, `Map<File, V>` and `Heap<File>`'s Push/Pop are refused at
+  the call (a read by reference would need `T&` of a number, T24); a `Destroy()` of a collection after pushes of values
+  built from a local makes that local a holder (bulk review 7's F16 rule). tests/drops.olang decides each order while
+  compiling as at run time and under `interpret`.
+
+#### Packed structs (T13c, X11a, X18, the user's QCX 2, 2026-11-07; built 2026-11-07, wt-packed, details mine).
+
+- **Packed structs (T13c, X11a, X18, the user's QCX 2, 2026-11-07; built 2026-11-07, wt-packed, details mine).** `type
+  Header packed struct(version U4, ihl U4, length U16) { version, ihl, length }` (`packed` a word of one place, right
+  before `struct`, after `immut`/`unique` where written; before `enum`/`extends`/`trait`/`error` an error naming T13c):
+  no padding, fields from the lowest bit up in declaration order (bit b in byte b/8, least significant first - GCC's and
+  clang's packed bitfields on little-endian x86-64 and AArch64), size its bits rounded up to bytes, alignment 1, the
+  bits above the last field zero. A field's width: an integer's own (any width, T4a), Bool 1, a float its bits, a
+  payload-free enum its integer raw type's (the raw value held, T17e) or the fewest bits counting its cases (the
+  position held; text raw values too), a packed struct its fields' bits (nested bit by bit, not rounded), a fixed array
+  its elements' one after another; a reference, a run-time array (text), a function value, an `any`, an error value, an
+  ordinary struct, an enum with a payload is T13c's error at the field, and so are type parameters and a destructor. A
+  field is read by a shift and a mask and stored by replacing its bits (the place up to the packed value evaluated
+  once); **no reference names one** - lending it read-only or writably, a receiver, a slice, a walk of an array field is
+  T13c's error naming the copy to write (`v := h.lanes`). ==, Hash, `$`, json, Copy go by the fields; reflection's
+  `f.Offset` is the byte holding a field's lowest bit, and every field has `f.BitOffset` and `f.Bits` (an ordinary
+  struct's 8x its offset and size). C: by reference always, by value only holding integer bits (as C's struct of its
+  bytes: one or two integer registers to 16 bytes, memory beyond - clang measured), a float in one held by value at the
+  boundary X11a's error; `build -library` writes `struct __attribute__((packed))` of one bitfield per field (an array
+  one per element, `name_0`); C imports translate a packed record into a packed struct where every member is a
+  bitfield of an integer/_Bool type or an integer, float or integer array member at a whole byte of the running bits
+  (else opaque words, as before - a packed record of byte-aligned members had been taken for a plain struct, laid out
+  with padding: wrong offsets, fixed). Decided (mine): built as two MIR prims over the whole value - `Unpack` and
+  `Repack` - which lowering makes for a place through a packed field (`pl.Pk`, the prefix place once, the value read,
+  changed and stored back; an array field unpacked whole into a temporary and indexed there), emit computes over the
+  value as one `iN` loaded from its bytes (`[N x i8]` in memory and in other structs' types, so LLVM lays no `i24` out
+  with its own alignment) and the evaluator over its bytes, bit by bit - so interpret, baking (K2) and decided asserts
+  agree with run time (tests/packed.olang). Found on the way (pre-existing, fixed): an `if` in a generic's instance
+  whose condition a fixed local decided was asked of the evaluator by its place, which every instance shares - a walk
+  of `T.Fields` unrolled to none (a struct of private fields) fixed json's `first` and made `json.Encode` of such a
+  struct S8a's dead-branch error; no such `if` is asked now (check.ifOf).
+
+#### - **Holders ended before what they hold (O15, QCZ, the user's decision 2026-11-0
+
+- **Holders ended before what they hold (O15, QCZ, the user's decision 2026-11-07: "let the compiler order them"; built
+  2026-11-07, wt-dropord, details mine).** A block's by-value holders end last declared first, except that one holding
+  a reference to another of its block is ended before it: the held one's end waits until every holder of it has run
+  (lowering's `runOrder` over the level's deferred code - only a held drop moves, later, so deferred code registered
+  between keeps its place before the holder); two that may hold each other - a cycle - is a compile-time error naming
+  both (`check.settleDropOrder`, after the last attempt). "Holds" is `typed.DropHolds`, a flow-insensitive points-to
+  over the body: a reference into V's storage stored into H or into storage H's references reach - by an assignment, by
+  any call given storage H reaches writably and a reference reaching V (decided, mine: the call's callee is never read,
+  so the order is read off the function itself, with and without the scope pass - the evaluator lowers before it runs -
+  and an edit to a callee's body never reorders a caller's destructors), by a lambda capturing both - through any
+  number of steps, each possible by types (`types.RefInto`: the stored type can hold a reference into the other's type
+  or a by-value part of it; a function value, an `any`, a type variable can hold any). Test builds register a held
+  value's holders' guards again after its own (a guard of a holder holding nothing does nothing), so a failed check's
+  unwinding ends holders first too. The evaluator and `interpret` run lowering's MIR, so they agree (tests/drops.olang's
+  `holders`, baked and asserted while compiling). A value registered with the scope (O16) still ends at its close after
+  the block's variables - so one that may hold a variable of its block, or a value registered after it (`gs :=
+  Vec<Grip>()` whose element is given a reference to `l Lamp`, a temporary `hold(Grip(1), l)`), is an error naming the
+  by-value form `gs Vec<Grip> = ...` (bulk review 8, F2: it ran the Grip's destructor on a Lamp Part C had released; the
+  points-to now models a registered local as standing for its value's storage - `DropHolding.Judged`, check's
+  `dropRegistered`; conservative: one in an inner block holding an outer variable is refused too, as O28 may place it
+  there). Limits (recorded): interpret's stop cleanups (B3e) run in registration order;
+  a holder whose references live in an outer scope (it holds a reference from outside) gets what is stored into it lifted
+  there by section 8 (O28) - its drop then registered where it lives, after the block (the old order was right there by
+  that, the hazard only where a holder's references live in its own block: checked before, `210` where `112` is right).
+
+#### Declared types are nominal (T29).
+
+- **Declared types are nominal (T29).** `type Meters I32`, `type Name Array<T>`; `extends` inherits the base's methods
+  and operators (T29f, the user's design); `Name(x)` converts and names the argument's storage (T29a) - a copy to or
+  from an immut type (T13a); a declared
+  primitive may have a constructor, which a literal runs while compiling (T29d, the user's design). Over a struct,
+  enum or generic instance it is an error. `Char` extends `U8`, `String` extends `Array<Char>` (T29h/T29c, the user's
+  design); text written in the program is a `String`.
+
+#### Enums carry payloads and may be recursive through `&` (T17, T17a, T17c, T17d).
+
+- **Enums carry payloads and may be recursive through `&` (T17, T17a, T17c, T17d).** A payload lives where its value
+  does; an enum reference's zero is null; a null matches no case pattern. A case may carry one type written whole,
+  `Round Circle` (the coordinator's decision 2026-10-24): `Shape.Round(c)` builds it, a narrowed value is that type
+  (`e.r`, `e.Area()`), `case Shape.Round(c)` and `e as Shape.Round` give it; so `{ North South }` on one line is one case
+  carrying a `South`. A local declared or assigned an enum case whose payload must be exactly where a longer scope's
+  references are (a by-value parameter's, `m := Maybe.Some(r)`), or a local collection one is pushed into, has its
+  references placed there (O28, T17c; C2, 2026-11-07 - it had been T17c's error, a struct's equivalent accepted).
+
+#### Enum raw values (T17e, the user's decision 2026-10-24).
+
+- **Enum raw values (T17e, the user's decision 2026-10-24).** `type Op enum String { Plus = "+" }`, `type Status enum
+  U8 { Ok, Busy = 9 }`: a table of constants beside the cases, never their representation (a value still holds its
+  case; `$op` is `Op.Plus`). Text defaults to the case's name, an integer to 0 or one more than the case before; values
+  are literals (an integer literal-only expression, a character literal; mine: no names, so the table needs nothing
+  resolved), fit the type and are distinct. `op.Value()` is supplied (a case-by-case test, the constant itself where
+  the case is written); `try Op.From(v)` through the type's name fails with the prelude's `CaseError.NoCase`, a call of
+  the prelude's generic `caseIndex` (std/prelude/enums.olang), so `try`, R8 and the evaluator need nothing new. Mine:
+  `Value()` with parentheses as every supplied method; the raw type is `String` or an integer type (a declared one
+  over an integer, `Char` included); `From` only where no case carries a payload, and then no case is named `From`; an
+  anonymous enum has none.
+
+#### - **Type-level builders (D19, D19a, T30b, QBT, the user's decision 2026-10-27: "
+
+- **Type-level builders (D19, D19a, T30b, QBT, the user's decision 2026-10-27: "I want it with a)" - reversing QAS's
+  "no type-level functions" and QAT's module builders; built 2026-11-07, details mine).** `fn Color.FromHex(t String&)
+  Color ? BadHex` - a function of the type, called `Color.FromHex(t)`, `gfx.Color.FromHex(t)` through an import,
+  `List<I64>.Of(a)` through an instance (the owner's variables bound; `list.List.Of(a)` bare infers them), `T.Parse(t)`
+  through a type variable; its owner a struct, enum, type over another or extern type of its own module (the prelude:
+  built-in and prelude types too), or a trait-constrained variable (`fn T.Parse<T Integer>(...)`, a default builder);
+  one result, a value of the owner (itself, `&`, `?&`, an instance), any errors; no parameter naming the owner; its own
+  namespace beside cases and reflection's members, public by its first letter; no value reaches it; a value where
+  nothing generic is left (`texts.Map(Color.FromHex)`); never inherited through `extends`. **Placement (a), D19a**: a
+  top-level function (not a method, extern, export fn or `main`) whose one result is a struct/enum/over type its module
+  declares and none of whose parameters names it is an error naming `fn T.Name`. **T30b**: a trait may require a
+  builder of a type its parameter names, `type Parsed<T> trait { T.Parse(t String&) T ? ParseError }`, met on T31's
+  terms; such a trait has no `any`. `T.Functions` walks a type's builders (G41); doc/explain/hover/completion list them
+  under their type by declaration (B14), `test Color.FromHex` targets one (B7a), `explain FILE Color.FromHex` prints
+  one. The prelude: `String.FromC(p, max)` (X15), `F16/BF16/F32/F64.FromBits(u)` (E33, the argument exactly the unsigned
+  type of the width - a narrower one is an error, never widened), `T.Parse(t, base)` for every integer type (`ParseAs`
+  gone). Decided (mine): a builder's Name is "Owner.Member" internally (so symbols, diagnostics, profiles and FnKey name
+  it whole), its Member and Owner kept on `ast.Func`; builders keyed by the owner's receiver key in their own table
+  (`generic.BuilderOf`, defaults over traits as M19e's); a generic named bare takes the builder written with variables;
+  an enum's case wins over nothing (a builder may not take a case's name); `G18a` reads `T.Parse` as a need ("Parse (a
+  builder)"). `tools/builder_migrate.olang` (in `olang fix`, the compiler's parser, std read for its builders) migrated the
+  repository: a moved function's name loses its type's name where it is a word of it (`net.ParseIP` -> `net.IP.Parse`,
+  `time.DateOf` -> `time.Date.Of`), else keeps it (`time.Millis` -> `time.Duration.Millis`, `os.Exec` -> `os.Output.Exec`,
+  `chan.Select` -> `chan.Ready.Select`); since bulk review 8 (HISTORY.md "Bulk review 8, fixed", bfix8c) it rewrites
+  calls of functions that became builders under a shorter name (the stripping read backward, a table for `list.From`),
+  never names a builder like a case of its enum, and a generic owner written bare is D19's error naming `fn Bag<T>.mk`
+  and the instance form, as D19a's hint now writes the owner its result gives. compiler/msgs.olang's `Msg` moved to `compiler/diagmsg.olang` (an import cycle,
+  M2), so msgs's 840 functions make another module's type and stay functions. **Found on the way (pre-existing,
+  fixed):** the formatter's loader (fmt.olang) took a `../x` import for a remote one (its first part holds a dot), so its
+  oracle missed the names such an import reaches.
+
+#### Methods are declared with a receiver clause and called only as methods (M19, the user's call).
+
+- **Methods are declared with a receiver clause and called only as methods (M19, the user's call).** A method may not
+  share a field's name. Built-in types get methods only from the prelude (M19d). Overloading by receiver only (M21); a
+  method written for one instance of a generic (`Box<String&>`) is no other instance's.
+
+#### - **A number written as a literal is a receiver like any other value (E13c, 2026
+
+- **A number written as a literal is a receiver like any other value (E13c, 2026-10-18, the user: "2.0.Sqrt() should
+  be valid code. Don't make an exception for floats like that" - reversing their 2026-10-17 refusal).** `2.0.Sqrt()`,
+  `7.Hash()`, `255.Format(16)`, `(1 + 2).Hash()` take the literal's own type (T6a: `I64`, `F64`, `U64` above `I64`'s
+  largest), since a call is no place a literal adapts; another type is a conversion (`F32(2).Sqrt()`). `-2.0.Sqrt()` is
+  `-(2.0.Sqrt())`. L12's lexing is unchanged.
+
+#### - **`Copy()` makes a new value from an existing one (E31d, the user's decisions 
+
+- **`Copy()` makes a new value from an existing one (E31d, the user's decisions 2026-11-03 "Copy DECIDED", "Copy and
+  unique DECIDED", "Collections DECIDED"; built 2026-11-03, wt-unique, details mine).** Every type has one supplied -
+  part by part, deep through values (each part by its own Copy), shared at references and function values - and `x.Copy()`
+  written gives it (a reference's referent's: `r.Copy()` of an `Array<I64>&` is an `Array<I64>`); a struct or an enum
+  may declare its own, `fn (x T&) Copy() T` (read-only receiver, no parameters, its own type, no `?`, else an error naming
+  the form; on another type an error naming the supplied one), and every copy of a value calls its type's - a `:=` or
+  `=` from an existing value, a compound assignment, a by-value argument, a store into a part, a value put into a
+  collection, a collection's copy (each element by its Copy: collections follow their elements, no Copy of their own); a
+  fresh value (a constructor's or call's result) is no copy. A declared Copy only builds: an effect beyond allocation
+  (a global or a parameter written, C, a function value or an `any`, tasks, waiting, ending the program) is an error at
+  its name, read off its effects after the last attempt (`check.copyEffects`). `Clone` is gone: the prelude's
+  `Array.Clone` (the supplied Copy is it) and std/list's `List.Clone` (a List is a handle, its Copy shares it - a list of
+  its own is `list.List.FromIter(l.Iter())`); `tools/clone_migrate.olang` (text, last of `olang fix`'s text tools) rewrites
+  `.Clone()` to `.Copy()` and lists the lines of a file importing std/list (status 1). Decided (mine): built on QCE's copy
+  machinery - a type declaring Copy counts as owning parts (`types.OwnsParts`, the declaring decls registered with the
+  methods, `Table.MarkCopy`), so check's copy sites make the same `MakeKind.Copy` and lowering's Copy helper calls the
+  declared body (`declaredCopy`; check makes its instance, `wantCopy`, as `$` does Str's) with its result scope the
+  copy's and the program's for the rest - so the evaluator, `interpret` and section 8 (a copy's references judged as
+  shared with the source's) need nothing new; a collection's room (zeros) is never given to a declared Copy - a value
+  whose first never-null reference is null there is copied as its bytes; D9h's caller copy of a view a callee handed
+  back copies parts only (`HelperKind.Parts`), never the declared Copy (which the callee's own constructor call inside a
+  Copy would otherwise reach: it recursed); **no copy running a declared Copy is left out** (D9h, D9i) - a Copy deep
+  through references makes what the value refers to anew, and the move/view proofs speak of the value's own storage only
+  (a recorded limit and question: copies of such types are never elided); facts and B5a's order do not see through a
+  declared Copy (it allocates only). bench machine code byte-identical.
+
+#### Operators are methods named for them (E31, the user's design).
+
+- **Operators are methods named for them (E31, the user's design).** `Plus Minus Mul Div Rem MatMul Neg Less BitAnd
+  ... Inc Dec At SetAt Slice Call`, a lowercase spelling being module-private (M6b); `> <= >=` derive from `Less`. A
+  method is the operator only in the operator's shape - another shape is an ordinary method. Any operator's
+  method but `Len`/`Eq`/`Str` may declare errors, making the operator fallible as written (E31a); there are no checked
+  forms. `x[i, j]` calls `At(i, j)`. **`commutes` (E31c, the
+  user's decision 2026-10-25)** after a `Plus Mul BitAnd BitOr BitXor`'s result lets `2.0 * v` call `v.Mul(2.0)` when the
+  left type has none, operands still evaluated left first; the parameter's type must differ from the receiver's, and a
+  clash with the other type's operator is an error at the commuting (the later) declaration. A store through `x[i]`
+  reads, writes and writes back by `SetAt` (E31b); a `mut` method on `x[i]` is made on the element in place through the collection's `RefMut` where it has one, is reached writably and the call's other arguments are plain values - literals, reads of locals, globals and their fields, operations over them, constructors called on them - taken before them (2026-11-02, mine: not in a spawned call) - also on a field of the element at any depth (`u.nodes[p].kids.Push(c)`,
+  2026-11-03, the values study's B4), and **two-phase** (Rust's, mine): an argument owning nothing and holding no reference
+  that is no plain value (a number a call gives, `t.nodes[0].kids.Push(t.add(k))`) is held first and the element reached
+  after it, the indices then plain and the element sharing no reference (one that does is a copy written through as
+  left to right reads it - e31bviewlaterarg) - and nothing the call runs before its write lands may change the collection (bulk review 6: the element's type reaches no function value, `any` or writable reference to storage the collection may be, and the method's and argument constructors' bodies write no global and call through no value or `any`, read off the effect summaries after each attempt, `settleInPlace`), else an error unless the element is a handle,
+  and so is a compound store there through an operator method, which would run between the read and the write-back
+  (2026-10-26: it was dropped unseen). No user-declared
+  operator symbols; `==` and `$` overridable only by `Eq`/`Str`. A handle field of `x[i]`, or a handle a call gives
+  (`ll[0][0]`), is lent as its reference where its call landed (O17b/O18c); a field of a try-default (R9a) and a
+  conditional or match choosing a place (E28) are values, never lent writably or assigned. Any value with no storage
+  of its own whose references live elsewhere, lent to a reference parameter, is a split value (O17): bound where its
+  references are, refused where the callee keeps something in it - capturing the parameter in a lambda that can
+  outlive the call counts; a slice of a `try` value is a temporary's (E16a).
+
+#### Several results, no tuples (D8c/D8d, the user's call).
+
+- **Several results, no tuples (D8c/D8d, the user's call).** `return a, b`, `q, r := f()`, `f(g())` when g's call is
+  the only argument; `Pair<A, B>` in `std/pair` for two things kept together (the user's call; in the prelude until 2026-10-17).
+  **Results and error sets are written bare** (the user's call 2026-10-24): `fn divmod(a I64, b I64) I64, I64 ? A, B`,
+  in a declaration, a function type and a lambda alike. **Whole-item grouping (L18c, the user's call)**: an item of a
+  list - parameters, arguments, results, type arguments and parameters, array elements, indexes - holding a top-level
+  comma of its own is parenthesized whole, `Map<String&, (fn(x I64) I64, I64 ? A, B)>`, `apply(f (fn(x I64) I64,
+  I64), n I64)`; so a lambda or function type in such a list has one result and one error item unless wrapped. One
+  exception (mine): a function type with no error set as a result before its own signature's `?` is wrapped, `fn f()
+  (fn() I64) ? E`. Parentheses group nothing else: `(I64)` or a wrapped type that needs none is an error. `$` and
+  every diagnostic spell types this way (the checker had written error sets with ` + `). `tools/results_migrate.olang`
+  migrates, re-runnable (oann).
+
+#### Defaults and `default` (D8a/D8b/E14).
+
+- **Defaults and `default` (D8a/D8b/E14).** Trailing defaults, `default` in an argument slot. A default is built per
+  call in its declaration's context.
+
+#### Tests name their targets (B7a, B3a, B14, B15, 2026-10-26).
+
+- **Tests name their targets (B7a, B3a, B14, B15, 2026-10-26).** `test Twice "doubles" { }`, `test Box "..."`,
+  `test Map.Get "..."`: a function, a type or `Type.Method` of the test's own file (the method's declaration there; it
+  may be private); an unknown target (the nearest suggested), another file's, and one target with one description twice
+  are errors. Reported `ok - Twice: doubles` / `FAIL - Twice: ...`; `olang doc` lists them under the target as
+  examples with their bodies (collapsible in HTML), a hover shows the first and `+N more tests`. `olang test FILE
+  WORD...` runs the tests a word names - a target, its type (`Map` runs `Map.Get`'s), or text of a description (decided,
+  mine: a word that names no file and ends in no `.olang`, matched by the test binary's harness, so nothing rebuilds). Words
+  naming none of a file's tests say so, the nearest target or description suggested (`did you mean 'Box'?`), and that
+  file's run ends with the status 3 - the coordinator's decision 2026-10-26, from a review; over several files such a
+  file fails nothing where another listed file has a test the words name, else the run fails (`no listed file has a
+  test named by 'Box'`; the coordinator's decision, built 2026-10-26). A method's type is the receiver its declaration
+  writes, so an array's methods and a trait's defaults are targets too (`test Array.Windows`, `test
+  Iterator.TakeWhile`; built 2026-10-26).
+  std: examples on `String.Trim`, `Map.Get`, `Vec.Push`.
+
+#### Fuzzing and property tests (B19, B19a, docs/survey2.md section 5, 2026-10-26).
+
+- **Fuzzing and property tests (B19, B19a, docs/survey2.md section 5, 2026-10-26).** `olang test -fuzz NAME FILE
+  [-fuzztime SECONDS]` builds the file's tests with libFuzzer (`-fsanitize=fuzzer`, objects apart as `.fuzz`) and runs
+  the one test NAME names (B7a's words; none or several an error) per input: the harness is `LLVMFuzzerInitialize`
+  (globals once, the corpus directories made, libFuzzer's command line given them) and `LLVMFuzzerTestOneInput` (the
+  test behind a recovery point, a failed check printing FAIL and aborting). `std/fuzz`: `fuzz.Check(fn(data
+  Array<U8>&) { })` takes the fuzzer's input, or in a plain run the empty input and every file in `testdata/fuzz/SLUG/`
+  beside the test's file (Go's layout; failing inputs land there, libFuzzer's working corpus under `build/fuzz/`). It
+  composes with `-sanitize`. `std/prop`: `prop.Check(fn(xs Array<I64>&, p Pt) { assert ... }, cases = 100)` makes
+  each parameter's value by reflection (numbers, Bool, Char, String, arrays, Vec, structs through their constructors -
+  a refused one drops the case - and enums) from bytes (Hypothesis's design: 0 the least value), runs the cases in a
+  forked child seeded by the test's name, shrinks a failure's bytes (cuts, a binary search per byte, a borrow between
+  bytes), prints `argument N: $value`, saves it beside the file and runs it in the test, which fails as the property
+  does; under `-fuzz` the fuzzer's bytes are one case. Decided (mine): two modules, `fuzz` (bytes) and `prop` (values,
+  the survey's spelling); the harness names the running test and its file to std through runtime globals
+  (`__olang_test_name`, `__olang_test_file`, `__olang_fuzz_input`, `__olang_test_detach`); a property's failure is
+  found in a child rather than recovered in-process, since a failed check is a jump out of the test; runs are
+  deterministic (no clock seed); a shrunk failure is saved even outside `-fuzz` (Hypothesis's database). Measured: a
+  planted 4-byte prefix bug found in under a second (`checks` scenario `testfuzz`, ~10 s with the build); a property
+  over `Array<I64>` shrinks to `I64[50]` in ~2 s. Profiling is written up in docs/profiling.md (perf, a flame graph,
+  callgrind - which build keeps what).
+
+#### `olang profile FILE [ARGS]` (B20, QBL, the user's decision 2026-10-26; built 2026-10-27, details mine).
+
+- **`olang profile FILE [ARGS]` (B20, QBL, the user's decision 2026-10-26; built 2026-10-27, details mine).** A sampling
+  profiler built in: the program built as `build` builds it (`-O3`, LTO; `-quick` asks less) with frame pointers on every
+  path (shrink-wrapping off), line tables (`LineTablesOnly`) naming each function as source writes it outside its module
+  (`io.Println`, `Vec<I64>.Push`, `check.Checker.Expr`, the root's and the prelude's bare - emit's `ProfName`; `startup`
+  the entry, `task` a spawn's trampoline: every function the compiler writes gets a subprogram, since code inlined into
+  one without loses its lines) and the runtime's sampler (`std/runtime/prof.ll`, hooked into runtime.ll by `; @prof`
+  lines a compiler without it reads as comments) - objects `.prof`, nothing of it in any other build (their IR is the
+  same as before; checked on nbody and regex). Each runtime thread has a `CLOCK_THREAD_CPUTIME_ID` timer signalling
+  itself each ms; the handler, on the thread's alternate stack (2026-11-07), walks frame pointers (bounded by the
+  thread's first frame and its stack pointer, 128 deep) into a reserved buffer, no allocation, no lock - a record's
+  length stored first, marked pending, so the end waits a bounded while for unfinished records and the reader steps
+  over one left pending; a sample weighs 1 + the timer's overrun (a 250 Hz kernel: one each 4 ms
+  weighing 4 - their sum is the CPU time, 8.575 s against 8.579 s measured). Written at exit, os.Exit, an error leaving
+  main, a failed check and SIGINT/SIGTERM/SIGHUP left to end the program (never on a crash, never by a forked child) to
+  `build/profile/NAME.samples` with /proc/self/maps. The driver forks and execs the program (its stdin, output and
+  status the program's; SIGINT ignored while it waits), names addresses with llvm-symbolizer (beside the real clang, else
+  `llvm-symbolizer-20..18` on PATH; `make release` ships it) through inlined frames, and prints self/total by function,
+  the hot lines and the five hottest functions' callers, then writes a self-contained HTML flame graph (SVG, a click
+  zooms; `-output` names it). Options: -output, -quick, -define, -update. `interpret` is not profiled; allocation
+  profiling per site is future work. Measured: sampling costs ~0-2.5%; the build's frame pointers nothing on loops,
+  ~20% on binarytrees. compiler/profile.olang, docs/profiling.md.
+
+#### Arguments by name (E14b, QBG, 2026-10-26 - reverses the 2026-09 rejection).
+
+- **Arguments by name (E14b, QBG, 2026-10-26 - reverses the 2026-09 rejection).** A defaulted parameter only, after
+  every argument by position, in any order, each once (`connect(h, retries = 5)`); naming a required parameter, a name
+  given twice or also by position, an unknown name (the nearest defaulted one suggested) and a name through a function
+  value are errors. Functions, methods, constructors, generics, an `any`'s trait methods. Decided (mine): evaluated in
+  the order written - reordered arguments but literals held in hidden locals (`inWrittenOrder`); a defaulted
+  parameter's name is part of the API, a required one's stays the declaration's; `olang explain`/`doc` show defaults.
+
+#### Variadic parameters (D8g, QCF, the user's "yes, add variadic args", 2026-10-31; built 2026-10-31).
+
+- **Variadic parameters (D8g, QCF, the user's "yes, add variadic args", 2026-10-31; built 2026-10-31).** `fn sum(xs
+  ...I64)`: a call gives any number of arguments there - held as a fixed array in the caller's frame, lent to the call,
+  no allocation - or passes an array on with `...a`; inside, a read-only `Array<T>&`. Decided (mine): last but
+  defaulted parameters, which follow it by name (`os.Output.Exec("ls", "-l", dir = d)`); one, no default, those before it
+  required; methods, lambdas, function types (`fn(xs ...I64)`, named as every function type's parameters are) - not
+  constructors, payloads or externs; the arguments evaluated in written order (earlier ones held first where a
+  variadic one could change them); a generic's variable inferred from them; a function fits a function type of either
+  form (T22). Representation: `TypeRef.Spread`, a `Spread` permission bit on the signature's parameter, the checker
+  gathering the arguments into one before named ones are placed. std: filepath.Join, os.Exec/Start/ExecUntil (the
+  token first)/ExecInPlace, http.Get/Post's headers, csv.Record; `tools/variadic_migrate.olang` (in `olang fix`).
+
+#### Lambdas (D16, the user's design).
+
+- **Lambdas (D16, the user's design).** `fn(x) { return ... }`, `return` always written; captures copied (plain values
+  read-only - what a value owns copied with it, by its declared Copy, since bulk review 7 F8 -, references still naming
+  their instance, value arrays borrowed); types from the expected function type
+  (D16a) or the body (D16b). A function value is `{code, environment}`, identity by both words, never null unless its
+  type says `fn?&` (T21, below).
+  `(args)` after any postfix expression calls (E13b). `spawn fn() { }` runs a lambda as a task (D16e).
+
+#### No shadowing (D3a, the user's call)
+
+- **No shadowing (D3a, the user's call)**, types included: no local or parameter named like a global, a function, a
+  build constant or a type; a type and a function or global of one module may not share a name (D2).
+
+#### `:=` declares any settled expression's type (D15, the user's call).
+
+- **`:=` declares any settled expression's type (D15, the user's call).** `null` and a call giving nothing are errors.
+
+#### - **Traits are constraints; `any Trait&` is the run-time form (T30-T35, G19, the
+
+- **Traits are constraints; `any Trait&` is the run-time form (T30-T35, G19, the user's calls 2026-10-08 and
+  2026-10-24).** `trait` declares method signatures, satisfied implicitly (Go-style: a declared `implements` would point
+  dependencies the wrong way and could never make a built-in type conform); a private method name seals a trait; a bare
+  trait written as a type is an error naming `any R&`. Defaults are methods on a constrained type variable, overridable
+  (M19e). The 2026-10-08 interfaces were removed (bugs clustered in tables and boxing).
+
+#### `any Trait&` (T32-T34, D17f, 2026-10-24, the user's design; HISTORY.md "Run-time trait values").
+
+- **`any Trait&` (T32-T34, D17f, 2026-10-24, the user's design; HISTORY.md "Run-time trait values").** Two words, the
+  instance and a static table per (type, trait) - its type's identity, `$`'s renderings, a function per slot (the
+  trait's and extended traits' methods, defaults the receiver binds alone), and nothing else. A struct or
+  enum variable is borrowed, a temporary built where the any lands, a number/Bool/Char/array copied (the user); placement
+  is the scope pass's (`AnyMake` read as a conversion), never emit's. A method saying more than the trait's signature
+  (scopes, obligations) cannot be in a table (an error at the conversion). Calls dispatch through the table, `mut` only
+  through `mut any`, defaults reaching overrides, a default instantiated for a type only where some call through an any
+  reaches it (so `any Iterator<String>&` exists), an argument left off taking the trait's default; `for x in it` walks an
+  `any Iterator<T>&`; the any satisfies its
+  trait for generic code; no task calls through one. `==` is identity, `$` renders the instance, no `Hash`. A closed
+  trait's any is matched by type cases `case Button b`, `case Box<I64> b` (complete or `case _`) and `w as Button` (failing with
+  `CaseError.WrongCase` as written); an open trait's never (the user). A trait's methods take contracts (D17f), checked before every call through an
+  any; the implementation's own on its entry, after dispatch. Tables are `linkonce_odr`, named by
+  type and trait; the evaluator calls through them (K2 bakes through anys). An array copied in (a slice, `Lab(s)` too)
+  has its elements' references judged where the any lands; `$` counts an any as a reference (8 deep); an array of
+  anys is written `Array<any W&>[a, b]`, as `$` renders it (the review of 2026-10-24, HISTORY.md "`any Trait&`: the soundness
+  review, fixed"). **The second review's round (2026-10-25, HISTORY.md "`any Trait&`: the second review, fixed"):** an
+  array is copied into the box unless the scope pass finds it new storage built where the box is (`Scoper.anyItemNew`,
+  recorded per site in `typed.Plan.AnyNew`, which lowering follows - one decision, so a conditional, a match or a catch
+  default of existing text is copied); a table's slot functions are defined in the root's object with the instances
+  (B3d), since which defaults some call reaches is a whole-program fact and a reused module object (B3i) kept a stale
+  `unreachable`; `any R<T>&` is substituted, unified and counted for G4; an adapter keeping a copy of its receiver
+  (`Take`, `Zip` ...) through an any is an error at the call (a limit: an any has no copy); M21 keeps every instance's
+  method (an exact receiver first, two that apply alike an error); E30 types a chain's literal beside each comparison.
+  **The third review's round (2026-10-25, HISTORY.md "`any Trait&`: the third review, fixed"):** a call given a scope
+  argument (E25) is existing storage where that says, judged wherever it is put (it was taken for a temporary where it
+  stood - use-after-frees through fields, lists, returns, anys); the box's "new storage" answer is one pure function,
+  `typed.AnyItemNew`, which the scope pass, lowering and the compile-time evaluator all ask; a returned local that a kept
+  borrow also names is copied at its return, so the caller's value is its own;
+  M21's per-instance methods reach Eq/Hash; a type over an array of arrays is T7a's error.
+  **The fourth review's round (2026-10-25, HISTORY.md "`any Trait&`: the fourth review, fixed"):** a scoped call's array
+  is existing storage where the argument says whatever it holds (text and numbers too: copied where it is returned or
+  boxed, a local declared from one not moved); a returned array local is uncopied only where a whitelist proves nothing
+  else names it (`Plan.RetSole` - read, indexed, measured, sliced into what dies first, lent to calls keeping nothing),
+  else copied - so the evaluator, which always copies, agrees; AnyNoCopy looks inside function types; `spawn x = f&t()`
+  is a call; E25's "builds no result a scope argument could place" and "no local or parameter here" are given. Bench and
+  the compiler itself: identical IR, so no copy was added there.
+  **The fifth review's round (2026-10-25, HISTORY.md "`any Trait&`: the fifth review, fixed"):** a spawn target holding an
+  array by value is stored as the assignment it is judged as (T11b in place, else a copy made on the task's thread where
+  the assignment copies - `Task.Copies`); `canKeep` keeps unless proved otherwise (no result in any position borrowed
+  from the argument, no parameter sharing its scope, the settled body storing nothing into it); a conversion of a place
+  to a type over a declared array type (`Lab`, `Path` over `String`) names its storage (the place path takes the
+  underlying kind); one return-copy decision with a plan and without; a local a scoped call declares lives where the
+  argument says; `interpret` runs the scope pass and refuses what a build refuses (B3e) - a check gap
+  included since bulk review 7 (F11).
+
+#### No `volatile` (X3b)
+
+- **No `volatile` (X3b)** - a foreign call is an opaque barrier, atomics cover threads, MMIO is inexpressible.
+
+#### TBAA (T36).
+
+- **TBAA (T36).** Every numeric primitive, the array descriptor and a reference to a struct or an enum have element and
+  field tags (references since 2026-10-18, so a handle's reference hoists out of a loop); the runtime's scope and chunk
+  headers have their own (a loop body's empty scope folds away); aggregates and function values are untagged.
+
+#### Parameters (D9, D9b).
+
+- **Parameters (D9, D9b).** `&` says whose instance, `mut` whether it can be written; an immutable lvalue never binds
+  a `mut &` parameter. A generic's by-value parameter bound to a run-time-length array is copied exactly when its body
+  writes it (D9b, `paramWritten`), else is the caller's array. Arrays are passed by value as instances (D9a, G29).
+
+#### Assignability (E12, E12c).
+
+- **Assignability (E12, E12c).** Value into reference borrows an lvalue (with a lifetime check) or builds a temporary
+  in the target's scope; reference into value copies out; a reference to fixed storage is lent where a run-time one is
+  wanted with no copy. All four
+  combinations read the same for structs and arrays.
+
+#### - **Function types are reference-only (T21, QCI 3, the user's "g Handler should 
+
+- **Function types are reference-only (T21, QCI 3, the user's "g Handler should not be possible because a function can
+  never be a value" and "only function declarations don't have &", 2026-11-01; built 2026-11-02).** A place holding a
+  function value writes its marker on the `fn`: `fn&(e Event)` never null, `fn?&(e Event)` may be; a bare `fn(...)` on a
+  place is an error naming the `&` (said by the parser, so every file and every unreached generic is held to it);
+  declarations, lambdas and a type declaration's base carry none. `fn&` has no zero value (D13, D13d: assigned before any
+  read, or a default; `Array<fn&(..)>(n)` needs a fill); `fn?&` has every `?&` rule (null its zero, narrowing of locals
+  and parameters, `f!`, `f!(x)`, a `fn&` flowing in, nothing called through one before) - T21's "nullable by default"
+  gone. Decided (the coordinator): a flag on the function type entry (`types.Func`'s F, part of its identity and its
+  Canon `fn?(`), two words, a null code its null. Mine: the marker says nothing of permission (nothing writes through a
+  function value); `$f` renders `fn&(...)`; a C function pointer a header gives is `fn?&` (bindgen); explain prints a
+  declaration's signature `fn(...)` (no marker); MIR's verifier takes either nullability as one representation.
+  `tools/fnref_migrate.olang` (text, the compiler's parser saying where each bare type begins; in `olang fix` after the
+  other text tools, `null_migrate` then adding `?` and `!` from the diagnostics) migrated the repository - 376 types in
+  150 files, then 7 made `fn?&`, 5 `!` written, 4 by hand; the seed written twice (stage 1 reading both spellings).
+  **Declared function types (T21b, the coordinator's, same batch)**: `type Handler fn(e Event)` - no marker in the
+  declaration - held as `Handler&`/`Handler?&`, a bare `Handler` an error; nominal (a `Handler&` is no `Filter&`;
+  `Filter(h)` makes it one), a lambda or plain function value fitting it directly and it fitting its base; methods its
+  own (M19). Built (mine) as the function type carrying its declaration in the same flag word, so calls, §8's closure
+  tracking, layout and the evaluator need nothing new; no type parameters (G6) or `extends`; `$h` renders the signature,
+  a type is spelled `Handler&`.
+
+#### Function types (T22, T22a).
+
+- **Function types (T22, T22a).** Errors compared in order, `mut` and permissions on T22's terms (read-only for
+  writable parameters, writable for read-only results is safe); a type's `Call` fits a function type (E31), its errors
+  the type's in order (2026-10-25: never compared, so a `Call` with a contract read its error code as a result). A
+  function value returned from a parameter is an obligation (O14a). No function type says where references live (QCB,
+  2026-11-02; until then a type could write `b N&a` or `T&p`). **A function value carries its relations (T22a, QCR (1),
+  the user's "build them all" 2026-11-03; built 2026-11-07, docs/sec8.md round 3, details mine)**: a function, lambda or
+  adapted `Call` whose inferred obligations are more than its type says (`fn link(a mut N&, b N&)` storing b into a, a
+  lambda pushing what it is given into what it captured) is a value wherever the inference follows it whole - a local
+  (each version, whatever type the local is written with), a conditional, a `match`, a `catch` default, a conversion,
+  and a call's result (the callee's returns, O13c's third item, `summary.ResFn`) - and a call through it is judged as the
+  direct call each function it may be is (`g := link; g(x, N(5))` builds `N(5)` where `x` lives; O17's lending reads
+  each body's summary). At a **boundary** - an argument, a store into anything but a whole local, an element, a capture,
+  a task, an `any`, a `yield`, a binding, a return no caller follows (a cycle, several results), a call a loop-carried
+  version reaches before it is given - only what the written type says may come: T22a's error there names the function
+  (a lambda by the parameter it keeps), and the place; explain/doc/hover say `# as a value: held in locals and results
+  only - its scopes (b outlives a) ...` (or the function it gives). Decided (mine): records are the bodies a value may
+  call and, for a lambda or adapter, the terms its captures (receiver) had where it was made; the boundaries are checked
+  by a structural walk of each body in its reporting judging (`fnBounds`: a local's values flow-insensitively, a call's
+  results by `ResFn`, coverage deep through every function a call of it may give), calls through values by the records
+  the judging follows (`recsOf`); a version not judged yet that a read reaches (a loop's next turn) is known where it
+  names a function or a lambda capturing nothing, else judged at the read as at a boundary; a function-valued local
+  assigned whole with no versions found has every value judged at its reads; a generic's type variable is a boundary
+  (no scope twins - the coordinator's call); a task's function is not followed. bench and compiler/ IR byte-identical,
+  the scope phase unchanged. **A result holding references reads as borrowed from
+  the reference parameters (open point 5, the user's approval; built 2026-11-02, round 4b)**: a call through a value
+  holds each reference argument to outlive where the result lands - exactly there where something can be stored
+  through both, the result landing where that argument lives - and as a view (O27: an argument's storage the caller
+  builds is built where the result lands, since 2026-11-07), so a function whose obligations are only these hands back
+  what an argument refers to and is a value (`fn first(a Array<I64>&) Array<I64>& { return a[0:1] }; g := first`).
+  Decided (mine): reference parameters only.
+
+#### Static literals (T25d).
+
+- **Static literals (T25d).** A literal known while compiling reaching a read-only reference is the constant data
+  itself; an immutable global no writable reference reaches is `constant`, and importers see its value (K2).
+
+#### A number type's limits through its name (E36, the user's decision 2026-10-24).
+
+- **A number type's limits through its name (E36, the user's decision 2026-10-24).** `I64.Max`, `U8.Min`, `T.Max`
+  in a generic, and a float's `Max` (largest finite), `Min`, `Inf`, `NaN`, `Epsilon`, `SmallestNormal` - constants of
+  the type, never literals (they do not adapt); a declared type has them only where it extends its base and declares no
+  constructor (mine: a constructor decides its values). `MaxFinite` was named in the brief and folded into `Max` (mine:
+  one way to write it, Rust's meaning). The `T.` namespace reflection will read through.
+
+#### Bit operations are supplied methods of every integer type (E37, the user's decision 2026-10-24).
+
+- **Bit operations are supplied methods of every integer type (E37, the user's decision 2026-10-24).**
+  `LeadingZeros TrailingZeros PopCount` (an `I64` count; a zero's is its width), `RotateLeft(n) RotateRight(n)` (any
+  integer count, modulo the width, negative the other way - mine), `ByteSwap`; LLVM's intrinsics, the evaluator
+  computing them bit by bit. Inherited through `extends`, never redeclared, as E33's.
+
+#### Small type rules:
+
+- **Small type rules:** a type cannot embed itself by value (T16); a self-holding array type is an error (T29); an
+  inherited array method is never overridden (T29e); `x.Bits()` and the builders `F64.FromBits(u)` etc. move a float's IEEE pattern
+  (E33); an array made with a constant length 0 names one static storage, no allocation (arrays compare by contents, E10; a
+  struct of no fields still has storage of its own, since a reference to one compares by identity); a NaN renders `nan`.
+
+#### Visibility details (M6a, M12, M4).
+
+- **Visibility details (M6a, M12, M4).** A member or error word is public by its own first letter; enum cases are
+  alias-qualified across modules (`Lib.Dir.North`); an alias-less import takes the file's base name, so a file's
+  capitalization is part of its interface; capitalized aliases re-export, through chains of any depth; a cycle in
+  public reachability, or one file reached two ways, is an error.
