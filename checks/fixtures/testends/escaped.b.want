@@ -1,0 +1,6 @@
+inner deferred
+errdeferred
+deferred 1
+destruct 1
+unhandled error: E.Bad(2)
+(build with -debug to see where it came from)

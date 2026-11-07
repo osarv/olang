@@ -1,0 +1,7 @@
+inner deferred
+errdeferred
+deferred 1
+destruct 1
+unhandled error: E.Bad(2)
+escaped.olang:9: raised here
+escaped.olang:17: try passed it on

@@ -1563,11 +1563,13 @@ fn (ln mut lowering&) raise(sp source.Span, code mir.Operand) {
         return
     }
     l := ln.local(code, mir.I32T, sp)
-    if ln.isMain() { ln.mainPayloads(mir.Operand.Copy(mir.Lvalue.L(l)), sp) }
     was := ln.erroring
     ln.erroring = true
     ln.leave(0)
     ln.erroring = was
+    # (said once every scope of main is closed - its deferred code, errdefers and drops run first, as for a word
+    # carrying nothing (S19, S19e, O15); the payload's record is on its own stack, which they leave as they found it)
+    if ln.isMain() and not ln.dead { ln.mainPayloads(mir.Operand.Copy(mir.Lvalue.L(l)), sp) }
     ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.Lvalue.L(l))))
 }
 
@@ -1600,7 +1602,7 @@ fn (ln mut lowering&) mainPayloads(code mir.Operand, sp source.Span) {
         ln.end(mir.Term.Branch(ln.prim(typed.PrimOp.Eq, types.BoolT, Array<mir.Operand>[code, xs[i]], sp), yes, no))
         ln.start(yes)
         ln.emit(mir.Stmt.Raised(sp))   # (S18d: where it leaves main, as a Raise would say)
-        ln.end(mir.Term.Exit(sp, mir.ExitKind.Unhandled, ln.withPayload(xs[i], xs[i + 1], mine, sp)))
+        ln.end(mir.Term.Exit(sp, mir.ExitKind.Unhandled, ln.withPayload(xs[i], xs[i + 1], mine, sp, true)))
         ln.start(no)
     }
 }
@@ -2007,14 +2009,16 @@ fn (ln mut lowering&) fails(bad mir.Operand, chk typed.Check, kind mir.ExitKind,
 
 # E35: the error a "!" took ends the program, named as a program writes it - another module's error type by its
 # module's base name, the prelude's and this module's bare ("io.Error.FULL") - a test and an exit for each word
-fn (ln mut lowering&) bang(code mir.Operand, from types.ListId, sp source.Span, kind mir.ExitKind = mir.ExitKind.Error) {
+# (closed: every scope of the body closed already - the rendering's builder opened in none)
+fn (ln mut lowering&) bang(code mir.Operand, from types.ListId, sp source.Span, kind mir.ExitKind = mir.ExitKind.Error
+                           closed Bool = false) {
     xs := ln.bangNames(from, sp)
     for i in range 0, xs.Len(), 2 {
         yes, no := ln.F.NewBlock(), ln.F.NewBlock()
         same := ln.prim(typed.PrimOp.Eq, types.BoolT, Array<mir.Operand>[code, xs[i]], sp)
         ln.end(mir.Term.Branch(same, yes, no))
         ln.start(yes)
-        ln.end(mir.Term.Exit(sp, kind, ln.withPayload(xs[i], xs[i + 1], from, sp)))
+        ln.end(mir.Term.Exit(sp, kind, ln.withPayload(xs[i], xs[i + 1], from, sp, closed)))
         ln.start(no)
     }
     ln.end(mir.Term.Exit(sp, kind, ln.textData("unhandled error", sp)))
@@ -2023,7 +2027,8 @@ fn (ln mut lowering&) bang(code mir.Operand, from types.ListId, sp source.Span, 
 # T19b: what "!", a test's FAIL line and an escaping error say of error code c (a constant of list from): its name as
 # constant text, or, for a word carrying a payload, the name then the payload the top of the payload stack holds, as "$"
 # renders an error value ("json.Error.Unexpected(3, 14)") - text made in the program's scope, the program ending
-fn (ln mut lowering&) withPayload(c mir.Operand, name mir.Operand, from types.ListId, sp source.Span) mir.Operand {
+fn (ln mut lowering&) withPayload(c mir.Operand, name mir.Operand, from types.ListId, sp source.Span
+                                  closed Bool = false) mir.Operand {
     t := ln.T
     p := ln.L.P
     code := match c {
@@ -2039,7 +2044,7 @@ fn (ln mut lowering&) withPayload(c mir.Operand, name mir.Operand, from types.Li
     if pt == types.UnknownT or p.WordFields(t.DeclOf(et), w).Len() == 0: return name
     d := t.DeclOf(et)
     dm := t.DeclModule(d)
-    b := ln.F.AddScope(mir.ScopeKind.Builder, ln.top().S, typed.BlockId(-1), sp)
+    b := ln.F.AddScope(mir.ScopeKind.Builder, mir.NoScope if closed else ln.top().S, typed.BlockId(-1), sp)
     ln.emit(mir.Stmt.Open(sp, b))
     bref := mir.ScopeRef.Scope(b)
     ln.word(bref, $load.ErrQualifier(p.L.Mods[dm].Identity, dm == p.L.Root) $p.ErrorWordName(d, w), sp)

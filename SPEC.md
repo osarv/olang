@@ -7853,8 +7853,10 @@ each argument in order. A test binary's command line is its own name alone.
 
 **B5.** Running the compiled program (`build` mode), or interpreting it (`interpret`, B3e), invokes `main`. If it returns normally (falls off
 the end, or a bare `return`), the process exits with status `0`. If an error (§7) escapes `main`
-uncaught, the process prints `unhandled error: TypeName.WORD\n` to `stderr` (naming the specific
-declared error type and word that escaped) and exits with status `1`. The type is named as source writes it outside its
+uncaught, it leaves `main`'s blocks as it leaves any function's - their deferred code, errdefers and destructors run
+(S19, S19e, O15), whether or not its word carries a payload (T19b) - and then the process prints `unhandled error:
+TypeName.WORD\n` to `stderr` (naming the specific declared error type and word that escaped) and exits with status `1`.
+`main` is the root module's plain function of that name: a method or a builder named `main` is an ordinary function. The type is named as source writes it outside its
 module: with its module's alias before it (`io.Error.Failed`, `chan.Error.Closed`), except a type of the prelude, or of the
 root program itself, which is written bare (`ListError.EMPTY`). The same name stands in a failed test's line, in `!`'s
 message and in the error trace, whether the program is built or interpreted. What follows that line is the error's trace in a
