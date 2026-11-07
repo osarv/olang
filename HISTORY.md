@@ -30173,3 +30173,13 @@ padded beside text, `"x" 'c'.PadStart(3) "y"`, said to write `$'c'.PadStart(3)`,
 no PadStart - it is padded as its text): the hint is now the rendering that compiles, `$($'c').PadStart(3)`
 (parse.olang's `padsChar`, for PadStart and PadEnd on a character literal - the two methods T29f's message names).
 checks/cases/e11bcharpad. The parser is the literals round's file; the change is the one branch in `joinPieceHint`.
+
+**B11, json keys converted once.** std/json converted a member's name to its key by the policy (Camel, Snake, Kebab)
+on every encode and every decode lookup, character by character (`keyInto` into the output, `KeyOf` making a String
+for each lookup). Now each member's key under each policy is computed while compiling - `keyText<F>`, a match on the
+call's policy whose arms are `comptime KeyOf(f.Name, Naming.X)`, constant data per member of each type (K3; a
+descriptor's name is a constant of the instance, which comptime reads) - and encode pushes it, decode compares against
+it with no String made (`keyFor` gives a `String&`). Measured: 500,000 encodes of a four-field struct under Snake,
+1.73G -> 1.22G instructions (callgrind). Decided (mine): all four policies' keys are made for every member a program
+encodes or decodes, rather than only the policies used - a few bytes each, and the call's policy is a run-time value.
+std/json's 20 tests pass, its baked encodes among them.

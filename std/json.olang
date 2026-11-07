@@ -928,9 +928,20 @@ fn keyInto(b mut StringBuilder&, name String&, keys Naming) {
 }
 
 # the key of a field or a parameter: its own "@json.Key", else its name by the policy
-fn keyFor<F>(f F, keys Naming) String {
-    if f.HasAttr<Key>() { return $(f.Attr<Key>()!).Name }
-    return KeyOf(f.Name, keys)
+fn keyFor<F>(f F, keys Naming) String& {
+    if f.HasAttr<Key>() { return (f.Attr<Key>()!).Name }
+    return keyText(f, keys)
+}
+
+# a member's name as each policy writes it, converted while compiling (K3), once per member of each type - an encode or
+# a decode only picks one
+fn keyText<F>(f F, keys Naming) String& {
+    return match keys {
+        case Naming.Exact: f.Name
+        case Naming.Camel: comptime KeyOf(f.Name, Naming.Camel)
+        case Naming.Snake: comptime KeyOf(f.Name, Naming.Snake)
+        case Naming.Kebab: comptime KeyOf(f.Name, Naming.Kebab)
+    }
 }
 
 # a value of type T read from JSON text, by Encode's rules backwards: "p := try json.Decode<Point>(text)". A struct is
@@ -1249,7 +1260,7 @@ fn (w mut writer&) named<F>(f F, keys Naming) {
         w.text((f.Attr<Key>()!).Name)
     } else {
         w.out.PushChar('"')
-        keyInto(w.out, f.Name, keys)
+        w.out.Push(keyText(f, keys))
         w.out.PushChar('"')
     }
 }

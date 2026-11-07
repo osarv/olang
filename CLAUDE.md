@@ -1268,7 +1268,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   covering nothing in one copy of an unrolled walk is no error, as in a generic's body (R8). doc/explain/lsp show
   attributes with what they are on. std: `json.Naming` (Exact, Camel, Snake, Kebab - not `Keys`, which `json.Object`'s
   field holds) via `keys = ...` on Encode/Decode/From, `@json.Key`, `@json.Skip`, a type's `@json.Naming.X` winning over
-  the call's; std/csv records as structs (`Header`, `RecordOf`, `Encode`, `Decode`, `@csv.Column`, `@csv.Skip`);
+  the call's - each member's key under each policy converted while compiling (`comptime`, 2026-11-07: an encode
+  1.73G -> 1.22G instructions); std/csv records as structs (`Header`, `RecordOf`, `Encode`, `Decode`, `@csv.Column`, `@csv.Skip`);
   std/flags `p.Read<T>(args)` from a struct's parameters with `@flags.Help`, `@flags.Short`.
 - **Function facts (G42, QBP 9, B1.1, the user's "yes build with item 6" 2026-10-27, and the declared facts of
   2026-10-27; built 2026-10-31, details mine).** `mix.Allocates`, `dsp.mix.Blocks`, `pick<I64>.Terminates` through a
