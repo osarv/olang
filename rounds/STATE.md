@@ -52,3 +52,11 @@ push the round's branch; delete its build/.
 6. After "done" (no syntax, the user's rule): benchmarks, coverage, the REPL (plain `olang`) + Jupyter kernel, saturating
    arithmetic, platforms, `olang get` with the Cargo version model, the reference-counting carve-out (QCR 2). The
    licence: postponed by the user.
+
+## 2026-11-07 ~18:40 CET - after the container was replaced
+/home/user (wt/, review/, the scripts) was lost; restored: review/ from backup/review, worktrees merge, bfix8a, bfix8c
+from their pushed branches, /home/user/{blk,vlock,wipsnap.sh,wiploop.sh} rewritten (loop running), libclang-rt-18-dev
+and libcurl4-openssl-dev installed (only clang-18 here: no clang-19/20, no qemu - make cross cannot run).
+Merged: bfix8b (71cec3d), bfix8a (d240a62), bfix8c (ab66345) = master. Full verify running (merge/verify2.log).
+Next: fix what it shows (goldens of the fix rounds), then the gates - make scopesan, make scopefuzz, fuzz free, dead
+regions (OLANG_DEADREGIONS=1) - then trim CLAUDE.md (sonnet), then report "the compiler done".
