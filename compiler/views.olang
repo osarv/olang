@@ -186,6 +186,7 @@ type Viewer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     library Map<I64, Bool>          # the standard library's files
     vecFile I64 = -1                # the prelude's Vec module's file
     mapFile I64 = -1                # ... and its Map module's
+    colFile I64 = -1                # ... and its Columns module's (ColumnVec, T7e)
     fieldsOf Map<types.DeclId, I64> # a struct's field names, as an index in nameLists
     nameLists Vec<Vec<source.NameId>>
     # the call graph (Tarjan): each body's callees in edgeTo from edgeFrom[b]; the components, callees' first
@@ -221,6 +222,7 @@ fn (v mut Viewer&) Run() {
         if m.Identity.StartsWith("std/") { v.library.Put(m.File, true) }
         if m.Identity == "std/prelude/vec" { v.vecFile = m.File }
         if m.Identity == "std/prelude/map" { v.mapFile = m.File }
+        if m.Identity == "std/prelude/columns" { v.colFile = m.File }
     }
     if v.vecFile < 0 { return }
     v.str("")
@@ -253,9 +255,12 @@ fn (v mut Viewer&) Run() {
 # unjudged - checks/cases/m19gonce.olang)
 fn (v mut Viewer&) viewsHeld() Bool {
     for b in range v.Bodies.Len() {
-        if v.Bodies[b].File == v.vecFile or v.Bodies[b].File == v.mapFile { continue }
+        if v.Bodies[b].File == v.vecFile or v.Bodies[b].File == v.mapFile or v.Bodies[b].File == v.colFile { continue }
         for k in range v.edgeFrom[b], v.edgeFrom[b + 1] {
             w := v.edgeTo[k]
+            # a ColumnVec's column is a view the program takes itself (T7e: a slice of its buffer, check's
+            # columnVecField), so a body calling any of ColumnVec's functions may hold one
+            if w >= 0 and w < v.Bodies.Len() and v.Bodies[w].File == v.colFile and v.colFile >= 0 { return true }
             if w < 0 or w >= v.Bodies.Len() or (v.Bodies[w].File != v.vecFile and v.Bodies[w].File != v.mapFile) { continue }
             for r in v.P.T.Results(v.Bodies[w].Ty) {
                 if v.arrayish(r) or v.P.T.KindOf(r) == types.Kind.Ref { return true }
@@ -287,7 +292,7 @@ fn (v mut Viewer&) walk(b I64, check Bool) {
     v.Id = b
     v.check = check
     v.quiet = false
-    v.skip = body.File == v.vecFile
+    v.skip = body.File == v.vecFile or body.File == v.colFile
     v.loops.Clear()
     v.targets.Clear()
     v.paramAt.Clear()
@@ -485,6 +490,7 @@ fn (v mut Viewer&) bufferField(t types.TypeId) String {
     mod := v.P.T.Modules[v.P.T.DeclModule(decl)]
     if name == "Vec" and mod == "std/prelude/vec": return "data"
     if name == "Map" and mod == "std/prelude/map": return "ents"
+    if name == "ColumnVec" and mod == "std/prelude/columns": return "data"   # its Columns, one buffer per field (T7e)
     return ""
 }
 
@@ -604,6 +610,26 @@ fn (v mut Viewer&) bufferOf(p typed.Lvalue&, st state&, out mut Vec<place>&) ? N
         case typed.Lvalue.Field(_, _, b, i) {
             f := v.bufferField(b.Type())
             if f != "" and v.fieldName(v.deref(b.Type()), i) == f {
+                v.recordPlaces(b, st, out)
+                return
+            }
+            # a ColumnVec's column: a field of its Columns, the buffer - the column view "cv.x" and its room's growth
+            try v.columnOf(b, st, out)
+            return
+        }
+        case _ { }
+    }
+    error NotBuffer
+}
+
+# the ColumnVec's places in out where p is its Columns ("cv.data", T7e) - a column below it is one of its buffers;
+# failing with NotBuffer where p is no such field
+fn (v mut Viewer&) columnOf(p typed.Lvalue&, st state&, out mut Vec<place>&) ? NotBuffer {
+    match p {
+        case typed.Lvalue.Field(_, _, b, i) {
+            t := v.deref(b.Type())
+            if v.bufferField(t) == "data" and v.P.T.KindOf(t) == types.Kind.Named and
+               v.text(v.P.T.DeclName(v.P.T.DeclOf(t))) == "ColumnVec" and v.fieldName(t, i) == "data" {
                 v.recordPlaces(b, st, out)
                 return
             }

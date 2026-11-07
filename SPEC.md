@@ -798,7 +798,7 @@ per field of `T` - a **column** - rather than one array of `T`, and `ColumnVec<T
   `Vec`'s does (twice the size, 8 at first, the old ones retired - B2f). It is a value, `==` and `Hash` by its rows.
 - **Columns.** `c.x` is the column of `T`'s field `x`: an `Array<F>` place of a `Columns`, and for a `ColumnVec` a view
   of its buffer's first `Len()` elements carrying the table's permission (E16a) - good until it grows, as a `Vec`'s
-  `View()` is. Elements are read and written through it, lane operators apply (`c.x += c.vx * dt`, E39), and it is lent
+  `View()` is, and a use of one after a growth is M19g's error where the same `ColumnVec` is visible on both sides. Elements are read and written through it, lane operators apply (`c.x += c.vx * dt`, E39), and it is lent
   as any array is. A column is visible where `T`'s field is (M6a: a private field's column only in `T`'s module).
   Assigned whole, `c.x = v`, a column is written in place element by element (T11b) - `v` an array or lanes of the
   table's length, checked once and aborting as lanes of different lengths do (E39), or one value for every element; in a
@@ -3096,7 +3096,7 @@ of the language; they say which of a collection's positions are live, which the 
 **M19g (a Vec's views).** A **view** is what `v.View()` or `v.ViewMut()` gives - the elements of `v`'s buffer as it is
 when the view is taken - and so is a reference into the buffer, what `v.Ref(i)` and `v.RefMut(i)` give (and a `Map`'s
 `m.Ref(k)`, `m.RefMut(k)`, a reference into its slots, which a `Put` that grows them replaces just as a `Vec`'s growth
-does), and what is made of one: a slice of it, a conversion of it (`String(v.View())`), an
+does; and a `ColumnVec`'s column `cv.x`, T7e, a view of the buffer its `Push` replaces), and what is made of one: a slice of it, a conversion of it (`String(v.View())`), an
 element of it borrowed in place by a reference parameter (E12c), a value holding one (a struct built from it, a lambda
 capturing it, a collection a call is known to keep it in), and a function's result where the function's body hands
 back a view of a `Vec` its argument reaches. A view is **stale** from a growth of its `Vec` on: a `Push`, `PushAll`,
