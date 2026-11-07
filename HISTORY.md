@@ -30165,3 +30165,11 @@ default (`Float.Sqrt`) were "no top-level item". explain now falls back to B7a's
 declaration's receiver is written as that name (`ast.RecvTarget`: an array's `Array`, a constrained variable's trait)
 - so explain, doc's examples and `olang test FILE WORD` name such a method alike. The words scenario explains
 `Array.Windows` and `Iterator.TakeWhile`.
+
+**C11, small3's two diagnostics.** (1) "unknown name 'os'" three times for a module used three times without its
+import: checked again, it is one M10 error naming the import now (`'os' is no import here - std has it: 'import
+"std/os"'`), fixed by an earlier round and pinned by importmissingonce - nothing to do. (2) E11b's hint for a character
+padded beside text, `"x" 'c'.PadStart(3) "y"`, said to write `$'c'.PadStart(3)`, which is T29f's error next (a Char has
+no PadStart - it is padded as its text): the hint is now the rendering that compiles, `$($'c').PadStart(3)`
+(parse.olang's `padsChar`, for PadStart and PadEnd on a character literal - the two methods T29f's message names).
+checks/cases/e11bcharpad. The parser is the literals round's file; the change is the one branch in `joinPieceHint`.

@@ -3710,7 +3710,10 @@ fn (p mut Parser&) joinPieceHint(from I64, to I64) Bool {
     a := p.ts.Toks[from]
     b := p.ts.Toks[to]
     # a long operand - a chain holding a lambda, say - is rendered whole by parenthesizing it
-    if b.End > a.Start and b.End - a.Start <= 60 {
+    if b.End > a.Start and b.End - a.Start <= 60 and a.Kind == token.Tok.CharLit and p.padsChar(from, to) {
+        # a character is padded as its text (T29f): "'c'.PadStart(3)" is rendered "($'c').PadStart(3)"
+        p.reportAt(from, msgs.JoinPiece($"($" $p.text(a) ")" $p.src.Text[a.End:b.End]))
+    } else if b.End > a.Start and b.End - a.Start <= 60 {
         p.reportAt(from, msgs.JoinPiece(p.src.Text[a.Start:b.End]))
     } else if from == to {
         p.reportAt(from, msgs.JoinPiece(p.text(a)))
@@ -3718,6 +3721,13 @@ fn (p mut Parser&) joinPieceHint(from I64, to I64) Bool {
         p.reportAt(from, msgs.JoinPiece("(...)"))
     }
     return true
+}
+
+# whether the operand from..to is a character literal's PadStart or PadEnd - a method of its text, not of the Char
+fn (p Parser&) padsChar(from I64, to I64) Bool {
+    if to < from + 2 or p.kindAt(from + 1) != token.Tok.Dot { return false }
+    m := p.text(p.ts.Toks[from + 2])
+    return m == "PadStart" or m == "PadEnd"
 }
 
 # E11b: whether i ends a "$" rendering - "$n", "$a.b(c)" - a join piece another piece may follow
