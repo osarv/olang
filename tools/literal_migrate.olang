@@ -5,7 +5,7 @@
 # `Array<T>[a, b]`, `U8[c - 32 for c in t]` `Array<U8>[c - 32 for c in t]`, and an array pattern alike
 # (`case String&["test", ...]`). A front is read as old where it names a type with nothing after it but a marker -
 # a primitive, a type of the file, the prelude or std, an imported module's (through its alias), a type variable the
-# file's declarations introduce - or carries a marker ("&", "?&", a scope "&x") before its "[" whatever it is. A generic
+# file's declarations introduce - or carries a marker ("&", "?&") before its "[" whatever it is. A generic
 # type with no marker in front (`Vec<I64>[1, 2]`, `Array<I64>[...]`) is read as new and left alone - which is what
 # makes the tool idempotent, and why an old literal of generic elements held by value (`Array<F32>[F32[1, 2]]`, an
 # array of arrays) is migrated by hand. A type of the file declaring a `FromIter` is new where it stands bare. Comments
@@ -58,7 +58,7 @@ type known struct() {
     std String = ""
 }
 
-Prims Array<String&> = String&["Bool", "Char", "String", "F16", "BF16", "F32", "F64"]
+Prims Array<String&> = Array<String&>["Bool", "Char", "String", "F16", "BF16", "F32", "F64"]
 
 fn known.load(std String&) known {
     k := known()
@@ -180,7 +180,7 @@ type front struct(End I64, Marked Bool, Generic Bool, Any Bool, Path Vec<String>
 
 fn front.none() front { return front(-1, false, false, false, Vec<String>()) }
 
-# what stands at i, read as a literal's front: [any] path [<args>] [?] [& [name]] "["
+# what stands at i, read as a literal's front: [any] path [<args>] [?] [&] "["
 fn front.read(text String&, mask String&, i I64) front {
     j := i
     anyForm := false
@@ -212,8 +212,6 @@ fn front.read(text String&, mask String&, i I64) front {
     if j < text.Len() and text[j] == '&' {
         marked = true
         j++
-        n := word(text, j)
-        if n.Len() > 0 and n != "any" { j += n.Len() }
     }
     if j >= text.Len() or text[j] != '[' or mask[j] != 'c' { return front.none() }
     return front(j, marked, generic, anyForm, path)
@@ -238,7 +236,8 @@ fn closeAngle(text String&, mask String&, i I64) I64 {
 # whether a front is the old form: an element type before an array's "["
 fn (k mut known&) old(s scope&, f front&) Bool {
     if f.Any { return true }
-    if f.Generic { return f.Marked }
+    if f.Marked { return true }                   # no type is written "T&[" any more: an element type's marker
+    if f.Generic { return false }
     if f.Path.Len() == 1 {
         n := f.Path[0]
         if s.builders.Has(n) and not f.Marked { return false }
@@ -270,6 +269,8 @@ fn rewrite(text String&, mask String&, s scope&, k mut known&) String {
         if f.End >= 0 and k.old(s, f) {
             edits.Push(i)
             edits.Push(f.End)
+            i = f.End                             # the front read whole: "any Shape&" holds a "Shape&" of its own
+            continue
         }
         i += word(text, i).Len()
     }
