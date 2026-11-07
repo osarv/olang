@@ -4459,7 +4459,7 @@ reflnotlist.olang:9:18: error[G33]: I64 has no Fields - only a struct and an enu
       |                  ^~~~~~~~~~
 compilation failed with 1 error
 === reflnotype.olang
-reflnotype.olang:9:15: error[G38]: 'Element' of I64: only an array has an Element
+reflnotype.olang:9:15: error[G38]: 'Element' of I64: only an array, a Columns and a ColumnVec have an Element
     9 | fn main() { x I64.Element = 3 }
       |               ^~~~~~~~~~~
 compilation failed with 1 error

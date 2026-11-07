@@ -92,3 +92,9 @@ test "ColumnVec.Push: grows every column together" {
 test "ColumnVec: evaluated while compiling as at run time" {
     assert Worked == work(Run)
 }
+
+test "Columns: reflection sees a struct of columns, its rows' type its Element" {
+    assert Columns<P>.Kind == TypeKind.Struct and Columns<P>.Fields.Len() == 4 and Columns<P>.Fields[2].Name == "Vx"
+    assert Columns<P>.Element.Name == "P" and ColumnVec<Tag>.Element.Name == "Tag"
+    assert Columns<P>.Fields[0].Type.Element.Name == "F32"
+}

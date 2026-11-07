@@ -4791,7 +4791,8 @@ fn (p mut Program&) Project(t types.TypeId, name String&) types.TypeId, String {
     if name == "Element" {
         r := p.ReflUnder(t)
         if p.T.KindOf(r) == types.Kind.Array { return p.T.Elem(r), "" }
-        return types.UnknownT, "only an array has an Element"
+        if p.ColumnsRow(r) != types.UnknownT { return p.ColumnsRow(r), "" }   # T7e: a table's rows
+        return types.UnknownT, "only an array, a Columns and a ColumnVec have an Element"
     }
     if name == "Target" {
         if p.T.KindOf(t) == types.Kind.Ref { return p.T.Referent(t), "" }
