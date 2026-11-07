@@ -863,7 +863,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (a global or a parameter written, C, a function value or an `any`, tasks, waiting, ending the program) is an error at
   its name, read off its effects after the last attempt (`check.copyEffects`). `Clone` is gone: the prelude's
   `Array.Clone` (the supplied Copy is it) and std/list's `List.Clone` (a List is a handle, its Copy shares it - a list of
-  its own is `list.From(l.Iter())`); `tools/clone_migrate.olang` (text, last of `olang fix`'s text tools) rewrites
+  its own is `list.List.FromIter(l.Iter())`); `tools/clone_migrate.olang` (text, last of `olang fix`'s text tools) rewrites
   `.Clone()` to `.Copy()` and lists the lines of a file importing std/list (status 1). Decided (mine): built on QCE's copy
   machinery - a type declaring Copy counts as owning parts (`types.OwnsParts`, the declaring decls registered with the
   methods, `Table.MarkCopy`), so check's copy sites make the same `MakeKind.Copy` and lowering's Copy helper calls the
@@ -1831,7 +1831,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   2026-10-17, built 2026-10-26).** The prelude holds the built-in types' methods, the protocol traits and errors, `Vec<T>`
   (below), `Map<K, V>` (a value, as Vec; `Get` fails on a miss, `Take` is `Get` and `Remove` in one, `Update`, ordered walks by
   insertion of slot) and `StringBuilder` (now over a `Vec<Char>`); `String` and `Array` are built in. Every other
-  container is std: `list.List<T>` (`import "std/list"` - chunked, never moves, a handle; `list.Of(a)`, `list.From(it)`,
+  container is std: `list.List<T>` (`import "std/list"` - chunked, never moves, a handle; `list.Of(a)`, `list.List.FromIter(it)`,
   `list.Error`, `list.Iter`; `RunFrom` walks), `pair.Pair` (2026-10-17, the user's call: "Pair goes in Std not prelude"),
   set, deque, heap. Iterators (and arrays) have `Some Every` (renamed from `Any All`, the user's call 2026-10-24) `Count
   Fold Map Filter ToVec`, `Map`/`Filter` building a Vec (`a.ToVec()`, `it.ToVec()` replace `ToList`). Decided (mine):
@@ -1852,7 +1852,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   2026-11-01, wt-values, details mine).** Each holds its storage by value: a copy (`b := a` of a place, a field, an
   element, a by-value argument, a capture, a task's argument) is a collection of its own, shallow at every `&`; sharing
   is written `&` (`v mut Vec<T>&`, a `Vec<T>&` field); `Clone()` is gone from them (and since E31d from the language:
-  std/list's `List` stays a handle, built anew by `list.From(l.Iter())`). In place: `v.Ref(i)` `T&v` and `v.RefMut(i)` `mut T&v` (unchecked as `v[i]`), `try m.Ref(k)` /
+  std/list's `List` stays a handle, built anew by `list.List.FromIter(l.Iter())`). In place: `v.Ref(i)` `T&v` and `v.RefMut(i)` `mut T&v` (unchecked as `v[i]`), `try m.Ref(k)` /
   `try m.RefMut(k)` (`MapError.Missing`); a number in a Map through `Update`. A store through `x[i]` on a collection
   declaring `RefMut` is made in place, its value evaluated first (E31b, `check.inPlace` - a Vec of Vecs' `v[i].n += 1`
   had copied the element twice); a mutating call through `x[i]` is made in place through `RefMut` too where its other arguments are plain values (2026-11-02, E31b), else E31b's error naming `x.RefMut(i)`. A join's
@@ -1929,7 +1929,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`ArgumentError.Invalid`, bulk review 4 - a walk of one met a case that does not exist), and it asserts, decided per instance, that T is an enum of at most 64
   cases with no payload. `x in s`, `Add`/`Remove` (say whether it changed), `Len`, `Has`, `Empty<T>()`, `Full<T>()`, `Of(array)`,
   operators `| & - ^` (union, intersection, difference, exactly-one; no `+`: one spelling), `Complement`, `IsSubset`, `for c in s` in
-  case order, `$` as `BitSet{Color.Red}`, `==`/Hash by the bits; `Bits()`/`FromBits` (case-index bits, failing `bitset.Error.OutOfRange`
+  case order, `$` as `bitset.BitSet<Color>[Color.Red]` (its literal, E19), `==`/Hash by the bits; `Bits()`/`FromBits` (case-index bits, failing `bitset.Error.OutOfRange`
   past the last case), `Flags()`/`FromFlags(w)` (OR of the raw values of an integer-raw enum, T17e). `order.ByFields<T>(a, b)` is the
   `less` an array's or Vec's `Sort` takes (`xs.Sort(order.ByFields<T>)`): a struct by its visible fields in order, an enum by case then
   that case's fields; a field by `<` (numbers, Bool, Char) or its own `Less` (text included), else a struct or enum in turn, anything

@@ -76,6 +76,11 @@ stays in.
   Map, StringBuilder, Set, Deque and Heap hold their storage by value - a copy is one of their own, shared only through
   `&`, an element changed in place with `Ref`/`RefMut` - and std/list's `List` is the one handle (a copy names the
   same list - its `Copy()` shares it, `list.List.FromIter(l.Iter())` builds a list of its own). Every value has a `Copy()` (E31d).
+- **Every collection declares `FromIter`** (D19, E19): `fn C<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) C<T> ? E`,
+  so it has a literal (`set.Set<I64>[1, 2]`, a Map's keyed `Map<K, V>[k: v]`) and a comprehension (`deque.Deque<I64>[x
+  for x in xs]`) and any walk becomes one (`C.FromIter(it)`); a walk of an array (`ArrayIter`) may reserve its count
+  first. One taking more than the iterator (Heap's ordering) has no literal. Its `Str` renders the literal making it,
+  its type spelled by the compiler (`$Array<C<T>>(0)` cut to the type), so it reads `set.Set<I64>[...]` outside its module.
   `array`, `text` (`String`), `vec`, `map`, `iterator` (the helpers - `Map`, `Filter` and `ToVec` building a Vec - and the adapters `Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `TakeWhile`, `SkipWhile`, `StepBy`, `FlatMap`, `Sum`, `Min`/`Max`, `MinBy`/`MaxBy`, and `Partition` into two Vecs, `Scan`, `GroupBy`, `ChunkBy`, `Dedup`, `Unzip`, `Product`, `Last`, `Nth`; `Reversed`, `Cycle`, `LowerBound` and `BinarySearch` for a Vec or any type with `At` and `Len`; an array's `Reversed`, `Windows`, `TakeWhile`/`SkipWhile` views, `Partition`, `Cycle`, `LowerBound`, `BinarySearch` and `ChunkBy` views), `hash`, `number` (the numeric traits,
   the constants `Pi`, `Euler`, `Inf`, `NaN`, and the numbers' methods: every C math function on the floats -
   `x.Sqrt()`, `y.Atan2(x)` - and `Abs`, `Min`, `Max`, `Clamp`, `Pow`, `Sqrt` on the integers), `float`, `complex`, `f8`,
