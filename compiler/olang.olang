@@ -1341,7 +1341,7 @@ test "explain FILE NAME prints an item as the compiler sees it: inferred errors,
     assert explained("pct") == ("fn pct(part I64, whole I64) I64 ? ArgumentError   # its error set inferred\n    [whole > 0]\n" $
             "    [part >= 0]\n    # effects: allocates; never blocks; always ends; may be computed while compiling\n")
     assert explained("link") == ("fn link(a mut N&, b N&)\n    # scopes: b outlives a\n" $
-            "    # not a value: its scope obligations (# scopes, above) tie where what it is given lives to what it keeps or gives back, which a call through a function value cannot check (T22a) - call it directly\n" $
+            "    # as a value: held in locals and results only - its scopes (b outlives a) are more than a written function type says of every call (T22a)\n" $
             "    # effects: writes through 'a'; allocates nothing; never blocks; always ends; may be computed while compiling\n")
     assert explained("nope").Contains("error[B11b]: 'nope' is no top-level item of ")
 }

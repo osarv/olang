@@ -1,0 +1,149 @@
+# A function value carries its relations (T22a): a function or lambda whose scope obligations are more than a written
+# function type says of every call may still be a value where the inference follows it whole - held in a local, given
+# by a conditional, handed back by a call - and a call through it is judged as the direct call it is: a temporary
+# argument built where the function keeps it, a local's storage kept where a lambda's capture lives. Each test reads its
+# values back after an arena churn (what a closed scope left would be written over), and the evaluator decides the same
+# values while compiling (baked globals, top-level asserts).
+
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+
+type Keeper struct() {
+    kept fn?&() I64 = null
+}
+
+fn (k mut Keeper&) Call(x fn&() I64) { k.kept = x }
+
+# b kept in a: a call through a value of fn&(a mut N&, b N&) could not hold b to that
+fn link(a mut N&, b N&) { a.next = b }
+
+# b only read: covered by the type
+fn setv(a mut N&, b N&) { a.v = b.v }
+
+# a closure keeping what it is given in what it captured
+fn adder(names mut Vec<String&>&) fn&(k String&) {
+    return fn(k String&) { names.Push(k) }
+}
+
+# what a closed scope left behind is written over
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+# a named function held in a local: the temporary it keeps built where 'x' lives
+fn linked(n I64) I64 {
+    x mut N& = N(1)
+    g := link
+    g(x, N(n))
+    churn()
+    return x.next!.v
+}
+
+# a lambda keeping its argument in a captured list: each turn's text built where the list lives
+fn added(n I64) String {
+    names := Vec<String&>()
+    nr mut Vec<String&>& = names
+    add := fn(k String&) { nr.Push(k) }
+    for i in range n {
+        t := $i "."
+        add(t)
+    }
+    churn()
+    return names.Join("")
+}
+
+# a closure handed back by a call (the callee's returns, through the call): what it is given kept where 'gone' lives
+fn made(n I64) String {
+    gone := Vec<String&>()
+    f := adder(gone)
+    for i in range n { f($(i * 2)) }
+    churn()
+    return gone.Join(",")
+}
+
+# a conditional of two functions with different relations: each judged
+fn chosen(n I64, keep Bool) I64 {
+    x mut N& = N(0)
+    h := link if keep else setv
+    h(x, N(n))
+    churn()
+    return x.next!.v if x.next is not null else x.v
+}
+
+# a function-valued local given another value in a loop: each version reaching the call judged (O25i)
+fn cursor(n I64) I64 {
+    x mut N& = N(0)
+    op := setv
+    for i in range n {
+        op(x, N(i + 10))
+        op = link
+    }
+    churn()
+    return x.v * 100 + (x.next!.v if x.next is not null else -1)
+}
+
+# an adapter held in a local whose written type is no boundary: 's(...)' is the direct call to Keeper.Call, so the
+# closure's 'm' is built where 'kp' lives
+fn adapted(d I64) I64 {
+    kp := Keeper()
+    s fn&(x fn&() I64) = kp
+    {
+        m := N(d)
+        s(fn() I64 { return m.v + 1 })
+    }
+    churn()
+    return kp.kept!()
+}
+
+# the same, all the way through a value a call through a value gives
+fn twice(n I64) String {
+    gone := Vec<String&>()
+    mk := adder
+    f := mk(gone)
+    f($n)
+    f($(n + 1))
+    churn()
+    return gone.Join(",")
+}
+
+Linked := linked(7)
+Made := made(3)
+
+assert linked(5) == 5 and added(3) == "0.1.2." and made(2) == "0,2" and chosen(4, true) == 4
+assert chosen(4, false) == 4 and cursor(3) == 1012 and adapted(9) == 10 and twice(4) == "4,5"
+
+test linked "keeps what a named function held in a local keeps" {
+    assert linked(42) == 42 and Linked == 7
+}
+
+test added "keeps each turn's text a local lambda keeps" {
+    assert added(4) == "0.1.2.3."
+}
+
+test made "keeps what a closure a call hands back keeps" {
+    assert made(4) == "0,2,4,6" and Made == "0,2,4"
+}
+
+test chosen "judges each function a conditional gives" {
+    assert chosen(6, true) == 6 and chosen(6, false) == 6
+}
+
+test cursor "judges every version of a function-valued local" {
+    assert cursor(1) == 999 and cursor(4) == 1013
+}
+
+test adapted "keeps a closure an adapter held in a local keeps" {
+    assert adapted(20) == 21
+}
+
+test twice "keeps through a value a call through a value gives" {
+    assert twice(7) == "7,8"
+}

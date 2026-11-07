@@ -1,4 +1,4 @@
-# check: fail error[T22a]: this lambda keeps 'k' beyond the call, which a call through a function value cannot check - keep a copy instead
+# check: fail error[T22a]: this lambda keeps 'k' beyond the call, and this store holds only what its written function type says of every call - keep a copy instead
 # never: lambda$
 # T22a/B11: a lambda has no written name - the error names the parameter it keeps
 import "std/io"

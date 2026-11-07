@@ -1,5 +1,8 @@
-# check: fail error[T22a, E31]: Keeper's Call ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check
-# T22a/E31: the same Call adapter keeping a closure over a block-local node past its block (PE1b)
+# check: run
+# flags: -debug -sanitize
+# T22a/E31: the same Call adapter keeping a closure over a block-local node past its block (PE1b) - refused until
+# 2026-11-07: a local's written function type is no boundary (docs/sec8.md 5.7), so 's(...)' is judged as the direct
+# call to Keeper.Call it is, and the closure's 'm' is built where 'kp' lives (O27 as placement); read back after a churn
 import "std/io"
 type Node struct(v I64) {
     v

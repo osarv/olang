@@ -194,6 +194,9 @@ type summary struct() {
     # parameters, in the constructor's terms - from FieldFrom[i] in FieldTerms, -1 for none (O23a)
     FieldFrom Vec<I64>
     FieldTerms Vec<Term>
+    # T22a (docs/sec8.md 5.2): what every return gives, where the result is a function value - in the body's terms; not
+    # Full for a body in a cycle or one not judged (its returns are boundaries)
+    ResFn fnRecs
     # whether a return may hand back existing storage - a result outliving its scope by an obligation (O13, 2.7) -
     # rather than what the body builds
     HandsBack Bool = false
@@ -215,7 +218,6 @@ type compRun struct() {
     Sums Vec<mut summary&>
     Judged Vec<Bool>
     Diags diag.Taken
-    FnUses Vec<fnUse>
     Gaps Vec<Gap>
     WantDecl Vec<I64>
     WantField Vec<pair.Pair<I64, I64>>
@@ -251,18 +253,36 @@ type Placement struct(File I64, Start I64, End I64, Decl I64, Text String) {
     Text
 }
 
-# a function made a value (T22a): where, which body, and how - Named, Lambda, or an instance through its Call (Of)
-type fnUse struct(File I64, Sp source.Span, F I64, Kind I64, Of types.TypeId) {
-    File
-    Sp
-    F
-    Kind
-    Of
+# T22a (docs/sec8.md 5.2): a function value's record - the body it calls, and by that body's scope variable where each
+# capture (an adapter's receiver, E31) lived where the value was made, in the holding body's terms. A named function's
+# has none
+type fnRec struct(Body I64, Caps Vec<Term>, Adapter Bool) {
+    Body
+    Caps
+    Adapter
 }
 
-FnNamed I64 = 0
-FnLambda I64 = 1
-FnCall I64 = 2
+# the records a function value may carry: Full where they are all (no member is a value whose record is not followed -
+# a parameter's, a field's: T22's contract describes those); Late the definitions of a cursor reaching a read before they
+# are judged (their records judged where the value is read: a boundary)
+type fnRecs struct() {
+    Recs Vec<fnRec>
+    Full Bool = false
+    Late Vec<I64>
+    Loose Vec<I64>   # locals assigned whole that have no versions: every value they are given judged at the read
+}
+
+# where a value carrying records meets code judged once for many values (T22a's boundary), for its error
+BndNone I64 = 0
+BndArg I64 = 1
+BndStore I64 = 2
+BndCapture I64 = 3
+BndTask I64 = 4
+BndYield I64 = 5
+BndAny I64 = 6
+BndReturn I64 = 7
+BndOther I64 = 8
+BndLate I64 = 9
 
 # the scope pass over a checked program: P the program, Bodies check's typed bodies. Run judges every body and fills
 # Plans, one per body (an empty plan for a body with no code)
@@ -363,7 +383,24 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     fitLocalRead Bool = false              # ... that the value is a local read or borrowed, its own scope's to say (O10)
     fitAt Bool = false                     # fitError says its error at fitSp, not at the value (P1g)
     fitSp source.Span = source.Span(0, 0)
-    fnUses Vec<fnUse>                     # the functions made values, judged once every body is (T22a)
+    # T22a (docs/sec8.md 5): function values' records, this judging - by lambda or adapter site, where each capture lived
+    # where it was made (fnVal); by local declared once, the records its value carries; by cursor definition, those it
+    # gave; by call site, those its result carries (the callee's ResFn through the call); by call site through a value,
+    # the bodies it was judged as (computeKeeps reads them, O17). resFns what the body's returns gave so far, resFnOk
+    # whether they carry (one function result, no cycle); cyclic whether the component being judged is one
+    lamCaps Map<I64, Vec<Term>>
+    localRecs Map<I64, fnRecs>
+    defRecs Map<I64, fnRecs>
+    siteRecs Map<I64, fnRecs>
+    callRecs Map<I64, fnRecs>
+    valRelsAt Map<I64, Vec<rel>>           # ... and the obligations they hold it to (callRels)
+    resFns fnRecs = fnRecs()
+    resFnOk Bool = false
+    cyclic Bool = false
+    suspending Bool = false                # the return judged is a generator's yield (S20): a boundary, never a result
+    bndDefs Map<I64, Vec<typed.Expr&>>     # the boundary walk's: by local, every value it is given
+    bndSeen Map<I64, Bool>
+    bndCollect Bool = false
     kept Vec<Bool>                        # by local: computeKeeps' finding for a reference parameter
     keptStore Vec<Bool>                   # ... that it stores into what the parameter names (Stores)
     keptPut Vec<Bool>                     # ... itself, not only by handing a reference out (Puts)
@@ -550,7 +587,6 @@ fn (s mut Scoper&) Run() {
     for b in range s.sums.Len() {
         if s.sums[b].Rels.Len() > 0 and s.valueCovered(b, s.sums[b].Rels) { s.covered.Put(b, true) }
     }
-    s.fnValues()
     s.anyTables()
     s.exports()
 }
@@ -564,7 +600,6 @@ fn (s mut Scoper&) judgeAll(report Bool) {
     s.sums.Clear()
     s.judged.Clear()
     s.Gaps.Clear()
-    s.fnUses.Clear()
     s.trMemo.Clear()
     s.useMemo.Clear()
     s.useWhy.Clear()
@@ -624,7 +659,6 @@ fn (s mut Scoper&) judgeAll(report Bool) {
 # a component judged, what the judging gave and read set aside (compRun)
 fn (s mut Scoper&) judgeComp(comp Array<I64>&, report Bool) mut compRun& {
     mark := s.P.L.Diags.Count()
-    uses := s.fnUses.Len()
     gaps := s.Gaps.Len()
     hits := s.wantHits
     s.markReads.Clear()
@@ -639,7 +673,6 @@ fn (s mut Scoper&) judgeComp(comp Array<I64>&, report Bool) mut compRun& {
         run.Judged.Push(s.judged[b])
     }
     run.Diags = s.P.L.Diags.Since(mark)
-    for i in range uses, s.fnUses.Len() { run.FnUses.Push(s.fnUses[i]) }
     for i in range gaps, s.Gaps.Len() { run.Gaps.Push(s.Gaps[i]) }
     for d in s.wantsDecl { run.WantDecl.Push(d) }
     for w in s.wantsField { run.WantField.Push(w) }
@@ -718,7 +751,6 @@ fn (s mut Scoper&) retake(run mut compRun&, comp Array<I64>&) {
         s.judged[b] = run.Judged[i]
     }
     s.P.L.Diags.Replay(run.Diags)
-    for u in run.FnUses { s.fnUses.Push(u) }
     for g in run.Gaps { s.Gaps.Push(g) }
     for d in run.WantDecl { s.wantDecl.Put(d, true) }
     for w in run.WantField { s.wantField.Put(w, true) }
@@ -749,6 +781,7 @@ fn summaryDiff(a summary&, b summary&) String {
     if not (av.ResBind == bv.ResBind) { return "ResBind" }
     if not (av.FieldFrom == bv.FieldFrom) { return "FieldFrom" }
     if not (av.FieldTerms == bv.FieldTerms) { return "FieldTerms" }
+    if not (av.ResFn == bv.ResFn) { return "ResFn" }
     if av.Done != bv.Done or av.HandsBack != bv.HandsBack or av.Judging != bv.Judging { return "flags" }
     av.BuildFile = bv.BuildFile
     av.BuildAt = bv.BuildAt
@@ -784,14 +817,12 @@ fn (s mut Scoper&) checkReuse(k I64, comp Array<I64>&, old compRun&, now compRun
     what := StringBuilder()
     if not now.Diags.Same(old.Diags) { what.Push(" diagnostics") }
     if now.WantHits != old.WantHits { what.Push(" refusals") }
-    if now.FnUses.Len() != old.FnUses.Len() { what.Push(" values") }
     for i in range comp.Len() {
         if not sameSummary(now.Sums[i], old.Sums[i]) { what.Push($" summary of " $comp[i] ": " $summaryDiff(now.Sums[i], old.Sums[i])) }
         if not (now.Plans[i] == old.Plans[i]) { what.Push($" plan of " $comp[i]) }
     }
     if what.Len() == 0 {
         s.P.L.Diags.Forget(s.P.L.Diags.Count() - now.Diags.Count())
-        s.fnUses.Truncate(s.fnUses.Len() - now.FnUses.Len())
         s.Gaps.Truncate(s.Gaps.Len() - now.Gaps.Len())
         s.wantHits -= now.WantHits
         return
@@ -855,39 +886,731 @@ fn (s mut Scoper&) instContexts(inst I64) I64 {
     return chain.Len()
 }
 
-# T22a: a function carrying a scope obligation cannot be a value - a call through one discharges nothing
-fn (s mut Scoper&) fnValues() {
-    for u in s.fnUses {
-        rels := s.sums[u.F].Rels
-        if rels.Len() == 0 or u.Kind != FnCall and s.covered.Has(u.F) { continue }
-        at := diag.Where.Span(u.File, I64(u.Sp.Start), I64(u.Sp.End))
-        if u.Kind == FnCall {
-            t := u.Of
-            if s.isRef(t) { t = s.P.T.Referent(t) }
-            t = s.P.T.Plain(t)
-            name := s.P.L.Names.Text(s.P.T.DeclName(s.P.T.DeclOf(t))) if s.P.T.KindOf(t) == types.Kind.Named else ""
-            s.P.L.Diags.Error(at, msgs.CallValueObligations(name))
-        } else if u.Kind == FnNamed {
-            text := try s.texts.Get(u.File) catch default ""
-            s.P.L.Diags.Error(at, msgs.FuncValueObligations(text[I64(u.Sp.Start):I64(u.Sp.End)] if I64(u.Sp.End) <= text.Len() else ""))
-        } else {
-            s.lambdaValue(s.Bodies[u.F], rels, at)
+# ---- T22a: function values carrying their relations (docs/sec8.md 5) ----
+
+# a value carrying records (x) at a boundary (docs/sec8.md 5.4): code judged once for many values reads it there, so
+# each record's relations must be what a written function type says of every call (valueCovered) - and so must those of
+# every function a call of it may give (its ResFn) - else the error, at the value, naming the place
+fn (s mut Scoper&) boundary(x typed.Expr&, place I64) {
+    rs Vec<fnRec>
+    s.bndSeen.Clear()
+    s.bndRecs(x, rs)
+    seen Map<I64, Bool>
+    for r in rs {
+        bad := s.uncovered(r.Body, r.Adapter, seen)
+        if bad < 0 { continue }
+        s.bndError(x, bad, bad == r.Body and r.Adapter, place)
+        return
+    }
+}
+
+# the body among b and the functions a call of it may give whose relations a written function type does not cover, -1
+# for none
+fn (s mut Scoper&) uncovered(b I64, adapter Bool, seen mut Map<I64, Bool>&) I64 {
+    if b < 0 or seen.Has(b) { return -1 }
+    seen.Put(b, true)
+    if not s.valueOK(b, adapter) { return b }
+    for r in s.sums[b].ResFn.Recs {
+        u := s.uncovered(r.Body, r.Adapter, seen)
+        if u >= 0 { return u }
+    }
+    return -1
+}
+
+# whether body b's obligations are only what a written function type says of every call through a value (valueRels) -
+# a lambda written for a callback whose result is a type variable may require what that type does, each argument
+# outliving its result scope (O14b); an adapter's Call (E31) none at all, its receiver no parameter of the type
+fn (s mut Scoper&) valueOK(b I64, adapter Bool) Bool {
+    rels := s.sums[b].Rels
+    if rels.Len() == 0 { return true }
+    if adapter { return false }
+    body := s.Bodies[b]
+    if s.valueCovered(b, rels) { return true }
+    lambda := match body.Of {
+        case typed.BodyOf.Lambda(_): true
+        case _: false
+    }
+    return lambda and s.P.T.ResultFrom(body.Ty, 0) == types.FromTypeVar and resultsOnly(body, rels)
+}
+
+# T22a's error for body b reaching a boundary in value x (place, BndArg ...): a named function by its name, an adapter by
+# its type, a lambda by the parameter it keeps (B11)
+fn (s mut Scoper&) bndError(x typed.Expr&, b I64, adapter Bool, place I64) {
+    body := s.Bodies[b]
+    pl := bndText(place)
+    u := s.unAway(x)
+    at := s.opTok(x)
+    if adapter {
+        t := body.Locals[I64(body.Params[0])].Ty if body.Params.Len() > 0 else types.UnknownT
+        if s.isRef(t) { t = s.P.T.Referent(t) }
+        t = s.P.T.Plain(t)
+        name := s.P.L.Names.Text(s.P.T.DeclName(s.P.T.DeclOf(t))) if s.P.T.KindOf(t) == types.Kind.Named else ""
+        s.err(at, msgs.CallValueObligations(name, pl))
+        return
+    }
+    match body.Of {
+        case typed.BodyOf.Fn(inst) {
+            name := s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name)
+            match u {
+                case typed.Expr.Fn(sp, _, f) {
+                    if f == typed.FnVal.Named {
+                        at = s.lastName(sp)
+                        text := try s.texts.Get(s.B!.File) catch default ""
+                        if I64(at.End) <= text.Len() { name = text[I64(at.Start):I64(at.End)] }
+                    }
+                }
+                case _ { }
+            }
+            s.err(at, msgs.FuncValueObligations(name, pl))
+        }
+        case _ {
+            kept := s.keptParam(body, s.sums[b].Rels)
+            if body.Gen {
+                s.err(at, msgs.GenYieldsBorrow(kept))
+                return
+            }
+            s.err(at, msgs.LambdaValueObligations(kept, pl) if kept != "" else msgs.LambdaValueRelates(pl))
         }
     }
 }
 
-# T22a for a lambda made a value: it has no name the program wrote, so the error names the parameter it keeps, one an
-# obligation requires to outlive something else (B11)
-fn (s mut Scoper&) lambdaValue(body typed.Body&, rels Vec<rel>&, at diag.Where) {
-    # written for a callback whose result is a type variable, it may require what that type does: each of its arguments
-    # outliving its result scope (O14b)
-    if s.P.T.ResultFrom(body.Ty, 0) == types.FromTypeVar and resultsOnly(body, rels) { return }
-    kept := s.keptParam(body, rels)
-    if body.Gen {
-        s.P.L.Diags.Error(at, msgs.GenYieldsBorrow(kept))
+# the place a boundary is, as T22a's error says it
+fn bndText(place I64) String {
+    return match place {
+        case BndArg: "this argument"
+        case BndStore: "this store"
+        case BndCapture: "this capture"
+        case BndTask: "this task"
+        case BndYield: "this yield"
+        case BndAny: "this 'any'"
+        case BndReturn: "this return (from a function calling itself, or among several results)"
+        case BndLate: "this call - reached in a loop's next turn by a value assigned after it -"
+        case _: "this use"
+    }
+}
+
+# the bodies value x may call, structurally (records without where captures lived): a function written, a local's
+# every value (bndDefs), a conditional's or a match's values, a call's result - what its callee's returns give (ResFn);
+# nothing for a value whose record is not followed
+fn (s mut Scoper&) bndRecs(x typed.Expr?&, out mut Vec<fnRec>&) {
+    if x is null { return }
+    match x {
+        case typed.Expr.Away(_, _, y) { s.bndRecs(y, out) }
+        case typed.Expr.Promote(_, _, pr) { s.bndRecs(pr.X, out) }
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op == typed.PrimOp.Convert and args.Len() == 1 { s.bndRecs(args[0], out) }
+        }
+        case typed.Expr.Seq(_, _, q) { s.bndRecs(q.X, out) }
+        case typed.Expr.Cond(_, _, c) {
+            s.bndRecs(c.A, out)
+            s.bndRecs(c.B, out)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for a in m.Arms { s.bndRecs(a.Value, out) }
+            if m.NoMatch is not null { s.bndRecs(m.NoMatch!.Value, out) }
+        }
+        case typed.Expr.Try(_, _, t) {
+            s.bndRecs(t.X, out)
+            for c in t.Clauses {
+                for d in c.Defaults { s.bndRecs(d, out) }
+            }
+        }
+        case typed.Expr.Fn(_, _, f) {
+            match f {
+                case typed.FnVal.Named(b) { out.Push(fnRec(I64(b), Vec<Term>(), false)) }
+                case typed.FnVal.Lambda(id, _, _) { out.Push(fnRec(I64(id), Vec<Term>(), false)) }
+                case typed.FnVal.Adapter(cb, _, _) { out.Push(fnRec(I64(cb), Vec<Term>(), true)) }
+            }
+        }
+        case typed.Expr.Read(_, _, p, _) {
+            l := wholeLocal(p)
+            if l < 0 or s.bndSeen.Has(l) { return }
+            s.bndSeen.Put(l, true)
+            ds := try s.bndDefs.Get(l) catch default Vec<typed.Expr&>()
+            for d in ds { s.bndRecs(d, out) }
+        }
+        case typed.Expr.Call(_, _, c) {
+            match c.Target {
+                case typed.Callee.Body(id) { for r in s.sums[I64(id)].ResFn.Recs { out.Push(r) } }
+                case typed.Callee.Value(v) {
+                    rs Vec<fnRec>
+                    s.bndRecs(v, rs)
+                    for r in rs {
+                        for g in s.sums[r.Body].ResFn.Recs { out.Push(g) }
+                    }
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+}
+
+# the boundary walk (docs/sec8.md 5.4), once in the judging that reports: every function value of the body reaching a
+# place code judged once for many values reads - an argument, a store into anything but a whole local, a capture, a
+# task, a yield, an "any", a return no caller follows - checked (boundary). A value goes on uncounted only along what the
+# inference follows whole: a local declared or assigned whole, the callee of a call, a conditional's or a match's
+# value, a "catch" default, the returns of a function giving one function value outside a cycle (ResFn). bndCollect: the
+# first pass, which gathers what each local is given
+fn (s mut Scoper&) fnBoundsDefs() {
+    s.bndDefs.Clear()
+    s.bndCollect = true
+    s.bndBlock(s.B!.Root)
+    s.bndCollect = false
+}
+
+fn (s mut Scoper&) fnBounds() { s.bndBlock(s.B!.Root) }
+
+fn (s mut Scoper&) bndDef(l I64, x typed.Expr&) {
+    ds := try s.bndDefs.Get(l) catch default Vec<typed.Expr&>()
+    ds.Push(x)
+    s.bndDefs.Put(l, ds)
+}
+
+fn (s mut Scoper&) bndBlock(bl typed.Block?&) {
+    if bl is null { return }
+    for st in bl.Stmts { s.bndStmt(st) }
+}
+
+fn (s mut Scoper&) bndStmt(st typed.Stmt?&) {
+    if st is null { return }
+    match st {
+        case typed.Stmt.Let(_, l, x) {
+            if s.bndCollect { s.bndDef(I64(l), x) }
+            # (a constructor's field is a part of its instance: a store)
+            s.bndExpr(x, BndStore if s.B!.Locals[I64(l)].Kind == typed.LocalKind.Field else BndNone)
+        }
+        case typed.Stmt.Assign(_, p, x) {
+            l := wholeLocal(p)
+            if l >= 0 and s.bndCollect { s.bndDef(l, x) }
+            s.bndPlace(p)
+            whole := l >= 0 and s.B!.Locals[l].Kind != typed.LocalKind.Field
+            s.bndExpr(x, BndNone if whole else BndStore)
+        }
+        case typed.Stmt.Eval(_, x) { s.bndExpr(x, BndNone) }
+        case typed.Stmt.If(_, i) {
+            s.bndExpr(i.Test, BndOther)
+            s.bndBlock(i.Then)
+            s.bndBlock(i.Else)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            s.bndBlock(body)
+            s.bndBlock(post)
+        }
+        case typed.Stmt.Return(_, x) { s.bndReturn(x) }
+        case typed.Stmt.Suspend(_, x) { s.bndExpr(x, BndYield) }
+        case typed.Stmt.Reraise(_, x, _) { s.bndExpr(x, BndOther) }
+        case typed.Stmt.Exit(_, _, m) { s.bndExpr(m, BndOther) }
+        case typed.Stmt.Assert(_, c, m) {
+            s.bndExpr(c, BndOther)
+            s.bndExpr(m, BndOther)
+        }
+        case typed.Stmt.Block(_, b) { s.bndBlock(b) }
+        case typed.Stmt.Defer(_, b) { s.bndBlock(b) }
+        case typed.Stmt.Join(_, jn) {
+            s.bndBlock(jn.Code)
+            for c in jn.Clauses { s.bndBlock(c.Code) }
+        }
+        case typed.Stmt.Spawn(_, sw) {
+            for p in sw.Targets {
+                if p is null: continue
+                s.bndPlace(p)
+                # a task's result given a function-valued target: a boundary (decision 15)
+                if s.isFunc(p.Type()) and not s.bndCollect { s.boundary(sw.Task, BndTask) }
+            }
+            s.bndTask(sw.Task)
+            for c in sw.Clauses { s.bndExpr(c.Handler, BndOther) }
+        }
+        case typed.Stmt.Yield(_, x) { s.bndExpr(x, BndStore) }
+        case _ { }
+    }
+}
+
+# a return: its result followed (ResFn) where the body gives one function value outside a cycle, else a boundary
+fn (s mut Scoper&) bndReturn(x typed.Expr?&) {
+    if x is null { return }
+    match x {
+        case typed.Expr.Make(_, _, m) {
+            if m.Kind == typed.MakeKind.Tuple {
+                for a in m.Items { s.bndExpr(a, BndReturn) }
+                return
+            }
+        }
+        case _ { }
+    }
+    s.bndExpr(x, BndNone if s.resFnOk else BndReturn)
+}
+
+# a task: what it calls through, and its arguments, are boundaries (decision 15)
+fn (s mut Scoper&) bndTask(x typed.Expr&) {
+    c := typed.Call.Of(x)
+    if c is null {
+        s.bndExpr(x, BndTask)
         return
     }
-    s.P.L.Diags.Error(at, msgs.LambdaValueObligations(kept) if kept != "" else msgs.LambdaValueRelates())
+    match c.Target {
+        case typed.Callee.Value(v) { s.bndExpr(v, BndTask) }
+        case _ { }
+    }
+    for a in c.Args { s.bndExpr(a, BndTask) }
+}
+
+# value x at place (BndNone where the inference follows it whole): checked where it is a function value, then its parts
+fn (s mut Scoper&) bndExpr(x typed.Expr?&, place I64) {
+    if x is null { return }
+    if place != BndNone and not s.bndCollect and s.isFunc(x.Type()) {
+        s.boundary(x, place)
+        place = BndNone
+    }
+    match x {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p), typed.Expr.Borrow(_, _, p) { s.bndPlace(p) }
+        case typed.Expr.Promote(_, _, pr) { s.bndExpr(pr.X, place) }
+        case typed.Expr.Call(_, _, c) {
+            match c.Target {
+                case typed.Callee.Value(v) { s.bndExpr(v, BndNone) }
+                case _ { }
+            }
+            for a in c.Args { s.bndExpr(a, BndArg) }
+        }
+        case typed.Expr.Make(_, _, m) {
+            for a in m.Items { s.bndExpr(a, BndStore) }
+            s.bndExpr(m.Length, BndOther)
+        }
+        case typed.Expr.Collect(_, _, c) {
+            s.bndExpr(c.Reserve, BndOther)
+            s.bndBlock(c.Loop)
+        }
+        case typed.Expr.Prim(_, _, op, _, args) {
+            # (a conversion changes nothing of a function value - to a nullable or a declared function type, T21b)
+            if op == typed.PrimOp.Convert and args.Len() == 1 {
+                s.bndExpr(args[0], place)
+                return
+            }
+            for a in args { s.bndExpr(a, BndAny if op == typed.PrimOp.AnyMake else BndOther) }
+        }
+        case typed.Expr.Slice(_, _, sl) {
+            s.bndPlace(sl.Base)
+            s.bndExpr(sl.Lo, BndOther)
+            s.bndExpr(sl.Hi, BndOther)
+        }
+        case typed.Expr.Cond(_, _, c) {
+            s.bndExpr(c.C, BndOther)
+            s.bndExpr(c.A, place)
+            s.bndExpr(c.B, place)
+        }
+        case typed.Expr.Seq(_, _, q) {
+            for st in q.Stmts { s.bndStmt(st) }
+            s.bndExpr(q.X, place)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for st in m.Held { s.bndStmt(st) }
+            for a in m.Arms { s.bndArm(a, place) }
+            s.bndArm(m.NoMatch, place)
+        }
+        case typed.Expr.Try(_, _, t) {
+            s.bndExpr(t.X, place)
+            for c in t.Clauses {
+                s.bndBlock(c.Code)
+                for d in c.Defaults { s.bndExpr(d, place) }
+            }
+        }
+        case typed.Expr.Fn(_, _, f) {
+            match f {
+                case typed.FnVal.Lambda(_, caps, _) {
+                    for c in caps { s.bndExpr(c.Outer, BndCapture) }
+                }
+                case typed.FnVal.Adapter(_, r, _) { s.bndExpr(r, BndOther) }
+                case _ { }
+            }
+        }
+        case typed.Expr.Text(_, _, t) {
+            for pc in t.Pieces {
+                match pc {
+                    case typed.Piece.Render(r) { s.bndExpr(r, BndOther) }
+                    case _ { }
+                }
+            }
+        }
+        case typed.Expr.Away(_, _, y) { s.bndExpr(y, place) }
+        case _ { }
+    }
+}
+
+fn (s mut Scoper&) bndArm(a typed.Arm?&, place I64) {
+    if a is null { return }
+    for alt in a.Alts {
+        s.bndExpr(alt.Test, BndOther)
+        # (a binding is a local the inference does not follow: a boundary)
+        for bd in alt.Binds { s.bndExpr(bd.From, BndOther) }
+    }
+    s.bndExpr(a.Guard, BndOther)
+    s.bndBlock(a.Code)
+    s.bndExpr(a.Value, place)
+}
+
+fn (s mut Scoper&) bndPlace(p typed.Lvalue?&) {
+    if p is null { return }
+    match p {
+        case typed.Lvalue.Deref(_, _, r) { s.bndExpr(r, BndOther) }
+        case typed.Lvalue.Field(_, _, b, _) { s.bndPlace(b) }
+        case typed.Lvalue.Elem(_, _, e) {
+            s.bndPlace(e.Base)
+            s.bndExpr(e.Index, BndOther)
+        }
+        case typed.Lvalue.Payload(_, _, pl) { s.bndPlace(pl.Base) }
+        case typed.Lvalue.Temp(_, _, v, _) { s.bndExpr(v, BndOther) }
+        case _ { }
+    }
+}
+
+# ---- T22a: records in the judging (docs/sec8.md 5.2, 5.3) ----
+
+# a judging begun: no record known yet; the body's returns carry where it gives one function value outside a cycle
+fn (s mut Scoper&) recStart() {
+    s.lamCaps.Clear()
+    s.localRecs.Clear()
+    s.defRecs.Clear()
+    s.siteRecs.Clear()
+    s.callRecs.Clear()
+    s.valRelsAt.Clear()
+    s.resFns = fnRecs()
+    s.resFns.Full = true
+    s.suspending = false
+    ty := s.B!.Ty
+    s.resFnOk = false
+    if s.cyclic or s.B!.Gen or s.P.T.KindOf(ty) != types.Kind.Func { return }
+    if s.P.T.Results(ty).Len() != 1 { return }
+    s.resFnOk = s.isFunc(s.P.T.Result(ty))
+}
+
+# the records value x carries, where they are followed (5.2): a function written - a lambda's with where its captures
+# lived where it was made (lamCaps) -, a local's (its versions' for a cursor), a conditional's or a match's values, a
+# "catch" default, a call's result (siteRecs); anything else not followed (Full false)
+fn (s mut Scoper&) recsOf(x typed.Expr?&) fnRecs {
+    out := fnRecs()
+    out.Full = true
+    s.addRecs(out, x)
+    return out
+}
+
+fn (s mut Scoper&) addRecs(out mut fnRecs&, x typed.Expr?&) {
+    if x is null { return }
+    match x {
+        case typed.Expr.Away(_, _, y) { s.addRecs(out, y) }
+        case typed.Expr.Promote(_, _, pr) { s.addRecs(out, pr.X) }
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op == typed.PrimOp.Convert and args.Len() == 1 {
+                s.addRecs(out, args[0])
+                return
+            }
+            out.Full = false
+        }
+        case typed.Expr.Seq(_, _, q) { s.addRecs(out, q.X) }
+        case typed.Expr.Cond(_, _, c) {
+            s.addRecs(out, c.A)
+            s.addRecs(out, c.B)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for a in m.Arms { s.addRecs(out, a.Value) }
+            if m.NoMatch is not null { s.addRecs(out, m.NoMatch!.Value) }
+        }
+        case typed.Expr.Try(_, _, t) {
+            s.addRecs(out, t.X)
+            for c in t.Clauses {
+                for d in c.Defaults { s.addRecs(out, d) }
+            }
+        }
+        case typed.Expr.Fn(_, _, f) {
+            match f {
+                case typed.FnVal.Named(b) { addRec(out, fnRec(I64(b), Vec<Term>(), false)) }
+                case typed.FnVal.Lambda(id, _, site) {
+                    addRec(out, fnRec(I64(id), try s.lamCaps.Get(I64(site)) catch default Vec<Term>(), false))
+                }
+                case typed.FnVal.Adapter(cb, _, site) {
+                    addRec(out, fnRec(I64(cb), try s.lamCaps.Get(I64(site)) catch default Vec<Term>(), true))
+                }
+            }
+        }
+        case typed.Expr.Read(_, _, p, _) {
+            l := wholeLocal(p)
+            if l < 0 {
+                out.Full = false
+                return
+            }
+            s.addLocalRecs(out, l)
+        }
+        case typed.Expr.Call(_, _, c) {
+            got := try s.siteRecs.Get(I64(c.Site)) catch {
+                out.Full = false
+                return
+            }
+            mergeRecs(out, got)
+        }
+        case _ { out.Full = false }
+    }
+}
+
+# local l's records where it is read: a cursor's, every version reaching the read (one not judged yet this judging, late:
+# its value judged where it is read, a boundary); a held local's, what it holds (typed.LocalKind.Held); another's, what
+# its declaration gave - none known for a parameter, a binding, a for-in's name (not followed)
+fn (s mut Scoper&) addLocalRecs(out mut fnRecs&, l I64) {
+    if s.isCursorLocal(l) {
+        v := s.vers!
+        for d in s.reachFor(l, -1) {
+            if s.defRecs.Has(d) {
+                mergeRecs(out, try s.defRecs.Get(d) catch default fnRecs())
+            } else if v.DefSp[d].Start >= I32(0) and v.DefValue[d] is not null and not s.defSeen[d] {
+                s.lateDef(out, d)
+            } else {
+                out.Full = false
+            }
+        }
+        return
+    }
+    if s.assignedWhole(l) {
+        # (assigned whole with no versions found: not followed - each value judged where it is read)
+        out.Full = false
+        if not out.Loose.Has(l) { out.Loose.Push(l) }
+        return
+    }
+    if s.held.Has(l) {
+        hx := try s.held.Get(l) catch {
+            out.Full = false
+            return
+        }
+        s.addRecs(out, hx)
+        return
+    }
+    got := try s.localRecs.Get(l) catch {
+        out.Full = false
+        return
+    }
+    mergeRecs(out, got)
+}
+
+# a cursor's definition d not judged yet this judging, reaching a read: its records where they need no term of this
+# judging - a function named, a lambda capturing nothing, through conditionals - else late (judged at the read)
+fn (s mut Scoper&) lateDef(out mut fnRecs&, d I64) {
+    rs Vec<fnRec>
+    try s.namedRecs(s.vers!.DefValue[d], rs) catch NeedsTerm {
+        out.Full = false
+        if not out.Late.Has(d) { out.Late.Push(d) }
+        return
+    }
+    for r in rs { addRec(out, r) }
+}
+
+fn (s mut Scoper&) namedRecs(x typed.Expr?&, out mut Vec<fnRec>&) ? NeedsTerm {
+    if x is null { return }
+    match x {
+        case typed.Expr.Away(_, _, y): try s.namedRecs(y, out)
+        case typed.Expr.Promote(_, _, pr): try s.namedRecs(pr.X, out)
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op != typed.PrimOp.Convert or args.Len() != 1: error NeedsTerm
+            try s.namedRecs(args[0], out)
+        }
+        case typed.Expr.Cond(_, _, c) {
+            try s.namedRecs(c.A, out)
+            try s.namedRecs(c.B, out)
+        }
+        case typed.Expr.Fn(_, _, f): try s.namedRec(f, out)
+        case _: error NeedsTerm
+    }
+}
+
+fn (s mut Scoper&) namedRec(f typed.FnVal&, out mut Vec<fnRec>&) ? NeedsTerm {
+    match f {
+        case typed.FnVal.Named(b): out.Push(fnRec(I64(b), Vec<Term>(), false))
+        case typed.FnVal.Lambda(id, _, _) {
+            for k in s.Bodies[I64(id)].Vars {
+                if k == typed.ScopeVar.Capture: error NeedsTerm
+            }
+            out.Push(fnRec(I64(id), Vec<Term>(), false))
+        }
+        case _: error NeedsTerm
+    }
+}
+
+# whether local l of the body being judged is assigned whole after its declaration (walkBody)
+fn (s mut Scoper&) assignedWhole(l I64) Bool {
+    for k in range s.assignedFrom[s.Id], s.assignedFrom[s.Id + 1] {
+        if s.assignedTo[k] == l { return true }
+    }
+    return false
+}
+
+fn addRec(out mut fnRecs&, r fnRec) {
+    if not out.Recs.Has(r) { out.Recs.Push(r) }
+}
+
+fn mergeRecs(out mut fnRecs&, from fnRecs&) {
+    for r in from.Recs { addRec(out, r) }
+    if not from.Full { out.Full = false }
+    for d in from.Late {
+        if not out.Late.Has(d) { out.Late.Push(d) }
+    }
+    for l in from.Loose {
+        if not out.Loose.Has(l) { out.Loose.Push(l) }
+    }
+}
+
+# what a local declared (or a cursor's definition at sp) was given: its records, for the reads after it
+fn (s mut Scoper&) noteRecs(sp source.Span, l I64, x typed.Expr?&) {
+    if not s.isFunc(s.B!.Locals[l].Ty) { return }
+    rs := s.recsOf(x) if x is not null else fnRecs()
+    if s.isCursorLocal(l) {
+        d := s.vers!.DefOf(I64(sp.Start), l)
+        if d >= 0 { s.defRecs.Put(d, rs) }
+        return
+    }
+    s.localRecs.Put(l, rs)
+}
+
+# a record's body's scope variables in the numbering of a call through a value of type fty (vars, rv the result's): a
+# parameter's the type's own (an adapter's shifted past its receiver), the result's rv; a capture - and an adapter's
+# receiver - one past them each, in turn; -1 for one no call binds
+fn (s mut Scoper&) recMap(r fnRec, vars Array<I64>&, rv I64) Array<I64> {
+    b := s.Bodies[r.Body]
+    m := Array<I64>(b.Vars.Len(), -1)
+    ext := vars.Len()
+    for k in range b.Vars.Len() {
+        match b.Vars[k] {
+            case typed.ScopeVar.Param(l) {
+                j := paramPos(b, l)
+                if r.Adapter { j-- }
+                if j < 0 {
+                    m[k] = ext
+                    ext++
+                    continue
+                }
+                for v in range vars.Len() {
+                    if vars[v] == j { m[k] = v }
+                }
+            }
+            case typed.ScopeVar.Result, typed.ScopeVar.Instance { m[k] = rv }
+            case typed.ScopeVar.Capture(_) {
+                m[k] = ext
+                ext++
+            }
+            case _ { }
+        }
+    }
+    return m
+}
+
+# the position among body b's parameters of local l, -1 for none
+fn paramPos(b typed.Body&, l typed.LocalId) I64 {
+    for i in range b.Params.Len() {
+        if b.Params[i] == l { return i }
+    }
+    return -1
+}
+
+# the call's bindings for record r (map m): beta, then where each capture lived where the value was made
+fn (s mut Scoper&) recBeta(r fnRec, m Array<I64>&, beta Array<Term>&) Array<Term> {
+    n := beta.Len()
+    for k in range m.Len() {
+        if m[k] >= n { n = m[k] + 1 }
+    }
+    out := Array<Term>(n, Term.Untraced)
+    for v in range beta.Len() { out[v] = beta[v] }
+    for k in range m.Len() {
+        if m[k] < beta.Len() { continue }
+        if k < r.Caps.Len() and r.Caps[k] != Term.None { out[m[k]] = r.Caps[k] }
+    }
+    return out
+}
+
+# record r's body's obligations in the call's numbering (m); a derived scope of an adapter's parameter shifted past its
+# receiver, one of the receiver's not traced
+fn (s mut Scoper&) recRels(r fnRec, m Array<I64>&) Vec<rel> {
+    out Vec<rel>
+    for x in s.sums[r.Body].Rels {
+        y := x
+        y.Hi = recTerm(x.Hi, m, r.Adapter)
+        y.Lo = recTerm(x.Lo, m, r.Adapter)
+        out.Push(y)
+    }
+    return out
+}
+
+fn recTerm(t Term, m Array<I64>&, adapter Bool) Term {
+    return match t {
+        case Term.Var(k): Term.Var(m[k]) if k < m.Len() and m[k] >= 0 else Term.Untraced
+        case Term.Derived(p, w): (Term.Derived(p - 1, w) if p >= 1 else Term.Untraced) if adapter and p >= 0 else t
+        case _: t
+    }
+}
+
+# what a call's result carries (5.2): what its callee's returns give, through the call - a body's (beta its bindings),
+# each record's of a call through a value (recs) - each capture's term the caller's
+fn (s mut Scoper&) resultRecs(c typed.Call&, callee I64, recs fnRecs&, vars Array<I64>&, rv I64, beta Array<Term>&) fnRecs {
+    out := fnRecs()
+    out.Full = true
+    if callee >= 0 {
+        if not s.summed(callee) { return fnRecs() }
+        id := Array<I64>(beta.Len())
+        for k in range id.Len() { id[k] = k }
+        s.transRecs(out, s.sums[callee].ResFn, c, id, false, beta)
+        return out
+    }
+    if c.Target != typed.Callee.Value or recs.Recs.Len() == 0 { return fnRecs() }
+    if not recs.Full { out.Full = false }
+    for r in recs.Recs {
+        m := s.recMap(r, vars, rv)
+        s.transRecs(out, s.sums[r.Body].ResFn, c, m, r.Adapter, s.recBeta(r, m, beta))
+    }
+    return out
+}
+
+fn (s mut Scoper&) transRecs(out mut fnRecs&, from fnRecs&, c typed.Call&, m Array<I64>&, adapter Bool, beta Array<Term>&) {
+    if not from.Full { out.Full = false }
+    for r in from.Recs {
+        caps Vec<Term>
+        for t in r.Caps {
+            u := recTerm(t, m, adapter)
+            caps.Push(Term.None if t == Term.None else s.through(u, beta, c, false))
+        }
+        addRec(out, fnRec(r.Body, caps, r.Adapter))
+    }
+}
+
+# the obligations a call through a value is held to, by its records' (in the call's numbering) - and, where they are not
+# all, what its type says of every call (valueRels)
+fn (s mut Scoper&) unionRels(rrels Vec<Vec<rel>>&, full Bool, fty types.TypeId, vars Array<I64>&, rv I64) Vec<rel> {
+    out Vec<rel>
+    for rs in rrels {
+        for r in rs { out.Push(r) }
+    }
+    if not full {
+        for r in s.valueRels(fty, vars, rv, source.Span(0, 0)) { out.Push(r) }
+    }
+    return out
+}
+
+# T22a, decision 15: a cursor's definitions reaching a read before they are judged (a loop's next turn) - their values
+# judged at the read as at a boundary
+fn (s mut Scoper&) lateRecs(recs fnRecs&, x typed.Expr&) {
+    if not s.report { return }
+    vals Vec<typed.Expr&>
+    for d in recs.Late {
+        dv := s.vers!.DefValue[d]
+        if dv is not null { vals.Push(dv) }
+    }
+    for l in recs.Loose {
+        ds := try s.bndDefs.Get(l) catch default Vec<typed.Expr&>()
+        for dv in ds { vals.Push(dv) }
+    }
+    rs Vec<fnRec>
+    s.bndSeen.Clear()
+    for dv in vals { s.bndRecs(dv, rs) }
+    seen Map<I64, Bool>
+    for r in rs {
+        bad := s.uncovered(r.Body, r.Adapter, seen)
+        if bad < 0 { continue }
+        s.bndError(x, bad, bad == r.Body and r.Adapter, BndLate)
+        return
+    }
 }
 
 # whether every relation requires only what outlives the body's result scope
@@ -1002,6 +1725,7 @@ fn (s mut Scoper&) anyTables() {
 # saying its errors (docs/scope-model.md 7.2)
 fn (s mut Scoper&) component(comp Array<I64>&, report Bool) {
     cyclic := comp.Len() > 1 or s.callsItself(comp[0])
+    s.cyclic = cyclic
     if cyclic {
         # what the component's bodies may build into is a least fixed point: none at first, each round what the last
         # found (docs/scope-model.md 7.2)
@@ -1046,7 +1770,6 @@ fn (s mut Scoper&) done(comp Array<I64>&) {
 # judging do (one judging of most bodies saved: the compiler's own lift something in about one body of fifty)
 fn (s mut Scoper&) judgeOnce(b I64, report Bool) Bool {
     mark := s.P.L.Diags.Count()
-    uses := s.fnUses.Len()
     gaps := s.Gaps.Len()
     hits := s.wantHits
     wants := s.wantsDecl.Len()
@@ -1062,7 +1785,6 @@ fn (s mut Scoper&) judgeOnce(b I64, report Bool) Bool {
     if not s.liftGrew and s.P.L.Diags.Count() == mark { return true }
     s.Redone++
     s.P.L.Diags.Forget(mark)
-    s.fnUses.Truncate(uses)
     s.Gaps.Truncate(gaps)
     s.wantHits = hits
     s.wantsDecl.Truncate(wants)
@@ -1188,9 +1910,12 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     }
     s.tailSp = source.Span(-1, -1)
     s.dtorAt = source.Span(-1, -1)
+    s.recStart()
+    if report { s.fnBoundsDefs() }
     said := s.P.L.Diags.Count()
     s.run()
     s.verEnd()
+    if report { s.fnBounds() }
     if report and str { s.strReceiver() }
     if report and s.tailSp.Start >= I32(0) and s.dtorAt.Start >= I32(0) {
         # one cause, one error: the checker's (a local holding such a value) said on this line first stands alone
@@ -1210,6 +1935,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     if s.resBound {
         for t in s.resBind { sm.ResBind.Push(t) }
     }
+    sm.ResFn = s.resFns if s.resFnOk else fnRecs()
     sm.Builds.Clear()
     sm.Real.Clear()
     sm.BuildFile.Clear()
@@ -2263,6 +2989,8 @@ fn (s mut Scoper&) callRels(c typed.Call&) Vec<rel> {
     callee := s.bodyOf(c.Target)
     if callee >= 0 { return s.sums[callee].Rels }
     if c.Target != typed.Callee.Value { return Vec<rel>() }
+    # (a call through a value whose records are known: theirs, T22a 5.3)
+    if s.valRelsAt.Has(I64(c.Site)) { return try s.valRelsAt.Get(I64(c.Site)) catch default Vec<rel>() }
     fty := s.calleeType(c)
     if fty == types.UnknownT { return Vec<rel>() }
     vars := s.P.T.ScopeVarsOf(fty)
@@ -3869,13 +4597,29 @@ fn (s mut Scoper&) kwCall(c typed.Call&) {
             continue
         }
         if c.Target == typed.Callee.Value {
-            if k < ps.Len() and s.storeThrough(ps[k]) { s.storeParam(r, true) }
+            s.kwValueArg(c, k, r, ps, true)
         } else if s.calleeStoresArg(c, k) {
             s.storeParam(r, s.calleePutsArg(c, k))
         } else if s.calleeKeepsArg(c, k) {
             s.keepParam(r)
         }
         s.kwHanded(a)
+    }
+}
+
+# argument k (handing over parameter r's region) of a call through a function value: by what each record's body keeps,
+# stores and puts (T22a, 5.3) - a value not followed keeps nothing beyond the call but in its result, storing only where
+# something can be stored through its parameter (T22). keeps: whether a keep counts (a region's own storage handed on)
+fn (s mut Scoper&) kwValueArg(c typed.Call&, k I64, r I64, ps Array<types.TypeId>&, keeps Bool) {
+    rs := try s.callRecs.Get(I64(c.Site)) catch default fnRecs()
+    if not rs.Full and k < ps.Len() and s.storeThrough(ps[k]) { s.storeParam(r, true) }
+    for x in rs.Recs {
+        q := k + 1 if x.Adapter else k
+        if s.sumStores(x.Body, q) {
+            s.storeParam(r, s.sumPuts(x.Body, q))
+        } else if keeps and s.sumKeeps(x.Body, q) {
+            s.keepParam(r)
+        }
     }
 }
 
@@ -3888,7 +4632,7 @@ fn (s mut Scoper&) kwOutOfRegion(c typed.Call&, k I64, ua typed.Expr&, rr I64, p
         # can be stored through its parameter (T22a). A reference read out of the region names storage that lives where
         # the region's does: kept in it only by a callee storing into what it names, not by one keeping the reference
         if byValue {
-            if k < ps.Len() and s.storeThrough(ps[k]) { s.storeParam(rr, true) }
+            s.kwValueArg(c, k, rr, ps, false)
         } else if s.calleeStoresArg(c, k) {
             s.storeParam(rr, s.calleePutsArg(c, k))
         }
@@ -3897,7 +4641,14 @@ fn (s mut Scoper&) kwOutOfRegion(c typed.Call&, k I64, ua typed.Expr&, rr I64, p
     # a copy of a value read out of the region holding writable references, given to a function value: its body, not
     # known, can store through those references into the region (O17 - a by-value parameter holding writable references
     # is a store from outside)
-    if s.storeThrough(ua.Type()) and byValue { s.storeParam(rr, true) }
+    if s.storeThrough(ua.Type()) and byValue {
+        rs := try s.callRecs.Get(I64(c.Site)) catch default fnRecs()
+        if not rs.Full { s.storeParam(rr, true) }
+        for x in rs.Recs {
+            q := k + 1 if x.Adapter else k
+            if s.sumStores(x.Body, q) or s.sumKeeps(x.Body, q) { s.storeParam(rr, true) }
+        }
+    }
 }
 
 # an argument handing over a region's storage: its place's subexpressions, navigated and looked at
@@ -3930,6 +4681,26 @@ fn (s mut Scoper&) handedRegion(a typed.Expr&) I64 {
         case _ { }
     }
     return -1
+}
+
+# whether body cb may keep something in what its argument k names, store into it, store into it itself (its summary;
+# one not judged to the end may) - a record's body, for a call through a value (T22a)
+fn (s mut Scoper&) sumKeeps(cb I64, k I64) Bool {
+    if s.sums[cb].Judging { return k < s.sums[cb].Keeps.Len() and s.sums[cb].Keeps[k] }
+    if not s.sums[cb].Done or k >= s.sums[cb].Keeps.Len() { return true }
+    return s.sums[cb].Keeps[k]
+}
+
+fn (s mut Scoper&) sumStores(cb I64, k I64) Bool {
+    if s.sums[cb].Judging { return k < s.sums[cb].Stores.Len() and s.sums[cb].Stores[k] }
+    if not s.sums[cb].Done or k >= s.sums[cb].Stores.Len() { return true }
+    return s.sums[cb].Stores[k]
+}
+
+fn (s mut Scoper&) sumPuts(cb I64, k I64) Bool {
+    if s.sums[cb].Judging { return k < s.sums[cb].Puts.Len() and s.sums[cb].Puts[k] }
+    if not s.sums[cb].Done or k >= s.sums[cb].Puts.Len() { return true }
+    return s.sums[cb].Puts[k]
 }
 
 # whether a callee may keep something in what its argument k names
@@ -4721,7 +5492,12 @@ fn (s mut Scoper&) stmt(st typed.Stmt?&) {
             s.block(post)
         }
         case typed.Stmt.Jump(_, _, _) { }
-        case typed.Stmt.Return(sp, x), typed.Stmt.Suspend(sp, x) { s.ret(sp, x) }
+        case typed.Stmt.Return(sp, x) { s.ret(sp, x) }
+        case typed.Stmt.Suspend(sp, x) {
+            s.suspending = true
+            s.ret(sp, x)
+            s.suspending = false
+        }
         case typed.Stmt.Raise(_, _, _) { }
         case typed.Stmt.Reraise(_, x, _) { s.val(x, Term.None) }
         case typed.Stmt.Exit(_, _, m) { s.val(m, Term.None) }
@@ -4767,6 +5543,12 @@ fn (s mut Scoper&) unknownMark(y typed.LocalId) {
 }
 
 fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
+    s.letBody(sp, l, x)
+    # T22a: what a function value it is given carries (5.2)
+    s.noteRecs(sp, I64(l), x)
+}
+
+fn (s mut Scoper&) letBody(sp source.Span, l typed.LocalId, x typed.Expr?&) {
     loc := s.B!.Locals[I64(l)]
     t := loc.Ty
     if x is not null { s.inits.Put(I64(l), x) }
@@ -5820,6 +6602,7 @@ fn (s mut Scoper&) cursorAssign(sp source.Span, p typed.Lvalue&, x typed.Expr&) 
     s.noteLate(l, x)
     t := Term.None if got.K == ValKind.Null else s.valTerm(got, dest)
     s.verDefine(d, t)
+    s.noteRecs(sp, l, x)
     # (a value built here, or none: its term reads no cursor's - kept for the next judging though a lift grew, inferClaims)
     if d >= 0 and d < s.defFresh.Len() { s.defFresh[d] = got.K != ValKind.Existing }
     s.terms[l] = t
@@ -6358,6 +7141,8 @@ fn (s mut Scoper&) ret(sp source.Span, x typed.Expr?&) {
     s.inRet = true
     s.retValue(sp, x)
     s.inRet = saved
+    # T22a: what the result carries, for its callers (ResFn, 5.2)
+    if s.resFnOk and not s.suspending { mergeRecs(s.resFns, s.recsOf(x)) }
 }
 
 fn (s mut Scoper&) retValue(sp source.Span, x typed.Expr&) {
@@ -7443,16 +8228,15 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
     s.inSpawn = false
     s.onFrame = false
     match f {
-        case typed.FnVal.Named(b) {
-            if s.report { s.fnUses.Push(fnUse(s.B!.File, s.lastName(sp), I64(b), FnNamed, types.UnknownT)) }
-            return Val.existing(Term.Program)
-        }
+        case typed.FnVal.Named(_): return Val.existing(Term.Program)
         case typed.FnVal.Lambda(id, caps, site) {
-            if s.report { s.fnUses.Push(fnUse(s.B!.File, s.firstToken(s.B!.File, sp), I64(id), FnLambda, types.UnknownT)) }
             home := Term.None
             terms Vec<Term>
             scopes Vec<typed.Scope>
             lb := I64(id)
+            # T22a: where each capture lived where it is made - its record's (5.2)
+            rc := Vec<Term>()
+            for _ in range s.Bodies[lb].Vars.Len() { rc.Push(Term.None) }
             for c in caps {
                 v := s.val(c.Outer, Term.None)
                 if not s.holds(c.Outer.Type()) { continue }
@@ -7461,6 +8245,7 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
                 terms.Push(t)
                 home = t if home == Term.None else s.inner(home, t)
                 k := s.captureVar(lb, c.Inner)
+                if k >= 0 { rc[k] = t }
                 if s.buildsSum(lb, k) {
                     s.buildsThrough(t, sp, lb, k)
                 } else if spawned and not s.noBuildTerm(t) {
@@ -7471,6 +8256,7 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
                     s.standIn = false
                 }
             }
+            s.lamCaps.Put(I64(site), rc)
             if home == Term.None {
                 if frame {
                     s.onFrameAt(site)
@@ -7499,10 +8285,14 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
             return Val.existing(whole)
         }
         case typed.FnVal.Adapter(cb, r, site) {
-            if s.report { s.fnUses.Push(fnUse(s.B!.File, s.opTok(r), I64(cb), FnCall, r.Type())) }
             v := s.val(r, Term.None)
             t := s.valTerm(v, s.here())
             at := s.nameSpan(sp)
+            # T22a: where its receiver lives - its record's (5.2)
+            rk := s.paramVar(I64(cb), 0)
+            rc := Vec<Term>()
+            for i in range s.Bodies[I64(cb)].Vars.Len() { rc.Push(t if i == rk else Term.None) }
+            s.lamCaps.Put(I64(site), rc)
             # held in a local only ever called, it lives in this frame (D16c, E31) - anywhere else where its instance is,
             # a Str's receiver's part's too, which E11c refuses (a callee keeping nothing of it may hand it on, C8)
             if frame {
@@ -7597,8 +8387,17 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     j := s.taskJoin if spawned else Term.None
     s.taskJoin = Term.None
     fty := s.calleeType(c)
+    # T22a (5.3): what the value called through carries - judged as the direct call each record is; a task's not
+    # followed (decision 15: its function is a boundary)
+    recs := fnRecs()
     match c.Target {
-        case typed.Callee.Value(x) { s.calleeValue(x, spawned, j) }
+        case typed.Callee.Value(x) {
+            s.calleeValue(x, spawned, j)
+            if not spawned {
+                recs = s.recsOf(x)
+                s.lateRecs(recs, x)
+            }
+        }
         case _ { }
     }
     if fty == types.UnknownT {
@@ -7662,6 +8461,15 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     for v in range vars.Len() {
         if vars[v] == types.ResultVar { rv = v }
     }
+    # each record's body's scope variables in this call's numbering, and its obligations in it (5.3)
+    rmaps Vec<Array<I64>>
+    rrels Vec<Vec<rel>>
+    for r in recs.Recs {
+        m := s.recMap(r, vars, rv)
+        rmaps.Push(m)
+        rrels.Push(s.recRels(r, m))
+    }
+    if rrels.Len() > 0 { s.valRelsAt.Put(I64(c.Site), s.unionRels(rrels, recs.Full, fty, vars, rv)) }
     if rv >= 0 {
         beta[rv] = dest if dest.Runs() else here
         # a result nothing puts anywhere lands by its obligations where they need its scope to outlive an argument's
@@ -7682,6 +8490,11 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     for v in range vars.Len() {
         if beta[v] != Term.None { continue }
         t := s.requiredBy(callee, v, beta)
+        # (a call through a value: where every record's body needs it, the longest of them)
+        for i in range rrels.Len() {
+            u := s.requiredIn(rrels[i], v, s.recBeta(recs.Recs[i], rmaps[i], beta))
+            if u != Term.None { t = u if t == Term.None else s.joinTerm(t, u) }
+        }
         if t == Term.None { t = beta[rv] if rv >= 0 else (dest if v == ev and dest.Runs() else here) }
         beta[v] = t
     }
@@ -7747,7 +8560,14 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         agreed = s.argsAgree(c, callee, rv, owner, vals, beta)
     }
     if callee >= 0 { s.discharge(sp, callee, beta, c, agreed) }
-    if callee < 0 and c.Target == typed.Callee.Value { s.dischargeRels(sp, s.valueRels(fty, vars, rv, sp), -1, beta, c, agreed) }
+    if callee < 0 and c.Target == typed.Callee.Value {
+        # each record judged as the direct call it is (5.3); a value not followed by what its type says (T22)
+        for i in range recs.Recs.Len() { s.dischargeRels(sp, rrels[i], recs.Recs[i].Body, s.recBeta(recs.Recs[i], rmaps[i], beta), c, agreed) }
+        if not recs.Full { s.dischargeRels(sp, s.valueRels(fty, vars, rv, sp), -1, beta, c, agreed) }
+        if recs.Recs.Len() > 0 { s.callRecs.Put(I64(c.Site), recs) }
+    }
+    # what its result carries, where it is a function value (5.2)
+    if s.isFunc(ty) { s.siteRecs.Put(I64(c.Site), s.resultRecs(c, callee, recs, vars, rv, beta)) }
     s.resAt = beta[rv] if rv >= 0 else here
     if not s.holds(ty) { return Val.plain() }
     if s.P.T.Role(fty) != types.RoleCtor and callee >= 0 and s.summed(callee) and s.sums[callee].ResBind.Len() > 0 {
@@ -8266,7 +9086,12 @@ fn (s mut Scoper&) bindingArg(callee I64, v I64, firstArg Array<I64>&) I64 {
 # point before anything is said (7.2)
 fn (s mut Scoper&) requiredBy(callee I64, v I64, beta Array<Term>&) Term {
     if callee < 0 or not (s.sums[callee].Done or s.sums[callee].Judging) { return Term.None }
-    for r in s.sums[callee].Rels {
+    return s.requiredIn(s.sums[callee].Rels, v, beta)
+}
+
+# ... by obligations rels, in the call's numbering
+fn (s mut Scoper&) requiredIn(rels Vec<rel>&, v I64, beta Array<Term>&) Term {
+    for r in rels {
         if r.Hi != Term.Var(v) { continue }
         match r.Lo {
             case Term.Var(k) { if k < beta.Len() and beta[k] != Term.None and beta[k].Runs(): return beta[k] }

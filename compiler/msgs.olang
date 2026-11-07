@@ -1852,16 +1852,16 @@ fn SpawnResultType(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.SpawnResu
 fn SpawnResultAsRef(ty1 String&, ty2 String&, text String&, ty3 String&) r.Msg { return r.Msg(Diag.SpawnResultAsRef, "P1g", "a spawn target has exactly the call's type " $ty1 ", found " $ty2 " - declare '" $text "' to give " $ty3 ", built where its result lands") }
 fn SpawnResultTooShort() r.Msg { return r.Msg(Diag.SpawnResultTooShort, "P1g", "this target closes before the join does - declare it at the join's level or wider") }
 fn SpawnResultsDisagree() r.Msg { return r.Msg(Diag.SpawnResultsDisagree, "P1g", "these targets live in different scopes, and the results are built in one") }
-fn FuncValueObligations(text String&) r.Msg { return r.Msg(Diag.FuncValueObligations, "T22a", "'" $text "' ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it directly") }
-fn LambdaValueObligations(text String&) r.Msg { return r.Msg(Diag.LambdaValueObligations, "T22a", "this lambda keeps '" $text "' beyond the call, which a call through a function value cannot check - keep a copy instead") }
-fn LambdaValueRelates() r.Msg { return r.Msg(Diag.LambdaValueRelates, "T22a", "this lambda ties where what it is given lives to what it keeps or gives back - its captures included - which a call through a function value cannot check") }
+fn FuncValueObligations(text String&, place String&) r.Msg { return r.Msg(Diag.FuncValueObligations, "T22a", "'" $text "' ties where what it is given lives to what it keeps or gives back, and " $place " holds only what its written function type says of every call - call it directly, or hold it in a local and call it there") }
+fn LambdaValueObligations(text String&, place String&) r.Msg { return r.Msg(Diag.LambdaValueObligations, "T22a", "this lambda keeps '" $text "' beyond the call, and " $place " holds only what its written function type says of every call - keep a copy instead, or hold the lambda in a local and call it there") }
+fn LambdaValueRelates(place String&) r.Msg { return r.Msg(Diag.LambdaValueRelates, "T22a", "this lambda ties where what it is given lives to what it keeps or gives back - its captures included - and " $place " holds only what its written function type says of every call - hold it in a local and call it there") }
 
 # type arguments written apart from the name or the "(" (G12)
 fn TypeArgsSpaced(name String&) r.Msg { return r.Msg(Diag.TypeArgsSpaced, "G12", "type arguments are written touching the name and the '(': '" $name "<...>(...)' - with spaces, '<' and '>' compare") }
 
 # a Call failing with other errors than the function type it is wanted as
 fn CallValueErrors(ty String&, has String&, wants String&, fix String&) r.Msg { return r.Msg(Diag.CallValueErrors, "T22, E31", $ty "'s Call fails with " $has " where the function type says " $wants " - the same errors in the same order: " $fix) }
-fn CallValueObligations(ty String&) r.Msg { return r.Msg(Diag.CallValueObligations, "T22a, E31", $ty "'s Call ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it by name") }
+fn CallValueObligations(ty String&, place String&) r.Msg { return r.Msg(Diag.CallValueObligations, "T22a, E31", $ty "'s Call ties where what it is given lives to what it keeps or gives back, and " $place " holds only what its written function type says of every call - call it by name, or hold the value in a local and call it there") }
 fn LambdaResultUninferable() r.Msg { return r.Msg(Diag.LambdaResultUninferable, "D16b", "this value gives the lambda no result type - write one") }
 fn LambdaArity(ty String&, n1 I64, text String&, n2 I64) r.Msg { return r.Msg(Diag.LambdaArity, "D16a", $ty " takes " $n1 " parameter" $text ", and this lambda " $n2) }
 fn LambdaSignature(ty String&) r.Msg { return r.Msg(Diag.LambdaSignature, "D16a", "this lambda's signature disagrees with " $ty " - leave that part out, or make them agree") }

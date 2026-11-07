@@ -356,15 +356,31 @@ fn effectLine(b mut StringBuilder&, c mut typecheck.Checker&, f I64, body I64, i
     b.Push($indent "# effects: " $effects.Describe(fx.Of(body), ps.ToArray()) "\n")
 }
 
-# T21, T22a, G12, G29: a function that cannot become a value, and why - nothing for one that can
+# T21, T22a, G12, G29: a function that cannot become a value, and why; one that can only where its relations are
+# followed, where (T22a) - nothing for one any value of its type may be
 fn noValue(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, f I64, body I64, indent String&) {
     why := NoValueWhy(c, sc, f, body)
-    if why != "" { b.Push($indent "# not a value: " $why "\n") }
+    if why != "" {
+        b.Push($indent "# not a value: " $why "\n")
+        return
+    }
+    held := AsValueWhere(c, sc, body)
+    if held != "" { b.Push($indent "# as a value: " $held "\n") }
+}
+
+# T22a (docs/sec8.md 5.5): where a function whose scope obligations are more than a written function type says of every
+# call may go as a value - "" for one any value of its type may be
+fn AsValueWhere(c mut typecheck.Checker&, sc scope.Scoper&, body I64) String {
+    if body < 0 or sc.ValueCovered(body) { return "" }
+    obs := sc.Obligations(body, c.P.L.Names)
+    if obs.Len() == 0 { return "" }
+    return $"held in locals and results only - its scopes (" $obs.Join(", ") ") are more than a written function type says of every call (T22a)"
 }
 
 # why function f cannot become a value (T21) - "" where it can: a method is called as one, an extern by its name; one
 # taking an array by value is compiled per length (G29); a generic is a value only named with its type arguments
-# (G12); and one whose scope obligations tie where what it is given lives to what it keeps or gives back cannot be checked through a function value (T22a)
+# (G12). One whose scope obligations are more than a written function type says is a value held in locals and results
+# (T22a, AsValueWhere)
 fn NoValueWhy(c mut typecheck.Checker&, sc scope.Scoper&, f I64, body I64) String {
     decl := c.P.FnDecl(f)
     name := c.P.L.Names.Text(decl.Name)
@@ -379,9 +395,6 @@ fn NoValueWhy(c mut typecheck.Checker&, sc scope.Scoper&, f I64, body I64) Strin
         return $"a generic builder is a value only named with its type arguments, '" $ast.OwnerTarget(decl, c.P.L.Names) "<...>." $c.P.L.Names.Text(decl.Member) "' (G12, D19)"
     }
     if c.P.VarCount(owner) > 0 { return $"a generic is a value only named with its type arguments, '" $name "<...>' (G12)" }
-    if body >= 0 and sc.Obligations(body, c.P.L.Names).Len() > 0 and not sc.ValueCovered(body) {
-        return "its scope obligations (# scopes, above) tie where what it is given lives to what it keeps or gives back, which a call through a function value cannot check (T22a) - call it directly"
-    }
     return ""
 }
 
