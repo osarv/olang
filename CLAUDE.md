@@ -546,163 +546,75 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 ### Errors
 
-- **Error sets and `?` (R1-R8).** `fn f(params) Ret ? ErrA, ErrB`: result first, error set after `?` (the user's
-  call). `error T.WORD` raises; a bare unhandled fallible call is a compile error; coverage is judged at the callee's
-  set. Locally scoped codes: `{i32 code, T}`, the code packing (type ordinal << 16) | word ordinal from the function's
-  own list, so no whole-program numbering exists and propagation re-encodes.
+- **Error sets and `?` (R1-R8).** `fn f(params) Ret ? ErrA, ErrB`: result first, error set after `?` (the user's call).
+  `error T.WORD` raises; a bare unhandled fallible call is a compile error. Codes are `(type ordinal << 16) | word
+  ordinal` from the function's own list, so propagation re-encodes.
 - **Errors declared where raised; `?` always written; no flags (R3b, R1d, R23, R23a, T19; the user's decisions
-  2026-10-31, QBZ; built 2026-10-31).** `error NotFound` with nothing of that name declared, and no local of it in scope,
-  declares an error of its module (one value: `catch NotFound`, `? NotFound`, `e == NotFound`, held as T20 allows, `$e`
-  `NotFound`, `lex.NotFound` outside); the same name raised anywhere in the module is the same error; capitalized
-  exported, lower case private (M6). Named sets list them (`type LookupError error NotFound, Ambiguous`), braces still
-  declare a set's own (`IoError.Full`). Every error name is CamelCase, words included (`ListError.Empty`),
-  `tools/errorcase_rename.olang` (in `olang fix`) migrated the repository. A function that can fail writes `?` (R1d) -
-  contract functions and `main` included (`tools/question_migrate.olang`, driven by R1d, in `olang fix`); a trait method
-  with conditions names `ArgumentError`. A raised name one edit
-  from another error of the module is an error with did-you-mean unless a function raising it names it after its `?`.
-  A `Bool` among several results (R23) and a `Bool` result beside a `mut T&` parameter (R23a) are errors naming `? E`.
-  Decided (mine): the resolver walks a module's bodies once before resolving them (`names.surveyBodies`, diagnostics
-  quiet) to find the raised names, each then a synthesized `Decl.Errors` of one word, its own name
-  (`generic.IsRaisedError`) - so codes (R6), lowering, emit, the evaluator and `interpret` needed nothing new, and
-  `generic.ErrorWordName` prints it alone; `NotFound.NotFound` names nothing and `type NotFound error { NotFound }` is
-  refused naming `error NotFound` (the tool turns such declarations into raised errors); the prelude raises none by
-  name (its names are reserved everywhere); "one edit" is case-insensitive distance at most 1 within B11's third,
-  against declared error types and sets and names raised more often (as often and first); R23a exempts the receiver
-  (what a method acts on: `s.Add(x)` saying whether it changed), `extern fn` and `export fn` (C's conventions), and
-  applies to function types. The compiler's ~90 sites moved: success flags to errors raised by name (`p.Unify` fails
-  with `Mismatch`, `cond.meet` with `NoMeet`, `x.Text(b)` with `NoValue` ...), data Bools into small structs
-  (`cond.Decision`, `definit.Verdict`, `signMag`), "whether it changed" into counts (`free.addTo`, `unifyBound`),
-  accumulators into receivers (`typed.leaveWalk`, `types.DtorWalk`); std/json's whole numbers to an I128. Found on the
-  way (pre-existing): `error IoError` - a declared type written whole - raised nothing and said nothing (now R3's error).
-- **`?` alone infers the set (R1a, the user's call 2026-10-17: "Do 2", Zig's); every error has a type (R3, R22).**
-  A bare `?` is what the body can fail with - a least fixed point over calls, cycles included, ordered canonically
-  (owner module, then name) so separately compiled modules agree; it may come out empty, and in a generic differ per
-  instantiation. `? E` is a promise the body is held to. A function type and a trait method write their set (R1b); a
-  named function fits a superset list, re-encoded. The default error, bare `error`, R15-R19 and generalization are
-  gone (the user: "error should always require an actual error"). `main` writes `?` when it can fail (R1d). Stage 0 checks
-  the program again whenever a set read before it was final grows - a recursive call, a cycle - keeping both
-  attempts' memory, every signature signed before the first (an attempt done again had lost what signing said); a set written on one function of the cycle avoids it (compiler/generic.olang's canon parser).
-  **Words in a set (R1c, 2026-10-17, the coordinator's decision):** `? ListError.EMPTY` names one word, so a function
-  promises exactly what it raises and `catch ListError.EMPTY` is complete (R14 judges word by word); inferred sets carry
-  words (a callee's, less what clauses take); a set's words are part of a function type. std names them (`Pop`/`First`/
-  `Last` Empty, `RemoveAt`/`Insert`/`TakeAt`/`Swap*` OutOfRange, `IndexOf`/`Find*` NotFound, `ShortestDecimal`
-  NotFinite). A lambda infers with nothing written, in the canonical order (D16b).
+  2026-10-31, QBZ; built 2026-10-31).** `error NotFound` with nothing of that name declared declares an error of its
+  module (one value: `catch NotFound`, `? NotFound`, `$e`); capitalized exported, lower case private. Named sets list
+  them (`type LookupError error NotFound, Ambiguous`). Every error name is CamelCase (`tools/errorcase_rename.olang`). A
+  function that can fail writes `?` (R1d, `tools/question_migrate.olang`). A raised name one edit from another error
+  of the module is an error with did-you-mean. A `Bool` among several results (R23) and a `Bool` result beside a `mut
+  T&` parameter (R23a) are errors naming `? E`.
+- **`?` alone infers the set (R1a, the user's call 2026-10-17: "Do 2", Zig's); every error has a type (R3, R22).** A
+  bare `?` is what the body can fail with - a least fixed point over calls, ordered canonically; it may come out
+  empty. `? E` is a promise the body is held to. A function type and a trait method write their set (R1b); a named
+  function fits a superset list. The default error and bare `error` are gone (the user: "error should always require
+  an actual error"). **Words in a set (R1c, 2026-10-17, the coordinator's decision):** `? ListError.EMPTY` names one
+  word, and `catch` is judged word by word (R14).
 - **`try` handles what fails as written, and nothing else is checked (R8, E15a, E24, the user's design; `checked`
-  removed 2026-10-25, the user: "one error system: try").** A `try` takes the whole expression after it, up to its
-  end or the first `catch` (E24, the user's call 2026-10-25; it took a postfix expression): `try a.Get(i) + b.Get(j)`,
-  `x := 2 * try f() + 1` multiplying by `f() + 1`; in a list the item's `,` ends it; after its clauses the expression
-  goes on (a default is one term); parentheses directly around what it covers are an error; to cover less the `try` is
-  parenthesized, `2 * (try f()) + 1`. It covers every fallible call and operator in that - arguments, a chain - and never
-  turns a check on; every `try` must cover something no `try` or `!` inside it covers, and one covering nothing is an
-  error (not in a generic's body, where instantiations differ). `tools/try_migrate.olang` takes the parentheses off
-  (always); a `try` after an operator and followed by one is left alone where every later operator binds tighter (one
-  expression either way), else wrapped with `--old` and listed without it; an `as` inside an old try's reach is given
-  `!` where it reads a plain chain, else listed - a listing makes `olang fix` end with status 1 (2026-10-25, the review:
-  fix must never change what old code computes silently). What `checked` checked is now a
-  call that fails: `try a.Get(i)` / `try a.SliceOf(lo, hi)` (`ArrayError.OutOfRange`, a List's and a Vec's `Get`
-  their own errors), `try x.Narrow<I32>()` (`NumberError.Overflow`/`Invalid`, supplied by the compiler for every number
-  type), `as` failing as written (`CaseError.WrongCase`), and arithmetic in `std/arith` (not the prelude): `try
-  arith.Add(a, b)`, `Sub Mul Div Rem Neg ShiftLeft ShiftRight Pow`, and `Checked<T>` whose operators are those
-  (`try arith.Checked(a) * b + c`), `arith.Error` `OVERFLOW DivideByZero INVALID`, each function's set inferred per
-  number type (an integer's Add fails with OVERFLOW alone; `Rem` by -1 is 0, never OVERFLOW). Plain `/ %`, indexing and conversions stay unchecked; a
-  plain slice still aborts once per slice (E16b). `for x in try c` and `try join` stay. No `try { block }`.
-  `tools/checked_migrate.olang` rewrites the mechanical uses and lists the rest; `tools/as_migrate.olang` makes an
-  uncovered `as` `(x as C)!`.
-- **`!` ends the program on what fails as written (E35, the user's decision QV).** `f(x)!`, `a.F().G()!`,
-  `(f(x) + g(y))!` - `try`'s reach, no checks; a failure fails the running test, else prints `FILE:LINE: io.Error.W`
-  and aborts; needs no `?` (`fn main() { io.Println("hi")! }`). While compiling it is K1's abort class. `spawn f(x)!`
-  ends the program from the task's thread (P4, P6).
+  removed 2026-10-25, the user: "one error system: try").** A `try` takes the whole expression after it, up to its end
+  or the first `catch` (E24, the user's call 2026-10-25); it covers every fallible call and operator in it and never
+  turns a check on; one covering nothing is an error (not in a generic's body). To cover less, parenthesize. What
+  `checked` checked is now a call that fails: `try a.Get(i)`, `try a.SliceOf(lo, hi)`, `try x.Narrow<I32>()`, `as`
+  (`CaseError.WrongCase`), and `std/arith` (`try arith.Add(a, b)`, `Checked<T>`). Plain `/ %`, indexing and
+  conversions stay unchecked. `for x in try c` and `try join` stay; no `try { block }`. `tools/try_migrate.olang`,
+  `tools/checked_migrate.olang`, `tools/as_migrate.olang`.
+- **`!` ends the program on what fails as written (E35, the user's decision QV).** `f(x)!`, `(f(x) + g(y))!` - `try`'s
+  reach, no checks; a failure fails the running test, else prints `FILE:LINE: io.Error.W` and aborts; needs no `?`.
+  While compiling it is K1's abort class. `spawn f(x)!` ends the program from the task's thread.
 - **Operators may fail (E31, E31a, the user's calls).** A plain operator method (all but `Len`, `Eq`, `Str`) may
-  declare errors, making the operator fallible as written (`try a - b`, `try x[i]`, `try x[i] = v`). The checked forms
-  (`CheckedAt`, `CheckedPlus` ...) went with `checked` (2026-10-25): a method of that name is an ordinary method.
-- **The prelude's errors of the language's own operations (R20, 2026-10-25; `CheckError` removed with `checked`):**
-  `ArrayError.OutOfRange` (`Get`, `SliceOf`), `NumberError.Overflow`/`Invalid` (`Narrow`), `CaseError.WrongCase`
-  (`as`), `ArgumentError.Invalid` (a false contract condition, D17);
+  declare errors, making the operator fallible as written (`try a - b`, `try x[i]`). The checked forms went with
+  `checked`.
+- **The prelude's errors of the language's own operations (R20, 2026-10-25):** `ArrayError.OutOfRange`,
+  `NumberError.Overflow`/`Invalid`, `CaseError.WrongCase`, `ArgumentError.Invalid` (a false contract condition, D17);
   `Exhausted` is the loop protocol's. Nothing else is built in (QO3 withdrawn by the user).
 - **std fails with its own errors, never ends the program on a caller's mistake (R22, QO4, the user: "No std function
-  may ever exit").** `ListError`/`VecError` (`Empty NotFound OutOfRange`), `MapError.Missing`, `TextError`
-  (`NotFound BadBase NotFinite`; `Format`, `ParseInt` and `ParseUint` take a `Radix` - 2 to 36, or 0 - failing with
-  `TextError.BadBase`, a literal one decided while compiling, `Radix(10)` written out included), `ArrayError.NotFound`, `ChanError.CLOSED` on a Send,
-  `StatsError`, `RandError`, `JsonError.UNEVEN`, `NumberError.Negative` (a signed integer's `Sqrt`). Language guarantees still abort.
+  may ever exit").** `ListError`/`VecError`, `MapError.Missing`, `TextError` (`Format`, `ParseInt` take a `Radix` -
+  `TextError.BadBase`), `ArrayError.NotFound`, `ChanError.CLOSED`, `StatsError`, `RandError`, `JsonError.UNEVEN`,
+  `NumberError.Negative`. Language guarantees still abort.
 - **Catch clauses (R9a/R9b, R11, the user's calls).** Any number, in order; an item-less `catch` takes the rest; in
-  value position each clause leaves or gives its own `default`; a default belongs to its clause, and errors no clause
-  names propagate. `try f() default d` is gone. A reference default lives exactly in the result's scope.
+  value position each clause leaves or gives its own `default`; errors no clause names propagate. `try f() default d`
+  is gone.
 - **Error types are declared as types; named sets; a clause names what it took (T19, T19a, R11b, R3a, 2026-10-25, the
-  user's decisions QAM and the clause-only names of the same day).** `type IoError error { Full, Denied }` (the
-  listing rule; at least one word) replaces `error IoError { }`; `type LoadError error os.Error, ParseError { Timeout }`
-  is a **named set** - members (error types, words, sets, flattened in order) and optionally words of its own, its own
-  type then the last member of its own set; one grammar `type Name error [Member, ...] [{ Words }]`. A set is written
-  wherever an error set is (`? LoadError`, `fn(I64) ? LoadError` - so no parentheses in a list -, trait methods,
-  `catch LoadError`) and is the same set as its members written out (the same function type); never a code space of its
-  own (R6 codes per member type, expanded in `generic.errorList`). A set reaching itself, a word repeating a member's,
-  a word declared twice and a member naming nothing are errors (the last two, and `? Pt` with `Pt` a struct, and an
-  unknown error type in a function type or a lambda's set, were never reported - fixed). **`catch os.Error e { }`,
-  `catch A, B e`, `catch e`** (one bare item naming no type is the name - names.LoneCatchName; a misspelled type is
-  caught by the rule that a clause's name must be used) name the error the clause took (an error value, below, never null and never assigned): `$e` (`os.Error.Denied`, qualified as errors print, B5), `e == Word`/`e == Type`/`e == Set` (each side
-  something it can be), narrowing after such tests (as S8d: in a branch, after a leaving `if`; `and`/`or`/`not`
-  combine), `match e` (read as the if-chain it is; exhaustive or `case _`; a value form with `case P: v`), `error e`
-  (R3a, held to the function's set by what narrowing leaves). Representation (mine): the name is a hidden `I32` local holding
-  the code recoded to the clause's own set (canonical order), assigned where the clause is entered (lowering's
-  `toClause`), so the evaluator and `interpret` need nothing new; `error e` is `typed.Stmt.Reraise`, recoded to the
-  body's set. Decided (mine): a spawned call's clause names no error (it is a lambda on the task's thread - an error
-  naming it); a value `match e` gives a value in every clause (no clause there leaves); a case after the cases cover everything is an error.
-  `tools/errortype_migrate.olang` (text, idempotent, last of `olang fix`'s text tools) rewrites old declarations.
-- **Errors as values (T20, R3a, R11b, 2026-10-26, the user's option (b)).** An error type or a named set is a value's
-  type everywhere but a function's result (alone, among several, or in a function type - T20's error names `?`):
-  parameters, fields, locals, globals, elements, type arguments (`List<LoadErr>`, `Map<net.Error, I64>`); no unnamed
-  lists there. Values: words written, `null` (no error, the zero value), a catch clause's name (copied where it goes).
-  `==`/`!=` with words, types, sets, `null` and other values (each side something the other can be), narrowing (S8d,
-  null S8e), `match` with `case null` (an error where the value is known non-null: a catch name, a word, a tested
-  value), `$e` qualified as errors print, `null` for none, a supplied Hash, `error e` raising a held value - held to the
-  function's set by what narrowing leaves; raising null stops the program as a failed check, `FILE:LINE: raised a null
-  error`. No arithmetic, ordering or number conversion. A value of a wider set fits a narrower one only after narrowing.
-  Representation (mine): the I32 code under its set's canonical order (module identity, then name), 0 for null - an
-  interned `Kind.ErrVal` type over the set's entries; going between sets is `Rvalue.Recode`, which emit, the evaluator
-  and `interpret` already had. `e is null` is the null test (E10c), as for references. R11b's "storing refused" rules
-  went, and the cases pinning them became run cases. Since bulk review 3 (mine): Hash is by the error held (its type's
-  identity and word), so values `==` across sets hash alike; an error type in a rendering's type is qualified as its
-  values are (`Vec<lib.Both>[lib.LibErr.B]`); std/json writes a value as `$` does and reads it back by its word.
-- **Errors carry data (T19b, R3b, T20, D17, S13b; docs/errdata.md, the user's three decisions of 2026-11-07; built
-  2026-11-07, wt-errdata2, details mine).** A word may carry a payload of plain data, `type ParseError error { Bad(line
-  I64, col I64), Eof }` - raised `error ParseError.Bad(l, c)`, written as a value the same way, read where the error is
-  named (`catch ParseError.Bad e { e.line }`, after `if e == ParseError.Bad`), matched as an enum case's payload in a
-  `match` on a named error (`case ParseError.Bad(line, col = 0)`: positions, then names; names bound only in a statement
-  match, a case of one alternative), rendered by `$e`, `!`, `main` and a FAIL line (`ParseError.Bad(3, 7)`), compared and
-  hashed by word and payload. Values only: a field holding a reference, a function value, a unique value or one with
-  destructors is an error. **An error raised by name carries one too** (the user's): `error OutOfRange(index = i, limit
-  = n)`, `error NoKey(key)` - fields named by the raise (a pun, or `name = value`), their types settled by the module's
-  first raise (a reference's referent), later raises held to them. **Methods on error types** (the user's): `fn (e
-  ParseError) Where() String`, declared in the type's module, a named set's value calling only the set's own; `Eq`,
-  `Hash`, `Str`, `Copy` refused (T20 says how an error compares, hashes, renders, copies). **`ArgumentError.Invalid(what
-  String)`** (the user's) carries the failed condition, `"pick: y > x"`; D17's thread-local slot (`__olang_ert_req_*`) is
-  gone. Built (mine): the payload never enters the error union - raising pushes a copy on a per-thread LIFO payload stack
-  (runtime records in regions of their own), `try` passing the error on touches nothing, a clause copies it into its
-  name and pops it, a join keeps the earliest-spawned failure's (the task node's fifth word), an export entry drops it; an
-  error type with no payload words pushes nothing, so the success path, the ABI and every program without payloads are
-  unchanged. Each carrying type has a hidden payload enum (`Name$payload`, kept out of doc/lsp listings); an error value
-  of a set holding one is `{ i32 code, P_1..P_k }` (`types.SetErrRepr`). The evaluator keeps its own stack (baked globals
-  and decided asserts agree, tests/errdata.olang). ~70 ns a raise and pop. std: os `(path String)` on every word, json
-  `(line I64, col I64)` and `Missing(key)` (`json.Position` and the `at` parameters gone), csv, flags, regex `(at I64)`,
-  time `Syntax(at)`, net `Address(text)`/`UnknownHost(host)`, io `Partial(written)`; `olang api` reports a payload added
-  as breaking; explain/doc print a word's payload. Left: `e == W(3, _)` with `_` on an error value. Since bulk review 8
-  (HISTORY.md "Bulk review 8, fixed", bfix8b): a payload error escaping `main` runs main's defers, errdefers and
-  destructors first; a `try join` block's own error leaves with its own payload, the tasks' dropped by the wait
-  (`__olang_join_tasks_keep`'s flag); text and arrays inside a payload's structs, enums, arrays and error values are its
-  own; a narrowed payload field is indexed in place; the first raise in source order settles a raised error's fields
-  whichever is checked first (another attempt where a later raise was met first and differed).
+  user's decisions QAM and the clause-only names of the same day).** `type IoError error { Full, Denied }` (at least
+  one word); `type LoadError error os.Error, ParseError { Timeout }` is a **named set** - members (flattened in order)
+  plus words of its own; it is the same set as its members written out. **`catch os.Error e { }`, `catch A, B e`,
+  `catch e`** name the error the clause took: `$e`, `e == Word`/`Type`/`Set`, narrowing as S8d, `match e`, `error e`
+  (R3a, held to the function's set). A spawned call's clause names no error. `tools/errortype_migrate.olang`.
+- **Errors as values (T20, R3a, R11b, 2026-10-26, the user's option (b)); kept: QCY "keep errors as built then",
+  2026-11-07.** An error type or named set is a value's type everywhere but a function's result: parameters, fields,
+  locals, globals, elements, type arguments. Values: words written, `null` (no error, the zero value), a catch name.
+  `==`/`!=`, narrowing (S8d, S8e), `match` with `case null`, `$e`, a supplied Hash, `error e` raising a held value;
+  raising null stops the program. No arithmetic, ordering or number conversion. A value of a wider set fits a
+  narrower one only after narrowing. Represented as the I32 code under its set's canonical order.
+- **Errors carry data (T19b, R3b, T20, D17, S13b; docs/errdata.md, the user's decisions of 2026-11-07 "Yes, sure. Let
+  errors hold values." and the three after; built 2026-11-07).** A word may carry plain data, `type ParseError error {
+  Bad(line I64, col I64), Eof }`, raised `error ParseError.Bad(l, c)`, read where the error is named
+  (`catch ParseError.Bad e { e.line }`), matched as an enum payload, rendered by `$e`, compared and hashed by word and
+  payload. **An error raised by name carries data too** (`error NoKey(key)`), field types settled by the module's
+  first raise. **Methods on error types** (`fn (e ParseError) Where() String`). **`ArgumentError.Invalid(what
+  String)`** carries the failed condition. The payload never enters the error union: raising pushes a copy on a
+  per-thread stack, a clause copies it into its name; programs without payloads pay nothing. std errors carry paths,
+  positions and keys.
 - **Errors are errors (the user's rule).** Nothing returns a value beside a flag: iterators fail with `Exhausted`
   (`Next() T ? Exhausted`), `Map.Get`, `Find`, `Pop` fail with their errors.
 - **`main`**: no parameters or result, any error set or none (QU); an escaping error leaves main's blocks as any
-  function's (their deferred code and destructors run), then prints `unhandled error: T.W` (and its trace, S18d) and
-  exits 1. `os.Args()`/`os.Env()` give the command line (B4a). The entry is the root module's plain `main`
-  (`Program.IsEntry`): a method or builder named main is ordinary (bulk review 8). An error leaving a test runs its
-  deferred code and destructors before the FAIL line; `test -interpret` unwinds a failed test as the harness does (P1d:
-  scopes closed, destructors run, tasks joined), prints a `!`'s trace, and suggests the nearest test for a word.
+  function's, then prints `unhandled error: T.W` (and its trace, S18d) and exits 1. `os.Args()`/`os.Env()` give the
+  command line (B4a). The entry is the root module's plain `main`.
 - **Where errors may be raised (R3, R10, R14).** `error` is valid in an ordinary function and a constructor, never in
-  a `test` or `destruct` (a test's `try` may let an error out, which fails it, S16); the `try ... catch { }`
-  statement discards the value. A constructor field that fails produces no instance. A run-time array length out of range aborts (D14b), out of memory aborts
-  (D14c). `tools/errors_migrate.olang` migrates code (Try forms renamed, `try` to `checked`, `try` for what now fails);
-  `tools/donefail_migrate.olang` moves code off `done`/`fail`/`abort`.
+  a `test` or `destruct`; the `try ... catch { }` statement discards the value. A run-time array length out of range
+  aborts (D14b), out of memory aborts (D14c). `tools/errors_migrate.olang`, `tools/donefail_migrate.olang`.
 
 ### Memory and scopes (§8)
 
