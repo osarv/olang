@@ -20,7 +20,7 @@ line in docs/README.md, committed on wt-sec8 (only those paths; no push). Experi
   and T22a's refusals, gen_walkkept; found C3 and C6 compiling already
 - [x] the design: sections 2-6
 - [x] the evaluator, the touch points, the build plan, decisions, questions: sections 7-11
-- [ ] docs/README.md line; committed
+- [x] docs/README.md line; committed
 
 ## 0. Summary
 
