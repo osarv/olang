@@ -1312,6 +1312,64 @@ fn (g mut SG&) secondScenario(k I64) String& {
             "    return w.Hash()\n}\n")
 }
 
+# a cursor scenario (O25i): a reference local given values of several scopes - the scenario's own nodes, nodes built in
+# its blocks and loops, fresh ones - walked along chains, built through, captured, read in deferred code, and read after
+# the blocks that gave it a value; what it reaches is the checksum. A version read where its storage closed must be
+# built longer or refused (the read's error), and a store through versions of different scopes refused (O12)
+fn (g mut SG&) cursorScenario(k I64) String& {
+    for _ in range 8 { g.next() }        # (seeds of one program differ in their low bits: stir them first)
+    body := $g.cursorStmts(2, "    ") $g.cursorStmts(2, "    ")
+    return ("fn s" $k "() I64 {\n    root mut Node& = Node(" $g.val() ")\n    outer mut Node& = Node(" $g.val() ")\n"
+            "    cur mut Node& = " $(String&["root", "outer"][g.r(2)]) "\n    acc I64 = 0\n" $body "    churn()\n"
+            "    return acc * 7 + chain(root) * 3 + chain(outer) + chain(cur)\n}\n")
+}
+
+fn (g mut SG&) cursorStmts(d I64, ind String&) String& {
+    out String& = ""
+    for _ in range 1 + g.r(4) {
+        if d > 0 and g.chance(40) {
+            inner := $ind "    "
+            body := g.cursorStmts(d - 1, inner)
+            w := g.r(5)
+            if w == 0 { out = $out $ind "if Run > 0 {\n" $body $ind "}\n" }
+            else if w == 1 { out = $out $ind "for _ in range Run * 3 {\n" $body $inner "churn()\n" $ind "}\n" }
+            else if w == 2 { out = $out $ind "{\n" $body $ind "}\n" }
+            else if w == 3 { out = $out $ind "{\n" $inner "defer {\n" $inner "    acc += cur.v\n" $inner "}\n" $body $ind "}\n" }
+            else { out = $out $ind "if Run < 0 { } else {\n" $body $inner "churn()\n" $ind "}\n" }
+        } else {
+            out = $out $g.cursorLeaf(ind)
+        }
+    }
+    return out
+}
+
+fn (g mut SG&) cursorLeaf(ind String&) String& {
+    v := g.val()
+    w := g.r(11)
+    if w == 0 { return $ind "cur = root\n" }
+    if w == 1 { return $ind "cur = outer\n" }
+    if w == 2 { return $ind "cur = Node(" $v ")\n" }
+    if w == 3 {
+        q := g.name("q")
+        return $ind $q " mut Node& = Node(" $v ")\n" $ind "cur = " $q "\n"
+    }
+    if w == 4 { return $ind "cur.next = Node(" $v ")\n" }
+    if w == 5 {    # a walk along the chain, five steps at most (a chain may loop)
+        nx := g.name("nx")
+        return ($ind "for _ in range 5 {\n" $ind "    " $nx " := cur.next\n" $ind "    if " $nx " is null: break\n" $ind "    cur = "
+                $nx "\n" $ind "}\n")
+    }
+    if w == 6 { return $ind "acc += cur.v\n" }
+    if w == 7 {
+        f := g.name("f")
+        return $ind $f " := fn() I64 { return cur.v }\n" $ind "acc += " $f "()\n"
+    }
+    if w == 8 { return $ind "root.next = cur\n" }
+    if w == 9 { return $ind "cur = cur if Run > 0 else outer\n" }
+    q := g.name("q")
+    return $ind $q " mut Node& = Node(" $v ")\n" $ind $q ".next = cur\n" $ind "cur = " $q "\n"
+}
+
 # n statements around what t declares (as a), wrapped in blocks d deep at most
 fn (g mut SG&) stmts(t I64, a String&, d I64, ind String&) String& {
     out String& = ""
@@ -1350,6 +1408,7 @@ fn Scenario(seed U64, k I64) String& {
     if w < 12 { return "# scenario " $k "\n" $g.textScenario(k) }
     if w < 22 { return "# scenario " $k "\n" $g.secondScenario(k) }
     if w < 30 { return "# scenario " $k "\n" $g.genScenario(k) }
+    if w < 38 { return "# scenario " $k "\n" $g.cursorScenario(k) }
     t := Targets - 1 if g.chance(25) else g.r(Targets - 1)    # a Str scenario one time in four
     g.global = t == 9
     decl String& = $Decls[t]

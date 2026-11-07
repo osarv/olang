@@ -698,6 +698,8 @@ type Diag enum {
     ReturnOwnStorage
     ViewKept
     ViewReturned
+    ReadAfterScope
+    VersionsDiffer
     PartKept
     DeferReturns
     YieldOutside
@@ -807,6 +809,7 @@ type Diag enum {
     NoteDeclareWhere
     NoteBindingWhere
     NoteParamCopy
+    NoteAssignedHere
     NoteLoopCopyLent
     NoteViewRefusedBy
     NoteHeldIndexWhere
@@ -3012,6 +3015,14 @@ fn ViewKept(name String&) r.Msg { return r.Msg(Diag.ViewKept, "O27", "this keeps
 # ERR_VIEW_RETURNED
 fn ViewReturned(name String&) r.Msg { return r.Msg(Diag.ViewReturned, "O27", "this returns a view of '" $name "', which this function builds - return the value (a result written without '&' copies it), or a copy: '$x'") }
 
+# O25i (NLL, docs/sec8.md 3.4): a read of a reference local an assignment may have given storage that no longer lives
+# where the read stands, and that cannot be built longer
+fn ReadAfterScope(name String&) r.Msg { return r.Msg(Diag.ReadAfterScope, "O25i", "this reads '" $name "', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here") }
+
+# O25i, O12: something built or stored exactly where a reference local's referent lives, its versions reaching here living
+# in different scopes
+fn VersionsDiffer(name String&) r.Msg { return r.Msg(Diag.VersionsDiffer, "O25i, O12", "'" $name "' may hold values of different scopes here, so where its referent lives is not known - nothing new is built or stored through it: give it values of one scope, or store through each where it is assigned") }
+
 # O20 under the inference (docs/rework.md 2.6, 3): a value read out of a container this function builds, kept where the
 # container does not live, through a field that cannot have a binding of its own
 fn PartKept(part String&, whole String&) r.Msg { return r.Msg(Diag.PartKept, "O20", "'" $part "' lives where '" $whole "' does, which closes first - keep a copy ('$" $part "'), or keep what '" $whole "' was made from") }
@@ -3311,6 +3322,8 @@ fn NoteRefillKept(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.NoteRe
 
 # NOTE_DECLARE_WHERE
 fn NoteParamCopy(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.NoteParamCopy, "", "'" $text1 "' is the call's own copy of its argument - take it by reference to give back what the caller passed: '" $text2 "'") }
+
+fn NoteAssignedHere(name String&) r.Msg { return r.Msg(Diag.NoteAssignedHere, "", "'" $name "' is given a value here") }
 
 fn NoteBindingWhere(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.NoteBindingWhere, "", "'" $text1 "' is bound here to what the matched value holds, which lives in a block that closes first - make that where '" $text2 "' lives") }
 

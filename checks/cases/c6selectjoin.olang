@@ -1,0 +1,34 @@
+# check: run
+# flags: -debug -sanitize
+# C6 (feat's limit, fixed on the way - the kept round's C1 or item 17): chan.Select's SendOf cases written inside a
+# join block, both of them, as well as one made before it - built and run under the scope sanitizer
+import "std/chan"
+type box struct(v I32) { v }
+fn take(c mut chan.Chan<I64>&, got mut box&) {
+    got.v = I32(try chan.Recv(c) catch chan.Error default -1)
+}
+fn main() ? {
+    r := chan.Chan<I64>(0)
+    chan.Init(r)
+    full := chan.Chan<I64>(1)
+    chan.Init(full)
+    try chan.Send(full, 1)
+    got mut box& = box(0)
+    join {
+        spawn take(r, got)
+        match try chan.Select(chan.SendOf(r, 9), chan.SendOf(full, 4)) {
+            case chan.Ready.First(_) { }
+            case chan.Ready.Second(_) { unreachable }
+        }
+    }
+    assert got.v == 9
+    more := chan.SendOf(full, 4)
+    join {
+        spawn take(r, got)
+        match try chan.Select(chan.SendOf(r, 10), more) {
+            case chan.Ready.First(_) { }
+            case chan.Ready.Second(_) { unreachable }
+        }
+    }
+    assert got.v == 10
+}

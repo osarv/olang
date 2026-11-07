@@ -1,0 +1,34 @@
+# check: run
+# flags: -debug -sanitize
+# T25d: an element of an array literal of constant data, read by an index, is the constant data itself - in the
+# program's scope - so it may be kept anywhere: pushed into a Vec living outside the loop, given to a reference local
+# declared outside it, walked; read back after a churn under the scope sanitizer (the element was scoped to the
+# literal's temporary block, refused with O10c and O25)
+import "std/io"
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+        s := $k "-" $(k * 7)
+        assert s.Len() > 0
+    }
+}
+fn main() ? {
+    keep := Vec<String&>()
+    for k in range 3 {
+        keep.Push(String&["a", "b", "c"][k])
+    }
+    w String& = "x"
+    for k in range 3 {
+        w = String&["a", "b", "c"][k]
+    }
+    for nm in String&["ann", "bob"] { keep.Push(nm) }
+    op := " < "
+    for k in range 5 {
+        if k >= 2 { op = String&[" + ", " - ", " * "][k - 2] }
+    }
+    churn()
+    assert keep.Len() == 5 and keep[1] == "b" and keep[4] == "bob"
+    assert w == "c" and op == " * "
+    try io.Println($keep.Len() $w $op)
+}

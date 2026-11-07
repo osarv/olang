@@ -1469,8 +1469,9 @@ plain data an immutable global holds is read-only data the same way. Any other t
 storage of its own, or a writable reference - gets a copy of its own. Which happens is not observable except as speed, and as identity:
 each **site** - a literal as written once in the source - is one instance however often it is reached, so the same
 site reached twice is the same storage, and two sites are two instances even when they hold the same data. An
-element of a static literal is static data too: walked by `for ... in` (`for nm in String&["ann", "bob"]`), it lives
-in the program's scope (§8 O1b) and may be stored anywhere.
+element of a static literal is static data too: walked by `for ... in` (`for nm in String&["ann", "bob"]`), read by an
+index or a slice, or bound by an array pattern (`String&["a", "b"][k]`), it lives in the program's scope (§8 O1b) and
+may be stored anywhere.
 
 **T26.** A reference-shaped struct, enum or array is heap-indirect: the value held by a variable, field,
 or parameter of that type is a pointer, not the aggregate itself, and `==`/`!=` on it compare
@@ -6517,8 +6518,9 @@ sibling arguments in a way that cannot be told apart — is treated as **definit
 anything, rejected the same way an unverifiable tag is (O11) but for a distinct reason worth telling apart:
 this one was actually traced, and found to disagree, rather than simply never resolved at all. Where such a
 reference is read rather than assigned - through alternatives of a `match` binding one name from different scopes
-(S13c), a conditional or a `match` value whose values already live in different scopes (E28), or through anything else
-whose scope was not traced - **where it lives is not known**: it may be read,
+(S13c), a conditional or a `match` value whose values already live in different scopes (E28), a reference local read
+where versions living in different scopes reach it (O25i), or through anything else whose scope was not traced -
+**where it lives is not known**: it may be read,
 walked and compared, but it never equals an exact scope (O25), never determines a scope variable of a parameter
 through which something can be stored (O25g) or which a call's result is equated with (the callee could build there).
 Nothing new is built into a place holding such a reference by value either - a
@@ -6552,14 +6554,18 @@ value where it dangles. Accordingly:
 
 - **O25a.** A local lives where the inference places it (O28) - its block (O2) unless what it holds must outlive
   that - and an initializer never changes it: one that already lives somewhere must live in exactly that scope; a
-  temporary is built there. `x := e` takes `e`'s exact scope — the way a local adopts where its value lives. A type written as a **bare type variable**
+  temporary is built there. `x := e` takes `e`'s exact scope — the way a local adopts where its value lives. A
+  reference local or parameter, and a local holding a function value, take at each assignment the scope of what it
+  gives them - a new **version** (O25i); every other local (a value holding references, O25h) keeps one claim. A type written as a **bare type variable**
   (`acc U = init`) writes no scope either: where the variable is bound to a reference, or to a value holding
   references, the local takes its initializer's scope as `:=` does - the spelling generic code has for "a local of this
   variable's type, where its initializer lives" beside `:=` itself. A local declared from a field
   read through a parameter takes the derived scope it reads at (O23a), exact for what it is.
-- **O25b.** Assigning to a reference local or parameter requires the value's exact scope to be that target's
-  exact scope; between two of the function's scope variables that is an equality obligation on its callers
-  (O10c).
+- **O25b.** Assigning to a reference local or parameter, or to a local holding a function value, gives it a new
+  version holding the value's exact scope; nothing is required of the assignment itself (a temporary assigned is built
+  where the version's reads need it, O28), and between two of the function's scope variables it makes no relation.
+  Each read is judged against the versions that may reach it (O25i). Storing into a field, an element or a payload is
+  unchanged: O25c.
 - **O25c.** Storing an existing reference into a reference-holding **slot** — a field, element or payload —
   requires the value's exact scope to be the slot's whenever something can be stored through it (O25g).
   Otherwise the value must outlive the slot (O10), since nothing written through it can be misplaced - and a referent
@@ -6609,6 +6615,26 @@ value where it dangles. Accordingly:
   store of references into such a value afterwards puts them where the value's own references are, which its bindings
   then say. A copy of a handle (O17b) is a second name for the one collection - its reference is where the source's is -
   and is lent to a call as that reference.
+- **O25i (versions).** A **version** is what the declaration (for a parameter, its argument) or one whole assignment
+  gives a reference local or parameter, or a local holding a function value. It reaches every read a path from that
+  assignment arrives at with no other assignment of the local between them - through branches, through a loop into its
+  next turn and out of it, into a `catch` clause from anywhere in what its `try` covers, and into deferred code, which
+  any version of the local in its block reaches (it runs at a way out of the block). A lambda reads the local where it
+  is made (D16c), a task where it is spawned. At a read:
+  1. every version reaching it but the declaration's must still be valid there: the scope its referent lives in must
+     be open where the read stands. A loop body's block is a new one every turn, so a version reaching a read from an
+     earlier turn is valid only where it lives outside the loop body. Where it is a block the read is not inside, what
+     the version names is built where the read needs it, if it can be (O28) - a new one each time the assignment is
+     reached - else the read is a compile-time error naming the assignment and a copy (`$x`, `x.Copy()`);
+  2. the value read lives where its versions do: one version, exactly there; several living in different scopes, where
+     it lives is not known here (O12) - it may be read, compared, walked and passed where outliving suffices, but
+     nothing is built or stored through it, and it determines no scope variable through which something can be stored
+     (O25e, O25g): an error there names the assignments whose scopes differ.
+
+  A version is judged by what it holds, never by the local's other versions: `at = at.parent` walks a chain of parents
+  whatever their scopes. `null` given holds no scope. Storage reached only through a version lives where the reads it
+  reaches need it - no longer: a list built through a cursor in a loop and read nowhere after it lives in the loop's
+  block, and closes with it.
 
 A local that takes the program's scope (O25a) may be read and walked, and nothing may be allocated into or
 stored through it: the program's scope is reached through a global or a call's binding, never through a local's own tag.
@@ -6744,7 +6770,8 @@ A **reference** local the function returns follows it too, where what it names i
 or with a bare `&`, whose initializer is a temporary - a call's result built where it is put, a constructor's instance,
 a case of an enum (T17d) - or `null`, names what lives in the result scope; so does what a later assignment to it builds
 there. Its own slot - the reference itself, which nothing can name (T11: no reference to a reference) - stays in its
-block.
+block. A returned reference local moves whole: every version of it (O25i) the function builds is built in the result
+scope.
 One initialized from existing storage (a parameter, a field read out of one, a call handing back what it was given)
 keeps that storage's scope (O25a).
 

@@ -105,12 +105,13 @@ make drvgold       # capture drv.txt again; rungold run.txt (minutes); tokgold, 
 make fmtdiff       # every file formatted reads back as the same tree, keeps its comments, and is its own layout
 make drvdiff       # the driver says what stage 0 says: command lines decided before code generation, and whole builds
 make lowerdump     # every body and helper of the corpus and the checks' run cases lowered to MIR and verified
+make dumptool      # scopedump's own module compiled - the dump tools still check (in the suite)
 make emitdiff      # the corpus and std's tests built through emit, run, and each test's outcome compared with stage 0's
 make evaldiff      # the corpus, std's tests and the checks' run cases interpreted, compared with the built runs
 ```
 
 The `*diff` targets build `build/compiler_tools_dump` first. `make verify` and `make quick` run tokdiff, astdiff,
-namesdiff, layoutdiff, fmtdiff and drvdiff beside the tests, with the compiler `make bootstrap` installs
+namesdiff, layoutdiff, fmtdiff, drvdiff and dumptool beside the tests, with the compiler `make bootstrap` installs
 (`OLANG ?= build/olang`).
 
 ## Platforms (SPEC B12-B12d)
