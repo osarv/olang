@@ -103,18 +103,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   global's type and baked value. `Type.Method` names a method. `-target`, `-define`, `-update` apply.
 - **Effects, needs and "not a value"; `explain -caps` (B11b, B11c, QBP 6, QBP 11, A2.3, B1.2, the user's "build it"
   2026-10-27 and "if it doesn't cost compile time" 2026-10-31; built 2026-10-31).** explain, doc and hover print
-  `# effects: ...` under each function (writes, allocation, tasks, C, blocking, recursion, ending the program, ...),
-  `# T needs: ...` under a generic and `# not a value: why` where a function cannot become one. `olang explain -caps
-  FILE` lists, per module, the capabilities (files, network, processes, environment, threads, C) its code may reach.
-  One summary pass (compiler/effects.olang), made only when something asks, so other builds pay nothing.
+  `# effects: ...`, `# T needs: ...` and `# not a value: why` under functions; `olang explain -caps FILE` lists per
+  module the capabilities (files, network, processes, environment, threads, C) its code may reach. One summary pass
+  (compiler/effects.olang), made only when something asks.
 - **`explain -asm FILE NAME` and `explain -ir FILE NAME` (B11d, QBP 7, the user's "build it" 2026-10-27; built
-  2026-11-07).** A function's machine code or optimized LLVM IR as build compiles it, each run of instructions headed
-  by its source line with LLVM's optimization remarks beneath. Other builds' IR is unchanged. `-asm`, `-ir`, `-caps`
-  exclude one another. compiler/listing.olang; checks scenario `listing`.
+  2026-11-07).** A function's machine code or optimized LLVM IR as build compiles it, headed by source lines with
+  LLVM's optimization remarks. Other builds' IR is unchanged. compiler/listing.olang; checks scenario `listing`.
 - **`olang api OLD NEW PATH` (B21, QBP 15/B1.6, the user's "do it" 2026-10-31; built 2026-10-31).** Compares the
-  exported items of two versions (commits or directories), a row each, `breaking` or `ok`; status 0, 1 where something
-  breaks, 2 where a side cannot be read. Breaking: a removed name, changed signature or type, a grown error set, an
-  added enum case, error word or trait method, a trait no longer met. Effects and doc comments are no interface.
+  exported items of two versions (commits or directories): `breaking` or `ok` rows; status 1 where something breaks.
+  Breaking: removed names, changed signatures, grown error sets, added enum cases, error words or trait methods.
   compiler/api.olang; checks scenario `apicaps`.
 - **Doc comments (L4b) and `olang doc` (B14).** Go's rule, no new syntax: the `#` lines directly above a declaration,
   member or global are its documentation (a member or global with none takes its trailing comment); a module's is the
@@ -122,9 +119,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   [FILE...]` writes static HTML. Exported items only.
 - **Deprecation is a doc-comment convention, read by tools only (L4b, QCW, the user's "add deprecation only as a
   comment and kind of surrounding tools thing. It should not break the compiler", 2026-11-07; built 2026-11-07).** A
-  doc-comment paragraph beginning `Deprecated:` marks its declaration; the compiler gives it no meaning. `olang doc`
-  marks it, the language server hovers, tags and hints its uses (a hint, never an error), `olang api` lists it as a
-  non-breaking `deprecated` row. Removing between versions stays the main way.
+  doc-comment paragraph beginning `Deprecated:` is marked by `olang doc`, the language server (hover, tag, hint at
+  uses) and `olang api` (a non-breaking row); the compiler gives it no meaning. Removing between versions stays the
+  main way.
 - **`olang lsp` (B15) and `olang mcp` (B16), 2026-10-24 (the user: "we need this, both for MCP and neovim
   integration").** LSP over stdio (diagnostics, hover, definition, symbols, completion, formatting); MCP over stdio
   (`check`, `explain`, `doc`, `format`, `test`). Each analysis runs in a forked process; not incremental per module.
@@ -356,11 +353,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   of the prelude or std may declare a **conditional destructor** existing only in instances holding such values. C11
   is judged per instance: `List<File>` and a run-time `Array<T>(n)` of them are refused.
 - **Packed structs (T13c, X11a, X18, the user's QCX 2, 2026-11-07; built 2026-11-07).** `type Header packed struct(
-  version U4, ihl U4, length U16) { version, ihl, length }`: no padding, fields from the lowest bit up, size the bits
-  rounded up to bytes, alignment 1. Field types: integers of any width, Bool, floats, payload-free enums, nested
-  packed structs, fixed arrays; references, run-time arrays, function values and ordinary structs are T13c's error. No
-  reference names a field. `f.BitOffset`/`f.Bits` in reflection; `build -library` writes packed C structs; C imports
-  translate bitfield records.
+  version U4, ihl U4, length U16) { ... }`: no padding, fields from the lowest bit up, alignment 1. Fields: integers
+  of any width, Bool, floats, payload-free enums, nested packed structs, fixed arrays; references, run-time arrays and
+  ordinary structs are errors. No reference names a field. `f.BitOffset`/`f.Bits` in reflection; `build -library` and
+  C imports handle them.
 - **Holders ended before what they hold (O15, QCZ, the user's decision 2026-11-07: "let the compiler order them";
   built 2026-11-07).** A block's by-value holders end last declared first, except that one holding a reference to
   another is ended before it; two that may hold each other (a cycle) is a compile-time error naming both. "Holds" is a
@@ -517,12 +513,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   function values and iterators fail with, the empty set where nothing fallible binds it (then no `try`). Satisfaction
   is "held by" (T31). Not a stored error (T20).
 - **Generators (D18-D18d, S20, QAG revised, the user's decision 2026-10-18; built 2026-10-25).** A `fn` whose result
-  is `Iterator<T ? E>` and whose body holds a `yield` is a generator - no keyword. A call runs none of the body and
-  gives the prelude's `Generator<T ? E>`; its end (a bare `return`) or an error ends the walk, later `Next` failing with
-  `Exhausted`. Built as a lambda coroutine. **Borrowed elements (D18c, QBB, 2026-10-26; inferred since 2026-11-02)**:
-  `fn words(t String&) Iterator<String&>` yields views, read-only, never null (`ViewGenerator`). A for-in's walk made
-  and finished in one place is elided into the caller (D18e). Not allowed: `yield` in a lambda, deferred code, a join
-  block, or with deferred code pending around it.
+  is `Iterator<T ? E>` and whose body holds a `yield` is a generator - no keyword; a call gives the prelude's
+  `Generator<T ? E>` (a lambda coroutine); a bare `return` or an error ends the walk. **Borrowed elements (D18c, QBB,
+  2026-10-26)**: `Iterator<String&>` yields read-only views. A for-in's walk made and finished in one place is elided
+  (D18e). Not allowed: `yield` in a lambda, deferred code or a join block.
 - **Compile-time reflection (G32-G38, G13, docs/ideas.md #2, the user's decisions 2026-10-18; built 2026-10-25).** A
   type's structure read through its name while compiling: `T.Name`, `T.Kind` (`TypeKind`), `T.Base`, `T.Element`,
   `T.Length`, `T.Target`, `T.Nullable`, `T.Size`, `T.Align`, and the lists `T.Fields`, `T.Cases`, `T.Params`,
