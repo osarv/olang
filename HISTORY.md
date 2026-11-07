@@ -30604,3 +30604,6 @@ receiver. Both are D9h/D9i work of their own; the copy stays ~1% of a builder-he
   parameter to its drop where no error leaves (SPEC T13b's sentence). tests/drops.olang's `deferPush` (decided while
   compiling and at run time); checks' t13bhandondeferred (run, `-debug -sanitize`, churned), t13bhandondeferredtwice,
   t13bhandondeferredloop, t13bhandondeferredafter.
+- **F5 (T22a naming the type argument).** `use(keepIt<Blob>, v)` said "'Blob' ties where ...", the caret on `Blob`: the
+  error took the last name of the value's span. It takes the last name before a `<` and the type arguments with it now
+  (`scope.fnNameAt`): "'keepIt<Blob>' ties where ...", the caret on all of it. checks' t22ainstancename.

@@ -1,0 +1,25 @@
+# check: fail error[T22a]: 'keepIt<Blob>' ties where what it is given lives to what it keeps or gives back
+# T22a (bulk review 8, F5): an instance named as a value is named as written - the function with its type arguments,
+# the caret on all of it - not by its last name, the type argument
+import "std/io"
+
+type Blob unique struct(n I64) {
+    n
+    data := Array<I64>(n.Mod(7) + 2, n)
+}
+
+fn keepIt<T>(v mut Vec<T>&, x T) { v.Push(x) }
+
+fn use(f fn&(v mut Vec<Blob>&, x Blob), v mut Vec<Blob>&) {
+    for k in range 5 { f(v, Blob(k + 1)) }
+}
+
+fn main() {
+    v := Vec<Blob>()
+    use(keepIt<Blob>, v)
+    other := Vec<Blob>()
+    for _ in range 5 { other.Push(Blob(-7)) }
+    acc := 0
+    for b in v { acc = acc * 10 + b.data[0] }
+    io.Println($acc)!
+}

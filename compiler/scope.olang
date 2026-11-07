@@ -954,7 +954,7 @@ fn (s mut Scoper&) bndError(x typed.Expr&, b I64, adapter Bool, place I64) {
             match u {
                 case typed.Expr.Fn(sp, _, f) {
                     if f == typed.FnVal.Named and I64(f.body) == b {
-                        at = s.lastName(sp)
+                        at = s.fnNameAt(sp)
                         text := try s.texts.Get(s.B!.File) catch default ""
                         if I64(at.End) <= text.Len() { name = text[I64(at.Start):I64(at.End)] }
                     }
@@ -11529,6 +11529,21 @@ fn (s mut Scoper&) lastName(sp source.Span) source.Span {
         k++
     }
     return name
+}
+
+# the function a value written at sp names, as written: its last name, with the type arguments written after it
+# (`keepIt<Blob>`, an instance named - bulk review 8, F5)
+fn (s mut Scoper&) fnNameAt(sp source.Span) source.Span {
+    text := try s.texts.Get(s.B!.File) catch default ""
+    end := I64(sp.End)
+    if end > text.Len() { return sp }
+    for k in range I64(sp.Start), end {
+        if text[k] == '<' {
+            nm := s.lastName(source.Span(sp.Start, I32(k)))
+            return source.Span(nm.Start, sp.End)
+        }
+    }
+    return s.lastName(sp)
 }
 
 # where a mark "&name" on the line a span begins names name: the name's own span, else the span
