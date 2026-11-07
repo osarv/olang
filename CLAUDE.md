@@ -122,7 +122,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `starts tasks`, the classes reached, else `calls C`, `may end the program`, `may block`/`never blocks`, `recursive`,
   `always ends`, `may be computed while compiling` (`anything` through a function value or an `any`); under a generic
   `# T needs: Less, a walk` (G18a, read off its text); under a function that cannot become a value `# not a value: why`
-  (a method, an extern, a generic named bare, a G29 instance, T22a's scope obligations - docs/rework.md point 1).
+  (a method, an extern, a generic named bare, a G29 instance - docs/rework.md point 1), and `# as a value: held in
+  locals and results only - ...` under one whose scope obligations are more than a written function type says (T22a).
   `olang explain -caps FILE`: each module the program loads, the root first, with the classes its code may reach
   through everything it calls - files, network, processes, environment, threads, C (the program's own) - and the
   module where each is first reached. Decided (mine): one summary pass over the typed core, compiler/effects.olang
@@ -1074,13 +1075,29 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   tracking, layout and the evaluator need nothing new; no type parameters (G6) or `extends`; `$h` renders the signature,
   a type is spelled `Handler&`.
 - **Function types (T22, T22a).** Errors compared in order, `mut` and permissions on T22's terms (read-only for
-  writable parameters, writable for read-only results is safe); a function with scope obligations or a `Call` that
-  keeps its argument cannot become a value; a type's `Call` fits a function type (E31), its errors the type's in order
-  (2026-10-25: never compared, so a `Call` with a contract read its error code as a result). A
+  writable parameters, writable for read-only results is safe); a type's `Call` fits a function type (E31), its errors
+  the type's in order (2026-10-25: never compared, so a `Call` with a contract read its error code as a result). A
   function value returned from a parameter is an obligation (O14a). No function type says where references live (QCB,
-  2026-11-02): a function whose inferred obligations tie where what they are given lives to what they keep or give back (the T22a error's words since bulk review 6) - `fn link(a mut N&, b N&)` storing b
-  into a - is no value (T22a), said by explain/doc/hover (`# not a value`) and at the conversion; a lambda calling it
-  is one. (Until 2026-11-02 a type could write `b N&a` or `T&p`.) **A result holding references reads as borrowed from
+  2026-11-02; until then a type could write `b N&a` or `T&p`). **A function value carries its relations (T22a, QCR (1),
+  the user's "build them all" 2026-11-03; built 2026-11-07, docs/sec8.md round 3, details mine)**: a function, lambda or
+  adapted `Call` whose inferred obligations are more than its type says (`fn link(a mut N&, b N&)` storing b into a, a
+  lambda pushing what it is given into what it captured) is a value wherever the inference follows it whole - a local
+  (each version, whatever type the local is written with), a conditional, a `match`, a `catch` default, a conversion,
+  and a call's result (the callee's returns, O13c's third item, `summary.ResFn`) - and a call through it is judged as the
+  direct call each function it may be is (`g := link; g(x, N(5))` builds `N(5)` where `x` lives; O17's lending reads
+  each body's summary). At a **boundary** - an argument, a store into anything but a whole local, an element, a capture,
+  a task, an `any`, a `yield`, a binding, a return no caller follows (a cycle, several results), a call a loop-carried
+  version reaches before it is given - only what the written type says may come: T22a's error there names the function
+  (a lambda by the parameter it keeps), and the place; explain/doc/hover say `# as a value: held in locals and results
+  only - its scopes (b outlives a) ...` (or the function it gives). Decided (mine): records are the bodies a value may
+  call and, for a lambda or adapter, the terms its captures (receiver) had where it was made; the boundaries are checked
+  by a structural walk of each body in its reporting judging (`fnBounds`: a local's values flow-insensitively, a call's
+  results by `ResFn`, coverage deep through every function a call of it may give), calls through values by the records
+  the judging follows (`recsOf`); a version not judged yet that a read reaches (a loop's next turn) is known where it
+  names a function or a lambda capturing nothing, else judged at the read as at a boundary; a function-valued local
+  assigned whole with no versions found has every value judged at its reads; a generic's type variable is a boundary
+  (no scope twins - the coordinator's call); a task's function is not followed. bench and compiler/ IR byte-identical,
+  the scope phase unchanged. **A result holding references reads as borrowed from
   the reference parameters (open point 5, the user's approval; built 2026-11-02, round 4b)**: a call through a value
   holds each reference argument to outlive where the result lands - exactly there where something can be stored
   through both, the result landing where that argument lives - and as a view (O27: an argument's storage the caller

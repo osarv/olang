@@ -30386,3 +30386,70 @@ and of the free mode (two programs, 19 places freeing at once) found nothing. sc
 slices, a generator's borrowed words, a view handed back of what a helper builds, closures over a turn's node - kept in
 lists outliving them); round 2's view placements counted no join of unordered scope variables (`wLocals`: 0 on the new
 programs, the same 3 as before on compiler/).
+
+## A function value carries its relations (T22a, docs/sec8.md round 3, 2026-11-07, wt-sec8r3)
+
+**What.** QCR (1)'s third part (the user, 2026-11-03: "just build them all, extend the scope system to that"): T22a's
+refusal shrinks to what a written function type cannot match. Until now a function whose inferred obligations were
+more than its type says of every call (each reference parameter outliving the result) could not become a value at all,
+though a call through a local holding it sees exactly which function it calls - `g := link; g(x, N(5))`, the helper
+closure `add := fn(k String&) { names.Push(k) }; add("a")`, `f := mk(gone); f("b")` were all refused. Now such a value
+carries a **record** - the body it calls and, for a lambda or a type's `Call` adapter, the term each capture (the
+receiver) had where it was made - along what one judging sees whole: a local's declaration and each version (O25i), a
+conditional's, a `match`'s and a `catch` default's values, a conversion (to a nullable or declared function type), and
+a call's result (the callee's `summary.ResFn`, what every return gives, translated through the call's bindings - a
+capture of the callee's parameter's referent becomes the argument's term). A call through a value whose records are
+known is the direct call each is: the record's body's scope variables renumbered into the call's (a capture, an
+adapter's receiver one past the type's own), its obligations discharged through those bindings, the variables no
+argument binds placed where every record's body needs them (`requiredIn`, joined), its landing read off them
+(`valRelsAt` for `callRels`), and the lending of its arguments (O17's `calleeKeepsArg`/`Stores`/`Puts`, computeKeeps'
+`kwCall`) by each record's body's summary - stricter than T22's contract, since the point of a record is that the callee
+may keep. A value not followed (a parameter's, a field's, an element's) keeps today's judgment by its type
+(`valueRels`), which every value stored in such a place meets.
+
+**The boundary.** Where a value meets code judged once for many values - an argument, a store into anything but a
+whole local (a field, an element, a global, a constructor's field), an item a value is made of, a capture, a task's
+function, argument or result, an `any`, a `yield`, a pattern's binding, a `return` no caller follows (a function in a
+cycle, several results) - its records must be covered (`valueCovered`, unchanged), and so must every function a call of
+it may give (`ResFn`, deep). The check moved out of `fnValues` (after every judging, every function named as a value)
+into a structural walk of each body in its reporting judging (`fnBounds`): a value in a non-following position is a
+boundary, checked once, its parts walked as followed; a local's records there are all its values, flow-insensitively
+(`bndDefs`) - only a refusal can be lost to that imprecision, never soundness. T22a's four messages name the place
+("..., and this argument holds only what its written function type says of every call - call it directly, or hold it
+in a local and call it there"); explain/doc/hover's `# not a value` for T22a became `# as a value: held in locals and
+results only - its scopes (b outlives a) are more than a written function type says of every call (T22a)`, or names the
+function it gives (`Scoper.GivesHeld`), so a function that may only be held says so and the error at the place names the
+same function.
+
+**Decided (mine).** (1) Records are body identity plus capture terms; adapters carry the receiver's term as a capture.
+(2) The boundary walk is structural and separate from the judging; calls are judged by the records the judging follows -
+two consistent views: every position the walk lets through is one `recsOf` follows. (3) A version that a read reaches
+before it is judged this judging (a loop's next turn): known where its value is a function named or a lambda capturing
+nothing (no term of the judging needed), else judged at the read as at a boundary (`lateRecs`, "this call - reached in a
+loop's next turn by a value assigned after it -"). (4) A function-valued local assigned whole that has no versions (the
+reaching walk did not settle) has every value judged at its reads. (5) A held local (`LocalKind.Held`) carries what it
+holds. (6) The returns of a body giving one function value outside a cycle carry (`resFnOk`); a generator's yield never
+does. (7) A task's function is not followed (decision 15). (8) A generic's type variable is a boundary (docs/sec8.md
+question 1, the coordinator's call: no round 4). (9) The adapter's coverage stays "no obligations at all" (its receiver
+is no parameter of the function type). Spec: T22a rewritten, T22's and D17f's sentences, O13c's third item, O17's
+paragraph on calls through values, B11b's line.
+
+**Tests.** tests/fnrel.olang (a named function in a local, a local lambda keeping each turn's text, a closure a call
+hands back, a conditional of two functions, a function-valued local given another in a loop, an adapter in a local, a
+value a call through a value gives - read back after churns; baked `Linked`/`Made` and top-level asserts; under
+`-debug -sanitize` and `test -interpret` too). checks: callvaluekeepsblock is a run case (its local's written type is no
+boundary; round 2 builds the closure's `m` where `kp` lives); new run cases t22alocal, t22aresult, t22acursorfn; new
+fail cases t22acapture, t22apushed, t22agivesarg, t22alatelambda, t22areturncycle, t22agivenvalue; the staying T22a
+cases (t22sharedscope, -type, -generic, t22aobligation, t22alambdakeeps, callvaluekeeps, callvaluekeepsframe) say the
+place. fuzz/scopegen gained a relations scenario (link, a lambda pushing into a captured list, one a helper hands back
+- in locals, conditionals, loop-given versions, called with nodes of blocks and turns; rarely a boundary, refused):
+smoke runs agree built (`-debug -sanitize`) and interpreted. Gates measured: bench's programs and compiler/'s 309 modules
+IR byte-identical to the base compiler, the scope phase on compiler/ 3.53 s against 3.52 s.
+
+**Found on the way.** A call through a value given a by-value parameter's storage for a parameter its function keeps
+(`g := link; g(x, n)`, `n N` by value) was refused (O17, O10c) where the direct call compiles - `calleeKeepsArg` said
+"keeps" for every value; with records it reads the body, as the direct call does. fuzz/scopegen's kept-view leaf wrote
+`t := $"12" 12` (E11b's error), so round 2's kept-view scenario was refused whenever that leaf was drawn - written as a
+join now. Not fixed (seen in the smoke runs): several of scopegen's older scenarios make helpers that are D19a's error
+since the builders round (`mk8`, `csh8_3`, `cch4_6` - a scenario's own helpers, not the header's), and one writes
+`abort` (gone since 2026-10-17) - those scenarios are refused and left out, as the driver does with any refusal.

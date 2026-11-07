@@ -33,6 +33,12 @@ line in docs/README.md, committed on wt-sec8 (only those paths; no push). Experi
   placement needed a viewed temporary in the program's scope, and emit's elision needed nothing (its dataflow already
   refuses a walk placed outside its loop). Not built: the unique hand-on move (left for its own round - see the
   hand-off PROGRESS.md)
+- [x] **round 3 built** (wt-sec8r3, 2026-11-07): T22a's records - followed through locals (each version), conditionals,
+  matches, `catch` defaults, conversions and call results (`summary.ResFn`); a call through a known value judged as the
+  direct call each record is (its lending too); the boundaries checked by a structural walk in each body's reporting
+  judging, coverage deep through what a call of a value may give; explain's `# as a value` - HISTORY.md "A function
+  value carries its relations"; found beyond the note: a version a read reaches before it is judged (a loop's next
+  turn) needs no term where it names a function, else is judged at the read as at a boundary
 
 ## 0. Summary
 
