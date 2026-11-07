@@ -7741,8 +7741,8 @@ such once. Beneath a line's comment come the remarks LLVM made there about the f
 SLP vectorizers, the unrollers, LICM, GVN, the loop idiom and deletion passes, tail-call elimination, the register
 allocator and the assembly printer did (`passed`), declined and why (`missed`), and found (`analysis`) - each said once,
 with how many times it was made; a remark on a line left with no code of its own is listed after the code with its
-place. A header comment gives the function as B11b prints its signature, its instructions as the assembly printer
-counted them, and the functions inlined into it. A generic function's code is printed for each instance the program
+place. A header comment gives the function as B11b prints its signature, where it is declared, how its code was
+built, how many instructions the code holds, and the functions inlined into it. A generic function's code is printed for each instance the program
 makes, in turn. A function the link left no code of its own says so: inlined at every call - naming where, and, where
 that is one function, printing that function's code in its place - or never called. Comments are written as the code's
 own language writes them: `#` in x86-64 assembly, `//` in AArch64's, `;` in IR. `-asm`, `-ir` and `-caps` exclude one
