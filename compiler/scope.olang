@@ -134,6 +134,21 @@ type Val struct(K ValKind, T Term) {
     T
 }
 
+# a term of a cursor's definition kept between a body's judgings (NLL, docs/sec8.md 3.3): a block (K 1), a scope
+# variable (2), the program's (3), a derived scope (4) or an untraced one (5) by its own numbers; an underestimate (6)
+# by the term it stands above (B...), its field and how it was read - the numbers of sets and underestimates are a
+# judging's own
+type verAtom struct(K I64, A I64, W I64, BK I64, BA I64, BW I64, Elem Bool, Decl I64) {
+    K
+    A
+    W
+    BK
+    BA
+    BW
+    Elem
+    Decl
+}
+
 fn plain() Val { return Val(ValKind.Plain, Term.None) }
 
 fn fresh(t Term) Val { return Val(ValKind.Fresh, t) }
@@ -339,6 +354,8 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     ueBad source.Span = source.Span(0, 0)
     regionOnly Vec<I64>                   # by local: the parameter whose region it holds only reads of (O17), -1 none
     aliasOf Vec<I64>                      # by local: the reference parameter it was declared as a second name for, -1 none
+                                          # (or a cursor, whose regions curRegions has)
+    curRegions Map<I64, Vec<I64>>         # NLL: by cursor, the parameters whose regions any of its versions names (O17)
     rlChanged Bool = false
     why I64 = 0                            # what the obligations recorded now are for, in a constructor (rel.Why)
     # what decide found for the local the next Let declares: the result term it is moved to (O26a), or that a call it
@@ -390,6 +407,36 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     partFlow Bool = false                   # the proposal being made is for a part of the local
     derivedDecl Map<pair.Pair<I64, I64>, I64> # the field inference: by (body, parameter) and variable, the declaration
                                               # whose promoted field a derived scope D(p, w) was read through
+    # NLL (O25i, docs/sec8.md 3): a reference local or parameter, or a local holding a function value, assigned whole
+    # after its declaration is a cursor, given a version at its declaration and at each whole assignment
+    # (typed.Versions, found once a body: versOf, versNone), its term at a statement the versions reaching it (keys: the
+    # statements being judged, innermost last). By definition: its term in this judging (defNow, judged where defSeen); a
+    # read taking one not judged yet took the last judging's (defTerms), held at the judging's end to what it came to -
+    # by such read, its definitions and the set it was judged with (lateDef, lateFrom, lateTo into lateAtoms)
+    vers typed.Versions?& = null
+    versOf Map<I64, typed.Versions&>
+    versNone Map<I64, Bool>
+    curList Vec<I64>                        # the cursors of the body being judged
+    keys Vec<I64>
+    defNow Vec<Term>
+    defSeen Vec<Bool>
+    lateDef Vec<I64>
+    lateFrom Vec<I64>
+    lateTo Vec<I64>
+    lateAtoms Vec<verAtom>
+    defTerms Map<pair.Pair<I64, I64>, Vec<verAtom>>  # by (body, definition): its term in the body's last judging
+    defLifts Map<pair.Pair<I64, I64>, Term>          # ... where the inference builds its temporary (3.5)
+    verUnion Map<I64, Bool>                 # bodies whose definitions' terms only grow (inferClaims' bound)
+    verGrew Bool = false                    # a definition came to more than a read took (judged again, 3.3)
+    realGrew Bool = false                   # a lift grew - a claim, a call's landing, a definition's temporary
+    underIntern Map<verAtom, I64>           # an underestimate made again from a kept term, by what it is: its index
+    cursorSets Map<I64, I64>                # by set: the cursor whose versions it is (O25i's error)
+    curMoved Map<I64, Term>                 # by cursor: where O26a moved it, its every version's temporary there
+    letKey Map<I64, I64>                    # by local: where its declaration starts (a cursor read there, 3.5)
+    reachCtx I64 = -1                       # the definition whose value is proposed through: its statement's reach
+    propDepth I64 = 0
+    propSeen Map<I64, Bool>                 # the definitions a proposal went through (3.5: at = at.parent)
+    validSaid Map<I64, Bool>                # the definitions O25i's read error was said for
     origin Vec<I64>                        # by local: whose claim its own is (":=" of a local), -1 its own, -2 none to lift
     viewOf Vec<I64>                        # by local: the local whose storage it is a view of (O27), -1 none
     fitTarget I64 = -1                     # the local whose claim the slot of the fit judged is, -1 none
@@ -476,6 +523,8 @@ fn (s mut Scoper&) judgeAll(report Bool) {
         s.liftStor.Clear()
         s.wLocals.Clear()
         s.partLifts.Clear()
+        s.defLifts.Clear()
+        s.defTerms.Clear()
         s.runs.Clear()
     }
     for i in range s.Bodies.Len() {
@@ -660,6 +709,8 @@ fn (s mut Scoper&) dropLifts(comp Array<I64>&) {
     dropKeyed<Bool>(s.liftStor, mine)
     dropKeyed<Bool>(s.wLocals, mine)
     dropKeyed<Bool>(s.partLifts, mine)
+    dropKeyed<Term>(s.defLifts, mine)
+    dropKeyed<Vec<verAtom>>(s.defTerms, mine)
 }
 
 fn dropKeyed<V>(m mut Map<pair.Pair<I64, I64>, V>&, mine Map<I64, Bool>&) {
@@ -1071,6 +1122,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.temps.Clear()
     s.partDest.Clear()
     s.lifted.Clear()
+    s.verStart(b)
     # G16b, B11: what is said in an instance's body is said at the program's use of it, as the checker says it
     pushed := 0
     base := 0
@@ -1081,6 +1133,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.tailSp = source.Span(-1, -1)
     s.dtorAt = source.Span(-1, -1)
     s.run()
+    s.verEnd()
     if report and str { s.strReceiver() }
     if report and s.tailSp.Start >= I32(0) and s.dtorAt.Start >= I32(0) {
         rec := s.err(s.tailSp, msgs.BecomeDestructor("an instance is built in one of them"))
@@ -1647,6 +1700,7 @@ fn (s mut Scoper&) run() {
             if copied { s.copied.Put(I64(l), true) }
         }
     }
+    s.verEntry()
     s.blocks.Push(typed.BlockId(0))
     s.stmts(b!.Root!.Stmts)
     s.landHeld()
@@ -1880,6 +1934,23 @@ fn (s mut Scoper&) staticLiteral(x typed.Expr&) Bool {
     ty := x.ty
     if s.P.T.KindOf(ty) != types.Kind.Ref or (s.P.T.PermOf(ty) & types.Writable) != 0 { return false }
     return match x.pr.X {
+        case typed.Expr.Make(_, _, m): m.Kind == typed.MakeKind.Array and m.Items.Every(fn(it): return it == typed.Expr.Data)
+        case _: false
+    }
+}
+
+# whether a place is an array literal of constant data (T25d): a temporary of one, or what one promoted to a read-only
+# reference names
+fn (s mut Scoper&) constLiteral(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Temp(_, _, v, _): constItems(s.unAway(v))
+        case typed.Lvalue.Deref(_, _, r): s.staticLiteral(s.unAway(r))
+        case _: false
+    }
+}
+
+fn constItems(x typed.Expr&) Bool {
+    return match x {
         case typed.Expr.Make(_, _, m): m.Kind == typed.MakeKind.Array and m.Items.Every(fn(it): return it == typed.Expr.Data)
         case _: false
     }
@@ -3061,6 +3132,7 @@ fn (s mut Scoper&) computeKeeps(b typed.Body&) {
     for _ in range b.Locals.Len() { s.aliasOf.Push(-1) }
     s.aliasBlock(b.Root)
     s.regionLocals(b)
+    s.cursorRegions()
     s.kwBlock(b.Root)
     s.sums[s.Id].Keeps.Clear()
     s.sums[s.Id].Stores.Clear()
@@ -3100,6 +3172,7 @@ fn (s mut Scoper&) regionKind(l I64) Bool {
 fn (s mut Scoper&) regionOf(p typed.Lvalue&) I64 {
     if not flThroughRef(p) { return -1 }
     r := s.regionParam(flRoot(p))
+    if r >= 0 and s.cursorRegs(r).Len() > 1 { return r }
     if r < 0 or not s.regionKind(r) or not s.isRef(s.B!.Locals[r].Ty) { return -1 }
     return r
 }
@@ -3135,9 +3208,99 @@ fn (s mut Scoper&) derivedRead(x typed.Expr&) Bool {
 # l holds only reads of a region into ("s := l.s; s.tail[i] = x" stores into l's region, O17); else l
 fn (s mut Scoper&) regionParam(l I64) I64 {
     if l < 0 { return l }
-    if l < s.aliasOf.Len() and s.aliasOf[l] >= 0 { return s.aliasOf[l] }
-    if l < s.regionOnly.Len() and s.regionOnly[l] >= 0 and s.isRef(s.B!.Locals[l].Ty) { return s.regionOnly[l] }
-    return l
+    if l < s.aliasOf.Len() and s.aliasOf[l] >= 0 {
+        l = s.aliasOf[l]
+        if not s.isCursorLocal(l) { return l }
+    } else if l < s.regionOnly.Len() and s.regionOnly[l] >= 0 and s.isRef(s.B!.Locals[l].Ty) {
+        return s.regionOnly[l]
+    }
+    # NLL (decision 8): a cursor whose versions name one region is a second name for it; several, a store or a keep
+    # through it is one into each (storeParam, keepParam fan out)
+    rs := s.cursorRegs(l)
+    return rs[0] if rs.Len() == 1 else l
+}
+
+# the regions cursor l's versions name (curRegions), none for any other local
+fn (s mut Scoper&) cursorRegs(l I64) Vec<I64> {
+    if not s.isCursorLocal(l) { return Vec<I64>() }
+    return try s.curRegions.Get(l) catch default Vec<I64>()
+}
+
+# NLL (O17, decision 8): by cursor, the reference parameters whose regions any of its versions' values name - its entry's
+# own, what a version reads (a parameter, a second name for one, a reference read out of one, another cursor's), to a
+# fixed point over cursors given each other
+fn (s mut Scoper&) cursorRegions() {
+    s.curRegions.Clear()
+    if s.vers is null { return }
+    v := s.vers!
+    for _ in range v.DefLocal.Len() + 1 {
+        grew := false
+        for d in range v.DefLocal.Len() {
+            l := v.DefLocal[d]
+            rs Vec<I64>
+            x := v.DefValue[d]
+            if x is null {
+                if s.regionKind(l) and s.isRef(s.B!.Locals[l].Ty) { rs.Push(l) }
+            } else {
+                s.valueRegions(x, rs)
+            }
+            cur := try s.curRegions.Get(l) catch default Vec<I64>()
+            for r in rs {
+                if cur.Has(r) { continue }
+                cur.Push(r)
+                grew = true
+            }
+            s.curRegions.Put(l, cur)
+        }
+        if not grew { break }
+    }
+}
+
+# the regions value x names, into out: a local read whole (its own region, a second name's, a cursor's), a reference read
+# out of one, a borrow into one, a conditional's or a try's values, a result borrowed from an argument
+fn (s mut Scoper&) valueRegions(x typed.Expr?&, out mut Vec<I64>&) {
+    if x is null { return }
+    match x {
+        case typed.Expr.Read(_, _, p, _) {
+            if p == typed.Lvalue.Local { s.localRegions(I64(p.id), out) } else if flThroughRef(p) { s.localRegions(flRoot(p), out) }
+        }
+        case typed.Expr.Borrow(_, _, bp) { s.localRegions(regionRoot(bp), out) }
+        case typed.Expr.Away(_, _, y) { s.valueRegions(y, out) }
+        case typed.Expr.Cond(_, _, c) {
+            s.valueRegions(c.A, out)
+            s.valueRegions(c.B, out)
+        }
+        case typed.Expr.Seq(_, _, q) { s.valueRegions(q.X, out) }
+        case typed.Expr.Try(_, _, t) {
+            s.valueRegions(t.X, out)
+            for c in t.Clauses {
+                for df in c.Defaults { s.valueRegions(df, out) }
+            }
+        }
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if typed.PassesRefs(op) and args.Len() > 0 { s.valueRegions(args[0], out) }
+        }
+        case typed.Expr.Call(_, _, c) {
+            fty := s.calleeType(c)
+            if fty == types.UnknownT { return }
+            e := s.P.T.ResultFrom(fty, 0)
+            if e >= 0 and e < c.Args.Len() { s.valueRegions(c.Args[e], out) }
+        }
+        case _ { }
+    }
+}
+
+fn (s mut Scoper&) localRegions(l I64, out mut Vec<I64>&) {
+    if l < 0 or l >= s.aliasOf.Len() { return }
+    if s.aliasOf[l] >= 0 { l = s.aliasOf[l] }
+    if s.isCursorLocal(l) {
+        for r in s.cursorRegs(l) {
+            if not out.Has(r) { out.Push(r) }
+        }
+        return
+    }
+    r := s.regionOnly[l] if l < s.regionOnly.Len() and s.regionOnly[l] >= 0 and s.isRef(s.B!.Locals[l].Ty) else l
+    if s.regionKind(r) and s.isRef(s.B!.Locals[r].Ty) and not out.Has(r) { out.Push(r) }
 }
 
 # the reference locals declared as second names for a reference parameter (a for-in's hidden cursor): "c := p" - or
@@ -3162,9 +3325,12 @@ fn (s mut Scoper&) aliasBlock(bl typed.Block?&) {
                 p := s.letRegion(l, x)
                 # a constructor's field is the instance's slot, never a second name: what it holds, the instance keeps
                 field := s.B!.Locals[I64(l)].Kind == typed.LocalKind.Field
-                if p >= 0 and not field and s.isRef(s.B!.Locals[I64(l)].Ty) and s.isRef(s.B!.Locals[p].Ty) {
+                # (a cursor is no second name of one region: its versions say which it names, curRegions; a local declared
+                # from one is a second name of the cursor)
+                cur := s.isCursorLocal(I64(l))
+                if p >= 0 and not field and not cur and s.isRef(s.B!.Locals[I64(l)].Ty) and s.isRef(s.B!.Locals[p].Ty) {
                     if s.aliasOf[p] >= 0 { p = s.aliasOf[p] }
-                    if s.regionKind(p) { s.aliasOf[I64(l)] = p }
+                    if s.regionKind(p) or s.isCursorLocal(p) { s.aliasOf[I64(l)] = p }
                 }
             }
             case typed.Stmt.If(_, i) {
@@ -3355,6 +3521,16 @@ fn (s mut Scoper&) rlExpr(x typed.Expr?&, pass I64) {
 
 fn (s mut Scoper&) keepParam(id I64) {
     if id >= 0 and id < s.aliasOf.Len() and s.aliasOf[id] >= 0 { id = s.aliasOf[id] }
+    # a cursor: each region its versions name (decision 8)
+    rs := s.cursorRegs(id)
+    if rs.Len() > 0 {
+        for r in rs { s.keepOne(r) }
+        return
+    }
+    s.keepOne(id)
+}
+
+fn (s mut Scoper&) keepOne(id I64) {
     if id >= 0 and id < s.kept.Len() and s.regionKind(id) and s.isRef(s.B!.Locals[id].Ty) {
         s.kept[id] = true
     }
@@ -3364,6 +3540,16 @@ fn (s mut Scoper&) keepParam(id I64) {
 # when it is a store itself
 fn (s mut Scoper&) storeParam(id I64, put Bool) {
     id = s.regionParam(id)
+    # a cursor naming several regions: a store into each (decision 8)
+    rs := s.cursorRegs(id)
+    if rs.Len() > 1 {
+        for r in rs { s.storeOne(r, put) }
+        return
+    }
+    s.storeOne(id, put)
+}
+
+fn (s mut Scoper&) storeOne(id I64, put Bool) {
     if id >= 0 and id < s.kept.Len() and s.regionKind(id) and s.isRef(s.B!.Locals[id].Ty) {
         s.kept[id] = true
         s.keptStore[id] = true
@@ -3397,9 +3583,12 @@ fn (s mut Scoper&) kwStmt(st typed.Stmt?&) {
                 if ux == typed.Expr.Borrow: s.kwPlace(ux.p)
                 return
             }
+            # a cursor's version naming a local: what is done with the cursor is done with what it names (decision 8)
+            if s.isCursorLocal(I64(l)) and localRead(s.unAway(x)) >= 0 { return }
             s.kwExpr(x, false)
         }
         case typed.Stmt.Assign(_, p, x) {
+            if s.isCursorLocal(wholeLocal(p)) and localRead(s.unAway(x)) >= 0 { return }
             s.kwPlace(p)
             s.kwExpr(x, false)
             # a reference, or a value holding one, stored into a parameter's region that it did not read out of there
@@ -4458,6 +4647,7 @@ fn (s mut Scoper&) stmt(st typed.Stmt?&) {
     if st is null { return }
     saved := s.stmtSp
     s.stmtSp = st.Span()
+    s.verEnter(st)
     match st {
         case typed.Stmt.Let(sp, l, x) { s.let(sp, l, x) }
         case typed.Stmt.Assign(sp, p, x) { s.assign(sp, p, x) }
@@ -4506,6 +4696,7 @@ fn (s mut Scoper&) stmt(st typed.Stmt?&) {
             }
         }
     }
+    s.verLeave(st)
     s.stmtSp = saved
 }
 
@@ -4523,6 +4714,10 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
     moved := s.moveTo
     land := s.landOK
     part := s.landPart
+    if s.vers is not null {
+        s.letKey.Put(I64(l), I64(sp.Start))
+        if s.isCursorLocal(I64(l)) { s.curMoved.Put(I64(l), moved) }
+    }
     s.moveTo = Term.None
     s.landOK = false
     s.landPart = false
@@ -5065,8 +5260,458 @@ fn (s mut Scoper&) blockTerm(bl typed.BlockId) Term {
     return Term.Block(b)
 }
 
+# ---- NLL: reference locals by version (O25i, docs/sec8.md 3) ----
+
+# whether local l of the body being judged is a cursor (typed.Versions)
+fn (s mut Scoper&) isCursorLocal(l I64) Bool {
+    if s.vers is null or l < 0 or l >= s.vers!.Cursor.Len() { return false }
+    return s.vers!.Cursor[l]
+}
+
+# the cursors of body b and their definitions, found once a body: null where it has none - candidates the reference or
+# function-valued locals and parameters its body assigns whole (walkBody)
+fn (s mut Scoper&) versionsOf(b I64) typed.Versions?& {
+    if s.versNone.Has(b) { return null }
+    if s.versOf.Has(b) {
+        known := try s.versOf.Get(b) catch { return null }
+        return known
+    }
+    body := s.Bodies[b]
+    cand := Array<Bool>(body.Locals.Len(), false)
+    any := false
+    for k in range s.assignedFrom[b], s.assignedFrom[b + 1] {
+        l := s.assignedTo[k]
+        if l < 0 or l >= body.Locals.Len() { continue }
+        loc := body.Locals[l]
+        if loc.Kind != typed.LocalKind.Var and loc.Kind != typed.LocalKind.Param { continue }
+        if not s.isRef(loc.Ty) and not s.isFunc(loc.Ty) { continue }
+        cand[l] = true
+        any = true
+    }
+    vs := typed.NewVersions(body, cand) if any else null
+    if vs is null {
+        s.versNone.Put(b, true)
+        return null
+    }
+    s.versOf.Put(b, vs)
+    return vs
+}
+
+# body b's judging begun: its cursors found, no definition judged, no read late
+fn (s mut Scoper&) verStart(b I64) {
+    s.vers = s.versionsOf(b)
+    s.curList.Clear()
+    s.keys.Clear()
+    s.defNow.Clear()
+    s.defSeen.Clear()
+    s.lateDef.Clear()
+    s.lateFrom.Clear()
+    s.lateTo.Clear()
+    s.lateAtoms.Clear()
+    s.underIntern.Clear()
+    s.cursorSets.Clear()
+    s.curMoved.Clear()
+    s.letKey.Clear()
+    s.validSaid.Clear()
+    s.verGrew = false
+    s.reachCtx = -1
+    s.propDepth = 0
+    if s.vers is null { return }
+    v := s.vers!
+    for l in range v.Cursor.Len() {
+        if v.Cursor[l] { s.curList.Push(l) }
+    }
+    for _ in range v.DefLocal.Len() {
+        s.defNow.Push(Term.None)
+        s.defSeen.Push(false)
+    }
+}
+
+# a cursor parameter's entry: its version 0, the term its scope variable gives it
+fn (s mut Scoper&) verEntry() {
+    if s.vers is null { return }
+    v := s.vers!
+    for d in range v.DefLocal.Len() {
+        if v.DefSp[d].Start < I32(0) { s.verDefine(d, s.terms[v.DefLocal[d]]) }
+    }
+}
+
+# a statement entered: each cursor's term the versions reaching it (3.3)
+fn (s mut Scoper&) verEnter(st typed.Stmt&) {
+    if s.vers is null { return }
+    key := I64(st.Span().Start)
+    s.keys.Push(key)
+    s.cursorTerms(key)
+}
+
+# a statement left: a cursor's declaration gives its version its term (3.3); the statement around it has its terms again
+fn (s mut Scoper&) verLeave(st typed.Stmt&) {
+    if s.vers is null { return }
+    match st {
+        case typed.Stmt.Let(sp, l, x) {
+            # (a null given gives none - not the block the local is declared in, which no storage of it lives in)
+            if s.isCursorLocal(I64(l)) {
+                t := Term.None if s.nullLit(x) else s.terms[I64(l)]
+                s.verDefine(s.vers!.DefOf(I64(sp.Start), I64(l)), t)
+            }
+        }
+        case _ { }
+    }
+    s.verPop()
+}
+
+fn (s mut Scoper&) verPop() {
+    s.keys.Pop()!
+    if s.keys.Len() > 0 { s.cursorTerms(s.keys[s.keys.Len() - 1]) }
+}
+
+# x the literal null (a literal of a type holding references)
+fn (s mut Scoper&) nullLit(x typed.Expr?&) Bool {
+    if x is null { return false }
+    return match x {
+        case typed.Expr.Lit(_, ty, _): s.holds(ty)
+        case _: false
+    }
+}
+
+# each cursor's term at the statement starting at key: the terms of the definitions reaching it - one where they agree,
+# a set not known here where they differ (O12); a null given gives none
+fn (s mut Scoper&) cursorTerms(key I64) {
+    v := s.vers!
+    for l in s.curList {
+        xs Vec<Term>
+        for d in v.Reaching(key, l) {
+            dt := s.defTermAt(d)
+            if dt != Term.None { s.addToSet(xs, dt) }
+        }
+        t := s.termOf(xs)
+        s.terms[l] = t
+        match t {
+            case Term.Set(id) { s.cursorSets.Put(id, l) }
+            case _ { }
+        }
+    }
+}
+
+# the term definition d gives: this judging's where it is judged, else the last judging's (3.3) - none in the first
+fn (s mut Scoper&) defTermAt(d I64) Term {
+    if s.defSeen[d] { return s.defNow[d] }
+    got := try s.defTerms.Get(pair.Pair<I64, I64>(s.Id, d)) catch { return Term.None }
+    return s.fromAtoms(got)
+}
+
+# definition d judged, giving term t (a statement judged twice gives both)
+fn (s mut Scoper&) verDefine(d I64, t Term) {
+    if d < 0 or d >= s.defNow.Len() { return }
+    if s.defSeen[d] and s.defNow[d] != t {
+        xs Vec<Term>
+        if s.defNow[d] != Term.None { s.addToSet(xs, s.defNow[d]) }
+        if t != Term.None { s.addToSet(xs, t) }
+        t = s.termOf(xs)
+    }
+    s.defNow[d] = t
+    s.defSeen[d] = true
+}
+
+# terms xs as one: none, the one, or a set not known here
+fn (s mut Scoper&) termOf(xs Vec<Term>&) Term {
+    if xs.Len() == 0 { return Term.None }
+    if xs.Len() == 1 { return xs[0] }
+    s.setFrom.Push(s.setTerms.Len())
+    for t in xs { s.setTerms.Push(t) }
+    return Term.Set(s.setFrom.Len() - 1)
+}
+
+# a judging's end (3.3): each read that took a definition not judged yet held to what it came to - the body judged again
+# where it came to more - and each definition's term kept for the body's next judging
+fn (s mut Scoper&) verEnd() {
+    if s.vers is null { return }
+    for i in range s.lateDef.Len() {
+        d := s.lateDef[i]
+        if not s.defSeen[d] { continue }
+        now Vec<verAtom>
+        s.toAtoms(s.defNow[d], now)
+        for a in now {
+            if not s.atomIn(a, s.lateFrom[i], s.lateTo[i]) { s.verGrew = true }
+        }
+    }
+    union := s.verUnion.Has(s.Id)
+    for d in range s.defNow.Len() {
+        if not s.defSeen[d] { continue }
+        key := pair.Pair<I64, I64>(s.Id, d)
+        kept Vec<verAtom>
+        if union {
+            prior := try s.defTerms.Get(key) catch default Vec<verAtom>()
+            for a in prior { addAtom(kept, a) }
+        }
+        s.toAtoms(s.defNow[d], kept)
+        s.defTerms.Put(key, kept)
+    }
+    if not s.verGrew { return }
+    s.liftGrew = true
+    # the judging that reports reads what the quiet ones settled: a definition coming to more there would leave a read
+    # judged with too little, so the build stops rather than trust it
+    if s.report and not s.liftGather { s.gapAt(s.B!.Sp, "a reference local whose versions did not settle (O25i)") }
+}
+
+fn (s mut Scoper&) atomIn(a verAtom, from I64, to I64) Bool {
+    for i in range from, to {
+        if s.lateAtoms[i] == a { return true }
+    }
+    return false
+}
+
+fn addAtom(out mut Vec<verAtom>&, a verAtom) {
+    if not out.Has(a) { out.Push(a) }
+}
+
+# term t as kept between judgings (verAtom): a set as its members, an underestimate by the term it stands above - one
+# standing above another by what that one stands above, so a cursor walking a chain (at = at.parent) settles
+fn (s mut Scoper&) toAtoms(t Term, out mut Vec<verAtom>&) {
+    match t {
+        case Term.None { }
+        case Term.Set(id) {
+            for k in range s.setFrom[id], s.setEnd(id) { s.toAtoms(s.setTerms[k], out) }
+        }
+        case Term.Block(b) { addAtom(out, verAtom(1, I64(b), 0, 0, 0, 0, false, -1)) }
+        case Term.Var(i) { addAtom(out, verAtom(2, i, 0, 0, 0, 0, false, -1)) }
+        case Term.Program { addAtom(out, verAtom(3, 0, 0, 0, 0, 0, false, -1)) }
+        case Term.Untraced { addAtom(out, verAtom(5, 0, 0, 0, 0, 0, false, -1)) }
+        case Term.Derived(p, w) {
+            if p >= 0 {
+                addAtom(out, verAtom(4, p, w, 0, 0, 0, false, -1))
+                return
+            }
+            k := -p - 1
+            if k >= s.under.Len() {
+                addAtom(out, verAtom(5, 0, 0, 0, 0, 0, false, -1))
+                return
+            }
+            base Vec<verAtom>
+            s.toAtoms(s.under[k], base)
+            if base.Len() == 0 { base.Push(verAtom(5, 0, 0, 0, 0, 0, false, -1)) }
+            for b in base {
+                if b.K == 6 {
+                    addAtom(out, verAtom(6, 0, w, b.BK, b.BA, b.BW, s.underElem[k], s.underDecl[k]))
+                } else {
+                    addAtom(out, verAtom(6, 0, w, b.K, b.A, b.W, s.underElem[k], s.underDecl[k]))
+                }
+            }
+        }
+    }
+}
+
+# kept atoms as a term of this judging: an underestimate made once a judging for each (underIntern)
+fn (s mut Scoper&) fromAtoms(kept Vec<verAtom>&) Term {
+    xs Vec<Term>
+    for a in kept { s.addToSet(xs, s.atomTerm(a)) }
+    return s.termOf(xs)
+}
+
+fn (s mut Scoper&) atomTerm(a verAtom) Term {
+    return match a.K {
+        case 1: Term.Block(typed.BlockId(I32(a.A)))
+        case 2: Term.Var(a.A)
+        case 3: Term.Program
+        case 4: Term.Derived(a.A, a.W)
+        case 6: s.underOf(a)
+        case _: Term.Untraced
+    }
+}
+
+fn (s mut Scoper&) underOf(a verAtom) Term {
+    known := try s.underIntern.Get(a) catch default 0
+    if known < 0 { return Term.Derived(known, a.W) }
+    base := s.atomTerm(verAtom(a.BK, a.BA, a.BW, 0, 0, 0, false, -1))
+    s.under.Push(base)
+    s.underElem.Push(a.Elem)
+    s.underDecl.Push(a.Decl)
+    p := -s.under.Len()
+    s.underIntern.Put(a, p)
+    return Term.Derived(p, a.W)
+}
+
+# a read of cursor l (x): each version reaching it, but its declaration's, valid where the read stands - where it lives
+# open there (O25i item 1), else proposed where the read and the assignment meet; a version not judged yet in this
+# judging held to the set the read is judged with (verEnd)
+fn (s mut Scoper&) readCursor(l I64, x typed.Expr&) {
+    v := s.vers!
+    ds := s.reachFor(l, -1)
+    at := s.blocks[s.blocks.Len() - 1]
+    key := s.keys[s.keys.Len() - 1] if s.keys.Len() > 0 else -1
+    from := -1
+    for d in ds {
+        if not s.defSeen[d] {
+            if from < 0 {
+                got Vec<verAtom>
+                s.toAtoms(s.terms[l], got)
+                from = s.lateAtoms.Len()
+                for a in got { s.lateAtoms.Push(a) }
+            }
+            s.lateDef.Push(d)
+            s.lateFrom.Push(from)
+            s.lateTo.Push(s.lateAtoms.Len())
+        }
+        if v.DefFirst[d] { continue }
+        meet := s.lcaBlock(at, v.DefIn[d])
+        # (reached through a loop's next turn, it lives where that loop stands at least: the turn it was given in has
+        # left the loop's blocks)
+        far := v.Across(key, d) if v.Named(key) else s.outermostLoop()
+        if far >= typed.BlockId(0) { meet = s.lcaBlock(meet, s.B!.Blocks[I64(far)].Parent) }
+        if s.openAt(s.defTermAt(d), meet) { continue }
+        # (a refusal the field inference reads, as a fit's: a field read out of what the version names given a binding)
+        dv := v.DefValue[d]
+        if dv is not null { s.wantPromotion(dv) }
+        if s.liftGather {
+            s.propDepth++
+            if s.propDepth == 1 { s.propSeen.Clear() }
+            s.proposeDef(d, s.blockTerm(meet))
+            s.propDepth--
+        }
+        if s.report and not s.validSaid.Has(d) {
+            s.validSaid.Put(d, true)
+            name := s.P.L.Names.Text(s.B!.Locals[l].Name)
+            rec := s.err(x.Span(), msgs.ReadAfterScope(name))
+            s.note(rec, s.B!.File, v.DefSp[d], msgs.NoteAssignedHere(name))
+        }
+    }
+}
+
+# the body of the outermost loop the block being judged stands in, -1 for none
+fn (s mut Scoper&) outermostLoop() typed.BlockId {
+    for b in s.blocks {
+        k := s.B!.Blocks[I64(b)].Kind
+        if k == typed.BlockKind.Loop or k == typed.BlockKind.Collect { return b }
+    }
+    return typed.BlockId(-1)
+}
+
+# the innermost block enclosing blocks a and b
+fn (s mut Scoper&) lcaBlock(a typed.BlockId, b typed.BlockId) typed.BlockId {
+    x := a
+    for x >= typed.BlockId(0) {
+        if s.B!.Encloses(x, b) { return x }
+        x = s.B!.Blocks[I64(x)].Parent
+    }
+    return typed.BlockId(0)
+}
+
+# whether what lives at term t is alive in block b: a scope variable's, a derived scope's and the program's always, a
+# block's where it encloses b, an underestimate's where what it stands above is, a set's where each member's is
+fn (s mut Scoper&) openAt(t Term, b typed.BlockId) Bool {
+    return match t {
+        case Term.None, Term.Var(_), Term.Program: true
+        case Term.Block(bb): s.B!.Encloses(bb, b)
+        case Term.Derived(p, _): p >= 0 or s.openAt(s.floorOf(t), b)
+        case Term.Set(id): s.setOpenAt(id, b)
+        case Term.Untraced: false
+    }
+}
+
+fn (s mut Scoper&) setOpenAt(id I64, b typed.BlockId) Bool {
+    for k in range s.setFrom[id], s.setEnd(id) {
+        if not s.openAt(s.setTerms[k], b) { return false }
+    }
+    return true
+}
+
+# the definitions of cursor l reaching where its value is read: the statement starting at key, else the one the value
+# proposed through stands in (reachCtx), else the one judged; every definition of l outside any statement
+fn (s mut Scoper&) reachFor(l I64, key I64) Vec<I64> {
+    k := key
+    if k < 0 { k = s.reachCtx }
+    if k < 0 and s.keys.Len() > 0 { k = s.keys[s.keys.Len() - 1] }
+    return s.vers!.Reaching(k, l)
+}
+
+# a lift proposed for cursor l, read at the statement starting at key (-1: the one judged, 3.5): through each version
+# reaching that read - its declaration's value as a local's claim is lifted, an assignment's value proposed where it is
+# made (proposeDef), a parameter's entry nothing (its storage is its caller's: an obligation)
+fn (s mut Scoper&) proposeCursor(l I64, t Term, stor Bool, key I64) {
+    v := s.vers!
+    for d in s.reachFor(l, key) {
+        if v.DefSp[d].Start < I32(0) or s.propSeen.Has(d) { continue }
+        s.propSeen.Put(d, true)
+        if v.DefFirst[d] {
+            s.proposeFrom(l, t, stor, -1, true)
+        } else {
+            s.proposeDef(d, t)
+        }
+    }
+}
+
+# a lift proposed for an assignment's version (3.5): its temporary built where its reads need it (defLifts - at least
+# the local's block), what already lives somewhere proposed as the value it is, read where the assignment stands
+fn (s mut Scoper&) proposeDef(d I64, t Term) {
+    if not t.Runs() or s.genResult(t) { return }
+    v := s.vers!
+    x := v.DefValue[d]
+    if x is null { return }
+    if s.claimRoot(x) < 0 {
+        key := pair.Pair<I64, I64>(s.Id, d)
+        cur := try s.defLifts.Get(key) catch default Term.None
+        nt := s.joinTerm(cur, t) if cur.Runs() else t
+        if nt != cur {
+            s.defLifts.Put(key, nt)
+            s.liftGrew = true
+            s.realGrew = true
+            if s.Trace { s.TraceLog.Push($"lift version " $d " to " $nt " | " $s.traceAt(v.DefSp[d].Start)) }
+        }
+    }
+    saved := s.reachCtx
+    s.reachCtx = I64(v.DefSp[d].Start)
+    s.propose(x, t)
+    s.reachCtx = saved
+}
+
+# an assignment to cursor l (S4, O25b): a new version, the value's exact scope - nothing required of the assignment
+# itself, its temporary built in the local's block (where O26a moved it, the result scope) or where its reads need it
+# (3.5); a null given gives none
+fn (s mut Scoper&) cursorAssign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
+    l := wholeLocal(p)
+    d := s.vers!.DefOf(I64(sp.Start), l)
+    loc := s.B!.Locals[l]
+    dest := try s.curMoved.Get(l) catch default Term.None
+    if dest == Term.None { dest = s.blockTerm(loc.In) }
+    dl := try s.defLifts.Get(pair.Pair<I64, I64>(s.Id, d)) catch default Term.None
+    if dl.Runs() { dest = s.joinTerm(dest, dl) }
+    s.targets.Push(p)
+    if s.isRef(loc.Ty) { s.splitBorrow(x) }
+    savedLand, savedLandSp := s.landSite, s.landSp
+    ac := typed.CallOf(x)
+    if ac is not null { s.landSite, s.landSp = I64(ac.Site), s.eqAfter(p.Span()) }
+    got := s.val(x, dest)
+    s.landSite, s.landSp = savedLand, savedLandSp
+    s.noteLate(l, x)
+    t := Term.None if got.K == ValKind.Null else s.valTerm(got, dest)
+    s.verDefine(d, t)
+    s.terms[l] = t
+    try s.targets.Pop() catch { }
+}
+
+# O12 at a store through a cursor whose versions live in different scopes (O25i item 2): the error names it and, in
+# notes, the assignments reaching the store - true where the slot is such a cursor's (set id)
+fn (s mut Scoper&) versionsDiffer(sp source.Span, id I64) Bool {
+    l := try s.cursorSets.Get(id) catch default -1
+    if l < 0 { return false }
+    v := s.vers!
+    name := s.P.L.Names.Text(s.B!.Locals[l].Name)
+    rec := s.err(sp, msgs.VersionsDiffer(name))
+    said := 0
+    for d in s.reachFor(l, -1) {
+        if v.DefSp[d].Start < I32(0) or said == 4 { continue }
+        s.note(rec, s.B!.File, v.DefSp[d], msgs.NoteAssignedHere(name))
+        said++
+    }
+    return true
+}
+
 # a store (S4, O25b, O25c, O20): the slot's term from the target place, the value judged against it
 fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
+    if s.isCursorLocal(wholeLocal(p)) {
+        s.cursorAssign(sp, p, x)
+        return
+    }
     t := p.Type()
     s.targets.Push(p)
     s.placeOperands(p)
@@ -5198,8 +5843,8 @@ fn (s mut Scoper&) freshIntoUnknown(sp source.Span, p typed.Lvalue&, slot Term) 
             if s.report { s.err(s.eqAfter(p.Span()), msgs.BuildThroughUnknownScope()) }
             return
         }
-        case Term.Set(_) {
-            if s.report { s.err(s.eqAfter(p.Span()), msgs.StoreIntoUnknownScope()) }
+        case Term.Set(id) {
+            if s.report and not s.versionsDiffer(s.eqAfter(p.Span()), id) { s.err(s.eqAfter(p.Span()), msgs.StoreIntoUnknownScope()) }
             return
         }
         case _ { }
@@ -6064,8 +6709,10 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             return plain()
         }
         case typed.Expr.Data(_, _, _, _) { return Val(ValKind.Static, Term.Program) }
-        case typed.Expr.Read(_, ty, p, _) { return s.read(p, ty, dest) }
-        case typed.Expr.Take(_, ty, p) { return s.read(p, ty, dest) }
+        case typed.Expr.Read(_, ty, p, _), typed.Expr.Take(_, ty, p) {
+            if p == typed.Lvalue.Local and s.isCursorLocal(I64(p.id)) { s.readCursor(I64(p.id), x) }
+            return s.read(p, ty, dest)
+        }
         case typed.Expr.Borrow(_, _, p) {
             s.placeOperands(p)
             return existing(s.storOf(p))
@@ -6413,6 +7060,12 @@ fn (s mut Scoper&) readPart(p typed.Lvalue&, ty types.TypeId, dest Term) Val {
             }
         }
         case _ { }
+    }
+    # T25d: an element of an array literal of constant data, read by an index, is that data - in the program's scope,
+    # whatever the literal's own storage is (an element kept builds no array for it)
+    if p == typed.Lvalue.Elem and s.holds(ty) and s.constLiteral(p.e.Base) {
+        s.placeOperands(p)
+        return Val(ValKind.Static, Term.Program)
     }
     s.placeOperands(p)
     match p {
@@ -8345,7 +8998,7 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
     }
     if s.liftGather and k == Holds and exact and t != slot and s.order(slot, t) == FailsBlock {
         s.partFlow = s.fitPart
-        s.proposeLocal(s.fitTarget, t, s.fitStor)
+        if s.isCursorLocal(s.fitTarget) { s.liftLocal(s.fitTarget, t, s.fitStor) } else { s.proposeLocal(s.fitTarget, t, s.fitStor) }
         s.partFlow = false
     }
     if k == Holds and exact and t != slot {
@@ -8442,6 +9095,9 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
         }
         case _ { }
     }
+    # O25i: a store exactly where a cursor's referent lives, its versions living in different scopes
+    fs := s.fitSlot
+    if exact and fs == Term.Set and s.versionsDiffer(s.fitSp if s.fitAt else s.opTok(x), fs.id) { return }
     if kind == FitField and exact and s.why == 0 and not (s.taskTemp and s.fitSlot == s.taskSlot) {
         # a reference stored where something can be stored through it lives exactly where its slot's references do
         # (O25) - a value local of this function's own, named, where it is what closes first
@@ -8678,19 +9334,34 @@ fn (s mut Scoper&) viewKept(x typed.Expr&, sp source.Span, returned Bool) Bool {
 
 # a lift proposed for the local value x is the whole of: its claim lengthened to outlive t
 fn (s mut Scoper&) propose(x typed.Expr&, t Term) {
+    s.propDepth++
+    if s.propDepth == 1 { s.propSeen.Clear() }
+    s.proposeIn(x, t)
+    s.propDepth--
+}
+
+fn (s mut Scoper&) proposeIn(x typed.Expr&, t Term) {
     u := unPassed(s.unAway(x))
     match u {
         # each value a conditional or a match can give, lifted as though stored alone (E28)
         case typed.Expr.Cond(_, _, cd) {
-            if cd.A is not null { s.propose(cd.A!, t) }
-            s.propose(cd.B, t)
+            if cd.A is not null { s.proposeIn(cd.A!, t) }
+            s.proposeIn(cd.B, t)
             return
         }
         case typed.Expr.Match(_, _, m) {
             for a in m.Arms {
-                if a.Value is not null { s.propose(a.Value!, t) }
+                if a.Value is not null { s.proposeIn(a.Value!, t) }
             }
-            if m.NoMatch is not null and m.NoMatch!.Value is not null { s.propose(m.NoMatch!.Value!, t) }
+            if m.NoMatch is not null and m.NoMatch!.Value is not null { s.proposeIn(m.NoMatch!.Value!, t) }
+            return
+        }
+        # (and a try's value and each default its clauses give: NLL's r9adefaultinner, an inner local a default)
+        case typed.Expr.Try(_, _, tr) {
+            if tr.X is not null and s.isFresh(tr.X) { s.proposeCall(u, t) } else if tr.X is not null { s.proposeIn(tr.X!, t) }
+            for c in tr.Clauses {
+                for df in c.Defaults { s.proposeIn(df, t) }
+            }
             return
         }
         case typed.Expr.Promote(_, _, pr) {
@@ -8770,6 +9441,7 @@ fn (s mut Scoper&) proposeSite(site I64, t Term) {
     if nt == cur { return }
     s.siteLifts.Put(key, nt)
     s.liftGrew = true
+    s.realGrew = true
     if s.Trace { s.TraceLog.Push($"lift site " $site " to " $nt " | " $s.traceAt(s.B!.Sites[site].Sp.Start)) }
 }
 
@@ -8781,8 +9453,25 @@ fn (s mut Scoper&) siteLift(site I64) Term {
 # a lift proposed for local l - for the local its claim was taken from, where ":=" took it - to outlive t, its storage
 # with it where stor (a value local kept whole: built where it is kept, item 17)
 fn (s mut Scoper&) proposeLocal(l I64, t Term, stor Bool) {
-    for _ in range s.origin.Len() {
-        if l < 0 or l >= s.origin.Len() or s.origin[l] < 0 { break }
+    s.propDepth++
+    if s.propDepth == 1 { s.propSeen.Clear() }
+    s.proposeFrom(l, t, stor, -1, false)
+    s.propDepth--
+}
+
+# ... a cursor met along the claims followed lifted through the versions reaching its read (3.5): read at the statement
+# starting at key, the declaration of the local whose claim was taken from it; first: l's own declaration's value
+# proposed (its version 0), not what reaches its read
+fn (s mut Scoper&) proposeFrom(l I64, t Term, stor Bool, key I64, first Bool) {
+    for _ in range s.origin.Len() + 1 {
+        if l < 0 or l >= s.origin.Len() { break }
+        if not first and s.isCursorLocal(l) {
+            s.proposeCursor(l, t, stor, key)
+            return
+        }
+        first = false
+        if s.origin[l] < 0 { break }
+        key = try s.letKey.Get(l) catch default -1
         l = s.origin[l]
     }
     # a held local's value is its temporary initializer's, built where its one use puts it: a call of it lifted - and so is
@@ -8845,6 +9534,7 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
     s.lifts.Put(key, nt)
     if s.partFlow { s.partLifts.Put(key, true) }
     s.liftGrew = true
+    s.realGrew = true
     if s.Trace {
         loc := s.B!.Locals[l]
         s.TraceLog.Push($"lift " $s.P.L.Names.Text(loc.Name) " to " $nt $(" with its storage" if stor else "") $(" for a part kept" if s.partFlow else "") " | " $s.traceAt(loc.Sp.Start))
@@ -8870,15 +9560,35 @@ fn (s mut Scoper&) liftAtCall(c typed.Call&, r rel, lo Term) {
     s.proposeSite(I64(c.Site), lo)
 }
 
-# body b's claims inferred (2.4): judged quietly, gathering lifts, until no claim grows
+# body b's claims inferred (2.4): judged quietly, gathering lifts, until no claim grows. Its cursors' definitions start
+# from nothing and again whenever a lift grew (NLL, docs/sec8.md 3.3): with the claims fixed their terms only grow, to
+# the least the reads they reach need. Judged again where a definition came to more than a read took; past eight such
+# judgings in a row its definitions' terms keep what they had, so the rounds end whatever the shape
 fn (s mut Scoper&) inferClaims(b I64) {
+    s.dropDefs(b)
+    again := 0
     for {
         s.liftGather = true
         s.liftGrew = false
+        s.realGrew = false
         s.judge(b, false)
         s.liftGather = false
         if not s.liftGrew { break }
+        if s.realGrew {
+            s.dropDefs(b)
+            again = 0
+            continue
+        }
+        again++
+        if again == 8 { s.verUnion.Put(b, true) }
     }
+}
+
+# body b's cursors' definitions' terms forgotten: its next judging starts from nothing
+fn (s mut Scoper&) dropDefs(b I64) {
+    mine Map<I64, Bool>
+    mine.Put(b, true)
+    dropKeyed<Vec<verAtom>>(s.defTerms, mine)
 }
 
 # where offset at is in the body being judged's file, for the trace: its line's number and text

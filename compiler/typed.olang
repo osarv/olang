@@ -3546,3 +3546,497 @@ fn (w mut Landings&) place(p Lvalue&) {
         case Lvalue.Global(_, _, _, _), Lvalue.Target(_, _) { }
     }
 }
+
+# ---- reference locals by version (NLL, O25i) ----
+
+# NLL (O25i, docs/sec8.md 3.2): which definitions of a body's cursors reach each statement. A cursor is a reference
+# local or parameter, or a local holding a function value, assigned whole after its declaration (Cand, the scope pass's
+# candidates) and never a task's target (P1g: a spawn assigns it where its task ends, which no path here says). A
+# definition is a cursor's declaration with a value, a parameter's entry, or a whole assignment of it. It reaches every
+# statement a path from it arrives at with no other definition of its cursor between: through branches, a loop into its
+# next turn and out of it, into a catch clause from anywhere in what its try covers - a may-analysis of Landings' shape.
+# Deferred code and a join's clauses run at a way out, after anything: every definition reaches them. A statement is
+# named by where it starts - two at one place take what reaches either - and one holding definitions of its own (in a
+# block, an arm or a clause inside it) reads with those too. A statement no path reaches is named by none, and the
+# scope pass takes every definition there, as for any statement this walk did not name. Each definition reaching a
+# statement says the outermost loop whose next turn it reached it through, if any (Across): a block that loop's turn
+# entered and left again holds nothing of the turn before, however its read stands in it
+type Versions struct(B Body&, Cand Array<Bool>&) {
+    B
+    Cand
+    Cursor mut Array<Bool>& = Array<Bool>(Cand.Len(), false) # by local: a cursor
+    DefLocal Vec<I64>          # by definition: its cursor
+    DefSp Vec<source.Span>     # ... its statement's span - (-1, -1) for a parameter's entry
+    DefIn Vec<BlockId>         # ... the block it stands in
+    DefValue Vec<Expr?&>       # ... the value it gives - null for a parameter's entry
+    DefFirst Vec<Bool>         # ... whether it is its cursor's declaration or entry (its version 0)
+    defKey Map<I64, I64>       # by statement start and cursor (defName): its definition
+    rowOf Map<I64, I64>        # by statement start: its row in reach
+    reach Vec<I64>             # the rows, one entry a definition: what reaches each named statement (on's values)
+    # the walk's state: by definition, -2 where it does not reach here, -1 where it does on paths crossing no loop's turn,
+    # else the outermost loop body whose turn ended on a path it reaches here by; and last, 1 where no path does
+    on Vec<I64>
+    gens Vec<I64>              # every definition the walk made, in order
+    blocks Vec<BlockId>        # the blocks open, innermost last
+    loopBody Vec<BlockId>      # the loops being walked, and what their breaks and continues leave (rows of on's shape)
+    brk Vec<I64>
+    cont Vec<I64>
+    counting Bool = true       # the first walk: the definitions numbered, the tasks' targets found
+}
+
+fn defName(start I64, l I64) I64 { return start * 1048576 + l }
+
+# the definitions of body b's cursors among candidates cand, and what reaches each statement: null where none is a cursor
+fn NewVersions(b Body&, cand Array<Bool>&) Versions?& {
+    if b.Root is null: return null
+    v mut Versions& = Versions(b, cand)
+    for l in range cand.Len() { v.Cursor[l] = cand[l] }
+    for l in b.Params {
+        if cand[I64(l)]: v.addDef(source.Span(-1, -1), I64(l), BlockId(0), null, true)
+    }
+    v.block(b.Root!)
+    if not v.settle(): return null
+    v.counting = false
+    n := v.DefLocal.Len()
+    for d in range n { v.on.Push(-1 if v.DefSp[d].Start < I32(0) else -2) }
+    v.on.Push(0)
+    v.block(b.Root!)
+    return v
+}
+
+# the definitions of the candidates the first walk found no task's target, numbered again: whether there are any
+fn (v mut Versions&) settle() Bool {
+    loc, sps, ins, vals, firsts := v.DefLocal, v.DefSp, v.DefIn, v.DefValue, v.DefFirst
+    v.DefLocal.Clear()
+    v.DefSp.Clear()
+    v.DefIn.Clear()
+    v.DefValue.Clear()
+    v.DefFirst.Clear()
+    v.defKey.Clear()
+    for d in range loc.Len() {
+        if v.Cursor[loc[d]]: v.addDef(sps[d], loc[d], ins[d], vals[d], firsts[d])
+    }
+    return v.DefLocal.Len() > 0
+}
+
+fn (v mut Versions&) addDef(sp source.Span, l I64, inb BlockId, x Expr?&, first Bool) {
+    at := I64(sp.Start)
+    if at >= 0 and v.defKey.Has(defName(at, l)): return
+    if at >= 0: v.defKey.Put(defName(at, l), v.DefLocal.Len())
+    v.DefLocal.Push(l)
+    v.DefSp.Push(sp)
+    v.DefIn.Push(inb)
+    v.DefValue.Push(x)
+    v.DefFirst.Push(first)
+}
+
+# the definitions of cursor l reaching the statement starting at key: every one of l's where no walked path names it
+fn (v Versions&) Reaching(key I64, l I64) Vec<I64> {
+    out Vec<I64>
+    row := try v.rowOf.Get(key) catch default -1
+    n := v.DefLocal.Len()
+    for d in range n {
+        if v.DefLocal[d] == l and (row < 0 or v.reach[row * n + d] > -2): out.Push(d)
+    }
+    return out
+}
+
+# the outermost loop body definition d reaches the statement starting at key through a turn of - entered and left again
+# on the way - else -1
+fn (v Versions&) Across(key I64, d I64) BlockId {
+    row := try v.rowOf.Get(key) catch default -1
+    return BlockId(-1) if row < 0 else BlockId(I32(v.reach[row * v.DefLocal.Len() + d]))
+}
+
+# whether the walk named the statement starting at key - some path reaches it
+fn (v Versions&) Named(key I64) Bool { return v.rowOf.Has(key) }
+
+# the definition of cursor l the statement starting at at makes, -1 for none
+fn (v Versions&) DefOf(at I64, l I64) I64 { return try v.defKey.Get(defName(at, l)) catch default -1 }
+
+fn (v mut Versions&) dead() Bool { return v.on.Len() == 0 or v.on[v.on.Len() - 1] != 0 }
+
+fn (v mut Versions&) save() Vec<I64> {
+    s Vec<I64>
+    if v.counting: return s
+    for x in v.on { s.Push(x) }
+    return s
+}
+
+fn (v mut Versions&) restore(s Vec<I64>&) {
+    if v.counting: return
+    for k in range v.on.Len() { v.on[k] = s[k] }
+}
+
+# two of on's values for one definition where paths meet: reaching on either, through the outermost loop's turn either
+# went through - loops a point stands in are nested, so one encloses the other
+fn (v mut Versions&) outer(a I64, b I64) I64 {
+    if a == -2: return b
+    if b == -2: return a
+    if a == -1: return b
+    if b == -1: return a
+    return a if v.B.Encloses(BlockId(I32(a)), BlockId(I32(b))) else b
+}
+
+# the paths of s joined into this one's
+fn (v mut Versions&) meet(s Vec<I64>&) {
+    if v.counting: return
+    n := v.on.Len() - 1
+    if s[n] != 0: return
+    if v.on[n] != 0 {
+        v.restore(s)
+        return
+    }
+    for k in range n { v.on[k] = v.outer(v.on[k], s[k]) }
+}
+
+# no path goes on from here
+fn (v mut Versions&) end() {
+    if not v.counting: v.on[v.on.Len() - 1] = 1
+}
+
+# code run at a way out: every definition reaches it, as through the outermost loop it stands in (a turn's own blocks
+# are left there)
+fn (v mut Versions&) all() {
+    if v.counting: return
+    far := v.loopBody[0] if v.loopBody.Len() > 0 else BlockId(-1)
+    for k in range v.on.Len() - 1 { v.on[k] = I64(far) }
+    v.on[v.on.Len() - 1] = 0
+}
+
+# cursor l given a value by the statement starting at sp: its other definitions reach no further
+fn (v mut Versions&) define(sp source.Span, l I64, x Expr?&, first Bool) {
+    if l < 0 or l >= v.Cursor.Len() or not v.Cursor[l]: return
+    if v.counting {
+        v.addDef(sp, l, v.blocks[v.blocks.Len() - 1], x, first)
+        return
+    }
+    d := v.DefOf(I64(sp.Start), l)
+    if d < 0 or v.dead(): return
+    for k in range v.DefLocal.Len() {
+        if v.DefLocal[k] == l: v.on[k] = -2
+    }
+    v.on[d] = -1
+    v.gens.Push(d)
+}
+
+# what reached the statement starting at key (entry) and every definition made inside it (from gens[mark])
+fn (v mut Versions&) record(key I64, entry Vec<I64>&, mark I64) {
+    n := v.DefLocal.Len()
+    row := try v.rowOf.Get(key) catch default -1
+    if row < 0 {
+        row = v.reach.Len() / n
+        v.rowOf.Put(key, row)
+        for _ in range n { v.reach.Push(-2) }
+    }
+    for k in range n { v.reach[row * n + k] = v.outer(v.reach[row * n + k], entry[k]) }
+    for j in range mark, v.gens.Len() { v.reach[row * n + v.gens[j]] = v.outer(v.reach[row * n + v.gens[j]], -1) }
+}
+
+fn (v mut Versions&) block(b Block?&) {
+    if b is null: return
+    v.blocks.Push(b.Id)
+    for s in b.Stmts { v.stmt(s) }
+    v.blocks.Pop()!
+}
+
+# code run later than where it stands - deferred code, a join's clauses: from every definition
+fn (v mut Versions&) later(b Block?&) {
+    s0 := v.save()
+    v.all()
+    v.block(b)
+    v.restore(s0)
+}
+
+fn (v mut Versions&) stmt(s Stmt&) {
+    live := not v.counting and not v.dead()
+    entry := v.save()
+    mark := v.gens.Len()
+    match s {
+        # (a declaration's or an assignment's own value reads what reached it: named before it defines)
+        case Stmt.Let(sp, l, x) {
+            v.expr(x)
+            if live: v.record(I64(sp.Start), entry, mark)
+            live = false
+            if not v.B.Locals[I64(l)].Unset: v.define(sp, I64(l), x, true)
+        }
+        case Stmt.Assign(sp, p, x) {
+            if p != Lvalue.Local: v.place(p)
+            v.expr(x)
+            if live: v.record(I64(sp.Start), entry, mark)
+            live = false
+            if p == Lvalue.Local: v.define(sp, I64(p.id), x, false)
+        }
+        case Stmt.Eval(_, x), Stmt.Yield(_, x): v.expr(x)
+        case Stmt.Suspend(_, x): v.expr(x)
+        case Stmt.Return(_, x) {
+            v.expr(x)
+            v.end()
+        }
+        case Stmt.Reraise(_, x, _) {
+            v.expr(x)
+            v.end()
+        }
+        case Stmt.Raise(_, _, _): v.end()
+        case Stmt.Exit(_, _, m) {
+            v.expr(m)
+            v.end()
+        }
+        case Stmt.Assert(_, c, m) {
+            v.expr(c)
+            s0 := v.save()
+            v.expr(m)
+            v.restore(s0)
+        }
+        case Stmt.If(_, i) {
+            v.expr(i.Test)
+            s0 := v.save()
+            v.block(i.Then)
+            a := v.save()
+            v.restore(s0)
+            v.block(i.Else)
+            v.meet(a)
+        }
+        case Stmt.Loop(_, body, post): v.loop(body, post)
+        case Stmt.Jump(_, kind, lp): v.jump(kind, lp)
+        case Stmt.Block(_, b): v.block(b)
+        case Stmt.Defer(_, b): v.later(b)
+        case Stmt.Join(_, j) {
+            v.block(j.Code)
+            v.clauses(j.Clauses, v.save(), true)
+        }
+        case Stmt.Spawn(_, sw) {
+            for tg in sw.Targets {
+                if tg is null: continue
+                if tg != Lvalue.Local {
+                    v.place(tg)
+                } else if v.counting and I64(tg.id) < v.Cursor.Len() {
+                    v.Cursor[I64(tg.id)] = false
+                }
+            }
+            v.expr(sw.Task)
+            for c in sw.Clauses { v.expr(c.Handler) }
+        }
+    }
+    if live: v.record(I64(s.Span().Start), entry, mark)
+}
+
+# a loop: its body walked from what reaches its start - the way in, and each turn's end or continue - until that
+# settles; after it, what its breaks leave. The state its start settled at
+fn (v mut Versions&) loop(body Block&, post Block?&) Vec<I64> {
+    if v.counting {
+        v.block(body)
+        v.block(post)
+        return v.save()
+    }
+    n := v.DefLocal.Len()
+    k := v.loopBody.Len()
+    v.loopBody.Push(body.Id)
+    for i in range n + 1 {
+        v.brk.Push(1 if i == n else -2)
+        v.cont.Push(1 if i == n else -2)
+    }
+    start := v.save()
+    for {
+        v.restore(start)
+        for i in range n + 1 { v.cont[k * (n + 1) + i] = 1 if i == n else -2 }
+        v.block(body)
+        v.meet(v.row(false, k))
+        v.block(post)
+        if v.widen(start, body.Id) == 0: break
+    }
+    v.restore(v.row(true, k))
+    v.loopBody.Pop()!
+    for _ in range n + 1 {
+        v.brk.Pop()!
+        v.cont.Pop()!
+    }
+    return start
+}
+
+# loop k's share of its breaks' or its continues' state, as save gives one
+fn (v mut Versions&) row(brk Bool, k I64) Vec<I64> {
+    n := v.DefLocal.Len() + 1
+    out Vec<I64>
+    for i in range n { out.Push(v.brk[k * n + i] if brk else v.cont[k * n + i]) }
+    return out
+}
+
+# start widened by what the end of a turn of the loop whose body is lp brings it, through that turn: how many
+# definitions (or a path) it changed
+fn (v mut Versions&) widen(start mut Vec<I64>&, lp BlockId) I64 {
+    if v.dead(): return 0
+    n := v.DefLocal.Len()
+    grew := 1 if start[n] != 0 else 0
+    start[n] = 0
+    for i in range n {
+        if v.on[i] == -2: continue
+        w := v.outer(start[i], v.outer(v.on[i], I64(lp)))
+        if w != start[i]: grew++
+        start[i] = w
+    }
+    return grew
+}
+
+# a break or continue of the loop whose body is lp: this path's state kept for after the loop or its next turn
+fn (v mut Versions&) jump(kind JumpKind, lp BlockId) {
+    if v.counting or v.dead() {
+        v.end()
+        return
+    }
+    n := v.DefLocal.Len()
+    for k := v.loopBody.Len() - 1, k >= 0, k-- {
+        if v.loopBody[k] != lp: continue
+        b := k * (n + 1)
+        for i in range n {
+            if kind == JumpKind.Break: v.brk[b + i] = v.outer(v.brk[b + i], v.on[i])
+            else: v.cont[b + i] = v.outer(v.cont[b + i], v.on[i])
+        }
+        if kind == JumpKind.Break: v.brk[b + n] = 0
+        else: v.cont[b + n] = 0
+        break
+    }
+    v.end()
+}
+
+# catch clauses: each run from entry - a try's, what reached it and everything made inside what it covers - or, a
+# join's (fromAll), from every definition; the paths they end joined with this one's
+fn (v mut Versions&) clauses(cs Array<Clause&>&, entry Vec<I64>&, fromAll Bool) {
+    if cs.Len() == 0: return
+    out := v.save()
+    for c in cs {
+        if fromAll { v.all() } else { v.restore(entry) }
+        v.block(c.Code)
+        v.exprs(c.Defaults)
+        v.meet(out)
+        out = v.save()
+    }
+    v.restore(out)
+}
+
+fn (v mut Versions&) exprs(xs Array<Expr&>&) {
+    for x in xs { v.expr(x) }
+}
+
+fn (v mut Versions&) expr(x Expr?&) {
+    if x is null: return
+    match x {
+        case Expr.Lit(_, _, _), Expr.Data(_, _, _, _) { }
+        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p): v.place(p)
+        case Expr.Promote(_, _, pr): v.expr(pr.X)
+        case Expr.Call(_, _, c) {
+            match c.Target {
+                case Callee.Value(f) { v.expr(f) }
+                case _ { }
+            }
+            v.exprs(c.Args)
+        }
+        case Expr.Make(_, _, m) {
+            v.exprs(m.Items)
+            v.expr(m.Length)
+        }
+        case Expr.Collect(_, _, c) {
+            v.expr(c.Reserve)
+            st := v.loop(c.Loop, null)
+            # (a comprehension's walk always ends: its value is made)
+            if v.dead(): v.restore(st)
+        }
+        case Expr.Prim(_, _, _, _, args): v.exprs(args)
+        case Expr.Slice(_, _, sl) {
+            v.place(sl.Base)
+            v.expr(sl.Lo)
+            v.expr(sl.Hi)
+        }
+        case Expr.Cond(_, _, k) {
+            v.expr(k.C)
+            s0 := v.save()
+            v.expr(k.A)
+            a := v.save()
+            v.restore(s0)
+            v.expr(k.B)
+            v.meet(a)
+        }
+        case Expr.Seq(_, _, q) {
+            for st in q.Stmts { v.stmt(st) }
+            v.expr(q.X)
+        }
+        case Expr.Match(_, _, m): v.match(m)
+        case Expr.Try(_, _, t) {
+            s0 := v.save()
+            mark := v.gens.Len()
+            v.expr(t.X)
+            # a clause runs from any point inside what the try covers: what reached it, and every definition made there
+            entry := v.save()
+            if not v.counting {
+                for k in range s0.Len() - 1 { entry[k] = v.outer(entry[k], s0[k]) }
+                entry[s0.Len() - 1] = s0[s0.Len() - 1]
+                for j in range mark, v.gens.Len() { entry[v.gens[j]] = v.outer(entry[v.gens[j]], -1) }
+            }
+            v.clauses(t.Clauses, entry, false)
+        }
+        case Expr.Fn(_, _, f) {
+            match f {
+                case FnVal.Lambda(_, caps, _) { for cp in caps { v.expr(cp.Outer) } }
+                case FnVal.Adapter(_, recv, _) { v.expr(recv) }
+                case FnVal.Named(_) { }
+            }
+        }
+        case Expr.Text(_, _, tx) {
+            for pc in tx.Pieces {
+                if pc == Piece.Render: v.expr(pc.x)
+            }
+        }
+        case Expr.Away(_, _, y): v.expr(y)
+    }
+}
+
+fn (v mut Versions&) match(m Match&) {
+    for st in m.Held { v.stmt(st) }
+    s0 := v.save()
+    out := v.save()
+    if not v.counting: out[out.Len() - 1] = 1
+    for a in m.Arms {
+        v.restore(s0)
+        v.arm(a)
+        v.meet(out)
+        out = v.save()
+    }
+    if m.NoMatch is not null {
+        v.restore(s0)
+        v.arm(m.NoMatch!)
+        v.meet(out)
+        out = v.save()
+    }
+    v.restore(out)
+}
+
+# an arm: its tests and bindings, its guard, then its code and its value in its code's block
+fn (v mut Versions&) arm(a Arm&) {
+    for alt in a.Alts {
+        v.expr(alt.Test)
+        for bd in alt.Binds { v.expr(bd.From) }
+    }
+    v.expr(a.Guard)
+    if a.Code is null {
+        v.expr(a.Value)
+        return
+    }
+    v.blocks.Push(a.Code!.Id)
+    for s in a.Code!.Stmts { v.stmt(s) }
+    v.expr(a.Value)
+    v.blocks.Pop()!
+}
+
+fn (v mut Versions&) place(p Lvalue&) {
+    match p {
+        case Lvalue.Deref(_, _, r): v.expr(r)
+        case Lvalue.Field(_, _, base, _): v.place(base)
+        case Lvalue.Elem(_, _, e) {
+            v.place(e.Base)
+            v.expr(e.Index)
+        }
+        case Lvalue.Payload(_, _, py): v.place(py.Base)
+        case Lvalue.Temp(_, _, x, _): v.expr(x)
+        case Lvalue.Local(_, _, _), Lvalue.Global(_, _, _, _), Lvalue.Target(_, _) { }
+    }
+}

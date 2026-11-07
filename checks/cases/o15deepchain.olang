@@ -12,14 +12,16 @@ type Deep unique struct(v I64) {
     if v != RelNext { RelBad++ }
     RelNext--
 }
+# (the count is set before the loop: nothing reads 'head' after it, so the chain lives in the loop's block and its
+# destructors run as the loop ends - O25i places a reference local's versions by where they are read)
 fn release() {
+    RelNext = 299999
     head mut Deep?& = null
     for i in range 300000 {
         n mut Deep& = Deep(i)
         n.next = head
         head = n
     }
-    RelNext = 299999
 }
 fn main() ? {
     os.RunOnStack(262144, release)
