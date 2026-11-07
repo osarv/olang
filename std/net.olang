@@ -282,7 +282,7 @@ fn Addr.hostPort(t String&) Addr ? noAddress {
         return Addr(host, U16(port))
     }
     colon := try t.FindLast(":") catch { error noAddress }
-    host := try ParseIP(t[:colon]) catch Error.Address { error noAddress }
+    host := try IP.Parse(t[:colon]) catch Error.Address { error noAddress }
     if host.V6 { error noAddress }                  # an IPv6 host is written in brackets
     port, end := try decimalAt(t, colon + 1, 65535)
     if end != t.Len() { error noAddress }
@@ -605,7 +605,7 @@ RefusedBaked String = refused("::1:80")
 test Error "an address refused carries the text, a name not found the name" {
     assert RefusedBaked == "Error.Address(\"::1:80\")"
     assert refused("1.2.3.4:x") == "Error.Address(\"1.2.3.4:x\")" and refused("[::1]:443") == "ok"
-    try ParseIP("256.1.1.1") catch Error.Address e { assert e.text == "256.1.1.1" }
+    try IP.Parse("256.1.1.1") catch Error.Address e { assert e.text == "256.1.1.1" }
     try IP.IPv6(U8[1, 2]) catch Error.Address e { assert e.text == "U8[1, 2]" }
     try Lookup("") catch Error.UnknownHost e { assert e.host == "" } catch { unreachable "an empty name" }
 }

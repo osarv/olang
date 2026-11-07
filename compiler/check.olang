@@ -11569,7 +11569,7 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
             }
             et := c.typeNamed(x)
             if et >= types.TypeId(0) and c.text(n) == "From" and c.isEnum(et) and not c.hasCase(et, n) { return c.enumFrom(sp, nsp, et, args) }
-            if et >= types.TypeId(0) and not c.isEnum(et) {
+            if et >= types.TypeId(0) and not c.isEnum(et) and not (c.isNamed(et) and c.declKind(et) == types.DeclKind.Error) {   # an error word with a payload is built as its case (T19b)
                 c.noBuilder(nsp, x, et, n)
                 c.dropArgs(args)
                 return c.unknown(sp)
