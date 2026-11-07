@@ -1,0 +1,70 @@
+import "std/io"
+
+type Tally struct() {
+    ends I64 = 0
+    ids := Vec<I64>()
+}
+
+type Lamp unique struct(id I64, log mut Tally&) {
+    id, log
+    data := Array<I64>(3 + id.Mod(2), id)
+} destruct {
+    log.ends++
+    log.ids.Push(id)
+}
+
+type Bad error { No }
+
+fn idx(k I64) I64 ? {
+    if k > 0: error Bad.No
+    return 0
+}
+
+fn keepAt(v mut Vec<Lamp>&, l Lamp, i I64) { v.Push(l) }
+
+# the hand-on's later argument fails: the value is ended once, as the block is left
+fn later(v mut Vec<Lamp>&, l Lamp, k I64) ? {
+    keepAt(v, l, try idx(k))
+}
+
+# a later argument whose clause returns
+fn clauseRet(v mut Vec<Lamp>&, l Lamp, k I64) {
+    keepAt(v, l, try idx(k) catch { return })
+}
+
+# handed on in one branch, read in the other, an error after the branch
+fn branchy(v mut Vec<Lamp>&, l Lamp, k I64) ? {
+    if k % 2 == 0 {
+        v.Push(l)
+    } else {
+        k2 := l.id
+        try idx(k2)
+    }
+    try idx(k)
+}
+
+# errdefer seeing the parameter
+fn withErrdefer(v mut Vec<Lamp>&, l Lamp, k I64) ? {
+    errdefer v.Push(l)
+    try idx(k)
+}
+
+fn main() {
+    t := Tally()
+    {
+        v := Vec<Lamp>()
+        try later(v, Lamp(1, t), 0) catch { }
+        try later(v, Lamp(2, t), 1) catch { }
+        clauseRet(v, Lamp(3, t), 0)
+        clauseRet(v, Lamp(4, t), 1)
+        try branchy(v, Lamp(5, t), 0) catch { }
+        try branchy(v, Lamp(6, t), 1) catch { }
+        try branchy(v, Lamp(7, t), 2) catch { }
+        try withErrdefer(v, Lamp(8, t), 0) catch { }
+        try withErrdefer(v, Lamp(9, t), 1) catch { }
+        io.Println("held " $v.Len())!
+    }
+    b := StringBuilder()
+    for x in t.ids { b.Push($x ",") }
+    io.Println("ends " $t.ends " " $b.ToString())!
+}

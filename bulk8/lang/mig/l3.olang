@@ -1,0 +1,11 @@
+import "std/io"
+import "std/set"
+
+fn make<C>() C {
+    return Array<C>[3, 1, 2, 1]
+}
+
+fn main() {
+    s := make<set.Set<I64>>()
+    io.Println($s)!
+}

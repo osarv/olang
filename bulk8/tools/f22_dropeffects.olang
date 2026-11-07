@@ -1,0 +1,23 @@
+import "std/io"
+Count mut I64 = 0
+type R unique struct(id I64) { id } destruct { Count += 1 }
+fn sink(r R) I64 { return r.id }
+fn maybe(r R, keep Bool) I64 {
+    if keep { return sink(r) }
+    return 0
+}
+fn holdsNone(r R&) I64 { return r.id }
+fn makesOne(n I64) I64 {
+    r := R(n)
+    return r.id
+}
+fn inVec(n I64) I64 {
+    v := Vec<R>()
+    v.Push(R(n))
+    return v.Len()
+}
+assert maybe.WritesGlobals and sink.WritesGlobals and makesOne.WritesGlobals and inVec.WritesGlobals
+assert not holdsNone.WritesGlobals
+fn main() {
+    io.Println($maybe(R(1), Count == 0) " " $Count)!
+}

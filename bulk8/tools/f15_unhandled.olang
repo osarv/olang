@@ -1,0 +1,11 @@
+import "std/io"
+type E error { Bad(n I64, s String) }
+Live mut I64 = 0
+fn f(n I64) I64 ? E {
+    error E.Bad(n, "x" $n)
+}
+fn main() ? {
+    defer io.Println("deferred")!
+    x := try f(Live + 2)
+    io.Println($x)!
+}

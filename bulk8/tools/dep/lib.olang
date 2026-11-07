@@ -1,0 +1,22 @@
+# Lib.
+
+# A color.
+type Color struct(R U8, G U8, B U8) {
+    R
+    G   # Deprecated: read R.
+    B
+}
+
+# Deprecated: use Of.
+fn Color.Gray(v U8) Color { return Color(v, v, v) }
+
+# Of three.
+fn Color.Of(r U8) Color { return Color(r, r, r) }
+
+# Old way.
+#
+# Deprecated: gone next version.
+fn (c Color) Sum() I64 { return I64(c.R) + I64(c.G) }
+
+# Deprecated: use Limit2.
+Limit I64 = 3

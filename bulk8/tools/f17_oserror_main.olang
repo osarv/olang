@@ -1,0 +1,9 @@
+import "std/io"
+import "std/os"
+fn main() ? {
+    w := io.Writer(1)
+    defer w.Flush()!
+    w.Write("buffered line that must reach stdout\n")
+    t := try os.ReadFile("/nonexistent/file")
+    w.Write($t)
+}

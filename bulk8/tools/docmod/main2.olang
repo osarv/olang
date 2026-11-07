@@ -1,0 +1,28 @@
+import lib "lib"
+import "std/io"
+Live mut I64 = 0
+fn main() {
+    c := try lib.Color.FromHex("#ab") catch lib.ReadErr.Bad e {
+        io.Println("bad at " $e.line ":" $e.col " " $e)!
+        return
+    } catch default lib.Color.Gray(0)
+    io.Println($c)!
+}
+fn find() I64 {
+    return try lib.Find("") catch default -1
+}
+test "raised by name across modules" {
+    x := try lib.Find("") catch lib.NoKey e {
+        assert e.key == "" and $e == "lib.NoKey(\"\")", $e
+        return
+    }
+    assert x == 99
+}
+test "kept errors across modules" {
+    v := Vec<lib.ReadErr>()
+    for i in range 3 {
+        try lib.Color.FromHex("#" $i) catch lib.ReadErr e { v.Push(e) }
+    }
+    assert $v.View() == "Array<lib.ReadErr>[lib.ReadErr.Bad(1, 2), lib.ReadErr.Bad(1, 2), lib.ReadErr.Bad(1, 2)]", $v.View()
+    assert find() == -1
+}

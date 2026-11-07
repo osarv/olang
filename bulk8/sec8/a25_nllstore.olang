@@ -1,0 +1,64 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+}
+
+fn churn() I64 {
+    t := 0
+    for k in range 300 {
+        s := $k "-" $(k * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+# a store through the cursor of a value from an inner block, the referent also named by another local
+fn inner() I64 {
+    at mut Node& = Node(1)
+    keep := at
+    {
+        x := Node(5)
+        at.next = x
+    }
+    churn()
+    return keep.v * 10 + keep.next!.v
+}
+
+# the cursor's referent made fresh in a block, a turn's value stored through it, the cursor read after
+fn turns(n I64) I64 {
+    first mut Node& = Node(0)
+    at mut Node& = first
+    for i in range n {
+        t := Node(i + 1)
+        at.next = t
+        at = t
+    }
+    churn()
+    s := 0
+    c Node?& = first
+    for c is not null {
+        s = s * 10 + c.v
+        c = c.next
+    }
+    return s
+}
+
+# a referent given in an inner block, stored through after the block
+fn later() I64 {
+    at mut Node& = Node(1)
+    {
+        y := Node(2)
+        at = y
+    }
+    z := Node(3)
+    at.next = z
+    churn()
+    return at.v * 10 + at.next!.v
+}
+
+fn main() {
+    io.Println($inner() " " $turns(5) " " $later())!
+}

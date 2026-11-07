@@ -4,8 +4,14 @@
 - Read SPEC T19b/R3b/S13i, HISTORY errdata2.
 - T19b payloads: done - stores (loop + churn into outer local, Vec, struct, Map key, mut global, lambda capture,
   task argument), raised-by-name (refs copied, names checked), join (F1), narrowing (F2), first raise (F3).
-- Next: ArgumentError text / contracts, test harness payload, struct patterns, builders, literals/FromIter, packed,
-  Columns, migrations.
+- Done (sound unless a finding says otherwise): ArgumentError text (entry, through any, baked/decided/!), struct
+  patterns (permission of bindings, unique fields counted as mentions, packed fields, nested, evaluator), builders
+  (F4 F6, migration of generic/constrained/value/test-target uses: mig/m1-m3), literals and FromIter (sets, lists,
+  deques, maps, user FromIter failing with payload errors, generic C[...], baked sets - F5 F8), packed structs (bit
+  widths, signed, enums raw/positional, I70, arrays at bit offsets, C import of packed bitfields by value and by
+  reference, lending refused), Columns/ColumnVec (copies independent, Sort, reference fields' placement, unique and
+  destructor records refused - F7).
+- In progress: payload stack with errdefer / generators / task clauses / export fn / test harness.
 
 ## Findings
 - F1 HIGH NEW (T19b, errdata2; runtime __olang_join_tasks): f01_joinown_payload.olang. A `try join` block whose own
@@ -32,7 +38,11 @@
   literal through an imported type's FromIter (`bag.Bag[a, b]`, E19) is read as the old element-typed form and
   rewritten `Array<bag.Bag>[a, b]`: silent meaning change (prints bag.Bag(5) before, an array of two Bags after); with
   number items it stops compiling. A type of the file itself with FromIter is left alone (mig/l1.olang). olang fix
-  runs this tool on every file, so fix is not idempotent on today's code.
+  runs this tool on every file, so fix is not idempotent on today's code. Second shape (f05b_literal_migrate_typevar.olang):
+  a generic's `C[3, 1, 2, 1]` (E19's own example of a type variable in front) is rewritten `Array<C>[...]`; the
+  set instance stops compiling. The tool's doc lists both as deliberate ("an import's type through its alias, a type
+  variable") - the reading is right for old code and wrong for today's, and fix cannot tell them apart without asking
+  whether the type declares FromIter (it does ask for the file's own types).
 - F6 LOW NEW (D19, D19a): f06_builder_bare_generic_owner.olang. A builder of a generic type declared with a bare owner
   (`fn Bag.mk2(n I64) Bag<String&>`) is accepted, though D19 says a generic owner is written with its arguments; D19a's
   error for `fn mk2(n I64) Bag<String&>` suggests exactly that bare form ('fn Bag.mk2(...)'), where the instance form
@@ -44,3 +54,11 @@
   Vec's View() is", and M19g refuses exactly this for a Vec (scratch/cv3.olang). A plain build writes and reads the
   retired buffer silently (memory-safe, a lost write: prints "99 1"); -sanitize and interpret stop it. Either M19g
   should cover column views or T7e should say they are the run-time checks' only.
+- F8 LOW NEW (E19, T13b): f08_vec_literal_unique.olang. `Vec<Tok>[Tok(3), Tok(4)]` and `Map<I64, Tok>[1: Tok(5)]` of
+  fresh unique values are refused inside the prelude (Vec.FromIter / Map.FromIter "needs a copy ... call it with a
+  reference ('Tok&')" - advice that does not fit a literal), while `Array<Tok>[...]` and `v.Push(Tok(3))` compile. The
+  literal of fresh values could hand each one on (it is the one holder of the items array). SPEC E19's last paragraph
+  still says Vec's and Array's "literals and comprehensions are built directly", contradicting its first bullet (Vec
+  through FromIter, e4875ee). Related, same rule area: a FromIter taking a concrete iterator type (E19 allows
+  `ArrayIter<I64>`) has literals but its comprehension is refused "expected ArrayIter<I64>&, found Generator<I64>"
+  (scratch/lit2.olang) - E27 does not say comprehensions need a generic FromIter.

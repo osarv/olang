@@ -1,0 +1,17 @@
+import "std/io"
+type R unique struct(id I64) { id } destruct { io.Println("destruct " $id)! }
+Live mut I64 = 0
+fn helper(n I64) {
+    r := R(n)
+    defer io.Println("helper defer " $r.id)!
+    assert n == 0, "boom"
+}
+test "assert fails in a helper" {
+    r := R(1)
+    defer io.Println("deferred " $r.id)!
+    helper(Live + 2)
+}
+test "next" {
+    r := R(3)
+    io.Println("next " $r.id)!
+}

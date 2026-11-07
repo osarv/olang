@@ -33,3 +33,38 @@ OLDER: to compare with fcdb202.)
 ### Note: `olang fix` intermittently said `olang fix: cannot run .../tools_X` (variadic_migrate, clone_migrate,
 int_literal_i64 three runs in a row) with status 2, then ran the same tool fine; not reproduced in 5 later runs. The
 message does not say why (os.Output.Exec's error, which now carries the path, is dropped). Not chased further.
+
+### F4 (HIGH, NEW: T19b, 332caf4/e9d8fde - lower.olang `mainPayloads`) an error whose word carries a payload escaping `main` skips every defer, errdefer and destructor of main
+Reproducers f16_mainescape.olang (a unique resource, defer, errdefer, an inner block's defer), f17_oserror_main.olang
+(the everyday case: `defer w.Flush()!` in main, `try os.ReadFile(...)` failing - os.Error's words all carry the path
+now, so the buffered line is lost; the compiler at fcdb202 printed it). f16_plain.olang, the same program with a
+payload-free word, runs `inner deferred, errdeferred, deferred 1, destruct 1` before `unhandled error`; with `Bad(n
+I64)` nothing of it runs - built, -debug and interpret alike. Cause: `lowering.raise` calls `mainPayloads` (which ends
+the block with `Term.Exit(Unhandled)`) before `ln.leave(0)`, so the exit is taken at the raise/try site with every
+scope of main still open. Violates S19 (defer on every way out but the process-ending ones - an escaping error is
+main's way out, as for plain words), S19e, O15 (a destructor runs once where its holder lets go - here never). Fix:
+say the payload after `leave(0)` (the payload record lives on its own stack, untouched by the deferred code).
+
+### F5 (medium, NEW: test -interpret 53c380a/ad6be32) `olang test -interpret` runs no destructor of a test that fails
+Reproducers f19_testassert.olang (an assert failing in a helper), f18_plain.olang / f18_testescape.olang (an error
+leaving the test). The built test binary unwinds the failed test's open scopes (P1d): `destruct 2`, `destruct 1`
+before the FAIL line; `test -interpret` prints none of them - the failed test's resources are never released, and the
+run goes on to the next test in the same process (a file, a socket, a lock held across tests). B3e/CLAUDE.md say
+its output is the built binary's line for line; evaldiff compares only the ok/FAIL keys, so the suite cannot see it.
+
+### F6 (medium, OLDER - same at fcdb202) an error leaving a test's body skips the test's deferred code
+Reproducer f18_plain.olang: `defer io.Println("deferred " $r.id)!` in a test whose `try f()` lets E.Bad through: the
+built binary runs the destructor (`destruct 1`) but never the deferred code; same at fcdb202. S19 says deferred code
+runs on every way out of its block, "an error leaving the function - ... a `try` whose error no clause takes"
+included; S16 makes an error leaving a test an ordinary failure, not a process-ending one. (A failed assert is S16d/S18's
+"no cleanup" class, so f19's skipped `helper defer`/`deferred` is as specified - only the destructors are P1d's.)
+
+### F7 (low, NEW: test -interpret) `test -interpret`'s "no test is named by 'w'" line has no did-you-mean
+f02_tests.olang with word `twce`: built `... - did you mean 'twice'?`, interpreted the bare line (B11's did-you-mean,
+B3a). Also with several files (f04_testbang.olang f19_testassert.olang next).
+
+### F8 (low, NEW: B21 x R3b payloads) `olang api` calls a raised error's change a "changed global"
+api/old, api/new: `error Raised(n I64)` -> `Raised(n I64, why String)` is listed `breaking  changed global: error
+Raised(n I64)`. Correctly breaking; the kind word is wrong (an error, not a global). The rest of api's rows checked and
+right: a payload's field type changed, a payload added to a plain word, a builder's defaulted parameter, a builder
+removed and added, a packed struct's field widths.

@@ -1,0 +1,16 @@
+import "std/io"
+
+fn bits() U64 { return 4611686018427387904 }
+
+fn main() {
+    a U64 = 1
+    b U64 = 4611686018427387903
+    x := F64.FromBits(a + b)
+    y := -F64.FromBits(bits())
+    t := " 42 "
+    n := I64.Parse(t.Trim(), 10)!
+    m := try I32.Parse("17") catch default -1
+    arr := Array<U32>[1078530011]
+    k := F32.FromBits(arr[0])
+    io.Println($x " " $y " " $n " " $m " " $k)!
+}
