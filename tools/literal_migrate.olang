@@ -1,16 +1,19 @@
 # literal_migrate - E19, E27, S13h (QBU, QBW): the type before a literal's "[" is the type of the value it makes, no longer
 # its elements' - so every literal and comprehension written the old way, its element type in front, gets the array it
 # made written there: `I64[1, 2]` becomes `Array<I64>[1, 2]`, `String&["a"]` `Array<String&>["a"]`, `any Shape&[c]`
-# `Array<any Shape&>[c]`, `Node?&[n]` `Array<Node?&>[n]`, `lib.Pt[p]` `Array<lib.Pt>[p]`, `T[a, b]` (a type variable)
-# `Array<T>[a, b]`, `U8[c - 32 for c in t]` `Array<U8>[c - 32 for c in t]`, and an array pattern alike
-# (`case String&["test", ...]`). A front is read as old where it names a type with nothing after it but a marker -
-# a primitive, a type of the file, the prelude or std, an imported module's (through its alias), a type variable the
-# file's declarations introduce - or carries a marker ("&", "?&") before its "[" whatever it is. A generic
-# type with no marker in front (`Vec<I64>[1, 2]`, `Array<I64>[...]`) is read as new and left alone - which is what
-# makes the tool idempotent, and why an old literal of generic elements held by value (`Array<F32>[F32[1, 2]]`, an
-# array of arrays) is migrated by hand. A type of the file declaring a `FromIter` is new where it stands bare. Comments
-# and text are left alone, and so is a checks case failing with E19 (the old form held on purpose). A Markdown file is
-# migrated in its code: fenced blocks and inline `code`, std's types known.
+# `Array<any Shape&>[c]`, `Node?&[n]` `Array<Node?&>[n]`, `lib.Pt[p]` `Array<lib.Pt>[p]`, `U8[c - 32 for c in t]`
+# `Array<U8>[c - 32 for c in t]`, and an array pattern alike (`case String&["test", ...]`). A front is read as old where
+# it names a type with nothing after it but a marker - a primitive, a type of the file, the prelude or std, an imported
+# module's (through its alias) - or carries a marker ("&", "?&") before its "[" whatever it is. A front is read as new
+# and left alone where it is a generic type with no marker (`Vec<I64>[1, 2]`, `Array<I64>[...]`), a type declaring a
+# `FromIter` - the file's own or an import's (`bag.Bag[a, b]`, E19) - or a type variable the file's declarations
+# introduce (`C[a, b]`, E19's literal through the variable's FromIter): that is what makes the tool idempotent on
+# today's code, so `olang fix` changes nothing there (bulk review 8). The price: an old literal of a type variable's
+# elements (`T[a, b]`, an array of T) is left as written, and the compiler names its new form where it is checked
+# (E19: the bound type has no FromIter); an old literal of generic elements held by value (`Array<F32>[F32[1, 2]]`, an
+# array of arrays) is migrated by hand. Comments and text are left alone, and so is a checks case failing with E19 (the
+# old form held on purpose). A Markdown file is migrated in its code: fenced blocks and inline `code`, std's types known,
+# a single capital letter a type variable.
 #
 #     olang build tools/literal_migrate.olang && build/tools_literal_migrate [--std DIR] [--check] [-v] FILE|DIR...
 
@@ -56,6 +59,7 @@ fn main() {
 type known struct() {
     bare Map<String, Bool>
     mods Map<String, Map<String, Bool>>       # a module's file path -> the types it declares
+    makers Map<String, Map<String, Bool>>     # a module's file path -> its types declaring a FromIter (E19)
     imports Map<String, Map<String, String>>  # a module's file path -> its aliases and their files
     std String = ""
 }
@@ -89,6 +93,28 @@ fn (k mut known&) typesOf(path String&) Map<String, Bool>& {
     return try k.mods.Ref($path) catch { unreachable }
 }
 
+# the types a module's file declares a FromIter for - a literal of one is new (E19) - read once
+fn (k mut known&) makersOf(path String&) Map<String, Bool>& {
+    if k.makers.Has($path) { return try k.makers.Ref($path) catch { unreachable } }
+    m Map<String, Bool>
+    text := try srcmask.ReadText(path) catch default ""
+    for n in fromIterOwners(text) { m.Put($n, true) }
+    k.makers.Put($path, m)
+    return try k.makers.Ref($path) catch { unreachable }
+}
+
+# the owners of the builders named FromIter a text declares: "fn Bag.FromIter" and "fn Bag<T>.FromIter"
+fn fromIterOwners(text String&) Vec<String> {
+    out Vec<String>
+    for line in text.Split("\n") {
+        t := srcmask.Strip(line)
+        if not t.StartsWith("fn ") or not (".FromIter" in t) { continue }
+        n := word(t, 3)
+        if n.Len() > 0: out.Push($n)
+    }
+    return out
+}
+
 # the names a text declares as types: "type Name" and "extern type Name", indented or not
 fn declaredTypes(text String&) Vec<String> {
     out Vec<String>
@@ -114,6 +140,7 @@ fn word(t String&, i I64) String& {
 # it imports by their aliases, and the types of it that declare a FromIter (new where they stand bare)
 type scope struct() {
     own Map<String, Bool>
+    vars Map<String, Bool>                    # the type variables its declarations introduce
     aliases Map<String, String>               # alias -> module file
     builders Map<String, Bool>
 }
@@ -121,13 +148,10 @@ type scope struct() {
 fn scope.of(path String&, text String&, mask String&, k mut known&) scope {
     s := scope()
     for t in declaredTypes(text) { s.own.Put($t, true) }
+    for n in fromIterOwners(text) { s.builders.Put($n, true) }
     for line in text.Split("\n") {
         t := srcmask.Strip(line)
         if t.StartsWith("import ") { s.addImport(path, t, k) }
-        if t.StartsWith("fn ") and ".FromIter" in t {
-            n := word(t, 3)
-            if n.Len() > 0: s.builders.Put($n, true)
-        }
         if t.StartsWith("fn ") or t.StartsWith("type ") or t.StartsWith("extern type ") { s.addVars(t, k) }
     }
     return s
@@ -183,7 +207,7 @@ fn (s mut scope&) addVars(line String&, k known&) {
         if i > 0 and (srcmask.IsWord(line[i - 1]) or line[i - 1] == '.') { continue }
         n := word(line, i)
         if k.bare.Has($n) or s.own.Has($n) { continue }
-        s.own.Put($n, true)
+        s.vars.Put($n, true)
     }
 }
 
@@ -262,7 +286,8 @@ fn (k mut known&) old(s scope&, f front&) Bool {
     if f.Generic { return false }
     if f.Path.Len() == 1 {
         n := f.Path[0]
-        if s.builders.Has(n) and not f.Marked { return false }
+        # a type variable or a type of the file declaring a FromIter in front is today's literal (E19): `C[a, b]`
+        if s.vars.Has(n) or s.builders.Has(n) { return false }
         return s.names(n, k)
     }
     if not s.aliases.Has(f.Path[0]) { return false }
@@ -270,7 +295,9 @@ fn (k mut known&) old(s scope&, f front&) Bool {
     for i in range 1, f.Path.Len() - 1 {
         file = try k.aliasesOf(file).Get(f.Path[i]) catch { return false }
     }
-    return k.typesOf(file).Has(f.Path[f.Path.Len() - 1])
+    last := f.Path[f.Path.Len() - 1]
+    if k.makersOf(file).Has(last) { return false }    # an import's type with a FromIter: today's literal
+    return k.typesOf(file).Has(last)
 }
 
 # a file's text with every old front written as the array it makes
@@ -320,7 +347,7 @@ fn migrateMarkdown(text String&, k mut known&) String {
     for n in names {
         if n.EndsWith(".olang") { s.aliases.Put($n[:n.Len() - 6], $k.std "/" $n) }
     }
-    for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" { s.own.Put($c, true) }
+    for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" { s.vars.Put($c, true) }
     b := StringBuilder()
     fenced := false
     first := true
@@ -371,11 +398,22 @@ test "old fronts become the array they made; new ones are left as they are" {
     for p in Prims { k.bare.Put($p, true) }
     k.bare.Put("I64", true)
     k.bare.Put("I32", true)
-    text := "type Node struct() { }\nfn f<T>(a T) {\n    x := I64[1, 2]\n    y := String&[\"a\"]\n    z := Node?&[null]\n    w := T[a, a]\n    v := Vec<I64>[1, 2]\n    u := any Shape&[c]\n    c := I32[x * 2 for x in a]\n    q := Array<I32>&[r]\n    r := a[0]\n    s := xs.Node[0]\n    # I64[3] in a comment\n    t := \"I64[3]\"\n}\n"
-    want := "type Node struct() { }\nfn f<T>(a T) {\n    x := Array<I64>[1, 2]\n    y := Array<String&>[\"a\"]\n    z := Array<Node?&>[null]\n    w := Array<T>[a, a]\n    v := Vec<I64>[1, 2]\n    u := Array<any Shape&>[c]\n    c := Array<I32>[x * 2 for x in a]\n    q := Array<Array<I32>&>[r]\n    r := a[0]\n    s := xs.Node[0]\n    # I64[3] in a comment\n    t := \"I64[3]\"\n}\n"
+    text := "type Node struct() { }\nfn f<T>(a T) {\n    x := I64[1, 2]\n    y := String&[\"a\"]\n    z := Node?&[null]\n    w := T[a, a]\n    wm := T&[a]\n    v := Vec<I64>[1, 2]\n    u := any Shape&[c]\n    c := I32[x * 2 for x in a]\n    q := Array<I32>&[r]\n    r := a[0]\n    s := xs.Node[0]\n    # I64[3] in a comment\n    t := \"I64[3]\"\n}\n"
+    want := "type Node struct() { }\nfn f<T>(a T) {\n    x := Array<I64>[1, 2]\n    y := Array<String&>[\"a\"]\n    z := Array<Node?&>[null]\n    w := T[a, a]\n    wm := Array<T&>[a]\n    v := Vec<I64>[1, 2]\n    u := Array<any Shape&>[c]\n    c := Array<I32>[x * 2 for x in a]\n    q := Array<Array<I32>&>[r]\n    r := a[0]\n    s := xs.Node[0]\n    # I64[3] in a comment\n    t := \"I64[3]\"\n}\n"
     got := migrate("x.olang", text, k)
     assert got == want, got
     assert migrate("x.olang", got, k) == got
+}
+
+test "a type of an import declaring a FromIter, and one declaring none (bulk review 8)" {
+    dir := os.MkTemp(prefix = "litmig")!
+    os.WriteFile($dir "/bag.olang", "type Bag struct(N I64) { N }\nfn Bag.FromIter<I Iterator<Bag ? E>, ? E>(it mut I&) Bag ? E { return Bag(0) }\ntype Pt struct(x I64) { x }\n")!
+    k := known()
+    text := "import bag \"bag\"\nfn main() {\n    a := bag.Bag[bag.Bag(2), bag.Bag(3)]\n    b := bag.Pt[bag.Pt(1)]\n}\n"
+    got := migrate($dir "/main.olang", text, k)
+    want := "import bag \"bag\"\nfn main() {\n    a := bag.Bag[bag.Bag(2), bag.Bag(3)]\n    b := Array<bag.Pt>[bag.Pt(1)]\n}\n"
+    os.RemoveAll(dir)!
+    assert got == want, got
 }
 
 test "Markdown: the code in fences and spans" {
