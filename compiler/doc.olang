@@ -494,6 +494,7 @@ fn pushBuilders(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, 
         name := $c.P.L.Names.Text(c.P.FnDecl(f).Name)
         bi := try Entry.item(c, sc, x, mi, name, all) catch explain.Missing { continue }
         bi.Builder = true
+        bi.Target = $ast.OwnerTarget(c.P.FnDecl(f), c.P.L.Names) "." $c.P.L.Names.Text(c.P.FnDecl(f).Member)   # B7a: its tests
         e.Members.Push(bi)
     }
 }
