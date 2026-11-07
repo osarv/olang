@@ -930,3 +930,11 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   another package so v1 and v2 can sit side by side) - ASKED to confirm, rec yes; progress per token - the ledger and
   plan slimmed (185k -> ~100k tokens loaded per agent step), and "I want to do a compact and trim the Claude.md later
   today. So remember that." (plan.md).
+- Versions, the user 2026-11-07: "shouldn't the default be that we use the latest version? And we don't have to update
+  manually. And then we kind of say we want to pin to an older version." Answered: latest is the right choice of WHICH
+  version, but taken automatically on every build it changes builds with no change of the user's (a new release breaks
+  or alters a program overnight, two machines build different code, a bad or malicious release reaches everyone at
+  once); PROPOSED instead (Cargo's model): the newest compatible version (same major) is taken when a dependency is
+  added or updated (`olang get`, `olang get -update` for all), recorded in olang.lock so every build uses it until the
+  next update; `@v1.2` pins an older one; a new major is another package; two dependencies wanting one repository get
+  one copy, the newest that satisfies both. Replaces the MVS proposal. ASKED. In effect: today's olang.lock pinning.
