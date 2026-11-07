@@ -295,30 +295,35 @@ fn (e mut Effects&) settle(comp Vec<I64>&) {
         f.Writes = e.own[b].Writes
         e.whole[b] = f
     }
-    # the parameters written through: a callee writing through what an argument rooted at one reaches
-    changed := true
-    for changed {
-        changed = false
-        for b in comp {
-            for l in e.links[b] {
-                if l.Callee < 0 or l.Callee >= e.Bodies.Len() or e.state[l.Callee] < 1 { continue }
-                if inComp.Has(l.Callee) or e.state[l.Callee] == 2 {
-                    if not hasBit(e.whole[l.Callee].Writes, l.At) { continue }
-                    if l.Param == globalParam {
-                        # a callee writing through what a global's storage lends it: a store into the global (G.Push(x))
-                        if e.whole[b].WritesGlobals { continue }
-                        for w in comp: e.whole[w].WritesGlobals = true
-                        changed = true
-                        continue
-                    }
-                    if hasBit(e.whole[b].Writes, l.Param) { continue }
-                    e.whole[b].Writes = e.whole[b].Writes | paramBit(l.Param)
-                    changed = true
-                }
-            }
-        }
+    # the parameters written through: a callee writing through what an argument rooted at one reaches, to a fixed point
+    for {
+        added I64 = 0
+        for b in comp { added += e.passWrites(b, comp, inComp) }
+        if added == 0: break
     }
     for b in comp { e.state[b] = 2 }
+}
+
+# what body b's calls write through, passed on to b's own parameters (and to its component's globals): how many facts
+# it added
+fn (e mut Effects&) passWrites(b I64, comp Vec<I64>&, inComp Map<I64, Bool>&) I64 {
+    added I64 = 0
+    for l in e.links[b] {
+        if l.Callee < 0 or l.Callee >= e.Bodies.Len() or e.state[l.Callee] < 1: continue
+        if not (inComp.Has(l.Callee) or e.state[l.Callee] == 2): continue
+        if not hasBit(e.whole[l.Callee].Writes, l.At): continue
+        if l.Param == globalParam {
+            # a callee writing through what a global's storage lends it: a store into the global (G.Push(x))
+            if e.whole[b].WritesGlobals: continue
+            for w in comp: e.whole[w].WritesGlobals = true
+            added++
+            continue
+        }
+        if hasBit(e.whole[b].Writes, l.Param): continue
+        e.whole[b].Writes = e.whole[b].Writes | paramBit(l.Param)
+        added++
+    }
+    return added
 }
 
 # a link's Param where the argument lends a global's storage, or what a global refers to

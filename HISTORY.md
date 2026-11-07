@@ -30200,3 +30200,13 @@ mapvec 0.10 -> 0.04, session 0.07 -> 0.03, mapremove 0.22 -> 0.12, conns 0.09 ->
 0.46 -> 0.51 s with 1% fewer instructions (a whole tree per pass in one region: memory reuse order, not work, the likely
 cause; left as measured). Every fixture's maximum resident size is unchanged (1.8-2.4 MB). bench: no row makes regions
 but regex (three of them; 623,002,854 -> 622,993,191 instructions).
+
+**C24, compiler/'s deepest lines.** Lines nested deeper than four blocks inside a function's body (Claude's own rule,
+rules.md), counted by a throwaway brace walk: 27 left in compiler/ after the front-end refactor's round, in check.olang
+(5 functions), unparse.olang, effects.olang, ast.olang, generic.olang, scope.olang and parse.olang. Flattened all but
+scope.olang's and parse.olang's (sec8r2's and the literals round's files, left to them - 3 lines): check's `paramAt`
+(a narrowed callee and a value match over two helpers, `ctorParamAt`, `payloadParamAt`), `notRecord` (`recordBody`,
+guards over a narrowed statement), `wholeColumn` (`columnSlice`), `caughtCaseTest` (`altTest`, `payloadTest`),
+`payloadPatternOk` (a guard on the pattern's case, `payloadItemOk`); unparse's `decl` (`externBlock`, `errorDecl`);
+effects' `settle` (`passWrites`, counting the facts it adds - no changed flag); ast's `RecvTarget` and `OwnerTarget`
+sharing `nameOrConstraint`; generic's `DefaultMethods` (`traitReaches`). No change in what any of them does.

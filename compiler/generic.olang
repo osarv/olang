@@ -2890,24 +2890,24 @@ fn (p mut Program&) DefaultMethods(t types.TypeId, name source.NameId) Vec<I64> 
         d := types.DeclId(I32(p.defaultTraits[i]))
         td := p.typeDecl(d)
         if td is null or td.Body is null { continue }
-        ok := false
-        match td.Body {
-            case ast.TypeBody.Trait(methods, _, members) {
-                # T31a: a closed trait's defaults reach the types it lists alone
-                ok = members.Len() == 0 or p.Member(x, p.SelfType(d))
-                for m in methods {
-                    if m.IsBuilder() {
-                        if not p.meetsBuilder(d, p.T.Args(p.SelfType(d)), m) { ok = false }
-                        continue
-                    }
-                    if p.MethodOf(x, m.Name) < 0 { ok = false }
-                }
-            }
-            case _ { }
-        }
-        if ok { out.Push(f) }
+        if p.traitReaches(d, td.Body!, x) { out.Push(f) }
     }
     return out
+}
+
+# whether trait d's defaults reach type x: x meets every method and builder the trait requires, and is one a closed
+# trait lists (T31a)
+fn (p mut Program&) traitReaches(d types.DeclId, body ast.TypeBody&, x types.TypeId) Bool {
+    if body != ast.TypeBody.Trait: return false
+    if body.members.Len() > 0 and not p.Member(x, p.SelfType(d)): return false
+    for m in body.methods {
+        if m.IsBuilder() {
+            if not p.meetsBuilder(d, p.T.Args(p.SelfType(d)), m): return false
+        } else if p.MethodOf(x, m.Name) < 0 {
+            return false
+        }
+    }
+    return true
 }
 
 # the key of the trait a type variable's constraint written in module mi names, -1 for none

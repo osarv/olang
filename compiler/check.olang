@@ -12401,29 +12401,28 @@ fn (c mut Checker&) paramAt(target typed.Callee&, f I64, k I64) diag.Where {
         if j >= 0 and fd.S.Params.Len() > 0 and j < fd.S.Params.Len() { return c.markAt(mi, fd.S.Params[j].Ty) }
         return diag.Where.Nowhere
     }
-    match target {
-        case typed.Callee.Body(id) {
-            if I64(id) >= c.Bodies.Len() { return diag.Where.Nowhere }
-            match c.Bodies[I64(id)].Of {
-                case typed.BodyOf.Ctor(t, _) {
-                    d := c.P.T.DeclOf(c.deref(t))
-                    st := c.structBody(d)
-                    if st is null { return diag.Where.Nowhere }
-                    if st.Params.Len() > 0 and k < st.Params.Len() { return c.markAt(c.P.DeclModule(d), st.Params[k].Ty) }
-                }
-                case typed.BodyOf.Case(t, tag) {
-                    d := c.P.T.DeclOf(c.deref(t))
-                    cd := caseDecl(c.P.TypeDecl(d), tag)
-                    if cd is not null and cd.Payload.Len() > 0 and k < cd.Payload.Len() {
-                        return c.markAt(c.P.DeclModule(d), cd.Payload[k].Ty)
-                    }
-                }
-                case _ { }
-            }
-        }
-        case _ { }
+    if target != typed.Callee.Body or I64(target.id) >= c.Bodies.Len(): return diag.Where.Nowhere
+    return match c.Bodies[I64(target.id)].Of {
+        case typed.BodyOf.Ctor(t, _): c.ctorParamAt(t, k)
+        case typed.BodyOf.Case(t, tag): c.payloadParamAt(t, tag, k)
+        case _: diag.Where.Nowhere
     }
-    return diag.Where.Nowhere
+}
+
+# where the k-th parameter of type t's constructor is written; Nowhere where it is not known
+fn (c mut Checker&) ctorParamAt(t types.TypeId, k I64) diag.Where {
+    d := c.P.T.DeclOf(c.deref(t))
+    st := c.structBody(d)
+    if st is null or k < 0 or k >= st.Params.Len(): return diag.Where.Nowhere
+    return c.markAt(c.P.DeclModule(d), st.Params[k].Ty)
+}
+
+# where the k-th field of the payload of type t's case tag is written; Nowhere where it is not known
+fn (c mut Checker&) payloadParamAt(t types.TypeId, tag I64, k I64) diag.Where {
+    d := c.P.T.DeclOf(c.deref(t))
+    cd := caseDecl(c.P.TypeDecl(d), tag)
+    if cd is null or k < 0 or k >= cd.Payload.Len(): return diag.Where.Nowhere
+    return c.markAt(c.P.DeclModule(d), cd.Payload[k].Ty)
 }
 
 # where a type written in a file is - Nowhere for none written
@@ -14229,26 +14228,27 @@ fn (c mut Checker&) notRecord(row types.TypeId) String {
     if c.P.T.Destructs(row): return "has a destructor"
     td := c.P.TypeDecl(c.P.T.DeclOf(row))
     if td is null or td.Body is null: return "is no struct"
-    match td.Body {
-        case ast.TypeBody.Struct(s) {
-            es := s.Errs
-            if es is not null and (es.HasErrors or es.Contract is not null): return "has a constructor that checks or fails"
-            puns I64 = 0
-            for st in s.Body {
-                match st {
-                    case ast.Stmt.Var(_, v) {
-                        if not v.Field or v.Ty is not null or v.Values.Len() > 0 or v.Infer: return "has a field its constructor computes"
-                        puns += v.Names.Len()
-                    }
-                    case _: return "has a constructor that does more than declare its fields"
-                }
-            }
-            if puns == 0: return "has no fields"
-            if puns != s.Params.Len(): return "has a constructor parameter that is no field"
-            return ""
-        }
-        case _: return "is no struct"
+    return match td.Body {
+        case ast.TypeBody.Struct(s): recordBody(s)
+        case _: "is no struct"
     }
+}
+
+# T7e: why a struct's body keeps it from being a Columns' row - a constructor that checks or fails, a field it computes,
+# a statement other than a field, no fields, a parameter that is no field - "" for none
+fn recordBody(s ast.StructBody&) String {
+    es := s.Errs
+    if es is not null and (es.HasErrors or es.Contract is not null): return "has a constructor that checks or fails"
+    puns I64 = 0
+    for st in s.Body {
+        if st != ast.Stmt.Var: return "has a constructor that does more than declare its fields"
+        v := st.v
+        if not v.Field or v.Ty is not null or v.Values.Len() > 0 or v.Infer: return "has a field its constructor computes"
+        puns += v.Names.Len()
+    }
+    if puns == 0: return "has no fields"
+    if puns != s.Params.Len(): return "has a constructor parameter that is no field"
+    return ""
 }
 
 # T7e: a column assigned whole, "c.x = v": v's lanes - an array or lanes of the table's length, checked once and aborting
@@ -14283,20 +14283,19 @@ fn (c mut Checker&) columnStore(sp source.Span, p typed.Lvalue&, value ast.Expr&
 # length checked against the table's (columnStore). The prelude's own code assigns its buffers freely
 fn (c mut Checker&) wholeColumn(p typed.Lvalue&) Bool {
     if c.P.L.Mods[c.fr().Mi].Prelude: return false
-    match p {
-        case typed.Lvalue.Field(_, _, base, _): return c.P.IsColumns(c.deref(base.Type()))
-        case typed.Lvalue.Temp(_, _, v, _) {
-            match v {
-                case typed.Expr.Slice(_, _, sl) {
-                    match sl.Base {
-                        case typed.Lvalue.Field(_, _, base, _): return c.P.IsColumns(c.deref(base.Type()))
-                        case _: return false
-                    }
-                }
-                case _: return false
-            }
-        }
-        case _: return false
+    return match p {
+        case typed.Lvalue.Field(_, _, base, _): c.P.IsColumns(c.deref(base.Type()))
+        case typed.Lvalue.Temp(_, _, v, _): c.columnSlice(v)
+        case _: false
+    }
+}
+
+# T7e: whether v is a slice of a Columns' field - a ColumnVec's column as a whole
+fn (c mut Checker&) columnSlice(v typed.Expr&) Bool {
+    if v != typed.Expr.Slice: return false
+    return match v.s.Base {
+        case typed.Lvalue.Field(_, _, base, _): c.P.IsColumns(c.deref(base.Type()))
+        case _: false
     }
 }
 
@@ -17326,32 +17325,41 @@ fn (c mut Checker&) unpin(p source.Span, local I64) {
 fn (c mut Checker&) caughtCaseTest(m ast.Match&, cs ast.Case&) ast.Expr& {
     t ast.Expr?& = null
     for p in cs.Alts {
-        x ast.Expr?& = null
-        match p {
-            case ast.Pattern.Path(psp, y), ast.Pattern.Value(psp, y) {
-                x = ast.Expr.Is(psp, m.Subject, y, false) if isNullLit(y) else ast.Expr.Binary(psp, token.Tok.EqEq, m.Subject, y)
-            }
-            case ast.Pattern.Case(psp, y, _) {
-                # T19b, S13b: the word, then each field a value is given for - read where the word narrows the subject
-                x = ast.Expr.Binary(psp, token.Tok.EqEq, m.Subject, y)
-                for fp in c.payloadItems(p) {
-                    match fp.Sub {
-                        case ast.Pattern.Path(vsp, v), ast.Pattern.Value(vsp, v) {
-                            f := ast.Expr.Member(vsp, m.Subject, fp.Name)
-                            x = ast.Expr.Binary(psp, token.Tok.And, x!, ast.Expr.Binary(vsp, token.Tok.EqEq, f, v))
-                        }
-                        case _ { }
-                    }
-                }
-            }
-            case _ { }
-        }
-        if x is null { continue }
+        x := c.altTest(m, p)
+        if x is null: continue
         t = x if t is null else ast.Expr.Binary(cs.Sp, token.Tok.Or, t, x)
     }
     if t is null { t = ast.Expr.Lit(cs.Sp, token.Tok.BoolLit) }
     if cs.Guard is not null { t = ast.Expr.Binary(cs.Sp, token.Tok.And, t!, cs.Guard!) }
     return t!
+}
+
+# one alternative of a case on a caught error as a test of the subject - null for one that tests nothing
+fn (c mut Checker&) altTest(m ast.Match&, p ast.Pattern&) ast.Expr?& {
+    match p {
+        case ast.Pattern.Path(psp, y), ast.Pattern.Value(psp, y) {
+            if isNullLit(y): return ast.Expr.Is(psp, m.Subject, y, false)
+            return ast.Expr.Binary(psp, token.Tok.EqEq, m.Subject, y)
+        }
+        case ast.Pattern.Case(psp, y, _): return c.payloadTest(m, p, psp, y)
+        case _: return null
+    }
+}
+
+# T19b, S13b: a payload pattern's test - the word, then each field a value is given for, read where the word narrows the
+# subject
+fn (c mut Checker&) payloadTest(m ast.Match&, p ast.Pattern&, psp source.Span, y ast.Expr&) ast.Expr& {
+    x ast.Expr& = ast.Expr.Binary(psp, token.Tok.EqEq, m.Subject, y)
+    for fp in c.payloadItems(p) {
+        match fp.Sub {
+            case ast.Pattern.Path(vsp, v), ast.Pattern.Value(vsp, v) {
+                f := ast.Expr.Member(vsp, m.Subject, fp.Name)
+                x = ast.Expr.Binary(psp, token.Tok.And, x, ast.Expr.Binary(vsp, token.Tok.EqEq, f, v))
+            }
+            case _ { }
+        }
+    }
+    return x
 }
 
 # T19b, S13b: a payload pattern's items, one per field it mentions - by position first, then by name ("Bad(l, col = 0)")
@@ -17381,59 +17389,63 @@ fn (c mut Checker&) payloadItems(p ast.Pattern&) Vec<payloadItem> {
 # T19b, S13b: a payload pattern names one word carrying a payload, of a local's error value, its items no more than its
 # fields, each a field's once, a name, "_" or a value - said where not
 fn (c mut Checker&) payloadPatternOk(p ast.Pattern&, what String&, named Bool, alts I64) Bool {
-    match p {
-        case ast.Pattern.Case(psp, y, subs) {
-            path := exprPath(y)
-            if path is null {
-                c.err(psp, msgs.CaughtCaseForm())
-                return false
-            }
-            w, et := c.errorWord(path)
-            if w < 0 {
-                c.err(psp, msgs.CaughtCaseForm())
-                return false
-            }
-            fields := c.P.WordFields(c.P.T.DeclOf(et), w)
-            if fields.Len() == 0 {
-                c.err(psp, msgs.PlainWordCalled(c.wordText(et, w)))
-                return false
-            }
-            if subs.Len() > fields.Len() {
-                c.err(psp, msgs.PayloadArgs(c.wordText(et, w), fields.Len(), subs.Len()))
-                return false
-            }
-            if not named {
-                c.err(psp, msgs.ErrPatternNeedsName(what))
-                return false
-            }
-            seen Vec<source.NameId>
-            for fp in c.payloadItems(p) {
-                if not fields.Some(fn(f): return f.Name == fp.Name) {
-                    near mut msgs.Nearest& = msgs.Nearest(c.text(fp.Name))
-                    for f in fields { near.Offer(c.text(f.Name)) }
-                    c.err(psp, msgs.NoSuchMember(c.wordText(et, w), c.text(fp.Name), near.Hint()))
-                    return false
-                }
-                if fp.Name in seen {
-                    c.err(psp, msgs.PayloadArgs(c.wordText(et, w), fields.Len(), subs.Len()))
-                    return false
-                }
-                seen.Push(fp.Name)
-                if alts > 1 and isBind(fp.Sub) {
-                    c.err(fp.Sub.Span(), msgs.ErrPatternBindAlts())
-                    return false
-                }
-                match fp.Sub {
-                    case ast.Pattern.Wild(_), ast.Pattern.Bind(_, _), ast.Pattern.Value(_, _), ast.Pattern.Path(_, _) { }
-                    case _ {
-                        c.err(fp.Sub.Span(), msgs.CaughtCaseForm())
-                        return false
-                    }
-                }
-            }
-            return true
+    if p != ast.Pattern.Case: return true
+    psp, subs := p.sp, p.subs
+    path := exprPath(p.path)
+    if path is null {
+        c.err(psp, msgs.CaughtCaseForm())
+        return false
+    }
+    w, et := c.errorWord(path)
+    if w < 0 {
+        c.err(psp, msgs.CaughtCaseForm())
+        return false
+    }
+    fields := c.P.WordFields(c.P.T.DeclOf(et), w)
+    if fields.Len() == 0 {
+        c.err(psp, msgs.PlainWordCalled(c.wordText(et, w)))
+        return false
+    }
+    if subs.Len() > fields.Len() {
+        c.err(psp, msgs.PayloadArgs(c.wordText(et, w), fields.Len(), subs.Len()))
+        return false
+    }
+    if not named {
+        c.err(psp, msgs.ErrPatternNeedsName(what))
+        return false
+    }
+    seen Vec<source.NameId>
+    for fp in c.payloadItems(p) {
+        if not c.payloadItemOk(fp, psp, et, w, fields, subs.Len(), seen, alts): return false
+        seen.Push(fp.Name)
+    }
+    return true
+}
+
+# one item of a payload pattern: a field of the word's, once, a name, "_" or a value - and no name where the case has
+# several alternatives - said where not
+fn (c mut Checker&) payloadItemOk(fp payloadItem&, psp source.Span, et types.TypeId, w I64, fields Array<ast.Param&>&
+                                  given I64, seen Vec<source.NameId>&, alts I64) Bool {
+    if not fields.Some(fn(f): return f.Name == fp.Name) {
+        near mut msgs.Nearest& = msgs.Nearest(c.text(fp.Name))
+        for f in fields { near.Offer(c.text(f.Name)) }
+        c.err(psp, msgs.NoSuchMember(c.wordText(et, w), c.text(fp.Name), near.Hint()))
+        return false
+    }
+    if fp.Name in seen {
+        c.err(psp, msgs.PayloadArgs(c.wordText(et, w), fields.Len(), given))
+        return false
+    }
+    if alts > 1 and isBind(fp.Sub) {
+        c.err(fp.Sub.Span(), msgs.ErrPatternBindAlts())
+        return false
+    }
+    match fp.Sub {
+        case ast.Pattern.Wild(_), ast.Pattern.Bind(_, _), ast.Pattern.Value(_, _), ast.Pattern.Path(_, _): return true
+        case _ {
+            c.err(fp.Sub.Span(), msgs.CaughtCaseForm())
+            return false
         }
-        case _ { return true }
     }
 }
 

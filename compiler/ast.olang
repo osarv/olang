@@ -634,17 +634,7 @@ fn RecvTarget(f Func&, names source.Names&) String {
         match t {
             case TypeRef.Perm(_, of, _) { t = of }
             case TypeRef.Ref(_, of, _) { t = of }
-            case TypeRef.Named(_, path, _) {
-                n := path[path.Len() - 1]
-                for tp in f.TypeParams {
-                    if tp.Name != n or tp.Ty is null { continue }
-                    match tp.Ty! {
-                        case TypeRef.Named(_, cpath, _) { return $names.Text(cpath[cpath.Len() - 1]) }
-                        case _ { return "" }
-                    }
-                }
-                return $names.Text(n)
-            }
+            case TypeRef.Named(_, path, _) { return nameOrConstraint(f, path[path.Len() - 1], names) }
             case _ { return "" }
         }
     }
@@ -657,11 +647,17 @@ fn RecvTarget(f Func&, names source.Names&) String {
 fn OwnerTarget(f Func&, names source.Names&) String {
     n := f.OwnerName()
     if n == source.NameId(0) { return "" }
+    return nameOrConstraint(f, n, names)
+}
+
+# B7a: a type named n in f's declaration as a test names it - the trait constraining it where n is one of f's
+# constrained type variables, "" where its constraint is written otherwise, else n itself
+fn nameOrConstraint(f Func&, n source.NameId, names source.Names&) String {
     for tp in f.TypeParams {
         if tp.Name != n or tp.Ty is null { continue }
-        match tp.Ty! {
-            case TypeRef.Named(_, cpath, _) { return $names.Text(cpath[cpath.Len() - 1]) }
-            case _ { return "" }
+        return match tp.Ty! {
+            case TypeRef.Named(_, cpath, _): $names.Text(cpath[cpath.Len() - 1])
+            case _: ""
         }
     }
     return $names.Text(n)
