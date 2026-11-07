@@ -50,6 +50,10 @@ test block cannot make (programs that must fail to compile, whole builds) live i
   appended through one, an option kept from a parameter's array, an element of a constant literal (T25d), versions given
   in a catch clause, read in deferred code, captured by a lambda, given in a loop and read after it; read back after an
   arena churn, a baked global and top-level asserts deciding the same while compiling.
+- `fnrel.olang` - a function value carries its relations (T22a): a named function and a lambda keeping what they are
+  given, held in locals, handed back by calls, chosen by a conditional, given again in a loop, an adapter held in a
+  local - each call through one judged as the direct call it is; read back after an arena churn, baked globals and
+  top-level asserts deciding the same while compiling.
 - `viewplace.olang` - storage kept for a view (O27 as placement): a turn's text kept through views of it, a view handed
   back of what a function builds, a slice of a temporary kept in a parameter's field, a generator's views of a local it
   made, a closure over a turn's local kept in a field, a part of an instance kept past its turn; read back after an arena

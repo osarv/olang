@@ -31,6 +31,9 @@
 # made and finished in one place beside the ordinary ones); and generators handing out views (D18c) - of the text they
 # were given, of text and nodes their walk keeps - kept beside the walk, or past it (which must be refused).
 #
+# A relations scenario (one in sixteen or so, T22a) holds functions and closures whose obligations are more than their
+# type says in locals, conditionals and versions given in loops, calls them with nodes of blocks and turns, and now and
+# then puts one where a written function type is all that holds (refused, the scenario left out).
 # A kept-view scenario (one in sixteen or so, O27 as placement) keeps views of text made in blocks and loop turns - slices,
 # a generator's borrowed words, a view a helper hands back of what it builds - and closures over a turn's node in lists
 # that outlive them: each such storage must be built where its view is kept, or the view refused.
@@ -1414,7 +1417,59 @@ fn (g mut SG&) viewLeaf(k I64, ind String&) String& {
     if w == 1 { return $ind $t " := $\"" $v "-x\"\n" $ind "keep.Push(" $t "[0:1])\n" $ind "keep.Push(" $t "[1:])\n" }
     if w == 2 { return $ind "keep.Push(vh" $k "(" $v "))\n" }
     if w == 3 { return $ind $t " mut Node& = Node(" $v ")\n" $ind "fs.Push(fn() I64 { return " $t ".v })\n" }
-    return $ind $t " := $\"" $v "\" " $v "\n" $ind "keep.Push(" $t "[0:" $(Array<String&>["1", "2"][g.r(2)]) "])\n"
+    return $ind $t " := \"" $v "\" $" $v "\n" $ind "keep.Push(" $t "[0:" $(Array<String&>["1", "2"][g.r(2)]) "])\n"
+}
+
+# a relations scenario (T22a): functions and closures whose obligations are more than their type says - link, a lambda
+# pushing into a captured list, one a helper hands back - held in locals, chosen by conditionals, given again in loops,
+# and called with nodes made in blocks and turns; each argument must be built where the function keeps it (or refused),
+# so the chain and the kept nodes, after a churn, are the checksum. Now and then a value carrying one reaches a place a
+# written function type is all that holds - a list's element, a capture - which must be refused
+fn (g mut SG&) relScenario(k I64) String& {
+    for _ in range 8 { g.next() }
+    body := $g.relStmts(k, 2, "    ") $g.relStmts(k, 2, "    ")
+    return ("fn rk" $k "(l mut Vec<Node&>&) fn&(n Node&) {\n    return fn(n Node&) { l.Push(n) }\n}\n"
+            "fn rs" $k "(a mut Node&, b mut Node?&) { a.v += 1 }\n"
+            "fn s" $k "() I64 {\n    root mut Node& = Node(" $g.val() ")\n    kept := Vec<Node&>()\n"
+            "    kr mut Vec<Node&>& = kept\n    op := link\n    add := fn(n Node&) { kr.Push(n) }\n    give := rk" $k
+            "(kept)\n" $body "    add(Node(1))\n    give(Node(2))\n    op(root, root.next)\n    churn()\n    acc I64 = chain(root)\n"
+            "    for n in kept { acc = acc * 31 % 1000000007 + n.v }\n    return acc\n}\n")
+}
+
+fn (g mut SG&) relStmts(k I64, d I64, ind String&) String& {
+    out String& = ""
+    for _ in range 1 + g.r(4) {
+        if d > 0 and g.chance(40) {
+            inner := $ind "    "
+            body := g.relStmts(k, d - 1, inner)
+            w := g.r(3)
+            if w == 0 { out = $out $ind "for _ in range Run * 3 {\n" $body $inner "churn()\n" $ind "}\n" }
+            else if w == 1 { out = $out $ind "{\n" $body $ind "}\n" }
+            else { out = $out $ind "if Run > 0 {\n" $body $inner "churn()\n" $ind "}\n" }
+        } else {
+            out = $out $g.relLeaf(k, ind)
+        }
+    }
+    return out
+}
+
+fn (g mut SG&) relLeaf(k I64, ind String&) String& {
+    v := g.val()
+    q := g.name("q")
+    # (refused, now and then: a written function type is all that holds a list's element or a capture)
+    if g.r(400) == 0 { return $ind $q " := Vec<fn&(a mut Node&, b mut Node?&)>()\n" $ind $q ".Push(op)\n" }
+    if g.r(400) == 0 { return $ind $q " := fn() { add(Node(" $v ")) }\n" $ind $q "()\n" }
+    w := g.r(10)
+    if w == 0 { return $ind "op(root, Node(" $v "))\n" }
+    if w == 1 { return $ind $q " mut Node& = Node(" $v ")\n" $ind "op(root, " $q ")\n" }
+    if w == 2 { return $ind "add(Node(" $v "))\n" }
+    if w == 3 { return $ind $q " := Node(" $v ")\n" $ind "add(" $q ")\n" }
+    if w == 4 { return $ind "give(Node(" $v "))\n" }
+    if w == 5 { return $ind "op = rs" $k "\n" }
+    if w == 6 { return $ind "op = link\n" }
+    if w == 7 { return $ind $q " := link if Run > 0 else rs" $k "\n" $ind $q "(root, Node(" $v "))\n" }
+    if w == 8 { return $ind $q " := rk" $k "(kept)\n" $ind $q "(Node(" $v "))\n" }
+    return $ind $q " := Node(" $v ")\n" $ind "give(" $q ")\n"
 }
 
 # n statements around what t declares (as a), wrapped in blocks d deep at most
@@ -1457,6 +1512,7 @@ fn Scenario(seed U64, k I64) String& {
     if w < 30 { return "# scenario " $k "\n" $g.genScenario(k) }
     if w < 38 { return "# scenario " $k "\n" $g.cursorScenario(k) }
     if w < 44 { return "# scenario " $k "\n" $g.viewScenario(k) }
+    if w < 50 { return "# scenario " $k "\n" $g.relScenario(k) }
     t := Targets - 1 if g.chance(25) else g.r(Targets - 1)    # a Str scenario one time in four
     g.global = t == 9
     decl String& = $Decls[t]
