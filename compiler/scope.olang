@@ -250,6 +250,7 @@ type Placement struct(File I64, Start I64, End I64, Decl I64, Text String) {
     Decl
     Text
 }
+
 # a function made a value (T22a): where, which body, and how - Named, Lambda, or an instance through its Call (Of)
 type fnUse struct(File I64, Sp source.Span, F I64, Kind I64, Of types.TypeId) {
     File
