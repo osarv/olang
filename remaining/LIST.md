@@ -336,7 +336,9 @@ room after 1-11, enum layout before the final review (it changes T.Size, layout-
 - (e) The LICENCE stays the user's ("the last thing we do"): ask when the compiler is declared done.
 - QCU 1-3 are open; Columns<T> waits for them and for FromIter (QBU/QBW).
 
-## Proposed 2026-11-07 (QCX) - NOT decided: the user's "Add it then, not done" fixed a typo, it was no answer; re-asked
+## QCX, answered 2026-11-07 (after a misread): N2 yes (before "done"); N3, N4, N5, N6 and platforms yes, after "done"; N1 and struct patterns re-asked
+
+- N0. The interpreter brought current (the user asked): evaldump/evaldiff fixed, corpus + std under `interpret`, differences fixed, the comparison into make verify - before "done".
 
 - N1. Errors carrying data (deferred 2026-10-24): design note docs/errdata.md (wt-errdata) -> the user's direction
   questions -> build round (check, lower, emit, eval, scope; std migration).
