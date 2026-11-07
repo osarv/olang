@@ -6,7 +6,8 @@ Rules for agents: /home/user/review/rounds/finish-rules.md (builds through /home
 through /home/user/vlock - one slot). Records: .claude/memory/plan.md (queue, REMEMBER items), decisions.md (today's
 answers at the end), /home/user/review/remaining/LIST.md.
 
-## Merged today (master = wt-merge, pushed): deprec, asm (explain -asm/-ir), structpat (verified), drops (dafb690).
+## Merged today (master = wt-merge, pushed): deprec, asm (explain -asm/-ir), structpat (verified), drops (dafb690), interp (e2a3c7f), columns (7a7527d).
+Goldens: conflicts take our side; ALL four goldens recaptured once at the end (not per merge).
 
 ## Running (background agents; each reports by a hand-back message)
 
