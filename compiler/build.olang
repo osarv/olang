@@ -1100,24 +1100,30 @@ fn (c mut Config&) listLink(objs Vec<String&>&, prog Program&, dir String&, ir B
     }
     Phase("link")
     c.Linked++
-    listed := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
-    for n in listed {
-        if ir and n.StartsWith("code") { try c.bitcodeText($dir "/" $n, d) }
-    }
+    if ir { try c.bitcodeText(dir, d) }
     try os.WriteFile($dir "/made", $h "\n") catch os.Error { }
     listFiles(dir, ir, out)
 }
 
-# B11d: the bitcode at bc written as text beside it (bc.ll) by clang, no pass run over it
-fn (c Config&) bitcodeText(bc String&, d mut diag.Diagnostics&) ? Failed {
-    args Vec<String&>
-    args.Push($c.Clang)
-    if c.Target.Foreign { args.Push($"--target=" $c.Target.Triple) }
-    for a in String&["-S", "-emit-llvm", "-x", "ir", "-Xclang", "-disable-llvm-passes", "-o", $bc ".ll", bc] { args.Push($a) }
-    ran := try os.Exec(...args.ToArray()) catch os.Error default os.Output(127, "", "")
-    if ran.Status != 0 {
-        sayErr($ran.Stdout $ran.Stderr)
-        d.Fatal(diag.Where.Nowhere, msgs.ClangFailed(bc))
+# B11d: each part of bitcode the link wrote into dir (code, code1 ...) written as text beside it (code.ll ...) by clang,
+# no pass run over it, side by side
+fn (c Config&) bitcodeText(dir String&, d mut diag.Diagnostics&) ? Failed {
+    cmds Vec<Array<String&>&>
+    listed := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
+    for n in listed {
+        if not n.StartsWith("code") { continue }
+        args mut Vec<String&>& = Vec<String&>()
+        args.Push($c.Clang)
+        if c.Target.Foreign { args.Push($"--target=" $c.Target.Triple) }
+        bc := $dir "/" $n
+        for a in String&["-S", "-emit-llvm", "-x", "ir", "-Xclang", "-disable-llvm-passes", "-o", $bc ".ll", bc] { args.Push($a) }
+        cmds.Push(args.ToArray())
+    }
+    status, said := RunAll(cmds.ToArray(), c.width())
+    for i in range status.Len() {
+        if status[i] == 0 { continue }
+        sayErr(said[i])
+        d.Fatal(diag.Where.Nowhere, msgs.ClangFailed(cmds[i][cmds[i].Len() - 1]))
         error Failed.Reported
     }
 }
