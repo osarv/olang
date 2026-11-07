@@ -957,3 +957,6 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   relations, C3/C4/C6, T25d), both from wt-merge fe143d3. Merge queue: structpat's merge verify running; drops next
   (seed from drops, goldens with the merged compiler); then errors carrying data (round 1, after interp - both touch
   eval.olang), packed structs beside the section-8 build.
+- 2026-11-07: QCZ decided - drop order computed from references (holders first, cycles an error), then Part C. Queued
+  as round "dropord" (design note first, opus xhigh) once drops is merged; it touches check's drop flags, lowering's
+  defer order and free.olang, so it runs after the section-8 build or between its rounds, by files.
