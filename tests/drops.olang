@@ -708,3 +708,47 @@ fn gVecGiven(r GRes) Vec<GRes> {
 }
 
 assert gVecHeld.WritesGlobals and not gVecGiven.WritesGlobals, "decided while compiling (G42)"
+
+# a store over a value with destructors reached through what a call gives: the call made once, the old value ended
+# through what it gave, then the new one stored (O15; a checker gap until 2026-11-07)
+type BoxR struct(r Res) {
+    r
+}
+
+fn getBox(b mut BoxR&) mut BoxR& { return b }
+
+fn throughCall() String {
+    t := Tally()
+    {
+        b BoxR = BoxR(Res(1, t))
+        getBox(b).r = Res(3, t)
+        assert b.r.id == 3 and t.Listed() == "1"
+    }
+    return t.Listed()
+}
+
+ThroughCall := throughCall()
+assert ThroughCall == "1.3", "decided while compiling: " $ThroughCall
+
+test getBox "a store over a holder's part through what a call gives ends the old value, once" {
+    assert throughCall() == "1.3"
+}
+
+# a by-value holder declared in a loop's body and destroyed there: each turn declares it anew, so its Destroy() is no
+# mention before the next turn's (C9b; it was refused as one until 2026-11-07)
+fn loopDestroyed() String {
+    t := Tally()
+    for i in range 3 {
+        x Res = Res(i, t)
+        assert x.id == i
+        x.Destroy()
+    }
+    return t.Listed()
+}
+
+LoopDestroyed := loopDestroyed()
+assert LoopDestroyed == "0.1.2", "decided while compiling: " $LoopDestroyed
+
+test loopDestroyed "destroys a holder its loop's body declares, every turn" {
+    assert loopDestroyed() == "0.1.2"
+}

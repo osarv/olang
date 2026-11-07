@@ -1405,7 +1405,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   only call results landing where it does is not copied where kept (`typed.FreshViews`), so `b := box(mk(0))` then
   `b.v = mk(k)` frees as it goes.
 - **Recorded limits:** long-lived mutated structures holding values a task can reach still only grow (ledger QF), and
-  values with destructors are freed only where a `Destroy()` ends them; a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
+  values with destructors are freed only where a `Destroy()` ends them (unique Part C, LIST.md A3, measured and tried
+  2026-11-07 and not built: a holder's drop and a collection's destructor are let-goes no call is written for, where
+  views in use cannot be checked - two holders of a block end in reverse order and one may read the other's ended value
+  in its destructor (no drop check); HISTORY.md "Unique Part C"); a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
   port's §8 pass.
 - **More scope rules (O2d, O13a, O13c, O14b/O14c, O16, O18a, O20, O26).** A binding records the depth it was made at;
   each return in a loop is judged again by later assignments in that loop; a call's result carries its callee's result

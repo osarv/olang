@@ -29291,7 +29291,9 @@ against the receiver's `Res`: now only a value given whole for a bare variable (
 a value with destructors through an element (`v.data[i] = x`, `m.ents[i].Value = v`) was a checker gap ("reached
 through what a call gives"): the place is now evaluated once - an index or a reference it reads through held in a
 hidden local where it is more than a local's read or a literal (`check.stable`/`once`) - then the old value ended and
-the new one stored. (4) The prelude's sort helpers moved elements with vacate and plain stores into the vacated
+the new one stored (tests/drops.olang's throughCall: `getBox(b).r = Res(3, t)`). The checks' interp scenario had pinned
+that gap as the construct `interpret` stops at as a build does (bulk review 7, F11); it now uses one still left, a slice
+with no end of a type with no `Len`. (4) The prelude's sort helpers moved elements with vacate and plain stores into the vacated
 positions - a double end once elements have destructors (Sort over a fixed array of a Copy-declaring holder, which C11
 had refused in the instance and now reaches): they occupy.
 
@@ -29310,3 +29312,41 @@ time (and under -sanitize); a scratch program of the same orders agreed under `i
 program's buffer, a bare `Array<Conn>` parameter, a copy of a `Vec<Conn>`, occupy in a program, a comprehension and
 `Array<R>(n)` of destructor values, a copy of an array of them, a Vec of a Copy-declaring holder. The two cases pinning
 the old refusal (`c11dtortypearg`, `c11holdertypearg`: `Vec<Conn>`, `Vec<Pool>`) now pin what stays refused.
+
+## Unique Part C - storage freed where the destructor runs: measured, tried, not built (2026-11-07, wt-drops, O8d)
+
+LIST.md A3: destructors run where their holder lets go (Part B), but the storage the value owns stays until its scope
+closes; the brief asked to release it there wherever early freeing's conditions hold. **Measured first** (1M cycles, a
+destructor struct owning an `Array<I64>(32)`, maximum resident): a Map's value Put and then taken out and let go at the
+taker's block end 388 MB; a Map's value replaced by Put 260 MB; a Vec pushed and truncated every 64 260 MB; a value
+handed to a by-value parameter 1.9 MB and a holder `Destroy()`ed each turn 1.8 MB - both flat already, the turn's scope
+reclaiming them. **Tried** (on this branch, reverted): condition 4 relaxed for a destructor held by value (a holder ends
+it before the storage is let go of - S4's store drops first, vacate's statement drops first; a destructor reached
+through a reference stays one: registered where it was built, O16); `types.Anchors` over destructor structs (so a
+Map's value is an owner place); a dropped move of such a value kept (it is held where its call lands, O16 - a release
+there would free what a scope-close destructor reads); storeOver storing a handed-on parameter as it is, so condition 1
+sees the parameter. None moved a number: every let-go a destructor drives - the collection's own conditional
+destructor vacating its entries, a by-value holder's deferred drop - is a let-go "where no call is written" (free.olang's
+hidden let-goes), which keeps the place. **And rightly**: condition 6 (no view in use across the let-go) cannot be
+checked there. Two holders of one block end in reverse declaration order, so one declared first can hold a view into
+one declared after it and read it in its destructor after that one ended (below); a defer registered before a holder
+runs after its drop. Freeing at those drops would turn a read of an ended value into a read of freed storage.
+
+**What it needs (next round, a design of its own):** a holder's drop modelled as a call of its type's destructor body
+at the drop point - the lets propagated there - where the type's values are proven never registered (no Promote, no
+held call, no escapedHome registration, no test-build guard), and condition 6 checked at each drop against what runs
+after it in the block's exit sequence; and the copy QCE's `ownCopy` makes of a unique value handed on from a by-value
+parameter into a part (`v.Push(x)`, `m.Put(k, value)` - a real copy at run time of its owned parts, wasted: the
+original's flag is cleared and it is never used again) replaced by the move, with section 8's obligation for the
+parameter's owned parts so the caller builds them where they are kept.
+
+**Found on the way.** (1) Fixed: the Landings walk (T13b, C9b) did not renew a local at its declaration, so
+`x.Destroy()` of a by-value holder declared in a loop's body was "mentioned after" - the next turn's mentions of the new
+`x` (typed.Landings: `renewed` at a Let; tests/drops.olang's loopDestroyed). (2) Not fixed, a design question: no
+drop check. A holder storing a reference to a holder declared after it in the same block - `lg Logger = Logger(1); f
+File = File(7); lg.out = f` - is accepted (section 8: the same scope), and at the block's end `f` is ended first, then
+`lg`'s destructor reads `lg.out`: a destructor seeing a value whose destructor already ran (checked: it prints the file
+closed). Memory-safe today (the storage lives until the scope closes), but C11's closing guarantee ("nothing reaches a
+released resource") does not hold, and it is what blocks freeing at drops. Rust's dropck refuses the store (a value with
+a destructor may not hold a reference to one ended before it); olang's equivalent would refuse a by-value holder storing
+a reference to a holder declared later in its block - for the user.
