@@ -923,3 +923,10 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   where known, passed by value, never grows) and a growable one acting like Vec, named `ColumnVec<T>` (mine). Round
   columns started; round qbt (type-level builders, QBT) started; a three-slot build lock (/home/user/blk) keeps seven
   rounds' builds from the out-of-memory killer.
+- 2026-11-07, the user on four answers: the licence - "we'll still push it into the future" (postponed again; ask when
+  publishing); ecosystem - `olang get` YES (add or update a dependency and its lock entry; after "done", no syntax);
+  minimum version selection - the user asked what Go's rule is: explained (each dependency states the least version it
+  needs, the build takes the highest of those minimums - never a newer one just published -, a major version is
+  another package so v1 and v2 can sit side by side) - ASKED to confirm, rec yes; progress per token - the ledger and
+  plan slimmed (185k -> ~100k tokens loaded per agent step), and "I want to do a compact and trim the Claude.md later
+  today. So remember that." (plan.md).

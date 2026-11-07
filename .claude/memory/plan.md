@@ -191,3 +191,8 @@ on 2026-11-07. The remaining work is /home/user/review/remaining/LIST.md.)
   QBT type-level builders; then, last and alone (it migrates every literal), QBU+QBW (the type in front of every
   literal, FromIter) with Columns<T>; the smaller items (LIST.md C5-C8 ...); then goldens, the seed, one full verify,
   the gates and one bulk review with its fixes.
+- REMEMBER LATER TODAY (the user, 2026-11-07: "I want to do a compact and trim the Claude.md later today. So remember
+  that."): (1) remind the user to run /compact on this session once the current batch is merged (only they can); (2)
+  trim CLAUDE.md's settled decisions to terse entries, every detail kept in HISTORY.md (an agent, sonnet, after the
+  last language round merges - every agent reads CLAUDE.md, so not mid-push). Measured: CLAUDE.md ~58k tokens of the
+  ~100k every agent loads.
