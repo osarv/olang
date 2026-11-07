@@ -618,231 +618,77 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 ### Memory and scopes (§8)
 
-- **Memory lives in scopes (O1, O2).** Each block is an arena, reclaimed in one step at its close; nothing is freed
-  before (O8c); globals live in the program's scope (O1b). Allocas are in the entry block (O2c). The arena aligns by
-  size, 64 at 64 bytes (O8a); aggregates take their own alignment. The chunk pool is per-thread size classes bounded
-  by RAM/8 with an LRU, parked workers sharing the rest (O8b).
+- **Memory lives in scopes (O1, O2).** Each block is an arena, reclaimed in one step at its close; globals live in the
+  program's scope (O1b). Allocas are in the entry block (O2c). The arena aligns by size, 64 at 64 bytes (O8a). The
+  chunk pool is per-thread size classes bounded by RAM/8 with an LRU (O8b).
 - **Scopes inferred, none written (QCB, O28, the user's decision 2026-10-30: "Yes, do this scoping rework"; built
-  2026-11-02, round 4 of docs/rework.md).** Every scope marker goes - `&x`, `&return`, scope arguments `f&x()`, `outlives` - and the compiler places each
-  value in the shortest-lived scope every use allows (region inference over the whole program, as obligations already
-  are; field and result scopes hidden parameters), a value kept longer built directly where it is kept - and, since the
-  user's QCR (1) of 2026-11-03 reversed the rule that no storage is extended past the loop turn or block that made it,
-  the storage a kept view shows built where the view is kept too (O27 as placement, below), never a hidden copy. A bare
-  `&` (a reference) stays.
-  **No manual scopes at all (the user, 2026-10-30: "make manual scopes impossible")**: there is no way to write a
-  scope - no marker, scope argument or relation in the grammar; a removed spelling is simply gone (principle 4), so `&x`
-  after a type is a syntax error like any unknown form, not a diagnostic about scopes. Markers are optional only inside
-  the rework's branch, as its measuring step; master goes from today's markers straight to none. A block stays a scope (the
-  user, 2026-10-31): what a block built that nothing outside keeps is freed at its close, guaranteed - the one
-  structural handle on memory left. Optimization (the user: a tiny block's overhead may be skipped): a block whose
-  allocations are bounded and small, with no loop between it and the enclosing scope, is folded into that scope (no
-  header, no close) - its memory freed at most one scope later, by a bounded amount (mine: the bound and the rule). (Not built: the folding - measured in round 4b, docs/rework.md section 21: temporaries-only blocks folded changed no bench row nor the compiler's front end; it pays only where the enclosing scope allocates too and the block's allocation is a call result, which needs a bound on what a callee builds - every block keeps its scope.) Round 1 was
-  built behind `OLANG_SCOPES=infer` (2026-10-31); round 4 made it the only path (2026-11-02): the switch, every marker,
-  scope argument and `outlives` gone from the grammar, the repository migrated by `tools/scopes_migrate.olang` (in `olang
-  fix`), explain/doc/hover printing the inferred obligations as `# scopes: a outlives b`. Decided with it (mine, the user
-  absent): a function's reference result is as writable as written (`mut T&` where the caller may write it; a
-  constructor's always) - a built result is no longer writable by being built; the checks that were refused only for a
-  written scope's sake now run under `-sanitize` (115 of them), the rest name today's errors (O27, T22a, O10c, ...).
-- **No scope written (O28, QCB, 2026-11-02; replacing the user's 2026-10-05 scope names).** A reference is a bare
-  `&`. Every reference parameter has an implicit scope (O4b), a by-value parameter holding references too, a hidden
-  parameter the compiler binds at each call; a result lands where the call's result is put (O18a) or, handed back from
-  what an argument refers to, lives where that does (O13) - read off the body, shown by explain.
+  2026-11-02, round 4 of docs/rework.md).** Every scope marker is gone (`&x`, `&return`, scope arguments, `outlives`);
+  the compiler places each value in the shortest-lived scope every use allows (region inference over the whole
+  program), a value kept longer built directly where it is kept (QCR (1) reversed the no-extension rule), never a
+  hidden copy. **No manual scopes at all (the user, 2026-10-30: "make manual scopes impossible")**: nothing in the
+  grammar writes one. A block stays a scope (the user, 2026-10-31): what it built that nothing outside keeps is freed
+  at its close. Block folding was measured and not built. `tools/scopes_migrate.olang`; explain/doc/hover print the
+  obligations as `# scopes: a outlives b`.
+- **No scope written (O28, QCB, 2026-11-02; replacing the user's 2026-10-05 scope names).** A reference is a bare `&`.
+  Every reference parameter has an implicit scope (O4b), a hidden parameter the compiler binds at each call; a result
+  lands where the call's result is put (O18a) or, handed back from what an argument refers to, lives where that does
+  (O13).
 - **A reference never narrows (O25, the user's decision).** A local's type says where it lives (O25a); `:=` takes its
-  initializer's scope; exactness is required only where something can be stored through (O25g), else outliving. Copies
-  of reference-holding values keep their references where the source's are (O25h).
-- **A reference local typed per assignment (O25i, NLL as versions; docs/sec8.md round 1, built 2026-11-07, mine within
-  the note).** A reference local or parameter, and a local holding a function value, get a **version** at their
-  declaration and at every whole assignment, holding the value's exact scope - an assignment asks nothing (O25b
-  replaced: no equality between two parameters' scopes at `c = p`); each read is judged by the versions reaching it
-  (typed.Versions, reaching definitions over branches, loops, catch clauses, deferred code, lambdas): each must be open
-  where the read stands - else what it names is built where the read needs it (a lift), else ReadAfterScope; versions of
-  different scopes are O12's (VersionsDiffer naming the assignments) where something is built or stored through.
-  Decided (mine): a loop body's block is a new one every turn, so a version reaching a read from an earlier turn must
-  live where the loop stands (`Across`: found as a soundness hole in the first design); a null given holds no scope;
-  storage reached only through a cursor lives where the reads need it, no longer (o15deepchain's chain now closes with
-  its loop - its destructors run as the loop ends, earlier, never later); a version's term between judgings is the
-  latest judging's, a union only as an 8-round bound; a store through a reference local's own field that its value
-  outlives, exactly where it must, places the local's referent where the value lives (O28's equality - before NLL the
-  cursor assignment's equality lifted it as a side effect). T25d with it: an element of a constant literal read by an
-  index or a slice is constant data. Newly compiling: the widget click loop, a list's tail appended through a cursor,
-  `planAt` (scopedump, lowerdump and emitdump build - `make dumptool` compiles scopedump's module in the suite),
-  r9adefaultinner and strcursornewnode (run cases); the keeps analysis (O17) counts every version's regions
-  (nllkeepsunion1/2). tests/nll.olang.
-- **Storage kept for a view (O27 as placement, the user's QCR (1a) 2026-11-03 reversing QCB's no-extension rule;
-  docs/sec8.md round 2, built 2026-11-07, details mine).** A view of storage - a slice, a borrow of a part, what a callee
-  hands back of an argument's storage (O13), a conversion naming a local's storage (T29a), a closure of what it captured
-  - kept where that storage does not live has the storage built where the view is kept, as item 17's local is: a turn's
-  text kept through its words is built where the list lives, a new one each turn; a slice of a temporary has the
-  temporary homed there (lowering's `tempLocal`, `Plan.TempKept`); a generator's element viewing its argument has the
-  argument built there, one viewing what its walk keeps has the local built where the generator lives (D18c) and the
-  walk made where the elements are kept - emit's elision dataflow then leaves such a walk on the arena path by itself
-  (D18e); a part of an instance a local built, kept longer, has the instance built there once the field inference has
-  settled (O20). Still refused, the errors saying which: a by-value parameter's own storage, a match binding's or a
-  capture's copy (ViewKeptCopy), a `Next()` result scope, a derived or unknown scope (ViewKept, reworded), and storage
-  holding a value whose destructor is still to run (ViewKeptDestructor, PartKeptDestructor - docs/sec8.md question 2:
-  its end stays where its holder lets go) - what a callee hands back of such a local included, directly or through a
-  local (bulk review 8, F3: the call's landing was lifted, which placed the holder longer; `scope.dtorCall`). Decided (mine): the inference gathers whole lifts first, exactly as before,
-  and only where the settled judging still has a view, part or capture kept too long (`viewWanted`) judges again with
-  those proposing - so a program accepted before places byte-identically (bench IR checked) and pays no extra judging;
-  part lifts only once the field inference has settled (`partsOn`, a round judged afresh), and then only in that second
-  phase; a local declared from a conditional or a match proposes each value as stored alone (E28); `-memory` lists each
-  placement at the view with the copy that would let it go (B18, `Scoper.Placements`), and the language server shows it
-  as a hint (severity 4, code O27); C4 (docs/sec8.md 6): what a body whose reporting judging said a section-8 error
-  requires is not said again at its calls (`summary.Erred`, the obligations still passing up - left out of the reuse
-  comparison, so the field inference's rounds judge as before) - one cause, one error; the stand-in placement the
-  evaluator runs on homes a viewed temporary in the program's scope (it read a slice of one from a closed frame). Newly
-  compiling, run cases under `-debug -sanitize` read back after a churn and agreeing under `interpret`:
-  d18cinputoutlived, d18cyieldframe, d18cyieldlocal, o10celementstash, o25enote, o27genborrow, t22aviewkept,
-  t22borrowedresult, d16cstore, rv9slicetemp(-as, -view), t29aconvlifetime, o23adepth, stro20condstore, bulk 6's
-  gen_walkkept and gen_walkkept2 (c4genwalkkept, -2), d18cheldfield, d18cheldlocal, d18cviewkept, e16atrydefaultslice,
-  rv9slicetempctor, s5capturestruct, t22avalueexact, p2viewtask (a view handed to a task: its storage at the join's
-  level); o23aliaswrite stays refused (sound). tests/viewplace.olang, the
-  checks scenario `memoryplaced`.
-- **Obligations (O10b/O10c).** Inferred from the body, held at every call to the callee's whole body (checked on
-  demand and at a fixed point); temporaries built where the obligation says (O18b/O18c). A `:=` from a call lands by
-  obligations only where something is kept.
+  initializer's scope; exactness is required only where something can be stored through (O25g). Copies of
+  reference-holding values keep their references where the source's are (O25h).
+- **A reference local typed per assignment (O25i, NLL as versions; docs/sec8.md round 1, built 2026-11-07).** A
+  reference local, parameter or function-valued local gets a version at its declaration and every whole assignment,
+  holding the value's exact scope; each read is judged by the versions reaching it (open there, else lifted, else
+  ReadAfterScope; differing scopes are O12's). A loop body's block is new every turn. NLL DECIDED 2026-11-03 (the
+  user: "Yes, there's no point in omitting this"). tests/nll.olang.
+- **Storage kept for a view (O27 as placement, the user's QCR (1a) 2026-11-03; docs/sec8.md round 2, built
+  2026-11-07).** A view of storage (slice, borrow of a part, what a callee hands back of an argument, closure) kept
+  where that storage does not live has the storage built where the view is kept, as item 17's local. Still refused,
+  with errors saying which: a by-value parameter's own storage, a match binding's or capture's copy, a `Next()` result
+  scope, a derived or unknown scope, and storage holding a destructor value still to run. `-memory` lists each
+  placement (B18); the language server shows it as a hint (O27).
+- **Obligations (O10b/O10c).** Inferred from the body, held at every call to the callee's whole body; temporaries built
+  where the obligation says (O18b/O18c). A `:=` from a call lands by obligations only where something is kept.
 - **A returned local lives where the result goes (O26a).** A value or reference local the function returns, or that
-  flows into what it returns, lives in the result scope - Go's escape analysis, static. The flow is read as SPEC states
-  it, every callee by its checked body and a `try` changing nothing (2026-10-23: the two cautious readings the port
-  copied from stage 0 for parity reverted, HISTORY.md "Port: the parity readings reverted"). A constructor field
-  given a conditional or a match is the instance's slot, each value judged as stored there alone (C2d, E28); a choice
-  of new values and constants passed as an argument is a temporary, built where the parameter's scope is bound - for a
-  constructor, with the instance (2026-10-24, uafcc). A reference or a function value a returned lambda captures flows
-  too (bulk reviews 6 F9 and 6b F5): a lambda local so captured flows as returning it would.
+  flows into what it returns, lives in the result scope (Go's escape analysis, static), including through a returned
+  lambda's captures. A constructor field given a conditional or a match is the instance's slot (C2d, E28).
 - **A kept local is built where it is kept (O28, O17, D9i; item 17, the user's decision 2026-11-03: "creating it at
   the scope of the thing we're storing it in"; built 2026-11-07).** A value local kept by reference past its block or
-  loop turn (lent to a callee keeping a reference to it, borrowed by a reference kept longer), or copied whole at its
-  last mention into storage outliving its block (`rows.Push(rec)`, then moved, D9i), has its own storage placed where
-  it is kept (`plan.Stored`, lowering's `homeKept`): a new value each time its declaration runs, so a loop's kept
-  references each name their own turn's value - bulk review 6 F3's refusal gone. Only a by-value parameter's storage
-  (its caller's) stays C2d's error. The placement is static: the local is built there on every turn, kept or not (~16
-  bytes a turn for a 16-byte struct; ~620 for a Vec, its buffer's early-freeing region - a recorded limit). os.Args'
-  per-argument copy went with it (`promotedCopy`). The evaluator's stand-in placement homes such a local in the program's
-  scope (it had read the last turn's value). tests/kept.olang.
+  turn, or copied whole at its last mention into longer-lived storage, has its storage placed where it is kept, a new
+  value each time its declaration runs. Only a by-value parameter's storage stays C2d's error. tests/kept.olang.
 - **Lending (O17, O17a, O17b).** A value whose references live elsewhere than its storage is lent only to callees that
   keep nothing in it, read off their bodies; a handle (a struct of one reference) is lent as its reference.
 - **Derived and unknown scopes (O12, O23, O23a).** A field holding a view of what a constructor's reference parameter
-  refers to has a binding of its own (inferred, O28), read at a derived scope resolved per call; a scope not known here (alternatives from different scopes) is read but never built into. A derived scope exists at no run time: a
-  callee that may build into one is passed the program's scope there (C1, 2026-11-07: a destructor's `log.Saw(id)`
-  growing a Vec through its field was C2d's error where the same write inline was accepted) - its relations still
-  judged against the derived scope, only the storage it makes longer-lived.
+  refers to has a binding of its own, read at a derived scope resolved per call; a scope not known here is read but
+  never built into. A callee that may build into a derived scope is passed the program's scope there (C1).
 - **Constructors (C2d, C2g).** A bare field lives with the instance; an argument binds the instance only where the
   body can make it hold it; a constructor's top level allocates into the instance scope. A field given a lambda or an
-  adapter is never "a local only ever called" (D16d's frame latitude): the instance is assembled from it, so the
-  closure lives where what it captured does (2026-10-24, the unpar review's use-after-free).
-- **Scopes belong to one thread (P2, decision 48).** A task's scope arguments are private stand-ins folded at the
-  join; a closure that may build into a captured scope asks for its thread's part of it (`__olang_capture_scope`);
-  reading closures pay nothing.
+  adapter lives where what it captured does.
+- **Scopes belong to one thread (P2, decision 48).** A task's scope arguments are private stand-ins folded at the join;
+  a closure that may build into a captured scope asks for its thread's part of it (`__olang_capture_scope`).
 - **Letting go (O8d, round 3 of `docs/memory.md`, 2026-10-18; the user's QAB: "the user should not have to deal with
-  it").** One rule: everything lives in a scope. Storage a place lets go of while it was its only holder (assigned,
-  removed from its collection, a local given something moved out of one leaving its block) may be reclaimed then rather
-  than at the scope's close - the compiler's optimization, unobservable but in memory, never running a destructor
-  early (O15). A Vec's replaced buffer goes back to the thread's pool (no `mremap` growth). `own`, `take`, loans and
-  borrowed copies (O30-O42, T25e, E34, built 2026-10-10 to -11) are removed from the language; the rule numbers are
-  retired, and `docs/own.md` is the record. The runtime keeps its region functions, renamed `__olang_region_*` and
-  driven from C by a checks scenario, for the port. **Round 4 (2026-10-25)**: the prelude says what it lets go of -
-  `p.vacate()`, prelude-only like `retire()`, gives what a place holds and leaves it empty; List's, Vec's and Map's
-  removals vacate the positions they empty and every shift moves with it, so no position past a collection's end holds
-  a duplicate. Compiled as a plain read, so nothing changes at run time (a removal loop of them is deleted; callgrind
-  over Pop/TakeAt/SwapTake/Insert/Truncate/Clear/Remove unchanged). Decided (mine): `Vec.Clear` is `Truncate(0)`;
-  `SwapTake` of the last element moves nothing into its own place; `List.Clear`/`Truncate` vacate by counted loops, which
-  the optimizer can delete. **Round 6 (2026-10-25): early freeing, in the port** (compiler/free.olang, after the scope
-  pass, at the program's root). Candidate places are per type - a reference field, a handle field, an array type's
-  elements; a sole one's values are built in regions of their own (a kid of the scope, its header and first block
-  taken from a per-thread list of closed ones - 2026-11-07, dropvec 2.82G -> 1.16G instructions -, the word before each object
-  naming it) and each let-go releases one. Keep wherever a fact is missing: a function value, an extern, a module
-  compiled on its own (B3i: only the root's object makes regions and releases), a task anywhere, a destructor or
-  Str/Eq/Hash letting go; a view used after the let-go in the same function keeps too. `-memory` (B18) lists the
-  program's places that keep and why. Measured: 2.7's five programs 118 MB-1.49 GB -> under 2.5 MB; a fixed array widened
-  to a run-time value is now made where it is kept (it took a copy in the program's scope - 130 MB over 2M calls).
-  Gate: the evaluator's dead-region mode (`OLANG_DEADREGIONS=1`) over the suite, the suite under `-sanitize`, and
-  `fuzz free` (440 programs, ~4,900 places freed, nothing found; a planted unsound decision found in all 20 tried). **Round 7
-  (2026-10-25): `x.Destroy()` (C9b)**, the user's QAD: runs the destructor of the instance a local names now and frees
-  it, compiled only where the same analysis proves the local the only way left to reach it (made for it at a site, or
-  taken out of a collection holding it alone; never stored, captured, handed to a task or to a call that may keep it;
-  no other name used after), and the local is not read after it. std's resource types lose `Close()` (std/net).
-  Destructor order is kept (O15): an instance in a region is registered on its owner scope's list - now doubly linked,
-  O(1) unlink - and on its region's chain, which a release runs first. Decided (mine): a Destroy()'s target is a place of
-  its own (free.olang's destroy targets); a collection whose values have destructors is a candidate that never frees on
-  its own let-go but builds its values in regions when a Destroy() takes them out; a value taken out of one is destroyed
-  only in root-emitted code (B3i); `defer x.Destroy()` works, and `errdefer x.Destroy()` lets `x` be returned; a return
-  or error after it ends its path; a generator's yield is walked as a return's value and ends no path. Measured: 1M
-  connections with destructors in a Map 50 MB -> 1.9 MB, 100k std UDP sockets under `ulimit -n 64` 1.7 MB. **Bulk
-  review 1 (2026-10-25), fixed by "when in doubt, keep"**: a `yield` is a let-go of any place for what the generator's
-  frame holds across it (F1); a value of a place is stored inside another value of it only as itself - same pure path in
-  one statement - since a place key names every instance (F2); every fixed point runs to convergence, never cut at a
-  round count (F3); a place whose made-for value's building may register a destructor in its region (a constructor's
-  O16 temporary, a callee's built result: a may-summary per body) keeps, only `Destroy()` ending such early (F4); an
-  extern call lets go of anything where an export fn C may call may, and a program C may call back frees nothing early
-  (C may call it from its own threads, condition 3 - since 2026-11-07 only one giving an export fn to C, built
-  `-library`, or linking C of its own) (F6). Also: a generator resumed inside its own walk fails a guaranteed check
-  (S20, one compare a Next; F5); an embed in std or a remote repository is judged by its real path (E38, F7); std/json
-  keeps whole numbers an F64 cannot hold as `Json.Int`/`Json.Uint`, exact through Decode and Encode, U64's whole range
-  (F8); a generator's contract is its first Next's, `ArgumentError` written among `Iterator<T ? E>`'s errors (D18, F9);
-  `r.Destroy(); continue`/`break` in the loop that declares `r` ends its path (C9b); B18 names a walk's hidden local and
-  a place by its own let-go; a captured caught name is one error (R11b) (F10). A built result returning a global's
-  storage (bulk review over-rejection 13) stays refused - a built result is writable (T25c), so it would write the
-  global - but at the return now (O14), naming the by-value result, not as O10c at a call with no arguments.
-  **Round 8 (2026-11-02, wt-free5; mine, an optimization):** an **owner held in place** - a struct by value whose fields
-  are plain data, arrays of a run-time length (its anchors, `types.Anchors`) or such structs, a Vec or a Map held by
-  value in a field or as a Map's value - is a place: all its storage built in one region, released through its first
-  anchor holding storage, and a value built empty has its region released at once (MIR `Settle`, runtime
-  `__olang_region_drop`/`_settle`); it keeps where its value is changed in place (a store into it, a writable reference
-  to it handed on: what that builds lands where the container lives) or a value holding it is made with no store into
-  it (a copy of a struct, Map or array holding it, a D9h view's caller copy) - but a view constructor's caller copy
-  stored straight into the one owner leaf of a struct (Map.add's entry) is made for it, at the call's site. An **array a
-  struct holds by value** - a Vec's buffer, a Map's slots - is a place too: a collection's growth releases the array it
-  replaced where no view of it is in use (its `retire()` left out, `RetireDropped`), every array it is given a
-  comprehension of moved elements (grown) or of plain-data elements, so an element read by value out of one is no view
-  of it; owners win (an array an owner in a sole place holds keeps). And `tasks` (condition 3) is now a task reached
-  from where code may begin - a plain function nothing calls or names starts none: std/os's `RunOnStack` handing C a
-  function value had stopped every early free in any program importing std/os. Measured: the earlyfree fixtures by
-  value again, server 145 -> 2.3 MB, mapvec 66 -> 1.9 MB; knucleotide's peak 13.6 -> 9.9 MB (+0.76% instructions);
-  bench otherwise within 0.5%. The early-free fuzzer's programs had stopped compiling since round 4 (a read-only result,
-  std/list not imported) - fixed. **Owner locals (bulk review 6 F13):** a local holding a Vec or a Map by value given
-  another value in its body is a place too (`v = mk(k)` each turn: 620 MB -> 1.6 MB); a constructor's instance viewing
-  only call results landing where it does is not copied where kept (`typed.FreshViews`), so `b := box(mk(0))` then
-  `b.v = mk(k)` frees as it goes.
-- **Recorded limits:** long-lived mutated structures holding values a task can reach still only grow (ledger QF), and
-  a value with destructors is freed early where a `Destroy()` ends it, or where a holder by value ends it (unique Part
-  C, O8d condition 4, 2026-11-07 wt-dropord, mine: a destructor whose type is never registered with a scope, outside
-  test builds, is walked as a call where its holder lets go, its let-goes judged there; a holder's drop releases the
-  holder's leaves after the destructor - a Vec of them truncated 260 MB -> 1.9 MB), and a Map's unique values put and
-  taken, replaced or removed since the hand-on move (388/260/388 MB -> 1.9 MB, the next entry) - but not one taken into
-  a `:=` local (`r := m.Take(k)!` is held where the call lands, registered there, O16, which releases nothing: write
-  `r Res = m.Take(k)!`), nor one handed back by a function viewing it (D9h's caller copy); a value `List<String&>` has
-  one scope for chunks and referents (G11); a few over-rejections are left for the port's §8 pass.
-- **The unique hand-on is a move (T13b, O8d, D9i, 2026-11-07 wt-handon, LIST.md's hand-on move; details mine).** A
-  unique value handed on out of a by-value parameter at its last mention - a by-value argument, a store, a part of a
-  value made, a field declared with its type, a constructor's pun - is moved, never copied (check's `uniqueMoved`: the
-  copy sites skip `ownCopy`; `handOn` marks the move with a Gone Seq). §8 needed nothing new: a by-value parameter of a
-  type owning parts already has a scope variable (HoldsRefs counts owned parts), so storing the moved value into a longer
-  place is the function's obligation and its callers build the argument there (sec8r2's analysis had it as missing).
-  Early freeing (free.olang) reads the move: `parWhole` by body (the parameters moved whole into a struct held in place
-  or an instance's field), each call judging its argument as `copyInto` judges a value stored into such a struct - a
-  constructor of the type, else not made for the leaves - or passing it on (`wholeArg`, `movedPar`, a moved read no
-  view of its leaves); a constructor's instance viewing only moved parameters is its own (`typed.MovedArg`,
-  `FreshViews`, `ViewsMoved`: no D9h copy). Decided (mine): a lambda keeps its own copy (it is called only through a
-  function value, which can carry no obligation, T22a); a named function moving a unique value into what outlives the
-  call carries that relation as a value (T22a's records, merged with it: `f := keepIt; f(v, Buf(3))` builds the argument
-  where `v` lives; bulk review 8 found the refusal this round recorded lifted and kept it so - checks' t13bmovedvalue a
-  run case now; a parameter of a written function type stays T22a's boundary error); a constructor's
-  run-time array field keeps its slot in the frame, only its elements in the instance (lower's `fieldStor`: 16 bytes per
-  constructor call grew where the instance lives - every Vec, Map and StringBuilder constructor's, bench a few
-  instructions fewer). Measured over 1M cycles: put + taken 388 MB -> 1.9 MB, replaced 260 -> 1.9, put + removed 388 ->
-  1.9, a pun through a constructor 260 -> 1.9; bench's callgrind counts unchanged or lower (regex -1.5k of 156M).
-  checks' earlyfree maptake/mapput/mapdrop, cases t13bhandonlambda and t13bmovedvalue, tests/unique.olang's shelves,
-  fuzz/scopegen's hand-on scenarios (the early-free mode). B8 (StringBuilder's ToString handing its buffer over) not
-  built: HISTORY.md "The unique hand-on move".
-- **More scope rules (O2d, O13a, O13c, O14b/O14c, O16, O18a, O20, O26).** A binding records the depth it was made at;
-  each return in a loop is judged again by later assignments in that loop; a call's result carries its callee's result
-  bindings; a by-value parameter's references returned are an obligation; destructors register once per constructor
-  call and run at the instance scope's close, in reverse construction order; a by-value parameter's own storage is never
-  returned as borrowed from it (O14, the frame's copy); a reference field's scope is its
-  container's, through whole chains; a local array's or block-built value's references are not returned past their
-  block. A destructor's top level is the scope being closed (C9a); a slice or view of a temporary borrows it in the
-  block it is written in (E16a); a by-value parameter's scope variable is built into wherever stores are possible
-  (O4b).
+  it").** Storage a place lets go of while it was its only holder may be reclaimed then rather than at the scope's
+  close - the compiler's optimization, unobservable but in memory, never running a destructor early (O15). `own`,
+  `take`, loans and borrowed copies are removed. The prelude says what it lets go of (`p.vacate()`); early freeing is
+  the port's analysis (compiler/free.olang, round 6), keeping wherever a fact is missing (function values, externs, a
+  module compiled on its own, tasks, destructors); `-memory` (B18) lists what keeps and why. **`x.Destroy()` (C9b, the
+  user's QAD)** runs the destructor of the instance a local names now and frees it, only where the analysis proves the
+  local the only way left to reach it. **Round 8 (2026-11-02):** owners held in place (structs of plain data and
+  run-time arrays, a Vec or Map by value) are places with a region of their own; a collection's growth releases the
+  array it replaced where no view of it is in use. Gate: the dead-region evaluator, `-sanitize`, `fuzz free`.
+- **Recorded limits:** long-lived mutated structures holding values a task can reach still only grow (ledger QF); a
+  value with destructors is freed early where `Destroy()` or a by-value holder ends it (unique Part C, built
+  2026-11-07), but not one taken into a `:=` local (write `r Res = m.Take(k)!`); a `List<String&>` has one scope for
+  chunks and referents (G11); a few over-rejections are left for the port's section 8.
+- **The unique hand-on is a move (T13b, O8d, D9i, 2026-11-07).** A unique value handed on out of a by-value parameter
+  at its last mention is moved, never copied; the callee's obligations make callers build the argument where it is
+  stored. A lambda keeps its own copy; a named function moving a unique value into what outlives the call is no
+  function value (T22a). Early freeing reads the move.
+- **More scope rules (O2d, O13a, O13c, O14b/O14c, O16, O18a, O20, O26).** Each return in a loop is judged again by
+  later assignments; a call's result carries its callee's result bindings; a by-value parameter's references returned
+  are an obligation; destructors register once per constructor call and run at the instance scope's close in reverse
+  order; a by-value parameter's own storage is never returned as borrowed (O14); a reference field's scope is its
+  container's; a slice or view of a temporary borrows it in the block it is written in (E16a).
 - **A match binding lives in its clause's block (S13b) and takes the matched place's permission.** A conditional or
   match of references lives where its values share a scope, else "not known here" (E28, O12).
 
