@@ -9,19 +9,25 @@ answers at the end), /home/user/review/remaining/LIST.md.
 ## Merged today (master = wt-merge, pushed): deprec, asm (explain -asm/-ir), structpat (verified), drops (dafb690), interp (e2a3c7f), columns (7a7527d), packed (7d43a6b), dropord (3b66e3a; merged tip builds, drops/packed/columns tests pass).
 Goldens: conflicts take our side; ALL four goldens recaptured once at the end (not per merge).
 
-## Running (background agents; each reports by a hand-back message)
+## Running (background agents, started ~14:10 CET; each reports by a hand-back message)
 
-| round | worktree / branch | agent id | model | brief |
-|---|---|---|---|---|
-| interp | /home/user/wt/interp, wt-interp | a31ecc30993617cb3 | opus high | rounds/interp-brief.md (told: merge drops; no verify) |
-| errdata2 | /home/user/wt/errdata2, wt-errdata2 | a7083a44c562ca202 | opus high | rounds/errdata2-brief.md (told: Q1 yes, Q2 yes, Q3 ArgumentError text yes) |
-| packed | /home/user/wt/packed, wt-packed | a07f5ed3ce5e761b9 | opus high | rounds/packed-brief.md |
-| dropord | /home/user/wt/dropord, wt-dropord | ad93d12ccbc79a173 | opus xhigh | rounds/dropord-brief.md (4 phases) |
-| nll (sec8 round 1) | /home/user/wt/nll, wt-nll | ab7e90ce25f40eda0 | opus xhigh | prompt points to docs/sec8.md |
-| columns | /home/user/wt/columns, wt-columns | a4a72e7cacb61015d | opus high | rounds/columns-brief.md |
-| qbt | /home/user/wt/qbt, wt-qbt | a07a6e211646896e6 | opus high | rounds/qbt-brief.md |
+| round | worktree / branch | model | brief |
+|---|---|---|---|
+| sec8r2 | /home/user/wt/sec8r2, wt-sec8r2 | opus xhigh | rounds/sec8r2-brief.md (O27 placement + dropord's hand-on move, viewCtor) |
+| literals | /home/user/wt/literals, wt-literals | opus high | rounds/literals-brief.md (QBU/QBW FromIter + Columns literals; re-run its tool after merges) |
+| tidy2 | /home/user/wt/tidy2, wt-tidy2 | opus high | rounds/tidy2-brief.md (14 small items) |
+
+ALL SEVEN MORNING ROUNDS MERGED: master = 1877245 (interp, columns, packed, dropord, qbt, errdata2, nll). Merging the
+builders round needed builder_migrate re-run (build the tool against a pre-change std when std has new syntax:
+OLANG_STD=<old std> build/olx build tools/builder_migrate.olang); typed.CallOf -> typed.Call.Of by hand where the tool
+missed calls to functions moved in an earlier run. The seed was regenerated twice (98665d5, after errdata2).
 
 ## Merging a round (no verify per the rule)
+
+NEVER `git merge-file ... <(git show ...)` - process substitution gives an EMPTY result (it emptied CLAUDE.md and
+HISTORY.md in the columns and dropord merges; restored 94ce796). Write the three versions to real files first, and
+after every merge check `git diff --numstat HEAD^1 HEAD` for a file that lost most of its lines. `git checkout --ours
+FILE` takes the WHOLE file - for code conflicts use `git merge-file --ours/--theirs o b t` on real files instead.
 
 Merge into /home/user/wt/merge; HISTORY.md conflicts keep both sides; golden conflicts (compiler/goldens/*.txt) take
 one side, then `make -s tokgold astgold` with a compiler built from the merged sources (layoutgold, diaggold at the
@@ -30,12 +36,13 @@ push the round's branch; delete its build/.
 
 ## Next, in order
 
-1. sec8 round 2 (O27 as placement; ALSO from dropord: the unique hand-on move to a by-value parameter with its section-8 obligation - makes the three Map patterns flat - and viewCtor recording array leaves) and round 3 (T22a records) - fresh agents from round 1's PROGRESS.md (opus xhigh /
+0. NEXT after sec8r2: sec8 round 3 (T22a records), fresh agent from sec8r2's PROGRESS.md.
+1. [running] sec8 round 2 (O27 as placement; ALSO from dropord: the unique hand-on move to a by-value parameter with its section-8 obligation - makes the three Map patterns flat - and viewCtor recording array leaves) and round 3 (T22a records) - fresh agents from round 1's PROGRESS.md (opus xhigh /
    high), docs/sec8.md sections 9-10.
-2. Last language round, alone (it migrates nearly every file): QBU + QBW - the type in front of every literal and
+2. [running, beside sec8r2 and tidy2] Last language round (it migrates nearly every file): QBU + QBW - the type in front of every literal and
    comprehension (`Array<I64>[1, 2]`), built through a type-level builder `FromIter`, every std collection declaring one;
    Columns<T>/ColumnVec<T> literals with it. After qbt and columns merge.
-3. The smaller items (LIST.md C5, C7, C8 ...; cheaper regions - a per-thread free list for region headers, from dropord's phase 3 measurement; Vec push+truncate 0.12 -> 0.23 s for 260 MB -> 1.9 MB) - a tidy agent.
+3. [running: tidy2] The smaller items (LIST.md C5, C7, C8 ...; cheaper regions - a per-thread free list for region headers, from dropord's phase 3 measurement; Vec push+truncate 0.12 -> 0.23 s for 260 MB -> 1.9 MB) - a tidy agent.
 4. Goldens (all four) and the seed; ONE full verify, the gates, ONE bulk review (opus high) and its fix round.
 5. Then: trim CLAUDE.md (the user asked: later today; terse entries, details in HISTORY.md - a sonnet agent).
 6. After "done" (no syntax, the user's rule): benchmarks, coverage, the REPL (plain `olang`) + Jupyter kernel, saturating
