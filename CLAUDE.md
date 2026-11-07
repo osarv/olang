@@ -754,274 +754,108 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 ### Compile-time evaluation
 
-- **Anything computable at compile time may be (K1/K1a, the user's request); no function colouring** (no `constexpr`:
-  a call is evaluable when what it does is, and the places that need a value ask for one). The evaluator
+- **Anything computable at compile time may be (K1/K1a, the user's request); no function colouring.** The evaluator
   (`compiler/eval.olang`) interprets the checked program with the run time's semantics and refuses only what it must
-  (effects skipping would show, externs but libm, undefined behaviour, a step and memory budget). Whether a function
-  is evaluable is a property of the function (K1a); a body that did not check - a global's initializer, a default - is
-  no value to anything reading it, so one mistake is one error (2026-10-26). It must handle everything it can (the user's rule).
+  (effects skipping would show, externs but libm, undefined behaviour, a step and memory budget). Whether a function is
+  evaluable is a property of the function (K1a); it must handle everything it can (the user's rule).
 - **`comptime e` and `comptime for` (K3, K3a, survey2 item 8, the user's decision 2026-10-27: "comptime is a good word.
-  Its good for speed guarantees in certain loops too"; built 2026-10-31, details mine).** A keyword at the use site only
-  (no colouring, K1a stays): `comptime e` takes the whole expression after it (try's reach, E24), is computed while
-  compiling and is constant data - `t := comptime squares(16)` in a loop is a read of constant data; it reads what a
-  global's initializer may plus the instance's type variables and lengths, a fixed local (S8c) and an enclosing walk's
-  names, a local or parameter otherwise an error; what the evaluator cannot compute is an error at it saying why, never
-  a run-time fallback; an array's value is a read-only reference to the data (T25d). Built as a hidden immutable
-  global per place and instance (`generic.SynthGlobal`, `check.comptime`), homed in the root's object where the
-  instance's variables or names tell copies apart (B3d, B3i), so K2's baking, emit and the evaluator do the rest and
-  `interp.Bake` reports one not baked; on a global's whole initializer the global itself must bake. `comptime for x in
-  e` (e a range or an array of integers up to 64 bits, Bool or Char) is unrolled as reflection's walks are (G33):
-  each copy's `x` a constant (bound as a type variable's length is and as reflection's names are), so it decides `if`s,
-  asserts and lengths (G35, T7c); its elements are asked of the evaluator in one check and given to the next
-  (`UnrollAsk`, as QP1's lengths), at most 4096 copies, `for x in try` refused.
+  Its good for speed guarantees in certain loops too"; built 2026-10-31).** A keyword at the use site only: `comptime e`
+  takes the whole expression after it, is computed while compiling and is constant data; what the evaluator cannot
+  compute is an error at it. `comptime for x in e` (a range or an array of integers up to 64 bits, Bool or Char) is
+  unrolled, each copy's `x` a constant, so it decides `if`s, asserts and lengths (G35, T7c); at most 4096 copies.
 - **Constant contexts:** immutable globals are baked as data, references and arrays included (K2, K2b); an assert it
   can decide is checked while compiling (S18c); a condition the build decides (B9c, S8b); fixed locals (S8c).
-- **Decided asserts (S18c, 2026-10-27, mine; fixing two bugs std2 found).** A true one loses its run-time check
-  anywhere; a false (or aborting) one is a compile error only where every run of its body reaches it - in its body's
-  statements or a block, loop body or join block among them, with nothing before it that may leave (return, a break or
-  continue out, an error raised or passed on by a try whose clauses leave some of it, a call of a noreturn function -
-  bulk review 4 -, a clause or arm doing so, a yield); in a branch the build does not decide, an arm, a clause, deferred code or after such a statement it stays a
-  run-time check (`try f() catch X { return }` then `assert false` in a test was refused). It had been decided wherever
-  written. `typed.AlwaysReached`, check recording a try's leftovers (`Try.Left`). The error's message is rendered as the
-  run time would: by reflection for the instance (`"field " $f.Name`, `check.reflText`) - a reflection-decided assert
-  (G35) used to print its message's source - else by the evaluator, else written out, saying it reads what only the
-  running program knows (an assert whose message read a plain local was not decided at all). std/order names the
-  field with no order. Where it is said (2026-11-07, mine, as SPEC already stated): one an instance decides, and any of
-  the library's, at the program's outermost call of the instance's chain (through type instances' constructors,
-  `Origin.Type`), a note at the assert; an abort at an assert said false, or in an aborting global's initializer (said
-  at the global, K2), adds no error of its own.
+- **Decided asserts (S18c, 2026-10-27, mine).** A true one loses its run-time check; a false (or aborting) one is a
+  compile error only where every run of its body reaches it; in a branch the build does not decide, an arm, a clause,
+  deferred code or after something that may leave, it stays a run-time check. The message is rendered as the run time
+  would. One an instance decides is said at the program's outermost call of the instance's chain, with a note.
 - **Tests the evaluator runs** sit beside run-time tests for every language change (the checklist above).
-- **Refusals and agreements.** Refused: mutable-global reads, global writes, externs (but known libm, X8), tasks run
-  in sequence at the join (allowed), atomics on non-global places (allowed), process endings, undefined behaviour,
-  destructor-bearing values outside a global's own frame (K2c), anything past the step and 256MB budgets. Reaching
-  `unreachable` where a value is required is an error at the place. Every disagreement with the run time found
-  (by reviews and the differential fuzzer) is a bug fixed in the evaluator.
-- **`interpret` runs programs as built, and `test -interpret` their tests (B3e, M8; the comparison in the suite
-  2026-11-07, wt-interp).** Placed by the scope pass, each scope reclaimed as it closes, each destructor run where its
-  holder lets go (O15), libraries dlopened (a linker script's first library too), the runtime's functions its own; tasks
-  run one after another at their join (a wait for another task stops it, saying so). `olang test -interpret FILE
-  [WORD...]` (mine, an option of `test`, not a mode: the one code path `interpret` runs) checks the file as `test`
-  does and runs its tests as the test binary does - its lines, its status, its words (B7a), the harness's names given
-  to std/fuzz and std/prop, a detached child ending on its failed check. **In the suite**: every file of tests of the
-  corpus and std (`interp@FILE`, after its built run, shared.olang's at the end of a heavy lane) and the
-  checks' run cases in four parts (`interp@casesK`) are compared with the built runs compiler/goldens/run.txt stores
-  (compiler/tools/evaldiff.olang; evaldump is gone); a difference not in its `Expected` list, or a test not in its
-  `Skipped` list (one that would never end interpreted), fails the suite - about 9 minutes of CPU, 2.5 of wall time.
-  Listed (B3e's limits): std/chan's five waits for a task, std/net's getaddrinfo (a struct of pointers to C), the
-  cases measuring their own process's peak memory (chunkpool, mapchurn), an export fn handed to C (x13qsort); skipped:
-  std/cancel's spinning task, std/chan's Select polling for a task, std/net's Accept, gemmflat (over ten minutes),
-  std/os's million-deep recursion (~4 GB interpreted; its Args test then sees the words naming the others).
-  Fixed on the way: captures' scope variables bound by position (a generator's text went where a value capture's
-  environment lived - tests/generators' D18b), a whole `mir.Fn` copied into the machine's memory per caught error (2.3 GB
-  over 50,000; Select's polling ate 13 GB), the harness's names, test detach and the variadic dynamic call missing (std/fuzz,
-  std/prop, std/ffi), stops saying "-i".
+- **Refusals and agreements.** Refused: mutable-global reads, global writes, externs (but known libm, X8), process
+  endings, undefined behaviour, destructor-bearing values outside a global's own frame (K2c), anything past the step and
+  256MB budgets; tasks run in sequence at the join (allowed). Every disagreement with the run time found is a bug fixed
+  in the evaluator.
+- **`interpret` runs programs as built, and `test -interpret` their tests (B3e, M8; compared in the suite
+  2026-11-07).** Placed by the scope pass, scopes reclaimed as they close, destructors run where holders let go,
+  libraries dlopened; tasks run one after another at their join. In the suite every test file and the checks' run cases
+  (`interp@FILE`) are compared with the built runs (compiler/tools/evaldiff.olang); a difference not in its `Expected`
+  list or a test not in its `Skipped` list fails the suite. Listed limits: std/chan's waits for a task, std/net's
+  getaddrinfo, cases measuring their own process's memory, an export fn handed to C.
 - **`embed PATH` (E38, the user's decision 2026-10-18; built 2026-10-25).** A file's bytes read while compiling: a
-  read-only `Array<U8>&` of constant data, as a text literal is (T25d, one instance per site); text is `String(embed
-  "f")`, a view. A prefix operator over a `unary` (mine). PATH is a literal or an expression reading no local, the
-  latter evaluated after a check (`interp.decide`, alone in its round, then read in the next check); resolved as a
-  relative import against the source file's directory, kept inside std or a remote repository (`load.Embed`, each file
-  read once a compilation). B3i's module key holds each embedded file's hash, so a changed file rebuilds its module.
-  **Decided (mine)**: every file is an LLVM constant, whatever its size - `.incbin` above 64KB was dropped, measured: a
-  10MB constant compiles in 0.18s at -O3 and 0.32s under -flto (lower+emit 0.8s), and module asm would collide symbols
-  across modules under full LTO; explain and doc cut a value over 400 characters, saying its length.
+  read-only `Array<U8>&` of constant data; text is `String(embed "f")`. PATH is a literal or an expression reading no
+  local, resolved like a relative import, kept inside std or a remote repository. A changed file rebuilds its module.
+  Every file is an LLVM constant, whatever its size.
 
 ### std
 
 - **Text is plain `String` with methods, no wrapper type (`std/prelude/text.olang`).** A literal, a slice and every
-  rendering already are one, so methods reach all of them with nothing converted. `Eq`, `Find` (fails on a miss),
-  `Split`, `Trim`, `Replace`, `ParseInt(base)`, `ParseFloat`, `PadStart`, `Lines`, `<` by bytes. A String never changes
-  (T13a): text being written is an `Array<Char>` or a StringBuilder.
+  rendering already are one. `Eq`, `Find` (fails on a miss), `Split`, `Trim`, `Replace`, `ParseInt(base)`,
+  `ParseFloat`, `PadStart`, `Lines`, `<` by bytes. A String never changes (T13a): text being written is an
+  `Array<Char>` or a StringBuilder.
 - **Math is the numbers' methods (M19d, 2026-10-18, the user's decision: "Yes let's do this. I want an integer power as
   well", "Also abs for integers"; std/math removed).** Every C math function is a method of every float, written once as
-  a default over `Float` (`fn (x T) Sqrt<T Float>() T`, `match T` inside, X8's libm calls, so the evaluator computes
-  them while compiling), the first C argument the receiver: `x.Sqrt()`, `y.Atan2(x)`, `a.Hypot(b)`, `x.Fma(a, b)`,
-  `x.Pow(y)`, `IsNan`... `Abs`, `Min`, `Max`, `Clamp` over `Number` (IEEE on floats). Integers: `x.Pow(n U32)`
-  (wrapping as `*`; `try arith.Pow(x, n)` fails where it does not fit) and
-  `Sqrt()` (the user's name, not ISqrt: the floor of the root in the receiver's type, hardware sqrt plus a one-step
-  correction, exact for every U64; signed fails with the prelude's `NumberError.Negative` - mine - unsigned cannot
-  fail). Constants `Pi`, `Euler`, `Inf`, `NaN` are the prelude's, read by bare name everywhere and reserved (D3a);
-  others are computed in place (`F64(2).Sqrt()`). **`x.Mod(n)`, `x.DivFloor(n)`, `x.DivCeil(n)` (QBP 2, the user's
-  yes, 2026-10-27; built 2026-10-31)**: every integer's, defaults over `Integer` - the floored modulo (the divisor's
-  sign; `%` stays `Rem`, truncated) and the quotient rounded down and up; a zero divisor undefined as for `/` (E6a). Decided (mine): integer `Sqrt` is a concrete method per type (the
-  two signatures differ); a type that only declares `Less` no longer has Min/Max/Clamp (nothing but std/math's own test
-  used it - it declares its own); the methods live in `number.olang` beside the traits (M19: a default lives in its
-  trait's module). Not done: a named constant adapting like a literal (`f F32 = Pi` is an error; `F32(Pi)` is written) -
-  E4a covers literal-only expressions, not names. `tools/math_methods.olang` migrates (oann later).
+  a default over `Float` (`x.Sqrt()`, `y.Atan2(x)`, `x.Pow(y)`), X8's libm calls so the evaluator computes them.
+  `Abs`, `Min`, `Max`, `Clamp` over `Number`. Integers: `x.Pow(n U32)` (wrapping), `Sqrt()` (the user's name; signed
+  fails with `NumberError.Negative`). Constants `Pi`, `Euler`, `Inf`, `NaN` are the prelude's. **`x.Mod(n)`,
+  `x.DivFloor(n)`, `x.DivCeil(n)` (QBP 2, the user's yes, 2026-10-27)** on every integer; `%` stays truncated.
 - **The prelude's collections are Vec, Map and StringBuilder; List is `std/list` (M19d, QZ2, the user's decision
-  2026-10-17, built 2026-10-26).** The prelude holds the built-in types' methods, the protocol traits and errors, `Vec<T>`
-  (below), `Map<K, V>` (a value, as Vec; `Get` fails on a miss, `Take` is `Get` and `Remove` in one, `Update`, ordered walks by
-  insertion of slot) and `StringBuilder` (now over a `Vec<Char>`); `String` and `Array` are built in. Every other
-  container is std: `list.List<T>` (`import "std/list"` - chunked, never moves, a handle; `list.Of(a)`, `list.List.FromIter(it)`,
-  `list.Error`, `list.Iter`; `RunFrom` walks), `pair.Pair` (2026-10-17, the user's call: "Pair goes in Std not prelude"),
-  set, deque, heap. Iterators (and arrays) have `Some Every` (renamed from `Any All`, the user's call 2026-10-24) `Count
-  Fold Map Filter ToVec`, `Map`/`Filter` building a Vec (`a.ToVec()`, `it.ToVec()` replace `ToList`). Decided (mine):
-  std/list vacates nothing (vacate stays the prelude's - "no module has a privilege the language does not give"), so a
-  List's removals free nothing early; json still encodes and decodes `list.List` (it imports std/list); the type
-  `ListIter` is `list.Iter`, `ListError` `list.Error` (the std naming rule). `tools/list_vec.olang` migrates: by
-  default (and in `olang fix`) it keeps a List, qualified and imported; `--vec` moves code onto Vec, as the repository
-  was (2,302 of 2,484 `List<` in 314 of 349 files - the compiler entirely, std but json and std/list, the corpus, the
-  checks but the cases about a List). Found on the way, pre-existing: a Vec of `any` values or of possibly-null
-  references could not grow (the prelude's `vacate` on such an element was read as a call through it - T32b, T2c);
-  `$` of a `Vec<Char>` aborted (an array of Char renders as text, so Vec's Str found no `[`). Recorded limit: a
-  callback handed elements holding references from a Str's receiver (`it.tags.Iter().Some(f)` over a `Vec<String&>`)
-  is refused as building where the receiver lives (E11c); ListIter's own Some had let it through; a `for` loop compiles.
-  QF: a Map whose Vec values are replaced and removed stays flat (checks' earlyfree `mapvec`, under 8 MB for a million
-  replacements) where each Vec is made by a call handed to `Put`; one first named by a local in the Map's scope (`v mut
-  Vec<I64>&m = ...`) is kept until that scope closes (131 MB) - a recorded limit of early freeing.
+  2026-10-17, built 2026-10-26).** The prelude holds the built-in types' methods, the protocol traits and errors,
+  `Vec<T>`, `Map<K, V>` (`Get` fails on a miss, `Take`, `Update`, walks by insertion of slot) and `StringBuilder`. Every
+  other container is std: `list.List<T>` (chunked, a handle), `pair.Pair` (the user's call: "Pair goes in Std not
+  prelude"), set, deque, heap. Iterators and arrays have `Some Every Count Fold Map Filter ToVec` (`Some`/`Every` the
+  user's call). `tools/list_vec.olang` migrates.
 - **Vec, Map, Set, Deque, Heap and StringBuilder are values (QCE, the user's "Handles DECIDED 2026-11-01"; built
-  2026-11-01, wt-values, details mine).** Each holds its storage by value: a copy (`b := a` of a place, a field, an
-  element, a by-value argument, a capture, a task's argument) is a collection of its own, shallow at every `&`; sharing
-  is written `&` (`v mut Vec<T>&`, a `Vec<T>&` field); `Clone()` is gone from them (and since E31d from the language:
-  std/list's `List` stays a handle, built anew by `list.List.FromIter(l.Iter())`). In place: `v.Ref(i)` `T&v` and `v.RefMut(i)` `mut T&v` (unchecked as `v[i]`), `try m.Ref(k)` /
-  `try m.RefMut(k)` (`MapError.Missing`); a number in a Map through `Update`. A store through `x[i]` on a collection
-  declaring `RefMut` is made in place, its value evaluated first (E31b, `check.inPlace` - a Vec of Vecs' `v[i].n += 1`
-  had copied the element twice); a mutating call through `x[i]` is made in place through `RefMut` too where its other arguments are plain values (2026-11-02, E31b), else E31b's error naming `x.RefMut(i)`. A join's
-  operand owning storage is its own copy (E11b: a later operand clearing it showed a half-emptied snapshot). Decided (mine): Ref/RefMut, mirroring
-  View/ViewMut, rather than `m.At(k)` giving `mut V&` (At stays the value read); Map rebuilt over slot arrays (entries,
-  a next-chain, buckets made at the first Put) keeping insertion-of-slot walks; a moved-out owning part is left empty
-  (`vacate`) and `grown` clears the room of an owning element type; sorts move by `vacate` with `errdefer` putting a
-  failing comparison's element back; Deque's growth copies its ring; `Vec<String>.Join`/`Array<String>.Join` beside the
-  `&` forms (one `joinTexts<T>`). Copies nothing could tell from the value are not made (D9h, lowering): an element
-  read where it stands (`v[i].xs.Len()`, `readPlace`), a local or for-in element holding a view where every statement
-  of its block is quiet (`quietLife`) and what it is lent to keeps nothing (`typed.LocalUses.RefAt`,
-  `Lowerer.keepsNoRef`), a by-value argument the callee only reads (`argView`) - a 1000-Vec walk of 1000-element Vecs
-  1.7 s / 2.4 GB -> 0.00 s / 14 MB. D9a and D9c lifted for every parameter (G29 only where a length decides
-  something). `tools/handles_migrate.olang` (driven by `OLANG_HANDLES=1`'s report rows, M19's missing-Clone rows and
-  E31b's element rows) migrated std, compiler/, tests, checks, bench, tools and fuzz; it is not idempotent (a
-  reference made of a copy reads back as a reference), so it is not in `olang fix`'s table. Found on the way: lowering
-  and the evaluator's `Exec`/`Lowerer` held the checker's body list by value (bodies checked after it was made were
-  out of range - a crash), `mir.Fn`/`level` values copied per access (regex's test build 13.9 GB -> 330 MB); a Ref
-  into a Vec goes stale as a view does, and M19g does not see it (a recorded limit). Early freeing: a grown buffer stored
-  back is no escape (free.olang's Collect yields - every Push/Put had escaped its receiver: frames.olang 311 -> 1.9 MB);
-  a value owning storage held in place (a Map field by value, a Vec as a Map's value) is a place of early freeing since
-  round 8 (O8d, above) - a walk of a Map of them (`for e in m`, its entries copied out) makes it keep.
-- **`Vec<T>` is the default growable array (M19d, round 1 of `docs/memory.md`, 2026-10-17; the user's
-  QAB, approved in advance; a value since 2026-11-01, above).** Its record (buffer and count) is made where it is constructed; it is a type argument, field, global, capture or task argument like any value. Growth
-  doubles (8 first), the new buffer made by the prelude-only `a.grown(n)` - the elements moved in, the room past them
-  never filled, so no zero value is needed and a doubling writes each byte once (2026-10-26; it was filled with the
-  element being stored first) - and retires the old buffer, which stays where the Vec lives until that scope closes - so a view taken before a growth reads the old
-  elements, never freed memory. `View()` is the one way to have the elements as an array (`ViewMut()` writable - so `v.ViewMut().Chunks(n)` is how tasks split a Vec, with no Vec `Chunks` of its own). `for x in v` walks by `At`
-  and `Len` (S9d), seeing what the body pushes; `RunFrom` and `VecIter` went (`v.Iter()` is `Indexable`'s). `a.retire()`
-  (prelude-only, no method elsewhere) is nothing at run time but under `-sanitize`, where an array made in a module
-  that retires has a chunk of its own - and so has a Vec's or Map's buffer copied with its record (a Copy helper, bulk
-  review 6b F4) - and retiring poisons and protects it (`stale view: ...`, B2f); the evaluator marks
-  the node and stops on a later read or write with both places - the use and the program's growing call (K1: an error
-  where a value is required, a stop under `interpret`). **M19g (round 2, 2026-10-18)**: using a view after the same Vec
-  may have grown is a compile-time error where the compiler sees the same Vec on both sides - grown in the function
-  (by name or a second name it made), by a call given the Vec or a struct holding it through a parameter whose body may
-  grow it (summaries read off bodies, a fixed point; a function value grows what it is given writably), a global grown
-  by name, or while a task holds the view; never by element type, and a place through a call's result meets no other (mine) but an
-  element a Ref/RefMut hands back, any index of it (`vs[...]` - bulk review 6b F4; unsure means refused). Since bulk review 6 a `Ref(i)`/`RefMut(i)` (and a Map's) is a view too, and a stale view or Ref
-  reads the retired buffer, its owning elements emptied by the growth (SPEC follows the code). Hidden routes stay the
-  evaluator's and `-sanitize`'s. Vec had been abandoned in 2026-09 for `List` (a bump allocator could not free a grown
-  buffer), then built on `own` (QH), and is now neither. Array and Vec stay two types (QCV, the user's call 2026-11-06): a growing array
-  would make every slice a possible stale view, its in-place layout an inference rather than a guarantee (C and plain
-  structs rely on it), and its length no longer known while compiling.
-- **`Columns<T>`, a structure of arrays (QCS 3, the user's decision 2026-11-06; not built yet).** A prelude type the
-  compiler lays out as one array per field of a struct T: `c.x` is a column, an array (lane operators apply, as fast as
-  hand-written columns); `c[i]` reads a row as a T (a copy) and `c[i] = v` writes it back; pushing, removing and
-  sorting move rows together; `for row in c` walks rows; literals by FromIter. Built in by the compiler because
-  reflection reads types but cannot make one (Zig's MultiArrayList, Odin's `#soa`). Details in the ledger.
+  2026-11-01).** Each holds its storage by value: a copy is a collection of its own, shallow at every `&`; sharing is
+  written `&`. List stays a handle. In place: `v.Ref(i)`, `v.RefMut(i)`, `try m.Ref(k)`; a store or `mut` call through
+  `x[i]` is made in place through `RefMut` (E31b). `Vec<String>.Join` beside the `&` forms. `tools/handles_migrate.olang`
+  is not in `olang fix` (not idempotent).
+- **`Vec<T>` is the default growable array (M19d, round 1 of `docs/memory.md`, 2026-10-17; the user's QAB).** Growth
+  doubles (8 first) via the prelude-only `a.grown(n)` and retires the old buffer (it stays until the scope closes, so
+  a stale view reads old elements, never freed memory). `View()`/`ViewMut()` give the elements as an array. `for x in
+  v` walks by `At` and `Len` (S9d). **M19g**: using a view or Ref after the same Vec may have grown is a compile-time
+  error where the compiler sees the same Vec on both sides. Array and Vec stay two types (QCV, the user's "Yeah,
+  okay, keep them" 2026-11-06).
+- **`Columns<T>`, a structure of arrays (QCS 3, the user's decision 2026-11-06 "Do the columns solution").** Built
+  2026-11-07; see the Types entry.
 - **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Print`, `io.Println(t = "")`,
   `io.PrintErr`, `io.PrintErrln` fail with `io.Error` and are written with `try`; no std function ends the program on
-  its own. `io.Show<T>(v T, at Place = Place.Here) T` (QBP 4, 2026-10-27; built 2026-10-31) writes `FILE:LINE:COLUMN:
-  $v` to the standard error and gives `v` back - the one std call ignoring a failed write (its doc comment says why). The prelude's print words are gone. `io.Writer` buffers (errors at `Flush`); `io.Lines` reads lines.
+  its own. `io.Show<T>(v T, at Place = Place.Here) T` (QBP 4) writes `FILE:LINE:COLUMN: $v` to the standard error and
+  gives `v` back. `io.Writer` buffers (errors at `Flush`); `io.Lines` reads lines.
 - **Libraries:** `std/os` (files, Exec without a shell, Start/Process, RunOnStack, OnCrash, MkTemp, RemoveAll),
   `std/json` (immutable recursive enum tree, exact numbers), `std/http` (over curl), `std/csv` (strict), `std/stats`,
   `std/rand`, `std/time`, `std/filepath`, `std/cancel`, `std/chan`, `std/ffi` (libffi).
-- **std breadth (docs/survey.md items 7-8, the user: "Yes all of that", 2026-10-24; names mine, the user's naming rule:
-  a module's other names drop its prefix - `net.Error`, `regex.SyntaxError`).** `std/sync`: `Mutex<T>` reached only
-  in `m.With(fn(v mut T&) { })` - no lock/unlock pair - or `Update(fn(v T) T)` for a number (no primitive references),
-  `RWLock<T>` (`Read`/`Write`), `Once`; each a handle over pthread words that start zeroed, `-race` clean. `std/time`:
-  `Duration extends I64` (`Millis(5)`, `d.Seconds()`, `$d` as Go's `1h2m3.5s`), `Sleep`, `Date` with RFC 3339
-  `Format`/`Parse` (fixed offsets only - no zone database). `std/net`: blocking TCP (`Listen`, `Accept`, `Dial`, `Conn`
-  with `Read` failing `Closed` at the end of the stream, `Write`, `SetTimeout`) and UDP, IPv4/IPv6 (`ParseIP`, RFC
-  5952 text), destructors closing descriptors; names resolved by `Lookup`/`Resolve` over getaddrinfo (X10/X11) - X6's
-  `__olang_err` gained socket classes 7-13. `std/set`, `std/deque`, `std/heap` (a `less` function), values as Vec is.
-  Prelude iterator adapters `Take Skip Enumerate Zip Chain Sum Min Max MinBy MaxBy` (empty: `Exhausted`); the second
-  survey's walks (2026-10-26, below) `TakeWhile SkipWhile StepBy FlatMap Partition Reversed`, an array's `Windows`. `std/utf8`
-  (`Rune extends U32`, strict `Decode`, `Runes` walking bad bytes as U+FFFD as Go does), `std/base64`, `std/hex`,
-  `std/sha256` (1.1x a plain C SHA-256), `std/crc32`, `std/flags` (handles per flag, `--help` text, `flags.Error`),
-  `std/regex` (RE2's syntax, linear time: a lazy forward DFA finds a match's end, a reversed one its start, the Pike
-  VM gives groups; level with glibc's regexec on bench/regex). Language gaps found are in HISTORY.md.
-- **`std/bitset` and `std/order` (survey2 items 3-4, the user 2026-10-26; details mine).** `bitset.BitSet<T>` holds an enum's cases
-  in one `U64` (bit k the k-th case), a plain value; the constructor's contract refuses bits past the last case
-  (`ArgumentError.Invalid`, bulk review 4 - a walk of one met a case that does not exist), and it asserts, decided per instance, that T is an enum of at most 64
-  cases with no payload. `x in s`, `Add`/`Remove` (say whether it changed), `Len`, `Has`, `Empty<T>()`, `Full<T>()`, `Of(array)`,
-  operators `| & - ^` (union, intersection, difference, exactly-one; no `+`: one spelling), `Complement`, `IsSubset`, `for c in s` in
-  case order, `$` as `bitset.BitSet<Color>[Color.Red]` (its literal, E19), `==`/Hash by the bits; `Bits()`/`FromBits` (case-index bits, failing `bitset.Error.OutOfRange`
-  past the last case), `Flags()`/`FromFlags(w)` (OR of the raw values of an integer-raw enum, T17e). `order.ByFields<T>(a, b)` is the
-  `less` an array's or Vec's `Sort` takes (`xs.Sort(order.ByFields<T>)`): a struct by its visible fields in order, an enum by case then
-  that case's fields; a field by `<` (numbers, Bool, Char) or its own `Less` (text included), else a struct or enum in turn, anything
-  else a compile-time error naming the type.
-- **The second survey's walks (M19d, docs/survey2.md 1.5, 2026-10-26).** Iterator defaults beside Take/Skip:
-  `TakeWhile`, `SkipWhile` (keep not called again once it has said no), `StepBy(n)` (a `StepSize`, checked as a
-  `ChunkSize` is - `StepError.BadStep`), `FlatMap(f)` (f gives any iterator; the inner walk held in a `Vec` of one,
-  since a walk may have no zero value, D13c) and `Partition` (two Vecs as two results); `Reversed()` on any `At`+`Len`
-  type (a Vec) and on arrays and text (`ReversedIter`, measured level with the index loop: 50 x 10M sum 171 ms against
-  185, Horner 847 against 874); an array's `Windows(size)` (read-only views, Chunks' shape), `TakeWhile`/`SkipWhile`
-  (views) and `Partition` (two arrays). Each fails with what its iterator and callbacks fail with (`<T ? E>`), is
-  evaluated while compiling (a baked global in std/prelude/tests/iterator.olang) and has B7a examples on its iterator
-  type. Decided (mine): the struct adapters copy their iterator as the others do; FlatMap a struct, not a generator (a
-  generator cannot yield references its inner walks hold); an array method or an Iterator default could not be a B7a
-  target (only a named type's method could then), so the examples named the adapter types - they name the methods since
-  the checker batch (`Iterator.TakeWhile`, `Array.Reversed`). **Round 3 (QBP 5, the user: "build them any way you
-  want", 2026-10-27; built 2026-10-31, details mine)**: iterator defaults `Scan(init, f)` (running values, init not
-  given), `GroupBy(key)` (a new `Map<K, Vec<T>>`, keys in first-met order), `ChunkBy(same)` (runs by a neighbour test,
-  each a `Vec` built where its Next lands - a `ToVec` of them is refused by section 8, a for-in works), `Dedup()`
-  (consecutive equal values once), `Unzip()` (Zip's pairs into two Vecs), `Product()`, `Last()`, `Nth(n)` (Exhausted
-  past the end or for n < 0); on arrays (text included) and At+Len types `LowerBound(x)`, `BinarySearch(x)` (the first
-  equal, `ArrayError.NotFound` for arrays and Vecs alike) and `Cycle()` (endless; an empty one gives nothing), and on
-  arrays `ChunkBy(same)` as views. Each has B7a examples and a baked global beside its run-time test.
-- **`time.Virtual` and `chan.Select` (survey2 items 10 and 12, the user's decisions 2026-10-27; built 2026-10-31,
-  details mine).** `time.Virtual(fn() { ... })` runs its body on a virtual clock: `Now`/`Wall` read it (from
-  `VirtualStart`, 2000-01-01), `Sleep(d)` moves it on by d at once, std/cancel's deadlines (`NowNs` is `time.Now` now)
-  and `time.After`'s timers fire on it, tasks spawned inside share it (one atomic counter: sleeps add up); a wait with a
-  deadline and nothing to take moves the clock to the deadline and gives what it waits for 1 ms of real time (Go's
-  synctest approximated). Test builds only: elsewhere a call is S18c's false assert at the call's instance (the note
-  now kept for an assert in std), and `if TestBuild` keeps it out of Now/Wall/Sleep. `chan.Ready.Select(a, b[, c, d])` takes
-  the first ready of two to four cases in the order given - a channel received from, `SendOf(c, v)`, a `time.Timer`
-  (`time.After(d)`) - as `Ready<A, B, C, D>.First(v)`..`Fourth`, failing with what a case fails with (CLOSED); the
-  cases meet `chan.Case<T ? E>` (`TryNow() T ? E, Exhausted`, `Due() I64`), so time needs no import of chan; it polls
-  (spins, then sleeps to 1 ms, waking for its earliest timer). Two language rules came with it: **G9e** (a parameter
-  left off binds its variable to its default's type: Select's unused cases) and **S13g** (a case carrying a value of an
-  enum of no cases, T18 now allowing one, needs no clause: a match of two clauses over a two-case Select's `Ready` is
-  exhaustive). (A `SendOf(c, v)` written inside a join block, refused by C2d when built, compiles since the kept round -
-  checks/cases/c6selectjoin.)
-- **`a.Chunks(size)` (M19d, P8b, 2026-10-17).** Every array cut into consecutive writable slices of at most `size`,
-  held in an array living where the receiver does (Split's shape: an iterator's pieces would live where the iterator
-  does, which P2 rejects as a task argument), so `join { for part in a.Chunks(4) { spawn work(part) } }` cannot race.
-  `size` is a `ChunkSize` (a Radix-like checked `I64`, `ArrayError.BadChunk` below one; a literal checked while
-  compiling). Arrays only for now; Vec later (another branch is reworking Vec).
-- **`extern fn` and C interop (X1-X16; v2 the user's design 2026-10-24, details mine).** Across the boundary: Bool and
-  every numeric primitive (F16/BF16 as `_Float16`/`__bf16`, ext attributes per architecture), arrays of them (a
-  pointer), **extern types** (`extern type Db`: held as `Db&`/`Db?&`, passed back, compared, null-tested, never read or
-  built, C may return them; outside section 8's tracking, as numbers - X10), **plain-data structs** by reference and by
-  value, classified by `compiler/cabi.olang` as clang 18 passes them on x86-64 (System V) and AArch64 (AAPCS64), tested
-  against clang (X11). `link "name"` (`-lname`, or a path beside the module, X9) - since 2026-10-26 only on an extern block or a C import
-  (the C-imports entry below). **Callbacks are `export
-  fn`s only** (X13): C is given an export fn by name - a C entry with no closure that sets up olang's per-thread state
-  the first time C calls on a thread it made (one load and compare; that state is never released, a recorded limit) -
-  context through the user data argument. `build -library` (X14) makes `libNAME.so` (only the export fns visible,
-  globals set at load in B5a's order, a fresh scope per call) and `NAME.h` (stdint types, opaque typedefs, plain
-  structs, arrays as pointer and `int64_t` length, a fallible entry returning an `int32_t` code - library-wide, `(type
-  position from 1 << 16) | word`, `NAME_TYPE_WORD` constants - with its result through a pointer, an array result
-  copied into a caller's buffer returning its length); Python reaches it by ctypes. `t.ToC()` and `String.FromC(p, max)`
-  over the prelude's `CStr` (X15; a builder since D19 - it was `p.StringFromC(max)` while no type-level functions existed).
-  `olang bindgen HEADER.h` (X16) writes a header's declarations from clang's tree, macros' values computed by clang;
-  `interpret` loads the linked libraries; since 2026-10-26 it passes extern types and plain structs by reference too,
-  refusing a struct by value (B3e). Still no extern variables, and
-  the X1a hole stands. C math functions with their exact prototypes are known and evaluated while compiling (X8).
-- **std API details.** `Vec`, and std/list's `List`: `Push PushAll Pop First Last Clear Truncate Insert RemoveAt
-  SwapRemove IndexOf Remove Reverse Sort Join ToArray`, `v[i]` unchecked, `try v.Get(i)` checked (a List's first
-  chunk held on its own). `Map`: `Put Get
-  Has Remove Update Keys Values Clear`, removed slots reused, a key needs `Hash` and `==`. Text: `Split` borrows
-  the receiver, an empty separator splits into characters; `Replace("", x)` inserts at every position; `ParseInt(0)`
-  reads olang literal syntax; every base is a `Radix` (`TextError.BadBase`, a literal one decided while compiling);
-  `x.Fixed(n)` as `%.*f`, exact; `n.Format(base)`. `io.Writer` never fails on Write - the
-  first refusal is remembered and every `Flush` fails with it; `io.Lines` ends a line at `\n` or `\r\n`. `os.Exec`
-  captures through memory files; `chan.Send` on a closed channel fails with `ChanError.CLOSED`; `std/csv` is RFC 4180 strict;
-  `std/stats` uses the sample variance and numpy's percentiles. `Array.Sort` is a stable O(n log n) merge.
+- **std breadth (docs/survey.md items 7-8, the user: "Yes all of that", 2026-10-24; names mine, the user's naming
+  rule).** `std/sync` (`Mutex<T>` reached only in `m.With(fn(v mut T&) { })`, `RWLock`, `Once`), `std/time`
+  (`Duration`, `Sleep`, RFC 3339 `Date`), `std/net` (blocking TCP and UDP, IPv4/IPv6, destructors close descriptors),
+  `std/set`, `std/deque`, `std/heap`, prelude iterator adapters (`Take Skip Enumerate Zip Chain Sum Min Max MinBy
+  MaxBy`), `std/utf8`, `std/base64`, `std/hex`, `std/sha256`, `std/crc32`, `std/flags`, `std/regex` (RE2's syntax,
+  linear time).
+- **`std/bitset` and `std/order` (survey2 items 3-4, the user 2026-10-26).** `bitset.BitSet<T>` holds an enum's cases
+  in one `U64` (`x in s`, `Add`/`Remove`, `Len`, `| & - ^`, `for c in s`, `$` as its literal). `order.ByFields<T>(a,
+  b)` is the `less` an array's or Vec's `Sort` takes: a struct by its visible fields in order, an enum by case then
+  fields.
+- **The second survey's walks (M19d, docs/survey2.md 1.5, 2026-10-26; round 3 QBP 5, the user: "build them any way you
+  want", built 2026-10-31).** Iterator defaults `TakeWhile SkipWhile StepBy FlatMap Partition Scan GroupBy ChunkBy
+  Dedup Unzip Product Last Nth`; `Reversed()` on At+Len types, arrays and text; arrays' `Windows(size)`, `LowerBound`,
+  `BinarySearch`, `Cycle`. Each fails with what its iterator and callbacks fail with and has B7a examples.
+- **`time.Virtual` and `chan.Select` (survey2 items 10 and 12, the user's decisions 2026-10-27; built 2026-10-31).**
+  `time.Virtual(fn() { ... })` runs its body on a virtual clock (test builds only; `Sleep` moves it on at once).
+  `chan.Ready.Select(a, b[, c, d])` takes the first ready of two to four cases (receive, `SendOf(c, v)`, a timer) by
+  polling. Language rules with it: **G9e** (a parameter left off binds its variable to its default's type) and
+  **S13g** (a case carrying a value of an enum of no cases needs no clause).
+- **`a.Chunks(size)` (M19d, P8b, 2026-10-17).** Every array cut into consecutive writable slices of at most `size` (a
+  checked `ChunkSize`), held in an array living where the receiver does, so `join { for part in a.Chunks(4) { spawn
+  work(part) } }` cannot race. Arrays only; a Vec uses `v.ViewMut().Chunks(n)`.
+- **`extern fn` and C interop (X1-X16; v2 the user's design 2026-10-24).** Across the boundary: Bool, numeric
+  primitives, arrays of them, **extern types** (`extern type Db`, held as `Db&`/`Db?&`, X10), plain-data structs by
+  reference and by value (compiler/cabi.olang, System V and AAPCS64, X11). `link "name"` only on an extern block or a C
+  import (X9). **Callbacks are `export fn`s only** (X13). `build -library` (X14) makes `libNAME.so` and `NAME.h`. `t.ToC()`
+  and `String.FromC(p, max)` (X15). `olang bindgen HEADER.h` (X16). No extern variables; the X1a hole (a wrong
+  prototype) stands. C math functions with exact prototypes are evaluated while compiling (X8).
+- **std API details.** `Vec`/`List`: `Push PushAll Pop First Last Clear Truncate Insert RemoveAt SwapRemove IndexOf
+  Remove Reverse Sort Join ToArray`, `v[i]` unchecked, `try v.Get(i)` checked. `Map`: `Put Get Has Remove Update Keys
+  Values Clear`, a key needs `Hash` and `==`. Text: `Split` borrows the receiver, `ParseInt(0)` reads olang literal
+  syntax, `x.Fixed(n)`, `n.Format(base)`. `io.Writer` never fails on Write - `Flush` fails with the first refusal.
+  `Array.Sort` is a stable merge.
 - **Names in std are mine unless marked**; the user's: `Map` (not Dict), `Mul`, `extends`.
 
 ### Codegen and runtime
@@ -1030,54 +864,27 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   every module `available_externally`.
 - **Representation choices**: a function value is a code/environment pair crossing calls as two words; aggregates over
   128 bytes go through memory; one `ret` per function; enum payloads are whole words; integer `$` without snprintf.
-- **Cold paths, inferred (survey2 item 9, the user's decision 2026-10-27, "ye do the cold paths work the way you want";
-  built 2026-10-31, mine).** No syntax. What ends the program or a test - a failed assert or guaranteed check,
-  `unreachable`, `!`, a null `!`, an error leaving a test - calls runtime functions declared `cold noreturn`, and a
-  requirement found false (D17) calls a `cold` one, so LLVM lays those paths out of line and inlines nothing into them
-  (no dynamic change measured: callgrind's counts were identical with and without). A call's error edge carries
-  `!prof` weights of 1 to 2000 (LLVM's "unlikely"), kept because the bench gained and a miss-heavy program did not lose:
-  callgrind on baseline x86-64, Vec push 188.7M -> 103.7M instructions, a gather 62.3M -> 58.3M, regex -0.7%, any-dispatch
-  -0.4%, enum dispatch +1.4%, text +0.4%, and a program whose Map.Get misses half the time and whose Find mostly fails
-  125.8M -> 124.8M with the same mispredictions; timings agreed within the (heavy) noise.
+- **Cold paths, inferred (survey2 item 9, the user's decision 2026-10-27, "ye do the cold paths work the way you
+  want"; built 2026-10-31).** No syntax. What ends the program or a test calls `cold noreturn` runtime functions; a
+  call's error edge carries `!prof` weights (LLVM's "unlikely").
 - **No per-operation run-time checks (the user's rule).** Checks are per construction (slice bounds, array length) or
   opt-in by a named call that fails (`try a.Get(i)`, `try x.Narrow<I32>()`, `std/arith`).
-- **Benchmarks against C are in `bench/`** (`bench/run.olang`, not in verify): plain loops and allocation at or beyond C;
-  remaining gaps are in abstractions above them (bench/README.md).
+- **Benchmarks against C are in `bench/`** (`bench/run.olang`, not in verify): plain loops and allocation at or beyond C.
 - **Fuzzers:** `fuzz/` (differential: baked, decided, run - `make fuzz`) and the scope fuzzer (`make scopefuzz`).
-- **Runtime facts.** Runtime thread-locals are `initialexec`; the runtime's globals sit in comdats; every function
-  carries the target's CPU and features and `null_pointer_is_valid`; LLVM 18's BF16/F16 bugs are worked around (BF16
-  narrowing as integer arithmetic, asm fences on F16 bitcasts, FastISel off in `-debug`, AVX512-BF16 conversions removed -
-  T4, E33, B2c, B12c). The arena under `-sanitize` poisons with `0x7FF5...`, protects and holds back closed chunks.
-- **Optimizations from the survey (docs/optsurvey.md; built 2026-10-31, HISTORY.md "Optimizations from the survey,
-  built"; none changes meaning).** Its items 2 and 5 wait for the scoping rework (section 8 placement); `Pow(2.0)` is QBV's.
-  - 1: the arena's bump path `alwaysinline`, the rest `__olang_scope_alloc_slow` (`noinline`) - binary-trees 185 -> 131M Ir.
-  - 3: a body calling `grown` (a Vec's growth) is `typed.Body.Cold`, emitted `noinline cold`, so `Push` inlines.
-  - 4: a generator's `.walk`, `.wnext` and ramp `.coro` are `alwaysinline`, so D18e's elision holds in a large caller.
-  - 12: an integer's `Sqrt` corrects by squaring a root held below 2^32 - no division (3x natively).
-  - 15: every function `nounwind` (nothing unwinds; no unwind tables - regex's binary -4%); a baked global's initializer is never written, nor
-    the unused `olang.init.MODULE`; a mutable global whose initializer the evaluator computes to plain data is baked as its
-    writable storage's first value (std/time's counters) - nothing at startup. 128-bit division by a constant not built.
-  - 9: a text local copied from a literal, homed in its own block, gets a stack slot (`lower.slotCopy`), not arena storage.
-  - 14: an array of a constant length 0 is `@__olang_empty_array` - no allocation (an `Array<T>(0)`, a Vec's first buffer).
-  - 13: every enum tag load carries `!range` over its cases, so a match's exhaustiveness trap folds (8-way -12%).
-  - 8: `Sum`/`Count`/`Min`/`Max` through `Fold`; `Take`/`Skip` fold an array's (Take: an Indexable's) iterator by a counted loop
-    (`ArrayIter.Rest`, `Advance`) - `a.Iter().Skip(10).Take(k).Sum()` vectorizes (16.4 -> 1.9M Ir).
-  - 7: a filtered comprehension's result is the first n elements of its own buffer, no copy (17.7 -> 13.7M Ir); a Vec
-    grown in place is not built (View's read-only receiver has nowhere to record a view).
-  - 16 (QBV, the user: every exponent that gains): float `Pow` gives 1, x, x*x, 1/x for 0, 1, 2, -1 (pow's bits), a square root
-    for 0.5 (pow's edges kept), squaring for other whole |n| <= 16 (last bits may differ), else pow; decided by the value,
-    the evaluator computing the same - Pow(2.0) 138 -> 4.4M Ir, a variable exponent +17 Ir a call. SPEC states it.
-  - Not built: 10 (enum layout), 6 (constant calls in bodies), 11 (Filter/Map fusion) - each a design of its own; HISTORY.md.
-- **Testing.** `make verify` runs the corpus (`tests/shared.olang`, `tests/worker.olang`, `tests/runner.olang`), std's tests, `checks/`
-  (must-fail cases with their expected diagnostic, and whole-build scenarios, four at a time) and the port's diffs;
-  `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the user's rule).
-  **The suite runs side by side (2026-10-24, mine; HISTORY.md "The edit-test loop")**: every test file is a make target
-  of its own (`test@FILE`, `PARALLEL` at a time, the longest first, the gigabyte-sized builds in two lanes), with the
-  runner and the diffs beside them (`make suite`); builds sharing a directory claim each object (B3k) and the checks'
-  builds share a store of objects (B3j, `OLANG_OBJECTS`). `make quick` is the edit-test loop - the suite on the compiler
-  already built, rebuilt once by itself - and leaves out only the clean build, the seed bootstrap and its fixed point.
-  `make verify` (clean, `boot`, `suite`) stays the gate; `boot` reuses a bootstrap only of exactly the same inputs (the
-  seed, compiler/, std/, the makefile, clang, the CPU, the checkout's path) that passed before (`.bootcache`).
+- **Runtime facts.** Runtime thread-locals are `initialexec`; every function carries the target's CPU and features and
+  `null_pointer_is_valid`; LLVM 18's BF16/F16 bugs are worked around (T4, E33, B2c, B12c). The arena under `-sanitize`
+  poisons and protects closed chunks.
+- **Optimizations from the survey (docs/optsurvey.md; built 2026-10-31; none changes meaning).** The arena's bump path
+  inlined (1); a body calling `grown` is cold so `Push` inlines (3); generator `.walk` forms always inline (4); integer
+  `Sqrt` without division (12); every function `nounwind`, baked mutable globals (15); text locals copied from literals
+  on the stack (9); `@__olang_empty_array` (14); `!range` on enum tags (13); `Take`/`Skip` folded by counted loops
+  (8); filtered comprehensions without a copy (7); float `Pow` for small exponents (16, QBV, the user). Not built: 10
+  (enum layout), 6 (constant calls in bodies), 11 (Filter/Map fusion); 2 and 5 waited for the scoping rework.
+- **Testing.** `make verify` runs the corpus (`tests/shared.olang`, `tests/worker.olang`, `tests/runner.olang`), std's
+  tests, `checks/` (must-fail cases and whole-build scenarios) and the port's diffs; `make race`, `make scopesan`,
+  `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the user's rule). **The suite runs side by side
+  (2026-10-24)**: every test file a make target (`test@FILE`); `make quick` is the edit-test loop; `make verify` (clean,
+  `boot`, `suite`) stays the gate.
 
 ### The C compiler and the port
 
