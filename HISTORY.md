@@ -30142,3 +30142,18 @@ an instance an element aliases - refused, as sound as accepted would be; pinned)
 kept through its first character, a view handed back of what a function builds (`head`), a slice of a temporary in a
 parameter's field, a generator's views of a local it made, a closure over a turn's local, a part of an instance past
 its turn - baked (`Heads`) and asserted at the top level beside the run-time tests.
+
+**Also in this round (2026-11-07, wt-sec8r2).** free.olang's `viewCtor` - the store a caller's copy of a viewing
+constructor's instance (D9h) gives a struct held in place - recorded the owner leaves only; an array leaf got no store
+at all, so a place otherwise sole would have released, at its let-go, an array outside any region (the drop-order
+round's finding, unreachable while every place such a copy reaches keeps for another reason). It now records an array
+leaf as given a value not made for it - the place keeps (mine: the conservative reading, needing nothing of how lowering
+places a D9h copy's arrays); checks/cases/o8dviewctorarray runs such stores under the sanitizer. **The unique hand-on
+move was not built** (brief item 1; measured again: a `Map<I64, Res>` of a unique value owning an array, 1M cycles -
+put and Take 517 MB, Put replacing 260 MB, put and Remove 517 MB). Early freeing's dump says why: every hand-on of the
+by-value parameter (Put to `add`, `add` to `MapEntry`) is check's `ownCopy`, so what the Map holds is a copy, never made
+for the place. A move needs, beyond leaving the copy out, section 8 to see a unique value's owned storage at all - it
+holds no reference, so `read` gives it `Val.plain()` and no fit judges a store of it (the drop-order round's attempt read
+freed storage under `-sanitize` for that reason) - and a scope variable for a by-value parameter of a unique type owning
+parts, so a store of it into a longer place obliges its caller to build the argument there; then early freeing finds the
+place sole. Left for a round of its own (the hand-off note lists the steps); docs/sec8.md's progress says so.
