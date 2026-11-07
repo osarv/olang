@@ -1,6 +1,8 @@
-# check: fail error[O20]: the container outlives what this refers to
-# T29a/E12c: a conversion of a local array names the local's storage, which dies at the return - not a temporary (a
-# String's is a copy, T13a: Bytes may be written)
+# check: run
+# flags: -debug -sanitize
+# T29a/E12c, O27 as placement: a conversion of a local array names the local's storage - kept in a parameter's field, the
+# local is built where the field lives (it was O20's error: the storage died at the return); read back after a churn
+import "std/io"
 type Bytes Array<U8>
 type Holder struct() {
   s Bytes& = Bytes(Array<U8>(0))
@@ -9,4 +11,18 @@ fn keep(h mut Holder&) {
   local Array<U8> = Array<U8>[104, 105, 106]
   h.s = Bytes(local)
 }
-fn main() ? { }
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+fn main() ? {
+    h mut Holder& = Holder()
+    keep(h)
+    churn()
+    try io.Println($h.s[1])
+}

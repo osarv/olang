@@ -1,5 +1,8 @@
-# check: fail error[O27]: this returns a view of 'buf', which this function builds - return the value (a result written without '&' copies it), or a copy: '$x'
-# D18c: an element kept by the walk lives where the generator does - not in the walk's own frame, which ends with it
+# check: run
+# flags: -debug -sanitize
+# D18c, O27 as placement: an element kept by the walk lives where the generator does - the walk's own local it views
+# ('buf') is built there, not in the walk's frame (it was O27's error); each element read back after a churn
+import "std/io"
 fn heads(n I64) Iterator<Array<I64>&> {
     buf := Array<I64>(4)
     for i in range n {
@@ -8,6 +11,21 @@ fn heads(n I64) Iterator<Array<I64>&> {
     }
 }
 
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
 fn main() {
-    for _ in heads(2) { }
+    s := 0
+    for h in heads(3) {
+        churn()
+        s = s * 10 + h[0] + 1
+    }
+    io.Println($s)!
 }

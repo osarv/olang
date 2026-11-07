@@ -1,10 +1,27 @@
-# check: fail error[O20]: the container outlives what this refers to
-# D16d: nor stored into something that outlives what it captured
+# check: run
+# flags: -debug -sanitize
+# D16d, O27 as placement: a lambda stored into something that outlives what it captured has what it captured built
+# where it is stored - a closure is a view of its captures (it was O20's error); called after a churn
+import "std/io"
 type Point struct(x I32) { x }
 type Box struct() { f fn?&(n I32) I32 = null }
 fn stash(b mut Box&) {
     p Point& = Point(5)
     b.f = fn(n) { return n + p.x }
 }
-type E error { X }
-fn main() ? E { }
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+fn main() {
+    b mut Box& = Box()
+    stash(b)
+    churn()
+    io.Println($b.f!(37))!
+}

@@ -1,0 +1,28 @@
+# O27 as placement, B18: a turn's text kept through a generator's borrowed elements, and through a slice - each text built
+# where the list lives, which -memory lists with the copy that would let it go with its turn
+import "std/io"
+
+fn words(t String&) Iterator<String&> {
+    s := 0
+    for i in range t.Len() {
+        if t[i] == ' ' {
+            yield t[s:i]
+            s = i + 1
+        }
+    }
+    yield t[s:]
+}
+
+fn main() {
+    out := Vec<String&>()
+    for i in range 3 {
+        t := $i " a"
+        for w in words(t) { out.Push(w) }
+    }
+    firsts := Vec<String&>()
+    for k in range 3 {
+        u := $k "-x"
+        firsts.Push(u[0:1])
+    }
+    io.Println($out " " $firsts)!
+}

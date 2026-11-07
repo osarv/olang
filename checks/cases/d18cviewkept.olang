@@ -1,6 +1,7 @@
-# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-# D18c: an element kept by a generator's walk lives where the generator does - the for-in's block, which a list
-# declared before the loop outlives
+# check: run
+# flags: -debug -sanitize
+# D18c, O27 as placement: an element kept by a generator's walk lives where the generator does - a list declared before
+# the loop keeping them has the walk made where the list lives (it was O10c's error); read back after a churn
 fn labels(n I64) Iterator<String&> {
     for i in range n {
         s String& = $"label " $i
@@ -8,7 +9,19 @@ fn labels(n I64) Iterator<String&> {
     }
 }
 
+import "std/io"
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
 fn main() {
     kept := Vec<String&>()
     for w in labels(3) { kept.Push(w) }
+    churn()
+    io.Println($kept)!
 }

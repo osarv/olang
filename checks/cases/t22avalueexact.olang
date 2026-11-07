@@ -1,9 +1,19 @@
-# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
-# T22a, open point 5: through a function value, a reference argument outlives where the result lands - a loop turn's text
-# given beside a list the result is (exactly where something is stored through both) is refused, called by name it is
-# built where the list keeps it
+# check: run
+# flags: -debug -sanitize
+# T22a, open point 5, O27 as placement: through a function value, a reference argument outlives where the result lands -
+# exactly where something is stored through both: a loop turn's text given beside a list the result is, then pushed
+# into it, is built where the list lives, as called by name (it was O10c's error); read back after a churn
 import "std/io"
 fn pick(a mut Vec<String&>&, b String&) mut Vec<String&>& { return a }
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
 fn main() {
     g := pick
     v Vec<String&>
@@ -12,5 +22,6 @@ fn main() {
         w := g(v, t)
         w.Push(t)
     }
-    io.Println($v.Len())!
+    churn()
+    io.Println($v)!
 }

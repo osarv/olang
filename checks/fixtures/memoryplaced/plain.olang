@@ -1,0 +1,8 @@
+# nothing kept longer than its storage: -memory lists no placement made for a view
+import "std/io"
+
+fn main() {
+    out := Vec<String>()
+    for i in range 3 { out.Push($i " a") }
+    io.Println($out)!
+}

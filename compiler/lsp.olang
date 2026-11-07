@@ -530,6 +530,15 @@ fn (w worker&) deprecations(b mut StringBuilder&, a session.Analysis&, real Stri
         session.JsonStr(b, u.Note)
         b.PushChar('}')
     }
+    # (and where section 8 built storage longer for a view kept past it - O27, as -memory says it: a hint, untagged)
+    for u in a.Placed(real) {
+        if b.Len() > 0 { b.PushChar(',') }
+        b.Push("{\"range\":")
+        p.Range(b, u.Start, u.End)
+        b.Push(",\"severity\":4,\"source\":\"olang\",\"code\":\"O27\",\"message\":")
+        session.JsonStr(b, u.Note)
+        b.PushChar('}')
+    }
 }
 
 # whether a file is itself one of the open files to be checked here, as a root

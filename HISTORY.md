@@ -30288,3 +30288,101 @@ compiler/tools/evaldiff.olang still called `toolkit.GoldenRead` after the builde
 built since; left for the coordinator: the scope fuzzer's generator writes functions D19a now calls builders (every
 generated program refused - the builders round's), and run.txt, layout and drvdiff rows other rounds left stale
 (renamed tests, new files, `-interpret`).
+## Storage kept for a view: O27 as placement (docs/sec8.md round 2, 2026-11-07, wt-sec8r2)
+
+The user's QCR (1a) of 2026-11-03 reversed QCB's no-extension rule: a view of storage kept longer than the storage lives
+has the storage built where the view is kept, as item 17's local is - no refusal, its memory listed by `-memory`. Built
+in the scope pass's inference (compiler/scope.olang), with lowering's temporaries and the driver's report.
+
+**How it was built (mine, within docs/sec8.md 4).** The inference's proposals reach a view's storage: `proposeView`
+takes a slice of a local's storage or of what a reference local names, a borrow of a part, a slice of a temporary
+(E16a), a conversion naming a local's storage (T29a: `Borrow(Deref(Convert(Borrow(local))))`, `convertedLocal`), a call
+handing back a borrow of an argument (O13: the argument proposed, `borrowedCall`) and a closure (each capture proposed:
+a closure is a view of its captures); a local declared as a view (`viewOf`), or as a walk's element (`walkSrc` - the
+generator's argument), or from a borrowed call or a conditional/match (each value proposed as stored alone, E28), sends
+the proposal on at the end of its origin chain (`proposeFrom`); a callee's relation marked `View` lifts at the call
+(`dischargeRels`, `builtOK`). **Phases**: `inferClaims` gathers whole lifts to their fixed point exactly as before, and
+only if the last of those judgings met a view, part or capture kept too long (`viewWanted`) judges again with them
+proposing - so a program accepted before is placed as before and pays no extra judging (bench's 16 programs and the
+compiler's own 315 modules: IR byte-identical; OLANG_SCOPESTATS on compiler/ the same lifts, landings and re-judgings
+as the base, "0 second phases for views", the scope phase 3.6-3.9 s on both). Everything a view adds is gated by the
+phase, a borrowed call's own landing (a whole value's) kept in both; `judgeOnce` proposes no view (a view kept too long
+is an error there, which redoes the body by the phases).
+**Parts** (a field read out of what a local's constructor built) propose only once the field inference has settled: a
+settled round that still refused a part (`partWanted`, from the last judging of a body's gathering) turns `partsOn` on
+and judges every component afresh (no component taken again), part lifts then made only in a body's second phase -
+o23adepth's View instance and the Node it was made from built where the read after the loop needs them.
+**Temporaries**: a slice of one kept longer lifts the temporary's site (`proposeSite`); `tempTerm`/`storOf` place it
+there and `Plan.TempKept` tells lowering, whose `tempLocal` homes the temporary there (a new object each time, `Live`)
+instead of the frame - rv9slicetemp, rv9slicetempas, rv9slicetempview. **Generators** needed nothing of their own: a
+view of a walk-local yielded by a generator whose elements live where it does (D18c's third form) lifts the local to
+the generator's home capture, and a consumer keeping elements lifts the walk local (the receiver of `Next`, a borrowed
+result) to where they are kept; emit's elision dataflow already leaves a walk made in an outer block and called each
+turn on the arena path (D18e), so emit is unchanged.
+
+**What stays refused** - each a refusal of `liftLocal`/`proposeStorage`, said by `viewKept`/`partKept` with why:
+storage holding a value whose destructor is still to run (docs/sec8.md question 2, decided by me as recommended - a
+file would stay open as long as a list keeps a slice of its name: `ViewKeptDestructor`, `PartKeptDestructor`, rule
+`O27, O15`), a match binding's or a capture's copy (`ViewKeptCopy`), a derived or unknown scope (`ViewKept`, reworded:
+"where no storage can be built for it"), a by-value parameter's own storage (O14/C2d's errors, as before), a `Next()`
+result scope. **C4** (docs/sec8.md 6): a body whose reporting judging said an error has `summary.Erred`, and what it
+requires is not said again at its calls - one cause, one error. (First built as "its callers do not discharge its
+obligations": that changed what the field inference's intermediate rounds judged - a callee erring in one round
+lifted nothing at its callers - and cost the scope phase on compiler/ 15-20%; the obligations now pass up and lift as
+before, only the reports are left out, and `Erred` is no part of the reuse comparison.) bulk 6's gen_walkkept itself now compiles (its generator
+builds its local where it lives, its consumer makes the walk where the words are kept), and a generator yielding views
+of a destructor-holding local gives its one O27 error in the generator (o27destructorgen).
+
+**-memory and the language server** (B18, docs/sec8.md 4.4): `Scoper.Placements()` - each lift made while a view, a
+part or a capture proposed (`placed`, recorded in `liftLocal`/`proposeSite`, dropped with the lifts) - printed after
+early freeing's rows, in source order: `FILE:L:C: memory: 't' is built in main's scope, a new one each time it is made,
+for a view of it kept here`, a note at the declaration naming the copy that would let it go with its turn, and a count;
+the language server publishes each as a hint (severity 4, code `O27`), beside deprecation's. The checks scenario
+`memoryplaced`.
+
+**The evaluator** (K1) runs on lowering's stand-in placement, before the scope pass: a view of a local is fine there
+(item 17 homes kept locals in the program's scope), but a slice of a temporary read the temporary's frame slot after
+its function returned - tests/viewplace.olang's top-level assert said "uses storage after the scope it was made in
+closed". The stand-in now homes a temporary a slice or a borrow is taken of in the program's scope (`lowering.viewing`),
+so baked globals and decided asserts agree with the run time; `interpret` places by the plans and agreed on every new
+run case.
+
+**Newly compiling** (run cases under `-debug -sanitize`, read back after a churn, the same output interpreted):
+d18cinputoutlived, d18cyieldframe, d18cyieldlocal, o10celementstash, o25enote, o27genborrow, t22aviewkept,
+t22borrowedresult, d16cstore, rv9slicetemp, rv9slicetempas, rv9slicetempview, t29aconvlifetime, o23adepth,
+stro20condstore, c4genwalkkept, c4genwalkkept2, and seven the full run of the cases found accepted: d18cheldfield and
+d18cheldlocal (a generator's kept elements, held in a field and in a local, kept past its block - the holder built where
+the list lives), d18cviewkept (a walk made where its kept elements are kept), e16atrydefaultslice (a slice of a try's
+temporary returned - the temporary homed in the result scope), rv9slicetempctor (a constructor field's slice of a
+temporary - homed with the instance), s5capturestruct (closures pushed into a list - what each captured built where the
+list lives) and t22avalueexact (a call through a value whose result is exactly where its argument must be); and
+p2viewtask (a slice of a turn's text handed to a spawned call: built at the join's level, a new one each turn, as a whole
+argument is - it was P2's and O27's errors). o23aliaswrite stays refused at its read (O25i: its part is read through
+an instance an element aliases - refused, as sound as accepted would be; pinned). tests/viewplace.olang: a turn's text
+kept through its first character, a view handed back of what a function builds (`head`), a slice of a temporary in a
+parameter's field, a generator's views of a local it made, a closure over a turn's local, a part of an instance past
+its turn - baked (`Heads`) and asserted at the top level beside the run-time tests.
+
+**Also in this round (2026-11-07, wt-sec8r2).** free.olang's `viewCtor` - the store a caller's copy of a viewing
+constructor's instance (D9h) gives a struct held in place - recorded the owner leaves only; an array leaf got no store
+at all, so a place otherwise sole would have released, at its let-go, an array outside any region (the drop-order
+round's finding, unreachable while every place such a copy reaches keeps for another reason). It now records an array
+leaf as given a value not made for it - the place keeps (mine: the conservative reading, needing nothing of how lowering
+places a D9h copy's arrays); checks/cases/o8dviewctorarray runs such stores under the sanitizer. **The unique hand-on
+move was not built** (brief item 1; measured again: a `Map<I64, Res>` of a unique value owning an array, 1M cycles -
+put and Take 517 MB, Put replacing 260 MB, put and Remove 517 MB). Early freeing's dump says why: every hand-on of the
+by-value parameter (Put to `add`, `add` to `MapEntry`) is check's `ownCopy`, so what the Map holds is a copy, never made
+for the place. A move needs, beyond leaving the copy out, section 8 to see a unique value's owned storage at all - it
+holds no reference, so `read` gives it `Val.plain()` and no fit judges a store of it (the drop-order round's attempt read
+freed storage under `-sanitize` for that reason) - and a scope variable for a by-value parameter of a unique type owning
+parts, so a store of it into a longer place obliges its caller to build the argument there; then early freeing finds the
+place sole. Left for a round of its own (the hand-off note lists the steps); docs/sec8.md's progress says so.
+**Found on the way (fixed):** the scope fuzzer (fuzz/scopegen.olang) had generated no program the compiler accepts since
+the type-level builders round: its header's helpers (`fn mkNode(v I64) mut Node&`, `mkChain`, `via`, `txNo`, `retConv`
+...) make a type the program declares and take none, D19a's error, and a refused header is no scenario's fault - every
+program a finding "does not compile, and no scenario is to blame", so `make scopefuzz` and `fuzz free` ran nothing.
+They are builders now (`fn Node.mkNode(...)`, called `Node.mkNode(v)`); a smoke run of four programs (21 scenarios)
+and of the free mode (two programs, 19 places freeing at once) found nothing. scopegen gained kept-view scenarios (O27:
+slices, a generator's borrowed words, a view handed back of what a helper builds, closures over a turn's node - kept in
+lists outliving them); round 2's view placements counted no join of unordered scope variables (`wLocals`: 0 on the new
+programs, the same 3 as before on compiler/).

@@ -1,8 +1,20 @@
-# check: fail error[O27]: this keeps a view of 't', which lives only until its block or loop turn ends
-# T22a, open point 5: a call through a function value may hand back a view of what its reference argument refers to - the
-# result kept past the loop turn its argument lives in is refused, never the argument built longer
+# check: run
+# flags: -debug -sanitize
+# T22a, open point 5, O27 as placement: a call through a function value may hand back a view of what its reference
+# argument refers to - the result kept past the loop turn its argument lives in has the argument built where the
+# result is kept, a new one each turn (it was O27's error naming 't'); read back after a churn
 import "std/io"
 fn same(a String&) String& { return a }
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
 fn main() {
     g := same
     r String& = "x"
@@ -10,5 +22,6 @@ fn main() {
         t := $i
         r = g(t)
     }
+    churn()
     io.Println(r)!
 }

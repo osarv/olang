@@ -860,6 +860,19 @@ fn (a Analysis&) deprecatedAt(mi I64, at I64, member Bool) Bool {
 # a use of a deprecated item: where the name stands in the file, and the note
 type Use struct(Start I64, End I64, Note String&) { Start, End, Note }
 
+# the placements section 8 made for a view kept longer than its storage, in the file at real path (O27, B18): the
+# language server's hints, as -memory says them
+fn (a Analysis&) Placed(real String&) Vec<Use> {
+    out Vec<Use>
+    mi := a.ModuleOf(real)
+    if mi < 0 or a.Sc is null { return out }
+    file := a.L.Mods[mi].File
+    for p in a.Sc!.Placements() {
+        if p.File == file { out.Push(Use(p.Start, p.End, $p.Text " - a copy of what is kept ('$x') would let it go with its turn")) }
+    }
+    return out
+}
+
 # the uses of deprecated items in the file at real path (L4b): each word that names a deprecated declaration of the
 # program and resolves to it, other than the declaration's own. None where nothing in the program is deprecated - the
 # common case costs one scan of the modules' texts.
