@@ -323,6 +323,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     joinS Vec<mir.ScopeId>
     erroring Bool = false   # an error is leaving: a join's failure does not replace it (P4b)
     planned Bool = false    # whether plan is the scope pass's plan for B, not the stand-in
+    viewing Bool = false    # the place lowered next is a slice's base or a borrow's (tempLocal)
     taskArgs Bool = false   # whether the arguments lowered next are a task's (bulk review 5, F7): copies in taskAt
     taskAt mir.ScopeRef = mir.ScopeRef.Program
     adoptSite typed.SiteId = typed.SiteId(-1)    # a fresh array promoted (promote): made at the reference's scope
@@ -561,10 +562,14 @@ fn (ln mut lowering&) local(x mir.Operand, ty types.TypeId, sp source.Span) mir.
 fn (ln mut lowering&) tempLocal(v typed.Expr&, ty types.TypeId, sp source.Span, site typed.SiteId) mir.LocalId {
     i := I64(site)
     kept := ln.planned and i >= 0 and i < ln.plan.TempKept.Len() and ln.plan.TempKept[i]
-    if not kept: return ln.local(ln.val(v), ty, sp)
+    # (the stand-in placement, for the evaluator: one a view is taken of in the program's scope, where the view may be
+    # kept - as everything the stand-in builds is - not the frame a return closes)
+    away := not ln.planned and ln.viewing
+    ln.viewing = false
+    if not kept and not away: return ln.local(ln.val(v), ty, sp)
     x := ln.val(v)
     l := ln.temp(ty, sp)
-    ln.F.Locals[I64(l)].Home = ln.scopeRef(ln.plan.Built[i])
+    ln.F.Locals[I64(l)].Home = ln.scopeRef(ln.plan.Built[i]) if kept else mir.ScopeRef.Program
     ln.emit(mir.Stmt.Live(sp, l))
     ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(l), mir.Rvalue.Use(x)))
     return l
@@ -1812,7 +1817,9 @@ fn (ln mut lowering&) with(p pl, x mir.Proj) pl {
 # a reference to a place: a packed field's (T13c - a read-only reference the compiler takes, the program never lending
 # one) to a temporary holding its value
 fn (ln mut lowering&) borrow(p typed.Lvalue&, bt types.TypeId, sp source.Span) mir.Operand {
+    ln.viewing = true
     q := ln.place(p)
+    ln.viewing = false
     if q.Pk < 0 or ln.dead { return ln.into(bt, mir.Rvalue.Ref(ln.mk(q), bt), sp) }
     if (ln.T.PermOf(bt) & types.Writable) != 0 { ln.gap(sp, "a field of a packed struct lent writably") }
     l := ln.local(ln.packedRead(q, p.Type(), sp), p.Type(), sp)
@@ -4745,7 +4752,9 @@ fn (ln mut lowering&) constBool(b Bool, sp source.Span) mir.Operand { return mir
 # a slice (E16a): its bounds tested (E16b, E16c) - 0 <= lo <= hi <= the base's length - then the reference to its
 # elements
 fn (ln mut lowering&) slice(s typed.Slice&, ty types.TypeId, sp source.Span) mir.Operand {
+    ln.viewing = true
     base := ln.place(s.Base)
+    ln.viewing = false
     lo := ln.val(s.Lo)
     hi := ln.val(s.Hi)
     if ln.dead { return mir.Operand.None }
