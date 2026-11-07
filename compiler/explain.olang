@@ -87,14 +87,28 @@ fn fnNamed(c mut typecheck.Checker&, mi I64, name String&) I64 {
     dot := try name.Find(".") catch default -1
     if dot > 0 {
         d := typeNamed(c, mi, name[:dot])
-        if d < types.DeclId(0) { return -1 }
         m := nm.Intern(name[dot + 1:])
+        if d < types.DeclId(0) { return writtenMethod(c, mi, name[:dot], m) }
         f := c.P.MethodOf(c.P.SelfType(d), m)
-        return f if f >= 0 else c.P.BuilderOf(c.P.SelfType(d), m, true)   # D19: Type.Builder
+        if f < 0: f = c.P.BuilderOf(c.P.SelfType(d), m, true)   # D19: Type.Builder
+        return f if f >= 0 else writtenMethod(c, mi, name[:dot], m)   # a trait's default (Iterator.TakeWhile)
     }
     id := nm.Intern(name)
     for e in c.P.R.Tables[mi].Entries {
         if e.Name == id and e.Kind == names.What.Func { return c.P.FnNamed(mi, id) }
+    }
+    return -1
+}
+
+# a method of module mi on a type it does not declare - an array's, a built-in type's, a trait's default over a type
+# variable - named as a test names it (B7a): by the receiver its declaration writes ("Array.Windows",
+# "Iterator.TakeWhile", "Float.Sqrt"); -1 for none
+fn writtenMethod(c mut typecheck.Checker&, mi I64, owner String&, m source.NameId) I64 {
+    c.P.AllFns()
+    for f in range c.P.FnCount() {
+        decl := c.P.FnDecl(f)
+        if c.P.FnModule(f) != mi or decl.Recv is null or decl.Name != m: continue
+        if ast.RecvTarget(decl, c.P.L.Names) == owner: return f
     }
     return -1
 }

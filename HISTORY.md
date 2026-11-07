@@ -30157,3 +30157,11 @@ reflected type read as a value said G38's "is a type, not a value - write it whe
 type's own name read as a value (`a := I64`) said "is a type, not a value" with no rule. Both now say G38's, one
 sentence (`msgs.typeNotValue`) naming the three places a type goes - a declaration, a type argument, a match's subject
 - and SPEC G38 says a type's own name is no value either.
+
+**C10, explain of a method on a prelude type.** `olang explain FILE Type.Method` found a method only through a type
+FILE declares: std/prelude/text.olang's `String.Trim` worked, but an array's method (`Array.Windows`), a trait's default
+over a type variable (`Iterator.TakeWhile`, a method of no declared type though `Iterator` is one) and a number's
+default (`Float.Sqrt`) were "no top-level item". explain now falls back to B7a's rule - a method of FILE whose
+declaration's receiver is written as that name (`ast.RecvTarget`: an array's `Array`, a constrained variable's trait)
+- so explain, doc's examples and `olang test FILE WORD` name such a method alike. The words scenario explains
+`Array.Windows` and `Iterator.TakeWhile`.

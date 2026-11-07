@@ -111,7 +111,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `# its error set inferred`), its scope obligations as `# scopes: a outlives b` lines (inferred, QCB) (`return` the result scope), a generic's
   instances each with their own; a type's constructor, fields, own methods and the parameterless traits it meets; an
   enum's cases, an error type's words, a trait's methods; a global's type and its baked value (`$` of it, through the
-  evaluator), else `# set at startup`. `Type.Method` names a method. `-target`, `-define` and `-update` apply.
+  evaluator), else `# set at startup`. `Type.Method` names a method - one on a type its file does not declare (an
+  array's, a trait's default) by the receiver its declaration writes, as a test names it (`Array.Windows`,
+  `Iterator.TakeWhile`, `Float.Sqrt`; 2026-11-07). `-target`, `-define` and `-update` apply.
   compiler/explain.olang.
 - **Effects, needs and "not a value" under a signature; `explain -caps` (B11b, B11c, QBP 6, QBP 11, A2.3, B1.2, the
   user's "build it" 2026-10-27 and "if it doesn't cost compile time" 2026-10-31; built 2026-10-31, details mine).**

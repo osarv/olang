@@ -2522,6 +2522,13 @@ fn words(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" explain b.olang Color > out.txt 2>&1") == 0 and outOf(dir).Contains("    fn Color.FromHex(t String&) Color ? ColorError\n    fn Color.Gray(level U8) Color&\n    fn (c Color&) Hex()")
                  "explain lists a type's builders before its methods (B11b)", dir)
     try r.expect(sh(dir, "\"$OLANG\" explain B3g > out.txt 2>&1") == 0 and outOf(dir).Contains("running a file"), "explain", dir)
+    # B11b: a method of a type its file does not declare - an array's, a trait's default - named as a test names it
+    array := os.Quote($root() "/std/prelude/array.olang")
+    try r.expect(sh(dir, $"\"$OLANG\" explain " $array " Array.Windows > out.txt 2>&1") == 0 and
+                 outOf(dir).StartsWith("fn (a Array<T>&) Windows<T>(size ChunkSize)"), "explain of an array's method", dir)
+    iter := os.Quote($root() "/std/prelude/iterator.olang")
+    try r.expect(sh(dir, $"\"$OLANG\" explain " $iter " Iterator.TakeWhile > out.txt 2>&1") == 0 and
+                 outOf(dir).Contains(") TakeWhile"), "explain of a trait's default", dir)
     # D18c, QCB: a generator's borrowed elements are written as a reference - no scope written - and their scope said
     try r.expect(sh(dir, "\"$OLANG\" explain words.olang words > out.txt 2>&1") == 0 and
                  outOf(dir).Contains("fn words(t String&) Iterator<String&>   # a generator") and
