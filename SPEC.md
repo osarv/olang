@@ -5345,9 +5345,13 @@ the only one there), an arm, a clause, deferred code, a post clause, after a sta
 run time, failing there only where it is reached. The error carries the assert's message (S17), rendered as the run time
 renders it where that can be computed while compiling - by the evaluator, or from what reflection knows of the instance
 (`"field " $f.Name`, G33, G35) - and otherwise the message as written, saying that it reads what only the running
-program knows. In an instance the error is reported at the call that asked for it - the program's own call, the
-outermost of G16b's chain - with a note at the assert, since a length the call gave is what made it false. An assert in
-a `test` block is judged only in a test build (B3a), the only build that runs it.
+program knows. Where the instance decides it (its condition or message reads the instance's lengths, type variables or
+reflected members), and wherever the assert is the standard library's, the error is reported at the call that asked for
+it - the program's own call, the outermost of G16b's chain, through function instances and the constructors of type
+instances - with a note at the assert, since what the call gave is what made it false. One error is said for one
+cause: an assert whose evaluation aborts at an assert reported false, or in a global's initializer that aborts (said
+at the global, K2), adds none of its own. An assert in a `test` block is judged only in a test build (B3a), the only
+build that runs it.
 
 **S18d (the error return trace).** A test build (`test`) and a debug build (`-debug`, §10) keep, for each thread, a trace of
 where the error being returned went - its last 32 places: an `error` statement (R3), an `as` that does not hold (E32) or a

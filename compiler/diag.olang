@@ -337,6 +337,9 @@ fn (d Diagnostics&) TopContext() Where, String {
 # a file's text
 fn (d Diagnostics&) TextOf(file I64) String& { return d.texts[file] }
 
+# whether at is in the standard library's code (or a remote package's), where an error is said at the program's use
+fn (d Diagnostics&) IsLibrary(at Where) Bool { return d.isLibrary(at) }
+
 fn (d Diagnostics&) isLibrary(at Where) Bool {
     match at {
         case Where.File(f) { return d.library[f] }

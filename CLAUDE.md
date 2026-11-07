@@ -1744,7 +1744,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   run time would: by reflection for the instance (`"field " $f.Name`, `check.reflText`) - a reflection-decided assert
   (G35) used to print its message's source - else by the evaluator, else written out, saying it reads what only the
   running program knows (an assert whose message read a plain local was not decided at all). std/order names the
-  field with no order.
+  field with no order. Where it is said (2026-11-07, mine, as SPEC already stated): one an instance decides, and any of
+  the library's, at the program's outermost call of the instance's chain (through type instances' constructors,
+  `Origin.Type`), a note at the assert; an abort at an assert said false, or in an aborting global's initializer (said
+  at the global, K2), adds no error of its own.
 - **Tests the evaluator runs** sit beside run-time tests for every language change (the checklist above).
 - **Refusals and agreements.** Refused: mutable-global reads, global writes, externs (but known libm, X8), tasks run
   in sequence at the join (allowed), atomics on non-global places (allowed), process endings, undefined behaviour,

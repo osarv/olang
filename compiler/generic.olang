@@ -62,11 +62,13 @@ type instance struct(Fn I64, Args types.ListId, Sig types.TypeId, Name String&, 
 
 # where an instance - of a function or of a type - was first asked for (G16b): the span in a file, and the function
 # instance whose body was being checked there (-1 for a body no instance's); File -1 for none recorded. A diagnostic
-# met in an instance's body follows these back to the program's own use
-type Origin struct(File I64, Sp source.Span, Within I64) {
+# met in an instance's body follows these back to the program's own use. Where that body was a type instance's
+# constructor, Type is that instance (its own origin the next step back); VoidT otherwise
+type Origin struct(File I64, Sp source.Span, Within I64, Type types.TypeId = types.VoidT) {
     File
     Sp
     Within
+    Type
 }
 
 NoOrigin Origin = Origin(-1, source.Span(0, 0), -1)

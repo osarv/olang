@@ -286,7 +286,9 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
     x mut Exec& = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     n I64 = decideContracts(c, x) + decideTopAsserts(c, x)
-    for a in c.AssertAsks {
+    falseAt Map<pair.Pair<I64, I64>, Bool>   # the asserts said false - one aborting at one of them is that cause
+    aborted Vec<abortedAsk>
+    for i, a in c.AssertAsks {
         key := pair.Pair(a.Body, I64(a.Sp.Start))
         if decided.Has(key) { continue }
         s := eval.Stop.None
@@ -309,31 +311,52 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
         match s {
             case eval.Stop.None {
                 n++
-                rec := d.Error(at, falseMessage(x, a))
+                falseAt.Put(pair.Pair(a.File, I64(a.Sp.Start)), true)
+                rec := sayAt(d, a, at, falseMessage(x, a))
                 # G30/G16b: the instance it was false for
                 if a.CtxText != "" { d.Note(rec, a.Ctx, diagmsg.Msg(msgs.NoteHere().Kind, "", a.CtxText)) }
             }
             case eval.Stop.Exited(kind, file, sp, _) {
                 n++
-                if x.M.StoppedGlobal >= 0 {
-                    globalAborts(x, d, x.M.StoppedGlobal, kind, file, sp)
-                    continue
-                }
-                rec := d.Error(at, msgs.AssertAborts(AbortWhy(kind)))
-                d.Note(rec, diag.Where.Span(file, sp.Start, sp.End), msgs.NoteHere())
+                aborted.Push(abortedAsk(i, kind, file, sp, x.M.StoppedGlobal))
             }
             # M19g: it reads a view of a Vec taken before the Vec grew - what the program cannot have meant
             case eval.Stop.Refused(why, file, sp) {
-                if why == eval.WhyStale {
-                    n++
-                    rec := d.Error(at, msgs.AssertStale(why))
-                    staleNotes(x, d, rec, file, sp)
-                }
+                if why != eval.WhyStale: continue
+                n++
+                rec := sayAt(d, a, at, msgs.AssertStale(why))
+                staleNotes(x, d, rec, file, sp)
             }
             case _ { }
         }
     }
+    # one that aborts: said where it aborts, unless that is an assert said false already, or a global's initializer (K2) -
+    # one cause, one error
+    for e in aborted {
+        if falseAt.Has(pair.Pair(e.File, I64(e.Sp.Start))): continue
+        if e.Global >= 0 {
+            globalAborts(x, d, e.Global, e.Kind, e.File, e.Sp)
+            continue
+        }
+        a := c.AssertAsks[e.Ask]
+        rec := sayAt(d, a, diag.Where.Span(a.File, a.At.Start, a.At.End), msgs.AssertAborts(AbortWhy(e.Kind)))
+        d.Note(rec, diag.Where.Span(e.File, e.Sp.Start, e.Sp.End), msgs.NoteHere())
+    }
     return n
+}
+
+# an assert whose evaluation aborted: which (its index among the asks), how and where, and the global whose initializer
+# it stopped in (-1 for none)
+type abortedAsk struct(Ask I64, Kind mir.ExitKind, File I64, Sp source.Span, Global I64) { Ask, Kind, File, Sp, Global }
+
+# a decided assert's error: at the assert, or - where the instance it is checked for decides it, or it is the standard
+# library's - at the program's call that began the instance (a.Use, G16b's outermost; G18a's rerouting), with a note at
+# the assert
+fn sayAt(d mut diag.Diagnostics&, a typecheck.AssertAsk&, at diag.Where, m diagmsg.Msg) I64 {
+    if a.Use == diag.Where.Nowhere { return d.Error(at, m) }
+    rec := d.Error(a.Use, m)
+    d.Note(rec, at, msgs.NoteInLibrary() if d.IsLibrary(at) else msgs.NoteHere())
+    return rec
 }
 
 # an assert that aborts because a global it reads does: one cause, said at the global as K2 says it (the same error the

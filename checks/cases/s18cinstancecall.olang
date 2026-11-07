@@ -1,0 +1,13 @@
+# check: fail error[S18c]: this assertion is false, evaluated while compiling: short
+# also: s18cinstancecall.olang:12:12: error[S18c]
+# also: note: instantiated here, with a.Len() = 4
+# also: compilation failed with 1 error
+# S18c, G16b: an assert an instance decides false is said at the program's call that asked for the instance, with a note
+# at the assert - and main's assert, which aborts at it, is that one cause, never a second error
+fn f(a Array<I64>) I64 {
+    assert a.Len() < 3, "short"
+    return a[0]
+}
+fn main() {
+    assert f(I64[1, 2, 3, 4]) == 1
+}

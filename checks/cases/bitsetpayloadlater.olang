@@ -1,0 +1,15 @@
+# check: fail error[S18c]: this assertion is false, evaluated while compiling
+# also: a BitSet is over cases that carry no payload
+# also: bitsetpayloadlater.olang:13:10: error[S18c]
+# also: compilation failed with 1 error
+# std/bitset: a payload on a later case is refused while compiling too, at the program's use (it was decided for the
+# walk's first case alone, and aborted at run time)
+import "std/bitset"
+type Shape enum {
+    Dot
+    Circle(r F64)
+}
+fn main() {
+    s := bitset.BitSet<Shape>.Empty()
+    assert s.Len() == 0
+}

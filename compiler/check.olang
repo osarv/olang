@@ -400,7 +400,8 @@ type TopAssertAsk struct(File I64, Sp source.Span, At source.Span, Cond I64, Msg
 # an assert the evaluator may decide (S18c): the body it is in, where it is (its file and span), its condition's body
 # (BodyOf.Cond) and its message's, -1 for none
 type AssertAsk struct(Body I64, File I64, Sp source.Span, At source.Span, Cond I64, Msg I64, Fixed Array<I64>&
-    Ctx diag.Where, CtxText String&, Said Bool = false, SaidText String& = "", Written String& = "") {
+    Ctx diag.Where, CtxText String&, Said Bool = false, SaidText String& = "", Written String& = ""
+    Use diag.Where = diag.Where.Nowhere) {
     Body
     File
     Sp
@@ -412,6 +413,9 @@ type AssertAsk struct(Body I64, File I64, Sp source.Span, At source.Span, Cond I
     # its message as written, "" for none: what a false one's error carries where the message cannot be rendered while
     # compiling - it reads what only the running program knows
     Written
+    # where a decision is said: the program's own use of the library's code the assert is in (the call that began the
+    # instance, G18a's rerouting), Nowhere where the assert is the program's own
+    Use
     Fixed      # the locals of Body it reads as fixed (S8c)
     # G30, G16b: the instance it was checked for, where its constant variables are read - where it was asked for and
     # the note naming it ("instantiated here, with a.Len() = 6"); "" for none
@@ -5794,6 +5798,66 @@ fn (c mut Checker&) boundBy(t types.TypeId) I64 {
     return -1
 }
 
+# a generic type's declaration d applied to written arguments, the instance asked for at sp (G16b): a diagnostic met in
+# its constructor is said at the program's use there
+fn (c mut Checker&) applyAt(sp source.Span, d types.DeclId, targs Array<ast.TypeRef&>&) types.TypeId {
+    asking := c.P.Asking
+    c.P.Asking = c.origin(sp)
+    t := c.P.Apply(c.fr().Ctx, d, targs)
+    c.P.Asking = asking
+    return t
+}
+
+# G16b: where an instance is asked for - sp in the body being checked, the instance it belongs to and, in a type
+# instance's constructor, that instance
+fn (c mut Checker&) origin(sp source.Span) generic.Origin {
+    return generic.Origin(c.fr().File, sp, c.curInst(), c.ctorInstance())
+}
+
+# the type instance whose constructor the body being checked is (a lambda's, the one it is written in), VoidT for none -
+# or for a body inside a function instance, whose own chain says where it began
+fn (c mut Checker&) ctorInstance() types.TypeId {
+    i := c.frames.Len() - 1
+    for i >= 0 {
+        b := c.frames[i].Body
+        i--
+        if b < 0: continue
+        if c.Bodies[b].Inst() >= 0: return types.VoidT
+        if c.Bodies[b].Of == typed.BodyOf.Ctor: return c.ctorOf(b)
+    }
+    return types.VoidT
+}
+
+fn (c mut Checker&) ctorOf(b I64) types.TypeId {
+    return match c.Bodies[b].Of {
+        case typed.BodyOf.Ctor(t, _): t if c.P.T.Items(c.P.T.Args(t)).Len() > 0 else types.VoidT
+        case _: types.VoidT
+    }
+}
+
+# the program's own use that began the instance being checked: the outermost origin up its chain - through function
+# instances and type instances' constructors - outside the library (G16b), where a decision an instance makes about an
+# assert in it is said (S18c, as G18a says a need); Nowhere where there is none
+fn (c mut Checker&) programOrigin() diag.Where {
+    inst := c.checkedInst()
+    t := c.ctorInstance()
+    o := c.P.InstanceOrigin(inst) if inst >= 0 else c.P.TypeOrigin(t)
+    found := diag.Where.Nowhere
+    for _ in range 64 {
+        if o.File < 0: break
+        w := diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End))
+        if not c.P.L.Diags.IsLibrary(w): found = w
+        if o.Within >= 0 {
+            o = c.P.InstanceOrigin(o.Within)
+        } else if o.Type != types.VoidT {
+            o = c.P.TypeOrigin(o.Type)
+        } else {
+            break
+        }
+    }
+    return found
+}
+
 # the function instance whose body is being checked - a lambda's, the one it is written in; -1 for none
 fn (c mut Checker&) checkedInst() I64 {
     i := c.frames.Len() - 1
@@ -6306,7 +6370,7 @@ fn (c mut Checker&) resolve(t ast.TypeRef?&) types.TypeId {
         }
         case _ { }
     }
-    c.P.Asking = generic.Origin(c.fr().File, at, c.curInst())
+    c.P.Asking = c.origin(at)
     r := c.P.Resolve(c.fr().Ctx, t)
     c.P.Asking = asking
     if not c.writtenMet(t) { return types.UnknownT }   # what was said of it is the one error
@@ -6362,7 +6426,7 @@ fn (c mut Checker&) typeNamed(x ast.Expr&) types.TypeId {
                 c.err(targs[0].Span() if targs.Len() > 0 else sp, msgs.TypeArgCount(c.text(path[path.Len() - 1]), c.P.WrittenArity(d), generic.WrittenTypes(targs)))
                 return types.TypeId(-1)
             }
-            t := c.P.Apply(c.fr().Ctx, d, targs)
+            t := c.applyAt(sp, d, targs)
             if t == types.UnknownT or not c.instancesMet(t, sp) or not c.P.Body(t) { return types.TypeId(-1) }
             return t
         }
@@ -8139,7 +8203,7 @@ fn (c mut Checker&) ownerOf(x ast.Expr&) ownerAt {
             if path.Len() == 1 { return ownerAt(c.resolveNamed(ast.TypeRef.Named(sp, path, targs)), false) }
             d := c.genericNamed(g)
             if d < types.DeclId(0) { return ownerAt(types.UnknownT, false) }
-            return ownerAt(c.P.Apply(c.fr().Ctx, d, targs), false)
+            return ownerAt(c.applyAt(sp, d, targs), false)
         }
         case _ { }
     }
@@ -8285,7 +8349,7 @@ fn (c mut Checker&) fnValue(sp source.Span, f I64, explicit Array<types.TypeId>&
     }
     c.P.Sig(f)
     asking := c.P.Asking
-    c.P.Asking = generic.Origin(c.fr().File, sp, c.curInst())   # G16b: where the instance is asked for
+    c.P.Asking = c.origin(sp)   # G16b: where the instance is asked for
     inst := c.P.FnInstance(f, args)
     c.P.Asking = asking
     if args != types.ListId(0) and not c.instancesMet(c.P.InstanceSig(inst), sp) { return c.unknown(sp) }
@@ -11765,7 +11829,7 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                 if bc is not null { return bc }
             }
             if ref.Kind == names.What.Type and ref.Index >= 0 {
-                t := c.P.Apply(c.fr().Ctx, c.P.DeclFor(ref.Module, ref.Index), targs)
+                t := c.applyAt(msp, c.P.DeclFor(ref.Module, ref.Index), targs)
                 if t == types.UnknownT { return c.unknown(sp) }
                 if targs.Len() > 0 and not c.unendedArgs(targs, t) { return c.unknown(sp) }   # C11, as namedMet's
                 if targs.Len() > 0 and not c.instancesMet(t, targs[0].Span()) { return c.unknown(sp) }
@@ -12203,7 +12267,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     }
     if c.P.FnTooDeep(f, c.P.T.List(b.Vals), c.fnNameAt(f)) { return c.unknown(sp) }   # G17
     asking := c.P.Asking
-    c.P.Asking = generic.Origin(c.fr().File, nsp, c.curInst())   # G16b: where the instance is asked for
+    c.P.Asking = c.origin(nsp)   # G16b: where the instance is asked for
     inst := c.P.FnInstance(f, c.P.T.List(b.Vals))
     c.P.Asking = asking
     if not c.instancesMet(c.P.InstanceSig(inst), nsp) { return c.unknown(sp) }
@@ -14474,7 +14538,7 @@ fn (c mut Checker&) reflType(x ast.Expr&) types.TypeId {
                 c.err(targs[0].Span() if targs.Len() > 0 else sp, msgs.TypeArgCount(c.text(path[path.Len() - 1]), c.P.WrittenArity(d), generic.WrittenTypes(targs)))
                 return types.UnknownT
             }
-            it := c.P.Apply(c.fr().Ctx, d, targs)
+            it := c.applyAt(sp, d, targs)
             if it == types.UnknownT or not c.instancesMet(it, sp) or not c.P.Body(it) { return types.UnknownT }
             return it
         }
@@ -17598,7 +17662,17 @@ fn (c mut Checker&) assertStmt(sp source.Span, k ast.Expr&, msg ast.Expr?&) {
     # mistake is the call (time.Virtual outside a test build)
     lib := c.P.L.Mods[fr.Mi].Identity.StartsWith("std/")
     if not c.readsConst(k) and rd < 0 and not (saidOk and c.reflSaid) and not lib { ct = "" }
-    c.AssertAsks.Push(AssertAsk(fr.Body, fr.File, sp, c.operatorOf(k), cb, mb, fixed.ToArray(), cw, $ct, saidOk, $said, $written))
+    opAt := c.operatorOf(k)
+    # S18c: where the decision is said - at the program's own call that began the instance (G16b's outermost) where the
+    # instance decides it (ct kept) or the assert is the library's, with a note at the assert; else at the assert
+    use := diag.Where.Nowhere
+    inLib := c.P.L.Diags.IsLibrary(c.at(opAt))
+    if ct != "" or inLib {
+        use = c.programOrigin()
+        if use == diag.Where.Nowhere and inLib: use = c.P.L.Diags.UseOf(c.at(opAt))
+        if use == c.at(opAt): use = diag.Where.Nowhere
+    }
+    c.AssertAsks.Push(AssertAsk(fr.Body, fr.File, sp, opAt, cb, mb, fixed.ToArray(), cw, $ct, saidOk, $said, $written, use))
 }
 
 # S3: an expression standing alone is a call, "++" or "--"

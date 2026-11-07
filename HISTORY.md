@@ -30120,3 +30120,27 @@ in (`Machine.StoppedGlobal`, its body, set where `unwind` drops a halted initial
 stopped there says K2's error at that global instead of its own (interp's `globalAborts`), which the baking's own report
 of it repeats word for word at the same place and the diagnostics keep once. Decided (mine): said at the global even
 where the program has other errors and is not baked, so the cause is never lost. checks/cases/k2abortsread.
+
+**C8, a decided assert said at the program's call.** S18c said an assert an instance decides false is reported at the
+program's own call that began the instance, with a note at the assert; the code reported it at the assert, with a note
+at the innermost call (for std's asserts: std's own line, with a note at another line of std - std/bitset's "a BitSet
+is over an enum's cases" pointed at bitset.olang:29 and :19, never at the program). Now the checker keeps, with each
+assert it asks the evaluator about, where to say it (`AssertAsk.Use`): where the instance decides it (the context note
+is kept) or the assert is the library's, the outermost origin of the instance's chain outside the library
+(`programOrigin`), and interp says the error there with a note at the assert (`sayAt`; "in the standard library's code,
+here" for std's). The chain had a gap: an instance asked for inside a type instance's constructor (bitset's
+`check<T>()` in `BitSet<T>`'s) recorded no way further back, so generic.Origin gained `Type`, the type instance whose
+constructor asked, followed through `TypeOrigin`; and a type instance written with its arguments in an expression
+(`bitset.BitSet<Pt>.Empty()`, `lib.Box<I64>(...)`) is asked for at that place (`applyAt`) rather than wherever the
+checker's Asking last pointed (the enclosing function's declaration). One more error for the same cause went with it:
+main's `assert f(xs) == 1`, aborting at f's assert decided false, was said a second time - an abort at an assert said
+false is now no error of its own (as an abort in a global's initializer, C7). SPEC S18c states both.
+
+**Found on the way, fixed: std/bitset's payload check ran at run time.** `check<T>()` asserted "no payload" inside a
+walk of `T.Cases`; an assert in an unrolled walk is decided for its first copy only (S18c keys an assert by its span,
+which the copies share), so `BitSet<Shape>` with `Dot` first and `Circle(r F64)` second compiled and aborted when built.
+The check is now `assert T.Kind != TypeKind.Enum or comptime plain<T>()` (K3: the walk computed while compiling into a
+constant the evaluator reads), its 64-case assert likewise only of an enum, so a type that is no enum is one error, and
+`Str` builds a case only where it carries no payload. checks/cases/bitsetpayloadlater, s18cinstancecall; bitsetnotenum
+pins where it is said. Left: an assert written in an unrolled walk is still decided for the first copy alone (per-copy
+identity of asks).

@@ -24,13 +24,21 @@ type BitSet<T> struct(bits U64 = 0) [bits & ~mask<T>() == 0] ? {
 # caller's bits are within the cases, so the requirement holds and "!" never ends anything
 fn BitSet<T>.of(b U64) BitSet<T> { return BitSet<T>(b)! }
 
-# the check every instance makes: an enum, at most 64 cases, none with a payload
+# the check every instance makes: an enum, at most 64 cases, none with a payload - each decided while compiling and
+# said at the program's use (S18c), the later ones only of an enum, so a type that is none is one error
 fn check<T>() {
     assert T.Kind == TypeKind.Enum, "a BitSet is over an enum's cases"
-    assert T.Cases.Len() <= 64, "a BitSet holds at most 64 cases"
+    assert T.Kind != TypeKind.Enum or T.Cases.Len() <= 64, "a BitSet holds at most 64 cases"
+    assert T.Kind != TypeKind.Enum or comptime plain<T>(), "a BitSet is over cases that carry no payload"
+}
+
+# whether none of T's cases carries a payload - asked by comptime (K3), so the assert reading it is decided while
+# compiling for every instance (an assert in a walk of the cases is decided for its first copy alone)
+fn plain<T>() Bool {
     for c in T.Cases {
-        assert c.Fields.Len() == 0, "a BitSet is over cases that carry no payload"
+        if c.Fields.Len() > 0: return false
     }
+    return true
 }
 
 # the position of x's case among T's cases
@@ -161,7 +169,9 @@ fn (s BitSet<T>&) Str() String {
     b.Push("BitSet{")
     n I64 = 0
     for c in T.Cases {
-        if s.Has(c()) {
+        # a case with a payload is no BitSet's (check's assert says so at the program's use): built only where it has none
+        if c.Fields.Len() == 0 {
+            if not s.Has(c()): continue
             if n > 0: b.Push(", ")
             n++
             b.Push($c())
