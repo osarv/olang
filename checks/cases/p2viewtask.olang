@@ -1,0 +1,29 @@
+# check: run
+# flags: -debug -sanitize
+# P2, O27 as placement (docs/sec8.md 4.2, "Tasks"): a view handed to a task has its storage built at the join's level, as a
+# whole argument is - each turn's text a new one there (it was P2's and O27's errors); read back after a churn
+import "std/io"
+
+fn first(t String&) String& { return t[0:1] }
+
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+fn main() {
+    outs := Array<String&>(4, "")
+    join {
+        for i in range 4 {
+            t := $i "-task"
+            spawn outs[i] = first(t[0:3])
+        }
+    }
+    churn()
+    io.Println($outs)!
+}
