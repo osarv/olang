@@ -139,13 +139,24 @@ fn ensureBuilt(exe String&, tools String&, bin String&, name String&, std String
     lib := newest(std).Max(newest(filepath.Join(std, "prelude")))
     sources := newest(tools).Max(newest(filepath.Join(tools, "../compiler"))).Max(lib)
     if from == builtBy(exe) and mtime(program) > sources { return }
-    try os.Remove(stamp) catch os.Error { }
-    out := try os.Output.Exec(exe, "build", "-output", program, filepath.Join(tools, $name ".olang"), dir = bin) catch os.Error {
-        said.Write("olang: fix: cannot run " $exe "\n")
+    # built under a name of its own, then renamed into place: another fix running at the same time (the cache is shared
+    # by every run of this compiler over these tools) never runs a program half written, nor overwrites one it runs
+    tmp := try os.MkTemp(dir = bin, prefix = $"tools_" $name ".") catch os.Error e {
+        said.Write("olang: fix: cannot build tools/" $name ".olang: " $e "\n")
+        error NotBuilt
+    }
+    defer try os.RemoveAll(tmp) catch os.Error { }
+    made := filepath.Join(tmp, "tools_" $name)
+    out := try os.Output.Exec(exe, "build", "-output", made, filepath.Join(tools, $name ".olang"), dir = bin) catch os.Error e {
+        said.Write("olang: fix: cannot run " $exe ": " $e "\n")
         error NotBuilt
     }
     if out.Status != 0 {
         said.Write("olang: fix: tools/" $name ".olang does not build:\n" $out.Stdout $out.Stderr)
+        error NotBuilt
+    }
+    try os.Rename(made, program) catch os.Error e {
+        said.Write("olang: fix: cannot put tools_" $name " in place: " $e "\n")
         error NotBuilt
     }
     try os.WriteFile(stamp, builtBy(exe)) catch os.Error { }
@@ -192,8 +203,8 @@ fn Files(check Bool, paths Array<String&>&, exe String&, std String&) I32 {
         program := filepath.Join(bin, "tools_" $name)
         for at in range 0, files.Len(), Batch {
             run := files[at:(at + Batch).Min(files.Len())]
-            r := try os.Output.Exec(...arguments(program, ToolKinds[t], exe, std, run)) catch os.Error {
-                said.Write("olang: fix: cannot run " $program "\n")
+            r := try os.Output.Exec(...arguments(program, ToolKinds[t], exe, std, run)) catch os.Error e {
+                said.Write("olang: fix: cannot run " $program ": " $e "\n")
                 status = 2
                 break
             }
