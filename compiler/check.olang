@@ -4377,6 +4377,7 @@ fn (c mut Checker&) rootStmts(body Array<ast.Stmt&>&) typed.Block& {
     if body.Len() > 0 {
         c.stmtsOf(body)
     }
+    if c.fr().InCtor and c.P.IsColumns(c.fr().CtorOf) { c.columnsFields(c.fr().CtorOf) }
     # O15: a constructor's fields go on into its instance at its end
     if c.fr().InCtor {
         for f in c.cur().Fields { c.dropsGone(c.cur().Local(f).Sp, I64(f)) }
@@ -10225,6 +10226,7 @@ fn (c mut Checker&) instancesIn(t types.TypeId, sp source.Span, depth I64) Bool 
             if c.boundsMet.Has(t) { return try c.boundsMet.Get(t) catch default true }
             ok := c.listMet(args, sp, depth)
             if ok and c.P.T.Closed(t) { ok = c.bound(generic.DeclOwner(c.P.T.DeclOf(t)), args, sp) }
+            if ok and c.P.T.Closed(t) and (c.P.IsColumns(t) or c.P.IsColumnVec(t)) { ok = c.columnsMet(t, sp) }
             c.boundsMet.Put(t, ok)
             return ok
         }
@@ -13498,6 +13500,12 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Lvalue&, n so
         c.err(nsp, msgs.NoSuchMember(c.ty(t), c.text(n), c.memberHint(t, n, false)))
         return null
     }
+    # T7e: a ColumnVec's column - before its own fields (private to the prelude) everywhere but in the prelude
+    inPrelude := c.P.L.Mods[c.fr().Mi].Prelude
+    if c.P.IsColumnVec(t) and (not inPrelude or c.fieldIndex(t, n) < 0) {
+        cv := c.columnVecField(sp, nsp, base, t, n)
+        if cv is not null: return cv
+    }
     i := c.fieldIndex(t, n)
     if i < 0 {
         c.needErr(nsp, t, $"a field " $c.tok(n), msgs.NoSuchMember(c.ty(t), c.text(n), c.memberHint(t, n, true)))
@@ -13519,15 +13527,195 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Lvalue&, n so
     }
     # M6a: a member is public by its own first letter - another module's private one is said, its type carried on
     # (of a private type itself, M6 said where the type is named)
-    dm := c.P.T.DeclModule(c.P.T.DeclOf(t))
-    if not c.text(n)[0].IsUpper() and dm != c.fr().Mi and c.text(c.P.T.DeclName(c.P.T.DeclOf(t)))[0].IsUpper() and not c.P.L.Mods[dm].C {
+    # (T7e: a Columns' column is as private as its row type's field)
+    owner := c.P.ColumnsRow(t) if c.P.IsColumns(t) else t
+    dm := c.P.T.DeclModule(c.P.T.DeclOf(owner))
+    if not c.text(n)[0].IsUpper() and dm != c.fr().Mi and c.text(c.P.T.DeclName(c.P.T.DeclOf(owner)))[0].IsUpper() and not c.P.L.Mods[dm].C {
         c.err(nsp, msgs.MemberIsPrivate(c.text(n), c.ty(t)))
     }
     return typed.Lvalue.Field(sp, fs[i], base, i)
 }
 
+# T7e: a ColumnVec's column, "cv.x" - the first Len() elements of its buffer for x, a view with the ColumnVec's
+# permission (as a Vec's View is, E16a), good until the ColumnVec grows; null where n names no field of its row type
+fn (c mut Checker&) columnVecField(sp source.Span, nsp source.Span, base typed.Lvalue&, t types.TypeId, n source.NameId) typed.Lvalue?& {
+    row := c.P.ColumnsRow(t)
+    if not c.isStruct(row): return null
+    ns := c.P.FieldNames(row)
+    k I64 = -1
+    for j in range ns.Len() {
+        if ns[j] == n: k = j
+    }
+    if k < 0: return null
+    rm := c.P.T.DeclModule(c.P.T.DeclOf(row))
+    if not c.text(n)[0].IsUpper() and rm != c.fr().Mi and not c.P.L.Mods[rm].C {
+        c.err(nsp, msgs.MemberIsPrivate(c.text(n), c.ty(t)))
+    }
+    own := c.P.FieldNames(t)
+    di I64 = -1
+    ni I64 = -1
+    for j in range own.Len() {
+        if c.text(own[j]) == "data": di = j
+        if c.text(own[j]) == "n": ni = j
+    }
+    fs := c.P.T.Items(c.P.T.Fields(t))
+    if di < 0 or ni < 0 or di >= fs.Len() or ni >= fs.Len() or not c.P.Body(fs[di]) {
+        c.gap(nsp, "a ColumnVec of this shape (T7e)")
+        return null
+    }
+    cols := c.P.T.Items(c.P.T.Fields(fs[di]))
+    if k >= cols.Len() { return null }
+    data := typed.Lvalue.Field(sp, fs[di], base, di)
+    col := typed.Lvalue.Field(sp, cols[k], data, k)
+    count := c.read(sp, typed.Lvalue.Field(sp, fs[ni], base, ni))
+    perm := types.Writable if c.slicedWritable(col) else types.ReadOnly
+    v := typed.Expr.Slice(sp, c.P.T.Ref(cols[k], perm), typed.Slice(col, c.lit(sp, c.i64(), 0), count, typed.Check.None))
+    return typed.Lvalue.Temp(sp, typeOf(v), v, c.site(typed.SiteKind.Temp, sp))
+}
+
+# T7e: a Columns' constructor's fields, which the compiler writes - for each field of the row type, in order, a column
+# named as the field: Array<F>(rows, fill.f), its length checked once as any array's is (D14b)
+fn (c mut Checker&) columnsFields(t types.TypeId) {
+    row := c.P.ColumnsRow(t)
+    ps := c.cur().Params
+    if ps.Len() < 2 or not c.isStruct(row) or not c.P.Body(row): return
+    rows := I64(ps[0])
+    fill := I64(ps[1])
+    sp := c.cur().Local(ps[0]).Sp
+    cols := c.P.T.Items(c.P.T.Fields(t))
+    ns := c.P.FieldNames(t)
+    rfs := c.P.T.Items(c.P.T.Fields(row))
+    for k in range cols.Len().Min(ns.Len()).Min(rfs.Len()) {
+        x := c.read(sp, typed.Lvalue.Field(sp, rfs[k], typed.Lvalue.Local(sp, c.localType(fill), typed.LocalId(I32(fill))), k))
+        if not c.isRef(rfs[k]) { c.roStore(x, sp, RoStored) }   # T25c: every element is writable
+        mk := typed.Expr.Make(sp, cols[k], typed.Make(typed.MakeKind.Fill, 0, c.one(x), c.readLocal(sp, rows)
+                                                      c.site(typed.SiteKind.Make, sp), typed.Check.Abort))
+        id := c.local(ns[k], sp, cols[k], typed.LocalKind.Field, typed.Mark.Infer)
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(id)), mk))
+        c.cur().Fields.Push(typed.LocalId(I32(id)))
+        c.dropOnExit(id, sp, true)
+    }
+}
+
+# T7e: a Columns<T> or ColumnVec<T> instance checked where it is asked for, reported at sp - T a record: a struct whose
+# constructor declares exactly its fields, each a parameter written bare (no other statement, no contract, no
+# destructor), with at least one field and none named like a method of the type (M19). Whether it is
+fn (c mut Checker&) columnsMet(t types.TypeId, sp source.Span) Bool {
+    row := c.P.ColumnsRow(t)
+    if row == types.UnknownT or not c.P.T.Closed(row): return true
+    why := c.notRecord(row)
+    # (an empty table's buffers start as its rows' zero value: a record holding a never-null reference has none)
+    if why == "" and c.neverNullIn(row, 0) { why = "has no zero value (a never-null reference field - hold it as ?&)" }
+    if why != "" {
+        c.err(sp, msgs.ColumnsNotRecord(c.ty(t), c.ty(row), why))
+        return false
+    }
+    for n in c.P.FieldNames(row) {
+        if c.P.MethodOf(t, n) < 0: continue
+        c.err(sp, msgs.ColumnNamedLikeMethod(c.ty(t), c.ty(row), c.text(n)))
+        return false
+    }
+    return true
+}
+
+# whether a value of t holds a never-null reference by value (T2c: it has no zero value) - through a struct's fields
+fn (c mut Checker&) neverNullIn(t types.TypeId, depth I64) Bool {
+    if depth > 16: return false
+    if c.neverNull(t): return true
+    if not c.isStruct(t) or c.isRef(t) or not c.P.Body(t): return false
+    for f in c.P.T.Items(c.P.T.Fields(t)) {
+        if c.neverNullIn(f, depth + 1): return true
+    }
+    return false
+}
+
+# why a type is no record T7e takes as a row ("" where it is one)
+fn (c mut Checker&) notRecord(row types.TypeId) String {
+    if not c.isStruct(row) or not c.P.Body(row): return "is no struct"
+    if c.P.T.Destructs(row): return "has a destructor"
+    td := c.P.TypeDecl(c.P.T.DeclOf(row))
+    if td is null or td.Body is null: return "is no struct"
+    match td.Body {
+        case ast.TypeBody.Struct(s) {
+            es := s.Errs
+            if es is not null and (es.HasErrors or es.Contract is not null): return "has a constructor that checks or fails"
+            puns I64 = 0
+            for st in s.Body {
+                match st {
+                    case ast.Stmt.Var(_, v) {
+                        if not v.Field or v.Ty is not null or v.Values.Len() > 0 or v.Infer: return "has a field its constructor computes"
+                        puns += v.Names.Len()
+                    }
+                    case _: return "has a constructor that does more than declare its fields"
+                }
+            }
+            if puns == 0: return "has no fields"
+            if puns != s.Params.Len(): return "has a constructor parameter that is no field"
+            return ""
+        }
+        case _: return "is no struct"
+    }
+}
+
+# T7e: a column assigned whole, "c.x = v": v's lanes - an array or lanes of the table's length, checked once and aborting
+# as lanes of different lengths do (E39's LaneLen), or one value for every element - written into the column's own
+# storage element by element, so a view of the column sees them (T11b); a ColumnVec's through its view
+fn (c mut Checker&) columnStore(sp source.Span, p typed.Lvalue&, value ast.Expr&) {
+    t := c.deref(p.Type())
+    e := c.laneElemOf(t)
+    h := c.laneTarget(sp, p)
+    vk := c.laneLeaf(c.laneArg(value, e))
+    if c.laneNodes[vk].Elem == types.UnknownT: return
+    lv := laneVals()
+    c.laneHoldLeaves(vk, lv)
+    c.laneLength(sp, vk, lv)
+    n := c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, h), null)
+    if c.laneNodes[vk].Kind != LaneScalar {
+        from := c.exprs.Len()
+        c.exprs.Push(n)
+        c.exprs.Push(c.laneCount(sp, vk, lv))
+        n = typed.Expr.Prim(sp, c.i64(), typed.PrimOp.LaneLen, typed.Check.Abort, gather(c.exprs, from))
+    }
+    count := c.hidden(sp, c.i64())
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(count)), n))
+    i, id, outer, mark, lfrom := c.laneLoopOpen(sp, c.readLocal(sp, count))
+    x := c.partCopy(c.fit(c.laneElem(sp, vk, lv, c.readLocal(sp, i)), e, value.Span()))
+    base typed.Lvalue& = typed.Lvalue.Deref(sp, t, c.readLocal(sp, h))
+    c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Elem(sp, e, typed.Elem(base, c.readLocal(sp, i), typed.Check.None)), x))
+    c.laneLoopClose(sp, i, id, outer, mark, lfrom)
+}
+
+# T7e: whether p is a column as a whole - a Columns' field, a ColumnVec's "cv.x" - which a program assigns only alone, its
+# length checked against the table's (columnStore). The prelude's own code assigns its buffers freely
+fn (c mut Checker&) wholeColumn(p typed.Lvalue&) Bool {
+    if c.P.L.Mods[c.fr().Mi].Prelude: return false
+    match p {
+        case typed.Lvalue.Field(_, _, base, _): return c.P.IsColumns(c.deref(base.Type()))
+        case typed.Lvalue.Temp(_, _, v, _) {
+            match v {
+                case typed.Expr.Slice(_, _, sl) {
+                    match sl.Base {
+                        case typed.Lvalue.Field(_, _, base, _): return c.P.IsColumns(c.deref(base.Type()))
+                        case _: return false
+                    }
+                }
+                case _: return false
+            }
+        }
+        case _: return false
+    }
+}
+
 # a field's position among a struct's: its constructor body's field declarations, in order (C2)
 fn (c mut Checker&) fieldIndex(t types.TypeId, n source.NameId) I64 {
+    if c.P.IsColumns(t) {
+        # T7e: a Columns' columns are its row type's fields, named and ordered as they are
+        ns := c.P.FieldNames(t)
+        for i in range ns.Len() {
+            if ns[i] == n: return i
+        }
+        return -1
+    }
     sb := c.structBody(c.P.T.DeclOf(t))
     if sb is null { return -1 }
     k I64 = 0
@@ -17235,6 +17423,10 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
         p := c.discardOr(m.Targets[i]) if st is null else null
         places.Push(p)
     }
+    for i in range n {
+        pl := places[i]
+        if pl is not null and c.wholeColumn(pl) { c.err(c.argSpan(m.Targets[i]), msgs.ColumnAssigned()) }
+    }
     # S4d: a borrow in any value of any target's storage takes its old value
     s4d := c.s4d.Len()
     for pl in places {
@@ -17485,6 +17677,10 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
     if c.convertedPlace(p, target) {
         c.err(c.argSpan(target), msgs.NotAssignable())
         c.expr(value, types.UnknownT)
+        return
+    }
+    if op == token.Tok.Assign and c.wholeColumn(p) {
+        c.columnStore(sp, p, value)
         return
     }
     osp := c.opAfter(target.Span(), 1 if op == token.Tok.Assign else 2)

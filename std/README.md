@@ -70,8 +70,9 @@ stays in.
 ## Subfolders
 
 - `prelude/` - the prelude: every file here is loaded before every program, and its types and methods are visible
-  without an import. It holds the built-in types' methods, the protocol traits and errors, and three collections - `vec`
-  (`Vec`, the growable array), `map` and `text`'s `StringBuilder`; every other container is a module above (QZ2). Vec,
+  without an import. It holds the built-in types' methods, the protocol traits and errors, and the collections - `vec`
+  (`Vec`, the growable array), `map`, `text`'s `StringBuilder` and `columns` (`Columns<T>` and `ColumnVec<T>`, a
+  record's rows held as one array per field, T7e); every other container is a module above (QZ2). Vec,
   Map, StringBuilder, Set, Deque and Heap hold their storage by value - a copy is one of their own, shared only through
   `&`, an element changed in place with `Ref`/`RefMut` - and std/list's `List` is the one handle (a copy names the
   same list - its `Copy()` shares it, `list.From(l.Iter())` builds a list of its own). Every value has a `Copy()` (E31d).

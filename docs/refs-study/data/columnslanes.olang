@@ -1,0 +1,24 @@
+# columnslanes - the particles as a Columns<P> (T7e), the step written with lane operators over whole columns (E39):
+# the bounce a mask selecting between two lane expressions. Arguments: particles, steps.
+import "std/io"
+import "common"
+
+fn step(s mut Columns<common.P>&) {
+    s.Vy -= 9.8 * common.Dt
+    s.X += s.Vx * common.Dt
+    s.Y += s.Vy * common.Dt
+    under := s.Y.LanesLess(Array<F32>(s.Len(), 0.0))
+    s.Vy = under.Select(-s.Vy * 0.9, s.Vy)
+    s.Y = under.Select(-s.Y, s.Y)
+}
+
+fn main() ? {
+    n, steps := common.Arg(1, 4000000), common.Arg(2, 25)
+    r := common.Rand(5)
+    s := Columns<common.P>(n)
+    for i in range n: s[i] = r.Particle()
+    for _ in range steps: step(s)
+    sum := F64(0.0)
+    for p in s: sum += F64(p.X + p.Y)
+    try io.Println("columnslanes: " $sum)
+}

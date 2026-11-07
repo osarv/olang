@@ -2153,7 +2153,10 @@ fn (p mut Program&) Body(t types.TypeId) Bool {
         owner := DeclOwner(d)
         args := p.T.Args(t)
         match p.T.DeclKindOf(d) {
-            case types.DeclKind.Struct { p.T.SetStructBody(t, p.substList(p.T.Fields(self), owner, args), p.T.DtorWritten(self)) }
+            case types.DeclKind.Struct {
+                fs := p.columnFields(t) if p.IsColumns(t) else p.substList(p.T.Fields(self), owner, args)
+                p.T.SetStructBody(t, fs, p.T.DtorWritten(self))
+            }
             case types.DeclKind.Enum { p.T.SetEnumBody(t, p.T.CaseNames(self), p.substList(p.T.Cases(self), owner, args)) }
             case types.DeclKind.Over { p.T.SetOverBody(t, p.Subst(p.T.Base(self), owner, args)) }
             case _ { p.T.SetEmptyBody(t) }
@@ -3297,6 +3300,41 @@ fn (p mut Program&) InstanceContext(t types.TypeId) Context {
     }
     return c
 }
+# ---- structures of arrays (T7e) ----
+
+# whether t is an instance of the prelude's Columns<T> - a struct the compiler lays out as one array per field of T
+fn (p mut Program&) IsColumns(t types.TypeId) Bool { return p.preludeNamed(t, "Columns") }
+
+# ...of the prelude's ColumnVec<T>, the growable one: a struct holding a Columns<T> as its buffers
+fn (p mut Program&) IsColumnVec(t types.TypeId) Bool { return p.preludeNamed(t, "ColumnVec") }
+
+fn (p mut Program&) preludeNamed(t types.TypeId, name String&) Bool {
+    if p.T.KindOf(t) != types.Kind.Named: return false
+    d := p.T.DeclOf(t)
+    m := p.T.DeclModule(d)
+    if m < 0 or m >= p.L.Mods.Len() or not p.L.Mods[m].Prelude: return false
+    return p.text(p.T.DeclName(d)) == name
+}
+
+# a Columns' or a ColumnVec's row type, its type argument T; Unknown for another type
+fn (p mut Program&) ColumnsRow(t types.TypeId) types.TypeId {
+    if not p.IsColumns(t) and not p.IsColumnVec(t): return types.UnknownT
+    xs := p.T.Items(p.T.Args(t))
+    return xs[0] if xs.Len() == 1 else types.UnknownT
+}
+
+# a Columns instance's fields (T7e): for each field of its row type, in order, an array of that field's type of a
+# run-time length, named as the field (FieldNames) - none where the row type is no struct (or still a variable: a
+# pattern, never laid out), which the checker says where the instance is asked for (columnsMet)
+fn (p mut Program&) columnFields(t types.TypeId) types.ListId {
+    r := p.ColumnsRow(t)
+    if not p.T.Closed(r) or not p.isStructT(r) or not p.Body(r): return types.ListId(0)
+    fs := p.T.Items(p.T.Fields(r))
+    out := Array<types.TypeId>(fs.Len())
+    for i in range fs.Len() { out[i] = p.T.Array(fs[i], types.TypeId(0)) }
+    return p.T.List(out)
+}
+
 # a declared type of a std module by its name, Unknown for none (String, Char, CheckError, Exhausted ...)
 fn (p mut Program&) PreludeType(identity String&, name String&) types.TypeId { return p.preludeType(identity, name) }
 
@@ -4517,10 +4555,12 @@ fn (p mut Program&) reflName(b mut StringBuilder&, t types.TypeId) {
     }
 }
 
-# the names of a struct's fields (C2), in order: its constructor body's field declarations
+# the names of a struct's fields (C2), in order: its constructor body's field declarations - a Columns' its row type's
+# (T7e)
 fn (p mut Program&) FieldNames(t types.TypeId) Array<source.NameId> {
     out Vec<source.NameId>
     if p.T.KindOf(t) != types.Kind.Named { return out.ToArray() }
+    if p.IsColumns(t) { return p.FieldNames(p.ColumnsRow(t)) }
     td := p.typeDecl(p.T.DeclOf(t))
     if td is null or td.Body is null { return out.ToArray() }
     match td.Body {
@@ -4689,7 +4729,9 @@ fn (p mut Program&) ReflItems(t types.TypeId, list I64, cs I64, mi I64) Array<I6
         return none, "only a struct and an enum's case have fields"
     }
     # M6a: a struct's private fields are its module's; an enum case's fields are read by any module that reads the case
-    own := p.T.DeclModule(p.T.DeclOf(r)) == mi or not p.isStructT(r) or p.L.Mods[p.T.DeclModule(p.T.DeclOf(r))].C
+    # (T7e: the prelude, which supplies Columns over any struct, sees every field)
+    own := p.T.DeclModule(p.T.DeclOf(r)) == mi or not p.isStructT(r) or p.L.Mods[p.T.DeclModule(p.T.DeclOf(r))].C or
+           (mi >= 0 and mi < p.L.Mods.Len() and p.L.Mods[mi].Prelude)
     for i in range ns.Len() {
         if own or p.text(ns[i])[0].IsUpper() { out.Push(i) }
     }
@@ -4749,7 +4791,8 @@ fn (p mut Program&) Project(t types.TypeId, name String&) types.TypeId, String {
     if name == "Element" {
         r := p.ReflUnder(t)
         if p.T.KindOf(r) == types.Kind.Array { return p.T.Elem(r), "" }
-        return types.UnknownT, "only an array has an Element"
+        if p.ColumnsRow(r) != types.UnknownT { return p.ColumnsRow(r), "" }   # T7e: a table's rows
+        return types.UnknownT, "only an array, a Columns and a ColumnVec have an Element"
     }
     if name == "Target" {
         if p.T.KindOf(t) == types.Kind.Ref { return p.T.Referent(t), "" }

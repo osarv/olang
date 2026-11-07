@@ -549,6 +549,25 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `a[lo:hi]` is a borrow tagged with the base's scope and permission (an immutable global's array slices read-only,
   2026-10-26); `try a.Get(i)`, `try a.Set(i, v)` and `try a.SliceOf(lo, hi)` fail with `ArrayError.OutOfRange` instead (E16c/E16d); an out-of-range index, a
   wrong `extern` prototype and a data race are the three unchecked holes, stated (E16e, X1a, P8b).
+- **Structures of arrays: `Columns<T>` and `ColumnVec<T>` (T7e, QCS 3 and QCU, the user's decisions 2026-11-06/07:
+  "two column types", no computed types; built 2026-11-07, wt-columns, details mine).** A prelude struct the compiler
+  lays out as one `Array<F>` per field of the record `T`, named as the field (`generic.columnFields`,
+  `FieldNames`/`fieldIndex`), its constructor `Columns<P>(n[, fill])` written by the checker (each column `Array<F>(n,
+  fill.f)`, `columnsFields`); `ColumnVec<T>` a prelude struct over a `Columns<T>` buffer and a count, Vec's row
+  operations moving every column (`grown`/`retire`, occupy/vacate). Everything but the layout and the constructor is
+  prelude code over reflection (std/prelude/columns.olang: rows assembled through `T(cell(c, p, i) for p in T.Params)`,
+  written field by field), so lowering, emit, the evaluator, `interpret` and section 8 needed nothing new. Decided
+  (mine): T must be a **record** - a struct whose constructor only puns its fields (no computed field, condition or
+  destructor, at least one field, a zero value - no never-null reference field) - since columns are written element by element, refused where the instance is asked
+  for (`columnsMet`, at `instancesIn`), and so is a field named like the table type's method (M19); a run-time length,
+  not laid out in place even where known (a recorded limit - the brief's "in place like a fixed array" and G29's
+  per-length instances are not built); `cv.x` of a ColumnVec is a view of the first Len() elements (a slice, its
+  permission the table's), its own fields hidden outside the prelude; a column assigned whole (`c.x = v`) is written in
+  place lane by lane, `v`'s length checked once (E39's LaneLen abort), refused in a parallel assignment; a column is as
+  private as its field (M6a); the prelude's reflection sees every field (to supply Columns over any record);
+  `T.Element` of either is the rows' type; `$` renders `Columns<P>[P(1, 2)]` (the literal form QBU/QBW's FromIter will
+  make real); conversions `ToArray ToVec ToColumnVec ToColumns` (on arrays and Vecs too). Measured on the references
+  study's particles: 2.0 instructions an update, as hand-written columns (an `Array<P>` 13.0).
 - **Lane operators (E39, docs/ideas.md #4, the user's decision 2026-10-18; built 2026-10-26).** An array's operators
   work lane by lane (`a * b + c`, `x * 2.0`, `-a`, `and`/`or`/`not` on `Bool` lanes), each lane as the operation on two
   values (T6b, E6c, E31 - C64 and a user's types too); a whole expression is one loop, and `a.Sum()`, `Min()`/`Max()`
