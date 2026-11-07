@@ -76,6 +76,7 @@ type formatter struct(text String&, toks Array<token.Token>&) {
     group mut Array<Bool>& = Array<Bool>(toks.Len())
     closes mut Array<I64>& = Array<I64>(toks.Len())
     bodyColon mut Array<Bool>& = Array<Bool>(toks.Len())  # a ":" before a one-line body (S1b)
+    entryColon mut Array<Bool>& = Array<Bool>(toks.Len()) # a keyed literal's ":" (E19), "k: v"
     # the tokens with text, by index into toks, and beside each whether a statement end stands before it
     real Vec<I64>
     ended Vec<Bool>
@@ -141,6 +142,7 @@ fn (f mut formatter&) run() {
         if (k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace) and inner.Len() > 0 { inner.Pop()! }
         if k == token.Tok.Colon { f.bodyColon[j] = inner.Len() == 0 or (try inner.Last() catch default token.Tok.LBrace) != token.Tok.LBrack }
     }
+    f.markEntries()
     at I64 = 0
     r I64 = 0
     for r < f.real.Len() {
@@ -550,7 +552,7 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
     if kb == token.Tok.Dot and f.ellipsisAt(b) { return " " }
     if ka == token.Tok.Dot or kb == token.Tok.Dot { return "" }
     if kb == token.Tok.Bang { return "" }    # "!" is postfix only (E35)
-    if ka == token.Tok.Colon and (f.bodyColon[a] or f.group[a]) { return " " }
+    if ka == token.Tok.Colon and (f.bodyColon[a] or f.group[a] or f.entryColon[a]) { return " " }
     if ka == token.Tok.Colon or kb == token.Tok.Colon { return "" }
     if f.prefix(a, rb - 1) {
         # "- -x" stays apart, or it would read as "--"
@@ -844,5 +846,30 @@ fn (l loader&) chains(o mut parse.Oracle&, names mut source.Names&, m I64, prefi
         chain := $prefix $l.impAlias[i]
         l.addNames(o, names, chain, l.types[l.impTarget[i]])
         l.chains(o, names, l.impTarget[i], $chain ".", depth + 1)
+    }
+}
+
+# E19: the ":" of a keyed literal's entries - those at the top of a "[" that follows a ">" it touches (a generic type's
+# literal, "Map<String, I64>["a": 1]") or that holds a "," of its own (a slice holds none)
+fn (f mut formatter&) markEntries() {
+    for r in range f.real.Len() {
+        j := f.real[r]
+        if f.kind(j) != token.Tok.LBrack { continue }
+        afterType := r > 0 and f.kind(f.real[r - 1]) == token.Tok.Gt and not f.toks[j].Has(token.Space)
+        colons Vec<I64>
+        comma := false
+        depth := 0
+        for q in range r + 1, f.real.Len() {
+            t := f.real[q]
+            k := f.kind(t)
+            if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace: depth++
+            if (k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace) and depth == 0: break
+            if k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace: depth--
+            if depth == 0 and k == token.Tok.Comma: comma = true
+            if depth == 0 and k == token.Tok.Colon: colons.Push(t)
+        }
+        if afterType or comma {
+            for t in colons { f.entryColon[t] = true }
+        }
     }
 }
