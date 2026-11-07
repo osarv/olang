@@ -1,0 +1,29 @@
+# Vec phase 2a (R1, see r1a): "m := take h.lx.toks" carries a loan on the Lexer, but moving m into an own place
+# ("g.lx.toks = take m") holds no borrow, so the loan goes and "h.lx = null" is accepted; the reach check passed m because
+# it took h.lx.toks to refer to this block.  -b -d -s: use after scope closed; -i: correct; -b: churn text
+type Lex3 struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type H struct() {
+    lx own mut Lex3& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    h := H()
+    g := H()
+    h.lx = Lex3()
+    g.lx = Lex3()
+    for i in range 3 { h.lx.toks.Push($i "-built-into-h-region") }
+    m := take h.lx.toks
+    g.lx.toks = take m
+    h.lx = null
+    churn()
+    println(g.lx.toks[0])
+}

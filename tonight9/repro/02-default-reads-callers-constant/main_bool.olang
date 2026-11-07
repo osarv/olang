@@ -1,0 +1,14 @@
+# expected: builds, prints "6" (45eea97 does)
+# actual:   lib.olang:8:14: error[E6]: '+' takes numbers, found Bool
+#           lib.olang:8:16: error[E12]: expected I64, found Bool   (each "instantiated here, with N = true")
+import "lib"
+type Flag<N Bool> struct(k I64) {
+    k
+}
+fn (f Flag<<N>>&) Get() I64 {
+    return lib.F() + f.k
+}
+fn main() ? {
+    f := Flag<true>(2)
+    println($f.Get())
+}

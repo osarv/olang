@@ -1,0 +1,8 @@
+# M6b on an extending type: its private eq replaces I32's ==; another module must not fall back to the built-in
+import "lib/ext"
+fn main() ? {
+    a := ext.M(3)
+    b := ext.M(13)
+    println($ext.Eq2(a, b))
+    println($(a == b))
+}

@@ -1,0 +1,35 @@
+# P4b: a join's failure replacing a return, a break and a continue, with deferred code around; built against baked
+error E {
+    BAD
+}
+fn g(c mut Array<I64>&, k I64, bad Bool) ? E {
+    c[k] = c[k] + 1
+    if bad { error E.BAD }
+}
+fn f1(c mut Array<I64>&, bad Bool) I64 {
+    defer { c[0] = c[0] + 10 }
+    for i in range 3 {
+        defer { c[1] = c[1] + 100 }
+        try join {
+            spawn try g(c, 2, bad and i == 1)
+            if i == 0 { continue }
+            if i == 1 { return 5 }
+            break
+        } catch E { c[3] = c[3] + 1000 }
+        c[4] = c[4] + 1
+    }
+    return 7
+}
+fn run(bad Bool) String {
+    c := Array<I64>(5)
+    r := f1(c, bad)
+    return $r " " $c
+}
+Baked1 String = run(true)
+Baked2 String = run(false)
+on mut Bool = true
+off mut Bool = false
+fn main() ? {
+    println($run(on) " | " $Baked1)
+    println($run(off) " | " $Baked2)
+}

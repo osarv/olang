@@ -1,0 +1,46 @@
+# r04 OVER-REJECTION - O26a/O18c/O10d/T17c, T25b: the recursive-descent and Pratt idioms are refused.
+#   e := p.sum(); return e                                   -> O10d "this value lives in this function's own scope"
+#   lhs := p.atom(); ... lhs = E.Add(lhs, rhs); return lhs   -> T17c at rhs, O10d at the return
+# O26a puts a returned VALUE local in the result scope; a reference local initialized from a built call and returned
+# gets no such treatment. The only spelling that compiles is "lhs mut E&return = p.atom()" (and rhs likewise) - the
+# "mut" being required only because a built E& result is writable (T25b), though nothing can be written through a
+# reference to an enum. Every parse function of a parser written this way needs it.
+#
+# expected: 6
+# actual: 3 errors (T17c line 29, O10d lines 31 and 35); with "x mut E&return = ..." on lhs, rhs and e it builds and prints 6
+type E enum {
+    Num(v I64)
+    Add(l E&, r E&)
+}
+type P struct(src String&) {
+    src
+    at I64 = 0
+}
+fn (p mut P&) atom() E& {
+    v := I64(p.src[p.at] - '0')
+    p.at++
+    return E.Num(v)
+}
+fn (p mut P&) sum() E& {
+    lhs := p.atom()
+    for p.at < p.src.Len() and p.src[p.at] == '+' {
+        p.at++
+        rhs := p.atom()
+        lhs = E.Add(lhs, rhs)
+    }
+    return lhs
+}
+fn (p mut P&) group() E& {
+    e := p.sum()
+    return e
+}
+fn eval(e E&) I64 {
+    return match e {
+        case E.Num(v) => v
+        case E.Add(l, r) => eval(l) + eval(r)
+    }
+}
+fn main() ? {
+    p := P("1+2+3")
+    println($eval(p.group()))
+}

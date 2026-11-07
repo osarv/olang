@@ -1,0 +1,17 @@
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) Self() mut Acc&a { return a }
+fn first(a mut Acc&) mut Acc&a { return a }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    x := l[0].Self()
+    x.N = 99
+    y := first(l[0])
+    y.N = 77
+    arr := Array<Acc>(1)
+    p := arr[0].Self()
+    p.N = 99
+    println("list " $l[0].N " x " $x.N " array " $arr[0].N)
+}

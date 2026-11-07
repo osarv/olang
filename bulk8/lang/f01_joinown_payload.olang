@@ -1,0 +1,33 @@
+import "std/io"
+
+type AErr error { Bad(msg String), Own(n I64, msg String) }
+
+fn work(i I64) I64 ? AErr {
+    error AErr.Bad("task " $i)
+}
+
+fn own() ? AErr {
+    error AErr.Own(42, "own")
+}
+
+fn inner() String ? AErr {
+    out := Array<I64>(4)
+    try join {
+        for i in range 4 {
+            spawn out[i] = try work(i)
+        }
+        try own()
+    } catch AErr e {
+        return $e
+    }
+    return "none"
+}
+
+fn run() String {
+    return try inner() catch AErr e default "outer " $e
+}
+
+fn main() {
+    io.Println(run())!
+    io.Println(run())!
+}

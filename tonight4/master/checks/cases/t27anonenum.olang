@@ -1,0 +1,14 @@
+# check: fail error[E12]: expected enum { A B }, found enum { X Y Z }
+# T27: two anonymous enums are one type only with the same cases in the same order - "X Y Z" is not "A B"
+fn f(x enum {
+  A
+  B
+}) I32 { return 1 }
+fn main() ? {
+  y enum {
+    X
+    Y
+    Z
+  }
+  n := f(y)
+}

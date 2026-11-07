@@ -1,0 +1,7 @@
+# check: fail these two numbers do not meet
+# T6b: a U8 and an I8 meet nowhere - neither flows into the other, so one is converted
+fn main() ? {
+    a U8 = 1
+    b I8 = 1
+    c I16 = a + b
+}

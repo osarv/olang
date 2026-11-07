@@ -1,0 +1,12 @@
+# T29a: does "h.s = String(local)" copy or alias local?
+import "std/io"
+type Holder struct() {
+  s mut String& = null
+}
+fn main() ? {
+  h := Holder()
+  local Array<U8> = U8[104, 105, 106]
+  h.s = String(local)
+  local[0] = 65
+  try io.Print($h.s "\n")
+}

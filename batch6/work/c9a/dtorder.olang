@@ -1,0 +1,30 @@
+# C9a: a destructor-bearing value a destructor builds runs its destructor as that destructor returns - while a later
+# destructor of the same scope can still reach it through a field it was stored in
+Log mut I64 = 0
+type Res2 struct(id I64) {
+    id
+    live Bool = true
+} destruct {
+    Log = Log * 10 + 2
+}
+type B struct() {
+    r mut Res2& = null
+} destruct {
+    if r != null {
+        Log = Log * 10 + (5 if r.id == 7 else 6)
+    }
+}
+type A struct(b mut B&) {
+    b
+} destruct {
+    b.r = Res2(7)
+    Log = Log * 10 + 1
+}
+fn f() {
+    b mut B& = B()
+    a A&b = A(b)
+}
+fn main() ? {
+    f()
+    println($Log)
+}

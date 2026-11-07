@@ -1,0 +1,18 @@
+type P struct(v I64) { v }
+type Q struct(p P) { p }
+type E enum {
+    A(q Q)
+    Z
+}
+fn borrow(b P&) P&b { return b }
+fn main() ? {
+    keep P& = P(0)
+    for i in range 3 {
+        e := E.A(Q(P(i + 10)))
+        match e {
+            case E.A(q) { if i == 0 { keep = borrow(q.p) } }
+            case _ { }
+        }
+    }
+    println($keep.v)
+}

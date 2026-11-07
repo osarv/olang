@@ -1,0 +1,8 @@
+# G21: a constant argument is evaluated as the program would evaluate it (K1); U8 arithmetic wraps (E6c)
+B U8 = 255
+fn main() ? {
+    b := Array<U8, B + 1>()
+    println("fold: " $b.Len())
+    c := B + 1
+    println("program: " $c)
+}

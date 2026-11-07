@@ -1,0 +1,16 @@
+# check: fail error[O25h]: this value holds references into a scope the target outlives
+# O25h: a copy of an element keeps its references where the element's are - an inner block's array here, which the
+# outer array outlives
+type WC struct(word String&, count I64) {
+    word
+    count
+}
+fn main() ? {
+    outer := Array<WC>(1)
+    for i in range 2 {
+        inner := Array<WC>(1)
+        inner[0] = WC($i, i)
+        t := inner[0]
+        outer[0] = t
+    }
+}

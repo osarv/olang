@@ -1,0 +1,15 @@
+# compiler segfault in codegen (cgResolveScope -> mangleGlobal with mod NULL): a conditional (or match) value
+# returned through a borrowed result, one arm a call whose result is borrowed from the parameter, the other a temporary
+type Expr enum {
+    Num(v F64)
+    Neg(e Expr&)
+}
+fn wrap(a Expr&) Expr&a { return Expr.Neg(a) }
+fn simplify(e Expr&) Expr&e {
+    return wrap(e) if e != null else Expr.Num(1.0)
+}
+fn main() ? {
+    t Expr& = Expr.Neg(Expr.Num(2.0))
+    s := simplify(t)
+    assert s == s
+}

@@ -1,0 +1,4 @@
+# check: fail error[L9]: 'join' is a keyword, not a name - choose another
+# L9: a keyword where a name is wanted is said to be one, not reported as a token the parser did not expect
+fn join(a I32) I32 { return a }
+fn main() ? { }

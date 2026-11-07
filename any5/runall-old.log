@@ -1,0 +1,34 @@
+d04_boxconvreturn            use after scope closed: storage a closed scope gave back was read or written|status 134|status 0|olang interpret: d04_boxconvreturn.olang:8: it uses storage after the scope it was made in closed|status 1|
+
+e01_returnconvlocal          use after scope closed: storage a closed scope gave back was read or written|status 134|status 0|olang interpret: e01_returnconvlocal.olang:10: it uses storage after the scope it was made in closed|status 1|
+
+e01b_control                 status 0|status 0|status 0|
+
+e02_returnconvglobal         run: M Zutable x Zutable|status 0|run: M Zutable x Zutable|status 0|run: M Zutable x Zutable|status 0|
+
+e03_convcondtuple            use after scope closed: storage a closed scope gave back was read or written|status 134|status 0|olang interpret: e03_convcondtuple.olang:33: it uses storage after the scope it was made in closed|status 1|
+
+e07_convdeclassign           use after scope closed: storage a closed scope gave back was read or written|status 134|status 0|olang interpret: e07_convdeclassign.olang:14: it uses storage after the scope it was made in closed|status 1|
+
+e07b_convborrow              run:   over String: s aXc (T29a: Wbc); over Array<Char>: t Wbc|baked: over String: s aXc (T29a: Wbc); over Array<Char>: t Wbc|status 0|run:   over String: s aXc (T29a: Wbc); over Array<Char>: t Wbc|baked: over String: s 
+
+k01_evalcondreturn           run:   cond1 match1 dflt1|baked: Qond1 Qatch1 Qflt1|status 0|run:   cond1 match1 dflt1|baked: Qond1 Qatch1 Qflt1|status 0|run:   cond1 match1 dflt1|baked: cond1 match1 dflt1|status 0|
+
+k01b_evalcondassert          k01b_evalcondassert.olang:12:21: error[S18c]: this assertion is false, evaluated while compiling|k01b_evalcondassert.olang:12:21: error[S18c]: this assertion is false, evaluated while compiling|k01b_evalcondassert.olang:
+
+n01_spawnscopedtarget        n01_spawnscopedtarget.olang:12:23: error[P1]: 'spawn' takes a call|n01_spawnscopedtarget.olang:12:23: error[P1]: 'spawn' takes a call|n01_spawnscopedtarget.olang:12:23: error[P1]: 'spawn' takes a call|status 1|
+
+n02_spawnscopedforms         n02_spawnscopedforms.olang:24:26: error[P1]: 'spawn' takes a call|n02_spawnscopedforms.olang:25:27: error[P1]: 'spawn' takes a call|n02_spawnscopedforms.olang:26:23: error[P1]: 'spawn' takes a call|n02_spawnscopedforms.o
+
+n02b_spawncontrol            status 0|status 0|status 0|
+
+o01_scopedreturnforms        status 0|status 0|status 0|
+
+s03_sharedscope              run:   keep List<String&>["Qbc1"] v Qbc1|baked: keep List<String&>["abc1"] v Qbc1|status 0|run:   keep List<String&>["Qbc1"] v Qbc1|baked: keep List<String&>["abc1"] v Qbc1|status 0|run:   keep List<String&>["Qbc1"] v Qb
+
+s03b_sharedscopeassert       status 134|status 134|status 134|
+
+s04_sharedreceiver           run:   keep List<String&>["Qbc1", "Ref1"] v Qbc1 w Ref1|baked: keep List<String&>["abc1", "def1"] v Qbc1 w Ref1|status 0|run:   keep List<String&>["Qbc1", "Ref1"] v Qbc1 w Ref1|baked: keep List<String&>["abc1", "def1"] v
+
+s05_sharedany                run:   keep List<String&>["Zbc1"]|baked: keep List<String&>["abc1"]|status 0|run:   keep List<String&>["Zbc1"]|baked: keep List<String&>["abc1"]|status 0|run:   keep List<String&>["Zbc1"]|baked: keep List<String&>["Zbc1"
+

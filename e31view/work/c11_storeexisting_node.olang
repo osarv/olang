@@ -1,0 +1,29 @@
+# the element holds a reference to a node; the callee hangs a caller's loop-local node off it
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type E struct(head mut Node&, n I64) {
+    head
+    n
+}
+type Es struct(head mut Node&) {
+    head
+}
+fn (s Es&) At(i I64) E { return E(s.head, i) }
+fn hang(e mut E&, x mut Node&) { e.head.next = x }
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn main() ? {
+    s := Es(Node(1))
+    for k in range 3 {
+        x := Node(100 + k)
+        hang(s[k], x)
+    }
+    churn()
+    println($s.head.next.v)
+}

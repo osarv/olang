@@ -1,0 +1,24 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Adder struct(n mut Node&) {
+    n
+}
+fn (a Adder) Call(i I64) { a.n.next = a.n.next if i < 0 else Node(i) }
+fn work(f fn(i I64), n I64) {
+    for i in range n { f(i) }
+}
+fn main() ? {
+    a mut Node& = Node(0)
+    b mut Node& = Node(0)
+    aa := Adder(a)
+    ab := Adder(b)
+    c mut Node& = Node(0)
+    join {
+        spawn work(aa, 300000)
+        spawn work(ab, 300000)
+        for i in range 300000 { c.next = Node(i) }
+    }
+    println($a.next.v " " $b.next.v " " $c.next.v)
+}

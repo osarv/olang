@@ -1,0 +1,35 @@
+# a task's clause capturing a value String declared in the loop body, which closes before the join
+error E {
+    NEG
+}
+fn sq(n I64) I64 ? E {
+    if n < 0 { error E.NEG }
+    return n * n
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        s := $i $i "-" $(i * 3)
+        t = t + s.Len()
+    }
+    return t
+}
+fn slow(n I64) I64 ? E {
+    t I64 = 0
+    for i in range 3000000 { t = t + i % 7 }
+    if t < 0 { return 0 }
+    if n < 0 { error E.NEG }
+    return n
+}
+fn main() ? E {
+    out := List<String&>()
+    log mut List<String&>& = out
+    join {
+        for i in range 4 {
+            s := "task-" $i "-abcdefghijklmnop"
+            spawn try slow(-1 - i) catch E { println(s) }
+            churn()
+        }
+    }
+    println("done")
+}

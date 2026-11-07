@@ -1,0 +1,14 @@
+import "std/io"
+type P struct() {
+    arr := Array<I64>(3)
+}
+fn main() {
+    v := Vec<P>()
+    v.Push(P())
+    v[0].arr = v[0].arr + 1
+    io.Println($v[0].arr)!
+    io.Println($v[0].arr)!
+    m := Map<I64, P>()
+    m.Put(1, P())
+    io.Println($m)!
+}

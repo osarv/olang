@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/l3_for_post_copy_part.olang:11:33: error[O32]: 'c.a' belongs to what 't' was copied from - assign it there
+   11 |     for i := 0, i < 100000, c.a = Lexer(i) {
+      |                                 ^
+compilation failed with 1 error

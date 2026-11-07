@@ -1,0 +1,20 @@
+import "std/io"
+type H struct(v I32) {
+    v
+    owner mut Box& = null
+}
+type Box struct(h mut H&) {
+    head mut H& = h
+    tag I32 = 7
+}
+fn link(o mut Box&, h mut H&) { h.owner = o }
+fn tie(b mut Box&) { link(b, b.head) }          # b's own storage, stored where b's references lead
+fn use(arr mut Array<Box>&) {
+    b := arr[0]                                   # a copy: its storage this block, its references the array's
+    tie(b)
+}
+fn main() ? {
+    arr := Array<Box>(1, Box(H(1)))
+    use(arr)
+    try io.Print($arr[0].head.owner.tag "\n")
+}

@@ -1,0 +1,16 @@
+# T25b: literals reaching read-only references are the constant data itself; a local's is its own copy
+Live mut I32 = 1
+fn total(a Array<I32>&) I32 {
+    t I32 = 0
+    for x in a { t = t + x }
+    return t
+}
+fn lenOf(s String&) I64 { return s.Len() }
+error E { X }
+fn main() ? E {
+    assert total(I32[3, 4, 5]) + Live == 13
+    assert lenOf("static text") + I64(Live) == 12
+    mine := "copied"
+    mine[0] = 'C'
+    assert mine.Eq("Copied")
+}

@@ -1,0 +1,11 @@
+# id over a Nums (a declared array type) and over Array<I32>: two instantiations, one name
+import "std/io"
+fn id(x <T>) <T> { return x }
+type Nums Array<I32>
+fn main() ? {
+  n Nums = Nums(I32[1, 2])
+  arr Array<I32> = I32[3, 4, 5]
+  a := id(n)
+  b := id(arr)
+  try io.Print($a.Len() $b.Len() "\n")
+}

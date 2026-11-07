@@ -1,0 +1,11 @@
+# E39: "An element type that is or holds a reference is an error". "z := x + y" on an Array<P> of such elements is
+# refused, but "x += y" is accepted (and checked soundly, as the loop it is) - the rule and the in-place form disagree
+import "std/io"
+type P struct(s String&) { s }
+fn (a P) Plus(b P) P { return P($a.s $b.s) }
+fn main() {
+    x := Array<P>(2, P("a"))
+    y := Array<P>(2, P("b"))
+    x += y
+    io.Println($x[0].s)!
+}

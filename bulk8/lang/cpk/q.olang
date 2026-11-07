@@ -1,0 +1,12 @@
+import "std/io"
+import c "q.c"
+fn main() {
+    q := c.Q()
+    c.makeq(q)
+    io.Println($q.a " " $q.b " " $q.c " " $q.d " " $q.pad " " $q.e " " $q.f " " $q.g " " $q.h " " $c.sizeq() " " $c.Q.Size)!
+    q.b = 1234
+    q.d = 5
+    q.f = 2.25
+    q.h = 65535
+    io.Println($c.readq(q))!
+}

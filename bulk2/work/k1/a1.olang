@@ -1,0 +1,6 @@
+fn wraps(k I64) Bool {
+    a := I40.Max
+    b := a + I40(k)
+    return b < a
+}
+test "wraps" { assert wraps(1) }

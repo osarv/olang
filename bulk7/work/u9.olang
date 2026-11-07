@@ -1,0 +1,28 @@
+import "std/io"
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn (t mut Token&) Use() { t.uses++ }
+
+fn eat(t Token) I64 {
+    t.Use()
+    return t.uses
+}
+
+fn many(ts ...Token) I64 { return ts.Len() }
+
+fn withDef(n I64, x Token = Token(0)) I64 { return x.id + n }
+
+fn pick(b Bool, x Token) Token { return x }
+
+fn main() {
+    g fn&(t Token) I64 = eat
+    t := Token(1)
+    arr := Token[Token(1), Token(2)]
+    n := many(...arr)
+    t.Use()
+    io.Println($n " " $t.uses)!
+}

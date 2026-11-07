@@ -1,0 +1,8 @@
+# G20/L10: a U64 constant parameter cannot be given a value above I64's maximum, though U64 is an allowed type and the
+# literal is a U64 (L10) or its bits read unsigned (L10a)
+type K<N U64> struct() { x mut I32 }
+fn main() ? {
+    a := K<18446744073709551615>()
+    b := K<0xFFFFFFFFFFFFFFFF>()
+    println($a.x $b.x)
+}

@@ -1,0 +1,17 @@
+# decision 1 broken by e01's callee: AnyItemNew holds the unscoped call's array as it is - but convloc returns its own
+# frame's storage (Lab(s) is neither copied nor moved), so the boxes in the outer list name freed storage
+type Named trait {
+    Name() String
+}
+type Lab extends String
+fn (l Lab&) Name() String { return "lab " $l }
+fn convloc(i I64) Lab {
+    s := "abc" $i "-" $(i * 7)
+    return Lab(s)
+}
+fn main() {
+    xs := List<any Named&>()
+    for i in range 3 { xs.Push(convloc(i)) }
+    churn()
+    for x in xs { say(x.Name()) }
+}

@@ -1,0 +1,25 @@
+# check: run
+# a Map whose keys come and go reuses the slots removed keys leave, so it stays the size of what it holds: five million
+# puts and removes on at most a hundred keys, in a scope that never closes until the program ends, peak at a few
+# megabytes (they reached 120MB when a removed slot was never used again)
+import "std/os"
+
+fn peakKb() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmHWM:") catch default -1
+    if at < 0 { return -1 }
+    line := status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+fn main() ? {
+    m := Map<I64, I64>()
+    for i in range 5000000 {
+        m.Put(i, i)
+        if i >= 100 { assert m.Remove(i - 100) }
+    }
+    assert m.Len() == 100 and (try m.Get(4999999) catch default -1) == 4999999 and not (4999899 in m)
+    kb := peakKb()
+    assert kb > 0 and kb < 40000
+}

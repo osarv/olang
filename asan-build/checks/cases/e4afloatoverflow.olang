@@ -1,0 +1,6 @@
+# check: fail this expression is built only from literals
+# E4a: a float literal-only expression is computed in F64, and one whose finite operands overflow to an infinity has no
+# value - even for an F64 target
+fn main() ? {
+    x F64 = 1e308 * 10.0
+}

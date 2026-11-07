@@ -1,0 +1,99 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+}
+
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+# nested loops: inner loop's turn-local given, read on the outer loop's next turn
+fn nested(n I64) I64 {
+    cur Node& = Node(0)
+    s := 0
+    for i in range n {
+        s = s * 10 + cur.v
+        for j in range 2 {
+            t := Node(i + j)
+            cur = t
+        }
+        churn()
+    }
+    return s
+}
+
+# do-while: the version from the body read in the condition and the next turn
+fn doLoop(n I64) I64 {
+    cur Node& = Node(0)
+    k := 0
+    s := 0
+    do {
+        s = s * 10 + cur.v
+        x := Node(k + 1)
+        cur = x
+        k++
+        churn()
+    } for cur.v < n
+    return s * 10 + cur.v
+}
+
+# continue: the version skipping the rest of the body
+fn withContinue(n I64) I64 {
+    cur Node& = Node(5)
+    s := 0
+    for i in range n {
+        s = s * 10 + cur.v
+        x := Node(i)
+        if i % 2 == 0 {
+            cur = x
+            continue
+        }
+        churn()
+    }
+    churn()
+    return s * 10 + cur.v
+}
+
+# a version given by a match clause from the clause's own local
+type Sh enum { A(v I64), B }
+fn inMatch(e Sh) I64 {
+    cur Node& = Node(1)
+    match e {
+        case Sh.A(v) {
+            q := Node(v)
+            cur = q
+        }
+        case Sh.B { }
+    }
+    churn()
+    return cur.v
+}
+
+# three-clause loop: post clause reassigns the cursor to a turn local? 
+fn threeClause(n I64) I64 {
+    cur Node& = Node(100)
+    s := 0
+    for i := 0, i < n, i++ {
+        s += cur.v
+        y := Node(i)
+        cur = y
+        churn()
+    }
+    return s + cur.v
+}
+
+fn main() {
+    io.Println($nested(4))!
+    io.Println($doLoop(4))!
+    io.Println($withContinue(5))!
+    io.Println($inMatch(Sh.A(8)))!
+    io.Println($threeClause(4))!
+}

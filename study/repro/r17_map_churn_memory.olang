@@ -1,0 +1,11 @@
+# a Map that never holds more than 100 entries grows without bound under Put/Remove churn (120MB here):
+# a removed slot is never reused, and the map's scope closes only with the program
+import "std/map"
+fn main() ? {
+    m := map.Map<I64, I64>()
+    for i in range 5000000 {
+        m.Put(i, i)
+        if i >= 100 { m.Remove(i - 100) }
+    }
+    assert m.Len() == 100
+}

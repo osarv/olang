@@ -1,0 +1,20 @@
+import "std/io"
+type Box<T> struct(V T) { V }
+fn Box<T>.Of(v T) Box<T> { return Box(v) }
+fn twice<T Number>(x T) T { return x + x }
+fn link(a mut Vec<String&>&, s String&) {
+    a.Push(s)
+}
+fn keep(s String&) fn&() String& {
+    return fn() { return s }
+}
+fn main() {
+    f := Box<I64>.Of
+    g := twice<F64>
+    h := link
+    k := keep
+    v := Vec<String&>()
+    t := "x"
+    h(v, t)
+    io.Println($f(3) " " $g(1.5) " " $v.View() " " $k("y")())!
+}

@@ -1,0 +1,26 @@
+import "std/io"
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn (t mut Token&) Use() { t.uses++ }
+
+fn gen(t Token) Iterator<I64> {
+    for _ in range 3 {
+        t.Use()
+        yield t.id * 100 + t.uses
+    }
+}
+
+fn mk(n I64) Generator<I64> {
+    return gen(Token(n))
+}
+
+fn main() {
+    g := mk(5)
+    junk := Array<I64>(1000, 7)
+    for x in g { io.Println($x " " $junk[0])! }
+    for x in gen(Token(6)) { io.Println($x)! }
+}

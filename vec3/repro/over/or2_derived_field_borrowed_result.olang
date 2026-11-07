@@ -1,0 +1,27 @@
+# over-rejection: a borrowed own result reached through a struct parameter's &c field (w.r.Text()) is O38 at the return -
+# the field read is rooted ANY, so the function is never marked; the caller's O39 is right, the callee's O38 is not needed.
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type CB struct() {
+    data own mut Array<Char>& = Array<Char>(2, 'a')
+    text own mut String& = "bb"
+}
+type W struct(c CB&) {
+    r CB&c = c
+}
+fn g(w W&) String&w { return w.r.Text() }
+fn (c CB&) Text() String&c { return c.text }
+fn main() ? {
+    c := CB()
+    w := W(c)
+    t := g(w)
+    c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(t)
+}

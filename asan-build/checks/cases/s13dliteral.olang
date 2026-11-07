@@ -1,0 +1,13 @@
+# check: fail a case value must have the type of the value it is compared with
+# S13d: a literal in a payload is compared with that field by "==", so it has the field's type
+type S enum {
+    A(x I32)
+    B
+}
+fn f(s S) I32 {
+    match s {
+        case S.A("one") { return 1 }
+        nomatch { return 0 }
+    }
+}
+fn main() ? { }

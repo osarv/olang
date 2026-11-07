@@ -1,0 +1,12 @@
+== o15_destructexactassign
+  san:    exit 0 destructexactassign 12 13|
+  O3:     exit 0 destructexactassign 12 13|
+  interp: exit 0 destructexactassign 12 13|
+--- compile (-debug -sanitize)
+built ./build/o15_destructexactassign.debug.san
+--- run san
+destructexactassign 12 13
+--- run O3
+destructexactassign 12 13
+--- interpret
+destructexactassign 12 13

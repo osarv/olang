@@ -1,0 +1,8 @@
+import "std/io"
+type KV struct(k I32) {
+    k
+}
+fn main() ? io.IoError {
+    x := KV(1)
+    try io.Print($x.k "\n")
+}

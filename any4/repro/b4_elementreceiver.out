@@ -1,0 +1,12 @@
+== build -debug -sanitize
+run: ks[0].s Qbc1 x Qbc1
+baked: ks[0].s abc1 x Qbc1
+status 0
+== build
+run: ks[0].s Qbc1 x Qbc1
+baked: ks[0].s abc1 x Qbc1
+status 0
+== interpret
+run: ks[0].s Qbc1 x Qbc1
+baked: ks[0].s Qbc1 x Qbc1
+status 0

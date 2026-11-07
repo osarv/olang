@@ -1,0 +1,23 @@
+fn f() I64 {
+    m := Map<String&, I64>()
+    m.Put("a", 1)
+    l := List<String&>()
+    for k in m.Keys() { l.Push(k) }
+    return l.Len()
+}
+fn g() I64 {
+    m := Map<I64, String&>()
+    m.Put(1, "a")
+    l := List<String&>()
+    for v in m.Values() { l.Push(v) }
+    return l.Len()
+}
+fn h() I64 {
+    m := Map<String&, I64>()
+    m.Put("a", 1)
+    l := m.Keys().ToList()
+    out := List<String&>()
+    for k in l { out.Push(k) }
+    return out.Len()
+}
+fn main() ? { println($f() $g() $h()) }

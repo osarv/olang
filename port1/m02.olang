@@ -1,0 +1,26 @@
+# O17b: a copy of a handle taken out of a collection (its storage this block, its state elsewhere), lent to a callee
+# that pushes text it builds, directly and through a method chain
+import "std/io"
+import "churn"
+fn fill(l mut List<String&>&, i I64) { l.Push($i "-filled") }
+fn fill2(l List<String&>, i I64) { l.Push($i "-byval") }
+type Box struct(l List<String&>) { l }
+fn fill3(b mut Box&, i I64) { b.l.Push($i "-box") }
+fn main() ? io.IoError {
+    lists := List<List<String&>>()
+    lists.Push(List<String&>())
+    boxes := List<Box>()
+    boxes.Push(Box(List<String&>()))
+    for i in range 3 {
+        w := lists[0]
+        fill(w, i)
+        fill2(w, i)
+        bx := boxes[0]
+        fill3(bx, i)
+    }
+    c := churn.Churn()
+    s := ""
+    for t in lists[0] { s = $s $t "," }
+    for t in boxes[0].l { s = $s $t "," }
+    try io.Println($c " " $s)
+}

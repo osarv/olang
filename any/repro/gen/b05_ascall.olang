@@ -1,0 +1,39 @@
+import "std/io"
+# an "as" of a call's built any kept outside the loop: the call lands where the list lives
+type W trait for Btn, Sl {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+type Sl struct(at I64) { at }
+fn (s Sl&) Draw() String { return "<" $s.at ">" }
+fn pick(i I64) any W& {
+    if i % 2 == 0 { return Btn("p" $i "-" $(i * 9)) }
+    return Sl(i)
+}
+fn main() {
+    keep := List<Btn&>()
+    for i in range 6 {
+        if i % 2 == 0 { keep.Push(pick(i) as Btn) }
+    }
+    churn()
+    for b in keep { say(b.label) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

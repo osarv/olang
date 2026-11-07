@@ -1,0 +1,26 @@
+import "std/io"
+
+type H struct(r String&) {
+    r
+}
+type O struct(h H&) {
+    h
+}
+fn mkH(s String&) H& { return H(s) }
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+
+fn main() {
+    keep := O(null)
+    for i in range 10 {
+        t := $i "-loop"
+        keep = O(match i { case 0 => null  case _ => mkH(t) })
+    }
+    churn()
+    io.Println(keep.h.r)!
+}

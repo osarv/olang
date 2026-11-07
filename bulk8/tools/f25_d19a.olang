@@ -1,0 +1,19 @@
+import "std/io"
+type Pt struct(x I64) { x }
+type E error { Bad }
+fn two(n I64) Pt, I64 { return Pt(n), n }
+fn many(n I64) Array<Pt> { return Array<Pt>[Pt(n)] }
+fn maybe(n I64) Pt?& {
+    if n < 0: return null
+    return Pt(n)
+}
+fn gen(n I64) Iterator<Pt> {
+    for i in range n { yield Pt(i) }
+}
+fn lam() fn&(n I64) Pt { return fn(n I64) { return Pt(n) } }
+fn main() {
+    p, n := two(3)
+    q := maybe(1)!
+    io.Println($p " " $n " " $many(2) " " $q " " $lam()(5))!
+    for x in gen(2) { io.Println($x)! }
+}

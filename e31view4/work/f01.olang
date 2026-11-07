@@ -1,0 +1,17 @@
+import "std/io"
+# a Str that reads a two-level List field via x[i] and tries to BUILD a node through it (into the receiver) - must be refused
+type W struct(ll List<List<I64>>&) {
+    ll
+}
+fn grow(l mut List<I64>&) { l.Push(99) }
+fn (w W&) Str() String {
+    grow(w.ll[0])
+    return "W" $w.ll[0].Len()
+}
+fn main() ? {
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    ll[0].Push(5)
+    w := W(ll)
+    try io.Println($w)
+}

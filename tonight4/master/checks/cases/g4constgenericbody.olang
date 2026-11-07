@@ -1,0 +1,18 @@
+# check: fail error[G4, G24]: constant variable N appears in no parameter's type
+# also: compilation failed with 2 errors
+# never: error[G21]
+# G4: a generic function whose constant variable no call can give a value is reported once, at its declaration - its
+# body is not checked, in the generic or in any instantiation, and its calls report nothing more
+fn mk() Array<I64, <N>> {
+    a Array<I64, N>
+    return a
+}
+fn mk2(x <T>) Array<T, <N I64>> {
+    a Array<T, N>
+    return a
+}
+fn main() ? {
+    a := mk()
+    b := mk2(3)
+    println($a.Len() " " $b.Len())
+}

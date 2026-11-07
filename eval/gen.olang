@@ -1,0 +1,36 @@
+import "std/io"
+fn kind(x <T>) String {
+    match <T> {
+        case I32 { return "i32" }
+        case String& { return "str" }
+        nomatch { return "other" }
+    }
+}
+type Money struct(c I64) {
+    c
+}
+fn (a Money) Plus(b Money) Money { return Money(a.c + b.c) }
+fn (a Money) TryPlus(b Money) Money ? BuiltinError { return Money(try (a.c + b.c)) }
+fn (a Money) Div(b Money) I64 { return a.c / b.c }
+fn (a Money) TryDiv(b Money) I64 ? BuiltinError { return try (a.c / b.c) }
+fn divmod(a I64, b I64) (I64, I64) { return a / b, a % b }
+fn add2(a I64, b I64) I64 { return a * 10 + b }
+fn t(n I64) String {
+    m1 := Money(9223372036854775800)
+    m2 := Money(n)
+    s := try (m1 + m2) catch default Money(-1)
+    d := try (m1 / Money(n - n)) catch default -2
+    q, r := divmod(n * 7 + 3, n)
+    txt String& = "hello world"
+    has Bool = "lo w" in txt
+    sum := add2(divmod(17, n))
+    words := txt.Split(" ")
+    f := fn(x I64) I64 { return x * n }
+    g fn(x I64) I64 = f if n > 2 else fn(x I64) I64 { return x }
+    return $kind(1) " " $kind(txt) " " $kind(2.5) " " $s.c " " $d " " $q " " $r " " $has " " $sum " " $words.Len() " " $g(5) " " $words
+}
+B String = t(3)
+M mut I64 = 3
+fn main() ? io.IoError {
+    try io.Print($B "\n" $t(M) "\n")
+}

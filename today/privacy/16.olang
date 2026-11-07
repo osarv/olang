@@ -1,0 +1,8 @@
+# Pair of Tags ==
+import "lib/pv"
+
+fn main() ? {
+    a := pv.Make(3)
+    b := pv.Make(13)
+    println($(Pair(a, 1) == Pair(b, 1)))
+}

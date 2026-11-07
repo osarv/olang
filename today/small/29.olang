@@ -1,0 +1,6 @@
+# E11a: a float rendered only inside another module's generic, instantiated here - the root object defines the
+# instantiation, and with it must come the rendering's table
+import "lib/show"
+fn main() ? {
+    println(show.Show(F64(1.5)))
+}

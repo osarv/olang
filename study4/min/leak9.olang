@@ -1,0 +1,19 @@
+# a per-iteration line passed to a function returning a number that is stored in the returned struct
+type S struct() {
+    best I64 = 0
+    names List<String&> = List<String&>()
+}
+fn mk(i I64) String& { return "line " $i " took " $(i % 97) "ms" }
+fn measure(t String&) I64 { return t.Len() }
+fn scan(n I64) S {
+    s := S()
+    for i in range n {
+        line := mk(i)
+        v := measure(line)
+        if v > 1000000 { println("big") }
+    }
+    return s
+}
+fn main() ? {
+    println($scan(N).best)
+}

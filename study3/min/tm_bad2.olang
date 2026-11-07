@@ -1,0 +1,70 @@
+# typedmat - a typed matrix over std/linalg: Mat<T, R, C> whose dimensions are constants or Dynamic, so a product's
+# inner dimensions are checked while compiling where they are known and once at run time where they are not. Indexing
+# is m[i, j]; a checked form comes from TryAt. A tiny two-layer network forward pass and a least-squares fit use it.
+
+import "std/linalg"
+import "std/math"
+import "std/rand"
+
+Dynamic I64 = -1
+
+error MatError {
+    SHAPE
+}
+
+type Mat<T, R I64, C I64> struct(rows I64 = R, cols I64 = C) {
+    assert R == Dynamic or rows == R
+    assert C == Dynamic or cols == C
+    m linalg.Matrix<T> = linalg.Matrix<T>(rows, cols)
+}
+
+fn (a Mat<<T>, <R I64>, <C I64>>&) Rows() I64 { return R if R != Dynamic else a.m.Rows }
+fn (a Mat<<T>, <R I64>, <C I64>>&) Cols() I64 { return C if C != Dynamic else a.m.Cols }
+
+fn (a Mat<<T>, <R I64>, <C I64>>&) At(i I64, j I64) T { return a.m.Get(i, j) }
+fn (a mut Mat<<T>, <R I64>, <C I64>>&) SetAt(i I64, j I64, v T) { a.m.Set(i, j, v) }
+fn (a Mat<<T>, <R I64>, <C I64>>&) TryAt(i I64, j I64) T ? MatError {
+    if i < 0 or j < 0 or i >= a.Rows() or j >= a.Cols() { error MatError.SHAPE }
+    return a.m.Get(i, j)
+}
+
+# a product: K must agree - by the types when both know it, at run time otherwise
+fn (a Mat<<T>, <R I64>, <K I64>>&) MatMul(b Mat<T, <K2 I64>, <C I64>>&) Mat<T, R, C> {
+    assert K == Dynamic or K2 == Dynamic or K == K2
+    assert a.Cols() == b.Rows()
+    out := Mat<T, R, C>(a.Rows(), b.Cols())
+    linalg.Gemm(out.m, a.m, false, b.m, false)
+    return out
+}
+
+fn (a Mat<<T>, <R I64>, <C I64>>&) Plus(b Mat<T, R, C>&) Mat<T, R, C> {
+    out := Mat<T, R, C>(a.Rows(), a.Cols())
+    out.m.Copy(a.m)
+    out.m.Add(b.m)
+    return out
+}
+
+fn (a Mat<<T>, <R I64>, <C I64>>&) Map(f fn(x T) T) Mat<T, R, C> {
+    out := Mat<T, R, C>(a.Rows(), a.Cols())
+    for i in range a.Rows() {
+        for j in range a.Cols() { out[i, j] = f(a[i, j]) }
+    }
+    return out
+}
+
+fn (a Mat<<T>, <R I64>, <C I64>>&) Str() String {
+    b := StringBuilder()
+    for i in range a.Rows() {
+        b.Push("[")
+        for j in range a.Cols() { b.Push($(" " if j > 0 else "") $a[i, j]) }
+        b.Push("]")
+    }
+    return b.ToString()
+}
+
+fn main() ? {
+    a := Mat<F64, Dynamic, Dynamic>(2, 3)
+    b := Mat<F64, Dynamic, Dynamic>(2, 3)
+    c := a @ b
+    println($c.Rows())
+}

@@ -1,0 +1,43 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    t String& = $"node " $v " with text padded out to a fair length ..........................."
+}
+
+type Holder struct() {
+    n mut Node& = Node(0)
+    keep mut Node?& = null
+}
+
+# a resource whose destructor stores what it was given - a view of the holder's node - into the holder
+type Res struct(h mut Holder&, n Node&h) {
+    h
+    n
+} destruct {
+    h.keep = n
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    h := Holder()
+    for i in range 5 {
+        h.n = Node(i + 1)
+        {
+            r := Res(h, h.n)       # its destructor runs as this block closes: h.keep is h.n's node then
+        }
+        h.n = Node(100 + i)        # lets go of the node h.keep holds
+        churn()
+        if h.keep is not null { io.Println(h.keep!.t)! }
+    }
+}

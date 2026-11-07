@@ -1,0 +1,27 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Holder struct(n Node&) { n }
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn mk() (Holder, I32) {
+    n Node& = Node(42)
+    h := Holder(n)
+    return h, 1
+}
+fn mk2() (Node&, I32) {
+    n Node& = Node(43)
+    return n, 1
+}
+fn mk3(c Bool) (Node&, I32) {
+    n Node& = Node(44)
+    return (n if c else Node(1)), 1
+}
+fn main() ? {
+    h, k := mk()
+    churn()
+    try io.Print($h.n.v "\n")
+}

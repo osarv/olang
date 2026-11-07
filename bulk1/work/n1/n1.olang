@@ -1,0 +1,30 @@
+import "std/io"
+
+LiveF mut F64 = 0.0
+LiveI mut I64 = 0
+
+fn i64of(x F64) String { return try $x.Narrow<I64>() catch NumberError.OVERFLOW default "ovf" catch NumberError.INVALID default "inv" }
+fn u64of(x F64) String { return try $x.Narrow<U64>() catch NumberError.OVERFLOW default "ovf" catch NumberError.INVALID default "inv" }
+fn i32of32(x F32) String { return try $x.Narrow<I32>() catch NumberError.OVERFLOW default "ovf" catch NumberError.INVALID default "inv" }
+fn u8of(x F64) String { return try $x.Narrow<U8>() catch NumberError.OVERFLOW default "ovf" catch NumberError.INVALID default "inv" }
+fn f32of(x F64) String { return try $x.Narrow<F32>() catch NumberError.OVERFLOW default "ovf" }
+fn f16of(x F64) String { return try $x.Narrow<F16>() catch NumberError.OVERFLOW default "ovf" }
+fn i8ofu64(x U64) String { return try $x.Narrow<I8>() catch NumberError.OVERFLOW default "ovf" }
+fn u64ofi64(x I64) String { return try $x.Narrow<U64>() catch NumberError.OVERFLOW default "ovf" }
+fn i64ofu64(x U64) String { return try $x.Narrow<I64>() catch NumberError.OVERFLOW default "ovf" }
+
+fn all(z F64, k I64) String {
+    return ($i64of(z + 9223372036854775807.0) " " $i64of(z - 9223372036854775808.0) " " $i64of(z + 9223372036854774784.0) " "
+            $u64of(z + 18446744073709551615.0) " " $u64of(z + 18446744073709549568.0) " " $u64of(z - 0.5) " " $u64of(z - 1.0) " "
+            $i32of32(F32(z) + F32(2147483648.0)) " " $i32of32(F32(z) - F32(2147483648.0)) " " $i32of32(F32(z) + F32(2147483520.0)) " "
+            $u8of(z + 255.9) " " $u8of(z + 256.0) " " $u8of(z - 0.9) " " $u8of(z + Inf) " " $u8of(z + NaN) " "
+            $f32of(z + 1e300) " " $f32of(z + Inf) " " $f32of(z + NaN) " " $f32of(z + 3.4028235e38) " " $f16of(z + 65504.0) " " $f16of(z + 65520.0) " " $f16of(z + 65519.0) " "
+            $i8ofu64(U64(k) + 127) " " $i8ofu64(U64(k) + 128) " " $u64ofi64(k - 1) " " $i64ofu64(U64(k) + 9223372036854775808))
+}
+
+Baked := all(0.0, 0)
+
+fn main() {
+    io.Println(Baked)!
+    io.Println(all(LiveF, LiveI))!
+}

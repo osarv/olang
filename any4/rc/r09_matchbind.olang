@@ -1,0 +1,29 @@
+type K struct(s String&) { s }
+type KL struct(l Lab&) { l }
+type HS struct(s String&) { s }
+type Lab extends String
+# RetCopy: a borrow of the returned local kept through a match binding pushed outward
+type E enum {
+    T(s String&)
+    N
+}
+fn f(l mut List<String&>&, i I64) String {
+    s := "abc" $i
+    e := E.T(s)
+    match e {
+        case E.T(q) { l.Push(q) }
+        nomatch { }
+    }
+    return s
+}
+fn probe() String {
+    l := List<String&>()
+    x := f(l, 1)
+    x[0] = 'Q'
+    return "l " $l " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}

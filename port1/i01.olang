@@ -1,0 +1,21 @@
+# a call cycle: what a body keeps (stores into its argument) known only through the other member of the cycle
+import "std/io"
+import "churn"
+fn a(l mut List<String&>&, s String&, n I64) {
+    if n > 0 { b(l, s, n - 1) }
+}
+fn b(l mut List<String&>&, s String&, n I64) {
+    if n % 2 == 0 { l.Push(s) }
+    a(l, s, n)
+}
+fn main() ? io.IoError {
+    keep mut List<String&>& = List<String&>()
+    for i in range 3 {
+        t := $i "-cycle"
+        a(keep, t, 3)
+    }
+    c := churn.Churn()
+    s := ""
+    for x in keep { s = $s $x }
+    try io.Println($c " " $s)
+}

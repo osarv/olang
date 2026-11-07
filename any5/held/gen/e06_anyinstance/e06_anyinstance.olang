@@ -1,0 +1,39 @@
+import "std/io"
+# decision 1: a function returning "a as Lab" of an any (its instance's copy, E32/T34) - is it new storage?
+type Lab extends String
+type W trait for Lab {
+    mut Bump()
+}
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn inst(a any W&) Lab { return a as Lab }
+fn probe(i I64) String {
+    b mut any W& = Lab("abc" $i)
+    x := inst(b)
+    x[1] = 'Q'
+    c mut any W& = inst(b)
+    c.Bump()
+    return "b " $(b as Lab) " x " $x " c " $(c as Lab)
+}
+G := probe(1)
+fn main() {
+    say("run:   " $probe(1))
+    say("baked: " $G)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

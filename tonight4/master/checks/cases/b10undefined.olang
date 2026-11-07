@@ -1,0 +1,13 @@
+# check: fail error[B10]: unknown name 'Profile' - if it is a build constant, define it with '-D Profile=VALUE', or declare it with a default
+# also: error[B10]: unknown name 'Mode' - if it is a build constant, define it with '-D Mode=VALUE'
+# B10: a condition naming a name nothing declares, and nothing is near, most likely means a build constant -D did not
+# define - at the top level (decided by B9c) and in a function
+if Profile == "prod" {
+    Port := 443
+} else {
+    Port := 8080
+}
+
+fn main() ? {
+    if Mode == "fast" { }
+}

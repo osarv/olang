@@ -1,0 +1,32 @@
+# Vec phase 2a, relaxations a/d/e (O33/O34): a Vec field of an OWNED object ('p.lx.toks', lx 'own mut Lexer&') keeps what
+# its elements refer to in that object's region R - Push's obligations build "$i ..." there - but ownValuePlaceReach asks
+# ownReachOfBase(p.lx), which answers R's own reach (where p keeps its references: this block). So 'take p.lx.toks' is
+# taken to refer only to this block, and moving it into another object's field of the same reach is accepted. Releasing
+# p.lx then frees R, and the moved Vec's elements name freed text.
+#   -b -d -s: "use after scope closed" (134)    -i: 0-word-built-in-the-lexer's-region    -b: churn text (silent)
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    p := Parser()
+    p.lx = Lexer()
+    for i in range 3 { p.lx.toks.Push($i "-word-built-in-the-lexer's-region") }
+    d := Parser()
+    d.lx = Lexer()
+    q := p.lx
+    d.lx.toks = take q.toks
+    p.lx = null                          # releases R, where the words were built
+    churn()
+    println(d.lx.toks[0])
+}

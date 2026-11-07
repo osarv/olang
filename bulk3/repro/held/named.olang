@@ -1,0 +1,46 @@
+import "std/io"
+
+Log mut I64 = 0
+fn g(k I64) I64 {
+    Log = Log * 10 + k
+    return k
+}
+type E error { BAD }
+fn h(k I64) I64 ? E {
+    if k == 9 { error E.BAD }
+    return g(k)
+}
+
+fn f(a I64, b I64 = 2, c I64 = 3, d I64 = 4) I64 { return a * 1000 + b * 100 + c * 10 + d }
+
+type Shape trait { Area(scale I64 = 1, off I64 = 0) I64 }
+type Sq struct(s I64) { s }
+fn (q Sq&) Area(scale I64 = 1, off I64 = 0) I64 { return q.s * q.s * scale + off }
+
+type Cfg struct(host I64, port I64 = 80, tries I64 = 3) { host, port, tries }
+
+fn pick<T>(a T, b T = 0, flag Bool = false) T { return b if flag else a }
+
+fn tryit() I64 ? E {
+    return f(g(1), d = try h(4), b = try h(2), c = g(3))
+}
+
+Baked := f(1, d = g(4), c = g(3))
+
+fn main() {
+    Log = 0
+    r := f(g(1), d = g(4), b = g(2), c = g(3))
+    io.Println($r " " $Log)!
+    Log = 0
+    r2 := tryit()!
+    io.Println($r2 " " $Log)!
+    Log = 0
+    r3 := try f(g(1), d = h(4), c = h(9), b = g(2)) catch default -1
+    io.Println($r3 " " $Log)!
+    s any Shape& = Sq(3)
+    io.Println($s.Area(off = g(7), scale = g(2)) " " $Log)!
+    c := Cfg(g(5), tries = g(6))
+    io.Println($c " " $Log)!
+    io.Println($pick(4, flag = true) " " $pick(4, flag = true, b = 8))!
+    io.Println($Baked)!
+}

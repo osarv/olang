@@ -1,0 +1,27 @@
+# T21: fn?& null, narrowing, f!, a declared function type, in the run and the evaluator
+import "std/io"
+
+type Handler fn(x I64) I64
+type rec struct(h Handler?& = null, g fn?&(x I64) I64 = null) { h, g }
+
+fn twice(x I64) I64 { return 2 * x }
+
+fn call(h Handler?&, x I64) I64 {
+    if h is null: return -1
+    return h(x)
+}
+
+R := rec()
+RV := call(R.h, 3)
+RT := call(twice, 3)
+assert RV == -1 and RT == 6
+
+fn main() {
+    r := rec()
+    io.Println("run " $call(r.h, 3) " " $call(twice, 3) " baked " $RV " " $RT)!
+    io.Println("render " $r)!
+    g fn?&(x I64) I64 = twice
+    io.Println("g! " $g!(4))!
+    r2 := rec(twice, twice)
+    io.Println("eq " $(r2.h == r2.h) " " $(r == rec()))!
+}

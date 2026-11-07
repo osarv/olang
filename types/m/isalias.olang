@@ -1,0 +1,8 @@
+# E32/M12: the enum named after 'is' is never resolved - only its last two identifiers are compared by name
+import "lib"
+import "other"
+import "std/io"
+fn main() ? {
+  d := lib.Dir.North
+  try io.Print($(d is other.Dir.North) " " $(d is nosuchalias.Dir.North) " " $(d is a.b.c.Dir.North) "\n")
+}

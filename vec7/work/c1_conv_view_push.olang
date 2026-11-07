@@ -1,0 +1,8 @@
+# T29a retype in place: a converted view of a Vec holds the Vec's loan - a push while it lives
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    s := String(v.View())
+    for i in range 100 { v.Push('b') }
+    println(s)
+}

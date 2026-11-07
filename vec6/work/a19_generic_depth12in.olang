@@ -1,0 +1,55 @@
+type L0<T> struct() {
+    toks Vec<T> = Vec<T>()
+}
+type L1<T> struct() {
+    x L0<T> = L0<T>()
+}
+type L2<T> struct() {
+    x L1<T> = L1<T>()
+}
+type L3<T> struct() {
+    x L2<T> = L2<T>()
+}
+type L4<T> struct() {
+    x L3<T> = L3<T>()
+}
+type L5<T> struct() {
+    x L4<T> = L4<T>()
+}
+type L6<T> struct() {
+    x L5<T> = L5<T>()
+}
+type L7<T> struct() {
+    x L6<T> = L6<T>()
+}
+type L8<T> struct() {
+    x L7<T> = L7<T>()
+}
+type L9<T> struct() {
+    x L8<T> = L8<T>()
+}
+type L10<T> struct() {
+    x L9<T> = L9<T>()
+}
+type L11<T> struct() {
+    x L10<T> = L10<T>()
+}
+type L12<T> struct() {
+    x L11<T> = L11<T>()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    o := L12<I64>()
+    for i in range 3 { o.x.x.x.x.x.x.x.x.x.x.x.x.toks.Push(i + 1) }
+    c := o
+    for i in range 100 { c.x.x.x.x.x.x.x.x.x.x.x.x.toks.Push(i) }
+    churn()
+    println($o.x.x.x.x.x.x.x.x.x.x.x.x.toks[0])
+}

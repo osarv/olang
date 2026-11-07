@@ -1,0 +1,19 @@
+type K struct(s String&) { s }
+type KL struct(l Lab&) { l }
+type HS struct(s String&) { s }
+type Lab extends String
+# RetCopy: the returned local and a struct holding a borrow of it returned together
+fn f(i I64) String, HS {
+    s := "abc" $i
+    return s, HS(s)
+}
+fn probe() String {
+    a, h := f(1)
+    a[0] = 'Q'
+    return "a " $a " h.s " $h.s
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}

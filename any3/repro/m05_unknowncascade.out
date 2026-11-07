@@ -1,0 +1,12 @@
+== build -debug -sanitize
+m05_unknowncascade.olang:11:11: error: unknown type 'Tow'
+   11 | fn (b Box<Tow<I64, I64>>&) Describe() String { return "nope" }
+      |           ^~~~~~~~~~~~~
+m05_unknowncascade.olang:12:18: error[M21]: 'Describe' is declared twice for Box<I64> - declare one per instance
+   12 | fn (b Box<I64>&) Describe() String { return "exact " $b.v }
+      |                  ^~~~~~~~
+m05_unknowncascade.olang:11:28: note: 'Describe' is declared here
+   11 | fn (b Box<Tow<I64, I64>>&) Describe() String { return "nope" }
+      |                            ^~~~~~~~
+compilation failed with 2 errors
+== build

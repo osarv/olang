@@ -1,0 +1,18 @@
+# NEW in 7345ff9, CONFIRMED (memory, minor). A join reaching a Str in a loop condition: what the builder outgrows
+# stays in the enclosing block's arena (cap 64 -> want 1000 -> 2000), beside the text itself, every iteration.
+# Temporaries in a loop condition accumulating is pre-existing; the builder triples it.
+# 200,000 iterations, ~1KB text, peak RSS: new 826,720 KB; d6c7f52 207,928 KB; d0abfe8 207,928 KB. Output 200000.
+type Big struct(n I64) {
+    n
+}
+fn (b Big&) Str() String {
+    sb := StringBuilder()
+    for i in range 100 { sb.Push("0123456789") }
+    return sb.ToString()
+}
+fn main() ? {
+    b := Big(1)
+    i I64 = 0
+    for ($b " " $i).Len() > 0 and i < 200000 { i++ }
+    println($i)
+}

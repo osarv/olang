@@ -1,0 +1,17 @@
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    v.Push('a')
+    t String&v = String(v.View())
+    for i in range 1000 { v.Push('b') }
+    churn()
+    println(t)
+}

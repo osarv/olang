@@ -1,0 +1,22 @@
+# '$' of a conversion retyped in place - a conditional of array references: built vs interpreted vs baked
+fn r(k I64) String& {
+    a mut Array<Char>& = Array<Char>(2, 'a')
+    b mut Array<Char>& = Array<Char>(2, 'b')
+    return $String(a if k > 0 else b)
+}
+fn rv(k I64) String& {
+    v := Vec<Char>()
+    v.Push('v')
+    return $String(v.View() if k > 0 else v.View()[0:0])
+}
+Baked String& = r(1)
+BakedV String& = rv(1)
+fn main() ? {
+    println(r(1))
+    println(Baked)
+    println(rv(1))
+    println(BakedV)
+    a mut Array<Char>& = Array<Char>(2, 'a')
+    println($String(a))
+    println($a)
+}

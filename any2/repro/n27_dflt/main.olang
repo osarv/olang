@@ -1,0 +1,15 @@
+import "std/io"
+import "tr"
+type Btn struct(n I64) { n }
+fn (b Btn&) Draw(scale I64 = 1, tag String& = "own") String { return $(b.n * scale) " " $tag }
+fn say(s String&) { try io.Println(s) catch { } }
+fn drawn(n I64) String {
+    b := Btn(n)
+    w any tr.Drawn& = b
+    xs := List<String&>()
+    for i in range 3 { xs.Push(w.Draw()) }
+    return $xs " " $w.Draw(3) " " $b.Draw()
+}
+fn main() {
+    say(drawn(2))
+}

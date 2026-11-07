@@ -1,0 +1,118 @@
+import "std/io"
+
+type PE error { Bad(n I64, s String), Plain }
+type QE error { Q(t String) }
+
+Live mut I64 = 0
+
+fn raise(n I64) I64 ? PE {
+    if n == 0: error PE.Plain
+    error PE.Bad(n, "b" $n)
+}
+
+fn raiseQ(n I64) I64 ? QE {
+    error QE.Q("q" $n)
+}
+
+# a defer that catches its own payload error while another is in flight
+fn inflight(n I64) I64 ? PE {
+    defer {
+        x := try raiseQ(n + 100) catch QE default 0
+        io.Println("defer saw " $x)!
+    }
+    return try raise(n)
+}
+
+# an errdefer catching a different error while the first propagates
+fn inflight2(n I64) I64 ? PE {
+    errdefer {
+        try raiseQ(n) catch QE e {
+            io.Println("errdefer " $e)!
+        }
+    }
+    return try raise(n)
+}
+
+# a clause that raises a new payload error of the same type
+fn rethrow(n I64) I64 ? PE {
+    return try raise(n) catch PE e {
+        error PE.Bad(n * 10, "re" $e)
+    }
+}
+
+# a clause taking several types, no name
+fn several(n I64) I64 {
+    v := try raiseQ(n) if n > 5 else raise(n) catch default -1
+    return v
+}
+
+fn several2(n I64) I64 {
+    return try raiseQ(n) + raise(n) catch default -2
+}
+
+fn gen(n I64) Iterator<I64 ? PE> {
+    for i in range n {
+        if i == 2: error PE.Bad(i, "gen")
+        yield i
+    }
+}
+
+fn walk(n I64) String {
+    out := ""
+    for x in try gen(n) {
+        out = $out $x ","
+    } catch PE e {
+        out = $out "caught " $e
+    }
+    return out
+}
+
+fn tasks(base I64) String {
+    out := Array<I64>(4)
+    join {
+        for i in range 4 {
+            spawn out[i] = try raise(base + i) catch PE default -1
+        }
+    }
+    return $out
+}
+
+fn tasks2(base I64) String {
+    out := Array<I64>(4)
+    try join {
+        for i in range 4 {
+            spawn out[i] = try raise(base + 3 - i)
+        }
+    } catch PE e {
+        return "join " $e
+    }
+    return $out
+}
+
+fn main() {
+    a := try inflight(Live + 3) catch PE default 0
+    io.Println("1 " $a)!
+    try inflight(Live + 3) catch PE e {
+        io.Println("1b " $e)!
+    }
+    try inflight2(Live + 4) catch PE e {
+        io.Println("2 " $e)!
+    }
+    try rethrow(Live + 5) catch PE e {
+        io.Println("3 " $e)!
+    }
+    io.Println("4 " $several(Live + 3) " " $several(Live + 7) " " $several2(Live + 1))!
+    try raise(Live + 9) catch PE e {
+        io.Println("5 " $e)!
+    }
+    io.Println("6 " $walk(Live + 5))!
+    io.Println("7 " $tasks(Live + 1))!
+    io.Println("8 " $tasks2(Live + 1))!
+    for i in range 3 {
+        try raise(Live + i) catch PE.Bad e {
+            io.Println("9 " $e.n " " $e.s)!
+        } catch PE e {
+            io.Println("9 plain " $e)!
+        }
+    }
+}

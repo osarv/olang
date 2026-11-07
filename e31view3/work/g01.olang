@@ -1,0 +1,36 @@
+# F3's handle copy in unusual frames: a constructor's top level, a Str, a destructor, a lambda, a task
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type C struct(ll List<List<I64>>&) {
+    n := ll[0].Len()
+    m I64 = ll[0][1]
+}
+type W struct(ll List<List<I64>>&) {
+    ll
+}
+type D struct(ll List<List<I64>>&) {
+    ll
+} destruct { println("d " $ll[0].Len() " " $ll[0][1]) }
+fn main() ? {
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    ll[0].Push(5)
+    ll[0].Push(6)
+    c := C(ll)
+    println("c " $c.n " " $c.m)
+    w := W(ll)
+    println("w " $w.ll[0].Len())
+    d := D(ll)
+    churn()
+    f := fn() I64 { return ll[0].Len() + ll[0][0] }
+    println("f " $f())
+    out := Array<I64>(3)
+    join {
+        for i in range 3 { spawn out[i] = fn() I64 { return ll[0][1] + ll[0].Len() }() }
+    }
+    println($out)
+}

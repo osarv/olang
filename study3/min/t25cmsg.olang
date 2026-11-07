@@ -1,0 +1,9 @@
+type Item struct(name String&) { name }
+fn first(l List<Item&>&) Item& {
+    return l[0]
+}
+fn main() ? {
+    l := List<Item&>()
+    l.Push(Item("a"))
+    println(first(l).name)
+}

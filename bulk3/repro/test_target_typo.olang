@@ -1,0 +1,6 @@
+type Box struct(v I64) { v }
+fn (b Box&) Get() I64 { return b.v }
+fn add(a I64, b I64) I64 { return a + b }
+test add "adds" { assert add(1, 2) == 3 }
+test Box.Get "gets" { assert Box(3).Get() == 3 }
+test "plain" { assert true }

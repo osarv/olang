@@ -1,0 +1,42 @@
+# NEW (91ab3ba). A correct program is refused with an internal compiler error.
+# A closure takes a borrowed result from a callee that builds nothing - 'find', so the call hands it the captured scope
+# read-only (capReadOnly) - and gives a 'catch default' that builds a node. codegen builds the default where the call's
+# result lives (cgTrySlotType -> op->cgResultScope), which is that very read-only resolution: the build is recorded
+# against the captured scope, which the prologue never asked for, and cgCheckMayBuild stops the build.
+# The fixture's shape ('a.next = try find(a) catch default Node(i)') passes only because storing into 'a.next' resolves
+# the captured scope a second time, for writing. Here the result goes into a ':=' local; an argument
+# ('rd(try find(a) catch default Node(i))') or a condition ('if (try find(a) catch default Node(i)).v == -3') does the same.
+#   expected: builds; prints "0 0 299999" (as -i does, with smaller counts)
+#   actual:   "olang: internal compiler error: 'lambda$1' builds into a scope it was handed where the checker found it
+#             builds nothing (P2, SemanticMayBuild) - a bug in the compiler, not in the program"
+#   45eea97:  builds, and races: -r reports 36 data races (__olang_scope_alloc_a from the task vs main) - tonight8's F1
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn find(n mut Node&) mut Node&n ? {
+    if n.v >= 0 { error }
+    return n
+}
+fn work(f fn(i I64), n I64) {
+    for i in range n { f(i) }
+}
+fn main() ? {
+    a mut Node& = Node(0)
+    b mut Node& = Node(0)
+    fa := fn(i I64) {
+        x := try find(a) catch default Node(i)
+        if x.v == -5 { println("never") }
+    }
+    fb := fn(i I64) {
+        x := try find(b) catch default Node(i)
+        if x.v == -5 { println("never") }
+    }
+    c mut Node& = Node(0)
+    join {
+        spawn work(fa, 300000)
+        spawn work(fb, 300000)
+        for i in range 300000 { c.next = Node(i) }
+    }
+    println($a.v " " $b.v " " $c.next.v)
+}

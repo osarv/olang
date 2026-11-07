@@ -1,0 +1,39 @@
+# NEW (the forwarding stand-ins). __olang_scope_merge(dst, src) does not resolve dst. When dst is a stand-in that was
+# folded already (its head is @__olang_fwd_chunk), a later fold into it splices src's chunks and destructor nodes into
+# that stand-in instead of into the scope it forwards to. The stand-in stops forwarding (its head is no longer the
+# sentinel, its tail is still the forward pointer, and the sentinel global sits at the end of its chunk list), and the
+# stand-in is never closed. Everything later built into it - by the task, and by the main thread calling the kept
+# closure, which now allocates there directly - is never freed, and its destructors never run.
+# Shape: the closure k a first task handed back holds the first task's stand-in S1 (folded, forwarding to run's scope).
+# A second task is handed k, gets a stand-in S2 whose parent is S1, builds R(2), and S2 is folded into S1 at the join.
+#     expected: "end of run", then dtor 4, dtor 3 and dtor 2 in some order, then "after run" (master)
+#     actual:   -b, -d -s and -r: only "dtor 4" (R(2) and R(3) never destructed)
+# The same through os.RunOnStack (h3b): RunOnStack(1 << 20, k) with k kept past a join loses dtor 1 and dtor 2.
+type R struct(id I64) {
+    id
+} destruct {
+    println("dtor " $id)
+}
+type Holder struct() {
+    res mut R& = null
+}
+fn pass(f fn(i I64)) fn(i I64) { return f }
+fn call(f fn(i I64), i I64) { f(i) }
+fn run() {
+    n mut Holder& = Holder()
+    g := fn(i I64) { n.res = R(i) }
+    k fn(i I64) = g
+    join {
+        spawn k = pass(g)
+    }
+    join {
+        spawn call(k, 2)
+    }
+    k(3)
+    g(4)
+    println("end of run")
+}
+fn main() ? {
+    run()
+    println("after run")
+}

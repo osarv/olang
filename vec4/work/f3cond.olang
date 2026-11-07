@@ -1,0 +1,27 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# F1: a fresh-looking local typed to live where the parameter lives, returned through a cond
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn g2(n I64) mut String& ? {
+    if n > 3 { error }
+    return $n "-g2"
+}
+fn mk(a mut String&, n I64) mut String& {
+    out mut String&a = $n "-new-text-built-where-a-lives"
+    return out if n > 0 else $n "-x"
+}
+fn main() ? {
+    c := CB()
+    d := mk(c.text, 5)
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(d)
+}

@@ -1,0 +1,25 @@
+# a scope made ambiguous by two branches (O12/O13b) read back as 'unnamed' - and then trusted like a global's
+import "std/io"
+type Node struct(v I32) { v mut }
+type Cur struct(of Node&) { at Node&of = of }
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn pick(p Node&, q Node&, k Bool, l mut List<Node&>&) {
+    c := Cur(p)
+    if k { c = Cur(q) }
+    l.Push(c.at)
+}
+fn main() ? {
+    l List<Node&>& = List<Node&>()
+    for i in range 2 {
+        a Node& = Node(42)
+        b Node& = Node(43)
+        pick(a, b, true, l)
+    }
+    churn()
+    try io.Print($l[0].v "\n")
+}

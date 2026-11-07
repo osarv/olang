@@ -1,0 +1,13 @@
+# E10b: the supplied Hash of an enum whose payload holds a reference aborts for every other case
+import "std/io"
+type Tag enum {
+  None
+  Name(s String&)
+}
+fn main() ? {
+  a Tag = Tag.Name("ab")
+  b Tag = Tag.None
+  ha I64 = a.Hash()
+  hb I64 = b.Hash()                  # 'as' named what the value is not
+  try io.Print($(ha != hb) "\n")
+}

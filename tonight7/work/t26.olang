@@ -1,0 +1,14 @@
+type Bag struct(ls mut List<List<I64>>&) {
+    ls
+}
+fn (b Bag&) Str() String {
+    b.ls[0].Push(5)
+    return "b" $b.ls[0].Len()
+}
+fn main() ? {
+    l mut List<List<I64>>& = List<List<I64>>()
+    l.Push(List<I64>())
+    b := Bag(l)
+    println($b)
+    println($b)
+}

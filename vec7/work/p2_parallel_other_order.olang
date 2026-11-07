@@ -1,0 +1,25 @@
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+    more Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+    other own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    p := Parser()
+    p.lx = Lexer()
+    p.other = Lexer()
+    for i in range 3 { p.lx.toks.Push($i "-word-built-in-the-first-lexer") }
+    p.lx.more, p.lx = take p.lx.toks, take p.other
+    churn()
+    println($p.lx.more.Len())
+}

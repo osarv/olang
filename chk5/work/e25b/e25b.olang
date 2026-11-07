@@ -1,0 +1,29 @@
+# E25/C2d on c2a38f0: ':=' from a constructor given a scope argument judged at the local's block
+type Info struct(n I64) { n }
+type Env struct(r Info&) {
+    r
+    parent mut Env& = null
+}
+fn build(c mut Env&, keep mut List<Env&>&) {
+    for k in range 3 {
+        local := Info(k + 100)
+        x := Env&c(local)
+        keep.Push(x)
+    }
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k) * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    g := Info(1)
+    c mut Env& = Env(g)
+    keep := List<Env&>()
+    build(c, keep)
+    churn()
+    for e in keep { println($e.r.n) }
+}

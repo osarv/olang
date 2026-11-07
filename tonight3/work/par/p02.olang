@@ -1,0 +1,21 @@
+type Log struct() {
+    s mut List<I64>& = List<I64>()
+}
+fn mark(l mut Log&, k I64) I64 {
+    l.s.Push(k)
+    return k
+}
+fn run() String {
+    l := Log()
+    a := Array<I64>(4)
+    a[mark(l, 1)], a[mark(l, 2)] = mark(l, 3), mark(l, 0)
+    a[mark(l, a[2])] = mark(l, 5)
+    b := Array<I64>(4)
+    b[mark(l, 1)] += mark(l, 2)
+    return $l.s.ToArray() " " $a " " $b
+}
+B String = run()
+fn main() ? {
+    println("baked " $B)
+    println("run   " $run())
+}

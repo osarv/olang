@@ -1,0 +1,30 @@
+type Value enum {
+    Nil
+    Num(n F64)
+    Items(l mut List<Value&>&)
+}
+fn builtin(name String&, args List<Value&>&) Value {
+    if name == "len" {
+        l := args[0] as Value.Items
+        return Value.Num(F64(l.Len()))
+    }
+    if name == "push" {
+        match args[0] {
+            case Value.Items(l) { l.Push(args[1]) }
+            nomatch { }
+        }
+        l := 0
+        l.Push(args[1])
+        return Value.Nil
+    }
+    return Value.Nil
+}
+fn main() ? {
+    xs mut List<Value&>& = List<Value&>()
+    lv Value& = Value.Items(xs)
+    args := List<Value&>()
+    args.Push(lv)
+    args.Push(Value.Num(3.0))
+    builtin("push", args)
+    println($xs.Len())
+}

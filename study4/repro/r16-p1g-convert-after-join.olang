@@ -1,0 +1,22 @@
+# r16 DIAGNOSTIC - P1g with T7a: per-task results that are arrays. The results array must hold references
+# (Array<Array<I64>&>, T7a), and a task function returning the value Array<I64> cannot be its spawn target: "a spawn
+# target has exactly the call's type Array<I64>, found Array<I64>& - convert after the join". There is nothing to
+# convert into - an Array<Array<I64>> is T7a's error - and the fix is to declare the function's result Array<I64>&
+# (built) instead. Found hashing files in parallel (../dedup.olang).
+#
+# expected: a message naming the fix: "declare part's result Array<I64>&" (or accept the value into the reference
+#           slot, building it where the target lives, as an assignment would)
+# actual:   error[P1g] "... convert after the join"
+fn part(lo I64, hi I64) Array<I64> {
+    out := Array<I64>(hi - lo)
+    for i in range lo, hi { out[i - lo] = i * i }
+    return out
+}
+
+fn main() ? {
+    parts := Array<Array<I64>&>(2)
+    join {
+        for t in range 2 { spawn parts[t] = part(t * 4, t * 4 + 4) }
+    }
+    println($parts[0] " " $parts[1])
+}

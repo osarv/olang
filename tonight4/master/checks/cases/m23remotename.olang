@@ -1,0 +1,5 @@
+# check: fail may hold only letters
+# M23a: a remote import's host, owner, repository and ref are handed to git, so anything else in them is refused before
+# anything runs - this one used to run "touch PWNED" through the shell while fetching
+import "example.com/me/x'$(touch PWNED)'y/file"
+fn main() ? { }

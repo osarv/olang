@@ -1,0 +1,3 @@
+== build -debug -sanitize
+olang: error: the self-hosted compiler cannot build this yet: it does not emit not lowered: x02__nomatchonly_2ec yet
+olang: error: the self-hosted compiler cannot build this yet: x02_nomatchonly.olang:4:1: it does not lower an unknown type (a check error or gap): a local yet

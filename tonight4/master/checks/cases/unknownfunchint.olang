@@ -1,0 +1,4 @@
+# check: fail error[T4]: unknown type 'Float64'
+fn main() ? {
+    x := Float64(3)
+}

@@ -1,0 +1,4 @@
+import "std/map"
+import "map"
+error E { X }
+fn main() ? E { }

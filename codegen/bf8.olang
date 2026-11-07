@@ -1,0 +1,21 @@
+import "std/io"
+
+fn h1(x F16, y BF16) (F16, BF16) {
+    return x * F16(2.0), y + BF16(1.0)
+}
+
+fn h2(x F16, y BF16) BF16 {
+    z F16 = x * F16(2.0)
+    return y + BF16(1.0)
+}
+
+fn h3(x F16, y BF16) BF16 {
+    return y + BF16(1.0)
+}
+
+fn main() ? io.IoError {
+    a, b := h1(F16(0.25), BF16(3.0))
+    c := h2(F16(0.25), BF16(3.0))
+    d := h3(F16(0.25), BF16(3.0))
+    try io.Print($a " " $b " " $c " " $d "\n")
+}

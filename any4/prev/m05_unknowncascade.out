@@ -1,0 +1,16 @@
+== build -debug -sanitize
+m05_unknowncascade.olang:11:11: error: unknown type 'Tow'
+   11 | fn (b Box<Tow<I64, I64>>&) Describe() String { return "nope" }
+      |           ^~~~~~~~~~~~~
+compilation failed with 1 error
+== build
+m05_unknowncascade.olang:11:11: error: unknown type 'Tow'
+   11 | fn (b Box<Tow<I64, I64>>&) Describe() String { return "nope" }
+      |           ^~~~~~~~~~~~~
+compilation failed with 1 error
+== interpret
+m05_unknowncascade.olang:11:11: error: unknown type 'Tow'
+   11 | fn (b Box<Tow<I64, I64>>&) Describe() String { return "nope" }
+      |           ^~~~~~~~~~~~~
+compilation failed with 1 error
+status 1

@@ -1,0 +1,10 @@
+type Ctr struct() {
+  n I64 = 0
+}
+type B struct(c mut Ctr&) { c }
+G B = B(Ctr())
+fn apply(l B, f fn(x B)) { f(l) }
+fn main() ? {
+  apply(G, fn(x B) { x.c.n = 5 })
+  println($G.c.n)
+}

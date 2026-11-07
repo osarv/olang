@@ -1,0 +1,10 @@
+# check: fail error[G17]: this generic's instantiations never end - each one requires a larger one
+# G17: a constant argument that keeps changing never nests a type deeper - the chain of instantiations is what stops it
+fn grow(a Array<I64, <N>>&) I64 {
+    b Array<I64, N + 1>
+    return grow(b)
+}
+fn main() ? {
+    a Array<I64, 1>
+    x := grow(a)
+}

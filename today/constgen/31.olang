@@ -1,0 +1,6 @@
+# G22: a local named like a function constant var
+fn f(a Array<I64, <N>>&) I64 {
+    N := 4
+    return N
+}
+fn main() ? { println($f(I64[1, 2])) }

@@ -1,0 +1,22 @@
+Dtors mut I64 = 0
+type G<T> struct(seed T) {
+    seed
+}
+type Res struct(g G<<T>>&, n I64) {
+    n
+} destruct {
+    Dtors += n
+}
+fn mk() I64 {
+    a := G<I64>(1)
+    b := G<F64>(2.0)
+    {
+        x Res& = Res(a, 10)
+        y Res& = Res(b, 100)
+        z Res& = Res(a, 1000)
+    }
+    return Dtors
+}
+fn main() ? {
+    println($mk())
+}

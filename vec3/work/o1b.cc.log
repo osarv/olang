@@ -1,0 +1,13 @@
+/home/user/review/vec3/work/o1b.olang:16:34: error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead
+   16 | fn g(w W&) String&w { return w.r.Text() }
+      |                                  ^~~~
+/home/user/review/vec3/work/o1b.olang:22:7: error[O39]: assigning 'c.text' may release the String borrowed on line 20, which is used after it
+   22 |     c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+      |       ^~~~
+/home/user/review/vec3/work/o1b.olang:20:12: note: borrowed here
+   20 |     w := W(c)
+      |            ^
+/home/user/review/vec3/work/o1b.olang:24:13: note: used here, after it
+   24 |     println(t)
+      |             ^
+compilation failed with 2 errors

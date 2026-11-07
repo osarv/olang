@@ -1,0 +1,22 @@
+type K struct(s String&) { s }
+type KL struct(l Lab&) { l }
+type HS struct(s String&) { s }
+type Lab extends String
+# r01 with the lambda handed to a function that calls it
+fn run(g fn()) { g() }
+fn f(k mut K&, i I64) String {
+    s := "abc" $i
+    run(fn() { k.s = s })
+    return s
+}
+fn probe() String {
+    k := K("x")
+    x := f(k, 1)
+    x[0] = 'Q'
+    return "k.s " $k.s " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}

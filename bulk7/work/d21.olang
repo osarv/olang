@@ -1,0 +1,30 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+fn num(bad Bool) I64 ? Nope {
+    if bad: error Nope
+    return 4
+}
+
+fn mk(bad Bool) Res ? Nope { return Res(try num(bad)) }
+
+fn store(bad Bool) ? Nope {
+    x Res = Res(1)
+    x = try mk(bad)
+    io.Println("stored " $x.id " " $Ended)!
+}
+
+fn main() {
+    try store(true) catch Nope { }
+    io.Println("after failure " $Ended)!
+    Ended = 0
+    try store(false) catch Nope { }
+    io.Println("after success " $Ended)!
+}

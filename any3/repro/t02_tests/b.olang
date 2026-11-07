@@ -1,0 +1,11 @@
+# a root whose tests reach a default through helper's any, built after a.olang reused helper's object (B3i)
+import "helper"
+test "b counts through the table" {
+    assert helper.Make(5).Count(fn(x I64) Bool { return x > 2 }) == 3
+}
+test "b folds through the table" {
+    assert helper.Make(4).Fold(0, fn(a I64, x I64) I64 { return a + x }) == 10
+}
+test "b maxes" {
+    assert (try helper.Make(4).Max() catch default -1) == 4
+}

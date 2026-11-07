@@ -1,0 +1,9 @@
+# S12b (outside the any work, found by the differential fuzzer, seed 9639): a value match whose only clause is a
+# nomatch is typed unknown with no error - lowering then stops with an internal gap
+fn c(x0 I8) I8 {
+    a := match x0 { nomatch => I8(x0) }
+    return a
+}
+fn main() {
+    say($c(100))
+}

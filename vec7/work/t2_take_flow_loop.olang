@@ -1,0 +1,25 @@
+type Lex struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn mk() Vec<String&> {
+    w := Vec<String&>()
+    for k in range 2 {
+        l := Lex()
+        for i in range 3 { l.toks.Push($(i + k * 10) "-word-in-a-loop-body-local") }
+        w = take l.toks
+    }
+    return w
+}
+fn main() ? {
+    a := mk()
+    churn()
+    println(a[0])
+}

@@ -1,0 +1,33 @@
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    items Array<mut Node&, 2>
+}
+type W struct(b Box) { b }
+fn bump(src mut W&) {
+    b := src.b
+    for x in b.items {
+        x.next = Node()
+        x.next.v = 42
+    }
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        q := Array<I64>(64, -7)
+        t += q[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box())
+    w.b.items[0] = Node()
+    w.b.items[1] = Node()
+    bump(w)
+    churn()
+    println($w.b.items[0].next.v " " $w.b.items[1].next.v)
+}

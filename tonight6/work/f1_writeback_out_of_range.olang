@@ -1,0 +1,42 @@
+# NEW heap corruption (E31b): "v[0].Shrink(v)" reads v[0] into a hidden copy, calls Shrink on it, then writes the copy
+# back with SetAt(0, copy) - against v as it is AFTER the call. Shrink replaced v's storage with an empty array, so the
+# compiler-made write back indexes past it and overwrites whatever was allocated next (here v.other). The program never
+# indexed out of range: v[0] was valid when written.
+#   expected: v.other is 7 7 7 7 (or the write back rejected / checked)
+#   actual:   -b, -b -s, -b -d -s: "other I64[555, 666, 777, 888]" - the copy's fields E..H written into v.other
+#             -i: "olang -i: ...:21: it indexes outside the array, which is undefined at run time" (the SetAt line)
+#   a2e2878: builds and prints 7 7 7 7 (the copy was simply dropped - r02's lost write).
+type Big struct() {
+    A I64 = 0
+    B I64 = 0
+    C I64 = 0
+    D I64 = 0
+    E I64 = 0
+    F I64 = 0
+    G I64 = 0
+    H I64 = 0
+}
+type Vec struct() {
+    data mut Array<Big>& = Array<Big>(1)
+    other mut Array<I64>& = Array<I64>(4, 7)
+}
+fn (v Vec&) At(i I64) Big { return v.data[i] }
+fn (v mut Vec&) SetAt(i I64, x Big) { v.data[i] = x }
+fn (v Vec&) Len() I64 { return v.data.Len() }
+fn (b mut Big&) Shrink(v mut Vec&) {
+    b.A = 111
+    b.B = 222
+    b.C = 333
+    b.D = 444
+    b.E = 555
+    b.F = 666
+    b.G = 777
+    b.H = 888
+    v.data = Array<Big>(0)
+    v.other = Array<I64>(4, 7)
+}
+fn main() ? {
+    v := Vec()
+    v[0].Shrink(v)
+    println("len " $v.Len() " other " $v.other)
+}

@@ -1,0 +1,40 @@
+# O26a copiedRead: copies of a parameter's value, a global's, and a field read, returned by reference
+import "std/io"
+
+type node struct(v I64, next node?& = null) { v, next }
+
+G := node(7)
+
+fn fromParam(p node) node& {
+    cur := p
+    cur.v += 1
+    return cur
+}
+
+fn fromGlobal() node& {
+    cur := G
+    cur.v += 100
+    return cur
+}
+
+fn fromField(h node&) node& {
+    cur node = h.next!
+    cur.v += 1000
+    return cur
+}
+
+fn churn() I64 {
+    junk := Vec<String>()
+    for i in range 2000 { junk.Push($i "abcdefghijklmnopqrstuvwxyz") }
+    return junk.Len()
+}
+
+fn main() {
+    x := node(1)
+    h := node(2, node(3))
+    a := fromParam(x)
+    c := fromGlobal()
+    d := fromField(h)
+    n := churn()
+    io.Println($a.v " " $c.v " " $d.v " / " $x.v " " $G.v " " $h.next!.v " " $n)!
+}

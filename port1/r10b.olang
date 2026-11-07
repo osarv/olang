@@ -1,0 +1,18 @@
+# D9a / T7b: r10 with the payload written as Array<Char> (refused by stage 0), made in a function and kept
+import "std/io"
+import "churn"
+type E enum {
+    A(s Array<Char>)
+    N
+}
+fn wrap(i I64) E { return E.A($i "-payload-text-long-enough") }
+fn main() ? io.IoError {
+    e := wrap(1)
+    for i in range 3 { e = wrap(i + 5) }
+    c := churn.Churn()
+    m := match e {
+        case E.A(s) => $s
+        case E.N => "none"
+    }
+    try io.Println($c " " $m)
+}

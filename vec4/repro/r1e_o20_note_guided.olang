@@ -1,0 +1,28 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# class R reached by following O20's note for the program in s17a: "build it where the container lives ('x T&c')" -
+# the container is b, a borrow of an owned Box, so the text is built in the Box's region, which "c.box = Box()" frees
+type Box struct() {
+    s mut String& = "none"
+}
+type CB struct() {
+    box own mut Box& = Box()
+}
+fn main() ? {
+    c := CB()
+    b := c.box
+    last mut String&b = "none"
+    for i in range 3 {
+        last = $i "-new-text-built-where-the-box-lives"
+        b.s = last
+    }
+    c.box = Box()
+    churn()
+    println(last)
+}

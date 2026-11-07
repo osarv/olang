@@ -1,0 +1,10 @@
+# round 8: does a local Map's growth release the slots it replaced? (a probe)
+import "std/io"
+
+type blk struct(n I64, m I64) { n, m }
+
+fn main() {
+    m := Map<I64, blk>()
+    for i in range 2000000 { m.Put(i, blk(i, i)) }
+    io.Println($m.Get(5)!.n)!
+}

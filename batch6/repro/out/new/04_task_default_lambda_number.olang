@@ -1,0 +1,35 @@
+# OVER-REJECTION, NEW in decision 50 (9802fc3): a task's default holding a lambda that captures only a number is
+# refused as naming existing storage (P4a). A lambda capturing no reference is a temporary built where it lands (D16d).
+#   6af6a4e: error[P4a] at the lambda
+error E {
+    NEG
+}
+type Node struct(v I64) {
+    v
+}
+type FBox struct(f fn(x I64) I64) {
+    f
+}
+fn getF(n I64) FBox ? E {
+    if n < 0 { error E.NEG }
+    return FBox(fn(x I64) I64 { return x * 2 })
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+        nn := Node(i)
+        t = t + nn.v
+    }
+    return t
+}
+fn main() ? {
+    b FBox = FBox(fn(x I64) I64 { return x })
+    join {
+        k I64 = 41
+        spawn b = try getF(-1) catch default FBox(fn(x I64) I64 { return x + k })
+    }
+    churn()
+    println($b.f(1))
+}

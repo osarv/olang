@@ -1,0 +1,29 @@
+fn churnIt() {
+    for k in range 300 {
+        junk := $k "-churn-churn-churn-churn-churn-churn-churn-churn-churn-churn"
+        assert junk.Len() > 0
+    }
+}
+type State struct() {
+    n I64 = 0
+}
+type Bag struct() {
+    s mut State& = State()
+}
+fn (b mut Bag&) Add(v I64) { b.s.n = b.s.n + v }
+fn (b mut Bag&) Reset() { b.s = State() }
+fn (b mut Bag&) Swap(o Bag) { b.s = o.s }
+fn (b Bag&) Total() I64 { return b.s.n }
+fn resetFn(b mut Bag&) { b.s = State() }
+fn main() ? {
+    bags := List<Bag>()
+    bags.Push(Bag())
+    for k in range 3 {
+        bags[0].Add(5)
+        bags[0].Reset()
+        resetFn(bags[0])
+        bags[0].Swap(Bag())
+    }
+    churnIt()
+    println($bags[0].Total())
+}

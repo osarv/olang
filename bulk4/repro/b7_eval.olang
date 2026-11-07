@@ -1,0 +1,25 @@
+import "std/io"
+
+type P struct(x I64) { x }
+
+fn f(p P&, acc I64, n I64) I64 {
+    if n == 0 { return acc + p.x }
+    become f(p, acc + n, n - 1)
+}
+
+fn ev(n I64) Bool {
+    if n == 0 { return true }
+    become od(n - 1)
+}
+fn od(n I64) Bool {
+    if n == 0 { return false }
+    become ev(n - 1)
+}
+
+X := f(P(5), 0, 10000)
+assert X == 50005005
+assert ev(100000)
+
+fn main() {
+    io.Println($X " " $f(P(5), 0, 10000) " " $ev(100001))!
+}

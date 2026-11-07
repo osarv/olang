@@ -1,0 +1,7 @@
+# check: fail unknown type 'Nope'
+# never: is not a trait
+# G19: an unknown name in a constraint is one error - the stand-in type it recovers with is never named
+fn f(m <V Nope>&) I64 { return 1 }
+fn main() ? {
+    println("x")
+}

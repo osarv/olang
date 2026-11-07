@@ -1,0 +1,13 @@
+/home/user/review/vec7/work/l2_destructure_copy_part.olang:8:16: error[O31]: Lexer owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value: write Lexer&, or 'own mut Lexer&' to own one
+    8 | fn two(i I64) (Lexer, I64) { return Lexer(i), i }
+      |                ^~~~~
+/home/user/review/vec7/work/l2_destructure_copy_part.olang:14:16: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   14 |         c.a, k = two(i)
+      |                ^
+/home/user/review/vec7/work/l2_destructure_copy_part.olang:15:13: error[T25c]: a read-only copy cannot be passed where it may be written - pass one of its own, made with 'Clone()'
+   15 |         c.a.toks.Push(k)
+      |             ^~~~
+/home/user/review/vec7/work/l2_destructure_copy_part.olang:12:9: note: 'c' copies a place reached read-only, so it is read-only
+   12 |         c := t
+      |         ^
+compilation failed with 3 errors

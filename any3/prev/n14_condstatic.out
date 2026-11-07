@@ -1,0 +1,29 @@
+== build -debug -sanitize
+n14_condstatic.olang:21:17: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   21 |         xs.Push(Rows(a if i >= 0 else a))
+      |                 ^~~~
+n14_condstatic.olang:23:17: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   23 |         xs.Push(Rows(match i { case 99 => b case _ => b }))
+      |                 ^~~~
+n14_condstatic.olang:25:42: error[R11]: a default for a value holding references builds all it holds - a constructor call of numbers and written text, as 'List<String&>()'
+   25 |         xs.Push(try bad(i) catch default d)
+      |                                          ^
+n14_condstatic.olang:25:17: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   25 |         xs.Push(try bad(i) catch default d)
+      |                 ^~~
+compilation failed with 4 errors
+== build
+n14_condstatic.olang:21:17: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   21 |         xs.Push(Rows(a if i >= 0 else a))
+      |                 ^~~~
+n14_condstatic.olang:23:17: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   23 |         xs.Push(Rows(match i { case 99 => b case _ => b }))
+      |                 ^~~~
+n14_condstatic.olang:25:42: error[R11]: a default for a value holding references builds all it holds - a constructor call of numbers and written text, as 'List<String&>()'
+   25 |         xs.Push(try bad(i) catch default d)
+== interpret
+n14_condstatic.olang:25:42: error[R11]: a default for a value holding references builds all it holds - a constructor call of numbers and written text, as 'List<String&>()'
+   25 |         xs.Push(try bad(i) catch default d)
+      |                                          ^
+compilation failed with 1 error
+status 1

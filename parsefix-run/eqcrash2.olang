@@ -1,0 +1,4 @@
+test "x" {
+    b String& = "x"
+    assert b == null or missing == b
+}

@@ -1,0 +1,39 @@
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn mkNode() mut Node& {
+    n := Node()
+    n.v = 42
+    return n
+}
+fn two() (mut Node&, I64) { return mkNode(), 5 }
+fn grow(b mut Box&) {
+    k I64 = 0
+    b.head.next, k = mkNode(), 5
+}
+fn bump(src mut W&) {
+    b := src.b
+    grow(b)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box())
+    bump(w)
+    churn()
+    println($w.b.head.next.v)
+}

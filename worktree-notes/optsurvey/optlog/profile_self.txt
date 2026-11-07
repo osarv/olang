@@ -1,0 +1,59 @@
+built /tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/regex.bin
+
+olang profile: compiler_olang - 103 samples, 0.428 s of CPU time on 6 threads
+
+   self   total  function
+   11.0%  11.0%  __memcpy_avx512_unaligned_erms
+    9.1%   9.1%  json.spaceEnd
+    7.5%  20.6%  __olang_scope_alloc_a
+    7.5%   7.5%  sysmalloc
+    4.2%   4.2%  __libc_read
+    3.0%   4.9%  __olang_pool_give_list
+    2.8%  13.1%  __olang_new_chunk
+    2.8%   4.7%  bindgen.gen.track
+    2.8%   2.8%  __GI_mprotect
+    2.8%   2.8%  build.rotr
+    2.6%   4.4%  json.reader.string
+    1.9%   2.8%  emit.fnEm.w
+    1.9%   2.6%  emit.foldSlots
+    1.9%   1.9%  String.Eq
+    1.9%   1.9%  __olang_pool_keep
+    1.6%   1.6%  String.Hash
+    1.6%   1.6%  parse.Parser.skipFrom
+    0.9%  27.1%  json.reader.run
+    0.9%   6.8%  json.reader.close
+    0.9%   3.7%  build.Sha256.compress
+    0.9%   3.7%  emit.fnEm.let
+    0.9%   3.7%  lower.lowering.run
+    0.9%   1.9%  emit.Emitter.constText
+    0.9%   0.9%  0x5572ffdd1210 (compiler_olang.prof)
+    0.9%   0.9%  Array<Char>.Contains
+
+   self  line                                                                   function
+    7.5%  ./malloc/malloc.c:2936                                                 sysmalloc
+    5.8%  std/json.olang:487                                                     json.spaceEnd
+    4.9%  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:660  __memcpy_avx512_unaligned_erms
+    4.2%  ./io/../sysdeps/unix/sysv/linux/read.c:26                              __libc_read
+    2.8%  ./misc/../sysdeps/unix/syscall-template.S:117                          __GI_mprotect
+    2.8%  compiler/build.olang:275                                               build.rotr
+    2.6%  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:288  __memcpy_avx512_unaligned_erms
+    1.9%  compiler/bindgen.olang:182                                             bindgen.gen.track
+    1.9%  std/prelude/text.olang:61                                              String.Eq
+    1.6%  std/json.olang:488                                                     json.spaceEnd
+    1.6%  std/json.olang:489                                                     json.spaceEnd
+    1.6%  std/json.olang:610                                                     json.reader.string
+    1.6%  std/prelude/text.olang:49                                              String.Hash
+    0.9%  ./io/../sysdeps/unix/sysv/linux/close.c:27                             __close
+    0.9%  ./io/../sysdeps/unix/sysv/linux/unlink.c:28                            __unlink
+
+  called from (the five hottest functions)
+  __memcpy_avx512_unaligned_erms  <-  json.reader.name 29.8%, os.Process.ended 27.7%, bindgen.Translate 8.5%, emit.Emitter.function 8.5%
+  json.spaceEnd  <-  json.reader.skipSpace 100.0%
+  __olang_scope_alloc_a  <-  __olang_scope_alloc 71.6%, json.reader.close 5.7%, free.walker.expr 4.5%, json.nameIndex 4.5%
+  sysmalloc  <-  _int_malloc 100.0%
+  __libc_read  <-  __libc_read 100.0%
+flame graph: /tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/self.html
+
+real	1m15.679s
+user	3m23.883s
+sys	0m18.637s

@@ -1,0 +1,25 @@
+# C9a/O2: a destructor's nested block builds into its own scope; storing that through the instance's field
+Log mut I64 = 0
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Res struct(n mut Node&, k I64) {
+    n
+    k
+} destruct {
+    if n.next != null { Log = Log * 100 + n.next.v }
+    if k > 0 {
+        t mut Node& = Node(k)
+        n.next = t
+    }
+}
+fn f() {
+    a mut Node& = Node(0)
+    r1 Res&a = Res(a, 11)
+    r2 Res&a = Res(a, 22)
+}
+fn main() ? {
+    f()
+    println($Log)
+}

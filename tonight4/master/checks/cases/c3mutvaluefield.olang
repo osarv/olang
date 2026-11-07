@@ -1,0 +1,6 @@
+# check: fail error[C3]: a field is writable wherever its instance is - 'mut' is for a reference, and I32 is none
+# C3: a field may be written wherever its instance is reached writably, so "mut" before a value field's type says nothing
+type Counter struct() {
+    n mut I32 = 0
+}
+fn main() ? { }

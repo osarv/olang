@@ -1,0 +1,26 @@
+== build -debug -sanitize
+d03_boxobligation.olang:17:28: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   17 |         b mut any W& = Lab(mkk(outer, i))
+      |                            ^~~
+d03_boxobligation.olang:11:5: note: the callee requires it because of this statement
+   11 |     l.Push(s)
+      |     ^
+d03_boxobligation.olang:19:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   19 |         x := mkk(outer, i + 10)
+      |              ^~~
+d03_boxobligation.olang:11:5: note: the callee requires it because of this statement
+   11 |     l.Push(s)
+      |     ^
+compilation failed with 2 errors
+== build
+d03_boxobligation.olang:17:28: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   17 |         b mut any W& = Lab(mkk(outer, i))
+      |                            ^~~
+d03_boxobligation.olang:11:5: note: the callee requires it because of this statement
+   11 |     l.Push(s)
+      |     ^
+d03_boxobligation.olang:19:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   19 |         x := mkk(outer, i + 10)
+== interpret
+outer List<String&>["kept0-0", "kept10-70", "kept1-7", "kept11-77", "kept2-14", "kept12-84"]
+status 0

@@ -1,0 +1,19 @@
+# try l[i] on a List (a derived TryAt held in a SEQ): does the element's scope reach the fit check?
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn main() ? {
+    keep Node& = Node(1)
+    for i in range 2 {
+        l List<Node&>& = List<Node&>()
+        l.Push(Node(42))
+        keep = try l[0]
+    }
+    churn()
+    try io.Print($keep.v "\n")
+}

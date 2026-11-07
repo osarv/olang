@@ -1,0 +1,17 @@
+fn viaAs(row Array<F64>&) Array<F64, 3> {
+    v := row as Array<F64, 3>&
+    return v
+}
+fn viaTry(row Array<F64>&) F64 {
+    v := try (row as Array<F64, 3>&) catch default F64[0.0, 0.0, 0.0]
+    return v[0] + v[2]
+}
+fn viaTryCopy(row Array<F64>&) F64 {
+    v := try (row as Array<F64, 3>&) catch default F64[0.0, 0.0, 0.0]
+    w Array<F64, 3> = v
+    return w[0]
+}
+fn main() ? {
+    a := F64[1.0, 2.0, 3.0]
+    println($viaAs(a) " " $viaTry(a) " " $viaTryCopy(a))
+}

@@ -1,0 +1,7 @@
+# check: fail 'a is b' asks whether two references
+# E10c: identity needs references - two I32 values are never "one instance"
+fn main() ? {
+    a I32 = 1
+    b I32 = 1
+    assert a is b
+}

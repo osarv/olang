@@ -1,0 +1,24 @@
+import "std/io"
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn (t mut Token&) Use() { t.uses++ }
+
+fn twice(v mut Vec<Token>&, t Token, n I64) {
+    for i in range n {
+        if i >= 1 {
+            v.Push(t)
+            continue
+        }
+    }
+}
+
+fn main() {
+    v := Vec<Token>()
+    twice(v, Token(1), 3)
+    v[0].Use()
+    io.Println($v.Len() " " $v[0].uses " " $v[1].uses)!
+}

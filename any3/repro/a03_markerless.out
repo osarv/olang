@@ -1,0 +1,19 @@
+== build -debug -sanitize
+a03_markerless.olang:28:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   28 |         l = mk2(a)
+      |             ^~~
+a03_markerless.olang:22:36: note: the callee requires it because of this statement
+   22 | fn mk2<G Gen>(g mut G&) List<G>& { return g.Twice() }
+      |                                    ^~~~~~
+compilation failed with 1 error
+== build
+a03_markerless.olang:28:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   28 |         l = mk2(a)
+      |             ^~~
+a03_markerless.olang:22:36: note: the callee requires it because of this statement
+   22 | fn mk2<G Gen>(g mut G&) List<G>& { return g.Twice() }
+      |                                    ^~~~~~
+compilation failed with 1 error
+== interpret
+olang interpret: /home/user/wt/rvany3/std/prelude/array.olang:1: it calls a function whose body is not available
+status 1

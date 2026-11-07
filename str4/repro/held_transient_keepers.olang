@@ -1,0 +1,48 @@
+# HELD: callees keeping a passed capturing lambda in a List, a Map, a field, a generic Push, through a nested helper, in
+# a lambda they store, or from a task - every environment on the heap; prints "20 21 22 23 24 26 26 0".
+type Node struct(v I64) {
+    v
+}
+type Holder struct() {
+    f fn() I64 = null
+}
+fn keepList(l mut List<fn() I64>&, g fn() I64) { l.Push(g) }
+fn keepMap(m mut Map<I64, fn() I64>&, g fn() I64) { m.Put(1, g) }
+fn keepField(h mut Holder&, g fn() I64) { h.f = g }
+fn keepG(l mut List<<T>>&, g T) { l.Push(g) }
+fn keepNested(h mut Holder&, g fn() I64) { keepField(h, g) }
+fn keepLambda(h mut Holder&, g fn() I64) { 
+    k := fn() I64 { return g() + 1 }
+    h.f = k
+}
+fn keepSpawn(h mut Holder&, g fn() I64) {
+    join { spawn keepField(h, g) }
+}
+fn churn(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn fill(n Node&, l mut List<fn() I64>&, m mut Map<I64, fn() I64>&, h mut Holder&, h2 mut Holder&, h3 mut Holder&, h4 mut Holder&, l2 mut List<fn() I64>&) {
+    k := n.v
+    keepList(l, fn() I64 { return n.v + k })
+    keepMap(m, fn() I64 { return n.v + k + 1 })
+    keepField(h, fn() I64 { return n.v + k + 2 })
+    keepG(l2, fn() I64 { return n.v + k + 3 })
+    keepNested(h2, fn() I64 { return n.v + k + 4 })
+    keepLambda(h3, fn() I64 { return n.v + k + 5 })
+    keepSpawn(h4, fn() I64 { return n.v + k + 6 })
+}
+fn main() ? {
+    n := Node(10)
+    l := List<fn() I64>()
+    l2 := List<fn() I64>()
+    m := Map<I64, fn() I64>()
+    h := Holder()
+    h2 := Holder()
+    h3 := Holder()
+    h4 := Holder()
+    fill(n, l, m, h, h2, h3, h4, l2)
+    t := churn(300)
+    println($l[0]() " " $(try m.Get(1))() " " $h.f() " " $l2[0]() " " $h2.f() " " $h3.f() " " $h4.f() " " $t)
+}

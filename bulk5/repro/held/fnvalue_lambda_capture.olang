@@ -1,0 +1,19 @@
+import "std/io"
+fn mk(k I64) fn(a Array<I64>&) Array<I64>& {
+    xs := Array<I64>(2, k)
+    return fn(a Array<I64>&) Array<I64>& { return xs if a.Len() > 5 else a }
+}
+fn churn(n I64) I64 {
+    xs := Array<I64>(n, 7)
+    return xs[n - 1]
+}
+fn main() {
+    fs := Vec<fn(a Array<I64>&) Array<I64>&>()
+    for i in range 3 { fs.Push(mk(i)) }
+    big := Array<I64>(8, 0)
+    r := fs[1](big)
+    s := 0
+    for i in range 1, 50 { s += churn(i * 8) }
+    r[0] = 3
+    io.Println($r[0] " " $fs[1](big)[0] " " $s)!
+}

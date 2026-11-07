@@ -1,0 +1,64 @@
+import "std/io"
+
+Dtors mut I64 = 0
+type R struct(n I64) {
+    n
+} destruct {
+    Dtors += 1
+}
+type Hold struct(r R&) {
+    r
+}
+type E struct(A String&, B String&) {
+    A
+    B
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mkS(s String&) String { return $s "-made" }
+
+fn mk(i I64) Hold {
+    x := R(i) if i >= 0 else null
+    return Hold(x)
+}
+fn mk2(n I64) Hold {
+    x := R(100) if n > 100 else null
+    for i in range n {
+        x = R(i)
+    }
+    return Hold(x)
+}
+fn mk3(t String&, n I64) E {
+    b := mkS(t) if n >= 0 else ""
+    for i in range n {
+        b = mkS($i)
+    }
+    return E($t, b)
+}
+fn mk4(t String&, n I64) E {
+    b := match n {
+        case 0 => ""
+        case 1 => mkS(t)
+        nomatch => $t "-other"
+    }
+    return E($t, b)
+}
+
+fn main() {
+    sum I64 = 0
+    for i in range 10 {
+        h := mk(i)
+        g := mk2(i)
+        e := mk3("q", i)
+        f := mk4("w", i % 3)
+        churn()
+        sum += h.r.n
+        if g.r is not null { sum += g.r.n }
+        io.Println($e.B " " $f.B)!
+    }
+    io.Println($sum " " $Dtors)!
+}

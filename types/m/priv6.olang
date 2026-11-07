@@ -1,0 +1,10 @@
+# M6a: a match naming a private case
+import "lib"
+import "std/io"
+fn main() ? {
+  d := lib.Dir.North
+  match d {
+    case lib.Dir.south { try io.Print("s\n") }
+    nomatch { try io.Print("other\n") }
+  }
+}

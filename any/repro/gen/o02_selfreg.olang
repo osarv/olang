@@ -1,0 +1,37 @@
+import "std/io"
+# a method storing its receiver into an argument, called through an any made of a loop-local instance
+type Reg trait {
+    Into(l mut List<any Reg&>&)
+    Name() String
+}
+type Sq struct(n String&) { n }
+fn (s Sq&) Into(l mut List<any Reg&>&) { l.Push(s) }
+fn (s Sq&) Name() String { return s.n }
+fn main() {
+    l := List<any Reg&>()
+    for i in range 3 {
+        q := Sq("q" $i)
+        r any Reg& = q
+        r.Into(l)
+    }
+    churn()
+    for x in l { say(x.Name()) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

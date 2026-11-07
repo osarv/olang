@@ -1,0 +1,277 @@
+# A calculator: a tokenizer, a Pratt parser building an expression tree, a simplifier using nested patterns,
+# and an evaluator over an environment of variables kept in a Map.
+import "std/io"
+import "std/map"
+
+extern fn sqrt(x F64) F64
+
+type Kind enum {
+    Number
+    Ident
+    Op
+    LParen
+    RParen
+    Comma
+    End
+}
+
+type Token struct(kind Kind, text String&, num F64 = 0.0) {
+    kind
+    text
+    num
+}
+
+error CalcError {
+    SYNTAX
+    UNKNOWN_VAR
+    UNKNOWN_FN
+    DIV_ZERO
+    ARITY
+}
+
+fn tokenize(src String&) List<Token>&src ? CalcError {
+    toks List<Token>&src = List<Token>()
+    i I64 = 0
+    for i < src.Len() {
+        c := src[i]
+        if c.IsSpace() {
+            i++
+            continue
+        }
+        if c.IsDigit() or c == '.' {
+            start I64 = i
+            v F64 = 0.0
+            for i < src.Len() and src[i].IsDigit() {
+                v = v * 10.0 + F64(src[i] - '0')
+                i++
+            }
+            if i < src.Len() and src[i] == '.' {
+                i++
+                scale := 0.1
+                for i < src.Len() and src[i].IsDigit() {
+                    v += F64(src[i] - '0') * scale
+                    scale /= 10.0
+                    i++
+                }
+            }
+            toks.Push(Token(Kind.Number, src[start:i], v))
+            continue
+        }
+        if c.IsLetter() or c == '_' {
+            start I64 = i
+            for i < src.Len() and (src[i].IsLetter() or src[i].IsDigit() or src[i] == '_') { i++ }
+            toks.Push(Token(Kind.Ident, src[start:i]))
+            continue
+        }
+        k := match c {
+            case '(' => Kind.LParen
+            case ')' => Kind.RParen
+            case ',' => Kind.Comma
+            case '+', '-', '*', '/', '^', '=' => Kind.Op
+            nomatch { error CalcError.SYNTAX }
+        }
+        toks.Push(Token(k, src[i:i + 1]))
+        i++
+    }
+    toks.Push(Token(Kind.End, src[src.Len():]))
+    return toks
+}
+
+type Expr enum {
+    Num(v F64)
+    Var(name String&)
+    Neg(e Expr&)
+    Bin(op Char, a Expr&, b Expr&)
+    Call(f String&, args List<Expr&>&)
+}
+
+type Parser struct(src List<Token>&) {
+    toks List<Token>&src = src
+    at mut I64 = 0
+}
+
+fn (p Parser&) peek() Token { return p.toks[p.at] }
+fn (p mut Parser&) next() Token {
+    t := p.toks[p.at]
+    p.at++
+    return t
+}
+
+fn precedence(op Char) I32 {
+    return match op {
+        case '+', '-' => 10
+        case '*', '/' => 20
+        case '^' => 30
+        nomatch => 0
+    }
+}
+
+fn (p mut Parser&) primary() Expr& ? CalcError {
+    t := p.next()
+    match t.kind {
+        case Kind.Number { return Expr.Num(t.num) }
+        case Kind.Ident {
+            if p.peek().kind == Kind.LParen {
+                p.next()
+                args List<Expr&>&return = List<Expr&>()
+                if p.peek().kind != Kind.RParen {
+                    for {
+                        args.Push(try p.expr(0))
+                        if p.peek().kind != Kind.Comma { break }
+                        p.next()
+                    }
+                }
+                if p.next().kind != Kind.RParen { error CalcError.SYNTAX }
+                return Expr.Call($t.text, args)
+            }
+            return Expr.Var($t.text)
+        }
+        case Kind.Op if t.text[0] == '-' { return Expr.Neg(try p.primary()) }
+        case Kind.LParen {
+            e Expr&return = try p.expr(0)
+            if p.next().kind != Kind.RParen { error CalcError.SYNTAX }
+            return e
+        }
+        nomatch { error CalcError.SYNTAX }
+    }
+}
+
+fn (p mut Parser&) expr(minPrec I32) Expr& ? CalcError {
+    lhs Expr&return = try p.primary()
+    for {
+        t := p.peek()
+        if t.kind != Kind.Op { break }
+        op := t.text[0]
+        prec := precedence(op)
+        if prec == 0 or prec < minPrec { break }
+        p.next()
+        # right associative for ^, left for everything else
+        rhs Expr&return = try p.expr(prec if op == '^' else prec + 1)
+        lhs = Expr.Bin(op, lhs, rhs)
+    }
+    return lhs
+}
+
+# folds constant subtrees and removes x*1, x+0, 0*x
+fn simplify(e Expr&) Expr&e {
+    # (written as statements: "return match e { ... }" here crashes the compiler - see min/d8.olang)
+    match e {
+        case Expr.Bin(op, a, b) { return simplifyBin(op, simplify(a), simplify(b)) }
+        case Expr.Neg(Expr.Num(v)) { return Expr.Num(-v) }
+        case Expr.Neg(Expr.Neg(x)) { return simplify(x) }
+        case Expr.Neg(x) { return Expr.Neg(simplify(x)) }
+        nomatch { return e }
+    }
+}
+
+fn simplifyBin(op Char, a Expr&, b Expr&a) Expr&a {
+    match a {
+        case Expr.Num(x) {
+            match b {
+                case Expr.Num(y) if op != '/' or y != 0.0 { return Expr.Num(apply(op, x, y)) }
+                nomatch { }
+            }
+        }
+        nomatch { }
+    }
+    if op == '*' and (isNum(a, 0.0) or isNum(b, 0.0)) { return Expr.Num(0.0) }
+    if op == '*' and isNum(a, 1.0) { return b }
+    if (op == '*' or op == '/') and isNum(b, 1.0) { return a }
+    if op == '+' and isNum(a, 0.0) { return b }
+    if (op == '+' or op == '-') and isNum(b, 0.0) { return a }
+    return Expr.Bin(op, a, b)
+}
+
+fn isNum(e Expr&, v F64) Bool {
+    return match e {
+        case Expr.Num(x) if x == v => true
+        nomatch => false
+    }
+}
+
+fn apply(op Char, x F64, y F64) F64 {
+    return match op {
+        case '+' => x + y
+        case '-' => x - y
+        case '*' => x * y
+        case '/' => x / y
+        case '^' => pow(x, y)
+        nomatch => 0.0
+    }
+}
+
+fn pow(x F64, y F64) F64 {
+    r := 1.0
+    n := I64(y)
+    for i in range n { r *= x }
+    return r
+}
+
+type Env struct() {
+    vars mut map.Map<String&, F64>& = map.Map<String&, F64>()
+}
+
+fn (env Env&) eval(e Expr&) F64 ? CalcError {
+    match e {
+        case Expr.Num(v) { return v }
+        case Expr.Var(name) { return try env.vars.Get(name) catch { error CalcError.UNKNOWN_VAR } }
+        case Expr.Neg(x) { return -(try env.eval(x)) }
+        case Expr.Bin('/', a, b) {
+            d := try env.eval(b)
+            if d == 0.0 { error CalcError.DIV_ZERO }
+            return try env.eval(a) / d
+        }
+        case Expr.Bin(op, a, b) { return apply(op, try env.eval(a), try env.eval(b)) }
+        case Expr.Call(f, args) {
+            vals := F64[try env.eval(x) for x in args]
+            if f == "sqrt" {
+                if vals.Len() != 1 { error CalcError.ARITY }
+                return sqrt(vals[0])
+            }
+            if f == "max" {
+                if vals.Len() == 0 { error CalcError.ARITY }
+                return vals.Fold(vals[0], fn(m F64, x F64) F64 { return x if x > m else m })
+            }
+            error CalcError.UNKNOWN_FN
+        }
+    }
+    unreachable
+}
+
+fn show(e Expr&) String& {
+    return match e {
+        case Expr.Num(v) => $v
+        case Expr.Var(n) => $n
+        case Expr.Neg(x) => "-" $show(x)
+        case Expr.Bin(op, a, b) => "(" $show(a) " " $op " " $show(b) ")"
+        case Expr.Call(f, args) => $f "(" $args.Iter().Map(fn(a Expr&) String& { return show(a) }).ToArray() ")"
+    }
+}
+
+# runs one line: "name = expr" assigns, anything else prints the value
+fn (env mut Env&) run(line String&) String& ? CalcError {
+    toks := try tokenize(line)
+    p := Parser(toks)
+    if toks.Len() > 2 and toks[0].kind == Kind.Ident and toks[1].text == "=" {
+        p.at = 2
+        e := simplify(try p.expr(0))
+        if p.peek().kind != Kind.End { error CalcError.SYNTAX }
+        v := try env.eval(e)
+        env.vars.Put($toks[0].text, v)
+        return $toks[0].text " = " $v
+    }
+    e := try p.expr(0)
+    if p.peek().kind != Kind.End { error CalcError.SYNTAX }
+    s := simplify(e)
+    return $show(s) " => " $(try env.eval(s))
+}
+
+fn main() ? io.IoError {
+    env := Env()
+    lines := String&["x = 3", "y = x * 2 + 1", "y ^ 2 - x", "max(x, y, 4) * 1 + 0", "-(-x) * (y + 0)", "z + 1", "sqrt(16) / (x - 3)", "1 + * 2", "2 ^ 3 ^ 2", "foo(1)"]
+    for line in lines {
+        out := try env.run(line) catch CalcError.UNKNOWN_VAR default "error: unknown variable" catch CalcError.DIV_ZERO default "error: division by zero" catch default "error: syntax"
+        try io.Print($line "  ->  " $out "\n")
+    }
+    try io.Print("vars: " $env.vars.Len() "\n")
+}

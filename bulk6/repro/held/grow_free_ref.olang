@@ -1,0 +1,25 @@
+# round 8: a collection's own arrays released as it grows where no view of them is in use - a Ref kept across
+# the growth, in a function run again
+import "std/io"
+
+type blk struct(n I64, s String) { n, s }
+
+fn work(k I64) I64 {
+    v := Vec<blk>()
+    v.Push(blk(k, "first"))
+    r := v.Ref(0)
+    for i in range 100 { v.Push(blk(i, "x")) }
+    return r.n
+}
+
+fn grow(k I64) I64 {
+    v := Vec<blk>()
+    for i in range 100 { v.Push(blk(i + k, "x")) }
+    return v.Len()
+}
+
+fn main() {
+    s := 0
+    for k in range 1000 { s += work(k) + grow(k) }
+    io.Println($s)!
+}

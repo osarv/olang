@@ -1,0 +1,49 @@
+# landedCallRefsScope: a reference read out of a call's value result, stored somewhere that outlives the source
+type V struct(Data mut Array<F64>&) {
+    Data
+}
+type Info struct(n I64) { n }
+type Hold struct(r Info&) { r }
+type R enum {
+    None
+    C(h Hold)
+}
+type G struct(n I64) {
+    mem mut Array<F64>& = Array<F64>(n)
+    info Info& = Info(n)
+}
+type Sink struct() {
+    kept mut Array<F64>& = null
+    ki Info& = null
+}
+fn (g G&) params() V { return V(g.mem) }
+fn (g G&) infos() Array<Info&> { return Info&[g.info, g.info] }
+fn (g G&) res() R { return R.C(Hold(g.info)) }
+fn keepA(s mut Sink&, p mut Array<F64>&) { s.kept = p }
+fn keepI(s mut Sink&, p Info&) { s.ki = p }
+fn stashCond(s mut Sink&, g G&, c Bool) {
+    for i in range 3 {
+        local := G(2)
+        keepA(s, (local.params() if c else g.params()).Data)
+    }
+}
+fn stashElem(s mut Sink&) {
+    for i in range 3 {
+        local := G(2)
+        keepI(s, local.infos()[0])
+    }
+}
+fn stashPayload(s mut Sink&) {
+    for i in range 3 {
+        local := G(2)
+        keepI(s, (local.res() as R.C).r)
+    }
+}
+fn main() ? {
+    g := G(4)
+    s := Sink()
+    stashCond(s, g, true)
+    stashElem(s)
+    stashPayload(s)
+    println($s.ki.n)
+}

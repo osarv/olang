@@ -1,0 +1,311 @@
+# mk - a small build tool. Reads module files from a source directory; each starts with a line "needs: a b c" naming
+# the modules it depends on. Builds a dependency graph, finds cycles, orders it topologically, decides what is stale
+# from file times, and rebuilds the stale modules with a pool of worker tasks taking jobs from a channel, running each
+# "compile" (a shell command) with os.Exec. Then it edits one module and rebuilds incrementally, and finally introduces
+# a cycle and reports it.
+
+import "std/os"
+import "std/chan"
+import "std/rand"
+import "std/time"
+import "std/filepath"
+
+Modules I64 = 40
+Workers I64 = 4
+
+error BuildError {
+    CYCLE
+    MISSING
+    FAILED
+    IO
+}
+
+type Module struct(name String&, path String&) {
+    name
+    path
+    deps mut List<String&>& = List<String&>()
+    body String& = ""
+}
+
+type Graph struct() {
+    mods mut List<Module>& = List<Module>()
+    index mut Map<String&, I64>& = Map<String&, I64>()
+    # edges: for each module, the indices of the modules that depend on it
+    users mut List<List<I64>>& = List<List<I64>>()
+}
+
+# ---- reading the sources ----
+
+fn parseModule(name String&, path String&, text String&) Module ? BuildError {
+    m := Module(name, path)
+    lines := text.Split("\n")
+    if lines.Len() == 0 or not lines[0].StartsWith("needs:") {
+        eprintln(path ": first line must be 'needs: ...'")
+        error BuildError.MISSING
+    }
+    for d in lines[0][6:].Split(" ") {
+        t := d.Trim()
+        if t.Len() > 0 { m.deps.Push(t) }
+    }
+    m.body = text
+    return m
+}
+
+fn load(dir String&) Graph ? BuildError {
+    g := Graph()
+    names := try os.ReadDir(dir) catch os.OsError { error BuildError.IO }
+    for n in names {
+        if not n.EndsWith(".mod") { continue }
+        path := filepath.Join(dir, n)
+        text := try os.ReadFile(path) catch os.OsError { error BuildError.IO }
+        name := n[0:n.Len() - 4]
+        m := try parseModule(name, path, text)
+        g.index.Put(name, g.mods.Len())
+        g.mods.Push(m)
+        g.users.Push(List<I64>())
+    }
+    for i in range g.mods.Len() {
+        m := g.mods[i]
+        for d in m.deps {
+            j := try g.index.Get(d) catch {
+                eprintln(m.name ": needs unknown module '" $d "'")
+                error BuildError.MISSING
+            }
+            g.users[j].Push(i)
+        }
+    }
+    return g
+}
+
+# ---- cycles ----
+
+# depth-first search with three colours; on a back edge, the cycle is read off the path
+fn (g Graph&) findCycle() List<String&> {
+    color := Array<I32>(g.mods.Len())       # 0 white, 1 on the path, 2 done
+    path := List<I64>()
+    cycle := List<String&>()
+    for start in range g.mods.Len() {
+        if color[start] != 0 { continue }
+        if g.visit(start, color, path, cycle) { return cycle }
+    }
+    return cycle
+}
+
+fn (g Graph&) visit(i I64, color mut Array<I32>&, path mut List<I64>&, cycle mut List<String&>&) Bool {
+    color[i] = 1
+    path.Push(i)
+    for d in g.mods[i].deps {
+        j := try g.index.Get(d) catch { continue }
+        if color[j] == 1 {
+            # the cycle runs from j's place on the path to here
+            on := false
+            for p in path {
+                if p == j { on = true }
+                if on { cycle.Push(g.mods[p].name) }
+            }
+            cycle.Push(g.mods[j].name)
+            return true
+        }
+        if color[j] == 0 and g.visit(j, color, path, cycle) { return true }
+    }
+    try path.Pop() catch { }
+    color[i] = 2
+    return false
+}
+
+# ---- ordering ----
+
+fn (g Graph&) topoOrder() Array<I64> {
+    n := g.mods.Len()
+    pending := Array<I64>(n)
+    for i in range n { pending[i] = g.mods[i].deps.Len() }
+    ready := List<I64>()
+    for i in range n { if pending[i] == 0 { ready.Push(i) } }
+    order := List<I64>()
+    for ready.Len() > 0 {
+        i := try ready.Pop() catch { break }
+        order.Push(i)
+        for u in g.users[i] {
+            pending[u]--
+            if pending[u] == 0 { ready.Push(u) }
+        }
+    }
+    return order.ToArray()
+}
+
+# ---- staleness ----
+
+fn outPath(out String&, name String&) String {
+    return filepath.Join(out, $name ".o")
+}
+
+fn modTime(path String&) I64 {
+    info := try os.Stat(path) catch os.OsError { return -1 }
+    return info.ModTime
+}
+
+fn (g Graph&) stale(order Array<I64>&, out String&) Array<Bool> {
+    s := Array<Bool>(g.mods.Len())
+    for i in order {
+        m := g.mods[i]
+        target := modTime(outPath(out, m.name))
+        if target < 0 or target < modTime(m.path) {
+            s[i] = true
+            continue
+        }
+        for d in m.deps {
+            j := try g.index.Get(d) catch { continue }
+            if s[j] or modTime(outPath(out, d)) > target { s[i] = true }
+        }
+    }
+    return s
+}
+
+# ---- running ----
+
+type Done struct(idx I64, status I32, took I64) {
+    idx
+    status
+    took
+}
+
+fn (g Graph&) command(i I64, out String&) Array<String&> {
+    m := g.mods[i]
+    script := StringBuilder()
+    script.Push("sleep 0.02; cat ")
+    script.Push(os.Quote(m.path))
+    for d in m.deps {
+        script.Push(" ")
+        script.Push(os.Quote(outPath(out, d)))
+    }
+    script.Push(" > ")
+    script.Push(os.Quote(outPath(out, m.name)))
+    return String&["sh", "-c", script.ToString()]
+}
+
+fn worker(g Graph&, out String&, jobs mut chan.Chan<I64>&, done mut chan.Chan<Done>&) {
+    for i in jobs {
+        start := time.Now()
+        res := try os.Exec(g.command(i, out)) catch os.OsError {
+            chan.Send(done, Done(i, 127, 0))
+            continue
+        }
+        chan.Send(done, Done(i, res.Status, time.Since(start)))
+    }
+}
+
+fn (g Graph&) build(out String&, todo Array<Bool>&) I64 ? BuildError {
+    n := g.mods.Len()
+    pending := Array<I64>(n)
+    count I64 = 0
+    for i in range n {
+        if not todo[i] { continue }
+        count++
+        for d in g.mods[i].deps {
+            j := try g.index.Get(d) catch { continue }
+            if todo[j] { pending[i]++ }
+        }
+    }
+    if count == 0 { return 0 }
+    jobs := chan.Chan<I64>(n)
+    chan.Init(jobs)
+    done := chan.Chan<Done>(n)
+    chan.Init(done)
+    failed I64 = 0
+    built I64 = 0
+    join {
+        for w in range Workers { spawn worker(g, out, jobs, done) }
+        for i in range n {
+            if todo[i] and pending[i] == 0 { chan.Send(jobs, i) }
+        }
+        for built + failed < count {
+            d := try chan.Recv(done) catch chan.ChanError { break }
+            if d.status != 0 {
+                eprintln("FAILED " $g.mods[d.idx].name " (status " $d.status ")")
+                failed++
+                continue
+            }
+            built++
+            for u in g.users[d.idx] {
+                if not todo[u] { continue }
+                pending[u]--
+                if pending[u] == 0 { chan.Send(jobs, u) }
+            }
+        }
+        chan.Close(jobs)
+    }
+    if failed > 0 { error BuildError.FAILED }
+    return built
+}
+
+# ---- the demo ----
+
+fn writeModule(dir String&, name String&, deps List<String&>&, body String&) ? BuildError {
+    text := StringBuilder()
+    text.Push("needs:")
+    for d in deps {
+        text.Push(" ")
+        text.Push(d)
+    }
+    text.Push("\n")
+    text.Push(body)
+    text.Push("\n")
+    try os.WriteFile(filepath.Join(dir, $name ".mod"), text.ToString()) catch os.OsError { error BuildError.IO }
+}
+
+fn generate(dir String&, r mut rand.Rand&) ? BuildError {
+    for i in range Modules {
+        deps := List<String&>()
+        if i > 0 {
+            k := r.Below(4)
+            for d in range k {
+                dep := "m" $r.Below(i)
+                if dep not in deps { deps.Push(dep) }
+            }
+        }
+        try writeModule(dir, "m" $i, deps, "body of module " $i)
+    }
+}
+
+fn run(src String&, out String&, label String&) I64 ? BuildError {
+    g := try load(src)
+    cycle := g.findCycle()
+    if cycle.Len() > 0 {
+        eprintln(label ": cycle: " cycle.Join(" -> "))
+        error BuildError.CYCLE
+    }
+    order := g.topoOrder()
+    todo := g.stale(order, out)
+    start := time.Now()
+    n := try g.build(out, todo)
+    println(label ": " $g.mods.Len() " modules, rebuilt " $n " in " $(time.Since(start) / 1000000) " ms")
+    return n
+}
+
+fn main() ? {
+    root := try os.MkTemp()
+    defer try os.RemoveAll(root) catch os.OsError { }
+    src := filepath.Join(root, "src")
+    out := filepath.Join(root, "out")
+    try os.MkDirAll(src)
+    try os.MkDirAll(out)
+    r := rand.Rand(7)
+    try generate(src, r) catch BuildError { error }
+
+    first := try run(src, out, "full") catch BuildError { error }
+    again := try run(src, out, "again") catch BuildError { error }
+    assert again == 0
+
+    # edit one module in the middle: it and everything that needs it are rebuilt
+    deps := List<String&>()
+    deps.Push("m3")
+    try writeModule(src, "m20", deps, "edited body") catch BuildError { error }
+    edited := try run(src, out, "edit") catch BuildError { error }
+    println("first " $first " edited " $edited)
+
+    # a cycle: m3 now needs m20, which needs m3
+    deps2 := List<String&>()
+    deps2.Push("m20")
+    try writeModule(src, "m3", deps2, "cyclic") catch BuildError { error }
+    try run(src, out, "cyclic") catch BuildError.CYCLE { println("cycle detected") } catch BuildError { error }
+}

@@ -1,0 +1,38 @@
+# B4a/B3f/X6: a program reading its command line and environment, and using the file system - built and run, and
+# interpreted with -i, it must print the same
+import "std/os"
+import "std/io"
+
+error Bad {
+    OUTPUT
+}
+
+# B5a: the command line is there before any global is initialized
+Count := os.Args().Len()
+
+fn say(text String&) ? Bad {
+    try io.Print($text "\n") catch { error Bad.OUTPUT }
+}
+
+fn main() ? Bad {
+    args := os.Args()
+    try say("program: " $args[0])
+    try say($(args.Len() - 1) " arguments, " $(Count - 1) " seen by a global")
+    for i in range 1, args.Len() {
+        try say("[" $args[i] "]")
+    }
+    try say("value: " $(try os.Env("OLANG_CHECK_VALUE") catch default "unset"))
+    try os.MkDirAll("work/a/b") catch { try say("MkDirAll failed") }
+    try os.WriteFile("work/a/b/f.txt", "hello") catch { try say("WriteFile failed") }
+    info := try os.Stat("work/a/b/f.txt") catch default os.FileInfo(os.FileKind.OTHER, -1, -1)
+    try say("size " $info.Size " file " $(info.Kind == os.FileKind.FILE) " dated " $(info.ModTime > 0))
+    try os.Rename("work/a/b/f.txt", "work/a/g.txt") catch { try say("Rename failed") }
+    names := try os.ReadDir("work/a") catch default Array<String&>(0)
+    for name in names {
+        try say("in work/a: " $name)
+    }
+    try say("read back: " $(try os.ReadFile("work/a/g.txt") catch default "?"))
+    try os.Remove("work/a") catch os.OsError.NOT_EMPTY { try say("work/a is not empty") } catch { }
+    try os.Stat("work/none") catch os.OsError.NOT_FOUND { try say("work/none is not found") } catch { }
+    try say("real ends right: " $(try os.RealPath("work/a/../a/g.txt") catch default "").EndsWith("/work/a/g.txt"))
+}

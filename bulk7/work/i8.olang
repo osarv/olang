@@ -1,0 +1,24 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type C immut struct(r Res) {
+    r
+}
+
+type Lab extends Res
+
+fn main() {
+    {
+        c := C(Res(1))
+        d := c
+        io.Println($d.r.id)!
+    }
+    io.Println("ended " $Ended)!
+}

@@ -1,0 +1,154 @@
+# frame - a small column store: typed columns in one frame, filter, group-by, sort, select, and a printed table;
+# plus fixed-size feature vectors with constant generics.
+import "std/math"
+
+type Column enum {
+    Ints(name String&, v Array<I64>&)
+    Floats(name String&, v Array<F64>&)
+    Texts(name String&, v Array<String&>&)
+}
+
+fn (c Column&) Name() String&c {
+    return match c {
+        case Column.Ints(n, _) => n
+        case Column.Floats(n, _) => n
+        case Column.Texts(n, _) => n
+    }
+}
+
+fn (c Column&) Len() I64 {
+    return match c {
+        case Column.Ints(_, v) => v.Len()
+        case Column.Floats(_, v) => v.Len()
+        case Column.Texts(_, v) => v.Len()
+    }
+}
+
+fn (c Column&) Cell(i I64) String {
+    return match c {
+        case Column.Ints(_, v) => $v[i]
+        case Column.Floats(_, v) => v[i].Fixed(2)
+        case Column.Texts(_, v) => $v[i]
+    }
+}
+
+# the rows of c at the given positions, in that order
+fn (c Column&) Take(rows Array<I64>&) Column& {
+    match c {
+        case Column.Ints(n, v) { return Column.Ints(n, I64[v[r] for r in rows]) }
+        case Column.Floats(n, v) { return Column.Floats(n, F64[v[r] for r in rows]) }
+        case Column.Texts(n, v) {
+            out := Array<String&>(rows.Len())
+            for i, r in rows { out[i] = v[r] }
+            return Column.Texts(n, out)
+        }
+    }
+}
+
+type Frame struct(Cols Array<Column&>&) {
+    Cols
+    assert Cols.Len() > 0
+}
+
+fn (f Frame&) Rows() I64 { return f.Cols[0].Len() }
+
+fn (f Frame&) Col(name String&) Column&f ? {
+    for c in f.Cols {
+        if c.Name() == name { return c }
+    }
+    error
+}
+
+fn (f Frame&) Take(rows Array<I64>&) Frame {
+    cols := Array<Column&>(f.Cols.Len())       # a comprehension may not hold references (E27)
+    for i, c in f.Cols { cols[i] = c.Take(rows) }
+    return Frame(cols)
+}
+
+fn (f Frame&) Where(keep fn(i I64) Bool) Frame {
+    return f.Take(I64[i for i in range f.Rows() if keep(i)])
+}
+
+fn (f Frame&) SortBy(name String&) Frame ? {
+    order := I64[i for i in range f.Rows()]
+    col := try f.Col(name)
+    match col {
+        case Column.Ints(_, v) { order.Sort(fn(a, b) { return v[a] < v[b] }) }
+        case Column.Floats(_, v) { order.Sort(fn(a, b) { return v[a] < v[b] }) }
+        case Column.Texts(_, v) { order.Sort(fn(a, b) { return v[a] < v[b] }) }
+    }
+    return f.Take(order)
+}
+
+fn (f Frame&) Print() {
+    widths := I64[math.Max(c.Name().Len(), 8) for c in f.Cols]
+    line := StringBuilder()
+    for j, c in f.Cols { line.Push($c.Name().PadStart(widths[j]) "  ") }
+    println(line.ToString())
+    for i in range f.Rows() {
+        row := StringBuilder()
+        for j, c in f.Cols { row.Push($c.Cell(i).PadStart(widths[j]) "  ") }
+        println(row.ToString())
+    }
+}
+
+# sum of a float column grouped by a text column
+fn groupSum(f Frame&, key String&, val String&) Map<String&, F64> ? {
+    sums := Map<String&, F64>()
+    k := try f.Col(key)
+    v := try f.Col(val)
+    match k {
+        case Column.Texts(_, keys) {
+            match v {
+                case Column.Floats(_, vals) {
+                    for i in range keys.Len() { sums.Update(keys[i], 0.0, fn(s F64) F64 { return s + vals[i] }) }
+                }
+                nomatch { error }
+            }
+        }
+        nomatch { error }
+    }
+    return sums
+}
+
+# fixed-size feature vectors
+type Vec<N I64> struct() {
+    v Array<F64, N>
+}
+
+fn (a Vec<<N>>&) Dot(b Vec<N>&) F64 {
+    s := 0.0
+    for i in range N { s += a.v[i] * b.v[i] }
+    return s
+}
+
+fn (a Vec<<N>>&) Plus(b Vec<N>&) Vec<N> {
+    out := Vec<N>()
+    for i in range N { out.v[i] = a.v[i] + b.v[i] }
+    return out
+}
+
+fn main() ? {
+    city := String&["oslo", "lund", "oslo", "bergen", "lund", "oslo", "bergen"]
+    temp := F64[3.5, 9.0, 2.0, 6.5, 11.25, 4.0, 7.75]
+    year := I64[2020, 2020, 2021, 2021, 2022, 2022, 2023]
+    f := Frame(Column&[Column.Texts("city", city), Column.Floats("temp", temp), Column.Ints("year", year)])
+    f.Print()
+    println("-- warm, sorted by temp")
+    t := try f.Col("temp")
+    _, temps := try (t as Column.Floats)
+    warm := f.Where(fn(i) { return temps[i] > 4.0 })
+    (try warm.SortBy("temp")).Print()
+    println("-- sum by city")
+    sums := try groupSum(f, "city", "temp")
+    for e in sums { println($e.Key ": " $e.Value.Fixed(2)) }
+
+    a := Vec<3>()
+    b := Vec<3>()
+    for i in range 3 {
+        a.v[i] = F64(i + 1)
+        b.v[i] = 2.0
+    }
+    c := a + b
+    println("dot " $a.Dot(b) " sum " $c.v)
+}

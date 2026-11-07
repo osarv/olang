@@ -1,0 +1,22 @@
+== build -debug -sanitize
+n06d_generic.olang:19:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   19 |         keepIt(xs, r)
+      |         ^~~~~~
+n06d_generic.olang:13:45: note: the callee requires it because of this statement
+   13 | fn keepIt<T W>(xs mut List<any W&>&, x T) { xs.Push(x) }
+      |                                             ^~
+n06d_generic.olang:18:9: note: 'r' is declared here, in a block that closes first - declare it where 'xs' lives: 'r mut Rows&xs = ...'
+   18 |         r := Rows(String&[t, t])
+      |         ^
+compilation failed with 1 error
+== build
+n06d_generic.olang:19:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   19 |         keepIt(xs, r)
+      |         ^~~~~~
+n06d_generic.olang:13:45: note: the callee requires it because of this statement
+   13 | fn keepIt<T W>(xs mut List<any W&>&, x T) { xs.Push(x) }
+== interpret
+rows 2 t0-0
+rows 2 t1-7
+rows 2 t2-14
+status 0

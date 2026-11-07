@@ -1,0 +1,25 @@
+# E31b in place (F1 fix): the method calls C, which calls back an export fn growing the collection
+import "std/io"
+
+extern link "cb.o" {
+    fn c_poke(n I64)
+}
+
+type blk struct(n I64) { n }
+
+G mut Vec<blk>
+
+export fn olang_grow(n I64) {
+    for i in range n { G.Push(blk(i)) }
+}
+
+fn (b mut blk&) Bump() {
+    c_poke(1000)
+    b.n = 99
+}
+
+fn main() {
+    G.Push(blk(1))
+    G[0].Bump()
+    io.Println("G[0].n = " $G[0].n " len " $G.Len())!
+}

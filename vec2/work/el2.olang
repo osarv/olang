@@ -1,0 +1,27 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Pt struct(x I64, y I64) {
+    x
+    y
+}
+type CB struct() {
+    data own mut Array<Pt>& = Array<Pt>(2)
+}
+fn el(c CB&) Pt&c { return c.data[0] }
+fn use(c mut CB&) {
+    d := el(c)
+    c.data = Array<Pt>(8)
+    churn()
+    println($d.x " " $d.y)
+}
+fn main() ? {
+    c := CB()
+    c.data[0] = Pt(10, 20)
+    use(c)
+}

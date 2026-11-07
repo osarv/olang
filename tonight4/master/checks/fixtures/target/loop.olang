@@ -1,0 +1,39 @@
+# B12: what a build is for - the target's build constants on the first line, then what the loops computed, which is the
+# same on every target (B12c): a * b + c rounds twice wherever it runs, math.Fma once
+import "std/io"
+import "std/math"
+
+# c[i] = a[i] * b[i] + c[i], vectorizable, and never fused into one rounding
+fn mulAdd(a Array<F32>&, b Array<F32>&, c mut Array<F32>&) {
+    for i in range a.Len() { c[i] = a[i] * b[i] + c[i] }
+}
+
+# the same with one rounding - an FMA instruction where the target has one
+fn fused(a Array<F32>&, b Array<F32>&, c mut Array<F32>&) {
+    for i in range a.Len() { c[i] = math.Fma(a[i], b[i], c[i]) }
+}
+
+fn main() ? io.IoError {
+    n I64 = 1000
+    a := Array<F32>(n)
+    b := Array<F32>(n)
+    c := Array<F32>(n)
+    d := Array<F32>(n)
+    for i in range n {
+        a[i] = F32(i) * 0.1
+        b[i] = F32(n - i) * 0.3
+        c[i] = F32(i) / 7.0
+        d[i] = c[i]
+    }
+    for k in range 3 {
+        mulAdd(a, b, c)
+        fused(a, b, d)
+    }
+    sumC F64 = 0
+    sumD F64 = 0
+    for i in range n {
+        sumC += c[i]
+        sumD += d[i]
+    }
+    try io.Print($TargetCpu " " $TargetVectorBits " " $TargetHasFma "\n" $sumC " " $sumD " " $c[7] " " $d[7] "\n")
+}

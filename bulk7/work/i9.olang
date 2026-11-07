@@ -1,0 +1,20 @@
+import "std/io"
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn (t mut Token&) Use() { t.uses++ }
+
+type Box<T> immut struct(x T) {
+    x
+}
+
+fn main() {
+    b := Box<Token>(Token(1))
+    c := b
+    d := Box(Token(2))
+    e := d
+    io.Println($c.x.id " " $e.x.uses)!
+}

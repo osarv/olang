@@ -1,0 +1,18 @@
+# T25c/E31: a value whose Call takes a writable reference is accepted as a function value taking a read-only one,
+# so a read-only reference gets written through
+import "std/io"
+type Node struct(v I32) { v mut }
+type Writer struct() {
+  hits mut I32 = 0
+}
+fn (w Writer&) Call(n mut Node&) { n.v = 99 }
+fn apply(f fn(n Node&), n Node&) { f(n) }
+fn look(n Node&) {                       # n is read-only here: nothing may write through it
+  w := Writer()
+  apply(w, n)
+}
+fn main() ? {
+  m := Node(1)
+  look(m)
+  try io.Print($m.v "\n")
+}

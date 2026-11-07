@@ -1,0 +1,16 @@
+fn grow(w mut Vec<Char>&) {
+    t := String(w.View())
+    for i in range 1000 { w.Push('b') }
+    println(t)
+}
+fn sl(v Vec<I64>&) Array<I64>&v { return v.View()[0:1] }
+fn grow2(w mut Vec<I64>&) {
+    t := sl(w)
+    for i in range 1000 { w.Push(5) }
+    println($t)
+}
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    grow(v)
+}

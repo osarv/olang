@@ -1,0 +1,15 @@
+# OVER-REJECTION, NEW in e27b83b (7345ff9 and b6259d1 print 'b4'). The lambda is handed straight to a parameter
+# that keeps nothing, so codegen gives its environment to the frame (cgEnvOnStack; IR of peek: 'alloca { ptr, ptr }',
+# no scope_alloc) - but the walk's closure case reads only lambdaHome, not cgEnvOnStack/SemanticParamTransient, and
+# counts it as built where n lives. e27b83b: error[E11c, O12] at peek(b.head).
+# Fixing only the walk would turn the building variant ('s := $n.v' in the lambda) into n1's escape(null) segfault.
+type Node struct(v I64) {
+    v
+}
+type Bag struct(head Node&) {
+    head
+}
+fn apply(f fn() I64) I64 { return f() }
+fn peek(n Node&) I64 { return apply(fn() I64 { return n.v }) }
+fn (b Bag&) Str() String { return "b" $peek(b.head) }
+fn main() ? { println($Bag(Node(4))) }

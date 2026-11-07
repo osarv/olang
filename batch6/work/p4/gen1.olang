@@ -1,0 +1,28 @@
+# P4c: a join in a generic whose tasks differ per instantiation (match T), each with its own error set
+error A {
+    A1
+    A2
+}
+error B {
+    B1
+}
+fn fa(n I64) ? A {
+    if n == 1 { error A.A2 }
+}
+fn fb(n Bool) ? B {
+    if n { error B.B1 }
+}
+fn g(x <T>) I64 {
+    try join {
+        match T {
+            case I64 { spawn try fa(x) }
+            case Bool { spawn try fb(x) }
+        }
+    } catch A.A1 { return 11 } catch A.A2 { return 12 } catch B.B1 { return 21 }
+    return 0
+}
+on mut I64 = 1
+yes mut Bool = true
+fn main() ? {
+    println($g(on) " " $g(yes) " " $g(I64(5)) " " $g(false))
+}

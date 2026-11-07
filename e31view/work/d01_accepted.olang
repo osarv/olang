@@ -1,0 +1,54 @@
+# view-only callees given x[i] in many positions - every result must equal the array spelling, built, -d -s and -i
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn (v mut V&) Put(x I64) I64 {
+    v.d[v.n] = v.d[v.n] * 10 + x
+    return v.d[v.n]
+}
+fn put(v mut V&, x I64) I64 { return v.Put(x) }
+fn both(a mut V&, b mut V&) I64 { return a.Put(1) + b.Put(2) }
+Calls mut I64 = 0
+fn side(s Vs&) I64 {
+    Calls++
+    return 1
+}
+fn churn() {
+    for k in range 100 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn run() I64 {
+    s := Vs(Array<I64>(8))
+    t I64 = 0
+    t += put(s[0], 1)
+    t += s[1].Put(2)
+    t += both(s[2], s[2])
+    for k in range 3 {
+        if put(s[3], k) > 1000 { t += 1 }
+        churn()
+    }
+    x := put(s[4], 5) if t > 0 else 0
+    if t > 0 and s[5].Put(6) > 0 { t += 1 }
+    if t < 0 and s[5].Put(7) > 0 { t += 100 }
+    arr := I64[put(s[6], k) for k in range 3]
+    defer { s[7].Put(9) }
+    t += x + arr[2] + side(s) + put(s[side(s)], 3)
+    {
+        defer { s[7].Put(8) }
+    }
+    sum I64 = 0
+    for i in range 8 { sum = sum * 1000 + s.d[i] }
+    return sum + t
+}
+Baked I64 = run()
+fn main() ? {
+    churn()
+    println($run() " " $Baked " " $Calls)
+}

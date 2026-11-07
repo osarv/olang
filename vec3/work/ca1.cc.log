@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/ca1.olang:13:16: error[O37]: 'Call' gives a borrowed own result, so it is called by name only - a call through a function value holds no loan on the owned object it borrows; call 'Call' by name
+   13 |     d := apply(G(), w)
+      |                ^
+compilation failed with 1 error

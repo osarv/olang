@@ -1,0 +1,26 @@
+# QCC: a bare parameter can never affect the caller - an any made from a bare struct borrows the caller's storage
+# (by pointer), and a trait method that may write its receiver ('&Grow()') writes it through the any
+import "std/io"
+
+type pt struct(x I64, y I64) {
+    x
+    y
+}
+
+type grower trait {
+    &Grow()
+}
+
+fn (p pt&) Grow() { p.x += 100 }
+
+fn viaAny(p pt) I64 {
+    b any grower& = p
+    b.Grow()
+    return p.x
+}
+
+fn main() {
+    p := pt(2, 3)
+    r := viaAny(p)
+    io.Println($p.x " " $r)!
+}

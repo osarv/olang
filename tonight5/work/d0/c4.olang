@@ -1,0 +1,14 @@
+type P struct(v I64) { v }
+fn borrow(b P&) P&b { return b }
+fn main() ? {
+    keep P& = P(0)
+    x := 1
+    for i in range 3 {
+        v P = match x {
+            case 1 => P(i + 10)
+            case _ => P(0)
+        }
+        if i == 0 { keep = borrow(v) }
+    }
+    println($keep.v)
+}

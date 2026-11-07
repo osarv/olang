@@ -1,0 +1,10 @@
+# Map keyed by an array of Tags
+import "lib/pv"
+
+fn main() ? {
+    a := pv.Make(3)
+    b := pv.Make(13)
+    m := Map<Array<pv.Tag>, I32>()
+    m.Put(pv.Tag[a], 1)
+    println($m.Len())
+}

@@ -1,0 +1,2 @@
+fn id(x <T>) <T> { return x }
+fn main() ? { f := id }

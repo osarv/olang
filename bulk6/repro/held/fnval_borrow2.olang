@@ -1,0 +1,16 @@
+# open point 5 in a loop: a loop turn's local given to a function value, its borrowed result kept past the turn
+import "std/io"
+
+fn first(a Array<I64>&) Array<I64>& { return a[0:1] }
+
+fn mk(n I64) Array<I64> { return Array<I64>(4, n) }
+
+fn main() {
+    g := first
+    out := Vec<Array<I64>&>()
+    for i in range 5 {
+        t := mk(i)
+        out.Push(g(t))
+    }
+    io.Println($out)!
+}

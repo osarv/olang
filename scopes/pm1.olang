@@ -1,0 +1,24 @@
+# conditional / match values mixing a writable and a read-only reference (T25c)
+import "std/io"
+type Node struct(v I32) { v mut }
+fn f1(p mut Node&, q Node&, c Bool) {
+    x := p if c else q
+    x.v = 91
+}
+fn f2(p mut Node&, q Node&, c Bool) {
+    (p if c else q).v = 92
+}
+fn f3(p mut Node&, q Node&, k I32) {
+    y := match k { case 1 => p  nomatch => q }
+    y.v = 93
+}
+fn bump(n mut Node&) { n.v = 94 }
+fn f4(p mut Node&, q Node&, c Bool) {
+    bump(p if c else q)
+}
+fn main() ? {
+    a Node& = Node(1)
+    b Node& = Node(2)
+    f1(a, b, false)
+    try io.Print($b.v "\n")
+}

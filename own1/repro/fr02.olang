@@ -1,0 +1,18 @@
+Dropped mut I64 = 0
+type Node struct(n I64) {
+    n
+} destruct { Dropped++ }
+type Holder struct() {
+    cur own mut Node&
+    other own mut Node&
+}
+fn main() ? {
+    {
+        h := Holder()
+        h.cur = Node(1)
+        h.other = Node(2)
+        h.cur = null              # freed now - the instance drop must not free it again
+        # h.other freed at scope close; h.cur already null
+    }
+    println($Dropped)             # must be 2 (not 3)
+}

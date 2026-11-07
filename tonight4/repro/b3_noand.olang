@@ -1,0 +1,20 @@
+# control: same as b1 but store h directly without BitAnd - should be rejected (o17bkeeps shape)
+type Cell struct() {
+    v I64 = 0
+    kept mut Box& = null
+}
+type Box struct() { c mut Cell& = Cell() }
+fn (h mut Box&) stash() {
+    h.c.kept = h
+}
+fn run(m mut Map<I64, Box>&) ? {
+    for i in range 3 {
+        b := try m.Get(1)
+        b.stash()
+    }
+}
+fn main() ? {
+    m := Map<I64, Box>()
+    m.Put(1, Box())
+    try run(m)
+}

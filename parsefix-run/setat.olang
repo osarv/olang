@@ -1,0 +1,10 @@
+type Box struct() {
+    v mut I32 = 0
+}
+fn (b mut Box&) SetAt(i I64, x I32) { b.v = x }
+fn (b Box&) Len() I64 { return 1 }
+
+test "x" {
+    b Box& = Box()
+    try b[0] += 1 catch { }
+}

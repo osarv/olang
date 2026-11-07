@@ -1,0 +1,69 @@
+== build -debug -sanitize
+n21b_iteradapters.olang:18:19: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   18 |     b.Push($mk(n).Map(fn(x I64) String& { return "m" $x }) " ")
+      |                   ^~~
+/home/user/wt/rvany2/std/prelude/iterator.olang:57:9: note: in the standard library's code, here
+   57 |         out.Push(f(x))
+      |         ^~~
+n21b_iteradapters.olang:18:19: note: instantiated here, with I = any Iterator<I64>, T = I64, U = String&
+   18 |     b.Push($mk(n).Map(fn(x I64) String& { return "m" $x }) " ")
+      |                   ^~~
+n21b_iteradapters.olang:24:5: error[E12]: expected any Iterator<I64>&, found any Iterator<I64>
+   24 |     for x in mk(n).Take(2) { b.Push("t" $x) }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany2/std/prelude/iterator.olang:116:16: note: in the standard library's code, here
+  116 |     return try t.it.Next()
+      |                ^~~~
+n21b_iteradapters.olang:24:5: note: instantiated here, with I = any Iterator<I64>, T = I64
+   24 |     for x in mk(n).Take(2) { b.Push("t" $x) }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+n21b_iteradapters.olang:25:5: error[E12]: expected any Iterator<I64>&, found any Iterator<I64>
+   25 |     for x in mk(n).Skip(2) { b.Push("s" $x) }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany2/std/prelude/iterator.olang:129:13: note: in the standard library's code, here
+  129 |         try s.it.Next()
+      |             ^~~~
+n21b_iteradapters.olang:25:5: note: instantiated here, with I = any Iterator<I64>, T = I64
+   25 |     for x in mk(n).Skip(2) { b.Push("s" $x) }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+n21b_iteradapters.olang:26:5: error[E12]: expected any Iterator<I64>&, found any Iterator<I64>
+   26 |     for p in mk(n).Enumerate() { b.Push("e" $p) }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+== build
+n21b_iteradapters.olang:18:19: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   18 |     b.Push($mk(n).Map(fn(x I64) String& { return "m" $x }) " ")
+      |                   ^~~
+/home/user/wt/rvany2/std/prelude/iterator.olang:57:9: note: in the standard library's code, here
+   57 |         out.Push(f(x))
+== interpret
+n21b_iteradapters.olang:18:19: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   18 |     b.Push($mk(n).Map(fn(x I64) String& { return "m" $x }) " ")
+      |                   ^~~
+/home/user/wt/rvany2/std/prelude/iterator.olang:57:9: note: in the standard library's code, here
+   57 |         out.Push(f(x))
+      |         ^~~
+n21b_iteradapters.olang:18:19: note: instantiated here, with I = any Iterator<I64>, T = I64, U = String&
+   18 |     b.Push($mk(n).Map(fn(x I64) String& { return "m" $x }) " ")
+      |                   ^~~
+n21b_iteradapters.olang:24:5: error[E12]: expected any Iterator<I64>&, found any Iterator<I64>
+   24 |     for x in mk(n).Take(2) { b.Push("t" $x) }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany2/std/prelude/iterator.olang:116:16: note: in the standard library's code, here
+  116 |     return try t.it.Next()
+      |                ^~~~
+n21b_iteradapters.olang:24:5: note: instantiated here, with I = any Iterator<I64>, T = I64
+   24 |     for x in mk(n).Take(2) { b.Push("t" $x) }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+n21b_iteradapters.olang:25:5: error[E12]: expected any Iterator<I64>&, found any Iterator<I64>
+   25 |     for x in mk(n).Skip(2) { b.Push("s" $x) }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany2/std/prelude/iterator.olang:129:13: note: in the standard library's code, here
+  129 |         try s.it.Next()
+      |             ^~~~
+n21b_iteradapters.olang:25:5: note: instantiated here, with I = any Iterator<I64>, T = I64
+   25 |     for x in mk(n).Skip(2) { b.Push("s" $x) }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+n21b_iteradapters.olang:26:5: error[E12]: expected any Iterator<I64>&, found any Iterator<I64>
+   26 |     for p in mk(n).Enumerate() { b.Push("e" $p) }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+status 1

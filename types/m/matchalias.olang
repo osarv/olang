@@ -1,0 +1,11 @@
+# S13: a case naming another module's enum type that happens to share the name
+import "lib"
+import "other"
+import "std/io"
+fn main() ? {
+  d := lib.Dir.North
+  match d {
+    case other.Dir.North { try io.Print("matched other.Dir.North\n") }
+    nomatch { try io.Print("none\n") }
+  }
+}

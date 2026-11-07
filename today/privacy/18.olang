@@ -1,0 +1,10 @@
+# Map keyed by a main struct holding a Tag (supplied Hash walks a private hash)
+import "lib/pv"
+type W struct(t pv.Tag) { t }
+fn main() ? {
+    a := pv.Make(3)
+    b := pv.Make(13)
+    m := Map<W, I32>()
+    m.Put(W(a), 1)
+    println($m.Len())
+}

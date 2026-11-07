@@ -1,0 +1,51 @@
+# own4 N2: a spawn target given what the task's call returns - a borrowed result, a value holding one, a closure
+# capturing one - takes none of its loans. An assignment of the same call result (r = id(b)) holds them (refused); the
+# spawn's loans end at the join, and the release after it is accepted while the target still names the copy.
+# -b -s: "use after scope closed" (each of the four); -b: segfault; -i: "1 leaf5" (it never frees)
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type Hold struct(x Outer&) {
+    x
+}
+fn id(x Outer&) Outer&x { return x }
+fn wrap(x Outer&) Hold { return Hold(x) }
+fn two(x Outer&) (Outer&x, I64) { return x, 7 }
+fn mkf(x Outer&) fn() I64 { return fn() I64 { return x.o.k } }
+fn main() ? {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v                    # a borrowed copy: loans on v.o and v.o.deep
+    r Outer& = null
+    h Hold = Hold(null)
+    r2 Outer& = null
+    n I64 = 0
+    g fn() I64 = null
+    join {
+        spawn r = id(b)       # a borrowed result
+        spawn h = wrap(b)     # a value holding b
+        spawn r2, n = two(b)  # several targets
+        spawn g = mkf(b)      # a closure capturing b
+    }
+    v.o = null                # accepted: no loan is held by r, h, r2 or g
+    churn()
+    println($r.o.k " " $r.o.deep.text)
+    println($h.x.o.k " " $r2.o.k " " $g())
+}

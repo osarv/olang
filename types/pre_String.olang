@@ -1,0 +1,2 @@
+type String struct() { }
+fn main() ? { }

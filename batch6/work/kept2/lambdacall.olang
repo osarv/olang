@@ -1,0 +1,61 @@
+# O18c kept mode (2): a ":=" from a call that builds, kept beyond its block through: a lambda called where written
+type Tok struct(text String&, kind I64) {
+    text
+    kind
+}
+type TokE enum {
+    Word(s String&)
+    Num(n I64)
+}
+type Lexer struct(n I64) {
+    n
+    pos I64 = 0
+}
+fn (lx mut Lexer&) next() Tok {
+    lx.pos = lx.pos + 1
+    return Tok("w" $lx.pos "-abcdefghijklmnopqrstuvwxyz", lx.pos)
+}
+fn (lx mut Lexer&) nextE() TokE {
+    lx.pos = lx.pos + 1
+    return TokE.Word("e" $lx.pos "-abcdefghijklmnopqrstuvwxyz")
+}
+fn (lx mut Lexer&) words(k I64) List<String&> {
+    l := List<String&>()
+    for i in range k { l.Push("l" $i "-abcdefghijklmnopqrstuvwxyz") }
+    return l
+}
+fn (lx mut Lexer&) toks() Array<Tok> {
+    return Tok[Tok("a" $lx.pos "-abcdefghijklmnopqrstuvwxyz", 1), Tok("b" $lx.pos "-abcdefghijklmnopqrstuvwxyz", 2)]
+}
+type Bag struct() {
+    last String& = ""
+    toks mut List<Tok>& = List<Tok>()
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+fn put(b mut Bag&, s String&) {
+    b.last = s
+}
+fn first(t Tok) String&t ? {
+    if t.kind > 1000 { error }
+    return t.text
+}
+fn main() ? {
+    lx mut Lexer& = Lexer(0)
+    b mut Bag& = Bag()
+    for i in range 3 {
+        t := lx.next()
+        fn() { b.last = t.text }()
+        churn()
+    }
+    churn()
+    print($b.last " ")
+    for t in b.toks { print($t.text " ") }
+    println("")
+}

@@ -1,0 +1,6 @@
+# check: fail error[T6]: '0x100000000' does not fit U32
+# L10a: a hexadecimal literal adapting to an unsigned type is worth its bits read unsigned, so it fits only a type wide
+# enough for the pattern
+fn main() ? {
+    a U32 = 0x100000000
+}

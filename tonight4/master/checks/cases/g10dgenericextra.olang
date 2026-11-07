@@ -1,0 +1,7 @@
+# check: fail error[G10d]: U is not one of B's parameters, and a generic type's constructor introduces none of its own
+# also: add U to the type's list
+# G10d: only a type with no parameters may have a constructor introducing type variables
+type B<T> struct(x T, f <U>) {
+    x
+}
+fn main() ? { b := B<I64>(1, 2) }

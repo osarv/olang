@@ -1,0 +1,32 @@
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn mkNode() mut Node& {
+    n := Node()
+    n.v = 42
+    return n
+}
+type Wrap struct(b mut Box&) {
+    {
+        b.head.next = mkNode()
+    }
+    k I64 = 1
+}
+fn grow(b mut Box&) {
+    w := Wrap(b)
+}
+fn bump(src mut W&) {
+    b := src.b
+    grow(b)
+}
+fn main() ? {
+    w := W(Box())
+    bump(w)
+    println("ok")
+}

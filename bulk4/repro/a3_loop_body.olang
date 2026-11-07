@@ -1,0 +1,25 @@
+import "std/io"
+
+fn f(xs Array<I64>&) {
+    for _ in xs {
+        assert false, "no element expected"
+    }
+}
+
+fn g(n I64) {
+    for _ in range n {
+        assert false, "n is zero"
+    }
+}
+
+fn h(it mut Vec<I64>&) {
+    do {
+        assert it.Len() == 0 or true
+    } for false
+}
+
+fn main() {
+    f(Array<I64>(0))
+    g(0)
+    io.Println("fine")!
+}

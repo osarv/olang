@@ -1,0 +1,68 @@
+import "std/io"
+
+type Holder struct() {
+    t String& = ""
+}
+
+fn (h mut Holder&) set(i I64) { h.t = $"text number " $i " padded out to many bytes ........................................" }
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    h := Holder()
+    a1 String& = ""
+    a2 String& = ""
+    a3 String& = ""
+    a4 String& = ""
+    a5 String& = ""
+    a6 String& = ""
+    a7 String& = ""
+    a8 String& = ""
+    a9 String& = ""
+    a10 String& = ""
+    a11 String& = ""
+    a12 String& = ""
+    a13 String& = ""
+    a14 String& = ""
+    a15 String& = ""
+    a16 String& = ""
+    a17 String& = ""
+    a18 String& = ""
+    a19 String& = ""
+    a20 String& = ""
+    for i in range 30 {
+        h.set(i)
+        churn()
+        io.Println(a20)!
+        # a view of the text passed down a chain of locals written last to first: one step a turn
+        a20 = a19
+        a19 = a18
+        a18 = a17
+        a17 = a16
+        a16 = a15
+        a15 = a14
+        a14 = a13
+        a13 = a12
+        a12 = a11
+        a11 = a10
+        a10 = a9
+        a9 = a8
+        a8 = a7
+        a7 = a6
+        a6 = a5
+        a5 = a4
+        a4 = a3
+        a3 = a2
+        a2 = a1
+        a1 = h.t
+    }
+}

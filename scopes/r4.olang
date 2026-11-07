@@ -1,0 +1,23 @@
+# return a field of a call's built result; push one into an outer list
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box struct(n mut Node&) { n mut }
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+        a := Array<I32>(8, 7)
+    }
+}
+fn mkArr(v I32) Array<I32>& { return Array<I32>(4, v) }
+fn mkBox(v I32) Box& { return Box(Node(v)) }
+fn get(v I32) mut Node& { return mkBox(v).n }
+fn getA(v I32) Array<I32>& { return mkArr(v)[1:3] }
+fn main() ? {
+    a := get(42)
+    b := getA(43)
+    l List<mut Node&>& = List<mut Node&>()
+    for i in range 2 { l.Push(mkBox(44).n) }
+    churn()
+    try io.Print($a.v " " $b[0] " " $l[0].v "\n")
+}

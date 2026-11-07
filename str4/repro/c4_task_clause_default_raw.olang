@@ -1,0 +1,24 @@
+# P2 (o4) + P4a: a task's catch default is built in its call's result scope (cgTaskCallClause is handed the task's
+# result-scope argument). settleTaskStandins asks only whether the callee f builds there - it never does (it errors or
+# returns null) - so the scope is handed raw and sixteen tasks build their defaults in the spawner's scope unlocked.
+# expected 1324800. new -b: 1324792, 1324800, 1324802, 1324801, 1324789; -b -r: ThreadSanitizer data race in
+# __olang_scope_alloc_a (lambda$1 <- olang.task.13 <- __olang_worker_loop). be042da: 1324800 every run
+type Node struct(v I64) {
+    v
+}
+error Odd { NO }
+fn f(i I64) mut Node& ? Odd {
+    if i >= 0 { error Odd.NO }
+    return null
+}
+fn main() ? {
+    total I64 = 0
+    for r in range 400 {
+        out := Array<mut Node&>(16, null)
+        join {
+            for i in range 16 { spawn out[i] = try f(i) catch default Node(i + r) }
+        }
+        for i in range 16 { total += out[i].v }
+    }
+    println($total)
+}

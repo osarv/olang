@@ -1,0 +1,26 @@
+type Tok struct(text String&, n I64) {
+    text
+    n
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type L struct() {
+    toks Vec<Tok> = Vec<Tok>()
+}
+fn setT(l mut L&, t String&) { l.toks[0].text = t }
+fn main() ? {
+    l := L()
+    for i in range 3 { l.toks.Push(Tok("a", i)) }
+    for i in range 3 {
+        t := "w" $i "-loop-turn-text"
+        setT(l, t)
+    }
+    churn()
+    println(l.toks[0].text)
+}

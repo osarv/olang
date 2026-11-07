@@ -1,0 +1,26 @@
+import "std/os"
+drops mut I64 = 0
+type R struct() { } destruct { drops += 1 }
+fn main() ? { }
+test "a failing assert two RunOnStacks deep fails this test only" {
+    os.RunOnStack(1 << 20, fn() {
+        a R& = R()
+        os.RunOnStack(1 << 20, fn() {
+            b R& = R()
+            assert drops < 0, "inner"
+        })
+        unreachable
+    })
+    unreachable
+}
+test "both were destructed" {
+    assert drops == 2, "drops " $drops
+}
+test "fail inside" {
+    os.RunOnStack(1 << 16, fn() { fail })
+}
+test "next runs" {
+    x := 0
+    os.RunOnStack(1 << 16, fn() { assert true })
+    assert drops == 2
+}

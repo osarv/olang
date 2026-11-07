@@ -1,0 +1,24 @@
+Dropped mut I64 = 0
+type Sock struct(n I64) { n } destruct { Dropped++ }
+type Conn struct(fd I64) {
+    fd
+    sock own mut Sock&
+} destruct { Dropped++ }
+type Server struct() { cur own mut Conn& }
+type Out struct() { v I64 = 0 }
+fn readSock(s Server&, o mut Out&) {
+    c := s.cur
+    k := c.sock          # the task DOES borrow the Sock
+    o.v = k.n
+}
+fn main() ? {
+    s := Server()
+    s.cur = Conn(5)
+    s.cur.sock = Sock(9)
+    o := Out()
+    join {
+        spawn readSock(s, o)
+        s.cur.sock = Sock(99)   # releases the OLD sock the task borrows - must conflict
+    }
+    println($o.v)
+}

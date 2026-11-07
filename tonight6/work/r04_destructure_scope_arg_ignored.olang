@@ -1,0 +1,20 @@
+# OVER-REJECTION (O10c/E25): a List returned with a second result and destructured in a loop cannot be pushed into an
+# outer List - "rows.Push(rec)" is O10c, and the scope argument that fixes the single-result form (rec := mk&rows(k))
+# is ignored when the results are destructured (rec, next := mk2&rows(k)). Met reading CSV records
+# (readRecord returns the fields and where the next record starts). Workaround: rows.Push(rec.Clone()) - which is r01's
+# use-after-free.
+fn mk2(n I64) (List<String&>, I64) {
+    l := List<String&>()
+    for i in range n { l.Push($i) }
+    return l, n + 1
+}
+
+fn main() ? {
+    rows := List<List<String&>>()
+    for k in range 3 {
+        rec, next := mk2&rows(k)
+        rows.Push(rec)
+        println($next)
+    }
+    println($rows.Len())
+}

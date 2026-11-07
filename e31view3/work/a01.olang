@@ -1,0 +1,23 @@
+# a handle a call gives, its result landed at the shorter of two scopes, lent to a callee pushing
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn pick(a mut List<List<I64>>&, b mut List<List<I64>>&, c Bool) List<I64> {
+    if c { return a[0] }
+    return b[0]
+}
+fn pushTo(l mut List<I64>&, x I64) { l.Push(x) }
+fn main() ? {
+    outer := List<List<I64>>()
+    outer.Push(List<I64>())
+    for i in range 3 {
+        inner := List<List<I64>>()
+        inner.Push(List<I64>())
+        pushTo(pick(outer, inner, true), i + 7)
+    }
+    churn()
+    for s in outer[0] { println("for " $s) }
+}

@@ -1,0 +1,363 @@
+##### a10_returnconversion
+== build -debug -sanitize
+use after scope closed: storage a closed scope gave back was read or written
+status 134
+== build
+lab text2-1 lab 2-1t2-14
+status 0
+== interpret
+olang interpret: a10_returnconversion.olang:11: it uses storage after the scope it was made in closed
+status 1
+##### a1_returnscopedtext
+== build -debug -sanitize
+use after scope closed: storage a closed scope gave back was read or written
+status 134
+== build
+textreturnvalue rnvalue rnvalue 
+status 0
+== interpret
+olang interpret: a1_returnscopedtext.olang:31: it uses storage after the scope it was made in closed
+status 1
+##### a2_returnscopedlocal
+== build -debug -sanitize
+use after scope closed: storage a closed scope gave back was read or written
+status 134
+== build
+text2-1
+text2-1
+
+status 0
+== interpret
+olang interpret: /home/user/wt/rvany4-old/std/io.olang:77: it uses storage after the scope it was made in closed
+status 1
+##### a3_boxparamreturn
+== build -debug -sanitize
+use after scope closed: storage a closed scope gave back was read or written
+status 134
+== build
+lab text2-1
+lab 2-1t2-1
+lab 2-1t2-14
+status 0
+== interpret
+olang interpret: a3_boxparamreturn.olang:11: it uses storage after the scope it was made in closed
+status 1
+##### a3b_boxparamlocal
+== build -debug -sanitize
+use after scope closed: storage a closed scope gave back was read or written
+status 134
+== build
+lab text2-1
+lab 2-1t2-1
+lab 2-1t2-14
+status 0
+== interpret
+olang interpret: a3b_boxparamlocal.olang:11: it uses storage after the scope it was made in closed
+status 1
+##### a4_returnchain
+== build -debug -sanitize
+use after scope closed: storage a closed scope gave back was read or written
+status 134
+== build
+text2-1 text2-14
+status 0
+== interpret
+olang interpret: a4_returnchain.olang:32: it uses storage after the scope it was made in closed
+status 1
+##### a5_lambdacapture
+== build -debug -sanitize
+use after scope closed: storage a closed scope gave back was read or written
+status 134
+== build
+lab text7-49
+lab 7-497-49
+lab 7-497-49
+status 0
+== interpret
+olang interpret: a5_lambdacapture.olang:11: it uses storage after the scope it was made in closed
+status 1
+##### a6_methodreturn
+== build -debug -sanitize
+use after scope closed: storage a closed scope gave back was read or written
+status 134
+== build
+pre2 pre2
+status 0
+== interpret
+olang interpret: a6_methodreturn.olang:33: it uses storage after the scope it was made in closed
+status 1
+##### a7_returntrydefault
+== build -debug -sanitize
+use after scope closed: storage a closed scope gave back was read or written
+status 134
+== build
+text2-1 text2-14
+status 0
+== interpret
+olang interpret: a7_returntrydefault.olang:35: it uses storage after the scope it was made in closed
+status 1
+##### a8_returnmatch
+== build -debug -sanitize
+use after scope closed: storage a closed scope gave back was read or written
+status 134
+== build
+text2-1 text2-14
+status 0
+== interpret
+olang interpret: a8_returnmatch.olang:34: it uses storage after the scope it was made in closed
+status 1
+##### a9_returntuple
+== build -debug -sanitize
+use after scope closed: storage a closed scope gave back was read or written
+status 134
+== build
+text1-7 text2-14 3
+status 0
+== interpret
+olang interpret: a9_returntuple.olang:28: it uses storage after the scope it was made in closed
+status 1
+##### b1_aliaslocal
+== build -debug -sanitize
+run: lst List<String&>["Qbc1"] x Qbc1
+baked: lst List<String&>["Qbc1"] x Qbc1
+status 0
+== build
+run: lst List<String&>["Qbc1"] x Qbc1
+baked: lst List<String&>["Qbc1"] x Qbc1
+status 0
+== interpret
+run: lst List<String&>["Qbc1"] x Qbc1
+baked: lst List<String&>["Qbc1"] x Qbc1
+status 0
+##### b1b_aliaslocalassert
+== build -debug -sanitize
+b1b_aliaslocalassert.olang:16:20: error[S18c]: this assertion is false, evaluated while compiling
+   16 |     assert probe() == "abc1"
+      |                    ^~
+compilation failed with 1 error
+== build
+b1b_aliaslocalassert.olang:16:20: error[S18c]: this assertion is false, evaluated while compiling
+   16 |     assert probe() == "abc1"
+      |                    ^~
+compilation failed with 1 error
+== interpret
+b1b_aliaslocalassert.olang:16:20: error[S18c]: this assertion is false, evaluated while compiling
+   16 |     assert probe() == "abc1"
+      |                    ^~
+compilation failed with 1 error
+status 1
+##### b2_handlecopy
+== build -debug -sanitize
+run: lst List<String&>["Qbc1"] x Qbc1
+baked: lst List<String&>["Qbc1"] x Qbc1
+status 0
+== build
+run: lst List<String&>["Qbc1"] x Qbc1
+baked: lst List<String&>["Qbc1"] x Qbc1
+status 0
+== interpret
+run: lst List<String&>["Qbc1"] x Qbc1
+baked: lst List<String&>["Qbc1"] x Qbc1
+status 0
+##### b3_passlimit
+== build -debug -sanitize
+run: k.s Qbc1 x Qbc1
+baked: k.s Qbc1 x Qbc1
+status 0
+== build
+run: k.s Qbc1 x Qbc1
+baked: k.s Qbc1 x Qbc1
+status 0
+== interpret
+run: k.s Qbc1 x Qbc1
+baked: k.s Qbc1 x Qbc1
+status 0
+##### b3b_passcontrol
+== build -debug -sanitize
+run: k.s Qbc1 x Qbc1
+baked: k.s Qbc1 x Qbc1
+status 0
+== build
+run: k.s Qbc1 x Qbc1
+baked: k.s Qbc1 x Qbc1
+status 0
+== interpret
+run: k.s Qbc1 x Qbc1
+baked: k.s Qbc1 x Qbc1
+status 0
+##### b3c_passlimitassert
+== build -debug -sanitize
+b3c_passlimitassert.olang:33:20: error[S18c]: this assertion is false, evaluated while compiling
+   33 |     assert probe() == "abc1"
+      |                    ^~
+compilation failed with 1 error
+== build
+b3c_passlimitassert.olang:33:20: error[S18c]: this assertion is false, evaluated while compiling
+   33 |     assert probe() == "abc1"
+      |                    ^~
+compilation failed with 1 error
+== interpret
+b3c_passlimitassert.olang:33:20: error[S18c]: this assertion is false, evaluated while compiling
+   33 |     assert probe() == "abc1"
+      |                    ^~
+compilation failed with 1 error
+status 1
+##### b3d_passlimitany
+== build -debug -sanitize
+run: k.s Zbc2
+baked: k.s abc2
+status 0
+== build
+run: k.s Zbc2
+baked: k.s abc2
+status 0
+== interpret
+run: k.s Zbc2
+baked: k.s Zbc2
+status 0
+##### d1_spawnscoped
+== build -debug -sanitize
+d1_spawnscoped.olang:17:23: error[P1]: 'spawn' takes a call
+   17 |             spawn x = mkp&t(i * 11 + 1)
+      |                       ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+== build
+d1_spawnscoped.olang:17:23: error[P1]: 'spawn' takes a call
+   17 |             spawn x = mkp&t(i * 11 + 1)
+      |                       ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+== interpret
+d1_spawnscoped.olang:17:23: error[P1]: 'spawn' takes a call
+   17 |             spawn x = mkp&t(i * 11 + 1)
+      |                       ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+status 1
+##### d2_e25noresultscope
+== build -debug -sanitize
+status 0
+== build
+status 0
+== interpret
+status 0
+##### o0_pushdirect
+== build -debug -sanitize
+run: l List<String&>["Qbc1"] x Qbc1
+baked: l List<String&>["Qbc1"] x Qbc1
+status 0
+== build
+run: l List<String&>["Qbc1"] x Qbc1
+baked: l List<String&>["Qbc1"] x Qbc1
+status 0
+== interpret
+run: l List<String&>["Qbc1"] x Qbc1
+baked: l List<String&>["Qbc1"] x Qbc1
+status 0
+##### o1_matchbindpush
+== build -debug -sanitize
+o1_matchbindpush.olang:15:25: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   15 |         case E.T(q) { l.Push(q) }
+      |                         ^~~~
+/home/user/wt/rvany4-old/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+o1_matchbindpush.olang:15:18: note: 'q' is bound here to what the matched value holds, which lives in a block that closes first - make that where 'l' lives
+   15 |         case E.T(q) { l.Push(q) }
+      |                  ^
+o1_matchbindpush.olang:15:30: note: this text lives in a block that closes first - pass a copy, which is made where 'l' lives: write '$' before it
+   15 |         case E.T(q) { l.Push(q) }
+      |                              ^
+compilation failed with 1 error
+== build
+o1_matchbindpush.olang:15:25: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   15 |         case E.T(q) { l.Push(q) }
+      |                         ^~~~
+/home/user/wt/rvany4-old/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+o1_matchbindpush.olang:15:18: note: 'q' is bound here to what the matched value holds, which lives in a block that closes first - make that where 'l' lives
+   15 |         case E.T(q) { l.Push(q) }
+== interpret
+run: l List<String&>["abc1"] x Qbc1
+baked: l List<String&>["abc1"] x Qbc1
+status 0
+##### o2_aspayloadpush
+== build -debug -sanitize
+o2_aspayloadpush.olang:15:7: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   15 |     l.Push(q)
+      |       ^~~~
+/home/user/wt/rvany4-old/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+o2_aspayloadpush.olang:13:5: note: 'e' is declared here, in a block that closes first - declare it where 'l' lives: 'e mut E&l = ...'
+   13 |     e := E.T(s)
+      |     ^
+o2_aspayloadpush.olang:15:12: note: this text lives in a block that closes first - pass a copy, which is made where 'l' lives: write '$' before it
+   15 |     l.Push(q)
+      |            ^
+compilation failed with 1 error
+== build
+o2_aspayloadpush.olang:15:7: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   15 |     l.Push(q)
+      |       ^~~~
+/home/user/wt/rvany4-old/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+o2_aspayloadpush.olang:13:5: note: 'e' is declared here, in a block that closes first - declare it where 'l' lives: 'e mut E&l = ...'
+   13 |     e := E.T(s)
+== interpret
+run: l List<String&>["abc1"] x Qbc1
+baked: l List<String&>["abc1"] x Qbc1
+status 0
+##### o3_forinpush
+== build -debug -sanitize
+o3_forinpush.olang:10:22: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   10 |     for q in arr { l.Push(q) }
+      |                      ^~~~
+/home/user/wt/rvany4-old/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+o3_forinpush.olang:9:5: note: 'arr' is declared here, in a block that closes first - declare it where 'l' lives: 'arr mut Array<String&>&l = ...'
+    9 |     arr := String&[s, "y"]
+      |     ^~~
+o3_forinpush.olang:10:27: note: this text lives in a block that closes first - pass a copy, which is made where 'l' lives: write '$' before it
+   10 |     for q in arr { l.Push(q) }
+      |                           ^
+compilation failed with 1 error
+== build
+o3_forinpush.olang:10:22: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   10 |     for q in arr { l.Push(q) }
+      |                      ^~~~
+/home/user/wt/rvany4-old/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+o3_forinpush.olang:9:5: note: 'arr' is declared here, in a block that closes first - declare it where 'l' lives: 'arr mut Array<String&>&l = ...'
+    9 |     arr := String&[s, "y"]
+== interpret
+run: l List<String&>["abc1", "y"] x Qbc1
+baked: l List<String&>["abc1", "y"] x Qbc1
+status 0
+##### o4_iterpush
+== build -debug -sanitize
+o4_iterpush.olang:11:22: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   11 |     for q in tmp { l.Push(q) }
+      |                      ^~~~
+/home/user/wt/rvany4-old/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+o4_iterpush.olang:11:27: note: this text lives in a block that closes first - pass a copy, which is made where 'l' lives: write '$' before it
+   11 |     for q in tmp { l.Push(q) }
+      |                           ^
+compilation failed with 1 error
+== build
+o4_iterpush.olang:11:22: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   11 |     for q in tmp { l.Push(q) }
+      |                      ^~~~
+/home/user/wt/rvany4-old/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+o4_iterpush.olang:11:27: note: this text lives in a block that closes first - pass a copy, which is made where 'l' lives: write '$' before it
+   11 |     for q in tmp { l.Push(q) }
+== interpret
+run: l List<String&>["abc1"] x Qbc1
+baked: l List<String&>["abc1"] x Qbc1
+status 0

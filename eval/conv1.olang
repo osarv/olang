@@ -1,0 +1,11 @@
+import "std/io"
+
+V I64 = 1152921573326323713
+Baked F32 = F32(V)
+Run mut I64 = 1152921573326323713
+
+fn main() ? io.IoError {
+    r := F32(Run)
+    try io.Print("baked " $Baked " bits " $Baked.Bits() "\n")
+    try io.Print("run   " $r " bits " $r.Bits() "\n")
+}

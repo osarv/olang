@@ -1,0 +1,22 @@
+k01_set                run:   keep List<String&>["abc1"] h List<String&>["abc1"]|baked: keep List<String&>["abc1"] h List<String&>["abc1"]|status 0|run:   keep List<String&>["abc1"] h List<String&>["abc1"]|baked: keep List<String&>["abc1"] h List<String&>["abc1"]|status 0|run:   kee
+
+k02_nestedshare        run:   keep List<String&>["abc1"] h List<String&>["abc1"]|baked: keep List<String&>["abc1"] h List<String&>["abc1"]|status 0|run:   keep List<String&>["abc1"] h List<String&>["abc1"]|baked: keep List<String&>["abc1"] h List<String&>["abc1"]|status 0|run:   kee
+
+k03_generic            run:   keep List<String&>["abc1"] h List<String&>["abc1"]|baked: keep List<String&>["abc1"] h List<String&>["abc1"]|status 0|run:   keep List<String&>["abc1"] h List<String&>["abc1"]|baked: keep List<String&>["abc1"] h List<String&>["abc1"]|status 0|run:   kee
+
+k04_genericshare       k04_genericshare.olang:8:12: error[E12]: expected String&, found String&&|k04_genericshare.olang:13:18: error[E12]: expected String&&, found String|compilation failed with 2 errors|k04_genericshare.olang:8:12: error[E12]: expected String&, found String&&|k04_g
+
+k05_map                k05_map.olang:15:5: error[O25e]: these arguments live in different scopes, and the signature requires one ('&p')|k05_map.olang:16:10: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope|
+
+k06_slice              run:   keep List<String&>["Qb"] h List<String&>["Qb"]|baked: keep List<String&>["ab"] h List<String&>["ab"]|status 0|run:   keep List<String&>["Qb"] h List<String&>["Qb"]|baked: keep List<String&>["ab"] h List<String&>["ab"]|status 0|run:   keep List<String&>[
+
+k07_receiver           run:   keep List<String&>["abc1"] h List<String&>["abc1"]|baked: keep List<String&>["abc1"] h List<String&>["abc1"]|status 0|run:   keep List<String&>["abc1"] h List<String&>["abc1"]|baked: keep List<String&>["abc1"] h List<String&>["abc1"]|status 0|run:   kee
+
+k08_method             run:   keep List<String&>["Qbc1"] h List<String&>["Qbc1"]|baked: keep List<String&>["abc1"] h List<String&>["abc1"]|status 0|run:   keep List<String&>["Qbc1"] h List<String&>["Qbc1"]|baked: keep List<String&>["abc1"] h List<String&>["abc1"]|status 0|run:   kee
+
+k09_genericvalue       k09_genericvalue.olang:8:7: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope|compilation failed with 1 error|k09_genericvalue.olang:8:7: error[O10c]: the callee needs one argument's s
+
+k10_sharedslice        run:   keep List<String&>["bc"] h List<String&>["bc"]|baked: keep List<String&>["bc"] h List<String&>["bc"]|status 0|run:   keep List<String&>["bc"] h List<String&>["bc"]|baked: keep List<String&>["bc"] h List<String&>["bc"]|status 0|run:   keep List<String&>[
+
+k11_shareddefer        run:   keep List<String&>["abc1"] h List<String&>["abc1"]|baked: keep List<String&>["abc1"] h List<String&>["abc1"]|status 0|run:   keep List<String&>["abc1"] h List<String&>["abc1"]|baked: keep List<String&>["abc1"] h List<String&>["abc1"]|status 0|run:   kee
+

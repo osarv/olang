@@ -1,0 +1,50 @@
+import "std/io"
+
+type Tally struct() {
+    n I64 = 0
+}
+
+type Lamp unique struct(id I64) {
+    id
+    open := true
+    data := Array<I64>(16 + id.Mod(2), id)
+} destruct {
+    open = false
+}
+
+type Grip unique struct(id I64, log mut Tally&) {
+    id, log
+    held Lamp?& = null
+} destruct {
+    if held is not null: log.n += held!.data[3] + (1000000 if held!.open else 0)
+}
+
+fn churn() I64 {
+    t := 0
+    for _ in range 30 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+
+# gs declared first, ls after; gs[0] holds a reference to ls[0]: ls ends first (reverse order), then gs's Grip
+# reads the ended Lamp's data
+fn twoVecs(t mut Tally&, k I64) {
+    junk := Vec<Lamp>()
+    gs := Vec<Grip>()
+    gs.Push(Grip(5, t))
+    ls := Vec<Lamp>()
+    ls.Push(Lamp(k))
+    gs[0].held = ls[0]
+    junk.Push(Lamp(-1000))
+}
+
+fn main() {
+    t := Tally()
+    for k in range 1000 {
+        twoVecs(t, k)
+        churn()
+    }
+    io.Println($t.n)!
+}

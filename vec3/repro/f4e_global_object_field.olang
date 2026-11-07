@@ -1,0 +1,19 @@
+# F4: a borrow of a global's own object stored in a field of another global object (O20 lets it: the region reads as the program's).
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Doc struct() { title own mut String& = "bb" }
+type Idx struct() { alias String& = null }
+Docs own mut Doc& = Doc()
+Index mut Idx& = Idx()
+fn main() ? {
+    Index.alias = Docs.title
+    Docs.title = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(Index.alias)
+}

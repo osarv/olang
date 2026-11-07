@@ -1,0 +1,6 @@
+G List<I32> = I32[1, 2].ToList()
+fn apply(l List<I32>, f fn(x List<I32>)) { f(l) }
+fn main() ? {
+  apply(G, fn(x List<I32>) { x.Clear() })
+  println($G.Len())
+}

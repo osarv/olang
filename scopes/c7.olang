@@ -1,0 +1,14 @@
+import "std/io"
+fn f(i I64) I64 { return i * 3 }
+fn main() ? {
+    total I64 = 0
+    join {
+        for i in range 4 {
+            a := Array<I64>(2)
+            spawn a[0] = f(i)
+            b Array<I64>& = Array<I64>(2)
+            spawn b[1] = f(i)
+        }
+    }
+    try io.Print($total "\n")
+}

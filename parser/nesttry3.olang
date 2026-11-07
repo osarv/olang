@@ -1,0 +1,6 @@
+error E { X }
+fn k() { }
+fn g() ? E { error E.X }
+fn h() {
+    try g() catch E { try g() catch E { try g() catch E { k() } } }
+}

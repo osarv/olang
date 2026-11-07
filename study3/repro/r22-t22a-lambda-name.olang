@@ -1,0 +1,18 @@
+# r22 DIAGNOSTIC - T22a: a callback stored in a field that records its argument is refused with "lambda$1 relates its
+# arguments' scopes, which a call through a value cannot check - call it directly". "lambda$1" is the compiler's own
+# name, and "call it directly" cannot apply to a callback stored for later. The fix that works is to copy what it keeps
+# (goneRef.Push($k)).
+#
+# expected: an error at the lambda naming 'k' and suggesting a copy
+# actual: error[T22a] at line 15 as quoted
+type Cache struct() {
+    onEvict fn(k String&) = null
+}
+fn main() ? {
+    c := Cache()
+    gone := List<String&>()
+    goneRef mut List<String&>&gone = gone
+    c.onEvict = fn(k String&) { goneRef.Push(k) }
+    c.onEvict("a")
+    println($gone.Len())
+}

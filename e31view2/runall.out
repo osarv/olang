@@ -1,0 +1,392 @@
+### repro/c1_cond_element_lost_write.olang
+# C1 (OLDER, consistent in every mode): a conditional of elements lent for a writable parameter, bump(l[0] if k > 0 else l[1])
+[new -b] exit 0:
+list N 0
+[new -b -d -s] exit 0:
+list N 0
+[new -i]:
+list N 0
+  (exit 0)
+[old -b] exit 0:
+list N 0
+### repro/c1b_cond_array_lost_write.olang
+# C1: the built-in array spelling, bump(a[0] if k > 0 else a[1]) - array N 0 in every mode
+[new -b] exit 0:
+array N 0
+[new -b -d -s] exit 0:
+array N 0
+[new -i]:
+array N 0
+  (exit 0)
+[old -b] exit 0:
+array N 0
+### repro/f1_view_field_build_uaf.olang
+# F1 (NEW in c9d14a7, kept by 15841b0): a struct value FIELD of x[i] lent as a view to a callee that builds through
+[new -b] exit 0:
+199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+12
+  (exit 0)
+[old -b] COMPILE FAIL:
+f1_view_field_build_uaf.olang:28:31: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then
+   28 |     for i in range 3 { g(l[0].w, i + 10) }
+f1_view_field_build_uaf.olang:28:31: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   28 |     for i in range 3 { g(l[0].w, i + 10) }
+compilation failed with 2 errors
+[patched -b -d -s] COMPILE FAIL: f1_view_field_build_uaf.olang:28:31: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by refe
+### repro/f1b_view_field_param_uaf.olang
+# F1: as f1, the collection a parameter and the call at the function's top level
+[new -b] exit 0:
+199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+12
+  (exit 0)
+[old -b] COMPILE FAIL:
+f1b_view_field_param_uaf.olang:15:44: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', the
+   15 | fn add(l mut List<Layer>&, v I64) { g(l[0].w, v) }
+f1b_view_field_param_uaf.olang:15:44: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   15 | fn add(l mut List<Layer>&, v I64) { g(l[0].w, v) }
+compilation failed with 2 errors
+[patched -b -d -s] COMPILE FAIL: f1b_view_field_param_uaf.olang:15:44: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by ref
+### repro/f1c_view_field_method_uaf.olang
+# F1: as f1b, the view a method on the field (l[0].w.Build(v))
+[new -b] exit 0:
+199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+12
+  (exit 0)
+[old -b] COMPILE FAIL:
+f1c_view_field_method_uaf.olang:26:42: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', th
+   26 | fn add(l mut List<Layer>&, v I64) { l[0].w.Build(v) }
+f1c_view_field_method_uaf.olang:26:42: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   26 | fn add(l mut List<Layer>&, v I64) { l[0].w.Build(v) }
+compilation failed with 2 errors
+[patched -b -d -s] COMPILE FAIL: f1c_view_field_method_uaf.olang:26:42: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by re
+### repro/f1d_view_deeper_field_uaf.olang
+# F1: a field two levels down (l[0].w.inner)
+[new -b] exit 0:
+199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+12
+  (exit 0)
+[old -b] COMPILE FAIL:
+f1d_view_deeper_field_uaf.olang:26:47: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', th
+   26 | fn add(l mut List<Layer>&, v I64) { gi(l[0].w.inner, v) }
+f1d_view_deeper_field_uaf.olang:26:47: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   26 | fn add(l mut List<Layer>&, v I64) { gi(l[0].w.inner, v) }
+compilation failed with 2 errors
+[patched -b -d -s] COMPILE FAIL: f1d_view_deeper_field_uaf.olang:26:47: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by re
+### repro/f1e_view_field_r1_uaf.olang
+# F1 through r1: g(l[0].w) where g lends m.inner on to a view that builds - the top-level field lend is the hole;
+[new -b] exit 0:
+199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+12
+  (exit 0)
+[old -b] COMPILE FAIL:
+f1e_view_field_r1_uaf.olang:28:44: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then '
+   28 | fn add(l mut List<Layer>&, v I64) { g(l[0].w, v) }
+f1e_view_field_r1_uaf.olang:28:44: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   28 | fn add(l mut List<Layer>&, v I64) { g(l[0].w, v) }
+compilation failed with 2 errors
+[patched -b -d -s] COMPILE FAIL: f1e_view_field_r1_uaf.olang:28:44: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by refere
+### repro/f1x_view_whole_refused.olang
+# CONTROL for F1: the whole element lent to the same builder - O17's error (correct)
+[new -b] COMPILE FAIL:
+f1x_view_whole_refused.olang:11:36: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection li
+   11 | fn add(l mut List<M>&, v I64) { g(l[0], v) }
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+f1x_view_whole_refused.olang:11:36: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection li
+   11 | fn add(l mut List<M>&, v I64) { g(l[0], v) }
+compilation failed with 1 error
+[new -i]:
+f1x_view_whole_refused.olang:11:36: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection li
+   11 | fn add(l mut List<M>&, v I64) { g(l[0], v) }
+compilation failed with 1 error
+  (exit 1)
+[old -b] COMPILE FAIL:
+f1x_view_whole_refused.olang:11:36: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 
+   11 | fn add(l mut List<M>&, v I64) { g(l[0], v) }
+compilation failed with 1 error
+[patched -b -d -s] COMPILE FAIL: f1x_view_whole_refused.olang:11:36: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by refer
+### repro/f2_handle_field_coord.olang
+# F2 (OLDER - d05c915 too): the coordinator's program. A handle field (List) of a struct element, called through x[i]:
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+for 7
+  (exit 0)
+[old -b] exit 0:
+for 7
+[patched -b -d -s] for 7 
+### repro/f2b_handle_field_loop_main.olang
+# F2: the commonest shape - a loop in main. -b prints 199007 210736 199007, -s use after scope closed, -i 7 8 9
+[new -b] exit 0:
+for 199007
+for 210736
+for 199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+for 7
+for 8
+for 9
+  (exit 0)
+[old -b] exit 0:
+for 199007
+for 210736
+for 199007
+[patched -b -d -s] for 7 for 8 for 9 
+### repro/f2c_handle_field_list_param.olang
+# F2: the collection a List parameter, a function on the element's field
+[new -b] exit 0:
+for 199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+for 7
+  (exit 0)
+[old -b] exit 0:
+for 199007
+[patched -b -d -s] for 7 
+### repro/f2d_handle_field_method.olang
+# F2: in a method of the struct holding the collection
+[new -b] exit 0:
+for 199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+for 7
+  (exit 0)
+[old -b] exit 0:
+for 199007
+[patched -b -d -s] for 7 
+### repro/f2e_handle_field_nested.olang
+# F2: a handle field of a struct field of the element (f.Blocks[b].inner.S.Push)
+[new -b] exit 0:
+for 199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+for 7
+  (exit 0)
+[old -b] exit 0:
+for 199007
+[patched -b -d -s] for 7 
+### repro/f2f_handle_field_function.olang
+# F2: the handle field handed to a plain function (pushTo(f.Blocks[b].S, x))
+[new -b] exit 0:
+for 199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+for 7
+  (exit 0)
+[old -b] exit 0:
+for 199007
+[patched -b -d -s] for 7 
+### repro/f2g_handle_field_ref_collection.olang
+# F2: the collection held through a reference field
+[new -b] exit 0:
+for 199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+for 7
+  (exit 0)
+[old -b] exit 0:
+for 199007
+[patched -b -d -s] for 7 
+### repro/f2h_handle_field_two_level.olang
+# F2: the element read out of an element (ll[0][0].S.Push) - needs the inner read held as well (F3)
+[new -b] exit 0:
+for 199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+for 7
+  (exit 0)
+[old -b] exit 0:
+for 199007
+[patched -b -d -s] for 7 
+### repro/f2i_handle_field_text_segv.olang
+# F2: text pushed onto a List<String&> field - segfaults at -b (exit 139)
+[new -b] exit 139:
+
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+for 7
+  (exit 0)
+[old -b] exit 139:
+
+[patched -b -d -s] for 7 
+### repro/f2x_explicit_hold_ok.olang
+# CONTROL for F2: the same call written out, h := bs[b].S; h.Push(x) - correct (buildVarDecl's O18c lands the At call
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+[old -b] exit 0:
+for 7
+[patched -b -d -s] for 7 
+### repro/f2y_handle_element_ok.olang
+# CONTROL for F2: the element itself a handle (ls[b].Push) - correct: Push gets the list's scope
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+[old -b] exit 0:
+for 7
+[patched -b -d -s] for 7 
+### repro/f3_two_level_user_uaf.olang
+# F3 (OLDER - d05c915 too): written out, h := ll[0][0].S; h.Push(x) - O18c lands the outer At call, whose receiver ll[0]
+[new -b] exit 0:
+for 199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+for 7
+  (exit 0)
+[old -b] exit 0:
+for 199007
+[patched -b -d -s] use after scope closed: storage a closed scope gave back was read or written 
+### repro/f3b_two_level_user_whole.olang
+# F3: e := ll[0][0]; e.S.Push(x)
+[new -b] exit 0:
+for 199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+for 7
+  (exit 0)
+[old -b] exit 0:
+for 199007
+[patched -b -d -s] use after scope closed: storage a closed scope gave back was read or written 
+### repro/f3c_three_level_handles_user.olang
+# F3: handles all the way, h := lll[0][0]; h.Push(x) (the hidden form lll[0][0].Push(x), hf/h25, is correct)
+[new -b] exit 0:
+for 199007
+[new -b -d -s] exit 134:
+use after scope closed: storage a closed scope gave back was read or written
+[new -i]:
+for 7
+  (exit 0)
+[old -b] exit 0:
+for 199007
+[patched -b -d -s] use after scope closed: storage a closed scope gave back was read or written 
+### repro/f3x_split_ok.olang
+# CONTROL for F3: inner := ll[0]; h := inner[0].S - correct
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+[old -b] exit 0:
+for 7
+[patched -b -d -s] for 7 
+### repro/k1_r1_spawn_ok.olang
+# HELD: r1 with tasks - the callee spawns view calls on c.w and c.b in its own join, every mode agrees
+[new -b] exit 0:
+I64[3, 4, 0, 0]
+[new -b -d -s] exit 0:
+I64[3, 4, 0, 0]
+[new -i]:
+I64[3, 4, 0, 0]
+  (exit 0)
+[old -b] COMPILE FAIL:
+k1_r1_spawn_ok.olang:22:30: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = 
+   22 |     for i in range 3 { step(l[0]) }
+compilation failed with 1 error
+### repro/k2_r1_generic_insts.olang
+# HELD: a generic step lending c.w to Fill, a view for one instantiation and a writer for the other - refused for the writer only
+[new -b] COMPILE FAIL:
+k2_r1_generic_insts.olang:31:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[
+   31 |     step(b[0])
+k2_r1_generic_insts.olang:24:23: note: the callee is no view of the element because of this statement
+   24 | fn step(c mut <L>&) { c.w.Fill(3) }
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+k2_r1_generic_insts.olang:31:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[
+   31 |     step(b[0])
+k2_r1_generic_insts.olang:24:23: note: the callee is no view of the element because of this statement
+   24 | fn step(c mut <L>&) { c.w.Fill(3) }
+compilation failed with 1 error
+[new -i]:
+k2_r1_generic_insts.olang:31:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[
+   31 |     step(b[0])
+k2_r1_generic_insts.olang:24:23: note: the callee is no view of the element because of this statement
+   24 | fn step(c mut <L>&) { c.w.Fill(3) }
+compilation failed with 1 error
+  (exit 1)
+[old -b] COMPILE FAIL:
+k2_r1_generic_insts.olang:28:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[
+   28 |     step(a[0])
+k2_r1_generic_insts.olang:31:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[
+   31 |     step(b[0])
+compilation failed with 2 errors
+### repro/t1_field_of_trydefault_arg.olang
+# T1 HOLE (OLDER): (try a[1] catch default Acc()).P lent to a writable parameter on a built-in array - accepted;
+[new -b] exit 0:
+array P 0
+[new -b -d -s] exit 0:
+array P 0
+[new -i]:
+array P 1
+  (exit 0)
+[old -b] exit 0:
+array P 0
+### repro/t1b_field_of_trydefault_receiver.olang
+# T1 HOLE: the same as a writable receiver, (try a[1] catch default Acc()).P.Bump() - -b 0, -i 1
+[new -b] exit 0:
+array P 0 N 0
+[new -b -d -s] exit 0:
+array P 0 N 0
+[new -i]:
+array P 1 N 0
+  (exit 0)
+[old -b] exit 0:
+array P 0 N 0
+### repro/t1c_field_of_trydefault_baked.olang
+# T1 HOLE: the evaluator disagrees with the run time - baked 1, run 0 (-i: run 1)
+[new -b] exit 0:
+baked 1 run 0
+[new -b -d -s] exit 0:
+baked 1 run 0
+[new -i]:
+baked 1 run 1
+  (exit 0)
+[old -b] exit 0:
+baked 1 run 0
+### repro/t1d_assign_field_of_trydefault.olang
+# T1 HOLE, beyond E31b: an ASSIGNMENT through a field of a try-default, (try a[1] catch default Acc()).P.X = 5 - baked 51,
+[new -b] exit 0:
+baked 51 run 0
+[new -b -d -s] exit 0:
+baked 51 run 0
+[new -i]:
+baked 51 run 51
+  (exit 0)
+[old -b] exit 0:
+baked 51 run 0

@@ -1,0 +1,72 @@
+== r01_lambdabody
+  san:    refused: r01_lambdabody.olang:10:12: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
+  O3:     refused
+  interp: exit 0 run: k.s abc1 x Qbc1|baked: k.s abc1 x Qbc1|
+== r01b_lambdaarg
+  san:    refused: r01b_lambdaarg.olang:10:9: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
+  O3:     refused
+  interp: exit 0 run: k.s abc1 x Qbc1|baked: k.s abc1 x Qbc1|
+== r01c_spawnlambda
+  san:    refused: r01c_spawnlambda.olang:9:18: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
+  O3:     refused
+  interp: exit 0 run: k.s abc1 x Qbc1|baked: k.s abc1 x Qbc1|
+== r02_tuplereturn
+  san:    exit 0 run: a Qbc1 b ab|baked: a Qbc1 b ab|
+  O3:     exit 0 run: a Qbc1 b ab|baked: a Qbc1 b ab|
+  interp: exit 0 run: a Qbc1 b ab|baked: a Qbc1 b ab|
+== r02b_tuplestruct
+  san:    exit 0 run: a Qbc1 h.s abc1|baked: a Qbc1 h.s abc1|
+  O3:     exit 0 run: a Qbc1 h.s abc1|baked: a Qbc1 h.s abc1|
+  interp: exit 0 run: a Qbc1 h.s abc1|baked: a Qbc1 h.s abc1|
+== r03_conversion
+  san:    exit 0 run: k.l abc1 x Qbc1|baked: k.l abc1 x Qbc1|
+  O3:     exit 0 run: k.l abc1 x Qbc1|baked: k.l abc1 x Qbc1|
+  interp: exit 0 run: k.l abc1 x Qbc1|baked: k.l abc1 x Qbc1|
+== r04_field
+  san:    exit 0 run: k.s abc1 x Qbc1|baked: k.s abc1 x Qbc1|
+  O3:     exit 0 run: k.s abc1 x Qbc1|baked: k.s abc1 x Qbc1|
+  interp: exit 0 run: k.s abc1 x Qbc1|baked: k.s abc1 x Qbc1|
+== r05_slicefield
+  san:    exit 0 run: k.s ab x Qbc1|baked: k.s ab x Qbc1|
+  O3:     exit 0 run: k.s ab x Qbc1|baked: k.s ab x Qbc1|
+  interp: exit 0 run: k.s ab x Qbc1|baked: k.s ab x Qbc1|
+== r06_viaouterlocal
+  san:    refused: r06_viaouterlocal.olang:11:11: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+  O3:     refused
+  interp: exit 0 run: k.s abc1 x Qbc1|baked: k.s abc1 x Qbc1|
+== r07_reassignlonger
+  san:    exit 0 a much longer text 1 1000 / a much longer text 2 2000|
+  O3:     exit 0 a much longer text 1 1000 / a much longer text 2 2000|
+  interp: exit 0 a much longer text 1 1000 / a much longer text 2 2000|
+== r08_isidentity
+  san:    refused: r08_isidentity.olang:10:9: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+  O3:     refused
+  interp: exit 1 olang interpret: r08_isidentity.olang:17: it uses storage after the scope it was made in closed|
+== r09_matchbind
+  san:    refused: r09_matchbind.olang:15:25: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  O3:     refused
+  interp: exit 0 run: l List<String&>["abc1"] x Qbc1|baked: l List<String&>["abc1"] x Qbc1|
+== r10_forin
+  san:    refused: r10_forin.olang:10:22: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  O3:     refused
+  interp: exit 0 run: l List<String&>["abc1", "y"] x Qbc1|baked: l List<String&>["abc1", "y"] x Qbc1|
+== r11_defer
+  san:    exit 0 run: abc1|baked: abc1|
+  O3:     exit 0 run: abc1|baked: abc1|
+  interp: exit 0 run: abc1|baked: abc1|
+== r12_iterkept
+  san:    refused: r12_iterkept.olang:11:22: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  O3:     refused
+  interp: exit 0 run: l List<String&>["abc1"] x Qbc1|baked: l List<String&>["abc1"] x Qbc1|
+== r13_aspayload
+  san:    refused: r13_aspayload.olang:15:7: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  O3:     refused
+  interp: exit 0 run: l List<String&>["abc1"] x Qbc1|baked: l List<String&>["abc1"] x Qbc1|
+== r15_lambdastored
+  san:    refused: r15_lambdastored.olang:7:16: error[D3a]: 'f' names a function of this module - a name means one thing in it, so name this apart
+  O3:     refused
+  interp: exit 1 r15_lambdastored.olang:7:16: error[D3a]: 'f' names a function of this module - a name means one thing in it, so name this apart|r15_lambdast
+== r16_anybox
+  san:    refused: r16_anybox.olang:14:12: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
+  O3:     refused
+  interp: exit 0 run: k.s abc2|baked: k.s abc2|

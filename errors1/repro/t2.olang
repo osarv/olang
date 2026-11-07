@@ -1,0 +1,9 @@
+Big mut I64 = 9223372036854775807
+test "checked lets out" {
+    x := checked (Big + 1)
+    assert x == 0
+}
+test "noreturn in test" {
+    f := fn() I64 { return Big }
+    assert f() > 0
+}

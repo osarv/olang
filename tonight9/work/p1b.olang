@@ -1,0 +1,15 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+G mut Node& = Node(1)
+fn setg(i I64) {
+    G.next = Node(i)
+}
+fn main() ? {
+    setg(5)
+    G.next = Node(9)
+    g := G
+    g.next.next = Node(11)
+    println($G.next.v " " $G.next.next.v)
+}

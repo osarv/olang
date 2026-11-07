@@ -1,0 +1,32 @@
+import "std/io"
+
+type K enum {
+    A(s String&)
+    B
+}
+type H struct(r String&) {
+    r
+}
+type O struct(h H&) {
+    h
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+
+fn main() {
+    keep := O(null)
+    for i in range 5 {
+        t := $i "-loop"
+        k := K.A(t)
+        keep = O(match k {
+            case K.A(s) => H(s)
+            case K.B => null
+        })
+    }
+    churn()
+    io.Println($keep.h.r)!
+}

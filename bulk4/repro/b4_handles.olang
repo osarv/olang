@@ -1,0 +1,29 @@
+import "std/io"
+
+fn f(v Vec<I64>, n I64) I64 {
+    if n == 0 { return v.Len() }
+    w := Vec<I64>()
+    w.Push(n)
+    become f(w, n - 1)
+}
+
+fn k(g fn() I64, n I64) I64 {
+    if n == 0 { return g() }
+    x := n * 3
+    become k(fn() { return x }, n - 1)
+}
+
+type Sh trait { Area() I64 }
+type Sq struct(s I64) { s }
+fn (q Sq) Area() I64 { return q.s * q.s }
+
+fn a(s any Sh&, n I64) I64 {
+    if n == 0 { return s.Area() }
+    become a(Sq(n), n - 1)
+}
+
+fn main() {
+    io.Println($f(Vec<I64>(), 3))!
+    io.Println($k(fn() { return 0 }, 3))!
+    io.Println($a(Sq(5), 3))!
+}

@@ -1,0 +1,4 @@
+# check: run
+# flags: -D Version=1.2.3
+# B10: a value that is not one whole number literal is text
+fn main() ? { assert Version == "1.2.3" }

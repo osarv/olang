@@ -1,0 +1,23 @@
+import "std/io"
+type N struct(v I32) { v }
+type Cur struct(of mut N&) { at mut N&of = of }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n N& = N(I32(i))
+    }
+}
+fn main() ? {
+    outer mut N& = N(1)
+    a mut Cur& = Cur(outer)          # bound where outer lives: main's block
+    keep N& = outer
+    for i in range 2 {
+        s mut N& = N(42)             # the loop body's block
+        b mut Cur& = Cur(s)          # bound to the loop body
+        x := a if i == 0 else b      # the two bindings meet
+        x.at = s                     # judged against the meet: the loop body
+        keep = a.at                  # a's binding says main's block
+    }
+    churn()
+    try io.Print($keep.v "\n")
+}

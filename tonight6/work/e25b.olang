@@ -1,0 +1,33 @@
+fn churn() I64 {
+    t I64 = 0
+    for k in range 200 {
+        junk := $k "-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t += junk.Len()
+    }
+    return t
+}
+fn mk2(n I64) (List<String&>, I64) ? {
+    if n > 100 { error }
+    l := List<String&>()
+    for i in range n + 1 { l.Push($i "-elem-of-moderate-length-xxxxxxxxxxxxxxx") }
+    return l, n + 1
+}
+fn main() ? {
+    rows := List<List<String&>>()
+    for k in range 3 {
+        rec, next := try mk2&rows(k)
+        rows.Push(rec)
+    }
+    for k in range 3 {
+        rec, next := try mk2&rows(k) catch default List<String&>(), 0
+        rows.Push(rec)
+    }
+    for k in range 3 {
+        if k >= 0 {
+            rec, next := try mk2&rows(k)
+            rows.Push(rec)
+        }
+    }
+    println($churn())
+    for r in rows { println(r[0]) }
+}

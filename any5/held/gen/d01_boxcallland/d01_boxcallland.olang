@@ -1,0 +1,62 @@
+import "std/io"
+# decision 1: an unscoped call's array held by the box as it is - is the call's result scope where the box lands?
+# Boxes made in a loop body, kept in an outer list, read after the arena churns; the call's result is text the callee
+# builds, returns through a local (O26a), a slice copy, a nested call, a conditional of calls, a try default
+type Named trait {
+    Name() String
+}
+type Label extends String
+fn (l Label&) Name() String { return "label " $l }
+error Oops {
+    BAD
+}
+fn bad(k I64) String ? Oops {
+    if k < 100 { error Oops.BAD }
+    return "never"
+}
+fn mk(i I64) String { return "mk" $i }
+fn viaLocal(i I64) String {
+    s := "loc" $i
+    s[0] = 'L'
+    return s
+}
+fn viaSlice(p String&) String { return p[0:4] }
+fn nested(i I64) String { return mk(i + 10) }
+fn names(xs List<any Named&>&) String {
+    out := ""
+    for x in xs { out = $out $x.Name() ", " }
+    return out
+}
+fn main() {
+    xs := List<any Named&>()
+    for i in range 3 {
+        t := "slice" $i
+        xs.Push(Label(mk(i)))
+        xs.Push(Label(viaLocal(i)))
+        xs.Push(Label(viaSlice(t)))
+        xs.Push(Label(nested(i)))
+        xs.Push(Label(mk(i) if i > 0 else viaLocal(i)))
+        xs.Push(Label(try bad(i) catch default mk(i + 20)))
+        xs.Push(Label(match i { case 0 => nested(i) case _ => viaSlice(t) }))
+    }
+    churn()
+    say(names(xs))
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

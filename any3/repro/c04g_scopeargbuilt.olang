@@ -1,0 +1,12 @@
+# a scope argument (E25) on a call with a built reference result, pushed into an outer List<P&> - no any
+type P struct(n I64) { n }
+fn mkp(i I64) P& { return P(i) }
+fn main() {
+    xs := List<P&>()
+    for i in range 2 {
+        t := "inner" $i
+        xs.Push(mkp&t(i * 11))
+    }
+    assert churn() > 0
+    for x in xs { say($x.n) }
+}

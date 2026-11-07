@@ -1,0 +1,12 @@
+# a declared type over a generic struct instantiation - a natural "type Names List<String&>"
+import "std/io"
+type Names List<String&>
+fn (n mut Names&) AddTwo() {
+  n.Push("a")
+  n.Push("b")
+}
+fn main() ? {
+  n := Names()
+  n.AddTwo()
+  try io.Print($n.Len() "\n")
+}

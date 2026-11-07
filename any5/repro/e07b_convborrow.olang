@@ -1,0 +1,22 @@
+# T29a both ways round for a type declared over String: a value declaration from a conversion should copy and a
+# reference made from it should borrow - over String they are the other way round (over Array<Char> as written)
+type Lab extends String
+type Lab2 extends Array<Char>
+fn wr(l mut Lab&) { l[0] = 'W' }
+fn wr2(l mut Lab2&) { l[0] = 'W' }
+fn probe() String {
+    s := "abc"
+    x := Lab(s)
+    x[1] = 'X'
+    wr(Lab(s))
+    t := "abc"
+    y := Lab2(t)
+    y[1] = 'X'
+    wr2(Lab2(t))
+    return "over String: s " $s " (T29a: Wbc); over Array<Char>: t " $t
+}
+G := probe()
+fn main() {
+    say("run:   " $probe())
+    say("baked: " $G)
+}

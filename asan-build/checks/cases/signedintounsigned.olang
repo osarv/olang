@@ -1,0 +1,6 @@
+# check: fail a number flows implicitly only where nothing is lost
+# T6b: a signed value never flows into an unsigned type - a negative one has no place there
+fn main() ? {
+    a I32 = 1
+    b U64 = a
+}

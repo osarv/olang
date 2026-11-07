@@ -1,0 +1,24 @@
+# P1g / decision 50: two spawn targets in different blocks; the result built where the longer-lived one is kept,
+# then something built through the shorter-lived one and stored into the shared node
+import "std/io"
+import "churn"
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn two(i I64) (mut Node&, mut Node&) {
+    n := Node(i)
+    return n, n
+}
+fn main() ? io.IoError {
+    a mut Node& = null
+    for i in range 2 {
+        b mut Node& = null
+        join {
+            spawn a, b = two(i + 5)
+        }
+        b.next = Node(99)
+    }
+    c := churn.Churn()
+    try io.Println($c " " $a.v " " $a.next.v)
+}

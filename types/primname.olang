@@ -1,0 +1,10 @@
+# T4: a module declaring a type named like a primitive
+import "std/io"
+type I32 struct() {
+  x mut I64 = 7
+}
+fn main() ? {
+  a I32 = I32()
+  n := 5
+  try io.Print($a.x " " $n "\n")
+}

@@ -1,0 +1,16 @@
+# P4a/D16c: a clause assigning a variable of the spawner (a capture is a read-only copy)
+error E {
+    NEG
+}
+fn f(n I64) I64 ? E {
+    if n < 0 { error E.NEG }
+    return n
+}
+fn main() ? {
+    y I64 = 0
+    x I64 = 0
+    join {
+        spawn x = try f(-1) catch E { y = 5 } default 1
+    }
+    println($x " " $y)
+}

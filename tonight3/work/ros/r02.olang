@@ -1,0 +1,15 @@
+fn apply(f fn()) { f() }
+fn main() ? {
+    bad mut Array<I64>& = Array<I64>(8)
+    join {
+        for t in range 4 {
+            spawn fn() {
+                for i in range 20000 {
+                    g := fn() { bad[t] += 1 }
+                    apply(g)
+                }
+            }
+        }
+    }
+    println("counts " $bad)
+}

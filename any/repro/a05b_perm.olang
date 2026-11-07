@@ -1,0 +1,10 @@
+type Counter trait {
+    mut Bump() I64
+}
+type Tally struct(at I64) { at }
+fn (t mut Tally&) Bump() I64 {
+    t.at += 1
+    return t.at
+}
+fn viaAny(c any Counter&) I64 { return c.Bump() }
+fn main() { }

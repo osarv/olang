@@ -1,0 +1,18 @@
+# open point 5 through a generic instance: a result of a type variable bound to a reference, the function made a value
+import "std/io"
+
+fn firstOf<T>(v Vec<T>&) T { return v[0] }
+
+fn main() {
+    g := firstOf<String&>
+    out := Vec<String&>()
+    for i in range 5 {
+        w := Vec<String&>()
+        t := $i "-turn"
+        w.Push(t)
+        out.Push(g(w))
+    }
+    junk := Vec<String>()
+    for i in range 50 { junk.Push("zzzzzzzzzzzzzzzzzzzzzzz" $i) }
+    io.Println($out " " $junk.Len())!
+}

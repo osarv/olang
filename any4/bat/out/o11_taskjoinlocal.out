@@ -1,0 +1,12 @@
+== o11_taskjoinlocal
+  san:    exit 0 taskjoinlocal done|
+  O3:     exit 0 taskjoinlocal done|
+  interp: exit 0 taskjoinlocal done|
+--- compile (-debug -sanitize)
+built ./build/o11_taskjoinlocal.debug.san
+--- run san
+taskjoinlocal done
+--- run O3
+taskjoinlocal done
+--- interpret
+taskjoinlocal done

@@ -1,0 +1,16 @@
+# D19: "A generic owner is written with its arguments". fn Bag.mk2 (bare owner, generic Bag) is accepted, and D19a
+# suggests that very form for fn mk2(n I64) Bag<String&>; a call through an instance, Bag<I64>.mk2(7), stops the
+# build with "it does not check a generic name as a value yet" (a checker gap reached; B: a construct not checked).
+import "std/io"
+type Bag<T> struct(items Vec<T>) { items }
+fn Bag.mk2(n I64) Bag<String&> {
+    v := Vec<String&>()
+    v.Push("x" $n)
+    return Bag(v)
+}
+fn main() {
+    c := Bag<I64>.mk2(7)
+    io.Println($c.items)!
+    d := Bag<F64>.mk2(8)
+    io.Println($d.items)!
+}

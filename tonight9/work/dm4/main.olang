@@ -1,0 +1,10 @@
+import "lib"
+fn g(a <W>) I64 {
+    return lib.F(1)
+}
+fn h(a <P>) I64 {
+    return lib.G()
+}
+fn main() ? {
+    println($g(2.5) " " $lib.F(1) " " $h(3) " " $lib.G())
+}

@@ -1,0 +1,12 @@
+import "std/prop"
+fn sorted(xs Array<I64>&) Bool {
+    for i in range 1, xs.Len() {
+        if xs[i - 1] > xs[i]: return false
+    }
+    return true
+}
+test sorted "a sorted copy is sorted" {
+    prop.Check(fn(xs Array<I64>&) {
+        assert xs.Len() < 3 or xs[0] != 7, "found a 7"
+    }, cases = 300)
+}

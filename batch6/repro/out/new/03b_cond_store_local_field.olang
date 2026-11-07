@@ -1,0 +1,23 @@
+# CONFIRMED, PRE-EXISTING - finding 3 with a local reference's field: "b.last = x if i == 1 else "z"".
+#   -b -d -s: use after scope closed; -i: w1-abcdefghijklmnopqrstuvwxyz
+type Bag struct() {
+    last String& = ""
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+fn main() ? {
+    b mut Bag& = Bag()
+    for i in range 2 {
+        x String& = "w" $i "-abcdefghijklmnopqrstuvwxyz"
+        b.last = x if i == 1 else "z"
+        churn()
+    }
+    churn()
+    println(b.last)
+}

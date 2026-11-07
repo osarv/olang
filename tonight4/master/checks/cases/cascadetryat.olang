@@ -1,0 +1,11 @@
+# check: fail error[E31a]: Box has only the checked form of this operation, TryAt - write it under 'try'
+# also: compilation failed with 1 error
+# a type with only the checked form, indexed without 'try': one error, not one more for every later index in the chain
+type Box struct() {
+    n I64 = 0
+}
+fn (b Box&) TryAt(i I64) Box&b ? { return b }
+fn main() ? {
+    b := Box()
+    c := b[0][1][2]
+}

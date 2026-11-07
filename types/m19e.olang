@@ -1,0 +1,15 @@
+# M19e: a trait's default, overridden by one type and inherited by another
+import "std/io"
+type Shape trait {
+  Area() I64
+}
+fn (s <S Shape>) Describe() I64 { return s.Area() * 10 }
+type Sq struct(n I64) { n }
+fn (s Sq) Area() I64 { return s.n * s.n }
+type Ci struct(r I64) { r }
+fn (c Ci) Area() I64 { return 3 * c.r * c.r }
+fn (c Ci) Describe() I64 { return -1 }
+fn total(x <T Shape>) I64 { return x.Describe() }
+fn main() ? {
+  try io.Print($Sq(2).Describe() " " $Ci(1).Describe() " " $total(Sq(3)) " " $total(Ci(2)) "\n")
+}

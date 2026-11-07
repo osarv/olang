@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/r7_cond_base.olang:23:17: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   23 |     d.lx.toks = take (p.lx if c else p.lx).toks
+      |                 ^~~~
+compilation failed with 1 error

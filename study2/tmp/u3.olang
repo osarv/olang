@@ -1,0 +1,8 @@
+fn table() Map<String&, I32> {
+    m := Map<String&, I32>()
+    return m
+}
+fn main() ? {
+    m := table()
+    println($m.Len())
+}

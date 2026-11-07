@@ -1,0 +1,26 @@
+# (c)+(d) DIAGNOSTIC and FRICTION, O25/O8c: rebuilding a long-lived collection each step and putting the new one in
+# place - 'still := List<I64>() ... w.alive = still', the way a newcomer filters an entity list - is O25 "a reference
+# never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='", pointing at a list that IS
+# declared with ':='. Following the first half ('still mut List<I64>&w = List<I64>()') compiles and then grows the
+# program by the old list every step for ever (O8c: nothing in w's scope is reclaimed before w's scope closes):
+# Steps=24000 -> 298 MB in progs/ecs.olang, 12 KB a step. The flat spelling is 'w.alive.Clear()' then pushing back
+# (Clear keeps the chunks), which nothing points at.
+# Expected: the message names the in-place form (Clear and refill, or Truncate) - or a List gets a way to take
+# another's elements (a move/Swap) so the old buffer can be reused.
+Steps I64 = 1000
+type World struct() {
+    alive mut List<I64>& = List<I64>()
+}
+fn (w mut World&) age(s I64) {
+    still := List<I64>()
+    for id in w.alive {
+        if (id + s) % 7 != 0 { still.Push(id) }
+    }
+    for i in range 7 { still.Push(s * 10 + i) }
+    w.alive = still
+}
+fn main() ? {
+    w := World()
+    for s in range Steps { w.age(s) }
+    println($w.alive.Len())
+}

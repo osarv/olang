@@ -1,0 +1,10 @@
+# G26: an 'if' on N decided per instantiation; written as an early return, the statement after it is still checked
+# at N = 0, where it can never run
+fn Total(a Array<I64, <N>>&) I64 {
+    if N == 0 { return 0 }
+    return a[0] + Total(a[1:] as Array<I64, N - 1>&)
+}
+fn main() ? {
+    x Array<I64, 3> = I64[1, 2, 3]
+    println($Total(x))
+}

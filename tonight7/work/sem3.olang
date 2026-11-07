@@ -1,0 +1,16 @@
+fn bumpA(x mut Array<I64>&) { x[0]++ }
+fn g(a <T>) { bumpA(a) }
+fn g2(a <T>) { a[0].AtomicAdd(1) }
+fn g3(a <T>) {
+    f := fn() { bumpA(a) }
+    f()
+}
+fn main() ? {
+    arr mut Array<I64>& = I64[0, 0]
+    g(arr)
+    println("g: " $arr)
+    g2(arr)
+    println("g2: " $arr)
+    g3(arr)
+    println("g3: " $arr)
+}

@@ -1,0 +1,27 @@
+# E11c (pre-existing - db2af5d gives the same) x T25c (wt-qc): Str "must have no effect" - "$ calls it as often as
+# building the text needs (measure, write, or never)" - and that is checked as K1a evaluability, which refuses a global
+# write but not a write through a reference: a Str whose receiver (by value or by reference) holds a "mut" reference and
+# writes through it is accepted. The built program then runs it twice per "$" (measure, then write) and -i once, so the
+# modes disagree. With G an immutable global (and a by-value receiver) it is also a read-only copy written through,
+# which T25c refuses for every explicit call (an operator, Eq, Hash, At, Len, Call ... all give error[T25c]) but not for
+# the implicit Str call.
+# expected: an error at Str (E11c: it writes through a reference) - or "b 1 b 1" in every mode
+# actual:   -b and -d print "b 2 b 2" (G's counter written twice per "$"); -i prints "b 1 b 1"
+type Ctr struct() {
+    n I64 = 0
+}
+type B struct(c mut Ctr&) { c }
+G B = B(Ctr())
+fn (a B) Str() String {
+    a.c.n = a.c.n + 1
+    return "b"
+}
+fn main() ? {
+    x := B(Ctr())
+    s := $x
+    t := $G
+    print(s)
+    print(" " $x.c.n " ")
+    print(t)
+    println(" " $G.c.n)
+}

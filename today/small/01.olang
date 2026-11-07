@@ -1,0 +1,13 @@
+# D15: := from various settled expressions
+fn gen(a <T>) <T> { return a }
+fn twice(a I32) I32 { return a * 2 }
+fn main() ? {
+    a := 2147483647 + 1
+    b := -9223372036854775808
+    c := 9223372036854775808
+    d := 1 << 40
+    e := 0xFFFFFFFF + 1
+    f := twice
+    g := 'a' + 1
+    println($a " " $b " " $c " " $d " " $e " " $f(3) " " $g)
+}

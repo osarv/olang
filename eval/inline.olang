@@ -1,0 +1,16 @@
+import "std/io"
+type Blk struct() {
+    m mut Array<I32> = Array<I32>(4)
+}
+fn fill(n I64) I64 {
+    b := Blk()
+    src := Array<I32>(n, 7)
+    b.m = src
+    return b.m.Len()
+}
+B I64 = fill(3)
+M mut I64 = 3
+fn main() ? io.IoError {
+    try io.Print($B "\n")
+    try io.Print($fill(M) "\n")
+}

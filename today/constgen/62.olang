@@ -1,0 +1,19 @@
+# G26: an else-if chain on N, each branch only valid for its own N
+fn Pick(a Array<I64, <N>>&) I64 {
+    if N == 0 {
+        return 0
+    } else if N == 1 {
+        return a[0]
+    } else if N == 2 {
+        return a[0] + a[1]
+    } else {
+        return a[0] + a[1] + a[2]
+    }
+}
+fn main() ? {
+    z Array<I64, 0> = Array<I64, 0>()
+    o Array<I64, 1> = I64[5]
+    t Array<I64, 2> = I64[5, 6]
+    h Array<I64, 3> = I64[5, 6, 7]
+    println($Pick(z) " " $Pick(o) " " $Pick(t) " " $Pick(h))
+}

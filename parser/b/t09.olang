@@ -1,0 +1,10 @@
+# shifts vs type arguments
+test "a" {
+    x I64 = 1
+    y I64 = x << 3 >> 1
+    assert y == 4
+    z I64 = (x << 2) >> 1
+    assert z == 2
+    p := Pair<I32, I64>(1, 2)
+    assert p.First == 1
+}

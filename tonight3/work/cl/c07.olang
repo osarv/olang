@@ -1,0 +1,6 @@
+fn h2(c Bool, k I32) I64 { return k + (0 if c else (2000000000 + 2000000000)) }
+fn h3(c Bool, k I32) I64 { return k + (0 if c else 3000000000) }
+C mut Bool = false
+fn main() ? {
+    println($h2(C, 1) " " $h3(C, 1))
+}

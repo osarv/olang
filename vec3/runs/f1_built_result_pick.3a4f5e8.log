@@ -1,0 +1,4 @@
+/home/user/review/vec3/repro/f1_built_result_pick.olang:15:19: error: expected an expression, found ')'
+   15 |     v := Vec<I64>()
+      |                   ^
+compilation failed with 1 error

@@ -1,0 +1,15 @@
+import "std/io"
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+}
+fn main() ? {
+    f fn() I64 = fn() { return 0 }
+    for i in range 2 {
+        arr := Array<I64>(8, 42)
+        f = fn() { return arr[0] }
+    }
+    churn()
+    try io.Print($f() "\n")
+}

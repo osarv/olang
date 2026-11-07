@@ -1,0 +1,22 @@
+# P1g / O23a: a spawn's target is a '&src' field reached through a parameter (a derived scope); the task's built
+# result is stored there
+import "std/io"
+import "churn"
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Holder struct(src mut Node&) {
+    r mut Node&src = src
+}
+fn mkNode(i I64) mut Node& { return Node(i) }
+fn setIt(h mut Holder&, i I64) {
+    join { spawn h.r = mkNode(i) }
+}
+fn main() ? io.IoError {
+    base mut Node& = Node(1)
+    h mut Holder& = Holder(base)
+    setIt(h, 42)
+    c := churn.Churn()
+    try io.Println($c " " $h.r.v)
+}

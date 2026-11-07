@@ -1,0 +1,24 @@
+# Vec phase 2a (L1, see l1): the same in a loop in main - every turn's owners are held to the end of main.
+# 100,000 turns peak at 0.86GB and 800,000 at 6.9GB (~8.6KB a turn) - a leak in all but name. runall.sh runs it at 20,000; the peaks above were measured with -b at 100,000 and 800,000 (6.9GB).
+type X struct(k I64) {
+    k
+    text String& = "x" $k "-text-of-x-object"
+}
+type Lexer struct(n I64) {
+    n
+    o own mut X& = X(n)
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+    b Lexer = Lexer(2)
+}
+fn main() ? {
+    t := Two()
+    for i in range 20000 {
+        c := t
+        c.a = Lexer(7)                 # a borrowed copy's field given an owner: who releases it?
+        c.b = Lexer(8)
+    }
+    println(t.a.o.text)
+}

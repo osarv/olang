@@ -1,0 +1,31 @@
+# (b)+(c) OVER-REJECTION, C2d/E25: a constructor call with a scope argument, 'Env&c(c.env)', is refused, while the
+# declaration that says the same thing, 'local mut Env&c = Env(c.env)', compiles and runs right (-s clean). C2d's own
+# note proposes the refused spelling ("or the instance where the argument lives ('T&x(...)')"), as does the message
+# when the scope argument is left out.
+# Expected: both compile (E25: "On a constructor call it is where the instance lands").
+type Env struct(parent mut Env&) {
+    n I64 = 0
+    parent
+}
+type Closure struct(env mut Env&) {
+    env
+}
+type Value enum {
+    Nil
+    Fn(c Closure&)
+}
+fn depth(f Value&) I64 {
+    match f {
+        case Value.Fn(c) {
+            local := Env&c(c.env)
+            local.n = 1
+            return local.n + c.env.n
+        }
+        nomatch { return 0 }
+    }
+}
+fn main() ? {
+    g mut Env& = Env(null)
+    f Value& = Value.Fn(Closure(g))
+    println($depth(f))
+}

@@ -1,0 +1,38 @@
+# r05: ':=' from a slice / an element / a payload of a call's result, kept where the call landed by its obligations
+type Tok struct(text String&, extra Array<I64>&) {
+    text
+    extra
+}
+type Res enum {
+    None
+    Got(t Tok)
+}
+fn mkArr(t String&, n I64) Array<String&> { return String&[t, "fresh" $n] }
+fn mkTok(t String&, n I64) Tok { return Tok(t, Array<I64>(3, n)) }
+fn mkRes(t String&, n I64) Res { return Res.Got(Tok(t, Array<I64>(3, n))) }
+fn collect(t String&, keep mut List<String&>&, keepA mut List<Array<I64>&>&) {
+    for k in range 4 {
+        x := mkTok(t, k + 20).extra
+        keepA.Push(x)
+        p := mkRes(t, k + 30) as Res.Got
+        keepA.Push(p.extra)
+    }
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k) * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    t := "base"
+    keep := List<String&>()
+    keepA := List<Array<I64>&>()
+    collect(t, keep, keepA)
+    churn()
+    for s in keep { print($s " ") }
+    for a in keepA { print($a[0] " ") }
+    println()
+}

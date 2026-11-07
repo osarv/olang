@@ -1,0 +1,21 @@
+type Box struct(v I64) {
+    v
+    items mut List<I64>& = List<I64>()
+}
+type Node struct(v I64) {
+    v
+}
+fn main() ? {
+    boxes := List<Box>()
+    nodes := List<Node&>()
+    texts := List<String&>()
+    for i in range 5 {
+        boxes.Push(Box(i))
+
+        texts.Push("t" $i)
+    }
+    for i in range 5 { boxes[i].items.Push(i * 10) }
+    churn := List<String&>()
+    for i in range 1000 { churn.Push("x" $i) }
+    println($boxes[3].items[0]  " " $texts[3])
+}

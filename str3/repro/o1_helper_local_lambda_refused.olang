@@ -1,0 +1,19 @@
+# OVER-REJECTION (listed by the author), avoidable. peek's closure is a local only ever called, but D16d builds a
+# closure capturing a reference where that reference lives - n's scope, the receiver's in this call - so the walk is
+# right about the code as generated (IR of peek: '__olang_scope_alloc_a(ptr <n's scope>, ...)' for the environment).
+# Avoidable in codegen: a closure that never leaves its function (not returned, stored or captured; only called or
+# handed to a parameter that keeps nothing) can live in the frame, as D16d already does for o_helper_transient_lambda;
+# the walk then reads the same rule. e27b83b: error[E11c, O12] at peek(b.head) with a note at the lambda.
+# 7345ff9: exit 139 (segfault). b6259d1: 'b4'.
+type Node struct(v I64) {
+    v
+}
+type Bag struct(head Node&) {
+    head
+}
+fn peek(n Node&) I64 {
+    f := fn() I64 { return n.v }
+    return f()
+}
+fn (b Bag&) Str() String { return "b" $peek(b.head) }
+fn main() ? { println($Bag(Node(4))) }

@@ -1,0 +1,14 @@
+type E struct(Path String&) { Path }
+fn main() ? {
+    files := List<E>()
+    files.Push(E("a"))
+    files.Push(E("b"))
+    cands := files.ToArray()
+    m := Map<I64, List<String&>>()
+    for i in range cands.Len() {
+        if not m.Has(i % 2) { m.Put(i % 2, List<String&>()) }
+        l := try m.Get(i % 2)
+        l.Push(cands[i].Path)
+    }
+    println($(try m.Get(0)).Len())
+}

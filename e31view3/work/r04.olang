@@ -1,0 +1,19 @@
+# the relaxation through two levels where the OUTER handle (ll[0]) is itself a fresh list built in the loop, pushed
+# into an outer list that outlives it - does the inner Push land where ll's elements live?
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn main() ? {
+    ll := List<List<I64>>()
+    for i in range 3 {
+        inner := List<I64>()
+        ll.Push(inner)
+        ll[i].Push(i + 7)
+        churn()
+    }
+    churn()
+    for i in range 3 { for s in ll[i] { println("ll " $i " " $s) } }
+}

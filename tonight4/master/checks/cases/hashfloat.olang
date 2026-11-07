@@ -1,0 +1,8 @@
+# check: fail error[G19, E10b]: Pf does not satisfy the constraint Hashable on K: it has no Hash
+# E10b: a F64 has no Hash, so neither does a struct holding one
+type Pf struct(x F64) {
+    x
+}
+fn main() ? {
+    m := Map<Pf, I32>()
+}

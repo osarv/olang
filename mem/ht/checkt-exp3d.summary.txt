@@ -1,0 +1,10 @@
+reading file "checkt-exp3d.gz" - please wait, this might take some time...
+Debuggee command was: build/exp3dnf -t compiler/check.olang
+finished reading file, now analyzing data:
+
+total runtime: 106.813000s.
+calls to allocation functions: 5879338 (55043/s)
+temporary memory allocations: 2396095 (22432/s)
+peak heap memory consumption: 1.34G
+peak RSS (including heaptrack overhead): 1.64G
+total memory leaked: 1.33G

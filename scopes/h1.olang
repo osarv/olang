@@ -1,0 +1,19 @@
+# a conditional of existing references passed where the callee stores it (O17/O18b)
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn main() ? {
+    outer Node& = Node(1)
+    l List<Node&>& = List<Node&>()
+    for i in range 2 {
+        inner Node& = Node(42)
+        l.Push(inner if i >= 0 else outer)
+    }
+    churn()
+    try io.Print($l[0].v " " $l[1].v "\n")
+}

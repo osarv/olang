@@ -1,0 +1,27 @@
+# r12 OVER-REJECTION - C2d/T25d/O26a: the elements of a static text literal walked by for-in are static (T25d), so a
+# constructor may keep one anywhere - but not when the instance lands in a local the function returns (O26a: the
+# result scope): "g.rooms.Put(name, Room(name))" is C2d. The same in a function that keeps g local, or with a literal written
+# directly (direct), compiles. (Building a text adventure's world.)
+#
+# expected: 2 1
+# actual: error[C2d] at line 18, column 32 ("this instance holds a reference to an argument it would outlive")
+type Room struct(name String&) {
+    name
+    exits Map<I32, String&>
+}
+type Game struct() {
+    rooms Map<String&, mut Room&>
+}
+fn world() Game {
+    g := Game()
+    for name in String&["hall", "kitchen"] {
+        g.rooms.Put(name, Room(name))
+    }
+    return g
+}
+fn direct() Game {
+    g := Game()
+    g.rooms.Put("hall", Room("hall"))
+    return g
+}
+fn main() ? { println($world().rooms.Len() " " $direct().rooms.Len()) }

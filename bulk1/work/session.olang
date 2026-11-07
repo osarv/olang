@@ -1,0 +1,18 @@
+import "std/io"
+
+# 2.7: text reassigned into a long-lived field - each tick frees the previous text
+N I64 = 1000000
+
+type Session struct() {
+    status String& = ""
+}
+
+fn (s mut Session&) tick(n I64) {
+    s.status = "line " $n " of the file - a status text padded out to about a hundred bytes ......................"
+}
+
+fn main() {
+    s := Session()
+    for n in range N { s.tick(n) }
+    io.Println(s.status)!
+}

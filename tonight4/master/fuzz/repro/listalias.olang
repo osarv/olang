@@ -1,0 +1,48 @@
+# A List or Map value whose state lives elsewhere than its own storage - a copy made in a block inside the one the
+# collection was made in (T8: a second name for the same collection), or a List/Map parameter taken by value - cannot
+# have any method called on it, not even a read-only one: every call below is O17's "this value's references live
+# where its own storage does not, and the callee can store through it".
+#     expected: compiles; prints "9 | 9" (Len, a checked index and a Push through the second name each turn; a Push
+#               and a Put through by-value parameters, seen by the caller as T8 says)
+#     actual:   does not compile - 7 errors (O17) at x12.Len(), x12[0], x12.Push(3), x15.Put(...), l.Push, l.Len,
+#               m.Put
+# Found by the generator (a second name for a List in an inner block; a helper taking the caller's List). The same
+# copy in the List's own block works, and so does a parameter written "mut List<T>&".
+# Cause (semantic.c ~8740, O17's lend check where a call binds its scopes - ownSlotsAdmitStores/RefNarrowingMatters,
+# "a lend through which the callee could keep what it builds in the value's own slots"): the copy's own slot - List.s,
+# its one field, a reference to the shared state record - is in the inner block or the parameter's slot, while the
+# record lives where the original was made, and the check refuses any call that
+# lends such a value to a callee that "can store through it". A read-only receiver (Len, At, TryAt) cannot assign the
+# value's own slots (T25b: a field is assigned only through a writable instance), and List's and Map's mut methods
+# only ever store through their record (s.chunks, s.count, ...), never into s itself, so none of these calls can put
+# anything where the copy's own storage is. The generator now makes second names only in the collection's own block
+# and passes collections by reference.
+import "std/io"
+fn byValue(l List<I64>, m Map<I32, I32>) I64 {
+    l.Push(9)
+    m.Put(7, 7)
+    return l.Len()
+}
+fn c0(x0 I32) I64 {
+    x9 List<I64> = List<I64>()
+    x9.Push(1)
+    s I64 = 0
+    for x11 in range 2 {
+        x12 List<I64> = x9
+        s += x12.Len()
+        s += try x12[0] catch default 5
+        x12.Push(3)
+    }
+    x13 Map<I32, I32> = Map<I32, I32>()
+    for x14 in range 2 {
+        x15 Map<I32, I32> = x13
+        x15.Put(x14, 3)
+    }
+    s += byValue(x9, x13)
+    return s + x9.Len() - 6 + x13.Len() - 1
+}
+K0 I64 = c0(3)
+v0 mut I32 = 3
+fn main() ? io.IoError {
+    try io.Print($K0 " | " $c0(v0) "\n")
+}

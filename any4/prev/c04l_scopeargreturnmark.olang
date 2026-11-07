@@ -1,0 +1,21 @@
+# finding 1 through "&return": the box goes into the caller's outer list, its array into the callee's result scope -
+# where the call's result lands, the caller's loop body here
+type W trait {
+    Show() String
+}
+type Lab extends String
+fn (l Lab&) Show() String { return "lab " $String(l) }
+fn mk(i I64) String { return "text" $i "-" $(i * 7) }
+fn stash(l mut List<any W&>&, i I64) String {
+    l.Push(Lab(mk&return(i)))
+    return "r" $i
+}
+fn main() {
+    l := List<any W&>()
+    for i in range 3 {
+        r := stash(l, i)
+        say(r)
+    }
+    assert churn() > 0
+    for x in l { say(x.Show()) }
+}

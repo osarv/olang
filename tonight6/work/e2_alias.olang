@@ -1,0 +1,37 @@
+# E31b: two writes through one element in one call, and a callee reaching the list by another path.
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) AddFrom(b mut Acc&) {
+    a.N = a.N + 1
+    b.N = b.N + 10
+}
+fn (a mut Acc&) Touch(l mut List<Acc>&) {
+    a.N = a.N + 1
+    l[0].N = l[0].N + 100
+}
+fn (a mut Acc&) TouchArr(l mut Array<Acc>&) {
+    a.N = a.N + 1
+    l[0].N = l[0].N + 100
+}
+fn (a mut Acc&) Remove(l mut List<Acc>&) {
+    a.N = a.N + 1
+    x := l.RemoveAt(0)
+}
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    l[0].AddFrom(l[0])
+    arr := Array<Acc>(1)
+    arr[0].AddFrom(arr[0])
+    println("AddFrom: list " $l[0].N " array " $arr[0].N)
+    l[0].Touch(l)
+    arr[0].TouchArr(arr)
+    println("Touch: list " $l[0].N " array " $arr[0].N)
+    r := List<Acc>()
+    r.Push(Acc())
+    r.Push(Acc())
+    r[1].N = 50
+    r[0].Remove(r)
+    println("Remove: len " $r.Len() " r[0].N " $r[0].N)
+}

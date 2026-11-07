@@ -1,0 +1,18 @@
+import "std/io"
+
+type Circle struct(r F64) { r }
+fn grow(c mut Circle&) { c.r = c.r * 2.0 }
+
+type Shape enum { Round Circle, Sq(s F64) }
+
+fn bump(e mut Shape&) {
+    if e == Shape.Round {
+        grow(e)
+    }
+}
+
+fn main() {
+    s := Shape.Round(Circle(1.0))
+    bump(s)
+    io.Println("after: " $s)!
+}

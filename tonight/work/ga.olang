@@ -1,0 +1,42 @@
+import "std/linalg"
+import "std/rand"
+fn trial(rg mut rand.Rand&, seed I64) I64 {
+    m := 1 + rg.Below(150)
+    n := 1 + rg.Below(150)
+    k := 1 + rg.Below(150)
+    ta := rg.Below(2) == 1
+    tb := rg.Below(2) == 1
+    a := linalg.Matrix<F32>(k if ta else m, m if ta else k, null)
+    b := linalg.Matrix<F32>(n if tb else k, k if tb else n, null)
+    for i in range a.Data.Len() { a.Data[i] = F32(rg.Uniform(-1, 1)) }
+    for i in range b.Data.Len() { b.Data[i] = F32(rg.Uniform(-1, 1)) }
+    bias := linalg.Matrix<F32>(1, n, null)
+    for i in range n { bias.Data[i] = F32(rg.Uniform(-1, 1)) }
+    c1 := linalg.Matrix<F32>(m, n, null)
+    for i in range c1.Data.Len() { c1.Data[i] = F32(rg.Uniform(-1, 1)) }
+    c2 := c1.Clone()
+    pre := linalg.Matrix<F32>(m, n, null)
+    acts := linalg.Activation[linalg.Activation.Identity, linalg.Activation.Relu, linalg.Activation.Gelu, linalg.Activation.Tanh, linalg.Activation.Sigmoid]
+    act := acts[rg.Below(5)]
+    beta F64 = F64(rg.Below(2))
+    threads I64 = 1 + rg.Below(3)
+    linalg.GemmAct(c1, a, ta, b, tb, bias, act, 0.5, beta, threads, pre)
+    linalg.Gemm(c2, a, ta, b, tb, 0.5, beta, threads)
+    c2.AddRow(bias)
+    z := c2.Clone()
+    c2.Activate(z, act)
+    bad I64 = 0
+    for i in range c1.Data.Len() {
+        if c1.Data[i] != c2.Data[i] or pre.Data[i] != z.Data[i] {
+            if bad == 0 { println("seed " $seed " m" $m " n" $n " k" $k " ta" $ta " tb" $tb " act " $act " at " $i " " $c1.Data[i] " vs " $c2.Data[i] " pre " $pre.Data[i] " vs " $z.Data[i]) }
+            bad++
+        }
+    }
+    return bad
+}
+fn main() ? {
+    rg mut rand.Rand& = rand.Rand(3)
+    f I64 = 0
+    for s in range 400 { if trial(rg, s) > 0 { f++ } }
+    println("failing trials " $f)
+}

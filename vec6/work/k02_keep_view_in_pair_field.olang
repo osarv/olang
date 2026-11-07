@@ -1,0 +1,22 @@
+type H struct() {
+    p Pair<I64, Array<I64>&> = Pair<I64, Array<I64>&>(0, null)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn keep(h mut H&, d Array<I64>&) { h.p = Pair(1, d) }
+fn main() ? {
+    v := Vec<I64>()
+    for i in range 3 { v.Push(i + 1) }
+    h := H()
+    d := v.View()
+    keep(h, d)
+    for i in range 100 { v.Push(i) }
+    churn()
+    println($h.p.Second[0])
+}

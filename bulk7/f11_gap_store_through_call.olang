@@ -1,0 +1,34 @@
+# F11 (interpret disagrees with build; a destructor lost; NEW, O15): a store over a value with destructors reached
+# through what a call gives (`get(b).a = Res(3)`) is a known gap - `build` stops ("it does not check a store over a
+# value with destructors to run, reached through what a call gives (O15) yet") - but `interpret` runs it and skips the
+# old value's destructor: Res(1) is never ended ("stored, ended 0" / "ended 21").
+#   /home/user/wt/review7/build/olang f11_gap_store_through_call.olang            -> refused (gap)
+#   /home/user/wt/review7/build/olang interpret f11_gap_store_through_call.olang  -> runs, Res(1) never ended
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type Pair struct(a Res, b Res) {
+    a, b
+}
+
+type Box struct(p Pair) {
+    p
+}
+
+fn get(b mut Box&) mut Pair& { return b.p }
+
+fn main() {
+    {
+        b Box = Box(Pair(Res(1), Res(2)))
+        get(b).a = Res(3)
+        io.Println("stored, ended " $Ended)!
+    }
+    io.Println("ended " $Ended)!
+}

@@ -1,0 +1,10 @@
+# T29a/T7d: a declared type over Array<F32, 3> converted from a shorter run-time array - a conversion names its argument's
+# storage, so a length check is the only thing standing between it and the bytes after the array
+type V3 extends Array<F32, 3>
+fn first(v V3&) F32 { return v[2] }
+fn main() ? {
+    a := F32[1.5, 2.5]
+    guard := F32[99.0, 98.0]
+    v := V3(a)
+    println($v.Len() " " $v[2] " " $first(V3(a)) " " $guard)
+}

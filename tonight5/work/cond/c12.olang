@@ -1,0 +1,11 @@
+fn main() ? {
+    c := churn() < 0
+    w1 := W()
+    k1 := w1.b.head
+    {
+        h := pickwv(w1).b
+        growv(h)
+    }
+    churn()
+    println($rd(k1))
+}

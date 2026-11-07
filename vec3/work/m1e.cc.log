@@ -1,0 +1,7 @@
+/home/user/review/vec3/work/m1e.olang:22:7: error[O39]: assigning 'c.text' may release the String borrowed on line 21, which is used after it
+   22 |     c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+      |       ^~~~
+/home/user/review/vec3/work/m1e.olang:24:13: note: used here, after it
+   24 |     println(t)
+      |             ^
+compilation failed with 1 error

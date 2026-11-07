@@ -1,0 +1,23 @@
+# r22 FRICTION (memory, principle 1) - what a loop puts into a long-lived struct stays until that struct's scope
+# closes, so a long-running loop must not replace parts of it: a StringBuilder field replaced once per turn (there is
+# no StringBuilder.Clear; List has Clear) costs ~190 bytes a turn forever. Same family, also measured in this study:
+# text sent through a channel of String& lives where the channel lives (~23 bytes a message: 1,000,000 messages 33 MB,
+# ../min/pipemem.olang; Chan<String> is T7a's error, so text cannot travel by value), and List.RemoveAt keeps the
+# removed copies' memory. A tailer or a server built this way grows without bound; in Go the collector reclaims it.
+#
+# expected: some spelling that reuses the builder's storage (StringBuilder.Clear, as List.Clear keeps its chunks)
+# actual:   olang -b -D N=1000000 -> 193 MB peak; N=100000 -> 20 MB
+type F struct() {
+    pending StringBuilder = StringBuilder()
+}
+
+fn main() ? {
+    f := F()
+    total I64 = 0
+    for i in range N {
+        f.pending.Push("abc")
+        total += f.pending.Len()
+        f.pending = StringBuilder()
+    }
+    println($total)
+}

@@ -1,0 +1,5 @@
+import "std/io"
+import "lib"
+fn main() {
+    for x in lib.Make(3) { try io.Println($x) catch { } }
+}

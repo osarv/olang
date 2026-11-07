@@ -1,0 +1,41 @@
+# store through x[i] whose value replaces the collection's storage
+type Big struct() {
+    A I64 = 0
+    B I64 = 0
+    C I64 = 0
+    D I64 = 0
+    E I64 = 0
+    F I64 = 0
+    G I64 = 0
+    H I64 = 0
+}
+type Vec struct() {
+    data mut Array<Big>& = Array<Big>(1)
+    other mut Array<I64>& = Array<I64>(4, 7)
+}
+fn (v Vec&) At(i I64) Big { return v.data[i] }
+fn (v mut Vec&) SetAt(i I64, x Big) { v.data[i] = x }
+fn (v Vec&) Len() I64 { return v.data.Len() }
+fn shrink(v mut Vec&) I64 {
+    v.data = Array<Big>(0)
+    v.other = Array<I64>(4, 7)
+    return 555
+}
+fn shrinkBig(v mut Vec&) Big {
+    v.data = Array<Big>(0)
+    v.other = Array<I64>(4, 7)
+    b := Big()
+    b.E = 555
+    b.F = 666
+    b.G = 777
+    b.H = 888
+    return b
+}
+fn main() ? {
+    v := Vec()
+    v[0].E = shrink(v)
+    println("field store: len " $v.Len() " other " $v.other)
+    w := Vec()
+    w[0] = shrinkBig(w)
+    println("element store: len " $w.Len() " other " $w.other)
+}

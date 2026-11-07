@@ -1,0 +1,33 @@
+# P2: what a task is handed made in a block that closes before the join waits: a lambda capturing it, a receiver,
+# a slice, a handle
+import "std/io"
+import "churn"
+import "std/time"
+type Node struct(v I64) { v }
+fn (n Node&) Slow() I64 {
+    churn.Churn()
+    return n.v
+}
+fn run(f fn() I64) I64 { return f() }
+fn sumOf(a Array<I64>&) I64 {
+    churn.Churn()
+    t := 0
+    for x in a { t = t + x }
+    return t
+}
+fn main() ? io.IoError {
+    r1 I64 = 0
+    r2 I64 = 0
+    r3 I64 = 0
+    join {
+        if r1 == 0 {
+            y Node& = Node(5)
+            a := Array<I64>(8, 3)
+            spawn r1 = run(fn() I64 { return y.Slow() })
+            spawn r2 = y.Slow()
+            spawn r3 = sumOf(a[0:4])
+        }
+        churn.Churn()
+    }
+    try io.Println($r1 " " $r2 " " $r3)
+}

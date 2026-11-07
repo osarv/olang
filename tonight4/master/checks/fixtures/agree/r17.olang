@@ -1,0 +1,17 @@
+# R17: an error leaving a bare "?" function leaves as that function's own default error - so main reports it unnamed,
+# built or interpreted
+import "std/io"
+error Err {
+    LOUD
+}
+run mut I64 = 1
+fn inner(n I64) ? Err {
+    if n > 0 { error Err.LOUD }
+}
+fn outer(n I64) ? {
+    try inner(n)
+}
+fn main() ? {
+    try io.Print("before\n") catch { }
+    try outer(run)
+}

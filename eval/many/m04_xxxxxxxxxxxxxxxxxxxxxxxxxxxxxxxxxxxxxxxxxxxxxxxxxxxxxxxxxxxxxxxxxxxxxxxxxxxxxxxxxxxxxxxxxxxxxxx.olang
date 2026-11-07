@@ -1,0 +1,1 @@
+fn F4() I32 { return 4 }

@@ -1,0 +1,26 @@
+import "std/io"
+
+type Keep struct() {
+    views := Vec<mut Array<Char>&>()
+}
+
+fn f(k mut Keep&) String {
+    out := Array<Char>(3, 'a')
+    k.views.Push(out)
+    return String(out)
+}
+
+fn g(k mut Keep&) String {
+    out := Array<Char>(3, 'b')
+    k.views.Push(out[0:2])
+    return String(out)
+}
+
+fn main() {
+    k := Keep()
+    s := f(k)
+    t := g(k)
+    k.views[0][0] = 'z'
+    k.views[1][0] = 'y'
+    io.Println($s " " $t)!
+}

@@ -1,0 +1,19 @@
+# NEW (G9d), CONFIRMED, minor: SPEC G9d says the variable binds to a WRITABLE reference, but a generic constructor
+# (G10c) binds it read-only: Box(Res(1)) is a Box<Res&>, so 'b1.x.k = 5' is refused although nothing else holds the
+# instance. A generic function (fn id(x <T>) T) binds 'mut Res&' as specified.
+# e27b83b: error[T25b] at 'b1.x.k = 5'. 7345ff9: '5 1' then 'd'.
+type Res struct(k I64) {
+    k
+} destruct { println("d") }
+type Box<T> struct(x T) {
+    x
+}
+type Node struct(k I64) {
+    k
+}
+fn main() ? {
+    b1 := Box(Res(1))
+    b1.x.k = 5
+    b2 := Box(Node(1))
+    println($b1.x.k " " $b2.x.k)
+}

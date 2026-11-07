@@ -1,0 +1,21 @@
+fn churnIt() {
+    for k in range 300 {
+        junk := $k "-churn-churn-churn-churn-churn-churn-churn-churn-churn-churn"
+        assert junk.Len() > 0
+    }
+}
+type Holder struct() {
+    l List<String&> = List<String&>()
+}
+fn keepIn(l mut List<String&>&, h mut Holder&) { h.l = l }
+fn main() ? {
+    users := List<List<String&>>()
+    users.Push(List<String&>())
+    h := Holder()
+    for k in range 3 {
+        keepIn(users[0], h)
+    }
+    churnIt()
+    h.l.Push("x")
+    println($h.l.Len() " " $users[0].Len())
+}

@@ -1,0 +1,46 @@
+# round 8 / O8d condition 6: a Map's Vec value replaced by Put (freed at once where nothing views it) while a Ref into
+# the old value's buffer is still in use
+import "std/io"
+
+type blk struct(n I64, s String) { n, s }
+
+fn mk(k I64) Vec<blk> {
+    v := Vec<blk>()
+    for i in range 8 { v.Push(blk(k * 100 + i, $i)) }
+    return v
+}
+
+fn junk(m mut Map<I64, Vec<blk>>&, k I64) {
+    for j in range 50 { m.Put(1000 + j, mk(-k)) }
+}
+
+fn later(rr blk&, m mut Map<I64, Vec<blk>>&, k I64) I64 {
+    m.Put(k % 4, mk(k + 1))
+    junk(m, k)
+    return rr.n
+}
+
+fn work(m mut Map<I64, Vec<blk>>&, k I64) I64 {
+    m.Put(k % 4, mk(k))
+    old := try m.Ref(k % 4) catch { return 0 }
+    return later(old.Ref(3), m, k)
+}
+
+fn viaLambda(m mut Map<I64, Vec<blk>>&, k I64) I64 {
+    m.Put(k % 4, mk(k))
+    old := try m.Ref(k % 4) catch { return 0 }
+    rr := old.Ref(3)
+    f := fn() { m.Put(k % 4, mk(k + 1)) }
+    f()
+    junk(m, k)
+    return rr.n
+}
+
+fn main() {
+    m := Map<I64, Vec<blk>>()
+    s := 0
+    for k in range 2000 { s += work(m, k) }
+    t := 0
+    for k in range 2000 { t += viaLambda(m, k) }
+    io.Println($s " " $t " (" $(100 * 1999000 + 3 * 2000) " as by value)")!
+}

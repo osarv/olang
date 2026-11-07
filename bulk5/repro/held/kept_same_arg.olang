@@ -1,0 +1,15 @@
+import "std/io"
+type holder struct(s String&) {
+    s
+}
+fn mk(t String) holder { return holder(t) }
+fn a(t String, u String&) holder {
+    h := mk(t)
+    u[0] = 'x'
+    return h
+}
+fn main() {
+    s := $"abc"
+    h := a(s, s)
+    io.Println($h.s " " $s)!
+}

@@ -1,0 +1,26 @@
+type In struct(n I64) ? {
+    v Vec<I64> = Vec<I64>()
+    for i in range n { v.Push(i) }
+    if n == 5 { error }
+}
+type H struct() {
+    p own mut In& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    h := H()
+    t := 0
+    for k in range 20000 {
+        h.p = try In(k % 8) catch { null }
+        if h.p != null { t += h.p.v.Len() }
+    }
+    churn()
+    println($t)
+}

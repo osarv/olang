@@ -1,0 +1,11 @@
+# a declared type over another declared type
+import "std/io"
+type Pct I32(v mut I32) {
+  if v > 100 { v = 100 }
+}
+type Pct2 Pct
+fn main() ? {
+  p Pct2 = Pct2(150)
+  q Pct2 = 170
+  try io.Print($I32(p) " " $I32(q) "\n")
+}

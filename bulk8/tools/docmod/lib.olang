@@ -1,0 +1,52 @@
+# A small library for tools review.
+
+# What failed reading.
+type ReadErr error {
+    # the line it stopped at
+    Bad(line I64, col I64)
+    Eof
+}
+
+# A color.
+type Color struct(R U8, G U8, B U8) { R, G, B }
+
+# Gray of one value.
+fn Color.Gray(v U8) Color { return Color(v, v, v) }
+
+# From a hex text.
+fn Color.FromHex(t String&) Color ? ReadErr {
+    if t.Len() != 7: error ReadErr.Bad(1, t.Len())
+    return Color(1, 2, 3)
+}
+
+# A packed header.
+type Head packed struct(V U4, Ok Bool, N U11) { V, Ok, N }
+
+# Picks y over x.
+fn Pick(x I32, y I32) [y > x] I32 ? {
+    return y
+}
+
+# Twice, as a value too.
+fn Twice(x I64) I64 { return x * 2 }
+
+# Sums by value: an instance per length.
+fn SumFixed(a Array<I64>) I64 {
+    if a.Len() == 3: return 0
+    return a[0]
+}
+
+# Raises by name with data.
+fn Find(k String&) I64 ? {
+    if k == "": error NoKey(key = k)
+    return k.Len()
+}
+
+# Deprecated: use Twice.
+fn Old(x I64) I64 { return x }
+
+# Box of things.
+type Box<T> struct(V T) { V }
+
+# Of a value.
+fn Box<T>.Of(v T) Box<T> { return Box(v) }

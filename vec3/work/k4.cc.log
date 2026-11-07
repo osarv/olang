@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/k4.olang:9:63: error[T25c, O14]: a built result is new storage and writable, and this reference is read-only - return a copy, or borrow the result from the parameter it is read through
+    9 | fn k(a mut Array<Char>&) mut Array<Char>& { return Pair(a, 1).First }
+      |                                                               ^~~~~
+compilation failed with 1 error

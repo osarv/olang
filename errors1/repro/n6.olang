@@ -1,0 +1,5 @@
+# finding 5: a noreturn call as a match value is refused ("every value of this match is ?")
+import "std/os"
+fn c(x I64) I64 { return match x { case 1 => os.Exit(5) case _ => 2 } }
+fn d(x I64) I64 { return match x { case 1 => 7 case _ => os.Exit(5) } }
+fn main() { }

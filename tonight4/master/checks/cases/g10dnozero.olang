@@ -1,0 +1,16 @@
+# check: fail error[D13c]: D has no zero value, so this needs one
+# also: it introduces a type variable, which no zero binds
+# also: :14:10: error[D13c]
+# G10d/D13c: no zero value binds what a generic constructor introduces, so such a type has none
+type G<T> struct() {
+    n I64 = 0
+}
+type D struct(g G<<T>>&) {
+    n I64 = 1
+}
+fn main() ? {
+    d D
+    assert d.n == 1
+    a := Array<D>(3)
+    assert a.Len() == 3
+}

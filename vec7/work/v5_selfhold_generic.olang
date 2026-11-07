@@ -1,0 +1,8 @@
+type N<T> struct() {
+    x N<T> = N<T>()
+    v Vec<T> = Vec<T>()
+}
+fn main() ? {
+    x := N<I64>()
+    println($x.v.Len())
+}

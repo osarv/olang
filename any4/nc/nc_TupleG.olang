@@ -1,0 +1,23 @@
+import "std/io"
+# T32 AnyNoCopy through Vec<G>: a default whose result holds its receiver by value, called through an any
+type Ups struct(n I64) {
+    n
+    at I64 = 0
+}
+type Gen trait {
+    mut Step() I64
+}
+fn (u mut Ups&) Step() I64 {
+    u.at += 1
+    return u.at
+}
+type Wrap<T> struct(l List<T>&) { l }
+fn (g mut G&) Both<G Gen>() G, I64 {
+    return g, 1
+}
+fn main() {
+    a mut any Gen& = Ups(5)
+    x, n := a.Both()
+    say("made")
+}
+fn say(s String&) { try io.Println(s) catch { } }

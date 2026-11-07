@@ -1,0 +1,191 @@
+# sparse - a block-sparse matrix (BSR-like) over a dense B x B block type whose size is a constant parameter, with
+# matrix dimensions that are constants or Dynamic (known at run time). Operators: + and @ on blocks and matrices,
+# x[i, j] reads and writes. Used to solve a 2-D Poisson problem with conjugate gradients.
+
+import "std/math"
+
+Dynamic I64 = -1
+
+# ---- a dense B x B block ----
+
+type Block<T, B I64> struct() {
+    assert B > 0
+    data Array<T, B * B>
+}
+
+fn (b Block<<T>, <B I64>>&) At(i I64, j I64) T { return b.data[i * B + j] }
+fn (b mut Block<<T>, <B I64>>&) SetAt(i I64, j I64, v T) { b.data[i * B + j] = v }
+
+fn (a Block<<T>, <B I64>>&) Plus(b Block<T, B>&) Block<T, B> {
+    out := Block<T, B>()
+    for k in range B * B { out.data[k] = a.data[k] + b.data[k] }
+    return out
+}
+
+fn (a Block<<T>, <B I64>>&) MatMul(b Block<T, B>&) Block<T, B> {
+    out := Block<T, B>()
+    out.addProduct(a, b)
+    return out
+}
+
+# out += a b, in place
+fn (out mut Block<<T>, <B I64>>&) addProduct(a Block<T, B>&, b Block<T, B>&) {
+    for i in range B {
+        for k in range B {
+            aik := a[i, k]
+            if aik == 0 { continue }
+            for j in range B { out.data[i * B + j] += aik * b.data[k * B + j] }
+        }
+    }
+}
+
+# y[0:B] += this block times x[0:B]
+fn (a Block<<T>, <B I64>>&) mulVec(x Array<T>&, xOff I64, y mut Array<T>&, yOff I64) {
+    for i in range B {
+        s T = 0
+        for j in range B { s += a[i, j] * x[xOff + j] }
+        y[yOff + i] += s
+    }
+}
+
+fn (b Block<<T>, <B I64>>&) Str() String {
+    out := StringBuilder()
+    for i in range B {
+        out.Push("[")
+        for j in range B {
+            if j > 0 { out.Push(" ") }
+            out.Push($b[i, j])
+        }
+        out.Push("]")
+    }
+    return out.ToString()
+}
+
+# ---- the sparse matrix: blocks keyed by (block row, block column) ----
+
+type Sparse<T, B I64, R I64, C I64> struct(rows I64 = R, cols I64 = C) {
+    assert (R == Dynamic or R % B == 0) and (C == Dynamic or C % B == 0)
+    nrows I64 = R if R != Dynamic else rows
+    ncols I64 = C if C != Dynamic else cols
+    assert nrows >= 0 and ncols >= 0 and nrows % B == 0 and ncols % B == 0
+    blocks Map<Pair<I64, I64>, mut Block<T, B>&>
+}
+
+fn (m Sparse<<T>, <B I64>, <R I64>, <C I64>>&) Rows() I64 { return R if R != Dynamic else m.nrows }
+fn (m Sparse<<T>, <B I64>, <R I64>, <C I64>>&) Cols() I64 { return C if C != Dynamic else m.ncols }
+
+fn (m Sparse<<T>, <B I64>, <R I64>, <C I64>>&) At(i I64, j I64) T {
+    blk := try m.blocks.Get(Pair(i / B, j / B)) catch default null
+    if blk == null { return 0 }
+    return blk[i % B, j % B]
+}
+
+fn (m mut Sparse<<T>, <B I64>, <R I64>, <C I64>>&) block(bi I64, bj I64) mut Block<T, B>& {
+    key := Pair(bi, bj)
+    if key not in m.blocks { m.blocks.Put(key, Block<T, B>()) }
+    return try m.blocks.Get(key) catch { unreachable }
+}
+
+fn (m mut Sparse<<T>, <B I64>, <R I64>, <C I64>>&) SetAt(i I64, j I64, v T) {
+    m.block(i / B, j / B)[i % B, j % B] = v
+}
+
+# a sum, block by block
+fn (a Sparse<<T>, <B I64>, <R I64>, <C I64>>&) Plus(b Sparse<T, B, R, C>&) Sparse<T, B, R, C> {
+    assert a.Rows() == b.Rows() and a.Cols() == b.Cols()
+    out := Sparse<T, B, R, C>(a.Rows(), a.Cols())
+    for e in a.blocks { out.block(e.Key.First, e.Key.Second).data = e.Value.data }
+    for e in b.blocks {
+        o := out.block(e.Key.First, e.Key.Second)
+        o.data = o.Plus(e.Value).data
+    }
+    return out
+}
+
+# a product: every pair of blocks (i, k) (k, j) adds into (i, j)
+fn (a Sparse<<T>, <B I64>, <R I64>, <K I64>>&) MatMul(b Sparse<T, B, K, <C I64>>&) Sparse<T, B, R, C> {
+    assert a.Cols() == b.Rows()
+    out := Sparse<T, B, R, C>(a.Rows(), b.Cols())
+    byRow := Map<I64, mut List<Pair<I64, mut Block<T, B>&>>&>()
+    for e in b.blocks {
+        k := e.Key.First
+        if k not in byRow { byRow.Put(k, List<Pair<I64, mut Block<T, B>&>>()) }
+        (try byRow.Get(k) catch { unreachable }).Push(Pair(e.Key.Second, e.Value))
+    }
+    for e in a.blocks {
+        row := try byRow.Get(e.Key.Second) catch { continue }
+        for p in row { out.block(e.Key.First, p.First).addProduct(e.Value, p.Second) }
+    }
+    return out
+}
+
+# y = m x
+fn (m Sparse<<T>, <B I64>, <R I64>, <C I64>>&) MulVec(x Array<T>&, y mut Array<T>&) {
+    assert x.Len() == m.Cols() and y.Len() == m.Rows()
+    for i in range y.Len() { y[i] = 0 }
+    for e in m.blocks { e.Value.mulVec(x, e.Key.Second * B, y, e.Key.First * B) }
+}
+
+fn (m Sparse<<T>, <B I64>, <R I64>, <C I64>>&) Nonzeros() I64 {
+    return m.blocks.Values().Fold(I64(0), fn(acc, b) {
+        return acc + b.data.Count(fn(v T) Bool { return v != 0 })
+    })
+}
+
+# ---- conjugate gradients on a symmetric positive definite matrix ----
+
+fn dot(a Array<F64>&, b Array<F64>&) F64 {
+    s F64 = 0.0
+    for i in range a.Len() { s += a[i] * b[i] }
+    return s
+}
+
+fn cg(m Sparse<F64, <B I64>, <R I64>, <C I64>>&, rhs Array<F64>&, tol F64) (Array<F64>, I64) {
+    n := rhs.Len()
+    x := Array<F64>(n)
+    r := Array<F64>(n)
+    for i in range n { r[i] = rhs[i] }
+    p := Array<F64>(n)
+    for i in range n { p[i] = r[i] }
+    q := Array<F64>(n)
+    rr := dot(r, r)
+    iters I64 = 0
+    for iters < n and math.Sqrt(rr) > tol {
+        m.MulVec(p, q)
+        alpha := rr / dot(p, q)
+        for i in range n {
+            x[i] += alpha * p[i]
+            r[i] -= alpha * q[i]
+        }
+        rr2 := dot(r, r)
+        for i in range n { p[i] = r[i] + rr2 / rr * p[i] }
+        rr = rr2
+        iters++
+    }
+    return x, iters
+}
+
+# the 5-point Laplacian on a side x side grid, as a Dynamic-sized matrix of 4 x 4 blocks
+fn laplacian(side I64) Sparse<F64, 4, Dynamic, Dynamic> {
+    n := side * side
+    m := Sparse<F64, 4, Dynamic, Dynamic>(n, n)
+    for y in range side {
+        for x in range side {
+            i := y * side + x
+            m[i, i] = 4.0
+            if x > 0 { m[i, i - 1] = -1.0 }
+            if x < side - 1 { m[i, i + 1] = -1.0 }
+            if y > 0 { m[i, i - side] = -1.0 }
+            if y < side - 1 { m[i, i + side] = -1.0 }
+        }
+    }
+    return m
+}
+
+fn main() ? {
+    a := Sparse<I64, 2, 4, 4>()
+    b := Sparse<I64, 2, 6, 4>()
+    c := a @ b
+    println($c.Rows())
+    d := Sparse<I64, 3, 4, 4>()
+}

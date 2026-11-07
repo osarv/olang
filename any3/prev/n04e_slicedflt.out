@@ -1,0 +1,15 @@
+== build -debug -sanitize
+lab tex
+lab tex
+lab tex
+status 0
+== build
+lab tex
+lab tex
+lab tex
+status 0
+== interpret
+lab tex
+lab tex
+lab tex
+status 0

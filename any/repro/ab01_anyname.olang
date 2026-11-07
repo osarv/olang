@@ -1,0 +1,11 @@
+# 'any' as an ordinary name: a parameter, a field, a local, a function
+type Hold struct(any I64) {
+    any
+}
+fn f(any I64) I64 { return any + 1 }
+fn any2(n I64) I64 { return n }
+fn main() {
+    any := 3
+    h := Hold(any)
+    say($f(any) " " $h.any " " $any2(any))
+}

@@ -1,0 +1,7 @@
+/home/user/review/vec7/work/c20_conv_cond_forms.olang:3:19: error[D8]: this function returns String&, found String&
+    3 |     return String(match k { case 1 => a nomatch => a[0:1] })
+      |                   ^~~~~
+/home/user/review/vec7/work/c20_conv_cond_forms.olang:10:26: error[E28]: both values of 'a if c else b' have one type, found Array<Char> and Array<Char>&
+   10 |     t String& = String(w if c else w[0:1])
+      |                          ^~
+compilation failed with 2 errors

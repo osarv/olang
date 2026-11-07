@@ -1,0 +1,19 @@
+# an array named through a conversion (T29a) of read-only text made a mut any and written: a parameter, a global
+type Bump trait {
+    mut Bump()
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+G String = "global"
+fn poke(t String&) {
+    b mut any Bump& = Lab(t)
+    b.Bump()
+}
+fn main() {
+    s := "hello"
+    poke(s)
+    say(s)
+    poke(G)
+    say(G)
+    poke("literal")
+}

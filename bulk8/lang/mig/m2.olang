@@ -1,0 +1,24 @@
+import "std/io"
+
+type Col enum String { Red, Blue }
+
+type Box<T> struct(v T) { v }
+
+fn Col.Red() Col { return Col.Red }
+
+fn Col.ColFrom(s String&) Col {
+    if s == "b": return Col.Blue
+    return Col.Red
+}
+
+fn Box<T>.mkBox(v T) Box<T> { return Box(v) }
+
+fn Box<I64>.NameBox(v I64) Box<I64> { return Box(v) }
+
+fn main() {
+    f := Box<I64>.mkBox
+    g := Col.ColFrom
+    xs := I64[1, 2, 3]
+    bs := xs.Map(Box<I64>.mkBox)
+    io.Println($Col.Red() " " $g("b") " " $f(4).v " " $bs[1].v " " $Box<I64>.NameBox(5).v)!
+}

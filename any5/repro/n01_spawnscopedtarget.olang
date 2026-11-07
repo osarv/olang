@@ -1,0 +1,18 @@
+# NEW (the round's D): "spawn z = mk&u(i)" is now a call - its text is built where u lives (a loop body's local) and the
+# task stores it into z, declared outside the loop, as it is: z names the loop body's storage once it closes. The same
+# value assigned, "w = mk&u(i)", is copied (A)
+fn mk(i I64) String { return "mk" $i "-" $(i * 7) }
+fn main() {
+    z := ""
+    w := ""
+    for i in range 3 {
+        u := "inner" $i
+        join {
+            spawn z = mk&u(i)
+        }
+        w = mk&u(i)
+    }
+    churn()
+    say("w " $w)
+    say("z " $z)
+}

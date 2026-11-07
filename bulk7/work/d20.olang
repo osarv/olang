@@ -1,0 +1,23 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+fn hold<T>(x T) I64 { return 1 }
+
+fn pass<T>(x T) T { return x }
+
+fn main() {
+    {
+        hold(Res(1))
+        io.Println("hold " $Ended)!
+        r := pass(Res(2))
+        io.Println("pass " $r.id " " $Ended)!
+    }
+    io.Println("ended " $Ended)!
+}

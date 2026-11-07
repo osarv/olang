@@ -1,0 +1,11 @@
+# a root that only walks helper's any - its build leaves the table's default slots lazy (T32a)
+import "std/io"
+import "helper"
+fn main() {
+    for x in helper.Make(3) { try io.Println($x) catch { } }
+}
+test "a walks" {
+    n I64 = 0
+    for x in helper.Make(3) { n += x }
+    assert n == 6
+}

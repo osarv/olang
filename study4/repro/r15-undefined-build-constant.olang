@@ -1,0 +1,18 @@
+# r15 DIAGNOSTIC + FRICTION - B9c/B10: a top-level condition on a build constant the command line did not define
+# says "this top-level condition uses what exists only in the branches it decides, or does not check" - nothing about
+# 'Profile' being unknown, or about '-D Profile=...'. Later uses say "unknown name 'Profile'". And there is no way to
+# give a build constant a default (C's #ifndef, Go's -ldflags -X over a declared variable): declaring "Profile :=
+# "dev"" is B10's "'Profile' is a build constant - choose another name" whenever -D does define it. Found writing
+# ../config.olang, which therefore cannot be built without "-D Profile=...".
+#
+# expected: "unknown name 'Profile' - a build constant is defined with -D Profile=VALUE" (and some way to default it)
+# actual:   error[B9c] as quoted, then "unknown name 'Profile'" at the println
+if Profile == "prod" {
+    Port := 443
+} else {
+    Port := 8080
+}
+
+fn main() ? {
+    println($Profile " " $Port)
+}

@@ -1,0 +1,19 @@
+import "std/io"
+type N struct(v I64, next N?&) { v, next }
+fn says<T>() String {
+    if T.Nullable: return "nullable"
+    return "not"
+}
+fn fieldsSay<T>() String {
+    out := ""
+    for f in T.Fields {
+        out = $out $f.Name "=" $f.Type.Nullable " "
+    }
+    return out
+}
+G String = $says<N?&>() $says<N&>() $says<fn?&() I64>() $says<fn&() I64>() $says<Array<I64>?&>() $says<I64>()
+assert G == "nullablenotnullablenotnullablenot"
+F String = fieldsSay<N>()
+fn main() {
+    io.Println($G " " $F " " $says<N?&>() $says<Array<I64>?&>() $fieldsSay<N>())!
+}

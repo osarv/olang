@@ -1,0 +1,21 @@
+import "std/io"
+type N struct(v I32, next mut N&) { v, next }
+type Cur struct(of mut N&) { at mut N&of = of }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n N& = N(I32(i), null)
+    }
+}
+fn main() ? {
+    outer mut N& = N(1, null)            # main's block
+    for i in range 2 {
+        s mut N& = N(2, null)            # the loop body
+        c := Cur(s)                      # bound to the loop body
+        c.at = outer                     # outer outlives the binding: fits a '&of' field (>=)
+        y := c.at                        # y's scope: the binding - the loop body
+        y.next = N(3, null)              # built where y says it lives, stored into outer
+    }
+    churn()
+    try io.Print($outer.next.v "\n")
+}

@@ -1,0 +1,12 @@
+== build -debug -sanitize
+1 w1 2 2 1 w1 2 0
+1 w1 2 2 1 w1 2 0
+status 0
+== build
+1 w1 2 2 1 w1 2 0
+1 w1 2 2 1 w1 2 0
+status 0
+== interpret
+1 w1 2 2 1 w1 2 0
+1 w1 2 2 1 w1 2 0
+status 0

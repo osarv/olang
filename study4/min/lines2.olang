@@ -1,0 +1,15 @@
+type M struct(t String&) { t }
+fn mk(s String&) String& { return $s }
+fn grab(srcs Array<String&>&) List<M> {
+    out := List<M>()
+    for i in range srcs.Len() {
+        text := mk&out(srcs[i])
+        for line in text.Lines() { out.Push(M(line)) }
+    }
+    println($out.Len())
+    return List<M>()
+}
+fn main() ? {
+    r := grab(String&["a\nb", "c"])
+    println($r.Len())
+}

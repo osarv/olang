@@ -1,0 +1,29 @@
+# P4a/P1g: a task's default that is a captured value String - does the target take a copy, or the captured storage?
+error E {
+    NEG
+}
+fn f(n I64) String ? E {
+    if n < 0 { error E.NEG }
+    return "f" $n
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+fn main() ? {
+    y String = "y-initial"
+    for i in range 2 {
+        s := "s" $i "-abcdefghijklmnopqrstuvwxyz"
+        join {
+            spawn y = try f(-1) catch default s
+        }
+        s[0] = 'X'
+        println(y)
+    }
+    churn()
+    println(y)
+}

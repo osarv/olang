@@ -1,0 +1,8 @@
+# T16: a struct holding itself through an inline array field (C2e) is infinitely large
+type N struct() {
+  v mut I32 = 0
+  kids Array<N> = Array<N>(2)
+}
+fn main() ? {
+  n := N()
+}

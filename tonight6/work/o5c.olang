@@ -1,0 +1,37 @@
+fn churnIt() {
+    for k in range 200 {
+        junk := $k "-churn-churn-churn-churn-churn-churn-churn-churn-churn-churn"
+        assert junk.Len() > 0
+    }
+}
+fn viaLast() List<String&> ? {
+    ll := List<List<String&>>()
+    ll.Push(List<String&>())
+    ll[0].Push("x" $ll.Len() "-text-in-the-dead-block-of-moderate-length")
+    x := try ll.Last()
+    return x
+}
+fn getOr(l List<List<String&>>&) List<String&> ? {
+    if l.Len() == 0 { error }
+    return l[0]
+}
+fn viaFallible() List<String&> ? {
+    ll := List<List<String&>>()
+    ll.Push(List<String&>())
+    ll[0].Push("y" $ll.Len() "-text-in-the-dead-block-of-moderate-length")
+    x := try getOr(ll)
+    return x
+}
+fn viaMapNoTry() List<String&> {
+    m := Map<I64, List<String&>>()
+    m.Put(0, List<String&>())
+    g := try m.Get(0) catch default List<String&>()
+    g.Push("z-text-in-the-dead-block-of-moderate-length")
+    x := try m.Get(0) catch default List<String&>()
+    return x
+}
+fn main() ? {
+    c := viaMapNoTry()
+    churnIt()
+    println(c[0])
+}

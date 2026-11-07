@@ -1,0 +1,29 @@
+# S4d (wt-rv2fix), low: the copy of the old value is decided by comparing paths (storageWithinPlace: same root variable,
+# same members), so a borrow of the place through ANOTHER reference to the same instance is not seen. Here set(x, x):
+# "p.a = E.Neg(q.a)" borrows q.a, which is p.a, and the value written over p.a in place holds p.a itself. Statically
+# undecidable in general (it is aliasing); S4d's "no assignment makes a value hold its own storage" over-promises -
+# its last sentence ("with r a reference to x, x = E.Neg(r) makes the cycle it says") should cover a borrow written
+# through a reference too. Not a memory hazard: a cycle, the same in every mode.
+# expected (as specified): -5
+# actual:   -b and -d: segmentation fault (eval recurses); -i: "it recurses deeper than -i allows"
+type E enum {
+    Lit(v I64)
+    Neg(e E&)
+}
+type PE struct(a E) {
+    a
+}
+fn eval(e E&) I64 {
+    return match e {
+        case E.Lit(v) => v
+        case E.Neg(x) => 0 - eval(x)
+    }
+}
+fn set(p mut PE&, q PE&) {
+    p.a = E.Neg(q.a)
+}
+fn main() ? {
+    x := PE(E.Lit(5))
+    set(x, x)
+    println($eval(x.a))
+}

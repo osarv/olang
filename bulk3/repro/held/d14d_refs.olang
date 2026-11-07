@@ -1,0 +1,31 @@
+import "std/io"
+
+type Node struct(v I64) { v }
+
+fn dirty(n I64) I64 {
+    # leave pointers in recycled memory
+    b := Array<Node?&>(n)
+    for i in range n { b[i] = Node(i) }
+    s I64 = 0
+    for x in b { if x is not null { s += x.v } }
+    return s
+}
+
+fn fill(n I64) I64 {
+    a := Array<Node?&>(n)
+    for i in range n {
+        a[i] = Node(i * 2)
+    }
+    s I64 = 0
+    for x in a { if x is not null { s += x.v } }
+    return s
+}
+
+fn main() {
+    t I64 = 0
+    for k in range 200 {
+        { t += dirty(1000) }
+        { t += fill(1000) }
+    }
+    io.Println($t)!
+}

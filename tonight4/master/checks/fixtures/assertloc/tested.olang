@@ -1,0 +1,11 @@
+# S18a: inside a test a failed assert's location and message are printed before the harness's FAIL line
+Seed mut I64 = 0
+test "located" {
+    Seed = Seed + 1
+    assert Seed == 2, "Seed is " $Seed
+}
+test "plain" {
+    Seed = Seed + 1
+    assert Seed == 9
+}
+test "fine" { assert Seed == 2 }

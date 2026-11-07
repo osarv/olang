@@ -1,0 +1,16 @@
+type Pt struct() {
+    X I64 = 0
+}
+type Acc struct() {
+    N I64 = 0
+    P Pt = Pt()
+}
+fn bump(c mut Acc&) { c.N++ }
+fn bumpPt(p mut Pt&) { p.X++ }
+fn main() ? {
+    ll := List<List<Acc>>()
+    ll.Push(List<Acc>())
+    ll[0].Push(Acc())
+    bump(ll[0][0])
+    println("N " $ll[0][0].N)
+}

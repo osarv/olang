@@ -1,0 +1,20 @@
+== first build
+  sh -c 'cat src/a.txt src/b.txt > joined.txt'
+  sh -c 'wc -l < joined.txt > report.txt'
+  cat report.txt
+3
+mk: 3 commands, 0 failed, 8 ms
+== nothing changed
+mk: 0 commands, 0 failed, 0 ms
+== after changing src/b.txt
+  sh -c 'cat src/a.txt src/b.txt > joined.txt'
+  sh -c 'wc -l < joined.txt > report.txt'
+  cat report.txt
+4
+mk: 3 commands, 0 failed, 10 ms
+== a missing dependency
+mk: no rule to make 'nothing.txt'
+mk: 0 commands, 0 failed, 0 ms
+== a cycle
+mk: a cycle through a
+mk: 0 commands, 0 failed, 0 ms

@@ -1,0 +1,45 @@
+# O18c: a callee that stores the node it builds (its result) into an argument - its result scope must OUTLIVE the
+# argument's (a lower bound only); a ":=" from it in an inner block
+type Node struct(v I64, s String&) {
+    v
+    s
+}
+type Box struct() {
+    n mut Node& = null
+}
+fn f(a mut Box&, k I64) Node& {
+    n mut Node& = Node(k, "f" $k "-abcdefghijklmnopqrstuvwxyz")
+    a.n = n
+    return n
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+        nn := Node(i, "c")
+        t = t + nn.v
+    }
+    return t
+}
+fn main() ? {
+    b mut Box& = Box()
+    for i in range 3 {
+        t := f(b, i)
+        churn()
+    }
+    churn()
+    println($b.n.v " " $b.n.s)
+    for i in range 3 {
+        f(b, i + 10)
+        churn()
+    }
+    churn()
+    println($b.n.v " " $b.n.s)
+    for i in range 3 {
+        u := f(b, i + 20).v
+        churn()
+    }
+    churn()
+    println($b.n.v " " $b.n.s)
+}

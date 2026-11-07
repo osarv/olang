@@ -1,0 +1,25 @@
+# falsify a per-instance binding (C2d/O23a) by writing the '&of' field through a second name for the instance
+import "std/io"
+type N struct(v I32) { v mut }
+type Cur struct(of mut N&) { at mut N&of = of }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n N& = N(I32(i))
+    }
+}
+fn main() ? {
+    outer N& = N(1)
+    keep N& = outer
+    for i in range 2 {
+        x N& = N(42)
+        for j in range 1 {
+            c := Cur(outer)      # c.at is bound to where outer lives
+            d Cur& = c           # another name for the instance, with no binding of its own
+            d.at = x             # checked against d's container scope (this inner block): x outlives it
+            keep = c.at          # read through c's binding: outer's scope, which keep is in
+        }
+    }
+    churn()
+    try io.Print($keep.v "\n")     # expected 42
+}

@@ -1,0 +1,44 @@
+# NEW mechanism hole (decision 40 as built in a385b04). A task may not CALL a function value held in what it is handed -
+# but the check (callsFnThrough / fnRootsIn / fnEdges) follows a held value only through locals and field reads, and a
+# callee only when it calls through a FIELD of its parameter. Handing the held value itself to a helper that calls its
+# parameter ("runit(h.f, i)") is not seen, so the task calls the closure on its own thread with the spawner's scopes, as
+# the known struct case did before the decision: both tasks and main bump one arena.
+#     expected: error[P2] "this task calls a function value held in what it is handed" (as for h.f(i) directly), or
+#               "wrong elements: 0 of 200000"
+#     actual:   accepted; -b mostly segfaults (139) or prints "wrong elements: 13000-34000 of 200000"; -r reports data
+#               races in __olang_scope_alloc_a between a task and the main thread
+# The same is accepted (each racing under -r, wrong elements under -b) when the task:
+#   - copies the held value to a local and hands that on: "x := h.f ... runit(x, i)"
+#   - captures the handed struct in a lambda it calls: "g := fn(i I64) { h.f(i) }; g(i)"
+#   - puts the held value in a container it makes: "l.Push(h.f); l[0](i)", "Array<fn(i I64)>(1, h.f)[0](i)"
+#   - wraps it in an enum payload it makes and matches: "e := E.F(h.f); match e { case E.F(f) { f(i) } }"
+# (work/fu/v14, v16, v17, v18, v22). Calling h.f, through a local, through a method, a Call adapter or a returned
+# copy is refused.
+type N struct(v I64) {
+    v
+    w I64 = v * 3
+}
+type H struct(f fn(i I64)) { f }
+fn report(a List<N&>&, b List<N&>&) {
+    bad I64 = 0
+    i I64 = 0
+    for x in a { if x.v != i or x.w != 3 * i { bad++ } i++ }
+    i = 0
+    for x in b { if x.v != i + 1000000 or x.w != 3 * (i + 1000000) { bad++ } i++ }
+    println("wrong elements: " $bad " of " $(a.Len() + b.Len()))
+}
+fn runit(f fn(i I64), i I64) { f(i) }
+fn work(h H&, base I64) {
+    for i in range 100000 { runit(h.f, i + base) }
+}
+fn main() ? {
+    a mut List<N&>& = List<N&>()
+    b mut List<N&>& = List<N&>()
+    ha := H(fn(i I64) { a.Push(N(i)) })
+    hb := H(fn(i I64) { b.Push(N(i)) })
+    join {
+        spawn work(ha, 0)
+        spawn work(hb, 1000000)
+    }
+    report(a, b)
+}

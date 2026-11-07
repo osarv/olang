@@ -1,0 +1,10 @@
+import "lib"
+fn g(x <T>) I64 {
+    return lib.F()
+}
+fn h(x <N>) I64 {
+    return lib.F()
+}
+fn main() ? {
+    println($g(2.5) " " $g("s") " " $h(true) " " $lib.F())
+}

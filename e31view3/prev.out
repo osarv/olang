@@ -1,0 +1,329 @@
+=== c1_cond_element_lost_write.olang
+[new -b] COMPILE FAIL:
+c1_cond_element_lost_write.olang:17:15: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
+   17 |     bump(l[0] if k > 0 else l[1])
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+c1_cond_element_lost_write.olang:17:15: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
+   17 |     bump(l[0] if k > 0 else l[1])
+compilation failed with 1 error
+[new -i]:
+c1_cond_element_lost_write.olang:17:15: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
+   17 |     bump(l[0] if k > 0 else l[1])
+      |               ^~
+compilation failed with 1 error
+  (exit 1)
+=== c1b_cond_array_lost_write.olang
+[new -b] COMPILE FAIL:
+c1b_cond_array_lost_write.olang:14:15: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
+   14 |     bump(a[0] if k > 0 else a[1])
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+c1b_cond_array_lost_write.olang:14:15: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
+   14 |     bump(a[0] if k > 0 else a[1])
+compilation failed with 1 error
+[new -i]:
+c1b_cond_array_lost_write.olang:14:15: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
+   14 |     bump(a[0] if k > 0 else a[1])
+      |               ^~
+compilation failed with 1 error
+  (exit 1)
+=== f1_view_field_build_uaf.olang
+[new -b] COMPILE FAIL:
+f1_view_field_build_uaf.olang:28:31: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   28 |     for i in range 3 { g(l[0].w, i + 10) }
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+f1_view_field_build_uaf.olang:28:31: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   28 |     for i in range 3 { g(l[0].w, i + 10) }
+compilation failed with 1 error
+[new -i]:
+f1_view_field_build_uaf.olang:28:31: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   28 |     for i in range 3 { g(l[0].w, i + 10) }
+      |                               ^
+compilation failed with 1 error
+  (exit 1)
+=== f1b_view_field_param_uaf.olang
+[new -b] COMPILE FAIL:
+f1b_view_field_param_uaf.olang:15:44: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   15 | fn add(l mut List<Layer>&, v I64) { g(l[0].w, v) }
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+f1b_view_field_param_uaf.olang:15:44: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   15 | fn add(l mut List<Layer>&, v I64) { g(l[0].w, v) }
+compilation failed with 1 error
+[new -i]:
+f1b_view_field_param_uaf.olang:15:44: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   15 | fn add(l mut List<Layer>&, v I64) { g(l[0].w, v) }
+      |                                            ^
+compilation failed with 1 error
+  (exit 1)
+=== f1c_view_field_method_uaf.olang
+[new -b] COMPILE FAIL:
+f1c_view_field_method_uaf.olang:26:42: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   26 | fn add(l mut List<Layer>&, v I64) { l[0].w.Build(v) }
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+f1c_view_field_method_uaf.olang:26:42: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   26 | fn add(l mut List<Layer>&, v I64) { l[0].w.Build(v) }
+compilation failed with 1 error
+[new -i]:
+f1c_view_field_method_uaf.olang:26:42: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   26 | fn add(l mut List<Layer>&, v I64) { l[0].w.Build(v) }
+      |                                          ^
+compilation failed with 1 error
+  (exit 1)
+=== f1d_view_deeper_field_uaf.olang
+[new -b] COMPILE FAIL:
+f1d_view_deeper_field_uaf.olang:26:47: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   26 | fn add(l mut List<Layer>&, v I64) { gi(l[0].w.inner, v) }
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+f1d_view_deeper_field_uaf.olang:26:47: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   26 | fn add(l mut List<Layer>&, v I64) { gi(l[0].w.inner, v) }
+compilation failed with 1 error
+[new -i]:
+f1d_view_deeper_field_uaf.olang:26:47: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   26 | fn add(l mut List<Layer>&, v I64) { gi(l[0].w.inner, v) }
+      |                                               ^~~~~
+compilation failed with 1 error
+  (exit 1)
+=== f1e_view_field_r1_uaf.olang
+[new -b] COMPILE FAIL:
+f1e_view_field_r1_uaf.olang:28:44: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   28 | fn add(l mut List<Layer>&, v I64) { g(l[0].w, v) }
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+f1e_view_field_r1_uaf.olang:28:44: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   28 | fn add(l mut List<Layer>&, v I64) { g(l[0].w, v) }
+compilation failed with 1 error
+[new -i]:
+f1e_view_field_r1_uaf.olang:28:44: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   28 | fn add(l mut List<Layer>&, v I64) { g(l[0].w, v) }
+      |                                            ^
+compilation failed with 1 error
+  (exit 1)
+=== f1x_view_whole_refused.olang
+[new -b] COMPILE FAIL:
+f1x_view_whole_refused.olang:11:36: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   11 | fn add(l mut List<M>&, v I64) { g(l[0], v) }
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+f1x_view_whole_refused.olang:11:36: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   11 | fn add(l mut List<M>&, v I64) { g(l[0], v) }
+compilation failed with 1 error
+[new -i]:
+f1x_view_whole_refused.olang:11:36: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   11 | fn add(l mut List<M>&, v I64) { g(l[0], v) }
+      |                                    ^
+compilation failed with 1 error
+  (exit 1)
+=== f2_handle_field_coord.olang
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+=== f2b_handle_field_loop_main.olang
+[new -b] exit 0:
+for 7
+for 8
+for 9
+[new -b -d -s] exit 0:
+for 7
+for 8
+for 9
+[new -i]:
+for 7
+for 8
+for 9
+  (exit 0)
+=== f2c_handle_field_list_param.olang
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+=== f2d_handle_field_method.olang
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+=== f2e_handle_field_nested.olang
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+=== f2f_handle_field_function.olang
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+=== f2g_handle_field_ref_collection.olang
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+=== f2h_handle_field_two_level.olang
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+=== f2i_handle_field_text_segv.olang
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+=== f2x_explicit_hold_ok.olang
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+=== f2y_handle_element_ok.olang
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+=== f3_two_level_user_uaf.olang
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+=== f3b_two_level_user_whole.olang
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+=== f3c_three_level_handles_user.olang
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+=== f3x_split_ok.olang
+[new -b] exit 0:
+for 7
+[new -b -d -s] exit 0:
+for 7
+[new -i]:
+for 7
+  (exit 0)
+=== k1_r1_spawn_ok.olang
+[new -b] exit 0:
+I64[3, 4, 0, 0]
+[new -b -d -s] exit 0:
+I64[3, 4, 0, 0]
+[new -i]:
+I64[3, 4, 0, 0]
+  (exit 0)
+=== k2_r1_generic_insts.olang
+[new -b] COMPILE FAIL:
+k2_r1_generic_insts.olang:31:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   31 |     step(b[0])
+k2_r1_generic_insts.olang:24:23: note: the callee is no view of the element because of this statement
+   24 | fn step(c mut <L>&) { c.w.Fill(3) }
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+k2_r1_generic_insts.olang:31:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   31 |     step(b[0])
+k2_r1_generic_insts.olang:24:23: note: the callee is no view of the element because of this statement
+   24 | fn step(c mut <L>&) { c.w.Fill(3) }
+compilation failed with 1 error
+[new -i]:
+k2_r1_generic_insts.olang:31:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+=== t1_field_of_trydefault_arg.olang
+[new -b] COMPILE FAIL:
+t1_field_of_trydefault_arg.olang:14:43: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   14 |     bumpPt((try a[1] catch default Acc()).P)
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+t1_field_of_trydefault_arg.olang:14:43: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   14 |     bumpPt((try a[1] catch default Acc()).P)
+compilation failed with 1 error
+[new -i]:
+t1_field_of_trydefault_arg.olang:14:43: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   14 |     bumpPt((try a[1] catch default Acc()).P)
+      |                                           ^
+compilation failed with 1 error
+  (exit 1)
+=== t1b_field_of_trydefault_receiver.olang
+[new -b] COMPILE FAIL:
+t1b_field_of_trydefault_receiver.olang:15:36: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   15 |     (try a[1] catch default Acc()).P.Bump()
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+t1b_field_of_trydefault_receiver.olang:15:36: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   15 |     (try a[1] catch default Acc()).P.Bump()
+compilation failed with 1 error
+[new -i]:
+t1b_field_of_trydefault_receiver.olang:15:36: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   15 |     (try a[1] catch default Acc()).P.Bump()
+      |                                    ^
+compilation failed with 1 error
+  (exit 1)
+=== t1c_field_of_trydefault_baked.olang
+[new -b] COMPILE FAIL:
+t1c_field_of_trydefault_baked.olang:13:43: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   13 |     bumpPt((try a[1] catch default Acc()).P)
+compilation failed with 1 error
+[new -b -d -s] COMPILE FAIL:
+t1c_field_of_trydefault_baked.olang:13:43: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   13 |     bumpPt((try a[1] catch default Acc()).P)
+compilation failed with 1 error
+[new -i]:
+t1c_field_of_trydefault_baked.olang:13:43: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   13 |     bumpPt((try a[1] catch default Acc()).P)
+      |                                           ^
+compilation failed with 1 error
+  (exit 1)
+=== t1d_assign_field_of_trydefault.olang
+[new -b] COMPILE FAIL:
+t1d_assign_field_of_trydefault.olang:14:38: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store
+   14 |     (try a[1] catch default Acc()).P.X = 5
+t1d_assign_field_of_trydefault.olang:15:37: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store
+   15 |     (try a[1] catch default Acc()).N++
+compilation failed with 2 errors
+[new -b -d -s] COMPILE FAIL:
+t1d_assign_field_of_trydefault.olang:14:38: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store
+   14 |     (try a[1] catch default Acc()).P.X = 5
+t1d_assign_field_of_trydefault.olang:15:37: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store
+   15 |     (try a[1] catch default Acc()).N++
+compilation failed with 2 errors
+[new -i]:
+t1d_assign_field_of_trydefault.olang:14:38: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'try x[i].f = v' to check the store

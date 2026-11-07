@@ -1,0 +1,8 @@
+# over-rejection: ToArray's copy of a Vec<String&> carries a loan on the buffer, so the Vec cannot grow while it is used
+fn main() ? {
+    v := Vec<String&>()
+    v.Push("a")
+    a := v.ToArray()
+    v.Push("b")
+    println(a[0])
+}

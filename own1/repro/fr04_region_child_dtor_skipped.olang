@@ -1,0 +1,17 @@
+Dropped mut I64 = 0
+type Node struct(n I64) {
+    n
+    kid mut Node& = null
+} destruct { Dropped++ }
+type Holder struct() {
+    cur own mut Node&
+}
+R mut I64 = 1
+fn main() ? {
+    s := Holder()
+    s.cur = Node(1 * R)
+    s.cur.kid = Node(5 * R)          # a destructor-bearing child built into s.cur's region (plain ref field)
+    println("before release: " $Dropped)
+    s.cur = null                      # frees the region; both the Node and its kid should run destructors
+    println("after release: " $Dropped)   # expect 2 if the region runs the child's destructor
+}

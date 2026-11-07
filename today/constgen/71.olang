@@ -1,0 +1,9 @@
+# G20/G25: a Char constant - written as a character or as its code, one instantiation; rendered as a character
+type Sep<C Char> struct() { n mut I64 }
+fn (s Sep<<C>>&) Join(a String&, b String&) String { return $a $C $b }
+fn take(s Sep<'a'>&) I64 { return s.n }
+fn main() ? {
+    s := Sep<97>()
+    t := Sep<','>()
+    println($take(s) " " $s.Join("x", "y") " " $t.Join("x", "y"))
+}

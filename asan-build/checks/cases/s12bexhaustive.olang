@@ -1,0 +1,13 @@
+# check: fail does not cover every case
+# S12b/S13a: a match used as a value over an enum covers every case, counting only unguarded clauses
+type S enum {
+    A(x I32)
+    B
+}
+fn f(s S) I32 {
+    return match s {
+        case S.A(x) if x > 0 => x
+        case S.B => 0
+    }
+}
+fn main() ? { }

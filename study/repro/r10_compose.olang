@@ -1,0 +1,11 @@
+# a lambda capturing two function-valued parameters cannot be returned; capturing one can
+fn compose(f fn(x I64) I64, g fn(x I64) I64) fn(x I64) I64 {
+    return fn(x I64) I64 { return g(f(x)) }
+}
+fn twice(f fn(x I64) I64) fn(x I64) I64 {
+    return fn(x I64) I64 { return f(f(x)) }
+}
+fn inc(x I64) I64 { return x + 1 }
+fn main() ? {
+    assert compose(inc, twice(inc))(1) == 4
+}

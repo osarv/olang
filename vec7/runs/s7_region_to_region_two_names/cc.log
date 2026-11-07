@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/s7_region_to_region_two_names.olang:24:14: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   24 |     q.more = take b.lx.toks
+      |              ^~~~
+compilation failed with 1 error

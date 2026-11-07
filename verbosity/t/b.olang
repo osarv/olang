@@ -1,0 +1,9 @@
+import "std/io"
+type LocalId extends I32
+fn f(n I64) I64 { return n + 1 }
+fn main() ? {
+    a := Array<I64>(4, 7)
+    s := a[LocalId(1):LocalId(3)]
+    id := LocalId(2)
+    try io.Println($f(id) $s.Len())
+}

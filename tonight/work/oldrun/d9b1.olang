@@ -1,0 +1,25 @@
+# D9b/O4b: a by-value parameter its body never writes, but builds through - paramWritten false
+type N struct(v I64) {
+    v
+    next mut N& = null
+}
+type Box struct(n mut N&) { n }
+fn grow(b Box) { b.n.next = N(9) }
+fn churn() I64 {
+    s I64 = 0
+    for i in range 3000 {
+        a := Array<I64>(64, I64(i))
+        t := $i "abcdefghijklmnopqrstuvwxyz"
+        s = s + a[3] + t.Len()
+    }
+    return s
+}
+fn main() ? {
+    root N& = N(1)
+    bx := Box(root)
+    if root.v > 0 {
+        grow(bx)
+    }
+    c := churn()
+    println($root.next.v " " $c)
+}

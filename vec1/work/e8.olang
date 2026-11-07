@@ -1,0 +1,11 @@
+fn view(v Vec<I64>&) Array<I64>&v { return v.View() }
+fn grow(w mut Vec<I64>&) {
+    d := view(w)
+    w.Push(99)
+    println($d[0])
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    grow(v)
+}

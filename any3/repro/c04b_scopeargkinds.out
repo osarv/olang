@@ -1,0 +1,25 @@
+== build -debug -sanitize
+pushed 6
+pushed 6
+use after scope closed: storage a closed scope gave back was read or written
+../run.sh: line 15: 14460 Aborted                 timeout 60 ./build/$n.debug.san
+status 134
+== build
+pushed 6
+pushed 6
+TEXT1-7
+TEXT1-7
+TEXT1-7
+TEXT1-7
+GEN1-7
+TEXT1-7
+TEXT1-7
+TEXT1-7
+TEXT1-7
+GEN1-7
+status 0
+== interpret
+pushed 6
+pushed 6
+olang interpret: /home/user/wt/rvany3/std/prelude/text.olang:227: it uses storage after the scope it was made in closed
+status 1

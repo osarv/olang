@@ -1,0 +1,13 @@
+# x[i] for a "mut &" parameter of a computed callee (E13b): an element of an array of functions, a returned function
+type Acc struct() {
+    N I64 = 0
+}
+fn bumper() fn(c mut Acc&) { return fn(c mut Acc&) { c.N++ } }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    fs := Array<fn(c mut Acc&)>(1, fn(c mut Acc&) { c.N += 10 })
+    fs[0](l[0])
+    bumper()(l[0])
+    println("list N " $l[0].N)
+}

@@ -1,0 +1,35 @@
+# NEW use-after-free (O26a, callResultTiedToBlock): a local declared from a call whose result holds a LOCAL Map's
+# storage, then returned by value. a2e2878 rejected it (O10c at the Get - the local was moved into the result scope and
+# Get's obligation then failed); 055e97c never moves such a local (callResultTiedToBlock) and nothing else judges the
+# return, so the List handle comes back pointing into pick's closed block.
+#   expected: a compile-time error at "return l" (O26/O14c)
+#   actual:   builds; -b -s / -b -d -s: "use after scope closed"; -b and -i print 11 1 (no reuse visible)
+fn pick(n I64) List<I64> ? {
+    groups := Map<I64, List<I64>>()
+    for i in range n {
+        groups.Put(i, List<I64>())
+        g := try groups.Get(i)
+        g.Push(i * 11)
+    }
+    l := try groups.Get(1)
+    return l
+}
+
+fn main() ? {
+    a := try pick(3)
+    for k in range 200 {
+        junk := $k "-churn-churn-churn-churn-churn-churn-churn-churn-churn-churn"
+        assert junk.Len() > 0
+    }
+    println($a[0] " " $a.Len())
+}
+
+# The same with List.Last on a local List of Lists (also accepted, also "use after scope closed" under -s; a2e2878: O10c):
+fn viaLast() List<String&> ? {
+    ll := List<List<String&>>()
+    ll.Push(List<String&>())
+    ll[0].Push("x" $ll.Len() "-text-in-the-dead-block-of-moderate-length")
+    x := try ll.Last()
+    return x
+}
+# and with "try m.Get(0) catch default List<String&>()" in a function that declares no errors (work/o5c.olang).

@@ -1,0 +1,33 @@
+# n02 control: the same spawns with no scope argument
+# reference built where u lives - each target outside the loop, read after the loop body closes
+error Oops {
+    BAD
+}
+fn mk2(i I64) String, I64 { return "two" $i "-" $(i * 7), i }
+fn mkf(i I64) String ? Oops {
+    if i > 100 { error Oops.BAD }
+    return "try" $i "-" $(i * 7)
+}
+fn nums(i I64) Array<I64> { return I64[i, i * 7, i * 11] }
+type H struct(s String&) { s }
+fn mkh(i I64) H { return H("h" $i "-" $(i * 7)) }
+fn main() {
+    a := ""
+    n I64 = 0
+    b := ""
+    c := Array<I64>(0)
+    h := H("none")
+    for i in range 3 {
+        u := "inner" $i
+        join {
+            spawn a, n = mk2(i)
+            spawn b = try mkf(i) catch default "dflt"
+            spawn c = nums(i)
+        }
+    }
+    churn()
+    say("a " $a " " $n)
+    say("b " $b)
+    say("c " $c)
+    say("h " $h.s)
+}

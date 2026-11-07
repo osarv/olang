@@ -1,0 +1,8 @@
+import "std/io"
+import "std/os"
+
+G Array<I64> = I64[x * 2 for x in range os.Args().Len() + 3]
+
+fn main() ? io.IoError {
+    try io.Print($G "\n")
+}

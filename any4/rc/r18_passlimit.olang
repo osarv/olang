@@ -1,0 +1,37 @@
+type K struct(s String&) { s }
+# RetCopy: the third mode's flow runs at most six passes over the block; a borrow that reaches a parameter's field
+# through a chain written against statement order (each link one pass) is not seen, so the returned local is returned
+# as it is while k.s names it - the caller's value and k.s are one storage, and compile-time evaluation (which copies
+# every returned array) disagrees with the run time
+fn f(k mut K&, i I64) String {
+    s := "abc" $i
+    r1 String&s = ""
+    r2 String&s = ""
+    r3 String&s = ""
+    r4 String&s = ""
+    r5 String&s = ""
+    r6 String&s = ""
+    r7 String&s = ""
+    for j in range 9 {
+        k.s = r7
+        r7 = r6
+        r6 = r5
+        r5 = r4
+        r4 = r3
+        r3 = r2
+        r2 = r1
+        r1 = s
+    }
+    return s
+}
+fn probe() String {
+    k := K("x")
+    x := f(k, 1)
+    x[0] = 'Q'
+    return "k.s " $k.s " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}

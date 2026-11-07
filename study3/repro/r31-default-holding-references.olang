@@ -1,0 +1,15 @@
+# r31 FRICTION (a recorded limit, now needed by real code) - R11: "a default for a value holding references is not
+# supported yet" for "(try validate(text) catch default List<String&>()).Len()" - counting the problems a validator
+# returns, with "no problems list" as the fallback. Workaround: a helper with "catch { return -1 }".
+#
+# expected: 0
+# actual: error[R11] at line 13
+error Bad { NO }
+fn validate(text String&) List<String&> ? Bad {
+    if text.Len() == 0 { error Bad.NO }
+    return List<String&>()
+}
+fn main() ? {
+    n := (try validate("x") catch default List<String&>()).Len()
+    println($n)
+}

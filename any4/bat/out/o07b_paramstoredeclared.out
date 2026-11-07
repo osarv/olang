@@ -1,0 +1,12 @@
+== o07b_paramstoredeclared
+  san:    exit 0 paramstoredeclared 12|
+  O3:     exit 0 paramstoredeclared 12|
+  interp: exit 0 paramstoredeclared 12|
+--- compile (-debug -sanitize)
+built ./build/o07b_paramstoredeclared.debug.san
+--- run san
+paramstoredeclared 12
+--- run O3
+paramstoredeclared 12
+--- interpret
+paramstoredeclared 12

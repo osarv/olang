@@ -1,0 +1,33 @@
+# P2 (decision 48) during a scope's close: a destructor's task builds through its instance's field into the scope being
+# closed - a part made after the close folded its parts; what it registers there never runs
+Count mut I64 = 0
+type Tracker struct(k I64) {
+    k
+} destruct {
+    Count = Count + 1
+}
+type Box struct() {
+    keep mut List<Tracker&>& = List<Tracker&>()
+}
+type Res struct(b mut Box&, k I64) {
+    b
+    k
+} destruct {
+    bb := b
+    kk := k
+    join {
+        spawn fn() {
+            for j in range 10 { bb.keep.Push(Tracker(kk * 100 + j)) }
+        }
+    }
+}
+fn once(i I64) {
+    bx mut Box& = Box()
+    r Res&bx = Res(bx, i)
+}
+fn main() ? {
+    for i in range 3 {
+        once(i)
+        println($Count)
+    }
+}

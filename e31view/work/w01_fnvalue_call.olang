@@ -1,0 +1,18 @@
+# x[i] passed for a "mut &" parameter of a call through a function value (a local, a field, a parameter)
+type Acc struct() {
+    N I64 = 0
+}
+type H struct(fv fn(c mut Acc&)) {
+    fv
+}
+fn via(g fn(c mut Acc&), l mut List<Acc>&) { g(l[0]) }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    g := fn(c mut Acc&) { c.N++ }
+    g(l[0])
+    h := H(g)
+    h.fv(l[0])
+    via(g, l)
+    println("N " $l[0].N)
+}

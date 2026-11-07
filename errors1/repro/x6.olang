@@ -1,0 +1,21 @@
+# finding 12: for x in try c walks a CheckedAt-only type through CheckedAt
+import "std/io"
+error E {
+    A
+}
+type C struct(n I64) {
+    n
+}
+fn (c C&) Len() I64 { return c.n }
+fn (c C&) CheckedAt(i I64) I64 ? E + BuiltinError {
+    if i == 7 { error E.A }
+    return i * 10
+}
+fn main() {
+    c := C(3)
+    for x in try c {
+        io.Println($x)!
+    } catch { }
+    v := checked c[1] catch default 0
+    io.Println($v)!
+}

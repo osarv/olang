@@ -1,0 +1,8 @@
+type Box<T> struct(v T) { v }
+G List<I32> = I32[1, 2].ToList()
+fn main() ? {
+  y := G
+  b := Box(y)
+  b.v.Clear()
+  println($G.Len())
+}

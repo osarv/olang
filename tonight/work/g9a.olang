@@ -1,0 +1,7 @@
+type N struct(v I32) { v }
+fn second(a <T>, b T) T { return a }
+fn main() ? {
+    r := N(5)
+    x := second(null, r)
+    println($x.v)
+}

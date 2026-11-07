@@ -1,0 +1,21 @@
+# G23: a constant variable in unusual places - rendered, passed to a generic, in an array literal, a field default,
+# a comprehension, a lambda
+type Layout enum {
+    RowMajor
+    ColMajor
+}
+fn gen(x <T>) <T> { return x }
+type B<N I64, L Layout> struct() {
+    k I64 = N * 10
+    lits Array<I64, 2> = I64[N, N + 1]
+}
+fn (b B<<N>, <L>>&) Show() String {
+    sq := I64[i * N for i in range N]
+    f := fn() String { return $L }
+    return $N " " $gen(N) " " $b.lits " " $b.k " " $sq " " $f() " " $L
+}
+Baked String = B<3, Layout.ColMajor>().Show()
+fn main() ? {
+    println(B<3, Layout.ColMajor>().Show())
+    println(Baked)
+}

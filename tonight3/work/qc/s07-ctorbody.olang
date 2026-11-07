@@ -1,0 +1,9 @@
+type W struct(l List<I32>) {
+  l.Clear()
+  n := 1
+}
+G List<I32> = I32[1, 2].ToList()
+fn main() ? {
+  w := W(G)
+  println($G.Len() " " $w.n)
+}

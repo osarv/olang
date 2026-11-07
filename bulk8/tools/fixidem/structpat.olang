@@ -1,0 +1,198 @@
+# S13i: struct patterns - "case Point(x = 0, y)" takes a struct value apart by its fields: "name = p" matches a field
+# by a pattern (a literal compares, a name binds, a nested pattern goes inside, a computed value compares by "=="), a
+# bare name binds the field to a local of its name, and fields no item names are ignored. No constructor runs, so a
+# field its constructor computes is matched as it is (Temp's Kelvin). S13b: an enum case's payload by position and by
+# name, positions first; a case carrying one whole struct matched by a struct pattern in its position. Struct patterns
+# nest in payloads, in array patterns and in each other; a struct behind a reference is read through it, a null one
+# matching none; a generic struct is named bare (or with its arguments) against the value's instance. S13a: a struct is
+# one constructor, so names cover it, and a value match needs no "case _". Each computation is a global the evaluator
+# bakes and an assert it decides (K2, S18c), and at run time on an input it cannot see (Live)
+
+Live mut I64 = 0
+
+type Point struct(x I64, y I64) { x, y }
+
+type Line struct(start Point, end Point) { start, end }
+
+# a constructor whose parameter is no field: the pattern reads the fields, never the parameters
+type Temp struct(celsius I64) {
+    Kelvin I64 = celsius + 273
+    Hot Bool = celsius > 30
+}
+
+type Shape enum {
+    Rect(w I64, h I64)
+    Round Point
+    Dot
+}
+
+type Box<T> struct(v T, tag String&) { v, tag }
+
+type Node struct(n I64, next Node?&) { n, next }
+
+type Flag struct(on Bool, n I64) { on, n }
+
+fn where(p Point) String {
+    return match p {
+        case Point(x = 0, y = 0): "origin"
+        case Point(x = 0, y): "y" $y
+        case Point(x, y = 0): "x" $x
+        case Point(x, y) if x == y: "diag" $x
+        case Point(y, x): $x "," $y # names in any order
+    }
+}
+
+fn lines(l Line) String {
+    return match l {
+        case Line(start = Point(x = 0, y = 0), end): "from origin to " $where(end)
+        case Line(end = Point(x = 0)): "to the y axis"
+        case Line(start): "from " $where(start)
+    }
+}
+
+fn temps(t Temp) String {
+    return match t {
+        case Temp(Hot = true, Kelvin): "hot " $Kelvin
+        case Temp(Kelvin = 273): "freezing"
+        case Temp(Kelvin): $Kelvin "K"
+    }
+}
+
+fn shapes(s Shape) String {
+    return match s {
+        case Shape.Rect(h = 0): "flat"
+        case Shape.Rect(w, h = 1): "thin " $w
+        case Shape.Rect(h = 2, w = 2): "square 2"
+        case Shape.Rect(w, h): "rect " $(w * h)
+        case Shape.Round(Point(x = 0)): "round on the axis"
+        case Shape.Round(Point(x, y)): "round " $x "," $y
+        case Shape.Dot: "dot"
+    }
+}
+
+fn computed(p Point, k I64) String {
+    return match p {
+        case Point(x = k + 1): "one past"
+        case _: "no"
+    }
+}
+
+fn firstOnAxis(ps Array<Point>&) String {
+    return match ps {
+        case Array<Point>[Point(x = 0, y), ...]: "first on the axis at " $y
+        case Array<Point>[_, Point(y = 0, x), ...]: "second on the x axis at " $x
+        case _: "neither"
+    }
+}
+
+fn boxes(b Box<I64>) String {
+    return match b {
+        case Box(v = 3): "three"
+        case Box<I64>(v = 4, tag): "four " $tag
+        case Box(v, tag = "t"): "t " $v
+        case Box(v): $v
+    }
+}
+
+fn nodes(m Node?&) String {
+    return match m {
+        case Node(n = 0, next = Node(n = 1)): "0 then 1"
+        case Node(n, next = null): "last " $n
+        case Node(n): "node " $n
+        case _: "none"
+    }
+}
+
+fn byRef(p Point&) I64 {
+    return match p {
+        case Point(x = 1, y): y
+        case Point(x): x
+    }
+}
+
+fn flags(f Flag) I64 {
+    return match f {
+        case Flag(on = true, n): n
+        case Flag(on = false): -1
+    }
+}
+
+# alternatives binding the same names (S13c)
+fn either(s Shape) I64 {
+    return match s {
+        case Shape.Rect(w = v), Shape.Round(Point(x = v)): v
+        case Shape.Dot: 0
+    }
+}
+
+fn all(z I64) String {
+    b := StringBuilder()
+    for p in Array<Point>[Point(0, 0), Point(0, 5 + z), Point(3, 0), Point(4, 4), Point(1, 2)] {
+        b.Push(where(p))
+        b.Push(";")
+    }
+    b.Push($lines(Line(Point(0, z), Point(3, 3))) ";" $lines(Line(Point(1, 1), Point(0, 9))) ";" $lines(Line(Point(2, 0), Point(5, 5))) ";")
+    b.Push($temps(Temp(40 + z)) ";" $temps(Temp(0)) ";" $temps(Temp(10)) ";")
+    for s in Array<Shape>[Shape.Rect(5, 0), Shape.Rect(5, 1), Shape.Rect(2, 2), Shape.Rect(3, 4), Shape.Round(Point(0, z)), Shape.Round(Point(1, 2)), Shape.Dot] {
+        b.Push(shapes(s))
+        b.Push(";")
+    }
+    b.Push($computed(Point(3, 0), 2) ";" $computed(Point(3, 0), z) ";")
+    b.Push($firstOnAxis(Array<Point>[Point(0, 7)]) ";" $firstOnAxis(Array<Point>[Point(1, 1), Point(6, 0)]) ";" $firstOnAxis(Array<Point>[Point(1, 1)]) ";")
+    b.Push($boxes(Box(3, "a")) ";" $boxes(Box(4, "b")) ";" $boxes(Box(5, "t")) ";" $boxes(Box(6 + z, "u")) ";")
+    last := Node(1, null)
+    first := Node(0, last)
+    b.Push($nodes(first) ";" $nodes(last) ";" $nodes(Node(5, first)) ";" $nodes(null) ";")
+    b.Push($byRef(Point(1, 9)) ";" $byRef(Point(2, 9)) ";" $flags(Flag(true, 7)) ";" $flags(Flag(false, 7)) ";")
+    b.Push($either(Shape.Rect(8, 1)) ";" $either(Shape.Round(Point(9, 1))) ";" $either(Shape.Dot))
+    return b.ToString()
+}
+
+AllBaked := all(0)
+
+Want := ("origin;y5;x3;diag4;1,2;from origin to diag3;to the y axis;from x2;hot 313;freezing;283K;flat;thin 5;"
+    "square 2;rect 12;round on the axis;round 1,2;dot;one past;no;first on the axis at 7;second on the x axis at 6;"
+    "neither;three;four b;t 5;6;0 then 1;last 1;node 5;none;9;2;7;-1;8;9;0")
+
+type Opt<T> enum {
+    Some(v T)
+    None
+}
+
+# found on the way: a computed position beside a binding, and a generic case written with its arguments, bind (S13b)
+fn mixed(s Shape, o Opt<I64>, k I64) I64 {
+    a := match s {
+        case Shape.Rect(k + 1, h): h
+        case _: 0
+    }
+    b := match o {
+        case Opt<I64>.Some(v = 1): -1
+        case Opt<I64>.Some(x): x
+        case Opt.None: 0
+    }
+    return a * 100 + b
+}
+
+MixedBaked := mixed(Shape.Rect(3, 4), Opt<I64>.Some(5), 2)
+
+# a binding is a copy of the field: writing it leaves the value matched as it was (S13b)
+fn copies(p Point) I64 {
+    match p {
+        case Point(x) {
+            x = x + 100
+            return x + p.x
+        }
+    }
+}
+
+# private fields are named in their struct's own module (M6a): Point's x and y are lower case
+assert where(Point(2, 2)) == "diag2"
+
+test Point "S13i: struct patterns take a struct apart by its fields, at run time and while compiling" {
+    assert all(Live) == Want
+    assert AllBaked == Want
+    assert all(0) == Want # decided while compiling (S18c)
+    assert copies(Point(1, 2)) == 102
+    assert MixedBaked == 405 and mixed(Shape.Rect(3, 4), Opt<I64>.Some(5), 2 + Live) == 405
+    assert mixed(Shape.Rect(3, 4), Opt<I64>.Some(1), 1 + Live) == -1
+}

@@ -1,0 +1,2 @@
+type Box<T> struct(v <T>) { v }
+fn main() ? { b Box = Box<I32>(1) }

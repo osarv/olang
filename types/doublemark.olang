@@ -1,0 +1,4 @@
+type P struct() { }
+fn f(q P&) { }
+fn g(p P&q&q) { }
+fn main() ? { }

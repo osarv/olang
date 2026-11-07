@@ -1,0 +1,11 @@
+Gothenburg      0 km  Gothenburg
+Boras          65 km  Gothenburg -> Boras
+Trollhattan    75 km  Gothenburg -> Trollhattan
+Jonkoping     150 km  Gothenburg -> Boras -> Jonkoping
+Skovde        195 km  Gothenburg -> Trollhattan -> Skovde
+Linkoping     280 km  Gothenburg -> Boras -> Jonkoping -> Linkoping
+Orebro        315 km  Gothenburg -> Trollhattan -> Skovde -> Orebro
+Stockholm     480 km  Gothenburg -> Boras -> Jonkoping -> Linkoping -> Stockholm
+heap order: I64[0, 3, 6, 9, 2, 5, 8, 1, 4, 7]
+min: 2, greater: true
+maze: 15 baked 15

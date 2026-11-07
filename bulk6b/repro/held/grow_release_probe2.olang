@@ -1,0 +1,10 @@
+# round 8: does a local Vec's growth release the buffer it replaced? (a probe, -memory)
+import "std/io"
+
+type blk struct(n I64, m I64) { n, m }
+
+fn main() {
+    v := Vec<blk>()
+    for i in range 4000000 { v.Push(blk(i, i)) }
+    io.Println($v[3999999].n)!
+}

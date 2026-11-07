@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/l1.olang:6:31: error[O14]: this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'
+    6 |     f := fn(x CB&) { return x.Text() }
+      |                               ^~~~
+compilation failed with 1 error

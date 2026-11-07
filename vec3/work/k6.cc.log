@@ -1,0 +1,7 @@
+/home/user/review/vec3/work/k6.olang:10:34: error[O26]: '&return' names the result scope, and this function has none
+   10 | fn k(a Array<Char>&) Array<Char>&return { return id(a) }
+      |                                  ^~~~~~
+/home/user/review/vec3/work/k6.olang:10:50: error[T25c, O14]: a built result is new storage and writable, and this reference is read-only - return a copy, or borrow the result from the parameter it is read through
+   10 | fn k(a Array<Char>&) Array<Char>&return { return id(a) }
+      |                                                  ^~
+compilation failed with 2 errors

@@ -1,0 +1,57 @@
+import "std/io"
+# conversions and arrays reaching an any's box by shapes other than a read: a conditional, a match, a user function
+# returning a borrow, a member of a struct a call returns, a checked slice, a catch default
+type W trait {
+    mut Bump()
+    Show() String
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn (l Lab&) Show() String { return "lab " $String(l) }
+fn same(s mut String&) mut String&s { return s }
+type H struct(s mut String&) { s }
+error Oops {
+    BAD
+}
+fn pick(k I64) Lab ? Oops {
+    if k < 0 { error Oops.BAD }
+    return Lab("p" $k)
+}
+fn main() {
+    s := "hello"
+    u := "world"
+    c := s.Len() > 2
+    b1 mut any W& = Lab(s if c else u)
+    b1.Bump()
+    b2 mut any W& = Lab(match s.Len() { case 5 => s case _ => u })
+    b2.Bump()
+    b3 mut any W& = Lab(same(s))
+    b3.Bump()
+    h := H(u)
+    b4 mut any W& = Lab(h.s)
+    b4.Bump()
+    b5 mut any W& = Lab(checked s[1:9] catch default u)
+    b5.Bump()
+    b6 mut any W& = try pick(-1) catch default Lab(u)
+    b6.Bump()
+    say("s=" $s " u=" $u)
+    say($b1.Show() " " $b2.Show() " " $b3.Show() " " $b4.Show() " " $b5.Show() " " $b6.Show())
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

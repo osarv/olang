@@ -1,0 +1,32 @@
+# error sets through the table: an impl with fewer errors, one with named errors meeting a default-error slot, more errors
+error E1 {
+    A
+    B
+}
+error E2 {
+    C
+}
+type T trait {
+    Go(n I64) I64 ? E1, E2
+}
+type S struct(k I64) { k }
+fn (s S&) Go(n I64) I64 ? E1, E2 {
+    if n == 4 { error E1.B }
+    if n > 5 { error E2.C }
+    return n
+}
+fn go(k I64) String {
+    s := S(0)
+    t any T& = s
+    a := try t.Go(k) catch E1 default -1 catch E2.C default -2
+    c := checked t.Go(k) catch E1.A default -10 catch E1.B default -11 catch E2 default -12 catch CheckError default -13
+    return $a " " $c
+}
+Baked String = go(9)
+Live mut I64 = 9
+fn main() {
+    say(Baked)
+    say(go(Live))
+    say(go(Live - 7))
+    say(go(Live - 5))
+}

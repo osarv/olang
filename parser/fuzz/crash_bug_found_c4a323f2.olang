@@ -1,0 +1,5 @@
+# map - values found by key, compared with "==" (E10). A key is any type with a "Hash() I64" agreeing with "==": the
+# prelude gives it to I32, I64, U8 and String, the compiler supplies one for a struct, enum or array value whose
+# parts all have one (E10b), and a key type declaring Eq declares its Hash too.
+#
+# Buckets of chained slots, a power of two of them, doubled when the 

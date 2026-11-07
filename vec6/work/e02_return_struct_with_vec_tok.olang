@@ -1,0 +1,25 @@
+type Lex2 struct() {
+    toks Vec<Tok> = Vec<Tok>()
+}
+type Tok struct(text String&, n I64) {
+    text
+    n
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn build(k I64) Lex2 {
+    l := Lex2()
+    for i in range k { l.toks.Push(Tok($i "-word-built-in-reach", i)) }
+    return l
+}
+fn main() ? {
+    l := build(5)
+    churn()
+    println(l.toks[3].text)
+}

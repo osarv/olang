@@ -1,0 +1,12 @@
+== build -debug -sanitize
+d1_spawnscoped.olang:17:13: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   17 |             spawn x = mkp&t(i * 11 + 1)
+      |             ^~~~~
+compilation failed with 1 error
+== build
+d1_spawnscoped.olang:17:13: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   17 |             spawn x = mkp&t(i * 11 + 1)
+      |             ^~~~~
+compilation failed with 1 error
+== interpret
+status 0

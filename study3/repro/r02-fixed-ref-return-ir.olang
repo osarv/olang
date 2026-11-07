@@ -1,0 +1,15 @@
+# r02 BUG (invalid IR) - T7d/T7b: returning an Array<T, N>& where the result is the value Array<T, N> stores the pointer
+# as the aggregate. Every shape that returns the reference directly fails: "return a", "v := a; return v", and
+# "v := try (row as Array<F64, 3>&) catch default ...; return v" (how this was found, viewing a matrix row).
+#
+# expected: F64[1, 2, 3] (a copy out of the reference, as "w Array<F64, 3> = a; return w" does - that works)
+# actual -b: build/...ll: error: '%t4' defined with type 'ptr' but expected '[3 x double]'
+#              store [3 x double] %t4, ptr %t0      ->  clang could not compile
+# actual -i: F64[1, 2, 3]
+fn copyOut(a Array<F64, 3>&) Array<F64, 3> {
+    return a
+}
+fn main() ? {
+    y Array<F64, 3> = F64[1.0, 2.0, 3.0]
+    println($copyOut(y))
+}

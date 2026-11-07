@@ -1,0 +1,79 @@
+import "std/io"
+
+fn h(a F16, b F16) String { return $(a + b) " " $(a - b) " " $(a * b) " " $(a / b) " " $(-a) " " $(a < b) " " $(a == b) " " $(a + b).Bits() " " $(a / b).Bits() }
+fn bf(a BF16, b BF16) String { return $(a + b) " " $(a - b) " " $(a * b) " " $(a / b) " " $(a + b).Bits() " " $(a / b).Bits() }
+fn f(a F32, b F32) String { return $(a + b) " " $(a - b) " " $(a * b) " " $(a / b) " " $(a + b).Bits() " " $(a / b).Bits() }
+fn d(a F64, b F64) String { return $(a + b) " " $(a - b) " " $(a * b) " " $(a / b) }
+fn conv(x F64) String { return $F16(x) " " $BF16(x) " " $F32(x) " " $F16(x).Bits() " " $BF16(x).Bits() " " $F32(x).Bits() " " $I32(x) " " $I64(x) " " $U8(F32(x) / 1000.0) }
+fn conv2(x F32) String { return $F16(x).Bits() " " $BF16(x).Bits() " " $F64(x) }
+fn conv3(x F16) String { return $F32(x) " " $BF16(F32(x)).Bits() " " $F64(x) }
+fn i2f(x I32) String { return $F16(x).Bits() " " $BF16(x).Bits() " " $F32(x).Bits() }
+fn i2fu(x U32) String { return $F16(x).Bits() " " $BF16(x).Bits() " " $F32(x).Bits() }
+fn nanf(x F64) String { return $(x / x) " " $(x - x) " " $(x * 1.0e308 * 10.0) }
+
+B1 String = h(1.5, 0.3)
+B2 String = h(65000.0, 0.001)
+B3 String = bf(1.5, 0.3)
+B4 String = bf(3.0e38, 7.0)
+B5 String = f(1.1, 0.3)
+B6 String = f(1.0e-40, 3.0)
+B7 String = d(0.1, 0.2)
+B8 String = conv(1234.5678)
+B9 String = conv(65519.99)
+B10 String = conv(-0.00001)
+B11 String = conv2(1.0e-6)
+B12 String = conv3(0.0001)
+B13 String = i2f(16777217)
+B14 String = i2f(2049)
+B15 String = i2fu(4294967295)
+B16 String = nanf(0.0)
+B17 String = h(0.00006, 0.5)
+B18 String = conv(65520.0)
+
+M1a mut F16 = 1.5
+M1b mut F16 = 0.3
+M2a mut F16 = 65000.0
+M2b mut F16 = 0.001
+M3a mut BF16 = 1.5
+M3b mut BF16 = 0.3
+M4a mut BF16 = 3.0e38
+M4b mut BF16 = 7.0
+M5a mut F32 = 1.1
+M5b mut F32 = 0.3
+M6a mut F32 = 1.0e-40
+M6b mut F32 = 3.0
+M7a mut F64 = 0.1
+M7b mut F64 = 0.2
+M8 mut F64 = 1234.5678
+M9 mut F64 = 65519.99
+M10 mut F64 = -0.00001
+M11 mut F32 = 1.0e-6
+M12 mut F16 = 0.0001
+M13 mut I32 = 16777217
+M14 mut I32 = 2049
+M15 mut U32 = 4294967295
+M16 mut F64 = 0.0
+M17a mut F16 = 0.00006
+M17b mut F16 = 0.5
+M18 mut F64 = 65520.0
+
+fn main() ? io.IoError {
+    try io.Print("1 " $B1 "\n   " $h(M1a, M1b) "\n")
+    try io.Print("2 " $B2 "\n   " $h(M2a, M2b) "\n")
+    try io.Print("3 " $B3 "\n   " $bf(M3a, M3b) "\n")
+    try io.Print("4 " $B4 "\n   " $bf(M4a, M4b) "\n")
+    try io.Print("5 " $B5 "\n   " $f(M5a, M5b) "\n")
+    try io.Print("6 " $B6 "\n   " $f(M6a, M6b) "\n")
+    try io.Print("7 " $B7 "\n   " $d(M7a, M7b) "\n")
+    try io.Print("8 " $B8 "\n   " $conv(M8) "\n")
+    try io.Print("9 " $B9 "\n   " $conv(M9) "\n")
+    try io.Print("10 " $B10 "\n   " $conv(M10) "\n")
+    try io.Print("11 " $B11 "\n   " $conv2(M11) "\n")
+    try io.Print("12 " $B12 "\n   " $conv3(M12) "\n")
+    try io.Print("13 " $B13 "\n   " $i2f(M13) "\n")
+    try io.Print("14 " $B14 "\n   " $i2f(M14) "\n")
+    try io.Print("15 " $B15 "\n   " $i2fu(M15) "\n")
+    try io.Print("16 " $B16 "\n   " $nanf(M16) "\n")
+    try io.Print("17 " $B17 "\n   " $h(M17a, M17b) "\n")
+    try io.Print("18 " $B18 "\n   " $conv(M18) "\n")
+}

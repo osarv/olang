@@ -1,0 +1,37 @@
+type C struct() {
+    hits I64 = 0
+    v I64 = 7
+}
+fn (c mut C&) At(i I64) I64 {
+    c.hits++
+    return c.v
+}
+fn (c mut C&) Len() I64 {
+    c.hits++
+    return 1
+}
+fn (c mut C&) Plus(o C) C {
+    c.hits++
+    return C()
+}
+fn (c mut C&) Less(o C) Bool {
+    c.hits++
+    return false
+}
+fn (c mut C&) Has(x I64) Bool {
+    c.hits++
+    return false
+}
+type Bag struct(c mut C&) {
+    c
+}
+fn (b Bag&) Str() String {
+    s I64 = 0
+    u := b.c < C()
+    return "b" $b.c.hits
+}
+fn main() ? {
+    b := Bag(C())
+    println($b)
+    println($b)
+}

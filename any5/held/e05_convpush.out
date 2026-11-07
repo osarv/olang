@@ -1,0 +1,9 @@
+== build -debug -sanitize
+l List<Lab&>["abc0-0", "abc1-7", "abc2-14"]
+status 0
+== build
+l List<Lab&>["abc0-0", "abc1-7", "abc2-14"]
+status 0
+== interpret
+l List<Lab&>["abc0-0", "abc1-7", "abc2-14"]
+status 0

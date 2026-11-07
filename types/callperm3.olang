@@ -1,0 +1,17 @@
+# T25c/E31: a read-only reference to a value whose Call needs a writable receiver becomes a function value
+import "std/io"
+type Counter struct() {
+  n mut I32 = 0
+}
+fn (c mut Counter&) Call() I32 {
+  c.n++
+  return c.n
+}
+fn run(f fn() I32) I32 { return f() }
+fn peek(c Counter&) I32 { return run(c) }    # c is read-only here
+fn main() ? {
+  c := Counter()
+  x := peek(c)
+  x = peek(c)
+  try io.Print($c.n "\n")
+}

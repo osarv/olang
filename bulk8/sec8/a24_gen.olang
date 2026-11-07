@@ -1,0 +1,57 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+}
+
+fn churn() I64 {
+    t := 0
+    for k in range 300 {
+        s := $k "-" $(k * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+# a cursor given a turn's local, read on the next turn after a yield
+fn gen(n I64) Iterator<I64> {
+    cur Node& = Node(-1)
+    for i in range n {
+        yield cur.v
+        m := Node(i * 10)
+        cur = m
+        churn()
+    }
+    yield cur.v
+}
+
+# a generator yielding views of what a cursor reaches, built in the loop
+fn views(n I64) Iterator<String&> {
+    cur String& = "start"
+    for i in range n {
+        t := $i "-turn"
+        cur = t
+        yield cur[0:2]
+    }
+}
+
+fn main() {
+    s := 0
+    for x in gen(4) {
+        churn()
+        s = s * 100 + x + 1
+    }
+    io.Println($s)!
+    kept := Vec<String&>()
+    for w in views(5) { kept.Push(w) }
+    churn()
+    b := StringBuilder()
+    for w in kept { b.Push(w) }
+    io.Println(b.ToString())!
+    g := gen(3)
+    a := 0
+    for x in g { a += x }
+    io.Println($a)!
+}

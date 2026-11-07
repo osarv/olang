@@ -1,0 +1,15 @@
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+    items List<I64> = List<I64>()
+}
+type W struct(c mut V&) {
+    c.n = 5
+    k I64 = 1
+}
+fn main() ? {
+    l := List<V>()
+    l.Push(V(Array<I64>(2), 1))
+    w := W(l[0])
+    println($w.k)
+}

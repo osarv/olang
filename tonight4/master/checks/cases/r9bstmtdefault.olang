@@ -1,0 +1,12 @@
+# check: fail error[R11]: a try written as a statement gives no value, so it takes no default
+error E {
+    A
+    B
+}
+error F { C }
+fn f() I32 ? E + F { error E.A }
+fn main() ? E { }
+fn t() I32 ? E {
+    try f() catch E default 1 catch { }
+    return 0
+}

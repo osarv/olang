@@ -1,0 +1,40 @@
+# variants of t04: a try-default's field borrowed into a reference result (E12c), a view (E32b), a nested try
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type Pt struct() {
+    X I64 = 0
+    arr Array<I64, 2>
+}
+type Acc struct() {
+    P Pt
+}
+fn viewPt(a Array<Acc>&) Pt&a { return (try a[0] catch default Acc()).P }
+fn viewAs(a Array<Array<I64>&>&) Array<I64, 2>&a { return (try a[0] catch default Array<I64>(2)) as Array<I64, 2>& }
+fn viewSl(a Array<Acc>&) Array<I64>&a { return (try a[0].P catch default Pt()).arr[0:2] }
+fn deep(n I64) I64 {
+    b := Array<I64, 8>()
+    for i in range 8 { b[i] = n * 1000 + i }
+    if n == 0 { return b[3] }
+    return deep(n - 1) + b[1]
+}
+fn main() ? {
+    a := Array<Acc>(1)
+    a[0].P.X = 5
+    a[0].P.arr[0] = 11
+    a[0].P.arr[1] = 22
+    p := viewPt(a)
+    b := Array<Array<I64>&>(1)
+    b[0] = Array<I64>(2, 33)
+    w := viewAs(b)
+    s := viewSl(a)
+    t := deep(5)
+    churn()
+    x := p.X
+    y := w[1]
+    z := s[1]
+    println("p " $x " w " $y " s " $z " t " $t)
+}

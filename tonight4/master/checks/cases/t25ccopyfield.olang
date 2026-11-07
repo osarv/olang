@@ -1,0 +1,12 @@
+# check: fail error[T25c]: this writes through a reference a read-only copy holds
+# also: note: 'x' copies a place reached read-only, so it is read-only
+# T25c: a read-only copy writes nothing through its 'mut' reference fields - they are the place's
+type Box struct(P mut Array<I64>&) {
+    P
+}
+GB Box = Box(Array<I64>(3))
+G List<I64> = List<I64>()
+fn main() ? {
+    x := GB
+    x.P[0] = 1
+}

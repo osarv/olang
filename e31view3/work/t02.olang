@@ -1,0 +1,18 @@
+# T1h's tightening: a slice of a field of a try-default, lent writable, the index in range
+type Pt struct() {
+    X I64 = 0
+    arr Array<I64, 2>
+}
+type Acc struct() {
+    P Pt
+}
+fn bumpArr(x mut Array<I64>&) { x[0] = x[0] + 1 }
+fn run() I64 {
+    a := Array<Acc>(1)
+    bumpArr((try a[0] catch default Acc()).P.arr[0:1])
+    return a[0].P.arr[0]
+}
+Baked I64 = run()
+fn main() ? {
+    println("baked " $Baked " run " $run())
+}

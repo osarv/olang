@@ -1,0 +1,4 @@
+v3_selfhold_mutual.olang:2:5: error[T16]: A cannot hold itself by value - hold it through a reference ('&')
+    2 |     b B = B()
+      |     ^
+compilation failed with 1 error

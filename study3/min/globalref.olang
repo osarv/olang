@@ -1,0 +1,12 @@
+type Theme struct(name String&, fg I32) {
+    name
+    fg
+}
+Light Theme& = Theme("light", 0)
+Dark Theme& = Theme("dark", 15)
+Current mut Theme& = Light
+fn main() ? {
+    println(Current.name)
+    Current = Dark
+    println(Current.name)
+}

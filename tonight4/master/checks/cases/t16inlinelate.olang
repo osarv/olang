@@ -1,0 +1,10 @@
+# check: fail error[T16]: N cannot hold itself by value
+# T16/T7c/G21: the same when the length is computed only once the program has checked
+fn two() I64 { return 2 }
+type N struct() {
+  v I32 = 0
+  kids Array<N, two()>
+}
+fn main() ? {
+  n := N()
+}

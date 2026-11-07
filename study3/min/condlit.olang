@@ -1,0 +1,20 @@
+type R struct(words Array<String&>&) {
+    words
+}
+fn split(s String&) List<String&> {
+    out := List<String&>()
+    for w in s.Split(" ") { out.Push(w) }
+    return out
+}
+fn keep(text String&, m mut Map<String&, R&>&) {
+    bar := 3
+    a List<String&> = split(text[:bar])
+    b List<String&> = split(text[bar:] if bar < text.Len() else "")
+    m.Put(text, R(a.ToArray()))
+    m.Put(text[1:], R(b.ToArray()))
+}
+fn main() ? {
+    m := Map<String&, R&>()
+    keep("ab cd ef", m)
+    println($m.Len())
+}

@@ -1,0 +1,26 @@
+== build -debug -sanitize
+n06g_condarr.olang:20:17: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   20 |         xs.Push(Rows(a if i > 0 else b))
+      |                 ^~~~
+n06g_condarr.olang:29:5: error[D3a]: 'keep' names a function of this module - a name means one thing in it, so name this apart
+   29 |     keep Array<I64>& = Array<I64>(1, 0)
+      |     ^~~~
+n06g_condarr.olang:13:4: note: 'keep' is declared here
+   13 | fn keep<T W>(xs mut List<any W&>&, x T) { xs.Push(x) }
+      |    ^~~~
+compilation failed with 2 errors
+== build
+n06g_condarr.olang:20:17: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   20 |         xs.Push(Rows(a if i > 0 else b))
+      |                 ^~~~
+n06g_condarr.olang:29:5: error[D3a]: 'keep' names a function of this module - a name means one thing in it, so name this apart
+   29 |     keep Array<I64>& = Array<I64>(1, 0)
+== interpret
+n06g_condarr.olang:29:5: error[D3a]: 'keep' names a function of this module - a name means one thing in it, so name this apart
+   29 |     keep Array<I64>& = Array<I64>(1, 0)
+      |     ^~~~
+n06g_condarr.olang:13:4: note: 'keep' is declared here
+   13 | fn keep<T W>(xs mut List<any W&>&, x T) { xs.Push(x) }
+      |    ^~~~
+compilation failed with 1 error
+status 1

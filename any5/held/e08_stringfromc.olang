@@ -1,0 +1,12 @@
+# T7b: the prelude's StringFromC builds "out" in its frame and returns String(out) - a conversion of the local, not
+# copied and the local not moved: every caller's text is storage the callee's frame gave back
+extern fn strerror(code I32) CStr?&
+fn main() {
+    e := strerror(2)
+    keep := List<String&>()
+    for i in range 3 { keep.Push(e!.StringFromC(100)) }
+    s := e!.StringFromC(100)
+    churn()
+    say("s " $s)
+    say("keep " $keep)
+}

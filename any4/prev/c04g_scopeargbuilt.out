@@ -1,0 +1,20 @@
+== build -debug -sanitize
+c04g_scopeargbuilt.olang:9:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+    9 |         xs.Push(mkp&t(i * 11))
+      |            ^~~~
+/home/user/wt/rvany4/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+compilation failed with 1 error
+== build
+c04g_scopeargbuilt.olang:9:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+    9 |         xs.Push(mkp&t(i * 11))
+      |            ^~~~
+/home/user/wt/rvany4/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+compilation failed with 1 error
+== interpret
+0
+11
+status 0

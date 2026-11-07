@@ -1,0 +1,15 @@
+== r02_tuplereturn
+  san:    exit 0 run: a Qbc1 b ab|baked: a Qbc1 b ab|
+  O3:     exit 0 run: a Qbc1 b ab|baked: a Qbc1 b ab|
+  interp: exit 0 run: a Qbc1 b ab|baked: a Qbc1 b ab|
+--- compile (-debug -sanitize)
+built ./build/r02_tuplereturn.debug.san
+--- run san
+run: a Qbc1 b ab
+baked: a Qbc1 b ab
+--- run O3
+run: a Qbc1 b ab
+baked: a Qbc1 b ab
+--- interpret
+run: a Qbc1 b ab
+baked: a Qbc1 b ab

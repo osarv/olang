@@ -1,0 +1,16 @@
+# words pushed through a call's borrowed own result, and where they are built when the object is released and remade
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn (p mut Parser&) Lx() mut Lexer&p { return p.lx }
+fn main() ? {
+    p := Parser()
+    for k in range 400000 {
+        p.lx = Lexer()
+        for i in range 3 { p.lx.toks.Push($i "-word-pushed-through-the-call-....................................") }
+    }
+    println($p.lx.toks.Len())
+}

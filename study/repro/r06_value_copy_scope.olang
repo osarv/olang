@@ -1,0 +1,25 @@
+# a copy of an element holding references is taken to hold references into the copy's own block: a swap through a
+# temporary, a parallel-assignment swap, Array.Sort on records, and a loop variable stored outward are all rejected
+type WC struct(word String&, count I64) {
+    word
+    count
+}
+fn swap(a mut Array<WC>&, i I64, j I64) {
+    t := a[i]
+    a[i] = a[j]
+    a[j] = t
+}
+fn swap2(a mut Array<WC>&, i I64, j I64) {
+    a[i], a[j] = a[j], a[i]
+}
+fn main() ? {
+    a := Array<WC>(2)
+    a[0] = WC("b", 2)
+    a[1] = WC("a", 5)
+    swap(a, 0, 1)
+    swap2(a, 0, 1)
+    a.Sort(fn(x WC, y WC) Bool { return x.count > y.count })
+    rare := List<String&>()
+    for wc in a { if wc.count == 2 { rare.Push(wc.word) } }
+    assert a[0].word == "a" and rare.Len() == 1
+}

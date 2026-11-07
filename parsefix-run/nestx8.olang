@@ -1,0 +1,5 @@
+fn k() { }
+fn f(g fn()) { g() }
+fn h() {
+    f(fn() { f(fn() { f(fn() { f(fn() { f(fn() { f(fn() { f(fn() { f(fn() { k() }) }) }) }) }) }) }) })
+}

@@ -1,0 +1,39 @@
+# E25: destructured results built where a scope argument says
+fn churn() I64 {
+    t I64 = 0
+    for k in range 200 {
+        junk := $k "-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t += junk.Len()
+    }
+    return t
+}
+fn mk2(n I64) (List<String&>, I64) {
+    l := List<String&>()
+    for i in range n + 1 { l.Push($i "-elem-of-moderate-length-xxxxxxxxxxxxxxx") }
+    return l, n + 1
+}
+fn mk3(s String&) (List<String&>, I64) {
+    l := List<String&>()
+    l.Push(s)
+    return l, 1
+}
+fn main() ? {
+    rows := List<List<String&>>()
+    for k in range 3 {
+        t := $k "-loop-text-of-moderate-length-xxxxxxxxxxxxxxxx"
+        rec, next := mk2&t(k)
+        rows.Push(rec)
+    }
+    for k in range 3 {
+        t := $k "-loop-text-of-moderate-length-xxxxxxxxxxxxxxxx"
+        rec, next := mk3&rows(t)
+        rows.Push(rec)
+    }
+    for k in range 3 {
+        u := List<String&>()
+        rec, next := mk2&u(k)
+        rows.Push(rec)
+    }
+    println($churn())
+    for r in rows { println(r[0]) }
+}

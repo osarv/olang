@@ -1,0 +1,13 @@
+# a read-only method on a global holding references: nothing can be stored through a read-only receiver (O25g)
+import "std/io"
+type Node struct(v I32) {
+    v mut
+    next mut Node& = null
+}
+GL List<I32>& = List<I32>()
+GN Node& = Node(7)
+fn count(l List<I32>&) I64 { return l.Len() }
+fn val(n Node&) I32 { return n.v }
+fn main() ? {
+    try io.Print($count(GL) " " $GL.Len() " " $val(GN) "\n")
+}

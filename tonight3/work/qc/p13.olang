@@ -1,0 +1,20 @@
+type Ctr struct() {
+  n I64 = 0
+}
+type B struct(c mut Ctr&) { c }
+G B = B(Ctr())
+type E enum {
+  A(b B)
+  N
+}
+GE E = E.A(B(Ctr()))
+fn f(e E) {
+  match e {
+    case E.A(b) { b.c.n = 5 }
+    case E.N { }
+  }
+}
+fn main() ? {
+  f(GE)
+  println($(GE as E.A).c.n)
+}

@@ -1,0 +1,7 @@
+error Aerr {
+    A
+}
+fn Z(n I64) I64 ? {
+    if n == 2 { error Aerr.A }
+    return n
+}

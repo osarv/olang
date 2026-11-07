@@ -1,0 +1,18 @@
+type Kind enum {
+    Label(text String&)
+    Button(text String&, clicks I32)
+}
+type Widget struct(kind Kind) {
+    kind mut
+}
+fn bump(w mut Widget&) {
+    match w.kind {
+        case Kind.Button(t, n) { w.kind = Kind.Button(t, n + 1) }
+        nomatch { }
+    }
+}
+fn main() ? {
+    w Widget& = Widget(Kind.Button("OK", 0))
+    bump(w)
+    assert w.kind == Kind.Button("OK", 1)
+}

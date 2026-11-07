@@ -1,0 +1,18 @@
+# PRE-EXISTING (master gives the same). A constructor keeps, in a reference field, a borrow of its own BY-VALUE
+# PARAMETER (one that is not also a field). The checker reads a parameter's storage at depth 1, which in a constructor is
+# its top level - the instance's scope (C2g) - so "keep P& = p" is accepted; but the parameter is a slot of the
+# constructor's stack frame. After the call returns, h.keep points into a dead frame: the second construction reuses it.
+# Related to this batch's depth-0 rule (its comment treats "a parameter's own storage" as the body's top level, which in
+# a constructor is the instance's scope) but not introduced by it: the parameter's depth is 1, not 0.
+#     expected: "42 7" (as -i prints)
+#     actual:   -d / -d -s: "7 0"; -b / -s: garbage bytes (the rendering itself reads a dead frame)
+# The same through a call ("keep P& = borrow(p)") and inside a nested loop of the constructor.
+type P struct(v I64) { v }
+type H struct(p P) {
+    keep P& = p
+}
+fn main() ? {
+    h := H(P(42))
+    h2 := H(P(7))
+    println($h.keep.v " " $h2.keep.v)
+}

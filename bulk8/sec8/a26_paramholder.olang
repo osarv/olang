@@ -1,0 +1,66 @@
+import "std/io"
+
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+type Lamp unique struct(id I64, log mut Tally&) {
+    id, log
+    open := true
+    data := Array<I64>(16 + id.Mod(2), id)
+} destruct {
+    log.seen.Push(id)
+    open = false
+}
+
+type Grip unique struct(id I64) {
+    id
+    held Lamp?& = null
+} destruct {
+    if held is not null: held!.log.seen.Push(id * 1000 + held!.data[3] * 10 + (1 if held!.open else 0))
+}
+
+# a by-value parameter holding a reference to a local declared in the body
+fn paramHolds(g Grip, t mut Tally&, k I64) {
+    l Lamp = Lamp(k, t)
+    g.held = l
+}
+
+# the holder in an outer block, the held one in an inner block
+fn nested(t mut Tally&, k I64) {
+    g Grip = Grip(8)
+    {
+        l Lamp = Lamp(k, t)
+        g.held = l
+    }
+    other := Vec<Lamp>()
+    other.Push(Lamp(-9, t))
+    other.Truncate(0)
+}
+
+# in a loop: each turn's Lamp held by the outer Grip
+fn looped(t mut Tally&) {
+    g Grip = Grip(9)
+    for k in range 3 {
+        l Lamp = Lamp(k + 20, t)
+        g.held = l
+    }
+}
+
+fn show(t Tally&) String {
+    b := StringBuilder()
+    for x in t.seen { b.Push($x ".") }
+    return b.ToString()
+}
+
+fn main() {
+    t := Tally()
+    for k in range 3 { paramHolds(Grip(7), t, k + 1) }
+    io.Println(show(t))!
+    t2 := Tally()
+    nested(t2, 5)
+    io.Println(show(t2))!
+    t3 := Tally()
+    looped(t3)
+    io.Println(show(t3))!
+}

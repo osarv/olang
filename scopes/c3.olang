@@ -1,0 +1,13 @@
+# spawned call borrowing a value String declared in a loop body inside the join
+import "std/io"
+fn work(s String&) I64 { return s.Len() }
+fn main() ? {
+    total Array<I64>& = Array<I64>(4)
+    join {
+        for i in range 4 {
+            s := $i "abc"
+            spawn total[i] = work(s)
+        }
+    }
+    try io.Print($total[3] "\n")
+}

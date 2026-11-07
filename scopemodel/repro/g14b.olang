@@ -1,0 +1,18 @@
+import "std/io"
+type N struct(v I32) { v }
+fn id<T>(x T) T { return x }
+fn churn() {
+    for i in range 2000 {
+        s := $i "zzzzzzzzzzzzzzzzzzzzzzzzzzz"
+        m N& = N(I32(i))
+    }
+}
+fn main() ? {
+    keep mut N& = null
+    for i in range 2 {
+        n mut N& = N(42)
+        keep = id(n)
+    }
+    churn()
+    try io.Print($keep.v "\n")
+}

@@ -1,0 +1,26 @@
+import "std/io"
+type E error { Bad(n I64), Named(s String) }
+type Pt struct(x I64) { x }
+fn Pt.Of(n I64) Pt ? E {
+    if n < 0: error E.Bad(n)
+    return Pt(n)
+}
+fn Pt.Named(n I64) Pt ? E {
+    if n < 0: error E.Named("neg")
+    return Pt(n)
+}
+fn pick(x I64, y I64) [y > x] I64 ? { return y }
+fn plain(x I64) I64 { return x + 1 }
+fn byName(n I64) I64 ? {
+    if n < 0: error Neg(n = n)
+    return n
+}
+assert not Pt.Of.Allocates
+assert Pt.Named.Allocates
+assert pick.Allocates
+assert not plain.Allocates
+assert not byName.Allocates
+assert Pt.Of.Terminates and pick.Terminates
+fn main() {
+    io.Println($Pt.Of.Allocates " " $Pt.Named.Allocates " " $pick.Allocates " " $byName.Allocates)!
+}

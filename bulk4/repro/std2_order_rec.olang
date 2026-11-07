@@ -1,0 +1,10 @@
+import "std/io"
+import "std/order"
+
+type Tree enum { Leaf(v I64), Node(l Tree&, r Tree&) }
+
+fn main() {
+    xs := Tree[Tree.Node(Tree.Leaf(2), Tree.Leaf(1)), Tree.Leaf(5), Tree.Node(Tree.Leaf(1), Tree.Leaf(9))]
+    xs.Sort(order.ByFields<Tree>)
+    io.Println($xs)!
+}

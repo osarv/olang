@@ -1,0 +1,19 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# new storage built into a GLOBAL's own object's region, through a local typed with its scope
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+G own mut CB& = CB()
+fn main() ? {
+    d mut String&G = $5 "-new-text-in-the-global-region"
+    G = CB()
+    churn()
+    println(d)
+}

@@ -1,0 +1,11 @@
+# check: fail expected '{'
+# S12: a case is values or patterns - the "case c Circle& { }" form of the removed interface type cases crashed the
+# compiler, its node still parsed with nothing left to check it
+type Circle struct(r I32) { r }
+fn main() ? {
+    x := 3
+    match x {
+        case c Circle& { }
+        nomatch { }
+    }
+}

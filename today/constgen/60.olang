@@ -1,0 +1,14 @@
+# E10/T7d: == between an Array<T, N>& and an Array<T>& naming the same storage (identity: same storage, start, length)
+fn run() String {
+    a := I64[1, 2, 3, 4]
+    f := a[0:3] as Array<I64, 3>&
+    r Array<I64>& = a[0:3]
+    s Array<I64>& = a[0:2]
+    g Array<I64>& = f
+    return $(f == r) " " $(f == s) " " $(g == r) " " $(g is r)
+}
+B String = run()
+fn main() ? {
+    println(run())
+    println(B)
+}

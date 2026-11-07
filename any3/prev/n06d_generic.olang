@@ -1,0 +1,22 @@
+# a generic function pushing its array parameter into an any list
+type W trait {
+    Show() String
+}
+type P struct(s String&) { s }
+type Rows extends Array<String&>
+fn (r Rows&) Show() String { return "rows " $r.Len() " " $r[0] }
+type Grid extends Array<Array<String&>&>
+fn (g Grid&) Show() String { return "grid " $g[0][0] }
+type Ps extends Array<P>
+fn (p Ps&) Show() String { return "ps " $p[0].s }
+fn keepIt<T W>(xs mut List<any W&>&, x T) { xs.Push(x) }
+fn main() {
+    xs := List<any W&>()
+    for i in range 3 {
+        t := "t" $i "-" $(i * 7)
+        r := Rows(String&[t, t])
+        keepIt(xs, r)
+    }
+    churn()
+    for x in xs { say(x.Show()) }
+}

@@ -1,0 +1,13 @@
+type Module struct(name String&) {
+    name
+    deps mut List<String&>& = List<String&>()
+}
+fn report(mods List<Module>&, i I64) {
+    eprintln("FAILED " $mods[i].name)
+    for d in mods[i].deps { eprintln("  needs " $d) }
+}
+fn main() ? {
+    mods := List<Module>()
+    mods.Push(Module("a"))
+    report(mods, 0)
+}

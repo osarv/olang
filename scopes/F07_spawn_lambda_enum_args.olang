@@ -1,0 +1,31 @@
+# P2: a spawned call's argument that is a lambda capturing, or an enum holding, loop-body storage
+import "std/io"
+type Box enum {
+    Has(a Array<I64>&)
+    No
+}
+fn spin() I64 {
+    k I64 = 0
+    for j in range 20000000 { k = (k * 31 + j) % 1000003 }
+    return k - k
+}
+fn apply(f fn() I64) I64 {
+    s := spin()
+    return f() + s
+}
+fn sumB(b Box) I64 {
+    s := spin()
+    return (b as Box.Has)[0] + s
+}
+fn main() ? {
+    out := Array<I64>(4)
+    out2 := Array<I64>(4)
+    join {
+        for i in range 4 {
+            a := Array<I64>(1000, i + 1)
+            spawn out[i] = apply(fn() { return a[0] })
+            spawn out2[i] = sumB(Box.Has(a))
+        }
+    }
+    try io.Print($out[0] " " $out[1] " " $out[2] " " $out[3] " | " $out2[0] " " $out2[1] " " $out2[2] " " $out2[3] "  (expected 1 2 3 4 twice)\n")
+}

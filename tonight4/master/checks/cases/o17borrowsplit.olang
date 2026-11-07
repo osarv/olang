@@ -1,0 +1,30 @@
+# check: run
+# O26a: a local the function returns lives in the result scope, its storage too, so lending it to a callee that can store
+# through it is fine - what that builds is built there. This was O17's error while the storage stayed in the block;
+# o17borrowsplitwrap.olang keeps it where the local is not what is returned
+type Box struct(n I64) {
+    Data mut Array<I64>& = Array<I64>(n)
+}
+fn (b Box&) size() I64 { return b.Data.Len() }
+fn (b mut Box&) regrow(v I64) {
+    b.Data = Array<I64>(8, v)
+}
+fn make(n I64) Box {
+    b := Box&return(n)
+    assert b.size() == n
+    b.regrow(7)
+    return b
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    b := make(3)
+    churn()
+    assert b.Data[0] == 7 and b.Data.Len() == 8
+}

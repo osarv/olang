@@ -1,0 +1,8 @@
+# T7a/T7c: the old inline-field form - what does the diagnostic say to write?
+type M struct() {
+    m mut Array<F32> = Array<F32>(16)
+}
+fn main() ? {
+    x := M()
+    println($x.m.Len())
+}

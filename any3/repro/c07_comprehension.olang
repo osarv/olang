@@ -1,0 +1,30 @@
+# T32a: anys whose boxes hold a call's text as it is - in an array literal of anys, returned from a lambda through Map,
+# and a comprehension's own array as a box's item - kept past the loop
+type W trait {
+    Show() String
+}
+type Lab extends String
+fn (l Lab&) Show() String { return "lab " $String(l) }
+type Ups struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (u mut Ups&) Next() I64 ? Exhausted {
+    if u.at >= u.n { error Exhausted.END }
+    u.at += 1
+    return u.at
+}
+fn mk(i I64) String { return "t" $i "-" $(i * 7) }
+fn build(n I64) Array<any W&>& { return any W&[Lab(mk(n)), Lab(mk(n + 1))] }
+fn main() {
+    keep := List<any W&>()
+    for k in range 2 {
+        xs mut Array<any W&>&keep = any W&[Lab(mk(k * 10)), Lab(mk(k * 10 + 1))]
+        for x in xs { keep.Push(x) }
+        keep.Push(Lab(Char[Char(c) for c in range 97, 100]))
+    }
+    ys := build(3)
+    assert churn() > 0
+    for x in keep { say(x.Show()) }
+    for y in ys { say(y.Show()) }
+}

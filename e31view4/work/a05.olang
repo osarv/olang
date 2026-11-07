@@ -1,0 +1,27 @@
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { abort }
+    }
+}
+type Leaf struct(v I64) {
+    v
+}
+type RBox struct(v I64) {
+    head Leaf& = Leaf(v)
+    tag I64 = 0
+}
+type Holder struct() {
+    n Leaf& = null
+}
+fn collect(b RBox&, out mut Holder&) { out.n = b.head }
+fn main() ? {
+    b1 := RBox(9)
+    h := Holder()
+    for i in range 3 {
+        collect(b1 if i > 5 else RBox(i + 1), h)
+        churn()
+    }
+    churn()
+    assert h.n.v == 3, $h.n.v
+}

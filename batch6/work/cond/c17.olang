@@ -1,0 +1,22 @@
+# a conditional of a block's reference and static text, stored into a field of a reference parameter
+type Bag struct() {
+    last String& = ""
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+fn set(b mut Bag&, i I64) {
+    x String& = "w" $i "-abcdefghijklmnopqrstuvwxyz"
+    b.last = x if i == 1 else "z"
+}
+fn main() ? {
+    b mut Bag& = Bag()
+    set(b, 1)
+    churn()
+    println(b.last)
+}

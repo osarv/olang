@@ -1,0 +1,4 @@
+# check: fail has no type, and nothing sas what it is
+error E in() ? E {
+    f := fn(x) { return x }
+}

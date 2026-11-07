@@ -1,0 +1,37 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    t String& = $"node " $v " with text padded out to a fair length ..........................."
+}
+
+type Holder struct() {
+    l List<Node&>
+    m Map<I64, Node&>
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    h := Holder()
+    for i in range 5 {
+        h.l.Push(Node(i))
+        h.l = h.l.Clone()           # the old List let go of; the clone holds its nodes
+        h.m.Put(i, Node(i * 10))
+        h.m = h.m.Clone()
+        churn()
+        t I64 = 0
+        for n in h.l { t += n.t.Len() + n.v }
+        for e in h.m { t += e.Value.t.Len() + e.Value.v }
+        io.Println($t)!
+    }
+}

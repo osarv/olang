@@ -1,0 +1,9 @@
+import "std/io"
+
+Count mut I64 = 0
+assert Count == 0, "count starts at zero"
+
+fn main() {
+    Count = 5
+    io.Println($Count)!
+}

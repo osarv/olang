@@ -1,0 +1,35 @@
+# CONFIRMED, NEW (771a922) - finding 1 with a program's own generic At ("fn (c Bx<<T>>&) At(i I64) T"). A non-generic At
+# returning a borrowed "mut Cell&c" is refused (O20), as it should be.
+#   -b -d -s: use after scope closed; -i: w0.. w1.. w2..
+type Cell struct() {
+    s String& = ""
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+type Bx<T> struct() {
+    l mut List<T>& = List<T>()
+}
+fn (c Bx<<T>>&) At(i I64) T {
+    return c.l[i]
+}
+fn (c Bx<<T>>&) Len() I64 {
+    return c.l.Len()
+}
+fn main() ? {
+    cells mut Bx<mut Cell&>& = Bx<mut Cell&>()
+    for i in range 3 { cells.l.Push(Cell()) }
+    for i in range 3 {
+        x String& = "w" $i "-abcdefghijklmnopqrstuvwxyz"
+        cells[i].s = x
+        churn()
+    }
+    churn()
+    for c in cells { print($c.s " ") }
+    println("")
+}

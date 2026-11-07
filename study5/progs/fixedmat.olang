@@ -1,0 +1,84 @@
+# fixedmat - small fixed-size matrices whose shapes are constant parameters, so a product of mismatched shapes is a
+# compile-time error: 3D rotations and a 2x3 * 3x4 product.
+import "std/math"
+
+type Mat<R I64, C I64> struct() {
+    d Array<F64, R * C>
+}
+
+fn (m Mat<<R>, <C>>&) At(i I64, j I64) F64 { return m.d[i * C + j] }
+fn (m mut Mat<<R>, <C>>&) SetAt(i I64, j I64, v F64) { m.d[i * C + j] = v }
+
+fn (a Mat<<R>, <K>>&) MatMul(b Mat<K, <C>>&) Mat<R, C> {
+    out := Mat<R, C>()
+    for i in range R {
+        for j in range C {
+            s := 0.0
+            for k in range K { s += a[i, k] * b[k, j] }
+            out[i, j] = s
+        }
+    }
+    return out
+}
+
+fn (m Mat<<R>, <C>>&) T() Mat<C, R> {
+    out := Mat<C, R>()
+    for i in range R {
+        for j in range C { out[j, i] = m[i, j] }
+    }
+    return out
+}
+
+fn (m Mat<<R>, <C>>&) Str() String {
+    b := StringBuilder()
+    for i in range R {
+        b.Push("[")
+        for j in range C {
+            if j > 0 { b.Push(" ") }
+            b.Push(m[i, j].Fixed(3).PadStart(7))
+        }
+        b.Push("]\n")
+    }
+    return b.ToString()
+}
+
+# "fn identity<N I64>() Mat<N, N>" cannot be written: a function takes no parameter list (only a struct or trait
+# does) and a variable must appear in a parameter (G4) - so the identity is made from a matrix of its shape
+fn (m Mat<<N>, N>&) Identity() Mat<N, N> {
+    out := Mat<N, N>()
+    for i in range N { out[i, i] = 1.0 }
+    return out
+}
+
+fn rotZ(theta F64) Mat<3, 3> {
+    m := Mat<3, 3>()
+    c := math.Cos(theta)
+    s := math.Sin(theta)
+    m[0, 0] = c
+    m[0, 1] = -s
+    m[1, 0] = s
+    m[1, 1] = c
+    m[2, 2] = 1.0
+    return m
+}
+
+fn main() ? {
+    r := rotZ(math.Pi / 6.0)
+    rt := r.T()
+    p := r @ rt
+    print("R R^T =\n" $p)
+    a := Mat<2, 3>()
+    b := Mat<3, 4>()
+    for i in range 2 {
+        for j in range 3 { a[i, j] = F64(i + j) }
+    }
+    for i in range 3 {
+        for j in range 4 { b[i, j] = F64(i * j) - 1.0 }
+    }
+    c := a @ b
+    print("A B =\n" $c)
+    v := Mat<3, 1>()
+    v[0, 0] = 1.0
+    turned := r @ r @ r @ v               # 90 degrees
+    print("turned =\n" $turned)
+}

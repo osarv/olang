@@ -1,0 +1,17 @@
+# G27: a constraint on a constant's value is an assert in the constructor, decided per instantiation
+type Ring<T, N I64> struct() {
+    assert N > 0 and (N & (N - 1)) == 0, "N must be a power of two"
+    items mut Array<<T>, N>
+    head mut I64
+}
+fn (r mut Ring<<T>, <N>>&) Push(x <T>) {
+    r.items[r.head & (N - 1)] = x
+    r.head++
+}
+fn main() ? {
+    r := Ring<I32, 8>()
+    r.Push(3)
+    println($r.items[0])
+    s := Ring<I32, 6>()
+    println($s.head)
+}

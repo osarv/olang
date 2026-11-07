@@ -1,0 +1,42 @@
+fn mk(n I64) List<I64> {
+    l := List<I64>()
+    for i in range n { l.Push(i * 10) }
+    return l
+}
+fn mkref(n I64) mut Array<I64>& {
+    return Array<I64>(n, 7)
+}
+fn build() List<I64> {
+    out := List<I64>()
+    join {
+        spawn out = mk(5)
+    }
+    return out
+}
+fn buildRef() mut Array<I64>& {
+    r mut Array<I64>& = null
+    join {
+        spawn r = mkref(5)
+    }
+    return r
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    l := build()
+    r := buildRef()
+    outer := List<I64>()
+    {
+        join { spawn outer = mk(3) }
+    }
+    churn()
+    println($l[4] " " $l.Len() " " $r[4] " " $outer[2])
+}

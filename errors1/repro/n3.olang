@@ -1,0 +1,8 @@
+# finding 7: a lambda written noreturn is accepted (D8e forbids it); a call through it in value position is typed '?'
+import "std/os"
+import "std/io"
+fn main() {
+    f := fn() noreturn { os.Exit(3) }
+    x I64 = f() if os.Args().Len() > 5 else 7
+    io.Println($x)!
+}

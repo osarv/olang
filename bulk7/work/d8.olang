@@ -1,0 +1,30 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type Ref struct(r Res&) {
+    r
+}
+
+fn mk(n I64) Res& {
+    x Res = Res(n)
+    return x
+}
+
+fn wrap(n I64) Ref {
+    x Res = Res(n)
+    return Ref(x)
+}
+
+fn main() {
+    a := mk(5)
+    io.Println("ref " $a.id " ended " $Ended)!
+    b := wrap(6)
+    io.Println("held " $b.r.id " ended " $Ended)!
+}

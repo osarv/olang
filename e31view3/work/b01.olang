@@ -1,0 +1,22 @@
+# basic shape: a handle a call gives, lent to a pushing callee
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn pushTo(l mut List<I64>&, x I64) { l.Push(x) }
+fn main() ? {
+    m := Map<I64, List<I64>>()
+    m.Put(1, List<I64>())
+    for i in range 3 {
+        pushTo(try m.Get(1), i + 7)
+    }
+    churn()
+    for s in try m.Get(1) { println("for " $s) }
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    for i in range 3 { pushTo(try ll.First(), i + 20) }
+    churn()
+    for s in ll[0] { println("ll " $s) }
+}

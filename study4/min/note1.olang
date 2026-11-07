@@ -1,0 +1,17 @@
+type R struct(Code I64, Note String&) {
+    Code
+    Note
+}
+fn check(n I64) R {
+    note := ""
+    if n > 3 { note = "big: " $n }
+    return R(n, note)
+}
+fn check2(n I64) String& {
+    note := ""
+    if n > 3 { note = "big: " $n }
+    return note
+}
+fn main() ? {
+    println($check(5).Note " " $check2(7))
+}

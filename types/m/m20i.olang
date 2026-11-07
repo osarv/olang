@@ -1,0 +1,7 @@
+import "lib"
+fn main() ? {
+  match lib.Dir.Hold(2) {
+    case lib.Dir.Hold(lib) { }
+    nomatch { }
+  }
+}

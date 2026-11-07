@@ -1,0 +1,172 @@
+# ffi - a C function called by a name chosen while the program runs, with arguments described while it runs: what an
+# interpreter needs to call the externs of the program it runs. Everything else calls C through "extern fn" (§11),
+# which the compiler checks and which costs nothing; a call made here looks its function up and builds its call
+# interface each time. Ordinary olang over the runtime's dynamic call (X6), which is over the C library's dlsym and
+# libffi: a program importing this module links them, and no other does.
+#
+# A call is described by its kinds - one byte per argument, a number type's Code, or ArrayOf one for an array of them
+# - and its words, the arguments' values in order: a number is one word holding its bits from the lowest (Pack's
+# helpers write them); an array is one word holding its length followed by its elements' bytes, packed into as many
+# words as they fill (Pack, Unpack). The function is handed a pointer to those bytes, so what it writes there is in
+# the words after the call - copied in and out of whatever holds the array. Only X2's vocabulary crosses: numbers, and
+# arrays of numbers as parameters; a 16-bit float only inside an array, since libffi has no such type.
+
+extern fn __olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64
+extern fn __olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32
+
+# why a call could not be made: no function by its name in what the process has loaded (nor in the C math library),
+# or a kind nothing can pass - a 16-bit float alone, an array as the result, a code that names no kind
+error FfiError {
+    NOT_FOUND
+    UNSUPPORTED
+}
+
+# the number types a foreign function takes and gives (X2)
+type Kind enum {
+    I8
+    I16
+    I32
+    I64
+    U8
+    U16
+    U32
+    U64
+    F16
+    BF16
+    F32
+    F64
+}
+
+# the byte naming a number of kind k, in a call's kinds or as its result; 0 as a result is none
+fn Code(k Kind) U8 {
+    return match k {
+        case Kind.I8 => 1
+        case Kind.I16 => 2
+        case Kind.I32 => 3
+        case Kind.I64 => 4
+        case Kind.U8 => 5
+        case Kind.U16 => 6
+        case Kind.U32 => 7
+        case Kind.U64 => 8
+        case Kind.F16 => 9
+        case Kind.BF16 => 10
+        case Kind.F32 => 11
+        case Kind.F64 => 12
+    }
+}
+
+# the byte naming an array of numbers of kind k - a parameter, handed over as a pointer to its first element (X3)
+fn ArrayOf(k Kind) U8 { return Code(k) | 0x80 }
+
+# the bytes one number of the kind coded c takes - 8 for a code naming none, so a wrong one still reads in bounds
+fn width(c U8) I64 {
+    return match c {
+        case 1, 5 => 1
+        case 2, 6, 9, 10 => 2
+        case 3, 7, 11 => 4
+        nomatch => 8
+    }
+}
+
+# whether "name" is a function the process can call this way - in what it has loaded, or in the C math library
+fn Has(name String&) Bool {
+    return __olang_dyncall_check($name "\0", U8[0], 0) != 1
+}
+
+# calls the C function "name" with the arguments "words" holds, as "kinds" describes them, and gives its result's bits
+# - the result coded "result", 0 for none: an integer extended to 64 bits as its type extends, a float's IEEE bits
+# (F64FromBits, F32FromBits). What the function writes into an array argument is in "words" after the call. Fails with
+# NOT_FOUND when there is no such function and UNSUPPORTED for a kind nothing can pass. Words holding less than the
+# kinds describe are a mistake in the program, stopped as a failed check is; the prototype the kinds describe is the
+# program's word, as an extern declaration's is (X1a): a wrong one is undefined behaviour
+fn Call(name String&, kinds Array<U8>&, words mut Array<U64>&, result U8 = 0) U64 ? FfiError {
+    need I64 = 0
+    for k in kinds {
+        assert k != 0, "a call's kinds hold no 0"
+        if k < 0x80 {
+            need += 1
+            continue
+        }
+        assert need < words.Len(), "an array argument's words hold no length"
+        n := I64(words[need])
+        assert n >= 0 and n <= (words.Len() - need - 1) * 8, "an array argument's words hold fewer elements than its length"
+        need += 1 + (n * width(k & 0x7F) + 7) / 8
+    }
+    assert need <= words.Len(), "the words hold less than the kinds describe"
+    ended := Array<U8>(kinds.Len() + 1)
+    for i, k in kinds { ended[i] = k }
+    named := $name "\0"
+    match __olang_dyncall_check(named, ended, result) {
+        case 1 { error FfiError.NOT_FOUND }
+        case 2 { error FfiError.UNSUPPORTED }
+        nomatch { }
+    }
+    return __olang_dyncall(named, ended, words, result)
+}
+
+# the bytes of "bytes" written into words from word "at" on, eight to a word from the lowest - an array argument's
+# elements as Call's words hold them (its length is the word before)
+fn Pack(words mut Array<U64>&, at I64, bytes Array<U8>&) {
+    for i, b in bytes {
+        w := at + i / 8
+        shift := U64(i % 8) * 8
+        words[w] = (words[w] & ~(U64(0xFF) << shift)) | (U64(b) << shift)
+    }
+}
+
+# the bytes words hold from word "at" on, as Pack writes them, read back into "into" - one for each element it has room for
+fn Unpack(words Array<U64>&, at I64, into mut Array<U8>&) {
+    for i in range into.Len() {
+        into[i] = U8((words[at + i / 8] >> (U64(i % 8) * 8)) & 0xFF)
+    }
+}
+
+# how many words "bytes" bytes fill
+fn WordsFor(bytes I64) I64 { return (bytes + 7) / 8 }
+
+test "Has finds the C library's functions, and the math library's" {
+    assert Has("strlen") and Has("getpid") and Has("cbrt") and not Has("olang_no_such_function_anywhere")
+}
+
+test "Call passes numbers and gives each kind of result" {
+    w := U64[U64(-42)]
+    assert I64(try Call("labs", U8[Code(Kind.I64)], w, Code(Kind.I64)) catch default 0) == 42
+    x := U64[(6.25).Bits()]
+    assert (try Call("sqrt", U8[Code(Kind.F64)], x, Code(Kind.F64)) catch default 0).F64FromBits() == 2.5
+    f F32 = 2.25
+    y := U64[U64(f.Bits())]
+    assert U32(try Call("sqrtf", U8[Code(Kind.F32)], y, Code(Kind.F32)) catch default 0).F32FromBits() == 1.5
+    neg := U64[U64(-5)]
+    assert I64(try Call("abs", U8[Code(Kind.I32)], neg, Code(Kind.I32)) catch default 0) == 5     # an I32, extended
+    none := Array<U64>(0)
+    assert (try Call("getpid", U8[], none, Code(Kind.I32)) catch default 0) > 0
+}
+
+test "Call hands an array over and reads back what the function wrote" {
+    text := "hello, world"
+    w := Array<U64>(1 + WordsFor(text.Len() + 1))
+    w[0] = U64(text.Len() + 1)
+    Pack(w, 1, text)                                      # a zero byte after it: the words were zero
+    assert (try Call("strlen", U8[ArrayOf(Kind.U8)], w, Code(Kind.I64)) catch default 0) == 12
+    # memset(buf, 'z', 5) writes into the array, which is in the words after
+    m := Array<U64>(1 + 1 + 1 + 1)
+    m[0] = 8
+    m[2] = U64('z')
+    m[3] = 5
+    try Call("memset", U8[ArrayOf(Kind.U8), Code(Kind.I32), Code(Kind.I64)], m) catch { fail }
+    back := Array<U8>(8)
+    Unpack(m, 1, back)
+    assert back[0] == 'z' and back[4] == 'z' and back[5] == 0
+}
+
+test "Call fails on a function it cannot find, and on a kind nothing can pass" {
+    missing := false
+    try Call("olang_no_such_function_anywhere", U8[], Array<U64>(0)) catch FfiError.NOT_FOUND { missing = true } catch { }
+    assert missing
+    half := false
+    try Call("sqrtf", U8[Code(Kind.F16)], U64[0], Code(Kind.F32)) catch FfiError.UNSUPPORTED { half = true } catch { }
+    assert half
+    arrayResult := false
+    try Call("strlen", U8[ArrayOf(Kind.U8)], U64[0, 0], ArrayOf(Kind.U8)) catch FfiError.UNSUPPORTED { arrayResult = true } catch { }
+    assert arrayResult
+}

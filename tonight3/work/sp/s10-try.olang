@@ -1,0 +1,21 @@
+extern fn usleep(us U32) I32
+type Hold struct(f fn()) { f }
+type E enum {
+    F(f fn())
+    Z
+}
+fn get(h Hold&) fn() ? { return h.f }
+fn main() ? {
+    c mut Array<I64>& = Array<I64>(4, 0)
+    join {
+        for t in range 4 {
+            b := Array<I64>(4, t + 1)
+            h := Hold(fn() {
+                usleep(50000)
+                c[t] = b[t]
+            })
+            spawn (try get(h) catch { return })()
+        }
+    }
+    println($c[0] " " $c[1] " " $c[2] " " $c[3])
+}

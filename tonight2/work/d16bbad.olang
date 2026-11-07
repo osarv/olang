@@ -1,0 +1,4 @@
+fn main() ? {
+    x := fn(a I64) I64 { return a }(1, 2)
+    y := fn(a I64) I64 { return a }()
+}

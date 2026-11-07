@@ -1,0 +1,29 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# a return hidden in a match VALUE clause inside an else-if condition (no catch at all)
+fn pick(c Bool, x <T>, y T) T { return x if c else y }
+fn g(k I64) I64 ? {
+    if k < 5 { error }
+    return k
+}
+fn longer(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& {
+    if a.Len() == 0 { return Array<I64>(1) }
+    else if match a.Len() { case 2 { return pick(true, a, b) } case _ => true } { return Array<I64>(2) }
+    return Array<I64>(3)
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    other mut Array<I64>& = Array<I64>(1)
+    d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
+    for i in range 1000 { v.Push(i) } # frees the buffer
+    churn()
+    println($d[0] " " $d[1])
+}

@@ -1,0 +1,27 @@
+# finding 15: a lambda with no ? written is fallible (D16b), against R8 wording
+Zero mut I64 = 0
+One mut I64 = 1
+error E {
+    A
+}
+fn f(n I64) I64 ? {
+    if n == 0 { error E.A }
+    return n
+}
+test "passes by return" {
+    defer { assert true }
+    k := f(One)!
+    if k == 1 { return }
+    unreachable
+}
+test "fails by escaping error" {
+    x := try f(Zero)
+    assert x == 0
+}
+test "fails by bang" {
+    x := f(Zero)!
+}
+test "lambda in test" {
+    g := fn() I64 { return try f(Zero) }
+    assert try g() == 0
+}

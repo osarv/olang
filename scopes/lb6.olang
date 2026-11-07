@@ -1,0 +1,19 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Holder struct(n Node&) { n }
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn stash(h Holder, l mut List<Node&>&) { l.Push(h.n) }
+fn main() ? {
+    l List<Node&>& = List<Node&>()
+    for i in range 2 {
+        inner Node& = Node(42)
+        stash(Holder(inner), l)
+    }
+    churn()
+    try io.Print($l[0].v "\n")
+}

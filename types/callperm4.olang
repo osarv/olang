@@ -1,0 +1,9 @@
+type Counter struct() {
+  n mut I32 = 0
+}
+fn (c mut Counter&) Call() I32 {
+  c.n++
+  return c.n
+}
+fn peek(c Counter&) I32 { return c() }
+fn main() ? { }

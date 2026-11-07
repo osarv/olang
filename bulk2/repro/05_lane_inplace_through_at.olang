@@ -1,0 +1,24 @@
+# E39 x E31b: "x op= v" on an array reached through x[i] on a type with At and SetAt (a Vec's element) writes a hidden
+# copy and drops it - the write is lost in every mode. E31b writes a store through x[i] back with SetAt, and the
+# scalar forms here do; the lane form neither writes back nor refuses. On a Vec of read-only array references it is
+# also accepted, where the same "+=" on an Array of them is T25c's error
+import "std/io"
+
+type P struct() {
+    arr := Array<I64>(3)                     # an inline array (T7c)
+    xs mut Array<I64>& = Array<I64>(3, 1)    # a writable reference
+}
+
+fn main() {
+    v := Vec<P>()
+    v.Push(P())
+    v[0].arr[2] += 5        # E31b: read, change, written back - kept
+    v[0].arr += 5           # lost
+    v[0].xs += 7            # lost, though xs is a reference the copy shares
+    io.Println($v[0].arr " " $v[0].xs)!
+    io.Println("want: I64[5, 5, 10] I64[8, 8, 8]")!
+    w := Vec<Array<I64>&>()
+    w.Push(Array<I64>(3))
+    w[0] += 2               # accepted (T25c refuses "r[0] += 2" on an Array<Array<I64>&>), and lost
+    io.Println($w[0])!
+}

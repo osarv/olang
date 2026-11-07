@@ -1,0 +1,326 @@
+# checks - what a test block cannot check about the compiler itself: programs that must NOT compile, and
+# whole builds (a remote fetch, rebuilds under -D, the code generated). Every file in checks/cases is an
+# ordinary olang program whose first lines say what it must do:
+#     # check: fail <text>    it must fail to build, with <text> in the diagnostics
+#     # check: build          it must build
+#     # check: run            it must build, and the program must exit 0
+#     # flags: <arguments>    passed to the compiler (a -D value, say)
+# The multi-step scenarios below drive the compiler themselves, with their files in checks/fixtures.
+# Everything is built under build/checks, so nothing touches the tree.
+
+import "std/os"
+import "std/io"
+
+# the text after "<prefix>" on the line that starts with it, or "" when no line does
+fn lineAfter(src String&, prefix String&) String&src {
+    at := src.Find(prefix)
+    if at < 0 { return src[0:0] }
+    rest := src[at + prefix.Len():]
+    end := rest.FindByte('\n')
+    if end < 0 { return rest }
+    return rest[:end]
+}
+
+# the repository root - where the tests run - as an absolute path
+fn root() String& {
+    os.Run("pwd > build/checks.root")
+    r := try os.ReadFile("build/checks.root") catch default ""
+    return $r.Trim()
+}
+
+# a fresh, empty directory for one check, as an absolute path
+fn fresh(tag String&) String& {
+    dir String&return = $root() "/build/checks/" $tag
+    os.Run("rm -rf " $os.Quote(dir) " && mkdir -p " $os.Quote(dir))
+    return dir
+}
+
+# runs cmd inside dir; the compiler is "$OLANG" there, and what it printed lands in dir/out.txt
+fn sh(dir String&, cmd String&) I32 {
+    return os.Run("cd " $os.Quote(dir) " && OLANG=" $os.Quote($root() "/build/out") " && " $cmd)
+}
+
+fn outOf(dir String&) String& {
+    return try os.ReadFile($dir "/out.txt") catch default ""
+}
+
+# reports a failed check with what the compiler said, and says so
+fn failed(what String&, dir String&) Bool {
+    try io.PrintErr("check FAIL: " $what "\n" $outOf(dir) "\n") catch { }
+    return false
+}
+
+# builds one case file and judges it against its own header
+fn runCase(dir String&, name String&) Bool {
+    src := try os.ReadFile("checks/cases/" $name) catch default ""
+    check := lineAfter(src, "# check: ")
+    flags := lineAfter(src, "# flags: ")
+    base := name[:name.Len() - 6]
+    os.Run("cp checks/cases/" $name " " $os.Quote(dir))
+    status := sh(dir, "\"$OLANG\" -b " $flags " " $name " > out.txt 2>&1")
+    if check.StartsWith("fail ") {
+        if status == 0 { return failed($name " compiled but should not have", dir) }
+        want := check[5:]
+        if not outOf(dir).Contains(want) { return failed($name ": expected '" $want "'", dir) }
+        return true
+    }
+    if status != 0 { return failed($name " did not build", dir) }
+    if check.Eq("run") and sh(dir, "./build/" $base " > out.txt 2>&1") != 0 {
+        return failed($name " built but did not run cleanly", dir)
+    }
+    return true
+}
+
+test "every case in checks/cases does what its header says" {
+    dir := fresh("cases")
+    os.Run("ls checks/cases > " $os.Quote($dir "/list.txt"))
+    list := try os.ReadFile($dir "/list.txt") catch default ""
+    bad := 0
+    count := 0
+    rest String& = list
+    for rest.Len() > 0 {
+        end := rest.FindByte('\n')
+        if end < 0 { end = rest.Len() }
+        name := rest[:end]
+        if name.EndsWith(".olang") {
+            count++
+            if not runCase(dir, name) { bad++ }
+        }
+        if end == rest.Len() { break }
+        rest = rest[end + 1:]
+    }
+    assert count > 0
+    assert bad == 0
+}
+
+# M22a: a std module and a local file with the same base name are two modules - but one module may not
+# import both under the one alias the name gives them
+test "std/map beside a local map.olang" {
+    dir := fresh("twolists")
+    os.Run("cp checks/fixtures/twolists/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b twolists.olang > out.txt 2>&1 && ./build/twolists") == 0 or failed("twolists", dir)
+    assert sh(dir, "\"$OLANG\" -b samealias.olang > out.txt 2>&1") != 0
+    assert outOf(dir).Contains("alias")
+}
+
+# M23a/M23b/M23c: a remote repository is fetched once with git into the cache, "@ref" pins a version beside the default
+# branch, olang.lock pins each to a commit, -u moves them on, and a second build reads the cache and never touches
+# git - the remote is removed to prove it
+test "a file in a remote repository, fetched once into the cache" {
+    dir := fresh("remote")
+    repo String& = $dir "/remote/example.com/me/tools"
+    env String& = "OLANG_GIT_BASE=file://" $dir "/remote/ OLANG_CACHE=" $dir "/cache "
+    src String& = "checks/fixtures/remote/"
+    assert os.Run("mkdir -p " $os.Quote(repo) " && cp -r " $src "mathx " $src "mathy " $os.Quote(repo)) == 0
+    assert os.Run("cp " $src "*.olang " $os.Quote(dir)) == 0
+    git String& = "git -c user.name=t -c user.email=t@t"
+    assert sh(repo, "git init -q && git add . && " $git " commit -qm v1 && git tag v1") == 0
+    assert sh(repo, "sed -i 's/n + 1/n + 100/' mathy/inc.olang && " $git " commit -qam v2") == 0
+    assert sh(dir, $env "\"$OLANG\" -b remote.olang > out.txt 2>&1 && ./build/remote") == 0 or failed("remote build", dir)
+    assert outOf(dir).Contains("fetching example.com/me/tools into")
+    assert outOf(dir).Contains("fetching example.com/me/tools@v1 into")
+    assert sh(dir, "ls -d cache/example.com/me/tools/*/mathx > /dev/null") == 0
+    # M23b: both repositories are locked to the commits fetched, and the cache is keyed by commit
+    assert sh(dir, "grep -q '^example.com/me/tools [0-9a-f]\\{40\\}$' olang.lock && grep -q '^example.com/me/tools@v1 ' olang.lock") == 0
+    # the branch moves on, and a locked build neither fetches nor follows it
+    assert sh(repo, "sed -i 's/n + 100/n + 1000/' mathy/inc.olang && " $git " commit -qam v3") == 0
+    assert sh(dir, "touch remote.olang && " $env "\"$OLANG\" -b remote.olang > out.txt 2>&1 && ./build/remote") == 0 or failed("locked rebuild", dir)
+    assert not outOf(dir).Contains("fetching")
+    # with the cache gone, the locked commit is fetched again - not the branch's new head
+    assert sh(dir, "rm -rf cache && touch remote.olang && " $env "\"$OLANG\" -b remote.olang > out.txt 2>&1 && ./build/remote") == 0 or failed("locked refetch", dir)
+    assert outOf(dir).Contains("as olang.lock says")
+    # M23c: -u moves every repository the build reaches to its ref's current commit, once each - the branch's
+    # new head (so remote.olang's assert fails while compiling) - and leaves v1, which has not moved, as it was
+    assert sh(dir, "cp olang.lock before.lock && touch remote.olang && " $env "\"$OLANG\" -u -b remote.olang > out.txt 2>&1") != 0
+    assert outOf(dir).Contains("it is false")
+    assert outOf(dir).Contains("updated example.com/me/tools to") and outOf(dir).Contains("example.com/me/tools@v1 is already at")
+    assert sh(dir, "grep '^example.com/me/tools ' olang.lock > now.txt && ! grep -qFf now.txt before.lock") == 0
+    assert sh(dir, "grep '^example.com/me/tools@v1 ' olang.lock > now.txt && grep -qFf now.txt before.lock") == 0
+    assert sh(dir, "cp before.lock olang.lock") == 0
+    # deleting a line updates that repository to its ref's current commit
+    assert sh(dir, "cp olang.lock before.lock && sed -i '/^example.com\\/me\\/tools /d' olang.lock") == 0
+    assert sh(dir, "touch remote.olang && " $env "\"$OLANG\" -b remote.olang > out.txt 2>&1") != 0
+    assert outOf(dir).Contains("it is false")                           # it now adds 1000: remote.olang's assert says so
+    assert sh(dir, "grep '^example.com/me/tools ' olang.lock > now.txt && ! grep -qFf now.txt before.lock") == 0
+    assert sh(dir, "cp before.lock olang.lock && rm -rf remote && touch remote.olang") == 0
+    assert sh(dir, $env "\"$OLANG\" -b remote.olang > out.txt 2>&1") == 0 or failed("cached remote build", dir)
+    assert not outOf(dir).Contains("fetching")
+    assert sh(dir, $env "\"$OLANG\" -b missing.olang > out.txt 2>&1") != 0
+    assert outOf(dir).Contains("fetch")
+}
+
+# M1/M22: a module is a file - a directory is not one, and files in one directory see each other only
+# through imports
+test "a directory groups files and is never a module" {
+    dir := fresh("pkg")
+    os.Run("cp -r checks/fixtures/pkg " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -c pkg/one.olang > out.txt 2>&1") == 0 or failed("-c on a file in a directory", dir)
+    assert sh(dir, "\"$OLANG\" -t pkg/one.olang > out.txt 2>&1") == 0 or failed("-t on a file in a directory", dir)
+    assert outOf(dir).Contains("1 passed")
+    assert sh(dir, "\"$OLANG\" -t pkg > out.txt 2>&1") != 0
+    assert outOf(dir).Contains("a module is a file")
+    assert sh(dir, "\"$OLANG\" -c pkg/three.olang > out.txt 2>&1") != 0
+    assert outOf(dir).Contains("unknown")
+}
+
+# B10b: only a module whose import closure mentions a -D name is rebuilt when that value changes
+test "a -D value rebuilds only the modules that mention it" {
+    dir := fresh("stale")
+    os.Run("cp checks/fixtures/stale/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b -D Level=1 -D Want=2 uses.olang > out.txt 2>&1 && ./build/uses") == 0 or failed("first build", dir)
+    assert sh(dir, "stat -c %Y.%N build/plain.o > before.txt && ls build/uses.d*.main.o | wc -l > first.txt") == 0
+    assert sh(dir, "sleep 1 && \"$OLANG\" -b -D Level=5 -D Want=6 uses.olang > out.txt 2>&1 && ./build/uses") == 0
+    assert sh(dir, "stat -c %Y.%N build/plain.o | cmp -s - before.txt") == 0     # plain.o untouched
+    assert sh(dir, "test $(ls build/uses.d*.main.o | wc -l) -gt $(cat first.txt)") == 0
+}
+
+# B3e: -i runs a program as the built program runs - the same output, exit status and report of an error escaping
+# main; it stops, saying where, at what the built program leaves undefined, and at what it does not run yet (tasks)
+test "-i interprets a program as the built program runs" {
+    dir := fresh("interp")
+    os.Run("cp checks/fixtures/interp/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b prog.olang > out.txt 2>&1") == 0 or failed("interp build", dir)
+    assert sh(dir, "./build/prog > want.txt 2>&1") == 1                  # main ends in Oops.BAD
+    assert sh(dir, "\"$OLANG\" -i prog.olang > out.txt 2>&1") == 1
+    assert sh(dir, "cmp -s want.txt out.txt") == 0 or failed("-i printed what the built program did not", dir)
+    assert outOf(dir).Contains("unhandled error: Oops.BAD") and outOf(dir).Contains("read written 10 -1")
+    assert sh(dir, "\"$OLANG\" -i ub.olang > out.txt 2>&1") == 1
+    assert outOf(dir).Contains("ub.olang:6: it indexes outside the array")
+    assert sh(dir, "\"$OLANG\" -i tasks.olang > out.txt 2>&1") == 1
+    assert outOf(dir).Contains("tasks.olang:5: it starts tasks, which -i does not run yet")
+    assert sh(dir, "\"$OLANG\" -b ends.olang > out.txt 2>&1 && ./build/ends > want.txt 2>&1") == 134
+    assert sh(dir, "\"$OLANG\" -i ends.olang > out.txt 2>&1") == 134
+    assert sh(dir, "cmp -s want.txt out.txt") == 0 or failed("-i ended unlike the built program", dir)
+}
+
+# B4a/B3f/X6: a program reads its command line and environment through the runtime, and std/os's file calls work -
+# built and run, and interpreted, it prints the same; under -i what follows the file is the program's command line,
+# flags included, and its own name is the file
+test "a program reads its arguments and environment, and uses the file system" {
+    dir := fresh("osargs")
+    os.Run("cp checks/fixtures/osargs/* " $os.Quote(dir))
+    args String& = " one 'two words' -x > out.txt 2>&1"
+    assert sh(dir, "\"$OLANG\" -b osargs.olang > out.txt 2>&1") == 0 or failed("osargs build", dir)
+    assert sh(dir, "OLANG_CHECK_VALUE=hi ./build/osargs" $args " && cp out.txt want.txt") == 0 or failed("osargs", dir)
+    assert outOf(dir).Contains("program: ./build/osargs\n3 arguments, 3 seen by a global\n[one]\n[two words]\n[-x]\n")
+    assert outOf(dir).Contains("value: hi\nsize 5 file true dated true\nin work/a: b\nin work/a: g.txt\n")
+    assert sh(dir, "rm -rf work && OLANG_CHECK_VALUE=hi \"$OLANG\" -i osargs.olang" $args) == 0 or failed("osargs -i", dir)
+    assert outOf(dir).Contains("program: osargs.olang\n")
+    assert sh(dir, "tail -n +2 want.txt > w.txt && tail -n +2 out.txt | cmp -s w.txt -") == 0 or failed("-i differs", dir)
+    assert sh(dir, "rm -rf work && ./build/osargs > out.txt 2>&1") == 0
+    assert outOf(dir).Contains("0 arguments, 0 seen by a global\nvalue: unset\n")
+}
+
+# B5b: os.Exit ends the process with the status it is given, built and interpreted alike, after what was written
+test "os.Exit ends the process with its status" {
+    dir := fresh("osexit")
+    os.Run("cp checks/fixtures/osexit/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b osexit.olang > out.txt 2>&1 && ./build/osexit > out.txt 2>&1") == 42 or failed("osexit", dir)
+    assert outOf(dir) == "before\n" or failed("osexit output", dir)
+    assert sh(dir, "\"$OLANG\" -i osexit.olang > out.txt 2>&1") == 42 or failed("osexit -i", dir)
+    assert outOf(dir) == "before\n" or failed("osexit -i output", dir)
+}
+
+# S18c: an assert the compiler proves emits no run-time check at all
+test "a proven assert leaves no run-time check" {
+    dir := fresh("s18c")
+    os.Run("cp checks/fixtures/s18c/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b s18c.olang > out.txt 2>&1 && ./build/s18c") == 0 or failed("s18c", dir)
+    assert sh(dir, "grep -q assert.fail build/s18c.main.ll") != 0
+}
+
+# T25b: a literal handed to a read-only reference is read-only data, not an arena copy - while a local, which is
+# writable, still gets a copy of its own
+test "a literal reaching a read-only reference is static data" {
+    dir := fresh("static")
+    os.Run("cp checks/fixtures/static/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b -d lit.olang > out.txt 2>&1 && ./build/lit.debug") == 0 or failed("static", dir)
+    ll String& = " build/lit.main.debug.ll"
+    assert sh(dir, "grep -q 'constant .3 x i32. .i32 3, i32 4, i32 5.'" $ll) == 0
+    assert sh(dir, "grep -q 'lit_total(ptr %[a-z0-9.]*, { i64, ptr } { i64 3, ptr @.arr'" $ll) == 0
+    assert sh(dir, "grep -q 'lit_lenOf(ptr %[a-z0-9.]*, { i64, ptr } { i64 11, ptr @.str'" $ll) == 0
+}
+
+# K2: a global computed at compile time is written out as data; one reading a mutable global is set at startup
+test "computed globals are written out as data" {
+    dir := fresh("k2")
+    os.Run("cp checks/fixtures/k2/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b ct.olang > out.txt 2>&1 && ./build/ct") == 0 or failed("k2", dir)
+    ll String& = " build/ct.main.ll"
+    assert sh(dir, "grep -q '@ct_Fib = global i32 610'" $ll) == 0
+    assert sh(dir, "grep -q '@ct_Table.k0 = internal constant \\[4 x i32\\] \\[ i32 55, i32 89, i32 144, i32 233 \\]'" $ll) == 0
+    assert sh(dir, "grep -q '@ct_Table = global { i64, ptr } { i64 4, ptr @ct_Table.k0 }'" $ll) == 0
+    assert sh(dir, "grep -q '@ct_Ring.k0 = internal global %ct.Node { i32 1, ptr @ct_Ring.k0 }'" $ll) == 0
+    assert sh(dir, "grep -q '@ct_Chain = global ptr @ct_Chain.k0'" $ll) == 0
+    assert sh(dir, "grep -q '@ct_Kept = global ptr @ct_Kept.k0'" $ll) == 0           # K2c: never destructs, so baked
+    assert sh(dir, "grep -q '@ct_Dropped = global i32 zeroinitializer'" $ll) == 0    # its temporary's destructor runs
+    assert sh(dir, "grep -q '@ct_P = global %ct.CtPair { i32 8, double 0x3FE0000000000000 }'" $ll) == 0
+    assert sh(dir, "grep -q '@ct_Later = global i32 zeroinitializer'" $ll) == 0
+    assert sh(dir, "grep -q '@ct_Deferred = global i32 7'" $ll) == 0              # S19: deferred code run while compiling
+}
+
+# E33: a NaN made from bits keeps them when a global holding it is written out as data - F32's in the double form
+# LLVM reads back exactly, the 16-bit ones in their own
+test "a NaN made from bits is written out with its bits" {
+    dir := fresh("bits")
+    os.Run("cp checks/fixtures/bits/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b bits.olang > out.txt 2>&1 && ./build/bits") == 0 or failed("bits", dir)
+    ll String& = " build/bits.main.ll"
+    assert sh(dir, "grep -q '@bits_GS = global float 0x7FF0000020000000'" $ll) == 0
+    assert sh(dir, "grep -q '@bits_GQ = global double 0xFFF8000000000123'" $ll) == 0
+    assert sh(dir, "grep -q '@bits_GH = global half 0xH7C01'" $ll) == 0
+    assert sh(dir, "grep -q '@bits_GB = global bfloat 0xRFFC1'" $ll) == 0
+    assert sh(dir, "grep -q '@bits_Baked = global i1 true'" $ll) == 0
+}
+
+# a function returning an aggregate returns it through one slot and one exit block, so that inlined, its result's
+# fields reach the caller as separate values LLVM can see into - without it an iterator loop never vectorized
+test "an aggregate is returned through one slot" {
+    dir := fresh("retslot")
+    os.Run("cp checks/fixtures/retslot/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b retslot.olang > out.txt 2>&1 && ./build/retslot") == 0 or failed("retslot", dir)
+    assert sh(dir, "grep -q '^ret.common:' build/retslot.main.ll") == 0
+}
+
+# E31: a capitalized operator method is the operator everywhere; a lowercase one only in its own module
+test "a private operator works only in its own module" {
+    dir := fresh("opvis")
+    os.Run("cp checks/fixtures/opvis/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b use.olang > out.txt 2>&1 && ./build/use") == 0 or failed("opvis", dir)
+    assert sh(dir, "\"$OLANG\" -b usepriv.olang > out.txt 2>&1") != 0
+}
+
+# T17: an enum's payload is whole words, so copying one is word moves, not one byte at a time - which is what let
+# a match over a collection of enums run at the speed of a C switch
+test "an enum's payload is held as words" {
+    dir := fresh("enumwords")
+    os.Run("cp checks/fixtures/enumwords/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b enumwords.olang > out.txt 2>&1 && ./build/enumwords") == 0 or failed("enumwords", dir)
+    assert sh(dir, "grep -q '{ i64, \\[2 x i64\\] }' build/enumwords.main.ll") == 0
+}
+
+# S9d: a type's own Iter wins over At and Len - a List, which has all three, is still walked by its iterator: by
+# "for ... in", by a comprehension, by an iterator helper and in generic code constrained by Indexable, none of which
+# calls At
+test "a List is walked by its iterator, not by At" {
+    dir := fresh("listloop")
+    os.Run("cp checks/fixtures/listloop/* " $os.Quote(dir))
+    assert sh(dir, "\"$OLANG\" -b loop.olang > out.txt 2>&1 && ./build/loop") == 0 or failed("listloop", dir)
+    assert sh(dir, "grep -q 'call .*@std_prelude_list.ListIter.I16.Next.I16' build/loop.main.ll") == 0
+    assert sh(dir, "grep -q 'call .*@std_prelude_list.List.I16.At.I16' build/loop.main.ll") != 0
+}
+
+# B3: every module sees the prelude, so a prelude file edited since an object was built makes that object stale -
+# the root's above all, which holds the instantiations of the prelude's generics (B3d). It used to be reused, so a
+# program kept running the prelude it was first built with. A copy of std, so the real one is never touched.
+test "editing the prelude rebuilds what uses it" {
+    dir := fresh("preludestale")
+    os.Run("cp checks/fixtures/preludestale/* " $os.Quote(dir) " && cp -r std " $os.Quote($dir "/std"))
+    probe String& = "fn (p Pair<<A>, <B>>) Probe() <A> { return p.First }"
+    assert sh(dir, "echo " $os.Quote(probe) " >> std/prelude/pair.olang") == 0
+    assert sh(dir, "OLANG_STD=std \"$OLANG\" -b probe.olang > out.txt 2>&1 && ./build/probe > got.txt") == 0 or failed("first build", dir)
+    assert sh(dir, "grep -qx 3 got.txt") == 0
+    assert sh(dir, "sed -i 's/return p.First }/return p.Second }/' std/prelude/pair.olang") == 0
+    assert sh(dir, "OLANG_STD=std \"$OLANG\" -b probe.olang > out.txt 2>&1 && ./build/probe > got.txt") == 0 or failed("second build", dir)
+    assert sh(dir, "grep -qx 4 got.txt") == 0 or failed("the edited prelude was not used", dir)
+}

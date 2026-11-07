@@ -1,0 +1,19 @@
+# G4/G24 (wt-s3scope, "G4 for constants"): a constant variable no parameter can give a value is one error at the
+# declaration, "the body unchecked and calls silent" - true for a plain function (mk), but a generic one (mk2, which also
+# has a type variable) is instantiated anyway and its body checked, adding a second, misleading error (G21: "a constant
+# argument must be computable while compiling ...") at the body, with an "instantiated here" note at the call.
+# expected: exactly two errors, the two G4/G24 at lines 7 and 11
+# actual:   a third, error[G21] at 12:16, plus "note: instantiated here, with T = I32"
+fn mk() Array<I64, <N>> {
+    a Array<I64, N>
+    return a
+}
+fn mk2(x <T>) Array<T, <N I64>> {
+    a Array<T, N>
+    return a
+}
+fn main() ? {
+    a := mk()
+    b := mk2(3)
+    println($a.Len() " " $b.Len())
+}

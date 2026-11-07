@@ -1,0 +1,7 @@
+import lib "lib"
+import "std/io"
+fn main() {
+    c := lib.Color.Gray(1)
+    d := lib.Color.Of(2)
+    io.Println($c.G " " $c.Sum() " " $d.Sum() " " $lib.Limit)!
+}

@@ -1,0 +1,7 @@
+/home/user/review/vec3/work/op1.olang:13:41: error[O10]: this reference lives in a scope that may not outlive where it is put
+   13 | fn f(c own mut CB&) String&c { return c.Text() }
+      |                                         ^~~~
+/home/user/review/vec3/work/op1.olang:15:12: error[O34]: an own slot takes an owner - a constructor call made here, 'take' from another own slot, or null - and this is not one
+   15 |     t := f(CB())
+      |            ^~
+compilation failed with 2 errors

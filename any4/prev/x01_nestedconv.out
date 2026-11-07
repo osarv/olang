@@ -1,0 +1,16 @@
+== build -debug -sanitize
+x01_nestedconv.olang:5:19: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I64>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+    5 | type Grid extends Array<Array<I64>>
+      |                   ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+== build
+x01_nestedconv.olang:5:19: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I64>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+    5 | type Grid extends Array<Array<I64>>
+      |                   ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+== interpret
+x01_nestedconv.olang:5:19: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I64>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+    5 | type Grid extends Array<Array<I64>>
+      |                   ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+status 1

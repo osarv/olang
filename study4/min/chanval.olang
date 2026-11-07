@@ -1,0 +1,7 @@
+import "std/chan"
+fn main() ? {
+    c := chan.Chan<String>(2)
+    chan.Init(c)
+    chan.Send(c, "hi")
+    println(chan.Recv(c))
+}

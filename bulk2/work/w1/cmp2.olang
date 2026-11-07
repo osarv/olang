@@ -1,0 +1,24 @@
+import "std/io"
+fn g<T Integer>(z T, k I64) String {
+    one := T(k)
+    zero := one - one
+    x := zero - one
+    y := T.Min / (one + one + one + one + one)
+    return $x " " $y " " $(x < y) " " $(x >= y)
+}
+fn h(k I64) String {
+    one := I33(k)
+    zero := one - one
+    x := zero - one
+    y := I33.Min / (one + one + one + one + one)
+    return $x " " $y " " $(x < y) " " $(x >= y)
+}
+K mut I64 = 1
+B := g(I33(0), 1)
+C := h(1)
+fn main() {
+    io.Println(B)!
+    io.Println(g(I33(0), K))!
+    io.Println(C)!
+    io.Println(h(K))!
+}

@@ -1,0 +1,27 @@
+type Lex2 struct() {
+    toks Vec<Tok> = Vec<Tok>()
+}
+type H struct() {
+    lx own mut Lex2& = null
+}
+type Tok struct(text String&, n I64) {
+    text
+    n
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    h := H()
+    h.lx = Lex2()
+    for i in range 4 { h.lx.toks.Push(Tok($i "-own-text", i)) }
+    e := h.lx.toks[2]
+    h.lx = null
+    churn()
+    println(e.text)
+}

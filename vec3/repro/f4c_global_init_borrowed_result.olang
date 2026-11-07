@@ -1,0 +1,20 @@
+# F4: a global initialized with a borrowed own result (O37) of another global's own object.
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type CB struct() {
+    text own mut String& = "bb"
+}
+fn (c CB&) Text() String&c { return c.text }
+G own mut CB& = CB()
+T := G.Text()                  # a global holding a borrowed own result of G's text
+fn main() ? {
+    G.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"   # releases it
+    churn()
+    println(T)
+}

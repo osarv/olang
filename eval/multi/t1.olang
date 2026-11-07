@@ -1,0 +1,5 @@
+X I32 = 1
+fn val() I32 { return X }
+test "one" {
+    assert val() == 1
+}

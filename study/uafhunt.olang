@@ -1,0 +1,189 @@
+# Use-after-free hunt: shapes that build in inner blocks and keep the result in outer containers, each read back
+# after the arena has been churned. Every check prints ok or BAD.
+import "std/io"
+import "std/map"
+
+type Node struct(v I64, name String&) {
+    v
+    name
+    left mut Node& = null
+    right mut Node& = null
+}
+
+type Tree struct() {
+    root mut Node& = null
+    size mut I64 = 0
+}
+
+fn (t mut Tree&) insert(v I64) {
+    label String&t = "node-" $v
+    if t.root == null {
+        t.root = Node(v, label)
+        t.size++
+        return
+    }
+    cur Node&t = t.root
+    for cur != null {
+        if v < cur.v {
+            if cur.left == null {
+                cur.left = Node(v, label)
+                break
+            }
+            cur = cur.left
+        } else {
+            if cur.right == null {
+                cur.right = Node(v, label)
+                break
+            }
+            cur = cur.right
+        }
+    }
+    t.size++
+}
+
+fn inorder(n Node&, out mut List<I64>&) {
+    if n == null { return }
+    inorder(n.left, out)
+    out.Push(n.v)
+    inorder(n.right, out)
+}
+
+fn (t Tree&) find(v I64) Node&t {
+    cur Node&t = t.root
+    for cur != null {
+        if v == cur.v { return cur }
+        cur = cur.left if v < cur.v else cur.right
+    }
+    return null
+}
+
+type Shape enum {
+    Circle(r I64, tag String&)
+    Square(s I64, tag String&)
+}
+
+type Holder struct() {
+    shapes mut List<Shape>& = List<Shape>()
+    texts mut List<String&>& = List<String&>()
+    fns mut List<fn() I64>& = List<fn() I64>()
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 20000 {
+        a := Array<I64>(8, I64(i) * 3)
+        s := "garbage garbage garbage " $i
+        t += a[2] + s.Len()
+    }
+    return t
+}
+
+fn report(name String&, ok Bool) ? io.IoError {
+    try io.Print($name ": " $("ok" if ok else "BAD") "\n")
+}
+
+fn makeLabel(i I64) String& { return "L" $i "-" $(i * i) }
+
+fn main() ? io.IoError {
+    # a BST whose nodes and labels are built inside loops and branches
+    t := Tree()
+    seed I64 = 7
+    for i in range 300 {
+        seed = (seed * 1103515245 + 12345) % 2147483648
+        t.insert(seed % 1000)
+    }
+    churn()
+    got := List<I64>()
+    inorder(t.root, got)
+    sorted := true
+    arr := got.ToArray()
+    for i in range 1, arr.Len() { if arr[i - 1] > arr[i] { sorted = false } }
+    try report("bst sorted", sorted and arr.Len() == t.size)
+    n := t.find(arr[17])
+    try report("bst label", n != null and n.name == "node-" $arr[17])
+
+    # enum values with text built per iteration, kept in an outer list
+    h := Holder()
+    for i in range 100 {
+        if i % 2 == 0 {
+            h.shapes.Push(Shape.Circle(i, "c" $i))
+        } else {
+            h.shapes.Push(Shape.Square(i, makeLabel(i)))
+        }
+        h.texts.Push($i "!")
+    }
+    churn()
+    okShapes := true
+    i I64 = 0
+    for s in h.shapes {
+        match s {
+            case Shape.Circle(r, tag) { if tag != "c" $r { okShapes = false } }
+            case Shape.Square(sd, tag) { if tag != makeLabel(sd) { okShapes = false } }
+        }
+        i++
+    }
+    try report("enum payload text", okShapes and i == 100)
+    okTexts := true
+    for k in range h.texts.Len() { if h.texts[k] != $k "!" { okTexts = false } }
+    try report("pushed renderings", okTexts)
+
+    # a text builder grown in a loop, read after
+    b := StringBuilder()
+    for k in range 1000 { b.Push($k ",") }
+    built := b.ToString()
+    churn()
+    try report("builder", built.StartsWith("0,1,2,") and built.EndsWith("998,999,") and built.Len() == 3890)
+
+    # a map whose keys are built where it lives
+    m := map.Map<String&, I64>()
+    for k in range 500 {
+        key String&m = "k" $k
+        m.Put(key, k * 2)
+    }
+    churn()
+    okMap := true
+    for k in range 500 { if (try m.Get("k" $k) catch default -1) != k * 2 { okMap = false } }
+    try report("map keys", okMap and m.Len() == 500)
+
+    # values chosen by a conditional and a match, stored into a container field
+    for k in range 50 {
+        h.texts.Push("even" $k if k % 2 == 0 else "odd" $k)
+        h.texts.Push(match k % 3 {
+            case 0 => "fizz" $k
+            nomatch => "x" $k
+        })
+    }
+    churn()
+    try report("conditional values", h.texts[100] == "even0" and h.texts[103] == "x1" and h.texts[199] == "x49" and h.texts[198] == "odd49")
+
+    # closures capturing references, stored outside the loop
+    for k in range 10 {
+        lbl String&h = "f" $k
+        h.fns.Push(fn() I64 { return lbl.Len() })
+    }
+    churn()
+    total I64 = 0
+    for f in h.fns { total += f() }
+    try report("closures", total == 20)
+
+    # results of tasks, built on other threads into an outer list
+    out := List<String&>()
+    parts := Array<String&>(8)
+    join {
+        for k in range 8 { spawn parts[k] = makeLabel(k) }
+    }
+    churn()
+    okTasks := true
+    for k in range 8 { if parts[k] != makeLabel(k) { okTasks = false } }
+    try report("task results", okTasks)
+
+    # deferred code adding to an outer list on every way out of a loop body
+    log := List<String&>()
+    for k in range 6 {
+        defer log.Push("leave" $k)
+        if k == 2 { continue }
+        if k == 4 { break }
+    }
+    churn()
+    try report("deferred pushes", log.Len() == 5 and log[0] == "leave0" and log[4] == "leave4")
+}

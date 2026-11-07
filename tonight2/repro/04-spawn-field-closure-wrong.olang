@@ -1,0 +1,24 @@
+# P2/E13b (pre-existing - 472373d gives the same; in the area wt-cgfix3 extended): a task calling a function value read
+# from a field ("spawn h.f()") is never held to P2. cgfix3 checks a callee a call computes ("spawn id(f)()") and an
+# element ("spawn fs[0]()" is refused), but a field read is neither a temporary nor a variable with a block depth, so
+# the closure - built in the loop body, capturing the loop body's array - is accepted, and the body closes (and its
+# arena is reused by the next iteration) while the task runs.
+# expected: error[P2, D16e] at "spawn h.f()" ("this function value closes before the join does"), or 1 2 3 4
+# actual:   compiles; -b prints "0 4 0 4", -d "0 0 0 4" (varies); with more allocation in the loop body it segfaults
+#           (valgrind: invalid read in lambda$1 on the task thread)
+extern fn usleep(us U32) I32
+type Hold struct(f fn()) { f }
+fn main() ? {
+    c mut Array<I64>& = Array<I64>(4, 0)
+    join {
+        for t in range 4 {
+            b := Array<I64>(4, t + 1)
+            h := Hold(fn() {
+                usleep(50000)
+                c[t] = b[t]
+            })
+            spawn h.f()
+        }
+    }
+    println($c[0] " " $c[1] " " $c[2] " " $c[3])
+}

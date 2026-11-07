@@ -1,0 +1,11 @@
+type P struct() {
+    n I64 = 0
+}
+type W struct() { k I64 = 0 }
+fn (w W&) Call(p mut P&) { p.n = 99 }
+fn apply(f fn(p P&), p P&) { f(p) }
+G P = P()
+fn main() ? {
+    apply(W(), G)
+    println($G.n)
+}

@@ -1,0 +1,14 @@
+type C struct() { n I64 = 0 }
+type B struct(c mut C&) { c }
+fn bump(k mut C&) { k.n = k.n + 1 }
+fn (a B) Str() String {
+    f := bump
+    f(a.c)
+    return "b"
+}
+fn main() ? {
+    c mut C& = C()
+    b := B(c)
+    s := $b
+    println($s " " $c.n)
+}

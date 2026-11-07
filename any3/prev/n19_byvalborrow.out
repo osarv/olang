@@ -1,0 +1,38 @@
+== build -debug -sanitize
+n19_byvalborrow.olang:15:30: error[O10d]: this value lives in this function's own scope, which closes first
+   15 | fn f1(t Two) Pt&t { return t.a }
+      |                              ^
+n19_byvalborrow.olang:16:40: error[O10d]: this value lives in this function's own scope, which closes first
+   16 | fn f2(t Two, c Bool) Pt&t { return t.a if c else t.b }
+      |                                        ^~
+n19_byvalborrow.olang:16:38: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
+   16 | fn f2(t Two, c Bool) Pt&t { return t.a if c else t.b }
+      |                                      ^
+n19_byvalborrow.olang:17:28: error[O10d]: this value lives in this function's own scope, which closes first
+   17 | fn f3(t Two) Pt&t { return match t.a.x { case 0 => t.b case _ => t.a } }
+      |                            ^~~~~
+n19_byvalborrow.olang:17:54: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
+   17 | fn f3(t Two) Pt&t { return match t.a.x { case 0 => t.b case _ => t.a } }
+      |                                                      ^
+n19_byvalborrow.olang:18:35: error[O10d]: this value lives in this function's own scope, which closes first
+   18 | fn f4(t Two) any Named&t { return t.b }
+      |                                   ^
+n19_byvalborrow.olang:21:12: error[O10d]: this value lives in this function's own scope, which closes first
+   21 |     return q
+      |            ^
+n19_byvalborrow.olang:24:27: error[O10d]: this value lives in this function's own scope, which closes first
+   24 | fn f6(p Pt) Pt&p { return idr(p) }
+      |                           ^~~
+compilation failed with 6 errors
+== build
+n19_byvalborrow.olang:15:30: error[O10d]: this value lives in this function's own scope, which closes first
+   15 | fn f1(t Two) Pt&t { return t.a }
+      |                              ^
+n19_byvalborrow.olang:16:40: error[O10d]: this value lives in this function's own scope, which closes first
+   16 | fn f2(t Two, c Bool) Pt&t { return t.a if c else t.b }
+      |                                        ^~
+n19_byvalborrow.olang:16:38: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
+   16 | fn f2(t Two, c Bool) Pt&t { return t.a if c else t.b }
+== interpret
+olang interpret: n19_byvalborrow.olang:34: it uses storage after the scope it was made in closed
+status 1

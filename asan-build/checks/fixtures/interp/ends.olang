@@ -1,0 +1,4 @@
+# B3e: a guaranteed check aborts as the built program does, with its message
+fn main() ? {
+    unreachable
+}

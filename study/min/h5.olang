@@ -1,0 +1,8 @@
+fn main() ? {
+    words := List<String&>()
+    words.Push("ab")
+    words.Push("abcd")
+    empty String& = ""
+    longest := words.Iter().Fold(empty, fn(best, w) { return w if w.Len() > best.Len() else best })
+    assert longest == "abcd"
+}

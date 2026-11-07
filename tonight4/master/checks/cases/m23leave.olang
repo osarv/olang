@@ -1,0 +1,4 @@
+# check: fail error[M23]: this relative import leaves std
+import "std/../badform"
+error E { X }
+fn main() ? E { }

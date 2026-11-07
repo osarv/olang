@@ -1,0 +1,19 @@
+# E25 on a call whose SECOND result is borrowed from an argument (borrowedResult reads ResultFrom(fty, 0) only): the
+# scope argument names an outer local, the borrowed part refers to an inner block's text - kept outside the loop
+fn two(a I64, x String&) I64, String&x { return a, x }
+type H struct() {
+    s String& = "none"
+}
+fn main() {
+    t := "outer"
+    h := H()
+    keep := List<String&>()
+    for i in range 3 {
+        u := "inner" $i "-" $(i * 7)
+        n, r := two&t(i, u)
+        h.s = r
+        keep.Push(r)
+    }
+    churn()
+    say("h.s " $h.s " keep " $keep)
+}

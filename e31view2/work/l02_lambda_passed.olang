@@ -1,0 +1,21 @@
+type M struct(d mut Array<I64>&, off I64) {
+    d
+    off
+}
+type Layer struct(w M, b M, n I64) {
+    w
+    b
+    n
+}
+fn mk() Layer { return Layer(M(Array<I64>(3), 0), M(Array<I64>(3), 1), 5) }
+fn run(f fn()) { f() }
+fn g(m mut M&) { run(fn() { m.off = 9 }) }
+fn step(c mut Layer&) { g(c.w) }
+fn main() ? {
+    l := List<Layer>()
+    l.Push(mk())
+    step(l[0])
+    a := Layer[mk()]
+    step(a[0])
+    println("list " $l[0].w.off " array " $a[0].w.off)
+}

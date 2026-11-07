@@ -1,0 +1,6 @@
+# a large fixed array as a local: what does the compiler do?
+fn main() ? {
+    a := Array<U8, 3000000000>()
+    a[5] = 7
+    println($a.Len() " " $a[5])
+}

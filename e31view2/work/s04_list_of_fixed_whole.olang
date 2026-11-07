@@ -1,0 +1,8 @@
+fn fill(s mut Array<I64>&) { s[0] = 7 }
+fn main() ? {
+    l := List<Array<I64, 3>>()
+    l.Push(I64[3, 2, 1])
+    fill(l[0])
+    l[0].Sort(fn(x I64, y I64) Bool { return x < y })
+    println("list " $l[0])
+}

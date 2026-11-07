@@ -1,0 +1,30 @@
+# words moved from an owned object's region into the region of an object it owns, then that object moved out whole
+type Sub struct() {
+    more Vec<String&> = Vec<String&>()
+}
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+    sub own mut Sub& = null
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    p := Parser()
+    p.lx = Lexer()
+    p.lx.sub = Sub()
+    for i in range 3 { p.lx.toks.Push($i "-word-in-the-lexer's-region") }
+    p.lx.sub.more = take p.lx.toks
+    s own mut Sub& = take p.lx.sub
+    p.lx = null
+    churn()
+    println(s.more[0])
+}

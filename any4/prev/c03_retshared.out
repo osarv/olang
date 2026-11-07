@@ -1,0 +1,12 @@
+== build -debug -sanitize
+value: h.s abc1 x Qbc1
+any: h2.s abc2
+status 0
+== build
+value: h.s abc1 x Qbc1
+any: h2.s abc2
+status 0
+== interpret
+value: h.s abc1 x Qbc1
+any: h2.s abc2
+status 0

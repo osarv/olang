@@ -1,0 +1,78 @@
+### repro/o33_order_match_value_argument.olang
+  7f1a37a -b -d -s: | (status 139)
+  7f1a37a -i      : 11|12|
+  7f1a37a -b      : 
+  1bcfb72: accepted
+  8548b56: accepted
+### repro/o33_order_spawned_call.olang
+  7f1a37a -b -d -s: | (status 139)
+  7f1a37a -i      : 10|11|
+  7f1a37a -b      : 
+  1bcfb72: accepted
+  8548b56: accepted
+### repro/r2a_ctor_field_global_own.olang
+  7f1a37a -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  7f1a37a -i      : 7-new-text-in-the-region|
+  7f1a37a -b      : 2999abcdefghijklmnopqrst|
+  1bcfb72: accepted
+  8548b56: accepted
+### repro/r2a_ctor_field_in_param_scope_own.olang
+  7f1a37a -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  7f1a37a -i      : 5-new-text-in-the-region|
+  7f1a37a -b      : 2999abcdefghijklmnopqrst|
+  1bcfb72: accepted
+  8548b56: accepted
+### repro/r2a_ctor_field_no_own_block.olang
+  7f1a37a -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  7f1a37a -i      : 6-new-text-in-x's-scope|
+  7f1a37a -b      : uvwxyz0123456789s-scope|
+  1bcfb72: accepted
+  8548b56: accepted
+### repro/r2a_ctor_field_no_own_function.olang
+  7f1a37a -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  7f1a37a -i      : 5-new-text-in-x's-scope|
+  7f1a37a -b      : uvwxyz0123456789s-scope|
+  1bcfb72: accepted
+  8548b56: accepted
+### repro/r2a_ctor_field_via_function_own.olang
+  7f1a37a -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  7f1a37a -i      : 5-new-text-in-the-region|
+  7f1a37a -b      : 2999abcdefghijklmnopqrst|
+  1bcfb72: accepted
+  8548b56: accepted
+### repro/r2a_ctor_local_typed_no_own.olang
+  7f1a37a -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  7f1a37a -i      : 6-new-text-in-x's-scope|
+  7f1a37a -b      : uvwxyz0123456789s-scope|
+  1bcfb72: accepted
+  8548b56: accepted
+### repro/r2a_ctor_scope_argument_no_own.olang
+  7f1a37a -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  7f1a37a -i      : 6-new-text-in-x's-scope|
+  7f1a37a -b      : uvwxyz0123456789s-scope|
+  1bcfb72: accepted
+  8548b56: accepted
+### repro/r2b_after_release_region_reused_silent.olang
+  7f1a37a -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  7f1a37a -i      : 5-new-text-in-a-reused-region|
+  7f1a37a -b      : 2999abcdefghijklmnopqrstuvwxy|
+  1bcfb72: accepted
+  8548b56: accepted
+### repro/r2b_scope_argument_after_release.olang
+  7f1a37a -b -d -s: | (status 139)
+  7f1a37a -i      : 5-new-text-in-the-freed-region|
+  7f1a37a -b      : 
+  1bcfb72: accepted
+  8548b56: accepted
+### repro/r2b_typed_local_after_release.olang
+  7f1a37a -b -d -s: | (status 139)
+  7f1a37a -i      : 5-new-text-in-the-freed-region|
+  7f1a37a -b      : 
+  1bcfb72: accepted
+  8548b56: accepted
+### repro/r2b_typed_local_loop_after_release.olang
+  7f1a37a -b -d -s: 0-new-text-in-x's-region| (status 139)
+  7f1a37a -i      : 1-new-text-in-x's-region|2-new-text-in-x's-region|
+  7f1a37a -b      : 0-new-text-in-x's-region|
+  1bcfb72: accepted
+  8548b56: accepted

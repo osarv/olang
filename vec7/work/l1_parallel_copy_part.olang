@@ -1,0 +1,19 @@
+# L1 through a parallel assignment: a borrowed copy's owning part given an owner
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+    b Lexer = Lexer(2)
+}
+fn main() ? {
+    t := Two()
+    for i in range 100000 {
+        c := t
+        k := 0
+        c.a, k = Lexer(7 + i), i
+        c.a.toks.Push(k)
+    }
+    println($t.a.n)
+}

@@ -1,0 +1,28 @@
+# words pushed through a call's borrowed own result ('p.Lx().toks.Push') - built where p.Lx()'s type says, p's block -
+# then the lexer object returned whole ('take p.lx'): the words stay behind in the closed block?
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn (p mut Parser&) Lx() mut Lexer&p { return p.lx }
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn lexer() own mut Lexer& {
+    p := Parser()
+    p.lx = Lexer()
+    for i in range 3 { p.Lx().toks.Push($i "-word-pushed-through-the-call") }
+    return take p.lx
+}
+fn main() ? {
+    l := lexer()
+    churn()
+    println(l.toks[0])
+}

@@ -1,0 +1,16 @@
+import "std/io"
+fn shrink(v mut Vec<I64>&, x I64) I64 {
+    try v.Pop() catch { }
+    return x
+}
+fn dirty() I64 {
+    a := Array<I64>(64, 77)
+    return a[3]
+}
+fn main() {
+    t := dirty()
+    v := Vec<I64>()
+    for i in range 8 { v.Push(i) }
+    a := I64[shrink(v, x) for x in v]
+    io.Println($a.Len() " " $a " " $t)!
+}

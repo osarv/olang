@@ -1,0 +1,18 @@
+# E31b: a mutating call through x[i] made in place through RefMut, where the method itself grows the collection
+# through a mutable global - the RefMut's element is in the replaced buffer
+import "std/io"
+
+type blk struct(n I64) { n }
+
+G mut Vec<blk> = Vec<blk>()
+
+fn (b mut blk&) Bump() {
+    for i in range 1000 { G.Push(blk(i)) }
+    b.n = 99
+}
+
+fn main() {
+    G.Push(blk(1))
+    G[0].Bump()
+    io.Println("G[0].n = " $G[0].n " len " $G.Len())!
+}

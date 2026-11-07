@@ -1,0 +1,22 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn pick(c Bool, x <T>, y T) T { return x if c else y }
+fn longer(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& { return pick(a.Len() >= b.Len(), a, b) }
+type B struct() { buf own mut Array<I64>& = Array<I64>(2, 7) }
+fn use(b mut B&) {
+    other mut Array<I64>& = Array<I64>(1)
+    d := longer(b.buf, other)        # b's own buffer, no loan kept
+    b.buf = Array<I64>(50, 9)        # releases it: not refused
+    churn()
+    println($d[0] " " $d[1])
+}
+fn main() ? {
+    b := B()
+    use(b)
+}

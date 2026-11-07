@@ -1,0 +1,19 @@
+fn main() ? {
+    s U64 = 88172645463325252
+    bad I64 = 0
+    n I64 = 0
+    for k in range 20000000 {
+        s ^= s << 13
+        s ^= s >> 7
+        s ^= s << 17
+        a := U16(s & 65535).BF16FromBits()
+        b := U16((s >> 16) & 65535).BF16FromBits()
+        fa := F32(a)
+        fb := F32(b)
+        if (a < b) != (fa < fb) or (a <= b) != (fa <= fb) or (a == b) != (fa == fb) or (a != b) != (fa != fb) or (a > b) != (fa > fb) { bad++ }
+        if a == 0.0 { n++ }
+        na := -a
+        if na.Bits() != (a.Bits() ^ 32768) { bad++ }
+    }
+    println("bad " $bad " zeros " $n)
+}

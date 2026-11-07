@@ -1,0 +1,23 @@
+# an enum case holding loop-local text, made an any in an outer list
+type Named trait {
+    Name() String
+}
+type Tag enum {
+    Txt(s String&)
+    Nil
+}
+fn (t Tag) Name() String {
+    match t {
+        case Tag.Txt(s) { return "txt " $s }
+        case Tag.Nil { return "nil" }
+    }
+}
+fn main() {
+    xs := List<any Named&>()
+    for i in range 4 {
+        s := "e" $i "-" $(i * 11)
+        xs.Push(Tag.Txt(s))
+    }
+    churn()
+    for x in xs { say(x.Name()) }
+}

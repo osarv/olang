@@ -1,0 +1,16 @@
+import "std/io"
+
+V I64 = 1152921573326323713
+U U64 = 1152921573326323713
+Run mut I64 = 1152921573326323713
+RunU mut U64 = 1152921573326323713
+Lit F32 = 1152921573326323713
+BB BF16 = BF16(V)
+
+fn main() ? io.IoError {
+    try io.Print("U baked " $F32(U).Bits() " run " $F32(RunU).Bits() "\n")
+    try io.Print("lit " $Lit.Bits() "\n")
+    try io.Print("bf16 baked " $BB.Bits() " run " $BF16(Run).Bits() "\n")
+    x I64 = 1152921573326323713
+    try io.Print("local folded " $F32(x).Bits() "\n")
+}

@@ -1,0 +1,44 @@
+import "std/io"
+fn main() ? io.IoError {
+    bad I64 = 0
+    for total in range 0, 300 {
+        l := List<I64>()
+        ref := Array<I64>(total)
+        n I64 = 0
+        for n < total {
+            k I64 = (n * 7 + total) % 13
+            if k > total - n { k = total - n }
+            if k % 2 == 0 {
+                chunk := Array<I64>(k)
+                for j in range k { chunk[j] = n + j }
+                l.PushAll(chunk)
+            } else {
+                for j in range k { l.Push(n + j) }
+            }
+            for j in range k { ref[n + j] = n + j }
+            n += k
+            if k == 0 {
+                l.Push(n)
+                ref[n] = n
+                n++
+            }
+        }
+        if l.Len() != total { bad++ }
+        for i in range total {
+            if l[i] != ref[i] { bad++ }
+        }
+        for i in range total { l[i] = l[i] * 2 }
+        a := l.ToArray()
+        if a.Len() != total { bad++ }
+        for i in range total { if a[i] != ref[i] * 2 { bad++ } }
+        c I64 = 0
+        for x in l {
+            if x != ref[c] * 2 { bad++ }
+            c++
+        }
+        if c != total { bad++ }
+        oob := try l[total] catch default -7
+        if oob != -7 { bad++ }
+    }
+    try io.Print("bad " $bad "\n")
+}

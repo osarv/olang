@@ -1,0 +1,12 @@
+fn main() ? {
+    m := Map<I64, List<I64>>()
+    for i in range 5 { m.Put(i, List<I64>()) }
+    for i in range 5 {
+        l := try m.Get(i) catch { continue }
+        l.Push(i * 10)
+    }
+    churn := List<String&>()
+    for i in range 1000 { churn.Push("x" $i) }
+    l3 := try m.Get(3)
+    println($l3.Len() " " $l3[0])
+}

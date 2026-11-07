@@ -1,0 +1,70 @@
+import "std/io"
+
+Made mut I64 = 0
+Gone mut I64 = 0
+
+type H struct(n I64) {
+    n
+} destruct {
+    Gone = Gone + 1
+}
+
+fn mkH(n I64) H& {
+    Made = Made + 1
+    return H(n)
+}
+
+error E {
+    BAD
+}
+
+fn risky(x I64) I64 ? E {
+    if x % 3 == 0 { error E.BAD }
+    return x
+}
+
+fn loop1(n I64) I64 {
+    t I64 = 0
+    for i in range n {
+        h := mkH(i)
+        v I64 = try risky(i) catch E {
+            h2 := mkH(i)
+            if i % 2 == 0 { continue }
+            break
+        }
+        t = t + v + h.n
+    }
+    return t
+}
+
+fn loop2(n I64) I64 ? E {
+    for i in range n {
+        h := mkH(i)
+        if i > 1 {
+            h3 := mkH(i)
+            k := try risky(i)
+            if k > 100 { return k }
+        }
+    }
+    return 0
+}
+
+fn loop3(n I64) I64 {
+    t I64 = 0
+    for i in range n {
+        v I64 = match i % 3 {
+            case 0 => 1
+            case 1 => mkH(i).n
+            nomatch => 2
+        }
+        t = t + v
+    }
+    return t
+}
+
+fn main() ? io.IoError {
+    a := loop1(10)
+    b := try loop2(10) catch default 7
+    c := loop3(9)
+    try io.Print($a " " $b " " $c " made " $Made " gone " $Gone "\n")
+}

@@ -1,0 +1,30 @@
+type Tok struct(text String&, n I64) {
+    text
+    n
+}
+type Lex2 struct() {
+    toks Vec<Tok> = Vec<Tok>()
+}
+type H struct() {
+    lx own mut Lex2& = null
+}
+fn add(v mut Vec<Tok>&, t String&) { v.Push(Tok(t, 2)) }
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    h := H()
+    g := H()
+    h.lx = Lex2()
+    g.lx = Lex2()
+    for i in range 3 { h.lx.toks.Push(Tok($i "-built-into-h-region", i)) }
+    g.lx.toks.Push(h.lx.toks[0])
+    h.lx = null
+    churn()
+    println(g.lx.toks[0].text)
+}

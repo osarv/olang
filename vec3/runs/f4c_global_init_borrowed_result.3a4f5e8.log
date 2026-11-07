@@ -1,0 +1,7 @@
+/home/user/review/vec3/repro/f4c_global_init_borrowed_result.olang:13:39: error[O10]: this reference lives in a scope that may not outlive where it is put
+   13 | fn (c CB&) Text() String&c { return c.text }
+      |                                       ^~~~
+/home/user/review/vec3/repro/f4c_global_init_borrowed_result.olang:13:39: note: a read of an own slot is a borrow in a region of its own - only 'x := ...' declares a local holding it, and that local holds no other borrow
+   13 | fn (c CB&) Text() String&c { return c.text }
+      |                                       ^~~~
+compilation failed with 1 error

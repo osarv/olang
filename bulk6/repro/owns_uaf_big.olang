@@ -1,0 +1,26 @@
+# O17's 'owns' exemption: a value local owning storage, lent to a constructor keeping a reference to it, the instance
+# kept past the loop turn - with the local over 64KB, its own storage is the turn's arena, not a frame slot
+import "std/io"
+
+type big struct(s String) {
+    s
+    pad := Array<I64>(10000, 7)
+}
+type bh struct(b big&) { b }
+
+fn main() {
+    hs := Vec<bh>()
+    for k in range 1, 6 {
+        b := big($k "-th")
+        hs.Push(bh(b))
+    }
+    junk := Vec<Array<I64>>()
+    for _ in range 20 { junk.Push(Array<I64>(10000, 0x41414141)) }
+    s := 0
+    out := ""
+    for h in hs {
+        s += h.b.pad[9999]
+        out = $out " " $h.b.s
+    }
+    io.Println("pads " $s " (35) texts" $out " " $junk.Len())!
+}

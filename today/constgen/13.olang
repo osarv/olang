@@ -1,0 +1,10 @@
+# E32b/T25b: the typed form
+fn poke(a Array<I32>&) {
+    v mut Array<I32, 3>& = a as Array<I32, 3>&
+    v[0] = 99
+}
+fn main() ? {
+    x := I32[1, 2, 3]
+    poke(x)
+    println($x)
+}

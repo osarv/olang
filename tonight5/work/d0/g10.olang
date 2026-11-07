@@ -1,0 +1,9 @@
+type P struct(v I64) { v }
+type Hg<T> struct(p T) {
+    keep T& = p
+}
+fn main() ? {
+    h := Hg(P(42))
+    h2 := Hg(P(7))
+    println($h.keep.v " " $h2.keep.v)
+}

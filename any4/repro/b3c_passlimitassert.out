@@ -1,0 +1,14 @@
+== build -debug -sanitize
+run: k.s Qbc1
+b3c_passlimitassert.olang:36: assertion failed: k.s changed when the caller wrote its own value
+/home/user/review/any4/run.sh: line 17:  1773 Aborted                 timeout 60 ./build/$n.debug.san
+status 134
+== build
+run: k.s Qbc1
+b3c_passlimitassert.olang:36: assertion failed: k.s changed when the caller wrote its own value
+/home/user/review/any4/run.sh: line 17:  1879 Aborted                 timeout 60 ./build/$n
+status 134
+== interpret
+run: k.s Qbc1
+b3c_passlimitassert.olang:36: assertion failed: k.s changed when the caller wrote its own value
+status 134

@@ -1,0 +1,12 @@
+# the other order
+import "std/io"
+type Node struct(v I32) { v mut }
+fn main() ? {
+  rw := List<mut Node&>()
+  m := Node(2)
+  rw.Push(m)
+  ro := List<Node&>()
+  n Node& = Node(1)
+  ro.Push(n)                   # legal: a read-only reference into a list of read-only references
+  try io.Print($ro[0].v "\n")
+}

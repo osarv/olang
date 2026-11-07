@@ -1,0 +1,20 @@
+import "kk"
+fn main() ? {
+    a := kk.Key(1) == kk.Key(11)
+    s := $kk.Key(5)
+    v := kk.Vec(1) + kk.Vec(2)
+    l := kk.Vec(1) > kk.Vec(2)
+    b := kk.Bag()
+    x := b[0]
+    for e in b { }
+    y := 4 in b
+    g := kk.Gen()
+    for z in g { }
+    c := kk.Adder(1)
+    n := c(2)
+    w := kk.Wrap(kk.Key(1)) == kk.Wrap(kk.Key(2))
+    r := $kk.Wrap(kk.Key(1))
+    ks := kk.Key[kk.Key(1)] == kk.Key[kk.Key(1)]
+    h := kk.Wrap(kk.Key(1)).Hash()
+    f fn(x I32) I32 = c
+}

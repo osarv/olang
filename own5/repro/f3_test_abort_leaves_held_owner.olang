@@ -1,0 +1,41 @@
+# own5 F3 (N3's edge, tests only): an owner made for an owning parameter is held in a register while a later argument
+# runs - F3/N3 hold it in a slot only where that argument can leave the expression (cgMayLeave: a call, a check under
+# 'try', a catch clause). A guaranteed check without 'try' - a slice out of range, an 'as' that does not hold, an array
+# length out of range - aborts outside a test, but inside one it abandons the test (S18/P1d), whose unwinder closes
+# every open scope: the owner, in no scope, is never released and its destructor never runs.
+# olang -t: three FAILs as expected, then "made 3 dropped 0" (expected 3 and 3)
+Made mut I64 = 0
+Dropped mut I64 = 0
+type Res struct(n I64) {
+    n
+    Made = Made + 1
+} destruct {
+    Dropped = Dropped + 1
+}
+type E enum {
+    A(k I64)
+    B(k I64)
+}
+fn eat(o own mut Res&, s Array<I64>&) I64 { return o.n + s.Len() }
+fn eat3(o own mut Res&, k I64) I64 { return o.n + k }
+test "a slice out of range after an owner is made" {
+    a := I64[1, 2, 3]
+    lo := 2
+    hi := 1
+    x := eat(Res(1), a[lo:hi])
+    println($x)
+}
+test "an 'as' that does not hold after an owner is made" {
+    e := E.B(3)
+    x := eat3(Res(2), (e as E.A))
+    println($x)
+}
+test "an array length out of range after an owner is made" {
+    n := -1
+    x := eat(Res(3), Array<I64>(n))
+    println($x)
+}
+test "every owner made was released" {
+    println("made " $Made " dropped " $Dropped)
+    assert Made == Dropped
+}

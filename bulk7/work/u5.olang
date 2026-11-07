@@ -1,0 +1,20 @@
+import "std/io"
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn (t mut Token&) Use() { t.uses++ }
+
+fn comp<T>(x T) Array<T> { return T[x for _ in range 2] }
+
+fn main() {
+    c := comp(Token(2))
+    c[0].Use()
+    io.Println($c[0].uses " " $c[1].uses)!
+    t := Token(3)
+    d := Token[t for _ in range 2]
+    d[0].Use()
+    io.Println($d[0].uses " " $d[1].uses)!
+}

@@ -1,0 +1,12 @@
+# a trait method with a parameter default, called through an any with the argument left off; the impl's own default differs
+type W trait {
+    Draw(scale I64 = 2) I64
+}
+type Btn struct(n I64) { n }
+fn (b Btn&) Draw(scale I64 = 5) I64 { return b.n * scale }
+fn gen<S W>(s S) I64 { return s.Draw() }
+fn main() {
+    b := Btn(10)
+    w any W& = b
+    say($w.Draw() " " $b.Draw() " " $gen(b) " " $gen(w))
+}

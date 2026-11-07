@@ -1,0 +1,36 @@
+# O26a: a Ref into a value local's Vec returned - the local (and its buffer) live where the result goes
+import "std/io"
+
+type blk struct(n I64, s String) { n, s }
+
+fn f(k I64) blk& {
+    v := Vec<blk>()
+    for i in range 10 { v.Push(blk(k * 10 + i, $i "-s")) }
+    return v.Ref(3)
+}
+
+fn g(k I64) Array<I64>& {
+    v := Vec<I64>()
+    for i in range 10 { v.Push(k * 10 + i) }
+    return v.View()
+}
+
+fn main() {
+    rs := Vec<blk&>()
+    vs := Vec<Array<I64>&>()
+    for k in range 5 {
+        rs.Push(f(k))
+        vs.Push(g(k))
+    }
+    junk := Vec<Vec<blk>>()
+    for _ in range 50 {
+        w := Vec<blk>()
+        w.Push(blk(-1, "zzzzzzzzzzzzzzzzzzzz"))
+        junk.Push(w)
+    }
+    s := 0
+    for r in rs { s += r.n }
+    t := 0
+    for a in vs { t += a[0] }
+    io.Println("refs " $s " (115) views " $t " (110) " $rs[0].s " " $junk.Len())!
+}

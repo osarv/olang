@@ -1,0 +1,35 @@
+== build -debug -sanitize
+n26_anysubst.olang:13:51: error[E12]: expected I64, found T
+   13 | fn (s mut Src<T>&) First() T ? Exhausted { return try s.it.Next() }
+      |                                                   ^~~~~~~~~~~~~~~
+n26_anysubst.olang:17:16: note: instantiated here, with T = I64
+   17 |     v := try s.First() catch default -1
+      |                ^~~~~
+n26_anysubst.olang:14:52: error[E12]: expected fn(x T) Bool, found fn(x I64) Bool
+   14 | fn (s mut Src<T>&) Twice() I64 { return s.it.Count(fn(x T) Bool { return true }) }
+      |                                                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+n26_anysubst.olang:18:19: note: instantiated here, with T = I64
+   18 |     say($v " " $s.Twice())
+      |                   ^~~~~
+compilation failed with 2 errors
+== build
+n26_anysubst.olang:13:51: error[E12]: expected I64, found T
+   13 | fn (s mut Src<T>&) First() T ? Exhausted { return try s.it.Next() }
+      |                                                   ^~~~~~~~~~~~~~~
+n26_anysubst.olang:17:16: note: instantiated here, with T = I64
+   17 |     v := try s.First() catch default -1
+== interpret
+n26_anysubst.olang:13:51: error[E12]: expected I64, found T
+   13 | fn (s mut Src<T>&) First() T ? Exhausted { return try s.it.Next() }
+      |                                                   ^~~~~~~~~~~~~~~
+n26_anysubst.olang:17:16: note: instantiated here, with T = I64
+   17 |     v := try s.First() catch default -1
+      |                ^~~~~
+n26_anysubst.olang:14:52: error[E12]: expected fn(x T) Bool, found fn(x I64) Bool
+   14 | fn (s mut Src<T>&) Twice() I64 { return s.it.Count(fn(x T) Bool { return true }) }
+      |                                                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+n26_anysubst.olang:18:19: note: instantiated here, with T = I64
+   18 |     say($v " " $s.Twice())
+      |                   ^~~~~
+compilation failed with 2 errors
+status 1

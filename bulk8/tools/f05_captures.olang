@@ -1,0 +1,53 @@
+import "std/io"
+
+Live mut I64 = 0
+
+fn mk(n I64, log mut Vec<String>&) fn&() I64 {
+    k := n * 3
+    t := "x" $n
+    return fn() {
+        log.Push($t $k)
+        return k + t.Len()
+    }
+}
+
+fn gen(n I64, log mut Vec<String>&, tag String&) Iterator<I64> {
+    m := n + 1
+    for i in range m {
+        log.Push($tag $i)
+        yield i * n
+    }
+}
+
+fn main() {
+    log := Vec<String>()
+    fs := Vec<fn&() I64>()
+    for i in range 4 {
+        fs.Push(mk(Live + i, log))
+    }
+    for i in range 3 {
+        v := Vec<String>()
+        v.Push("churn" $i)
+    }
+    total := 0
+    for f in fs { total += f() }
+    io.Println($total " " $log.View())!
+    log2 := Vec<String>()
+    tag := "t" $Live
+    s := 0
+    for x in gen(Live + 3, log2, tag) { s += x }
+    for i in range 3 {
+        v := Vec<String>()
+        v.Push("churn" $i)
+    }
+    io.Println($s " " $log2.View())!
+    out := Array<I64>(4)
+    base := Live + 10
+    name := "n" $Live
+    join {
+        for i in range 4 {
+            spawn out[i] = fn() { return base + i + name.Len() }()
+        }
+    }
+    io.Println($out)!
+}

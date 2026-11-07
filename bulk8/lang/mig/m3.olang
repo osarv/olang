@@ -1,0 +1,12 @@
+import "std/io"
+type Meters I64
+type Pt struct(x I64) { x }
+type Op enum String { Plus = "+" }
+fn Meters.MaxMeters() Meters { return Meters(5) }
+fn Pt.NamePt() Pt { return Pt(1) }
+fn Op.FromOp() Op { return Op.Plus }
+fn Pt.Value() Pt { return Pt(2) }
+fn Pt.FieldsPt() Pt { return Pt(3) }
+fn main() {
+    io.Println($Meters.MaxMeters() " " $Pt.NamePt().x " " $Op.FromOp() " " $Pt.Value().x " " $Pt.FieldsPt().x)!
+}

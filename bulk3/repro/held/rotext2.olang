@@ -1,0 +1,12 @@
+import "std/io"
+type Rec struct(name String&) { name }
+fn w(b mut Array<Char>&) { b[0] = 'z' }
+fn viaParam(s String&) { w(s) }
+fn viaField(r Rec&) { w(r.name) }
+fn main() {
+    a := $"abc"
+    viaParam(a)
+    r := Rec($"def")
+    viaField(r)
+    io.Println($a " " $r.name)!
+}

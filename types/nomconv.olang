@@ -1,0 +1,16 @@
+# T29a/T25c: String(bytes) "copies nothing" - is the result a fresh value or a writable view of read-only storage?
+import "std/io"
+fn touch(b Array<U8>&) {                 # b is read-only: nothing may write through it
+  s := String(b)
+  s[0] = 'Z'
+}
+fn touch2(b Array<U8>&) {
+  s String = String(b)                   # a value declaration: new storage, a copy (T7b)
+  s[1] = 'Y'
+}
+fn main() ? {
+  raw Array<U8> = U8[104, 105, 106]
+  touch(raw)
+  touch2(raw)
+  try io.Print($raw "\n")
+}

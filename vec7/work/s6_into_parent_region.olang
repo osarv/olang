@@ -1,0 +1,29 @@
+# words moved from an owned sub-object's region into its owner's field, then the sub-object released
+type Sub struct() {
+    more Vec<String&> = Vec<String&>()
+}
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+    sub own mut Sub& = null
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    p := Parser()
+    p.lx = Lexer()
+    p.lx.sub = Sub()
+    for i in range 3 { p.lx.sub.more.Push($i "-word-in-the-sub's-region") }
+    p.lx.toks = take p.lx.sub.more
+    p.lx.sub = null
+    churn()
+    println(p.lx.toks[0])
+}

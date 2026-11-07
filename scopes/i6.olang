@@ -1,0 +1,23 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Gen struct() { n mut I32 = 0 }
+type Holder struct(g Gen&) { g }
+fn (g Gen&) At(i I64) Node& { return Node(I32(i) + 40) }
+fn (g Gen&) Len() I64 { return 10 }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn show(n Node&) I32 { return n.v }
+fn main() ? {
+    h Holder& = Holder(Gen())
+    l List<Node&>& = List<Node&>()
+    for i in range 2 {
+        l.Push(try h.g[2])
+    }
+    x := show(try h.g[3])
+    churn()
+    try io.Print($l[0].v " " $x "\n")
+}

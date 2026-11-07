@@ -1,0 +1,34 @@
+# conversions inside a conditional, a match value and a catch default, landing in an outer list from a loop body
+type W trait {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+type Sl struct(at I64) { at }
+fn (s Sl&) Draw() String { return "<" $s.at ">" }
+error FindErr {
+    NO
+}
+fn find(k I64) Btn ? FindErr {
+    if k % 2 == 0 { error FindErr.NO }
+    return Btn("found" $k)
+}
+fn mk(i I64) any W& {
+    return match i {
+        case 0 => Sl(100)
+        case 1 => Btn("m" $i)
+        case _ => Btn("o" $i)
+    }
+}
+fn main() {
+    xs := List<any W&>()
+    for i in range 4 {
+        xs.Push(Btn("c" $i) if i % 2 == 0 else Sl(i))
+        xs.Push(mk(i))
+        xs.Push(try find(i) catch default Btn("dflt" $i))
+        w any W& = try find(i) catch default Btn("w")
+        say(w.Draw())
+    }
+    churn()
+    for x in xs { say(x.Draw()) }
+}

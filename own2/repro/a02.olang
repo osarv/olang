@@ -1,0 +1,28 @@
+type Node struct(n I64) {
+    n
+    name String& = "the node name is " $n
+}
+type Inner struct() {
+    cur own mut Node&
+}
+type Outer struct() {
+    inner mut Inner& = Inner()
+}
+type Holder struct() {
+    o own mut Outer&
+}
+fn churn() {
+    j := List<String&>()
+    for i in range 400 { j.Push("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy" $i) }
+}
+fn nameOf(i Inner&) String& { return "x" }
+fn main() ? {
+    s := Holder()
+    s.o = Outer()
+    s.o.inner.cur = Node(5)
+    ii := s.o.inner
+    c := ii.cur
+    s.o = null
+    churn()
+    println(c.name)
+}

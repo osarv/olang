@@ -1,0 +1,4 @@
+fn helper() I32 { return 1 }
+fn main() ? {
+    assert helper() == 1
+}

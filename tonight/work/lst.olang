@@ -1,0 +1,32 @@
+fn build() I64 {
+    l := List<I64>()
+    e := l.Clone()
+    for i in range 100 { l.Push(i) }
+    for i in range 60 { x := try l.Pop() catch { break } }
+    c := l.Clone()
+    l.Clear()
+    l.Push(7)
+    d := l.Clone()
+    c.Push(1000)
+    s I64 = 0
+    for x in c { s += x }
+    return s * 1000000 + c.Len() * 1000 + d.Len() * 10 + e.Len()
+}
+fn mapb() I64 {
+    m := Map<I64, I64>()
+    for i in range 50 { m.Put(i, i * 2) }
+    for i in range 0, 50, 3 { m.Remove(i) }
+    c := m.Clone()
+    m.Clear()
+    s I64 = 0
+    for e in c { s += e.Key + e.Value }
+    return s * 1000 + c.Len() * 10 + m.Len()
+}
+G := build()
+GM := mapb()
+fn main() ? {
+    println($G " " $build() " " $GM " " $mapb())
+    lists := Array<List<I32>>(3, List<I32>())
+    lists[0].Push(1)
+    println($lists[2].Len())
+}

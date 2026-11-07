@@ -1,0 +1,14 @@
+type Box struct(n I64) {
+    n
+}
+type Q struct(b Box& = Box(5)) {
+    b
+}
+type B struct() {
+    data own mut Array<Q>& = null
+}
+fn main() ? {
+    bb := B()
+    bb.data = Array<Q>(3)
+    println($bb.data[1].b.n)
+}

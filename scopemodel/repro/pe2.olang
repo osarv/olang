@@ -1,0 +1,23 @@
+import "std/io"
+type N struct(v I32, next mut N&) { v, next }
+type Cur struct(of mut N&) { at mut N&of = of }
+fn grow(x mut N&) { x.next = N(9, null) }
+fn via(c mut Cur&) {
+    y := c.at          # copy out of a &of field: y lives at the derived scope
+    grow(y)            # hand y (by ref borrow) to a callee that builds through it
+}
+fn churn() {
+    for i in range 2000 {
+        s := $i "zzzzzzzzzzzzzzzzzzzzzzzzzzz"
+        m N& = N(I32(i), null)
+    }
+}
+fn main() ? {
+    for i in range 2 {
+        n mut N& = N(1, null)
+        c := Cur(n)
+        via(c)
+        try io.Print($n.next.v "\n")
+    }
+    churn()
+}

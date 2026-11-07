@@ -1,0 +1,11 @@
+import "std/os"
+type Quitter trait {
+    Quit()
+}
+type Q struct() { }
+fn (q Q&) Quit() noreturn { os.Exit(1) }
+fn stop(q <T Quitter>&) { q.Quit() }
+fn main() {
+    q := Q()
+    stop(q)
+}

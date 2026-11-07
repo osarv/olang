@@ -1,0 +1,10 @@
+type E enum {
+    L(v I32)
+    A(xs Array<E>&)
+}
+type S struct(xs Array<Array<S>&>&) { xs }
+fn main() ? {
+    a := E.A(Array<E>(0))
+    b := E.A(Array<E>(0))
+    println($(a == b))
+}

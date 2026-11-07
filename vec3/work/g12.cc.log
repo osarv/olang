@@ -1,0 +1,10 @@
+/home/user/review/vec3/work/g12.olang:13:7: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   13 |     l.Push(Docs.title)                     # a List local keeping a borrow of a global's own object
+      |       ^~~~
+/home/user/wt/rvvec3/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
+   59 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+/home/user/review/vec3/work/g12.olang:13:17: note: this text lives in a block that closes first - pass a copy, which is made where 'l' lives: write '$' before it
+   13 |     l.Push(Docs.title)                     # a List local keeping a borrow of a global's own object
+      |                 ^~~~~
+compilation failed with 1 error

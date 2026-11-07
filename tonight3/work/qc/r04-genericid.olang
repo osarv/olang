@@ -1,0 +1,10 @@
+fn id(x <T>) T { return x }
+fn look(l List<I32>&) {
+  y := id(l)
+  y.Push(9)
+}
+fn main() ? {
+  a := I32[1, 2].ToList()
+  look(a)
+  println($a.Len())
+}

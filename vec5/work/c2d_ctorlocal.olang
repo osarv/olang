@@ -1,0 +1,22 @@
+# C2d (no own): the text built in a constructor local typed in a parameter's scope, then the field given that local
+type H struct(x String&, n I64) {
+    t String&x = $n "-new-text-in-x's-scope"
+    y := t
+}
+fn main() ? {
+    h := H("outer", 1)
+    for i in range 2 {
+        s := $i "-inner-block-text"
+        h = H(s, 5 + i)
+    }
+    churn()
+    println(h.y)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

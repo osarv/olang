@@ -1,0 +1,13 @@
+# OVER-REJECTION, not new (7345ff9 refuses it too; b6259d1 prints 'n1'). Any array callback over an array of
+# references the receiver reaches - Count, Any, All, Fold, Map, Filter, Sort - is refused: the call through 'keep(x)'
+# inside the prelude is a body not known, and it binds keep's parameter scope to the elements' scope, the receiver's.
+# The lambda here builds nothing; seeing that needs the walk to follow a known lambda argument into the higher-order
+# callee. The List equivalent ('b.l.Iter().Count(f)') is accepted.
+type Bag struct(words Array<String&>&) {
+    words
+}
+fn (b Bag&) Str() String {
+    long := b.words.Count(fn(s String&) Bool { return s.Len() > 1 })
+    return "n" $long
+}
+fn main() ? { println($Bag(String&["ab", "c"])) }

@@ -1,0 +1,14 @@
+# F5, second shape: E19 names `C[a, b]` (C a type variable) as a literal made through C's FromIter; literal_migrate
+# reads it as the old array-of-T form and writes Array<C>[3, 1, 2, 1] - the instance with C = set.Set<I64> no longer
+# compiles (on a type whose FromIter takes C itself it would silently make an array instead).
+import "std/io"
+import "std/set"
+
+fn make<C>() C {
+    return C[3, 1, 2, 1]
+}
+
+fn main() {
+    s := make<set.Set<I64>>()
+    io.Println($s)!
+}

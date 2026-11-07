@@ -1,0 +1,19 @@
+import "std/os"
+
+fn down(n I64, acc I64) I64 {
+    v := Array<I64>(4, n)
+    if n == 0 {
+        assert acc < 0, "acc is " $acc
+        return acc
+    }
+    become down(n - 1, acc + v[0])
+}
+
+test "a failed check deep in a become chain" {
+    assert down(os.Args().Len() * 100000, 0) == 5000050000
+}
+
+test "after it, the next test runs" {
+    v := Array<I64>(1000, 3)
+    assert v.Sum() == 3000
+}

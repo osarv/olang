@@ -1,0 +1,13 @@
+# CONFIRMED (permissions batch, T2/T25b decision 5 vs D11a).
+# Expected: T2 - "a leading mut ... is valid on a reference-shaped type and on a type variable (which then stands for a
+#           writable reference when bound to one)"; for a parameter (y mut <T>) and a field (v mut T) that holds, so a
+#           local "x mut T = v" instantiated with T = I32 should compile and print 3.
+# Actual:   "error[D11a]: a local is always writable - 'mut' is for a reference, and I32 is none", reported in the
+#           instantiation. localPermission (semantic.c ~13617) tests declType->bType == BASETYPE_TYPEVAR, but in an
+#           instantiation the type is already the bound I32; declTypePermission (parameters, fields) has the same test
+#           but its error is skipped in the same case - so one generic body is legal for a parameter and not a local.
+fn keep(v <T>) T {
+    x mut T = v
+    return x
+}
+fn main() ? { println($keep(3)) }

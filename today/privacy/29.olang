@@ -1,0 +1,6 @@
+# M6b/E31: calling a value whose type has a private call, from another module
+import "lib/cl"
+fn main() ? {
+    a := cl.Make(3)
+    println($a(4))
+}

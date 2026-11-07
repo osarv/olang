@@ -1,0 +1,33 @@
+# QCE: a run-time array held by value is its container's own - a store, a constructor, a Map key, a Vec element
+import "std/io"
+
+type person struct(name String, tags Vec<String>) { name, tags }
+
+fn rename(p person) person {
+    p.name[0] = 'Z'
+    return p
+}
+
+fn main() {
+    t := $"abc"
+    p := person(t, Vec<String>())
+    p.tags.Push(t)
+    t[0] = 'x'
+    io.Println("person " $p " (abc, [abc])")!
+    m := Map<String, I64>()
+    k := $"key"
+    m.Put(k, 1)
+    k[0] = 'X'
+    io.Println("map has key " $m.Has("key") " (true) " $m.Has("Xey") " (false)")!
+    q := rename(p)
+    io.Println("p " $p.name " q " $q.name " (abc Zbc)")!
+    v := Vec<String>()
+    v.Push(t)
+    w := v
+    w.RefMut(0)[0] = 'w'
+    io.Println("v " $v " w " $w " (xbc wbc)")!
+    arr := String["a", "b"]
+    brr := arr
+    brr[0][0] = 'q'
+    io.Println("arr " $arr " brr " $brr)!
+}

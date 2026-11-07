@@ -1,0 +1,197 @@
+# dedup - finds files with identical contents under a directory.
+#
+#   dedup [-d] [-j N] DIR
+#
+# Files are grouped by size first; only sizes shared by two or more files are hashed (two independent 64-bit hashes
+# of the whole content, as one key), in parallel; files whose keys match are compared byte by byte before being
+# called duplicates. Prints each group of duplicates and the bytes they waste. With -d, every duplicate but the
+# first of its group (in path order) is removed. Empty files are ignored. With no DIR, a demo tree is made in a
+# temporary directory, scanned, and removed.
+
+import "std/os"
+import "std/filepath"
+import "std/rand"
+
+# the key files are grouped by: the compiler supplies Hash and == for a struct of numbers (E10b)
+type Digest struct(A U64, B U64, Size I64) {
+    A
+    B
+    Size
+}
+
+type Entry struct(Path String&, Size I64) {
+    Path
+    Size
+}
+
+Hashed mut I64 = 0
+BytesRead mut I64 = 0
+
+fn walk(dir String&, out mut List<Entry>&) {
+    names := try os.ReadDir(dir) catch {
+        eprintln("dedup: cannot read " $dir)
+        return
+    }
+    for name in names {
+        p String&out = filepath.Join(dir, name)
+        info := try os.Stat(p) catch { continue }
+        match info.Kind {
+            case os.FileKind.DIR { walk(p, out) }
+            case os.FileKind.FILE {
+                if info.Size > 0 { out.Push(Entry(p, info.Size)) }
+            }
+            nomatch { }
+        }
+    }
+}
+
+# FNV-1a and a multiply-rotate hash, over the whole file
+fn digest(e Entry) Digest {
+    data := try os.ReadFile(e.Path) catch { return Digest(0, 0, -1) }
+    a U64 = 0xcbf29ce484222325
+    b U64 = 0x9E3779B97F4A7C15
+    for c in data {
+        a = (a ^ U64(c)) * 0x100000001b3
+        b = (b + U64(c) + 1) * 0xff51afd7ed558ccd
+        b = (b << 31) | (b >> 33)
+    }
+    Hashed.AtomicAdd(1)
+    BytesRead.AtomicAdd(data.Len())
+    return Digest(a, b, data.Len())
+}
+
+fn digestRange(files Array<Entry>&, lo I64, hi I64) Array<Digest>& {
+    out mut Array<Digest>&return = Array<Digest>(hi - lo)
+    for i in range lo, hi { out[i - lo] = digest(files[i]) }
+    return out
+}
+
+fn sameContent(a String&, b String&) Bool {
+    x := try os.ReadFile(a) catch { return false }
+    y := try os.ReadFile(b) catch { return false }
+    return x == y
+}
+
+type Report struct() {
+    groups I64 = 0
+    duplicates I64 = 0
+    wasted I64 = 0
+    removed I64 = 0
+}
+
+fn dedup(root String&, jobs I64, remove Bool) Report ? {
+    files mut List<Entry>& = List<Entry>()
+    os.RunOnStack(64 << 20, fn() { walk(root, files) })
+    # sizes held by more than one file
+    bySize mut Map<I64, I64>& = Map<I64, I64>()
+    for f in files { bySize.Update(f.Size, 0, fn(n I64) I64 { return n + 1 }) }
+    candidates := files.Iter().Filter(fn(f Entry) Bool { return (try bySize.Get(f.Size) catch default 0) > 1 }).ToArray()
+    candidates.Sort(fn(x Entry, y Entry) Bool { return x.Path < y.Path })
+    # hash them, a run of candidates per task
+    tasks := jobs if candidates.Len() >= jobs else 1
+    step := (candidates.Len() + tasks - 1) / tasks
+    parts := Array<Array<Digest>&>(tasks)
+    join {
+        for t in range tasks {
+            lo := t * step
+            hi := lo + step if lo + step < candidates.Len() else candidates.Len()
+            spawn parts[t] = digestRange(candidates, lo, hi)
+        }
+    }
+    groups := Map<Digest, List<String&>>()
+    order := List<Digest>()
+    for t in range tasks {
+        for k, d in parts[t] {
+            if d.Size < 0 { continue }
+            if not groups.Has(d) {
+                groups.Put(d, List<String&>())
+                order.Push(d)
+            }
+            l mut List<String&>&groups = try groups.Get(d)
+            l.Push(candidates[t * step + k].Path)
+        }
+    }
+    r := Report()
+    for d in order {
+        paths := try groups.Get(d)
+        if paths.Len() < 2 { continue }
+        first := paths[0]
+        same := List<String&>()
+        for i in range 1, paths.Len() {
+            if sameContent(first, paths[i]) { same.Push(paths[i]) }
+        }
+        if same.Len() == 0 { continue }
+        r.groups++
+        r.duplicates += same.Len()
+        r.wasted += d.Size * same.Len()
+        println($d.Size " bytes: " $first)
+        for p in same {
+            println("    = " $p)
+            if remove {
+                try os.Remove(p) catch os.OsError { eprintln("dedup: cannot remove " $p) }
+                r.removed++
+            }
+        }
+    }
+    return r
+}
+
+# a tree with known duplicates: 6 groups, 11 duplicates
+fn demoTree(root String&) ? os.OsError {
+    r := rand.Rand(42)
+    contents := List<String&>()
+    for i in range 8 {
+        b := StringBuilder()
+        n := 100 + r.Below(5000)
+        for k in range n { b.PushChar(Char('a' + r.Below(26))) }
+        contents.Push(b.ToString())
+    }
+    # same size as contents[0], different bytes
+    twin := StringBuilder()
+    for k in range contents[0].Len() { twin.PushChar('z') }
+    dirs := String&["", "a", "a/b", "a/b/c", "d", "d/e"]
+    for d in dirs { try os.MkDirAll(filepath.Join(root, d)) }
+    copies := I64[3, 2, 4, 1, 2, 3, 1, 3]                  # how many files hold contents[i]
+    n := 0
+    for i, c in copies {
+        for k in range c {
+            path := filepath.Join(root, dirs[n % dirs.Len()], "f" $n ".txt")
+            try os.WriteFile(path, contents[i])
+            n++
+        }
+    }
+    try os.WriteFile(filepath.Join(root, "twin.txt"), twin.ToString())
+    try os.WriteFile(filepath.Join(root, "empty1"), "")
+    try os.WriteFile(filepath.Join(root, "d/empty2"), "")
+}
+
+fn main() ? {
+    args := os.Args()
+    remove := false
+    jobs I64 = 4
+    root := ""
+    i := 1
+    for i < args.Len() {
+        match args[i] {
+            case "-d" { remove = true }
+            case "-j" {
+                i++
+                jobs = try args[i].ParseInt()
+            }
+            nomatch { root = args[i] }
+        }
+        i++
+    }
+    demo := root.Len() == 0
+    if demo {
+        root = try os.MkTemp("", "dedup-")
+        try demoTree(root)
+    }
+    defer {
+        if demo { try os.RemoveAll(root) catch { } }
+    }
+    r := try dedup(root, jobs, remove)
+    println($r.groups " groups, " $r.duplicates " duplicates, " $r.wasted " bytes wasted, " $r.removed " removed ("
+        $Hashed.AtomicLoad() " files hashed, " $BytesRead.AtomicLoad() " bytes read)")
+    if demo and (r.groups != 6 or r.duplicates != 11) { fail }
+}

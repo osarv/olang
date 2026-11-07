@@ -1,0 +1,9 @@
+== build -debug -sanitize
+textreturnvalue text1-7 text2-14
+status 0
+== build
+textreturnvalue text1-7 text2-14
+status 0
+== interpret
+textreturnvalue text1-7 text2-14
+status 0

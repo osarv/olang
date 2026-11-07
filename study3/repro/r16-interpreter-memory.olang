@@ -1,0 +1,17 @@
+# r16 FRICTION (known, -i stage 1: the evaluator never frees) - B3e: ordinary scripting data sizes exhaust memory under
+# -i. This loop builds and drops one short line 20,000 times; built, it runs in a few MB. Measured on the study's
+# programs: a log analyser over 300 lines peaks at 1.47 GB under -i and is killed at 5,000 lines; an LRU simulation of
+# 1,000 steps peaks at 2.0 GB, and 20,000 steps is killed; a 20,000-line word count is killed before it reaches its
+# tasks. Principle 5 lists -i first among the scripting tools.
+#
+# expected: "done 200000" under -i, in bounded memory
+# actual: -b prints it at once; -i peaks at 1.46 GB for 2,000 iterations (7 s) and is killed at 12.3 GB for 20,000
+#         (peak resident memory polled from /proc)
+fn main() ? {
+    n I64 = 0
+    for i in range 20000 {
+        line := "entry " $i " of the log, with some words in it"
+        n += line.Split(" ").Len()
+    }
+    println("done " $n)
+}

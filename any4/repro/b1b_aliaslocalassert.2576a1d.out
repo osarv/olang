@@ -1,0 +1,16 @@
+== build -debug -sanitize
+b1b_aliaslocalassert.olang:16:20: error[S18c]: this assertion is false, evaluated while compiling
+   16 |     assert probe() == "abc1"
+      |                    ^~
+compilation failed with 1 error
+== build
+b1b_aliaslocalassert.olang:16:20: error[S18c]: this assertion is false, evaluated while compiling
+   16 |     assert probe() == "abc1"
+      |                    ^~
+compilation failed with 1 error
+== interpret
+b1b_aliaslocalassert.olang:16:20: error[S18c]: this assertion is false, evaluated while compiling
+   16 |     assert probe() == "abc1"
+      |                    ^~
+compilation failed with 1 error
+status 1

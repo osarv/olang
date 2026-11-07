@@ -1,0 +1,7 @@
+# check: fail error[M19f]: 'println' is the prelude's function, seen in every module - choose another name
+# also: error[M19f]: 'print' is the prelude's function
+# M19f: print, println, eprint and eprintln are seen in every module, so no module may declare one, nor a local
+fn println(t String&) { }
+fn main() ? {
+    print := 3
+}

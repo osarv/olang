@@ -1,0 +1,5 @@
+fn pick8(b Bool) U8 { return match b { case true => 200
+        case false => 0 } }
+fn main() ? {
+    assert pick8(true) == 200
+}

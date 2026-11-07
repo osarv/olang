@@ -1,0 +1,5 @@
+import "std/io"
+fn main() ? io.IoError {
+    BuiltBaked := 3
+    try io.Print($BuiltBaked "\n")
+}

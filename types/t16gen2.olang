@@ -1,0 +1,7 @@
+# T16 through a generic's own field: Wrap<T> holds a T and an Opt<T>-like struct holding Wrap<T>
+type Pair2<A, B> struct(a <A>, b <B>) {
+  a
+  b
+}
+type N struct(p Pair2<I32, N>) { p }
+fn main() ? { }

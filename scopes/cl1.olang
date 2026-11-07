@@ -1,0 +1,22 @@
+# E31: a reference to a value whose type declares Call, stored where a function value is wanted
+import "std/io"
+type Counter struct(start I64) { n mut I64 = start }
+fn (c mut Counter&) Call() I64 {
+    c.n++
+    return c.n
+}
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        a := Array<I64>(8, 7)
+    }
+}
+fn main() ? {
+    f fn() I64 = fn() { return 0 }
+    for i in range 2 {
+        c Counter& = Counter(41)
+        f = c
+    }
+    churn()
+    try io.Print($f() "\n")
+}

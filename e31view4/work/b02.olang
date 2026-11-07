@@ -1,0 +1,30 @@
+# read-only ref param building through shallow mut field; try default = existing longer-lived box; element short-lived
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { abort }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Box struct() {
+    head mut Node& = Node(0, null)
+    tag I64 = 0
+}
+fn grow(b Box&, v I64) { b.head.next = Node(v, b.head.next) }
+fn main() ? {
+    longlived := Box()
+    for i in range 3 {
+        a := Array<Box>(1, Box())
+        grow(try a[0] catch default longlived, i + 1)
+        if a[0].head.next != null { longlived.tag = a[0].head.next.v }
+        churn()
+    }
+    churn()
+    n := 0
+    for x := longlived.head, x != null, x = x.next { n = n * 10 + x.v }
+    assert longlived.tag >= 0, $longlived.tag
+    assert n == 0, $n
+}

@@ -1,0 +1,15 @@
+== build -debug -sanitize
+lab text7-49
+lab text7-49
+lab text7-49
+status 0
+== build
+lab text7-49
+lab text7-49
+lab text7-49
+status 0
+== interpret
+lab text7-49
+lab text7-49
+lab text7-49
+status 0

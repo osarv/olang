@@ -1,0 +1,39 @@
+import "std/io"
+type Lab extends String
+type W trait {
+    mut Bump()
+}
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+type K struct(s String&) { s }
+fn get(k K&) String { return k.s }
+fn probe(i I64) String {
+    k := K("abc" $i)
+    b mut any W& = Lab(get(k))
+    b.Bump()
+    x := get(k)
+    x[1] = 'Q'
+    return "src " $k.s " b " $b " x " $x
+}
+G := probe(1)
+fn main() {
+    say("run:   " $probe(1))
+    say("baked: " $G)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

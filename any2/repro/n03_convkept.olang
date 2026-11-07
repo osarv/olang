@@ -1,0 +1,39 @@
+# the shapes of n02 with the source made in a loop body and the any kept past it
+type W trait {
+    mut Bump()
+    Show() String
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn (l Lab&) Show() String { return "lab " $String(l) }
+fn same(s mut String&) mut String&s { return s }
+type H struct(s mut String&) { s }
+error Oops {
+    BAD
+}
+fn pick(k I64) Lab ? Oops {
+    if k < 0 { error Oops.BAD }
+    return Lab("p" $k)
+}
+fn main() {
+    xs := List<mut any W&>()
+    for i in range 3 {
+        s := "cond" $i "-" $(i * 7)
+        u := "other" $i
+        c := s.Len() > 2
+        xs.Push(Lab(s if c else u))
+        m := "match" $i "-" $(i * 7)
+        xs.Push(Lab(match m.Len() { case 0 => u case _ => m }))
+        f := "call" $i "-" $(i * 7)
+        xs.Push(Lab(same(f)))
+        g := "field" $i "-" $(i * 7)
+        h := H(g)
+        xs.Push(Lab(h.s))
+        k := "slice" $i "-" $(i * 7)
+        xs.Push(Lab(checked k[0:9] catch default u))
+        d := "dflt" $i "-" $(i * 7)
+        xs.Push(try pick(-1) catch default Lab(d))
+    }
+    churn()
+    for x in xs { say(x.Show()) }
+}

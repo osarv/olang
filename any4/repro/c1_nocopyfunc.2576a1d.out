@@ -1,0 +1,4 @@
+== build -debug -sanitize
+olang: error: the self-hosted compiler cannot build this yet: it does not emit a type with no layout: any c1_nocopyfunc:Gen yet
+== build
+olang: error: the self-hosted compiler cannot build this yet: it does not emit a type with no layout: any c1_nocopyfunc:Gen yet

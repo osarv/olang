@@ -1,0 +1,41 @@
+# h01 with the collection reached through a "&p" field (a derived scope)
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type BagState struct() {
+    head mut Node& = null
+}
+type Bag struct() {
+    s mut BagState& = BagState()
+}
+fn (b Bag&) Sneak(v I64) { b.s.head = Node(v, b.s.head) }
+fn (b Bag&) Sum() I64 {
+    t I64 = 0
+    for n := b.s.head, n != null, n = n.next { t = t * 10 + n.v }
+    return t
+}
+type Holder struct(l mut List<Bag>&) {
+    bags mut List<Bag>&l = l
+}
+fn add(h Holder&, v I64) {
+    h.bags[0].Sneak(v)
+    (try h.bags.First()).Sneak(v + 10)
+}
+fn main() ? {
+    l := List<Bag>()
+    l.Push(Bag())
+    h := Holder(l)
+    for i in range 3 {
+        add(h, i + 1)
+        churn()
+    }
+    churn()
+    println("l " $l[0].Sum())
+}

@@ -1,0 +1,6 @@
+import "std/io"
+import "example.com/me/tools/mathx/add"
+N mut I32 = 1
+fn main() ? io.IoError {
+    try io.Print($add.Add1(N) "\n")
+}

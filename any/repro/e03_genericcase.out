@@ -1,0 +1,9 @@
+== build -debug -sanitize
+olang: error: the self-hosted compiler cannot build this yet: it does not emit not lowered: e03__genericcase_2ekind yet
+olang: error: the self-hosted compiler cannot build this yet: e03_genericcase.olang:13:37: it does not lower an unknown type (a check error or gap): an expression yet
+== build
+olang: error: the self-hosted compiler cannot build this yet: it does not emit not lowered: e03__genericcase_2ekind yet
+olang: error: the self-hosted compiler cannot build this yet: e03_genericcase.olang:13:37: it does not lower an unknown type (a check error or gap): an expression yet
+== interpret
+olang interpret: e03_genericcase.olang:22: it calls a function whose body is not available
+status 1

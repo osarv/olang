@@ -1,0 +1,12 @@
+== build -debug -sanitize
+run:   src ZQc b ZQc x ZQc
+baked: src ZQc b ZQc x ZQc
+status 0
+== build
+run:   src ZQc b ZQc x ZQc
+baked: src ZQc b ZQc x ZQc
+status 0
+== interpret
+run:   src ZQc b ZQc x ZQc
+baked: src ZQc b ZQc x ZQc
+status 0

@@ -1,0 +1,48 @@
+import "std/io"
+type Holder struct(l mut List<String&>&) { l }
+fn (h mut Holder&) Add(x String&h) I64 {
+    h.l.Push(x)
+    return 1
+}
+fn put(m mut Map<I64, String&>&, x String&m) I64 {
+    m.Put(1, x)
+    return 1
+}
+GM := 0
+fn f(keep mut List<String&>&, h mut Holder&, i I64) String {
+    s := "abc" $i
+    mm := Map<I64, String&>()
+    put(mm, s)
+    keep.Push(try mm.Get(1) catch default "none")
+    return s
+}
+fn probe(i I64) String {
+    keep := List<String&>()
+    h := Holder(keep)
+    v := f(keep, h, i)
+    v[0] = 'Q'
+    return "keep " $keep " h " $h.l
+}
+G := probe(1)
+fn main() {
+    say("run:   " $probe(1))
+    say("baked: " $G)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

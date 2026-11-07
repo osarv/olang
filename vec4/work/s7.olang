@@ -1,0 +1,19 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# s3 with an own array (Vec) region and a String: x := v.View() of a Vec<Char>, d mut String&x
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    v.Push('b')
+    x := v.ViewMut()
+    d mut String&x = $5 "-new-text-in-the-buffer-region"
+    for i in range 1000 { v.Push('c') }
+    churn()
+    println(d)
+}

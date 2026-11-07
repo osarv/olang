@@ -1,0 +1,9 @@
+import "a_b"
+import "a/b"
+import "std/io"
+fn id(x <T>) <T> { return x }
+fn main() ? {
+  p := id(a_b.Mk())
+  q := id(b.Mk())
+  try io.Print($p.X " " $q.X "\n")
+}

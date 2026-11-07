@@ -1,0 +1,18 @@
+import "std/io"
+import "std/os"
+fn main() ? io.IoError + os.OsError {
+    for a in os.Args() { try io.Print("[" $a "]") }
+    e := try os.Env("HOME") catch default "none"
+    u := try os.Env("NO_SUCH_VAR_X") catch default "unset"
+    try io.Print(" " $e " " $u "\n")
+    d := try os.ReadDir(".")
+    try io.Print($(d.Len() > 0) "\n")
+    info := try os.Stat("args.olang")
+    try io.Print($info.Size "\n")
+    r := try os.RealPath(".")
+    try io.Print($(r.Len() > 0) "\n")
+    x := try os.Stat("nonexistent") catch os.OsError.NOT_FOUND {
+        try io.Print("nf\n")
+        return
+    }
+}

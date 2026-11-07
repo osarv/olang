@@ -1,0 +1,9 @@
+# T29a/T7d: a declared run-time array type converted from a fixed array (names its storage, length N beside it)
+type S extends Array<F32>
+fn third(v S&) F32 { return v[2] }
+fn main() ? {
+    f Array<F32, 3> = F32[1.5, 2.5, 3.5]
+    s := S(f)
+    s[0] = 9.0
+    println($third(S(f)) " " $s.Len() " " $f)
+}

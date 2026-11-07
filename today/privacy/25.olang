@@ -1,0 +1,6 @@
+# M6b: both spellings declared
+type T struct(v I32) { v }
+fn (a T) Eq(b T) Bool { return true }
+fn (a T) eq(b T) Bool { return false }
+fn (a T) Hash() I64 { return 0 }
+fn main() ? { println($(T(1) == T(2))) }

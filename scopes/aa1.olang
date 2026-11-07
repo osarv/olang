@@ -1,0 +1,24 @@
+import "std/io"
+type C struct() {
+    n mut I64 = 0
+    log mut I64 = 0
+}
+fn step(c mut C&, v I64) I64 {
+    c.n++
+    c.log = c.log * 10 + v
+    return c.n % 3
+}
+fn run() I64 {
+    c C& = C()
+    a := Array<I64>(4)
+    a[step(c, 1)] = step(c, 2) * 10 + step(c, 3)
+    a[step(c, 4)] += step(c, 5)
+    x, y := step(c, 6), step(c, 7)
+    a[step(c, 8)], a[step(c, 9)] = a[step(c, 1)], a[step(c, 2)]
+    return c.log * 1000 + a[0] * 100 + a[1] * 10 + a[2] + x + y
+}
+G I64 = run()
+fn main() ? {
+    r := run()
+    try io.Print($G " " $r "\n")
+}

@@ -1,0 +1,30 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box enum {
+    Has(n Node&)
+    No
+}
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn mkBox(v I32) Box { return Box.Has(Node(v)) }
+fn mkBoxR(v I32) Box& { return Box.Has(Node(v)) }
+fn ro(n Node&) Node&n { return n }
+fn main() ? {
+    k1 := ro(Node(1))
+    k2 := ro(Node(1))
+    k3 := ro(Node(1))
+    for i in range 2 {
+        k1 = mkBox(41) as Box.Has
+        k2 = mkBoxR(42) as Box.Has
+        match mkBox(43) {
+            case Box.Has(n) { k3 = n }
+            nomatch { }
+        }
+    }
+    churn()
+    try io.Print($k1.v " " $k2.v " " $k3.v "\n")
+}

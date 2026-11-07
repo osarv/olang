@@ -1,0 +1,12 @@
+# check: fail error[S13f]: unknown name 'big' - a name in a case is a value compared by '=='; to take any value and test it, write 'case _ if ...'
+# never: error: unknown name
+# S13f: a lone unknown name in a case was meant to take the value - which "case _ if" does. One error: the guard reading
+# the name is not reported again
+fn classify(n I64) String {
+    return match n {
+        case 0 => "zero"
+        case big if big > 100 => "big"
+        nomatch => "small"
+    }
+}
+fn main() ? { println(classify(500)) }

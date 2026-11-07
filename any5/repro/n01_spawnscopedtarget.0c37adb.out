@@ -1,0 +1,16 @@
+== build -debug -sanitize
+n01_spawnscopedtarget.olang:12:23: error[P1]: 'spawn' takes a call
+   12 |             spawn z = mk&u(i)
+      |                       ^~~~~~~
+compilation failed with 1 error
+== build
+n01_spawnscopedtarget.olang:12:23: error[P1]: 'spawn' takes a call
+   12 |             spawn z = mk&u(i)
+      |                       ^~~~~~~
+compilation failed with 1 error
+== interpret
+n01_spawnscopedtarget.olang:12:23: error[P1]: 'spawn' takes a call
+   12 |             spawn z = mk&u(i)
+      |                       ^~~~~~~
+compilation failed with 1 error
+status 1

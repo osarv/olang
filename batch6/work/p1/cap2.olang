@@ -1,0 +1,27 @@
+# P4a/P2: clauses capturing values whose references live in a block that closes before the join
+error E {
+    NEG
+}
+type Node struct(v I64) {
+    v
+}
+type W struct(n Node&) {
+    n
+}
+fn f(n I64) I64 ? E {
+    if n < 0 { error E.NEG }
+    return n
+}
+fn mkw(i I64) W {
+    return W(Node(i))
+}
+fn main() ? {
+    outer := W(Node(0))
+    join {
+        for i in range 3 {
+            w := mkw(i)
+            outer2 := outer
+            spawn try f(-1) catch E { println($w.n.v " " $outer2.n.v) }
+        }
+    }
+}

@@ -1,0 +1,13 @@
+fn pick(k I64) Array<I64> {
+    return match k {
+        case 1 => I64[1, 2, 3]
+        nomatch => I64[4, 5]
+    }
+}
+fn pick2(k I64) Array<I64> {
+    return I64[1, 2, 3] if k == 1 else I64[4, 5]
+}
+fn main() ? {
+    a Array<I64> = I64[1, 2, 3] if true else I64[4]
+    println($pick(1) " " $pick(2) " " $pick2(2))
+}

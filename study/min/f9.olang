@@ -1,0 +1,18 @@
+import "std/map"
+type lruNode<K, V> struct(key <K>, value <V>) {
+    key mut
+    value mut
+    next mut lruNode<<K>, <V>>& = null
+}
+type LRU<K Hashable<<K>>, V> struct() {
+    index mut map.Map<<K>, mut lruNode<<K>, <V>>&>& = map.Map<<K>, mut lruNode<<K>, <V>>&>()
+}
+fn (c mut LRU<<K>, <V>>&) Get(key <K>) <V> ? {
+    n := try c.index.Get(key)
+    return n.value
+}
+fn main() ? {
+    c := LRU<I64, String&>()
+    c.index.Put(1, lruNode<I64, String&>(1, "x"))
+    assert (try c.Get(1)) == "x"
+}

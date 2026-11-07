@@ -1,0 +1,20 @@
+# D9b: a struct holding a fixed array passed to a mut by-value parameter is the callee's own copy
+type Box struct() { v mut Array<I32, 3> }
+fn pokeBox(b mut Box) I32 {
+    b.v[0] = 9
+    return b.v[0]
+}
+type Big struct() { v mut Array<I32, 64> }
+fn pokeBig(b mut Big) I32 {
+    b.v[0] = 9
+    return b.v[0]
+}
+fn run() I32 {
+    b := Box()
+    g := Big()
+    return pokeBox(b) * 1000 + b.v[0] * 100 + pokeBig(g) * 10 + g.v[0]
+}
+Baked I32 = run()
+fn main() ? {
+    println($run() " " $Baked)
+}

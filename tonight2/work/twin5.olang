@@ -1,0 +1,34 @@
+type G<T> struct(seed T) {
+    seed
+}
+type L struct(g G<<T>>&, s String&) {
+    s
+    n I64 = 1
+}
+type M struct(g G<<T>>&, s String&) {
+    t String& = s
+    n I64 = 1
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        x := $i $i $i "-" $(i * 7)
+        t += x.Len()
+    }
+    return t
+}
+fn main() ? {
+    gf := G<F32>(0.5)
+    gi := G<I64>(1)
+    l := L(gf, "init")
+    m := M(gi, "init")
+    {
+        txt := "inner" $5
+        l = L(gi, txt)
+        m = M(gf, txt)
+    }
+    churn()
+    println($l.s " " $m.t)
+}

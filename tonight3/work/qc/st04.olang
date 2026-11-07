@@ -1,0 +1,15 @@
+type Ctr struct() {
+  n I64 = 0
+}
+type B struct(c mut Ctr&) { c }
+G B = B(Ctr())
+fn (a B) Str() String {
+  a.c.n = a.c.n + 1
+  return "b"
+}
+fn main() ? {
+  x := B(Ctr())
+  s := $x
+  println(s)
+  println($x.c.n)
+}

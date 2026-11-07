@@ -1,0 +1,26 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Inner struct(k I64) {
+    data own mut Array<I64>& = Array<I64>(2, k)
+}
+type Outer struct(k I64) {
+    in own mut Inner& = Inner(k)
+}
+fn pick(a Outer&, b Outer&a, k I64) Inner&a {
+    if k > 0 { return a.in }
+    return b.in
+}
+fn main() ? {
+    x := Outer(11)
+    y := Outer(22)
+    d := pick(x, y, 1)
+    x.in = Inner(33)
+    churn()
+    println($d.data[0])
+}

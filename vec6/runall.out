@@ -1,0 +1,65 @@
+### repro/d1_deep_borrowed_copy_no_loan.olang
+  d5ddcda -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  d5ddcda -i      : 1 5|
+  d5ddcda -b      : 777 5| (status 0)
+  f743da5: refused - /home/user/review/vec6/repro/d1_deep_borrowed_copy_no_loan.olang:6:10: error[O31]: Vec<I64> owns objects - a field of it is 'own' - so only a local or a result holds one 
+### repro/d2_deep_owner_local_returned_by_reference.olang
+  d5ddcda -b -d -s: baked 1| (status 139)
+  d5ddcda -i      : baked 1|1 7|
+  d5ddcda -b      : baked 1| (status 139)
+  f743da5: refused - /home/user/review/vec6/repro/d2_deep_owner_local_returned_by_reference.olang:9:10: error[O31]: Vec<I64> owns objects - a field of it is 'own' - so only a local or a resul
+### repro/l1_borrowed_copy_field_given_owner_leaks.olang
+  d5ddcda -b -d -s: turn: made 4 dropped 0|at work end: made 4 dropped 0|made 4 dropped 4| (status 0)
+  d5ddcda -i      : at work end: made 0 dropped 0|olang -i: /home/user/review/vec6/repro/l1_borrowed_copy_field_given_owner_leaks.olang:17: it builds a value whose type declares a destructor, which -i does not run yet|
+  d5ddcda -b      : turn: made 4 dropped 0|at work end: made 4 dropped 0|made 4 dropped 4| (status 0)
+  f743da5: refused - /home/user/review/vec6/repro/l1_borrowed_copy_field_given_owner_leaks.olang:18:10: error[O31]: Vec<I64> owns objects - a field of it is 'own' - so only a local or a resul
+### repro/l1b_borrowed_copy_field_given_owner_grows.olang
+  d5ddcda -b -d -s: x1-text-of-x-object| (status 0)
+  d5ddcda -i      : x1-text-of-x-object|
+  d5ddcda -b      : x1-text-of-x-object| (status 0)
+  f743da5: refused - /home/user/review/vec6/repro/l1b_borrowed_copy_field_given_owner_grows.olang:10:10: error[O31]: Vec<I64> owns objects - a field of it is 'own' - so only a local or a resu
+### repro/r1a_take_field_of_owned_object.olang
+  d5ddcda -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  d5ddcda -i      : 0-word-built-in-the-lexer's-region|
+  d5ddcda -b      : 2999abcdefghijklmnopqrstuvwxyz0123| (status 0)
+  f743da5: refused - /home/user/review/vec6/repro/r1a_take_field_of_owned_object.olang:8:10: error[O31]: Vec<String&> owns objects - a field of it is 'own' - so only a local or a result holds
+### repro/r1b_take_via_local_into_own_place.olang
+  d5ddcda -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  d5ddcda -i      : 0-built-into-h-region|
+  d5ddcda -b      : 2999abcdefghijklmnopq| (status 0)
+  f743da5: refused - /home/user/review/vec6/repro/r1b_take_via_local_into_own_place.olang:5:10: error[O31]: Vec<String&> owns objects - a field of it is 'own' - so only a local or a result ho
+### repro/r1c_take_struct_value_field_of_owned.olang
+  d5ddcda -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  d5ddcda -i      : 0-built-into-h-region|
+  d5ddcda -b      : 2999abcdefghijklmnopq| (status 0)
+  f743da5: refused - /home/user/review/vec6/repro/r1c_take_struct_value_field_of_owned.olang:4:10: error[O31]: Vec<String&> owns objects - a field of it is 'own' - so only a local or a result
+### repro/r1d_globals_owned_objects.olang
+  d5ddcda -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  d5ddcda -i      : 0-built-into-gh-region|
+  d5ddcda -b      : 2999abcdefghijklmnopqr| (status 0)
+  f743da5: refused - /home/user/review/vec6/repro/r1d_globals_owned_objects.olang:4:10: error[O31]: Vec<String&> owns objects - a field of it is 'own' - so only a local or a result holds one 
+### repro/r1e_vec_tok_between_owned.olang
+  d5ddcda -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  d5ddcda -i      : 0-built-into-h-region|
+  d5ddcda -b      : 2999abcdefghijklmnopq| (status 0)
+  f743da5: refused - /home/user/review/vec6/repro/r1e_vec_tok_between_owned.olang:8:14: error[T25e]: 'own' on Array<Tok>& is not supported yet - own a struct ('own Conn&') or an array of a ru
+### repro/r1f_steal_result_into_own_place.olang
+  d5ddcda -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  d5ddcda -i      : 0-built-into-h-region|
+  d5ddcda -b      : 2999abcdefghijklmnopq| (status 0)
+  f743da5: refused - /home/user/review/vec6/repro/r1f_steal_result_into_own_place.olang:6:10: error[O31]: Vec<String&> owns objects - a field of it is 'own' - so only a local or a result hold
+### repro/r1g_return_take_from_owned_local.olang
+  d5ddcda -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  d5ddcda -i      : 0-word-built-in-the-lexer's-region|
+  d5ddcda -b      : 2999abcdefghijklmnopqrstuvwxyz0123| (status 0)
+  f743da5: refused - /home/user/review/vec6/repro/r1g_return_take_from_owned_local.olang:7:10: error[O31]: Vec<String&> owns objects - a field of it is 'own' - so only a local or a result hol
+### repro/r1h_take_through_borrow_local.olang
+  d5ddcda -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  d5ddcda -i      : 0-word-built-in-the-lexer's-region|
+  d5ddcda -b      : 2999abcdefghijklmnopqrstuvwxyz0123| (status 0)
+  f743da5: refused - /home/user/review/vec6/repro/r1h_take_through_borrow_local.olang:4:10: error[O31]: Vec<String&> owns objects - a field of it is 'own' - so only a local or a result holds 
+### repro/x1_older_conversion_of_view_copied_at_run_time.olang
+  d5ddcda -b -d -s: za|aa|q| (status 0)
+  d5ddcda -i      : za|za|q|
+  d5ddcda -b      : za|aa|q| (status 0)
+  f743da5: accepted

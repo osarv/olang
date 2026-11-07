@@ -1,0 +1,18 @@
+# chain: give the handle (from a call) to A, which hands it to B, which repoints the handle's OWN field - must be
+# rejected (not "only through the reference")
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn reset(l mut List<I64>&) { l = List<I64>() }
+fn aa(l mut List<I64>&) { reset(l) }
+fn getLL(ll mut List<List<I64>>&) List<I64> ? { return try ll.First() }
+fn main() ? {
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    aa((try getLL(ll)))
+    churn()
+    println("len " $ll[0].Len())
+}

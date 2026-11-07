@@ -1,0 +1,20 @@
+# the same through a local array of references (no struct)
+fn make() Array<String&, 1> {
+    a := "alpha" $3
+    h Array<String&, 1> = Array<String&, 1>()
+    h[0] = a
+    return h
+}
+fn churn() I64 {
+    s I64 = 0
+    for i in range 1000 {
+        t := "xxxxxxxxxxxxxxxxxxxxxxxx" $i
+        s = s + t.Len()
+    }
+    return s
+}
+fn main() ? {
+    h := make()
+    println($churn())
+    println($h[0])
+}

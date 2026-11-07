@@ -1,0 +1,29 @@
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn stash(b Box, l mut List<mut Node&>&) { l.Push(b.head) }
+fn main() ? {
+    l := List<mut Node&>()
+    for i in range 3 {
+        stash(Box(), l)
+        l[i].v = 40 + i
+    }
+    churn()
+    println($l[0].v " " $l[2].v)
+}

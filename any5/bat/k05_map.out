@@ -1,0 +1,30 @@
+== build -debug -sanitize
+k05_map.olang:15:5: error[O25e]: these arguments live in different scopes, and the signature requires one ('&p')
+   15 |     put(mm, s)
+      |     ^~~
+k05_map.olang:14:5: note: 'mm' is declared here, in a block that closes first - declare it where 's' lives: 'mm mut Map<I64, String&>&s = ...'
+   14 |     mm := Map<I64, String&>()
+      |     ^~
+k05_map.olang:16:10: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   16 |     keep.Push(try mm.Get(1) catch default "none")
+      |          ^~~~
+/home/user/wt/rvany5/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+k05_map.olang:14:5: note: 'mm' is declared here, in a block that closes first - declare it where 'keep' lives: 'mm mut Map<I64, String&>&keep = ...'
+   14 |     mm := Map<I64, String&>()
+      |     ^~
+compilation failed with 2 errors
+== build
+k05_map.olang:15:5: error[O25e]: these arguments live in different scopes, and the signature requires one ('&p')
+   15 |     put(mm, s)
+      |     ^~~
+k05_map.olang:14:5: note: 'mm' is declared here, in a block that closes first - declare it where 's' lives: 'mm mut Map<I64, String&>&s = ...'
+   14 |     mm := Map<I64, String&>()
+      |     ^~
+k05_map.olang:16:10: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   16 |     keep.Push(try mm.Get(1) catch default "none")
+== interpret
+run:   keep List<String&>["abc1"] h List<String&>["abc1"]
+baked: keep List<String&>["abc1"] h List<String&>["abc1"]
+status 0

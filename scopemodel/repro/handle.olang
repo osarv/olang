@@ -1,0 +1,12 @@
+import "std/io"
+fn main() ? {
+    m := Map<String&, mut List<I64>&>()
+    words := String&["a", "b", "a", "c", "b", "a"]
+    for w in words {
+        k String&m = $w
+        if not (k in m) { m.Put(k, List<I64>()) }
+        l := try m.Get(k)
+        l.Push(1)
+    }
+    try io.Print($(try m.Get("a")).Len() "\n")
+}

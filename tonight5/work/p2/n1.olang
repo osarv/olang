@@ -1,0 +1,26 @@
+type N struct(v I64) {
+    v
+    w I64 = v * 3
+}
+fn main() ? {
+    a mut List<N&>& = List<N&>()
+    b mut List<N&>& = List<N&>()
+    pa := fn(i I64) { a.Push(N(i)) }
+    pb := fn(i I64) { b.Push(N(i)) }
+    wa := fn(base I64) { for i in range 100000 { pa(i + base) } }
+    wb := fn(base I64) { for i in range 100000 { pb(i + base) } }
+    join {
+        spawn fn() { wa(0) }()
+        spawn fn() {
+            join {
+                spawn wb(1000000)
+            }
+        }()
+    }
+    bad I64 = 0
+    i I64 = 0
+    for x in a { if x.v != i or x.w != 3 * i { bad++ } i++ }
+    i = 0
+    for x in b { if x.v != i + 1000000 or x.w != 3 * (i + 1000000) { bad++ } i++ }
+    println("wrong elements: " $bad " of " $(a.Len() + b.Len()))
+}

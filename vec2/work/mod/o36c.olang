@@ -1,0 +1,13 @@
+import "ownlib"
+fn main() ? {
+    f := ownlib.Eat
+    g := ownlib.Mk
+    t := 0
+    for i in range 100000 {
+        b own mut ownlib.Box& = ownlib.Box()
+        t += f(take b)
+        x := g()
+        t += x.Data[1]
+    }
+    println($t)
+}

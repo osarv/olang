@@ -1,0 +1,12 @@
+type S struct() {
+    f0 mut I64 = 0
+    f1 mut I64 = 0
+    f2 mut I64 = 0
+    f3 mut I64 = 0
+    f4 mut I64 = 0
+}
+fn main() ? {
+    keep := List<S&>()
+    for i in range 1000000 { keep.Push(S()) }
+    println($keep.Len())
+}

@@ -1,0 +1,4 @@
+v2_selfhold.olang:2:5: error[T16]: S cannot hold itself by value - hold it through a reference ('&')
+    2 |     s S = S()
+      |     ^
+compilation failed with 1 error

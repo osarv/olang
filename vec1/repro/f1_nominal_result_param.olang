@@ -1,0 +1,28 @@
+# Shows: a borrowed own result whose type is a DECLARED array type (String, "extends Array<Char>")
+# is NOT given a loan on the Vec's buffer when the Vec is reached as a reference parameter, so a Push
+# that reinstalls (frees) the buffer is wrongly accepted and the result dangles.
+# Relaxation 1 (borrowed own results, O37/O38) x the nominal-type key in OwnTypeKey.
+#   build/out -b -d -s f1_nominal_result_param.olang && ./build/f1_nominal_result_param.debug.san   -> "use after scope closed" (UAF)
+#   build/out -i f1_nominal_result_param.olang                                                       -> "aa" (reference answer)
+#   build/out -b f1_nominal_result_param.olang && ./build/f1_nominal_result_param                    -> "aa" (silent; memory happens to survive)
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+fn asText(v Vec<Char>&) String&v { return String(v.View()) }
+fn grow(w mut Vec<Char>&) {
+    t := asText(w)                        # borrowed own result; type is String (nominal), not Array<Char>
+    for i in range 1000 { w.Push('b') }   # grows/frees the buffer -- should be O39, is NOT refused
+    churn()                               # reuse the freed buffer
+    println(t)
+}
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    v.Push('a')
+    grow(v)
+}

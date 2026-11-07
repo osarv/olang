@@ -1,0 +1,31 @@
+type E enum {
+    Lit(v I64)
+    Neg(e E&)
+}
+type H struct(v I64) {
+    v
+    e mut E& = null
+}
+fn work(f fn(i I64), n I64) {
+    for i in range n { f(i) }
+}
+fn val(e E&) I64 {
+    return match e {
+        case E.Lit(v) => v
+        case E.Neg(x) => 0 - val(x)
+        nomatch => 0
+    }
+}
+fn main() ? {
+    a mut H& = H(0)
+    b mut H& = H(0)
+    fa := fn(i I64) { a.e = E.Lit(i) }
+    fb := fn(i I64) { b.e = E.Lit(i) }
+    c mut H& = H(0)
+    join {
+        spawn work(fa, 300000)
+        spawn work(fb, 300000)
+        for i in range 300000 { c.e = E.Lit(i) }
+    }
+    println($val(a.e) " " $val(b.e) " " $val(c.e))
+}

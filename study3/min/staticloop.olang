@@ -1,0 +1,30 @@
+type Room struct(name String&) {
+    name
+}
+fn a() I64 {
+    rooms := Map<String&, mut Room&>()
+    for name in String&["hall", "kitchen"] {
+        rooms.Put(name, Room(name))
+    }
+    return rooms.Len()
+}
+fn b() I64 {
+    rooms := Map<String&, Room&>()
+    for name in String&["hall", "kitchen"] {
+        rooms.Put(name, Room(name))
+    }
+    return rooms.Len()
+}
+fn c() I64 {
+    rooms := List<mut Room&>()
+    for name in String&["hall", "kitchen"] {
+        rooms.Push(Room(name))
+    }
+    return rooms.Len()
+}
+fn d() I64 {
+    rooms := Map<String&, mut Room&>()
+    rooms.Put("hall", Room("hall"))
+    return rooms.Len()
+}
+fn main() ? { println($a() $b() $c() $d()) }

@@ -1,0 +1,15 @@
+import "std/io"
+error E {
+    A
+}
+One mut I64 = 1
+fn f(n I64) I64 ? {
+    if n == 0 { error E.A }
+    return n
+}
+fn main() {
+    if f(One)! == 1 { io.Println("eq")! }
+    if f(One)!!=2 { io.Println("ne")! }
+    b := -f(One)!
+    io.Println($b)!
+}

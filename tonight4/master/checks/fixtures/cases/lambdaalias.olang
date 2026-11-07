@@ -1,0 +1,5 @@
+# M20: a lambda's parameter may not reuse an import alias, as no other parameter may
+import "lib"
+fn main() ? {
+  f := fn(lib I32) I32 { return lib }
+}

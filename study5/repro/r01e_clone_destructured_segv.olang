@@ -1,0 +1,17 @@
+# BUG (r01): List.Clone() of a destructured fallible-call result pushed outward: segfault in List.At (-b, -d).
+fn mk2(n I64) (List<String&>, I64) {
+    l := List<String&>()
+    for i in range n + 1 { l.Push($i "-some-text-of-moderate-length") }
+    return l, n + 1
+}
+
+fn main() ? {
+    rows := List<List<String&>>()
+    for k in range 4 {
+        rec, next := mk2(k)
+        rows.Push(rec.Clone())
+        junk := Array<I64>(5000, next)
+        assert junk[1] == next
+    }
+    for r in rows { println($r.Len() " " $r[0]) }
+}

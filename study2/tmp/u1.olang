@@ -1,0 +1,22 @@
+fn table() Map<String&, I32> {
+    m := Map<String&, I32>()
+    m.Put("if", 1)
+    m.Put("else", 2)
+    return m
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 100 {
+        a := Array<I64>(64, i)
+        t += a[3]
+    }
+    return t
+}
+
+fn main() ? {
+    m := table()
+    x := churn()
+    println($x)
+    println($(try m.Get("else") catch default -1))
+}

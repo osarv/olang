@@ -1,0 +1,53 @@
+# C2d/T17c/O25h (pre-existing - db2af5d gives the same): a reference passed for a constructor's by-value field, or an enum
+# case's by-value payload, is copied out of the reference into the instance, but the instance's references are taken to
+# live where the instance is built (grow's block). Building through them builds there and stores into r's node. The
+# same with a VALUE argument (H(src.b), E.A(src.b)) is refused - C2d / T17c - so only the copy out of a reference slips.
+# expected: an error at H(r) / E.A(r) (as for a value argument), or 42 42
+# actual:   -b and -d print "-7 -7", -i prints "42 42"
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+type H struct(b Box) { b }
+type E enum {
+    A(b Box)
+    Z
+}
+fn viaCtor(r mut Box&) {
+    h := H(r)
+    h.b.head.next = Node()
+    h.b.head.next.v = 42
+}
+fn viaPayload(r mut Box&) {
+    e := E.A(r)
+    match e {
+        case E.A(b) {
+            b.head.next = Node()
+            b.head.next.v = 42
+        }
+        case E.Z { }
+    }
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w1 := W(Box())
+    w2 := W(Box())
+    viaCtor(w1.b)
+    viaPayload(w2.b)
+    churn()
+    println($w1.b.head.next.v " " $w2.b.head.next.v)
+}

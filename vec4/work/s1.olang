@@ -1,0 +1,19 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# new storage built INTO an own buffer's region through a local typed with the borrow's scope (x T&y)
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    x := v.ViewMut()
+    d mut Array<I64>&x = Array<I64>(2, 7)
+    for i in range 1000 { v.Push(i) }
+    churn()
+    println($d[0] " " $d[1])
+}

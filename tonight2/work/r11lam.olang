@@ -1,0 +1,29 @@
+error Bad { NO }
+type P struct(v I64) { v }
+type H struct(f fn() I64) {
+    f
+}
+fn mk(k I64) H ? Bad {
+    if k > 0 { error Bad.NO }
+    return H(fn() I64 { return 1 })
+}
+fn get(k I64) H {
+    loc mut P& = P(77)
+    h := try mk(k) catch default H(fn() I64 { return loc.v })
+    return h
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    h := get(5)
+    churn()
+    println($h.f())
+}

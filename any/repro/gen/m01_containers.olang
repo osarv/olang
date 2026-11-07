@@ -1,0 +1,53 @@
+import "std/io"
+# anys in a global, in a struct field from its constructor, in a Map and a Vec, all made in a loop body
+type W trait {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+type Sz trait {
+    Hash() I64
+}
+G mut any W?& = null
+GN mut any Sz?& = null
+type H struct(w any W&) { w }
+fn setG(i I64) {
+    G = Btn("g" $i)
+    n := i * 3
+    GN = n
+}
+fn main() {
+    hs := List<H&>()
+    m := Map<I64, any W&>()
+    v := Vec<any W&>()
+    for i in range 4 {
+        setG(i)
+        hs.Push(H(Btn("h" $i)))
+        m.Put(i, Btn("m" $i))
+        v.Push(Btn("v" $i))
+    }
+    churn()
+    say(G!.Draw())
+    say($GN)
+    for h in hs { say(h.w.Draw()) }
+    for i in range 4 { say((try m.Get(i) catch default Btn("none")).Draw()) }
+    for x in v { say(x.Draw()) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

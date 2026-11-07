@@ -1,0 +1,12 @@
+import "std/io"
+M mut I64 = -9223372036854775807
+fn main() ? io.IoError {
+    buf := Array<U8>(32)
+    v I64 = M - 1
+    n := io.FormatInt(v, buf)
+    try io.Print(buf[:n])
+    try io.Print("\n")
+    n = io.FormatInt(M, buf)
+    try io.Print(buf[:n])
+    try io.Print("\n")
+}

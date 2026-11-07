@@ -1,0 +1,9 @@
+# E13b: calling a function value held in a field
+import "std/io"
+type Cb struct() { f mut fn(x I32) I32 = null }
+fn dbl(x I32) I32 { return x * 2 }
+fn main() ? {
+    cb Cb& = Cb()
+    cb.f = dbl
+    try io.Print($(cb.f)(21) "\n")
+}

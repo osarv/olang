@@ -1,0 +1,10 @@
+/home/user/review/vec3/work/c2.olang:10:12: error[O34]: a local of Vec<I64>, which owns objects, is given an owner - a value made here, a call's result, or 'take' of another - and this is not one
+   10 |     return b }
+      |            ^
+/home/user/review/vec3/work/c2.olang:10:12: error[T25c]: a copy of a read-only Vec<I64> cannot be returned as a writable value - return one of its own, made with 'b.Clone()', or a read-only reference
+   10 |     return b }
+      |            ^
+/home/user/review/vec3/work/c2.olang:9:6: note: 'v' is declared read-only here - declare it 'v mut Vec<I64>&' to write through it
+    9 | fn f(v Vec<I64>&) Vec<I64> { b := v
+      |      ^
+compilation failed with 2 errors

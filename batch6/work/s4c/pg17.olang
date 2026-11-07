@@ -1,0 +1,15 @@
+# S4c: hidden locals of parallel assignments collide - the third statement's held value is named like the first's
+type Node struct(v I64) {
+    v
+}
+fn mk(i I64) Node& {
+    return Node(i)
+}
+fn main() ? {
+    k I64 = 0
+    a mut Node& = Node(0)
+    a, k = mk(2), k
+    a, k = mk(3), k
+    a, k = mk(4), k
+    println($a.v " " $k)
+}

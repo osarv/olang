@@ -1,0 +1,26 @@
+# a bare parameter's own storage kept through Vec<String&>.Push, its caller's argument a loop turn's text,
+# the result's element kept past the turn
+import "std/io"
+
+fn wrap(t String) Vec<String&> {
+    v := Vec<String&>()
+    v.Push(t)
+    return v
+}
+
+fn churn(n I64) I64 {
+    xs := Array<I64>(n, 7)
+    return xs[n - 1]
+}
+
+fn main() {
+    keep := Vec<String&>()
+    for i in range 3 {
+        t := $"abc" $i
+        w := wrap(t)
+        keep.Push(w[0])
+    }
+    s := 0
+    for i in range 1, 50 { s += churn(i * 8) }
+    io.Println($keep " " $s)!
+}

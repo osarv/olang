@@ -1,0 +1,149 @@
+# builders (D19, D19a, T30b): a function of a type rather than of its module - declared "fn Color.FromHex(...)", called
+# through the type's name, an instance's, an import's alias or a type variable's; generic over its owner's variables and
+# its own; a value where nothing generic is left; required by a trait; walked by reflection (T.Functions); the prelude's
+# on the built-in types (T.Parse, F64.FromBits, String.FromC). What the evaluator bakes and decides agrees with the run
+# time, and a builder's result read back after an arena churn
+
+import "geom/rect"
+
+type Color struct(R U8, G U8, B U8) { R, G, B }
+
+fn Color.Gray(v U8) Color { return Color(v, v, v) }
+
+fn Color.FromHex(t String&) Color ? BadHex {
+    if t.Len() != 7 or t[0] != '#' { error BadHex }
+    r := try U8.Parse(t[1:3], 16) catch ParseError { error BadHex }
+    g := try U8.Parse(t[3:5], 16) catch ParseError { error BadHex }
+    b := try U8.Parse(t[5:7], 16) catch ParseError { error BadHex }
+    return Color(r, g, b)
+}
+
+# a private builder: its module's alone
+fn Color.mix(a U8, b U8) Color { return Color(a, b, a) }
+
+# a builder may give a reference to its owner, and fail
+type Node struct(V I64, Next Node?&) { V, Next }
+
+fn Node.Chain(n I64) Node& {
+    head Node& = Node(0, null)
+    for i in range 1, n { head = Node(i, head) }
+    return head
+}
+
+type Box<T> struct(V T) { V }
+
+fn Box<T>.Of(v T) Box<T> { return Box(v) }
+fn Box<T>.Zero() Box<T> { return Box(T(0)) }
+fn Box<T>.Pair<U>(v T, u U) Box<T> { return Box(v) }
+
+# a builder of one instance alone (M21)
+fn Box<String&>.Named() Box<String&> { return Box<String&>("named") }
+
+type Shade enum { Light, Dark }
+
+fn Shade.FromBool(dark Bool) Shade { return Shade.Dark if dark else Shade.Light }
+
+# a trait requiring a builder of the type its parameter names (T30b)
+type Parsed<T> trait { T.Parse(t String&, base Radix = 10) T ? ParseError }
+
+fn readAll<T Parsed<T>>(xs Array<String&>&) Vec<T> ? ParseError {
+    out := Vec<T>()
+    for x in xs { out.Push(try T.Parse(x)) }
+    return out
+}
+
+# a builder through a type variable needs only what the body asks (G18a)
+fn Box<T>.zeroOf() Box<T> { return Box<T>.Zero() }
+
+type Pt struct(X I64, Y I64) { X, Y }
+
+fn Pt.Origin() Pt { return Pt(0, 0) }
+fn Pt.Diag(n I64) Pt { return Pt(n, n) }
+
+fn names<T>() String {
+    b := StringBuilder()
+    for f in T.Functions { b.Push($f.Name " ") }
+    return b.ToString()
+}
+
+Gray9 := Color.Gray(9)
+Hex := Color.FromHex("#102030")!
+Parsed12 := I16.Parse("-12")!
+One := F64.FromBits(0x3FF0000000000000)
+
+test Color.Gray "makes three equal channels" {
+    assert Color.Gray(7) == Color(7, 7, 7)
+}
+
+test Color.FromHex "reads #rrggbb, failing on anything else" {
+    assert (try Color.FromHex("#ff8000")) == Color(255, 128, 0)
+    try Color.FromHex("ff8000") catch BadHex { return }
+    assert false, "no '#' read"
+}
+
+test "a private builder is its module's" {
+    assert Color.mix(1, 2) == Color(1, 2, 1)
+}
+
+test "a builder gives a reference, read back after an arena churn" {
+    n := Node.Chain(5)
+    junk := Vec<String>()
+    for i in range 1000 { junk.Push($i) }
+    assert junk.Len() == 1000 and n.V == 4 and n.Next!.V == 3
+}
+
+test "through an instance, bare and inferred, and one of an instance alone" {
+    a := Box<I64>.Of(3)
+    b := Box.Of("x")
+    z := Box<F64>.Zero()
+    p := Box<I64>.Pair(1, "u")
+    q := Box<I64>.Pair<Bool>(2, true)
+    n := Box<String&>.Named()
+    assert a.V == 3 and b.V == "x" and z.V == 0.0 and p.V == 1 and q.V == 2 and n.V == "named"
+}
+
+test "an enum's builder" {
+    assert Shade.FromBool(true) == Shade.Dark and Shade.FromBool(false) == Shade.Light
+}
+
+test "a builder is a value where nothing generic is left" {
+    f := Color.Gray
+    g := Box<I64>.Of
+    assert f(4) == Color(4, 4, 4) and g(8).V == 8
+}
+
+test "a trait requires a builder, and a generic calls it through its variable" {
+    v := try readAll<I64>(Array<String&>["1", "22", "-3"])
+    assert v.Len() == 3 and v[2] == -3
+    w := try readAll<U8>(Array<String&>["255"])
+    assert w[0] == 255
+    try readAll<U8>(Array<String&>["256"]) catch ParseError.Overflow { return }
+    assert false, "256 is no U8"
+}
+
+test "through the owner's variables" {
+    assert Box<I64>.zeroOf().V == 0 and Box<F32>.zeroOf().V == 0.0
+}
+
+test "another module's builders, through its alias" {
+    s := rect.Rect.Square(3)
+    assert s.W == 3 and s.H == 3
+}
+
+test "reflection walks a type's builders" {
+    assert names<Pt>() == "Origin Diag "
+}
+
+test "the prelude's builders: T.Parse, F64.FromBits, String.FromC" {
+    assert (try I64.Parse("-12")) == -12 and (try U128.Parse("340282366920938463463374607431768211455")) == U128.Max
+    assert (try U8.Parse("ff", 16)) == 255 and (try U128.Parse("0x1FFFFFFFFFFFFFFFF", 0)) == (U128(1) << 65) - 1
+    assert F64.FromBits(0x3FF0000000000000) == 1.0 and F16.FromBits(0x3C00) == 1.0 and F32.FromBits(0x3E800000) == 0.25
+    assert BF16.FromBits(0xBFC0) == -1.5
+}
+
+test "the evaluator bakes and decides what the run time computes" {
+    assert Gray9 == Color.Gray(9) and Hex == Color(16, 32, 48) and Parsed12 == -12 and One == 1.0
+}
+
+assert Color.Gray(3) == Color(3, 3, 3), "decided while compiling"
+assert I8.Parse("-128")! == I8.Min

@@ -1,0 +1,47 @@
+# check: fail error[O17]: this value's references live where its own storage does not
+# O17: every call takes part in the fixed point, its callee's body checked before it or not. zs's body was checked while
+# ys's was in progress, and read xs's answer (false) then - xs's answer turned true only once the cycle through ys was
+# settled, and zs, never revisited, let bump lend it a value whose references live elsewhere than its storage
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn ys(b mut Box&, n I64) {
+    if n > 100 { xs(b, n - 1) }
+    if n > 200 { zs(b, n - 1) }
+    if n == 0 {
+        b.head.next = Node()
+        b.head.next.v = 42
+    }
+}
+fn xs(b mut Box&, n I64) {
+    if n > 0 { ys(b, n - 1) }
+}
+fn zs(b mut Box&, n I64) {
+    xs(b, n)
+}
+fn bump(src mut W&) {
+    b := src.b
+    zs(b, 1)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box())
+    bump(w)
+    churn()
+    println($w.b.head.next.v)
+}

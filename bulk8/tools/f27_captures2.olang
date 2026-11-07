@@ -1,0 +1,40 @@
+import "std/io"
+type Rd struct(name String&, v F64) { name, v }
+Live mut I64 = 0
+fn mk(a I64, t String&, arr Array<I64>&, rd Rd, log mut Vec<String>&) fn&() String {
+    b := a * 2
+    u := $t "!"
+    return fn() {
+        log.Push($u)
+        return $a " " $t " " $arr.Len() " " $rd.name " " $b " " $u
+    }
+}
+fn gen(a I64, t String&, rd Rd, n I64, log mut Vec<String>&) Iterator<String> {
+    k := a + 1
+    for i in range n {
+        log.Push("g" $i $t)
+        yield $k " " $rd.name " " $t " " $i
+    }
+}
+fn main() {
+    log := Vec<String>()
+    fs := Vec<fn&() String>()
+    texts := Vec<String>()
+    for i in range 3 { texts.Push("t" $(i + Live)) }
+    arr := Array<I64>(4 + Live, 1)
+    for i in range 3 {
+        rd := Rd(texts[i], 1.5)
+        fs.Push(mk(i, texts[i], arr, rd, log))
+    }
+    for i in range 5 {
+        v := Vec<String>()
+        v.Push("churn" $i)
+    }
+    out := ""
+    for f in fs { out = $out $f() "|" }
+    io.Println($out)!
+    rd := Rd(texts[1], 2.5)
+    g := ""
+    for s in gen(Live + 7, texts[2], rd, 3, log) { g = $g $s "|" }
+    io.Println($g " " $log.View())!
+}

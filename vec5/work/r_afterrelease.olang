@@ -1,0 +1,21 @@
+# R: a local typed in a borrow's region declared AFTER the release - the borrow x is not read again (only named as a
+# scope), so the release is accepted, and d is built in the freed region
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn main() ? {
+    c := CB()
+    x := c.text
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    d mut String&x = $5 "-new-text-in-the-freed-region"
+    churn()
+    println(d)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

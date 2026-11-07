@@ -1,0 +1,3 @@
+import "lib"
+type T struct(lib I32) { lib }
+fn main() ? { }

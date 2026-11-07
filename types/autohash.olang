@@ -1,0 +1,25 @@
+# E10b: a supplied Hash for a struct key holding an enum with text, an array and a Pair - -b against -i
+import "std/io"
+import "std/map"
+type Tag enum {
+  None
+  Name(s String&)
+  Num(n I64, m U8)
+}
+type K struct(t Tag, id I32, p Pair<I32, Char>) {
+  t
+  id
+  p
+}
+fn main() ? {
+  m := map.Map<K, I32>()
+  m.Put(K(Tag.Name("ab"), 1, Pair(2, 'x')), 10)
+  m.Put(K(Tag.Num(5, 6), 1, Pair(2, 'x')), 20)
+  m.Put(K(Tag.None, 2, Pair(3, 'y')), 30)
+  a := try m.Get(K(Tag.Name("ab"), 1, Pair(2, 'x'))) catch default -1
+  b := try m.Get(K(Tag.Num(5, 6), 1, Pair(2, 'x'))) catch default -1
+  c := try m.Get(K(Tag.None, 2, Pair(3, 'y'))) catch default -1
+  d := try m.Get(K(Tag.Num(5, 7), 1, Pair(2, 'x'))) catch default -1
+  h I64 = K(Tag.Name("ab"), 1, Pair(2, 'x')).Hash()
+  try io.Print($a " " $b " " $c " " $d " " $h "\n")
+}

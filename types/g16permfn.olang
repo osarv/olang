@@ -1,0 +1,12 @@
+# id over Node& and over mut Node& are two instantiations (bindingsMatch is strict) with one name
+import "std/io"
+type Node struct(v I32) { v mut }
+G Node& = Node(1)
+fn id(x <T>) <T> { return x }
+fn main() ? {
+  a := id(G)          # T = Node& (read-only)
+  m Node& = Node(2)   # a local: writable
+  b := id(m)          # T = mut Node&
+  b.v = 7
+  try io.Print($a.v " " $m.v "\n")
+}

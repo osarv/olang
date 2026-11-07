@@ -1,0 +1,7 @@
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(1)
+    a := v.ToArray()
+    v.Push(2)
+    println($a[0])
+}

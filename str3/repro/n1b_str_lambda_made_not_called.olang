@@ -1,0 +1,17 @@
+# NEW, CONFIRMED: segfault. The lambda is only made, never called: making a closure that captures the receiver and
+# may build anywhere crashes in __olang_scope_escape(null) (IR: '%t17 = load ptr, ptr %loc.9' - the receiver's scope,
+# null from rdb's 'call @n1b.Bag.Str(ptr null, ...)' - then 'call void @__olang_scope_escape(ptr %t17)').
+# e27b83b -b, -b -s, -b -d: exit 139. 7345ff9, b6259d1, -i: 'bag 3'.
+type Bag struct(k I64) {
+    k
+}
+fn (b Bag&) Str() String {
+    f := fn() I64 {
+        s := $b.k
+        return s.Len()
+    }
+    return "bag " $b.k
+}
+fn main() ? {
+    println($Bag(3))
+}

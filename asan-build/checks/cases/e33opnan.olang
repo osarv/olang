@@ -1,0 +1,7 @@
+# check: fail it reads the bits of a NaN an operation made
+# E33a: an operation's NaN has an unspecified sign and payload, so its bits are not decided while compiling
+error E { X }
+if (F64(0) / F64(0)).Bits() == 0x7FF8000000000000 {
+    fn g() { }
+}
+fn main() ? E { }

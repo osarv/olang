@@ -1,0 +1,18 @@
+# check: fail error[S13a]: case A of S is not covered
+# S13a: patterns inside a payload cover a case only together - here T.Q is never matched
+type T enum {
+    P
+    Q
+}
+type S enum {
+    A(t T)
+    B
+}
+fn f(s S) I32 {
+    match s {
+        case S.A(T.P) { return 1 }
+        case S.B { return 0 }
+    }
+    return -1
+}
+fn main() ? { }

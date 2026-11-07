@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/ca3.olang:11:56: error[O37]: 'Call' gives a borrowed own result, so it is called by name only - a call through a function value holds no loan on the owned object it borrows; call 'Call' by name
+   11 | fn apply(v Vec<I64>&, f fn(x Vec<I64>&) Array<I64>&x = G()) Array<I64>&v { return f(v) }
+      |                                                        ^
+compilation failed with 1 error

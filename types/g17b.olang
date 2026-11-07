@@ -1,0 +1,7 @@
+# G17 through a generic TYPE: a field instantiating the type with a bigger argument
+type Grow<T> struct() {
+  next mut Grow<Array<<T>>&>& = null
+}
+fn main() ? {
+  g := Grow<I32>()
+}

@@ -1,0 +1,25 @@
+# As inplace_closure_grow, in a function run again (O8d condition 5), so early freeing may release the grown buffer
+import "std/io"
+
+type blk struct(n I64, f fn&()) { n, f }
+
+fn (b mut blk&) Run() {
+    b.f()
+    b.n = 99
+}
+
+fn work(k I64) I64 {
+    v := Vec<blk>()
+    vr mut Vec<blk>& = v
+    v.Push(blk(1, fn() { }))
+    g := fn() { for i in range 1000 { vr.Push(blk(i + k, fn() { })) } }
+    v[0].f = g
+    v[0].Run()
+    return v[0].n
+}
+
+fn main() {
+    s := 0
+    for k in range 200 { s += work(k) }
+    io.Println("sum " $s)!
+}

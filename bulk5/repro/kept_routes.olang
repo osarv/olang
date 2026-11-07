@@ -1,0 +1,55 @@
+# D9e (round 2e): a bare parameter's own storage kept through other routes than a constructor it calls directly
+import "std/io"
+
+type holder struct(s String&) {
+    s
+}
+
+fn viaVec(t String) Vec<holder> {
+    v := Vec<holder>()
+    v.Push(holder(t))
+    return v
+}
+
+fn viaLocal(t String) holder {
+    s := t
+    return holder(s)
+}
+
+fn viaChoice(t String, u String, k I64) holder { return holder(t if k == 0 else u) }
+
+fn viaMatch(t String, k I64) holder {
+    return match k {
+        case 0: holder(t)
+        case _: holder($"none")
+    }
+}
+
+fn viaArray(t String) Array<holder> { return holder[holder(t)] }
+
+fn main() {
+    t := $"abc"
+    a := viaVec(t)
+    b := viaLocal(t)
+    c := viaChoice(t, t, 0)
+    d := viaMatch(t, 0)
+    e := viaArray(t)
+    g := t.Split(",")
+    t[0] = 'x'
+    io.Println($a[0].s " " $b.s " " $c.s " " $d.s " " $e[0].s " " $g[0])!
+}
+
+fn afterWrite() String {
+    t := $"abc"
+    b := viaLocal(t)
+    c := viaChoice(t, t, 0)
+    t[0] = 'x'
+    return $b.s " " $c.s
+}
+
+# the evaluator's reading, baked while compiling (K2)
+Baked String = afterWrite()
+
+test "baked vs run time" {
+    assert Baked == afterWrite(), "baked " $Baked ", run time " $afterWrite()
+}

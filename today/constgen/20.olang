@@ -1,0 +1,12 @@
+# T7c: a struct holding a large fixed array, built and copied - compile time should not grow with the length
+type Big struct() {
+    a mut Array<F32, 1000000>
+    n mut I64
+}
+fn main() ? {
+    b := Big()
+    b.a[7] = 2.5
+    c Big = b
+    c.a[7] = 1.0
+    println($b.a[7] " " $c.a[7] " " $c.a.Len())
+}

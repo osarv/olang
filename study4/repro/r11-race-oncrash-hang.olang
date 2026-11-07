@@ -1,0 +1,29 @@
+# r11 BUG (a hang instead of a crash) - P7 (-r) with os.OnCrash (S2): when ThreadSanitizer's own bookkeeping faults -
+# here a recursion 400,000 deep, past what its trace holds (CLAUDE.md records ~260,000) - the runtime's crash handler
+# runs and blocks inside __tsan_atomic64_load (gdb: __olang_crash_handler -> __tsan_atomic64_load -> SlotLock ->
+# Semaphore::Wait), so the process never ends. Without OnCrash the same program ends with TSan's "nested bug in the same
+# thread, aborting" (status 66) or completes. Found running ../min/taskprint.olang (8 tasks recursing 200,000 deep on
+# RunOnStack stacks) under -r: it hung at 0% CPU.
+#
+#   olang -b -r r11-race-oncrash-hang.olang
+#   timeout 60 build/r11-race-oncrash-hang.race       # 3 runs: status 66, 0, 66 - never hangs
+#   timeout 60 build/r11-race-oncrash-hang.race x     # 6 runs: 0, 124, 124, 139, 124, 139 - 124 is hung
+#
+# expected: with OnCrash, the message and a crash status - the handler should not be instrumented (it can run while
+#           TSan's state is inconsistent)
+# actual:   hangs
+import "std/os"
+
+fn depth(n I64, acc mut Array<I64>&) I64 {
+    if n == 0 { return acc[0] }
+    acc[n % acc.Len()] += n
+    return depth(n - 1, acc) + acc[(n * 7) % acc.Len()] % 3
+}
+
+fn main() ? {
+    if os.Args().Len() > 1 { os.OnCrash("r11: crashed\n") }
+    acc mut Array<I64>& = Array<I64>(64)
+    got mut Array<I64>& = Array<I64>(1)
+    os.RunOnStack(1 << 30, fn() { got[0] = depth(400000, acc) })
+    println($got[0])
+}

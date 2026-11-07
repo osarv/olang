@@ -1,0 +1,8 @@
+fn main() ? {
+    adj := List<mut List<I64>&>()
+    adj.Push(List<I64>())
+    adj[0].Push(5)
+    inner := adj[0]
+    inner.Push(6)
+    assert adj[0].Len() == 2
+}

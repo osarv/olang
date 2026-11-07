@@ -1,0 +1,12 @@
+# D15/S9a/T7c: a for-in variable over fixed arrays - its type keeps the length
+fn take(x Array<I32, 2>&) I64 { return x.Len() }
+fn main() ? {
+    a := Array<Array<I32, 2>>(3)
+    s I64 = 0
+    for p in a { s = s + take(p) }
+    for i, p in a { s = s + take(p) }
+    l := List<Array<I32, 2>>()
+    l.Push(a[0])
+    for p in l { s = s + take(p) }
+    println($s)
+}

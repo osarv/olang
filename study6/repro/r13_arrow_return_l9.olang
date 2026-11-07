@@ -1,0 +1,26 @@
+# (c) DIAGNOSTIC, L9/S12b: 'case X => return v' inside a function (a statement match) - what a newcomer writes after
+# reading the value form - gets S12b's helpful message when the returned value starts with a literal ("'=>' gives a
+# value, and 'return' gives none - a clause that leaves is a block: '{ return 1 }'") and the misleading L9 "'return' is
+# a keyword, not a name - choose another" when it starts with a name ('return x', 'return f(1)', 'return Tok.Str').
+# Below: a() gets S12b, b() gets L9. The interpreter's first draft got 5 L9 and 3 S12b.
+# Expected: S12b's message every time.
+type Tok enum {
+    Num
+    Str
+}
+fn a(t Tok) I32 {
+    match t {
+        case Tok.Num => return 1
+        nomatch { }
+    }
+    return 0
+}
+fn one(t Tok) I32 { return 1 }
+two I32 = 2
+fn b(t Tok) I32 {
+    match t {
+        case Tok.Num => return one(t)
+        case Tok.Str => return two
+    }
+}
+fn main() ? { println($a(Tok.Num) $b(Tok.Str)) }

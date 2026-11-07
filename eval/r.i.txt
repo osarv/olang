@@ -1,0 +1,2 @@
+P(7, -7) Q(P(7, -7), "hi\n\"x\"", 0.1) Shape.Circle(1.5) Shape.Rect(7, 4) Shape.Dot I32[7, 2, 3] I32[]&[null, null] Node(1, Node(2, null)) Expr.Add(Expr.Lit(1), Expr.Add(Expr.Lit(2), Expr.Lit(3))) 7 Tag('q', 200, true, "z\t") I32[] String&["a", "b\\c"] ' 0.33333334 -0 18446744073709551615
+P(7, -7) Q(P(7, -7), "hi\n\"x\"", 0.1) Shape.Circle(1.5) Shape.Rect(7, 4) Shape.Dot I32[7, 2, 3] I32[]&[null, null] Node(1, Node(2, null)) Expr.Add(Expr.Lit(1), Expr.Add(Expr.Lit(2), Expr.Lit(3))) 7 Tag('q', 200, true, "z\t") I32[] String&["a", "b\\c"] ' 0.33333334 -0 18446744073709551615

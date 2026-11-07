@@ -1,0 +1,32 @@
+== build -debug -sanitize
+d2_e25noresultscope.olang:7:10: error[E25]: num builds no result a scope argument could place
+    7 |     a := num&t(1)
+      |          ^~~~~~~~
+d2_e25noresultscope.olang:8:10: error[E25]: P builds no result a scope argument could place
+    8 |     b := P&t(2)
+      |          ^~~~~~
+d2_e25noresultscope.olang:9:10: error[E25]: mkpv builds no result a scope argument could place
+    9 |     c := mkpv&t(3)
+      |          ^~~~~~~~~
+compilation failed with 3 errors
+== build
+d2_e25noresultscope.olang:7:10: error[E25]: num builds no result a scope argument could place
+    7 |     a := num&t(1)
+      |          ^~~~~~~~
+d2_e25noresultscope.olang:8:10: error[E25]: P builds no result a scope argument could place
+    8 |     b := P&t(2)
+      |          ^~~~~~
+d2_e25noresultscope.olang:9:10: error[E25]: mkpv builds no result a scope argument could place
+    9 |     c := mkpv&t(3)
+== interpret
+d2_e25noresultscope.olang:7:10: error[E25]: num builds no result a scope argument could place
+    7 |     a := num&t(1)
+      |          ^~~~~~~~
+d2_e25noresultscope.olang:8:10: error[E25]: P builds no result a scope argument could place
+    8 |     b := P&t(2)
+      |          ^~~~~~
+d2_e25noresultscope.olang:9:10: error[E25]: mkpv builds no result a scope argument could place
+    9 |     c := mkpv&t(3)
+      |          ^~~~~~~~~
+compilation failed with 3 errors
+status 1

@@ -1,0 +1,7 @@
+# check: fail this literal's value can't be represented
+# T6: BF16 has F32's exponent range but 8 bits of precision - its largest value is about 3.3895e38, so 3.39e38 rounds
+# to it and fits, while 3.4e38 rounds to an infinity
+fn main() ? {
+    ok BF16 = 3.39e38
+    z BF16 = 3.4e38
+}

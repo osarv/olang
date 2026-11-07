@@ -1,0 +1,21 @@
+import "std/io"
+
+type Blob unique struct(n I64) {
+    n
+    data := Array<I64>(n.Mod(7) + 2, n)
+}
+
+
+fn use(f fn&(v mut Vec<Blob>&, x Blob), v mut Vec<Blob>&) {
+    for k in range 5 { f(v, Blob(k + 1)) }
+}
+
+fn main() {
+    v := Vec<Blob>()
+    use(fn(w mut Vec<Blob>&, x Blob) { w.Push(x) }, v)
+    other := Vec<Blob>()
+    for _ in range 5 { other.Push(Blob(-7)) }
+    acc := 0
+    for b in v { acc = acc * 10 + b.data[0] }
+    io.Println($acc)!
+}

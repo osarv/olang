@@ -1,0 +1,24 @@
+# open point 5 (round 2e): a call through a function value whose & result hands back its & parameter; the result
+# kept past the argument's block - valueRels must hold the argument to outlive the result's scope
+import "std/io"
+
+fn self(a Array<I64>&) Array<I64>& { return a }
+
+fn churn(n I64) I64 {
+    xs := Array<I64>(n, 7)
+    return xs[n - 1]
+}
+
+fn through(g fn(a Array<I64>&) Array<I64>&, k I64) Array<I64>& {
+    xs := Array<I64>(2, k)
+    return g(xs)
+}
+
+fn main() {
+    h := self
+    views := Vec<Array<I64>&>()
+    views.Push(through(h, 9))
+    s := 0
+    for i in range 1, 50 { s += churn(i * 8) }
+    io.Println($views[0][1] " " $s)!
+}

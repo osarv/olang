@@ -1,0 +1,8 @@
+# a small, standalone module imported (unnamed - see the report) by worker.olang, and re-exported from
+# there since worker's own alias for it ("Base", derived from this file's own name) is capitalized. Used
+# from runner.olang, two hops away ("wk.Base.Whatever"), to exercise transitive re-export end to end -
+# see the tests in runner.olang.
+
+BaseCount mut I32 = 0
+
+# cons

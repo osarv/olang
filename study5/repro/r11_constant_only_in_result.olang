@@ -1,0 +1,17 @@
+# OVER-REJECTION + DIAGNOSTIC: a function whose constant appears only in its result - the identity of a fixed-size
+# matrix - cannot be written: a function takes no parameter list (only a struct or trait does) and G4 wants every
+# variable in a parameter. The message is "expected '(', found '<'". Workaround: a method on a matrix of that shape.
+type Mat<R I64, C I64> struct() {
+    d Array<F64, R * C>
+}
+
+fn identity<N I64>() Mat<N, N> {
+    m := Mat<N, N>()
+    for i in range N { m.d[i * N + i] = 1.0 }
+    return m
+}
+
+fn main() ? {
+    i3 := identity<3>()
+    println($i3.d)
+}

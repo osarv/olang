@@ -1,0 +1,28 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# F3: a spawn target from a try with a catch default whose value is a borrowed own result
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn (c CB&) Text() String&c { return c.text }
+fn (c CB&) TryText(k I64) String&c ? {
+    if k > 3 { error }
+    return c.text
+}
+fn use(c mut CB&) {
+    d String&c = c.text
+    join { spawn d = try c.TryText(1) catch default c.Text() }
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(d)
+}
+fn main() ? {
+    c := CB()
+    use(c)
+}

@@ -1,0 +1,29 @@
+== build -debug -sanitize
+n20_byvalrefs.olang:16:27: error[O10d]: this value lives in this function's own scope, which closes first
+   16 | fn g1(h HR) HR&h { return h }
+      |                           ^
+n20_byvalrefs.olang:16:7: note: 'h' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'h HR&'
+   16 | fn g1(h HR) HR&h { return h }
+      |       ^
+n20_byvalrefs.olang:17:30: error[O10d]: this value lives in this function's own scope, which closes first
+   17 | fn g2(t Two) HR&t { return t.b }
+      |                              ^
+n20_byvalrefs.olang:18:34: error[O10d]: this value lives in this function's own scope, which closes first
+   18 | fn g3(h HR) any Named&h { return h }
+      |                                  ^
+n20_byvalrefs.olang:18:7: note: 'h' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'h HR&'
+   18 | fn g3(h HR) any Named&h { return h }
+      |       ^
+compilation failed with 3 errors
+== build
+n20_byvalrefs.olang:16:27: error[O10d]: this value lives in this function's own scope, which closes first
+   16 | fn g1(h HR) HR&h { return h }
+      |                           ^
+n20_byvalrefs.olang:16:7: note: 'h' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'h HR&'
+   16 | fn g1(h HR) HR&h { return h }
+      |       ^
+n20_byvalrefs.olang:17:30: error[O10d]: this value lives in this function's own scope, which closes first
+   17 | fn g2(t Two) HR&t { return t.b }
+== interpret
+olang interpret: n20_byvalrefs.olang:27: it uses storage after the scope it was made in closed
+status 1

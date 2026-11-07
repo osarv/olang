@@ -1,0 +1,17 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+Roots mut Array<mut Node&>& = Array<mut Node&>(3)
+F fn(t I64, i I64) = fn(t I64, i I64) { Roots[t] = Node(i) }
+fn work(t I64, n I64) {
+    for i in range n { F(t, i) }
+}
+fn main() ? {
+    join {
+        spawn work(0, 300000)
+        spawn work(1, 300000)
+        for i in range 300000 { Roots[2] = Node(i) }
+    }
+    println($Roots[0].v " " $Roots[1].v " " $Roots[2].v)
+}

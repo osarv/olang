@@ -1,0 +1,17 @@
+# the COVERED case: a borrow passed directly to the task as an argument, spawner releases - should be O39
+type Node struct(n I64) {
+    n
+    name String& = "node" $n
+}
+type Holder struct() {
+    cur own mut Node&
+}
+fn look(n Node&) { println(n.name) }
+fn main() ? {
+    s := Holder()
+    s.cur = Node(3)
+    join {
+        spawn look(s.cur)        # a borrow given to the task
+        s.cur = null             # release while the task may be using it
+    }
+}

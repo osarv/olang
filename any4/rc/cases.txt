@@ -1,0 +1,342 @@
+=== r01_lambdabody
+# RetCopy: a borrow of the returned local kept by a lambda's body (a capture stored through a captured reference) - a
+# second name the flow analysis does not walk into
+fn f(k mut K&, i I64) String {
+    s := "abc" $i
+    put := fn() { k.s = s }
+    put()
+    return s
+}
+fn probe() String {
+    k := K("x")
+    x := f(k, 1)
+    x[0] = 'Q'
+    return "k.s " $k.s " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r01b_lambdaarg
+# r01 with the lambda handed to a function that calls it
+fn run(g fn()) { g() }
+fn f(k mut K&, i I64) String {
+    s := "abc" $i
+    run(fn() { k.s = s })
+    return s
+}
+fn probe() String {
+    k := K("x")
+    x := f(k, 1)
+    x[0] = 'Q'
+    return "k.s " $k.s " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r01c_spawnlambda
+# r01 with the lambda run as a task
+fn f(k mut K&, i I64) String {
+    s := "abc" $i
+    join { spawn fn() { k.s = s }() }
+    return s
+}
+fn probe() String {
+    k := K("x")
+    x := f(k, 1)
+    x[0] = 'Q'
+    return "k.s " $k.s " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r02_tuplereturn
+# RetCopy: the returned local and a slice of it returned together - the return is left out of the third mode
+fn f(i I64) String, String& {
+    s := "abc" $i
+    return s, s[0:2]
+}
+fn probe() String {
+    a, b := f(1)
+    a[0] = 'Q'
+    return "a " $a " b " $b
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r02b_tuplestruct
+# RetCopy: the returned local and a struct holding a borrow of it returned together
+fn f(i I64) String, HS {
+    s := "abc" $i
+    return s, HS(s)
+}
+fn probe() String {
+    a, h := f(1)
+    a[0] = 'Q'
+    return "a " $a " h.s " $h.s
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r03_conversion
+# RetCopy: a borrow kept as a conversion naming the local's storage (T29a), stored in a parameter's field
+fn f(k mut KL&, i I64) String {
+    s := "abc" $i
+    k.l = Lab(s)
+    return s
+}
+fn probe() String {
+    k := KL(Lab("x"))
+    x := f(k, 1)
+    x[0] = 'Q'
+    return "k.l " $String(k.l) " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r04_field
+# control: the borrow stored directly (RetCopy's own case) - expected to agree
+fn f(k mut K&, i I64) String {
+    s := "abc" $i
+    k.s = s
+    return s
+}
+fn probe() String {
+    k := K("x")
+    x := f(k, 1)
+    x[0] = 'Q'
+    return "k.s " $k.s " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r05_slicefield
+# RetCopy: a slice of the returned local stored in a parameter's field
+fn f(k mut K&, i I64) String {
+    s := "abc" $i
+    k.s = s[0:2]
+    return s
+}
+fn probe() String {
+    k := K("x")
+    x := f(k, 1)
+    x[0] = 'Q'
+    return "k.s " $k.s " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r06_viaouterlocal
+# RetCopy: a borrow of the returned local stored into an outer block's reference local, which is then stored outward
+fn f(k mut K&, i I64) String {
+    r String& = "none"
+    if i > 0 {
+        s := "abc" $i
+        r = s
+        k.s = r
+        return s
+    }
+    return "z"
+}
+fn probe() String {
+    k := K("x")
+    x := f(k, 1)
+    x[0] = 'Q'
+    return "k.s " $k.s " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r07_reassignlonger
+# a moved returned local reassigned with text of another length before it is returned - its new storage
+fn f(i I64) String {
+    s := "abc" $i
+    s = "a much longer text " $i " " $(i * 1000)
+    return s
+}
+fn main() {
+    a := f(1)
+    b := f(2)
+    assert churn() > 0
+    say($a " / " $b)
+}
+=== r08_isidentity
+# RetCopy and is: a reference stored by the callee compared with the caller's value by identity
+type KR struct(s Array<I64>&) { s }
+fn f(k mut KR&) Array<I64> {
+    s := Array<I64>(3, 7)
+    k.s = s
+    return s
+}
+fn probe() String {
+    k := KR(Array<I64>(1, 0))
+    x := f(k)
+    x[0] = 99
+    return "k.s[0] " $k.s[0] " x[0] " $x[0]
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r09_matchbind
+# RetCopy: a borrow of the returned local kept through a match binding pushed outward
+type E enum {
+    T(s String&)
+    N
+}
+fn f(l mut List<String&>&, i I64) String {
+    s := "abc" $i
+    e := E.T(s)
+    match e {
+        case E.T(q) { l.Push(q) }
+        nomatch { }
+    }
+    return s
+}
+fn probe() String {
+    l := List<String&>()
+    x := f(l, 1)
+    x[0] = 'Q'
+    return "l " $l " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r10_forin
+# RetCopy: an element of an array of borrows walked by a for-in, pushed outward
+fn f(l mut List<String&>&, i I64) String {
+    s := "abc" $i
+    arr := String&[s, "y"]
+    for q in arr { l.Push(q) }
+    return s
+}
+fn probe() String {
+    l := List<String&>()
+    x := f(l, 1)
+    x[0] = 'Q'
+    return "l " $l " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r11_defer
+# a deferred write of the returned local after the result is computed (lowering copies when a defer is pending)
+fn f(i I64) String {
+    s := "abc" $i
+    defer { s[0] = 'Z' }
+    return s
+}
+G := f(1)
+fn main() {
+    say("run: " $f(1))
+    say("baked: " $G)
+}
+=== r12_iterkept
+# RetCopy: a borrow of the returned local kept through an iterator over a list it was pushed in (a local list)
+fn f(l mut List<String&>&, i I64) String {
+    s := "abc" $i
+    tmp := List<String&>()
+    tmp.Push(s)
+    for q in tmp { l.Push(q) }
+    return s
+}
+fn probe() String {
+    l := List<String&>()
+    x := f(l, 1)
+    x[0] = 'Q'
+    return "l " $l " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r13_aspayload
+# RetCopy: a borrow of the returned local kept through an "as" payload read, pushed outward
+type E enum {
+    T(s String&)
+    N
+}
+fn f(l mut List<String&>&, i I64) String {
+    s := "abc" $i
+    e := E.T(s)
+    q := e as E.T
+    l.Push(q)
+    return s
+}
+fn probe() String {
+    l := List<String&>()
+    x := f(l, 1)
+    x[0] = 'Q'
+    return "l " $l " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r15_lambdastored
+# RetCopy: a lambda capturing the returned local (a value array, borrowed, D16c) stored in a parameter's field
+type KF struct(f fn() Char) { f }
+fn f(k mut KF&, i I64) String {
+    s := "abc" $i
+    k.f = fn() Char { return s[0] }
+    return s
+}
+fn probe() String {
+    k := KF(fn() Char { return 'n' })
+    x := f(k, 1)
+    x[0] = 'Q'
+    return "k.f() " $k.f() " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+=== r16_anybox
+# r01's missed name through an any's box: the box holds the call's array as it is (AnyItemNew), which the lambda's
+# store also names
+type W trait {
+    mut Bump()
+}
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn f(k mut K&, i I64) String {
+    s := "abc" $i
+    put := fn() { k.s = s }
+    put()
+    return s
+}
+fn probe() String {
+    k := K("x")
+    b mut any W& = Lab(f(k, 2))
+    b.Bump()
+    return "k.s " $k.s
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}

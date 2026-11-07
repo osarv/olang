@@ -1,0 +1,24 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# over-rejection? new storage handed back through a generic pass-through, id(Array<I64>(n))
+fn id(x <T>) T { return x }
+fn twice(a Array<I64>&) mut Array<I64>& {
+    out mut Array<I64>&return = Array<I64>(a.Len())
+    for i in range a.Len() { out[i] = a[i] * 2 }
+    return id(out)
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    d := twice(v.View())
+    for i in range 1000 { v.Push(i) }
+    churn()
+    println($d[0] " " $d[1])
+}

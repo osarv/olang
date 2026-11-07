@@ -1,0 +1,21 @@
+# an array copied into a mut any, written through the table: the copy changes, the original does not - evaluator and run time
+type Bump trait {
+    mut Bump()
+}
+type Nums extends Array<I64>
+fn (n mut Nums&) Bump() { n[0] += 1 }
+fn go(k I64) String {
+    a := Nums(I64[1, 2, k])
+    r mut any Bump& = a
+    r.Bump()
+    s mut any Bump& = r
+    s.Bump()
+    a.Bump()
+    return $a " " $r " " $s " " $(s == r)
+}
+Baked String = go(3)
+Live mut I64 = 3
+fn main() {
+    say(Baked)
+    say(go(Live))
+}

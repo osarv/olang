@@ -1,0 +1,12 @@
+== build -debug -sanitize
+exact 3|generic|exact 9|false
+exact 3|generic|exact 9|false
+status 0
+== build
+exact 3|generic|exact 9|false
+exact 3|generic|exact 9|false
+status 0
+== interpret
+exact 3|generic|exact 9|false
+exact 3|generic|exact 9|false
+status 0

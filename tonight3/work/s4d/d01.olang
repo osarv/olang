@@ -1,0 +1,64 @@
+type E enum {
+    Lit(v I64)
+    Neg(e E&)
+    Add(a E&, b E&)
+}
+fn eval(e E&) I64 {
+    return match e {
+        case E.Lit(v) => v
+        case E.Neg(x) => 0 - eval(x)
+        case E.Add(a, b) => eval(a) + eval(b)
+    }
+}
+type Node struct(v I64, next Node&) {
+    v
+    next
+}
+fn depth(n Node&) I64 {
+    d I64 = 0
+    for c := n, c != null, c = c.next { d += c.v }
+    return d
+}
+type PE struct(a E, b E) {
+    a
+    b
+}
+fn t1(k I64) I64 {
+    x := E.Lit(k)
+    x = E.Neg(x)
+    x = E.Add(x, x)
+    return eval(x)
+}
+fn t2(k I64) I64 {
+    n := Node(k, null)
+    for i in range 3 { n = Node(n.v + 1, n) }
+    return depth(n)
+}
+fn t3(k I64) I64 {
+    p := PE(E.Lit(k), E.Lit(k + 1))
+    p.a, p.b = E.Neg(p.b), E.Add(p.a, p.b)
+    return eval(p.a) * 100 + eval(p.b)
+}
+fn t4(k I64) I64 {
+    a := E.Lit(k)
+    b := E.Lit(k * 10)
+    a, b = b, a
+    a, b = E.Add(a, b), E.Neg(a)
+    return eval(a) * 1000 + eval(b)
+}
+fn t5(k I64) I64 {
+    arr Array<E, 3> = E[E.Lit(k), E.Lit(k + 1), E.Lit(k + 2)]
+    arr[0] = E.Add(arr[1], arr[2])
+    arr[1], arr[2] = E.Neg(arr[0]), E.Add(arr[0], arr[1])
+    return eval(arr[0]) * 10000 + eval(arr[1]) * 100 + eval(arr[2])
+}
+B1 I64 = t1(3)
+B2 I64 = t2(3)
+B3 I64 = t3(3)
+B4 I64 = t4(3)
+B5 I64 = t5(3)
+K mut I64 = 3
+fn main() ? {
+    println("baked " $B1 " " $B2 " " $B3 " " $B4 " " $B5)
+    println("run   " $t1(K) " " $t2(K) " " $t3(K) " " $t4(K) " " $t5(K))
+}

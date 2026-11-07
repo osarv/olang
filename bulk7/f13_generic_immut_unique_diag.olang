@@ -1,0 +1,26 @@
+# F13 (diagnostic, low; NEW, T13a/T13b): a generic immut type instantiated with a unique type argument (`Box<Token>`,
+# `type Box<T> immut struct(x T)`) is accepted where it is made - "unique and immut never both" is checked only for
+# written types - and `c := b` then fails with T13a's "nothing of Box<Token> changes after its constructor (it is
+# immut) - make a new one" (the copy became a writable reference to a unique value, T13b, of an immut type): the
+# message names neither rule that actually applies nor the fix.
+#   /home/user/wt/review7/build/olang f13_generic_immut_unique_diag.olang
+import "std/io"
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn (t mut Token&) Use() { t.uses++ }
+
+type Box<T> immut struct(x T) {
+    x
+}
+
+fn main() {
+    b := Box<Token>(Token(1))
+    c := b
+    d := Box(Token(2))
+    e := d
+    io.Println($c.x.id " " $e.x.uses)!
+}

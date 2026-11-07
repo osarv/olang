@@ -1,0 +1,98 @@
+# kmeans - cluster points from three Gaussian blobs with k-means (Lloyd's algorithm) on std/linalg, then fit a
+# linear regression with the normal equations and Solve.
+import "std/linalg"
+import "std/rand"
+import "std/math"
+
+N I64 = 30000
+D I64 = 8
+K I64 = 3
+
+fn makeBlobs(r mut rand.Rand&, n I64, d I64, k I64) (linalg.Matrix<F64>, Array<I32>) {
+    centers := linalg.Matrix<F64>(k, d)
+    for c in range k {
+        for j in range d { centers.Set(c, j, F64(c * 10) + F64(j)) }
+    }
+    x := linalg.Matrix<F64>(n, d)
+    labels := Array<I32>(n)
+    for i in range n {
+        c := r.Below(k)
+        labels[i] = I32(c)
+        for j in range d { x.Set(i, j, centers.Get(c, j) + r.Normal()) }
+    }
+    return x, labels
+}
+
+fn kmeans(x linalg.Matrix<F64>&, k I64, iters I64) (linalg.Matrix<F64>, Array<I32>) {
+    n := x.Rows
+    d := x.Cols
+    cent := linalg.Matrix<F64>(k, d)
+    for c in range k {               # first k points as starting centroids, spread out
+        for j in range d { cent.Set(c, j, x.Get(c * (n / k), j)) }
+    }
+    assign := Array<I32>(n)
+    xx := Array<F64>(n)
+    x.RowNorms(xx)
+    dots := linalg.Matrix<F64>(n, k)
+    for it in range iters {
+        linalg.Gemm(dots, x, false, cent, true)       # dots = x * cent^T
+        cc := Array<F64>(k)
+        cent.RowNorms(cc)
+        changed := 0
+        for i in range n {
+            best := 0
+            bestD := math.Inf
+            for c in range k {
+                dist := xx[i] * xx[i] - 2.0 * dots.Get(i, c) + cc[c] * cc[c]
+                if dist < bestD {
+                    bestD = dist
+                    best = c
+                }
+            }
+            if assign[i] != I32(best) { changed++ }
+            assign[i] = I32(best)
+        }
+        sums := linalg.Matrix<F64>(k, d)
+        counts := Array<I64>(k)
+        for i in range n {
+            c := assign[i]
+            counts[c]++
+            for j in range d { sums.Set(c, j, sums.Get(c, j) + x.Get(i, j)) }
+        }
+        for c in range k {
+            for j in range d { cent.Set(c, j, sums.Get(c, j) / F64(counts[c])) }
+        }
+        println("iteration " $it ": " $changed " changed")
+        if changed == 0 { break }
+    }
+    return cent, assign
+}
+
+fn main() ? linalg.SolveError {
+    r := rand.Rand(7)
+    x, labels := makeBlobs(r, N, D, K)
+    cent, assign := kmeans(x, K, 20)
+    println("centroids:")
+    println($cent)
+    # agreement with the true labels, up to a permutation: count pairs (true, found)
+    pairs := Map<Pair<I32, I32>, I64>()
+    for i in range N { pairs.Update(Pair(labels[i], assign[i]), 0, fn(v I64) I64 { return v + 1 }) }
+    for e in pairs { println("true " $e.Key.First " -> cluster " $e.Key.Second ": " $e.Value) }
+
+    # linear regression: y = 3 + 2 x0 - x1 + noise, fit by (X^T X) w = X^T y
+    rows := 10000
+    xm := linalg.Matrix<F64>(rows, 3)
+    y := linalg.Matrix<F64>(rows, 1)
+    for i in range rows {
+        a := r.Uniform(-1.0, 1.0)
+        b := r.Uniform(-1.0, 1.0)
+        xm.Set(i, 0, 1.0)
+        xm.Set(i, 1, a)
+        xm.Set(i, 2, b)
+        y.Set(i, 0, 3.0 + 2.0 * a - b + 0.01 * r.Normal())
+    }
+    xtx := xm.T() @ xm
+    xty := xm.T() @ y
+    w := try linalg.Solve(xtx, xty)
+    println("weights: " $w.Get(0, 0).Fixed(4) " " $w.Get(1, 0).Fixed(4) " " $w.Get(2, 0).Fixed(4))
+}

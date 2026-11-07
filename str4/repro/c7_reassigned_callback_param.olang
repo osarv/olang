@@ -1,0 +1,32 @@
+# may-build walk (mbiMemo.deps): a call through a function-typed parameter is taken to build only what the argument
+# passed for it builds - but a parameter is the callee's own copy and may be reassigned (D9), here to a lambda that
+# builds where the node lives, so Str's non-building argument is checked and the building lambda never is.
+# new -b: "b1 / 100 0"; -b -s: "use after scope closed" (134); -i: "b1 / 101 0". e27b83b: error[E11c, O12]
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Bag struct(head mut Node&) {
+    head
+}
+fn hook(g fn(x mut Node&), n mut Node&) {
+    g = fn(x mut Node&) { x.next = Node(x.v + 100) }
+    g(n)
+}
+fn (b Bag&) Str() String {
+    hook(fn(x mut Node&) { }, b.head)
+    return "b" $b.head.v
+}
+fn churn(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    l := List<I64>()
+    for i in range 30 { l.Push(i) }
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn main() ? {
+    b := Bag(Node(1))
+    println($b)
+    t := churn(100)
+    println($b.head.next.v " " $t)
+}

@@ -1,0 +1,47 @@
+import "std/io"
+# QC (T25c): an array reached read-only, holding writable references, copied into a mut any's box - can the any write
+# through the copy's references what the caller handed over read-only?
+type Node struct(v I64) { v }
+type Gr trait {
+    mut Grow(v I64)
+}
+type Ns extends Array<mut Node&>
+fn (a mut Ns&) Grow(v I64) { a[0].v = v }
+fn poke(a Ns&) {
+    w mut any Gr& = a
+    w.Grow(99)
+}
+fn pokeConv(a Array<mut Node&>&) {
+    w mut any Gr& = Ns(a)
+    w.Grow(77)
+}
+G Ns = Ns(Array<mut Node&>(1, Node(1)))
+fn main() {
+    n := Node(5)
+    arr := Array<mut Node&>(1, n)
+    poke(Ns(arr))
+    say($n.v)
+    pokeConv(arr)
+    say($n.v)
+    w mut any Gr& = G
+    w.Grow(3)
+    say($G[0].v)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

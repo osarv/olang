@@ -1,0 +1,4 @@
+import lib "lib"
+fn main() {
+    c := lib.Color.
+}

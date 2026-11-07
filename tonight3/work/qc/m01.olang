@@ -1,0 +1,7 @@
+fn main() ? {
+    m := Map<I64, List<I64>>()
+    m.Put(1, List<I64>())
+    l := try m.Get(1) catch { return }
+    l.Push(5)
+    println($l.Len())
+}

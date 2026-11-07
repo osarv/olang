@@ -1,0 +1,10 @@
+# M6a: a private enum case named by 'as', and inside a nested pattern
+import "lib"
+import "std/io"
+fn main() ? {
+  d := lib.Dir.Hold(4)
+  match d {
+    case lib.Dir.south, lib.Dir.North { try io.Print("a\n") }
+    nomatch { try io.Print("b\n") }
+  }
+}

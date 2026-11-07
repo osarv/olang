@@ -1,0 +1,12 @@
+type WC struct(word String&, count I64) {
+    word
+    count
+}
+fn main() ? {
+    a := Array<WC>(3)
+    a[0] = WC("b", 2)
+    a[1] = WC("a", 5)
+    a[2] = WC("c", 1)
+    a.Sort(fn(x WC, y WC) Bool { return x.count > y.count })
+    assert a[0].word == "a"
+}

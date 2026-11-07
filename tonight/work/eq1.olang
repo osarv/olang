@@ -1,0 +1,9 @@
+# == through array references walks contents with no identity shortcut - a value cycle through an array reference
+type S struct(xs mut Array<S>&) { xs }
+fn main() ? {
+    xs mut Array<S>& = Array<S>(1)
+    s := S(xs)
+    xs[0] = s
+    println("built")
+    println($(s == s))
+}

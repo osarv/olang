@@ -1,0 +1,46 @@
+import "std/io"
+
+type E struct(A String&, B String&) {
+    A
+    B
+}
+type Hold struct(e E&) {
+    e
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(s String&) String { return $s "-made" }
+
+fn f(t String&, k I64) E {
+    for i in range 3 {
+        if i == 1 {
+            return E($t, match k {
+                case 0, 1 => mk(t)
+                case 2 if t.Len() > 100 => "never"
+                case 2 => mk(mk(t))
+                case 3 { return E("r", "r") }
+                nomatch { break }
+            })
+        }
+    }
+    return E("b", "b")
+}
+fn g(t String&, k I64) Hold {
+    return Hold(E($t, mk(t) if k > 0 else ("" if k < -5 else (match k { case 0 => mk(t)  nomatch => "" }))) if k > -10 else null)
+}
+
+fn main() {
+    l := List<E>()
+    hs := List<Hold>()
+    for k in range 5 {
+        l.Push(f($k, k))
+        hs.Push(g($k "g", k - 2))
+        churn()
+    }
+    churn()
+    io.Println($l[0].B " " $l[2].B " " $l[3].B " " $l[4].B " " $hs[2].e.B " " $hs[4].e.B " " $hs[0].e.B)!
+}

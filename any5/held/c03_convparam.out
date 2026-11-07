@@ -1,0 +1,12 @@
+== build -debug -sanitize
+run:   t abc1 x aQc1 b Zbc1
+baked: t abc1 x aQc1 b Zbc1
+status 0
+== build
+run:   t abc1 x aQc1 b Zbc1
+baked: t abc1 x aQc1 b Zbc1
+status 0
+== interpret
+run:   t abc1 x aQc1 b Zbc1
+baked: t abc1 x aQc1 b Zbc1
+status 0

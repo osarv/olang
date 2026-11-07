@@ -1,0 +1,9 @@
+# B9c: a condition reading a constant computed from a branch-declared type's method - deciding on its own outcome
+import "std/io"
+if Unit().Get() == 1 {
+  type Unit struct() { n I32 = 1 }
+  fn (u Unit) Get() I32 { return u.n }
+} else {
+  fn other() I32 { return 0 }
+}
+fn main() ? { }

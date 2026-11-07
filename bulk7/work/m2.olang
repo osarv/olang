@@ -1,0 +1,18 @@
+import "std/io"
+
+type Buf struct(a Array<I64>) {
+    a
+}
+
+fn keep(b Buf) Buf {
+    b.a[0] = 50
+    return b
+}
+
+fn main() {
+    t := Array<I64>(3, 1)
+    f := fn() I64 { return t[0] }
+    u := Buf(t)
+    u.a[0] = 7
+    io.Println($f() " " $u.a[0])!
+}

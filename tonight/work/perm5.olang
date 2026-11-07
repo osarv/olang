@@ -1,0 +1,22 @@
+type Pt struct(x I32) { x }
+fn (p mut Pt&) Bump() { p.x += 1 }
+G := Pt(1)
+GA := I32[1, 2, 3]
+GS := "abc"
+fn main() ? {
+    G.Bump()
+    G.x = 3
+    GA[0] = 5
+    s := GA[0:2]
+    s[0] = 7
+    r mut Array<I32>& = GA
+    q := GS.Trim()
+    q[0] = 'z'
+    GA[1].AtomicAdd(1)
+    x := match 1 {
+        case _ => GA
+    }
+    x[0] = 1
+    y := GA if true else GA
+    y[0] = 2
+}

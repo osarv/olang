@@ -1,0 +1,23 @@
+# (b) OVER-REJECTION, C2d inside std/prelude/map.olang: a Map whose value type holds (by value) a Map of itself -
+# the dynamic value of a JSON reader, a config tree, an interpreter's object - is refused, with the error at the
+# Map's type and a note into map.olang:28 (mapSlot's constructor). Same when the value only REACHES the map's holder
+# through references: an interpreter's Value.Fn(Closure&) whose Closure holds the Env& that holds the
+# Map<String&, Value> (see the second program in the comment below).
+# Expected: compiles (List<Value> in the same position does, and Map<String&, Value&> does).
+# Actual: error[C2d] "this instance holds a reference to an argument it would outlive" at line 8.
+# Workaround: Map<String&, Value&> - every value boxed by reference.
+#
+#   type Value enum { Nil  Fn(c Closure&) }
+#   type Closure struct(env Holder&) { env }
+#   type Holder struct() { m mut Map<I64, Value>& = Map<I64, Value>() }      -> same C2d
+type Value enum {
+    Nil
+    Num(n F64)
+    Obj(fields Map<String&, Value>&)
+}
+fn main() ? {
+    m := Map<String&, Value>()
+    m.Put("a", Value.Num(1.0))
+    v := Value.Obj(m)
+    println($m.Len())
+}

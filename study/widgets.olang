@@ -1,0 +1,148 @@
+# A retained-mode widget tree, as a GUI toolkit keeps one: nodes with a parent link and a list of children,
+# a layout pass, hit testing, event bubbling to the parents, and lookup by id.
+import "std/io"
+import "std/map"
+
+type Kind enum {
+    Panel(vertical Bool)
+    Label(text String&)
+    Button(text String&, clicks I32)
+}
+
+type Rect struct(x I32, y I32, w I32, h I32) {
+    x
+    y
+    w
+    h
+}
+fn (r Rect) contains(px I32, py I32) Bool { return px >= r.x and py >= r.y and px < r.x + r.w and py < r.y + r.h }
+
+type Widget struct(id String&, kind Kind) {
+    id
+    kind mut
+    parent mut Widget& = null
+    bounds mut Rect = Rect(0, 0, 0, 0)
+    handled mut I32 = 0
+    # (last: fields declared after a List<mut Widget&> are "unknown" through its elements, min/m3.olang)
+    children mut List<mut Widget&>& = List<mut Widget&>()
+}
+
+type Ui struct() {
+    root mut Widget& = null
+    byId mut map.Map<String&, mut Widget&>& = map.Map<String&, mut Widget&>()
+}
+
+# a new widget under parent (the root when parent is null), registered by id
+fn (ui mut Ui&) add(parent mut Widget&ui, id String&ui, kind Kind) mut Widget&ui {
+    w Widget&ui = Widget(id, kind)
+    if parent == null {
+        ui.root = w
+    } else {
+        w.parent = parent
+        parent.children.Push(w)
+    }
+    ui.byId.Put(id, w)
+    return w
+}
+
+fn preferred(w Widget&) Rect {
+    match w.kind {
+        case Kind.Label(t) { return Rect(0, 0, I32(t.Len()) * 8, 16) }
+        case Kind.Button(t, _) { return Rect(0, 0, I32(t.Len()) * 8 + 16, 24) }
+        case Kind.Panel(vertical) {
+            pw I32 = 0
+            ph I32 = 0
+            for c in w.children {
+                p := preferred(c)
+                if vertical {
+                    pw = p.w if p.w > pw else pw
+                    ph += p.h + 4
+                } else {
+                    pw += p.w + 4
+                    ph = p.h if p.h > ph else ph
+                }
+            }
+            return Rect(0, 0, pw + 8, ph + 8)
+        }
+    }
+}
+
+fn layout(w mut Widget&, x I32, y I32) {
+    p := preferred(w)
+    w.bounds = Rect(x, y, p.w, p.h)
+    match w.kind {
+        case Kind.Panel(vertical) {
+            cx I32 = x + 4
+            cy I32 = y + 4
+            for c in w.children {
+                layout(c, cx, cy)
+                if vertical { cy += c.bounds.h + 4 } else { cx += c.bounds.w + 4 }
+            }
+        }
+        nomatch { }
+    }
+}
+
+# the deepest widget containing the point
+fn hit(w mut Widget&, x I32, y I32) mut Widget&w {
+    if not w.bounds.contains(x, y) { return null }
+    for c in w.children {
+        h := hit(c, x, y)
+        if h != null { return h }
+    }
+    return w
+}
+
+# a click goes to the widget under it, then bubbles up through its parents
+fn (ui mut Ui&) click(x I32, y I32) String& {
+    target := hit(ui.root, x, y)
+    if target == null { return "nothing" }
+    path := StringBuilder()
+    for w Widget&ui = target, w != null, w = w.parent {
+        w.handled++
+        match w.kind {
+            case Kind.Button(t, n) { w.kind = Kind.Button($t, n + 1) }        # (a copy of t: reusing it is rejected, min/n1.olang)
+            nomatch { }
+        }
+        path.Push(w.id)
+        if w.parent != null { path.Push(" < ") }
+    }
+    return path.ToString()
+}
+
+fn dump(b mut StringBuilder&, w Widget&, depth I32) {
+    for i in range depth { b.Push("  ") }
+    b.Push($w.id " " $w.bounds " " $w.kind " handled=" $w.handled "\n")
+    for c in w.children { dump(b, c, depth + 1) }
+}
+
+fn main() ? io.IoError {
+    ui := Ui()
+    root := ui.add(null, "root", Kind.Panel(true))
+    title := ui.add(root, "title", Kind.Label("Settings"))
+    row := ui.add(root, "row", Kind.Panel(false))
+    ui.add(row, "ok", Kind.Button("OK", 0))
+    ui.add(row, "cancel", Kind.Button("Cancel", 0))
+    ui.add(root, "status", Kind.Label("ready"))
+    layout(ui.root, 0, 0)
+    try io.Print("click ok: " $ui.click(10, 30) "\n")
+    try io.Print("click ok again: " $ui.click(12, 32) "\n")
+    try io.Print("click cancel: " $ui.click(50, 30) "\n")
+    try io.Print("click outside: " $ui.click(500, 500) "\n")
+    ok := try ui.byId.Get("ok") catch default null
+    try io.Print("ok's parent: " $ok.parent.id ", ok's kind: " $ok.kind "\n")
+    b := StringBuilder()
+    dump(b, ui.root, 0)
+    try io.Print($b.ToString())
+
+    # a deep tree built in a loop, then searched
+    deep := Ui()
+    at := deep.add(null, "n0", Kind.Panel(true))
+    for i in range 1, 2000 {
+        at = deep.add(at, "n" $i, Kind.Panel(i % 2 == 0))
+    }
+    leaf := try deep.byId.Get("n1999") catch default null
+    depth I32 = 0
+    for w Widget&deep = leaf, w.parent != null, w = w.parent { depth++ }
+    try io.Print("deep: " $deep.byId.Len() " widgets, leaf depth " $depth "\n")
+}

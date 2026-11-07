@@ -1,0 +1,23 @@
+type K struct(s String&) { s }
+type KL struct(l Lab&) { l }
+type HS struct(s String&) { s }
+type Lab extends String
+# RetCopy: a borrow of the returned local kept by a lambda's body (a capture stored through a captured reference) - a
+# second name the flow analysis does not walk into
+fn f(k mut K&, i I64) String {
+    s := "abc" $i
+    put := fn() { k.s = s }
+    put()
+    return s
+}
+fn probe() String {
+    k := K("x")
+    x := f(k, 1)
+    x[0] = 'Q'
+    return "k.s " $k.s " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}

@@ -1,0 +1,9 @@
+== build -debug -sanitize
+a String&["local1-7", "loop1-7"]
+status 0
+== build
+a String&["local1-7", "loop1-7"]
+status 0
+== interpret
+a String&["local1-7", "loop1-7"]
+status 0

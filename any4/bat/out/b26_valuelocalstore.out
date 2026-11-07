@@ -1,0 +1,13 @@
+== b26_valuelocalstore
+  san:    refused: b26_valuelocalstore.olang:28:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  O3:     refused
+  interp: exit 0 valuelocal text1-7|
+--- compile (-debug -sanitize)
+b26_valuelocalstore.olang:28:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   28 |         h.s = x
+      |             ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+valuelocal text1-7

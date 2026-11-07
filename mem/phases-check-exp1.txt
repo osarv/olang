@@ -1,0 +1,11 @@
+MEMDEBUG attempt start                            inuse=     0MB mmapped=     0MB rss=     2MB
+MEMDEBUG  prelude loaded                          inuse=    50MB mmapped=     3MB rss=    52MB
+MEMDEBUG  all modules loaded (tokens+syntax)      inuse=   387MB mmapped=    25MB rss=   387MB
+MEMDEBUG  signatures+globals                      inuse=   478MB mmapped=    30MB rss=   442MB
+MEMDEBUG  bodies+instantiations checked           inuse=  1218MB mmapped=    35MB rss=  1028MB
+MEMDEBUG  settled (regions, ro, maybuild)         inuse=  1219MB mmapped=    35MB rss=  1029MB
+MEMDEBUG  own borrows settled                     inuse=  1299MB mmapped=    35MB rss=  1054MB
+MEMDEBUG  comptime start                          inuse=  1299MB mmapped=    35MB rss=  1054MB
+MEMDEBUG attempt end                              inuse=  1357MB mmapped=    35MB rss=  1112MB
+MEMDEBUG codegen start                            inuse=  1363MB mmapped=    35MB rss=  1118MB
+MEMDEBUG codegen end                              inuse=  1398MB mmapped=    35MB rss=  1152MB

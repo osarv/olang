@@ -1,0 +1,31 @@
+import "std/io"
+# T7b: the prelude's StringFromC builds "out" in its frame and returns String(out) - a conversion of the local, not
+# copied and the local not moved: every caller's text is storage the callee's frame gave back
+extern fn strerror(code I32) CStr?&
+fn main() {
+    e := strerror(2)
+    keep := List<String&>()
+    for i in range 3 { keep.Push(e!.StringFromC(100)) }
+    s := e!.StringFromC(100)
+    churn()
+    say("s " $s)
+    say("keep " $keep)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

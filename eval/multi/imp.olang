@@ -1,0 +1,2 @@
+import "nosuchmod"
+test "x" { assert true }

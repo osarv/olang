@@ -1,0 +1,26 @@
+# c03 baked: the same probe computed while compiling (an immutable global, K2) and at run time
+type W trait {
+    mut Bump()
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+type H struct(s String&) { s }
+fn f(k mut H&, i I64) String {
+    s := "abc" $i
+    k.s = s
+    return s
+}
+fn probe() String {
+    h := H("x")
+    x := f(h, 1)
+    x[0] = 'Q'
+    h2 := H("y")
+    b mut any W& = Lab(f(h2, 2))
+    b.Bump()
+    return $h.s " " $h2.s
+}
+G String = probe()
+fn main() {
+    say(G)
+    say(probe())
+}

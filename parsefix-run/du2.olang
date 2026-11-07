@@ -1,0 +1,8 @@
+if X > 0 {
+    fn pick() I32 { return 1 }
+} else {
+    fn pick() I32 { return 2 }
+}
+test "x" {
+    assert (pick() == 1) == (X > 0)
+}

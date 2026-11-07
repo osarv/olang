@@ -1,0 +1,32 @@
+type Named struct(k I64) {
+    k
+    name String& = "nm-text"
+    toks Vec<I64> = Vec<I64>()
+}
+type Host struct() {
+    lx Named = Named(0)
+    ly Named = Named(1)
+}
+type HO struct() {
+    h own mut Host& = null
+}
+G mut Host = Host()
+fn main() ? {
+    t := 0
+    ho := HO()
+    for i in range 400000 {
+        p mut Host& = Host()                 # an instance in the loop body's arena
+        for j in range 40 { p.lx.toks.Push(j) }
+        p.ly = Named(i)                      # releases the old ly
+        for j in range 40 { p.ly.toks.Push(j) }
+        q := Host()                          # an owner value local
+        for j in range 40 { q.lx.toks.Push(j) }
+        m := take q.lx                       # moved out, released at block end
+        ho.h = Host()                        # own slot replaced: the old one released
+        for j in range 40 { ho.h.lx.toks.Push(j) }
+        G.lx = Named(7)                      # a global's field replaced
+        for j in range 40 { G.lx.toks.Push(j) }
+        t += p.lx.toks.Len() + m.toks.Len() + q.ly.toks.Len()
+    }
+    println($t)
+}

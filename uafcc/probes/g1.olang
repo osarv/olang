@@ -1,0 +1,29 @@
+import "std/io"
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(s String&) String { return $s "-made" }
+fn put<T>(l mut List<T>&, x T) { l.Push(x) }
+fn putB(l mut List<Box&>&, x Box&) { l.Push(x) }
+type Box struct(s String&) {
+    s
+}
+
+fn main() {
+    l := List<String&>()
+    bs := List<Box&>()
+    for i in range 10 {
+        t := $i
+        put(l, mk(t) if i >= 0 else "")
+        putB(bs, Box(mk(t)) if i % 2 == 0 else null)
+        putB(bs, match i % 2 { case 0 => Box(mk(t))  case _ => null })
+        defer put(l, mk(t) if i >= 0 else "zz")
+        churn()
+    }
+    churn()
+    io.Println($l[3] " " $bs[4].s " " $bs[5].s " " $l.Len())!
+}

@@ -1,0 +1,10 @@
+if X == -16 {
+    fn pick() I32 { return 1 }
+} else {
+    fn pick() I32 { return 2 }
+}
+
+test "a negative hex build constant has one value" {
+    assert pick() == 1
+    assert X == -16
+}

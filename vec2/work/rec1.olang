@@ -1,0 +1,26 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# a's mark is set by its LAST return; b is checked while a is in progress, so b sees a unmarked
+fn a(v Vec<I64>&, n I64) Array<I64>&v {
+    if n > 0 { return b(v, n - 1) }
+    return v.View()
+}
+fn b(v Vec<I64>&, n I64) Array<I64>&v { return a(v, n) }
+fn grow(w mut Vec<I64>&) {
+    d := b(w, 1)
+    for i in range 1000 { w.Push(i + 100) }
+    churn()
+    println($d[0] " " $d[1])
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    grow(v)
+}

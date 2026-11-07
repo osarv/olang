@@ -1,0 +1,42 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() { head mut Node& = Node(1) }
+type E enum {
+    A(b Box)
+    Z
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn grow(b mut Box&) { b.head.next = Node(43) }
+fn growv(b Box) { b.head.next = Node(44) }
+fn rd(n Node&) I64 {
+    if n.next == null { return 0 }
+    return n.next.v
+}
+type W struct() { b Box = Box() }
+fn pickw(w mut W&) mut W&w { return w }
+fn pickwv(w mut W&) W { return w }
+fn pickf(b mut Box&, bad Bool) mut Box&b ? {
+    if bad { error }
+    return b
+}
+fn f(p mut Box&, c Bool) Box {
+    local mut Box& = Box()
+    local.head.v = 77
+    e := E.A(p) if c else E.A(local)
+    return e as E.A
+}
+fn main() ? {
+    outer mut Box& = Box()
+    r := f(outer, churn() > 0)
+    churn()
+    println($r.head.v)
+}

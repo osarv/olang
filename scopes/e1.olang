@@ -1,0 +1,24 @@
+# parallel assignment swapping references across scopes
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn two(a Node&, b Node&) (Node&a, Node&b) { return a, b }
+fn main() ? {
+    a Node& = Node(1)
+    c Node& = Node(2)
+    for i in range 2 {
+        b Node& = Node(42)
+        a, b = b, a
+    }
+    for i in range 2 {
+        b Node& = Node(43)
+        c, b = two(b, c)
+    }
+    churn()
+    try io.Print($a.v " " $c.v "\n")
+}

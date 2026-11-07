@@ -1,0 +1,40 @@
+type Sh enum {
+    C(r F64)
+    S(a F64)
+}
+fn k(n I32) I32 {
+    return match n {
+        case 1 => 10
+        case _ if n > 100 => 20
+        case _ => 30
+    }
+}
+fn f(x F64) I32 {
+    return match x {
+        case 0.0 => 1
+        case _ => 2
+    }
+}
+fn sh(s Sh) I32 {
+    match s {
+        case Sh.C(r) if r > 1.0 { return 1 }
+        case _ { return 2 }
+    }
+}
+fn gen(a Array<I32, <N I64>>&) I64 {
+    return match N {
+        case 3 => 33
+        case _ => 99
+    }
+}
+fn str(t String&) I32 {
+    return match t {
+        case "a" => 1
+        case _ => 2
+    }
+}
+G := k(500)
+fn main() ? {
+    println($k(1) " " $k(500) " " $k(7) " " $f(0.0 / 0.0) " " $sh(Sh.C(5.0)) " " $sh(Sh.S(1.0)) " " $G)
+    println($gen(Array<I32, 3>()) " " $gen(Array<I32, 4>()) " " $str("a") " " $str("zz"))
+}

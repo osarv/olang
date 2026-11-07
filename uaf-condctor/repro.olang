@@ -1,0 +1,11 @@
+import "std/io"
+type E struct(A String&, B String&) { A  B }
+fn mk(s String&) String { return $s "-made" }
+fn f(t String&, at I64) E { e := E($t, mk(t) if at >= 0 else ""); return e }
+fn main() ? {
+    for i in range 1000 {
+        e := f("x", i)
+        if e.B.Len() != 6: unreachable "freed"
+    }
+    try io.Println("ok")
+}

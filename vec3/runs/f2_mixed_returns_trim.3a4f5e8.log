@@ -1,0 +1,13 @@
+/home/user/review/vec3/repro/f2_mixed_returns_trim.olang:16:33: error[O10]: this reference lives in a scope that may not outlive where it is put
+   16 | fn h(c CB&) String&c { return c.text }
+      |                                 ^~~~
+/home/user/review/vec3/repro/f2_mixed_returns_trim.olang:16:33: note: a read of an own slot is a borrow in a region of its own - only 'x := ...' declares a local holding it, and that local holds no other borrow
+   16 | fn h(c CB&) String&c { return c.text }
+      |                                 ^~~~
+/home/user/review/vec3/repro/f2_mixed_returns_trim.olang:19:33: error[O10]: this reference lives in a scope that may not outlive where it is put
+   19 |     if n == 0 { return String(c.data) }
+      |                                 ^~~~
+/home/user/review/vec3/repro/f2_mixed_returns_trim.olang:19:33: note: a read of an own slot is a borrow in a region of its own - only 'x := ...' declares a local holding it, and that local holds no other borrow
+   19 |     if n == 0 { return String(c.data) }
+      |                                 ^~~~
+compilation failed with 2 errors

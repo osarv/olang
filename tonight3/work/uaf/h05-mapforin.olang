@@ -1,0 +1,32 @@
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn grow(m mut Map<I64, Box>&) {
+    for e in m {
+        e.Value.head.next = Node()
+        e.Value.head.next.v = 42
+    }
+}
+fn main() ? {
+    m := Map<I64, Box>()
+    m.Put(1, Box())
+    grow(m)
+    churn()
+    for e in m { println($e.Value.head.next.v) }
+}

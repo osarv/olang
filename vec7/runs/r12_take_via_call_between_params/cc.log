@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/r12_take_via_call_between_params.olang:24:10: error[O38]: this argument borrows an own object, and the callee may keep it beyond the call - only this function's locals may hold it: keep a Clone() instead
+   24 |     move(a, b)
+      |          ^
+compilation failed with 1 error

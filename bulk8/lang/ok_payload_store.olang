@@ -1,0 +1,79 @@
+import "std/io"
+
+type PErr error { Bad(msg String, data Array<I64>), Eof }
+
+type Holder struct(e PErr) { e }
+
+Live mut I64 = 3
+
+fn parse(n I64) I64 ? PErr {
+    if n == 0: error PErr.Eof
+    buf := Array<I64>[n, n + 1, n + 2]
+    error PErr.Bad("n=" $n, buf)
+}
+
+fn churn() I64 {
+    s := 0
+    for i in range 1000 {
+        t := "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" $i
+        s += t.Len()
+    }
+    return s
+}
+
+fn Holder.LastOf(k I64) Holder {
+    last PErr = null
+    for i in range k {
+        try parse(i + 1) catch PErr e {
+            last = e
+        }
+        churn()
+    }
+    return Holder(last)
+}
+
+fn holders(k I64) Vec<Holder> {
+    out := Vec<Holder>()
+    for i in range k {
+        try parse(i + 1) catch PErr e {
+            out.Push(Holder(e))
+        }
+    }
+    return out
+}
+
+fn mapOf(k I64) Map<PErr, I64> {
+    m := Map<PErr, I64>()
+    for i in range k {
+        try parse(i % 2 + 1) catch PErr e {
+            m.Put(e, i)
+        }
+    }
+    return m
+}
+
+fn summary(k I64) String {
+    l := Holder.LastOf(k).e
+    churn()
+    hs := holders(k)
+    churn()
+    m := mapOf(k)
+    churn()
+    s := $l " " $hs.Len() " " $m.Len()
+    for h in hs {
+        s = $s " " $h.e
+    }
+    if l == PErr.Bad {
+        d := l.data
+        s = $s " " $d[2] " " $l.msg
+    }
+    return s
+}
+
+Baked := summary(3)
+assert summary(3) == Baked
+
+fn main() {
+    io.Println(summary(Live))!
+    io.Println(Baked)!
+}

@@ -1,0 +1,25 @@
+type Wrap struct(l mut List<I64>&) {
+    l
+    count I64 = 0
+}
+fn f(n I64) List<I64> {
+    out := List<I64>()
+    local := List<I64>()
+    for i in range n { local.Push(i) }
+    tmp mut Wrap& = Wrap(local)
+    tmp.count = local.Len()
+    out.Push(tmp.count)
+    return out
+}
+fn g(n I64) List<I64> {
+    out := List<I64>()
+    local := List<I64>()
+    for i in range n { local.Push(i) }
+    w := Wrap(local)
+    w.count = local.Len()
+    out.Push(w.count)
+    return out
+}
+fn main() ? {
+    println($f(5)[0] " " $g(6)[0])
+}

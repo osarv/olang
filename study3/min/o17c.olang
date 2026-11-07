@@ -1,0 +1,24 @@
+fn split(line String&) List<String&> {
+    toks := List<String&>()
+    toks.Push(line[0:1])
+    return toks
+}
+fn c(line String&) I64 {
+    toks List<String&>&line = split(line)
+    return toks.Len()
+}
+fn c2(line String&) I64 {
+    toks List<String&> = split(line)
+    return toks.Len()
+}
+fn c3(line String&) I64 {
+    return split(line).Len()
+}
+fn c4(line String&) I64 {
+    n I64 = 0
+    for t in split(line) { n += t.Len() }
+    return n
+}
+fn main() ? {
+    println($c("ab") " " $c2("ab") " " $c3("ab") " " $c4("ab"))
+}

@@ -1,0 +1,10 @@
+# M6b on an extending type, other operations: < and + on I32 still built in? (the type declares no less/plus)
+import "lib/ext"
+fn main() ? {
+    a := ext.M(3)
+    b := ext.M(13)
+    println($(a < b) " " $(a + b))
+    c I32 = a
+    println($(c == 13))
+    println($(a == 13))
+}

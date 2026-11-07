@@ -1,0 +1,32 @@
+== build -debug -sanitize
+k04_genericshare.olang:8:12: error[E12]: expected String&, found String&&
+    8 |     l.Push(x)
+      |            ^
+k04_genericshare.olang:13:5: note: instantiated here, with T = String&
+   13 |     keepIn(keep, s)
+      |     ^~~~~~
+k04_genericshare.olang:13:18: error[E12]: expected String&&, found String
+   13 |     keepIn(keep, s)
+      |                  ^
+compilation failed with 2 errors
+== build
+k04_genericshare.olang:8:12: error[E12]: expected String&, found String&&
+    8 |     l.Push(x)
+      |            ^
+k04_genericshare.olang:13:5: note: instantiated here, with T = String&
+   13 |     keepIn(keep, s)
+      |     ^~~~~~
+k04_genericshare.olang:13:18: error[E12]: expected String&&, found String
+   13 |     keepIn(keep, s)
+== interpret
+k04_genericshare.olang:8:12: error[E12]: expected String&, found String&&
+    8 |     l.Push(x)
+      |            ^
+k04_genericshare.olang:13:5: note: instantiated here, with T = String&
+   13 |     keepIn(keep, s)
+      |     ^~~~~~
+k04_genericshare.olang:13:18: error[E12]: expected String&&, found String
+   13 |     keepIn(keep, s)
+      |                  ^
+compilation failed with 2 errors
+status 1

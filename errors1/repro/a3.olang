@@ -1,0 +1,13 @@
+# finding 1: I32(inf) under checked is INVALID, the table says OVERFLOW
+import "std/io"
+fn fi(x F64) I32 ? { return checked I32(x) }
+fn w(x F64) String {
+    r := try fi(x) catch BuiltinError.OVERFLOW default 1 catch BuiltinError.INVALID default 2 catch default 3
+    return $r
+}
+fn main() {
+    big := 1e308
+    inf := big * 10.0
+    nan := inf - inf
+    io.Println("inf " $w(inf) " -inf " $w(-inf) " nan " $w(nan) " 1e12 " $w(1e12) " 5.5 " $w(5.5))!
+}

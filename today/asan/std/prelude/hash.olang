@@ -1,0 +1,38 @@
+# hashing, part of the prelude: what a Map needs of a key - "Hash() I64", agreeing with "==" - for the built-in
+# types a key is most often (String's own is in text.olang, beside the type - M19). A program's own key type declares
+# it (T29, M19), and an Eq too when "==" is not already what equal keys means (E10a).
+# Integer arithmetic wraps, which every hash here relies on.
+
+# what a Map key needs (G19): a Hash that agrees with "==" - keys equal by "==" hash equally
+type Hashable<T> trait {
+    Hash() I64
+}
+
+# a multiply by the golden-ratio constant, then the high bits folded into the low ones: a Map takes the low
+# bits as a bucket index, and a multiply alone leaves keys that differ only above them in one bucket
+fn mixHash(n I64) I64 {
+    h I64 = n * -7046029254386353131
+    return h ^ (h >> 29)
+}
+
+fn (n I64) Hash() I64 { return mixHash(n) }
+fn (n I32) Hash() I64 { return mixHash(n) }
+fn (b U8) Hash() I64 { return mixHash(b) }
+fn (n I8) Hash() I64 { return mixHash(n) }
+fn (n I16) Hash() I64 { return mixHash(n) }
+fn (n U16) Hash() I64 { return mixHash(n) }
+fn (n U32) Hash() I64 { return mixHash(n) }
+fn (n U64) Hash() I64 { return mixHash(I64(n)) }
+
+
+# a Bool's hash, so a struct or enum with a Bool part is a key too (E10b)
+fn (b Bool) Hash() I64 {
+    if b { return mixHash(1) }
+    return mixHash(0)
+}
+
+test "equal keys hash equally, and nearby integers spread" {
+    assert I32(7).Hash() == I32(7).Hash()
+    assert I64(1).Hash() != I64(2).Hash()
+    assert true.Hash() == true.Hash() and true.Hash() != false.Hash()
+}

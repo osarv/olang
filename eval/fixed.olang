@@ -1,0 +1,52 @@
+import "std/io"
+fn f(n I32) I32 {
+    x I32 = 5
+    r I32 = 0
+    for i in range n {
+        if x == 5 { r += 1 } else { r += 100 }
+        x = 7
+    }
+    return r
+}
+fn g(n I32) I32 {
+    x I32 = 5
+    r I32 = 0
+    for i in range n {
+        if x == 5 { r += 1 } else { r += 100 }
+        x, r = 7, r
+    }
+    return r
+}
+fn h(n I32) I32 {
+    x I32 = 5
+    r I32 = 0
+    for i in range n {
+        if x == 5 { r += 1 } else { r += 100 }
+        defer x = 9
+    }
+    return r
+}
+fn k(n I32) I32 {
+    x I32 = 5
+    r I32 = 0
+    a := Array<I32>(1)
+    for i in range n {
+        if x == 5 { r += 1 } else { r += 100 }
+        x, a[0] = a[0] + 2, 3
+    }
+    return r
+}
+fn q(n I32) (I32, I32) { return n, n }
+fn m(n I32) I32 {
+    x I32 = 5
+    r I32 = 0
+    for i in range n {
+        if x == 5 { r += 1 } else { r += 100 }
+        _, x = q(8)
+    }
+    return r
+}
+M mut I32 = 3
+fn main() ? io.IoError {
+    try io.Print($f(M) " " $g(M) " " $h(M) " " $k(M) " " $m(M) "\n")
+}

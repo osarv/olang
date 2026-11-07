@@ -1,0 +1,9 @@
+# an array made for a declaration is that declaration's storage - adopted, not built and then copied
+import "std/io"
+import "std/os"
+
+fn main() ? io.IoError {
+    a := Array<I32>(os.Args().Len() + 10)
+    a[5] = 3
+    try io.Print($a[5] "\n")
+}

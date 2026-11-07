@@ -1,0 +1,10 @@
+# x01 from a fill converted directly: invalid IR (clang refuses the object)
+type Grid extends Array<Array<I64>>
+fn (g Grid&) Show() String { return "g " $g[0][0] "," $g[1][1] }
+fn mkGrid(k I64) Grid { return Grid(Array<Array<I64>>(2, Array<I64>(2, k))) }
+fn main() {
+    g := Grid(Array<Array<I64>>(2, Array<I64>(2, 5)))
+    say(g.Show())
+    h := mkGrid(3)
+    say(h.Show())
+}

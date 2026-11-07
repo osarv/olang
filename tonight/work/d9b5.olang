@@ -1,0 +1,25 @@
+# D9b: a by-value array parameter the body never writes is the caller's array at run time - the evaluator copies
+# it when the argument is a slice or a reference, and gives another answer
+fn see(k <T>, x T, w mut Array<I32>&) I32 {
+    w[0] = 70
+    return x[0]
+}
+fn viaRef() I32 {
+    a := I32[5, 6]
+    r mut Array<I32>& = a
+    return see(a, r, r)
+}
+fn viaSlice() I32 {
+    a := I32[5, 6]
+    return see(a, a[0:2], a)
+}
+fn viaLocal() I32 {
+    a := I32[5, 6]
+    return see(a, a, a)
+}
+G1 := viaRef()
+G2 := viaSlice()
+G3 := viaLocal()
+fn main() ? {
+    println("baked " $G1 " " $G2 " " $G3 " - run " $viaRef() " " $viaSlice() " " $viaLocal())
+}

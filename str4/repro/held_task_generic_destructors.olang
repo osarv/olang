@@ -1,0 +1,30 @@
+# HELD (-b -r): four tasks building destructor-bearing values through a generic id() into their holders - stand-ins made,
+# no race, "41200 40000"
+Gone mut I64 = 0
+type Res struct(k I64) {
+    k
+} destruct { Gone.AtomicAdd(1) }
+type Holder struct() {
+    r mut Res& = null
+}
+fn id(x <T>) T { return x }
+fn mk(h mut Holder&, i I64) {
+    for j in range 50 { h.r = id(Res(i + j)) }
+}
+fn main() ? {
+    total I64 = 0
+    for r in range 200 {
+        a := Holder()
+        b := Holder()
+        c := Holder()
+        d := Holder()
+        join {
+            spawn mk(a, 1)
+            spawn mk(b, 2)
+            spawn mk(c, 3)
+            spawn mk(d, 4)
+        }
+        total += a.r.k + b.r.k + c.r.k + d.r.k
+    }
+    println($total " " $Gone)
+}

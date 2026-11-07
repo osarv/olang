@@ -1,0 +1,18 @@
+# check: fail error[T25c]: 'Call' writes through or keeps its by-value parameter 'b', so it cannot be a function value
+# T25c/E31: a type's Call made a function value is held to the same rule as a function or lambda
+type Box struct(P mut Array<I64>&) {
+    P
+}
+type Setter struct(n I64) {
+    n
+}
+fn (s Setter&) Call(b Box) I64 {
+    b.P[0] = s.n
+    return b.P[0]
+}
+fn apply(f fn(b Box) I64, b Box) I64 { return f(b) }
+GB Box = Box(Array<I64>(3))
+fn main() ? {
+    s := Setter(3)
+    println($apply(s, GB))
+}

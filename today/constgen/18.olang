@@ -1,0 +1,10 @@
+# G26: the spec's Total, baked (K2), decided (S18c), run (-b, -d, -i)
+fn Total(a Array<I64, <N>>&) I64 {
+    if N == 0 { return 0 } else { return a[0] + Total(a[1:] as Array<I64, N - 1>&) }
+}
+Baked I64 = Total(I64[1, 2, 3, 4])
+fn main() ? {
+    x Array<I64, 4> = I64[1, 2, 3, 4]
+    assert Total(I64[5, 5]) == 10
+    println($Total(x) " " $Baked)
+}

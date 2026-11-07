@@ -1,0 +1,22 @@
+# T2c / E10: equality and hashing of values holding nullable arrays - null equals only null, also inside a value
+import "std/io"
+
+type rec struct(s String?&) { s }
+type nrec struct(a Array<I64>?&) { a }
+
+fn main() {
+    z String?& = null
+    a := rec(z)
+    b := rec("")
+    io.Println("rec(null) == rec(\"\"): " $(a == b) " (false)")!
+    io.Println("hash equal: " $(a.Hash() == b.Hash()))!
+    za Array<I64>?& = null
+    e Array<I64>?& = Array<I64>(0)
+    io.Println("nrec(null) == nrec([]): " $(nrec(za) == nrec(e)) " (false)")!
+    io.Println("top String?&: " $(z == "") " (false)")!
+    v := Vec<String?&>()
+    v.Push(z)
+    w := Vec<String?&>()
+    w.Push("")
+    io.Println("Vec[null] == Vec[\"\"]: " $(v == w) " (false)")!
+}

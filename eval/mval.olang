@@ -1,0 +1,29 @@
+import "std/io"
+fn pick(n I32) Array<I32> {
+    a := I32[1, 2, 3]
+    b := I32[4, 5, 6]
+    return match n {
+        case 1 => a
+        nomatch => b
+    }
+}
+fn pickc(n I32) Array<I32> {
+    a := I32[1, 2, 3]
+    b := I32[4, 5, 6]
+    return a if n == 1 else b
+}
+fn churn() I64 {
+    s I64 = 0
+    for i in range 50 {
+        x := Array<I64>(64, i)
+        s += x[3]
+    }
+    return s
+}
+M mut I32 = 1
+fn main() ? io.IoError {
+    p := pick(M)
+    q := pickc(M)
+    c := churn()
+    try io.Print($p " " $q " " $c "\n")
+}

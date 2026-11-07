@@ -1,0 +1,22 @@
+# R: a local typed in the region of a borrowed own RESULT (no run-time scope: "built elsewhere"), assigned new text
+# from an inner block - where is the text built?
+fn main() ? {
+    v := Vec<String&>()
+    v.Push("a")
+    w := v.View()
+    d mut String&w = "none"
+    for i in range 3 {
+        d = $i "-new-text-assigned-in-a-loop-body"
+    }
+    churn()
+    println(d)
+    println(w[0])
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

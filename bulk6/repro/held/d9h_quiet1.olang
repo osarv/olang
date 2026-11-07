@@ -1,0 +1,23 @@
+# D9h: a by-value copy of an element held as a view where its statements look quiet; the source changed through
+# routes the quietness reading may miss
+import "std/io"
+
+type blk struct(xs Vec<I64>) { xs }
+type hold struct(v mut Vec<blk>&) { v }
+
+fn poke(h hold) { h.v.RefMut(0).xs[0] = 99 }
+
+fn viaHold() I64 {
+    v := Vec<blk>()
+    xs := Vec<I64>()
+    xs.Push(1)
+    v.Push(blk(xs))
+    hd := hold(v)
+    t := v[0]
+    poke(hd)
+    return t.xs[0]
+}
+
+fn main() {
+    io.Println("viaHold " $viaHold() " (by value 1)")!
+}

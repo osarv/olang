@@ -1,0 +1,12 @@
+== build -debug -sanitize
+run:   src List<String&>["abc1"] b Zbc1 x aQc1
+baked: src List<String&>["abc1"] b Zbc1 x aQc1
+status 0
+== build
+run:   src List<String&>["abc1"] b Zbc1 x aQc1
+baked: src List<String&>["abc1"] b Zbc1 x aQc1
+status 0
+== interpret
+run:   src List<String&>["abc1"] b Zbc1 x aQc1
+baked: src List<String&>["abc1"] b Zbc1 x aQc1
+status 0

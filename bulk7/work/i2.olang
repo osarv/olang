@@ -1,0 +1,35 @@
+import "std/io"
+
+type Buf extends Array<Char>
+
+type Rec struct(name String) {
+    name
+}
+
+fn edit(t String&) String {
+    s := t
+    x := Buf(s)
+    x[0] = 'z'
+    return $x
+}
+
+fn main() {
+    r := Rec($12345)
+    s := r.name
+    x := Buf(s)
+    x[0] = 'z'
+    io.Println($r.name " " $x)!
+    t := $678
+    io.Println($edit(t) " " $t)!
+    v := Vec<String>()
+    v.Push($999)
+    w := v[0]
+    y := Buf(w)
+    y[0] = 'k'
+    io.Println($v[0] " " $y)!
+    parts := "ab,cd".Split(",")
+    p := parts[0]
+    z := Buf(p)
+    z[0] = 'Q'
+    io.Println($parts[0] " " $z)!
+}

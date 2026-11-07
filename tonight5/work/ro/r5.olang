@@ -1,0 +1,12 @@
+fn mk() Map<I64, List<I64>> {
+    m := Map<I64, List<I64>>()
+    m.Put(1, List<I64>())
+    return m
+}
+G Map<I64, List<I64>> = mk()
+fn main() ? {
+    c := G.Clone()
+    x := try c.Get(1) catch { return }
+    x.Push(9)
+    println($(try G.Get(1) catch { return }).Len())
+}

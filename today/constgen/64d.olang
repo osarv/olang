@@ -1,0 +1,9 @@
+# T29a/T7d: a declared type over Array<F32, 3> converted from a run-time array. Expected: rejected, or the length
+# checked once (T7d) and the view made (E32b). Found: accepted with no check; -b and -d emit invalid IR (a { i64, ptr }
+# used as a ptr), and -i gives a V3 of length 2 (here: aborts copying it into fixed storage)
+type V3 extends Array<F32, 3>
+fn main() ? {
+    a := F32[1.5, 2.5]
+    v V3 = V3(a)
+    println($v.Len() " " $v[2])
+}

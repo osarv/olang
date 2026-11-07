@@ -1,0 +1,19 @@
+# check: run
+# B9c: a top-level condition holding a method call, a member or "xor" - past what tokens evaluate - is decided by
+# compile-time evaluation. It used to be judged on the prefix the tokens reached: "not true or false" for the first
+# condition here, and the third was decided as "Seven == Seven", silently choosing the wrong branch
+error E { X }
+Seven I64 = 7
+H := Seven.Hash()
+if Seven.Hash() != 3 and H == Seven.Hash() xor false {
+    fn g() I32 { return 1 }
+}
+if (Seven + 1).Hash() == 3 {
+    fn g() I32 { return 2 }
+}
+if Seven == Seven.Hash() {
+    fn h() I32 { return 1 }
+} else {
+    fn h() I32 { return 2 }
+}
+fn main() ? E { assert g() == 1 and h() == 2 }

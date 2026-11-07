@@ -1,0 +1,32 @@
+import "std/io"
+
+fn labels(n I64) Iterator<String&return> {
+    for i in range n {
+        s String&return = $"label " $i
+        yield s
+    }
+}
+
+fn churn() I64 {
+    n I64 = 0
+    for i in range 200 {
+        v := Vec<String&>()
+        for k in range 3 { v.Push($i "-churn-churn-churn-" $k) }
+        n += v[2].Len()
+    }
+    return n
+}
+
+fn firstOf(n I64) String& {
+    for w in labels(n) { return w }
+    return ""
+}
+
+fn main() {
+    x := try labels(2).Next() catch default ""
+    churn()
+    io.Println(x)!
+    y := firstOf(3)
+    churn()
+    io.Println(y)!
+}

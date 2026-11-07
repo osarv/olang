@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/r14_take_via_match_binding.olang:36:35: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   36 |         case E.A(s) { d.lx.toks = take s.toks }
+      |                                   ^~~~
+compilation failed with 1 error

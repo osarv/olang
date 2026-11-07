@@ -1,0 +1,12 @@
+# a generic callee writing only through the parameter's reference field - should be accepted as a view
+type Acc struct() {
+    N I64 = 0
+    d mut Array<I64>& = Array<I64>(2)
+}
+fn poke(a mut <T>&) { a.d[0] = a.N + 7 }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    poke(l[0])
+    println("list d " $l[0].d[0])
+}

@@ -1,0 +1,10 @@
+# check: fail error[G21]: a constant argument must be computable while compiling
+# G21: a call computing a constant argument must be one compile-time evaluation can run - this one writes a global
+Counter mut I64 = 0
+fn next() I64 {
+    Counter++
+    return 4
+}
+fn main() ? {
+    a Array<U8, next()>
+}

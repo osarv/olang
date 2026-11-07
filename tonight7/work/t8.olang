@@ -1,0 +1,19 @@
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+type Wrap struct(c mut Cell&) {
+    c
+    c.v++
+}
+fn (b Bag&) Str() String {
+    w := Wrap(b.c)
+    return "b" $w.c.v
+}
+fn main() ? {
+    b := Bag(Cell())
+    println($b)
+    println($b)
+}

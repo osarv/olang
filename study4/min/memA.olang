@@ -1,0 +1,11 @@
+# a map counted with copied keys, the keys always the same four words
+fn main() ? {
+    m := Map<String&, I64>()
+    words := String&["DEBUG", "INFO", "WARN", "ERROR"]
+    for i in range N {
+        line := $words[i % 4] " request " $i
+        fields := line.Split(" ")
+        m.Update($fields[0], 0, fn(n I64) I64 { return n + 1 })
+    }
+    println($m.Len() " " $(try m.Get("INFO") catch default 0))
+}

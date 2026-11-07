@@ -1,0 +1,23 @@
+# T7b, T32a: `return Lab(G)`, G an immutable global's text - the caller's value is the global's storage itself
+type Lab extends String
+type W trait {
+    mut Bump()
+}
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+G String = "global"
+M mut String = "mutable"
+fn cg() Lab { return Lab(G) }
+fn cm() Lab { return Lab(M) }
+fn probe() String {
+    x := cm()
+    x[0] = 'Q'
+    b mut any W& = cm()
+    b.Bump()
+    return "M " $M " x " $x
+}
+fn main() {
+    say("run: " $probe())
+    y := cg()
+    y[0] = 'Q'
+    say("G " $G " y " $y)
+}

@@ -1,0 +1,21 @@
+type K struct(s String&) { s }
+type KL struct(l Lab&) { l }
+type HS struct(s String&) { s }
+type Lab extends String
+# RetCopy: a borrow kept as a conversion naming the local's storage (T29a), stored in a parameter's field
+fn f(k mut KL&, i I64) String {
+    s := "abc" $i
+    k.l = Lab(s)
+    return s
+}
+fn probe() String {
+    k := KL(Lab("x"))
+    x := f(k, 1)
+    x[0] = 'Q'
+    return "k.l " $String(k.l) " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}

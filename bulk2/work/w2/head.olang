@@ -1,0 +1,40 @@
+import "std/io"
+import "std/arith"
+
+# a pseudo-random 128-bit value from a seed (splitmix-like over U128)
+fn rnd(s mut Array<U128>&) U128 {
+    s[0] = s[0] * U128(6364136223846793005) + U128(1442695040888963407)
+    z := s[0] ^ (s[0] >> 61)
+    return z * (z >> 33 | U128(1))
+}
+
+fn bat2<T Integer>(z T, k I64) String {
+    st := Array<U128>(1)
+    st[0] = U128(k) * U128(0x9E3779B97F4A7C15)
+    b := StringBuilder()
+    w := T.Max.PopCount() + (1 if T.Min < z else 0)
+    for r in range 12 {
+        x := T(rnd(st))
+        y := T(rnd(st))
+        if r == 0 { x = T.Max }
+        if r == 1 { y = T.Min }
+        b.Push($x " " $y " | ")
+        b.Push($F64(x) " " $F32(x) " " $BF16(x) " " $F16(y) " | ")
+        for s in I64[0, 1, w / 2, w - 1] {
+            if s >= w { continue }
+            b.Push($(x << s) " " $(x >> s) " ")
+        }
+        b.Push("| " $x.Format(16) " " $y.Format(7) " " $x.Hash() " ")
+        if T.Max > 0 { b.Push($x.Pow(3) " " $(try arith.Pow(x, 2) catch default z) " ") }
+        b.Push($(try arith.Add(x, y) catch default z) " " $(try arith.Sub(x, y) catch default z) " " $(try arith.Mul(x, y) catch default z) " ")
+        b.Push($(try ($x).ParseAs<T>() catch default z) " " $(try x.Narrow<I16>() catch default I16(-7)) " " $(try x.Narrow<U70>() catch default U70(7)) " ")
+        b.Push($I24(x) " " $U9(x) " " $I100(x) " " $(x < y) " " $(x == x) " " $x.LeadingZeros() " " $x.TrailingZeros() " " $x.PopCount())
+        b.Push(" " $x.PadStart(3, '0') " " $(x.Min(y)) " " $(x.Max(y)) " " $(try F64(y).Narrow<T>() catch default z) " " $(try F32(x).Narrow<T>() catch default z) " " $(try BF16(x).Narrow<T>() catch default z))
+        if T.Min <= z {
+            b.Push(" " $(try x.Sqrt() catch default z))
+        }
+        b.Push("\n")
+    }
+    return b.ToString()
+}
+K mut I64 = 1

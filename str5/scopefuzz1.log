@@ -1,0 +1,4 @@
+nice -n 19 build/out -b -d fuzz/fuzz.olang
+built ./build/fuzz_fuzz.debug
+nice -n 19 ./build/fuzz_fuzz.debug scope 9100 150 2 12
+fuzz scope: 150 programs, 707 scenarios run, 1093 refused by the compiler, 0 findings

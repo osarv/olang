@@ -1,0 +1,21 @@
+# O10b/O25: a reference stored into an inline fixed array of a longer-lived instance must outlive it
+type Node struct(v I64) { v }
+type Holder struct() { arr mut Array<Node&, 2> }
+fn put(h mut Holder&, n Node&) { h.arr[0] = n }
+fn churn() I64 {
+    s I64 = 0
+    for i in range 1000 {
+        t := Array<I64>(64, i)
+        s = s + t[3]
+    }
+    return s
+}
+fn main() ? {
+    h := Holder()
+    for i in range 3 {
+        n := Node(i + 100)
+        put(h, n)
+    }
+    println($churn())
+    println($h.arr[0].v)
+}

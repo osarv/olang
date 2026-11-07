@@ -1,0 +1,21 @@
+# G42 / effects: a function whose only effect is a destructor it runs - growing a mutable global - reads as writing no
+# global, allocating nothing and computable while compiling
+import "std/io"
+
+G mut Vec<I64>
+
+type guard struct() { } destruct {
+    for i in range 1000 { G.Push(i) }
+}
+
+fn touch() {
+    g := guard()
+}
+
+assert not touch.WritesGlobals, "touch writes no global"
+assert not touch.Allocates, "touch allocates nothing"
+
+fn main() {
+    touch()
+    io.Println("len " $G.Len() " - yet the facts say touch writes no global and allocates nothing")!
+}

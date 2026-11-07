@@ -1,0 +1,12 @@
+== r07_reassignlonger
+  san:    exit 0 a much longer text 1 1000 / a much longer text 2 2000|
+  O3:     exit 0 a much longer text 1 1000 / a much longer text 2 2000|
+  interp: exit 0 a much longer text 1 1000 / a much longer text 2 2000|
+--- compile (-debug -sanitize)
+built ./build/r07_reassignlonger.debug.san
+--- run san
+a much longer text 1 1000 / a much longer text 2 2000
+--- run O3
+a much longer text 1 1000 / a much longer text 2 2000
+--- interpret
+a much longer text 1 1000 / a much longer text 2 2000

@@ -1,0 +1,12 @@
+import "std/io"
+
+V I64 = 1152921504606846976 + 4503599627370496 + 1
+Run mut I64 = 1152921504606846976 + 4503599627370496 + 1
+B BF16 = BF16(V)
+H mut I64 = 65519
+G F16 = F16(V)
+
+fn main() ? io.IoError {
+    try io.Print("bf16 baked " $B.Bits() " run " $BF16(Run).Bits() "\n")
+    try io.Print("f16 " $F16(H).Bits() "\n")
+}

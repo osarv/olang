@@ -1,0 +1,2 @@
+fn f(g mut fn() I32) { }
+fn main() ? { }

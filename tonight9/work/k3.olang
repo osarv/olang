@@ -1,0 +1,21 @@
+type Big struct(n I64) {
+    a Array<I64, 4>
+    a[0] = n
+    a[1] = n + 1
+}
+fn mkr(n I64) Array<I64>& {
+    return Big(n).a[0:2]
+}
+fn churn() I64 {
+    s I64 = 0
+    for j in range 20 {
+        t := Array<I64>(30000, j)
+        s = s + t[5]
+    }
+    return s
+}
+fn main() ? {
+    r := mkr(7)
+    x := churn()
+    println($r[1] " " $x)
+}

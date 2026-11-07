@@ -1,0 +1,12 @@
+# a JSON-like dynamic value: an object holds a Map of values
+type Value enum {
+    Nil
+    Num(n F64)
+    Obj(fields Map<String&, Value&>&)
+}
+fn main() ? {
+    m := Map<String&, Value&>()
+    m.Put("a", Value.Num(1.0))
+    v := Value.Obj(m)
+    println($m.Len())
+}

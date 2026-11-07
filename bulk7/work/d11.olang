@@ -1,0 +1,19 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+fn main() {
+    x Res = Res(1)
+    for i in range 3 {
+        if i >= 1 {
+            x.Destroy()
+        }
+    }
+    io.Println("ended " $Ended)!
+}

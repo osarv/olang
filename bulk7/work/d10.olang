@@ -1,0 +1,19 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+fn mk(n I64) fn&() I64 {
+    x Res = Res(n)
+    return fn() I64 { return x.id }
+}
+
+fn main() {
+    f := mk(3)
+    io.Println("closure " $f() " ended " $Ended)!
+}

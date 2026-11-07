@@ -1,0 +1,22 @@
+# a view call in a loop's condition on an element over 64KB: the hidden copy is made at every evaluation - where?
+type Big struct() {
+    a Array<I64, 9000> = Array<I64, 9000>()
+}
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+    big Big = Big()
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn put(v mut V&, x I64) I64 {
+    v.d[v.n] = v.d[v.n] + x
+    return v.d[v.n]
+}
+fn main() ? {
+    s := Vs(Array<I64>(8))
+    for put(s[0], 1) < 5000 { }
+    println($s.d[0])
+}

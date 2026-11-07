@@ -1,0 +1,25 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn keepFirst(l mut List<<T>>&, x <T>) { l.Push(x) }
+fn setAt(a mut Array<<T>>&, x <T>) { a[0] = x }
+type Cell<T> struct(v0 <T>) { v mut <T> = v0 }
+fn put(c mut Cell<<T>>&, x <T>) { c.v = x }
+fn main() ? {
+    l List<Node&>& = List<Node&>()
+    a Array<Node&>& = Array<Node&>(1, Node(0))
+    c Cell<Node&>& = Cell<Node&>(Node(0))
+    for i in range 2 {
+        inner Node& = Node(42)
+        keepFirst(l, inner)
+        setAt(a, inner)
+        put(c, inner)
+    }
+    churn()
+    try io.Print($l[0].v " " $a[0].v " " $c.v.v "\n")
+}

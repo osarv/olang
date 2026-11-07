@@ -1,0 +1,40 @@
+# D9h (round 2d) meets the copy on entry: a body writing a part of its bare parameter works on its own copy, then
+# returns a view of that copy - handed back as a view of the argument?
+import "std/io"
+
+fn edit(t String) String {
+    t[0] = 'q'
+    return t[0:2]
+}
+
+fn edit2(t String) String {
+    for i in range t.Len() { t[i] = 'z' }
+    return t[1:]
+}
+
+fn churn(n I64) I64 {
+    xs := Array<I64>(n, 7)
+    return xs[n - 1]
+}
+
+fn count(t String) I64 { return t.Len() }
+
+fn main() {
+    a := $"abc"
+    r := edit(a)
+    s := 0
+    for i in range 1, 50 { s += churn(i * 8) }
+    n := count(edit2(a))
+    io.Println($r " " $edit(a) " " $a " " $n " " $s)!
+}
+
+fn both() String {
+    a := $"abc"
+    return $edit(a) " " $a
+}
+
+Baked String = both()
+
+test "baked vs run time" {
+    assert Baked == both(), "baked " $Baked ", run time " $both()
+}

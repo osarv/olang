@@ -1,0 +1,20 @@
+type Graph struct() {
+    users mut List<List<I64>>& = List<List<I64>>()
+}
+fn build(n I64) Graph {
+    g := Graph()
+    for i in range n {
+        g.users.Push(List<I64>())
+        g.users[i].Push(-1)
+    }
+    for i in range n {
+        g.users[i].Push(i)
+    }
+    return g
+}
+fn main() ? {
+    g := build(5)
+    churn := List<String&>()
+    for i in range 1000 { churn.Push("x" $i) }
+    println($g.users[3].Len() " " $g.users[3].Last())
+}

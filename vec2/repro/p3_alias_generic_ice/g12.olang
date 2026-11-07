@@ -1,0 +1,5 @@
+import "genlib"
+fn main() ? {
+    f := genlib.Id
+    println("x")
+}

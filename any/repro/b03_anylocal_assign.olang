@@ -1,0 +1,15 @@
+# an outer any assigned an any of a loop-local temporary
+type W trait {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+fn main() {
+    o any W& = Btn("first")
+    for i in range 4 {
+        w any W& = Btn("b" $i)
+        o = w
+    }
+    churn()
+    say(o.Draw())
+}

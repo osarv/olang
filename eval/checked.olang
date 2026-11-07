@@ -1,0 +1,35 @@
+import "std/io"
+
+fn add8(a I8, b I8) I8 { return try (a + b) catch default 99 }
+fn shl(a I32, n I32) I32 { return try (a << n) catch default -7 }
+fn neg8(a I8) I8 { return try (-a) catch default 55 }
+fn inc8(a mut I8) I8 {
+    try a++ catch { return 44 }
+    return a
+}
+fn cnv(x I64) I8 { return try I8(x) catch default 33 }
+fn cnvf(x F64) I32 { return try I32(x) catch default 22 }
+fn cnvu(x I64) U32 { return try U32(x) catch default 11 }
+fn divu(a U8, b U8) U8 { return try (a / b) catch default 9 }
+fn mulu64(a U64, b U64) U64 { return try (a * b) catch default 8 }
+fn fadd(a F32, b F32) F32 { return try (a * b) catch default 1.5 }
+fn f16add(a F16, b F16) F16 { return try (a + b) catch default 2.5 }
+
+B String = $add8(100, 100) " " $shl(1, 32) " " $neg8(-128) " " $inc8(127) " " $cnv(300) " " $cnvf(3000000000.0) " " $cnvu(-1) " " $divu(5, 0) " " $mulu64(4294967296, 4294967296) " " $fadd(3.0e38, 2.0) " " $f16add(60000.0, 10000.0)
+Ma mut I8 = 100
+Mn mut I32 = 32
+Mm mut I8 = -128
+Mi mut I8 = 127
+Mx mut I64 = 300
+Mf mut F64 = 3000000000.0
+Mu mut I64 = -1
+Mz mut U8 = 0
+Mbig mut U64 = 4294967296
+Mf32 mut F32 = 3.0e38
+Mh mut F16 = 60000.0
+Mh2 mut F16 = 10000.0
+
+fn main() ? io.IoError {
+    try io.Print($B "\n")
+    try io.Print($add8(Ma, Ma) " " $shl(1, Mn) " " $neg8(Mm) " " $inc8(Mi) " " $cnv(Mx) " " $cnvf(Mf) " " $cnvu(Mu) " " $divu(5, Mz) " " $mulu64(Mbig, Mbig) " " $fadd(Mf32, 2.0) " " $f16add(Mh, Mh2) "\n")
+}

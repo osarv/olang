@@ -1,0 +1,28 @@
+# memory: a Vec local reassigned each turn of a loop - is what it let go of freed (O8d), or kept until the function ends?
+import "std/io"
+
+fn sum(v Vec<I64>&) I64 {
+    s := 0
+    for x in v { s += x }
+    return s
+}
+
+fn mk(k I64) Vec<I64> {
+    v := Vec<I64>()
+    for i in range 100 { v.Push(i + k) }
+    return v
+}
+
+fn run() I64 {
+    v := mk(0)
+    t := 0
+    for k in range 200000 {
+        v = mk(k)
+        t += sum(v)
+    }
+    return t
+}
+
+fn main() {
+    io.Println($run())!
+}

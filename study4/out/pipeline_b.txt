@@ -1,0 +1,6 @@
+full run: 400 parsed, in order to 400, checksum ok: true, deepest reorder 11
+  parser 0: 113
+  parser 1: 110
+  parser 2: 177
+  16 ms, source blocked 16 ms
+stopped run: in order to 150, received 159 (stop record at 150)

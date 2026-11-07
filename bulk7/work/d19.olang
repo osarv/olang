@@ -1,0 +1,25 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+fn use(r Res&) I64 {
+    s I64 = 0
+    for i in range 2000000 { s += i % 7 }
+    return r.id + s - s + Ended * 1000
+}
+
+fn main() {
+    x Res = Res(1)
+    n I64 = 0
+    join {
+        spawn n = use(x)
+        x.Destroy()
+    }
+    io.Println($n)!
+}

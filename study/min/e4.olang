@@ -1,0 +1,14 @@
+fn add(adj mut List<mut List<I64>&>&, a I64, v I64) {
+    adj[a].Push(v)
+}
+fn count(adj List<mut List<I64>&>&, a I64) I64 {
+    n I64 = 0
+    for x in adj[a] { n += x }
+    return n
+}
+fn main() ? {
+    adj := List<mut List<I64>&>()
+    adj.Push(List<I64>())
+    add(adj, 0, 5)
+    assert count(adj, 0) == 5
+}

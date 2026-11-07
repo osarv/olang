@@ -1,0 +1,33 @@
+error Oops { BAD }
+type OnlyAt struct() { d mut Array<I64>& = Array<I64>(4, 0) }
+fn (v OnlyAt&) At(i I64) I64 { return v.d[i] }
+type M struct() { d mut Array<I64>& = Array<I64>(16, 0) }
+fn (v M&) At(i I64, j I64) I64 { return v.d[i * 4 + j] }
+fn (v mut M&) SetAt(i I64, j I64, x I64) { v.d[i * 4 + j] = x }
+type T struct() { d mut Array<I64>& = Array<I64>(4, 0) }
+fn (v T&) At(i I64) I64 { return v.d[i] }
+fn (v mut T&) SetAt(i I64, x I64) { v.d[i] = x }
+fn (v T&) TryAt(i I64) I64 ? Oops {
+    if i > 3 { error Oops.BAD }
+    return v.d[i]
+}
+fn (v mut T&) TrySetAt(i I64, x I64) ? Oops {
+    if i > 3 { error Oops.BAD }
+    v.d[i] = x
+}
+type F struct() { d mut Array<F64>& = Array<F64>(4, 0.5) }
+fn (v F&) At(i I64) F64 { return v.d[i] }
+fn (v mut F&) SetAt(i I64, x F64) { v.d[i] = x }
+fn main() ? {
+    m := M()
+    m[1, 2]++
+    m[1, 2]++
+    t := T()
+    try t[2]++ catch Oops { println("no") }
+    try t[9]++ catch Oops { println("caught 9") }
+    f := F()
+    f[1]++
+    f[1]--
+    f[2]++
+    println($m[1, 2] " " $t[2] " " $f[1] " " $f[2])
+}

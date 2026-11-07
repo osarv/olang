@@ -1,0 +1,22 @@
+# O18c: x := f(...) whose result scope lands at the argument's (outer) scope
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box struct(n Node&) { n }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+        b Box& = Box(n)
+    }
+}
+fn wrap(l Node&) Box& { return Box(l) }
+fn main() ? {
+    outer Node& = Node(42)
+    keep Box& = Box(outer)
+    for i in range 2 {
+        b := wrap(outer)
+        keep = b
+    }
+    churn()
+    try io.Print($keep.n.v "\n")
+}

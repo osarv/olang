@@ -1,0 +1,18 @@
+# "as" on a closed trait's any naming one generic instance
+type Shape trait for Box<I64>, Box<String&> {
+    Area() I64
+}
+type Box<T> struct(v T, n I64) {
+    v
+    n
+}
+fn (b Box<T>&) Area() I64 { return b.n }
+fn main() {
+    xs := List<any Shape&>()
+    xs.Push(Box<I64>(5, 2))
+    xs.Push(Box<String&>("hi", 3))
+    a := xs[0] as Box<I64>
+    say($a.v)
+    b := xs[1] as Box<I64>
+    say($b.v)
+}

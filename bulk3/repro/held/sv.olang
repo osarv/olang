@@ -1,0 +1,7 @@
+import "std/io"
+import c "sv.c"
+fn main() {
+    p := c.mk(4)
+    t := c.tri(-3)
+    io.Println($p.a " " $p.b " " $c.take(p) " " $t.x " " $t.z " " $c.sumtri(t))!
+}

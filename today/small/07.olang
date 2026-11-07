@@ -1,0 +1,14 @@
+# S17: assert's message is evaluated only on failure; S18a: FILE:LINE
+Count mut I32 = 0
+X mut I32 = 5
+fn note() String {
+    Count = Count + 1
+    return "noted " $Count
+}
+fn main() ? {
+    x := X
+    assert x > 0, note()
+    println("count after a passing assert: " $Count)
+    assert x > 10, "x is " $x " and " $note()
+    println("not reached")
+}

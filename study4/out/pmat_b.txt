@@ -1,0 +1,6 @@
+baked small bands agree with the run time: true (-0.260316924)
+  static: bands took 622 to 967 us
+static sum -2249.250468, dynamic sum -2249.250468, identical bands: true
+max relative error vs linalg: true true
+ms: static 2, dynamic 1, linalg 1
+dominant eigenvalue 33.900000000 (expected 33.900000000), close: true

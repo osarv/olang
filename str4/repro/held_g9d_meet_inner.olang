@@ -1,0 +1,14 @@
+# HELD (G9d meet): a writable Array<mut Res&> beside a read-only Res& is refused with E12 in both argument orders
+type Res struct(k I64) {
+    k
+}
+fn put(a mut Array<<T>>&, b T) { a[0] = b }
+fn put2(b <T>, a mut Array<T>&) { a[0] = b }
+fn main() ? {
+    ro Res& = Res(7)
+    arr := Array<mut Res&>(1, Res(1))
+    put(arr, ro)
+    put2(ro, arr)
+    arr[0].k = 99
+    println($ro.k)
+}

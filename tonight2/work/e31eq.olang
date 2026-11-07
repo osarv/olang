@@ -1,0 +1,28 @@
+type P struct(x I64) { x }
+fn (a P&) Eq(b P&, tol I64) Bool { return a.x - b.x <= tol and b.x - a.x <= tol }
+fn (a P&) Hash(seed I64) I64 { return a.x + seed }
+fn (a P&) Str(prec I64) String& { return "P!" }
+fn (a P&) Less(b P&, c P&) Bool { return false }
+type Q struct(p P, y I64) { p
+ y }
+fn run() I64 {
+    a := P(1)
+    b := P(1)
+    c := P(2)
+    r I64 = 0
+    if a == b { r += 1 }
+    if a != c { r += 10 }
+    q1 := Q(a, 3)
+    q2 := Q(b, 3)
+    if q1 == q2 { r += 100 }
+    arr := P[a, c]
+    if b in arr { r += 1000 }
+    if a.Eq(c, 1) { r += 10000 }
+    s := $a
+    if s == "P(x: 1)" or s == "P(1)" { r += 100000 }
+    return r
+}
+B := run()
+fn main() ? {
+    println($B " " $run() " " $P(5))
+}

@@ -1,0 +1,8 @@
+type N<T> struct() {
+    x N<T> = N<T>()
+    n I64 = 0
+}
+fn main() ? {
+    x := N<I64>()
+    println($x.n)
+}

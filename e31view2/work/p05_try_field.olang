@@ -1,0 +1,13 @@
+type Acc struct() {
+    N I64 = 0
+}
+type H struct(fv fn(c mut Acc&) ?) {
+    fv
+}
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    h := H(fn(c mut Acc&) ? { c.N++ })
+    try h.fv(l[0])
+    println("list N " $l[0].N)
+}

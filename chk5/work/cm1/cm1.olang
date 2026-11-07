@@ -1,0 +1,17 @@
+# a comma inside written type arguments counted as an argument separator: the local is mapped to the wrong parameter
+type Info struct(Offset I64, Len I64) {
+    Offset
+    Len
+}
+type W struct(r Info&) { r }
+type G struct() { n I64 = 0 }
+fn (g G&) pick3(p Pair<I64, I64>, i Info&, n I64) Info&i { return i }
+fn (g G&) view(k I64) W {
+    i := Info(k, k + 1)
+    return W(g.pick3(Pair<I64, I64>(1, 2), i, 0))
+}
+fn main() ? {
+    g := G()
+    w := g.view(4)
+    println($w.r.Len)
+}

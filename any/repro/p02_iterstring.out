@@ -1,0 +1,65 @@
+== build -debug -sanitize
+p02_iterstring.olang:24:36: error[G19, T31a]: String does not satisfy the constraint Number on T: Number is closed, met by I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64 alone
+   24 |     it mut any Iterator<String>& = w
+      |                                    ^
+p02_iterstring.olang:24:36: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+   24 |     it mut any Iterator<String>& = w
+      |                                    ^
+/home/user/wt/rvany/std/prelude/list.olang:49:56: note: in the standard library's code, here
+   49 |     chunks mut Array<mut Array<T>&>& = Array<mut Array<T>&>(0)    # the chunks made, in order, once there are two:
+      |                                                        ^
+p02_iterstring.olang:24:36: note: instantiated here, with I = Words, T = String
+   24 |     it mut any Iterator<String>& = w
+      |                                    ^
+/home/user/wt/rvany/std/prelude/iterator.olang:63:1: note: instantiated here, with T = String
+   63 | fn (it mut I&) Filter<I Iterator<T>, T>(keep fn(x T) Bool) List<T>& {
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+p02_iterstring.olang:27:32: error[G19, T31a]: Pt does not satisfy the constraint Number on T: Number is closed, met by I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64 alone
+   27 |     jt mut any Iterator<Pt>& = p
+      |                                ^
+p02_iterstring.olang:27:32: error[E6]: '<' takes numbers, found Pt
+   27 |     jt mut any Iterator<Pt>& = p
+      |                                ^
+/home/user/wt/rvany/std/prelude/iterator.olang:211:14: note: in the standard library's code, here
+  211 |         if x < best: best = x
+      |              ^
+p02_iterstring.olang:27:32: note: instantiated here, with I = PtIt, T = Pt
+   27 |     jt mut any Iterator<Pt>& = p
+      |                                ^
+compilation failed with 4 errors
+== build
+p02_iterstring.olang:24:36: error[G19, T31a]: String does not satisfy the constraint Number on T: Number is closed, met by I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64 alone
+   24 |     it mut any Iterator<String>& = w
+      |                                    ^
+p02_iterstring.olang:24:36: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+   24 |     it mut any Iterator<String>& = w
+== interpret
+p02_iterstring.olang:24:36: error[G19, T31a]: String does not satisfy the constraint Number on T: Number is closed, met by I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64 alone
+   24 |     it mut any Iterator<String>& = w
+      |                                    ^
+p02_iterstring.olang:24:36: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+   24 |     it mut any Iterator<String>& = w
+      |                                    ^
+/home/user/wt/rvany/std/prelude/list.olang:49:56: note: in the standard library's code, here
+   49 |     chunks mut Array<mut Array<T>&>& = Array<mut Array<T>&>(0)    # the chunks made, in order, once there are two:
+      |                                                        ^
+p02_iterstring.olang:24:36: note: instantiated here, with I = Words, T = String
+   24 |     it mut any Iterator<String>& = w
+      |                                    ^
+/home/user/wt/rvany/std/prelude/iterator.olang:63:1: note: instantiated here, with T = String
+   63 | fn (it mut I&) Filter<I Iterator<T>, T>(keep fn(x T) Bool) List<T>& {
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+p02_iterstring.olang:27:32: error[G19, T31a]: Pt does not satisfy the constraint Number on T: Number is closed, met by I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64 alone
+   27 |     jt mut any Iterator<Pt>& = p
+      |                                ^
+p02_iterstring.olang:27:32: error[E6]: '<' takes numbers, found Pt
+   27 |     jt mut any Iterator<Pt>& = p
+      |                                ^
+/home/user/wt/rvany/std/prelude/iterator.olang:211:14: note: in the standard library's code, here
+  211 |         if x < best: best = x
+      |              ^
+p02_iterstring.olang:27:32: note: instantiated here, with I = PtIt, T = Pt
+   27 |     jt mut any Iterator<Pt>& = p
+      |                                ^
+compilation failed with 4 errors
+status 1

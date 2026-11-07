@@ -1,0 +1,10 @@
+fn main() ? {
+    keep Box& = Box(0)
+    e := E.A(Box(3))
+    match e {
+        case E.A(y) { keep = borrow(y) }
+        case _ { }
+    }
+    churn()
+    println($keep.v)
+}

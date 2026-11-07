@@ -1,0 +1,15 @@
+type Expr enum {
+    Num(v F64)
+    Neg(e Expr&)
+}
+fn simplify(e Expr&) Expr&e {
+    return match e {
+        case Expr.Neg(Expr.Num(v)) => Expr.Num(-v)
+        nomatch => e
+    }
+}
+fn main() ? {
+    t Expr& = Expr.Neg(Expr.Num(2.0))
+    s := simplify(t)
+    assert s == s
+}

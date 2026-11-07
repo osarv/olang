@@ -1,0 +1,34 @@
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n "-text-of-the-leaf"
+}
+type Leafs struct(k I64) {
+    a own mut Leaf& = Leaf(k)
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf& = Leaf(k * 10)
+    lv Leafs = Leafs(k * 100)
+    buf own mut Array<I64>& = Array<I64>(3, k)
+    name own mut String& = "nm" $k "-own-name-text"
+}
+type Outer struct() {
+    o own mut Inner& = Inner(1)
+}
+fn (x Outer&) First() Inner&x { return x.o }
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn (x Outer&) Nm() String&x { return x.First().name }
+fn main() ? {
+    v := Outer()
+    d := v.Nm()
+    v.o.name = "zz" $d.Len() "-replaced"
+    churn()
+    println(d)
+}

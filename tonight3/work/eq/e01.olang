@@ -1,0 +1,40 @@
+type S struct(xs Array<S>&, v I64) {
+    xs
+    v
+}
+type T struct(a Array<U>&, w F64) {
+    a
+    w
+}
+type U struct(t Array<T>&, k I64) {
+    t
+    k
+}
+type Q struct(s S, e Array<Q>&) {
+    s
+    e
+}
+fn mkS(d I64, v I64) S {
+    if d == 0 { return S(Array<S>(0), v) }
+    return S(S[mkS(d - 1, v), mkS(d - 1, v + 1)], v)
+}
+fn mkT(d I64, w F64) T {
+    if d == 0 { return T(Array<U>(0), w) }
+    return T(U[U(T[mkT(d - 1, w)], d)], w)
+}
+fn t1(a I64, b I64) Bool { return mkS(4, a) == mkS(4, b) }
+fn t2(a F64, b F64) Bool { return mkT(3, a) == mkT(3, b) }
+fn t3(a I64, b I64) Bool { return Q(mkS(2, a), Q[Q(mkS(1, a), Array<Q>(0))]) == Q(mkS(2, b), Q[Q(mkS(1, b), Array<Q>(0))]) }
+fn t4(a F64) Bool { return mkT(2, a) != mkT(2, a) }
+B1 Bool = t1(1, 1)
+B2 Bool = t1(1, 2)
+B3 Bool = t2(0.5, 0.5)
+B4 Bool = t2(-0.0, 0.0)
+B5 Bool = t3(1, 1)
+B6 Bool = t4(0.0 / 0.0)
+X mut I64 = 1
+Z mut F64 = 0.0
+fn main() ? {
+    println("baked " $B1 " " $B2 " " $B3 " " $B4 " " $B5 " " $B6)
+    println("run   " $t1(X, X) " " $t1(X, X + 1) " " $t2(0.5, 0.5) " " $t2(-Z, Z) " " $t3(X, X) " " $t4(Z / Z))
+}

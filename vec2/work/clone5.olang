@@ -1,0 +1,8 @@
+fn cl(v Vec<I64>&) Vec<I64> { return v.Clone() }
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(3)
+    c := cl(v)
+    v.Push(4)
+    println($c[0] " " $c.Len())
+}

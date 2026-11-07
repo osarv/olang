@@ -1,0 +1,40 @@
+# tasks reading a field of a call's result and building fresh results where a parameter lives (items 2/3 under -r)
+type V struct(Data mut Array<F64>&) {
+    Data
+}
+type G struct(n I64) {
+    mem mut Array<F64>& = Array<F64>(n)
+}
+type Sink struct() {
+    kept mut List<Array<F64>&>& = List<Array<F64>&>()
+}
+fn (g G&) params() V { return V(g.mem) }
+fn (g G&) fresh(n I64) V { return V(Array<F64>(n, 2.5)) }
+fn sum(p Array<F64>&) F64 {
+    s F64 = 0.0
+    for x in p { s += x }
+    return s
+}
+fn work(g G&, s mut Sink&, k I64) F64 {
+    t F64 = 0.0
+    for i in range 200 {
+        t += sum(g.params().Data)
+        x := g.fresh(k + 1).Data
+        t += x[0]
+        s.kept.Push(g.fresh(2).Data)
+    }
+    return t
+}
+fn main() ? {
+    out := Array<F64>(4)
+    gs := List<G&>()
+    ss := List<mut Sink&>()
+    for k in range 4 {
+        gs.Push(G(4))
+        ss.Push(Sink())
+    }
+    join {
+        for k in range 4 { spawn out[k] = work(gs[k], ss[k], k) }
+    }
+    println($out[0] " " $out[3] " " $ss[0].kept.Len())
+}

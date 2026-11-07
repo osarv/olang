@@ -1,0 +1,30 @@
+import "std/io"
+
+type Pt struct(x I64, y I64) { x, y }
+
+type W trait { Name() String }
+
+fn (p Pt) Name() String { return "pt" }
+
+fn first<T>(xs Array<T>&) Array<T> {
+    return Array<T>[xs[0]]
+}
+
+fn classify(ws Array<String&>&) String {
+    return match ws {
+        case Array<String&>["go", ...rest]: "go " $rest.Len()
+        case Array<String&>[]: "none"
+        case _: "other"
+    }
+}
+
+fn main() {
+    a := Array<I64>[1, 2, 3]
+    s := Array<String&>["go", "x"]
+    ps := Array<Pt>[Pt(1, 2), Pt(3, 4)]
+    anys := Array<any W&>[ps[0], ps[1]]
+    evens := Array<I64>[x * 2 for x in a if x > 1]
+    nested := Array<Array<I64>&>[a, a]
+    cs := Array<Char>['a', 'b']
+    io.Println($a " " $classify(s) " " $ps " " $anys.Len() " " $evens " " $nested.Len() " " $cs " " $first(a))!
+}

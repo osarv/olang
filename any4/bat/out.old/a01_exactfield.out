@@ -1,0 +1,12 @@
+== a01_exactfield
+  san:    exit 0 exactfield 12|
+  O3:     exit 0 exactfield 12|
+  interp: exit 0 exactfield 12|
+--- compile (-debug -sanitize)
+built ./build/a01_exactfield.debug.san
+--- run san
+exactfield 12
+--- run O3
+exactfield 12
+--- interpret
+exactfield 12

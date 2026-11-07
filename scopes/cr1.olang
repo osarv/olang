@@ -1,0 +1,22 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box enum {
+    Has(n Node&)
+    No
+}
+fn mk(k I64) Node& ? {
+    if k > 1 { error }
+    return Node(I32(k))
+}
+fn main() ? {
+    xs := I32[(try mk(i) catch default Node(9)).v for i in range 4]
+    ys := I32[(match i { case 0 => 5  nomatch => 6 }) for i in range 3 if i > 0]
+    b := Box.Has(Node(3))
+    zs := I32[(b as Box.Has).v + (I32(i) if i > 1 else 0) for i in range 3]
+    defer { try io.Print($xs[3] " " $ys[0] " " $zs[2] "\n") catch { } }
+    w := match b {
+        case Box.Has(n) if n.v > 2 => (try mk(0) catch default Node(n.v)).v
+        nomatch => 0
+    }
+    try io.Print($w "\n")
+}

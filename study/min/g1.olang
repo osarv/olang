@@ -1,0 +1,9 @@
+import "std/map"
+fn main() ? {
+    m := map.Map<I64, I64>()
+    for i in range 5000000 {
+        m.Put(i, i)
+        if i >= 100 { m.Remove(i - 100) }
+    }
+    assert m.Len() == 100
+}

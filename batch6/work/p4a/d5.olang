@@ -1,0 +1,43 @@
+# P4a: a value default holding references for a value target in a caller's instance
+error E {
+    NEG
+}
+type Node struct(v I64, s String&) {
+    v
+    s
+}
+type W struct(n Node&) {
+    n
+}
+type H struct() {
+    w W = W(Node(0, "zero"))
+    ws mut List<W>& = List<W>()
+}
+fn mkw(n I64) W ? E {
+    if n < 0 { error E.NEG }
+    return W(Node(n, "mk" $n "-abcdefghijklmnopqrstuvwxyz"))
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+        nn := Node(i, "c")
+        t = t + nn.v
+    }
+    return t
+}
+fn fill(h mut H&) {
+    for i in range 3 {
+        join {
+            spawn h.w = try mkw(i - 5) catch default W(Node(-i, "dflt" $i "-abcdefghijklmnopqrstuvwxyz"))
+        }
+        churn()
+    }
+}
+fn main() ? {
+    h := H()
+    fill(h)
+    churn()
+    println($h.w.n.v " " $h.w.n.s)
+}

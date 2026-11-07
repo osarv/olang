@@ -1,0 +1,7 @@
+import "std/io"
+import "std/os"
+
+N := os.Args().Len()
+assert N >= 1
+
+fn main() { io.Println($N)! }

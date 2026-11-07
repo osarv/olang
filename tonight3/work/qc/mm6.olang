@@ -1,0 +1,4 @@
+fn main() ? {
+    a := Array<List<I64>>(2, List<I64>())
+    s := a.Map(fn(x List<I64>) I64 { return x.Len() })
+}

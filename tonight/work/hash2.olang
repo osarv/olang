@@ -1,0 +1,4 @@
+type S struct(a Array<S>&, b Array<S>&) { a, b }
+fn main() ? {
+    m := Map<S, I32>()
+}

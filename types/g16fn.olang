@@ -1,0 +1,10 @@
+# two instantiations of one generic over two different function types
+import "std/io"
+fn id(x <T>) <T> { return x }
+fn dbl(n I32) I32 { return n * 2 }
+fn half(n F64) F64 { return n / 2.0 }
+fn main() ? {
+  f := id(dbl)
+  g := id(half)
+  try io.Print($f(21) " " $g(5.0) "\n")
+}

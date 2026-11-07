@@ -1,0 +1,13 @@
+type WC struct(word String&, count I64) {
+    word
+    count
+}
+fn main() ? {
+    recs := Array<WC>(2)
+    recs[0] = WC("a", 1)
+    recs[1] = WC("b", 2)
+    rare := List<String&>()
+    for wc in recs { if wc.count == 1 { rare.Push(wc.word) } }
+    for i in range recs.Len() { if recs[i].count == 2 { rare.Push(recs[i].word) } }
+    assert rare.Len() == 2
+}

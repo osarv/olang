@@ -1,0 +1,13 @@
+import "std/io"
+type E error { Bad(n I64) }
+type R unique struct(id I64) { id } destruct { io.Println("destruct " $id)! }
+Live mut I64 = 0
+fn f(n I64) I64 ? E {
+    error E.Bad(n)
+}
+test "payload leaves" {
+    r := R(1)
+    defer io.Println("deferred " $r.id)!
+    x := try f(Live + 2)
+    assert x == 0
+}

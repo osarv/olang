@@ -1,0 +1,9 @@
+# E10c: 'is' between an Array<T, N>& and an Array<T>& naming the same storage says they "never name one instance",
+# while '==' on the same two (identity, E10) says they are one
+fn main() ? {
+    a := I64[1, 2, 3, 4]
+    f := a[0:3] as Array<I64, 3>&
+    r Array<I64>& = a[0:3]
+    println($(f == r))
+    println($(f is r))
+}

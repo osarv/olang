@@ -1,0 +1,21 @@
+# PRE-EXISTING (master: "b 2" too); this batch's E11c effect check does not cover it. A Str that makes a lambda capturing
+# a reference it reached through its receiver and calls it THROUGH A LOCAL ("f()") writes through that reference: effCall
+# resolves f to the lambda (effLambdaOf) and then only looks for arguments reaching outside storage - there are none - so
+# the lambda's own effWrites (its write through the capture) never reaches Str. Called directly ("fn() {...}()") or passed
+# to a function it is caught. "$" then runs Str twice at run time (measure, write) and once under -i.
+#     expected: error[E11c] (it writes, through a reference, what was there before it ran)
+#     actual:   accepted; -b prints "b 2", -i prints "b 1". Also through a second local ("g := f; g()", 05b)
+type C struct() { n I64 = 0 }
+type B struct(c mut C&) { c }
+fn (a B&) Str() String {
+    k := a.c
+    f := fn() { k.n = k.n + 1 }
+    f()
+    return "b"
+}
+fn main() ? {
+    c mut C& = C()
+    b := B(c)
+    s := $b
+    println($s " " $c.n)
+}

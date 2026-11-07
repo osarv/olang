@@ -1,0 +1,29 @@
+# O17 per function: a generic method that builds into its receiver's List field, called on x[i] (E31b's copy)
+type Holder<T> struct() {
+    items List<T> = List<T>()
+}
+fn (h mut Holder<<T>>&) Add(x T) { h.items.Push(x) }
+fn churn() I64 {
+    t I64 = 0
+    for k in range 200 {
+        junk := $k "-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t += junk.Len()
+    }
+    return t
+}
+fn main() ? {
+    hs := List<Holder<I64>>()
+    hs.Push(Holder<I64>())
+    for k in range 3 {
+        hs[0].Add(k)
+    }
+    hs2 := List<Holder<String&>>()
+    hs2.Push(Holder<String&>())
+    for k in range 3 {
+        hs2[0].Add("lit")
+    }
+    println($churn())
+    println($hs[0].items.Len() " " $hs2[0].items.Len())
+    for x in hs[0].items { println($x) }
+    for x in hs2[0].items { println(x) }
+}

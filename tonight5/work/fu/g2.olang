@@ -1,0 +1,31 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+G mut Node& = Node(1)
+Fns mut List<fn() I64> = List<fn() I64>()
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn keep(x mut Node&, l mut List<fn() I64>&) {
+    l.Push(fn() I64 {
+        x.next = Node(x.v + 41)
+        return x.next.v
+    })
+}
+fn work() { keep(G, Fns) }
+fn main() ? {
+    join {
+        spawn keep(G, Fns)
+    }
+    churn()
+    f := Fns[0]
+    println($f())
+    churn()
+    println($G.next.v)
+}

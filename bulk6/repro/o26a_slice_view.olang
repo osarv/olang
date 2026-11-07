@@ -1,0 +1,25 @@
+# O26a: a slice of a view of a value local's Vec, returned - the local should live where the result goes, as for View()
+import "std/io"
+
+fn whole(k I64) Array<I64>& {
+    v := Vec<I64>()
+    for i in range 10 { v.Push(k * 10 + i) }
+    return v.View()
+}
+
+fn part(k I64) Array<I64>& {
+    v := Vec<I64>()
+    for i in range 10 { v.Push(k * 10 + i) }
+    return v.View()[2:4]
+}
+
+fn partLocal(k I64) Array<I64>& {
+    v := Vec<I64>()
+    for i in range 10 { v.Push(k * 10 + i) }
+    w := v.View()
+    return w[2:4]
+}
+
+fn main() {
+    io.Println($whole(1) " " $part(2) " " $partLocal(3))!
+}

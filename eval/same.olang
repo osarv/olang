@@ -1,0 +1,16 @@
+import "std/io"
+fn t(n I64) String {
+    arr := I32[1, 2, 3, 4, 5]
+    a Array<I32>& = arr[1:3]
+    b Array<I32>& = arr[1:n]
+    c Array<I32>& = arr[0:0]
+    d Array<I32>& = arr[2:2]
+    e Array<I32>& = Array<I32>(0)
+    f Array<I32>& = Array<I32>(0)
+    return $same(a, b) " " $(a == b) " " $same(c, d) " " $(c == d) " " $same(e, f) " " $(e == f)
+}
+B String = t(2)
+M mut I64 = 2
+fn main() ? io.IoError {
+    try io.Print($B "\n" $t(M) "\n")
+}

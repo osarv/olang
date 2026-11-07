@@ -1,0 +1,13 @@
+fn h1(c Bool, k I32) I64 { return k + (2000000000 + 2000000000) }
+fn h2(c Bool, k I32) I64 { return k + (0 if c else (2000000000 + 2000000000)) }
+fn s1(c Bool, k I32) I64 { return k + (1 << 40) }
+fn s2(c Bool, k I32) I64 { return k + (0 if c else (1 << 40)) }
+B1 I64 = h1(false, 1)
+B2 I64 = h2(false, 1)
+B3 I64 = s1(false, 1)
+B4 I64 = s2(false, 1)
+C mut Bool = false
+fn main() ? {
+    println("baked " $B1 " " $B2 " " $B3 " " $B4)
+    println("run   " $h1(C, 1) " " $h2(C, 1) " " $s1(C, 1) " " $s2(C, 1))
+}

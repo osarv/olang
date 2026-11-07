@@ -1,0 +1,14 @@
+== b20_payload
+  san:    refused: b20_payload.olang:31:26: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
+  O3:     refused
+  interp: exit 0 payload 1|payload 12|
+--- compile (-debug -sanitize)
+b20_payload.olang:31:26: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
+   31 |         out.Push(E.C(mkp&t(i * 11 + 1)))
+      |                          ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+payload 1
+payload 12

@@ -1,0 +1,11 @@
+type Q struct(t String& = "abc-static-text") {
+    t
+}
+type B struct() {
+    data own mut Array<Q>& = null
+}
+fn main() ? {
+    b := B()
+    b.data = Array<Q>(3)
+    println(b.data[1].t)
+}

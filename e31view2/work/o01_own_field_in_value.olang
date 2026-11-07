@@ -1,0 +1,23 @@
+type Node struct(v I64) {
+    v
+}
+type W struct() {
+    o own mut Node& = null
+    k I64 = 0
+}
+type V struct(w W&) {
+    w
+}
+fn g(m mut W&) {
+    x := take m.o
+    println("took " $x.v)
+}
+fn step(c mut V&) { g(c.w) }
+fn main() ? {
+    l := List<V>()
+    w := W()
+    w.o = Node(5)
+    l.Push(V(w))
+    step(l[0])
+    println("ok")
+}

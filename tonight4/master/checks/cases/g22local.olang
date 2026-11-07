@@ -1,0 +1,7 @@
+# check: fail error[G22, D3a]: 'M' is a constant variable of this declaration
+# G22, D3a: a local of a body may not take a constant variable's name, or a bare M and <M> would be two things
+fn f(a Array<I64, <M>>&) I64 {
+    M := 3
+    return M
+}
+fn main() ? { assert f(I64[1, 2]) == 3 }

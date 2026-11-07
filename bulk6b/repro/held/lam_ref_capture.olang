@@ -1,0 +1,35 @@
+# O26a/D16d: references captured by returned lambdas - a reference local repointed at a loop turn's local, a reference to
+# a frame local, a nested lambda
+import "std/io"
+
+type node struct(v I64) { v }
+
+fn mk(k I64) node& { return node(k) }
+
+fn repointed(k I64) fn&() I64 {
+    r := mk(0)
+    for i in range k {
+        t := node(i * 10)
+        r = t
+    }
+    return fn() I64 { return r.v }
+}
+
+fn frameRef(k I64) fn&() I64 {
+    x := node(k)
+    r node& = x
+    return fn() I64 { return r.v }
+}
+
+fn churn() I64 {
+    junk := Vec<String>()
+    for i in range 2000 { junk.Push($i "abcdefghijklmnopqrstuvwxyz") }
+    return junk.Len()
+}
+
+fn main() {
+    a := repointed(4)
+    b := frameRef(5)
+    n := churn()
+    io.Println($a() " " $b() " " $n)!
+}

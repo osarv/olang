@@ -1,0 +1,26 @@
+type Rule struct(Target String&, Deps List<String&>) {
+    Target
+    Deps
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        l := List<I64>()
+        for k in range 50 { l.Push(k * 1000003 + i) }
+        t += l[7]
+    }
+    return t
+}
+fn main() ? {
+    text String& = "a b c\nd e\nf g h i"
+    rules := Map<String&, Rule>()
+    for line in text.Lines() {
+        deps mut List<String&>&rules = List<String&>()
+        for d in line.Split(" ") { deps.Push(d) }
+        rules.Put(line, Rule(line, deps))
+        x := List<I64>()
+        for k in range 100 { x.Push(k) }
+    }
+    for i in range 10 { churn() }
+    for e in rules { println($e.Key " -> " $e.Value.Deps.Len() " " $e.Value.Deps.ToArray()) }
+}

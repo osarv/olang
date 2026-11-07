@@ -1,0 +1,27 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+}
+
+GA mut Node& = null
+
+fn setIt(n I64) {
+    GA = Node(n)
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 10 {
+        a Node& = Node(i + 1000)
+        b := Array<I64>(16, 99)
+        t = t + a.v + b[0]
+    }
+    return t
+}
+
+fn main() ? io.IoError {
+    setIt(7)
+    k := churn()
+    try io.Print($GA.v " " $k "\n")
+}

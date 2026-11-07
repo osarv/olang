@@ -1,0 +1,18 @@
+# T32a holds a call's array result in the box as it is - taking it to be built where the any lands. A written scope
+# argument (E25) puts the call's result elsewhere: here in a loop body's scope, while the box lands in an outer list
+type W trait {
+    Show() String
+}
+type Lab extends String
+fn (l Lab&) Show() String { return "lab " $String(l) }
+fn mk(i I64) String { return "text" $i "-" $(i * 7) }
+fn main() {
+    l := List<any W&>()
+    for i in range 3 {
+        t := "inner" $i
+        l.Push(Lab(mk&t(i)))
+        say("pushed " $t.Len())
+    }
+    assert churn() > 0
+    for x in l { say(x.Show()) }
+}

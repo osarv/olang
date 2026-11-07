@@ -1,0 +1,11 @@
+import "std/io"
+fn z() F64 { return -0.0 }
+fn z2() F64 {
+    x F64 = 0.0
+    return -x
+}
+fn z3() F32 { return -0.0 }
+B F64 = z()
+fn main() ? io.IoError {
+    try io.Print($z() " " $z2() " " $z3() " " $B " " $(1.0 / z()) " " $z().Bits() "\n")
+}

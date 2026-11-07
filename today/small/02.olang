@@ -1,0 +1,8 @@
+# D15/E4a/T29h: 'a' + 1 - a character literal is a Char, so the sum is a Char ('b'), not an I32
+fn main() ? {
+    g := 'a' + 1
+    h Char = 'a' + 1
+    c := 'a'
+    k := c + 1
+    println($g " " $h " " $k " " $('a' + 1))
+}

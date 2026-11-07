@@ -1,0 +1,17 @@
+# D13c/T7c: the zero value of a fixed array of a type whose zero value is not zero bits
+type P struct(v I64 = 7) { v }
+type H struct() {
+    ps mut Array<P, 2>
+    rows mut Array<Array<P, 2>, 2>
+}
+fn run() I64 {
+    a := Array<P, 3>()
+    f Array<P, 3> = Array<P, 3>()
+    h := H()
+    g Array<P, 2>
+    return a[2].v * 10000 + f[1].v * 1000 + h.ps[1].v * 100 + h.rows[1][1].v * 10 + g[0].v
+}
+Baked I64 = run()
+fn main() ? {
+    println($run() " " $Baked)
+}

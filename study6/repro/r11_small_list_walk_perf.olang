@@ -1,0 +1,30 @@
+# (e) PERFORMANCE: walking a short List (3 elements - a spatial-hash cell, an adjacency list) costs ~17 ns a walk with
+# 'for x in l' and ~15 ns indexed, against ~3 ns in C (r11_small_list_walk_perf.c, clang -O3 -march=native): 2M walks
+# 35 ms / 30 ms / 6 ms. callgrind on progs/ecs.olang (300 steps): List.RunFrom 17% and listState.grow 13% of all
+# instructions, the simulation itself 66%. RunFrom is an out-of-line call per chunk that also allocates its three I64
+# locals in the arena (r02), and l[i] recomputes highBit per element.
+# Expected: a one-chunk list walked as an array is walked - RunFrom inlined and allocation-free, a first-chunk fast
+# path in At.
+import "std/time"
+Reps I64 = 2000000
+fn main() ? {
+    lists := List<List<I64>>()
+    for i in range 64 {
+        l := List<I64>&lists()
+        for k in range 3 { l.Push(i * 10 + k) }
+        lists.Push(l)
+    }
+    t0 := time.Now()
+    total I64 = 0
+    for r in range Reps {
+        l := lists[r & 63]
+        for x in l { total += x }
+    }
+    t1 := time.Now()
+    for r in range Reps {
+        l := lists[r & 63]
+        for i in range l.Len() { total += l[i] }
+    }
+    t2 := time.Now()
+    println($total " for-in " $((t1 - t0) / 1000000) " ms, indexed " $((t2 - t1) / 1000000) " ms")
+}

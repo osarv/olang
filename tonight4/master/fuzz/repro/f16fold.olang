@@ -1,0 +1,9 @@
+import "std/io"
+v mut I32 = 98
+fn c(x5 I32) String {
+    x6 I32 = (x5 << 20) * 7
+    return $(F16((x6 * 4) * 31358))
+}
+fn main() ? io.IoError {
+    try io.Print($c(v) "\n")
+}

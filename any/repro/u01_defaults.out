@@ -1,0 +1,29 @@
+== build -debug -sanitize
+u01_defaults.olang:8:31: error[E14]: expected 1 argument, found 0
+    8 | fn gen<S W>(s S) I64 { return s.Draw() }
+      |                               ^~~~~~~~
+u01_defaults.olang:12:50: note: instantiated here, with S = any W&
+   12 |     say($w.Draw() " " $b.Draw() " " $gen(b) " " $gen(w))
+      |                                                  ^~~
+u01_defaults.olang:12:10: error[E14]: expected 1 argument, found 0
+   12 |     say($w.Draw() " " $b.Draw() " " $gen(b) " " $gen(w))
+      |          ^~~~~~~~
+compilation failed with 2 errors
+== build
+u01_defaults.olang:8:31: error[E14]: expected 1 argument, found 0
+    8 | fn gen<S W>(s S) I64 { return s.Draw() }
+      |                               ^~~~~~~~
+u01_defaults.olang:12:50: note: instantiated here, with S = any W&
+   12 |     say($w.Draw() " " $b.Draw() " " $gen(b) " " $gen(w))
+== interpret
+u01_defaults.olang:8:31: error[E14]: expected 1 argument, found 0
+    8 | fn gen<S W>(s S) I64 { return s.Draw() }
+      |                               ^~~~~~~~
+u01_defaults.olang:12:50: note: instantiated here, with S = any W&
+   12 |     say($w.Draw() " " $b.Draw() " " $gen(b) " " $gen(w))
+      |                                                  ^~~
+u01_defaults.olang:12:10: error[E14]: expected 1 argument, found 0
+   12 |     say($w.Draw() " " $b.Draw() " " $gen(b) " " $gen(w))
+      |          ^~~~~~~~
+compilation failed with 2 errors
+status 1

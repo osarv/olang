@@ -1,0 +1,24 @@
+# a block-local text pushed into l.toks, then l taken into the result: is the Push checked against where l now lives?
+type Lex struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn mk() Vec<String&> {
+    l := Lex()
+    s := "block-local-text-" $7
+    l.toks.Push(s)
+    w := take l.toks
+    return w
+}
+fn main() ? {
+    a := mk()
+    churn()
+    println(a[0])
+}

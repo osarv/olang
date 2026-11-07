@@ -1,0 +1,11 @@
+type Ctr struct() {
+  n I64 = 0
+}
+type B struct(c mut Ctr&) { c }
+G B = B(Ctr())
+fn a(x B, n I32) { if n > 0 { b(x, n - 1) } }
+fn b(x B, n I32) { if n == 0 { x.c.n = 5 } else { a(x, n - 1) } }
+fn main() ? {
+  a(G, 3)
+  println($G.c.n)
+}

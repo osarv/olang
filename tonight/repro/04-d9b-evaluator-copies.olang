@@ -1,0 +1,30 @@
+# CONFIRMED (permissions batch, D9b: "a by-value array the body never writes is the caller's array").
+# Expected: the evaluator (baked globals, asserts decided while compiling, -i) agrees with the built program:
+#           "baked 70 70 70 - run 70 70 70".
+# Actual:   -b/-d: "baked 5 5 70 - run 70 70 70"; -i: "baked 5 5 70 - run 5 5 70". ctCallBind (comptime.c ~1518)
+#           shares only when the argument is an lvalue VALUE (OperandIsLvalue(a) && !ctIsRef(a->type)); a reference
+#           or slice argument is copied by ctFitBoundary, while the generated code passes the caller's {len, ptr}
+#           pair. An "assert viaRef() == 5" would even be decided true while compiling and dropped.
+fn see(k <T>, x T, w mut Array<I32>&) I32 {
+    w[0] = 70
+    return x[0]
+}
+fn viaRef() I32 {
+    a := I32[5, 6]
+    r mut Array<I32>& = a
+    return see(a, r, r)
+}
+fn viaSlice() I32 {
+    a := I32[5, 6]
+    return see(a, a[0:2], a)
+}
+fn viaLocal() I32 {
+    a := I32[5, 6]
+    return see(a, a, a)
+}
+G1 := viaRef()
+G2 := viaSlice()
+G3 := viaLocal()
+fn main() ? {
+    println("baked " $G1 " " $G2 " " $G3 " - run " $viaRef() " " $viaSlice() " " $viaLocal())
+}

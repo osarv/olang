@@ -1,0 +1,15 @@
+import "std/io"
+fn t(k I32) String {
+    a := I32[1, 2, 3]
+    s := a[0:2]
+    a = I32[k, 8, 9]
+    b := Array<I32>(3, 5)
+    c := b[1:]
+    b = Array<I32>(3, k)
+    return $s " " $c
+}
+B String = t(7)
+M mut I32 = 7
+fn main() ? io.IoError {
+    try io.Print($B "\n" $t(M) "\n")
+}

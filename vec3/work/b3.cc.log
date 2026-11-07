@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/b3.olang:10:43: error[T25c, O14]: a built result is new storage and writable, and this reference is read-only - return a copy, or borrow the result from the parameter it is read through
+   10 | fn mk(v Vec<Char>&) Array<Char>& { return id(v.View()) }
+      |                                           ^~
+compilation failed with 1 error

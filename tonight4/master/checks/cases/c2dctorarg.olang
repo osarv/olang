@@ -1,0 +1,16 @@
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
+# C2d/O18b: a constructor call passed as an argument lands where the callee puts it - here the outer list - so the
+# existing storage it holds is checked there (it used to be checked nowhere, and the list kept a reclaimed node)
+type Node struct(v I32) {
+    v
+}
+type Wrap struct(n Node&) {
+    n
+}
+fn main() ? {
+    l mut List<Wrap&>& = List<Wrap&>()
+    for i in range 2 {
+        inner Node& = Node(42)
+        l.Push(Wrap(inner))
+    }
+}

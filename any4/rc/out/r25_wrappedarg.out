@@ -1,0 +1,14 @@
+== r25_wrappedarg
+  san:    refused: r25_wrappedarg.olang:9:14: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the insta
+  O3:     refused
+  interp: exit 0 run: k.s abc1 x Qbc1|baked: k.s abc1 x Qbc1|
+--- compile (-debug -sanitize)
+r25_wrappedarg.olang:9:14: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+    9 |     put(Wrap(k), s)
+      |              ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+run: k.s abc1 x Qbc1
+baked: k.s abc1 x Qbc1

@@ -1,0 +1,31 @@
+import "std/os"
+import "std/time"
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn mk(r Node&, i I64) Node&r { return Node(i) }
+fn work(f fn(i I64) I64, n I64) I64 {
+    s I64 = 0
+    for i in range n { s += f(i) }
+    return s
+}
+fn main() ? {
+    n I64 = 5000000
+    root Node& = Node(0)
+    f := fn(i I64) I64 { return mk(root, i).v }
+    t0 := time.Now()
+    a := work(f, n)
+    t1 := time.Since(t0)
+    b I64 = 0
+    t2 := time.Now()
+    join { spawn b = work(f, n) }
+    t3 := time.Since(t2)
+    # warm up 40 workers, then one task per worker
+    join { for k in range 40 { spawn work(f, 1) } }
+    c I64 = 0
+    t4 := time.Now()
+    join { spawn c = work(f, n) }
+    t5 := time.Since(t4)
+    println("main " $(t1 / 1000000) " ms, task " $(t3 / 1000000) " ms, task after 40 parts " $(t5 / 1000000) " ms " $(a == b and b == c))
+}

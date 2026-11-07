@@ -1,0 +1,12 @@
+# T29b/E23: every array has Len() - does an array satisfy a trait requiring Len()?
+import "std/io"
+type Sized trait {
+  Len() I64
+}
+fn size(x <T Sized>&) I64 { return x.Len() }
+type Bag struct() { n I64 = 3 }
+fn (b Bag&) Len() I64 { return b.n }
+fn main() ? {
+  a Array<I32> = I32[1, 2, 3, 4]
+  try io.Print($size(Bag()) " " $size(a) "\n")
+}

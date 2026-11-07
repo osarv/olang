@@ -1,0 +1,13 @@
+== b38b_destructassignref
+  san:    refused: b38b_destructassignref.olang:29:14: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+  O3:     refused
+  interp: exit 0 destructassign 12 13|
+--- compile (-debug -sanitize)
+b38b_destructassignref.olang:29:14: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   29 |         a, b = mk2p&t(i * 11 + 1)
+      |              ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+destructassign 12 13

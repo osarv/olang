@@ -1,0 +1,35 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    t String& = $"node " $v " with text padded out to a fair length ..........................."
+}
+
+type Holder struct() {
+    arr Array<Node&>& = Array<Node&>(0)
+    keep List<Node&>
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    h := Holder()
+    for r in range 5 {
+        h.arr = Node&[Node(r * 10 + k) for k in range 4]
+        old := h.arr
+        h.arr = Node&[Node(r * 100 + k) for k in range 4 if k % 2 == 0]
+        churn()
+        t I64 = 0
+        for n in h.arr { t += n.v + n.t.Len() }
+        io.Println($t)!
+    }
+}

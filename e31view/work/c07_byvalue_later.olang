@@ -1,0 +1,22 @@
+type R struct(l mut List<String&>&, n I64) {
+    l
+    n
+}
+type Rs struct(l mut List<String&>&) {
+    l
+}
+fn (s Rs&) At(i I64) R { return R(s.l, i) }
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn f(r mut R&) { h(r) }
+fn h(v R) { v.l.Push($v.n) }
+fn main() ? {
+    s := Rs(List<String&>())
+    for k in range 3 { f(s[k]) }
+    churn()
+    println($s.l)
+}

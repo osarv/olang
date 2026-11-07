@@ -1,0 +1,36 @@
+import "std/io"
+
+# D13d: a loop whose only break is inside a catch clause in an index - definit's breaks() does not look there, so the
+# loop reads as never ending, the read after it as dead code, and the local's zero value is never written
+type P struct(v I64 = 7) { v }
+type E error { STOP }
+
+fn g(i I64) I64 ? E {
+    if i >= 3 { error E.STOP }
+    return i
+}
+
+fn junk(k I64) I64 {
+    a, b, c, d I64 = k * 7919 + 4096, k * 104729 + 8192, k * 15485863, k * 32452843
+    e, f, gg, h I64 = a ^ b, b ^ c, c ^ d, d ^ a
+    return a + b + c + d + e + f + gg + h
+}
+
+fn probe(a Array<I64>&) I64 {
+    p P
+    i I64 = 0
+    for {
+        s := a[try g(i) catch { break }]
+        i += s + 1
+    }
+    return p.v
+}
+
+fn main() {
+    a := I64[0, 1, 2, 3]
+    t I64 = 0
+    for k in range 3 {
+        t += junk(k)
+        io.Println($probe(a))!
+    }
+}

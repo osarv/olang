@@ -1,0 +1,32 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct(v I64) {
+    v
+    head mut Node& = Node(1)
+    pad Array<I64, 10000>
+}
+type E enum {
+    A(b Box)
+    Z
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 2000 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn borrow(b Box&) Box&b { return b }
+fn main() ? {
+    keep Box& = Box(0)
+    e := E.A(Box(3))
+    match e {
+        case E.A(y) { keep = borrow(y) }
+        case _ { }
+    }
+    churn()
+    println($keep.v)
+}

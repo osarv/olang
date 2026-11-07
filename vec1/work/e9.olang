@@ -1,0 +1,11 @@
+fn asText(v Vec<Char>&) String&v { return String(v.View()) }
+fn grow(w mut Vec<Char>&) {
+    t := asText(w)
+    for i in range 1000 { w.Push('b') }
+    println(t)
+}
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    grow(v)
+}

@@ -1,0 +1,28 @@
+# a ':=' from a field of a call result holding fresh storage and an argument's - stored in a longer list
+type Pair2 struct(a String&, b Array<I64>&) {
+    a
+    b
+}
+type Out struct(p Pair2) { p }
+fn mk(t String&, n I64) Out { return Out(Pair2(t, Array<I64>(n, 7))) }
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k) * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn fill(keep mut List<Pair2>&, base String&) {
+    for k in range 3 {
+        x := mk(base, k + 2).p
+        keep.Push(x)
+    }
+}
+fn main() ? {
+    keep := List<Pair2>()
+    base := "base"
+    fill(keep, base)
+    churn()
+    println($keep[0].a " " $keep[0].b " " $keep[2].b)
+}

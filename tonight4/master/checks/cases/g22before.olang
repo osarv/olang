@@ -1,0 +1,4 @@
+# check: fail error[G22]: 'N' is introduced later in this signature - its first use is written '<N>'
+# G22: a signature is read left to right - receiver, parameters, results - and a bare N before its "<N>" names nothing
+fn first(a Array<I32, N>&, b Array<I32, <N>>&) I64 { return N }
+fn main() ? { assert first(I32[1], I32[2]) == 1 }

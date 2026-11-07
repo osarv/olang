@@ -1,0 +1,26 @@
+# E31b: the element copy's references live where the list's do; a write of a loop-body text into it must be refused.
+type Rec struct(name String&, n I64) {
+    name
+    n
+}
+fn (r mut Rec&) SetName(s String&) { r.name = s }
+fn setName(r mut Rec&, s String&) { r.name = s }
+fn churn() I64 {
+    t := 0
+    for k in range 200 {
+        junk := $k "-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t += junk.Len()
+    }
+    return t
+}
+fn main() ? {
+    l := List<Rec>()
+    l.Push(Rec("start", 0))
+    l.Push(Rec("start", 0))
+    l.Push(Rec("start", 0))
+    for k in range 3 {
+        t := $k "-loop-body-text-of-moderate-length"
+        l[0].name = t
+    }
+    println($churn() " " $l[0].name)
+}

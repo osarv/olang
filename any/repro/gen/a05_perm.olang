@@ -1,0 +1,40 @@
+import "std/io"
+# a mut trait method through an any made of a read-only reference
+type Counter trait {
+    mut Bump() I64
+}
+type Tally struct(at I64) { at }
+fn (t mut Tally&) Bump() I64 {
+    t.at += 1
+    return t.at
+}
+G Tally& = Tally(1)
+fn viaRo(t Tally&) I64 {
+    c mut any Counter& = t
+    return c.Bump()
+}
+fn viaAny(c any Counter&) I64 {
+    d mut any Counter& = c
+    return d.Bump()
+}
+fn main() {
+    say($viaRo(G))
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

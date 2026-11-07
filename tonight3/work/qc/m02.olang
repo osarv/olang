@@ -1,0 +1,12 @@
+fn main() ? {
+    m := Map<I64, List<I64>>()
+    m.Put(1, List<I64>())
+    for e in m { println($e.Value.Len()) }
+    l := List<List<I64>>()
+    l.Push(List<I64>())
+    x := try l.First() catch { return }
+    y := l[0]
+    a := Array<List<I64>>(2, List<I64>())
+    z := a.Iter().ToList()
+    println($x.Len() " " $y.Len() " " $z.Len())
+}

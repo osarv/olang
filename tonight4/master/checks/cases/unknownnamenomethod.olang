@@ -1,0 +1,9 @@
+# check: fail unknown name 't'
+# never: did you mean 'At'
+# B11: an unknown name is never suggested a method's name - a method is reached through a value
+type Ring struct() { n I64 }
+fn (r Ring&) At(i I64) I64 { return i }
+fn main() ? {
+    u := t + 1
+    println($u)
+}

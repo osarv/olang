@@ -1,0 +1,7 @@
+# M19f: println given a number, and given two pieces - what the diagnostics say
+fn main() ? {
+    println(5)
+    println("a", "b")
+    x := 3
+    println(x)
+}

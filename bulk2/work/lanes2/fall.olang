@@ -1,0 +1,17 @@
+import "std/io"
+import "std/arith"
+N mut I64 = 4
+fn main() {
+    a := Array<arith.Checked<I8>>(N, arith.Checked<I8>(I8(110)))
+    a[0] = arith.Checked<I8>(I8(1))
+    b := try a + I8(20) catch default Array<arith.Checked<I8>>(1, arith.Checked<I8>(I8(-1)))
+    s I64 = 0
+    for x in b { s += I64(x.Value) }
+    io.Println($b.Len() " " $s)!
+    c := Array<arith.Checked<I8>>(N, arith.Checked<I8>(I8(1)))
+    c[2] = arith.Checked<I8>(I8(120))
+    try c += I8(10) catch { }
+    t I64 = 0
+    for x in c { t += I64(x.Value) }
+    io.Println($t)!
+}

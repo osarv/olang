@@ -1,0 +1,15 @@
+import "std/io"
+
+fn build(n I64) String {
+    for i in range n {
+        tmp := Array<Char>(1000, 'a')
+        tmp[0] = Char(48 + i % 10)
+        if i == n - 1: return String(tmp)
+    }
+    return ""
+}
+
+fn main() {
+    s := build(200000)
+    io.Println($s.Len() " " $s[0])!
+}

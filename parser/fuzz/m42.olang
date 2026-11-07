@@ -1,0 +1,136 @@
+# map - values found by key, compared with "==" (E10). A key is any type with a "Hash() I64" agreeing with "==": the
+# prelude gives it to I32, I64, U8 and String, the compiler supplies one for a struct, enum or array value whose
+# parts all have one (E10b), and a key type declaring Eq declares its Hash too.
+#
+# Buckets of chained slots, a power of two of them, doubled when the map is three-quarters full. Everything a
+# Map allocates lives where the Map does (its fields are bare "&", C2d), so it is reclaimed with that scope and
+# needs no destructor. Growing re-links the existing slots into new buckets and copies nothing else; the old
+# bucket array stays in the scope until it closes, as anything an arena holds does.
+#
+# A key or value that is a reference ("Map<String&, I32>") is stored as the reference - it must outlive the
+# map, which every call checks (O10b).
+
+type mapSlot<K, V> struct(key <K>, value <V>, next mut mapSlot<<K>, <V>>&) {
+    key
+    value mut
+    next mut
+}
+
+type Map<K Hashable<<K>>, V> struct() {
+    buckets mut Array<mut mapSlot<<K>, <V>>&>& = Array<mut mapSlot<<K>, <V>>&>(8)
+    count mut I64 = 0
+}
+
+# one key and its value, as a "for ... in" over a Map gives them
+type MapEntry<K, V> struct(key <K>, value <V>) {
+    Key <K> = key
+    Value <V> = value
+}
+
+fn (m Map<<K>, <V>>&) Len() I64 { return m.count }
+
+fn (m Map<<K>, <V>>&) bucketOf(key <K>) I64 { return key.Hash() & (m.buckets.Len() - 1) }
+
+# sets the value for key, replacing the one it had
+fn (m mut Map<<K>, <V>>&) Put(key <K>, value <V>) {
+    i := m.bucketOf(key)
+    for s mapSlot<<K>, <V>>&m = m.buckets[i], s != null, s = s.next {
+        if s.key == key {
+            s.value = value
+            return
+        }
+    }
+    m.buckets[i] = mapSlot<<K>, <V>>(key, value, m.buckets[i])
+    m.count++
+    if m.count * 4 > m.buckets.Len() * 3 { m.grow() }
+}
+
+# doubles the buckets and re-links every slot into its new one
+fn (m mut Map<<K>, <V>>&) grow() {
+    old := m.buckets
+    m.buckets = Array<mut mapSlot<<K>, <V>>&>(old.Len() * 2)
+    for i in range old.Len() {
+        s mapSlot<<K>, <V>>&m = old[i]
+        for s != null {
+            after := s.next
+            j := m.bucketOf(s.key)
+            s.next = m.buckets[j]
+            m.buckets[j] = s
+            s = after
+        }
+    }
+}
+
+# the value for key - failing with the default error when there is none, so a miss is never read as a value:
+# "try m.Get(k) catch default 0" gives a fallback, "try m.Get(k)" passes the miss on, "k in m" only asks
+fn (m Map<<K>, <V>>&) Get(key <K>) <V> ? {
+    for s mapSlot<<K>, <V>>&m = m.buckets[m.bucketOf(key)], s != null, s = s.next {
+        if s.key == key { return s.value }
+    }
+    error
+}
+
+# whether key has a value - what "key in m" asks (E29)
+fn (m Map<<K>, <V>>&) Has(key <K>) Bool {
+    for s mapSlot<<K>, <V>>&m = m.buckets[m.bucketOf(key)], s != null, s = s.next {
+        if s.key == key { return true }
+    }
+    return false
+}
+
+# removes key and its value, and says whether it was there
+fn (m mut Map<<K>, <V>>&) Remove(key <K>) Bool {
+    i := m.bucketOf(key)
+    prev mapSlot<<K>, <V>>&m = null
+    for s mapSlot<<K>, <V>>&m = m.buckets[i], s != null, s = s.next {
+        if s.key == key {
+            if prev == null { m.buckets[i] = s.next } else { prev.next = s.next }
+            m.count--
+            return true
+        }
+        prev = s
+    }
+    return false
+}
+
+# a position in a Map - handed out fresh by Iter(), so the map keeps none and every loop gets its own. It holds the
+# next slot itself, so each step follows one link rather than walking a chain from its start
+type MapIter<K, V> struct(of Map<<K>, <V>>&) {
+    m Map<<K>, <V>>&of = of
+    bucket mut I64 = 0                          # the next bucket to start a chain from
+    slot mut mapSlot<<K>, <V>>&of = null        # the next slot along the current chain; null once it is walked
+}
+
+fn (it mut MapIter<<K>, <V>>&) Next() MapEntry<<K>, <V>> ? Exhausted {
+    for it.slot == null {
+        if it.bucket == it.m.buckets.Len() { error Exhausted.END }
+        it.slot = it.m.buckets[it.bucket]
+        it.bucket++
+    }
+    e := MapEntry<<K>, <V>>(it.slot.key, it.slot.value)
+    it.slot = it.slot.next
+    return e
+}
+
+fn (m Map<<K>, <V>>&) Iter() MapIter<<K>, <V>> { return MapIter<<K>, <V>>(m) }
+
+test "put, get, replace, remove" {
+    m := Map<I32, I64>()
+    m.Put(1, 10)
+    m.Put(2, 20)
+    assert (try m.Get(1) catch default -1) == 10
+    m.Put(1, 11)
+    assert (try m.Get(1) catch default -1) == 11 and m.Len() == 2
+    assert (try m.Get(3) catch default -1) == -1
+    missed := false
+    try m.Get(3) catch { missed = true }
+    assert missed
+    assert m.Remove(1) and not m.Remove(1)
+    assert not m.Has(1) and m.Has(2) and m.Len() == 1
+}
+
+test "a map grows, and keeps every key through it" {
+    m := Map<I32, I32>()
+    for i in range 1000 { m.Put(i, i * i) }
+    assert m.Len() == 1000
+    for i in ran

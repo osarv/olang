@@ -1,0 +1,22 @@
+import "std/map"
+type lruNode struct(value I64) {
+    value mut
+    next mut lruNode& = null
+}
+type LRU struct() {
+    index mut map.Map<I64, mut lruNode&>& = map.Map<I64, mut lruNode&>()
+    head mut lruNode& = null
+}
+fn (c mut LRU&) front(n mut lruNode&c) {
+    c.head = n
+}
+fn (c mut LRU&) Get(key I64) I64 ? {
+    n := try c.index.Get(key)
+    c.front(n)
+    return n.value
+}
+fn main() ? {
+    c := LRU()
+    c.index.Put(1, lruNode(5))
+    assert (try c.Get(1)) == 5
+}

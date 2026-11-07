@@ -1,0 +1,16 @@
+type K struct(s String&) { s }
+type KL struct(l Lab&) { l }
+type HS struct(s String&) { s }
+type Lab extends String
+# a moved returned local reassigned with text of another length before it is returned - its new storage
+fn f(i I64) String {
+    s := "abc" $i
+    s = "a much longer text " $i " " $(i * 1000)
+    return s
+}
+fn main() {
+    a := f(1)
+    b := f(2)
+    assert churn() > 0
+    say($a " / " $b)
+}

@@ -1,0 +1,29 @@
+# P4a: destructor-bearing values built by a failing task's call and by its default - each destructed once
+error E {
+    NEG
+}
+Count mut I64 = 0
+type Res struct(k I64) {
+    k
+} destruct {
+    Count = Count + 1
+}
+fn mkRes(n I64) Res& ? E {
+    r Res& = Res(n)
+    if n < 0 { error E.NEG }
+    return Res(n * 10)
+}
+fn once(i I64) I64 {
+    a Res& = null
+    b Res& = null
+    join {
+        spawn a = try mkRes(i) catch default Res(-1)
+        spawn b = try mkRes(-i - 1) catch default Res(-2)
+    }
+    return a.k + b.k
+}
+fn main() ? {
+    t I64 = 0
+    for i in range 5 { t = t + once(i) }
+    println($t " " $Count)
+}

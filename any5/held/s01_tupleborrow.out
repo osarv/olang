@@ -1,0 +1,24 @@
+== build -debug -sanitize
+s01_tupleborrow.olang:10:7: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   10 |     k.Take(two(i, s))
+      |       ^~~~
+s01_tupleborrow.olang:7:45: note: the callee requires it because of this statement
+    7 | fn (k mut Keeper&) Take(a I64, x String&) { k.l.Push(x) }
+      |                                             ^
+s01_tupleborrow.olang:10:12: note: this text lives in a block that closes first - pass a copy, which is made where 'k' lives: write '$' before it
+   10 |     k.Take(two(i, s))
+      |            ^~~~~~~~~
+compilation failed with 1 error
+== build
+s01_tupleborrow.olang:10:7: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   10 |     k.Take(two(i, s))
+      |       ^~~~
+s01_tupleborrow.olang:7:45: note: the callee requires it because of this statement
+    7 | fn (k mut Keeper&) Take(a I64, x String&) { k.l.Push(x) }
+      |                                             ^
+s01_tupleborrow.olang:10:12: note: this text lives in a block that closes first - pass a copy, which is made where 'k' lives: write '$' before it
+   10 |     k.Take(two(i, s))
+== interpret
+run:   keep List<String&>["abc1"] v Qbc1
+baked: keep List<String&>["abc1"] v Qbc1
+status 0

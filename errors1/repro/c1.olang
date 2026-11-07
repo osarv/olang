@@ -1,0 +1,16 @@
+import "std/io"
+error E {
+    A
+}
+Big mut I64 = 9223372036854775807
+fn id(n I64) I64 ? {
+    if n == 0 { error E.A }
+    return n
+}
+fn plain(n I64) I64 { return n }
+fn main() {
+    a := checked id(Big + 1) catch BuiltinError.OVERFLOW default 1 catch default 2
+    b := checked plain(Big + 1) catch default 3
+    c := checked (id(Big) + 1) catch BuiltinError.OVERFLOW default 4 catch default 5
+    io.Println($a " " $b " " $c)!
+}

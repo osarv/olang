@@ -1,0 +1,8 @@
+fn f(a U16, c Bool) I64 { return (U16(a) if c else U16(a + 1)) }
+fn g(a U16, c Bool) I64 { return (a if c else a + 1) }
+run mut U16 = 7
+flag mut Bool = true
+fn main() ? {
+    assert f(run, flag) == 7
+    assert g(run, flag) == 7
+}

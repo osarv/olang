@@ -1,0 +1,10 @@
+# E10b: a struct holding a reference whose type declares Eq and Hash, with that reference null
+import "std/io"
+type K struct(s String&, n I32) {
+  s
+  n
+}
+fn main() ? {
+  k := K(null, 3)
+  try io.Print($k.Hash() "\n")
+}

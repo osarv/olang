@@ -1,0 +1,28 @@
+# 0859cbe accepts this Str; its parent rejected it (E11c). poke writes only its parameter's own field (now a "shallow"
+# write); the argument is a field of a conditional of references from two scopes, which RefExactScope cannot place,
+# so effPlaceOutside takes it for a temporary the Str made - but it is the rendered value's own Mid
+type In struct() {
+    k I64 = 0
+}
+type Mid struct() {
+    inner In = In()
+}
+type Bag struct(m mut Mid&) {
+    m
+}
+fn poke(p mut In&) { p.k++ }
+fn (b Bag&) Str() String {
+    loc mut Mid& = Mid()
+    poke((b.m if b.m.inner.k >= 0 else loc).inner)
+    return "b" $b.m.inner.k
+}
+fn render() String {
+    b := Bag(Mid())
+    first := $b
+    return $first " " $b " k=" $b.m.inner.k
+}
+Baked := render()
+fn main() ? {
+    println(Baked)
+    println(render())
+}

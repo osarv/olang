@@ -1,0 +1,37 @@
+import "std/io"
+
+type Holder struct() {
+    t String& = ""
+}
+
+G mut Holder& = Holder()
+
+# lets go of the global holder's text, and says so
+fn resetG(i I64) Bool {
+    G.t = $"text number " $i " padded out to many bytes ........................................"
+    return true
+}
+
+# a contract whose condition calls resetG: it runs on entry, before the body
+fn step(i I64) [resetG(i)] I64 ? ArgumentError { return i }
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    resetG(-1)
+    for i in range 5 {
+        v := G.t                    # a view of the global holder's text
+        try step(i) catch ArgumentError { }
+        churn()
+        io.Println(v)!              # used after the call whose contract let go of it
+    }
+}

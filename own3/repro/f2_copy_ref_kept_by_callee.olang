@@ -1,0 +1,42 @@
+# own3 F2: a reference to a borrowed copy's storage, kept by a callee (List.Push, Map.Put, a function or method storing
+# its argument into another's referent), outlives the copy's loans: the source then releases what the copy's own
+# pointers name, and reading through the kept reference reads freed memory.
+# -b -s: "use after scope closed"; -b: segfault; valgrind (-a x86-64-v3): invalid read in a block freed by
+# __olang_own_free; -i: "1 leaf5" (it never frees)
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type Big struct() {
+    x Outer& = null
+}
+fn put(dst mut Big&, x Outer&) { dst.x = x }      # keeps x in dst's referent - the obligation says so
+fn main() ? {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v                                        # a borrowed copy: loans on v.o until b's last use
+    l := List<Outer&>()
+    l.Push(b)                                     # b's last use - but l keeps a reference to b's storage
+    g := Big()
+    put(g, b)                                     # ...and so does g
+    v.o = null                                    # accepted: no loan is live - v.o's Inner and Leaf released
+    churn()
+    println($l[0].o.k " " $l[0].o.deep.text)      # b's stale pointer - freed memory
+    println($g.x.o.k)
+}

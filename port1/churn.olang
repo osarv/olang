@@ -1,0 +1,15 @@
+# shared by the programs here: allocate and free a lot, so a stale reference reads reused memory
+type cNode struct(v I64) {
+    v
+    w I64 = 99
+}
+fn Churn() I64 {
+    t := 0
+    for i in range 200 {
+        b cNode& = cNode(12345)
+        t = t + b.v
+        s := $i "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+        t = t + s.Len() - s.Len()
+    }
+    return t
+}

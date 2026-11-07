@@ -1,0 +1,25 @@
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) Add() { a.N++ }
+fn bump(a mut Acc&) { a.N++ }
+fn run(l mut List<Acc>&) {
+    defer l[0].Add()
+    defer bump(l[0])
+    defer l[0].N = l[0].N + 10
+    l[0].N = 100
+}
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    run(l)
+    println("l[0].N=" $l[0].N)
+    c := 0
+    a := Array<Acc>(1)
+    for i in range 3 {
+        a[0].Add()
+        if i == 1 { l[0].Add() }
+        cond := l[0].N if true else 5
+    }
+    println("l[0].N=" $l[0].N)
+}

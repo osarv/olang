@@ -1,0 +1,18 @@
+fn churnIt() {
+    for k in range 300 {
+        junk := $k "-churn-churn-churn-churn-churn-churn-churn-churn-churn-churn"
+        assert junk.Len() > 0
+    }
+}
+
+fn main() ? {
+    users := List<List<List<String&>>>()
+    users.Push(List<List<String&>>())
+    users[0].Push(List<String&>())
+    for k in range 3 {
+        t := $k "-loop-text-of-moderate-length"
+        users[0][0].Push($t)
+    }
+    churnIt()
+    for s in users[0][0] { println(s) }
+}

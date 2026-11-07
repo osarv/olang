@@ -1,0 +1,25 @@
+import "std/io"
+
+type Pt struct(x I64, y I64) {
+    x, y
+}
+
+fn slow(p Pt&) I64 {
+    s I64 = 0
+    for i in range 3000000 { s += i % 3 }
+    return p.x * 1000 + p.y + s - s
+}
+
+fn main() {
+    a I64 = 0
+    b I64 = 0
+    join {
+        if a == 0 {
+            spawn a = slow(Pt(1, 2))
+        }
+        if b == 0 {
+            spawn b = slow(Pt(3, 4))
+        }
+    }
+    io.Println($a " " $b)!
+}

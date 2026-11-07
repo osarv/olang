@@ -1,0 +1,6 @@
+import "std/os"
+fn main() ? {
+    f fn() = null
+    os.RunOnStack(1 << 20, f)
+    println("after")
+}

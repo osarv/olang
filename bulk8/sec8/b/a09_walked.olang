@@ -1,0 +1,59 @@
+import "std/io"
+
+type Blob unique struct(id I64) {
+    id
+    data := Array<I64>(16 + id.Mod(2), id)
+}
+
+# a walk's name over a Vec of unique values is a reference to the element; the body truncates
+fn walked(n I64) I64 {
+    ls := Vec<Blob>()
+    other := Vec<Blob>()
+    s := 0
+    for k in range n {
+        ls.Push(Blob(k + 1))
+        for b in ls {
+            ls.Truncate(0)
+            other.Push(Blob(-1000))
+            other.Truncate(0)
+            s += b.data[3]
+        }
+    }
+    return s
+}
+
+# w := element is a reference naming it
+fn named(n I64) I64 {
+    ls := Vec<Blob>()
+    other := Vec<Blob>()
+    s := 0
+    for k in range n {
+        ls.Push(Blob(k + 1))
+        w := ls[0]
+        ls.Clear()
+        other.Push(Blob(-1000))
+        other.Truncate(0)
+        s += w.data[3]
+    }
+    return s
+}
+
+# a Map's Ref kept across Remove
+fn mapped(n I64) I64 {
+    m := Map<I64, Blob>()
+    other := Vec<Blob>()
+    s := 0
+    for k in range n {
+        m.Put(1, Blob(k + 1))
+        w Blob& = m.Ref(1)!
+        m.Remove(1)
+        other.Push(Blob(-1000))
+        other.Truncate(0)
+        s += w.data[3]
+    }
+    return s
+}
+
+fn main() {
+    io.Println($walked(100))!
+}

@@ -1,0 +1,7 @@
+# control: the same through a named generic function (D9b: borrowed for the call)
+fn isFive(x <T>) Bool { return x[0] == 5 }
+fn main() ? {
+    a := Array<Array<I32, 2>>(3)
+    a[1][0] = 5
+    println($isFive(a[1]) " " $isFive(a[0]))
+}

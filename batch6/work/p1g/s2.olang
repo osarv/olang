@@ -1,0 +1,43 @@
+# P1g/P4a: String value targets given a default by the task's own clause, kept past the loop
+error E {
+    NEG
+}
+type V struct(n I64) {
+    n
+}
+fn render(n I64) String ? E {
+    if n < 0 { error E.NEG }
+    return "r" $n "-abcdefghijklmnopqrstuvwxyz0123456789"
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+fn main() ? {
+    a String = "init"
+    b String = "init"
+    for i in range 3 {
+        join {
+            spawn a = try render(i - 5) catch default "def" $i "-abcdefghijklmnopqrstuvwxyz"
+            spawn b = try render(i) catch default "def" $i "-abcdefghijklmnopqrstuvwxyz"
+        }
+        churn()
+    }
+    churn()
+    println(a)
+    println(b)
+    ks := List<String&>()
+    for i in range 3 {
+        c String = "c"
+        join {
+            spawn c = try render(i - 1) catch default "cdef" $i "-abcdefghijklmnopqrstuvwxyz"
+        }
+        ks.Push($c)
+        churn()
+    }
+    println($ks)
+}

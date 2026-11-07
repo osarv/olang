@@ -1,0 +1,48 @@
+# F1b: a slice or an 'as' view of an owned object's inline array, kept in a local (directly or
+# through a borrow 'c := h.cur'), carries no loan - the owner is released under it.
+# Expected output: 41, 51, 61. Accepted; -s reports use after scope closed.
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type In3 struct(k I64) {
+    data Array<I64, 8> = Array<I64, 8>()
+}
+type H3 struct() {
+    cur own mut In3&
+}
+fn sl(h mut H3&) I64 {
+    h.cur = In3(1)
+    h.cur.data[0] = 41
+    s := h.cur.data[0:8]
+    h.cur = null
+    churn()
+    return s[0]
+}
+fn asView(h mut H3&) I64 {
+    h.cur = In3(1)
+    h.cur.data[2] = 51
+    v := h.cur.data as Array<I64, 8>&
+    h.cur = null
+    churn()
+    return v[2]
+}
+fn viaLocal(h mut H3&) I64 {
+    h.cur = In3(1)
+    h.cur.data[1] = 61
+    c := h.cur
+    s := c.data[0:8]
+    h.cur = null
+    churn()
+    return s[1]
+}
+fn main() ? {
+    h mut H3& = H3()
+    println($sl(h))
+    println($asView(h))
+    println($viaLocal(h))
+}

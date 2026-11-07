@@ -1,0 +1,28 @@
+import "std/io"
+type M struct(v I64) { v }
+type H struct() {
+    buf mut Array<M>& = Array<M>(4, M(1))
+}
+G mut H& = H()
+N mut I64 = 0
+fn (a M) Plus(b M) M {
+    N++
+    if N == 2 { G.buf = Array<M>(4, M(9)) }
+    return M(a.v + b.v)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 100 {
+        x := Array<M>(4, M(i))
+        t += x[1].v
+    }
+    return t
+}
+fn main() {
+    d := Array<M>(4, M(100))
+    x := G.buf + d
+    churn()
+    s I64 = 0
+    for m in x { s += m.v }
+    io.Println($s " " $G.buf[0].v)!
+}

@@ -1,0 +1,44 @@
+# sum: n pseudo-random I64 values pushed onto a List, then summed over and over - through the List and through an
+# Array copied from it, each with a for loop and with an iterator's Fold ("push" only builds the list). Which runs is
+# the first argument; the C version pushes onto a growable array and sums it with a hand-written loop for all of them.
+import "std/io"
+import "std/os"
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 4 { error }
+    mode := args[1]
+    n := try args[2].ParseInt()
+    passes := try args[3].ParseInt()
+    l := List<I64>()
+    s I64 = 1
+    for i in range n {
+        s = s * 6364136223846793005 + 1442695040888963407
+        l.Push(s >> 33)
+    }
+    total I64 = 0
+    if mode == "push" {
+        total = l.Len() + l[n - 1]
+    } else if mode == "list" {
+        for p in range passes {
+            for x in l { total += x ^ p }
+        }
+    } else if mode == "listfold" {
+        for p in range passes {
+            total += l.Iter().Fold(I64(0), fn(acc, x) { return acc + (x ^ p) })
+        }
+    } else if mode == "array" {
+        a := l.ToArray()
+        for p in range passes {
+            for x in a { total += x ^ p }
+        }
+    } else if mode == "arrayfold" {
+        a := l.ToArray()
+        for p in range passes {
+            total += a.Iter().Fold(I64(0), fn(acc, x) { return acc + (x ^ p) })
+        }
+    } else {
+        error
+    }
+    try io.Print($total "\n")
+}

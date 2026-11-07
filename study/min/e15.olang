@@ -1,0 +1,11 @@
+fn pick(a Array<I64>&, i I32) I64 { return a[i] }
+fn main() ? {
+    queue := List<I32>()
+    queue.Push(0)
+    v := queue[0]
+    data := Array<I64>(4, 7)
+    lists := List<mut List<I32>&>()
+    lists.Push(List<I32>())
+    out := lists[v]
+    assert out.Len() == 0
+}

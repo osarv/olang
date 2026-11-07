@@ -1,0 +1,22 @@
+import "std/io"
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn (t mut Token&) Use() { t.uses++ }
+
+fn both(r Token&, x Token) I64 {
+    x.Use()
+    x.Use()
+    return r.uses * 10 + x.uses
+}
+
+fn pass(t Token) I64 {
+    return both(t, t)
+}
+
+fn main() {
+    io.Println($pass(Token(1)))!
+}

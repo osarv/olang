@@ -1,0 +1,12 @@
+type A struct() {
+    b B = B()
+    v Vec<String&> = Vec<String&>()
+}
+type B struct() {
+    a A = A()
+}
+fn main() ? {
+    x := A()
+    y := take x.v
+    println($y.Len())
+}

@@ -1,0 +1,19 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# what does the compiler suggest for text pushed into an owned List after being made in the block?
+type CB struct() {
+    items own mut List<String&>& = List<String&>()
+}
+fn main() ? {
+    c := CB()
+    l := c.items
+    s := $5 "-new-text"
+    l.Push(s)
+    println(s)
+}

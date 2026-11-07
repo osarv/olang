@@ -1,0 +1,30 @@
+type Diag struct() {
+    col I64 = 0
+}
+type Ctx struct(nums List<I64>&, diag mut Diag&) {
+    nums
+    diag
+}
+fn (c mut Ctx&) note() { c.diag.col = c.nums.Len() }
+fn check(d mut Diag&) {
+    nums := List<I64>()
+    nums.Push(4)
+    c := Ctx(nums, d)
+    c.note()
+}
+type Ctx2 struct(nums Array<I64>&, diag mut Diag&) {
+    nums
+    diag
+}
+fn check2(d mut Diag&) {
+    nums := I64[1, 2]
+    c := Ctx2(nums, d)
+    c.diag.col = 7
+}
+fn main() ? {
+    d := Diag()
+    check(d)
+    println($d.col)
+    check2(d)
+    println($d.col)
+}

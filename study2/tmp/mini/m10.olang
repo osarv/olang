@@ -1,0 +1,12 @@
+fn remote(quoted String&) Bool {
+    path := quoted[1:quoted.Len() - 1]
+    first := try path.FindByte('/') catch default path.Len()
+    if "." in path[0:first] { return true }
+    return false
+}
+fn remote2(path String&) Bool {
+    return "." in path[0:3]
+}
+fn main() ? {
+    println($remote("\"a.b/c\"") " " $remote2("abcd"))
+}

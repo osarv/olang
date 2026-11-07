@@ -1,0 +1,19 @@
+# r32 FRICTION (recorded as inexpressible, T25c/permission batch) - a reassignable global pointing at one of several
+# immutable constants - the current theme, the active mode table - cannot be written: "Current mut Theme& = Light" makes
+# the referent writable too, so an immutable Light cannot be its value, and without "mut" Current cannot be reassigned.
+# The only workaround is to make every candidate a mutable global.
+#
+# expected: light then dark
+# actual: error[T25c] at lines 14 and 17
+type Theme struct(name String&, fg I32) {
+    name
+    fg
+}
+Light Theme& = Theme("light", 0)
+Dark Theme& = Theme("dark", 15)
+Current mut Theme& = Light
+fn main() ? {
+    println(Current.name)
+    Current = Dark
+    println(Current.name)
+}

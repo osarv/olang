@@ -1,0 +1,6 @@
+# check: fail error[S18a]: an assertion's message is text, found I64
+# S18a: the message after an assert's comma is text
+Seed mut I64 = 0
+fn main() ? {
+    assert Seed == 0, Seed
+}

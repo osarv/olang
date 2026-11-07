@@ -1,0 +1,6 @@
+type B struct(f fn() I64) {
+    F fn() I64 = f
+}
+fn K(x Array<I64>&) B {
+    return B(fn() I64 { return x[1] })
+}

@@ -1,0 +1,25 @@
+# E31b view lend, aliasing through a LATER ARGUMENT: the receiver's copy is read first, then the argument replaces the
+# element, then the method writes through the copy's (old) reference - the element never sees it. On an Array the
+# receiver is the element itself and the write lands. Before c9d14a7: E31b's error.
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+fn (v mut V&) Put(x I64) { v.d[0] = x }
+fn replace(l mut List<V>&) I64 {
+    l[0] = V(Array<I64>(1), 1)
+    return 5
+}
+fn replaceA(a mut Array<V>&) I64 {
+    a[0] = V(Array<I64>(1), 1)
+    return 5
+}
+fn main() ? {
+    l := List<V>()
+    l.Push(V(Array<I64>(1), 0))
+    l[0].Put(replace(l))
+    println("list:  element d[0] " $l[0].d[0])
+    a := V[V(Array<I64>(1), 0)]
+    a[0].Put(replaceA(a))
+    println("array: element d[0] " $a[0].d[0])
+}

@@ -1,0 +1,19 @@
+# r08 OVER-REJECTION - O17 (S9a for-in lowering): "for v in c" over a LOCAL value of a type that is its own iterator
+# (has Next) and holds a List is O17; the hand-written loop "v := try c.Next() catch Exhausted { break }" over the same
+# local compiles, and so does declaring it "c mut Countdown& = Countdown(4)". The same type holding only an I64 is fine.
+# (A binary heap drained with "for v in heap" in Dijkstra.)
+#
+# expected: 10
+# actual: error[O17] at line 16 ("for")
+type Countdown struct(n I64) {
+    left List<I64>
+    for i in range n { left.Push(n - i) }
+}
+fn (c mut Countdown&) Next() I64 ? Exhausted { return try c.left.Pop() catch { error Exhausted.END } }
+fn sum() I64 {
+    c := Countdown(4)
+    s I64 = 0
+    for v in c { s += v }
+    return s
+}
+fn main() ? { println($sum()) }

@@ -1,0 +1,41 @@
+# PRE-EXISTING, CONFIRMED UAF/segfault. w((i if j < 0 else o).m.inner): a conditional of two struct values from
+# different scopes, a value field borrowed through its bare mut field and built into. new and base -b segfault;
+# -s: 'use after scope closed'. The same through a local is refused (O11/O12).
+type In struct() {
+    k I64 = 0
+    l List<I64> = List<I64>()
+}
+type Mid struct() {
+    inner In = In()
+}
+type Bag struct(m mut Mid&) {
+    m
+}
+fn w(p mut In&) {
+    p.k++
+    p.l.Push(p.k * 10)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn pick(a Bag&, b Bag&, k Bool) I64 {
+    w((a if k else b).m.inner)
+    return 0
+}
+fn main() ? {
+    o := Bag(Mid())
+    for j in range 20 {
+        i := Bag(Mid())
+        w((i if j < 0 else o).m.inner)
+    }
+    churn()
+    println($o.m.inner.k " " $o.m.inner.l.Len() " " $o.m.inner.l[19])
+    println($o.m.inner.l.ToArray()[:3])
+}

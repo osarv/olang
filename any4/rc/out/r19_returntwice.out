@@ -1,0 +1,15 @@
+== r19_returntwice
+  san:    exit 0 run: a Qbc1 b abc1|baked: a Qbc1 b abc1|
+  O3:     exit 0 run: a Qbc1 b abc1|baked: a Qbc1 b abc1|
+  interp: exit 0 run: a Qbc1 b abc1|baked: a Qbc1 b abc1|
+--- compile (-debug -sanitize)
+built ./build/r19_returntwice.debug.san
+--- run san
+run: a Qbc1 b abc1
+baked: a Qbc1 b abc1
+--- run O3
+run: a Qbc1 b abc1
+baked: a Qbc1 b abc1
+--- interpret
+run: a Qbc1 b abc1
+baked: a Qbc1 b abc1

@@ -1,0 +1,22 @@
+fn g1(c Bool, f F32) F32 { return f + (1 if c else 2) }
+fn g2(c Bool, u U8) Bool { return u == (300 if c else 1) }
+fn g3(c Bool, h F16) F16 { return h * (2 if c else 0.5) }
+fn g4(c Bool, k I64) I64 { return k - (-1 if c else 1) }
+fn g5(c Bool, u U32) U32 { return u * (2 if c else 3) }
+fn g7(c Bool, x I32) Bool { return 1 < (2 if c else 0) < x }
+fn g8(c Bool) I64 { return pick((1 if c else 2), (3 if c else 4)) }
+fn pick(a <T>, b T) T { return a if a > b else b }
+fn g9(c Bool, b U8) I64 { return b + (1 if c else (1 << 40)) }
+B1 F32 = g1(true, 0.5)
+B2 Bool = g2(true, 44)
+B3 F16 = g3(false, 3.0)
+B4 I64 = g4(true, 5)
+B5 U32 = g5(true, 4000000000)
+B7 Bool = g7(true, 3)
+B8 I64 = g8(false)
+B9 I64 = g9(false, 3)
+C mut Bool = true
+fn main() ? {
+    println("baked " $B1 " " $B2 " " $B3 " " $B4 " " $B5 " " $B7 " " $B8 " " $B9)
+    println("run   " $g1(C, 0.5) " " $g2(C, 44) " " $g3(not C, 3.0) " " $g4(C, 5) " " $g5(C, 4000000000) " " $g7(C, 3) " " $g8(not C) " " $g9(not C, 3))
+}

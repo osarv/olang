@@ -1,0 +1,82 @@
+# QCC: a bare parameter can never affect the caller - but the elements of a bare Vec<node&> (and Array<node&>) are
+# handed out writable by the element reads, and a callee writes the caller's nodes through them
+import "std/io"
+
+type node struct(v I64) {
+    v
+}
+
+type bag struct(items Vec<node&>) {
+    items
+}
+
+fn byIndex(v Vec<node&>) {
+    x := v[0]
+    x.v += 1
+}
+
+fn byWalk(v Vec<node&>) {
+    for x in v { x.v += 10 }
+}
+
+fn byGet(v Vec<node&>) {
+    x := try v.Get(0) catch default node(0)
+    x.v += 100
+}
+
+fn byView(v Vec<node&>) {
+    a := v.View()
+    a[0].v += 1000
+}
+
+fn byClone(v Vec<node&>) {
+    u := v.Clone()
+    u[0].v += 10000
+}
+
+fn byArray(a Array<node&>) {
+    x := a[0]
+    x.v += 100000
+}
+
+fn byField(b bag) {
+    for x in b.items { x.v += 1000000 }
+}
+
+# the copy on entry of a bare array of references is Array<mut node&> (-memory says so): its elements write through
+fn byEntryCopy(a Array<node&>) I64 {
+    a[0].v += 10000000
+    return a.Len()
+}
+
+fn main() {
+    nd := node(0)
+    v := Vec<node&>()
+    v.Push(nd)
+    byIndex(v)
+    byWalk(v)
+    byGet(v)
+    byView(v)
+    byClone(v)
+    byArray(node&[nd])
+    byField(bag(v))
+    n := byEntryCopy(node&[nd])
+    io.Println($nd.v " " $n)!
+}
+
+fn afterWrites() I64 {
+    nd := node(0)
+    v := Vec<node&>()
+    v.Push(nd)
+    byIndex(v)
+    byWalk(v)
+    n := byEntryCopy(node&[nd])
+    return nd.v + n
+}
+
+# the evaluator's reading, baked while compiling (K2)
+Baked I64 = afterWrites()
+
+test "baked vs run time" {
+    assert Baked == afterWrites(), "baked " $Baked ", run time " $afterWrites()
+}

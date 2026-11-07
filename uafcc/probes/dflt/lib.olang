@@ -1,0 +1,7 @@
+Lvl mut I64 = 1
+fn Mk(s String&) String { return $s "-made" }
+type E struct(A String&, B String& = Mk("dflt") if Lvl > 0 else "") {
+    A
+    B
+}
+fn F(a String&, b String& = Mk("fd") if Lvl > 0 else "") E { return E(a, b) }

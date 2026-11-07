@@ -1,0 +1,32 @@
+# NEW (decision 48). The same through a Call adapter: SemanticMayBuild(Call) is false, so the adapter loads the instance scope raw instead of asking __olang_scope_mine.
+# Two tasks call a closure capturing a reference in main's scope while main builds into that same scope. The closure
+# builds a node into the captured scope only through Adder.Call's conditional, which SemanticMayBuild does not see, so the closure's
+# prologue asks nothing (no __olang_capture_scope) and its creation claims nothing (no __olang_scope_escape): the task
+# bumps main's arena unchecked from its own thread.
+#   expected: "299999 299999 299999" every run, no TSan report (-i, and 48f82fb, print that; 48f82fb's -r is clean)
+#   actual:   -r: "WARNING: ThreadSanitizer: data race ... __olang_scope_alloc_a <- Adder.Call <- adapter (thread T1) vs __olang_scope_alloc_a
+#             <- main"; -b: now and then a wrong value or a segfault (01d: 3 of 50 runs wrong, 1 segfault)
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Adder struct(n mut Node&) {
+    n
+}
+fn (a Adder) Call(i I64) { a.n.next = a.n.next if i < 0 else Node(i) }
+fn work(f fn(i I64), n I64) {
+    for i in range n { f(i) }
+}
+fn main() ? {
+    a mut Node& = Node(0)
+    b mut Node& = Node(0)
+    aa := Adder(a)
+    ab := Adder(b)
+    c mut Node& = Node(0)
+    join {
+        spawn work(aa, 300000)
+        spawn work(ab, 300000)
+        for i in range 300000 { c.next = Node(i) }
+    }
+    println($a.next.v " " $b.next.v " " $c.next.v)
+}

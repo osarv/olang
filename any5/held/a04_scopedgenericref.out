@@ -1,0 +1,16 @@
+== build -debug -sanitize
+a04_scopedgenericref.olang:16:15: error[E25]: gid builds no result a scope argument could place
+   16 |         h.p = gid&t(n)
+      |               ^~~~~~~~
+compilation failed with 1 error
+== build
+a04_scopedgenericref.olang:16:15: error[E25]: gid builds no result a scope argument could place
+   16 |         h.p = gid&t(n)
+      |               ^~~~~~~~
+compilation failed with 1 error
+== interpret
+a04_scopedgenericref.olang:16:15: error[E25]: gid builds no result a scope argument could place
+   16 |         h.p = gid&t(n)
+      |               ^~~~~~~~
+compilation failed with 1 error
+status 1

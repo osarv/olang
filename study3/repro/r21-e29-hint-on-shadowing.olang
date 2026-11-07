@@ -1,0 +1,12 @@
+# r21 DIAGNOSTIC - E29/D3a: reusing a parameter's name as a for-in variable is plain shadowing (D3a), but the message
+# reads it as membership: "'s' is already declared, and a for-in declares its names - to loop while it is in c:
+# 'for { if x not in c { break } }'". A newcomer looping over a schema's alternatives inside "match s" meant neither.
+#
+# expected: "'s' is already a parameter, and names are never reused (D3a) - choose another name"
+# actual: error[E29] at line 9 as quoted
+fn count(s I64, options Array<I64>&) I64 {
+    n I64 = 0
+    for s in options { n += s }
+    return n
+}
+fn main() ? { println($count(1, I64[1, 2])) }

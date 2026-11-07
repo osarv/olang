@@ -1,0 +1,19 @@
+# (d) FRICTION / memory, O25a+E16a: a slice of a fresh temporary, declared where a longer-lived list lives (as the
+# compiler's note asks: 'gone String&history = m.text()[at:at + n]'), borrows the WHOLE temporary, which is therefore
+# built in history's scope and kept for as long as the list - to keep n characters. progs/editor.olang's driver did
+# this once per delete: 40k edits 221 MB, against 27 MB when the n characters are built on their own
+# ('b.slice(at, n)'). Nothing in the source shows the 4 KB copy that stays; Go has the same trap (a substring pins its
+# string), but there a GC at least frees it when the substring goes.
+# Below: 100k turns keeping 3 characters each: 140 MB; 'w := whole(t); gone String&history = $w[0:3]' (a copy): 11 MB.
+# Expected (direction): a slice of a temporary landing in a longer-lived scope copies the slice (only the temporary
+# is built where the statement stands), or a note says what is kept.
+Turns I64 = 100000
+fn whole(i I64) String { return ("x" $i).Repeat(200) }
+fn main() ? {
+    history := List<String&>()
+    for t in range Turns {
+        gone String&history = whole(t)[0:3]
+        history.Push(gone)
+    }
+    println($history.Len() " " $history[5])
+}

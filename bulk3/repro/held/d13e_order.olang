@@ -1,0 +1,8 @@
+import "std/io"
+type Node struct(v I64) { v }
+Mode I64 = 1
+Y I64 = readX()
+X Node&
+if Mode == 1 { X = Node(5) } else { X = Node(6) }
+fn readX() I64 { return X.v }
+fn main() { io.Println($Y " " $X.v)! }

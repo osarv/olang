@@ -1,0 +1,15 @@
+# a fixed array of text copied into an any kept past the loop body
+type Sized trait {
+    Len() I64
+}
+fn main() {
+    xs := List<any Sized&>()
+    for i in range 3 {
+        a := Array<String&, 2>()
+        a[0] = "f" $i "-" $(i * 23)
+        a[1] = "g"
+        xs.Push(a)
+    }
+    churn()
+    for x in xs { say($x) }
+}

@@ -1,0 +1,23 @@
+# LIFO destruction in an ordinary function: a newer destructor-bearing instance stored into an older one's field is
+# released first, and the older one's destructor reads it after
+Log mut I64 = 0
+type Res2 struct(id I64) {
+    id
+} destruct {
+    Log = Log * 10 + 2
+}
+type B struct() {
+    r mut Res2& = null
+} destruct {
+    if r != null {
+        Log = Log * 10 + (5 if r.id == 7 else 6)
+    }
+}
+fn f() {
+    b mut B& = B()
+    b.r = Res2(7)
+}
+fn main() ? {
+    f()
+    println($Log)
+}

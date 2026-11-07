@@ -1,0 +1,23 @@
+type Named struct(k I64) {
+    k
+    name String& = "nm" $k "-text-built-by-ctor"
+    toks Vec<I64> = Vec<I64>()
+}
+type Host struct() {
+    lx Named = Named(0)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+GN mut Named = Named(1)
+fn reset(k I64) { GN = Named(k) }
+fn main() ? {
+    reset(5)
+    churn()
+    println(GN.name)
+}

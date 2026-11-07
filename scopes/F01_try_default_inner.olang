@@ -1,0 +1,23 @@
+# try catch default: an inner reference as the default
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn mk(k I64) Node& ? {
+    if k > -5 { error }
+    return Node(7)
+}
+fn main() ? {
+    outer Node& = Node(1)
+    keep Node& = outer
+    for i in range 2 {
+        inner Node& = Node(42)
+        keep = try mk(i) catch default inner
+    }
+    churn()
+    try io.Print($keep.v "\n")
+}

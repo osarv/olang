@@ -1,0 +1,23 @@
+# check: run
+# flags: -D Profile=prod -D Port=443 -D Ratio=2 -D Verbose=true
+# B10c: an immutable global of a type a -D value can have is a build constant's default - -D replaces it, fitted to the
+# declared type; a top-level condition (B9a) and a local one (S8b) read the value -D gave
+Profile := "dev"
+Port I64 = 8080
+Ratio F64 = 1.5
+Verbose := false
+Quiet := true
+
+if Profile == "prod" {
+    Banner := "production"
+} else {
+    Banner := "development"
+}
+
+fn main() ? {
+    assert Profile == "prod" and Port == 443 and Ratio == 2.0 and Banner == "production"
+    v := 0
+    if Verbose { v = 1 }
+    if Quiet { v += 10 }
+    assert v == 11
+}

@@ -1,0 +1,17 @@
+# a converted view of a Vec field of an owned object, then the object released
+type Lexer struct() {
+    chars Vec<Char> = Vec<Char>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn main() ? {
+    p := Parser()
+    p.lx = Lexer()
+    for i in range 5 { p.lx.chars.Push('a') }
+    s := String(p.lx.chars.View())
+    p.lx = null
+    w := Vec<I64>()
+    for i in range 100 { w.Push(i) }
+    println(s)
+}

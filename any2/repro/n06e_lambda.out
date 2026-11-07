@@ -1,0 +1,15 @@
+== build -debug -sanitize
+n06e_lambda.olang:20:14: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
+   20 |         f := fn() { xr.Push(r) }
+      |              ^~
+compilation failed with 1 error
+== build
+n06e_lambda.olang:20:14: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
+   20 |         f := fn() { xr.Push(r) }
+      |              ^~
+compilation failed with 1 error
+== interpret
+rows 2 t0-0
+rows 2 t1-7
+rows 2 t2-14
+status 0

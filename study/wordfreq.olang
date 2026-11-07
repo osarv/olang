@@ -1,0 +1,83 @@
+# Word frequencies of a text file: read it, split it into lowercase words, count them in a Map, sort the
+# counts and print a table of the most common.
+import "std/io"
+import "std/map"
+import "std/os"
+
+type WordCount struct(word String&, count I64) {
+    word
+    count
+}
+
+# the words of the text, lowercased, each a fresh String
+fn wordsOf(text String&) List<String&>& {
+    out List<String&>&return = List<String&>()
+    b := StringBuilder()
+    for c in text {
+        if c.IsLetter() or c == '\'' {
+            b.PushChar(c.ToLower())
+        } else if b.Len() > 0 {
+            out.Push(b.ToString())
+            b = StringBuilder()
+        }
+    }
+    if b.Len() > 0 { out.Push(b.ToString()) }
+    return out
+}
+
+fn countWords(words List<String&>&) map.Map<String&, I64>& {
+    counts map.Map<String&, I64>&return = map.Map<String&, I64>()
+    for w in words {
+        counts.Put(w, (try counts.Get(w) catch default 0) + 1)
+    }
+    return counts
+}
+
+fn pad(s String&, width I64) String& {
+    b := StringBuilder()
+    b.Push(s)
+    for i in range width - s.Len() { b.PushChar(' ') }
+    return b.ToString()
+}
+
+fn bar(n I64, max I64, width I64) String& {
+    filled I64 = n * width / max
+    return String(Array<Char>(filled, '#'))
+}
+
+fn main() ? os.OsError + io.IoError {
+    args := os.Args()
+    # (not 'path String& = "..."' then 'path = args[1]': the local is writable, args' elements are not)
+    path := args[1] if args.Len() > 1 else "wordfreq_sample.txt"
+    if not os.Exists(path) {
+        sample := "The quick brown fox jumps over the lazy dog. The dog sleeps; the fox runs.\nIt's the fox's day: the fox, the dog and the quick cat.\n"
+        try os.WriteFile(path, sample)
+    }
+    text := try os.ReadFile(path)
+    lines := text.Split("\n").Count(fn(l String&) Bool { return l.Len() > 0 })
+    words := wordsOf(text)
+    counts := countWords(words)
+    entries := List<WordCount>()
+    for e in counts { entries.Push(WordCount(e.Key, e.Value)) }
+    recs := entries.ToArray()
+    # (not "recs.Sort(...)": sorting records holding text fails inside the prelude, see min/h1.olang - so sort positions)
+    order := Array<I64>(recs.Len())
+    for i in range recs.Len() { order[i] = i }
+    order.Sort(fn(x I64, y I64) Bool {
+        a := recs[x]
+        b := recs[y]
+        return a.count > b.count or (a.count == b.count and a.word.Compare(b.word) < 0)
+    })
+    longest := words[0]
+    for w in words { if w.Len() > longest.Len() { longest = w } }
+    try io.Print("file " $path ": " $lines " lines, " $words.Len() " words, " $counts.Len() " distinct, longest '" $longest "'\n")
+    top := order[:5] if order.Len() > 5 else order[:]
+    max := recs[top[0]].count
+    for i in top {
+        wc := recs[i]
+        try io.Print($pad(wc.word, 8) " " $wc.count " " $bar(wc.count, max, 20) "\n")
+    }
+    rare := List<String&>()
+    for i in range recs.Len() { if recs[i].count == 1 { rare.Push(recs[i].word) } }        # ("for wc in recs" is rejected, min/h6.olang)
+    try io.Print("seen once: " $rare.Len() "\n")
+}

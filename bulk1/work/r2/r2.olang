@@ -1,0 +1,37 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    t String& = $"node " $v " with text padded out to a fair length ..........................."
+}
+
+type Holder struct() {
+    l List<mut Node&>
+    l2 List<mut Node&>
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    h := Holder()
+    for i in range 5 {
+        h.l2 = List<mut Node&>()                      # the holder's second list made again each turn
+        h.l2.Push(Node(i))
+        h.l.Push(try h.l2.Pop() catch { unreachable })  # moved into the first list
+        h.l2 = List<mut Node&>()                      # the second list let go of
+        churn()
+        t I64 = 0
+        for x in h.l { t = t * 10 + x.v + x.t.Len() }
+        io.Println($t)!
+        if h.l.Len() > 2 { try h.l.Pop() catch { } }
+    }
+}

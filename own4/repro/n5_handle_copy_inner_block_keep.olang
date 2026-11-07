@@ -1,0 +1,72 @@
+# own4 N5: F2 holds what a call keeps "until the end of the block the destination lives in", and for a handle (List,
+# Map) takes the block of the local named - but a handle's copy (l2 := l, a for-in element, ...) declared in an inner
+# block shares state that lives where the original was made, an outer block. The hold ends with the inner block, the
+# release after it is accepted, and the outer name reads the kept copy's stale own pointers.
+# -b -s: "use after scope closed" (each of the three); -b: segfault; -i: "1 leaf5" (it never frees)
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+fn viaCopy() {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v                       # a borrowed copy
+    l := List<Outer&>()
+    {
+        l2 := l                  # a second name for l's state - which lives in the outer block
+        l2.Push(b)               # kept "until the end of the block l2 lives in": the inner one
+    }
+    v.o = null                   # accepted
+    churn()
+    println($l[0].o.k " " $l[0].o.deep.text)
+}
+fn viaLoop() {
+    v := Outer()
+    v.o = Inner(2)
+    v.o.deep = Leaf(6)
+    b := v
+    ls := List<List<Outer&>>()
+    ls.Push(List<Outer&>())
+    for inner in ls {
+        inner.Push(b)            # the element's state lives where ls keeps it; held only to the loop body's end
+    }
+    v.o = null
+    churn()
+    println($ls[0][0].o.k " " $ls[0][0].o.deep.text)
+}
+fn viaMap() {
+    v := Outer()
+    v.o = Inner(3)
+    v.o.deep = Leaf(7)
+    b := v
+    m := Map<I64, Outer&>()
+    {
+        m2 := m
+        m2.Put(1, b)
+    }
+    v.o = null
+    churn()
+    x := try m.Get(1) catch default null
+    println($x.o.k " " $x.o.deep.text)
+}
+fn main() ? {
+    viaCopy()
+    viaLoop()
+    viaMap()
+}

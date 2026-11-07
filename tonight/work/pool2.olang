@@ -1,0 +1,24 @@
+import "std/os"
+fn work(seed I64) I64 {
+    s I64 = 0
+    for r in range 4 {
+        a := Array<I64>(200000 + seed * 7000 + r * 1000, seed)
+        s = s + a[a.Len() - 1]
+    }
+    return s
+}
+fn main() ? {
+    out mut Array<I64>& = Array<I64>(6)
+    for round in range 20 {
+        join {
+            for t in range 3 { spawn out[t] = work(t + round) }
+            for t in range 3, 6 {
+                spawn fn() {
+                    os.RunOnStack(1 << 20, fn() { out[t] = work(t + round) })
+                }
+            }
+        }
+        os.RunOnStack(1 << 20, fn() { out[0] = out[0] + work(round) })
+    }
+    println($out)
+}

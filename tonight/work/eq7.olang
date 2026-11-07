@@ -1,0 +1,7 @@
+# "==" on a struct holding an array reference of its own type: the compiler crashes (no cycle in the data needed)
+type S struct(xs Array<S>&) { xs }
+fn main() ? {
+    a := S(Array<S>(0))
+    b := S(Array<S>(0))
+    println($(a == b))
+}

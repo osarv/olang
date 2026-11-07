@@ -1,0 +1,26 @@
+# a method pushing its argument into a global list, called through an any with a loop-local argument
+type Node struct(v String&) { v }
+type Reg trait {
+    Reg(n Node&)
+}
+GL List<Node&> = List<Node&>()
+type S struct(k I64) { k }
+fn (s S&) Reg(n Node&) { GL.Push(n) }
+fn viaAny(r any Reg&) {
+    for i in range 3 {
+        n := Node("a" $i "-" $(i * 7))
+        r.Reg(n)
+    }
+}
+fn direct(s S&) {
+    for i in range 3 {
+        n := Node("d" $i)
+        s.Reg(n)
+    }
+}
+fn main() {
+    s := S(0)
+    viaAny(s)
+    churn()
+    for n in GL { say(n.v) }
+}

@@ -1,0 +1,16 @@
+# D at depth 12 through a generic wrapper chain: a borrowed copy, then a push
+type L0 struct() {
+    toks Vec<I64> = Vec<I64>()
+}
+type W<T> struct(x T) {
+    x
+}
+fn main() ? {
+    o := W(W(W(W(W(W(W(W(W(W(W(W(L0()))))))))))))
+    for i in range 3 { o.x.x.x.x.x.x.x.x.x.x.x.x.toks.Push(i + 1) }
+    c := o
+    for i in range 100 { o.x.x.x.x.x.x.x.x.x.x.x.x.toks.Push(i) }
+    z := Vec<I64>()
+    for i in range 5 { z.Push(777) }
+    println($c.x.x.x.x.x.x.x.x.x.x.x.x.toks[0])
+}

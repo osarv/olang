@@ -1,0 +1,16 @@
+type E1 error { A(s String, n I64), B }
+
+fn f(k I64) I64 ? E1 {
+    if k % 3 == 0: error E1.B
+    error E1.A("k" $k, k)
+}
+
+export fn Probe(k I64) I64 ? E1 {
+    if k < 0: return 5
+    x := try f(k) catch E1.B default 1
+    return x
+}
+
+export fn Catches(k I64) I64 {
+    return try f(k) catch E1.A e default e.n catch default 0
+}

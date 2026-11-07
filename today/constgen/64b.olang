@@ -1,0 +1,8 @@
+# T29a/T7d: V3(a) passed by reference - -b invalid IR; -i indexes past the 2 elements it was given
+type V3 extends Array<F32, 3>
+fn third(v V3&) F32 { return v[2] }
+fn main() ? {
+    a := F32[1.5, 2.5]
+    guard := F32[99.0, 98.0]
+    println($third(V3(a)) " " $guard)
+}

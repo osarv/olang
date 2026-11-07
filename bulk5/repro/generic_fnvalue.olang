@@ -1,0 +1,13 @@
+# under the switches a function with a bare array parameter cannot be given to a generic taking fn(x T) T with T
+# bound to the same type: the by-pointer representation leaks into the function type (over-rejection; the message
+# spells the bare parameter as 'String&')
+import "std/io"
+
+fn inner(t String) String { return t[1:] }
+
+fn pass<T>(x T, f fn(x T) T) T { return f(x) }
+
+fn main() {
+    t := $"abcd"
+    io.Println($pass(t, inner))!
+}

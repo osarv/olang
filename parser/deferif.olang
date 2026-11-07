@@ -1,0 +1,13 @@
+fn pick() I32 { return 3 }
+
+if pick() == 3 {
+    type Mode enum {
+        Fast
+        Slow
+    }
+}
+
+test "deferred top-level if declares an enum" {
+    m := Mode.Fast
+    assert m == Mode.Fast
+}

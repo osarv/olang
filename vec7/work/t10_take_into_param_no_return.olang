@@ -1,0 +1,26 @@
+# the same without returning h: l's words move into the caller's holder while l stays in fill's block
+type Lex struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Holder struct() {
+    v Vec<String&> = Vec<String&>()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn fill(h mut Holder&) {
+    l := Lex()
+    for i in range 3 { l.toks.Push($i "-word-in-l's-storage") }
+    h.v = take l.toks
+}
+fn main() ? {
+    h mut Holder& = Holder()
+    fill(h)
+    churn()
+    println(h.v[0])
+}

@@ -1,0 +1,14 @@
+import "std/io"
+type Node struct(iv I32) {
+    v mut I32 = iv
+}
+fn mk() Node& {
+    n Node&return = Node(1)
+    return n
+}
+A Node& = mk()
+B Node& = A
+fn main() ? io.IoError {
+    assert same(A, B)
+    try io.Print("same(A, B) at run time: " $same(A, B) "\n")
+}

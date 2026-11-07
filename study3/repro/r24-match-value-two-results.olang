@@ -1,0 +1,17 @@
+# r24 DIAGNOSTIC - S12b/D8c: a match used as a value cannot give several results (a function returning (I32, I32)
+# wants "return match op { case "+" => 3, 4 ... }"). That is the rule (D8c: several results are never one value), but
+# the message is "expected '}', found ','" - it should say a match gives one value, and to use a statement match with
+# "return 3, 4" in each clause.
+#
+# expected: an error naming D8c/S12b
+# actual: error at line 10, column 27: expected '}', found ','
+fn power(op String&) (I32, I32) {
+    return match op {
+        case "+", "-" => 3, 4
+        nomatch => 0, 0
+    }
+}
+fn main() ? {
+    l, r := power("+")
+    println($l $r)
+}

@@ -1,0 +1,11 @@
+# a converted view handed through a function giving a borrowed result, then the Vec grows
+fn first(s String&) String&s { return s[0:1] }
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    t := first(String(v.View()))
+    for i in range 100 { v.Push('b') }
+    w := Vec<I64>()
+    for i in range 100 { w.Push(i) }
+    println(t)
+}

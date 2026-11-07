@@ -1,0 +1,23 @@
+# check: fail note: 'line' is declared here, in a block that closes first - declare it where 's' lives: 'line mut String&s = ...'
+# never: parse&s(...)
+# B11/O10c: an entry parsed from a line made each turn is kept in a longer-lived table. The entry's references are the
+# line's (parse requires its argument to outlive its result), so the note points at the line, not at a scope argument
+# for parse - which would only move the error into parse
+type Entry struct(service String&) {
+    service
+}
+fn parse(line String&) Entry { return Entry(line[0:2]) }
+type Stats struct() {
+    names Map<String&, I64>
+}
+fn (s mut Stats&) add(e Entry) { s.names.Put(e.service, 1) }
+fn run(lines Array<String&>&) I64 {
+    s := Stats()
+    for l in lines {
+        line := $l "!"
+        e := parse(line)
+        s.add(e)
+    }
+    return s.names.Len()
+}
+fn main() ? { println($run(String&["ab", "cd"])) }

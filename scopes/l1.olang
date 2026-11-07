@@ -1,0 +1,23 @@
+import "std/io"
+type N struct(v I32) {
+    v mut
+    next mut N& = null
+}
+type Cur struct(of mut N&) { at mut N&of = of }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n N& = N(I32(i))
+    }
+}
+fn repoint(c mut Cur&, x mut N&) { c.at = x }
+fn main() ? {
+    outer N& = N(1)
+    c := Cur(outer)
+    for i in range 2 {
+        inner N& = N(42)
+        repoint(c, inner)
+    }
+    churn()
+    try io.Print($c.at.v "\n")
+}

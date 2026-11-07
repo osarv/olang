@@ -1,0 +1,39 @@
+import "std/io"
+
+type P struct(n I64) {
+    n
+}
+type K enum {
+    A(p P)
+    B
+}
+type W struct(q P&) {
+    q
+}
+type O struct(w W&) {
+    w
+}
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+
+fn mk(k K) O {
+    return O(match k {
+        case K.A(p) => W(p)
+        case K.B => null
+    })
+}
+
+fn main() {
+    n I64 = 0
+    for i in range 100 {
+        o := mk(K.A(P(i)))
+        churn()
+        if o.w.q.n == i { n += 1 }
+    }
+    io.Println($n)!
+}

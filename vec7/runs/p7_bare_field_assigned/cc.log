@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/p7_bare_field_assigned.olang:23:14: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   23 |     p.lx.sub = s
+      |              ^
+compilation failed with 1 error

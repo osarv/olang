@@ -1,0 +1,12 @@
+# check: fail error: the block opened on line 4 has no '}' - found 'fn'
+# also: the block opened on line 8 has no '}' - found 'test'
+# also: compilation failed with 2 errors
+type P struct(x I64) {
+    x
+# a missing "}" is said at the brace it belongs to, where the next declaration shows it - not as "expected '('" at that
+# declaration's name - and the next item is read from that declaration, so a second missing one is found too
+fn main() ? {
+    if P(1).x == 1 {
+        assert true
+}
+test "t" { assert true }

@@ -1,0 +1,12 @@
+G I32 = 1
+fn local(y I32) I32 {
+    if y > 0.5 {
+        return 1
+    }
+    return 2
+}
+fn g() Bool { return G > 0.5 }
+test "x" {
+    assert local(1) == 1
+    assert g()
+}

@@ -1,0 +1,14 @@
+# a long-lived struct whose StringBuilder field is replaced each turn
+type F struct() {
+    pending StringBuilder = StringBuilder()
+}
+fn main() ? {
+    f := F()
+    total I64 = 0
+    for i in range N {
+        f.pending.Push("abc")
+        total += f.pending.Len()
+        f.pending = StringBuilder()
+    }
+    println($total)
+}

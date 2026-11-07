@@ -1,0 +1,3 @@
+import "lib"
+lib I32 = 3
+fn main() ? { }

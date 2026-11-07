@@ -1,0 +1,16 @@
+import "std/io"
+
+type Buf struct(a Array<I64>) {
+    a
+}
+
+type P struct(r Buf&, own Buf) {
+    r, own
+}
+
+fn main() {
+    t := Buf(Array<I64>(3, 1))
+    p := P(t, t)
+    p.own.a[0] = 9
+    io.Println($p.r.a[0] " " $p.own.a[0])!
+}

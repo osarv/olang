@@ -1,0 +1,33 @@
+fn canon(x BF16) U64 {
+    if x != x { return 99999 }
+    return U64(x.Bits())
+}
+fn main() ? {
+    h U64 = 1469598103934665603
+    s U64 = 88172645463325252
+    bad I64 = 0
+    for k in range 20000000 {
+        s ^= s << 13
+        s ^= s >> 7
+        s ^= s << 17
+        a := U16(s & 65535).BF16FromBits()
+        b := U16((s >> 16) & 65535).BF16FromBits()
+        x := a + b
+        y := a * b
+        z := a / b
+        w := a - b
+        rx := BF16(F64(a) + F64(b))
+        ry := BF16(F64(a) * F64(b))
+        rz := BF16(F64(a) / F64(b))
+        rw := BF16(F64(a) - F64(b))
+        if canon(x) != canon(rx) or canon(y) != canon(ry) or canon(z) != canon(rz) or canon(w) != canon(rw) {
+            if bad < 5 { println("a " $a.Bits() " b " $b.Bits() " +" $x.Bits() "/" $rx.Bits() " *" $y.Bits() "/" $ry.Bits() " /" $z.Bits() "/" $rz.Bits() " -" $w.Bits() "/" $rw.Bits()) }
+            bad++
+        }
+        h = (h ^ canon(x)) * 1099511628211
+        h = (h ^ canon(y)) * 1099511628211
+        h = (h ^ canon(z)) * 1099511628211
+        h = (h ^ canon(w)) * 1099511628211
+    }
+    println($h " bad " $bad)
+}

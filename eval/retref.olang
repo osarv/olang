@@ -1,0 +1,18 @@
+import "std/io"
+type P struct(v I32) {
+    v
+}
+fn f(p P&) P { return p }
+fn g(a Array<I32>&) Array<I32> { return a }
+fn t(n I32) String {
+    a P& = P(n)
+    b := P(n)
+    x Array<I32>& = I32[n, 2]
+    y := I32[n, 2]
+    return $(f(a) == b) " " $(b == f(a)) " " $(g(x) == y) " " $(f(a) != b)
+}
+B String = t(3)
+M mut I32 = 3
+fn main() ? io.IoError {
+    try io.Print($B "\n" $t(M) "\n")
+}

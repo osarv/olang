@@ -1,0 +1,25 @@
+type Lx struct(n I64) ? {
+    toks Vec<I64> = Vec<I64>()
+    for i in range n { toks.Push(i) }
+    if n > 3 { error }
+    more Vec<I64> = Vec<I64>()
+    for i in range n { more.Push(i * 2) }
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn tryMake(n I64) I64 {
+    l := try Lx(n) catch { return -1 }
+    return l.toks.Len() + l.more.Len()
+}
+fn main() ? {
+    t := 0
+    for k in range 20000 { t += tryMake(k % 8) }
+    churn()
+    println($t)
+}

@@ -1,0 +1,9 @@
+error E {
+    A
+    B
+}
+fn final(e E) Bool { return true }
+fn main() ? {
+    x E
+    println("ok")
+}

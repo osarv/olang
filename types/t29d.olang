@@ -1,0 +1,19 @@
+# T29d: a literal entering a type with a constructor goes through it - initializer, assignment, argument, return
+import "std/io"
+type Pct I32(v mut I32) {
+  if v > 100 { v = 100 }
+}
+fn take(p Pct) I32 { return I32(p) }
+fn give() Pct { return 150 }
+fn dflt(p Pct = 170) I32 { return I32(p) }
+type Holder struct(p Pct) { p }
+fn main() ? {
+  a Pct = 150
+  b Pct = Pct(0)
+  b = 160
+  arr := Pct[150, 20]
+  fill := Array<Pct>(2, 180)
+  h := Holder(190)
+  c := I32(give())
+  try io.Print($I32(a) " " $I32(b) " " $take(140) " " $c " " $dflt() " " $I32(arr[0]) " " $I32(fill[0]) " " $I32(h.p) "\n")
+}

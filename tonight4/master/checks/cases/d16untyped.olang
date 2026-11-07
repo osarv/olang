@@ -1,0 +1,5 @@
+# check: fail error[D16a]: lambda parameter 'x' has no type, and nothing gives it one
+error E { X }
+fn main() ? E {
+    f := fn(x) { return x }
+}

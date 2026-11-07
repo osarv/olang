@@ -1,0 +1,6 @@
+fn g(b U8) I64 { return b + (2000000000 + 2000000000) }
+fn g2(c Bool, b U8) I64 { return b + ((2000000000 + 2000000000) if c else 1) }
+C mut Bool = true
+fn main() ? {
+    println($g(3) " " $g2(C, 3))
+}

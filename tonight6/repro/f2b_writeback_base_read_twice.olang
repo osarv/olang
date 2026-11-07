@@ -1,0 +1,16 @@
+# NEW (E31b, with f2): the BASE is not held either when it is a variable - a global List the call replaces gets the write
+# back. GL[0] was valid when written; the write back indexes the new, empty list: segfault (-b, -b -s, -b -d -s, exit 139),
+# -i: "list.olang:145: it indexes a null array". a2e2878: builds, prints 0 (the write dropped).
+type Acc struct() {
+    N I64 = 0
+}
+GL mut List<Acc> = List<Acc>()
+fn (a mut Acc&) Reset() {
+    a.N = 5
+    GL = List<Acc>()
+}
+fn main() ? {
+    GL.Push(Acc())
+    GL[0].Reset()
+    println($GL.Len())
+}

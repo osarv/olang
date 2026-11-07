@@ -1,0 +1,9 @@
+# DIAGNOSTIC: an array literal of Json references written "Array<json.Json&>[...]" (it reads as "an array of Json&")
+# is an array literal whose ELEMENT type is Array<Json&>: T7a "an array inside an array ... write Array<Json&>&" and
+# then E12 at every item ("expected Array<Json&>, found Json"). The spelling meant is json.Json&[...]; the message
+# could say that a literal is "ElementType[items]".
+import "std/json"
+fn main() ? {
+    values := Array<json.Json&>[json.Json.Num(1.0), json.Json.Null]
+    println($values.Len())
+}

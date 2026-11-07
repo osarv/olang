@@ -1,0 +1,38 @@
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+type E enum {
+    A(b mut Box&)
+    B(b mut Box&)
+}
+fn grow(e1 E&, e2 E&) {
+    match e1 {
+        case E.A(x), E.B(x) {
+            d Box = x
+            d.head.next = Node()
+            d.head.next.v = 42
+        }
+    }
+}
+fn main() ? {
+    b := Box()
+    grow(E.A(b), E.B(b))
+    churn()
+    println($b.head.next.v)
+}

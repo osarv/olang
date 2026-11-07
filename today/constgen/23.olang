@@ -1,0 +1,10 @@
+# G24: two positions binding one constant variable to different values is an error at the call, naming both
+fn Dot(a Array<<T>, <N>>&, b Array<<T>, N>&) <T> {
+    s <T> = 0
+    for i in range N { s = s + a[i] * b[i] }
+    return s
+}
+fn main() ? {
+    println($Dot(I32[1, 2, 3], I32[4, 5, 6]))
+    println($Dot(I32[1, 2, 3], I32[4, 5]))
+}

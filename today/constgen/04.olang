@@ -1,0 +1,8 @@
+# '==' on two fixed-array values: the comparison is emitted one element at a time (codegen cgDeepEq), so the IR and
+# the compile time grow with N
+fn main() ? {
+    x Array<I32, 50000> = Array<I32, 50000>()
+    y Array<I32, 50000> = Array<I32, 50000>()
+    y[3] = 1
+    println($(x == y))
+}

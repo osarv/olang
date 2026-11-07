@@ -1,0 +1,11 @@
+# r34 FRICTION (recorded: comprehensions deferred) - E27: the commonest comprehension in real code maps values to text
+# and joins it - "String&[show(a) for a in args].Join(", ")" (a call's arguments), "String&[$p.First for p in bad]" -
+# and it is "a comprehension's elements may not be or hold references yet". String[...] would be T7a (an array value
+# inside an array). Every such site became a StringBuilder loop.
+#
+# expected: (1, 2, 3)
+# actual: error[E27] at line 10
+fn main() ? {
+    xs := I64[1, 2, 3]
+    println("(" $String&[$x for x in xs].Join(", ") ")")
+}

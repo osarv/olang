@@ -1,0 +1,10 @@
+import "std/io"
+A mut I64 = 3
+fn g() I64 ? {
+    arr := I64[1, 2, 3]
+    return try (checked arr[A]) + 1
+}
+fn main() {
+    w := try g() catch default 0
+    io.Println($w)!
+}

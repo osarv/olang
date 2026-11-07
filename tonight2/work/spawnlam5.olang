@@ -1,0 +1,25 @@
+extern fn usleep(us U32) I32
+type P struct(v I64) { v }
+fn main() ? {
+    out mut Array<I64>& = Array<I64>(8, 0)
+    names := List<String&>()
+    base := 1000
+    join {
+        for i in range 8 {
+            spawn out[i] = fn(k I64) I64 {
+                usleep(U32(1000 * (8 - k)))
+                return base + k * k
+            }(i)
+        }
+    }
+    x I64 = 0
+    join {
+        spawn x = fn() I64 { return base * 2 }()
+    }
+    sb := StringBuilder()
+    for v in out { sb.Push($v " ") }
+    sb.Push($x)
+    println(sb.ToString())
+    y := fn(a I64, b I64) I64 { return a * b + base }(6, 7)
+    println($y)
+}

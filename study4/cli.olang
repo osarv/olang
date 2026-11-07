@@ -1,0 +1,194 @@
+# cli - command-line flags, the GNU way: "--name value", "--name=value", "-n value", "-abc" for several short
+# switches, "--" ending the flags. A Parser is told its flags, parses a command line, and is asked for their values
+# afterwards; whatever is not a flag is positional. Errors say which flag; Usage() writes the help text.
+#
+#     p := cli.Parser("todo", "keeps a list of things to do")
+#     p.Switch("verbose", 'v', "say more")
+#     p.Number("limit", 'n', 10, "show at most this many")
+#     p.Text("file", 'f', "todo.json", "where the list is kept")
+#     try p.Parse(os.Args()) catch cli.CliError { eprintln(p.Problem()) }
+#     if p.On("verbose") { ... }
+
+error CliError {
+    UNKNOWN_FLAG
+    MISSING_VALUE
+    NOT_A_NUMBER
+    HELP                   # -h or --help was given: print Usage() and stop
+}
+
+type FlagKind enum {
+    Switch
+    Number
+    Text
+}
+
+type Flag struct(Name String&, Short Char, Kind FlagKind, Default String&, Help String&) {
+    Name
+    Short
+    Kind
+    Default
+    Help
+}
+
+type Parser struct(Program String&, About String&) {
+    Program
+    About
+    flags List<Flag> = List<Flag>()
+    values Map<String&, String&> = Map<String&, String&>()
+    Positional List<String&> = List<String&>()
+    problem String& = ""
+}
+
+fn (p mut Parser&) add(f Flag) {
+    p.flags.Push(f)
+    p.values.Put(f.Name, f.Default)
+}
+
+fn (p mut Parser&) Switch(name String&, short Char, help String&) {
+    p.add(Flag(name, short, FlagKind.Switch, "false", help))
+}
+
+fn (p mut Parser&) Number(name String&, short Char, def I64, help String&) {
+    p.add(Flag(name, short, FlagKind.Number, $def, help))
+}
+
+fn (p mut Parser&) Text(name String&, short Char, def String&, help String&) {
+    p.add(Flag(name, short, FlagKind.Text, def, help))
+}
+
+fn (p Parser&) byName(name String&) Flag ? {
+    for f in p.flags {
+        if f.Name == name { return f }
+    }
+    error
+}
+
+fn (p Parser&) byShort(c Char) Flag ? {
+    for f in p.flags {
+        if f.Short == c { return f }
+    }
+    error
+}
+
+# sets f from "value", checking a number is one
+fn (p mut Parser&) set(f Flag, value String&) ? CliError {
+    if f.Kind is FlagKind.Number {
+        try value.ParseInt() catch {
+            p.problem = $p.Program ": --" $f.Name " takes a number, not '" $value "'"
+            error CliError.NOT_A_NUMBER
+        }
+    }
+    p.values.Put(f.Name, value)
+}
+
+fn (p mut Parser&) Parse(args Array<String&>&) ? CliError {
+    i I64 = 1
+    for i < args.Len() {
+        a := args[i]
+        i++
+        if a == "--" {
+            for i < args.Len() {
+                p.Positional.Push(args[i])
+                i++
+            }
+            break
+        }
+        if a == "-h" or a == "--help" { error CliError.HELP }
+        if a.StartsWith("--") {
+            body := a[2:]
+            eq := try body.FindByte('=') catch default -1
+            name := body[:eq] if eq >= 0 else body
+            f := try p.byName(name) catch {
+                p.problem = $p.Program ": unknown flag --" $name
+                error CliError.UNKNOWN_FLAG
+            }
+            if f.Kind is FlagKind.Switch {
+                try p.set(f, "true")
+            } else if eq >= 0 {
+                try p.set(f, body[eq + 1:])
+            } else if i < args.Len() {
+                try p.set(f, args[i])
+                i++
+            } else {
+                p.problem = $p.Program ": --" $name " needs a value"
+                error CliError.MISSING_VALUE
+            }
+            continue
+        }
+        if a.StartsWith("-") and a.Len() > 1 {
+            for k in range 1, a.Len() {
+                f := try p.byShort(a[k]) catch {
+                    p.problem = $p.Program ": unknown flag -" $a[k]
+                    error CliError.UNKNOWN_FLAG
+                }
+                if f.Kind is FlagKind.Switch {
+                    try p.set(f, "true")
+                    continue
+                }
+                # a short flag taking a value: the rest of this word, or the next word
+                if k + 1 < a.Len() {
+                    try p.set(f, a[k + 1:])
+                } else if i < args.Len() {
+                    try p.set(f, args[i])
+                    i++
+                } else {
+                    p.problem = $p.Program ": -" $a[k] " needs a value"
+                    error CliError.MISSING_VALUE
+                }
+                break
+            }
+            continue
+        }
+        p.Positional.Push(a)
+    }
+}
+
+# the value of a flag that was declared - a mistake in the program, not the user's, when it was not
+fn (p Parser&) Get(name String&) String&p {
+    return try p.values.Get(name) catch {
+        # "assert false, msg" is decided while compiling (S18c), and abort takes no message
+        eprintln("cli: no flag named " $name)
+        abort
+    }
+}
+
+fn (p Parser&) On(name String&) Bool { return p.Get(name) == "true" }
+
+fn (p Parser&) Num(name String&) I64 { return try p.Get(name).ParseInt() catch default 0 }
+
+fn (p Parser&) Problem() String&p { return p.problem }
+
+fn (p Parser&) Usage() String {
+    b := StringBuilder()
+    b.Push("usage: " $p.Program " [flags] ...\n" $p.About "\n\nflags:\n")
+    for f in p.flags {
+        head := StringBuilder()
+        head.Push("  -" $f.Short ", --" $f.Name)
+        if not (f.Kind is FlagKind.Switch) { head.Push(" " $f.Name.ToUpper()) }
+        b.Push($head.ToString().PadEnd(28) $f.Help)
+        if not (f.Kind is FlagKind.Switch) { b.Push(" (default " $f.Default ")") }
+        b.PushChar('\n')
+    }
+    return b.ToString()
+}
+
+test "long, short, joined and separate values" {
+    p := Parser("t", "a test")
+    p.Switch("verbose", 'v', "say more")
+    p.Switch("all", 'a', "everything")
+    p.Number("limit", 'n', 10, "at most")
+    p.Text("file", 'f', "x.json", "where")
+    try p.Parse(String&["t", "-va", "--limit=3", "-fout.json", "one", "--", "-two"]) catch { fail }
+    assert p.On("verbose") and p.On("all") and p.Num("limit") == 3 and p.Get("file") == "out.json"
+    assert p.Positional.Len() == 2 and p.Positional[1] == "-two"
+}
+
+test "errors name the flag" {
+    p := Parser("t", "a test")
+    p.Number("limit", 'n', 10, "at most")
+    try p.Parse(String&["t", "--limit", "many"]) catch CliError.NOT_A_NUMBER {
+        assert p.Problem() == "t: --limit takes a number, not 'many'"
+        done
+    } catch { fail }
+    fail
+}

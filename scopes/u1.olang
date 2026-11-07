@@ -1,0 +1,29 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box struct(n Node&) { n }
+type Holder struct(n Node&) { n }
+G mut Node& = null
+GB mut Box& = null
+GH mut Holder = Holder(Node(0))
+GL mut List<Node&>& = List<Node&>()
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn wrap(n Node&) Box& { return Box(n) }
+fn same(n Node&) Node&n { return n }
+fn work() {
+    local Node& = Node(42)
+    GB = wrap(local)
+    G = same(local)
+    GH = Holder(local)
+    GL.Push(local)
+    G = Node(5)
+}
+fn main() ? {
+    work()
+    churn()
+    try io.Print($GB.n.v "\n")
+}

@@ -1,0 +1,11 @@
+# a read-only List reference written through a value copy of the handle
+fn look(l List<I32>&) I64 {
+    c List<I32> = l
+    c.Push(99)
+    return l.Len()
+}
+fn main() ? {
+    x := I32[1, 2].ToList()
+    r List<I32>& = x
+    println($look(r) " " $x.Len() " " $x[2])
+}

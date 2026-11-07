@@ -1,0 +1,15 @@
+# T19b: "A payload holds values only: numbers, Bool, Char, text and arrays held by value (its own copy), error values,
+# and enums and structs of those". A field of text is accepted, but text one level down is refused as "holds a
+# reference": a struct holding a String, an enum case holding one, an Array<String>, and an error value whose own
+# payload holds text (PErr.Bad(msg String) inside WErr.Wrap) - each "payload field ... holds a reference - a payload
+# holds values only". With the inner payload a number (scratch/nest2.olang) the error value field works, built and
+# interpreted alike.
+import "std/io"
+type Loc struct(file String, line I64) { file, line }
+type Sh enum { Named(t String), Anon }
+type PErr error { Bad(msg String), Eof }
+type QErr error { At(at Loc), Kind(s Sh), Arr(a Array<String>), Wrap(inner PErr) }
+fn main() {
+    x QErr = QErr.At(Loc("f", 3))
+    io.Println($x)!
+}

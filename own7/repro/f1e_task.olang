@@ -1,0 +1,36 @@
+# F1e: the same part lent to a task: the spawner releases the owner while the task reads it.
+# Expected output: 5. Accepted; -s reports use after scope closed, -b segfaults.
+import "std/time"
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Plain struct(k I64) {
+    k
+}
+type In3 struct(k I64) {
+    pl Plain = Plain(k)
+}
+type H3 struct() {
+    cur own mut In3&
+}
+fn useP(p mut Plain&, out mut Array<I64>&) {
+    t0 := time.Now()
+    for time.Since(t0) < 50000000 { }
+    out[0] = p.k
+}
+fn main() ? {
+    h mut H3& = H3()
+    h.cur = In3(5)
+    out := Array<I64>(1)
+    join {
+        spawn useP(h.cur.pl, out)
+        h.cur = null
+        churn()
+    }
+    println($out[0])
+}

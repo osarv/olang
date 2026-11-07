@@ -1,0 +1,75 @@
+# channels: field of a field; an &p field; an instantiation's method; an operator method; E31b write-back
+type Info struct(Offset I64, Len I64) {
+    Offset
+    Len
+}
+type Inner struct() { ref Info& = null }
+type Cur struct(p Info&) {
+    at Info&p = p
+}
+type Slot struct() { ref Info& = null }
+type Box<T> struct(v T) { v }
+type Holder struct(c Cur) {
+    a Inner = Inner()
+    c
+    gen mut Box<Info&>& = Box<Info&>(null)
+    items mut List<Slot>& = List<Slot>()
+    n I64 = 0
+}
+fn (h mut Holder&) viaFieldOfField(i Info&) I64 {
+    h.a.ref = i
+    return 0
+}
+fn (b mut Box<<T>>&) set(x T) I64 {
+    b.v = x
+    return 0
+}
+fn (h mut Holder&) viaGeneric(i Info&) I64 { return h.gen.set(i) }
+fn (h mut Holder&) Plus(i Info&) I64 {
+    h.a.ref = i
+    return 1
+}
+fn (h mut Holder&) viaWriteBack(i Info&) I64 {
+    h.items[0].ref = i
+    return 0
+}
+fn mkFF(k I64, d Info&) Holder {
+    h := Holder(Cur(d))
+    i := Info(k, k + 1)
+    h.viaFieldOfField(i)
+    return h
+}
+fn mkGen(k I64, d Info&) Holder {
+    h := Holder(Cur(d))
+    i := Info(k, k + 1)
+    h.viaGeneric(i)
+    return h
+}
+fn mkOp(k I64, d Info&) Holder {
+    h := Holder(Cur(d))
+    i := Info(k, k + 1)
+    h.n = h + i
+    return h
+}
+fn mkOpNamed(k I64, d Info&) Holder {
+    h := Holder(Cur(d))
+    i := Info(k, k + 1)
+    h.n = h.Plus(i)
+    return h
+}
+fn mkWB(k I64, d Info&) Holder {
+    h := Holder(Cur(d))
+    h.items.Push(Slot())
+    i := Info(k, k + 1)
+    h.viaWriteBack(i)
+    return h
+}
+fn main() ? {
+    d := Info(0, 0)
+    a := mkFF(1, d)
+    b := mkGen(2, d)
+    c := mkOp(3, d)
+    e := mkOpNamed(4, d)
+    f := mkWB(5, d)
+    println($a.a.ref.Len " " $b.gen.v.Len " " $c.a.ref.Len " " $e.a.ref.Len " " $f.items[0].ref.Len)
+}

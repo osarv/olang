@@ -1,0 +1,26 @@
+# E31b view lend, aliasing: the callee reaches the collection another way and replaces the element, then writes
+# through its view. Lent from a List (a hidden copy) the write lands in the replaced array and the element never sees
+# it; lent from an Array (the element itself) it lands in the new one. Before c9d14a7: E31b's error.
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+fn work(c mut V&, l mut List<V>&) {
+    l[0] = V(Array<I64>(2), 7)
+    c.d[0] = 5
+    println("  callee sees n " $c.n)
+}
+fn workA(c mut V&, a mut Array<V>&) {
+    a[0] = V(Array<I64>(2), 7)
+    c.d[0] = 5
+    println("  callee sees n " $c.n)
+}
+fn main() ? {
+    l := List<V>()
+    l.Push(V(Array<I64>(2), 1))
+    work(l[0], l)
+    println("list:  element d[0] " $l[0].d[0] " n " $l[0].n)
+    a := V[V(Array<I64>(2), 1)]
+    workA(a[0], a)
+    println("array: element d[0] " $a[0].d[0] " n " $a[0].n)
+}

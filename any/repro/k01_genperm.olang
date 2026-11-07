@@ -1,0 +1,18 @@
+# generic code over a trait given a read-only any: a mut method called inside
+type Counter trait {
+    mut Bump() I64
+}
+type Tally struct(at I64) { at }
+fn (t mut Tally&) Bump() I64 {
+    t.at += 1
+    return t.at
+}
+G Tally& = Tally(1)
+fn bumpIt<C Counter>(c C) I64 { return c.Bump() }
+fn bumpMut<C Counter>(c mut C) I64 { return c.Bump() }
+fn main() {
+    r any Counter& = G
+    say($bumpIt(r))
+    say($bumpMut(r))
+    say($G.at)
+}

@@ -1,0 +1,8 @@
+# an immutable global List changed through a by-value parameter - and the evaluator, which baked G
+G := I32[1, 2].ToList()
+N := G.Len()
+fn sneaky(c List<I32>) { c.Push(9) }
+fn main() ? {
+    sneaky(G)
+    println("baked N " $N " G.Len() now " $G.Len() " " $G[2])
+}

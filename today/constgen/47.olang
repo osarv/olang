@@ -1,0 +1,10 @@
+# G21: a constant argument needing evaluation (a call, a conversion) in a generic STRUCT's field reads as 0
+fn twice(n I64) I64 { return n * 2 }
+type B<N I64> struct() {
+    a mut Array<I32, twice(N)>
+    c mut Array<I32, I64(N)>
+}
+fn main() ? {
+    b := B<3>()
+    println($b.a.Len() " " $b.c.Len())
+}

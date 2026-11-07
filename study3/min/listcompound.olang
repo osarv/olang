@@ -1,0 +1,23 @@
+type S struct() {
+    values List<I32>
+}
+type W struct() {
+    age S
+}
+fn bump(w mut W&, i I64) {
+    w.age.values[i] += 1
+}
+fn bump2(w mut W&, i I64) {
+    w.age.values[i] = w.age.values[i] + 1
+}
+fn bump3(s mut S&, i I64) {
+    s.values[i] += 1
+}
+fn main() ? {
+    w := W()
+    w.age.values.Push(1)
+    bump(w, 0)
+    bump2(w, 0)
+    bump3(w.age, 0)
+    println($w.age.values[0])
+}

@@ -1,0 +1,12 @@
+== build -debug -sanitize
+run: k.s abc2
+baked: k.s abc2
+status 0
+== build
+run: k.s abc2
+baked: k.s abc2
+status 0
+== interpret
+run: k.s abc2
+baked: k.s abc2
+status 0

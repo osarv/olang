@@ -1,0 +1,21 @@
+# T2c in the evaluator: a baked global holding a null String?& field, read at run time
+import "std/io"
+
+type rec struct(s String?&, a Array<I64>?&) { s, a }
+
+fn mk() rec {
+    z String?& = null
+    za Array<I64>?& = null
+    return rec(z, za)
+}
+
+G := mk()
+GV := String?&[null, "x"]
+
+fn main() {
+    r := mk()
+    io.Println("baked s null " $(G.s is null) " a null " $(G.a is null) " run s null " $(r.s is null))!
+    io.Println("baked vec[0] null " $(GV[0] is null))!
+    x := GV[0]
+    if x is not null { io.Println("len " $x.Len())! }
+}

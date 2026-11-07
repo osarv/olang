@@ -1,0 +1,25 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+fn byRef(id I64) I64 {
+    x := Res(id)
+    defer x.Destroy()
+    return x.id
+}
+
+fn byValue(id I64) I64 {
+    x Res = Res(id)
+    defer x.Destroy()
+    return x.id
+}
+
+fn main() {
+    io.Println($byRef(1) " " $byValue(2) " ended " $Ended)!
+}

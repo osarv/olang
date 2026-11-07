@@ -1,0 +1,25 @@
+== build -debug -sanitize
+m03_sigdiff.olang:9:43: error[E12]: expected String, found I64
+    9 | fn viaGen<T>(b Box<T>&) String { return b.Describe() }
+      |                                           ^~~~~~~~
+m03_sigdiff.olang:13:9: note: instantiated here, with T = I64
+   13 |     say(viaGen(b))
+      |         ^~~~~~
+compilation failed with 1 error
+== build
+m03_sigdiff.olang:9:43: error[E12]: expected String, found I64
+    9 | fn viaGen<T>(b Box<T>&) String { return b.Describe() }
+      |                                           ^~~~~~~~
+m03_sigdiff.olang:13:9: note: instantiated here, with T = I64
+   13 |     say(viaGen(b))
+      |         ^~~~~~
+compilation failed with 1 error
+== interpret
+m03_sigdiff.olang:9:43: error[E12]: expected String, found I64
+    9 | fn viaGen<T>(b Box<T>&) String { return b.Describe() }
+      |                                           ^~~~~~~~
+m03_sigdiff.olang:13:9: note: instantiated here, with T = I64
+   13 |     say(viaGen(b))
+      |         ^~~~~~
+compilation failed with 1 error
+status 1

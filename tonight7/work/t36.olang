@@ -1,0 +1,26 @@
+type In struct() {
+    k I64 = 0
+}
+type Mid struct() {
+    inner In = In()
+}
+type Bag struct(m mut Mid&) {
+    m
+}
+fn (b Bag&) Str() String {
+    a(b.m.inner, 3)
+    return "b" $b.m.inner.k
+}
+fn a(p mut In&, n I64) {
+    if n > 0 { c(p, n - 1) }
+}
+fn c(p mut In&, n I64) {
+    if n > 1 { a(p, n - 1) }
+    if n == 1 { d(p) }
+}
+fn d(p mut In&) { e(p) }
+fn e(p mut In&) { p.k++ }
+fn main() ? {
+    b := Bag(Mid())
+    println($b)
+}

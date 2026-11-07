@@ -1,0 +1,31 @@
+# F1c: a for-in over an owned object's inline array borrows it; the body releases the owner.
+# Expected output: 43. Accepted; -s reports use after scope closed.
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type In3 struct(k I64) {
+    data Array<I64, 8> = Array<I64, 8>()
+}
+type H3 struct() {
+    cur own mut In3&
+}
+fn fl(h mut H3&) I64 {
+    h.cur = In3(1)
+    h.cur.data[3] = 43
+    t := 0
+    for x in h.cur.data {
+        h.cur = null
+        churn()
+        t += x
+    }
+    return t
+}
+fn main() ? {
+    h mut H3& = H3()
+    println($fl(h))
+}

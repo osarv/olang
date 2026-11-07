@@ -1,0 +1,22 @@
+# a read-only reference field, now assignable through a writable instance: is the store's scope checked?
+type N struct(v I64) { v }
+type H struct(r N&) { r }
+fn set(h mut H&, n N&) { h.r = n }
+fn churn() I64 {
+    s I64 = 0
+    for i in range 2000 {
+        a := Array<I64>(64, I64(i))
+        s = s + a[3]
+    }
+    return s
+}
+fn main() ? {
+    h mut H& = H(N(1))
+    for i in range 3 {
+        local := N(42 + I64(i))
+        set(h, local)
+        h.r = local
+    }
+    c := churn()
+    println($h.r.v " " $c)
+}

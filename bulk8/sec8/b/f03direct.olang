@@ -1,0 +1,29 @@
+import "std/io"
+
+# a holder whose destructor writes over the array it owns
+type H unique struct(n I64) {
+    n
+    arr := Array<I64>(4 + n.Mod(3), n)
+} destruct {
+    arr[0] = -99
+}
+
+# a view of what the parameter holds, handed back
+fn first2(h H&) Array<I64>& { return h.arr[0:2] }
+
+# the view kept past the holder's block: O27 places h where the view is kept, though h's destructor runs as its
+# block ends (written directly, h.arr[0:2] is ViewKeptDestructor's error)
+fn keep(n I64) I64 {
+    views := Vec<Array<I64>&>()
+    for k in range n {
+        h H = H(k + 1)
+        views.Push(h.arr[0:2])
+    }
+    s := 0
+    for v in views { s += v[0] }
+    return s
+}
+
+fn main() {
+    io.Println($keep(50))!
+}

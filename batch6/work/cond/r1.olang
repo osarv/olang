@@ -1,0 +1,28 @@
+# a conditional of a local's reference and a parameter, returned as a borrowed result
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+fn pick(a String&, k I64) String&a {
+    x String& = "local" $k "-abcdefghijklmnopqrstuvwxyz"
+    return x if k == 1 else a
+}
+type Hold struct(s String&) {
+    s
+}
+fn mkHold(a String&, k I64) Hold& {
+    x String& = "loc" $k "-abcdefghijklmnopqrstuvwxyz"
+    return Hold(x if k == 1 else a)
+}
+fn main() ? {
+    base String& = "base"
+    r := pick(base, 1)
+    h := mkHold(base, 1)
+    churn()
+    println(r)
+    println(h.s)
+}

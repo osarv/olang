@@ -1,0 +1,18 @@
+# OVER-REJECTION, avoidable: a helper spawning a task with the node it was handed. hr builds nothing anywhere, but
+# cgCallTargetAndArgs makes a stand-in (P2) for every scope variable of a spawned call, and the walk counts each - the
+# stand-in could be skipped where the callee may not build into that variable (SemanticMayBuildInto answers it).
+# e27b83b: error[E11c, O12]. 7345ff9: exit 139. b6259d1: 'b6'.
+type Node struct(v I64) {
+    v
+}
+type Bag struct(head Node&) {
+    head
+}
+fn hr(n Node&) I64 { return n.v }
+fn hjoin(n Node&) I64 {
+    x I64 = 0
+    join { spawn x = hr(n) }
+    return x
+}
+fn (b Bag&) Str() String { return "b" $hjoin(b.head) }
+fn main() ? { println($Bag(Node(6))) }

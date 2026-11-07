@@ -1,0 +1,13 @@
+/home/user/review/vec3/repro/f2b_mixed_returns_cond.olang:14:33: error[O10]: this reference lives in a scope that may not outlive where it is put
+   14 | fn h(c CB&) String&c { return c.text }
+      |                                 ^~~~
+/home/user/review/vec3/repro/f2b_mixed_returns_cond.olang:14:33: note: a read of an own slot is a borrow in a region of its own - only 'x := ...' declares a local holding it, and that local holds no other borrow
+   14 | fn h(c CB&) String&c { return c.text }
+      |                                 ^~~~
+/home/user/review/vec3/repro/f2b_mixed_returns_cond.olang:16:33: error[O10]: this reference lives in a scope that may not outlive where it is put
+   16 |     if n == 0 { return String(c.data) }   # a source: marks f, type Array<Char>
+      |                                 ^~~~
+/home/user/review/vec3/repro/f2b_mixed_returns_cond.olang:16:33: note: a read of an own slot is a borrow in a region of its own - only 'x := ...' declares a local holding it, and that local holds no other borrow
+   16 |     if n == 0 { return String(c.data) }   # a source: marks f, type Array<Char>
+      |                                 ^~~~
+compilation failed with 2 errors

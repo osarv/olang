@@ -1,0 +1,42 @@
+import "std/io"
+# anys made from loop-local text, copied arrays and conversions, handed to tasks (P2: they last until the join)
+type W trait {
+    Show() String
+}
+type Lab extends String
+fn (l Lab&) Show() String { return "lab " $String(l) }
+type Rows extends Array<String&>
+fn (r Rows&) Show() String { return "rows " $r[0] }
+fn work(x any W&) String& {
+    churn()
+    return x.Show()
+}
+fn main() {
+    out := Array<String&>(6, "")
+    join {
+        for i in range 3 {
+            t := "t" $i "-" $(i * 7)
+            spawn out[i] = work(Lab(t))
+            spawn out[i + 3] = work(Lab(t if i > 0 else "z"))
+        }
+    }
+    for s in out { say(s) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

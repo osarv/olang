@@ -1,0 +1,15 @@
+type PE error { Bad(n I64) }
+Live mut I64 = 0
+fn raise(n I64) I64 ? PE {
+    error PE.Bad(n)
+}
+fn inner(n I64) I64 ? PE {
+    return try raise(n)
+}
+test "bang in a test" {
+    x := inner(Live + 3)!
+    assert x == 1
+}
+test "bang in a test 2" {
+    assert inner(Live + 4)! == 1
+}

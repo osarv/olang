@@ -1,0 +1,39 @@
+# P4a: defaults that are calls - one building new storage, one handing back existing storage, one wrapping it
+error E {
+    NEG
+}
+type Node struct(v I64) {
+    v
+}
+type W struct(n Node&) {
+    n
+}
+fn mk(n I64) Node& ? E {
+    if n < 0 { error E.NEG }
+    return Node(n)
+}
+fn mkw(n I64) W ? E {
+    if n < 0 { error E.NEG }
+    return W(Node(n))
+}
+fn fresh(n I64) Node& {
+    return Node(n * 10)
+}
+fn same(a Node&) Node&a {
+    return a
+}
+fn wrap(a Node&) W {
+    return W(a)
+}
+fn main() ? {
+    base Node& = Node(1)
+    p Node& = Node(0)
+    q Node& = Node(0)
+    w W = W(base)
+    join {
+        spawn p = try mk(-1) catch default fresh(3)
+        spawn q = try mk(-1) catch default same(base)
+        spawn w = try mkw(-1) catch default wrap(base)
+    }
+    println($p.v " " $q.v " " $w.n.v)
+}

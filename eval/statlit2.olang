@@ -1,0 +1,8 @@
+import "std/io"
+fn two(a Array<I32>&, b Array<I32>&) Bool { return a == b }
+fn t(n I32) Bool { return two(I32[1, 2], I32[1, 2]) }
+B Bool = t(1)
+M mut I32 = 1
+fn main() ? io.IoError {
+    try io.Print($B " " $t(M) "\n")
+}

@@ -1,0 +1,27 @@
+import "std/os"
+import "std/time"
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn mk(r Node&, i I64) Node&r { return Node(i) }
+fn work(f fn(i I64) I64, n I64) I64 {
+    s I64 = 0
+    for i in range n { s += f(i) }
+    return s
+}
+fn main() ? {
+    root Node& = Node(0)
+    f := fn(i I64) I64 { return mk(root, i).v }
+    rounds I64 = 200
+    if os.Args().Len() > 1 { rounds = try os.Args()[1].ParseInt() catch default 200 }
+    t0 := time.Now()
+    for r in range rounds {
+        join {
+            for t in range 4 {
+                spawn work(f, 10)
+            }
+        }
+        if r % 50 == 49 { println($(r + 1) " rounds " $(time.Since(t0) / 1000000) " ms") }
+    }
+}

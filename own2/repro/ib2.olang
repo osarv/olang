@@ -1,0 +1,19 @@
+Dropped mut I64 = 0
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+} destruct { Dropped++ }
+type Server struct() { cur own mut Conn& }
+fn churn() {
+    j := List<String&>()
+    for i in range 200 { j.Push("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy" $i) }
+}
+fn pick(x mut Server&) mut Server&x { return x }
+fn main() ? {
+    s := Server()
+    s.cur = Conn(1)
+    c := s.cur
+    pick(s).cur = null       # release through a borrowed-result base while c is live
+    churn()
+    println($c.name)
+}

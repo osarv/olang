@@ -1,0 +1,19 @@
+import "std/io"
+type Node struct(v I32, nx mut Node&) {
+    v mut
+    next mut Node& = nx
+}
+fn churn() {
+    for i in range 1000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        a := Array<I32>(64, 7)
+    }
+}
+fn main() ? {
+    keep Node& = Node(1, null)
+    for i in range 3 {
+        keep.next = Node(I32(i) + 10, null)
+    }
+    churn()
+    try io.Print($keep.v " " $keep.next.v "\n")
+}

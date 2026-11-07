@@ -1,0 +1,22 @@
+type Holder struct(l mut List<String&>&) { l }
+fn (h mut Holder&) Add(x String&h) I64 {
+    h.l.Push(x)
+    return 1
+}
+fn f(keep mut List<String&>&, h mut Holder&, i I64) String {
+    s := "abc" $i
+    h.Add(s[1:3])
+    return s
+}
+fn probe(i I64) String {
+    keep := List<String&>()
+    h := Holder(keep)
+    v := f(keep, h, i)
+    v[0] = 'Q'
+    return "keep " $keep " h " $h.l
+}
+G := probe(1)
+fn main() {
+    say("run:   " $probe(1))
+    say("baked: " $G)
+}

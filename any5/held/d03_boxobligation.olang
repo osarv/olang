@@ -1,0 +1,23 @@
+# decision 1: a callee whose result scope must outlive another argument's (an obligation: it pushes its returned local
+# into that list) - the call's result held by a box made in a loop body, the list outside the loop
+type Lab extends String
+type W trait {
+    mut Bump()
+}
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn mkk(l mut List<String&>&, i I64) String {
+    s := "kept" $i "-" $(i * 7)
+    l.Push(s)
+    return s
+}
+fn main() {
+    outer := List<String&>()
+    for i in range 3 {
+        b mut any W& = Lab(mkk(outer, i))
+        b.Bump()
+        x := mkk(outer, i + 10)
+        x[1] = 'Q'
+    }
+    churn()
+    say("outer " $outer)
+}

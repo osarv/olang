@@ -1,0 +1,37 @@
+# == on anys of copied numbers and text; the evaluator (baked global) against the run time
+type Hashy trait {
+    Hash() I64
+}
+type Sized trait {
+    Len() I64
+}
+fn eqNum(n I64) String {
+    a any Hashy& = n
+    b any Hashy& = n
+    c := a
+    return $(a == b) " " $(a == c)
+}
+fn eqText(k I64) String {
+    s := List<any Sized&>()
+    for i in range 2 { s.Push("hi") }
+    t := "abc"
+    u any Sized& = t
+    v any Sized& = t
+    return $(s[0] == s[1]) " " $(u == v) " " $k
+}
+fn eqStruct(k I64) String {
+    x := Sq(k)
+    a any Hashy& = x
+    b any Hashy& = x
+    return $(a == b)
+}
+type Sq struct(k I64) { k }
+fn (q Sq&) Hash() I64 { return q.k }
+BakedNum String = eqNum(3)
+BakedText String = eqText(1)
+BakedStruct String = eqStruct(1)
+Live mut I64 = 3
+fn main() {
+    say("baked " $BakedNum " | " $BakedText " | " $BakedStruct)
+    say("live  " $eqNum(Live) " | " $eqText(Live - 2) " | " $eqStruct(Live))
+}

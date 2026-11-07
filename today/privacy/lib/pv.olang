@@ -1,0 +1,22 @@
+# a library type whose protocol methods are private
+type Tag struct(v I32) {
+    v
+}
+fn (a Tag) eq(b Tag) Bool { return a.v % 10 == b.v % 10 }
+fn (a Tag) hash() I64 { return I64(a.v % 10) }
+fn (a Tag) str() String { return "Tag#" $a.v }
+fn (a Tag) plus(b Tag) Tag { return Tag(a.v + b.v) }
+fn (a Tag) less(b Tag) Bool { return a.v % 10 < b.v % 10 }
+fn Make(v I32) Tag { return Tag(v) }
+# inside the module: == calls eq
+fn Same(a Tag, b Tag) Bool { return a == b }
+# a struct of this module holding a Tag: part-by-part == written here reaches eq
+type Pair2 struct(a Tag, b Tag) {
+    a
+    b
+}
+fn SamePair(x Pair2&, y Pair2&) Bool { return x == y }
+fn MakePair(a I32, b I32) Pair2 { return Pair2(Tag(a), Tag(b)) }
+# a generic written here applied to Tags
+fn GenEq(a <T>, b <T>) Bool { return a == b }
+fn UseGen() Bool { return GenEq(Tag(3), Tag(13)) }

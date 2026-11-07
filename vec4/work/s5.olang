@@ -1,0 +1,20 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# new storage built into an own object's region through a borrowed result (T&p) - not an own slot read
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn mkIn(p String&, n I64) mut String&p { return $n "-new-text-in-the-region" }
+fn main() ? {
+    c := CB()
+    d := mkIn(c.text, 5)
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(d)
+}

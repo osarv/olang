@@ -1,0 +1,13 @@
+# std/chan: a Send on a closed channel stops the program, as a slice out of range does - after what was buffered before
+# the close has been received
+import "std/chan"
+
+fn main() ? {
+    c mut chan.Chan<I32>& = chan.Chan<I32>(2)
+    chan.Init(c)
+    chan.Send(c, 1)
+    chan.Close(c)
+    println("got " $(try chan.Recv(c) catch default -1))
+    chan.Send(c, 2)
+    println("not reached")
+}

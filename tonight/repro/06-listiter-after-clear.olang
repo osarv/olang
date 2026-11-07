@@ -1,0 +1,23 @@
+# CONFIRMED (pre-existing - also on edf8238; std/prelude/list.olang ListIter.Next, line ~312).
+# Expected: an iterator over a list that was emptied (Clear, or Pop below the iterator's position) ends - or at worst
+#           gives unspecified elements, as MapIter does ("which entries the rest gives unspecified") - and never reads
+#           outside the list's storage.
+# Actual:   -b: "after Clear the iterator gave 1001 more" (it never ends; the 1000 cap stops it); -d: segmentation
+#           fault; -i: "it indexes a null array". Next tests "it.at == it.list.count", so once count drops below at it
+#           walks on through it.list.chunks[k] past the chunks that exist (an unchecked index). "it.at >= count" (as
+#           RunFrom and enter() should too) fixes it.
+fn main() ? {
+    l := List<I64>()
+    for i in range 20 { l.Push(i) }
+    it := l.Iter()
+    for j in range 15 { x := try it.Next() catch Exhausted { break } }
+    l.Clear()
+    l.Push(100)
+    n I64 = 0
+    for {
+        x := try it.Next() catch Exhausted { break }
+        n++
+        if n > 1000 { break }
+    }
+    println("after Clear the iterator gave " $n " more")
+}

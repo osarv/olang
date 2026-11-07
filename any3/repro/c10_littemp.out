@@ -1,0 +1,41 @@
+== build -debug -sanitize
+ns 0,2 #3
+lab aaa
+lab xay
+ns 0,0 #4
+ns 0,1 #2
+lab pa
+ns 1,3 #3
+lab bbb
+lab xby
+ns 0,3 #4
+ns 10,11 #2
+lab pb
+status 0
+== build
+ns 0,2 #3
+lab aaa
+lab xay
+ns 0,0 #4
+ns 0,1 #2
+lab pa
+ns 1,3 #3
+lab bbb
+lab xby
+ns 0,3 #4
+ns 10,11 #2
+lab pb
+status 0
+== interpret
+ns 0,2 #3
+lab aaa
+lab xay
+ns 0,0 #4
+ns 0,1 #2
+lab pa
+ns 1,3 #3
+lab bbb
+lab xby
+ns 0,3 #4
+ns 10,11 #2
+lab pb

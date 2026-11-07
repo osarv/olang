@@ -1,0 +1,28 @@
+# CONFIRMED (pre-existing - reproduced on edf8238, before the permissions batch; O4b/C2d placement).
+# Expected: "expected 9 8, got 9 8" - N(9) is stored into the caller's node, so it must be built where b's
+#           references live (grow's hidden scope argument for b, %sarg0), as growRef builds N(8) where n lives.
+# Actual:   -b/-d: "expected 9 8, got 2999 8" - grow allocates N(9) from its OWN function scope (closed at its
+#           return) and stores it into root.next: a use-after-free, overwritten by churn(). -i gives 9 8.
+type N struct(v I64) {
+    v
+    next mut N& = null
+}
+type Box struct(n mut N&) { n }
+fn grow(b Box) { b.n.next = N(9) }
+fn growRef(n mut N&) { n.next = N(8) }
+fn churn() I64 {
+    s I64 = 0
+    for i in range 3000 {
+        a := Array<I64>(64, I64(i))
+        s = s + a[3]
+    }
+    return s
+}
+fn main() ? {
+    root mut N& = N(1)
+    other mut N& = N(2)
+    grow(Box(root))
+    growRef(other)
+    c := churn()
+    println("expected 9 8, got " $root.next.v " " $other.next.v)
+}

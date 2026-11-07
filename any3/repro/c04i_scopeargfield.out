@@ -1,0 +1,10 @@
+== build -debug -sanitize
+use after scope closed: storage a closed scope gave back was read or written
+../run.sh: line 15: 15468 Aborted                 timeout 60 ./build/$n.debug.san
+status 134
+== build
+field 12
+status 0
+== interpret
+olang interpret: c04i_scopeargfield.olang:14: it uses storage after the scope it was made in closed
+status 1

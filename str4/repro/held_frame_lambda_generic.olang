@@ -1,0 +1,29 @@
+# HELD: a generic whose instantiations use a local lambda differently (match T) decides per instantiation - gen$Bool
+# STACK, gen$I64 heap; -b and -b -d print "11 11 11 0".
+type Node struct(v I64) {
+    v
+}
+type Holder struct() {
+    f fn() I64 = null
+}
+fn churn(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn gen(x <T>, n Node&, h mut Holder&) I64 {
+    f := fn() I64 { return n.v + 1 }
+    match T {
+        case I64 { h.f = f }
+        case Bool { return f() }
+    }
+    return f()
+}
+fn main() ? {
+    n := Node(10)
+    h := Holder()
+    a := gen(true, n, h)
+    b := gen(I64(3), n, h)
+    t := churn(300)
+    println($a " " $b " " $h.f() " " $t)
+}

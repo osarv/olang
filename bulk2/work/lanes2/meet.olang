@@ -1,0 +1,17 @@
+import "std/io"
+fn u8s(n I64) Array<U8> {
+    a := Array<U8>(n)
+    for i in range n { a[i] = U8(i * 100) }
+    return a
+}
+N mut I64 = 4
+fn main() {
+    a := u8s(N)
+    io.Println($(a + 300) " " $(a + 1) " " $(-a) " " $(a + a) " " $(a << 1) " " $(300 - a))!
+    b := Array<I32>(N, -7)
+    io.Println($(b / 2) " " $(b % 3) " " $(b >> 1) " " $(b + I64(1)) " " $(~b))!
+    c := Array<F16>(N, F16(1.5))
+    io.Println($(c * c) " " $(c + 0.1) " " $(c / 0.0))!
+    s U8 = 200
+    io.Println($(s + 300) " " $(-s) " " $(s * 2))!
+}

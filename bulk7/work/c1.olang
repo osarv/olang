@@ -1,0 +1,30 @@
+import "std/io"
+
+type Buf struct(a Array<I64>) {
+    a
+}
+
+type Holder struct(r mut Buf&) {
+    r
+}
+
+fn poke(h Holder&) { h.r.a[0] = 9 }
+
+fn main() {
+    b := Buf(Array<I64>(3, 1))
+    rb mut Buf& = b
+    a := b
+    rb.a[0] = 9
+    io.Println($a.a[0] " " $b.a[0])!
+    c := Buf(Array<I64>(3, 1))
+    h := Holder(c)
+    d := c
+    poke(h)
+    io.Println($d.a[0] " " $c.a[0])!
+    e := Buf(Array<I64>(3, 1))
+    re mut Buf& = e
+    f := fn() { re.a[0] = 9 }
+    g := e
+    f()
+    io.Println($g.a[0] " " $e.a[0])!
+}

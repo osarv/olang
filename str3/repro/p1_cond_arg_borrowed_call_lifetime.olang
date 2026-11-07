@@ -1,0 +1,29 @@
+# PRE-EXISTING (b6259d1 and e27b83b alike), CONFIRMED: a temporary passed to a borrowed-result call that is one arm
+# of a conditional handed to another call is built in the function's scope, not the loop body's (O18a landing).
+# work(): 1,000,000 Nodes kept until it returns - peak RSS 139,216 KB on e27b83b and 139,184 KB on b6259d1; work2()
+# (no conditional) 11,212 KB. With a destructor type the destructors are also delayed (see n6).
+type Node struct(k I64) {
+    k
+    pad Array<I64, 16>
+}
+fn idr(x Node&) Node&x { return x }
+fn takeR(r Node&) I64 { return r.k }
+fn work() I64 {
+    c := true
+    t I64 = 0
+    for i in range 1000000 {
+        t += takeR(idr(Node(i)) if c else Node(16))
+    }
+    return t
+}
+fn work2() I64 {
+    t I64 = 0
+    for i in range 1000000 {
+        t += takeR(idr(Node(i)))
+    }
+    return t
+}
+fn main() ? {
+    t := work()
+    println($t)
+}

@@ -1,0 +1,7 @@
+# check: fail error[E11b]: a join piece is a text literal or a '$' rendering - write '$label(3)'
+# E11b: a value joined to text is rendered with '$' - the hint writes the rendering of the whole operand
+fn label(n I32) String& { return "x" }
+fn show(t String&) { }
+fn main() ? {
+    show(label(3) "\n")
+}

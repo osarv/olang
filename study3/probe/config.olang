@@ -1,0 +1,185 @@
+# config - validates JSON configuration documents against a schema written as a recursive enum: objects with required
+# and optional members, arrays of a schema, bounded numbers, strings from a set, one-of. Every problem is reported
+# with its path ("servers[1].port"), not just the first.
+
+import "std/json"
+import "std/filepath"
+import "std/os"
+
+type Schema enum {
+    Any
+    Bool
+    Int(lo I64, hi I64)
+    Num(lo F64, hi F64)
+    Text(oneOf Array<String&>&)
+    Path(mustExist Bool)
+    List(of Schema&, min I64)
+    Record(fields Array<Field&>&, closed Bool)
+    OneOf(options Array<Schema&>&)
+}
+
+type Field struct(name String&, schema Schema&, required Bool = true) {
+    name
+    schema
+    required
+}
+
+fn req(name String&, s Schema&) Field& { return Field(name, s) }
+fn opt(name String&, s Schema&) Field& { return Field(name, s, false) }
+
+type Problems struct() {
+    list List<String&>
+}
+
+fn (p mut Problems&) add(path String&, what String&) { p.list.Push($path ": " $what) }
+
+fn kindOf(j json.Json&) String {
+    return match j {
+        case json.Json.Null => "null"
+        case json.Json.Bool(_) => "a boolean"
+        case json.Json.Num(_) => "a number"
+        case json.Json.Str(_) => "a string"
+        case json.Json.Arr(_) => "an array"
+        case json.Json.Obj(_) => "an object"
+    }
+}
+
+fn check(s Schema&, j json.Json&, path String&, out mut Problems&) {
+    match s {
+        case Schema.Any {}
+        case Schema.Bool if j is not json.Json.Bool { out.add(path, "expected a boolean, found " $kindOf(j)) }
+        case Schema.Int(lo, hi) {
+            v := try j.AsNum() catch {
+                out.add(path, "expected an integer, found " $kindOf(j))
+                return
+            }
+            if v != F64(I64(v)) { out.add(path, "expected an integer, found " $v) }
+            else if v < F64(lo) or v > F64(hi) { out.add(path, $v " is outside " $lo ".." $hi) }
+        }
+        case Schema.Num(lo, hi) {
+            v := try j.AsNum() catch {
+                out.add(path, "expected a number, found " $kindOf(j))
+                return
+            }
+            if not (lo <= v <= hi) { out.add(path, $v " is outside " $lo ".." $hi) }
+        }
+        case Schema.Text(oneOf) {
+            t := try j.AsStr() catch {
+                out.add(path, "expected a string, found " $kindOf(j))
+                return
+            }
+            if oneOf.Len() > 0 and t not in oneOf { out.add(path, "'" $t "' is not one of " $oneOf) }
+        }
+        case Schema.Path(mustExist) {
+            t := try j.AsStr() catch {
+                out.add(path, "expected a path, found " $kindOf(j))
+                return
+            }
+            if not filepath.IsAbs(t) { out.add(path, "'" $t "' is not an absolute path") }
+            else if mustExist and not os.Exists(t) { out.add(path, $t " does not exist") }
+            else if filepath.Clean(t) != t { out.add(path, $t " is not clean (" $filepath.Clean(t) ")") }
+        }
+        case Schema.List(of, min) {
+            items := try j.AsArr() catch {
+                out.add(path, "expected an array, found " $kindOf(j))
+                return
+            }
+            if items.Len() < min { out.add(path, "needs at least " $min " items, has " $items.Len()) }
+            for i, it in items { check(of, it, $path "[" $i "]", out) }
+        }
+        case Schema.Record(fields, closed) {
+            o := try j.AsObj() catch {
+                out.add(path, "expected an object, found " $kindOf(j))
+                return
+            }
+            for f in fields {
+                sub := $path "." $f.name if path.Len() > 0 else $f.name
+                v := try j[f.name] catch json.JsonError {
+                    if f.required { out.add(sub, "is required") }
+                    continue
+                }
+                check(f.schema, v, sub, out)
+            }
+            if closed {
+                for k in o.Keys {
+                    if not fields.Any(fn(f Field&) Bool { return f.name == k }) { out.add(path, "unknown member '" $k "'") }
+                }
+            }
+        }
+        case Schema.OneOf(options) {
+            for alt in options {
+                trial := Problems()
+                check(alt, j, path, trial)
+                if trial.list.Len() == 0 { return }
+            }
+            out.add(path, "matches none of " $options.Len() " alternatives")
+        }
+        nomatch {}
+    }
+}
+
+ServerSchema Schema& = Schema.Record(Field&[
+    req("host", Schema.Text(String&[])),
+    req("port", Schema.Int(1, 65535)),
+    opt("tls", Schema.Bool),
+    opt("weight", Schema.Num(0.0, 1.0)),
+], true)
+
+ConfigSchema Schema& = Schema.Record(Field&[
+    req("name", Schema.Text(String&[])),
+    req("mode", Schema.Text(String&["dev", "staging", "prod"])),
+    req("servers", Schema.List(ServerSchema, 1)),
+    opt("logDir", Schema.Path(false)),
+    opt("retries", Schema.OneOf(Schema&[Schema.Int(0, 10), Schema.Text(String&["forever"])])),
+], true)
+
+Good := (
+    "{\n"
+    "  \"name\": \"api\", \"mode\": \"prod\", \"logDir\": \"/var/log/api\", \"retries\": \"forever\",\n"
+    "  \"servers\": [ {\"host\": \"a.example\", \"port\": 443, \"tls\": true, \"weight\": 0.5},\n"
+    "                 {\"host\": \"b.example\", \"port\": 8443} ]\n"
+    "}"
+)
+
+Bad := (
+    "{\n"
+    "  \"name\": \"api\", \"mode\": \"production\", \"logDir\": \"var//log\", \"retries\": 11, \"colour\": \"red\",\n"
+    "  \"servers\": [ {\"host\": \"a.example\", \"port\": 70000, \"tls\": \"yes\"},\n"
+    "                 {\"port\": 1.5, \"weight\": 2} ]\n"
+    "}"
+)
+
+fn validate(text String&) List<String&> ? json.JsonError {
+    at := json.Position()
+    doc := try json.Parse(text, at)
+    p := Problems()
+    check(ConfigSchema, doc, "", p)
+    return p.list
+}
+
+fn countProblems(text String&) I64 {
+    l := try validate(text) catch { return -1 }
+    return l.Len()
+}
+GoodCount I64 = countProblems(Good)
+
+fn mainOld() ? {
+    for text in String&[Good, Bad, "{\"name\": 1,}"] {
+        problems := try validate(text) catch json.JsonError {
+            println("not JSON")
+            continue
+        }
+        println($problems.Len() " problems")
+        for p in problems { println("  " $p) }
+    }
+    println("baked: " $GoodCount)
+}
+type Probe<N I64> struct() { }
+fn probeValue() I64 {
+    x := countProblems(Good)
+    return 1
+}
+fn main() ? {
+    p := Probe<probeValue()>()
+    println("ok")
+}

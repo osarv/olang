@@ -1,0 +1,21 @@
+type E enum {
+    Lit(v I64)
+    Neg(e E&)
+}
+type PE struct(a E) {
+    a
+}
+fn eval(e E&) I64 {
+    return match e {
+        case E.Lit(v) => v
+        case E.Neg(x) => 0 - eval(x)
+    }
+}
+fn set(p mut PE&, q PE&) {
+    p.a = E.Neg(q.a)
+}
+fn main() ? {
+    x := PE(E.Lit(5))
+    set(x, x)
+    println($eval(x.a))
+}

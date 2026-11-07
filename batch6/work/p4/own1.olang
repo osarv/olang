@@ -1,0 +1,25 @@
+# P4c: an error raised by a try join's own block is not the join's - its clauses do not take it, built and baked
+error E {
+    NEG
+    OWN
+}
+fn f(n I64) ? E {
+    if n < 0 { error E.NEG }
+}
+fn g(n I64) I64 ? E {
+    try join {
+        spawn try f(n)
+        if n > 5 { error E.OWN }
+    } catch E { return 1 }
+    return 2
+}
+fn run(n I64) I64 {
+    return try g(n) catch E.OWN default 30 catch E.NEG default 40
+}
+B1 I64 = run(-1)
+B2 I64 = run(9)
+B3 I64 = run(1)
+on mut I64 = 1
+fn main() ? {
+    println($run(-on) " " $run(9 * on) " " $run(on) " | " $B1 " " $B2 " " $B3)
+}

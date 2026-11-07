@@ -1,0 +1,18 @@
+# (c) MISSING std piece: List, Map and StringBuilder declare no Str, so '$l' renders the private representation, with
+# the spare slots of the chunk (filled with copies of the first element, D13c) shown as if they were elements:
+#   $l (List<I64> holding 1, 2)  -> List(listState(Array<I64>&[I64[1, 2, 1, 1, 1, 1, 1, 1], null, null, null], 1, 1,
+#                                   I64[1, 2, 1, 1, 1, 1, 1, 1], 2, 8, 2))
+#   $m (Map<String&, I64> {"a": 1}) -> Map(mapState(mapSlot<String&, I64>&[null, null, null, null,
+#                                   mapSlot(MapEntry("a", 1), null), null, null, null], 1, null))
+# A Value.Arr(List<Value>) in the interpreter printed 60 lines of this. Debug-printing a collection is the first thing a
+# newcomer does.
+# Expected: List.Str -> 'List<I64>[1, 2]' (or '[1, 2]'), Map.Str -> '{"a": 1}', StringBuilder.Str -> its text.
+fn main() ? {
+    l := List<I64>()
+    l.Push(1)
+    l.Push(2)
+    println($l)
+    m := Map<String&, I64>()
+    m.Put("a", 1)
+    println($m)
+}

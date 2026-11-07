@@ -1,0 +1,7 @@
+fn main() ? {
+    m := Map<I64, List<String&>>()
+    m.Put(1, List<String&>())
+    l := try m.Get(1)
+    l.Push("x")
+    println($(try m.Get(1)).Len())
+}

@@ -1,0 +1,13 @@
+type Ctr struct() {
+  n I64 = 0
+}
+type B struct(c mut Ctr&) { c }
+G B = B(Ctr())
+fn (a B) Less(b B) Bool {
+  b.c.n = 99
+  return true
+}
+fn main() ? {
+  k := G < G
+  println($G.c.n " " $k)
+}

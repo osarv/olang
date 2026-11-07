@@ -1,0 +1,24 @@
+== build -debug -sanitize
+r0
+r1
+r2
+lab text0-0
+lab text1-7
+lab text2-14
+status 0
+== build
+r0
+r1
+r2
+lab text0-0
+lab text1-7
+lab text2-14
+status 0
+== interpret
+r0
+r1
+r2
+lab text0-0
+lab text1-7
+lab text2-14
+status 0

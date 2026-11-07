@@ -1,0 +1,12 @@
+G mut Vec<I64> = Vec<I64>()
+fn swap(k I64) I64 {
+    l := take G
+    l.Push(k)
+    G = take l
+    return G.Len()
+}
+fn main() ? {
+    t := 0
+    for k in range 2000 { t += swap(k) }
+    println($t " " $G[1999])
+}

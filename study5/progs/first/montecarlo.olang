@@ -1,0 +1,50 @@
+# montecarlo - estimate pi and an option price by Monte Carlo, split over tasks.
+import "std/rand"
+import "std/math"
+import "std/time"
+
+Samples I64 = 40000000
+Tasks I64 = 4
+
+fn piPart(seed U64, n I64) I64 {
+    r := rand.Rand(seed)
+    inside I64 = 0
+    for i in range n {
+        x := r.Float()
+        y := r.Float()
+        if x * x + y * y <= 1.0 { inside++ }
+    }
+    return inside
+}
+
+# a European call: S0 100, strike 105, rate 5%, volatility 20%, one year
+fn callPart(seed U64, n I64) F64 {
+    r := rand.Rand(seed)
+    s0, k, rate, vol := 100.0, 105.0, 0.05, 0.2
+    sum := 0.0
+    for i in range n {
+        st := s0 * math.Exp((rate - 0.5 * vol * vol) + vol * r.Normal())
+        sum += math.Max(st - k, 0.0)
+    }
+    return sum
+}
+
+fn main() ? {
+    t := time.Now()
+    hits := Array<I64>(Tasks)
+    join {
+        for i in range Tasks { spawn hits[i] = piPart(U64(i + 1), Samples / Tasks) }
+    }
+    total := hits.Fold(0, fn(a I64, h I64) I64 { return a + h })
+    pi := 4.0 * F64(total) / F64(Samples / Tasks * Tasks)
+    println("pi ~ " $pi.Fixed(5) " (error " $math.Abs(pi - math.Pi).Fixed(5) ") in " $(F64(time.Since(t)) / 1e9).Fixed(3) " s")
+
+    t = time.Now()
+    sums := Array<F64>(Tasks)
+    join {
+        for i in range Tasks { spawn sums[i] = callPart(U64(100 + i), Samples / 4 / Tasks) }
+    }
+    payoff := sums.Fold(0.0, fn(a, s) { return a + s }) / F64(Samples / 4 / Tasks * Tasks)
+    price := payoff * math.Exp(-0.05)
+    println("call price ~ " $price.Fixed(4) " (Black-Scholes 8.0214) in " $(F64(time.Since(t)) / 1e9).Fixed(3) " s")
+}

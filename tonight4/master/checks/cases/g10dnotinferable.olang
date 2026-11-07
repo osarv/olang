@@ -1,0 +1,9 @@
+# check: fail error[G10d]: what D's constructor introduces cannot be inferred from these arguments
+# G10d: a generic constructor's variables are inferred from the call's arguments, and null binds none
+type G<T> struct() {
+    n I64 = 0
+}
+type D struct(g G<<T>>&) {
+    n I64 = 1
+}
+fn main() ? { d := D(null) }

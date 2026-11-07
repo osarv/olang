@@ -1,0 +1,22 @@
+# under the switches an immutable global's elements are handed out writable (x := G[0]): the global is written at
+# run time, and while compiling the evaluator writes it as it bakes another global
+import "std/io"
+
+type node struct(v I64) {
+    v
+}
+
+G Array<node&> = node&[node(1)]
+
+fn bump() I64 {
+    x := G[0]
+    x.v += 1
+    return x.v
+}
+
+B I64 = bump()
+
+fn main() {
+    io.Println($G " " $B)!
+    io.Println($bump())!
+}

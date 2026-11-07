@@ -1,0 +1,10 @@
+import "std/io"
+fn main() ? {
+    total Array<I64>& = Array<I64>(4)
+    join {
+        for i in range 4 {
+            spawn fn() { total[i] = i * 10 }
+        }
+    }
+    try io.Print($total[3] "\n")
+}

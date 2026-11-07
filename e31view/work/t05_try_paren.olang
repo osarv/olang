@@ -1,0 +1,19 @@
+# a view call inside "try (...)" (E15a: the index inside is checked, the derived form) - base built it
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn (s Vs&) Len() I64 { return s.d.Len() }
+fn put(v mut V&, x I64) I64 {
+    v.d[v.n] = x
+    return x
+}
+fn main() ? {
+    s := Vs(Array<I64>(4))
+    r := try (put(s[2], 9) + 1) catch default 0
+    println($s.d " " $r)
+}

@@ -1,0 +1,16 @@
+type Expr enum {
+    Num(v F64)
+    Neg(e Expr&)
+}
+fn wrap(a Expr&) Expr&a {
+    return Expr.Neg(a)
+}
+fn simplify(e Expr&) Expr&e {
+    if e != null { return wrap(e) }
+    return Expr.Num(1.0)
+}
+fn main() ? {
+    t Expr& = Expr.Neg(Expr.Num(2.0))
+    s := simplify(t)
+    assert s == s
+}

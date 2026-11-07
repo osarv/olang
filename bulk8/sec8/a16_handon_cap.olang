@@ -1,0 +1,26 @@
+import "std/io"
+
+type Blob unique struct(n I64) {
+    n
+    data := Array<I64>(n.Mod(7) + 2, n)
+}
+
+type Shelf struct() {
+    m Map<I64, Blob>
+    fs Vec<fn&() I64>
+}
+
+# a closure capturing the parameter kept in a field, the parameter then handed on
+fn (s mut Shelf&) put(k I64, b Blob) {
+    s.fs.Push(fn() I64 { return b.data[0] })
+    s.m.Put(k, b)
+}
+
+fn main() {
+    s Shelf = Shelf()
+    for k in range 5 { s.put(k, Blob(k + 10)) }
+    for k in range 3 { s.m.Remove(k) }
+    acc := 0
+    for f in s.fs { acc += f() }
+    io.Println($acc)!
+}

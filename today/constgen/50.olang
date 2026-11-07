@@ -1,0 +1,9 @@
+# G21: a generic struct field whose length is computed by a call - its type outside the struct reads length 0
+fn twice(n I64) I64 { return n * 2 }
+type B<N I64> struct() { a mut Array<I32, twice(N)> }
+fn main() ? {
+    b := B<3>()
+    b.a[5] = 9
+    x Array<I32, 6> = b.a
+    println($b.a.Len() " " $x[5])
+}

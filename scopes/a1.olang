@@ -1,0 +1,19 @@
+# conditional expression: a reference from an inner block flows to an outer one through `a if c else b`
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn main() ? {
+    outer Node& = Node(1)
+    keep := outer
+    for i in range 2 {
+        inner Node& = Node(42)
+        keep = inner if i >= 0 else outer
+    }
+    churn()
+    try io.Print($keep.v "\n")
+}

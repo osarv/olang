@@ -1,0 +1,28 @@
+# O26a copiedRead: a copy of a loop turn's local whose reference field names a turn temporary, returned
+import "std/io"
+
+type node struct(v I64, next node?& = null) { v, next }
+
+fn last(k I64) node& {
+    out := node(-1)
+    for i in range k {
+        nn := node(i)
+        tmp := node(i + 1000)
+        nn.next = tmp
+        cur := nn
+        if i == k - 1: return cur
+    }
+    return out
+}
+
+fn churn() I64 {
+    junk := Vec<String>()
+    for i in range 2000 { junk.Push($i "abcdefghijklmnopqrstuvwxyz") }
+    return junk.Len()
+}
+
+fn main() {
+    a := last(4)
+    n := churn()
+    io.Println($a.v " " $a.next!.v " " $n)!
+}

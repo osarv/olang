@@ -1,0 +1,19 @@
+type Rule struct(Target String&, Deps List<String&>) {
+    Target
+    Deps
+}
+type Mk struct() {
+    rules Map<String&, Rule> = Map<String&, Rule>()
+}
+fn (m mut Mk&) parse(text String&) {
+    for line in text.Lines() {
+        deps mut List<String&>&m = List<String&>()
+        for d in line.Split(" ") { deps.Push(d) }
+        m.rules.Put(line, Rule(line, deps))
+    }
+}
+fn main() ? {
+    m := Mk()
+    m.parse("a b\nc d e")
+    println($m.rules.Len())
+}

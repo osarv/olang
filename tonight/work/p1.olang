@@ -1,0 +1,25 @@
+type N struct(v I32, nx N&) {
+    v
+    next mut N& = nx
+}
+type Cur struct(of N&) { at mut N&of = of }
+type Box struct(n mut N&) { n }
+fn growB(b Box) { b.n.next = N(9, null) }
+fn fill(c mut Cur&) { growB(Box(c.at)) }
+fn churn() I64 {
+    s := 0
+    for i in range 1000 {
+        a := Array<I64>(64, i)
+        s = s + a[3]
+    }
+    return s
+}
+fn main() ? {
+    root mut N& = N(1, null)
+    c := Cur(root)
+    if true {
+        fill(c)
+    }
+    x := churn()
+    println($root.next.v)
+}

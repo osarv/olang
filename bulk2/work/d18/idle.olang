@@ -1,0 +1,86 @@
+import "std/io"
+
+Dtors mut I64 = 0
+type Res struct(v I64) {
+    v
+} destruct {
+    Dtors++
+}
+
+fn mk(n I64) Array<I64> {
+    a := Array<I64>(n)
+    for i in range n { a[i] = i }
+    return a
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        x := Array<I64>(64, i)
+        t += x[3]
+    }
+    return t
+}
+
+# a generator whose loop body builds text after each resume
+fn gen(n I64) Iterator<I64> {
+    for i in range n {
+        s := $i "-" $(i * 2)
+        yield s.Len()
+        t := $i "+" $(i * 3)
+        yield t.Len()
+    }
+}
+
+fn main() ? {
+    # a loop body building only through a callee's result
+    total I64 = 0
+    for i in range 50 {
+        a := mk(i % 7 + 1)
+        churn()
+        total += a[a.Len() - 1]
+    }
+    # a closure capturing a loop-local array, called after a churn
+    for i in range 30 {
+        b := mk(5)
+        f := fn() I64 { return b[4] + i }
+        churn()
+        total += f()
+    }
+    # a destructor registered in a loop body
+    for i in range 10 {
+        r := Res(i)
+        total += r.v
+    }
+    # defer in a loop body
+    for i in range 10 {
+        c := mk(3)
+        defer { total += c[2] }
+        churn()
+    }
+    # a catch clause that builds, in a loop
+    for i in range 10 {
+        v := try mk(4).Get(i) catch ArrayError { churn() } default mk(9)[8]
+        churn()
+        total += v
+    }
+    # tasks in a loop, each given a loop-local array
+    for i in range 4 {
+        d := mk(6)
+        s mut Array<I64>& = Array<I64>(1)
+        join { spawn add(d, s) }
+        churn()
+        total += s[0]
+    }
+    # a generator walked part way, many times
+    for k in range 100 {
+        for x in gen(5) {
+            churn()
+            total += x
+            if x > 5 { break }
+        }
+    }
+    io.Println($total " " $Dtors)!
+}
+
+fn add(d Array<I64>&, s mut Array<I64>&) { s[0] = d.Sum() }

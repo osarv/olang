@@ -1,0 +1,17 @@
+# S17/S18a in a test: the failing assert's FILE:LINE and message precede the FAIL line
+X mut I64 = 3
+fn helper(n I64) {
+    assert n > 5, "n was " $n
+}
+test "fails in a helper" {
+    helper(X)
+}
+test "fails directly" {
+    assert X > 10, "X=" $X
+}
+test "passes" {
+    assert X == 3
+}
+test "unreachable" {
+    if X == 3 { unreachable }
+}

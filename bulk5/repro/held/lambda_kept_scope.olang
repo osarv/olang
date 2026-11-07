@@ -1,0 +1,20 @@
+import "std/io"
+fn viaSlice(t String) fn() String {
+    s := t[1:]
+    return fn() String { return $s }
+}
+fn mk(i I64) fn() String {
+    t := $"abc" $i
+    return viaSlice(t)
+}
+fn churn(n I64) I64 {
+    xs := Array<I64>(n, 7)
+    return xs[n - 1]
+}
+fn main() {
+    fs := Vec<fn() String>()
+    for i in range 3 { fs.Push(mk(i)) }
+    s := 0
+    for i in range 1, 50 { s += churn(i * 8) }
+    io.Println($fs[0]() $fs[2]() " " $s)!
+}

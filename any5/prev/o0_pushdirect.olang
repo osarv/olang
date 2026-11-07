@@ -1,0 +1,18 @@
+type K struct(s String&) { s }
+# control: the second review's c03d shape - the returned local pushed into the caller's list
+fn f(l mut List<String&>&, i I64) String {
+    s := "abc" $i
+    l.Push(s)
+    return s
+}
+fn probe() String {
+    l := List<String&>()
+    x := f(l, 1)
+    x[0] = 'Q'
+    return "l " $l " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}

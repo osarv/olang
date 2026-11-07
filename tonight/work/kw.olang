@@ -1,0 +1,19 @@
+type P struct(v I32) { v }
+fn (p P&) spawn() I32 { return p.v + 1 }
+fn (p P&) fail(x I32) I32 { return x * 2 }
+fn (p P&) return() I32 { return 7 }
+fn (p P&) if(c Bool) I32 { return 1 if c else 2 }
+fn (p P&) in(x I32) Bool { return x == p.v }
+fn (p P&) test() I32 { return 9 }
+fn (p P&) fn() I32 { return 10 }
+fn (p P&) done() I32 { return 11 }
+fn (p P&) match() I32 { return 12 }
+G := P(4).spawn()
+fn main() ? {
+    p := P(4)
+    println($p.spawn() " " $p.fail(3) " " $p.return() " " $p.if(true) " " $p.in(4) " " $p.test() " " $G)
+    println($p.fn() " " $p.done() " " $p.match())
+    q := p.spawn()
+    if p.in(5) { done }
+    done
+}

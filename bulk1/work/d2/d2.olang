@@ -1,0 +1,29 @@
+import "std/io"
+
+type Holder struct() {
+    t String& = ""
+}
+
+fn (h mut Holder&) set(i I64) { h.t = $"text number " $i " padded out to many bytes ........................................" }
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    h := Holder()
+    h.set(-1)
+    v := h.t
+    for i in range 4 {
+        churn()
+        io.Println(v)!
+        defer h.set(i)       # lets go of the text v names as the turn ends
+    }
+}

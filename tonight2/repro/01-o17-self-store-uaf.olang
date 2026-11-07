@@ -1,0 +1,39 @@
+# O17 (wt-s3scope, settleRegions/readFromRegion): a callee storing its parameter's OWN storage into the region its
+# references live in is not counted as a store, so a value whose storage and references live in different scopes
+# (here a copy of src.b: storage in bump's block, references where src's are) may be lent to it.
+# tie() then hangs a reference to bump's block-local copy off a node that outlives it.
+# expected: rejected with error[O17] at tie(b) (the previous compiler, 472373d, rejects it), or else prints 42
+# actual:   compiles; -b prints garbage (1048576), -d prints 0, -i prints 42; valgrind: uninitialised reads
+type Node struct() {
+    owner mut Box& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn tie(b mut Box&) {
+    b.head.owner = b
+}
+fn bump(src mut W&) {
+    b := src.b
+    b.tag = 42
+    tie(b)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box())
+    bump(w)
+    churn()
+    println($w.b.head.owner.tag)
+}

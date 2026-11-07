@@ -1,0 +1,23 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn mk() Vec<I64> {
+    v := Vec<I64>()
+    v.Push(5)
+    return v
+}
+G mut Vec<I64> = mk()
+fn grab() I64 {
+    d := G.View()
+    for i in range 100 { G.Push(i) }
+    return d[0]
+}
+A I64 = grab()
+fn main() ? {
+    println($A)
+}

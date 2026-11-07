@@ -1,0 +1,36 @@
+type P struct(n I64) { n }
+type H struct(p P?&) { p }
+type HS struct(s String&) { s }
+type V struct(p P&) { p }
+type Sh trait {
+    Show() String
+}
+fn (p P&) Show() String { return "P" $p.n }
+type Lab extends String
+fn (l Lab&) Show() String { return "lab " $String(l) }
+fn mkp(i I64) P& { return P(i) }
+fn mk(i I64) String { return "text" $i "-" $(i * 7) }
+fn mkv(i I64) V { return V(P(i)) }
+error Fail {
+    BAD
+}
+fn fp(i I64) P& ? Fail {
+    if i >= 0 { error Fail.BAD }
+    return P(i)
+}
+# a for-in over a scoped call's List result, its elements pushed outward
+fn mkl(i I64) List<P&> {
+    l := List<P&>()
+    l.Push(P(i))
+    l.Push(P(i + 1))
+    return l
+}
+fn main() {
+    out := List<P&>()
+    for i in range 2 {
+        t := "inner" $i
+        for q in mkl&t(i * 11 + 1) { out.Push(q) }
+    }
+    assert churn() > 0
+    for x in out { say("forin " $x.n) }
+}

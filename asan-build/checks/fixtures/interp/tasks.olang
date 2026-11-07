@@ -1,0 +1,7 @@
+# B3e: tasks are not interpreted yet - reaching one stops, saying so
+fn work(n I32) { }
+fn main() ? {
+    join {
+        spawn work(1)
+    }
+}

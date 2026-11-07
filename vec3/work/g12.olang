@@ -1,0 +1,17 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Doc struct() { title own mut String& = "bb" }
+Docs own mut Doc& = Doc()
+fn main() ? {
+    l := List<String&>()
+    l.Push(Docs.title)                     # a List local keeping a borrow of a global's own object
+    Docs.title = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(l[0])
+}

@@ -1,0 +1,23 @@
+# a field store through a List element: what is stored lives in the loop body, the element where the list lives
+type Cell struct() {
+    s String& = ""
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+fn main() ? {
+    cells mut List<mut Cell&>& = List<mut Cell&>()
+    for i in range 3 { cells.Push(Cell()) }
+    for i in range 3 {
+        cells[i].s = "w" $i "-abcdefghijklmnopqrstuvwxyz"
+        churn()
+    }
+    churn()
+    for c in cells { print($c.s " ") }
+    println("")
+}

@@ -1,0 +1,32 @@
+# s1 through a parameter used as a cursor (S4a): the function moves the second parser's words into the first's lexer
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+    more Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn shift(p mut Parser&, other mut Parser&) {
+    q := p.lx
+    p = other
+    q.more = take p.lx.toks
+}
+fn main() ? {
+    a mut Parser& = Parser()
+    b mut Parser& = Parser()
+    a.lx = Lexer()
+    b.lx = Lexer()
+    for i in range 3 { b.lx.toks.Push($i "-word-in-b's-lexer-region") }
+    shift(a, b)
+    b.lx = null
+    churn()
+    println(a.lx.more[0])
+}

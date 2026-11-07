@@ -1,0 +1,18 @@
+# F2 (OLDER - d05c915 too): the coordinator's program. A handle field (List) of a struct element, called through x[i]:
+# Push builds the chunk in add's own scope (IR: List$I64.Push(ptr %t76, ...), %t76 add's scope, closed at its return).
+type Blk struct() {
+    S List<I64>
+    t I64 = 0
+}
+type F struct(K I64) {
+    K
+    Blocks List<Blk>
+}
+fn (f mut F&) NewBlock() { f.Blocks.Push(Blk()) }
+fn add(f mut F&, b I64, x I64) { f.Blocks[b].S.Push(x) }
+fn main() ? {
+    f := F(1)
+    f.NewBlock()
+    add(f, 0, 7)
+    for s in f.Blocks[0].S { println("for " $s) }
+}

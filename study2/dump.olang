@@ -1,0 +1,605 @@
+# dump - a syntax tree as S-expressions, one declaration per line, so the parser's reading can be checked by eye and
+# diffed. Walks every node kind, so it is also a test of matching nested recursive enums.
+import "scan"
+import "ast"
+
+type Dumper struct() {
+    out mut StringBuilder
+}
+
+fn (d mut Dumper&) put(t String&) { d.out.Push(t) }
+
+fn (d Dumper&) Text() String { return d.out.ToString() }
+
+fn (d mut Dumper&) Decls(ds Array<ast.Decl&>&) {
+    for x in ds {
+        d.decl(x)
+        d.put("\n")
+    }
+}
+
+fn (d mut Dumper&) decl(x ast.Decl&) {
+    match x {
+        case ast.Decl.Fn(f) { d.func(f) }
+        case ast.Decl.Extern(f) {
+            d.put("(extern ")
+            d.func(f)
+            d.put(")")
+        }
+        case ast.Decl.TypeD(_, name, params, extending, body) {
+            d.put("(type " $name)
+            for tp in params {
+                d.put(" <" $tp.Name)
+                if tp.Ty != null {
+                    d.put(" ")
+                    d.ty(tp.Ty)
+                }
+                d.put(">")
+            }
+            if extending { d.put(" extends") }
+            d.put(" ")
+            d.body(body)
+            d.put(")")
+        }
+        case ast.Decl.Global(_, names, mutable, ty, values) {
+            d.put("(global")
+            for n in names { d.put(" " $n) }
+            if mutable { d.put(" mut") }
+            if ty != null {
+                d.put(" ")
+                d.ty(ty)
+            }
+            d.exprs(values)
+            d.put(")")
+        }
+        case ast.Decl.Import(_, alias, path) { d.put("(import " $alias " " $path ")") }
+        case ast.Decl.ErrorD(_, name, words) {
+            d.put("(error " $name)
+            for w in words { d.put(" " $w) }
+            d.put(")")
+        }
+        case ast.Decl.TestD(_, name, body) {
+            d.put("(test " $name)
+            d.stmts(body)
+            d.put(")")
+        }
+        case ast.Decl.IfD(_, cond, then, els) {
+            d.put("(top-if ")
+            d.expr(cond)
+            d.put(" (")
+            for t in then { d.decl(t) }
+            d.put(") (")
+            for e in els { d.decl(e) }
+            d.put("))")
+        }
+        case ast.Decl.UnparsedD(at, end) { d.put("(unparsed " $at ".." $end ")") }
+    }
+}
+
+fn (d mut Dumper&) body(b ast.TypeBody&) {
+    match b {
+        case ast.TypeBody.Struct(params, errors, body, dtor) {
+            d.put("(struct")
+            d.params(params)
+            d.errs(errors)
+            d.stmts(body)
+            if dtor.Len() > 0 {
+                d.put(" (destruct")
+                d.stmts(dtor)
+                d.put(")")
+            }
+            d.put(")")
+        }
+        case ast.TypeBody.Enum(cases) {
+            d.put("(enum")
+            for c in cases {
+                d.put(" " $c.Name)
+                if c.Payload.Len() > 0 { d.params(c.Payload) }
+            }
+            d.put(")")
+        }
+        case ast.TypeBody.Trait(methods) {
+            d.put("(trait")
+            for m in methods {
+                d.put(" ")
+                d.func(m)
+            }
+            d.put(")")
+        }
+        case ast.TypeBody.Over(base, cp, ce, cb) {
+            d.put("(over ")
+            d.ty(base)
+            if cb.Len() > 0 {
+                d.params(cp)
+                d.stmts(cb)
+            }
+            d.put(")")
+        }
+    }
+}
+
+fn (d mut Dumper&) func(f ast.Func&) {
+    d.put("(fn")
+    if f.Recv != null {
+        d.put(" (recv ")
+        d.param(f.Recv)
+        d.put(")")
+    }
+    if f.Name.Len() > 0 { d.put(" " $f.Name) }
+    d.sig(f.S)
+    if f.HasBody { d.stmts(f.Body) }
+    d.put(")")
+}
+
+fn (d mut Dumper&) sig(s ast.Sig&) {
+    d.params(s.Params)
+    if s.Results.Len() > 0 {
+        d.put(" (->")
+        for r in s.Results {
+            d.put(" ")
+            d.ty(r)
+        }
+        d.put(")")
+    }
+    d.errs(s)
+}
+
+fn (d mut Dumper&) errs(s ast.Sig&) {
+    if s == null or not s.HasErrors { return }
+    d.put(" (?")
+    for e in s.Errors { d.put(" " $d.path(e)) }
+    d.put(")")
+}
+
+fn (d Dumper&) path(p ast.Path&) String {
+    b := StringBuilder()
+    for i, x in p.Parts {
+        if i > 0 { b.PushChar('.') }
+        b.Push(x)
+    }
+    return b.ToString()
+}
+
+fn (d mut Dumper&) params(ps Array<ast.Param&>&) {
+    d.put(" (")
+    for i, x in ps {
+        if i > 0 { d.put(" ") }
+        d.param(x)
+    }
+    d.put(")")
+}
+
+fn (d mut Dumper&) param(x ast.Param&) {
+    d.put("[" $x.Name)
+    if x.Mutable { d.put(" mut") }
+    if x.Ty != null {
+        d.put(" ")
+        d.ty(x.Ty)
+    }
+    if x.Dflt != null {
+        d.put(" = ")
+        d.expr(x.Dflt)
+    }
+    d.put("]")
+}
+
+fn (d mut Dumper&) ty(t ast.TypeRef&) {
+    match t {
+        case ast.TypeRef.Named(_, path, args, isRef, marker, writable) {
+            if writable { d.put("mut ") }
+            for i, x in path {
+                if i > 0 { d.put(".") }
+                d.put(x)
+            }
+            if args.Len() > 0 {
+                d.put("<")
+                for i, a in args {
+                    if i > 0 { d.put(", ") }
+                    d.ty(a)
+                }
+                d.put(">")
+            }
+            if isRef { d.put("&" $marker) }
+        }
+        case ast.TypeRef.Var(_, name, constraint, isRef, writable) {
+            if writable { d.put("mut ") }
+            d.put("<" $name)
+            if constraint != null {
+                d.put(" ")
+                d.ty(constraint)
+            }
+            d.put(">")
+            if isRef { d.put("&") }
+        }
+        case ast.TypeRef.Func(_, s, _) {
+            d.put("(fn-type")
+            d.sig(s)
+            d.put(")")
+        }
+        case ast.TypeRef.Const(_, value) {
+            d.put("(const ")
+            d.expr(value)
+            d.put(")")
+        }
+        case ast.TypeRef.Shape(_, body) { d.body(body) }
+    }
+}
+
+fn (d mut Dumper&) stmts(ss Array<ast.Stmt&>&) {
+    d.put(" {")
+    for x in ss {
+        d.put(" ")
+        d.stmt(x)
+    }
+    d.put(" }")
+}
+
+fn (d mut Dumper&) exprs(es Array<ast.Expr&>&) {
+    for e in es {
+        d.put(" ")
+        d.expr(e)
+    }
+}
+
+fn (d mut Dumper&) stmt(x ast.Stmt&) {
+    match x {
+        case ast.Stmt.ExprS(_, e) { d.expr(e) }
+        case ast.Stmt.Var(_, names, mutable, ty, values) {
+            d.put("(var")
+            for n in names { d.put(" " $n) }
+            if mutable { d.put(" mut") }
+            d.put(" ")
+            d.ty(ty)
+            d.exprs(values)
+            d.put(")")
+        }
+        case ast.Stmt.Define(_, names, values) {
+            d.put("(:=")
+            for n in names { d.put(" " $n) }
+            d.exprs(values)
+            d.put(")")
+        }
+        case ast.Stmt.Assign(_, op, targets, values, tried, clauses) {
+            d.put("(" $d.op(op) $(" try" if tried else ""))
+            d.exprs(targets)
+            d.put(" <-")
+            d.exprs(values)
+            d.catches(clauses)
+            d.put(")")
+        }
+        case ast.Stmt.Field(_, names, mutable) {
+            d.put("(field")
+            for n in names { d.put(" " $n) }
+            if mutable { d.put(" mut") }
+            d.put(")")
+        }
+        case ast.Stmt.If(_, cond, then, els) {
+            d.put("(if ")
+            d.expr(cond)
+            d.stmts(then)
+            if els != null {
+                d.put(" else ")
+                d.stmt(els)
+            }
+            d.put(")")
+        }
+        case ast.Stmt.Forever(_, body) {
+            d.put("(forever")
+            d.stmts(body)
+            d.put(")")
+        }
+        case ast.Stmt.While(_, cond, body) {
+            d.put("(while ")
+            d.expr(cond)
+            d.stmts(body)
+            d.put(")")
+        }
+        case ast.Stmt.For3(_, init, cond, post, body) {
+            d.put("(for3 ")
+            d.stmt(init)
+            d.put(" ")
+            d.expr(cond)
+            d.put(" ")
+            d.stmt(post)
+            d.stmts(body)
+            d.put(")")
+        }
+        case ast.Stmt.ForIn(_, key, name, source, tried, body, clauses) {
+            d.put("(for-in " $key " " $name $(" try " if tried else " "))
+            d.expr(source)
+            d.stmts(body)
+            d.catches(clauses)
+            d.put(")")
+        }
+        case ast.Stmt.DoFor(_, body, cond) {
+            d.put("(do")
+            d.stmts(body)
+            d.put(" ")
+            d.expr(cond)
+            d.put(")")
+        }
+        case ast.Stmt.MatchS(_, m) { d.matchX(m) }
+        case ast.Stmt.Return(_, values) {
+            d.put("(return")
+            d.exprs(values)
+            d.put(")")
+        }
+        case ast.Stmt.Jump(_, kind) { d.put("(" $d.op(kind) ")") }
+        case ast.Stmt.Assert(_, cond, msg) {
+            d.put("(assert ")
+            d.expr(cond)
+            if msg != null {
+                d.put(" ")
+                d.expr(msg)
+            }
+            d.put(")")
+        }
+        case ast.Stmt.Raise(_, word) {
+            d.put("(error")
+            if word != null { d.put(" " $d.path(word)) }
+            d.put(")")
+        }
+        case ast.Stmt.Spawn(_, targets, call) {
+            d.put("(spawn")
+            d.exprs(targets)
+            d.put(" ")
+            d.expr(call)
+            d.put(")")
+        }
+        case ast.Stmt.JoinS(_, body) {
+            d.put("(join")
+            d.stmts(body)
+            d.put(")")
+        }
+        case ast.Stmt.DeferS(_, s) {
+            d.put("(defer ")
+            d.stmt(s)
+            d.put(")")
+        }
+        case ast.Stmt.Block(_, body) {
+            d.put("(block")
+            d.stmts(body)
+            d.put(")")
+        }
+        case ast.Stmt.Unparsed(at, end) { d.put("(unparsed " $at ".." $end ")") }
+    }
+}
+
+fn (d mut Dumper&) catches(cl Array<ast.Catch&>&) {
+    for c in cl {
+        d.put(" (catch")
+        for i in c.Items { d.put(" " $d.path(i)) }
+        if c.HasBody { d.stmts(c.Body) }
+        if c.Defaults.Len() > 0 {
+            d.put(" default")
+            d.exprs(c.Defaults)
+        }
+        d.put(")")
+    }
+}
+
+fn (d mut Dumper&) matchX(m ast.Match&) {
+    d.put("(match ")
+    d.expr(m.Subject)
+    for c in m.Cases { d.caseX(c, "case") }
+    if m.NoMatch != null { d.caseX(m.NoMatch, "nomatch") }
+    d.put(")")
+}
+
+fn (d mut Dumper&) caseX(c ast.Case&, what String&) {
+    d.put(" (" $what)
+    d.exprs(c.Alts)
+    for t in c.Types {
+        d.put(" ")
+        d.ty(t)
+    }
+    if c.Guard != null {
+        d.put(" if ")
+        d.expr(c.Guard)
+    }
+    if c.Value != null {
+        d.put(" => ")
+        d.expr(c.Value)
+    } else {
+        d.stmts(c.Body)
+    }
+    d.put(")")
+}
+
+fn (d Dumper&) op(k scan.Tok) String {
+    return match k {
+        case scan.Tok.Plus => "+"
+        case scan.Tok.Minus => "-"
+        case scan.Tok.Star => "*"
+        case scan.Tok.Slash => "/"
+        case scan.Tok.Percent => "%"
+        case scan.Tok.At => "@"
+        case scan.Tok.EqEq => "=="
+        case scan.Tok.NotEq => "!="
+        case scan.Tok.Lt => "<"
+        case scan.Tok.Le => "<="
+        case scan.Tok.Gt => ">"
+        case scan.Tok.Ge => ">="
+        case scan.Tok.Amp => "&"
+        case scan.Tok.Pipe => "|"
+        case scan.Tok.Caret => "^"
+        case scan.Tok.Tilde => "~"
+        case scan.Tok.Shl => "<<"
+        case scan.Tok.Shr => ">>"
+        case scan.Tok.And => "and"
+        case scan.Tok.Or => "or"
+        case scan.Tok.Xor => "xor"
+        case scan.Tok.Not => "not"
+        case scan.Tok.In => "in"
+        case scan.Tok.Dollar => "$"
+        case scan.Tok.Inc => "++"
+        case scan.Tok.Dec => "--"
+        case scan.Tok.Assign => "="
+        case scan.Tok.PlusEq => "+="
+        case scan.Tok.MinusEq => "-="
+        case scan.Tok.StarEq => "*="
+        case scan.Tok.SlashEq => "/="
+        case scan.Tok.PercentEq => "%="
+        case scan.Tok.ShlEq => "<<="
+        case scan.Tok.ShrEq => ">>="
+        case scan.Tok.AndEq => "&="
+        case scan.Tok.OrEq => "|="
+        case scan.Tok.XorEq => "^="
+        case scan.Tok.Break => "break"
+        case scan.Tok.Continue => "continue"
+        case scan.Tok.Done => "done"
+        case scan.Tok.Fail => "fail"
+        case scan.Tok.Abort => "abort"
+        case scan.Tok.Unreachable => "unreachable"
+        nomatch => $k
+    }
+}
+
+fn (d mut Dumper&) expr(e ast.Expr&) {
+    match e {
+        case ast.Expr.Name(_, name) { d.put(name) }
+        case ast.Expr.Lit(_, _, text) { d.put(text) }
+        case ast.Expr.Unary(_, op, x) {
+            d.put("(" $d.op(op) " ")
+            d.expr(x)
+            d.put(")")
+        }
+        case ast.Expr.Postfix(_, op, x) {
+            d.put("(post" $d.op(op) " ")
+            d.expr(x)
+            d.put(")")
+        }
+        case ast.Expr.Binary(_, op, a, b) {
+            d.put("(" $d.op(op) " ")
+            d.expr(a)
+            d.put(" ")
+            d.expr(b)
+            d.put(")")
+        }
+        case ast.Expr.NotIn(_, a, b) {
+            d.put("(not-in ")
+            d.expr(a)
+            d.put(" ")
+            d.expr(b)
+            d.put(")")
+        }
+        case ast.Expr.Chain(_, ops, xs) {
+            d.put("(chain ")
+            d.expr(xs[0])
+            for i, o in ops {
+                d.put(" " $d.op(o) " ")
+                d.expr(xs[i + 1])
+            }
+            d.put(")")
+        }
+        case ast.Expr.Cond(_, a, c, b) {
+            d.put("(cond ")
+            d.expr(c)
+            d.put(" ")
+            d.expr(a)
+            d.put(" ")
+            d.expr(b)
+            d.put(")")
+        }
+        case ast.Expr.Call(_, f, args) {
+            d.put("(call ")
+            d.expr(f)
+            d.exprs(args)
+            d.put(")")
+        }
+        case ast.Expr.ScopeCall(_, f, scope, args) {
+            d.put("(call&" $scope " ")
+            d.expr(f)
+            d.exprs(args)
+            d.put(")")
+        }
+        case ast.Expr.Member(_, x, name) {
+            d.put("(. ")
+            d.expr(x)
+            d.put(" " $name ")")
+        }
+        case ast.Expr.Index(_, x, idx) {
+            d.put("(index ")
+            d.expr(x)
+            d.exprs(idx)
+            d.put(")")
+        }
+        case ast.Expr.Slice(_, x, lo, hi) {
+            d.put("(slice ")
+            d.expr(x)
+            d.put(" ")
+            if lo != null { d.expr(lo) } else { d.put("_") }
+            d.put(" ")
+            if hi != null { d.expr(hi) } else { d.put("_") }
+            d.put(")")
+        }
+        case ast.Expr.Join(_, parts) {
+            d.put("(join")
+            d.exprs(parts)
+            d.put(")")
+        }
+        case ast.Expr.Try(_, x, clauses) {
+            d.put("(try ")
+            d.expr(x)
+            d.catches(clauses)
+            d.put(")")
+        }
+        case ast.Expr.IsType(_, x, t, negated) {
+            d.put("(is" $(" not " if negated else " "))
+            d.expr(x)
+            d.put(" ")
+            d.ty(t)
+            d.put(")")
+        }
+        case ast.Expr.IsValue(_, x, y, negated) {
+            d.put("(is-value" $(" not " if negated else " "))
+            d.expr(x)
+            d.put(" ")
+            d.expr(y)
+            d.put(")")
+        }
+        case ast.Expr.As(_, x, t) {
+            d.put("(as ")
+            d.expr(x)
+            d.put(" ")
+            d.ty(t)
+            d.put(")")
+        }
+        case ast.Expr.ArrayLit(_, elem, items) {
+            d.put("(array ")
+            d.ty(elem)
+            d.exprs(items)
+            d.put(")")
+        }
+        case ast.Expr.Compr(_, elem, value, key, name, source, filter) {
+            d.put("(compr ")
+            d.ty(elem)
+            d.put(" ")
+            d.expr(value)
+            d.put(" for " $key " " $name " in ")
+            d.expr(source)
+            if filter != null {
+                d.put(" if ")
+                d.expr(filter)
+            }
+            d.put(")")
+        }
+        case ast.Expr.Lambda(_, f) { d.func(f) }
+        case ast.Expr.MatchE(_, m) { d.matchX(m) }
+        case ast.Expr.Generic(_, x, args) {
+            d.put("(generic ")
+            d.expr(x)
+            for a in args {
+                d.put(" ")
+                d.ty(a)
+            }
+            d.put(")")
+        }
+        case ast.Expr.Default(_) { d.put("default") }
+        case ast.Expr.RangeE(_, args) {
+            d.put("(range")
+            d.exprs(args)
+            d.put(")")
+        }
+    }
+}

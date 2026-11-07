@@ -1,0 +1,16 @@
+import "std/io"
+import "std/os"
+Bad mut Bool = false
+fn Fatal(m String&) noreturn {
+    io.PrintErr(m)!
+    os.Exit(2)
+}
+fn pick(a <T>, b T) T { return a }
+fn run(f fn(c I32)) { f(0) }
+fn main() {
+    x I64 = Fatal("no x") if Bad else 3
+    y := Fatal("no y") if Bad else 4
+    z := pick(3, 5)
+    if Bad { run(os.Exit) }
+    io.Println($x " " $y " " $z)!
+}

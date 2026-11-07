@@ -1,0 +1,13 @@
+== r08_isidentity
+  san:    refused: r08_isidentity.olang:10:9: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+  O3:     refused
+  interp: exit 1 olang interpret: r08_isidentity.olang:17: it uses storage after the scope it was made in closed|
+--- compile (-debug -sanitize)
+r08_isidentity.olang:10:9: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+   10 |     k.s = s
+      |         ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+olang interpret: r08_isidentity.olang:17: it uses storage after the scope it was made in closed

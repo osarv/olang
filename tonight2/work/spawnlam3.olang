@@ -1,0 +1,19 @@
+extern fn usleep(us U32) I32
+type W struct(a Array<I64>&) { a }
+fn main() ? {
+    out mut Array<I64>& = Array<I64>(4, 0)
+    join {
+        for i in range 4 {
+            a := Array<I64>(1000, i + 1)
+            spawn fn(x Array<I64>&, j I64) {
+                usleep(20000)
+                out[j] = x[999] * 10
+            }(a, i)
+            spawn fn(w W, j I64) {
+                usleep(20000)
+                out[j] = w.a[999] * 10
+            }(W(a), i)
+        }
+    }
+    println($out[0] " " $out[1] " " $out[2] " " $out[3])
+}

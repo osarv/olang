@@ -1,0 +1,23 @@
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+fn put(c mut V&, x I64) { c.d[0] = x + c.n }
+fn main() ? {
+    l := List<V>()
+    l.Push(V(Array<I64>(2), 1))
+    l.Push(V(Array<I64>(2), 2))
+    i := 0
+    {
+        defer put(l[i], 100)
+        i = 1
+    }
+    println("list: " $l[0].d " " $l[1].d)
+    a := V[V(Array<I64>(2), 1), V(Array<I64>(2), 2)]
+    j := 0
+    {
+        defer put(a[j], 100)
+        j = 1
+    }
+    println("array: " $a[0].d " " $a[1].d)
+}

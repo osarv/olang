@@ -1,0 +1,47 @@
+=== b48_returntrydefault
+# a catch default given a scope argument naming the function's own local, returned as a value
+fn fs(i I64) String ? Fail {
+    if i >= 0 { error Fail.BAD }
+    return "neg"
+}
+fn g(i I64) String {
+    t := "local" $i
+    return try fs(i) catch default mk&t(i)
+}
+fn main() {
+    a := g(1)
+    b := g(2)
+    assert churn() > 0
+    say($a " " $b)
+}
+=== b49_returnmatch
+# a match of scoped calls naming the function's own local, returned as a value
+fn g(i I64) String {
+    t := "local" $i
+    return match i {
+        case 0 => mk&t(5)
+        nomatch => mk&t(i)
+    }
+}
+fn main() {
+    a := g(1)
+    b := g(2)
+    assert churn() > 0
+    say($a " " $b)
+}
+=== b50_returnscopedtry
+# a fallible call given a scope argument naming the function's own local, returned through try
+fn fs2(i I64) String ? Fail {
+    if i < 0 { error Fail.BAD }
+    return "ok" $i "-" $(i * 7)
+}
+fn g(i I64) String {
+    t := "local" $i
+    return try fs2&t(i) catch default "z"
+}
+fn main() {
+    a := g(1)
+    b := g(2)
+    assert churn() > 0
+    say($a " " $b)
+}

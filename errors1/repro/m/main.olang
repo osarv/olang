@@ -1,0 +1,10 @@
+import "std/io"
+import "lib"
+import "zz"
+fn main() {
+    for i in range 4 {
+        r := try lib.Work(i) catch lib.Lerr default -1 catch zz.Aerr default -2
+        io.Println($r)!
+    }
+    v := lib.Work(2)!
+}

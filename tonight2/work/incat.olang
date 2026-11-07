@@ -1,0 +1,36 @@
+type V struct(n I64) {
+    d mut Array<I64>& = Array<I64>(n, 0)
+}
+fn (v V&) At(i I64) I64 { return v.d[i] }
+fn (v mut V&) SetAt(i I64, x I64) { v.d[i] = x }
+fn (v V&) Len() I64 { return v.d.Len() }
+type H struct() {
+    v V = V(4)
+}
+Calls mut I64 = 0
+fn next() I64 {
+    Calls++
+    return Calls
+}
+fn bump() I64 {
+    v := V(4)
+    v[1]++
+    v[1]++
+    v[next()]++
+    v[2]--
+    h := H()
+    h.v[3]++
+    h.v[3]++
+    l := List<H>()
+    l.Push(H())
+    try v[3]++ catch BuiltinError { return -1 }
+    return v[1] * 1000 + v[2] * 100 + v[3] * 10 + h.v[3] + Calls * 100000
+}
+Baked := bump()
+fn main() ? {
+    Calls = 0
+    r := bump()
+    println($Baked " " $r)
+    v := V(2)
+    try v[5]++ catch BuiltinError { println("caught") }
+}

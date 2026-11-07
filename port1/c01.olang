@@ -1,0 +1,42 @@
+# value arrays (String) assigned in nested blocks: plain, parallel, swap, a compound join, a match value, a try default
+import "std/io"
+import "churn"
+fn txt(i I64) String { return $i "abcdefgh" $i }
+error Bad {
+    NO
+}
+fn maybe(i I64) String ? Bad {
+    if i % 2 == 0 { error Bad.NO }
+    return $i "odd"
+}
+type E enum {
+    A(i I64)
+    B(s String&)
+}
+fn main() ? io.IoError {
+    s String = "none"
+    t String = "t"
+    u String = "u"
+    k I64 = 0
+    v String = "v"
+    w String = "w"
+    for i in range 5 {
+        if i > 1 {
+            s = $i "-plain-" $i
+            t, k = $i "-par-" $i, i
+            u, s = s, u
+            v = $v $i
+            e := E.A(i) if i % 2 == 0 else E.B("lit")
+            w = match e {
+                case E.A(j) => $j "-match"
+                case E.B(q) => $q "-b"
+            }
+        }
+    }
+    x String = "x"
+    if k > 0 {
+        x = try maybe(k) catch default $k "-default"
+    }
+    c := churn.Churn()
+    try io.Println($c " " $s " " $t " " $u " " $v " " $w " " $x)
+}

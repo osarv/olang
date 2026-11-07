@@ -1,0 +1,9 @@
+== build -debug -sanitize
+run: k.s abc1
+status 0
+== build
+run: k.s abc1
+status 0
+== interpret
+run: k.s abc1
+status 0

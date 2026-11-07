@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/c2_conv_view_returned.olang:13:21: error[T25c, O14]: a built result is new storage and writable, and this reference is read-only - return a copy, or borrow the result from the parameter it is read through
+   13 |     return String(v.View())
+      |                     ^~~~
+compilation failed with 1 error

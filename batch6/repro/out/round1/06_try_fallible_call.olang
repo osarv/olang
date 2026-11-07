@@ -1,0 +1,17 @@
+# PRE-EXISTING over-rejection: "x := try c(4)", c's type declaring a fallible Call (E31), says "this call can fail -
+# write 'try'". So "spawn try c(3)" cannot be written either.
+error B {
+    B1
+}
+type Ctr struct(k I64) {
+    k
+}
+fn (c Ctr&) Call(n I64) I64 ? B {
+    if n == c.k { error B.B1 }
+    return n
+}
+fn main() ? {
+    c Ctr& = Ctr(3)
+    x := try c(4)
+    println($x)
+}

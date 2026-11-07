@@ -1,0 +1,33 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type Holder struct(r Res, n I64) {
+    r, n
+}
+
+fn wrap(r Res, n I64) Holder { return Holder(r, n) }
+
+fn num(bad Bool) I64 ? Nope {
+    if bad: error Nope
+    return 4
+}
+
+# r is handed on as wrap's first argument; the second argument fails before wrap is called
+fn pass(r Res, bad Bool) I64 ? Nope {
+    h := wrap(r, try num(bad))
+    return h.n
+}
+
+fn main() {
+    try pass(Res(1), true) catch Nope { }
+    io.Println("after a failure: " $Ended)!
+    try pass(Res(2), false) catch Nope { }
+    io.Println("after a success: " $Ended)!
+}

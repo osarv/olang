@@ -1,0 +1,15 @@
+import "std/io"
+error VErr {
+    NEG
+}
+type V struct(n I64) {
+    n
+}
+fn (a V) Minus(b V) V ? {
+    if a.n < b.n { error VErr.NEG }
+    return V(a.n - b.n)
+}
+fn (a V) CheckedMinus(b V) V ? BuiltinError {
+    return V(checked (a.n - b.n))
+}
+fn main() { }

@@ -1,0 +1,28 @@
+type Keep struct() {
+    fs mut List<fn() I64>& = List<fn() I64>()
+}
+fn main() ? {
+    seen mut Array<I64>& = Array<I64>(4)
+    ks := List<mut Keep&>()
+    for t in range 4 { ks.Push(Keep()) }
+    join {
+        for t in range 4 {
+            spawn fn() {
+                k := ks[t]
+                for i in range 20000 {
+                    v := t * 1000000 + i
+                    k.fs.Push(fn() { return v + seen[0] })
+                }
+            }
+        }
+    }
+    bad I64 = 0
+    for t in range 4 {
+        i I64 = 0
+        for f in ks[t].fs {
+            if f() != t * 1000000 + i { bad++ }
+            i++
+        }
+    }
+    println("wrong closures: " $bad)
+}

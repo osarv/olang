@@ -1,0 +1,236 @@
+# mk - a small make: rules from a file, run in dependency order when a target is older than what it depends on.
+#
+#   mk [-f FILE] [-n] [-k] [-C DIR] [TARGET...]
+#
+# The file holds rules - "target: dep dep ..." - each followed by its commands, one per indented line. A command is
+# split into words at spaces (single quotes keep a word together) and run with os.Exec, no shell. A target is rebuilt
+# when it does not exist, or when any dependency is newer or was rebuilt in this run. -n prints the commands without
+# running them, -k keeps going after a failure. With no file named and no Mkfile in DIR, mk writes a small demo project
+# into a fresh temporary directory, builds it twice (touching one source in between) and removes it.
+
+import "std/os"
+import "std/io"
+import "std/filepath"
+import "std/time"
+
+type Rule struct(Target String&, Deps List<String&>, Commands List<String&>, Line I64) {
+    Target
+    Deps
+    Commands
+    Line
+}
+
+error MkError {
+    SYNTAX
+    NO_RULE
+    CYCLE
+    FAILED
+}
+
+type Mk struct(dir String&, dryRun Bool, keepGoing Bool) {
+    dir
+    dryRun
+    keepGoing
+    rules Map<String&, Rule> = Map<String&, Rule>()
+    order List<String&> = List<String&>()      # rule targets in file order, for the default goal
+    built Map<String&, Bool> = Map<String&, Bool>()
+    visiting Map<String&, Bool> = Map<String&, Bool>()
+    ran I64 = 0
+    failed I64 = 0
+    why String& = ""
+}
+
+# splits a command at spaces; '...' keeps a word together
+fn words(cmd String&) List<String&> {
+    out := List<String&>()
+    b := StringBuilder()
+    quoted := false
+    have := false
+    for c in cmd {
+        if c == '\'' {
+            quoted = not quoted
+            have = true
+        } else if c == ' ' and not quoted {
+            if have { out.Push(b.ToString()) }
+            b = StringBuilder()
+            have = false
+        } else {
+            b.PushChar(c)
+            have = true
+        }
+    }
+    if have { out.Push(b.ToString()) }
+    return out
+}
+
+fn (m mut Mk&) parse(text String&) ? MkError {
+    current := ""
+    n := 0
+    for raw in text.Lines() {
+        n++
+        line := raw.TrimEnd()
+        if line.Len() == 0 or line.TrimStart().StartsWith("#") { continue }
+        if line[0] == ' ' or line[0] == '\t' {
+            if current.Len() == 0 {
+                m.why = "line " $n ": a command before any rule"
+                error MkError.SYNTAX
+            }
+            r := try m.rules.Get(current) catch { unreachable }
+            r.Commands.Push(line.Trim())
+            continue
+        }
+        colon := try line.FindByte(':') catch {
+            m.why = "line " $n ": expected 'target: deps'"
+            error MkError.SYNTAX
+        }
+        target := line[:colon].Trim()
+        deps := List<String&>()
+        for d in line[colon + 1:].Split(" ") {
+            if d.Len() > 0 { deps.Push(d) }
+        }
+        m.rules.Put(target, Rule(target, deps, List<String&>(), n))
+        m.order.Push(target)
+        current = target
+    }
+}
+
+fn (m Mk&) path(name String&) String { return filepath.Join(m.dir, name) }
+
+fn (m Mk&) mtime(name String&) I64 {
+    info := try os.Stat(m.path(name)) catch { return -1 }
+    return info.ModTime
+}
+
+# brings target up to date; true when it was (re)built in this run
+fn (m mut Mk&) make(target String&, depth I64) Bool ? MkError {
+    if m.built.Has(target) { return try m.built.Get(target) }
+    if m.visiting.Has(target) {
+        m.why = "a cycle through " $target
+        error MkError.CYCLE
+    }
+    if not m.rules.Has(target) {
+        if m.mtime(target) >= 0 {
+            m.built.Put(target, false)
+            return false
+        }
+        m.why = "no rule to make '" $target "'"
+        error MkError.NO_RULE
+    }
+    m.visiting.Put(target, true)
+    r := try m.rules.Get(target)
+    newer := false
+    for d in r.Deps {
+        if try m.make(d, depth + 1) { newer = true }
+    }
+    mine := m.mtime(target)
+    if not newer {
+        for d in r.Deps {
+            if m.mtime(d) > mine { newer = true }
+        }
+    }
+    stale := newer or mine < 0
+    if stale {
+        for c in r.Commands {
+            println("  " $c)
+            if m.dryRun { continue }
+            m.ran++
+            args := words(c).ToArray()
+            out := try os.Exec(args) catch os.OsError {
+                m.why = "cannot run '" $args[0] "'"
+                error MkError.FAILED
+            }
+            if out.Stdout.Len() > 0 { print(out.Stdout) }
+            if out.Stderr.Len() > 0 { eprint(out.Stderr) }
+            if out.Status != 0 {
+                m.why = "'" $target "' failed: " $c " exited with " $out.Status
+                m.failed++
+                if not m.keepGoing { error MkError.FAILED }
+                break
+            }
+        }
+    }
+    m.visiting.Remove(target)
+    m.built.Put(target, stale)
+    return stale
+}
+
+fn demoProject(dir String&) ? os.OsError {
+    try os.MkDirAll(filepath.Join(dir, "src"))
+    try os.WriteFile(filepath.Join(dir, "src/a.txt"), "alpha\nbeta\n")
+    try os.WriteFile(filepath.Join(dir, "src/b.txt"), "gamma\n")
+    rules := "# demo rules\n" "all: report.txt\n\n" "joined.txt: src/a.txt src/b.txt\n"
+        "    sh -c 'cat src/a.txt src/b.txt > joined.txt'\n\n" "report.txt: joined.txt\n"
+        "    sh -c 'wc -l < joined.txt > report.txt'\n" "    cat report.txt\n"
+    try os.WriteFile(filepath.Join(dir, "Mkfile"), rules)
+}
+
+fn build(dir String&, file String&, goals Array<String&>&, dryRun Bool, keepGoing Bool) I64 {
+    m := Mk(dir, dryRun, keepGoing)
+    text := try os.ReadFile(filepath.Join(dir, file)) catch os.OsError {
+        eprintln("mk: cannot read " $file)
+        return 2
+    }
+    try m.parse(text) catch MkError {
+        eprintln("mk: " $file ": " $m.why)
+        return 2
+    }
+    targets := List<String&>()
+    for g in goals { targets.Push(g) }
+    if targets.Len() == 0 {
+        if m.order.Len() == 0 { return 0 }
+        targets.Push(m.order[0])
+    }
+    t0 := time.Now()
+    status := 0
+    for t in targets {
+        rebuilt := try m.make(t, 0) catch MkError {
+            eprintln("mk: " $m.why)
+            status = 1
+        } default false
+        if status == 0 and not rebuilt and not m.dryRun { println("mk: '" $t "' is up to date") }
+    }
+    eprintln("mk: " $m.ran " commands, " $m.failed " failed, " $(time.Since(t0) / 1000000) " ms")
+    return status
+}
+
+fn main() ? {
+    args := os.Args()
+    file := "Mkfile"
+    dir := "."
+    dryRun := false
+    keepGoing := false
+    goals := List<String&>()
+    i := 1
+    for i < args.Len() {
+        match args[i] {
+            case "-n" { dryRun = true }
+            case "-k" { keepGoing = true }
+            case "-f" {
+                i++
+                file = args[i]
+            }
+            case "-C" {
+                i++
+                dir = args[i]
+            }
+            nomatch { goals.Push(args[i]) }
+        }
+        i++
+    }
+    if os.Exists(filepath.Join(dir, file)) {
+        os.Exit(I32(build(dir, file, goals.ToArray(), dryRun, keepGoing)))
+    }
+    demo := try os.MkTemp("", "mk-demo-")
+    defer try os.RemoveAll(demo) catch { eprintln("mk: could not remove " $demo) }
+    try demoProject(demo)
+    println("== first build")
+    if build(demo, "Mkfile", goals.ToArray(), dryRun, keepGoing) != 0 { fail }
+    println("== nothing changed")
+    if build(demo, "Mkfile", goals.ToArray(), dryRun, keepGoing) != 0 { fail }
+    println("== after touching src/b.txt")
+    try os.WriteFile(filepath.Join(demo, "src/b.txt"), "gamma\ndelta\n")
+    if build(demo, "Mkfile", goals.ToArray(), dryRun, keepGoing) != 0 { fail }
+    println("== a missing dependency")
+    try os.WriteFile(filepath.Join(demo, "Mkfile"), "out: nothing.txt\n    true\n")
+    if build(demo, "Mkfile", goals.ToArray(), dryRun, keepGoing) != 1 { fail }
+}

@@ -1,0 +1,37 @@
+# O4b/O25h (rvfix fixed the first review's #2 for a VALUE argument; pre-existing for this one - db2af5d gives the same):
+# a REFERENCE passed for a by-value parameter holding references is a copy out of the reference (E12), so the parameter's
+# scope variable should be bound to where the referent's references live (O25h: "where the referent is"). It is bound
+# as for a temporary instead - to grow's own block scope: grow passes its own %olang.scope, not its %sarg0, to build -
+# so build's Node() is allocated in grow's block and stored into the caller's node.
+# expected: 42 ("build(w.b)" from main, a value argument, gives 42)
+# actual:   -b and -d print -7, -i prints 42. The same through a call's reference: "build(pick(r))"
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+fn build(b Box) {
+    b.head.next = Node()
+    b.head.next.v = 42
+}
+fn grow(r mut Box&) { build(r) }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box())
+    grow(w.b)
+    churn()
+    println($w.b.head.next.v)
+}

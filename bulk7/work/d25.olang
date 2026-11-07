@@ -1,0 +1,30 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type T3 struct(a Res, n I64) ? Bad {
+    if n > 5: error Bad
+    a
+    b Res = Res(n)
+    if n > 3: error Bad
+}
+
+fn main() {
+    {
+        x := try T3(Res(1), 9) catch Bad default T3(Res(2), 0)!
+        io.Println("x " $x.a.id " " $Ended)!
+    }
+    io.Println("ended " $Ended)!
+    Ended = 0
+    {
+        y := try T3(Res(3), 4) catch Bad default T3(Res(5), 0)!
+        io.Println("y " $y.a.id " " $Ended)!
+    }
+    io.Println("ended " $Ended)!
+}

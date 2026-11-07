@@ -1,0 +1,16 @@
+# an I32 local read out of a List carries a scope: indexing with it is rejected, with "v + 0" accepted
+type G struct() {
+    adj mut List<mut List<I32>&>& = List<mut List<I32>&>()
+}
+fn (g G&) walk(src I32) I64 {
+    queue := List<I32>()
+    queue.Push(src)
+    v I32 = queue[0]
+    out := g.adj[v]
+    return out.Len()
+}
+fn main() ? {
+    g := G()
+    g.adj.Push(List<I32>())
+    assert g.walk(0) == 0
+}

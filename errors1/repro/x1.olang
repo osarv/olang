@@ -1,0 +1,22 @@
+import "std/io"
+error VErr {
+    NEG
+}
+type V struct(n I64) {
+    n
+}
+fn (a V) Minus(b V) V ? {
+    if a.n < b.n { error VErr.NEG }
+    return V(a.n - b.n)
+}
+fn (a V) CheckedMinus(b V) V ? VErr + BuiltinError {
+    return try (a - b)
+}
+A mut I64 = 3
+fn main() {
+    v := (V(5) - V(A))!
+    io.Println($v.n)!
+    arr := I64[1, 2, 3]
+    w := 0
+    io.Println($w)!
+}

@@ -1,0 +1,20 @@
+fn churnIt() {
+    for k in range 300 {
+        junk := $k "-churn-churn-churn-churn-churn-churn-churn-churn-churn-churn"
+        assert junk.Len() > 0
+    }
+}
+type Box struct(n I64) {
+    n
+    items List<String&> = List<String&>()
+}
+fn main() ? {
+    boxes := List<Box>()
+    boxes.Push(Box(1))
+    for k in range 3 {
+        boxes[0].items.Push($k "-loop-text-of-moderate-length")
+        t := $k "-loop-text-of-moderate-length"
+    }
+    churnIt()
+    for s in boxes[0].items { println(s) }
+}

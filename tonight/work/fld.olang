@@ -1,0 +1,23 @@
+type N struct(v I64) { v }
+type H struct(r N&) { r }
+fn churn() I64 {
+    s I64 = 0
+    for i in range 3000 {
+        a := Array<I64>(64, I64(i))
+        s = s + a[3]
+    }
+    return s
+}
+fn main() ? {
+    n1 := N(1)
+    h := H(n1)
+    hs := Array<H>(2, H(n1))
+    for i in range 2 {
+        n2 := N(42)
+        h.r = n2
+        hs[0].r = n2
+        hs[1] = H(n2)
+    }
+    c := churn()
+    println($h.r.v " " $hs[0].r.v " " $hs[1].r.v " " $c)
+}

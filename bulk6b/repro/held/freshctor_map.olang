@@ -1,0 +1,24 @@
+# F13 FreshCtorAt: constructors given fresh call results, held in a Map whose values are replaced, in an owner local
+# reassigned, and rendered (the earlier version read freed storage in Map's rendering)
+import "std/io"
+
+type rec struct(name String, xs Vec<I64>) { name, xs }
+
+fn mk(k I64) Vec<I64> {
+    v Vec<I64>
+    for i in range 6 { v.Push(k * 10 + i) }
+    return v
+}
+
+fn label(k I64) String { return $k "-label-padded-to-some-length" }
+
+fn main() {
+    m := Map<I64, rec>()
+    for k in range 2000 { m.Put(k % 5, rec(label(k), mk(k))) }
+    b := rec(label(0), mk(0))
+    for k in range 1, 2000 { b = rec(label(k), mk(k)) }
+    s := 0
+    for k in range 5 { s += m.Get(k)!.xs[5] }
+    io.Println($s " " $b.name " " $b.xs[5])!
+    io.Println($m.Get(3)!)!
+}

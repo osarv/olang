@@ -1,0 +1,12 @@
+fn asText(v Vec<Char>&) String&v { return String(v.View()) }
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    v.Push('b')
+    t := asText(v)
+    v.Push('X')
+    v2 := Vec<Char>()
+    v2.Push('Q')
+    v2.Push('R')
+    println(t)
+}

@@ -1,0 +1,36 @@
+# print, println, eprint, eprintln - text to the standard output or the standard error, for scripts (M19f). The
+# language's own words, seen in every module by their bare names. They need no "try": a write that fails ends the
+# program as a failed check does (S18), saying so on the standard error - output a script has no way to handle is not
+# an error set for it to carry. io.Print and io.PrintErr are the forms that hand the failure back.
+#
+# A value is made text where it is written - "println($n)", "println("n is " $n)" - so each takes one text.
+
+extern fn write(fd I32, buf Array<U8>, count I64) I64
+
+# t, then nothing - to the standard output
+fn print(t String&) { writeOut(1, t, "print could not write to the standard output\n") }
+
+# t and a line end - to the standard output, as one write, so lines from tasks running at once are not cut into each
+# other; with no text, a line end alone
+fn println(t String& = "") { writeOut(1, $t "\n", "println could not write to the standard output\n") }
+
+# t, then nothing - to the standard error
+fn eprint(t String&) { writeOut(2, t, "eprint could not write to the standard error\n") }
+
+# t and a line end - to the standard error
+fn eprintln(t String& = "") { writeOut(2, $t "\n", "eprintln could not write to the standard error\n") }
+
+# every byte of t to fd, retrying a short write with what is left; a write that fails or moves nothing ends the program,
+# with why on the standard error (which may itself be what failed - there is nowhere left to say so)
+fn writeOut(fd I32, t Array<U8>&, why String&) {
+    sent I64 = 0
+    for sent < t.Len() {
+        tail := t[sent:]
+        n := write(fd, tail, tail.Len())
+        if n <= 0 {
+            write(2, why, why.Len())
+            abort
+        }
+        sent += n
+    }
+}

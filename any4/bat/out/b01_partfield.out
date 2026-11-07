@@ -1,0 +1,13 @@
+== b01_partfield
+  san:    refused: b01_partfield.olang:27:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  O3:     refused
+  interp: exit 0 field 12|
+--- compile (-debug -sanitize)
+b01_partfield.olang:27:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   27 |         h.p = mkv&t(i * 11 + 1).p
+      |             ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+field 12

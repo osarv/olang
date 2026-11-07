@@ -1,0 +1,16 @@
+import "std/io"
+
+fn mk() Array<I32> {
+    a := Array<I32>(8, 5)
+    return a
+}
+
+fn main() ? io.IoError {
+    for x in mk() {
+        junk := Array<I32>(64, 99)
+        try io.Print($x " ")
+    }
+    try io.Print("\n")
+    s := $mk()
+    try io.Print($s "\n")
+}

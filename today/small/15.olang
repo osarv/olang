@@ -1,0 +1,5 @@
+# B11/G19: one unknown trait name in a constraint - one error, and the stand-in type is never named
+fn f(m <V Nope>&) I64 { return 1 }
+fn main() ? {
+    println("x")
+}

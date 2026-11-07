@@ -1,0 +1,17 @@
+# G21/E6c/E6d: the length of a field computed from a U8 constant by the fold (exact, 64-bit: 246) differs from the same
+# expression in the body (U8 arithmetic, then a literal too large for U8 meeting it as I32: 502) - a loop written over
+# "the array's length" as the type spells it writes past the array, into the next field
+type B<N U8> struct() {
+    a mut Array<I32, N - 20 + 256>
+    after mut I64
+}
+fn (b mut B<<N>>&) Fill() {
+    for i in range N - 20 + 256 { b.a[i] = 7 }
+}
+fn main() ? {
+    b := B<10>()
+    b.after = 42
+    b.Fill()
+    println($b.a.Len() " body says " $(N10() - 20 + 256) " after=" $b.after)
+}
+fn N10() U8 { return 10 }

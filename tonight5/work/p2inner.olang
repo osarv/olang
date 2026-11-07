@@ -1,0 +1,16 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn work(g fn()) { g() }
+fn main() ? {
+    t I64 = 0
+    join {
+        for i in range 3 {
+            n mut Node& = Node(i)
+            g := fn() { n.next = Node(n.v + 1) }
+            spawn work(g)
+        }
+    }
+    println("ok")
+}

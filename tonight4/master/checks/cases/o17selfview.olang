@@ -1,0 +1,35 @@
+# check: fail error[O17]: this value's references live where its own storage does not
+# O17: a view of the lent value's own inline array ("b.head.view = b.data") is the value's storage, not something read
+# out of its region - no reference is followed on the way to it
+type Node struct() {
+    view Array<I64>& = null
+}
+type Box struct() {
+    head mut Node& = Node()
+    data Array<I64, 4>
+}
+type W struct(b Box) { b }
+fn tie(b mut Box&) {
+    b.data[1] = 42
+    b.head.view = b.data
+}
+fn bump(src mut W&) {
+    b := src.b
+    tie(b)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box())
+    bump(w)
+    churn()
+    println($w.b.head.view[1])
+}

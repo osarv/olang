@@ -1,0 +1,26 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# the same without F2 involved: a recorded source two own levels down, release of the intermediate owner
+type Inner struct() {
+    data own mut Array<Char>& = Array<Char>(3, 'i')
+}
+type CB struct() {
+    inner own mut Inner& = Inner()
+}
+fn (c CB&) InnerData() Array<Char>&c { return c.inner.data }
+fn use(c mut CB&) {
+    t := c.InnerData()
+    c.inner = Inner()
+    churn()
+    println(String(t))
+}
+fn main() ? {
+    c := CB()
+    use(c)
+}

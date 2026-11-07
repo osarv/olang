@@ -1,0 +1,13 @@
+type Acc struct() {
+    N I64 = 0
+}
+fn b1(c mut Acc&) { c.N++ }
+fn b2(c mut Acc&) { c.N += 10 }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    k := l.Len()
+    f fn(c mut Acc&) = match k { case 1 => b1  case _ => b2 }
+    (match k { case 1 => b1  case _ => b2 })(l[0])
+    println("list N " $l[0].N)
+}

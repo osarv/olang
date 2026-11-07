@@ -1,0 +1,13 @@
+G mut Array<I64>& = null
+type V struct(xs Array<I64>&) { xs }
+fn mk(n I64) V {
+    a := I64[1, 2, 3, 4, 5]
+    a[0] = n
+    s := a[1:4]
+    G = s
+    return V(s)
+}
+fn main() ? {
+    v := mk(7)
+    println($v.xs[0] " " $G[0])
+}

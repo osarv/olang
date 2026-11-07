@@ -1,0 +1,193 @@
+# jobrun - a worker pool over channels, with a timeout per job, a deadline for the whole run, and cancellation.
+#
+# A producer feeds jobs into a bounded channel; N workers take them, run each under its own deadline (a token that
+# fires by itself), and send an outcome back on a results channel. The collector cancels the whole run on the first
+# failure when fail-fast is on, or when the run's own deadline passes. Every job ends in exactly one outcome:
+# done, failed, timed out, or cancelled (never started, or stopped part way).
+
+import "std/chan"
+import "std/cancel"
+import "std/time"
+
+extern fn usleep(us U32) I32
+
+type Kind enum {
+    Sleep(ms I64)            # waits, checking its token every millisecond
+    Spin(n I64)              # computes, checking its token every 1024 steps
+    Crash(code I64)          # fails at once
+}
+
+type Job struct(Id I64, What Kind, TimeoutMs I64) {
+    Id
+    What
+    TimeoutMs
+}
+
+type Outcome enum {
+    Done(value I64)
+    Failed(code I64)
+    TimedOut
+    Cancelled
+}
+
+type Report struct(Id I64, Worker I64, Result Outcome, Ms I64) {
+    Id
+    Worker
+    Result
+    Ms
+}
+
+error JobError {
+    CRASHED
+}
+
+Started mut I64 = 0
+Finished mut I64 = 0
+
+# collatz steps of every number below n, as busy work - stopping when either token fires
+fn spin(n I64, mine cancel.Token&, all cancel.Token&) I64 ? cancel.Stopped {
+    total I64 = 0
+    for i in range 1, n {
+        if i % 1024 == 0 {
+            if mine.Cancelled() { try mine.Reason() }
+            if all.Cancelled() { error cancel.Stopped.CANCELLED }
+        }
+        x := i
+        for x != 1 {
+            x = x / 2 if x % 2 == 0 else 3 * x + 1
+            total++
+        }
+    }
+    return total
+}
+
+fn nap(ms I64, mine cancel.Token&, all cancel.Token&) I64 ? cancel.Stopped {
+    for i in range ms {
+        if mine.Cancelled() { try mine.Reason() }
+        if all.Cancelled() { error cancel.Stopped.CANCELLED }
+        usleep(1000)
+    }
+    return ms
+}
+
+fn perform(j Job&, all cancel.Token&) I64 ? JobError + cancel.Stopped {
+    mine := cancel.After(j.TimeoutMs)
+    return match j.What {
+        case Kind.Sleep(ms) => try nap(ms, mine, all)
+        case Kind.Spin(n) => try spin(n, mine, all)
+        case Kind.Crash(code) { error JobError.CRASHED }
+    }
+}
+
+fn worker(id I64, jobs mut chan.Chan<Job&>&, results mut chan.Chan<Report&>&, all cancel.Token&) {
+    for {
+        j := try chan.RecvUntil(jobs, all) catch cancel.Stopped { break }
+        eprintln("worker " $id " took " $(-1 if j == null else j.Id))
+        if j == null { break }                 # the producer's end-of-work marker
+        Started.AtomicAdd(1)
+        t0 := time.Now()
+        out := Outcome.Cancelled
+        v := try perform(j, all) catch JobError.CRASHED {
+            out = Outcome.Failed(j.What as Kind.Crash)
+        } default -1 catch cancel.Stopped.TIMED_OUT {
+            out = Outcome.TimedOut
+        } default -1 catch cancel.Stopped.CANCELLED {
+            out = Outcome.Cancelled
+        } default -1
+        if v >= 0 { out = Outcome.Done(v) }
+        Finished.AtomicAdd(1)
+        chan.Send(results, Report(j.Id, id, out, time.Since(t0) / 1000000))
+    }
+}
+
+fn produce(list Array<Job&>&, jobs mut chan.Chan<Job&>&, workers I64, all cancel.Token&) {
+    for j in list {
+        try chan.SendUntil(jobs, j, all) catch cancel.Stopped { break }
+    }
+    for i in range workers {
+        try chan.SendUntil(jobs, null, all) catch cancel.Stopped { break }
+    }
+}
+
+fn describe(o Outcome) String {
+    return match o {
+        case Outcome.Done(v) => "done " $v
+        case Outcome.Failed(c) => "failed with " $c
+        case Outcome.TimedOut => "timed out"
+        case Outcome.Cancelled => "cancelled"
+    }
+}
+
+fn runAll(list Array<Job&>&, workers I64, failFast Bool, deadlineMs I64) List<Report> {
+    jobs := chan.Chan<Job&>(2)
+    chan.Init(jobs)
+    results := chan.Chan<Report&>(0)                # a rendezvous: a worker waits until its report is taken
+    chan.Init(results)
+    all := cancel.After(deadlineMs)
+    reports := List<Report>()
+    seen := Array<Bool>(list.Len())
+    join {
+        spawn produce(list, jobs, workers, all)
+        for w in range workers { spawn worker(w, jobs, results, all) }
+        for reports.Len() < list.Len() {
+            r := try chan.RecvUntil(results, all) catch cancel.Stopped {
+                # the run is over: the workers stop at their next check, and every job they still had or never
+                # took is cancelled - collect what they send while stopping
+                for Finished.AtomicLoad() > reports.Len() {
+                    late := chan.Recv(results)
+                    reports.Push(late)
+                    seen[late.Id] = true
+                }
+                break
+            }
+            reports.Push(r)
+            seen[r.Id] = true
+            if failFast and r.Result is Outcome.Failed { all.Cancel() }
+        }
+    }
+    for i in range list.Len() {
+        if not seen[i] { reports.Push(Report(i, -1, Outcome.Cancelled, 0)) }
+    }
+    reports.Sort(fn(a Report, b Report) Bool { return a.Id < b.Id })
+    return reports
+}
+
+fn jobsFor(scenario I64) Array<Job&> {
+    match scenario {
+        case 1 {
+            return Job&[Job(0, Kind.Spin(20000), 5000), Job(1, Kind.Sleep(5), 1000), Job(2, Kind.Spin(5000), 5000),
+                Job(3, Kind.Sleep(200), 20), Job(4, Kind.Crash(7), 1000), Job(5, Kind.Spin(3000), 5000)]
+        }
+        case 2 {
+            return Job&[Job(0, Kind.Sleep(30), 1000), Job(1, Kind.Crash(3), 1000), Job(2, Kind.Sleep(400), 2000),
+                Job(3, Kind.Sleep(400), 2000), Job(4, Kind.Sleep(400), 2000), Job(5, Kind.Sleep(400), 2000)]
+        }
+        nomatch {
+            return Job&[Job(0, Kind.Sleep(100), 5000), Job(1, Kind.Sleep(500), 5000), Job(2, Kind.Sleep(500), 5000),
+                Job(3, Kind.Sleep(500), 5000)]
+        }
+    }
+}
+
+fn show(title String&, reports List<Report>&) {
+    println("== " $title)
+    tally := Map<String&, I64>()
+    for r in reports {
+        line := describe(r.Result)
+        println("  job " $r.Id ": " $line)
+        word := line.Split(" ")[0]
+        tally.Update($word, 0, fn(n I64) I64 { return n + 1 })
+    }
+    keys := tally.Keys().ToList()
+    keys.Sort(fn(a String&, b String&) Bool { return a < b })
+    b := StringBuilder()
+    for k in keys { b.Push(" " $k "=" $(try tally.Get(k) catch default 0)) }
+    println("  totals:" $b.ToString())
+}
+
+fn main() ? {
+    defer println("started " $Started.AtomicLoad() ", finished " $Finished.AtomicLoad())
+
+    show("fail fast", runAll(jobsFor(2), 2, true, 10000))
+    show("run deadline", runAll(jobsFor(3), 2, false, 300))
+}

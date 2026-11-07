@@ -1,0 +1,25 @@
+import "std/io"
+
+GArr mut Array<I64>& = null
+GS mut String& = null
+
+fn setIt(n I64) {
+    GArr = Array<I64>(4, n)
+    GS = "v=" $n
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 10 {
+        b := Array<I64>(16, 99)
+        s := "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" $i
+        t = t + b[0] + s.Len()
+    }
+    return t
+}
+
+fn main() ? io.IoError {
+    setIt(7)
+    k := churn()
+    try io.Print($GArr " " $GS " " $k "\n")
+}

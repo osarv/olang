@@ -1,0 +1,31 @@
+# PRE-EXISTING, CONFIRMED UAF - p3 through 'return $Wrap(x)' and a caller's outer reference.
+type Node struct(v I64) {
+    v
+}
+type Res struct(a Node&) {
+    a
+} destruct { println("Res destructor sees " $a.v) }
+type Wrap struct(a Node&) {
+    a
+    r Res& = Res(a)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn f(x Node&) String {
+    return $Wrap(x)
+}
+fn main() ? {
+    outer String& = ""
+    {
+        local Node& = Node(42)
+        outer = f(local)
+    }
+    churn()
+    println(outer)
+}

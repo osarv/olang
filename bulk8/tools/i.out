@@ -1,0 +1,4 @@
+ip net.Error.Address("1.2.3")
+addr net.Error.Address("1.2.3.4")
+addr6 net.Error.Address("[::1:80")
+olang interpret: /home/user/wt/review8/std/net.olang:375: it calls an external function with a parameter or result interpret cannot pass - only numbers, Bools, arrays and structs of numbers, and pointers C gave

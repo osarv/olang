@@ -1,0 +1,20 @@
+# M19d: "a view taken before a growth reads the old elements, never freed memory" - with elements owning storage the
+# growth moves them out (vacate), so the old elements read empty
+import "std/io"
+
+type blk struct(n I64, s String) { n, s }
+
+fn main() {
+    v := Vec<blk>()
+    v.Push(blk(5, "five"))
+    w := v.View()
+    vr mut Vec<blk>& = v
+    g := fn() { for i in range 100 { vr.Push(blk(i, "x")) } }
+    g()
+    io.Println("old view reads n=" $w[0].n " s='" $w[0].s "' (5 five)")!
+    r := v.Ref(0)
+    v2 := Vec<I64>()
+    v2.Push(7)
+    for i in range 100 { v.Push(blk(i, "y")) }
+    io.Println("ref reads n=" $r.n " s='" $r.s "'")!
+}

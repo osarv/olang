@@ -1,0 +1,31 @@
+import "std/io"
+
+error E {
+    BAD
+}
+
+fn halves(x F16, y BF16) (F16, BF16, U64) ? E {
+    if x > F16(100.0) { error E.BAD }
+    return x * F16(2.0), y + BF16(1.0), 5
+}
+
+fn main() ? io.IoError + E {
+    d, e, f := try halves(F16(0.25), BF16(3.0))
+    try io.Print($d " " $e " " $f "\n")
+}
+
+fn direct(x F16) (F16, BF16, U64) ? E {
+    return try halves(x, BF16(3.0))
+}
+
+fn direct2(x F16) (F16, BF16, U64) ? E {
+    a, b, c := try halves(x, BF16(3.0))
+    return a, b, c
+}
+
+test "t" {
+    d, e, f := try direct(F16(0.25)) catch default F16(9.0), BF16(9.0), 9
+    g, h, i := try direct2(F16(0.25)) catch default F16(9.0), BF16(9.0), 9
+    assert e == BF16(4.0)
+    assert h == BF16(4.0)
+}

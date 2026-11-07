@@ -1,0 +1,293 @@
+# A small JSON reader: tokenizer-less recursive descent over the text, building a tree of enums held by
+# reference, then pretty-printing it and querying it.
+import "std/io"
+
+type Json enum {
+    Null
+    Boolean(b Bool)
+    Num(n F64)
+    Text(s String&)
+    Arr(items List<Json&>&)
+    Obj(fields List<Pair<String&, Json&>>&)
+}
+
+error JsonError {
+    UNEXPECTED
+    EOF
+    BAD_NUMBER
+    BAD_ESCAPE
+}
+
+type Parser struct(src String&) {
+    src
+    pos mut I64 = 0
+}
+
+fn (p Parser&) atEnd() Bool { return p.pos >= p.src.Len() }
+
+fn (p Parser&) peek() Char {
+    if p.atEnd() { return '\0' }
+    return p.src[p.pos]
+}
+
+fn (p mut Parser&) skipWs() {
+    for not p.atEnd() and p.src[p.pos].IsSpace() { p.pos++ }
+}
+
+fn (p mut Parser&) expect(c Char) ? JsonError {
+    p.skipWs()
+    if p.atEnd() { error JsonError.EOF }
+    if p.src[p.pos] != c { error JsonError.UNEXPECTED }
+    p.pos++
+}
+
+fn (p mut Parser&) word(w String&) ? JsonError {
+    if p.pos + w.Len() > p.src.Len() { error JsonError.EOF }
+    if not p.src[p.pos:p.pos + w.Len()].Eq(w) { error JsonError.UNEXPECTED }
+    p.pos += w.Len()
+}
+
+# a string's text: a slice of the source when it has no escapes, else a fresh copy with them decoded
+fn (p mut Parser&) parseString() String& ? JsonError {
+    try p.expect('"')
+    start := p.pos
+    escaped := false
+    for {
+        if p.atEnd() { error JsonError.EOF }
+        c := p.src[p.pos]
+        if c == '"' { break }
+        if c == '\\' {
+            escaped = true
+            p.pos++
+        }
+        p.pos++
+    }
+    raw := p.src[start:p.pos]
+    p.pos++
+    if not escaped { return $raw }
+    b := StringBuilder()
+    i I64 = 0
+    for i < raw.Len() {
+        c := raw[i]
+        if c == '\\' {
+            i++
+            match raw[i] {
+                case 'n' { b.PushChar('\n') }
+                case 't' { b.PushChar('\t') }
+                case '"', '\\', '/' { b.PushChar(raw[i]) }
+                nomatch { error JsonError.BAD_ESCAPE }
+            }
+        } else {
+            b.PushChar(c)
+        }
+        i++
+    }
+    return b.ToString()
+}
+
+fn (p mut Parser&) parseNumber() F64 ? JsonError {
+    neg := false
+    if p.peek() == '-' {
+        neg = true
+        p.pos++
+    }
+    if not p.peek().IsDigit() { error JsonError.BAD_NUMBER }
+    v F64 = 0.0
+    for p.peek().IsDigit() {
+        v = v * 10.0 + F64(p.peek() - '0')
+        p.pos++
+    }
+    if p.peek() == '.' {
+        p.pos++
+        scale F64 = 0.1
+        if not p.peek().IsDigit() { error JsonError.BAD_NUMBER }
+        for p.peek().IsDigit() {
+            v += F64(p.peek() - '0') * scale
+            scale *= 0.1
+            p.pos++
+        }
+    }
+    return -v if neg else v
+}
+
+fn (p mut Parser&) parseValue() Json& ? JsonError {
+    p.skipWs()
+    if p.atEnd() { error JsonError.EOF }
+    c := p.peek()
+    if c == '{' { return try p.parseObject() }
+    if c == '[' { return try p.parseArray() }
+    if c == '"' { return Json.Text(try p.parseString()) }
+    if c == 't' {
+        try p.word("true")
+        return Json.Boolean(true)
+    }
+    if c == 'f' {
+        try p.word("false")
+        return Json.Boolean(false)
+    }
+    if c == 'n' {
+        try p.word("null")
+        return Json.Null
+    }
+    return Json.Num(try p.parseNumber())
+}
+
+fn (p mut Parser&) parseArray() Json& ? JsonError {
+    try p.expect('[')
+    items List<Json&>&return = List<Json&>()
+    p.skipWs()
+    if p.peek() == ']' {
+        p.pos++
+        return Json.Arr(items)
+    }
+    for {
+        items.Push(try p.parseValue())
+        p.skipWs()
+        if p.peek() == ',' {
+            p.pos++
+            continue
+        }
+        try p.expect(']')
+        break
+    }
+    return Json.Arr(items)
+}
+
+fn (p mut Parser&) parseObject() Json& ? JsonError {
+    try p.expect('{')
+    fields List<Pair<String&, Json&>>&return = List<Pair<String&, Json&>>()
+    p.skipWs()
+    if p.peek() == '}' {
+        p.pos++
+        return Json.Obj(fields)
+    }
+    for {
+        p.skipWs()
+        key String&fields = try p.parseString()
+        try p.expect(':')
+        value Json&fields = try p.parseValue()
+        fields.Push(Pair<String&, Json&>(key, value))
+        p.skipWs()
+        if p.peek() == ',' {
+            p.pos++
+            continue
+        }
+        try p.expect('}')
+        break
+    }
+    return Json.Obj(fields)
+}
+
+fn parse(text String&) Json& ? JsonError {
+    p := Parser(text)
+    v Json&return = try p.parseValue()
+    p.skipWs()
+    if not p.atEnd() { error JsonError.UNEXPECTED }
+    return v
+}
+
+fn indent(b mut StringBuilder&, n I32) {
+    for i in range n { b.Push("  ") }
+}
+
+fn render(b mut StringBuilder&, v Json&, depth I32) {
+    match v {
+        case Json.Null { b.Push("null") }
+        case Json.Boolean(x) { b.Push("true" if x else "false") }
+        case Json.Num(n) { b.Push($n) }
+        case Json.Text(s) {
+            b.PushChar('"')
+            b.Push(s)
+            b.PushChar('"')
+        }
+        case Json.Arr(items) if items.Len() == 0 { b.Push("[]") }
+        case Json.Arr(items) {
+            b.Push("[\n")
+            first := true
+            for x in items {
+                if not first { b.Push(",\n") }
+                first = false
+                indent(b, depth + 1)
+                render(b, x, depth + 1)
+            }
+            b.PushChar('\n')
+            indent(b, depth)
+            b.PushChar(']')
+        }
+        case Json.Obj(fields) {
+            b.Push("{\n")
+            first := true
+            for f in fields {
+                if not first { b.Push(",\n") }
+                first = false
+                indent(b, depth + 1)
+                b.Push("\"" $f.First "\": ")
+                render(b, f.Second, depth + 1)
+            }
+            b.PushChar('\n')
+            indent(b, depth)
+            b.PushChar('}')
+        }
+    }
+}
+
+fn pretty(v Json&) String& {
+    b := StringBuilder()
+    render(b, v, 0)
+    return b.ToString()
+}
+
+# the value under key in an object, failing when it is not an object or has no such key
+fn (v Json&) Get(key String&) Json&v ? {
+    match v {
+        case Json.Obj(fields) {
+            for f in fields {
+                if f.First == key { return f.Second }
+            }
+        }
+        nomatch { }
+    }
+    error
+}
+
+fn (v Json&) Index(i I64) Json&v ? {
+    match v {
+        case Json.Arr(items) if i >= 0 and i < items.Len() { return items[i] }
+        nomatch { }
+    }
+    error
+}
+
+fn sumNumbers(v Json&) F64 {
+    return match v {
+        case Json.Num(n) => n
+        case Json.Arr(items) => items.Iter().Fold(0.0, fn(acc F64, x Json&) F64 { return acc + sumNumbers(x) })
+        case Json.Obj(fields) => fields.Iter().Fold(0.0, fn(acc F64, f Pair<String&, Json&>) F64 { return acc + sumNumbers(f.Second) })
+        nomatch => 0.0
+    }
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 3000 {
+        junk := Array<I64>(64, I64(i))
+        s := $i "-" $junk[3]
+        t += junk[5] + s.Len()
+    }
+    return t
+}
+
+fn main() ? JsonError + io.IoError {
+    doc := "{\"name\": \"olang\", \"version\": 0.9, \"tags\": [\"fast\", \"safe\", \"tab\\there\"],\n  \"nested\": {\"ok\": true, \"none\": null, \"list\": [1, 2, 3.5, -4]}, \"empty\": [] }"
+    tree := try parse(doc)
+    try io.Print($pretty(tree) "\n")
+    churn()
+    name := try tree.Get("name") catch { error JsonError.UNEXPECTED }
+    try io.Print("name = " $name "\n")
+    lst := try tree.Get("nested") catch { error JsonError.UNEXPECTED }
+    third := try (try lst.Get("list") catch { error JsonError.UNEXPECTED }).Index(2) catch { error JsonError.UNEXPECTED }
+    try io.Print("nested.list[2] = " $third "\n")
+    try io.Print("sum of numbers = " $sumNumbers(tree) "\n")
+    bad := try parse("[1, 2,") catch JsonError.EOF default null catch default null
+    try io.Print("bad parse is null: " $(bad == null) "\n")
+}

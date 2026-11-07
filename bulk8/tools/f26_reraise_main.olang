@@ -1,0 +1,13 @@
+import "std/io"
+type PE error { Bad(n I64) }
+Live mut I64 = 0
+fn f(n I64) I64 ? PE { error PE.Bad(n) }
+fn main() ? {
+    defer io.Println("deferred")!
+    held PE = null
+    try f(Live + 4) catch PE e { held = e }
+    if held is not null {
+        io.Println("re-raising " $held)!
+        error held
+    }
+}

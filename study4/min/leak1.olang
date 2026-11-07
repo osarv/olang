@@ -1,0 +1,16 @@
+# tookMs called in a loop: its memory should be reclaimed when it returns
+fn tookMs(line String&) I64 {
+    at := try line.Find("took ") catch { return -1 }
+    rest := line[at + 5:]
+    end := try rest.Find("ms") catch { return -1 }
+    return try rest[:end].ParseInt() catch default -1
+}
+fn main() ? {
+    line String& = "00001 INFO request 12 took 37ms"
+    best I64 = 0
+    for i in range N {
+        ms := tookMs(line)
+        if ms > best { best = ms }
+    }
+    println($best)
+}

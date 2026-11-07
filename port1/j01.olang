@@ -1,0 +1,12 @@
+# memory: a comprehension over an iterator (no length known up front) growing past its first room, in a loop
+import "std/io"
+fn main() ? io.IoError {
+    l mut List<I64>& = List<I64>()
+    for i in range 5000 { l.Push(i) }
+    t I64 = 0
+    for k in range 2000 {
+        a := I64[x * 2 for x in l]
+        t = t + a[4999]
+    }
+    try io.Println($t)
+}

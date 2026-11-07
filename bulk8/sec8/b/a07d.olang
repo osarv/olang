@@ -1,0 +1,30 @@
+import "std/io"
+
+type Lamp unique struct(id I64) {
+    id
+    open := true
+    data := Array<I64>(4096, id)
+} destruct {
+    open = false
+}
+
+# a reference to a Vec's element kept while the Vec ends that element (Truncate) - its storage released at once
+# (unique Part C) - then a new value built in a region of its own, then the reference read
+fn kept(n I64) I64 {
+    ls := Vec<Lamp>()
+    other := Vec<Lamp>()
+    s := 0
+    for k in range n {
+        ls.Push(Lamp(k + 1))
+        r Lamp& = ls[0]
+        if ls.Len() > 1000000: ls.Truncate(0)
+        other.Push(Lamp(-1000))
+        other.Truncate(0)
+        s += r.data[3] + (1000000 if r.open else 0)
+    }
+    return s
+}
+
+fn main() {
+    io.Println($kept(20000))!
+}

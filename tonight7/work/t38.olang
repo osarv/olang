@@ -1,0 +1,17 @@
+type Pair2 Array<I64, 2>
+type H struct() {
+    fix Array<I64, 2> = Array<I64, 2>()
+}
+type Bag struct(h mut H&) {
+    h
+}
+fn bumpP(p mut Pair2&) { p[0]++ }
+fn (b Bag&) Str() String {
+    bumpP(Pair2(b.h.fix))
+    return "b" $b.h.fix[0]
+}
+fn main() ? {
+    b := Bag(H())
+    println($b)
+    println($b)
+}

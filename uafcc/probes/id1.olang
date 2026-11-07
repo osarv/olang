@@ -1,0 +1,32 @@
+import "std/io"
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(s String&) String { return $s "-made" }
+fn id(s String&) String&s { return s }
+fn pickFirst(a String&, b String&a) String&a { return a if a.Len() > 0 else b }
+fn f(t String&, k I64) String& { return id(mk(t) if k >= 0 else "") }
+fn g(t String&, k I64) String& {
+    x := id(match k { case 0 => ""  nomatch => mk(t) })
+    return x
+}
+fn h(t String&, k I64) String& { return pickFirst(mk(t) if k > 1 else "", t) }
+
+fn main() {
+    l := List<String&>()
+    for i in range 5 {
+        t := $i
+        l.Push(id(mk(t) if i >= 0 else ""))
+        l.Push(f(t, i))
+        l.Push(g(t, i))
+        u := h("out", i)
+        churn()
+        l.Push(u)
+    }
+    churn()
+    io.Println($l[4] " " $l[5] " " $l[6] " " $l[18] " " $l[19])!
+}

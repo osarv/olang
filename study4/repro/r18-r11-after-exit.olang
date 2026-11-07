@@ -1,0 +1,16 @@
+# r18 DIAGNOSTIC - R11/D10a/B5b: a catch clause in value position that ends the program with os.Exit is "a clause here
+# leaves, or gives the value with 'default v'" - os.Exit does end the program, but it is an ordinary call (B5b), so the
+# clause must also say "unreachable". The message does not mention it, and a Go programmer (log.Fatal, os.Exit) writes
+# exactly this. Found in ../json2csv.olang.
+#
+# expected: R11's message adding "a call that ends the program does not count - write 'unreachable' after it"
+# actual:   error[R11] as quoted
+import "std/os"
+
+fn main() ? {
+    text := try os.ReadFile("/nonexistent") catch os.OsError {
+        eprintln("cannot read")
+        os.Exit(2)
+    }
+    println(text)
+}

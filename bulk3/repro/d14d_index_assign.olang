@@ -1,0 +1,26 @@
+import "std/io"
+
+fn dirty(n I64) I64 {
+    b := Array<I64>(n, 77)
+    return b[n - 1]
+}
+
+fn probe(n I64) I64 {
+    a := Array<I64>(n)
+    for i in range n {
+        i = 0
+        a[i] = 1
+    }
+    s I64 = 0
+    for x in a { s += x }
+    return s
+}
+
+fn main() {
+    t I64 = 0
+    for k in range 3 {
+        { t += dirty(100000) }
+        { t += probe(100000) }
+    }
+    io.Println($t)!
+}

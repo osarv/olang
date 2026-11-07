@@ -1,0 +1,14 @@
+import "std/io"
+type Nums struct() { }
+type NA Array<I64>
+type P struct(x I64) { x }
+fn main() {
+    s String& = "ab"
+    n := NA(Array<I64>(2))
+    r := Array<String&>(2, "x")
+    a := Array<I64>(2, 1)
+    e := Array<Bool>(2)
+    b := Array<Bool>(2)
+    p := Array<P>(2, P(1))
+    io.Println($(p.Min()))!
+}

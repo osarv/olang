@@ -1,0 +1,117 @@
+# Concurrency: a pool of workers fed by a channel, reporting through another; a parallel map; a shared counter
+# kept with atomics; and a slow job cancelled by a deadline.
+import "std/io"
+import "std/chan"
+import "std/cancel"
+
+type Job struct(id I32, n I64) {
+    id
+    n
+}
+
+type Result struct(id I32, primes I64, by I32) {
+    id
+    primes
+    by
+}
+
+fn isPrime(n I64) Bool {
+    if n < 2 { return false }
+    for d I64 = 2, d * d <= n, d++ {
+        if n % d == 0 { return false }
+    }
+    return true
+}
+
+fn primesBelow(n I64) I64 {
+    c I64 = 0
+    for i in range n { if isPrime(i) { c++ } }
+    return c
+}
+
+type Stats struct() {
+    finished mut I64 = 0
+    busy mut I64 = 0
+}
+
+# takes jobs until it gets one with a negative n, which means stop
+fn worker(id I32, jobs mut chan.Chan<Job>&, results mut chan.Chan<Result>&, stats mut Stats&) {
+    for {
+        j := chan.Recv(jobs)
+        if j.n < 0 { return }
+        atomicAdd(stats.busy, 1)
+        r := Result(j.id, primesBelow(j.n), id)
+        atomicAdd(stats.busy, -1)
+        atomicAdd(stats.finished, 1)
+        chan.Send(results, r)
+    }
+}
+
+fn feed(jobs mut chan.Chan<Job>&, count I32, workers I32) {
+    for i in range count { chan.Send(jobs, Job(i, 1000 + I64(i) * 500)) }
+    for i in range workers { chan.Send(jobs, Job(-1, -1)) }
+}
+
+fn collect(results mut chan.Chan<Result>&, count I32, into mut Array<I64>&, by mut Array<I32>&) {
+    for i in range count {
+        r := chan.Recv(results)
+        into[r.id] = r.primes
+        by[r.by]++
+    }
+}
+
+# counts up while the token has not fired; how far it got
+fn spinUntil(tok cancel.Token&, out mut Stats&) {
+    n I64 = 0
+    for not tok.Cancelled() {
+        n++
+        if n % 1000 == 0 { atomicAdd(out.finished, 1000) }
+    }
+}
+
+fn square(x I64) I64 { return x * x }
+
+fn main() ? io.IoError {
+    count I32 = 40
+    nWorkers I32 = 4
+    jobs chan.Chan<Job>& = chan.Chan<Job>(8)
+    results chan.Chan<Result>& = chan.Chan<Result>(8)
+    chan.Init(jobs)
+    chan.Init(results)
+    stats Stats& = Stats()
+    primes := Array<I64>(count)
+    perWorker := Array<I32>(nWorkers)
+    join {
+        for w in range nWorkers { spawn worker(w, jobs, results, stats) }
+        spawn feed(jobs, count, nWorkers)
+        spawn collect(results, count, primes, perWorker)
+    }
+    total := primes.Fold(I64(0), fn(a I64, x I64) I64 { return a + x })
+    try io.Print("jobs done " $atomicLoad(stats.finished) ", busy now " $atomicLoad(stats.busy) ", primes total " $total "\n")
+    try io.Print("first " $primes[:5] " last " $primes[35:] "\n")
+    try io.Print("each worker took some: " $perWorker.All(fn(n I32) Bool { return n > 0 }) ", total " $perWorker.Fold(I32(0), fn(a I32, n I32) I32 { return a + n }) "\n")
+
+    # parallel map: each task writes its own slot
+    squares := Array<I64>(16)
+    join {
+        for i in range 16 { spawn squares[i] = square(i) }
+    }
+    try io.Print("squares " $squares "\n")
+
+    # a lambda task capturing a reference, and a deadline stopping a spinner
+    spun Stats& = Stats()
+    tok := cancel.After(30)
+    start := cancel.NowNs()
+    join {
+        spawn spinUntil(tok, spun)
+        spawn fn() { atomicAdd(spun.busy, 7) }
+    }
+    elapsedMs I64 = (cancel.NowNs() - start) / 1000000
+    try io.Print("spinner stopped after ~" $(elapsedMs >= 25 and elapsedMs < 1000) ", counted " $(atomicLoad(spun.finished) > 0) ", lambda " $atomicLoad(spun.busy) "\n")
+
+    # a receive that gives up at a deadline
+    quiet chan.Chan<I32>& = chan.Chan<I32>(1)
+    chan.Init(quiet)
+    got := try chan.RecvUntil(quiet, cancel.After(10)) catch cancel.Stopped.TIMED_OUT default -1 catch default -2
+    try io.Print("recv with deadline: " $got "\n")
+}

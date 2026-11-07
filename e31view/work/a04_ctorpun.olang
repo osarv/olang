@@ -1,0 +1,18 @@
+# a constructor whose parameter is a "mut Acc&" kept by a bare pun - x[i]'s hidden copy given to it
+type Acc struct() {
+    N I64 = 0
+}
+type W struct(a mut Acc&) {
+    a
+}
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    w := W(l[0])
+    w.a.N = 5
+    println("list " $l[0].N " w " $w.a.N)
+    arr := Array<Acc>(1)
+    w2 := W(arr[0])
+    w2.a.N = 5
+    println("array " $arr[0].N)
+}

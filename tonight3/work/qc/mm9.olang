@@ -1,0 +1,5 @@
+fn main() ? {
+    l := List<List<I64>>()
+    l.Push(List<I64>())
+    c := l.Clone()
+}

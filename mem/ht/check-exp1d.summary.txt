@@ -1,0 +1,10 @@
+reading file "check-exp1d.gz" - please wait, this might take some time...
+Debuggee command was: build/exp1d -c compiler/check.olang
+finished reading file, now analyzing data:
+
+total runtime: 12.084000s.
+calls to allocation functions: 2118245 (175293/s)
+temporary memory allocations: 691812 (57250/s)
+peak heap memory consumption: 1.41G
+peak RSS (including heaptrack overhead): 1.35G
+total memory leaked: 1.41G

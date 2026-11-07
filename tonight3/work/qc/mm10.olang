@@ -1,0 +1,5 @@
+fn main() ? {
+    m := Map<I64, List<I64>>()
+    m.Put(1, List<I64>())
+    for v in m.Values() { println($v.Len()) }
+}

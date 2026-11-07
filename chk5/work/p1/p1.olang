@@ -1,0 +1,34 @@
+type Info struct(Offset I64, Len I64) {
+    Offset
+    Len
+}
+type In struct(p Info&) {
+    at Info&p = p
+}
+type Out struct(mem Array<I64>&, inner In) {
+    mem
+    inner
+}
+type Store struct() {
+    mem mut Array<I64>& = Array<I64>(4)
+}
+fn (st Store&) get2(i Info&) Out { return Out(st.mem, In(i)) }
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k) * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    st := Store()
+    keep := List<In>()
+    for k in range 3 {
+        loc := Info(k + 10, k + 20)
+        x := st.get2(loc).inner
+        keep.Push(x)
+    }
+    churn()
+    println($keep[0].at.Offset " " $keep[2].at.Len)
+}

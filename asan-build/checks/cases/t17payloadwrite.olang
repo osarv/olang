@@ -1,0 +1,22 @@
+# check: fail a payload lives where the value does
+# T17c/O25: a payload that can be written through - a writable reference to a struct holding references - must live
+# exactly where the enum value does: a node built through it is built in the value's scope and stored in the node, so a
+# node from an outer block held in an inner block's value would end up pointing into the inner block's storage
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Slot enum {
+    Empty
+    Held(n mut Node&)
+}
+fn main() ? {
+    outer Node& = Node(1)
+    for i in range 2 {
+        s Slot& = Slot.Held(outer)
+        match s {
+            case Slot.Held(n) { n.next = Node(i) }
+            nomatch { }
+        }
+    }
+}

@@ -1,0 +1,27 @@
+import "std/io"
+type Mix struct(h F16, b BF16, f F32, u U8, s I16, d F64) {
+    h
+    b
+    f
+    u
+    s
+    d
+}
+type Pay enum {
+    P(h F16, u U8, f F32, i I64)
+    Q(b Bool, w U16)
+    R
+}
+fn mk(k F64) Mix { return Mix(F16(k), BF16(k * 3.0), F32(k / 3.0), U8(250), I16(-3), k) }
+G Mix = mk(1.1)
+E1 Pay = Pay.P(F16(2.5), U8(200), F32(-0.0), -5)
+E2 Pay = Pay.Q(true, U16(65535))
+E3 Pay = Pay.R
+Arr Array<Pay> = Pay[Pay.Q(false, 7), Pay.P(F16(65504.0), 1, 1.5, 9223372036854775807)]
+K mut F64 = 1.1
+fn main() ? io.IoError {
+    r := mk(K)
+    try io.Print($G "\n" $r "\n" $(G == r) "\n")
+    try io.Print($E1 " " $E2 " " $E3 " " $Arr "\n")
+    try io.Print($(E1 == Pay.P(F16(2.5), U8(200), F32(-0.0), -5)) "\n")
+}

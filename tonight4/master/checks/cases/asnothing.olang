@@ -1,0 +1,11 @@
+# check: fail error[E32]: case B carries nothing for 'as' to give
+# E32: as on a case with no payload
+type T enum {
+    A(v I32)
+    B
+}
+fn f(t T) I32 {
+    x := t as T.B
+    return 0
+}
+fn main() ? { }

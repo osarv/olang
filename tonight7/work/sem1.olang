@@ -1,0 +1,26 @@
+type In struct() {
+    k I64 = 0
+}
+type E enum {
+    A(x In)
+    B
+}
+type H struct() {
+    e E = E.A(In())
+    p In = In()
+    q In = In()
+}
+fn poke(p mut In&) { p.k++ }
+fn main() ? {
+    h mut H& = H()
+    match h.e {
+        case E.A(v) { poke(v) }
+        nomatch { }
+    }
+    println("match binding: " $h.e)
+    poke(h.e as E.A)
+    println("as: " $h.e)
+    c := true
+    poke(h.p if c else h.q)
+    println("cond: " $h.p.k " " $h.q.k)
+}

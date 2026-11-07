@@ -1,0 +1,45 @@
+import "std/io"
+# a method pushing its argument into a global list, called through an any with a loop-local argument
+type Node struct(v String&) { v }
+type Reg trait {
+    Reg(n Node&)
+}
+GL List<Node&> = List<Node&>()
+type S struct(k I64) { k }
+fn (s S&) Reg(n Node&) { GL.Push(n) }
+fn viaAny(r any Reg&) {
+    for i in range 3 {
+        n := Node("a" $i "-" $(i * 7))
+        r.Reg(n)
+    }
+}
+fn direct(s S&) {
+    for i in range 3 {
+        n := Node("d" $i)
+        s.Reg(n)
+    }
+}
+fn main() {
+    s := S(0)
+    viaAny(s)
+    churn()
+    for n in GL { say(n.v) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

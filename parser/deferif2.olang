@@ -1,0 +1,11 @@
+if TargetOs == "linux" {
+    type Mode enum {
+        Fast
+        Slow
+    }
+}
+
+test "token-decided top-level if declares an enum" {
+    m := Mode.Fast
+    assert m == Mode.Fast
+}

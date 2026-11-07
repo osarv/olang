@@ -1,0 +1,27 @@
+# NEW in 7345ff9, CONFIRMED. f1a through a generic function and through a trait default (G19): same null closure.
+# new -b: Segmentation fault, exit 139. d6c7f52 and d0abfe8: 3 10.
+type Sized trait {
+    Len() I64
+}
+fn (x <T Sized>&) Twice() I64 {
+    f := fn() I64 { return x.Len() * 2 }
+    return f()
+}
+fn count(xs Array<<T>>&) I64 {
+    f := fn() I64 { return xs.Len() }
+    return f()
+}
+type Box struct(n I64) {
+    n
+}
+fn (b Box&) Len() I64 { return b.n }
+type Bag struct(arr Array<I64>&, box Box&) {
+    arr
+    box
+}
+fn (b Bag&) Str() String {
+    return $count(b.arr) " " $b.box.Twice()
+}
+fn main() ? {
+    println($Bag(I64[1, 2, 3], Box(5)))
+}

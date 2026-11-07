@@ -1,0 +1,18 @@
+# arrays of anys: a fill and a literal from loop-local instances, kept outside the loop
+type W trait {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+fn main() {
+    keep := List<Array<any W&>&>()
+    for i in range 3 {
+        b := Btn("b" $i)
+        keep.Push(Array<any W&>(2, b))
+        keep.Push(Array<any W&>(2, Btn("f" $i)))
+    }
+    churn()
+    for a in keep {
+        for w in a { say(w.Draw()) }
+    }
+}

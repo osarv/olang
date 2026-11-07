@@ -1,0 +1,2037 @@
+# fuzz/scopegen - writes random, well-formed programs that stress where values live (§8), for the scope sanitizer's
+# fuzzer ("fuzz scope", fuzz.olang). The compile-time evaluator is not their subject: every value is computed at run
+# time, read after an arena churn, and printed, and a program the compiler accepts must print the same built with the
+# scope sanitizer (-d -s, B2f) and interpreted (-i, which keeps every value alive). A use after a scope closed - storage
+# the static check (§8.4) let a value outlive - faults or reads poison under -s, so it shows as a difference.
+#
+# A program is a list of independent SCENARIOS. Scenario k is a function s<k>() I64 holding a TARGET - storage that
+# outlives what the scenario does to it: a node, a struct holding a box, a List, a Map, an array of references, a
+# struct of Lists, an enum, a List returned through two calls, a struct with an inline array, a global, a node built
+# and returned by a callee - and a tree of statements storing new values into it: built in nested blocks and loops (an
+# if, a for, a bare block, a match, a deferred block, after a churn), through helper functions taking the target by
+# reference or by value, through copies out of references (from calls, parameters, fields, elements, slices, views,
+# enum payloads), through constructors and enum cases, captured by lambdas, by spawned calls and spawned lambdas, and
+# made as locals of an inner block and stored outward (which the checker must refuse), through conditionals and matches
+# of references from different scopes, through the element a List's At, First or Last or a Map's Get hands back, and by
+# spawned calls that fail (spawn try, try join, a task's default). Then it churns the arena and returns a checksum of
+# everything the target reaches.
+#
+# A Str scenario (one scenario in four) declares a type whose Str's body does what the reviews of decision 49 attacked,
+# over the parts of its receiver - a node, a List, a Map and an array of nodes: stores through conditionals, matches and
+# catch defaults (a borrowed result, a Map's Get, a checked index), callbacks building or reading, lambdas, tasks and
+# spawned lambdas, generics, call cycles, writes through a List's element (E31b), a local moved into a borrowed result's
+# home (O26a), as well as what Str may do - read and walk its receiver, write numbers through it, build in its own blocks.
+# The value is rendered in a loop, alone and in joins, with a churn after each rendering, and the text's hash and what the
+# receiver reaches are the checksum. Str may build nothing where its receiver lives (E11c), so most such bodies are
+# refused; what the compiler accepts must print the same built -s and interpreted.
+#
+# An own scenario (§8.8) holds owned objects in a holder's own slots and gives them new owners, moves them between the
+# slots and through owner locals, releases them (null, take, a call, a block's end), and builds into an owned object's
+# region through borrows - directly, through a call, a method or a task, before and after other arguments - with some
+# borrows kept across a release, which the checker must refuse (O39): an object moved to another owner's tree while
+# borrowed and released there, a task borrowing through the holder (synchronised by an atomic flag) while the spawner
+# releases, a loop releasing what the last turn's task builds into, deferred code releasing before the join waits.
+#
+# One program in four (HasDtors) also has destructor-bearing types - resources whose destructors count themselves, build
+# through their fields, and spawn tasks building into the scope being closed - made over the target and in blocks of
+# their own. -i runs no destructors, so such a program is checked against itself: built -d -s and built -b, the two
+# must print the same, ending "dtors 0" - every resource made has been destructed by the time main prints.
+#
+# Each scenario's text - its globals, helpers and function - starts with a line "# scenario k", so a compile-time
+# error is traced to its scenario by line and that scenario left out (Program's mask): a refused construct is safe,
+# and the rest of the program is still run.
+
+# whether the program seed has destructors (see above)
+fn HasDtors(seed U64) Bool { return seed % 4 == 3 }
+
+# the destructor-bearing types a program with destructors has
+DtorPrelude := (
+    "Made mut I64 = 0\n"
+    "Dropped mut I64 = 0\n"
+    "type Tracker struct() {\n"
+    "    Made = Made + 1\n"
+    "} destruct {\n"
+    "    Dropped = Dropped + 1\n"
+    "}\n"
+    "# builds through its field as it is destructed\n"
+    "type ResA struct(n mut Node&, k I64) {\n"
+    "    n\n"
+    "    k\n"
+    "    Made = Made + 1\n"
+    "} destruct {\n"
+    "    Dropped = Dropped + 1\n"
+    "    n.next = Node(k)\n"
+    "}\n"
+    "# a task it spawns builds destructor-bearing values into the scope being closed (C9a, P2)\n"
+    "type ResB struct(n mut Node&, k I64) {\n"
+    "    n\n"
+    "    k\n"
+    "    Made = Made + 1\n"
+    "} destruct {\n"
+    "    Dropped = Dropped + 1\n"
+    "    keep mut List<Tracker&>& = List<Tracker&>()\n"
+    "    kk := k\n"
+    "    join { spawn fn() { for j in range 3 { keep.Push(Tracker()) } } }\n"
+    "    t Tracker& = Tracker()\n"
+    "    n.next = Node(kk + keep.Len())\n"
+    "}\n"
+    "# a task it spawns builds through its field; a value it makes is destructed as it returns\n"
+    "type ResC struct(n mut Node&, k I64) {\n"
+    "    n\n"
+    "    k\n"
+    "    Made = Made + 1\n"
+    "} destruct {\n"
+    "    Dropped = Dropped + 1\n"
+    "    h := n\n"
+    "    kk := k\n"
+    "    join { spawn fn() { h.next = Node(kk * 3) } }\n"
+    "    r ResA& = ResA(Node(kk), kk + 1)\n"
+    "}\n"
+    "# own3 F3/F4 (§8.8): an owned resource, a holder of one, and a chain whose destructor holds owner locals of its own\n"
+    "type ORes struct(v I64) {\n"
+    "    v\n"
+    "    Made = Made + 1\n"
+    "} destruct {\n"
+    "    Dropped = Dropped + 1\n"
+    "}\n"
+    "type ORHold struct() {\n"
+    "    res own mut ORes&\n"
+    "}\n"
+    "type ODeep struct(v I64) {\n"
+    "    v\n"
+    "    next own mut ODeep&\n"
+    "    Made = Made + 1\n"
+    "} destruct {\n"
+    "    Dropped = Dropped + 1\n"
+    "    x own mut ORes& = ORes(v)\n"
+    "    y := ORHold()\n"
+    "    y.res = ORes(v + 1)\n"
+    "}\n"
+    "fn otake2(o own mut ORes&, k I64) I64 { return o.v + k }\n"
+    "# own5 F3: test blocks giving an owner to a call whose later argument fails a guaranteed check - a slice's bounds, an\n"
+    "# 'as', an array's length - which abandons the test: its unwinder must release the owner (counted apart from main's)\n"
+    "HeldMade mut I64 = 0\n"
+    "HeldDropped mut I64 = 0\n"
+    "type OHeld struct(n I64) {\n"
+    "    n\n"
+    "    HeldMade = HeldMade + 1\n"
+    "} destruct {\n"
+    "    HeldDropped = HeldDropped + 1\n"
+    "}\n"
+    "type OHeldBox struct() {\n"
+    "    r own mut OHeld&\n"
+    "}\n"
+    "type OHeldE enum {\n"
+    "    A(k I64)\n"
+    "    B(k I64)\n"
+    "}\n"
+    "fn oheldEat(o own mut OHeld&, s Array<I64>&) I64 { return o.n + s.Len() }\n"
+    "fn oheldEat3(o own mut OHeld&, k I64) I64 { return o.n + k }\n"
+    "# own4 N1: a resource whose destructor reads what it was given; N6: constructors failing after making own fields\n"
+    "type OWatch struct() {\n"
+    "    x OPlain& = null\n"
+    "    Made = Made + 1\n"
+    "} destruct {\n"
+    "    Dropped = Dropped + 1\n"
+    "    if x != null {\n"
+    "        churn()\n"
+    "        WatchSeen = WatchSeen + opl(x) % 997\n"
+    "    }\n"
+    "}\n"
+    "WatchSeen mut I64 = 0\n"
+    "fn oputW(w mut OWatch&, x OPlain&) { w.x = x }\n"
+    "# own4 N3: an owner held while a checked operation under try leaves, propagated to the caller\n"
+    "fn on3idx(a Array<I64>&, i I64, v I64) I64 ? { return otake2(ORes(v), try a[i]) }\n"
+    "fn on3div(z I64, v I64) I64 ? { return otake2(ORes(v), try (10 / z)) }\n"
+    "fn on3slice(a Array<I64>&, i I64, v I64) I64 ? { return otake2(ORes(v), (try a[1:i]).Len()) }\n"
+    "fn on3conv(big I64, v I64) I64 ? { return otake2(ORes(v), I64(try I32(big))) }\n"
+    "fn on3region(h mut ORHold&, a Array<I64>&, i I64) ? { h.res = ORes(try a[i]) }\n"
+    "type OFail struct(n I64) ? {\n"
+    "    n\n"
+    "    a own mut ORes& = ORes(n)\n"
+    "    k := try ofail(n)\n"
+    "}\n"
+    "type OFail2 struct(n I64) ? {\n"
+    "    n\n"
+    "    a own mut ORes& = ORes(n)\n"
+    "    b own mut ORes& = ORes(n + 1)\n"
+    "    if n > -1000000000 { error }\n"
+    "}\n"
+    "fn ofail(k I64) I64 ? {\n"
+    "    if k > -1000000000 { error }\n"
+    "    return k\n"
+    "}\n"
+    "# own6 N3: an owned result, or an owner value local moved into the result, then given to nobody - a join failing in\n"
+    "# the return's place (P4b) - which must release it\n"
+    "fn ofailUnit(k I64) ? {\n"
+    "    if k > -1000000000 { error }\n"
+    "}\n"
+    "fn ojoinOwned(v I64) own mut ORes& ? {\n"
+    "    try join {\n"
+    "        spawn try ofailUnit(v)\n"
+    "        return ORes(v)\n"
+    "    }\n"
+    "    return null\n"
+    "}\n"
+    "fn ojoinValue(v I64) ORHold ? {\n"
+    "    h := ORHold()\n"
+    "    h.res = ORes(v)\n"
+    "    try join {\n"
+    "        spawn try ofailUnit(v)\n"
+    "        return h\n"
+    "    }\n"
+    "    return h\n"
+    "}\n"
+    "# own6 N3b: an owned result made, then deferred code failing a guaranteed check - which abandons a test\n"
+    "fn oheldDefer(a Array<I64>&, lo I64) own mut OHeld& {\n"
+    "    defer { println($a[lo:1].Len()) }\n"
+    "    return OHeld(5)\n"
+    "}\n"
+    "fn oheldDeferVal(a Array<I64>&, lo I64) OHeldBox {\n"
+    "    h := OHeldBox()\n"
+    "    h.r = OHeld(6)\n"
+    "    defer { println($a[lo:1].Len()) }\n"
+    "    return h\n"
+    "}\n"
+)
+
+# leaves out the shapes of the use-after-frees known and open when this was written (the 2026-10-09 review's 02, 02b,
+# 02c, 02d: copies out of a call's reference, a reference for a by-value parameter or kept by a constructor or a
+# payload, and copies of an enum's payload passed on), so that a run finds what is not known yet; set by "fuzz scope ...
+# avoid". Built without it, a program is the whole of what the generator writes
+AvoidKnown mut Bool = false
+# every scenario an own one (§8.8), set by "fuzz scope ... own"
+OwnOnly mut Bool = false
+
+# the module an own program imports (vec2 N2: a function made a value through an import alias is checked as one named
+# bare - O37, O40), written beside it as oalib.olang by the fuzzer
+OwnLib := (
+    "type LBox struct() {\n"
+    "    Buf own mut Array<I64>& = Array<I64>(4, 7)\n"
+    "}\n"
+    "G own mut LBox& = LBox()\n"
+    "fn View(b LBox&) Array<I64>&b { return b.Buf }\n"
+    "fn Drop() { G = LBox() }\n"
+    "fn Sum(a Array<I64>&) I64 {\n"
+    "    t := 0\n"
+    "    for x in a { t += x }\n"
+    "    return t\n"
+    "}\n"
+)
+
+# the types and helpers every program has
+Prelude := (
+    "import \"std/time\"\n"
+    "extern fn getpid() I32\n"
+    "Run mut I64 = 1          # read by every condition, so none is decided while compiling\n"
+    "type Node struct(v I64) {\n"
+    "    v\n"
+    "    next mut Node& = null\n"
+    "}\n"
+    "type Box struct() {\n"
+    "    head mut Node& = Node(1)\n"
+    "    tag I64 = 0\n"
+    "}\n"
+    "type W struct(b Box) { b }\n"
+    "type H struct(b Box) { b }\n"
+    "type E enum {\n"
+    "    A(b Box)\n"
+    "    N(n mut Node&)\n"
+    "    Z\n"
+    "}\n"
+    "type Bag struct() {\n"
+    "    nodes List<mut Node&>\n"
+    "    boxes List<Box>\n"
+    "}\n"
+    "type Two struct() {\n"
+    "    items Array<mut Node&, 2>\n"
+    "}\n"
+    "# allocates and gives back: whatever reuses a closed scope's storage writes -7 and text over it\n"
+    "fn churn() I64 {\n"
+    "    t I64 = 0\n"
+    "    for i in range 200 {\n"
+    "        a := Array<I64>(64, -7)\n"
+    "        t += a[3]\n"
+    "        s := $i $i $i \"-\" $(i * 7)\n"
+    "        t += s.Len()\n"
+    "    }\n"
+    "    return t + I64(getpid() * 0)\n"
+    "}\n"
+    "# a chain's values, 40 nodes at most\n"
+    "fn chain(n Node&) I64 {\n"
+    "    t I64 = 0\n"
+    "    c := n\n"
+    "    for k in range 40 {\n"
+    "        if c == null { break }\n"
+    "        t = t * 31 + c.v\n"
+    "        c = c.next\n"
+    "    }\n"
+    "    return t\n"
+    "}\n"
+    "fn sumList(l List<mut Node&>&) I64 {\n"
+    "    t I64 = 0\n"
+    "    for n in l { t = t * 7 + chain(n) }\n"
+    "    return t\n"
+    "}\n"
+    "fn sumArr(a Array<mut Node&>&) I64 {\n"
+    "    t I64 = 0\n"
+    "    for n in a { t = t * 7 + chain(n) }\n"
+    "    return t\n"
+    "}\n"
+    "fn sumMap(m Map<I64, mut Node&>&) I64 {\n"
+    "    t I64 = 0\n"
+    "    for k in range 40 {\n"
+    "        n := try m.Get(k) catch default null\n"
+    "        t = t * 7 + chain(n)\n"
+    "    }\n"
+    "    return t\n"
+    "}\n"
+    "fn sumBoxes(l List<Box>&) I64 {\n"
+    "    t I64 = 0\n"
+    "    for b in l { t = t * 7 + chain(b.head) }\n"
+    "    return t\n"
+    "}\n"
+    "fn sumE(e E&) I64 {\n"
+    "    if e is E.A {\n"
+    "        b := e as E.A\n"
+    "        return chain(b.head)\n"
+    "    }\n"
+    "    if e is E.N { return chain(e as E.N) }\n"
+    "    return 0\n"
+    "}\n"
+    "fn mkNode(v I64) mut Node& { return Node(v) }\n"
+    "fn mkChain(v I64) mut Node& {\n"
+    "    n := Node(v)\n"
+    "    n.next = Node(v + 1)\n"
+    "    return n\n"
+    "}\n"
+    "fn via(v I64) mut Node& { return mkChain(v) }\n"
+    "fn mkLambda(v I64) mut Node& {\n"
+    "    f := fn(x I64) mut Node& { return Node(x) }\n"
+    "    return f(v)\n"
+    "}\n"
+    "fn nodeOf(e E) mut Node&e { return e as E.N }\n"
+    "fn pickNode(x mut Node&) mut Node&x { return x }\n"
+    "fn pickBox(x mut Box&) mut Box&x { return x }\n"
+    "fn build(b Box) { b.head.next = Node(42) }\n"
+    "fn byAs(e E) {\n"
+    "    b := e as E.A\n"
+    "    b.head.next = Node(43)\n"
+    "}\n"
+    "fn link(a mut Node&, b mut Node&a) { a.next = b }\n"
+    "fn grow(a mut Node&, v I64) { a.next = Node(v) }\n"
+    "fn growDeep(a mut Node&, v I64) {\n"
+    "    if v > 0 {\n"
+    "        for i in range 2 {\n"
+    "            a.next = Node(v + i)\n"
+    "            churn()\n"
+    "        }\n"
+    "    }\n"
+    "}\n"
+    "fn mkList(v I64) List<mut Node&> {\n"
+    "    l := List<mut Node&>()\n"
+    "    for i in range 3 { l.Push(Node(v + i)) }\n"
+    "    return l\n"
+    "}\n"
+    "fn mkList2(v I64) List<mut Node&> { return mkList(v) }\n"
+    "fn pushNode(l mut List<mut Node&>&, v I64) { l.Push(Node(v)) }\n"
+    "fn putNode(m mut Map<I64, mut Node&>&, k I64, v I64) { m.Put(k, Node(v)) }\n"
+    "fn setNode(a mut Array<mut Node&>&, k I64, v I64) { a[k] = Node(v) }\n"
+    "# fallible: growF and mkF succeed, failF fails after building, mkFail fails\n"
+    "fn growF(a mut Node&, v I64) ? {\n"
+    "    if Run < 0 { error }\n"
+    "    a.next = Node(v)\n"
+    "}\n"
+    "fn failF(a mut Node&, v I64) ? {\n"
+    "    a.next = Node(v)\n"
+    "    if Run > 0 { error }\n"
+    "}\n"
+    "fn mkF(v I64) mut Node& ? {\n"
+    "    if Run < 0 { error }\n"
+    "    return Node(v)\n"
+    "}\n"
+    "fn mkFail(v I64) mut Node& ? {\n"
+    "    if Run > 0 { error }\n"
+    "    return Node(v)\n"
+    "}\n"
+    "# for Str scenarios: a borrowed result that fails, callbacks, a generic, call cycles, a local moved into a borrowed result's home\n"
+    "fn borrowF(n mut Node&) mut Node&n ? {\n"
+    "    if Run > 0 { error }\n"
+    "    return n\n"
+    "}\n"
+    "fn applyN(n mut Node&, f fn(x mut Node&)) { f(n) }\n"
+    "fn applyR(n Node&, f fn(x Node&) I64) I64 { return f(n) }\n"
+    "fn idT(x <T>) T { return x }\n"
+    "fn cycA(n Node&, c I64) I64 {\n"
+    "    if c > 0 { return cycB(n, c - 1) }\n"
+    "    return n.v\n"
+    "}\n"
+    "fn cycB(n Node&, c I64) I64 { return cycA(n, c) + 1 }\n"
+    "fn cycGrow(n mut Node&, c I64) {\n"
+    "    if c > 0 { cycGrow2(n, c - 1) } else { n.next = Node(c + 7) }\n"
+    "}\n"
+    "fn cycGrow2(n mut Node&, c I64) { cycGrow(n, c) }\n"
+    "type P2 struct(n mut Node&) { n }\n"
+    "fn moveH(n mut Node&) mut Node&n {\n"
+    "    p := P2(n)\n"
+    "    return p.n\n"
+    "}\n"
+    "fn pickDef(n mut Node&, v I64) mut Node&n { return try borrowF(n) catch default mkNode(v) }\n"
+    "fn readN(n Node&) I64 { return chain(n) }\n"
+    "# for own scenarios (§8.8): an owned object holding a node it builds into its region, and one it owns\n"
+    "type ONode struct(v I64) {\n"
+    "    v\n"
+    "    n mut Node& = Node(v)\n"
+    "    sub own mut ONode&\n"
+    "}\n"
+    "type OHold struct() {\n"
+    "    cur own mut ONode&\n"
+    "    other own mut ONode&\n"
+    "    buf own mut Array<I64>&                # own arrays: a buffer in a region of its own, its elements living where h does\n"
+    "    nodes own mut Array<mut Node&>&\n"
+    "    text own mut String& = \"t\"\n"
+    "    w own mut OWrap&\n"
+    "}\n"
+    "fn onode(o ONode&) I64 {\n"
+    "    if o == null { return 0 }\n"
+    "    return o.v * 7 + chain(o.n)\n"
+    "}\n"
+    "fn osum(a Array<I64>&) I64 {\n"
+    "    t I64 = 0\n"
+    "    for x in a { t = t * 31 + x }\n"
+    "    return t\n"
+    "}\n"
+    "fn ohash(h OHold&) I64 {\n"
+    "    t I64 = onode(h.cur) * 31 + onode(h.other)\n"
+    "    if h.cur != null { t = t * 31 + onode(h.cur.sub) }\n"
+    "    t = t * 31 + osum(h.buf)\n"
+    "    for n in h.nodes { t = t * 31 + chain(n) }\n"
+    "    if h.w != null { t = t * 31 + chain(h.w.m) }\n"
+    "    return t * 31 + h.text.Len() + I64(h.text[h.text.Len() - 1])\n"
+    "}\n"
+    "fn ofill(h mut OHold&, v I64) {\n"
+    "    h.nodes = Array<mut Node&>(3)\n"
+    "    for i in range 3 { h.nodes[i] = Node(v + i) }\n"
+    "}\n"
+    "fn ogrowAt(a mut Array<mut Node&>&, v I64) {\n"
+    "    if a.Len() > 0 and a[0] != null { a[0].next = Node(v) }\n"
+    "}\n"
+    "# a holder whose constructor gives its own fields owners made there\n"
+    "type OBuf struct(v I64) {\n"
+    "    buf own mut Array<I64>& = Array<I64>(3, v)\n"
+    "    nodes own mut Array<mut Node&>& = Array<mut Node&>(2)\n"
+    "    nodes[0] = Node(v)\n"
+    "    kid own mut ONode& = ONode(v)\n"
+    "}\n"
+    "fn ogrow(o mut ONode&, v I64) { o.n.next = Node(v) }\n"
+    "fn (o mut ONode&) Grow(v I64) { o.n.next = mkChain(v) }\n"
+    "fn odrop(h mut OHold&) { h.other = null }\n"
+    "fn oswap(h mut OHold&) {\n"
+    "    t := take h.cur\n"
+    "    h.cur = take h.other\n"
+    "    h.other = take t\n"
+    "}\n"
+    "fn osetN(x mut Node&, o mut ONode&) { o.n = x }\n"
+    "# owning parameters and owned results (O36, O37): an owner handed to a call, released there or moved on, or handed back\n"
+    "fn oconsume(o own mut ONode&) I64 { return onode(o) % 997 }\n"
+    "fn ostash(h mut OHold&, o own mut ONode&) { h.other = take o }\n"
+    "fn omk(v I64) own mut ONode& {\n"
+    "    o own mut ONode& = ONode(v)\n"
+    "    o.n.next = Node(v + 1)\n"
+    "    churn()\n"
+    "    return o\n"
+    "}\n"
+    "fn opass(o own mut ONode&) own mut ONode& { return o }\n"
+    "fn otail(o own mut ONode&) own mut ONode& {\n"
+    "    if o == null { return null }\n"
+    "    return take o.sub\n"
+    "}\n"
+    "fn ogrownBuf(old Array<I64>&, n I64) own mut Array<I64>& {\n"
+    "    a own mut Array<I64>& = Array<I64>(n)\n"
+    "    for i in range old.Len() { if i < n { a[i] = old[i] } }\n"
+    "    return a\n"
+    "}\n"
+    "fn ogrownNodes(old own mut Array<mut Node&>&, n I64) own mut Array<mut Node&>& {\n"
+    "    a own mut Array<mut Node&>& = Array<mut Node&>(n)\n"
+    "    for i in range old.Len() { if i < n { a[i] = old[i] } }\n"
+    "    return a\n"
+    "}\n"
+    "# an owned object viewing a node outside its region - a \"&p\" field keeps the argument's own scope (C2d)\n"
+    "type OWrap struct(n Node&) {\n"
+    "    m Node&n = n\n"
+    "}\n"
+    "fn owrap(n Node&) own mut OWrap& {\n"
+    "    o own mut OWrap& = OWrap(n)\n"
+    "    return o\n"
+    "}\n"
+    "# own3's shapes (§8.8): a callee storing into an own array's element, read-only lends of one, and calls keeping a\n"
+    "# borrowed copy of the holder\n"
+    "fn ofillAt(a mut Array<mut Node&>&, v I64) {\n"
+    "    if a.Len() > 0 { a[0] = Node(v) }\n"
+    "}\n"
+    "fn onodes(a Array<mut Node&>&) I64 {\n"
+    "    t I64 = 0\n"
+    "    for n in a { t = t * 31 + chain(n) }\n"
+    "    return t\n"
+    "}\n"
+    "type OBox struct() {\n"
+    "    h OHold& = null\n"
+    "}\n"
+    "fn oput(x mut OBox&, h OHold&) { x.h = h }\n"
+    "fn (x mut OBox&) set(h OHold&) { x.h = h }\n"
+    "fn oboxed(x OBox&) I64 {\n"
+    "    if x.h == null { return 0 }\n"
+    "    return ohash(x.h)\n"
+    "}\n"
+    "# own4's shapes (§8.8), over an owner value of a type nothing can be stored through, so a borrowed copy of it is\n"
+    "# lent freely (O17): the copy handed back by a spawned call, kept in an owner made from it or handed to an owning\n"
+    "# parameter, kept by a handle's copy\n"
+    "type OLeaf struct(n I64) {\n"
+    "    n\n"
+    "    text String& = \"leaf\" $n\n"
+    "}\n"
+    "type OInner struct(k I64) {\n"
+    "    k\n"
+    "    deep own mut OLeaf&\n"
+    "}\n"
+    "type OPlain struct() {\n"
+    "    o own mut OInner&\n"
+    "}\n"
+    "fn opl(x OPlain&) I64 {\n"
+    "    if x == null or x.o == null { return 0 }\n"
+    "    t := x.o.k * 31\n"
+    "    if x.o.deep != null { t = t + x.o.deep.n * 7 + x.o.deep.text.Len() }\n"
+    "    return t\n"
+    "}\n"
+    "fn oid(x OPlain&) OPlain&x { return x }\n"
+    "type OHolder struct(x OPlain&) {\n"
+    "    x\n"
+    "}\n"
+    "fn oholder(x OPlain&) OHolder { return OHolder(x) }\n"
+    "fn otwo(x OPlain&) (OPlain&x, I64) { return x, 7 }\n"
+    "# own7 F1: an owned object's inline parts, and an own array's plain elements, lent where they are\n"
+    "type OPart struct(k I64) {\n"
+    "    k\n"
+    "}\n"
+    "type OIn struct(k I64) {\n"
+    "    pl OPart = OPart(k)\n"
+    "    data Array<I64, 8> = Array<I64, 8>()\n"
+    "}\n"
+    "type OH7 struct() {\n"
+    "    cur own mut OIn&\n"
+    "    buf own mut Array<OPart>&\n"
+    "}\n"
+    "fn o7f(h mut OH7&, p mut OPart&) I64 {\n"
+    "    h.cur = null\n"
+    "    churn()\n"
+    "    return p.k\n"
+    "}\n"
+    "fn o7g(h mut OH7&, a mut Array<I64>&) I64 {\n"
+    "    h.cur = null\n"
+    "    churn()\n"
+    "    return a[0] + a[7]\n"
+    "}\n"
+    "fn (p mut OPart&) O7Bump(h mut OH7&) I64 {\n"
+    "    h.cur = null\n"
+    "    churn()\n"
+    "    return p.k\n"
+    "}\n"
+    "fn o7b(h mut OH7&, p mut OPart&) I64 {\n"
+    "    h.buf = null\n"
+    "    churn()\n"
+    "    return p.k\n"
+    "}\n"
+    "fn o7rel(h mut OH7&) I64 {\n"
+    "    h.cur = null\n"
+    "    churn()\n"
+    "    return 1\n"
+    "}\n"
+    "fn o7rd(p mut OPart&) I64 { return p.k }\n"
+    "fn o7use(p OPart&, out mut Array<I64>&) { out[0] = p.k }\n"
+    "fn o7same(p OPart&) OPart&p { return p }\n"
+    "fn omkf(x OPlain&) fn() I64 { return fn() I64 { return opl(x) } }\n"
+    "fn owithFirst(x OPlain&) own mut Array<OHolder&>& {\n"
+    "    a own mut Array<OHolder&>& = Array<OHolder&>(1)\n"
+    "    a[0] = OHolder(x)\n"
+    "    return a\n"
+    "}\n"
+    "type OBig struct() {\n"
+    "    bx OHolder& = null\n"
+    "}\n"
+    "fn okeepFirst(dst mut OBig&, a own mut Array<OHolder&>&) { dst.bx = a[0] }\n"
+    "# own5 F1: a callee keeping an '&p' field of what it is given - the field read at a derived scope (O23a)\n"
+    "type OW struct(o OPlain&) {\n"
+    "    f OPlain&o = o\n"
+    "}\n"
+    "fn okeepW(l mut List<OPlain&>&, w OW) { l.Push(w.f) }\n"
+    "fn (w OW&) ointo(l mut List<OPlain&>&) { l.Push(w.f) }\n"
+    "type OBig2 struct() {\n"
+    "    x OPlain& = null\n"
+    "}\n"
+    "fn osetBig(g mut OBig2&, w OW&) { g.x = w.f }\n"
+    "# a flag set atomically; owait waits for it 2 ms at most (-i runs a task only at its join, so there it never comes)\n"
+    "type OFlag struct() {\n"
+    "    v I64 = 0\n"
+    "}\n"
+    "fn owait(f OFlag&) {\n"
+    "    t0 := time.Now()\n"
+    "    for f.v.AtomicLoad() == 0 and time.Since(t0) < 2000000 { }\n"
+    "}\n"
+    "# a task borrowing what its holder owns, through the holder, and using it once the spawner has gone on (O41)\n"
+    "fn otask(h OHold&, f mut OFlag&, g OFlag&, out mut OFlag&) {\n"
+    "    b := h.cur\n"
+    "    f.v.AtomicStore(1)\n"
+    "    owait(g)\n"
+    "    out.v = onode(b)\n"
+    "}\n"
+)
+
+# the targets: what a scenario declares, and what it returns (the last, a Str scenario, declares its own - strScenario)
+Targets I64 = 13
+Decls := String&[
+    "x := Node(1)",
+    "w := W(Box())",
+    "l := List<mut Node&>()\n    l.Push(Node(1))",
+    "m := Map<I64, mut Node&>()",
+    "a := Array<mut Node&>(4)\n    a[0] = Node(1)",
+    "bag := Bag()\n    bag.boxes.Push(Box())",
+    "e := E.A(Box())",
+    "l := mkList2(1)",
+    "t := Two()\n    t.items[0] = Node(1)\n    t.items[1] = Node(1)",
+    "",                                    # a global, declared before the function
+    "",                                    # a node a callee built and returned
+    "h := OHold()",                        # a holder of owned objects (§8.8)
+    "",                                    # a Str scenario
+]
+Checks := String&[
+    "chain(x)",
+    "chain(w.b.head)",
+    "sumList(l)",
+    "sumMap(m)",
+    "sumArr(a)",
+    "sumList(bag.nodes) * 7 + sumBoxes(bag.boxes)",
+    "sumE(e)",
+    "sumList(l)",
+    "chain(t.items[0]) * 7 + chain(t.items[1])",
+    "",
+    "chain(x)",
+    "ohash(h)",
+    "",
+]
+
+type SG struct(seed U64) {
+    s U64 = (seed * 6364136223846793005 + 1442695040888963407) | 1
+    v I64 = 1                          # the last value a node was made with
+    k I64 = 0                          # the scenario being made
+    n I64 = 0                          # names made in it so far
+    helpers mut String& = ""           # its helper functions
+    boxKind I64 = 0                    # what boxOp's box is: 0 a value, 1 a reference, 2 a copy of an enum's payload
+    dtors Bool = false                 # the program has destructor-bearing types (HasDtors)
+    global Bool = false                # the target is a global: nothing destructor-bearing is made over it
+}
+
+# xorshift64
+fn (g mut SG&) next() U64 {
+    g.s = g.s ^ (g.s << 13)
+    g.s = g.s ^ (g.s >> 7)
+    g.s = g.s ^ (g.s << 17)
+    return g.s
+}
+
+fn (g mut SG&) r(n I64) I64 { return I64(g.next() % U64(n)) }
+fn (g mut SG&) chance(pct I64) Bool { return g.r(100) < pct }
+
+# a value no node has been made with yet in this scenario
+fn (g mut SG&) val() I64 {
+    g.v += 1 + g.r(5)
+    return g.v
+}
+
+# a name not used before in this scenario
+fn (g mut SG&) name(p String&) String& {
+    g.n += 1
+    return $p $g.k "_" $g.n
+}
+
+fn (g mut SG&) addHelper(text String&) { g.helpers = $g.helpers $text }
+
+# a new node: built by a constructor, by a call returning one it built - directly, through a local, through two calls,
+# through a lambda - or read out of an enum case's payload
+fn (g mut SG&) newNode() String& {
+    v := g.val()
+    k := g.r(9)
+    if k == 0 { return "mkNode(" $v ")" }
+    if k == 1 { return "mkChain(" $v ")" }
+    if k == 2 { return "via(" $v ")" }
+    if k == 3 { return "mkLambda(" $v ")" }
+    if k == 4 { return "nodeOf(E.N(Node(" $v ")))" }
+    return "Node(" $v ")"
+}
+
+# a statement storing a new node through the node a (a writable reference)
+fn (g mut SG&) nodeOp(a String&, ind String&, d I64) String& {
+    k := g.r(14)
+    if g.chance(35) { return g.condOp(a, ind) }
+    if g.chance(15) { return g.failOp(a, ind) }
+    if g.dtors and g.chance(30) { return g.dtorOp(a, ind) }
+    v := g.val()
+    if k == 1 { return $ind "grow(" $a ", " $v ")\n" }
+    if k == 2 { return $ind "growDeep(" $a ", " $v ")\n" }
+    if k == 3 { return $ind "link(" $a ", " $g.newNode() ")\n" }
+    if k == 4 {    # made in a block of its own and stored outward: refused unless it lives where a does
+        q := g.name("q")
+        return $ind "{\n" $ind "    " $q " := " $g.newNode() "\n" $ind "    " $a ".next = " $q "\n" $ind "}\n"
+    }
+    if k == 5 {    # a lambda capturing a reference to the node builds through it
+        h := g.name("h")
+        f := g.name("f")
+        return $ind $h " := " $a "\n" $ind $f " := fn(v I64) { " $h ".next = Node(v) }\n" $ind $f "(" $v ")\n"
+    }
+    if k == 6 { return $ind "join { spawn grow(" $a ", " $v ") }\n" }
+    if k == 7 {    # a spawned lambda building through a reference it captured
+        h := g.name("h")
+        return $ind $h " := " $a "\n" $ind "join { spawn fn() { " $h ".next = Node(" $v ") } }\n"
+    }
+    if k == 8 and d > 0 {    # a helper taking the node by reference
+        f := g.name("opNode")
+        body := g.stmts(0, "p", d - 1, "    ")
+        g.addHelper("fn " $f "(p mut Node&) {\n" $body "}\n")
+        return $ind $f "(" $a ")\n"
+    }
+    if k == 9 {    # a reference handed back by a call
+        h := g.name("h")
+        return $ind $h " := pickNode(" $a ")\n" $ind $h ".next = " $g.newNode() "\n"
+    }
+    if k == 10 { return $ind $a ".next = " $g.newNode() "\n" $ind $a ".next.next = " $g.newNode() "\n" }
+    if k == 11 {    # a box made here, holding the node
+        b := g.name("b")
+        return $ind $b " := Box()\n" $ind $b ".head = " $a "\n" $ind $b ".head.next = " $g.newNode() "\n"
+    }
+    if k == 12 {    # a node made where a churn runs between its making and its storing
+        q := g.name("q")
+        return $ind $q " := " $g.newNode() "\n" $ind "churn()\n" $ind $a ".next = " $q "\n"
+    }
+    return $ind $a ".next = " $g.newNode() "\n"
+}
+
+# a statement storing a conditional or a match of references through the node a - values from different scopes: one
+# made in a block of its own (which the checker must refuse to store outward), a new one, a or what it holds
+fn (g mut SG&) condOp(a String&, ind String&) String& {
+    k := g.r(8)
+    q := g.name("q")
+    #(a is a node place - a value local, a field, an element; pickNode(a) is a reference to it, for a value beside one)
+    if k == 0 { return $ind $a ".next = " $g.newNode() " if Run > 0 else " $a ".next\n" }
+    if k == 1 {
+        return $ind "{\n" $ind "    " $q " mut Node& = " $g.newNode() "\n" $ind "    " $a ".next = " $q " if Run > 0 else " $a ".next\n" $ind "}\n"
+    }
+    if k == 2 {
+        return ($ind "{\n" $ind "    " $q " mut Node& = " $g.newNode() "\n" $ind "    " $a ".next = match Run { case 1 => " $q
+                " case _ => pickNode(" $a ") }\n" $ind "}\n")
+    }
+    if k == 3 { return $ind $q " mut Node& = " $g.newNode() "\n" $ind $a ".next = " $q " if Run > 0 else pickNode(" $a ")\n" }
+    if k == 4 {    # passed on: an argument whose values live in different scopes
+        return $ind "{\n" $ind "    " $q " mut Node& = " $g.newNode() "\n" $ind "    link(" $a ", " $q " if Run > 0 else " $a ".next)\n" $ind "}\n"
+    }
+    if k == 5 {    # declared with ':=' - it lives where a does, the new value made there - and built through
+        c := g.name("c")
+        return $ind $c " := pickNode(" $a ") if Run > 0 else " $g.newNode() "\n" $ind $c ".next = " $g.newNode() "\n"
+    }
+    if k == 6 {    # declared with a written type: where it lives is not known, so nothing is built through it
+        c := g.name("c")
+        return ($ind "{\n" $ind "    " $q " mut Node& = " $g.newNode() "\n" $ind "    " $c " mut Node& = " $q " if Run > 0 else pickNode(" $a ")\n"
+                $ind "    " $c ".next = " $g.newNode() "\n" $ind "}\n")
+    }
+    return $ind $a ".next = match Run { case 1 => " $g.newNode() " case _ => " $a ".next }\n"
+}
+
+# a statement storing through the node a by spawned calls that may fail - failing, a task's default standing in for its
+# result, a join that fails. One task a join: two would race on a
+fn (g mut SG&) failOp(a String&, ind String&) String& {
+    k := g.r(5)
+    v := g.val()
+    t := g.name("t")
+    if k == 0 { return $ind "join { spawn try growF(" $a ", " $v ") catch { } }\n" }
+    if k == 1 { return $ind "try join { spawn try failF(" $a ", " $v ") } catch { }\n" }
+    if k == 2 {    # a default where the task's result lands
+        return ($ind $t " mut Node& = null\n" $ind "join { spawn " $t " = try mkFail(" $v ") catch default Node(" $g.val() ") }\n"
+                $ind $a ".next = " $t "\n")
+    }
+    if k == 3 {    # ...declared in a block of its own and stored outward
+        return ($ind "{\n" $ind "    " $t " mut Node& = null\n" $ind "    join { spawn " $t " = try mkF(" $v ") catch default Node("
+                $g.val() ") }\n" $ind "    " $a ".next = " $t "\n" $ind "}\n")
+    }
+    return $ind "try join { spawn try growF(" $a ", " $v ") } catch { }\n"
+}
+
+# a statement making a destructor-bearing resource: over the node a, which it builds through as it is destructed, or
+# in a block or a loop body of its own
+fn (g mut SG&) dtorOp(a String&, ind String&) String& {
+    k := g.r(4)
+    v := g.val()
+    rt := String&["ResA", "ResB", "ResC"][g.r(3)]
+    r := g.name("r")
+    y := g.name("y")
+    if k == 0 and not g.global {    # over the target, destructed when its scope closes
+        h := g.name("h")
+        return $ind $h " := pickNode(" $a ")\n" $ind $r " " $rt "&" $h " = " $rt "(" $h ", " $v ")\n"
+    }
+    if k == 1 {
+        i := g.name("i")
+        return ($ind "for " $i " in range 2 {\n" $ind "    " $y " := Node(" $v ")\n" $ind "    " $r " " $rt "& = " $rt "(" $y ", "
+                $i ")\n" $ind "    " $a ".next = " $y "\n" $ind "}\n")
+    }
+    if k == 2 {    # a list of resources
+        l := g.name("rl")
+        return ($ind "{\n" $ind "    " $y " := Node(" $v ")\n" $ind "    " $l " := List<" $rt "&>()\n" $ind "    " $l ".Push("
+                $rt "(" $y ", " $v "))\n" $ind "    " $l ".Push(" $rt "(" $y ", " $g.val() "))\n" $ind "}\n")
+    }
+    return $ind "{\n" $ind "    " $y " := Node(" $v ")\n" $ind "    " $r " " $rt "& = " $rt "(" $y ", " $v ")\n" $ind "    churn()\n" $ind "}\n"
+}
+
+# a statement storing a new node through the box b (a writable Box place)
+fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
+    k := g.r(13)
+    if AvoidKnown {
+        if g.boxKind == 2 or k == 3 or k == 7 { k = 0 }
+        if g.boxKind == 1 and (k == 4 or k == 5 or k == 6 or k == 8 or k == 11) { k = 0 }
+    }
+    if k == 1 {    # a copy of the box: its references are the box's
+        c := g.name("c")
+        return $ind $c " Box = " $b "\n" $ind $c ".head.next = " $g.newNode() "\n"
+    }
+    if k == 2 {
+        c := g.name("c")
+        return $ind $c " := " $b "\n" $ind $c ".head.next = " $g.newNode() "\n"
+    }
+    if k == 3 {    # a copy out of a reference a call hands back
+        c := g.name("c")
+        return $ind $c " Box = pickBox(" $b ")\n" $ind $c ".head.next = " $g.newNode() "\n"
+    }
+    if k == 4 { return $ind "build(" $b ")\n" }
+    if k == 5 {    # a copy kept by a constructor
+        h := g.name("h")
+        return $ind $h " := H(" $b ")\n" $ind $h ".b.head.next = " $g.newNode() "\n"
+    }
+    if k == 6 {    # a copy kept by an enum case, matched out
+        e := g.name("e")
+        y := g.name("y")
+        return ($ind $e " := E.A(" $b ")\n" $ind "match " $e " {\n" $ind "    case E.A(" $y ") { " $y ".head.next = "
+                $g.newNode() " }\n" $ind "    case _ { }\n" $ind "}\n")
+    }
+    if k == 7 { return $ind "byAs(E.A(" $b "))\n" }
+    if k == 8 {    # a payload taken out by "as"
+        x := g.name("x")
+        return $ind $x " := E.A(" $b ") as E.A\n" $ind $x ".head.next = " $g.newNode() "\n"
+    }
+    if k == 9 { return g.nodeOp($b ".head", ind, d) }
+    if k == 10 and d > 0 {    # a helper taking the box by reference
+        f := g.name("opBox")
+        was := g.boxKind
+        g.boxKind = 1
+        body := g.stmts(1, "y", d - 1, "    ")
+        g.boxKind = was
+        g.addHelper("fn " $f "(y mut Box&) {\n" $body "}\n")
+        return $ind $f "(" $b ")\n"
+    }
+    if k == 11 and d > 0 {    # a helper taking the box by value: its references are still the caller's
+        f := g.name("opVal")
+        was := g.boxKind
+        g.boxKind = 0
+        body := g.stmts(1, "y", d - 1, "    ")
+        g.boxKind = was
+        g.addHelper("fn " $f "(y Box) {\n" $body "}\n")
+        return $ind $f "(" $b ")\n"
+    }
+    return $ind $b ".head.next = " $g.newNode() "\n"
+}
+
+# a statement storing a new node into the List l
+fn (g mut SG&) listOp(l String&, ind String&) String& {
+    if g.chance(30) { return g.listElemOp(l, ind) }
+    k := g.r(9)
+    v := g.val()
+    if k == 1 {
+        q := g.name("q")
+        return $ind "{\n" $ind "    " $q " := " $g.newNode() "\n" $ind "    " $l ".Push(" $q ")\n" $ind "}\n"
+    }
+    if k == 2 {
+        i := g.name("i")
+        return $ind "for " $i " in range 3 { " $l ".Push(Node(" $v " + " $i ")) }\n"
+    }
+    if k == 3 { return $ind "pushNode(" $l ", " $v ")\n" }
+    if k == 4 {
+        f := g.name("f")
+        return $ind $f " := fn(v I64) mut Node& { return Node(v) }\n" $ind $l ".Push(" $f "(" $v "))\n"
+    }
+    if k == 5 { return $ind "join { spawn pushNode(" $l ", " $v ") }\n" }
+    if k == 6 {    # building through the elements a walk hands out
+        n := g.name("n")
+        return $ind "for " $n " in " $l " { " $n ".next = " $g.newNode() " }\n"
+    }
+    if k == 7 {    # a node made here, a churn, then pushed
+        q := g.name("q")
+        return $ind $q " := " $g.newNode() "\n" $ind "churn()\n" $ind $l ".Push(" $q ")\n"
+    }
+    return $ind $l ".Push(" $g.newNode() ")\n"
+}
+
+# a statement storing through an element of the List l its At, First or Last hands back, or into one by SetAt - a new
+# node, or one made in a block of its own (which the checker must refuse to store there)
+fn (g mut SG&) listElemOp(l String&, ind String&) String& {
+    k := g.r(8)
+    q := g.name("q")
+    if k == 0 { return $ind "if " $l ".Len() > 0 { " $l "[0].next = " $g.newNode() " }\n" }
+    if k == 1 {
+        return $ind "{\n" $ind "    " $q " := " $g.newNode() "\n" $ind "    if " $l ".Len() > 0 { " $l "[0].next = " $q " }\n" $ind "}\n"
+    }
+    if k == 2 { return $ind "if " $l ".Len() > 0 { (try " $l ".First() catch { unreachable }).next = " $g.newNode() " }\n" }
+    if k == 3 {
+        return ($ind "{\n" $ind "    " $q " := " $g.newNode() "\n" $ind "    if " $l ".Len() > 0 { (try " $l
+                ".Last() catch { unreachable }).next = " $q " }\n" $ind "}\n")
+    }
+    if k == 4 { return $ind "if " $l ".Len() > 0 { " $l "[" $l ".Len() - 1] = " $g.newNode() " }\n" }
+    if k == 5 {    # a parallel assignment through an element
+        n := g.name("k")
+        return $ind $n " I64 = 0\n" $ind "if " $l ".Len() > 0 { " $l "[0].next, " $n " = " $g.newNode() ", 1 }\n"
+    }
+    if k == 6 {    # a conditional of values from different scopes, pushed
+        return $ind "{\n" $ind "    " $q " mut Node& = " $g.newNode() "\n" $ind "    " $l ".Push(" $q " if Run > 0 else " $g.newNode() ")\n" $ind "}\n"
+    }
+    return $ind $l ".Push(" $g.newNode() " if Run > 0 else " $g.newNode() ")\n"
+}
+
+# a statement storing a new node into the Map m
+fn (g mut SG&) mapOp(m String&, ind String&) String& {
+    if g.chance(25) {    # through the node a lookup hands back - a new one, or one made in a block of its own
+        key := g.r(30)
+        q := g.name("q")
+        put := $ind $m ".Put(" $key ", Node(" $g.val() "))\n"
+        if g.chance(50) { return $put $ind "(try " $m ".Get(" $key ") catch { unreachable }).next = " $g.newNode() "\n" }
+        return ($put $ind "{\n" $ind "    " $q " := " $g.newNode() "\n" $ind "    (try " $m ".Get(" $key
+                ") catch { unreachable }).next = " $q "\n" $ind "}\n")
+    }
+    k := g.r(7)
+    key := g.r(30)
+    v := g.val()
+    if k == 1 {
+        q := g.name("q")
+        return $ind "{\n" $ind "    " $q " := " $g.newNode() "\n" $ind "    " $m ".Put(" $key ", " $q ")\n" $ind "}\n"
+    }
+    if k == 2 {
+        i := g.name("i")
+        return $ind "for " $i " in range 3 { " $m ".Put(" $key " + " $i ", Node(" $v ")) }\n"
+    }
+    if k == 3 { return $ind "putNode(" $m ", " $key ", " $v ")\n" }
+    if k == 4 {    # building through the entries a walk hands out
+        e := g.name("e")
+        return $ind "for " $e " in " $m " { " $e ".Value.next = " $g.newNode() " }\n"
+    }
+    if k == 5 {    # a node a lookup hands back, built through
+        n := g.name("n")
+        return ($ind $n " := try " $m ".Get(" $key ") catch default null\n" $ind "if " $n " != null { " $n
+                ".next = " $g.newNode() " }\n")
+    }
+    return $ind $m ".Put(" $key ", " $g.newNode() ")\n"
+}
+
+# a statement storing a new node into the array a
+fn (g mut SG&) arrOp(a String&, ind String&, d I64) String& {
+    k := g.r(8)
+    at := g.r(4)
+    v := g.val()
+    if k == 1 {
+        q := g.name("q")
+        return $ind "{\n" $ind "    " $q " := " $g.newNode() "\n" $ind "    " $a "[" $at "] = " $q "\n" $ind "}\n"
+    }
+    if k == 2 {
+        i := g.name("i")
+        return $ind "for " $i " in range 4 { " $a "[" $i "] = Node(" $v " + " $i ") }\n"
+    }
+    if k == 3 { return $ind "setNode(" $a ", " $at ", " $v ")\n" }
+    if k == 4 {    # a slice of the array, stored through
+        s := g.name("s")
+        return $ind $s " := " $a "[0:2]\n" $ind $s "[1] = " $g.newNode() "\n"
+    }
+    if k == 5 {    # building through the elements a walk hands out
+        n := g.name("n")
+        return $ind "for " $n " in " $a " { if " $n " != null { " $n ".next = " $g.newNode() " } }\n"
+    }
+    if k == 6 { return g.nodeOp($a "[0]", ind, d) }
+    return $ind $a "[" $at "] = " $g.newNode() "\n"
+}
+
+# a statement storing through the struct t holding an inline array of two nodes
+fn (g mut SG&) twoOp(t String&, ind String&, d I64) String& {
+    k := g.r(6)
+    if k == 1 {    # a slice of the inline array
+        s := g.name("s")
+        return $ind $s " := " $t ".items[0:2]\n" $ind $s "[1].next = " $g.newNode() "\n"
+    }
+    if k == 2 {    # a view of it
+        s := g.name("s")
+        return $ind $s " := " $t ".items as Array<mut Node&, 2>&\n" $ind $s "[0].next = " $g.newNode() "\n"
+    }
+    if k == 3 {    # a copy of the struct: its references are the struct's
+        c := g.name("c")
+        return $ind $c " := " $t "\n" $ind $c ".items[1].next = " $g.newNode() "\n"
+    }
+    if k == 4 { return g.nodeOp($t ".items[1]", ind, d) }
+    return g.nodeOp($t ".items[0]", ind, d)
+}
+
+# a statement storing into the enum e (holding a box)
+fn (g mut SG&) enumOp(e String&, ind String&, d I64) String& {
+    k := g.r(3)
+    if k == 1 and not AvoidKnown { return $ind "byAs(" $e ")\n" }
+    y := g.name("y")
+    was := g.boxKind
+    g.boxKind = 2
+    op := g.boxOp(y, $ind "        ", d)
+    g.boxKind = was
+    return $ind "match " $e " {\n" $ind "    case E.A(" $y ") {\n" $op $ind "    }\n" $ind "    case _ { }\n" $ind "}\n"
+}
+
+# a statement storing into what t declares: 0 a node x, 1 a box (the scenario's w.b), anything else the target's own
+fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
+    if t == 0 { return g.nodeOp(a, ind, d) }
+    if t == 1 {
+        if g.chance(60) { return g.boxOp(a, ind, d) }
+        return g.nodeOp($a ".head", ind, d)
+    }
+    if t == 2 { return g.listOp(a, ind) }
+    if t == 3 { return g.mapOp(a, ind) }
+    if t == 4 { return g.arrOp(a, ind, d) }
+    if t == 5 {
+        k := g.r(4)
+        if k == 0 { return $ind $a ".boxes.Push(Box())\n" }
+        if k == 1 {    # a copy of an element of a List of boxes: its references are the element's
+            c := g.name("c")
+            return $ind $c " := " $a ".boxes[0]\n" $ind $c ".head.next = " $g.newNode() "\n"
+        }
+        return g.listOp($a ".nodes", ind)
+    }
+    if t == 6 { return g.enumOp(a, ind, d) }
+    if t == 11 { return g.ownOp(a, ind) }
+    return g.twoOp(a, ind, d)
+}
+
+# a statement on the holder h of owned objects (§8.8): giving its slots new owners, moving owners between them and
+# through owner locals, releasing them (null, take, a call), building into an owned object's region through a borrow -
+# directly, by a call, a method, a task - and borrows kept across a release, which the checker must refuse (O39)
+fn (g mut SG&) ownOp(h String&, ind String&) String& {
+    v := g.val()
+    if g.chance(25) { return g.ownReviewOp(h, ind, v) }
+    k := g.r(62)
+    c := $h ".cur"
+    o := $h ".other"
+    if k >= 50 { return g.ownValOp(h, ind, k - 50, v) }
+    if k >= 37 { return g.ownCallOp(h, ind, k - 37, v) }
+    if k >= 27 { return g.ownArrOp(h, ind, k - 27, v) }
+    if k == 26 {    # a chain of owners deeper than a release nests (O35), built through owner locals and released later
+        x := g.name("x")
+        y := g.name("y")
+        return ($ind "{\n" $ind "    " $x " own mut ONode& = ONode(" $v ")\n" $ind "    for i in range 260 + " $v " % 9 {\n" $ind "        "
+                $y " own mut ONode& = ONode(" $v " + i)\n" $ind "        " $y ".n.next = Node(i)\n" $ind "        " $y ".sub = take " $x
+                "\n" $ind "        " $x " = take " $y "\n" $ind "    }\n" $ind "    churn()\n" $ind "    " $c " = take " $x "\n" $ind "}\n")
+    }
+    if k == 0 { return $ind $c " = ONode(" $v ")\n" }
+    if k == 1 { return $ind $o " = ONode(" $v ")\n" }
+    if k == 2 { return $ind $c " = take " $o "\n" }
+    if k == 3 { return $ind $o " = take " $c "\n" }
+    if k == 4 { return $ind $c " = null\n" }
+    if k == 5 { return $ind "if " $c " != null { ogrow(" $c ", " $v ") }\n" }
+    if k == 6 { return $ind "if " $c " != null { " $c ".n.next = " $g.newNode() " }\n" }
+    if k == 7 { return $ind "if " $c " != null { " $c ".sub = ONode(" $v ") }\n" }
+    if k == 8 { return $ind "if " $c " != null and " $c ".sub != null { " $o " = take " $c ".sub }\n" }
+    if k == 9 { return $ind "oswap(" $h ")\n" }
+    if k == 10 { return $ind "odrop(" $h ")\n" }
+    if k == 11 { return $ind "take " $c "\n" }
+    if k == 12 {    # an owner local, released or moved at its block's end
+        x := g.name("x")
+        return $ind "{\n" $ind "    " $x " := take " $c "\n" $ind "    churn()\n" $ind "    " $o " = take " $x "\n" $ind "}\n"
+    }
+    if k == 13 {    # a borrow local, built through
+        b := g.name("b")
+        return $ind $b " := " $c "\n" $ind "if " $b " != null { grow(" $b ".n, " $v ") }\n"
+    }
+    if k == 14 {    # a borrow used after a release (O39: refused)
+        b := g.name("b")
+        return $ind $b " := " $c "\n" $ind $c " = null\n" $ind "if " $b " != null { grow(" $b ".n, " $v ") }\n"
+    }
+    if k == 15 {    # a lambda reading through a borrowed copy of the holder - it captures no owner (O32)
+        f := g.name("f")
+        b := g.name("b")
+        return $ind $b " := " $h "\n" $ind $f " := fn() I64 { return onode(" $b ".cur) }\n" $ind $o " = ONode(" $f "())\n"
+    }
+    if k == 16 { return $ind "if " $o " != null { join { spawn ogrow(" $o ", " $v ") } }\n" }
+    if k == 17 {    # an owner local made here, built into, moved into a slot
+        y := g.name("y")
+        return ($ind $y " own mut ONode& = ONode(" $v ")\n" $ind $y ".n.next = Node(" $v ")\n" $ind "churn()\n" $ind $c " = take "
+                $y "\n")
+    }
+    if k == 18 { return $ind "if " $c " != null { " $c ".sub = take " $o " }\n" }
+    if k == 19 { return $ind "if " $c " != null { " $c ".Grow(" $v ") }\n" }
+    if k == 20 {    # a value built for a region a local borrow names
+        b := g.name("b")
+        return $ind $b " := " $c "\n" $ind "if " $b " != null { osetN(Node(" $v "), " $b ") }\n"
+    }
+    if k == 22 {    # an owner moved to another owner local's tree while borrowed, then released through that one (O39: refused)
+        p := g.name("p")
+        q := g.name("q")
+        b := g.name("b")
+        return ($ind "{\n" $ind "    " $p " own mut OHold& = OHold()\n" $ind "    " $p ".cur = ONode(" $v ")\n" $ind "    " $q
+                " own mut OHold& = OHold()\n" $ind "    " $b " := " $p ".cur\n" $ind "    " $q ".cur = take " $p ".cur\n" $ind "    " $q
+                ".cur = null\n" $ind "    churn()\n" $ind "    " $b "v := onode(" $b ") % 997 + " $v "\n" $ind "    " $o " = ONode(" $b
+                "v)\n" $ind "}\n")
+    }
+    if k == 23 {    # ...from below a parameter into an owner local of its reach, in a helper (O39: refused)
+        f := g.name("ocross")
+        g.addHelper("fn " $f "(p mut OHold&) I64 {\n    if p.cur == null or p.other == null { return 0 }\n    o own mut ONode& = take p.other\n"
+                    "    b := p.cur\n    o.sub = take p.cur\n    o.sub = null\n    churn()\n    t := onode(b)\n    p.other = take o\n"
+                    "    return t\n}\n")
+        return $ind $c " = ONode(" $f "(" $h ") % 997 + " $v ")\n"
+    }
+    if k == 24 {    # a task borrowing through the holder, synchronised, while the spawner releases (O41: refused)
+        f := g.name("f")
+        e := g.name("e")
+        r := g.name("r")
+        return ($ind $f " := OFlag()\n" $ind $e " := OFlag()\n" $ind $r " := OFlag()\n" $ind "if " $c " != null {\n" $ind
+                "    join {\n" $ind "        spawn otask(" $h ", " $f ", " $e ", " $r ")\n" $ind "        owait(" $f ")\n" $ind "        " $c
+                " = null\n" $ind "        churn()\n" $ind "        " $e ".v.AtomicStore(1)\n" $ind "    }\n" $ind "}\n" $ind $o " = ONode("
+                $r ".v % 997 + " $v ")\n")
+    }
+    if k == 25 {    # a loop giving the slot a new owner while the last turn's task builds into the old one (O41: refused)
+        return ($ind "join {\n" $ind "    for i in range 3 {\n" $ind "        " $c " = ONode(" $v " + i)\n" $ind "        spawn ogrow(" $c
+                ", " $v ")\n" $ind "    }\n" $ind "}\n")
+    }
+    if k == 21 and g.chance(50) {    # deferred code releasing before the join waits (O41: refused)
+        return ($ind "if " $c " != null {\n" $ind "    join {\n" $ind "        defer { " $c " = null }\n" $ind "        spawn ogrow(" $c ", "
+                $v ")\n" $ind "    }\n" $ind "}\n")
+    }
+    if g.chance(50) { return $ind "if " $c " != null and " $c ".sub != null { ogrow(" $c ".sub, " $v ") }\n" }
+    return $ind "if " $c " != null { osetN(Node(" $v "), " $c ") }\n"    # built before its region is read (O33: refused)
+}
+
+# the shapes the review of own phase 2a found accepted wrongly (own3): a callee, a lambda or a task given a borrow of an own
+# array storing into its element (F1, refused: O17, O33), a call keeping a borrowed copy of h - a List, a Map, a function,
+# a method, a lambda pushed - or a store of one through a reference, across a release (F2, refused: O39), and in a program
+# with destructors an owner handed to a call or a constructor's region made before an argument that leaves (F3: released,
+# "dtors 0"), and a destructor with owner locals of its own (F4)
+fn (g mut SG&) ownReviewOp(h String&, ind String&, v I64) String& {
+    n := $h ".nodes"
+    e := g.name("e")
+    back := ($ind "if " $n ".Len() > 0 and " $n "[0] != null {\n" $ind "    " $e " := " $n "[0]\n" $ind "    " $n
+             " = Array<mut Node&>(1)\n" $ind "    churn()\n" $ind "    " $n "[0] = " $e "\n" $ind "}\n")
+    if g.chance(60) {
+        w := g.r(16)
+        if w < 4 { return g.own4Op(h, ind, v) }
+        if w < 6 { return g.own5Op(h, ind, v) }
+        if w < 9 { return g.own6Op(h, ind, v) }
+        if w >= 14 {
+            pv := g.r(3)
+            if pv == 0 { return g.vec2Op(h, ind, v, g.r(4)) }
+            return g.vec3Op(h, ind, v, g.r(8)) if pv == 1 else g.vec4Op(h, ind, v, g.r(11))
+        }
+        return g.own7Op(h, ind, v) if w < 11 else g.vecOp(h, ind, v)
+    }
+    k := g.r(15 if g.dtors else 11)
+    if k == 0 { return $ind "ofillAt(" $n ", " $v ")\n" $back }
+    if k == 1 {
+        nm := g.name("nm")
+        f := g.name("f")
+        return ($ind $nm " := " $n "\n" $ind $f " := fn(x I64) { if " $nm ".Len() > 0 { " $nm "[0] = Node(x) } }\n" $ind $f "("
+                $v ")\n" $back)
+    }
+    if k == 2 { return $ind "join { spawn ofillAt(" $n ", " $v ") }\n" $back }
+    if k == 3 { return $ind $h ".other = ONode(onodes(" $n ") % 997 + " $v ")\n" }    # a read-only lend
+    b := g.name("b")
+    l := g.name("l")
+    c := $h ".cur"
+    o := $h ".other"
+    if k == 4 {
+        return ($ind $b " := " $h "\n" $ind $l " := List<OHold&>()\n" $ind $l ".Push(" $b ")\n" $ind $c " = null\n" $ind
+                "churn()\n" $ind $o " = ONode(ohash(" $l "[0]) % 997)\n")
+    }
+    if k == 5 {
+        t := g.name("t")
+        return ($ind $b " := " $h "\n" $ind $l " := Map<I64, OHold&>()\n" $ind $l ".Put(1, " $b ")\n" $ind $c " = null\n" $ind
+                "churn()\n" $ind $t " I64 = 0\n" $ind "for kv in " $l " { " $t " = ohash(kv.Value) }\n" $ind $o " = ONode(" $t
+                " % 997)\n")
+    }
+    if k == 6 or k == 7 {
+        put := "oput(" $l ", " $b ")" if k == 6 else $l ".set(" $b ")"
+        return ($ind $b " := " $h "\n" $ind $l " := OBox()\n" $ind $put "\n" $ind $c " = null\n" $ind "churn()\n" $ind $o
+                " = ONode(oboxed(" $l ") % 997)\n")
+    }
+    if k == 8 {
+        return ($ind $b " := " $h "\n" $ind $l " := List<fn() I64>()\n" $ind $l ".Push(fn() I64 { return ohash(" $b ") })\n"
+                $ind $c " = null\n" $ind "churn()\n" $ind $o " = ONode(" $l "[0]() % 997)\n")
+    }
+    if k == 9 {    # stored through a reference to a local, read through the local
+        r := g.name("r")
+        return ($ind $b " := " $h "\n" $ind $l " := OBox()\n" $ind $r " mut OBox& = " $l "\n" $ind $r ".h = " $b "\n" $ind $c
+                " = null\n" $ind "churn()\n" $ind $o " = ONode(oboxed(" $l ") % 997)\n")
+    }
+    if k == 10 {    # kept, read, and built into through h's owners - nothing released while it is kept: accepted
+        return ($ind $b " := " $h "\n" $ind $l " := List<OHold&>()\n" $ind $l ".Push(" $b ")\n" $ind "churn()\n" $ind "if " $c
+                " != null { ogrow(" $c ", ohash(" $l "[0]) % 997 + " $v ") }\n")
+    }
+    rh := g.name("rh")
+    if k == 11 {    # an owner handed to a call, a later argument leaving first
+        return ($ind $rh " := ORHold()\n" $ind $rh ".res = ORes(" $v ")\n" $ind "for i in range 1 {\n" $ind "    " $g.name("x")
+                " := otake2(take " $rh ".res, try ofail(" $v ") catch { break })\n" $ind "}\n")
+    }
+    if k == 12 {    # ...one made for it
+        return ($ind "for i in range 1 {\n" $ind "    " $g.name("x") " := otake2(ORes(" $v "), try ofail(" $v ") catch { break })\n"
+                $ind "}\n")
+    }
+    if k == 13 {    # a constructor's region made before its argument leaves
+        return ($ind $rh " := ORHold()\n" $ind "for i in range 1 {\n" $ind "    " $rh ".res = ORes(try ofail(" $v
+                ") catch { break })\n" $ind "}\n")
+    }
+    hd := g.name("hd")    # a chain whose destructors hold owner locals, released at a block's end
+    x := g.name("x")
+    return ($ind "{\n" $ind "    " $hd " own mut ODeep& = null\n" $ind "    for i in range 20 + " $v " % 9 {\n" $ind "        " $x
+            " own mut ODeep& = ODeep(i)\n" $ind "        " $x ".next = take " $hd "\n" $ind "        " $hd " = take " $x "\n" $ind
+            "    }\n" $ind "}\n" $ind "churn()\n")
+}
+
+# the shapes the review of own4 found (own4): a borrowed copy of h kept by a spawn target - a borrowed result, a value
+# holding one, one of several targets, a closure (N2) - by an owner made from it or an owning parameter (N4), by a
+# handle's copy made in an inner block or a for-in element (N5), all refused (O38: only this function's locals hold a
+# borrow); in a program with destructors, a resource made before an owner value local and given a copy of it (N1,
+# refused), an owner held while a checked operation under "try" leaves (N3: released, "dtors 0") and a constructor
+# failing after making its own fields (N6: released)
+fn (g mut SG&) own4Op(h String&, ind String&, v I64) String& {
+    o := $h ".other"
+    b := g.name("b")
+    r := g.name("r")
+    pv := g.name("pv")
+    k := g.r(16 if g.dtors else 9)
+    made := ($ind $pv " := OPlain()\n" $ind $pv ".o = OInner(" $v ")\n" $ind $pv ".o.deep = OLeaf(" $v " + 1)\n" $ind $b " := "
+            $pv "\n")
+    rel := $ind $pv ".o = null\n" $ind "churn()\n"
+    if k <= 3 {
+        decl := $ind $r " OPlain& = null\n"
+        sp := "spawn " $r " = oid(" $b ")"
+        use := "opl(" $r ")"
+        if k == 1 {
+            decl = $ind $r " OHolder = OHolder(null)\n"
+            sp = "spawn " $r " = oholder(" $b ")"
+            use = "opl(" $r ".x)"
+        }
+        if k == 2 {
+            sp = "spawn " $r ", " $r "n = otwo(" $b ")"
+            decl = $decl $ind $r "n I64 = 0\n"
+        }
+        if k == 3 {
+            decl = $ind $r " fn() I64 = null\n"
+            sp = "spawn " $r " = omkf(" $b ")"
+            use = $r "()"
+        }
+        return ($ind "{\n" $made $decl $ind "join {\n" $ind "    " $sp "\n" $ind "}\n" $rel $ind $o " = ONode(" $use " % 997 + " $v
+                ")\n" $ind "}\n")
+    }
+    if k == 4 {
+        return ($ind "{\n" $made $ind $r " own mut Array<OHolder&>& = owithFirst(" $b ")\n" $rel $ind $o " = ONode(opl(" $r
+                "[0].x) % 997 + " $v ")\n" $ind "}\n")
+    }
+    if k == 5 {
+        return ($ind "{\n" $made $ind $r " := OBig()\n" $ind "okeepFirst(" $r ", owithFirst(" $b "))\n" $rel $ind $o
+                " = ONode(opl(" $r ".bx.x) % 997 + " $v ")\n" $ind "}\n")
+    }
+    if k == 6 {
+        return ($ind "{\n" $made $ind $r " := List<OPlain&>()\n" $ind "{\n" $ind "    " $r "2 := " $r "\n" $ind "    " $r
+                "2.Push(" $b ")\n" $ind "}\n" $rel $ind $o " = ONode(opl(" $r "[0]) % 997 + " $v ")\n" $ind "}\n")
+    }
+    if k == 7 {
+        e := g.name("e")
+        return ($ind "{\n" $made $ind $r " := List<List<OPlain&>>()\n" $ind $r ".Push(List<OPlain&>())\n" $ind "for " $e " in " $r
+                " { " $e ".Push(" $b ") }\n" $rel $ind $o " = ONode(opl(" $r "[0][0]) % 997 + " $v ")\n" $ind "}\n")
+    }
+    if k == 8 {
+        x := g.name("x")
+        return ($ind "{\n" $made $ind $r " := Map<I64, OPlain&>()\n" $ind "{\n" $ind "    " $r "2 := " $r "\n" $ind "    " $r
+                "2.Put(1, " $b ")\n" $ind "}\n" $rel $ind $x " := try " $r ".Get(1) catch default null\n" $ind $o " = ONode(opl("
+                $x ") % 997 + " $v ")\n" $ind "}\n")
+    }
+    w := g.name("w")
+    lv := g.name("lv")
+    if k == 9 or k == 10 {    # N1: the resource is destructed after the owner value local's owners are released
+        give := $ind "    " $w ".x = " $b "\n" if k == 9 else $ind "    oputW(" $w ", " $b ")\n"
+        return ($ind "{\n" $ind "    " $w " := OWatch()\n" $ind "    " $lv " := OPlain()\n" $ind "    " $lv ".o = OInner(" $v
+                ")\n" $ind "    " $lv ".o.deep = OLeaf(" $v " + 1)\n" $ind "    " $b " := " $lv "\n" $give $ind "}\n")
+    }
+    x := g.name("x")
+    ai := g.name("ai")
+    arr := $ind $ai " := I64[1, 2]\n"
+    loop := $ind "for i in range 1 {\n"
+    if k == 11 {    # N3: the check propagated out of a helper, or caught by a clause that breaks
+        if g.chance(50) { return $arr $loop $ind "    " $x " := try on3idx(" $ai ", 5 + i, " $v ") catch { break }\n" $ind "}\n" }
+        return $arr $loop $ind "    " $x " := otake2(ORes(" $v "), try " $ai "[5 + i] catch { break })\n" $ind "}\n"
+    }
+    if k == 12 {
+        if g.chance(50) { return $loop $ind "    " $x " := try on3div(i - i, " $v ") catch { break }\n" $ind "}\n" }
+        return $loop $ind "    " $x " := try on3conv(5000000000 + i, " $v ") catch { break }\n" $ind "}\n"
+    }
+    if k == 13 { return $arr $loop $ind "    " $x " := try on3slice(" $ai ", 9 + i, " $v ") catch { break }\n" $ind "}\n" }
+    if k == 14 {
+        rh := g.name("rh")
+        return $arr $ind $rh " := ORHold()\n" $loop $ind "    try on3region(" $rh ", " $ai ", 7 + i) catch { break }\n" $ind "}\n"
+    }
+    fl := "OFail" if g.chance(50) else "OFail2"    # N6
+    return $loop $ind "    " $x " := try " $fl "(" $v " + i) catch { break }\n" $ind "}\n"
+}
+
+# the shapes the review of own4's fixes found (own5): a borrowed copy kept by a callee through an '&p' field of what it is
+# given - by value, as a receiver, into another argument's field (F1, refused: O38) - and an owner value local returned
+# by reference, or held by a returned value, whose owners its block's end releases (F2, refused: O38)
+fn (g mut SG&) own5Op(h String&, ind String&, v I64) String& {
+    o := $h ".other"
+    b := g.name("b")
+    r := g.name("r")
+    w := g.name("w")
+    pv := g.name("pv")
+    k := g.r(5)
+    made := ($ind $pv " := OPlain()\n" $ind $pv ".o = OInner(" $v ")\n" $ind $pv ".o.deep = OLeaf(" $v " + 1)\n" $ind $b " := "
+             $pv "\n")
+    rel := $ind $pv ".o = null\n" $ind "churn()\n"
+    if k <= 2 {
+        if k == 2 {
+            return ($ind "{\n" $made $ind $r " := OBig2()\n" $ind $w " := OW(" $b ")\n" $ind "osetBig(" $r ", " $w ")\n" $rel
+                    $ind $o " = ONode(opl(" $r ".x) % 997 + " $v ")\n" $ind "}\n")
+        }
+        keep := "okeepW(" $r ", " $w ")" if k == 0 else $w ".ointo(" $r ")"
+        return ($ind "{\n" $made $ind $r " := List<OPlain&>()\n" $ind $w " := OW(" $b ")\n" $ind $keep "\n" $rel $ind $o
+                " = ONode(opl(" $r "[0]) % 997 + " $v ")\n" $ind "}\n")
+    }
+    f := g.name("omkOwnerRef")
+    mk := ("    p := OPlain()\n    p.o = OInner(v)\n    p.o.deep = OLeaf(v + 1)\n")
+    if k == 3 {
+        g.addHelper("fn " $f "(v I64) mut OPlain& {\n" $mk "    return p\n}\n")
+        return $ind $r " := " $f "(" $v ")\n" $ind "churn()\n" $ind $o " = ONode(opl(" $r ") % 997 + " $v ")\n"
+    }
+    g.addHelper("fn " $f "(v I64) OHolder {\n" $mk "    q := OHolder(p)\n    return q\n}\n")
+    return $ind $r " := " $f "(" $v ")\n" $ind "churn()\n" $ind $o " = ONode(opl(" $r ".x) % 997 + " $v ")\n"
+}
+
+# the shapes the review of own5's fixes found (own6): a borrow handed back as one of several results - kept across a
+# release (N1, refused: O39), kept by a callee (O38), returned from an owner value local's borrow (O38, O26a) - a
+# conditional or a match choosing between owner value locals (N2, refused: O34); and accepted, a count read through a
+# borrow kept across a release (it holds nothing), and in a program with destructors an owned result a failing join
+# gives to nobody (N3: released, "dtors 0")
+fn (g mut SG&) own6Op(h String&, ind String&, v I64) String& {
+    o := $h ".other"
+    b := g.name("b")
+    r := g.name("r")
+    pv := g.name("pv")
+    pw := g.name("pw")
+    x := g.name("x")
+    k := g.r(10 if g.dtors else 8)
+    made := ($ind $pv " := OPlain()\n" $ind $pv ".o = OInner(" $v ")\n" $ind $pv ".o.deep = OLeaf(" $v " + 1)\n" $ind $b " := "
+             $pv "\n")
+    rel := $ind $pv ".o = null\n" $ind "churn()\n"
+    src := $b if g.chance(50) else $pv
+    if k == 0 {
+        return ($ind "{\n" $made $ind $r ", " $r "n := otwo(" $src ")\n" $rel $ind $o " = ONode((opl(" $r ") + " $r "n) % 997 + " $v
+                ")\n" $ind "}\n")
+    }
+    if k == 1 {
+        return ($ind "{\n" $made $ind $r " := List<OPlain&>()\n" $ind $x ", " $x "n := otwo(" $src ")\n" $ind $r ".Push(" $x ")\n"
+                $rel $ind $o " = ONode(opl(" $r "[0]) % 997 + " $v ")\n" $ind "}\n")
+    }
+    mk := "    p := OPlain()\n    p.o = OInner(v)\n    p.o.deep = OLeaf(v + 1)\n"
+    f := g.name("omkTwo")
+    if k == 2 {
+        g.addHelper("fn " $f "(v I64) OPlain& {\n" $mk "    a, n := otwo(p)\n    return a\n}\n")
+        return $ind $r " := " $f "(" $v ")\n" $ind "churn()\n" $ind $o " = ONode(opl(" $r ") % 997 + " $v ")\n"
+    }
+    if k == 3 or k == 4 {
+        pick := $pv " if Run > 0 else " $pw
+        if k == 4 { pick = "match Run {\n" $ind "    case 1 => " $pv "\n" $ind "    case _ => " $pw "\n" $ind "}" }
+        return ($ind "{\n" $made $ind $pw " := OPlain()\n" $ind $pw ".o = OInner(" $v " + 2)\n" $ind $r " mut OPlain& = " $pick "\n"
+                $ind $r ".o = null\n" $ind "churn()\n" $ind $o " = ONode(opl(" $pv ") % 997 + " $v ")\n" $ind "}\n")
+    }
+    if k == 5 {
+        return ($ind "{\n" $made $ind $x " := " $b ".o.deep.text.Len()\n" $rel $ind $o " = ONode(" $x " % 997 + " $v ")\n" $ind
+                "}\n")
+    }
+    if k == 6 or k == 7 {
+        g.addHelper("fn " $f "(v I64) I64 {\n" $mk "    q := p\n    return q.o.deep.text.Len() + q.o.k\n}\n")
+        return $ind $o " = ONode(" $f "(" $v ") % 997)\n"
+    }
+    call := "ojoinOwned" if k == 8 else "ojoinValue"
+    return $ind "for i in range 1 {\n" $ind "    " $x " := try " $call "(" $v " + i) catch { break }\n" $ind "}\n"
+}
+
+# the shape the review of own6's fixes found (own7 F1): an owned object's inline field or array, or an own array's plain
+# element, lent where it is - to a reference parameter, a receiver, a slice or a view kept in a local, a for-in, a task,
+# a borrowed result, a join's piece rendered after a later operand ran - while the owner is released (refused: O39,
+# O41); and accepted, copies and numbers read out of the same parts, and lends no release meets
+fn (g mut SG&) own7Op(h String&, ind String&, v I64) String& {
+    o := $h ".other"
+    hh := g.name("hh")
+    x := g.name("x")
+    k := g.r(13)
+    mk := ($ind $hh " mut OH7& = OH7()\n" $ind $hh ".cur = OIn(" $v ")\n" $ind $hh ".cur.data[0] = " $v " + 1\n" $ind $hh
+           ".cur.data[7] = " $v " + 2\n" $ind $hh ".buf = Array<OPart>(300, OPart(" $v " + 3))\n")
+    rel := $ind $hh ".cur = null\n" $ind "churn()\n"
+    use := $ind $o " = ONode(" $x " % 997 + " $v ")\n"
+    if k == 0 { return $ind "{\n" $mk $ind $x " := o7f(" $hh ", " $hh ".cur.pl)\n" $use $ind "}\n" }
+    if k == 1 { return $ind "{\n" $mk $ind $x " := o7g(" $hh ", " $hh ".cur.data)\n" $use $ind "}\n" }
+    if k == 2 { return $ind "{\n" $mk $ind $x " := " $hh ".cur.pl.O7Bump(" $hh ")\n" $use $ind "}\n" }
+    s := g.name("s")
+    if k == 3 or k == 4 {
+        view := $hh ".cur.data[0:8]" if k == 3 else $hh ".cur.data as Array<I64, 8>&"
+        return $ind "{\n" $mk $ind $s " := " $view "\n" $rel $ind $x " := " $s "[0] + " $s "[7]\n" $use $ind "}\n"
+    }
+    if k == 5 {
+        return ($ind "{\n" $mk $ind $x " := 0\n" $ind "for y in " $hh ".cur.data {\n" $ind "    " $hh ".cur = null\n" $ind
+                "    churn()\n" $ind "    " $x " += y\n" $ind "}\n" $use $ind "}\n")
+    }
+    if k == 6 { return $ind "{\n" $mk $ind $x " := o7b(" $hh ", " $hh ".buf[3])\n" $use $ind "}\n" }
+    if k == 7 {
+        out := g.name("out")
+        return ($ind "{\n" $mk $ind $out " := Array<I64>(1)\n" $ind "join {\n" $ind "    spawn o7use(" $hh ".cur.pl, " $out ")\n"
+                $ind "    " $hh ".cur = null\n" $ind "    churn()\n" $ind "}\n" $ind $x " := " $out "[0]\n" $use $ind "}\n")
+    }
+    if k == 8 {
+        return ($ind "{\n" $mk $ind $s " := o7same(" $hh ".cur.pl)\n" $rel $ind $x " := " $s ".k\n" $use $ind "}\n")
+    }
+    if k == 9 {    # copies and numbers read out of the parts, and slices used before the release: accepted
+        return ($ind "{\n" $mk $ind $s " := " $hh ".cur.pl\n" $ind $x " := " $hh ".cur.pl.k + o7rd(" $hh ".cur.pl) + " $hh
+                ".cur.data[0:8][7]\n" $rel $ind $x " += " $s ".k\n" $use $ind "}\n")
+    }
+    t := g.name("t")
+    if k == 11 {    # a join's piece rendered after a later operand released what it reads (refused: O39)
+        return ($ind "{\n" $mk $ind $t " := $" $hh ".cur.data \" \" $o7rel(" $hh ")\n" $ind $x " := " $t ".Len()\n" $use $ind
+                "}\n")
+    }
+    if k == 12 {    # ...released before the piece is evaluated: accepted, it renders the null
+        return ($ind "{\n" $mk $ind $t " := $o7rel(" $hh ") \" \" $" $hh ".cur\n" $ind $x " := " $t ".Len()\n" $use $ind "}\n")
+    }
+    return ($ind "{\n" $mk $ind $x " := o7rd(" $hh ".buf[2])\n" $ind "for y in " $hh ".cur.data { " $x " += y }\n" $ind $hh
+            ".buf = null\n" $rel $use $ind "}\n")
+}
+
+# Vec phase 1 (O37, O17, the prelude's Vec): a borrowed result of an own field or a slice of one, directly or passed
+# through, used before its object is released (accepted) or after (refused: O39); a callee permuting an own array of text
+# (accepted), or storing new text into it (refused: O17); a Vec of text or nodes grown with an element kept across the
+# growth, the Vec replaced, cloned or moved - and a view of it kept across a push (refused: O39)
+fn (g mut SG&) vecOp(h String&, ind String&, v I64) String& {
+    o := $h ".other"
+    x := g.name("x")
+    s := g.name("s")
+    use := $ind $o " = ONode(" $x " % 997 + " $v ")\n"
+    k := g.r(20)
+    if k >= 16 { return g.vec2Op(h, ind, v, k - 16) }
+    if k >= 12 {    # vec1: a borrowed own result converted to a declared array type, of an own field or of a Vec's view -
+                    # used before the release (accepted), after it (refused: O39), or through a function value (refused: O37)
+        ix := g.name("OIx")
+        vw := g.name("oix")
+        vv := g.name("oivw")
+        g.addHelper("type " $ix " Array<I64>\n" "fn " $vw "(h OHold&) " $ix "&h { return " $ix "(h.buf) }\n"
+                    "fn " $vv "(v Vec<I64>&) " $ix "&v { return " $ix "(v.View()) }\n")
+        mk := $ind $h ".buf = Array<I64>(4, " $v ")\n" $ind $h ".buf[2] = " $v " + 5\n"
+        if k == 12 {
+            return ($ind "{\n" $mk $ind $s " := " $vw "(" $h ")\n" $ind $h ".buf = null\n" $ind "churn()\n" $ind $x " := " $s
+                    "[2]\n" $use $ind "}\n")
+        }
+        d := g.name("d")
+        w := g.name("w")
+        if k == 13 {    # (through a Vec parameter: the review's f1b, where the owner's own structure does not catch it)
+            gr := g.name("oigr")
+            g.addHelper("fn " $gr "(w mut Vec<I64>&) I64 {\n    d := " $vv "(w)\n    for i in range 40 { w.Push(i) }\n"
+                        "    churn()\n    return d[0]\n}\n")
+            return ($ind "{\n" $ind $w " := Vec<I64>()\n" $ind $w ".Push(" $v ")\n" $ind $x " := " $gr "(" $w ")\n" $use $ind
+                    "}\n")
+        }
+        if k == 14 {
+            f := g.name("f")
+            return ($ind "{\n" $mk $ind $f " := " $vw "\n" $ind $s " := " $f "(" $h ")\n" $ind $h ".buf = null\n" $ind
+                    "churn()\n" $ind $x " := " $s "[2]\n" $use $ind "}\n")
+        }
+        return ($ind "{\n" $mk $ind $s " := " $vw "(" $h ")\n" $ind $x " := " $s "[2] + " $s ".Len()\n" $ind $h ".buf = null\n"
+                $ind $w " := Vec<I64>()\n" $ind $w ".Push(" $v ")\n" $ind $x " += " $vv "(" $w ")[0]\n" $ind
+                "for i in range 40 { " $w ".Push(i) }\n" $ind "churn()\n" $use $ind "}\n")
+    }
+    if k <= 3 {
+        vw := g.name("ovw")
+        sl := g.name("osl")
+        ps := g.name("ops")
+        g.addHelper("fn " $vw "(h OHold&) Array<I64>&h { return h.buf }\n" "fn " $sl "(h OHold&) Array<I64>&h { return h.buf[1:3] }\n"
+                    "fn " $ps "(h OHold&) Array<I64>&h { return " $vw "(h) }\n")
+        f := $vw if k == 0 else ($sl if k == 1 else $ps)
+        mk := $ind $h ".buf = Array<I64>(4, " $v ")\n" $ind $h ".buf[2] = " $v " + 5\n"
+        if k == 3 {    # used after the buffer is released (refused: O39)
+            return ($ind "{\n" $mk $ind $s " := " $vw "(" $h ")\n" $ind $h ".buf = null\n" $ind "churn()\n" $ind $x " := " $s
+                    "[2]\n" $use $ind "}\n")
+        }
+        return ($ind "{\n" $mk $ind $s " := " $f "(" $h ")\n" $ind $x " := " $s "[1] + " $s ".Len()\n" $ind $h ".buf = null\n"
+                $ind "churn()\n" $use $ind "}\n")
+    }
+    if k == 4 or k == 5 {    # a borrowed own object: read before its release, or after it (refused: O39)
+        fs := g.name("ofs")
+        g.addHelper("fn " $fs "(h OHold&) ONode&h { return h.cur }\n")
+        mk := $ind $h ".cur = ONode(" $v ")\n"
+        if k == 5 {
+            return ($ind "{\n" $mk $ind $s " := " $fs "(" $h ")\n" $ind $h ".cur = null\n" $ind "churn()\n" $ind $x " := onode("
+                    $s ")\n" $use $ind "}\n")
+        }
+        return ($ind "{\n" $mk $ind $s " := " $fs "(" $h ")\n" $ind $x " := onode(" $s ")\n" $ind $h ".cur = null\n" $ind
+                "churn()\n" $use $ind "}\n")
+    }
+    if k == 6 or k == 7 {    # a callee permuting an own array of text, or storing new text into it (refused: O17)
+        ht := g.name("OHT")
+        pm := g.name("opm")
+        st := "    a[0] = $k\n" if k == 7 else ""
+        g.addHelper("type " $ht " struct() {\n    names own mut Array<String&>&\n}\n" "fn " $pm "(a mut Array<String&>&, k I64) {\n"
+                    "    t := a[0]\n    a[0] = a[a.Len() - 1]\n    a[a.Len() - 1] = t\n    a.Reverse()\n"
+                    "    a.Sort(fn(p String&, q String&) Bool { return p < q })\n"
+                    $st "}\n")
+        t := g.name("t")
+        y := g.name("y")
+        return ($ind "{\n" $ind $t " mut " $ht "& = " $ht "()\n" $ind $t ".names = Array<String&>(5)\n" $ind "for i in range 5 { " $t
+                ".names[i] = $(i * 3 + " $v ") }\n" $ind $pm "(" $t ".names, " $v ")\n" $ind "churn()\n" $ind $x " := 0\n" $ind
+                "for " $y " in " $t ".names { " $x " = " $x " * 31 + " $y ".Len() + I64(" $y "[0]) }\n" $use $ind "}\n")
+    }
+    if k == 8 {    # a Vec of text grown with an element kept across the growth, then replaced
+        e := g.name("e")
+        return ($ind "{\n" $ind $s " := Vec<String&>()\n" $ind "for i in range 3 { " $s ".Push($(i + " $v ")) }\n" $ind $e " := "
+                $s "[1]\n" $ind "for i in range 40 { " $s ".Push(\"v\" $i) }\n" $ind "churn()\n" $ind $x " := " $e ".Len() * 7 + "
+                $s "[40].Len()\n" $ind $s " = Vec<String&>()\n" $ind "churn()\n" $ind $x " += " $e ".Len() + " $s ".Len()\n" $use
+                $ind "}\n")
+    }
+    if k == 9 {    # a Vec of nodes: cloned, moved, sorted, its first node kept across a release of the buffers
+        e := g.name("e")
+        c := g.name("c")
+        return ($ind "{\n" $ind $s " := Vec<mut Node&>()\n" $ind "for i in range 20 { " $s ".Push(Node(" $v " + i % 7)) }\n" $ind
+                $e " := " $s "[3]\n" $ind $c " := " $s ".Clone()\n" $ind $c ".Sort(fn(p Node&, q Node&) Bool { return p.v < q.v })\n"
+                $ind $s " = take " $c "\n" $ind "churn()\n" $ind $x " := chain(" $e ") + " $s "[0].v + " $s ".Len()\n" $use $ind "}\n")
+    }
+    if k == 10 {    # a view of a Vec kept across a push (refused: O39)
+        d := g.name("d")
+        return ($ind "{\n" $ind $s " := Vec<I64>()\n" $ind $s ".Push(" $v ")\n" $ind $d " := " $s ".View()\n" $ind "for i in range 40 { "
+                $s ".Push(i) }\n" $ind "churn()\n" $ind $x " := " $d "[0]\n" $use $ind "}\n")
+    }
+    # a view of a Vec used before a push, and the elements walked after (accepted)
+    return ($ind "{\n" $ind $s " := Vec<I64>()\n" $ind $s ".Push(" $v ")\n" $ind $x " := " $s ".View()[0]\n" $ind "for i in range 40 { "
+            $s ".Push(i) }\n" $ind "churn()\n" $ind "for " $x "y in " $s " { " $x " += " $x "y }\n" $use $ind "}\n")
+}
+
+# vec2 (the review of 2d1aabf): a recursion through two borrowed own result functions of different objects' types, whose
+# loan must meet a release of either type (N1: used after the release, refused O39; before it, accepted); a function made
+# a value through an import alias, called through the value with the owner released after (N2: refused O37, O40), or
+# called by name and used before the release (accepted)
+fn (g mut SG&) vec2Op(h String&, ind String&, v I64, k I64) String& {
+    o := $h ".other"
+    x := g.name("x")
+    use := $ind $o " = ONode(" $x " % 997 + " $v ")\n"
+    if k <= 1 {
+        rc := g.name("ORC")
+        ra := g.name("ora")
+        rb := g.name("orb")
+        g.addHelper("type " $rc " struct() {\n    data own mut Array<Char>& = Array<Char>(2, 'a')\n    text own mut String& = \"bb\"\n}\n"
+                    "fn " $ra "(c " $rc "&, n I64) String&c {\n    if n == 0 { return String(c.data) }\n"
+                    "    if n == 1 { return " $rb "(c, n - 1) }\n    return c.text\n}\n"
+                    "fn " $rb "(c " $rc "&, n I64) String&c { return " $ra "(c, n) }\n")
+        c := g.name("c")
+        t := g.name("t")
+        mk := $ind $c " := " $rc "()\n" $ind $c ".text = $(" $v " * 3)\n"
+        if k == 0 {    # used after the String it borrows is released, through a reference parameter - where nothing but the
+                       # loan's type meets the release (refused: O39)
+            us := g.name("ous")
+            g.addHelper("fn " $us "(c mut " $rc "&) I64 {\n    t := " $rb "(c, 2)\n    c.text = \"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n"
+                        "    churn()\n    return t.Len() + I64(t[0])\n}\n")
+            return $ind "{\n" $mk $ind $x " := " $us "(" $c ")\n" $use $ind "}\n"
+        }
+        return ($ind "{\n" $mk $ind $t " := " $rb "(" $c ", 2)\n" $ind $x " := " $t ".Len() + I64(" $t "[0]) + " $rb "(" $c
+                ", 0).Len()\n" $ind $c ".text = \"zz\"\n" $ind $c ".data = Array<Char>(3, 'q')\n" $ind "churn()\n" $ind $x " += " $ra "("
+                $c ", 2).Len()\n" $use $ind "}\n")
+    }
+    b := g.name("b")
+    s := g.name("s")
+    f := g.name("f")
+    mk := $ind $b " := oalib.LBox()\n" $ind $b ".Buf[2] = " $v "\n"
+    if k == 2 {    # through the value, in a function given the box by reference, its buffer released after (refused: O37)
+        vw := g.name("oavw")
+        g.addHelper("fn " $vw "(b mut oalib.LBox&) I64 {\n    f := oalib.View\n    s := f(b)\n    b.Buf = Array<I64>(4, 1)\n"
+                    "    churn()\n    return s[2]\n}\n")
+        return $ind "{\n" $mk $ind $x " := " $vw "(" $b ")\n" $use $ind "}\n"
+    }
+    if g.chance(50) {    # a releasing function through the value, the global's buffer borrowed (refused: O40)
+        return ($ind "{\n" $ind $f " := oalib.Drop\n" $ind $s " := oalib.G.Buf\n" $ind $f "()\n" $ind "churn()\n" $ind $x " := "
+                $s "[0] + " $v "\n" $use $ind "}\n")
+    }
+    # by name, used before the release; a plain function through the value (accepted)
+    return ($ind "{\n" $mk $ind $f " := oalib.Sum\n" $ind $s " := oalib.View(" $b ")\n" $ind $x " := " $s "[2] + " $f "(" $s
+            ")\n" $ind $b ".Buf = Array<I64>(4, 1)\n" $ind "oalib.Drop()\n" $ind "churn()\n" $ind $x " += oalib.G.Buf[1]\n" $use
+            $ind "}\n")
+}
+
+# vec3 (the third review of Vec phase 1): a written built result handing back its argument through a generic, a List or
+# a conditional (refused: O39) beside one proven new storage (accepted); a borrowed own result function whose other return
+# borrows an object of another type (refused: O38); a spawn target given a borrowed own result (refused: O38); a borrow of
+# a global's own object kept in a global (refused: O1b, O38) beside a number read out of it (accepted)
+fn (g mut SG&) vec3Op(h String&, ind String&, v I64, k I64) String& {
+    o := $h ".other"
+    x := g.name("x")
+    use := $ind $o " = ONode(" $x " % 997 + " $v ")\n"
+    vv := g.name("vv")
+    d := g.name("d")
+    mkv := $ind $vv " := Vec<I64>()\n" $ind $vv ".Push(" $v ")\n" $ind $vv ".Push(" $v " + 1)\n"
+    grow := $ind "for i in range 100 { " $vv ".Push(i) }\n" $ind "churn()\n"
+    if k <= 2 {    # F1: the wrapper hands its argument back - through id, a List, a conditional of generics (refused: O39)
+        id := g.name("oid")
+        w := g.name("obw")
+        if k == 0 {
+            g.addHelper("fn " $id "(a <T>) T { return a }\nfn " $w "(a mut Array<I64>&) mut Array<I64>& { return " $id "(a) }\n")
+        } else if k == 1 {
+            g.addHelper("fn " $w "(a mut Array<I64>&) mut Array<I64>& {\n    l := List<mut Array<I64>&>()\n    l.Push(a)\n"
+                        "    return l[0]\n}\n")
+        } else {
+            g.addHelper("fn " $id "(c Bool, a <T>, b T) T { return a if c else b }\n"
+                        "fn " $w "(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& { return " $id "(a.Len() >= b.Len(), a, b) }\n")
+        }
+        call := $w "(" $vv ".ViewMut())" if k < 2 else $w "(" $vv ".ViewMut(), Array<I64>(1))"
+        return $ind "{\n" $mkv $ind $d " := " $call "\n" $grow $ind $x " := " $d "[0] + " $d "[1]\n" $use $ind "}\n"
+    }
+    if k == 3 {    # F1's legal side: new storage made in the callee, kept across the growth (accepted)
+        w := g.name("obf")
+        g.addHelper("fn " $w "(v Vec<I64>&) mut Array<I64>& {\n    a := v.ToArray()\n    return a\n}\n")
+        return $ind "{\n" $mkv $ind $d " := " $w "(" $vv ")\n" $grow $ind $x " := " $d "[0] + " $d "[1] + " $vv ".Len()\n" $use $ind "}\n"
+    }
+    if k == 4 {    # F2: a borrowed own result whose other return is a String, recorded as an Array<Char> (refused: O38)
+        rc := g.name("ORM")
+        tx := g.name("ormt")
+        pk := g.name("ormp")
+        c := g.name("c")
+        t := g.name("t")
+        g.addHelper("type " $rc " struct() {\n    data own mut Array<Char>& = Array<Char>(2, 'a')\n    text own mut String& = \"bb\"\n}\n"
+                    "fn " $tx "(c " $rc "&) String&c { return c.text }\n"
+                    "fn " $pk "(c " $rc "&, n I64) String&c {\n    if n == 0 { return String(c.data) }\n    t := " $tx "(c)\n"
+                    "    return t\n}\n")
+        return ($ind "{\n" $ind $c " := " $rc "()\n" $ind $c ".text = $(" $v " * 3)\n" $ind $t " := " $pk "(" $c ", 1)\n" $ind
+                $c ".text = \"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n" $ind "churn()\n" $ind $x " := " $t ".Len() + I64(" $t "[0])\n"
+                $use $ind "}\n")
+    }
+    if k == 5 {    # F3: a spawn target given a task's borrowed own result, kept past the join (refused: O38)
+        return ($ind "{\n" $mkv $ind $d " Array<I64>&" $vv " = null\n" $ind "join { spawn " $d " = " $vv ".View() }\n" $grow
+                $ind $x " := " $d "[0] + " $d "[1]\n" $use $ind "}\n")
+    }
+    gd := g.name("OGD")
+    gg := g.name("OGd")
+    gc := g.name("OGc")
+    g.addHelper("type " $gd " struct() { title own mut String& = \"bb\" }\n" $gg " own mut " $gd "& = " $gd "()\n" $gc
+                " mut String& = \"none\"\n")
+    rename := $ind $gg ".title = \"zz" $v "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n" $ind "churn()\n"
+    if k == 6 {    # F4: a borrow of a global's own object kept in a global (refused: O1b)
+        return ($ind "{\n" $ind $gc " = " $gg ".title\n" $rename $ind $x " := " $gc ".Len() + I64(" $gc "[0])\n" $use $ind "}\n")
+    }
+    # ...a number read out of it, kept (accepted)
+    return ($ind "{\n" $ind $x " := " $gg ".title.Len() + I64(" $gg ".title[0])\n" $rename $ind $x " += " $gg ".title.Len()\n" $use
+            $ind "}\n")
+}
+
+# vec4 (the fourth review of Vec phase 1): F1' - a return (or a write of the local returned) hidden in an else-if's
+# condition, a case guard, a for's post clause, a match value's block clause or a spawn target's index, which the
+# freshness proof must see (refused: O39), beside one returning new storage there (accepted); R - new storage built in an
+# owned object's region through a local typed with a borrow's scope, or a scope argument naming one, used after the
+# region's release (refused: O39) or before it (accepted); X - a return in an assert's message (refused: S17)
+fn (g mut SG&) vec4Op(h String&, ind String&, v I64, k I64) String& {
+    o := $h ".other"
+    x := g.name("x")
+    use := $ind $o " = ONode(" $x " % 997 + " $v ")\n"
+    if k <= 6 {
+        vv := g.name("vv")
+        d := g.name("d")
+        pk := g.name("v4p")
+        fl := g.name("v4g")
+        w := g.name("v4w")
+        g.addHelper("fn " $pk "(c Bool, x <T>, y T) T { return x if c else y }\nfn " $fl "(k I64) I64 ? {\n    if k < 5 { error }\n"
+                    "    return k\n}\n")
+        back := $pk "(true, a, b)"
+        body := ""
+        if k == 0 {
+            body = ("    if a.Len() == 0 { return Array<I64>(1) }\n    else if (try " $fl "(a.Len()) catch { return " $back
+                    " }) > 0 { return Array<I64>(2) }\n    return Array<I64>(3)\n")
+        } else if k == 1 {
+            body = ("    match a.Len() {\n        case 0 { return Array<I64>(1) }\n        case _ if (try " $fl "(a.Len()) catch { return "
+                    $back " }) > 0 { return Array<I64>(2) }\n        case _ { return Array<I64>(3) }\n    }\n")
+        } else if k == 2 {
+            body = "    for i := 0, i < 3, i = (try " $fl "(i) catch { return " $back " }) { }\n    return Array<I64>(3)\n"
+        } else if k == 3 {
+            body = ("    if a.Len() == 0 { return Array<I64>(1) }\n    else if match a.Len() { case 2 { return " $back
+                    " } case _ => true } { return Array<I64>(2) }\n    return Array<I64>(3)\n")
+        } else if k == 4 {
+            body = ("    out mut Array<I64>&return = Array<I64>(2)\n    res := Array<I64>(4)\n    join { spawn res[(try " $fl
+                    "(1) catch { out = " $back " } default 0)] = " $pk "(true, 3, 4) }\n    return out\n")
+        } else if k == 5 {
+            body = ("    if a.Len() == 0 { return Array<I64>(1) }\n    else if (try " $fl "(a.Len()) catch { out := " $back
+                    "\n        return out }) > 0 { return Array<I64>(2) }\n    return Array<I64>(3)\n")
+        } else {    # the legal side: new storage returned from the else-if's catch block (accepted)
+            body = ("    if a.Len() == 0 { return Array<I64>(1) }\n    else if (try " $fl "(a.Len()) catch { return Array<I64>(5, b.Len()) })"
+                    " > 0 { return Array<I64>(2) }\n    return Array<I64>(3)\n")
+        }
+        g.addHelper("fn " $w "(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& {\n" $body "}\n")
+        return ($ind "{\n" $ind $vv " := Vec<I64>()\n" $ind $vv ".Push(" $v ")\n" $ind $vv ".Push(" $v " + 1)\n" $ind $d " := " $w
+                "(" $vv ".ViewMut(), Array<I64>(1))\n" $ind "for i in range 100 { " $vv ".Push(i) }\n" $ind "churn()\n" $ind $x
+                " := " $d "[0] + " $d ".Len()\n" $use $ind "}\n")
+    }
+    if k == 10 {    # X: a return in an assert's message (refused: S17)
+        fl := g.name("v4g")
+        w := g.name("v4x")
+        g.addHelper("fn " $fl "(k I64) I64 ? {\n    if k < 5 { error }\n    return k\n}\nfn " $w "(k I64) I64 {\n    assert k > 100, (try "
+                    $fl "(k) catch { return 7 }).Format()\n    return 3\n}\n")
+        return $ind $x " := " $w "(" $v ")\n" $use
+    }
+    t := g.name("t")
+    d := g.name("d")
+    mk := g.name("v4m")
+    g.addHelper("fn " $mk "(n I64) mut String& { return $n \"-new-text-in-the-region\" }\n")
+    made := $ind $d " mut String&" $t " = $" $v " \"-new-text-in-the-region\"\n"
+    if k == 8 { made = $ind $d " := " $mk "&" $t "(" $v ")\n" }
+    rel := $ind $h ".text = \"zz" $v "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\"\n" $ind "churn()\n"
+    read := $ind $x " := " $d ".Len() + I64(" $d "[0])\n"
+    if k == 9 {    # R's legal side: used before the release (accepted)
+        return $ind "{\n" $ind $t " := " $h ".text\n" $made $read $rel $use $ind "}\n"
+    }
+    return $ind "{\n" $ind $t " := " $h ".text\n" $made $rel $read $use $ind "}\n"    # R: used after it (refused: O39)
+}
+
+# a statement handing h's owners to calls and taking them back (O36, O37): released in the callee or moved on, made by a
+# call into a slot, an owner local or an owning parameter, a buffer replaced by a call given a borrow of it or given it -
+# and a borrow kept across a move into a call, or an owned result holding a borrow of what is then released, which the
+# checker must refuse (O39, O10c)
+fn (g mut SG&) ownCallOp(h String&, ind String&, k I64, v I64) String& {
+    c := $h ".cur"
+    o := $h ".other"
+    if k == 0 { return $ind "if " $c " != null { " $o " = ONode(oconsume(take " $c ") + " $v ") }\n" }
+    if k == 1 { return $ind "ostash(" $h ", take " $c ")\n" }
+    if k == 2 { return $ind $c " = omk(" $v ")\n" }
+    if k == 3 { return $ind $c " = opass(take " $o ")\n" }
+    if k == 4 { return $ind "omk(" $v ")\n" }
+    if k == 5 {    # an owner local an owned result made, moved into a slot
+        x := g.name("x")
+        return $ind $x " := omk(" $v ")\n" $ind "churn()\n" $ind $c " = take " $x "\n"
+    }
+    if k == 6 { return $ind $c " = otail(take " $c ")\n" }
+    if k == 7 { return $ind "ostash(" $h ", omk(" $v "))\n" }
+    if k == 8 { return $ind $h ".buf = ogrownBuf(" $h ".buf, " $(v % 6 + 1) ")\n" }
+    if k == 9 { return $ind $h ".nodes = ogrownNodes(take " $h ".nodes, " $(v % 4 + 1) ")\n" }
+    if k == 10 {    # a borrow kept across a move into a call (O39: refused)
+        b := g.name("b")
+        return ($ind $b " := " $c "\n" $ind "ostash(" $h ", take " $c ")\n" $ind "churn()\n" $ind "if " $b " != null { " $o
+                " = ONode(onode(" $b ") % 997) }\n")
+    }
+    if k == 11 { return $ind $h ".w = owrap(" $g.newNode() ")\n" }    # an owned result holding what lives where h does
+    if k == 12 { return $ind "if " $h ".w != null { " $h ".w = owrap(" $h ".w.m) }\n" }    # ...and rewrapped, R1
+    #(an owned result holding a node in what is then released: O10c, refused)
+    return $ind "if " $c " != null {\n" $ind "    " $h ".w = owrap(" $c ".n)\n" $ind "    " $c " = null\n" $ind "}\n"
+}
+
+# a statement on h as an owner value (O31, O32): a borrowed copy of it read before a release, or kept across one or
+# across a move (O39: refused); h moved out and back, given an owned value result, or one let go; parts of such a
+# result moved into h; one made in a block of its own moved out (O34: refused, what it holds may refer to the block)
+fn (g mut SG&) ownValOp(h String&, ind String&, k I64, v I64) String& {
+    c := $h ".cur"
+    o := $h ".other"
+    b := g.name("b")
+    x := g.name("x")
+    if k == 0 { return $ind $b " := " $h "\n" $ind $o " = ONode(ohash(" $b ") % 997 + " $v ")\n" }
+    if k == 1 {    # a borrowed copy kept across a release (O39: refused)
+        return $ind $b " := " $h "\n" $ind $c " = null\n" $ind "churn()\n" $ind $o " = ONode(ohash(" $b ") % 997)\n"
+    }
+    if k == 2 { return $ind "{\n" $ind "    " $x " := take " $h "\n" $ind "    churn()\n" $ind "    " $h " = take " $x "\n" $ind "}\n" }
+    if k == 3 or k == 4 or k == 5 {
+        mk := g.name("omkHold")
+        g.addHelper("fn " $mk "(v I64) OHold {\n    x := OHold()\n    x.cur = ONode(v)\n    x.cur.n.next = Node(v + 1)\n"
+                    "    x.buf = Array<I64>(2, v)\n    churn()\n    return x\n}\n")
+        if k == 3 { return $ind $h " = " $mk "(" $v ")\n" }
+        if k == 4 { return $ind $mk "(" $v ")\n" }
+        return ($ind "{\n" $ind "    " $x " := " $mk "(" $v ")\n" $ind "    churn()\n" $ind "    " $c " = take " $x ".cur\n" $ind
+                "    " $h ".buf = take " $x ".buf\n" $ind "}\n")
+    }
+    if k == 6 {    # an owner value a copying helper made, its part moved into h
+        cp := g.name("ocopyHold")
+        g.addHelper("fn " $cp "(h OHold&) OHold {\n    c := OHold()\n    if h.cur != null { c.cur = ONode(h.cur.v + 1) }\n"
+                    "    churn()\n    return c\n}\n")
+        return $ind "{\n" $ind "    " $x " := " $cp "(" $h ")\n" $ind "    churn()\n" $ind "    " $o " = take " $x ".cur\n" $ind "}\n"
+    }
+    if k == 7 {    # a borrowed copy kept across h given another (O39: refused)
+        return $ind $b " := " $h "\n" $ind $h " = OHold()\n" $ind "churn()\n" $ind $o " = ONode(ohash(" $b ") % 997)\n"
+    }
+    if k == 8 {    # an owner value made in a block of its own and moved out (O34: refused)
+        return ($ind "{\n" $ind "    " $x " := OHold()\n" $ind "    " $x ".cur = ONode(" $v ")\n" $ind "    churn()\n" $ind "    " $h
+                " = take " $x "\n" $ind "}\n")
+    }
+    if k == 9 {    # a lambda reading through a borrowed copy, called before h's slot is given another owner
+        f := g.name("f")
+        return ($ind $b " := " $h "\n" $ind $f " := fn() I64 { return ohash(" $b ") }\n" $ind $o " = ONode(" $f "() % 997 + " $v
+                ")\n")
+    }
+    if k == 10 {    # a borrowed copy kept across a move out of h (O39: refused)
+        return $ind $b " := " $h "\n" $ind $x " := take " $h "\n" $ind "churn()\n" $ind $o " = ONode(ohash(" $b ") % 997)\n"
+    }
+    # a borrowed copy of a borrowed copy, read after h's buffer is replaced (O39: refused)
+    y := g.name("y")
+    return ($ind $b " := " $h "\n" $ind $y " := " $b "\n" $ind $h ".buf = Array<I64>(1, " $v ")\n" $ind "churn()\n" $ind $o
+            " = ONode(osum(" $y ".buf) % 997)\n")
+}
+
+# a statement on h's own arrays: new buffers, writes, a buffer moved through an owner local and back, elements kept
+# across a release of their buffer (they live where h does), a constructor's own fields, and a borrow of the buffer - a
+# slice - kept across its release, which the checker must refuse (O39)
+fn (g mut SG&) ownArrOp(h String&, ind String&, k I64, v I64) String& {
+    b := $h ".buf"
+    n := $h ".nodes"
+    if k == 0 { return $ind $b " = Array<I64>(" $(v % 5 + 1) ", " $v ")\n" }
+    if k == 1 { return $ind $b " = I64[x * " $v " for x in range " $(v % 4 + 1) "]\n" }
+    if k == 2 { return $ind "if " $b ".Len() > 0 { " $b "[0] = " $b "[0] + " $v " }\n" }
+    if k == 3 {    # moved out to an owner local, the arena churned, moved back
+        x := g.name("x")
+        return $ind "{\n" $ind "    " $x " := take " $b "\n" $ind "    churn()\n" $ind "    " $b " = take " $x "\n" $ind "}\n"
+    }
+    if k == 4 { return $ind "ofill(" $h ", " $v ")\n" }
+    if k == 5 {    # an element kept across a release of its buffer: it lives where h does
+        e := g.name("e")
+        return ($ind "if " $n ".Len() > 0 {\n" $ind "    " $e " := " $n "[0]\n" $ind "    " $n " = Array<mut Node&>(1)\n" $ind
+                "    churn()\n" $ind "    " $n "[0] = " $e "\n" $ind "}\n")
+    }
+    if k == 6 { return $ind "ogrowAt(" $n ", " $v ")\n" }
+    if k == 7 { return $ind $h ".text = $" $h ".text \"" $(v % 10) "\"\n" }
+    if k == 8 {    # a constructor's own fields, read back after a churn
+        o := g.name("o")
+        return ($ind $o " := OBuf(" $v ")\n" $ind "churn()\n" $ind $b " = take " $o ".buf\n" $ind $h ".other = take " $o ".kid\n" $ind
+                "if " $n ".Len() > 0 { " $n "[0] = " $o ".nodes[0] }\n")
+    }
+    if g.chance(50) {    # a slice of the buffer kept across its release (O39: refused)
+        s := g.name("s")
+        return ($ind $s " := " $b "[0:]\n" $ind $b " = Array<I64>(2, " $v ")\n" $ind "churn()\n" $ind "if " $s ".Len() > 0 { " $b
+                "[0] = " $s "[0] }\n")
+    }
+    return $ind "if " $n ".Len() > 0 and " $n "[0] != null { " $n "[0].next = Node(" $v ") }\n"
+}
+
+# ---- Str scenarios ----
+
+# a statement of a Str's body over its receiver r: what Str may do (three times in five) - read and walk what the
+# receiver reaches, through the same constructs - or one of the shapes the reviews of decision 49 attacked, which builds
+# where the receiver lives and so is refused; acc is the body's own running number
+fn (g mut SG&) strOp(ind String&) String& {
+    v := g.val()
+    q := g.name("q")
+    if g.chance(60) {
+        k := g.r(17)
+        if k == 0 { return $ind "acc += chain(r.n)\n" }
+        if k == 1 { return $ind "r.n.v = r.n.v + 1\n" }                       # an effect: once per rendering
+        if k == 2 {    # a lambda in this frame, reading what the receiver reaches
+            return $ind $q " := fn() I64 { return r.n.v + " $v " }\n" $ind "acc += " $q "()\n"
+        }
+        if k == 3 {    # a lambda building in its own blocks
+            f := g.name("f")
+            return ($ind $f " := fn() I64 {\n" $ind "    " $q " := Node(r.n.v)\n" $ind "    " $q ".next = Node(" $v ")\n" $ind
+                    "    return chain(" $q ")\n" $ind "}\n" $ind "acc += " $f "()\n")
+        }
+        if k == 4 { return $ind "acc += idT(r.n).v + idT(r.n.v)\n" }
+        if k == 5 { return $ind "acc += cycA(r.n, 3)\n" }
+        if k == 6 { return $ind "if r.l.Len() > 0 { acc += r.l[0].v }\n" }
+        if k == 7 {    # what Str builds in its own blocks
+            tl := g.name("tl")
+            return ($ind $q " := Node(" $v ")\n" $ind $q ".next = Node(r.n.v)\n" $ind $tl " := List<I64>()\n" $ind $tl ".Push(chain("
+                    $q "))\n" $ind "acc += " $tl "[0]\n")
+        }
+        if k == 8 { return $ind $q " := $r.n.v \"x\" $chain(r.n)\n" $ind "acc += " $q ".Len()\n" }
+        if k == 9 { return $ind "acc += sumList(r.l) + sumMap(r.m) + sumArr(r.a)\n" }
+        if k == 10 {    # a conditional of references, read
+            return $ind $q " := r.n if Run > 0 else r.l[0]\n" $ind "if " $q " != null { acc += " $q ".v }\n"
+        }
+        if k == 11 {    # a catch default that is existing storage, read
+            return $ind $q " := try r.m.Get(Run * 9) catch default r.n\n" $ind "acc += " $q ".v\n"
+        }
+        if k == 12 { return $ind $q " := try r.a[Run * 9] catch default r.n\n" $ind "acc += " $q ".v\n" }
+        if k == 13 { return $ind $q " := try borrowF(r.n) catch default r.n.next\n" $ind "if " $q " != null { acc += " $q ".v }\n" }
+        if k == 14 {    # walks
+            y := g.name("y")
+            e := g.name("e")
+            return $ind "for " $y " in r.l { acc += " $y ".v }\n" $ind "for " $e " in r.m { acc += " $e ".Value.v }\n"
+        }
+        if k == 15 { return $ind "acc += match Run { case 1 => r.n.v case _ => " $v " }\n" }
+        return $ind "if r.l.Len() > 0 { r.l[0].v = r.l[0].v + " $v " }\n"    # a number written through an element
+    }
+    k := g.r(18)
+    if k == 0 { return $ind "r.n.next = mkNode(" $v ") if Run > 0 else r.n.next\n" }
+    if k == 1 { return $ind "r.n.next = match Run { case 1 => mkNode(" $v ") case _ => r.n.next }\n" }
+    if k == 2 { return $ind "r.n.next = try borrowF(r.n) catch default mkNode(" $v ")\n" }
+    if k == 3 { return $ind "r.n.next = try r.m.Get(3) catch default mkNode(" $v ")\n" }
+    if k == 4 { return $ind "r.n.next = try r.a[Run * 9] catch default mkNode(" $v ")\n" }
+    if k == 5 { return $ind "applyN(r.n, fn(x mut Node&) { x.next = Node(" $v ") })\n" }
+    if k == 6 { return $ind "acc += applyR(r.n, fn(x Node&) I64 { return x.v })\n" }
+    if k == 7 {
+        y := g.name("y")
+        return $ind $y " I64 = 0\n" $ind "join { spawn " $y " = readN(r.n) }\n" $ind "acc += " $y "\n"
+    }
+    if k == 8 { return $ind "join { spawn grow(r.n, " $v ") }\n" }
+    if k == 9 {
+        h := g.name("h")
+        return $ind $h " := r.n\n" $ind "join { spawn fn() { " $h ".next = Node(" $v ") } }\n"
+    }
+    if k == 10 { return $ind "idT(r.n).next = Node(" $v ")\n" }
+    if k == 11 { return $ind "cycGrow(r.n, 2)\n" }
+    if k == 12 { return $ind "if r.l.Len() > 0 { r.l[0].next = Node(" $v ") }\n" }
+    if k == 13 { return $ind "acc += moveH(r.n).v\n" }
+    if k == 14 { return $ind "r.n.next = pickDef(r.n, " $v ")\n" }
+    if k == 15 { return $ind "r.l.Push(Node(" $v "))\n" }
+    if k == 16 { return $ind "r.m.Put(" $v ", Node(" $v "))\n" }
+    return $ind $q " := Node(" $v ")\n" $ind "r.n.next = " $q "\n"
+}
+
+# a Str's body: a few statements, some in a block, a loop or deferred code
+fn (g mut SG&) strBody(ind String&, d I64) String& {
+    out mut String& = ""
+    for c in range 1 + g.r(2) {
+        if d > 0 and g.chance(35) {
+            w := g.r(4)
+            body := g.strBody($ind "    ", d - 1)
+            if w == 0 { out = $out $ind "if Run > 0 {\n" $body $ind "}\n" }
+            else if w == 1 {
+                i := g.name("i")
+                out = $out $ind "for " $i " in range 2 {\n" $body $ind "}\n"
+            }
+            else if w == 2 { out = $out $ind "defer {\n" $body $ind "}\n" }
+            else { out = $out $ind "{\n" $body $ind "}\n" }
+        } else {
+            out = $out $g.strOp(ind)
+        }
+    }
+    return out
+}
+
+# a Str scenario: a type whose Str does strBody over its receiver, rendered in a loop with a churn after each rendering
+fn (g mut SG&) strScenario(k I64) String& {
+    t := "R" $k
+    body := g.strBody("    ", 2)
+    rd := String&["$r", "\"<\" $r \">\"", "$r $r", "$r.n.v $r"][g.r(4)]
+    return ("type " $t " struct(n mut Node&, l List<mut Node&>, m Map<I64, mut Node&>, a Array<mut Node&>&) {\n    n\n    l\n    m\n"
+            "    a\n}\n" "fn (r " $t "&) Str() String {\n    acc I64 = 0\n" $body "    return \"r\" $acc \":\" $chain(r.n)\n}\n"
+            "fn s" $k "() I64 {\n    x := Node(1)\n    x.next = Node(2)\n    l := List<mut Node&>()\n    l.Push(Node(3))\n"
+            "    m := Map<I64, mut Node&>()\n    m.Put(3, Node(4))\n    a := Array<mut Node&>(4)\n    a[0] = Node(5)\n"
+            "    r := " $t "(x, l, m, a)\n    h I64 = 0\n    for i in range 3 {\n        s := " $rd "\n"
+            "        h = h * 31 + s.Hash()\n        churn()\n    }\n    churn()\n"
+            "    return h * 7 + chain(x) * 5 + sumList(l) * 3 + sumMap(m) + sumArr(a)\n}\n")
+}
+
+# n statements around what t declares (as a), wrapped in blocks d deep at most
+fn (g mut SG&) stmts(t I64, a String&, d I64, ind String&) String& {
+    out mut String& = ""
+    for c in range 1 + g.r(3) {
+        if d > 0 and g.chance(45) {
+            inner := $ind "    "
+            w := g.r(8)
+            body := g.stmts(t, a, d - 1, inner)
+            if w == 0 { out = $out $ind "if Run > 0 {\n" $body $ind "}\n" }
+            else if w == 1 {
+                i := g.name("i")
+                out = $out $ind "for " $i " in range Run * 2 {\n" $body $ind "}\n"
+            }
+            else if w == 2 { out = $out $ind "{\n" $body $ind "}\n" }
+            else if w == 3 { out = $out $ind "if Run > 0 {\n" $inner "churn()\n" $body $ind "}\n" }
+            else if w == 4 { out = $out $ind "match Run {\n" $inner "case 1 {\n" $body $inner "}\n" $inner "case _ { }\n" $ind "}\n" }
+            else if w == 5 { out = $out $ind "if Run < 0 { } else {\n" $body $ind "}\n" }
+            else if w == 6 { out = $out $ind "{\n" $inner "defer {\n" $body $inner "}\n" $inner "churn()\n" $ind "}\n" }
+            else {         # a loop whose body churns after storing, so a stale store is read back at once
+                i := g.name("i")
+                out = $out $ind "for " $i " in range 3 {\n" $body $inner "churn()\n" $ind "}\n"
+            }
+        } else {
+            out = $out $g.leaf(t, a, ind, d)
+        }
+    }
+    return out
+}
+
+# scenario k of the program seed: its globals, helpers and function s<k>, after a line "# scenario k"
+fn Scenario(seed U64, k I64) String& {
+    g := SG(seed * 1000003 + U64(k) + 1)
+    g.k = k
+    g.dtors = HasDtors(seed)
+    t := Targets - 1 if g.chance(25) else g.r(Targets - 1)    # a Str scenario one time in four
+    if OwnOnly { t = 11 }
+    g.global = t == 9
+    decl String& = $Decls[t]
+    check String& = $Checks[t]
+    head mut String& = ""
+    kind I64 = t
+    a String& = "x"
+    if t == 1 { a = "w.b" }
+    if t == 2 or t == 7 { a = "l" }
+    if t == 3 { a = "m" }
+    if t == 4 { a = "a" }
+    if t == 5 { a = "bag" }
+    if t == 6 { a = "e" }
+    if t == 7 { kind = 2 }
+    if t == 8 { a = "t" }
+    if t == 9 {    # a global node, written through by a function
+        kind = 0
+        a = "G" $k
+        head = $a " mut Node& = Node(1)\n"
+        check = "chain(" $a ")"
+    }
+    if t == 10 {    # a node built and stored through in a callee, returned through another
+        kind = 0
+        body := g.stmts(0, "x", 2, "    ")
+        head = ("fn mk" $k "() mut Node& {\n    x := Node(1)\n" $body "    return x\n}\n" "fn mk" $k "b() mut Node& { return mk"
+                $k "() }\n")
+        decl = "x := mk" $k "b()"
+    }
+    if t == 11 { a = "h" }
+    if t == Targets - 1 { return "# scenario " $k "\n" $g.strScenario(k) }
+    body := g.stmts(kind, a, 2, "    ")
+    return ("# scenario " $k "\n" $head $g.helpers "fn s" $k "() I64 {\n    " $decl "\n" $body "    churn()\n    return " $check
+            "\n}\n")
+}
+
+# the program seed: n scenarios, those with keep[k] false left out (all kept when keep is empty)
+fn Program(seed U64, n I64, keep Array<Bool>&) String& {
+    b := StringBuilder()
+    b.Push("# scope fuzz seed " $seed "\n")
+    if OwnOnly { b.Push("import \"oalib\"\n") }
+    b.Push(Prelude)
+    if HasDtors(seed) { b.Push(DtorPrelude) }
+    for k in range n {
+        if keep.Len() == 0 or keep[k] { b.Push(Scenario(seed, k)) }
+    }
+    b.Push("fn main() ? {\n")
+    for k in range n {
+        if keep.Len() == 0 or keep[k] { b.Push("    println(\"" $k ": \" $s" $k "())\n") }
+    }
+    if HasDtors(seed) { b.Push("    println(\"dtors \" $(Made - Dropped))\n") }
+    b.Push("}\n")
+    if HasDtors(seed) and OwnOnly { b.Push(HeldTests(seed)) }
+    return b.ToString()
+}
+
+# own5 F3: the test blocks of a program with destructors in own mode (see the prelude's OHeld) - some of seven shapes (the
+# last two own6 N3b's: an owned result made, then deferred code failing), chosen by the seed, then one checking every
+# owner they made was released. Run by "-t" only (fuzz.olang)
+fn HeldTests(seed U64) String& {
+    b := StringBuilder()
+    pick := seed / 4
+    shapes := String&[
+        "    a := I64[1, 2, 3]\n    lo := 1 + Run\n    x := oheldEat(OHeld(1), a[lo:1])\n    println($x)\n",
+        "    e := OHeldE.B(Run)\n    x := oheldEat3(OHeld(2), (e as OHeldE.A))\n    println($x)\n",
+        "    x := oheldEat(OHeld(3), Array<I64>(0 - Run))\n    println($x)\n",
+        "    h := OHeldBox()\n    a := I64[1, 2]\n    h.r = OHeld(a[1 + Run:1].Len())\n",
+        "    h := OHeldBox()\n    h.r = OHeld(4)\n    e := OHeldE.B(Run)\n    x := oheldEat3(take h.r, (e as OHeldE.A))\n    println($x)\n",
+        "    a := I64[1, 2, 3]\n    x := oheldDefer(a, 1 + Run)\n    println($x.n)\n",
+        "    a := I64[1, 2, 3]\n    y := oheldDeferVal(a, 1 + Run)\n    println($y.r.n)\n"]
+    for i in range shapes.Len() {
+        if ((pick >> U64(i)) & 1) == 0 and i != I64(pick % U64(shapes.Len())) { continue }
+        b.Push("test \"held " $i "\" {\n")
+        b.Push(shapes[i])
+        b.Push("}\n")
+    }
+    b.Push("test \"every held owner was released\" {\n    println(\"held made \" $HeldMade \" dropped \" $HeldDropped)\n"
+           "    assert HeldMade == HeldDropped\n}\n")
+    return b.ToString()
+}

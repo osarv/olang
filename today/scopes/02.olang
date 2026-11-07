@@ -1,0 +1,13 @@
+# control for 01: the same reference given to the constructor is caught (O26)
+type Holder struct(name mut String&) {
+    name
+}
+fn make() Holder {
+    a := "alpha" $3
+    h := Holder(a)
+    return h
+}
+fn main() ? {
+    h := make()
+    println($h.name)
+}

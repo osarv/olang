@@ -1,0 +1,18 @@
+# round 2e's stated limit (14.2, 3): a tail call copies nothing - a become into a body keeping a bare parameter's own
+# storage shares the caller's argument, whose later write shows through
+import "std/io"
+
+type holder struct(s String&) {
+    s
+}
+
+fn mk(t String) holder { return holder(t) }
+
+fn viaTail(t String) holder { become mk(t) }
+
+fn main() {
+    t := $"abc"
+    h := viaTail(t)
+    t[0] = 'x'
+    io.Println($h.s)!
+}

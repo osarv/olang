@@ -1,0 +1,36 @@
+# O26a copiedRead + D9h: a value copy of an immutable global's element (D9h may hold it as a view of the global's
+# constant data), returned as a writable reference, written by the caller
+import "std/io"
+
+type blk struct(xs Vec<I64>, n I64) { xs, n }
+
+fn mkAll() Vec<blk> {
+    out Vec<blk>
+    for k in range 3 {
+        v Vec<I64>
+        for i in range 4 { v.Push(k * 10 + i) }
+        out.Push(blk(v, k))
+    }
+    return out
+}
+
+GB := mkAll()
+
+fn firstOf() mut blk& {
+    e := GB[0]
+    return e
+}
+
+fn firstVal() blk {
+    e := GB[1]
+    return e
+}
+
+fn main() {
+    r := firstOf()
+    r.xs[0] = 999
+    r.n = 5
+    w := firstVal()
+    w.xs[0] = 888
+    io.Println("GB[0].xs[0] " $GB[0].xs[0] " (0) GB[1].xs[0] " $GB[1].xs[0] " (10) r " $r.xs[0] " w " $w.xs[0])!
+}

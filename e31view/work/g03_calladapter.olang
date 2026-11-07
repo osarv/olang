@@ -1,0 +1,18 @@
+# the element type declares Call with a "mut" receiver writing its own field; the view callee calls it, directly or
+# handing the parameter to a function value parameter (a Call adapter)
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+fn (v mut V&) Call(x I64) I64 {
+    v.n += x
+    return v.n
+}
+fn apply(g fn(x I64) I64, x I64) I64 { return g(x) }
+fn f1(c mut V&) I64 { return c(3) }
+fn f2(c mut V&) I64 { return apply(c, 3) }
+fn main() ? {
+    l := List<V>()
+    l.Push(V(Array<I64>(1), 0))
+    println($f1(l[0]) " " $f2(l[0]) " " $l[0].n)
+}

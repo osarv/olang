@@ -1,0 +1,23 @@
+type Big struct(n I64) {
+    a Array<I64, 20000>
+    a[0] = n
+    a[1] = n + 1
+}
+type K struct(n I64) {
+    r Array<I64>& = Big(n).a[0:2]
+}
+fn churn() I64 {
+    s I64 = 0
+    for j in range 20 {
+        t := Array<I64>(30000, j)
+        s = s + t[5]
+    }
+    return s
+}
+fn main() ? {
+    k := K(7)
+    x := churn()
+    y Array<I64>& = Big(3).a[0:2]
+    z := churn()
+    println($k.r[1] " " $y[1] " " $x " " $z)
+}

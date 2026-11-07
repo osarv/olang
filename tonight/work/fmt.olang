@@ -1,0 +1,10 @@
+G := (I64(-9223372036854775807) - 1).Format(2)
+G2 := I8(-128).Format(36)
+fn main() ? {
+    m I64 = -9223372036854775807 - 1
+    for b in I64[2, 3, 7, 10, 16, 36] {
+        println($m.Format(b) " " $(try m.Format(b).ParseInt(b) catch default 0))
+    }
+    println($I8(-128).Format(2) " " $I16(-32768).Format(16) " " $I32(-2147483648).Format(36) " " $U64(0).Format(2) " " $U64(18446744073709551615).Format(36))
+    println($G " " $G2 " " $'A'.Format(16))
+}

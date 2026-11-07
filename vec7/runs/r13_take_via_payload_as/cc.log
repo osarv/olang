@@ -1,0 +1,7 @@
+/home/user/review/vec7/work/r13_take_via_payload_as.olang:28:40: error[O10]: this reference lives in a scope that may not outlive where it is put
+   28 |     for i in range 3 { (p.lx.e as E.A).toks.Push($i "-word-in-the-sub-in-the-lexer's-region") }
+      |                                        ^~~~
+/home/user/review/vec7/work/r13_take_via_payload_as.olang:31:17: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   31 |     d.lx.toks = take (p.lx.e as E.A).toks
+      |                 ^~~~
+compilation failed with 2 errors

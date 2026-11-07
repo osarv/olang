@@ -1,0 +1,61 @@
+# (b) OVER-REJECTION, O10c: a field or payload read straight off a call's result (List.At, or a method returning an
+# element) and passed on is refused; the same value through a ':=' local is accepted.
+#   names.Push(p.next().text)          O10c, note into List.Push's grow     (a parser collecting parameter names)
+#   names.Push(p.toks[p.at].text)      O10c
+#   t := p.next(); names.Push(t.text)  compiles, runs right under -s
+# and the same for an enum payload: 'l := args[0] as Value.Items; l.Push(args[1])' is O10c (note at List.At), while
+# 'a0 := args[0]; l := a0 as Value.Items' compiles.
+# The commonest shape: a List of structs that hold a List (a module and its dependencies) - every read of a field of
+# 'mods[i]', even only to render it, is O10c with a note at List.At (list.olang:138):
+#   eprintln("FAILED " $mods[i].name)       O10c
+#   for d in mods[i].deps { ... }            O10c
+#   m := mods[i]; eprintln($m.name)          compiles
+# (The statements review recorded "an At result in operand position whose element type has mut reference fields" as a
+# limit; here it was hit 9 times across 3 of the 4 programs, each time worked around with a ':=' local.)
+# Expected: all compile (the element and its text live where p.toks's / mods's elements do).
+type Token struct(kind I32, text String&) {
+    kind
+    text
+}
+type Parser struct(toks List<Token>&) {
+    toks
+    at I64 = 0
+}
+fn (p mut Parser&) next() Token {
+    t := p.toks[p.at]
+    p.at++
+    return t
+}
+fn (p mut Parser&) names() Array<String&>& {
+    names := List<String&>()
+    for p.at < p.toks.Len() {
+        names.Push(p.next().text)
+    }
+    return names.ToArray()
+}
+type Value enum {
+    Nil
+    Items(l mut List<Value&>&)
+}
+fn push(args List<Value&>&) {
+    l := args[0] as Value.Items
+    l.Push(args[1])
+}
+type Module struct(name String&) {
+    name
+    deps mut List<String&>& = List<String&>()
+}
+fn report(mods List<Module>&, i I64) {
+    eprintln("FAILED " $mods[i].name)
+    for d in mods[i].deps { eprintln("  needs " $d) }
+}
+fn main() ? {
+    mods := List<Module>()
+    mods.Push(Module("a"))
+    report(mods, 0)
+    toks := List<Token>()
+    toks.Push(Token(1, "a"))
+    toks.Push(Token(2, "b"))
+    p := Parser(toks)
+    println($p.names())
+}

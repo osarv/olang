@@ -1,0 +1,8 @@
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    v.Push('a')
+    t := String(v.View())
+    for i in range 1000 { v.Push('b') }
+    println(t)
+}

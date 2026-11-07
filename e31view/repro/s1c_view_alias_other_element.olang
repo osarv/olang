@@ -1,0 +1,26 @@
+# E31b view lend, aliasing: the callee moves element 0 to slot 1 and puts a new element in slot 0 through another path,
+# then writes "its" element through the view - from a List the write lands in slot 1, from an Array in slot 0
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+fn (v mut V&) Mark(l mut List<V>&) {
+    l[1] = l[0]
+    l[0] = V(Array<I64>(1), 0)
+    v.d[0] = 99
+}
+fn (v mut V&) MarkA(a mut Array<V>&) {
+    a[1] = a[0]
+    a[0] = V(Array<I64>(1), 0)
+    v.d[0] = 99
+}
+fn main() ? {
+    l := List<V>()
+    l.Push(V(Array<I64>(1), 0))
+    l.Push(V(Array<I64>(1), 0))
+    l[0].Mark(l)
+    println("list:  slot0 " $l[0].d[0] " slot1 " $l[1].d[0])
+    a := V[V(Array<I64>(1), 0), V(Array<I64>(1), 0)]
+    a[0].MarkA(a)
+    println("array: slot0 " $a[0].d[0] " slot1 " $a[1].d[0])
+}

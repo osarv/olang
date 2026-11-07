@@ -1,0 +1,15 @@
+type E enum {
+    Lit(v I64)
+    Neg(a E&)
+}
+fn eval(e E&) I64 {
+    return match e {
+        case E.Lit(v) => v
+        case E.Neg(a) => 0 - eval(a)
+    }
+}
+fn main() ? {
+    x := E.Lit(5)
+    x = E.Neg(x)
+    println($eval(x))
+}

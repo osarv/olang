@@ -1,0 +1,12 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn main() ? {
+    h := Node(0)
+    k I64 = 0
+    for i in range 3 {
+        k, h.next = i, Node(i + 200)
+    }
+    println($h.next.v " " $k)
+}

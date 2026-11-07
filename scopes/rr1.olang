@@ -1,0 +1,62 @@
+# realistic: a recursive-descent parser building an AST of recursive enums, evaluating it, and a graph
+import "std/io"
+import "std/map"
+type Expr enum {
+    Num(v I64)
+    Add(a Expr&, b Expr&)
+    Mul(a Expr&, b Expr&)
+}
+type Parser struct(src String&) {
+    s String&src = src
+    pos mut I64 = 0
+}
+fn (p mut Parser&) peek() Char {
+    if p.pos >= p.s.Len() { return Char(0) }
+    return p.s[p.pos]
+}
+fn (p mut Parser&) atom() Expr& {
+    v I64 = 0
+    for p.peek().IsDigit() {
+        v = v * 10 + I64(U8(p.peek()) - U8('0'))
+        p.pos++
+    }
+    return Expr.Num(v)
+}
+fn (p mut Parser&) term() Expr& {
+    e Expr&return = p.atom()
+    for p.peek() == '*' {
+        p.pos++
+        e = Expr.Mul(e, p.atom())
+    }
+    return e
+}
+fn (p mut Parser&) expr() Expr& {
+    e Expr&return = p.term()
+    for p.peek() == '+' {
+        p.pos++
+        e = Expr.Add(e, p.term())
+    }
+    return e
+}
+fn eval(e Expr&) I64 {
+    return match e {
+        case Expr.Num(v) => v
+        case Expr.Add(a, b) => eval(a) + eval(b)
+        case Expr.Mul(a, b) => eval(a) * eval(b)
+    }
+}
+type GNode struct(name String&) {
+    name
+    edges mut List<GNode&>& = List<GNode&>()
+}
+fn main() ? {
+    p := Parser("2+3*4+10")
+    tree := p.expr()
+    nodes map.Map<String&, GNode&>& = map.Map<String&, GNode&>()
+    names := String&["a", "b", "c"]
+    for nm in names { nodes.Put(nm, GNode(nm)) }
+    a := try nodes.Get("a")
+    b := try nodes.Get("b")
+    a.edges.Push(b)
+    try io.Print($eval(tree) " " $a.edges.Len() "\n")
+}

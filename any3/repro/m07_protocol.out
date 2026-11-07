@@ -1,0 +1,12 @@
+== build -debug -sanitize
+true true false false I(13) I(13) G G I(36) G 1
+true true false false I(13) I(13) G G I(36) G 1
+status 0
+== build
+true true false false I(13) I(13) G G I(36) G 1
+true true false false I(13) I(13) G G I(36) G 1
+status 0
+== interpret
+true true false false I(13) I(13) G G I(36) G 1
+true true false false I(13) I(13) G G I(36) G 1
+status 0

@@ -1,0 +1,17 @@
+Dropped mut I64 = 0
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+} destruct { Dropped++ }
+fn churn() {
+    j := List<String&>()
+    for i in range 200 { j.Push("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy" $i) }
+}
+fn pick(x mut Conn&) mut Conn&x { return x }
+fn main() ? {
+    o own mut Conn& = Conn(1)
+    d := pick(o)          # a borrowed result rooted at o
+    take o                # release o while d (a borrow of o) is live - must conflict
+    churn()
+    println($d.name)
+}

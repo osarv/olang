@@ -1,0 +1,19 @@
+# try catch default: text built as the default of a String result landing in an outer variable
+import "std/io"
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+}
+fn mk(k I64) String& ? {
+    if k > -5 { error }
+    return "seven"
+}
+fn main() ? {
+    keep String& = "one"
+    for i in range 2 {
+        keep = try mk(i) catch default $i " is the default text, long enough to notice"
+    }
+    churn()
+    try io.Print($keep "\n")
+}

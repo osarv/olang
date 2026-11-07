@@ -1,0 +1,32 @@
+# CONFIRMED, NEW (771a922), diagnostics only: the same C2d error at 14:20 is printed twice (the ":=" now judges the
+# instance where the scope argument puts it, and the assignment's check reports it again); c2a38f0 prints it once.
+# Both refuse the program, correctly.
+type Info struct(n I64) { n }
+type Env struct(r Info&) {
+    r
+}
+type Holder struct(e Env) {
+    e
+}
+fn build(c mut Holder&) {
+    for k in range 3 {
+        local := Info(k + 100)
+        x := Env&c(local)
+        c.e = x
+    }
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k) * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    g := Info(1)
+    c mut Holder& = Holder(Env(g))
+    build(c)
+    churn()
+    println($c.e.r.n)
+}

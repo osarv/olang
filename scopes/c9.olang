@@ -1,0 +1,20 @@
+# spawn: a temporary argument holding a reference to loop-body storage escapes P2
+import "std/io"
+type W struct(a Array<I64>&) { a }
+fn slow(w W&) I64 {
+    k I64 = 0
+    for j in range 20000000 { k = (k * 31 + j) % 1000003 }
+    t I64 = 0
+    for x in w.a { t += x }
+    return t + (k - k)
+}
+fn main() ? {
+    out := Array<I64>(4)
+    join {
+        for i in range 4 {
+            a := Array<I64>(1000, i + 1)
+            spawn out[i] = slow(W(a))
+        }
+    }
+    try io.Print($out[0] " " $out[1] " " $out[2] " " $out[3] "  (expected 1000 2000 3000 4000)\n")
+}

@@ -1,0 +1,2 @@
+fn b_c() I32 { return 1 }
+fn Get() I32 { return b_c() }

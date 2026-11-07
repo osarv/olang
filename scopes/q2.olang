@@ -1,0 +1,29 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box struct(n Node&) { n }
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+        b Box& = Box(n)
+    }
+}
+fn mk(v I32) Node& { return Node(v) }
+fn wrap(n Node&) Box& { return Box(n) }
+fn wrapv(n Node&) Box { return Box(n) }
+fn twice(n mut Node&) mut Node&n { return n }
+fn main() ? {
+    keep Box& = Box(Node(1))
+    keepv Box = Box(Node(1))
+    keepn Node& = Node(1)
+    l List<Box&>& = List<Box&>()
+    for i in range 2 {
+        keep = wrap(mk(42))
+        keepv = wrapv(mk(43))
+        keepn = twice(mk(44))
+        l.Push(wrap(twice(mk(45))))
+        l.Push(Box(Node(46)))
+    }
+    churn()
+    try io.Print($keep.n.v " " $keepv.n.v " " $keepn.v " " $l[0].n.v " " $l[1].n.v "\n")
+}

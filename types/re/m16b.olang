@@ -1,0 +1,4 @@
+# M16: one file imported twice under two aliases
+import "c"
+import D "c"
+fn main() ? { }

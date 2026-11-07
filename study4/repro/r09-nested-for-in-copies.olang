@@ -1,0 +1,26 @@
+# r09 OVER-REJECTION - O10c/O25h (the r06 limit of study 3, one level further): concatenating lists of records,
+# "for p in parts { for m in p { all.Push(m) } }", is refused - the callee needs one argument's scope to outlive
+# another's - with no note. One level ("for m in p" over a local p) compiles, and so does indexing the outer level
+# ("for i in range parts.Len() { for m in parts[i] { ... } }"), which is what ../pgrep.olang does. The records are
+# where they always were; only the outer loop's copy of the list handle stands between them and "all".
+#
+# expected: 5
+# actual:   error[O10c] at all.Push, note pointing into list.olang ("if s.used == s.room { s.grow(x) }")
+type M struct(t String&) { t }
+
+fn mk(n I64) List<M> {
+    out := List<M>()
+    for i in range n { out.Push(M($i)) }
+    return out
+}
+
+fn main() ? {
+    parts := Array<List<M>>(2, List<M>())
+    parts[0] = mk(2)
+    parts[1] = mk(3)
+    all := List<M>()
+    for p in parts {
+        for m in p { all.Push(m) }
+    }
+    println($all.Len())
+}

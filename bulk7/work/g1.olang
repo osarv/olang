@@ -1,0 +1,24 @@
+import "std/io"
+
+Name mut String& = "init"
+
+fn set(n I64) {
+    s := $n
+    Name = s
+}
+
+fn setSlice(t String&) {
+    Name = t[1:3]
+}
+
+fn main() {
+    set(12345)
+    junk := Array<I64>(1000, 7)
+    io.Println($Name " " $junk[0])!
+    {
+        w := $98765
+        setSlice(w)
+    }
+    junk2 := Array<I64>(1000, 7)
+    io.Println($Name " " $junk2[0])!
+}

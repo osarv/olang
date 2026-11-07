@@ -1,0 +1,20 @@
+type Lab extends String
+type W trait {
+    mut Bump()
+}
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn get(m Map<I64, String&>&) String { return try m.Get(1) catch default "none" }
+fn probe(i I64) String {
+    m := Map<I64, String&>()
+    m.Put(1, "abc" $i)
+    b mut any W& = Lab(get(m))
+    b.Bump()
+    x := get(m)
+    x[1] = 'Q'
+    return "src " $m " b " $b " x " $x
+}
+G := probe(1)
+fn main() {
+    say("run:   " $probe(1))
+    say("baked: " $G)
+}

@@ -1,0 +1,17 @@
+# P4d inside a spawned lambda
+error E {
+    NEG
+}
+fn f(n I64) I64 ? E {
+    if n < 0 { error E.NEG }
+    return n
+}
+fn main() ? {
+    join {
+        spawn fn() {
+            y I64 = 0
+            try join { spawn y = try f(-1) } catch E { }
+            println($y)
+        }
+    }
+}

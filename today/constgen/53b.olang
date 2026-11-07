@@ -1,0 +1,10 @@
+# control: the same function, used without anything depending on the length
+fn twice(n I64) I64 { return n * 2 }
+fn sig(a Array<I64, <N>>&) Array<I64, twice(N)> {
+    return Array<I64, twice(N)>()
+}
+fn main() ? {
+    y Array<I64, 3> = I64[1, 2, 3]
+    q Array<I64, 6> = sig(y)
+    println($q)
+}

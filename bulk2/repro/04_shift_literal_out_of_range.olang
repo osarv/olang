@@ -1,0 +1,13 @@
+# E8a: "Where the amount is a literal ... an out-of-range one is a compile-time error". The self-hosted checker never
+# makes that check (msgs.ShiftOutOfRange has no caller): "x >> 70" on a U8, or "u << 9" on a U7 (T4a), compiles, and the
+# run time shifts out of range - undefined behaviour, which here prints NUL bytes as the number's text
+import "std/io"
+
+fn f(x U8) U8 { return x >> 70 }
+fn g(u U7) U7 { return u << 9 }
+
+K mut U8 = 5
+
+fn main() {
+    io.Println($f(K) " " $g(U7(K)))!
+}

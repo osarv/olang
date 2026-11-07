@@ -1,0 +1,22 @@
+# D9h quiet reading: a read-only reference argument whose referent holds a writable reference to the view's source
+import "std/io"
+
+type blk struct(xs Vec<I64>) { xs }
+type hold struct(v mut Vec<blk>&) { v }
+
+fn poke(h hold&) { h.v.RefMut(0).xs[0] = 99 }
+
+fn viaHold() I64 {
+    v := Vec<blk>()
+    xs := Vec<I64>()
+    xs.Push(1)
+    v.Push(blk(xs))
+    hd := hold(v)
+    t := v[0]
+    poke(hd)
+    return t.xs[0]
+}
+
+fn main() {
+    io.Println("viaHold " $viaHold() " (by value 1)")!
+}

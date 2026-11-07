@@ -1,0 +1,50 @@
+# S4c/O1b: parallel assignments into a global's reference fields, built in tasks; read back after churn
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Holder struct() {
+    n mut Node& = null
+}
+G1 mut Holder& = Holder()
+G2 mut Holder& = Holder()
+G3 mut Holder& = Holder()
+G4 mut Holder& = Holder()
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+        nn := Node(i)
+        t = t + nn.v
+    }
+    return t
+}
+fn set(h mut Holder&, i I64) {
+    for j in range 2000 {
+        k I64 = 0
+        h.n, k = Node(i * 10000 + j), j
+        h.n.next, k = Node(-j), k
+    }
+}
+fn setG(which I64) {
+    for j in range 2000 {
+        k I64 = 0
+        if which == 1 { G1.n, k = Node(j), j }
+        if which == 2 { G2.n, k = Node(j * 2), j }
+        if which == 3 { G3.n.next, k = Node(j * 3), j }
+        if which == 4 { G4.n.next, k = Node(j * 4), j }
+    }
+}
+fn main() ? {
+    G3.n = Node(0)
+    G4.n = Node(0)
+    join {
+        spawn setG(1)
+        spawn setG(2)
+        spawn setG(3)
+        spawn setG(4)
+    }
+    churn()
+    println($G1.n.v " " $G2.n.v " " $G3.n.next.v " " $G4.n.next.v)
+}

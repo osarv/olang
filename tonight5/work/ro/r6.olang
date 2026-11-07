@@ -1,0 +1,16 @@
+fn mk() List<List<I64>> {
+    l := List<List<I64>>()
+    l.Push(List<I64>())
+    return l
+}
+G List<List<I64>> = mk()
+fn pick(l List<<T>>&) T {
+    x := l[0]
+    y := x
+    return y
+}
+fn main() ? {
+    b := pick(G)
+    b.Push(9)
+    println($G[0].Len())
+}

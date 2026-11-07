@@ -1,0 +1,28 @@
+import "std/io"
+
+type Blob unique struct(n I64) {
+    n
+    data := Array<I64>(n.Mod(7) + 2, n)
+}
+
+type Bad error { No }
+
+fn mk(k I64) Blob ? {
+    if k > 2: error Bad.No
+    return Blob(k)
+}
+
+fn put(m mut Map<I64, Blob>&, k I64, b Blob) { m.Put(k, b) }
+
+fn main() {
+    m := Map<I64, Blob>()
+    d Blob = Blob(99)
+    put(m, 1, try mk(5) catch default d)
+    c := true
+    put(m, 2, d if c else Blob(3))
+    match 1 {
+        case 1: put(m, 3, d)
+        case _ { }
+    }
+    io.Println($m.Len())!
+}

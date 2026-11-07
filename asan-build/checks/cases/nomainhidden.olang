@@ -1,0 +1,4 @@
+# check: fail compilation failed with 1 error
+# a main that did not parse is not reported missing as well - one mistake is one error
+fn main() ?error {
+}

@@ -1,0 +1,7 @@
+# M6b: in another module a private eq is not found - == on Tag is an error here
+import "lib/pv"
+fn main() ? {
+    a := pv.Make(3)
+    b := pv.Make(13)
+    println($(a == b))
+}

@@ -1,0 +1,19 @@
+type K struct(s String&) { s }
+# RetCopy: the caller's struct reached through a reference local - a field store through it
+fn f(k mut K&, i I64) String {
+    s := "abc" $i
+    r := k
+    r.s = s
+    return s
+}
+fn probe() String {
+    k := K("x")
+    x := f(k, 1)
+    x[0] = 'Q'
+    return "k.s " $k.s " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}

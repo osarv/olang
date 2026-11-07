@@ -1,0 +1,51 @@
+$ todo ./build/todo -f /tmp/tmp.SDJqYHmS4h/list.json add buy milk
+  (status 0)
+$ todo ./build/todo -f /tmp/tmp.SDJqYHmS4h/list.json add write the -i study --verbose
+todo: unknown flag -i
+  (status 2)
+$ todo ./build/todo -f /tmp/tmp.SDJqYHmS4h/list.json -v add call bob, about the 'quote'
+added #2
+  (status 0)
+$ todo ./build/todo -f /tmp/tmp.SDJqYHmS4h/list.json list
+[ ]   1  buy milk
+[ ]   2  call bob, about the 'quote'
+  (status 0)
+$ todo ./build/todo -f /tmp/tmp.SDJqYHmS4h/list.json done 2
+  (status 0)
+$ todo ./build/todo -f /tmp/tmp.SDJqYHmS4h/list.json list
+[ ]   1  buy milk
+  (status 0)
+$ todo ./build/todo -f /tmp/tmp.SDJqYHmS4h/list.json -a list
+[ ]   1  buy milk
+[x]   2  call bob, about the 'quote'
+  (status 0)
+$ todo ./build/todo -n1 -f/tmp/tmp.SDJqYHmS4h/list.json list
+[ ]   1  buy milk
+  (status 0)
+$ todo ./build/todo -f /tmp/tmp.SDJqYHmS4h/list.json rm 1
+  (status 0)
+$ todo ./build/todo -f /tmp/tmp.SDJqYHmS4h/list.json rm 99
+todo: no such item
+  (status 1)
+$ todo ./build/todo -f /tmp/tmp.SDJqYHmS4h/list.json --limit=x list
+todo: --limit takes a number, not 'x'
+  (status 2)
+$ todo ./build/todo -f /tmp/tmp.SDJqYHmS4h/list.json --nope list
+todo: unknown flag --nope
+  (status 2)
+$ todo ./build/todo -f /tmp/tmp.SDJqYHmS4h/list.json frobnicate
+todo: unknown command 'frobnicate'
+  (status 2)
+$ todo ./build/todo --help
+usage: todo [flags] ...
+keeps a list of things to do
+
+flags:
+  -f, --file FILE           where the list is kept (default todo.json)
+  -n, --limit LIMIT         list at most this many (default 20)
+  -v, --verbose             say more
+  -a, --all                 list finished items too
+  (status 0)
+$ todo ./build/todo -f /tmp/tmp.SDJqYHmS4h/list.json list
+todo: /tmp/tmp.SDJqYHmS4h/list.json is not a to-do list
+  (status 1)

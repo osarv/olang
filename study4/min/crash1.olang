@@ -1,0 +1,20 @@
+import "std/os"
+type P struct(x I64) { x }
+fn deep(n I64) I64 { return deep(n + 1) + 1 }
+fn main() ? {
+    os.OnCrash("crash1: internal error - please report it\n")
+    args := os.Args()
+    if args.Len() > 1 and args[1] == "null" {
+        p P& = null
+        println($p.x)
+    }
+    if args.Len() > 1 and args[1] == "deep" { println($deep(0)) }
+    if args.Len() > 1 and args[1] == "index" {
+        a := I64[1, 2, 3]
+        println($a[args.Len() * 100000000])
+    }
+    if args.Len() > 1 and args[1] == "slice" {
+        a := I64[1, 2, 3]
+        println($a[1:args.Len() + 5])
+    }
+}

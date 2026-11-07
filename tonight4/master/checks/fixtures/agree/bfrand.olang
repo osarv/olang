@@ -1,0 +1,24 @@
+import "std/io"
+seed mut I64 = 88172645463325252
+fn next() I64 {
+    seed = seed ^ (seed << 13)
+    seed = seed ^ (seed >> 7)
+    seed = seed ^ (seed << 17)
+    return seed
+}
+fn main() ? io.IoError {
+    b := StringBuilder()
+    for i in range 3000 {
+        x := next()
+        sh := I64(U64(next()) % 64)
+        y I64 = x >> sh
+        z U64 = U64(next()) >> U64(sh)
+        w I32 = I32(y)
+        b.Push($BF16(y).Bits() " " $BF16(z).Bits() " " $BF16(w).Bits() " " $F16(y).Bits() " " $F32(y).Bits() " " $F32(z).Bits() " " $F64(z).Bits() " " $F16(I16(w)).Bits() "\n")
+    }
+    for k in range 600 {
+        v I64 = I64(k) - 300
+        b.Push($BF16(v).Bits() " " $F16(v * 113).Bits() "\n")
+    }
+    try io.Print(b.ToString())
+}

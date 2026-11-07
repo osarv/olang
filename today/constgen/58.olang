@@ -1,0 +1,6 @@
+# T7d: the other direction, a run-time-length array copied into fixed storage
+fn mk() Array<I32> { return Array<I32>(20000) }
+fn main() ? {
+    x Array<I32, 20000> = mk()
+    println($x.Len())
+}

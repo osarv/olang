@@ -1,0 +1,7 @@
+/home/user/review/vec3/work/mod/x9.olang:12:37: error[O4a]: 'x' names no variable visible here - a marker names where the reference lives, as '&x'
+   12 |     f := fn(x Vec<I64>&) Array<I64>&x { return mid.Vl.View2(x) }
+      |                                     ^
+/home/user/review/vec3/work/mod/x9.olang:12:55: error[O14]: this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'
+   12 |     f := fn(x Vec<I64>&) Array<I64>&x { return mid.Vl.View2(x) }
+      |                                                       ^~~~~
+compilation failed with 2 errors

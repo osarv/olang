@@ -1,0 +1,40 @@
+# a view-only callee hands back a read-only borrow of the hidden copy's value part (big: over 64KB, so the copy is
+# taken from its block's arena, not the stack); the caller keeps it past the block the copy was made in
+type Big struct() {
+    a Array<I64, 9000> = Array<I64, 9000>()
+    x I64 = 0
+}
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+    big Big = Big()
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V {
+    v := V(s.d, i)
+    v.big.x = 1000 + i
+    return v
+}
+fn id(b Big&) Big&b { return b }
+fn f(c mut V&) Big&c { return id(c.big) }
+fn churn() {
+    for k in range 20 {
+        a := Array<I64>(200, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn main() ? {
+    s := Vs(Array<I64>(4))
+    k := 2
+    x := match k {
+        case 2 => f(s[2])
+        nomatch => f(s[0])
+    }
+    churn()
+    println($x.x)
+    y := f(s[3]) if k == 2 else f(s[1])
+    churn()
+    println($y.x)
+}

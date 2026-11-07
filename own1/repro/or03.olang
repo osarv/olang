@@ -1,0 +1,13 @@
+type Node struct(n I64) {
+    n
+    name String& = "n" $n
+}
+type Holder struct() {
+    cur own mut Node&
+}
+fn main() ? {
+    s := Holder()
+    s.cur = Node(1)
+    best := s.cur               # := borrow local
+    println(best.name)
+}

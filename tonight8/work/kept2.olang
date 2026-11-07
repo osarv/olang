@@ -1,0 +1,14 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+Fs mut List<fn(i I64)> = List<fn(i I64)>()
+fn mk(i I64) {
+    x mut Node& = Node(i)
+    f := fn(j I64) { x.next = Node(j) }
+    Fs.Push(f)
+}
+fn main() ? {
+    join { spawn mk(1) }
+    Fs[0](4)
+}

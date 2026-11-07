@@ -1,0 +1,31 @@
+# T25c (wt-qc) - over-rejections in the prelude, and the inconsistency behind them (no memory hazard).
+# (a) Since QC, the prelude's own generic code no longer compiles for a collection whose elements hold writable
+#     references (a List, a Map, any handle): Map.Get (map.olang:111, "f mapSlot<K, V>&s" is a read-only reference, so
+#     "return f.entry.Value" returns a read-only copy), List.Clone, Array.ToList, Array.Filter, Iter().ToList - each an
+#     error[T25c] "a copy of a read-only List<I64> cannot be ..." reported at the program's call. db2af5d compiled them.
+# (b) Meanwhile x[i] through a user At on a read-only collection gives a writable copy (a call's result is fresh), so
+#     "ls[0].Push(9)" on a read-only List<List<I32>>& changes the inner list, where "for x in ls { x.Push(9) }" and the
+#     same on Array<List<I32>>& are refused - for-in, the place rule and At disagree about one element.
+# expected: (a) compiles: prints "1 2 1"; (b) one answer for all three forms
+# actual:   (a) four errors[T25c], one per line marked "a"; with those lines removed (b) prints 3
+fn look(ls List<List<I32>>&) {
+    ls[0].Push(9)                                          # (b) accepted
+}
+fn main() ? {
+    m := Map<I64, List<I64>>()
+    m.Put(1, I64[1].ToList())
+    g := try m.Get(1) catch { return }                     # (a)
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    ll.Push(List<I64>())
+    c := ll.Clone()                                        # (a)
+    arr := Array<List<I64>>(1, List<I64>())
+    t := arr.ToList()                                      # (a)
+    f := arr.Filter(fn(x List<I64>) Bool { return true })  # (a)
+    println($g.Len() " " $c.Len() " " $t.Len())
+    a := I32[1, 2].ToList()
+    o := List<List<I32>>()
+    o.Push(a)
+    look(o)
+    println($a.Len())
+}

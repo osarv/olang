@@ -1,0 +1,12 @@
+# P1g: a spawn target that is a List element (SetAt)
+fn f(n I64) I64 {
+    return n * 2
+}
+fn main() ? {
+    l := List<I64>()
+    for i in range 4 { l.Push(0) }
+    join {
+        for i in range 4 { spawn l[i] = f(i) }
+    }
+    println($l)
+}

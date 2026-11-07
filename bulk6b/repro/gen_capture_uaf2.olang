@@ -1,0 +1,20 @@
+# gen_capture_uaf in a plain build: the turn's churn reuses the storage the closure environment was in
+import "std/io"
+
+type node struct(v I64) { v }
+
+fn mk(k I64) node& { return node(k) }
+
+fn gen(k I64) Iterator<I64> {
+    r := mk(k)
+    f := fn() I64 { return r.v }
+    for i in range 4 { yield f() + i }
+}
+
+fn main() {
+    for x in gen(5) {
+        keep := Vec<node&>()
+        for j in range 64 { keep.Push(mk(1000000 + j)) }
+        io.Println($x " (" $keep.Len() ")")!
+    }
+}

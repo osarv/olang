@@ -1,0 +1,43 @@
+import "std/io"
+
+type B struct(f fn() I64) {
+    F fn() I64 = f
+}
+fn K(x Array<I64>&) B {
+    return B(fn() I64 { return x[1] })
+}
+
+fn get() B {
+    d := Array<I64>(4, 9)
+    r := K(d)
+    return r
+}
+
+fn getloop() B {
+    r B
+    for i in range 3 {
+        d := Array<I64>(4, 5 + i)
+        r = K(d)
+    }
+    return r
+}
+
+fn main() {
+    v := get()
+    churn()
+    io.Println($v.F())!
+    v = getloop()
+    churn()
+    io.Println($v.F())!
+}
+
+fn churn() {
+    for i in range 300 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        m := Map<I64, List<I64>>()
+        m.Put(i, b)
+        assert a[3] == i
+    }
+}

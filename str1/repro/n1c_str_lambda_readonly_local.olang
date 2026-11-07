@@ -1,0 +1,26 @@
+# NEW, CONFIRMED UAF - n1 through a read-only local reference 'w Wr&b' captured by a lambda storing through w.h.
+# new -b prints 0 (want 5); -b -s: 'use after scope closed'. Writable 'w mut Wr&b' is correctly refused.
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Bag struct(head mut Node&) {
+    head
+}
+type Wr struct(h mut Node&) {
+    h
+}
+fn (b Bag&) Str() String {
+    w Wr&b = Wr(b.head)
+    f := fn() { w.h.next = Node(5, null) }
+    f()
+    return "b"
+}
+fn main() ? {
+    b := Bag(Node(1, null))
+    s := $b
+    keep := List<Node&>()
+    for i in range 2000 { keep.Push(Node(-7, null)) }
+    println(s)
+    println($b.head.next.v)
+}

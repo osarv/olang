@@ -1,0 +1,100 @@
+import "std/linalg"
+import "std/rand"
+import "std/math"
+
+# reference: c[g,m] for one product, by the definition
+fn ref(c mut Array<F64>&, co I64, ldc I64, a Array<F64>&, ao I64, lda I64, ta Bool, b Array<F64>&, bo I64, ldb I64, tb Bool,
+       m I64, n I64, k I64, alpha F64, beta F64, tri I64, d I64) {
+    for i in range m {
+        for j in range n {
+            if tri == 1 and j > i + d { continue }
+            s F64 = 0
+            for p in range k {
+                # op(a)[i,p]
+                r I64 = p if ta else i
+                q I64 = i if ta else p
+                if tri == 2 and q > r + d { continue }
+                av F64 = a[ao + r * lda + q]
+                bv F64 = b[bo + j * ldb + p] if tb else b[bo + p * ldb + j]
+                s = s + av * bv
+            }
+            old F64 = c[co + i * ldc + j]
+            c[co + i * ldc + j] = alpha * s + (beta * old if beta != 0 else 0.0)
+        }
+    }
+}
+
+fn trial(rg mut rand.Rand&, seed I64) I64 {
+    G := 1 + rg.Below(3)
+    M := 1 + rg.Below(3)
+    m := 1 + rg.Below(40)
+    n := 1 + rg.Below(40)
+    k := rg.Below(40)
+    ta := rg.Below(2) == 1
+    tb := rg.Below(2) == 1
+    tri := rg.Below(3)
+    d := (rg.Below(9) - 4) * (1 if rg.Below(2) == 0 else 37)
+    alpha F64 = F64(rg.Below(3)) - 0.5
+    beta F64 = F64(rg.Below(3)) * 0.5
+    ar I64 = k if ta else m
+    ac I64 = m if ta else k
+    br I64 = n if tb else k
+    bc I64 = k if tb else n
+    # strides with padding
+    las I64 = ac + rg.Below(3)
+    lbs I64 = bc + rg.Below(3)
+    lcs I64 = n + rg.Below(3)
+    asz I64 = (ar - 1) * las + ac if ar > 0 and ac > 0 else 0
+    bsz I64 = (br - 1) * lbs + bc if br > 0 and bc > 0 else 0
+    csz I64 = (m - 1) * lcs + n
+    count := G * M
+    A := Array<F64>(asz * count + 1)
+    B := Array<F64>(bsz * count + 1)
+    C := Array<F64>(csz * count + 1)
+    for i in range A.Len() { A[i] = F64(rg.Below(7)) - 3 }
+    for i in range B.Len() { B[i] = F64(rg.Below(7)) - 3 }
+    for i in range C.Len() { C[i] = F64(rg.Below(7)) - 3 }
+    # Left: what lies above a's diagonal is never read - make it NaN
+    if tri == 2 {
+        for e in range count {
+            for r in range ar {
+                for q in range ac {
+                    if q > r + d { A[e * asz + r * las + q] = 0.0 / 0.0 }
+                }
+            }
+        }
+    }
+    R := Array<F64>(C.Len())
+    for i in range C.Len() { R[i] = C[i] }
+    for e in range count {
+        ref(R, e * csz, lcs, A, e * asz, las, ta, B, e * bsz, lbs, tb, m, n, k, alpha, beta, tri, d)
+    }
+    # batches: Groups G, Members M, member stride = size, group stride = M * size
+    cb := linalg.Batch<F64>(m, n, lcs, G, M * csz, M, csz, C)
+    ab := linalg.Batch<F64>(ar, ac, las, G, M * asz, M, asz, A)
+    bb := linalg.Batch<F64>(br, bc, lbs, G, M * bsz, M, bsz, B)
+    t := linalg.Triangular.None
+    if tri == 1 { t = linalg.Triangular.Result }
+    if tri == 2 { t = linalg.Triangular.Left }
+    threads I64 = 1 + rg.Below(3)
+    linalg.GemmBatch(cb, ab, ta, bb, tb, alpha, beta, t, d, threads)
+    bad I64 = 0
+    for i in range C.Len() {
+        if not (math.Abs(C[i] - R[i]) <= 1e-9) and not (math.IsNan(C[i]) and math.IsNan(R[i])) {
+            if bad == 0 {
+                println("seed " $seed " G" $G " M" $M " m" $m " n" $n " k" $k " ta" $ta " tb" $tb " tri" $tri " d" $d " alpha" $alpha " beta" $beta " at " $i " got " $C[i] " want " $R[i])
+            }
+            bad += 1
+        }
+    }
+    return bad
+}
+
+fn main() ? {
+    rg mut rand.Rand& = rand.Rand(7)
+    fails I64 = 0
+    for s in range 3000 {
+        if trial(rg, s) > 0 { fails += 1 }
+    }
+    println("failing trials " $fails)
+}

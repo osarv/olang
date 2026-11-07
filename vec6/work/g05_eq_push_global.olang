@@ -1,0 +1,25 @@
+G mut Vec<I64> = Vec<I64>()
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Q struct(k I64) {
+    k
+}
+fn (q Q&) Eq(o Q&) Bool {
+    for i in range 100 { G.Push(i) }
+    return q.k == o.k
+}
+fn main() ? {
+    G.Push(1)
+    q := Q(1)
+    p := Q(1)
+    d := G.View()
+    b := q == p
+    churn()
+    println($d[0] $b)
+}

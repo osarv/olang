@@ -1,0 +1,17 @@
+fn g(k I64) (fn(x I64) I64, I64) {
+    return fn(x I64) I64 { return x + k }, k * 2
+}
+fn use(f fn(x I64) I64, n I64) I64 { return f(n) }
+fn ident(v <T>) T { return v }
+type A struct(n I64) { n }
+fn (a A&) Plus(f fn(x I64) I64) I64 { return f(a.n) }
+fn run() I64 {
+    r1 := use(g(5))
+    h := ident(fn(x I64) I64 { return x * 3 })
+    r2 := h(7)
+    a := A(4)
+    r3 := a + fn(x I64) I64 { return x * x }
+    return r1 * 10000 + r2 * 100 + r3
+}
+B := run()
+fn main() ? { println($B " " $run()) }

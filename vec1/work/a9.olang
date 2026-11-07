@@ -1,0 +1,11 @@
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    v.Push('a')
+    t String&v = String(v.View())
+    v[0] = 'z'
+    println(t)
+    u := String(v.View())
+    v[1] = 'y'
+    println(u)
+}

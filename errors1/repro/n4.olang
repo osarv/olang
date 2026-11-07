@@ -1,0 +1,4 @@
+import "std/os"
+fn b(x I64) noreturn { if x > 0 { os.Exit(1) } }
+fn c(x I64) I64 { match x { case 1 => os.Exit(1) case _ => return 2 } }
+fn main() { }

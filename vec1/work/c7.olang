@@ -1,0 +1,16 @@
+fn a(v Vec<I64>&, n I64) Array<I64>&v {
+    if n > 0 { return b(v, n - 1) }
+    return v.View()
+}
+fn b(v Vec<I64>&, n I64) Array<I64>&v { return a(v, n) }
+fn grow(w mut Vec<I64>&) {
+    d := b(w, 3)
+    for i in range 1000 { w.Push(i + 100) }
+    println($d[0] " " $d[1])
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(1)
+    v.Push(2)
+    grow(v)
+}

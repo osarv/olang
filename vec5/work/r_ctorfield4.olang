@@ -1,0 +1,21 @@
+# R evasion (variant): the ctor field built from a call, not a rendering; Vec's own buffer as the region
+type H struct(x Array<I64>&) {
+    y mut Array<I64>&x = Array<I64>(3)
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    h := H(v.View())
+    h.y[0] = 77
+    for i in range 1000 { v.Push(i) }   # frees the buffer's region, where h.y lives
+    churn()
+    println($h.y[0])
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

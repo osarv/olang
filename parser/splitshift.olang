@@ -1,0 +1,18 @@
+fn pick() I32 { return 3 }
+
+if pick() == 3 {
+    fn nested() List<List<I32>>& {
+        return List<List<I32>>()
+    }
+}
+
+if pick() == 4 {
+    fn other() I32 { return 1 }
+} else {
+    fn other() I32 { return 7 }
+}
+
+test "two deferred top-level ifs, the first branch holding a >>" {
+    assert other() == 7
+    assert nested().Len() == 0
+}

@@ -1,0 +1,21 @@
+== build -debug -sanitize
+lab Zource
+lab Zource
+lab Z0-0
+lab Z1-7
+source
+status 0
+== build
+lab Zource
+lab Zource
+lab Z0-0
+lab Z1-7
+source
+status 0
+== interpret
+lab Zource
+lab Zource
+lab Z0-0
+lab Z1-7
+source
+status 0

@@ -1,0 +1,10 @@
+# two instantiations of one generic TYPE over two different function types share one instantiation
+import "std/io"
+type Box<T> struct(v <T>) { v }
+fn dbl(n I32) I32 { return n * 2 }
+fn half(n F64) F64 { return n / 2.0 }
+fn main() ? {
+  a := Box<fn(n I32) I32>(dbl)
+  b := Box<fn(n F64) F64>(half)
+  try io.Print($a.v(21) " " $b.v(5.0) "\n")
+}

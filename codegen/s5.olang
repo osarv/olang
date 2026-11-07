@@ -1,0 +1,14 @@
+import "std/io"
+
+type Box struct(s I64) {
+    v mut I64 = s
+}
+
+fn main() ? io.IoError {
+    b Box& = Box(0)
+    k I64 = 41
+    join {
+        spawn fn() { b.v = k + 1 }
+    }
+    try io.Print($b.v "\n")
+}

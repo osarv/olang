@@ -1,0 +1,12 @@
+== build -debug -sanitize
+run:   over String: s aXc (T29a: Wbc); over Array<Char>: t Wbc
+baked: over String: s aXc (T29a: Wbc); over Array<Char>: t Wbc
+status 0
+== build
+run:   over String: s aXc (T29a: Wbc); over Array<Char>: t Wbc
+baked: over String: s aXc (T29a: Wbc); over Array<Char>: t Wbc
+status 0
+== interpret
+run:   over String: s aXc (T29a: Wbc); over Array<Char>: t Wbc
+baked: over String: s aXc (T29a: Wbc); over Array<Char>: t Wbc
+status 0

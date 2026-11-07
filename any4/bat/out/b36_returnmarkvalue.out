@@ -1,0 +1,12 @@
+== b36_returnmarkvalue
+  san:    exit 0 text1-7 text2-14|
+  O3:     exit 0 text1-7 text2-14|
+  interp: exit 0 text1-7 text2-14|
+--- compile (-debug -sanitize)
+built ./build/b36_returnmarkvalue.debug.san
+--- run san
+text1-7 text2-14
+--- run O3
+text1-7 text2-14
+--- interpret
+text1-7 text2-14

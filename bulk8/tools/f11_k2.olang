@@ -1,0 +1,12 @@
+import "std/io"
+fn bad(n I64) I64 {
+    assert n > 5, "n too small: " $n
+    return n
+}
+G I64 = bad(3)
+H I64 = G + 1
+assert H > 0
+fn main() {
+    assert G == 3
+    io.Println($H)!
+}

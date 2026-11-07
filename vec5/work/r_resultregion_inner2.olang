@@ -1,0 +1,22 @@
+# R: the same with an own slot's borrow as the region (a run-time scope exists)
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn main() ? {
+    c := CB()
+    x := c.text
+    d mut String&x = "none"
+    for i in range 3 {
+        d = $i "-new-text-assigned-in-a-loop-body"
+    }
+    churn()
+    println(d)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

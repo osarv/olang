@@ -1,0 +1,14 @@
+type P struct(v I64) { v }
+fn borrow(b P&) P&b { return b }
+type H struct(p P) {
+    keep P& = P(0)
+    {
+        q := p
+        keep = borrow(q)
+    }
+}
+fn main() ? {
+    h := H(P(42))
+    h2 := H(P(7))
+    println($h.keep.v " " $h2.keep.v)
+}

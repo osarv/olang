@@ -1,0 +1,19 @@
+# check: run
+# X7 again for what the runtime declares since os.RunOnStack and os.OnCrash (raise, write), and, beside a declaration of
+# the runtime's dynamic call, for what its separate part declares (dlsym): each extern naming one is that function, not a
+# second declaration of it - in the object holding that part and in every other
+import "std/os"
+
+extern fn raise(sig I32) I32
+extern fn write(fd I32, buf Array<U8>, n I64) I64
+extern fn dlsym(handle U64, name Array<U8>) U64
+extern fn __olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32
+
+fn main() ? {
+    assert raise(0) == 0                                  # signal 0: nothing is sent
+    assert write(1, "", 0) == 0
+    assert dlsym(0, "strlen\0") != 0                      # RTLD_DEFAULT is the null handle
+    assert __olang_dyncall_check("strlen\0", U8[0x85, 0], 4) == 0
+    assert __olang_dyncall_check("olang_no_such_function\0", U8[0], 0) == 1
+    os.RunOnStack(1 << 16, fn() { assert raise(0) == 0 })
+}

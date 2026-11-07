@@ -1,0 +1,8 @@
+type Node struct() {
+    kids mut Map<I64, Node&>& = Map<I64, Node&>()
+}
+fn main() ? {
+    root := Node()
+    root.kids.Put(1, Node())
+    println($root.kids.Len())
+}

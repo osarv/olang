@@ -1,0 +1,7 @@
+type E enum {
+    A(f fn() I64)
+    N
+}
+fn K(x Array<I64>&) E {
+    return E.A(fn() I64 { return x[1] })
+}

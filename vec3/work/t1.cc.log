@@ -1,0 +1,7 @@
+/home/user/review/vec3/work/t1.olang:18:10: error[G19]: CB does not satisfy the constraint Texty on T: it has no method Text that fits
+   18 |     t := textOf(c)
+      |          ^~~~~~
+/home/user/review/vec3/work/t1.olang:15:12: note: 'Text' is declared here, with another signature
+   15 | fn (c CB&) Text() String&c { return c.text }
+      |            ^~~~
+compilation failed with 1 error

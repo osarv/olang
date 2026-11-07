@@ -1,0 +1,12 @@
+GS mut String& = ""
+fn set() {
+    v := Vec<Char>()
+    for i in range 10 { v.Push('a') }
+    GS = String(v.View())
+}
+fn main() ? {
+    set()
+    w := Vec<I64>()
+    for i in range 100 { w.Push(i) }
+    println(GS)
+}

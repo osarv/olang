@@ -1,0 +1,67 @@
+import "std/io"
+
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+type Lamp unique struct(id I64, log mut Tally&) {
+    id, log
+    open := true
+    data := Array<I64>(16, id)
+} destruct {
+    log.seen.Push(id)
+    open = false
+}
+
+type Grip unique struct(id I64) {
+    id
+    held Lamp?& = null
+} destruct {
+    if held is not null: held!.log.seen.Push(id * 1000 + held!.data[3] * 10 + (1 if held!.open else 0))
+}
+
+# a holder whose parts refer to one another: the earlier part refers to the later
+type Rig struct(t mut Tally&) {
+    g Grip = Grip(1)
+    l Lamp = Lamp(2, t)
+}
+
+fn parts(t mut Tally&) {
+    r Rig = Rig(t)
+    r.g.held = r.l
+}
+
+# a block variable holding a reference to an element of a Vec of Lamps declared after it
+fn vecElem(t mut Tally&) {
+    g Grip = Grip(3)
+    v := Vec<Lamp>()
+    v.Push(Lamp(4, t))
+    g.held = v[0]
+}
+
+# a Vec of Grips, the first refers to a Lamp in another Vec declared after
+fn twoVecs(t mut Tally&) {
+    gs := Vec<Grip>()
+    gs.Push(Grip(5))
+    ls := Vec<Lamp>()
+    ls.Push(Lamp(6, t))
+    gs[0].held = ls[0]
+}
+
+fn show(t Tally&) String {
+    b := StringBuilder()
+    for x in t.seen { b.Push($x "." ) }
+    return b.ToString()
+}
+
+fn main() {
+    t := Tally()
+    parts(t)
+    io.Println("parts " $show(t))!
+    t2 := Tally()
+    vecElem(t2)
+    io.Println("vecElem " $show(t2))!
+    t3 := Tally()
+    twoVecs(t3)
+    io.Println("twoVecs " $show(t3))!
+}

@@ -1,0 +1,6 @@
+import "std/io"
+import "lib"
+import "user"
+fn main() {
+    try io.Println("two " $user.CountBig(lib.Make(6)) " " $user.Biggest(lib.Make(2))) catch { }
+}

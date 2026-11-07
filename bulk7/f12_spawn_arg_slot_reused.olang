@@ -1,0 +1,32 @@
+# F12 (use of reused storage / wrong result; NEW in the range, likely D9h's stackArg 2bfb0d4): a spawned call's
+# read-only reference argument read out of a Vec element (`spawn out[k] = slow(pts[k])` in a loop inside a join) is
+# given one frame stack slot that every turn overwrites while the earlier tasks are still running - every task reads
+# the last element. Expected I64[0, 1002, 2004, 3006, 4008, 5010, 6012, 7014] (what 11b8d38 prints in all three
+# modes). Got: built I64[5010, 5010, 5010, 5010, 5010, 7014, 7014, 7014] (timing-dependent), -debug -sanitize and
+# interpret all 7014.
+#   /home/user/wt/review7/build/olang f12_spawn_arg_slot_reused.olang
+#   /home/user/wt/review7/build/olang interpret f12_spawn_arg_slot_reused.olang
+# Also `spawn out[k] = slow(Pt(k, k * 2))` (a temporary made for the call) gives 7014 eight times (work/h2.olang).
+import "std/io"
+
+type Pt struct(x I64, y I64) {
+    x, y
+}
+
+fn slow(p Pt&) I64 {
+    s I64 = 0
+    for i in range 3000000 { s += i % 3 }
+    return p.x * 1000 + p.y + s - s
+}
+
+fn main() {
+    pts := Vec<Pt>()
+    for i in range 8 { pts.Push(Pt(i, i * 2)) }
+    out := Array<I64>(8, 0)
+    join {
+        for k in range 8 {
+            spawn out[k] = slow(pts[k])
+        }
+    }
+    io.Println($out)!
+}

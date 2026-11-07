@@ -1,0 +1,7 @@
+import "std/os"
+type N struct(v I32) { v }
+fn main() ? {
+    os.OnCrash("MY MESSAGE\n")
+    n N& = null
+    println($n.v)
+}

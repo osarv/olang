@@ -1,0 +1,25 @@
+# c03 through an assert the compiler decides (S18c): decided true while compiling (the box copied), the same expression
+# at run time is false (the box holds the call's result, which h2.s names)
+type W trait {
+    mut Bump()
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+type H struct(s String&) { s }
+fn f(k mut H&, i I64) String {
+    s := "abc" $i
+    k.s = s
+    return s
+}
+fn probe() String {
+    h2 := H("y")
+    b mut any W& = Lab(f(h2, 2))
+    b.Bump()
+    return h2.s
+}
+fn main() {
+    assert probe() == "abc2"
+    r := probe()
+    say("asserted abc2, run time gives " $r)
+    assert r == "abc2"
+}

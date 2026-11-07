@@ -1,0 +1,6 @@
+# G21/L10: I64's minimum written as a constant argument is rejected ("beyond I64's range"), though it is I64's value
+type K<N I64> struct() { x mut I64 }
+fn main() ? {
+    c := K<-9223372036854775808>()
+    println($c.x)
+}

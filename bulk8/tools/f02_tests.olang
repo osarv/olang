@@ -1,0 +1,44 @@
+import "std/io"
+
+type PE error { Bad(n I64, s String), Plain }
+
+Live mut I64 = 0
+
+fn raise(n I64) I64 ? PE {
+    if n == 0: error PE.Plain
+    error PE.Bad(n, "b" $n)
+}
+
+fn twice(x I64) [x >= 0] I64 ? {
+    return x * 2
+}
+
+test raise "a payload leaves the test" {
+    x := try raise(Live + 4)
+    assert x == 1
+}
+
+test raise "plain leaves" {
+    try raise(Live)
+}
+
+test twice "contract fails" {
+    assert try twice(Live - 1) == 0
+}
+
+test twice "contract bang" {
+    assert twice(Live - 2)! == 0
+}
+
+test "assert message" {
+    assert Live == 1, "live was " $Live
+}
+
+test "passes" {
+    defer io.Println("deferred")!
+    assert Live == 0
+}
+
+test "unreachable" {
+    if Live == 0: unreachable "why " $Live
+}

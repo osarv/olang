@@ -1,0 +1,20 @@
+import "std/io"
+
+fn vecText(n I64) I64 {
+    ls := Vec<String>()
+    other := Vec<String>()
+    s := 0
+    for k in range n {
+        ls.Push($k "abcdefghijkl")
+        w := ls[0]
+        ls.Truncate(0)
+        other.Push("zzzzzzzzzzzzzzzzzzzzzzzzzz" $k)
+        other.Truncate(0)
+        s += w.Len() + I64(w[0])
+    }
+    return s
+}
+
+fn main() {
+    io.Println($vecText(1000))!
+}

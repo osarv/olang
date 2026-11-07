@@ -1,0 +1,4 @@
+# check: fail '?' alone already says this can fail, without saying how - 'error' is not an error type
+# R15: the default error is '?' by itself
+fn main() ?error {
+}

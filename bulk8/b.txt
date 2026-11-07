@@ -1,0 +1,2 @@
+olang: o2.olang: cannot be read
+B=2

@@ -1,0 +1,32 @@
+type Reg struct(m Map<String&, I64>, l List<I64>, a mut Array<I64>&) {
+    m
+    l
+    a
+}
+fn (r Reg&) Str() String {
+    keys := r.m.Keys().ToList()
+    keys.Sort(fn(x String&, y String&) Bool { return x < y })
+    sb := StringBuilder()
+    for k in keys {
+        sb.Push(k)
+        sb.Push(" ")
+    }
+    c Array<I64> = r.a
+    c.Sort(fn(x I64, y I64) Bool { return x < y })
+    sb.Push($c " ")
+    total := r.l.Iter().Fold(0, fn(acc I64, x I64) I64 { return acc + x })
+    sb.Push($total)
+    s := r.l.ToArray()
+    s.Reverse()
+    return sb.ToString()
+}
+fn main() ? {
+    m := Map<String&, I64>()
+    m.Put("b", 1)
+    m.Put("a", 2)
+    l := List<I64>()
+    l.Push(3)
+    l.Push(4)
+    r := Reg(m, l, I64[3, 1, 2])
+    println($r)
+}

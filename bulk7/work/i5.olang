@@ -1,0 +1,14 @@
+import "std/io"
+
+# a String made from an Array<Char> at its last mention, while the same call lends the array writably: the String
+# changes under its reader
+fn change(m mut Array<Char>&, s String) String {
+    m[0] = 'z'
+    return s
+}
+
+fn main() {
+    buf := Array<Char>(3, 'a')
+    t := change(buf, String(buf))
+    io.Println(t)!
+}

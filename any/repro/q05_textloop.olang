@@ -1,0 +1,23 @@
+# loop-local text made an any kept outside the loop, plainly and through a conversion; an I64 array likewise
+type Sized trait {
+    Len() I64
+}
+type Lab extends String
+type Nums extends Array<I64>
+fn main() {
+    xs := List<any Sized&>()
+    for i in range 3 {
+        s := "text" $i "-" $(i * 7)
+        xs.Push(s)
+        t := "lab" $i "-" $(i * 7)
+        xs.Push(Lab(t))
+        a := I64[i, i * 100]
+        xs.Push(a)
+        b := I64[i + 5, i * 100]
+        xs.Push(Nums(b))
+        u := Lab("lit")
+        xs.Push(u)
+    }
+    churn()
+    for x in xs { say($x) }
+}

@@ -1,0 +1,26 @@
+# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it
+# O17: a callee handing out a writable reference into what it is lent (headOf returns b.head, borrowed and writable) lets
+# its caller build into the value's region through it - "h.next = Node()" would build the node in this block, under a
+# copy whose references claim the source's scope, and "src.b = b" would hand it back. Decided by headOf's body.
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+}
+type W struct(b Box) {
+    b
+}
+fn (b Box&) headOf() mut Node&b { return b.head }
+fn bump(src mut W&) {
+    b := src.b
+    h := b.headOf()
+    h.next = Node()
+    src.b = b
+}
+fn main() ? {
+    w := W(Box())
+    bump(w)
+    println($w.b.head.next.v)
+}

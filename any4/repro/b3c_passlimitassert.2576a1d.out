@@ -1,0 +1,16 @@
+== build -debug -sanitize
+b3c_passlimitassert.olang:33:20: error[S18c]: this assertion is false, evaluated while compiling
+   33 |     assert probe() == "abc1"
+      |                    ^~
+compilation failed with 1 error
+== build
+b3c_passlimitassert.olang:33:20: error[S18c]: this assertion is false, evaluated while compiling
+   33 |     assert probe() == "abc1"
+      |                    ^~
+compilation failed with 1 error
+== interpret
+b3c_passlimitassert.olang:33:20: error[S18c]: this assertion is false, evaluated while compiling
+   33 |     assert probe() == "abc1"
+      |                    ^~
+compilation failed with 1 error
+status 1

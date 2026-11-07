@@ -1,0 +1,8 @@
+type H struct() {
+    X Array<I64>& = null
+}
+fn K(x Array<I64>&) H {
+    h := H()
+    defer { h.X = x }
+    return h
+}

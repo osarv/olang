@@ -1,0 +1,22 @@
+# enum payload `as` reading a reference out, stored outer
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box enum {
+    Has(n Node&)
+    Empty
+}
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn main() ? {
+    keep Node& = Node(1)
+    for i in range 2 {
+        b := Box.Has(Node(42))
+        keep = b as Box.Has
+    }
+    churn()
+    try io.Print($keep.v "\n")
+}

@@ -1,0 +1,16 @@
+== build -debug -sanitize
+m01_permrecv.olang:8:15: error: expected a name, found '<'
+    8 | fn (b Bag<mut <T>&>&) Poke() { b.x.v = 77 }
+      |               ^
+compilation failed with 1 error
+== build
+m01_permrecv.olang:8:15: error: expected a name, found '<'
+    8 | fn (b Bag<mut <T>&>&) Poke() { b.x.v = 77 }
+      |               ^
+compilation failed with 1 error
+== interpret
+m01_permrecv.olang:8:15: error: expected a name, found '<'
+    8 | fn (b Bag<mut <T>&>&) Poke() { b.x.v = 77 }
+      |               ^
+compilation failed with 1 error
+status 1

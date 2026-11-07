@@ -1,0 +1,35 @@
+# r10 FRICTION - G11/O14c: the references in a local List<String&> are taken to live where the LIST lives, whatever
+# they point at, so slices of a parameter collected in a local list cannot go anywhere that outlives the list: a
+# tokenizer's tokens cannot be keyed into the caller's map (put), a topological sort's ready list cannot be appended
+# to the caller's graph, a rule's words cannot be kept in the caller's table. A by-value result loses it too: a
+# function cannot say its List<String&> result's elements borrow from its argument (List<String&line> is not a type,
+# G11). The prelude's Split avoids it by returning Array<String&>&t - a reference to an array living in the text's
+# scope (put3 compiles). Workarounds used: allocate every such list in the destination's scope
+# ("deps List<String&>&g = words(...)"), or copy each string ($k).
+#
+# expected: 3
+# actual: error[O10c] at lines 20 and 23 - "the callee needs one argument's scope to outlive another's"
+fn split(line String&) List<String&> {
+    toks := List<String&>()
+    toks.Push(line[0:1])
+    toks.Push(line[1:2])
+    return toks
+}
+fn put(line String&, m mut Map<String&, I64>&) {
+    toks List<String&> = split(line)
+    m.Put(toks[0], 1)
+}
+fn put2(line String&, m mut Map<String&, I64>&) {
+    for t in split(line) { m.Put(t, 2) }
+}
+fn put3(line String&, m mut Map<String&, I64>&) {
+    toks := line.Split(" ")
+    m.Put(toks[0], 3)
+}
+fn main() ? {
+    m := Map<String&, I64>()
+    put("ab", m)
+    put2("cd", m)
+    put3("e f", m)
+    println($m.Len())
+}

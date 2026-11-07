@@ -1,0 +1,36 @@
+# F14 (over-rejection; NEW, O15): a store over a by-value holder of a value with a destructor from a fallible call -
+# `x = try mk(bad)`, `x = mk(bad)!`, `x = try mk(bad) catch Nope default Res(0)` - is refused with T13b's "this value is
+# held elsewhere, and 'x' holds one of its own", though the value is fresh: `x = mk2(bad)` (no try), `x = Res(5)` and
+# `x = Res(try num(bad))` compile and run, and the same stores of a unique type WITHOUT a destructor compile (the
+# store-over path's hidden local seems not to see through the try/! wrapping). The declaration `x Res = try mk(bad)`
+# compiles.
+#   /home/user/wt/review7/build/olang f14_store_over_try_refused.olang   -> T13b error at line 29
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+fn num(bad Bool) I64 ? Nope {
+    if bad: error Nope
+    return 4
+}
+
+fn mk(bad Bool) Res ? Nope { return Res(try num(bad)) }
+
+fn mk2(bad Bool) Res { return Res(1) }
+
+fn store(bad Bool) ? Nope {
+    x Res = Res(9)
+    x = try mk(bad)
+    io.Println("ok " $x.id " " $Ended)!
+}
+
+fn main() {
+    try store(false) catch Nope { }
+    io.Println("end " $Ended)!
+}

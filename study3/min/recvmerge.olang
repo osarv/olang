@@ -1,0 +1,19 @@
+fn merge(into mut Map<String&, I64>&, from Map<String&, I64>&) {
+    for e in from {
+        add := e.Value
+        into.Update(e.Key, 0, fn(n I64) I64 { return n + add })
+    }
+}
+type Box<T> struct() {
+    items List<T>
+}
+fn (b mut Box<<T>>&) take() T { return try b.items.Pop() catch { unreachable } }
+fn main() ? {
+    total := Map<String&, I64>()
+    inbox mut Box<Map<String&, I64>&>& = Box<Map<String&, I64>&>()
+    one mut Map<String&, I64>&inbox = Map<String&, I64>()
+    one.Put("x", 1)
+    inbox.items.Push(one)
+    merge(total, inbox.take())
+    println($total.Len())
+}

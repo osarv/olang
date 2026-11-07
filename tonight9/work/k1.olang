@@ -1,0 +1,24 @@
+type Holder struct(a Array<I64>&) {
+    a
+}
+type K struct(n I64) {
+    big Array<I64, 20000>
+    big[0] = n
+    big[1] = n + 1
+    view Array<I64>& = big[0:2]
+    h Holder& = Holder(big[0:2])
+    f := fn() I64 { return big[1] }
+}
+fn churn() I64 {
+    s I64 = 0
+    for j in range 200 {
+        t := Array<I64>(30000, j)
+        s = s + t[5]
+    }
+    return s
+}
+fn main() ? {
+    k := K(7)
+    x := churn()
+    println($k.view[0] " " $k.view[1] " " $k.h.a[1] " " $k.f() " " $x)
+}

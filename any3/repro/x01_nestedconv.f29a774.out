@@ -1,0 +1,4 @@
+== build -debug -sanitize
+./runold.sh: line 14: 25272 Segmentation fault      timeout 60 ./build/$n.debug.san
+status 139
+== build

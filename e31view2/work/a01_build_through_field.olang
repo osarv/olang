@@ -1,0 +1,28 @@
+# r1: a value field c.w lent to a view callee that builds a node through a reference field of it
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type M struct(r mut Node&, off I64) {
+    r
+    off
+}
+fn g(m mut M&) { m.r.next = Node(5, null) }
+type Layer struct(w M, n I64) {
+    w
+    n
+}
+fn step(c mut Layer&) { g(c.w) }
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn main() ? {
+    l := List<Layer>()
+    l.Push(Layer(M(Node(1, null), 0), 0))
+    for i in range 3 { step(l[0]) }
+    churn()
+    println($l[0].w.r.next.v)
+}

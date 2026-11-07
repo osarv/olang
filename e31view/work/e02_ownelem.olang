@@ -1,0 +1,23 @@
+# x[i] whose type owns (At gives an owned result, built fresh) lent as a view; the callee takes the own field
+type Conn struct(id I64) {
+    id
+}
+type V struct(n I64) {
+    n
+    o own mut Conn& = Conn(n * 10)
+}
+type Hold struct() {
+    k own mut Conn& = null
+}
+type Vs struct(h mut Hold&) {
+    h
+}
+fn (s Vs&) At(i I64) V { return V(i) }
+fn f(c mut V&) { c.o.id += 1 }
+fn g(c mut V&, h mut Hold&) { h.k = take c.o }
+fn main() ? {
+    s := Vs(Hold())
+    f(s[3])
+    g(s[4], s.h)
+    println($s.h.k.id)
+}

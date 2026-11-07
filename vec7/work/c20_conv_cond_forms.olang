@@ -1,0 +1,13 @@
+fn show(s String&) { println(s) }
+fn pick2(k I64, a Array<Char>&) String&a {
+    return String(match k { case 1 => a nomatch => a[0:1] })
+}
+fn main() ? {
+    w := Array<Char>(3, 'w')
+    z := Array<Char>(2, 'z')
+    c := w.Len() > 2
+    show(String(w if c else z))
+    t String& = String(w if c else w[0:1])
+    println(t)
+    println(pick2(1, w))
+}

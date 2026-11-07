@@ -1,0 +1,19 @@
+# a read-only copy of a value holding a writable any: written through (QC must refuse); a read-only list of writable anys
+type Counter trait {
+    mut Bump() I64
+    Seen() I64
+}
+type Tally struct(at I64) { at }
+fn (t mut Tally&) Bump() I64 {
+    t.at += 1
+    return t.at
+}
+fn (t Tally&) Seen() I64 { return t.at }
+type H struct(w mut any Counter&) { w }
+G H = H(Tally(1))
+fn viaRo(h H&) I64 { return h.w.Bump() }
+fn main() {
+    x := G
+    x.w.Bump()
+    say($viaRo(G) " " $G.w.Seen())
+}

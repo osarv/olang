@@ -1,0 +1,30 @@
+# O41: a task given the holder (no borrow at the spawn) reads an owned object; the spawner releases it in
+# between, ordered by channels, so no field is raced - only the freed object is read
+import "std/chan"
+type Node struct(n I64) {
+    n
+    name String& = "node" $n
+}
+type Holder struct() {
+    cur own mut Node&
+}
+fn work(h Holder&, a mut chan.Chan<I64>&, b mut chan.Chan<I64>&) {
+    c := h.cur
+    chan.Send(a, 1)
+    k := try chan.Recv(b) catch { return }
+    println(c.name)
+}
+fn main() ? {
+    s := Holder()
+    s.cur = Node(3)
+    a := chan.Chan<I64>(1)
+    chan.Init(a)
+    b := chan.Chan<I64>(1)
+    chan.Init(b)
+    join {
+        spawn work(s, a, b)
+        k := try chan.Recv(a) catch { return }
+        s.cur = null
+        chan.Send(b, 1)
+    }
+}

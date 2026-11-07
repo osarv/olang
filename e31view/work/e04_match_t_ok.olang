@@ -1,0 +1,23 @@
+# a generic writing the parameter's own storage only for one instantiation (match T): judged per instantiation
+type A struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+type B struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+fn poke(x mut <T>&) {
+    match T {
+        case A { x.d[0] = 7 }
+        case B { x.n = 9 }
+    }
+}
+fn main() ? {
+    la := List<A>()
+    la.Push(A(Array<I64>(1), 0))
+    poke(la[0])
+    lb := List<B>()
+    lb.Push(B(Array<I64>(1), 0))
+    println($la[0].d[0])
+}

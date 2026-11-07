@@ -1,0 +1,29 @@
+# PRE-EXISTING, CONFIRMED UAF. The '$' operand's instance is built where the text lands (an outer reference), but
+# judged where it stands; its destructor-bearing field outlives 'local'. -b prints garbage; -s: 'use after scope closed'.
+type Node struct(v I64) {
+    v
+}
+type Res struct(a Node&) {
+    a
+} destruct { println("Res destructor sees " $a.v) }
+type Wrap struct(a Node&) {
+    a
+    r Res& = Res(a)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    outer String& = ""
+    {
+        local Node& = Node(42)
+        outer = $Wrap(local)
+    }
+    churn()
+    println(outer)
+}

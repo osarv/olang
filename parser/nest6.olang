@@ -1,0 +1,5 @@
+fn f(g fn() I32) I32 { return g() }
+fn h() I32 {
+    f(fn() I32 { return f(fn() I32 { return f(fn() I32 { return f(fn() I32 { return f(fn() I32 { return f(fn() I32 { return 1 }) }) }) }) }) })
+    return 0
+}

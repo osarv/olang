@@ -1,0 +1,23 @@
+type Tok struct(text String&, n I64) {
+    text
+    n
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    keep String& = "init"
+    {
+        v := Vec<Tok>()
+        for i in range 3 { v.Push(Tok($i "-inner-block-text", i)) }
+        e := v.TakeAt(1)
+        keep = e.text
+    }
+    churn()
+    println(keep)
+}

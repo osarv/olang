@@ -1,0 +1,13 @@
+# r23 DIAGNOSTIC - D9a/G22: a constructor parameter of a fixed array type is refused (D9a, every array parameter is a
+# reference) with "write Array<I16, <N>>&" - but N is introduced by the type's own parameter list and written bare
+# inside it (G22): following the suggestion gives G22's "N was introduced already - write it 'N'". It should say "Array<I16, N>&".
+#
+# expected: ... write Array<I16, N>&
+# actual: error[D9a] at line 7: "array parameter 'taps' is passed by reference - write Array<I16, <N>>&"
+type Fir<N I64> struct(taps Array<I16, N>) {
+    taps
+}
+fn main() ? {
+    f := Fir<3>(I16[1, 2, 3])
+    println($f.taps.Len())
+}

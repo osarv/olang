@@ -1,0 +1,20 @@
+# spawn: a task whose call captures a split value then keeps a ref to the copy
+fn idBox(seed mut Box&) Box { return seed }
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() {
+    head mut Node& = Node(0)
+}
+fn use(b Box&, out mut List<Box&>&) { out.Push(b) }
+fn main() ? {
+    seed := Box()
+    ptrs := List<Box&>()
+    join {
+        for i in range 3 {
+            spawn use(idBox(seed), ptrs)
+        }
+    }
+    assert ptrs.Len() == 3, $ptrs.Len()
+}

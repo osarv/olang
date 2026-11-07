@@ -1,0 +1,12 @@
+fn mk() List<List<I64>> {
+    l := List<List<I64>>()
+    l.Push(List<I64>())
+    return l
+}
+G List<List<I64>> = mk()
+fn main() ? {
+    r := try G.RunFrom(0) catch { return }
+    x := r[0]
+    x.Push(9)
+    println($G[0].Len())
+}

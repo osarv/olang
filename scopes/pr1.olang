@@ -1,0 +1,23 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn ro(n Node&) Node&n { return n }
+fn main() ? {
+    outer Node& = Node(1)
+    keep := ro(outer)
+    kp := Pair(outer, outer)
+    for i in range 2 {
+        inner Node& = Node(42)
+        p := Pair(outer, inner)
+        keep = p.Second
+        kp = p
+        kp = Pair(outer, inner)
+    }
+    churn()
+    try io.Print($keep.v "\n")
+}

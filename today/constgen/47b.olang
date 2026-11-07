@@ -1,0 +1,17 @@
+# G21: a constant argument needing evaluation (a call) in a generic struct's field: the field reads as Array<I32, 0>,
+# while the constructor's own reading of the same field is right - what one part of the program writes, another
+# indexes past
+fn twice(n I64) I64 { return n * 2 }
+type B<N I64> struct() {
+    a mut Array<I32, twice(N)>
+    after mut I64
+}
+fn (b mut B<<N>>&) Fill() {
+    for i in range twice(N) { b.a[i] = 100 + I32(i) }
+}
+fn main() ? {
+    b := B<3>()
+    b.after = 42
+    b.Fill()
+    println($b.a.Len() " after=" $b.after)
+}

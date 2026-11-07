@@ -1,0 +1,22 @@
+Dropped mut I64 = 0
+type Node struct(n I64) {
+    n
+} destruct { Dropped++ }
+type Holder struct() {
+    cur own mut Node&
+}
+fn main() ? {
+    {
+        o own mut Node& = Node(1)
+        h := Holder()
+        h.cur = take o            # moved into h.cur; o is null now
+        # block closes: o's drop frees null, h.cur's drop frees the Node - once
+    }
+    println($Dropped)             # must be 1
+    Dropped = 0
+    {
+        o own mut Node& = Node(2)
+        # not moved: o's drop frees it once
+    }
+    println($Dropped)             # must be 1
+}

@@ -1,0 +1,21 @@
+# returned: the converted view of a local Vec - the Vec is released at the return
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn text() String& {
+    v := Vec<Char>()
+    for i in range 20 { v.Push('a') }
+    return String(v.View())
+}
+fn main() ? {
+    s := text()
+    churn()
+    w := Vec<I64>()
+    for i in range 100 { w.Push(i) }
+    println(s)
+}

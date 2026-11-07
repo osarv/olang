@@ -1,0 +1,40 @@
+import "std/io"
+# which conversions (T29a) are copied into an any's box: text from a join, a new array, a literal-made array
+type Sized trait {
+    Len() I64
+}
+type Lab extends String
+type Nums extends Array<I64>
+fn main() {
+    xs := List<any Sized&>()
+    for i in range 2 {
+        t := "lab" $i "-" $(i * 7)
+        xs.Push(Lab(t))
+        a := Array<I64>(2, i + 40)
+        xs.Push(Nums(a))
+        c := I64[i + 5, 7]
+        xs.Push(Nums(c))
+        d := String(Char['x', 'y', 'z'])
+        xs.Push(Lab(d))
+    }
+    churn()
+    for x in xs { say($x) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

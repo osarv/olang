@@ -1,0 +1,42 @@
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type OB struct() {
+    buf own mut Array<I64>& = Array<I64>(4)
+}
+fn lenOfCopy() I64 {
+    v := OB()
+    b := v
+    return b.buf.Len()
+}
+fn lenOfRef() I64 {
+    v := OB()
+    r OB& = v
+    return r.buf.Len()
+}
+fn textLen() I64 {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(1)
+    r Outer& = v
+    return r.o.deep.text.Len()
+}
+fn main() ? {
+    println($lenOfCopy() " " $lenOfRef() " " $textLen())
+}

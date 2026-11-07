@@ -1,0 +1,52 @@
+# spectral-norm: the largest eigenvalue of an infinite matrix, by the power method (the Benchmarks Game's
+# algorithm) - nested loops over F64 arrays and a small function called in the inner loop
+import "std/io"
+import "std/os"
+
+extern fn sqrt(x F64) F64
+
+# entry (i, j) of the matrix A
+fn a(i I64, j I64) F64 { return 1.0 / F64((i + j) * (i + j + 1) / 2 + i + 1) }
+
+# out = A v
+fn timesA(v Array<F64>&, out mut Array<F64>&) {
+    for i in range out.Len() {
+        s F64 = 0.0
+        for j, x in v { s += a(i, j) * x }
+        out[i] = s
+    }
+}
+
+# out = A^T v
+fn timesAt(v Array<F64>&, out mut Array<F64>&) {
+    for i in range out.Len() {
+        s F64 = 0.0
+        for j, x in v { s += a(j, i) * x }
+        out[i] = s
+    }
+}
+
+# out = A^T A v, through tmp
+fn timesAtA(v Array<F64>&, out mut Array<F64>&, tmp mut Array<F64>&) {
+    timesA(v, tmp)
+    timesAt(tmp, out)
+}
+
+fn main() ? {
+    args := os.Args()
+    n I64 = 100
+    if args.Len() > 1 { n = try args[1].ParseInt() }
+    u := Array<F64>(n, 1.0)
+    v := Array<F64>(n)
+    tmp := Array<F64>(n)
+    for i in range 10 {
+        timesAtA(u, v, tmp)
+        timesAtA(v, u, tmp)
+    }
+    vBv, vv F64
+    for i in range n {
+        vBv += u[i] * v[i]
+        vv += v[i] * v[i]
+    }
+    try io.Print($sqrt(vBv / vv) "\n")
+}

@@ -1,0 +1,30 @@
+# P2 (o4) + mbiMemo.deps: a task's callee cc hands hook a non-building callback; hook reassigns its parameter to one
+# that builds, so the walk answers "builds nothing" for cc and the scope is handed raw - four tasks then allocate in one
+# scope with no lock. expected 4200. new -b: 4234, 4272, 4214, 4225; -b -r: data race in __olang_scope_alloc_a (hook).
+# e27b83b and be042da: 4200
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn hook(g fn(x mut Node&), n mut Node&) {
+    g = fn(x mut Node&) { x.next = Node(x.v + 1) }
+    for i in range 300 { g(n) }
+}
+fn cc(n mut Node&) { hook(fn(x mut Node&) { }, n) }
+fn main() ? {
+    total I64 = 0
+    for r in range 300 {
+        a := Node(1)
+        b := Node(2)
+        c := Node(3)
+        d := Node(4)
+        join {
+            spawn cc(a)
+            spawn cc(b)
+            spawn cc(c)
+            spawn cc(d)
+        }
+        total += a.next.v + b.next.v + c.next.v + d.next.v
+    }
+    println($total)
+}

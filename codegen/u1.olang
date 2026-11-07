@@ -1,0 +1,12 @@
+import "std/io"
+
+fn main() ? io.IoError {
+    t := Array<I32>(256)
+    for i in range 256 {
+        t[i] = I32(i)
+    }
+    b U8 = 200
+    v := t[b]
+    t[b] = 1234
+    try io.Print($v " " $t[200] "\n")
+}

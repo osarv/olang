@@ -1,0 +1,8 @@
+# S18c/S17: an assert decided false while compiling whose message cannot be evaluated while compiling
+extern fn getpid() I32
+Mutable mut I32 = 4
+fn pure(n I32) I32 { return n * 2 }
+fn main() ? {
+    assert pure(3) == 7, "pid " $getpid() " m " $Mutable
+    println("x")
+}

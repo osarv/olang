@@ -1,0 +1,36 @@
+# O18c/r05: "t := lx.next().text" lands next() by its obligations where the lexer lives, so the checker reads t as
+# living there - is the fresh text next() builds really built there?
+type Token struct(kind I64, text String&) {
+    kind
+    text
+}
+type Lexer struct(src String&) {
+    src
+    at I64 = 0
+}
+fn (lx mut Lexer&) next() Token {
+    lx.at++
+    if lx.at % 2 == 0 { return Token(1, lx.src[0:3]) }
+    return Token(2, "fresh" $lx.at)
+}
+fn collect(lx mut Lexer&, keep mut List<String&>&) {
+    for k in range 4 {
+        t := lx.next().text
+        keep.Push(t)
+    }
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k) * 1000)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    lx := Lexer("abcdef")
+    keep := List<String&>()
+    collect(lx, keep)
+    churn()
+    for s in keep { println(s) }
+}

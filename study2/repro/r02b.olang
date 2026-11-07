@@ -1,0 +1,18 @@
+fn table() Map<I32, I32> {
+    m := Map<I32, I32>()
+    for i in range 50 { m.Put(i, i * 10) }
+    return m
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 100 {
+        a := Array<I64>(64, 7)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    m := table()
+    x := churn()
+    println($x " " $(try m.Get(7) catch default -1) " " $(try m.Get(49) catch default -1))
+}

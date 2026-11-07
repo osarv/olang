@@ -1,0 +1,9 @@
+# hex/bin/separators/exponents
+test "a" {
+    a I64 = 0xFF_FF
+    b I64 = 0b1010_1010
+    c F64 = 1e3
+    d F64 = 1_000.5
+    e F64 = 1e1_0
+    assert a == 65535 and b == 170 and c == 1000.0 and d == 1000.5 and e == 10000000000.0
+}

@@ -1,0 +1,17 @@
+import "std/io"
+
+fn dbl(x I64) I64 {
+    return x * 2
+}
+
+fn pick() fn(x I64) I64 {
+    return dbl
+}
+
+fn main() ? io.IoError {
+    r I64 = 0
+    join {
+        spawn r = pick()(5)
+    }
+    try io.Print($r "\n")
+}

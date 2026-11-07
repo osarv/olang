@@ -1,0 +1,8 @@
+# chiseck: fail readelses a mutable global
+error E {type X }
+seed mut I32 = 1
+fn f() I32 { return seed }
+if f() == 1 {
+    fn g() { }
+}
+fn main() ? E { }

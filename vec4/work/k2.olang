@@ -1,0 +1,32 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# a borrowed own result of a NESTED own object of the settled type: release the intermediate owner
+type Inner struct() {
+    data own mut Array<Char>& = Array<Char>(3, 'i')
+}
+type CB struct() {
+    data own mut Array<Char>& = Array<Char>(3, 'd')
+    inner own mut Inner& = Inner()
+}
+fn (c CB&) InnerData() Array<Char>&c { return c.inner.data }
+fn (c CB&) Pick(raw Bool) Array<Char>&c {
+    if raw { return c.data }
+    t := c.InnerData()
+    return t
+}
+fn use(c mut CB&) {
+    t := c.Pick(false)
+    c.inner = Inner()
+    churn()
+    println(String(t))
+}
+fn main() ? {
+    c := CB()
+    use(c)
+}

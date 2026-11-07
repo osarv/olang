@@ -1,0 +1,375 @@
+# calc - a small expression language: a tokenizer, a Pratt parser over a recursive-enum tree, a constant folder and a
+# tree-walking evaluator. Programs are lines of "let NAME = EXPR" or "EXPR"; expressions have numbers, names, + - * / ^,
+# unary minus, comparisons, "a if c else b" spelled "if c then a else b", and calls of a few built-ins.
+
+import "std/math"
+
+error CalcError {
+    BAD_CHAR
+    UNEXPECTED
+    UNKNOWN_NAME
+    UNKNOWN_FUNCTION
+    ARITY
+    DIV_ZERO
+}
+
+# where the last error happened, since an error carries no data
+type Diag struct() {
+    line I64 = 0
+    col I64 = 0
+    what String& = ""
+}
+
+type Kind enum {
+    Num
+    Name
+    Op
+    LParen
+    RParen
+    Comma
+    Assign
+    End
+}
+
+type Token struct(kind Kind, text String&, num F64, pos I64) {
+    kind
+    text
+    num
+    pos
+}
+
+fn isNameChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
+
+fn tokenize(src String&, diag mut Diag&) List<Token> ? CalcError {
+    toks := List<Token>()
+    i I64 = 0
+    for i < src.Len() {
+        c := src[i]
+        if c.IsSpace() {
+            i++
+            continue
+        }
+        start := i
+        if c.IsDigit() or c == '.' {
+            for i < src.Len() and (src[i].IsDigit() or src[i] == '.') { i++ }
+            text := src[start:i]
+            v := try text.ParseFloat() catch {
+                diag.col = start
+                diag.what = text
+                error CalcError.BAD_CHAR
+            }
+            toks.Push(Token(Kind.Num, text, v, start))
+            continue
+        }
+        if c.IsLetter() {
+            for i < src.Len() and isNameChar(src[i]) { i++ }
+            toks.Push(Token(Kind.Name, src[start:i], 0.0, start))
+            continue
+        }
+        i++
+        kind := match c {
+            case '(' => Kind.LParen
+            case ')' => Kind.RParen
+            case ',' => Kind.Comma
+            case '+', '-', '*', '/', '^', '<', '>' => Kind.Op
+            case '=' => Kind.Assign
+            nomatch {
+                diag.col = start
+                diag.what = src[start:i]
+                error CalcError.BAD_CHAR
+            }
+        }
+        # "==" and "<=" ">=" are one operator
+        if i < src.Len() and src[i] == '=' and (c == '=' or c == '<' or c == '>') {
+            i++
+            kind = Kind.Op
+        }
+        toks.Push(Token(kind, src[start:i], 0.0, start))
+    }
+    toks.Push(Token(Kind.End, "", 0.0, src.Len()))
+    return toks
+}
+
+# ---- the tree ----
+
+type Expr enum {
+    Num(v F64)
+    Var(name String&)
+    Neg(e Expr&)
+    Bin(op String&, l Expr&, r Expr&)
+    Cond(c Expr&, a Expr&, b Expr&)
+    Call(name String&, args Array<Expr&>&)
+}
+
+# ---- the parser: Pratt, binding powers per operator ----
+
+type Parser struct(toks List<Token>&) {
+    toks
+    at I64 = 0
+    badAt I64 = -1
+}
+
+fn (p Parser&) peek() Token { return p.toks[p.at] }
+
+fn (p mut Parser&) advance() Token {
+    t := p.toks[p.at]
+    if p.at < p.toks.Len() - 1 { p.at++ }
+    return t
+}
+
+fn (p mut Parser&) bail(t Token) ? CalcError {
+    p.badAt = t.pos
+    error CalcError.UNEXPECTED
+}
+
+fn (p mut Parser&) expect(k Kind) Token ? CalcError {
+    t := p.advance()
+    if t.kind != k { try p.bail(t) }
+    return t
+}
+
+# left and right binding power of an infix operator; 0 when the token is not one
+fn infixPower(op String&) (I32, I32) {
+    match op {
+        case "==", "<", ">", "<=", ">=" { return 1, 2 }
+        case "+", "-" { return 3, 4 }
+        case "*", "/" { return 5, 6 }
+        case "^" { return 8, 7 }
+        nomatch { return 0, 0 }
+    }
+}
+
+fn (p mut Parser&) prefix() Expr& ? CalcError {
+    t := p.advance()
+    match t.kind {
+        case Kind.Num { return Expr.Num(t.num) }
+        case Kind.Name {
+            if t.text == "if" {
+                c := try p.expr(0)
+                kw := p.advance()
+                if kw.text != "then" { try p.bail(kw) }
+                a := try p.expr(0)
+                kw2 := p.advance()
+                if kw2.text != "else" { try p.bail(kw2) }
+                b := try p.expr(0)
+                return Expr.Cond(c, a, b)
+            }
+            if p.peek().kind == Kind.LParen {
+                p.advance()
+                args mut List<Expr&>&return = List<Expr&>()
+                if p.peek().kind != Kind.RParen {
+                    args.Push(try p.expr(0))
+                    for p.peek().kind == Kind.Comma {
+                        p.advance()
+                        args.Push(try p.expr(0))
+                    }
+                }
+                try p.expect(Kind.RParen)
+                return Expr.Call(t.text, args.ToArray())
+            }
+            return Expr.Var(t.text)
+        }
+        case Kind.Op if t.text == "-" { return Expr.Neg(try p.expr(9)) }
+        case Kind.LParen {
+            e mut Expr&return = try p.expr(0)
+            try p.expect(Kind.RParen)
+            return e
+        }
+        nomatch {
+            try p.bail(t)
+            unreachable
+        }
+    }
+}
+
+fn (p mut Parser&) expr(minPower I32) Expr& ? CalcError {
+    lhs mut Expr&return = try p.prefix()
+    for {
+        t := p.peek()
+        if t.kind != Kind.Op { break }
+        l, r := infixPower(t.text)
+        if l < minPower { break }
+        p.advance()
+        rhs mut Expr&return = try p.expr(r)
+        lhs = Expr.Bin(t.text, lhs, rhs)
+    }
+    return lhs
+}
+
+# ---- folding: numbers combine, x + 0 and x * 1 simplify ----
+
+fn fold(e Expr&) Expr&e {
+    return match e {
+        case Expr.Bin(op, l, r) => simplify(Expr.Bin(op, fold(l), fold(r)))
+        case Expr.Neg(Expr.Num(v)) => Expr.Num(-v)
+        case Expr.Neg(x) => Expr.Neg(fold(x))
+        case Expr.Cond(c, a, b) => Expr.Cond(fold(c), fold(a), fold(b))
+        nomatch => e
+    }
+}
+
+fn simplify(e Expr&) Expr&e {
+    return match e {
+        case Expr.Bin("+", Expr.Num(a), Expr.Num(b)) => Expr.Num(a + b)
+        case Expr.Bin("-", Expr.Num(a), Expr.Num(b)) => Expr.Num(a - b)
+        case Expr.Bin("*", Expr.Num(a), Expr.Num(b)) => Expr.Num(a * b)
+        case Expr.Bin("+", x, Expr.Num(0.0)), Expr.Bin("+", Expr.Num(0.0), x) => x
+        case Expr.Bin("*", x, Expr.Num(1.0)), Expr.Bin("*", Expr.Num(1.0), x) => x
+        nomatch => e
+    }
+}
+
+# ---- evaluation ----
+
+fn truth(b Bool) F64 { return 1.0 if b else 0.0 }
+
+fn eval(e Expr&, env Map<String&, F64>&, diag mut Diag&) F64 ? CalcError {
+    return match e {
+        case Expr.Num(v) => v
+        case Expr.Var(n) => try env.Get(n) catch {
+            diag.what = $n
+            error CalcError.UNKNOWN_NAME
+        }
+        case Expr.Neg(x) => -(try eval(x, env, diag))
+        case Expr.Cond(c, a, b) => try eval(a, env, diag) if try eval(c, env, diag) != 0.0 else try eval(b, env, diag)
+        case Expr.Bin(op, l, r) => try binary(op, try eval(l, env, diag), try eval(r, env, diag))
+        case Expr.Call(name, args) => try call(name, args, env, diag)
+    }
+}
+
+fn binary(op String&, a F64, b F64) F64 ? CalcError {
+    return match op {
+        case "+" => a + b
+        case "-" => a - b
+        case "*" => a * b
+        case "/" if b == 0.0 { error CalcError.DIV_ZERO }
+        case "/" => a / b
+        case "^" => math.Pow(a, b)
+        case "==" => truth(a == b)
+        case "<" => truth(a < b)
+        case ">" => truth(a > b)
+        case "<=" => truth(a <= b)
+        case ">=" => truth(a >= b)
+        nomatch { unreachable }
+    }
+}
+
+fn call(name String&, args Array<Expr&>&, env Map<String&, F64>&, diag mut Diag&) F64 ? CalcError {
+    vals := F64[try eval(a, env, diag) for a in args]
+    match name {
+        case "sqrt", "abs", "floor" if vals.Len() != 1 {
+            diag.what = $name
+            error CalcError.ARITY
+        }
+        case "sqrt" { return math.Sqrt(vals[0]) }
+        case "abs" { return math.Abs(vals[0]) }
+        case "floor" { return math.Floor(vals[0]) }
+        case "min", "max" if vals.Len() == 0 {
+            diag.what = $name
+            error CalcError.ARITY
+        }
+        case "min" { return vals.Fold(vals[0], fn(acc F64, x F64) F64 { return math.Min(acc, x) }) }
+        case "max" { return vals.Fold(vals[0], fn(acc F64, x F64) F64 { return math.Max(acc, x) }) }
+        nomatch {
+            diag.what = $name
+            error CalcError.UNKNOWN_FUNCTION
+        }
+    }
+}
+
+# ---- printing a tree back as text ----
+
+fn show(e Expr&) String {
+    return match e {
+        case Expr.Num(v) => $v
+        case Expr.Var(n) => n
+        case Expr.Neg(x) => "-" $show(x)
+        case Expr.Bin(op, l, r) => "(" $show(l) " " $op " " $show(r) ")"
+        case Expr.Cond(c, a, b) => "(if " $show(c) " then " $show(a) " else " $show(b) ")"
+        case Expr.Call(n, args) => $n "(" $showArgs(args) ")"
+    }
+}
+
+fn showArgs(args Array<Expr&>&) String {
+    b := StringBuilder()
+    for i, a in args {
+        if i > 0 { b.Push(", ") }
+        b.Push(show(a))
+    }
+    return b.ToString()
+}
+
+# ---- the driver ----
+
+Program := String&[
+    "let r = 2",
+    "let area = 3.14159 * r ^ 2",
+    "area",
+    "let big = if area > 10 then 1 else 0",
+    "big + 0",
+    "min(3, r * 4, 1 + 1) * 1",
+    "max(sqrt(16), abs(-7), floor(2.5))",
+    "x + 1",
+    "3 / (r - 2)",
+    "2 $ 3",
+    "(1 + 2",
+]
+
+fn runLine(line String&, env mut Map<String&, F64>&, diag mut Diag&) String ? CalcError {
+    toks List<Token> = try tokenize(line, diag)
+    p := Parser(toks)
+    defer {
+        if p.badAt >= 0 {
+            diag.col = p.badAt
+            diag.what = line[p.badAt:math.Min(p.badAt + 1, line.Len())]
+        }
+    }
+    isLet := toks.Len() > 2 and toks[0].text == "let" and toks[2].kind == Kind.Assign
+    if isLet { p.at = 3 }
+    tree := try p.expr(0)
+    try p.expect(Kind.End)
+    folded := fold(tree)
+    v := try eval(folded, env, diag)
+    if isLet {
+        env.Put($toks[1].text, v)
+        return $toks[1].text " = " $v
+    }
+    return $show(folded) " = " $v
+}
+
+fn main() ? {
+    env := Map<String&, F64>()
+    n I64 = 0
+    for line in Program {
+        n++
+        if line.Trim().Len() == 0 { continue }
+        diag := Diag()
+        diag.line = n
+        out := try runLine(line, env, diag) catch CalcError.UNKNOWN_NAME {
+            println($n ": unknown name '" $diag.what "'")
+            continue
+        } catch CalcError.DIV_ZERO {
+            println($n ": division by zero")
+            continue
+        } catch CalcError {
+            println($n ": error at column " $diag.col " near '" $diag.what "'")
+            continue
+        }
+        println($n ": " $out)
+    }
+}
+
+# the whole pipeline, run while compiling (K2) and compared with the run time
+fn evalText(src String&) F64 {
+    env := Map<String&, F64>()
+    env.Put("r", 3.0)
+    d := Diag()
+    s := try runLine(src, env, d) catch default "error"
+    at := try s.FindLast("= ") catch default -2
+    return try s[at + 2:].ParseFloat() catch default -1.0
+}
+Baked F64 = evalText("2 ^ 10 + min(r, 4) * -1")
+test "the pipeline baked and at run time" {
+    assert Baked == 1021.0
+    assert evalText("2 ^ 10 + min(r, 4) * -1") == Baked
+}

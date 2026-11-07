@@ -1,0 +1,26 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# over-rejection? a recursive builder of new storage - never proven fresh (least fixed point), so it keeps the loan
+fn build(a Array<I64>&, n I64) mut Array<I64>& {
+    if n == 0 {
+        out mut Array<I64>&return = Array<I64>(a.Len())
+        for i in range a.Len() { out[i] = a[i] * 2 }
+        return out
+    }
+    return build(a, n - 1)
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    d := build(v.View(), 3)
+    for i in range 1000 { v.Push(i) }
+    churn()
+    println($d[0] " " $d[1])
+}

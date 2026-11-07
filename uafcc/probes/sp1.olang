@@ -1,0 +1,28 @@
+import "std/io"
+
+type E struct(A String&, B String&) {
+    A
+    B
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(s String&) String { return $s "-made" }
+fn wrap(s String&) E { return E("w", s) }
+fn wrapc(s String&, k I64) E { return E("w", mk(s) if k >= 0 else "") }
+
+fn main() {
+    rs := Array<E>(4, E("", ""))
+    qs := Array<E>(4, E("", ""))
+    join {
+        for i in range 4 {
+            spawn rs[i] = wrap(mk($i) if i >= 0 else "")
+            spawn qs[i] = wrapc($i, i)
+        }
+    }
+    churn()
+    io.Println($rs[3].B " " $qs[2].B)!
+}

@@ -1,0 +1,9 @@
+# T25c/T25d: converting an immutable global reference and handing it to a writable parameter writes read-only data
+import "std/io"
+type Bytes Array<U8>
+fn w(s mut Bytes&) { s[0] = 1 }
+G Array<U8>& = U8[7, 8]                  # an immutable global reference: read-only
+fn main() ? {
+  w(Bytes(G))
+  try io.Print($G "\n")
+}

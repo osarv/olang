@@ -1,0 +1,20 @@
+# handle passed to a GENERIC function that stores the handle's own storage into a long-lived field
+type Cell struct() {
+    v I64 = 0
+    kept mut Box& = null
+}
+type Box struct() { c mut Cell& = Cell() }
+fn keep(h mut Box&, x <T>) {
+    h.c.kept = h
+}
+fn run(m mut Map<I64, Box>&) ? {
+    for i in range 3 {
+        c := try m.Get(1)
+        keep(c, i)
+    }
+}
+fn main() ? {
+    m := Map<I64, Box>()
+    m.Put(1, Box())
+    try run(m)
+}

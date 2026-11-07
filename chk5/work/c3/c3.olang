@@ -1,0 +1,25 @@
+type Info struct(Offset I64, Len I64) {
+    Offset
+    Len
+}
+type FH struct(f fn() I64) { f }
+type G struct() { x I64 = 0 }
+fn (g G&) getter(i Info&) fn() I64 { return fn() I64 { return i.Len } }
+fn (g G&) mkf(k I64) FH {
+    i := Info(k, k + 1)
+    return FH(g.getter(i))
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 50 {
+        a := Array<I64>(64, I64(k))
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    g := G()
+    h := g.mkf(3)
+    churn()
+    println($h.f())
+}

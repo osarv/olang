@@ -1,0 +1,8 @@
+type S struct(xs mut Array<S>&) { xs }
+fn main() ? {
+    xs mut Array<S>& = Array<S>(1)
+    s := S(xs)
+    xs[0] = s
+    m := Map<S, I32>()
+    m.Put(s, 1)
+}

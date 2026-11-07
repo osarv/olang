@@ -1,0 +1,14 @@
+import "std/io"
+type N struct(v I32) { v }
+type Holder struct(n N&) { n }
+fn idh(h Holder) Holder { return h }
+fn churn() { for i in range 2000 { s := $i "zzzzzzzzzzzzzzzzzzzzzzzzzzz"; m N& = N(I32(i)) } }
+fn main() ? {
+    keep mut Holder& = null
+    for i in range 2 {
+        inner N& = N(42)
+        keep = idh(Holder(inner))   # O14c obligation: V(h) >= R; inner dies, keep outlives
+    }
+    churn()
+    try io.Print($keep.n.v "\n")
+}

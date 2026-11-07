@@ -1,0 +1,15 @@
+import "std/io"
+
+# D13d: a do-while loop's break is in its post clause (its condition, read from the second turn), which definit's
+# Loop case does not ask breaks() about - the loop reads as never ending, the code after it as dead, and a never-null
+# reference nothing assigned is read
+type Node struct(v I64) { v }
+
+fn probe() I64 {
+    n Node&
+    i I64 = 0
+    do { i++ } for i < 3
+    return n.v
+}
+
+fn main() { io.Println($probe())! }

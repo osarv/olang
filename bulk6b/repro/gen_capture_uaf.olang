@@ -1,0 +1,28 @@
+# a generator (pre-existing - the compiler before the fix round crashes too): a lambda over a reference local from a built call, called
+# in a yield's value - the reference's referent is placed where the first Next's result goes, freed after that turn
+import "std/io"
+
+type node struct(v I64) { v }
+
+fn mk(k I64) node& { return node(k) }
+
+fn gen(k I64) Iterator<I64> {
+    r := mk(k)
+    f := fn() I64 { return r.v }
+    for i in range 3 { yield f() + i }
+}
+
+fn churn() I64 {
+    junk := Vec<String>()
+    for i in range 2000 { junk.Push($i "abcdefghijklmnopqrstuvwxyz") }
+    return junk.Len()
+}
+
+fn main() {
+    t := 0
+    for x in gen(5) {
+        churn()
+        t += x
+    }
+    io.Println($t " (18)")!
+}

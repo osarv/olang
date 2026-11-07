@@ -1,0 +1,7 @@
+# check: fail it divides the most negative value by -1
+# B9a/E6a: the most negative I64 divided by -1 has no value - compile-time evaluation says so, where the token evaluator
+# crashed the compiler computing it
+if (-9223372036854775807 - 1) / -1 == 0 {
+    fn g() I32 { return 1 }
+}
+fn main() ? { }

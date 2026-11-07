@@ -1,0 +1,12 @@
+fn Find(m mut Map<I64, List<I64>>&, k I64) List<I64> ? {
+    l := try m.Get(k)
+    return l
+}
+
+fn FindR(m mut Map<I64, List<I64>>&, k I64) List<I64> ? {
+    return try m.Get(k)
+}
+
+type W struct() {
+    In Map<I64, List<I64>> = Map<I64, List<I64>>()
+}

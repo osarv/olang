@@ -1,0 +1,29 @@
+# try catch default: a temporary default in a returned call
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn mk(k I64) Node& ? {
+    if k > -5 { error }
+    return Node(7)
+}
+fn mks(k I64) String ? {
+    if k > -5 { error }
+    return "x"
+}
+fn get() Node& {
+    return try mk(1) catch default Node(42)
+}
+fn gets() String {
+    return try mks(1) catch default "hello there, a long default string"
+}
+fn main() ? {
+    keep := get()
+    t := gets()
+    churn()
+    try io.Print($keep.v " " $t "\n")
+}

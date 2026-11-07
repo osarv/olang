@@ -1,0 +1,10 @@
+type Box enum {
+    Val(v I32)
+    None
+}
+test "x" {
+    mask I32 = 6
+    b := Box.Val(7)
+    x I32 = b as Box.Val & mask
+    assert x == 6
+}

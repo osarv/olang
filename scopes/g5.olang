@@ -1,0 +1,20 @@
+# a lambda capturing a VALUE that holds a reference (O25h) - copied into the closure - stored in an outer variable
+import "std/io"
+type Node struct(v I32) { v mut }
+type Holder struct(n Node&) { n }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn main() ? {
+    f fn() I32 = fn() { return 0 }
+    for i in range 2 {
+        inner Node& = Node(42)
+        h := Holder(inner)
+        f = fn() { return h.n.v }
+    }
+    churn()
+    try io.Print($f() "\n")
+}

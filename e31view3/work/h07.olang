@@ -1,0 +1,30 @@
+# the baseline: a plain element x[i] lent to a READ-ONLY reference parameter whose callee builds through a mut field
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Box struct() {
+    head mut Node& = Node(0, null)
+    tag I64 = 0
+}
+fn addVia(b Box&, v I64) { b.head.next = Node(v, b.head.next) }
+fn sum(b Box&) I64 {
+    t I64 = 0
+    for n := b.head, n != null, n = n.next { t = t * 10 + n.v }
+    return t
+}
+fn main() ? {
+    a := Array<Box>(1, Box())
+    for i in range 3 {
+        addVia(a[0], i + 1)
+        churn()
+    }
+    churn()
+    println("a " $sum(a[0]))
+}

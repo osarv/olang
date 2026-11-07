@@ -1,0 +1,43 @@
+type Node enum {
+    Leaf(s String&)
+    Many(kids Array<Node&>&)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+fn show(n Node&) String& {
+    return match n {
+        case Node.Leaf(s) => $s
+        case Node.Many(k) => "[" $k.Len() ":" $show(k[0]) "]"
+    }
+}
+fn build(n I64) Node& {
+    l := List<Node&>()
+    for i in range n {
+        s := "leaf" $i
+        l.Push(Node.Leaf(s))
+    }
+    return Node.Many(l.ToArray())
+}
+type Bag struct() {
+    items List<String&> = List<String&>()
+}
+fn wrap(b Bag&) Array<String&>&b { return b.items.ToArray() }
+fn bag(n I64) Array<String&> {
+    b := Bag()
+    for i in range n { b.items.Push("x" $i) }
+    return wrap(b)
+}
+fn main() ? {
+    t := build(5)
+    a := bag(4)
+    churn()
+    println($show(t) " " $a[3] " " $a.Len())
+}

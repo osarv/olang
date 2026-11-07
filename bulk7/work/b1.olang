@@ -1,0 +1,16 @@
+import "std/io"
+
+type Buf struct(a Array<I64>) {
+    a
+}
+
+fn walk(b Buf, n I64) I64 {
+    if n == 0: return b.a[0] * 1000 + b.a[2]
+    t := Buf(Array<I64>(3, n))
+    t.a[2] = b.a[0]
+    become walk(t, n - 1)
+}
+
+fn main() {
+    io.Println($walk(Buf(Array<I64>(3, 7)), 5))!
+}

@@ -1,0 +1,12 @@
+# r14 OVER-REJECTION - G9a/D16a: a literal initial value binds Fold's <U> before the lambda's written types are read,
+# so "a.Fold(0, fn(acc I64, x I32) I64 { ... })" is "this lambda's signature disagrees with fn(acc I32, x I32) I32",
+# reported twice (columns 27 and 24). G9a says a literal binds nothing while another argument can. Workaround:
+# Fold(I64(0), ...).
+#
+# expected: 6
+# actual: two error[D16a] at line 10
+fn main() ? {
+    a := I32[1, 2, 3]
+    total := a.Fold(0, fn(acc I64, x I32) I64 { return acc + x })
+    println($total)
+}

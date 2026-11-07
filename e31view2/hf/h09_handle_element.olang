@@ -1,0 +1,22 @@
+type Blk struct() {
+    S List<I64>
+    t I64 = 0
+}
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type F struct(K I64) {
+    K
+    Ls List<List<I64>>
+}
+fn add(f mut F&, b I64, x I64) { f.Ls[b].Push(x) }
+fn main() ? {
+    f := F(1)
+    f.Ls.Push(List<I64>())
+    add(f, 0, 7)
+    churn()
+    for s in f.Ls[0] { println("for " $s) }
+}

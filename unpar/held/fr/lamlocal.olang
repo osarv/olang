@@ -1,0 +1,47 @@
+import "std/io"
+
+type E enum {
+    F(f fn() I64)
+    N
+}
+
+type H struct(f fn() I64) {
+    F fn() I64 = f
+}
+
+type H2 struct(x Array<I64>&) {
+    X Array<I64>& = x
+}
+
+fn mayfail(n I64) Array<I64> ? MyErr {
+    if n > 1 { error MyErr.BAD }
+    return Array<I64>(1)
+}
+
+error MyErr {
+    BAD
+}
+
+type M struct(n I64, d Array<I64>&) {
+    n
+    g := fn() I64 { return d[1] }
+    f fn() I64 = g
+}
+
+fn main() {
+    d := Array<I64>(4, 7)
+    m := M(2, d)
+    churn()
+    io.Println($m.f())!
+}
+
+fn churn() {
+    for i in range 300 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        m := Map<I64, List<I64>>()
+        m.Put(i, b)
+        assert a[3] == i
+    }
+}

@@ -1,0 +1,47 @@
+import "std/io"
+import "std/os"
+
+Log mut I64 = 0
+
+error E {
+    BAD
+}
+
+fn risky(x I64) I64 ? E {
+    if x < 0 { error E.BAD }
+    return x
+}
+
+fn two() (I64, I64) {
+    return 3, 4
+}
+
+fn add(a I64, b I64) I64 {
+    return a + b
+}
+
+fn f(n I64) I64 ? E {
+    defer {
+        Log = Log + add(two())
+        v I64 = try risky(n) catch default 100
+        Log = Log + v
+        x := Array<I64>(n + 3, 1)
+        for e in x { Log = Log + e }
+        m I64 = match n { case 1 => 10 nomatch => 20 }
+        Log = Log + m
+    }
+    for i in range n {
+        if i == 2 { return i }
+        if i == 3 { break }
+    }
+    if n > 7 { error E.BAD }
+    k := try risky(n - 5)
+    return k
+}
+
+fn main() ? io.IoError + E {
+    a := try f(os.Args().Len()) catch default 0
+    b := try f(9) catch default 0
+    c := try f(4) catch default 0
+    try io.Print($a " " $b " " $c " " $Log "\n")
+}

@@ -1,0 +1,25 @@
+# os.RunOnStack called from two tasks: each f builds into the program's scope (assigning its own global), but the
+# RunOnStack thread reaches the real program scope, not its task's private stand-in (P2) - two threads bump one arena
+import "std/os"
+type N struct(v I64) {
+    v
+    pad Array<I64>& = Array<I64>(30, v)
+}
+G0 mut N& = N(0)
+G1 mut N& = N(0)
+fn fill0() {
+    for i in range 20000 { G0 = N(i) }
+}
+fn fill1() {
+    for i in range 20000 { G1 = N(i + 1000000) }
+}
+fn main() ? {
+    join {
+        spawn fn() { os.RunOnStack(1 << 20, fn() { fill0() }) }
+        spawn fn() { os.RunOnStack(1 << 20, fn() { fill1() }) }
+    }
+    ok := G0.v == 19999 and G1.v == 1019999
+    for x in G0.pad { ok = ok and x == 19999 }
+    for x in G1.pad { ok = ok and x == 1019999 }
+    println("ok " $ok " " $G0.v " " $G1.v " " $G0.pad[29] " " $G1.pad[29])
+}

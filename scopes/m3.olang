@@ -1,0 +1,28 @@
+# a cycle where the storing function is reached only around the cycle, and a global initializer
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+type Box struct() { n mut Node& = null }
+fn main() ? {
+    bx Box& = Box()
+    for i in range 2 {
+        inner Node& = Node(42)
+        p(bx, inner, 3)
+    }
+    churn()
+    try io.Print($bx.n.v "\n")
+}
+fn p(bx mut Box&, x Node&, n I64) {
+    if n > 0 { q(bx, x, n - 1) }
+}
+fn q(bx mut Box&, x Node&, n I64) {
+    if n > 0 { r(bx, x, n - 1) }
+}
+fn r(bx mut Box&, x Node&, n I64) {
+    if n > 0 { p(bx, x, n - 1) } else { bx.n = x }
+}

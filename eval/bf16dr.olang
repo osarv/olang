@@ -1,0 +1,10 @@
+import "std/io"
+X F64 = 1.0 + 1.0 / 256.0 + 1.0 / 1073741824.0
+B BF16 = BF16(X)
+H F16 = F16(1.0 + 1.0 / 2048.0 + 1.0 / 1073741824.0)
+M mut F64 = 1.0 + 1.0 / 256.0 + 1.0 / 1073741824.0
+MH mut F64 = 1.0 + 1.0 / 2048.0 + 1.0 / 1073741824.0
+fn main() ? io.IoError {
+    try io.Print("baked " $B.Bits() " run " $BF16(M).Bits() "\n")
+    try io.Print("f16 baked " $H.Bits() " run " $F16(MH).Bits() "\n")
+}

@@ -1,0 +1,12 @@
+# check: fail error[T25c]: a read-only copy cannot be passed where it may be written
+# also: note: 'x' copies 'G', reached read-only, so it is read-only - 'x := G.Clone()' would be one of its own
+# T25c: 'x := G' copies an immutable global, so the copy cannot be lent to a 'mut' receiver - Push would change G's list
+type Box struct(P mut Array<I64>&) {
+    P
+}
+GB Box = Box(Array<I64>(3))
+G List<I64> = List<I64>()
+fn main() ? {
+    x := G
+    x.Push(1)
+}

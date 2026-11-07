@@ -1,0 +1,16 @@
+import "std/io"
+import "std/map"
+# group words by their first letter: a Map whose values are Lists
+fn main() ? {
+    words := "apple avocado banana blueberry cherry apricot beet".Split(" ")
+    groups := map.Map<Char, mut List<String&>&>()
+    for w in words {
+        k := w[0]
+        if k not in groups { groups.Put(k, List<String&>()) }
+        g := try groups.Get(k)
+        g.Push(w)
+    }
+    for e in groups {
+        try io.Print($e.Key ": " $e.Value.ToArray() "\n")
+    }
+}

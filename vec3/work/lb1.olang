@@ -1,0 +1,18 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn mk(a mut Array<Char>&) fn() Char { return fn() Char { return a[0] } }
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    v.Push('b')
+    f := mk(v.ViewMut())
+    for i in range 1000 { v.Push('z') }
+    churn()
+    println($f())
+}

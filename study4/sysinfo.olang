@@ -1,0 +1,78 @@
+# sysinfo - a script reporting on the machine and process, calling the C library by name at run time (std/ffi)
+# where olang has no binding: the host name, the user and process ids, the page size and core count, the load
+# average, and a string the C library formats. The same numbers are fetched once through extern declarations, so the
+# two routes can be compared. Meant to be run with "olang -i" as a script as much as built.
+
+import "std/ffi"
+import "std/os"
+import "std/time"
+
+extern fn getpid() I32
+extern fn sysconf(name I32) I64
+
+ScSysconfPageSize I32 = 30          # _SC_PAGESIZE on Linux
+ScNprocessorsOnln I32 = 84          # _SC_NPROCESSORS_ONLN
+
+# a C function of no arguments returning an integer of kind k
+fn callInt(name String&, k ffi.Kind) I64 ? ffi.FfiError {
+    words := Array<U64>(0)
+    return I64(try ffi.Call(name, Array<U8>(0), words, ffi.Code(k)))
+}
+
+# gethostname(buf, len): the buffer is an array argument - its length then its bytes in the words
+fn hostname() String& ? ffi.FfiError {
+    size I64 = 256
+    words := Array<U64>(2 + ffi.WordsFor(size))
+    words[0] = U64(size)                          # the array's length, in elements
+    words[1 + ffi.WordsFor(size)] = U64(size)      # then len, the second argument
+    kinds := U8[ffi.ArrayOf(ffi.Kind.U8), ffi.Code(ffi.Kind.U64)]
+    rc := try ffi.Call("gethostname", kinds, words, ffi.Code(ffi.Kind.I32))
+    if I32(rc) != 0 { return "?" }
+    raw mut Array<U8>&return = Array<U8>(size)
+    ffi.Unpack(words, 1, raw)
+    n := try raw.FindIndex(fn(b U8) Bool { return b == 0 }) catch default size
+    return String(raw[:n])
+}
+
+# getloadavg(double[3], 3)
+fn loadAverage() Array<F64, 3> ? ffi.FfiError {
+    words := Array<U64>(1 + 3 + 1)
+    words[0] = 3
+    words[4] = 3
+    got := try ffi.Call("getloadavg", U8[ffi.ArrayOf(ffi.Kind.F64), ffi.Code(ffi.Kind.I32)], words, ffi.Code(ffi.Kind.I32))
+    out Array<F64, 3>
+    if I32(got) < 3 { return out }
+    for i in range 3 { out[i] = words[1 + i].F64FromBits() }
+    return out
+}
+
+# strlen through ffi, of text given as bytes with a NUL
+fn cLength(t String&) I64 ? ffi.FfiError {
+    bytes := $t "\0"
+    words := Array<U64>(1 + ffi.WordsFor(bytes.Len()))
+    words[0] = U64(bytes.Len())
+    ffi.Pack(words, 1, bytes)
+    return I64(try ffi.Call("strlen", U8[ffi.ArrayOf(ffi.Kind.U8)], words, ffi.Code(ffi.Kind.U64)))
+}
+
+fn main() ? {
+    t0 := time.Now()
+    host := try hostname() catch ffi.FfiError default "unknown"
+    pid := try callInt("getpid", ffi.Kind.I32)
+    uid := try callInt("getuid", ffi.Kind.U32)
+    pages := try callInt("getpagesize", ffi.Kind.I32)
+    load := try loadAverage()
+    println("host:        " $host)
+    println("pid:         " $pid " (extern says " $getpid() ", same: " $(pid == I64(getpid())) ")")
+    println("uid:         " $uid)
+    println("page size:   " $pages " (sysconf says " $sysconf(ScSysconfPageSize) ")")
+    println("cores:       " $sysconf(ScNprocessorsOnln))
+    println("load:        " $load[0].Fixed(2) " " $load[1].Fixed(2) " " $load[2].Fixed(2))
+    println("strlen:      " $(try cLength("olang")) " " $(try cLength("")))
+    println("has qsort:   " $ffi.Has("qsort") ", has nothing: " $ffi.Has("olang_no_such"))
+    missing := try callInt("olang_no_such", ffi.Kind.I32) catch ffi.FfiError.NOT_FOUND default -1
+    println("missing:     " $missing)
+    user := try os.Env("USER") catch default "(unset)"
+    println("user:        " $user)
+    eprintln("took " $(time.Since(t0) / 1000) " us")
+}

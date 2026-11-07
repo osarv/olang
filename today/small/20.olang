@@ -1,0 +1,29 @@
+# E31/E31a/R21: checked multi-index reads and stores through TryAt(i, j) and TrySetAt(i, j, v)
+type Grid struct(w I64) {
+    w
+    cells mut Array<I64>& = Array<I64>(w * w)
+}
+fn (g Grid&) At(r I64, c I64) I64 { return g.cells[r * g.w + c] }
+fn (g mut Grid&) SetAt(r I64, c I64, v I64) { g.cells[r * g.w + c] = v }
+fn (g Grid&) TryAt(r I64, c I64) I64 ? BuiltinError {
+    if r < 0 or r >= g.w or c < 0 or c >= g.w { error BuiltinError.OUT_OF_BOUNDS }
+    return g.cells[r * g.w + c]
+}
+fn (g mut Grid&) TrySetAt(r I64, c I64, v I64) ? BuiltinError {
+    if r < 0 or r >= g.w or c < 0 or c >= g.w { error BuiltinError.OUT_OF_BOUNDS }
+    g.cells[r * g.w + c] = v
+}
+fn run() I64 {
+    g := Grid(3)
+    try g[1, 1] = 5 catch BuiltinError { return -1 }
+    try g[1, 1] += 10 catch BuiltinError { return -2 }
+    bad := 0
+    try g[3, 0] = 7 catch BuiltinError { bad = bad + 1 }
+    try g[0, 3] += 7 catch BuiltinError { bad = bad + 10 }
+    v := try g[5, 5] catch default -100
+    return g[1, 1] * 1000 + bad * 10 + v
+}
+Baked I64 = run()
+fn main() ? {
+    println($run() " " $Baked)
+}

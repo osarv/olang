@@ -1,0 +1,7 @@
+import "std/io"
+Early mut I32 = Late + 1
+Late I32 = Mut2 + 10
+Mut2 mut I32 = 5
+fn main() ? io.IoError {
+    try io.Print($Early " " $Late " " $Mut2 "\n")
+}

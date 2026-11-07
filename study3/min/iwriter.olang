@@ -1,0 +1,6 @@
+import "std/io"
+fn main() ? {
+    w := io.Writer(io.Stdout)
+    w.Write("hi\n")
+    try w.Flush()
+}

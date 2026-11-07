@@ -1,0 +1,16 @@
+type P struct(x I64, name String&) {
+    x
+    name
+}
+fn pick(ps Array<P&>&, want I64) P&ps {
+    best P&ps = null
+    for p in ps {
+        if p.x == want { best = p }
+    }
+    return best
+}
+fn main() ? {
+    ps := P&[P(1, "a"), P(2, "b")]
+    b := pick(ps, 7)
+    println("x is " $b.x " name " $b.name)
+}

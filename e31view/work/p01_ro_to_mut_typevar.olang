@@ -1,0 +1,17 @@
+# a read-only reference handed to a generic whose parameter is "mut <T>" (T2: writable when bound to a reference)
+type Acc struct() {
+    N I64 = 0
+    d mut Array<I64>& = Array<I64>(1)
+}
+fn k(x mut <T>) { x.N = 5 }
+fn h(v Acc&) { k(v) }
+fn f(c mut Acc&) { h(c) }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    f(l[0])
+    println($l[0].N)
+    a := Acc[Acc()]
+    f(a[0])
+    println($a[0].N)
+}

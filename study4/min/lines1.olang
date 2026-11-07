@@ -1,0 +1,9 @@
+type M struct(t String&) { t }
+fn main() ? {
+    text String& = "a\nbb\nccc\n"
+    kept := List<String&>()
+    for line in text.Lines() { kept.Push(line) }
+    ms := List<M>()
+    for line in text.Lines() { ms.Push(M(line)) }
+    println($kept.Len() " " $ms.Len())
+}

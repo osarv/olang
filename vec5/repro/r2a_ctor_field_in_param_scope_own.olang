@@ -1,0 +1,23 @@
+# R evasion: a constructor field declared in a parameter's scope, the parameter given an own slot's borrow.
+# The field is new text built in the region; the instance does not hold the parameter itself.
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+type H struct(x String&) {
+    y String&x = $5 "-new-text-in-the-region"
+}
+fn main() ? {
+    c := CB()
+    h := H(c.text)
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(h.y)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

@@ -1,0 +1,9 @@
+== build -debug -sanitize
+asserted abc2, run time gives abc2
+status 0
+== build
+asserted abc2, run time gives abc2
+status 0
+== interpret
+asserted abc2, run time gives abc2
+status 0

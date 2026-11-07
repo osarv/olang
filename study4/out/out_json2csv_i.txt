@@ -1,0 +1,7 @@
+id,name,tags,address.city,address.zip,active,score,address.geo.lat,address.geo.lon
+1,Ada Lovelace,math;poetry,London,,,,,
+2,"Grace ""Amazing"" Hopper",,,,true,97.5,,
+3,"Linus, T.",,Portland,,,,45.5,-122.7
+4,"Multi
+Line","[{""k"":1}]",,,,1e+21,,
+json2csv: 4 rows, 9 columns

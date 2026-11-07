@@ -1,0 +1,5 @@
+fn K(x Array<I64>&) List<fn() I64> {
+    l := List<fn() I64>()
+    l.Push(fn() I64 { return x[1] })
+    return l
+}

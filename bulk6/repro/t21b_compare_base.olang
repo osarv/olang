@@ -1,0 +1,13 @@
+# T21b: a declared function type "fits its base" - yet == between a Handler?& and a fn?& of the same signature is E12
+import "std/io"
+
+type Handler fn(x I64) I64
+
+fn inc(x I64) I64 { return x + 1 }
+
+fn main() {
+    h Handler?& = inc
+    g fn?&(x I64) I64 = inc
+    b fn?&(x I64) I64 = h
+    io.Println($(h == g) " " $(b == g))!
+}

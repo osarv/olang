@@ -1,0 +1,26 @@
+# R1 through a call, in a function: 'return take p.Lx().toks' from a parameter's owned lexer
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn (p mut Parser&) Lx() mut Lexer&p { return p.lx }
+fn steal(p mut Parser&) Vec<String&> { return take p.Lx().toks }
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    p := Parser()
+    p.lx = Lexer()
+    for i in range 3 { p.lx.toks.Push($i "-word-built-in-the-lexer's-region") }
+    w := steal(p)
+    p.lx = null
+    churn()
+    println(w[0])
+}

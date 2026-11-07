@@ -1,0 +1,22 @@
+# E31/O14: returning a local instance whose type declares Call, as a function value
+import "std/io"
+type Counter struct(start I64) { n mut I64 = start }
+fn (c mut Counter&) Call() I64 {
+    c.n++
+    return c.n
+}
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        a := Array<I64>(8, 7)
+    }
+}
+fn mkF() fn() I64 {
+    c Counter& = Counter(41)
+    return c
+}
+fn main() ? {
+    g := mkF()
+    churn()
+    try io.Print($g() " (expected 42)\n")
+}

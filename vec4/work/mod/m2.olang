@@ -1,0 +1,17 @@
+# F4 across modules: global initializers T and U (no function store)
+import "lib"
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+T := lib.Docs.Title
+U := lib.Docs.Text()
+fn main() ? {
+    lib.Rename()
+    churn()
+    println(T)
+}

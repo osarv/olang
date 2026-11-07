@@ -1,0 +1,32 @@
+# own3 F2 (variant): a lambda capturing a borrowed copy, kept in a List by Push, is called after the source releases
+# what the copy's pointers name. -b -s: "use after scope closed"; -b: segfault; -i: prints 5
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+fn main() ? {
+    v := Outer()
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v
+    fs := List<fn() I64>()
+    fs.Push(fn() I64 { return b.o.deep.text.Len() })
+    v.o = null
+    churn()
+    println($fs[0]())
+}

@@ -1,0 +1,6 @@
+# G22/D3a: a clash inside a generic never instantiated
+fn f(a Array<I64, <N>>&) I64 {
+    N := 4
+    return N
+}
+fn main() ? { println("x") }

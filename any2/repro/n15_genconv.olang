@@ -1,0 +1,23 @@
+# text (no references inside) reaching an any through a generic or plain parameter: the box copies it, so nothing about
+# the argument's scope matters
+type W trait {
+    Show() String
+}
+type Lab extends String
+fn (l Lab&) Show() String { return "lab " $String(l) }
+fn pushG<T W>(xs mut List<any W&>&, x T) { xs.Push(x) }
+fn pushP(xs mut List<any W&>&, x Lab&) { xs.Push(x) }
+fn mkG<T W>(x T) any W& { return x }
+fn mkP(x Lab&) any W& { return x }
+fn main() {
+    xs := List<any W&>()
+    for i in range 3 {
+        t := Lab("t" $i "-" $(i * 7))
+        pushG(xs, t)
+        pushP(xs, t)
+        xs.Push(mkG(t))
+        xs.Push(mkP(t))
+    }
+    churn()
+    for x in xs { say(x.Show()) }
+}

@@ -1,0 +1,55 @@
+# own4 N1: an instance with a destructor, built in a block BEFORE an owner value local, is given a borrowed copy of it.
+# O38 holds the copy's loans until the end of the block the instance lives in - but at that block's close the owner
+# value local's owners are released (O35) before the earlier-registered destructor runs (O15: reverse order), and the
+# destructor reads the copy's stale own pointers.
+# -b -s: "use after scope closed"; -b: segfault; valgrind (-a x86-64-v3): invalid read in Watch$dtor of a block freed by
+# __olang_own_free; -i: refuses (it runs no destructors yet)
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type Watch struct() {
+    x Outer& = null
+} destruct {
+    if x != null {
+        churn()
+        println("watch sees " $x.o.k " " $x.o.deep.text)
+    }
+}
+fn put(dst mut Watch&, x Outer&) { dst.x = x }
+fn run() {
+    w := Watch()              # registered on the block first, so destructed last
+    v := Outer()              # an owner value local: its owners released at the block's close - before w's destructor
+    v.o = Inner(1)
+    v.o.deep = Leaf(5)
+    b := v                    # a borrowed copy
+    w.x = b                   # kept until the end of the block w lives in (O38) - the same block
+}
+fn run2() {
+    w := Watch()
+    v := Outer()
+    v.o = Inner(2)
+    v.o.deep = Leaf(6)
+    b := v
+    put(w, b)                 # the F2 path: a call keeping b in w, held to the block's end
+}
+fn main() ? {
+    run()
+    run2()
+    println("done")
+}

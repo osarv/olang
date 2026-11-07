@@ -1,0 +1,13 @@
+# G16a/B3b: instantiation names for negative, Bool and enum constants, and a large one
+type Layout enum {
+    RowMajor
+    ColMajor
+}
+type K<N I64, B Bool, L Layout> struct() { x mut I64 }
+fn (k K<<N>, <B>, <L>>&) Val() I64 { return N + (1 if B else 0) }
+fn main() ? {
+    a := K<-1, true, Layout.ColMajor>()
+    b := K<1, false, Layout.RowMajor>()
+    d := K<9223372036854775807, true, Layout.ColMajor>()
+    println($a.Val() " " $b.Val() " " $d.Val())
+}

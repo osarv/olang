@@ -1,0 +1,35 @@
+# O1b/P2: two tasks building into the program's scope at once - each through its own stand-in for it, folded back at
+# the join. Built with -d, where nothing hides the allocations: sharing the scope itself corrupted the heap there
+import "std/io"
+
+type Node struct(v I64) {
+    v
+}
+
+G Node& = Node(5)
+BadA mut I64 = 0
+BadB mut I64 = 0
+
+fn mk(p Node&, k I64) Node&p { return Node(p.v + k) }
+
+fn workA(n I64) {
+    for i in range n {
+        x := mk(G, i)
+        if x.v != 5 + i { BadA = BadA + 1 }
+    }
+}
+
+fn workB(n I64) {
+    for i in range n {
+        y := mk(G, 2 * i)
+        if y.v != 5 + 2 * i { BadB = BadB + 1 }
+    }
+}
+
+fn main() ? io.IoError {
+    join {
+        spawn workA(1000000)
+        spawn workB(1000000)
+    }
+    try io.Print($BadA " " $BadB "\n")
+}

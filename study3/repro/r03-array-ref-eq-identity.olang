@@ -1,0 +1,18 @@
+# r03 FRICTION (a silent wrong answer, by the rules) - E10/E10a/E10c: "==" on two Array<T>& references compares
+# identity, while on two Array<T> values it compares elements and on two String& references it compares text (String
+# declares Eq). ToArray() returns "mut Array<T>&", so "c.Keys().ToArray() == m.keys.ToArray()" - checking an LRU cache
+# against a model - is false for equal contents, and "$a" shows them equal. Identity has its own spelling now ("a is b",
+# E10c); a.Equal(b) gives the element comparison.
+#
+# expected (what a reader of the program expects): ==: true
+# actual: I64[1] I64[1] ==: false  Equal: true   (-b and -i agree)
+fn main() ? {
+    l := List<I64>()
+    l.Push(1)
+    a := l.ToArray()
+    b := l.ToArray()
+    println($a " " $b " ==: " $(a == b) "  Equal: " $a.Equal(b))
+    x := I64[1]
+    y := I64[1]
+    println("values ==: " $(x == y) ", text ==: " $("ab".ToUpper() == "AB"))
+}

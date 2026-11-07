@@ -1,0 +1,9 @@
+== build -debug -sanitize
+pre1 pre2
+status 0
+== build
+pre1 pre2
+status 0
+== interpret
+pre1 pre2
+status 0

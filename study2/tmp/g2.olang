@@ -1,0 +1,15 @@
+Keys Map<String&, I32> = table()
+
+fn table() Map<String&, I32> {
+    m := Map<String&, I32>()
+    m.Put("if", 1)
+    return m
+}
+
+fn a() I32 { return try Keys.Get("if") catch default 0 }
+fn b() I32 { return Keys.Len() }
+fn c() Bool { return "if" in Keys }
+
+fn main() ? {
+    println($a() " " $b() " " $c())
+}

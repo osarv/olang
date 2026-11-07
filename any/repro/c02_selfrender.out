@@ -1,0 +1,9 @@
+== build -debug -sanitize
+./run.sh: line 10: 18603 Segmentation fault      timeout 60 ./build/$n.debug.san
+status 139
+== build
+./run.sh: line 11: 18607 Segmentation fault      timeout 60 ./build/$n
+status 139
+== interpret
+olang interpret: /home/user/wt/rvany/std/prelude/array.olang:1: it uses storage after the scope it was made in closed
+status 1

@@ -1,0 +1,27 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type B2 struct(x Node&, y Node&) {
+    x
+    y
+}
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn two(a Node&, b Node&) (Node&a, Node&b) { return a, b }
+fn mk2(v I32) (Node&, Node&) { return Node(v), Node(v + 1) }
+fn pairUp(x Node&, y Node&) B2& { return B2(x, y) }
+fn main() ? {
+    outer Node& = Node(1)
+    keep B2& = B2(outer, outer)
+    keep2 B2& = B2(outer, outer)
+    for i in range 2 {
+        inner Node& = Node(42)
+        keep2 = pairUp(mk2(50))
+        keep2 = B2(mk2(60))
+    }
+    churn()
+    try io.Print($keep2.y.v "\n")
+}

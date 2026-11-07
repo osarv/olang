@@ -1,0 +1,17 @@
+# G21: the checker reads the field as Array<I32, 0> while code is generated for 6 elements - a declaration the
+# checker accepts copies six elements into storage for none
+fn twice(n I64) I64 { return n * 2 }
+type B<N I64> struct() {
+    a mut Array<I32, twice(N)>
+}
+fn (b mut B<<N>>&) Fill() {
+    for i in range twice(N) { b.a[i] = 100 + I32(i) }
+}
+fn take(z Array<I32, 0>&) I64 { return z.Len() }
+fn main() ? {
+    b := B<3>()
+    b.Fill()
+    guard := I64[1, 2, 3, 4]
+    x Array<I32, 0> = b.a
+    println($x " " $take(b.a) " " $guard)
+}

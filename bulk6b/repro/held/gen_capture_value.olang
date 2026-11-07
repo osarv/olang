@@ -1,0 +1,27 @@
+# gen_capture_uaf with a plain I64 captured (no reference): the closure environment alone
+import "std/io"
+
+type node struct(v I64) { v }
+
+fn mk(k I64) node& { return node(k) }
+
+fn gen(k I64) Iterator<I64> {
+    r := k
+    f := fn() I64 { return r }
+    for i in range 3 { yield f() + i }
+}
+
+fn churn() I64 {
+    junk := Vec<String>()
+    for i in range 2000 { junk.Push($i "abcdefghijklmnopqrstuvwxyz") }
+    return junk.Len()
+}
+
+fn main() {
+    t := 0
+    for x in gen(5) {
+        churn()
+        t += x
+    }
+    io.Println($t " (18)")!
+}

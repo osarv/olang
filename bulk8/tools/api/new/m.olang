@@ -1,0 +1,13 @@
+type E error { Bad(n I32), Eof(at I64) }
+type Pt struct(x I64) { x }
+fn Pt.Of(n I64, m I64 = 0) Pt { return Pt(n + m) }
+fn Pt.Added() Pt { return Pt(1) }
+type H packed struct(a U3, b U5) { a, b }
+fn F(n I64) I64 ? E {
+    if n < 0: error E.Bad(I32(n))
+    return n
+}
+fn G(n I64) I64 ? {
+    if n < 0: error Raised(n = n, why = "neg")
+    return n
+}

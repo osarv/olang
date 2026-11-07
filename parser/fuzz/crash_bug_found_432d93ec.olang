@@ -1,0 +1,107 @@
+# text, part of the prelude. A String is an Array<Char> with an identity of its own (T29a): it indexes, slices
+# and goes to C as the array does, and text written in the program - a literal, a "$x" rendering, a join - is a
+# String wherever one is wanted (T29c). Bytes become text with "String(bytes)", which copies nothing, and text goes
+# wherever an Array<U8> is wanted as it is (T29h). "==" compares what two texts say (String's Eq, E10a); "same(a, b)"
+# asks whether they are one. There is no encoding check: a Char is one byte of text, a UTF-8 code unit.
+
+# one byte of text (T29h): a U8 that renders as a character, the type of a character literal ('a'), and with U8's
+# arithmetic ('a' + 1 is 'b')
+type Char extends U8
+
+fn (c Char) IsDigit() Bool { return c >= '0' and c <= '9' }
+fn (c Char) IsLower() Bool { return c >= 'a' and c <= 'z' }
+fn (c Char) IsUpper() Bool { return c >= 'A' and c <= 'Z' }
+fn (c Char) IsLetter() Bool { return c.IsLower() or c.IsUpper() }
+fn (c Char) IsSpace() Bool { return c == ' ' or c == '\t' or c == '\n' or c == '\r' }
+fn (c Char) ToUpper() Char { return c - 32 if c.IsLower() else c }
+fn (c Char) ToLower() Char { return c + 32 if c.IsUpper() else c }
+
+type String extends Array<Char>
+
+error ParseError {
+    EMPTY
+    INVALID
+    OVERFLOW
+}
+
+# FNV-1a over the bytes: text that SAYS the same thing hashes the same, whatever storage holds it
+fn (t String&) Hash() I64 {
+    h I64 = -3750763034362895579
+    for c in t {
+        h = (h ^ c) * 1099511628211
+    }
+    return h
+}
+
+# the same bytes, in the same order
+fn (a String&) Eq(b String&) Bool {
+    if a.Len() != b.Len() {
+        return false
+    }
+    for i in range a.Len() {
+        if a[i] != b[i] {
+            return false
+        }
+    }
+    return true
+}
+
+# bytewise lexicographic order: -1, 0 or 1. A proper prefix sorts first.
+fn (a String&) Compare(b String&) I32 {
+    n I64 = a.Len()
+    if b.Len() < n {
+        n = b.Len()
+    }
+    for i in range n {
+        if a[i] < b[i] {
+            return -1
+        }
+        if a[i] > b[i] {
+            return 1
+        }
+    }
+    if a.Len() < b.Len() {
+        return -1
+    }
+    if a.Len() > b.Len() {
+        return 1
+    }
+    return 0
+}
+
+fn (a String&) StartsWith(prefix String&) Bool {
+    if prefix.Len() > a.Len() {
+        return false
+    }
+    return a[:prefix.Len()].Eq(prefix)
+}
+
+fn (a String&) EndsWith(suffix String&) Bool {
+    if suffix.Len() > a.Len() {
+        return false
+    }
+    return a[a.Len() - suffix.Len():].Eq(suffix)
+}
+
+# the index of the first occurrence of c, or -1
+fn (a String&) FindByte(c U8) I64 {
+    for i in range a.Len() {
+        if a[i] == c {
+            return i
+        }
+    }
+    return -1
+}
+
+# the index of the first occurrence of sub, or -1. An empty sub is found at 0.
+fn (a String&) Find(sub String&) I64 {
+    last I64 = a.Len() - sub.Len()
+    for i in range last + 1 {
+        if a[i:i + sub.Len()].Eq(sub) {
+            return i
+        }
+    }
+    return -1
+}
+
+# (Contains - whether sub occurs in it - is every array's, std/prelude

@@ -1,0 +1,16 @@
+# C2e: an inline field's size, computed at compile time, depending on the generic type's argument
+import "std/io"
+fn cap(a Array<<T>>&) I64 {
+  match <T> {
+    case I32 { return 2 }
+    nomatch { return 5 }
+  }
+}
+type Buf<T> struct() {
+  data Array<<T>> = Array<<T>>(cap(Array<<T>>(0)))
+}
+fn main() ? {
+  a := Buf<I32>()
+  b := Buf<F64>()
+  try io.Print($a.data.Len() " " $b.data.Len() "\n")
+}

@@ -1,0 +1,9 @@
+# over-rejection: an element read through a view keeps the loan, where v[0] (At) does not
+fn main() ? {
+    v := Vec<String&>()
+    v.Push("a")
+    d := v.View()
+    e := d[0]
+    v.Push("b")
+    println(e)
+}

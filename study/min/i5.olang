@@ -1,0 +1,6 @@
+fn take(x U8) U8 { return x }
+fn main() ? {
+    b := true
+    m U8 = match b { case true => 3
+        nomatch => 4 }
+}

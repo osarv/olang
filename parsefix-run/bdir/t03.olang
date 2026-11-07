@@ -1,0 +1,10 @@
+# comprehension with filter and conditional element
+test "a" {
+    a := I32[1, 2, 3, 4, 5]
+    b := I32[(x if x > 2 else 0) for x in a if x != 4]
+    assert b.Len() == 4
+    c := I32[x * 2 for x in a]
+    assert c[4] == 10
+    d := I64[i for i in range 2, 5]
+    assert d.Len() == 3
+}

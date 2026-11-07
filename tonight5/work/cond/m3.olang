@@ -1,0 +1,21 @@
+type B2 struct() { arr Array<mut Node&, 2> }
+fn mk2(b mut Box&) B2 {
+    x := B2()
+    x.arr[0] = b.head
+    x.arr[1] = b.head
+    return x
+}
+fn main() ? {
+    c := churn() < 0
+    outer mut Box& = Box()
+    k := outer.head
+    o2 := mk2(outer)
+    {
+        inner mut Box& = Box()
+        i2 := mk2(inner)
+        d B2 = o2 if c else i2
+        d.arr[0].next = Node(48)
+    }
+    churn()
+    println($rd(k))
+}

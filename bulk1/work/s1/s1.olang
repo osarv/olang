@@ -1,0 +1,38 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    t String& = $"node " $v " with text padded out to a fair length ..........................."
+    next mut Node?& = null
+}
+
+type Holder struct() {
+    m Map<I64, mut Node&>
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    h := Holder()
+    for i in range 8 {
+        h.m.Put(i, Node(i))
+        if i >= 1 {
+            a := try h.m.Get(i - 1) catch { unreachable }
+            b := try h.m.Get(i) catch { unreachable }
+            b.next = a                   # one value of the map's place stored inside another
+        }
+        if i >= 1 { h.m.Remove(i - 1) }  # which a removal then lets go of
+        churn()
+        c := try h.m.Get(i) catch { unreachable }
+        if c.next is not null { io.Println(c.next!.t)! }
+    }
+}

@@ -1,0 +1,14 @@
+type N struct(v I32) { v }
+fn keep(v <T>) T {
+    x T = v
+    return x
+}
+fn param(y mut <T>) T { return y }
+type Box<T> struct(v mut T) { v }
+fn main() ? {
+    n mut N& = N(1)
+    println($keep(n).v " " $keep(3) " " $param(4) " " $param(n).v)
+    b := Box<I32>(5)
+    c := Box<N&>(n)
+    println($b.v " " $c.v.v)
+}

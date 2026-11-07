@@ -1,0 +1,43 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn mk(n mut Node&, k I64) Node {
+    r := Node(k)
+    r.next = n
+    return r
+}
+fn churn() I64 {
+    s I64 = 0
+    for j in range 50 {
+        t := Node(j)
+        u := Node(j + 1)
+        s = s + t.v + u.v
+    }
+    return s
+}
+fn two(p mut Node&, q mut Node&, i I64) {
+    p.next, q.next = Node(i), Node(p.v + i)
+}
+fn swapish(p mut Node&, q mut Node&) {
+    p.next, q.next = Node(q.v), Node(p.next.v)
+}
+fn main() ? {
+    a mut Node& = Node(0)
+    for i in range 3 {
+        b mut Node& = Node(10 + i)
+        a.next, b.next = Node(i), Node(a.v + 100)
+        two(a, b, i)
+        swapish(a, b)
+        c mut Node& = Node(20)
+        c.next, a.next = Node(a.next.v), Node(c.v)
+    }
+    x := churn()
+    o mut Node& = Node(1)
+    for i in range 3 {
+        loc mut Node& = Node(50 + i)
+        o.next, loc.v = mk(o, i), 7
+    }
+    y := churn()
+    println($a.next.v " " $o.next.v " " $o.next.next.v " " $x " " $y)
+}

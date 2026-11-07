@@ -1,0 +1,42 @@
+import "std/io"
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(s String&) String { return $s "-made" }
+
+fn keepRec(l mut List<String&>&, s String&, n I64) {
+    if n == 0 {
+        l.Push(s)
+        return
+    }
+    keepRec(l, mk(s) if n > 1 else "", n - 1)
+}
+fn evenK(l mut List<String&>&, s String&, n I64) {
+    if n == 0 {
+        l.Push(s)
+        return
+    }
+    oddK(l, match n { case 1 => ""  nomatch => mk(s) }, n - 1)
+}
+fn oddK(l mut List<String&>&, s String&, n I64) {
+    if n == 0 {
+        l.Push(s)
+        return
+    }
+    evenK(l, mk(s) if n > 0 else "", n - 1)
+}
+
+fn main() {
+    l := List<String&>()
+    for i in range 4 {
+        keepRec(l, $i, 3)
+        evenK(l, $i "e", 4)
+        churn()
+    }
+    churn()
+    io.Println($l[0] " " $l[6] " " $l[7])!
+}

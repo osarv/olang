@@ -1,0 +1,29 @@
+type P struct(n I32, s String&) {
+    n
+    s
+    s = $n "-dynamic-text-long-enough-to-notice"
+}
+type R struct(v I32, r mut Array<I32>&) {
+    v
+    r
+    r = Array<I32>(8, v)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 3000 {
+        a := Array<I64>(64, I64(i))
+        u := $i "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+        t = t + a[3] + u.Len()
+    }
+    return t
+}
+fn main() ? {
+    keep P& = P(0, "x")
+    keepR R& = R(0, null)
+    for i in range 3 {
+        keep = P(I32(i) + 1, "orig")
+        keepR = R(I32(i) + 7, null)
+    }
+    c := churn()
+    println($keep.s " " $keepR.r " " $c)
+}

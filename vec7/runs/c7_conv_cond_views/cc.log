@@ -1,0 +1,13 @@
+/home/user/review/vec7/work/c7_conv_cond_views.olang:9:28: error[O39]: calling 'Push' may release the Array<Char> borrowed on line 8, which is used after it
+    9 |     for i in range 100 { v.Push('b') }
+      |                            ^~~~
+/home/user/review/vec7/work/c7_conv_cond_views.olang:8:19: note: borrowed here
+    8 |     s := String(v.View() if c else w.View())
+      |                   ^~~~
+/home/user/review/vec7/work/c7_conv_cond_views.olang:12:13: note: used here, after it
+   12 |     println(s)
+      |             ^
+/home/user/wt/rvvec7/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error

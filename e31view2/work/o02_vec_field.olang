@@ -1,0 +1,12 @@
+type W struct() {
+    v Vec<I64> = Vec<I64>()
+    k I64 = 0
+}
+type V struct() {
+    w W = W()
+}
+fn main() ? {
+    l := List<V>()
+    l.Push(V())
+    println("ok")
+}

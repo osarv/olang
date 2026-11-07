@@ -1,0 +1,10 @@
+/home/user/review/vec7/work/c6_conv_view_task.olang:7:32: error[O41]: calling 'Push' may release the Array<Char> the task spawned on line 6 may be using until the join - release it after the join
+    7 |         for i in range 100 { v.Push('b') }
+      |                                ^~~~
+/home/user/review/vec7/work/c6_conv_view_task.olang:6:29: note: borrowed here
+    6 |         spawn show(String(v.View()))
+      |                             ^~~~
+/home/user/wt/rvvec7/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error

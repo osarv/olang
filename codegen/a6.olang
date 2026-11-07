@@ -1,0 +1,15 @@
+import "std/io"
+
+fn label(n I64) String {
+    s := "item-" $n
+    return s
+}
+
+fn show(t String&) ? io.IoError {
+    pad := "...................................................." $t.Len()
+    try io.Print($t " " $pad "\n")
+}
+
+fn main() ? io.IoError {
+    try show(label(42))
+}

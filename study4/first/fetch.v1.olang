@@ -1,0 +1,181 @@
+# fetch - downloads URLs in parallel, retrying with backoff, and saves the bodies.
+#
+#   fetch [-o DIR] [-r RETRIES] [-t TIMEOUT_MS] URL...
+#
+# Each URL is fetched by a task of its own. A request is retried when no response arrives (connection refused, a
+# timeout, a broken transfer) or the server answers 5xx, waiting 50ms, 100ms, 200ms ... between attempts; a 4xx is
+# final. The whole run has a deadline after which no new attempt starts. A body is written to DIR under the last part
+# of the URL's path, and the Content-Length the server sent, when it sent one, is checked against what arrived.
+#
+# With no URL given it runs a self-check: it serves a temporary directory with "python3 -m http.server", started a
+# moment AFTER the first requests go out (so they are refused and must be retried), fetches a few files from it plus a
+# missing one and an unused port, and stops the server.
+
+import "std/os"
+import "std/http"
+import "std/filepath"
+import "std/cancel"
+import "std/time"
+
+extern fn usleep(us U32) I32
+
+type Result struct(Url String&, Status I32, Bytes I64, Attempts I64, Ms I64, Note String&) {
+    Url
+    Status
+    Bytes
+    Attempts
+    Ms
+    Note
+}
+
+type Config struct() {
+    dir String& = "fetched"
+    retries I64 = 4
+    timeoutMs I64 = 2000
+    urls List<String&> = List<String&>()
+}
+
+# the last part of the URL's path, or "index.html"
+fn saveName(url String&) String& {
+    rest := url
+    scheme := try url.Find("://") catch default -1
+    if scheme >= 0 { rest = url[scheme + 3:] }
+    slash := try rest.FindByte('/') catch { return "index.html" }
+    path := rest[slash:]
+    q := try path.FindByte('?') catch default path.Len()
+    base := filepath.Base(path[:q])
+    if base.Len() == 0 or base == "/" { return "index.html" }
+    return base
+}
+
+fn retryable(e http.HttpError) Bool {
+    return e != http.HttpError.BAD_URL and e != http.HttpError.INVALID and e != http.HttpError.NO_CURL
+}
+
+fn fetchOne(url String&, cfg Config&, all cancel.Token&) Result {
+    t0 := time.Now()
+    wait I64 = 50
+    attempts I64 = 0
+    note := ""
+    for attempts <= cfg.retries {
+        if all.Cancelled() {
+            note = "deadline passed"
+            break
+        }
+        attempts++
+        r := try http.Send("GET", url, Array<http.Header>(0), "", cfg.timeoutMs) catch http.HttpError {
+            note = "no response"
+            usleep(U32(wait * 1000))
+            wait *= 2
+            continue
+        }
+        if r.Status >= 500 {
+            note = "server error " $r.Status
+            usleep(U32(wait * 1000))
+            wait *= 2
+            continue
+        }
+        if r.Status == 200 {
+            declared := try r.Header("Content-Length") catch default ""
+            if declared.Len() > 0 {
+                n := try declared.Trim().ParseInt() catch default -1
+                if n != r.Body.Len() { note = "short body: " $r.Body.Len() " of " $n }
+            }
+            try os.WriteFile(filepath.Join(cfg.dir, saveName(url)), r.Body) catch os.OsError { note = "cannot save" }
+        }
+        return Result(url, r.Status, r.Body.Len(), attempts, time.Since(t0) / 1000000, note)
+    }
+    return Result(url, 0, 0, attempts, time.Since(t0) / 1000000, note)
+}
+
+fn fetchAll(cfg Config&, deadlineMs I64) Array<Result> {
+    try os.MkDirAll(cfg.dir) catch { eprintln("fetch: cannot make " $cfg.dir) }
+    all := cancel.After(deadlineMs)
+    urls := cfg.urls.ToArray()
+    results := Array<Result>(urls.Len())
+    join {
+        for i, u in urls { spawn results[i] = fetchOne(u, cfg, all) }
+    }
+    return results
+}
+
+fn show(results Array<Result>&) {
+    for r in results {
+        status := "-" if r.Status == 0 else $r.Status
+        println($status.PadStart(4) $r.Bytes.PadStart(7) " bytes  " $r.Attempts " attempt(s)  " $r.Url
+            ("  (" $r.Note ")" if r.Note.Len() > 0 else ""))
+    }
+}
+
+# the self-check: a server started late, on a port picked from the process id
+fn selfCheck() I64 ? os.OsError {
+    root := try os.MkTemp("", "fetch-root-")
+    out := try os.MkTemp("", "fetch-out-")
+    defer {
+        try os.RemoveAll(root) catch { }
+        try os.RemoveAll(out) catch { }
+    }
+    try os.WriteFile(filepath.Join(root, "hello.txt"), "hello, world\n")
+    big := StringBuilder()
+    for i in range 20000 { big.Push($i "\n") }
+    try os.WriteFile(filepath.Join(root, "numbers.txt"), big.ToString())
+    try os.MkDirAll(filepath.Join(root, "sub"))
+    try os.WriteFile(filepath.Join(root, "sub/data.json"), "{\"ok\": true}\n")
+    port := 20000 + I64(time.Wall() % 20000)
+    base := "http://127.0.0.1:" $port
+    cfg := Config()
+    cfg.dir = out
+    cfg.retries = 6
+    for p in String&["/hello.txt", "/numbers.txt", "/sub/data.json", "/missing.txt"] { cfg.urls.Push($base $p) }
+    cfg.urls.Push("http://127.0.0.1:1/never")
+    pidFile := filepath.Join(root, "server.pid")
+    results Array<Result>
+    join {
+        spawn fn() {
+            usleep(150000)
+            os.Run("cd " $os.Quote(root) " && exec python3 -m http.server " $port " --bind 127.0.0.1 >/dev/null 2>&1 & echo $! > "
+                $os.Quote(pidFile))
+        }()
+        results = fetchAll(cfg, 10000)
+    }
+    pid := try os.ReadFile(pidFile)
+    os.Run("kill " $pid.Trim())
+    show(results)
+    bad := 0
+    if results[0].Status != 200 or results[0].Attempts < 2 { bad++ }
+    if results[1].Bytes != big.Len() { bad++ }
+    if results[3].Status != 404 { bad++ }
+    if results[4].Status != 0 { bad++ }
+    saved := try os.ReadFile(filepath.Join(out, "numbers.txt"))
+    if saved != big.ToString() { bad++ }
+    println("self-check: " $bad " problem(s)")
+    return bad
+}
+
+fn main() ? {
+    args := os.Args()
+    cfg := Config()
+    i := 1
+    for i < args.Len() {
+        a := args[i]
+        if a == "-o" or a == "-r" or a == "-t" {
+            if i + 1 >= args.Len() {
+                eprintln("fetch: " $a " needs a value")
+                os.Exit(2)
+            }
+            v := args[i + 1]
+            if a == "-o" { cfg.dir = v }
+            if a == "-r" { cfg.retries = try v.ParseInt() }
+            if a == "-t" { cfg.timeoutMs = try v.ParseInt() }
+            i += 2
+            continue
+        }
+        cfg.urls.Push(a)
+        i++
+    }
+    if cfg.urls.Len() == 0 {
+        if try selfCheck() != 0 { fail }
+        return
+    }
+    show(fetchAll(cfg, 60000))
+}

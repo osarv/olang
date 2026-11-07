@@ -1,0 +1,10 @@
+# section 12: an enum type can never be generic
+import "std/io"
+type Opt<T> enum {
+  None
+  Some(v <T>)
+}
+fn main() ? {
+  o := Opt<I32>.Some(3)
+  try io.Print($o "\n")
+}

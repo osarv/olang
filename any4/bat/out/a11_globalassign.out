@@ -1,0 +1,15 @@
+== a11_globalassign
+  san:    exit 0 local 0 inner0|local 1 inner1|
+  O3:     exit 0 local 0 inner0|local 1 inner1|
+  interp: exit 0 local 0 inner0|local 1 inner1|
+--- compile (-debug -sanitize)
+built ./build/a11_globalassign.debug.san
+--- run san
+local 0 inner0
+local 1 inner1
+--- run O3
+local 0 inner0
+local 1 inner1
+--- interpret
+local 0 inner0
+local 1 inner1

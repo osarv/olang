@@ -1,0 +1,17 @@
+# check: fail error[S9e]: this loop's own calls can fail
+# S9e: a loop whose Next can fail is written with try
+error E {
+    X
+}
+type It struct() {
+    i I32 = 0
+}
+fn (t mut It&) Next() I32 ? E + Exhausted {
+    if t.i > 2 { error Exhausted.END }
+    t.i++
+    return t.i
+}
+fn main() ? E {
+    t mut It& = It()
+    for x in t { }
+}

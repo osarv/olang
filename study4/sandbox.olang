@@ -1,0 +1,154 @@
+# sandbox - builds and runs small olang programs, each in a fresh temporary directory, and checks their output.
+#
+#   sandbox [-j N] [-k] FILE...
+#
+# Each FILE is an olang program whose leading comment lines say what it must print: "# expect: TEXT" lines, in order,
+# and optionally "# status: N". The program is copied into a new directory made by os.MkTemp, built there with the
+# compiler named by $OLANG (else "olang" on PATH) and run; its standard output is compared with the expected lines. The
+# directory is removed afterwards unless -k keeps it (for a failure only). Programs are built N at a time (default 2),
+# the next file taken from a shared counter. A summary is written to sandbox-report.txt through a temporary file
+# renamed into place, so a reader never sees half of it. With no FILE, a built-in set of programs is checked.
+
+import "std/os"
+import "std/filepath"
+import "std/time"
+import "std/io"
+
+type Case struct(Name String&, Source String&) {
+    Name
+    Source
+}
+
+type Outcome struct(Name String&, Passed Bool, Detail String&, Ms I64) {
+    Name
+    Passed
+    Detail
+    Ms
+}
+
+Builtin := Case&[
+    Case("hello.olang", "# expect: hello\n# expect: 42\nfn main() ? {\n    println(\"hello\")\n    println($(6 * 7))\n}\n"),
+    Case("exit3.olang", "# status: 3\nimport \"std/os\"\nfn main() ? { os.Exit(3) }\n"),
+    Case("wrong.olang", "# expect: one\nfn main() ? { println(\"two\") }\n"),
+    Case("broken.olang", "# expect: x\nfn main() ? { println(undefinedName) }\n"),
+    Case("loop.olang", "# expect: 4950\nfn main() ? {\n    s I64 = 0\n    for i in range 100 { s += i }\n    println($s)\n}\n")
+]
+
+Next mut I64 = 0
+
+fn compiler() String& {
+    return try os.Env("OLANG") catch default "olang"
+}
+
+fn expectations(src String&) (List<String&>, I32) {
+    lines := List<String&>()
+    status I32 = 0
+    for l in src.Lines() {
+        if l.StartsWith("# expect: ") {
+            lines.Push(l[10:])
+        } else if l.StartsWith("# status: ") {
+            status = I32(try l[10:].Trim().ParseInt() catch default 0)
+        }
+    }
+    return lines, status
+}
+
+fn check(c Case&, keep Bool) Outcome {
+    t0 := time.Now()
+    dir := try os.MkTemp("", "sandbox-") catch { return Outcome(c.Name, false, "cannot make a directory", 0) }
+    cleanup := true
+    defer {
+        if cleanup { try os.RemoveAll(dir) catch { eprintln("sandbox: could not remove " $dir) } }
+    }
+    file := filepath.Join(dir, c.Name)
+    try os.WriteFile(file, c.Source) catch { return Outcome(c.Name, false, "cannot write the source", 0) }
+    exe := filepath.Join(dir, "build", filepath.Base(c.Name).Replace(".olang", ""))
+    # the compiler writes into build/ under its working directory, so it runs in the sandbox (through env -C)
+    built := try os.Exec(String&["env", "-C", dir, compiler(), "-b", c.Name]) catch os.OsError {
+        return Outcome(c.Name, false, "cannot run the compiler", time.Since(t0) / 1000000)
+    }
+    if built.Status != 0 {
+        cleanup = not keep
+        first := try built.Stdout.Lines().Next() catch default ""
+        return Outcome(c.Name, false, "does not build: " $first, time.Since(t0) / 1000000)
+    }
+    ran := try os.Exec(String&[exe]) catch os.OsError {
+        return Outcome(c.Name, false, "cannot run " $exe, time.Since(t0) / 1000000)
+    }
+    want, status := expectations(c.Source)
+    got := ran.Stdout.Lines().ToList()
+    detail String&return = ""
+    if ran.Status != status {
+        detail = "status " $ran.Status ", expected " $status
+    } else if got.Len() != want.Len() {
+        detail = $got.Len() " lines, expected " $want.Len()
+    } else {
+        for i in range want.Len() {
+            if got[i] != want[i] {
+                detail = "line " $(i + 1) ": '" $got[i] "', expected '" $want[i] "'"
+                break
+            }
+        }
+    }
+    if detail.Len() > 0 { cleanup = not keep }
+    return Outcome(c.Name, detail.Len() == 0, detail, time.Since(t0) / 1000000)
+}
+
+fn worker(cases Array<Case&>&, results mut Array<Outcome>&, keep Bool) {
+    for {
+        i := Next.AtomicAdd(1)
+        if i >= cases.Len() { return }
+        results[i] = check(cases[i], keep)
+    }
+}
+
+fn writeReport(path String&, results Array<Outcome>&) ? os.OsError {
+    tmp := $path ".tmp"
+    fd := try os.Create(tmp)
+    w := io.Writer(fd)
+    for r in results {
+        w.Write($("PASS " if r.Passed else "FAIL ") $r.Name " (" $r.Ms " ms)" $(" - " $r.Detail if not r.Passed else "") "\n")
+    }
+    try w.Flush() catch io.IoError { error os.OsError.FAILED }
+    try os.Close(fd)
+    try os.Rename(tmp, path)
+}
+
+fn main() ? {
+    os.OnCrash("sandbox: crashed - please report it\n")
+    args := os.Args()
+    jobs I64 = 2
+    keep := false
+    files := List<String&>()
+    i := 1
+    for i < args.Len() {
+        if args[i] == "-j" {
+            jobs = try args[i + 1].ParseInt()
+            i += 2
+            continue
+        }
+        if args[i] == "-k" { keep = true } else { files.Push(args[i]) }
+        i++
+    }
+    # one variable cannot hold either the global table or local data (a reference keeps its exact scope, O25), so
+    # the built-in cases are copied into the local list too
+    loaded := List<Case&>()
+    for f in files {
+        src String&loaded = try os.ReadFile(f)
+        loaded.Push(Case(filepath.Base(f), src))
+    }
+    if files.Len() == 0 {
+        for c in Builtin { loaded.Push(c) }
+    }
+    cases := loaded.ToArray()
+    results := Array<Outcome>(cases.Len())
+    join {
+        for w in range jobs { spawn worker(cases, results, keep) }
+    }
+    passed := results.Count(fn(r Outcome) Bool { return r.Passed })
+    for r in results {
+        println($("PASS " if r.Passed else "FAIL ") $r.Name $(" - " $r.Detail if not r.Passed else ""))
+    }
+    try writeReport("sandbox-report.txt", results)
+    println($passed "/" $results.Len() " passed")
+}

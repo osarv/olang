@@ -1,0 +1,40 @@
+# channels: an &p field of the receiver; a task; a Call adapter field; a trait default
+type Info struct(Offset I64, Len I64) {
+    Offset
+    Len
+}
+type Cur struct(p mut Info&) {
+    at mut Info&p = p
+}
+type Holder struct(c Cur) {
+    c
+    ref Info& = null
+    n I64 = 0
+}
+fn (h mut Holder&) viaPField(i mut Info&) I64 {
+    h.c.at = i
+    return 0
+}
+fn store(h mut Holder&, i Info&) { h.ref = i }
+fn (h mut Holder&) viaTask(i Info&) I64 {
+    join { spawn store(h, i) }
+    return 0
+}
+fn mkP(k I64, d mut Info&) Holder {
+    h := Holder(Cur(d))
+    i := Info(k, k + 1)
+    h.viaPField(i)
+    return h
+}
+fn mkT(k I64, d mut Info&) Holder {
+    h := Holder(Cur(d))
+    i := Info(k, k + 1)
+    h.viaTask(i)
+    return h
+}
+fn main() ? {
+    d := Info(0, 0)
+    a := mkP(1, d)
+    b := mkT(2, d)
+    println($a.c.at.Len " " $b.ref.Len)
+}

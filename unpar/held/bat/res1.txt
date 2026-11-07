@@ -1,0 +1,46 @@
+compr_s/main.olang           branch rc=1   error[E27]     | master rc=1   error[E27]     | compr_s/main.olang:5:30: error[E27]: a comprehension's elements may not be or hold referen
+compr_x/main.olang           branch rc=1   error[E27]     | master rc=1   error[E27]     | compr_x/lib.olang:3:30: error[E27]: a comprehension's elements may not be or hold referenc
+ctorassign_s/main.olang      branch rc=0                  | master rc=0                  | 9
+ctorassign_x/main.olang      branch rc=0                  | master rc=0                  | 9
+ctorcall_s/main.olang        branch rc=0                  | master rc=0                  | 9
+ctorcall_x/main.olang        branch rc=0                  | master rc=0                  | 9
+ctorhandle2_s/main.olang     branch rc=0                  | master rc=0                  | 9
+ctorhandle2_x/main.olang     branch rc=0                  | master rc=0                  | 9
+ctorhandle_s/main.olang      branch rc=0                  | master rc=0                  | 9
+ctorhandle_x/main.olang      branch rc=0                  | master rc=0                  | 9
+ctorlam2_s/main.olang        branch rc=139                | master rc=139                | 
+ctorlam2_x/main.olang        branch rc=139                | master rc=139                | 
+ctorloop_s/main.olang        branch rc=0                  | master rc=0                  | 9
+ctorloop_x/main.olang        branch rc=0                  | master rc=0                  | 9
+ctormatch_s/main.olang       branch rc=0                  | master rc=0                  | 9
+ctormatch_x/main.olang       branch rc=0                  | master rc=0                  | 9
+ctormethod_s/main.olang      branch rc=0                  | master rc=0                  | 9
+ctormethod_x/main.olang      branch rc=0                  | master rc=0                  | 9
+defer_s/main.olang           branch rc=139                | master rc=139                | 
+defer_x/main.olang           branch rc=139                | master rc=139                | 
+forin_s/main.olang           branch rc=0                  | master rc=0                  | 9
+forin_x/main.olang           branch rc=0                  | master rc=0                  | 9
+iterator_s/main.olang        branch rc=0                  | master rc=0                  | 9
+iterator_x/main.olang        branch rc=0                  | master rc=0                  | 9
+lamarr_s/main.olang          branch rc=0                  | master rc=0                  | 9
+lamarr_x/main.olang          branch rc=0                  | master rc=0                  | 9
+lamcond_s/main.olang         branch rc=1   error[C2d]     | master rc=1   error[C2d]     | lamcond_s/main.olang:8:14: error[C2d]: this instance holds a reference to an argument it w
+lamcond_x/main.olang         branch rc=1   error[C2d]     | master rc=1   error[C2d]     | lamcond_x/lib.olang:6:14: error[C2d]: this instance holds a reference to an argument it wo
+lamenum_s/main.olang         branch rc=0                  | master rc=0                  | 9
+lamenum_x/main.olang         branch rc=0                  | master rc=0                  | 9
+lamlist_s/main.olang         branch rc=0                  | master rc=0                  | 9
+lamlist_x/main.olang         branch rc=0                  | master rc=0                  | 9
+lamstruct_s/main.olang       branch rc=0                  | master rc=0                  | 9
+lamstruct_x/main.olang       branch rc=0                  | master rc=0                  | 9
+matchbind_s/main.olang       branch rc=1   error[O26]     | master rc=1   error[O26]     | matchbind_s/main.olang:13:24: error[O26]: this value refers to this function's own storage
+matchbind_x/main.olang       branch rc=1   error[O26]     | master rc=1   error[O26]     | matchbind_x/lib.olang:11:24: error[O26]: this value refers to this function's own storage,
+slicefield_s/main.olang      branch rc=1   error[D13c]    | master rc=1   error[D13c]    | slicefield_s/main.olang:17:5: error[D13c]: H has no zero value, so this needs one - its co
+slicefield_x/main.olang      branch rc=1   error[D13c]    | master rc=1   error[D13c]    | slicefield_x/main.olang:11:5: error[D13c]: H has no zero value, so this needs one - its co
+spawnret_s/main.olang        branch rc=0                  | master rc=0                  | 9
+spawnret_x/main.olang        branch rc=0                  | master rc=0                  | 9
+trydef_s/main.olang          branch rc=1                  | master rc=1                  | trydef_s/main.olang:6:22: error: expected a name, found '}'
+trydef_x/main.olang          branch rc=1                  | master rc=1                  | trydef_x/lib.olang:4:22: error: expected a name, found '}'
+tuplecall_s/main.olang       branch rc=0                  | master rc=0                  | 9
+tuplecall_x/main.olang       branch rc=0                  | master rc=0                  | 9
+viaother_s/main.olang        branch rc=0                  | master rc=0                  | 9
+viaother_x/main.olang        branch rc=0                  | master rc=0                  | 9

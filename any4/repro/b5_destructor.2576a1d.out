@@ -1,0 +1,14 @@
+== build -debug -sanitize
+x Zbc1
+b5_destructor.olang:14: assertion failed: the callee's destructor wrote the caller's value
+/home/user/review/any4/run.sh: line 17: 14182 Aborted                 timeout 60 ./build/$n.debug.san
+status 134
+== build
+x Zbc1
+b5_destructor.olang:14: assertion failed: the callee's destructor wrote the caller's value
+/home/user/review/any4/run.sh: line 17: 14223 Aborted                 timeout 60 ./build/$n
+status 134
+== interpret
+x Zbc1
+b5_destructor.olang:14: assertion failed: the callee's destructor wrote the caller's value
+status 134

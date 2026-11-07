@@ -1,0 +1,21 @@
+type G struct() {
+    adj mut List<mut List<I32>&>& = List<mut List<I32>&>()
+}
+fn (g G&) walk(src I32) I64 {
+    queue := List<I32>()
+    queue.Push(src)
+    n I64 = 0
+    head I64 = 0
+    for head < queue.Len() {
+        v := queue[head]
+        head++
+        out := g.adj[v]
+        n += out.Len()
+    }
+    return n
+}
+fn main() ? {
+    g := G()
+    g.adj.Push(List<I32>())
+    assert g.walk(0) == 0
+}

@@ -1,0 +1,21 @@
+# which conversions (T29a) are copied into an any's box: text from a join, a new array, a literal-made array
+type Sized trait {
+    Len() I64
+}
+type Lab extends String
+type Nums extends Array<I64>
+fn main() {
+    xs := List<any Sized&>()
+    for i in range 2 {
+        t := "lab" $i "-" $(i * 7)
+        xs.Push(Lab(t))
+        a := Array<I64>(2, i + 40)
+        xs.Push(Nums(a))
+        c := I64[i + 5, 7]
+        xs.Push(Nums(c))
+        d := String(Char['x', 'y', 'z'])
+        xs.Push(Lab(d))
+    }
+    churn()
+    for x in xs { say($x) }
+}

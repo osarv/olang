@@ -1,0 +1,37 @@
+# defaults and overrides through the table, a trait extending another, decided while compiling and at run time
+type Base trait {
+    Id() I64
+}
+type Shape trait extends Base {
+    Area() I64
+}
+fn (s S) Describe<S Shape>() String { return "shape " $s.Area() }
+fn (s S) Tag<S Base>() I64 { return s.Id() * 10 }
+fn (s S) Mapped<S Shape, U>(f fn(x I64) U) U { return f(s.Area()) }
+type Sq struct(k I64) { k }
+fn (q Sq&) Id() I64 { return 1 }
+fn (q Sq&) Area() I64 { return q.k * q.k }
+fn (q Sq&) Describe() String { return "square " $q.k }
+type Ci struct(r I64) { r }
+fn (c Ci&) Id() I64 { return 2 }
+fn (c Ci&) Area() I64 { return 3 * c.r * c.r }
+fn (c Ci&) Tag() I64 { return 99 }
+fn all(k I64) String {
+    xs := List<any Shape&>()
+    xs.Push(Sq(k))
+    xs.Push(Ci(k))
+    b := StringBuilder()
+    for x in xs { b.Push($x.Describe() "/" $x.Tag() "/" $x.Mapped(fn(a I64) String { return "m" $a }) "/" $x.Id() ";") }
+    return b.ToString()
+}
+fn viaBase(s any Base&) I64 { return s.Tag() }
+Baked String = all(2)
+Live mut I64 = 2
+fn main() {
+    assert all(2) == "square 2/10/m4/1;shape 12/99/m12/2;", "compile time"
+    say(Baked)
+    say(all(Live))
+    q := Sq(1)
+    c := Ci(1)
+    say($viaBase(q) " " $viaBase(c))
+}

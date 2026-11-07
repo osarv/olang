@@ -1,0 +1,24 @@
+# writing through 'as' on a read-only payload, and through a checked index of read-only elements (T25c)
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box enum {
+    R(n Node&)
+    No
+}
+type World struct() { items mut List<Node&>& = List<Node&>() }
+fn viaAs(q Node&) {           # promises not to write q
+    b := Box.R(q)
+    (b as Box.R).v = 81
+}
+fn viaTry(w World&, q Node&) ? {   # w's list holds read-only references
+    (try w.items[0]).v = 82
+}
+fn main() ? {
+    a Node& = Node(1)
+    viaAs(a)
+    c Node& = Node(2)
+    w World& = World()
+    w.items.Push(c)
+    try viaTry(w, c)
+    try io.Print($a.v " " $c.v "\n")
+}

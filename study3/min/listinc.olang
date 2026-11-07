@@ -1,0 +1,14 @@
+type W struct() {
+    values List<I32>
+}
+fn main() ? {
+    l := List<I32>()
+    l.Push(1)
+    l[0] += 1
+    l[0]++
+    w := W()
+    w.values.Push(5)
+    w.values[0] += 1
+    w.values[0]++
+    println($l[0] " " $w.values[0])
+}

@@ -1,0 +1,36 @@
+type Pt struct(x I32, y I32) { x, y }
+type S enum {
+    A(p Pt)
+    B(n I32)
+    L(a Array<I32>&)
+}
+G S = S.A(Pt(1, 2))
+fn touch(s S&) I32 {
+    match s {
+        case S.A(p) {
+            p.x = 50
+            p = Pt(7, 7)
+            return p.x
+        }
+        case S.L(a) {
+            a = I32[9]
+            return a[0]
+        }
+        nomatch { return 0 }
+    }
+}
+fn main() ? {
+    v := S.A(Pt(1, 2))
+    r S& = v
+    println($touch(r) " " $v)
+    println($touch(G) " " $G)
+    match v {
+        case S.A(p) {
+            p.x = 40
+        }
+        nomatch { }
+    }
+    println($v)
+    w := S.L(I32[1, 2])
+    println($touch(w) " " $w)
+}

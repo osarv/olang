@@ -1,0 +1,23 @@
+# r09 OVER-REJECTION - O10c/O13c with MapKeyIter and MapValueIter: a key walked with "for k in m.Keys()" cannot be
+# pushed into a List in the same block as the map - nor a value from m.Values(). "for e in m { l.Push(e.Key) }" and
+# "m.Keys().ToList()" both compile. (Collecting the ready nodes of a topological sort.)
+#
+# expected: 21
+# actual: error[O10c] at lines 13 and 20, note pointing into list.olang's Push ("the callee requires it because of this
+#         statement: if l.used == l.room { l.grow(x) }")
+fn keys() I64 {
+    m := Map<String&, I64>()
+    m.Put("a", 1)
+    m.Put("b", 2)
+    l := List<String&>()
+    for k in m.Keys() { l.Push(k) }
+    return l.Len()
+}
+fn values() I64 {
+    m := Map<I64, String&>()
+    m.Put(1, "a")
+    l := List<String&>()
+    for v in m.Values() { l.Push(v) }
+    return l.Len()
+}
+fn main() ? { println($keys() $values()) }

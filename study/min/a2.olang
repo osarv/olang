@@ -1,0 +1,18 @@
+type Tree enum {
+    Leaf(n I64)
+    Add(a Tree&, b Tree&)
+}
+
+fn main() ? {
+    l := List<Tree&>()
+    l.Push(Tree.Leaf(1))
+    l.Push(Tree.Add(Tree.Leaf(2), Tree.Leaf(3)))
+    s I64 = 0
+    for k in l {
+        match k {
+            case Tree.Leaf(n) { s += n }
+            nomatch { s += 100 }
+        }
+    }
+    assert s == 101
+}

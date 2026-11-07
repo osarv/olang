@@ -1,0 +1,14 @@
+# check: fail error[S13a]: case A of S is not covered
+# S13a: a guarded case covers nothing - the guard may be false
+type S enum {
+    A(x I32)
+    B
+}
+fn f(s S) I32 {
+    match s {
+        case S.A(x) if x > 0 { return x }
+        case S.B { return 0 }
+    }
+    return -1
+}
+fn main() ? { }

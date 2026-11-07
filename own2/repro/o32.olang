@@ -1,0 +1,9 @@
+type Conn struct(fd I64) { fd } destruct { Dropped++ }
+Dropped mut I64 = 0
+type Server struct() { cur own mut Conn& }
+fn use(f fn()) { f() }
+fn main() ? {
+    o own mut Server& = Server()
+    o.cur = Conn(1)
+    use(fn() { o.cur = null })
+}

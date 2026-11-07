@@ -1,0 +1,9 @@
+step 0: alive 7 food 6 eaters 1 sparks 0
+step 500: alive 884 food 378 eaters 500 sparks 6
+step 1000: alive 1164 food 412 eaters 620 sparks 132
+step 1500: alive 1106 food 428 eaters 594 sparks 84
+step 2000: alive 1127 food 438 eaters 587 sparks 102
+step 2500: alive 1104 food 405 eaters 603 sparks 96
+final: alive 1054 food 389 eaters 593 sparks 72
+carried 3538 log 200 last: t3000: eater 26310 picked up 28171
+born 28221 died 27203 eaten 14446 pairs 2643639

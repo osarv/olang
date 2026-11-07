@@ -1,0 +1,13 @@
+type S struct() {
+    o own mut T& = null
+    s S = S()
+}
+type T struct() {
+    v Vec<I64> = Vec<I64>()
+}
+fn main() ? {
+    x := S()
+    c := x
+    x.o = T()
+    println($c.s.o.v.Len())
+}

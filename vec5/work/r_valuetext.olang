@@ -1,0 +1,22 @@
+# R: a String VALUE local declared in a borrow's region ("d String&x"? no - a value): a value String result given
+# the region as its scope argument
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn mk(n I64) String { return $n "-new-text-in-the-region" }
+fn main() ? {
+    c := CB()
+    x := c.text
+    d := mk&x(5)
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(d)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

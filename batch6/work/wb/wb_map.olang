@@ -1,0 +1,25 @@
+# a field store through Map.Get's result (a generic result bound to a writable reference): what is stored lives in the
+# loop body, the element where the map lives
+type Cell struct() {
+    s String& = ""
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+fn main() ? {
+    m := Map<I64, mut Cell&>()
+    for i in range 3 { m.Put(i, Cell()) }
+    for i in range 3 {
+        x String& = "w" $i "-abcdefghijklmnopqrstuvwxyz"
+        (try m.Get(i)).s = x
+        churn()
+    }
+    churn()
+    for i in range 3 { print($(try m.Get(i)).s " ") }
+    println("")
+}

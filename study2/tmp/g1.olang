@@ -1,0 +1,17 @@
+Keys Map<String&, I32> = table()
+
+fn table() Map<String&, I32> {
+    m := Map<String&, I32>()
+    m.Put("if", 1)
+    m.Put("else", 2)
+    return m
+}
+
+fn look(src String&) I32 {
+    return try Keys.Get(src[0:2]) catch default 0
+}
+
+fn main() ? {
+    println($look("if x"))
+    println($look("xx"))
+}

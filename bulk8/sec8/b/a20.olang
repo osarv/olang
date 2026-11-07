@@ -1,0 +1,41 @@
+import "std/io"
+
+type Rec struct(id I64) {
+    id
+    data := Array<I64>(16 + id.Mod(2), id)
+}
+
+fn mapped(n I64) I64 {
+    m := Map<I64, Rec>()
+    other := Map<I64, Rec>()
+    s := 0
+    for k in range n {
+        m.Put(1, Rec(k + 1))
+        r Rec& = m.Ref(1)!
+        m.Remove(1)
+        other.Put(1, Rec(-1000))
+        other.Remove(1)
+        s += r.data[3]
+    }
+    return s
+}
+
+fn vecText(n I64) I64 {
+    ls := Vec<String>()
+    other := Vec<String>()
+    s := 0
+    for k in range n {
+        ls.Push($k "abcdefghijkl")
+        r String& = ls.Ref(0)
+        ls.Truncate(0)
+        other.Push("zzzzzzzzzzzzzzzzzzzzzzzzzz" $k)
+        other.Truncate(0)
+        s += r.Len()
+    }
+    return s
+}
+
+fn main() {
+    io.Println($mapped(1000))!
+    io.Println($vecText(1000))!
+}

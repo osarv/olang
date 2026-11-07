@@ -1,0 +1,37 @@
+> look
+  hall: you see lamp, anvil
+> take anvil
+  taken: anvil: weighs 9
+> take lamp
+  the lamp is too heavy
+> inv
+  you carry 1 things, weight 9
+> n
+  you go to the kitchen
+> e
+  you go to the garden
+> take key
+  taken: key: weighs 1
+> w
+  you go to the kitchen
+> s
+  you go to the cellar
+> look
+  it is too dark to see
+> w
+  the way Dir.West is locked
+> use key on west
+  unlocked the way Dir.West
+> w
+  you go to the vault
+> take gold
+  the gold is too heavy
+> take anvil
+  there is no anvil here
+> dance
+  I don't understand 'dance'
+> inv
+  you carry 2 things, weight 10
+> q
+  bye
+moves: 18, in the vault

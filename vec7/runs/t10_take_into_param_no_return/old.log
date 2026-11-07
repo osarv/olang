@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/t10_take_into_param_no_return.olang:19:11: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   19 |     h.v = take l.toks
+      |           ^~~~
+compilation failed with 1 error

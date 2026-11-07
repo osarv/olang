@@ -1,0 +1,3 @@
+import "example.com/me/x'$(touch PWNED)'y/file"
+fn main() ? {
+}

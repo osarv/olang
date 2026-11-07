@@ -1,0 +1,29 @@
+import "std/os"
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+G mut Node& = Node(1)
+GF mut List<fn() I64> = List<fn() I64>()
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn keepG(g fn() I64) { GF.Push(g) }
+fn main() ? {
+    x := G
+    g := fn() I64 {
+        x.next = Node(x.v + 41)
+        return x.next.v
+    }
+    os.RunOnStack(1 << 20, fn() { keepG(g) })
+    churn()
+    f := GF[0]
+    println($f())
+    churn()
+    println($G.next.v)
+}

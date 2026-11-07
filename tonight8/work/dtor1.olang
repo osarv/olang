@@ -1,0 +1,25 @@
+Count mut I64 = 0
+type R struct(v I64) {
+    v
+} destruct { Count.AtomicAdd(1) }
+type Node struct(v I64) {
+    v
+    r mut R& = null
+}
+fn work(f fn(i I64), n I64) {
+    for i in range n { f(i) }
+}
+fn run() {
+    a mut Node& = Node(0)
+    f := fn(i I64) { a.r = R(i) }
+    join {
+        spawn work(f, 1000)
+        spawn work(f, 1000)
+        for i in range 1000 { a.r = R(i) }
+    }
+    f(5)
+}
+fn main() ? {
+    run()
+    println($Count)
+}

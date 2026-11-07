@@ -1,0 +1,41 @@
+import "std/io"
+import "std/map"
+Seed mut I64 = 12345
+fn rnd() I64 {
+    Seed = Seed * 6364136223846793005 + 1442695040888963407
+    return (Seed >> 33) & 1023
+}
+fn main() ? io.IoError {
+    m := map.Map<I64, I64>()
+    keys := Array<I64>(1024)
+    has := Array<Bool>(1024)
+    bad I64 = 0
+    for step in range 200000 {
+        k := rnd()
+        op I64 = rnd() % 3
+        if op == 0 {
+            m.Put(k, step)
+            keys[k] = step
+            has[k] = true
+        } else if op == 1 {
+            r := m.Remove(k)
+            if r != has[k] { bad++ }
+            has[k] = false
+        } else {
+            v := try m.Get(k) catch default -1
+            want I64 = keys[k] if has[k] else -1
+            if v != want { bad++ }
+            if (k in m) != has[k] { bad++ }
+        }
+    }
+    n I64 = 0
+    for h in has { if h { n++ } }
+    if n != m.Len() { bad++ }
+    c I64 = 0
+    for e in m {
+        c++
+        if not has[e.Key] or keys[e.Key] != e.Value { bad++ }
+    }
+    if c != n { bad++ }
+    try io.Print("bad " $bad " len " $m.Len() "\n")
+}

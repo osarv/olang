@@ -1,0 +1,14 @@
+type Lamp unique struct(id I64) {
+    id
+} destruct {
+    id = 0
+}
+
+fn d1(v mut Vec<Lamp>&, l Lamp) {
+    defer v.Push(l)
+}
+
+fn main() {
+    v := Vec<Lamp>()
+    d1(v, Lamp(1))
+}

@@ -1,0 +1,32 @@
+# E31 (wt-s3scope, "x[i]++"): on a type with At and SetAt, "x[i]++" is specified as "x[i] += 1" with x and i evaluated
+# once. The lowering (buildIncDec, target->isAtCall) wraps the SetAt statement in an OPERATION_SEQ whose args keep the
+# original At call, which is evaluated again - so the index expression runs twice and At is called an extra time.
+# ("x[i] += 1" itself evaluates the index once.)
+# expected: 11110  (next() once, At once, SetAt once, v[1] == 1)
+# actual:   22110  (next() twice, At twice) in -b, -d and -i alike
+type V struct(n I64) {
+    d mut Array<I64>& = Array<I64>(n, 0)
+    ats I64 = 0
+    sets I64 = 0
+}
+fn (v mut V&) At(i I64) I64 {
+    v.ats++
+    return v.d[i]
+}
+fn (v mut V&) SetAt(i I64, x I64) {
+    v.sets++
+    v.d[i] = x
+}
+Calls mut I64 = 0
+fn next() I64 {
+    Calls++
+    return Calls
+}
+fn run() I64 {
+    v := V(8)
+    v[next()]++
+    return Calls * 10000 + v.ats * 1000 + v.sets * 100 + v[1] * 10 + v[2]
+}
+fn main() ? {
+    println($run())
+}

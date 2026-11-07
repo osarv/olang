@@ -1,0 +1,44 @@
+import "std/io"
+
+type Holder struct() {
+    v Vec<I64>
+    l List<String&>
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+# the generator walks h.v - the walk's hidden borrow of its buffer held across each yield
+fn each(h Holder&) Iterator<I64> {
+    for x in h.v { yield x }
+}
+
+fn eachText(h Holder&) Iterator<I64> {
+    for s in h.l { yield s.Len() * 1000 + I64(s[10]) }
+}
+
+fn main() {
+    h := Holder()
+    for i in range 8 { h.v.Push(i) }
+    t I64 = 0
+    for x in each(h) {
+        if x < 3 { for k in range 40 { h.v.Push(1000 + k) } }   # grows the Vec: its old buffer let go of
+        churn()
+        t += x
+    }
+    io.Println($t)!
+    for k in range 6 { h.l.Push($"text item " $k " padded out ...................................") }
+    for y in eachText(h) {
+        try h.l.Pop() catch { }                             # lets go of the last element
+        churn()
+        io.Println($y)!
+    }
+}

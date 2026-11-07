@@ -1,0 +1,46 @@
+# P4a: a default that is a call building new storage, for targets in a caller's instance and a caller's array
+error E {
+    NEG
+}
+type Node struct(v I64, s String&) {
+    v
+    s
+}
+type H struct() {
+    n mut Node& = null
+}
+fn mk(n I64) Node& ? E {
+    if n < 0 { error E.NEG }
+    return Node(n, "mk" $n)
+}
+fn fresh(n I64) Node& {
+    return Node(n * 10, "fresh" $n "-abcdefghijklmnopqrstuvwxyz")
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+        nn := Node(i, "c")
+        t = t + nn.v
+    }
+    return t
+}
+fn fill(h mut H&, out mut Array<Node&>&) {
+    for i in range 3 {
+        join {
+            spawn h.n = try mk(i - 5) catch default fresh(i)
+            spawn out[i] = try mk(i - 1) catch default fresh(100 + i)
+        }
+        churn()
+    }
+}
+fn main() ? {
+    h := H()
+    out := Array<Node&>(3)
+    fill(h, out)
+    churn()
+    println($h.n.v " " $h.n.s)
+    for n in out { print($n.v " " $n.s " ") }
+    println("")
+}

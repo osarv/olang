@@ -1,0 +1,15 @@
+type Ctr struct() {
+  n I64 = 0
+}
+type B struct(c mut Ctr&) { c }
+G B = B(Ctr())
+fn (a B) Hash() I64 {
+  a.c.n = a.c.n + 1
+  return 1
+}
+fn (a B) Eq(b B&) Bool { return true }
+fn main() ? {
+  m := Map<B, I64>()
+  m.Put(G, 1)
+  println($G.c.n)
+}

@@ -1,0 +1,19 @@
+# keep the first k of a sorted local list of pairs holding text
+fn top(counts Map<String&, I64>&, k I64) List<Pair<String&, I64>> {
+    all := List<Pair<String&, I64>>()
+    for e in counts { all.Push(Pair(e.Key, e.Value)) }
+    all.Sort(fn(a, b) { return a.Second > b.Second })
+    out := List<Pair<String&, I64>>()
+    for p in all {
+        if out.Len() >= k { break }
+        out.Push(p)
+    }
+    return out
+}
+
+fn main() ? {
+    m := Map<String&, I64>()
+    m.Put("a", 3)
+    m.Put("b", 5)
+    for p in top(m, 1) { println($p.First " " $p.Second) }
+}

@@ -1,0 +1,6 @@
+# check: fail error[S18c]: this assertion is false, evaluated while compiling: x is 3, not 4
+# S18c/S18a: an assert decided false while compiling says so with its message, when that can be computed too
+fn main() ? {
+    x I64 = 3
+    assert x == 4, "x is " $x ", not 4"
+}

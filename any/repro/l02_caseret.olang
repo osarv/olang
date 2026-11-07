@@ -1,0 +1,34 @@
+# a type-case binding / an "as" borrowed from a local any of a temporary, returned (O26a must move the any's instance)
+type W trait for Btn, Lab {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+type Lab extends String
+fn (l Lab&) Draw() String { return "L" $String(l) }
+fn bor(w any W&) Btn&w {
+    match w {
+        case Btn b { return b }
+        case Lab _ { return Btn("none") }
+    }
+}
+fn borAs(w any W&) Lab&w { return w as Lab }
+fn mk(i I64) Btn& {
+    w any W& = Btn("loc" $i)
+    return bor(w)
+}
+fn mk2(i I64) Lab& {
+    w any W& = Lab("lab" $i)
+    return borAs(w)
+}
+fn main() {
+    xs := List<Btn&>()
+    ls := List<Lab&>()
+    for i in range 3 {
+        xs.Push(mk(i))
+        ls.Push(mk2(i))
+    }
+    churn()
+    for x in xs { say(x.label) }
+    for l in ls { say(String(l)) }
+}

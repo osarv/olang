@@ -1,0 +1,25 @@
+import "std/io"
+
+# D13d: as d13d_hidden_break, with a never-null reference (no zero value at all): the program compiles and reads a
+# reference nothing assigned
+type Node struct(v I64) { v }
+type E error { STOP }
+
+fn g(i I64) I64 ? E {
+    if i >= 3 { error E.STOP }
+    return i
+}
+
+fn probe(a Array<I64>&) I64 {
+    n Node&
+    i I64 = 0
+    for {
+        io.Println($a[try g(i) catch { break }])!
+        i++
+    }
+    return n.v
+}
+
+fn main() {
+    io.Println($probe(I64[0, 1, 2, 3]))!
+}

@@ -1,0 +1,39 @@
+# matmul: C = A B for square F32 matrices, each one array indexed row * n + column, in the i-k-j order that walks
+# B and C a row at a time - the loop a vectorizer should turn into SIMD
+import "std/io"
+import "std/os"
+
+# a matrix of n * n values from a simple recurrence, so nothing is known while compiling
+fn matrix(n I64, seed I64) Array<F32> {
+    m := Array<F32>(n * n)
+    s I64 = seed
+    for i in range n * n {
+        s = (s * 1103515245 + 12345) % 2147483648
+        m[i] = F32(s % 1000) / 1000.0
+    }
+    return m
+}
+
+fn multiply(a Array<F32>&, b Array<F32>&, c mut Array<F32>&, n I64) {
+    for i in range n {
+        row := c[i * n:(i + 1) * n]
+        for k in range n {
+            aik := a[i * n + k]
+            bk := b[k * n:(k + 1) * n]
+            for j in range n { row[j] += aik * bk[j] }
+        }
+    }
+}
+
+fn main() ? {
+    args := os.Args()
+    n I64 = 64
+    if args.Len() > 1 { n = try args[1].ParseInt() }
+    a := matrix(n, 1)
+    b := matrix(n, 2)
+    c := Array<F32>(n * n)
+    multiply(a, b, c, n)
+    sum F64 = 0.0
+    for x in c { sum += x }
+    try io.Print($sum " " $c[0] " " $c[n * n - 1] "\n")
+}

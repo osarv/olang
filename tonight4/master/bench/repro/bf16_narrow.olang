@@ -1,0 +1,25 @@
+# F32 -> BF16, and BF16 arithmetic (computed in F32, narrowed after each operation): LLVM 18 lowers "fptrunc float to
+# bfloat" to a call of __truncsfbf2 on every x86 target without AVX512-BF16 or AVX-NE-CONVERT, which B12c takes away -
+# so a narrowing was a call per element that no loop vectorized (10-14 ns an element against ~1 for widening), and a
+# BF16 multiply-add 23-30 ns. FIXED 2026-10-09: the code generator narrows in integers on the F32's bits (cgNarrowBF16),
+# the same bits, and BF16 arithmetic widens, computes and narrows that way - 0.7-1.0 ns an element, vectorized. Run:
+# repro/opt.sh bf16_narrow, and look for "__truncsfbf2" in build/bf16_narrow.opt.ll (none now)
+import "std/rand"
+import "std/time"
+
+fn main() ? {
+    n I64 = 1 << 22
+    a := Array<F32>(n)
+    r := rand.Rand(1)
+    for i in range n { a[i] = F32(r.Normal()) }
+    b := Array<BF16>(n)
+    d := Array<BF16>(n)
+    for round in range 3 {
+        t0 := time.Now()
+        for i in range n { b[i] = BF16(a[i]) }
+        t1 := time.Now()
+        for i in range n { d[i] = b[i] * b[i] + b[i] }
+        t2 := time.Now()
+        println("ns an element: BF16(x) " $(F64(t1 - t0) / F64(n)).Fixed(2) ", BF16 multiply-add " $(F64(t2 - t1) / F64(n)).Fixed(2))
+    }
+}

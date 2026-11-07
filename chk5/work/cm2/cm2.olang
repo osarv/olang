@@ -1,0 +1,23 @@
+type Info struct(Offset I64, Len I64) {
+    Offset
+    Len
+}
+type W struct(r Info&) { r }
+type G struct() { n I64 = 0 }
+fn (g G&) pick3(f fn() I64, i Info&, n I64) Info&i { return i }
+fn (g G&) pick4(m Map<I64, I64>&, i Info&, n I64) Info&i { return i }
+fn (g G&) view(k I64) W {
+    i := Info(k, k + 1)
+    return W(g.pick3(fn() I64 { a, b := 1, 2
+        return a }, i, 0))
+}
+fn (g G&) view2(k I64) W {
+    j := Info(k, k + 1)
+    return W(g.pick4(Map<I64, I64>(), j, 0))
+}
+fn main() ? {
+    g := G()
+    w := g.view(4)
+    w2 := g.view2(5)
+    println($w.r.Len " " $w2.r.Len)
+}

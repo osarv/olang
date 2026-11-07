@@ -1,0 +1,8 @@
+# a conditional of two literals into a target whose type is not the literals' default: invalid IR
+fn pick8(b Bool) U8 { return 200 if b else 0 }
+fn main() ? {
+    b := true
+    v I64 = 7 if b else 9
+    f F32 = 2.5 if b else 3.5
+    assert v == 7 and f == 2.5 and pick8(b) == 200
+}

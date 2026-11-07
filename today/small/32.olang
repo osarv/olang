@@ -1,0 +1,13 @@
+# control for the return hole: storing a local's text into a field of a caller's instance is caught
+type Holder struct() {
+    name mut String& = null
+}
+fn fill(h mut Holder&) {
+    a := "alpha" $3
+    h.name = a
+}
+fn main() ? {
+    h := Holder()
+    fill(h)
+    println($h.name)
+}

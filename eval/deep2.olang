@@ -1,0 +1,16 @@
+import "std/io"
+fn rec(n I32, l List<I32>&) I32 {
+    if n == 0 { return 0 }
+    r I32 = 0
+    for x in l {
+        s := $(match x { case 1 => rec(n - 1, l) nomatch => 0 })
+        r = I32(s.Len())
+    }
+    return r
+}
+N mut I32 = 90000
+fn main() ? io.IoError {
+    l := List<I32>()
+    l.Push(1)
+    try io.Print($rec(N, l) "\n")
+}

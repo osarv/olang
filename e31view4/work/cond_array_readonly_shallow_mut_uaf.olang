@@ -1,0 +1,32 @@
+# h05_1 with a plain struct (two fields, no handle): a conditional of two elements lent to a read-only reference
+# parameter whose callee builds through the struct's writable reference field
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { abort }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Box struct() {
+    head mut Node& = Node(0, null)
+    tag I64 = 0
+}
+fn addVia(b Box&, v I64) { b.head.next = Node(v, b.head.next) }
+fn sum(b Box&) I64 {
+    t I64 = 0
+    for n := b.head, n != null, n = n.next { t = t * 10 + n.v }
+    return t
+}
+fn main() ? {
+    a := Array<Box>(2, Box())
+    a[1] = Box()
+    for i in range 3 {
+        addVia(a[0] if i >= 0 else a[1], i + 1)
+        churn()
+    }
+    churn()
+    assert true, ""
+}

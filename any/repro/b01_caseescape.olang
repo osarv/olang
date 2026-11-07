@@ -1,0 +1,25 @@
+# a type-case binding / an "as" of a loop-local any, kept outside the loop
+type W trait for Btn, Lab {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+type Lab extends String
+fn (l Lab&) Draw() String { return "L" $String(l) }
+
+fn main() {
+    keep := List<Btn&>()
+    keepL := List<Lab&>()
+    for i in range 4 {
+        w any W& = Btn("b" $i "-" $(i * 3))
+        match w {
+            case Btn b { keep.Push(b) }
+            case Lab _ { }
+        }
+        v any W& = Lab("lab" $i "-" $(i * 5))
+        keepL.Push(v as Lab)
+    }
+    churn()
+    for b in keep { say(b.label) }
+    for l in keepL { say(String(l)) }
+}

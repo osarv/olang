@@ -1,0 +1,13 @@
+# check: fail error[O26]: this value refers to this function's own storage
+# O14c/O25h: a copy of a local array keeps its references where the array's are - in this block, since the array is not
+# what the return reads (O26a moves only that) - so a slice of the copy returned refers to text that dies at the return
+fn mk(n I64) Array<String&> {
+    a := Array<String&>(2)
+    a[0] = $n $n
+    b := a
+    return b[0:1]
+}
+fn main() ? {
+    a := mk(12)
+    assert a.Len() == 1
+}

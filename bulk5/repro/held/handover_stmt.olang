@@ -1,0 +1,43 @@
+# D9h (round 2d): a view handed back uncopied where it is read where it stands - read positions whose source the
+# same statement changes
+import "std/io"
+
+fn inner(t String) String { return t[1:t.Len() - 1] }
+
+fn count(t String) I64 {
+    n := 0
+    for c in t { if c == 'x' { n++ } }
+    return n
+}
+
+fn poke(u String&) I64 {
+    u[1] = 'x'
+    return 0
+}
+
+fn both(a I64, b I64) I64 { return a * 10 + b }
+
+type mark struct(u String&) {
+    u
+}
+
+fn (m mark) Str() String {
+    return "m"
+}
+
+fn main() {
+    t := $"abcd"
+    out := StringBuilder()
+    # the view's source written in the loop it walks
+    for c in inner(t) {
+        t[2] = 'x'
+        out.PushChar(c)
+    }
+    t2 := $"abcd"
+    # arguments evaluated left to right: the view read after a later argument wrote its source
+    k := both(count(inner(t2)), poke(t2))
+    t3 := $"abcd"
+    r3 String& = t3
+    k3 := both(poke(r3), count(inner(t3)))
+    io.Println($out.ToString() " " $k " " $k3)!
+}

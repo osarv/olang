@@ -1,0 +1,21 @@
+# may-build walk: as c5b, in a Str - a transient lambda for apply makes a closure over the receiver that escapes (here
+# only into "is"), which lives where the receiver does. new: internal compiler error; e27b83b: error[E11c, O12]
+# pointing at the closure (the right answer); be042da: refused by the old purity rule
+type Node struct(v I64) {
+    v
+}
+type Bag struct(head Node&) {
+    head
+}
+fn apply(f fn() I64) I64 { return f() }
+fn (b Bag&) Str() String {
+    n := apply(fn() I64 {
+        h := fn() I64 { return b.head.v }
+        t := h is h
+        return h() if t else 0
+    })
+    return "b" $n
+}
+fn main() ? {
+    println($Bag(Node(4)))
+}

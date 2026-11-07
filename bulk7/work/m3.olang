@@ -1,0 +1,19 @@
+import "std/io"
+
+type Buf struct(a Array<I64>) {
+    a
+}
+
+fn first(x Array<I64>&) I64 { return x[0] }
+
+fn main() {
+    t := Array<I64>(3, 1)
+    s := t[0:2]
+    u := Buf(t)
+    u.a[0] = 7
+    io.Println($s[0] " " $u.a[0])!
+    v := Array<I64>(3, 1)
+    w := Buf(v)
+    w.a[0] = 8
+    io.Println($first(v))!
+}

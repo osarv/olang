@@ -1,0 +1,37 @@
+import "std/io"
+
+type Blob unique struct(n I64) {
+    n
+    data := Array<I64>(n.Mod(7) + 2, n)
+}
+
+type Shelf struct() {
+    m Map<I64, Blob>
+}
+
+fn churnArena() I64 {
+    t I64 = 0
+    for i in range 50 {
+        a := Array<I64>(64, -1)
+        t += a[i % 64]
+    }
+    return t
+}
+
+# a view of the parameter's storage kept elsewhere, then the parameter handed on into the Map
+fn (s mut Shelf&) put(i I64, b Blob, views mut Vec<Array<I64>&>&) {
+    views.Push(b.data[0:1])
+    s.m.Put(i % 2, b)
+}
+
+fn main() {
+    s Shelf = Shelf()
+    views := Vec<Array<I64>&>()
+    for i in range 6 {
+        s.put(i, Blob(i * 10 + 1), views)
+        churnArena()
+    }
+    acc I64 = 0
+    for v in views { acc = acc * 100 + v[0] }
+    io.Println($acc)!
+}

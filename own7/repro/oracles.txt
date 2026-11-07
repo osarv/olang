@@ -1,0 +1,118 @@
+########## f1a_ref_arg
+=== compile -b -s
+--- run -s
+use after scope closed: storage a closed scope gave back was read or written
+./run.sh: line 9: 28297 Aborted                 timeout 60 ./build/$b.san
+[exit 134]
+=== -b
+5
+33
+7
+7
+[exit 0]
+=== valgrind -b
+[vg exit 9]
+==28340== Invalid read of size 8
+==28340==  Address 0x4b66278 is 56 bytes inside a block of size 128 free'd
+==28340==  Block was alloc'd at
+==28340== 
+==28340== Invalid read of size 8
+==28340==  Address 0x4b66378 is 120 bytes inside a block of size 128 free'd
+==28340==  Block was alloc'd at
+==28340== 
+==28340== Invalid read of size 8
+==28340==  Address 0x4b66340 is 64 bytes inside a block of size 128 free'd
+==28340==  Block was alloc'd at
+=== -i
+5
+33
+7
+7
+[exit 0]
+########## f1b_local_view
+=== compile -b -s
+--- run -s
+use after scope closed: storage a closed scope gave back was read or written
+./run.sh: line 9: 28360 Aborted                 timeout 60 ./build/$b.san
+[exit 134]
+=== -b
+41
+51
+61
+[exit 0]
+=== valgrind -b
+[vg exit 9]
+==28379== Invalid read of size 8
+==28379==  Address 0x4b66278 is 56 bytes inside a block of size 120 free'd
+==28379==  Block was alloc'd at
+==28379== 
+==28379== Invalid read of size 8
+==28379==  Address 0x4b66348 is 72 bytes inside a block of size 120 free'd
+==28379==  Block was alloc'd at
+==28379== 
+==28379== Invalid read of size 8
+==28379==  Address 0x4b66400 is 64 bytes inside a block of size 120 free'd
+==28379==  Block was alloc'd at
+=== -i
+41
+51
+61
+[exit 0]
+########## f1c_forin
+=== compile -b -s
+--- run -s
+use after scope closed: storage a closed scope gave back was read or written
+./run.sh: line 9: 28399 Aborted                 timeout 60 ./build/$b.san
+[exit 134]
+=== -b
+43
+[exit 0]
+=== valgrind -b
+[vg exit 9]
+==28418== Invalid read of size 8
+==28418==  Address 0x4b66280 is 64 bytes inside a block of size 120 free'd
+==28418==  Block was alloc'd at
+==28418== 
+=== -i
+43
+[exit 0]
+########## f1d_ownarray_elem
+=== compile -b -s
+--- run -s
+use after scope closed: storage a closed scope gave back was read or written
+./run.sh: line 9: 28438 Aborted                 timeout 60 ./build/$b.san
+[exit 134]
+=== -b
+9
+[exit 0]
+=== valgrind -b
+[vg exit 0]
+=== -i
+9
+[exit 0]
+########## f1e_task
+=== compile -b -s
+--- run -s
+use after scope closed: storage a closed scope gave back was read or written
+./run.sh: line 9: 28478 Aborted                 timeout 60 ./build/$b.san
+[exit 134]
+=== -b
+./run.sh: line 11: 28489 Segmentation fault      timeout 60 ./build/$b
+[exit 139]
+=== valgrind -b
+./run.sh: line 16: 28500 Segmentation fault      timeout 300 valgrind -q --error-exitcode=9 ./build/$b > /dev/null 2> /tmp/own7_$b.vg
+[vg exit 139]
+==28501== Thread 2:
+==28501== Invalid read of size 8
+==28501==  Address 0x4b66278 is 56 bytes inside a block of size 64 free'd
+==28501==  Block was alloc'd at
+==28501== 
+==28501== Thread 1:
+==28501== Invalid read of size 8
+==28501==  Address 0x4b66258 is 24 bytes inside a block of size 64 free'd
+==28501==  Block was alloc'd at
+==28501== 
+==28501== Invalid read of size 8
+=== -i
+5
+[exit 0]

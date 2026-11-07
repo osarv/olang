@@ -1,0 +1,31 @@
+import "std/io"
+
+type Config immut struct(n I64, xs Array<I64>) {
+    n, xs
+}
+
+type Server struct(cfg Config) {
+    cfg
+}
+
+fn main() {
+    s := Server(Config(1, Array<I64>(100, 1)))
+    keep := Vec<Config>()
+    total I64 = 0
+    for i in range 1000 {
+        old := s.cfg
+        if i % 100 == 0: keep.Push(old)
+        s.cfg = Config(i, Array<I64>(100, i))
+        junk := Array<I64>(100, -1)
+        total += junk[0]
+    }
+    sum I64 = 0
+    for c in keep { sum += c.xs[50] }
+    io.Println($sum " " $total)!
+    v := Vec<Config>()
+    v.Push(Config(1, Array<I64>(100, 3)))
+    o := v[0]
+    v[0] = Config(2, Array<I64>(100, 4))
+    j2 := Array<I64>(100, -1)
+    io.Println($o.xs[50] " " $j2[0])!
+}

@@ -1,0 +1,10 @@
+type CB struct() {
+    text own mut String& = "bb"
+}
+G own mut CB& = CB()
+T mut String& = null
+fn main() ? {
+    T = G.text
+    G.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    println(T)
+}

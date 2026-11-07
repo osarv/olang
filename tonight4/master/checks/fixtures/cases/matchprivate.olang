@@ -1,0 +1,9 @@
+# M6a: a pattern naming a private case of another module's enum
+import "lib"
+fn main() ? {
+  d := lib.Dir.North
+  match d {
+    case lib.Dir.south { }
+    nomatch { }
+  }
+}

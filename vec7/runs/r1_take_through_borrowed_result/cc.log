@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/r1_take_through_borrowed_result.olang:21:12: error[O38, O26a]: this result reaches the owner value local 'p' by reference, and its owners are released as its block ends - return the owner itself, with a result of its type ('Parser'), where 'return p' moves it
+   21 |     return take p.Lx().toks
+      |            ^~~~
+compilation failed with 1 error

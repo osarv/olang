@@ -1,0 +1,18 @@
+# C: AnyNoCopy - defaults whose result keeps the instance by value through other shapes: a struct holding a function
+# giving it, a closure capturing a by-value receiver's copy whose type does not name G
+type Ups struct(n I64) {
+    n
+    at I64 = 0
+}
+type Gen trait {
+    Peek() I64
+}
+fn (u Ups&) Peek() I64 { return u.n }
+type Thunk<T> struct(f fn() T) { f }
+fn (g G&) LaterT<G Gen>() Thunk<G> { return Thunk(fn() G { return g }) }
+fn (g G) Show<G Gen>() fn() I64 { return fn() I64 { return g.Peek() + 1 } }
+fn main() {
+    a any Gen& = Ups(5)
+    s := a.Show()
+    say("show " $s())
+}

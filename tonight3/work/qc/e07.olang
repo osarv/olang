@@ -1,0 +1,18 @@
+type Ctr struct() {
+  n I64 = 0
+}
+type B struct(c mut Ctr&) { c }
+G B = B(Ctr())
+fn (a B) Eq(b B) Bool {
+  a.c.n = 99
+  return true
+}
+fn (a B) Hash() I64 { return 1 }
+fn main() ? {
+  x := B(Ctr())
+  match G {
+    case x { println("x") }
+    nomatch { println("no") }
+  }
+  println($G.c.n)
+}

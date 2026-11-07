@@ -1,0 +1,21 @@
+type Countdown struct(n I64) {
+    left List<I64>
+    for i in range n { left.Push(n - i) }
+}
+fn (c mut Countdown&) Next() I64 ? Exhausted { return try c.left.Pop() catch { error Exhausted.END } }
+fn sum() I64 {
+    c := Countdown(4)
+    s I64 = 0
+    for {
+        v := try c.Next() catch Exhausted { break }
+        s += v
+    }
+    return s
+}
+fn sum3() I64 {
+    c mut Countdown& = Countdown(4)
+    s I64 = 0
+    for v in c { s += v }
+    return s
+}
+fn main() ? { println($sum() " " $sum3()) }

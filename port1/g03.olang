@@ -1,0 +1,22 @@
+# O23a records: a constructor's field reassigned inside the constructor's own body
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+type Holder struct(src Node&) {
+    r Node&src = src
+}
+type Outer struct(a Node&, b Node&) {
+    mid Holder = Holder(a)
+    if b.v > 0 { mid = Holder(b) }
+}
+fn main() ? io.IoError {
+    x Node& = Node(1)
+    keep Node& = x
+    if x.v == 1 {
+        y Node& = Node(77)
+        o := Outer(x, y)
+        keep = o.mid.r
+    }
+    c := churn.Churn()
+    try io.Println($c " " $keep.v)
+}

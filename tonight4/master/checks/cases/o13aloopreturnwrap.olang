@@ -1,0 +1,33 @@
+# check: run
+# O13a/O26a: a loop body runs again after itself, so a return in it sees what the loop assigns the local later; the
+# local is returned inside another value, so it lives where the result goes and so does what is assigned to it - read
+# back after an arena churn. It used to be built in this block, a compile-time error (O26)
+type H struct(r String&) {
+    r
+}
+type W struct(h H) {
+    h
+}
+fn mk(n I64, s String&) W {
+    e := H(s)
+    for i in range 3 {
+        if i == 2 { return W(e) }
+        e = H($n $n)
+    }
+    return W(H(s))
+}
+fn main() ? {
+    w := mk(12, "x")
+    churn()
+    assert w.h.r == "1212"
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 50 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        x := $i $i $i $i
+        t += x.Len()
+    }
+    return t
+}

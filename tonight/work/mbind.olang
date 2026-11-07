@@ -1,0 +1,50 @@
+type E enum {
+    A(v I64)
+    B(p Pt)
+}
+type Pt struct(x I64) { x }
+fn bump(e E) I64 {
+    match e {
+        case E.A(v) {
+            v = v + 100
+        }
+        case E.B(p) {
+            p.x = p.x + 100
+        }
+    }
+    return match e {
+        case E.A(v) => v
+        case E.B(p) => p.x
+    }
+}
+fn bumpRef(e E&) I64 {
+    match e {
+        case E.A(v) { v = v + 100 }
+        case E.B(p) { p.x = p.x + 100 }
+    }
+    return match e {
+        case E.A(v) => v
+        case E.B(p) => p.x
+    }
+}
+fn viaRef() I64 {
+    e := E.B(Pt(3))
+    r E& = e
+    return bumpRef(r) * 10 + (e as E.B).x
+}
+fn arr() I64 {
+    a := Array<E>(1, E.A(4))
+    for x in a {
+        match x { case E.A(v) { v = 50 } nomatch { } }
+    }
+    match a[0] { case E.A(v) { v = 60 } nomatch { } }
+    return match a[0] { case E.A(v) => v  nomatch => 0 }
+}
+G1 := bump(E.A(1))
+G2 := bump(E.B(Pt(2)))
+G3 := viaRef()
+G4 := arr()
+fn main() ? {
+    println("baked " $G1 " " $G2 " " $G3 " " $G4)
+    println("run   " $bump(E.A(1)) " " $bump(E.B(Pt(2))) " " $viaRef() " " $arr())
+}

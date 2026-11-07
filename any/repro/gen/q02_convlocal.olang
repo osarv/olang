@@ -1,0 +1,45 @@
+import "std/io"
+# an array named through a conversion of a local (T29a) made a mut any and written: the local must not change
+type Bump trait {
+    mut Bump()
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+type Nums extends Array<I64>
+fn (n mut Nums&) Bump() { n[0] = 99 }
+fn go(k I64) String {
+    s := "hello"
+    b mut any Bump& = Lab(s)
+    b.Bump()
+    a := I64[1, 2, k]
+    c mut any Bump& = Nums(a)
+    c.Bump()
+    l := List<mut any Bump&>()
+    l.Push(Nums(a))
+    l[0].Bump()
+    return $s " " $a
+}
+Baked String = go(3)
+Live mut I64 = 3
+fn main() {
+    say(Baked)
+    say(go(Live))
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

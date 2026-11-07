@@ -1,0 +1,14 @@
+# S17: an R21 checked store's error leaving the assert message
+fn h(k I64) String ? {
+    if k > 3 { error }
+    return "ok " $k
+}
+fn check(k I64) I64 ? {
+    a := Array<I64>(2)
+    assert k < 2, (try h(k) catch { try a[k] = 1 } default "message")
+    return k
+}
+fn main() ? {
+    println($(try check(1)))
+    println($(try check(5) catch default 0))
+}

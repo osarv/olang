@@ -1,0 +1,14 @@
+type Acc struct() {
+    N I64 = 0
+}
+fn bump(a mut Acc&) { a.N++ }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    l.Push(Acc())
+    ll := List<List<Acc>>()
+    ll.Push(l)
+    bump(try ll[0][1])
+    bump((try ll[0])[1])
+    println("N " $ll[0][1].N)
+}

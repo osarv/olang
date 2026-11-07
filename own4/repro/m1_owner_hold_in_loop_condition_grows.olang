@@ -1,0 +1,25 @@
+# own4 M1 (minor, a leak bounded by the loop's run): F3's hidden owner slot for an owning parameter, held while a
+# later argument that can leave runs, is registered on the enclosing block's scope (__olang_scope_register_dtor in
+# for.cond, on the function's scope) at every evaluation of a loop condition, so each turn adds a 24-byte node that is
+# released only when run() returns. 4M turns: ~98MB peak (scratch/peak.sh), 400k: ~10MB. The same for a post clause.
+# Pre-existing analogue: a destructor-bearing temporary in a loop condition registers on the enclosing scope (O2's
+# design - a condition has no block of its own).
+type Leaf struct(n I64) {
+    n
+}
+fn take2(c own mut Leaf&, k I64) I64 { return c.n + k }
+fn ok(k I64) I64 ? {
+    if k > 5000000000 { error }
+    return 0
+}
+fn run(n I64) I64 ? {
+    i := 0
+    for take2(Leaf(i), try ok(i)) < n {
+        i++
+    }
+    return i
+}
+fn main() ? {
+    t := try run(4000000)
+    println($t)
+}

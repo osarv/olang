@@ -1,0 +1,19 @@
+import "std/io"
+
+fn run() String {
+    a := Array<I64>(3, 0)
+    v := Vec<I64>()
+    for _ in range 3 { v.Push(0) }
+    i I64 = 0
+    i, a[i] = 1, 5
+    j I64 = 0
+    j, v[j] = 1, 5
+    return $a " " $v
+}
+
+G := run()
+
+fn main() {
+    io.Println(run())!
+    io.Println(G)!
+}

@@ -1,0 +1,45 @@
+import "std/io"
+# decision 1: an own array's buffer returned as a value, and an owner value local (Vec) element - copied?
+type Nums extends Array<I64>
+type W trait {
+    mut Bump()
+}
+fn (n mut Nums&) Bump() { n[0] = 99 }
+type OB struct() {
+    buf own mut Array<I64>& = Array<I64>(3, 7)
+}
+fn get(o OB&) Array<I64> { return o.buf }
+fn getConv(o OB&) Nums { return Nums(o.buf) }
+fn probe() String {
+    o := OB()
+    x := get(o)
+    x[1] = 5
+    b mut any W& = Nums(get(o))
+    b.Bump()
+    c mut any W& = getConv(o)
+    c.Bump()
+    return "o.buf " $o.buf " x " $x
+}
+G := probe()
+fn main() {
+    say("run:   " $probe())
+    say("baked: " $G)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

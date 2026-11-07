@@ -1,0 +1,2 @@
+type E<T> enum { A(v <T>) }
+fn main() ? { }

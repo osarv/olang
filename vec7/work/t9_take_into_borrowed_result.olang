@@ -1,0 +1,28 @@
+# O26a follows take into a borrowed result's home: 'h.v = take l.toks; return h' with 'Holder&h'
+type Lex struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Holder struct() {
+    v Vec<String&> = Vec<String&>()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn fill(h mut Holder&) mut Holder&h {
+    l := Lex()
+    for i in range 3 { l.toks.Push($i "-word-in-l's-storage") }
+    h.v = take l.toks
+    return h
+}
+fn main() ? {
+    h mut Holder& = Holder()
+    g := fill(h)
+    churn()
+    println(g.v[0])
+    println(h.v[1])
+}

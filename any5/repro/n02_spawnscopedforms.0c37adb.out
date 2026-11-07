@@ -1,0 +1,32 @@
+== build -debug -sanitize
+n02_spawnscopedforms.olang:24:26: error[P1]: 'spawn' takes a call
+   24 |             spawn a, n = mk2&u(i)
+      |                          ^~~~~~~~
+n02_spawnscopedforms.olang:25:27: error[P1]: 'spawn' takes a call
+   25 |             spawn b = try mkf&u(i) catch default "dflt"
+      |                           ^~~~~~~~
+n02_spawnscopedforms.olang:26:23: error[P1]: 'spawn' takes a call
+   26 |             spawn c = nums&u(i)
+      |                       ^~~~~~~~~
+compilation failed with 3 errors
+== build
+n02_spawnscopedforms.olang:24:26: error[P1]: 'spawn' takes a call
+   24 |             spawn a, n = mk2&u(i)
+      |                          ^~~~~~~~
+n02_spawnscopedforms.olang:25:27: error[P1]: 'spawn' takes a call
+   25 |             spawn b = try mkf&u(i) catch default "dflt"
+      |                           ^~~~~~~~
+n02_spawnscopedforms.olang:26:23: error[P1]: 'spawn' takes a call
+   26 |             spawn c = nums&u(i)
+== interpret
+n02_spawnscopedforms.olang:24:26: error[P1]: 'spawn' takes a call
+   24 |             spawn a, n = mk2&u(i)
+      |                          ^~~~~~~~
+n02_spawnscopedforms.olang:25:27: error[P1]: 'spawn' takes a call
+   25 |             spawn b = try mkf&u(i) catch default "dflt"
+      |                           ^~~~~~~~
+n02_spawnscopedforms.olang:26:23: error[P1]: 'spawn' takes a call
+   26 |             spawn c = nums&u(i)
+      |                       ^~~~~~~~~
+compilation failed with 3 errors
+status 1

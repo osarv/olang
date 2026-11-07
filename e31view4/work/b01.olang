@@ -1,0 +1,30 @@
+# try default is a LONGER-lived existing box; element is short-lived; callee builds through b and returns it
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { abort }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Box struct() {
+    head mut Node& = Node(0, null)
+    tag I64 = 0
+}
+fn grow(b mut Box&, v I64) { b.head = Node(v, b.head) }
+fn main() ? {
+    longlived := Box()
+    keep := List<Box>()
+    for i in range 3 {
+        a := Array<Box>(1, Box())
+        grow(try a[0] catch default longlived, i + 1)
+        keep.Push(a[0])
+        churn()
+    }
+    churn()
+    t := 0
+    for b in keep { for n := b.head, n != null, n = n.next { t = t * 10 + n.v } }
+    assert t == 123, $t
+}

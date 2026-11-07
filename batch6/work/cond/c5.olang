@@ -1,0 +1,23 @@
+# a conditional of a loop body's text and a field's own value, stored into that field of an outer instance
+type Bag struct() {
+    last String& = ""
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+    }
+    return t
+}
+fn main() ? {
+    b mut Bag& = Bag()
+    outer String& = "outer"
+    for i in range 2 {
+        x String& = "w" $i "-abcdefghijklmnopqrstuvwxyz"
+        b.last = x if i == 1 else outer
+        churn()
+    }
+    churn()
+    println(b.last)
+}

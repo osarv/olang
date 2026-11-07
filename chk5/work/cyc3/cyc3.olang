@@ -1,0 +1,28 @@
+# O26a/calleeMayHoldArg: a parser's mutually recursive methods keep the token they are given in the node they build -
+# read before the cycle's late obligations exist, the token local is left in its block, and the call is then refused
+type Tok struct(text String&, depth I64) {
+    text
+    depth
+}
+type Node struct(name String&, kid Node&) {
+    name
+    kid
+}
+type P struct(src String&) {
+    src
+    at I64 = 0
+}
+fn (p P&) term(t Tok) Node& {
+    if t.depth < 3 { return p.expr(Tok(t.text, t.depth + 1)) }
+    return Node(t.text, null)
+}
+fn (p P&) expr(t Tok) Node& { return Node("e", p.term(t)) }
+fn (p P&) parse(k I64) Node& {
+    t := Tok("tok" $k, 0)
+    return p.expr(t)
+}
+fn main() ? {
+    p := P("abcdef")
+    n := p.parse(3)
+    println($n.name " " $n.kid.kid.kid.kid.name)
+}

@@ -1,0 +1,8 @@
+# Hash() called directly on a main struct holding a Tag
+import "lib/pv"
+type W struct(t pv.Tag) { t }
+fn main() ? {
+    a := pv.Make(3)
+    b := pv.Make(13)
+    println($W(a).Hash())
+}

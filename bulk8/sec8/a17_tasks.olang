@@ -1,0 +1,28 @@
+import "std/io"
+
+type Blob unique struct(n I64) {
+    n
+    data := Array<I64>(n.Mod(7) + 2, n)
+}
+
+fn work(m mut Map<I64, Blob>&, base I64) {
+    for k in range 20000 {
+        m.Put(k % 4, Blob(base + k))
+        if k % 3 == 0: m.Remove((k + 1) % 4)
+    }
+}
+
+fn main() {
+    a := Map<I64, Blob>()
+    b := Map<I64, Blob>()
+    join {
+        spawn work(a, 1)
+        spawn work(b, 2)
+    }
+    acc := 0
+    for k in range 4 {
+        if a.Has(k): acc += a.Ref(k)!.data[0]
+        if b.Has(k): acc += b.Ref(k)!.data[0]
+    }
+    io.Println($acc)!
+}

@@ -1,0 +1,38 @@
+# O26a/D16d (F9) with tasks: a reference from a built call captured by a returned lambda, the referent also given to a task
+# in a join, and a copied local (F8) built on a task's thread through spawn x = f()
+import "std/io"
+
+type node struct(v I64, next node?& = null) { v, next }
+
+fn mk(k I64) mut node& { return node(k) }
+
+fn work(n mut node&) { n.v += 100 }
+
+fn withTask(k I64) fn&() I64 {
+    r := mk(k)
+    join { spawn work(r) }
+    return fn() I64 { return r.v }
+}
+
+fn mkv(k I64) node { return node(k * 2) }
+
+fn copied(k I64) node& {
+    a node
+    join { spawn a = mkv(k) }
+    cur := a
+    cur.v += 1
+    return cur
+}
+
+fn churn() I64 {
+    junk := Vec<String>()
+    for i in range 2000 { junk.Push($i "abcdefghijklmnopqrstuvwxyz") }
+    return junk.Len()
+}
+
+fn main() {
+    f := withTask(3)
+    c := copied(5)
+    n := churn()
+    io.Println($f() " " $c.v " " $n " (103 11 2000)")!
+}

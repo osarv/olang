@@ -1,0 +1,35 @@
+# a lambda capturing a match binding read out of a by-value enum parameter (an 'unnamed' scope), stored long-lived
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box enum {
+    Has(n Node&)
+    No
+}
+GF mut fn() I32 = null
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn stash(b Box) {
+    match b {
+        case Box.Has(n) { GF = fn() { return n.v } }
+        nomatch { }
+    }
+}
+fn stashL(b Box, l mut List<fn() I32>&) {
+    match b {
+        case Box.Has(n) { l.Push(fn() { return n.v + 1 }) }
+        nomatch { }
+    }
+}
+fn main() ? {
+    l List<fn() I32>& = List<fn() I32>()
+    for i in range 2 {
+        inner Node& = Node(42)
+        stash(Box.Has(inner))
+    }
+    churn()
+    try io.Print($GF() "\n")
+}

@@ -1,0 +1,21 @@
+# L10a: a hex literal adapting to an unsigned type is its bits read unsigned - in declarations, literal-only
+# expressions, comparisons and arguments; baked, compiled and interpreted
+fn id(u U64) U64 { return u }
+fn run() String {
+    a U64 = 0xFFFFFFFFFFFFFFFF
+    b U64 = 0x8000000000000000 >> 1
+    c I64 = 0x8000000000000000 >> 1
+    d U32 = 0xFFFFFFFF
+    e U64 = 0xFFFFFFFFFFFFFFFF / 3
+    f := id(0xFFFFFFFFFFFFFFFF)
+    g := a == 0xFFFFFFFFFFFFFFFF
+    h := a > 0x7FFFFFFFFFFFFFFF
+    k U8 = 0xFF + 0
+    m U64 = 0b1000000000000000000000000000000000000000000000000000000000000000
+    return $a " " $b " " $c " " $d " " $e " " $f " " $g " " $h " " $k " " $m
+}
+Baked String = run()
+fn main() ? {
+    println(run())
+    println(Baked)
+}

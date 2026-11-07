@@ -1,0 +1,23 @@
+import "std/io"
+Data := I64[3, 1, 4, 1, 5, 9, 2, 6]
+fn each(a Array<I64>&) Iterator<I64> {
+    for x in a { yield x }
+}
+fn viaLocal() I64 {
+    t I64 = 0
+    g := each(Data)
+    for x in g { t += x }
+    return t
+}
+fn viaHelper() I64 { return each(Data).Sum() }
+fn viaText(s String&) I64 {
+    t I64 = 0
+    g := each(I64[s.Len(), 2])
+    for x in g { t += x }
+    return t
+}
+fn main() {
+    t I64 = 0
+    for i in range 1000000 { t += viaLocal() }
+    io.Println($t)!
+}

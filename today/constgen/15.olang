@@ -1,0 +1,14 @@
+# E32b/O13: a view of a local array may not be returned past the local
+fn leak() Array<I32, 3>& {
+    x := I32[1, 2, 3]
+    return x as Array<I32, 3>&
+}
+fn leak2() Array<I32, 3>& {
+    x Array<I32, 3> = I32[1, 2, 3]
+    return x
+}
+fn main() ? {
+    a := leak()
+    b := leak2()
+    println($a $b)
+}

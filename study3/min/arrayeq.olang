@@ -1,0 +1,13 @@
+fn main() ? {
+    l := List<I64>()
+    l.Push(1)
+    a := l.ToArray()
+    b := l.ToArray()
+    println($a " " $b " ==: " $(a == b) "  Equal: " $a.Equal(b))
+    x := I64[1]
+    y := I64[1]
+    println("values ==: " $(x == y))
+    s := "ab".ToUpper()
+    t := "AB"
+    println("text ==: " $(s == t))
+}

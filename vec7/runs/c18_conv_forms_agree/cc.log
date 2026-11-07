@@ -1,0 +1,7 @@
+/home/user/review/vec7/work/c18_conv_forms_agree.olang:10:21: error[D8]: this function returns String&, found String&
+   10 |     return String(a if k > 0 else a[0:1])
+      |                     ^~
+/home/user/review/vec7/work/c18_conv_forms_agree.olang:16:12: error[E11b]: a join piece is a text literal or a '$' rendering - write '$a'
+   16 |     return a " " b " " c
+      |            ^
+compilation failed with 2 errors

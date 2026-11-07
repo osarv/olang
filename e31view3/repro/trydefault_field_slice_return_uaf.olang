@@ -1,0 +1,25 @@
+# t03 minimized: a slice of a try-default element of an array of fixed arrays, returned as a borrow of the array
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn view(a Array<Array<I64, 2>>&) Array<I64>&a { return (try a[0] catch default Array<I64, 2>())[0:2] }
+fn deep(n I64) I64 {
+    b := Array<I64, 8>()
+    for i in range 8 { b[i] = n * 1000 + i }
+    if n == 0 { return b[3] }
+    return deep(n - 1) + b[1]
+}
+fn main() ? {
+    a := Array<Array<I64, 2>>(1)
+    a[0][0] = 11
+    a[0][1] = 22
+    v := view(a)
+    t := deep(5)
+    churn()
+    x := v[0]
+    y := v[1]
+    println("v " $x " " $y " t " $t)
+}

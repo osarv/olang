@@ -1,0 +1,12 @@
+type Ctr struct() {
+  n I64 = 0
+  arr mut Array<I64>& = Array<I64>(4)
+}
+type B struct(c mut Ctr&) { c }
+G B = B(Ctr())
+fn val() I64 { return 7 }
+fn main() ? {
+  y := G
+  y.c.arr[0].AtomicStore(5)
+  println($G.c.n " " $G.c.arr[0])
+}

@@ -1,0 +1,12 @@
+# match on a Tag value
+import "lib/pv"
+
+fn main() ? {
+    a := pv.Make(3)
+    b := pv.Make(13)
+    k := match a {
+        case b => 1
+        nomatch => 0
+    }
+    println($k)
+}

@@ -1,0 +1,31 @@
+# NEW manifestation (G9d) of a PRE-EXISTING landing bug: a destructor temporary passed to a generic <T> call inside a
+# conditional argument is built in the function's own scope, not the loop body's: 1,000,000 instances are held (and
+# their destructors delayed) until work() returns.
+# e27b83b -b: 'in work: made 1000000 gone 0', peak RSS 166,620 KB. b6259d1: 'gone 1000000' in work, 11,240 KB.
+# 7345ff9: 'gone 2000000' (F4's double destruction), 11,228 KB.
+# The root predates G9d: with a non-generic 'fn idr(x Res&) Res&x' (p1_cond_arg_borrowed_call_lifetime.olang) b6259d1
+# behaves exactly as e27b83b does here. G9d routes every generic <T> call with a destructor temporary into that path.
+Made mut I64 = 0
+Gone mut I64 = 0
+type Res struct(k I64) {
+    k
+    pad Array<I64, 16>
+    Made++
+} destruct {
+    Gone++
+}
+fn id(x <T>) T { return x }
+fn takeR(r Res&) I64 { return r.k }
+fn work() I64 {
+    c := true
+    t I64 = 0
+    for i in range 1000000 {
+        t += takeR(id(Res(i)) if c else Res(16))
+    }
+    println("in work: made " $Made " gone " $Gone)
+    return t
+}
+fn main() ? {
+    t := work()
+    println("after: made " $Made " gone " $Gone " " $t)
+}

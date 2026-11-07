@@ -1,0 +1,13 @@
+/home/user/review/vec3/work/r2.olang:15:5: error[O39]: calling 'reset' may release the Array<Char> borrowed on line 14, which is used after it
+   15 |     reset(o.FirstMut())
+      |     ^~~~~
+/home/user/review/vec3/work/r2.olang:14:15: note: borrowed here
+   14 |     x := o.in.data
+      |               ^~~~
+/home/user/review/vec3/work/r2.olang:17:14: note: used here, after it
+   17 |     println($x[0])
+      |              ^
+/home/user/review/vec3/work/r2.olang:12:28: note: 'reset' releases here
+   12 | fn reset(i mut Inner&) { i.data = Array<Char>(40, 'z') }
+      |                            ^~~~
+compilation failed with 1 error

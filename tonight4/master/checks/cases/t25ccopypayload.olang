@@ -1,0 +1,18 @@
+# check: fail error[T25c]: a copy of a read-only Box cannot be stored where it can be written
+# T25c: an enum case's payload is writable storage
+type Box struct(P mut Array<I64>&) {
+    P
+}
+GB Box = Box(Array<I64>(3))
+G List<I64> = List<I64>()
+type Opt enum {
+    None
+    Some(b Box)
+}
+fn main() ? {
+    o := Opt.Some(GB)
+    match o {
+        case Opt.Some(b) { b.P[0] = 1 }
+        nomatch { }
+    }
+}

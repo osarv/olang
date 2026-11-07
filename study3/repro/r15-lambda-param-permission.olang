@@ -1,0 +1,15 @@
+# r15 OVER-REJECTION - T22/D16a/T25b: a lambda whose parameter is a READ-ONLY reference is refused where the expected
+# function type passes a writable one: "l.Iter().Fold(0, fn(acc I32, b Box&) I32 {...})" over a List<mut Box&> is
+# "expected fn(acc I32, x mut Box&) I32, found fn(acc I32, b Box&) I32". A callee that asks less (reads only) is safe
+# wherever more is offered - writable converts to read-only at the outermost level (T25c) everywhere else. Leaving the
+# parameter's type out compiles.
+#
+# expected: 4
+# actual: error[E12] at line 13
+type Box struct(v I32) { v }
+fn main() ? {
+    l := List<mut Box&>()
+    l.Push(Box(4))
+    s := l.Iter().Fold(0, fn(acc I32, b Box&) I32 { return acc + b.v })
+    println($s)
+}

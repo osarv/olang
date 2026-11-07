@@ -1,0 +1,34 @@
+import "std/io"
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn (t mut Token&) Use() { t.uses++ }
+
+fn keep(v mut Vec<Token>&, t Token) I64 {
+    v.Push(t)
+    return v.Len()
+}
+
+fn many(v mut Vec<Token>&, t Token) I64 {
+    xs := I64[keep(v, t) for _ in range 3]
+    return xs.Len()
+}
+
+fn dowhile(v mut Vec<Token>&, t Token) {
+    i I64 = 0
+    do {
+        v.Push(t)
+        i++
+    } for i < 3
+}
+
+fn main() {
+    v := Vec<Token>()
+    many(v, Token(1))
+    dowhile(v, Token(2))
+    v[0].Use()
+    io.Println($v.Len() " " $v[0].uses " " $v[1].uses)!
+}

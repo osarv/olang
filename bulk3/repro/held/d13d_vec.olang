@@ -1,0 +1,24 @@
+import "std/io"
+fn junk(k I64) I64 {
+    a, b, c, d I64 = k * 7919 + 4096, k * 104729 + 8192, k * 15485863, k * 32452843
+    e, f, g, h I64 = a ^ b, b ^ c, c ^ d, d ^ a
+    return a + b + c + d + e + f + g + h
+}
+fn probe(c Bool) I64 {
+    v Vec<I64>
+    if c { v = Vec<I64>() } else { v = Vec<I64>(4) }
+    for i in range 10 { v.Push(i) }
+    for k in range 100 {
+        w Vec<I64>
+        if c { w = Vec<I64>() } else { w = Vec<I64>(2) }
+        w.Push(k)
+        v.Push(w.Len())
+    }
+    for k in range 100 { v = Vec<I64>(k) }
+    return v.Len()
+}
+fn main() {
+    t I64 = 0
+    for k in range 1000 { t += junk(k) + probe(k % 2 == 0) }
+    io.Println($t)!
+}

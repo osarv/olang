@@ -1,0 +1,8 @@
+import "std/os"
+import "std/io"
+type P struct(a I64, b String, c I64) { a, b, c }
+fn main() {
+    p := P()
+    o := os.Output()
+    io.Println($p.a $o.Status)!
+}

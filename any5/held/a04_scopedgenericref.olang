@@ -1,0 +1,19 @@
+# E25 on a generic whose result is its type-variable argument (ResultFrom = FromTypeVar, so not "borrowed" to E25):
+# T bound to a reference, the result is the argument itself - does the scope argument say where it lives?
+type Node struct(v I64) {
+    v
+}
+type H struct() {
+    p Node?& = null
+}
+fn gid<T>(x T) T { return x }
+fn main() {
+    t := Node(0)
+    h := H()
+    for i in range 3 {
+        n := Node(i + 100)
+        h.p = gid&t(n)
+    }
+    churn()
+    say("h.p " $h.p!.v)
+}

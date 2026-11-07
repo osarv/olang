@@ -1,0 +1,26 @@
+# function values: captures of values, references and value arrays, stored outside the block they are made in
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+fn adder(k I64) fn(x I64) I64 { return fn(x I64) I64 { return x + k } }
+fn reader(n Node&) fn() I64 { return fn() I64 { return n.v } }
+fn texter(i I64) fn() I64 {
+    s String&return = $i "abcdef"
+    return fn() I64 { return s.Len() }
+}
+fn main() ? io.IoError {
+    f fn(x I64) I64 = adder(0)
+    g fn() I64 = reader(Node(1))
+    h fn() I64 = texter(1)
+    outer Node& = Node(500)
+    for i in range 5 {
+        f = adder(i * 100)
+        nn Node& = Node(i * 3)
+        if i == 0 { g = reader(outer) }
+        h = texter(i * 1000)
+        k := i
+        f = fn(x I64) I64 { return x + k + 1 } if i == 4 else f
+    }
+    c := churn.Churn()
+    try io.Println($c " " $f(1) " " $g() " " $h())
+}

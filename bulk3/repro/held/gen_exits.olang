@@ -1,0 +1,51 @@
+import "std/io"
+
+Drops mut I64 = 0
+type Res struct(id I64) { id } destruct { Drops += id }
+type E error { BAD }
+
+fn gen(n I64, tag I64) Iterator<I64> {
+    r := Res(tag)
+    for i in range n {
+        q := Res(tag * 100)
+        yield i
+    }
+}
+
+fn find(a I64, b I64) I64 ? E {
+    for x in gen(5, 1) {
+        for y in gen(5, 2) {
+            if x * y == a { return x + y }
+            if x * y == b { error E.BAD }
+            if y == 3 { break }
+            if y == 1 { continue }
+        }
+        if x == 4 { break }
+    }
+    return -1
+}
+
+fn comp(n I64) I64 {
+    t I64 = 0
+    for k in range n {
+        a := I64[x * 2 for x in gen(k, 3)]
+        t += a.Len()
+        if k == 2 { return t }
+    }
+    return t
+}
+
+fn main() {
+    s I64 = 0
+    s += try find(6, 100) catch default -7
+    io.Println($s " " $Drops)!
+    s += try find(100, 4) catch default -7
+    io.Println($s " " $Drops)!
+    s += try find(100, 100) catch default -7
+    io.Println($s " " $Drops)!
+    s += comp(5)
+    io.Println($s " " $Drops)!
+    g := gen(3, 4)
+    for x in g { if x == 1 { break } }
+    io.Println($Drops)!
+}

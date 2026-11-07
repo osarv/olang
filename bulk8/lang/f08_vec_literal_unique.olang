@@ -1,0 +1,13 @@
+# E19: a Vec's (and a Map's) literal goes through its FromIter; Vec.FromIter Pushes each element it reads from
+# the items' ArrayIter, which for a unique type (T13b) is a reference into the items array, so the literal of fresh
+# values is refused ("Vec.FromIter needs a copy ... call Vec.FromIter with a reference (Tok&)"), where the same Vec
+# filled by Push(Tok(3)) and Array<Tok>[...] compile. SPEC E19 also still ends "their literals and comprehensions are
+# built directly", which the first bullet (and commit e4875ee) replaced.
+import "std/io"
+type Tok unique struct(id I64) { id }
+fn main() {
+    a := Array<Tok>[Tok(1), Tok(2)]
+    v := Vec<Tok>[Tok(3), Tok(4)]
+    m := Map<I64, Tok>[1: Tok(5)]
+    io.Println($a[1].id " " $v[1].id " " $v.Len() " " $m.Len())!
+}

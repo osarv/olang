@@ -1,0 +1,14 @@
+import "std/io"
+fn lt(x I33, y I33) Bool { return x < y }
+fn ge(x I33, y I33) Bool { return x >= y }
+fn f(k I64) String {
+    a := I33(-k)
+    b := I33(-858993459) * I33(k)
+    return $a " " $b " " $(a < b) " " $(a >= b) " " $lt(a, b) " " $ge(a, b)
+}
+K mut I64 = 1
+B := f(1)
+fn main() {
+    io.Println(B)!
+    io.Println(f(K))!
+}

@@ -1,0 +1,9 @@
+# a Map whose values are Lists cannot be walked: rejected inside std/map's MapIter.Next
+import "std/map"
+fn main() ? {
+    groups := map.Map<I32, mut List<I32>&>()
+    groups.Put(1, List<I32>())
+    n I64 = 0
+    for e in groups { n += e.Value.Len() }
+    assert n == 0
+}

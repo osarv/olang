@@ -1,0 +1,11 @@
+== build -debug -sanitize
+s No such file or directory
+keep List<String&>["No such file or directory", "No such file or directory", "No such file or directory"]
+status 0
+== build
+s No such file or directory
+keep List<String&>["No such file or directory", "No such file or directory", "No such file or directory"]
+status 0
+== interpret
+olang interpret: e08_stringfromc.olang:6: it calls an external function with a parameter or result -i cannot pass - only numbers, Bools and arrays of numbers
+status 1

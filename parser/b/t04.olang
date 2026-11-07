@@ -1,0 +1,24 @@
+# match with several values, guards, => values
+type Shape enum {
+    Circle(r I32)
+    Rect(w I32, h I32)
+    Dot
+}
+fn area(s Shape) I32 {
+    return match s {
+        case Shape.Circle(r) if r > 10 => 1000
+        case Shape.Circle(r) => r * r * 3
+        case Shape.Rect(w, h) => w * h
+        case Shape.Dot => 0
+    }
+}
+test "a" {
+    assert area(Shape.Rect(2, 3)) == 6
+    assert area(Shape.Circle(2)) == 12
+    v I32 = 3
+    match v {
+        case 1, 2, 3 { v = 10 }
+        nomatch { v = 0 }
+    }
+    assert v == 10
+}

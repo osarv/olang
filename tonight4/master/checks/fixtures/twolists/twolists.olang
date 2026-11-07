@@ -1,0 +1,7 @@
+import "std/io"
+import mine "io"
+error E { X }
+fn main() ? E {
+    try io.Print("") catch { }
+    assert mine.Mine() == 7
+}

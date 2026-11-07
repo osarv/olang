@@ -1,0 +1,17 @@
+# for comparison with c04: a struct built by a constructor call or a call's built result given a scope argument
+type Sh trait {
+    Show() String
+}
+type P struct(n I64) { n }
+fn (p P&) Show() String { return "p" $p.n }
+fn mkp(i I64) P& { return P(i) }
+fn main() {
+    xs := List<any Sh&>()
+    for i in range 2 {
+        t := "inner" $i
+        xs.Push(P&t(i))
+        xs.Push(mkp&t(i))
+    }
+    assert churn() > 0
+    for x in xs { say(x.Show()) }
+}

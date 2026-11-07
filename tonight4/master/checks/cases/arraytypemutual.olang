@@ -1,0 +1,11 @@
+# check: fail error[T29]: B holds itself through the array it is declared over
+# never: representations differ
+# T29: two types over arrays of each other are one type holding itself through its elements - reported once, at the one
+# whose element was still being declared
+type A Array<B&>
+type B Array<A&>
+fn main() ? {
+    b B& = B(Array<A&>(0))
+    a := A(Array<B&>(1, b))
+    println($a.Len())
+}

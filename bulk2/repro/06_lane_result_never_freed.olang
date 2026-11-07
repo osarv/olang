@@ -1,0 +1,24 @@
+# E39 (and E27 before it): a lane result - or a comprehension - assigned to a long-lived reference place in a loop is
+# never freed early: free.mayRegister reads every Seq and Collect as "may register a destructor", so each old array
+# stays until the scope closes. The same computation through a function frees at once. Measure: /usr/bin/time -f %M
+import "std/io"
+
+type H struct() {
+    arr mut Array<I64>& = Array<I64>(1000, 1)
+}
+
+fn dbl(a Array<I64>&) Array<I64> {
+    b := Array<I64>(a.Len())
+    for i in range a.Len() { b[i] = a[i] * 2 }
+    return b
+}
+
+N mut I64 = 100000
+
+fn main() {
+    h := H()
+    for i in range N { h.arr = h.arr * 2 }          # ~1.6 GB peak, each old array kept
+    g := H()
+    for i in range N { g.arr = dbl(g.arr) }         # ~2 MB: freed at once
+    io.Println($h.arr[0] " " $g.arr[0])!
+}

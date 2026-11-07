@@ -1,0 +1,20 @@
+# T7c in the prelude's containers: List and Map of fixed arrays, sorted, iterated, baked and run
+fn run() String {
+    l := List<Array<I32, 2>>()
+    for i in range 20 {
+        p Array<I32, 2> = I32[I32(i % 5), I32(i)]
+        l.Push(p)
+    }
+    m := Map<Array<I32, 2>, I64>()
+    for p in l { m.Put(p, I64(p[1])) }
+    a := l.ToArray()
+    a.Sort(fn(x, y) { return x[0] < y[0] })
+    k Array<I32, 2> = I32[3, 13]
+    got := try m.Get(k) catch default -1
+    return $l.Len() " " $m.Len() " " $a[0] " " $a[19] " " $got " " $(k in l)
+}
+Baked String = run()
+fn main() ? {
+    println(run())
+    println(Baked)
+}

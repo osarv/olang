@@ -1,0 +1,7 @@
+# M6a: a private enum case
+import "lib"
+import "std/io"
+fn main() ? {
+  d := lib.Dir.south
+  try io.Print($(d == lib.Dir.North) "\n")
+}

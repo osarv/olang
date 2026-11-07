@@ -1,0 +1,30 @@
+# closures building through what they capture: called in a nested block, in a task, kept in a struct, passed on
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+type Hold struct(f fn(i I64)) { f }
+fn callIt(f fn(i I64), i I64) { f(i) }
+fn main() ? io.IoError {
+    l mut List<Node&>& = List<Node&>()
+    t mut List<String&>& = List<String&>()
+    add := fn(i I64) { l.Push(Node(i)) }
+    addT := fn(i I64) { t.Push($i "-t") }
+    h := Hold(addT)
+    for i in range 3 {
+        if i >= 0 {
+            add(i)
+            callIt(add, i + 10)
+            h.f(i + 20)
+        }
+        join {
+            spawn add(i + 100)
+            spawn callIt(addT, i + 200)
+        }
+    }
+    c := churn.Churn()
+    s := 0
+    for n in l { s = s + n.v }
+    u := ""
+    for x in t { u = $u $x }
+    try io.Println($c " " $s " " $u)
+}

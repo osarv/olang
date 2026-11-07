@@ -1,0 +1,16 @@
+import "std/io"
+import "lib"
+type Other error { X }
+type Mine error Other, lib.LibErr
+fn main() {
+    m Mine = lib.Kept
+    v := Vec<lib.Both>()
+    lib.Catch(1, v)
+    lib.Catch(2, v)
+    lib.Catch(3, v)
+    io.Println($m " " $(m == lib.LibErr.B) " " $v " " $lib.Same(v[0], lib.KeptB) " " $(v[0] == m) " " $lib.KeptB)!
+    mp := Map<lib.Both, I64>()
+    mp.Put(v[0], 1)
+    mp.Put(lib.KeptB, 2)
+    io.Println($(try mp.Get(lib.LibErr.B) catch default -1) " " $(try mp.Get(lib.LibErr.C) catch default -1))!
+}

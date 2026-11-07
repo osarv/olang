@@ -1,0 +1,31 @@
+# (a) BUG, unbounded memory growth - O26a moves NUMBER locals into a borrowed result's scope.
+# A function returning a slice of its parameter ('Array<T>&a') built from local integers allocates each of those
+# integers in a's scope (the IR: '__olang_scope_alloc_a(<a's scope>, 8, 8)' per local), where they stay until a's scope
+# closes. List.RunFrom (std/prelude/list.olang:471, three I64 locals) is such a function, and it is what every
+# 'for x in l' over a List calls once per chunk - so walking a long-lived List leaks ~24 bytes a chunk into the list's
+# scope, for ever. Measured: a 1,000-element List walked 400k times 69 MB, 1.6M times 272 MB; this file's window()
+# 1M calls 18 MB, 4M calls 66 MB (16 B a call). Found as a steady leak of ~0.5 KB a step in the ECS simulation
+# (progs/ecs.olang walks its alive List four times a step).
+# Expected: flat memory - O26a moves "a local holding references" (and these hold none); a number is a value.
+# Run: olang -b -D Calls=4000000 rf_...olang, or -D Walks=1600000 with the List loop.
+Calls I64 = 1000000
+Walks I64 = 100000
+fn window(a Array<I64>&, at I64) Array<I64>&a {
+    from I64 = at + 1
+    to I64 = from + 2
+    return a[from:to]
+}
+fn main() ? {
+    a := Array<I64>(100, 7)
+    total I64 = 0
+    for c in range Calls {
+        w := window(a, c % 90)
+        total += w[0]
+    }
+    l := List<I64>()
+    for i in range 1000 { l.Push(i) }
+    for w in range Walks {
+        for x in l { total += x }
+    }
+    println($total)
+}

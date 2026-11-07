@@ -1,0 +1,7 @@
+# T29a: a conversion of a fixed-length view ('as', E32b) - names its storage or copies it?
+fn main() ? {
+    a := Array<Char>(4, 'a')
+    w String& = String(a as Array<Char, 4>&)
+    a[0] = 'z'
+    println(w)
+}

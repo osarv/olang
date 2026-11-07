@@ -1,0 +1,12 @@
+# Bool has no Hash, so no enum or struct with a Bool part is a Map key; the constraint failure is followed by
+# errors inside std/map's instantiated methods
+import "std/map"
+type C enum {
+    A
+    B(x Bool)
+}
+fn main() ? {
+    m := map.Map<C, I32>()
+    m.Put(C.A, 1)
+    assert C.A in m
+}

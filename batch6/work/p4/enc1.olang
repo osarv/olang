@@ -1,0 +1,76 @@
+# P4b/P4c: errors re-encoded from a task's callee list to the join's list and on to the function's, in different orders
+error A {
+    A1
+    A2
+    A3
+}
+error B {
+    B1
+    B2
+}
+error C {
+    C1
+    C2
+    C3
+}
+fn fa(n I64) I64 ? C + A {
+    if n == 1 { error A.A3 }
+    if n == 2 { error C.C2 }
+    if n == 3 { error A.A1 }
+    return n
+}
+fn fb(n I64) I64 ? B + C {
+    if n == 1 { error B.B2 }
+    if n == 2 { error C.C3 }
+    return n
+}
+fn fd(n I64) I64 ? {
+    if n == 1 { error }
+    return n
+}
+# the task catches A.A3 itself: A still reaches the join whole
+fn j1(x I64, y I64) I64 ? B + A + C {
+    try join {
+        spawn try fa(x) catch A.A3 { }
+        spawn try fb(y)
+    }
+    return 0
+}
+fn show(x I64, y I64) I64 {
+    return try j1(x, y) catch A.A1 default 11 catch A.A2 default 12 catch A.A3 default 13 catch B.B1 default 21 catch B.B2 default 22 catch C.C1 default 31 catch C.C2 default 32 catch C.C3 default 33
+}
+# a bare-? function: a task's named error leaves as the default error
+fn j2(x I64) I64 ? {
+    try join {
+        spawn try fa(x)
+    }
+    return 0
+}
+fn show2(x I64) I64 {
+    return try j2(x) catch default 99
+}
+# a join catching the default error from a bare-? callee, then named ones
+fn j3(x I64, y I64) String {
+    try join {
+        spawn try fd(x)
+        spawn try fb(y)
+    } catch B.B2 { return "jB2" } catch C { return "jC" } catch { return "jdflt" }
+    return "ok"
+}
+J1a I64 = show(3, 0)
+J1b I64 = show(1, 2)
+J1c I64 = show(2, 1)
+J1d I64 = show(0, 2)
+J2 I64 = show2(2)
+J3a String = j3(1, 1)
+J3b String = j3(0, 2)
+J3c String = j3(0, 1)
+J3d String = j3(5, 5)
+run mut I64 = 1
+fn main() ? {
+    println($show(3 * run, 0) " " $show(1 * run, 2 * run) " " $show(2 * run, 1 * run) " " $show(0, 2 * run))
+    println($J1a " " $J1b " " $J1c " " $J1d)
+    println($show2(2 * run) " " $J2)
+    println($j3(1 * run, 1 * run) " " $j3(0, 2 * run) " " $j3(0, 1 * run) " " $j3(5 * run, 5))
+    println($J3a " " $J3b " " $J3c " " $J3d)
+}

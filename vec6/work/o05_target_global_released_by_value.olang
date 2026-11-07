@@ -1,0 +1,30 @@
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+    b Lexer = Lexer(2)
+}
+type H struct() {
+    lx own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+GH mut H = H()
+fn reset() Vec<I64> {
+    GH.lx = null
+    return Vec<I64>()
+}
+fn main() ? {
+    GH.lx = Lexer(3)
+    GH.lx.toks = reset()
+    churn()
+    println("done")
+}

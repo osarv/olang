@@ -1,0 +1,17 @@
+import "std/io"
+
+type Shape enum { Circle(r F64), Sq(s F64) }
+type Box struct(s Shape) { s }
+
+fn grow(e mut Shape&) {
+    if e == Shape.Circle {
+        e.r = 9.0
+        io.Println("inside " $e.r)!
+    }
+}
+
+fn main() {
+    b := Box(Shape.Circle(1.5))
+    grow(b.s)
+    io.Println($b.s)!
+}

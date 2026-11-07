@@ -1,0 +1,37 @@
+# may-build walk (mbiMemo.deps): in a call cycle, a member reads the in-progress head's deps as 0 (mayBuildIntoRaw
+# returns false for state 1 and mbiDepsOf gives the unfinished memo's 0), so the building lambda cb passes ca is never
+# asked; ca settles at "no, deps = g" and Str's own non-building lambda is all that is checked. At run time cb builds
+# Node(101) where the receiver's node lives - the scope "$" opened for the call - and it is freed after rendering.
+# new -b: "b1 / 200 0"; -b -s: "use after scope closed" (134); -i: "b1 / 101 0".
+# e27b83b: error[E11c, O12]; be042da: error[E11c] (purity)
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Bag struct(head mut Node&) {
+    head
+}
+fn ca(g fn(x mut Node&), n mut Node&, c I64) {
+    if c > 0 { cb(n, c - 1) }
+    g(n)
+}
+fn cb(n mut Node&, c I64) {
+    ca(fn(x mut Node&) { x.next = Node(x.v + 100) }, n, c)
+}
+fn (b Bag&) Str() String {
+    ca(fn(x mut Node&) { }, b.head, 2)
+    return "b" $b.head.v
+}
+fn churn(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn main() ? {
+    b := Bag(Node(1))
+    println($b)
+    t := churn(200)
+    l := List<Node&>()
+    for i in range 50 { l.Push(Node(i)) }
+    println($b.head.next.v " " $t)
+}

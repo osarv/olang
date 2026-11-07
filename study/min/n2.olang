@@ -1,0 +1,12 @@
+type Kind enum {
+    Label(text String&)
+    Button(text String&, clicks I32)
+}
+fn main() ? {
+    k Kind = Kind.Button("OK", 0)
+    match k {
+        case Kind.Button(t, n) { k = Kind.Button(t, n + 1) }
+        nomatch { }
+    }
+    assert k == Kind.Button("OK", 1)
+}

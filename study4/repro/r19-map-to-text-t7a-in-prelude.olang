@@ -1,0 +1,13 @@
+# r19 DIAGNOSTIC - T7a through a generic: "items.Map(fn(x) String { ... }).Join(";")" - mapping to text - reports
+# T7a twice at the call ("an array inside an array or a struct is held by reference - write String&"), with notes into
+# the prelude's Map (array.olang lines 81 and 82), then "Array<String> has no method 'Join'". The fix is at the lambda's result type
+# (String&), which the messages never point at. Found in ../json2csv.olang; study 3's r34 (text comprehensions) is
+# the same restriction from the other side.
+#
+# expected: one error at the lambda's result type: "U = String is an array, held by reference in an array - write the
+#           lambda's result as String&"
+# actual:   two identical error[T7a, T7c] at Map and error[M19] "Array<String> has no method 'Join'"
+fn main() ? {
+    nums := I64[1, 2, 3]
+    println(nums.Map(fn(n I64) String { return "#" $n }).Join(";"))
+}

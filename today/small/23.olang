@@ -1,0 +1,21 @@
+# L10a: a hex literal for an unsigned target in a case value, a default parameter, a try default and an array literal
+fn f(x U64 = 0xFFFFFFFFFFFFFFFF) U64 { return x }
+fn g(n I64) U64 ? {
+    if n > 0 { error }
+    return 1
+}
+fn run() String {
+    u U64 = f()
+    k := match u {
+        case 0xFFFFFFFFFFFFFFFF => 1
+        nomatch => 0
+    }
+    t U64 = try g(1) catch default 0xFFFFFFFFFFFFFFFE
+    arr := U64[0xFFFFFFFFFFFFFFFF, 0x8000000000000000]
+    return $u " " $k " " $t " " $arr
+}
+Baked String = run()
+fn main() ? {
+    println(run())
+    println(Baked)
+}

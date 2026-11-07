@@ -1,0 +1,11 @@
+# an any made here
+type Ups struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (u mut Ups&) Next() I64 ? Exhausted {
+    if u.at >= u.n { error Exhausted.END }
+    u.at += 1
+    return u.at
+}
+fn Make(n I64) mut any Iterator<I64>& { return Ups(n) }

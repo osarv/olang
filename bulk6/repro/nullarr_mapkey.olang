@@ -1,0 +1,38 @@
+# T2c nullable arrays: null distinct from empty - tests, equality, rendering, hashing, in the evaluator and the run
+import "std/io"
+
+type rec struct(s String?& = null, t String?& = "") { s, t }
+
+fn eqNull(a String?&, b String?&) Bool { return a == b }
+
+fn lenOr(a String?&) I64 {
+    if a is null: return -1
+    return a.Len()
+}
+
+Z String?& = null
+E String?& = ""
+EqZE := eqNull(Z, E)
+EqZZ := eqNull(Z, null)
+LenZ := lenOr(Z)
+R := rec()
+RS := $R
+ZS := $Z
+
+assert not EqZE, "null equals empty, decided while compiling"
+assert EqZZ
+
+fn main() {
+    z String?& = null
+    e String?& = ""
+    io.Println("run: z==e " $eqNull(z, e) " z==null " $eqNull(z, null) " lenOr " $lenOr(z) " " $lenOr(e))!
+    io.Println("baked: z==e " $EqZE " z==null " $EqZZ " lenOr " $LenZ)!
+    r := rec()
+    io.Println("run rec " $r " baked rec " $RS " run Z " $z " baked Z " $ZS)!
+    m := Map<String?&, I64>()
+    m.Put(z, 1)
+    m.Put(e, 2)
+    io.Println("map len " $m.Len() " (2: null and empty are distinct keys)")!
+    vv String?&
+    io.Println("zero-valued declaration is null: " $(vv is null))!
+}

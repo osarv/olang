@@ -1,0 +1,24 @@
+type Views extends Array<Array<I64>&>
+type H struct() {
+    s mut Views& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn keep(h mut H&, d Array<I64>&) { h.s[0] = d }
+fn main() ? {
+    v := Vec<I64>()
+    for i in range 3 { v.Push(i + 1) }
+    h := H()
+    h.s = Views(Array<Array<I64>&>(2))
+    d := v.View()
+    keep(h, d)
+    for i in range 100 { v.Push(i) }
+    churn()
+    println($h.s[0][0])
+}

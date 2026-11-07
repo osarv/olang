@@ -1,0 +1,17 @@
+fn churnIt() {
+    for k in range 300 {
+        junk := $k "-churn-churn-churn-churn-churn-churn-churn-churn-churn-churn"
+        assert junk.Len() > 0
+    }
+}
+fn keepRef(l mut List<String&>&, rs mut List<mut List<String&>&>&) { rs.Push(l) }
+fn main() ? {
+    users := List<List<String&>>()
+    users.Push(List<String&>())
+    rs := List<mut List<String&>&>()
+    for k in range 3 {
+        keepRef(users[0], rs)
+    }
+    churnIt()
+    println($rs.Len())
+}

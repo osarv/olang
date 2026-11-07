@@ -1,0 +1,33 @@
+# S4b/S4c / O12, O23a: built results stored by a destructuring and by a parallel assignment into an element of an
+# array of unknown scope and into a '&src' field reached through a parameter
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+type Holder struct(src mut Node&) {
+    r mut Node&src = src
+}
+fn two(i I64) (mut Node&, I64) { return Node(i), i }
+fn setD(h mut Holder&, i I64) {
+    k I64 = 0
+    h.r, k = two(i)
+}
+fn setP(h mut Holder&, i I64) {
+    k I64 = 0
+    h.r, k = Node(i), 1
+}
+fn main() ? io.IoError {
+    outer mut Array<mut Node&>& = Array<mut Node&>(1, Node(0))
+    base mut Node& = Node(1)
+    h mut Holder& = Holder(base)
+    for i in range 3 {
+        inner mut Array<mut Node&>& = Array<mut Node&>(1, Node(0))
+        arr := outer if i < 10 else inner
+        k I64 = 0
+        arr[0], k = two(i + 50)
+        arr[0], k = Node(i + 60), 2
+        setD(h, i + 70)
+        setP(h, i + 80)
+    }
+    c := churn.Churn()
+    try io.Println($c " " $outer[0].v " " $h.r.v)
+}

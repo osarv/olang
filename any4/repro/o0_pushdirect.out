@@ -1,0 +1,12 @@
+== build -debug -sanitize
+run: l List<String&>["abc1"] x Qbc1
+baked: l List<String&>["abc1"] x Qbc1
+status 0
+== build
+run: l List<String&>["abc1"] x Qbc1
+baked: l List<String&>["abc1"] x Qbc1
+status 0
+== interpret
+run: l List<String&>["abc1"] x Qbc1
+baked: l List<String&>["abc1"] x Qbc1
+status 0

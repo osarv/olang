@@ -1,0 +1,22 @@
+# r24 FRICTION - O25 (a reference keeps its exact scope): "cases := Builtin; if loaded { cases = local }" - a default
+# table from a global, replaced by data loaded at run time - cannot be one variable: ':=' gives 'cases' the program's
+# scope (the global's), and a local array cannot go there (O10c at ToArray); typed "cases Array<C&>& = G" is O25 ("a
+# reference never narrows"). ../sandbox.olang copied the global's elements into the local list instead (globsel3 in
+# ../min). Go: "cases := builtin; if len(files) > 0 { cases = load(files) }".
+#
+# expected: 3 (or a spelling for "a reference that may point at either": the shorter of the two scopes, read-only)
+# actual:   error[O10c] at "loaded.ToArray()"
+type C struct(N String&) { N }
+
+G := C&[C("a"), C("b")]
+
+fn main() ? {
+    args := String&["x", "y", "z"]
+    cases := G
+    if args.Len() > 1 {
+        loaded := List<C&>()
+        for a in args { loaded.Push(C(a)) }
+        cases = loaded.ToArray()
+    }
+    println($cases.Len())
+}

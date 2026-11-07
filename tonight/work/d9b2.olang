@@ -1,0 +1,17 @@
+type N struct(v I64) {
+    v
+    next mut N& = null
+}
+type Box struct(n mut N&) { n }
+fn grow(b Box) {
+    loc mut N& = N(5)
+    b.n.next = loc
+}
+fn grow2(n mut N&) {
+    loc mut N& = N(5)
+    n.next = loc
+}
+fn main() ? {
+    root mut N& = N(1)
+    grow(Box(root))
+}

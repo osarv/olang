@@ -1,0 +1,21 @@
+# a conversion of a borrowed call result (Trim) into an any: is the box a copy?
+type W trait {
+    mut Bump()
+    Show() String
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn (l Lab&) Show() String { return "lab " $String(l) }
+fn main() {
+    s := "  hello  "
+    b mut any W& = Lab(s.Trim())
+    b.Bump()
+    say("alias: " $s " / " $b.Show())
+    xs := List<mut any W&>()
+    for i in range 3 {
+        t := "  text" $i "-" $(i * 7) "  "
+        xs.Push(Lab(t.Trim()))
+    }
+    churn()
+    for x in xs { say(x.Show()) }
+}

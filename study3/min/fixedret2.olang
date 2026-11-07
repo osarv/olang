@@ -1,0 +1,9 @@
+fn copyOut(a Array<F64, 3>&) Array<F64, 3> {
+    w Array<F64, 3> = a
+    return w
+}
+fn main() ? {
+    x := F64[1.0, 2.0, 3.0]
+    y Array<F64, 3> = x
+    println($copyOut(y))
+}

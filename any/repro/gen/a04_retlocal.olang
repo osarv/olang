@@ -1,0 +1,50 @@
+import "std/io"
+# anys returned from functions: of a local struct, of a parameter, of a temporary, of a number
+type Named trait {
+    Name() String
+}
+type Cat struct(n String&) { n }
+fn (c Cat&) Name() String { return "cat " $c.n }
+fn ofLocal(i I64) any Named& {
+    c := Cat("loc" $i)
+    return c
+}
+fn ofTemp(i I64) any Named& { return Cat("tmp" $i) }
+fn ofParam(c Cat&) any Named&c { return c }
+fn ofNum(i I64) any Hashy& {
+    n := i + 5
+    return n
+}
+type Hashy trait {
+    Hash() I64
+}
+fn main() {
+    a := ofLocal(1)
+    b := ofTemp(2)
+    k := Cat("par")
+    c := ofParam(k)
+    d := ofNum(3)
+    churn()
+    say(a.Name())
+    say(b.Name())
+    say(c.Name())
+    say($d)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

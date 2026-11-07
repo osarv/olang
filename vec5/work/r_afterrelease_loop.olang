@@ -1,0 +1,23 @@
+# R: a local typed in a borrow's region inside a loop that also replaces the owner's text - the next turn builds in
+# the region the previous turn released (x itself is never read in the loop, only named as a scope)
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn main() ? {
+    c := CB()
+    x := c.text
+    for i in range 3 {
+        d mut String&x = $i "-new-text-in-x's-region"
+        println(d)
+        c.text = $i "-replaced-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+        churn()
+    }
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

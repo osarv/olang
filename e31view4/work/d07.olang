@@ -1,0 +1,28 @@
+# callee stores a REFERENCE to the parameter (the copy) into an outer list
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { abort }
+    }
+}
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() {
+    head mut Node& = Node(0)
+}
+fn idBox(seed mut Box&) Box { return seed }
+fn keepPtr(b Box&, out mut List<Box&>&) { out.Push(b) }
+fn main() ? {
+    seed := Box()
+    ptrs := List<Box&>()
+    for i in range 3 {
+        keepPtr(idBox(seed), ptrs)
+        churn()
+    }
+    churn()
+    t := 0
+    for b in ptrs { t = t + b.head.v }
+    assert t == 0, $t
+}

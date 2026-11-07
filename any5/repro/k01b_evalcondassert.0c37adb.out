@@ -1,0 +1,16 @@
+== build -debug -sanitize
+k01b_evalcondassert.olang:12:21: error[S18c]: this assertion is false, evaluated while compiling
+   12 |     assert probe(1) == "cond1"
+      |                     ^~
+compilation failed with 1 error
+== build
+k01b_evalcondassert.olang:12:21: error[S18c]: this assertion is false, evaluated while compiling
+   12 |     assert probe(1) == "cond1"
+      |                     ^~
+compilation failed with 1 error
+== interpret
+k01b_evalcondassert.olang:12:21: error[S18c]: this assertion is false, evaluated while compiling
+   12 |     assert probe(1) == "cond1"
+      |                     ^~
+compilation failed with 1 error
+status 1

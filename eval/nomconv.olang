@@ -1,0 +1,14 @@
+import "std/io"
+fn t(c U8) String {
+    b := Array<U8>(3, 'a')
+    x := String(b)
+    b[0] = c
+    y String& = String(b)
+    b[1] = c
+    return $x " " $y
+}
+B String = t('z')
+M mut U8 = 'z'
+fn main() ? io.IoError {
+    try io.Print($B "\n" $t(M) "\n")
+}

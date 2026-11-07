@@ -1,0 +1,28 @@
+import "std/os"
+import "std/io"
+
+fn deep(n I64) I64 {
+    if n == 0: return 0
+    a := Array<I64>(8, n)
+    return deep(n - 1) + a[3] % 7
+}
+
+fn spin(n I64) I64 {
+    s := 0
+    for i in range n { s = (s * 31 + i) % 1000003 }
+    return s
+}
+
+fn main() {
+    accv := Vec<I64>()
+    acc mut Vec<I64>& = accv
+    for _ in range 20000 {
+        os.RunOnStack(200000, fn() { acc.Push(deep(1500)) })
+    }
+    total := acc.Len()
+    out := Array<I64>(3)
+    join {
+        for i in range 3 { spawn out[i] = spin(30000000 + i) }
+    }
+    io.Println($total " " $out)!
+}

@@ -1,0 +1,8 @@
+G List<I32> = I32[1, 2].ToList()
+fn get() (List<I32>&, I32) { return G, 1 }
+fn main() ? {
+  r, k := get()
+  x List<I32> = r
+  x.Push(9)
+  println($G.Len())
+}

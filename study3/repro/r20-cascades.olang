@@ -1,0 +1,27 @@
+# r20 DIAGNOSTIC - one cause, several errors:
+# (1) G24: a call whose constant variable is bound to two values gets the error, and its result then recovers as I32,
+#     so the next line adds "I32 has no method 'Size'" (line 26).
+# (2) G4/G24: a constant introduced only in a function's result type gets its error (one per variable, line 15), then
+#     G21 for each use in the body's declarations (line 16, twice), then "unknown name" for each use as a value
+#     (lines 17-18).
+#
+# expected: 3 errors (W and H at line 15, G24 at line 25)
+# actual: 8 errors
+type Sq<T, N I64> struct() {
+    data Array<T, N * N>
+}
+fn (a Sq<<T>, <N I64>>&) Times(b Sq<T, N>&) Sq<T, N> { return Sq<T, N>() }
+fn (a Sq<<T>, <N I64>>&) Size() I64 { return N }
+fn grid(rows Array<String&>&) Array<Array<Char, <W I64>>, <H I64>> {
+    out Array<Array<Char, W>, H>
+    for y in range H {
+        for x in range W { out[y][x] = rows[y][x] }
+    }
+    return out
+}
+fn main() ? {
+    a := Sq<I64, 2>()
+    b := Sq<I64, 3>()
+    c := a.Times(b)
+    println($c.Size())
+}

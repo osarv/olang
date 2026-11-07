@@ -1,0 +1,11 @@
+host:        vm
+pid:         17387 (extern says 17387, same: true)
+uid:         0
+page size:   4096 (sysconf says 4096)
+cores:       4
+load:        3.16 3.52 3.93
+strlen:      5 0
+has qsort:   true, has nothing: false
+missing:     -1
+user:        (unset)
+took 183 us

@@ -1,0 +1,12 @@
+== build -debug -sanitize
+t abcdef1 x Zbc
+kept List<String&>["abc", "abc", "abc"]
+status 0
+== build
+t abcdef1 x Zbc
+kept List<String&>["abc", "abc", "abc"]
+status 0
+== interpret
+t abcdef1 x Zbc
+kept List<String&>["abc", "abc", "abc"]
+status 0

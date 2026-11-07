@@ -1,0 +1,7 @@
+# check: fail extends
+# P9/T29f: a declared type that does not extend its base has none of its base's methods, the atomic ones included
+type Raw I32
+fn main() ? {
+    r Raw = 1
+    r.AtomicAdd(1)
+}

@@ -1,0 +1,10 @@
+/home/user/review/vec3/work/r1.olang:16:7: error[O39]: assigning 'd.data' may release the Array<Char> borrowed on line 14, which is used after it
+   16 |     d.data = Array<Char>(40, 'z')
+      |       ^~~~
+/home/user/review/vec3/work/r1.olang:14:12: note: borrowed here
+   14 |     x := o.Data()
+      |            ^~~~
+/home/user/review/vec3/work/r1.olang:18:14: note: used here, after it
+   18 |     println($x[0])
+      |              ^
+compilation failed with 1 error

@@ -1,0 +1,18 @@
+4885 bytes: /tmp/dedup-RigVBv/a/b/c/f3.txt
+    = /tmp/dedup-RigVBv/d/f4.txt
+1124 bytes: /tmp/dedup-RigVBv/a/b/f14.txt
+    = /tmp/dedup-RigVBv/a/f13.txt
+    = /tmp/dedup-RigVBv/f12.txt
+3842 bytes: /tmp/dedup-RigVBv/a/b/f2.txt
+    = /tmp/dedup-RigVBv/a/f1.txt
+    = /tmp/dedup-RigVBv/f0.txt
+1466 bytes: /tmp/dedup-RigVBv/a/b/f8.txt
+    = /tmp/dedup-RigVBv/a/f7.txt
+    = /tmp/dedup-RigVBv/d/e/f5.txt
+    = /tmp/dedup-RigVBv/f6.txt
+554 bytes: /tmp/dedup-RigVBv/d/e/f11.txt
+    = /tmp/dedup-RigVBv/d/f10.txt
+2027 bytes: /tmp/dedup-RigVBv/d/e/f17.txt
+    = /tmp/dedup-RigVBv/d/f16.txt
+    = /tmp/dedup-RigVBv/f18.txt
+6 groups, 11 duplicates, 23823 bytes wasted, 0 removed (18 files hashed, 41563 bytes read)

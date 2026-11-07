@@ -1,0 +1,20 @@
+import "std/io"
+import "std/os"
+fn say(what String&, e os.Error) {
+    io.Println($what " " $e)!
+}
+fn main() {
+    try os.Rename("/nonexist/a", "/tmp/b") catch os.Error e { say("rename", e) }
+    try os.ReadDir("/nonexist/d") catch os.Error e { say("readdir", e) }
+    try os.MkDir("/proc/x") catch os.Error e { say("mkdir", e) }
+    try os.Output.Exec("/nonexist/prog", "a") catch os.Error e { say("exec", e) }
+    try os.Process.Start("/nonexist/prog2") catch os.Error e { say("start", e) }
+    try os.FileInfo.Stat("/nonexist/s") catch os.Error e { say("stat", e) }
+    try os.Remove("/nonexist/r") catch os.Error e { say("remove", e) }
+    try os.ReadLink("/etc/hostname") catch os.Error e { say("readlink", e) }
+    try os.WriteFile("/proc/self/nope/x", "t") catch os.Error e { say("write", e) }
+    try os.Link("/nonexist/l", "/tmp/l2") catch os.Error e { say("link", e) }
+    try os.RealPath("/nonexist/rp") catch os.Error e { say("realpath", e) }
+    try os.Env("OLANG_REVIEW_NOPE") catch os.Error e { say("env", e) }
+    try os.MkTemp("/nonexist/t") catch os.Error e { say("mktemp", e) }
+}

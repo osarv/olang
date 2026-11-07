@@ -1,0 +1,11 @@
+type Box<T> struct(x T) {
+    x
+}
+type N<T> struct() {
+    v Vec<I64> = Vec<I64>()
+    x N<Box<T>> = N<Box<T>>()
+}
+fn main() ? {
+    a := N<I64>()
+    println($a.v.Len())
+}

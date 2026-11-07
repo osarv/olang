@@ -1,0 +1,34 @@
+# CONFIRMED, NEW (771a922) over-rejection, not a use-after-free. A parser's mutually recursive methods: term is checked
+# first, checks expr on demand, and expr calls term while term is still in progress - so expr's obligation "t outlives
+# the result" is only added later (dischargeLateObligations). parse's O26a reads expr's obligations through the new
+# calleeThroughDot/calleeMayHoldArg before that, decides the token local t is kept nowhere, leaves it in parse's block,
+# and the late re-hold of "p.expr(t)" then refuses the program:
+#   o26a_cycle_overreject.olang:28:14: error[O10c]: the callee needs one argument's scope to outlive another's ...
+# c2a38f0 took every dotted call to keep its arguments, moved t into the result scope, and builds and runs clean under
+# -b, -b -s, -i: "e tok3". The same with plain functions was already refused on c2a38f0 (o26a_cycle_plain_preexisting).
+type Tok struct(text String&, depth I64) {
+    text
+    depth
+}
+type Node struct(name String&, kid Node&) {
+    name
+    kid
+}
+type P struct(src String&) {
+    src
+    at I64 = 0
+}
+fn (p P&) term(t Tok) Node& {
+    if t.depth < 3 { return p.expr(Tok(t.text, t.depth + 1)) }
+    return Node(t.text, null)
+}
+fn (p P&) expr(t Tok) Node& { return Node("e", p.term(t)) }
+fn (p P&) parse(k I64) Node& {
+    t := Tok("tok" $k, 0)
+    return p.expr(t)
+}
+fn main() ? {
+    p := P("abcdef")
+    n := p.parse(3)
+    println($n.name " " $n.kid.kid.kid.kid.name)
+}

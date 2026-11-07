@@ -1,0 +1,8 @@
+# D15/T7d: a fixed array declared with ":=" from its constructor - the length is dropped (D15 says it declares
+# Array<T, N>) and the value is copied into an Array<T> one element at a time in the IR (cgPromoteFixedToRuntimeLength):
+# 100k elements take ~10s to compile (18MB of IR), 1M ~88s; 3,000,000,000 grew the compiler past 4.7GB until killed
+fn main() ? {
+    a := Array<U8, 100000>()
+    a[5] = 7
+    println($a.Len() " " $a[5])
+}

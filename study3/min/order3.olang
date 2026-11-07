@@ -1,0 +1,23 @@
+fn countInto(m mut Map<String&, I64>&, line String&) {
+    for w in line.Split(" ") { m.Update(w.ToLower(), 0, fn(n I64) I64 { return n + 1 }) }
+}
+fn mk(lines List<String&>&) mut Map<String&, I64>& {
+    m mut Map<String&, I64>&return = Map<String&, I64>()
+    for i in range lines.Len() { countInto(m, lines[i]) }
+    return m
+}
+fn merge(into mut Map<String&, I64>&, from Map<String&, I64>&) {
+    for e in from { into.Put(e.Key, e.Value) }
+}
+fn a(lines List<String&>&) I64 {
+    parts := Array<mut Map<String&, I64>&>(2)
+    for t in range 2 { parts[t] = mk(lines) }
+    total := Map<String&, I64>()
+    for i in range parts.Len() { merge(total, parts[i]) }
+    return total.Len()
+}
+fn main() ? {
+    l := List<String&>()
+    l.Push("a B")
+    println($a(l))
+}

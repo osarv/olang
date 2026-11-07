@@ -1,0 +1,15 @@
+fn id(a Array<I32, 3>&) Array<I32, 3> { return a }
+fn second(k <T>, x T) T { return x }
+fn run() I32 {
+    a := Array<I32, 3>()
+    a[0] = 4
+    r mut Array<I32, 3>& = a
+    b := id(r)
+    c := second(a, r)
+    r[0] = 9
+    return b[0] * 100 + c[0] * 10 + a[0]
+}
+G := run()
+fn main() ? {
+    println($G " " $run())
+}

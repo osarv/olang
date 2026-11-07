@@ -1,0 +1,20 @@
+# two modules' types of one name in one closed trait: dispatch, type cases and as
+import "std/io"
+import tr "tr"
+import ma "ma"
+import mb "mb"
+fn say(s String&) { try io.Println(s) catch { } }
+fn kind(s any tr.Shape&) String {
+    match s {
+        case ma.Sq a { return "ma " $a.K }
+        case mb.Sq b { return "mb " $b.K }
+    }
+}
+fn main() {
+    xs := List<any tr.Shape&>()
+    xs.Push(ma.Sq(3))
+    xs.Push(mb.Sq(3))
+    for x in xs { say($x.Area() " " $kind(x) " " $x) }
+    say($(xs[1] as mb.Sq).K)
+    say($(xs[0] as mb.Sq).K)
+}

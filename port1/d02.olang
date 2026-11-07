@@ -1,0 +1,34 @@
+# T7b/T29a: a value array returned through a conversion of a fixed array on the frame
+import "std/io"
+import "churn"
+fn f1() String {
+    b Array<Char, 5> = Array<Char, 5>()
+    for i in range 5 { b[i] = 'f' }
+    return String(b)
+}
+type F struct() {
+    a Array<Char, 4> = Array<Char, 4>()
+}
+fn f2() String {
+    h := F()
+    for i in range 4 { h.a[i] = 'g' }
+    return String(h.a)
+}
+fn f3() Array<Char> {
+    b Array<Char, 3> = Array<Char, 3>()
+    for i in range 3 { b[i] = 'h' }
+    return b
+}
+fn deep(n I64) I64 {
+    x Array<I64, 64> = Array<I64, 64>()
+    for i in range 64 { x[i] = n }
+    return x[3] + (deep(n - 1) if n > 0 else 0)
+}
+fn main() ? io.IoError {
+    s1 := f1()
+    s2 := f2()
+    s3 := f3()
+    d := deep(20)
+    c := churn.Churn()
+    try io.Println($c " " $s1 " " $s2 " " $String(s3) " " $d)
+}

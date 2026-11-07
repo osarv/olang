@@ -1,0 +1,119 @@
+### f1_built_result_pick.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : 10 20
+  280ef76 -b      : 10 20
+  2d1aabf: refused - error[O39]
+  91ff37e: refused - error[O39]
+  3a4f5e8: refused - 
+### f1b_built_result_id.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : ab
+  280ef76 -b      : ab
+  2d1aabf: refused - error[O39]
+  91ff37e: refused - error[O39]
+  3a4f5e8: refused - 
+### f1c_built_result_list.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : ab
+  280ef76 -b      : ab
+  2d1aabf: refused - error[O39]
+  91ff37e: refused - error[O39]
+  3a4f5e8: refused - 
+### f1d_built_result_map.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : ab
+  280ef76 -b      : ab
+  2d1aabf: refused - error[O39]
+  91ff37e: refused - error[O39]
+  3a4f5e8: refused - 
+### f2_mixed_returns_trim.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : bb
+  280ef76 -b      : bb
+  2d1aabf: accepted
+  91ff37e: refused - error[O39]
+  3a4f5e8: refused - error[O10]
+### f2b_mixed_returns_cond.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : bb
+  280ef76 -b      : bb
+  2d1aabf: accepted
+  91ff37e: refused - error[O39]
+  3a4f5e8: refused - error[O10]
+### f2c_mixed_returns_local.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : bb
+  280ef76 -b      : bb
+  2d1aabf: accepted
+  91ff37e: refused - error[O39]
+  3a4f5e8: refused - error[O10]
+### f2d_mixed_returns_id.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : bb
+  280ef76 -b      : bb
+  2d1aabf: accepted
+  91ff37e: refused - error[O39]
+  3a4f5e8: refused - error[O10]
+### f3_spawn_target_view.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : 10 20
+  280ef76 -b      : 10 20
+  2d1aabf: accepted
+  91ff37e: accepted
+  3a4f5e8: refused - error[P1]
+### f3b_spawn_target_struct.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : bb
+  280ef76 -b      : bb
+  2d1aabf: accepted
+  91ff37e: accepted
+  3a4f5e8: refused - error[O10]
+### f4_global_holds_borrow.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : bb
+  280ef76 -b      : bb
+  2d1aabf: accepted
+  91ff37e: accepted
+  3a4f5e8: accepted
+### f4b_global_init_borrow.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+  280ef76 -b      : bb
+  2d1aabf: accepted
+  91ff37e: accepted
+  3a4f5e8: accepted
+### f4c_global_init_borrowed_result.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+  280ef76 -b      : bb
+  2d1aabf: accepted
+  91ff37e: accepted
+  3a4f5e8: refused - error[O10]
+### f3c_alias/main.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : 10 20
+  280ef76 -b      : 10 20
+  2d1aabf: accepted
+  91ff37e: accepted
+  3a4f5e8: refused - 
+### f2e_mixed_returns_catch_default.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : bb
+  280ef76 -b      : bb
+  2d1aabf: accepted
+  91ff37e: refused - error[O39]
+  3a4f5e8: refused - error[O10]
+### f4d_global_own_array_slice.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : 7 7
+  280ef76 -b      : 7 7
+  2d1aabf: accepted
+  91ff37e: accepted
+  3a4f5e8: accepted
+### f4e_global_object_field.olang
+  280ef76 -b -d -s: use after scope closed: storage a closed scope gave back was read or written (status 134)
+  280ef76 -i      : bb
+  280ef76 -b      : bb
+  2d1aabf: accepted
+  91ff37e: accepted
+  3a4f5e8: accepted

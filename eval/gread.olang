@@ -1,0 +1,15 @@
+import "std/io"
+type Holder struct(a mut Array<I32>&) {
+    a
+}
+fn mk() Holder {
+    arr Array<I32>&return = Array<I32>(2)
+    return Holder(arr)
+}
+G Holder = mk()
+fn f() I32 { return G.a[0] }
+fn main() ? io.IoError {
+    G.a[0] = 7
+    assert f() == 0
+    try io.Print("f() is " $f() " but the assert f() == 0 passed\n")
+}

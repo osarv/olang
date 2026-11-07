@@ -1,0 +1,35 @@
+import "std/io"
+# a conditional choosing between a loop-local struct and an outer one, made an any kept outside
+type W trait {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+fn main() {
+    xs := List<any W&>()
+    keep := Btn("keep")
+    for i in range 4 {
+        loc := Btn("loc" $i)
+        xs.Push(loc if i > 1 else keep)
+    }
+    churn()
+    for x in xs { say(x.Draw()) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

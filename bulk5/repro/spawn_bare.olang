@@ -1,0 +1,21 @@
+import "std/io"
+import "std/time"
+
+type Pt struct(X I64, Y I64) { X, Y }
+
+fn grow(p Pt&) { p.X = 100 }
+
+fn work(p Pt) I64 {
+    time.Sleep(time.Millis(50))
+    return p.X
+}
+
+fn main() {
+    s := Pt(1, 2)
+    r := 0
+    join {
+        spawn r = work(s)
+        grow(s)
+    }
+    io.Println($r)!
+}

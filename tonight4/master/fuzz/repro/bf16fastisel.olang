@@ -1,0 +1,11 @@
+import "std/io"
+z mut U16 = 0
+fn c19(x0 U8, x1 I16) String {
+    x5 BF16 = (try (BF16(z) * (match x1 { case 3 => BF16(x0) / 7.21828e-2 nomatch => BF16(((-0.1) / BF16(x0))) })) catch default 305.375)
+    return $(x5)
+}
+v0 mut U8 = 255
+v1 mut I16 = 4018
+fn main() ? io.IoError {
+    try io.Print($c19(v0, v1) "\n")
+}

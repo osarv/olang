@@ -1,0 +1,21 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn pick(c Bool, x <T>, y T) T { return x if c else y }
+fn longer(a mut String&, b mut String&) mut String& { return pick(a.Len() >= b.Len(), a, b) }
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    v.Push('b')
+    w := String(v.ViewMut())
+    other mut String& = "x"
+    d := longer(w, other)
+    for i in range 1000 { v.Push('z') }
+    churn()
+    println(d)
+}

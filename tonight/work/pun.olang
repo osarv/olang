@@ -1,0 +1,17 @@
+type P struct(n I32, s String&) {
+    n
+    s
+    n = n + 5
+    s = "changed"
+}
+type Q struct(a Array<I32>&) {
+    a
+    a = I32[9, 9]
+}
+G := P(1, "orig")
+GQ := Q(I32[1])
+fn main() ? {
+    p := P(1, "orig")
+    q := Q(I32[1])
+    println($G.n " " $G.s " " $p.n " " $p.s " " $GQ.a " " $q.a)
+}

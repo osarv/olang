@@ -1,0 +1,10 @@
+fn main() ? {
+    v := Vec<Char>()
+    for i in range 3 { v.Push('a') }
+    k := v.Len()
+    s := String(match k { case 3 => v.View() nomatch => v.View() })
+    for i in range 100 { v.Push('b') }
+    z := Vec<I64>()
+    for i in range 100 { z.Push(i) }
+    println(s)
+}

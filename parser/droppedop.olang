@@ -1,0 +1,8 @@
+fn f() I32 { return 7 }
+
+test "a lone prefix operator inside an argument list" {
+    assert f(-) == 7
+    assert f($) == 7
+    a := I32[~]
+    assert a.Len() == 0
+}

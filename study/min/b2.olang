@@ -1,0 +1,7 @@
+fn main() ? {
+    l := List<Pair<String&, I64>>()
+    k String& = "abc"
+    l.Push(Pair(k, I64(3)))
+    p Pair<String&, I64> = Pair(k, I64(4))
+    assert l.Len() == 1
+}

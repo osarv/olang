@@ -1,0 +1,35 @@
+Made mut I64 = 0
+Dropped mut I64 = 0
+type Res struct(n I64) {
+    n
+    Made++
+} destruct {
+    Dropped++
+}
+type Hold struct() {
+    r own mut Res&
+}
+fn mkOwned(a Array<I64>&, lo I64, hi I64) own mut Res& {
+    defer { println($a[lo:hi].Len()) }      # a guaranteed check in deferred code, after the result is made
+    return Res(1)
+}
+fn mkValue(a Array<I64>&, lo I64, hi I64) Hold {
+    h := Hold()
+    h.r = Res(2)
+    defer { println($a[lo:hi].Len()) }
+    return h                                # h's owner moved into the result, then the test is abandoned
+}
+test "deferred code fails after an owned result is made" {
+    a := I64[1, 2, 3]
+    x := mkOwned(a, 2, 1)
+    println($x.n)
+}
+test "deferred code fails after an owner value local is returned" {
+    a := I64[1, 2, 3]
+    y := mkValue(a, 2, 1)
+    println($y.r.n)
+}
+test "every owner made was released" {
+    println("made " $Made " dropped " $Dropped)
+    assert Made == Dropped
+}

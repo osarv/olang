@@ -1,0 +1,7 @@
+# T29a/T7d: V3(a) declared with ":=" - under -i a V3 (type length 3) has Len() 2; -b emits invalid IR
+type V3 extends Array<F32, 3>
+fn main() ? {
+    a := F32[1.5, 2.5]
+    v := V3(a)
+    println($v.Len())
+}

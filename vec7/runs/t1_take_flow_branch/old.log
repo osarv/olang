@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/t1_take_flow_branch.olang:17:16: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   17 |     if c { w = take l.toks }
+      |                ^~~~
+compilation failed with 1 error

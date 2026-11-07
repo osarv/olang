@@ -1,0 +1,39 @@
+import "std/io"
+
+type Lnk unique struct(src Array<I64>&) {
+    src
+}
+
+type Shelf struct() {
+    m Map<I64, Lnk>
+}
+
+fn (s mut Shelf&) put(k I64, b Lnk) { s.m.Put(k, b) }
+
+fn (s mut Shelf&) pass(k I64, b Lnk) { s.put(k, b) }
+
+fn churn() I64 {
+    t := 0
+    for k in range 300 {
+        x := $k "-" $(k * 7)
+        a := Array<I64>(64, -7)
+        t += x.Len() + a[3]
+    }
+    return t
+}
+
+fn fill(s mut Shelf&, n I64) {
+    for k in range n {
+        t := Array<I64>(3 + k.Mod(2), k + 100)
+        s.pass(k, Lnk(t))
+    }
+}
+
+fn main() {
+    s Shelf = Shelf()
+    fill(s, 20)
+    churn()
+    acc := 0
+    for k in range 20 { acc += s.m.Ref(k)!.src[1] }
+    io.Println($acc)!
+}

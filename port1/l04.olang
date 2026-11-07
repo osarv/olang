@@ -1,0 +1,16 @@
+# P1g / O12: a spawn's target is an element of an array reference whose scope is not known here (a conditional
+# of two arrays from different scopes); the task's built result is stored there
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+fn mkNode(i I64) Node& { return Node(i) }
+fn main() ? io.IoError {
+    outer mut Array<Node&>& = Array<Node&>(1, Node(0))
+    for i in range 3 {
+        inner mut Array<Node&>& = Array<Node&>(1, Node(0))
+        arr := outer if i < 10 else inner
+        join { spawn arr[0] = mkNode(i + 50) }
+    }
+    c := churn.Churn()
+    try io.Println($c " " $outer[0].v)
+}

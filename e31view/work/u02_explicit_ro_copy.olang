@@ -1,0 +1,16 @@
+# the same written out: t := l[0] from a read-only List, then lent writably
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+fn put(v mut V&, x I64) { v.d[v.n] = x }
+fn h(l List<V>&) {
+    t := l[0]
+    put(t, 7)
+}
+fn main() ? {
+    l := List<V>()
+    l.Push(V(Array<I64>(2), 0))
+    h(l)
+    println($l[0].d)
+}

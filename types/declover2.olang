@@ -1,0 +1,9 @@
+# B is declared over A, which extends I32; B itself does not extend (T29f: inherits nothing it does not declare)
+import "std/io"
+type A extends I32
+type B A
+fn main() ? {
+  b B = B(5)
+  c B = b + b         # T29f: should be an error - B does not extend its base
+  try io.Print($I32(c) "\n")
+}

@@ -1,0 +1,12 @@
+import "std/io"
+type PE error { Bad(n I64) }
+type Runner struct(n I64) { n }
+Live mut I64 = 0
+fn (r Runner) main() I64 ? PE {
+    if r.n > 0: error PE.Bad(r.n)
+    return 0
+}
+fn main() {
+    x := try Runner(Live + 3).main() catch PE e default -e.n
+    io.Println("caught in main: " $x)!
+}

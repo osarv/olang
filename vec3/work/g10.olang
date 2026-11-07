@@ -1,0 +1,16 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+Buf own mut Array<I64>& = Array<I64>(2, 7)
+Head mut Array<I64>& = null
+fn main() ? {
+    Head = Buf[0:2]              # a slice of a global own array kept in a global
+    Buf = Array<I64>(64, 9)      # releases the old buffer
+    churn()
+    println($Head[0] " " $Head[1])
+}

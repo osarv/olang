@@ -1,0 +1,26 @@
+# QCE + T25d: an array of text held by value made from literals - its elements its own, never the constant data
+import "std/io"
+
+type person struct(name String) { name }
+
+fn main() {
+    arr := String["a", "b"]
+    arr[0][0] = 'q'
+    io.Println("arr " $arr)!
+    p := person("abc")
+    p.name[0] = 'Z'
+    io.Println("p " $p)!
+    v := Vec<String>()
+    v.Push("lit")
+    v.RefMut(0)[0] = 'L'
+    io.Println("v " $v)!
+    a2 := Array<String>(2, "fill")
+    a2[1][0] = 'F'
+    io.Println("a2 " $a2)!
+    m := Map<String, String>()
+    m.Put("k", "val")
+    m.RefMut("k")![0] = 'V'
+    io.Println("m " $m)!
+    q := person("abc")
+    io.Println("fresh " $q " " $person("abc"))!
+}

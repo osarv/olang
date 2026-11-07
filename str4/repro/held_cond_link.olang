@@ -1,0 +1,27 @@
+# HELD (N6/P1): conditional and match temporaries passed for a parameter the callee requires to outlive another - built
+# where the other lives; -b -s matches -i: "12 32 60 0"
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn link(a mut Node&, b mut Node&) { b.next = a }
+fn link2(b mut Node&, a mut Node&) { b.next = a }
+fn churn(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    l := List<I64>()
+    for i in range 30 { l.Push(i) }
+    if d == 0 { return 0 }
+    return churn(d - 1) + a[3] - d
+}
+fn main() ? {
+    top := Node(1)
+    top2 := Node(2)
+    top3 := Node(3)
+    for i in range 3 {
+        link(Node(i + 10) if i > 0 else Node(i + 20), top)
+        link2(top2, Node(i + 30) if i > 0 else Node(i + 40))
+        link(match i { case 1 => Node(50) case _ => Node(60) }, top3)
+    }
+    t := churn(100)
+    println($top.next.v " " $top2.next.v " " $top3.next.v " " $t)
+}

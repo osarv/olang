@@ -1,0 +1,10 @@
+type Node struct(v I64) {
+    v
+}
+fn pickd(r Node&, n Node&r = Node(7)) Node&r { return n }
+fn main() ? {
+    a Node& = Node(0)
+    f := fn() I64 { return pickd(a).v }
+    x := pickd(a)
+    println($f() " " $x.v)
+}

@@ -1,0 +1,38 @@
+error PErr { BAD }
+type Diag struct() {
+    what String& = ""
+}
+type Tok struct(text String&) {
+    text
+}
+type P struct(toks List<Tok>&, diag mut Diag&) {
+    toks
+    diag
+    at I64 = 0
+}
+fn (p mut P&) advance() Tok {
+    t := p.toks[p.at]
+    p.at++
+    return t
+}
+fn (p mut P&) bail(t Tok) ? PErr {
+    p.diag.what = t.text
+    error PErr.BAD
+}
+fn (p mut P&) expect(s String&) ? PErr {
+    t := p.advance()
+    if t.text != s { try p.bail(t) }
+}
+fn (p mut P&) pair() ? PErr {
+    try p.expect("(")
+    try p.expect(")")
+}
+fn main() ? {
+    src := "(]"
+    toks := List<Tok>()
+    toks.Push(Tok(src[0:1]))
+    toks.Push(Tok(src[1:2]))
+    d := Diag()
+    p := P(toks, d)
+    try p.pair() catch PErr { println("bad: " $d.what) }
+}

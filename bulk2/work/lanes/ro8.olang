@@ -1,0 +1,11 @@
+import "std/io"
+fn poke(s mut Array<I64>&, k I64) { s[0] = k }
+fn ro(a Array<I64>&) { poke(a[0:1], 9) }
+fn ro2(a Array<I64>&) { s := a[0:1]
+ s[0] = 7 }
+fn main() {
+    x := Array<I64>(3)
+    ro(x)
+    ro2(x)
+    io.Println($x)!
+}

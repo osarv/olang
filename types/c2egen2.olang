@@ -1,0 +1,16 @@
+# C2e: the same with the F64 instantiation first
+import "std/io"
+fn cap(a Array<<T>>&) I64 {
+  match <T> {
+    case I32 { return 2 }
+    nomatch { return 5 }
+  }
+}
+type Buf<T> struct() {
+  data Array<<T>> = Array<<T>>(cap(Array<<T>>(0)))
+}
+fn main() ? {
+  b := Buf<F64>()
+  a := Buf<I32>()
+  try io.Print($a.data.Len() " " $b.data.Len() "\n")
+}

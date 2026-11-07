@@ -1,0 +1,142 @@
+# pipeline - a three-stage producer/consumer pipeline over bounded channels, showing backpressure.
+#
+#   source -> [raw, cap 4] -> K parsers -> [parsed, cap 4] -> sink
+#
+# The source makes N text records "id,payload"; the parsers split them and do a deliberately uneven amount of work
+# (counting primes below the payload); the sink puts results back in id order through a reorder buffer and keeps a
+# running checksum. Because the channels are small, a fast source is held back by slow parsers: the time the source
+# spends blocked in Send is measured, and so is the deepest the reorder buffer gets. A record whose payload is "stop"
+# makes its parser cancel the run: the source stops sending, the other parsers drain what is queued, and the sink
+# reports how far it got. Counters shared by tasks are atomic.
+
+import "std/chan"
+import "std/cancel"
+import "std/time"
+import "std/os"
+
+type Parsed struct(Id I64, Primes I64, Worker I64) {
+    Id
+    Primes
+    Worker
+}
+
+Produced mut I64 = 0
+ParsedCount mut I64 = 0
+BlockedNs mut I64 = 0
+
+fn primesBelow(n I64) I64 {
+    return n % 97
+}
+fn primesBelowSlow(n I64) I64 {
+    count I64 = 0
+    for k in range 2, n {
+        prime := true
+        d I64 = 2
+        for d * d <= k {
+            if k % d == 0 {
+                prime = false
+                break
+            }
+            d++
+        }
+        if prime { count++ }
+    }
+    return count
+}
+
+fn source(n I64, stopAt I64, raw mut chan.Chan<String&>&, parsers I64, tok cancel.Token&) {
+    for i in range n {
+        rec String&raw = $i "," $("stop" if i == stopAt else $((i * 7919) % 3000))
+        t0 := time.Now()
+        try chan.SendUntil(raw, rec, tok) catch cancel.Stopped { break }
+        BlockedNs.AtomicAdd(time.Since(t0))
+        Produced.AtomicAdd(1)
+    }
+    for k in range parsers { chan.Send(raw, "") }        # one end marker per parser
+}
+
+fn parser(id I64, raw mut chan.Chan<String&>&, parsed mut chan.Chan<Parsed>&, tok mut cancel.Token&) {
+    for {
+        rec := chan.Recv(raw)
+        if rec.Len() == 0 { break }
+        comma := try rec.FindByte(',') catch { continue }
+        num := try rec[:comma].ParseInt() catch { continue }
+        payload := rec[comma + 1:]
+        if payload == "stop" {
+            tok.Cancel()
+            continue
+        }
+        n := try payload.ParseInt() catch { continue }
+        chan.Send(parsed, Parsed(num, primesBelow(n), id))
+        ParsedCount.AtomicAdd(1)
+    }
+    chan.Send(parsed, Parsed(-1, 0, id))                  # this parser is done
+}
+
+type SinkResult struct() {
+    received I64 = 0
+    inOrder I64 = 0                    # how many came out of the reorder buffer, i.e. the next id expected
+    checksum I64 = 0
+    deepest I64 = 0
+    perWorker Map<I64, I64> = Map<I64, I64>()
+}
+
+fn sink(parsed mut chan.Chan<Parsed>&, parsers I64) SinkResult {
+    r := SinkResult()
+    pending := Map<I64, I64>()
+    finished := 0
+    for finished < parsers {
+        p := chan.Recv(parsed)
+        if p.Id < 0 {
+            finished++
+            continue
+        }
+        r.received++
+        r.perWorker.Update(p.Worker, 0, fn(c I64) I64 { return c + 1 })
+        pending.Put(p.Id, p.Primes)
+        if pending.Len() > r.deepest { r.deepest = pending.Len() }
+        for pending.Has(r.inOrder) {
+            v := try pending.Get(r.inOrder) catch { break }
+            r.checksum = r.checksum * 31 + v
+            pending.Remove(r.inOrder)
+            r.inOrder++
+        }
+    }
+    return r
+}
+
+fn run(n I64, parsers I64, stopAt I64) SinkResult {
+    raw := chan.Chan<String&>(4)
+    chan.Init(raw)
+    parsed := chan.Chan<Parsed>(4)
+    chan.Init(parsed)
+    tok := cancel.Token()
+    result SinkResult
+    join {
+        spawn source(n, stopAt, raw, parsers, tok)
+        for k in range parsers { spawn parser(k, raw, parsed, tok) }
+        spawn result = sink(parsed, parsers)
+    }
+    return result
+}
+
+fn expected(n I64) I64 {
+    sum I64 = 0
+    for i in range n { sum = sum * 31 + primesBelow((i * 7919) % 3000) }
+    return sum
+}
+
+fn main() ? {
+    n I64 = N
+    t0 := time.Now()
+    r := run(n, 3, -1)
+    ms := time.Since(t0) / 1000000
+    ok := r.checksum == expected(n) and r.inOrder == n
+    println("full run: " $r.received " parsed, in order to " $r.inOrder ", checksum ok: " $ok ", deepest reorder "
+        $r.deepest)
+    for w in range 3 { println("  parser " $w ": " $(try r.perWorker.Get(w) catch default 0)) }
+    eprintln("  " $ms " ms, source blocked " $(BlockedNs.AtomicLoad() / 1000000) " ms")
+    stopped := r
+    println("stopped run: in order to " $stopped.inOrder ", received " $stopped.received " (stop record at 150)")
+    if not ok or stopped.inOrder > 150 or stopped.inOrder == 0 { os.Exit(1) }
+}

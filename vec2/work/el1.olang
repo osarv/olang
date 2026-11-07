@@ -1,0 +1,24 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Pt struct(x I64, y I64) {
+    x
+    y
+}
+fn el(v Vec<Pt>&) Pt&v { return v.View()[0] }
+fn grow(w mut Vec<Pt>&) {
+    d := el(w)
+    for i in range 1000 { w.Push(Pt(i, i)) }
+    churn()
+    println($d.x " " $d.y)
+}
+fn main() ? {
+    v := Vec<Pt>()
+    v.Push(Pt(10, 20))
+    grow(v)
+}

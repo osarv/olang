@@ -1,0 +1,12 @@
+# for-in over a List of references to anything a store can go through (a struct holding a List, a node with a
+# mut reference field) is rejected inside the prelude's ListIter.Next ("v := it.chunk[it.i]")
+type Bag struct() {
+    items List<I64>& = List<I64>()
+}
+fn main() ? {
+    l := List<Bag&>()
+    l.Push(Bag())
+    s I64 = 0
+    for k in l { s += k.items.Len() }
+    assert s == 0
+}

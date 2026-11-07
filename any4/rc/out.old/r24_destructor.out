@@ -1,0 +1,15 @@
+== r24_destructor
+  san:    exit 134 x Zbc1|r24_destructor.olang:14: assertion failed: the callee's destructor wrote the caller's value|
+  O3:     exit 134 x Zbc1|r24_destructor.olang:14: assertion failed: the callee's destructor wrote the caller's value|
+  interp: exit 134 x Zbc1|r24_destructor.olang:14: assertion failed: the callee's destructor wrote the caller's value|
+--- compile (-debug -sanitize)
+built ./build/r24_destructor.debug.san
+--- run san
+x Zbc1
+r24_destructor.olang:14: assertion failed: the callee's destructor wrote the caller's value
+--- run O3
+x Zbc1
+r24_destructor.olang:14: assertion failed: the callee's destructor wrote the caller's value
+--- interpret
+x Zbc1
+r24_destructor.olang:14: assertion failed: the callee's destructor wrote the caller's value

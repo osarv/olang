@@ -1,0 +1,20 @@
+# OVER-REJECTION + DIAGNOSTIC: converting a number to a generic function's type variable, T(1) or T(1.0 / n), is
+# "unknown function or type 'T'" - once per instantiation (four copies of each error here) - though T is a type in
+# scope and the conversion is what generic numeric code needs (scaling a Matrix<T> by a computed F64). The workarounds
+# are "one T = 1" for literals and linalg.Cast(x, like) (a std/linalg helper) for computed values.
+import "std/linalg"
+
+fn normalize(m mut linalg.Matrix<<T>>&, norm F64) {
+    m.Scale(T(1.0 / norm))
+}
+
+fn main() ? {
+    a := linalg.Matrix<F64>(2, 2)
+    b := linalg.Matrix<F32>(2, 2)
+    c := linalg.Matrix<F16>(2, 2)
+    d := linalg.Matrix<BF16>(2, 2)
+    normalize(a, 2.0)
+    normalize(b, 2.0)
+    normalize(c, 2.0)
+    normalize(d, 2.0)
+}

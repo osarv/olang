@@ -1,0 +1,37 @@
+# the prelude's Fixed, tested - a module of its own, not part of the prelude, so what the tests compute is compiled only
+# when they are run
+
+fn fixedAll(k I64) String {
+    out := StringBuilder()
+    for v in F64[0.0, 1.0, 1.25, 2.5, 3.5, -0.04, 0.125, 123.456, 1e21, 5e-324, 1.7976931348623157e308, 0.1, -2.675] {
+        out.Push(v.Fixed(k))
+        out.PushChar(' ')
+    }
+    out.Push(F32(0.1).Fixed(k + 8))
+    out.PushChar(' ')
+    out.Push(F16(0.1).Fixed(k))
+    out.PushChar(' ')
+    out.Push(BF16(1.0 / 3.0).Fixed(k))
+    return out.ToString()
+}
+
+fixedAllBaked := fixedAll(2)
+fixedMutable mut I64 = 2         # mutable, so the run-time call below is made at run time
+
+test "Fixed rounds to n digits as %.*f does, while compiling as at run time" {
+    want := StringBuilder()
+    want.Push("0.00 1.00 1.25 2.50 3.50 -0.04 0.12 123.46 1000000000000000000000.00 0.00 ")
+    want.Push("179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953")
+    want.Push("514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236")
+    want.Push("903222948165808559332123348274797826204144723168738177180919299881250404026184124858368.00 0.10 -2.67 ")
+    want.Push("0.1000000015 0.10 0.33")
+    assert fixedAllBaked == want.ToString()
+    assert fixedAll(fixedMutable) == fixedAllBaked
+    assert (0.5).Fixed(0) == "0" and (1.5).Fixed(0) == "2" and (2.5).Fixed(0) == "2" and (-0.5).Fixed(0) == "-0"
+    assert (0.0).Fixed(-3) == "0" and (-0.0).Fixed(1) == "-0.0"
+    nan F64 = 0.0 / 0.0
+    assert nan.Fixed(3) == "nan" and (1.0 / 0.0).Fixed(2) == "inf" and (-1.0 / 0.0).Fixed(2) == "-inf"
+    tiny := (5e-324).Fixed(330)
+    assert tiny.Len() == 332 and tiny.EndsWith("04940656") and tiny.StartsWith("0.0000")
+    assert (1e-7).Fixed(9) == "0.000000100" and (123.0).Fixed(3) == "123.000"
+}

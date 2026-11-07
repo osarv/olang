@@ -1,0 +1,13 @@
+/home/user/review/vec3/work/lb1.olang:15:29: error[O39]: calling 'Push' may release the Array<Char> borrowed on line 14, which is used after it
+   15 |     for i in range 1000 { v.Push('z') }
+      |                             ^~~~
+/home/user/review/vec3/work/lb1.olang:14:15: note: borrowed here
+   14 |     f := mk(v.ViewMut())
+      |               ^~~~~~~
+/home/user/review/vec3/work/lb1.olang:17:14: note: used here, after it
+   17 |     println($f())
+      |              ^
+/home/user/wt/rvvec3/std/prelude/vec.olang:31:32: note: 'Push' releases here
+   31 |     if v.n == v.data.Len() { v.data = vecGrown(take v.data, v.n, 8 if v.n < 4 else v.n * 2) }
+      |                                ^~~~
+compilation failed with 1 error

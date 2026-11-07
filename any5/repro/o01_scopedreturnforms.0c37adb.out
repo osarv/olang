@@ -1,0 +1,9 @@
+== build -debug -sanitize
+keep List<String&>["mk1", "mk2"] a Qk1 b Rk2 c mk3 d mk4
+status 0
+== build
+keep List<String&>["mk1", "mk2"] a Qk1 b Rk2 c mk3 d mk4
+status 0
+== interpret
+keep List<String&>["mk1", "mk2"] a Qk1 b Rk2 c mk3 d mk4
+status 0

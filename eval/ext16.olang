@@ -1,0 +1,10 @@
+import "std/io"
+extern fn memset(p Array<F16>, c I32, n I64) I64
+fn main() ? io.IoError {
+    a := Array<F16>(3)
+    a[0] = 1.5
+    a[1] = 2.5
+    a[2] = 3.5
+    r := memset(a, 0, 2)
+    try io.Print($a "\n")
+}

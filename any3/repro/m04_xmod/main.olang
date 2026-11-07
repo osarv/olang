@@ -1,0 +1,17 @@
+import "std/io"
+import "lib"
+import "mid"
+fn say(s String&) { try io.Println(s) catch { } }
+fn run() String {
+    b := lib.Box<I64>(3)
+    p := lib.Box<lib.Two>(lib.Two(8, 9))
+    s := lib.Box<String&>("q")
+    w := mid.Wrap<I64>(b)
+    x any lib.D&w = w
+    return $b.Describe() "|" $mid.Via(b) "|" $mid.Via(p) "|" $mid.Via(s) "|" $w.Describe() "|" $x.Describe() "|" $lib.Make(5).Describe() "|" $lib.MakeP(6).Describe()
+}
+G String = run()
+fn main() {
+    say(G)
+    say(run())
+}

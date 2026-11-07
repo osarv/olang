@@ -1,0 +1,27 @@
+# write a '&of' field reached through a field of a parameter: the derived obligation names the parameter's type
+import "std/io"
+type N struct(v I32) { v mut }
+type Cur struct(of mut N&) { at mut N&of = of }
+type Outer struct(c mut Cur&) { c }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n N& = N(I32(i))
+    }
+}
+fn setDeep(o mut Outer&, x mut N&) { o.c.at = x }
+fn main() ? {
+    outer N& = N(1)
+    keep N& = outer
+    for i in range 2 {
+        x N& = N(42)
+        for j in range 1 {
+            c := Cur(outer)
+            o := Outer(c)
+            setDeep(o, x)
+            keep = c.at
+        }
+    }
+    churn()
+    try io.Print($keep.v "\n")
+}

@@ -1,0 +1,384 @@
+make boot
+make[1]: Entering directory '/home/user/wt/rvany5-old'
+make[2]: Entering directory '/home/user/wt/rvany5-old'
+make -j4 build/olang.seed
+make[3]: Entering directory '/home/user/wt/rvany5-old'
+xz -dc seed/compiler_ast.ll.xz > build/seed/compiler_ast.ll
+xz -dc seed/compiler_ast.loc.ll.xz > build/seed/compiler_ast.loc.ll
+xz -dc seed/compiler_build.ll.xz > build/seed/compiler_build.ll
+xz -dc seed/compiler_build.loc.ll.xz > build/seed/compiler_build.loc.ll
+clang -O2 -c build/seed/compiler_ast.ll -o build/seed/compiler_ast.o
+clang -O2 -c build/seed/compiler_ast.loc.ll -o build/seed/compiler_ast.loc.o
+clang -O2 -c build/seed/compiler_build.loc.ll -o build/seed/compiler_build.loc.o
+clang -O2 -c build/seed/compiler_build.ll -o build/seed/compiler_build.o
+xz -dc seed/compiler_cabi.ll.xz > build/seed/compiler_cabi.ll
+xz -dc seed/compiler_cabi.loc.ll.xz > build/seed/compiler_cabi.loc.ll
+clang -O2 -c build/seed/compiler_cabi.loc.ll -o build/seed/compiler_cabi.loc.o
+clang -O2 -c build/seed/compiler_cabi.ll -o build/seed/compiler_cabi.o
+xz -dc seed/compiler_check-1.ll.xz > build/seed/compiler_check-1.ll
+xz -dc seed/compiler_check-2.ll.xz > build/seed/compiler_check-2.ll
+clang -O2 -c build/seed/compiler_check-2.ll -o build/seed/compiler_check-2.o
+clang -O2 -c build/seed/compiler_check-1.ll -o build/seed/compiler_check-1.o
+xz -dc seed/compiler_check-3.ll.xz > build/seed/compiler_check-3.ll
+clang -O2 -c build/seed/compiler_check-3.ll -o build/seed/compiler_check-3.o
+xz -dc seed/compiler_check-4.ll.xz > build/seed/compiler_check-4.ll
+clang -O2 -c build/seed/compiler_check-4.ll -o build/seed/compiler_check-4.o
+xz -dc seed/compiler_check-5.ll.xz > build/seed/compiler_check-5.ll
+clang -O2 -c build/seed/compiler_check-5.ll -o build/seed/compiler_check-5.o
+xz -dc seed/compiler_check-6.ll.xz > build/seed/compiler_check-6.ll
+clang -O2 -c build/seed/compiler_check-6.ll -o build/seed/compiler_check-6.o
+xz -dc seed/compiler_check-7.ll.xz > build/seed/compiler_check-7.ll
+clang -O2 -c build/seed/compiler_check-7.ll -o build/seed/compiler_check-7.o
+xz -dc seed/compiler_check-8.ll.xz > build/seed/compiler_check-8.ll
+clang -O2 -c build/seed/compiler_check-8.ll -o build/seed/compiler_check-8.o
+xz -dc seed/compiler_check.ll.xz > build/seed/compiler_check.ll
+clang -O2 -c build/seed/compiler_check.ll -o build/seed/compiler_check.o
+xz -dc seed/compiler_check.loc.ll.xz > build/seed/compiler_check.loc.ll
+clang -O2 -c build/seed/compiler_check.loc.ll -o build/seed/compiler_check.loc.o
+xz -dc seed/compiler_cond.ll.xz > build/seed/compiler_cond.ll
+clang -O2 -c build/seed/compiler_cond.ll -o build/seed/compiler_cond.o
+xz -dc seed/compiler_cond.loc.ll.xz > build/seed/compiler_cond.loc.ll
+clang -O2 -c build/seed/compiler_cond.loc.ll -o build/seed/compiler_cond.loc.o
+xz -dc seed/compiler_diag.ll.xz > build/seed/compiler_diag.ll
+clang -O2 -c build/seed/compiler_diag.ll -o build/seed/compiler_diag.o
+xz -dc seed/compiler_diag.loc.ll.xz > build/seed/compiler_diag.loc.ll
+clang -O2 -c build/seed/compiler_diag.loc.ll -o build/seed/compiler_diag.loc.o
+xz -dc seed/compiler_doc.ll.xz > build/seed/compiler_doc.ll
+clang -O2 -c build/seed/compiler_doc.ll -o build/seed/compiler_doc.o
+xz -dc seed/compiler_doc.loc.ll.xz > build/seed/compiler_doc.loc.ll
+clang -O2 -c build/seed/compiler_doc.loc.ll -o build/seed/compiler_doc.loc.o
+xz -dc seed/compiler_emit-1.ll.xz > build/seed/compiler_emit-1.ll
+clang -O2 -c build/seed/compiler_emit-1.ll -o build/seed/compiler_emit-1.o
+xz -dc seed/compiler_emit-2.ll.xz > build/seed/compiler_emit-2.ll
+clang -O2 -c build/seed/compiler_emit-2.ll -o build/seed/compiler_emit-2.o
+xz -dc seed/compiler_emit-3.ll.xz > build/seed/compiler_emit-3.ll
+clang -O2 -c build/seed/compiler_emit-3.ll -o build/seed/compiler_emit-3.o
+xz -dc seed/compiler_emit.ll.xz > build/seed/compiler_emit.ll
+clang -O2 -c build/seed/compiler_emit.ll -o build/seed/compiler_emit.o
+xz -dc seed/compiler_emit.loc.ll.xz > build/seed/compiler_emit.loc.ll
+clang -O2 -c build/seed/compiler_emit.loc.ll -o build/seed/compiler_emit.loc.o
+xz -dc seed/compiler_eval-1.ll.xz > build/seed/compiler_eval-1.ll
+clang -O2 -c build/seed/compiler_eval-1.ll -o build/seed/compiler_eval-1.o
+xz -dc seed/compiler_eval-2.ll.xz > build/seed/compiler_eval-2.ll
+clang -O2 -c build/seed/compiler_eval-2.ll -o build/seed/compiler_eval-2.o
+xz -dc seed/compiler_eval.ll.xz > build/seed/compiler_eval.ll
+clang -O2 -c build/seed/compiler_eval.ll -o build/seed/compiler_eval.o
+xz -dc seed/compiler_eval.loc.ll.xz > build/seed/compiler_eval.loc.ll
+clang -O2 -c build/seed/compiler_eval.loc.ll -o build/seed/compiler_eval.loc.o
+xz -dc seed/compiler_explain.ll.xz > build/seed/compiler_explain.ll
+clang -O2 -c build/seed/compiler_explain.ll -o build/seed/compiler_explain.o
+xz -dc seed/compiler_explain.loc.ll.xz > build/seed/compiler_explain.loc.ll
+clang -O2 -c build/seed/compiler_explain.loc.ll -o build/seed/compiler_explain.loc.o
+xz -dc seed/compiler_fetch.ll.xz > build/seed/compiler_fetch.ll
+clang -O2 -c build/seed/compiler_fetch.ll -o build/seed/compiler_fetch.o
+xz -dc seed/compiler_fetch.loc.ll.xz > build/seed/compiler_fetch.loc.ll
+clang -O2 -c build/seed/compiler_fetch.loc.ll -o build/seed/compiler_fetch.loc.o
+xz -dc seed/compiler_fix.ll.xz > build/seed/compiler_fix.ll
+clang -O2 -c build/seed/compiler_fix.ll -o build/seed/compiler_fix.o
+xz -dc seed/compiler_fix.loc.ll.xz > build/seed/compiler_fix.loc.ll
+clang -O2 -c build/seed/compiler_fix.loc.ll -o build/seed/compiler_fix.loc.o
+xz -dc seed/compiler_fmt.ll.xz > build/seed/compiler_fmt.ll
+clang -O2 -c build/seed/compiler_fmt.ll -o build/seed/compiler_fmt.o
+xz -dc seed/compiler_fmt.loc.ll.xz > build/seed/compiler_fmt.loc.ll
+clang -O2 -c build/seed/compiler_fmt.loc.ll -o build/seed/compiler_fmt.loc.o
+xz -dc seed/compiler_generic-1.ll.xz > build/seed/compiler_generic-1.ll
+clang -O2 -c build/seed/compiler_generic-1.ll -o build/seed/compiler_generic-1.o
+xz -dc seed/compiler_generic.ll.xz > build/seed/compiler_generic.ll
+clang -O2 -c build/seed/compiler_generic.ll -o build/seed/compiler_generic.o
+xz -dc seed/compiler_generic.loc.ll.xz > build/seed/compiler_generic.loc.ll
+clang -O2 -c build/seed/compiler_generic.loc.ll -o build/seed/compiler_generic.loc.o
+xz -dc seed/compiler_interp.ll.xz > build/seed/compiler_interp.ll
+clang -O2 -c build/seed/compiler_interp.ll -o build/seed/compiler_interp.o
+xz -dc seed/compiler_interp.loc.ll.xz > build/seed/compiler_interp.loc.ll
+clang -O2 -c build/seed/compiler_interp.loc.ll -o build/seed/compiler_interp.loc.o
+xz -dc seed/compiler_load.ll.xz > build/seed/compiler_load.ll
+clang -O2 -c build/seed/compiler_load.ll -o build/seed/compiler_load.o
+xz -dc seed/compiler_load.loc.ll.xz > build/seed/compiler_load.loc.ll
+clang -O2 -c build/seed/compiler_load.loc.ll -o build/seed/compiler_load.loc.o
+xz -dc seed/compiler_lower-1.ll.xz > build/seed/compiler_lower-1.ll
+clang -O2 -c build/seed/compiler_lower-1.ll -o build/seed/compiler_lower-1.o
+xz -dc seed/compiler_lower.ll.xz > build/seed/compiler_lower.ll
+clang -O2 -c build/seed/compiler_lower.ll -o build/seed/compiler_lower.o
+xz -dc seed/compiler_lower.loc.ll.xz > build/seed/compiler_lower.loc.ll
+clang -O2 -c build/seed/compiler_lower.loc.ll -o build/seed/compiler_lower.loc.o
+xz -dc seed/compiler_lsp.ll.xz > build/seed/compiler_lsp.ll
+clang -O2 -c build/seed/compiler_lsp.ll -o build/seed/compiler_lsp.o
+xz -dc seed/compiler_lsp.loc.ll.xz > build/seed/compiler_lsp.loc.ll
+clang -O2 -c build/seed/compiler_lsp.loc.ll -o build/seed/compiler_lsp.loc.o
+xz -dc seed/compiler_mcp.ll.xz > build/seed/compiler_mcp.ll
+clang -O2 -c build/seed/compiler_mcp.ll -o build/seed/compiler_mcp.o
+xz -dc seed/compiler_mcp.loc.ll.xz > build/seed/compiler_mcp.loc.ll
+clang -O2 -c build/seed/compiler_mcp.loc.ll -o build/seed/compiler_mcp.loc.o
+xz -dc seed/compiler_mir-1.ll.xz > build/seed/compiler_mir-1.ll
+clang -O2 -c build/seed/compiler_mir-1.ll -o build/seed/compiler_mir-1.o
+xz -dc seed/compiler_mir.ll.xz > build/seed/compiler_mir.ll
+clang -O2 -c build/seed/compiler_mir.ll -o build/seed/compiler_mir.o
+xz -dc seed/compiler_mir.loc.ll.xz > build/seed/compiler_mir.loc.ll
+clang -O2 -c build/seed/compiler_mir.loc.ll -o build/seed/compiler_mir.loc.o
+xz -dc seed/compiler_msgs.ll.xz > build/seed/compiler_msgs.ll
+clang -O2 -c build/seed/compiler_msgs.ll -o build/seed/compiler_msgs.o
+xz -dc seed/compiler_msgs.loc.ll.xz > build/seed/compiler_msgs.loc.ll
+clang -O2 -c build/seed/compiler_msgs.loc.ll -o build/seed/compiler_msgs.loc.o
+xz -dc seed/compiler_names.ll.xz > build/seed/compiler_names.ll
+clang -O2 -c build/seed/compiler_names.ll -o build/seed/compiler_names.o
+xz -dc seed/compiler_names.loc.ll.xz > build/seed/compiler_names.loc.ll
+clang -O2 -c build/seed/compiler_names.loc.ll -o build/seed/compiler_names.loc.o
+xz -dc seed/compiler_olang-i.loc.ll.xz > build/seed/compiler_olang-i.loc.ll
+clang -O2 -c build/seed/compiler_olang-i.loc.ll -o build/seed/compiler_olang-i.loc.o
+xz -dc seed/compiler_olang.inst.ll.xz > build/seed/compiler_olang.inst.ll
+clang -O2 -c build/seed/compiler_olang.inst.ll -o build/seed/compiler_olang.inst.o
+xz -dc seed/compiler_olang.loc.ll.xz > build/seed/compiler_olang.loc.ll
+xz -dc seed/compiler_olang.main.ll.xz > build/seed/compiler_olang.main.ll
+clang -O2 -c build/seed/compiler_olang.loc.ll -o build/seed/compiler_olang.loc.o
+clang -O2 -c build/seed/compiler_olang.main.ll -o build/seed/compiler_olang.main.o
+xz -dc seed/compiler_olang_compiler_build-i.loc.ll.xz > build/seed/compiler_olang_compiler_build-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_build-i.loc.ll -o build/seed/compiler_olang_compiler_build-i.loc.o
+xz -dc seed/compiler_olang_compiler_build.inst.ll.xz > build/seed/compiler_olang_compiler_build.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_build.inst.ll -o build/seed/compiler_olang_compiler_build.inst.o
+xz -dc seed/compiler_olang_compiler_cabi-i.loc.ll.xz > build/seed/compiler_olang_compiler_cabi-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_cabi-i.loc.ll -o build/seed/compiler_olang_compiler_cabi-i.loc.o
+xz -dc seed/compiler_olang_compiler_cabi.inst.ll.xz > build/seed/compiler_olang_compiler_cabi.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_cabi.inst.ll -o build/seed/compiler_olang_compiler_cabi.inst.o
+xz -dc seed/compiler_olang_compiler_check-1.inst.ll.xz > build/seed/compiler_olang_compiler_check-1.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_check-1.inst.ll -o build/seed/compiler_olang_compiler_check-1.inst.o
+xz -dc seed/compiler_olang_compiler_check-i.loc.ll.xz > build/seed/compiler_olang_compiler_check-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_check-i.loc.ll -o build/seed/compiler_olang_compiler_check-i.loc.o
+xz -dc seed/compiler_olang_compiler_check.inst.ll.xz > build/seed/compiler_olang_compiler_check.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_check.inst.ll -o build/seed/compiler_olang_compiler_check.inst.o
+xz -dc seed/compiler_olang_compiler_cond-i.loc.ll.xz > build/seed/compiler_olang_compiler_cond-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_cond-i.loc.ll -o build/seed/compiler_olang_compiler_cond-i.loc.o
+xz -dc seed/compiler_olang_compiler_cond.inst.ll.xz > build/seed/compiler_olang_compiler_cond.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_cond.inst.ll -o build/seed/compiler_olang_compiler_cond.inst.o
+xz -dc seed/compiler_olang_compiler_diag-i.loc.ll.xz > build/seed/compiler_olang_compiler_diag-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_diag-i.loc.ll -o build/seed/compiler_olang_compiler_diag-i.loc.o
+xz -dc seed/compiler_olang_compiler_diag.inst.ll.xz > build/seed/compiler_olang_compiler_diag.inst.ll
+xz -dc seed/compiler_olang_compiler_doc-i.loc.ll.xz > build/seed/compiler_olang_compiler_doc-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_doc-i.loc.ll -o build/seed/compiler_olang_compiler_doc-i.loc.o
+clang -O2 -c build/seed/compiler_olang_compiler_diag.inst.ll -o build/seed/compiler_olang_compiler_diag.inst.o
+xz -dc seed/compiler_olang_compiler_doc.inst.ll.xz > build/seed/compiler_olang_compiler_doc.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_doc.inst.ll -o build/seed/compiler_olang_compiler_doc.inst.o
+xz -dc seed/compiler_olang_compiler_emit-i.loc.ll.xz > build/seed/compiler_olang_compiler_emit-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_emit-i.loc.ll -o build/seed/compiler_olang_compiler_emit-i.loc.o
+xz -dc seed/compiler_olang_compiler_emit.inst.ll.xz > build/seed/compiler_olang_compiler_emit.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_emit.inst.ll -o build/seed/compiler_olang_compiler_emit.inst.o
+xz -dc seed/compiler_olang_compiler_eval-i.loc.ll.xz > build/seed/compiler_olang_compiler_eval-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_eval-i.loc.ll -o build/seed/compiler_olang_compiler_eval-i.loc.o
+xz -dc seed/compiler_olang_compiler_eval.inst.ll.xz > build/seed/compiler_olang_compiler_eval.inst.ll
+xz -dc seed/compiler_olang_compiler_explain.inst.ll.xz > build/seed/compiler_olang_compiler_explain.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_explain.inst.ll -o build/seed/compiler_olang_compiler_explain.inst.o
+clang -O2 -c build/seed/compiler_olang_compiler_eval.inst.ll -o build/seed/compiler_olang_compiler_eval.inst.o
+xz -dc seed/compiler_olang_compiler_fmt.inst.ll.xz > build/seed/compiler_olang_compiler_fmt.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_fmt.inst.ll -o build/seed/compiler_olang_compiler_fmt.inst.o
+xz -dc seed/compiler_olang_compiler_generic-i.loc.ll.xz > build/seed/compiler_olang_compiler_generic-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_generic-i.loc.ll -o build/seed/compiler_olang_compiler_generic-i.loc.o
+xz -dc seed/compiler_olang_compiler_generic.inst.ll.xz > build/seed/compiler_olang_compiler_generic.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_generic.inst.ll -o build/seed/compiler_olang_compiler_generic.inst.o
+xz -dc seed/compiler_olang_compiler_interp-i.loc.ll.xz > build/seed/compiler_olang_compiler_interp-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_interp-i.loc.ll -o build/seed/compiler_olang_compiler_interp-i.loc.o
+xz -dc seed/compiler_olang_compiler_interp.inst.ll.xz > build/seed/compiler_olang_compiler_interp.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_interp.inst.ll -o build/seed/compiler_olang_compiler_interp.inst.o
+xz -dc seed/compiler_olang_compiler_load-i.loc.ll.xz > build/seed/compiler_olang_compiler_load-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_load-i.loc.ll -o build/seed/compiler_olang_compiler_load-i.loc.o
+xz -dc seed/compiler_olang_compiler_load.inst.ll.xz > build/seed/compiler_olang_compiler_load.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_load.inst.ll -o build/seed/compiler_olang_compiler_load.inst.o
+xz -dc seed/compiler_olang_compiler_lower-i.loc.ll.xz > build/seed/compiler_olang_compiler_lower-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_lower-i.loc.ll -o build/seed/compiler_olang_compiler_lower-i.loc.o
+xz -dc seed/compiler_olang_compiler_lower.inst.ll.xz > build/seed/compiler_olang_compiler_lower.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_lower.inst.ll -o build/seed/compiler_olang_compiler_lower.inst.o
+xz -dc seed/compiler_olang_compiler_lsp-i.loc.ll.xz > build/seed/compiler_olang_compiler_lsp-i.loc.ll
+xz -dc seed/compiler_olang_compiler_lsp.inst.ll.xz > build/seed/compiler_olang_compiler_lsp.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_lsp-i.loc.ll -o build/seed/compiler_olang_compiler_lsp-i.loc.o
+xz -dc seed/compiler_olang_compiler_mir-i.loc.ll.xz > build/seed/compiler_olang_compiler_mir-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_lsp.inst.ll -o build/seed/compiler_olang_compiler_lsp.inst.o
+clang -O2 -c build/seed/compiler_olang_compiler_mir-i.loc.ll -o build/seed/compiler_olang_compiler_mir-i.loc.o
+xz -dc seed/compiler_olang_compiler_mir.inst.ll.xz > build/seed/compiler_olang_compiler_mir.inst.ll
+xz -dc seed/compiler_olang_compiler_names-i.loc.ll.xz > build/seed/compiler_olang_compiler_names-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_names-i.loc.ll -o build/seed/compiler_olang_compiler_names-i.loc.o
+clang -O2 -c build/seed/compiler_olang_compiler_mir.inst.ll -o build/seed/compiler_olang_compiler_mir.inst.o
+xz -dc seed/compiler_olang_compiler_names.inst.ll.xz > build/seed/compiler_olang_compiler_names.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_names.inst.ll -o build/seed/compiler_olang_compiler_names.inst.o
+xz -dc seed/compiler_olang_compiler_parse-i.loc.ll.xz > build/seed/compiler_olang_compiler_parse-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_parse-i.loc.ll -o build/seed/compiler_olang_compiler_parse-i.loc.o
+xz -dc seed/compiler_olang_compiler_parse.inst.ll.xz > build/seed/compiler_olang_compiler_parse.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_parse.inst.ll -o build/seed/compiler_olang_compiler_parse.inst.o
+xz -dc seed/compiler_olang_compiler_scan-i.loc.ll.xz > build/seed/compiler_olang_compiler_scan-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_scan-i.loc.ll -o build/seed/compiler_olang_compiler_scan-i.loc.o
+xz -dc seed/compiler_olang_compiler_scan.inst.ll.xz > build/seed/compiler_olang_compiler_scan.inst.ll
+xz -dc seed/compiler_olang_compiler_scope-i.loc.ll.xz > build/seed/compiler_olang_compiler_scope-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_scope-i.loc.ll -o build/seed/compiler_olang_compiler_scope-i.loc.o
+clang -O2 -c build/seed/compiler_olang_compiler_scan.inst.ll -o build/seed/compiler_olang_compiler_scan.inst.o
+xz -dc seed/compiler_olang_compiler_scope.inst.ll.xz > build/seed/compiler_olang_compiler_scope.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_scope.inst.ll -o build/seed/compiler_olang_compiler_scope.inst.o
+xz -dc seed/compiler_olang_compiler_session-i.loc.ll.xz > build/seed/compiler_olang_compiler_session-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_session-i.loc.ll -o build/seed/compiler_olang_compiler_session-i.loc.o
+xz -dc seed/compiler_olang_compiler_session.inst.ll.xz > build/seed/compiler_olang_compiler_session.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_session.inst.ll -o build/seed/compiler_olang_compiler_session.inst.o
+xz -dc seed/compiler_olang_compiler_source-i.loc.ll.xz > build/seed/compiler_olang_compiler_source-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_source-i.loc.ll -o build/seed/compiler_olang_compiler_source-i.loc.o
+xz -dc seed/compiler_olang_compiler_source.inst.ll.xz > build/seed/compiler_olang_compiler_source.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_source.inst.ll -o build/seed/compiler_olang_compiler_source.inst.o
+xz -dc seed/compiler_olang_compiler_target.inst.ll.xz > build/seed/compiler_olang_compiler_target.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_target.inst.ll -o build/seed/compiler_olang_compiler_target.inst.o
+xz -dc seed/compiler_olang_compiler_typed-i.loc.ll.xz > build/seed/compiler_olang_compiler_typed-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_typed-i.loc.ll -o build/seed/compiler_olang_compiler_typed-i.loc.o
+xz -dc seed/compiler_olang_compiler_typed.inst.ll.xz > build/seed/compiler_olang_compiler_typed.inst.ll
+xz -dc seed/compiler_olang_compiler_types-i.loc.ll.xz > build/seed/compiler_olang_compiler_types-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_typed.inst.ll -o build/seed/compiler_olang_compiler_typed.inst.o
+clang -O2 -c build/seed/compiler_olang_compiler_types-i.loc.ll -o build/seed/compiler_olang_compiler_types-i.loc.o
+xz -dc seed/compiler_olang_compiler_types.inst.ll.xz > build/seed/compiler_olang_compiler_types.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_types.inst.ll -o build/seed/compiler_olang_compiler_types.inst.o
+xz -dc seed/compiler_olang_compiler_views-i.loc.ll.xz > build/seed/compiler_olang_compiler_views-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_compiler_views-i.loc.ll -o build/seed/compiler_olang_compiler_views-i.loc.o
+xz -dc seed/compiler_olang_compiler_views.inst.ll.xz > build/seed/compiler_olang_compiler_views.inst.ll
+clang -O2 -c build/seed/compiler_olang_compiler_views.inst.ll -o build/seed/compiler_olang_compiler_views.inst.o
+xz -dc seed/compiler_olang_std_chan-i.loc.ll.xz > build/seed/compiler_olang_std_chan-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_std_chan-i.loc.ll -o build/seed/compiler_olang_std_chan-i.loc.o
+xz -dc seed/compiler_olang_std_chan.inst.ll.xz > build/seed/compiler_olang_std_chan.inst.ll
+clang -O2 -c build/seed/compiler_olang_std_chan.inst.ll -o build/seed/compiler_olang_std_chan.inst.o
+xz -dc seed/compiler_olang_std_os-i.loc.ll.xz > build/seed/compiler_olang_std_os-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_std_os-i.loc.ll -o build/seed/compiler_olang_std_os-i.loc.o
+xz -dc seed/compiler_olang_std_os.inst.ll.xz > build/seed/compiler_olang_std_os.inst.ll
+clang -O2 -c build/seed/compiler_olang_std_os.inst.ll -o build/seed/compiler_olang_std_os.inst.o
+xz -dc seed/compiler_olang_std_pair.inst.ll.xz > build/seed/compiler_olang_std_pair.inst.ll
+clang -O2 -c build/seed/compiler_olang_std_pair.inst.ll -o build/seed/compiler_olang_std_pair.inst.o
+xz -dc seed/compiler_olang_std_prelude_float-i.loc.ll.xz > build/seed/compiler_olang_std_prelude_float-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_std_prelude_float-i.loc.ll -o build/seed/compiler_olang_std_prelude_float-i.loc.o
+xz -dc seed/compiler_olang_std_prelude_float.inst.ll.xz > build/seed/compiler_olang_std_prelude_float.inst.ll
+clang -O2 -c build/seed/compiler_olang_std_prelude_float.inst.ll -o build/seed/compiler_olang_std_prelude_float.inst.o
+xz -dc seed/compiler_olang_std_prelude_list-i.loc.ll.xz > build/seed/compiler_olang_std_prelude_list-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_std_prelude_list-i.loc.ll -o build/seed/compiler_olang_std_prelude_list-i.loc.o
+xz -dc seed/compiler_olang_std_prelude_list.inst.ll.xz > build/seed/compiler_olang_std_prelude_list.inst.ll
+clang -O2 -c build/seed/compiler_olang_std_prelude_list.inst.ll -o build/seed/compiler_olang_std_prelude_list.inst.o
+xz -dc seed/compiler_olang_std_prelude_text-i.loc.ll.xz > build/seed/compiler_olang_std_prelude_text-i.loc.ll
+clang -O2 -c build/seed/compiler_olang_std_prelude_text-i.loc.ll -o build/seed/compiler_olang_std_prelude_text-i.loc.o
+xz -dc seed/compiler_olang_std_prelude_text.inst.ll.xz > build/seed/compiler_olang_std_prelude_text.inst.ll
+clang -O2 -c build/seed/compiler_olang_std_prelude_text.inst.ll -o build/seed/compiler_olang_std_prelude_text.inst.o
+xz -dc seed/compiler_parse-1.ll.xz > build/seed/compiler_parse-1.ll
+xz -dc seed/compiler_parse.ll.xz > build/seed/compiler_parse.ll
+xz -dc seed/compiler_parse.loc.ll.xz > build/seed/compiler_parse.loc.ll
+clang -O2 -c build/seed/compiler_parse.loc.ll -o build/seed/compiler_parse.loc.o
+clang -O2 -c build/seed/compiler_parse-1.ll -o build/seed/compiler_parse-1.o
+clang -O2 -c build/seed/compiler_parse.ll -o build/seed/compiler_parse.o
+xz -dc seed/compiler_runtime.ll.xz > build/seed/compiler_runtime.ll
+clang -O2 -c build/seed/compiler_runtime.ll -o build/seed/compiler_runtime.o
+xz -dc seed/compiler_runtime.loc.ll.xz > build/seed/compiler_runtime.loc.ll
+clang -O2 -c build/seed/compiler_runtime.loc.ll -o build/seed/compiler_runtime.loc.o
+xz -dc seed/compiler_scan.ll.xz > build/seed/compiler_scan.ll
+clang -O2 -c build/seed/compiler_scan.ll -o build/seed/compiler_scan.o
+xz -dc seed/compiler_scan.loc.ll.xz > build/seed/compiler_scan.loc.ll
+clang -O2 -c build/seed/compiler_scan.loc.ll -o build/seed/compiler_scan.loc.o
+xz -dc seed/compiler_scope-1.ll.xz > build/seed/compiler_scope-1.ll
+clang -O2 -c build/seed/compiler_scope-1.ll -o build/seed/compiler_scope-1.o
+xz -dc seed/compiler_scope-2.ll.xz > build/seed/compiler_scope-2.ll
+clang -O2 -c build/seed/compiler_scope-2.ll -o build/seed/compiler_scope-2.o
+xz -dc seed/compiler_scope-3.ll.xz > build/seed/compiler_scope-3.ll
+clang -O2 -c build/seed/compiler_scope-3.ll -o build/seed/compiler_scope-3.o
+xz -dc seed/compiler_scope.ll.xz > build/seed/compiler_scope.ll
+clang -O2 -c build/seed/compiler_scope.ll -o build/seed/compiler_scope.o
+xz -dc seed/compiler_scope.loc.ll.xz > build/seed/compiler_scope.loc.ll
+clang -O2 -c build/seed/compiler_scope.loc.ll -o build/seed/compiler_scope.loc.o
+xz -dc seed/compiler_session.ll.xz > build/seed/compiler_session.ll
+clang -O2 -c build/seed/compiler_session.ll -o build/seed/compiler_session.o
+xz -dc seed/compiler_session.loc.ll.xz > build/seed/compiler_session.loc.ll
+clang -O2 -c build/seed/compiler_session.loc.ll -o build/seed/compiler_session.loc.o
+xz -dc seed/compiler_source.ll.xz > build/seed/compiler_source.ll
+clang -O2 -c build/seed/compiler_source.ll -o build/seed/compiler_source.o
+xz -dc seed/compiler_source.loc.ll.xz > build/seed/compiler_source.loc.ll
+clang -O2 -c build/seed/compiler_source.loc.ll -o build/seed/compiler_source.loc.o
+xz -dc seed/compiler_target.ll.xz > build/seed/compiler_target.ll
+clang -O2 -c build/seed/compiler_target.ll -o build/seed/compiler_target.o
+xz -dc seed/compiler_target.loc.ll.xz > build/seed/compiler_target.loc.ll
+clang -O2 -c build/seed/compiler_target.loc.ll -o build/seed/compiler_target.loc.o
+xz -dc seed/compiler_token.ll.xz > build/seed/compiler_token.ll
+xz -dc seed/compiler_typed.ll.xz > build/seed/compiler_typed.ll
+clang -O2 -c build/seed/compiler_token.ll -o build/seed/compiler_token.o
+clang -O2 -c build/seed/compiler_typed.ll -o build/seed/compiler_typed.o
+xz -dc seed/compiler_typed.loc.ll.xz > build/seed/compiler_typed.loc.ll
+clang -O2 -c build/seed/compiler_typed.loc.ll -o build/seed/compiler_typed.loc.o
+xz -dc seed/compiler_types.ll.xz > build/seed/compiler_types.ll
+clang -O2 -c build/seed/compiler_types.ll -o build/seed/compiler_types.o
+xz -dc seed/compiler_types.loc.ll.xz > build/seed/compiler_types.loc.ll
+clang -O2 -c build/seed/compiler_types.loc.ll -o build/seed/compiler_types.loc.o
+xz -dc seed/compiler_unparse.ll.xz > build/seed/compiler_unparse.ll
+xz -dc seed/compiler_unparse.loc.ll.xz > build/seed/compiler_unparse.loc.ll
+clang -O2 -c build/seed/compiler_unparse.loc.ll -o build/seed/compiler_unparse.loc.o
+clang -O2 -c build/seed/compiler_unparse.ll -o build/seed/compiler_unparse.o
+xz -dc seed/compiler_views.ll.xz > build/seed/compiler_views.ll
+clang -O2 -c build/seed/compiler_views.ll -o build/seed/compiler_views.o
+xz -dc seed/compiler_views.loc.ll.xz > build/seed/compiler_views.loc.ll
+clang -O2 -c build/seed/compiler_views.loc.ll -o build/seed/compiler_views.loc.o
+xz -dc seed/olang_dyncall.ll.xz > build/seed/olang_dyncall.ll
+clang -O2 -c build/seed/olang_dyncall.ll -o build/seed/olang_dyncall.o
+xz -dc seed/olang_runtime.ll.xz > build/seed/olang_runtime.ll
+clang -O2 -c build/seed/olang_runtime.ll -o build/seed/olang_runtime.o
+xz -dc seed/std_cancel.ll.xz > build/seed/std_cancel.ll
+clang -O2 -c build/seed/std_cancel.ll -o build/seed/std_cancel.o
+xz -dc seed/std_chan.ll.xz > build/seed/std_chan.ll
+clang -O2 -c build/seed/std_chan.ll -o build/seed/std_chan.o
+xz -dc seed/std_chan.loc.ll.xz > build/seed/std_chan.loc.ll
+clang -O2 -c build/seed/std_chan.loc.ll -o build/seed/std_chan.loc.o
+xz -dc seed/std_ffi.ll.xz > build/seed/std_ffi.ll
+clang -O2 -c build/seed/std_ffi.ll -o build/seed/std_ffi.o
+xz -dc seed/std_ffi.loc.ll.xz > build/seed/std_ffi.loc.ll
+clang -O2 -c build/seed/std_ffi.loc.ll -o build/seed/std_ffi.loc.o
+xz -dc seed/std_filepath.ll.xz > build/seed/std_filepath.ll
+clang -O2 -c build/seed/std_filepath.ll -o build/seed/std_filepath.o
+xz -dc seed/std_filepath.loc.ll.xz > build/seed/std_filepath.loc.ll
+clang -O2 -c build/seed/std_filepath.loc.ll -o build/seed/std_filepath.loc.o
+xz -dc seed/std_io.ll.xz > build/seed/std_io.ll
+clang -O2 -c build/seed/std_io.ll -o build/seed/std_io.o
+xz -dc seed/std_io.loc.ll.xz > build/seed/std_io.loc.ll
+clang -O2 -c build/seed/std_io.loc.ll -o build/seed/std_io.loc.o
+xz -dc seed/std_json.ll.xz > build/seed/std_json.ll
+clang -O2 -c build/seed/std_json.ll -o build/seed/std_json.o
+xz -dc seed/std_json.loc.ll.xz > build/seed/std_json.loc.ll
+clang -O2 -c build/seed/std_json.loc.ll -o build/seed/std_json.loc.o
+xz -dc seed/std_os.ll.xz > build/seed/std_os.ll
+clang -O2 -c build/seed/std_os.ll -o build/seed/std_os.o
+xz -dc seed/std_os.loc.ll.xz > build/seed/std_os.loc.ll
+clang -O2 -c build/seed/std_os.loc.ll -o build/seed/std_os.loc.o
+xz -dc seed/std_pair.ll.xz > build/seed/std_pair.ll
+clang -O2 -c build/seed/std_pair.ll -o build/seed/std_pair.o
+xz -dc seed/std_prelude_array.ll.xz > build/seed/std_prelude_array.ll
+clang -O2 -c build/seed/std_prelude_array.ll -o build/seed/std_prelude_array.o
+xz -dc seed/std_prelude_complex.ll.xz > build/seed/std_prelude_complex.ll
+clang -O2 -c build/seed/std_prelude_complex.ll -o build/seed/std_prelude_complex.o
+xz -dc seed/std_prelude_f8.ll.xz > build/seed/std_prelude_f8.ll
+clang -O2 -c build/seed/std_prelude_f8.ll -o build/seed/std_prelude_f8.o
+xz -dc seed/std_prelude_float.ll.xz > build/seed/std_prelude_float.ll
+clang -O2 -c build/seed/std_prelude_float.ll -o build/seed/std_prelude_float.o
+xz -dc seed/std_prelude_float.loc.ll.xz > build/seed/std_prelude_float.loc.ll
+clang -O2 -c build/seed/std_prelude_float.loc.ll -o build/seed/std_prelude_float.loc.o
+xz -dc seed/std_prelude_hash.ll.xz > build/seed/std_prelude_hash.ll
+clang -O2 -c build/seed/std_prelude_hash.ll -o build/seed/std_prelude_hash.o
+xz -dc seed/std_prelude_list.ll.xz > build/seed/std_prelude_list.ll
+clang -O2 -c build/seed/std_prelude_list.ll -o build/seed/std_prelude_list.o
+xz -dc seed/std_prelude_list.loc.ll.xz > build/seed/std_prelude_list.loc.ll
+clang -O2 -c build/seed/std_prelude_list.loc.ll -o build/seed/std_prelude_list.loc.o
+xz -dc seed/std_prelude_number.ll.xz > build/seed/std_prelude_number.ll
+clang -O2 -c build/seed/std_prelude_number.ll -o build/seed/std_prelude_number.o
+xz -dc seed/std_prelude_text.ll.xz > build/seed/std_prelude_text.ll
+clang -O2 -c build/seed/std_prelude_text.ll -o build/seed/std_prelude_text.o
+xz -dc seed/std_prelude_text.loc.ll.xz > build/seed/std_prelude_text.loc.ll
+clang -O2 -c build/seed/std_prelude_text.loc.ll -o build/seed/std_prelude_text.loc.o
+xz -dc seed/std_prelude_vec.ll.xz > build/seed/std_prelude_vec.ll
+clang -O2 -c build/seed/std_prelude_vec.ll -o build/seed/std_prelude_vec.o
+xz -dc seed/std_prelude_vec.loc.ll.xz > build/seed/std_prelude_vec.loc.ll
+clang -O2 -c build/seed/std_prelude_vec.loc.ll -o build/seed/std_prelude_vec.loc.o
+xz -dc seed/std_time.ll.xz > build/seed/std_time.ll
+clang -O2 -c build/seed/std_time.ll -o build/seed/std_time.o
+xz -dc seed/std_time.loc.ll.xz > build/seed/std_time.loc.ll
+clang -O2 -c build/seed/std_time.loc.ll -o build/seed/std_time.loc.o
+clang build/seed/compiler_ast.o build/seed/compiler_ast.loc.o build/seed/compiler_build.o build/seed/compiler_build.loc.o build/seed/compiler_cabi.o build/seed/compiler_cabi.loc.o build/seed/compiler_check-1.o build/seed/compiler_check-2.o build/seed/compiler_check-3.o build/seed/compiler_check-4.o build/seed/compiler_check-5.o build/seed/compiler_check-6.o build/seed/compiler_check-7.o build/seed/compiler_check-8.o build/seed/compiler_check.o build/seed/compiler_check.loc.o build/seed/compiler_cond.o build/seed/compiler_cond.loc.o build/seed/compiler_diag.o build/seed/compiler_diag.loc.o build/seed/compiler_doc.o build/seed/compiler_doc.loc.o build/seed/compiler_emit-1.o build/seed/compiler_emit-2.o build/seed/compiler_emit-3.o build/seed/compiler_emit.o build/seed/compiler_emit.loc.o build/seed/compiler_eval-1.o build/seed/compiler_eval-2.o build/seed/compiler_eval.o build/seed/compiler_eval.loc.o build/seed/compiler_explain.o build/seed/compiler_explain.loc.o build/seed/compiler_fetch.o build/seed/compiler_fetch.loc.o build/seed/compiler_fix.o build/seed/compiler_fix.loc.o build/seed/compiler_fmt.o build/seed/compiler_fmt.loc.o build/seed/compiler_generic-1.o build/seed/compiler_generic.o build/seed/compiler_generic.loc.o build/seed/compiler_interp.o build/seed/compiler_interp.loc.o build/seed/compiler_load.o build/seed/compiler_load.loc.o build/seed/compiler_lower-1.o build/seed/compiler_lower.o build/seed/compiler_lower.loc.o build/seed/compiler_lsp.o build/seed/compiler_lsp.loc.o build/seed/compiler_mcp.o build/seed/compiler_mcp.loc.o build/seed/compiler_mir-1.o build/seed/compiler_mir.o build/seed/compiler_mir.loc.o build/seed/compiler_msgs.o build/seed/compiler_msgs.loc.o build/seed/compiler_names.o build/seed/compiler_names.loc.o build/seed/compiler_olang-i.loc.o build/seed/compiler_olang.inst.o build/seed/compiler_olang.loc.o build/seed/compiler_olang.main.o build/seed/compiler_olang_compiler_build-i.loc.o build/seed/compiler_olang_compiler_build.inst.o build/seed/compiler_olang_compiler_cabi-i.loc.o build/seed/compiler_olang_compiler_cabi.inst.o build/seed/compiler_olang_compiler_check-1.inst.o build/seed/compiler_olang_compiler_check-i.loc.o build/seed/compiler_olang_compiler_check.inst.o build/seed/compiler_olang_compiler_cond-i.loc.o build/seed/compiler_olang_compiler_cond.inst.o build/seed/compiler_olang_compiler_diag-i.loc.o build/seed/compiler_olang_compiler_diag.inst.o build/seed/compiler_olang_compiler_doc-i.loc.o build/seed/compiler_olang_compiler_doc.inst.o build/seed/compiler_olang_compiler_emit-i.loc.o build/seed/compiler_olang_compiler_emit.inst.o build/seed/compiler_olang_compiler_eval-i.loc.o build/seed/compiler_olang_compiler_eval.inst.o build/seed/compiler_olang_compiler_explain.inst.o build/seed/compiler_olang_compiler_fmt.inst.o build/seed/compiler_olang_compiler_generic-i.loc.o build/seed/compiler_olang_compiler_generic.inst.o build/seed/compiler_olang_compiler_interp-i.loc.o build/seed/compiler_olang_compiler_interp.inst.o build/seed/compiler_olang_compiler_load-i.loc.o build/seed/compiler_olang_compiler_load.inst.o build/seed/compiler_olang_compiler_lower-i.loc.o build/seed/compiler_olang_compiler_lower.inst.o build/seed/compiler_olang_compiler_lsp-i.loc.o build/seed/compiler_olang_compiler_lsp.inst.o build/seed/compiler_olang_compiler_mir-i.loc.o build/seed/compiler_olang_compiler_mir.inst.o build/seed/compiler_olang_compiler_names-i.loc.o build/seed/compiler_olang_compiler_names.inst.o build/seed/compiler_olang_compiler_parse-i.loc.o build/seed/compiler_olang_compiler_parse.inst.o build/seed/compiler_olang_compiler_scan-i.loc.o build/seed/compiler_olang_compiler_scan.inst.o build/seed/compiler_olang_compiler_scope-i.loc.o build/seed/compiler_olang_compiler_scope.inst.o build/seed/compiler_olang_compiler_session-i.loc.o build/seed/compiler_olang_compiler_session.inst.o build/seed/compiler_olang_compiler_source-i.loc.o build/seed/compiler_olang_compiler_source.inst.o build/seed/compiler_olang_compiler_target.inst.o build/seed/compiler_olang_compiler_typed-i.loc.o build/seed/compiler_olang_compiler_typed.inst.o build/seed/compiler_olang_compiler_types-i.loc.o build/seed/compiler_olang_compiler_types.inst.o build/seed/compiler_olang_compiler_views-i.loc.o build/seed/compiler_olang_compiler_views.inst.o build/seed/compiler_olang_std_chan-i.loc.o build/seed/compiler_olang_std_chan.inst.o build/seed/compiler_olang_std_os-i.loc.o build/seed/compiler_olang_std_os.inst.o build/seed/compiler_olang_std_pair.inst.o build/seed/compiler_olang_std_prelude_float-i.loc.o build/seed/compiler_olang_std_prelude_float.inst.o build/seed/compiler_olang_std_prelude_list-i.loc.o build/seed/compiler_olang_std_prelude_list.inst.o build/seed/compiler_olang_std_prelude_text-i.loc.o build/seed/compiler_olang_std_prelude_text.inst.o build/seed/compiler_parse-1.o build/seed/compiler_parse.o build/seed/compiler_parse.loc.o build/seed/compiler_runtime.o build/seed/compiler_runtime.loc.o build/seed/compiler_scan.o build/seed/compiler_scan.loc.o build/seed/compiler_scope-1.o build/seed/compiler_scope-2.o build/seed/compiler_scope-3.o build/seed/compiler_scope.o build/seed/compiler_scope.loc.o build/seed/compiler_session.o build/seed/compiler_session.loc.o build/seed/compiler_source.o build/seed/compiler_source.loc.o build/seed/compiler_target.o build/seed/compiler_target.loc.o build/seed/compiler_token.o build/seed/compiler_typed.o build/seed/compiler_typed.loc.o build/seed/compiler_types.o build/seed/compiler_types.loc.o build/seed/compiler_unparse.o build/seed/compiler_unparse.loc.o build/seed/compiler_views.o build/seed/compiler_views.loc.o build/seed/olang_dyncall.o build/seed/olang_runtime.o build/seed/std_cancel.o build/seed/std_chan.o build/seed/std_chan.loc.o build/seed/std_ffi.o build/seed/std_ffi.loc.o build/seed/std_filepath.o build/seed/std_filepath.loc.o build/seed/std_io.o build/seed/std_io.loc.o build/seed/std_json.o build/seed/std_json.loc.o build/seed/std_os.o build/seed/std_os.loc.o build/seed/std_pair.o build/seed/std_prelude_array.o build/seed/std_prelude_complex.o build/seed/std_prelude_f8.o build/seed/std_prelude_float.o build/seed/std_prelude_float.loc.o build/seed/std_prelude_hash.o build/seed/std_prelude_list.o build/seed/std_prelude_list.loc.o build/seed/std_prelude_number.o build/seed/std_prelude_text.o build/seed/std_prelude_text.loc.o build/seed/std_prelude_vec.o build/seed/std_prelude_vec.loc.o build/seed/std_time.o build/seed/std_time.loc.o -o build/olang.seed -lm -lpthread -ldl -lffi
+make[3]: Leaving directory '/home/user/wt/rvany5-old'
+build/olang.seed build -output build/olang.1 compiler/olang.olang
+built build/olang.1
+build/olang.1 build -output build/olang.2 compiler/olang.olang
+built build/olang.2
+build/olang.2 build -output build/olang.3 compiler/olang.olang
+built build/olang.3
+cmp build/olang.2 build/olang.3
+cp build/olang.3 build/olang
+bootstrap: build/olang.2 and build/olang.3 are byte for byte equal; build/olang installed
+make[2]: Leaving directory '/home/user/wt/rvany5-old'
+make[1]: Leaving directory '/home/user/wt/rvany5-old'

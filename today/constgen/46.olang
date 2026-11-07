@@ -1,0 +1,10 @@
+# G21/G25/T12: an array length given by a narrower constant (a U8 N converted, an I32 global) is the same type as the
+# literal length
+type B<N U8> struct() { a mut Array<I32, I64(N)> }
+W I32 = 3
+fn take(x Array<I32, 3>&) I64 { return x.Len() }
+fn main() ? {
+    b := B<3>()
+    c Array<I32, W> = I32[1, 2, 3]
+    println($take(b.a) " " $take(c))
+}

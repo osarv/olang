@@ -1,0 +1,72 @@
+import "std/io"
+
+fn mk() Map<I64, List<I64>> {
+    m := Map<I64, List<I64>>()
+    m.Put(1, List<I64>())
+    return m
+}
+
+fn mk2() (Map<I64, List<I64>>, I64) {
+    return mk(), 2
+}
+
+fn u1() List<I64> ? {
+    m, k := mk2()
+    l := try m.Get(1)
+    l.Push(1)
+    return l
+}
+
+fn u2() List<I64> ? {
+    m, k := mk(), 3
+    l := try m.Get(1)
+    l.Push(2)
+    return l
+}
+
+fn u5() List<I64> ? {
+    l List<I64>
+    for i in range 3 {
+        maps := Vec<Map<I64, List<I64>>>()
+        maps.Push(mk())
+        l = try (try maps.First()).Get(1)
+        l.Push(5)
+    }
+    return l
+}
+
+fn u6() List<I64> ? {
+    l List<I64>
+    for i in range 3 {
+        mm := Map<I64, Map<I64, List<I64>>>()
+        mm.Put(1, mk())
+        inner := try mm.Get(1)
+        l = try inner.Get(1)
+        l.Push(6)
+    }
+    return l
+}
+
+fn main() ? {
+    r1 := try u1()
+    r2 := try u2()
+    r5 := try u5()
+    r6 := try u6()
+    churn()
+    r1.Push(0)
+    r2.Push(0)
+    r5.Push(0)
+    r6.Push(0)
+    churn()
+    io.Println($r1 $r2   $r5 $r6 )!
+}
+fn churn() {
+    for i in range 300 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        m := Map<I64, List<I64>>()
+        m.Put(i, b)
+        assert a[3] == i
+    }
+}

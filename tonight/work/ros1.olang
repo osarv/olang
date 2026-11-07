@@ -1,0 +1,34 @@
+import "std/os"
+type Cell struct() { v I64 = 0 }
+fn deep(n I64) I64 {
+    if n == 0 { return 0 }
+    return 1 + deep(n - 1)
+}
+fn main() ? {
+    c mut Cell& = Cell()
+    l := List<String&>()
+    lr mut List<String&>& = l
+    os.RunOnStack(0, fn() {
+        for i in range 1000 { lr.Push($i "-x") }
+        c.v = deep(100)
+        println("tiny ok " $lr.Len())
+    })
+    os.RunOnStack(-5, fn() { c.v = 3 })
+    println($c.v)
+    # nested
+    os.RunOnStack(1 << 22, fn() {
+        os.RunOnStack(1 << 22, fn() { c.v = deep(10000) })
+    })
+    println($c.v " " $l[999])
+    # inside tasks
+    out := Array<I64>(4)
+    o mut Array<I64>& = out
+    join {
+        for t in range 4 {
+            spawn fn() {
+                os.RunOnStack(1 << 24, fn() { o[t] = deep(100000 + t) })
+            }
+        }
+    }
+    println($out)
+}

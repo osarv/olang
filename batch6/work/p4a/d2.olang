@@ -1,0 +1,38 @@
+# P4a: a task whose call returns a BORROWED reference ("Node&a"), given a default holding a new instance
+error E {
+    NEG
+}
+type Node struct(v I64, s String&) {
+    v
+    s
+}
+fn pick(a Node&, k I64) Node&a ? E {
+    if k < 0 { error E.NEG }
+    return a
+}
+fn pickv(a Array<I64>&, k I64) Array<I64>&a ? E {
+    if k < 0 { error E.NEG }
+    return a
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i $i "-" $(i * 3) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t = t + s.Len()
+        nn := Node(i, "c")
+        t = t + nn.v
+    }
+    return t
+}
+fn main() ? {
+    base Node& = Node(1, "base")
+    arr Array<I64>& = I64[1, 2, 3]
+    p Node&base = base
+    q Array<I64>&arr = arr
+    join {
+        spawn p = try pick(base, -1) catch default Node(-5, "dflt" $p.v "-abcdefghijklmnopqrstuvwxyz")
+        spawn q = try pickv(arr, -1) catch default I64[7, 8, 9]
+    }
+    churn()
+    println($p.v " " $p.s " " $q)
+}

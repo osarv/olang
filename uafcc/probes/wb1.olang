@@ -1,0 +1,37 @@
+import "std/io"
+
+type H struct(s String&, n I64) {
+    s
+    n
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(s String&) String { return $s "-made" }
+
+fn main() {
+    l := List<String&>()
+    hs := List<H>()
+    for i in range 3 {
+        l.Push("")
+        hs.Push(H("", 0))
+    }
+    for i in range 3 {
+        t := $i
+        l[i] = mk(t) if i >= 0 else ""
+        hs[i].s = match i { case 1 => ""  nomatch => mk(t) }
+        hs[i].n += 1
+        churn()
+    }
+    m := Map<I64, String&>()
+    for i in range 3 {
+        t := $i "m"
+        m.Put(i, mk(t) if i > 0 else "zero")
+        m.Update(i, "", fn(v String&) String& { return v })
+    }
+    churn()
+    io.Println($l[2] " " $hs[0].s " " $hs[2].s " " $(try m.Get(2) catch default "miss"))!
+}

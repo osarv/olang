@@ -1,0 +1,11 @@
+type P struct(v I64) { v }
+type Box<T> struct(x T) { x }
+type D struct(b Box<<T>>, n I64) {
+    n
+    keep Box<T>& = b
+}
+fn main() ? {
+    h := D(Box(P(42)), 1)
+    h2 := D(Box(P(7)), 2)
+    println($h.n " " $h2.n)
+}

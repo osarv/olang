@@ -1,0 +1,46 @@
+# units - units of measure as declared types: adding lengths, dividing a length by a time for a speed, and the
+# compiler keeping metres and feet apart. A run log is summarised in those units.
+type Meters extends F64
+type Seconds extends F64
+type Speed extends F64          # metres per second
+type Feet extends F64
+
+fn (d Meters) Div(t Seconds) Speed { return Speed(F64(d) / F64(t)) }
+fn (v Speed) Mul(t Seconds) Meters { return Meters(F64(v) * F64(t)) }
+fn (f Feet) ToMeters() Meters { return Meters(F64(f) * 0.3048) }
+fn (d Meters) Str() String { return $F64(d).Fixed(1) " m" }
+fn (t Seconds) Str() String {
+    s := I64(F64(t))
+    return $(s / 60) ":" $(s % 60).PadStart(2, '0')
+}
+fn (v Speed) Str() String { return $(F64(v) * 3.6).Fixed(2) " km/h" }
+
+type Run struct(Distance Meters, Time Seconds) {
+    Distance
+    Time
+}
+
+fn (r Run&) Pace() Speed { return r.Distance / r.Time }
+
+fn main() ? {
+    runs := List<Run>()
+    runs.Push(Run(Meters(5000.0), Seconds(1500.0)))
+    runs.Push(Run(Meters(10000.0), Seconds(3300.0)))
+    runs.Push(Run(Feet(3000.0).ToMeters(), Seconds(300.0)))
+
+    total Meters = 0.0
+    time Seconds = 0.0
+    for r in runs {
+        println($r.Distance " in " $r.Time " = " $r.Pace())
+        total += r.Distance
+        time += r.Time
+    }
+    avg := total / time
+    println("total " $total " in " $time ", average " $avg)
+    println("an hour at that speed: " $(avg * Seconds(3600.0)))
+    fastest := runs[0]
+    for r in runs {
+        if r.Pace() > fastest.Pace() { fastest = r }
+    }
+    println("fastest: " $fastest.Distance " at " $fastest.Pace())
+}

@@ -1,0 +1,12 @@
+# a nullable reference made a non-nullable any
+type W trait {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+fn pick(k I64) Btn?& { return null if k > 0 else Btn("x") }
+fn main() {
+    b := pick(1)
+    w any W& = b
+    say(w.Draw())
+}

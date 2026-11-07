@@ -1,0 +1,18 @@
+# E4a/E6d/E8a (wt-rvfix, conditional literals): beside an operand it cannot fit, a conditional of literals meets it at
+# its values' own type - but OperandBinary marks every operand under it "folded away" (markFoldedAway on the copy, as for
+# a literal-only expression that WAS folded) without folding any: "1 << 40" inside it stays an I32 shift past its width,
+# and checkLiteralShifts skips it as folded. The shift is undefined at run time (E8a), so the modes disagree. The
+# previous compiler (db2af5d) rejects the same line with error[E8a, E4a].
+# A related inconsistency (all modes agree): a literal-only expression in such a conditional is computed in its
+# literals' own type, so "b + (0 if c else (2000000000 + 2000000000))" is -294967293 where
+# "b + (2000000000 + 2000000000)" is 4000000003 (E6d: "taken as the one literal holding its value").
+# expected: error[E8a, E4a] (or 1099511627779) - and 4000000003 4000000003
+# actual:   -b prints "4 4000000003 -294967293", -d "3 4000000003 -294967293",
+#           -i stops: "it shifts by a count outside the type's width"
+fn sh(c Bool, b U8) I64 { return b + (1 if c else (1 << 40)) }
+fn lit(b U8) I64 { return b + (2000000000 + 2000000000) }
+fn cond(c Bool, b U8) I64 { return b + (0 if c else (2000000000 + 2000000000)) }
+C mut Bool = false
+fn main() ? {
+    println($sh(C, 3) " " $lit(3) " " $cond(C, 3))
+}

@@ -1,0 +1,35 @@
+# PRE-EXISTING (also d0abfe8), CONFIRMED UAF - the root of n1 outside Str: a split value lent to a method whose lambda
+# stores through a read-only capture's writable field; no O17 edge, so the callee is bound to the copy's block.
+# -b prints -7 (want 7); -b -s: 'use after scope closed'. The same store without the lambda is bound correctly.
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Box struct(n I64) {
+    head mut Node& = Node(n, null)
+}
+type W struct(b Box) {
+    b
+}
+fn (b Box&) grow() {
+    f := fn() { b.head.next = Node(7, null) }
+    f()
+}
+fn bump(src mut W&) {
+    b := src.b
+    b.grow()
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn main() ? {
+    w := W(Box(3))
+    bump(w)
+    churn()
+    println($w.b.head.next.v)
+}

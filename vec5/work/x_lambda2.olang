@@ -1,0 +1,14 @@
+# S17: a lambda in an assert message, its body has a try that propagates out of the lambda (the lambda's own error)
+fn h(k I64) I64 ? {
+    if k > 3 { error }
+    return k
+}
+fn check(k I64) I64 {
+    assert k < 2, (try (fn(n I64) String ? { v := try h(n)
+        return "v " $v })(k) catch default "caught")
+    return k
+}
+fn main() ? {
+    println($check(1))
+    println($check(5))
+}

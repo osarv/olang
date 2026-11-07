@@ -1,0 +1,20 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+# new storage built into an owner LOCAL's region through a scope argument naming the owner local
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn mk(n I64) mut String& { return $n "-new-text-in-the-owner-region" }
+fn main() ? {
+    cc own mut CB& = CB()
+    d := mk&cc(5)
+    cc = CB()
+    churn()
+    println(d)
+}

@@ -1,0 +1,6 @@
+G List<I32> = I32[1, 2].ToList()
+M mut Array<List<I32>, 1> = Array<List<I32>, 1>[G]
+fn main() ? {
+  M[0].Push(9)
+  println($G.Len())
+}

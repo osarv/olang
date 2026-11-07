@@ -1,0 +1,18 @@
+# range with step, for-in, do-for, comparison chains
+fn sum(n I64) I64 {
+    s I64 = 0
+    for i in range 0, n, 2 {
+        s += i
+    }
+    return s
+}
+test "a" {
+    assert sum(10) == 20
+    x I32 = 5
+    assert 1 < x < 10
+    k I32 = 0
+    do {
+        k++
+    } for k < 3
+    assert k == 3
+}

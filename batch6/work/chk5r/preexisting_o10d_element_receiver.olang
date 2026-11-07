@@ -1,0 +1,18 @@
+# PRE-EXISTING over-rejection (c2a38f0 too): borrowing an element of an array held in a reference field of a reference
+# parameter - "sizeFn(g.arr[0])", "g.arr[0].size()" - is O10d "this value lives in this function's own scope" (lines 8
+# and 13); through a local ("a := g.arr; a[0].size()") or from main it compiles.
+type Elem struct() { n I64 = 0 }
+fn (e Elem&) size() I64 { return e.n }
+fn sizeFn(e Elem&) I64 { return e.n }
+type G struct() { arr mut Array<Elem>& = Array<Elem>(3) }
+fn f1(g G&) I64 { return sizeFn(g.arr[0]) }
+fn f2(g G&) I64 {
+    a := g.arr
+    return a[0].size()
+}
+fn f3(g mut G&) I64 { return g.arr[0].size() }
+fn main() ? {
+    g := G()
+    println($f1(g) " " $f2(g) " " $f3(g))
+    println($g.arr[0].size())
+}

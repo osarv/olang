@@ -1,0 +1,79 @@
+import "std/io"
+
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+type Lamp unique struct(id I64, log mut Tally&) {
+    id, log
+    open := true
+} destruct {
+    log.seen.Push(id)
+    open = false
+}
+
+type Grip unique struct(id I64) {
+    id
+    held Lamp?& = null
+} destruct {
+    if held is not null: held!.log.seen.Push(id * 10 + (1 if held!.open else 0))
+}
+
+fn (g mut Grip&) Hold(l Lamp&) { g.held = l }
+
+fn show(t Tally&) String {
+    b := StringBuilder()
+    for x in t.seen { b.Push($x ".") }
+    return b.ToString()
+}
+
+fn v1(t mut Tally&) {
+    gs := Vec<Grip>()
+    gs.Push(Grip(1))
+    l Lamp = Lamp(2, t)
+    gs[0].held = l
+}
+
+fn v2(t mut Tally&) {
+    g Grip = Grip(3)
+    ls := Vec<Lamp>()
+    ls.Push(Lamp(4, t))
+    g.Hold(ls[0])
+}
+
+fn v3(t mut Tally&) {
+    gs := Vec<Grip>()
+    gs.Push(Grip(5))
+    ls := Vec<Lamp>()
+    ls.Push(Lamp(6, t))
+    gs[0].Hold(ls[0])
+}
+
+fn v4(t mut Tally&) {
+    g Grip = Grip(7)
+    m := Map<I64, Lamp>()
+    m.Put(1, Lamp(8, t))
+    g.held = m.Ref(1)!
+}
+
+fn v5(t mut Tally&) {
+    gs := Vec<Grip>()
+    gs.Push(Grip(1))
+    ls := Vec<Lamp>()
+    ls.Push(Lamp(2, t))
+    for i in range gs.Len() { gs.RefMut(i).held = ls[0] }
+}
+
+fn main() {
+    t1 := Tally()
+    v1(t1)
+    t2 := Tally()
+    v2(t2)
+    t3 := Tally()
+    v3(t3)
+    t4 := Tally()
+    v4(t4)
+    t5 := Tally()
+    v5(t5)
+    io.Println($show(t1) " " $show(t2) " " $show(t3) " " $show(t4) " " $show(t5))!
+}

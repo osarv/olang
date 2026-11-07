@@ -1,0 +1,26 @@
+# a method keeping its argument in a global (or a lambda-reachable place), called through an any with a short-lived one
+type Node struct(v String&) { v }
+type Reg trait {
+    Reg(n Node&)
+}
+GN mut Node?& = null
+type S struct(k I64) { k }
+fn (s S&) Reg(n Node&) { GN = n }
+fn direct() {
+    for i in range 3 {
+        n := Node("d" $i)
+        S(1).Reg(n)
+    }
+}
+fn viaAny(r any Reg&) {
+    for i in range 3 {
+        n := Node("a" $i "-" $(i * 7))
+        r.Reg(n)
+    }
+}
+fn main() {
+    s := S(0)
+    viaAny(s)
+    churn()
+    say(GN!.v)
+}

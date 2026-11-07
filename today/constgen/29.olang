@@ -1,0 +1,6 @@
+# G22: a field named like the type's constant
+type B<N I64> struct() { N mut I64 }
+fn main() ? {
+    b := B<3>()
+    println($b.N)
+}

@@ -1,0 +1,21 @@
+# r07 OVER-REJECTION - O17: the grouping idiom "l := try m.Get(k); l.Push(x)" (a Map of Lists; a List is a handle, so
+# l names the map's own list) is refused inside a loop - "this value's references live where its own storage does not,
+# and the callee can store through it" - even pushing a literal. Push stores nothing in l's own slot; it writes the
+# list's state, which lives where the map does. Outside a loop (variant B) it compiles and works. Found grouping files
+# by digest (../dedup.olang); the fix was "l mut List<String&>&groups = try groups.Get(d)".
+#
+# expected: 2 1
+# actual:   error[O17] at "l.Push", column of l
+fn main() ? {
+    m := Map<I64, List<String&>>()
+    for i in range 3 {
+        if not m.Has(i % 2) { m.Put(i % 2, List<String&>()) }
+        l := try m.Get(i % 2)
+        l.Push("x")
+    }
+    # variant B, compiles:
+    #   m.Put(1, List<String&>())
+    #   l := try m.Get(1)
+    #   l.Push("x")
+    println($(try m.Get(0)).Len() " " $(try m.Get(1)).Len())
+}

@@ -1,0 +1,14 @@
+# PRE-EXISTING (45eea97 alike), found by the differential fuzzer on 91ab3ba (seed 3153 case 23, minimized). Unrelated to
+# 91ab3ba's changes. '$' of a slice of an Array<I16, 0> renders "null" while compiling (K2's baked K) and under -i,
+# "I16[]" at run time (-b and -d): the evaluator takes the zero-length inline array for a storage-less array, codegen gives
+# the slice the inline array's (zero-byte) storage.
+#   expected: one answer in every mode
+#   actual:   -b and -d "null | I16[]", -i "null | null"
+fn c() String {
+    x3 Array<I16, 0>
+    return $(x3[0:0])
+}
+K String = c()
+fn main() ? {
+    println($K " | " $c())
+}

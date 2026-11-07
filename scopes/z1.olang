@@ -1,0 +1,20 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+type Holder struct(n mut Node&) { n mut }
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn copyInto(dst mut Holder&, src Holder&) { dst.n = src.n }
+fn main() ? {
+    h Holder = Holder(Node(1))
+    for i in range 2 {
+        h2 := Holder(Node(42))
+        copyInto(h, h2)
+        h.n = h2.n
+    }
+    churn()
+    try io.Print($h.n.v "\n")
+}

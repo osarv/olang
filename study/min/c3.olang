@@ -1,0 +1,16 @@
+type Item struct(n I64) {
+    n
+}
+fn find(l List<Pair<String&, Item&>>&, key String&) Item&l ? {
+    for f in l {
+        if f.First == key { return f.Second }
+    }
+    error
+}
+fn main() ? {
+    l := List<Pair<String&, Item&>>()
+    k String& = "x"
+    l.Push(Pair<String&, Item&>(k, Item(4)))
+    it := try find(l, "x")
+    assert it.n == 4
+}

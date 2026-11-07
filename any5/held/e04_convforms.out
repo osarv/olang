@@ -1,0 +1,15 @@
+== build -debug -sanitize
+run:   lambda: s outer1 x Quter1; field: st.a I64[5, 5, 5] y I64[99, 5, 5]; lit: literal z Literal
+baked: lambda: s outer1 x Quter1; field: st.a I64[5, 5, 5] y I64[99, 5, 5]; lit: literal z Literal
+fixed local I64[3, 7, 3]
+status 0
+== build
+run:   lambda: s outer1 x Quter1; field: st.a I64[5, 5, 5] y I64[99, 5, 5]; lit: literal z Literal
+baked: lambda: s outer1 x Quter1; field: st.a I64[5, 5, 5] y I64[99, 5, 5]; lit: literal z Literal
+fixed local I64[3, 7, 3]
+status 0
+== interpret
+run:   lambda: s outer1 x Quter1; field: st.a I64[5, 5, 5] y I64[99, 5, 5]; lit: literal z Literal
+baked: lambda: s outer1 x Quter1; field: st.a I64[5, 5, 5] y I64[99, 5, 5]; lit: literal z Literal
+fixed local I64[3, 7, 3]
+status 0

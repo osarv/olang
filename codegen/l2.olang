@@ -1,0 +1,21 @@
+import "std/io"
+
+fn adder(k I64) fn(x I64) I64 {
+    return fn(x I64) I64 { return x + k }
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 10 {
+        b := Array<I64>(16, 99)
+        t = t + b[0]
+    }
+    return t
+}
+
+fn main() ? io.IoError {
+    f := adder(5)
+    c := churn()
+    g := adder(7)
+    try io.Print($f(1) " " $g(1) " " $c "\n")
+}

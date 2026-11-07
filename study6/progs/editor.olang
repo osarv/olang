@@ -1,0 +1,263 @@
+# editor - the buffer engine of a text editor: a piece table over the original text and an append-only buffer of
+# everything typed, with undo and redo stacks and an index of where lines start. Driven by a scripted, random edit
+# session checked step by step against a naive model (a List of characters edited directly).
+
+import "std/rand"
+import "std/math"
+
+Edits I64 = 20000
+CheckEvery I64 = 500
+
+type Source enum {
+    Original
+    Added
+}
+
+type Piece struct(src Source, start I64, len I64) {
+    src
+    start
+    len
+}
+
+type Edit enum {
+    Insert(at I64, text String&)
+    Delete(at I64, text String&)
+}
+
+type Buffer struct(original String&) {
+    original
+    added mut List<Char>& = List<Char>()
+    pieces mut List<Piece>& = List<Piece>()
+    undos mut List<Edit>& = List<Edit>()
+    redos mut List<Edit>& = List<Edit>()
+    lineStarts mut List<I64>& = List<I64>()
+    size I64 = original.Len()
+}
+
+fn newBuffer(text String&) Buffer {
+    b := Buffer(text)
+    if text.Len() > 0 { b.pieces.Push(Piece(Source.Original, 0, text.Len())) }
+    b.reindex()
+    return b
+}
+
+fn (b Buffer&) charAt(p Piece, i I64) Char {
+    match p.src {
+        case Source.Original { return b.original[p.start + i] }
+        case Source.Added { return b.added[p.start + i] }
+    }
+}
+
+# the whole text
+fn (b Buffer&) Text() String {
+    out := StringBuilder()
+    for p in b.pieces {
+        for i in range p.len { out.PushChar(b.charAt(p, i)) }
+    }
+    return out.ToString()
+}
+
+# the text from at, n characters
+fn (b Buffer&) slice(at I64, n I64) String {
+    out := StringBuilder()
+    pos I64 = 0
+    for p in b.pieces {
+        for i in range p.len {
+            if pos >= at and pos < at + n { out.PushChar(b.charAt(p, i)) }
+            pos++
+        }
+    }
+    return out.ToString()
+}
+
+# where the piece holding position at is, and how far into it
+fn (b Buffer&) find(at I64) (I64, I64) {
+    pos I64 = 0
+    for i in range b.pieces.Len() {
+        p := b.pieces[i]
+        if at < pos + p.len { return i, at - pos }
+        pos += p.len
+    }
+    return b.pieces.Len(), 0
+}
+
+fn (b mut Buffer&) insertRaw(at I64, text String&) {
+    if text.Len() == 0 { return }
+    start := b.added.Len()
+    for c in text { b.added.Push(c) }
+    np := Piece(Source.Added, start, text.Len())
+    i, off := b.find(at)
+    if i == b.pieces.Len() {
+        b.pieces.Push(np)
+    } else if off == 0 {
+        b.pieces.Insert(i, np)
+    } else {
+        p := b.pieces[i]
+        left := Piece(p.src, p.start, off)
+        right := Piece(p.src, p.start + off, p.len - off)
+        b.pieces[i] = left
+        b.pieces.Insert(i + 1, np)
+        b.pieces.Insert(i + 2, right)
+    }
+    b.size += text.Len()
+}
+
+fn (b mut Buffer&) deleteRaw(at I64, n I64) {
+    if n == 0 { return }
+    end := at + n
+    out := List<Piece>()
+    pos I64 = 0
+    for p in b.pieces {
+        pend := pos + p.len
+        if pend <= at or pos >= end {
+            out.Push(p)
+        } else {
+            if pos < at { out.Push(Piece(p.src, p.start, at - pos)) }
+            if pend > end { out.Push(Piece(p.src, p.start + (end - pos), pend - end)) }
+        }
+        pos = pend
+    }
+    # first: 'b.pieces = out' - O25 (r10); refilled in place instead, so each edit does not leave a dead list behind (O8c)
+    b.pieces.Clear()
+    for p in out { b.pieces.Push(p) }
+    b.size -= n
+}
+
+fn (b mut Buffer&) Insert(at I64, text String&) {
+    b.insertRaw(at, text)
+    b.undos.Push(Edit.Insert(at, text))
+    b.redos.Clear()
+    b.reindex()
+}
+
+fn (b mut Buffer&) Delete(at I64, n I64) {
+    gone String&b = b.slice(at, n)          # first: 'gone := ...' - T17c at the Push below, its advice ('v E&x') points the wrong way
+    b.deleteRaw(at, n)
+    b.undos.Push(Edit.Delete(at, gone))
+    b.redos.Clear()
+    b.reindex()
+}
+
+fn (b mut Buffer&) Undo() Bool {
+    e := try b.undos.Pop() catch { return false }
+    match e {
+        case Edit.Insert(at, text) { b.deleteRaw(at, text.Len()) }
+        case Edit.Delete(at, text) { b.insertRaw(at, text) }
+    }
+    b.redos.Push(e)
+    b.reindex()
+    return true
+}
+
+fn (b mut Buffer&) Redo() Bool {
+    e := try b.redos.Pop() catch { return false }
+    match e {
+        case Edit.Insert(at, text) { b.insertRaw(at, text) }
+        case Edit.Delete(at, text) { b.deleteRaw(at, text.Len()) }
+    }
+    b.undos.Push(e)
+    b.reindex()
+    return true
+}
+
+# where every line starts
+fn (b mut Buffer&) reindex() {
+    b.lineStarts.Clear()
+    b.lineStarts.Push(0)
+    pos I64 = 0
+    for p in b.pieces {
+        for i in range p.len {
+            pos++
+            if b.charAt(p, i) == '\n' { b.lineStarts.Push(pos) }
+        }
+    }
+}
+
+fn (b Buffer&) LineCount() I64 { return b.lineStarts.Len() }
+
+fn (b Buffer&) Line(n I64) String {
+    start := b.lineStarts[n]
+    end := b.size
+    if n + 1 < b.lineStarts.Len() { end = b.lineStarts[n + 1] - 1 }
+    return b.slice(start, end - start)
+}
+
+# ---- the naive model ----
+
+type Model struct() {
+    chars mut List<Char>& = List<Char>()
+}
+
+fn (m mut Model&) insert(at I64, text String&) {
+    for i in range text.Len() { m.chars.Insert(at + i, text[i]) }
+}
+
+fn (m mut Model&) delete(at I64, n I64) {
+    for i in range n { m.chars.RemoveAt(at) }
+}
+
+fn (m Model&) text() String {
+    return String(m.chars.ToArray())
+}
+
+# ---- the session ----
+
+Words := String&["olang", "piece", "table", "undo", "redo", "line", "scope", "arena", "\n", " ", "fn", "{", "}"]
+
+fn main() ? {
+    initial := "first line\nsecond line\nthird line\n"
+    b := newBuffer(initial)
+    m := Model()
+    m.insert(0, initial)
+    history := List<Edit>()            # the model's own undo stack
+    redoModel := List<Edit>()
+    r := rand.Rand(1)
+    for step in range Edits {
+        roll := r.Below(10)
+        if roll < 5 {
+            at := r.Below(b.size + 1)
+            w := Words[r.Below(Words.Len())]
+            b.Insert(at, w)
+            m.insert(at, w)
+            history.Push(Edit.Insert(at, w))
+            redoModel.Clear()
+        } else if roll < 8 and b.size > 0 {
+            at := r.Below(b.size)
+            n := r.Below(math.Min(8, b.size - at)) + 1
+            # first: 'gone := m.text()[at:at + n]' - T17c; as 'gone String&history = m.text()[at:at + n]' it compiled
+            # and kept the WHOLE model text per delete (r09): 40k edits 221 MB, against 27 MB with:
+            gone String&history = b.slice(at, n)
+            b.Delete(at, n)
+            m.delete(at, n)
+            history.Push(Edit.Delete(at, gone))
+            redoModel.Clear()
+        } else if roll < 9 {
+            if b.Undo() {
+                e := try history.Pop() catch { unreachable }
+                match e {
+                    case Edit.Insert(at, text) { m.delete(at, text.Len()) }
+                    case Edit.Delete(at, text) { m.insert(at, text) }
+                }
+                redoModel.Push(e)
+            }
+        } else {
+            if b.Redo() {
+                e := try redoModel.Pop() catch { unreachable }
+                match e {
+                    case Edit.Insert(at, text) { m.insert(at, text) }
+                    case Edit.Delete(at, text) { m.delete(at, text.Len()) }
+                }
+                history.Push(e)
+            }
+        }
+        if step % CheckEvery == 0 {
+            if b.Text() != m.text() {
+                println("MISMATCH at step " $step)
+                fail
+            }
+        }
+    }
+    assert b.Text() == m.text()
+    println("size " $b.size " pieces " $b.pieces.Len() " lines " $b.LineCount() " undo " $b.undos.Len())
+    println("line 3: " $b.Line(3))
+}

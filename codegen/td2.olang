@@ -1,0 +1,34 @@
+import "std/io"
+
+type Node struct(s I64) {
+    v I64 = s
+}
+
+error E {
+    BAD
+}
+
+fn mk(x I64) Node& ? E {
+    if x < 0 { error E.BAD }
+    return Node(x)
+}
+
+fn wrap(x I64) Node& {
+    return try mk(x) catch default Node(7)
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 10 {
+        b := Array<I64>(16, 99)
+        t = t + b[0]
+    }
+    return t
+}
+
+fn main() ? io.IoError {
+    a := wrap(5)
+    b := wrap(-5)
+    c := churn()
+    try io.Print($a.v " " $b.v " " $c "\n")
+}

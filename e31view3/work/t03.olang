@@ -1,0 +1,31 @@
+# a slice of a field of a try-default, returned as a borrow of the collection: the checker reads the slice as one of
+# a's storage, the code generator slices the try's temporary
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+type Pt struct() {
+    X I64 = 0
+    arr Array<I64, 2>
+}
+type Acc struct() {
+    P Pt
+}
+fn view(a mut Array<Acc>&) mut Array<I64>&a { return (try a[0] catch default Acc()).P.arr[0:2] }
+fn deep(n I64) I64 {
+    b := Array<I64, 8>()
+    for i in range 8 { b[i] = n * 1000 + i }
+    if n == 0 { return b[3] }
+    return deep(n - 1) + b[1]
+}
+fn main() ? {
+    a := Array<Acc>(1)
+    a[0].P.arr[0] = 11
+    a[0].P.arr[1] = 22
+    v := view(a)
+    t := deep(5)
+    churn()
+    println("v " $v[0] " " $v[1] " t " $t)
+}

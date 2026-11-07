@@ -1,0 +1,22 @@
+== b41_forinscoped
+  san:    refused: b41_forinscoped.olang:33:22: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+  O3:     refused
+  interp: exit 0 forin 1|forin 2|forin 12|forin 13|
+--- compile (-debug -sanitize)
+b41_forinscoped.olang:33:22: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   33 |         for q in mkl&t(i * 11 + 1) { out.Push(q) }
+      |                      ^
+b41_forinscoped.olang:33:42: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   33 |         for q in mkl&t(i * 11 + 1) { out.Push(q) }
+      |                                          ^~~~
+/home/user/wt/rvany4/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+compilation failed with 2 errors
+--- run san
+--- run O3
+--- interpret
+forin 1
+forin 2
+forin 12
+forin 13

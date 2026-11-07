@@ -1,0 +1,67 @@
+error PErr { BAD }
+type Diag struct() {
+    what String& = ""
+}
+type Kind enum {
+    Open
+    Close
+    Name
+}
+type Tok struct(kind Kind, text String&) {
+    kind
+    text
+}
+type E enum {
+    Name(n String&)
+    Group(e E&)
+}
+type P struct(toks List<Tok>&, diag mut Diag&) {
+    toks
+    diag
+    at I64 = 0
+}
+fn (p mut P&) advance() Tok {
+    t := p.toks[p.at]
+    p.at++
+    return t
+}
+fn (p mut P&) bail(t Tok) ? PErr {
+    p.diag.what = t.text
+    error PErr.BAD
+}
+fn (p mut P&) expect(k Kind) ? PErr {
+    t := p.advance()
+    if t.kind != k { try p.bail(t) }
+}
+fn (p mut P&) atom() E& ? PErr {
+    t := p.advance()
+    match t.kind {
+        case Kind.Open {
+            e mut E&return = try p.atom()
+            try p.expect(Kind.Close)
+            return E.Group(e)
+        }
+        case Kind.Name { return E.Name(t.text) }
+        nomatch {
+            try p.bail(t)
+            unreachable
+        }
+    }
+}
+fn parse(src String&, d mut Diag&) E& ? PErr {
+    toks := List<Tok>()
+    for i in range src.Len() {
+        k := Kind.Open if src[i] == '(' else Kind.Close if src[i] == ')' else Kind.Name
+        toks.Push(Tok(k, src[i:i + 1]))
+    }
+    p := P(toks, d)
+    return try p.atom()
+}
+fn main() ? {
+    d := Diag()
+    e := try parse("((x]", d) catch PErr {
+        println("bad: " $d.what)
+        return
+    }
+    println($e)
+}

@@ -1,0 +1,29 @@
+fn a(line String&) I64 {
+    toks := List<String&>()
+    toks.Push(line[0:1])
+    return toks.Len()
+}
+type Tok struct(text String&) {
+    text
+}
+fn b(line String&) I64 {
+    toks := List<Tok>()
+    toks.Push(Tok(line[0:1]))
+    return toks.Len()
+}
+fn split(line String&) List<String&> {
+    toks := List<String&>()
+    toks.Push(line[0:1])
+    return toks
+}
+fn c(line String&) I64 {
+    toks := split(line)
+    return toks.Len()
+}
+fn d(line String&) I64 {
+    toks := line.Split(" ")
+    return toks.Len()
+}
+fn main() ? {
+    println($a("ab") $b("ab") $c("ab") $d("a b"))
+}

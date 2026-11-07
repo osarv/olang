@@ -1,0 +1,10 @@
+fn take(x U8) U8 { return x }
+fn main() ? {
+    b := true
+    x F32 = 2.5 if b else 3.5
+    y U8 = 200 if b else 0
+    z := take(100 if b else 1)
+    w U8 = 0
+    w = 7 if b else 9
+    assert x == 2.5 and y == 200 and z == 100 and w == 7
+}

@@ -1,0 +1,30 @@
+# open point 5 (round 2e): a function made a value whose obligations are more than "the result hands back what a &
+# parameter reaches" - one storing one parameter into another - called through the value with a shorter-lived argument
+import "std/io"
+
+type node struct(v I64) {
+    v
+    next node?& = null
+}
+
+fn link(a node&, b node&) node& {
+    a.next = b
+    return a
+}
+
+fn churn(n I64) I64 {
+    xs := Array<I64>(n, 7)
+    return xs[n - 1]
+}
+
+fn main() {
+    f := link
+    root := node(1)
+    for i in range 3 {
+        tmp := node(100 + i)
+        _ = f(root, tmp)
+    }
+    s := 0
+    for i in range 1, 50 { s += churn(i * 8) }
+    io.Println($root.next!.v " " $s)!
+}

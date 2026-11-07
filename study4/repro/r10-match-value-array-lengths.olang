@@ -1,0 +1,21 @@
+# r10 OVER-REJECTION - S12b/E28: a match giving arrays of different lengths, into a run-time-length result, is
+# refused - "every value of this match is Array<I64, 3>, found Array<I64, 2>" - where the conditional form (pick2) of
+# the same thing compiles: each literal fits Array<I64> on its own (E28 says each value fits the target on its own).
+# Found returning a scenario's job list from a match (../jobrun.olang), rewritten as a statement match with returns.
+#
+# expected: I64[1, 2, 3] I64[4, 5] I64[4, 5]
+# actual:   error[S12b] at the nomatch value
+fn pick(k I64) Array<I64> {
+    return match k {
+        case 1 => I64[1, 2, 3]
+        nomatch => I64[4, 5]
+    }
+}
+
+fn pick2(k I64) Array<I64> {
+    return I64[1, 2, 3] if k == 1 else I64[4, 5]
+}
+
+fn main() ? {
+    println($pick(1) " " $pick(2) " " $pick2(2))
+}

@@ -1,0 +1,19 @@
+# S9d: List has At and Len, and its own Iter - so a loop over it, a comprehension, an iterator helper, and a loop in
+# generic code that knows it only as Indexable all walk it through ListIter.Next, and none of them calls At. I16
+# so that nothing in the prelude instantiates it too.
+
+fn total(c <C Indexable<<T>>>&) I64 {
+    s I64 = 0
+    for x in c { s += x }
+    return s
+}
+
+fn main() ? {
+    l := List<I16>()
+    for i in range 30 { l.Push(I16(i)) }
+    sum I16 = 0
+    for x in l { sum += x }
+    evens := I16[x for x in l if x % 2 == 0]
+    big := l.Iter().Count(fn(x) { return x > 20 })
+    if sum != 435 or evens.Len() != 15 or big != 9 or total(l) != 435 { error }
+}

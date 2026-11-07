@@ -1,0 +1,1 @@
+olang -i: /home/user/wt/s6c/std/chan.olang:164: it waits for another task, and -i runs a join's tasks one after another, never beside each other

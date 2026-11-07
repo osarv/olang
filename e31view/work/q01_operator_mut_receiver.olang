@@ -1,0 +1,23 @@
+# operators whose method has a "mut" receiver writing its own storage, on x[i] (a List's copy) - the write lands nowhere
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) Plus(k I64) I64 {
+    a.N += k
+    return a.N
+}
+fn (a mut Acc&) Call(k I64) I64 {
+    a.N += k * 100
+    return a.N
+}
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    x := l[0] + 1
+    y := l[0](2)
+    println("list " $l[0].N " " $x " " $y)
+    a := Acc[Acc()]
+    p := a[0] + 1
+    q := a[0](2)
+    println("array " $a[0].N " " $p " " $q)
+}

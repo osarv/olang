@@ -1,0 +1,47 @@
+import "std/io"
+
+# F1 (OLDER: fcdb202 crashes alike): a reference to a collection's element whose type owns storage (an owner held in
+# place - a struct with a run-time array field - or a unique such value) kept across a removal that empties its
+# position (Vec's Truncate, Clear, RemoveAt, SwapRemove, Pop; Map's Remove) is read after early freeing released what
+# the element owned. -memory says the Map's removed elements are kept ("'r' is used here, after 'm.Remove(1)'") but
+# the element's own region (the owner place Rec) is released all the same. Segfault in a plain build and under
+# -debug -sanitize; interpret says "it indexes outside the array" (the vacated slot).
+type Rec struct(id I64) {
+    id
+    data := Array<I64>(16 + id.Mod(2), id)
+}
+
+fn fromMap(n I64) I64 {
+    m := Map<I64, Rec>()
+    other := Map<I64, Rec>()
+    s := 0
+    for k in range n {
+        m.Put(1, Rec(k + 1))
+        r Rec& = m.Ref(1)!
+        m.Remove(1)
+        other.Put(1, Rec(-1000))
+        other.Remove(1)
+        s += r.data[3]
+    }
+    return s
+}
+
+fn fromVec(n I64) I64 {
+    ls := Vec<Rec>()
+    other := Vec<Rec>()
+    s := 0
+    for k in range n {
+        ls.Push(Rec(k + 1))
+        r Rec& = ls.Ref(0)
+        ls.Truncate(0)
+        other.Push(Rec(-1000))
+        other.Truncate(0)
+        s += r.data[3]
+    }
+    return s
+}
+
+fn main() {
+    io.Println($fromVec(1000))!
+    io.Println($fromMap(1000))!
+}

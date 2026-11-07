@@ -1,0 +1,8 @@
+# check: fail error[S3, E11b]: text on a line of its own does nothing - a join continues onto the next line only inside parentheses
+# S3/E11b: outside brackets a line end ends the join (L18), so the next line's text stands alone
+fn main() ? {
+    n := 3
+    s := "n=" $n
+        " more"
+    assert s.Len() > 0
+}

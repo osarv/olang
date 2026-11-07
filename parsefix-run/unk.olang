@@ -1,0 +1,6 @@
+test "x" {
+    nope = 1
+    nope2++
+    nope3.x = 4
+    a := nope4 + 1
+}

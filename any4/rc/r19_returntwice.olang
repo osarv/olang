@@ -1,0 +1,18 @@
+type K struct(s String&) { s }
+# RetCopy: the returned local returned twice, as two of several results - the third mode leaves returns out, so neither
+# is copied and the caller's two values are one storage; compile-time evaluation copies each
+fn two(i I64) String, String {
+    s := "abc" $i
+    return s, s
+}
+fn probe() String {
+    a, b := two(1)
+    a[0] = 'Q'
+    return "a " $a " b " $b
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+    assert probe() == "a Qbc1 b abc1", "the two results are one storage"
+}

@@ -1,0 +1,13 @@
+# r13 OVER-REJECTION + DIAGNOSTIC - E31/S3a/S4: on a type with At/SetAt (a List), "l[i] += 1" works but "l[i]++" is
+# S4 "this cannot be written - a variable, an element or a member can" - l[i] reads as an element. E31 derives x++
+# as x = x + 1, and x[i] op= v through SetAt; the two are not composed.
+#
+# expected: 3
+# actual: error[S4] at line 11
+fn main() ? {
+    l := List<I32>()
+    l.Push(1)
+    l[0] += 1
+    l[0]++
+    println($l[0])
+}

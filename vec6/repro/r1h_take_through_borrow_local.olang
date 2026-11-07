@@ -1,0 +1,28 @@
+# Vec phase 2a (R1, see r1a): the same through a borrow local - "q := p.lx", then "d.lx.toks = take q.toks".
+#   -b -d -s: use after scope closed; -i: correct; -b: churn text (silent)
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    p := Parser()
+    p.lx = Lexer()
+    for i in range 3 { p.lx.toks.Push($i "-word-built-in-the-lexer's-region") }
+    d := Parser()
+    d.lx = Lexer()
+    q := p.lx
+    d.lx.toks = take q.toks
+    p.lx = null                          # releases R, where the words were built
+    churn()
+    println(d.lx.toks[0])
+}

@@ -1,0 +1,29 @@
+# G26: match on an enum constant, an if on a Bool constant, a conditional on N, inside a lambda too
+type Layout enum {
+    RowMajor
+    ColMajor
+}
+type Grid<L Layout, Fast Bool, N I64> struct() { d mut Array<I64, N * N> }
+fn (g Grid<<L>, <F>, <N>>&) Index(r I64, c I64) I64 {
+    return match L {
+        case Layout.RowMajor => r * N + c
+        case Layout.ColMajor => c * N + r
+    }
+}
+fn (g Grid<<L>, <F>, <N>>&) Name() String {
+    if F { return "fast" } else { return "slow" }
+}
+fn (g Grid<<L>, <F>, <N>>&) Cells() I64 {
+    k := fn(x I64) I64 { return x * (2 if N > 2 else 3) }
+    return k(N * N)
+}
+fn run() String {
+    a := Grid<Layout.RowMajor, true, 3>()
+    b := Grid<Layout.ColMajor, false, 2>()
+    return $a.Index(1, 2) " " $b.Index(1, 2) " " $a.Name() " " $b.Name() " " $a.Cells() " " $b.Cells()
+}
+Baked String = run()
+fn main() ? {
+    println(run())
+    println(Baked)
+}

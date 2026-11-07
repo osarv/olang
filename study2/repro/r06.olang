@@ -1,0 +1,44 @@
+# r06 FRICTION (main parser friction): a local List filled with nodes borrowed from the parser (Node&p) cannot be
+# flattened into the result - many1: "return Node.Many(l.ToArray())" is O26, since a value local's references are
+# pinned to its own block. Works only as "l List<Node&>&p = List<Node&>()" (many2), so every temporary list lives in
+# the parser's arena until the parser dies. Same for maybe(): an empty array local replaced later (O26).
+# opt(): a null-initialized "x Node&p = null" is writable, so a read-only borrowed result cannot be assigned (T25c, Q4).
+type Node enum {
+    Leaf(v I64)
+    Many(items Array<Node&>&)
+}
+type P struct() {
+    pos mut I64 = 0
+}
+fn (p mut P&) leaf() Node&p {
+    p.pos++
+    return Node.Leaf(p.pos)
+}
+# (1) a local list, natural
+fn (p mut P&) many1() Node&p {
+    l := List<Node&>()
+    for i in range 3 { l.Push(p.leaf()) }
+    return Node.Many(l.ToArray())
+}
+# (2) the list where the parser lives
+fn (p mut P&) many2() Node&p {
+    l List<Node&>&p = List<Node&>()
+    for i in range 3 { l.Push(p.leaf()) }
+    return Node.Many(l.ToArray())
+}
+# (3) an optional node, filled later
+fn (p mut P&) opt(b Bool) Node&p {
+    x Node&p = null
+    if b { x = p.leaf() }
+    return Node.Many(Node&[x])
+}
+# (4) an array declared empty and replaced
+fn (p mut P&) maybe(b Bool) Node&p {
+    items := Array<Node&>(0)
+    if b { items = Node&[p.leaf()] }
+    return Node.Many(items)
+}
+fn main() ? {
+    p := P()
+    println($p.many1() " " $p.many2() " " $p.opt(true) " " $p.maybe(true))
+}

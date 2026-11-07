@@ -1,0 +1,23 @@
+# n31's analog without an any: a copy of a read-only array of writable references, written through
+type Node struct(v I64) { v }
+type Ns extends Array<mut Node&>
+fn (a mut Ns&) Grow(v I64) { a[0].v = v }
+fn direct(a Ns&) { a[0].v = 11 }
+fn copied(a Ns&) {
+    b := a
+    b[0].v = 22
+}
+fn copiedMut(a Ns&) {
+    b Ns = a
+    b.Grow(33)
+}
+fn main() {
+    n := Node(5)
+    arr := Ns(Array<mut Node&>(1, n))
+    direct(arr)
+    say($n.v)
+    copied(arr)
+    say($n.v)
+    copiedMut(arr)
+    say($n.v)
+}

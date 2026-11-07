@@ -1,0 +1,20 @@
+# O17/O17b: a handle (a List) held by value in a struct built in an inner block over an outer list; text pushed
+# through the inner copy
+import "std/io"
+import "churn"
+type W struct(l List<String&>) { l }
+fn addTo(l List<String&>, i I64) { l.Push($i "-added") }
+fn main() ? io.IoError {
+    outer := List<String&>()
+    for i in range 3 {
+        w := W&outer(outer)
+        w.l.Push($i "-pushed")
+        addTo(w.l, i)
+        x := w
+        x.l.Push($i "-x")
+    }
+    c := churn.Churn()
+    s := ""
+    for t in outer { s = $s $t "," }
+    try io.Println($c " " $s)
+}

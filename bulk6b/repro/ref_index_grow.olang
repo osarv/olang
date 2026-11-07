@@ -1,0 +1,21 @@
+# M19g (F7) hidden route through an index, and round 8's release of a replaced buffer: a Ref into vs[0]'s buffer held
+# across vs[0]'s growth made through another index
+import "std/io"
+
+type blk struct(n I64, m I64) { n, m }
+
+fn main() {
+    vs := Vec<Vec<blk>>()
+    vs.Push(Vec<blk>())
+    vs[0].Push(blk(1, 2))
+    r := vs.RefMut(0).RefMut(0)
+    for i in range 1000 { vs[0].Push(blk(i, i)) }
+    junk := Vec<Vec<blk>>()
+    for i in range 300 {
+        w := Vec<blk>()
+        for j in range 20 { w.Push(blk(-i, -j)) }
+        junk.Push(w)
+    }
+    r.n = 77
+    io.Println("vs[0][0].n " $vs[0][0].n " r.n " $r.n " r.m " $r.m " " $junk.Len())!
+}

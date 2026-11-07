@@ -1,0 +1,35 @@
+# R1 through an enum payload held in the owned object: '(p.lx.e as E.A).toks'
+type Sub struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type E enum {
+    A(s mut Sub&)
+    N
+}
+type Lexer struct() {
+    e E = E.N
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    p := Parser()
+    p.lx = Lexer()
+    p.lx.e = E.A(Sub())
+    for i in range 3 { (p.lx.e as E.A).toks.Push($i "-word-in-the-sub-in-the-lexer's-region") }
+    d := Parser()
+    d.lx = Lexer()
+    d.lx.toks = take (p.lx.e as E.A).toks
+    p.lx = null
+    churn()
+    println(d.lx.toks[0])
+}

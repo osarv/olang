@@ -1,0 +1,46 @@
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+    b own mut Lexer& = Lexer(2)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn deepFail(k I64) {
+    w := Two()
+    for i in range k { w.a.toks.Push(i)
+        w.b.toks.Push(i) }
+    m := take w.a
+    m.toks.Push(5)
+    defer { m.toks.Push(6) }
+    assert k < 0
+}
+fn deepDone(k I64) {
+    w := Two()
+    for i in range k { w.a.toks.Push(i) }
+    {
+        x := take w.a
+        x.toks.Push(1)
+        done
+    }
+}
+test "a failing assert with owning fields alive" {
+    deepFail(50)
+}
+test "done with owning fields alive" {
+    deepDone(40)
+}
+test "after" {
+    assert churn() > 0
+    w := Two()
+    for i in range 100 { w.a.toks.Push(i) }
+    assert w.a.toks[99] == 99
+}

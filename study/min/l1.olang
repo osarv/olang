@@ -1,0 +1,12 @@
+import "std/map"
+type C enum {
+    A
+    B(x Bool)
+}
+fn main() ? {
+    m := map.Map<C, I32>()
+    m.Put(C.A, 1)
+    assert C.A in m
+    flags := map.Map<Bool, I32>()
+    flags.Put(true, 1)
+}

@@ -1,0 +1,2 @@
+Fv(0.1, 0.1, 0.1, 0.1) U8[104, 105] hi <3> Named[<0>, <0>] Cyc(3, Cyc(3, Cyc(3, Cyc(3, Cyc(3, Cyc(3, Cyc(3, Cyc(3, ...)))))))) Wrap.W(Col.Green, "q", <3>) fn(x I32) I32 fn(x I32) I32 String&[] I8[-128, 127] Bool[true, false] Col[Col.Red, Col.Blue] (3, "x3") dbl(x I32) I32 true Col.Blue
+Fv(0.1, 0.1, 0.1, 0.1) U8[104, 105] hi <3> Named[<0>, <0>] Cyc(3, Cyc(3, Cyc(3, Cyc(3, Cyc(3, Cyc(3, Cyc(3, Cyc(3, ...)))))))) Wrap.W(Col.Green, "q", <3>) fn(x I32) I32 fn(x I32) I32 String&[] I8[-128, 127] Bool[true, false] Col[Col.Red, Col.Blue] (3, "x3") dbl(x I32) I32 true Col.Blue

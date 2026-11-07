@@ -1,0 +1,20 @@
+import "std/io"
+type Col enum {
+    Red
+    Green
+    Blue(n I64, s String&)
+}
+type Two enum {
+    A(x I32)
+    B(y I32)
+    C
+}
+M mut I32 = 1
+fn pick(m I32) Col { return Col.Red if m == 0 else Col.Green }
+fn main() ? io.IoError {
+    try io.Print($Two.A(M).Hash() "\n")
+    try io.Print($Two.B(M).Hash() "\n")
+    c := Two.C
+    try io.Print($c.Hash() "\n")
+    try io.Print($pick(M).Hash() "\n")
+}

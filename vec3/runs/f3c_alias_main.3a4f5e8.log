@@ -1,0 +1,10 @@
+/home/user/review/vec3/repro/f3c_alias/main.olang:11:15: error: unknown type 'Vec'
+   11 | fn grow(w mut Vec<I64>&) {
+      |               ^~~
+/home/user/review/vec3/repro/f3c_alias/main.olang:21:19: error: expected an expression, found ')'
+   21 |     v := Vec<I64>()
+      |                   ^
+/home/user/review/vec3/repro/f3c_alias/vlib.olang:1:12: error: unknown type 'Vec'
+    1 | fn View2(v Vec<I64>&) Array<I64>&v { return v.View() }
+      |            ^~~
+compilation failed with 3 errors

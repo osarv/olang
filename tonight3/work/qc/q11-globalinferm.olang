@@ -1,0 +1,6 @@
+G List<I32> = I32[1, 2].ToList()
+M mut := G
+fn main() ? {
+  M.Push(9)
+  println($G.Len())
+}

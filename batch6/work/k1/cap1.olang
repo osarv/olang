@@ -1,0 +1,31 @@
+# P4a/D16c: a clause's captures are copied when the spawn runs - a later change to the variable is not seen, baked or built
+error E {
+    NEG
+}
+fn f(n I64) I64 ? E {
+    if n < 0 { error E.NEG }
+    return n
+}
+fn run(n I64) String {
+    k I64 = 1
+    s := "one"
+    l := List<I64>()
+    l.Push(1)
+    x I64 = 0
+    y String = ""
+    z I64 = 0
+    join {
+        spawn x = try f(n) catch default k
+        spawn y = try fn() String ? E { return "t" $(try f(n)) }() catch default s
+        spawn z = try f(n) catch default l.Len()
+        k = 2
+        s = "two"
+        l.Push(2)
+    }
+    return $x " " $y " " $z
+}
+B1 String = run(-1)
+on mut I64 = 1
+fn main() ? {
+    println($run(-on) " | " $B1)
+}

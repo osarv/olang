@@ -1,0 +1,17 @@
+# r12 DIAGNOSTIC - E11b: the join-piece hints appear only in some positions.
+#   println("a " mark "b")          -> error[E11b] "write '$mark'"                      (good)
+#   println("a " $n mark "b")       -> error: expected ')', found 'mark'                 (a name after a '$' piece)
+#   x := $i "," ("stop" if c else $i)   -> error: expected '(', found end of line        (at the END of the line)
+#   with a line break before the '(' the message is E11b's good "'(' after a piece of text calls it - write '$(...)'"
+# Each was hit writing ../tailer.olang, ../pipeline.olang and ../fetch.olang.
+#
+# expected: E11b's hint ("write '$mark'", "write '$(...)'") at the piece, for all three
+# actual:   the two raw parse errors above (only the first is reported per file; comment lines out to see the next)
+fn main() ? {
+    mark := "!"
+    n := 5
+    c := true
+    println("a " $n mark "b")
+    x := $n "," ("stop" if c else $n)
+    println(x)
+}

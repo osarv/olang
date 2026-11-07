@@ -1,0 +1,34 @@
+type Expr enum {
+    Lit(v I64)
+    Add(a Expr&, b Expr&)
+}
+type Env struct() {
+    vars mut Map<String&, Expr&>
+    order mut List<Expr&>
+}
+fn eval(e Expr&) I64 {
+    return match e {
+        case Expr.Lit(v) => v
+        case Expr.Add(a, b) => eval(a) + eval(b)
+    }
+}
+fn (env mut Env&) define(name String&, e Expr&) {
+    env.vars.Put(name, e)
+    env.order.Push(e)
+}
+fn main() ? {
+    env := Env()
+    one Expr&env = Expr.Lit(1)
+    env.define("one", one)
+    env.define("two", Expr.Add(one, one))
+    total I64 = 0
+    for kv in env.vars { total += eval(kv.Value) }
+    for e in env.order {
+        match e {
+            case Expr.Add(Expr.Lit(x), _) { total += x * 100 }
+            nomatch { }
+        }
+    }
+    x := try env.vars.Get("two") catch { return }
+    println($total " " $x)
+}

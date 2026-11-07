@@ -1,0 +1,11 @@
+type Bag struct(N I64, Sum I64) { N, Sum }
+
+fn Bag.FromIter<I Iterator<I64 ? E>, ? E>(it mut I&) Bag ? E {
+    n := 0
+    s := 0
+    for x in it {
+        n++
+        s += x
+    }
+    return Bag(n, s)
+}

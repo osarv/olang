@@ -1,0 +1,23 @@
+# C9a: a destructor storing a reference to something it built in the closing scope into a global, directly, through a
+# lambda capturing it, and through a by-value copy holding it
+type Node struct(v I64) {
+    v
+}
+type Pair2 struct(a Node&) {
+    a
+}
+G mut Node& = null
+GF mut fn() I64 = fn() I64 { return 0 }
+GP mut Pair2& = null
+type Res struct(k I64) {
+    k
+} destruct {
+    n Node& = Node(k)
+    G = n
+    GF = fn() I64 { return n.v }
+    p := Pair2(n)
+    GP = Pair2(p.a)
+}
+fn main() ? {
+    r Res& = Res(4)
+}

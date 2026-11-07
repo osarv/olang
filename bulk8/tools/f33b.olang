@@ -1,0 +1,9 @@
+import "std/io"
+fn first<T>(xs Array<T>) T {
+    assert xs.Len() > 0, "empty: " $xs.Len()
+    return xs[0]
+}
+fn main() {
+    e := Array<I64>(0)
+    io.Println($first(e))!
+}

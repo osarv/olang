@@ -1,0 +1,22 @@
+type P struct(v I64) { v }
+type E enum {
+    A(p P)
+    Z
+}
+fn mk(b P&) P&b { return P(b.v + 1) }
+fn main() ? {
+    e := E.A(P(10))
+    t I64 = 0
+    for i in range 3000000 {
+        match e {
+            case E.A(y) {
+                k := mk(y)
+                l := List<P&>()
+                l.Push(k)
+                t += l[0].v
+            }
+            case _ { }
+        }
+    }
+    println($t)
+}

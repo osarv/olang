@@ -1,0 +1,14 @@
+ip net.Error.Address("1.2.3")
+addr net.Error.Address("1.2.3.4")
+addr6 net.Error.Address("[::1:80")
+resolve net.Error.UnknownHost("no.such.host.invalid")
+date time.Error.Range
+date2 time.Error.Syntax(19)
+date3 time.Error.Syntax(0)
+re regex.SyntaxError.UnclosedGroup(4)
+re2 regex.SyntaxError.BadRepeat(6)
+re3 regex.SyntaxError.BadRange(4)
+row 2
+csv csv.Error.TextAfterQuote(2)
+json json.Error.Unexpected(1, 13)
+json2 json.Error.Unexpected(3, 2)

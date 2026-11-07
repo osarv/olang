@@ -1,0 +1,9 @@
+type H struct(x Array<I64>&) {
+    X Array<I64>& = x
+}
+type G struct(h H) {
+    In H = h
+}
+fn K(x Array<I64>&) G {
+    return G(H(x if x.Len() > 0 else Array<I64>(4)))
+}

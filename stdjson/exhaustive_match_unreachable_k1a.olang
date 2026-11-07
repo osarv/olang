@@ -1,0 +1,19 @@
+# since checker batch 2, an exhaustive statement match over an enum REFERENCE holds an implicit `unreachable` for a
+# null one, which K1a takes as "it ends the test or the process" - so no function with such a match is evaluable
+# while compiling, and a Str written this way is an error (E11c); `case null` does not help, only `nomatch` does.
+# Also: the "note: here" row has no location.
+type E enum {
+    A
+    B(v I64)
+}
+fn (e E&) Str() String {
+    match e {
+        case E.A { return "a" }
+        case E.B(v) { return "b" $v }
+        case null { return "null" }
+    }
+}
+fn main() ? {
+    x E& = E.B(3)
+    assert $x == "b3"
+}

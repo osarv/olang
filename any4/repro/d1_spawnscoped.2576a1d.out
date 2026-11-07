@@ -1,0 +1,16 @@
+== build -debug -sanitize
+d1_spawnscoped.olang:17:23: error[P1]: 'spawn' takes a call
+   17 |             spawn x = mkp&t(i * 11 + 1)
+      |                       ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+== build
+d1_spawnscoped.olang:17:23: error[P1]: 'spawn' takes a call
+   17 |             spawn x = mkp&t(i * 11 + 1)
+      |                       ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+== interpret
+d1_spawnscoped.olang:17:23: error[P1]: 'spawn' takes a call
+   17 |             spawn x = mkp&t(i * 11 + 1)
+      |                       ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+status 1

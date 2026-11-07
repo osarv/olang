@@ -1,0 +1,43 @@
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf&
+}
+type Outer struct() {
+    o own mut Inner&
+}
+type View struct(x Outer&) {
+    x
+}
+fn (a Outer&) Two() (View&a, I64) { return View(a), 1 }
+fn mkDestr() View {
+    v := Outer()
+    v.o = Inner(6)
+    v.o.deep = Leaf(6)
+    a, b := v.Two()
+    return a
+}
+fn k6() I64 {
+    a := mkDestr()
+    return a.x.o.k
+}
+K I64 = k6()
+fn main() ? {
+    assert k6() == 6
+    println("baked K=" $K)
+    a := mkDestr()
+    churn()
+    println($(a.x.o == null))
+    println("run time: " $k6())
+}

@@ -1,0 +1,11 @@
+fn f(p mut Box&, c Bool) Box {
+    local mut Box& = Box()
+    local.head.v = 77
+    return p if c else local
+}
+fn main() ? {
+    outer mut Box& = Box()
+    r := f(outer, churn() > 0)
+    churn()
+    println($r.head.v)
+}

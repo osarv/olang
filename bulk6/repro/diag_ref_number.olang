@@ -1,0 +1,8 @@
+# diagnostics: Ref on a Vec of numbers is refused inside std/prelude/vec.olang (T24) with an instantiation note,
+# rather than at the call as G18a says a generic's needs are
+fn main() {
+    v := Vec<I64>()
+    v.Push(1)
+    r := v.Ref(0)
+    v.Push(r)
+}

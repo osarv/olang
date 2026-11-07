@@ -1,0 +1,35 @@
+# E31b: the write back after a call goes to x[i] as it is after the call - here an index into storage the call replaced.
+type Big struct() {
+    A I64 = 0
+    B I64 = 0
+    C I64 = 0
+    D I64 = 0
+    E I64 = 0
+    F I64 = 0
+    G I64 = 0
+    H I64 = 0
+}
+type Vec struct() {
+    data mut Array<Big>& = Array<Big>(1)
+    other mut Array<I64>& = Array<I64>(4, 7)
+}
+fn (v Vec&) At(i I64) Big { return v.data[i] }
+fn (v mut Vec&) SetAt(i I64, x Big) { v.data[i] = x }
+fn (v Vec&) Len() I64 { return v.data.Len() }
+fn (b mut Big&) Shrink(v mut Vec&) {
+    b.A = 111
+    b.B = 222
+    b.C = 333
+    b.D = 444
+    b.E = 555
+    b.F = 666
+    b.G = 777
+    b.H = 888
+    v.data = Array<Big>(0)
+    v.other = Array<I64>(4, 7)
+}
+fn main() ? {
+    v := Vec()
+    v[0].Shrink(v)
+    println("len " $v.Len() " other " $v.other)
+}

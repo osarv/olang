@@ -1,0 +1,20 @@
+# a block inside a match used as a value - here a comprehension's loop in a case's value - has an arena of its own, so
+# what its iterations build is reclaimed as they end; it used to have none, and leaked into the function's scope
+import "std/io"
+import "std/os"
+
+fn work(n I64) I64 {
+    t I64 = 0
+    for i in range n {
+        v I64 = match i % 2 {
+            case 0 => I64[($x "abcdefghijklmnopqrstuvwxyz").Len() for x in range 50].Len()
+            nomatch => 1
+        }
+        t = t + v
+    }
+    return t
+}
+
+fn main() ? io.IoError {
+    try io.Print($work(200000 * os.Args().Len()) "\n")
+}

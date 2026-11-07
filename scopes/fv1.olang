@@ -1,0 +1,24 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 3000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn mk(v I32) Node& { return Node(v) }
+fn getF() fn(v I32) Node& { return mk }
+fn main() ? {
+    f fn(v I32) Node& = mk
+    k1 Node& = Node(1)
+    k2 Node& = Node(1)
+    k3 Node& = Node(1)
+    fs := Array<fn(v I32) Node&>(1, mk)
+    for i in range 2 {
+        k1 = f(41)
+        k2 = getF()(42)
+        k3 = fs[0](43)
+    }
+    churn()
+    try io.Print($k1.v " " $k2.v " " $k3.v "\n")
+}

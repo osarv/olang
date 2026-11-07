@@ -1,0 +1,12 @@
+# check: run
+# flags: -D X=-0x10
+# B10: a negative hexadecimal build constant has one value - the token evaluator's and the program's
+if X == -16 {
+    fn pick() I32 { return 1 }
+} else {
+    fn pick() I32 { return 2 }
+}
+fn main() ? {
+    assert pick() == 1
+    assert X == -16
+}

@@ -1,0 +1,14 @@
+import "std/io"
+type P struct(v I32) {
+    v
+}
+fn f(p P&) P { return p }
+if f(P(4)) == P(4) {
+    Which I32 = 1
+} else {
+    Which I32 = 2
+}
+M mut I32 = 4
+fn main() ? io.IoError {
+    try io.Print("chosen " $Which ", but at run time f(P(4)) == P(4) is " $(f(P(M)) == P(M)) "\n")
+}

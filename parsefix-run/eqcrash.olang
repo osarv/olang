@@ -1,0 +1,4 @@
+test "x" {
+    b := String(Array<U8>(5, 'x'))
+    assert a == b
+}

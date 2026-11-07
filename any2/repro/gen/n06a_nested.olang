@@ -1,0 +1,42 @@
+import "std/io"
+# an array of array references whose texts die with the block
+type W trait {
+    Show() String
+}
+type P struct(s String&) { s }
+type Rows extends Array<String&>
+fn (r Rows&) Show() String { return "rows " $r.Len() " " $r[0] }
+type Grid extends Array<Array<String&>&>
+fn (g Grid&) Show() String { return "grid " $g[0][0] }
+type Ps extends Array<P>
+fn (p Ps&) Show() String { return "ps " $p[0].s }
+fn keepIt<T W>(xs mut List<any W&>&, x T) { xs.Push(x) }
+fn main() {
+    xs := List<any W&>()
+    for i in range 3 {
+        t := "t" $i "-" $(i * 7)
+        inner := String&[t, t]
+        g := Array<Array<String&>&>(1, inner)
+        xs.Push(Grid(g))
+    }
+    churn()
+    for x in xs { say(x.Show()) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

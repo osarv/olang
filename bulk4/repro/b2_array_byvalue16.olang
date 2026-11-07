@@ -1,0 +1,13 @@
+import "std/io"
+
+fn walk(a Array<I64>, n I64) I64 {
+    c := I64[n * 7, n * 7, n * 7, n * 7, n * 7, n * 7, n * 7, n * 7, n * 7, n * 7, n * 7, n * 7, n * 7, n * 7, n * 7, n * 7]
+    s := c[0] + c[15]
+    if n == 0 { return a.Sum() + s }
+    b := I64[n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n]
+    become walk(b, n - 1)
+}
+
+fn main() {
+    io.Println($walk(I64[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 3))!
+}

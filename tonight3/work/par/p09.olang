@@ -1,0 +1,26 @@
+type P struct(v I64) {
+    v
+}
+fn mk(out mut P&) {
+    k I64 = 0
+    q mut P& = P(0)
+    q, k = P(5), 1
+    out.v = q.v
+}
+fn grab() P& {
+    a mut P& = P(0)
+    b mut P& = P(0)
+    a, b = P(5), P(6)
+    return b
+}
+fn deep(n I64) I64 {
+    x := Array<I64, 64>()
+    for i in range 64 { x[i] = -7 }
+    if n == 0 { return x[3] }
+    return deep(n - 1) + x[5]
+}
+fn main() ? {
+    r := grab()
+    deep(20)
+    println($r.v)
+}

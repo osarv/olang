@@ -1,0 +1,16 @@
+== b18_setat
+  san:    refused: b18_setat.olang:28:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  O3:     refused
+  interp: exit 0 setat 12|
+--- compile (-debug -sanitize)
+b18_setat.olang:28:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   28 |         l[0] = mkp&t(i * 11 + 1)
+      |              ^
+/home/user/wt/rvany4/std/prelude/list.olang:170:9: note: the callee requires it because of this statement
+  170 |         l.s.first[i] = x
+      |         ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+setat 12

@@ -1,0 +1,40 @@
+import "std/io"
+# a closed trait listing one instance of a generic, matched by a type case naming the generic
+type Shape trait for Box<I64>, Dot {
+    Area() I64
+}
+type Box<T> struct(v T, n I64) {
+    v
+    n
+}
+fn (b Box<T>&) Area() I64 { return b.n }
+type Dot struct(k I64) { k }
+fn (d Dot&) Area() I64 { return 0 }
+fn kind(s any Shape&) String {
+    match s {
+        case Box b { return "box " $b.v }
+        case Dot _ { return "dot" }
+    }
+}
+fn main() {
+    x any Shape& = Box<I64>(5, 2)
+    say(kind(x))
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

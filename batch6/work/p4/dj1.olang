@@ -1,0 +1,38 @@
+# P4b/S19: a try join inside deferred code registered in a failing join block, and a plain join there
+error E {
+    NEG
+}
+fn g(c mut Array<I64>&, k I64, n I64) ? E {
+    c[k] = c[k] + 1
+    if n < 0 { error E.NEG }
+}
+fn f(c mut Array<I64>&, a I64, b I64) I64 {
+    try join {
+        defer {
+            try join { spawn try g(c, 0, b) } catch E { c[1] = c[1] + 10 }
+            join { spawn try g(c, 2, 1) catch E { } }
+        }
+        spawn try g(c, 3, a)
+        if a < -5 { return 99 }
+    } catch E {
+        c[4] = c[4] + 100
+        return 5
+    }
+    return 7
+}
+fn run(a I64, b I64) String {
+    c := Array<I64>(5)
+    r := f(c, a, b)
+    return $r " " $c
+}
+B1 String = run(-1, -1)
+B2 String = run(1, -1)
+B3 String = run(-9, 1)
+B4 String = run(1, 1)
+on mut I64 = 1
+fn main() ? {
+    println($run(-on, -on) " | " $B1)
+    println($run(on, -on) " | " $B2)
+    println($run(-9 * on, on) " | " $B3)
+    println($run(on, on) " | " $B4)
+}

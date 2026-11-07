@@ -1,0 +1,22 @@
+fn main() ? {
+    a mut List<I64>& = List<I64>()
+    b mut List<I64>& = List<I64>()
+    c mut List<I64>& = List<I64>()
+    d mut List<I64>& = List<I64>()
+    join {
+        spawn fn() { for i in range 2000000 { a.Push(i) } }
+        spawn fn() { for i in range 2000000 { b.Push(i + 1000000) } }
+        spawn fn() { for i in range 2000000 { c.Push(i + 20000000) } }
+        spawn fn() { for i in range 2000000 { d.Push(i + 3000000) } }
+    }
+    bad I64 = 0
+    i I64 = 0
+    for x in a { if x != i { bad++ } i++ }
+    i = 0
+    for x in b { if x != i + 1000000 { bad++ } i++ }
+    i = 0
+    for x in c { if x != i + 20000000 { bad++ } i++ }
+    i = 0
+    for x in d { if x != i + 3000000 { bad++ } i++ }
+    println("wrong elements: " $bad)
+}

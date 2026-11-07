@@ -1,0 +1,5 @@
+type Box struct() {
+    Data own mut Array<I64>& = Array<I64>(4, 9)
+}
+G own mut Box& = Box()
+fn Drop() { G = Box() }

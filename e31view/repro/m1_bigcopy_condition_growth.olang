@@ -1,0 +1,25 @@
+# Memory: an element over 64KB (its hidden copy, like any temporary over 64KB, comes from the block's arena, T7c) lent
+# as a view in a loop's CONDITION - evaluated in the enclosing block, never closed while the loop runs - so every
+# evaluation keeps At's result AND the view's hidden copy: 2 x 72KB per turn, unbounded. The class is pre-existing
+# (m1b: a plain big temporary in a condition grows the same, base and new); the view lend doubles it.
+type Big struct() {
+    a Array<I64, 9000> = Array<I64, 9000>()
+}
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+    big Big = Big()
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn put(v mut V&, x I64) I64 {
+    v.d[v.n] = v.d[v.n] + x
+    return v.d[v.n]
+}
+fn main() ? {
+    s := Vs(Array<I64>(8))
+    for put(s[0], 1) < 5000 { }
+    println($s.d[0])
+}

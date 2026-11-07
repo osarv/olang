@@ -1,0 +1,15 @@
+type Item struct(n I64) {
+    n
+}
+fn find(l List<Item&>&, n I64) Item&l ? {
+    for x in l {
+        if x.n == n { return x }
+    }
+    error
+}
+fn main() ? {
+    l := List<Item&>()
+    l.Push(Item(4))
+    it := try find(l, 4)
+    assert it.n == 4
+}

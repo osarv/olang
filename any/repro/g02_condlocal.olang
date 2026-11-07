@@ -1,0 +1,16 @@
+# a conditional choosing between a loop-local struct and an outer one, made an any kept outside
+type W trait {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+fn main() {
+    xs := List<any W&>()
+    keep := Btn("keep")
+    for i in range 4 {
+        loc := Btn("loc" $i)
+        xs.Push(loc if i > 1 else keep)
+    }
+    churn()
+    for x in xs { say(x.Draw()) }
+}

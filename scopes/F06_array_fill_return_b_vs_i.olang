@@ -1,0 +1,13 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+fn mkNodes(v I32) Array<mut Node&>& { return Array<mut Node&>(2, Node(v)) }
+fn mkNodes2(v I32) Array<mut Node&>& {
+    n Node&return = Node(v)
+    return Array<mut Node&>(2, n)
+}
+fn main() ? {
+    a := mkNodes(43)
+    b := mkNodes2(44)
+    c := Array<mut Node&>(2, Node(45))
+    try io.Print($a[0].v " " $a[1].v " " $b[0].v " " $c[0].v " " $c[1].v "\n")
+}

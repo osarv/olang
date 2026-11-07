@@ -1,0 +1,23 @@
+# can a catch default read a local its block declared? (value position)
+type CB struct() {
+    text own mut String& = $1 "-ttttttttttttttt"
+}
+fn f(k I64) String& ? {
+    if k > 1 { error }
+    return "ok"
+}
+fn main() ? {
+    c := CB()
+    x := try f(5) catch { t := c.text } default t
+    c.text = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    println(x)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}

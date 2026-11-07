@@ -1,0 +1,36 @@
+import "std/io"
+
+type Holder struct(n I64) {
+    n
+    L List<String&>
+}
+fn (h mut Holder&) Keep(s String&) { h.L.Push(s) }
+fn each(hs mut List<mut Holder&>&, f fn(h mut Holder&)) {
+    for h in hs { f(h) }
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(s String&) String { return $s "-made" }
+
+fn main() {
+    hs := List<mut Holder&>()
+    hs.Push(Holder(1))
+    hs.Push(Holder(2))
+    for i in range 10 {
+        t := $i
+        each(hs, fn(h mut Holder&) {
+            h.Keep(mk(t) if i >= 0 else "")
+            h.Keep(match i % 2 {
+                case 0 => mk(t)
+                case _ => ""
+            })
+        })
+        churn()
+    }
+    churn()
+    io.Println($hs[1].L[6] " " $hs[0].L[8] " " $hs[0].L.Len())!
+}

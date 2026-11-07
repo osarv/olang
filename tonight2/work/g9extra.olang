@@ -1,0 +1,5 @@
+fn ap(x <T>) T { return x }
+fn main() ? {
+    k := ap(1, fn(a I64) I64 { return a })
+    println($k)
+}

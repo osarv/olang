@@ -1,0 +1,9 @@
+type N struct(v I32) {
+    v
+    next mut N& = null
+}
+test "x" {
+    a N& = N(1)
+    b N& = N(2)
+    a.next = b.nxt
+}

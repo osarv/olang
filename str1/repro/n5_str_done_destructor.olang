@@ -1,0 +1,22 @@
+# NEW (minor), CONFIRMED. 'done' inside Str in a test: Res(1), built in the temp scope rdPutStr opens, never
+# destructs (that scope is not on P1d's unwind chain); Res(2) in Str's own block does. Base refuses (E11c).
+type Res struct(k I64) {
+    k
+} destruct { println("Res destructed " $k) }
+type Bag struct(n I64) {
+    n
+}
+fn (b Bag&) Str() String {
+    r Res&b = Res(1)
+    q := Res(2)
+    if b.n == 7 { done }
+    return "b"
+}
+test "done inside Str" {
+    b := Bag(7)
+    s := $b
+    println("not reached " $s)
+}
+test "after" {
+    println("second test runs")
+}

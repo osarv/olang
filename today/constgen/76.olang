@@ -1,0 +1,9 @@
+# E32b: 'as' to a fixed array without the reference marker, from text, and of the wrong element type
+fn main() ? {
+    a := I64[1, 2, 3]
+    b := a as Array<I64, 3>
+    s := "abc"
+    c := s as Array<Char, 3>&
+    d := a as Array<I32, 3>&
+    println($b $c $d)
+}

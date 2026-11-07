@@ -1,0 +1,19 @@
+# P4: spawning a fallible Call value with try
+error B {
+    B1
+}
+type Ctr struct(k I64) {
+    k
+}
+fn (c Ctr&) Call(n I64) I64 ? B {
+    if n == c.k { error B.B1 }
+    return n
+}
+fn main() ? {
+    c := Ctr(3)
+    x := try c(4)
+    try join {
+        spawn try c(3)
+    } catch B { println("caught") }
+    println($x)
+}

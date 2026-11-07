@@ -1,0 +1,22 @@
+import "std/io"
+
+type Pt struct(x I64, y I64) {
+    x, y
+}
+
+fn gen(p Pt&) Iterator<I64> {
+    yield p.x
+    yield p.y
+}
+
+fn main() {
+    gs := Vec<Generator<I64>>()
+    for k in range 3 {
+        gs.Push(gen(Pt(k, k * 10)))
+    }
+    total I64 = 0
+    for g in gs {
+        for x in g { total = total * 100 + x }
+    }
+    io.Println($total)!
+}

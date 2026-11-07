@@ -1,0 +1,6 @@
+type Box struct(P mut Array<I64>&) { P }
+G := List<I64>()
+fn main() ? {
+  G.Push(9)
+  println($G.Len())
+}

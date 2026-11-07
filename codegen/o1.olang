@@ -1,0 +1,10 @@
+import "std/io"
+
+fn main() ? io.IoError + BuiltinError {
+    n I64 = 2305843009213693953
+    a Array<I64>& = Array<I64>(n)
+    try io.Print("len " $a.Len() "\n")
+    b := Array<I64>(4, 1)
+    try a[3] = 77
+    try io.Print("b " $b "\n")
+}

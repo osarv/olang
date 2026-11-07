@@ -1,0 +1,20 @@
+fn main() ? {
+    m := Map<I64, I64>()
+    for i in range 16 { m.Put(i, i) }
+    seenK := List<I64>()
+    for k in m.Keys() {
+        seenK.Push(k)
+        for j in range 16 { if j != k { m.Remove(j) } }
+    }
+    m2 := Map<I64, I64>()
+    for i in range 16 { m2.Put(i, i) }
+    seenE := List<I64>()
+    for e in m2 {
+        seenE.Push(e.Key)
+        for j in range 16 { if j != e.Key { m2.Remove(j) } }
+    }
+    println("keys walk " $seenK.Len() " entries walk " $seenE.Len() " len " $m.Len() " " $m2.Len())
+    sb := StringBuilder()
+    for k in seenK { sb.Push($k ",") }
+    println(sb.ToString())
+}

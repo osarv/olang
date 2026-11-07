@@ -1,0 +1,12 @@
+type A enum {
+    Leaf(v I64)
+    Box(b B&)
+}
+type B enum {
+    One(a A&)
+    Two(v I64)
+}
+fn main() ? {
+    x A& = A.Box(B.Two(3))
+    println($x)
+}

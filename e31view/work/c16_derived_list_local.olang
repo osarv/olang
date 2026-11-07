@@ -1,0 +1,29 @@
+# elements with a "&h" field held in a List (At gives copies with no per-instance bindings); a view callee hangs the
+# caller's loop-local node off the node the field names, which lives where the list's elements' references do
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type E struct(h mut Node&, n I64) {
+    head mut Node&h = h
+    n
+}
+fn hang(e mut E&, x mut Node&) { e.head.next = x }
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn main() ? {
+    root := Node(1)
+    l := List<E>()
+    l.Push(E(root, 0))
+    for k in range 3 {
+        x := Node(100 + k)
+        t := l[0]
+        hang(t, x)
+    }
+    churn()
+    println($root.next.v)
+}

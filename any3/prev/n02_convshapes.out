@@ -1,0 +1,12 @@
+== build -debug -sanitize
+s=hello u=world
+lab Zello lab Zello lab Zello lab Zorld lab Zorld lab Zorld
+status 0
+== build
+s=hello u=world
+lab Zello lab Zello lab Zello lab Zorld lab Zorld lab Zorld
+status 0
+== interpret
+s=hello u=world
+lab Zello lab Zello lab Zello lab Zorld lab Zorld lab Zorld
+status 0

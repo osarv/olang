@@ -1,0 +1,10 @@
+import "std/io"
+import "std/bitset"
+
+type Color enum { Red, Green, Blue }
+
+fn main() {
+    s := bitset.BitSet<Color>(12)
+    io.Println("Len " $s.Len() " Bits " $s.Bits())!
+    for c in s { io.Println($c)! }
+}

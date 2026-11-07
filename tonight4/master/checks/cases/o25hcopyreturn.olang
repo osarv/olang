@@ -1,0 +1,27 @@
+# check: run
+# O25h/O26a: an element of a local array, returned, is read where the result is put, so the array - built here -
+# lives there with what its elements refer to, and the copy returned keeps it. It used to be an error (O26)
+type WC struct(word String&, count I64) {
+    word
+    count
+}
+fn mk(n I64) WC {
+    a := Array<WC>(1)
+    a[0] = WC($n $n, 1)
+    return a[0]
+}
+fn main() ? {
+    w := mk(12)
+    churn()
+    assert w.count == 1 and w.word == "1212"
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 50 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        x := $i $i $i $i
+        t += x.Len()
+    }
+    return t
+}

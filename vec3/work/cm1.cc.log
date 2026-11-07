@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/cm1.olang:10:22: error[E27]: a comprehension's elements may not be or hold references yet - build the array with a loop
+   10 |     xs := Array<I64>&[w.View() for i in range 2]
+      |                      ^
+compilation failed with 1 error

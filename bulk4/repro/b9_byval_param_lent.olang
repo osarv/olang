@@ -1,0 +1,29 @@
+import "std/io"
+
+type P struct(x I64, y I64, z I64) { x, y, z }
+
+fn spoil(n I64) I64 {
+    a := I64[n, n, n, n, n, n, n, n, n, n, n, n]
+    return a.Sum()
+}
+
+fn f(p P, q P&, n I64) I64 {
+    if n == 0 {
+        s := spoil(99)
+        return q.x + q.y + q.z + s - s
+    }
+    become f(P(n, n, n), p, n - 1)
+}
+
+fn g(a Array<I64>, b Array<I64>&, n I64) I64 {
+    if n == 0 {
+        s := spoil(99)
+        return b.Sum() + s - s
+    }
+    become g(I64[n, n, n, n], a, n - 1)
+}
+
+fn main() {
+    io.Println($f(P(1, 2, 3), P(4, 5, 6), 2))!
+    io.Println($g(I64[1, 2, 3, 4], I64[0, 0, 0, 0], 2))!
+}

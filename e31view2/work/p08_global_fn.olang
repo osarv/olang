@@ -1,0 +1,10 @@
+type Acc struct() {
+    N I64 = 0
+}
+G mut fn(c mut Acc&) = fn(c mut Acc&) { c.N++ }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    G(l[0])
+    println("list N " $l[0].N)
+}

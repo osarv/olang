@@ -1,0 +1,20 @@
+# CONFIRMED, introduced by 7345ff9 (P2) and not closed by e27b83b: a promoted try of a fallible constructor whose
+# 'catch default' is itself a constructor call registers the default's instance twice (cgStoreArm's promotion
+# hand-off covers conditional and match arms, not a try's default). Two distinct copies destructed.
+# e27b83b and 7345ff9 (-b and -b -s): 'x 5', 'destruct 5 (... before: false)' TWICE, 'end'. b6259d1: once.
+error E { X }
+type FRes struct(k I64) ? E {
+    k
+    gone Bool = false
+    if k < 0 { error E.X }
+} destruct {
+    println("destruct " $k " (this instance destructed before: " $gone ")")
+    gone = true
+}
+fn main() ? {
+    {
+        x := try FRes(-1) catch default (try FRes(5) catch { unreachable })
+        println("x " $x.k)
+    }
+    println("end")
+}

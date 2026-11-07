@@ -1,0 +1,19 @@
+import "std/io"
+type Node struct(v I64) { v }
+type E error { STOP }
+fn g(i I64) I64 ? E {
+    if i >= 3 { error E.STOP }
+    return i
+}
+fn sink(x I64) { }
+
+fn probe(c Bool) I64 {
+    n Node&
+    i I64 = 0
+    for {
+        if i > 9 { return try g(i) catch { break } }
+        i++
+    }
+    return n.v
+}
+fn main() { io.Println($probe(true))! }

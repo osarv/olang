@@ -1,0 +1,17 @@
+# NEW, CONFIRMED unbounded leak - n4 through an error propagating out of a piece. Peak RSS new 1,542,904 KB vs base 1,576 KB.
+fn g(i I64) I64 ? {
+    if i % 2 == 0 { error }
+    return i
+}
+fn h(big Array<I64>&, i I64) I64 ? {
+    s := $big $(try g(i))
+    return s.Len()
+}
+fn main() ? {
+    big := Array<I64>(200, 123456)
+    n I64 = 0
+    for i in range 2000000 {
+        n += try h(big, i) catch default 0
+    }
+    println($n)
+}

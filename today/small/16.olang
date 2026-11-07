@@ -1,0 +1,19 @@
+# D13c: a List of a type with no zero value (its constructor has an effect) - push, empty ToArray, Map, Filter
+Made mut I64 = 0
+type Ticket struct(n I64) {
+    Made = Made + 1
+    n
+}
+fn main() ? {
+    l := List<Ticket>()
+    e := l.ToArray()
+    println("empty: " $e.Len() " made " $Made)
+    for i in range 20 { l.Push(Ticket(i)) }
+    a := l.ToArray()
+    m := l.Iter().Map(fn(t Ticket) I64 { return t.n * 2 })
+    f := l.Iter().Filter(fn(t Ticket) Bool { return t.n % 3 == 0 })
+    println($a.Len() " " $a[19].n " " $m.Len() " " $f.Len() " made " $Made)
+    k := List<Ticket>()
+    km := k.Iter().Map(fn(t Ticket) I64 { return t.n })
+    println($km.Len())
+}

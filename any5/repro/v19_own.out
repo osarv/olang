@@ -1,0 +1,16 @@
+== build -debug -sanitize
+v19_own.olang:9:13: error: expected end of line, found 'mut'
+    9 |     buf own mut Array<I64>& = Array<I64>(3, 7)
+      |             ^~~
+compilation failed with 1 error
+== build
+v19_own.olang:9:13: error: expected end of line, found 'mut'
+    9 |     buf own mut Array<I64>& = Array<I64>(3, 7)
+      |             ^~~
+compilation failed with 1 error
+== interpret
+v19_own.olang:9:13: error: expected end of line, found 'mut'
+    9 |     buf own mut Array<I64>& = Array<I64>(3, 7)
+      |             ^~~
+compilation failed with 1 error
+status 1

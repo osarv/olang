@@ -1,0 +1,13 @@
+# OVER-REJECTION (D16c): a lambda may not capture a local struct that holds any reference, even to read a number
+# field - "a copy of this loses its references' scopes". Met updating per-sensor Map entries from readings
+# (Reading(Sensor String&, Value F64)): every rd.Value inside the Update lambda. Workaround: v := x.Value first.
+type Reading struct(Sensor String&, Value F64) {
+    Sensor
+    Value
+}
+
+fn main() ? {
+    x := Reading("a", 1.5)
+    f := fn(t F64) F64 { return t + x.Value }
+    println($f(1.0))
+}

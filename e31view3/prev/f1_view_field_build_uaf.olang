@@ -1,0 +1,31 @@
+# F1 (NEW in c9d14a7, kept by 15841b0): a struct value FIELD of x[i] lent as a view to a callee that builds through
+# a reference of it - built in the hidden copy's block, stored in the shared node. -b prints garbage (199007), -b -d -s
+# reports use after scope closed, -i prints 12. The whole-element form (f1x below, v03) is O17's error, as is this one once
+# the hidden copy's references are placed where the collection's are. d05c915 refused it (E31b).
+# a struct (non-handle) field of x[i] lent to a view callee that builds a node through a reference of it
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type M struct(r mut Node&, off I64) {
+    r
+    off
+}
+type Layer struct(w M, n I64) {
+    w
+    n
+}
+fn g(m mut M&, v I64) { m.r.next = Node(v, null) }
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn main() ? {
+    l := List<Layer>()
+    l.Push(Layer(M(Node(1, null), 0), 0))
+    for i in range 3 { g(l[0].w, i + 10) }
+    churn()
+    println($l[0].w.r.next.v)
+}

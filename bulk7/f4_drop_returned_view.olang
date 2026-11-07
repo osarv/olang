@@ -1,0 +1,37 @@
+# F4 (use after release; NEW, O15 48a4e5b): a by-value holder `x Res = Res(n)` whose storage flows into the result -
+# returned as a reference (`Res&` result), as an `any Named&`, or held by a returned struct's reference field - lives
+# where the result goes (O26a), but its drop flag is not cleared (only a whole local returned by value is a landing),
+# so its destructor runs at the callee's end while the caller still reads it. Prints "ref 5 ended 5" and
+# "held 6 ended 56"; expected "ended 0" in both (written `x := Res(n)` - held where the call lands, O16 - it is 0).
+# The `any Named&` form behaves the same (work/d7b.olang: "any 5 ended 5").
+#   /home/user/wt/review7/build/olang f4_drop_returned_view.olang   (interpret agrees)
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type Ref struct(r Res&) {
+    r
+}
+
+fn mk(n I64) Res& {
+    x Res = Res(n)
+    return x
+}
+
+fn wrap(n I64) Ref {
+    x Res = Res(n)
+    return Ref(x)
+}
+
+fn main() {
+    a := mk(5)
+    io.Println("ref " $a.id " ended " $Ended)!
+    b := wrap(6)
+    io.Println("held " $b.r.id " ended " $Ended)!
+}

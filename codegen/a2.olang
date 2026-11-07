@@ -1,0 +1,17 @@
+import "std/io"
+
+fn two() (Array<I32>, I32) {
+    a := Array<I32>(8, 5)
+    return a, 1
+}
+
+fn churn() I64 {
+    junk := Array<I32>(64, 99)
+    return junk.Len()
+}
+
+fn main() ? io.IoError {
+    x, n := two()
+    k := churn()
+    try io.Print($x " " $n " " $k "\n")
+}

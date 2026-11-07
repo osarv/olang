@@ -1,0 +1,3 @@
+names: String&["e", "b", "d"] evicted String&["b", "c", "a"]
+hits 6469 misses 6830 model agrees false
+baked: (147, 184, false)

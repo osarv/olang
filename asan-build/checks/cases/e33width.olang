@@ -1,0 +1,5 @@
+# check: fail a float is made from the bits of the unsigned integer type of its width
+error E { X }
+fn main() ? E {
+    f := U32(1).F64FromBits()
+}

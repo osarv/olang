@@ -1,0 +1,13 @@
+# control: the reference given at construction is caught
+type Holder struct(name mut String&) {
+    name
+}
+fn make() Holder {
+    a := "alpha" $3
+    h := Holder(a)
+    return h
+}
+fn main() ? {
+    h := make()
+    println($h.name)
+}

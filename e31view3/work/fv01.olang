@@ -1,0 +1,21 @@
+# a handle a call through a function value gives, then lent (receiver of Len/At/Iter, a writable parameter)
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn pushTo(l mut List<I64>&, x I64) { l.Push(x) }
+fn main() ? {
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    g := fn() List<I64> { return ll[0] }
+    for i in range 3 {
+        pushTo(g(), i + 7)
+        g().Push(i + 20)
+        churn()
+    }
+    churn()
+    println("len " $g().Len() " first " $g()[0])
+    for x in g() { println("x " $x) }
+}

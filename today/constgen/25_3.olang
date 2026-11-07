@@ -1,0 +1,22 @@
+type Holder struct() {
+    name mut String& = null
+}
+fn make() Holder {
+    a String& = "alpha" $3
+    h := Holder()
+    h.name = a
+    return h
+}
+fn churn() I64 {
+    s I64 = 0
+    for i in range 1000 {
+        t := "xxxxxxxxxxxxxxxxxxxxxxxx" $i
+        s = s + t.Len()
+    }
+    return s
+}
+fn main() ? {
+    h := make()
+    println($churn())
+    println($h.name)
+}

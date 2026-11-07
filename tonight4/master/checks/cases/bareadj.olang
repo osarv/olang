@@ -1,0 +1,7 @@
+# check: fail error[E11b]: a join piece is a text literal or a '$' rendering - write '$b'
+error E { X }
+fn f(a Array<U8>&) { }
+fn main() ? E {
+    b := "y"
+    f("a" b)
+}

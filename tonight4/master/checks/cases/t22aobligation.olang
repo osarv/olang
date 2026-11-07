@@ -1,0 +1,18 @@
+# check: fail error[T22a]: 'hang' relates its arguments' scopes, which a call through a function value cannot check
+# T22a: hang requires b to outlive a, which a call through a function value would never check
+type Node struct(v I32) {
+    v
+    next mut Node& = null
+}
+fn hang(a mut Node&, b Node&) {
+    a.next = b
+}
+fn apply(f fn(a mut Node&, b Node&), a mut Node&, b Node&) {
+    f(a, b)
+}
+error E { X }
+fn main() ? E {
+    a mut Node& = Node(1)
+    b Node& = Node(2)
+    apply(hang, a, b)
+}

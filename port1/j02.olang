@@ -1,0 +1,12 @@
+# memory: D9b - a generic's by-value parameter bound to an array value, written by the body, copied per call
+import "std/io"
+fn firstUp<T>(x T) I64 {
+    x[0] = 'Z'
+    return x.Len()
+}
+fn main() ? io.IoError {
+    s := "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"
+    t I64 = 0
+    for k in range 1000000 { t = t + firstUp(s) }
+    try io.Println($t " " $s)
+}

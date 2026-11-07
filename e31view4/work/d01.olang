@@ -1,0 +1,39 @@
+import "std/io"
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { abort }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+# Pair holds two mut Node& fields; a call returns such a pair by value, the two fields from different scopes
+type Pair2 struct() {
+    a mut Node& = null
+    b mut Node& = null
+}
+fn mk(outer mut Node&, inner mut Node&) Pair2 {
+    p := Pair2()
+    p.a = outer
+    p.b = inner
+    return p
+}
+# callee builds through p.a (whose node is the longer-lived outer) and through p.b (shorter)
+fn grow(p Pair2&, v I64) {
+    p.a.next = Node(v, p.a.next)
+    p.b.next = Node(v, p.b.next)
+}
+fn main() ? {
+    outer := Node(100, null)
+    for i in range 3 {
+        inner := Node(0, null)
+        grow(mk(outer, inner), i + 1)
+        churn()
+    }
+    churn()
+    n := 0
+    for x := outer, x != null, x = x.next { n = n * 10 + x.v }
+    try io.Println($n)
+}

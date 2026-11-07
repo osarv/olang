@@ -1,0 +1,2 @@
+type C32 struct() { }
+fn main() ? { }

@@ -1,0 +1,14 @@
+# the E25 hole: a built result given a scope argument naming a loop body's local, assigned to an outer struct's field
+type P struct(n I64) { n }
+type H struct(p P?&) { p }
+fn mkp(i I64) P& { return P(i) }
+fn main() {
+    h := H(null)
+    xs := List<P&>()
+    for i in range 2 {
+        t := "inner" $i
+        h.p = mkp&t(i * 11 + 1)
+    }
+    assert churn() > 0
+    say("field " $h.p!.n)
+}

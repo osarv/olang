@@ -1,0 +1,20 @@
+# P4a: a clause holding a loop whose break leaves only the loop, in value position (it must give the target a value)
+error E {
+    NEG
+}
+fn f(n I64) I64 ? E {
+    if n < 0 { error E.NEG }
+    return n
+}
+fn a1(n I64) I64 {
+    x I64 = 0
+    join {
+        spawn x = try f(n) catch E {
+            for { break }
+        }
+    }
+    return x
+}
+fn main() ? {
+    println($a1(-1))
+}

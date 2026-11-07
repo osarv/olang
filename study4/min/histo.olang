@@ -1,0 +1,39 @@
+# a parallel histogram with atomic adds on array elements, a spawn target that is a struct field reached through a
+# reference, and parallel os.Exec with large outputs
+import "std/os"
+
+type Job struct() {
+    total I64 = 0
+    lines I64 = 0
+}
+
+fn fill(counts mut Array<I64>&, lo I64, hi I64) I64 {
+    for i in range lo, hi {
+        x := (i * 2654435761) % 1000003
+        counts[x % counts.Len()].AtomicAdd(1)
+    }
+    return hi - lo
+}
+
+fn seqLines(n I64) I64 {
+    out := try os.Exec(String&["seq", "1", $n]) catch { return -1 }
+    return out.Stdout.Lines().Count(fn(l String&) Bool { return true })
+}
+
+fn main() ? {
+    counts := Array<I64>(64)
+    taken := Array<I64>(8)
+    join {
+        for t in range 8 { spawn taken[t] = fill(counts, t * 125000, (t + 1) * 125000) }
+    }
+    sum := counts.Fold(I64(0), fn(a I64, c I64) I64 { return a + c })
+    println("histogram total " $sum ", tasks " $taken.Fold(I64(0), fn(a I64, c I64) I64 { return a + c }))
+    j mut Job& = Job()
+    jobs := Array<mut Job&>(4)
+    for i in range 4 { jobs[i] = Job() }
+    join {
+        spawn j.total = fill(counts, 0, 1000)
+        for i in range 4 { spawn jobs[i].lines = seqLines(200000 + i) }
+    }
+    println("field target " $j.total ", exec lines " $jobs[0].lines " " $jobs[1].lines " " $jobs[2].lines " " $jobs[3].lines)
+}

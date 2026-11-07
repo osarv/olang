@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/g8.olang:15:16: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+   15 |     Docs.alias = Docs.title
+      |                ^
+compilation failed with 1 error

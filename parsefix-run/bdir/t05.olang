@@ -1,0 +1,11 @@
+# text join, block comment, one-line blocks
+fn g(a I32) I32 { return a }
+test "a" {
+    n I32 = 4
+    s := "n is " $n "!" ## inline ## 
+    assert s == "n is 4!"
+    t := "ab" "cd"
+    assert t == "abcd"
+    if n > 3 { n = 3 }
+    assert g(n) == 3
+}

@@ -1,0 +1,11 @@
+# check: run
+# T29e/G19: a method an "extends" type inherits meets a trait as it answers a direct call
+type Counter trait {
+  Count(keep fn(x I32) Bool) I64
+}
+fn n(c <C Counter>&) I64 { return c.Count(fn(x I32) Bool { return x > 1 }) }
+type Ints extends Array<I32>
+fn main() ? {
+  a Ints = Ints(I32[1, 2, 3])
+  assert n(a) == 2
+}

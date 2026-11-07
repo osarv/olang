@@ -1,0 +1,31 @@
+# take of a Vec field of an object an own reference local holds - its words are in that object's region, released at
+# the return
+type Lex struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn mk() Vec<String&> {
+    o own mut Lex& = Lex()
+    for i in range 3 { o.toks.Push($i "-word-in-o's-region") }
+    w := take o.toks
+    return w
+}
+fn mk2() Vec<String&> {
+    o own mut Lex& = Lex()
+    for i in range 3 { o.toks.Push($i "-word-in-o's-region") }
+    return take o.toks
+}
+fn main() ? {
+    a := mk()
+    b := mk2()
+    churn()
+    println(a[0])
+    println(b[0])
+}

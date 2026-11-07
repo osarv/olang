@@ -1,0 +1,28 @@
+type E enum {
+    Lit(v I64)
+    Add(a E&, b E&)
+}
+type Keep struct() { x mut E& = null }
+fn f(e E&, k mut Keep&) {
+    match e {
+        case E.Add(a, b), E.Add(b, a) {
+            loc := E.Lit(5)
+            lr E& = loc
+            a = lr
+            k.x = a
+        }
+        nomatch { }
+    }
+}
+fn g(e E&, k mut Keep&) {
+    match e {
+        case E.Add(a, b) {
+            loc := E.Lit(5)
+            lr E& = loc
+            a = lr
+            k.x = a
+        }
+        nomatch { }
+    }
+}
+fn main() ? { }

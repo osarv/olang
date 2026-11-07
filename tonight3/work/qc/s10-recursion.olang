@@ -1,0 +1,7 @@
+G List<I32> = I32[1, 2].ToList()
+fn a(x List<I32>, n I32) { if n > 0 { b(x, n - 1) } }
+fn b(x List<I32>, n I32) { if n == 0 { x.Clear() } else { a(x, n - 1) } }
+fn main() ? {
+  a(G, 3)
+  println($G.Len())
+}

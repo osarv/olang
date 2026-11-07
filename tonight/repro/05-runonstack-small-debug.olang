@@ -1,0 +1,16 @@
+# CONFIRMED (portgaps S1, os.RunOnStack).
+# Expected: a size below the least a thread may have "is made that size" - every line "ok N", in -b, -d and -r alike.
+# Actual:   -b and -r: all six lines. -d: "ok 65536", "ok 32768", "ok 24576", then
+#           "could not start a thread with that stack" (abort, 134) for 20000 and below - so std/os's own test
+#           "RunOnStack(0, ...)" fails under -t -d. pthread_create needs guard + static TLS + 2KB; the floor is
+#           max(sysconf(_SC_THREAD_STACK_MIN), 16384) and ignores TLS, which in a -d (no LTO) link is 0x4600 bytes
+#           (.tbss) against 0x448 with LTO: the runtime's linkonce_odr thread_local globals (@__olang_pool, 1KB each)
+#           have no comdat, so every object keeps its own copy of their storage.
+import "std/os"
+fn main() ? {
+    x mut Array<I64>& = Array<I64>(1)
+    for sz in I64[65536, 32768, 24576, 20000, 16384, 0] {
+        os.RunOnStack(sz, fn() { x[0] = x[0] + 1 })
+        println("ok " $sz)
+    }
+}

@@ -1,0 +1,22 @@
+# S4b: a destructuring assignment into two targets in different blocks, both from one call's built results;
+# something is then built through the shorter-lived target and stored into the shared node
+import "std/io"
+import "churn"
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn two(i I64) (mut Node&, mut Node&) {
+    n := Node(i)
+    return n, n
+}
+fn main() ? io.IoError {
+    a mut Node& = null
+    for i in range 2 {
+        b mut Node& = null
+        a, b = two(i + 5)
+        b.next = Node(99)
+    }
+    c := churn.Churn()
+    try io.Println($c " " $a.v " " $a.next.v)
+}

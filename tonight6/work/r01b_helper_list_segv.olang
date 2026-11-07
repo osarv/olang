@@ -1,0 +1,16 @@
+# BUG (r01): a helper returning a List holding its reference parameter, its result pushed outward from a loop:
+# garbage text, then a segfault (-b); -i is right.
+fn one(s String&) List<String&> {
+    c := List<String&>()
+    c.Push(s)
+    return c
+}
+
+fn main() ? {
+    rows := List<List<String&>>()
+    for k in range 4 {
+        t := $k "-some-text-of-moderate-length"
+        rows.Push(one(t))
+    }
+    for r in rows { println($r[0]) }
+}

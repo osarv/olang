@@ -1,0 +1,1 @@
+fn F() I64 { return 1 }

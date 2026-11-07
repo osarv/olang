@@ -1,0 +1,2 @@
+type T struct(x I32) { X I32 = x }
+fn Make() T { return T(3) }

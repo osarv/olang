@@ -1,0 +1,8 @@
+# $ on Tag
+import "lib/pv"
+
+fn main() ? {
+    a := pv.Make(3)
+    b := pv.Make(13)
+    println($a)
+}

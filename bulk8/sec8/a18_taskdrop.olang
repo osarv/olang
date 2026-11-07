@@ -1,0 +1,31 @@
+import "std/io"
+
+type Lamp unique struct(id I64) {
+    id
+    data := Array<I64>(id.Mod(5) + 3, id)
+} destruct {
+    data[0] = -1
+}
+
+fn work(out mut Vec<I64>&, base I64) {
+    ls := Vec<Lamp>()
+    s := 0
+    for k in range 200000 {
+        ls.Push(Lamp(base + k))
+        if ls.Len() > 3 {
+            s += ls[0].data[1]
+            ls.Truncate(1)
+        }
+    }
+    out.Push(s)
+}
+
+fn main() {
+    a := Vec<I64>()
+    b := Vec<I64>()
+    join {
+        spawn work(a, 1)
+        spawn work(b, 2)
+    }
+    io.Println($a[0] " " $b[0])!
+}

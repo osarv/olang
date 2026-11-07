@@ -1,0 +1,13 @@
+import c "stdio.h"
+type Small extends I8
+fn main() {
+    a, b, d := I8(-1), U8(255), U16(65535)
+    f := F32(1.5)
+    h := F16(2.5)
+    s := Small(-3)
+    w := U5(31)
+    q := I5(-1)
+    ch := 'A'
+    c.printf("%d %d %d %f %f %d %c %u\n".ToC(), a, b, d, f, h, s, ch, U32(4000000000))
+    c.fflush(null)
+}

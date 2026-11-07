@@ -1,0 +1,19 @@
+import "std/io"
+
+type Big struct(xs Array<I64>) {
+    xs
+}
+
+fn main() {
+    g := Big(Array<I64>(2, 0))
+    h := fn() I64 { return g.xs[0] }
+    g.xs[0] = 5
+    a := Array<I64>(2, 0)
+    k := fn() I64 { return a[0] }
+    a[0] = 6
+    v := Vec<I64>()
+    v.Push(0)
+    q := fn() I64 { return v[0] }
+    v[0] = 7
+    io.Println($h() " " $k() " " $q())!
+}

@@ -1,0 +1,16 @@
+/home/user/review/vec7/work/c15_conv_mapkey.olang:3:8: error[S8a]: this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it
+    3 |     if true {
+      |        ^~~~
+/home/user/review/vec7/work/c15_conv_mapkey.olang:6:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+    6 |         m.Put(String(v.View()), 1)
+      |           ^~~
+/home/user/wt/rvvec7/std/prelude/map.olang:73:5: note: the callee requires it because of this statement
+   73 |     s.add(i, key, value)
+      |     ^
+/home/user/review/vec7/work/c15_conv_mapkey.olang:4:9: note: 'v' is declared here, in a block that closes first - declare it where 'm' lives: 'v mut Vec<Char>&m = ...'
+    4 |         v := Vec<Char>()
+      |         ^
+/home/user/review/vec7/work/c15_conv_mapkey.olang:6:24: note: this text lives in a block that closes first - pass a copy, which is made where 'm' lives: write '$' before it
+    6 |         m.Put(String(v.View()), 1)
+      |                        ^~~~
+compilation failed with 2 errors

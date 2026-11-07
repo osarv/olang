@@ -1,0 +1,33 @@
+# F10 (wrong result - a destructor never runs; NEW, O15): a by-value parameter holding a value with a destructor is not
+# ended when the function's or constructor's contract (D17) fails the call: Res(1) (constructor C) and Res(3)
+# (function use) are never ended. Expected "c 2 ended 1", "ended 21", "use -1 ended 3"; got "ended 0", "ended 2",
+# "ended 0" - built and interpret alike.
+#   /home/user/wt/review7/build/olang f10_contract_fail_skips_drop.olang
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type C struct(r Res, n I64) [n > 0] ? {
+    r
+}
+
+fn use(r Res, n I64) [n > 0] I64 ? { return r.id }
+
+fn zero() I64 { return Ended - Ended }
+
+fn main() {
+    {
+        c := try C(Res(1), zero()) catch ArgumentError default C(Res(2), 1)!
+        io.Println("c " $c.r.id " ended " $Ended)!
+    }
+    io.Println("ended " $Ended)!
+    Ended = 0
+    k := try use(Res(3), zero()) catch ArgumentError default -1
+    io.Println("use " $k " ended " $Ended)!
+}

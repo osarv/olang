@@ -1,0 +1,27 @@
+# F4b (same cause as F4): a by-value holder stored by reference into a parameter's collection - the scope pass homes
+# x where b lives, but x's destructor runs at put's end. Prints 'kept 7 ended 7'; expected 'ended 0'.
+#   /home/user/wt/review7/build/olang f4b_drop_stored_ref.olang
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type Box struct() {
+    items := Vec<Res&>()
+}
+
+fn put(b mut Box&, n I64) {
+    x Res = Res(n)
+    b.items.Push(x)
+}
+
+fn main() {
+    b := Box()
+    put(b, 7)
+    io.Println("kept " $b.items[0].id " ended " $Ended)!
+}

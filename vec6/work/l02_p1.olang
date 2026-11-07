@@ -1,0 +1,15 @@
+type Named struct(k I64) {
+    k
+    toks Vec<I64> = Vec<I64>()
+}
+type Host struct() {
+    lx Named = Named(0)
+    ly Named = Named(1)
+}
+fn main() ? {
+    for i in range 800000 {
+        p mut Host& = Host()
+        p.ly = Named(i)
+    }
+    println("ok")
+}

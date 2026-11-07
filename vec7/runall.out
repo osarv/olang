@@ -1,0 +1,56 @@
+== repro/f1a_samepath_repointed_local.olang
+  c7099f6 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  c7099f6 -i      : 0-word-in-b's-lexer-region|
+  c7099f6 -b      : 2999abcdefghijklmnopqrstuv| (status 0)
+  d5ddcda: accepted
+== repro/f1b_samepath_cursor_chain.olang
+  c7099f6 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  c7099f6 -i      : 0-word-in-the-second-lexer|
+  c7099f6 -b      : 2999abcdefghijklmnopqrstuv| (status 0)
+  d5ddcda: accepted
+== repro/f1c_samepath_param_cursor.olang
+  c7099f6 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  c7099f6 -i      : 0-word-in-b's-lexer-region|
+  c7099f6 -b      : 2999abcdefghijklmnopqrstuv| (status 0)
+  d5ddcda: accepted
+== repro/f1d_samepath_global.olang
+  c7099f6 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  c7099f6 -i      : 0-word-in-H's-lexer-region|
+  c7099f6 -b      : 2999abcdefghijklmnopqrstuv| (status 0)
+  d5ddcda: accepted
+== repro/f2a_take_via_borrowed_result_call.olang
+  c7099f6 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  c7099f6 -i      : 0-word-built-in-the-lexer's-region|
+  c7099f6 -b      : 2999abcdefghijklmnopqrstuvwxyz0123| (status 0)
+  d5ddcda: accepted
+== repro/f2b_take_via_borrow_local_of_call.olang
+  c7099f6 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  c7099f6 -i      : 0-word-built-in-the-lexer's-region|
+  c7099f6 -b      : 2999abcdefghijklmnopqrstuvwxyz0123| (status 0)
+  d5ddcda: accepted
+== repro/f2c_take_via_call_on_global.olang
+  c7099f6 -b -d -s: use after scope closed: storage a closed scope gave back was read or written| (status 134)
+  c7099f6 -i      : 0-word-built-in-the-lexer's-region|
+  c7099f6 -b      : 2999abcdefghijklmnopqrstuvwxyz0123| (status 0)
+  d5ddcda: accepted
+== repro/f3_build_via_borrowed_result_leaks.olang
+  c7099f6 -b -d -s: 3| (status 0)
+  c7099f6 -i      : 
+  c7099f6 -b      : 3| (status 0)
+  d5ddcda: accepted
+== repro/n1_conversion_of_conditional_returned_d8.olang
+  c7099f6: REFUSED /home/user/review/vec7/repro/n1_conversion_of_conditional_returned_d8.olang:3:21: error[D8]: this function returns String&, found String&|/home/user/review/vec7/repro/n1_conversion_of_conditional_returned_d8.olang:6:19: error[D8]: this function returns String&, found String&|
+  d5ddcda: accepted
+== repro/n2_deep_array_type_spurious_o31.olang
+  c7099f6: REFUSED /home/user/review/vec7/repro/n2_deep_array_type_spurious_o31.olang:3:37: error[O31]: Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<I64>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>& owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value: write Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<I64>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&&, or 'own mut Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<I64>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&&' to own one|compilation failed with 1 error|
+  d5ddcda: accepted
+== repro/v1_generic_selfhold_crash.olang
+./run.sh: line 18:  6058 Segmentation fault      $NEW -b -d -s "$f" > cc.log 2>&1
+  c7099f6: REFUSED olang: internal compiler error: the compiler crashed (a segmentation fault) - a bug in the compiler, not in the program|
+./run.sh: line 22:  6069 Segmentation fault      $OLD -b -d -s "$f" > old.log 2>&1
+  d5ddcda: refused - olang: internal compiler error: the compiler crashed (a segmentation fault) - a bug in the compiler, not in the program
+== repro/x1b_conversion_of_fixed_ref_call.olang
+  c7099f6 -b -d -s: 1 0| (status 0)
+  c7099f6 -i      : 1 1|
+  c7099f6 -b      : 1 0| (status 0)
+  d5ddcda: accepted

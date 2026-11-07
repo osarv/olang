@@ -1,0 +1,20 @@
+# an outer any assigned a copy of an inner block's array of text, and a field of an outer struct likewise
+type Sized trait {
+    Len() I64
+}
+type Holder struct() {
+    s any Sized?& = null
+}
+fn main() {
+    o any Sized& = I64[1]
+    h := Holder()
+    for i in range 3 {
+        a := Array<String&>(1, "x")
+        a[0] = "e" $i "-" $(i * 11)
+        o = a
+        h.s = a
+    }
+    churn()
+    say($o)
+    say($h.s)
+}

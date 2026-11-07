@@ -1,0 +1,5 @@
+fn pick(b Bool) I32 { return 1 if b else 0 }
+fn pick8(b Bool) U8 { return 200 if b else 0 }
+fn main() ? {
+    assert pick(true) == 1 and pick8(true) == 200
+}

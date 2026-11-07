@@ -1,0 +1,14 @@
+# T7a: arrays and Lists whose elements are a declared array type held by value (String), filled in a loop with text
+# built each turn
+import "std/io"
+import "churn"
+fn main() ? io.IoError {
+    a := Array<String>(3, "init")
+    l := List<String>()
+    for i in range 3 {
+        a[i] = $i "-elem-text-that-is-long-enough"
+        l.Push($i "-list-text-that-is-long-enough")
+    }
+    c := churn.Churn()
+    try io.Println($c " " $a[0] " " $a[2] " " $l[1])
+}

@@ -1,0 +1,38 @@
+import "std/io"
+# a method declared for one instantiation, and a trait default - direct, generic and through an any
+type Shape trait {
+    Area() I64
+}
+fn (s S) Describe<S Shape>() String { return "default " $s.Area() }
+type Box<T> struct(v T, n I64) {
+    v
+    n
+}
+fn (b Box<T>&) Area() I64 { return b.n }
+fn (b Box<String&>&) Describe() String { return "text box " $b.v }
+fn gen<S Shape>(s S) String { return s.Describe() }
+fn main() {
+    a := Box<I64>(5, 2)
+    say(a.Describe())
+    say(gen(a))
+    x any Shape& = a
+    say(x.Describe())
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

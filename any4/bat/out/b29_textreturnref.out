@@ -1,0 +1,12 @@
+== b29_textreturnref
+  san:    exit 0 textreturnref List<String&>["text0-0", "text1-7"]|
+  O3:     exit 0 textreturnref List<String&>["text0-0", "text1-7"]|
+  interp: exit 0 textreturnref List<String&>["text0-0", "text1-7"]|
+--- compile (-debug -sanitize)
+built ./build/b29_textreturnref.debug.san
+--- run san
+textreturnref List<String&>["text0-0", "text1-7"]
+--- run O3
+textreturnref List<String&>["text0-0", "text1-7"]
+--- interpret
+textreturnref List<String&>["text0-0", "text1-7"]

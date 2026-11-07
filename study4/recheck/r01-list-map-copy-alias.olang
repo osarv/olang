@@ -1,0 +1,27 @@
+# r01 BUG (wrong answers, silently) - T7/T7a, D13c, C11's old "Vec rule": a List or Map is a struct VALUE whose storage
+# hangs off reference fields (List.chunks, Map.buckets) while its counts are plain fields. "b := a" (and a fill,
+# Array<Map<K, V>>(n, Map<K, V>())) copies the counts and shares the storage, so the two values corrupt each other.
+#
+# expected: b[1] == 2; m.Len() agrees with m.Has and with walking m (either a real copy, or the copy refused)
+# actual (-b and -i agree):
+#   b[1] = 3 (pushed 2)                           - a's Push overwrote b's element
+#   m.Len 7, m.Has(a) false, keys walked 6        - n.Remove("a") removed it from m's buckets, m's count still 7
+#   parts[1].Len 0, parts[1].Has(x) true          - one fill shared by every element
+fn main() ? {
+    a := List<I64>()
+    a.Push(1)
+    b := a
+    b.Push(2)
+    a.Push(3)
+    println("b[1] = " $b[1] " (pushed 2)")
+
+    m := Map<String&, I64>()
+    for k in String&["a", "b", "c", "d", "e", "f", "g"] { m.Put(k, 1) }
+    n := m
+    n.Remove("a")
+    println("m.Len " $m.Len() ", m.Has(a) " $m.Has("a") ", keys walked " $m.Keys().ToList().Len())
+
+    parts := Array<Map<String&, I64>>(2, Map<String&, I64>())   # Array<Map<..>>(2) alone is D13c
+    parts[0].Put("x", 1)
+    println("parts[1].Len " $parts[1].Len() ", parts[1].Has(x) " $parts[1].Has("x"))
+}

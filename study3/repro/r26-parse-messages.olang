@@ -1,0 +1,18 @@
+# r26 DIAGNOSTIC - parse errors that do not say what to write:
+#  line 10: "nomatch => unreachable" in a match value -> "expected an expression, found 'unreachable'"
+#           (the fix: nomatch { unreachable }, S12b's leaving block)
+#  line 15: a continuation line beginning with an operator -> "expected '}', found '+'" (the fix: end the line before
+#           with the operator, or wrap the expression in parentheses, L18/L18a)
+fn sign(n I64) I64 {
+    return match n {
+        case 0 => 0
+        case 1 => 1
+        nomatch => unreachable
+    }
+}
+fn sum(a I64, b I64, c I64) I64 {
+    s := a + b
+        + c
+    return s
+}
+fn main() ? { println($sign(1) $sum(1, 2, 3)) }

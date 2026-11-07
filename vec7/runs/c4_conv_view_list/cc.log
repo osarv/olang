@@ -1,0 +1,13 @@
+/home/user/review/vec7/work/c4_conv_view_list.olang:15:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   15 |         l.Push(String(v.View()))
+      |           ^~~~
+/home/user/wt/rvvec7/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
+   59 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+/home/user/review/vec7/work/c4_conv_view_list.olang:13:9: note: 'v' is declared here, in a block that closes first - declare it where 'l' lives: 'v mut Vec<Char>&l = ...'
+   13 |         v := Vec<Char>()
+      |         ^
+/home/user/review/vec7/work/c4_conv_view_list.olang:15:25: note: this text lives in a block that closes first - pass a copy, which is made where 'l' lives: write '$' before it
+   15 |         l.Push(String(v.View()))
+      |                         ^~~~
+compilation failed with 1 error

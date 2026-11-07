@@ -1,0 +1,9 @@
+type S struct() {
+    kids Array<Array<S, 2>, 2> = Array<Array<S, 2>, 2>()
+    n I64 = 0
+}
+fn main() ? {
+    x := S()
+    c := x
+    println($c.n)
+}

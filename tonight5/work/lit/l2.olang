@@ -1,0 +1,21 @@
+fn churn() I64 { return 3 }
+fn main() ? {
+    c := churn() > 0
+    d := churn() < 0
+    b U8 = 250
+    k I32 = 2147483647
+    f F32 = 1.5
+    println($(b + (10 if c else 300)))
+    println($(k + (1 if c else (2 if d else 3000000000))))
+    println($(b + (1 << 7 if c else 1 << 9)))
+    println($(f + (0.1 if c else 1e300)))
+    println($(k * (2 if c else -2)))
+    println($((10 if c else 300) + b))
+    u U32 = 5
+    println($(u - (1 if c else 2)))
+    println($(u - (6 if c else 2)))
+    x := 7 if c else 8
+    println($x)
+    println($(b + match churn() { case 3 => 1 << 40
+        case _ => 0 }))
+}

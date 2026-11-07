@@ -1,0 +1,38 @@
+# QCC 2.10: a bare parameter read after the same call wrote the caller's storage through a & argument
+import "std/io"
+
+type pt struct(x I64, y I64) {
+    x
+    y
+}
+
+fn f(a pt, b pt&) I64 {
+    b.x = 5
+    return a.x
+}
+
+fn g(t String, u String&) Char {
+    u[0] = 'x'
+    return t[0]
+}
+
+fn main() {
+    p := pt(1, 2)
+    r := f(p, p)
+    t := $"abc"
+    c := g(t, t)
+    io.Println($r " " $c)!
+}
+
+fn both() I64 {
+    p := pt(1, 2)
+    t := $"abc"
+    return f(p, p) * 1000 + I64(g(t, t))
+}
+
+# the evaluator's reading, baked while compiling (K2)
+Baked I64 = both()
+
+test "baked vs run time" {
+    assert Baked == both(), "baked " $Baked ", run time " $both()
+}

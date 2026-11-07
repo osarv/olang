@@ -1,0 +1,12 @@
+# check: fail an error may not leave deferred code
+# S19b: a try in deferred code must catch every error it can produce right there
+error E {
+    BAD
+}
+fn g() I32 ? E { return 1 }
+fn f() I32 ? E {
+    defer y := try g() catch default 0
+    defer x := try g()
+    return 1
+}
+fn main() ? E { assert try f() == 1 }

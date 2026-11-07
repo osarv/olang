@@ -1,0 +1,28 @@
+type N struct(v I64) {
+    v
+    w I64 = v * 3
+}
+type H struct(f fn(i I64)) { f }
+fn report(a List<N&>&, b List<N&>&) {
+    bad I64 = 0
+    i I64 = 0
+    for x in a { if x.v != i or x.w != 3 * i { bad++ } i++ }
+    i = 0
+    for x in b { if x.v != i + 1000000 or x.w != 3 * (i + 1000000) { bad++ } i++ }
+    println("wrong elements: " $bad " of " $(a.Len() + b.Len()))
+}
+fn runit(f fn(i I64), i I64) { f(i) }
+fn work(h H&, base I64) {
+    for i in range 100000 { runit(h.f, i + base) }
+}
+fn main() ? {
+    a mut List<N&>& = List<N&>()
+    b mut List<N&>& = List<N&>()
+    ha := H(fn(i I64) { a.Push(N(i)) })
+    hb := H(fn(i I64) { b.Push(N(i)) })
+    join {
+        spawn work(ha, 0)
+        spawn work(hb, 1000000)
+    }
+    report(a, b)
+}

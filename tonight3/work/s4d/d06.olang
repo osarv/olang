@@ -1,0 +1,35 @@
+type E enum {
+    Lit(v I64)
+    Neg(e E&)
+}
+fn eval(e E&) I64 {
+    return match e {
+        case E.Lit(v) => v
+        case E.Neg(x) => 0 - eval(x)
+    }
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        q := Array<I64>(64, -7)
+        t += q[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t
+}
+G mut E = E.Lit(4)
+type PE struct(a E) {
+    a
+}
+GP mut PE = PE(E.Lit(6))
+fn step() {
+    G = E.Neg(G)
+    GP.a = E.Neg(GP.a)
+    churn()
+}
+fn main() ? {
+    for i in range 3 { step() }
+    churn()
+    println($eval(G) " " $eval(GP.a))
+}

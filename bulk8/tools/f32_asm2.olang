@@ -1,0 +1,14 @@
+import "std/io"
+fn unused(x I64) I64 { return x * 3 }
+fn big(xs Array<F64>&) F64 {
+    s := 0.0
+    for i in range xs.Len() { s += xs[i] * xs[i] }
+    for i in range xs.Len() { s += xs[i].Sqrt() }
+    return s
+}
+fn viaValue(x I64) I64 { return x + 7 }
+fn main() {
+    f := viaValue
+    a := Array<F64>(1000, 2.0)
+    for i in range 3 { io.Println($big(a) " " $f(i))! }
+}

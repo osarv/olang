@@ -1,0 +1,94 @@
+import "std/linalg"
+import "std/rand"
+import "std/math"
+
+fn trial(rg mut rand.Rand&, seed I64) I64 {
+    N := 1 + rg.Below(3)
+    C := 1 + rg.Below(5)
+    K := 1 + rg.Below(5)
+    S := 1 + rg.Below(3)
+    P := rg.Below(3)
+    H := K + rg.Below(9)
+    W := K + rg.Below(9)
+    if rg.Below(3) == 0 { H = 1 + rg.Below(3) }
+    if H + 2 * P < K { H = K }
+    if W + 2 * P < K { W = K }
+    O := 1 + rg.Below(20)
+    imgs := linalg.Matrix<F64>(N, H * W * C, null)
+    for i in range imgs.Data.Len() { imgs.Data[i] = F64(rg.Below(7)) - 3 }
+    p := linalg.Patches<F64>(imgs, C, H, W, K, S, P)
+    w := linalg.Matrix<F64>(O, C * K * K, null)
+    for i in range w.Data.Len() { w.Data[i] = F64(rg.Below(7)) - 3 }
+    bias := linalg.Matrix<F64>(1, O, null)
+    for i in range O { bias.Data[i] = F64(rg.Below(5)) - 2 }
+    out := linalg.Matrix<F64>(p.Rows, O, null)
+    beta F64 = F64(rg.Below(2))
+    for i in range out.Data.Len() { out.Data[i] = F64(rg.Below(5)) - 2 }
+    want := out.Clone()
+    # naive convolution
+    for b in range N {
+        for oy in range p.OutH {
+            for ox in range p.OutW {
+                row := (b * p.OutH + oy) * p.OutW + ox
+                for o in range O {
+                    s F64 = 0
+                    for c in range C {
+                        for ky in range K {
+                            for kx in range K {
+                                y := oy * S - P + ky
+                                x := ox * S - P + kx
+                                if y >= 0 and y < H and x >= 0 and x < W {
+                                    s = s + imgs.Get(b, (y * W + x) * C + c) * w.Get(o, (c * K + ky) * K + kx)
+                                }
+                            }
+                        }
+                    }
+                    v F64 = s + beta * want.Get(row, o) + bias.Get(0, o)
+                    want.Set(row, o, v if v > 0 else 0.0)
+                }
+            }
+        }
+    }
+    threads I64 = 1 + rg.Below(3)
+    linalg.GemmPatches(out, p, w, true, bias, linalg.Activation.Relu, 1, beta, threads)
+    # and Im2col
+    cols := linalg.Matrix<F64>(p.Rows, p.Cols, null)
+    p.Im2col(cols, threads)
+    bad I64 = 0
+    for i in range out.Data.Len() {
+        if math.Abs(out.Data[i] - want.Data[i]) > 1e-9 {
+            if bad == 0 { println("seed " $seed " N" $N " C" $C " K" $K " S" $S " P" $P " H" $H " W" $W " O" $O " at " $i " got " $out.Data[i] " want " $want.Data[i]) }
+            bad += 1
+        }
+    }
+    for b in range N {
+        for oy in range p.OutH {
+            for ox in range p.OutW {
+                row := (b * p.OutH + oy) * p.OutW + ox
+                for c in range C {
+                    for ky in range K {
+                        for kx in range K {
+                            y := oy * S - P + ky
+                            x := ox * S - P + kx
+                            v F64 = imgs.Get(b, (y * W + x) * C + c) if y >= 0 and y < H and x >= 0 and x < W else 0.0
+                            if cols.Get(row, (c * K + ky) * K + kx) != v {
+                                if bad == 0 { println("im2col seed " $seed) }
+                                bad += 1
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return bad
+}
+
+fn main() ? {
+    rg mut rand.Rand& = rand.Rand(11)
+    fails I64 = 0
+    for s in range 2000 {
+        if trial(rg, s) > 0 { fails += 1 }
+    }
+    println("failing trials " $fails)
+}

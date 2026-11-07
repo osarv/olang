@@ -1,0 +1,55 @@
+# O8d round 8: an owner held in place (a struct holding a Vec by value) let go of while a view of its storage is in use
+import "std/io"
+
+type box struct(v Vec<I64>) { v }
+
+fn mk(k I64) Vec<I64> {
+    v := Vec<I64>()
+    for i in range 64 { v.Push(k * 1000 + i) }
+    return v
+}
+
+fn replace(b mut box&, k I64) { b.v = mk(k) }
+
+fn sameFn(k I64) I64 {
+    b := box(mk(k))
+    w := b.v.View()
+    b = box(mk(k + 1))
+    return w[3]
+}
+
+fn acrossCall(k I64) I64 {
+    b := box(mk(k))
+    w := b.v.View()
+    replace(b, k + 1)
+    return w[3]
+}
+
+type pt struct(x I64) { x }
+type pbox struct(v Vec<pt>) { v }
+
+fn replaceP(b mut pbox&, k I64) {
+    v := Vec<pt>()
+    for i in range 64 { v.Push(pt(k * 1000 + i)) }
+    b.v = v
+}
+
+fn viaRef(k I64) I64 {
+    b := pbox(Vec<pt>())
+    replaceP(b, k)
+    r := b.v.Ref(3)
+    replaceP(b, k + 1)
+    return r.x
+}
+
+fn main() {
+    s1 := 0
+    s2 := 0
+    s3 := 0
+    for k in range 300 {
+        s1 += sameFn(k)
+        s2 += acrossCall(k)
+        s3 += viaRef(k)
+    }
+    io.Println($s1 " " $s2 " " $s3 " (each 44851350)")!
+}

@@ -1,0 +1,13 @@
+type Acc struct() {
+    N I64 = 0
+}
+GL mut List<Acc> = List<Acc>()
+fn (a mut Acc&) Reset() {
+    a.N = 5
+    GL = List<Acc>()
+}
+fn main() ? {
+    GL.Push(Acc())
+    GL[0].Reset()
+    println($GL.Len())
+}

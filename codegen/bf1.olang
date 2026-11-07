@@ -1,0 +1,20 @@
+import "std/io"
+
+fn g(x F16, y BF16) BF16 {
+    return y + BF16(1.0)
+}
+
+fn h(y BF16) BF16 {
+    return y + BF16(1.0)
+}
+
+fn apply(f fn(a F16, b BF16) BF16, x F16) BF16 {
+    return f(x, BF16(3.0))
+}
+
+fn main() ? io.IoError {
+    a := g(F16(0.25), BF16(3.0))
+    b := apply(g, F16(0.25))
+    c := h(BF16(3.0))
+    try io.Print($a " " $b " " $c "\n")
+}

@@ -1,0 +1,8 @@
+# G26/D10a: a function every path of which returns only in the instantiations it is used with
+fn OnlyZero(a Array<I64, <N>>&) I64 {
+    if N == 0 { return 7 }
+}
+fn main() ? {
+    z Array<I64, 0> = Array<I64, 0>()
+    println($OnlyZero(z))
+}

@@ -1,0 +1,5 @@
+type Dir enum { North South }
+test "x" {
+    d := Dir.South
+    assert d != Dir.North
+}

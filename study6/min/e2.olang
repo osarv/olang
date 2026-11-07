@@ -1,0 +1,16 @@
+type Value enum {
+    Nil
+    Num(n F64)
+    Items(l mut List<Value&>&)
+}
+fn set(t Value&, v Value&t) {
+    l := t as Value.Items
+    l.SetAt(0, v)
+}
+fn main() ? {
+    xs mut List<Value&>& = List<Value&>()
+    xs.Push(Value.Nil)
+    lv Value& = Value.Items(xs)
+    set(lv, Value.Num(2.0))
+    println($xs.Len())
+}

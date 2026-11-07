@@ -1,0 +1,13 @@
+fn main() ? {
+    c := churn() < 0
+    outer mut Box& = Box()
+    k1 := outer.head
+    {
+        inner mut Box& = Box()
+        d Box = outer
+        d = outer if c else inner
+        growv(d)
+    }
+    churn()
+    println($rd(k1))
+}

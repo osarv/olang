@@ -1,0 +1,15 @@
+# T7a: a struct field of a declared array type held by value, written with its type (String, and a type over
+# Array<I64>), returned from a function
+import "std/io"
+import "churn"
+type Nums Array<I64>
+type Rec struct(n I64) {
+    t String = $n "-text-that-is-long-enough"
+    a Nums = Nums(Array<I64>(n, 7))
+}
+fn mk(n I64) Rec { return Rec(n) }
+fn main() ? io.IoError {
+    k := mk(4)
+    c := churn.Churn()
+    try io.Println($c " " $k.t " " $k.a[3])
+}

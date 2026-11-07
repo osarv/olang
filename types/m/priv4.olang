@@ -1,0 +1,7 @@
+# M6: a private method of a public type
+import "lib"
+import "std/io"
+fn main() ? {
+  r := lib.MakeRec()
+  try io.Print($r.peek() "\n")
+}

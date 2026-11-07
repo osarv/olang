@@ -1,0 +1,27 @@
+# tasks: temporaries a task's callee keeps, built for a task inside a join nested in a loop
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+type Bag struct() {
+    items List<Node&> = List<Node&>()
+}
+fn put(b mut Bag&, n Node&b) { b.items.Push(n) }
+fn putText(l mut List<String&>&, s String&l) { l.Push(s) }
+fn main() ? io.IoError {
+    b mut Bag& = Bag()
+    l mut List<String&>& = List<String&>()
+    for i in range 3 {
+        join {
+            spawn put(b, Node(i * 10))
+        }
+        join {
+            spawn putText(l, $i "-txt")
+        }
+    }
+    c := churn.Churn()
+    s := ""
+    for x in l { s = $s $x }
+    t := 0
+    for n in b.items { t = t + n.v }
+    try io.Println($c " " $t " " $s)
+}

@@ -1,0 +1,15 @@
+import "std/io"
+
+Calls mut I64 = 0
+
+fn next() I64 {
+    Calls = Calls + 1
+    return Calls
+}
+
+fn main() ? io.IoError {
+    a := Array<I64>(10, 0)
+    a[next()] += 5
+    a[next()]++
+    try io.Print($Calls " " $a "\n")
+}

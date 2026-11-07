@@ -1,0 +1,29 @@
+# over-rejection probes for A: text a scope argument puts in the result scope or in the caller's list, kept and returned
+type Lab extends String
+fn mk(i I64) String { return "mk" $i }
+fn r1(keep mut List<String&>&, i I64) String {
+    x := mk&return(i)
+    keep.Push(x)
+    return x
+}
+fn r2(keep mut List<String&>&, i I64) String {
+    x := mk&keep(i)
+    keep.Push(x)
+    return x
+}
+fn r3(i I64) Lab { return Lab(mk&return(i)) }
+fn r4(i I64) String {
+    x := mk&return(i)
+    return x
+}
+fn main() {
+    keep := List<String&>()
+    a := r1(keep, 1)
+    b := r2(keep, 2)
+    c := r3(3)
+    d := r4(4)
+    a[0] = 'Q'
+    b[0] = 'R'
+    churn()
+    say("keep " $keep " a " $a " b " $b " c " $c " d " $d)
+}

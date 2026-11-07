@@ -1,0 +1,14 @@
+# A Ref into a Vec kept across the Vec's growth (M19g's local case; O8d condition 6 for the grown buffer)
+import "std/io"
+
+type blk struct(n I64) { n }
+
+fn main() {
+    v := Vec<blk>()
+    v.Push(blk(1))
+    w := v.ViewMut()
+    for i in range 100000 { v.Push(blk(i)) }
+    w[0].n = 77
+    x := v[0].n
+    io.Println("v[0].n = " $x)!
+}

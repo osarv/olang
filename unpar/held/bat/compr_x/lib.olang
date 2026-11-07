@@ -1,0 +1,4 @@
+fn K(x Array<I64>&) Array<Array<I64>&> {
+    xs := Array<Array<I64>&>(2, x)
+    return Array<Array<I64>&>[y for y in xs]
+}

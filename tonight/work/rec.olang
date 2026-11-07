@@ -1,0 +1,2 @@
+fn f(n I64) I64 { return f(n + 1) + 1 }
+fn main() ? { println($f(0)) }

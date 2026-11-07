@@ -1,0 +1,49 @@
+type L0 struct() {
+    toks Vec<I64> = Vec<I64>()
+}
+type L1 struct() {
+    x L0 = L0()
+}
+type L2 struct() {
+    x L1 = L1()
+}
+type L3 struct() {
+    x L2 = L2()
+}
+type L4 struct() {
+    x L3 = L3()
+}
+type L5 struct() {
+    x L4 = L4()
+}
+type L6 struct() {
+    x L5 = L5()
+}
+type L7 struct() {
+    x L6 = L6()
+}
+type L8 struct() {
+    x L7 = L7()
+}
+type L9 struct() {
+    x L8 = L8()
+}
+type L10 struct() {
+    x L9 = L9()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    o := L10()
+    for i in range 3 { o.x.x.x.x.x.x.x.x.x.x.toks.Push(i + 1) }
+    c L10 = o
+    for i in range 100 { o.x.x.x.x.x.x.x.x.x.x.toks.Push(i) }
+    churn()
+    println($c.x.x.x.x.x.x.x.x.x.x.toks[0])
+}

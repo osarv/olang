@@ -1,0 +1,44 @@
+# P4b: an inner join's error leaving an outer join's block - the outer tasks still run (and are waited for) at run time;
+# the evaluator must run them too, or a baked global disagrees with the run time
+error E {
+    BAD
+}
+error F {
+    BAD
+}
+fn mark(c mut Array<I64>&, k I64, bad Bool) ? F {
+    c[k] = c[k] + 1
+    if bad { error F.BAD }
+}
+fn g(c mut Array<I64>&, bad Bool) ? E {
+    c[2] = c[2] + 1
+    if bad { error E.BAD }
+}
+fn nest(c mut Array<I64>&, a Bool, b Bool) ? E + F {
+    try join {
+        spawn try mark(c, 0, a)
+        try join {
+            spawn try g(c, b)
+        }
+        c[3] = c[3] + 1
+    }
+    c[4] = c[4] + 1
+}
+fn run(a Bool, b Bool) String {
+    c := Array<I64>(5)
+    r := 0
+    try nest(c, a, b) catch E { r = 1 } catch F { r = 2 }
+    return $r " " $c
+}
+Baked1 String = run(true, true)
+Baked2 String = run(true, false)
+Baked3 String = run(false, true)
+Baked4 String = run(false, false)
+on mut Bool = true
+off mut Bool = false
+fn main() ? {
+    println($run(on, on) " | " $Baked1)
+    println($run(on, off) " | " $Baked2)
+    println($run(off, on) " | " $Baked3)
+    println($run(off, off) " | " $Baked4)
+}

@@ -1,0 +1,29 @@
+type Token struct(kind I32, text String&) {
+    kind
+    text
+}
+type Parser struct(toks List<Token>&) {
+    toks
+    at I64 = 0
+}
+fn (p mut Parser&) next() Token {
+    t := p.toks[p.at]
+    p.at++
+    return t
+}
+fn (p mut Parser&) names() Array<String&>& {
+    names := List<String&>()
+    for p.at < p.toks.Len() {
+        t := p.next()
+        names.Push(t.text)
+    }
+    return names.ToArray()
+}
+fn main() ? {
+    toks := List<Token>()
+    toks.Push(Token(1, "a"))
+    toks.Push(Token(2, "b"))
+    p := Parser(toks)
+    ns := p.names()
+    println($ns)
+}

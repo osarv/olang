@@ -1,0 +1,49 @@
+# view lends in unusual positions: a catch default, a match guard, an assert message, a comprehension filter, a for's
+# condition and post clause, a do-for condition, a lambda body, a constructor field, a destructor, a conditional
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn put(v mut V&, x I64) I64 {
+    v.d[v.n] = v.d[v.n] + x
+    return v.d[v.n]
+}
+fn fails() I64 ? { error }
+type Holder struct(s Vs&) {
+    s
+    first I64 = put(s[0], 1000)
+}
+type Res struct(s Vs&) {
+    s
+} destruct { put(s[9], 1) }
+fn run() I64 {
+    s := Vs(Array<I64>(10))
+    a := try fails() catch default put(s[0], 1)
+    k := 3
+    match k {
+        case 3 if put(s[1], 2) > 0 { a += 1 }
+        nomatch { }
+    }
+    assert put(s[2], 3) > 0, "msg " $put(s[2], 100)
+    xs := I64[i for i in range 3 if put(s[3], 1) > 0]
+    for i := 0, put(s[4], 1) < 3, i = put(s[5], 1) { a += 1 }
+    do { a += 1 } for put(s[6], 1) < 2
+    f := fn(t Vs&) I64 { return put(t[7], 5) }
+    a += f(s)
+    h := Holder(s)
+    {
+        r := 0
+    }
+    a += put(s[8], 1) if a > 0 else put(s[8], 1000)
+    sum I64 = 0
+    for i in range 10 { sum = sum * 100 + s.d[i] }
+    return sum + a + xs.Len() + h.first
+}
+Baked I64 = run()
+fn main() ? {
+    println($run() " " $Baked)
+}

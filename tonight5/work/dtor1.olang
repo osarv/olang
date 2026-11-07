@@ -1,0 +1,31 @@
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+type B struct() {
+    items List<I64>
+} destruct {
+    for i in range 100 { items.Push(i) }
+    churn()
+}
+type A struct() {
+    b mut B& = null
+} destruct {
+    churn()
+    s I64 = 0
+    for x in b.items { s += x }
+    println("sum " $s " len " $b.items.Len())
+}
+fn run() {
+    a mut A& = A()
+    b mut B& = B()
+    a.b = b
+}
+fn main() ? {
+    run()
+    println("done")
+}

@@ -1,0 +1,17 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+fn main() {
+    {
+        a Array<Res> = Array<Res>(3, Res(1))
+        io.Println("made " $a.Len() " ended " $Ended)!
+    }
+    io.Println("ended " $Ended)!
+}

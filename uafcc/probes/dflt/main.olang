@@ -1,0 +1,26 @@
+import "std/io"
+import "lib"
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mkE(i I64) lib.E {
+    e := lib.E($i)
+    return e
+}
+fn mkF(i I64) lib.E { return lib.F($i) }
+
+fn main() {
+    l := List<lib.E>()
+    for i in range 5 {
+        l.Push(mkE(i))
+        l.Push(mkF(i))
+        l.Push(lib.E($i))
+        churn()
+    }
+    churn()
+    io.Println($l[3].B " " $l[4].B " " $l[14].B)!
+}

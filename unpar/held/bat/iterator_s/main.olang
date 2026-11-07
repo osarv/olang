@@ -1,0 +1,49 @@
+import "std/io"
+
+type It struct(a Array<I64>&) {
+    A Array<I64>& = a
+    at I64 = 0
+}
+fn (i mut It&) Next() I64 ? Exhausted {
+    if i.at >= i.A.Len() { error Exhausted.END }
+    i.at++
+    return i.A[i.at - 1]
+}
+fn K(x Array<I64>&) It {
+    return It(x)
+}
+
+fn get() It {
+    d := Array<I64>(4, 9)
+    r := K(d)
+    return r
+}
+
+fn getloop() It {
+    r It
+    for i in range 3 {
+        d := Array<I64>(4, 5 + i)
+        r = K(d)
+    }
+    return r
+}
+
+fn main() {
+    v := get()
+    churn()
+    io.Println($v.A[1])!
+    v = getloop()
+    churn()
+    io.Println($v.A[1])!
+}
+
+fn churn() {
+    for i in range 300 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        m := Map<I64, List<I64>>()
+        m.Put(i, b)
+        assert a[3] == i
+    }
+}

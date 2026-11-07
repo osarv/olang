@@ -1,0 +1,21 @@
+== a13_destructexact
+  san:    exit 0 destructexact 1|destructexact 2|destructexact 12|destructexact 13|
+  O3:     exit 0 destructexact 1|destructexact 2|destructexact 12|destructexact 13|
+  interp: exit 0 destructexact 1|destructexact 2|destructexact 12|destructexact 13|
+--- compile (-debug -sanitize)
+built ./build/a13_destructexact.debug.san
+--- run san
+destructexact 1
+destructexact 2
+destructexact 12
+destructexact 13
+--- run O3
+destructexact 1
+destructexact 2
+destructexact 12
+destructexact 13
+--- interpret
+destructexact 1
+destructexact 2
+destructexact 12
+destructexact 13

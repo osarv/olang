@@ -1,0 +1,7 @@
+/home/user/review/vec7/work/d1_generic_chain_12.olang:10:50: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   10 |     for i in range 3 { o.x.x.x.x.x.x.x.x.x.x.x.x.toks.Push(i + 1) }
+      |                                                  ^~~~
+/home/user/review/vec7/work/d1_generic_chain_12.olang:12:52: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   12 |     for i in range 100 { o.x.x.x.x.x.x.x.x.x.x.x.x.toks.Push(i) }
+      |                                                    ^~~~
+compilation failed with 2 errors

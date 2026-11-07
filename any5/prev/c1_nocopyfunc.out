@@ -1,0 +1,16 @@
+== build -debug -sanitize
+c1_nocopyfunc.olang:21:12: error[T32]: 'Later' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   21 |     f := a.Later()
+      |            ^~~~~
+compilation failed with 1 error
+== build
+c1_nocopyfunc.olang:21:12: error[T32]: 'Later' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   21 |     f := a.Later()
+      |            ^~~~~
+compilation failed with 1 error
+== interpret
+c1_nocopyfunc.olang:21:12: error[T32]: 'Later' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   21 |     f := a.Later()
+      |            ^~~~~
+compilation failed with 1 error
+status 1

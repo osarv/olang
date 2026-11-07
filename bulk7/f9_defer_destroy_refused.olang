@@ -1,0 +1,31 @@
+# F9 (over-rejection; NEW, O15/T13b): `defer x.Destroy()` on a by-value holder is refused with C9b "destructed here,
+# and mentioned after" when the block reads x after the defer statement (the deferred Destroy runs after those reads).
+# The same with `x := Res(id)` (byRef) compiles and runs (prints "1 ended 1" alone). `errdefer x.Destroy()` then
+# `return x` is refused too (C9b and T13b's "handed on ... mentioned after"), where CLAUDE.md says `errdefer
+# x.Destroy()` lets x be returned.
+#   /home/user/wt/review7/build/olang f9_defer_destroy_refused.olang  -> error at line 19 (byValue)
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+fn byRef(id I64) I64 {
+    x := Res(id)
+    defer x.Destroy()
+    return x.id
+}
+
+fn byValue(id I64) I64 {
+    x Res = Res(id)
+    defer x.Destroy()
+    return x.id
+}
+
+fn main() {
+    io.Println($byRef(1) " " $byValue(2) " ended " $Ended)!
+}

@@ -1,0 +1,4 @@
+# M6b: a private protocol method with the wrong shape is an error even when never used as the operation
+type T struct(v I32) { v }
+fn (a T) less(b T) I32 { return 1 }
+fn main() ? { println($T(1).v) }

@@ -1,0 +1,19 @@
+# D9b: a by-value array the body never writes is the caller's - the evaluator must agree, whatever the argument is
+fn see(k <T>, x T, w mut Array<I32>&) I32 {
+    w[0] = 70
+    return x[0]
+}
+fn mk() I32 {
+    a := I32[5, 6]
+    r mut Array<I32>& = a
+    return see(a, r, r)
+}
+fn mk2() I32 {
+    a := I32[5, 6]
+    return see(a, a, a)
+}
+G := mk()
+G2 := mk2()
+fn main() ? {
+    println("baked " $G " " $G2 " run " $mk() " " $mk2())
+}

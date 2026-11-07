@@ -1,0 +1,18 @@
+# NEW, CONFIRMED: segfault. Fold with a lambda that captures the receiver and renders text.
+# e27b83b -b, -b -s: exit 139. 7345ff9, -i: 'b1'. b6259d1: refused (E11c purity).
+type Bag struct(k I64) {
+    k
+    l List<I64> = List<I64>()
+}
+fn (b Bag&) Str() String {
+    n := b.l.Iter().Fold(0, fn(a I64, x I64) I64 {
+        s := $(x + b.k)
+        return a + s.Len()
+    })
+    return "b" $n
+}
+fn main() ? {
+    b := Bag(1)
+    b.l.Push(4)
+    println($b)
+}

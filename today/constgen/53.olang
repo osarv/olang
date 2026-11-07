@@ -1,0 +1,11 @@
+# G21: a generic function's result type whose length is computed by a call - first attempt reads it as length 0
+fn twice(n I64) I64 { return n * 2 }
+fn sig(a Array<I64, <N>>&) Array<I64, twice(N)> {
+    return Array<I64, twice(N)>()
+}
+fn main() ? {
+    y Array<I64, 3> = I64[1, 2, 3]
+    q := sig(y)
+    q[5] = 1
+    println($q)
+}

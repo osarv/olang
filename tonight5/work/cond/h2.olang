@@ -1,0 +1,19 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() { head mut Node& = Node(1) }
+type H struct(b Box) { b }
+fn main() ? {
+    hs := List<H>()
+    o mut Box& = Box()
+    for i in range 3 {
+        inner mut Box& = Box()
+        x := 1
+        hs.Push(H(match x {
+            case 1 => o
+            case _ => inner
+        }))
+    }
+    println($hs.Len())
+}

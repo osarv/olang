@@ -1,0 +1,31 @@
+# alternatives binding the same name: Two(x, _), Has(x)
+import "std/io"
+type Node struct(v I32) { v mut }
+type Box enum {
+    Has(n Node&)
+    Two(a Node&, b Node&)
+    Empty
+}
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn ro(n Node&) Node&n { return n }
+fn pick(i I64, o Node&, n Node&) Box { return Box.Two(o, n) }
+fn main() ? {
+    outer Node& = Node(1)
+    keep := ro(outer)
+    for i in range 2 {
+        inner Node& = Node(42)
+        b := Box.Has(inner)
+        if i == 0 { b = Box.Two(outer, inner) }
+        match b {
+            case Box.Has(x) { keep = x }
+            nomatch { }
+        }
+    }
+    churn()
+    try io.Print($keep.v "\n")
+}

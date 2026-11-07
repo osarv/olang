@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/b7.olang:9:52: error[O14]: this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'
+    9 | fn mk(v Vec<Char>&) Array<Char>& { return v.View() as Array<Char, 2>& }
+      |                                                    ^~
+compilation failed with 1 error

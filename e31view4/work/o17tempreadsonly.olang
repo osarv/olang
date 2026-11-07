@@ -1,0 +1,38 @@
+# check: run
+# flags: -d -s
+# O17 (U1): a split value - a call's result whose references are seed's - lent to reference parameters whose callees only
+# read, and build only where nothing keeps it: accepted, its copy a temporary of the loop body, read back after a churn
+import "std/io"
+fn churn() ? io.IoError {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { try io.Println("x") }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Box struct() {
+    head mut Node& = Node(0, null)
+    tag I64 = 0
+}
+fn idBox(seed mut Box&) Box { return seed }
+fn sum(b Box&) I64 {
+    t I64 = 0
+    for n := b.head, n != null, n = n.next { t = t * 10 + n.v }
+    return t
+}
+fn bumpHead(b Box&) { b.head.v = b.head.v + 1 }
+fn main() ? {
+    seed := Box()
+    seed.head.next = Node(7, null)
+    t := 0
+    for i in range 3 {
+        t += sum(idBox(seed))
+        bumpHead(idBox(seed))
+        try churn()
+    }
+    assert seed.head.v == 3 and sum(seed) == 37, $sum(seed)
+    assert t == 7 + 17 + 27, $t
+}

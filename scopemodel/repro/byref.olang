@@ -1,0 +1,12 @@
+import "std/io"
+type N struct(v I32) { v }
+type Box struct(inner mut N&) { inner }
+type Holder struct(r mut N&) { r }
+fn move(p mut Box&, dst mut Holder&) { dst.r = p.inner }
+fn main() ? {
+    g mut N& = N(1)
+    h mut Holder& = Holder(g)
+    b mut Box& = Box(g)
+    move(b, h)
+    try io.Print($h.r.v "\n")
+}

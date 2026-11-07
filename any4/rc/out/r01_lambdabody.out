@@ -1,0 +1,14 @@
+== r01_lambdabody
+  san:    refused: r01_lambdabody.olang:10:12: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
+  O3:     refused
+  interp: exit 0 run: k.s abc1 x Qbc1|baked: k.s abc1 x Qbc1|
+--- compile (-debug -sanitize)
+r01_lambdabody.olang:10:12: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
+   10 |     put := fn() { k.s = s }
+      |            ^~
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+run: k.s abc1 x Qbc1
+baked: k.s abc1 x Qbc1

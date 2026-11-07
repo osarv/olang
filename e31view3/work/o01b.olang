@@ -1,0 +1,15 @@
+# over-rejection candidate: a Str reading a two-level List field through x[i]
+type W struct(ll List<List<I64>>&) {
+    ll
+}
+fn (w W&) Str() String {
+    n := w.ll[0].Len()
+    return "W" $n
+}
+fn main() ? {
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    ll[0].Push(5)
+    w := W(ll)
+    println($w)
+}

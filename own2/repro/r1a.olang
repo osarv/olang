@@ -1,0 +1,20 @@
+Dropped mut I64 = 0
+type Conn struct(fd I64) {
+    fd
+    name String& = "c" $fd
+} destruct { Dropped++ }
+type Server struct() {
+    cur own mut Conn&
+}
+fn churn() {
+    j := List<String&>()
+    for i in range 400 { j.Push("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy" $i) }
+}
+fn main() ? {
+    s := Server()
+    s.cur = Conn(1)
+    c := s.cur
+    s.cur = Conn(c.fd + 1)   # value uses c - fine (computed before store)
+    churn()
+    println($c.name)         # c used AFTER the release - must conflict
+}

@@ -1,0 +1,22 @@
+type K struct(s String&) { s }
+type KL struct(l Lab&) { l }
+type HS struct(s String&) { s }
+type Lab extends String
+# RetCopy: an element of an array of borrows walked by a for-in, pushed outward
+fn f(l mut List<String&>&, i I64) String {
+    s := "abc" $i
+    arr := String&[s, "y"]
+    for q in arr { l.Push(q) }
+    return s
+}
+fn probe() String {
+    l := List<String&>()
+    x := f(l, 1)
+    x[0] = 'Q'
+    return "l " $l " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}

@@ -1,0 +1,3 @@
+frame 100: 31 positioned, born 60, died 32
+baked: frame 100: 31 positioned, born 60, died 32
+bulk and per-entity agree to 0

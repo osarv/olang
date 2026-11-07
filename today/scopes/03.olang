@@ -1,0 +1,25 @@
+# O26/T7c: the 01 hole through an inline fixed array of references - the elements outlive the text they name
+type Holder struct() {
+    names mut Array<String&, 2>
+}
+fn make() Holder {
+    a := "alpha" $3
+    b := "beta" $4
+    h := Holder()
+    h.names[0] = a
+    h.names[1] = b
+    return h
+}
+fn churn() I64 {
+    s I64 = 0
+    for i in range 1000 {
+        t := "xxxxxxxxxxxxxxxxxxxxxxxx" $i
+        s = s + t.Len()
+    }
+    return s
+}
+fn main() ? {
+    h := make()
+    println($churn())
+    println($h.names[0] " " $h.names[1])
+}

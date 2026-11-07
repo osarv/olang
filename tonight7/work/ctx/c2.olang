@@ -1,0 +1,28 @@
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+fn touch(c mut Cell&) I64 {
+    c.v++
+    return c.v
+}
+fn fail1(c mut Cell&) I64 ? {
+    c.v++
+    if c.v > 0 { error }
+    return 1
+}
+fn (b Bag&) Str() String {
+    k := b.c.v
+    n := match k {
+    case _ if touch(b.c) > 0 => 1
+    nomatch => 2
+    }
+    return "b" $b.c.v
+}
+fn main() ? {
+    b := Bag(Cell())
+    println($b)
+    println($b)
+}

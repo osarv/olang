@@ -1,0 +1,218 @@
+# A reference local typed per assignment (O25i): each assignment gives it a version holding where the value it gives
+# lives, and each read is judged by the versions reaching it - a cursor walking a chain, a list's tail found and
+# appended to, an option kept from a parameter's array, an element of a constant literal, a cursor given a value in a
+# catch clause, read in deferred code, captured by a lambda, assigned in a loop and read after it. Each test reads its
+# values back after an arena churn (what a closed scope left would be written over), and the evaluator decides the same
+# values while compiling (a baked global, top-level asserts).
+
+type Kind enum { Panel, Button, Label }
+
+type Widget struct(kind Kind, parent mut Widget?&) {
+    kind
+    parent
+    clicks I64 = 0
+}
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+}
+
+type Box struct() {
+    v I64 = 0
+}
+
+type Miss error { Here }
+
+# what a closed scope left behind is written over
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+# a click handed up the widget tree: the cursor walks parents, whatever scope each lives in
+fn click(w mut Widget&) I64 {
+    at mut Widget?& = w
+    n := 0
+    for at is not null {
+        a := at
+        if a.kind == Kind.Button {
+            a.clicks++
+            return n
+        }
+        if a.kind == Kind.Panel: a.clicks++
+        n++
+        at = a.parent
+    }
+    return n
+}
+
+fn clickDepth() I64 {
+    root := Widget(Kind.Panel, null)
+    button := Widget(Kind.Button, root)
+    mid := Widget(Kind.Label, button)
+    leaf := Widget(Kind.Label, mid)
+    d := click(leaf)
+    churn()
+    return d * 100 + button.clicks * 10 + root.clicks
+}
+
+# a list's tail found by a cursor and appended to: what is built through it lives where the list does
+fn appendTail(head mut Node&, v I64) {
+    at mut Node& = head
+    for at.next is not null { at = at.next! }
+    at.next = Node(v)
+}
+
+fn chainSum(n I64) I64 {
+    head := Node(0)
+    for i in range 1, n { appendTail(head, i) }
+    churn()
+    s := 0
+    at Node?& = head
+    for at is not null {
+        s = s * 10 + at.v
+        at = at.next
+    }
+    return s
+}
+
+# an option taken from a parameter's array: the cursor holds the parameter's element, no relation asked of the caller
+fn planAt(args Array<String&>&) String {
+    plan String& = ""
+    for k in range args.Len() {
+        if args[k] == "-plan" and k + 1 < args.Len() { plan = args[k + 1] }
+    }
+    return $plan
+}
+
+# an element of a constant literal is constant data (T25d), kept past the loop
+fn ops(n I64) String {
+    out := StringBuilder()
+    op String& = " < "
+    for k in range n {
+        if k >= 2 { op = Array<String&>[" + ", " - ", " * "][(k - 2) % 3] }
+        out.Push(op)
+    }
+    churn()
+    return out.ToString()
+}
+
+fn find(xs Array<Node&>&, v I64) Node& ? {
+    for x in xs {
+        if x.v == v: return x
+    }
+    error Miss.Here
+}
+
+fn check(v I64) ? {
+    if v > 2 { error Miss.Here }
+}
+
+# a version given in a catch clause reaches the read after the try, as one given by a call that may fail does
+fn caught(v I64) I64 {
+    a := Node(1)
+    b := Node(2)
+    xs := Array<Node&>[a, b]
+    got Node& = a
+    try check(v) catch {
+        got = b
+    }
+    if v == 2 { got = try find(xs, v) catch default a }
+    churn()
+    return got.v
+}
+
+# every version of the local in its block reaches deferred code
+fn lastSeen(xs Array<Node&>&, out mut Box&) {
+    cur Node& = xs[0]
+    defer { out.v = cur.v }
+    for x in xs { cur = x }
+}
+
+fn deferred() I64 {
+    out := Box()
+    lastSeen(Array<Node&>[Node(4), Node(5), Node(6)], out)
+    churn()
+    return out.v
+}
+
+# a lambda reads the version reaching it where it is made
+fn captured(k I64) I64 {
+    a := Node(10)
+    b := Node(20)
+    cur Node& = a
+    if k > 0 { cur = b }
+    f := fn() I64 { return cur.v }
+    churn()
+    return f()
+}
+
+# a version given in a loop and read after it: what it names is built where that read needs it, a new one each turn
+fn afterLoop(n I64) I64 {
+    keep Node& = Node(-1)
+    for i in range n {
+        inner mut Node& = Node(i * 3)
+        keep = inner
+    }
+    churn()
+    return keep.v
+}
+
+# two versions of one scope: a store through the cursor builds where both live
+fn twoOfOne(k I64) I64 {
+    a := Node(1)
+    b := Node(2)
+    at mut Node& = a
+    if k > 0 { at = b }
+    at.next = Node(9)
+    churn()
+    return a.v * 100 + b.v * 10 + at.next!.v
+}
+
+Chain := chainSum(5)
+
+assert clickDepth() == 210 and chainSum(4) == 123 and planAt(Array<String&>["-o", "x", "-plan", "p.txt"]) == "p.txt"
+assert ops(6) == " <  <  +  -  *  + " and caught(2) == 2 and caught(7) == 2 and deferred() == 6
+assert captured(0) == 10 and captured(1) == 20 and afterLoop(4) == 9 and twoOfOne(1) == 129
+
+test click "walks the parents to the button" {
+    assert clickDepth() == 210
+}
+
+test appendTail "appends at the tail a cursor found" {
+    assert chainSum(5) == 1234 and Chain == 1234
+}
+
+test planAt "keeps an option from a parameter's array" {
+    assert planAt(Array<String&>["-plan", "a", "-o", "b"]) == "a" and planAt(Array<String&>["-o"]) == ""
+}
+
+test ops "keeps an element of a constant literal" {
+    assert ops(7) == " <  <  +  -  *  +  - "
+}
+
+test find "gives a version in a catch clause" {
+    assert caught(1) == 1 and caught(2) == 2 and caught(3) == 2
+}
+
+test lastSeen "reads every version in deferred code" {
+    assert deferred() == 6
+}
+
+test captured "captures the version reaching the lambda" {
+    assert captured(0) == 10 and captured(3) == 20
+}
+
+test afterLoop "reads after the loop what the last turn gave" {
+    assert afterLoop(1) == 0 and afterLoop(5) == 12
+}
+
+test twoOfOne "builds through versions of one scope" {
+    assert twoOfOne(0) == 129 and twoOfOne(1) == 129
+}

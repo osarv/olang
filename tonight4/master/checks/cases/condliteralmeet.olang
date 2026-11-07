@@ -1,0 +1,10 @@
+# check: fail error[E6d]: this literal does not fit U32, and U32 does not flow into I32
+# E4a/E6d: beside an operand whose type cannot hold all its values, a conditional of literals meets it at its own type,
+# as one literal does - and a U32 does not flow into an I32, so they do not meet
+C mut Bool = true
+
+fn main() ? {
+    u U32 = 5
+    v := u - (-1 if C else 1)
+    println($v)
+}

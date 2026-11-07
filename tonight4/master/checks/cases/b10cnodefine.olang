@@ -1,0 +1,19 @@
+# check: run
+# B10c: without -D a build constant's default is the declaration's own value - and a condition reading it is
+# configuration, never S8a's dead branch: the build decides it (S8b), and only the branch it chooses is checked
+Profile := "dev"
+Port I64 = 8080
+
+if Profile == "prod" {
+    Banner := "production"
+} else {
+    Banner := "development"
+}
+
+fn main() ? {
+    assert Profile == "dev" and Port == 8080 and Banner == "development"
+    if Profile == "prod" { this is not checked }
+    n := 0
+    if Port > 1000 { n = 1 }
+    assert n == 1
+}

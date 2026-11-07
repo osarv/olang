@@ -1,0 +1,16 @@
+import "std/io"
+
+fn two(x F16, y BF16) (F16, BF16, U64) {
+    return x * F16(2.0), y + BF16(1.0), 9
+}
+
+fn twoE(x F16, y BF16) (F16, BF16) ? {
+    if x > F16(100.0) { error }
+    return x * F16(2.0), y + BF16(1.0)
+}
+
+fn main() ? io.IoError {
+    a, b, c := two(F16(0.25), BF16(3.0))
+    d, e := try twoE(F16(0.25), BF16(3.0)) catch default F16(0.0), BF16(0.0)
+    try io.Print($a " " $b " " $c " " $d " " $e "\n")
+}

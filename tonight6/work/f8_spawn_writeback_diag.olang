@@ -1,0 +1,17 @@
+# DIAGNOSTIC regression (E31b/P1): a spawned method call on x[i] with a mut receiver is now wrapped in the write back,
+# and spawn then says "'spawn' takes a call" - it is one. (a2e2878 built it and dropped the writes, r02.)
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) Add() { a.N++ }
+fn bump(a mut Acc&) { a.N++ }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    l.Push(Acc())
+    join {
+        spawn l[0].Add()
+        spawn bump(l[1])
+    }
+    println("l[0].N=" $l[0].N " l[1].N=" $l[1].N)
+}

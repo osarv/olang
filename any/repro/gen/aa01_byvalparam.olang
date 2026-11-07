@@ -1,0 +1,39 @@
+import "std/io"
+# an any borrowing a by-value parameter's own storage, returned borrowed from it or built
+type Named trait {
+    Name() String
+}
+type Pt struct(x I64, y I64) {
+    x
+    y
+}
+fn (p Pt&) Name() String { return "pt " $p.x " " $p.y }
+fn bor(p Pt) any Named&p { return p }
+fn bui(p Pt) any Named& { return p }
+fn main() {
+    xs := List<any Named&>()
+    for i in range 3 {
+        xs.Push(bor(Pt(i, i * 10)))
+        xs.Push(bui(Pt(i, i * 100)))
+    }
+    churn()
+    for x in xs { say(x.Name()) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

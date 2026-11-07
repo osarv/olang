@@ -1,0 +1,29 @@
+type Reading struct(Sensor String&, Value F64) {
+    Sensor
+    Value
+}
+fn churn() I64 {
+    t I64 = 0
+    for k in range 200 {
+        junk := $k "-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        t += junk.Len()
+    }
+    return t
+}
+type Node struct(v I64) { v }
+fn fresh(r Reading) Node&r {
+    return Node(r.Sensor.Len())
+}
+fn main() ? {
+    t := "abc-text-built-in-main" $churn()
+    r := Reading(t, 1.0)
+    l := List<I64>()
+    l.Push(1)
+    f := fn() I64 {
+        n := fresh(r)
+        m := fresh(r)
+        return n.v + m.v + l.Len()
+    }
+    for i in range 3 { println($f()) }
+    println($l.Len())
+}

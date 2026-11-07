@@ -1,0 +1,17 @@
+# c04c without an any: a constructor call and a built result given a scope argument, pushed into an outer List<P&>
+type P struct(n I64) { n }
+fn mkp(i I64) P& { return P(i) }
+fn mk(i I64) String { return "text" $i }
+fn main() {
+    xs := List<P&>()
+    ys := List<String&>()
+    for i in range 2 {
+        t := "inner" $i
+        xs.Push(P&t(i))
+        xs.Push(mkp&t(i))
+        ys.Push(mk&t(i))
+    }
+    assert churn() > 0
+    for x in xs { say($x.n) }
+    for y in ys { say(y) }
+}

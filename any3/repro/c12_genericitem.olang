@@ -1,0 +1,24 @@
+# T32a in a generic's instance: the item is a call through a function value giving T by value (new), a T read (copied)
+type W trait {
+    mut Bump()
+    Show() String
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn (l Lab&) Show() String { return "lab " $String(l) }
+fn wrapCall<T W>(f fn(i I64) T, i I64) mut any W& { return f(i) }
+fn wrapRead<T W>(x T) mut any W& { return x }
+fn wrapCond<T W>(g fn(i I64) T, f fn(i I64) T, i I64) mut any W& { return f(i) if i > 0 else g(i) }
+fn main() {
+    l := List<mut any W&>()
+    src := Lab("srcA")
+    for i in range 3 {
+        l.Push(wrapCall(fn(k I64) Lab { return Lab("c" $k "-" $(k * 7)) }, i))
+        l.Push(wrapRead(src))
+        l.Push(wrapCond(fn(k I64) Lab { return Lab("g" $k) }, fn(k I64) Lab { return Lab("d" $k "-" $(k * 7)) }, i))
+    }
+    assert churn() > 0
+    for x in l { x.Bump() }
+    for x in l { say(x.Show()) }
+    say(String(src))
+}

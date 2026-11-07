@@ -1,0 +1,12 @@
+== build -debug -sanitize
+abc1 abc2
+abc1 abc2
+status 0
+== build
+abc1 abc2
+abc1 abc2
+status 0
+== interpret
+abc1 abc2
+abc1 abc2
+status 0

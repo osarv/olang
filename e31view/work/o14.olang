@@ -1,0 +1,27 @@
+type K enum {
+    A
+    B
+}
+type Pt struct() {
+    X I64 = 0
+}
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+    kind K = K.A
+    inl Array<I64, 2> = Array<I64, 2>()
+    p Pt = Pt()
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn f(c mut V&) {
+    q := c.p.X
+    c.d[0] = q
+}
+fn main() ? {
+    s := Vs(Array<I64>(4))
+    f(s[1])
+    println($s.d)
+}

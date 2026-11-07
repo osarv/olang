@@ -1,0 +1,27 @@
+# R1 between parameters: src is a lexer (a plain reference parameter), dst a parser holding an owned lexer
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn mv(src mut Lexer&, dst mut Parser&) { dst.lx.toks = take src.toks }
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    p := Parser()
+    p.lx = Lexer()
+    for i in range 3 { p.lx.toks.Push($i "-word-built-in-the-lexer's-region") }
+    d := Parser()
+    d.lx = Lexer()
+    mv(p.lx, d)
+    p.lx = null
+    churn()
+    println(d.lx.toks[0])
+}

@@ -1,0 +1,52 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type Holder struct(r Res) {
+    r
+}
+
+fn cond(r Res, keep Bool) Holder {
+    return Holder(r) if keep else Holder(Res(9))
+}
+
+fn arm(r Res, n I64) Holder {
+    return match n {
+        case 0: Holder(r)
+        case _: Holder(Res(8))
+    }
+}
+
+fn clause(r Res, bad Bool) Holder {
+    k := try pick(bad) catch Nope { return Holder(r) }
+    return Holder(Res(k))
+}
+
+fn pick(bad Bool) I64 ? Nope {
+    if bad: error Nope
+    return 7
+}
+
+fn main() {
+    { h := cond(Res(1), false)
+      io.Println("cond " $h.r.id " " $Ended)! }
+    io.Println("after " $Ended)!
+    Ended = 0
+    { h := arm(Res(2), 1)
+      io.Println("arm " $h.r.id " " $Ended)! }
+    io.Println("after " $Ended)!
+    Ended = 0
+    { h := clause(Res(3), false)
+      io.Println("clause " $h.r.id " " $Ended)! }
+    io.Println("after " $Ended)!
+    Ended = 0
+    { h := clause(Res(4), true)
+      io.Println("clause " $h.r.id " " $Ended)! }
+    io.Println("after " $Ended)!
+}

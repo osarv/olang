@@ -1,0 +1,9 @@
+type E enum {
+    A(at I64)
+    Big(f0 I64, f1 I64, f2 I64, f3 I64, f4 I64, f5 I64, f6 I64, f7 I64, f8 I64)
+}
+fn main() ? {
+    keep := List<E&>()
+    for i in range 1000000 { keep.Push(E.A(i)) }
+    println($keep.Len())
+}

@@ -1,0 +1,17 @@
+type Cell struct() {
+    v I64 = 0
+}
+type Bag struct(c mut Cell&) {
+    c
+}
+fn id(x <T>) T { return x }
+fn (b Bag&) Str() String {
+    r := id(b.c)
+    r.v++
+    return "b" $r.v
+}
+fn main() ? {
+    b := Bag(Cell())
+    println($b)
+    println($b)
+}

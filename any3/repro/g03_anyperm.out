@@ -1,0 +1,16 @@
+== build -debug -sanitize
+g03_anyperm.olang:15:49: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   15 | fn ro(it any Iterator<I64>&) I64 { return drain(it) }
+      |                                                 ^~
+g03_anyperm.olang:16:51: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   16 | fn roI(it any Iterator<I64>&) I64 { return drainI(it) }
+      |                                                   ^~
+compilation failed with 2 errors
+== build
+g03_anyperm.olang:15:49: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   15 | fn ro(it any Iterator<I64>&) I64 { return drain(it) }
+      |                                                 ^~
+g03_anyperm.olang:16:51: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   16 | fn roI(it any Iterator<I64>&) I64 { return drainI(it) }
+      |                                                   ^~
+compilation failed with 2 errors

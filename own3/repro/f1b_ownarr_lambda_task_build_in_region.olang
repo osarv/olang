@@ -1,0 +1,30 @@
+# own3 F1 (variants): a lambda capturing a borrow of an own array, and a task handed one, build an element's referent
+# in the buffer's region; the index read is retagged to the slot's reach and outlives the buffer.
+# -b -s: "use after scope closed" (each part alone); -i prints the texts
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+type B struct() {
+    names own mut Array<String&>& = Array<String&>(3)
+}
+fn fill(a mut Array<String&>&) { a[0] = $7 "built-by-task" }
+fn main() ? {
+    b := B()
+    nm := b.names
+    f := fn() { nm[0] = $5 "via-lambda" }    # the capture's scope is bound to the buffer's region
+    f()
+    e := b.names[0]
+    b.names = Array<String&>(1)
+    churn()
+    println(e)
+    join { spawn fill(b.names) }               # the task's stand-in folds into the buffer's region
+    g := b.names[0]
+    b.names = Array<String&>(1)
+    churn()
+    println(g)
+}

@@ -1,0 +1,9 @@
+type Bag struct() {
+    items List<I64>& = List<I64>()
+}
+fn main() ? {
+    l := List<Bag&>()
+    l.Push(Bag())
+    b := l[0]
+    assert b.items.Len() == 0
+}

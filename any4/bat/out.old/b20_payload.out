@@ -1,0 +1,13 @@
+== b20_payload
+  san:    exit 134 use after scope closed: storage a closed scope gave back was read or written|
+  O3:     exit 0 payload 12|payload 12849|
+  interp: exit 1 olang interpret: b20_payload.olang:36: it uses storage after the scope it was made in closed|
+--- compile (-debug -sanitize)
+built ./build/b20_payload.debug.san
+--- run san
+use after scope closed: storage a closed scope gave back was read or written
+--- run O3
+payload 12
+payload 12849
+--- interpret
+olang interpret: b20_payload.olang:36: it uses storage after the scope it was made in closed

@@ -1,0 +1,14 @@
+import "std/io"
+
+Calls mut I64 = 0
+
+fn mk() Array<I64>& {
+    Calls = Calls + 1
+    return Array<I64>(3, Calls)
+}
+
+fn main() ? io.IoError {
+    x I64 = try mk()[1] catch default 0
+    y I64 = try (mk()[2] + 1) catch default 0
+    try io.Print($x " " $y " " $Calls "\n")
+}

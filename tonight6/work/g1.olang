@@ -1,0 +1,24 @@
+# E31b in a global initializer: is the write back made there?
+type Acc struct() {
+    N I64 = 0
+}
+fn (a mut Acc&) AddRet() I64 {
+    a.N = a.N + 5
+    return a.N
+}
+fn bump(a mut Acc&) I64 {
+    a.N = a.N + 7
+    return a.N
+}
+fn mk() List<Acc> {
+    l := List<Acc>()
+    l.Push(Acc())
+    return l
+}
+GM mut List<Acc> = mk()
+Y I64 = GM[0].AddRet()
+Z I64 = bump(GM[0])
+fn main() ? {
+    w := GM[0].AddRet()
+    println("Y " $Y " Z " $Z " GM[0].N " $GM[0].N " w " $w)
+}

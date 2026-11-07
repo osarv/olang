@@ -1,0 +1,19 @@
+# "$" on a reference to an array value's zero value: the evaluator rendered the empty array it holds, the run time the
+# null reference it is (E10: an array with no storage has a null reference's bits; E11a renders a null as "null").
+#     expected: "null true" on every line
+#     actual:   the baked global (K2), an assert decided while compiling (S18c) and -i said "U16[] true"; -d and -b
+#               "null true" - "== null" agreed, "$" did not
+# Found by the generator (seed 3193: a borrow of a zero-valued array local rendered into a case's text result).
+# Cause (comptime.c, ctRenderBody): a marked array was rendered "null" only for a CT_NULL value, not for a reference
+# to an aggregate with no storage, which ctArrayRefNull already reads as null for "==". Fixed.
+fn cc(n I32) String {
+    d Array<U16>
+    rd Array<U16>&d = d
+    return $rd " " $(rd == null)
+}
+K String = cc(3)
+v mut I32 = 3
+fn main() ? {
+    println($K)
+    println($cc(v))
+}

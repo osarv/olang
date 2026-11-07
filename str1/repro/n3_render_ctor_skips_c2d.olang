@@ -1,0 +1,33 @@
+# NEW, CONFIRMED UAF from item 3 (in->hereChecked = true, semantic.c:11782). $Wrap(x) skips C2d exactness; Wrap's bare
+# field holds a destructor-bearing Res whose destructor stores Node(9) built in f's closing block into main's node.
+# new -b prints 670003 (want 9); -b -s: 'use after scope closed'; base refuses with C2d.
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type Res struct(a mut Node&) {
+    a
+} destruct { a.next = Node(9, null) }
+type Wrap struct(a mut Node&) {
+    a
+    r Res& = Res(a)
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+fn f(x mut Node&) I64 {
+    s := $Wrap(x)
+    return s.Len()
+}
+fn main() ? {
+    n := Node(1, null)
+    k := f(n)
+    churn()
+    println($k)
+    println($n.next.v)
+}

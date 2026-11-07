@@ -1,0 +1,4 @@
+error E { X }
+fn main() ? E {
+    error E.X
+}

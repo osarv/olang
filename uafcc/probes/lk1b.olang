@@ -1,0 +1,14 @@
+import "std/io"
+
+fn mk(s String&) String { return $s "-made-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }
+fn look(l List<String&>&, s String&l) Bool { return l.Len() > s.Len() }
+
+fn main() {
+    l := List<String&>()
+    l.Push("a")
+    n I64 = 0
+    for i in range 1000000 {
+        if look(l, mk($i)) { n += 1 }
+    }
+    io.Println($n)!
+}

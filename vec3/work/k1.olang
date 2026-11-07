@@ -1,0 +1,20 @@
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn id(x <T>) T { return x }
+# a written built result - but it hands back its argument through id (O14b obligation: a outlives the result scope)
+fn k(a mut Array<Char>&) mut Array<Char>& { return id(a) }
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    v.Push('b')
+    d := k(v.ViewMut())
+    for i in range 1000 { v.Push('z') }
+    churn()
+    println($d[0] $d[1])
+}

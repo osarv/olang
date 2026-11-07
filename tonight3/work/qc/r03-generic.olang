@@ -1,0 +1,7 @@
+fn pushOne(x <T>) { x.Push(9) }
+fn look(l List<I32>&) { pushOne(l) }
+fn main() ? {
+  a := I32[1, 2].ToList()
+  look(a)
+  println($a.Len())
+}

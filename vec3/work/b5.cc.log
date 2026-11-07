@@ -1,0 +1,4 @@
+/home/user/review/vec3/work/b5.olang:10:34: error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead
+   10 | fn mk(v Vec<Char>&) Ix& { return Ix(v.View()) }
+      |                                  ^~
+compilation failed with 1 error

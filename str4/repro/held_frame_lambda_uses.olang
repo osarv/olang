@@ -1,0 +1,86 @@
+# HELD: a local lambda called in defer, a conditional, a match, try, a catch default, "$", an assert and a comprehension
+# keeps its environment on the stack; a lambda passed to a local lambda, and every spawned use, on the heap (per-function
+# placement: awk -f held_env_placement.awk build/<name>.main.ll). Prints "5 5 5 5 5 5x 15 5 5" and "5 5 5 0".
+type Node struct(v I64) {
+    v
+}
+error Bad { NO }
+fn apply(g fn() I64) I64 { return g() }
+fn fdefer(n Node&) I64 {
+    t I64 = 0
+    {
+        f := fn() I64 { return n.v }
+        defer { t += f() }
+    }
+    return t
+}
+fn fcond(n Node&, c Bool) I64 {
+    f := fn() I64 { return n.v }
+    return f() if c else 0
+}
+fn fmatch(n Node&, c I64) I64 {
+    f := fn() I64 { return n.v }
+    return match c { case 1 => f() case _ => 2 }
+}
+fn ftry(n Node&) I64 {
+    f := fn() I64 ? { if n.v < 0 { error }
+        return n.v }
+    return try f() catch default 7
+}
+fn ftrydefault(n Node&) I64 {
+    f := fn() I64 { return n.v }
+    g := fn() I64 ? { if n.v < 100 { error }
+        return n.v }
+    return try g() catch default f()
+}
+fn fstr(n Node&) String {
+    f := fn() I64 { return n.v }
+    return $f() "x"
+}
+fn fself(n Node&) I64 {
+    f := fn(h fn() I64) I64 { return h() + n.v }
+    return f(fn() I64 { return n.v * 2 })
+}
+fn fassert(n Node&) I64 {
+    f := fn() I64 { return n.v }
+    assert f() == n.v
+    return f()
+}
+fn fcomp(n Node&) I64 {
+    f := fn(x I64) I64 { return x + n.v }
+    a := I64[f(x) for x in range 3]
+    return a[0]
+}
+fn fspawntarget(n Node&) I64 {
+    f := fn() I64 { return n.v }
+    x I64 = 0
+    join { spawn x = f() }
+    return x
+}
+fn fspawntry(n Node&) I64 {
+    f := fn() I64 ? { if n.v < 0 { error }
+        return n.v }
+    x I64 = 0
+    join { spawn x = try f() catch default 1 }
+    return x
+}
+fn fspawnclause(n Node&) I64 {
+    f := fn() I64 { return n.v }
+    g := fn() I64 ? { if n.v < 100 { error }
+        return n.v }
+    x I64 = 0
+    join { spawn x = try g() catch default f() }
+    return x
+}
+fn fclausestmt(n Node&) I64 {
+    f := fn() I64 { return n.v }
+    g := fn() ? { if n.v < 100 { error } }
+    x I64 = 0
+    join { spawn try g() catch { assert f() > 0 } }
+    return x
+}
+fn main() ? {
+    n := Node(5)
+    println($fdefer(n) " " $fcond(n, true) " " $fmatch(n, 1) " " $ftry(n) " " $ftrydefault(n) " " $fstr(n) " " $fself(n) " " $fassert(n) " " $fcomp(n))
+    println($fspawntarget(n) " " $fspawntry(n) " " $fspawnclause(n) " " $fclausestmt(n))
+}

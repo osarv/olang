@@ -1,0 +1,25 @@
+type E enum {
+    Lit(v I64)
+    Add(a E&, b E&)
+}
+fn eval(e E&) I64 {
+    return match e {
+        case E.Lit(v) => v
+        case E.Add(a, b) => eval(a) + eval(b)
+    }
+}
+fn (a E&) Plus(b E&) E { return E.Add(a, b) }
+fn viaEq() I64 {
+    x := E.Lit(1)
+    x = x + E.Lit(2)
+    return eval(x)
+}
+fn viaCompound() I64 {
+    x := E.Lit(1)
+    x += E.Lit(2)
+    return eval(x)
+}
+fn main() ? {
+    println($viaEq())
+    println($viaCompound())
+}

@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/t4_take_flow_inner_block.olang:18:13: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   18 |         w = take l.toks
+      |             ^~~~
+compilation failed with 1 error

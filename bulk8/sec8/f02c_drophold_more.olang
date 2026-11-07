@@ -1,0 +1,75 @@
+# F2c: more of F2 - a Map element (v7), a Vec element through a local RefMut (v8), a call given both (v9: SPEC O15 names
+# this case outright) end the Lamp before its Grip; a struct field holder (v6) is right. Expected each "N1.M."
+import "std/io"
+
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+type Lamp unique struct(id I64, log mut Tally&) {
+    id, log
+    open := true
+} destruct {
+    log.seen.Push(id)
+    open = false
+}
+
+type Grip unique struct(id I64) {
+    id
+    held Lamp?& = null
+} destruct {
+    if held is not null: held!.log.seen.Push(id * 10 + (1 if held!.open else 0))
+}
+
+fn (g mut Grip&) Hold(l Lamp&) { g.held = l }
+
+fn show(t Tally&) String {
+    b := StringBuilder()
+    for x in t.seen { b.Push($x ".") }
+    return b.ToString()
+}
+
+type Pair struct() {
+    g Grip = Grip(1)
+}
+
+fn v6(t mut Tally&) {
+    h Pair = Pair()
+    l Lamp = Lamp(2, t)
+    h.g.held = l
+}
+
+fn v7(t mut Tally&) {
+    ms := Map<I64, Grip>()
+    ms.Put(1, Grip(3))
+    l Lamp = Lamp(4, t)
+    ms.RefMut(1)!.held = l
+}
+
+fn v8(t mut Tally&) {
+    gs := Vec<Grip>()
+    gs.Push(Grip(5))
+    l Lamp = Lamp(6, t)
+    g := gs.RefMut(0)
+    g.held = l
+}
+
+fn v9(t mut Tally&) {
+    gs := Vec<Grip>()
+    gs.Push(Grip(7))
+    l Lamp = Lamp(8, t)
+    set := fn(x mut Vec<Grip>&, y Lamp&) { x.RefMut(0).held = y }
+    set(gs, l)
+}
+
+fn main() {
+    t1 := Tally()
+    v6(t1)
+    t2 := Tally()
+    v7(t2)
+    t3 := Tally()
+    v8(t3)
+    t4 := Tally()
+    v9(t4)
+    io.Println($show(t1) " " $show(t2) " " $show(t3) " " $show(t4))!
+}

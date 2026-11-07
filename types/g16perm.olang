@@ -1,0 +1,14 @@
+# List<Node&> and List<mut Node&> are two types (T25b, G16a) but share one instantiation name
+import "std/io"
+type Node struct(v I32) { v mut }
+fn main() ? {
+  ro := List<Node&>()          # first use: elements read-only
+  n Node& = Node(1)
+  ro.Push(n)
+  rw := List<mut Node&>()      # a list of writable references
+  m := Node(2)
+  rw.Push(m)
+  x := rw[0]
+  x.v = 5                      # legal: rw holds writable references
+  try io.Print($m.v "\n")
+}

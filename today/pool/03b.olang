@@ -1,0 +1,22 @@
+# control: the same with Gemm, which packs into a workspace of its own scope
+# by one panel per step - each old panel stays in the workspace's scope until it closes
+import "std/linalg"
+import "std/os"
+fn rss() String {
+    s := try os.ReadFile("/proc/self/status") catch default ""
+    for line in s.Lines() {
+        if line.StartsWith("VmRSS") { return line }
+    }
+    return "?"
+}
+fn main() ? {
+    ws := linalg.GemmWorkspace<F32>()
+    q := linalg.Matrix<F32>(64, 64, null)
+    for t in range 64, 1600, 16 {
+        k := linalg.Matrix<F32>(t, 64, null)
+        s := linalg.Matrix<F32>(64, t, null)
+        linalg.Gemm(s, q, false, k, true)
+        if t % 256 == 0 { println($t " " $rss()) }
+    }
+    println("end " $rss())
+}

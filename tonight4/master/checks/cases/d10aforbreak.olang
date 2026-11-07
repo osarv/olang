@@ -1,0 +1,8 @@
+# check: fail error[D10a]: the end can be reached without returning I32
+# D10a: a loop with a break of its own can be left, so the end after it is reached
+fn f(x Bool) I32 {
+    for {
+        if x { break }
+    }
+}
+fn main() ? { }

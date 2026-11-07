@@ -1,0 +1,12 @@
+type C struct(N String&) { N }
+G := C&[C("a"), C("b")]
+fn main() ? {
+    args := String&["x", "y", "z"]
+    cases := G
+    if args.Len() > 1 {
+        loaded := List<C&>()
+        for a in args { loaded.Push(C(a)) }
+        cases = loaded.ToArray()
+    }
+    println($cases.Len())
+}

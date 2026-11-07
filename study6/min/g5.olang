@@ -1,0 +1,8 @@
+fn main() ? {
+    users := List<List<I64>>()
+    users.Push(List<I64>())
+    users[0].Push(7)
+    churn := List<String&>()
+    for i in range 1000 { churn.Push("x" $i) }
+    println($users[0].Len() " " $users[0][0])
+}

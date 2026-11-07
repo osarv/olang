@@ -1,0 +1,6 @@
+# check: fail error[E32b]: this array's length is 2, not 3
+# E32b: where both lengths are known while compiling, an "as" between them is checked there
+fn main() ? {
+    d Array<I32, 2>
+    e := d as Array<I32, 3>&
+}

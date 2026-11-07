@@ -1,0 +1,5 @@
+# M19f: a global named println
+println I64 = 3
+fn main() ? {
+    print("x")
+}

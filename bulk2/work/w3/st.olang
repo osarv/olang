@@ -1,0 +1,27 @@
+import "std/io"
+type S struct(a U3, b I65, c U12, d I1, e U128, f I24) { a
+    b
+    c
+    d
+    e
+    f }
+fn mk(k I64) S { return S(U3(k * 5), I65(-k) << 60, U12(k * 1000), I1(k), (U128(k) << 120) | U128(k), I24(-k * 99999)) }
+G := mk(3)
+H := S[mk(1), mk(2), mk(3)]
+K mut I64 = 3
+fn main() {
+    r := mk(K)
+    io.Println($G)!
+    io.Println($r)!
+    io.Println($(G == r) " " $(G.Hash() == r.Hash()) " " $G.Hash())!
+    m := Map<S, I64>()
+    m.Put(G, 5)
+    io.Println($(try m.Get(r) catch default -1))!
+    io.Println($H)!
+    a := Array<S>(K)
+    for i in range K { a[i] = mk(i + 1) }
+    io.Println($(a == H) " " $a[2].b " " $a[2].e " " $H[2].f)!
+    v := Vec<S>()
+    for i in range 20 { v.Push(mk(i)) }
+    io.Println($v[19])!
+}

@@ -1,0 +1,42 @@
+# realistic correct programs: find the max node of a list, walk a tree, a map of strings
+import "std/io"
+import "std/map"
+type Node struct(v I32) { v mut }
+type Tree struct(key I32) {
+    key
+    left mut Tree& = null
+    right mut Tree& = null
+}
+fn (t mut Tree&) Insert(k I32) {
+    if k < t.key {
+        if t.left == null { t.left = Tree(k) } else { t.left.Insert(k) }
+    } else {
+        if t.right == null { t.right = Tree(k) } else { t.right.Insert(k) }
+    }
+}
+fn (t Tree&) Min() Tree&t {
+    c Tree&t = t
+    for c.left != null { c = c.left }
+    return c
+}
+fn biggest(l List<Node&>&) Node&l ? {
+    best := l[0]
+    for x in l {
+        if x.v > best.v { best = x }
+    }
+    return best
+}
+fn main() ? {
+    l List<Node&>& = List<Node&>()
+    for i in range 10 { l.Push(Node(I32((i * 7) % 10))) }
+    b := try biggest(l)
+    keep := l[0]
+    for x in l { if x.v == 3 { keep = x } }
+    t Tree& = Tree(50)
+    for k in I32[30, 70, 20, 40, 60, 80] { t.Insert(k) }
+    m map.Map<String&, I64>& = map.Map<String&, I64>()
+    for i in range 5 { m.Put($i "-key", i * 10) }
+    total I64 = 0
+    for e in m { total += e.Value }
+    try io.Print($b.v " " $keep.v " " $t.Min().key " " $total " " $(try m.Get("3-key")) "\n")
+}

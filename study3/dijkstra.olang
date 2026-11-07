@@ -1,0 +1,209 @@
+# dijkstra - a generic binary heap constrained by an ordering trait (with defaults), Dijkstra's shortest paths over a
+# named road graph, and the same search on a fixed-size grid held in Array<Array<Char, W>, H>.
+
+type Ordered<T> trait {
+    Less(other T) Bool
+}
+
+# defaults every Ordered type gets
+fn (a <O Ordered<<T>>>) Greater(b T) Bool { return b.Less(a) }
+fn (a <O Ordered<<T>>>) Min(b T) T { return b if b.Less(a) else a }
+
+# a min-heap: the smallest element by Less on top
+type Heap<T Ordered<T>> struct() {
+    items List<T>
+}
+
+fn (h Heap<<T>>&) Len() I64 { return h.items.Len() }
+
+fn (h mut Heap<<T>>&) Push(x T) {
+    h.items.Push(x)
+    i := h.items.Len() - 1
+    for i > 0 {
+        parent := (i - 1) / 2
+        if not h.items[i].Less(h.items[parent]) { break }
+        h.swap(i, parent)
+        i = parent
+    }
+}
+
+fn (h mut Heap<<T>>&) swap(i I64, j I64) {
+    h.items[i], h.items[j] = h.items[j], h.items[i]
+}
+
+fn (h mut Heap<<T>>&) Pop() T ? Exhausted {
+    if h.items.Len() == 0 { error Exhausted.END }
+    top := h.items[0]
+    last := try h.items.Pop() catch { unreachable }
+    if h.items.Len() == 0 { return top }
+    h.items[0] = last
+    i I64 = 0
+    n := h.items.Len()
+    for {
+        l := 2 * i + 1
+        r := l + 1
+        m := i
+        if l < n and h.items[l].Less(h.items[m]) { m = l }
+        if r < n and h.items[r].Less(h.items[m]) { m = r }
+        if m == i { break }
+        h.swap(i, m)
+        i = m
+    }
+    return top
+}
+
+# a heap is an iterator that empties it in order
+fn (h mut Heap<<T>>&) Next() T ? Exhausted { return try h.Pop() }
+
+# ---- the road graph ----
+
+type Edge struct(to I64, cost I64) {
+    to
+    cost
+}
+
+type Visit struct(node I64, dist I64) {
+    node
+    dist
+}
+
+fn (a Visit) Less(b Visit) Bool { return a.dist < b.dist or (a.dist == b.dist and a.node < b.node) }
+
+type Graph struct() {
+    names List<String&>
+    ids Map<String&, I64>
+    adj List<mut List<Edge>&>
+}
+
+fn (g mut Graph&) id(name String&) I64 {
+    return try g.ids.Get(name) catch {
+        g.ids.Put(name, g.names.Len())
+        g.names.Push(name)
+        g.adj.Push(List<Edge>())
+        return g.names.Len() - 1
+    }
+}
+
+fn (g mut Graph&) road(a String&, b String&, km I64) {
+    x := g.id(a)
+    y := g.id(b)
+    g.adj[x].Push(Edge(y, km))
+    g.adj[y].Push(Edge(x, km))
+}
+
+Unreached I64 = 1 << 60
+
+fn (g Graph&) shortest(from I64) (Array<I64>, Array<I64>) {
+    n := g.names.Len()
+    dist := Array<I64>(n, Unreached)
+    prev := Array<I64>(n, -1)
+    dist[from] = 0
+    h mut Heap<Visit>& = Heap<Visit>()
+    h.Push(Visit(from, 0))
+    for v in h {
+        if v.dist > dist[v.node] { continue }
+        for e in g.adj[v.node] {
+            d := v.dist + e.cost
+            if d < dist[e.to] {
+                dist[e.to] = d
+                prev[e.to] = v.node
+                h.Push(Visit(e.to, d))
+            }
+        }
+    }
+    return dist, prev
+}
+
+fn (g Graph&) route(prev Array<I64>&, to I64) String {
+    hops := List<I64>()
+    for at := to, at != -1, at = prev[at] { hops.Push(at) }
+    hops.Reverse()
+    b := StringBuilder()
+    for i, h in hops {
+        if i > 0 { b.Push(" -> ") }
+        b.Push(g.names[h])
+    }
+    return b.ToString()
+}
+
+# ---- a grid maze in fixed-size storage ----
+
+type Maze<W I64, H I64> struct(rows Array<String&>&) {
+    assert rows.Len() == H
+    cells Array<Array<Char, W>, H>
+    for y in range H {
+        for x in range W { cells[y][x] = rows[y][x] }
+    }
+}
+
+type Cell struct(x I64, y I64, d I64) {
+    x
+    y
+    d
+}
+fn (a Cell) Less(b Cell) Bool { return a.d < b.d }
+
+fn (m Maze<<W I64>, <H I64>>&) solve() I64 {
+    dist := Array<I64, W * H>()
+    for i in range W * H { dist[i] = Unreached }
+    h mut Heap<Cell>& = Heap<Cell>()
+    h.Push(Cell(0, 0, 0))
+    dist[0] = 0
+    for c in h {
+        if c.x == W - 1 and c.y == H - 1 { return c.d }
+        for step in I64[0, 1, 2, 3] {
+            nx := c.x + (1 if step == 0 else -1 if step == 1 else 0)
+            ny := c.y + (1 if step == 2 else -1 if step == 3 else 0)
+            if nx < 0 or ny < 0 or nx >= W or ny >= H { continue }
+            cost := match m.cells[ny][nx] {
+                case '#' => -1
+                case '~' => 5
+                nomatch => 1
+            }
+            if cost < 0 { continue }
+            if c.d + cost < dist[ny * W + nx] {
+                dist[ny * W + nx] = c.d + cost
+                h.Push(Cell(nx, ny, c.d + cost))
+            }
+        }
+    }
+    return -1
+}
+
+fn mazeCost() I64 {
+    m := Maze<8, 5>(String&[
+        "..#.....",
+        ".##.~~#.",
+        "....#.#.",
+        "#.###.#.",
+        ".....~~.",
+    ])
+    return m.solve()
+}
+MazeBaked := mazeCost()
+
+fn main() ? {
+    g := Graph()
+    g.road("Gothenburg", "Boras", 65)
+    g.road("Gothenburg", "Trollhattan", 75)
+    g.road("Boras", "Jonkoping", 85)
+    g.road("Trollhattan", "Skovde", 120)
+    g.road("Skovde", "Jonkoping", 75)
+    g.road("Jonkoping", "Linkoping", 130)
+    g.road("Skovde", "Orebro", 120)
+    g.road("Orebro", "Stockholm", 200)
+    g.road("Linkoping", "Stockholm", 200)
+    from := g.id("Gothenburg")
+    dist, prev := g.shortest(from)
+    for i, name in g.names {
+        println($name.PadEnd(12) " " $dist[i].PadStart(4) " km  " $g.route(prev, i))
+    }
+    h mut Heap<Visit>& = Heap<Visit>()
+    for i in range 10 { h.Push(Visit(i, (i * 7) % 10)) }
+    order := I64[v.node for v in h]
+    println("heap order: " $order)
+    a := Visit(1, 5)
+    b := Visit(2, 3)
+    println("min: " $a.Min(b).node ", greater: " $a.Greater(b))
+    println("maze: " $mazeCost() " baked " $MazeBaked)
+}

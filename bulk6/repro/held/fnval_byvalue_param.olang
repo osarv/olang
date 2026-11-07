@@ -1,0 +1,18 @@
+# open point 5 covers reference parameters only: a result handed back from a BY-VALUE parameter's references, via a function value
+import "std/io"
+
+type holder struct(s String&) { s }
+
+fn pick(h holder) String& { return h.s }
+
+fn main() {
+    g := pick
+    out := Vec<String&>()
+    for i in range 5 {
+        t := $i "-turn"
+        out.Push(g(holder(t)))
+    }
+    junk := Vec<String>()
+    for i in range 50 { junk.Push("zzzzzzzzzzzzzzzzzzzzzzz" $i) }
+    io.Println($out " " $junk.Len())!
+}

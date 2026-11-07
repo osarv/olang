@@ -1,0 +1,15 @@
+== r18c_passlimitassert
+  san:    exit 134 run: k.s Qbc1|r18c_passlimitassert.olang:36: assertion failed: k.s changed when the caller wrote its own value|
+  O3:     exit 134 run: k.s Qbc1|r18c_passlimitassert.olang:36: assertion failed: k.s changed when the caller wrote its own value|
+  interp: exit 134 run: k.s Qbc1|r18c_passlimitassert.olang:36: assertion failed: k.s changed when the caller wrote its own value|
+--- compile (-debug -sanitize)
+built ./build/r18c_passlimitassert.debug.san
+--- run san
+run: k.s Qbc1
+r18c_passlimitassert.olang:36: assertion failed: k.s changed when the caller wrote its own value
+--- run O3
+run: k.s Qbc1
+r18c_passlimitassert.olang:36: assertion failed: k.s changed when the caller wrote its own value
+--- interpret
+run: k.s Qbc1
+r18c_passlimitassert.olang:36: assertion failed: k.s changed when the caller wrote its own value

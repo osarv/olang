@@ -1,0 +1,71 @@
+import "std/io"
+
+type PErr error { EMPTY, BAD }
+type NetError error { DOWN, SLOW, GONE }
+type LoadError error NetError, PErr { TIMEOUT }
+type Wide error PErr, LoadError
+
+fn parse(i I64) I64 ? PErr {
+    if i == 0 { error PErr.EMPTY }
+    if i == 1 { error PErr.BAD }
+    return i
+}
+
+fn load(i I64) I64 ? LoadError {
+    if i == 2 { error NetError.GONE }
+    if i == 3 { error LoadError.TIMEOUT }
+    return try parse(i)
+}
+
+type Box struct() {
+    l LoadError
+    p PErr
+}
+
+fn caught(i I64, b mut Box&) {
+    b.l = null
+    try load(i) catch LoadError e { b.l = e }
+}
+
+fn pe(i I64, b mut Box&) {
+    b.p = null
+    try parse(i) catch PErr e { b.p = e }
+}
+
+fn same<T>(a T, b T) Bool { return a == b }
+
+fn reraise(e LoadError) I64 ? Wide {
+    if e is not null { error e }
+    return 0
+}
+
+Baked := LoadError[PErr.BAD, NetError.SLOW, LoadError.TIMEOUT, null]
+
+fn main() {
+    m := Map<LoadError, I64>()
+    bx := Box()
+    for i in range 5 {
+        caught(i, bx)
+        e := bx.l
+        m.Put(e, i)
+        io.Println($i " " $e " " $(e == PErr.BAD) " " $(e == NetError) " " $e.Hash())!
+    }
+    pe(1, bx)
+    p := bx.p
+    l LoadError = p
+    caught(1, bx)
+    io.Println($(l == p) " " $same(l, bx.l) " " $(try m.Get(p) catch default -1) " " $(p.Hash() == l.Hash()))!
+    w Wide = l
+    io.Println($w " " $(w == l) " " $(w == p) " " $(w.Hash() == l.Hash()))!
+    for b in Baked { io.Println($b " " $(b == PErr.BAD) " " $(b == LoadError.TIMEOUT))! }
+    caught(3, bx)
+    r := try reraise(bx.l) catch Wide e { io.Println("re " $e)! } default 9
+    v := Vec<PErr>()
+    v.Push(PErr.EMPTY)
+    v.Push(p)
+    io.Println($v " " $r)!
+    match l {
+        case PErr.BAD { io.Println("bad")! }
+        case _ { io.Println("other")! }
+    }
+}

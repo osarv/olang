@@ -1,0 +1,21 @@
+# check: fail error[O25h]: this value holds references into a scope the target outlives
+# O25h/O20: a value copied out of a reference keeps its references where the referent is - so assigning one to a local
+# whose references are claimed to be in its block is held to that claim, exactly where something can be stored through
+# them (O25g); it was accepted, and a node built through the local then lived in its block
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type Box struct() {
+    head mut Node& = Node()
+}
+fn copyOut(src Box&) {
+    d := Box()
+    d = src
+    d.head.next = Node()
+}
+fn main() ? {
+    b := Box()
+    copyOut(b)
+    println($b.head.v)
+}

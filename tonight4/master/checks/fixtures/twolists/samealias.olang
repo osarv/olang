@@ -1,0 +1,4 @@
+import "std/io"
+import "io"
+error E { X }
+fn main() ? E { }

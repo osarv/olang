@@ -1,0 +1,16 @@
+import "std/io"
+type Named trait {
+    Name() String
+}
+type Cat struct(n String&) { n }
+fn (c Cat&) Name() String { return "cat " $c.n }
+
+fn main() {
+    xs := List<any Named&>()
+    for i in range 3 {
+        c := Cat("c" $i)
+        xs.Push(Cat("t" $i))
+    }
+    churn()
+    for x in xs { say(x.Name()) }
+}

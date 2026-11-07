@@ -1,0 +1,22 @@
+fn mix(u U16) I64 {
+    h := u.F16FromBits()
+    b := h.Bits().BF16FromBits()
+    h2 := b.Bits().F16FromBits()
+    r I64 = 0
+    if b == b { r += I64(F32(b) * 4.0) }
+    if h2 == h2 { r += I64(F32(h2) * 2.0) }
+    r += I64(b.Bits()) + I64(h2.Bits()) * 3
+    if b == b and F32(b) < 1000000.0 and F32(b) > -1000000.0 { r += I64(b) }
+    b16 := BF16(F32(u) * 0.001)
+    r += I64(b16.Bits())
+    return r
+}
+fn total() I64 {
+    t I64 = 0
+    for u in range 65536 { t = t * 31 + mix(U16(u)) }
+    return t
+}
+B := total()
+fn main() ? {
+    println($B " " $total())
+}

@@ -1,0 +1,8 @@
+# check: fail error[T29f]: only a type over a number or an array extends its base
+# T29f: a struct has no base to inherit from
+type P extends struct(x I32) {
+    x
+}
+fn main() ? {
+    p := P(1)
+}

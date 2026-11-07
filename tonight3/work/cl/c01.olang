@@ -1,0 +1,34 @@
+fn f1(c Bool) F32 { x F32 = 0.1 if c else 0.2
+    return x * (3.0 if c else 0.7) }
+fn f2(c Bool) F16 { h F16 = 65519.99 if c else 0.1
+    return h }
+fn f3(c Bool, b U8) I32 { return b + (300 if c else 1) }
+fn f4(c Bool, b U8) U8 { return b + (3 if c else 1) }
+fn f5(c Bool) BF16 { v BF16 = 1.1 if c else (2.2 if not c else 3.3)
+    return v }
+fn f6(c Bool) I64 { v I64 = (1 << 40) if c else 7
+    return v }
+fn f7(c Bool, g F32) F32 { return g * (1.0 / 3.0 if c else 0.25) }
+fn f8(c Bool, k I32) F64 { return F64(k) + (0.1 if c else 0.2) }
+fn f9(c Bool) U64 { v U64 = 0xFFFFFFFFFFFFFFFF if c else 1
+    return v }
+fn f10(c Bool, k I64) I64 { return match k { case 0 => 1 case 1 => (2 if c else 3) case _ => 4 } }
+fn f11(c Bool) F32 { return match c { case true => 0.1 case false => 0.3 } }
+B1 F32 = f1(true)
+B2 F16 = f2(true)
+B3 I32 = f3(true, 250)
+B4 U8 = f4(true, 254)
+B5 BF16 = f5(true)
+B6 I64 = f6(true)
+B7 F32 = f7(true, 0.3)
+B8 F64 = f8(true, 2)
+B9 U64 = f9(true)
+B10 I64 = f10(false, 1)
+B11 F32 = f11(true)
+C mut Bool = true
+G mut F32 = 0.3
+fn main() ? {
+    println("baked " $B1 " " $B2 " " $B3 " " $B4 " " $B5 " " $B6 " " $B7 " " $B8 " " $B9 " " $B10 " " $B11)
+    println("run   " $f1(C) " " $f2(C) " " $f3(C, 250) " " $f4(C, 254) " " $f5(C) " " $f6(C) " " $f7(C, G) " " $f8(C, 2) " " $f9(C) " " $f10(not C, 1) " " $f11(C))
+    println($(B1.Bits() == f1(C).Bits() and B7.Bits() == f7(C, G).Bits()))
+}

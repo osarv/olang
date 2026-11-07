@@ -1,0 +1,14 @@
+# check: fail a payload lives where the value does
+# T17c: an enum's payload lives where the enum value does - storing one built from a reference that dies at the end of
+# each iteration into a reference that outlives the loop would leave the payload dangling
+type Expr enum {
+    Lit(v I64)
+    Add(a Expr&, b Expr&)
+}
+fn main() ? {
+    keep Expr& = Expr.Lit(0)
+    for i in range 3 {
+        t Expr& = Expr.Lit(i)
+        keep = Expr.Add(keep, t)
+    }
+}

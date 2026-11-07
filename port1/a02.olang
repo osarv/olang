@@ -1,0 +1,14 @@
+# a conditional whose arm builds, assigned to an outer local inside a loop
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+type Box struct(n Node&) { n }
+fn mk(i I64) Node& { return Node(i) }
+fn main() ? io.IoError {
+    keep mut Node& = Node(0)
+    for i in range 10 {
+        keep = keep if i % 3 == 1 else mk(i * 7)
+    }
+    c := churn.Churn()
+    try io.Println($c " " $keep.v)
+}

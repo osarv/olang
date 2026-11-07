@@ -1,0 +1,7 @@
+fn main() ? {
+    w := Vec<String&>()
+    w.Push("a")
+    c := w.Clone()
+    c.Push("x")
+    println($c.Len())
+}

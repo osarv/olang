@@ -1,0 +1,13 @@
+# a lambda capturing a reference declared in the join block itself
+import "std/io"
+type Node struct(v I32) { v mut }
+fn main() ? {
+    total Array<I32>& = Array<I32>(4)
+    join {
+        n Node& = Node(7)
+        for i in range 4 {
+            spawn fn() { total[i] = n.v + I32(i) }
+        }
+    }
+    try io.Print($total[3] "\n")
+}

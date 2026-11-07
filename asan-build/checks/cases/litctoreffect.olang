@@ -1,0 +1,9 @@
+# check: fail and that failed: it writes a global
+# T29d: the constructor a literal enters through runs while compiling, so it must be computable then
+Made mut I32 = 0
+type Counted I32(v I32) {
+    Made++
+}
+fn main() ? {
+    c Counted = 3
+}

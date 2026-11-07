@@ -1,0 +1,24 @@
+type Cell struct() {
+    v I64 = 0
+}
+type Inner struct(r mut Cell&) {
+    r
+    k I64 = 0
+}
+type Mid struct(r mut Cell&) {
+    inner Inner = Inner(r)
+}
+type Bag struct(m mut Mid&) {
+    m
+}
+fn id(x <T>) T { return x }
+fn poke(p mut Inner&) { p.k++ }
+fn (b Bag&) Str() String {
+    poke(id(b.m).inner)
+    return "b" $b.m.inner.k
+}
+fn main() ? {
+    b := Bag(Mid(Cell()))
+    println($b)
+    println($b)
+}

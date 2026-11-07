@@ -1,0 +1,9 @@
+# S18a: a failed assert says where it is, and the message written after it - built and interpreted alike
+import "std/os"
+fn main() ? {
+    n := os.Args().Len()
+    assert n < 4, "never shown " $n
+    if n == 2 { abort }
+    if n == 3 { unreachable }
+    assert n == 7, "n is " $n
+}

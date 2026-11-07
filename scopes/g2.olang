@@ -1,0 +1,18 @@
+import "std/io"
+type Node struct(v I32) { v mut }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n Node& = Node(I32(i))
+    }
+}
+fn mkAdder(n Node&) fn() I32 { return fn() { return n.v } }
+fn main() ? {
+    f fn() I32 = fn() { return 0 }
+    for i in range 2 {
+        inner Node& = Node(42)
+        f = mkAdder(inner)
+    }
+    churn()
+    try io.Print($f() "\n")
+}

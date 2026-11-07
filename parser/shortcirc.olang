@@ -1,0 +1,9 @@
+if X != 0 and 10 / X > 1 {
+    fn pick() I32 { return 1 }
+} else {
+    fn pick() I32 { return 2 }
+}
+
+test "and short-circuits in a top-level condition" {
+    assert pick() == 2
+}

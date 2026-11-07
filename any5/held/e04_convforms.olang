@@ -1,0 +1,37 @@
+# decision 1 / T7b: other conversions of a value place returned as a value - a lambda's captured text, a struct's
+# fixed-length field read through a reference, a fixed-length local - and a static literal returned
+type Lab extends String
+type Nums extends Array<I64>
+type F struct() {
+    a := Array<I64>(3, 5)
+}
+fn field(r F&) Nums { return Nums(r.a) }
+fn fixedLocal(i I64) Nums {
+    a := Array<I64>(3, i)
+    a[1] = 7
+    return Nums(a)
+}
+fn lit() String { return "literal" }
+fn probe(i I64) String {
+    s := "outer" $i
+    g := fn() Lab { return Lab(s) }
+    x := g()
+    x[0] = 'Q'
+    out := "lambda: s " $s " x " $x "; "
+    st := F()
+    y := field(st)
+    y[0] = 99
+    out = $out "field: st.a " $st.a " y " $y "; "
+    z := lit()
+    z[0] = 'L'
+    out = $out "lit: " $lit() " z " $z
+    return out
+}
+G := probe(1)
+fn main() {
+    say("run:   " $probe(1))
+    say("baked: " $G)
+    w := fixedLocal(3)
+    churn()
+    say("fixed local " $w)
+}

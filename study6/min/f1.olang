@@ -1,0 +1,9 @@
+fn main() ? {
+    l := List<I64>()
+    l.Push(1)
+    l.Push(2)
+    println($l)
+    m := Map<String&, I64>()
+    m.Put("a", 1)
+    println($m)
+}

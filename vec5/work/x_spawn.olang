@@ -1,0 +1,16 @@
+# S17: a join in an assert message - its task writes a global; -i and the program agree?
+G mut I64 = 0
+fn work(n I64) { G = G + n }
+fn h(k I64) String ? {
+    if k > 3 { error }
+    return "ok " $k
+}
+fn check(k I64) I64 {
+    assert k < 2, (try h(k) catch { join { spawn work(k) }
+        println("joined " $G) } default "message " $G)
+    return k
+}
+fn main() ? {
+    println($check(1))
+    println($check(5))
+}

@@ -1,0 +1,336 @@
+# Io - the standard I/O module. Ordinary olang on top of "extern fn" (§11), not a compiler builtin:
+# the whole point of the extern mechanism is that this file has no privileges the language doesn't give
+# every other module.
+
+extern fn write(fd I32, buf Array<U8>, count I64) I64
+extern fn read(fd I32, buf Array<U8>, count I64) I64
+extern fn open(path Array<U8>, flags I32) I32
+extern fn close(fd I32) I32
+extern fn pipe(fds Array<I32>) I32
+
+error IoError {
+    FAILED
+    PARTIAL
+}
+
+# thin wrappers so the tests can open a real descriptor; the raw calls take a NUL-terminated path, which
+# olang string literals do not add, so callers write the "\0" themselves
+fn openReadOnly(path Array<U8>&) I32 {
+    return open(path, 0)
+}
+
+fn closeFd(fd I32) I32 {
+    return close(fd)
+}
+
+Stdin I32 = 0
+Stdout I32 = 1
+Stderr I32 = 2
+
+# writes every byte of "data" to "fd", retrying until it is all gone. A short write is ordinary rather than
+# exceptional - a pipe or socket takes what it has room for - so the loop re-slices the unwritten tail and
+# goes again. "data[sent:]" is a borrow (E16a): no copy, no allocation, just a pointer and a length, which
+# is what makes retrying free. Before slicing existed this reported PARTIAL and gave up, because there was
+# no way to name the tail at all.
+fn Write(fd I32, data Array<U8>&) ? IoError {
+    total I64 = I64(data.Len())
+    if total == 0 {
+        return
+    }
+    sent I64 = 0
+    do {
+        tail := data[sent:]
+        n I64 = write(fd, tail, I64(tail.Len()))
+        if n < 0 {
+            error IoError.FAILED
+        }
+        # no bytes moved with bytes still outstanding: retrying would spin rather than make progress
+        if n == 0 {
+            error IoError.PARTIAL
+        }
+        sent = sent + n
+    } for sent < total
+}
+
+# reads up to len(buf) bytes into the caller's buffer and hands back the front of it - a borrow, so the
+# caller gets something already the right length to pass on and cannot read past what was actually read.
+# "buf" and the return share the scope variable "s" (O3): the returned slice points into the caller's own
+# buffer, so its lifetime is that buffer's, and saying so is what lets it be returned at all - a bare "&"
+# return type is rejected outright (O13).
+fn Read(fd I32, buf mut Array<U8>&) Array<U8>&buf ? IoError {
+    n I64 = read(fd, buf, I64(buf.Len()))
+    if n < 0 {
+        error IoError.FAILED
+    }
+    return buf[:n]
+}
+
+fn Print(data Array<U8>&) ? IoError {
+    try Write(Stdout, data)
+}
+
+fn PrintErr(data Array<U8>&) ? IoError {
+    try Write(Stderr, data)
+}
+
+# writes n's decimal representation into buf and returns how many bytes it used. The caller supplies the
+# buffer because a function may not return a bare "&" reference (O13) and an I64 never needs more than
+# 20 bytes anyway. "buf mut Array<U8>&" and not "buf mut Array<U8>": the marker is what makes this the caller's
+# own array rather than a copy of it, and so what makes this an out-parameter at all - D9a rejects the
+# unmarked spelling outright rather than let a call copy an array.
+# The digits are taken from the NEGATIVE of n's magnitude, as ParseInt accumulates: the negative range is the larger, so
+# I64's minimum has a magnitude there, where negating it to a positive wraps back to itself.
+fn FormatInt(n I64, buf mut Array<U8>&) I32 {
+    neg Bool = n < 0
+    v I64 = n if neg else -n
+    # least-significant digit first, reversed in place below; v % 10 is in -9 .. 0, since division truncates
+    used I32 = 0
+    do {
+        buf[used] = U8(-(v % 10)) + '0'
+        v = v / 10
+        used++
+    } for v < 0
+    if neg {
+        buf[used] = '-'
+        used++
+    }
+    lo I32 = 0
+    hi I32 = used - 1
+    for lo < hi {
+        t U8 = buf[lo]
+        buf[lo] = buf[hi]
+        buf[hi] = t
+        lo++
+        hi--
+    }
+    return used
+}
+
+# a file's lines, one at a time: "for line in try io.Lines(fd) { ... } catch IoError { ... }". The file is read through a
+# buffer a piece at a time, so reading one of any size takes the memory of its longest line, never of the whole of it -
+# the buffer starts at "size" bytes and doubles whenever a single line fills it.
+# A line is what comes before a newline, without it, and one carriage return just before the newline goes with it, so
+# "a\r\nb\n" is "a" and "b" as "a\nb\n" is. The last line needs no newline after it: "a\nb" is "a" and "b", "a\n" is
+# just "a", and "a\n\n" is "a" and "" - an empty file has no lines at all.
+# Each line Next gives is new text, built where its caller puts it (O18a) and nowhere else, so it stays as it is
+# whatever is read after it: in "for line in", the loop body's own scope, reclaimed as each turn ends - to keep one
+# longer, put it where it is to be kept (kept.Push($line) builds a copy in the list's scope). Next fails with
+# IoError.FAILED when the read under it does - calling it again reads again - and with Exhausted once every line has
+# been given.
+type Lines struct(fd I32, size I64 = 65536) {
+    fd
+    buf mut String& = String(Array<U8>(size if size > 0 else 1))
+    start mut I64 = 0                # buf[start:end] is what has been read and not yet given as a line
+    end mut I64 = 0
+    ended mut Bool = false           # read has said the file is over
+}
+
+fn (l mut Lines&) Next() String& ? IoError + Exhausted {
+    from I64 = l.start               # buf[l.start:from] holds no newline
+    for {
+        for i in range from, l.end {
+            if l.buf[i] == '\n' {
+                first := l.start
+                l.start = i + 1
+                return l.line(first, i)
+            }
+        }
+        if l.ended {
+            if l.start == l.end { error Exhausted.END }
+            first := l.start
+            l.start = l.end
+            return l.line(first, l.end)
+        }
+        from = l.end - l.start
+        if l.start > 0 {             # what is unread to the front, leaving the room after it to read into
+            for k in range from { l.buf[k] = l.buf[l.start + k] }
+            l.start = 0
+            l.end = from
+        }
+        if l.end == l.buf.Len() {    # one line fills the buffer: twice the room
+            old := l.buf
+            l.buf = String(Array<U8>(old.Len() * 2))
+            for k in range l.end { l.buf[k] = old[k] }
+        }
+        got := read(l.fd, l.buf[l.end:], l.buf.Len() - l.end)
+        if got < 0 { error IoError.FAILED }
+        if got == 0 { l.ended = true }
+        l.end += got
+    }
+    unreachable
+}
+
+# buf[first:last] as new text, a carriage return at its end dropped
+fn (l Lines&) line(first I64, last I64) String& {
+    n I64 = last - first - (1 if last > first and l.buf[last - 1] == '\r' else 0)
+    text String&return = String(Array<U8>(n))
+    for k in range n { text[k] = l.buf[first + k] }
+    return text
+}
+
+test "Write reports a failure from the underlying syscall" {
+    failed Bool = false
+    try Write(-1, "no such fd") catch IoError {
+        failed = true
+    }
+    assert failed
+}
+
+test "Write succeeds on a real descriptor" {
+    ok Bool = true
+    try Print("io.olang: hello from a standard library written in olang\n") catch IoError {
+        ok = false
+    }
+    assert ok
+}
+
+# an ordinary zero-filled fixed-size buffer, no marker and no run-time length: passing it to a "Array<U8>&"
+# parameter borrows it (E12c), so FormatInt writes into these very bytes. Both of those used to be
+# impossible at once - E12a rejected passing an unmarked array, and D13 rejects the "U8[24]&" that would
+# have satisfied it - so the buffer had to be declared run-time-sized for a length known right here.
+# Read hands back the front of the caller's own buffer, so the length is carried by the value rather than
+# by a separate count the caller has to remember to respect. Reading from /dev/null gives 0 bytes, which is
+# an empty slice rather than an error.
+# The assertion lives in a fallible helper rather than in the test: "try f()" is an expression only where
+# there is a signature to propagate through, and a "try f() catch { }" statement discards the value it
+# caught - so a test block cannot bind the result of a fallible call at all.
+fn checkReadIsEmpty(fd I32, buf mut Array<U8>&) ? IoError {
+    got := try Read(fd, buf)
+    assert got.Len() == 0
+}
+
+test "Read returns a slice of the caller's own buffer" {
+    buf Array<U8, 8>
+    path := U8['/', 'd', 'e', 'v', '/', 'n', 'u', 'l', 'l', 0]
+    fd I32 = openReadOnly(path)
+    assert fd >= 0
+    ok Bool = true
+    try checkReadIsEmpty(fd, buf) catch IoError {
+        ok = false
+    }
+    assert ok
+    closeFd(fd)
+}
+
+test "FormatInt renders decimals, including zero and negatives" {
+    buf Array<U8, 24>
+
+    # the extremes: I64's minimum has no positive counterpart to format from
+    n0 := FormatInt(-9223372036854775807 - 1, buf)
+    assert String(buf[:n0]) == "-9223372036854775808"
+    n0 = FormatInt(9223372036854775807, buf)
+    assert String(buf[:n0]) == "9223372036854775807"
+
+    n I32 = FormatInt(0, buf)
+    assert n == 1
+    assert buf[0] == '0'
+
+    n = FormatInt(1234, buf)
+    assert n == 4
+    assert buf[0] == '1'
+    assert buf[1] == '2'
+    assert buf[2] == '3'
+    assert buf[3] == '4'
+
+    n = FormatInt(-90, buf)
+    assert n == 3
+    assert buf[0] == '-'
+    assert buf[1] == '9'
+    assert buf[2] == '0'
+}
+
+# a descriptor reading back "text": the read end of a pipe it has been written into, the write end closed after it -
+# for the tests of Lines, which need no file. Under a pipe's own buffer, 64KB, so the write never waits for a reader
+fn reading(text String&) I32 {
+    fds Array<I32, 2>
+    assert pipe(fds) == 0
+    try Write(fds[1], text) catch IoError { fail }
+    close(fds[1])
+    return fds[0]
+}
+
+# the lines of "text", read through Lines with a buffer of "size" bytes, each in brackets
+fn bracketed(text String&, size I64) String& {
+    fd := reading(text)
+    out String&return = ""
+    for line in try Lines(fd, size) {
+        out = $out "[" $line "]"
+    } catch IoError { fail }
+    close(fd)
+    return out
+}
+
+test "Lines gives each line, without its newline" {
+    assert bracketed("one\ntwo\n\nfour", 65536) == "[one][two][][four]"
+    assert bracketed("one\ntwo\n", 65536) == "[one][two]"           # a newline at the end ends the last line
+    assert bracketed("one\n\n", 65536) == "[one][]"
+    assert bracketed("\n", 65536) == "[]"
+    assert bracketed("", 65536) == ""                                  # an empty file has no lines
+    assert bracketed("no newline at all", 65536) == "[no newline at all]"
+}
+
+test "Lines drops the carriage return of a CRLF, and only that one" {
+    assert bracketed("a\r\nb\r\n\r\nc", 65536) == "[a][b][][c]"
+    assert bracketed("last\r", 65536) == "[last]"                    # before the end of the file as before a newline
+    assert bracketed("x\ry\n\r\r\n\r", 65536) == "[x\ry][\r][]"
+}
+
+test "Lines reads lines longer than its buffer" {
+    long String& = "0123456789abcdefghijklmnopqrstuvwxyz"
+    text := $long "\nab\n\n" $long $long "\r\nc"
+    want := "[" $long "][ab][][" $long $long "][c]"
+    assert bracketed(text, 4) == want            # each long line doubling the buffer, and what follows moved to its front
+    assert bracketed(text, 1) == want
+    assert bracketed(text, 0) == want            # no room at all is taken as one byte
+    assert bracketed(text, 37) == want           # a line exactly as long as the buffer
+    assert bracketed(text, 65536) == want
+}
+
+test "Lines reports a read that fails, and ends the loop with it" {
+    failed := false
+    n I64 = 0
+    for line in try Lines(-1) {
+        n++
+    } catch IoError { failed = true }
+    assert failed and n == 0
+}
+
+# Exhausted again for every call once the lines have run out
+fn afterTheEnd(fd I32) ? IoError {
+    l := Lines(fd, 2)
+    first := try l.Next() catch Exhausted { fail }
+    assert first == "only"
+    for i in range 3 {
+        try l.Next() catch Exhausted { continue }
+        fail
+    }
+}
+
+test "Next fails with Exhausted once the lines are over, each time it is called" {
+    fd := reading("only\n")
+    try afterTheEnd(fd) catch IoError { fail }
+    close(fd)
+}
+
+# allocates and lets go of a few hundred texts, so storage a closed scope gave back is handed out again
+fn ioChurn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        s := $i "-------------------------------------------------------------"
+        t += s.Len()
+    }
+    return t
+}
+
+# a line lives where it is put: kept in a list, its copy is built in the list's scope and outlives the loop
+test "a line kept is built where it is kept" {
+    fd := reading("alpha\nbeta\ngamma\n")
+    kept := List<String&>()
+    for line in try Lines(fd, 3) {
+        assert ioChurn() > 0
+        kept.Push($line)
+    } catch IoError { fail }
+    close(fd)
+    assert ioChurn() > 0
+    assert kept.Len() == 3 and kept[0] == "alpha" and kept[1] == "beta" and kept[2] == "gamma"
+}

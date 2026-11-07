@@ -1,0 +1,5 @@
+block squared: [1 8][0 9] sum [2 4][0 6]
+small product: 19005 baked 19005
+laplacian 144x144, 150 blocks, 672 nonzeros
+cg: 21 iterations, centre 12.268659, residual below 1e-8: true
+2L at the centre: 8

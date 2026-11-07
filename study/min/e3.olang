@@ -1,0 +1,13 @@
+type G struct() {
+    adj mut List<mut List<I64>&>& = List<mut List<I64>&>()
+}
+fn (g mut G&) add(a I64, v I64) {
+    inner := g.adj[a]
+    inner.Push(v)
+}
+fn main() ? {
+    g := G()
+    g.adj.Push(List<I64>())
+    g.add(0, 5)
+    assert g.adj[0].Len() == 1
+}

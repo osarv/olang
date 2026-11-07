@@ -1,0 +1,17 @@
+type Sym struct(name String&) { name }
+type Mod struct() {
+    top mut Map<String&, Sym&>
+
+}
+type R struct() {
+    mods mut List<mut Mod&>
+}
+fn (r R&) find(n String&) Sym&r {
+    t := try r.mods[0].top.Get(n) catch default null
+    return t
+}
+fn main() ? {
+    r := R()
+    r.mods.Push(Mod())
+    println($r.find("a"))
+}

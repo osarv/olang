@@ -1,0 +1,16 @@
+# NEW (G9d), CONFIRMED: generic code changes meaning, unannounced in SPEC G9d. With T bound to 'mut Res&', '==' in a
+# generic body compares two temporaries by identity (E10: a struct reference without Eq), so same(Res(1), Res(1))
+# went from true to false; and a Hashable<T> constraint no longer holds (no Hash for a reference without Eq), so
+# hashOf(Res(2)) is now refused.
+# e27b83b: error[G19, E10b] 'Res& does not satisfy the constraint Hashable on T' at hashOf; with that line removed it
+# prints 'false' (the evaluator agrees: a global 'G := same(Res(1), Res(1))' bakes as 'constant i1 false').
+# 7345ff9: 'true' 'true' (and d2 d1 d1). b6259d1: 'true' 'true' (no destructor runs at all).
+type Res struct(k I64) {
+    k
+} destruct { println("d" $k) }
+fn same(a <T>, b T) Bool { return a == b }
+fn hashOf(x <T Hashable<T>>) I64 { return x.Hash() }
+fn main() ? {
+    println($same(Res(1), Res(1)))
+    println($(hashOf(Res(2)) != 0))
+}

@@ -1,0 +1,10 @@
+# T29e/E10b: a type extending I64 that declares Eq must declare Hash - but Hash is inherited and may not be overridden
+import "std/io"
+import "std/map"
+type Id extends I64
+fn (a Id) Eq(b Id) Bool { return a % 100 == b % 100 }
+fn main() ? {
+  m := map.Map<Id, I32>()
+  m.Put(Id(105), 1)
+  try io.Print($(Id(5) == Id(105)) " " $(try m.Get(Id(205)) catch default -1) "\n")
+}

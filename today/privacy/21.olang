@@ -1,0 +1,8 @@
+# array Has inside a lib generic ... GenEq on arrays of Tags (judged in lib)
+import "lib/pv"
+
+fn main() ? {
+    a := pv.Make(3)
+    b := pv.Make(13)
+    println($pv.GenEq(pv.Tag[a], pv.Tag[b]))
+}

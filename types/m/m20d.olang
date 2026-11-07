@@ -1,0 +1,3 @@
+import "lib"
+error lib { A }
+fn main() ? { }

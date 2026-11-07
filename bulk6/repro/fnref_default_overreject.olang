@@ -1,0 +1,20 @@
+# T21: never-null function values held in collections - Map values, Vec, Deque, Set? - their storage made with no zero
+import "std/io"
+import "std/deque"
+
+fn inc(x I64) I64 { return x + 1 }
+
+fn main() {
+    m := Map<I64, fn&(x I64) I64>()
+    for i in range 100 { m.Put(i, inc) }
+    m.Remove(5)
+    v := Vec<fn&(x I64) I64>()
+    for _ in range 100 { v.Push(inc) }
+    f := try v.Pop() catch default inc
+    d := deque.Deque<fn&(x I64) I64>()
+    for _ in range 50 { d.PushBack(inc) }
+    g := try m.Get(7) catch default inc
+    io.Println($m.Len() " " $v.Len() " " $f(1) " " $g(2) " " $d.Len())!
+    x := Array<fn&(x I64) I64>(3)
+    io.Println($x[0](1))!
+}

@@ -1,0 +1,32 @@
+# temporaries and numbers made anys as a task's arguments, inside the join's loop
+type Counter trait {
+    mut Bump() I64
+    Seen() I64
+}
+type Tally struct(at I64) { at }
+fn (t mut Tally&) Bump() I64 {
+    t.at += 1
+    return t.at
+}
+fn (t Tally&) Seen() I64 { return t.at }
+type Hashy trait {
+    Hash() I64
+}
+fn work(c mut any Counter&, n I64) I64 {
+    for i in range n { c.Bump() }
+    return c.Seen()
+}
+fn hw(h any Hashy&) I64 { return h.Hash() % 1000 }
+fn main() {
+    rs := Array<I64>(8, 0)
+    hs := Array<I64>(8, 0)
+    join {
+        for k in range 8 {
+            n := k * 13
+            spawn rs[k] = work(Tally(k * 100), 50)
+            spawn hs[k] = hw(n)
+        }
+    }
+    say($rs)
+    say($hs)
+}

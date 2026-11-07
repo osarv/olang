@@ -1,0 +1,10 @@
+type Bag struct() {
+    n mut Bag& = null
+}
+fn main() ? {
+    l := List<Bag&>()
+    l.Push(Bag())
+    s I64 = 0
+    for k in l { if k.n == null { s++ } }
+    assert s == 1
+}

@@ -1,0 +1,10 @@
+# G27: decided for every instantiation of the type, whether or not an instance is ever built
+type Ring<T, N I64> struct() {
+    assert N > 0 and (N & (N - 1)) == 0, "N must be a power of two"
+    items mut Array<<T>, N>
+}
+fn look(r Ring<I32, 6>&) I32 { return r.items[0] }
+G mut Ring<I64, 12>& = null
+fn main() ? {
+    println("ran")
+}

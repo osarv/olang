@@ -1,0 +1,21 @@
+type Cell struct() {
+    xs Array<I64, 4> = Array<I64, 4>()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    v := Vec<Cell>()
+    v.Push(Cell())
+    for c in v {
+        sl := c.xs[0:2]
+        v.Push(Cell())
+        churn()
+        println($sl[0])
+    }
+}

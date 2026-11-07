@@ -1,0 +1,8 @@
+fn c() String {
+    x3 Array<I16, 0>
+    return $(x3[0:0])
+}
+K String = c()
+fn main() ? {
+    println($K " | " $c())
+}

@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/c4_conv_view_list.olang:15:16: error[O38]: this argument borrows an own object, and the callee may keep it beyond the call - only this function's locals may hold it: keep a Clone() instead
+   15 |         l.Push(String(v.View()))
+      |                ^~~~~~
+compilation failed with 1 error

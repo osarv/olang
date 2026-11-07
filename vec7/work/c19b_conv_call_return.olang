@@ -1,0 +1,8 @@
+fn first(a Array<Char>&) Array<Char>&a { return a[0:1] }
+fn pick(a Array<Char>&) String&a {
+    return String(first(a))
+}
+fn main() ? {
+    w := Array<Char>(3, 'w')
+    println(pick(w))
+}

@@ -1,0 +1,10 @@
+Base I64 = 40
+fn apply(x I64, f fn(v I64) I64 = fn(v I64) I64 { return v * 2 + Base }) I64 {
+    return f(x)
+}
+fn one() I64 { return apply(1) }
+fn two() I64 { return apply(2) }
+fn main() ? {
+    g := fn(i I64) I64 { return apply(i) }
+    println($one() " " $two() " " $g(3) " " $apply(4))
+}

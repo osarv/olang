@@ -1,0 +1,53 @@
+Flag mut I64 = 0
+fn f(i I64) I64 ? {
+    if i > 0 { error }
+    return 1
+}
+fn noise(d I64) I64 {
+    a := I64[d, d, d, d, d, d, d, d]
+    if d == 0 { return Flag }
+    return noise(d - 1) + a[3] - d
+}
+fn early(i I64) String {
+    s := "a fairly long first piece that is well past sixty four bytes of room by itself, surely" $i " " $(try f(i) catch { return "early" }) "tail"
+    return s
+}
+fn prop(i I64) String ? {
+    s := "a fairly long first piece that is well past sixty four bytes of room by itself, surely" $i " " $(try f(i)) "tail"
+    return s
+}
+fn loopy(n I64) I64 {
+    t I64 = 0
+    for i in range n {
+        s := "a fairly long first piece that is well past sixty four bytes of room by itself, surely" $i " " $(try f(i) catch { continue }) "tail"
+        t += s.Len()
+    }
+    return t
+}
+test "return from inside a join" {
+    s := early(1)
+    t := noise(60)
+    assert t != 0, "expected 1"
+}
+test "after 1" {
+    t := noise(10)
+    assert t == 0
+}
+test "error from inside a join" {
+    s := try prop(1) catch default "x"
+    t := noise(60)
+    assert t != 0, "expected 2"
+}
+test "after 2" {
+    t := noise(10)
+    assert t == 0
+}
+test "continue from inside a join" {
+    s := loopy(3)
+    t := noise(60)
+    assert t != 0, "expected 3"
+}
+test "after 3" {
+    t := noise(10)
+    assert t == 0
+}

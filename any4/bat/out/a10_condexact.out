@@ -1,0 +1,12 @@
+== a10_condexact
+  san:    exit 0 condexact 12|
+  O3:     exit 0 condexact 12|
+  interp: exit 0 condexact 12|
+--- compile (-debug -sanitize)
+built ./build/a10_condexact.debug.san
+--- run san
+condexact 12
+--- run O3
+condexact 12
+--- interpret
+condexact 12

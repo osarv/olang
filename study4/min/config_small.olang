@@ -1,0 +1,253 @@
+# config - layered configuration: compiled-in defaults chosen by build constants, then a file, then the environment.
+#
+#   olang -b -D Profile=prod config.olang && build/config [FILE]
+#
+# Defaults depend on the build: "-D Profile=dev" or "prod" picks a set at compile time (a top-level if), and the
+# operating system picks where the default file lives. The file format nests sections in braces:
+#
+#     server {
+#         port = 8080
+#         tls { enabled = true }
+#     }
+#
+# and is read by a recursive-descent parser into dotted keys ("server.tls.enabled"). Every key may then be overridden
+# by an environment variable APP_<KEY>, dots as underscores, upper case (APP_SERVER_PORT). Values are checked against
+# the schema: an unknown key, a value of the wrong kind, or a missing required key is an error naming it. Each final
+# value is printed with where it came from. A self-test parses a file nested 50,000 sections deep, on a big stack.
+
+import "std/os"
+import "std/filepath"
+import "std/io"
+
+if Profile == "prod" {
+    DefaultPort := 443
+    DefaultWorkers := 16
+    DefaultLog := "warn"
+    TlsDefault := true
+} else {
+    DefaultPort := 8080
+    DefaultWorkers := 2
+    DefaultLog := "debug"
+    TlsDefault := false
+}
+
+if TargetOs == "linux" {
+    ConfigPath := "/etc/app/app.conf"
+} else {
+    ConfigPath := "app.conf"
+}
+
+error ConfigError {
+    SYNTAX
+    UNKNOWN_KEY
+    BAD_VALUE
+    MISSING
+}
+
+type ValueKind enum {
+    Int
+    Bool
+    Text
+}
+
+type Setting struct(Key String&, Kind ValueKind, Value String&, From String&) {
+    Key
+    Kind
+    Value
+    From
+}
+
+type Config struct() {
+    settings Map<String&, Setting> = Map<String&, Setting>()
+    order List<String&> = List<String&>()
+    problem String& = ""
+}
+
+fn (c mut Config&) define(key String&, kind ValueKind, value String&) {
+    c.settings.Put(key, Setting(key, kind, value, "default"))
+    c.order.Push(key)
+}
+
+fn defaults() Config {
+    c := Config()
+    c.define("server.port", ValueKind.Int, $DefaultPort)
+    c.define("server.workers", ValueKind.Int, $DefaultWorkers)
+    c.define("server.tls.enabled", ValueKind.Bool, $TlsDefault)
+    c.define("server.tls.cert", ValueKind.Text, "")
+    c.define("log.level", ValueKind.Text, DefaultLog)
+    c.define("db.url", ValueKind.Text, "")
+    return c
+}
+
+fn valid(kind ValueKind, value String&) Bool {
+    return match kind {
+        case ValueKind.Int => (try value.ParseInt() catch default -1) >= 0
+        case ValueKind.Bool => value == "true" or value == "false"
+        case ValueKind.Text => true
+    }
+}
+
+fn (c mut Config&) set(key String&, value String&, from String&) ? ConfigError {
+    s := try c.settings.Get(key) catch {
+        c.problem = "unknown key '" $key "'"
+        error ConfigError.UNKNOWN_KEY
+    }
+    if not valid(s.Kind, value) {
+        c.problem = "'" $value "' is not a valid value for " $key
+        error ConfigError.BAD_VALUE
+    }
+    c.settings.Put(key, Setting(key, s.Kind, value, from))
+}
+
+# ---- the file format: a recursive-descent parser ----
+
+type Parser struct(src String&) {
+    src
+    pos I64 = 0
+    line I64 = 1
+    depth I64 = 0
+    deepest I64 = 0
+}
+
+fn (p mut Parser&) skip() {
+    for p.pos < p.src.Len() {
+        c := p.src[p.pos]
+        if c == '#' {
+            for p.pos < p.src.Len() and p.src[p.pos] != '\n' { p.pos++ }
+        } else if c == '\n' {
+            p.line++
+            p.pos++
+        } else if c.IsSpace() {
+            p.pos++
+        } else {
+            return
+        }
+    }
+}
+
+fn (p mut Parser&) word() String&p {
+    start := p.pos
+    for p.pos < p.src.Len() {
+        c := p.src[p.pos]
+        if not (c.IsLetter() or c.IsDigit() or c == '_' or c == '-' or c == '.' or c == '/' or c == ':') { break }
+        p.pos++
+    }
+    return p.src[start:p.pos]
+}
+
+# entries until a '}' (inside a section) or the end, each "name = value" or "name { ... }"; "path" holds the names of
+# the sections around them, joined into a key only for a value - building every section's key on the way down would
+# cost the square of the depth
+fn (p mut Parser&) entries(path mut List<String&>&, out mut List<Pair<String&, String&>>&) ? ConfigError {
+    p.depth++
+    if p.depth > p.deepest { p.deepest = p.depth }
+    for {
+        p.skip()
+        if p.pos >= p.src.Len() or p.src[p.pos] == '}' { break }
+        name := p.word()
+        if name.Len() == 0 { error ConfigError.SYNTAX }
+        p.skip()
+        if p.pos < p.src.Len() and p.src[p.pos] == '{' {
+            p.pos++
+            path.Push(name)
+            try p.entries(path, out)
+            try path.Pop() catch { unreachable }
+            p.skip()
+            if p.pos >= p.src.Len() or p.src[p.pos] != '}' { error ConfigError.SYNTAX }
+            p.pos++
+        } else if p.pos < p.src.Len() and p.src[p.pos] == '=' {
+            p.pos++
+            p.skip()
+            path.Push(name)
+            key String&out = path.Join(".")
+            try path.Pop() catch { unreachable }
+            out.Push(Pair(key, $p.word()))
+        } else {
+            error ConfigError.SYNTAX
+        }
+    }
+    p.depth--
+}
+
+fn parse(src String&, out mut List<Pair<String&, String&>>&) I64 ? ConfigError {
+    p := Parser(src)
+    path := List<String&>()
+    try p.entries(path, out)
+    if p.pos < p.src.Len() { error ConfigError.SYNTAX }
+    return p.deepest
+}
+
+# ---- layering ----
+
+fn envName(key String&) String {
+    return "APP_" $key.ToUpper().Replace(".", "_")
+}
+
+fn load(path String&) Config ? ConfigError {
+    c := defaults()
+    if os.Exists(path) {
+        text := try os.ReadFile(path) catch {
+            c.problem = "cannot read " $path
+            error ConfigError.MISSING
+        }
+        entries := List<Pair<String&, String&>>()
+        try parse(text, entries) catch ConfigError.SYNTAX {
+            c.problem = $path ": syntax error"
+            error ConfigError.SYNTAX
+        }
+        for e in entries { try c.set($e.First, $e.Second, $path) }
+    }
+    for key in c.order {
+        v String&return = try os.Env(envName(key)) catch { continue }
+        try c.set(key, v, envName(key))
+    }
+    tls := try c.settings.Get("server.tls.enabled") catch { unreachable }
+    cert := try c.settings.Get("server.tls.cert") catch { unreachable }
+    if tls.Value == "true" and cert.Value.Len() == 0 {
+        c.problem = "server.tls.enabled needs server.tls.cert"
+        error ConfigError.MISSING
+    }
+    return c
+}
+
+fn show(c Config&) {
+    out := io.Writer(io.Stdout)
+    for key in c.order {
+        s := try c.settings.Get(key) catch { continue }
+        out.Write($key.PadEnd(22) " = " $s.Value.PadEnd(24) " (" $s.From ")\n")
+    }
+    try out.Flush() catch { }
+}
+
+# a file nested n sections deep, with one value at the bottom
+fn nested(n I64) String {
+    b := StringBuilder()
+    for i in range n { b.Push("s" $(i % 10) " {\n") }
+    b.Push("leaf = 1\n")
+    for i in range n { b.Push("}\n") }
+    return b.ToString()
+}
+
+# what the deep parse on its own stack found - a global, since a lambda can neither write a captured number nor hold
+# a reference to one (T24)
+Depth mut I64 = 0
+
+fn main() ? {
+    args := os.Args()
+    path := ConfigPath
+    if args.Len() > 1 { path = args[1] }
+    c := try load(path) catch ConfigError {
+        eprintln("config: " $path ": problem")
+        os.Exit(1)
+        unreachable
+    }
+    println("profile " $Profile " on " $TargetOs)
+    show(c)
+    # the self-test: deep nesting on a big stack
+    deep := nested(50000)
+    got mut List<Pair<String&, String&>>& = List<Pair<String&, String&>>()
+    os.RunOnStack(8 << 10, fn() {
+        Depth = try parse(deep, got) catch default -1
+    })
+    println("nested: depth " $Depth ", " $got.Len() " value(s), first key ends " $got[0].First[got[0].First.Len() - 7:])
+}

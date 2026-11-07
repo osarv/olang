@@ -1,0 +1,80 @@
+# report - compute per-sensor statistics from simulated readings and write them as a JSON report, then read the
+# report back and query it.
+import "std/json"
+import "std/rand"
+import "std/math"
+import "std/os"
+
+type Reading struct(Sensor String&, Value F64) {
+    Sensor
+    Value
+}
+
+type Summary struct(Name String&) {
+    Name
+    N I64 = 0
+    Mean F64 = 0.0
+    M2 F64 = 0.0           # Welford's running sum of squared differences
+    Min F64 = math.Inf
+    Max F64 = -math.Inf
+}
+
+fn (s mut Summary&) Add(x F64) {
+    s.N++
+    d := x - s.Mean
+    s.Mean += d / F64(s.N)
+    s.M2 += d * (x - s.Mean)
+    s.Min = math.Min(s.Min, x)
+    s.Max = math.Max(s.Max, x)
+}
+
+fn (s Summary&) Variance() F64 { return s.M2 / F64(s.N - 1) if s.N > 1 else 0.0 }
+
+fn (s Summary) ToJson() json.Json& {      # by value: on Summary& the call in main is O10c
+    names := String&["name", "n", "mean", "stddev", "min", "max"]
+    values := json.Json&[
+        json.Json.Str(s.Name),
+        json.Json.Num(F64(s.N)),
+        json.Json.Num(s.Mean),
+        json.Json.Num(math.Sqrt(s.Variance())),
+        json.Json.Num(s.Min),
+        json.Json.Num(s.Max),
+    ]
+    return json.Json.Obj(json.Object(names, values))
+}
+
+fn main() ? json.JsonError + os.OsError {
+    r := rand.Rand(99)
+    sensors := String&["temp-a", "temp-b", "pressure", "humidity"]
+    readings := List<Reading>()
+    for i in range 5000 {
+        s := sensors[r.Below(sensors.Len())]
+        readings.Push(Reading(s, r.Normal() * 3.0 + F64(s.Len())))
+    }
+
+    stats := Map<String&, Summary>()
+    for rd in readings {
+        v := rd.Value                 # capturing rd (it holds a String&) is D16c
+        stats.Update(rd.Sensor, Summary(rd.Sensor), fn(s Summary) Summary {
+            s.Add(v)
+            return s
+        })
+    }
+
+    items := List<json.Json&>()
+    for e in stats { items.Push(e.Value.ToJson()) }
+    doc := json.Json.Obj(json.Object(String&["count", "sensors"], json.Json&[json.Json.Num(F64(readings.Len())), json.Json.Arr(items.ToArray())]))
+    text := json.Encode(doc, "  ")
+    try os.WriteFile("/tmp/study5_report.json", text)
+    println(text)
+
+    back := try json.Parse(try os.ReadFile("/tmp/study5_report.json"))
+    total := try (try back["count"]).AsInt()
+    println("total readings: " $total)
+    for item in try (try back["sensors"]).AsArr() {
+        name := try (try item["name"]).AsStr()
+        mean := try (try item["mean"]).AsNum()
+        println($name " mean " $mean.Fixed(3))
+    }
+    assert back == doc
+}

@@ -1,0 +1,9 @@
+# check: fail error[G7]: D is not generic, so it takes no type arguments
+# G10d: what a generic constructor introduces is inferred, never written - the type itself takes no arguments
+type G<T> struct() {
+    n I64 = 0
+}
+type D struct(g G<<T>>&) {
+    n I64 = 1
+}
+fn main() ? { d := D<I64>(G<I64>()) }

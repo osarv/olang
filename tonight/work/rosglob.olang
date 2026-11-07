@@ -1,0 +1,12 @@
+import "std/os"
+type N struct(v I64) { v }
+G mut N& = N(0)
+GL mut List<String&>& = List<String&>()
+fn main() ? {
+    os.RunOnStack(1 << 20, fn() {
+        G = N(5)
+        GL.Push($G.v "-text")
+    })
+    a := Array<I64>(10000, 1)
+    println($G.v " " $GL[0] " " $a[5])
+}

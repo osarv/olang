@@ -1,0 +1,8 @@
+fn look(m Map<String&, I32>&, src String&) I32 {
+    return try m.Get(src[0:2]) catch default 0
+}
+fn main() ? {
+    m := Map<String&, I32>()
+    m.Put("if", 1)
+    println($look(m, "if x"))
+}

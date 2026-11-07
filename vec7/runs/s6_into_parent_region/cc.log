@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/s6_into_parent_region.olang:25:17: error[O34]: the owner refers to what lives shorter than the slot it is moved into - move it where that lives
+   25 |     p.lx.toks = take p.lx.sub.more
+      |                 ^~~~
+compilation failed with 1 error

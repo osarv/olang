@@ -1,0 +1,17 @@
+import "std/io"
+type E error { Bad }
+type R unique struct(id I64) { id } destruct { io.Println("destruct " $id)! }
+Live mut I64 = 0
+fn f(n I64) I64 ? E {
+    error E.Bad
+}
+fn main() ? {
+    r := R(1)
+    defer io.Println("deferred " $r.id)!
+    errdefer io.Println("errdeferred")!
+    {
+        defer io.Println("inner deferred")!
+        x := try f(Live + 2)
+        io.Println($x)!
+    }
+}

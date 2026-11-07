@@ -1,0 +1,6 @@
+run mut I64 = 3
+fn f(n I64) String { return $n }
+fn main() ? {
+    want String& = "3"
+    assert f(run) == want
+}

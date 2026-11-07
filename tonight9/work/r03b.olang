@@ -1,0 +1,33 @@
+# Same root as 03, through a temporary. PRE-EXISTING for a temporary of 64KB or less, NEW (91ab3ba) for a larger one,
+# and here the new one is a wrong value under a plain build.
+# K's field keeps a slice of a field of a temporary 'Big(n)'. The checker accepts it as if the temporary lived where the
+# instance lands; codegen puts the temporary in frame storage - the stack when small, and for one over 64KB, until
+# 91ab3ba the scope a constructor's top level allocates into (the instance's, C2g), now the constructor's own (T7c),
+# which closes as K returns. Big(3) in main then takes the freed chunk.
+#   expected: "8 4 190 190" (45eea97 prints that, -b and -d -s)
+#   actual:   -b "4 4 190 190" (k.r[1] reads Big(3)'s storage); -d -s "use after scope closed: storage a closed scope
+#             gave back was read or written", status 134
+#   with 20000 -> 4 (a stack temporary): -b prints a dead frame's bytes for k.r[1], -d -s "0 4 190 190" - 45eea97 alike
+type Big struct(n I64) {
+    a Array<I64, 20000>
+    a[0] = n
+    a[1] = n + 1
+}
+type K struct(n I64) {
+    r Array<I64>& = Big(n).a[0:2]
+}
+fn churn() I64 {
+    s I64 = 0
+    for j in range 20 {
+        t := Array<I64>(30000, j)
+        s = s + t[5]
+    }
+    return s
+}
+fn main() ? {
+    k := K(7)
+    x := churn()
+    y Array<I64>& = Big(3).a[0:2]
+    z := churn()
+    println($k.r[1] " " $y[1] " " $x " " $z)
+}

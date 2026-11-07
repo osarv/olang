@@ -1,0 +1,27 @@
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn mk(i I64) Node { return Node(i) }
+fn wrap(n mut Node&) mut Node& {
+    r mut Node& = Node(1)
+    r.next = n
+    return r
+}
+fn churn() I64 {
+    s I64 = 0
+    for j in range 50 {
+        t := Node(j)
+        s = s + t.v
+    }
+    return s
+}
+fn main() ? {
+    a mut Node& = Node(0)
+    for i in range 3 {
+        loc mut Node& = Node(100 + i)
+        a.next = match i { case -1 => mk(i) case -2 => a.next nomatch => wrap(loc) }
+    }
+    y := churn()
+    println($a.next.v " " $a.next.next.v " " $y)
+}

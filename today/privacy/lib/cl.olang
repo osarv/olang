@@ -1,0 +1,3 @@
+type Adder struct(k I64) { k }
+fn (a Adder&) call(x I64) I64 { return x + a.k }
+fn Make(k I64) Adder { return Adder(k) }

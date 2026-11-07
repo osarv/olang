@@ -1,0 +1,20 @@
+type Item struct(n I64) {
+    n
+}
+type KV struct(k String&, v Item&) {
+    k
+    v
+}
+fn find2(l List<KV>&, key String&) Item&l ? {
+    for i in range l.Len() {
+        f := l[i]
+        if f.k == key { return f.v }
+    }
+    error
+}
+fn main() ? {
+    l := List<KV>()
+    l.Push(KV("x", Item(4)))
+    it := try find2(l, "x")
+    assert it.n == 4
+}

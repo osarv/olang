@@ -1,0 +1,10 @@
+/home/user/review/vec3/work/g13.olang:13:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   13 |     Titles.Push(Docs.title)                 # a global List keeping a borrow of a global's own object
+      |            ^~~~
+/home/user/wt/rvvec3/std/prelude/list.olang:59:27: note: the callee requires it because of this statement
+   59 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+/home/user/review/vec3/work/g13.olang:13:5: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   13 |     Titles.Push(Docs.title)                 # a global List keeping a borrow of a global's own object
+      |     ^~~~~~
+compilation failed with 2 errors

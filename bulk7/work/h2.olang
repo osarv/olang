@@ -1,0 +1,23 @@
+import "std/io"
+
+type Pt struct(x I64, y I64) {
+    x, y
+}
+
+fn slow(p Pt&) I64 {
+    s I64 = 0
+    for i in range 3000000 { s += i % 3 }
+    return p.x * 1000 + p.y + s - s
+}
+
+fn main() {
+    pts := Vec<Pt>()
+    for i in range 8 { pts.Push(Pt(i, i * 2)) }
+    out := Array<I64>(8, 0)
+    join {
+        for k in range 8 {
+            spawn out[k] = slow(Pt(k, k * 2))
+        }
+    }
+    io.Println($out)!
+}

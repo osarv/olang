@@ -1,0 +1,4 @@
+/home/user/review/vec3/repro/f1b_built_result_id.olang:14:20: error: expected an expression, found ')'
+   14 |     v := Vec<Char>()
+      |                    ^
+compilation failed with 1 error

@@ -1,0 +1,16 @@
+# BUG (use-after-free, wrong output): List.Clone() copies a list's elements - for a List<String&> the references,
+# not the text - and its result lands where it is put, so a clone of a loop-body list pushed into an outer list keeps
+# references to text built in the loop body, reclaimed at the end of each turn. The checker accepts it.
+#   expected (as -i prints): 1 0-text..., 1 1-text..., 1 2-text..., 1 3-text...
+#   actual (-b and -d):      every row reads "3-some-text-of-moderate-length" (the last turn's text, written over
+#                            the reclaimed chunk); with a function result destructured into "rec, next" it segfaults
+# "rows.Push(rec)" (no Clone) is correctly O10c.
+fn main() ? {
+    rows := List<List<String&>>()
+    for k in range 4 {
+        rec := List<String&>()
+        rec.Push($k "-some-text-of-moderate-length")
+        rows.Push(rec.Clone())
+    }
+    for r in rows { println($r.Len() " " $r[0]) }
+}

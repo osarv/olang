@@ -1,0 +1,22 @@
+import "std/io"
+# lambda over the split value used WITHIN the call (not escaping) - should be fine
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() {
+    head mut Node& = Node(7)
+    tag I64 = 0
+}
+fn idBox(seed mut Box&) Box { return seed }
+fn useNow(b Box&) I64 {
+    f := fn() I64 { return b.head.v }
+    return f() + f()
+}
+fn main() ? {
+    seed := Box()
+    t := 0
+    for i in range 3 { t = t + useNow(idBox(seed)) }
+    assert t == 42, $t
+    try io.Println($t)
+}

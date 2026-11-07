@@ -1,0 +1,8 @@
+# check: fail error[C2a]: field 'n' has a parameter's name - write it bare to take the parameter's value, or name it apart
+# also: note: 'n' is declared here
+# also: compilation failed with 1 error
+# C2a: a field taking another value than its same-named parameter's is named apart from it
+type T struct(n I32) {
+    n I32 = n + 1
+}
+fn main() ? { }

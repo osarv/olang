@@ -1,0 +1,19 @@
+# the callee stores the handle it is given into a mut& out-parameter (another handle place), reaching the collection a
+# second way; given a handle a call gives
+fn churn() {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { println("x") }
+    }
+}
+fn stash(src mut List<I64>&, dst mut List<I64>&) { dst = src }
+fn getLL(ll mut List<List<I64>>&) List<I64> ? { return try ll.First() }
+fn main() ? {
+    ll := List<List<I64>>()
+    ll.Push(List<I64>())
+    ll[0].Push(99)
+    keep mut List<I64>& = null
+    stash((try getLL(ll)), keep)
+    churn()
+    println("keep " $keep.Len())
+}

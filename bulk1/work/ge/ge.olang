@@ -1,0 +1,65 @@
+import "std/io"
+
+type Tree<T> enum {
+    Leaf(v T)
+    Node(l Tree<T>&, r Tree<T>&)
+}
+
+type Opt<T> enum {
+    None
+    Some(v T)
+}
+
+fn build(d I64, k I64) Tree<String&>& {
+    if d == 0 { return Tree.Leaf($"leaf " $k " text padded ........................................") }
+    return Tree<String&>.Node(build(d - 1, 2 * k), build(d - 1, 2 * k + 1))
+}
+
+fn total(t Tree<String&>&) I64 {
+    return match t {
+        case Tree.Leaf(v) => v.Len()
+        case Tree.Node(l, r) => total(l) + total(r)
+    }
+}
+
+# a rewrite keeping the leaves - which the old tree's region holds
+fn mirror(t Tree<String&>&) Tree<String&>& {
+    return match t {
+        case Tree.Leaf(v) => Tree.Leaf(v)
+        case Tree.Node(l, r) => Tree<String&>.Node(mirror(r), mirror(l))
+    }
+}
+
+type Holder struct() {
+    t Tree<String&>& = Tree<String&>.Leaf("start")
+    o Opt<String&> = Opt<String&>.None
+}
+
+fn first(t Tree<String&>&) String& {
+    return match t {
+        case Tree.Leaf(v) => v
+        case Tree.Node(l, _) => first(l)
+    }
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    h := Holder()
+    for i in range 6 {
+        h.t = build(4, i)
+        h.t = mirror(h.t)
+        churn()
+        h.o = Opt<String&>.Some($"opt " $i)
+        io.Println($total(h.t) " " $first(h.t) " " $h.o " " $(h.o == Opt.Some($"opt " $i)) " " $(h.o.Hash() == Opt<String&>.Some($"opt " $i).Hash()))!
+    }
+}

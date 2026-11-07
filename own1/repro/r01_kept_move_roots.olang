@@ -1,0 +1,19 @@
+# O39 roots: an owner moved between two owner locals' trees by a kept-reach take keeps its loans rooted at the
+# first local, so a release through the second local does not see them
+type Node struct(n I64) {
+    n
+    name String& = "node" $n
+}
+type Holder struct() {
+    cur own mut Node&
+}
+fn main() ? {
+    o1 own mut Holder& = Holder()
+    o1.cur = Node(5)
+    o2 own mut Holder& = Holder()
+    c := o1.cur              # a loan rooted at o1
+    o2.cur = take o1.cur     # moved into o2's tree: same reach, no release checked
+    o2.cur = null            # releases the Node - through o2, so the loan rooted at o1 is not seen
+    println(c.name)
+    println($c.n)
+}

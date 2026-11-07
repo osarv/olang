@@ -1,0 +1,57 @@
+import "std/io"
+
+type Bad error { NEG, BIG }
+
+Live mut I64 = 0
+
+fn pick(x I64, y I64) [y > x] I64 ? ArgumentError { return y - x }
+
+fn check(x I64) I64 ? Bad {
+    if x < 0 { error Bad.NEG }
+    if x > 100 { error Bad.BIG }
+    return x
+}
+
+# a contract calling a fallible function: its error leaves the function as the body's would
+fn guarded(x I64) [try check(x) < 50] I64 ? Bad, ArgumentError { return x * 2 }
+
+type Scale struct(k I64) {
+    k
+}
+
+fn (s Scale) Call(x I64) [x != 0] I64 ? Bad, ArgumentError {
+    if x > 1000 { error Bad.BIG }
+    return x * s.k
+}
+
+fn useFn(f (fn(x I64) I64 ? Bad, ArgumentError), x I64) String {
+    return try $f(x) catch Bad.BIG default "big" catch Bad.NEG default "neg" catch ArgumentError default "arg"
+}
+
+fn evens(n I64) [n >= 0] Iterator<I64 ? ArgumentError> {
+    for i in range n { yield 2 * i }
+}
+
+fn walked(n I64) String {
+    s I64 = 0
+    for x in try evens(n) { s += x } catch ArgumentError { return "arg" }
+    return $s
+}
+
+fn all(z I64) String {
+    a := try $pick(z + 1, z + 5) catch ArgumentError default "arg"
+    b := try $pick(z + 5, z + 1) catch ArgumentError default "arg"
+    c := try $guarded(z + 10) catch Bad.NEG default "neg" catch Bad.BIG default "big" catch ArgumentError default "arg"
+    d := try $guarded(z + 70) catch Bad.NEG default "neg" catch Bad.BIG default "big" catch ArgumentError default "arg"
+    e := try $guarded(z + 700) catch Bad.NEG default "neg" catch Bad.BIG default "big" catch ArgumentError default "arg"
+    sc := Scale(3)
+    f := $useFn(sc, z + 4) " " $useFn(sc, z) " " $useFn(sc, z + 2000)
+    return $a " " $b " " $c " " $d " " $e " " $f " " $walked(z + 4) " " $walked(z - 1)
+}
+
+Baked := all(0)
+
+fn main() {
+    io.Println(Baked)!
+    io.Println(all(Live))!
+}

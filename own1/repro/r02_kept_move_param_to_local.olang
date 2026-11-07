@@ -1,0 +1,23 @@
+# O39 roots: a loan rooted at a parameter, its object moved (kept reach) into an owner local whose reach is the
+# parameter's, then released through the owner local - a release rooted at a local never meets a parameter's loan
+type Node struct(n I64) {
+    n
+    name String& = "node" $n
+}
+type Holder struct() {
+    cur own mut Node&
+    sub own mut Holder&
+}
+fn f(p mut Holder&) {
+    o own mut Holder& = take p.sub   # o's reach is p.sub's - p's scope
+    c := p.cur                       # a loan rooted at the parameter p
+    o.cur = take p.cur               # kept reach (both p's scope): a move, no release checked
+    o.cur = null                     # released through o - rooted at a local, so it never meets p's loan
+    println(c.name)
+}
+fn main() ? {
+    h := Holder()
+    h.sub = Holder()
+    h.cur = Node(7)
+    f(h)
+}

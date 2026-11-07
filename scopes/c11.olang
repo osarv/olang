@@ -1,0 +1,32 @@
+# spawn: a by-value argument holding a reference to loop-body storage; and a local naming a loop-body variable's scope
+import "std/io"
+type W struct(a Array<I64>&) { a }
+fn spin() I64 {
+    k I64 = 0
+    for j in range 20000000 { k = (k * 31 + j) % 1000003 }
+    return k - k
+}
+fn slowv(w W) I64 {
+    s := spin()
+    t I64 = 0
+    for x in w.a { t += x }
+    return t + s
+}
+fn slowa(a Array<I64>&) I64 {
+    s := spin()
+    t I64 = 0
+    for x in a { t += x }
+    return t + s
+}
+fn main() ? {
+    out := Array<I64>(4)
+    out2 := Array<I64>(4)
+    join {
+        for i in range 4 {
+            a := Array<I64>(1000, i + 1)
+            wv := W(a)
+            spawn out[i] = slowv(wv)
+        }
+    }
+    try io.Print($out[0] " " $out[1] " " $out[2] " " $out[3] " | " $out2[0] " " $out2[1] " " $out2[2] " " $out2[3] "  (expected 1000 2000 3000 4000 twice)\n")
+}

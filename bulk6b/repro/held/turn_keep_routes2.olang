@@ -1,0 +1,48 @@
+# O17/C2d (F3): a loop turn's owning value local kept by reference past the turn, through routes other than a
+# constructor called in the loop: a function storing into a mut parameter, a method, a lambda pushed, a copy of a wrapper
+import "std/io"
+
+type holder struct(v Vec<I64>&) { v }
+
+fn keep(out mut Vec<holder>&, v Vec<I64>&) { out.Push(holder(v)) }
+
+type bag struct() {
+    hs Vec<holder>
+}
+
+fn (b mut bag&) Add(v Vec<I64>&) { b.hs.Push(holder(v)) }
+
+fn sum(hs Vec<holder>&) I64 {
+    s := 0
+    for h in hs { s += h.v.Len() }
+    return s
+}
+
+
+
+fn viaCopy() I64 {
+    out := Vec<holder>()
+    for i in range 1, 6 {
+        v := Vec<I64>()
+        for j in range i { v.Push(j) }
+        w := holder(v)
+        out.Push(w)
+    }
+    return sum(out)
+}
+
+fn viaLambda() I64 {
+    fs := Vec<fn&() I64>()
+    for i in range 1, 6 {
+        v := Vec<I64>()
+        for j in range i { v.Push(j) }
+        fs.Push(fn() I64 { return v.Len() })
+    }
+    s := 0
+    for f in fs { s += f() }
+    return s
+}
+
+fn main() {
+    io.Println($viaCopy() " " $viaLambda() " (15 each)")!
+}

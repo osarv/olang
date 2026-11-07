@@ -1,0 +1,21 @@
+import "std/io"
+
+type Config immut struct(n I64, xs Array<I64>) {
+    n, xs
+}
+
+type Wrap struct(c Config) {
+    c
+}
+
+Cfg mut Config = Config(1, I64[1, 2])
+
+fn swapIn(a mut Array<I64>&) { a[0] = 1 }
+
+fn main() {
+    v := Vec<Config>()
+    c2 := Cfg
+    Cfg = Config(9, I64[9])
+    v.Push(c2)
+    io.Println($Cfg.n " " $v " " $Cfg.xs)!
+}

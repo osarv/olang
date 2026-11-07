@@ -1,0 +1,29 @@
+type In struct(n I64) ? {
+    v Vec<I64> = Vec<I64>()
+    for i in range n { v.Push(i) }
+    if n == 5 { error }
+}
+type Out struct(n I64) ? {
+    a In = try In(n % 3)
+    b In = try In(n)
+    w Vec<I64> = Vec<I64>()
+    w.Push(n)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn tryMake(n I64) I64 {
+    o := try Out(n) catch { return -1 }
+    return o.a.v.Len() + o.b.v.Len() + o.w.Len()
+}
+fn main() ? {
+    t := 0
+    for k in range 20000 { t += tryMake(k % 8) }
+    churn()
+    println($t)
+}

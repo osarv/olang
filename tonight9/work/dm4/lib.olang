@@ -1,0 +1,10 @@
+type W extends I64
+type P struct(V I64) {
+    V
+}
+fn F(x I64, w W = W(7), n I64 = Array<W>(3).Len()) I64 {
+    return x + I64(w) + n
+}
+fn G(p P = P(5)) I64 {
+    return p.V
+}

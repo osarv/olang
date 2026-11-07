@@ -1,0 +1,33 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+}
+
+fn churn() I64 {
+    t := 0
+    for k in range 300 {
+        s := $k "-" $(k * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+fn pick(a Node&, b Node&) Node& { return a if a.v > b.v else b }
+
+# a version given by a call borrowing from a turn's local, read after the loop
+fn best(n I64) I64 {
+    cur Node& = Node(-1)
+    for i in range n {
+        t := Node((i * 7) % 5)
+        cur = pick(cur, t)
+    }
+    churn()
+    return cur.v
+}
+
+fn main() {
+    io.Println($best(6))!
+}

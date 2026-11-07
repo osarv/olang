@@ -1,0 +1,48 @@
+import "std/io"
+import "std/arith"
+
+type Bad error { X }
+
+Log mut I64 = 0
+Live mut I64 = 0
+
+fn f(n I64) I64 ? Bad {
+    Log = Log * 10 + 1
+    if n < 0 { error Bad.X }
+    return n
+}
+
+fn g(n I64) arith.Checked<I64> {
+    Log = Log * 10 + 2
+    return arith.Checked(n)
+}
+
+fn h(n I64) I64 {
+    Log = Log * 10 + 3
+    return n
+}
+
+fn one(n I64) I64 { return 2 * try f(n) + 1 catch default -100 }
+fn two(n I64) I64 { return (try f(n) catch default 5) + 1 }
+fn three(n I64) I64 { return try f(n) catch default 5 + 1 }
+fn four(n I64) I64 {
+    Log = 0
+    c := try h(n) * g(n) + h(1) catch default arith.Checked(I64(-1))
+    return c.Value * 1000 + Log
+}
+fn five(n I64) I64 {
+    x := try arith.Checked(n) * n * n catch arith.Error.OVERFLOW default arith.Checked(I64(-7))
+    return x.Value
+}
+fn six(a I32, b I32) I64 {
+    return I64(try a.Narrow<I8>() catch default I8(-1)) * 1000 + I64(try b.Narrow<U8>() catch NumberError.OVERFLOW default U8(7) catch default U8(9))
+}
+fn seven(x F64) I64 { return I64(try x.Narrow<I32>() catch NumberError.OVERFLOW default -1 catch NumberError.INVALID default -2) }
+
+Baked := $one(3) " " $one(-1) " " $two(-1) " " $three(-1) " " $three(4) " " $four(5) " " $five(3000000) " " $five(3000000000) " " $six(127, 255) " " $six(128, 256) " " $six(-129, -1) " " $seven(1e10) " " $seven(NaN) " " $seven(-2147483648.0) " " $seven(2147483647.5)
+
+fn main() {
+    l := Live
+    io.Println(Baked)!
+    io.Println($one(l + 3) " " $one(l - 1) " " $two(l - 1) " " $three(l - 1) " " $three(l + 4) " " $four(l + 5) " " $five(l + 3000000) " " $five(l + 3000000000) " " $six(I32(l) + 127, I32(l) + 255) " " $six(I32(l) + 128, I32(l) + 256) " " $six(I32(l) - 129, I32(l) - 1) " " $seven(F64(l) + 1e10) " " $seven(F64(l) + NaN) " " $seven(F64(l) - 2147483648.0) " " $seven(F64(l) + 2147483647.5))!
+}

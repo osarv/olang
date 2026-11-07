@@ -1,0 +1,22 @@
+# E31b in place (F1 fix): a generator method called through x[i] keeps the element's reference (its receiver) in the
+# walk it gives - the collection grows before the walk runs
+import "std/io"
+
+type blk struct(n I64) { n }
+
+fn (b mut blk&) Counter() Iterator<I64> {
+    for _ in range 3 {
+        b.n++
+        yield b.n
+    }
+}
+
+fn main() {
+    v := Vec<blk>()
+    v.Push(blk(10))
+    g := v[0].Counter()
+    for i in range 1000 { v.Push(blk(i)) }
+    s := 0
+    for x in g: s += x
+    io.Println("sum " $s " v[0].n " $v[0].n " (33 13 by the reference; by the copy form, 33 10)")!
+}

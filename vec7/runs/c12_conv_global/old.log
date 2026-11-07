@@ -1,0 +1,4 @@
+/home/user/review/vec7/work/c12_conv_global.olang:5:10: error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead
+    5 |     GS = String(v.View())
+      |          ^~~~~~
+compilation failed with 1 error

@@ -1,0 +1,12 @@
+== build -debug -sanitize
+run:   cond1 match1 dflt1
+baked: Qond1 Qatch1 Qflt1
+status 0
+== build
+run:   cond1 match1 dflt1
+baked: Qond1 Qatch1 Qflt1
+status 0
+== interpret
+run:   cond1 match1 dflt1
+baked: cond1 match1 dflt1
+status 0

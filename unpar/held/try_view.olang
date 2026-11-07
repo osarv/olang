@@ -1,0 +1,50 @@
+import "std/io"
+
+fn h() Array<I64>& ? {
+    m := Map<I64, Vec<I64>>()
+    m.Put(1, Vec<I64>())
+    l := try m.Get(1)
+    for i in range 10 { l.Push(i + 300) }
+    return l.View()
+}
+
+fn h2() Array<I64>& ? {
+    l Vec<I64>
+    for j in range 3 {
+        m := Map<I64, Vec<I64>>()
+        m.Put(1, Vec<I64>())
+        l = try m.Get(1)
+        for i in range 10 { l.Push(i + 400 + j) }
+    }
+    return l.View()
+}
+
+fn h3() Array<I64>& ? {
+    m := Map<I64, Vec<I64>>()
+    m.Put(1, Vec<I64>())
+    l := try m.Get(1)
+    for i in range 10 { l.Push(i + 500) }
+    m2 := Map<I64, Vec<I64>>()
+    m2.Put(1, Vec<I64>())
+    l = try m2.Get(1)
+    l.Push(7)
+    return (try m.Get(1)).View()
+}
+
+fn main() ? {
+    a := try h()
+    b := try h2()
+    c := try h3()
+    churn()
+    io.Println($a[3] " " $b[3] " " $c[3])!
+}
+fn churn() {
+    for i in range 300 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        m := Map<I64, List<I64>>()
+        m.Put(i, b)
+        assert a[3] == i
+    }
+}
