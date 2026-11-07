@@ -12188,7 +12188,7 @@ fn fzFill(n I64) String {
 }
 FzFillBaked String = fzFill(3)
 test "T8: an array filled with a reference names one instance in every element" {
-    want String& = "Array<String&>[\"ab\", \"ab\", \"ab\"] Array<Char>&[\"xd\", \"xd\", \"xd\"] true Array<I32>&[Array<I32>[7, 9, 7], Array<I32>[7, 9, 7], Array<I32>[7, 9, 7]] true Array<I32>[7, 9, 7]"
+    want String& = "Array<String&>[\"ab\", \"ab\", \"ab\"] Array<Array<Char>&>[\"xd\", \"xd\", \"xd\"] true Array<Array<I32>&>[Array<I32>[7, 9, 7], Array<I32>[7, 9, 7], Array<I32>[7, 9, 7]] true Array<I32>[7, 9, 7]"
     assert FzFillBaked == want and fzFill(3) == want
     assert fzFill(fzRun + 2) == want
 }
