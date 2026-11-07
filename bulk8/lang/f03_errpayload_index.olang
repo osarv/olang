@@ -1,0 +1,15 @@
+import "std/io"
+type PErr error { Bad(msg String, data Array<I64>), Eof }
+type H struct(e PErr) { e }
+fn main() {
+    h := H(PErr.Bad("x", Array<I64>[1, 2, 3]))
+    l := h.e
+    s := "a"
+    if l == PErr.Bad {
+        n := l.data.Len()
+        d := l.data
+        s = $s $n $d[2]
+        s = $s $l.data[2]
+    }
+    io.Println(s)!
+}

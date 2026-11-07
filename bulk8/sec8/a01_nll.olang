@@ -1,0 +1,96 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+}
+
+type Box struct() {
+    v I64 = 0
+}
+
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+# deferred code reads a version given in an inner block that closed before
+fn deferInner(out mut Box&) {
+    cur Node& = Node(1)
+    defer { out.v = cur.v }
+    {
+        x := Node(9)
+        cur = x
+    }
+    churn()
+}
+
+# store through a cursor whose versions differ: one the caller's, one local
+fn storeMixed(head mut Node&, k I64) {
+    at mut Node& = head
+    loc := Node(50)
+    if k > 0 { at = loc }
+    at.v = 77
+}
+
+# a cursor assigned in a loop to a node built in a nested block, read on the next turn
+fn nextTurn(n I64) I64 {
+    prev Node& = Node(-1)
+    s := 0
+    for i in range n {
+        s = s * 10 + prev.v + 1
+        {
+            m := Node(i)
+            prev = m
+        }
+        churn()
+    }
+    return s
+}
+
+# a cursor given in a catch clause's block from a local of that block
+fn bad(v I64) ? {
+    if v > 0 { error Miss.Here }
+}
+type Miss error { Here }
+
+fn inClause(v I64) I64 {
+    cur Node& = Node(3)
+    try bad(v) catch {
+        z := Node(42)
+        cur = z
+    }
+    churn()
+    return cur.v
+}
+
+# a lambda made after an inner-block assignment, returned
+fn mkReader(k I64) fn&() I64 {
+    cur Node& = Node(1)
+    if k > 0 {
+        y := Node(k)
+        cur = y
+    }
+    return fn() I64 { return cur.v }
+}
+
+fn main() {
+    b := Box()
+    deferInner(b)
+    churn()
+    io.Println($b.v)!
+    h := Node(0)
+    storeMixed(h, 0)
+    churn()
+    io.Println($h.v)!
+    io.Println($nextTurn(4))!
+    io.Println($inClause(1))!
+    f := mkReader(5)
+    churn()
+    io.Println($f())!
+}

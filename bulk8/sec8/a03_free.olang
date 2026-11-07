@@ -1,0 +1,40 @@
+import "std/io"
+
+type H struct() {
+    a Array<I64>& = Array<I64>(0)
+}
+
+type K struct() {
+    views Vec<Array<I64>&> = Vec<Array<I64>&>()
+}
+
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+fn fill(h mut H&, n I64) {
+    h.a = Array<I64>(8, n)
+}
+
+fn stash(h H&, k mut K&) {
+    k.views.Push(h.a[0:2])
+}
+
+fn main() {
+    h mut H& = H()
+    k mut K& = K()
+    for i in range 5 {
+        fill(h, i * 11)
+        stash(h, k)
+    }
+    churn()
+    s := 0
+    for v in k.views { s = s * 100 + v[0] + v[1] }
+    io.Println($s)!
+}

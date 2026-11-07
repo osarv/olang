@@ -1,0 +1,15 @@
+defer saw 0
+1 0
+defer saw 0
+1b PE.Bad(3, "b3")
+errdefer QE.Q("q4")
+2 PE.Bad(4, "b4")
+3 PE.Bad(50, "rePE.Bad(5, \"b5\")")
+4 -1 -1 -2
+5 PE.Bad(9, "b9")
+6 0,1,caught PE.Bad(2, "gen")
+7 Array<I64>[-1, -1, -1, -1]
+8 join PE.Bad(4, "b4")
+9 plain PE.Plain
+9 1 b1
+9 2 b2
