@@ -30532,3 +30532,84 @@ call handing back a borrowed reference, so the String is a view its caller copie
 (b) for the common build-and-return shape, the builder local lifted to where its text goes and that copy left out
 where it is the builder's last use - D9i's moved-local rule extended from constructors to a call whose result views its
 receiver. Both are D9h/D9i work of their own; the copy stays ~1% of a builder-heavy run (the tidy round's measure).
+
+## Bulk review 8, fixed (2026-11-07)
+
+### bfix8b - error payloads, main, tests and interpret
+
+Bulk review 8 (/home/user/review/bulk8, tools/ and lang/ NOTES.md) over the rounds of 2026-11-07; this round took the
+error-payload, main, test and interpret findings. Each fix is a commit naming its finding, each pinned by a test.
+
+**tools F4 (high): a payload error escaping main ran none of main's deferred code, errdefers or destructors.**
+`lowering.raise` said the payload (`mainPayloads`, ending the block with `Exit(Unhandled)`) before `leave(0)`, so the
+exit was taken where the error was raised with every scope of main still open: `defer w.Flush()!` lost its buffered
+line whenever an os.Error (all of whose words carry the path now) left main. Fixed: said after `leave(0)` - the record
+is on its own stack, which deferred code leaves as it found it - the rendering's builder opened in no scope
+(`withPayload(closed = true)`), since none is open there. Pinned by checks' `testends` (`escaped.olang`: built, -debug and
+interpreted, a payload word, its defers, errdefer and destructor in order).
+
+**tools F9: a root-module method named main was taken for the entry.** `lowering.isMain`, emit's and interp's entry
+search asked only "the root's, named main", so a method `fn (r Runner) main() I64 ? PE` letting a payload error out
+ended the program. One predicate now, `Program.IsEntry` (root module, a plain function - no receiver, no builder - named
+main), used by lowering, emit, interp and free.olang's `runsAgain` (which had taken any module's function named main for
+one that runs once - a library's `main` called in a loop). checks/cases/b4methodmain.olang.
+
+**lang F1 (high): a `try join` block's own error, its tasks failing too, left with the task's payload.**
+`__olang_join_tasks` always attached the earliest failing task's record on top of the payload stack - also where the
+wait takes no failure, because an error of the block's own is leaving (P4b drops the tasks'): the clause taking the
+block's error then read the task's record (a segfault under -debug -sanitize, a wrong payload or interpret's stop), and
+where the block's error carried none the task's record leaked (52 MB over 100k joins, now 2.2 MB). The runtime's
+`__olang_join_tasks_keep` takes a keep flag (`__olang_join_tasks` stays, keeping, for the seed's compiler): emit passes
+true only where the wait's failed edge is its own (lowering's erroring wait has its
+failed edge the ok one), the test harness's unwinding false; the evaluator drops the kept task's record the same way
+(`Scope.KeptBase`). tests/errdata.olang, beside a baked global and a decided assert.
+
+**lang F2: a narrowed payload's array field could not be indexed in one expression.** `l.data[2]` after `if l ==
+PErr.Bad` said "may hold an error that has no field data": `place` took `l.data` through `field`, never the error
+narrowing `errField` that the member expression uses. `place` now asks `errField` first (a read-only temporary, never
+written - T19b). tests/errdata.olang.
+
+**lang F3: the first raise in source order settled a raised error's fields only when it was checked first.** A first
+raise whose body calls, before the raise, a function raising the same name met that later raise first (its body in
+progress, `settleRaised` could not check it), which settled the fields - adding a call changed the payload type and what
+compiled. Now a raise settling the fields while the first raise's body is in progress is provisional (`raisedEarly`);
+the first raise, when met, settles them again from its own values, and where they differ the program is checked again
+(`raisedMoved`, an attempt as R1a's - the settlement kept across attempts, so the later raise is held to the first's
+types). checks/cases/r3bfirstraiseorder.olang (the later raise's I64 is T6b's error) and a run test.
+
+**lang F9: text inside a payload's structs, enums, arrays and error values was refused.** `payloadBad` asked
+`HoldsRefs`, which counts an owned part (an array held by value, text) as a reference for section 8 - text passed only
+at a payload's top. `payloadRef` walks the type as T19b states it: references, function values, anys and types
+without bodies refused at any depth through values, owned parts the payload's own (the copy onto the stack is
+`ownCopyOf`'s, deep through values). Built, -debug -sanitize and interpreted agree, kept values read after churns, 2M
+raises flat at 1.9 MB. tests/errdata.olang.
+
+**tools F6 (older): an error leaving a test ran none of the test's deferred code.** The test body's escape was a
+`bang(Escaped)` where the try stood, all its scopes open - the harness's unwinding closed them (destructors) but
+deferred code never ran, though S19 runs it on an error leaving a block and S16 makes such an error an ordinary
+failure. It now leaves every level first (defers, errdefers, drops), as main does; SPEC S16 says so.
+
+**tools F5: `test -interpret` ran no destructor of a failed test.** The evaluator dropped a stopped request's frames
+with no registration run. With `Machine.TestUnwind` (set by RunTests), a test a check stops is unwound as
+`__olang_unwind_to` does it (`closeOpen`): each frame from the top, each open scope innermost first, a join's tasks
+still to run run first (their failures no one's - `unwinding`), then the scope closed through `stepClose`, destructors
+run as frames; no deferred code (S16d). testends' ends.olang now runs alike built and `test -interpret` (it differed in
+five tests: the join's task, three destructor counts, the stack's handle).
+
+**tools F1, F7: `test -interpret` printed no trace after a `!`, and no did-you-mean for a word naming no test.**
+RunTests prints `TraceText` after an `ExitKind.Error` stop, as RunMain does; it collects the tests' targets and
+descriptions where words name none (`Exec.TestWords`, handed to `Config.TestWords` for `noTestNamed`). checks' `interp`
+scenario: unwind.olang run built and interpreted, compared, and a misspelled word.
+
+**From the full verify (the coordinator):** evaldiff's Skipped named chan's SendOf test by its old name (the test is
+`Ready.Select: ...` since the builders round) and did not know checks/cases/c6selectjoin.olang (Select polling for a
+task its join runs only afterwards - both never end interpreted, B3e); tests/cimport.olang's packed record test passes a
+packed struct to C by value, which interpret refuses (B3e) - listed in Expected. Making interpret pass structs by value
+through libffi (packed ones included) is left: libffi has no packed layouts, so it would take building C's
+classification (cabi.olang) into the evaluator's call.
+
+Decided (mine): the payload's main/test message is rendered after the scopes close (a Str with effects says it after
+the deferred code, as the plain word's line is); a raise met before its first raise settles provisionally rather than
+being refused (the program the spec accepts compiles); an extern type's reference in a payload stays accepted as
+before (HoldsRefs counts it as no reference, X10); `test -interpret` unwinds only the tests' requests, not a global's
+initializer.

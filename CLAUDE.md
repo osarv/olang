@@ -1481,11 +1481,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   and decided asserts agree, tests/errdata.olang). ~70 ns a raise and pop. std: os `(path String)` on every word, json
   `(line I64, col I64)` and `Missing(key)` (`json.Position` and the `at` parameters gone), csv, flags, regex `(at I64)`,
   time `Syntax(at)`, net `Address(text)`/`UnknownHost(host)`, io `Partial(written)`; `olang api` reports a payload added
-  as breaking; explain/doc print a word's payload. Left: `e == W(3, _)` with `_` on an error value.
+  as breaking; explain/doc print a word's payload. Left: `e == W(3, _)` with `_` on an error value. Since bulk review 8
+  (HISTORY.md "Bulk review 8, fixed", bfix8b): a payload error escaping `main` runs main's defers, errdefers and
+  destructors first; a `try join` block's own error leaves with its own payload, the tasks' dropped by the wait
+  (`__olang_join_tasks_keep`'s flag); text and arrays inside a payload's structs, enums, arrays and error values are its
+  own; a narrowed payload field is indexed in place; the first raise in source order settles a raised error's fields
+  whichever is checked first (another attempt where a later raise was met first and differed).
 - **Errors are errors (the user's rule).** Nothing returns a value beside a flag: iterators fail with `Exhausted`
   (`Next() T ? Exhausted`), `Map.Get`, `Find`, `Pop` fail with their errors.
-- **`main`**: no parameters or result, any error set or none (QU); an escaping error prints `unhandled error: T.W`
-  (and its trace, S18d) and exits 1. `os.Args()`/`os.Env()` give the command line (B4a).
+- **`main`**: no parameters or result, any error set or none (QU); an escaping error leaves main's blocks as any
+  function's (their deferred code and destructors run), then prints `unhandled error: T.W` (and its trace, S18d) and
+  exits 1. `os.Args()`/`os.Env()` give the command line (B4a). The entry is the root module's plain `main`
+  (`Program.IsEntry`): a method or builder named main is ordinary (bulk review 8). An error leaving a test runs its
+  deferred code and destructors before the FAIL line; `test -interpret` unwinds a failed test as the harness does (P1d:
+  scopes closed, destructors run, tasks joined), prints a `!`'s trace, and suggests the nearest test for a word.
 - **Where errors may be raised (R3, R10, R14).** `error` is valid in an ordinary function and a constructor, never in
   a `test` or `destruct` (a test's `try` may let an error out, which fails it, S16); the `try ... catch { }`
   statement discards the value. A constructor field that fails produces no instance. A run-time array length out of range aborts (D14b), out of memory aborts
