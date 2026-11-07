@@ -902,6 +902,7 @@ fn (a Analysis&) moduleNames(it mut Items&, mi I64, own Bool) {
     for e in c!.P.R.Tables[mi].Entries {
         name := nm.Text(e.Name)
         if not own and not doc.Exported(name) { continue }
+        if name.Contains("$") { continue }              # an error type's hidden payload enum (T19b)
         if e.Kind == names.What.Func {
             f := c!.P.FnNamed(mi, e.Name)
             if f < 0 or c!.P.FnDecl(f).Recv is not null { continue }

@@ -381,13 +381,23 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
         case types.DeclKind.Foreign { return $"extern type " $name "\n" }
         case types.DeclKind.Error {
             # T19, T19a: its members as written, then its own words
-            if c.P.IsRaisedError(d) { return $"error " $name "   # declared where it is raised (R3b)\n" }
+            if c.P.IsRaisedError(d) {
+                b.Push($"error " $name)
+                wordPayload(b, c, self, 0)
+                b.Push("   # declared where it is raised (R3b)\n")
+                return b.ToString()
+            }
             src := c.P.L.Mods[c.P.DeclModule(d)].Src!.Text
             b.Push($"type " $name " error")
             ms := c.P.ErrorMembers(d)
             for i in range ms.Len() { b.Push($(", " if i > 0 else " ") $src[I64(ms[i].Sp.Start):I64(ms[i].Sp.End)]) }
             b.Push("\n")
-            for w in c.P.ErrorWords(d) { b.Push($"    " $nm.Text(w) "\n") }
+            ws := c.P.ErrorWords(d)
+            for k in range ws.Len() {
+                b.Push($"    " $nm.Text(ws[k]))
+                wordPayload(b, c, self, k)
+                b.PushChar('\n')
+            }
             return b.ToString()
         }
         case types.DeclKind.Trait {
@@ -467,6 +477,16 @@ fn pushPayload(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId, s
     }
     sig := declSig(c, named(c, c.P.CaseSig(self, k), null, casePayload(c.P.TypeDecl(d)!, k)))
     b.Push(sig[2:firstClose(sig) + 1])
+}
+
+# T19b: word k of the error type self's payload as its declaration writes it, "(line I64, col I64)", nothing for a word
+# carrying none - read off the hidden payload enum, whose cases are the words in order
+fn wordPayload(b mut StringBuilder&, c mut typecheck.Checker&, self types.TypeId, k I64) {
+    pe := c.P.PayloadOf(self)
+    if pe == types.UnknownT: return
+    cases := c.P.T.Items(c.P.T.Cases(pe))
+    if k >= cases.Len() or cases[k] == types.TypeId(0): return
+    pushPayload(b, c, c.P.T.DeclOf(pe), pe, k)
 }
 
 fn casePayload(td ast.TypeDecl&, k I64) Array<ast.Param&>& {
