@@ -130,7 +130,7 @@ test longest "an array that may be null: null distinct from empty, read once nar
     assert z is null
     w String&                                    # one never null starts as the empty array, as a value array does
     assert w.Len() == 0
-    assert $n == "null" and $e == "" and $Array<Array<I64>?&>[] == "Array<I64>?&[]"
+    assert $n == "null" and $e == "" and $Array<Array<I64>?&>[] == "Array<Array<I64>?&>[]"
 }
 
 test sample "the evaluator agrees: baked while compiling as at run time" {
