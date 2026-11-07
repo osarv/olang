@@ -1,0 +1,15 @@
+# check: fail error[K2]: this global's initializer aborts the program, evaluated while compiling: an assertion in it fails, which aborts the program
+# also: compilation failed with 1 error
+# K2, S18c, S17a: a global whose initializer aborts is one error, at the global - the asserts reading it (a top-level
+# one, decided ones in main, one through another global) say nothing more
+fn mk(n I64) I64 {
+    assert n < 2, "too big"
+    return n
+}
+X := mk(5)
+Y := X + 1
+assert X > 0
+fn main() {
+    assert X == 3
+    assert Y == 3
+}

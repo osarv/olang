@@ -315,6 +315,10 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
             }
             case eval.Stop.Exited(kind, file, sp, _) {
                 n++
+                if x.M.StoppedGlobal >= 0 {
+                    globalAborts(x, d, x.M.StoppedGlobal, kind, file, sp)
+                    continue
+                }
                 rec := d.Error(at, msgs.AssertAborts(AbortWhy(kind)))
                 d.Note(rec, diag.Where.Span(file, sp.Start, sp.End), msgs.NoteHere())
             }
@@ -330,6 +334,16 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
         }
     }
     return n
+}
+
+# an assert that aborts because a global it reads does: one cause, said at the global as K2 says it (the same error the
+# baking reports, so said once), never at each assert reading it
+fn globalAborts(x mut Exec&, d mut diag.Diagnostics&, g I64, kind mir.ExitKind, file I64, sp source.Span) {
+    b := x.Bodies[g]
+    rec := d.Error(diag.Where.Span(b.File, I64(b.Sp.Start), I64(b.Sp.End)), msgs.GlobalAborts(AbortWhy(kind)))
+    if file != b.File or d.LineAt(file, I64(sp.Start)) != d.LineAt(b.File, I64(b.Sp.Start)) {
+        d.Note(rec, diag.Where.Span(file, I64(sp.Start), I64(sp.End)), msgs.NoteHere())
+    }
 }
 
 # a false assert's error: with its message rendered as the run time renders it - by reflection or by the evaluator -
@@ -370,6 +384,10 @@ fn decideTopAsserts(c mut typecheck.Checker&, x mut Exec&) I64 {
                 d.Error(at, msgs.TopAssertFalseMessage(text))
             }
             case eval.Stop.Exited(kind, file, sp, _) {
+                if x.M.StoppedGlobal >= 0 {
+                    globalAborts(x, d, x.M.StoppedGlobal, kind, file, sp)
+                    continue
+                }
                 rec := d.Error(at, msgs.AssertAborts(AbortWhy(kind)))
                 d.Note(rec, diag.Where.Span(file, sp.Start, sp.End), msgs.NoteHere())
             }

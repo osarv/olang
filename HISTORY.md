@@ -30112,3 +30112,11 @@ by the scope pass (an instance built in a closing scope, `dtorAt`). Both are now
 the scope pass's still says the cases the checker cannot see (an instance built in a block, a callee's built result, a
 payload). becomedtor pins `compilation failed with 1 error`. The scope pass's line is one call in scope.olang (sec8r2's
 file).
+
+**C7, an aborting global said once.** A global whose initializer aborts the program while compiling (K2) was said at
+the global and again at every assert reading it - a top-level one (S17a), each decided one (S18c), one reading it
+through another global: four errors for one cause. The evaluator now keeps the global whose initializer a stop ended
+in (`Machine.StoppedGlobal`, its body, set where `unwind` drops a halted initialization); an assert whose evaluation
+stopped there says K2's error at that global instead of its own (interp's `globalAborts`), which the baking's own report
+of it repeats word for word at the same place and the diagnostics keep once. Decided (mine): said at the global even
+where the program has other errors and is not baked, so the cause is never lost. checks/cases/k2abortsread.

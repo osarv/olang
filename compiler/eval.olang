@@ -365,6 +365,9 @@ type Machine struct(T mut types.Table&, When Mode) {
     Result Ptr = NullPtr         # the last request's result
     ResultTy types.TypeId = types.VoidT
     Stopped Stop = Stop.None
+    # the global whose initializer the last request stopped in - its initializer's body, -1 for none: an assert reading a
+    # global whose initializer aborts is that one cause, said at the global (K2)
+    StoppedGlobal I64 = -1
     halted Bool = false
     # S8a, S8b: whether the last request read a build constant - a function in BuildFns run, a build constant's default
     # (B10c) read, or a global whose initializer read one - as stage 0's usedBuild: a condition decided reading none is
@@ -5233,6 +5236,7 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
     m.halted = false
     m.UsedBuild = false
     m.Stopped = Stop.None
+    m.StoppedGlobal = -1
     m.Steps = 0
     m.trace.Clear()
     m.traceStack.Clear()
@@ -5333,6 +5337,11 @@ fn (m mut Machine&) unwind(base I64) {
     }
     for m.nFs > base { m.dropFrame() }
     if m.initGlobal >= 0 and m.halted {
+        m.StoppedGlobal = -1
+        match m.codeKeys[m.globals[m.initGlobal].Init] {
+            case mir.FnKey.Body(id): m.StoppedGlobal = I64(id)
+            case _ { }
+        }
         for g in range m.globals.Len() {
             if m.globals[g].State == 1 { m.globals[g].State = 0 }
         }
