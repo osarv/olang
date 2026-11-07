@@ -494,14 +494,19 @@ fn earlyfree(r mut report&) ? Failed {
     # descriptors too, under a limit of 64 open at once
     # mapvec (QF): a Map of Vecs whose values are replaced and removed
     # vecreassign (bulk review 6 F13): a Vec local and a Vec field given a new value each turn
-    progs := String&["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec", "vecreassign"]
-    small := String&["300", "100", "2000", "2000", "5", "300", "2000", "200", "2000", "300"]
+    # dropvec (Part C): a Vec of values with destructors truncated, each one's storage freed where it is ended
+    # exportquiet (condition 3's sharper rule): an export fn no C is given stops no early freeing
+    progs := String&["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec", "vecreassign"
+                     "dropvec", "exportquiet"]
+    small := String&["300", "100", "2000", "2000", "5", "300", "2000", "200", "2000", "300", "2000", "300"]
     full := String&["example.com\n", "3000000\n", "100\n"
                     "line 999999 of the file - a status text padded out to about a hundred bytes ......................\n"
-                    "3071\n", "12000000000000\n", "999936 64\n", "16\n", "63 504\n", "2000980000000 2000980000000\n"]
+                    "3071\n", "12000000000000\n", "999936 64\n", "16\n", "63 504\n", "2000980000000 2000980000000\n"
+                    "1000000 499999500000\n", "40039400000\n"]
     part := String&["example.com\n", "3000\n", "100\n"
                     "line 1999 of the file - a status text padded out to about a hundred bytes ......................\n"
-                    "3071\n", "270000\n", "1936 64\n", "16\n", "64 512\n", "5970000 5970000\n"]
+                    "3071\n", "270000\n", "1936 64\n", "16\n", "64 512\n", "5970000 5970000\n", "2000 1999000\n"
+                    "149100\n"]
     for i in range progs.Len() {
         p := progs[i]
         try r.expect(sh(dir, $"\"$OLANG\" build " $p ".olang > out.txt 2>&1") == 0, $p " build", dir)

@@ -1,0 +1,25 @@
+import "std/io"
+
+# O8d, O15 (Part C): a Vec of values with destructors, each ended where the Vec lets go of it (Truncate), its storage
+# freed right there - the destructor walked as a call where it runs (260 MB kept before, over 1,000,000 values of
+# 256 bytes each)
+N I64 = 1000000
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64, n I64) {
+    id
+    data := Array<I64>(n, id)
+} destruct { Ended++ }
+
+fn main() {
+    v Vec<Res> = Vec<Res>()
+    t := 0
+    for i in range N {
+        v.Push(Res(i, 32))
+        t += v[v.Len() - 1].data[31]
+        if v.Len() == 64: v.Truncate(0)
+    }
+    v.Truncate(0)
+    io.Println($Ended " " $t)!
+}

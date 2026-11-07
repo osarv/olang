@@ -1,9 +1,23 @@
 # check: fail error[S17a]: this top-level assert is false, decided while compiling
-# G42 (review 6b F1): where the program has an export fn, a call of C may call it back (X13), so a function calling C
-# may do what an export fn does - here write a global
-import unistd "unistd.h"
+# G42 (review 6b F1, the sharper rule of 2026-11-03): where C is given an export fn (X13), a call of C - but the C
+# library's own input and output, text, memory and time functions - may call it back, so a function calling C may do
+# what the export fn does: here qsort, given olang_count, writes a global
 G mut I64 = 0
-export fn olang_grow(n I64) { G = G + n }
-fn bump() { unistd.usleep(0) }
-assert not bump.WritesGlobals
-fn main() { bump() }
+
+type Item struct(key I32) { key }
+
+extern fn qsort(base mut Array<Item>&, n I64, size I64, cmp fn&(a Item&, b Item&) I32)
+
+export fn olang_count(a Item&, b Item&) I32 {
+    G = G + 1
+    return a.key - b.key
+}
+
+fn sorted(xs mut Array<Item>&) { qsort(xs, xs.Len(), 4, olang_count) }
+
+assert not sorted.WritesGlobals
+
+fn main() {
+    xs := Item[Item(2), Item(1)]
+    sorted(xs)
+}

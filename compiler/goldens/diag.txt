@@ -1771,11 +1771,11 @@ e31bdtor.olang:15:5: note: the callee is no view of the element because of this 
       |     ^~~~~~~~
 compilation failed with 1 error
 === e31bexportback.olang
-e31bexportback.olang:19:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   19 |     G[0].Bump()
+e31bexportback.olang:22:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   22 |     G[0].Bump()
       |      ^
-e31bexportback.olang:15:5: note: the callee is no view of the element because of this statement
-   15 |     b.n = 99
+e31bexportback.olang:18:5: note: the callee is no view of the element because of this statement
+   18 |     b.n = 99
       |     ^~~~~~~~
 compilation failed with 1 error
 === e31bfieldviewbuild.olang
@@ -2687,9 +2687,9 @@ g23narrow.olang:4:14: error[T6b]: I64 does not flow into U8 - convert it, as U8(
       |              ^~~
 compilation failed with 1 error
 === g42exportback.olang
-g42exportback.olang:8:8: error[S17a]: this top-level assert is false, decided while compiling
-    8 | assert not bump.WritesGlobals
-      |        ^~~~~~~~~~~~~~~~~~~~~~
+g42exportback.olang:18:8: error[S17a]: this top-level assert is false, decided while compiling
+   18 | assert not sorted.WritesGlobals
+      |        ^~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === g42factfalse.olang
 g42factfalse.olang:5:8: error[S17a]: this top-level assert is false, decided while compiling: the callback must not allocate
@@ -3554,6 +3554,16 @@ compilation failed with 1 error
 o14returnglobal.olang:8:26: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     8 |     x mut Array<Char>& = Show()
       |                          ^~~~~~
+compilation failed with 1 error
+=== o15dropcycle.olang
+o15dropcycle.olang:13:5: error[O15]: 'a' and 'b' may each hold a reference to the other, and both have destructors to run - whichever is ended first, the other's destructor could read it: end one of them before the other refers to it (a block of its own, or its Destroy()), or hold one by reference
+   13 |     b Node = Node(2)
+      |     ^
+compilation failed with 1 error
+=== o15dropcyclestep.olang
+o15dropcyclestep.olang:18:5: error[O15]: 'h' and 'g' may each hold a reference to the other, and both have destructors to run - whichever is ended first, the other's destructor could read it: end one of them before the other refers to it (a block of its own, or its Destroy()), or hold one by reference
+   18 |     g Hold = Hold(2)
+      |     ^
 compilation failed with 1 error
 === o17bbitand.olang
 o17bbitand.olang:20:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')

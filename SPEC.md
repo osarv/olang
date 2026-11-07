@@ -6228,9 +6228,11 @@ keeps: `List.Clear` and `StringBuilder.Clear` empty a container and keep its sto
 **O8d (letting go).** A **place** is
 storage that holds a value and can be given another: a local, a field, an element of an array or a collection, a
 global. A place **lets go** of what it holds when it is assigned (S4), when the entry holding it is removed (M19d's
-`RemoveAt`, `SwapRemove`, `Remove`, `Clear`, `Truncate`), and, for a local given something moved out of a collection
-(`Pop`, `TakeAt`, `SwapTake`, `Take`), when its block is left. What it held is reclaimed then - not when its scope
-closes - when the place was its **only holder**:
+`RemoveAt`, `SwapRemove`, `Remove`, `Clear`, `Truncate`), for a local given something moved out of a collection
+(`Pop`, `TakeAt`, `SwapTake`, `Take`), when its block is left, and, for a value with a destructor held by value (O15),
+where that value is ended - its holder's block left, a store over it, its collection ending it - right after its
+destructor has run. What it held is reclaimed then - not when its scope closes - when the place was its **only
+holder**:
 1. it was **made for the place**: built there (a constructor call, an enum case, an array, a literal, text rendered or
    joined, a call's built result, O13), `null`, or constant data (T25d); or moved there from a place that was its only
    holder (a collection's `Pop`, `TakeAt` or `Take`, and the last use of a local given one);
@@ -6238,10 +6240,15 @@ closes - when the place was its **only holder**:
    another value of the same place included (each value is its own: a node one holder holds linked from another
    holder's node is stored elsewhere), a global, a closure kept past the call that made it, a task, or a call that may
    keep it (O10b, O26a);
-3. nothing it holds is reached by more than one thread (§6.8) - nor is anything, in a program with an export fn, which
-   C may call from a thread of its own (X12);
+3. nothing it holds is reached by more than one thread (§6.8) - nor is anything in a program C may call back (X12):
+   one giving an export fn to a C function (X13), built as a library (X14), or linking C of its own that may name
+   one (a `.c` import, a `link`, X9, X21) - C may call it from a thread of its own;
 4. nothing it holds, nor anything built where it lives - an instance a constructor builds and no reference takes
-   (O16) among it - is an instance whose destructor is still to run (O15): only a `Destroy()` (C9b) ends that early;
+   (O16) among it - is an instance whose destructor is still to run (O15): only a `Destroy()` (C9b) ends that early -
+   but a value held by value, ended where its holder lets go of it, is reclaimed right after its destructor runs, where
+   no value of its type (or of a type holding it) is ever registered with a scope (O16) and no test build may run its
+   destructor where a failed check unwinds (S16) - its destructor then runs only where a holder lets go, each a call
+   whose let-goes are judged there;
 5. the place can let go again before its scope closes: it is let go of in a loop, or in a function that can run again
    while the place lives;
 6. no reference read from what the place holds is in use across a call that may make the place let go.
@@ -6264,8 +6271,9 @@ such a value held in a place that reclaims it whole.
 A reference read from what a place holds that is still in use after the place lets go - in the function holding the
 reference, or across a call that may make it let go (condition 6) - makes the place keep what it lets go of. Each
 condition is the compiler's to prove, over the whole program: where a fact it needs cannot be shown - a body not known
-(a function value, an `extern` - which may call back any export fn, X12 - so a place one may let go of is let go of
-across it), code in a module compiled on its own (B3i), a cycle of calls not settled - the place keeps, as O8c says;
+(a function value, an `extern` - which, in a program C may call back (condition 3), may call any export fn C may call,
+X12, but the C library's input and output, text, memory and time functions, which call nothing back - so a place one
+may let go of is let go of across it), code in a module compiled on its own (B3i), a cycle of calls not settled - the place keeps, as O8c says;
 nothing is reclaimed on a guess, and no fact is taken from a fixed point not run to its end. A generator (D18) lets go
 as a function does, its `yield` giving a value as a `return` does - and a `yield` is a call that may make any place let
 go, for what its frame holds across it: its consumer runs what it likes before the next `Next()`. What the
@@ -6991,9 +6999,21 @@ reference - has its destructors run exactly once, **where its holder lets go of 
   a call standing as a statement, a part read through `open(1).fd`) is held where the call lands (O16): registered with
   that scope, and its destructors run when the scope closes (O1), in the reverse order of the registrations - unless a
   `Destroy()` ran them before (C9b).
-A block's variables let go before its scope closes - in the reverse order they were declared, among its deferred code -
-and the scope's registered values after; a join block's variables let go after its wait (P1b), where its tasks have
-ended, after its deferred code. Where in the scope an instance's storage lies, and whether it was reserved
+A block's variables let go before its scope closes - in the reverse order they were declared, among its deferred code,
+except that **a variable holding a reference to another is ended before it**: the held one's end waits until every
+variable of the block holding it has been ended, and runs then, so no destructor reads a value already ended - and the
+scope's registered values after; a join block's variables let go after its wait (P1b), where its tasks have ended, after
+its deferred code. A variable *holds* another of its block (both holding values with destructors to run) where a
+reference into the other's storage - to it, or to a part it holds by value - may be stored into the first's storage or
+into storage the first's references reach: by an assignment, by a call given both - storage it reaches writably (through
+a `mut` reference, a function value or an `any` among what it is given) and a reference reaching the other, whatever the
+callee does with them, so the order is read off the function itself - or by a lambda capturing both; and through any
+number of such steps (`h` holding a reference to a collection that holds one to `r`), each one possible by the types: a
+value of the type stored can hold - through its parts and the references it reaches - a reference into a value of the
+other's type or a part of it (a function value, an `any` or a type variable can hold any). Two variables of a block each holding the other
+- a cycle of such references - is a compile-time error naming both: whichever were ended first, the other's destructor
+could read it; ending one before the other refers to it (a block of its own, a `Destroy()`) or holding one by reference
+removes it. A test ended by a failed check (P1d) ends its holders in the same order. Where in the scope an instance's storage lies, and whether it was reserved
 before its constructor's arguments were built, is not observable. A global and a generator's
 parameter hold such a value by reference, and a type argument holds it by value only where its instance ends it (C11):
 the program's scope, a walk left part way and an array of a run-time length outside a collection have no holder that
@@ -7861,8 +7881,8 @@ Vec`, `starts tasks`, the classes of B11c it reaches (`files`, `network`, `proce
 else `calls C`, `may end the program`, `may block` or `never blocks`, `recursive`, `always ends` (G42's `Terminates`),
 and `may be computed while compiling` (K1a: no C but C's math, no mutable global read or written) - a destructor the body
 registers or runs counted as G42's facts count it. A call through a
-function value or an `any` is `anything`, and so is a call of C (G42's) where the program has an export fn - `anything -
-it calls C, which may call the program's export fns`; a body that did not check is `not known`. Under a generic function, a line
+function value or an `any` is `anything`, and so is a call of C (G42's) in a program C may call back (O8d condition 3)
+- `anything - it calls C, which may call the program's export fns`; a body that did not check is `not known`. Under a generic function, a line
 `# T needs: Less, a walk ...` for each type variable says what its body asks of it beyond its written constraint
 (G18a). Under a function that cannot become a value (T21), a line `# not a value: ...` says why: a method is called as
 one (M19), an extern by its name (X1), a generic is a value only named with its type arguments (G12), one compiled per
@@ -9143,9 +9163,10 @@ none at its end, while one an error may leave with before the hand-on does):
 | `Recursive` | call itself, directly or through others |
 | `Terminates` | **always end**: every loop of it is a for-in over an array or a range (a count known before the loop starts), it is not recursive, and nothing of it waits or calls C not known to return - the one fact true where nothing is known against it |
 
-A call through a function value or an `any` may do anything, and so may a body that did not check, and - where the
-program has an export fn (X12), which C may call from any C call (X13) - a call of C but C's math, the runtime's own and
-the C functions known to return at once without calling back: such a function has every fact but `Terminates`, so no
+A call through a function value or an `any` may do anything, and so may a body that did not check, and - in a program
+C may call back (an export fn given to a C function, X13; built as a library, X14; or linking C of its own, a `.c`
+import or a `link`, which may name one) - a call of C but C's math, the runtime's own, the C functions known to return
+at once, and the C library's input and output, text, memory and time functions, none of which calls back: such a function has every fact but `Terminates`, so no
 fact is claimed that a run could prove false. A fact is decided once the
 program has checked, from every body: read in a body, it is the constant the bodies give - an attempt reads each as
 its cautious value first and the program is checked again with the values found, until what is read is what is found

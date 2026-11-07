@@ -1,0 +1,20 @@
+# check: build
+# E31b (the sharper rule of 2026-11-03): a method called through x[i] that calls C is made on the element in place where
+# no C can call the program back - its export fn is given to no C function, it links no C of its own, and usleep, the C
+# library's, calls nothing back
+import "std/io"
+import unistd "unistd.h"
+type blk struct(n I64) { n }
+G mut Vec<blk>
+export fn olang_grow(n I64) {
+    for i in range n { G.Push(blk(i)) }
+}
+fn (b mut blk&) Bump() {
+    unistd.usleep(0)
+    b.n = 99
+}
+fn main() {
+    G.Push(blk(1))
+    G[0].Bump()
+    io.Println("G[0].n = " $G[0].n " len " $G.Len())!
+}

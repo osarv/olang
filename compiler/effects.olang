@@ -160,7 +160,8 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     dropsRun Map<I64, Bool>      # the body's holders whose drop may run, by flag local (typed.DropsRun)
     curBody I64 = -1             # the body walked
     curMod I64 = -1
-    exports I64 = -1              # how many export fns the program has (X12), -1 until counted
+    dtorsNoted Bool = false
+    ownC I64 = -1                 # whether the program links C of its own and has an export fn (cMayCallBack), -1 unknown
     dtorOf Map<types.TypeId, I64> # by type: its destructor's body (C9)
 }
 
@@ -180,8 +181,8 @@ fn (e mut Effects&) grow() {
         e.tLow.Push(0)
         e.tOn.Push(false)
     }
-    if e.exports < 0 {
-        e.exports = e.countExports()
+    if not e.dtorsNoted {
+        e.dtorsNoted = true
         for i in range e.Bodies.Len() {
             of := e.Bodies[i].Of
             if of == typed.BodyOf.Dtor: e.dtorOf.Put(of.t, i)
@@ -194,16 +195,20 @@ fn (e mut Effects&) grow() {
     }
 }
 
-# the program's export fns: C may call one from any C call (X13) - free.olang's condition 3 too
-fn (e mut Effects&) countExports() I64 {
-    n I64 = 0
+# whether C may call one of the program's export fns (X12-X14): it is built as a library, a C function is given one
+# (X13), or the program has one and links C of its own, which may name it (load.LinksOwnC) - free.olang's condition 3 too
+fn (e mut Effects&) cMayCallBack() Bool {
+    if e.P.L.SharedLib or e.P.L.HandedToC.Len() > 0: return true
+    if e.ownC < 0: e.ownC = 1 if e.P.L.LinksOwnC() and e.hasExport() else 0
+    return e.ownC == 1
+}
+
+fn (e Effects&) hasExport() Bool {
     for body in e.Bodies {
-        match body.Of {
-            case typed.BodyOf.Fn(i) { if e.P.FnDecl(e.P.InstanceFn(i)).Export: n++ }
-            case _ { }
-        }
+        of := body.Of
+        if of == typed.BodyOf.Fn and e.P.FnDecl(e.P.InstanceFn(of.instance)).Export: return true
     }
-    return n
+    return false
 }
 
 # what body b may do, with everything it may call
@@ -790,9 +795,10 @@ fn (e mut Effects&) extern(f I64) {
         e.cur.Opaque = true
     }
     if name == "exit" or name == "_exit" or name == "abort" { e.cur.Exits = true }
-    # C may call any of the program's export fns before it returns (X13), and they may do anything: where the program
-    # has one, a C call is not known - but the runtime's own and those known to return at once, calling nothing back
-    if e.exports > 0 and not name.StartsWith("__olang_") and not quickC(name) {
+    # C may call the program's export fns before it returns (X13), and they may do anything: where C may call one back
+    # (cMayCallBack), a C call is not known - but the runtime's own, those known to return at once, and the C library's
+    # input and output, text, memory and time functions, which call nothing back (typed.NoCallbackExtern)
+    if e.cMayCallBack() and not name.StartsWith("__olang_") and not quickC(name) and not typed.NoCallbackExtern(name) {
         e.cur.Unknown = true
         e.cur.Back = true
     }

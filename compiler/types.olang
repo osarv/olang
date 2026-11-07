@@ -1207,6 +1207,103 @@ fn (w mut codeWalk&) some(l ListId) Bool {
     return false
 }
 
+# O15's holders: whether a value of type from may hold - in a part, or behind a reference it reaches, at any depth - a
+# reference into the storage of a value of type into: to it, or to a part it holds by value (deep through fields,
+# payloads and elements held by value - a run-time array part's elements among them, its own storage). A function
+# value, an "any", a type variable or a type not resolved may hold any; an extern type's reference holds none (X10)
+fn (t Table&) RefInto(from TypeId, into TypeId) Bool {
+    ins Vec<TypeId>
+    t.valueParts(into, ins)
+    w := refWalk(t, ins)
+    return w.reaches(from)
+}
+
+# id and every type it holds by value (deep through fields, payloads and elements held by value), as representations
+fn (t Table&) ValueParts(id TypeId) Vec<TypeId> {
+    out Vec<TypeId>
+    t.valueParts(id, out)
+    return out
+}
+
+fn (t Table&) valueParts(id TypeId, out mut Vec<TypeId>&) {
+    r := t.Repr(id)
+    if out.Has(r): return
+    out.Push(r)
+    match t.KindOf(r) {
+        case Kind.Array: t.valueParts(t.Elem(r), out)
+        case Kind.Tuple, Kind.Record: t.valuePartsOf(t.Parts(r), out)
+        case Kind.AnonEnum: t.valuePartsOf(t.ShapeCases(r), out)
+        case Kind.Named {
+            if not t.HasBody(r): return
+            match t.DeclKindOf(t.DeclOf(r)) {
+                case DeclKind.Struct: t.valuePartsOf(t.Fields(r), out)
+                case DeclKind.Enum: t.valuePartsOf(t.Cases(r), out)
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+}
+
+fn (t Table&) valuePartsOf(l ListId, out mut Vec<TypeId>&) {
+    for x in t.Items(l) {
+        if x != TypeId(0): t.valueParts(x, out)
+    }
+}
+
+type refWalk struct(T Table&, Into Vec<TypeId>&) {
+    T, Into
+    walking Vec<TypeId>
+}
+
+fn (w mut refWalk&) reaches(id TypeId) Bool {
+    t := w.T
+    if t.ForeignRef(id) or w.walking.Has(id): return false
+    k := t.KindOf(id)
+    if k == Kind.Func or k == Kind.Var or k == Kind.Any or k == Kind.Unknown: return true
+    w.walking.Push(id)
+    return match k {
+        case Kind.Ref: w.lands(t.Referent(id)) or w.reaches(t.Referent(id))
+        case Kind.Array: w.reaches(t.Elem(id))
+        case Kind.Tuple, Kind.Record: w.some(t.Parts(id))
+        case Kind.AnonEnum: w.some(t.ShapeCases(id))
+        case Kind.Named: w.named(id)
+        case _: false
+    }
+}
+
+# whether a reference to a referent of this type may name storage among Into: the same representation, or - an array
+# view - an array of the same elements, whatever its length
+fn (w mut refWalk&) lands(x TypeId) Bool {
+    t := w.T
+    r := t.Repr(x)
+    if w.Into.Has(r): return true
+    if t.KindOf(r) != Kind.Array: return false
+    e := t.Repr(t.Elem(r))
+    for y in w.Into {
+        if t.KindOf(y) == Kind.Array and t.Repr(t.Elem(y)) == e: return true
+    }
+    return false
+}
+
+fn (w mut refWalk&) named(id TypeId) Bool {
+    t := w.T
+    if not t.HasBody(id): return true
+    return match t.DeclKindOf(t.DeclOf(id)) {
+        case DeclKind.Struct: w.some(t.Fields(id))
+        case DeclKind.Enum: w.some(t.Cases(id))
+        case DeclKind.Over: w.reaches(t.Base(id))
+        case _: false
+    }
+}
+
+fn (w mut refWalk&) some(l ListId) Bool {
+    for x in w.T.Items(l) {
+        if x != TypeId(0) and w.reaches(x): return true
+    }
+    return false
+}
+
 # (a part not typed yet may hold one; among cases, 0 is a case without a payload)
 fn (t mut Table&) listShares(l ListId, depth I64, cases Bool) Bool {
     for x in t.Items(l) {

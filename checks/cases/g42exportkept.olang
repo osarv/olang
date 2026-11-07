@@ -1,0 +1,16 @@
+# check: build
+# G42, X12 (the sharper rule of 2026-11-03): an export fn no C function is given, in a program linking no C of its own
+# and not built -library, is never called back - a C call (here getuid) writes no global through it
+import unistd "unistd.h"
+
+G mut I64 = 0
+
+export fn olang_grow(n I64) { G = G + n }
+
+fn uid() I64 { return I64(unistd.getuid()) }
+
+assert not uid.WritesGlobals
+
+fn main() {
+    olang_grow(uid())
+}
