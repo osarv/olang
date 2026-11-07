@@ -196,3 +196,5 @@ on 2026-11-07. The remaining work is /home/user/review/remaining/LIST.md.)
   trim CLAUDE.md's settled decisions to terse entries, every detail kept in HISTORY.md (an agent, sonnet, after the
   last language round merges - every agent reads CLAUDE.md, so not mid-push). Measured: CLAUDE.md ~58k tokens of the
   ~100k every agent loads.
+- 2026-11-07 ~12:30 CET: before the user's /compact, the coordinator's state (running rounds, merge steps, the order of
+  what is left) is written to /home/user/review/rounds/STATE.md - read it first after the compaction.
