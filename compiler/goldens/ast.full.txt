@@ -415,6 +415,10 @@
 | FN 4:1-4:14
 | -- diagnostics
 | error T13b 3:17
+=== checks/cases/t13cnotstruct.olang
+| FN 4:1-4:14
+| -- diagnostics
+| error T13c 3:8
 === checks/cases/t19emptywords.olang
 | FN 4:1-4:14
 | -- diagnostics
