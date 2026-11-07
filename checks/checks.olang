@@ -1127,16 +1127,16 @@ fn listed(r mut report&) ? Failed {
                  outOf(dir).Contains("# no code: nothing in the program calls it, so the link kept none\n"), "no code, never called", dir)
     try r.expect(sh(dir, "\"$OLANG\" explain -asm prog.olang big > out.txt 2>&1") == 0 and
                  outOf(dir).StartsWith("# instance big<I64>: fn(a I64, b I64) I64\n") and
-                 outOf(dir).Contains("\n# instance big<F64>: fn(a F64, b F64) F64\n") and outOf(dir).Contains("inlined at every call"),
+                 outOf(dir).Contains("\n# instance big<F64>: fn(a F64, b F64) F64\n") and outOf(dir).Contains("inlined at every call")
                  "a generic's instances, each inlined", dir)
     try r.expect(sh(dir, "\"$OLANG\" explain -asm -quick prog.olang scale > out.txt 2>&1") == 0 and
-                 outOf(dir).Contains("-O2, each module on its own (-quick)") and outOf(dir).Contains("\nprog_2escale:"),
+                 outOf(dir).Contains("-O2, each module on its own (-quick)") and outOf(dir).Contains("\nprog_2escale:")
                  "-quick: each module's own code", dir)
     try r.expect(sh(dir, "\"$OLANG\" explain -asm prog.olang Point > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("error[B11d]: 'Point' is no function of prog.olang"), "a type refused", dir)
     try r.expect(sh(dir, "ls build/*.listing.o > /dev/null && ls build/*.listing.yaml > /dev/null") == 0, "the listing's objects and remarks", dir)
     try r.expect(sh(dir, "\"$OLANG\" build prog.olang > out.txt 2>&1") == 0 and
-                 sh(dir, "for f in build/*.ll; do case $f in *.listing.ll) ;; *) grep -l DILocation $f;; esac; done | grep -q .") != 0,
+                 sh(dir, "for f in build/*.ll; do case $f in *.listing.ll) ;; *) grep -l DILocation $f;; esac; done | grep -q .") != 0
                  "a plain build carries no line tables", dir)
     try r.expect(sh(dir, "\"$OLANG\" help explain > out.txt 2>&1") == 0 and outOf(dir).Contains("  -asm") and
                  outOf(dir).Contains("  -quick"), "help explain", dir)

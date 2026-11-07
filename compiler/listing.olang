@@ -172,7 +172,7 @@ fn readRemarks(text String&, syms Array<String&>&, names Namer&, out mut Vec<Rem
         if cut or not ofAny(r.Function, syms) { continue }
         value := unquote(v)
         if k == "String" and value == " at callsite " { cut = true }
-        if k == "Callee" or k == "Caller" { value = names.Name(value) }
+        if k == "Callee" or k == "Caller" or k == "Function" { value = names.Name(value) }
         if not cut {
             for ch in value { msg.Push(ch) }
         }
