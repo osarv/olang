@@ -18,8 +18,8 @@ line in docs/README.md, committed on wt-sec8 (only those paths; no push). Experi
   T22a (fnValues, valueRels); where -memory is printed
 - [x] reproduced every shape (section 1): the cursor, a constant then a view, the dump tools, the T25d element, O27's
   and T22a's refusals, gen_walkkept; found C3 and C6 compiling already
-- [ ] the design: sections 2-6 (writing)
-- [ ] the evaluator, the touch points, the build plan, decisions, questions: sections 7-11
+- [x] the design: sections 2-6
+- [x] the evaluator, the touch points, the build plan, decisions, questions: sections 7-11
 - [ ] docs/README.md line; committed
 
 ## 0. Summary
@@ -602,8 +602,8 @@ places, so they run one after another, never beside each other or beside another
 - **Code**: scope.olang - views propose (`propose`, `viewRoot`/`viewSource` with storage), `liftAtCall` on `View`
   relations, closures propose their captures, the two phases (whole, then views; parts after `inferFields` settles), the
   refusals of 4.3 with `viewKept`/`partKept` reworded, the placements recorded, C4's mark; D18e's walk landing where its
-  elements are kept (emit's elision conditions already refuse a walk whose result scope is not the loop's block, loop or
-  frame - checked, not changed); olang.olang prints the placements under `-memory`; session.olang publishes the hint;
+  elements are kept, and emit's elision (D18e's `.walk` form, destroyed as its loop's block is left) refused for such a
+  walk - D18b's arena path instead (emit.olang's elision test gains the condition); olang.olang prints the placements under `-memory`; session.olang publishes the hint;
   msgs.olang reworded, `make diaggold`.
 - **Tests**: tests/viewplace.olang (words kept from a turn's text, slices of temporaries into a parameter's field, a
   generator's views of a local kept by the consumer, a closure over a turn's local kept - read back after churns; K2 and
@@ -655,3 +655,75 @@ B18's `-memory` text in `help`; 9 verify.
 
 After the three rounds: a narrow soundness review (opus, high) of round 1's walker and round 3's boundaries before
 reuse in place builds on them - the change is large enough not to wait for the bulk review that follows reuse in place.
+
+## 10. Decided here (mine, within the user's decisions - to object to)
+
+1. Versions are for reference locals, reference parameters and locals holding function values. A value local holding
+   references keeps one claim (O25h): its stores into parts would make per-version claims a different design, and
+   nothing refused needs it.
+2. Which versions reach a statement is a structured reaching-definitions walk in typed.olang beside `Landings`, keyed by
+   where statements start (the union on a collision); deferred code and a join's clauses read every definition in the
+   body; a statement holding a nested assignment of a cursor reads it with the union. check and the typed core are
+   unchanged.
+3. The scope pass sets a cursor's term per statement from the versions reaching it, so every existing reader of a
+   local's term sees the right version with no change of its own.
+4. A read's validity is judged only where an assignment's version reaches it; a failure proposes a placement first,
+   and is an error only for storage that cannot be built longer.
+5. A read reached by versions of different scopes is O12's "not known here": read, compared and stored where outliving
+   suffices, never built through or exact; its error names the assignments whose scopes differ.
+6. A version's temporary is built where its own reads need it (at least the local's block) - shorter than today, where
+   it is built where the local's whole claim is. The one plan change round 1 may make in programs accepted today.
+7. Underestimates are interned by the term they stand above and kept between a body's judgings with each definition's
+   term; a body is judged again only where a loop-carried version adds a member to a set a read was judged with.
+8. The keeps analysis (O17) takes a cursor to name every region any of its versions names.
+9. The WIP patch's approach (/home/user/review/nll-wip.patch - every value a local is ever given as one set, assignments
+   still fitted against it, underestimates turned into Untraced between probes) is not taken: a read before a
+   short-lived assignment becomes as short as the assignment (`at := w; keep.Push(at); for ... { t := Node(); at = t }`
+   refuses the Push), and with O27 as placement that imprecision would build values longer with no error at all; and
+   Untraced refuses every outliving use of the widget's cursor.
+10. T25d: an element of an array literal of constant data, read by an index, a slice or an array pattern, is static
+    data in the program's scope.
+11. O27's placement runs in two phases - whole lifts first, as today, then view lifts; part lifts only once the field
+    inference has settled - so a program accepted today places exactly as before (IR byte-identical, a gate).
+12. A closure is a view of its captures: kept longer, the storage it captured is built where it is kept.
+13. A view stays refused where the storage cannot be built longer: a by-value parameter's, a match binding's or a
+    capture's own copy, a `Next()` result scope, a derived or unknown scope - and storage holding a destructor value
+    (question 2).
+14. `-memory` lists every placement made for a view, a part or a capture, with the copy that would let it go per turn;
+    the language server shows it as a hint; the compiler itself says errors only.
+15. Records travel along a body's locals (each version, whether the local's type is written or not), conditionals,
+    matches and `catch` defaults, and call results (the callee's summary, outside cycles); they stop at arguments,
+    fields, elements, payloads, globals, type arguments, captures, tasks, `any`, `yield` and type variables (question 1).
+    A call through a value whose records are known is judged as the direct call it is, its lending by the body's own
+    summary.
+16. A value whose record is not followed is judged by T22's contract, as every function value is today.
+17. C4: a body with a section-8 error of its own has its obligations not discharged at its callers - one cause, one
+    error.
+18. C3 and C6 compile today (checked under `-debug -sanitize`); run cases pin them.
+19. Once round 1 lets compiler/tools' dump tools build, `make verify` builds one of them (`-quick`), if that costs under
+    ~15 s - they rotted unseen for days outside verify.
+20. Hidden scope variables (`W`, rework 2.4) are not built this round; round 2 counts the joins they would serve.
+21. D18e: a walk whose elements are views of what it keeps, kept beyond its loop, is made where they are kept and not
+    elided.
+22. explain/doc/hover's `# not a value` becomes `# as a value: held in locals and results only - ...` (B11b).
+23. A narrow soundness review (opus, high) of rounds 1 and 3 before reuse in place builds on them.
+
+## 11. Direction questions
+
+1. **Generic type variables carrying relations.** The user's rule shrinks T22a to "what a written function type
+   cannot match"; a generic's type variable bound to a function type (`keep<F>(f F) F`, `f := keep(link)` -
+   t22sharedscopegeneric) is not written by the program, but its instance is judged once for every function given to
+   it, so carrying relations through it means an instance per record (round 4's scope twins: one typed body judged and
+   emitted per record) - the largest piece of machinery in the round, for a shape one case in the repository has.
+   **Recommended:** not now - a type variable's binding is a boundary like a written parameter, and round 4 is built if
+   real code asks. **Default if unanswered:** a boundary (t22sharedscopegeneric stays refused, worded at the call).
+2. **A view of storage holding a value with a destructor.** O27 as placement would build such storage where the view
+   is kept, and its destructor would then run there, later than its holder lets go - a file kept open for as long as a
+   list holds a slice of its name. **Recommended:** keep refusing that one case (the error names a copy of what the view
+   shows), so a resource's end stays where its holder is (O15, the user's "Rust's way"). The other way: build it there
+   too and list it in `-memory` with the destructor's new place. **Default if unanswered:** refused.
+3. **A function's written result type and relations.** A result's function type is written (`fn mk(..) fn&(k
+   String&)`), but its callers read the callee's summary, not just its type - as they read a result's construction
+   bindings (O13c). **Recommended:** results carry what every return gives (decision 15), so `f := mk(gone); f("b")`
+   compiles; the literal reading of "a written function type" would make a result a boundary like a parameter.
+   **Default if unanswered:** results carry; the other reading is a one-line change in round 3.
