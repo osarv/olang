@@ -1,0 +1,27 @@
+import "std/io"
+
+# O8d, T13b (the unique hand-on move): a Map of unique values, each put and taken out again half the time - Put hands
+# the value on into a slot without a copy (its storage built where the Map lives, in a region of its own), Take moves
+# it out to a holder that ends it at the turn's end, its storage freed right there (388 MB kept before, over 1,000,000
+# values of 256 bytes each, when every hand-on copied)
+N I64 = 1000000
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64, n I64) {
+    id
+    data := Array<I64>(n, id)
+} destruct { Ended++ }
+
+fn main() {
+    m := Map<I64, Res>()
+    t := 0
+    for i in range N {
+        m.Put(i % 64, Res(i, 32))
+        if i % 2 == 1 {
+            r Res = m.Take(i % 64)!
+            t += r.data[31]
+        }
+    }
+    io.Println($Ended " " $t " " $m.Len())!
+}

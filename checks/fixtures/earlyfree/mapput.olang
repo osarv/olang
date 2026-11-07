@@ -1,0 +1,23 @@
+import "std/io"
+
+# O8d, T13b (the unique hand-on move): a Map of unique values replaced by Put - the new value handed on into the slot
+# without a copy, the old one ended where it is stored over and its storage freed right there (260 MB kept before,
+# over 1,000,000 values of 256 bytes each, when every hand-on copied)
+N I64 = 1000000
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64, n I64) {
+    id
+    data := Array<I64>(n, id)
+} destruct { Ended++ }
+
+fn main() {
+    m := Map<I64, Res>()
+    t := 0
+    for i in range N {
+        m.Put(i % 64, Res(i, 32))
+        t += m.Ref(i % 64)!.data[31]
+    }
+    io.Println($Ended " " $t " " $m.Len())!
+}
