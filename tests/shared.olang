@@ -13647,7 +13647,7 @@ fn kValues() I64 {
     a[1] = 5
     b Array<I32> = a
     b[1] = 6
-    m := Array<I32>[Array<I32>[1, 2], Array<I32>[3, 4]]
+    m := Array<Array<I32>>[Array<I32>[1, 2], Array<I32>[3, 4]]
     cells := Array<KCell>(2)
     cells[1] = KCell(7, 8)
     sh := KShape.Tri(Array<I32>[1, 2, 9])
@@ -16143,7 +16143,7 @@ fn renChars(c Char) String {
     b := RenPlain(c)
     o := RenOver(b)
     ls := Array<RenLetter>[a, RenLetter(c)]
-    return $a " " $b " " $o " " $ls " " $RenHolder(a, Array<I64>[Array<I64>[1, 2, 3]])
+    return $a " " $b " " $o " " $ls " " $RenHolder(a, Array<Array<I64>>[Array<I64>[1, 2, 3]])
 }
 RenCharsBaked String = renChars('a')
 test "E11a: a declared type over Char renders as a character, extends or not, alone and inside another value" {
@@ -16154,11 +16154,11 @@ test "E11a: a declared type over Char renders as a character, extends or not, al
 }
 
 fn renRows(n I64) String {
-    aa Array<Array<I64>> = Array<I64>[Array<I64>[n, 2, 3], Array<I64>[4, 5, 6]]
+    aa Array<Array<I64>> = Array<Array<I64>>[Array<I64>[n, 2, 3], Array<I64>[4, 5, 6]]
     l := Vec<Array<I64>&>()
     l.Push(aa[0])
     r Array<Array<I32>&> = Array<Array<I32>&>[Array<I32>[1], Array<I32>[]]
-    cs Array<Array<Char>> = Array<Char>["ab", "cd"]
+    cs Array<Array<Char>> = Array<Array<Char>>["ab", "cd"]
     return $aa " " $l.ToArray() " " $r " " $cs " " $Array<Array<I64>&>(0)
 }
 RenRowsBaked String = renRows(1)

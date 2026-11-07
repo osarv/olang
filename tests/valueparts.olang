@@ -123,10 +123,10 @@ fn churn() I64 {
 }
 
 test "a comprehension's elements are its own" {
-    ws := Array<Char>["ab", "c", "def"]
+    ws := Array<Array<Char>>["ab", "c", "def"]
     up := Array<String>[$w "!" for w in ws]
-    same := Array<Char>[w for w in ws]
-    some := Array<Char>[w for w in ws if w.Len() > 1]
+    same := Array<Array<Char>>[w for w in ws]
+    some := Array<Array<Char>>[w for w in ws if w.Len() > 1]
     ns := Array<node>[node(i) for i in range 3]
     ws[0][0] = 'X'
     assert churn() > 0
@@ -186,7 +186,7 @@ test "a clone of an array is its own, its elements' parts too" {
     a := Array<I64>[1, 2, 3]
     b := a.Copy()
     b[0] = 9
-    ws := Array<Char>["ab", "c"]
+    ws := Array<Array<Char>>["ab", "c"]
     vs := ws.Copy()
     vs[0][0] = 'X'
     assert a[0] == 1 and b[0] == 9 and ws[0] == "ab" and vs[0] == "Xb"
