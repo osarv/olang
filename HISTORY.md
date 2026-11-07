@@ -29517,3 +29517,60 @@ closed). Memory-safe today (the storage lives until the scope closes), but C11's
 released resource") does not hold, and it is what blocks freeing at drops. Rust's dropck refuses the store (a value with
 a destructor may not hold a reference to one ended before it); olang's equivalent would refuse a by-value holder storing
 a reference to a holder declared later in its block - for the user.
+
+## Type-level builders (D19, D19a, T30b, QBT, 2026-11-07, wt-qbt)
+
+The user's decision (2026-10-27, "I want it with a)"), reversing the 2025-10-25 answers QAS ("keep the namespaces to
+modules and objects": `p.StringFromC(max)`) and QAT (extra builders as module functions, grouped by the docs by a
+heuristic): a function making a value of a type is the type's, declared `fn Color.FromHex(t String&) Color ? BadHex`
+and called through the type's name. Placement (a) made it the only place: a function of a module making a value of a
+type that module declares, and taking none of it, is an error naming the builder - so a reader finds every way a value
+is made under the type, and doc/explain/completion/reflection list them by declaration, not by guessing.
+
+What was built: the parser reads `fn Owner[<args>].Name[<own>](...)` (and `P.Name(...)` in a trait body, T30b); the
+function is an ordinary one named "Owner.Name" internally, its owner a written type whose bare argument names
+introduce variables as a receiver's do, kept beside its member name on `ast.Func`. The resolver puts it in no set of the
+module's (D2), the program keys it by its owner's receiver key in a table of its own (`builders`, M21's chaining for
+instances, a default for a trait-constrained variable as M19e's), and the checker finds it at `T.Name(...)`: through
+the type's name, an import's alias, an instance (`List<I64>.Of(a)` binds the owner's variables through the explicit
+binding a call already took for G12), a generic named bare (the variables inferred), a type variable bound in an
+instance (`T.Parse(t)`), a reflected type (`V.Base.Parse(t)`, G38) - and own type arguments after its name. Written
+without a call it is a function value when nothing generic is left. Satisfying a trait with builder requirements
+(`meetsBuilder`) substitutes the trait's arguments into the owner and compares as T31 does without a receiver; such a
+trait has no `any` (no instance to dispatch on). G18a reads a builder through a variable as a need, said at the call.
+`T.Functions` walks a type's builders (a seventh reflected list, its descriptors called as the builder is). explain
+prints `fn List<T>.Of(a Array<T>&) List<T>`, doc lists builders under their type (and a builder of a built-in type or a
+trait's default as an item of its own), the language server hovers and completes them after a type's name, B7a takes
+`test Color.FromHex "..."`. Because a builder is a function to everything below the checker, lowering, emit, the
+evaluator and `interpret` needed nothing (tests/builders.olang bakes globals and decides asserts through builders).
+
+The prelude's three: `String.FromC(p, max)` (was `p.StringFromC(max)`), `F64.FromBits(u)` and kin (were the
+compiler-supplied `u.F64FromBits()` methods - supplied as builders now, the argument exactly the unsigned type of the
+width: a U32 given F64.FromBits would widen silently to a different float's pattern, so it is refused naming `U64(x)`),
+and `T.Parse(t, base)` for every integer type, a default builder over `Integer` (was `t.ParseAs<T>(base)`).
+
+Decided (mine): a builder takes no value of its owner anywhere in a parameter's type (an array of it too) - so "makes a
+T and takes no T" is exactly a builder, one shape one place; the result one value of the owner (itself, a reference, an
+instance); its name may not be a case of its enum or a member the language reads through a type's name; a builder is
+never inherited through `extends`; a trait's builder requirement names one of the trait's own parameters (no `Self`:
+the `Lesser<T>` idiom already names the satisfying type); a trait builder cannot have type parameters of its own (T35
+as for methods - the literals round, QBU/QBW, decides whether `FromIter` needs that).
+
+The migration: `tools/builder_migrate.olang` (the compiler's scanner and parser; every module the files import read,
+std too, only the files given written; idempotent; in `olang fix` as a `--std` tool). It moves each candidate onto its
+type - a generic type's owner its result as written (`fn List<T>.Of(...)`), the variables the owner names leaving the
+function's list unless constrained - and rewrites every use in its module and through an import's alias, with type
+arguments split between the owner's instance and the builder's own; a function value and a test's target alike; the
+prelude's three methods become their builders by reading the receiver's postfix chain backward. A moved name loses
+its type's name where that is a camel-case word of it (`ParseIP` -> `IP.Parse`, `DateOf` -> `Date.Of`), unless that
+would change its visibility, leave a name reflection reads, or clash. Over the repository: 214 files, std's
+`time.Duration.Millis`, `net.IP.Parse`, `net.Conn.Dial`, `os.Output.Exec`, `http.Response.Get`, `list.List.Of`,
+`json.Json.Parse`, `chan.Ready.Select`, `utf8.RuneIter.Runes` among them. compiler/msgs.olang's 840 functions made a
+`Msg` the module declared, so they would all have been `msgs.Msg.TypeMismatch(...)`: `Msg` moved to a module of its own,
+`compiler/diagmsg.olang` (msgs and diagmsg import each other, M2's cycle; `Diag` stays in msgs), and a message line is
+now `fn X(...) r.Msg { return r.Msg(Diag.X, ...) }` - checks/checks.olang reads that shape.
+
+Found on the way: the formatter's loader read `../x` as a remote import (its first part holds a dot), so its oracle
+missed the names such imports reach (fixed as load.olang already did); a `.Copy()` of a `String&` view kept in a Map
+was refused by O27 as keeping a view of the map's holder (worked around in the tool by building the text as a value;
+not chased - the section-8 round's).
