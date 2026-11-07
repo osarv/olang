@@ -132,3 +132,27 @@ test "a Map of unique values: Put takes fresh ones, Take hands one back" {
     t := try m.Take("a")
     assert t.id == 3 and m.Len() == 1 and (try m.Ref("b")).id == 2
 }
+
+# a name made from a by-value parameter (a reference, a closure over it) used before the value is handed on, and a
+# plain read of a part beside the hand-on in one call - none of them reaches the value once it is handed on (bulk
+# review 7, F15, F16)
+fn aliasBefore(t Token) Slot {
+    alias := t
+    seen := fn() I64 { return t.id }
+    alias.Use()
+    n := seen()
+    return Slot(t, $n)
+}
+
+fn tagged(n I64, t Token) Slot { return Slot(t, $n) }
+
+fn idBeside(t Token) Slot { return tagged(t.id, t) }
+
+test aliasBefore "hands a parameter on after the names made from it are done" {
+    s := aliasBefore(Token(4))
+    assert s.tok.uses == 1 and s.label == "4"
+    u := idBeside(Token(6))
+    assert u.label == "6"
+}
+
+assert aliasBefore(Token(4)).tok.uses == 1 and idBeside(Token(6)).label == "6"

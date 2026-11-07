@@ -2388,15 +2388,31 @@ fn freshValue(x Expr&) Bool {
 # local - is its local's last mention on every path from it, in the order the body evaluates: Bad[k] where some path
 # mentions the local after read k. A branch's mentions are no other branch's; a loop running again reaches its body's
 # mentions before the read; a mention in deferred code, a task or a join's clauses runs after everything
-type Landings struct(Locals Array<I64>&, Starts Array<I64>&) {
+type Landings struct(Locals Array<I64>&, Starts Array<I64>&, Holds Array<Bool>&) {
     Locals                                                       # each watched read's local
     Starts                                                       # ... and where it starts
+    Holds                                                        # whether each local of the body may name another's storage
     Bad mut Array<Bool>& = Array<Bool>(Locals.Len(), false)
+    Via mut Array<I64>& = Array<I64>(Locals.Len(), -1)           # the local whose mention after made it Bad (-1: itself)
+    Lent mut Array<Bool>& = Array<Bool>(Locals.Len(), false)     # Bad because the same call also mentions it
     open mut Array<Bool>& = Array<Bool>(Locals.Len(), false)     # read already, on some path reaching here
     dead Bool = false                                            # no path reaches here
     loops Vec<landLoop>
     later I64 = 0                                                # > 0 inside code that runs after
     laterLocals Map<I64, Bool>                                   # the locals mentioned there
+    laterVia Map<I64, I64>                                       # ... and the holder each was mentioned through
+    # every mention, in the order walked: its local, where it starts, whether it reads the local whole
+    saidL Vec<I64>
+    saidAt Vec<I64>
+    saidRead Vec<Bool>
+    saidLend Vec<Bool>                                           # ... whether it names the local's storage (a borrow, a
+                                                                 # slice, a whole read, through a holder) - no plain read
+    saidRef Vec<Bool>                                            # ... whether it names the storage by a reference made
+    lending I64 = 0                                              # > 0 inside a borrow's, a slice's or a take's place
+    # the locals that may name a watched local's storage (bulk review 7, F16): a reference or a closure made from it
+    holder Vec<I64>
+    holderOf Vec<I64>
+    via I64 = -1                                                 # the holder a mention being made came through
 }
 
 # a loop being walked: its body block, and what its breaks and continues leave open
@@ -2444,19 +2460,37 @@ fn orInto(to mut Array<Bool>&, from Array<Bool>&) {
 fn (w mut Landings&) Body(b Block&) {
     w.block(b)
     for k in range w.Locals.Len() {
-        if w.laterLocals.Has(w.Locals[k]): w.Bad[k] = true
+        if not w.laterLocals.Has(w.Locals[k]): continue
+        w.Bad[k] = true
+        w.Via[k] = try w.laterVia.Get(w.Locals[k]) catch default -1
     }
 }
 
 fn (w mut Landings&) mention(id LocalId, at I64, read Bool) {
     l := I64(id)
+    w.saidL.Push(l)
+    w.saidAt.Push(at)
+    w.saidRead.Push(read)
+    w.saidLend.Push(read or w.lending > 0 or w.via >= 0)
+    w.saidRef.Push(w.lending > 0 or w.via >= 0)
+    # (a holder's mention is one of what it names: an alias or a capture used after the landing reads what was handed on)
+    for j in range w.holder.Len() {
+        if w.holder[j] != l: continue
+        was := w.via
+        w.via = l if was < 0 else was
+        w.mention(LocalId(I32(w.holderOf[j])), at, false)
+        w.via = was
+    }
     if w.later > 0 {
         w.laterLocals.Put(l, true)
+        if w.via >= 0: w.laterVia.Put(l, w.via)
         return
     }
     if w.dead: return
     for k in range w.Locals.Len() {
-        if w.Locals[k] == l and w.open[k]: w.Bad[k] = true
+        if w.Locals[k] != l or not w.open[k]: continue
+        w.Bad[k] = true
+        w.Via[k] = w.via
     }
     if not read: return
     for k in range w.Locals.Len() {
@@ -2471,10 +2505,17 @@ fn (w mut Landings&) block(b Block?&) {
 
 fn (w mut Landings&) stmt(s Stmt&) {
     match s {
-        case Stmt.Let(_, _, x), Stmt.Eval(_, x), Stmt.Yield(_, x), Stmt.Reraise(_, x, _): w.expr(x)
+        case Stmt.Let(_, l, x) {
+            i0 := w.saidL.Len()
+            w.expr(x)
+            w.holds(I64(l), i0)
+        }
+        case Stmt.Eval(_, x), Stmt.Yield(_, x), Stmt.Reraise(_, x, _): w.expr(x)
         case Stmt.Assign(_, p, x) {
             w.place(p)
+            i0 := w.saidL.Len()
             w.expr(x)
+            if p == Lvalue.Local: w.holds(I64(p.id), i0)
         }
         case Stmt.Suspend(_, x): w.expr(x)
         case Stmt.Return(_, x) {
@@ -2513,6 +2554,47 @@ fn (w mut Landings&) stmt(s Stmt&) {
             w.later--
         }
     }
+}
+
+# local l given a value whose making named a watched local's storage by a reference (a borrow, a slice, a capture, or
+# through a holder of one) from mention i0 on: where l may name storage, it holds what that local is - its later
+# mentions are that local's. A value handed on into l (a read of it whole) makes l its new holder, no alias
+fn (w mut Landings&) holds(l I64, i0 I64) {
+    if l < 0 or l >= w.Holds.Len() or not w.Holds[l]: return
+    for j in range i0, w.saidL.Len() {
+        m := w.saidL[j]
+        if m == l or not w.saidRef[j] or not w.watched(m): continue
+        w.holder.Push(l)
+        w.holderOf.Push(m)
+    }
+}
+
+fn (w Landings&) watched(l I64) Bool {
+    for m in w.Locals {
+        if m == l: return true
+    }
+    return false
+}
+
+# (bulk review 7, F15) a watched read handed on as one operand of a call or a value made, from mention i0 on, while
+# another operand mentions the same local - lent and handed on at once - is Bad: two places would hold one value
+fn (w mut Landings&) apart(i0 I64) {
+    for k in range w.Locals.Len() {
+        if w.Bad[k]: continue
+        if not w.readIn(k, i0): continue
+        for j in range i0, w.saidL.Len() {
+            if w.saidL[j] != w.Locals[k] or not w.saidLend[j] or (w.saidRead[j] and w.saidAt[j] == w.Starts[k]): continue
+            w.Bad[k] = true
+            w.Lent[k] = true
+        }
+    }
+}
+
+fn (w Landings&) readIn(k I64, i0 I64) Bool {
+    for j in range i0, w.saidL.Len() {
+        if w.saidRead[j] and w.saidL[j] == w.Locals[k] and w.saidAt[j] == w.Starts[k]: return true
+    }
+    return false
 }
 
 fn (w mut Landings&) laterBlock(b Block?&) {
@@ -2594,18 +2676,26 @@ fn (w mut Landings&) expr(x Expr?&) {
         case Expr.Read(sp, _, p, _) {
             if p == Lvalue.Local { w.mention(p.id, I64(sp.Start), true) } else { w.place(p) }
         }
-        case Expr.Borrow(_, _, p), Expr.Take(_, _, p): w.place(p)
+        case Expr.Borrow(_, _, p), Expr.Take(_, _, p) {
+            w.lending++
+            w.place(p)
+            w.lending--
+        }
         case Expr.Promote(_, _, pr): w.expr(pr.X)
         case Expr.Call(_, _, c) {
+            i0 := w.saidL.Len()
             match c.Target {
                 case Callee.Value(f) { w.expr(f) }
                 case _ { }
             }
             w.exprs(c.Args)
+            w.apart(i0)
         }
         case Expr.Make(_, _, m) {
+            i0 := w.saidL.Len()
             w.exprs(m.Items)
             w.expr(m.Length)
+            w.apart(i0)
         }
         case Expr.Collect(_, _, c) {
             w.expr(c.Reserve)
@@ -2615,7 +2705,9 @@ fn (w mut Landings&) expr(x Expr?&) {
         # (a holder's destructors run where it lets go, O15 - its own mention of what it holds, no use of it)
         case Expr.Prim(_, _, op, _, args) { if op != PrimOp.Drop: w.exprs(args) }
         case Expr.Slice(_, _, sl) {
+            w.lending++
             w.place(sl.Base)
+            w.lending--
             w.expr(sl.Lo)
             w.expr(sl.Hi)
         }
@@ -2687,7 +2779,11 @@ fn (w mut Landings&) matchExpr(m Match&) {
 fn (w mut Landings&) arm(a Arm&) {
     for alt in a.Alts {
         w.expr(alt.Test)
-        for bd in alt.Binds { w.expr(bd.From) }
+        for bd in alt.Binds {
+            i0 := w.saidL.Len()
+            w.expr(bd.From)
+            w.holds(I64(bd.To), i0)
+        }
     }
     w.expr(a.Guard)
     w.block(a.Code)
@@ -2701,7 +2797,10 @@ fn (w mut Landings&) place(p Lvalue&) {
         case Lvalue.Field(_, _, base, _): w.place(base)
         case Lvalue.Elem(_, _, e) {
             w.place(e.Base)
+            lent := w.lending
+            w.lending = 0
             w.expr(e.Index)
+            w.lending = lent
         }
         case Lvalue.Payload(_, _, py): w.place(py.Base)
         case Lvalue.Temp(_, _, v, _): w.expr(v)

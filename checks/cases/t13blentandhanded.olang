@@ -1,0 +1,20 @@
+# check: fail error[T13b]: 's' is handed on here while the same call also reaches it, and Res is unique - one value would be in two places
+# T13b (bulk review 7, F15): a by-value parameter handed on at its last mention while the same call lends it - r and x
+# would be two copies of one unique value
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+    open Bool = true
+} destruct { Ended++ }
+
+fn (r mut Res&) Close() { r.open = false }
+
+fn both(r Res&, x Res) Bool {
+    x.Close()
+    return r.open
+}
+
+fn pass(s Res) Bool { return both(s, s) }
+
+fn main() { assert pass(Res(1)) }
