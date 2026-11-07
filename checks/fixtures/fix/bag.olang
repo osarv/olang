@@ -1,0 +1,8 @@
+# a type of another module declaring a FromIter: its literal is today's (E19)
+type Bag struct(N I64) { N }
+
+fn Bag.FromIter<I Iterator<Bag ? E>, ? E>(it mut I&) Bag ? E {
+    n := 0
+    for b in it { n += b.N }
+    return Bag(n)
+}

@@ -1,0 +1,14 @@
+# written 2026-11-06, before std's functions making a type's value became its builders under a shorter name (D19a):
+# net.ParseIP, net.ParseAddr, time.DateOf and list.From
+import "std/io"
+import "std/net"
+import "std/time"
+import "std/list"
+
+fn main() ? {
+    ip := try net.ParseIP("127.0.0.1") catch net.Error default net.Loopback4()
+    ad := try net.ParseAddr("127.0.0.1:80") catch net.Error default net.Addr(ip, 1)
+    d := time.DateOf(0)
+    l := list.From(Array<I64>[1, 2, 3].Iter())
+    try io.Println($ip " " $ad " " $d.Year " " $l.Len())
+}
