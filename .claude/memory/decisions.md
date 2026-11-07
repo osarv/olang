@@ -2953,3 +2953,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   lists it as not breaking); the compiler gives it no meaning. Removal between versions stays the main way to
   deprecate (olang api says what breaks, olang fix migrates); the note is a courtesy before a removal. Being built:
   round deprec (wt-deprec).
+- QCX ASKED 2026-11-07 (the user: "Is there anything else we're still missing from other languages that we want?"):
+  nothing big - the surveys' remaining items are the ones marked "later"; split into language changes worth deciding
+  before oann is written on the language, and tooling that can come any time. Asked, numbered, with my recs: (1) errors
+  carrying data (deferred by the user 2026-10-24) - yes, design note first: plain-data payloads on error words, the
+  success path paying nothing; (2) packed / declared-layout structs (`type Header packed struct(version U4, ihl U4,
+  length U16)`, no padding, exact widths) - yes; (3) struct patterns and destructuring - still later; (4) benchmarks in
+  the test runner (`olang test -bench`) - yes, small; (5) coverage (`olang test -cover`) - yes, medium; (6) a REPL and
+  a Jupyter kernel on it - yes, after the compiler is done; (7) saturating arithmetic in std/arith - yes, small (fixed
+  point waits for FPGA). Platforms (macOS, Windows, WASM) later. In effect: none queued.
