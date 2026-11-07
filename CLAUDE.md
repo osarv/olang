@@ -419,7 +419,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   structs.
 - **Integers of every width, `I1`-`I128` and `U1`-`U128` (T4a, docs/ideas.md #5, the user's decision 2026-10-18; built
   2026-10-26).** The eight are ordinary members: wrapping at the width, the T6b lattice, literals adapting, `T.Max`/`Min`,
-  `std/arith` and `Narrow`, `$`, a supplied `Hash`, `Format`, the new `t.ParseAs<T>()`, E37's bit operations and the
+  `std/arith` and `Narrow`, `$`, a supplied `Hash`, `Format`, the builder `T.Parse(t)` (D19), E37's bit operations and the
   `Integer` trait all hold at every width, computed exactly at compile time and under `interpret` (the evaluator's
   two-word arithmetic). Storage is the next of 1, 2, 4, 8, 16 bytes (LLVM's `iN`, C's `_BitInt`). Decided (mine):
   a literal holds up to 128 bits (2026-10-26: `x U128 = 340282366920938463463374607431768211455`, `x I128 = 1 << 100`;
@@ -431,7 +431,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   The second bulk review (2026-10-26, HISTORY.md "Bulk review 2, fixed"): the evaluator computes I33-I63 at their own
   widths (its I64 fast path took them for I64s), std/arith and `Pow` read the width from `T.Max`/`T.Min` (no case list),
   a literal shift amount is checked against the width (E8a), an array of 128-bit elements is 16-aligned (O8a), and
-  `ParseAs` reads a prefixed literal of up to 128 bits (L10a); `tests/intsweep.olang` holds every width class to the
+  `T.Parse` reads a prefixed literal of up to 128 bits (L10a); `tests/intsweep.olang` holds every width class to the
   run time.
 - **A literal's own type: an integer is `I64`, a float `F64` (T6a, the user's calls, 2026-10-08/10).** A literal
   adapts to a typed target (T6); an expression of literals only adapts as one literal, computed exactly (E4a); a
@@ -718,6 +718,33 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `Value()` with parentheses as every supplied method; the raw type is `String` or an integer type (a declared one
   over an integer, `Char` included); `From` only where no case carries a payload, and then no case is named `From`; an
   anonymous enum has none.
+- **Type-level builders (D19, D19a, T30b, QBT, the user's decision 2026-10-27: "I want it with a)" - reversing QAS's
+  "no type-level functions" and QAT's module builders; built 2026-11-07, details mine).** `fn Color.FromHex(t String&)
+  Color ? BadHex` - a function of the type, called `Color.FromHex(t)`, `gfx.Color.FromHex(t)` through an import,
+  `List<I64>.Of(a)` through an instance (the owner's variables bound; `list.List.Of(a)` bare infers them), `T.Parse(t)`
+  through a type variable; its owner a struct, enum, type over another or extern type of its own module (the prelude:
+  built-in and prelude types too), or a trait-constrained variable (`fn T.Parse<T Integer>(...)`, a default builder);
+  one result, a value of the owner (itself, `&`, `?&`, an instance), any errors; no parameter naming the owner; its own
+  namespace beside cases and reflection's members, public by its first letter; no value reaches it; a value where
+  nothing generic is left (`texts.Map(Color.FromHex)`); never inherited through `extends`. **Placement (a), D19a**: a
+  top-level function (not a method, extern, export fn or `main`) whose one result is a struct/enum/over type its module
+  declares and none of whose parameters names it is an error naming `fn T.Name`. **T30b**: a trait may require a
+  builder of a type its parameter names, `type Parsed<T> trait { T.Parse(t String&) T ? ParseError }`, met on T31's
+  terms; such a trait has no `any`. `T.Functions` walks a type's builders (G41); doc/explain/hover/completion list them
+  under their type by declaration (B14), `test Color.FromHex` targets one (B7a), `explain FILE Color.FromHex` prints
+  one. The prelude: `String.FromC(p, max)` (X15), `F16/BF16/F32/F64.FromBits(u)` (E33, the argument exactly the unsigned
+  type of the width - a narrower one is an error, never widened), `T.Parse(t, base)` for every integer type (`ParseAs`
+  gone). Decided (mine): a builder's Name is "Owner.Member" internally (so symbols, diagnostics, profiles and FnKey name
+  it whole), its Member and Owner kept on `ast.Func`; builders keyed by the owner's receiver key in their own table
+  (`generic.BuilderOf`, defaults over traits as M19e's); a generic named bare takes the builder written with variables;
+  an enum's case wins over nothing (a builder may not take a case's name); `G18a` reads `T.Parse` as a need ("Parse (a
+  builder)"). `tools/builder_migrate.olang` (in `olang fix`, the compiler's parser, std read for its builders) migrated the
+  repository: a moved function's name loses its type's name where it is a word of it (`net.ParseIP` -> `net.IP.Parse`,
+  `time.DateOf` -> `time.Date.Of`), else keeps it (`time.Millis` -> `time.Duration.Millis`, `os.Exec` -> `os.Output.Exec`,
+  `chan.Select` -> `chan.Ready.Select`). compiler/msgs.olang's `Msg` moved to `compiler/diagmsg.olang` (an import cycle,
+  M2), so msgs's 840 functions make another module's type and stay functions. **Found on the way (pre-existing,
+  fixed):** the formatter's loader (fmt.olang) took a `../x` import for a remote one (its first part holds a dot), so its
+  oracle missed the names such an import reaches.
 - **Methods are declared with a receiver clause and called only as methods (M19, the user's call).** A method may not
   share a field's name. Built-in types get methods only from the prelude (M19d). Overloading by receiver only (M21); a
   method written for one instance of a generic (`Box<String&>`) is no other instance's.
@@ -847,7 +874,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Variadic parameters (D8g, QCF, the user's "yes, add variadic args", 2026-10-31; built 2026-10-31).** `fn sum(xs
   ...I64)`: a call gives any number of arguments there - held as a fixed array in the caller's frame, lent to the call,
   no allocation - or passes an array on with `...a`; inside, a read-only `Array<T>&`. Decided (mine): last but
-  defaulted parameters, which follow it by name (`os.Exec("ls", "-l", dir = d)`); one, no default, those before it
+  defaulted parameters, which follow it by name (`os.Output.Exec("ls", "-l", dir = d)`); one, no default, those before it
   required; methods, lambdas, function types (`fn(xs ...I64)`, named as every function type's parameters are) - not
   constructors, payloads or externs; the arguments evaluated in written order (earlier ones held first where a
   variadic one could change them); a generic's variable inferred from them; a function fits a function type of either
@@ -970,7 +997,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   integer count, modulo the width, negative the other way - mine), `ByteSwap`; LLVM's intrinsics, the evaluator
   computing them bit by bit. Inherited through `extends`, never redeclared, as E33's.
 - **Small type rules:** a type cannot embed itself by value (T16); a self-holding array type is an error (T29); an
-  inherited array method is never overridden (T29e); `x.Bits()` and `u.F64FromBits()` etc. move a float's IEEE pattern
+  inherited array method is never overridden (T29e); `x.Bits()` and the builders `F64.FromBits(u)` etc. move a float's IEEE pattern
   (E33); an array made with a constant length 0 names one static storage, no allocation (arrays compare by contents, E10; a
   struct of no fields still has storage of its own, since a reference to one compares by identity); a NaN renders `nan`.
 - **Visibility details (M6a, M12, M4).** A member or error word is public by its own first letter; enum cases are
@@ -1766,7 +1793,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   and `time.After`'s timers fire on it, tasks spawned inside share it (one atomic counter: sleeps add up); a wait with a
   deadline and nothing to take moves the clock to the deadline and gives what it waits for 1 ms of real time (Go's
   synctest approximated). Test builds only: elsewhere a call is S18c's false assert at the call's instance (the note
-  now kept for an assert in std), and `if TestBuild` keeps it out of Now/Wall/Sleep. `chan.Select(a, b[, c, d])` takes
+  now kept for an assert in std), and `if TestBuild` keeps it out of Now/Wall/Sleep. `chan.Ready.Select(a, b[, c, d])` takes
   the first ready of two to four cases in the order given - a channel received from, `SendOf(c, v)`, a `time.Timer`
   (`time.After(d)`) - as `Ready<A, B, C, D>.First(v)`..`Fourth`, failing with what a case fails with (CLOSED); the
   cases meet `chan.Case<T ? E>` (`TryNow() T ? E, Exhausted`, `Due() I64`), so time needs no import of chan; it polls
@@ -1792,8 +1819,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   globals set at load in B5a's order, a fresh scope per call) and `NAME.h` (stdint types, opaque typedefs, plain
   structs, arrays as pointer and `int64_t` length, a fallible entry returning an `int32_t` code - library-wide, `(type
   position from 1 << 16) | word`, `NAME_TYPE_WORD` constants - with its result through a pointer, an array result
-  copied into a caller's buffer returning its length); Python reaches it by ctypes. `t.ToC()` and `p.StringFromC(max)`
-  over the prelude's `CStr` (X15: not `String.FromC(p, max)` as decided - no type-level functions, E33's precedent).
+  copied into a caller's buffer returning its length); Python reaches it by ctypes. `t.ToC()` and `String.FromC(p, max)`
+  over the prelude's `CStr` (X15; a builder since D19 - it was `p.StringFromC(max)` while no type-level functions existed).
   `olang bindgen HEADER.h` (X16) writes a header's declarations from clang's tree, macros' values computed by clang;
   `interpret` loads the linked libraries; since 2026-10-26 it passes extern types and plain structs by reference too,
   refusing a struct by value (B3e). Still no extern variables, and

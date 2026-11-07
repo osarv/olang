@@ -2836,8 +2836,8 @@ any types held as one, named `pair.Pair` once imported, its type arguments infer
 the container to choose over a `Vec` where that matters: an element is never copied by a growth, and no run of them a
 walk holds is ever replaced: `Push(x)` and `PushAll(a)`
 (every element of an array, in order) add at the end, `Len()` counts, `ToArray()` copies the elements into one new
-array in the caller's scope, and `Has(x)` asks by `==` (E29); `list.Of(a)` is the other way, a new `List` of an array's elements
-(`list.Of(Array<I32>(n, v))` for `n` copies of one value), and `list.From(it)` a new `List` of every value an
+array in the caller's scope, and `Has(x)` asks by `==` (E29); `list.List.Of(a)` is the other way, a new `List` of an array's elements
+(`list.List.Of(Array<I32>(n, v))` for `n` copies of one value), and `list.List.From(it)` a new `List` of every value an
 iterator gives. It indexes (E31): `l[i]` is `At(i)`, a copy of
 the element, and `l[i] = x` is `SetAt(i, x)`, which replaces one - both unchecked, as an array index is (E16), with
 `try l.Get(i)` checking `i` against `Len()`, failing with `list.Error.OutOfRange`. Every one of these costs the same whatever
@@ -2870,7 +2870,7 @@ A `List` is a **handle**: its chunks and its counts are one record, made where t
 a `List` value is one reference to that record. So a copy of the value - `b := a`, an assignment, a field, an element,
 a by-value argument - is a second name for the same list: a `Push` through either is seen through both, as through
 two references (and as with a Go map) - its supplied `Copy()` (E31d) shares the record, as a copy of a value holding a
-reference does. `list.From(l.Iter())` builds a new `List` with the same elements in the same order and storage of its
+reference does. `list.List.From(l.Iter())` builds a new `List` with the same elements in the same order and storage of its
 own, built where its result lands; elements are copied as values (each by its own Copy), so a list of references
 gives a list of the same references. `std/list` says nothing of the positions it empties (it uses no `vacate`): a position past a
 `List`'s end may still hold what was there, so early freeing (O8d) takes a `List`'s removals for no let-go, and what they
@@ -2915,7 +2915,7 @@ room for `n` more the same way; `Len()` and `Cap()` count. It has the operations
 names and on the same terms but `RunFrom`, failing with `VecError`'s words (`Empty`, `NotFound`, `OutOfRange`) - `v[i]` and `v[i] = x` (E31,
 unchecked), `Get` (checked), `First`, `Last`, `Pop`, `Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`,
 `Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`, `Join` (of a `Vec` of texts, `Vec<String&>`
-or `Vec<String>`) and `ToArray` - a `List` built by `list.From(l.Iter())` is a `Vec`'s copy; an array's `ToVec()` is a new `Vec` of its elements (`Array<I32>(n, v).ToVec()` for `n` copies of one
+or `Vec<String>`) and `ToArray` - a `List` built by `list.List.From(l.Iter())` is a `Vec`'s copy; an array's `ToVec()` is a new `Vec` of its elements (`Array<I32>(n, v).ToVec()` for `n` copies of one
 value), and an iterator's `ToVec()` one of every value it gives; `Pop`, `Clear` and `Truncate` keep the buffer. `for x in v` walks it by `At` and `Len` (S9d), reading the
 `Vec` each step, so a walk that pushes sees what it pushed; `v.Iter()` is an `Indexable`'s (M19e). `View()` is the one
 way to have its elements as an array - `Array<T>&`, `ViewMut()` writably - a window on the buffer as it is now, good
@@ -6929,7 +6929,7 @@ so in `h := ll[0][0].S`, `e := ll[0][0]` and `h := lll[0][0]` the outer `At`'s r
 are, and so is what is read through it. A **value** result so landed holds what its
 callee's obligations say it holds of its arguments, so it then determines the parameter's scope where its result scope
 landed, as existing storage does: `bs.Push(box(t))`, `box` giving a struct holding `t`, is `b := box(t); bs.Push(b)`, and
-with `t` in a loop's block and `bs` outside it the call is an error, as is `rows.Push(list.From(rec.Iter()))` for a loop's list `rec`
+with `t` in a loop's block and `bs` outside it the call is an error, as is `rows.Push(list.List.From(rec.Iter()))` for a loop's list `rec`
 - never a value taken for a temporary and built where the list lives while what it holds stays in the loop. A field, an
 element or a slice read out of such a result and passed on by value is a copy out of it whose references are where the
 result landed: `bs.Push(pair(t).a)`, `bs.Push(boxes(t)[0])` and `bs.Push(wrap(pair(t).a))` are
@@ -8671,7 +8671,7 @@ constraint's check (G19).
 call's variables, or a reference to one, that no argument, receiver, constraint or lambda bound, binds that variable to
 its default's type - the default checked as the declaration writes it, before any instance is known: `fn
 f<A Named, B Named>(a A, b B = Idle()) String` called as `f(x)` is `f` at `B = Idle`, the default then given as D8a
-gives it. A variable G9c reaches through such a binding's constraint binds then too (std/chan's `Select(a, b)` binding
+gives it. A variable G9c reaches through such a binding's constraint binds then too (std/chan's `Ready.Select(a, b)` binding
 its third and fourth cases' types to the defaults' never-ready case). A default that does not say a type (`null`) binds
 nothing, and G4 says what is missing.
 
