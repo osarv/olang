@@ -2522,6 +2522,12 @@ owner's variables and its own) is a function value where it is written without a
 `texts.Map(Color.FromHex)`. A builder is never inherited through `extends` (T29f): it makes its own owner, which the
 extending type is not.
 
+A builder named **`FromIter`**, taking an iterator of its owner's elements (`fn Bag<T>.FromIter<I Iterator<T ? E>, ?
+E>(it mut I&) Bag<T> ? E`, or a concrete iterator type), is what its owner's literals and comprehensions call (E19,
+E27): any type declaring one has `Bag<I64>[1, 2]`, and its keyed form where the elements are `MapEntry`s. Nothing else
+marks it - no trait names it, so none needs a builder generic over its iterator (T35) - and a `FromIter` taking more
+than the iterator (a heap's ordering) is an ordinary builder its owner's literal cannot call.
+
 **D19a (where a function goes).** A function making a value of a type its module declares is that type's builder: a
 top-level function - not a method, an `extern fn` (X1), an `export fn` (X12), a test or `main` - whose one result is a
 struct, an enum or a type declared over another that its module declares (the type itself, a reference to it or an
@@ -2949,7 +2955,7 @@ the container to choose over a `Vec` where that matters: an element is never cop
 walk holds is ever replaced: `Push(x)` and `PushAll(a)`
 (every element of an array, in order) add at the end, `Len()` counts, `ToArray()` copies the elements into one new
 array in the caller's scope, and `Has(x)` asks by `==` (E29); `list.List.Of(a)` is the other way, a new `List` of an array's elements
-(`list.List.Of(Array<I32>(n, v))` for `n` copies of one value), and `list.List.From(it)` a new `List` of every value an
+(`list.List.Of(Array<I32>(n, v))` for `n` copies of one value), and `list.List.FromIter(it)` a new `List` of every value an
 iterator gives. It indexes (E31): `l[i]` is `At(i)`, a copy of
 the element, and `l[i] = x` is `SetAt(i, x)`, which replaces one - both unchecked, as an array index is (E16), with
 `try l.Get(i)` checking `i` against `Len()`, failing with `list.Error.OutOfRange`. Every one of these costs the same whatever
@@ -2973,8 +2979,9 @@ there was one; `SwapTake(i)` removes the element at `i` and gives it, the last e
 moved whatever the length, the order not kept - and takes `i` as `TakeAt` does, and `SwapRemove(i)` does the same
 giving nothing. A `List` of texts has `Join(sep)`, as an array of texts does. `$` renders a `List` (E11c) as an
 array of its elements renders, with the `List`
-named in front: `List<I64>[1, 2, 3]`, `List<String&>["a"]`, `List<I64>[]` - each element as it renders inside any other
-value. Changing a `List` other than by `Push` while a walk of it is under way
+named in front as source outside `std/list` writes it, the literal making it (E19): `list.List<I64>[1, 2, 3]`,
+`list.List<String&>["a"]`, `list.List<I64>[]` - each element as it renders inside any other value; `List<T>.FromIter(it)`
+(D19) builds one of every value an iterator gives. Changing a `List` other than by `Push` while a walk of it is under way
 leaves which elements the rest of the walk gives unspecified - but a walk only ever gives elements the list holds or
 held, and it ends: once the list holds no more than the walk has given (after a `Clear()`, or `Pop()`s below its
 position) the next step is its end.
@@ -2982,7 +2989,7 @@ A `List` is a **handle**: its chunks and its counts are one record, made where t
 a `List` value is one reference to that record. So a copy of the value - `b := a`, an assignment, a field, an element,
 a by-value argument - is a second name for the same list: a `Push` through either is seen through both, as through
 two references (and as with a Go map) - its supplied `Copy()` (E31d) shares the record, as a copy of a value holding a
-reference does. `list.List.From(l.Iter())` builds a new `List` with the same elements in the same order and storage of its
+reference does. `list.List.FromIter(l.Iter())` builds a new `List` with the same elements in the same order and storage of its
 own, built where its result lands; elements are copied as values (each by its own Copy), so a list of references
 gives a list of the same references. `std/list` says nothing of the positions it empties (it uses no `vacate`): a position past a
 `List`'s end may still hold what was there, so early freeing (O8d) takes a `List`'s removals for no let-go, and what they
@@ -3005,9 +3012,11 @@ map of its own with the same keys and values, walked in the same order, and two 
 (`m mut Map<K, V>&`). `Ref(k)` and `RefMut(k)` give the value for `k` in place - `V&` and `mut V&`, living where
 the map does - failing with
 `MapError.Missing` - so a collection held in a map is changed where it is (`(try m.RefMut(k)).Push(x)`), a value that is
-no reference's referent (a number) through `Update`. `$` renders a `Map` (E11c) as its entries in `Iter()`'s
-order, each `key: value` with the key and the value rendered as inside any other value, in braces after its type:
-`Map<String&, I64>{"a": 1, "b": 2}`, `Map<I64, Bool>{}`.
+no reference's referent (a number) through `Update`. `$` renders a `Map` (E11c) as the keyed literal making it (E19):
+its entries in `Iter()`'s order, each `key: value` with the key and the value rendered as inside any other value, in
+brackets after its type: `Map<String&, I64>["a": 1, "b": 2]`, `Map<I64, Bool>[]`. `Map<K, V>.FromIter(it)` (D19) puts
+each `MapEntry` an iterator gives, a later key replacing an earlier one's value: `Map<String&, I64>["a": 1]` is its
+literal.
 
 The prelude declares `type Vec<T>`, the **growable array**. Its elements lie next to each other in one buffer, so
 indexing it and walking it cost what an array's do, past one load of the buffer the `Vec` names. A `Vec` holds its
@@ -3027,7 +3036,7 @@ room for `n` more the same way; `Len()` and `Cap()` count. It has the operations
 names and on the same terms but `RunFrom`, failing with `VecError`'s words (`Empty`, `NotFound`, `OutOfRange`) - `v[i]` and `v[i] = x` (E31,
 unchecked), `Get` (checked), `First`, `Last`, `Pop`, `Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`,
 `Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`, `Join` (of a `Vec` of texts, `Vec<String&>`
-or `Vec<String>`) and `ToArray` - a `List` built by `list.List.From(l.Iter())` is a `Vec`'s copy; an array's `ToVec()` is a new `Vec` of its elements (`Array<I32>(n, v).ToVec()` for `n` copies of one
+or `Vec<String>`) and `ToArray` - a `List` built by `list.List.FromIter(l.Iter())` is a `Vec`'s copy; an array's `ToVec()` is a new `Vec` of its elements (`Array<I32>(n, v).ToVec()` for `n` copies of one
 value), and an iterator's `ToVec()` one of every value it gives; `Pop`, `Clear` and `Truncate` keep the buffer. `for x in v` walks it by `At` and `Len` (S9d), reading the
 `Vec` each step, so a walk that pushes sees what it pushed; `v.Iter()` is an `Indexable`'s (M19e). `View()` is the one
 way to have its elements as an array - `Array<T>&`, `ViewMut()` writably - a window on the buffer as it is now, good
@@ -3039,8 +3048,9 @@ storage that was freed; and what the elements refer to lives where the `Vec` doe
 so an element read out of it (`s := v[0]`) is kept across growth. Such a stale view is a compile-time error where the
 same `Vec` is seen on both sides (M19g), and elsewhere a mistake the compile-time evaluator stops on (K1) and the scope
 sanitizer reports (B2f). `==` compares its elements (E10), it hashes as they do
-(E10b), and `$` renders it as an array with `Vec` named in front: `Vec<I64>[1, 2, 3]`, `Vec<Char>['a']` (each `Char`
-a character literal, an array of them rendering as text). A `Vec` is the growable array; `std/list`'s `List` is for
+(E10b), and `$` renders it as the literal making it (E19), an array's items with `Vec` named in front: `Vec<I64>[1, 2,
+3]`, `Vec<Char>['a']` (each `Char` a character literal, an array of them rendering as text); `Vec<T>.FromIter(it)` (D19)
+is a `Vec` of every value an iterator gives. A `Vec` is the growable array; `std/list`'s `List` is for
 what its chunks give - a `Push` never moves what is stored, so no view of it is ever stale. The library's
 collections (the prelude's and std's) say what they stop using, and how a buffer grows, with operations only the
 library has:
@@ -3679,12 +3689,14 @@ its type: the value written the way it would be in source:
   (copied: the result is a new value, never a second name for the operand's storage). Inside another value, its bytes written as
   a string literal: `"text"`, with `\n`, `\t`, `\r`, `\0`, `\\` and `\"` escaped. Any other byte is
   written as itself.
-- any other array — its element type as an array literal writes it (E19), then its items: `I32[1, 2, 3]`,
-  `Point&[Point(1, 2)]`, `I32[]` when empty. The element type is written whole - an array of arrays writes each
-  element as an array of its own, `Array<I64>[I64[1, 2, 3], I64[4, 5, 6]]` (E21) - with every inner level's `mut`
-  (T25b), `List<mut Node&>[...]`, but not the element's own, which a literal's elements take from where the literal
-  goes: an `Array<mut Node&>` renders `Node&[...]`. An array of a declared type over `Char` is such an array:
-  `Letter['a', 'b']`.
+- any other array — as an array literal writes it (E19): `Array<` and its element type, `>`, then its items:
+  `Array<I32>[1, 2, 3]`, `Array<Point&>[Point(1, 2)]`, `Array<I32>[]` when empty. The element type is written whole -
+  an array of arrays writes each element as an array of its own, `Array<Array<I64>>[Array<I64>[1, 2, 3],
+  Array<I64>[4, 5, 6]]` (E21) - with every inner level's `mut` (T25b), `Array<List<mut Node&>>[...]`, but not the
+  element's own, which a literal's elements take from where the literal goes: an `Array<mut Node&>` renders
+  `Array<Node&>[...]`. An array of a declared type over `Char` is such an array: `Array<Letter>['a', 'b']`. So every
+  rendering of an array, as every rendering of a collection the library declares (a `Vec`, a `Map`, a `List`: E19's
+  literals, through their `Str`), reads back as the literal making it.
 - a struct — its declared name, then its fields in declaration order in parentheses: `Point(1, -2)`.
 - an enum — `Type.Case`, followed by the payload's fields in parentheses when the live case carries one:
   `Shape.Rect(3, 4)`.
@@ -4009,35 +4021,55 @@ slices, cascading through every caller.
 **E17.** `base . IDEN` requires `base` to be a struct type with a field named `IDEN`; its result
 type is that field's declared type.
 
-### 5.6 Array literals
+### 5.6 Literals of collections
 
-**E19.** `array-literal ::= elem-type "[" list(arr-item) "]"` (L18a), where
-`elem-type ::= PRIMITIVE-NAME | scalar-name [ type-args ] [ reference-marker ] | "any" type-name [ type-args ]
-reference-marker` and
-`scalar-name ::= alias-chain IDEN`
-(§4.4 M8) names the literal's
-element type, stated exactly once regardless of nesting depth (E21) - a type's name, or a type variable of the generic
-the literal is written in (`T[a, b]`, §12 G8b). The optional
-`reference-marker` (T24) makes each element a separately allocated reference rather than a value laid
-out inline — `Handle&[a, b, c]` builds three instances, each with its own allocation and its own scope
-tag. A primitive scalar type may never carry one (T24). An element type `any R&` (T32) makes an array of run-time trait
-values, `any Shape&[c, s]`, each item made an `any` as T32a says - the form `$` renders such an array in (E11a).
+**E19.** `array-literal ::= made-type "[" [ list(arr-item) | list(entry) ] "]"` (L18a), where
+`made-type ::= alias-chain IDEN [ type-args ]` (§4.4 M8) is **the type of the value the literal makes**, stated exactly
+once regardless of nesting depth (E21) - `Array<I64>[1, 2]`, `Vec<String&>["a", "b"]`, `set.Set<I64>[1, 2]`,
+`Map<String&, I64>["a": 1]`, a type variable of the generic the literal is written in included (`C[a, b]`, §12 G8b) -
+and `entry ::= expr ":" expr`. It is never a reference or an `any` (T24, T32): those are elements' types, written inside
+the made type's arguments - `Array<Handle&>[a, b, c]` builds three instances, each with its own allocation and its own
+scope tag, and `Array<any Shape&>[c, s]` makes an array of run-time trait values, each item made an `any` as T32a says -
+the form `$` renders such an array in (E11a). A primitive type in front makes nothing: `I64[1, 2]` is a compile-time
+error naming `Array<I64>[1, 2]`. What the literal is depends on the made type:
 
-An element type may itself be an **array**: an `Array<T>` as a reference (T7a) - `Array<I32>&[r0, r1]` has two
-elements, references to the arrays `r0` and `r1`, each with its own length - and an `Array<T>` as a value: items of
-one known length are laid out in place (T7d), `Array<F32>[F32[1, 2], F32[3, 4]]` two rows of two; items of different
-lengths are each the array's own copy (T7a), `String["a", "bc"]`.
-`arr-item ::= expr | "[" [ arr-item { "," arr-item } ] "]"` — a plain expression, or a nested
-bracketed group with no restated type, for a multi-dimensional literal.
+- **`Array<T>`** (T7): an array of `T`, its items laid out in order, built where it lands. An element type may itself be
+  an **array**: an `Array<T>` as a reference (T7a) - `Array<Array<I32>&>[r0, r1]` has two elements, references to the
+  arrays `r0` and `r1`, each with its own length - and an `Array<T>` as a value: items of one known length are laid out
+  in place (T7d), `Array<Array<F32>>[Array<F32>[1, 2], Array<F32>[3, 4]]` two rows of two; items of different lengths
+  are each the array's own copy (T7a), `Array<String>["a", "bc"]`.
+- **`Vec<T>`** (M19d): a `Vec` of exactly those elements, its buffer the array the same items would make, handed to it
+  with no copy - `Vec<I64>[1, 2, 3]`, `Vec<I64>[]` (no buffer, as `Vec<I64>()`).
+- **any other type `C`** declaring a builder `FromIter` (D19, below): `C.FromIter(it)`, `it` a walk of the items -
+  `Array<E>[items].Iter()`, an `ArrayIter<E>` over an array made where the call is, so the builder may read their count
+  before the first (`it.Rest().Len()`) - where `E` is the element type its `FromIter` takes: the element its parameter's type
+  is an `Iterator` of (a type variable constrained by `Iterator<E ? Err>`, or an iterator type whose `Next` gives `E`).
+  Each item is checked against `E` as an array literal's is, a literal adapting to it. What `FromIter` can fail with is
+  what the literal can: `try lib.Strict<I64>[1, 2]`. A type with no `FromIter` - a struct, a primitive, a declared array
+  type - is a compile-time error naming the builder.
+
+The **keyed form** `C[k: v, ...]` is for a made type whose `FromIter` takes `MapEntry<K, V>` elements (a `Map`'s):
+each entry is `MapEntry<K, V>(k, v)`, the key checked against `K` and the value against `V` -
+`Map<String&, I64>["a": 1, "b": 2]`. Every item of a literal is an entry or none is; entries in the literal of a type
+whose elements are no `MapEntry` are a compile-time error, and so are plain items where they are. `C[]` is empty in
+either form. An entry's `:` is no slice's (E16): a slice has its base before the `[`.
+
+The literal is the one way to write a collection's values in place; `C.FromIter(it)` is an ordinary call (D19), so
+any walk becomes any collection: `set.Set<I64>.FromIter(words.Iter().Map(len).Iter())`. The prelude's `Array<T>` and
+`Vec<T>` declare `FromIter` too - a walk of unknown length gathered as a `Vec` gathers - though their literals and
+comprehensions are built directly.
+
+`arr-item ::= expr | "[" [ arr-item { "," arr-item } ] "]"` - a plain expression, or a nested bracketed group with no
+restated type, which is an error (E21).
 
 **E20.** A literal's length is the number of items written - zero items, zero - and is known while compiling,
-whatever the literal is checked against (T7c). Its type is an `Array<T>` (T7) everywhere - a `:=` (D15), a bare type
-variable (G9), a parameter (an instance of its length, G29) - and storage it is kept in may be fixed with its length
-(T7d).
+whatever the literal is checked against (T7c). An `Array<T>` literal's type is an `Array<T>` (T7) everywhere - a `:=`
+(D15), a bare type variable (G9), a parameter (an instance of its length, G29) - and storage it is kept in may be fixed
+with its length (T7d). Any other literal's type is its made type.
 
 **E21.** A literal's items are never themselves bracket groups: there are no nested literals, since there
-is no multi-dimensional array (T7a). An array of arrays is a literal of references, `Array<I32>&[r0, r1]`, or of
-arrays held by value, each item an array of its own (`Array<F32>[F32[1, 2], F32[3, 4]]`).
+is no multi-dimensional array (T7a). An array of arrays is a literal of references, `Array<Array<I32>&>[r0, r1]`, or of
+arrays held by value, each item an array of its own (`Array<Array<F32>>[Array<F32>[1, 2], Array<F32>[3, 4]]`).
 
 ### 5.7 Enum values
 
@@ -4115,18 +4147,19 @@ olang (written over `T(x)` and E36's limits), so the compile-time evaluator comp
 
 ### 5.12 Comprehensions
 
-**E27.** `comprehension ::= elem-type "[" expr "for" IDEN [ "," IDEN ] "in" ( binary | range ) [ "if" binary ] "]"` is
-a new array holding the first `expr` once for each value `for ... in` (S9a/S9b) would walk, in order — only those for
-which the condition after `if` is `true`, when there is one. It is an `array-literal` (E19) whose one item is followed
-by the `for` clause, and its `elem-type` is written as a literal's is; every element must fit it as a literal's items
-must. It is no list: a line break before its `for`, or anywhere in its clause, separates nothing (L18a). The names are bound for each value exactly as in a `for ... in` loop (copied out of an array, an index counting
-from 0 for the two-name form) and are visible in the element expression and the condition only. What may follow `in`
-is what a `for ... in` takes: an array, a range, an iterator or an iterable.
+**E27.** `comprehension ::= made-type "[" expr "for" IDEN [ "," IDEN ] "in" ( binary | range ) [ "if" binary ] "]"`
+is a new value of the made type (E19) holding the first `expr` once for each value `for ... in` (S9a/S9b) would walk,
+in order — only those for which the condition after `if` is `true`, when there is one. It is a literal (E19) whose one
+item is followed by the `for` clause; every element must fit the made type's element type as a literal's items must.
+It is no list: a line break before its `for`, or anywhere in its clause, separates nothing (L18a). The names are bound
+for each value exactly as in a `for ... in` loop (copied out of an array, an index counting from 0 for the two-name
+form) and are visible in the element expression and the condition only. What may follow `in` is what a `for ... in`
+takes: an array, a range, an iterator or an iterable.
 
-Its type is `Array<T>` for the written element type `T`, a value - of known length (T7c) with no `if` and a source
-whose length is known while compiling. Like `Array<T>(n)` (T7) it is a temporary,
-built in the scope of whatever it lands in. The element expression and the condition are evaluated once per value,
-the condition first, in the order the values are walked.
+Made into an **`Array<T>`**, its type is `Array<T>`, a value - of known length (T7c) with no `if` and a source whose
+length is known while compiling. Like `Array<T>(n)` (T7) it is a temporary, built in the scope of whatever it lands in.
+The element expression and the condition are evaluated once per value, the condition first, in the order the values
+are walked.
 
 Its storage is allocated before the first element where the source's length is known before the loop - an array's
 length or a range's count, at most - and otherwise grows: room for 100 elements, then double whenever full. Storage
@@ -4135,13 +4168,20 @@ no `if` and a known length, the storage allocated is the array itself, exactly i
 nothing is an empty array - whose storage, as every empty array's, nothing can tell apart from another's: there is
 nothing in it to read or write, and arrays compare by what they hold (E10).
 
+Made into a **`Vec<T>`**, it is built as the array would be and that storage is the `Vec`'s buffer, handed over with no
+copy (its length the elements kept). Made into **any other type** declaring `FromIter` (E19), it is
+`C.FromIter(walk)`, the walk a generator (D18) of the elements - each element computed when the builder asks for the
+next, the condition first, no array made: `set.Set<I64>[x % 7 for x in xs]`. A comprehension made so may not fail by
+calls of its own (a walk handing errors to a builder is written as a generator function and its `FromIter` called).
+
 An element type that is or holds a reference (T24) is not admitted: a comprehension's elements are values.
 
-`I32[x * 2 for x in a if x > 3]`, `I64[I64(i) * I64(i) for i in range n]`, `U8[c - 32 for c in t]`.
+`Array<I32>[x * 2 for x in a if x > 3]`, `Array<I64>[I64(i) * I64(i) for i in range n]`, `Array<U8>[c - 32 for c in t]`,
+`Vec<I64>[x * x for x in a]`.
 
 The source after `in` and the condition after `if` are each a `binary`, not an `expr`: an `if` there belongs to the
 comprehension, so a conditional (E28) in either position is written in parentheses. The element may be one freely:
-`I32[x if x > 0 else 0 for x in a]`.
+`Array<I32>[x if x > 0 else 0 for x in a]`.
 
 ### 5.13 Conditional expressions
 
@@ -5031,7 +5071,7 @@ pattern        ::= alias-chain IDEN "." IDEN [ "(" list(item) ")" ]
 item           ::= sub-pattern | IDEN "=" sub-pattern                    (S13b, S13i)
 sub-pattern    ::= IDEN | pattern | struct-pattern | array-pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
 struct-pattern ::= alias-chain IDEN "(" [ list(item) ] ")"               (S13i)
-array-pattern  ::= elem-type "[" [ list(array-item) ] "]"                (S13h)
+array-pattern  ::= made-type "[" [ list(array-item) ] "]"               (S13h)
 array-item     ::= sub-pattern | "..." [ IDEN ]
 ```
 
@@ -5164,23 +5204,24 @@ by a reference never null - is never the value matched: S13a asks no clause for 
 covered, and a match over a type all of whose cases are such needs no clause at all. std/chan's `Ready` of a Select
 given two cases has four, the last two carrying such a value, so a match of two clauses is exhaustive.
 
-**S13h (array patterns).** `case String&["test", file, ...words]` matches an array element by element. The element
-type is written before the `[` as an array literal writes it (`I64[...]`, `String&[...]`, `Char[...]`), and is the
-matched value's element type (a compile-time error otherwise). Each item is a `sub-pattern` matched against one
+**S13h (array patterns).** `case Array<String&>["test", file, ...words]` matches an array element by element. The type
+before the `[` is written as a literal making the matched value writes it (E19) - `Array<I64>[...]`,
+`Array<String&>[...]`, `Vec<I64>[...]` for a `Vec` - or, for a declared array type such as `String`, as the array it is
+declared over (`Array<Char>[...]`); its element type is the matched value's (a compile-time error otherwise). Each item is a `sub-pattern` matched against one
 element, as a payload's position is (S13b): a literal compares the element by `==`, a name binds a copy of it - always a
-fresh name, never a local's value read, so comparing with a local is a guard (`case I64[x] if x == want`), and a name
+fresh name, never a local's value read, so comparing with a local is a guard (`case Array<I64>[x] if x == want`), and a name
 already in scope is D3a's error - `_` ignores it, and a nested pattern matches it. One item may be `...name`: the
 elements the other items do not name, bound as a **view** of the matched array's storage - a slice of it (E16a), with
 its permission - or a bare `...`, binding nothing. Items before it match from the start, items after it from the end:
-`case I64[first, ..., last]`. With no `...` the array has exactly as many elements as items; with one, at least as many
+`case Array<I64>[first, ..., last]`. With no `...` the array has exactly as many elements as items; with one, at least as many
 as the other items. The **length is tested first**, so no element is read outside the array, then the items in order.
-What is matched is an array - text too, its elements `Char`s (`case Char['-', '-', ...name]` on a `String`, the rest a
+What is matched is an array - text too, its elements `Char`s (`case Array<Char>['-', '-', ...name]` on a `String`, the rest a
 `String`) - or a value of a type declaring `At` and `Len` (E31, a `Vec`), whose elements are its `At`'s copies and whose
 named rest is its `Slice` (a bare `...` where it declares none; a named one is then a compile-time error naming the
 array to match instead). An array pattern stands at a case's top or in a payload position: `case
-Cmd.Run(String&["ls", ...args])`. Its lengths are what S13a covers: for exhaustiveness the length is the array's
-constructor, so `case I64[]` and `case I64[first, ...rest]` cover every array of `I64`, and `case String&[]`, `case
-String&[only]` and `case String&[first, ...rest, last]` every array of text; a match used as a value (S12b) that leaves a
+Cmd.Run(Array<String&>["ls", ...args])`. Its lengths are what S13a covers: for exhaustiveness the length is the array's
+constructor, so `case Array<I64>[]` and `case Array<I64>[first, ...rest]` cover every array of `I64`, and `case Array<String&>[]`, `case
+Array<String&>[only]` and `case Array<String&>[first, ...rest, last]` every array of text; a match used as a value (S12b) that leaves a
 length to no case is a compile-time error naming it ("an array of 1 element", "3 elements or more"). A `...` anywhere but
 among an array pattern's items is a compile-time error. An alternative written as an array literal after a path that
 names no type (`case table[k]`) is a value compared by `==` (S13).
@@ -7087,7 +7128,7 @@ so in `h := ll[0][0].S`, `e := ll[0][0]` and `h := lll[0][0]` the outer `At`'s r
 are, and so is what is read through it. A **value** result so landed holds what its
 callee's obligations say it holds of its arguments, so it then determines the parameter's scope where its result scope
 landed, as existing storage does: `bs.Push(box(t))`, `box` giving a struct holding `t`, is `b := box(t); bs.Push(b)`, and
-with `t` in a loop's block and `bs` outside it the call is an error, as is `rows.Push(list.List.From(rec.Iter()))` for a loop's list `rec`
+with `t` in a loop's block and `bs` outside it the call is an error, as is `rows.Push(list.List.FromIter(rec.Iter()))` for a loop's list `rec`
 - never a value taken for a temporary and built where the list lives while what it holds stays in the loop. A field, an
 element or a slice read out of such a result and passed on by value is a copy out of it whose references are where the
 result landed: `bs.Push(pair(t).a)`, `bs.Push(boxes(t)[0])` and `bs.Push(wrap(pair(t).a))` are
