@@ -644,7 +644,6 @@ type Diag enum {
     LiteralNotMade
     FromIterShape
     LiteralEntries
-    LiteralNoEntries
     ComprWalkFails
     NotAnEnum
     TakesNoArgs
@@ -2861,9 +2860,6 @@ fn LiteralEntries(ty String&) r.Msg { return r.Msg(Diag.LiteralEntries, "E19", "
 
 # ERR_COMPR_WALK_FAILS
 fn ComprWalkFails() r.Msg { return r.Msg(Diag.ComprWalkFails, "E27", "a comprehension made into a collection other than an array or a Vec walks its elements as the collection asks for them, and may not fail by calls of its own - write a generator function and call the collection's FromIter with it") }
-
-# ERR_LITERAL_NO_ENTRIES
-fn LiteralNoEntries() r.Msg { return r.Msg(Diag.LiteralNoEntries, "E19", "a keyed literal's items are each 'key: value' - every one of them or none") }
 
 # ERR_NOT_AN_ENUM
 fn NotAnEnum(tok String&) r.Msg { return r.Msg(Diag.NotAnEnum, "E22", $tok " is not an enum type, so it has no values 'T.Case'") }

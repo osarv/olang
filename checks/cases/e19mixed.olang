@@ -1,0 +1,6 @@
+# check: fail expected ':', found ']'
+# E19: every item of a keyed literal is an entry - its first item's ':' decides, so a plain one after it is a syntax error
+fn main() {
+    m := Map<String&, I64>["a": 1, "b"]
+    assert m.Len() == 2
+}

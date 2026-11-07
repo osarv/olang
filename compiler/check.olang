@@ -15760,7 +15760,7 @@ fn (c mut Checker&) madeLit(sp source.Span, msp source.Span, made types.TypeId, 
         c.dropItems(items)
         return c.unknown(sp)
     }
-    arr := c.entriesLit(sp, b.Elem, items) if c.entryAt(items) >= 0 else c.plainLit(sp, b.Elem, items)
+    arr := c.entriesLit(sp, b.Elem, items) if c.entryAt(items) >= 0 else c.arrayLit(sp, b.Elem, items)
     if typeOf(arr) == types.UnknownT { return c.unknown(sp) }
     return c.fromIter(sp, msp, b, made, arr)
 }
@@ -15861,17 +15861,6 @@ fn (c mut Checker&) dropItems(items Array<ast.Expr&>&) {
     }
 }
 
-# the array of el a literal's plain items make - none of them an entry (E19)
-fn (c mut Checker&) plainLit(sp source.Span, el types.TypeId, items Array<ast.Expr&>&) typed.Expr& {
-    ek := c.entryAt(items)
-    if ek >= 0 {
-        c.err(items[ek].Span(), msgs.LiteralNoEntries())
-        c.dropItems(items)
-        return c.unknown(sp)
-    }
-    return c.arrayLit(sp, el, items)
-}
-
 # the array of MapEntry<K, V> a keyed literal's entries make, each "k: v" its MapEntry(k, v) - el its builder's element,
 # which must be a MapEntry (E19)
 fn (c mut Checker&) entriesLit(sp source.Span, el types.TypeId, items Array<ast.Expr&>&) typed.Expr& {
@@ -15888,10 +15877,9 @@ fn (c mut Checker&) entriesLit(sp source.Span, el types.TypeId, items Array<ast.
                 x := c.construct(esp, esp, c.deref(el), Array<ast.Expr&>[k, v])
                 c.exprs.Push(c.partCopy(x))
             }
-            case _ {
+            case _ {                              # the parser makes every item of a keyed literal an entry
                 c.exprs.Truncate(from)
-                c.err(it.Span(), msgs.LiteralNoEntries())
-                c.dropItems(items)
+                c.gap(it.Span(), "a keyed literal's plain item")
                 return c.unknown(sp)
             }
         }
@@ -19742,16 +19730,18 @@ fn (c mut Checker&) comprWalk(sp source.Span, cm ast.Compr&, el types.TypeId) ty
     f := ast.ForIn(cm.Key, cm.Name, cm.Source, false, Array<ast.Stmt&>(0), Array<ast.Catch&>(0))
     wState, wGen, wKnown := c.comprState, c.comprGen, c.comprKnown
     c.comprState, c.comprGen, c.comprKnown = 0, true, -1
-    fails := fr.LoopFails
+    fr.Tries++                                    # its own calls said once, below, not each where it stands
     lid, outer, mark := c.open(typed.BlockKind.Plain, sp)
     c.walk(sp, f, cm, el)
     lb := c.close(lid, outer, mark, from)
     c.comprState, c.comprGen, c.comprKnown = wState, wGen, wKnown
-    if c.fr().LoopFails > fails {
+    failed := c.fr().Fallible > 0 or c.fr().LoopFails > 0
+    c.fr().Tries--
+    if failed {
         fa := try c.src(sp).Find(" for ") catch default -1
         c.err(source.Span(sp.Start + I32(fa + 1), sp.Start + I32(fa + 4)) if fa >= 0 else sp, msgs.ComprWalkFails())
+        parent.Fallible++                         # one error for the cause: a try around it covers what it meant to
     }
-    c.fr().LoopFails = fails
     c.emit(typed.Stmt.Block(sp, lb))
     c.emit(c.genEnd(source.Span(sp.End - 1, sp.End)))
     c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
