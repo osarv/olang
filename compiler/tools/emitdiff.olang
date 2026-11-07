@@ -203,9 +203,7 @@ fn outcomes(rows Vec<String&>&) Map<String&, String&> {
         if row.StartsWith("ok - ") {
             m.Put($row[5:], "ok")
         } else if row.StartsWith("FAIL - ") {
-            n := row[7:]
-            k := try n.Find(": ") catch default -1
-            m.Put($n[:k] if k >= 0 else $n, "FAIL")
+            m.Put(toolkit.TestName(row[7:]), "FAIL")
         }
     }
     return m

@@ -8,6 +8,13 @@ language change needs in all; this is the map of where.
 Records for every change: `SPEC.md` (the rule), `CLAUDE.md` (current-state entry), `HISTORY.md` (the story),
 `.claude/memory/decisions.md` (a question left open).
 
+Every change to what olang means keeps the interpreter comparison green (`interp@FILE` and `interp@casesK` in the
+suite): `interpret` runs each test file and run case as the build does, held to `compiler/goldens/run.txt`. A test
+added or a run case changing what it prints means `make rungold` (the built runs captured again, each difference
+explained first); a difference the interpreter must have is listed in `compiler/tools/evaldiff.olang`'s `Expected`
+(or, never ending interpreted, `Skipped`) with its reason - and fixed in `compiler/eval.olang`/`interp.olang` wherever it
+is no B3e limit.
+
 ## A keyword
 
 | place | why |
@@ -62,6 +69,7 @@ odd-width paths (`tests/intsweep.olang`); `tools/precedence_migrate.olang` if pr
 | `compiler/build.olang`, `target.olang` | the option's effect; the object-name hash if it changes code (`.quick`, `.debug`, B4) |
 | `tools/cli_words.olang` | rewrites old spellings; add to it only if an option is renamed |
 | `compiler/goldens/drv.txt` (`make drvgold`), `compiler/tools/drvdiff.olang` | the driver's command-line behaviour |
+| `compiler/olang.olang` `Passes.Interpret`, `build.olang` `InterpretTests` | `test -interpret` (B3e): an option saying how to build is refused beside it (`buildWord`) |
 | `editors/nvim/` (`compiler/olang.vim` makeprg, `lua/olang/init.lua`), `editors/README.md` | commands the plugin runs |
 | `docs/profiling.md`, `docs/install.md`, `makefile` | commands they quote |
 

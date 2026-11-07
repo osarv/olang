@@ -150,17 +150,25 @@ emitdiff: build/compiler_tools_emitdump build/compiler_tools_emitdiff
 	build/compiler_tools_emitdiff -v > build/emitdiff.txt
 	grep '^== total' build/emitdiff.txt
 
-# M8's acceptance, measured: each file of tests in the corpus and std run by the self-hosted pipeline's evaluator (load,
-# names, check, scope, lower, eval - compiler/tools/evaldump.olang) and compared test by test with stage 0's run as
-# compiler/goldens/run.txt stores it, and the checks' run cases compared as programs (compiler/tools/evaldiff.olang; the
-# rows in build/evaldiff.txt, not in verify until it is required)
-build/compiler_tools_evaldump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/evaldump.olang
-	$(OLANG) build compiler/tools/evaldump.olang
-EVAL_CASES = $(shell grep -L '^\# flags' $$(grep -l '^\# check: run' checks/cases/*.olang))
-evaldiff: build/compiler_tools_evaldump build/compiler_tools_evaldiff
-	build/compiler_tools_evaldiff -v > build/evaldiff.txt
-	build/compiler_tools_evaldiff $(EVAL_CASES) > build/evaldiff.cases.txt
-	grep '^== total' build/evaldiff.txt build/evaldiff.cases.txt
+# B3e, in the suite: the interpreter held to the built programs - each file of tests of the corpus and std run by
+# "olang test -interpret" (interp@FILE), the checks' run cases by "olang interpret" in four parts (interp@casesK), each
+# compared with the built run compiler/goldens/run.txt stores (compiler/tools/evaldiff.olang, which lists by name the
+# differences the interpreter is known to have and the tests it is not given). A difference not listed is a failure,
+# named in build/failed.txt. "make evaldiff" runs the whole comparison alone, its rows in build/evaldiff.txt
+INTERP_FILES = $(wildcard tests/*.olang) $(wildcard std/*.olang) $(wildcard std/prelude/tests/*.olang)
+INTERP_PARTS = 1 2 3 4
+INTERP_RUNS = $(addprefix interp@,$(INTERP_FILES)) $(addprefix interp@cases,$(INTERP_PARTS))
+$(addprefix interp@,$(INTERP_FILES)): interp@%: build/compiler_tools_evaldiff FORCE
+	@$(OLANG_ENV) build/compiler_tools_evaldiff $* || echo "interp@$*" >> build/failed.txt
+$(addprefix interp@cases,$(INTERP_PARTS)): interp@cases%: build/compiler_tools_evaldiff FORCE
+	@$(OLANG_ENV) build/compiler_tools_evaldiff -cases $* $(words $(INTERP_PARTS)) || echo "interp@cases$*" >> build/failed.txt
+# a file's interpreted run after its built one, since both write the same scratch files (std/os's build/os_files)
+$(foreach f,$(filter $(OLANG_TESTS),$(INTERP_FILES)),$(eval interp@$(f): | test@$(f)))
+# the interpreted run holding gigabytes (the corpus's shared.olang, 2.5 GB) waits at the end of a lane of heavy test
+# builds, so no more than two such processes are in memory at once
+interp@tests/shared.olang: | test@compiler/interp.olang
+evaldiff: build/compiler_tools_evaldiff
+	$(OLANG_ENV) build/compiler_tools_evaldiff -v > build/evaldiff.txt; grep '^== total' build/evaldiff.txt
 
 # captures compiler/goldens/run.txt again from $(GOLD_OLANG) - stage 0's runs of the corpus's and std's tests and of
 # the checks' run cases, which emitdiff and evaldiff hold the port to - after a test or a run case is added or changes
@@ -361,7 +369,7 @@ checkir:
 # (-k: a failure stops nothing else; the failed parts are named at the end), then checkir over the IR they wrote
 suite: $(OLANG)
 	@rm -f build/failed.txt
-	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(TEST_RUNS_HEAVY) runner $(DIFFS) $(TEST_RUNS_REST) \
+	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(TEST_RUNS_HEAVY) runner $(DIFFS) $(TEST_RUNS_REST) $(INTERP_RUNS) \
 		&& [ ! -s build/failed.txt ] || $(FAILED)
 	@$(MAKE) --no-print-directory checkir
 

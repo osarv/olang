@@ -101,6 +101,7 @@ type Diag enum {
     OptionNotForMode
     OptionNeedsValue
     QuickAlone
+    InterpretBuilds
     FuzzTimeNotNumber
     FuzzTimeAlone
     FuzzNoTest
@@ -998,6 +999,9 @@ fn OptionNeedsValue(text1 String&, text2 String&) Msg { return Msg(Diag.OptionNe
 
 # ERR_QUICK_ALONE
 fn QuickAlone(text String&) Msg { return Msg(Diag.QuickAlone, "B2g", "-quick and " $text " each say how much to optimize - give one") }
+
+# ERR_INTERPRET_BUILDS
+fn InterpretBuilds(text String&) Msg { return Msg(Diag.InterpretBuilds, "B3e", "-interpret builds nothing, and " $text " says how to build - give one") }
 
 # ERR_FUZZ_TIME_NOT_NUMBER
 fn FuzzTimeNotNumber(text String&) Msg { return Msg(Diag.FuzzTimeNotNumber, "B19", "-fuzztime takes a whole number of seconds, at least 1, and '" $text "' is none") }

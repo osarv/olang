@@ -1,0 +1,30 @@
+# B3e: test -interpret runs a file's tests as its test binary runs them - the same lines, the same status
+
+type Oops error { Bad }
+
+Seen mut I64 = 0
+
+fn twice(n I64) I64 { return 2 * n }
+
+fn fails(n I64) I64 ? Oops {
+    if n > 0: error Oops.Bad
+    return n
+}
+
+test twice "doubles" {
+    Seen += 1
+    assert twice(21) == 42
+}
+
+test twice "is wrong on purpose" {
+    assert twice(Seen) == 5
+}
+
+test fails "lets its error out" {
+    x := try fails(1)
+    assert x == 0
+}
+
+test "globals are set first and kept between tests" {
+    assert Seen == 1
+}

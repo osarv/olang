@@ -49,7 +49,9 @@ Go through this for every change to what olang means - a rule added, revised or 
 2. **Checker and codegen**: implement it so the code conforms to what was just written.
 3. **Compile-time evaluator** (`compiler/eval.olang`, K1): give it the same semantics - never leave it refusing or diverging
    from the run time. Prove the two agree with a test the evaluator actually runs (an `assert` it can decide, S18c,
-   or a global it bakes, K2) beside the run-time test.
+   or a global it bakes, K2) beside the run-time test. `interpret` runs every test file and run case the build runs
+   (`interp@FILE` in the suite, compiler/tools/evaldiff.olang): it stays green, a difference the interpreter must have
+   listed there by name with its reason.
 4. **Tests**: corpus tests for what now works (read back after an arena churn where scopes are involved), and
    `checks/cases` programs for what must now fail, each naming the expected diagnostic.
 5. **Migrate the corpus and `std`** when the change invalidates code; keep old tests unless the change invalidates them.
@@ -99,7 +101,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   at a `,` of its list, so a lambda that is a list item returns one value (L18c wraps one returning several, mine).
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build
   compile test interpret format explain help doc lsp mcp fix bindgen profile`; options `-output -debug -race -sanitize -target -define -update
-  -check -quick -html -library -memory -fuzz -fuzztime -caps -asm -ir`,
+  -check -quick -html -library -memory -fuzz -fuzztime -caps -asm -ir -interpret`,
   each checked against the modes it applies to (one table, also `help`'s); old flags simply gone (`tools/cli_words.olang`).
 - **`-quick` (B2g, the user's call 2026-10-24).** For build, compile, test and running a file: `-O2` without
   link-time optimization, objects apart (`.quick`); an error beside `-debug` or `-race`, which set their own levels.
@@ -1600,8 +1602,25 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   destructor-bearing values outside a global's own frame (K2c), anything past the step and 256MB budgets. Reaching
   `unreachable` where a value is required is an error at the place. Every disagreement with the run time found
   (by reviews and the differential fuzzer) is a bug fixed in the evaluator.
-- **`interpret` is stage 1** (no memory reclaimed, no destructors, tasks in sequence); stage 2 is the port's M8, not built in
-  C.
+- **`interpret` runs programs as built, and `test -interpret` their tests (B3e, M8; the comparison in the suite
+  2026-11-07, wt-interp).** Placed by the scope pass, each scope reclaimed as it closes, each destructor run where its
+  holder lets go (O15), libraries dlopened (a linker script's first library too), the runtime's functions its own; tasks
+  run one after another at their join (a wait for another task stops it, saying so). `olang test -interpret FILE
+  [WORD...]` (mine, an option of `test`, not a mode: the one code path `interpret` runs) checks the file as `test`
+  does and runs its tests as the test binary does - its lines, its status, its words (B7a), the harness's names given
+  to std/fuzz and std/prop, a detached child ending on its failed check. **In the suite**: every file of tests of the
+  corpus and std (`interp@FILE`, after its built run, shared.olang's at the end of a heavy lane) and the
+  checks' run cases in four parts (`interp@casesK`) are compared with the built runs compiler/goldens/run.txt stores
+  (compiler/tools/evaldiff.olang; evaldump is gone); a difference not in its `Expected` list, or a test not in its
+  `Skipped` list (one that would never end interpreted), fails the suite - about 9 minutes of CPU, 2.5 of wall time.
+  Listed (B3e's limits): std/chan's five waits for a task, std/net's getaddrinfo (a struct of pointers to C), the
+  cases measuring their own process's peak memory (chunkpool, mapchurn), an export fn handed to C (x13qsort); skipped:
+  std/cancel's spinning task, std/chan's Select polling for a task, std/net's Accept, gemmflat (over ten minutes),
+  std/os's million-deep recursion (~4 GB interpreted; its Args test then sees the words naming the others).
+  Fixed on the way: captures' scope variables bound by position (a generator's text went where a value capture's
+  environment lived - tests/generators' D18b), a whole `mir.Fn` copied into the machine's memory per caught error (2.3 GB
+  over 50,000; Select's polling ate 13 GB), the harness's names, test detach and the variadic dynamic call missing (std/fuzz,
+  std/prop, std/ffi), stops saying "-i".
 - **`embed PATH` (E38, the user's decision 2026-10-18; built 2026-10-25).** A file's bytes read while compiling: a
   read-only `Array<U8>&` of constant data, as a text literal is (T25d, one instance per site); text is `String(embed
   "f")`, a view. A prefix operator over a `unary` (mine). PATH is a literal or an expression reading no local, the

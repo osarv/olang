@@ -35,7 +35,7 @@ fn main() ? {
             catch io.Error { }
         os.Exit(2)
     }
-    os.RunOnStack(1 << 30, fn() { run(args) })
+    os.RunOnStack(1 << 30, fn() { run(os.Args()) })
 }
 
 type totals struct() {

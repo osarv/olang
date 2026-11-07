@@ -1,150 +1,284 @@
-# evaldiff - M8's acceptance, measured: each program run by the self-hosted pipeline's evaluator (load, names, check,
-# scope, lower with its placement, eval - compiler/tools/evaldump.olang), and its run compared with stage 0's as
-# compiler/goldens/run.txt stores it (captured by compiler/tools/rungold.olang, make rungold).
+# evaldiff - the interpreter held to the built programs: each file of tests of the corpus and std run by "$OLANG test
+# -interpret" (B3e) and each checks case that must run ("# check: run") by "$OLANG interpret", compared with the built
+# program's run as compiler/goldens/run.txt stores it (captured by compiler/tools/rungold.olang, make rungold).
 #
-#     evaldiff [-v] [-i] [FILE...]
+#     evaldiff [-v] [FILE...]
+#     evaldiff [-v] -cases K N
 #
-# A file of tests (the corpus, std's tests - the default list) is run as "olang test FILE" runs it, and compared test
-# by test: a row per file, "same N" where every test ends as the stored run's does, else what each said - "golden P ok
-# F fail; port P ok F fail; D differ" - and with -v each test that differs. A checks case ("# check: run") is a program,
-# run, its output and status compared (its status alone where the stored output was unstable) - with -i against "$OLANG
-# interpret" too (else build/olang). Then the totals. The evaluator is
-# build/compiler_tools_evaldump (or $EVALDUMP), each of its runs stopped after $EVALTIMEOUT seconds (300): tasks run in
-# sequence (K1), so one waiting for another that has not run never ends.
+# A file of tests is compared test by test: a row per file, "same N" where every test ends as the stored run's does,
+# else what each said - "built P ok F fail; interpreted P ok F fail; D differ" - and with -v each test that differs. A
+# checks case is a program, copied into a directory of its own under build/evaldiff and interpreted there with its
+# -define and -target flags (its -debug and -sanitize choose how code is generated, which interpret does not, B3e), its
+# output and status compared (its status alone where the stored output was unstable). With no FILE, every file of
+# tests and every case; with -cases K N, every Nth case from the Kth (K from 1), so N runs share them. Each run is stopped after $EVALTIMEOUT seconds (600).
+#
+# The differences the interpreter is known to have are listed below by name (Expected), each with why; one listed that
+# no longer differs is said, so the list is kept short. The status: 1 where a file differs and is not listed, else 0 -
+# make verify runs it a file at a time (interp@FILE, the makefile)
 
 import "std/os"
+import "std/filepath"
 import "toolkit"
+
+# the differences the interpreter is known to have, by name - a file ("FILE": its status, any test of it) or one test
+# ("FILE: NAME", NAME as the run names it) - each with why after " - "
+Expected Array<String&> = String&[
+    # B3e: a join's tasks run one after another at the join, so a wait for another task stops the run, saying so
+    "std/chan.olang: a bounded channel carries values between two tasks - a task waits for another (B3e)"
+    "std/chan.olang: a channel carries any element type - a task waits for another (B3e)"
+    "std/chan.olang: a channel of capacity 0 is a rendezvous - a task waits for another (B3e)"
+    "std/chan.olang: for v in c receives until the channel is closed and drained - a task waits for another (B3e)"
+    "std/chan.olang: Close wakes every task waiting to receive, and RecvUntil sees it before its deadline - a wait for a task (B3e)"
+    # B3e, X10: getaddrinfo is handed a struct holding pointers, which the interpreter cannot pass to C
+    "std/net.olang: names are resolved through the C library, numbers read as they are - a struct of pointers to C (B3e)"
+    # a file with a test skipped runs its others named by words, which its test binary sees as its arguments too
+    "std/os.olang: Args gives the program's own name first - the words naming the tests to run are arguments (B7a)"
+    # what a program measures of its own process is the interpreting compiler's there (O8b, O8d: the built runtime's pool)
+    "checks/cases/chunkpool.olang - its peak memory is the compiler's under interpret"
+    "checks/cases/mapchurn.olang - its peak memory is the compiler's under interpret"
+    # X13: C is handed an export fn to call back, which under interpret is no function C can call (B3e)
+    "checks/cases/x13qsort.olang - an export fn handed to C (B3e)"
+]
+
+# the tests the interpreter is not given at all, since they would never end - by name, as Expected names a test: a task
+# spinning or blocked in C until another runs beside it, which under interpret never happens (B3e). The file's other
+# tests run, named by the words test takes (B7a). A whole file named is not run (a program too slow interpreted)
+Skipped Array<String&> = String&[
+    "checks/cases/gemmflat.olang - matrix products over ten minutes interpreted (the memory it holds flat is the build's)"
+    "std/cancel.olang: a busy task stops when the token is cancelled - a task spins until another cancels it (B3e)"
+    "std/chan.olang: Select: sends through SendOf, a rendezvous handing its value to a waiting receiver - Select polls for a task (B3e)"
+    "std/net.olang: a TCP connection over loopback carries bytes both ways - Accept blocks in C for a task (B3e)"
+    # a million frames deep: the interpreter's frames take ~3.7 KB each, so ~4 GB, beside the suite's other processes
+    "std/os.olang: RunOnStack runs a recursion deeper than a thread's own stack holds, and waits for it - a million frames, ~4 GB interpreted"
+]
 
 fn main() {
     args := os.Args()
-    olang := toolkit.Compiler()
-    evaldump := toolkit.Env("EVALDUMP", "build/compiler_tools_evaldump")
+    # absolute, since a case is interpreted in a directory of its own
+    olang := try os.RealPath(toolkit.Compiler()) catch os.Error { toolkit.Die("evaldiff: no compiler " $toolkit.Compiler()) }
     verbose := false
-    interpret := false
+    part, parts I64 = 0, 0
     files Vec<String&>
-    for k in range 1, args.Len() {
+    k I64 = 1
+    for k < args.Len() {
         if args[k] == "-v" {
             verbose = true
-        } else if args[k] == "-i" {
-            interpret = true
+        } else if args[k] == "-cases" and k + 2 < args.Len() {
+            part = try args[k + 1].ParseInt() catch default 0
+            parts = try args[k + 2].ParseInt() catch default 0
+            k += 2
         } else {
             files.Push(args[k])
         }
+        k++
     }
-    if files.Len() == 0 {
-        for f in toolkit.Matching("tests", ".olang") { files.Push($f) }
-        for f in toolkit.Matching("std", ".olang") { files.Push($f) }
-        for f in toolkit.Matching("std/prelude/tests", ".olang") { files.Push($f) }
+    if parts > 0 {
+        cases := runCases()
+        for i in range part - 1, cases.Len(), parts { files.Push(cases[i]) }
+    } else if files.Len() == 0 {
+        for d in String&["tests", "std", "std/prelude/tests"] {
+            for f in toolkit.Matching(d, ".olang") { files.Push($f) }
+        }
+        for f in runCases() { files.Push(f) }
     }
     gold := toolkit.GoldenRead("compiler/goldens/run.txt", "rungold")
-    same, differ, broken I64 = 0, 0, 0
-    tests, testsSame I64 = 0, 0
+    same, differ, known I64 = 0, 0, 0
     for f in files {
-        r := compare(gold, olang, evaldump, f, verbose, interpret)
+        r := compare(gold, olang, f, verbose)
         toolkit.Say(r.Row)
-        tests += r.Tests
-        testsSame += r.Same
-        if r.Broken {
-            broken++
-        } else if r.Equal {
+        if r.Equal {
             same++
+        } else if r.Known {
+            known++
         } else {
             differ++
         }
     }
-    toolkit.Say(("== total: files " $files.Len() " same " $same " differ " $differ " broken " $broken "; tests " $tests
-                 " ending as stored " $testsSame "\n"))
+    if files.Len() > 1 {
+        toolkit.Say(("== total: files " $files.Len() " same " $same " differing as listed " $known " differing " $differ
+                     "\n"))
+    }
+    if differ > 0 { os.Exit(1) }
 }
 
 type result struct() {
     Row String& = ""
     Equal Bool = false
-    Broken Bool = false
-    Tests I64 = 0
-    Same I64 = 0
+    Known Bool = false  # differs, and every difference is listed
 }
 
-fn compare(gold toolkit.Golden&, olang String&, evaldump String&, f String&, v Bool, interpret Bool) result {
-    r := result()
-    program := f.StartsWith("checks/")
+fn compare(gold toolkit.Golden&, olang String&, f String&, v Bool) result {
+    for e in Skipped {
+        if not e.StartsWith($f " - ") { continue }
+        r := result()
+        r.Known = true
+        r.Row = $f ": not interpreted - " $e[f.Len() + 3:] "\n"
+        return r
+    }
     s0 := toolkit.RunStored(gold, f)
     if not s0.Found {
-        r.Broken = true
+        r := result()
         r.Row = $f ": no stored run in compiler/goldens/run.txt (make rungold)\n"
         return r
     }
-    limit := toolkit.Env("EVALTIMEOUT", "300")
-    p := toolkit.Run(String&["timeout", $limit, $evaldump, $f]) if program else toolkit.Run(String&["timeout", $limit, $evaldump, "-t", $f])
-    unlowered := count(p.Stderr, "unlowered ")
-    if program {
-        r.Equal = (not s0.Stable or toolkit.RunText(p.Stdout) == s0.Out) and p.Status == s0.Status
-        row := $f ": " $("same" if r.Equal else "differs (status " $s0.Status " / " $p.Status ")")
-        if interpret {
-            i0 := toolkit.Run(String&["timeout", "600", $olang, "interpret", $f])
-            row = $row "; " $olang " interpret " $("agrees" if i0.Stdout == p.Stdout and i0.Status == p.Status else "differs (status " $i0.Status ")")
-        }
-        r.Row = $row $note(unlowered) "\n"
-        return r
-    }
+    return program(s0, olang, f) if f.StartsWith("checks/") else tests(s0, olang, f, v)
+}
+
+# a file of tests, interpreted, its tests' endings held to the stored run's
+fn tests(s0 toolkit.StoredRun&, olang String&, f String&, v Bool) result {
+    r := result()
     a := outcomes(toolkit.Rows(s0.Out))
-    b := outcomes(toolkit.Rows(p.Stdout))
-    if b.Len() == 0 and (a.Len() > 0 or p.Status != s0.Status) {
-        r.Broken = true
-        r.Row = $f ": no test ran (status " $p.Status ") - " $firstLine(p.Stderr) "\n"
-        return r
+    skip := skipped(f, a)
+    args := Vec<String&>()
+    for w in String&["timeout", limit(), olang, "test", "-interpret", f] { args.Push(w) }
+    if skip.Len() > 0 {
+        # the file's other tests named, each by its whole name and by what follows its target (B7a's words)
+        for name in a.Keys() {
+            if skip.Has(name) { continue }
+            args.Push(name)
+            k := try name.Find(": ") catch default -1
+            if k >= 0 { args.Push($name[k + 2:]) }
+        }
+        for name in skip { a.Remove(name) }
     }
-    r.Tests = a.Len()
+    p := toolkit.Run(args.ToArray())
+    b := outcomes(toolkit.Rows(p.Stdout))
     rows := StringBuilder()
-    diffs I64 = 0
+    diffs, unlisted I64 = 0, 0
     for name in a.Keys() {
         x := try a.Get(name) catch default ""
         y := try b.Get(name) catch default "missing"
-        if x == y {
-            r.Same++
-        } else {
-            diffs++
-            if v { rows.Push("    " $name ": golden " $x ", port " $y "\n") }
-        }
+        if x == y { continue }
+        diffs++
+        k := listed($f ": " $name) or listed(f)
+        if not k { unlisted++ }
+        if v or not k { rows.Push("    " $name ": built " $x ", interpreted " $y $(" (listed)" if k else "") "\n") }
     }
-    r.Equal = diffs == 0 and p.Status == s0.Status
+    for name in b.Keys() {
+        if a.Has(name) { continue }
+        diffs++
+        if not listed(f) { unlisted++ }
+        rows.Push("    " $name ": not in the built run, interpreted " $(try b.Get(name) catch default "") "\n")
+    }
+    # a status differs as the tests that differ say (1 where one fails) - with none differing, only a listed file may
+    statusDiffers := p.Status != s0.Status
+    if statusDiffers and diffs == 0 and not listed(f) { unlisted++ }
+    r.Equal = diffs == 0 and not statusDiffers
+    r.Known = not r.Equal and unlisted == 0
     if r.Equal {
-        r.Row = $f ": same " $r.Tests $note(unlowered) "\n"
-    } else {
-        s0ok, s0f := counts(a)
-        pok, pf := counts(b)
-        r.Row = ($f ": golden " $s0ok " ok " $s0f " fail; port " $pok " ok " $pf " fail (status " $p.Status "); " $diffs
-                 " differ" $note(unlowered) "\n" $rows.ToString())
+        r.Row = $f ": same " $a.Len() $stale(f) "\n"
+        return r
     }
+    s0ok, s0f := counts(a)
+    pok, pf := counts(b)
+    why := "" if b.Len() > 0 else " - " $firstLine($p.Stdout "\n" $p.Stderr)
+    r.Row = ($f ": built " $s0ok " ok " $s0f " fail (status " $s0.Status "); interpreted " $pok " ok " $pf " fail (status "
+             $p.Status "); " $diffs " differ" $(" as listed" if r.Known else "") $why "\n" $rows.ToString())
     return r
 }
 
-fn count(t String&, prefix String&) I64 {
-    n I64 = 0
-    for row in toolkit.Rows(t) {
-        if row.StartsWith(prefix) { n++ }
+# a checks case: a program, copied into a directory of its own and interpreted there with its -define and -target flags, its
+# output and status held to the stored run's
+fn program(s0 toolkit.StoredRun&, olang String&, f String&) result {
+    r := result()
+    root := try os.Cwd() catch os.Error { toolkit.Die("evaldiff: no working directory") }
+    name := filepath.Base(f)
+    dir := $root "/build/evaldiff/" $name[:name.Len() - 6]
+    try os.RemoveAll(dir) catch os.Error { }
+    try os.MkDirAll(dir) catch os.Error { toolkit.Die("evaldiff: cannot make " $dir) }
+    text := toolkit.Read(f)
+    toolkit.Write($dir "/" $name, text)
+    args := Vec<String&>()
+    for a in String&["timeout", limit(), olang, "interpret"] { args.Push(a) }
+    flags := toolkit.Fields(headerLine(text, "# flags: "))
+    for i in range flags.Len() {
+        if (flags[i] == "-define" or flags[i] == "-target") and i + 1 < flags.Len() {
+            args.Push(flags[i])
+            args.Push(flags[i + 1])
+        }
     }
-    return n
+    args.Push(name)
+    p := toolkit.Run(args.ToArray(), dir = dir)
+    out := p.Stdout.Replace(dir, "$CASE").Replace(root, "$ROOT")
+    sameOut := not s0.Stable or out == s0.Out
+    r.Equal = sameOut and p.Status == s0.Status
+    r.Known = not r.Equal and listed(f)
+    if r.Equal {
+        r.Row = $f ": same" $stale(f) "\n"
+        try os.RemoveAll(dir) catch os.Error { }
+        return r
+    }
+    what := "" if sameOut else ", its output (in " $dir ")"
+    toolkit.Write($dir "/interpreted.txt", $out "\n--- standard error\n" $p.Stderr)
+    r.Row = ($f ": differs - status built " $s0.Status ", interpreted " $p.Status $what $(" as listed" if r.Known else "")
+             " - " $firstLine(p.Stderr) "\n")
+    return r
 }
 
-fn note(n I64) String { return "" if n == 0 else " (" $n " unlowered)" }
+# the checks cases that must run ("# check: run"), in name order
+fn runCases() Vec<String&> {
+    out := Vec<String&>()
+    for f in toolkit.Matching("checks/cases", ".olang") {
+        if headerLine(toolkit.Read(f), "# check: ") == "run" { out.Push($f) }
+    }
+    return out
+}
 
-fn firstLine(t String&) String {
-    for row in toolkit.Rows(t) {
-        if row.Len() > 0 { return $row }
+fn limit() String { return toolkit.Env("EVALTIMEOUT", "600") }
+
+# whether a difference is listed in Expected: the entry is key, or key and its reason after " - "
+fn listed(key String&) Bool {
+    for e in Expected {
+        if e == key or e.StartsWith($key " - ") { return true }
+    }
+    return false
+}
+
+# the tests of file f that Skipped names, of those its stored run has (names as outcomes keys them)
+fn skipped(f String&, a Map<String&, String&>&) Vec<String&> {
+    out := Vec<String&>()
+    for name in a.Keys() {
+        key := $f ": " $name
+        for e in Skipped {
+            if e.StartsWith($key " - ") { out.Push(name) }
+        }
+    }
+    return out
+}
+
+# a file listed whose run is the stored one now: said, so the entry goes
+fn stale(f String&) String {
+    for e in Expected {
+        if e.StartsWith(f) and (e.Len() == f.Len() or e[f.Len()] == ' ' or e[f.Len()] == ':') {
+            return " (listed in evaldiff's Expected, which no longer differs - take it out)"
+        }
     }
     return ""
 }
 
-# each test's ending, by name: "ok" or "FAIL"
+# the rest of a header's first line beginning with prefix, "" for none
+fn headerLine(text String&, prefix String&) String {
+    for line in toolkit.Rows(text) {
+        if line.StartsWith(prefix) { return $line[prefix.Len():] }
+    }
+    return ""
+}
+
+fn firstLine(t String&) String {
+    for row in toolkit.Rows(t) {
+        if row.Len() > 0 and not row.StartsWith("== ") { return $row }
+    }
+    return ""
+}
+
+# each test's ending, by its name (a FAIL line's error taken off, as the stored run keeps it): "ok" or "FAIL"
 fn outcomes(rows Vec<String&>&) Map<String&, String&> {
     m Map<String&, String&>
     for row in rows {
         if row.StartsWith("ok - ") {
             m.Put($row[5:], "ok")
         } else if row.StartsWith("FAIL - ") {
-            n := row[7:]
-            k := try n.Find(": ") catch default -1
-            m.Put($n[:k] if k >= 0 else $n, "FAIL")
+            m.Put(toolkit.TestName(row[7:]), "FAIL")
         }
     }
     return m

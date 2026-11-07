@@ -115,6 +115,7 @@ type Config struct() {
     ListName String& = ""   # and the function it shows, the front end giving its code's symbols (Program.Named)
     Update Bool = false
     Tests Bool = false
+    Interpreted Bool = false    # test -interpret: the tests run by the evaluator instead of built (B3e)
     Jobs I64 = 0
     Color Bool = false
     Quiet Bool = false  # no "built ..." lines: for tests of the build itself, and running a file
@@ -863,7 +864,7 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
         return 1
     }
     Phase("link")
-    if not c.Quiet { sayln(c.paint("36", $"== " $file " ==")) }
+    c.TestHeader(file)
     run := try c.runner(d) catch Failed { return finish(d) }
     cmd Vec<String&>
     for w in run { cmd.Push($w) }
@@ -990,6 +991,26 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
         return 1
     }
     return 1 if failed else 0
+}
+
+# the line a file's test run begins with, once it is built or checked (B3a)
+fn (c Config&) TestHeader(file String&) {
+    if not c.Quiet { sayln(c.paint("36", $"== " $file " ==")) }
+}
+
+# test -interpret FILE with one file: its tests run by the front end's evaluator, as interpret runs a program (B3e) -
+# said as TestFile says them; 0 when every test passed, 3 where the words name none of its tests
+fn InterpretTests<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&
+    filters Array<String&>& = Array<String&>(0)) I32 {
+    info := try os.Stat(file) catch os.Error { return c.unusable(file, msgs.CannotOpen(), d) }
+    if info.Kind == os.FileKind.DIR { return c.unusable(file, msgs.IsDirectory(), d) }
+    if info.Kind != os.FileKind.FILE { return c.unusable(file, msgs.NotRegular(), d) }
+    status := try fe.Interpret(file, filters, c, d) catch Failed.Reported { return c.skipped(file, d) } catch Failed.Unbuilt { return unbuilt() }
+    if status == 3 and filters.Len() > 0 {
+        sayln(noTestNamed(file, filters, Vec<String&>()))
+        return 3
+    }
+    return 0 if status == 0 else 1
 }
 
 # interpret FILE ARGS: the program run by the front end (B3e); the status it ends with
