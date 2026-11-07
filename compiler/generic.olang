@@ -87,6 +87,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     R
     T := types.NewTable(L.Names)
     declAt Map<I64, types.DeclId>      # by module and entry, (module << 32) | entry
+    payloads Map<I64, types.TypeId>    # T19b: an error type's payload enum by its declaration (PayloadOf), UnknownT for none
     unifyDepth I64 = 0                 # how far inside a type's arguments Unify is (G9d binds a value given whole alone)
     declMi Vec<I64>                   # by DeclId: its module and its entry in the module's name table
     declEi Vec<I64>
@@ -754,7 +755,63 @@ fn (p mut Program&) ErrValOf(entries Array<types.TypeId>&) types.TypeId {
     }
     xs := es.ToArray()
     xs.Sort(fn(a types.TypeId, b types.TypeId) Bool { return p.errBefore(a, b) })
-    return p.T.ErrVal(p.T.List(xs))
+    v := p.T.ErrVal(p.T.List(xs))
+    if p.T.ErrRepr(v) == types.UnknownT {
+        parts Vec<types.TypeId>
+        parts.Push(types.TypeId(5))
+        for x in xs {
+            pt := p.PayloadOf(p.T.ErrOf(x))
+            if pt != types.UnknownT: parts.Push(pt)
+        }
+        if parts.Len() > 1: p.T.SetErrRepr(v, p.T.Tuple(p.T.List(parts.ToArray())))
+    }
+    return v
+}
+
+# T19b: the hidden payload enum of an error type some of whose words carry a payload (names.payloadEnum) - a case per
+# word, in order, with that word's fields - UnknownT for an error type whose words carry none
+fn (p mut Program&) PayloadOf(et types.TypeId) types.TypeId {
+    if et == types.UnknownT or p.T.KindOf(et) != types.Kind.Named: return types.UnknownT
+    d := p.T.DeclOf(et)
+    if p.T.DeclKindOf(d) != types.DeclKind.Error: return types.UnknownT
+    have := try p.payloads.Get(I64(d)) catch default types.TypeId(-1)
+    if have != types.TypeId(-1): return have
+    mi := p.T.DeclModule(d)
+    ei := p.TypeEntry(mi, p.L.Names.Intern(names.PayloadName(p.text(p.T.DeclName(d)))))
+    pt := types.UnknownT
+    if ei >= 0 {
+        pt = p.T.Named(p.DeclFor(mi, ei), types.ListId(0))
+        p.Body(pt)
+    }
+    p.payloads.Put(I64(d), pt)
+    return pt
+}
+
+# T19b: the fields word w of an error type's declaration carries, as written - none for a plain word
+fn (p mut Program&) WordFields(d types.DeclId, w I64) Array<ast.Param&>& {
+    e := p.errorDecl(d)
+    if e is null { return Array<ast.Param&>(0) }
+    match e {
+        case ast.Decl.Errors(_, _, _, _, cases) {
+            if w >= 0 and w < cases.Len(): return cases[w].Payload
+        }
+        case _ { }
+    }
+    return Array<ast.Param&>(0)
+}
+
+# T19b: the field of an error value's tuple that holds the payload of the error type at position pos of its set (from
+# 0), 0 for an error type carrying none (its code alone)
+fn (p mut Program&) PayloadField(v types.TypeId, pos I64) I64 {
+    if not p.T.ErrCarries(v): return 0
+    xs := p.T.Items(p.T.ErrValItems(v))
+    f I64 = 0
+    for i in range xs.Len() {
+        if p.PayloadOf(p.T.ErrOf(xs[i])) == types.UnknownT: continue
+        f++
+        if i == pos: return f
+    }
+    return 0
 }
 
 # the error value's type an error type or a named set stands for (T20, T19a), the set's name kept for spelling
@@ -1439,7 +1496,7 @@ fn (p mut Program&) ErrorWords(d types.DeclId) Array<source.NameId>& {
     e := p.errorDecl(d)
     if e is null { return Array<source.NameId>(0) }
     return match e {
-        case ast.Decl.Errors(_, _, words, _): words
+        case ast.Decl.Errors(_, _, words, _, _): words
         case _: Array<source.NameId>(0)
     }
 }
@@ -1465,7 +1522,7 @@ fn (p mut Program&) ErrorMembers(d types.DeclId) Array<ast.Path&>& {
     e := p.errorDecl(d)
     if e is null { return Array<ast.Path&>(0) }
     return match e {
-        case ast.Decl.Errors(_, _, _, members): members
+        case ast.Decl.Errors(_, _, _, members, _): members
         case _: Array<ast.Path&>(0)
     }
 }
@@ -1479,7 +1536,7 @@ fn errorDeclIn(ds Array<ast.Decl&>&, name source.NameId) ast.Decl?& {
     if ds.Len() == 0 { return null }
     for d in ds {
         match d {
-            case ast.Decl.Errors(_, n, _, _) {
+            case ast.Decl.Errors(_, n, _, _, _) {
                 if n == name { return d }
             }
             case ast.Decl.If(_, ti) {

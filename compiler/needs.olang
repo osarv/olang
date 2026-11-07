@@ -219,7 +219,7 @@ fn (w mut walker&) stmt(s ast.Stmt&) {
             w.catches(j.Clauses)
         }
         case ast.Stmt.Defer(_, st, _) { w.stmt(st) }
-        case ast.Stmt.Raise(_, _) { }
+        case ast.Stmt.Raise(_, _, _) { }
     }
 }
 

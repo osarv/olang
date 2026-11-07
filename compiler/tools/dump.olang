@@ -451,7 +451,7 @@ fn (w mut walker&) decl(d ast.Decl&) {
             w.line("EXTERNS", sp)
             for x in ds { w.decl(x) }
         }
-        case ast.Decl.Errors(sp, _, _, _) {
+        case ast.Decl.Errors(sp, _, _, _, _) {
             if not w.skipped(sp.Start) { w.line("ERRORS", sp) }
         }
         case ast.Decl.Test(sp, _, body, _) {
@@ -624,7 +624,7 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
             w.expr(c)
             w.expr(msg)
         }
-        case ast.Stmt.Raise(sp, _) { w.line("RAISE", sp) }
+        case ast.Stmt.Raise(sp, _, _) { w.line("RAISE", sp) }
         case ast.Stmt.Spawn(sp, targets, call) {
             w.line("SPAWN", sp)
             w.exprs(targets)

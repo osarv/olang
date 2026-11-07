@@ -297,7 +297,8 @@ fn (r mut Resolver&) declareRaised(mi I64, firsts Vec<raisedName>&) {
     for f in firsts {
         r.addType(mi, f.Name, f.Sp, null)
         r.L.Mods[mi].Types.Push($r.text(f.Name))
-        ds.Push(ast.Decl.Errors(f.Sp, f.Name, Array<source.NameId>(1, f.Name), Array<ast.Path&>(0)))
+        ds.Push(ast.Decl.Errors(f.Sp, f.Name, Array<source.NameId>(1, f.Name), Array<ast.Path&>(0)
+                                ast.CaseDecl&[ast.CaseDecl(f.Sp, f.Name, Array<ast.Param&>(0))]))
     }
     r.L.Mods[mi].Decls = ds.ToArray()
 }
@@ -410,7 +411,10 @@ fn (r mut Resolver&) collect(mi I64, decls Array<ast.Decl&>&) {
                 r.addValue(mi, f.Name, r.nameSpan(mi, from, f.Name), false, true, f.Recv is not null, null)
             }
             case ast.Decl.Type(sp, t) { r.addType(mi, t.Name, r.nameSpan(mi, sp.Start, t.Name), t) }
-            case ast.Decl.Errors(sp, name, _, _) { r.addType(mi, name, r.nameSpan(mi, sp.Start, name), null) }
+            case ast.Decl.Errors(sp, name, _, _, cases) {
+                r.addType(mi, name, r.nameSpan(mi, sp.Start, name), null)
+                r.payloadEnum(mi, sp, name, cases)
+            }
             case ast.Decl.Global(_, v) {
                 for i in range v.Names.Len() { r.addValue(mi, v.Names[i], v.NameSps[i], WrittenMut(v.Ty), false, false, v) }
             }
@@ -441,7 +445,7 @@ fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
             case ast.Decl.If(_, ti) { r.waitAside(mi, ti) }
             case ast.Decl.Fn(f), ast.Decl.Extern(f) { t.waiting.Put(f.Name, true) }
             case ast.Decl.Type(_, td) { t.waiting.Put(td.Name, true) }
-            case ast.Decl.Errors(_, name, _, _) { t.waiting.Put(name, true) }
+            case ast.Decl.Errors(_, name, _, _, _) { t.waiting.Put(name, true) }
             case ast.Decl.Global(_, v) {
                 for n in v.Names { t.waiting.Put(n, true) }
             }
@@ -498,6 +502,21 @@ fn (r mut Resolver&) addType(mi I64, n source.NameId, sp source.Span, decl ast.T
     t.types.Put(n, t.Entries.Len())
     t.Entries.Push(Entry(n, sp, What.Type, false, decl))
 }
+
+# T19b: an error type whose words carry payloads has a hidden enum beside it - PayloadName(name), a case per word with
+# the word's fields - the type of what travels with one of its errors and of the part an error value holds for it
+fn (r mut Resolver&) payloadEnum(mi I64, sp source.Span, name source.NameId, cases Array<ast.CaseDecl&>&) {
+    if not cases.Some(fn(c): return c.Payload.Len() > 0): return
+    hidden := r.L.Names.Intern(PayloadName(r.text(name)))
+    td := ast.TypeDecl(hidden, Array<ast.TypeParam&>(0), false, ast.TypeBody.Enum(cases, null))
+    t := r.Tables[mi]
+    if hidden in t.types: return
+    t.types.Put(hidden, t.Entries.Len())
+    t.Entries.Push(Entry(hidden, sp, What.Type, false, td))
+}
+
+# T19b: the name of an error type's hidden payload enum - no program can write it
+fn PayloadName(name String&) String { return $name "$payload" }
 
 # D2, D8c, B10, B10c, M20: a function or a global (a method is in no namespace of names)
 fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable Bool, isFunc Bool, isMethod Bool
@@ -785,9 +804,12 @@ fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
                 r.startItem(mi)
                 r.block(body)
             }
-            case ast.Decl.Errors(_, _, _, members) {
+            case ast.Decl.Errors(_, _, _, members, cases) {
                 r.startItem(mi)
                 for m in members { r.path(m) }
+                for c in cases {
+                    for p in c.Payload { r.typeRef(p.Ty) }
+                }
             }
             case ast.Decl.ExternBlock(_, _, ds) { r.bodies(mi, ds) }
             case _ { }
@@ -1086,8 +1108,11 @@ fn (r mut Resolver&) stmt(s ast.Stmt?&) {
         case ast.Stmt.Jump(_, _, msg) {
             if msg is not null { r.expr(msg) }
         }
-        case ast.Stmt.Raise(_, word) {
+        case ast.Stmt.Raise(_, word, args) {
             if r.survey: r.surveyRaise(word) else: r.path(word)
+            if args is not null {
+                for a in args { r.expr(a) }
+            }
         }
         case ast.Stmt.Spawn(_, targets, call) {
             for t in targets { r.target(t) }

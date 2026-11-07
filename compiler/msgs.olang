@@ -854,6 +854,12 @@ type Diag enum {
     ReraiseWordNotInSet
     RaiseNotCaught
     RaiseNearError
+    PayloadHoldsRef
+    PayloadWordBare
+    PlainWordCalled
+    PayloadFieldUnnarrowed
+    PayloadFieldWrite
+    PayloadArgs
     FlagAmongResults
     FlagWithOutParam
     RaiseNeedsQuestion
@@ -1386,6 +1392,24 @@ fn ReraiseWordNotInSet(ty1 String&, ty2 String&) Msg { return Msg(Diag.ReraiseWo
 
 # ERR_RAISE_NOT_CAUGHT
 fn RaiseNotCaught(tok String&) Msg { return Msg(Diag.RaiseNotCaught, "R3", "'error' raises a word, 'error T.WORD', or an error value - " $tok " is neither") }
+
+# ERR_PAYLOAD_HOLDS_REF
+fn PayloadHoldsRef(field String&, ty String&, what String&) Msg { return Msg(Diag.PayloadHoldsRef, "T19b", "payload field " $field " of type " $ty " holds " $what " - a payload holds values only: hold a copy ('$x', 'x.Copy()') or plain data") }
+
+# ERR_PAYLOAD_WORD_BARE
+fn PayloadWordBare(word String&, fields String&) Msg { return Msg(Diag.PayloadWordBare, "T19b", $word " carries " $fields " - give them: '" $word "(" $fields ")'") }
+
+# ERR_PLAIN_WORD_CALLED
+fn PlainWordCalled(word String&) Msg { return Msg(Diag.PlainWordCalled, "T19b", $word " carries nothing - write it without '()'") }
+
+# ERR_PAYLOAD_FIELD_UNNARROWED
+fn PayloadFieldUnnarrowed(name String&, field String&) Msg { return Msg(Diag.PayloadFieldUnnarrowed, "T19b", $name " may hold an error that has no field " $field " - test which it holds first ('if " $name " == T.Word')") }
+
+# ERR_PAYLOAD_FIELD_WRITE
+fn PayloadFieldWrite(name String&) Msg { return Msg(Diag.PayloadFieldWrite, "T19b", "a payload field is never written - " $name " is the error as it was raised") }
+
+# ERR_PAYLOAD_ARGS
+fn PayloadArgs(word String&, want I64, got I64) Msg { return Msg(Diag.PayloadArgs, "T19b", $word " carries " $want " field" $("" if want == 1 else "s") ", " $got " given") }
 
 # ERR_RAISE_NEAR_ERROR
 fn RaiseNearError(tok String&, near String&) Msg { return Msg(Diag.RaiseNearError, "R3b", "no error of this module is named " $tok " - did you mean " $near "? To raise a new error of that name, name it after this function's '?'") }

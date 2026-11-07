@@ -1557,14 +1557,40 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
             }
             case ast.Decl.If(_, ti) { c.declsIf(mi, ti, c.P.L.Chosen(mi, ti.Cond!.Span().Start), 0) }
             case ast.Decl.ExternBlock(_, _, xs) { c.decls(mi, xs) }
-            case ast.Decl.Errors(esp, name, words, members) {
+            case ast.Decl.Errors(esp, name, words, members, cases) {
                 c.push(-1, mi, types.VoidT, types.ListId(0))
                 c.errorDeclRules(mi, esp, name, words, members)
+                c.payloadRules(mi, name, cases)
                 c.pop()
             }
             case _ { }
         }
     }
+}
+
+# T19b: a payload holds values - no reference, function value, any, extern type, unique type or type with destructors
+# to run, at any depth through values - since it is copied onto the payload stack and out where a clause names it
+fn (c mut Checker&) payloadRules(mi I64, name source.NameId, cases Array<ast.CaseDecl&>&) {
+    if not cases.Some(fn(x): return x.Payload.Len() > 0): return
+    ctx := generic.Context(mi, -1)
+    for cs in cases {
+        for p in cs.Payload {
+            if p.Ty is null: continue
+            ft := c.P.Resolve(ctx, p.Ty!)
+            if ft == types.UnknownT: continue
+            what := c.payloadBad(ft)
+            if what != "": c.P.L.Diags.Error(diag.Where.Span(c.P.L.Mods[mi].File, I64(p.Sp.Start), I64(p.Sp.End)), msgs.PayloadHoldsRef(c.text(p.Name), c.ty(ft), what))
+        }
+    }
+}
+
+# what a payload field's type holds that a payload may not (T19b): "" for nothing
+fn (c mut Checker&) payloadBad(t types.TypeId) String {
+    if c.P.T.HoldsRefs(t): return "a reference"
+    if c.P.T.Unique(t): return "a unique value"
+    if c.P.T.NeedsDrop(t): return "a value with destructors to run"
+    if c.P.T.KindOf(t) == types.Kind.Func: return "a function value"
+    return ""
 }
 
 # T19, T19a: an error type's words differ; a named set's members are error types, their words or sets, none reaching
@@ -16536,7 +16562,7 @@ fn (c mut Checker&) stmt(s ast.Stmt?&) {
         case ast.Stmt.Jump(sp, kind, msg) { c.jump(sp, kind, msg) }
         case ast.Stmt.Assert(sp, k, _) if c.fr().Contract != 0 { c.ctCond(sp, k) }
         case ast.Stmt.Assert(sp, k, msg) { c.assertStmt(sp, k, msg) }
-        case ast.Stmt.Raise(sp, word) { c.raise(sp, word) }
+        case ast.Stmt.Raise(sp, word, args) { c.raise(sp, word, args) }
         case ast.Stmt.Defer(sp, inner, onError) { c.deferStmt(sp, inner, onError) }
         case ast.Stmt.Block(sp, body) { c.emit(typed.Stmt.Block(sp, c.blockOf(body, typed.BlockKind.Plain, sp))) }
         case ast.Stmt.Join(sp, j) { c.joinStmt(sp, j) }
@@ -21091,7 +21117,7 @@ fn (c mut Checker&) jump(sp source.Span, kind token.Tok, msg ast.Expr?& = null) 
 }
 
 # error E.WORD (R3)
-fn (c mut Checker&) raise(sp source.Span, word ast.Path?&) {
+fn (c mut Checker&) raise(sp source.Span, word ast.Path?&, args Array<ast.Expr&>?&) {
     if c.fr().InTaskClause {
         c.err(sp, msgs.TaskClauseError())
         return
@@ -23112,7 +23138,7 @@ fn stmtAssigns(st ast.Stmt?&, n Array<source.NameId>&) Bool {
         case ast.Stmt.Become(_, x) { return exprAssigns(x, n) }
         case ast.Stmt.Jump(_, _, msg) { return exprAssigns(msg, n) }
         case ast.Stmt.Assert(_, c, msg) { return exprAssigns(c, n) or exprAssigns(msg, n) }
-        case ast.Stmt.Raise(_, _) { return false }
+        case ast.Stmt.Raise(_, _, _) { return false }
         case ast.Stmt.Join(_, j) { return assignsName(j.Body, n) or clausesAssign(j.Clauses, n) }
         case ast.Stmt.Defer(_, inner, _) { return stmtAssigns(inner, n) }
         case ast.Stmt.Spawn(_, targets, call) {

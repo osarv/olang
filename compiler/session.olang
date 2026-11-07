@@ -689,7 +689,7 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
                 w.leaf(b, nm.Text(v.Names[k]), KindVariable, I64(sp.Start), I64(sp.End), I64(ns.Start), I64(ns.End), "")
             }
         }
-        case ast.Decl.Errors(sp, n, words, _) {
+        case ast.Decl.Errors(sp, n, words, _, _) {
             name := nm.Text(n)
             s := nameIn(t, I64(sp.Start), name)
             w.open(b, name, KindEnum, I64(sp.Start), I64(sp.End), s, s + name.Len(), "error")
