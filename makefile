@@ -164,9 +164,8 @@ $(addprefix interp@cases,$(INTERP_PARTS)): interp@cases%: build/compiler_tools_e
 	@$(OLANG_ENV) build/compiler_tools_evaldiff -cases $* $(words $(INTERP_PARTS)) || echo "interp@cases$*" >> build/failed.txt
 # a file's interpreted run after its built one, since both write the same scratch files (std/os's build/os_files)
 $(foreach f,$(filter $(OLANG_TESTS),$(INTERP_FILES)),$(eval interp@$(f): | test@$(f)))
-# the interpreted runs holding gigabytes (std/os's million-deep recursion, the corpus's shared.olang) wait at
-# the end of the two lanes of heavy test builds, so no more than two such processes are in memory at once
-interp@std/os.olang: | test@compiler/emit.olang
+# the interpreted run holding gigabytes (the corpus's shared.olang, 2.5 GB) waits at the end of a lane of heavy test
+# builds, so no more than two such processes are in memory at once
 interp@tests/shared.olang: | test@compiler/interp.olang
 evaldiff: build/compiler_tools_evaldiff
 	$(OLANG_ENV) build/compiler_tools_evaldiff -v > build/evaldiff.txt; grep '^== total' build/evaldiff.txt

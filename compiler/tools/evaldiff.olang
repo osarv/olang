@@ -31,6 +31,8 @@ Expected Array<String&> = String&[
     "std/chan.olang: Close wakes every task waiting to receive, and RecvUntil sees it before its deadline - a wait for a task (B3e)"
     # B3e, X10: getaddrinfo is handed a struct holding pointers, which the interpreter cannot pass to C
     "std/net.olang: names are resolved through the C library, numbers read as they are - a struct of pointers to C (B3e)"
+    # a file with a test skipped runs its others named by words, which its test binary sees as its arguments too
+    "std/os.olang: Args gives the program's own name first - the words naming the tests to run are arguments (B7a)"
     # what a program measures of its own process is the interpreting compiler's there (O8b, O8d: the built runtime's pool)
     "checks/cases/chunkpool.olang - its peak memory is the compiler's under interpret"
     "checks/cases/mapchurn.olang - its peak memory is the compiler's under interpret"
@@ -46,6 +48,8 @@ Skipped Array<String&> = String&[
     "std/cancel.olang: a busy task stops when the token is cancelled - a task spins until another cancels it (B3e)"
     "std/chan.olang: Select: sends through SendOf, a rendezvous handing its value to a waiting receiver - Select polls for a task (B3e)"
     "std/net.olang: a TCP connection over loopback carries bytes both ways - Accept blocks in C for a task (B3e)"
+    # a million frames deep: the interpreter's frames take ~3.7 KB each, so ~4 GB, beside the suite's other processes
+    "std/os.olang: RunOnStack runs a recursion deeper than a thread's own stack holds, and waits for it - a million frames, ~4 GB interpreted"
 ]
 
 fn main() {

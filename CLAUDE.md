@@ -1609,13 +1609,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   [WORD...]` (mine, an option of `test`, not a mode: the one code path `interpret` runs) checks the file as `test`
   does and runs its tests as the test binary does - its lines, its status, its words (B7a), the harness's names given
   to std/fuzz and std/prop, a detached child ending on its failed check. **In the suite**: every file of tests of the
-  corpus and std (`interp@FILE`, after its built run, the multi-gigabyte ones at the end of the heavy lanes) and the
+  corpus and std (`interp@FILE`, after its built run, shared.olang's at the end of a heavy lane) and the
   checks' run cases in four parts (`interp@casesK`) are compared with the built runs compiler/goldens/run.txt stores
   (compiler/tools/evaldiff.olang; evaldump is gone); a difference not in its `Expected` list, or a test not in its
   `Skipped` list (one that would never end interpreted), fails the suite - about 9 minutes of CPU, 2.5 of wall time.
   Listed (B3e's limits): std/chan's five waits for a task, std/net's getaddrinfo (a struct of pointers to C), the
   cases measuring their own process's peak memory (chunkpool, mapchurn), an export fn handed to C (x13qsort); skipped:
-  std/cancel's spinning task, std/chan's Select polling for a task, std/net's Accept, gemmflat (over ten minutes).
+  std/cancel's spinning task, std/chan's Select polling for a task, std/net's Accept, gemmflat (over ten minutes),
+  std/os's million-deep recursion (~4 GB interpreted; its Args test then sees the words naming the others).
   Fixed on the way: captures' scope variables bound by position (a generator's text went where a value capture's
   environment lived - tests/generators' D18b), a whole `mir.Fn` copied into the machine's memory per caught error (2.3 GB
   over 50,000; Select's polling ate 13 GB), the harness's names, test detach and the variadic dynamic call missing (std/fuzz,

@@ -29571,13 +29571,14 @@ tasks wait for each other (the interpreter stops, naming the task) and its Selec
 skipped); std/cancel's busy task spinning until another cancels it (skipped); std/net's TCP test, whose Accept blocks in C
 for a task (skipped), and its name lookup (getaddrinfo takes a struct holding pointers, which the interpreter does not
 pass to C); chunkpool and mapchurn, which measure their own process's peak memory (the compiler's, interpreted);
-x13qsort, an export fn handed to C to call back; gemmflat, over ten minutes interpreted (skipped). Everything else - 89
-files of tests and 442 run cases - ends as built.
+x13qsort, an export fn handed to C to call back; gemmflat, over ten minutes interpreted (skipped); std/os's million-deep
+RunOnStack recursion (the interpreter's frames cost ~3.7 KB each: ~4 GB, which the OOM killer took beside the other
+rounds' builds - skipped), and with it std/os's "Args gives the program's own name first", since a file with a test
+skipped runs its others named by words, which its test binary sees as arguments too. Everything else ends as built.
 
 **In the suite (mine).** One target per file of tests (`interp@FILE`, after its built `test@FILE`, since both write the
-same scratch files) and the run cases in four parts (`interp@casesK`, `evaldiff -cases K 4`); the runs holding
-gigabytes - std/os (a million-deep recursion: the interpreter's frames cost ~3.7 KB each, 5.4 GB) and
-shared.olang (2.6 GB) - wait at the end of the two heavy lanes. Measured: about 9 minutes of CPU (the slowest
+same scratch files) and the run cases in four parts (`interp@casesK`, `evaldiff -cases K 4`); the one run holding
+gigabytes - shared.olang (2.5 GB) - waits at the end of a heavy lane. Measured: about 9 minutes of CPU (the slowest
 tests/become, 10 million tail calls, 100 s; std/regex 39 s), about 2.5 minutes of a 4-core suite's wall time. A
 difference not listed fails the suite naming `interp@FILE`; a listed one that no longer differs is said on its row so the
 list stays short.
