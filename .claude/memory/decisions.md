@@ -3014,3 +3014,16 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   Shape.Round(c)` binds the struct whole). Options: (1) keep it so - recommended; (2) patterns by field name (`case
   Point(y = 0)`), looking like a constructor call that is none; (3) positional patterns only for structs whose
   constructor just stores its parameters - matchability then depends on the constructor's body. In effect: none.
+- QCY ANSWERED 2026-11-07 (the user: "keep errors as built then"): T20 stays - errors are values everywhere but a
+  result; errors with data are built as docs/errdata.md designs them (a stored error value holds its payload).
+- QCX (3) struct patterns, the user 2026-11-07: "cant we do pattern matching against the fields without running the
+  constructor? ... we just need to read the value, and given that it's a public value, we can read it. Or given that
+  we're in the same module, it's private, we can also read it ... it looks like a constructor, but it's not really a
+  constructor." PROPOSED (asked to confirm): yes - a struct in a pattern lists fields by name, never constructor
+  parameters, and runs nothing (Python's class patterns, `case Point(x=0, y=y)`): `name = pattern` matches that field
+  (a literal compares, a new name binds, a nested pattern goes inside), a bare `name` is `name = name`, unmentioned
+  fields are ignored, only fields readable there (public anywhere, private in the struct's module). By name, not
+  position: reordering or adding fields never changes a pattern's meaning, and no private field is a position someone
+  else must skip. Enum payloads keep their positional patterns (declared by position) and may take the named form too
+  (`case Shape.Rect(h = 0)`). In `case` patterns only (nested in payloads and array elements); a destructuring
+  declaration not now. Recommended yes. In effect: none.
