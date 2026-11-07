@@ -447,7 +447,8 @@ release: $(OLANG)
 # a release unpacked into a fresh directory builds and runs a program with nothing but its own clang: PATH holds only
 # the system's tools a build runs (the linker), never a clang. The program imports a C library header (X17) and one of
 # clang's own (stdint.h, from the resource directory shipped in llvm/lib/clang) - and "olang explain T6a" reads the
-# SPEC.md shipped beside bin/, and "olang profile" names the program's functions by the llvm-symbolizer shipped beside clang
+# SPEC.md shipped beside bin/, "olang profile" names the program's functions by the llvm-symbolizer shipped beside clang,
+# and "olang explain -asm" shows a function's code as the link generates it, through the LLVMgold.so shipped beside it
 releasetest:
 	@t=$$(mktemp -d) && tar -C $$t -xJf build/release/$(RELEASE_NAME).tar.xz && mkdir $$t/work $$t/path && \
 	for p in ld ld.bfd as sh cat; do ln -s $$(command -v $$p) $$t/path/$$p; done && \
@@ -459,9 +460,11 @@ releasetest:
 	printf 'import "std/io"\n\nfn spin(n I64) I64 {\n    s I64 = 1\n    for i in range n { s = (s * 31 + i) ^ (s >> 7) }\n    return s\n}\n\nfn main() { io.Println($$spin(300000000))! }\n' > $$t/work/spin.olang && \
 	env -i HOME=$$t PATH=$$t/path OLANG_CACHE=$$t/cache $$t/$(RELEASE_NAME)/bin/olang profile spin.olang > profile.txt 2>&1; \
 	pr=$$?; grep -A2 "  self   total" $$t/work/profile.txt; \
+	env -i HOME=$$t PATH=$$t/path OLANG_CACHE=$$t/cache $$t/$(RELEASE_NAME)/bin/olang explain -asm spin.olang spin > asm.txt 2>&1; \
+	as=$$?; grep -m2 "spin.olang:" $$t/work/asm.txt; \
 	if [ $$st -eq 0 ] && grep -q "hello from $$(uname -m) 5 127" $$t/work/out.txt && [ $$ex -eq 0 ] && grep -q "T6a" $$t/work/explain.txt && \
-		[ $$pr -eq 0 ] && grep -q "%  spin$$" $$t/work/profile.txt; \
-	then echo "releasetest: built and ran a program importing C headers, explain read SPEC.md, profile named the hot function"; rm -rf $$t; \
+		[ $$pr -eq 0 ] && grep -q "%  spin$$" $$t/work/profile.txt && [ $$as -eq 0 ] && grep -q "spin.olang:5  for i in range n" $$t/work/asm.txt; \
+	then echo "releasetest: built and ran a program importing C headers, explain read SPEC.md, profile named the hot function, explain -asm showed its code"; rm -rf $$t; \
 	else echo "releasetest: failed ($$t)"; exit 1; fi
 
 # the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one

@@ -119,6 +119,7 @@ emit changes what a bootstrap needs, `make seed`); `docs/optsurvey.md` / `bench/
 | `build/rec`, object names | `build.olang` (B3i hashes everything compiled against) | a new input to a module's key must be added to the hash |
 | `testdata/fuzz/SLUG/` | `std/fuzz`, `std/prop` | saved failures, replayed by plain runs |
 | the cimport cache | `compiler/bindgen.olang` | key: import, clang, compiler, flags |
+| `OBJ.listing.yaml`, `build/listing/NAME/` | `compiler/build.olang` (clang's `-fsave-optimization-record`, the LTO plugin's `emit-asm`/`emit-llvm`/`opt-remarks-filename`) for explain -asm/-ir (B11d); read by `compiler/listing.olang` (remark YAML, `.loc`, `!dbg`) | LLVM's formats, not ours: a new LLVM is checked with the checks scenario `listing` (18, 19, 20 pass) |
 
 ## A migration (`olang fix`)
 

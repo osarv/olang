@@ -14,6 +14,8 @@ What the compiler offers tools, and the editor support built on it:
   when no file is named).
 - `olang explain -caps FILE` (B11c) - what each module of a program may reach (files, network, processes, environment,
   threads, C); `olang api OLD NEW PATH` (B21) - a module's interface changes between two versions, breaking or not.
+- `olang explain -asm FILE NAME`, `olang explain -ir FILE NAME` (B11d) - a function's machine code or optimized IR as
+  build compiles it, its source lines between the instructions and LLVM's optimization remarks beneath them.
 - `nvim/` - a Neovim plugin: filetype, syntax highlighting, `:make` through the compiler, `K` on a rule, format on
   save, and the language server. Its own README says how to install it.
 

@@ -2686,7 +2686,9 @@ fn (fe mut fnEm&) run() {
         # destroyed in one function, its handle never escaping, has its frame on that function's stack
         fe.pro.Push("  %cneed = call i1 @llvm.coro.alloc(token %cid)\n  br i1 %cneed, label %coro.alloc, label %coro.begin\n")
         fe.pro.Push("coro.alloc:\n  %csz = call i64 @llvm.coro.size.i64()\n  %cal = call i64 @llvm.coro.align.i64()\n")
-        fe.pro.Push("  %cmem0 = call ptr @__olang_scope_alloc_a(ptr %home, i64 %csz, i64 %cal)\n  br label %coro.begin\n")
+        # the call takes the function's line: an inlinable call with none in a function with debug information makes
+        # LLVM drop the whole module's (-debug, profile and listing builds of a generator - found by B11d)
+        fe.pro.Push("  %cmem0 = call ptr @__olang_scope_alloc_a(ptr %home, i64 %csz, i64 %cal)" $fe.dbgEntry() "\n  br label %coro.begin\n")
         fe.pro.Push("coro.begin:\n  %cmem = phi ptr [ null, %entry ], [ %cmem0, %coro.alloc ]\n")
         fe.pro.Push("  %hdl = call ptr @llvm.coro.begin(token %cid, ptr %cmem)\n")
     }

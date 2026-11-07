@@ -1208,6 +1208,20 @@ test "the modes: each said wrong as stage 0 says it" {
     assert prepared(String&["explain", "m.olang"]) ==
         "olang: error[B11b]: explain m.olang takes the name of one of its items, as 'olang explain m.olang main'\n"
     assert prepared(String&["help"]) == "no mistake: help"
+    # B11d: a function's code - a file and a name, one of -asm, -ir and -caps, -quick and another machine only with it
+    assert prepared(String&["explain", "-asm", "m.olang", "f"]) == "no mistake: explain"
+    assert prepared(String&["explain", "-ir", "-quick", "m.olang", "Box.Get"]) == "no mistake: explain"
+    assert prepared(String&["explain", "-asm", "m.olang"]) ==
+        "olang: error[B11d]: explain -asm takes a program's file and the name of one of its functions, as 'olang explain -asm main.olang main'\n"
+    assert prepared(String&["explain", "-asm", "-ir", "m.olang", "f"]) ==
+        "olang: error[B11d]: -asm, -ir and -caps exclude one another - explain shows one of them at a time\n"
+    assert prepared(String&["explain", "-caps", "-ir", "m.olang"]) ==
+        "olang: error[B11d]: -asm, -ir and -caps exclude one another - explain shows one of them at a time\n"
+    assert prepared(String&["explain", "-quick", "m.olang", "f"]) ==
+        "olang: error[B11d]: -quick applies to explain only with -asm or -ir, which show code as a build makes it\n"
+    assert prepared(String&["explain", "-target", "aarch64-linux-gnu", "m.olang", "f"]).Contains("error[B12a]: explain runs")
+    armAsm := prepared(String&["explain", "-asm", "-target", "aarch64-linux-gnu", "m.olang", "f"])
+    assert armAsm == "no mistake: explain" or armAsm.Contains("error[B12a]: this clang cannot build")
 }
 
 explainedSrc String& = ("type MathError error { Zero }\n"

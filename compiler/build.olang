@@ -1015,20 +1015,16 @@ type Listed struct() {
 }
 
 # explain -asm/-ir FILE NAME (B11d): the program FILE is the root of built as build builds it - its objects, each with
-# its remarks (c.Listing) - and its code generated as the link generates it, into build/listing/NAME/, written afresh:
+# its remarks (c.Listing) - and its code generated as the link generates it, into build/listing/NAME.MODES.asm (or .ir):
 # the assembly the link's code generator writes or the IR it reads, which the linker's LTO plugin writes in place of a
 # program (emit-asm, emit-llvm), its remarks beside it. Under -quick, where code is final once a module is compiled, each
-# module is compiled again to assembly or IR, with its remarks. Fails, having reported why, where it does not build
+# module is compiled again to assembly or IR, with its remarks. What a run made is kept with a stamp of what it was made
+# from (made), so asking again of an unchanged program links nothing. Fails, having reported why, where it does not build
 fn ListingCode<F Frontend>(fe mut F&, c mut Config&, file String&, ir Bool, prog mut Program&, d mut diag.Diagnostics&) Listed ? Failed {
     try fe.Analyze(file, Kind.Program, c, prog, d)
     if d.Errors() > 0 or prog.Units.Len() == 0 { error Failed.Reported }
     try c.ensureDir(d)
-    dir := $c.Dir "/listing/" $Readable(prog.rootIdentity())
-    try os.RemoveAll(dir) catch os.Error { }
-    try os.MkDirAll(dir) catch os.Error {
-        fileFatal(dir, msgs.CannotOpen(), d)
-        error Failed.Reported
-    }
+    dir := $c.Dir "/listing/" $Readable(prog.rootIdentity()) $c.modeSuffix() $(".ir" if ir else ".asm")
     out := Listed()
     if c.Quick {
         try c.listQuick(prog, dir, ir, out, d)
@@ -1041,6 +1037,32 @@ fn ListingCode<F Frontend>(fe mut F&, c mut Config&, file String&, ir Bool, prog
     }
     try c.listLink(objs, prog, dir, ir, out, d)
     return out
+}
+
+# B11d: whether dir holds what a run hashed h made - its stamp says h
+fn madeBefore(dir String&, h String&) Bool { return (try os.ReadFile($dir "/made") catch os.Error default "") == $h "\n" }
+
+# B11d: dir made afresh, empty
+fn afresh(dir String&, d mut diag.Diagnostics&) ? Failed {
+    try os.RemoveAll(dir) catch os.Error { }
+    try os.MkDirAll(dir) catch os.Error {
+        fileFatal(dir, msgs.CannotOpen(), d)
+        error Failed.Reported
+    }
+}
+
+# B11d: the files a run wrote into dir listed into out, in their order (code, code1 ... code10, u0, u1 ...): its remarks
+# (YAML) and its code - assembly, or IR as text (bitcode and the inputs of -quick's compiles left out)
+fn listFiles(dir String&, ir Bool, out mut Listed&) {
+    names Vec<String&>
+    listed := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
+    for n in listed { names.Push($n) }
+    names.Sort(fn(a String&, b String&) Bool { return a.Len() < b.Len() or (a.Len() == b.Len() and a < b) })
+    for n in names {
+        if n.Contains(".yaml") { out.Remarks.Push($dir "/" $n) }
+        if n == "made" or n.Contains(".yaml") or n.EndsWith(".in.ll") { continue }
+        if ir == n.EndsWith(".ll") { out.Parts.Push($dir "/" $n) }
+    }
 }
 
 # B11d: the objects linked as Link links them, the plugin writing the code it generates (or, ir, the IR it generates
@@ -1061,30 +1083,33 @@ fn (c mut Config&) listLink(objs Vec<String&>&, prog Program&, dir String&, ir B
     for x in String&["-lm", "-lpthread", "-ldl"] { args.Push($x) }
     if prog.Dyncall != "" { args.Push("-lffi") }
     if c.Clang == "" { error Failed.Unbuilt }
+    parts Vec<String&>
+    for a in args { parts.Push(a) }
+    parts.Push(c.clangVersion())
+    h := HashOf(parts)
+    if madeBefore(dir, h) {
+        listFiles(dir, ir, out)
+        return
+    }
+    try afresh(dir, d)
     ran := try os.Exec(...args.ToArray()) catch os.Error default os.Output(127, "", "")
     if ran.Status != 0 {
         sayErr($ran.Stdout $ran.Stderr)
         d.Fatal(diag.Where.Nowhere, msgs.LinkFailed($dir "/code"))
         error Failed.Reported
     }
+    Phase("link")
     c.Linked++
-    names Vec<String&>
     listed := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
-    for n in listed { names.Push($n) }
-    names.Sort(fn(a String&, b String&) Bool { return a.Len() < b.Len() or (a.Len() == b.Len() and a < b) })
-    for n in names {
-        if n.StartsWith("link.yaml") { out.Remarks.Push($dir "/" $n) }
-        if not n.StartsWith("code") { continue }
-        if not ir {
-            out.Parts.Push($dir "/" $n)
-            continue
-        }
-        out.Parts.Push(try c.bitcodeText($dir "/" $n, d))
+    for n in listed {
+        if ir and n.StartsWith("code") { try c.bitcodeText($dir "/" $n, d) }
     }
+    try os.WriteFile($dir "/made", $h "\n") catch os.Error { }
+    listFiles(dir, ir, out)
 }
 
 # B11d: the bitcode at bc written as text beside it (bc.ll) by clang, no pass run over it
-fn (c Config&) bitcodeText(bc String&, d mut diag.Diagnostics&) String ? Failed {
+fn (c Config&) bitcodeText(bc String&, d mut diag.Diagnostics&) ? Failed {
     args Vec<String&>
     args.Push($c.Clang)
     if c.Target.Foreign { args.Push($"--target=" $c.Target.Triple) }
@@ -1095,7 +1120,6 @@ fn (c Config&) bitcodeText(bc String&, d mut diag.Diagnostics&) String ? Failed 
         d.Fatal(diag.Where.Nowhere, msgs.ClangFailed(bc))
         error Failed.Reported
     }
-    return $bc ".ll"
 }
 
 # B11d, -quick: each module's IR (its code - the places a Locations unit holds are data) and the runtime's compiled
@@ -1108,6 +1132,19 @@ fn (c mut Config&) listQuick(prog Program&, dir String&, ir Bool, out mut Listed
     if prog.Runtime != "" { texts.Push(prog.Runtime) }
     if prog.Dyncall != "" { texts.Push(prog.Dyncall) }
     if c.Clang == "" { error Failed.Unbuilt }
+    stamp Vec<String&>
+    for t in texts {
+        stamp.Push(IrHash(t))
+        for f in c.CompileFlags(t) { stamp.Push(f) }
+    }
+    stamp.Push($ir)
+    stamp.Push(c.clangVersion())
+    h := HashOf(stamp)
+    if madeBefore(dir, h) {
+        listFiles(dir, ir, out)
+        return
+    }
+    try afresh(dir, d)
     cmds Vec<Array<String&>&>
     sizes Vec<I64>
     for i, text in texts {
@@ -1116,17 +1153,14 @@ fn (c mut Config&) listQuick(prog Program&, dir String&, ir Bool, out mut Listed
             fileFatal(input, msgs.CannotOpen(), d)
             error Failed.Reported
         }
-        part := $dir "/u" $i $(".ll" if ir else ".s")
         args mut Vec<String&>& = Vec<String&>()
         args.Push($c.Clang)
         for f in c.CompileFlags(text) { args.Push($f) }
         args.Push("-S")
         if ir { args.Push("-emit-llvm") }
-        for a in String&["-o", part, input, $"-foptimization-record-file=" $dir "/u" $i ".yaml"] { args.Push($a) }
+        for a in String&["-o", $dir "/u" $i $(".ll" if ir else ".s"), input, $"-foptimization-record-file=" $dir "/u" $i ".yaml"] { args.Push($a) }
         cmds.Push(args.ToArray())
         sizes.Push(text.Len())
-        out.Parts.Push(part)
-        out.Remarks.Push($dir "/u" $i ".yaml")
     }
     status, said := RunAll(cmds.ToArray(), c.width(), sizes.ToArray())
     c.Compiled += cmds.Len()
@@ -1137,6 +1171,8 @@ fn (c mut Config&) listQuick(prog Program&, dir String&, ir Bool, out mut Listed
         error Failed.Reported
     }
     for i in range texts.Len() { try os.Remove($dir "/u" $i ".in.ll") catch os.Error { } }
+    try os.WriteFile($dir "/made", $h "\n") catch os.Error { }
+    listFiles(dir, ir, out)
 }
 
 # a signal as the C library names it (strsignal)

@@ -199,20 +199,17 @@ fn kindWord(tag String&) String {
 
 # ---- names ----
 
-# the program's modules, to name a symbol as source writes it outside its module (B20a): the root's and the prelude's
-# bare, any other's after its alias
+# what names a symbol as source writes it outside its module (B20a): the root's and the prelude's bare, any other
+# module's after its alias
 type Namer struct() {
-    ids Vec<String&>        # longest first
-    root String& = ""
+    root String& = ""       # the root's identity
 }
 
 fn MakeNamer(prog build.Program&) Namer {
     n := Namer()
     for u in prog.Units {
         if u.Holds == build.UnitKind.Main or u.Holds == build.UnitKind.Tests { n.root = $u.Identity }
-        if u.Identity not in n.ids and not u.Identity.StartsWith("c_") { n.ids.Push($u.Identity) }
     }
-    n.ids.Sort(fn(a String&, b String&) Bool { return a.Len() > b.Len() })
     return n
 }
 
@@ -227,13 +224,36 @@ fn (n Namer&) Name(sym String&) String {
     if sym.EndsWith("_copied") { return n.Name(sym[:sym.Len() - 7]) }
     text := types.Demangle(sym)
     if text == sym { return $sym }
-    for id in n.ids {
-        q := load.ErrQualifier(id, id == n.root)
-        if text.StartsWith($id ".") { text = $q $text[id.Len() + 1:] }
-        text = text.Replace($id ":", q)
+    # "MODULE.rest": a function by its module's alias, a method by its type alone (which names its module)
+    dot := try text.Find(".") catch default -1
+    lead := text[:dot] if dot > 0 else ""
+    if lead != "" and not lead.Contains("<") and not lead.Contains(":") and not lead.Contains("(") {
+        rest := text[dot + 1:]
+        text = $rest if rest.Contains(":") else $load.ErrQualifier(lead, lead == n.root) $rest
     }
-    return text
+    return n.typesNamed(text)
 }
+
+# a canonical text with each declared type's "IDENTITY:" written as its module's qualifier ("Vec<check.Checker>"), the
+# root's and the prelude's bare
+fn (n Namer&) typesNamed(text String&) String {
+    b := StringBuilder()
+    from I64 = 0            # copied up to here
+    for i, ch in text {
+        if ch != ':' { continue }
+        s := i
+        for s > from and not typeDelim(text[s - 1]) { s-- }
+        b.Push(text[from:s])
+        id := text[s:i]
+        b.Push(load.ErrQualifier(id, id == n.root))
+        from = i + 1
+    }
+    b.Push(text[from:])
+    return b.ToString()
+}
+
+# what may stand before a type in a canonical text (emit's typeDelim)
+fn typeDelim(ch Char) Bool { return ch == '<' or ch == ',' or ch == ' ' or ch == '(' or ch == '[' or ch == '&' or ch == '?' }
 
 # ---- source lines ----
 
@@ -362,13 +382,16 @@ fn found(parts Vec<String&>&, sym String&, ir Bool) String {
 # sym's code in one part of code: sym where it is defined there, the function it is an alias of, else ""
 fn definedIn(text String&, sym String&, ir Bool) String {
     for line in text.Lines() {
-        if ir and line.StartsWith("define ") and line.Contains($"@" $sym "(") { return $sym }
+        if ir and line.StartsWith("define ") and irDefines(line, sym) { return $sym }
         if ir and line.StartsWith($"@" $sym " = ") and line.Contains(" alias ") { return aliasee(line) }
-        if not ir and line.StartsWith($sym ":") { return $sym }
+        if not ir and line.StartsWith($sym) and (line.StartsWith($sym ":") or line.StartsWith($sym ".llvm.")) { return $sym }
         if not ir and line.Trim().StartsWith($".set\t" $sym ", ") { return $line.Trim()[sym.Len() + 7:].Trim() }
     }
     return ""
 }
+
+# whether a "define" line defines sym - by its name, or as ThinLTO renamed it once it promoted it ("sym.llvm.123")
+fn irDefines(line String&, sym String&) Bool { return line.Contains($"@" $sym "(") or line.Contains($"@" $sym ".llvm.") }
 
 # the function an IR alias line names: its last "@name"
 fn aliasee(line String&) String {
@@ -609,7 +632,7 @@ fn (w mut Writer&) irPart(text String&, sym String&) {
     }
     inside := false
     for line in text.Lines() {
-        if line.StartsWith("define ") and line.Contains($"@" $sym "(") { inside = true }
+        if line.StartsWith("define ") and irDefines(line, sym) { inside = true }
         if not inside { continue }
         w.irLine(line, meta)
         if line == "}" { inside = false }
@@ -675,12 +698,21 @@ test "a remark's YAML read: its kind, pass, place, function and message, the inl
     out Vec<Remark>
     n := Namer()
     n.root = "v"
-    n.ids.Push("v")
     readRemarks(yaml, String&["v_2escale"], n, out)
     assert out.Len() == 1
     r := out[0]
     assert r.Kind == "passed" and r.Pass == "inline" and r.File == "v.olang" and r.Line == 6 and r.Callee == "v_2etwice"
     assert r.Message == "'twice' inlined into 'scale' with (cost=-15000)"
+}
+
+test "a symbol named as source writes it outside its module" {
+    n := Namer()
+    n.root = "v"
+    assert n.Name(types.Symbol("v.scale")) == "scale" and n.Name(types.Symbol("std/io.Println")) == "io.Println"
+    assert n.Name(types.Symbol("std/prelude/vec.std/prelude/vec:Vec<v:Point>.Push")) == "Vec<Point>.Push"
+    assert n.Name(types.Symbol("std/net.std/net:Conn.Read")) == "net.Conn.Read"
+    assert n.Name("main") == "startup" and n.Name("memcpy") == "memcpy"
+    assert n.Name($types.Symbol("v.scale") "_fv_x") == "scale as a function value"
 }
 
 test "YAML scalars and places as the remark writer writes them" {

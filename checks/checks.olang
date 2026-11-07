@@ -46,7 +46,7 @@ Scenarios := String&["fix", "strheld", "fuzz", "testfuzz", "bench", "agree", "la
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
-                     "profile", "apicaps"]
+                     "profile", "apicaps", "listing"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -435,6 +435,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "definit" { try definit(r) }
         case "profile" { try profiled(r) }
         case "apicaps" { try apicaps(r) }
+        case "listing" { try listed(r) }
         case "tbaa" { try tbaa(r) }
         case "opvis" { try opvis(r) }
         case "protopriv" { try protopriv(r) }
@@ -1101,6 +1102,45 @@ test "olang profile names the hot function, its line and its callers" { assert p
 # B21, B11c: olang api between two directories marks each change breaking or not, its status 1 where one breaks; and
 # explain -caps names what each module may reach
 test "olang api lists a module's interface changes, and explain -caps what each module reaches" { assert passed("apicaps") }
+
+# B11d: explain -asm and -ir show a function's code as build compiles it - the function by its label, the lines of
+# source it comes from between its instructions, LLVM's remarks beneath them (a loop vectorized, a call inlined) - and
+# what has no code says why; a generic's instances each in turn; -quick's per module; a name of no function refused;
+# the listing's objects apart from a plain build's, whose IR holds no line tables
+test "olang explain -asm and -ir show a function's code with its source lines and LLVM's remarks" { assert passed("listing") }
+
+fn listed(r mut report&) ? Failed {
+    dir := fresh("listing")
+    os.Run("cp checks/fixtures/listing/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" explain -asm prog.olang scale > out.txt 2>&1") == 0, "-asm builds", dir)
+    asm := outOf(dir)
+    try r.expect(asm.StartsWith("# fn scale(a mut Array<F32>&, b Array<F32>&)\n# prog.olang:10 - "), "the function first, as explain prints it", dir)
+    try r.expect(asm.Contains("\n# prog.olang:11  for i in range a.Len() { a[i] = twice(b[i]) }\n"), "a line of source among the code", dir)
+    try r.expect(asm.Contains("\n# prog.olang:7  fn twice(x F32) F32 { return x * 2.0 + 1.0 }\n"), "an inlined function's own line", dir)
+    try r.expect(asm.Contains("passed   loop-vectorize: vectorized loop (vectorization width: "), "a vectorized remark", dir)
+    try r.expect(asm.Contains("passed   inline: 'twice' inlined into 'scale' with (cost="), "an inlined remark", dir)
+    try r.expect(sh(dir, "\"$OLANG\" explain -ir prog.olang scale > out.txt 2>&1") == 0, "-ir builds", dir)
+    ir := outOf(dir)
+    try r.expect(ir.Contains("\n; prog.olang:11  for i in range") and ir.Contains("\ndefine ") and ir.Contains(" x float>") and
+                 not ir.Contains("!dbg"), "-ir: the optimized IR, vectorized, its lines as comments", dir)
+    try r.expect(sh(dir, "\"$OLANG\" explain -asm prog.olang unused > out.txt 2>&1") == 0 and
+                 outOf(dir).Contains("# no code: nothing in the program calls it, so the link kept none\n"), "no code, never called", dir)
+    try r.expect(sh(dir, "\"$OLANG\" explain -asm prog.olang big > out.txt 2>&1") == 0 and
+                 outOf(dir).StartsWith("# instance big<I64>: fn(a I64, b I64) I64\n") and
+                 outOf(dir).Contains("\n# instance big<F64>: fn(a F64, b F64) F64\n") and outOf(dir).Contains("inlined at every call"),
+                 "a generic's instances, each inlined", dir)
+    try r.expect(sh(dir, "\"$OLANG\" explain -asm -quick prog.olang scale > out.txt 2>&1") == 0 and
+                 outOf(dir).Contains("-O2, each module on its own (-quick)") and outOf(dir).Contains("\nprog_2escale:"),
+                 "-quick: each module's own code", dir)
+    try r.expect(sh(dir, "\"$OLANG\" explain -asm prog.olang Point > out.txt 2>&1") == 1 and
+                 outOf(dir).Contains("error[B11d]: 'Point' is no function of prog.olang"), "a type refused", dir)
+    try r.expect(sh(dir, "ls build/*.listing.o > /dev/null && ls build/*.listing.yaml > /dev/null") == 0, "the listing's objects and remarks", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build prog.olang > out.txt 2>&1") == 0 and
+                 sh(dir, "for f in build/*.ll; do case $f in *.listing.ll) ;; *) grep -l DILocation $f;; esac; done | grep -q .") != 0,
+                 "a plain build carries no line tables", dir)
+    try r.expect(sh(dir, "\"$OLANG\" help explain > out.txt 2>&1") == 0 and outOf(dir).Contains("  -asm") and
+                 outOf(dir).Contains("  -quick"), "help explain", dir)
+}
 
 fn apicaps(r mut report&) ? Failed {
     dir := fresh("apicaps")

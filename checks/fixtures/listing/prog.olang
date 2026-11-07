@@ -1,0 +1,26 @@
+# B11d's fixture: a loop LLVM vectorizes with a call it inlines, a function nothing calls, a generic of two instances
+import "std/os"
+import "std/io"
+
+type Point struct(X I64, Y I64) { X, Y }
+
+fn twice(x F32) F32 { return x * 2.0 + 1.0 }
+
+# called only through a function value, so the link keeps its code
+fn scale(a mut Array<F32>&, b Array<F32>&) {
+    for i in range a.Len() { a[i] = twice(b[i]) }
+}
+
+fn unused(p Point) I64 { return p.X * p.Y }
+
+fn big<T>(a T, b T) T { return a if a > b else b }
+
+fn main() {
+    n := os.Args().Len() * 1000
+    a := Array<F32>(n)
+    b := Array<F32>(n, 1.5)
+    steps := Vec<fn&(a mut Array<F32>&, b Array<F32>&)>()
+    for _ in range n % 7 + 2 { steps.Push(scale) }
+    for f in steps { f(a, b) }
+    io.Println($a[0] " " $big(n, 3) " " $big(F64(n), 2.5))!
+}
