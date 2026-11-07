@@ -12562,8 +12562,15 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         k++
     }
     for k < ps.Len() {
-        c.exprs.Push(c.callDefault(nsp, sp, target, f, k, recv is not null, ps[k]))
+        d := c.callDefault(nsp, sp, target, f, k, recv is not null, ps[k])
+        c.exprs.Push(d)
         k++
+        if typeOf(d) != types.UnknownT { continue }
+        # B11: the first argument left off with no default said it (E14) - the rest are the same cause
+        for k < ps.Len() {
+            c.exprs.Push(c.unknown(sp))
+            k++
+        }
     }
     c.inWrittenOrder(order, from + (1 if recv is not null else 0))
     errs := types.ListId(0) if decided else c.calleeErrors(target, sig)

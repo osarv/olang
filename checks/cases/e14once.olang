@@ -1,0 +1,11 @@
+# check: fail error[E14]: expected 3 arguments, found 0
+# never: found 1
+# never: found 2
+# B11: a call leaving off arguments that have no default is one error, said once for the first of them - not one row
+# for each (bulk review 8)
+type P struct(a I64, b String, c I64) { a, b, c }
+
+fn main() {
+    p := P()
+    assert p.a == 0
+}
