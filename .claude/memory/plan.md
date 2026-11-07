@@ -198,7 +198,7 @@ on 2026-11-07. The remaining work is /home/user/review/remaining/LIST.md.)
   ~100k every agent loads.
 - 2026-11-07 ~12:30 CET: before the user's /compact, the coordinator's state (running rounds, merge steps, the order of
   what is left) is written to /home/user/review/rounds/STATE.md - read it first after the compaction.
-- 2026-11-07 ~19:45 CET: THE COMPILER DONE (pending only the CLAUDE.md trim). Every round of the day merged, bulk
+- 2026-11-07 ~19:45 CET: THE COMPILER DONE; CLAUDE.md trimmed to 94 KB (from 267 KB) the same evening, every entry verbatim in HISTORY.md. Every round of the day merged, bulk
   review 8 and its three fix rounds merged; the final full verify passed on 1879ade (master), and the gates on it:
   scopesan (1,866 tests under -debug -sanitize, all ok), scopefuzz (200 programs, 1,129 scenarios, 0 findings), fuzz
   free (200 programs, 1,537 places freeing at once, 0 findings), the interpreted comparison with dead regions on (only
