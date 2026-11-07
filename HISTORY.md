@@ -29520,7 +29520,7 @@ a reference to a holder declared later in its block - for the user.
 
 ## Type-level builders (D19, D19a, T30b, QBT, 2026-11-07, wt-qbt)
 
-The user's decision (2026-10-27, "I want it with a)"), reversing the 2025-10-25 answers QAS ("keep the namespaces to
+The user's decision (2026-10-27, "I want it with a)"), reversing the 2026-10-25 answers QAS ("keep the namespaces to
 modules and objects": `p.StringFromC(max)`) and QAT (extra builders as module functions, grouped by the docs by a
 heuristic): a function making a value of a type is the type's, declared `fn Color.FromHex(t String&) Color ? BadHex`
 and called through the type's name. Placement (a) made it the only place: a function of a module making a value of a
