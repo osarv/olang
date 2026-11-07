@@ -30532,3 +30532,20 @@ call handing back a borrowed reference, so the String is a view its caller copie
 (b) for the common build-and-return shape, the builder local lifted to where its text goes and that copy left out
 where it is the builder's last use - D9i's moved-local rule extended from constructors to a call whose result views its
 receiver. Both are D9h/D9i work of their own; the copy stays ~1% of a builder-heavy run (the tidy round's measure).
+
+## Bulk review 8, fixed
+
+### bfix8a (section 8 and memory; 2026-11-07, wt-bfix8a)
+
+- **t13bmovedvalue is a run case (the coordinator's item, from the full verify on e5f4561).** The hand-on round
+  (wt-handon) refused a named function moving a unique value into what outlives the call as a function value (`f :=
+  keepIt`, T22a), the move being an obligation of the function that no written function type carries. sec8r3's records
+  (T22a: a function value carries its inferred relations wherever the inference follows it whole, a local's versions
+  included) were merged beside it, and the case compiled on the merged tree. Checked whether accepting it is sound:
+  `f := keepIt; f(v, Buf(k))` in a loop with the Vec outside it, a local chosen by a conditional between `keepIt` and
+  a lambda, and a local reassigned in the loop - built `-debug -sanitize`, run plain and interpreted after the arena
+  churned, every Buf read back whole (`1 41000 5250 5050` alike). A call through the local is judged as the direct call
+  is, so each argument is built where the Vec lives; passing `keepIt` to a parameter of a written function type, or
+  capturing the local in a lambda, stays T22a's boundary error (the existing t22a* cases). So the refusal the hand-on
+  round recorded as its cost is lifted, and kept lifted: the case is a run case under `-debug -sanitize` with those
+  three shapes, SPEC T13b's sentence says what holds now, and CLAUDE.md's hand-on entry with it.

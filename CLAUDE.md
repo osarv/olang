@@ -1699,7 +1699,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   view of its leaves); a constructor's instance viewing only moved parameters is its own (`typed.MovedArg`,
   `FreshViews`, `ViewsMoved`: no D9h copy). Decided (mine): a lambda keeps its own copy (it is called only through a
   function value, which can carry no obligation, T22a); a named function moving a unique value into what outlives the
-  call is no function value (T22a, the cost: `f := keepIt` refused - write a lambda calling it); a constructor's
+  call carries that relation as a value (T22a's records, merged with it: `f := keepIt; f(v, Buf(3))` builds the argument
+  where `v` lives; bulk review 8 found the refusal this round recorded lifted and kept it so - checks' t13bmovedvalue a
+  run case now; a parameter of a written function type stays T22a's boundary error); a constructor's
   run-time array field keeps its slot in the frame, only its elements in the instance (lower's `fieldStor`: 16 bytes per
   constructor call grew where the instance lives - every Vec, Map and StringBuilder constructor's, bench a few
   instructions fewer). Measured over 1M cycles: put + taken 388 MB -> 1.9 MB, replaced 260 -> 1.9, put + removed 388 ->

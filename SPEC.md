@@ -860,8 +860,10 @@ reads it after: a **by-value parameter**, given a fresh value at every call, may
 **move**, never a copy: the parameter is the caller's value, what it owns (its arrays, T7a) where the caller built it,
 so the place it lands in becomes the value's one holder - a `Map`'s slot, a `Vec`'s element, an instance's field - and
 §8 holds the parameter to outlive that place (an obligation of the function, O10b, its callers building the argument
-where the value is kept, O18b). A function moving a value so into what outlives the call therefore cannot become a
-function value (T22a): `f := keepIt` is refused where `fn keepIt(v mut Vec<File>&, f File) { v.Push(f) }`. A lambda,
+where the value is kept, O18b). A function moving a value so into what outlives the call therefore carries that
+relation as a function value (T22a): held in a local, `f := keepIt; f(v, File(3))` builds the argument where `v`'s
+storage lives, as the direct call does, where `fn keepIt(v mut Vec<File>&, f File) { v.Push(f) }`; at a boundary (a
+parameter of a written function type, a field, a capture) it is T22a's error. A lambda,
 which is called only through a function value, keeps its own copy of what it hands on instead, as a by-value argument
 of any other type is copied (D9) - unobservable but in memory, the value being nowhere else. Last is judged on every
 path from the landing, in the order the function evaluates: another branch's mentions are not after it, a loop running
