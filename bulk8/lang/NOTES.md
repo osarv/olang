@@ -11,7 +11,22 @@
   widths, signed, enums raw/positional, I70, arrays at bit offsets, C import of packed bitfields by value and by
   reference, lending refused), Columns/ColumnVec (copies independent, Sort, reference fields' placement, unique and
   destructor records refused - F7).
-- In progress: payload stack with errdefer / generators / task clauses / export fn / test harness.
+- Payload stack: errdefer and defer catching their own payload errors while one is in flight, a generator raising
+  into its for-in, a spawned call's own clause, an export fn from C 2M times (flat 2.2 MB), a test letting a payload
+  error out then catching later, `!` - all agree build/interpret (scratch/ps1, t1, xlib/). Recoding payload values
+  between sets, Map keys and == by payload (scratch/rc1), error values stored past churns (ok_payload_store.olang).
+- Builder rules: extends does not inherit, E36 names refused, T30b's error-set agreement (scratch/bd1, bd2).
+- Not covered: payload records left by a test that fails or a `!` in a test (a leak only, LIFO kept); C imports of
+  packed records under interpret (refused by design); json of payload errors; deprec/asm/sec8 rounds (others').
+- Done.
+
+## Minor, not numbered
+- `olang test -interpret`: a `!` failing in a test prints no "raised here" trace line where the build does
+  (scratch/t1.olang).
+- An E11b error in a join made M5a also say `nothing here is reached through 'io'` though io is used
+  (scratch/cv4.olang before its fix) - one mistake, two errors.
+- A `mut PErr&` receiver gives T24, then T20 and T19b errors for the same cause (scratch/em1.olang).
+- O25i's advice for a unique local suggests `x.Copy()` (scratch/u2.olang), which a unique type never has.
 
 ## Findings
 - F1 HIGH NEW (T19b, errdata2; runtime __olang_join_tasks): f01_joinown_payload.olang. A `try join` block whose own
@@ -62,3 +77,9 @@
   through FromIter, e4875ee). Related, same rule area: a FromIter taking a concrete iterator type (E19 allows
   `ArrayIter<I64>`) has literals but its comprehension is refused "expected ArrayIter<I64>&, found Generator<I64>"
   (scratch/lit2.olang) - E27 does not say comprehensions need a generic FromIter.
+- F9 LOW-MEDIUM NEW (T19b, check's payloadBad): f09_payload_text_inside.olang. T19b admits text, arrays by value,
+  error values, "and enums and structs of those" as payload fields; a String field is accepted, but a struct holding a
+  String, an enum case holding one, an `Array<String>` and an error value whose payload holds text are each refused
+  "payload field ... holds a reference". Text counts as a value only at the top. So a wrapping error
+  (`Wrap(inner PErr)`) works only while PErr's payloads hold no text (scratch/nest2.olang works) - and every std error
+  carries text (os paths, json keys), so no std error can be wrapped.

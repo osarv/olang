@@ -1,0 +1,33 @@
+import "std/io"
+type PE error { Bad(n I64, s String) }
+Live mut I64 = 0
+fn raise(n I64) I64 ? PE {
+    if n % 2 == 0: return n
+    error PE.Bad(n, "t" $n)
+}
+fn inner(n I64) I64 ? PE {
+    x := try raise(n + 1) catch PE e default e.n * 100
+    out := Array<I64>(2)
+    try join {
+        for i in range 2 { spawn out[i] = try raise(n + i * 2) }
+    }
+    return x + out[0] + out[1]
+}
+fn outer(b I64) String {
+    out := Array<I64>(4)
+    try join {
+        for i in range 4 { spawn out[i] = try inner(b + i) }
+    } catch PE e {
+        return "caught " $e
+    }
+    return $out
+}
+fn main() {
+    io.Println($outer(Live + 0))!
+    io.Println($outer(Live + 2))!
+    s := ""
+    for i in range 3 {
+        s = $s $outer(Live + i * 2) ";"
+    }
+    io.Println($s)!
+}

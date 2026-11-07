@@ -1,0 +1,12 @@
+type Blob unique struct(id I64) {
+    id
+}
+
+fn d1(v mut Vec<Blob>&, l Blob) {
+    defer v.Push(l)
+}
+
+fn main() {
+    v := Vec<Blob>()
+    d1(v, Blob(1))
+}

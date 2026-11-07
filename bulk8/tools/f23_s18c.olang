@@ -1,0 +1,14 @@
+import "std/bitset"
+import "std/io"
+type Shape enum { Dot, Circle(r F64) }
+type Pt struct(x I64) { x }
+fn first<T>(xs Array<T>&) T {
+    assert xs.Len() > 0, "empty: " $xs.Len()
+    return xs[0]
+}
+fn wrap<T>(xs Array<T>&) T { return first(xs) }
+fn main() {
+    s := bitset.BitSet<Shape>.Empty()
+    e := Array<I64>(0)
+    io.Println($s " " $wrap(e))!
+}

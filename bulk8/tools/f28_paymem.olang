@@ -1,0 +1,18 @@
+import "std/io"
+type PE error { Bad(n I64, s String) }
+Live mut I64 = 0
+fn raise(n I64) I64 ? PE { error PE.Bad(n, "x" $n) }
+fn viaDefault(n I64) I64 { return try raise(n) catch default 0 }
+fn viaNamed(n I64) I64 { return try raise(n) catch PE e default e.n }
+fn viaPlain(n I64) I64 { return try raise(n) catch PE default 1 }
+fn viaStmt(n I64) I64 {
+    try raise(n) catch { }
+    return 2
+}
+fn main() {
+    s := 0
+    for i in range 600000 + Live {
+        s += viaDefault(i) + viaNamed(i) + viaPlain(i) + viaStmt(i)
+    }
+    io.Println($s)!
+}

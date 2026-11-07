@@ -1,0 +1,22 @@
+import "std/io"
+import "std/net"
+import "std/time"
+import "std/regex"
+import "std/csv"
+import "std/json"
+fn say(t String&) { io.Println(t)! }
+fn main() {
+    try net.IP.Parse("1.2.3") catch net.Error e { say("ip " $e) }
+    try net.Addr.Parse("1.2.3.4") catch net.Error e { say("addr " $e) }
+    try net.Addr.Parse("[::1:80") catch net.Error e { say("addr6 " $e) }
+    try net.Addr.Resolve("no.such.host.invalid:80") catch net.Error e { say("resolve " $e) }
+    try time.Date.Parse("2026-13-01T00:00:00Z") catch time.Error e { say("date " $e) }
+    try time.Date.Parse("2026-11-07T10:00:00") catch time.Error e { say("date2 " $e) }
+    try time.Date.Parse("") catch time.Error e { say("date3 " $e) }
+    try regex.Regex.Compile("ab(c") catch regex.SyntaxError e { say("re " $e) }
+    try regex.Regex.Compile("a{2,1}") catch regex.SyntaxError e { say("re2 " $e) }
+    try regex.Regex.Compile("[z-a]") catch regex.SyntaxError e { say("re3 " $e) }
+    for r in try csv.Rows("a,b\n\"x\"y,z\n") { say("row " $r.Len()) } catch csv.Error e { say("csv " $e) }
+    try json.Json.Parse("{\"a\": [1, 2,]}") catch json.Error e { say("json " $e) }
+    try json.Json.Parse("[1,\n 2,\n x]") catch json.Error e { say("json2 " $e) }
+}
