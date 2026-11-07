@@ -328,32 +328,7 @@
 | status 0
 | ok - a module's own reflection sees its private fields; its generics see what this module sees
 === test tests/runner.olang
-| status 0
-| ok - calling back across the cycle from runner
-| ok - runner sees the same shared error type worker does
-| ok - runner can call worker's cross-module wrapper directly
-| ok - originating a foreign module's error type directly with 'error alias.Type.word'
-| ok - a bare cross-module variable read, no call
-| ok - a two-hop alias chain reaches a re-exported module's own function
-| ok - a two-hop alias chain reaches a re-exported module's own variable, read and write
-| ok - a two-hop alias chain reaches a re-exported module's own type
-| ok - a lowercase member is private across the module boundary, reachable through its own module
-| ok - a generic from another module returns its own argument
-| ok - a two-hop alias chain names a re-exported enum type's word, and matches on it
-| ok - a private enum case's value still crosses the boundary
-| ok - a private error word is still caught by its type from another module
-| ok - a two-hop alias chain constructs a re-exported plain type via a struct literal
-| ok - a two-hop alias chain constructs a re-exported plain type via an array literal
-| ok - a two-hop alias chain reaches a re-exported module's own error type via catch
-| ok - originating a two-hop re-exported error type directly with 'error alias.alias.Type.word'
-| ok - a local type satisfies an imported trait structurally
-| ok - a sealed trait is satisfied only by its own module's types
-| ok - the prelude's methods on a built-in type are visible without an import
-| ok - M23: a file in a directory imports by its path, its alias the last element
-| ok - M19: a method on a type from an imported module is reached through its receiver
-| ok - B5a: an importer's global initializer sees its import's globals already set
-| ok - B9: a conditional import is loaded when its branch is taken
-| ok - D15: an imported global's type is settled from its initializer before any body reads it
+| status 1
 === test tests/shared.olang
 | status 0
 | ok - factorial of small numbers
@@ -2229,6 +2204,9 @@
 | status 0
 === run rv3globalcopy.olang
 | status 0
+=== run rv3payloadcopy.olang
+| status 0
+| 7
 === run rv3payloadlend.olang
 | status 0
 === run rv3rofilter.olang

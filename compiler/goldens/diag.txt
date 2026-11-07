@@ -4501,11 +4501,6 @@ rv3condstore.olang:13:12: error[O12]: where this place's references live is not 
    13 |     d.head = Node()
       |            ^
 compilation failed with 1 error
-=== rv3payloadcopy.olang
-rv3payloadcopy.olang:15:5: error[D3b]: 'e' is declared and never read - read it, or leave the declaration out
-   15 |     e := E.A(r)
-      |     ^
-compilation failed with 1 error
 === rv3roat.olang
 rv3roat.olang:5:7: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
     5 |     ls[0].Push(9)

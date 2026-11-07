@@ -29193,7 +29193,11 @@ is no split value - O17). SPEC T17c says so. **Soundness:** only the local's ref
 scope of what its payload refers to, which outlives the local's block - the same placement O28 makes for any local whose
 value must outlive its block; the exact fit is then judged against the new claim, and a payload from a scope that cannot
 be placed there (a by-value parameter's own storage, the callee's copy) stays refused
-(checks/cases/t17ccaseparamcopy.olang, C2d at the case's argument). A local assigned a case referring to a local of
+(checks/cases/t17ccaseparamcopy.olang, C2d at the case's argument). One must-fail case had pinned the old refusal,
+`rv3payloadcopy` (`e := E.A(r)`, `r` a `mut Box&`, the payload a copy of the Box whose `head` reference something can be
+stored through): the same copy held by a struct (`h := HB(r)`) was accepted on master, and now the case's local's
+references are placed where the Box's are, so a node built through `e.b.head` lands where `r`'s referent lives - it
+became a `-sanitize` run case reading that node back through `r` after a churn. A local assigned a case referring to a local of
 the function after one referring to a parameter's referent has that local lifted too (built where the parameter's
 references live, a new one per call) - checked at run time under `-sanitize`. tests/kept.olang: a local declared,
 assigned and pushed into, a write through the payload's reference reaching the caller's, after a churn, run and decided
