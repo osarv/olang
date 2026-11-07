@@ -3460,6 +3460,27 @@ nextflag.olang:9:14: error[S9a]: It& cannot be walked - 'for ... in' takes an ar
     9 |     for _ in t { }
       |              ^
 compilation failed with 2 errors
+=== nllkeepsunion1.olang
+nllkeepsunion1.olang:19:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
+   19 |         f(x, t)
+      |              ^
+compilation failed with 1 error
+=== nllkeepsunion2.olang
+nllkeepsunion2.olang:19:11: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
+   19 |         f(t, x)
+      |           ^
+compilation failed with 1 error
+=== nllmerge.olang
+nllmerge.olang:15:17: error[O25i, O12]: 'at' may hold values of different scopes here, so where its referent lives is not known - nothing new is built or stored through it: give it values of one scope, or store through each where it is assigned
+   15 |         at.next = N(9)
+      |                 ^
+nllmerge.olang:13:9: note: 'at' is given a value here
+   13 |         at mut N& = outer
+      |         ^~
+nllmerge.olang:14:21: note: 'at' is given a value here
+   14 |         if i == 1 { at = inner }
+      |                     ^~~~~~~~~~
+compilation failed with 1 error
 === noextendsmethod.olang
 noextendsmethod.olang:6:12: error[T29f]: Nums declares no 'Count', and does not extend its base, which has one - declare it with 'extends'
     6 |     c := n.Count(fn(x) { return x > 1 })
@@ -3730,9 +3751,12 @@ o18claterkept.olang:24:16: error[O17]: this value's references live where its ow
       |                ^
 compilation failed with 1 error
 === o18cprojectionborrow.olang
-o18cprojectionborrow.olang:17:14: error[O10]: this reference lives in a scope that may not outlive where it is put
-   17 |         held = x
-      |              ^
+o18cprojectionborrow.olang:21:20: error[O25i]: this reads 'held', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
+   21 |     try io.Println(held!.s)
+      |                    ^~~~
+o18cprojectionborrow.olang:19:9: note: 'held' is given a value here
+   19 |         held = x
+      |         ^~~~~~~~
 compilation failed with 1 error
 === o18cprojectionfresh.olang
 o18cprojectionfresh.olang:15:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -3754,9 +3778,12 @@ o1blambdaglobal.olang:14:30: error[O1b]: a global holds only what lives as long 
       |                              ^
 compilation failed with 1 error
 === o23adepth.olang
-o23adepth.olang:17:14: error[O20]: 'v.n' lives where 'v' does, which closes first - keep a copy ('$v.n'), or keep what 'v' was made from
-   17 |         keep = v.n
-      |              ^
+o23adepth.olang:22:13: error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
+   22 |     assert $keep != ""
+      |             ^~~~
+o23adepth.olang:19:9: note: 'keep' is given a value here
+   19 |         keep = v.n
+      |         ^~~~~~~~~~
 compilation failed with 1 error
 === o23aliasmethod.olang
 o23aliasmethod.olang:17:16: error[O23, O11]: this stores into a field whose binding is not known through this path - store through a variable holding the instance
@@ -3767,9 +3794,12 @@ o23aliasmethod.olang:9:33: note: the callee requires it because of this statemen
       |                                 ^
 compilation failed with 1 error
 === o23aliaswrite.olang
-o23aliaswrite.olang:18:14: error[O20]: 'c.at' lives where 'c' does, which closes first - keep a copy ('$c.at'), or keep what 'c' was made from
-   18 |         keep = c.at
-      |              ^
+o23aliaswrite.olang:22:13: error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
+   22 |     assert $keep != ""
+      |             ^~~~
+o23aliaswrite.olang:20:9: note: 'keep' is given a value here
+   20 |         keep = c.at
+      |         ^~~~~~~~~~~
 compilation failed with 1 error
 === o25enote.olang
 o25enote.olang:19:5: error[O27]: this keeps a view of 'text', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Copy()'
@@ -4300,11 +4330,6 @@ r8trynothing.olang:4:20: error[R8]: nothing here can fail - write it without 'tr
     4 | fn main() ? { x := try inc(1) }
       |                    ^~~
 compilation failed with 1 error
-=== r9adefaultinner.olang
-r9adefaultinner.olang:19:14: error[O25]: a reference never narrows - declare it with ':=' from what it is given
-   19 |         keep = try mk(i) catch default inner
-      |              ^
-compilation failed with 1 error
 === r9adefaultlocal.olang
 r9adefaultlocal.olang:15:12: error[O10d]: this value lives in this function's own scope, which closes first
    15 |     return try mk(1) catch default seed
@@ -4629,9 +4654,12 @@ rv5matchborrow.olang:9:22: note: the callee requires it because of this statemen
       |                      ^~~~~~
 compilation failed with 1 error
 === rv5matchkeep.olang
-rv5matchkeep.olang:15:44: error[O10]: this reference lives in a scope that may not outlive where it is put
-   15 |             case E.A(y) { if i == 0 { keep = y } }
-      |                                            ^
+rv5matchkeep.olang:21:21: error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
+   21 |     try io.Println($keep.v)
+      |                     ^~~~~~
+rv5matchkeep.olang:17:39: note: 'keep' is given a value here
+   17 |             case E.A(y) { if i == 0 { keep = y } }
+      |                                       ^~~~~~~~
 compilation failed with 1 error
 === rv9slicetemp.olang
 rv9slicetemp.olang:18:9: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Copy()')
@@ -5400,11 +5428,6 @@ compilation failed with 1 error
 strcondnode.olang:24:34: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    24 |     x := b.head if b.k == 0 else Node(1, null)
       |                                  ^~~~~~~~~~~~~
-compilation failed with 1 error
-=== strcursornewnode.olang
-strcursornewnode.olang:24:9: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   24 |     x = Node(7, null)
-      |         ^~~~~~~~~~~~~
 compilation failed with 1 error
 === strcycledeps.olang
 strcycledeps.olang:20:5: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
