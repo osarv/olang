@@ -21740,9 +21740,7 @@ fn (c mut Checker&) firstUncovered(rows Vec<Array<ast.Pattern&>&>&, t types.Type
                 case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) {
                     if c.caseTag(x, t) == k { sub.Push(patTail(r, Array<ast.Pattern&>(0), ps.Len())) }
                 }
-                case ast.Pattern.Case(_, path, subs) {
-                    if c.caseTag(path, t) == k and subs.Len() == ps.Len() { sub.Push(patTail(r, subs, 0)) }
-                }
+                case ast.Pattern.Case(_, path, subs) { if c.caseTag(path, t) == k: c.byFieldRow(sub, r, subs, c.caseFields(t, k, path)) }
                 case _ { }
             }
         }
@@ -21889,7 +21887,7 @@ fn (c mut Checker&) coversRows(rows Vec<Array<ast.Pattern&>&>&, ts Array<types.T
                 }
                 match p {
                     case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) if c.caseTag(x, t) == k { sub.Push(patTail(r, Array<ast.Pattern&>(0), ps.Len())) }
-                    case ast.Pattern.Case(_, path, subs) if c.caseTag(path, t) == k and subs.Len() == ps.Len() { sub.Push(patTail(r, subs, 0)) }
+                    case ast.Pattern.Case(_, path, subs) if c.caseTag(path, t) == k { c.byFieldRow(sub, r, subs, c.caseFields(t, k, path)) }
                     case _ { }
                 }
             }
@@ -21898,6 +21896,7 @@ fn (c mut Checker&) coversRows(rows Vec<Array<ast.Pattern&>&>&, ts Array<types.T
         return true
     }
     if c.seqColumn(rows) { return c.coversSeq(rows, t, rest, depth) }
+    if c.isStruct(t) and c.structColumn(rows, t) { return c.coversStruct(rows, t, rest, depth) }
     sub mut Vec<Array<ast.Pattern&>&>& = Vec<Array<ast.Pattern&>&>()
     for r in rows {
         if c.patWild(r[0]) { sub.Push(patTail(r, Array<ast.Pattern&>(0), 0)) }
@@ -22144,23 +22143,10 @@ fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Lvalue&, t types.TypeId,
         case ast.Pattern.Case(sp, path, subs) {
             et := c.deref(t)
             k := c.caseTag(path, et)
-            if k < 0 { return c.callPattern(sp, path, subs, place, t, et) }
-            tst := c.isCase(sp, place, k)
-            sig := c.P.CaseSig(et, k)
-            ps := c.P.T.Items(c.P.T.Params(sig))
-            if ps.Len() != subs.Len() {
-                c.err(sp, msgs.ArgCount(ps.Len(), "" if ps.Len() == 1 else "s", subs.Len()))
-                return c.lit(sp, types.BoolT, 0)
-            }
-            base := place
-            if c.isRef(t) { base = typed.Lvalue.Deref(sp, et, c.read(sp, place)) }
-            rec := c.P.T.Items(c.P.T.Cases(et))[k]
-            pp := typed.Lvalue.Payload(sp, rec, typed.Payload(base, k, typed.Check.None))
-            for i in range subs.Len() {
-                fp := typed.Lvalue.Field(subs[i].Span(), ps[i], pp, i)
-                tst = c.and2(sp, tst, c.pattern(subs[i], fp, ps[i], binds, arm))
-            }
-            return tst
+            if k >= 0 { return c.payloadPattern(sp, path, k, subs, place, t, binds, arm) }
+            d := c.structDecl(path)
+            if d >= types.DeclId(0) { return c.structPattern(sp, path, d, subs, place, t, binds, arm) }
+            return c.callPattern(sp, path, subs, place, t, et)
         }
         case ast.Pattern.Value(_, x) { return c.exprPattern(x, place, t, binds, arm, true) }
         case ast.Pattern.Elems(sp, x, subs) { return c.elemsPattern(sp, x, subs, place, t, binds, arm) }
@@ -22168,6 +22154,9 @@ fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Lvalue&, t types.TypeId,
             c.err(sp, msgs.RestNotHere())    # S13h: an array pattern's item, which it reads itself
             return c.lit(sp, types.BoolT, 0)
         }
+        # a field by name is an item of a case's or a struct's pattern, which reads it there (S13b, S13i); anywhere
+        # else the call it was written in is no pattern - a value, whose argument by name the call says
+        case ast.Pattern.Field(sp, _, _) { return c.lit(sp, types.BoolT, 0) }
     }
 }
 
@@ -22236,6 +22225,7 @@ fn (c mut Checker&) callPattern(sp source.Span, path ast.Expr&, subs Array<ast.P
     for q in subs {
         match q {
             case ast.Pattern.Value(_, x), ast.Pattern.Path(_, x) { xs.Push(x) }
+            case ast.Pattern.Field(fsp, n, ast.Pattern.Value(_, x)) { xs.Push(ast.Expr.Named(fsp, n, x)) }
             case _ {
                 c.gap(q.Span(), "a binding in a call compared as a value (S13d)")
                 return c.lit(sp, types.BoolT, 0)
@@ -22243,6 +22233,265 @@ fn (c mut Checker&) callPattern(sp source.Span, path ast.Expr&, subs Array<ast.P
         }
     }
     return c.valueTest(sp, place, ast.Expr.Call(sp, path, xs.ToArray()), t)
+}
+
+# ---- items by name, struct patterns (S13b, S13i) ----
+
+# the fields a pattern's items match: their names in order (a name 0 where none is known), the struct they are a
+# value of (-1 for an enum case's payload, whose fields every module reads), how a message names what is matched
+# ("Point", "Shape.Rect"), and for a case carrying one whole type (T17a), with no field names, that type ("" for none)
+type fieldSet struct(Names Array<source.NameId>&, Struct types.TypeId, What String&, Whole String&) {
+    Names
+    Struct
+    What
+    Whole
+}
+
+# S13i: a struct's fields as a struct pattern names them, in their order (C2)
+fn (c mut Checker&) structFields(st types.TypeId) fieldSet& {
+    ns Vec<source.NameId>
+    sb := c.structBody(c.P.T.DeclOf(st))
+    if sb is not null {
+        for v in generic.FieldDecls(sb) {
+            for vn in v.Names { ns.Push(vn) }
+        }
+    }
+    return fieldSet(ns.ToArray(), st, c.ty(st), "")
+}
+
+# S13b: case k of enum et's payload fields as named items name them - none where it carries one whole type
+fn (c mut Checker&) caseFields(et types.TypeId, k I64, path ast.Expr&) fieldSet& {
+    ps := c.P.T.Items(c.P.T.Params(c.P.CaseSig(et, k)))
+    ns := Array<source.NameId>(ps.Len(), source.NameId(0))
+    cd := caseDecl(c.P.TypeDecl(c.P.T.DeclOf(et)), k)
+    if cd is not null and cd.Whole { return fieldSet(ns, types.TypeId(-1), c.src(path.Span()), c.ty(ps[0]) if ps.Len() > 0 else "?") }
+    if cd is not null {
+        for i in range cd.Payload.Len() { if i < ns.Len(): ns[i] = cd.Payload[i].Name }
+    }
+    return fieldSet(ns, types.TypeId(-1), c.src(path.Span()), "")
+}
+
+# a call's arguments read as a pattern's items (DESIGN.md point 13), where the parser left the call a value: "_" none,
+# a name a binding, "name = x" a field by name, anything else what the expression is as a pattern
+fn (c mut Checker&) argPatterns(args Array<ast.Expr&>&) Array<ast.Pattern&>& {
+    out := Array<ast.Pattern&>(args.Len(), ast.Pattern.Wild(source.Span(0, 0)))
+    for i, a in args { out[i] = c.argPattern(a) }
+    return out
+}
+
+fn (c mut Checker&) argPattern(a ast.Expr&) ast.Pattern& {
+    return match a {
+        case ast.Expr.Name(sp, n): ast.Pattern.Wild(sp) if c.text(n) == "_" else ast.Pattern.Bind(sp, n)
+        case ast.Expr.Named(sp, n, v): ast.Pattern.Field(sp, n, c.argPattern(v))
+        case _: ast.Pattern.Value(a.Span(), a)
+    }
+}
+
+# S13b, S13i: a pattern's items, one pattern per field - items by position first, in order, then items by name where
+# their fields stand (a struct pattern's bare name its field's binding), each field no item names a wildcard; a
+# payload's items by position alone name every field. What is wrong is said where say is set, failing with BadItems
+fn (c mut Checker&) byField(sp source.Span, subs Array<ast.Pattern&>&, fs fieldSet&, say Bool) Array<ast.Pattern&>& ? BadItems {
+    n := fs.Names.Len()
+    out := Array<ast.Pattern&>(n, ast.Pattern.Wild(sp))
+    given := Array<Bool>(n, false)
+    pos := 0
+    named := false
+    for q in subs {
+        f, sub := c.itemOf(q, fs)
+        if f == source.NameId(0) {
+            if fs.Struct >= types.TypeId(0) { try c.badItem(say, q.Span(), msgs.StructPatPositional(fs.What)) }
+            if named { try c.badItem(say, q.Span(), msgs.PatPositionAfterName()) }
+            if pos < n {
+                out[pos] = q
+                given[pos] = true
+            }
+            pos++
+            continue
+        }
+        named = true
+        if fs.Whole.Len() > 0 { try c.badItem(say, c.nameAt(q), msgs.WholeCaseNamed(fs.What, fs.Whole)) }
+        i := nameIndex(fs.Names, f)
+        if i < 0 or not c.fieldReadable(fs, f) { try c.badItem(say, c.nameAt(q), c.noItemField(fs, f)) }
+        if given[i] { try c.badItem(say, c.nameAt(q), msgs.PatFieldBothWays(c.text(f)) if i < pos else msgs.PatFieldTwice(c.text(f))) }
+        out[i] = sub
+        given[i] = true
+    }
+    if pos > n or (not named and pos != n) { try c.badItem(say, sp, msgs.ArgCount(n, "" if n == 1 else "s", pos)) }
+    return out
+}
+
+# an item's field and its pattern: "name = p" name and p, a struct pattern's bare name its own field and its binding;
+# any other item by position (field 0)
+fn (c mut Checker&) itemOf(q ast.Pattern&, fs fieldSet&) source.NameId, ast.Pattern& {
+    match q {
+        case ast.Pattern.Field(_, f, sub) { return f, sub }
+        case ast.Pattern.Bind(_, f) { if fs.Struct >= types.TypeId(0): return f, q }
+        case _ { }
+    }
+    return source.NameId(0), q
+}
+
+# the span of the name an item by name writes
+fn (c mut Checker&) nameAt(q ast.Pattern&) source.Span {
+    sp := q.Span()
+    match q {
+        case ast.Pattern.Field(_, f, _) { return source.Span(sp.Start, sp.Start + I32(c.text(f).Len())) }
+        case _ { return sp }
+    }
+}
+
+# where a name stands among names, -1 for nowhere
+fn nameIndex(ns Array<source.NameId>&, f source.NameId) I64 {
+    for i, g in ns { if g == f: return i }
+    return -1
+}
+
+# said where say is set; the items fail either way
+fn (c mut Checker&) badItem(say Bool, sp source.Span, m msgs.Msg&) ? BadItems {
+    if say { c.err(sp, m) }
+    error BadItems
+}
+
+# M6a: whether this module may name a struct's field f - a public one anywhere, a private one in its own module; every
+# payload field
+fn (c mut Checker&) fieldReadable(fs fieldSet&, f source.NameId) Bool {
+    if fs.Struct < types.TypeId(0) or c.text(f)[0].IsUpper() or c.frames.Len() == 0 { return true }
+    d := c.P.T.DeclOf(fs.Struct)
+    dm := c.P.T.DeclModule(d)
+    return dm == c.fr().Mi or not c.text(c.P.T.DeclName(d))[0].IsUpper() or c.P.L.Mods[dm].C
+}
+
+# what a name no field of fs has says: a struct's, a private one's, a case payload's - with the nearest this module
+# may name (B11)
+fn (c mut Checker&) noItemField(fs fieldSet&, f source.NameId) msgs.Msg& {
+    if fs.Struct >= types.TypeId(0) and nameIndex(fs.Names, f) >= 0 { return msgs.MemberIsPrivate(c.text(f), fs.What) }
+    near mut msgs.Nearest& = msgs.Nearest(c.text(f))
+    for g in fs.Names {
+        if g != source.NameId(0) and c.fieldReadable(fs, g) { near.Offer(c.text(g)) }
+    }
+    if fs.Struct >= types.TypeId(0) { return msgs.StructPatNoField(fs.What, c.text(f), near.Hint()) }
+    return msgs.PayloadNoField(fs.What, c.text(f), near.Hint())
+}
+
+# S13b: case k's test over the value at place, then each field an item matches - by position or by name - matched by
+# its pattern in its order
+fn (c mut Checker&) payloadPattern(sp source.Span, path ast.Expr&, k I64, subs Array<ast.Pattern&>&, place typed.Lvalue&
+                                   t types.TypeId, binds mut Vec<typed.Bind&>&, arm I64) typed.Expr& {
+    et := c.deref(t)
+    items := try c.byField(sp, subs, c.caseFields(et, k, path), true) catch BadItems { return c.lit(sp, types.BoolT, 0) }
+    tst := c.isCase(sp, place, k)
+    ps := c.P.T.Items(c.P.T.Params(c.P.CaseSig(et, k)))
+    base := place
+    if c.isRef(t) { base = typed.Lvalue.Deref(sp, et, c.read(sp, place)) }
+    rec := c.P.T.Items(c.P.T.Cases(et))[k]
+    pp := typed.Lvalue.Payload(sp, rec, typed.Payload(base, k, typed.Check.None))
+    for i in range items.Len() {
+        if isWild(items[i]) { continue }
+        fp := typed.Lvalue.Field(items[i].Span(), ps[i], pp, i)
+        tst = c.and2(sp, tst, c.pattern(items[i], fp, ps[i], binds, arm))
+    }
+    return tst
+}
+
+# S13i: the struct declaration a pattern's path names - "Point", "geo.Point", a generic one bare or with its arguments
+# ("Box", "Box<I64>"); -1 for none
+fn (c mut Checker&) structDecl(path ast.Expr&) types.DeclId {
+    t := c.typeNamed(path)
+    if t >= types.TypeId(0) { return c.P.T.DeclOf(t) if c.isStruct(t) else types.DeclId(-1) }
+    g := path
+    match path {
+        case ast.Expr.Generic(_, gx, _) { g = gx }
+        case _ { }
+    }
+    d := c.genericNamed(g)
+    if d >= types.DeclId(0) and c.P.T.DeclKindOf(d) == types.DeclKind.Struct { return d }
+    return types.DeclId(-1)
+}
+
+# S13i: whether a struct pattern's path names the matched value's type st: its declaration, written bare (a generic
+# one then st's instance) or with arguments that are st's
+fn (c mut Checker&) structPatOf(path ast.Expr&, d types.DeclId, st types.TypeId) Bool {
+    if not c.isNamed(st) or c.P.T.DeclOf(st) != d { return false }
+    match path {
+        case ast.Expr.Generic(gsp, gx, targs) {
+            ns := typePathOf(gx)
+            if ns.Len() == 0 { return false }
+            w := c.resolveNamed(ast.TypeRef.Named(gsp, ns, targs))
+            return w == types.UnknownT or c.P.T.Same(c.P.T.Plain(w), c.P.T.Plain(st))
+        }
+        case _ { return true }
+    }
+}
+
+# S13i: a struct pattern's test over the value at place - a reference tested for null first, then read through - each
+# field an item names matched by its pattern, a bare name binding the field
+fn (c mut Checker&) structPattern(sp source.Span, path ast.Expr&, d types.DeclId, subs Array<ast.Pattern&>&, place typed.Lvalue&
+                                  t types.TypeId, binds mut Vec<typed.Bind&>&, arm I64) typed.Expr& {
+    st := c.deref(t)
+    if st == types.UnknownT { return c.lit(sp, types.BoolT, 0) }
+    if not c.structPatOf(path, d, st) {
+        c.err(path.Span(), msgs.StructPatType(c.ty(st), msgs.Tok(c.src(path.Span()))))
+        return c.lit(sp, types.BoolT, 0)
+    }
+    fs := c.structFields(st)
+    items := try c.byField(sp, subs, fs, true) catch BadItems { return c.lit(sp, types.BoolT, 0) }
+    tst := c.lit(sp, types.BoolT, 1)
+    base := place
+    if c.isRef(t) {
+        if c.P.T.IsNullable(t) { tst = c.negate(sp, c.prim(sp, types.BoolT, typed.PrimOp.Same, c.read(sp, place), c.nullOf(sp, t))) }
+        base = typed.Lvalue.Deref(sp, st, c.read(sp, place))
+    }
+    for i in range items.Len() {
+        if isWild(items[i]) { continue }
+        isp := items[i].Span()
+        fp := c.field(isp, isp, base, fs.Names[i])
+        if fp is null { return c.lit(sp, types.BoolT, 0) }
+        tst = c.and2(sp, tst, c.pattern(items[i], fp, fp.Type(), binds, arm))
+    }
+    return tst
+}
+
+# S13a, S13i: whether a column holds a struct pattern of t, so its fields are its positions
+fn (c mut Checker&) structColumn(rows Vec<Array<ast.Pattern&>&>&, t types.TypeId) Bool {
+    d := c.P.T.DeclOf(t)
+    for r in rows {
+        match r[0] {
+            case ast.Pattern.Case(_, path, _) { if c.structDecl(path) == d: return true }
+            case _ { }
+        }
+    }
+    return false
+}
+
+# S13i: rows whose first column is a struct of type t, covering every value when they do over its fields - one
+# constructor, a wildcard's fields all wildcards, a struct pattern's the fields it names and wildcards
+fn (c mut Checker&) coversStruct(rows Vec<Array<ast.Pattern&>&>&, t types.TypeId, rest Array<types.TypeId>&, depth I64) Bool {
+    fs := c.structFields(t)
+    fts := c.P.T.Items(c.P.T.Fields(t))
+    if fts.Len() != fs.Names.Len() { return false }
+    d := c.P.T.DeclOf(t)
+    sub mut Vec<Array<ast.Pattern&>&>& = Vec<Array<ast.Pattern&>&>()
+    for r in rows {
+        if c.patWild(r[0]) {
+            sub.Push(patTail(r, Array<ast.Pattern&>(0), fts.Len()))
+            continue
+        }
+        match r[0] {
+            case ast.Pattern.Case(_, path, subs) { if c.structDecl(path) == d: c.byFieldRow(sub, r, subs, fs) }
+            case _ { }
+        }
+    }
+    cols Vec<types.TypeId>
+    for q in fts { cols.Push(q) }
+    for q in rest { cols.Push(q) }
+    return c.coversRows(sub, cols.ToArray(), depth + 1)
+}
+
+# a row whose first column is a case's or a struct's pattern, its items one per field in its place (S13b, S13i) - none
+# where they are wrong, which the pattern's own test said
+fn (c mut Checker&) byFieldRow(sub mut Vec<Array<ast.Pattern&>&>&, r Array<ast.Pattern&>&, subs Array<ast.Pattern&>&, fs fieldSet&) {
+    items := try c.byField(r[0].Span(), subs, fs, false) catch BadItems { return }
+    sub.Push(patTail(r, items, 0))
 }
 
 # ---- array patterns (S13h) ----
@@ -22410,23 +22659,9 @@ fn (c mut Checker&) exprPattern(x ast.Expr&, place typed.Lvalue&, t types.TypeId
         }
         case ast.Expr.Call(_, f, args) {
             k := c.caseTag(f, et)
-            if k >= 0 {
-                tst := c.isCase(sp, place, k)
-                ps := c.P.T.Items(c.P.T.Params(c.P.CaseSig(et, k)))
-                if ps.Len() != args.Len() {
-                    c.err(sp, msgs.ArgCount(ps.Len(), "" if ps.Len() == 1 else "s", args.Len()))
-                    return c.lit(sp, types.BoolT, 0)
-                }
-                base := place
-                if c.isRef(t) { base = typed.Lvalue.Deref(sp, et, c.read(sp, place)) }
-                rec := c.P.T.Items(c.P.T.Cases(et))[k]
-                pp := typed.Lvalue.Payload(sp, rec, typed.Payload(base, k, typed.Check.None))
-                for i in range args.Len() {
-                    fp := typed.Lvalue.Field(args[i].Span(), ps[i], pp, i)
-                    tst = c.and2(sp, tst, c.exprPattern(args[i], fp, ps[i], binds, arm, false))
-                }
-                return tst
-            }
+            if k >= 0 { return c.payloadPattern(sp, f, k, c.argPatterns(args), place, t, binds, arm) }
+            d := c.structDecl(f)
+            if d >= types.DeclId(0) { return c.structPattern(sp, f, d, c.argPatterns(args), place, t, binds, arm) }
             # a case of another enum, or of another instance of this one (G6b), with its payload: said as the type
             # it is, its payload's parts not read as values
             if c.caseWritten(f) {

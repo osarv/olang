@@ -2538,7 +2538,7 @@ fn (p mut Parser&) pattern(x ast.Expr&, top Bool) ast.Pattern& {
         }
         case ast.Expr.Member(sp, _, _) { return ast.Pattern.Path(sp, x) }
         case ast.Expr.Call(sp, f, args) {
-            if isPath(f) { return p.casePattern(sp, x, f, args) }
+            if isPatPath(f) { return p.casePattern(sp, f, args) }
             return ast.Pattern.Value(sp, x)
         }
         case ast.Expr.Index(sp, ty, items) {
@@ -2557,22 +2557,31 @@ fn (p mut Parser&) pattern(x ast.Expr&, top Bool) ast.Pattern& {
     }
 }
 
-# a call x of path f as a pattern: a case with patterns for its arguments, or - where one is a value no literal - a
-# value compared by "==" (S13d)
-fn (p mut Parser&) casePattern(sp source.Span, x ast.Expr&, f ast.Expr&, args Array<ast.Expr&>&) ast.Pattern& {
+# a call of path f as a pattern: a case's or a struct's, with patterns for its arguments - "name = x" a field matched
+# by name (S13b, S13i), a value no pattern compared by "==" in its position (S13d); the checker reads a call of what is
+# neither as the value it builds
+fn (p mut Parser&) casePattern(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&) ast.Pattern& {
     from := p.pats.Len()
-    for a in args {
-        sub := p.pattern(a, false)
-        match sub {
-            case ast.Pattern.Value(_, v) if not isLiteral(v) {
-                p.pats.Truncate(from)
-                return ast.Pattern.Value(sp, x)
-            }
-            case _ { }
-        }
-        p.pats.Push(sub)
-    }
+    for a in args { p.pats.Push(p.itemPattern(a)) }
     return ast.Pattern.Case(sp, f, gather(p.pats, from))
+}
+
+# an argument of a call read as a pattern: "name = x" a field by name, its pattern x's; else a position's pattern
+fn (p mut Parser&) itemPattern(a ast.Expr&) ast.Pattern& {
+    match a {
+        case ast.Expr.Named(sp, n, v) { return ast.Pattern.Field(sp, n, p.pattern(v, false)) }
+        case _ { return p.pattern(a, false) }
+    }
+}
+
+# a pattern's path: a name or a dotted path, a generic type with its arguments ("Box<I64>"), or a case of one
+# ("Opt<I64>.Some")
+fn isPatPath(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Generic(_, g, _): isPath(g)
+        case ast.Expr.Member(_, b, _): isPatPath(b)
+        case _: isPath(x)
+    }
 }
 
 # S13h: an array literal's form as a pattern - each item an element's pattern, "...name" its rest; one item that is no

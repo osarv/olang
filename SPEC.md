@@ -4834,17 +4834,20 @@ a loop that allocates and sometimes `continue`s cost no more than one that never
 
 ```
 case-clause    ::= "case" case-alt { sep case-alt } [ "if" expr ] case-body
-case-alt       ::= pattern | array-pattern | type-case | "_" | binary
+case-alt       ::= pattern | struct-pattern | array-pattern | type-case | "_" | binary
 type-case      ::= alias-chain IDEN [ type-args ] ( IDEN | "_" )       (T34)
 case-body      ::= block | ":" line-stmnt
-pattern        ::= alias-chain IDEN "." IDEN [ "(" list(sub-pattern) ")" ]
-sub-pattern    ::= IDEN | pattern | array-pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
+pattern        ::= alias-chain IDEN "." IDEN [ "(" list(item) ")" ]
+item           ::= sub-pattern | IDEN "=" sub-pattern                    (S13b, S13i)
+sub-pattern    ::= IDEN | pattern | struct-pattern | array-pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
+struct-pattern ::= alias-chain IDEN "(" [ list(item) ] ")"               (S13i)
 array-pattern  ::= elem-type "[" [ list(array-item) ] "]"                (S13h)
 array-item     ::= sub-pattern | "..." [ IDEN ]
 ```
 
 A `case-alt` is a `pattern` when everything before its last name names a known type and the whole of it parses as
-one, followed by `,`, `if`, `{`, `:` or its line's end; a path followed on its line by a name is a `type-case`, taken
+one, followed by `,`, `if`, `{`, `:` or its line's end - a path naming a struct type followed by its parentheses being a
+`struct-pattern` (S13i), never a constructor's call; a path followed on its line by a name is a `type-case`, taken
 on an `any` of a closed trait (T34); `_` alone takes every value (S13f), so an unguarded `case _` is the match's
 catch-all; anything else is a value, a `binary` expression (E1) - so the `if` of a guard is never read as a conditional
 (E28). Alternatives follow the listing rule (L18a): `,` between two on one line, the line break between lines - a
@@ -4915,7 +4918,14 @@ cannot be is a compile-time error.
 
 **S13b (patterns).** A pattern names a case of the enum at its position: `Type.Case` matches that case whatever its
 payload holds, and `Type.Case(p, ...)` matches it when each position of its payload matches, in declaration order,
-naming every field. A position is one of:
+naming every field. A payload's fields may also be matched **by name**, `name = p`, as a call's arguments may be given
+(E14b): `case Shape.Rect(h = 0)`, `case Shape.Rect(w, h = 0)`. Items by position come first, in declaration order, then
+items by name in any order; with an item by name the fields no item names are ignored (each a `_`), while a pattern of
+positions only names every field. A field given by position and again by name, a field named twice, an item by
+position after one by name, and a name the case's payload has no field of (the nearest named) are compile-time
+errors. A case carrying one whole type (T17a, `Round Circle`) has one position and no field names: its value is
+matched by a pattern of that type in the position - `case Shape.Round(Circle(r))` (S13i). A position, or what an item
+by name matches, is one of:
 - a **name**: a fresh local bound to a copy of that field, visible to the clause's guard and body only, and
   assignable as any local is (D11) - an identifier there is always a binding, never a value read, so the form never
   means "compare against a variable". Its storage is the clause's, as a local of the clause body is: a borrow of it does
@@ -4982,6 +4992,32 @@ String&[only]` and `case String&[first, ...rest, last]` every array of text; a m
 length to no case is a compile-time error naming it ("an array of 1 element", "3 elements or more"). A `...` anywhere but
 among an array pattern's items is a compile-time error. An alternative written as an array literal after a path that
 names no type (`case table[k]`) is a value compared by `==` (S13).
+
+**S13i (struct patterns).** `case Point(x = 0, y)` matches a struct value by its **fields**: in a pattern a struct
+type's parentheses list fields, never its constructor's parameters, and no constructor runs - the pattern reads the
+value as it is. A struct is built by a constructor whose parameters need not be its fields (C2), so the order of its
+fields was never part of what it promises; a struct pattern therefore names every field it matches, and has no item by
+position. Each item is
+- `name = p`: the field `name` matched by `p`, as a payload's position is (S13b) - a literal compares it by `==`, a
+  name binds a copy of it (always a fresh name: a local's value is compared by a guard, and a name already in scope is
+  D3a's error), `_` ignores it, a nested pattern matches it (a case of the enum it holds, a struct pattern, an array
+  pattern: `case Line(start = Point(x = 0, y = 0))`), and any other expression is a value compared by `==`;
+- a bare `name`: `name = name`, the field bound to a fresh local of its own name.
+
+Fields no item names are ignored. A field may be named only where it may be read (M6a): a public field anywhere, a
+private one in its struct's module. An item naming no field the struct has (the nearest readable one named - so
+`case Point(a, b)` says that a struct pattern names fields), a field private to another module, a field named twice,
+and an item by position (a literal, `_` or a pattern with no name before it) are compile-time errors. The type named is
+the matched value's (a compile-time error otherwise); a generic struct is named bare and is the matched value's
+instance (`case Box(v = 3)` against a `Box<I64>`), as a generic enum's case is (G6b), or written with its arguments,
+which must then be the matched value's. A struct the matched value holds through a reference is read through it, and a
+null reference (`T?&`) matches no struct pattern - the reference is tested first, as a null holds no case (S13). A
+binding takes the permission of the place it is read from (S13b, T25c), and a field of a unique type (T13b) is bound as
+a reference to it. A struct pattern stands at a case's top, in a payload position, as an array pattern's item and as an
+item of another struct pattern; it is a pattern only - no declaration takes a value apart (`Point(x, y) := p` is no
+statement). For S13a a struct is one constructor whose positions are its fields: a field no item names is a `_`, so a
+struct pattern of names and `_` covers every value of its type, and `case Flag(on = true)` with `case Flag(on = false)`
+cover every `Flag` - a match used as a value (S12b) over a struct needs no `case _` when its patterns cover it.
 
 **S13f (`case _`).** The alternative `_` matches every value, so it is its case's only alternative. With a guard,
 `case _ if cond` is selected when `cond` holds, whatever the value - the multiway test a range or a NaN asks for, the

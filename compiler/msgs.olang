@@ -545,6 +545,14 @@ type Diag enum {
     RestNoSlice
     ElemsNotSeq
     ElemsType
+    StructPatNoField
+    StructPatPositional
+    StructPatType
+    PatFieldTwice
+    PatFieldBothWays
+    PatPositionAfterName
+    PayloadNoField
+    WholeCaseNamed
     VariadicNotLast
     VariadicHere
     VariadicDefault
@@ -2432,6 +2440,30 @@ fn ElemsNotSeq(ty String&) Msg { return Msg(Diag.ElemsNotSeq, "S13h", "an array 
 
 # ERR_ELEMS_TYPE
 fn ElemsType(written String&, elem String&) Msg { return Msg(Diag.ElemsType, "S13h", "this array pattern's elements are " $written ", and what is matched holds " $elem " - write '" $elem "[...]'") }
+
+# ERR_STRUCT_PAT_NO_FIELD
+fn StructPatNoField(ty String&, text String&, hint String&) Msg { return Msg(Diag.StructPatNoField, "S13i", $ty " has no field '" $text "' - a struct pattern names the fields it matches, never its constructor's parameters" $hint) }
+
+# ERR_STRUCT_PAT_POSITIONAL
+fn StructPatPositional(ty String&) Msg { return Msg(Diag.StructPatPositional, "S13i", "a struct pattern names the fields it matches - write 'field = pattern' or a field's name: the order of " $ty "'s fields is no part of it") }
+
+# ERR_STRUCT_PAT_TYPE
+fn StructPatType(ty String&, text String&) Msg { return Msg(Diag.StructPatType, "S13i", "the value matched here is " $ty ", and this struct pattern matches " $text) }
+
+# ERR_PAT_FIELD_TWICE
+fn PatFieldTwice(text String&) Msg { return Msg(Diag.PatFieldTwice, "S13b", "field '" $text "' is named twice in this pattern") }
+
+# ERR_PAT_FIELD_BOTH_WAYS
+fn PatFieldBothWays(text String&) Msg { return Msg(Diag.PatFieldBothWays, "S13b", "field '" $text "' is matched by position and again by name") }
+
+# ERR_PAT_POSITION_AFTER_NAME
+fn PatPositionAfterName() Msg { return Msg(Diag.PatPositionAfterName, "S13b", "an item by position follows one by name - items by position come first, as a call's arguments do") }
+
+# ERR_PAYLOAD_NO_FIELD
+fn PayloadNoField(text String&, name String&, hint String&) Msg { return Msg(Diag.PayloadNoField, "S13b", "case " $text " has no field '" $name "'" $hint) }
+
+# ERR_WHOLE_CASE_NAMED
+fn WholeCaseNamed(text String&, ty String&) Msg { return Msg(Diag.WholeCaseNamed, "S13b", "case " $text " carries one whole " $ty " and has no field names - match its fields with a struct pattern, '" $text "(" $ty "(field = ...))'") }
 
 # ERR_MATCH_LENGTH_UNCOVERED
 fn MatchLengthUncovered(ty String&, what String&) Msg { return Msg(Diag.MatchLengthUncovered, "S13h", "a match over " $ty " gives a value only when its cases cover every value - none matches an array of " $what "; add a case for it, or 'case _: v'") }
