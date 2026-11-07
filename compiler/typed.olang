@@ -1236,6 +1236,8 @@ fn (u mut LocalUses&) prim(op PrimOp, args Array<Expr&>&, ctx Ctx) {
         match op {
             case PrimOp.Convert { u.expr(a, ctx) }
             case PrimOp.AnyMake { u.expr(a, Ctx.Esc) }
+            # (a holder's drop, O15: its destructors given the value where it is - lent for the call, kept nowhere)
+            case PrimOp.Drop { u.expr(a, Ctx.Arg) }
             case _ { u.expr(a, Ctx.Op) }
         }
     }

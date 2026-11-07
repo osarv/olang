@@ -365,6 +365,7 @@ fn (ln mut lowering&) gap(sp source.Span, what String&) {
 fn (ln mut lowering&) run() {
     b := ln.B
     t := ln.T
+    away := ln.standInAway()
     # locals: the typed body's, in its numbering
     for i in range b.Locals.Len() {
         l := b.Locals[i]
@@ -383,6 +384,7 @@ fn (ln mut lowering&) run() {
                 case _ { }
             }
         }
+        if away[i]: home = mir.ScopeRef.Program
         ln.F.AddLocal(mir.Local(l.Name, l.Sp, l.Ty, k, home))
     }
     for p in b.Params { ln.F.Params.Push(mir.LocalId(I32(p))) }
@@ -1126,6 +1128,42 @@ fn (ln mut lowering&) placeStorage(p typed.Lvalue&) mir.ScopeRef {
         case typed.Lvalue.Local(_, _, id): ln.storageOf(id)
         case _: mir.ScopeRef.Program
     }
+}
+
+# the stand-in placement's locals (no plan: a body lowered while compiling, for the evaluator) whose own storage flows
+# out of the body - handed back, held by what is handed back, kept by a callee, captured: given the program's scope,
+# as everything the stand-in builds is, rather than the frame a return closes (the evaluator refused such a program as
+# reading closed storage, where the run time - placed by the scope pass - reads it; bulk review 7, found with F4).
+# EscHard and a reference-holding result's Ret only: a read-only reference given a call is no reason to move it
+fn (ln mut lowering&) standInAway() Array<Bool> {
+    b := ln.B
+    out := Array<Bool>(b.Locals.Len(), false)
+    if ln.planned or b.Root is null: return out
+    u := typed.Uses(ln.T, b)
+    refs := ln.T.HoldsRefs(ln.T.Result(b.Ty))
+    for i in range b.Locals.Len() {
+        l := b.Locals[i]
+        # (a holder of a value with destructors keeps its frame: one flowing out is refused while compiling all the
+        # same, K2c, and a task's borrow of one in a join block - EscHard - must not move its drop)
+        if l.Kind != typed.LocalKind.Var or ln.T.IsRef(l.Ty) or ln.T.NeedsDrop(l.Ty): continue
+        out[i] = u.EscHard[i] or (u.Ret[i] and refs)
+    }
+    return out
+}
+
+# where by-value local p's storage lives, where the scope pass moved it out of its own block (O26a: the result's, a
+# parameter's, the program's; an outer block's): Frame for a local held where it is declared, or any other place
+fn (ln mut lowering&) escapedHome(p typed.Lvalue&) mir.ScopeRef {
+    if p != typed.Lvalue.Local: return mir.ScopeRef.Frame
+    l := I64(p.id)
+    # (a constructor's field lives with the instance; it is let go of here only where the constructor fails, and
+    # then now - no instance holds it)
+    if ln.B.Locals[l].Kind == typed.LocalKind.Field: return mir.ScopeRef.Frame
+    if ln.F.Locals[l].Home != mir.ScopeRef.Frame: return ln.F.Locals[l].Home
+    if not ln.planned: return mir.ScopeRef.Frame
+    st := ln.plan.Stored[l] if l < ln.plan.Stored.Len() else typed.Scope.Unset
+    if st != typed.Scope.Block or st.b == ln.B.Locals[l].In: return mir.ScopeRef.Frame
+    return ln.scopeRef(st)
 }
 
 # where a function's result is built: its result scope, else the program's
@@ -4237,7 +4275,17 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
             case typed.Expr.Borrow(_, _, p) {
                 a := ln.place(p)
                 if ln.dead { return mir.Operand.None }
-                ln.dropAt(a, p.Type(), ln.innermost(), sp)
+                home := ln.escapedHome(p)
+                if home == mir.ScopeRef.Frame {
+                    ln.dropAt(a, p.Type(), ln.innermost(), sp)
+                    return mir.Operand.None
+                }
+                # (bulk review 7, F4) a holder whose storage the scope pass moved where it flows - the result's, a
+                # parameter's, an outer block's - lets go of nothing here: its value is registered where its storage
+                # lives, as a call's value no slot takes is (O16), and its destructors run as that scope closes
+                rt := ln.T.Ref(p.Type(), types.Writable)
+                r := ln.into(rt, mir.Rvalue.Ref(ln.mk(a), rt), sp)
+                ln.emit(mir.Stmt.RegisterDtor(sp, home, p.Type(), r))
             }
             case _ { ln.gap(sp, "a drop of no place") }
         }

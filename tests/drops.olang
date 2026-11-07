@@ -163,3 +163,55 @@ test seenBy "reads a join block's holder while its task runs, ended after the wa
     assert joinHeld() == 11
 }
 assert joinHeld() == 11
+
+# a holder whose storage flows out of its function - returned as a reference, held by a returned value's reference
+# field, pushed by reference into a parameter's collection, captured by a returned closure - lets go where that storage
+# lives, as a call's value no slot takes is held where it lands (O16), never at the function's end (bulk review 7, F4)
+type RefTo struct(r Res&) {
+    r
+}
+
+type Shelf struct() {
+    items := Vec<Res&>()
+}
+
+fn mkRef(n I64, t mut Tally&) Res& {
+    x Res = Res(n, t)
+    return x
+}
+
+fn wrapRef(n I64, t mut Tally&) RefTo {
+    x Res = Res(n, t)
+    return RefTo(x)
+}
+
+fn shelve(s mut Shelf&, n I64, t mut Tally&) {
+    x Res = Res(n, t)
+    s.items.Push(x)
+}
+
+fn closeOver(n I64, t mut Tally&) fn&() I64 {
+    x Res = Res(n, t)
+    return fn() I64 { return x.id }
+}
+
+fn flowedOut() String {
+    t := Tally()
+    seen := ""
+    {
+        a := mkRef(5, t)
+        b := wrapRef(6, t)
+        s := Shelf()
+        shelve(s, 7, t)
+        f := closeOver(8, t)
+        seen = $a.id $b.r.id $s.items[0].id $f() "/" $t.Text()
+    }
+    return $seen "/" $t.Text()
+}
+
+test mkRef "ends a holder whose storage flowed out where that storage lives" {
+    assert flowedOut() == "5678//8765"
+}
+
+# (decided only at run time: the values flowing out are registered where they land, which the evaluator refuses
+# while compiling - K2c)
