@@ -623,7 +623,7 @@ fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
             ks := g.name("ks")
             kk := g.name("k")
             return ($ind "{\n" $ind "    " $ks " := list.List<fn&() I64>()\n" $ind "    for " $i " in range 3 { " $ks ".Push(keepBox(idBox("
-                    $b "))) }\n" $ind "    churn()\n" $ind "    for " $kk " in " $ks " { if " $kk "() == -7 { abort } }\n" $ind "}\n")
+                    $b "))) }\n" $ind "    churn()\n" $ind "    for " $kk " in " $ks " { if " $kk "() == -7 { unreachable } }\n" $ind "}\n")
         }
         if m == 5 { return $ind "for " $i " in range 3 { useBox(idBox(" $b ")) }\n" }    # a lambda only called in the callee
         return $ind "for " $i " in range 3 { readBox(idBox(" $b ")) }\n"
@@ -935,7 +935,7 @@ fn (g mut SG&) ctorScopeOp(a String&, ind String&, k I64) String& {
     hh := g.name("hh")
     tt := g.name("tt")
     field := "    y String& = $n \"-new-text-in-p\"\n"
-    if k == 2 { field = "    y := " $mkt "&p(n)\n" }
+    if k == 2 { field = "    y := " $mkt "(n)\n" }
     if k == 4 { field = "    y String& = $n \"-new-text-in-the-instance\"\n" }
     if k == 5 { field = "    y String& = (p if n >= 0 else $n \"-new-text-in-the-instance\")\n" }
     if k == 6 {
@@ -946,8 +946,8 @@ fn (g mut SG&) ctorScopeOp(a String&, ind String&, k I64) String& {
         if k == 8 { field = "    y String& = $n \"-new-text-in-the-instance\"\n    f fn&() I64 = fn() I64 { return y.Len() + I64(y[0]) }\n" }
     }
     g.addHelper(("fn " $mkt "(n I64) String& { return $n \"-made-in-p\" }\ntype " $ty " struct(p String&, n I64) {\n" $field
-                "}\nfn " $mkh "(p String&, n I64) " $ty " { return " $ty "(p, n) }\n"))
-    make := $ty "(" $tt ", " $v " + i)" if k != 1 else $mkh "(" $tt ", " $v " + i)"
+                "}\nfn " $ty "." $mkh "(p String&, n I64) " $ty " { return " $ty "(p, n) }\n"))
+    make := $ty "(" $tt ", " $v " + i)" if k != 1 else $ty "." $mkh "(" $tt ", " $v " + i)"
     read := $hh ".y.Len() + I64(" $hh ".y[0])" if k < 7 else $hh ".f()"
     use := $ind $a ".next = Node(" $read ")\n"
     if k == 3 or k == 9 {    # the legal side: read where the argument lives
@@ -982,11 +982,11 @@ fn (g mut SG&) ctorChoiceArgOp(a String&, ind String&, k I64) String& {
     }
     g.addHelper(("fn " $mk "(t String&, n I64) String { return $t \"-\" $n }\ntype " $ty " struct(p String&, n I64) {\n    p\n    n\n}\n"
                 "type " $wt " struct(q " $ty ", n I64) {\n    q\n    n\n}\n"
-                "fn " $mkh "(t String&, n I64) " $rt " {\n" $body "}\n"))
+                "fn " $rt "." $mkh "(t String&, n I64) " $rt " {\n" $body "}\n"))
     pp := $hh ".q.p" if k == 12 else $hh ".p"
     init := $wt "(" $ty "(\"outer\", 0), 0)" if k == 12 else $ty "(\"outer\", 0)"
     return ($ind "{\n" $ind $hh " := " $init "\n" $ind "for i in range 2 {\n" $ind "    " $tt " := $i \"-inner-text\"\n"
-            $ind "    " $hh " = " $mkh "(" $tt ", " $v " + i)\n" $ind "}\n" $ind "churn()\n"
+            $ind "    " $hh " = " $rt "." $mkh "(" $tt ", " $v " + i)\n" $ind "}\n" $ind "churn()\n"
             $ind $a ".next = Node(" $pp ".Len() + I64(" $pp "[0]))\n" $ind "}\n")
 }
 
@@ -1537,9 +1537,9 @@ fn Scenario(seed U64, k I64) String& {
     if t == 10 {    # a node built and stored through in a callee, returned through another
         kind = 0
         body := g.stmts(0, "x", 2, "    ")
-        head = ("fn mk" $k "() mut Node& {\n    x := Node(1)\n" $body "    return x\n}\n" "fn mk" $k "b() mut Node& { return mk"
+        head = ("fn Node.mk" $k "() mut Node& {\n    x := Node(1)\n" $body "    return x\n}\n" "fn Node.mk" $k "b() mut Node& { return Node.mk"
                 $k "() }\n")
-        decl = "x := mk" $k "b()"
+        decl = "x := Node.mk" $k "b()"
     }
     if t == Targets - 1 { return "# scenario " $k "\n" $g.strScenario(k) }
     body := g.stmts(kind, a, 2, "    ")
