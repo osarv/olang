@@ -307,7 +307,8 @@ keep.Push(t[0:1]) }` builds each turn's `t` where `keep` lives, a new one each t
 its turn (`keep.Push($t[0:1])`). A part of an instance a local's constructor built, kept longer, gives the field a binding
 of its own where the constructor can bind it (O28), else has the instance built where the part is kept. Storage that
 cannot be built elsewhere stays where it is, and keeping a view of it longer is a compile-time error naming a copy of
-what the view shows: a by-value parameter's own storage (the call's copy, O14, C2d), a generator `Next()`'s result scope
+what the view shows: a by-value parameter's own storage (the call's copy, O14, C2d), a match binding's or a capture's
+own copy (S13b, D16c), a generator `Next()`'s result scope
 (D18b), storage reached through a derived scope or a scope not known here (O23a, O12), and storage holding a value
 whose destructor is still to run (O15: it would run later than its holder lets go) [question 2]."
 
@@ -368,6 +369,7 @@ Every edge lifts; the rest is when.
 | storage the view shows | why it cannot be built longer | the error |
 |---|---|---|
 | a by-value parameter's own storage | the call's copy, made by the caller where the call stands (O14, item 17's exception) | O14/C2d, as today: return the value or take `p T&` |
+| a match binding's or a lambda capture's own copy | made by the match or the lambda where it stands (S13b, D16c); not `liftable` - additive later if code asks | O20/O27, naming a copy |
 | a generator `Next()`'s result scope | one call's; the walk keeps nothing in it (D18b) | D18b's |
 | reached through a derived scope or a scope not known here | exists at no run time / where it lives is not known (O23a, O12) | O23a's, O12's - as a whole value's today |
 | holding a value whose destructor is still to run (`mayHoldDtor`) | it would run where the view's holder lets go, not where its own holder does (O15) - a file kept open for the name of it | reworded O27: "this keeps a view of 'f', whose destructor runs when its block ends - keep a copy of what it shows" [question 2] |
@@ -397,7 +399,7 @@ for that edge; the judgment after the lift is the same FIT as before with a long
 re-judged: a store into the lifted storage (`t.x = y`, now in a longer scope) must have `y` outlive the new term, and
 proposes or fails in the next round; a lifted local is exactly in its new term (it is built there), so stores through it
 build there (I2). Lifts go only into terms that exist at run time (`Runs`) and only of storage the program builds
-(`liftable`; never a parameter's, a capture's or a for-in's copy), and they only lengthen (`joinTerm`), in a finite
+(`liftable`: a local or a hidden one, never a parameter's, a capture's or a match binding's copy), and they only lengthen (`joinTerm`), in a finite
 lattice, so the iteration ends at a least solution. A destructor never runs later than its holder lets go (4.3). A
 view handed to a task is built at the join's level, so P2 holds.
 
@@ -416,3 +418,97 @@ gen_walkkept and gen_walkkept2 (C4). o23aliaswrite becomes either accepted (its 
 refused at `arr[0].at = x` by O23's unknown binding - both sound; the round runs it under `-sanitize` and pins what it
 gives. Staying refused: o26own, e31calllocal, r9adefaultlocal, o10dd9bslice (a by-value parameter's storage); a new case
 keeping a view of a destructor-holding local past its block (question 2).
+
+## 5. T22a: a function value carries its relations
+
+### 5.1 The rule, as SPEC would state it
+
+**T22a** (replaced). "A function's inferred relations (§8 O10b) - between its parameters' scopes and its result's,
+and, for a lambda or a type's `Call` (E31), between those and what it captured - are carried by the function value it
+becomes wherever the inference follows that value whole: through the locals of the body holding it (each version,
+O25i), a conditional's or a `match`'s value, and a call's result (what every return of the callee gives, O13c). A call
+through such a value is held to its relations as a direct call is held to its callee's obligations (O10c), what it
+captured taken where it lived when the lambda was made. A place where the value meets code judged once for many values -
+an argument for a parameter, a field, an element, a payload, a global, a type argument, a capture, an `any` (T32a), a
+task, a type variable's binding [question 1] - holds only what its written function type says of every call (T22): a
+value carrying more there is a compile-time error naming the relations and the place. `olang explain` says of every
+function carrying relations where it can and cannot go (B11b)."
+
+**T22** keeps its last sentences for a written function type ("every parameter its own scope, and a result holding
+references may hand back what its reference parameters refer to"), minus O27's clause (4.1). **O13c** gains a third
+thing a call's result carries: "for a function value, what every `return` gives carries (T22a), resolved through the
+call". **D16d** is unchanged: where a lambda lives is still where its captures do.
+
+### 5.2 Records: what a value carries, where it travels, where it stops
+
+- **A record** is the body a function value calls and, for a lambda, the term each capture had where the lambda was
+  made (in the holding body's terms); for an adapter (`kp` given as a function value through its `Call`, E31), its
+  receiver's term. A named function's record has no captures. A value may carry several records (versions reaching a
+  read, a conditional of two functions) and **unknown**: a value from a parameter, a field, an element - anything whose
+  record is not followed - which T22's contract describes, as every value does today.
+- **Travels** along what one judgment sees whole: a `Fn` expression gives its record; a read of a local gives its
+  versions' records (3.3: `fnRecs` beside `defTerms`, set per statement as terms are); `Cond`, `Match` and a `catch`
+  default give the union; a call gives what its callee's summary says every return gives (`summary.ResFn`, in the
+  callee's terms, translated through the call's bindings - a capture of the callee's parameter's referent becomes the
+  argument's term, the result scope where the call lands). `ResFn` is computed for bodies outside a cycle; a body in a
+  cycle, or one not wholly checked, gives unknown, and its returns of a value with relations are boundaries (judged at
+  the `return`).
+- **Stops** at every place that code judged once for many values reads: an argument (whatever the callee - its
+  parameter's type is all its body was judged with), a store into a field, an element, a payload, a global, a type
+  argument (`v.Push(f)`), a capture (a lambda's body is judged once, before the body making it, so its captures are
+  unknown inside it), a task's function or argument, an `any`, a `yield`, and a generic's type variable [question 1].
+
+### 5.3 A call through a value that carries a record
+
+`call` with `Callee.Value(x)`: where every record of `x` is known, each is judged as a direct call to its body - the
+parameters' scope variables bound by the arguments (O17, O18a, O18b as for `Callee.Body`), the result scope by where the
+call lands, each capture's scope variable by the record's term - and its obligations discharged (`dischargeRels` with
+that body's relations, through those bindings); where two records place a temporary argument differently (O18b), it is
+built where both need (the join). An unknown member keeps today's judgment (`valueRels`). O17's lending reads the
+record's body (`Keeps`, `Stores`, `Puts`) instead of "a call through a function value keeps nothing of its arguments
+beyond the call but in its result" - stricter, since the point of a record is that the callee may keep.
+
+### 5.4 The boundary and its error
+
+At a boundary, each record's relations must be what the place's written type says of every call (`valueCovered`,
+unchanged: each reference parameter's scope outliving the result's, exactly where both can be stored through); a
+relation naming a capture is never covered. `fnUses` and `fnValues` change from "every function named as a value" to
+"every record reaching a boundary": the check moves into the walk, at the argument, the `=`, the `return` in a cycle.
+The error names the function (or "this lambda" and the parameter it keeps, as today), the relation and the place:
+`'link' ties b's scope to a's (it stores b into a), and put's parameter 'f' is a written function type, which says
+nothing of that - call link directly, or hold it in a local and call it there`. The messages of
+FuncValueObligations, LambdaValueObligations, LambdaValueRelates and CallValueObligations are reworded so; T32a's
+AnyMethodObligations stays.
+
+### 5.5 explain, doc, hover
+
+`# not a value: its scope obligations ... (T22a)` becomes `# as a value: held in locals and results only - its scopes
+(b outlives a) are more than a written function type says (T22a)`; a function covered by T22's contract says nothing,
+as today. B11b's text follows.
+
+### 5.6 Why it is sound
+
+- *Exact records.* A record names the body called and the scopes its captures had when the lambda was made; captures
+  are copies made then and never repointed (D16c: a capture's copy is read-only; a reference capture still names the
+  instance it named), so those scopes are where the captured referents live at every later call.
+- *Complete records.* Every value a local can hold at a call reaches it through a version (3.7's over-approximation);
+  every value a call's result can be is one of its callee's returns (`ResFn` over every `return`); a conditional's
+  value is one of its branches'. Anything else is unknown, judged by T22's contract.
+- *Direct-call soundness.* A call through a value whose records are known discharges each record's obligations
+  through that call's own bindings - the same judgment O10c makes for the direct call, sound by its argument. Lending
+  reads the body's own summary, as a direct call's does.
+- *Nothing escapes the inference unchecked.* A value leaves what one judgment sees only at a boundary, where T22a's
+  coverage holds as today; a call through a value reached from a boundary place relies only on T22's contract, which
+  every value stored there meets. Records change no code (two words, as T21 says), so nothing changes at run time.
+
+### 5.7 Cost and programs
+
+A record per `Fn` expression and per read of a function-valued local; a call through a known value is a direct call's
+discharge. Negligible. Newly compiling (run cases, read back after a churn): `g := link; g(x, N(5))` (the temporary built
+where `x` lives, O18b through link's relation); local closures keeping their arguments (`add := fn(k String&) {
+names.Push(k) }`, `add("a")`); `f := mk(gone); f("b")` with `mk` returning such a closure; a conditional of two
+functions with different relations, each judged; a function-valued cursor (3.1). Staying refused, said at the place:
+t22sharedscope, t22sharedscopetype, t22aobligation (an argument for a written parameter), t22alambdakeeps (a field),
+callvaluekeeps, callvaluekeepsblock, callvaluekeepsframe (an adapter given a written parameter, or a local written
+`s fn&(x fn&() I64) = kp` - a local's written type is no boundary, so that one stops at `s(...)`'s argument instead),
+t32anyscopes (an `any`), t22sharedscopegeneric (question 1).
