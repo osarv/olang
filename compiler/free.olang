@@ -44,6 +44,7 @@ OPl I64 = 2     # a value of place v, read from it: a view of it
 OMov I64 = 3    # a value moved out of place v (vacate)
 ONew I64 = 4    # what is built at site v of the body
 OUnk I64 = 5    # not known
+OParC I64 = 6   # what parameter v holds by reference only: a copy of its value, which owns its owned parts anew (Part C)
 
 fn orig(k I64, v I64) I64 { return (k << 40) | v }
 fn okind(o I64) I64 { return o >> 40 }
@@ -148,6 +149,7 @@ LDrop I64 = 3
 LCall I64 = 4
 LDestroy I64 = 6   # a Destroy() of a value moved out of the place (C9b): what it held may be ended there
 LYield I64 = 7     # a generator's yield: its consumer may let go of any place before the next Next (F1)
+LHeld I64 = 8      # a by-value holder's value ended where its block is left (O15): its leaves let go there (Part C)
 
 # a call given a value of a sole place as the root of an argument: what the callee builds there is built in that
 # value's region (RegionOr)
@@ -218,6 +220,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     resFrom Vec<mut Vec<I64>&>
     parStored Vec<mut Vec<I64>&>
     parEsc Vec<mut Vec<I64>&>
+    parEscC Vec<mut Vec<I64>&>  # by body: the parameters a copy of which it keeps - their references, not their owned parts
     parMulti Vec<mut Vec<I64>&>   # the parameters a body stores more than once on a path (a loop, two stores)
     lets Vec<mut Vec<I64>&>
     letsAll Vec<Bool>
@@ -284,6 +287,12 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     sayDestroys Bool = true    # whether a refused Destroy() is reported (not on the error path, where nothing is built)
     Done Bool = false          # whether Decide ran with a root (else every decision is "keep")
     Debug Bool = false
+    # Part C: a test build (its guards run destructors where a failed check unwinds - where no call is written); by
+    # type (representation), its destructor's body; the types whose values may be registered with a scope (O16) - their
+    # destructors run as it closes, where no call is written
+    Tests Bool = false
+    dtorOf Map<I64, I64>
+    registered Map<I64, Bool>
 }
 
 fn (f mut Free&) T() mut types.Table& { return f.P.T }
@@ -665,6 +674,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64, destroys Bool = true) {
         f.resFrom.Push(Vec<I64>())
         f.parStored.Push(Vec<I64>())
         f.parEsc.Push(Vec<I64>())
+        f.parEscC.Push(Vec<I64>())
         f.parMulti.Push(Vec<I64>())
         f.lets.Push(Vec<I64>())
         f.letsAll.Push(false)
@@ -685,6 +695,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64, destroys Bool = true) {
         f.savedAt.Push(Array<I64>(0))
         f.dIn.Push(false)
         f.olIn.Push(false)
+        f.noteDtor(b)
     }
     # with no root nothing is freed early, but each Destroy() is still decided (C9b) - where it can be, by facts this
     # module's code and its imports' give alone: a value built for its local
@@ -759,7 +770,8 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64, destroys Bool = true) {
         if f.lets[b].Len() > 0 or f.letsAll[b] {
             # what it may let go of keeps: it runs where no call is written, so no view can be judged across it - every
             # place, where it may let go of any
-            if f.implicit(b) {
+            # (Part C: a destructor running only where a value's holder lets go of it is a call there - dtorCalls)
+            if f.implicit(b) and not f.modelled(b) {
                 if f.letsAll[b] { f.hidden = true } else { addAllTo(f.hiddenAt, f.lets[b]) }
                 if f.Debug { try io.PrintErr($"free: hidden let-go in " $f.fnName(b) " at " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n") catch io.Error { } }
             }
@@ -823,6 +835,132 @@ fn (f mut Free&) entry(b I64) Bool {
     if i < 0 or f.named[b]: return true
     d := f.P.FnDecl(f.P.InstanceFn(i))
     return d.Recv is not null or d.Export or f.P.L.Names.Text(d.Name) == "main"
+}
+
+# ---- Part C: destructors where their holders let go ----
+
+# body b as a destructor's (by its type), or as a constructor registering its instance (C11's reference-only
+# instance, registered where it lands - O16)
+fn (f mut Free&) noteDtor(b I64) {
+    t := f.T()
+    match f.Bodies[b].Of {
+        case typed.BodyOf.Dtor(ty) { f.dtorOf.Put(I64(t.Repr(ty)), b) }
+        case typed.BodyOf.Ctor(_, _) {
+            rs := t.Results(f.Bodies[b].Ty)
+            if rs.Len() == 1 and t.IsRef(rs[0]) and t.NeedsDrop(t.Referent(rs[0])) { f.register(t.Referent(rs[0])) }
+        }
+        case _ { }
+    }
+}
+
+# a value of type ty registered with a scope (O16): the destructors it runs - its own and its parts' - run as that
+# scope closes, where no call is written
+fn (f mut Free&) register(ty types.TypeId) {
+    if f.Debug and not f.registered.Has(I64(f.T().Repr(ty))) { try io.PrintErr($"free: registered " $f.T().Canon(ty) "\n") catch io.Error { } }
+    for p in f.T().ValueParts(ty) { f.registered.Put(I64(p), true) }
+}
+
+# whether destructor body b runs only where a holder lets go of a value written in the program (a Drop or a Destroy,
+# walked as a call of it - dtorCalls): no value of its type is ever registered with a scope, and no test build's guard
+# runs it where a failed check unwinds
+fn (f mut Free&) modelled(b I64) Bool {
+    if f.Tests: return false
+    return match f.Bodies[b].Of {
+        case typed.BodyOf.Dtor(ty): not f.registered.Has(I64(f.T().Repr(ty)))
+        case _: false
+    }
+}
+
+fn (f Free&) isDtor(b I64) Bool {
+    if b < 0 or b >= f.Bodies.Len(): return false
+    return match f.Bodies[b].Of {
+        case typed.BodyOf.Dtor(_): true
+        case _: false
+    }
+}
+
+# a Drop or a Destroy of a value of the type a gives (or refers to): a call of each destructor it runs - its own and its
+# parts', deep - with every let-go those bodies may do (Part C: so a destructor's let-goes are judged where it runs)
+fn (w mut walker&) dtorCalls(sp source.Span, a typed.Expr&) {
+    t := w.T()
+    ty := a.Type()
+    w.dtorCallsOf(sp, t.Referent(ty) if t.IsRef(ty) else ty)
+}
+
+fn (w mut walker&) dtorCallsOf(sp source.Span, ty types.TypeId) {
+    f := w.F
+    t := w.T()
+    for p in t.ValueParts(ty) {
+        b2 := try f.dtorOf.Get(I64(p)) catch default -1
+        if b2 < 0: continue
+        if not w.Final { addTo(f.callers[b2], w.Id) }
+        if f.letsAll[b2] {
+            if not w.Final and not f.letsAll[w.Id] {
+                f.letsAll[w.Id] = true
+                f.changed = true
+            }
+            if w.Final: w.go(AnyPlace, LCall, sp, source.Span(0, 0), b2)
+            continue
+        }
+        for k in f.lets[b2] { w.go(k, LCall, sp, source.Span(0, 0), b2) }
+    }
+}
+
+# Part C: block bl's scope closing - a statement of its own after everything in it - running the destructors of the
+# values registered with it (O16), each walked as a call there
+fn (w mut walker&) closeAt(bl typed.Block&) {
+    ts := try w.closes.Get(I64(bl.Id)) catch { return }
+    w.closes.Remove(I64(bl.Id))
+    n := w.no
+    w.no++
+    w.ends.Push(n)
+    was := w.cur
+    w.cur = n
+    sp := w.body().Blocks[I64(bl.Id)].Sp
+    for ty in ts { w.dtorCallsOf(sp, ty) }
+    w.ends[n] = n
+    w.cur = was
+}
+
+# a value with destructors to run given storage at site (a Promote, O16): registered with the scope the site builds
+# in - a block of this body, whose close runs them (closeAt); any other scope's close is no place of this body
+fn (w mut walker&) registeredAt(site typed.SiteId, ty types.TypeId) {
+    f := w.F
+    sc := typed.Scope.Unset
+    if w.Id < f.Plans.Len() and site >= typed.SiteId(0) and I64(site) < f.Plans[w.Id].Built.Len() { sc = f.Plans[w.Id].Built[I64(site)] }
+    if sc != typed.Scope.Block {
+        f.register(ty)
+        return
+    }
+    k := I64(sc.b)
+    ts := try w.closes.Get(k) catch default Vec<types.TypeId>()
+    if not ts.Has(ty): ts.Push(ty)
+    w.closes.Put(k, ts)
+}
+
+# the by-value local a Drop in deferred code ends - a holder letting go where its block is left (check.dropOnExit) - -1
+# for any other operation
+fn (w mut walker&) heldDrop(op typed.PrimOp, args Array<typed.Expr&>&) I64 {
+    if op != typed.PrimOp.Drop or args.Len() != 1 or w.deferStack.Len() == 0: return -1
+    a := args[0]
+    if a != typed.Expr.Borrow: return -1
+    p := a.p
+    if p != typed.Lvalue.Local: return -1
+    return I64(p.id)
+}
+
+# Part C: a holder whose storage the scope pass homed outside its block registers its value where that storage lives
+# instead of ending it (lowering's escapedHome)
+fn (w mut walker&) escapedHolder(d typed.Block&) {
+    b := w.body()
+    l := typed.DropHolder(b, d)
+    if l < 0 or b.Locals[l].Kind == typed.LocalKind.Field or w.Id >= w.F.Plans.Len(): return
+    st := w.F.Plans[w.Id].Stored
+    if l >= st.Len(): return
+    s := st[l]
+    own := s == typed.Scope.Frame or s == typed.Scope.Unset or (s == typed.Scope.Block and s.b == b.Locals[l].In)
+    if not own and w.F.Debug { try io.PrintErr($"free: escaped holder " $l " in " $w.F.fnName(w.Id) " " $s " in " $b.Locals[l].In "\n") catch io.Error { } }
+    if not own { w.F.register(b.Locals[l].Ty) }
 }
 
 # whether a body runs where no call is written: a destructor, or a method lowering calls by its name (E11c, E10a)
@@ -994,6 +1132,17 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     storeWithin I64 = -1       # the parameter the container being stored into is reached from (withinOf), -1 none
     storeInside I64 = -1       # ... the place a value of which it is reached through (insidePlace), -1 none
     exemptSite I64 = -1        # the call a store's value is, whose copy (D9h) is made for the place it is stored into
+    # Part C: QCE's copy of a value handed on (check.ownCopy) as the value of a store into a struct or an element held in
+    # place - made right there for the one owner or array leaf it holds (copyInto). check.storeOver holds it in a Held
+    # local first (by local, the copy); the copy whose site is exempt from untracked, the held local read as the store's
+    heldCopy Map<I64, typed.Expr&>
+    copyExempt I64 = -1
+    copyRead I64 = -1
+    # Part C: by let-go, the Defer statement whose block's end it stands at (a holder's drop), -1 for its own statement;
+    # by block, the types of the values registered with its scope (O16) - their destructors walked as calls at its close
+    goEnd Vec<I64>
+    closes Map<I64, Vec<types.TypeId>>
+    handing I64 = 0             # a unique value being handed on (Seq.Gone): moved, so no view of it is in use here
     yieldOrig Vec<mut Vec<I64>&>  # what each Collect being walked yields may refer into
     stmtSp source.Span = source.Span(0, 0)     # the statement being walked
     readPlace Vec<I64>        # view reads: the place, the statement
@@ -1043,6 +1192,9 @@ fn newWalker(f mut Free&, b I64, final Bool) mut walker& {
     w.quiet = 0
     w.storeWithin = -1
     w.storeInside = -1
+    w.heldCopy.Clear()
+    w.copyExempt = -1
+    w.copyRead = -1
     w.reset()
     body := f.Bodies[b]
     n := body.Locals.Len()
@@ -1156,6 +1308,8 @@ fn (w mut walker&) reset() {
     w.goRecv.Clear()
     w.goCallee.Clear()
     w.goIdx.Clear()
+    w.goEnd.Clear()
+    w.closes.Clear()
     w.parSite.Clear()
     w.parSitePlace.Clear()
     w.parSiteAt.Clear()
@@ -1183,8 +1337,17 @@ fn (w mut walker&) block(bl typed.Block&) {
     for i in range bl.Stmts.Len() {
         # a statement right before a return: what it stores is the last store on its path
         if i + 1 < bl.Stmts.Len() and leaves(bl.Stmts[i + 1]) { w.lastAt.Push(w.no) }
-        if track: nums.Push(w.no)
+        if w.Final: nums.Push(w.no)
         w.stmt(bl.Stmts[i])
+    }
+    w.closeAt(bl)
+    if not w.Final { return }
+    # Part C: where a holder's drop - deferred code - runs: its block's end
+    for i in range bl.Stmts.Len() {
+        match bl.Stmts[i] {
+            case typed.Stmt.Defer(_, _) { w.deferEnd.Put(nums[i], w.no - 1) }
+            case _ { }
+        }
     }
     if not track { return }
     # C9b: where a Defer statement's code runs (its block's end), and the statements a return, an error or an
@@ -1259,6 +1422,7 @@ fn (w mut walker&) inOwner(o Vec<I64>&, but I64, sp source.Span, how String&) {
 fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&) {
     if not w.Final or w.quiet > 0 { return }
     for k in w.F.heldPlaces(ty) {
+        if w.F.Debug { try io.PrintErr($"untracked " $k " at " $w.F.P.L.Diags.Locate(w.body().File, I64(sp.Start)) "\n") catch io.Error { } }
         w.F.keep(k, RCopied, w.body().File, sp, $"a value holding it is made with no store into it, by " $how ": '" $w.text(sp) "'")
     }
 }
@@ -1297,7 +1461,24 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
         case typed.Stmt.Let(sp, l, x) {
             w.declAt[I64(l)] = n
             w.declSp[I64(l)] = x.Span()
+            # (Part C: storeOver's held copy, judged where it is stored - copyInto - or, read anywhere else, untracked)
+            lk := w.body().Locals[I64(l)].Kind
+            site := ownCopySite(x) if lk == typed.LocalKind.Held or lk == typed.LocalKind.Hidden else -1
+            if site >= 0: w.heldCopy.Put(I64(l), x)
+            # (and a constructor's field given a copy of a value handed on - QCE's ownCopy of a parameter - its leaves'
+            # value, made right there: copyLeaves)
+            fk := try w.fields.Get(I64(l)) catch default -1
+            # (never in a constructor whose instance views what it is given - D9h leaves that copy out, its caller copying)
+            fieldCopy := fk >= 0 and ownCopySite(x) >= 0 and w.F.placeKey(w.ctorTy, fk) < 0 and w.F.leaves(x.Type()).Len() > 0 and
+                         w.F.viewsOf(w.Id) == 0
+            exemptWas := w.copyExempt
+            if site >= 0 or fieldCopy: w.copyExempt = ownCopySite(x)
             o := w.expr(x)
+            w.copyExempt = exemptWas
+            if fieldCopy {
+                o = w.F.unowned(o)
+                w.copyLeaves(w.F.leaves(x.Type()), x, sp)
+            }
             w.give(I64(l), o)
             k := try w.fields.Get(I64(l)) catch default -1
             if k >= 0 { w.storeField(k, x, o, sp) }
@@ -1351,6 +1532,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
         case typed.Stmt.Block(_, b) { w.block(b) }
         case typed.Stmt.Defer(_, b) {
             if w.body().Blocks[I64(b.Id)].Kind == typed.BlockKind.ErrDefer: w.errDefers.Push(n)
+            if not w.Final: w.escapedHolder(b)
             w.inDefer++
             w.deferStack.Push(n)
             w.block(b)
@@ -1404,7 +1586,17 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     c0 := typed.CallOf(x)
     outer := w.exemptSite
     w.exemptSite = I64(c0.Site) if c0 is not null and p != typed.Lvalue.Local else -1
+    # Part C: a copy of a value handed on stored into a part held in place - made for its leaves (copyInto)
+    cm := w.copyStored(p, x)
+    wasE, wasR := w.copyExempt, w.copyRead
+    if cm is not null {
+        w.copyExempt = ownCopySite(cm)
+        w.copyRead = readLocalOf(x)
+    }
     o := w.expr(x)
+    # (the copy, read out of its held local, is the value made for those leaves - no view of them)
+    if cm is not null: o = w.F.unowned(o)
+    w.copyExempt, w.copyRead = wasE, wasR
     w.exemptSite = outer
     try w.targets.Pop() catch { }
     # (a value array stored whole from existing storage is copied there, T7b)
@@ -1449,7 +1641,7 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
             # value's - which a constructor's own stores account for, and a copy stores elsewhere
             lvs := w.F.leaves(p.Type())
             for lf in lvs { w.go(lf.PlaceId, LLeaf, p.Span(), source.Span(0, 0), -1) }
-            if lvs.Len() > 0 { o = w.copyInto(lvs, p.Type(), x, o, sp) }
+            if lvs.Len() > 0 { o = w.copyInto(lvs, p.Type(), x, o, sp, cm) }
         }
         case typed.Lvalue.Elem(_, _, _) {
             # an element given a value: never a let-go - the program's own copies between elements are not known
@@ -1461,7 +1653,7 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
                 return
             }
             lvs := w.F.leaves(p.Type())
-            if lvs.Len() > 0 { o = w.copyInto(lvs, p.Type(), x, o, sp) }
+            if lvs.Len() > 0 { o = w.copyInto(lvs, p.Type(), x, o, sp, cm) }
         }
         case _ { }
     }
@@ -1473,9 +1665,14 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
 # a struct value given to a struct held in place: what it holds beyond its candidate leaves, which the place's own
 # leaves now hold. A constructor of the type stores into them itself (its parameters' stores, as for any instance);
 # any other value - a copy, a call's result - gives each leaf a value not made for it (condition 1)
-fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mut Vec<I64>&, sp source.Span) Vec<I64> {
+fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mut Vec<I64>&, sp source.Span
+                            cm typed.Expr?& = null) Vec<I64> {
     f := w.F
     t := w.T()
+    if cm is not null {
+        w.copyLeaves(lvs, cm, sp)
+        return o
+    }
     c := typed.CallOf(x)
     b2 := typed.CalleeBody(c) if c is not null else -1
     if b2 >= 0 and f.Bodies[b2].Root is not null and t.Role(f.Bodies[b2].Ty) == types.RoleCtor and
@@ -1483,14 +1680,9 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
         if f.viewsOf(b2) != 0 { w.viewCtor(lvs, c!, x, sp) }
         out Vec<I64>
         w.quiet++
-        for y in f.resFrom[b2] {
-            if okind(y) == OPar {
-                j := oval(y)
-                if j < c!.Args.Len(): addAllTo(out, w.expr(c!.Args[j]))
-            } else {
-                addTo(out, y)
-            }
-        }
+        args Vec<Vec<I64>>
+        for a in c!.Args { args.Push(w.expr(a)) }
+        for y in f.resFrom[b2] { f.through(y, args, out) }
         w.quiet--
         return out
     }
@@ -1505,6 +1697,78 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
         }
     }
     return o
+}
+
+# origins o less the views of (and values moved out of) owner and array places: what a copy leaves behind, owning
+# its own copies of those
+fn (f mut Free&) unowned(o Vec<I64>&) Vec<I64> {
+    out Vec<I64>
+    for y in o {
+        k := okind(y)
+        if (k == OPl or k == OMov) and (f.IsOwner(oval(y)) or f.arr[oval(y)]): continue
+        addTo(out, orig(OParC, oval(y)) if k == OPar else y)
+    }
+    return out
+}
+
+# a callee's origin y given its call's arguments' origins: a parameter's what its argument refers into (a copy of one,
+# what the argument refers into but its owned parts), anything else itself
+fn (f mut Free&) through(y I64, args Vec<Vec<I64>>&, out mut Vec<I64>&) {
+    k := okind(y)
+    j := oval(y)
+    if k != OPar and k != OParC {
+        addTo(out, y)
+        return
+    }
+    if j >= args.Len(): return
+    addAllTo(out, args[j] if k == OPar else f.unowned(args[j]))
+}
+
+# Part C: the copy of a value handed on (QCE's ownCopy, check.storeOver's held copy) a store into a part held in place
+# is given, -1 / null for any other value: only where that part's type has candidate leaves and no place of its own
+fn (w mut walker&) copyStored(p typed.Lvalue&, x typed.Expr&) typed.Expr?& {
+    match p {
+        case typed.Lvalue.Field(_, _, _, _), typed.Lvalue.Elem(_, _, _) { }
+        case _ { return null }
+    }
+    if w.F.placeOfPlace(p) >= 0 or w.F.leaves(p.Type()).Len() == 0: return null
+    if ownCopySite(x) >= 0: return x
+    l := readLocalOf(x)
+    if l < 0 or not w.heldCopy.Has(l): return null
+    return w.heldCopy.Get(l)!
+}
+
+# the site of a copy check.ownCopy makes (a Make of kind Copy, built where its site says), -1 for anything else
+fn ownCopySite(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Make(_, _, m): I64(m.Site) if m.Kind == typed.MakeKind.Copy else -1
+        case _: -1
+    }
+}
+
+# a copy made right at a store into a struct or an element held in place (copyStored): it builds what the value owns
+# anew where its site says - made for the one owner or array leaf there is, in a region of its own; with several, one
+# region would hold them all, so none is made for any. A leaf of another kind (a reference the copy shares) is given
+# existing storage
+fn (w mut walker&) copyLeaves(lvs Vec<leaf>&, cm typed.Expr&, sp source.Span) {
+    f := w.F
+    if not w.Final or w.quiet > 0 { return }
+    owners Vec<I64>
+    for lf in lvs {
+        if f.IsOwner(lf.PlaceId) or f.arr[lf.PlaceId]: owners.Push(lf.PlaceId)
+    }
+    site := ownCopySite(cm)
+    one := owners.Len() == 1 and site >= 0 and f.rootEmitted[w.Id]
+    for lf in lvs {
+        k := lf.PlaceId
+        if owners.Has(k) {
+            f.stores.Push(store(k, w.Id, w.body().File, sp, SFresh if one else SFail, -1, site if one else -1, cm, null))
+            if not one: f.keep(k, RMade, w.body().File, sp, $"its new value is a copy holding other owners too: '" $w.text(cm.Span()) "'")
+            continue
+        }
+        f.stores.Push(store(k, w.Id, w.body().File, sp, SFail, -1, -1, cm, null))
+        f.keep(k, RMade, w.body().File, sp, $"its new value is existing storage a copy shares: '" $w.text(cm.Span()) "'")
+    }
 }
 
 # a constructor handing back views of what it is given, its instance stored into a struct held in place: the copy its
@@ -1776,6 +2040,7 @@ fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee 
     if w.quiet > 0 { return }
     w.goPlace.Push(k)
     w.goAt.Push(w.cur)
+    w.goEnd.Push(w.deferStack[w.deferStack.Len() - 1] if kind == LHeld and w.deferStack.Len() > 0 else -1)
     w.goKind.Push(kind)
     w.goSp.Push(sp)
     w.goRecv.Push(recv)
@@ -1821,6 +2086,7 @@ fn (w mut walker&) escape(o Vec<I64>&, sp source.Span, where String&, heap Bool,
     f := w.F
     for y in o {
         k := okind(y)
+        if k == OParC and not w.Final and oval(y) != inside and addTo(f.parEscC[w.Id], oval(y)) > 0 { f.changed = true }
         if k == OPar and not w.Final and oval(y) != inside {
             if addTo(f.parEsc[w.Id], oval(y)) > 0 {
                 f.changed = true
@@ -1868,7 +2134,7 @@ fn (w mut walker&) use(l I64, sp source.Span) {
 
 # a view read: a value of place k (or moved out of it) read in the statement being walked
 fn (w mut walker&) viewRead(o Vec<I64>&) {
-    if not w.Final or w.quiet > 0 { return }
+    if not w.Final or w.quiet > 0 or w.handing > 0 { return }
     for y in o {
         k := okind(y)
         if k == OPl or k == OMov {
@@ -1945,6 +2211,7 @@ fn (w mut walker&) reachTo(p typed.Lvalue&) Vec<I64> {
 # struct held in place copies with it
 fn (w mut walker&) readOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
     f := w.F
+    if p == typed.Lvalue.Local and I64(p.id) != w.copyRead and w.heldCopy.Has(I64(p.id)) { w.untracked(ty, p.Span(), "a copy of a value holding it") }
     o := w.reach(p)
     w.elemRead(p, o)
     k := f.placeOfPlace(p)
@@ -2007,7 +2274,17 @@ fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
         case typed.Expr.Borrow(_, _, p) { out = w.borrowOf(p) }
         case typed.Expr.Take(_, ty, p) { out = w.takeOf(p, ty) }
         case typed.Expr.Promote(_, pty, pr) {
+            # (Part C: a value with destructors to run given storage here is registered there, O16)
+            dtor := w.T().IsRef(pty) and w.T().NeedsDrop(w.T().Referent(pty))
+            if dtor: w.registeredAt(pr.Site, w.T().Referent(pty))
             out = w.expr(pr.X)
+            # (a value moved out of a place held so is ended where the scope closes, which releases nothing of it: the
+            # place keeps, its values never built in regions no release would reach)
+            if dtor and w.Final {
+                for y in out {
+                    if okind(y) == OMov: w.F.keep(oval(y), RMade, w.body().File, pr.X.Span(), $"a value moved out of it is held where its call lands (O16), where nothing releases it: '" $w.text(pr.X.Span()) "'")
+                }
+            }
             addTo(out, orig(ONew, I64(pr.Site)))
             if not w.Final and w.F.destructs(pty) and isVar(w.F.Plans[w.Id].Built[I64(pr.Site)]) { w.F.setRegOut(w.Id) }
         }
@@ -2021,7 +2298,10 @@ fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
             }
             if m.Length is not null { w.expr(m.Length!) }
             if m.Site >= typed.SiteId(0) { addTo(out, orig(ONew, I64(m.Site))) }
-            if m.Kind == typed.MakeKind.Copy or m.Kind == typed.MakeKind.Fill { w.untracked(ty, sp, "a copy of a value holding it") }
+            # (a copy makes what it owns anew, deep through values: no view of the source's owner or array leaves)
+            if m.Kind == typed.MakeKind.Copy { out = w.F.unowned(out) }
+            exempt := m.Kind == typed.MakeKind.Copy and w.copyExempt >= 0 and I64(m.Site) == w.copyExempt
+            if (m.Kind == typed.MakeKind.Copy or m.Kind == typed.MakeKind.Fill) and not exempt { w.untracked(ty, sp, "a copy of a value holding it") }
             w.makeStores(m, ty, sp)
         }
         case typed.Expr.Collect(_, ty, c) {
@@ -2038,6 +2318,14 @@ fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
             # the prelude's retire() of the array a collection replaced: no use of it - where its place is sole the
             # array is released as it is replaced and the retire() left out (rmRetire)
             l := readLocalOf(args[0]) if op == typed.PrimOp.Retire and args.Len() == 1 else -1
+            hd := w.heldDrop(op, args)
+            if hd >= 0 {
+                # Part C: a holder's drop where its block is left (O15) - no use of it, its destructors walked as calls,
+                # and its leaves let go there (lowering releases what they hold once the destructors ran)
+                w.dtorCalls(psp, args[0])
+                for lf in w.F.leaves(w.body().Locals[hd].Ty) { w.go(lf.PlaceId, LHeld, psp, source.Span(0, 0), -1) }
+                return out
+            }
             if l >= 0 {
                 if w.Final {
                     o Vec<I64> = w.origins[l]
@@ -2046,6 +2334,7 @@ fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
             } else {
                 for a in args { addAllTo(out, w.expr(a)) }
             }
+            if (op == typed.PrimOp.Drop or op == typed.PrimOp.Destroy) and args.Len() == 1 { w.dtorCalls(psp, args[0]) }
         }
         case typed.Expr.Slice(_, _, s) {
             out = w.readOf(s.Base, s.Base.Type())
@@ -2059,7 +2348,11 @@ fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
         }
         case typed.Expr.Seq(_, _, q) {
             for st in q.Stmts { w.stmt(st) }
+            # (Part C: a unique value handed on - T13b, O15 - is the callee's from here, moved: the caller holds no view of
+            # it in use during the call)
+            if q.Gone: w.handing++
             if q.X is not null { out = w.expr(q.X!) }
+            if q.Gone: w.handing--
         }
         case typed.Expr.Match(_, _, m) {
             for st in m.Held { w.stmt(st) }
@@ -2191,14 +2484,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
             for a in args { addAllTo(out, a) }
             return out
         }
-        for y in f.resFrom[b2] {
-            if okind(y) == OPar {
-                j := oval(y)
-                if j < args.Len(): addAllTo(out, args[j])
-            } else {
-                addTo(out, y)
-            }
-        }
+        for y in f.resFrom[b2] { f.through(y, args, out) }
         # a constructor's stores are into the instance it makes: its candidate leaves hold them - places of their own,
         # wherever the instance goes - so they are no escape of the parameter
         ctor := w.T().Role(f.Bodies[b2].Ty) == types.RoleCtor
@@ -2212,6 +2498,9 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         }
         for j in f.parEsc[b2] {
             if j < args.Len(): w.escape(args[j], sp, "", false)
+        }
+        for j in f.parEscC[b2] {
+            if j < args.Len(): w.escape(f.unowned(args[j]), sp, "", false)
         }
         # a callee that may let go of anything is one event for any place
         if f.letsAll[b2] {
@@ -2428,7 +2717,7 @@ fn (f mut Free&) storedMore(b I64, j I64) Bool {
     for e in f.parStored[b] {
         if e >> 32 == j: n++
     }
-    if n > 1 or has(f.parEsc[b], j) or has(f.resFrom[b], orig(OPar, j)) { return true }
+    if n > 1 or has(f.parEsc[b], j) or has(f.resFrom[b], orig(OPar, j)) or has(f.resFrom[b], orig(OParC, j)) { return true }
     return has(f.parMulti[b], j)
 }
 
@@ -2474,6 +2763,7 @@ fn (w mut walker&) storeAs(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, wh
     if not w.Final {
         if contained { return }
         for y in o {
+            if okind(y) == OParC and oval(y) != w.storeWithin and addTo(f.parEscC[w.Id], oval(y)) > 0 { f.changed = true }
             if okind(y) == OPar and oval(y) != w.storeWithin and addTo(f.parEsc[w.Id], oval(y)) > 0 {
                 f.changed = true
                 if f.Debug { try io.PrintErr($"esc-store " $f.fnName(w.Id) " par " $oval(y) " at " $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) " within " $w.storeWithin "\n") catch io.Error { } }
@@ -2749,10 +3039,14 @@ fn (w mut walker&) views() {
         k := w.goPlace[g]
         s := w.goAt[g]
         kind := w.goKind[g]
+        # (a holder's drop runs where its block is left: judged from there)
+        if w.goEnd[g] >= 0 { s = try w.deferEnd.Get(w.goEnd[g]) catch default s }
         if k >= 0 and (k >= f.whyKind.Len() or f.whyKind[k] != RNone): continue
         at := w.goIdx[g]
         # in the statement itself
-        if kind != LAssign and kind != LLeaf and kind != LDestroy and kind != LYield {
+        # (a destructor walked as a call where its holder lets go - dtorCalls - reads the value it ends: its own body's
+        # views are judged in its walk)
+        if kind != LAssign and kind != LLeaf and kind != LDestroy and kind != LYield and kind != LHeld and not f.isDtor(w.goCallee[g]) {
             for i in range readFrom[s], readFrom[s + 1] {
                 q := reads[i]
                 if (k >= 0 and q != k) or f.whyKind[q] != RNone or f.isDestroy(q): continue

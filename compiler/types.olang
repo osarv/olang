@@ -1131,7 +1131,13 @@ fn (t Table&) RefInto(from TypeId, into TypeId) Bool {
     return w.reaches(from)
 }
 
-# id and every type it holds by value, as their representations
+# id and every type it holds by value (deep through fields, payloads and elements held by value), as representations
+fn (t Table&) ValueParts(id TypeId) Vec<TypeId> {
+    out Vec<TypeId>
+    t.valueParts(id, out)
+    return out
+}
+
 fn (t Table&) valueParts(id TypeId, out mut Vec<TypeId>&) {
     r := t.Repr(id)
     if out.Has(r): return

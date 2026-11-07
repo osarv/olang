@@ -6154,9 +6154,11 @@ keeps: `List.Clear` and `StringBuilder.Clear` empty a container and keep its sto
 **O8d (letting go).** A **place** is
 storage that holds a value and can be given another: a local, a field, an element of an array or a collection, a
 global. A place **lets go** of what it holds when it is assigned (S4), when the entry holding it is removed (M19d's
-`RemoveAt`, `SwapRemove`, `Remove`, `Clear`, `Truncate`), and, for a local given something moved out of a collection
-(`Pop`, `TakeAt`, `SwapTake`, `Take`), when its block is left. What it held is reclaimed then - not when its scope
-closes - when the place was its **only holder**:
+`RemoveAt`, `SwapRemove`, `Remove`, `Clear`, `Truncate`), for a local given something moved out of a collection
+(`Pop`, `TakeAt`, `SwapTake`, `Take`), when its block is left, and, for a value with a destructor held by value (O15),
+where that value is ended - its holder's block left, a store over it, its collection ending it - right after its
+destructor has run. What it held is reclaimed then - not when its scope closes - when the place was its **only
+holder**:
 1. it was **made for the place**: built there (a constructor call, an enum case, an array, a literal, text rendered or
    joined, a call's built result, O13), `null`, or constant data (T25d); or moved there from a place that was its only
    holder (a collection's `Pop`, `TakeAt` or `Take`, and the last use of a local given one);
@@ -6167,7 +6169,11 @@ closes - when the place was its **only holder**:
 3. nothing it holds is reached by more than one thread (§6.8) - nor is anything, in a program with an export fn, which
    C may call from a thread of its own (X12);
 4. nothing it holds, nor anything built where it lives - an instance a constructor builds and no reference takes
-   (O16) among it - is an instance whose destructor is still to run (O15): only a `Destroy()` (C9b) ends that early;
+   (O16) among it - is an instance whose destructor is still to run (O15): only a `Destroy()` (C9b) ends that early -
+   but a value held by value, ended where its holder lets go of it, is reclaimed right after its destructor runs, where
+   no value of its type (or of a type holding it) is ever registered with a scope (O16) and no test build may run its
+   destructor where a failed check unwinds (S16) - its destructor then runs only where a holder lets go, each a call
+   whose let-goes are judged there;
 5. the place can let go again before its scope closes: it is let go of in a loop, or in a function that can run again
    while the place lives;
 6. no reference read from what the place holds is in use across a call that may make the place let go.

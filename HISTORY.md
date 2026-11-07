@@ -29569,3 +29569,45 @@ a value registered with the scope (O16 - an argument for a reference parameter, 
 the scope's close after the block's variables, unordered by holding (Part C keeps the storage of any variable such a
 value may reference); interpret's stop cleanups (B3e: deferred code run when interpret meets what it cannot run) keep
 registration order; a holder's parts end its own destructor first, then the last part first, unordered by holding.
+
+## Unique Part C, built (2026-11-07, wt-dropord, O8d condition 4)
+
+What round drops measured and could not build (the section above), on top of the drop order (holders before what they
+hold - the hazard that blocked it). **Built (free.olang, lowering):** a destructor body is *modelled* - walked as a call
+wherever its type's value is ended by a holder (a Drop or a Destroy in the code, `dtorCalls`, through the destructors of
+its parts too), its let-goes judged at that point - where no value of its type, or of a type holding it by value, is
+ever registered with a scope (O16: a held call's Promote, a constructor building a reference-only instance, a holder
+whose storage the scope pass homed outside its block - lowering's escapedHome) and the build is no test build (a guard
+runs destructors where a failed check unwinds, where no call is written); every other destructor stays a let-go "where
+no call is written", which keeps (free's hidden let-goes). A registered value built in a block of the body is walked at
+that block's close (`closeAt`). A holder's drop at its block's end is a let-go of its leaves (`LHeld`), judged from the
+block's end (`deferEnd`), and lowering releases what they hold right after the destructor ran (the Drop in deferred
+code, `heldDrop`). A copy QCE makes of a value handed on, stored into a part held in place - a constructor's field, a
+storeOver's held copy - is the leaves' value made right there (`copyLeaves`, a region of its own for the one owner or
+array leaf), not "a copy of a value holding it"; a copy's origins lose the source's owner and array views (`unowned`,
+and `OParC` for a parameter's shallow part); a unique value handed on (Seq.Gone) is no view in use at the call.
+
+**Measured** (1M cycles, a destructor struct owning an `Array<I64>(32)`, maximum resident; the merged master's compiler
+against this branch's): a Vec pushed and truncated every 64 - 260 MB -> 1.9 MB (0.12 -> 0.23 s: each value's region a
+malloc'd header and block); a Map's value put and taken 517 -> 517 MB, replaced by Put 260 -> 260 MB, put and removed
+517 -> 517 MB. checks' earlyfree scenario has the Vec case (`dropvec`, under 8 MB; the master compiler runs out).
+
+**Why the Map cases stay (tried, reverted).** Every hand-on of a unique value to a by-value parameter is a real copy
+(check's `valueArg` ownCopy: `m.Put(k, v)` copies into Put's parameter, Put's `m.add(b, key, value)` into add's, add's
+`MapEntry(key, value)` into the constructor's) whose source is never released (its flag cleared, never used again), and
+a constructor whose instance views its parameter (D9h) is copied once more where the store keeps it, since its argument
+is a copy, not a call (`typed.FreshViews`). (1) Moving instead of copying (valueArg leaving a unique value as it is)
+made replace flat - and read freed storage (a Map's entry kept past the turn, `-sanitize`): section 8 places a by-value
+parameter's parts as the frame's own copy (O14), so nothing builds the caller's argument where the callee keeps it;
+the move needs that obligation (the brief's "with section 8's obligation for the parameter's owned parts"), a
+section-8 change. (2) Tracking the copies instead - each call-site copy the leaves' value made at its site, and the
+handed-on source released after its copy - made replace flat but the Map's put/take and put/remove grew (1.1 GB) and
+crashed under `-sanitize`: the D9h copy of the viewing constructor's instance at the store is no store free.olang
+records for an array leaf (`viewCtor` counts owner leaves only), so a sole place held a value outside any region. Not
+built; for the section-8 round: the move with its obligation, which removes both copies.
+
+**Decided (mine).** Destructors modelled only where provably run at a written point (never registered, not a test
+build); registration propagated through a type's by-value parts (`types.ValueParts`); a value moved out of a place and
+then held where its call lands (O16) keeps the place (a scope close releases nothing of it). **Found on the way:** none
+in master; the `viewCtor` gap above is unreachable while those copies stay untracked (they keep the place) - recorded
+for the section-8 round.

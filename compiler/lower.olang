@@ -339,6 +339,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     # first ordered or a holder's guard registered
     holding typed.DropHolding = typed.DropHolding()
     holdingMade Bool = false
+    heldDrop Bool = false   # Part C: a by-value holder's drop being lowered where its block is left (runDefers)
     # the locals this body hands back holding views of its arguments, with the parameters
     # each views (typed.ViewWalk.Settle, as check recorded them); the copies left out for them and for the locals holding
     # views in place of their copies (viewLocals) - a MakeKind.Copy by its site, a value array local's T7b copy at its
@@ -688,6 +689,24 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<Array<I
     return out
 }
 
+# the release paths of a value of type ty's sole leaves: each by the fields that reach it, and a handle's reference,
+# field 0
+fn (ln mut lowering&) leafPaths(ty types.TypeId) Vec<Array<I64>> {
+    out Vec<Array<I64>>
+    fr := ln.L.Free!
+    for lf in fr.SoleLeaves(ty) {
+        if not fr.IsHandle(lf.PlaceId) {
+            out.Push(lf.Path)
+            continue
+        }
+        path := Array<I64>(lf.Path.Len() + 1)
+        for i in range lf.Path.Len() { path[i] = lf.Path[i] }
+        path[lf.Path.Len()] = 0
+        out.Push(path)
+    }
+    return out
+}
+
 # what local l holds released, at each of the paths: a sole place's old value let go of
 fn (ln mut lowering&) releaseAt(l mir.LocalId, paths Vec<Array<I64>>&, sp source.Span) {
     for path in paths {
@@ -815,7 +834,10 @@ fn (ln mut lowering&) runDefers(i I64, phase deferPhase) {
             ln.emit(mir.Stmt.Deferred(ln.B.Blocks[I64(ln.defers[k].Id)].Sp, lv.S, mir.NoBlock))
         }
         # deferred code runs as a block of its own, inside the block it is registered in
+        was := ln.heldDrop
+        ln.heldDrop = ln.isDrop(k)
         ln.block(ln.defers[k])
+        ln.heldDrop = was
     }
     for k in mine { ln.deferAt[k] = lv.S }
     for saved.Len() > 0 { ln.levels.Push(try saved.Pop() catch { unreachable }) }
@@ -4183,6 +4205,11 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
                 home := ln.escapedHome(p)
                 if home == mir.ScopeRef.Frame {
                     ln.dropAt(a, p.Type(), ln.innermost(), sp)
+                    # Part C (O8d): a holder letting go as its block is left releases what its sole leaves hold, once
+                    # its destructors ran (free.olang's LHeld)
+                    if ln.heldDrop and ln.freeing and p == typed.Lvalue.Local and not ln.dead {
+                        ln.releaseAt(mir.LocalId(I32(p.id)), ln.leafPaths(p.Type()), sp)
+                    }
                     return mir.Operand.None
                 }
                 # (bulk review 7, F4) a holder whose storage the scope pass moved where it flows - the result's, a

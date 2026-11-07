@@ -904,6 +904,7 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, des
     # and early freeing's decisions written into its plans (O8d), for a program at its root
     fr mut free.Free& = free.Free(c.P, c.Bodies, sc)
     fr.Debug = (try os.Env("OLANG_FREEDUMP") catch default "") != ""
+    fr.Tests = cfg.Tests
     fr.Decide(sc.Plans, root, destroys)
     return fr
 }
