@@ -36,6 +36,9 @@ Expected Array<String&> = Array<String&>[
     # what a program measures of its own process is the interpreting compiler's there (O8b, O8d: the built runtime's pool)
     "checks/cases/chunkpool.olang - its peak memory is the compiler's under interpret"
     "checks/cases/mapchurn.olang - its peak memory is the compiler's under interpret"
+    # B3e, X11a: a struct passed to C or returned from it by value - here a packed one (cdemo_iv) - is what interpret
+    # refuses; the same record by reference runs (the test's first half)
+    "tests/cimport.olang: a packed record of bitfields is a packed struct, its bits C's (X18, X11a) - a struct by value to C (B3e)"
     # X13: C is handed an export fn to call back, which under interpret is no function C can call (B3e)
     "checks/cases/x13qsort.olang - an export fn handed to C (B3e)"
 ]
@@ -46,7 +49,8 @@ Expected Array<String&> = Array<String&>[
 Skipped Array<String&> = Array<String&>[
     "checks/cases/gemmflat.olang - matrix products over ten minutes interpreted (the memory it holds flat is the build's)"
     "std/cancel.olang: a busy task stops when the token is cancelled - a task spins until another cancels it (B3e)"
-    "std/chan.olang: Select: sends through SendOf, a rendezvous handing its value to a waiting receiver - Select polls for a task (B3e)"
+    "std/chan.olang: Ready.Select: sends through SendOf, a rendezvous handing its value to a waiting receiver - Select polls for a task (B3e)"
+    "checks/cases/c6selectjoin.olang - Select polls for a task its join runs only after it (B3e)"
     "std/net.olang: a TCP connection over loopback carries bytes both ways - Accept blocks in C for a task (B3e)"
     # a million frames deep: the interpreter's frames take ~3.7 KB each, so ~4 GB, beside the suite's other processes
     "std/os.olang: RunOnStack runs a recursion deeper than a thread's own stack holds, and waits for it - a million frames, ~4 GB interpreted"
