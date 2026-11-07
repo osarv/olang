@@ -22215,6 +22215,11 @@ fn (c mut Checker&) callPattern(sp source.Span, path ast.Expr&, subs Array<ast.P
         case ast.Expr.Member(msp, prefix, n) {
             pt := c.typeNamed(prefix)
             if c.isEnum(et) and pt >= types.TypeId(0) and c.P.T.DeclOf(pt) == c.P.T.DeclOf(et) {
+                # G6b: a case of another instance, written with its arguments, is said as the type it is
+                if not c.P.T.Same(c.P.T.Plain(pt), c.P.T.Plain(et)) and c.caseWritten(path) {
+                    c.err(sp, msgs.CaseValueType(c.ty(et), c.ty(pt)))
+                    return c.lit(sp, types.BoolT, 0)
+                }
                 c.err(memberSpan(msp, c.text(n).Len()), c.noCase(et, n))
                 return c.lit(sp, types.BoolT, 0)
             }

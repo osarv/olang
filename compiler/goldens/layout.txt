@@ -3980,7 +3980,7 @@ compiler/ast:Param	48 8	%"compiler/ast:Param"	{ %"compiler/source:Span", i32, pt
 compiler/ast:Param&	8 8	ptr	-	-
 compiler/ast:Path	24 8	%"compiler/ast:Path"	{ %"compiler/source:Span", { i64, ptr } }	fields 0,8
 compiler/ast:Path&	8 8	ptr	-	-
-compiler/ast:Pattern	40 8	{ i64, [4 x i64] }	-	cases 0;0,8;0,8,16;0,8;0,8;0,8,16,20;0,8,16;0,8
+compiler/ast:Pattern	40 8	{ i64, [4 x i64] }	-	cases 0;0,8;0,8,16;0,8;0,8;0,8,16,20;0,8,16;0,8;0,8,16
 compiler/ast:Pattern&	8 8	ptr	-	-
 compiler/ast:Sig	80 8	%"compiler/ast:Sig"	{ { i64, ptr }, { i64, ptr }, i1, { i64, ptr }, i1, ptr, i1, i1 }	fields 0,16,32,40,56,64,72,73
 compiler/ast:Sig&	8 8	ptr	-	-
