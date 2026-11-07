@@ -32,7 +32,10 @@ make scopefuzz                    # SEED=1 COUNT=100 JOBS=2 SCENARIOS=12
 ## The early-free fuzzer (O8d, C9b)
 
 Programs that replace and remove in long-lived places, keep views across the let-goes, store views elsewhere, and
-take resources out of a Map to `Destroy()` them, each scenario with a holder type of its own. Each is built
+take resources out of a Map to `Destroy()` them, each scenario with a holder type of its own. One scenario in three
+hands unique values owning storage on through by-value parameters (T13b's move) - one call deep, two, through a
+constructor's field - into a Map and a Vec held by value, replaces, removes and takes them out to holders, and in half
+of them keeps views across those let-goes. Each is built
 `-d -s -memory` and interpreted in the evaluator's dead-region mode (`OLANG_DEADREGIONS=1`), which stops at a read of
 a region a release reclaimed. Scenarios the compiler refuses are left out and counted; the summary counts the places
 the builds' `-memory` reports free at once, so a run that frees nothing is seen to.
