@@ -66,3 +66,5 @@ verify2's failures: goldens of the fix rounds (recaptured), and compiler/olang.o
 aarch64 on a clang-18 container said "this clang cannot build" before "explain runs on this machine": fixed (Resolve's
 `here`, 05534a1). Final verify running (merge/verify3.log). CLAUDE.md trim agent running (wt/trim, sonnet). Next after
 verify: the gates (scopesan, scopefuzz, fuzz free, dead regions) - one after another, not beside the verify.
+
+## ~19:45 CET: verify3 passed, gates clean (scopesan, scopefuzz, fuzz free, dead regions). Waiting on the trim agent.
