@@ -3210,6 +3210,8 @@ fn (w mut Landings&) stmt(s Stmt&) {
         case Stmt.Let(_, l, x) {
             i0 := w.saidL.Len()
             w.expr(x)
+            # (a declaration makes the local anew - a loop's next turn declares it again, C9b)
+            w.renewed(I64(l))
             w.holds(I64(l), i0)
         }
         case Stmt.Eval(_, x), Stmt.Yield(_, x), Stmt.Reraise(_, x, _): w.expr(x)

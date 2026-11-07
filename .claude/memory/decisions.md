@@ -3048,3 +3048,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   flat with Part C. Cost: programs whose resource holders refer to later siblings are refused (reorder the
   declarations); compile time only, nothing at run time. Recommended yes, then Part C built on it. In effect: no drop
   check, Part C not built.
+- QCZ DECIDED 2026-11-07 (the user, asked what a drop check is, then: "So either we force reordering of the
+  declarations, or the compiler makes it smart, right?", then "Yes, let the compiler order them"): no Rust-style
+  refusal - the compiler orders the ends itself: values are ended last declared first, except that a value holding a
+  reference to another is ended before it (holders before what they hold), read off the same store relations section 8
+  tracks; only a cycle of such references (two resources referring to each other) is an error naming both. Then unique
+  Part C (storage freed where the destructor runs) built on it. A round of its own after drops merges, design note
+  first (xhigh).

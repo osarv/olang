@@ -975,8 +975,8 @@ fn interp(r mut report&) ? Failed {
     # ... and a construct the checker does not check yet stops it, as it stops a build (F11)
     try r.expect(sh(dir, "\"$OLANG\" build gap.olang > want.txt 2>&1") == 1, "gap.olang built", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret gap.olang > out.txt 2>&1") == 1, "-i gap.olang ran", dir)
-    try r.expect(outOf(dir).Contains("it does not check a store over a value with destructors") and
-                 not outOf(dir).Contains("stored"), "-i gap.olang output", dir)
+    try r.expect(outOf(dir).Contains("it does not check a slice with no end of a type with no Len") and
+                 not outOf(dir).Contains("sliced"), "-i gap.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret ub.olang > out.txt 2>&1") == 1, "-i ub.olang did not stop", dir)
     try r.expect(outOf(dir).Contains("ub.olang:6: it indexes outside the array"), "-i ub.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret cyclic.olang > out.txt 2>&1") == 1, "-i cyclic.olang did not stop", dir)

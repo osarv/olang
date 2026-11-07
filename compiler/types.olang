@@ -201,6 +201,7 @@ type Table struct(Names mut source.Names&) {
     ints Vec<TypeId>                   # T4a: the integer type of each width, I1 .. I128 at 1 .. 128, U1 .. U128 above
     copyDecls Map<I64, Bool>           # E31d: the declared types (by DeclId) that declare their own Copy
     uniqueDecls Map<I64, Bool>         # T13b: the declared types (by DeclId) declared unique
+    endsDecls Map<I64, Bool>           # C11: the library's collections (by DeclId) whose destructor ends what they hold
     uniqueKnown Map<I64, Bool>         # ... and whether a type is unique, once every part of it was typed (Unique)
 }
 
@@ -878,7 +879,7 @@ fn (t Table&) needsDrop(id TypeId, depth I64) Bool {
         case Kind.Named {
             if not t.HasBody(r): return false
             return match t.DeclKindOf(t.DeclOf(r)) {
-                case DeclKind.Struct: t.Destructs(r) or t.partsDrop(t.Fields(r), depth)
+                case DeclKind.Struct: t.destructs(r, depth) or t.partsDrop(t.Fields(r), depth)
                 case DeclKind.Enum: t.partsDrop(t.Cases(r), depth)
                 case _: false
             }
@@ -1214,7 +1215,36 @@ fn (t mut Table&) SetEmptyBody(id TypeId) { t.bodies.Put(id, body(ListId(0), Lis
 fn (t Table&) Fields(id TypeId) ListId { return t.bodyOf(id).Fields }
 fn (t Table&) Cases(id TypeId) ListId { return t.bodyOf(id).Cases }
 fn (t Table&) Base(id TypeId) TypeId { return t.bodyOf(id).Base }
-fn (t Table&) Destructs(id TypeId) Bool { return t.bodyOf(id).Destructs }
+fn (t Table&) Destructs(id TypeId) Bool { return t.destructs(id, 0) }
+
+fn (t Table&) destructs(id TypeId, depth I64) Bool {
+    b := t.bodyOf(id)
+    if not b.Destructs or t.endsDecls.Len() == 0 or not t.endsDecls.Has(I64(t.DeclOf(id))): return b.Destructs
+    return t.holdsDropping(id, depth)
+}
+
+# whether a struct's declaration has a destructor written - where it runs or not (an instance of a collection holding
+# nothing with destructors has none, Destructs)
+fn (t Table&) DtorWritten(id TypeId) Bool { return t.bodyOf(id).Destructs }
+
+# C11, O15: a collection of the prelude or std whose destructor, not declared unique, ends the elements it holds - a
+# destructor that exists only in its instances holding a value with destructors to run (EndsHeld)
+fn (t mut Table&) MarkEnds(d DeclId) { t.endsDecls.Put(I64(d), true) }
+
+fn (t Table&) Ends(id TypeId) Bool { return t.KindOf(id) == Kind.Named and t.endsDecls.Has(I64(t.DeclOf(id))) }
+
+# whether an instance of such a collection holds, by value - through its fields and the elements of the arrays they
+# are, a run-time length's included (the elements its own code says are live) - a value with destructors to run
+fn (t Table&) holdsDropping(id TypeId, depth I64) Bool {
+    for x in t.Items(t.Fields(id)) {
+        if x == TypeId(0) or t.IsRef(x): continue
+        if t.needsDrop(x, depth + 1): return true
+        r := t.Repr(x)
+        if t.KindOf(r) == Kind.Array and t.needsDrop(t.Elem(r), depth + 2): return true
+    }
+    return false
+}
+
 
 # an enum's case names, in order
 fn (t Table&) CaseNames(id TypeId) Array<source.NameId>& { return try t.caseNames.Get(id) catch default Array<source.NameId>(0) }

@@ -259,6 +259,8 @@ type Diag enum {
     NoteInstanceRef
     DoubleReferenceMarker
     DestructTypeByValue
+    DestructCopiedHeld
+    DestructRunArray
     DestructGlobal
     DestructGenParam
     TraitNotAType
@@ -1593,7 +1595,9 @@ fn InvalidReferenceTarget(ty String&) Msg { return Msg(Diag.InvalidReferenceTarg
 fn DoubleReferenceMarker() Msg { return Msg(Diag.DoubleReferenceMarker, "T24", "a type takes at most one reference marker") }
 
 # ERR_DESTRUCT_TYPE_BY_VALUE
-fn DestructTypeByValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.DestructTypeByValue, "C11", $ty1 " has a destructor to run, so a type argument holds it by reference - write " $ty2 "&") }
+fn DestructCopiedHeld(ty String&, held String&) Msg { return Msg(Diag.DestructCopiedHeld, "C11", $ty " has a destructor to run and copies (its Copy), and a copy of " $held " would copy what it holds past its count - hold them by reference, " $ty "&") }
+fn DestructRunArray(ty String&) Msg { return Msg(Diag.DestructRunArray, "C11", $ty " has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<" $ty ">, or hold " $ty "& ones") }
+fn DestructTypeByValue(ty String&, held String&) Msg { return Msg(Diag.DestructTypeByValue, "C11", $ty " has a destructor to run, and " $held " keeps values of it where no holder ends them - write " $ty "&, or keep them in a Vec<" $ty ">") }
 fn DestructGlobal(ty String&) Msg { return Msg(Diag.DestructGlobal, "C11", $ty " has a destructor to run, so a global holds it by reference - write " $ty "&, its destructor run as the program ends") }
 fn DestructGenParam(ty String&) Msg { return Msg(Diag.DestructGenParam, "C11, S20", $ty " has a destructor to run, so a generator takes it by reference - write " $ty "&: a walk left part way runs no code of its body to end it") }
 
