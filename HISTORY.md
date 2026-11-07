@@ -30143,7 +30143,9 @@ d18cheldlocal (a generator's kept elements, held in a field and in a local, kept
 the list lives), d18cviewkept (a walk made where its kept elements are kept), e16atrydefaultslice (a slice of a try's
 temporary returned - the temporary homed in the result scope), rv9slicetempctor (a constructor field's slice of a
 temporary - homed with the instance), s5capturestruct (closures pushed into a list - what each captured built where the
-list lives) and t22avalueexact (a call through a value whose result is exactly where its argument must be). o23aliaswrite stays refused at its read (O25i: its part is read through
+list lives) and t22avalueexact (a call through a value whose result is exactly where its argument must be); and
+p2viewtask (a slice of a turn's text handed to a spawned call: built at the join's level, a new one each turn, as a whole
+argument is - it was P2's and O27's errors). o23aliaswrite stays refused at its read (O25i: its part is read through
 an instance an element aliases - refused, as sound as accepted would be; pinned). tests/viewplace.olang: a turn's text
 kept through its first character, a view handed back of what a function builds (`head`), a slice of a temporary in a
 parameter's field, a generator's views of a local it made, a closure over a turn's local, a part of an instance past

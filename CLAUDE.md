@@ -1518,7 +1518,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   d18cinputoutlived, d18cyieldframe, d18cyieldlocal, o10celementstash, o25enote, o27genborrow, t22aviewkept,
   t22borrowedresult, d16cstore, rv9slicetemp(-as, -view), t29aconvlifetime, o23adepth, stro20condstore, bulk 6's
   gen_walkkept and gen_walkkept2 (c4genwalkkept, -2), d18cheldfield, d18cheldlocal, d18cviewkept, e16atrydefaultslice,
-  rv9slicetempctor, s5capturestruct, t22avalueexact; o23aliaswrite stays refused (sound). tests/viewplace.olang, the
+  rv9slicetempctor, s5capturestruct, t22avalueexact, p2viewtask (a view handed to a task: its storage at the join's
+  level); o23aliaswrite stays refused (sound). tests/viewplace.olang, the
   checks scenario `memoryplaced`.
 - **Obligations (O10b/O10c).** Inferred from the body, held at every call to the callee's whole body (checked on
   demand and at a fixed point); temporaries built where the obligation says (O18b/O18c). A `:=` from a call lands by
