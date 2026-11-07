@@ -60,3 +60,9 @@ and libcurl4-openssl-dev installed (only clang-18 here: no clang-19/20, no qemu 
 Merged: bfix8b (71cec3d), bfix8a (d240a62), bfix8c (ab66345) = master. Full verify running (merge/verify2.log).
 Next: fix what it shows (goldens of the fix rounds), then the gates - make scopesan, make scopefuzz, fuzz free, dead
 regions (OLANG_DEADREGIONS=1) - then trim CLAUDE.md (sonnet), then report "the compiler done".
+
+## 2026-11-07 ~19:05 CET
+verify2's failures: goldens of the fix rounds (recaptured), and compiler/olang.olang's "the modes" - explain -target
+aarch64 on a clang-18 container said "this clang cannot build" before "explain runs on this machine": fixed (Resolve's
+`here`, 05534a1). Final verify running (merge/verify3.log). CLAUDE.md trim agent running (wt/trim, sonnet). Next after
+verify: the gates (scopesan, scopefuzz, fuzz free, dead regions) - one after another, not beside the verify.
