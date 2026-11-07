@@ -29231,3 +29231,82 @@ nothing the seed's compiler cannot build - and the suite); the next commit only 
 and moves two functions above another's comment (its tokens, tree and layout goldens recaptured), and `make quick`
 passed on it, then `make scopesan` and `make scopefuzz` (100 programs, 474 scenarios, 726 refused by the compiler, 0
 findings).
+
+## Collections holding values with destructors by value (2026-11-07, wt-drops, C11, O15, M19d)
+
+The user's decisions of 2026-11-03 ("Copy and unique DECIDED", "Collections DECIDED") made collections ordinary types,
+unique exactly when their elements are; Part B of unique (O15's drop flags) left them out: C11 refused every type
+argument holding a value with a destructor to run, naming `Vec<Res&>`, because a collection's own code moves its
+elements, grows its buffer and keeps room past its count, and no drop walked its live elements. LIST.md A4.
+
+**The design note (written before building).** What a collection must say, and the compiler cannot infer, is which
+positions of its buffer hold elements - a Vec's first n, a Map's live slots, a Deque's ring - and which are room: never
+written past a count, or vacated (a vacate keeps the moved value's bits, so ending such a position ends a value twice;
+ending never-written room runs a destructor on garbage or zeros - fd 0 closed). Three things say it, all where `vacate`,
+`grown` and `retire` already were, the library's operations and no part of the language:
+(1) `p.vacate()` keeps its two readings - as an expression it moves the value out (Pop, TakeAt, Take), as a statement
+it lets go of it - and the statement now ENDS a value with destructors in place: check's `exprStmt` emits a Drop of the
+place before the Take statement (O8d's let-go kept for early freeing). (2) `p.occupy(x)`, new: x stored into a place
+holding no value, so nothing is ended - storeInto with `room`, a plain Assign where `=` would have been O15's
+storeOver. For a value with no destructor both are the typed code they were, so plain element types pay nothing.
+(3) A **conditional destructor**: a generic struct of the prelude or std, not declared unique, may declare `destruct`;
+it exists only in the instances holding by value, through their parts (run-time arrays included), a value with a
+destructor to run (`types.Table.Ends`, marked where the declaration is registered, `generic.EndsHeld`; `Destructs`
+decides per instance through `holdsDropping`, depth threaded so a type holding a Vec of itself terminates; the body
+made only where it exists). Those instances are unique already (T13b follows elements through arrays); every other
+instance (`Vec<I64>`) has no destructor, is copyable and identical to before. Vec's is `for i := n - 1, i >= 0, i-- {
+data[i].vacate() }`, Map's vacates live slots (`next[i] >= -1`) from the last, Deque's its ring back to front. The drop
+glue never walks a run-time array part by itself (`needsDrop` reads fixed arrays only), so the buffer is ended by the
+collection's destructor alone.
+
+**Decided (mine).** (1) The order is O15's for a holder's parts carried over - the last first - for a Vec from its
+last position, a Map by slot from the last used, a Deque from the back; Truncate and Clear end what they remove in the
+same order. (Rust ends a Vec's elements first to last; one rule for parts weighed more.) (2) The primitives are the
+library's: prelude and std (`generic.Library`, the identity under `std/`), since std/deque holds its ring itself -
+reversing my 2026-10-26 "vacate stays prelude-only until real code needs it"; std/list still uses none (List's
+removals free nothing early, as before). (3) C11 is judged on the instance, not the argument: a type argument may hold
+such a value where every one the instance reaches is held in a place a holder lets go of - a field, a payload, a fixed
+array's element, a collection's buffer whose destructor ends it - and refused where an array of a run-time length of
+them is reached outside such a buffer, through parts or through references (`generic.Program.UnendedDrop`, which makes
+the instances' bodies as it walks). So `Box<File>` of a plain field works (the compiler's part walk ends it), std/list's
+`List<File>` is refused - its chunks are reached through a reference and every copy of a List is a second holder of
+them (the brief's recommendation, kept: no sound reason found to accept it) - and so is a program's `Buf<T> { a Array<T>
+}`. The error names the reference form and a Vec, once: the types the failing walk went through are not judged again
+where the instances' own bodies write them (`unendedSaid`). It is said at the written type, at a qualified constructor
+call's arguments too (`list.List<File>()` went through no written-type check at all), and a written type under a
+reference marker is judged nothing (`refMarked`: `old Array<T>& = v.data` in Vec's room holds no value). (4) A
+collection holds such values only where they are unique: a copy of one copies its whole buffer, vacated positions and
+room included, so a Copy-declaring holder (`Kept`) is refused there (DestructCopiedHeld) - giving Vec a declared Copy of
+its live elements would have made every `Vec<I64>` copy run it (E31d: never elided). (5) RemoveAt and SwapRemove end
+the element in place rather than calling TakeAt and dropping its result: the result landed in RemoveAt's frame against
+TakeAt's obligation (O10c), and a registered temporary is K2c's refusal while compiling.
+
+**Found on the way (fixed).** (1) Pre-existing, unsound: a comprehension of a run-time length, `Array<T>(n)` of a
+run-time n, and `a.Copy()` of an `Array<Kept>&` made values with destructors that nothing ever ended (`R[R(i) for i in
+range n]` made five and ended none). Each is now C11's error (`runArrayEnds`: `Array<T>(n)` at arrayCall, the
+comprehension once its state says it is not fixed, the written Copy and ownCopy); a count known while compiling still
+makes a fixed array, which ends its elements. (2) G9d's binding of a destructor-declaring struct to a reference applied
+wherever a variable was bound, inside a type's arguments too, so `v.Push(x)` on a `Vec<Res>` bound `T` to `mut Res&`
+against the receiver's `Res`: now only a value given whole for a bare variable (`unifyDepth` in Unify). (3) A store over
+a value with destructors through an element (`v.data[i] = x`, `m.ents[i].Value = v`) was a checker gap ("reached
+through what a call gives"): the place is now evaluated once - an index or a reference it reads through held in a
+hidden local where it is more than a local's read or a literal (`check.stable`/`once`) - then the old value ended and
+the new one stored. (4) The prelude's sort helpers moved elements with vacate and plain stores into the vacated
+positions - a double end once elements have destructors (Sort over a fixed array of a Copy-declaring holder, which C11
+had refused in the instance and now reaches): they occupy.
+
+**What stays refused (recorded limits).** Map keys and Heap's comparator are taken by value (`bucketOf(key K)`, `less
+fn&(a T, b T)`), and a unique value is lent to no by-value parameter (T13b), so `Set<File>`, `Map<File, V>` and
+`Heap<File>`'s Push and Pop are refused at the call ("Push needs a copy"); reading a T by reference in generic code would
+need `T&` of a number, which T24 forbids - a language question, not this round's. A `Destroy()` of a collection after
+pushes of values built from a local makes that local a holder of it (bulk review 7's F16: a call given a reference to
+the collection beside a lent local), so the local cannot be mentioned after the Destroy.
+
+**Tests.** tests/drops.olang: each of Vec, Map and Deque through every removal and store, nested collections (a Vec of
+Vecs, a Map of Vecs, a struct holding a Vec, a generic `Boxed<Res>`), Destroy, a by-value parameter and a returned Vec,
+elements holding text built in a loop read back after an arena churn, and G42's WritesGlobals of a function holding a
+Vec of them against one handing it on - each order decided by a top-level assert while compiling and checked at run
+time (and under -sanitize); a scratch program of the same orders agreed under `interpret`. checks/cases: List<Conn>, a
+program's buffer, a bare `Array<Conn>` parameter, a copy of a `Vec<Conn>`, occupy in a program, a comprehension and
+`Array<R>(n)` of destructor values, a copy of an array of them, a Vec of a Copy-declaring holder. The two cases pinning
+the old refusal (`c11dtortypearg`, `c11holdertypearg`: `Vec<Conn>`, `Vec<Pool>`) now pin what stays refused.
