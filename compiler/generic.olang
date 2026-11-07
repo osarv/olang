@@ -3150,6 +3150,14 @@ fn (p mut Program&) FnNamed(mi I64, name source.NameId) I64 {
     return try p.fnByName.Get(pair.Pair(mi, I64(name))) catch default -1
 }
 
+# B4: whether function f is the program's entry - the root module's plain function named main, never a method or a
+# builder of that name, nor another module's main
+fn (p Program&) IsEntry(f I64) Bool {
+    if p.FnModule(f) != p.L.Root { return false }
+    fd := p.FnDecl(f)
+    return fd.Recv is null and not fd.IsBuilder() and p.L.Names.Text(fd.Name) == "main"
+}
+
 # a function's signature (D7, D8c, R15; M19: a method's receiver its first parameter), over its variables: those its
 # receiver's type arguments introduce, in order, then its list's (G3, QW)
 fn (p mut Program&) Sig(f I64) types.TypeId {

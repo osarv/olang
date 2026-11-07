@@ -500,7 +500,7 @@ fn (e mut Emitter&) emitAll() {
             }
             case typed.BodyOf.Fn(inst) {
                 f := p.InstanceFn(inst)
-                if p.FnModule(f) == p.L.Root and e.text(p.FnDecl(f).Name) == "main" { mainBody = i }
+                if p.IsEntry(f) { mainBody = i }
             }
             case _ { }
         }

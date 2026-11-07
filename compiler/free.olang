@@ -2097,7 +2097,8 @@ fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee 
 fn (w mut walker&) runsAgain() Bool {
     return match w.body().Of {
         case typed.BodyOf.Global(_, _), typed.BodyOf.Test(_): false
-        case _: w.F.fnName(w.Id) != "main"
+        case typed.BodyOf.Fn(i): not w.F.P.IsEntry(w.F.P.InstanceFn(i))
+        case _: true
     }
 }
 

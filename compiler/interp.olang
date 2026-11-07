@@ -1045,7 +1045,7 @@ fn (x mut Exec&) Entries() Vec<I64>, I64 {
             }
             case typed.BodyOf.Fn(inst) {
                 f := p.InstanceFn(inst)
-                if p.FnModule(f) == p.L.Root and p.T.Names.Text(p.FnDecl(f).Name) == "main" { main = i }
+                if p.IsEntry(f) { main = i }
             }
             case _ { }
         }

@@ -1,0 +1,22 @@
+# check: run
+# flags: -debug -sanitize
+# B4, T19b (bulk review 8): the program's entry is the root module's plain function main - a method named main is an
+# ordinary method, so a payload error leaving it reaches its caller's clause, never ends the program
+import "std/io"
+
+type PE error { Bad(n I64) }
+
+type Runner struct(k I64) { k }
+
+fn (r Runner) main() I64 ? PE {
+    if r.k > 0: error PE.Bad(r.k)
+    return 0
+}
+
+Live mut I64 = 3
+
+fn main() {
+    v := try Runner(Live).main() catch PE e default -e.n
+    assert v == -3
+    io.Println("caught " $v)!
+}

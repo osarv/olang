@@ -1578,8 +1578,7 @@ fn (ln mut lowering&) isMain() Bool {
     p := ln.L.P
     match ln.B.Of {
         case typed.BodyOf.Fn(inst) {
-            f := p.InstanceFn(inst)
-            return p.FnModule(f) == p.L.Root and ln.T.Names.Text(p.FnDecl(f).Name) == "main"
+            return p.IsEntry(p.InstanceFn(inst))
         }
         case _ { return false }
     }
