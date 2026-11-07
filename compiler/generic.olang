@@ -115,6 +115,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     fnsAll I64 = -1                    # how many modules there were when allFns last added every one's
     fnSig Map<I64, types.TypeId>       # by function: its signature, receiver first
     fnByName Map<pair.Pair<I64, I64>, I64>  # (module, name): a plain function
+    decidedOf Map<I64, Array<Bool>> = Map<I64, Array<Bool>>()   # G29: lengthsDecided by function, once found
     methods Map<pair.Pair<I64, I64>, I64>   # (receiver key, name): the first method declared
     sameKey Map<I64, I64>              # by method: the next declared of its receiver key and name (M21: one per instance)
     defaultFns Vec<I64>               # the methods declared on a constrained type variable: traits' defaults (M19e)
@@ -3185,7 +3186,7 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     levels Vec<I64>
     # ... but only where the body decides something on that length (LengthDecided): any other array by value is one of a
     # run-time length, its function one instance whatever the lengths given (D9a)
-    decided := p.lengthsDecided(row)
+    decided := p.lengthsDecidedOf(f)
     # (and wherever rows held by value lie under the level a call passes: rows laid out in place where the instance
     # wants rows of a run-time length are no copy a call can make of what a reference names, G29)
     if row.F.Recv is not null and p.nestedRows(p.Resolve(c, row.F.Recv!.Ty)): decided[0] = true
@@ -3304,15 +3305,82 @@ fn mentionsName(t ast.TypeRef?&, n source.NameId) Bool {
 # length ("a.Len()") or its elements' ("a[0].Len()"), pushed to ns
 # G29, G30: by parameter, the receiver first (false where there is none), whether the body decides something on the
 # length of an array it is given by value (LengthDecided) - an extern's and a bodiless function's never
-fn (p mut Program&) lengthsDecided(row fnRow&) Array<Bool> {
+fn (p mut Program&) lengthsDecided(row fnRow&, depth I64) Array<Bool> {
     out := Array<Bool>(row.F.S.Params.Len() + 1, false)
     if row.F.Body.Len() == 0 or row.Extern: return out
     text := p.L.Mods[row.Mi].Src!.Text
     from := I64(row.F.Body[0].Span().Start)
     to := I64(row.F.Body[row.F.Body.Len() - 1].Span().End)
     if row.F.Recv is not null: out[0] = LengthDecided(text, from, to, p.text(row.F.Recv!.Name))
-    for j, prm in row.F.S.Params { out[j + 1] = LengthDecided(text, from, to, p.text(prm.Name)) }
+    for j, prm in row.F.S.Params {
+        out[j + 1] = LengthDecided(text, from, to, p.text(prm.Name)) or p.handedOn(row.Mi, text, from, to, p.text(prm.Name), depth)
+    }
     return out
+}
+
+# lengthsDecided of function f, found once; a function still being looked at (a call cycle) decides nothing through it
+fn (p mut Program&) lengthsDecidedOf(f I64, depth I64 = 0) Array<Bool> {
+    if f in p.decidedOf { return try p.decidedOf.Get(f) catch { unreachable } }
+    p.decidedOf.Put(f, Array<Bool>(p.fns[f].F.S.Params.Len() + 1, false))
+    out := p.lengthsDecided(p.fns[f], depth)
+    p.decidedOf.Put(f, out)
+    return out
+}
+
+# G29 (bulk review 8): whether a body hands the parameter name on whole, as an argument, to a function of its module
+# whose parameter there decides something on the length - so the length known at the program's call follows it through
+# (wrap(xs) calling first(xs), first asserting xs.Len() > 0). Read from the text as LengthDecided is: "f(..., name, ...)"
+# with f a plain function's name - a method's, an alias's or a value's call follows nothing (decided at run time)
+fn (p mut Program&) handedOn(mi I64, text String&, from I64, to I64, name String&, depth I64) Bool {
+    if depth > 8: return false
+    at := from
+    for at < to {
+        k := try text[at:to].Find(name) catch { return false }
+        q := at + k
+        at = q + name.Len()
+        if q > 0 and (text[q - 1].IsLetter() or text[q - 1].IsDigit() or text[q - 1] == '_' or text[q - 1] == '.'): continue
+        if at < to and (text[at].IsLetter() or text[at].IsDigit() or text[at] == '_'): continue
+        e := skipBlank(text, at, to)
+        if e >= to or (text[e] != ',' and text[e] != ')'): continue
+        callee, arg := callAround(text, from, q)
+        if callee == "": continue
+        g := p.FnNamed(mi, p.L.Names.Intern(callee))
+        if g < 0 or p.fns[g].F.Recv is not null: continue
+        d := p.lengthsDecidedOf(g, depth + 1)
+        if arg + 1 < d.Len() and d[arg + 1]: return true
+    }
+    return false
+}
+
+fn skipBlank(text String&, at I64, to I64) I64 {
+    i := at
+    for i < to and (text[i] == ' ' or text[i] == '\t') { i++ }
+    return i
+}
+
+# the plain name of the call whose argument list holds position q, and which argument q is in - "" where q is in none,
+# the call is a method's or an alias's ("x.f(", "lib.f("), or q is not an argument by itself
+fn callAround(text String&, from I64, q I64) String, I64 {
+    depth := 0
+    commas := 0
+    i := q - 1
+    for i >= from {
+        c := text[i]
+        if c == ')' or c == ']' or c == '}' { depth++ }
+        if c == '(' or c == '[' or c == '{' {
+            if depth == 0: break
+            depth--
+        }
+        if c == '\n' and depth == 0: return "", 0
+        if c == ',' and depth == 0: commas++
+        i--
+    }
+    if i < from or text[i] != '(': return "", 0
+    e := i
+    b := e
+    for b > from and (text[b - 1].IsLetter() or text[b - 1].IsDigit() or text[b - 1] == '_') { b-- }
+    if b == e or (b > from and text[b - 1] == '.'): return "", 0
+    return $text[b:e], commas
 }
 
 # G29, G30: whether a body decides something on a parameter's length - "n.Len()" written in an if's, an assert's or a

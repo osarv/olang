@@ -2230,7 +2230,8 @@ copied at the call - a copy left out wherever nothing could tell it from the arg
 parameter nowhere, keeps it nowhere and hands it back nowhere, and nothing changes the argument while the call runs).
 Where the body **decides something on the length** - `a.Len()` in the condition of an `if`, an `assert` or a `match`,
 after a conditional's or a guard's `if`, in a `comptime`, or giving an array its length (`Array<T>(a.Len())`, a
-comprehension over `range a.Len()`) - the function is compiled once for each length its calls give it (G29), and in
+comprehension over `range a.Len()`), or hands the array on whole, as an argument, to a function of its module whose
+parameter there decides something on it - the function is compiled once for each length its calls give it (G29), and in
 each it is fixed storage (T7d) whose `Len()` is a constant (T7c), so that decision is made while compiling (G30); a call
 giving a length known only at run time has an instance of its own, in which the decision is made at run time. The same
 holds for every array level held by value beneath the parameter - the elements of an `Array<Array<F64>>&` parameter,
