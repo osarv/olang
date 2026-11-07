@@ -935,3 +935,10 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   hint at uses) and olang api (a `deprecated` row, not breaking). Round drops continued by a fresh agent (opus xhigh,
   from f24af92's PROGRESS.md). asm's verify running; merge when it passes (golden rows resolved per file, then a verify
   on the merged tip). Running: structpat, drops. Next free slot: round interp (#86).
+- 2026-11-07 ~10:05 CET: round structpat done (wt-structpat 15ce44d, verify passed on its tip): S13i struct patterns by
+  field name, S13b payload fields by name too (positions first), exhaustiveness over a struct's fields; lowering, emit,
+  the evaluator and interpret unchanged (tests/structpat.olang's baked global and decided assert agree); `case
+  Point(1, 2)` gone (a struct path in a pattern is always a struct pattern - tests/shared.olang migrated); found and
+  fixed: `case Shape.Rect(k + 1, h)` said "unknown name 'h'", `case Opt<I64>.Some(x)` did not bind x. asm + deprec
+  merged on wt-merge (9241f1d): the full verify had two tests and drvdiff killed by memory (the cgroup's OOM killer),
+  the two re-run and passed, drvdiff re-running; then master, then structpat merged and verified.
