@@ -2322,6 +2322,8 @@ fn testends(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/testends/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" test ends.olang > out.txt 2>&1") != 0, "ends", dir)
     try r.expect(sh(dir, "cmp -s out.txt ends.want") == 0, "ends output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test heldends.olang > out.txt 2>&1") != 0, "heldends", dir)
+    try r.expect(outOf(dir).Contains("ok - after") and outOf(dir).Contains("1 passed, 1 failed"), "heldends output", dir)
     for n in String&["traced", "banged", "spawnbanged", "checkbanged", "contractbanged", "why"] {
         try r.expect(sh(dir, "\"$OLANG\" build " $n ".olang > out.txt 2>&1") == 0, $n " build", dir)
         # the shell adds its own "Aborted" line after what a program stopped by '!' printed

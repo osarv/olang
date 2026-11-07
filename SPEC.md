@@ -6830,7 +6830,9 @@ by value as a part (a field, a payload, an element of an array held by value), d
 reference - has its destructors run exactly once, **where its holder lets go of it**:
 - a variable or a parameter holding it by value (`f File = File(3)`, `fn use(f File)`, a copy where its type declares
   Copy, E31d) lets go as the block declaring it is left - its function's body for a parameter - on every way out but the
-  process-ending ones (S19c), as deferred code registered at its declaration does (S19); unless it no longer holds the
+  process-ending ones (S19c), as deferred code registered at its declaration does (S19) - and a test ended by a failed
+  check (P1d), which runs no deferred code, ends what such a variable still holds as it closes the variable's block,
+  among the values registered there (O16); unless it no longer holds the
   value there: a by-value parameter handed on at its last mention (T13b) - as an argument, once the call is made, after
   every argument is evaluated, so a later argument that leaves (an error passed on, a clause's `return`) leaves the
   value with it, ended as the block is left -, a whole variable returned (O26a) or made a constructor's field (a pun,

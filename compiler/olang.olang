@@ -518,6 +518,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     }
     lw mut lower.Lowerer& = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
+    lw.Tests = tests
     lw.ViewDump = (try os.Env("OLANG_VIEWDUMP") catch default "") != ""
     # O8d: early freeing is decided for a program at its root - a module compiled on its own frees nothing early (B3i)
     fr := try placement(c, cfg, -1 if kind == build.Kind.Module else l.Root)

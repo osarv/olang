@@ -20345,6 +20345,8 @@ fn (c mut Checker&) dropIfHeld(sp source.Span, p typed.Lvalue&, flag I64) typed.
     from := c.stmts.Len()
     id, outer, mark := c.open(typed.BlockKind.Plain, sp)
     c.emit(drop)
+    # (it holds nothing after - so a test build's guard of it, F5, finds nothing to end as the block's scope closes)
+    c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Local(sp, types.BoolT, typed.LocalId(I32(flag))), c.lit(sp, types.BoolT, 0)))
     then := c.close(id, outer, mark, from)
     return typed.Stmt.If(sp, typed.If(c.readLocal(sp, flag), then, null))
 }

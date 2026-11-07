@@ -1,0 +1,20 @@
+# O15, P1d (bulk review 7, F5): a test ended by a failed check ends what its by-value holders hold, as it ends what is
+# registered where calls landed - the second test reads back both destructors run, x's after y's (x declared first)
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+test "fails holding one by value" {
+    x Res = Res(1)
+    y := Res(2)
+    assert x.id + y.id == 0
+}
+
+test "after" {
+    assert Ended == 21, "ended: " $Ended
+}

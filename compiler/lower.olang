@@ -61,6 +61,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     # B3e: for interpret - each registration of deferred code made with a cleanup of its own (Stmt.Deferred), which
     # interpret runs for the blocks a stop leaves; never for a build (emit has no use for them)
     Cleanups Bool = false
+    Tests Bool = false        # a test build: a by-value holder's guard registered with its block (F5)
     # S18c (mir.Key.Assert): the asserts decided true while compiling, by body and where the assert starts - no test
     AssertsTrue Map<pair.Pair<I64, I64>, Bool>
     # the functions lowering refers to that are no typed body - helpers, adapters, modules' initializations - in the
@@ -968,6 +969,7 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             ln.deferAt.Push(ln.top().S)
             # B3e: a stop interpret meets is no error leaving, so an errdefer has no cleanup (S19c, S19e)
             if ln.L.Cleanups and not ln.onError(ln.defers.Len() - 1) { ln.cleanup(sp, ln.defers.Len() - 1) }
+            if ln.isDrop(ln.defers.Len() - 1) { ln.guardHolder(sp, bl) }
         }
         case typed.Stmt.Join(sp, j) { ln.join(sp, j) }
         case typed.Stmt.Spawn(sp, sw) { ln.spawn(sp, sw) }
@@ -4803,6 +4805,84 @@ fn (ln mut lowering&) helper(kind mir.HelperKind, ty types.TypeId) {
             ln.dropAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp, true)
             ln.epilogue(mir.Operand.None)
         }
+        case mir.HelperKind.Guard {
+            ln.prologue(mir.VarKind[mir.VarKind.Closing])
+            ln.guardBody(ty, sp)
+            ln.epilogue(mir.Operand.None)
+        }
+    }
+}
+
+# a guard's body (HelperKind.Guard): where its holder's flag is set, the holder's destructors run and the flag cleared
+fn (ln mut lowering&) guardBody(gty types.TypeId, sp source.Span) {
+    g := ln.at(mir.LocalId(0))
+    flag := ln.with(ln.with(g, mir.Proj.Field(0)), mir.Proj.Deref)
+    held := ln.with(ln.with(g, mir.Proj.Field(1)), mir.Proj.Deref)
+    yes := ln.F.NewBlock()
+    done := ln.F.NewBlock()
+    ln.end(mir.Term.Branch(mir.Operand.Copy(ln.mk(flag)), yes, done))
+    ln.start(yes)
+    ln.dropAt(held, mir.GuardOf(ln.T, gty), mir.ScopeRef.Var(0), sp)
+    ln.emit(mir.Stmt.Assign(sp, ln.mk(flag), mir.Rvalue.Use(mir.Operand.Const(types.BoolT, 0))))
+    ln.end(mir.Term.Goto(done))
+    ln.start(done)
+}
+
+# a by-value holder's drop just registered (deferred code of kind Drop, "if flag { Drop(x) }"): in a test build its
+# guard registered with the block too, so a failed check's unwinding, which runs no deferred code, ends what the holder
+# still holds as it closes the block's scope (P1d; bulk review 7, F5)
+fn (ln mut lowering&) guardHolder(sp source.Span, b typed.Block&) {
+    if not ln.L.Tests or b.Stmts.Len() != 1: return
+    match b.Stmts[0] {
+        case typed.Stmt.If(_, f) { ln.guardIf(sp, f) }
+        case _ { }
+    }
+}
+
+fn (ln mut lowering&) guardIf(sp source.Span, f typed.If&) {
+    if f.Then.Stmts.Len() == 0: return
+    fp := readLocalPlace(f.Test)
+    hp := droppedPlace(f.Then.Stmts[0])
+    if fp is null or hp is null: return
+    t := ln.T
+    rf := t.Ref(types.BoolT, types.Writable)
+    rh := t.Ref(hp.Type(), types.Writable)
+    fv := ln.into(rf, mir.Rvalue.Ref(ln.mk(ln.place(fp)), rf), sp)
+    hv := ln.into(rh, mir.Rvalue.Ref(ln.mk(ln.place(hp)), rh), sp)
+    if ln.dead: return
+    gty := mir.GuardType(t, hp.Type())
+    gv := ln.into(gty, mir.Rvalue.Aggregate(gty, 0, ln.F.Args(mir.Operand[fv, hv])), sp)
+    s := ln.innermost()
+    gr := ln.into(t.Ref(gty, types.Writable), mir.Rvalue.New(s, gv, t.Ref(gty, types.Writable)), sp)
+    ln.emit(mir.Stmt.RegisterDtor(sp, s, gty, gr))
+}
+
+# the place a holder's drop statement ("Drop(&x)") ends, else null
+fn droppedPlace(s typed.Stmt&) typed.Lvalue?& {
+    return match s {
+        case typed.Stmt.Eval(_, x): droppedArg(x)
+        case _: null
+    }
+}
+
+fn droppedArg(x typed.Expr&) typed.Lvalue?& {
+    return match x {
+        case typed.Expr.Prim(_, _, op, _, args): borrowedPlace(args[0]) if op == typed.PrimOp.Drop and args.Len() == 1 else null
+        case _: null
+    }
+}
+
+fn borrowedPlace(x typed.Expr&) typed.Lvalue?& {
+    return match x {
+        case typed.Expr.Borrow(_, _, p): p
+        case _: null
+    }
+}
+
+fn readLocalPlace(x typed.Expr&) typed.Lvalue?& {
+    return match x {
+        case typed.Expr.Read(_, _, p, _): p if p == typed.Lvalue.Local else null
+        case _: null
     }
 }
 
