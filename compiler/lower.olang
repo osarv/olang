@@ -556,6 +556,20 @@ fn (ln mut lowering&) local(x mir.Operand, ty types.TypeId, sp source.Span) mir.
     return l
 }
 
+# a temporary given storage (Lvalue.Temp): a local of the frame, or - one a view of it kept longer has the scope pass
+# build where its Built says (plan.TempKept, O27 as placement) - a local homed there, a new object each time it is made
+fn (ln mut lowering&) tempLocal(v typed.Expr&, ty types.TypeId, sp source.Span, site typed.SiteId) mir.LocalId {
+    i := I64(site)
+    kept := ln.planned and i >= 0 and i < ln.plan.TempKept.Len() and ln.plan.TempKept[i]
+    if not kept: return ln.local(ln.val(v), ty, sp)
+    x := ln.val(v)
+    l := ln.temp(ty, sp)
+    ln.F.Locals[I64(l)].Home = ln.scopeRef(ln.plan.Built[i])
+    ln.emit(mir.Stmt.Live(sp, l))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(l), mir.Rvalue.Use(x)))
+    return l
+}
+
 fn (ln mut lowering&) prim(op typed.PrimOp, ty types.TypeId, args Array<mir.Operand>&, sp source.Span) mir.Operand {
     return ln.into(ty, mir.Rvalue.Prim(op, ty, ln.F.Args(args)), sp)
 }
@@ -1889,7 +1903,7 @@ fn (ln mut lowering&) place(p typed.Lvalue?&) pl {
         case typed.Lvalue.Field(_, _, base, i): ln.packedField(ln.place(base), base.Type(), i)
         case typed.Lvalue.Elem(sp, _, e): ln.elem(e, sp)
         case typed.Lvalue.Payload(sp, _, py): ln.payload(py, sp)
-        case typed.Lvalue.Temp(sp, ty, v, _): pl(mir.Base.Local(ln.local(ln.val(v), ty, sp)))
+        case typed.Lvalue.Temp(sp, ty, v, site): pl(mir.Base.Local(ln.tempLocal(v, ty, sp, site)))
         case typed.Lvalue.Target(sp, _): ln.target(sp)
     }
 }

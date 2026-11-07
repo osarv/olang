@@ -104,12 +104,17 @@ type rel struct(Hi Term, Lo Term, Exact Bool, At source.Span, Why I64, View Bool
     Exact
     At
     Why      # a constructor's: WhyHolds where its instance holds an argument (C2d), WhyField where a field viewing q's referent names one
-    View     # the inference's: what Lo's slot keeps of Hi is a view of storage, never lifted (O27)
+    View     # the inference's: what Lo's slot keeps of Hi is a view of storage, lifted only in its second phase (O27)
 }
 
 WhyHolds I64 = 1
 WhyField I64 = 2
 WhyResult I64 = 3 # what an instance a function returns holds (C2d through its result, said where the result lands)
+
+# what a placement for O27 was made for (placedRow.Kind): a view of storage, a part of an instance, a closure's capture
+PlaceView I64 = 1
+PlacePart I64 = 2
+PlaceCapture I64 = 3
 
 # what a judgment of "outlives" comes to (2.2): it holds; it is an obligation the body records; it fails because a
 # block is asked to outlive a scope variable (O10d) or another block it is nested in (O10); it cannot be judged here
@@ -224,6 +229,12 @@ type markRead struct(Ctor I64, Field I64, Mark typed.Mark) {
 type sumRead struct(Body I64, Sum summary&) {
     Body
     Sum
+}
+
+# O27 as placement (docs/sec8.md 4.4): a lift made for a view, a part or a capture - where the view stands, and which
+type placedRow struct(At source.Span, Kind I64) {
+    At
+    Kind
 }
 
 # a function made a value (T22a): where, which body, and how - Named, Lambda, or an instance through its Call (Of)
@@ -460,6 +471,20 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     fitPart Bool = false
     slotCall I64 = -1                      # the call whose value a by-value holder's slot takes as it is (O15), -1 none
     obligeView Bool = false                # the obligation recorded next keeps a view of storage, not a whole value (O27)
+    # O27 as placement (docs/sec8.md 4.2): a view, a part or a capture kept longer than the storage it shows proposes that
+    # storage built where it is kept - in a second phase of a body's gathering, once whole lifts have settled
+    # (viewPhase), part lifts only once the field inference has settled (partsOn); a phase that left such a proposal
+    # unmade asks for the next (viewWanted, partWanted). placed: by (body, local, or -1 - site), the placement made for
+    # one, which -memory lists (B18); viewKind, viewAt what the proposal being made is for (0 none, else a PlaceView...)
+    viewPhase Bool = false
+    partsOn Bool = false
+    viewWanted Bool = false
+    partWanted Bool = false
+    partNow Bool = false                    # ... a part proposal refused in the judging being made
+    viewKind I64 = 0
+    viewAt source.Span = source.Span(0, 0)
+    propAt source.Span = source.Span(0, 0)   # where the outermost proposal being made stands
+    placed Map<pair.Pair<I64, I64>, placedRow>
     # the field inference (2.6): quiet judgings of the program collecting the declarations whose fields a refusal needs
     # given a binding of their own, by declaration; what was promoted and given back, by (declaration, field)
     fieldGather Bool = false
@@ -535,6 +560,7 @@ fn (s mut Scoper&) judgeAll(report Bool) {
         s.liftStor.Clear()
         s.wLocals.Clear()
         s.partLifts.Clear()
+        s.placed.Clear()
         s.defLifts.Clear()
         s.defTerms.Clear()
         s.freshDefs.Clear()
@@ -722,6 +748,7 @@ fn (s mut Scoper&) dropLifts(comp Array<I64>&) {
     dropKeyed<Bool>(s.liftStor, mine)
     dropKeyed<Bool>(s.wLocals, mine)
     dropKeyed<Bool>(s.partLifts, mine)
+    dropKeyed<placedRow>(s.placed, mine)
     dropKeyed<Term>(s.defLifts, mine)
     dropKeyed<Vec<verAtom>>(s.defTerms, mine)
 }
@@ -1013,7 +1040,10 @@ fn (s mut Scoper&) judgeOnce(b I64, report Bool) Bool {
     s.finalQuiet = not report or s.fieldGather
     s.liftGather = true
     s.liftGrew = false
+    # (views propose here too: a judging that proposes anything is done again as inferClaims' phases do it)
+    s.viewPhase = true
     s.judge(b, report)
+    s.viewPhase = false
     s.liftGather = false
     s.finalQuiet = false
     if not s.liftGrew and s.P.L.Diags.Count() == mark { return true }
@@ -6184,7 +6214,8 @@ fn (s mut Scoper&) storOf(p typed.Lvalue&) Term {
         case typed.Lvalue.Payload(_, _, pl) { return s.storOf(pl.Base) }
         case typed.Lvalue.Temp(_, _, v, site) {
             s.tempTerm(v, site)
-            return s.frameHere()
+            lt := s.siteLift(I64(site))
+            return lt if lt.Runs() else s.frameHere()
         }
         case typed.Lvalue.Target(_, _) {
             if s.targets.Len() >= 2 { return s.storOf(s.targets[s.targets.Len() - 2]) }
@@ -6292,8 +6323,11 @@ fn (s mut Scoper&) tempTerm(v typed.Expr&, site typed.SiteId) Term {
     if t != Term.Untraced { return t }
     s.resAt = Term.None
     x := s.tempVal(v)
-    h := s.here()
+    # (built where a slice of it is kept, O27 as placement: its own storage there, no longer the frame's)
+    lt := s.siteLift(I64(site))
+    h := lt if lt.Runs() else s.here()
     s.build(site, h)
+    if lt.Runs() and I64(site) < s.plan.TempKept.Len() { s.plan.TempKept[I64(site)] = true }
     t = x.T if x.T != Term.None else h
     # a call's array value holds no reference, but its elements are where its result scope is bound (T7b)
     if x.T == Term.None and s.arenaValue(v.Type()) and typed.Call.Of(v) is not null and s.resAt.Runs() { t = s.resAt }
@@ -7143,7 +7177,8 @@ fn (s mut Scoper&) builtOK(x typed.Expr?&, t Term) Bool {
                 if b == Term.None { continue }
                 o := s.order(b, t)
                 # the inference: the argument too short for where the part is put proposes a longer claim (2.4)
-                if s.liftGather and o == FailsBlock and ai >= 0 and not r.View { s.propose(c.Args[ai], t) }
+                if s.liftGather and o == FailsBlock and ai >= 0 and r.View and not s.viewPhase { s.viewWanted = true }
+                if s.liftGather and o == FailsBlock and ai >= 0 and (not r.View or s.viewPhase) { s.propose(c.Args[ai], t) }
                 if o != Holds and o != Obliged { return false }
             }
             case Term.Program { }
@@ -8242,7 +8277,13 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
         if k == Holds { continue }
         # the inference: an argument whose local's claim is too short for what the callee keeps of it whole proposes a
         # longer one - the local the call's result lands for, where the result is what is too short (2.4, O27)
-        if s.liftGather and k == FailsBlock and not r.View { s.liftAtCall(c, r, lo) }
+        # (a view of storage it keeps, only in the inference's second phase: O27 as placement)
+        if s.liftGather and k == FailsBlock and r.View and not s.viewPhase { s.viewWanted = true }
+        if s.liftGather and k == FailsBlock and (not r.View or s.viewPhase) {
+            if r.View { s.viewing(PlaceView, s.nameSpan(sp)) }
+            s.liftAtCall(c, r, lo)
+            s.viewKind = 0
+        }
         # ... and an argument read out of what a local builds, too short: never lifted (O20), its field may want a binding
         # of its own (2.6)
         if k == FailsBlock or k == FailsUnknown {
@@ -9457,9 +9498,13 @@ fn (s mut Scoper&) viewKept(x typed.Expr&, sp source.Span, returned Bool) Bool {
 # a lift proposed for the local value x is the whole of: its claim lengthened to outlive t
 fn (s mut Scoper&) propose(x typed.Expr&, t Term) {
     s.propDepth++
-    if s.propDepth == 1 { s.propSeen.Clear() }
+    if s.propDepth == 1 {
+        s.propSeen.Clear()
+        s.propAt = x.Span()
+    }
     s.proposeIn(x, t)
     s.propDepth--
+    if s.propDepth == 0 { s.viewKind = 0 }
 }
 
 fn (s mut Scoper&) proposeIn(x typed.Expr&, t Term) {
@@ -9496,12 +9541,175 @@ fn (s mut Scoper&) proposeIn(x typed.Expr&, t Term) {
     }
     r := s.claimRoot(x)
     if r < 0 {
+        if s.proposeView(u, t) { return }
         s.proposeCall(u, t)
         return
     }
     s.partFlow = partRead(u)
-    s.proposeLocal(r, t, s.keepsStorage(x))
+    s.proposeLocal(r, t, s.keepsStorage(x) or s.convertsStorage(x))
     s.partFlow = false
+}
+
+# O27 as placement (docs/sec8.md 4.2): a lift proposed for value x where it is a view of storage kept too long - a slice
+# of a local's storage or of what a reference local names, a borrow of a part of it, a slice of a temporary, a closure
+# of what it captured: that storage built where t is (O28), as a whole value kept longer is. Only in the inference's
+# second phase (viewWanted asks for it); whether x was such a view
+fn (s mut Scoper&) proposeView(u typed.Expr&, t Term) Bool {
+    match u {
+        case typed.Expr.Fn(_, _, f) {
+            if f != typed.FnVal.Lambda { return false }
+            if not s.viewPhase {
+                s.viewWanted = true
+                return true
+            }
+            # a closure is a view of its captures (D16c, D16d): what each captured is built where the closure is kept
+            s.viewing(PlaceCapture, u.Span())
+            for cp in f.captures {
+                if s.holds(cp.Outer.Type()): s.proposeIn(cp.Outer, t)
+            }
+            return true
+        }
+        case _ { }
+    }
+    # what a callee hands back borrowed from an argument (O13: a result written 'T&p') is a view of what that argument
+    # names: the argument proposed, its storage with it where it is a value local's
+    bc := s.borrowedCall(u)
+    if bc is not null {
+        if not s.viewPhase {
+            s.viewWanted = true
+            return true
+        }
+        e := s.P.T.ResultFrom(s.calleeType(bc), 0)
+        if e >= 0 and e < bc.Args.Len() {
+            s.viewing(PlaceView, u.Span())
+            s.proposeIn(bc.Args[e], t)
+        }
+        return true
+    }
+    base := s.viewBase(u)
+    if base is null {
+        # a borrow of what a conversion of a value local's storage names (T29a: the storage itself, no copy)
+        cl := convertedLocal(u)
+        if cl < 0 { return false }
+        if not s.viewPhase {
+            s.viewWanted = true
+            return true
+        }
+        s.viewing(PlaceView, u.Span())
+        s.proposeStorage(cl, t, false)
+        return true
+    }
+    if not s.viewPhase {
+        s.viewWanted = true
+        return true
+    }
+    s.viewing(PlaceView, u.Span())
+    ts := tempSite(base)
+    if ts >= 0 {
+        # a slice of a temporary (E16a): the temporary built where the slice is kept
+        s.proposeSite(ts, t)
+    } else {
+        l := flRoot(base)
+        if l >= 0 { s.proposeStorage(l, t, flThroughRef(base)) }
+    }
+    return true
+}
+
+# the local whose storage local l holds a view of (O27): one it was declared as a view of, or the argument of the
+# generator whose walk's element it is (D18c); -1 for none
+fn (s mut Scoper&) viewedBy(l I64) I64 {
+    if l < 0 or l >= s.viewOf.Len() { return -1 }
+    if s.viewOf[l] >= 0 { return s.viewOf[l] }
+    return try s.walkSrc.Get(l) catch default -1
+}
+
+# whether x is a conditional or a match (E28), which a local declared from it is no claim of
+fn (s mut Scoper&) choiceInit(x typed.Expr&) Bool {
+    u := unPassed(s.unAway(x))
+    return u == typed.Expr.Cond or u == typed.Expr.Match
+}
+
+# the call value x is, unwrapped, where its result is borrowed from one of its arguments (O13); null for none
+fn (s mut Scoper&) borrowedCall(x typed.Expr&) typed.Call?& {
+    u := unPassed(s.unAway(x))
+    if u == typed.Expr.Try and u.t.X is not null { u = unPassed(s.unAway(u.t.X!)) }
+    c := typed.Call.Of(u)
+    if c is null or s.P.T.ResultFrom(s.calleeType(c), 0) < 0 { return null }
+    return c
+}
+
+# the place value u shows a view of the storage of (O27): a slice's base, a borrowed part; null for none
+fn (s mut Scoper&) viewBase(u typed.Expr&) typed.Lvalue?& {
+    match unWidened(u) {
+        case typed.Expr.Slice(_, _, sl) { return sl.Base }
+        case typed.Expr.Borrow(_, _, p) {
+            return match p {
+                case typed.Lvalue.Local(_, _, _), typed.Lvalue.Deref(_, _, _): null
+                case _: p
+            }
+        }
+        case _ { return null }
+    }
+}
+
+# the local whose own storage value u borrows through a conversion of it to a type declared over it (T29a), -1 none
+fn convertedLocal(u typed.Expr&) I64 {
+    if u != typed.Expr.Borrow { return -1 }
+    p := u.p
+    if p != typed.Lvalue.Deref { return -1 }
+    r := p.ref
+    if r != typed.Expr.Prim or r.op != typed.PrimOp.Convert or r.args.Len() != 1 { return -1 }
+    return match r.args[0] {
+        case typed.Expr.Borrow(_, _, q): wholeLocal(q)
+        case _: -1
+    }
+}
+
+# the site of the temporary place p is a part of, reached with no reference between (E16a); -1 for none
+fn tempSite(p typed.Lvalue&) I64 {
+    return match p {
+        case typed.Lvalue.Temp(_, _, _, site): I64(site)
+        case typed.Lvalue.Field(_, _, b, _): tempSite(b)
+        case typed.Lvalue.Elem(_, _, e): tempSite(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): tempSite(pl.Base)
+        case _: -1
+    }
+}
+
+# the proposal being made is for a view, a part or a capture (kind), standing at sp - placed's rows
+fn (s mut Scoper&) viewing(kind I64, sp source.Span) {
+    if s.viewKind != 0 { return }
+    s.viewKind = kind
+    s.viewAt = sp
+}
+
+# a lift proposed for the storage local l shows - through a reference it holds (ref): what it names, its claim lifted;
+# its own storage: built where t is (item 17's path). Storage holding a value whose destructor is still to run is never
+# built longer for a view (O15, docs/sec8.md 4.3): its end stays where its holder lets go, the view O27's error
+fn (s mut Scoper&) proposeStorage(l I64, t Term, ref Bool) {
+    if l < 0 or l >= s.B!.Locals.Len() { return }
+    if not ref and s.mayHoldDtor(s.B!.Locals[l].Ty) { return }
+    s.proposeLocal(l, t, not ref and not s.isRef(s.B!.Locals[l].Ty))
+}
+
+# whether value x converts a value local's own storage to a type declared over it (T29a), which names that storage: in
+# the inference's second phase, kept longer, the storage goes with it (O27)
+fn (s mut Scoper&) convertsStorage(x typed.Expr&) Bool {
+    match unPassed(s.unAway(x)) {
+        case typed.Expr.Promote(_, _, pr) {
+            cp := s.convertedPlace(pr.X)
+            if cp is null { return false }
+            l := wholeLocal(cp)
+            if l < 0 or s.isRef(s.B!.Locals[l].Ty) { return false }
+            if not s.viewPhase {
+                s.viewWanted = true
+                return false
+            }
+            s.viewing(PlaceView, x.Span())
+            return not s.mayHoldDtor(s.B!.Locals[l].Ty)
+        }
+        case _ { return false }
+    }
 }
 
 # whether local l is declared with an instance its constructor builds here - not a call's result, which may be
@@ -9564,6 +9772,7 @@ fn (s mut Scoper&) proposeSite(site I64, t Term) {
     s.siteLifts.Put(key, nt)
     s.liftGrew = true
     s.realGrew = true
+    if s.viewKind != 0 { s.placed.Put(pair.Pair<I64, I64>(s.Id, -1 - site), placedRow(s.viewAt, s.viewKind)) }
     if s.Trace { s.TraceLog.Push($"lift site " $site " to " $nt " | " $s.traceAt(s.B!.Sites[site].Sp.Start)) }
 }
 
@@ -9576,9 +9785,13 @@ fn (s mut Scoper&) siteLift(site I64) Term {
 # with it where stor (a value local kept whole: built where it is kept, item 17)
 fn (s mut Scoper&) proposeLocal(l I64, t Term, stor Bool) {
     s.propDepth++
-    if s.propDepth == 1 { s.propSeen.Clear() }
+    if s.propDepth == 1 {
+        s.propSeen.Clear()
+        s.propAt = s.stmtSp
+    }
     s.proposeFrom(l, t, stor, -1, false)
     s.propDepth--
+    if s.propDepth == 0 { s.viewKind = 0 }
 }
 
 # ... a cursor met along the claims followed lifted through the versions reaching its read (3.5): read at the statement
@@ -9595,6 +9808,35 @@ fn (s mut Scoper&) proposeFrom(l I64, t Term, stor Bool, key I64, first Bool) {
         if s.origin[l] < 0 { break }
         key = try s.letKey.Get(l) catch default -1
         l = s.origin[l]
+    }
+    # a local holding a view of another's storage (O27 as placement, docs/sec8.md 4.2): that storage proposed, in the
+    # inference's second phase
+    # (or given what a callee hands back of an argument's storage, or a conditional's or a match's value: the argument,
+    # each value, proposed - E28)
+    if l >= 0 and l < s.origin.Len() and s.origin[l] == -2 and s.viewedBy(l) < 0 {
+        init := try s.inits.Get(l) catch default null
+        if init is not null and s.borrowedCall(init) is not null {
+            s.proposeIn(init, t)
+            return
+        }
+        if init is not null and s.choiceInit(init) {
+            if not s.viewPhase {
+                s.viewWanted = true
+                return
+            }
+            s.proposeIn(init, t)
+            return
+        }
+    }
+    v := s.viewedBy(l)
+    if v >= 0 and s.origin[l] == -2 {
+        if not s.viewPhase {
+            s.viewWanted = true
+            return
+        }
+        s.viewing(PlaceView, s.propAt)
+        s.proposeStorage(v, t, s.isRef(s.B!.Locals[v].Ty))
+        return
     }
     # a held local's value is its temporary initializer's, built where its one use puts it: a call of it lifted - and so is
     # a hidden one's holding a call's several results (D8d)
@@ -9624,11 +9866,17 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
     # a generator's locals live across its yields, and each Next call's result scope is that call's: nothing is lifted
     # into it (D18b, as O26a moves nothing there)
     if s.genResult(t) { return }
-    # a part of what a local builds - a field, an element - kept longer is no reason to build all of it longer: its field
-    # gets a binding of its own (2.6), or the read is O20's error (no storage extended past the block that made it)
+    # a part of what a local builds - a field, an element - kept longer: its field gets a binding of its own first
+    # (2.6); only once the field inference has settled is the instance built where the part is kept (O27 as placement,
+    # docs/sec8.md 4.2), and never one holding a value whose destructor is still to run (4.3)
     if s.partFlow and s.buildsOwn(l) {
-        if s.Trace { s.TraceLog.Push($"no lift " $s.P.L.Names.Text(s.B!.Locals[l].Name) " for a part kept | " $s.traceAt(s.B!.Locals[l].Sp.Start)) }
-        return
+        if not s.partsOn { s.partNow = true }
+        if s.partsOn and not s.viewPhase { s.viewWanted = true }
+        if not s.partsOn or not s.viewPhase or s.mayHoldDtor(s.B!.Locals[l].Ty) {
+            if s.Trace { s.TraceLog.Push($"no lift " $s.P.L.Names.Text(s.B!.Locals[l].Name) " for a part kept | " $s.traceAt(s.B!.Locals[l].Sp.Start)) }
+            return
+        }
+        s.viewing(PlacePart, s.propAt)
     }
     if l < 0 or l >= s.origin.Len() or s.origin[l] == -2 or not s.liftable(l) or not t.Runs() {
         if s.Trace and l >= 0 and l < s.origin.Len() {
@@ -9655,6 +9903,7 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
     if not grows { return }
     s.lifts.Put(key, nt)
     if s.partFlow { s.partLifts.Put(key, true) }
+    if s.viewKind != 0 { s.placed.Put(key, placedRow(s.viewAt, s.viewKind)) }
     s.liftGrew = true
     s.realGrew = true
     if s.Trace {
@@ -9686,15 +9935,31 @@ fn (s mut Scoper&) liftAtCall(c typed.Call&, r rel, lo Term) {
 # from nothing and again whenever a lift grew (NLL, docs/sec8.md 3.3): with the claims fixed their terms only grow, to
 # the least the reads they reach need. Judged again where a definition came to more than a read took; past eight such
 # judgings in a row its definitions' terms keep what they had, so the rounds end whatever the shape
+#
+# O27 as placement (docs/sec8.md 4.2): first whole lifts to their fixed point, exactly as before views lifted; then, only
+# where a view, a part or a capture kept too long asked for it in the last judging (viewWanted), again with those
+# proposing as well - so a program whose views all fit places as it did, judged as often
 fn (s mut Scoper&) inferClaims(b I64) {
     s.dropDefs(b, false)
+    s.viewWanted = false
+    s.inferRounds(b)
+    if not s.viewWanted { return }
+    s.viewPhase = true
+    s.inferRounds(b)
+    s.viewPhase = false
+}
+
+fn (s mut Scoper&) inferRounds(b I64) {
     again := 0
     for {
         s.liftGather = true
         s.liftGrew = false
         s.realGrew = false
+        s.viewWanted = false
+        s.partNow = false
         s.judge(b, false)
         s.liftGather = false
+        if not s.liftGrew and s.partNow { s.partWanted = true }
         if not s.liftGrew { break }
         # (a lift that really grew drops the definitions' terms: kept, one could reproduce itself through a read of its own
         # cursor - at = at.next - and the least placement would not be found; but one a value built here gives reads no
@@ -9749,6 +10014,7 @@ fn (s mut Scoper&) inferFields() Bool {
         s.wantDecl.Clear()
         s.wantField.Clear()
         s.wantHits = 0
+        s.partWanted = false
         mark := s.P.L.Diags.Count()
         s.fieldGather = true
         s.judgeAll(true)
@@ -9767,6 +10033,14 @@ fn (s mut Scoper&) inferFields() Bool {
         if s.gaveBack { grew = true }
         s.gaveBack = false
         s.FieldRounds.Push(-1 if grew else s.wantHits)
+        # settled with a part of an instance still kept too long somewhere: the rounds go on with parts placed (O27 as
+        # placement, docs/sec8.md 4.2) - every component judged again, none taken as it was without them
+        if not grew and s.partWanted and not s.partsOn {
+            s.partsOn = true
+            s.P.L.Diags.Forget(mark)
+            s.reuse = false
+            continue
+        }
         if not grew and s.wantHits == 0 { return true }
         s.P.L.Diags.Forget(mark)
         # the next round judges again only the components something they read changed for (judgeAll)
