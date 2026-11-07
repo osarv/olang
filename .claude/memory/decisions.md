@@ -938,3 +938,9 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   added or updated (`olang get`, `olang get -update` for all), recorded in olang.lock so every build uses it until the
   next update; `@v1.2` pins an older one; a new major is another package; two dependencies wanting one repository get
   one copy, the newest that satisfies both. Replaces the MVS proposal. ASKED. In effect: today's olang.lock pinning.
+- Versions DECIDED 2026-11-07 (the user: "Yeah, go with the cargo model"): `olang get pkg` takes the newest version of
+  the same major and records it in olang.lock; every build uses the lock; `olang get -update` moves everything to the
+  newest; `pkg@v1.2` pins an older one; a new major is another package; two dependencies wanting one library get one
+  copy, the newest satisfying both. After "done" (no syntax). And: plain `olang`, nothing after it, opens the REPL (the
+  interpreter underneath); `olang interpret FILE` runs a whole file, `olang FILE` builds and runs - the user: "just
+  running OLang then. Puts you in the REPL".
