@@ -960,3 +960,10 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
 - 2026-11-07: QCZ decided - drop order computed from references (holders first, cycles an error), then Part C. Queued
   as round "dropord" (design note first, opus xhigh) once drops is merged; it touches check's drop flags, lowering's
   defer order and free.olang, so it runs after the section-8 build or between its rounds, by files.
+- 2026-11-07 ~11:15 CET (the user: build everything now, no verifies or reviews until one at the end): structpat's
+  merge verified and on master; drops merged (dafb690, seed from drops, tokens/trees recaptured; no verify - the rule).
+  Running: interp, the sec8 design note, errdata2 (errors carrying data, rounds 1/3/4), packed (packed structs),
+  dropord (drop order by references, Part C, reuse in place, the C-call rule). Next: the sec8 build after its note;
+  QBT type-level builders; then, last and alone (it migrates every literal), QBU+QBW (the type in front of every
+  literal, FromIter) with Columns<T>; the smaller items (LIST.md C5-C8 ...); then goldens, the seed, one full verify,
+  the gates and one bulk review with its fixes.

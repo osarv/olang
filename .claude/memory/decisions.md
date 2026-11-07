@@ -3055,3 +3055,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   tracks; only a cycle of such references (two resources referring to each other) is an error naming both. Then unique
   Part C (storage freed where the destructor runs) built on it. A round of its own after drops merges, design note
   first (xhigh).
+- ASKED 2026-11-07 (errors carrying data, docs/errdata.md section 14; the build of rounds 1, 3, 4 running): (1) errors
+  raised by name carry data, `error NotFound(path)`, field types from the module's first raise - rec yes; default: only
+  declared error types carry data; (2) methods on error types (decided by the user 2026-10-18 with QAN, never built) -
+  rec yes, after the std migration; default: not built; (3) `ArgumentError.Invalid` carrying the failed condition's
+  text - rec not now (the thread-local slot stays); default: not built. QCU 1-3 (Columns<T>) re-raised the same day.
+- The user, 2026-11-07, on the /tmp leftovers: "Yes, you made a little" (read as yes, delete them) - the permission
+  classifier refused the deletion again ("Shared Scratch Sweep"); not worked around; told the user. Disk had 12 GB free.

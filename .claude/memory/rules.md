@@ -191,6 +191,14 @@ ending Sat 2026-10-31 keeps the 0.95 rule and its queued end-of-week batch.
 "Actually, scrap that").** Read as withdrawing the 95%: the standing 0.92 stop holds this week too. The bulk review
 started on the 95% was stopped at once (it had not yet built anything).
 
+## The finishing push: build first, verify once (the user, 2026-11-07)
+"make sure you build everything now before verifying and testing and stuff. I want the language to be finished today.
+So no unnecessary reviews or verifications. Just do one at the end." For the push to finish the language: rounds run
+side by side and merge without their own full verify, gates or review (agents develop on targeted tests and run one
+`make quick` through vlock at the end); goldens and the seed are settled once at the end; then one full verify, the
+gates (scopesan, scopefuzz, fuzz free, dead regions) and one bulk review with its fixes. Rules for agents:
+/home/user/review/rounds/finish-rules.md.
+
 ## Waking up after a reset, and never losing work to a limit
 **Standing rule** (the user 2026-10-08: "Always schedule yourself to resume when tokens are back as your usage runs
 out"; earlier: "So I don't have to start you manually"): whenever work is left that the window will not cover - the
