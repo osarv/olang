@@ -2200,12 +2200,14 @@ written in. Each one it uses is **captured** when the lambda is made, as though 
 own type:
 
 - a **value** is copied, and the lambda's copy is **read-only**, unlike a parameter's - changing the variable
-  afterwards does not change the lambda, and writing to the copy is a compile-time error; a value of a unique type
+  afterwards does not change the lambda, and writing to the copy is a compile-time error. The copy is the lambda's own
+  as `x := v` makes one: what the value owns by value - an array of a run-time length in a field, a `Vec`'s or a `Map`'s
+  storage - is copied with it, by the type's declared Copy where it has one (E31d), made where the lambda lives; a value of a unique type
   (T13b), never copied, is borrowed as a value array is, and so is a value with a destructor to run (O15), whose holder
   is the variable;
 - a **reference** keeps naming the very instance it names (the copy is of the reference), and may be written
   through exactly when its type is writable (T25b) - this is how a lambda changes state outside itself;
-- a value **array** - text included - is **borrowed**, not copied, since copying one is never implicit (T7b):
+- a value **array** itself - text included - is **borrowed**, not copied, since copying one is never implicit (T7b):
   the lambda holds a read-only reference to the variable's own storage, sees later writes to it, and lives no
   longer than it (D16d);
 - a value **holding references** is copied too, read-only, with the scope its references live in - as a by-value

@@ -4513,7 +4513,11 @@ fn (ln mut lowering&) lambda(body typed.BodyId, caps Array<typed.Capture&>&, sit
     for i in range caps.Len() {
         ops[i] = ln.val(caps[i].Outer)
         ct := caps[i].Outer.Type()
-        if gen and not ln.dead and ln.valueArray(ct) { ops[i] = ln.arrayCopy(ops[i], ct, sp, s) }
+        if ln.dead: continue
+        if gen and ln.valueArray(ct) { ops[i] = ln.arrayCopy(ops[i], ct, sp, s) }
+        # D16c, E31d (bulk review 7, F8): a value captured is the lambda's own copy - what it owns copied (a struct's
+        # arrays, a Vec's buffer), by its declared Copy - made where the lambda lives; a value array is borrowed (above)
+        if caps[i].Outer == typed.Expr.Read and not ln.T.IsRef(ct) and ln.T.OwnsParts(ct) { ops[i] = ln.ownCopyOf(ops[i], ct, s, sp) }
     }
     if ln.dead { return mir.Operand.None }
     return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, s, ln.F.Args(ops), ln.capScopes(site)), sp)

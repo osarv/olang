@@ -5399,6 +5399,9 @@ fn (c mut Checker&) captureIn(fi I64, n source.NameId, sp source.Span) I64 {
         ox = typed.Expr.Borrow(sp, it, op)
     } else {
         ox = typed.Expr.Read(sp, ot, op, typed.SiteId(-1))
+        # (bulk review 7, F8) the capture is the lambda's own copy, made as the lambda is (lowering's lambda): its
+        # declared Copy's body wanted here (E31d)
+        if not c.isRef(ot) and c.P.T.OwnsParts(ot) { c.wantCopy(ot, 0) }
     }
     b := c.Bodies[fr.Body]
     inner := I64(b.AddLocal(typed.Local(n, sp, it, typed.BlockId(0), typed.LocalKind.Capture, typed.Mark.Infer)))

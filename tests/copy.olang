@@ -145,3 +145,28 @@ test parallel "copies each value of a parallel declaration and assignment" {
     assert Parallel == parallel()
     assert parallel() == "I64[0, 0]I64[5, 0]I64[0, 6]Vec<I64>[1]Vec<I64>[9, 2]Vec<I64>[1]1112I64[7, 0]I64[0, 0]"
 }
+
+# a lambda's capture of a value is its own copy, made as the lambda is: what the value owns copied too (a struct's
+# array, a Vec's buffer), by the declared Copy; a value array itself is borrowed (D16c, E31d; bulk review 7, F8)
+fn captured() String {
+    g := Big(Array<I64>(2, 0))
+    h := fn() I64 { return g.xs[0] }
+    g.xs[0] = 5
+    a := Array<I64>(2, 0)
+    k := fn() I64 { return a[0] }
+    a[0] = 6
+    v := Vec<I64>()
+    v.Push(0)
+    q := fn() I64 { return v[0] }
+    v[0] = 7
+    e := Gen(1)
+    f := fn() I64 { return e.gen }
+    return $h() $k() $q() $f()
+}
+
+Captured := captured()
+
+test captured "copies what a captured value owns, by its Copy" {
+    assert Captured == captured()
+    assert captured() == "0601"
+}
