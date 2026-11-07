@@ -197,6 +197,9 @@ type summary struct() {
     # whether a return may hand back existing storage - a result outliving its scope by an obligation (O13, 2.7) -
     # rather than what the body builds
     HandsBack Bool = false
+    # C4 (docs/sec8.md 6): its judging that reports said a section-8 error of its own - its callers do not discharge the
+    # obligations it recorded, so one cause is one error (it did not check; a caller would only repeat it)
+    Erred Bool = false
     Done Bool = false
     Judging Bool = false # its component is being judged to a fixed point: Builds is what the rounds so far found
 }
@@ -235,6 +238,13 @@ type sumRead struct(Body I64, Sum summary&) {
 type placedRow struct(At source.Span, Kind I64) {
     At
     Kind
+}
+
+# ... a row of -memory's for one, in the order rows are written: by file, then where the view stands
+type placedLine struct(File I64, At I64, Text String) {
+    File
+    At
+    Text
 }
 
 # a function made a value (T22a): where, which body, and how - Named, Lambda, or an instance through its Call (Of)
@@ -1175,6 +1185,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     }
     s.tailSp = source.Span(-1, -1)
     s.dtorAt = source.Span(-1, -1)
+    said := s.P.L.Diags.Count()
     s.run()
     s.verEnd()
     if report and str { s.strReceiver() }
@@ -1189,6 +1200,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     # the obligations only grow: what a round found is kept for the next - one a round found whole stays whole (O27)
     for r in s.gamma { keepRel(s.sums[b].Rels, r) }
     sm := s.sums[b]
+    if report { sm.Erred = s.P.L.Diags.Count() > said }
     s.noteFieldRecs(sm)
     sm.ResBind.Clear()
     if s.resBound {
@@ -8264,6 +8276,7 @@ fn (s mut Scoper&) requiredBy(callee I64, v I64, beta Array<Term>&) Term {
 # a callee's obligations judged through a call's bindings (O10c): each held, recorded as the caller's own, or an error
 # at the call naming the callee's statement that required it
 fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c typed.Call&, agreed Bool) {
+    if s.sums[callee].Erred { return }
     s.dischargeRels(sp, s.sums[callee].Rels, callee, beta, c, agreed)
 }
 
@@ -8356,7 +8369,7 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
         if ai0 >= 0 and r.View {
             wl := s.wholeRoot(c.Args[ai0])
             if wl >= 0 and not s.isParam(wl) {
-                s.err(s.nameSpan(sp), msgs.ViewKept(s.P.L.Names.Text(s.B!.Locals[wl].Name)))
+                s.err(s.nameSpan(sp), s.viewKeptMsg(wl, false))
                 continue
             }
         }
@@ -9486,13 +9499,22 @@ fn (s mut Scoper&) viewSource(x typed.Expr&) I64 {
     return -1
 }
 
-# O27's error for value x, a view of a local's storage kept too long, said at sp: true where it was one
+# O27's error for value x, a view of a local's storage kept too long, said at sp: true where it was one. With O27 as
+# placement it is left only where that storage cannot be built where the view is kept (docs/sec8.md 4.3)
 fn (s mut Scoper&) viewKept(x typed.Expr&, sp source.Span, returned Bool) Bool {
     vs := s.viewSource(x)
     if vs < 0 or s.isParam(vs) { return false }
-    name := s.P.L.Names.Text(s.B!.Locals[vs].Name)
-    s.err(sp, msgs.ViewReturned(name) if returned else msgs.ViewKept(name))
+    s.err(sp, s.viewKeptMsg(vs, returned))
     return true
+}
+
+# ... the message for a view of local l's storage: why it could not be built longer
+fn (s mut Scoper&) viewKeptMsg(l I64, returned Bool) diagmsg.Msg {
+    loc := s.B!.Locals[l]
+    name := s.P.L.Names.Text(loc.Name)
+    if s.mayHoldDtor(loc.Ty) { return msgs.ViewKeptDestructor(name) }
+    if loc.Kind == typed.LocalKind.Binding or loc.Kind == typed.LocalKind.Capture { return msgs.ViewKeptCopy(name) }
+    return msgs.ViewReturned(name) if returned else msgs.ViewKept(name)
 }
 
 # a lift proposed for the local value x is the whole of: its claim lengthened to outlive t
@@ -9565,7 +9587,7 @@ fn (s mut Scoper&) proposeView(u typed.Expr&, t Term) Bool {
             # a closure is a view of its captures (D16c, D16d): what each captured is built where the closure is kept
             s.viewing(PlaceCapture, u.Span())
             for cp in f.captures {
-                if s.holds(cp.Outer.Type()): s.proposeIn(cp.Outer, t)
+                if s.holds(cp.Outer.Type()) and not s.mayHoldDtor(cp.Outer.Type()): s.proposeIn(cp.Outer, t)
             }
             return true
         }
@@ -9580,7 +9602,7 @@ fn (s mut Scoper&) proposeView(u typed.Expr&, t Term) Bool {
             return true
         }
         e := s.P.T.ResultFrom(s.calleeType(bc), 0)
-        if e >= 0 and e < bc.Args.Len() {
+        if e >= 0 and e < bc.Args.Len() and not s.mayHoldDtor(bc.Args[e].Type()) {
             s.viewing(PlaceView, u.Span())
             s.proposeIn(bc.Args[e], t)
         }
@@ -9687,8 +9709,7 @@ fn (s mut Scoper&) viewing(kind I64, sp source.Span) {
 # its own storage: built where t is (item 17's path). Storage holding a value whose destructor is still to run is never
 # built longer for a view (O15, docs/sec8.md 4.3): its end stays where its holder lets go, the view O27's error
 fn (s mut Scoper&) proposeStorage(l I64, t Term, ref Bool) {
-    if l < 0 or l >= s.B!.Locals.Len() { return }
-    if not ref and s.mayHoldDtor(s.B!.Locals[l].Ty) { return }
+    if l < 0 or l >= s.B!.Locals.Len() or s.mayHoldDtor(s.B!.Locals[l].Ty) { return }
     s.proposeLocal(l, t, not ref and not s.isRef(s.B!.Locals[l].Ty))
 }
 
@@ -9740,7 +9761,8 @@ fn (s mut Scoper&) partKept(x typed.Expr&, sp source.Span) Bool {
     r := s.claimRoot(x)
     text := try s.texts.Get(s.B!.File) catch default ""
     part := text[I64(u.Span().Start):I64(u.Span().End)] if I64(u.Span().End) <= text.Len() else "x"
-    s.err(sp, msgs.PartKept(part, s.P.L.Names.Text(s.B!.Locals[r].Name)))
+    whole := s.P.L.Names.Text(s.B!.Locals[r].Name)
+    s.err(sp, msgs.PartKeptDestructor(part, whole) if s.mayHoldDtor(s.B!.Locals[r].Ty) else msgs.PartKept(part, whole))
     return true
 }
 
@@ -10377,6 +10399,72 @@ fn (s mut Scoper&) scopeOf(t Term) typed.Scope {
         case Term.Var(i): typed.Scope.Var(i)
         case Term.Program: typed.Scope.Program
         case _: typed.Scope.Inert
+    }
+}
+
+# ---- the placements made for views (O27 as placement, B18) ----
+
+# -memory's rows for the placements made for a view, a part or a capture (docs/sec8.md 4.4): one each, at the view, with a
+# note at what is built longer and the copy that would let it go with its turn; "" for none
+fn (s mut Scoper&) PlacedReport() String {
+    d := s.P.L.Diags
+    rows Vec<placedLine>
+    for key in s.placed.Keys() {
+        b := key.First
+        if b < 0 or b >= s.Bodies.Len() or not s.judged[b] { continue }
+        row := try s.placed.Get(key) catch { continue }
+        body := s.Bodies[b]
+        what := match row.Kind {
+            case PlacePart: "for a part of it kept here"
+            case PlaceCapture: "for a closure of it kept here"
+            case _: "for a view of it kept here"
+        }
+        name := "a temporary"
+        at := row.At
+        t := Term.None
+        if key.Second >= 0 {
+            name = $"'" $s.P.L.Names.Text(body.Locals[key.Second].Name) "'"
+            at = body.Locals[key.Second].Sp
+            t = try s.lifts.Get(key) catch default Term.None
+        } else {
+            site := -1 - key.Second
+            if site < body.Sites.Len() { at = body.Sites[site].Sp }
+            t = try s.siteLifts.Get(key) catch default Term.None
+        }
+        text := $d.Locate(body.File, I64(row.At.Start)) ": memory: " $name " is built in " $s.placedScope(b, t) ", a new one each time it is made, " $what "\n" $d.Locate(body.File, I64(at.Start)) ": note: made here - a copy of what is kept ('$x', 'x.Copy()') would let it go with its turn\n"
+        if not rows.View().Some(fn(r): return r.Text == text) { rows.Push(placedLine(body.File, I64(row.At.Start), $text)) }
+    }
+    if rows.Len() == 0 { return "" }
+    rows.Sort(fn(a placedLine, b placedLine) Bool { return a.File < b.File or (a.File == b.File and a.At < b.At) })
+    out := StringBuilder()
+    for r in rows { out.Push(r.Text) }
+    out.Push($"memory: " $rows.Len() " placement" $("" if rows.Len() == 1 else "s") " made for a view kept longer than its storage (O27)\n")
+    return out.ToString()
+}
+
+# term t of body b as -memory names a scope: a function's own, the result scope, what a parameter refers to, where a
+# generator lives, an outer block, the program's
+fn (s mut Scoper&) placedScope(b I64, t Term) String {
+    body := s.Bodies[b]
+    fname := match body.Of {
+        case typed.BodyOf.Fn(i): $s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(i)).Name)
+        case _: "the function"
+    }
+    return match t {
+        case Term.Program: "the program's scope"
+        case Term.Block(bl): $fname "'s scope" if bl == typed.BlockId(0) else $"an outer block of " $fname
+        case Term.Var(k): s.varScopeName(body, k)
+        case _: "a longer-lived scope"
+    }
+}
+
+fn (s mut Scoper&) varScopeName(body typed.Body&, k I64) String {
+    if k < 0 or k >= body.Vars.Len() { return "a longer-lived scope" }
+    return match body.Vars[k] {
+        case typed.ScopeVar.Param(l): $"the scope of what '" $s.P.L.Names.Text(body.Locals[I64(l)].Name) "' refers to"
+        case typed.ScopeVar.Result: "the result scope"
+        case typed.ScopeVar.Capture(_): "where the generator lives" if body.Gen and body.GenHome else "the scope of what the lambda captured"
+        case _: "a longer-lived scope"
     }
 }
 

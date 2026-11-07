@@ -1304,8 +1304,8 @@ list and no `noreturn`: never returning, it does all such a type promises (D8e).
 function type says nothing more of where its references live (QCB): every parameter its own scope, and a result holding
 references may hand back what its reference parameters refer to - whole, or a view of it (T22a). So a call through a
 value of the type holds each reference argument to outlive the scope the result lands in (§8 O10c), exactly that scope
-where something can be stored through both the parameter and the result (O25g), and as a view: met by where the argument
-already lives, never by building it longer (O27).
+where something can be stored through both the parameter and the result (O25g), and as a view: an argument's storage
+the caller builds is built where the result lands (O27).
 
 **T22a.** A function whose signature carries a **scope obligation** (§8 O10b) - a relation between its
 parameters' scopes that every caller must establish - cannot be used as a function value: a call through a
@@ -2449,7 +2449,8 @@ O14):
   own locals hold (a local yielded, a view of one, what is stored into one - `all.Push(p)` then `yield p`), or views of
   two parameters'. Each element is a reference living where the generator does - its result scope (D18b) - and so do
   those locals, what is built into them and a temporary yielded; what its arguments refer to outlives it. What is kept there stays
-  until the generator's scope closes, however many values the walk gives, and no element outlives the generator.
+  until the generator's scope closes, however many values the walk gives, and no element outlives the generator. A local
+  it yields a view of is built where the generator lives (O27).
 
 Either borrowed form gives a `ViewGenerator<T ? E>` (T35b), `T` the elements' referent: its `Next()` gives a reference
 borrowed from the generator value it is called on, so wherever else it is walked - held in a local, a field, given to
@@ -2474,7 +2475,9 @@ argument, an `any` - is walked as D18b says. In a test build every walk is, sinc
 scopes from outside the function (S18b). Such a walk lives in the block the loop's statement is - a held local's in the
 local's block - whatever the generator was given: the generator is made there - not where something it was given
 lives, a constant's text or a global's array in the program's scope - and dropped as that block is left (D18b), its
-storage reclaimed and the scopes it holds closed, their destructors run.
+storage reclaimed and the scopes it holds closed, their destructors run - unless what it yields is a view of what the
+walk keeps (D18c's third form) and the loop's body keeps an element longer: the walk is then made where that is kept
+(O27), and walked as D18b says.
 
 ### 3.4.3 Builders
 
@@ -6706,7 +6709,8 @@ one result scope. A function whose results hold no reference has none. The resul
 result scope (O26); storage of a parameter's scope, or one a parameter's references reach - the obligation of O13; and
 storage of the program's scope (a global's, constant data, T25d), which outlives every result scope. Not storage of the
 function's own scope or of one of its blocks, which closes at the return - a compile-time error naming a copy to return
-instead (`$x`, `x.Copy()`) - and not a view of storage such a block built (O27). A by-value parameter's own storage is
+instead (`$x`, `x.Copy()`); a view of storage the function builds has that storage built in the result scope, as a
+returned local is (O26a, O27). A by-value parameter's own storage is
 the call's copy, in the function's own scope: a reference into it, or to a part of it reached without a reference, is
 one into the function's own storage - and a by-value parameter whose type holds no reference has no scope (O4b), so
 only what lives in the program's scope is handed back from it.
@@ -6853,14 +6857,23 @@ registered in it (O15, run when the caller's scope closes) see it; a local decla
 is built in the result scope on every turn; and a call that fails leaves what it built in the caller's scope until that
 scope closes.
 
-**O27 (no storage extended for a view).** Only a whole value's flow lengthens where it is built (O28). A **view** of
-storage - a slice, a borrow of a part, what a callee hands back of an argument's storage - kept where that storage does
-not already live (past the loop turn or the block that built it, or through a reference result past the function) is
-a compile-time error naming a copy of what the view shows (`$x`, `x.Copy()`), never a copy made for it and never the
-storage held longer for a part of it: `for k in range n { t := $k "-x"; keep.Push(t[0:1]) }` is refused,
-`keep.Push($t[0:1])` accepted. Likewise a **part** of an instance a local's constructor built - a value read out of its
-field or element - kept longer never lengthens where the instance is built: the field takes a binding of its own (O28),
-or the read is O20's error naming a copy (`$p.last`).
+**O27 (storage kept for a view).** A **view** of storage - a slice, a borrow of a part, what a callee hands back of an
+argument's storage (O13), a conversion naming a local's storage (T29a), a closure of what it captured (D16d) - kept
+where that storage does not already live has the storage built where the view is kept, as a whole value kept longer
+is (O28): `for k in range n { t := $k "-x"; keep.Push(t[0:1]) }` builds each turn's `t` where `keep` lives, a new one
+each turn, kept until that scope closes; a slice of a temporary (E16a) has the temporary built there; a generator's
+element viewing what its argument refers to (D18c) has that argument built there, and one viewing what its walk keeps
+has the walk made there. Nothing is copied for it. `-memory` lists each such placement with the view that keeps it
+(B18), and the copy that would let the storage go with its turn (`keep.Push($t[0:1])`). A **part** of an instance a
+local's constructor built - a value read out of its field or element - kept longer gives the field a binding of its own
+where the constructor can bind it (O28), else has the instance built where the part is kept. Storage that cannot be
+built elsewhere stays where it is, and keeping a view of it longer is a compile-time error naming a copy of what the
+view shows (`$x`, `x.Copy()`): a by-value parameter's own storage (the call's copy, O14, C2d), a match binding's or a
+capture's own copy (S13b, D16c), a generator `Next()`'s result scope (D18b), storage reached through a derived scope
+or a scope not known here (O23a, O12), and storage holding a value whose destructor is still to run (O15: it would run
+later than its holder lets go of it) - so `f := File(p); keep.Push(f.name[0:1])` in a loop is refused, naming
+`$f.name[0:1]`. A body that said such an error of its own has the obligations it recorded left undischarged at its
+callers: one cause, one error.
 
 **O28 (scopes inferred).** No scope is written (QCB): the compiler places each local, each call's result, each
 temporary and each constructor field in the shortest-lived scope every use of it allows, over the whole program, as it
@@ -6883,10 +6896,13 @@ of them allow, and every judgment of this section is then made of it. So:
   (O23a), decided over the whole program;
 - a generator's elements live where its yields say (D18c).
 
-The placement never extends storage past the loop turn or the block that made it for a part of it (O27), and nothing is
-copied that the program did not write: where no placement satisfies every use, the program is refused with the error of
-the rule that fails, saying what to write instead - a copy (`$x`, `x.Copy()`), the value built where it is kept, or a
-call made directly rather than through a function value (T22a). A block stays a scope (O2): what it built that nothing
+The placement extends storage only for what is kept: a whole value where it is kept, the storage a view shows where
+the view is kept (O27). Nothing is copied that the program did not write: where no placement satisfies every use, the
+program is refused with the error of the rule that fails, saying what to write instead - a copy (`$x`, `x.Copy()`), the
+value built where it is kept, or a call made directly rather than through a function value (T22a). Whole values are
+placed first; storage for views only once they are, and an instance for a part of it only once the fields' bindings
+are decided - so a program whose views all fit where their storage already lives is placed as though views lifted
+nothing. A block stays a scope (O2): what it built that nothing
 outside keeps is reclaimed at its close. `olang explain` shows a function's obligations (B11b).
 
 **O13a.** A returned value whose **type** declares scope variables (T17c, or a constructor-bearing struct's
@@ -8158,7 +8174,12 @@ starts from: a parameter's referent's, named by its type (`the Server's scope`),
 scope`). Places that free at once are counted, not listed; rows for one cause are written once. A collection whose
 values have destructors keeps what it lets go of (condition 4), and is counted as freeing at once where a `Destroy()`
 takes its values out (C9b). Then a line for D9h: how many returns hand a view back, and how many calls read one where it
-stands or copy it.
+stands or copy it. After early freeing's rows, a row for each placement made for a view, a part or a capture (O27), in
+source order - `path:line:column: memory:
+'X' is built in SCOPE, a new one each time it is made, for a view of it kept here` at the view (`for a part of it kept
+here`, `for a closure of it kept here`), SCOPE as above or `the result scope`, `the program's scope`, `an outer block`; a
+`note:` row at X's declaration naming the copy that would let it go with its turn (`keep a copy of what the view shows,
+'$x'`) - and a line counting them.
 
 **B19 (fuzzing).** `test -fuzz NAME FILE` fuzzes one test of one file: the test NAME names - as a word of B3a's
 names a test, by its target, its target's type or text of its description; naming none, or several, is an error at

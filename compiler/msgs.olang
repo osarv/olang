@@ -698,9 +698,12 @@ type Diag enum {
     ReturnOwnStorage
     ViewKept
     ViewReturned
+    ViewKeptDestructor
+    ViewKeptCopy
     ReadAfterScope
     VersionsDiffer
     PartKept
+    PartKeptDestructor
     DeferReturns
     YieldOutside
     YieldInLambda
@@ -3009,11 +3012,19 @@ fn CaseIsSubject(tok String&) r.Msg { return r.Msg(Diag.CaseIsSubject, "S13f", $
 # ERR_RETURN_OWN_STORAGE
 fn ReturnOwnStorage() r.Msg { return r.Msg(Diag.ReturnOwnStorage, "O26", "this value refers to this function's own storage, which dies at the return - return a copy ('$x', 'x.Copy()')") }
 
-# ERR_VIEW_KEPT
-fn ViewKept(name String&) r.Msg { return r.Msg(Diag.ViewKept, "O27", "this keeps a view of '" $name "', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Copy()'") }
+# O27 as placement (docs/sec8.md 4.3): a view kept where the storage it shows cannot be built - where it is kept is no
+# scope that exists at run time, or not known here
+fn ViewKept(name String&) r.Msg { return r.Msg(Diag.ViewKept, "O27", "this keeps a view of '" $name "' where no storage can be built for it (where it is kept is not known here) - keep a copy of what it shows: '$x' or 'x.Copy()'") }
 
-# ERR_VIEW_RETURNED
-fn ViewReturned(name String&) r.Msg { return r.Msg(Diag.ViewReturned, "O27", "this returns a view of '" $name "', which this function builds - return the value (a result written without '&' copies it), or a copy: '$x'") }
+# ... returned: the result scope a view's storage would be built in is not known here
+fn ViewReturned(name String&) r.Msg { return r.Msg(Diag.ViewReturned, "O27", "this returns a view of '" $name "', whose storage cannot be built where the result goes - return the value (a result written without '&' copies it), or a copy: '$x'") }
+
+# ... of storage holding a value whose destructor is still to run, which is never built longer for a view (O15): its end
+# stays where its holder lets go of it
+fn ViewKeptDestructor(name String&) r.Msg { return r.Msg(Diag.ViewKeptDestructor, "O27, O15", "this keeps a view of '" $name "', whose destructor runs when its block ends - its storage is not kept longer for a view: keep a copy of what it shows, '$x' or 'x.Copy()'") }
+
+# ... of the copy a match binding or a lambda's capture made where it stands (S13b, D16c), which lives no longer
+fn ViewKeptCopy(name String&) r.Msg { return r.Msg(Diag.ViewKeptCopy, "O27", "this keeps a view of '" $name "', the copy its match or lambda made where it stands, which goes with it - keep a copy of what it shows: '$x' or 'x.Copy()'") }
 
 # O25i (NLL, docs/sec8.md 3.4): a read of a reference local an assignment may have given storage that no longer lives
 # where the read stands, and that cannot be built longer
@@ -3026,6 +3037,9 @@ fn VersionsDiffer(name String&) r.Msg { return r.Msg(Diag.VersionsDiffer, "O25i,
 # O20 under the inference (docs/rework.md 2.6, 3): a value read out of a container this function builds, kept where the
 # container does not live, through a field that cannot have a binding of its own
 fn PartKept(part String&, whole String&) r.Msg { return r.Msg(Diag.PartKept, "O20", "'" $part "' lives where '" $whole "' does, which closes first - keep a copy ('$" $part "'), or keep what '" $whole "' was made from") }
+
+# ... the container holding a value whose destructor is still to run, never built longer for a part of it (O27, O15)
+fn PartKeptDestructor(part String&, whole String&) r.Msg { return r.Msg(Diag.PartKeptDestructor, "O20, O15", "'" $part "' lives where '" $whole "' does, whose destructor runs when its block ends - keep a copy ('$" $part "')") }
 
 # ERR_DEFER_RETURNS
 fn DeferReturns() r.Msg { return r.Msg(Diag.DeferReturns, "S19b", "deferred code may not return - it runs while its block is left") }
