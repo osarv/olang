@@ -6,7 +6,7 @@ Rules for agents: /home/user/review/rounds/finish-rules.md (builds through /home
 through /home/user/vlock - one slot). Records: .claude/memory/plan.md (queue, REMEMBER items), decisions.md (today's
 answers at the end), /home/user/review/remaining/LIST.md.
 
-## Merged today (master = wt-merge, pushed): deprec, asm (explain -asm/-ir), structpat (verified), drops (dafb690), interp (e2a3c7f), columns (7a7527d).
+## Merged today (master = wt-merge, pushed): deprec, asm (explain -asm/-ir), structpat (verified), drops (dafb690), interp (e2a3c7f), columns (7a7527d), packed (7d43a6b), dropord (3b66e3a; merged tip builds, drops/packed/columns tests pass).
 Goldens: conflicts take our side; ALL four goldens recaptured once at the end (not per merge).
 
 ## Running (background agents; each reports by a hand-back message)
@@ -30,12 +30,12 @@ push the round's branch; delete its build/.
 
 ## Next, in order
 
-1. sec8 round 2 (O27 as placement) and round 3 (T22a records) - fresh agents from round 1's PROGRESS.md (opus xhigh /
+1. sec8 round 2 (O27 as placement; ALSO from dropord: the unique hand-on move to a by-value parameter with its section-8 obligation - makes the three Map patterns flat - and viewCtor recording array leaves) and round 3 (T22a records) - fresh agents from round 1's PROGRESS.md (opus xhigh /
    high), docs/sec8.md sections 9-10.
 2. Last language round, alone (it migrates nearly every file): QBU + QBW - the type in front of every literal and
    comprehension (`Array<I64>[1, 2]`), built through a type-level builder `FromIter`, every std collection declaring one;
    Columns<T>/ColumnVec<T> literals with it. After qbt and columns merge.
-3. The smaller items (LIST.md C5, C7, C8 ...) - a tidy agent.
+3. The smaller items (LIST.md C5, C7, C8 ...; cheaper regions - a per-thread free list for region headers, from dropord's phase 3 measurement; Vec push+truncate 0.12 -> 0.23 s for 260 MB -> 1.9 MB) - a tidy agent.
 4. Goldens (all four) and the seed; ONE full verify, the gates, ONE bulk review (opus high) and its fix round.
 5. Then: trim CLAUDE.md (the user asked: later today; terse entries, details in HISTORY.md - a sonnet agent).
 6. After "done" (no syntax, the user's rule): benchmarks, coverage, the REPL (plain `olang`) + Jupyter kernel, saturating
