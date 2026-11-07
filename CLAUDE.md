@@ -327,12 +327,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   repository - 135 files. Found on the way (pre-existing): in a match on an error value a guarded `case _` was taken as
   the chain's else, its guard dropped (`caughtLast`, `caughtCases`).
 - **Array patterns (S13h, QBP 10, the user's "Do it" and the rest spelled `...`, 2026-10-31; built 2026-10-31).**
-  `case String&["test", file, ...words]`: a literal compares an element, a name binds one (always new; a local's value
+  `case Array<String&>["test", file, ...words]`: a literal compares an element, a name binds one (always new; a local's value
   is a guard), `...name` binds the rest as a view of the array (a slice), a bare `...` skips it, no `...` is the exact
-  length; items after the rest count from the end; the length is tested first. Decided (mine): the element type is
-  written as a literal writes it and must be the subject's; arrays, text (`Char[...]`, the rest a `String`) and an
+  length; items after the rest count from the end; the length is tested first. Decided (mine): the type is written as
+  a literal making the subject writes it (QBU: `Array<I64>[...]`, `Vec<I64>[...]`, a declared array type as its base's
+  `Array<Char>[...]`), its elements the subject's; arrays, text (`Array<Char>[...]`, the rest a `String`) and an
   At+Len type (a Vec - a named rest needs its `Slice`); at a case's top or in a payload; lengths are S13a's
-  constructors (`I64[]` + `I64[x, ...r]` cover every array), a value match missing a length names it. Built as the
+  constructors (`Array<I64>[]` + `Array<I64>[x, ...r]` cover every array), a value match missing a length names it. Built as the
   parser's `Pattern.Elems`/`Rest` and the checker's tests and bindings (`elemsPattern`) - nothing new below check.
 - **Struct patterns by field name; payload fields by name too (S13i, S13b, the user's decision 2026-11-07: "structs
   by name, arrays by position, and enums by both"; built 2026-11-07).** `case Point(x = 0, y)`: in a pattern a struct
@@ -372,8 +373,36 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   a narrowed payload's copy is never lent writably either (`e.Grow()`, `grow(e)`, `e.c.Grow()` - the write would be
   lost), S8d's message naming the local and its case; lending the payload place itself was not taken (another
   reference to the enum's storage could change its case under it).
-- **Comprehensions `T[e for x in c if p]` (E27, the user's design)** - element type required, brackets; reserved up
-  front from a known length, else 100 and doubling (the user's numbers).
+- **Comprehensions `Array<T>[e for x in c if p]` (E27, the user's design)** - the made type required (QBU, below),
+  brackets; an array's reserved up front from a known length, else 100 and doubling (the user's numbers).
+- **The type before a literal's `[` is the type it makes; `FromIter` builds the rest (E19-E21, E27, S13h, D19, QBU and
+  QBW, the user's decisions 2026-10-27: "type in front for sure", "do only fromIter"; QBX's target-typed literals
+  declined; built 2026-11-07, wt-literals, details mine).** `Array<I64>[1, 2]`, `Array<String&>["a"]`, `Array<any
+  Shape&>[c]`, `Array<Array<F32>>[Array<F32>[1, 2]]`, `Vec<I64>[1, 2]`, `set.Set<I64>[1, 2]`, `Map<String, I64>["a":
+  1]` (the keyed form: entries `k: v`, each a `MapEntry<K, V>`), `C[]` empty; a comprehension alike (`Vec<I64>[x * x for
+  x in a]`). An `Array<T>` is laid out as before (bench code unchanged); any other type is `C.FromIter(walk)` - the one
+  protocol, a type-level builder (D19) taking an iterator, its element type read off its parameter (a variable
+  constrained by `Iterator<E ? Err>`, or a concrete iterator's Next), its errors the literal's (`try lib.Strict[1, 2]`);
+  `T.FromIter(it)` an ordinary call. A literal's walk is its items' array's `ArrayIter`, so a builder reserves their count
+  (`it.Rest().Len()`); a comprehension made into a `Vec` is the array then its FromIter, into any other type a generator
+  of the elements (`check.comprWalk`: a coroutine lambda, Suspend per element, no array made) - one that may fail by calls
+  of its own an error (E27, ComprWalkFails: write a generator function). The prelude declares Array's, Vec's and Map's
+  FromIter, std List's (From renamed), Set's, Deque's, BitSet's, Columns', ColumnVec's; Heap's takes its ordering too,
+  so a Heap has no literal (FromIterShape). A primitive, a reference, a struct with no FromIter in front is an error
+  naming `Array<T>[...]`. **`$` renders the literal making it (E11a)**: `Array<I64>[1, 2]`, `Map<K, V>[k: v]`,
+  `list.List<I64>[...]`, `set.Set<I64>[...]`, `deque.Deque<T>[...]`, `bitset.BitSet<T>[...]` (the collections' Str
+  through the compiler's own spelling of their type); and every declared type's name - in a rendering's types and in
+  struct and enum values - is written as source writes it outside its module (`pair.Pair("k", 0.5)`, B5's rule for
+  errors, `ErrQualifier`), the prelude's and the running program's own bare. Decided (mine): no trait requires FromIter
+  (no Collection trait - QBW), so T35 is not relaxed; the keyed form held in the AST as a binary `:` (the parser decides
+  it by the first item); a declared array type (String) has no literal of its own; the formatter writes `k: v`; a
+  checks case failing with E19 keeps the old form. Array patterns write the matched value's type (`case
+  Array<I64>[x, ...r]`, `case Vec<I64>[...]`, text `case Array<Char>['-', ...r]`). `tools/literal_migrate.olang` (a std
+  tool in `olang fix`: an old front - a known type with only a marker after it, or any marked one - written as the array
+  it made; a generic front unmarked read as new, so idempotent; re-export chains followed; Markdown code spans too)
+  migrated std, compiler/, tests, checks, tools, bench, fuzz and SPEC; old arrays of generic values held by value were
+  written by hand. Limits: a Vec's literal copies its items' array into its buffer (reserved once); comments keep old
+  forms.
 - **Error words, enum cases and constructor fields follow the listing rule (T17/T19/C2, QY):** commas on a line, line
   breaks between lines; a named set's members are on its line (T19a).
 - **Keywords as names (L9/L9a):** any keyword names a method after a receiver or `.`; statement-like and non-value
@@ -389,8 +418,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   blank line is empty. One token, a `STR_LIT` otherwise; decoded once (`scan.LiteralBytes`) for the checker, build
   conditions and import paths; the formatter keeps a raw token as written.
 - **Text joins by adjacency; `$x` renders any value (E11a/E11b, the user's design).** A piece is a literal or a `$`
-  rendering, so a missing comma never joins silently. Values render as source writes them (`Point(1, -2)`, `I64[1,
-  2]`, `List<I64>[1]`, `Map<K, V>{k: v}`); floats shortest round-trip (Schubfach); a `Char` (and a type over one) as a
+  rendering, so a missing comma never joins silently. Values render as source writes them (`Point(1, -2)`, `Array<I64>[1,
+  2]`, `list.List<I64>[1]`, `Map<K, V>[k: v]` - E19's literals); floats shortest round-trip (Schubfach); a `Char` (and a type over one) as a
   character, `U8` as a number. A type's `Str()` overrides it (E11c, the user's call) and is called exactly once per
   rendering, in order, and may have effects (decision 49) - but builds nothing where its receiver lives. A join's
   operands are evaluated before any piece renders (Go's rule).
@@ -464,7 +493,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **A guarantee is declared by holding a value (QCE, the user's decision 2026-10-31; built 2026-11-01, on the default
   path since round 3d).** What must not change from outside is declared by value and gets its own copy where it is
   kept: an array of a run-time length may be a field, an element, a payload or a type argument by value (T7a relaxed:
-  `type person struct(name String, age I64)`, `Vec<String>`, `Array<String>(n, "ab")`, `String["a", "bc"]`) - the
+  `type person struct(name String, age I64)`, `Vec<String>`, `Array<String>(n, "ab")`, `Array<String>["a", "bc"]`) - the
   container's own, a store copying into it (`typed.MakeKind.Copy`, lowering's Copy helper: deep through values, shallow
   at references); `Map<String, V>` holds its own key text (a copy at Put of a new key, none on an update or a lookup),
   `Map<String&, V>` shares the caller's, which the `&` says. A constructor's parameter may hold a run-time array by value
@@ -528,7 +557,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   its type's zero value, made by the constructor from its parameters' defaults (D13c, the user's design); a type whose
   constructor has effects has none. `tools/null_migrate.olang` migrates code from the compiler's own diagnostics.
 - **Arrays: one type, `Array<T>`, a length never written (T7-T7d, QP1-QP4, the user's design 2026-10-01 and 2026-10-17;
-  `Array<T, N>` and constant parameters removed 2026-10-24).** `Array<T>(n[, fill])` makes one, literals `I32[1, 2]`;
+  `Array<T, N>` and constant parameters removed 2026-10-24).** `Array<T>(n[, fill])` makes one, literals `Array<I32>[1, 2]`;
   storage is **fixed** - laid out in place, `Len()` a constant - wherever its length is known where it is made (T7c: a
   literal, text, `Array<T>(n)` with `n` the evaluator can compute, a slice with known bounds, `lo + k` included),
   inferred, never written. A local is fixed when its value's length is known and nothing assigns it as a whole later (a
@@ -565,8 +594,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   permission the table's), its own fields hidden outside the prelude; a column assigned whole (`c.x = v`) is written in
   place lane by lane, `v`'s length checked once (E39's LaneLen abort), refused in a parallel assignment; a column is as
   private as its field (M6a); the prelude's reflection sees every field (to supply Columns over any record);
-  `T.Element` of either is the rows' type; `$` renders `Columns<P>[P(1, 2)]` (the literal form QBU/QBW's FromIter will
-  make real); conversions `ToArray ToVec ToColumnVec ToColumns` (on arrays and Vecs too). Measured on the references
+  `T.Element` of either is the rows' type; `$` renders `Columns<P>[P(1, 2)]` (its literal, through its
+  FromIter); conversions `ToArray ToVec ToColumnVec ToColumns` (on arrays and Vecs too). Measured on the references
   study's particles: 2.0 instructions an update, as hand-written columns (an `Array<P>` 13.0).
 - **Lane operators (E39, docs/ideas.md #4, the user's decision 2026-10-18; built 2026-10-26).** An array's operators
   work lane by lane (`a * b + c`, `x * 2.0`, `-a`, `and`/`or`/`not` on `Bool` lanes), each lane as the operation on two
@@ -979,7 +1008,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   any; the implementation's own on its entry, after dispatch. Tables are `linkonce_odr`, named by
   type and trait; the evaluator calls through them (K2 bakes through anys). An array copied in (a slice, `Lab(s)` too)
   has its elements' references judged where the any lands; `$` counts an any as a reference (8 deep); an array of
-  anys is written `any W&[a, b]`, as `$` renders it (the review of 2026-10-24, HISTORY.md "`any Trait&`: the soundness
+  anys is written `Array<any W&>[a, b]`, as `$` renders it (the review of 2026-10-24, HISTORY.md "`any Trait&`: the soundness
   review, fixed"). **The second review's round (2026-10-25, HISTORY.md "`any Trait&`: the second review, fixed"):** an
   array is copied into the box unless the scope pass finds it new storage built where the box is (`Scoper.anyItemNew`,
   recorded per site in `typed.Plan.AnyNew`, which lowering follows - one decision, so a conditional, a match or a catch
