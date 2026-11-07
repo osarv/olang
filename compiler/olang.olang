@@ -1149,7 +1149,7 @@ test "a command line's mistakes are said as stage 0 says them" {
     assert mistake(String&["test", "-race", "-quick", "m.olang"]) ==
         "olang: error[B2g]: -quick and -race each say how much to optimize - give one\n"
     assert mistake(String&["interpret", "-quick", "m.olang"]) ==
-        "olang: error[B1]: -quick applies to running a file, build, compile, test and profile, not to interpret\n"
+        "olang: error[B1]: -quick applies to running a file, build, compile, test, explain and profile, not to interpret\n"
     assert mistake(String&["build", "-quick", "m.olang"]) == "no mistake: build"
 }
 
@@ -1266,7 +1266,7 @@ test "doc, lsp and mcp: their files, names and options (B14-B16)" {
         "olang: error[B14]: doc a.olang takes at most the name of one of its items, as 'olang doc a.olang main'\n"
     assert prepared(String&["lsp", "a.olang"]) == "olang: error[B1]: lsp takes no files - its client names them as it goes\n"
     assert mistake(String&["mcp", "-quick"]) ==
-        "olang: error[B1]: -quick applies to running a file, build, compile, test and profile, not to mcp\n"
+        "olang: error[B1]: -quick applies to running a file, build, compile, test, explain and profile, not to mcp\n"
     assert mistake(String&["build", "-html", "d", "a.olang"]) == "olang: error[B1]: -html applies to doc, not to build\n"
     if target.FindClang() == "" { return }
     assert prepared(String&["doc", "-html", "out"]) == "no mistake: doc"
