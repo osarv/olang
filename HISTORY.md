@@ -30163,3 +30163,12 @@ holds no reference, so `read` gives it `Val.plain()` and no fit judges a store o
 freed storage under `-sanitize` for that reason) - and a scope variable for a by-value parameter of a unique type owning
 parts, so a store of it into a longer place obliges its caller to build the argument there; then early freeing finds the
 place sole. Left for a round of its own (the hand-off note lists the steps); docs/sec8.md's progress says so.
+**Found on the way (fixed):** the scope fuzzer (fuzz/scopegen.olang) had generated no program the compiler accepts since
+the type-level builders round: its header's helpers (`fn mkNode(v I64) mut Node&`, `mkChain`, `via`, `txNo`, `retConv`
+...) make a type the program declares and take none, D19a's error, and a refused header is no scenario's fault - every
+program a finding "does not compile, and no scenario is to blame", so `make scopefuzz` and `fuzz free` ran nothing.
+They are builders now (`fn Node.mkNode(...)`, called `Node.mkNode(v)`); a smoke run of four programs (21 scenarios)
+and of the free mode (two programs, 19 places freeing at once) found nothing. scopegen gained kept-view scenarios (O27:
+slices, a generator's borrowed words, a view handed back of what a helper builds, closures over a turn's node - kept in
+lists outliving them); round 2's view placements counted no join of unordered scope variables (`wLocals`: 0 on the new
+programs, the same 3 as before on compiler/).
