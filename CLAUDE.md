@@ -1562,7 +1562,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   settled (O20). Still refused, the errors saying which: a by-value parameter's own storage, a match binding's or a
   capture's copy (ViewKeptCopy), a `Next()` result scope, a derived or unknown scope (ViewKept, reworded), and storage
   holding a value whose destructor is still to run (ViewKeptDestructor, PartKeptDestructor - docs/sec8.md question 2:
-  its end stays where its holder lets go). Decided (mine): the inference gathers whole lifts first, exactly as before,
+  its end stays where its holder lets go) - what a callee hands back of such a local included, directly or through a
+  local (bulk review 8, F3: the call's landing was lifted, which placed the holder longer; `scope.dtorCall`). Decided (mine): the inference gathers whole lifts first, exactly as before,
   and only where the settled judging still has a view, part or capture kept too long (`viewWanted`) judges again with
   those proposing - so a program accepted before places byte-identically (bench IR checked) and pays no extra judging;
   part lifts only once the field inference has settled (`partsOn`, a round judged afresh), and then only in that second
