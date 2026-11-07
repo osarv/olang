@@ -17,42 +17,42 @@ fn churn() {
         assert s.Len() > 0
     }
 }
-fn mk1(i I64) N& {
+fn N.mk1(i I64) N& {
     x1 mut N& = N(i)
     x1.next = N(i + 1)
     x2 := x1
     return x2
 }
-fn mk2(i I64) H {
+fn H.mk2(i I64) H {
     x1 := H(N(i))
     x2 := x1
     return x2
 }
-fn mk3(i I64) N {
+fn N.mk3(i I64) N {
     x1 := N(i)
     x1.next = N(i + 1)
     x2 := x1
     return x2
 }
-fn mk3after(i I64) N {
+fn N.mk3after(i I64) N {
     x1 := N(i)
     x1.next = N(i + 1)
     x2 := x1
     x1.v = 9
     return x2
 }
-fn mk4after(i I64) H {
+fn H.mk4after(i I64) H {
     x1 := H(N(i))
     x2 := x1
     assert x1.n.v == i
     return x2
 }
 fn main() ? {
-    a := mk1(3)
-    b := mk2(5)
-    c := mk3(7)
-    d := mk3after(11)
-    e := mk4after(13)
+    a := N.mk1(3)
+    b := H.mk2(5)
+    c := N.mk3(7)
+    d := N.mk3after(11)
+    e := H.mk4after(13)
     churn()
     assert a.next!.v == 4 and b.n.v == 5 and c.next!.v == 8 and d.v == 11 and d.next!.v == 12 and e.n.v == 13
     try io.Println($a.next!.v " " $b.n.v " " $c.next!.v " " $d.next!.v " " $e.n.v)

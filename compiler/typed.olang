@@ -4000,7 +4000,7 @@ type Versions struct(B Body&, Cand Array<Bool>&) {
 fn defName(start I64, l I64) I64 { return start * 1048576 + l }
 
 # the definitions of body b's cursors among candidates cand, and what reaches each statement: null where none is a cursor
-fn NewVersions(b Body&, cand Array<Bool>&) Versions?& {
+fn Versions.New(b Body&, cand Array<Bool>&) Versions?& {
     if b.Root is null: return null
     v mut Versions& = Versions(b, cand)
     for l in range cand.Len() { v.Cursor[l] = cand[l] }

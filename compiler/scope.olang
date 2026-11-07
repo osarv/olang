@@ -5301,7 +5301,7 @@ fn (s mut Scoper&) versionsOf(b I64) typed.Versions?& {
         cand[l] = true
         any = true
     }
-    vs := typed.NewVersions(body, cand) if any else null
+    vs := typed.Versions.New(body, cand) if any else null
     if vs is null {
         s.versNone.Put(b, true)
         return null
@@ -5767,7 +5767,7 @@ fn (s mut Scoper&) cursorAssign(sp source.Span, p typed.Lvalue&, x typed.Expr&) 
     s.targets.Push(p)
     if s.isRef(loc.Ty) { s.splitBorrow(x) }
     savedLand, savedLandSp := s.landSite, s.landSp
-    ac := typed.CallOf(x)
+    ac := typed.Call.Of(x)
     if ac is not null { s.landSite, s.landSp = I64(ac.Site), s.eqAfter(p.Span()) }
     got := s.val(x, dest)
     s.landSite, s.landSp = savedLand, savedLandSp

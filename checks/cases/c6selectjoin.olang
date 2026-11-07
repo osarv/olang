@@ -16,7 +16,7 @@ fn main() ? {
     got mut box& = box(0)
     join {
         spawn take(r, got)
-        match try chan.Select(chan.SendOf(r, 9), chan.SendOf(full, 4)) {
+        match try chan.Ready.Select(chan.SendOf(r, 9), chan.SendOf(full, 4)) {
             case chan.Ready.First(_) { }
             case chan.Ready.Second(_) { unreachable }
         }
@@ -25,7 +25,7 @@ fn main() ? {
     more := chan.SendOf(full, 4)
     join {
         spawn take(r, got)
-        match try chan.Select(chan.SendOf(r, 10), more) {
+        match try chan.Ready.Select(chan.SendOf(r, 10), more) {
             case chan.Ready.First(_) { }
             case chan.Ready.Second(_) { unreachable }
         }
