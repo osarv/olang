@@ -1,0 +1,9 @@
+# check: fail error[T13c]: 'h.i' is a field of a packed struct, at a bit offset, so no reference names it - copy it into a local first ('v := h.i') and lend that
+# T13c: a field of a packed value lies at a bit offset - lending it to a reference parameter is refused, read-only too
+type Inner packed struct(a U4, b U4) { a, b }
+type H packed struct(i Inner, k U8) { i, k }
+fn look(x Inner&) U4 { return x.a }
+fn main() {
+    h := H(Inner(1, 2), 3)
+    assert look(h.i) == 1
+}

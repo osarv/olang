@@ -854,15 +854,15 @@ bitfields on little-endian x86-64 and AArch64 (X11a). Its size is its bits round
 and the bits above its last field are always zero. A field's **width** is:
 - an integer type of any width (T4a) and a type declared over one - `Char` (8) included - its width; `Bool` 1;
 - `F16`, `BF16` 16, `F32` 32, `F64` 64: the float's bits (E33);
-- an enum carrying no payload: its raw type's width where it declares integer raw values (T17e), the field holding the
-  case's raw value; else the fewest bits that count its cases (`⌈log2 n⌉`, at least 1), the field holding the case's
-  position from 0;
+- an enum carrying no payload: its raw type's width where it declares integer raw values (T17e) of a type of at most
+  64 bits, the field holding the case's raw value; else - text raw values or none - the fewest bits that count its cases
+  (`⌈log2 n⌉`, at least 1), the field holding the case's position from 0;
 - a packed struct: its fields' bits - not rounded to bytes, so packed structs nest bit by bit;
 - an array laid out in place with a length known while compiling (T7c) of any of these: its length times its
   element's width, element i at i times that width.
 Any other field type - a reference (`&`, `?&`), an array of a run-time length (text included), a function value, an
-`any`, an error value, a struct that is not packed, an enum carrying a payload or declaring text raw values (or raw
-values past 64 bits) - is a compile-time error at the field naming this rule. A packed struct takes no type parameters
+`any`, an error value, a struct that is not packed, an enum carrying a payload - is a compile-time error at the field
+naming this rule. A packed struct takes no type parameters
 (its layout is its declaration's) and declares no destructor (it holds plain data), each an error naming the rule;
 `packed` before anything but `struct` - `enum`, `extends`, `trait`, `error` - is an error saying so.
 

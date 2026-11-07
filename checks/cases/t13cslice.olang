@@ -1,0 +1,11 @@
+# check: fail error[T13c]: 'h.lanes' is a field of a packed struct, at a bit offset, so no reference names it - copy it into a local first ('v := h.lanes') and lend that
+# T13c: a slice is a reference to the elements, which a packed array field packs bit by bit
+type H packed struct(k U8) {
+    k
+    lanes := Array<U3>(4)
+}
+fn main() {
+    h := H(1)
+    s := h.lanes[0:2]
+    assert s.Len() == 2
+}

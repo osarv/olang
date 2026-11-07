@@ -1127,7 +1127,7 @@ fn (c mut Checker&) holdsFloat(t types.TypeId) Bool {
     u := c.P.T.Repr(t)
     if c.P.T.IsFloat(u) { return true }
     if c.P.T.KindOf(u) == types.Kind.Array { return c.holdsFloat(c.P.T.Elem(u)) }
-    if not c.P.T.Packed(u) { return false }
+    if not c.P.T.Packed(u) or not c.P.Body(u) { return false }
     for f in c.P.T.Items(c.P.T.Fields(u)) {
         if c.holdsFloat(f) { return true }
     }
@@ -1880,8 +1880,7 @@ fn (c mut Checker&) packedWhat(f types.TypeId) String {
 fn (c mut Checker&) namedPackedWhat(r types.TypeId) String {
     if c.isStruct(r): return "a struct that is not packed"
     if not c.isEnum(r): return "it has no width in bits"
-    if c.P.T.HasPayload(c.P.T.Cases(r)): return "an enum carrying a payload"
-    return "an enum of text raw values, or raw values past 64 bits"
+    return "an enum carrying a payload"
 }
 
 # T13b: what a "unique" type declaration says it of that has no values of its own - "" for a struct, an enum, a type

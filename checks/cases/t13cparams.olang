@@ -1,0 +1,4 @@
+# check: fail error[T13c]: a packed struct takes no type parameters - its layout is its declaration's
+# T13c: a packed struct's layout is fixed where it is declared
+type Box<T> packed struct(x T) { x }
+fn main() { }
