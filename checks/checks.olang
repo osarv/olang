@@ -1024,6 +1024,17 @@ fn interp(r mut report&) ? Failed {
                  outOf(dir).Contains("1 passed, 0 failed"), "test -interpret doubles", dir)
     try r.expect(sh(dir, "\"$OLANG\" test -interpret tests.olang nothin > out.txt 2>&1") == 3 and
                  outOf(dir).Contains("no test is named by 'nothin'"), "test -interpret nothin", dir)
+    # ... and a failing test is left as its binary leaves it: destructors run by a failed check's unwinding (P1d),
+    # deferred code where an error leaves (S19), a "!"'s trace (E35), a word naming none answered with the nearest (B7a)
+    try r.expect(sh(dir, "\"$OLANG\" test unwind.olang > want.txt 2>&1") == 1, "unwind.olang's built tests passed", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -interpret unwind.olang > out.txt 2>&1") == 1, "test -interpret unwind passed", dir)
+    try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "test -interpret left failing tests unlike their binary", dir)
+    try r.expect(outOf(dir).Contains("destruct 2\ndestruct 1\nunwind.olang:13: assertion failed: boom\n") and
+                 outOf(dir).Contains("errdeferred 3\ndeferred 3\ndestruct 3\nFAIL - inner: lets a payload out: E.Bad(4)\n") and
+                 outOf(dir).Contains("unwind.olang:29: E.Bad(6)\nunwind.olang:8: raised here\n") and
+                 outOf(dir).Contains("1 passed, 3 failed"), "test -interpret unwind output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test -interpret unwind.olang helpr > out.txt 2>&1") == 3 and
+                 outOf(dir).Contains("no test is named by 'helpr' - did you mean 'helper'?"), "test -interpret helpr", dir)
     try r.expect(sh(dir, "\"$OLANG\" test -interpret -debug tests.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("error[B3e]: -interpret builds nothing, and -debug says how to build"), "test -interpret -debug", dir)
 }

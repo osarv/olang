@@ -1000,6 +1000,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
         x.M.Args.Push($"./build/" $build.Readable(l.Mods[l.Root].Identity) "_test")
         for a in args { x.M.Args.Push($a) }
         status = x.RunTests(d, args)
+        for w in x.TestWords { cfg.TestWords.Push($w) }
     } else {
         for a in args { x.M.Args.Push($a) }      # the file first (build.Interpret's)
         status = x.RunMain(d)

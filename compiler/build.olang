@@ -117,6 +117,7 @@ type Config struct() {
     Update Bool = false
     Tests Bool = false
     Interpreted Bool = false    # test -interpret: the tests run by the evaluator instead of built (B3e)
+    TestWords Vec<String&>      # and their targets and descriptions, where the words named none (B7a's did-you-mean)
     Jobs I64 = 0
     Color Bool = false
     Quiet Bool = false  # no "built ..." lines: for tests of the build itself, and running a file
@@ -1012,7 +1013,7 @@ fn InterpretTests<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag
     if info.Kind != os.FileKind.FILE { return c.unusable(file, msgs.NotRegular(), d) }
     status := try fe.Interpret(file, filters, c, d) catch Failed.Reported { return c.skipped(file, d) } catch Failed.Unbuilt { return unbuilt() }
     if status == 3 and filters.Len() > 0 {
-        sayln(noTestNamed(file, filters, Vec<String&>()))
+        sayln(noTestNamed(file, filters, c.TestWords))
         return 3
     }
     return 0 if status == 0 else 1

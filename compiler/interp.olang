@@ -874,6 +874,7 @@ type Exec struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&, When eval
     # K1a: while compiling, the bodies checking met an error or a gap in - never evaluated, as an unlowered one is not
     Faulty Map<I64, Bool>
     ReadsBuild Map<I64, Bool>       # S8a: the bodies reading a build constant (check's)
+    TestWords Vec<String&>          # B7a: each test's target and description, for a run whose words name none
     started Bool = false
 }
 
@@ -1129,7 +1130,18 @@ fn (x mut Exec&) RunTests(d mut diag.Diagnostics&, words Array<String&>& = Array
     for t in all {
         if x.selected(t, words) { tests.Push(t) }
     }
-    if tests.Len() == 0 and words.Len() > 0 { return 3 }
+    if tests.Len() == 0 and words.Len() > 0 {
+        # (what the harness's driver names its nearest from, B11)
+        m := x.P.L.Mods[x.P.L.Root]
+        for t in all {
+            td := ast.FindTest(m.Decls, x.Bodies[t].Sp)
+            if td is null: continue
+            tg := ast.TestTarget(td, x.P.L.Names)
+            if tg != "": x.TestWords.Push(tg)
+            x.TestWords.Push(ast.TestDesc(td, m.Src!.Text))
+        }
+        return 3
+    }
     for t in tests { x.Need(mir.FnKey.Body(typed.BodyId(I32(t)))) }
     x.InitGlobals()
     x.M.TestUnwind = true
@@ -1160,6 +1172,8 @@ fn (x mut Exec&) RunTests(d mut diag.Diagnostics&, words Array<String&>& = Array
         }
         text := x.StopText(s, t, d)
         if text != "" { say($text "\n") }
+        # E35, S18d: a "!" that failed the test - where the error it took came from, as the harness prints it
+        if s == eval.Stop.Exited(mir.ExitKind.Error, _, _, _) { say(x.TraceText(d)) }
         say("FAIL - " $name "\n")
     }
     say($pass " passed, " $fail " failed\n")
