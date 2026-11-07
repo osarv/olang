@@ -3,7 +3,7 @@
 # 1:1, P1e); a client dials. IPv4 and IPv6 alike: an IP is either, an Addr is an IP and a port, written as
 # "127.0.0.1:8080" or "[::1]:8080". Every failure is a net.Error naming why. There is no async I/O. A name is resolved by
 # Lookup and Resolve, through the C library's getaddrinfo (its linked list of addrinfo walked by the pointers C gives,
-# each node copied out into its plain-data struct, X22); ParseIP and ParseAddr read only numbers (and "localhost").
+# each node copied out into its plain-data struct, X22); IP.Parse and Addr.Parse read only numbers (and "localhost").
 #
 # A Conn, a Listener and a UDP socket close their descriptor when their scope closes (a destructor, C9), or sooner at
 # x.Destroy() (C9b); each is held by reference (C11). Linux's socket constants, the same on x86-64 and AArch64.

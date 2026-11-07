@@ -853,7 +853,7 @@ fn writeNumber(sb mut StringBuilder&, v F64) { sb.Push($v) }
 # quotes ("North") and one with fields as an object of one member, the case's name, holding its fields
 # ({"Circle":{"r":2}}), an array, a List and a Vec as an array, a Map with text keys as an object, text as a string, a
 # Char as a string of it, numbers and Bools as themselves, a reference as what it names, an error value (T20) as "$"
-# writes it ("io.Error.FULL") and null as null. "json.Encode(Point(1, 2))".
+# writes it ("io.Error.Failed") and null as null. "json.Encode(Point(1, 2))".
 #
 # Names become keys by a policy (Naming): as declared by default, else as "keys" says - "json.Encode(v, keys =
 # json.Naming.Snake)" writes a field CreatedAt as "created_at" - or as its type says, which wins over the call's: a type
@@ -1010,7 +1010,7 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
                 k := policy<T>(keys)
                 return try T(try member(o, p, k, keys) for p in T.Params)
             } else if T.Kind == TypeKind.Error {
-                # an error value (T20) as "$" writes it, "io.Error.FULL"; null for none
+                # an error value (T20) as "$" writes it, "io.Error.Failed"; null for none
                 match j {
                     case Json.Null { return null }
                     case Json.Str(name) {
@@ -1200,7 +1200,7 @@ fn (w mut writer&) any<T>(v T, depth I64) {
             } else if T.Kind == TypeKind.Struct {
                 w.fields(v, T.Fields.Len(), depth)
             } else if T.Kind == TypeKind.Error {
-                # an error value (T20) as "$" writes it, "io.Error.FULL"; null for none
+                # an error value (T20) as "$" writes it, "io.Error.Failed"; null for none
                 if v is null { w.out.Push("null") } else { w.text($v) }
             } else if T.Kind == TypeKind.Enum {
                 k := policy<T>(w.keys)
