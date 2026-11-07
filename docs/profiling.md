@@ -102,3 +102,62 @@ callgrind_annotate callgrind.out.*        # instructions per function; per line 
 Found here: this container's `perf` wrapper names no tools for its kernel - the installed binary works by its path
 (`/usr/lib/linux-tools-6.8.0-147/perf`) - and the virtual machine exposes no hardware counters (`perf stat` gives
 task-clock alone), which is one reason `olang profile` samples by CPU-time timers rather than by perf events.
+
+## 3. A function's code: `olang explain -asm` and `-ir`
+
+Where the profile names a hot function, `explain -asm` shows what it compiled to (SPEC.md B11d):
+
+```
+olang explain -asm FILE.olang NAME      # NAME's machine code as build compiles it, its source lines and LLVM's remarks
+olang explain -ir FILE.olang NAME       # its optimized LLVM IR, the same way
+olang explain -asm -quick FILE.olang NAME              # the -O2 code of a -quick build
+olang explain -asm -target aarch64-linux-gnu FILE.olang NAME   # another machine's (clang 19 or newer)
+```
+
+`NAME` is a function or `Type.Method`; a generic one's code is shown for each instance the program makes. The program
+is built as `build` builds it - `-O3`, link-time optimization - with its objects apart (`.listing`): their debug
+information holds each function's lines and names, as a profile build's does, and nothing else, so the code is the
+code a plain build makes (its IR is byte-identical with line tables taken out). Each object's compile keeps LLVM's
+optimization remarks beside it (`clang -fsave-optimization-record`, `NAME.HASH.listing.yaml`). The code is final only
+once the program is linked - the link inlines across modules, vectorizes and generates the code - so the objects are
+then linked by the linker's LTO plugin told to write, in place of a program, the assembly it generates
+(`-plugin-opt=emit-asm`) or the IR it generates it from (`-plugin-opt=emit-llvm`, turned back into text by clang), with
+its own remarks (`-plugin-opt=opt-remarks-filename`), into `build/listing/NAME/`. Nothing more than the clang a build
+uses is needed - no `llvm-objdump`, no `llvm-dis` - and LLVM 18, 19 and 20 all do it. Under `-quick` each module is
+compiled again to assembly or IR with its remarks. Then the function's code is found by its symbol and written with each
+run of instructions headed by the line of source it comes from (`.loc` in assembly, `!dbg` in IR - the innermost
+place, so a line of a function inlined into it is that function's own), and beneath a line the remarks made there:
+
+```
+$ olang explain -asm checks/fixtures/listing/prog.olang scale
+# fn scale(a mut Array<F32>&, b Array<F32>&)
+# prog.olang:10 - x86_64 machine code as build compiles it: -O3, optimized again as the program is linked, for sapphirerapids
+# no code of its own: inlined at every call, into scale as a function value, whose code follows
+# 113 instructions; inlined into it: twice, scale
+prog_2escale_fv_fn_28mut_20Array_3cF32_3e_26_2c_20Array_3cF32_3e_26_29: # @prog_2escale_fv_...
+# %bb.0:
+# prog.olang:11  for i in range a.Len() { a[i] = twice(b[i]) }
+#    passed   inline: 'twice' inlined into 'scale' with (cost=-25, threshold=375)
+#    passed   loop-vectorize: vectorized loop (vectorization width: 16, interleaved count: 4) (x2)
+#    passed   loop-unroll: unrolled loop by a factor of 8 with run-time trip count (x2)
+#    missed   gvn: load of type float not eliminated because it is clobbered by store (x14)
+...
+.LBB2_6:                                # =>This Inner Loop Header: Depth=1
+	vmovups	(%rax,%rdi,4), %zmm1
+...
+# prog.olang:7  fn twice(x F32) F32 { return x * 2.0 + 1.0 }
+	vaddps	%zmm1, %zmm1, %zmm1
+	vaddps	%zmm0, %zmm1, %zmm1
+# prog.olang:11  for i in range a.Len() { a[i] = twice(b[i]) }
+	vmovups	%zmm1, (%r8,%rdi,4)
+```
+
+The remarks are those of the passes a reader of a function's code asks about - the inliner, the loop and SLP
+vectorizers, the unrollers, LICM, GVN, loop idioms and deletion, tail calls, the register allocator's spills and the
+stack frame - `passed` for what a pass did, `missed` for what it declined and why, `analysis` for what it found, each
+said once with how many times it was made. A remark on a line the final code no longer holds (a loop deleted, a value
+computed while compiling) is listed after the code. A function with no code of its own says so: inlined at every call
+- named, and where that is one function its code is shown in its place (`main` is inlined into the program's entry,
+`startup`) - or never called. What costs: a listing build compiles as a plain build does, its remarks some megabytes
+beside the objects (17 MB for the fixture, std included); asked again with nothing changed, 0.47 s - a stamp of what
+the link was given skips it. The compiler itself: ~160 s, ~130 of them its ThinLTO link; asked again, 21 s.

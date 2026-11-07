@@ -43,9 +43,10 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     T
     Tests Bool = false              # a test build: the harness runs the root's tests
     Debug Bool = false              # a -debug build: the error return trace kept (S18d), as in a test build
-    # B20: a build olang profile makes - line tables and each function's readable name in its debug information, and
-    # main starting the runtime's sampler
+    # B20: a build olang profile makes - main starting the runtime's sampler - and (Lines, set with it) one explain -asm
+    # or -ir makes (B11d): line tables and each function's readable name in its debug information
     Prof Bool = false
+    Lines Bool = false
     Library Bool = false            # a shared library (X14): its globals set as it loads, no main
     # each function's MIR verified before it is written (mir.Fn.Verify), one not well formed stubbed and reported:
     # in test builds, where the compiler is tested; any other build trusts lowering, the verifier's walk having been a
@@ -158,8 +159,9 @@ type Reused struct(Module I64) {
 # whether the error return trace is kept (S18d): test and -debug builds
 fn (e Emitter&) traced() Bool { return e.Tests or e.Debug }
 
-# whether functions carry debug information: all of it under -debug (B2e), their lines and names in a profile build (B20)
-fn (e Emitter&) dbg() Bool { return e.Debug or e.Prof }
+# whether functions carry debug information: all of it under -debug (B2e), their lines and names in a profile build
+# (B20) or a listing build (B11d)
+fn (e Emitter&) dbg() Bool { return e.Debug or e.Lines }
 
 fn (e mut Emitter&) gap(what String&) {
     if what not in e.Gaps { e.Gaps.Push($what) }
@@ -1600,7 +1602,7 @@ fn (fe mut fnEm&) subprogram() {
     file := e.dbgFile(f.File)
     line := e.D.LineAt(f.File, I64(f.Sp.Start))
     fe.dbgSp = e.dbgNew()
-    name := e.ProfName(f.Of) if e.Prof and not e.Debug else e.dbgName(f.Of)
+    name := e.ProfName(f.Of) if e.Lines and not e.Debug else e.dbgName(f.Of)
     fe.dbgMeta.Push($"!" $fe.dbgSp " = distinct !DISubprogram(name: \"" $escape(name) "\", scope: !" $file $
                     ", file: !" $file ", line: " $line ", type: !" $e.dbgSubTy() ", scopeLine: " $line $
                     ", spFlags: DISPFlagDefinition, unit: !" $e.dbgCu() ")\n")
@@ -1727,7 +1729,7 @@ fn (e mut Emitter&) item(symbol String&, home I64, text String&, decl String& = 
     if e.itemAt.Has(symbol) { return }
     e.itemAt.Put($symbol, e.itemSym.Len())
     e.itemSym.Push($symbol)
-    e.itemText.Push(e.dbgFunctions(text) if e.Prof and not e.Debug else $text)
+    e.itemText.Push(e.dbgFunctions(text) if e.Lines and not e.Debug else $text)
     e.itemHome.Push(home)
     e.itemDecl.Push($decl)
     e.itemRefs.Push(Array<I64>(0))
@@ -2684,7 +2686,9 @@ fn (fe mut fnEm&) run() {
         # destroyed in one function, its handle never escaping, has its frame on that function's stack
         fe.pro.Push("  %cneed = call i1 @llvm.coro.alloc(token %cid)\n  br i1 %cneed, label %coro.alloc, label %coro.begin\n")
         fe.pro.Push("coro.alloc:\n  %csz = call i64 @llvm.coro.size.i64()\n  %cal = call i64 @llvm.coro.align.i64()\n")
-        fe.pro.Push("  %cmem0 = call ptr @__olang_scope_alloc_a(ptr %home, i64 %csz, i64 %cal)\n  br label %coro.begin\n")
+        # the call takes the function's line: an inlinable call with none in a function with debug information makes
+        # LLVM drop the whole module's (-debug, profile and listing builds of a generator - found by B11d)
+        fe.pro.Push("  %cmem0 = call ptr @__olang_scope_alloc_a(ptr %home, i64 %csz, i64 %cal)" $fe.dbgEntry() "\n  br label %coro.begin\n")
         fe.pro.Push("coro.begin:\n  %cmem = phi ptr [ null, %entry ], [ %cmem0, %coro.alloc ]\n")
         fe.pro.Push("  %hdl = call ptr @llvm.coro.begin(token %cid, ptr %cmem)\n")
     }

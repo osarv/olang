@@ -29256,3 +29256,78 @@ the doc comments (L4b) that tools do; scanner, parser, checker, lowering and the
   not in OLD, `breaks` false, the status unaffected; a removed item stays breaking.
 - **Tests.** doc: the convention and the marks; lsp: hover, completion tag and the Hint on a scripted session; checks
   `apicaps`: `api old dep` gives the row and status 0 (fixture `checks/fixtures/apicaps/dep`).
+
+## explain -asm and -ir: a function's code as build compiles it (2026-11-07, B11d, QBP 7)
+
+The user's "build it" of 2026-10-27 (decisions.md QBP 7): one function's code as the build compiled it, `-O3` and LTO,
+with LLVM's optimization remarks mapped to olang lines. Built as `olang explain -asm FILE NAME` (the machine code) and
+`olang explain -ir FILE NAME` (the optimized LLVM IR), SPEC B11d.
+
+**Where the final code comes from.** Under full LTO an object is bitcode that has had only the pre-link pipeline; the
+link merges the modules, inlines across them, vectorizes (much is vectorized before - LLVM 18's full-LTO pre-link runs
+the vectorizers too, ThinLTO's does not) and generates the code. So the code has to be taken from the link. Measured
+three ways on a small program: (1) disassembling the linked binary - needs `llvm-objdump` (not shipped in a release, and
+the binary's line table to be read for the interleaving); (2) the plugin's `save-temps` (`.0.5.precodegen.bc`, then
+`clang -S` of it - a code generation of our own, not the link's, and four large files per task); (3) the linker's LTO
+plugin told to write, in place of a program, what it generates: `-plugin-opt=emit-asm` writes the assembly the link's
+code generator produces, `-plugin-opt=emit-llvm` the IR it generates it from, `-plugin-opt=opt-remarks-filename` the
+link's remarks. (3) was taken: it is the link's own code, one run, through GNU ld and the LLVMgold.so a release already
+ships; under ThinLTO each task writes its own file (`code`, `code1` ... and `link.yaml.thin.N.`), read alike. Bitcode is
+turned into text by clang itself (`clang -S -emit-llvm -x ir -Xclang -disable-llvm-passes`, checked identical to
+`llvm-dis`), so nothing beyond the clang a build uses is needed. The compile phase's remarks come from each object's own
+compile (`-fsave-optimization-record`, `-foptimization-record-file`, `-foptimization-record-passes`), kept beside the
+object as `NAME.HASH.listing.yaml` - an object of a listing build counts as there only with its remarks (`want`), the
+store (B3j) keeps and links both. Under `-quick` code is final once a module is compiled, so each module's IR is
+compiled again with `-S` (and `-emit-llvm`) beside its remarks. LLVM 18, 19 and 20 all do it, and an aarch64 target
+under clang 20.
+
+**The build.** The objects are a mode of their own, `.listing` (`Config.Listing`, the mode suffix, B3i's record key):
+emit's new `Lines` - the line tables and readable names of a profile build (B20's `LineTablesOnly`, `ProfName`,
+subprograms for the compiler's own functions) without its sampler or frame pointers (`Prof` keeps only those now) - and
+the remarks' flags. Nothing else changes: the IR of every other build is byte-identical (bench's binarytrees, dispatch,
+nbody, regex, text, vec - 50 `.ll` files compared). A run's output goes into `build/listing/NAME.MODES.asm` (or `.ir`)
+with a stamp of what it was made from (the link's arguments, which name the objects by their content, and clang's
+version), so asking about another function of an unchanged program links nothing.
+
+**Finding the function.** The front end resolves NAME as explain does (`explain.Codes`: a function or `Type.Method`,
+each instance of a generic) into labels and symbols (`P.InstanceName`, the symbol emit gives the instance's body), the
+build carrying them in `Program.Named`. In the code a symbol is found by its label (assembly) or its `define` (IR), a
+part split off or renamed by ThinLTO (`sym.llvm.N`, `sym.cold.1`) with it, an alias (emit's merged instances,
+`mergeSame`) followed to the code it stands for. A function with no code of its own is followed through the inliner's
+remarks: inlined into one function, that one's code is shown (and on, through functions inlined in turn - an olang
+`main` is inlined into the C entry, named `startup` as a profile names it, B20a), its remarks with it; inlined into
+several, they are named; inlined nowhere, "nothing calls it". A function made a value is reached through its thunk
+(`_fv_`), named "as a function value".
+
+**The listing.** Assembly's `.loc FILE LINE` and IR's `!dbg` (a DILocation, its scope's DIFile) give the innermost
+place of each instruction, so code inlined from another function shows that function's own line, in its own file;
+line 0 (LLVM's for code with no one line) and the compiler's `<generated>` file are said once as "no line of the
+program". Before each run of instructions from a new place comes `FILE:LINE  text`, the source read once per file, the
+standard library's files shown as `std/...`; then the remarks made there in the function (or the functions inlined into
+the code shown), each said once with its count. A remark's place is its own DebugLoc; remarks whose line no code holds
+any more (a loop deleted, a value folded) are listed after the code by place. Directives that only describe the code
+(`.cfi_*`, `.file`, `.type`, `.size`, alignment, temporaries' labels, `$local` aliases) are left out, `!dbg`
+attachments taken off IR lines; instructions are counted for the header. Comments are the code's own language's
+(`#`, AArch64's `//`, IR's `;`). The remark YAML is read in olang (compiler/listing.olang): documents `--- !Kind` to
+`...`, a remark's own keys, its arguments' values joined into its message as LLVM joins them (the inliner's " at callsite
+F:L:C;" tail dropped - its place is shown), symbols in `Callee`/`Caller` named as source writes them (`types.Demangle`,
+then a module's qualifier as errors print, `load.ErrQualifier`, and each `IDENTITY:` inside a type likewise).
+
+**The passes** (`build.RemarkPasses`, anchored): inline, loop-vectorize, slp-vectorizer, loop-unroll,
+loop-unroll-and-jam, licm, gvn, loop-idiom, loop-delete, tailcallelim, loop-distribute, loop-interchange,
+loop-load-elim, regalloc, prologepilog. Left out: asm-printer (its InstructionMix is a list of opcodes; the header
+counts instructions itself) and passes a reader of one function rarely asks about.
+
+**Measured.** The fixture (checks/fixtures/listing/prog.olang): a listing build from nothing 3.45 s against a plain
+build's 3.17 s, 17 MB of remarks for it and std; asked again, 0.47 s (the stamp: nothing linked). The compiler
+itself (`explain -asm compiler/olang.olang drive`, ThinLTO, 174 tasks): 157-185 s and 5.7-6.3 GB where its objects are to
+compile or a module changed - 130-150 s of it the link, as a program's link of it takes (no ThinLTO cache: a task taken
+from the cache writes no remarks), ~15 s reading its ~1.2 GB of remarks; asked again of the unchanged program, 20.7 s
+and 3.8 GB (the front end and the remarks - the stamp skips the link), the same listing.
+
+**Found on the way, fixed.** A generator's frame allocation (`%cmem0 = call ptr @__olang_scope_alloc_a`, emit's
+coroutine prologue) carried no `!dbg`; with debug information in the function, LLVM's verifier calls that invalid and
+drops the whole module's debug information ("ignoring invalid debug info") - every `olang profile` of a program with a
+generator lost that module's names and lines (checked: `olang profile` of a small generator program said so on master),
+and the listing build of the compiler lost generic.olang's. The call now takes the function's line (`dbgEntry`).
+`-debug` builds were not hit: there the runtime's functions carry no body to inline.

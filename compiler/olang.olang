@@ -33,6 +33,7 @@ import "explain"
 import "api"
 import "bindgen"
 import "profile"
+import "listing"
 import "session"
 import "lsp"
 import "mcp"
@@ -92,7 +93,7 @@ ModeUsage Array<String&> = String&[
     "olang test [OPTION...] FILE.olang..."
     "olang interpret [OPTION...] FILE.olang [ARGUMENT...]"
     "olang format [OPTION...] FILE.olang..."
-    "olang explain RULE | FILE.olang NAME | -caps FILE.olang"
+    "olang explain RULE | FILE.olang NAME | -caps FILE.olang | -asm|-ir FILE.olang NAME"
     "olang help [MODE]"
     "olang doc [OPTION...] FILE.olang [NAME] | -html DIR [FILE.olang...]"
     "olang lsp [OPTION...]"
@@ -109,7 +110,7 @@ ModeWhat Array<String&> = String&[
     "runs each file's test blocks, each file built on its own (B3a)"
     "runs the program by compile-time evaluation instead of building it, the arguments after the file its own (B3e)"
     "rewrites each file in olang's one layout (B13)"
-    "prints a rule of the specification (B11a), or a top-level item as the compiler sees it (B11b)"
+    "prints a rule of the specification (B11a), a top-level item as the compiler sees it (B11b), or a function's code as build compiles it (B11d)"
     "lists the modes, or a mode's options"
     "prints a module's documentation (B14), or writes a library's as HTML"
     "serves the Language Server Protocol on the standard input and output, for editors (B15)"
@@ -123,9 +124,9 @@ ModeWhat Array<String&> = String&[
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
 # what they do
 OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
-    "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime", "-caps"]
-OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", "", "NAME", "SECONDS", ""]
-OptModes Array<I64> = I64[12294, 15, 15, 15, 1887, 10079, 10079, 2080, 8207, 256, 2, 11, 8, 8, 64]
+    "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime", "-caps", "-asm", "-ir"]
+OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", "", "NAME", "SECONDS", "", "", ""]
+OptModes Array<I64> = I64[12294, 15, 15, 15, 1887, 10079, 10079, 2080, 8271, 256, 2, 11, 8, 8, 64, 64, 64]
 OptWhat Array<String&> = String&[
     "writes the executable, the object, bindgen's declarations or profile's flame graph to PATH (B3h, X16, B20)"
     "builds unoptimized, with debug information (B2c, B2e)"
@@ -142,6 +143,8 @@ OptWhat Array<String&> = String&[
     "fuzzes the one test NAME names (as test's words do) with libFuzzer, failing inputs saved beside the file (B19)"
     "with -fuzz: stops fuzzing after SECONDS (B19)"
     "prints what each module the program loads may reach - files, network, processes, environment, threads, C (B11c)"
+    "prints a function's machine code as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)"
+    "prints a function's optimized LLVM IR as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)"
 ]
 
 fn modeName(m I64) String { return "running a file" if m == Run else $ModeWords[m] }
@@ -185,6 +188,7 @@ type CommandLine struct() {
     Check Bool = false
     Html String& = ""
     Caps Bool = false
+    Listing String& = ""   # B11d: "-asm" or "-ir", explain showing a function's code
 }
 
 # a mistake in the command line: reported to the diagnostics already
@@ -247,6 +251,11 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
             if o == 11 { c.Memory = true }
             if o == 12 { c.Fuzz = $v }
             if o == 14 { cl.Caps = true }
+            if o == 15 or o == 16 {
+                if cl.Listing != "" { try usage(d, msgs.ListingAlone()) }
+                cl.Listing = $a
+            }
+            if cl.Caps and cl.Listing != "" { try usage(d, msgs.ListingAlone()) }
             if o == 13 {
                 n := try v.ParseInt(10) catch default -1
                 if n < 1 { try usage(d, msgs.FuzzTimeNotNumber(v)) }
@@ -323,7 +332,12 @@ fn checkOutput(out String&, d mut diag.Diagnostics&) ? Bad {
 fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) CommandLine ? Bad {
     cl := try Parse(args, c, d)
     if cl.Mode == Help { return cl }
-    if cl.Mode == Explain and cl.Caps {
+    # B11d: -quick asks how code is built, which explain shows only of a function's code
+    if cl.Mode == Explain and c.Quick and cl.Listing == "" { try usage(d, msgs.ListingQuick("-quick")) }
+    if cl.Mode == Explain and cl.Listing != "" {
+        # a program's file, then the name of one of its functions
+        if cl.Files.Len() != 1 or not cl.HasWord or not endsWithOlang(cl.Files[0]) { try usage(d, msgs.ListingUsage(cl.Listing)) }
+    } else if cl.Mode == Explain and cl.Caps {
         # B11c: one program's file, nothing after it
         if not cl.HasWord or cl.Files.Len() > 0 or not endsWithOlang(cl.Word) { try usage(d, msgs.CapsOneFile()) }
         cl.Files.Push($cl.Word)
@@ -362,7 +376,7 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     }
     # B12a: another architecture is compiled, built and linked for with its C library, and its programs and tests run
     # through an emulator; what runs in this process - interpret, the tools - is for this machine only
-    foreignOk := cl.Mode == Compile or cl.Mode == Build or cl.Mode == Test or cl.Mode == Run
+    foreignOk := cl.Mode == Compile or cl.Mode == Build or cl.Mode == Test or cl.Mode == Run or cl.Listing != ""
     if c.Target.Foreign and not foreignOk { try usage(d, msgs.TargetForeignMode(modeName(cl.Mode), cl.Spec)) }
     c.Tests = cl.Mode == Test
     c.Profile = cl.Mode == Profile
@@ -424,6 +438,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
         return write(text)
     }
     if cl.Mode == Explain and cl.Caps { return session.CapsMode(cl.Files[0], c) }
+    if cl.Mode == Explain and cl.Listing != "" { return listing.Run(fe, c, cl.Files[0], cl.Word, cl.Listing == "-ir", d) }
     if cl.Mode == Explain {
         if cl.Files.Len() == 1 {
             return build.Explain(fe, c, cl.Files[0], cl.Word, d)
@@ -515,6 +530,14 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     if c.Gaps.Len() > 0 {
         for g in c.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) ": it does not check " $g.What " yet") }
         error build.Failed.Unbuilt
+    }
+    # B11d: the function explain -asm or -ir shows, with each of its instances' symbols
+    if cfg.ListName != "" {
+        codes := try explain.Codes(c, l.Root, cfg.ListName) catch explain.Missing {
+            d.Error(diag.Where.Nowhere, msgs.ListingNoFunction(cfg.ListName, root))
+            error build.Failed.Reported
+        }
+        for k in codes { prog.Named.Push(build.Code(k.Label, k.File, k.Line, k.Symbol)) }
     }
     lw mut lower.Lowerer& = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
@@ -652,6 +675,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.San = cfg.San
     e.Debug = cfg.Debug
     e.Prof = cfg.Profile
+    e.Lines = cfg.Profile or cfg.Listing
     e.VerifyMir = tests
     e.BF16Opaque = cfg.Debug or cfg.Race
     e.Library = cfg.Library and kind == build.Kind.Program
@@ -683,7 +707,7 @@ fn buildInputs(cfg build.Config&, tests Bool) String {
     info := try os.Stat(exe) catch os.Error { return "" }
     cwd := try os.Cwd() catch default ""
     t := cfg.Target
-    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests $(" prof" if cfg.Profile else "") $(" fuzz" if cfg.Fuzz != "" else "") "\n" $
+    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests $(" prof" if cfg.Profile else "") $(" listing" if cfg.Listing else "") $(" fuzz" if cfg.Fuzz != "" else "") "\n" $
             t.Triple "\n" $t.Arch "\n" $t.Cpu "\n" $t.Attrs "\n" $cfg.Consts.Fingerprint() "\n" $cwd "\n" $load.StdDir())
 }
 
@@ -970,6 +994,9 @@ fn cIr(unit String&, text String&, cfg build.Config&) String {
         # B20: the sampler walks C's frames too, and names its lines
         args.Push("-fno-omit-frame-pointer")
         args.Push("-gline-tables-only")
+    } else if cfg.Listing {
+        # B11d: C's lines named where explain -asm shows code inlined from it
+        args.Push("-gline-tables-only")
     }
     for a in String&["-O2", "-Xclang", "-disable-llvm-passes", "-w", "-x", "c", "-S", "-emit-llvm", "-o", "-", "-"] { args.Push($a) }
     kb := StringBuilder()
@@ -1122,7 +1149,7 @@ test "a command line's mistakes are said as stage 0 says them" {
     assert mistake(String&["test", "-race", "-quick", "m.olang"]) ==
         "olang: error[B2g]: -quick and -race each say how much to optimize - give one\n"
     assert mistake(String&["interpret", "-quick", "m.olang"]) ==
-        "olang: error[B1]: -quick applies to running a file, build, compile, test and profile, not to interpret\n"
+        "olang: error[B1]: -quick applies to running a file, build, compile, test, explain and profile, not to interpret\n"
     assert mistake(String&["build", "-quick", "m.olang"]) == "no mistake: build"
 }
 
@@ -1181,6 +1208,20 @@ test "the modes: each said wrong as stage 0 says it" {
     assert prepared(String&["explain", "m.olang"]) ==
         "olang: error[B11b]: explain m.olang takes the name of one of its items, as 'olang explain m.olang main'\n"
     assert prepared(String&["help"]) == "no mistake: help"
+    # B11d: a function's code - a file and a name, one of -asm, -ir and -caps, -quick and another machine only with it
+    assert prepared(String&["explain", "-asm", "m.olang", "f"]) == "no mistake: explain"
+    assert prepared(String&["explain", "-ir", "-quick", "m.olang", "Box.Get"]) == "no mistake: explain"
+    assert prepared(String&["explain", "-asm", "m.olang"]) ==
+        "olang: error[B11d]: explain -asm takes a program's file and the name of one of its functions, as 'olang explain -asm main.olang main'\n"
+    assert prepared(String&["explain", "-asm", "-ir", "m.olang", "f"]) ==
+        "olang: error[B11d]: -asm, -ir and -caps exclude one another - explain shows one of them at a time\n"
+    assert prepared(String&["explain", "-caps", "-ir", "m.olang"]) ==
+        "olang: error[B11d]: -asm, -ir and -caps exclude one another - explain shows one of them at a time\n"
+    assert prepared(String&["explain", "-quick", "m.olang", "f"]) ==
+        "olang: error[B11d]: -quick applies to explain only with -asm or -ir, which show code as a build makes it\n"
+    assert prepared(String&["explain", "-target", "aarch64-linux-gnu", "m.olang", "f"]).Contains("error[B12a]: explain runs")
+    armAsm := prepared(String&["explain", "-asm", "-target", "aarch64-linux-gnu", "m.olang", "f"])
+    assert armAsm == "no mistake: explain" or armAsm.Contains("error[B12a]: this clang cannot build")
 }
 
 explainedSrc String& = ("type MathError error { Zero }\n"
@@ -1225,7 +1266,7 @@ test "doc, lsp and mcp: their files, names and options (B14-B16)" {
         "olang: error[B14]: doc a.olang takes at most the name of one of its items, as 'olang doc a.olang main'\n"
     assert prepared(String&["lsp", "a.olang"]) == "olang: error[B1]: lsp takes no files - its client names them as it goes\n"
     assert mistake(String&["mcp", "-quick"]) ==
-        "olang: error[B1]: -quick applies to running a file, build, compile, test and profile, not to mcp\n"
+        "olang: error[B1]: -quick applies to running a file, build, compile, test, explain and profile, not to mcp\n"
     assert mistake(String&["build", "-html", "d", "a.olang"]) == "olang: error[B1]: -html applies to doc, not to build\n"
     if target.FindClang() == "" { return }
     assert prepared(String&["doc", "-html", "out"]) == "no mistake: doc"

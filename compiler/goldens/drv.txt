@@ -245,7 +245,7 @@
 |   test        runs each file's test blocks, each file built on its own (B3a)
 |   interpret   runs the program by compile-time evaluation instead of building it, the arguments after the file its own (B3e)
 |   format      rewrites each file in olang's one layout (B13)
-|   explain     prints a rule of the specification (B11a), or a top-level item as the compiler sees it (B11b)
+|   explain     prints a rule of the specification (B11a), a top-level item as the compiler sees it (B11b), or a function's code as build compiles it (B11d)
 |   help        lists the modes, or a mode's options
 |   doc         prints a module's documentation (B14), or writes a library's as HTML
 |   lsp         serves the Language Server Protocol on the standard input and output, for editors (B15)
@@ -348,14 +348,17 @@
 | status 0
 === olang help explain
 | stdout:
-| usage: olang explain RULE | FILE.olang NAME | -caps FILE.olang
-| prints a rule of the specification (B11a), or a top-level item as the compiler sees it (B11b)
+| usage: olang explain RULE | FILE.olang NAME | -caps FILE.olang | -asm|-ir FILE.olang NAME
+| prints a rule of the specification (B11a), a top-level item as the compiler sees it (B11b), or a function's code as build compiles it (B11d)
 | 
 | options:
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+|   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -caps              prints what each module the program loads may reach - files, network, processes, environment, threads, C (B11c)
+|   -asm               prints a function's machine code as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)
+|   -ir                prints a function's optimized LLVM IR as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)
 | stderr:
 | status 0
 === olang help help
@@ -432,7 +435,7 @@
 |             | "bindgen" | "profile" | "api"
 | option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
 |             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps"
+|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir"
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -447,7 +450,7 @@
 | |---|---|---|
 | | `-output PATH` | build, compile, bindgen, profile | B3h, §11 X16, B20 |
 | | `-debug`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2b, B2f |
-| | `-quick` | running a file, build, compile, test, profile | B2g, B20 |
+| | `-quick` | running a file, build, compile, test, profile, explain | B2g, B20, B11d |
 | | `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
 | | `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp, profile | B10, §4 M23c |
 | | `-check` | format, fix | B13, B17 |
@@ -456,6 +459,7 @@
 | | `-memory` | running a file, build, test | B18 |
 | | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
 | | `-caps` | explain | B11c |
+| | `-asm`, `-ir` | explain | B11d |
 | 
 | `build`, `compile`, `bindgen` and `profile` take exactly one file, `api` two versions (commits or directories) and a
 | file or directory, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with

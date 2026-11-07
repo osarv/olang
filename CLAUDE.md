@@ -99,7 +99,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   at a `,` of its list, so a lambda that is a list item returns one value (L18c wraps one returning several, mine).
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build
   compile test interpret format explain help doc lsp mcp fix bindgen profile`; options `-output -debug -race -sanitize -target -define -update
-  -check -quick -html -library -memory -fuzz -fuzztime`,
+  -check -quick -html -library -memory -fuzz -fuzztime -caps -asm -ir`,
   each checked against the modes it applies to (one table, also `help`'s); old flags simply gone (`tools/cli_words.olang`).
 - **`-quick` (B2g, the user's call 2026-10-24).** For build, compile, test and running a file: `-O2` without
   link-time optimization, objects apart (`.quick`); an error beside `-debug` or `-race`, which set their own levels.
@@ -133,7 +133,23 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   values of a variable's type through parameters, locals, Array/Vec elements, for-in, and into other generics the program
   calls, `match T` arms and reflection-decided `if`s left out, the written constraint's methods and a closed trait's
   operators dropped); what the checker holds a call to is G18a below.
-- **`olang api OLD NEW PATH` (B21, QBP 15/B1.6, the user's "do it" 2026-10-31; built 2026-10-31, details mine).** Two
+- **`explain -asm FILE NAME` and `explain -ir FILE NAME` (B11d, QBP 7, the user's "build it" 2026-10-27; built
+  2026-11-07, details mine).** A function's machine code or optimized LLVM IR as build compiles it (`-O3` + LTO: the
+  link's code; `-quick`: each module's; any `-target`, `-define`, `-update`), each run of instructions headed by the
+  source line it comes from (the innermost: an inlined function's own line) and LLVM's optimization remarks beneath
+  (inliner, vectorizers, unrollers, LICM, GVN, loop idiom/deletion, tail calls, spills, the stack - passed, missed,
+  analysis, each once with a count); a generic's instances in turn; a function with no code of its own says where it
+  was inlined (one function's code shown in its place) or that nothing calls it. Decided (mine): the objects are
+  `.listing` artifacts - line tables (emit's `Lines`, B20's names without the sampler or frame pointers) and remarks
+  kept beside each (`-fsave-optimization-record`, `OBJ.yaml`) - so no other build's IR changes (bench IR byte-identical);
+  the code is taken from the link itself by the LTO plugin's `emit-asm`/`emit-llvm` (`opt-remarks-filename` for its
+  remarks; a ThinLTO link's tasks each a file), bitcode turned to text by clang - the asm the link really generates,
+  needing nothing beyond the clang a build uses (no llvm-objdump or llvm-dis to ship), LLVM 18-20 alike; remarks read
+  as YAML in olang (compiler/listing.olang); comments in the code's own language (`#`, AArch64 `//`, IR `;`); `-asm`,
+  `-ir`, `-caps` exclude one another, `-quick` and a foreign `-target` apply to explain only with `-asm`/`-ir`. The
+  checks scenario `listing`.
+- **`olang api OLD NEW PATH` (B21
+, QBP 15/B1.6, the user's "do it" 2026-10-31; built 2026-10-31, details mine).** Two
   versions - commits (their trees through `git archive`, PATH relative to where it runs) or directories - of the
   modules at PATH (a file, or every .olang below a directory), each checked as doc checks it in a process of its own,
   their exported items and members compared by name and B11b's signature; a row each, `breaking` or `ok`, the count
