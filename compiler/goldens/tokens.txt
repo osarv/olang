@@ -1686,13 +1686,14 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 244020b30fdf2de1 0f06288b2bb8f361 checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-43de8ccafb671295 39ac4fa53e55283b checks/checks.olang
+531fd12cdb47664a 6109047583f7e512 checks/checks.olang
 ffb8d8d4ac4136a2 1b4b128786ebb348 checks/fixtures/agree/agree.olang
 93a0581f17cca83e 1f1000aa84a5a1d5 checks/fixtures/agree/bfrand.olang
 a11159f77eaf86c0 d3fdf60e8368dbb1 checks/fixtures/agree/math.olang
 752f8d4fa0ba2c85 2b11f3b917c49f74 checks/fixtures/agree/r17.olang
 323cc5e5756a1fd7 cc0d6a85c70282f7 checks/fixtures/agree/share.olang
 d37e713f36e3e8e6 7ca216f27cd0e8fe checks/fixtures/apicaps/caps.olang
+0dcda6044e2df4e4 b65af00b24a36f9e checks/fixtures/apicaps/dep/lib.olang
 b479c4e25d39db64 732f3769894cbe09 checks/fixtures/apicaps/new/lib.olang
 ae85d28fc25f38de 07bfa4814325af2d checks/fixtures/apicaps/old/lib.olang
 525cf9d7ac865e77 6458c858472e9590 checks/fixtures/assertloc/guaranteed.olang
@@ -1923,7 +1924,7 @@ efe336c8764b3874 b8593d7598e541f5 checks/fixtures/vechandle/handle.olang
 2db2d45b244608a9 c74d67e3273a82ed checks/fixtures/vechandle/stale.olang
 247e6c4bce8dd272 01738f65ec9354ea checks/fixtures/vechandle/stalecopy.olang
 7a3e2cb7d1d87b4c b78647a0dd417cf9 checks/fixtures/widealign/widealign.olang
-bc79c84ee8e54fd9 2a678bf7e38d46a3 compiler/api.olang
+7d69e2c621ca7fa3 d89bd81b446ce396 compiler/api.olang
 6cd909582809158a 94b8e350ce6cf3d4 compiler/ast.olang
 0aacc8069c40ce81 ed81606e3af3ccf5 compiler/bindgen.olang
 3410dc15b98397a4 eca79a24085f9c16 compiler/build.olang
@@ -1932,7 +1933,7 @@ b7991dc4fda8d90f ad533e90d7720eee compiler/check.olang
 cbc3a2177fe2fb78 be3bb2edbf25d845 compiler/cond.olang
 b0af2e84da3b68dd ff1dbd077a31f6c6 compiler/definit.olang
 eef9dd6aaf47f2de 649277b568f2add9 compiler/diag.olang
-7a73b498ea95632a dd64aeaaf53c3f76 compiler/doc.olang
+a411be670ad312e5 4e40cb4188663839 compiler/doc.olang
 e101aa37dd2640e5 b449213542a06cf0 compiler/effects.olang
 707d0eab5cc6e2fa db7c58fd53c68140 compiler/emit.olang
 9d765252b6e67799 d9c399621ed6ea0b compiler/eval.olang
@@ -1945,7 +1946,7 @@ da13dc33e9ceb65e eb58a90d9122a7ae compiler/generic.olang
 b734275a3e54bbb5 643e72712c5db515 compiler/interp.olang
 64775bb322e353e8 f9d3dd3c8154a58f compiler/load.olang
 6853125f6ea44cfb 51ae3fe2b6855e1c compiler/lower.olang
-025928255c54707a 8b086d200f0cc2e7 compiler/lsp.olang
+18452a1dbcd1168c 7ce3a62c5df42593 compiler/lsp.olang
 84e8f9a4af57a411 17b5c8771e0b23b8 compiler/mcp.olang
 2aefa4af728673a9 c9c02818a73f57aa compiler/mir.olang
 457c282a86957306 fe07b43e6c588387 compiler/msgs.olang
@@ -1957,7 +1958,7 @@ b0ce9a097f48ce1f 81b6e44030d0209a compiler/profile.olang
 672b63f9a00d870a 2f96a413518788c8 compiler/runtime.olang
 68b3e4897b8f7683 d070d05805a87a92 compiler/scan.olang
 90d5a473be4bdca7 09f8f36df336d31a compiler/scope.olang
-0a05e752605c64f6 8a35c1bc5d91b473 compiler/session.olang
+acdef21181c207f6 f4f7054383ebfbe3 compiler/session.olang
 f6975e0c80778183 a143b4a2b7369ed5 compiler/source.olang
 e8eb3d2e60f7bb31 3ca34f650732d326 compiler/target.olang
 6a532120b548d9b9 1f959f62979af9eb compiler/testdata/lex/brackets.olang
