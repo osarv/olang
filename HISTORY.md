@@ -30221,3 +30221,11 @@ section); the header no longer speaks of ids. 3,448 -> 1,935 lines, nothing else
 table reads the Diag enum and the functions, never the ids). For a merge: a side that added a message under an id line
 resolves by taking that side's file and dropping `^# (ERR|NOTE)_[A-Z0-9_]+$` lines and the blank lines between one-line
 functions again. The decision's other half, "redundant integer casts cleaned up", was not looked at.
+
+**B8, not built: StringBuilder's ToString handing its buffer over.** Decided 2026-11-03 ("without a copy"), but sound
+only where the builder's buffer lives at least as long as the String's destination and nothing uses the builder after
+- a builder is most often a local whose text is returned, so its buffer sits in a scope the result outlives. That is the
+unique hand-on move the section-8 round (sec8r2) is building, not something the prelude can say alone (`ToString`
+takes a read-only receiver, and a view of the buffer returned would tie the text to the builder). Measured meanwhile:
+the copy compiles to a vectorized loop (no clear first, D14d) - 2,000 builds of 20,000 pushes each, ~1% of the time.
+Left for after sec8r2.
