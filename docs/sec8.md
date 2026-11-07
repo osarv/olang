@@ -218,7 +218,8 @@ judges it - no dataflow over terms is needed for it.
 ### 3.5 Lifts through versions
 
 `propose(x, t)` with `x` reading a cursor follows the versions reaching that read to their values: for each, it
-proposes on the definition's value expression - a temporary's site is lifted (`proposeSite`, so a version's temporary
+proposes on the definition's value expression (version 0 is lifted as a local's claim is today, `liftLocal`, its
+temporary built at the claim) - a temporary's site is lifted (`proposeSite`, so a version's temporary
 is built where its own reads need it - floor: the local's block - and never where the local's other versions are
 kept), another local is lifted (`proposeLocal`), a parameter's or the program's storage proposes nothing (an
 obligation, or nothing to do). A definition whose value reads a cursor (`at = at.parent`) proposes through the versions
@@ -293,3 +294,125 @@ loop valid - the case becomes a run case read back after a churn); a list's tail
 a cursor over two parameters read and compared. Staying refused: a cursor given values of two scopes and then built
 through (new case, O12 naming both assignments); the keeps analysis' two probes (O17); a slot's exactness
 (o25gfieldbinding).
+
+## 4. O27 as placement: storage a view needs is built where the view is kept
+
+### 4.1 The rule, as SPEC would state it
+
+**O27** (replaced). **Storage kept for a view.** "A view of storage - a slice, a borrow of a part, what a callee hands
+back of an argument's storage, a closure of what it captured - kept where that storage does not already live has the
+storage built where the view is kept, as a whole value kept longer is (O28): `for k in range n { t := $k "-x";
+keep.Push(t[0:1]) }` builds each turn's `t` where `keep` lives, a new one each turn, kept until that scope closes.
+`-memory` lists each such placement with the view that keeps it (B18), and the copy that would let the storage go with
+its turn (`keep.Push($t[0:1])`). A part of an instance a local's constructor built, kept longer, gives the field a binding
+of its own where the constructor can bind it (O28), else has the instance built where the part is kept. Storage that
+cannot be built elsewhere stays where it is, and keeping a view of it longer is a compile-time error naming a copy of
+what the view shows: a by-value parameter's own storage (the call's copy, O14, C2d), a generator `Next()`'s result scope
+(D18b), storage reached through a derived scope or a scope not known here (O23a, O12), and storage holding a value
+whose destructor is still to run (O15: it would run later than its holder lets go) [question 2]."
+
+**O28** (its last paragraph): "The placement never extends storage past the loop turn or the block that made it for a
+part of it (O27)" becomes "The placement extends storage only for what is kept: a whole value where it is kept, the
+storage a view shows where the view is kept (O27)"; "where no placement satisfies every use, the program is refused"
+keeps its list minus O27's copy.
+
+**O14**: "and not a view of storage such a block built (O27)" becomes "a view of storage the function builds has that
+storage built in the result scope, as a returned local is (O26a, O27)".
+
+**T22**: "as a view: met by where the argument already lives, never by building it longer (O27)" becomes "an argument's
+storage the caller builds is built where the result lands (O27)".
+
+**D18c**: a generator yielding views of a local it made builds that local where the generator lives (the third form,
+"kept by the walk"). **D18e**: "Such a walk lives in the block the loop's statement is ... whatever the generator was
+given" gains "- unless what it yields is a view of what the walk keeps and the loop's body keeps it longer: the walk is
+then made where that is kept (O27), and walked as D18b says".
+
+**B18** (a paragraph added): "Then a row for each placement made for a view (O27): `path:line:column: memory: 'X' is
+built where 'Y' lives, a new one each time it is made, for a view of it kept here` at the view, a `note:` at X's
+declaration, and the copy that would build it per turn; a line counting them."
+
+### 4.2 The inference
+
+Every edge lifts; the rest is when.
+
+- **A view proposes.** In `propose`, where the value is no whole local's (`wholeRoot < 0`), its view's root is
+  proposed - `viewRoot` (a slice of a place rooted at a local, a borrow of a part) through `viewSource`'s origins -
+  with its storage (`proposeLocal(root, t, stor = true)`: item 17's path, `liftStor`, `plan.Stored`, lowering's
+  `homeKept`: a new value each time the declaration runs); a slice of a temporary lifts the temporary's site
+  (`proposeSite`); a reference local's view lifts what it names (its claim, or its versions' values, 3.5).
+- **Through calls.** `liftAtCall` no longer skips a relation marked `View`: the argument determining its outliving side
+  is proposed, its storage with it. The mark stays on relations and lifts only to say, in `-memory`, which placements a
+  view caused.
+- **A closure is a view of its captures.** A lambda kept longer than what it captured (D16d: it lives where its
+  captures do) proposes each capture's outer local - a reference's claim or versions, a borrowed value array's storage
+  (D16c). d16cstore's `p` is built where `b` lives.
+- **Order, so accepted programs do not move.** View lifts are gathered in a second phase: the quiet judgings first
+  gather whole lifts to their fixed point exactly as today, then judge with view proposals on, then again until nothing
+  grows. Part lifts (a field or element read out of what a local builds, `partFlow`) are turned on only once the field
+  inference has settled - promoting a field costs nothing, building the instance longer costs memory, so the field
+  inference gets the refusals first (its gathering judgings never lift for a part). A program accepted today has no
+  failing view or part fit once whole lifts have settled, so it proposes nothing new and places exactly as today - its
+  plans byte-identical (decision 10). (Without the phases, a view proposal arriving first could change which of two
+  unordered scope variables a join keeps - `joinTerm` keeps the first, hidden variables `W` not being built - and with it
+  the obligations.)
+- **Conditionals and matches** propose each value as though stored alone (E28 - `propose` already walks them); a value
+  built for the conditional lands with it. stro20condstore is checked against this in the round.
+- **Generators.** A yielded view of a local the walk keeps lifts the local to the generator's home (`homeVar`, the
+  hidden capture of where the generator lives); a for-in walk whose such elements the loop keeps longer lands where they
+  are kept (the D18e change above - that walk is not elided, an arena frame as D18b's). Nothing is lifted into a
+  `Next()` result scope (`genResult`).
+- **Tasks.** A view handed to a task has its storage built at the join's level, as a whole argument is (P2).
+
+### 4.3 What stays refused, and why
+
+| storage the view shows | why it cannot be built longer | the error |
+|---|---|---|
+| a by-value parameter's own storage | the call's copy, made by the caller where the call stands (O14, item 17's exception) | O14/C2d, as today: return the value or take `p T&` |
+| a generator `Next()`'s result scope | one call's; the walk keeps nothing in it (D18b) | D18b's |
+| reached through a derived scope or a scope not known here | exists at no run time / where it lives is not known (O23a, O12) | O23a's, O12's - as a whole value's today |
+| holding a value whose destructor is still to run (`mayHoldDtor`) | it would run where the view's holder lets go, not where its own holder does (O15) - a file kept open for the name of it | reworded O27: "this keeps a view of 'f', whose destructor runs when its block ends - keep a copy of what it shows" [question 2] |
+
+These are `liftLocal`'s refusals today (`liftable`, `genResult`, `Runs`) plus the destructor one; `fitError`'s
+`viewKept` and `partKept` stay only for them, their messages reworded to say which.
+
+### 4.4 Memory
+
+The decision trades refusals for memory, so the memory must be visible and the fix named:
+
+- **`-memory`** gets a section of placements made for a view (B18 above). The scope pass records each lift whose
+  proposal came from a view, a part or a capture (`placed`: body, local or site, the term, the view's place); the
+  driver prints them after early freeing's rows (olang.olang, where `fr.Report()` is printed). For o27genborrow:
+  `o27genborrow.olang:22:46: memory: 't' is built where 'out' lives (main's scope), a new one each time it is made, for
+  a view of it kept here - keep a copy of what it shows ('$w') to build it per turn`.
+- **The language server** publishes the same as a hint (severity 4, as deprecation's) at the view - no compiler
+  warning: the compiler says errors only.
+- **Early freeing** is unchanged: placed storage lives in its new scope, freed there or earlier by O8d where a place
+  lets go of it as its only holder.
+
+### 4.5 Why it is sound
+
+Placement decides where storage is *built*; FIT still judges every edge against the placement (rework 2.4, step 4).
+Lifting a view's root to the slot's term makes the view's term - the storage's scope - outlive the slot, which is I1
+for that edge; the judgment after the lift is the same FIT as before with a longer claim. What a lift can disturb is
+re-judged: a store into the lifted storage (`t.x = y`, now in a longer scope) must have `y` outlive the new term, and
+proposes or fails in the next round; a lifted local is exactly in its new term (it is built there), so stores through it
+build there (I2). Lifts go only into terms that exist at run time (`Runs`) and only of storage the program builds
+(`liftable`; never a parameter's, a capture's or a for-in's copy), and they only lengthen (`joinTerm`), in a finite
+lattice, so the iteration ends at a least solution. A destructor never runs later than its holder lets go (4.3). A
+view handed to a task is built at the join's level, so P2 holds.
+
+### 4.6 Cost
+
+Nothing for a program accepted today (4.2's phases: no new proposal, no new judging). A program that today stops at
+O27 or O20 pays the judgings its lifts need - a few - instead of an error. compiler/ is accepted today, so the scope
+phase on it is unchanged; the round checks that compiler/'s and bench's IR are byte-identical before and after.
+
+### 4.7 Programs
+
+Newly compiling - each becomes a run case built `-debug -sanitize` and read back after an arena churn: d18cinputoutlived,
+d18cyieldframe, d18cyieldlocal, o10celementstash, o25enote, o27genborrow, t22aviewkept, t22borrowedresult, d16cstore,
+rv9slicetemp, rv9slicetempas, rv9slicetempview, t29aconvlifetime, o23adepth, stro20condstore (if 4.2 covers it), bulk 6's
+gen_walkkept and gen_walkkept2 (C4). o23aliaswrite becomes either accepted (its `c` and `x` built in `main`'s block) or
+refused at `arr[0].at = x` by O23's unknown binding - both sound; the round runs it under `-sanitize` and pins what it
+gives. Staying refused: o26own, e31calllocal, r9adefaultlocal, o10dd9bslice (a by-value parameter's storage); a new case
+keeping a view of a destructor-holding local past its block (question 2).
