@@ -84,7 +84,7 @@ WhyEnds String& = "it ends the test or the process"
 WhySteps String& = "the computation runs longer than compile-time evaluation allows"
 WhyMemory String& = "the computation takes more memory than compile-time evaluation allows"
 WhyDepth String& = "the computation recurses deeper than compile-time evaluation allows"
-WhyRunDepth String& = "it recurses deeper than -i allows"
+WhyRunDepth String& = "it recurses deeper than interpret allows"
 WhyEqDepth String& = "the comparison recurses deeper than compile-time evaluation allows"
 WhyRunEqDepth String& = "the comparison recurses deeper than interpret allows"
 WhyNull String& = "it reads through a null reference"
@@ -105,7 +105,7 @@ WhyNoBody String& = "it calls a function whose body is not available"
 WhyNotModelled String& = "it uses a value compile-time evaluation does not model"
 WhyPayload String& = "it reads the payload of a case the value does not hold"
 WhyLong String& = "it makes an array longer than the evaluator holds"
-WhyFfiFind String& = "it calls an external function -i cannot find in this process"
+WhyFfiFind String& = "it calls an external function interpret cannot find in this process"
 WhyFfiPass String& = "it calls an external function with a parameter or result interpret cannot pass - only numbers, Bools, arrays and structs of numbers, and pointers C gave"
 WhyForeign String& = "it reads through a pointer C gave, which only C may read"
 WhyNoClause String& = "a task's error has no clause to take it"
@@ -437,6 +437,12 @@ type Machine struct(T mut types.Table&, When Mode) {
     StaleAt I64 = -1
     Library Map<I64, Bool>
     Args Vec<String&>          # -i: the interpreted program's command line, its file first (B3e)
+    # test -interpret (B3e, B19): the file whose tests run and the running test, as the test harness names them to std
+    # (fuzz, prop) - "" where none is set; Detached once a forked child took its test's recovery point away, so a failed
+    # check ends the process as the built child's does
+    TestFile String& = ""
+    TestName String& = ""
+    Detached Bool = false
     # S18d: the error being returned's last places, oldest first - its file, span, what it did and its own text (a
     # requirement's "pick: y > x", D17), four words a place
     trace Vec<I64>
@@ -4201,6 +4207,8 @@ extern {
     fn __olang_exec(path Array<U8>, args Array<U8>, count I64) I32
     fn __olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64
     fn __olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32
+    fn __olang_dyncall_var(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8, fixed I64) U64
+    fn __olang_dyncall_var_check(name Array<U8>, kinds Array<U8>, ret U8, fixed I64) I32
 }
 
 fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.TypeId, dst Ptr, hasDst Bool) Bool {
@@ -4250,17 +4258,37 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
             v = I64(__olang_mkdtemp(b))
             m.putBytes(fi, x(0), b, b.Len())
         }
-        case "__olang_dyncall" {
+        case "__olang_dyncall", "__olang_dyncall_var" {
             wb := m.bytesOf(fi, x(2))
             words := Array<U64>(wb.Len() / 8)
             for k in range wb.Len() { words[k / 8] = words[k / 8] | (U64(wb[k]) << U64(8 * (k % 8))) }
-            v = I64(__olang_dyncall(m.bytesOf(fi, x(0)), m.bytesOf(fi, x(1)), words, U8(m.intArg(fi, x(3)))))
+            nm, kinds, ret := m.bytesOf(fi, x(0)), m.bytesOf(fi, x(1)), U8(m.intArg(fi, x(3)))
+            # a variadic C function's call (X21): its fixed arguments' count beside the rest
+            v = (I64(__olang_dyncall_var(nm, kinds, words, ret, m.intArg(fi, x(4)))) if name == "__olang_dyncall_var" else
+                 I64(__olang_dyncall(nm, kinds, words, ret)))
             for k in range wb.Len() { wb[k] = U8((words[k / 8] >> U64(8 * (k % 8))) & 0xFF) }
             m.putBytes(fi, x(2), wb, wb.Len())
         }
         case "__olang_dyncall_check" {
             v = I64(__olang_dyncall_check(m.bytesOf(fi, x(0)), m.bytesOf(fi, x(1)), U8(m.intArg(fi, x(2)))))
         }
+        case "__olang_dyncall_var_check" {
+            v = I64(__olang_dyncall_var_check(m.bytesOf(fi, x(0)), m.bytesOf(fi, x(1)), U8(m.intArg(fi, x(2)))
+                                              m.intArg(fi, x(3))))
+        }
+        case "__olang_test_running", "__olang_test_source" {
+            # B19: the harness's names, as its runtime keeps them - -1 where none is set
+            t := m.TestName if name == "__olang_test_running" else m.TestFile
+            v = -1
+            if t != "" {
+                b := Array<U8>(t.Len())
+                for k in range t.Len() { b[k] = U8(t[k]) }
+                m.putBytes(fi, x(0), b, m.intArg(fi, x(1)))
+                v = t.Len()
+            }
+        }
+        case "__olang_fuzz_input" { v = -1 }     # no fuzzer runs a test interpreted
+        case "__olang_test_detach" { m.Detached = true }
         case "__olang_on_crash" {
             # S2 under -i: the program's message written first, then the compiler's own - a crash now is likeliest in
             # a foreign function the program calls
