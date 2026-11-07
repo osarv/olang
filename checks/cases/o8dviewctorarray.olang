@@ -1,0 +1,40 @@
+# check: run
+# flags: -debug -sanitize
+# O8d (round sec8r2, from the drop-order round's notes): a constructor's instance holding text and an array by value,
+# stored into a struct held in place each turn - what free.olang's viewCtor says of the copy a caller makes of a viewing
+# constructor's instance (D9h) now covers its array leaves too (they were given no store at all, which a sole place's
+# let-go would have released outside any region; they keep). Every value read back after a churn
+import "std/io"
+
+type Person struct(name String, tags Array<I64>) {
+    name
+    tags
+}
+
+type Holder struct() {
+    p Person = Person("x", Array<I64>(1, 0))
+}
+
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+fn main() {
+    h mut Holder& = Holder()
+    t := 0
+    for i in range 2000 {
+        n := $i "-name"
+        a := Array<I64>(32, i)
+        h.p = Person(n, a)
+        t += n.Len() + a[0]
+        if i % 500 == 0: churn()
+    }
+    churn()
+    io.Println($t " " $h.p.name " " $h.p.tags[31])!
+}
