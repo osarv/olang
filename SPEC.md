@@ -9090,7 +9090,8 @@ fn routes() Map<String&, fn&(r Request&) Response> {
 ```
 
 **G42 (function facts).** What a function may do is read while compiling, through its name - `mix.Allocates`,
-`dsp.mix.Allocates` through an import's alias, `pick<I64>.Allocates` for a generic's instance (a generic named without
+`dsp.mix.Allocates` through an import's alias, `pick<I64>.Allocates` for a generic's instance, `Color.FromHex.Allocates`
+for a builder (D19) and `Box<I64>.Of.Allocates` for an instance of one over a generic owner (a generic named without
 its type arguments has no facts: an error naming that form) - and on a function's descriptor (G41, `f.Allocates` in a
 walk of `m.Functions` or `T.Methods`, each copy its own function's). Each is a `Bool`, true where the function or any
 body it may call - a destructor among them where a body registers one (a constructor of a type with one, a value of one

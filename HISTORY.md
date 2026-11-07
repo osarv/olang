@@ -29574,3 +29574,11 @@ Found on the way: the formatter's loader read `../x` as a remote import (its fir
 missed the names such imports reach (fixed as load.olang already did); a `.Copy()` of a `String&` view kept in a Map
 was refused by O27 as keeping a view of the map's holder (worked around in the tool by building the text as a value;
 not chased - the section-8 round's).
+
+After `make quick` (the same round): a fact is read through a builder's name too (`GHeld.gEvery.WritesGlobals`, G42 -
+std's and the tests' facts named moved functions); `olang doc` finds a builder's doc comment by "Type.Name"; a generic
+builder's "not a value" reason names `Box<...>.Of` (it said G29's per-length reason: the owner's variables are no
+written type parameters); the differential fuzzer writes a case making a declared type as that type's builder
+(`S1_0.c1(...)`, `G1<F64>.c1(...)`); code embedded in the compiler's own tests moved by hand. A tool limit found: a use
+through a chain of re-exporting aliases (`wk.Base.BaseSouth()`, worker re-exporting Base) is not rewritten - one in
+tests/runner.olang, moved by hand.
