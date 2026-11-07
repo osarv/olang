@@ -1084,7 +1084,7 @@ c0ae5c374ae200f9 25a6501574b6c287 checks/cases/rangefloat.olang
 23ee383056d1901c 08c2ee6455f5b8d5 checks/cases/rangezero.olang
 b6cf2e94d6636b54 a10588a32f57adc5 checks/cases/redefbuiltin.olang
 2036f5103e5f5030 34c7bc98ebbc71f5 checks/cases/redefd.olang
-051b2c068e849ca4 82fc7057dcdf949e checks/cases/reflargcompr.olang
+ed72488cb7b2f3f7 82fc7057dcdf949e checks/cases/reflargcompr.olang
 e90d333667ac7621 af995ebf285752e0 checks/cases/reflcaseother.olang
 967980732e746fcd acae7f2d39e5049c checks/cases/reflcaseunreachable.olang
 7f1b3780ad8b43f9 9fa0cfbfad3e38b7 checks/cases/refldescnomember.olang
@@ -2012,11 +2012,11 @@ efe336c8764b3874 aafa63e2e9dc5e5a checks/fixtures/vechandle/handle.olang
 247e6c4bce8dd272 52897fe49a44c5d9 checks/fixtures/vechandle/stalecopy.olang
 7a3e2cb7d1d87b4c 6e17b6bc06d2c131 checks/fixtures/widealign/widealign.olang
 4d638d61caac0d75 19b5a2677a23f204 compiler/api.olang
-bc10f91d527499e4 9b9f7b01270bb831 compiler/ast.olang
+debaf46619bbfa98 9b9f7b01270bb831 compiler/ast.olang
 76e002fe516379d0 23a5d5b8d2beea28 compiler/bindgen.olang
 7a97b79b93d86c8b 7ccc74677e4b59e6 compiler/build.olang
 5bd986c42a6537a1 4a754ae29f789b2f compiler/cabi.olang
-7447a16085eabab8 41b48bcb5a60a561 compiler/check.olang
+4f33b20558cf33fd 41b48bcb5a60a561 compiler/check.olang
 94c7f3b55fc68951 6e8d7c13cd955b3e compiler/cond.olang
 08c016b6fa677234 c409e181f4f7c754 compiler/definit.olang
 184cf90d776aa569 722bd43c2197ec25 compiler/diag.olang
@@ -2038,7 +2038,7 @@ d29792a8c109642e 2b0efb890195de37 compiler/lower.olang
 160e68ac624ecb31 fe3e68cb6ff6dacb compiler/lsp.olang
 a9fdbee6672ba31e 89e29d0fd7116d29 compiler/mcp.olang
 3c13777ef661b4c6 998a11d8d8f6e563 compiler/mir.olang
-2427c83dd9782361 f96e2ae151bf02a8 compiler/msgs.olang
+5391399cc3efc8c5 8ddfa61a0c5ec937 compiler/msgs.olang
 7cd82ba607aceedb f3c20600c4158349 compiler/names.olang
 3ca8bd78a33b7278 22dd9b1a97c41ffd compiler/needs.olang
 f9a0106c35a471bd 10bcdc506d31d553 compiler/olang.olang
