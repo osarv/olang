@@ -13,9 +13,10 @@ Goldens: conflicts take our side; ALL four goldens recaptured once at the end (n
 
 | round | worktree / branch | model | brief |
 |---|---|---|---|
-| sec8r2 | /home/user/wt/sec8r2, wt-sec8r2 | opus xhigh | rounds/sec8r2-brief.md (O27 placement + dropord's hand-on move, viewCtor) |
+| sec8r3 | /home/user/wt/sec8r3, wt-sec8r3 | opus high | rounds/sec8r3-brief.md (T22a relations) |
+| handon | /home/user/wt/handon, wt-handon | opus xhigh | rounds/handon-brief.md (unique hand-on move + B8) |
 
-tidy2 merged (aff942b, ff) and literals merged (8eb88bd + cee098e seed). Re-run literal_migrate after merging sec8r2:
+sec8r2 merged (7bbd6b5; scope fuzzer's generator fixed by it). tidy2 merged (aff942b, ff) and literals merged (8eb88bd + cee098e seed). Re-run literal_migrate after merging sec8r2:
   OLANG_STD=<a std in the new syntax> <new compiler> build -quick -output build/tools_literal_migrate tools/literal_migrate.olang
   build/tools_literal_migrate --std std std compiler tests checks tools bench fuzz   (and builder_migrate likewise)
 BEFORE THE GATES: fuzz/scopegen.olang writes plain functions D19a refuses (scope fuzzer fails) - migrate it; B8

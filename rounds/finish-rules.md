@@ -23,12 +23,9 @@ to be finished today. So no unnecessary reviews or verifications. Just do one at
   (guard clauses, `:` one-line bodies, `case P: v`, narrowing, comprehensions, errors raised by name).
 - Report at the end: what was built, your decisions (numbered), bugs found and fixed, quick's result, what was left.
 
-Rounds running at the same time (from 2026-11-07 afternoon; keep to your files where you can; the coordinator merges):
-- sec8r2 (/home/user/wt/sec8r2): section 8 round 2 - O27 as placement, the unique hand-on move - compiler/scope.olang,
-  free.olang, typed.olang, emit's generator elision test, olang.olang's -memory rows.
-- literals (/home/user/wt/literals): the type in front of every literal and comprehension, FromIter - parser, check's
-  literals and comprehensions, the prelude and std collections, a migration tool rewriting `T[...]` everywhere (its
-  output committed separately; the coordinator re-runs it after merging the others, so do not hand-edit literal
-  syntax in other rounds' files).
-- tidy2 (/home/user/wt/tidy2): small fixes - diagnostics, reflection, explain, the profiler's handler, reproducible
-  builds, msgs.olang's generator, StringBuilder, json keys, cheaper region headers in the runtime.
+Rounds running at the same time (from 2026-11-07 ~17:30 CET; the coordinator merges):
+- sec8r3 (/home/user/wt/sec8r3): section 8 round 3 - function values carrying their relations (scope.olang's records,
+  calls through values, boundaries; explain/session's "as a value" line).
+- handon (/home/user/wt/handon): the unique hand-on move - check's valueArg/partCopy, free.olang, the by-value
+  parameter's obligation in scope.olang; then StringBuilder's hand-over (std/prelude/text.olang).
+Literals are written with the type in front (`Array<I64>[1, 2]`) and a function making a type's value is a builder.
