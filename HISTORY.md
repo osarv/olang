@@ -32887,3 +32887,146 @@ The entries as they stood before the trim of 2026-11-07, verbatim, by subsection
 
 - **A match binding lives in its clause's block (S13b) and takes the matched place's permission.** A conditional or
   match of references lives where its values share a scope, else "not known here" (E28, O12).
+
+### Concurrency
+
+#### `join { }` with `spawn` calls inside (P1-P1b).
+
+- **`join { }` with `spawn` calls inside (P1-P1b).** Binding is lexical, one level; the join waits on every way out; a
+  task's arguments must outlive the join block (P2). P3/P5 (no shared writes) were withdrawn - a spawning program owns
+  its races, which `-race` (ThreadSanitizer, P7) detects - Go's position, for Go's reason: no static check without an
+  ownership discipline, and a borrow checker would cost the doubly linked list, the graph and the parent pointer.
+  Every ordering olang can express goes through pthread or LLVM atomics, so TSan sees all of it.
+
+#### `spawn x = f()` binds a result (P1g)
+
+- **`spawn x = f()` binds a result (P1g)**; parallel map is `spawn out[i] = f(i)`.
+
+#### A spawned call may fail (P4-P4d, decision 50, the user approved).
+
+- **A spawned call may fail (P4-P4d, decision 50, the user approved).** `spawn try f()`, clauses run on the task's
+  thread; `try join { } catch ...` fails with the earliest-spawned failure; a target of a failing task is unwritten,
+  so clauses on such a join must leave.
+
+#### Memory model (P8-P8c):
+
+- **Memory model (P8-P8c):** three happens-before edges (globals, spawn, join); a data race is undefined.
+
+#### Atomics are methods on integer places (P9, E10c, the user: "I don't like built-ins very much"):
+
+- **Atomics are methods on integer places (P9, E10c, the user: "I don't like built-ins very much"):** `AtomicLoad`,
+  `AtomicStore`, `AtomicAdd`, `AtomicSwap`, `AtomicCompareSwap`, sequentially consistent.
+
+#### Runtime:
+
+- **Runtime:** 1:1 threads, cached (at most 64 idle); no fixed pool and no M:N (P1e/P1f). Cancellation and timeout are
+  `std/cancel` (the user's call: "both"); channels are `std/chan` (`Close`, rendezvous at capacity 0). `spawn` is for
+  parallelism, not I/O concurrency, so 1:1 threads suffice; a fixed pool would deadlock on a nested join or a channel,
+  and M:N would be the language's largest hidden machinery (revisit only with async I/O).
+
+#### Task details.
+
+- **Task details.** A thread that cannot start aborts (P1c); a failed assert on a task thread aborts (P6); in a test
+  build a failed check unwinds open scopes and joins tasks before its `longjmp` (P1d, test builds only); a task's
+  chunk pool goes back when it parks (P2a). `os.RunOnStack(bytes, f)` is the call `f()` on a bigger stack.
+
+#### Scope parts in detail (decision 48).
+
+- **Scope parts in detail (decision 48).** Every scope header has an owner thread (a number from a counter), parts and
+  a parent; `__olang_capture_scope` gives the scope on its owner's thread, else that thread's part (made once, linked
+  lock-free, folded at the close, destructors first); a worker's program-scope part is never folded; codegen holds
+  every body to the checker's may-build walk (`cgCheckMayBuild`, an internal error on a miss). Decision 40's static
+  refusal was removed with it.
+
+### Modules and the build
+
+#### A module is a file (M1/M22/M23, the user's design 2026-10-06).
+
+- **A module is a file (M1/M22/M23, the user's design 2026-10-06).** Imports name a file without `.olang`: `std/x`,
+  `host/owner/repo[@ref]/path`, or relative to the importing file. Identity is the path. Capitalized names are
+  exported, members and words too (M6/M6a); a protocol method follows the same privacy, declared once (M6b, the user's
+  rule). An import's alias is reserved in its module (M20). The prelude (`std/prelude`) gives built-in types their
+  methods and types by bare name (M19d). No package-private visibility for now (the user's call).
+
+#### Remote packages
+
+- **Remote packages** are fetched with git into a cache keyed by commit and pinned by `olang.lock` (M23b, the user's
+  call); `-update` updates (M23c); every part is validated and nothing runs through a shell.
+
+#### Separate compilation (B1-B8).
+
+- **Separate compilation (B1-B8).** `compile` one module, `build` build and link, `test` each file's tests in a process
+  of its own (B3a), `interpret` interprets through the evaluator (B3e). Imports are resolved from source - no header files. Objects
+  are named by a hash of everything compiled against and rebuilt when the compiler is newer; a root's object is its
+  own artifact. Globals initialize imports first, then in dependency order (B5a; a cycle is an error). No interface
+  file exists because a function's scope obligations are derived from its body, which only the source has.
+
+#### Optimization (B2c-B2e):
+
+- **Optimization (B2c-B2e):** `-O3` and full LTO by default (what the machine can do unless asked otherwise; LTO also
+  made builds faster, ThinLTO measured no better at this size; the port links a program of 8 MB of IR or more by
+  ThinLTO with a cache, importing functions of at most 70 instructions - the compiler's own -O3 build 213 s -> 108 s, an
+  edit 43 s; then round 7's 238 -> 176 s of CPU; round 8 measured the link at its floor for -O3 over this much IR -
+  the import limit, the opt level, lld and smaller parts each no better without costing the compiler's speed - and a
+  development build at -O2 without LTO, 20.8 s clean and 3.8 s for an edit inlined everywhere against 18 s, proposed
+  to the user); `-debug` is `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize`
+  the scope sanitizer (B2f: closed chunks poisoned and protected).
+
+#### Targets (B12, the user's call):
+
+- **Targets (B12, the user's call):** native CPU by default, `-target NAME` to cross-compile; target
+  constants `TargetOs TargetArch TargetCpu TargetVectorBits TargetHasFma`. No fast-math or contraction (the user's
+  call).
+
+#### Platforms (B12a, B12d, 2026-10-25, the platforms batch; details mine).
+
+- **Platforms (B12a, B12d, 2026-10-25, the platforms batch; details mine).** LLVM 18, 19 and 20 all build the suite
+  unchanged - the IR olang writes is one all three read (nothing version-specific had to change). The clang is
+  `OLANG_CLANG`, else a release's own (`../llvm/bin/clang` beside the compiler), else the newest of `clang-20`,
+  `clang-19`, `clang-18`, `clang` on PATH. **Another architecture is built, linked and tested for** (it was `compile`
+  only): `build` links with the cross C library clang finds (`/usr/aarch64-linux-gnu`) or `OLANG_SYSROOT`; `test` and
+  running a file run through an emulator (`OLANG_EMULATOR`, else `qemu-ARCH[-static]` with `-L` the sysroot); only
+  `interpret` and the analysis tools stay this-machine-only. aarch64 needs clang 19+ (LLVM 18's back end cannot select
+  `bfloat`). Measured under qemu-aarch64 with clang 20: the whole corpus (shared.olang's 739 tests and the rest), std's
+  and the prelude's tests and every checks case built for aarch64 pass (`make cross`), and the cinterop scenario runs
+  `abi.olang` against GCC's aarch64 `abi.c` (AAPCS64, X11). Left out of `make cross`: std/os's two tests of a program
+  that cannot start (qemu-user turns posix_spawn's failed exec into a child exiting 127) and std/ffi (no target libffi).
+  **`make release`** packs the compiler built for the architecture's baseline, std, SPEC.md, editors, tools and clang
+  with LLVM's libraries and their non-glibc dependencies (`llvm/`); `releasetest` unpacks it in a fresh directory and
+  builds hello world with only `ld` on PATH. R9 names another module's error by its alias (`io.Error`).
+
+#### Conditional compilation is a top-level `if` (B9-B10c, the user's design).
+
+- **Conditional compilation is a top-level `if` (B9-B10c, the user's design).** `-define Name=value` build constants;
+  an immutable top-level global is a default `-define` replaces (B10c); a local `if` the build decides is conditional
+  compilation too (S8b, the user's call); a constant condition not depending on the build is a dead-branch error
+  (S8a).
+
+#### Diagnostics are one row each (B11/B11a, the user's design).
+
+- **Diagnostics are one row each (B11/B11a, the user's design).** `path:line:col: error[RULE]: message`, the source
+  line and a caret, `note:` rows; source order, one error per cause; `olang explain RULE` prints the spec rule. **Did you
+  mean (2026-10-26, the user's request):** every name that names nothing - a local, global, function, type, alias,
+  field, method, case, error type or word, scope name, import, named argument, test target, option - ends its message
+  with the nearest allowed name, ` - did you mean 'x'?`, within about a third of the word (case-insensitive edit
+  distance); one helper, `msgs.Nearest` (mine: of two equally near, locals first, then aliases, then the module's and
+  the prelude's names). **Typed holes (E41, QBP 3, the user's "yes build it", 2026-10-27; built 2026-10-31)**: `_` where
+  a value is wanted is an error naming the type wanted and the locals, parameters and module globals in scope that fit
+  (mine: by E12's flow, the locals first, at most eight), or that nothing says the type; the language server shows it
+  as any diagnostic (`check.typedHole`).
+
+#### Build details.
+
+- **Build details.** Objects for a different mode are different artifacts (`.main.o`, `.test.o`, `.tmod.o`, `.race.o`,
+  `.debug.o`, `.san.o`, a `-define` hash, B4/B10b); the target is in the object hash (B12b); symbols are mangled from
+  module identity with every character but letters and digits escaped (B3b); two modules of one base name are fine
+  (identity is the path). `-define` values are typed as the literal would be, text a `String` (B10); the token evaluator
+  (B9a) decides only what it decides exactly and defers the rest to the compile-time evaluator (B9c), which checks the
+  program again with each decision. An untaken top-level branch is not parsed. A build is the same byte for byte
+  whatever process made it (2026-11-07, mine): the IR clang reads names its readable file as `source_filename`, never
+  the temporary one carrying the compiler's pid (a Locations object's FILE symbol reached the program).
+
+#### Declared module identity was deferred until packaging, and is now the import path (M22).
+
+- **Declared module identity was deferred until packaging, and is now the import path (M22).** Individual function or
+  type imports are not planned: the unit of import is the module.
