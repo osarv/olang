@@ -11,3 +11,8 @@ reference. 3-5 over-rejections: relax only where sound, argued in HISTORY; when 
 Process: checklist per item, evaluator agreement, tests and checks/cases, HISTORY section, CLAUDE.md, DEPENDENTS.md;
 make quick; at the end make verify + scopesan + scopefuzz; commit per piece (own paths, no push); PROGRESS.md untracked;
 olang only, nesting <= 3; report per item with soundness arguments, measurements, decisions, gate results.
+
+2026-11-07 05:56 CET: a container restart killed the first agent after it committed a7a6cd5 (item 17, O28) and left
+compiler/effects.olang and compiler/typed.olang uncommitted (item 2 in progress); a fresh agent continues: it checks
+a7a6cd5 first (the ~20 rewritten checks/cases must still guard what they name, or become run tests argued in HISTORY),
+measures os.Args and item 17's memory, then items 2-5. Full verifies through /home/user/vlock.
