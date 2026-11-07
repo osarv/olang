@@ -7297,7 +7297,7 @@ file has a test the words name; where none has, the run fails, its last line `no
 **B3e.** `interpret <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
 program is analyzed exactly as under `build` - `main` is required (B4), and every compile-time error is reported the
 same way, section 8's included (where values live is the same scope pass's, so a program the build refuses is not
-run) - and then `main` is run by compile-time evaluation (§13 K1) with the effects K1 refuses performed:
+run, a construct this compiler does not check yet among what it refuses) - and then `main` is run by compile-time evaluation (§13 K1) with the effects K1 refuses performed:
 nothing is generated, nothing is linked and no file is written. It behaves as the built program would run (B5):
 globals are initialized imports first (B5a) and may be read and written, an `extern` function (§11) is called in
 the interpreting process, `os.Exit` ends it with its status, an error escaping `main` is reported as B5
