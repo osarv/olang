@@ -317,3 +317,20 @@ test "a narrowed payload's array field is indexed in place" {
     assert ThirdBaked == 16 and third(Live + 4) == ThirdBaked
     assert second(Live - 5) == -10 and second(Live + 2) == 2
 }
+
+# R3b (bulk review 8): the module's first raise in source order settles a raised error's fields, whichever is checked
+# first - lateA's, though lateA calls lateB, whose raise is met before it
+fn lateA(n I32) I64 ? {
+    if n > 5: return try lateB(n - 1)
+    error Late(v = n)
+}
+
+fn lateB(n I32) I64 ? { error Late(v = n) }
+
+fn lateSaid(n I32) String { return try $lateA(n) catch Late e default $e }
+
+LateBaked String = lateSaid(9)
+
+test "the first raise in source order settles a raised error's fields" {
+    assert LateBaked == "Late(8)" and lateSaid(I32(Live) + 9) == LateBaked and lateSaid(I32(Live) + 2) == "Late(2)"
+}

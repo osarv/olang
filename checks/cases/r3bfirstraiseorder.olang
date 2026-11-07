@@ -1,0 +1,15 @@
+# check: fail error[T6b]: I64 does not flow into I32
+# R3b (bulk review 8): the module's first raise in source order settles a raised error's fields - a's, an I32 - even
+# where a's body calls b, whose raise of an I64 is met first while a is checked; b's raise is then the error
+fn a(n I32) I64 ? {
+    if n > 5: return try b(I64(n) - 1)
+    error X(v = n)
+}
+
+fn b(n I64) I64 ? {
+    error X(v = n)
+}
+
+fn main() {
+    r := try a(9) catch X e default I64(e.v)
+}

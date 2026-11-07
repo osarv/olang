@@ -248,6 +248,11 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # attempt before found them - kept from one attempt to the next, as errPresets is
     factReads Vec<factRead>
     factPresets Map<String&, Bool>
+    # R3b, T19b: the errors raised by name whose payload a later raise settled, met while the body holding the first
+    # raise was being checked and before that raise - the first raise settles it again when it is met, and an attempt
+    # whose first raise found other types is done again (raisedMoved), kept from one attempt to the next
+    raisedEarly Map<I64, Bool>
+    raisedMoved Bool = false
     # E31b: the calls made in place through x[i] (inPlaceCall), as each attempt made them, and the sites found, after an
     # attempt, to reach what could change the collection - kept from one attempt to the next, as factPresets is
     inPlaceReads Vec<inPlaceRead>
@@ -630,7 +635,8 @@ fn (c mut Checker&) CheckProgram() {
         moved := c.settleFacts()
         # E31b: a call made in place found to reach what could change its collection means checking again, the copy's
         inPlaceMoved := c.settleInPlace()
-        moved = moved or inPlaceMoved
+        moved = moved or inPlaceMoved or c.raisedMoved
+        c.raisedMoved = false
         if (not grew and not moved) or c.Attempts >= 20 {
             if moved { c.factsUndecided() }
             if inPlaceMoved { c.inPlaceUndecided() }
@@ -22603,8 +22609,19 @@ fn (c mut Checker&) pushPayload(sp source.Span, word ast.Path&, et types.TypeId,
     if c.P.IsRaisedError(d) {
         given = c.raisedArgs(wsp, wtext, fields, given)
         if given.Len() != fields.Len(): return
-        if word.Sp != c.P.RaisedAt(d): c.settleRaised(et, pt)
-        if not c.P.RaisedSettled(pt): pre = c.settleBy(pt, given, fields)
+        first := word.Sp == c.P.RaisedAt(d)
+        if not first: c.settleRaised(et, pt)
+        if not c.P.RaisedSettled(pt) {
+            # (a later raise met first: the first raise's body is being checked and has not reached it - settled by
+            # this one for now, the first raise settling it when met)
+            pre = c.settleBy(pt, given, fields)
+            if not first: c.raisedEarly.Put(I64(d), true)
+        } else if first and c.raisedEarly.Has(I64(d)) {
+            c.raisedEarly.Remove(I64(d))
+            was := c.P.RaisedFields(pt)
+            pre = c.settleBy(pt, given, fields)
+            if c.P.RaisedFields(pt) != was: c.raisedMoved = true
+        }
     }
     pv := c.enumCase(sp, wsp, pt, c.P.ErrorWords(d)[w], given, pre)
     if typeOf(pv) == types.UnknownT: return

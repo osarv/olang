@@ -1624,6 +1624,9 @@ fn (p mut Program&) SettleRaised(pt types.TypeId, ts Array<types.TypeId>&) {
 # whether an error raised by name carrying a payload has had its field types settled (T19b)
 fn (p mut Program&) RaisedSettled(pt types.TypeId) Bool { return p.raisedFields.Has(I64(p.T.DeclOf(pt))) }
 
+# the field types settled for an error raised by name carrying a payload (T19b), the empty list where none are
+fn (p Program&) RaisedFields(pt types.TypeId) types.ListId { return try p.raisedFields.Get(I64(p.T.DeclOf(pt))) catch default types.ListId(0) }
+
 # where an error raised by name is first raised: its declaration's span (R3b), the raise's word
 fn (p mut Program&) RaisedAt(d types.DeclId) source.Span {
     e := p.errorDecl(d)
