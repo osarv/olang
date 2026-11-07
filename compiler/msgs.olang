@@ -1422,37 +1422,37 @@ fn ReraiseWordNotInSet(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.Rerai
 fn RaiseNotCaught(tok String&) r.Msg { return r.Msg(Diag.RaiseNotCaught, "R3", "'error' raises a word, 'error T.WORD', or an error value - " $tok " is neither") }
 
 # ERR_PAYLOAD_HOLDS_REF
-fn PayloadHoldsRef(field String&, ty String&, what String&) Msg { return Msg(Diag.PayloadHoldsRef, "T19b", "payload field " $field " of type " $ty " holds " $what " - a payload holds values only: hold a copy ('$x', 'x.Copy()') or plain data") }
+fn PayloadHoldsRef(field String&, ty String&, what String&) r.Msg { return r.Msg(Diag.PayloadHoldsRef, "T19b", "payload field " $field " of type " $ty " holds " $what " - a payload holds values only: hold a copy ('$x', 'x.Copy()') or plain data") }
 
 # ERR_PAYLOAD_WORD_BARE
-fn PayloadWordBare(word String&, fields String&) Msg { return Msg(Diag.PayloadWordBare, "T19b", $word " carries " $fields " - give them: '" $word "(" $fields ")'") }
+fn PayloadWordBare(word String&, fields String&) r.Msg { return r.Msg(Diag.PayloadWordBare, "T19b", $word " carries " $fields " - give them: '" $word "(" $fields ")'") }
 
 # ERR_PLAIN_WORD_CALLED
-fn PlainWordCalled(word String&) Msg { return Msg(Diag.PlainWordCalled, "T19b", $word " carries nothing - write it without '()'") }
+fn PlainWordCalled(word String&) r.Msg { return r.Msg(Diag.PlainWordCalled, "T19b", $word " carries nothing - write it without '()'") }
 
 # ERR_PAYLOAD_FIELD_UNNARROWED
-fn PayloadFieldUnnarrowed(name String&, field String&) Msg { return Msg(Diag.PayloadFieldUnnarrowed, "T19b", $name " may hold an error that has no field " $field " - test which it holds first ('if " $name " == T.Word')") }
+fn PayloadFieldUnnarrowed(name String&, field String&) r.Msg { return r.Msg(Diag.PayloadFieldUnnarrowed, "T19b", $name " may hold an error that has no field " $field " - test which it holds first ('if " $name " == T.Word')") }
 
 # ERR_PAYLOAD_ARGS
-fn PayloadArgs(word String&, want I64, got I64) Msg { return Msg(Diag.PayloadArgs, "T19b", $word " carries " $want " field" $("" if want == 1 else "s") ", " $got " given") }
+fn PayloadArgs(word String&, want I64, got I64) r.Msg { return r.Msg(Diag.PayloadArgs, "T19b", $word " carries " $want " field" $("" if want == 1 else "s") ", " $got " given") }
 
 # ERR_RAISED_FIELD_UNNAMED
-fn RaisedFieldUnnamed() Msg { return Msg(Diag.RaisedFieldUnnamed, "R3b, T19b", "a field an error raised by name carries is named by the raise: a bare name, or 'name = value'") }
+fn RaisedFieldUnnamed() r.Msg { return r.Msg(Diag.RaisedFieldUnnamed, "R3b, T19b", "a field an error raised by name carries is named by the raise: a bare name, or 'name = value'") }
 
 # ERR_ERR_PATTERN_NEEDS_NAME
-fn ErrPatternNeedsName(what String&) Msg { return Msg(Diag.ErrPatternNeedsName, "T19b, S13b", "a payload pattern reads the error a local or a catch clause's name holds, and " $what " is no name - write 'e := ...' first and match 'e'") }
+fn ErrPatternNeedsName(what String&) r.Msg { return r.Msg(Diag.ErrPatternNeedsName, "T19b, S13b", "a payload pattern reads the error a local or a catch clause's name holds, and " $what " is no name - write 'e := ...' first and match 'e'") }
 
 # ERR_ERR_PATTERN_BIND_VALUE
-fn ErrPatternBindValue() Msg { return Msg(Diag.ErrPatternBindValue, "T19b, S13b", "a payload pattern binds names only in a match statement - in a value match read the field after the test ('case W: e.field')") }
+fn ErrPatternBindValue() r.Msg { return r.Msg(Diag.ErrPatternBindValue, "T19b, S13b", "a payload pattern binds names only in a match statement - in a value match read the field after the test ('case W: e.field')") }
 
 # ERR_ERR_PATTERN_BIND_ALTS
-fn ErrPatternBindAlts() Msg { return Msg(Diag.ErrPatternBindAlts, "T19b, S13b", "a payload pattern binding a name stands alone in its case - give each alternative a case of its own") }
+fn ErrPatternBindAlts() r.Msg { return r.Msg(Diag.ErrPatternBindAlts, "T19b, S13b", "a payload pattern binding a name stands alone in its case - give each alternative a case of its own") }
 
 # ERR_ERROR_METHOD_GIVEN
-fn ErrorMethodGiven(ty String&, name String&) Msg { return Msg(Diag.ErrorMethodGiven, "T20", "an error value's " $name " is the language's (T20) - " $ty " cannot declare one; choose another name") }
+fn ErrorMethodGiven(ty String&, name String&) r.Msg { return r.Msg(Diag.ErrorMethodGiven, "T20", "an error value's " $name " is the language's (T20) - " $ty " cannot declare one; choose another name") }
 
 # ERR_RAISED_FIELDS_DIFFER
-fn RaisedFieldsDiffer(name String&, first String&) Msg { return Msg(Diag.RaisedFieldsDiffer, "R3b, T19b", $name " carries (" $first "), as its first raise names them - give the same fields in that order") }
+fn RaisedFieldsDiffer(name String&, first String&) r.Msg { return r.Msg(Diag.RaisedFieldsDiffer, "R3b, T19b", $name " carries (" $first "), as its first raise names them - give the same fields in that order") }
 
 # ERR_RAISE_NEAR_ERROR
 fn RaiseNearError(tok String&, near String&) r.Msg { return r.Msg(Diag.RaiseNearError, "R3b", "no error of this module is named " $tok " - did you mean " $near "? To raise a new error of that name, name it after this function's '?'") }

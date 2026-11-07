@@ -441,7 +441,7 @@ test "Parse refuses what is not a date" {
 
 # why t is no date ($e: this file the root here, so unqualified), "ok" when it is one
 fn whyNot(t String&) String {
-    try Parse(t) catch Error e { return $e }
+    try Date.Parse(t) catch Error e { return $e }
     return "ok"
 }
 

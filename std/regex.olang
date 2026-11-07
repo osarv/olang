@@ -1578,7 +1578,7 @@ test "a match is computed while compiling as at run time" {
 
 # why pattern does not compile ($e, the file itself the root here, so unqualified), "ok" when it does
 fn whyNot(pattern String&) String {
-    try Compile(pattern) catch SyntaxError e { return $e }
+    try Regex.Compile(pattern) catch SyntaxError e { return $e }
     return "ok"
 }
 
@@ -1590,7 +1590,7 @@ test SyntaxError "an error carries the offset where the pattern went wrong" {
     assert whyNot("a)b") == "SyntaxError.UnmatchedParen(1)"
     assert whyNot("x[b-a]") == "SyntaxError.BadRange(5)"
     assert whyNot("ab") == "ok"
-    try Compile("a**") catch SyntaxError.BadRepeat e { assert e.at == 3 } catch SyntaxError { unreachable }
+    try Regex.Compile("a**") catch SyntaxError.BadRepeat e { assert e.at == 3 } catch SyntaxError { unreachable }
 }
 
 }

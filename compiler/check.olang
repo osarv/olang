@@ -1417,6 +1417,8 @@ fn (c mut Checker&) placement(f I64) {
     c.push(-1, mi, types.VoidT, types.ListId(0))
     c.err(c.nameSpan(fd), msgs.BuilderExpected(c.tok(fd.Name), c.text(c.P.T.DeclName(d)), c.text(fd.Name)))
     c.pop()
+}
+
 # T20, M19: a method of an error type or a named set is declared in its module, and never one the language gives every
 # error value (Eq, Hash, Str, Copy: an error compares, hashes, renders and copies as T20 says)
 fn (c mut Checker&) errorMethod(f I64, rt types.TypeId, name String&) {

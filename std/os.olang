@@ -223,7 +223,7 @@ fn (p Process&) Pid() I32 { return p.pid }
 # starts the program args[0] as Exec does - its command line, input, capture and directory alike - and gives it back
 # running, without waiting for it: a program to run beside this one (a server a test talks to, several commands at
 # once), or one to give up on. Fails as Exec does when it cannot be started
-fn Start(args ...String&, input Array<U8>& = "", capture Bool = true, dir String& = "") Process ? Error {
+fn Process.Start(args ...String&, input Array<U8>& = "", capture Bool = true, dir String& = "") Process ? Error {
     if args.Len() == 0 { error Error.Failed("") }
     size I64 = 0
     for a in args {
@@ -236,7 +236,7 @@ fn Start(args ...String&, input Array<U8>& = "", capture Bool = true, dir String
     try dir.FindByte(0) catch { zero = false }
     if zero { error Error.Failed(dir) }
     if dir.Len() > 0 {                                  # said here, where a missing program could not be mistaken for it
-        info := try Stat(dir)
+        info := try FileInfo.Stat(dir)
         if info.Kind != FileKind.DIR { error Error.NotDir(dir) }
     }
     line := Array<U8>(size)                         # the arguments, each ended by a zero byte

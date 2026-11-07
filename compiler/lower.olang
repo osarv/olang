@@ -1534,7 +1534,7 @@ fn (ln mut lowering&) raise(sp source.Span, code mir.Operand) {
         return
     }
     l := ln.local(code, mir.I32T, sp)
-    if ln.isMain() { ln.mainPayloads(mir.Operand.Copy(mir.L(l)), sp) }
+    if ln.isMain() { ln.mainPayloads(mir.Operand.Copy(mir.Lvalue.L(l)), sp) }
     was := ln.erroring
     ln.erroring = true
     ln.leave(0)
@@ -2045,7 +2045,7 @@ fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(
 
 # the code an error value local x of type ty holds: the value itself, or its tuple's first part
 fn (ln mut lowering&) errCodeOf(x mir.LocalId, ty types.TypeId) mir.Operand {
-    if not ln.T.ErrCarries(ty): return mir.Operand.Copy(mir.L(x))
+    if not ln.T.ErrCarries(ty): return mir.Operand.Copy(mir.Lvalue.L(x))
     return mir.Operand.Copy(ln.mk(ln.with(pl(mir.Base.Local(x)), mir.Proj.Field(0))))
 }
 
@@ -2114,10 +2114,10 @@ fn (ln mut lowering&) errConvert(v mir.Operand, from types.TypeId, to types.Type
     code := ln.into(mir.I32T, mir.Rvalue.Recode(ln.errCodeOf(x, from), t.ErrValItems(from), t.ErrValItems(to)), sp)
     if not t.ErrCarries(to): return code
     res := ln.temp(to, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(mir.Operand.Const(to, 0))))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(res), mir.Rvalue.Use(mir.Operand.Const(to, 0))))
     rp := pl(mir.Base.Local(res))
     ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(rp, mir.Proj.Field(0))), mir.Rvalue.Use(code)))
-    if not t.ErrCarries(from): return mir.Operand.Copy(mir.L(res))
+    if not t.ErrCarries(from): return mir.Operand.Copy(mir.Lvalue.L(res))
     fs := t.Items(t.ErrValItems(from))
     ts := t.Items(t.ErrValItems(to))
     for i in range fs.Len() {
@@ -2135,14 +2135,14 @@ fn (ln mut lowering&) errConvert(v mir.Operand, from types.TypeId, to types.Type
             ln.start(no)
         }
     }
-    return mir.Operand.Copy(mir.L(res))
+    return mir.Operand.Copy(mir.Lvalue.L(res))
 }
 
 # payload v (a payload enum's value, of type pt) pushed: a record on top of the payload stack, v's own copy built in its
 # region, the record pointing at it
 fn (ln mut lowering&) errPush(v mir.Operand, pt types.TypeId, sp source.Span) {
     h := ln.temp(mir.I64T, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(h), mir.Rvalue.ErrPush))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), mir.Rvalue.ErrPush))
     at := mir.ScopeRef.Held(h)
     # (the copy's calls placed beside the raise, never at its span, which the trace reads as the raise's own - S18d)
     own := ln.ownCopyOf(v, pt, at, source.Span(sp.Start + 1, sp.End))
@@ -2157,7 +2157,7 @@ fn (ln mut lowering&) errCaught(v mir.Operand, ty types.TypeId, sp source.Span) 
     t := ln.T
     x := ln.local(v, ty, sp)
     res := ln.temp(ty, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(mir.Operand.Const(ty, 0))))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(res), mir.Rvalue.Use(mir.Operand.Const(ty, 0))))
     code := ln.into(mir.I32T, mir.Rvalue.Use(ln.errCodeOf(x, ty)), sp)
     rp := pl(mir.Base.Local(res))
     ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(rp, mir.Proj.Field(0))), mir.Rvalue.Use(code)))
@@ -2176,7 +2176,7 @@ fn (ln mut lowering&) errCaught(v mir.Operand, ty types.TypeId, sp source.Span) 
         ln.goto(no)
         ln.start(no)
     }
-    return mir.Operand.Copy(mir.L(res))
+    return mir.Operand.Copy(mir.Lvalue.L(res))
 }
 
 # text as constant data (T25d), a String&
@@ -2285,11 +2285,11 @@ fn (ln mut lowering&) toClause(ti I64, ci I64, code mir.Operand, from types.List
         if ln.T.ErrCarries(bt) {
             # T19b: its code here; the clause's block gives it its payload and pops the record (check's caughtPayload)
             named = true
-            ln.emit(mir.Stmt.Assign(cl.Sp, mir.L(bl), mir.Rvalue.Use(mir.Operand.Const(bt, 0))))
+            ln.emit(mir.Stmt.Assign(cl.Sp, mir.Lvalue.L(bl), mir.Rvalue.Use(mir.Operand.Const(bt, 0))))
             at := ln.mk(ln.with(pl(mir.Base.Local(bl)), mir.Proj.Field(0)))
             ln.emit(mir.Stmt.Assign(cl.Sp, at, mir.Rvalue.Recode(code, from, cl.CaughtSet)))
         } else {
-            ln.emit(mir.Stmt.Assign(cl.Sp, mir.L(bl), mir.Rvalue.Recode(code, from, cl.CaughtSet)))
+            ln.emit(mir.Stmt.Assign(cl.Sp, mir.Lvalue.L(bl), mir.Rvalue.Recode(code, from, cl.CaughtSet)))
         }
     }
     # T19b: a clause taking an error whose type carries a payload, and naming none, pops its record
@@ -5695,7 +5695,7 @@ fn (ln mut lowering&) hashErr(v mir.Operand, ty types.TypeId, sp source.Span) mi
         ln.end(mir.Term.Branch(hit, yes, no))
         ln.start(yes)
         h := ln.mix(ln.prim(typed.PrimOp.BitXor, mir.I64T, mir.Operand[ln.constI64(key), w], sp), sp)
-        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(h)))
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(res), mir.Rvalue.Use(h)))
         # T19b: and what its payload holds - hashing follows equality (E10b)
         pt := p.PayloadOf(t.ErrOf(es[j]))
         if pt != types.UnknownT {

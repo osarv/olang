@@ -90,7 +90,7 @@ fn IP.IPv4(a U8, b U8, c U8, d U8) IP {
 }
 
 # the IPv6 address of sixteen bytes, in order - failing with ADDRESS for another number of them
-fn IPv6(b Array<U8>&) IP ? Error.Address {
+fn IP.IPv6(b Array<U8>&) IP ? Error.Address {
     if b.Len() != 16 { error Error.Address($b) }
     ip := IP(true)
     for i in range 16 { ip.bytes[i] = b[i] }
@@ -135,7 +135,7 @@ fn decimalAt(t String&, at I64, most I64) I64, I64 ? noAddress {
     return v, i
 }
 
-fn parse4(t String&) IP ? noAddress {
+fn IP.parse4(t String&) IP ? noAddress {
     ip := IP()
     at I64 = 0
     for k in range 4 {
@@ -160,7 +160,7 @@ fn hexDigit(c Char) I64 {
 
 # RFC 4291's text: eight groups of up to four hex digits, "::" standing for one run of zero groups, the last two groups
 # optionally written as an IPv4 address ("::ffff:1.2.3.4")
-fn parse6(t String&) IP ? noAddress {
+fn IP.parse6(t String&) IP ? noAddress {
     groups := Array<I64>(8)
     n I64 = 0
     gap I64 = -1                                  # where "::" stands, in groups
@@ -176,7 +176,7 @@ fn parse6(t String&) IP ? noAddress {
         colon := try t[at:].FindByte(':') catch default -1
         if dot >= 0 and (colon < 0 or dot < colon) {
             if n > 6 { error noAddress }
-            v4 := try parse4(t[at:])
+            v4 := try IP.parse4(t[at:])
             groups[n] = I64(v4.bytes[0]) << 8 | I64(v4.bytes[1])
             groups[n + 1] = I64(v4.bytes[2]) << 8 | I64(v4.bytes[3])
             n += 2
@@ -222,8 +222,8 @@ fn IP.Parse(t String&) IP ? Error.Address {
     if t == "localhost" { return IP.Loopback4() }
     found := true
     try t.FindByte(':') catch { found = false }
-    if found { return try parse6(t) catch noAddress { error Error.Address(t) } }
-    return try parse4(t) catch noAddress { error Error.Address(t) }
+    if found { return try IP.parse6(t) catch noAddress { error Error.Address(t) } }
+    return try IP.parse4(t) catch noAddress { error Error.Address(t) }
 }
 
 # how "$" renders an IP: dotted decimal, or RFC 5952's IPv6 text - lowercase, leading zeros dropped, the longest run of
@@ -268,15 +268,15 @@ type Addr struct(host IP, port U16) {
 }
 
 # "host:port" - an IPv6 host in brackets, "[::1]:8080" - read into an Addr, failing with ADDRESS for anything else
-fn ParseAddr(t String&) Addr ? Error.Address {
-    return try hostPort(t) catch noAddress { error Error.Address(t) }
+fn Addr.Parse(t String&) Addr ? Error.Address {
+    return try Addr.hostPort(t) catch noAddress { error Error.Address(t) }
 }
 
-fn hostPort(t String&) Addr ? noAddress {
+fn Addr.hostPort(t String&) Addr ? noAddress {
     if t.Len() > 0 and t[0] == '[' {
         shut := try t.FindByte(']') catch { error noAddress }
         if shut + 1 >= t.Len() or t[shut + 1] != ':' { error noAddress }
-        host := try parse6(t[1:shut])
+        host := try IP.parse6(t[1:shut])
         port, end := try decimalAt(t, shut + 2, 65535)
         if end != t.Len() { error noAddress }
         return Addr(host, U16(port))
@@ -396,8 +396,8 @@ fn Lookup(host String&) Array<IP> ? Error.UnknownHost, Error.Unreachable, Error.
 
 # "host:port" - a name or an address, an IPv6 one in brackets - read into the Addr of the host's first address, failing
 # with ADDRESS for text of another shape and as Lookup does for a name with no address
-fn Resolve(t String&) Addr ? Error.Address, Error.UnknownHost, Error.Unreachable, Error.Failed {
-    if t.Len() > 0 and t[0] == '[' { return try ParseAddr(t) }
+fn Addr.Resolve(t String&) Addr ? Error.Address, Error.UnknownHost, Error.Unreachable, Error.Failed {
+    if t.Len() > 0 and t[0] == '[' { return try Addr.Parse(t) }
     colon := try t.FindLast(":") catch { error Error.Address(t) }
     port, end := try decimalAt(t, colon + 1, 65535) catch noAddress { error Error.Address(t) }
     if end != t.Len() { error Error.Address(t) }
@@ -596,7 +596,7 @@ test "addresses are read and written as text" {
 
 # what refusing t says ($e: this file the root here, so unqualified)
 fn refused(t String&) String {
-    try ParseAddr(t) catch Error e { return $e }
+    try Addr.Parse(t) catch Error e { return $e }
     return "ok"
 }
 
@@ -606,7 +606,7 @@ test Error "an address refused carries the text, a name not found the name" {
     assert RefusedBaked == "Error.Address(\"::1:80\")"
     assert refused("1.2.3.4:x") == "Error.Address(\"1.2.3.4:x\")" and refused("[::1]:443") == "ok"
     try ParseIP("256.1.1.1") catch Error.Address e { assert e.text == "256.1.1.1" }
-    try IPv6(U8[1, 2]) catch Error.Address e { assert e.text == "U8[1, 2]" }
+    try IP.IPv6(U8[1, 2]) catch Error.Address e { assert e.text == "U8[1, 2]" }
     try Lookup("") catch Error.UnknownHost e { assert e.host == "" } catch { unreachable "an empty name" }
 }
 

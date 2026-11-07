@@ -365,7 +365,7 @@ fn (j Json&) Hash() I64 {
 # the value the JSON text holds: one value, with nothing but whitespace around it (a byte order mark before it is
 # ignored). Fails with the Error that says why the text is not JSON, carrying where reading stopped - the start of the
 # problem, or the end of the text
-fn Parse(text String&) Json& ? Error {
+fn Json.Parse(text String&) Json& ? Error {
     r mut reader& = reader(text)
     try r.run()
     return r.vals[0]
@@ -945,7 +945,7 @@ fn keyFor<F>(f F, keys Naming) String {
 # Fails with what Parse fails with, with Error.Missing and Error.WrongKind where the text does not fit
 # the type, and with what a constructor fails with
 fn Decode<T>(text String&, keys Naming = Naming.Exact) T ? {
-    j := try Parse(text)
+    j := try Json.Parse(text)
     return try From<T>(j, keys)
 }
 
@@ -1302,7 +1302,7 @@ if TestBuild {
 
     # why text is not JSON, as "WORD LINE:COL", or "ok"
     fn problem(text String&) String& {
-        try Parse(text) catch Error.Unexpected e { return "UNEXPECTED " $e.line ":" $e.col }
+        try Json.Parse(text) catch Error.Unexpected e { return "UNEXPECTED " $e.line ":" $e.col }
             catch Error.Unterminated e { return "UNTERMINATED " $e.line ":" $e.col }
             catch Error.BadEscape e { return "BAD_ESCAPE " $e.line ":" $e.col }
             catch Error.BadNumber e { return "BAD_NUMBER " $e.line ":" $e.col }
@@ -1548,11 +1548,11 @@ if TestBuild {
 
     test "the fixture file" {
         text := try os.ReadFile("checks/fixtures/json/sample.json")
-        doc := try Parse(text)
+        doc := try Json.Parse(text)
         try fixture(doc)
         # T19b: where a text stops being JSON is carried by the error
-        assert (try $Parse("{\"a\":\n  [1, 2,]}") catch Error e default $e) == "Error.Unexpected(2, 9)"
-        assert (try Parse(Encode(doc, "  "))) == doc
+        assert (try $Json.Parse("{\"a\":\n  [1, 2,]}") catch Error e default $e) == "Error.Unexpected(2, 9)"
+        assert (try Json.Parse(Encode(doc, "  "))) == doc
     }
 
     # K1: Parse and Encode run while compiling - this global is baked, and agrees with the same work done at run time

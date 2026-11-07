@@ -300,7 +300,7 @@ fn value<V>(f String&) V ? badValue {
         }
         case _ {
             if V.Kind == TypeKind.Integer {
-                return V(try f.ParseAs<V.Base>() catch ParseError { error badValue })
+                return V(try V.Base.Parse(f) catch ParseError { error badValue })
             } else {
                 assert V.Kind == TypeKind.Float, "a csv column is text, a Char, a Bool or a number"
                 return V(V.Base(try f.ParseFloat() catch ParseError { error badValue }))
