@@ -1060,7 +1060,7 @@ fn (s mut Scoper&) bndRecs(x typed.Expr?&, out mut Vec<fnRec>&) {
                 case typed.FnVal.Adapter(cb, _, _) { out.Push(fnRec(I64(cb), Vec<Term>(), true)) }
             }
         }
-        case typed.Expr.Read(_, _, p, _) {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p), typed.Expr.Borrow(_, _, p) {
             l := wholeLocal(p)
             if l < 0 or s.bndSeen.Has(l) { return }
             s.bndSeen.Put(l, true)
@@ -1369,7 +1369,7 @@ fn (s mut Scoper&) addRecs(out mut fnRecs&, x typed.Expr?&) {
                 }
             }
         }
-        case typed.Expr.Read(_, _, p, _) {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p), typed.Expr.Borrow(_, _, p) {
             l := wholeLocal(p)
             if l < 0 {
                 out.Full = false
