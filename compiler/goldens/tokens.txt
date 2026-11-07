@@ -1956,7 +1956,7 @@ e5057fd9bd6edfb6 1de60a99a8d8cef1 compiler/names.olang
 b0ce9a097f48ce1f 81b6e44030d0209a compiler/profile.olang
 672b63f9a00d870a 2f96a413518788c8 compiler/runtime.olang
 68b3e4897b8f7683 d070d05805a87a92 compiler/scan.olang
-468f1d64003b0793 75b5c16eee87b549 compiler/scope.olang
+90d5a473be4bdca7 09f8f36df336d31a compiler/scope.olang
 0a05e752605c64f6 8a35c1bc5d91b473 compiler/session.olang
 f6975e0c80778183 a143b4a2b7369ed5 compiler/source.olang
 e8eb3d2e60f7bb31 3ca34f650732d326 compiler/target.olang

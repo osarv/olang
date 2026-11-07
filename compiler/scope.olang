@@ -394,12 +394,12 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     viewOf Vec<I64>                        # by local: the local whose storage it is a view of (O27), -1 none
     fitTarget I64 = -1                     # the local whose claim the slot of the fit judged is, -1 none
     promoteLocal I64 = -1                  # the local the temporary judged next is declared as (a Promote), -1 none
-    caseLocal I64 = -1                     # ... and the local an enum case judged next is the whole value of (T17c, C2)
-    caseStor Bool = false                  # ... its storage lifted with it (an argument whose local decides where it is built:
-    casePart Bool = false                  # as propose lifts that local) - read for a part of it
-    fitStor Bool = false                   # the same of the fit judged (fitTarget's)
-    slotCall I64 = -1                      # the call whose value a by-value holder's slot takes as it is (O15), -1 none
+    caseLocal I64 = -1                     # ... and the local an enum case judged next is the whole value of (T17c, C2),
+    caseStor Bool = false                  # its storage lifted with it where propose would take it,
+    casePart Bool = false                  # and read for a part of it (caseFrom)
+    fitStor Bool = false                   # the same of the fit judged, for fitTarget
     fitPart Bool = false
+    slotCall I64 = -1                      # the call whose value a by-value holder's slot takes as it is (O15), -1 none
     obligeView Bool = false                # the obligation recorded next keeps a view of storage, not a whole value (O27)
     # the field inference (2.6): quiet judgings of the program collecting the declarations whose fields a refusal needs
     # given a binding of their own, by declaration; what was promoted and given back, by (declaration, field)
@@ -7413,10 +7413,6 @@ fn (s mut Scoper&) isHeldFresh(x typed.Expr&) Bool {
     return false
 }
 
-# the term the callee's obligations require scope variable v to live in: a bound one it must outlive or equal (O18b);
-# None where none does. A callee of the component being judged gives what the rounds so far found: its obligations only
-# grow, so the first relation naming v - what this reads - is fixed once found, and the rounds still reach their fixed
-# point before anything is said (7.2)
 # (C2) an enum case built where argument x's local decides: that local proposed as propose(x) would propose it
 fn (s mut Scoper&) caseFrom(x typed.Expr&) {
     s.caseLocal = s.claimRoot(x)
@@ -7438,6 +7434,10 @@ fn (s mut Scoper&) bindingArg(callee I64, v I64, firstArg Array<I64>&) I64 {
     return -1
 }
 
+# the term the callee's obligations require scope variable v to live in: a bound one it must outlive or equal (O18b);
+# None where none does. A callee of the component being judged gives what the rounds so far found: its obligations only
+# grow, so the first relation naming v - what this reads - is fixed once found, and the rounds still reach their fixed
+# point before anything is said (7.2)
 fn (s mut Scoper&) requiredBy(callee I64, v I64, beta Array<Term>&) Term {
     if callee < 0 or not (s.sums[callee].Done or s.sums[callee].Judging) { return Term.None }
     for r in s.sums[callee].Rels {
