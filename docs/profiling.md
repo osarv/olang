@@ -159,5 +159,5 @@ said once with how many times it was made. A remark on a line the final code no 
 computed while compiling) is listed after the code. A function with no code of its own says so: inlined at every call
 - named, and where that is one function its code is shown in its place (`main` is inlined into the program's entry,
 `startup`) - or never called. What costs: a listing build compiles as a plain build does, its remarks some megabytes
-beside the objects (17 MB for the fixture, std included); again with nothing changed, ~0.8 s - the link, and reading
-the remarks.
+beside the objects (17 MB for the fixture, std included); asked again with nothing changed, 0.47 s - a stamp of what
+the link was given skips it. The compiler itself: ~160 s, ~130 of them its ThinLTO link; asked again, 21 s.

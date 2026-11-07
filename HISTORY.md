@@ -29294,9 +29294,11 @@ loop-load-elim, regalloc, prologepilog. Left out: asm-printer (its InstructionMi
 counts instructions itself) and passes a reader of one function rarely asks about.
 
 **Measured.** The fixture (checks/fixtures/listing/prog.olang): a listing build from nothing 3.45 s against a plain
-build's 3.17 s, 17 MB of remarks for it and std; asked again, 0.8 s (the link and reading the remarks). The compiler
-itself (`explain -asm compiler/olang.olang drive`, ThinLTO, 174 tasks): 157 s and 6.3 GB from a clean build directory -
-the link, as a program's link of it takes, and ~1.2 GB of remarks read; LISTING_REPEAT.
+build's 3.17 s, 17 MB of remarks for it and std; asked again, 0.47 s (the stamp: nothing linked). The compiler
+itself (`explain -asm compiler/olang.olang drive`, ThinLTO, 174 tasks): 157-185 s and 5.7-6.3 GB where its objects are to
+compile or a module changed - 130-150 s of it the link, as a program's link of it takes (no ThinLTO cache: a task taken
+from the cache writes no remarks), ~15 s reading its ~1.2 GB of remarks; asked again of the unchanged program, 20.7 s
+and 3.8 GB (the front end and the remarks - the stamp skips the link), the same listing.
 
 **Found on the way, fixed.** A generator's frame allocation (`%cmem0 = call ptr @__olang_scope_alloc_a`, emit's
 coroutine prologue) carried no `!dbg`; with debug information in the function, LLVM's verifier calls that invalid and
