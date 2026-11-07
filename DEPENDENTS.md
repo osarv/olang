@@ -57,6 +57,7 @@ odd-width paths (`tests/intsweep.olang`); `tools/precedence_migrate.olang` if pr
 | `compiler/olang.olang`: `ModeWords`, `ModeUsage`, `ModeWhat`, `OptWords`, `OptValues`, `OptModes`, `OptWhat` | the one table; `olang help` and the unknown/not-for-this-mode diagnostics read it |
 | `SPEC.md` B1 grammar (`mode-word`, `option`) and its table (option, modes, rule) **[checked]** | the normative list |
 | every `olang MODE -option` written in a README, SPEC.md or `editors/` **[checked]** | an unknown option or one the mode does not take is reported |
+| `compiler/doc.olang` (`Deprecation`, `DeprecatedNames`) / `api.olang` / `session.olang` (`DeprecatedUses`, `AddDep`) / `lsp.olang` | the `Deprecated:` doc-comment convention (L4b): doc's mark, hover, completion tag, use hints, api's `deprecated` row; SPEC L4b/B14/B15/B21, `checks` scenario `apicaps` |
 | `compiler/mcp.olang` / `lsp.olang` / `session.olang` | when the mode runs the analysis (`-target`, `-define`, `-update` pass through) |
 | `compiler/build.olang`, `target.olang` | the option's effect; the object-name hash if it changes code (`.quick`, `.debug`, B4) |
 | `tools/cli_words.olang` | rewrites old spellings; add to it only if an option is renamed |

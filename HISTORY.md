@@ -29231,3 +29231,28 @@ nothing the seed's compiler cannot build - and the suite); the next commit only 
 and moves two functions above another's comment (its tokens, tree and layout goldens recaptured), and `make quick`
 passed on it, then `make scopesan` and `make scopefuzz` (100 programs, 474 scenarios, 726 refused by the compiler, 0
 findings).
+
+## Deprecation as a doc-comment convention (L4b, QCW, 2026-11-07)
+
+The user: "add deprecation only as a comment and kind of surrounding tools thing. It should not break the compiler. I
+think the main way you would deprecate things in OLang is just removing them between versions." Built as a reading of
+the doc comments (L4b) that tools do; scanner, parser, checker, lowering and the evaluator are untouched.
+
+- **The convention.** A paragraph of a doc comment (also a trailing comment of a member or global) beginning
+  `Deprecated:` is the note (`doc.Deprecation`, one line, the paragraph's lines joined). A line inside another paragraph
+  that happens to begin so is no note.
+- **doc.** Text: `   # deprecated` ends the item's first line (the second line of an effects-bearing signature is a comment
+  already, so the mark stands on the first). HTML: class `dep` (struck through) on the listing and the index entry, the
+  note paragraph bold. `mcp`'s `doc` prints the same text.
+- **lsp.** Hover already carried the doc comment, so the note shows with it. Completion: `Items.AddDep` writes
+  `"tags":[1]` for functions, types, globals, fields and methods (`Analysis.deprecatedAt`, which guards modules without
+  a source). Uses: `Analysis.DeprecatedUses` collects the words of the declaration lines that carry a note
+  (`doc.DeprecatedNames`, over every module's text), finds those words in the open file outside comments, and keeps
+  the ones the resolver's target resolves to a noted declaration (`noteOf`) other than on the declaration's own line;
+  published with the checker's diagnostics as severity 4, tags [2]. **Found on the way (mine, own bug):** a first
+  version asked `Lookup`, which needs the scope pass the first publication runs before; the null reached it - the
+  resolver's target needs none.
+- **api.** The per-item line gained a fourth tab-separated field; a row `deprecated` for an item deprecated in NEW and
+  not in OLD, `breaks` false, the status unaffected; a removed item stays breaking.
+- **Tests.** doc: the convention and the marks; lsp: hover, completion tag and the Hint on a scripted session; checks
+  `apicaps`: `api old dep` gives the row and status 0 (fixture `checks/fixtures/apicaps/dep`).

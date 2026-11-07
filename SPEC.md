@@ -117,7 +117,10 @@ word or a global with no comment above it takes the line comment that ends its o
 what follows. A module's documentation is the comment lines that begin its file - after a first line beginning `#!` -
 when they are no declaration's. The text is each line with its `#` and one space after it removed; a line holding `#`
 alone is a paragraph break. A block comment (L4a) is never documentation. `doc` prints it (B14) and `lsp` shows it
-(B15).
+(B15). A paragraph of a doc comment beginning `Deprecated:` marks its declaration **deprecated**: a convention for tools
+alone - the checker, the diagnostics (all of them errors, B11), the builds and the evaluator give it no meaning. `doc`
+marks the item (B14), `lsp` hovers its note, tags its completion and hints at its uses (B15), `mcp`'s `doc` shows what
+`doc` shows (B16), and `api` lists an item newly marked (B21). The usual way to deprecate is to remove between versions.
 
 **L5.** A newline (`'\n'`) is otherwise insignificant except for L18.
 
@@ -7757,7 +7760,7 @@ formatter is part of the compiler: `format` lays files out as the compiler that 
 
 **B14.** `doc FILE [NAME]` prints the documentation of the module `FILE` (L4b): the module's own, then each of its
 exported top-level items - a function, a type, an error type, a global - in the order the file declares them, each with
-its signature as `explain FILE NAME` gives it (B11b) and its doc comment beneath, indented; a type's fields, cases,
+its signature as `explain FILE NAME` gives it (B11b) and its doc comment beneath, indented, a deprecated item (L4b) with `# deprecated` ending its first line (in HTML its listing struck through and the note in bold); a type's fields, cases,
 words and methods each with their own, and each item's examples - the tests of its file naming it (B7a), by
 description, their bodies beneath - after its doc comment. A type has one constructor; the other ways to make a value are ordinary functions of the type's module, and a listing groups them under the type as its *builders* - after its fields, before its methods, under a `builders` line, and no longer among the module's plain functions: an exported top-level function with one result (a function with several is none) that is the type, a reference to it, or an instance of it, where the type is a struct, an enum or a type declared over another and is declared by the function's own module (the errors it may fail with do not matter). A type is listed with its builders only when the type is itself listed. `explain FILE Type` lists them too, one line each, and the language server's hover on a type shows them. With `NAME` (a top-level item or `Type.Method`, exported or not) it prints that
 item alone. The program `FILE` is the root of is checked first; one with errors reports them instead. `doc -html DIR
@@ -7772,11 +7775,14 @@ more there are, the definition of a name,
 a document's symbols, completion of a module's members and of fields and methods after `.`, and formatting (B13). Each
 open file is checked as the root of its program, again after every edit and in every open file importing it. A file
 that does not parse has its diagnostics and answers nothing else; no request ends the server but `shutdown` and
-`exit`.
+`exit`. For a deprecated item (L4b) the hover shows the note with the rest of the doc comment, its completion item
+carries the tag `Deprecated` (`"tags":[1]`), and each use of it in an open file is published as a diagnostic of severity
+Hint (4) tagged `Deprecated` (`"tags":[2]`) carrying the note - the only diagnostic published that is not an error; the
+compiler never prints it.
 
 **B16.** `mcp` serves the Model Context Protocol on the standard input and output (JSON-RPC 2.0, one message a line)
 with the tools `check` (a file's diagnostics, each its file, line, column, rule and message), `explain` (B11b),
-`doc` (B14), `format` (B13, the formatted text, the file unchanged) and `test` (B3a, each test's outcome).
+`doc` (B14, deprecated items marked as there), `format` (B13, the formatted text, the file unchanged) and `test` (B3a, each test's outcome).
 
 **B17.** `fix <file or directory> ...` rewrites code written in an older language to the language of today, by running
 the migration tools the language's changes came with (`tools/`, beside the compiler's `std/`; `OLANG_TOOLS` names another
@@ -7889,7 +7895,7 @@ file below a directory, its `testdata` and hidden directories aside - gained, lo
 where the command runs in it). Each side's module is checked as `doc` checks a program (B14) - with this compiler and
 its standard library - and its exported items and members (functions, types, their constructors, fields, cases, words,
 methods and builders, globals, the traits a type meets) are compared by name and by the signature B11b gives them. A
-row is written per change, `breaking` or `ok`, and the count of breaking changes last; the status is 0 where nothing
+row is written per change, `breaking`, `ok` or - for an item deprecated (L4b) in `NEW` and not in `OLD` - `deprecated`, which breaks nothing and leaves the status alone, and the count of breaking changes last; the status is 0 where nothing
 breaks, 1 where something does, 2 where a side is neither a directory nor a commit, or a module on it does not check.
 What breaks an importer: a name removed; a signature changed - its parameters, results or receiver, a field's type, a
 constructor's parameters, a global's type; an error set grown (a complete `catch` or match of the old set no longer

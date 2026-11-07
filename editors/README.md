@@ -6,7 +6,8 @@ What the compiler offers tools, and the editor support built on it:
   compiler reports them, hover (an item's signature as `olang explain` gives it - with its effects, a generic's needs and
   whether it can be a value - and its doc comment), go to
   definition, document symbols, completion after `.` (a module's names, a value's fields and methods) and of the names
-  in scope, and formatting (`olang format`). Any LSP client can use it.
+  in scope, and formatting (`olang format`); items whose doc comment has a `Deprecated:` paragraph get a completion tag
+  and their uses a Hint diagnostic tagged Deprecated (editors strike the name through). Any LSP client can use it.
 - `olang mcp` (B16) - a Model Context Protocol server on the standard input and output, for agents: the tools `check`,
   `explain`, `doc`, `format` and `test`.
 - `olang doc FILE [NAME]`, `olang doc -html DIR [FILE...]` (B14) - a module's documentation, its doc comments (L4b:

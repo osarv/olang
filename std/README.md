@@ -60,6 +60,13 @@ The prelude is the exception to the rule, since its names are bare everywhere (`
 `ArrayError`, `NumberError`, `CaseError`, `ArgumentError` keep their prefix) - and so it must never declare a plain `Error`, which would collide with
 every module's own. `tools/stutter_rename.olang` renames the old names in other code (`olang fix` runs it).
 
+## Deprecation
+
+std deprecates by removing, between versions: `olang api OLD NEW std` says what breaks, and `olang fix` carries a rename
+or a move in its migration tools. A doc comment paragraph beginning `Deprecated:` (SPEC L4b) is a courtesy before a
+removal - `olang doc`, the language server and `olang api` show it, the compiler ignores it - never a state an item
+stays in.
+
 ## Subfolders
 
 - `prelude/` - the prelude: every file here is loaded before every program, and its types and methods are visible
