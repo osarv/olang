@@ -2164,7 +2164,9 @@ loop around the copy but not around the local's declaration count as after), no 
 other part of the same value made - mentions the local (`peek(t, t)` lends `t` beside its copy, `part(t.a, t)` reads
 in it, `t.Peek(t)` is its receiver: those stay alive for the very call the copy is given to), the local's storage is its own - no view
 held in place of its copy (D9h) - named by no other local, escaping nowhere, never assigned whole, in no region early
-freeing made (O8d), and lives at least as long as where the copy would be built; a constructor's instance viewing only
+freeing made (O8d), and lives at least as long as where the copy would be built - a local whose copy at its last
+mention goes into storage outliving its block is built there (O28), so `rows.Push(rec)` in a loop moves each turn's
+`rec` into `rows` rather than copying it out of the turn; a constructor's instance viewing only
 such moved locals is its own (no D9h copy where it is kept). Unobservable: the evaluator copies and agrees. Neither
 D9h's left-out copies nor D9i's moves apply to a value whose copy runs a declared Copy (E31d), which may make what the
 value refers to anew: it is copied wherever the program copies it. A copy D9h's caller makes of a view a callee handed
@@ -6592,7 +6594,11 @@ of them allow, and every judgment of this section is then made of it. So:
 
 - a local lives in its block unless what it holds is kept longer - stored into a longer-lived place, returned (O26a),
   handed to a task (P2), given to a call whose obligations need it to outlive an argument - and then where it is kept,
-  built there from the start, not copied there;
+  built there from the start, not copied there. The same holds for the local itself: one kept by reference past its
+  block or loop turn (lent to a callee keeping a reference to it, O17; borrowed by a reference kept longer), or copied
+  whole at its last mention into storage that outlives its block (moved there, D9i), is built where it is kept - a new
+  value each time its declaration runs, so a loop's turns never share one; its memory is the kept scope's on every
+  turn, kept or not (the placement is the program's, not a turn's);
 - a call's result is built where it is put (O18a), where its callee's obligations need it (O18c) or, handed back from
   what the callee was given, lives where that does (O13);
 - a constructor field is its instance's, unless the field holds a view of what a reference parameter refers to and an
@@ -6686,9 +6692,12 @@ something in it (through a call cycle too); a lambda only called in the callee's
 which is a call), or made for a callee keeping nothing of it (D16c), keeps nothing. A read-only parameter is no exception: a shallow `mut` field is stored through as surely.
 A value **owning storage** (an array of a run-time length by value, a struct or enum holding one, T7a) lent to a callee
 that keeps a reference to it - an instance holding it (`holder(v)` with `holder struct(v Vec<I64>&)`), a result
-borrowing it - binds the variable where that value's own storage is, never where its parts are: a loop turn's local is
-one slot every turn reuses, so keeping it past the turn is the error C2d names (make it where the instance goes, hold it
-by value in a field, or give a copy); lent to a callee keeping nothing of it, it binds where its parts are.
+borrowing it - binds the variable where that value's own storage is, never where its parts are. A local's own storage
+is placed where what keeps it is (O28): a loop turn's local kept past its turn is built where it is kept, a new value
+each time its declaration runs, so each kept reference names its own turn's value. Where the value's storage cannot be
+placed there - a by-value parameter's, which its caller made - keeping it is the error C2d names (make it where the
+instance goes, hold it by value in a field, or give a copy); lent to a callee keeping nothing of it, it binds where its
+parts are.
 Any other argument that is not already reference-shaped binds nothing: it is a temporary (O6), and the tag on
 its parameter is where it is about to be *allocated*, not a fact about where it already lives. Where it is
 allocated is decided as for any temporary (O18a).

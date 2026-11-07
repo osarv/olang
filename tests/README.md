@@ -44,6 +44,8 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `drops.olang` - destructors run where the holder lets go (O15): a by-value variable's as its block is left, a
   parameter's at the callee's end unless handed on, a holder's parts, a store over a place, a variable's Destroy(); the
   whole order decided while compiling beside the run time.
+- `kept.olang` - a local kept past its block or loop turn is built where it is kept (O28, O17, D9i): each turn's value its
+  own, read back after an arena churn; decided while compiling beside the run time.
 
 Imports are relative to the importing file. A module's identity is its path from the
 working directory (M22), so these are `tests/shared`, `tests/geom/rect` and so on.

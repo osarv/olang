@@ -1137,7 +1137,9 @@ fn (ln mut lowering&) placeStorage(p typed.Lvalue&) mir.ScopeRef {
 # out of the body - handed back, held by what is handed back, kept by a callee, captured: given the program's scope,
 # as everything the stand-in builds is, rather than the frame a return closes (the evaluator refused such a program as
 # reading closed storage, where the run time - placed by the scope pass - reads it; bulk review 7, found with F4).
-# EscHard and a reference-holding result's Ret only: a read-only reference given a call is no reason to move it
+# EscHard, a reference-holding result's Ret, and a lend - read-only or writable - to a body that may keep a reference
+# to it (item 17: the run time builds such a local where it is kept, a new value each turn, and the evaluator's frame
+# slot, one storage every turn wrote, gave each kept reference the last turn's value)
 fn (ln mut lowering&) standInAway() Array<Bool> {
     b := ln.B
     out := Array<Bool>(b.Locals.Len(), false)
@@ -1149,7 +1151,7 @@ fn (ln mut lowering&) standInAway() Array<Bool> {
         # (a holder of a value with destructors keeps its frame: one flowing out is refused while compiling all the
         # same, K2c, and a task's borrow of one in a join block - EscHard - must not move its drop)
         if l.Kind != typed.LocalKind.Var or ln.T.IsRef(l.Ty) or ln.T.NeedsDrop(l.Ty): continue
-        out[i] = u.EscHard[i] or (u.Ret[i] and refs)
+        out[i] = ln.escapes(u, i) or not ln.lendsKeep(u, i) or (u.Ret[i] and refs)
     }
     return out
 }

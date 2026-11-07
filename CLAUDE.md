@@ -1278,6 +1278,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   of new values and constants passed as an argument is a temporary, built where the parameter's scope is bound - for a
   constructor, with the instance (2026-10-24, uafcc). A reference or a function value a returned lambda captures flows
   too (bulk reviews 6 F9 and 6b F5): a lambda local so captured flows as returning it would.
+- **A kept local is built where it is kept (O28, O17, D9i; item 17, the user's decision 2026-11-03: "creating it at
+  the scope of the thing we're storing it in"; built 2026-11-07).** A value local kept by reference past its block or
+  loop turn (lent to a callee keeping a reference to it, borrowed by a reference kept longer), or copied whole at its
+  last mention into storage outliving its block (`rows.Push(rec)`, then moved, D9i), has its own storage placed where
+  it is kept (`plan.Stored`, lowering's `homeKept`): a new value each time its declaration runs, so a loop's kept
+  references each name their own turn's value - bulk review 6 F3's refusal gone. Only a by-value parameter's storage
+  (its caller's) stays C2d's error. The placement is static: the local is built there on every turn, kept or not (~16
+  bytes a turn for a 16-byte struct; ~620 for a Vec, its buffer's early-freeing region - a recorded limit). os.Args'
+  per-argument copy went with it (`promotedCopy`). The evaluator's stand-in placement homes such a local in the program's
+  scope (it had read the last turn's value). tests/kept.olang.
 - **Lending (O17, O17a, O17b).** A value whose references live elsewhere than its storage is lent only to callees that
   keep nothing in it, read off their bodies; a handle (a struct of one reference) is lent as its reference.
 - **Derived and unknown scopes (O12, O23, O23a).** A field holding a view of what a constructor's reference parameter

@@ -29052,3 +29052,74 @@ function, where the error points.
 **Found on the way, not fixed (pre-existing):** C2d refuses `h HeldTwo = HeldTwo(r, 4)` where `r` is a by-value
 parameter of a unique type holding a `mut` reference (`Res(id, log mut Tally&)`) - the same family as wt-uniq's T17c
 over-rejection (a by-value parameter holding a reference put into an enum case), queued as step 7 of the week's plan.
+
+## A kept local built where it is kept; drop flags in effects; three over-rejections (2026-11-07, wt-kept)
+
+The round after bulk review 7's fixes: item 17 (the user's decision of 2026-11-03, "If we store something that we create
+in a loop ... we should be creating it at the scope of the thing we're storing it in. Basically just the already
+existing scoping rules"), drop flags in the effect summaries (LIST.md A5), and three over-rejections found by wt-uniq and
+bulk review 7 (C1, C2, `HeldTwo(r, 4)`). Built in wt-kept by two agents - the first was stopped by a container restart
+after committing item 17's code; the second checked it, gave it its records and the evaluator's agreement, and did the
+rest.
+
+**Item 17: a local kept past its block or loop turn is built where it is kept (O28, O17, D9i).** Until now the scope
+pass lifted a value local's *parts* where they were kept, but its own storage only to a scope variable or the
+program's (O26a's homes): a local lent whole to a callee keeping a reference to it (`hs.Push(H(p))` with `H struct(p
+P&)`), or borrowed by a reference kept longer, stayed in its frame slot - one slot every turn of a loop reuses - so
+every kept reference would have named the last turn's value. Bulk review 6 (F3) had made that an error (O17's "binds
+where its own storage is", C2d at the keeping call); the user's decision made it placement instead. **How (the first
+agent's, mine to describe):** (1) `scope.liftLocal` takes the local's own storage with it wherever the lift's term is
+other than its own block - an outer block included (`liftStor`, `plan.Stored`); (2) `lower.homeKept` homes such a
+local's storage in that block's arena from its declaration on - its `Live` makes a new object there each time the
+declaration runs, so a loop's turns never share one; an array of a run-time length keeps its frame slot (its reference
+is the pair naming its elements, which `storageOf` already builds where the plan keeps them), a fixed one moves with
+the rest; (3) a whole local copied at its last mention into storage outliving its block (`rows.Push(rec)`, check's
+`MakeKind.Copy` of a read of it, D9i's candidates - `typed.LastCopies`, the last-use walk moved from lowering to typed
+so both passes ask the same) is lifted to where that copy goes (`scope.liftCopied`), so D9i's "lives at least as long
+as where the copy is built" holds and lowering moves it there instead of copying it out of a turn that closes first;
+(4) a value's own copy, or a conversion of one (`String(chars)`), promoted to a reference of a run-time-length array is
+made where the reference goes (`lower.promotedCopy`), not made and copied there again - os.Args' per-argument copy.
+
+**What the second agent found checking it.** (a) The twenty `checks/cases` programs the commit turned from must-fail into
+run cases each still test what their names say, now as soundness tests: every one runs under `-sanitize` and reads what
+it kept back after an arena churn (`churn()`, three hundred turns writing text and arrays where a closed turn's storage
+would be reused), and the ones that guarded bulk review 6's F3 (`o17ownturn*`) print every kept value, so a placement
+that shared one slot between turns fails their stored output (`recs 12345`, not `55555`). The one case whose point was
+the refusal itself, `c2dnoclone` (a value of a type with no Clone is not told to copy it), was moved onto a by-value
+parameter - storage the caller made, which nothing can build where the instance goes - and still fails as named. (b) The
+commit had no records: SPEC's O17 still said "a loop turn's local is one slot every turn reuses, so keeping it past the
+turn is the error C2d names", O28 and D9i said nothing of it, and neither HISTORY nor CLAUDE.md had it - written now.
+(c) **The compile-time evaluator disagreed with the run time** - checklist step 3. A body lowered while compiling has no
+plan; the stand-in placement homed in the program's scope only a local escaping hard or flowing into a reference-holding
+result, so a local lent read-only or writably to a callee keeping a reference to it kept its frame slot: the evaluator
+gave every kept reference the last turn's value (`vecs(4)`, `nested(3)`, `reassigned(3)` decided false while compiling)
+or read a closed frame ("uses storage after the scope it was made in closed"), where the run time and `interpret`
+(placed by the scope pass, B3e) read each turn's own. `lower.standInAway` now also homes in the program's scope a local
+given to a body that may keep a reference to it - read-only (`escapes`: a `RefAt` whose callee's `keepsNoRef` fails)
+or writably (`lendsKeep`: a `LendAt` whose callee does not `preserve` it) - its `Live` making a new value per
+declaration as the planned placement's does. Conservative (a Vec pushed to in a loop is homed so too; the stand-in
+already built its buffer in the program's scope, so the cost is its record per turn), and only while compiling.
+`tests/kept.olang` holds eight shapes - every turn, some turns, a Vec kept and pushed to after, an array lent whole, an
+outer block that is itself a turn, a local assigned whole after it is kept, a whole local moved into what outlives its
+turn, text a turn builds stored into a result - each read back after a churn at run time and decided by top-level
+asserts while compiling.
+
+**Soundness (for the next bulk review).** The placement only lengthens where a local lives - from its own block to an
+enclosing block's (or a scope variable's, or the program's) - so no reference the scope pass already judged against the
+local can outlive it; it is judged against the new term (`plan.Stored`) wherever it is read. Each execution of the
+declaration makes a new object (`Live` in that arena), so values of different turns are never one storage, which is
+what F3's refusal protected. A holder of a value with destructors so homed lets go where it lives (bulk review 7's F4,
+`escapedHome`), never at its own block's end. `liftCopied` only lifts; whether the copy is then left out stays
+lowering's `movable` decision (D9i's conditions), so where it is not, the local is built longer and copied - memory,
+never safety. The stand-in's extra homes are the program's scope, which outlives everything the evaluator runs.
+
+**Measured.** os.Args (std/os `Args`, a program built at -O3 + LTO by master 654d60d's sources against this round's):
+`Args` 341 -> 320 instructions, three `memcpy` calls -> one (the argument's bytes from argv; the String's own copy of
+them gone), four allocation sites -> three. Memory (`/usr/bin/time`, maximum resident): 2M turns each keeping a
+16-byte struct by reference beside a text temporary - 66 MB (the temporaries reclaimed per turn; 48 MB is what is
+kept, the rest the holder Vec's doubling); the same keeping one turn in a thousand - 34 MB, ~17 bytes a turn: the
+placement is the program's, not a turn's, so the local is built where it is kept on every turn, kept or not (what
+O26a already did for a local returned from a loop body - stated in O28 now). A `Vec<I64>` kept by a holder costs ~620
+bytes a turn, kept or not (its buffer's first growth makes an early-freeing region - a 152-byte header and a chunk -
+in the outer scope, round 8's machinery; a Vec moved into a `Vec<Vec<I64>>` costs ~155): recorded as a limit, the
+region for a buffer nothing lets go of being an optimization for later.
