@@ -1,6 +1,8 @@
 # Errors carrying data
 
-A design note (2026-11-07, for review; nothing built). The user decided on 2026-11-07 to add what was deferred on
+A design note (2026-11-07), built the same day on wt-errdata2 - rounds 1-4 and the three direction questions (14),
+which the user answered yes; HISTORY.md "Errors carrying data" says what was built and where it departs from this note
+(os's `Failed` carries the path only; `ArgumentError.Invalid` carries the condition, section 9.3 superseded). The user decided on 2026-11-07 to add what was deferred on
 2026-10-24: an error word that carries plain data, so `error ParseError.Bad(line, col)` raises one and a catch, a
 match, `$e` and a stored error value can read it - with the success path paying nothing (PRINCIPLES.md 2).
 
@@ -12,6 +14,11 @@ match, `$e` and a stored error value can read it - with the success path paying 
   codes), runtime.ll (the trace and the requirement slot), std's error types and their raisers. Note written in full:
   sections 1-12, the decisions (13) and the direction questions (14). Nothing measured - no build was run (disk and
   memory shared); round 1's first job is the measurements section 12.4 names.
+- 2026-11-07 (wt-errdata2): built - round 1 (declared payload words end to end), round 3 (tasks, joins, export fns),
+  round 4 (std's migration as 10.1, `olang api`'s payload comparison), round 2 (errors raised by name carrying data),
+  methods on error types, `ArgumentError.Invalid(what String)` (the requirement slot removed), and payload patterns in a
+  match on a named error (S13b's items). Measured: ~70 ns a raise, push and pop; memory flat over 3M raises and 1,000
+  failing joins.
 
 ## 1. The answer in brief
 

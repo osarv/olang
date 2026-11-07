@@ -1306,6 +1306,29 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   went, and the cases pinning them became run cases. Since bulk review 3 (mine): Hash is by the error held (its type's
   identity and word), so values `==` across sets hash alike; an error type in a rendering's type is qualified as its
   values are (`Vec<lib.Both>[lib.LibErr.B]`); std/json writes a value as `$` does and reads it back by its word.
+- **Errors carry data (T19b, R3b, T20, D17, S13b; docs/errdata.md, the user's three decisions of 2026-11-07; built
+  2026-11-07, wt-errdata2, details mine).** A word may carry a payload of plain data, `type ParseError error { Bad(line
+  I64, col I64), Eof }` - raised `error ParseError.Bad(l, c)`, written as a value the same way, read where the error is
+  named (`catch ParseError.Bad e { e.line }`, after `if e == ParseError.Bad`), matched as an enum case's payload in a
+  `match` on a named error (`case ParseError.Bad(line, col = 0)`: positions, then names; names bound only in a statement
+  match, a case of one alternative), rendered by `$e`, `!`, `main` and a FAIL line (`ParseError.Bad(3, 7)`), compared and
+  hashed by word and payload. Values only: a field holding a reference, a function value, a unique value or one with
+  destructors is an error. **An error raised by name carries one too** (the user's): `error OutOfRange(index = i, limit
+  = n)`, `error NoKey(key)` - fields named by the raise (a pun, or `name = value`), their types settled by the module's
+  first raise (a reference's referent), later raises held to them. **Methods on error types** (the user's): `fn (e
+  ParseError) Where() String`, declared in the type's module, a named set's value calling only the set's own; `Eq`,
+  `Hash`, `Str`, `Copy` refused (T20 says how an error compares, hashes, renders, copies). **`ArgumentError.Invalid(what
+  String)`** (the user's) carries the failed condition, `"pick: y > x"`; D17's thread-local slot (`__olang_ert_req_*`) is
+  gone. Built (mine): the payload never enters the error union - raising pushes a copy on a per-thread LIFO payload stack
+  (runtime records in regions of their own), `try` passing the error on touches nothing, a clause copies it into its
+  name and pops it, a join keeps the earliest-spawned failure's (the task node's fifth word), an export entry drops it; an
+  error type with no payload words pushes nothing, so the success path, the ABI and every program without payloads are
+  unchanged. Each carrying type has a hidden payload enum (`Name$payload`, kept out of doc/lsp listings); an error value
+  of a set holding one is `{ i32 code, P_1..P_k }` (`types.SetErrRepr`). The evaluator keeps its own stack (baked globals
+  and decided asserts agree, tests/errdata.olang). ~70 ns a raise and pop. std: os `(path String)` on every word, json
+  `(line I64, col I64)` and `Missing(key)` (`json.Position` and the `at` parameters gone), csv, flags, regex `(at I64)`,
+  time `Syntax(at)`, net `Address(text)`/`UnknownHost(host)`, io `Partial(written)`; `olang api` reports a payload added
+  as breaking; explain/doc print a word's payload. Left: `e == W(3, _)` with `_` on an error value.
 - **Errors are errors (the user's rule).** Nothing returns a value beside a flag: iterators fail with `Exhausted`
   (`Next() T ? Exhausted`), `Map.Get`, `Find`, `Pop` fail with their errors.
 - **`main`**: no parameters or result, any error set or none (QU); an escaping error prints `unhandled error: T.W`
@@ -1973,9 +1996,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   hi I64, x I64) [hi >= lo, x >= lo and x <= hi] Bool`,
   `type Percent struct(v I64) [v >= 0 and v <= 100] { v }`. A condition is any `Bool` expression over the parameters and
   what a body reads at its top level - calls, fallible calls, lambdas included. **Checked on entry in every build**, in
-  order: a false one fails the call with the prelude's `ArgumentError.Invalid`, its trace line and `!`'s message naming
-  the function and the condition (`pick: y > x`) - in every build, a build keeping no trace keeping that one line (a
-  thread-local write where the condition is false, cleared where a clause takes the error; 2026-10-25); an error from a call inside a condition leaves as itself. So
+  order: a false one fails the call with the prelude's `ArgumentError.Invalid`, carrying the function and the condition
+  as its payload (`ArgumentError.Invalid("pick: y > x")` in `$e`, `!`'s message and `main`'s, in every build - the
+  thread-local slot of 2026-10-25 went with errors carrying data, 2026-11-07), the trace naming it too; an error from a call inside a condition leaves as itself. So
   `ArgumentError` is in the function's set: a bare `?` infers it, a function with no `?` has it, a written set must list
   it (an error naming it otherwise); every call needs `try`/`catch`/`!`. Decided while compiling where the evaluator can:
   at a call whose arguments are all values it computes a false condition is an error at the call - unless a `catch`
