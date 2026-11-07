@@ -1,0 +1,1 @@
+type Pt struct(X F32, y F32) { X, y }

@@ -1,0 +1,26 @@
+# check: run
+# T7e: Columns<T> and ColumnVec<T> - columns laid out by the compiler, rows read and written through them, row moves
+# done column by column; the same answers while compiling (the baked global, the top-level assert) as at run time
+type P struct(X F32, Y I64) { X, Y }
+fn less(a P, b P) Bool { return a.Y < b.Y }
+fn build() I64 {
+    v := ColumnVec<P>()
+    for i in range 50: v.Push(P(F32(i), 50 - i))
+    v.Sort(less)
+    try v.Insert(0, P(0.5, -1)) catch { return -1 }
+    try v.RemoveAt(1) catch { return -2 }
+    c := v.ToColumns()
+    c.X *= 2.0
+    return c.Len() * 1000 + I64(c.X[0]) + c[1].Y
+}
+Built := build()
+assert Built == 50003
+fn main() {
+    assert Built == build()
+    c := Columns<P>(3, P(1.0, 7))
+    c[1] = P(2.0, 8)
+    t := c
+    t.Y[2] = 9
+    assert c.Y[2] == 7 and t.Y[2] == 9 and c[1] == P(2.0, 8)
+    assert $c == "Columns<P>[P(1, 7), P(2, 8), P(1, 7)]"
+}

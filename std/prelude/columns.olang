@@ -74,12 +74,22 @@ fn (c mut Columns<T>&) Sort<? E>(less fn&(x T, y T) Bool ? E) ? E {
 
 # a's elements laid out in the order given - element k the one at order[k]
 fn reorder<F>(a mut Array<F>&, order Array<I64>&) {
-    was := F[a[k] for k in order]
+    if a.Len() == 0 { return }
+    was := Array<F>(a.Len(), a[0])
+    for k in range a.Len() { was[k] = a[order[k]] }
     for k in range a.Len() { a[k] = was[k] }
 }
 
 # the rows, copied into one array in the caller's scope
-fn (c Columns<T>&) ToArray() Array<T> { return T[c[i] for i in range c.Len()] }
+fn (c Columns<T>&) ToArray() Array<T> { return rowsOf(c, c.Len()) }
+
+# the first n rows of c, in order
+fn rowsOf<T>(c Columns<T>&, n I64) Array<T> {
+    if n == 0 { return Array<T>(0) }
+    out := Array<T>(n, c[0])
+    for i in range 1, n { out[i] = c[i] }
+    return out
+}
 
 # the rows, copied into a Vec
 fn (c Columns<T>&) ToVec() Vec<T> {
@@ -112,7 +122,12 @@ fn (v Vec<T>&) ToColumns() Columns<T> { return v.View().ToColumns() }
 fn (v Vec<T>&) ToColumnVec() ColumnVec<T> { return v.View().ToColumns().ToColumnVec() }
 
 # the field d of every element of a, in order
-fn columnOf<T, D>(a Array<T>&, d D) Array<D.Type> { return D.Type[d.Of(x) for x in a] }
+fn columnOf<T, D>(a Array<T>&, d D) Array<D.Type> {
+    if a.Len() == 0 { return Array<D.Type>(0) }
+    out := Array<D.Type>(a.Len(), d.Of(a[0]))
+    for i in range 1, a.Len() { out[i] = d.Of(a[i]) }
+    return out
+}
 
 # how "$" renders a Columns (E11c): as an array of its rows renders, the type named in front - "Columns<P>[P(1, 2)]"
 fn (c Columns<T>&) Str() String {
@@ -265,7 +280,7 @@ fn (v ColumnVec<T>&) ToColumns() Columns<T> {
 }
 
 # the rows, copied into one array in the caller's scope
-fn (v ColumnVec<T>&) ToArray() Array<T> { return T[v.data[i] for i in range v.n] }
+fn (v ColumnVec<T>&) ToArray() Array<T> { return rowsOf(v.data, v.n) }
 
 # the rows, copied into a Vec
 fn (v ColumnVec<T>&) ToVec() Vec<T> {

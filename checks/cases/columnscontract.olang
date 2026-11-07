@@ -1,0 +1,7 @@
+# check: fail error[T7e]: Columns<Pos> takes a record for its rows, and Pos has a constructor that checks or fails
+# T7e: a constructor that checks what it is given keeps no promise once a column is written element by element
+type Pos struct(n I64) [n >= 0] ? { n }
+fn main() {
+    c := Columns<Pos>(1, Pos(1)!)
+    assert c.Len() == 1
+}

@@ -1741,6 +1741,8 @@
 | status 0
 === run chunkpool.olang
 | status 0
+=== run columnsrun.olang
+| status 0
 === run condcall.olang
 | status 0
 === run condcallvalue.olang
