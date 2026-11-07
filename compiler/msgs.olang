@@ -914,6 +914,9 @@ type Diag enum {
     FactNoFunction
     ApiNoSide
     ApiNoFiles
+    ColumnsNotRecord
+    ColumnNamedLikeMethod
+    ColumnAssigned
     CapsOneFile
     ApiUsage
     ListingUsage
@@ -3282,6 +3285,15 @@ fn ApiNoSide(text String&) Msg { return Msg(Diag.ApiNoSide, "B21", "'" $text "' 
 
 # ERR_API_NO_FILES
 fn ApiNoFiles(text String&) Msg { return Msg(Diag.ApiNoFiles, "B21", "'" $text "' names no .olang file on either side") }
+
+# ERR_COLUMNS_NOT_RECORD
+fn ColumnsNotRecord(ty String&, row String&, why String&) Msg { return Msg(Diag.ColumnsNotRecord, "T7e", $ty " takes a record for its rows, and " $row " " $why " - a record is a struct whose constructor declares exactly its fields, each a parameter written bare: 'type P struct(X F32, Y F32) { X, Y }'") }
+
+# ERR_COLUMN_NAMED_LIKE_METHOD
+fn ColumnNamedLikeMethod(ty String&, row String&, name String&) Msg { return Msg(Diag.ColumnNamedLikeMethod, "T7e", $row "'s field '" $name "' would be a column of " $ty " named like its method '" $name "' (M19) - rename the field") }
+
+# ERR_COLUMN_ASSIGNED
+fn ColumnAssigned() Msg { return Msg(Diag.ColumnAssigned, "T7e", "a column is never assigned whole - its length is its table's; assign its elements ('c.x[i] = v') or its lanes ('c.x *= 2.0'), or the row ('c[i] = p')") }
 
 test "a message is its text, its arguments in their places" {
     m := Expected("'}'", Tok("South"))
