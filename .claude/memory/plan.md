@@ -942,3 +942,13 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   fixed: `case Shape.Rect(k + 1, h)` said "unknown name 'h'", `case Opt<I64>.Some(x)` did not bind x. asm + deprec
   merged on wt-merge (9241f1d): the full verify had two tests and drvdiff killed by memory (the cgroup's OOM killer),
   the two re-run and passed, drvdiff re-running; then master, then structpat merged and verified.
+- 2026-11-07 ~10:30 CET: round drops done (wt-drops cad927a; verify, scopesan, dead regions, scopefuzz, fuzz free all
+  passed; bench machine code identical): collections hold destructor values by value (Vec/Map/Deque/Box of a unique
+  element are unique and end their elements, last first; vacate as a statement ends in place, `occupy` stores into
+  room; conditional destructors on generic structs, only in instances holding such values; C11 judged per instance -
+  List<File>, Buf<T>, run-time Array<T>(n) of them refused); seed regenerated. Part C (storage freed at the destructor)
+  measured and not built: needs a drop check - asked the user (QCZ). Found and fixed: run-time comprehensions,
+  Array<T>(n) and a.Copy() of destructor values never ended (now C11); G9d bound T to mut Res& inside Vec<T>; a store
+  over a destructor value through an element was a checker gap; the prelude's sorts stored over vacated positions;
+  Destroy() of a holder declared in a loop body. Merge after structpat's verify: seed taken from drops (bootstrap
+  proves it), goldens recaptured with the merged compiler.

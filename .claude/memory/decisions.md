@@ -3039,3 +3039,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   patterns name fields (`case Point(x = 0, y)`, a bare name binding its field, unmentioned fields ignored, readable
   fields only); arrays by position as today; enum payloads by position as today and by field name too
   (`case Shape.Rect(h = 0)`, positional items first). In `case` patterns only. Being built: round structpat.
+- QCZ ASKED 2026-11-07 (from round drops): a drop check, Rust's dropck - a value with a destructor may not hold a
+  reference to a value with a destructor that could be ended before it (declared after it in its block, or in an inner
+  scope); such a reference is an error naming the order. Why: a holder's destructor runs after a later sibling was
+  ended, so today it can read an ended value (no memory hazard only because storage waits for the scope's close), and
+  freeing storage where the destructor runs (unique Part C) would turn that read into a use after free; measured, 1M
+  cycles: a Map value taken out and dropped 388 MB, replaced by Put 260 MB, a Vec pushed and truncated 260 MB - all
+  flat with Part C. Cost: programs whose resource holders refer to later siblings are refused (reorder the
+  declarations); compile time only, nothing at run time. Recommended yes, then Part C built on it. In effect: no drop
+  check, Part C not built.
