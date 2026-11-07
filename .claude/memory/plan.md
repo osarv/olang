@@ -858,4 +858,10 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   trig_01UpkSP1CvFmvUotAUWuyYCt carries these steps.
 - 2026-11-06: QCS 3 decided (the user: "Do the columns solution") - `Columns<T>`, the built-in structure of arrays,
   is step 8 of the final batch (decisions.md "QCS (3) DECIDED" has its shape; spec first).
+- 2026-11-07 01:05 CET (the user: "use up the last weeks tokens now. Ill see you tomorrow" - the last hours before the
+  05:00 reset, past the 0.92 stop, taken because the user said so): started steps (1) and (2) of the directive, both
+  read-only, side by side - the audit of every decided-but-unbuilt item (writing /home/user/review/remaining/LIST.md)
+  and bulk review 7 (building in /home/user/wt/review7, notes in /home/user/review/bulk7/NOTES.md); each keeps a
+  "## Progress" section so it can be continued if the limit stops it. The wake-up after the reset resumes them. Disk
+  was 94% full after a container restart: freed to ~10 GB by deleting wt/uniq/build (7 GB) and wt/rework/build.
 
