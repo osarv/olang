@@ -143,6 +143,9 @@
 | ok - getBox: a store over a holder's part through what a call gives ends the old value, once
 | ok - loopDestroyed: destroys a holder its loop's body declares, every turn
 | ok - a holder is ended before what it holds - stored, through a call, past deferred code, through a shelf, in a closure
+| ok - gripsHeld: ends a collection by value before what its elements hold
+| ok - registeredHeld: ends a registered holder before a value registered before it
+| ok - deferPush: hands its by-value parameter on from deferred code, once
 === test tests/embed.olang
 | status 0
 | ok - E38: embed gives the file's bytes, baked and decided while compiling, read at run time
@@ -2294,6 +2297,9 @@
 === run o26aviewflow.olang
 | status 0
 | 3 2 4
+=== run o27callplaced.olang
+| status 0
+| 1275 35
 === run o27genborrow.olang
 | status 0
 | Vec<String&>["0", "a", "b", "1", "a", "b", "2", "a", "b", "3", "a", "b", "4", "a", "b"] Vec<String&>["0", "c", "d", "1", "c", "d", "2", "c", "d"] 50
@@ -2308,6 +2314,9 @@
 | status 0
 === run o4bvalueparamgeneric.olang
 | status 0
+=== run o8dremovedelemref.olang
+| status 0
+| 0 0
 === run o8dviewctorarray.olang
 | status 0
 | 2015890 1999-name 1999
@@ -2663,9 +2672,16 @@
 | b2b5
 === run strwalks.olang
 | status 0
+=== run t13bhandondeferred.olang
+| status 0
+| held 5 sum 19
+| ends 6 8,9,4,3,2,1,
 === run t13bhandonlambda.olang
 | status 0
 | 585 30
+=== run t13bmovedvalue.olang
+| status 0
+| 1 41000 5250 5050
 === run t17ccaselocallifted.olang
 | status 0
 | 110 0
