@@ -30075,3 +30075,18 @@ both: scope 2,377 ms without versions, 2,446 ms with (+3%, within the noise of t
 `versions: 186 bodies with a cursor, 647 definitions, 68 judgings asked again`. Bench's IR changes only in std/os's and
 std/regex's: a text a cursor was given, built in the program's scope before (the cursor's one claim was a constant's,
 the program's) and now in the function's frame or the caller's scope, where its reads are.
+
+## The tidy round (2026-11-07, wt-tidy2)
+
+Small fixes before the final verify, each from /home/user/review/remaining/LIST.md.
+
+**C14.** SPEC's overview still listed a comprehension among T7c's sources not built; comprehension lengths are built
+(definit, 2026-10-26). Only a reference local and a mutable private global are left.
+
+**C13, reproducible builds.** clang reads each unit's IR from a temporary file of the process's own
+(`NAME.PID.tmp.ll`, B3k) and kept that name: an ELF FILE symbol in a non-LTO object - every Locations object (B3l),
+which reaches the linked program's symbol table - and the source name in an LTO object's bitcode. So two builds of one
+program differed by the compiler's pid. Now build.olang writes `source_filename = "NAME.ll"` (the readable name, no
+directory) at the top of every IR it hands clang, unless the IR names one already (a C import's, which clang wrote,
+says "-"). Measured: a program built twice, plain and `-debug`, in a clean `build/` each time gives the same bytes; the
+compiler's own bootstrap still compares its second and third builds equal.

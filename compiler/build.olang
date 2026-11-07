@@ -498,9 +498,13 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
     if not base.StartsWith("olang_") and readable not in j.irs { irPath = readable }
     # clang reads the IR from a file of this process's own, renamed to irPath once compiled: another build in the same
     # directory, run beside this one, may write irPath at the same time - the same name with other IR, or the same IR
-    # truncated and written again under clang's feet
+    # truncated and written again under clang's feet. Its source_filename is the readable name alone, never the temporary
+    # one: clang keeps that name in the object (a Locations object's FILE symbol reaches the program, an LTO object's
+    # bitcode the link), so a build is the same byte for byte whatever process and directory made it
     irTmp := $irPath[:irPath.Len() - 3] "." $unistd.getpid() ".tmp.ll"
-    try os.WriteFile(irTmp, ir) catch os.Error {
+    named := ir.StartsWith("source_filename") or ir.Contains("\nsource_filename")   # a C import's IR names its own
+    text := $ir if named else $"source_filename = \"" $filepath.Base(irPath) "\"\n" $ir
+    try os.WriteFile(irTmp, text) catch os.Error {
         fileFatal(irPath, msgs.CannotOpen(), d)
         error Failed.Reported
     }

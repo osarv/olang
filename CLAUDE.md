@@ -1702,7 +1702,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   module identity with every character but letters and digits escaped (B3b); two modules of one base name are fine
   (identity is the path). `-define` values are typed as the literal would be, text a `String` (B10); the token evaluator
   (B9a) decides only what it decides exactly and defers the rest to the compile-time evaluator (B9c), which checks the
-  program again with each decision. An untaken top-level branch is not parsed.
+  program again with each decision. An untaken top-level branch is not parsed. A build is the same byte for byte
+  whatever process made it (2026-11-07, mine): the IR clang reads names its readable file as `source_filename`, never
+  the temporary one carrying the compiler's pid (a Locations object's FILE symbol reached the program).
 - **Declared module identity was deferred until packaging, and is now the import path (M22).** Individual function or
   type imports are not planned: the unit of import is the module.
 
