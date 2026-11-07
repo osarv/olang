@@ -29565,12 +29565,12 @@ the type's module (MethodOnForeignType, which no other path used), and never `Eq
 T20 says how an error compares, hashes, renders and copies - `$e` stays the error's name, so `!` and `main` say it alike).
 
 **ArgumentError carries the condition.** `ArgumentError.Invalid(what String)`; the entry check and the check before a
-call through an `any` (which had been `PrimOp.Holds`, now the same `if not cond { push; raise }` as on entry -
-`check.argumentPush`) push `"pick: y > x"`. The thread-local slot (`__olang_ert_req_set/clear/print`) is gone: a build
+call through an `any` (`check.argumentPush`) push `"pick: y > x"` - the latter held in a hidden local, pushed where
+false, then still failed by `PrimOp.Holds` (an expression's failure goes to the innermost try; a raise statement in the
+call's sequence went to the function's exit - tests/any.olang's D17f test found it). The thread-local slot (`__olang_ert_req_set/clear/print`) is gone: a build
 keeping no trace prints the error with its payload, then the hint (`__olang_debug_hint`); the trace keeps naming the
 condition at its place. The runtime change needed one compiler build with stub definitions of the old calls (the
-installed compiler still emitted them), then a rebuild without them. `PrimOp.Holds` is left in typed/lower/eval/mir
-(MIR's own tests use it as a sample prim); nothing makes it now.
+installed compiler still emitted them), then a rebuild without them.
 
 **std (round 4).** os: every word carries `(path String)` - errno is not exposed (`Failed` too; decided, the note's
 `(path, errno)` reduced); json: reading words `(line I64, col I64)`, `Missing(key String)`, `json.Position` and every `at`
@@ -29592,7 +29592,10 @@ attach, never copied between threads' regions. (9) A raised error's field types 
 first raise's body checked first wherever the shape is asked - so it is the module's first raise in every program but
 one whose bodies reach each other in a cycle before either raise is met. (10) A raised error written as a value takes
 its fields by position, as a declared word does (`e == OutOfRange(-1, 10)`). (11) Methods on error types: `Eq`, `Hash`,
-`Str`, `Copy` refused. (12) regex/time offsets are where reading stopped.
+`Str`, `Copy` refused. (12) regex/time offsets are where reading stopped. (13) A raise whose payload owns storage allocates (the note's decision 13), so every function
+with a contract now says `allocates` in its effects line and has the `Allocates` fact (its condition's text is copied
+onto the payload stack where it is false) - the user's "the cost is on the failure path only" taken as written; facts
+do not tell the failure path apart.
 
 **Found and fixed on the way.** The resolver's survey kept no raise arguments; `explain` and `doc` printed a word
 without its payload and `doc` listed the hidden enum with the error's doc comment; did-you-mean could offer the hidden

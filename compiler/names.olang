@@ -318,7 +318,10 @@ fn (r mut Resolver&) raisedFields(mi I64, args Array<ast.Expr&>?&) Array<ast.Par
         match a {
             case ast.Expr.Name(sp, n) { out.Push(ast.Param(sp, n, null, null)) }
             case ast.Expr.Named(sp, n, _) { out.Push(ast.Param(sp, n, null, null)) }
-            case _ { r.L.Diags.Error(r.at(mi, a.Span()), msgs.RaisedFieldUnnamed()) }
+            case _ {
+                r.L.Diags.Error(r.at(mi, a.Span()), msgs.RaisedFieldUnnamed())
+                out.Push(ast.Param(a.Span(), source.NameId(0), null, null))   # held, so the count says nothing more
+            }
         }
     }
     return out.ToArray()

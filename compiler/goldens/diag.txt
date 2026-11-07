@@ -4272,6 +4272,21 @@ r3bownword.olang:3:1: error[R3b]: an error of one word named as its type is decl
     3 | type NotFound error { NotFound }
       | ^~~~~~~~
 compilation failed with 1 error
+=== r3bpayloaddiffer.olang
+r3bpayloaddiffer.olang:5:34: error[R3b, T19b]: OutOfRange carries (index, limit), as its first raise names them - give the same fields in that order
+    5 |     if at > 10: error OutOfRange(limit = 10, index = at)
+      |                                  ^~~~~~~~~~
+compilation failed with 1 error
+=== r3bpayloadref.olang
+r3bpayloadref.olang:5:35: error[T19b]: payload field node of type Node holds a reference - a payload holds values only: hold a copy ('$x', 'x.Copy()') or plain data
+    5 |     if n.v < 0: error Lost(node = n)
+      |                                   ^
+compilation failed with 1 error
+=== r3bpayloadunnamed.olang
+r3bpayloadunnamed.olang:4:33: error[R3b, T19b]: a field an error raised by name carries is named by the raise: a bare name, or 'name = value'
+    4 |     if at < 0: error OutOfRange(at + 1)
+      |                                 ^~~~~~
+compilation failed with 1 error
 === r3bqualified.olang
 r3bqualified.olang:8:11: error[T19]: NotFound has no word 'NotFound'
     8 |     error NotFound.NotFound
@@ -5946,6 +5961,56 @@ t19awordofmember.olang:4:18: error[T19a]: word 'Z' is C's too, a member of this 
     4 | type D error C { Z }
       |                  ^
 compilation failed with 1 error
+=== t19bargcount.olang
+t19bargcount.olang:4:23: error[T19b]: ParseError2.Bad carries 2 fields, 1 given
+    4 |     error ParseError2.Bad(3)
+      |                       ^~~
+compilation failed with 1 error
+=== t19bnofield.olang
+t19bnofield.olang:7:56: error: ParseError2.Bad has no member 'coll' - did you mean 'col'?
+    7 |     x := try parse() catch ParseError2.Bad e default e.coll
+      |                                                        ^~~~
+compilation failed with 1 error
+=== t19bpatternalts.olang
+t19bpatternalts.olang:11:30: error[T19b, S13b]: a payload pattern binding a name stands alone in its case - give each alternative a case of its own
+   11 |             case ReadErr.Bad(line), ReadErr.Worse(line) { assert line < 0 }
+      |                              ^~~~
+compilation failed with 1 error
+=== t19bpatternname.olang
+t19bpatternname.olang:7:14: error[T19b, S13b]: a payload pattern reads the error a local or a catch clause's name holds, and 'Last' is no name - write 'e := ...' first and match 'e'
+    7 |         case ReadErr.Bad(line) { assert line > 0 }
+      |              ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== t19bpatternvalue.olang
+t19bpatternvalue.olang:10:9: error[T19b, S13b]: a payload pattern binds names only in a match statement - in a value match read the field after the test ('case W: e.field')
+   10 |         case ReadErr.Bad(line): line
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== t19bpayloadref.olang
+t19bpayloadref.olang:3:28: error[T19b]: payload field node of type Node& holds a reference - a payload holds values only: hold a copy ('$x', 'x.Copy()') or plain data
+    3 | type BadError error { Lost(node Node&), Plain }
+      |                            ^~~~~~~~~~
+compilation failed with 1 error
+=== t19bplaincalled.olang
+t19bplaincalled.olang:4:23: error[T19b]: ParseError2.Eof carries nothing - write it without '()'
+    4 |     error ParseError2.Eof()
+      |                       ^~~
+compilation failed with 1 error
+=== t19bunnarrowed.olang
+t19bunnarrowed.olang:7:52: error[T19b]: e may hold an error that has no field line - test which it holds first ('if e == T.Word')
+    7 |     x := try parse() catch ParseError2 e default e.line
+      |                                                    ^~~~
+compilation failed with 1 error
+=== t19bvaluebare.olang
+t19bvaluebare.olang:4:22: error[T19b]: ParseError2.Bad carries line, col - give them: 'ParseError2.Bad(line, col)'
+    4 |     e := ParseError2.Bad
+      |                      ^~~
+compilation failed with 1 error
+=== t19bwordbare.olang
+t19bwordbare.olang:4:23: error[T19b]: ParseError2.Bad carries line, col - give them: 'ParseError2.Bad(line, col)'
+    4 |     error ParseError2.Bad
+      |                       ^~~
+compilation failed with 1 error
 === t19emptywords.olang
 t19emptywords.olang:3:16: error: expected an error word, found '}'
     3 | type E error { }
@@ -5965,6 +6030,16 @@ compilation failed with 1 error
 t20comparednoterror.olang:6:8: error[T20]: 'n' is I64, not an error value - only an error value is 'P.A'
     6 |     if n == P.A { }
       |        ^
+compilation failed with 1 error
+=== t20errormethodforeign.olang
+t20errormethodforeign.olang:4:17: error[M19]: a method of os.Error is declared in that type's module
+    4 | fn (e os.Error) Where() String { return "" }
+      |                 ^~~~~
+compilation failed with 1 error
+=== t20errormethodgiven.olang
+t20errormethodgiven.olang:4:18: error[T20]: an error value's Str is the language's (T20) - ReadError cannot declare one; choose another name
+    4 | fn (e ReadError) Str() String { return "parse" }
+      |                  ^~~
 compilation failed with 1 error
 === t20errorresult.olang
 t20errorresult.olang:4:16: error[T20]: E is an error type: an error is raised, never returned - write '? E' after the parameters

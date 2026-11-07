@@ -4916,13 +4916,18 @@ fn (c mut Checker&) dispatchChecks(sp source.Span, r types.TypeId, target typed.
         if ae == types.UnknownT { continue }
         c.leaks1(ae)
         fr.Fallible++
-        # D17, T19b: false, the call fails with ArgumentError.Invalid carrying the condition
+        # D17, T19b: false, the call fails with ArgumentError.Invalid carrying the condition - pushed, then failed to
+        # the innermost try (Holds: an expression's failure, which a raise statement here would not reach)
+        h := c.hidden(sp, types.BoolT)
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), v))
         bfrom := c.stmts.Len()
         id, outer, bmark := c.open(typed.BlockKind.Plain, sp)
         c.argumentPush(sp, ae, 0, $info.Name ": " $info.ReqTexts[i])
-        c.stmts.Push(typed.Stmt.Raise(sp, ae, 0))
         blk := c.close(id, outer, bmark, bfrom)
-        c.emit(typed.Stmt.If(sp, typed.If(c.negate(sp, v), blk, null)))
+        c.emit(typed.Stmt.If(sp, typed.If(c.negate(sp, c.readLocal(sp, h)), blk, null)))
+        from := c.exprs.Len()
+        c.exprs.Push(c.readLocal(sp, h))
+        c.emit(typed.Stmt.Eval(sp, typed.Expr.Prim(sp, types.BoolT, typed.PrimOp.Holds, typed.Check.Try, gather(c.exprs, from))))
         c.cur().RaiseAt.Push(sp.Start)
         c.cur().RaiseWhat.Push($info.Name ": " $info.ReqTexts[i])
     }
