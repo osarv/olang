@@ -61,6 +61,11 @@ fn Flatten(t mut types.Table&, ty types.TypeId, base I64, out mut Vec<Scalar>&) 
         for i in range n { Flatten(t, el, base + i * t.Size(el), out) }
         return
     }
+    if t.Packed(r) {
+        # X11a: a packed struct as C passes a struct of its bytes - its fields integer bits, classified INTEGER
+        for i in range t.Size(r) { out.Push(Scalar(base + i, 1, "i8", false)) }
+        return
+    }
     if t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct {
         fs := t.Items(t.Fields(r))
         offs := t.Offsets(r)

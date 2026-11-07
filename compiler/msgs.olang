@@ -355,6 +355,12 @@ type Diag enum {
     UniqueByValue
     UniqueAfter
     UniqueFill
+    PackedNotStruct
+    PackedField
+    PackedParams
+    PackedDestruct
+    PackedLend
+    PackedByValueC
     UniqueLentHere
     UniqueAlias
     DestroyedAfter
@@ -1880,6 +1886,24 @@ fn UniqueByValue(ty String&, what String&) Msg { return Msg(Diag.UniqueByValue, 
 
 # ERR_UNIQUE_FILL
 fn UniqueFill(ty String&) Msg { return Msg(Diag.UniqueFill, "T13b", "Array<" $ty ">(n, fill) copies its fill into every element, and " $ty " is unique - make each element with a comprehension ('" $ty "[" $ty "(...) for i in range n]'), or hold references ('Array<" $ty "&>')") }
+
+# ERR_PACKED_NOT_STRUCT
+fn PackedNotStruct() Msg { return Msg(Diag.PackedNotStruct, "T13c", "'packed' lays a struct out bit by bit - it is written right before 'struct', nothing else") }
+
+# ERR_PACKED_FIELD
+fn PackedField(ty String&, what String&) Msg { return Msg(Diag.PackedField, "T13c", "a packed struct lays its fields out bit by bit, so " $ty " (" $what ") is no field of one - a field is an integer, Bool, Char, float, payload-free enum, packed struct, or an array of a known length of these") }
+
+# ERR_PACKED_PARAMS
+fn PackedParams() Msg { return Msg(Diag.PackedParams, "T13c", "a packed struct takes no type parameters - its layout is its declaration's") }
+
+# ERR_PACKED_DESTRUCT
+fn PackedDestruct() Msg { return Msg(Diag.PackedDestruct, "T13c", "a packed struct holds plain data, so it declares no destructor") }
+
+# ERR_PACKED_LEND
+fn PackedLend(field String&) Msg { return Msg(Diag.PackedLend, "T13c", "'" $field "' is a field of a packed struct, at a bit offset, so no reference names it - copy it into a local first ('v := " $field "') and lend that") }
+
+# ERR_PACKED_BY_VALUE_C
+fn PackedByValueC(ty String&) Msg { return Msg(Diag.PackedByValueC, "X11a", $ty " is packed and holds a float, so it crosses to C by reference only - write '" $ty "&'") }
 
 # ERR_UNIQUE_AFTER
 fn UniqueAfter(name String&, ty String&) Msg { return Msg(Diag.UniqueAfter, "T13b", "'" $name "' is handed on here, and " $ty " is unique - a unique value given by value lands once more only at its last mention, and '" $name "' is mentioned after") }

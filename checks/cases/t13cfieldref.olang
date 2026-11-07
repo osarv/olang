@@ -1,0 +1,5 @@
+# check: fail error[T13c]: a packed struct lays its fields out bit by bit, so Node& (a reference) is no field of one
+# T13c: a reference has no width in bits
+type Node struct(v I64) { v }
+type P packed struct(n Node&, k U4) { n, k }
+fn main() { }

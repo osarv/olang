@@ -1,0 +1,4 @@
+# check: fail error[T13c]: 'packed' lays a struct out bit by bit - it is written right before 'struct', nothing else
+# T13c: "packed" says a struct's layout; an enum has none of its own to pack
+type E packed enum { A, B }
+fn main() { }

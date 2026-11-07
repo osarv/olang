@@ -1,0 +1,5 @@
+# check: fail error[T13c]: a packed struct lays its fields out bit by bit, so Pt (a struct that is not packed) is no field of one
+# T13c: an ordinary struct is laid out with padding; only a packed struct nests bit by bit
+type Pt struct(x U8, y U32) { x, y }
+type P packed struct(p Pt, k U4) { p, k }
+fn main() { }

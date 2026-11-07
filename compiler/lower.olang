@@ -297,6 +297,8 @@ type collectCtx struct(Buf mir.LocalId, N mir.LocalId, Elem types.TypeId, ArrT t
 type pl struct(B mir.Base) {
     B
     Ps Vec<mir.Proj>
+    Pk I64 = -1                 # T13c: where Ps's steps into a packed value begin (-1 for none): no place, read and
+    PkTy types.TypeId           # written through the whole value at Ps[:Pk], of type PkTy
 }
 
 type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut mir.Fn&) {
@@ -909,6 +911,10 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             ln.targets.Push(p)
             v := ln.fit(ln.val(value), value, target.Type(), sp)
             try ln.targets.Pop() catch { }
+            if p.Pk >= 0 {
+                if not ln.dead { ln.packedWrite(p, v, sp) }
+                return
+            }
             # (QCE: a part holding an array by value takes the copy check made, or the new storage
             # it is given, as it is - never written over in place, since the part may be room a Vec has not filled)
             if ln.valueArray(target.Type()) and not ln.dead and not typed.PartOf(target) {
@@ -1647,13 +1653,102 @@ fn (ln mut lowering&) valueTargets(sw typed.Spawn&) Bool {
 
 # ---- places ----
 
-fn (ln mut lowering&) mk(p pl) mir.Lvalue { return ln.F.Place(p.B, p.Ps.ToArray()) }
+fn (ln mut lowering&) mk(p pl) mir.Lvalue {
+    if p.Pk >= 0 {
+        ln.gap(ln.B.Sp, "a field of a packed struct taken as a place")
+        return ln.F.Place(p.B, p.Ps.View()[:p.Pk])
+    }
+    return ln.F.Place(p.B, p.Ps.ToArray())
+}
 
 fn (ln mut lowering&) with(p pl, x mir.Proj) pl {
     q := pl(p.B)
     for y in p.Ps { q.Ps.Push(y) }
     q.Ps.Push(x)
+    q.Pk, q.PkTy = p.Pk, p.PkTy
     return q
+}
+
+# ---- packed fields (T13c) ----
+
+# a reference to a place: a packed field's (T13c - a read-only reference the compiler takes, the program never lending
+# one) to a temporary holding its value
+fn (ln mut lowering&) borrow(p typed.Lvalue&, bt types.TypeId, sp source.Span) mir.Operand {
+    q := ln.place(p)
+    if q.Pk < 0 or ln.dead { return ln.into(bt, mir.Rvalue.Ref(ln.mk(q), bt), sp) }
+    if (ln.T.PermOf(bt) & types.Writable) != 0 { ln.gap(sp, "a field of a packed struct lent writably") }
+    l := ln.local(ln.packedRead(q, p.Type(), sp), p.Type(), sp)
+    return ln.into(bt, mir.Rvalue.Ref(mir.L(l), bt), sp)
+}
+
+# p's field i, where p is a packed value: a step no place holds, read and written through the value
+fn (ln mut lowering&) packedField(p pl, base types.TypeId, i I64) pl {
+    q := ln.with(p, mir.Proj.Field(i))
+    if q.Pk < 0 and ln.T.Packed(ln.T.Repr(base)) { q.Pk, q.PkTy = p.Ps.Len(), base }
+    return q
+}
+
+# a place that is one: a packed field's value held in a temporary (T13c), any other place as it is
+fn (ln mut lowering&) solid(p pl, ty types.TypeId, sp source.Span) pl {
+    if p.Pk < 0 or ln.dead: return p
+    return pl(mir.Base.Local(ln.local(ln.packedRead(p, ty, sp), ty, sp)))
+}
+
+# the types a packed place's steps pass through, the packed value's first
+fn (ln mut lowering&) packedTypes(p pl) Array<types.TypeId> {
+    n := p.Ps.Len() - p.Pk
+    out := Array<types.TypeId>(n + 1)
+    out[0] = p.PkTy
+    for k in range n {
+        r := ln.T.Repr(out[k])
+        out[k + 1] = match p.Ps[p.Pk + k] {
+            case mir.Proj.Field(i): ln.T.Items(ln.T.Fields(r))[i]
+            case _: ln.T.Elem(r)
+        }
+    }
+    return out
+}
+
+# the values a packed place's steps pass through: the packed value, each field read out of the one before (an element
+# read from an array field held in a temporary); the last is the place's value
+fn (ln mut lowering&) packedChain(p pl, sp source.Span) Array<mir.Operand> {
+    tys := ln.packedTypes(p)
+    vs := Array<mir.Operand>(tys.Len())
+    vs[0] = mir.Operand.Copy(ln.F.Place(p.B, p.Ps.View()[:p.Pk]))
+    for k in range tys.Len() - 1 {
+        st := p.Ps[p.Pk + k]
+        if st == mir.Proj.Field {
+            vs[k + 1] = ln.prim(typed.PrimOp.Unpack, tys[k + 1], mir.Operand[vs[k], ln.constI64(st.i)], sp)
+            continue
+        }
+        a := ln.local(vs[k], tys[k], sp)
+        vs[k + 1] = ln.into(tys[k + 1], mir.Rvalue.Use(mir.Operand.Copy(ln.F.Place(mir.Base.Local(a), mir.Proj[st]))), sp)
+    }
+    return vs
+}
+
+fn (ln mut lowering&) packedRead(p pl, ty types.TypeId, sp source.Span) mir.Operand {
+    vs := ln.packedChain(p, sp)
+    return ln.into(ty, mir.Rvalue.Use(vs[vs.Len() - 1]), sp)
+}
+
+# v stored into a packed place: each value the steps pass through given its new part, from the last step back, and the
+# packed value stored whole where it lies (the place before it evaluated once)
+fn (ln mut lowering&) packedWrite(p pl, v mir.Operand, sp source.Span) {
+    tys := ln.packedTypes(p)
+    vs := ln.packedChain(p, sp)
+    cur := v
+    for k := tys.Len() - 2, k >= 0, k-- {
+        st := p.Ps[p.Pk + k]
+        if st == mir.Proj.Field {
+            cur = ln.prim(typed.PrimOp.Repack, tys[k], mir.Operand[vs[k], ln.constI64(st.i), cur], sp)
+            continue
+        }
+        a := ln.local(vs[k], tys[k], sp)
+        ln.emit(mir.Stmt.Assign(sp, ln.F.Place(mir.Base.Local(a), mir.Proj[st]), mir.Rvalue.Use(cur)))
+        cur = mir.Operand.Copy(mir.L(a))
+    }
+    ln.emit(mir.Stmt.Assign(sp, ln.F.Place(p.B, p.Ps.View()[:p.Pk]), mir.Rvalue.Use(cur)))
 }
 
 # a place's base and projections, its references and indices computed before
@@ -1667,7 +1762,7 @@ fn (ln mut lowering&) place(p typed.Lvalue?&) pl {
         case typed.Lvalue.Local(_, _, id): pl(mir.Base.Local(mir.LocalId(I32(id))))
         case typed.Lvalue.Global(_, ty, m, n): pl(mir.Base.Global(m, n, ty))
         case typed.Lvalue.Deref(sp, _, r): ln.deref(r, sp)
-        case typed.Lvalue.Field(_, _, base, i): ln.with(ln.place(base), mir.Proj.Field(i))
+        case typed.Lvalue.Field(_, _, base, i): ln.packedField(ln.place(base), base.Type(), i)
         case typed.Lvalue.Elem(sp, _, e): ln.elem(e, sp)
         case typed.Lvalue.Payload(sp, _, py): ln.payload(py, sp)
         case typed.Lvalue.Temp(sp, ty, v, _): pl(mir.Base.Local(ln.local(ln.val(v), ty, sp)))
@@ -1998,7 +2093,7 @@ fn (ln mut lowering&) value(x typed.Expr&) mir.Operand {
         case typed.Expr.Lit(_, lt, bits): mir.Operand.Const(lt, bits)
         case typed.Expr.Data(sp, dt, _, c): mir.Operand.Data(dt, ln.F.AddConst(c), ln.file, sp)
         case typed.Expr.Read(sp, rt, p, _): ln.read(p, rt, sp)
-        case typed.Expr.Borrow(sp, bt, p): ln.into(bt, mir.Rvalue.Ref(ln.mk(ln.place(p)), bt), sp)
+        case typed.Expr.Borrow(sp, bt, p): ln.borrow(p, bt, sp)
         case typed.Expr.Take(sp, tt, p): ln.take(p, tt, sp)
         case typed.Expr.Promote(sp, pt, pr): ln.promote(pr, pt, sp)
         case typed.Expr.Call(sp, ct, c): ln.call(c, ct, sp)
@@ -2140,6 +2235,7 @@ fn (ln mut lowering&) read(p typed.Lvalue&, ty types.TypeId, sp source.Span) mir
     ln.readOut(p, ty)
     q := ln.place(p)
     if ln.dead { return mir.Operand.None }
+    if q.Pk >= 0 { return ln.packedRead(q, ty, sp) }
     return ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(q))), sp)
 }
 
@@ -4424,6 +4520,7 @@ fn (ln mut lowering&) piece(x typed.Expr&, sp source.Span) mir.Operand, types.Ty
             case typed.Expr.Read(_, _, p, _) {
                 q := ln.place(p)
                 if ln.dead { return mir.Operand.None, xt }
+                if q.Pk >= 0 { return ln.packedRead(q, xt, sp), xt }   # T13c: no place to refer to
                 rt := t.Ref(xt, types.ReadOnly)
                 return ln.into(rt, mir.Rvalue.Ref(ln.mk(q), rt), sp), rt
             }
@@ -4992,6 +5089,7 @@ fn (ln mut lowering&) flag(v Bool, sp source.Span) mir.LocalId {
 # order, an enum's case then its payload, an array's length then its elements - an aggregate part through its own
 # Equal helper, so a type that comes round to itself is one function
 fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span, top Bool = false) mir.Operand {
+    a, b = ln.solid(a, ty, sp), ln.solid(b, ty, sp)
     t := ln.T
     r := t.Repr(ty)
     if ln.scalar(ty) {
@@ -5023,7 +5121,7 @@ fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span, top B
     cases, isEnum := ln.casesOf(ty), mir.HasCases(ln.T, ty)
     if isParts {
         for i in range parts.Len() {
-            e := ln.equalAt(ln.with(a, mir.Proj.Field(i)), ln.with(b, mir.Proj.Field(i)), parts[i], sp)
+            e := ln.equalAt(ln.packedField(a, ty, i), ln.packedField(b, ty, i), parts[i], sp)
             next := ln.F.NewBlock()
             ln.end(mir.Term.Branch(e, next, no))
             ln.start(next)
@@ -5128,6 +5226,7 @@ fn (ln mut lowering&) combine(h mir.LocalId, x mir.Operand, sp source.Span) {
 # elements' (a null 0); a struct's, tuple's or record's fields combined in order, an enum's case then its payload's, an
 # array's elements - an aggregate part through its own Hash helper
 fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = false) mir.Operand {
+    a = ln.solid(a, ty, sp)
     t := ln.T
     r := t.Repr(ty)
     # a part whose type declares Hash (or, in its own module, hash: M6b) hashes by it (E10b)
@@ -5180,7 +5279,7 @@ fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = f
     parts, isParts := ln.partsOf(ty), mir.HasFields(ln.T, ty)
     cases, isEnum := ln.casesOf(ty), mir.HasCases(ln.T, ty)
     if isParts {
-        for i in range parts.Len() { ln.combine(h, ln.hashAt(ln.with(a, mir.Proj.Field(i)), parts[i], sp), sp) }
+        for i in range parts.Len() { ln.combine(h, ln.hashAt(ln.packedField(a, ty, i), parts[i], sp), sp) }
     } else if isEnum {
         tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(a)), sp)
         ln.combine(h, ln.mix(tag, sp), sp)
@@ -5538,7 +5637,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.word(b, "(", sp)
         for i in range parts.Len() {
             if i > 0 { ln.word(b, ", ", sp) }
-            ln.inner(ln.with(a, mir.Proj.Field(i)), parts[i], b, sp)
+            ln.inner(ln.packedField(a, ty, i), parts[i], b, sp)
         }
         ln.word(b, ")", sp)
     } else if isEnum {
@@ -5622,6 +5721,7 @@ fn (ln mut lowering&) depth() mir.Operand { return ln.constI64(0) if ln.rdepth =
 # a value written inside another's rendering (E11a): a Char as a character literal, text as a string literal, a
 # number or a Bool as at the top, anything else as at the top through its Render helper
 fn (ln mut lowering&) inner(a pl, ty types.TypeId, b mir.ScopeRef, sp source.Span) {
+    a = ln.solid(a, ty, sp)
     t := ln.T
     r := t.Repr(ty)
     if ln.isChar(ty) {

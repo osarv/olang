@@ -67,6 +67,8 @@ type record struct(Key String&) {
     Transparent Bool = false                            # a union GNU C passes as its first member (transparent_union)
     Size I64 = -1                                       # its size and alignment, where clang was asked (X18)
     Align I64 = -1
+    Packed Bool = false                                 # __attribute__((packed)) (X18, X11a)
+    Widths Vec<I64>                                     # each field's bitfield width, -1 for one that is no bitfield
 }
 
 # a function the header declares: its name, its C type and its parameters' names ("" where unnamed) and types, whether
@@ -310,9 +312,12 @@ fn (g mut gen&) recordDecl(n json.Json&, name String&, own Bool) {
     for f in inner(n) {
         k := text(f, "kind")
         if k == "TransparentUnionAttr" { g.recs[r].Transparent = true }
+        if k == "PackedAttr" { g.recs[r].Packed = true }
         if k == "RecordDecl" { g.recordDecl(f, text(f, "name"), own) }
         if k != "FieldDecl" { continue }
         if flag(f, "isBitfield") { g.recs[r].Bitfields = true }
+        w := try constValue(f).ParseInt(10) catch default -1
+        g.recs.RefMut(r).Widths.Push(w if flag(f, "isBitfield") else -1)
         g.recs.RefMut(r).Names.Push(text(f, "name"))
         g.recs.RefMut(r).Types.Push(typeOf(f))
     }
@@ -560,6 +565,12 @@ fn (g mut gen&) plain(i I64) Bool {
     if r == 0 { return false }
     if r >= 1 { return true }                           # being decided: a pointer to it is what reached it again
     g.recs[i].Plain = 2
+    if g.recs[i].Packed {
+        # a packed record is plain data only as a packed struct (X18, X11a): every member placed where T13c places it
+        ok := g.packedFields(i).Len() > 0
+        g.recs[i].Plain = 1 if ok else 0
+        return ok
+    }
     ok := g.recs[i].Complete and not g.recs[i].Bitfields and not g.recs[i].Union and not g.recs[i].Returned
     if ok {
         for k, ft in g.recs[i].Types {
@@ -577,6 +588,67 @@ fn (g mut gen&) plain(i I64) Bool {
     }
     g.recs[i].Plain = 1 if ok else 0
     return ok
+}
+
+# X18, X11a: a packed record's members as a packed struct's fields ("name Type" lines; an array "name := ..."), where its
+# layout is T13c's - every member named, a bitfield (of width 1 or more) of an integer or _Bool type, or an integer,
+# _Bool or floating member, or an array of integers, at a whole byte of the running bits - else none
+fn (g mut gen&) packedFields(i I64) Vec<String&> {
+    out Vec<String&>
+    r := g.recs[i]
+    if not r.Complete or r.Union or r.Returned or r.Names.Len() == 0 { return out }
+    used := Map<String&, I64>()
+    bits I64 = 0
+    for k in range r.Names.Len() {
+        if r.Names[k] == "" { return Vec<String&>() }
+        ct := g.parseType(r.Types[k])
+        n := g.nodes[ct]
+        w := r.Widths[k]
+        name := g.paramName(r.Names[k], k, used)
+        if w >= 0 {
+            if w == 0 or n.Kind != CKind.Num or n.Text.StartsWith("F") { return Vec<String&>() }
+            out.Push($"    " $name " " $bitfieldType(n.Text, w) "\n")
+            bits += w
+            continue
+        }
+        if bits % 8 != 0 { return Vec<String&>() }
+        if n.Kind == CKind.Arr {
+            e := g.nodes[n.To]
+            if e.Kind != CKind.Num or e.Text.StartsWith("F") or e.Text == "Bool" or numBits(e.Text) == 0 { return Vec<String&>() }
+            out.Push($"    " $name " := Array<" $("U8" if e.Text == "char" else e.Text) ">(" $n.N ")\n")
+            bits += numBits(e.Text) * n.N
+            continue
+        }
+        # (a _Bool member that is no bitfield takes a byte in C, a Bool field one bit: no packed form)
+        if n.Kind != CKind.Num or numBits(n.Text) == 0 or n.Text == "Bool" { return Vec<String&>() }
+        out.Push($"    " $name " " $("U8" if n.Text == "char" else n.Text) "\n")
+        bits += numBits(n.Text)
+    }
+    return out
+}
+
+# X11a: whether a packed record has a floating member, which keeps it from crossing by value
+fn (g mut gen&) packedFloat(i I64) Bool {
+    for ft in g.recs[i].Types {
+        n := g.nodes[g.parseType(ft)]
+        if n.Kind == CKind.Num and (n.Text.StartsWith("F") or n.Text == "BF16") { return true }
+    }
+    return false
+}
+
+# a C bitfield of w bits of a number type's olang name: a Bool for _Bool, else an integer of its width, signed where the
+# type is
+fn bitfieldType(t String&, w I64) String {
+    if t == "Bool" { return "Bool" if w == 1 else "U" $w }
+    return $("I" if t.StartsWith("I") else "U") $w
+}
+
+# the bits a number type's olang name holds (char as a byte); 0 for a name that is no number's
+fn numBits(t String&) I64 {
+    if t == "char" or t == "Bool" { return 8 }
+    if t == "BF16" { return 16 }
+    if t.Len() < 2 { return 0 }
+    return try t[1:].ParseInt(10) catch default 0
 }
 
 # whether a struct or a union is held as opaque words (X18): complete, given back by no function, not plain data - its
@@ -641,6 +713,7 @@ fn (g mut gen&) valueType(t I64, callback Bool) String ? Skip {
         case CKind.Rec {
             i := g.recOf(n.Text)
             if not g.plain(i) { try g.skip("a struct by value that is not plain data (X11)") }
+            if g.recs[i].Packed and g.packedFloat(i) { try g.skip("a packed struct holding a float by value (X11a)") }
             return g.name(i)
         }
         case CKind.Ptr {
@@ -852,6 +925,12 @@ fn (g mut gen&) structDecl(i I64) String {
     # (a copy of the record: plain, parseType and fieldType may read more records, growing g.recs - M19g)
     plain := g.plain(i)
     r := g.recs[i]
+    if plain and r.Packed {
+        b.Push("type " $r.Name " packed struct() {\n")
+        for line in g.packedFields(i) { b.Push(line) }
+        b.Push("}\n")
+        return b.ToString()
+    }
     b.Push("type " $r.Name " struct() {\n")
     if not plain {
         # opaque words of its size and alignment (X18): C's to read, the program's to hold in place

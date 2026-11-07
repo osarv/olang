@@ -990,12 +990,14 @@ fn (c mut Checker&) externRules(f I64) {
         if not runtime and c.callbackType(t) { continue }   # X13: an export fn, by its C name
         if runtime and c.P.T.KindOf(t) == types.Kind.Func and c.P.T.Items(c.P.T.Params(t)).Len() == 0 and c.P.T.Result(t) == types.VoidT and c.P.T.Items(c.P.T.Errors(t)).Len() == 0 { continue }
         sp := fd.S.Params[i].Sp
-        c.P.L.Diags.Error(diag.Where.Span(file, I64(sp.Start), I64(sp.Start) + c.text(fd.S.Params[i].Name).Len()), msgs.ExternType(c.ty(t)))
+        m := msgs.PackedByValueC(c.ty(t)) if c.P.T.Packed(c.under(t)) else msgs.ExternType(c.ty(t))
+        c.P.L.Diags.Error(diag.Where.Span(file, I64(sp.Start), I64(sp.Start) + c.text(fd.S.Params[i].Name).Len()), m)
     }
     r := c.P.T.Result(sig)
     if r == types.UnknownT or r == types.VoidT or r == types.NoreturnT or fd.S.Results.Len() == 0 { return }
     if fd.S.Results.Len() > 1 or not c.externValue(r) {
-        c.P.L.Diags.Error(diag.Where.Span(file, I64(fd.S.Results[0].Span().Start), I64(fd.S.Results[fd.S.Results.Len() - 1].Span().End)), msgs.ExternResult(c.ty(r)))
+        m := msgs.PackedByValueC(c.ty(r)) if c.P.T.Packed(c.under(r)) and fd.S.Results.Len() == 1 else msgs.ExternResult(c.ty(r))
+        c.P.L.Diags.Error(diag.Where.Span(file, I64(fd.S.Results[0].Span().Start), I64(fd.S.Results[fd.S.Results.Len() - 1].Span().End)), m)
     }
 }
 
@@ -1116,7 +1118,20 @@ fn (c mut Checker&) externValue(t types.TypeId) Bool {
     u := c.under(t)
     if c.cNumber(u) or u == types.BoolT { return true }
     if c.foreignRef(t) { return true }
+    if c.P.T.Packed(u) { return not c.holdsFloat(u) }   # X11a: by value only as integer bits
     return c.plainStruct(t, 0)
+}
+
+# X11a: whether a packed value holds a float, deep through its packed fields and arrays
+fn (c mut Checker&) holdsFloat(t types.TypeId) Bool {
+    u := c.P.T.Repr(t)
+    if c.P.T.IsFloat(u) { return true }
+    if c.P.T.KindOf(u) == types.Kind.Array { return c.holdsFloat(c.P.T.Elem(u)) }
+    if not c.P.T.Packed(u) or not c.P.Body(u) { return false }
+    for f in c.P.T.Items(c.P.T.Fields(u)) {
+        if c.holdsFloat(f) { return true }
+    }
+    return false
 }
 
 # X10: whether a type is a reference to an extern type - "Db&", "Db?&"
@@ -1130,6 +1145,7 @@ fn (c mut Checker&) foreignRef(t types.TypeId) Bool {
 # type's reference, an array of a length known while compiling of plain data, or a plain-data struct held by value
 fn (c mut Checker&) plainStruct(t types.TypeId, depth I64) Bool {
     if depth > 16 or not c.isNamed(t) or c.declKind(t) != types.DeclKind.Struct or not c.P.Body(t) { return false }
+    if c.P.T.Packed(t) { return true }   # X11a: plain data, laid out as C's packed bitfields
     if c.P.T.Destructs(t) { return false }
     for fl in c.P.T.Items(c.P.T.Fields(t)) {
         if not c.plainField(fl, depth + 1) { return false }
@@ -1763,6 +1779,7 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
         c.err(source.Span(sp.Start + I32(at), sp.Start + I32(at + 7)), msgs.ExtendsNotBase())
     }
     c.uniqueRules(sp, td, d)
+    c.packedRules(sp, nsp, td, d)
     c.pop()
 }
 
@@ -1804,6 +1821,66 @@ fn (c mut Checker&) uniqueRules(sp source.Span, td ast.TypeDecl&, d types.DeclId
         }
         case _ { }
     }
+}
+
+# T13c: a packed struct takes no type parameters, declares no destructor and gives each field a width; an enum field
+# declaring raw values has them recorded for emit and the evaluator
+fn (c mut Checker&) packedRules(sp source.Span, nsp source.Span, td ast.TypeDecl&, d types.DeclId) {
+    if not td.Packed or td.Body is null: return
+    if td.Params.Len() > 0 {
+        c.err(nsp, msgs.PackedParams())
+        return
+    }
+    match td.Body {
+        case ast.TypeBody.Struct(sb) { c.packedStruct(sp, sb, d) }
+        case _ { }
+    }
+}
+
+fn (c mut Checker&) packedStruct(sp source.Span, sb ast.StructBody&, d types.DeclId) {
+    if sb.Dtor.Len() > 0 { c.err(source.Span(sb.DtorSp.Start, sb.DtorSp.Start + 8), msgs.PackedDestruct()) }
+    self := c.P.SelfType(d)
+    if not c.P.Body(self): return
+    c.P.Layout(self)
+    fs := c.P.T.Items(c.P.T.Fields(self))
+    sps := fieldSpans(sb)
+    for i in range fs.Len() {
+        c.noteRawBits(fs[i])
+        what := c.packedWhat(fs[i])
+        if what != "" { c.err(sps[i] if i < sps.Len() else sp, msgs.PackedField(c.ty(fs[i]), what)) }
+    }
+}
+
+# T13c: an enum field's raw values, recorded where its raw type was (generic.noteRawType)
+fn (c mut Checker&) noteRawBits(f types.TypeId) {
+    r := c.P.T.Repr(f)
+    if c.P.T.KindOf(r) == types.Kind.Array and c.P.T.Length(r) != types.TypeId(0) {
+        c.noteRawBits(c.P.T.Elem(r))
+        return
+    }
+    if not c.isEnum(r) or c.P.T.RawType(r) == types.UnknownT: return
+    c.P.T.SetRawBits(c.P.T.DeclOf(r), c.rawsOf(r).Bits)
+}
+
+# T13c: what a type no packed field may be is, said in its error - "" for one it may be
+fn (c mut Checker&) packedWhat(f types.TypeId) String {
+    if c.P.T.PackedBits(f) >= 0: return ""
+    r := c.P.T.Repr(f)
+    return match c.P.T.KindOf(r) {
+        case types.Kind.Ref: "a reference"
+        case types.Kind.Func: "a function value"
+        case types.Kind.Any: "an any"
+        case types.Kind.ErrVal: "an error value"
+        case types.Kind.Array: "an array of a run-time length" if c.P.T.Length(r) == types.TypeId(0) else c.packedWhat(c.P.T.Elem(r))
+        case types.Kind.Named: c.namedPackedWhat(r)
+        case _: "it has no width in bits"
+    }
+}
+
+fn (c mut Checker&) namedPackedWhat(r types.TypeId) String {
+    if c.isStruct(r): return "a struct that is not packed"
+    if not c.isEnum(r): return "it has no width in bits"
+    return "an enum carrying a payload"
 }
 
 # T13b: what a "unique" type declaration says it of that has no values of its own - "" for a struct, an enum, a type
@@ -6141,6 +6218,25 @@ fn typeOf(x typed.Expr?&) types.TypeId {
 }
 
 # the place a value reads; null where it is no Read
+# T13c: the field of a packed value a place passes through (its span, as written), else a span starting at -1
+fn (c mut Checker&) packedPart(p typed.Lvalue&) source.Span {
+    return match p {
+        case typed.Lvalue.Field(sp, _, base, _): sp if c.P.T.Packed(c.P.T.Repr(base.Type())) else c.packedPart(base)
+        case typed.Lvalue.Elem(_, _, e): c.packedPart(e.Base)
+        case typed.Lvalue.Payload(_, _, py): c.packedPart(py.Base)
+        case _: source.Span(-1, -1)
+    }
+}
+
+# T13c: a place lent to a reference, or sliced, where it lies in a packed value - an error naming the field and the copy
+# to write; whether it was one
+fn (c mut Checker&) lendsPacked(p typed.Lvalue&, sp source.Span) Bool {
+    fsp := c.packedPart(p)
+    if fsp.Start < 0 { return false }
+    c.err(sp, msgs.PackedLend(c.src(fsp)))
+    return true
+}
+
 fn readPlace(x typed.Expr&) typed.Lvalue?& {
     match x {
         case typed.Expr.Read(_, _, p, _) { return p }
@@ -6846,6 +6942,7 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
             b := c.tryBorrowed(x, want, sp)
             if b is not null { return b }
             p := readPlace(x)
+            if p is not null and c.lendsPacked(p, sp) { return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp))) }
             if p is not null {
                 if (c.P.T.PermOf(want) & types.Writable) != 0 {
                     c.mustWrite(p, sp, false)
@@ -6877,6 +6974,7 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
             # elements are held as the wanted one's are (an Array<Char> lent as an Array<U8>&: Char extends U8, T29h) -
             # it had been copied and the copy lent, so what the callee wrote was lost
             if p is not null and hk == types.Kind.Array and (c.P.T.Length(have) != types.TypeId(0) or c.sameRepr(have, r)) {
+                if c.lendsPacked(p, sp) { return typed.Expr.Promote(sp, want, typed.Promote(c.fit(x, r, sp), c.site(typed.SiteKind.Promote, sp))) }
                 if (c.P.T.PermOf(want) & types.Writable) != 0 {
                     c.mustWrite(p, sp, false)
                     c.roDeepNeed(x)
@@ -7070,7 +7168,7 @@ fn (c mut Checker&) externArray(target typed.Callee&, x typed.Expr&, want types.
     if wa == types.UnknownT or c.P.T.Length(wa) != types.TypeId(0) { return null }
     if c.P.T.KindOf(have) != types.Kind.Array or c.P.T.Length(have) == types.TypeId(0) { return null }
     p := readPlace(x)
-    if p is null { return null }
+    if p is null or c.lendsPacked(p, sp) { return null }
     # a parameter held by reference ("Array<U8>&") takes the borrow itself, one by value the array it names
     if c.isRef(want) { return c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(have, types.Writable), p), c.P.T.Ref(c.P.T.Referent(want), types.Writable)) }
     b := c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(have, types.Writable), p), c.P.T.Ref(want, types.Writable))
@@ -7133,6 +7231,7 @@ fn (c mut Checker&) cBorrow(x typed.Expr&, want types.TypeId, sp source.Span) ty
         c.err(sp, msgs.CPointerTemporary(c.ty(have)))
         return x
     }
+    if c.lendsPacked(p, sp) { return x }
     if c.writable(want) { c.mustWrite(p, sp, false) }
     return typed.Expr.Borrow(sp, c.P.T.Ref(have, types.Writable if c.writable(want) else 0), p)
 }
@@ -9148,6 +9247,7 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr?&, hi ast.Exp
 # a slice of what a place holds (E16a): its bounds checked once - aborting for x[lo:hi] (E16b), failing as written with
 # ArrayError.OutOfRange for x.SliceOf(lo, hi) (E16c)
 fn (c mut Checker&) sliceOf(sp source.Span, b typed.Lvalue&, lo ast.Expr?&, hi ast.Expr?&, check typed.Check) typed.Expr& {
+    if c.lendsPacked(b, sp) { return c.unknown(sp) }   # T13c: a slice is a reference to the elements
     base typed.Lvalue& = b
     t := base.Type()
     # E16a: a slice carries its base's permission - of a value array, the place's own (an immutable global's is
@@ -13363,6 +13463,7 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
             c.err(c.operandAt(x), msgs.AtomicNotPlace())
             return c.unknown(sp)
         }
+        if c.lendsPacked(p, c.operandAt(x)) { return c.unknown(sp) }
         if op != typed.PrimOp.AtomicLoad { c.noteWrite(p) }
         if op != typed.PrimOp.AtomicLoad and not c.placeWritable(p) {
             c.err(c.operandAt(x), msgs.AtomicNotWritable())
@@ -14231,7 +14332,7 @@ fn (c mut Checker&) reflLen(y ast.Expr&, n source.NameId, args Array<ast.Expr&>&
 }
 
 # a reflected member known while compiling (G32, G34): a type's Name, Kind, Size, Align, Length; a descriptor's Name,
-# Offset, HasDefault
+# Offset, BitOffset, Bits, HasDefault
 fn (c mut Checker&) reflConst(y ast.Expr&, n source.NameId) reflVal {
     name := c.text(n)
     t := c.reflType(y)
@@ -14282,6 +14383,10 @@ fn (c mut Checker&) reflConst(y ast.Expr&, n source.NameId) reflVal {
     if name == "Offset" and ds.K == generic.DescField {
         off := c.fieldOffset(ds)
         return rvInt(off) if off >= 0 else noRefl()
+    }
+    if (name == "BitOffset" or name == "Bits") and ds.K == generic.DescField {
+        b := c.fieldBits(ds, name == "Bits")
+        return rvInt(b) if b >= 0 else noRefl()
     }
     return noRefl()
 }
@@ -14351,6 +14456,17 @@ fn (c mut Checker&) fieldOffset(ds generic.Desc) I64 {
     return 8 + offs[ds.At] if ds.At < offs.Len() else -1
 }
 
+# G34, T13c: where a field starts and how many bits it takes - a packed struct's exactly, any other's in whole bytes
+fn (c mut Checker&) fieldBits(ds generic.Desc, width Bool) I64 {
+    off := c.fieldOffset(ds)
+    if off < 0 { return -1 }
+    r := c.P.ReflUnder(ds.Of)
+    fs := c.P.T.Items(c.P.T.Fields(r)) if c.isStruct(r) else c.P.T.Items(c.P.T.Parts(c.P.T.Items(c.P.T.Cases(r))[ds.Case]))
+    if ds.At >= fs.Len() { return -1 }
+    if c.P.T.Packed(r) { return c.P.T.PackedBits(fs[ds.At]) if width else c.P.T.BitOffsets(r)[ds.At] }
+    return 8 * c.P.T.Size(fs[ds.At]) if width else 8 * off
+}
+
 # a reflected value written into the program: a literal of its type
 fn (c mut Checker&) reflExpr(sp source.Span, v reflVal) typed.Expr& {
     if v.K == RvBool { return c.lit(sp, types.BoolT, v.I) }
@@ -14408,7 +14524,7 @@ fn (c mut Checker&) reflMember(sp source.Span, nsp source.Span, x ast.Expr&, n s
     v := c.reflConst(x, n)
     if v.Ok { return c.reflExpr(sp, v) }
     have := match ds.K {
-        case generic.DescField: "Name, Type, Offset, Of, Attr and HasAttr"
+        case generic.DescField: "Name, Type, Offset, BitOffset, Bits, Of, Attr and HasAttr"
         case generic.DescCase: "Name, Fields, Attr and HasAttr"
         case generic.DescParam: "Name, Type, HasDefault, Default, Attr and HasAttr"
         case generic.DescFunc: "Name, Type, Params, Results, Errors, Attr, HasAttr, NoReturn, Exported, Extern, Commutes and G42's facts - and it is called"
@@ -18196,11 +18312,14 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt& {
     # a condition B9a left to evaluation: asked for, the if checked as a running one meanwhile
     asked := false
     if not dead and i.Then!.Group >= 0 and d.IsPending(i.Then!.Group) {
-        b := c.CondBody(c.fr().Mi, i.Cond!)
+        # (never in a generic's instance: a decision is kept by the condition's place, which every instance shares - a
+        # walk of a type's fields unrolled to none fixed a local there, and its if was S8a's dead branch, json.Encode of
+        # a struct of private fields refused)
+        b := -1 if c.fr().Ctx.Vars.Len() > 0 else c.CondBody(c.fr().Mi, i.Cond!)
         if b >= 0 {
             c.Asks.Push(Ask(b, c.fr().File, i.Cond!.Span().Start, i, c.fr().Body, c.lastFixed.ToArray()))
             asked = true
-        } else if not c.readsConst(i.Cond) {
+        } else if c.fr().Ctx.Vars.Len() > 0 or not c.readsConst(i.Cond) {
             # it reads a local no evaluation can stand for: the running program's, what its branches hold reported (S7)
             c.Running(i)
         }

@@ -1,0 +1,7 @@
+# check: fail error[T13c]: a packed struct holds plain data, so it declares no destructor
+# T13c: a packed struct is plain data, ended by nothing
+Ended mut I64 = 0
+type Reg unique packed struct(v U4) {
+    v
+} destruct { Ended++ }
+fn main() { }

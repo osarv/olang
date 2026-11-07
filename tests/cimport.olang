@@ -74,3 +74,20 @@ test "a variadic call: integers of other widths promoted to the C type that hold
     n := s.snprintf(buf, 96, "%d %d %d %d %llu %lld %d".ToC(), a, b, e, f, g, h, k)
     assert String(buf[:n]) == "21 -7 -2000 2147483647 8589934591 -549755813888 -1"
 }
+
+test "a packed record of bitfields is a packed struct, its bits C's (X18, X11a)" {
+    assert d.cdemo_hdr.Size == 8 and d.cdemo_iv.Size == 7
+    h := d.cdemo_hdr()
+    h.v = 15
+    h.d = -3
+    h.len = 1000
+    h.syn = true
+    h.x = 2.5
+    assert d.cdemo_hdr_sum(h) == 15 - 3 + 1000 + 1 + 2
+    d.cdemo_hdr_set(h)
+    assert h.d == -8 and h.rest == 127 and h.x == 4.5 and h.len == 1000 and h.v == 15
+    v := d.cdemo_iv_make()
+    assert v.a == 9 and v.b == -100 and v.c == 0x123456789
+    v.b = 77
+    assert d.cdemo_iv_b(v) == 77 + 1
+}

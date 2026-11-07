@@ -1,0 +1,135 @@
+# T13c: packed structs - "type Header packed struct(...)" lays its fields out from the lowest bit up with no padding,
+# each at its exact width (an integer its own, a Bool 1, a float its bits, a payload-free enum the bits counting its
+# cases or its raw type's, a packed struct its fields' bits, a fixed array its elements' one after another), the size
+# rounded up to bytes, alignment 1. A field is read by a shift and a mask and stored by replacing its bits alone, the
+# place up to the packed value evaluated once. ==, Hash, $ and json go by the fields, and reflection says each field's
+# bits (G34). Each computation is a global the evaluator bakes and a top-level assert it decides (K2, S17a), and at run
+# time on an input it cannot see (Live)
+
+import "std/json"
+
+Live mut I64 = 0
+
+type Kind enum { Data, Ack, Fin }
+
+type Op enum U8 { Get = 3, Put = 200 }
+
+type Flags packed struct(Syn Bool, Ack Bool, Fin Bool) { Syn, Ack, Fin }
+
+type Header packed struct(Version U4, Ihl U4, Length U16, K Kind, F Flags, S I5, Code Op, H F16) {
+    Version, Ihl, Length, K, F, S, Code, H
+    Lanes := Array<U3>(4)
+}
+
+fn header(n U16) Header { return Header(4, 5, n, Kind.Fin, Flags(true, false, true), -3, Op.Put, 1.5) }
+
+# fields written one by one - a nested packed struct's field, an array field's element, a raw-valued enum
+fn written(n U16) Header {
+    h := header(n)
+    h.Ihl = 6
+    h.Length += 100
+    h.F.Ack = true
+    h.Lanes[1] = 6
+    h.Lanes[2] = 3
+    h.S++
+    h.Code = Op.Get
+    h.H = -0.25
+    return h
+}
+
+# the bytes the value is: built field by field, then read back through a byte view of a copy
+type Word packed struct(Lo U4, Mid U8, Hi U4) { Lo, Mid, Hi }
+
+fn wordBits(w Word) I64 { return I64(w.Lo) | I64(w.Mid) << 4 | I64(w.Hi) << 12 }
+
+Written Header = written(20)
+Equal Bool = written(7) == written(7) and written(7).Hash() == written(7).Hash()
+Unequal Bool = written(7) == written(8)
+Rendered String = $written(20)
+
+assert Header.Size == 9 and Header.Align == 1 and Flags.Size == 1 and Word.Size == 2
+assert Written.Ihl == 6 and Written.Length == 120 and Written.F.Ack and Written.F.Syn and Written.Lanes[1] == 6
+assert Written.Lanes[2] == 3 and Written.S == -2 and Written.Code == Op.Get and Written.H == -0.25 and Written.K == Kind.Fin
+assert Equal and not Unequal
+assert Rendered == "Header(4, 6, 120, Kind.Fin, Flags(true, true, true), -2, Op.Get, -0.25, U3[0, 6, 3, 0])"
+assert wordBits(Word(0xA, 0xBC, 0xD)) == 0xDBCA
+
+test Header "fields read and written by their bits alone, computed while compiling as at run time" {
+    h := written(U16(20 + Live))
+    assert h == Written and h.Hash() == Written.Hash()
+    assert $h == Rendered
+    h.Lanes[3] = 7
+    assert h.Lanes[3] == 7 and h.Lanes[2] == 3 and h.Code == Op.Get and h.H == -0.25
+    h.F = Flags(false, false, false)
+    assert not h.F.Syn and h.S == -2 and h.K == Kind.Fin
+    assert h != Written
+}
+
+test Header "a field's neighbours keep their bits when it is stored, signed fields keep their sign" {
+    w := Word(0xF, 0x00, 0xF)
+    w.Mid = U8(0xAB + Live)
+    assert wordBits(w) == 0xFABF
+    w.Lo = 0
+    w.Hi = 1
+    assert wordBits(w) == 0x1AB0
+    h := header(U16(Live))
+    h.S = -16
+    assert h.S == -16 and h.Code == Op.Put
+    h.S--
+    assert h.S == 15     # wraps at its five bits (E6c)
+}
+
+# a packed value inside an ordinary struct and an array, read and written through them; a place to the packed value
+# evaluated once
+type Frame struct(tag I64, hdr Header) { tag, hdr }
+
+Bumps mut I64 = 0
+
+fn bump() I64 {
+    Bumps++
+    return Live
+}
+
+test Header "a packed value held in a struct and an array, its fields written through them" {
+    f := Frame(1, header(9))
+    f.hdr.F.Fin = false
+    f.hdr.Lanes[0] = 5
+    assert not f.hdr.F.Fin and f.hdr.Lanes[0] == 5 and f.hdr.Length == 9
+    hs := Array<Header>(3, header(1))
+    hs[bump()].Length += 2
+    assert Bumps == 1 and hs[0].Length == 3 and hs[1].Length == 1
+}
+
+# G34: where each field starts and how many bits it takes
+fn layout<T>() String {
+    out := ""
+    for f in T.Fields { out = $out $f.Name ":" $f.BitOffset "+" $f.Bits "@" $f.Offset " " }
+    return out
+}
+
+Layout String = layout<Header>()
+
+assert Layout == "Version:0+4@0 Ihl:4+4@0 Length:8+16@1 K:24+2@3 F:26+3@3 S:29+5@3 Code:34+8@4 H:42+16@5 Lanes:58+12@7 "
+
+test Header "reflection gives each field's bits" {
+    assert layout<Header>() == Layout
+    assert layout<Frame>() == "tag:0+64@0 hdr:64+72@8 "
+}
+
+type Pub packed struct(V U3, F Flags, K Kind) { V, F, K }
+
+test Pub "json writes and reads a packed struct by its fields" {
+    p := Pub(5, Flags(true, false, true), Kind.Ack)
+    t := json.Encode(p)
+    assert t == "{\"V\":5,\"F\":{\"Syn\":true,\"Ack\":false,\"Fin\":true},\"K\":\"Ack\"}"
+    assert json.Decode<Pub>(t)! == p
+}
+
+test Header "an array field stored whole, and its copy's lanes" {
+    h := header(U16(Live))
+    h.Lanes = U3[1, 2, 3, 4]
+    l := h.Lanes
+    l += U3[1, 1, 1, 1]
+    h.Lanes = l[0:4]
+    assert h.Lanes == U3[2, 3, 4, 5] and h.Lanes.Len() == 4 and h.Code == Op.Put
+}

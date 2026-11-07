@@ -201,6 +201,9 @@ type Table struct(Names mut source.Names&) {
     ints Vec<TypeId>                   # T4a: the integer type of each width, I1 .. I128 at 1 .. 128, U1 .. U128 above
     copyDecls Map<I64, Bool>           # E31d: the declared types (by DeclId) that declare their own Copy
     uniqueDecls Map<I64, Bool>         # T13b: the declared types (by DeclId) declared unique
+    packedDecls Map<I64, Bool>         # T13c: the struct declarations (by DeclId) declared packed
+    rawTys Map<I64, TypeId>            # T13c: an enum's integer raw type (by DeclId), where a packed field holds one
+    rawBits Map<I64, Array<I64>&>      # ... and its cases' raw values, in case order
     endsDecls Map<I64, Bool>           # C11: the library's collections (by DeclId) whose destructor ends what they hold
     uniqueKnown Map<I64, Bool>         # ... and whether a type is unique, once every part of it was typed (Unique)
 }
@@ -903,6 +906,90 @@ fn (t mut Table&) MarkUnique(d DeclId) { t.uniqueDecls.Put(I64(d), true) }
 
 fn (t Table&) AnyUnique() Bool { return t.uniqueDecls.Len() > 0 }
 
+# T13c: a struct declared packed - registered as declarations are, before any layout is asked for
+fn (t mut Table&) MarkPacked(d DeclId) { t.packedDecls.Put(I64(d), true) }
+
+fn (t Table&) Packed(id TypeId) Bool { return t.KindOf(id) == Kind.Named and t.packedDecls.Has(I64(t.DeclOf(id))) }
+
+# T13c: an enum's integer raw type (T17e), recorded where a packed field holds the enum (generic's layout), and its
+# cases' raw values, recorded by the checker
+fn (t mut Table&) SetRawType(d DeclId, ty TypeId) { t.rawTys.Put(I64(d), ty) }
+fn (t mut Table&) SetRawBits(d DeclId, bits Array<I64>&) { t.rawBits.Put(I64(d), bits) }
+
+# an enum's integer raw type as recorded (UnknownT for none), and its cases' raw values
+fn (t Table&) RawType(id TypeId) TypeId {
+    if t.KindOf(id) != Kind.Named { return UnknownT }
+    return try t.rawTys.Get(I64(t.DeclOf(id))) catch default UnknownT
+}
+fn (t Table&) RawBits(id TypeId) Array<I64>& { return try t.rawBits.Get(I64(t.DeclOf(id))) catch default Array<I64>(0) }
+
+# T13c: the bits a value of a type takes as a packed struct's field - an integer its width, a Bool 1, a float its bits,
+# a payload-free enum its raw type's width or the fewest bits counting its cases, a packed struct its fields' bits, a
+# fixed array its length times its element's; -1 for a type no packed field may be
+fn (t Table&) PackedBits(id TypeId) I64 {
+    r := t.Repr(id)
+    if r == BoolT: return 1
+    if t.IsNumber(r): return t.Bits(r)
+    match t.KindOf(r) {
+        case Kind.Array {
+            if t.Length(r) == TypeId(0) or t.KindOf(t.Length(r)) != Kind.Const: return -1
+            e := t.PackedBits(t.Elem(r))
+            return -1 if e < 0 else e * t.ConstValue(t.Length(r))
+        }
+        case Kind.Named { return t.namedPackedBits(r) }
+        case _ { return -1 }
+    }
+}
+
+fn (t Table&) namedPackedBits(r TypeId) I64 {
+    if not t.HasBody(r): return -1
+    match t.DeclKindOf(t.DeclOf(r)) {
+        case DeclKind.Struct {
+            if not t.Packed(r): return -1
+            n I64 = 0
+            for f in t.Items(t.Fields(r)) {
+                b := t.PackedBits(f)
+                if b < 0: return -1
+                n += b
+            }
+            return n
+        }
+        case DeclKind.Enum {
+            if t.HasPayload(t.Cases(r)): return -1
+            raw := t.RawType(r)
+            if raw != UnknownT: return t.Bits(t.Repr(raw))
+            return CaseBits(t.Items(t.Cases(r)).Len())
+        }
+        case _ { return -1 }
+    }
+}
+
+# the fewest bits that count n cases, at least 1
+fn CaseBits(n I64) I64 {
+    b I64 = 1
+    for (I64(1) << b) < n { b++ }
+    return b
+}
+
+# T13c: a packed struct's fields' bit offsets, in order
+fn (t Table&) BitOffsets(id TypeId) Array<I64> {
+    fs := t.Items(t.Fields(id))
+    out := Array<I64>(fs.Len())
+    at I64 = 0
+    for i in range fs.Len() {
+        out[i] = at
+        at += t.fieldBits(fs[i])
+    }
+    return out
+}
+
+# a packed struct's field's width - one no packed field may have (its error said by the checker) taken as its bytes, so
+# the rest is laid out as written
+fn (t Table&) fieldBits(f TypeId) I64 {
+    b := t.PackedBits(f)
+    return b if b >= 0 else 8 * t.Size(f)
+}
+
 # whether Unique's answer for a type is known already
 fn (t Table&) UniqueSettled(id TypeId) Bool { return t.uniqueKnown.Has(I64(id)) }
 
@@ -1404,7 +1491,9 @@ fn (t mut Table&) ComputeLayout(id TypeId) Bool {
         case Kind.Named {
             if not t.HasBody(id) { return false }
             match t.DeclKindOf(t.DeclOf(id)) {
-                case DeclKind.Struct { size, align = t.layFields(id, t.Fields(id)) }
+                case DeclKind.Struct {
+                    size, align = t.layPacked(id) if t.Packed(id) else t.layFields(id, t.Fields(id))
+                }
                 case DeclKind.Enum { size, align = t.layEnum(id, t.Cases(id)) }
                 case DeclKind.Error { size, align = 4, 4 }
                 case DeclKind.Over {
@@ -1439,6 +1528,17 @@ fn (t mut Table&) layFields(id TypeId, fields ListId) I64, I64 {
         off += t.Size(f)
     }
     return (off + align - 1) / align * align, align
+}
+
+# T13c: a packed struct's bits rounded up to bytes, alignment 1; its fields' offsets the bytes holding their lowest bits
+fn (t mut Table&) layPacked(id TypeId) I64, I64 {
+    bits I64 = 0
+    t.offsetsAt[I64(id)] = t.offsets.Len()
+    for f in t.Items(t.Fields(id)) {
+        t.offsets.Push(bits / 8)
+        bits += t.fieldBits(f)
+    }
+    return (bits + 7) / 8, 1
 }
 
 # T17: an enum carrying no payload is its ordinal, an I32; one that does is a tag word and room for its largest
@@ -1511,7 +1611,7 @@ fn (t mut Table&) enumLlvm(id TypeId) String {
 
 fn (t mut Table&) namedLlvm(id TypeId) String {
     return match t.DeclKindOf(t.DeclOf(id)) {
-        case DeclKind.Struct: t.structName(id)
+        case DeclKind.Struct: "[" $t.Size(id) " x i8]" if t.Packed(id) else t.structName(id)
         case DeclKind.Enum: t.enumLlvm(id)
         case DeclKind.Error: "i32"
         case DeclKind.Over: $t.Llvm(t.Base(id))

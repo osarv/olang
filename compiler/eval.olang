@@ -2094,6 +2094,10 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
             m.copy(dst, s, n)
         }
         case mir.Rvalue.Prim(op, ty, args) {
+            if op == typed.PrimOp.Unpack or op == typed.PrimOp.Repack {
+                m.packedOp(fi, dst, op, args)
+                return
+            }
             if op == typed.PrimOp.Convert and m.arrayOf(ty) != types.UnknownT {
                 m.convertArray(fi, dst, m.arg(fi, args, 0), ty)
                 return
@@ -2257,6 +2261,15 @@ fn (m mut Machine&) aggregate(fi I64, dst Ptr, ty types.TypeId, tag I64, args mi
     n := m.size(ty)
     s := m.scratchFor(0, n)
     m.zero(s, n)
+    if m.T.Packed(m.T.Repr(ty)) {
+        # T13c: each field's bits placed after the one before's
+        pt := m.T.Repr(ty)
+        fs := m.T.Items(m.T.Fields(pt))
+        offs := m.T.BitOffsets(pt)
+        for i in range args.N { m.packInto(s, offs[i], fs[i], m.addr(fi, m.arg(fi, args, i), 1)) }
+        m.copy(dst, s, n)
+        return
+    }
     sh := m.shape(ty)
     for i in range args.N {
         x := m.arg(fi, args, i)
@@ -2272,6 +2285,91 @@ fn (m mut Machine&) aggregate(fi I64, dst Ptr, ty types.TypeId, tag I64, args mi
     }
     if sh == vEnum { m.wr(s, 8, tag) } else if sh == vOrd { m.wr(s, 4, tag) }
     m.copy(dst, s, n)
+}
+
+# ---- packed structs (T13c) ----
+
+# Unpack, args [x, k]: field k of the packed value x read out of its bits; Repack, args [x, k, v]: x with field k's bits
+# replaced by v's - both into dst, which may be x's own place
+fn (m mut Machine&) packedOp(fi I64, dst Ptr, op typed.PrimOp, args mir.Range) {
+    x := m.arg(fi, args, 0)
+    pt := m.T.Repr(m.opType(fi, x))
+    k := m.scalar(fi, m.arg(fi, args, 1))
+    ft := m.T.Items(m.T.Fields(pt))[k]
+    off := m.T.BitOffsets(pt)[k]
+    n := m.size(pt)
+    s := m.scratchFor(0, n + m.size(ft))
+    m.copy(s, m.addr(fi, x, 1), n)
+    if m.halted { return }
+    if op == typed.PrimOp.Unpack {
+        out := Ptr(s.Id, n)
+        m.unpackInto(out, ft, s, off)
+        m.copy(dst, out, m.size(ft))
+        return
+    }
+    m.packInto(s, off, ft, m.addr(fi, m.arg(fi, args, 2), 2))
+    m.copy(dst, s, n)
+}
+
+# a field's value of type ft written at dst from the bits at src from bit off
+fn (m mut Machine&) unpackInto(dst Ptr, ft types.TypeId, src Ptr, off I64) {
+    r := m.T.Repr(ft)
+    if m.T.KindOf(r) == types.Kind.Array {
+        el := m.T.Elem(r)
+        ew := m.T.PackedBits(el)
+        for i in range m.T.ConstValue(m.T.Length(r)) { m.unpackInto(Ptr(dst.Id, dst.Off + i * m.size(el)), el, src, off + i * ew) }
+        return
+    }
+    w := m.T.PackedBits(r)
+    m.zero(dst, m.size(r))
+    raws := m.T.RawBits(r)
+    if m.T.RawType(r) == types.UnknownT or raws.Len() == 0 {
+        m.copyBits(dst, 0, src, off, w)
+        return
+    }
+    # T17e: a raw value read back as the position of the case holding it
+    t := m.scratchFor(3, 8)
+    m.zero(t, 8)
+    m.copyBits(t, 0, src, off, w)
+    v := m.rd(t, 8)
+    for i in range raws.Len() {
+        if raws[i] & bmask(w) == v {
+            m.wr(dst, 4, i)
+            return
+        }
+    }
+    m.refuse(WhyNotModelled)
+}
+
+# a field's value of type ft, at src, written into the bits at dst from bit off
+fn (m mut Machine&) packInto(dst Ptr, off I64, ft types.TypeId, src Ptr) {
+    r := m.T.Repr(ft)
+    if m.T.KindOf(r) == types.Kind.Array {
+        el := m.T.Elem(r)
+        ew := m.T.PackedBits(el)
+        for i in range m.T.ConstValue(m.T.Length(r)) { m.packInto(dst, off + i * ew, el, Ptr(src.Id, src.Off + i * m.size(el))) }
+        return
+    }
+    w := m.T.PackedBits(r)
+    raws := m.T.RawBits(r)
+    if m.T.RawType(r) == types.UnknownT or raws.Len() == 0 {
+        m.copyBits(dst, off, src, 0, w)
+        return
+    }
+    t := m.scratchFor(3, 8)
+    m.wr(t, 8, raws[m.rd(src, 4)])
+    m.copyBits(dst, off, t, 0, w)
+}
+
+# n bits from bit soff at src to bit doff at dst, the bits around them kept (bit b of a value its byte b / 8's bit b % 8)
+fn (m mut Machine&) copyBits(dst Ptr, doff I64, src Ptr, soff I64, n I64) {
+    for i in range n {
+        sb, db := soff + i, doff + i
+        bit := (m.rd(Ptr(src.Id, src.Off + sb / 8), 1) >> (sb % 8)) & 1
+        at := Ptr(dst.Id, dst.Off + db / 8)
+        m.wr(at, 1, (m.rd(at, 1) & ~(I64(1) << (db % 8))) | (bit << (db % 8)))
+        if m.halted { return }
+    }
 }
 
 fn (m mut Machine&) newRef(fi I64, dst Ptr, s mir.ScopeRef, x mir.Operand, ty types.TypeId) {

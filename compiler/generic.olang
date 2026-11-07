@@ -236,6 +236,7 @@ fn (p mut Program&) DeclFor(mi I64, ei I64) types.DeclId {
     }
     d = p.T.AddDecl(mi, e.Name, kind, n)
     if td is not null and td.Word == ast.DeclWord.Unique { p.T.MarkUnique(d) }   # T13b
+    if td is not null and td.Packed { p.T.MarkPacked(d) }                        # T13c
     if td is not null and p.EndsHeld(mi, td) { p.T.MarkEnds(d) }                 # C11
     p.declAt.Put(key, d)
     p.declMi.Push(mi)
@@ -2514,10 +2515,36 @@ fn (p mut Program&) Layout(t types.TypeId) Bool {
             if not p.Layout(e) { ok = false }
         }
     }
+    if ok and p.T.Packed(t) {
+        for f in p.T.Items(p.T.Fields(t)) { p.noteRawType(f) }
+    }
     if ok { ok = p.T.ComputeLayout(t) }
     if isInstance { p.chain-- }
     if p.T.LayoutState(t) == types.LayingOut { p.T.SetLayoutState(t, types.LaidOut if ok else types.NoLayout) }
     return ok
+}
+
+# T13c: an enum a packed field holds (or an array of them) that declares integer raw values takes its raw type's width:
+# the raw type recorded for the layout (the values the checker records once it has them, check.packedRules)
+fn (p mut Program&) noteRawType(f types.TypeId) {
+    r := p.T.Repr(f)
+    if p.T.KindOf(r) == types.Kind.Array and p.T.Length(r) != types.TypeId(0) {
+        p.noteRawType(p.T.Elem(r))
+        return
+    }
+    if p.T.KindOf(r) != types.Kind.Named or p.T.DeclKindOf(p.T.DeclOf(r)) != types.DeclKind.Enum: return
+    d := p.T.DeclOf(r)
+    if p.T.RawType(r) != types.UnknownT: return
+    td := p.typeDecl(d)
+    if td is null or td.Body is null: return
+    match td.Body {
+        case ast.TypeBody.Enum(_, raw) {
+            if raw is null: return
+            rt := p.Resolve(p.declContext(d), raw)
+            if p.T.IsInt(p.T.Repr(rt)) and p.T.Bits(p.T.Repr(rt)) <= 64 { p.T.SetRawType(d, rt) }
+        }
+        case _ { }
+    }
 }
 
 # the bodies a type's representation passes through (T29: a declared type over another) made, so that Repr reaches it

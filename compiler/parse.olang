@@ -646,7 +646,7 @@ fn (p mut Parser&) attributed() ast.Decl?& ? Fail {
         }
         case ast.Decl.Type(sp, td) {
             p.declareAttrs(attrs)
-            return ast.Decl.Type(sp, ast.TypeDecl(td.Name, td.Params, td.Extends, td.Body, attrs, td.Word))
+            return ast.Decl.Type(sp, ast.TypeDecl(td.Name, td.Params, td.Extends, td.Body, attrs, td.Word, td.Packed))
         }
         case _ { return d }
     }
@@ -871,11 +871,27 @@ fn (p mut Parser&) typeDeclRest(at I32, name source.NameId) ast.Decl& ? Fail {
         word = w
         p.advance()
     }
+    packed := p.packedWord()
     extending := p.accept(token.Tok.Extends)
     body := try p.typeBody()
     sp := p.from(at)
     if p.sees(token.Tok.StmtEnd) { p.advance() }
-    return ast.Decl.Type(sp, ast.TypeDecl(name, params, extending, body, Array<ast.Attr&>(0), word))
+    return ast.Decl.Type(sp, ast.TypeDecl(name, params, extending, body, Array<ast.Attr&>(0), word, packed))
+}
+
+# T13c: "packed" right before "struct" - a word only there (L9b); before another body's keyword it is an error naming
+# T13c, read as the word so the body still parses
+fn (p mut Parser&) packedWord() Bool {
+    if not p.sees(token.Tok.Iden) or p.text(p.tk()) != "packed": return false
+    k := p.ts.Toks[p.after(1)].Kind
+    if k == token.Tok.Struct {
+        p.advance()
+        return true
+    }
+    if k != token.Tok.Enum and k != token.Tok.Extends and k != token.Tok.Trait and k != token.Tok.Error: return false
+    p.report(p.here(), p.tk().End, msgs.PackedNotStruct())
+    p.advance()
+    return false
 }
 
 # the word a type declaration's word spells (T13a, T13b) - Plain for a name that is none

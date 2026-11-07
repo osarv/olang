@@ -443,7 +443,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
             sig := declSig(c, named(c, c.P.CtorSig(self), null, ctorParams(c.P.TypeDecl(d)!)))
             close := firstClose(sig)
             ps := withDefaults(c, sig[3:close], ctorParams(c.P.TypeDecl(d)!), c.P.DeclModule(d), 0)
-            b.Push($"type " $name $declWord(c, self) " struct(" $ps ")" $errorsAfter(sig[close + 1:]) "\n")
+            b.Push($"type " $name $declWord(c, self) $(" packed" if c.P.T.Packed(self) else "") " struct(" $ps ")" $errorsAfter(sig[close + 1:]) "\n")
             match c.P.TypeDecl(d)!.Body {
                 case ast.TypeBody.Struct(sb) {
                     if sb.Errs is not null { contract(b, c, sb.Errs!, c.P.DeclModule(d), "    ") }

@@ -4394,7 +4394,7 @@ reflcaseunreachable.olang:15:18: note: instantiated here, with T = I64
       |                  ^~~~~~
 compilation failed with 1 error
 === refldescnomember.olang
-refldescnomember.olang:9:34: error[G34]: a field has no 'Width' - its members are Name, Type, Offset, Of, Attr and HasAttr
+refldescnomember.olang:9:34: error[G34]: a field has no 'Width' - its members are Name, Type, Offset, BitOffset, Bits, Of, Attr and HasAttr
     9 | fn main() { n := Point.Fields[0].Width }
       |                                  ^~~~~
 compilation failed with 1 error
@@ -5814,6 +5814,61 @@ $ROOT/std/prelude/vec.olang:110:12: note: Get needs a copy here
   110 |     return v.data[i]
       |            ^~~~~~~~~
 compilation failed with 1 error
+=== t13cdestruct.olang
+t13cdestruct.olang:6:3: error[T13c]: a packed struct holds plain data, so it declares no destructor
+    6 | } destruct { Ended++ }
+      |   ^~~~~~~~
+compilation failed with 1 error
+=== t13cfieldpayload.olang
+t13cfieldpayload.olang:4:39: error[T13c]: a packed struct lays its fields out bit by bit, so Shape (an enum carrying a payload) is no field of one - a field is an integer, Bool, Char, float, payload-free enum, packed struct, or an array of a known length of these
+    4 | type P packed struct(s Shape, k U4) { s, k }
+      |                                       ^
+compilation failed with 1 error
+=== t13cfieldref.olang
+t13cfieldref.olang:4:39: error[T13c]: a packed struct lays its fields out bit by bit, so Node& (a reference) is no field of one - a field is an integer, Bool, Char, float, payload-free enum, packed struct, or an array of a known length of these
+    4 | type P packed struct(n Node&, k U4) { n, k }
+      |                                       ^
+compilation failed with 1 error
+=== t13cfieldstruct.olang
+t13cfieldstruct.olang:4:36: error[T13c]: a packed struct lays its fields out bit by bit, so Pt (a struct that is not packed) is no field of one - a field is an integer, Bool, Char, float, payload-free enum, packed struct, or an array of a known length of these
+    4 | type P packed struct(p Pt, k U4) { p, k }
+      |                                    ^
+compilation failed with 1 error
+=== t13cfieldtext.olang
+t13cfieldtext.olang:3:43: error[T13c]: a packed struct lays its fields out bit by bit, so String (an array of a run-time length) is no field of one - a field is an integer, Bool, Char, float, payload-free enum, packed struct, or an array of a known length of these
+    3 | type P packed struct(name String, k U4) { name, k }
+      |                                           ^~~~
+compilation failed with 1 error
+=== t13cforin.olang
+t13cforin.olang:10:14: error[T13c]: 'h.lanes' is a field of a packed struct, at a bit offset, so no reference names it - copy it into a local first ('v := h.lanes') and lend that
+   10 |     for x in h.lanes { n += I64(x) }
+      |              ^~~~~~~
+compilation failed with 1 error
+=== t13clendparam.olang
+t13clendparam.olang:8:17: error[T13c]: 'h.i' is a field of a packed struct, at a bit offset, so no reference names it - copy it into a local first ('v := h.i') and lend that
+    8 |     assert look(h.i) == 1
+      |                 ^~~
+compilation failed with 1 error
+=== t13clendrecv.olang
+t13clendrecv.olang:8:5: error[T13c]: 'h.i' is a field of a packed struct, at a bit offset, so no reference names it - copy it into a local first ('v := h.i') and lend that
+    8 |     h.i.Bump()
+      |     ^~~
+compilation failed with 1 error
+=== t13cnotstruct.olang
+t13cnotstruct.olang:3:8: error[T13c]: 'packed' lays a struct out bit by bit - it is written right before 'struct', nothing else
+    3 | type E packed enum { A, B }
+      |        ^~~~~~
+compilation failed with 1 error
+=== t13cparams.olang
+t13cparams.olang:3:6: error[T13c]: a packed struct takes no type parameters - its layout is its declaration's
+    3 | type Box<T> packed struct(x T) { x }
+      |      ^~~
+compilation failed with 1 error
+=== t13cslice.olang
+t13cslice.olang:9:10: error[T13c]: 'h.lanes' is a field of a packed struct, at a bit offset, so no reference names it - copy it into a local first ('v := h.lanes') and lend that
+    9 |     s := h.lanes[0:2]
+      |          ^~~~~~~~~~~~
+compilation failed with 1 error
 === t13holdsitself.olang
 t13holdsitself.olang:4:7: error[T16]: E cannot hold itself by value - hold it through a reference ('&')
     4 |     A(e E)
@@ -7073,6 +7128,11 @@ compilation failed with 1 error
 x10typearg.olang:6:14: error[X10]: Db is an extern type, held only by reference - write 'Db&', or 'Db?&' where it may be null
     6 |     l := Vec<Db>()
       |              ^~
+compilation failed with 1 error
+=== x11apackedfloat.olang
+x11apackedfloat.olang:5:20: error[X11a]: Sample is packed and holds a float, so it crosses to C by reference only - write 'Sample&'
+    5 |     fn take_sample(s Sample) I32
+      |                    ^
 compilation failed with 1 error
 === x11notplain.olang
 x11notplain.olang:8:16: error[X2]: Named cannot cross the C boundary - an extern parameter is a number of the twelve primitives, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
