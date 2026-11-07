@@ -523,12 +523,12 @@ callvaluekeepsframe (an adapter given to keepVia's written parameter), t32anysco
 
 - **C3** (`x2 := x1; return x2` of a constructed local, O10d): compiles today, with and without `x1` read after the
   copy, clean under `-debug -sanitize` (section 1) - most likely closed by D9i's move at a last use and the returned
-  whole-local copy placed where the result goes. Round 1 adds `checks/cases/c3secondname.olang` (run, both shapes, read back after a
-  churn) so it stays closed.
+  whole-local copy placed where the result goes. Round 1 adds `checks/cases/c3secondname.olang` (run, both shapes,
+  read back after a churn) so it stays closed.
 - **C6** (`chan.Select(chan.SendOf(r, 9), ...)` inside a join block, C2d): compiles and runs clean under `-debug
-  -sanitize` today (most likely since the kept round's C1 or item 17). Round 1 adds `checks/cases/c6selectjoin.olang` (run: the std/chan
-  test's shape with both `SendOf`s written inside the join) and drops the "Limit" sentence from CLAUDE.md's std entry
-  and HISTORY's note.
+  -sanitize` today (most likely since the kept round's C1 or item 17). Round 1 adds
+  `checks/cases/c6selectjoin.olang` (run: the std/chan test's shape with both `SendOf`s written inside the join) and
+  drops the "Limit" sentence from CLAUDE.md's std entry and HISTORY's note.
 - **C4** (held/gen_walkkept: the generator body's O27 and the consumer's O10c for one cause): round 2 accepts the
   program (4.7). For what stays refused, one cause gives one error: a body whose reporting judging said a section-8
   error of its own is marked in its summary, and its callers do not discharge - and so do not report - the obligations
