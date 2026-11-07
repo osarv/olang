@@ -1367,6 +1367,7 @@ ae1529735e6c5c8f d6b64e121b2d6db7 checks/cases/t13bfillgeneric.olang
 a831d3e3eac2bae9 2344f222b1fae43e checks/cases/t13bfillunique.olang
 d77573936e9cf52e fb29573256d72dfc checks/cases/t13bimmutgenericunique.olang
 f413dc25cc554f13 e0336cc5f8a03b18 checks/cases/t13bimmutholdsunique.olang
+3f3380d45aec8f37 d7a9758de6e48b22 checks/cases/t13bkeptafter.olang
 92ec31c7dde1d341 4f1cf9e10212a732 checks/cases/t13bkind.olang
 32dea6cac93e9623 56bdc3bac4b16ac6 checks/cases/t13blentandhanded.olang
 50b86e52f00afa23 9b81349420a81408 checks/cases/t13bneedscopy.olang
