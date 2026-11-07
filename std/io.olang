@@ -5,9 +5,11 @@
 import unistd "unistd.h"
 import fcntl "fcntl.h"
 
+# what writing fails with: the system refused (Failed), or took no more bytes with some still to go (Partial,
+# carrying how many it had taken)
 type Error error {
     Failed
-    Partial
+    Partial(written I64)
 }
 
 # thin wrappers so the tests can open a real descriptor; the raw calls take a NUL-terminated path, which
@@ -27,7 +29,7 @@ Stderr I32 = 2
 # writes every byte of "data" to "fd", retrying until it is all gone. A short write is ordinary rather than
 # exceptional - a pipe or socket takes what it has room for - so the loop re-slices the unwritten tail and
 # goes again. "data[sent:]" is a borrow (E16a): no copy, no allocation, just a pointer and a length, which
-# is what makes retrying free. Before slicing existed this reported PARTIAL and gave up, because there was
+# is what makes retrying free. Before slicing existed this reported Partial and gave up, because there was
 # no way to name the tail at all.
 fn Write(fd I32, data Array<U8>&) ? Error {
     total I64 = I64(data.Len())
@@ -43,7 +45,7 @@ fn Write(fd I32, data Array<U8>&) ? Error {
         }
         # no bytes moved with bytes still outstanding: retrying would spin rather than make progress
         if n == 0 {
-            error Error.Partial
+            error Error.Partial(sent)
         }
         sent = sent + n
     } for sent < total
@@ -200,8 +202,9 @@ fn (l Lines&) line(first I64, last I64) String& {
 # left when Flush is called; something larger than the buffer goes straight through. So nothing reaches the
 # descriptor until a Flush or a full buffer - what a program prints with Println meanwhile comes before it.
 # Writing never fails where it is written: a write the system refuses is remembered, everything after it is dropped,
-# and Flush fails with it - Error.Failed, or PARTIAL for a descriptor taking nothing more - then and every time after,
-# since the output is incomplete whatever comes later (C's stdio and Go's bufio keep the first failure the same way).
+# and Flush fails with it - Error.Failed, or Partial (with how much it took) for a descriptor taking nothing more -
+# then and every time after, since the output is incomplete whatever comes later (C's stdio and Go's bufio keep the
+# first failure the same way).
 # Flush where the output is complete, so a failure is the caller's to handle; to have it written however a function is
 # left, an error included, defer it - "defer out.Flush()!", deferred code having no caller to pass a
 # failure on to (S19b). The descriptor is the caller's to close. A pipe whose reader has gone ends the program on
@@ -210,12 +213,12 @@ type Writer struct(fd I32, size I64 = 65536) {
     fd
     buf mut Array<U8>& = Array<U8>(size if size > 0 else 1)
     used I64 = 0                     # buf[:used] waits to be written
-    broken I32 = 0                   # 0 while every write has gone through; 1 Failed, 2 PARTIAL - the first that did not
+    refused Error = null             # the first write the system refused, null while every write has gone through
 }
 
 # t, after what is written already
 fn (w mut Writer&) Write(t Array<U8>&) {
-    if w.broken != 0 { return }
+    if w.refused is not null { return }
     n := t.Len()
     if n > w.buf.Len() - w.used {
         w.drain()
@@ -232,7 +235,7 @@ fn (w mut Writer&) Write(t Array<U8>&) {
 # one character, after what is written already
 fn (w mut Writer&) WriteChar(c Char) {
     if w.used == w.buf.Len() { w.drain() }
-    if w.broken != 0 { return }
+    if w.refused is not null { return }
     w.buf[w.used] = c
     w.used++
 }
@@ -240,18 +243,18 @@ fn (w mut Writer&) WriteChar(c Char) {
 # what waits in the buffer, written now - failing with the first write the system refused, now or before
 fn (w mut Writer&) Flush() ? Error {
     w.drain()
-    if w.broken == 1 { error Error.Failed }
-    if w.broken == 2 { error Error.Partial }
+    refused := w.refused
+    if refused is not null { error refused }
 }
 
 # what waits in the buffer, to the descriptor - or dropped, once a write has failed
 fn (w mut Writer&) drain() {
-    if w.used > 0 and w.broken == 0 { w.send(w.buf[:w.used]) }
+    if w.used > 0 and w.refused is null { w.send(w.buf[:w.used]) }
     w.used = 0
 }
 
 fn (w mut Writer&) send(t Array<U8>&) {
-    try Write(w.fd, t) catch Error.Failed { w.broken = 1 } catch Error.Partial { w.broken = 2 }
+    try Write(w.fd, t) catch Error e { w.refused = e }
 }
 
 test "Write reports a failure from the underlying syscall" {
@@ -511,7 +514,7 @@ fn reportTo(fd I32, n I64) ? Error {
     w := Writer(fd)
     defer w.Flush()!
     for i in range n {
-        if i == 3 { error Error.Partial }
+        if i == 3 { error Error.Partial(i) }
         w.Write("line " $i "\n")
     }
 }
@@ -521,7 +524,7 @@ test "a deferred Flush writes what was written however the function is left" {
     assert unistd.pipe(fds) == 0
     try reportTo(fds[1], 2)
     left := false
-    try reportTo(fds[1], 9) catch Error.Partial { left = true } catch Error { }
+    try reportTo(fds[1], 9) catch Error.Partial e { left = e.written == 3 } catch Error { }
     assert left
     unistd.close(fds[1])
     got := drained(fds[0])
