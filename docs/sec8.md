@@ -88,3 +88,208 @@ Two things the probes showed that shape the design:
 - **Function values held only in locals are refused today**, though a call through such a local sees exactly which
   function it calls: the commonest is a local helper closure pushing into a captured collection (`add := fn(k
   String&) { names.Push(k) }`), refused as "this lambda keeps 'k' beyond the call".
+
+## 2. The model this round extends
+
+Unchanged, and relied on below (docs/scope-model.md, docs/rework.md 2.1-2.7, scope.olang's header): a body's terms
+are its blocks (`Block`), its scope variables (`Var`: reference parameters, by-value ones holding references, the
+result scope, an instance, a capture), the program's scope, derived scopes (`Derived(p, w)`, O23a) and two static
+ones - a set of terms not known here (`Set`, O12) and an untraced one; an **underestimate** is a `Derived` with a
+negative index whose `under` entry is the term it stands above (O23: "the container's scope - an underestimate and
+never a claim"). `order` judges "outlives" (Holds, Obliged, FailsBlock, FailsUnknown); `fit` puts existing storage
+into a slot (outlive it, exactly where something can be stored through it, O25g); a temporary is built where it lands.
+A local has one **claim** (`terms[l]`), proposed by quiet judgings that gather **lifts** (`propose`, `liftLocal`,
+`proposeSite`) until none grows (`inferClaims`; a lone body `judgeOnce`, redone where it lifted or said something),
+then judged reporting. Only whole flows lift today: a view (`viewRoot`: a slice, a borrow of a part; a callee's
+relation marked `View`; a part of an instance a local builds, `partFlow`) proposes nothing, and a failing fit of one is
+O27's or O20's error (`viewKept`, `partKept`). Obligations are summaries over Tarjan's components, callees first.
+T22a: a function named or made a value is recorded (`fnUses`) and refused after every judging (`fnValues`) unless its
+obligations are only what T22 says of every call through a value (`valueRels`, `valueCovered`).
+
+## 3. NLL: a reference local takes the scope of what each assignment gives it
+
+### 3.1 The rule, as SPEC would state it
+
+**O25a** (revised, the first sentence kept): "A local lives where the inference places it (O28) ... `x := e` takes `e`'s
+exact scope. A reference local or parameter, and a local holding a function value, take at each assignment the scope
+of what it gives them - a new **version** (O25i); every other local (a value holding references, O25h) keeps one claim."
+
+**O25b** (replaced): "Assigning to a reference local or parameter, or to a local holding a function value, gives it a
+new version holding the value's exact scope; nothing is required of the assignment itself (a temporary assigned is built
+where the version's reads need it, O28). Each read is judged against the versions that may reach it (O25i). Storing
+into a field, an element or a payload is unchanged: O25c."
+
+**O25i** (new). **Versions.** "A version is what the declaration or one assignment gives a local. It reaches every
+read a path from that assignment arrives at with no other assignment of the local between them - through branches,
+through a loop into its next turn and out of it, into a `catch` clause from anywhere in what its `try` covers, and into
+deferred code, which any version of the local in its body reaches (it runs at a way out of its block). A lambda reads the
+local where it is made (D16c), a task where it is spawned. At a read:
+
+1. every version reaching it must still be valid there: the scope where its referent lives must be open where the
+   read stands. Where it is a block the read is not inside, what the version names is built where the read needs it,
+   if it can be (O28) - else the read is a compile-time error naming the assignment and a copy (`$x`, `x.Copy()`);
+2. the value read lives where its versions do: one version, exactly there; several living in different scopes, where
+   it lives is not known here (O12) - it may be read, compared, walked and passed where outliving suffices, but nothing
+   is built through it, and it determines no scope variable through which something can be stored (O25e, O25g): an
+   error there names the assignments whose scopes differ.
+
+A version is judged by what it holds, never by the local's other versions: `at = at.parent` walks a chain of parents
+whatever their scopes."
+
+**O12** (one item added): "... or a read of a local reached by versions living in different scopes (O25i)."
+
+**T25d** (extended): "An element of a static literal is static data too: walked by `for ... in`, read by an index or a
+slice, or bound by an array pattern (`String&["a", "b"][k]`) - it lives in the program's scope and may be stored
+anywhere." (The folded T25d imprecision; section 6.)
+
+What does not change: fields, elements and payloads (O25c - a slot's exactness, o25gfieldbinding stays refused);
+value locals holding references (O25h's one claim); obligations (O10b) except that reassignment no longer makes two
+scope variables equal; O26a's move of a returned local (it keeps moving the whole local, every version's temporaries -
+an over-approximation, as today).
+
+### 3.2 Versions: a reaching-definitions walk
+
+The reading "which versions reach this read" is syntactic, so it is computed once per body before the scope pass
+judges it - no dataflow over terms is needed for it.
+
+- **Which locals.** A *cursor* is a local of kind Var or Param whose type is a reference or a function value and which
+  is assigned whole after its declaration (`assignedTo`, which scope.olang's `walkBody` already computes). Bodies with
+  none - nearly all - are untouched: their locals keep one version, today's claim.
+- **The walk** is a may-analysis of the shape `typed.Landings` has (paths saved and restored at branches, a loop's
+  breaks and continues collected, code that runs later): `typed.Versions(body, cursors)` numbers each cursor's
+  definitions - its declaration (version 0; none for a declaration with no value, D13d) and each `Assign` whose target
+  is the whole local - and gives, for each statement, the definitions of each cursor reaching its start: `If` merges its
+  branches (a missing `else` merges the condition's fall-through); `Loop` iterates its body until the definitions at
+  its head stop growing (bit sets: a few passes), `Jump` sends its state to the loop's exit or head, `Return`, `Raise`,
+  `Reraise`, `Exit`, a `become` and a `noreturn` call end a path; a `match`'s arms and a conditional's values (statements
+  inside expressions, `Seq`) merge as branches; a `catch` clause starts from the union of the states inside what its
+  `try` covers; `Defer`, a join's clauses and deferred code read every definition of the cursor in the body (they run
+  at a way out, after anything - `Landings`' "later"); a `Spawn`'s task and a lambda read where they stand.
+- **Keys.** A statement is named by where it starts. Two statements check makes at one place (a desugared `do ... for`,
+  a for-in's hidden statements) get the union of what reaches either - sound, never more precise than needed. A
+  statement holding a nested assignment of a cursor (in a `catch` block or a `match` arm inside it) reads that cursor
+  with the union of what reaches the statement and every definition inside it.
+- **Where it lives.** typed.olang, beside `Landings`, `DropsRun` and `BreaksOut` (the shared structural walkers), with
+  test blocks over every construct; the scope pass asks it once per body that has a cursor and keeps the answer with the
+  body's other pre-scans (`assignedTo`, `borrowedTo`). check needs nothing; the typed core is unchanged.
+
+### 3.3 Version terms in the scope pass
+
+- **A definition's term** is fixed where its statement is judged: the declaration's as `let` fixes a claim today
+  (`markTerm`, `:=` taking its initializer's exact term, constant data the program's scope); an assignment's is the
+  value's term (`valTerm`) - existing storage exactly where it lives, a temporary at the site's placement (3.5). The
+  assignment's `fit` against the local's claim goes, for cursors only (`assign`'s `FitLocal` path; the WIP patch's
+  `cursorAssign` did the opposite and is not taken).
+- **A cursor's term at a statement** is the term of the definitions reaching it: before `stmt` judges a statement it
+  sets `terms[l]` of each cursor to `setOf` their terms (one term where they agree). So the 28 places that read a local's
+  term (`terms[...]`, `peekPlace`, `slotOf`, `valTerm`) read the right version with no change of their own - the one
+  reason to key the walk by statement.
+- **Across a body's judgings.** A definition later in the walk than a read it reaches (a loop's next turn) has no term
+  yet when the read is judged: the read uses what the definition had in the body's previous judging - none in the first.
+  Each definition's term is kept between judgings (`defTerms`, keyed by body and definition) as plain terms - blocks,
+  scope variables, the program's, derived scopes - and underestimates by the term they stand above, since `Set` ids and
+  `under` indices are numbered afresh in each judging. An underestimate of an underestimate is the first one, and of a
+  set the set of underestimates, so a definition's term is drawn from a finite universe and only grows.
+- **When to judge again.** At the end of a judging the scope pass compares each loop-carried definition's term with
+  the sets the reads it reaches were judged with: only where it adds a member to one is the body judged again (as
+  `liftGrew` asks today; `judgeOnce` redoes it). `at = at.next` over a bare field adds nothing - the read already held
+  the declaration's term - so the commonest cursor costs no second judging; the widget's parent walk costs one (it
+  adds an underestimate once, then nothing). Where a body is judged quietly first for its assigned locals' records
+  (`lateGather`, which every cursor of a type with constructor parameters already causes), that judging seeds the terms.
+
+### 3.4 Reads: validity and exactness
+
+- **Validity** (O25i item 1). At a read of a cursor reached by an assignment's version, `fit(term, Block(here), not
+  exact, FitLive)`: each member must outlive the innermost block around the read. A read in deferred code is judged
+  against its registering block; a capture, at the lambda; a spawned task's argument also outlives the join (P2, as
+  today). Reads reached only by version 0 need no check - the declaration's term encloses its block, as today.
+- A failing validity fit is a **lift proposal** like any other (3.5): what the version names is built where the read
+  is - `inner` in r9adefaultinner is built in `main`'s block, a new one each turn - so the read error arises only where
+  the version's storage cannot be built longer (O27's list, 4.3), worded as O25i's.
+- **Exactness** (item 2). A read whose versions differ is a `Set`: `fit` judges it per member for outliving, and
+  every exact use - a temporary stored through it (`at.next = Node()`), an argument binding a scope variable something
+  can be stored through (O25e), an exact slot (O25c) - is O12's error, with a note at each assignment whose scope
+  differs. One version's term is exact (it took the value's exact scope), so stores through a cursor that holds one
+  version, or versions of one scope, build where its referent lives: `cur = cur.next!` over a bare field and then
+  `cur.next = N(v)` builds in the list's scope.
+- **Underestimates** read and compare as the term they stand above (`order(floor(t), b) = order(t, b)`), and are never
+  exact or built into - the widget's `at` may be clicked, compared, returned or stored where outliving suffices.
+
+### 3.5 Lifts through versions
+
+`propose(x, t)` with `x` reading a cursor follows the versions reaching that read to their values: for each, it
+proposes on the definition's value expression - a temporary's site is lifted (`proposeSite`, so a version's temporary
+is built where its own reads need it - floor: the local's block - and never where the local's other versions are
+kept), another local is lifted (`proposeLocal`), a parameter's or the program's storage proposes nothing (an
+obligation, or nothing to do). A definition whose value reads a cursor (`at = at.parent`) proposes through the versions
+reaching that inner read, with a visited set. So a lift asked by one read lifts only what can reach it, and NLL
+never builds a value longer than the reads of its own version need - shorter than today, where a temporary assigned to
+a reference local is built where the local's whole claim is (decision 6).
+
+### 3.6 Everything else that reads a local's scope
+
+- **The keeps analysis** (O17: `computeKeeps`, `aliasOf`, `regionOnly`). A cursor names, for what a body keeps and
+  stores, every region any of its versions names: `aliasOf` becomes a set for cursors, and a store through one is a store
+  into each region (decision 8). Today's conservatism (section 1) came from O25b's equality; it must not go with it.
+  Cases: the two probes of section 1, as O17 fail cases.
+- **Records** (O23a's per-instance bindings of a local, `late`, `noteLate`) stay as today: a reassigned local's record
+  is the merge of every value it is given. Per-version records are a refinement left out (nothing refused needs it).
+- **O26a** (a returned local in the result scope): unchanged - a returned cursor moves whole, every version's temporary
+  built in the result scope. The per-read lifts of 3.5 would place them precisely; replacing O26a's syntactic move for
+  cursors is a later refinement (a plan change for accepted programs, measured first).
+- **Captures** (D16c, D16d): a lambda captures the version reaching it; the closure's term is built from those
+  versions' terms, as today from the claim.
+- **Generators**: a `yield` is a path point like any; a version never holds a `Next()` result scope (temporaries of an
+  assignment are built at the version's placement, and `liftLocal` refuses that scope, D18b).
+- **Narrowing** (S8e) is check's and is unchanged: a narrowing still ends at a statement assigning the local.
+
+### 3.7 Why it is sound
+
+The run-time invariants are docs/scope-model.md's: I1 (a reference stored in a slot points into a scope that outlives
+the slot's), I2 (exactness where something can be stored through it). A reference local's slot is a special slot:
+nothing can name it (T11: no reference to a reference), so nothing is stored through the *slot*, and the only thing
+I1 protects there is that a **read** of it finds its referent alive. NLL replaces "the referent outlives the local's
+block" by the weaker invariant it needs:
+
+> **N.** For every read of a local at a point u, and every value v the local may hold at u, the scope v's referent
+> lives in is open at u.
+
+- *Reaching definitions over-approximate.* Every value the local holds at u at run time was given by a definition
+  with a path to u free of other definitions; the structured walk includes every such definition (a may-analysis over
+  every path the core's control flow has - branches, loops, jumps, clauses, deferred code at every exit). So the
+  versions reaching u include every dynamic value at u.
+- *A version's term is exact.* A definition takes its value's exact scope (O25: a reference's tag is exact); a
+  temporary is built at its placement, which is its term. So "the version's term is open at u" is "the referent is
+  alive at u", and item 1 of O25i is N, checked at every read reached by an assignment (version 0's term encloses its
+  block, so its reads hold N by the declaration's own judgment, as today).
+- *Stores through a read* build into its term (E12c); I2 needs that term to be where the referent really is, which
+  holds for one version (exact) and is refused for several of different scopes (O12) and for underestimates. So I2
+  holds for everything built through a cursor.
+- *Values read flow on as today.* A read's value carries its versions' terms; every slot it reaches is judged by FIT
+  with that term (a set per member), so I1 holds for every slot by the existing argument.
+- *The loop fixed point.* Definition terms live in a finite universe (the body's terms, underestimates interned by
+  base, sets as subsets) and only grow (a value's term is monotone in the terms of the reads it is built from), so the
+  iteration reaches the least fixed point; the reporting judging uses it, so every read is judged with a set that
+  contains every reaching version's term.
+- *Obligations* only shrink (O25b's equality between two scope variables is gone); a caller's discharge is O10c's.
+- *The keeps analysis* over-approximates (every region any version names), so O17's lending stays sound.
+
+Nothing changes at run time: versions are the scope pass's reading of the typed core; the only plan change is where a
+version's temporary is built, which FIT then judges as any placement.
+
+### 3.8 Cost
+
+`typed.Versions` runs only on bodies with a cursor (one linear walk; a loop's body re-walked until its head's bit sets
+settle, two or three passes). A second judging only where a loop-carried version adds a scope (3.3). The scope phase on
+compiler/ is ~1.35 s; the round measures it with `OLANG_TIMES` and counts version re-judgings in `OLANG_SCOPESTATS`
+beside `Redone`, and holds it within 2%. Expected well under that: judgeOnce already redoes about one body in fifty, and
+cursors whose versions add a scope are rarer than cursors.
+
+### 3.9 Programs
+
+Newly compiling: the widget tree's click loop; `planAt` (so scopedump, lowerdump and emitdump build - decision 19 puts
+them into verify); `op`'s element of a literal; r9adefaultinner (its `inner` built in `main`'s block, the read after the
+loop valid - the case becomes a run case read back after a churn); a list's tail found by a cursor and appended to;
+a cursor over two parameters read and compared. Staying refused: a cursor given values of two scopes and then built
+through (new case, O12 naming both assignments); the keeps analysis' two probes (O17); a slot's exactness
+(o25gfieldbinding).
