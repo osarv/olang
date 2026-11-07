@@ -3063,3 +3063,17 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - The user, 2026-11-07, on the /tmp leftovers: "Yes, you made a little" (read as yes, delete them) - the permission
   classifier refused the deletion again ("Shared Scratch Sweep"); not worked around; told the user. Disk had 12 GB free. The user then: "Yes, you may delete them, not made a little" -
   deleted (/tmp entries older than a day, ~3.7 GB); disk 14 GB free.
+- ANSWERED 2026-11-07 (the user: "1 yes 2)yes 3)why not now? 4)no computed types, keep the name, Im still torn on the
+  one type solution tho. dont we want column to act a lot like array and be laid out in memory in structs etc?"):
+  (1) errors raised by name carry data, field types from the first raise - YES; (2) methods on error types - YES;
+  (3) ArgumentError carrying its condition: answered that the only costs were the failure path's copy and bigger stored
+  error values of sets holding it, neither real - so built (replacing D17's thread-local slot) unless the user objects;
+  all three sent to round errdata2. QCU (1) no computed types - DECIDED; (2) the name `Columns` - DECIDED; (3) still
+  open, discussed: options (a) one type acting like Array - fixed length set where it is made, a value laid out in place
+  in structs where its length is known (T7c), passed by value, growth by building a new one (FromIter, a Vec of rows
+  first) - recommended; (b) two types, an Array-like one and a growable one (Vec-like); (c) one growable type, fixed in
+  place only as the compiler's optimization (the earlier recommendation, withdrawn). In effect: not built.
+- docs/sec8.md's three questions, decided by me 2026-11-07 as the note recommends (the user's push to finish today; for
+  their review): generic type variables stop function-value records (`keep<F>(f F) F`, one case in the repository, stays
+  refused); a view of storage holding a destructor value is never placed longer (refused, naming a copy - a file would
+  stay open past its holder); a function's written result type carries records. Section-8 round 1 (NLL) started.
