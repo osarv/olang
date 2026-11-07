@@ -29517,3 +29517,58 @@ closed). Memory-safe today (the storage lives until the scope closes), but C11's
 released resource") does not hold, and it is what blocks freeing at drops. Rust's dropck refuses the store (a value with
 a destructor may not hold a reference to one ended before it); olang's equivalent would refuse a by-value holder storing
 a reference to a holder declared later in its block - for the user.
+
+## Structures of arrays: Columns<T> and ColumnVec<T> (T7e, 2026-11-07, wt-columns)
+
+The user decided a built-in structure of arrays on 2026-11-06 (QCS 3: a prelude type the compiler lays out as one array
+per field of a struct), with no computed types (QCU) and the name `Columns`, then (2026-11-07, "dont we want column to
+act a lot like array and be laid out in memory in structs etc?", "do two column types") two types as Array and Vec are
+two: `Columns<T>` fixed in length, a value; `ColumnVec<T>` growable, Vec's row operations.
+
+**How it is built.** Without computed types a prelude declaration cannot hold one array per field of an arbitrary T, so
+the compiler supplies exactly that and nothing more: `generic.Body` gives an instance `Columns<P>` (P a closed struct)
+the fields `Array<F_k>` (run-time length) for P's fields, `FieldNames` and the checker's `fieldIndex` name them as P's
+fields, and the checker writes the constructor's body - a field local per column made by `MakeKind.Fill` of
+`rows` and `fill.f_k` (`check.columnsFields`, hooked in `rootStmts`). Everything else is prelude code
+(std/prelude/columns.olang) over reflection: a row is built through the record's constructor, `T(cell(c, p, i) for p in
+T.Params)` with `cell` an unrolled walk over `Columns<T>.Fields` choosing the column of p's name (decided per copy,
+G35); a row is written `Columns<T>.Fields[k].Of(c)[i] = f.Of(x)` in a walk over `T.Fields`; Sort sorts the positions,
+then lays each column out in that order. `ColumnVec<T>` is an ordinary prelude struct (`data Columns<T>`, `n`, `want`)
+whose growth replaces each column's buffer by `grown` and retires the old (as a Vec's), whose moves use occupy/vacate.
+So lowering, MIR, emit, the evaluator, `interpret`, section 8, copies (QCE's Copy helper: run-time arrays deep) and `==`
+(field-wise, arrays by contents - the rows) needed nothing new; the evaluator agrees by construction
+(std/prelude/tests/columns.olang bakes a computation through both into a global decided by a top-level assert, and runs
+it beside; checks/cases/columnsrun.olang likewise, and runs under `interpret`).
+
+**Decided (mine).** (1) The rows' type is a *record* - a struct whose constructor declares exactly its fields as puns,
+no other statement, no condition, no destructor, at least one field: columns are written element by element, so a
+constructor's checks or computed fields would keep no promise; it also makes "build a row through the constructor"
+exactly the raw assembly. Refused at the written instance (`check.columnsMet` beside G19's bounds in `instancesIn`)
+naming why, and a field named like a method of the table (M19). (2) The fill's default is the prelude's `zeroRow<T>()`
+(T's zero value, D13c), so a record holding a never-null reference has no `Columns<T>(n)`, and - since a ColumnVec's
+buffer starts as Columns' zero value - no ColumnVec (a recorded limit). (3) A run-time length always: the brief's
+"laid out in place where its length is known, as a fixed array" and G29's per-length instances are not built - a struct
+body is one per instance type, and a length per instance would need Array's const operand on the struct (a recorded
+limit; `Columns` is still a value, held in place inside a struct as its column descriptors, storage where it lives).
+(4) `cv.x` of a ColumnVec is the slice `cv.data.x[0:cv.n]` given a temporary place (`check.columnVecField`), unchecked
+(the count never exceeds the buffer); outside the prelude it is looked for before the struct's own (private) fields, so
+a record field named `n` or `data` is a column. (5) A column is assigned whole (`c.x = v`, either type) by writing v's
+lanes into its own storage (`check.columnStore` on E39's lane machinery), its length checked once with E39's LaneLen
+(the abort "lane lengths differ"); a whole store that gave the field new storage would have broken a view held of it and
+a ColumnVec's view is a temporary - a first version refused whole assignment and the particle program's lane step
+(`s.Vy = mask.Select(...)`) showed it too rigid. In a parallel assignment a column is refused (no one place for the
+check). (6) A column is private where its field is (M6a, the row type's module decides), and the prelude's reflection
+sees every field (`ReflItems`), the price of supplying Columns over any record. (7) `T.Element` of a Columns or a
+ColumnVec is its rows' type; `T.Kind` is `Struct`, `T.Fields` the columns. (8) `$c` renders `Columns<P>[P(1, 2)]` -
+the literal that QBU/QBW's FromIter will make source. (9) Rows are built by loops, not comprehensions (E27 refuses an
+element holding references, which a row of text does).
+
+**Measured** (docs/refs-study.md 3.5, the particles: callgrind at `-target x86-64-v3`, 1M particles, 10 steps less 0):
+`columns.olang` 2.0 instructions an update, as `soa.olang`'s hand-written columns (an `Array<P>` 13.0); time under a
+loaded machine level with soa. The lane form pays an array per statement.
+
+**Left**: in-place layout for known lengths and per-length instances (above); literals and comprehensions
+(`Columns<P>[...]`) through FromIter (QBU/QBW, a later round: a `FromIter(it)` type-level builder on each of the two -
+Columns' building its rows into a ColumnVec and handing over its buffer, ColumnVec's pushing - and `$`'s rendering
+already matches); M19g's compile-time stale-view check does not know a ColumnVec's `cv.x` (the evaluator and -sanitize
+see the retired buffers, B2f).

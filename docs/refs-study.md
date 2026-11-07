@@ -197,6 +197,12 @@ instructions. This is Python's and Java's arrays of objects; it is why numpy exi
 3. **Structure of arrays wins regardless of the question**: `soa.olang` vectorizes (2 instructions an update) where
    neither the flat nor the pointer array of structs does (the branch, the interleaved fields) - 1.65x faster than
    flat. For the data domain's hot loops, arrays of numbers are the layout in every model.
+   Built since (2026-11-07, T7e): `Columns<P>` lays the same columns out from the record type -
+   `refs-study/data/columns.olang` (the step as soa's loop over the columns, named by reference) measures 2.0
+   instructions an update, as `soa.olang` does (flat 13.0; callgrind, `-target x86-64-v3`, 1M particles, 10 steps less
+   0), the setup 45 against 42 instructions a particle (rows written through `c[i] = p`); `columnslanes.olang`, the step in lane
+   operators and a mask, gives the same checksum and pays an array per lane statement (E39 fuses within one statement, not
+   across them).
 
 ## 4. What inference would win back, and how decidable it is
 
