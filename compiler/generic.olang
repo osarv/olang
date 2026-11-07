@@ -298,10 +298,18 @@ fn (p mut Program&) unendedFields(r types.TypeId, seen mut Map<types.TypeId, Boo
     for x in p.T.Items(p.T.Fields(r)) {
         if x == types.TypeId(0): continue
         xr := p.T.Repr(x)
-        u := p.unended(p.T.Elem(xr), seen, depth + 1) if ends and p.T.KindOf(xr) == types.Kind.Array else p.unended(x, seen, depth + 1)
+        u := p.bufferUnended(p.T.Elem(xr), seen, depth) if ends and p.T.KindOf(xr) == types.Kind.Array else p.unended(x, seen, depth + 1)
         if u != types.UnknownT: return u
     }
     return types.UnknownT
+}
+
+# a collection's buffer's element type: unended where it has a destructor to run and copies - a copy of the collection
+# copies its whole buffer, the room past its count too (vacated positions keep what was moved out) - else as anything
+# held (a unique element is never copied, T13b)
+fn (p mut Program&) bufferUnended(el types.TypeId, seen mut Map<types.TypeId, Bool>&, depth I64) types.TypeId {
+    if not p.T.IsRef(el) and p.T.NeedsDrop(el) and not p.T.Unique(el): return el
+    return p.unended(el, seen, depth + 1)
 }
 
 fn (p mut Program&) unendedIn(xs Array<types.TypeId>&, seen mut Map<types.TypeId, Bool>&, depth I64) types.TypeId {

@@ -357,8 +357,9 @@ sortRun I64 = 24
 sortBlock I64 = sortRun << 9
 
 # sorts a[lo:hi] by insertion: each element shifted down past those it is less than
-# Elements are moved, never copied (vacate: a value owning storage is moved, not copied twice) - and a less that fails
-# puts the one held aside back into the gap, so the array keeps every element
+# Elements are moved, never copied (vacate: a value owning storage is moved, not copied twice; occupy: the gap it left
+# holds nothing to end) - and a less that fails puts the one held aside back into the gap, so the array keeps every
+# element
 fn sortInsertion<T ? E>(a mut Array<T>&, lo I64, hi I64, less fn&(x T, y T) Bool ? E) ? E {
     for i in range lo + 1, hi { try sortInsert(a, lo, i, less) }
 }
@@ -366,12 +367,12 @@ fn sortInsertion<T ? E>(a mut Array<T>&, lo I64, hi I64, less fn&(x T, y T) Bool
 fn sortInsert<T ? E>(a mut Array<T>&, lo I64, i I64, less fn&(x T, y T) Bool ? E) ? E {
     x := a[i].vacate()
     j I64 = i
-    errdefer a[j] = x
+    errdefer a[j].occupy(x)
     for j > lo and try less(x, a[j - 1]) {
-        a[j] = a[j - 1].vacate()
+        a[j].occupy(a[j - 1].vacate())
         j--
     }
-    a[j] = x
+    a[j].occupy(x)
 }
 
 # moves each element of a[lo:lo + pos.Len()] to the place pos gives it - after it, a[lo + k] is what a[pos[k]] was -
@@ -386,10 +387,10 @@ fn sortPermute<T>(a mut Array<T>&, lo I64, pos mut Array<I64>&) {
             from := pos[j]
             pos[j] = lo + j
             if from == lo + start {
-                a[lo + j] = held
+                a[lo + j].occupy(held)
                 break
             }
-            a[lo + j] = a[from].vacate()
+            a[lo + j].occupy(a[from].vacate())
             j = from - lo
         }
     }
@@ -397,8 +398,8 @@ fn sortPermute<T>(a mut Array<T>&, lo I64, pos mut Array<I64>&) {
 
 fn sortSwap<T>(a mut Array<T>&, i I64, j I64) {
     t := a[i].vacate()
-    a[i] = a[j].vacate()
-    a[j] = t
+    a[i].occupy(a[j].vacate())
+    a[j].occupy(t)
 }
 
 # merges the sorted runs a[lo:m] and a[m:hi] in place (SymMerge)

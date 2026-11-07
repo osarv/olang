@@ -7158,7 +7158,11 @@ has no count of live elements, so nothing could end them - a written `Array<Res>
 struct() { a Array<T> }` as `Buf<Res>`), std/list's `List<Res>`, whose chunks a reference names (its copies are second
 holders of them). That is a compile-time error at the argument, naming the reference form and a `Vec`: `Res has a
 destructor to run, and List<Res> keeps values of it where no holder ends them - write Res&, or keep them in a
-Vec<Res>`. A **global's** type and a **generator's parameter** hold it by reference: a bare `type-ref` naming it there is a
+Vec<Res>`. Such an array is not made either: `Array<T>(n)` of a length known only at run time, a comprehension not of a
+count known while compiling (T7c) and a copy of an array (E31d) whose elements have a destructor to run are each a
+compile-time error naming a `Vec` (a length known while compiling makes a fixed array, which ends its elements). And a
+collection holds such values by value only where they are unique: a copy of one copies its whole buffer, the positions
+it vacated too, so one whose elements copy (a holder declaring Copy, E31d) is an error naming the reference form. A **global's** type and a **generator's parameter** hold it by reference: a bare `type-ref` naming it there is a
 compile-time error naming the reference form - the program's scope and a walk left part way (S20) have no holder that
 lets go. The type named where an expression is - a constructor called (`Res(1)`, `Box<Res>(r)`
 naming its own arguments), a case of it - holds no value there; a call's value no place written for it takes is held
