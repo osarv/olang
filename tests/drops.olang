@@ -853,3 +853,57 @@ test "a holder is ended before what it holds - stored, through a call, past defe
     assert holders() == "11.2.31.4.9.51.6.71.8.31.2.51.4.7.6"
     assert HoldersEnded == holders()
 }
+
+# ---- holders in collections, and values registered with a scope (O15, O16; bulk review 8, F2) ----
+
+# a collection held by value whose elements hold references to a variable of its block is ended before it - an element
+# reached through RefMut, a Map's value, a call given both; registered with the scope (`gs := Vec<Grip>()`) it would be
+# ended after its block's variables, which is O15's error naming this by-value form (checks' o15registered*). Values
+# registered with one scope end the last registered first, so one holding a value registered before it needs nothing
+fn gripsHeld() String {
+    t := Tally()
+    {
+        gs Vec<Grip> = Vec<Grip>()
+        gs.Push(Grip(1))
+        l Lamp = Lamp(2, t)
+        gs[0].held = l
+    }
+    {
+        ms Map<I64, Grip> = Map<I64, Grip>()
+        ms.Put(1, Grip(3))
+        l Lamp = Lamp(4, t)
+        ms.RefMut(1)!.held = l
+    }
+    {
+        gs Vec<Grip> = Vec<Grip>()
+        gs.Push(Grip(5))
+        l Lamp = Lamp(6, t)
+        set := fn(x mut Vec<Grip>&, y Lamp&) { x.RefMut(0).held = y }
+        set(gs, l)
+    }
+    return t.Listed()
+}
+
+GripsHeld := gripsHeld()
+assert GripsHeld == "11.2.31.4.51.6", "decided while compiling: " $GripsHeld
+
+test gripsHeld "ends a collection by value before what its elements hold" {
+    assert gripsHeld() == "11.2.31.4.51.6"
+}
+
+# (registered values end at their scope's close, which the evaluator does not run while compiling - K2c - so this one
+# is held to the run time and to interpret alone)
+fn registeredHeld() String {
+    t := Tally()
+    {
+        l := Lamp(8, t)
+        g := Grip(7)
+        g.held = l
+    }
+    return t.Listed()
+}
+
+test registeredHeld "ends a registered holder before a value registered before it" {
+    assert registeredHeld() == "71.8"
+}
+

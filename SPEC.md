@@ -7254,7 +7254,13 @@ value of the type stored can hold - through its parts and the references it reac
 other's type or a part of it (a function value, an `any` or a type variable can hold any). Two variables of a block each holding the other
 - a cycle of such references - is a compile-time error naming both: whichever were ended first, the other's destructor
 could read it; ending one before the other refers to it (a block of its own, a `Destroy()`) or holding one by reference
-removes it. A test ended by a failed check (P1d) ends its holders in the same order. Where in the scope an instance's storage lies, and whether it was reserved
+removes it. A value **registered with a scope** (O16) - a call's value a `:=` names (`gs := Vec<Grip>()`) or a
+temporary given to a reference parameter - is ended as that scope closes, after the variables of its block, and values
+registered with one scope end the last registered first; so one that may hold (as above, through any number of steps) a
+variable holding a value with destructors to run, or a value registered after it, is a compile-time error naming the
+declaration that holds it by value (`gs Vec<Grip> = Vec<Grip>()`), which its block then ends in the order above - one
+holding a value registered before it, in its block or an enclosing one, is ended first and needs nothing. A test ended
+by a failed check (P1d) ends its holders in the same order. Where in the scope an instance's storage lies, and whether it was reserved
 before its constructor's arguments were built, is not observable. A global and a generator's
 parameter hold such a value by reference, and a type argument holds it by value only where its instance ends it (C11):
 the program's scope, a walk left part way and an array of a run-time length outside a collection have no holder that

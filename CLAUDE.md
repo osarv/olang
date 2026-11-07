@@ -791,8 +791,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   or a by-value part of it; a function value, an `any`, a type variable can hold any). Test builds register a held
   value's holders' guards again after its own (a guard of a holder holding nothing does nothing), so a failed check's
   unwinding ends holders first too. The evaluator and `interpret` run lowering's MIR, so they agree (tests/drops.olang's
-  `holders`, baked and asserted while compiling). Limits (recorded): a value registered with the scope (O16) still ends at
-  its close after the block's variables, unordered by holding; interpret's stop cleanups (B3e) run in registration order;
+  `holders`, baked and asserted while compiling). A value registered with the scope (O16) still ends at its close after
+  the block's variables - so one that may hold a variable of its block, or a value registered after it (`gs :=
+  Vec<Grip>()` whose element is given a reference to `l Lamp`, a temporary `hold(Grip(1), l)`), is an error naming the
+  by-value form `gs Vec<Grip> = ...` (bulk review 8, F2: it ran the Grip's destructor on a Lamp Part C had released; the
+  points-to now models a registered local as standing for its value's storage - `DropHolding.Judged`, check's
+  `dropRegistered`; conservative: one in an inner block holding an outer variable is refused too, as O28 may place it
+  there). Limits (recorded): interpret's stop cleanups (B3e) run in registration order;
   a holder whose references live in an outer scope (it holds a reference from outside) gets what is stored into it lifted
   there by section 8 (O28) - its drop then registered where it lives, after the block (the old order was right there by
   that, the hazard only where a holder's references live in its own block: checked before, `210` where `112` is right).

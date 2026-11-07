@@ -12598,6 +12598,8 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
 fn (c mut Checker&) held(sp source.Span, call typed.Expr&) typed.Expr& {
     r := typeOf(call)
     if r == types.UnknownT or r == types.VoidT or c.isRef(r) or not c.P.T.NeedsDrop(r): return call
+    # (O15: what such a value may hold is judged with its body's holders - settleDropOrder)
+    if c.frames.Len() > 0 and c.fr().Body >= 0: c.dropBodies.Put(c.fr().Body, true)
     return typed.Expr.Promote(sp, c.P.T.Ref(r, types.Writable), typed.Promote(call, c.site(typed.SiteKind.Promote, sp)))
 }
 
@@ -21791,19 +21793,33 @@ fn (c mut Checker&) dropIfHeld(sp source.Span, p typed.Lvalue&, flag I64) typed.
 }
 
 # O15 (QCZ): a block's by-value holders end holders first (lowering's runOrder) - two that may hold each other cannot,
-# each an error naming both, said at the later one's declaration
+# each an error naming both, said at the later one's declaration; and a value registered with a scope (O16), ended as
+# that scope closes, may hold neither a by-value holder nor a value registered after it - said at it, naming the
+# by-value declaration that puts it among its block's holders
 fn (c mut Checker&) settleDropOrder() {
     for b in c.dropBodies.Keys() {
         if b >= c.Bodies.Len(): continue
         body := c.Bodies[b]
-        d := typed.DropHolding.DropHolds(c.P.T, body)
+        d := typed.DropHolding.Judged(c.P.T, body)
         for k in range d.Holders.Len() {
             for v in d.Held[k] {
                 h := d.Holders[k]
                 if d.Holds(v, h) and registeredBefore(d, h, v): c.dropCycle(body, h, v)
             }
         }
+        for k in range d.Refused.Len() { c.dropRegistered(body, d, k) }
     }
+}
+
+# refusal k of d: a registered local (-1: a temporary) that may hold a value ended before it (O15, O16)
+fn (c mut Checker&) dropRegistered(body typed.Body&, d typed.DropHolding&, k I64) {
+    held := c.text(body.Locals[d.RefusedHeld[k]].Name)
+    sp := d.RefusedSp[k]
+    at := diag.Where.Span(body.File, I64(sp.Start), I64(sp.End))
+    r := d.Refused[k]
+    t := c.ty(d.RefusedTy[k])
+    m := msgs.DropRegistered(c.text(body.Locals[r].Name), held, t) if r >= 0 else msgs.DropTempRegistered(held, t)
+    c.P.L.Diags.Error(at, m)
 }
 
 # whether holder h's drop is registered before holder v's

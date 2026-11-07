@@ -30560,3 +30560,26 @@ receiver. Both are D9h/D9i work of their own; the copy stays ~1% of a builder-he
   -sanitize`) pins what such a read gives - a release without the emptying would read freed storage there. Left as a
   question for the language, not taken here: a reference to an element read after its removal could be refused within
   a function as M19g refuses a stale view after growth.
+- **F2 (a holder that is an element of a collection) - the registered value, not holdWalk.** `gs := Vec<Grip>()` is a
+  call's value no place written for it takes - held where the call lands and registered with that scope (O16, a
+  Promote) - and a registered value ends at its scope's close, after every variable of the block: the recorded limit
+  of the drop-order round. So `gs[0].held = l` (by RefMut), a Map's element, a call given both - every variant the
+  review isolated - ended the Lamp first and its storage was released (Part C) before the Grip's destructor read it.
+  `gs Vec<Grip> = Vec<Grip>()` holds the Vec by value and DropHolds orders every one of those variants right (checked:
+  `11.2.`, `31.4.` ... built and interpreted). And the walk itself could not see such stores: storage through a
+  registered reference local was what that local refers into, and the Promote's temporary has no local. Fixed
+  (conservative, nothing at run time): `typed.DropHolding.Judged` - check's - models a reference local given a registered
+  value as standing for that value's storage (its referents include itself, its storage type the referent's), records a
+  registered temporary given writably to a call, and refuses a registered local that may hold a by-value holder of the
+  body, or a value registered after it (two registrations, a later one, or one in a block not around it, count as after:
+  a scope ends its registered values last registered first, an outer one after an inner one), and a temporary a call
+  may make hold a holder of its block - O15's new error at the registered value naming `gs Vec<Grip> = ...`
+  (`DropRegistered`, `DropTempRegistered`; SPEC O15). Decided (mine): refuse rather than order - a registered value's end
+  is the runtime's scope close, which no deferred code can be moved around, and ending it early (a Destroy-like unlink)
+  would be new machinery in the runtime; a registered value of an inner block holding an outer variable is refused too,
+  since a store through its own field places it where the variable lives (O28) - an over-refusal where a call relates
+  them instead, the error naming the form that compiles. Lowering's DropHolds sees the same registrations; in a program
+  the refusal accepts no registered value holds a holder, so no holder's order changes. tests/
+  drops.olang's `gripsHeld` (decided while compiling and at run time) and `registeredHeld` (a registered holder of an
+  earlier registered value, run time only - K2c); checks' o15registeredholds, o15registeredlater, o15registeredtemp,
+  o15registeredinner.
