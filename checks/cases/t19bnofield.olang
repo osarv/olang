@@ -1,0 +1,9 @@
+# check: fail ParseError2.Bad has no member 'row' - did you mean 'col'?
+type ParseError2 error { Bad(line I64, col I64), Eof }
+fn parse() I64 ? ParseError2 {
+    error ParseError2.Bad(3, 4)
+}
+fn main() ? {
+    x := try parse() catch ParseError2.Bad e default e.row
+    assert x == 3
+}

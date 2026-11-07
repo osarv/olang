@@ -1084,7 +1084,8 @@ defaults (D13c).
 
 ### 2.6 Error types
 
-**T19.** `error-decl ::= "type" IDEN "error" [ error-list ] [ "{" list(IDEN) "}" ]` (the `error-list` on the
+**T19.** `error-decl ::= "type" IDEN "error" [ error-list ] [ "{" list(error-word) "}" ]`, `error-word ::= IDEN [
+"(" params ")" ]` (the `error-list` on the
 declaration's line, D8), with at least one of the two written and the braces last, is a **top-level** declaration, and
 the only form an error type is declared in: `error` after the name says what the type is, as `struct`, `enum` and
 `trait` do, and an error type is never reached from a general `type-expr` position (T2). With braces it declares an
@@ -1095,6 +1096,28 @@ qualified by its own type (`IoError.Full`) and is public by its own first letter
 CamelCase - a word as a type is (`ListError.OutOfRange`, a private `notFound`) - so an error reads one way whether it is
 declared in braces or raised by name (R3b). An error type takes no type parameters and extends nothing; one of a
 single word named as itself is no declaration (R3b: an error raised by name is that).
+
+**T19b (payloads).** A word may carry a **payload**, its fields in parentheses as an enum case's are (T17): `type
+ParseError error { Bad(line I64, col I64), Eof }` - names and types, the listing rule inside, at least one field, no
+defaults. A word carrying a payload is raised with its fields given by position, each fitted as an argument is (E12):
+`error ParseError.Bad(line, col)` (R3); written as a value it is called the same way (`x ParseError =
+ParseError.Bad(3, 7)`). A word carrying a payload written bare, a word carrying none called (`ParseError.Eof()`), and a
+count of fields that differs, are compile-time errors naming the form. A payload holds **values only**: numbers,
+`Bool`, `Char`, text and arrays held by value (its own copy), error values, and enums and structs of those - a field
+whose type holds a reference, a function value, an `any`, a unique value (T13b) or a value with destructors to run
+(O15), at any depth through values, is a compile-time error at the field naming the rule. The payload travels **beside
+the error's code, never in it**: a fallible call still returns `{ i32 code, T }` (R6), so the success path and the ABI
+are as without payloads. Raising pushes the payload, its own copy, on the raising thread's **payload stack**; a `try`
+passing the error on touches nothing; whatever takes the error takes the payload - a clause (R11), copying it into the
+error value it names (R11b) and popping it, named or not; a join (P4b), keeping the earliest-spawned failure's and
+dropping the others'; an export fn's entry (X12), dropping it before it returns the code to C. Errors in flight nest
+(deferred code lets no error leave, a destructor raises none), so the error in flight always holds the top record. An
+error of an error type none of whose words carries a payload pushes nothing: such types cost exactly what they cost
+without payloads. A payload is read where the error is named: a field of an error value narrowed to one word, `e.line`
+after `if e == ParseError.Bad` (T20) or in `catch ParseError.Bad e { e.line }` - a field read where the value may hold
+another word is a compile-time error naming the test, and a payload field is never written (an error is what was
+raised); `$e` renders the payload after the word as an enum case's (`ParseError.Bad(3, 7)`, text quoted, E11a); a "!"
+(E35), an error escaping `main` (B5) and a test's FAIL line (S16) say the error so too.
 
 **T19a (named error sets).** With an `error-list` after `error` the declaration names an **error set**: `type
 LoadError error os.Error, ParseError`. Its members are what an `error-list` names (D8) - error types, single words
@@ -1114,7 +1137,8 @@ confusion. A member naming no error type, word or set is a compile-time error (R
 result: a parameter, a local, a global, a field, an array's element and a type argument may be one (`List<LoadError>`,
 `Map<net.Error, I64>`). Its values are the set's words, written qualified (`ParseError.Empty` is a value wherever a
 value of a set holding it is wanted), and `null`, which says "no error" and is the type's zero value (D13). An error
-value carries no data and holds no reference: it is a number to the scope rules (§8). Writing an error type or a set
+value holds no reference: it is a number to the scope rules (§8), with the payload of the word it holds where a word
+carries one (T19b) - a value of its own, copied where it is kept (QCE). Writing an error type or a set
 as a function's result - alone or among several results, or in a function type - is a compile-time error naming `?`,
 which says a function fails; the error-union return convention, `try`/`catch` and the `error` statement are §7. A set
 of several types used as a value's type is a named set; an unnamed list is written only after a signature's `?` and
@@ -1122,7 +1146,8 @@ as a catch clause's items. An error value is made by a word written, by `null`, 
 took (R11b), and it is used in these ways and no others:
 
 - `==` and `!=` with a word (`e == ParseError.Empty`), with an error type or a named set (`e == ParseError`: true
-  where it holds a word of that type, or of what the set stands for), and with another error value (the same word);
+  where it holds a word of that type, or of what the set stands for), and with another error value (the same word and,
+  where it carries one, an equal payload - E10, text by its contents);
   whether it holds no error is `e is null` (`e is not null` its negation), the one null test (E10c) - `e == null` is
   E10c's error, naming it. Each side names something the
   other can be, else the test is a compile-time error (it could never hold); two error types or sets are never
@@ -1137,7 +1162,7 @@ took (R11b), and it is used in these ways and no others:
 - `$e`: the error's name as an unhandled error prints it (B5, E11a) - `ParseError.Empty`, another module's type by
   its module's name - and `null` for none;
 - hashing: the compiler supplies `Hash` (E10b), so an error value is a `Map` key - by the error it holds (its type and
-  word), whatever set it is held as, so two error values `==` across sets hash alike;
+  word, then its payload's fields), whatever set it is held as, so two error values `==` across sets hash alike;
 - a value fits where its set is expected only when every word it can be is in that set (a wider set's value after
   narrowing has shown it is): `l LoadError = e` with `e` a `ParseError` fits; the other way is a compile-time error
   naming the test that narrows;
@@ -1145,7 +1170,10 @@ took (R11b), and it is used in these ways and no others:
 
 It has no arithmetic, no ordering and no conversion to or from a number. At run time a value is the 32-bit code of
 the error-union convention (R6) under its own set, `0` for `null`; a value going where a wider or narrower set is
-expected is recoded (R7).
+expected is recoded (R7). A value of a set holding an error type some of whose words carry payloads (T19b) is that code
+followed by one payload part per such type, in the set's order, laid out as an enum of the type's words is - the part
+of the code's type holding the payload of its word, every other part its zero (so `null` is all zero); recoding moves
+the payload into the target set's part.
 
 ### 2.7 Function types
 
@@ -5473,7 +5501,8 @@ clause through are compile-time errors. `unreachable` and a `noreturn` call end 
 were, and is carried to the task's `join` block - as its code (R6), written before the task is reported finished, so
 the join's edge (P8) orders it. The join still waits for every task (P1b), and then, if any task failed, the join
 **fails** with the error of the task spawned **earliest** among those that failed - in the order the `spawn`
-statements ran, so in the order of a loop's iterations - and every other task's error is dropped. A failing task stops
+statements ran, so in the order of a loop's iterations - and every other task's error is dropped. A payload the
+failing task's error carries (T19b) goes with it to the joining thread; the others' are dropped. A failing task stops
 no other: stopping siblings is cooperative, through a cancellation token (`std/cancel`) the tasks watch.
 
 The join fails on **every** way out of its block - falling off its end, a `return`, a `break`, a `continue` - and its
@@ -5773,8 +5802,9 @@ type.
 
 ### 7.2 The `error` statement
 
-**R3.** `error-stmnt ::= "error" ( alias-chain IDEN "." IDEN | alias-chain IDEN ) STMNT_END` (`alias-chain`, §4.4 M8,
-possibly empty, giving a bare `Type.Word`). `alias-chain IDEN "." IDEN` names a declared error type (§4.4) and one of
+**R3.** `error-stmnt ::= "error" ( alias-chain IDEN "." IDEN | alias-chain IDEN ) [ "(" args ")" ] STMNT_END`
+(`alias-chain`, §4.4 M8, possibly empty, giving a bare `Type.Word`); the arguments are a payload's fields (T19b), given
+where the word carries one and only there. `alias-chain IDEN "." IDEN` names a declared error type (§4.4) and one of
 that type's own declared words (T19); a lone `IDEN` is a held error (R3a) where it names a local, a parameter or a
 global, else an error raised by name (R3b), and `alias-chain IDEN` another module's error raised by name. Every error
 is of a type: a declared one names its word; one raised by name is its own type. A declared error type written whole
@@ -5801,7 +5831,7 @@ other, with did-you-mean - the other a declared error type or set, or a name rai
 first) - unless a function raising it names it after its `?` (`fn f() ? NotFond`), which says it is meant.
 
 **R3a (raising a held error).** `error e`, with `e` an error value (T20) - a local, a parameter or a global holding
-one, the name a catch clause gave the error it took (R11b) among them - raises the error it holds, its type and word.
+one, the name a catch clause gave the error it took (R11b) among them - raises the error it holds, its type and word, with the payload it holds (T19b).
 It is held to the enclosing function's set as `error T.WORD` is (R3): every error `e` can be there - its set, less what
 a test of `e` has excluded (T20) - must be in a written set, or is taken on by an inferred one (R1a). Raising a value
 that holds `null`, no error, stops the program as a failed check does, `FILE:LINE: raised a null error` (S18a); in a
@@ -5934,8 +5964,10 @@ that name.
 default ...` name the error the clause took, for the clause - its block and its defaults - as a for-in names its
 element. The name is an error value (T20) whose set is what the clause took: the words of what the tried operand can
 fail with that the clause's items name (everything left, for a clause with none), less what earlier clauses took. It is
-never null. It is used as any error value is - compared, narrowed, matched, rendered, passed, stored, captured, raised
-again - and is copied where it goes, so a value taken from it outlives the clause (`last = e`, `l.Push(e)`). The name
+never null, and holds the payload its error carries (T19b), its own copy made where the name lives - so `catch
+ParseError.Bad e { e.line }` reads it at once. It is used as any error value is - compared, narrowed, matched, rendered,
+passed, stored, captured, raised again - and is copied where it goes, so a value taken from it outlives the clause
+(`last = e`, `l.Push(e)`). The name
 itself is never assigned: assigning to it is a compile-time error naming a local of its own (`x := e`). It is declared
 as any local is (D3, D3a: it may not reuse another's name), a clause that never uses its name is a compile-time error
 naming the clause without it, and `try e` is an error naming `error e`. The name holds the error's code under the
@@ -8225,7 +8257,8 @@ reference (`a Array<I32>&`, `t String&`) - and its result is an `extern-value-ty
 more C parameters after the rest, a pointer to `cap` elements and `cap`, into which the entry copies as many of the
 result's elements as fit, returning the result's whole length (`int64_t`) - so a caller learns how large a buffer to
 give again. A function declaring errors (R1) has an entry returning an `int32_t`: 0 when it returns, else the code of
-the error it fails with (X14 numbers them); its result, where it has one, is then written through a pointer C gives
+the error it fails with (X14 numbers them) - the payload a word carries (T19b) is not passed to C, the entry dropping it
+before it returns; its result, where it has one, is then written through a pointer C gives
 as a last parameter (`T *`), or for an array result its length through a pointer after the buffer's two. A failure of
 any other kind - a failed check, `fail`, `unreachable` - ends the process as it does anywhere.
 

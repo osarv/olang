@@ -858,7 +858,6 @@ type Diag enum {
     PayloadWordBare
     PlainWordCalled
     PayloadFieldUnnarrowed
-    PayloadFieldWrite
     PayloadArgs
     FlagAmongResults
     FlagWithOutParam
@@ -1404,9 +1403,6 @@ fn PlainWordCalled(word String&) Msg { return Msg(Diag.PlainWordCalled, "T19b", 
 
 # ERR_PAYLOAD_FIELD_UNNARROWED
 fn PayloadFieldUnnarrowed(name String&, field String&) Msg { return Msg(Diag.PayloadFieldUnnarrowed, "T19b", $name " may hold an error that has no field " $field " - test which it holds first ('if " $name " == T.Word')") }
-
-# ERR_PAYLOAD_FIELD_WRITE
-fn PayloadFieldWrite(name String&) Msg { return Msg(Diag.PayloadFieldWrite, "T19b", "a payload field is never written - " $name " is the error as it was raised") }
 
 # ERR_PAYLOAD_ARGS
 fn PayloadArgs(word String&, want I64, got I64) Msg { return Msg(Diag.PayloadArgs, "T19b", $word " carries " $want " field" $("" if want == 1 else "s") ", " $got " given") }

@@ -1,0 +1,155 @@
+# T19b: errors carrying data - payload words raised with their fields, taken by clauses, read where narrowed, rendered,
+# compared, hashed, stored, raised again, recoded between sets, carried from tasks to their joins. Each computation is
+# done twice where it can be - as a global the evaluator bakes and an assert it decides while compiling (K2, S18c), and
+# on an input the evaluator cannot see (Live, a mutable global), at run time - so the two must agree.
+
+type ParseErr error {
+    Bad(line I64, col I64)
+    Eof
+    Named(what String)
+}
+type NetErr error { Gone(host String), Slow }
+type LoadErr error ParseErr, NetErr
+
+Live mut I64 = 0
+
+fn parse(n I64) I64 ? ParseErr {
+    if n == 0: error ParseErr.Eof
+    if n < 0: error ParseErr.Bad(n, 7)
+    if n > 100: error ParseErr.Named("big " $n)
+    return n * 2
+}
+
+fn fetch(n I64) I64 ? NetErr {
+    if n == 1001: error NetErr.Slow
+    error NetErr.Gone("host" $n)
+}
+
+fn load(n I64) I64 ? LoadErr {
+    if n >= 1000: return try fetch(n)
+    return try parse(n)
+}
+
+# what n's parse said, as "$" renders it
+fn said(n I64) String {
+    return try $parse(n) catch ParseErr e default $e
+}
+
+# the line of a Bad, read off the clause's name
+fn line(n I64) I64 {
+    return try parse(n) catch ParseErr.Bad e default e.line catch default -1
+}
+
+# the payload read where narrowing leaves one word
+fn named(n I64) String {
+    v := try parse(n) catch ParseErr e {
+        if e == ParseErr.Named: return e.what
+        return "other"
+    }
+    return $v
+}
+
+# error e raises what e holds, payload and all
+fn again(n I64) I64 ? ParseErr {
+    return try parse(n) catch ParseErr e {
+        error e
+    }
+}
+
+fn againSaid(n I64) String {
+    return try $again(n) catch ParseErr e default $e
+}
+
+# errors kept for later, each its own copy
+fn kept(ns Array<I64>&) Vec<LoadErr> {
+    out := Vec<LoadErr>()
+    for n in ns {
+        try load(n) catch LoadErr e {
+            out.Push(e)
+        }
+    }
+    return out
+}
+
+# the join's error: the earliest-spawned failure's, its payload with it
+fn fanned(base I64) String {
+    out := Array<I64>(8)
+    try join {
+        for i in range 8 {
+            spawn out[i] = try parse(base + 5 - i)
+        }
+    } catch ParseErr e {
+        return $e
+    }
+    return $out
+}
+
+Said String = said(-3)
+assert Said == "ParseErr.Bad(-3, 7)"
+assert said(500) == "ParseErr.Named(\"big 500\")"
+assert said(0) == "ParseErr.Eof"
+assert line(-9) == -9 and line(0) == -1
+assert named(200) == "big 200"
+assert againSaid(-4) == "ParseErr.Bad(-4, 7)"
+Kept Vec<LoadErr> = kept(I64[0, -2, 300, 1000, 1001])
+assert Kept.Len() == 5
+assert $Kept[2] == "ParseErr.Named(\"big 300\")" and $Kept[3] == "NetErr.Gone(\"host1000\")"
+
+test "a payload is read in the clause and where narrowing leaves one word" {
+    assert said(Live - 3) == "ParseErr.Bad(-3, 7)"
+    assert said(Live + 500) == "ParseErr.Named(\"big 500\")"
+    assert line(Live - 9) == -9 and line(Live) == -1
+    assert named(Live + 200) == "big 200" and named(Live) == "other"
+    assert said(Live + 4) == "8"
+}
+
+test "error e raises the payload it holds" {
+    assert againSaid(Live - 4) == "ParseErr.Bad(-4, 7)"
+}
+
+test "a value kept outlives the clause and the scopes after it" {
+    ks := kept(I64[Live, Live - 2, Live + 300, Live + 1000, Live + 1001])
+    for i in range 50 {
+        v := Vec<String>()
+        v.Push("churn" $i)
+    }
+    assert ks.Len() == 5
+    assert $ks[0] == "ParseErr.Eof" and $ks[1] == "ParseErr.Bad(-2, 7)"
+    assert $ks[2] == "ParseErr.Named(\"big 300\")" and $ks[3] == "NetErr.Gone(\"host1000\")" and $ks[4] == "NetErr.Slow"
+    assert ks.View() == Kept.View()
+}
+
+test "values compare and hash by word and payload" {
+    a := ParseErr.Bad(Live + 1, 2)
+    assert a == ParseErr.Bad(1, 2) and a != ParseErr.Bad(1, 3) and a != ParseErr.Eof
+    assert a.Hash() == ParseErr.Bad(1, 2).Hash()
+    m := Map<ParseErr, I64>()
+    m.Put(ParseErr.Named("a"), 1)
+    m.Put(ParseErr.Named("b"), 2)
+    m.Put(ParseErr.Named("a"), 3)
+    assert m.Len() == 2 and (try m.Get(ParseErr.Named("a")) catch default 0) == 3
+    w LoadErr = a
+    assert w == ParseErr.Bad(1, 2) and $w == "ParseErr.Bad(1, 2)"
+    z LoadErr = null
+    assert z is null and z != w
+}
+
+test "a payload rides from a task to its join, the earliest-spawned failure's kept" {
+    assert fanned(Live) == "ParseErr.Eof"
+    out := Array<I64>(8)
+    join {
+        for i in range 4 {
+            spawn out[i] = try parse(Live - i) catch ParseErr default -1
+        }
+    }
+    assert out[1] == -1
+}
+
+test "a loop raising and taking payloads stays flat" {
+    total := 0
+    for i in range 200000 {
+        total += try parse(Live - i - 1) catch ParseErr.Bad e default e.col catch default 0
+        total += try parse(Live + 101 + i) catch default 1
+    }
+    assert total == 1600000
+}

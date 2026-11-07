@@ -16236,6 +16236,7 @@ fn (c mut Checker&) errCode(x typed.Expr&) typed.Expr& {
 fn (c mut Checker&) errField(sp source.Span, nsp source.Span, x ast.Expr&, n source.NameId) typed.Expr?& {
     ln := c.errLocalName(x)
     if ln == source.NameId(0): return null
+    c.caughtUsed(ln)
     id := c.localNamed(ln)
     t := c.localType(id)
     now := c.errNow(ln, c.P.T.ErrValItems(t))

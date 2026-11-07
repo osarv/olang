@@ -1,0 +1,9 @@
+# check: fail error[T19b]: ParseError2.Eof carries nothing - write it without '()'
+type ParseError2 error { Bad(line I64, col I64), Eof }
+fn parse() I64 ? ParseError2 {
+    error ParseError2.Eof()
+}
+fn main() {
+    x := try parse() catch default 0
+    assert x == 0
+}

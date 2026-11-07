@@ -1,0 +1,5 @@
+# check: fail error[T19b]: payload field node of type Node& holds a reference
+type Node struct(v I64) { v }
+type BadError error { Lost(node Node&), Plain }
+fn main() {
+}
