@@ -1837,6 +1837,19 @@ fn (c mut Checker&) immutHoldsUnique(self types.TypeId, sps Vec<source.Span>&) {
 
 # whether a value of type t holds a value of declaration d by value: itself, or through a struct's fields, an enum's
 # payloads, a fixed array's elements or what a type is declared over - never through a reference or a run-time array
+# T13b for a generic immut struct (bulk review 7, F13): an instance holding a unique part by value - a unique type
+# argument - is refused where it was asked for, naming the rule: never both
+fn (c mut Checker&) instImmutUnique(t types.TypeId) {
+    if not c.P.Immut(t) or not c.P.Body(t): return
+    o := c.P.TypeOrigin(t)
+    if o.File < 0: return
+    for f in c.P.T.Items(c.P.T.Fields(t)) {
+        if c.isRef(f) or not c.P.Unique(f): continue
+        c.P.L.Diags.ErrorBare(diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End)), msgs.UniqueImmutPart(c.ty(t), c.ty(f)))
+        return
+    }
+}
+
 # T16 for a generic struct: each instance that holds itself by value, said at the field, named as the instance
 fn (c mut Checker&) instHoldsItself(t types.TypeId, d types.DeclId, sb ast.StructBody&) {
     if not c.P.Body(t) { return }
@@ -3443,7 +3456,10 @@ fn (c mut Checker&) ctorChecked(id I64, t types.TypeId, twin types.ListId) {
                     c.paramWritten(s.Params[i], ps[i])
                 }
                 c.cur().SetVars(c.P.ScopeVarsOf(sig))
-                if c.P.T.Items(c.P.T.Args(t)).Len() > 0 { c.instHoldsItself(t, d, s) }
+                if c.P.T.Items(c.P.T.Args(t)).Len() > 0 {
+                    c.instHoldsItself(t, d, s)
+                    c.instImmutUnique(t)
+                }
                 pushed := c.typeContexts(t, td)   # G16b: an instance's with where it was asked for
                 root := c.rootStmts(s.Body)
                 c.cur().Root = root
@@ -20221,7 +20237,8 @@ fn (c mut Checker&) uniqueRef(x typed.Expr&, sp source.Span, written Bool = true
         return x
     }
     p := readPlace(x)
-    perm := types.Writable if p is not null and c.placeWritable(p) else types.ReadOnly
+    # (an immut type's reference is read-only: nothing of it changes, T13a - one unique too is F13's error already)
+    perm := types.Writable if p is not null and c.placeWritable(p) and not c.P.Immut(t) else types.ReadOnly
     return c.fit(x, c.P.T.Ref(t, perm), sp)
 }
 
