@@ -247,7 +247,7 @@ type Golden struct() {
     Bodies Map<String&, String&> = Map<String&, String&>()
 }
 
-# a section of a golden file, written as GoldenRead reads it back
+# a section of a golden file, written as Golden.Read reads it back
 fn GoldenSection(key String&, body String&) String {
     b := StringBuilder()
     b.Push("=== " $key "\n")
