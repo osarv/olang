@@ -311,3 +311,25 @@ fn (v ColumnVec<T>&) Str() String {
     o := try r.FindByte('[') catch { unreachable }
     return "ColumnVec<" $r[:o] ">" $r[o:]
 }
+
+# the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
+# prelude is part of every program
+
+if TestBuild {
+    type columnsPt struct(X F32, Y F32) { X, Y }
+
+    # examples (B7a): what olang doc shows under the type
+    test Columns "a column per field, a row per index" {
+        c := Columns<columnsPt>(3, columnsPt(1.0, 2.0))
+        c.X += c.Y                                      # lanes: one loop over two arrays
+        c[0] = columnsPt(0.0, 0.0)
+        assert c.X[1] == 3.0 and c[0] == columnsPt(0.0, 0.0) and c.Len() == 3
+    }
+
+    test ColumnVec.Push "adds a row at the end of every column" {
+        v := ColumnVec<columnsPt>()
+        v.Push(columnsPt(1.0, 2.0))
+        v.Push(columnsPt(3.0, 4.0))
+        assert v.Len() == 2 and v.Y[1] == 4.0 and v[0] == columnsPt(1.0, 2.0)
+    }
+}

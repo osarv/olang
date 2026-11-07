@@ -1,0 +1,94 @@
+# Columns<T> and ColumnVec<T>, the structures of arrays (T7e), tested - a module of its own, compiled only when run.
+# Text kept in columns is read back after the arena churns; a computation through both types is baked into a global
+# (K2) and decided by a top-level assert (S17a) beside the same computation at run time
+
+type P struct(X F32, Y F32, Vx F32, Vy F32) { X, Y, Vx, Vy }
+type Tag struct(name String, n I64) { name, n }
+type Grid struct(at I64, w F64 = 1.5) { at, w }
+
+Run I64 = Count(1)                                      # a run-time 1: computations given it are not folded
+fn Count(k I64) I64 {
+    c := 0
+    for _ in range k { c++ }
+    return c
+}
+
+fn churn() {
+    for i in range 200 {
+        s := $i " churn " $(i * 7)
+        assert s.Len() > 0
+    }
+}
+
+fn byY(a P, b P) Bool { return a.Y < b.Y }
+
+# a step of particles, the column way: one loop per column, lane operators over whole columns
+fn step(c mut Columns<P>&, dt F32) {
+    c.Vy -= 9.8 * dt
+    c.X += c.Vx * dt
+    c.Y += c.Vy * dt
+}
+
+fn work(k I64) I64 {
+    v := ColumnVec<P>(2)
+    for i in range 40 { v.Push(P(F32(i * k), F32(40 - i), 1.0, 0.0)) }
+    v.Sort(byY)
+    try v.SwapRemove(0) catch { unreachable }
+    try v.Insert(3, P(-1.0, -1.0, 0.0, 0.0)) catch { unreachable }
+    x := try v.Pop() catch { unreachable }
+    c := v.ToColumns()
+    step(c, 0.5)
+    return c.Len() * 100000 + I64(c.X[3]) * 1000 + I64(x.X) + I64(c[0].Vy * 10.0)
+}
+
+Worked := work(1)
+assert Worked == 3900000 - 1000 + 1 - 49
+
+test "Columns: rows are read and written through the columns" {
+    c := Columns<P>(4, P(1.0, 2.0, 3.0, 4.0))
+    c.X[2] = 9.0
+    assert c.Len() == 4 and c[2] == P(9.0, 2.0, 3.0, 4.0) and c[3].Vy == 4.0
+    c[1] = P(5.0, 6.0, 7.0, 8.0)
+    assert c.Y[1] == 6.0 and c.Vx[1] == 7.0
+    assert (try c.Get(4) catch default P(0.0, 0.0, 0.0, 0.0)) == P(0.0, 0.0, 0.0, 0.0)
+    n := 0
+    for p in c { n += I64(p.Vy) }
+    assert n == 20
+}
+
+test "Columns: zero rows take the record's defaults, and a copy is a table of its own" {
+    g := Columns<Grid>(3)
+    assert g.w[2] == 1.5 and g.at[0] == 0
+    h := g
+    h.at[0] = 7
+    assert g.at[0] == 0 and h.at[0] == 7 and g != h
+    assert $g == "Columns<Grid>[Grid(0, 1.5), Grid(0, 1.5), Grid(0, 1.5)]"
+}
+
+test "Columns.Sort: moves every column together, stably" {
+    c := P[P(1.0, 3.0, 0.0, 0.0), P(2.0, 1.0, 0.0, 0.0), P(3.0, 1.0, 0.0, 0.0)].ToColumns()
+    c.Sort(byY)
+    assert c.X[0] == 2.0 and c.X[1] == 3.0 and c.X[2] == 1.0 and c.Y[2] == 3.0
+    c.Swap(0, 2)
+    assert c[0] == P(1.0, 3.0, 0.0, 0.0)
+}
+
+test "ColumnVec.Push: grows every column together" {
+    v := ColumnVec<Tag>()
+    for i in range 100 { v.Push(Tag($i, i)) }
+    churn()
+    assert v.Len() == 100 and v.name[57] == "57" and v.n[99] == 99 and v[12] == Tag("12", 12)
+    v.Truncate(10)
+    try v.RemoveAt(0) catch { unreachable }
+    assert v.Len() == 9 and v[0].name == "1"
+    w := v.ToVec()
+    assert w.Len() == 9 and w[8] == Tag("9", 9)
+    back := w.ToColumnVec()
+    assert back == v
+    v.Clear()
+    assert v.Len() == 0 and back.Len() == 9
+}
+
+test "ColumnVec: evaluated while compiling as at run time" {
+    assert Worked == work(Run)
+}

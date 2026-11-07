@@ -13500,7 +13500,9 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Lvalue&, n so
         c.err(nsp, msgs.NoSuchMember(c.ty(t), c.text(n), c.memberHint(t, n, false)))
         return null
     }
-    if c.P.IsColumnVec(t) and not c.P.L.Mods[c.fr().Mi].Prelude {
+    # T7e: a ColumnVec's column - before its own fields (private to the prelude) everywhere but in the prelude
+    inPrelude := c.P.L.Mods[c.fr().Mi].Prelude
+    if c.P.IsColumnVec(t) and (not inPrelude or c.fieldIndex(t, n) < 0) {
         cv := c.columnVecField(sp, nsp, base, t, n)
         if cv is not null: return cv
     }
