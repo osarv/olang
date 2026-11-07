@@ -240,13 +240,15 @@ type placedRow struct(At source.Span, Kind I64) {
     Kind
 }
 
-# ... a row of -memory's for one, in the order rows are written: by file, then where the view stands
-type placedLine struct(File I64, At I64, Text String) {
+# a placement made for a view, as -memory and the language server say it: the view's span in its file, where what is
+# built longer is declared, and what is said
+type Placement struct(File I64, Start I64, End I64, Decl I64, Text String) {
     File
-    At
+    Start
+    End
+    Decl
     Text
 }
-
 # a function made a value (T22a): where, which body, and how - Named, Lambda, or an instance through its Call (Of)
 type fnUse struct(File I64, Sp source.Span, F I64, Kind I64, Of types.TypeId) {
     File
@@ -10404,11 +10406,10 @@ fn (s mut Scoper&) scopeOf(t Term) typed.Scope {
 
 # ---- the placements made for views (O27 as placement, B18) ----
 
-# -memory's rows for the placements made for a view, a part or a capture (docs/sec8.md 4.4): one each, at the view, with a
-# note at what is built longer and the copy that would let it go with its turn; "" for none
-fn (s mut Scoper&) PlacedReport() String {
-    d := s.P.L.Diags
-    rows Vec<placedLine>
+# the placements made for a view, a part or a capture (docs/sec8.md 4.4), one each in source order: where the view
+# stands, what is built longer and where its declaration is - -memory's rows (B18) and the language server's hints
+fn (s Scoper&) Placements() Vec<Placement> {
+    rows Vec<Placement>
     for key in s.placed.Keys() {
         b := key.First
         if b < 0 or b >= s.Bodies.Len() or not s.judged[b] { continue }
@@ -10431,20 +10432,32 @@ fn (s mut Scoper&) PlacedReport() String {
             if site < body.Sites.Len() { at = body.Sites[site].Sp }
             t = try s.siteLifts.Get(key) catch default Term.None
         }
-        text := $d.Locate(body.File, I64(row.At.Start)) ": memory: " $name " is built in " $s.placedScope(b, t) ", a new one each time it is made, " $what "\n" $d.Locate(body.File, I64(at.Start)) ": note: made here - a copy of what is kept ('$x', 'x.Copy()') would let it go with its turn\n"
-        if not rows.View().Some(fn(r): return r.Text == text) { rows.Push(placedLine(body.File, I64(row.At.Start), $text)) }
+        text := $name " is built in " $s.placedScope(b, t) ", a new one each time it is made, " $what
+        p := Placement(body.File, I64(row.At.Start), I64(row.At.End), I64(at.Start), $text)
+        if not rows.View().Some(fn(r): return r.File == p.File and r.Start == p.Start and r.Text == p.Text) { rows.Push(p) }
     }
+    rows.Sort(fn(a Placement, b Placement) Bool { return a.File < b.File or (a.File == b.File and a.Start < b.Start) })
+    return rows
+}
+
+# -memory's rows for the placements made for a view: one each, at the view, with a note at what is built longer and the
+# copy that would let it go with its turn, then their count; "" for none
+fn (s mut Scoper&) PlacedReport() String {
+    d := s.P.L.Diags
+    rows := s.Placements()
     if rows.Len() == 0 { return "" }
-    rows.Sort(fn(a placedLine, b placedLine) Bool { return a.File < b.File or (a.File == b.File and a.At < b.At) })
     out := StringBuilder()
-    for r in rows { out.Push(r.Text) }
+    for r in rows {
+        out.Push($d.Locate(r.File, r.Start) ": memory: " $r.Text "\n")
+        out.Push($d.Locate(r.File, r.Decl) ": note: made here - a copy of what is kept ('$x', 'x.Copy()') would let it go with its turn\n")
+    }
     out.Push($"memory: " $rows.Len() " placement" $("" if rows.Len() == 1 else "s") " made for a view kept longer than its storage (O27)\n")
     return out.ToString()
 }
 
 # term t of body b as -memory names a scope: a function's own, the result scope, what a parameter refers to, where a
 # generator lives, an outer block, the program's
-fn (s mut Scoper&) placedScope(b I64, t Term) String {
+fn (s Scoper&) placedScope(b I64, t Term) String {
     body := s.Bodies[b]
     fname := match body.Of {
         case typed.BodyOf.Fn(i): $s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(i)).Name)
@@ -10458,7 +10471,7 @@ fn (s mut Scoper&) placedScope(b I64, t Term) String {
     }
 }
 
-fn (s mut Scoper&) varScopeName(body typed.Body&, k I64) String {
+fn (s Scoper&) varScopeName(body typed.Body&, k I64) String {
     if k < 0 or k >= body.Vars.Len() { return "a longer-lived scope" }
     return match body.Vars[k] {
         case typed.ScopeVar.Param(l): $"the scope of what '" $s.P.L.Names.Text(body.Locals[I64(l)].Name) "' refers to"
