@@ -124,3 +124,12 @@ test Pub "json writes and reads a packed struct by its fields" {
     assert t == "{\"V\":5,\"F\":{\"Syn\":true,\"Ack\":false,\"Fin\":true},\"K\":\"Ack\"}"
     assert json.Decode<Pub>(t)! == p
 }
+
+test Header "an array field stored whole, and its copy's lanes" {
+    h := header(U16(Live))
+    h.Lanes = U3[1, 2, 3, 4]
+    l := h.Lanes
+    l += U3[1, 1, 1, 1]
+    h.Lanes = l[0:4]
+    assert h.Lanes == U3[2, 3, 4, 5] and h.Lanes.Len() == 4 and h.Code == Op.Put
+}
