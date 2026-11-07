@@ -2988,3 +2988,29 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   26 files alike, its tool (evaldump) noted as not building since 2026-10-26. Decided (mine): a round brings it back -
   the tool fixed, every difference but the stated limit (tasks run one after another, B3e) fixed, the comparison put
   into `make verify` - before the compiler is called done; the REPL builds on it.
+- QCX (1) DECIDED 2026-11-07 (the user: "Yes, sure. Let errors hold values."): errors carry data (docs/errdata.md on
+  wt-errdata). The build waits for QCY below, which decides whether a payload ever leaves the error stack.
+- QCX (6) DECIDED 2026-11-07 (the user: "Move the interpreter into just olang without anything. And then add a Jupyter
+  notebook on top. I don't know what REPL is."): plain `olang`, with nothing after it, opens the interpreter at a
+  prompt (a REPL: read a line, run it, print the result, repeat); a Jupyter kernel on top of it. After the compiler is
+  done, and after the interpreter round brings `interpret` current.
+- QCY ASKED 2026-11-07 (the user: "I think the reason we didn't want errors as values is because we didn't want them to
+  be declarable as variables ... holding errors as catching errors and then doing something with them. That's fine,
+  creating errors that hold values is fine, but storing errors as variables, should not be."). The record: on
+  2026-10-25 the user was "not sold on the idea of storing errors", then proposed it themselves ("we could have errors
+  as variables and still only allow errors in the right slot"), and on 2026-10-26 chose it ("Ye, let's have them") -
+  T20, built (fields, locals, elements, type arguments; never a result). Asked, the options: (a) keep T20 as built;
+  (b) an error lives only in the catch clause that names it (read, test, match, render, raise again - nothing else);
+  (c) (b), and the clause may also hand it to a function as a parameter (handling code factored out), never kept - no
+  local declared with it, no field, element, type argument, global or capture. Recommended (c). Found: std and the
+  compiler keep no error in a field or collection as far as a search shows; the feature's own tests and std/json's
+  encoding of error values would go. Either (b) or (c) simplifies errors with data (a payload read in place on the
+  error stack, never copied out). In effect: T20 as built; the errdata build waits.
+- QCX (3) struct patterns, talked through 2026-11-07 (the user: "since the only way into a struct is through its
+  constructor, this kind of becomes problematic. But I think you could make the same case for arrays and enums too,
+  maybe. Can we talk about it?"): enum cases and arrays run no code when built (what goes in is what is stored, all of
+  it readable), so a pattern is the exact reverse; a struct's constructor is code (computed and private fields,
+  contracts, parameters not stored), so there is nothing to reverse - patterns already stop at it (`case
+  Shape.Round(c)` binds the struct whole). Options: (1) keep it so - recommended; (2) patterns by field name (`case
+  Point(y = 0)`), looking like a constructor call that is none; (3) positional patterns only for structs whose
+  constructor just stores its parameters - matchability then depends on the constructor's body. In effect: none.
