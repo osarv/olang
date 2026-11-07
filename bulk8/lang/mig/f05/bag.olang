@@ -1,0 +1,8 @@
+# a Bag merges Bags: its literal takes Bags
+type Bag struct(N I64) { N }
+
+fn Bag.FromIter<I Iterator<Bag ? E>, ? E>(it mut I&) Bag ? E {
+    n := 0
+    for b in it { n += b.N }
+    return Bag(n)
+}

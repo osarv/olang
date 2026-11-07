@@ -1,0 +1,40 @@
+import "std/json"
+import "std/io"
+
+type Inner struct(HTTPCode I64, userID String) { HTTPCode, userID }
+
+@json.Naming.Kebab
+type Fixed struct(SomeValue I64, OtherOne Bool) { SomeValue, OtherOne }
+
+type User struct(UserName String, @json.Key("id") UserID I64, CreatedAt I64, In Inner, F Fixed, Tags Vec<String>) {
+    UserName, UserID, CreatedAt, In, F, Tags
+}
+
+type Shape enum { Circle(RadiusLen F64), Square(SideLen F64) }
+
+fn User.mk(n I64) User {
+    t := Vec<String>()
+    t.Push("a" $n)
+    return User("bob", n, 1700, Inner(200, "u" $n), Fixed(3, true), t)
+}
+
+fn all(n I64) String {
+    out := ""
+    for k in Array<json.Naming>[json.Naming.Exact, json.Naming.Camel, json.Naming.Snake, json.Naming.Kebab] {
+        t := json.Encode(User.mk(n), keys = k)
+        back := try json.Decode<User>(t, keys = k) catch default User.mk(-1)
+        s := json.Encode(Shape.Square(2.5), keys = k)
+        sb := try json.Decode<Shape>(s, keys = k) catch default Shape.Circle(0.0)
+        out = $out $t " " $back.UserID $back.In.userID " " $s " " $sb "\n"
+    }
+    return out
+}
+
+Baked String = all(7)
+Live mut I64 = 7
+
+fn main() {
+    r := all(Live)
+    io.Print(r)!
+    io.Println($(r == Baked))!
+}

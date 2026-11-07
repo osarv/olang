@@ -1,0 +1,12 @@
+# builder_migrate (run: bin/builder_migrate --std STD THIS-FILE, or olang fix): RedCol makes a Col and takes none, so it
+# moves onto Col; the tool drops the type's camel-case word and names it Col.Red - a case of Col (D19: "'Red' is
+# already a case of Col"). The migrated file no longer compiles; olang fix then ends "cannot run tools_errors_migrate".
+import "std/io"
+
+type Col enum String { Red, Blue }
+
+fn Col.Red() Col { return Col.Red }
+
+fn main() {
+    io.Println($Col.Red())!
+}

@@ -1,0 +1,26 @@
+import "std/io"
+
+type Pt struct(x I64, y I64) { x, y }
+
+fn (p Pt) Sum() I64 { return p.x + p.y }
+
+fn total(a Array<I64>&) I64 {
+    s := 0
+    for v in a { s += v }
+    return s
+}
+
+fn twice<T Number>(x T) T { return x + x }
+
+fn gen(n I64) Iterator<I64> {
+    for i in range n { yield i }
+}
+
+fn main() {
+    a := Array<I64>(100, 3)
+    io.Println($total(a) " " $Pt(1, 2).Sum() " " $twice(3) " " $twice(2.5))!
+    s := 0
+    for x in gen(10) { s += x }
+    f := total
+    io.Println($f(a) $s)!
+}

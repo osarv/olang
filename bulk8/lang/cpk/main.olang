@@ -1,0 +1,15 @@
+import "std/io"
+import c "h.c"
+
+type H packed struct(v U3, s I5, len U13, big U40) { v, s, len, big }
+
+fn main() {
+    m := c.make()
+    io.Println($m.v " " $m.s " " $m.len " " $m.big " " $c.size())!
+    m.v = 2
+    m.s = -3
+    c.bump(m)
+    io.Println($m.v " " $m.s " " $m.len " " $m.big " " $c.sum(m))!
+    h := H(1, -2, 300, 7)
+    io.Println($H.Size " " $h.len)!
+}

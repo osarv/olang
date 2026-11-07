@@ -1,0 +1,39 @@
+import "std/io"
+
+type Box<T> struct(v T, n I64) { v, n }
+
+type Color struct(r I64) { r }
+
+type Pt struct(x I64) { x }
+
+# generic over both: owner's T and own U
+fn Box<T>.mk<U>(x U, v T) Box<T> {
+    return Box(v, I64(x))
+}
+
+fn Color.Make(r I64) Color {
+    return Color(r)
+}
+
+fn Pt.new(x I64 = 3) Pt { return Pt(x) }
+
+# a constrained owner variable
+fn Box<T>.boxNum<T Number>(v T) Box<T> {
+    return Box(v, 1)
+}
+
+fn apply(f fn&(r I64) Color, k I64) Color { return f(k) }
+
+fn main() {
+    b := Box<I64>.mk<F64>(2.5, 7)
+    c := Color.Make(4)
+    d := apply(Color.Make, 9)
+    p := Pt.new(x = 11)
+    q := Pt.new()
+    e := Box.boxNum(2.5)
+    io.Println($b.v " " $b.n " " $c.r " " $d.r " " $p.x " " $q.x " " $e.v)!
+}
+
+test Color.Make "makes" {
+    assert Color.Make(1).r == 1
+}

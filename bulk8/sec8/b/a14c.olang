@@ -1,0 +1,43 @@
+import "std/io"
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    id = -1
+}
+
+type H struct(n I64) {
+    r Res = Res(n)
+    arr := Array<I64>(4 + n.Mod(3), n)
+}
+
+fn churn() I64 {
+    t := 0
+    for k in range 300 {
+        s := $k "-" $(k * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+# a view of an array part of a holder of a destructor value, kept past the holder's block
+fn first2(h H&) Array<I64>& { return h.arr[0:2] }
+
+fn keep(n I64) I64 {
+    views := Vec<fn&() I64>()
+    other := Vec<H>()
+    for k in range n {
+        h H = H(k + 1)
+        views.Push(fn() I64 { return h.arr[0] })
+    }
+    for k in range n { other.Push(H(-5)) }
+    churn()
+    s := 0
+    for v in views { s += v() }
+    return s
+}
+
+fn main() {
+    io.Println($keep(50))!
+}

@@ -1,0 +1,32 @@
+import "std/io"
+
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+
+fn link(a mut N&, b N&) { a.next = b }
+
+fn churn() I64 {
+    t := 0
+    for k in range 300 {
+        s := $k "-" $(k * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+# a global holding a function that ties its arguments
+Op := link
+
+fn viaGlobal(x mut N&) {
+    Op(x, N(5))
+}
+
+fn main() {
+    a := N(0)
+    viaGlobal(a)
+    churn()
+    io.Println($a.next!.v)!
+}

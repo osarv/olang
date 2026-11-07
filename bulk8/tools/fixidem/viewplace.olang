@@ -1,0 +1,142 @@
+# Storage kept for a view (O27 as placement): a view of storage kept where that storage does not live has the storage
+# built where the view is kept - words kept from a turn's text, a slice of a temporary kept in a parameter's field, a
+# generator's views of a local it made kept by the consumer, a closure over a turn's local kept in a field, a view a
+# function hands back of what it builds, a part of an instance kept past it. Each test reads its values back after an
+# arena churn (what a closed scope left would be written over), and the evaluator decides the same values while
+# compiling (a baked global, top-level asserts).
+
+type Holder struct() {
+    r Array<I64>& = Array<I64>(0)
+    f fn?&(n I64) I64 = null
+}
+
+type Big struct(n I64) {
+    a := Array<I64>(4)
+    a[0] = n
+    a[1] = n + 1
+}
+
+type Node struct(v I64) {
+    v
+}
+
+type View struct(of mut Node&) {
+    n mut Node& = of
+}
+
+# what a closed scope left behind is written over
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+# the first word of each turn's text kept past the turn: each turn's text built where 'keep' lives
+fn firsts(n I64) String {
+    keep := Vec<String&>()
+    for k in range n {
+        t := $k "-x"
+        keep.Push(t[0:1])
+    }
+    churn()
+    out := StringBuilder()
+    for w in keep { out.Push(w) }
+    return out.ToString()
+}
+
+# a view a function hands back of text it builds: the text built where the result goes (O14)
+fn head(n I64) String& {
+    t := $n "abc"
+    return t[0:2]
+}
+
+fn Big.mk(n I64) Big { return Big(n) }
+
+# a slice of a call's value - a temporary - kept in a parameter's field: the temporary built where the field lives
+fn setRow(h mut Holder&, n I64) {
+    h.r = Big.mk(n).a[0:2]
+}
+
+fn rowAfter(n I64) I64 {
+    h mut Holder& = Holder()
+    setRow(h, n)
+    churn()
+    return h.r[0] * 100 + h.r[1]
+}
+
+# a generator yielding views of a local it made, the elements kept by the consumer: the local built where the generator
+# lives, the walk made where the elements are kept
+fn pieces(t String&) Iterator<String&> {
+    c := $t "!"
+    for i in range c.Len() { yield c[i:i + 1] }
+}
+
+fn kept(t String&) String {
+    out := Vec<String&>()
+    for w in pieces(t) { out.Push(w) }
+    churn()
+    b := StringBuilder()
+    for w in out { b.Push(w) }
+    return b.ToString()
+}
+
+# a closure over a turn's local, kept in a field that outlives the turn: what it captured built where the field lives
+fn stash(h mut Holder&, k I64) {
+    p Node& = Node(k * 10)
+    h.f = fn(n) { return n + p.v }
+}
+
+fn closureAfter(k I64) I64 {
+    h mut Holder& = Holder()
+    for i in range k { stash(h, i) }
+    churn()
+    return h.f!(1)
+}
+
+# a part of an instance kept past the turn that built it (O25i's version 'keep = v.n'): the instance, and what it was
+# made from, built where the read after the loop needs them
+fn partAfter(n I64) I64 {
+    keep Node& = Node(-1)
+    for i in range n {
+        inner mut Node& = Node(i * 3)
+        v := View(inner)
+        keep = v.n
+    }
+    churn()
+    return keep.v
+}
+
+Heads := head(7)
+
+assert head(42) == "42" and firsts(4) == "0123" and rowAfter(5) == 506
+assert kept("ab") == "ab!" and closureAfter(3) == 21 and partAfter(4) == 9
+
+test firsts "keeps the first character of each turn's text" {
+    assert firsts(6) == "012345"
+}
+
+test head "hands back a view of what it builds" {
+    h := head(91)
+    churn()
+    assert h == "91" and Heads == "7a"
+}
+
+test setRow "keeps a slice of a temporary in a parameter's field" {
+    assert rowAfter(7) == 708
+}
+
+test pieces "keeps a generator's views of a local it made" {
+    assert kept("xyz") == "xyz!"
+}
+
+test stash "keeps a closure over a turn's local" {
+    assert closureAfter(5) == 41
+}
+
+test partAfter "keeps a part of an instance past its turn" {
+    assert partAfter(3) == 6
+}

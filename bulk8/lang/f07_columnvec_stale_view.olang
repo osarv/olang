@@ -1,0 +1,24 @@
+# T7e: a ColumnVec column "is a view ... good until it grows, as a Vec's View() is"; M19g makes using a Vec view after
+# a growth seen in the same function (or through a call given the Vec) a compile-time error. A column view kept across
+# a growth compiles; a plain build writes and reads the retired buffer (prints 99 1, then a stale 2), only -sanitize
+# and interpret stop it. scratch/cv3.olang: the same with Vec views is refused twice by M19g.
+import "std/io"
+
+type P struct(X I64, Y I64) { X, Y }
+
+fn grow(v mut ColumnVec<P>&) {
+    for i in range 20 { v.Push(P(i, i)) }
+}
+
+fn main() {
+    v := ColumnVec<P>()
+    v.Push(P(1, 2))
+    xs := v.X
+    grow(v)
+    xs[0] = 99
+    io.Println($xs[0] " " $v[0].X)!
+    ys := v.Y
+    v.Push(P(5, 5))
+    for i in range 30 { v.Push(P(i, i)) }
+    io.Println($ys[0])!
+}

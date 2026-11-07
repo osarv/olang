@@ -1,0 +1,7 @@
+import z "zlib.h" link "z"
+import fast "fast.c"
+import "std/io"
+fn main() {
+    v := String.FromC(z.zlibVersion()!, 32)
+    io.Println($v.Len() " " $fast.twice(3))!
+}

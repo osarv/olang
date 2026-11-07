@@ -1,0 +1,9 @@
+import lib "lib"
+import "std/io"
+
+fn main() {
+    c := try lib.Color.FromHex("#aabbcc") catch lib.ReadErr default lib.Color.Gray(1)
+    p := try lib.Pick(1, 2) catch default 0
+    f := lib.Twice
+    io.Println($c " " $p " " $f(3) " " $lib.Old(1) " " $lib.Box.Of(4) " " $lib.Head(1, true, 5))!
+}

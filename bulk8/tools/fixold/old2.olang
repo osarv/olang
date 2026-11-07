@@ -1,0 +1,28 @@
+# written 2026-11-06 against std as it was then
+import "std/io"
+import "std/net"
+import "std/time"
+import "std/os"
+import "std/utf8"
+import "std/regex"
+import "std/list"
+import "std/chan"
+
+fn main() ? {
+    ip := try net.ParseIP("127.0.0.1") catch net.Error default net.IP.Loopback4()
+    ad := try net.ParseAddr("127.0.0.1:80") catch net.Error default net.Addr(ip, 1)
+    d := try time.Date.Parse("2026-11-06T10:00:00Z") catch time.Error default time.DateOf(2000, 1, 1, 0, 0, 0)
+    out := try os.Output.Exec("true") catch os.Error default os.Output()
+    info := try os.FileInfo.Stat("/") catch os.Error e {
+        if e == os.Error.NotFound { try io.Println("nf") }
+        return
+    }
+    rs := 0
+    for r in utf8.RuneIter.Runes("héllo") { rs++ }
+    re := try regex.Regex.Compile("a+") catch regex.SyntaxError default regex.Regex.Compile("b")!
+    l := list.List.Of(Array<I64>[1, 2])
+    c := chan.Init<I64>(1)
+    try chan.Send(c, 3)
+    v := try chan.Recv(c)
+    try io.Println($ip " " $ad " " $d " " $out.Status " " $info.IsDir " " $rs " " $re.Matches("aa") " " $l.Len() " " $v)
+}

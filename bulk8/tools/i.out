@@ -1,3 +1,5 @@
-26 Array<String>["x00", "x13", "x26", "x39"]
-18 Array<String>["t00", "t01", "t02", "t03"]
-Array<I64>[12, 13, 14, 15]
+{"UserName":"bob","id":7,"CreatedAt":1700,"In":{"HTTPCode":200},"F":{"some-value":3,"other-one":true},"Tags":["a7"]} -1u-1 {"Square":{"SideLen":2.5}} Shape.Square(2.5)
+{"userName":"bob","id":7,"createdAt":1700,"in":{"httpCode":200},"f":{"some-value":3,"other-one":true},"tags":["a7"]} -1u-1 {"square":{"sideLen":2.5}} Shape.Square(2.5)
+{"user_name":"bob","id":7,"created_at":1700,"in":{"http_code":200},"f":{"some-value":3,"other-one":true},"tags":["a7"]} -1u-1 {"square":{"side_len":2.5}} Shape.Square(2.5)
+{"user-name":"bob","id":7,"created-at":1700,"in":{"http-code":200},"f":{"some-value":3,"other-one":true},"tags":["a7"]} -1u-1 {"square":{"side-len":2.5}} Shape.Square(2.5)
+true

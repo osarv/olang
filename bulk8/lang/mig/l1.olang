@@ -1,0 +1,19 @@
+import "std/io"
+
+type Bag struct(n I64, sum I64) { n, sum }
+
+fn Bag.FromIter<I Iterator<I64 ? E>, ? E>(it mut I&) Bag ? E {
+    n := 0
+    s := 0
+    for x in it {
+        n++
+        s += x
+    }
+    return Bag(n, s)
+}
+
+fn main() {
+    b := Bag[1, 2, 3]
+    c := Bag[x * 2 for x in range 4]
+    io.Println($b.n " " $b.sum " " $c.sum)!
+}

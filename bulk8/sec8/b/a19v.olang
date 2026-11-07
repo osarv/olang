@@ -1,0 +1,42 @@
+import "std/io"
+
+# a plain struct owning storage: a reference to the element through Ref kept across Truncate
+type Rec struct(id I64) {
+    id
+    data := Array<I64>(16 + id.Mod(2), id)
+}
+
+fn kept(n I64) I64 {
+    ls := Vec<Rec>()
+    other := Vec<Rec>()
+    s := 0
+    for k in range n {
+        ls.Push(Rec(k + 1))
+        r Rec& = ls.Ref(0)
+        ls.Pop()!
+        other.Push(Rec(-1000))
+        other.Truncate(0)
+        s += r.data[3]
+    }
+    return s
+}
+
+# a Map of text values: a reference to a value through Ref kept across Remove
+fn mapped(n I64) I64 {
+    m := Map<I64, String>()
+    other := Map<I64, String>()
+    s := 0
+    for k in range n {
+        m.Put(1, $k "abcdefgh")
+        r String& = m.Ref(1)!
+        m.Remove(1)
+        other.Put(1, "zzzzzzzzzzzzzzzzzzz" $k)
+        other.Remove(1)
+        s += r.Len()
+    }
+    return s
+}
+
+fn main() {
+    io.Println($kept(1000))!
+}

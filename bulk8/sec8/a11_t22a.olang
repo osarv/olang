@@ -1,0 +1,72 @@
+import "std/io"
+
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+
+fn link(a mut N&, b N&) { a.next = b }
+
+fn noop(a mut N&, b N&) { a.v += b.v - b.v }
+
+fn churn() I64 {
+    t := 0
+    for k in range 300 {
+        s := $k "-" $(k * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+# a function value called in a task
+fn inTask(x mut N&) {
+    op := link
+    op(x, N(5))
+}
+
+# a function value called in deferred code
+fn inDefer(x mut N&) {
+    op := link
+    defer op(x, N(6))
+    churn()
+}
+
+# narrowed from a ?& function value
+fn narrowed(x mut N&, k I64) {
+    op := noop
+    if k > 0 { op = link }
+    op = op if k > 5 else noop
+    op(x, N(7))
+}
+
+# a try default giving it
+fn pick(k I64) (fn&(a mut N&, b N&)) ? Miss {
+    if k > 3 { error Miss.Here }
+    return link if k > 0 else noop
+}
+type Miss error { Here }
+
+fn viaTry(x mut N&, k I64) {
+    op := try pick(k) catch default link
+    op(x, N(8))
+}
+
+fn main() {
+    a := N(0)
+    inTask(a)
+    churn()
+    io.Println($a.next!.v)!
+    b := N(0)
+    inDefer(b)
+    churn()
+    io.Println($b.next!.v)!
+    c := N(0)
+    narrowed(c, 6)
+    churn()
+    io.Println($c.next!.v)!
+    d := N(0)
+    viaTry(d, 9)
+    churn()
+    io.Println($d.next!.v)!
+}

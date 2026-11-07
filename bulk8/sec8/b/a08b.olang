@@ -1,0 +1,26 @@
+import "std/io"
+
+# a plain struct owning storage: a reference to the element kept across Truncate
+type Rec struct(id I64) {
+    id
+    data := Array<I64>(16 + id.Mod(2), id)
+}
+
+fn kept(n I64) I64 {
+    ls := Vec<Rec>()
+    other := Vec<Rec>()
+    s := 0
+    for k in range n {
+        ls.Push(Rec(k + 1))
+        r Rec& = ls[0]
+        ls.Truncate(0)
+        other.Push(Rec(-1000))
+        other.Truncate(0)
+        s += r.data[3]
+    }
+    return s
+}
+
+fn main() {
+    io.Println($kept(1000))!
+}

@@ -1,0 +1,13 @@
+# literal_migrate (bin/literal_migrate --std STD THIS-FILE, or olang fix) on code of today: bag.Bag[a, b] makes a Bag
+# through bag.Bag.FromIter (E19); the tool reads the front - an import's type with nothing after it - as the old
+# element-typed form and writes Array<bag.Bag>[a, b]: an array of two Bags. It prints "bag.Bag(5)" before, "Array<bag.Bag>
+# [bag.Bag(2), bag.Bag(3)]" after - a silent change of meaning; with I64 items it no longer compiles. A type of the file itself
+# with a FromIter is left alone (mig/l1.olang), so only the import path misses the check.
+import "std/io"
+import bag "f05/bag"
+
+fn main() {
+    a := bag.Bag(2)
+    b := bag.Bag(3)
+    io.Println($bag.Bag[a, b])!
+}

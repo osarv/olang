@@ -1,0 +1,238 @@
+# A local kept past its block or loop turn is built where it is kept (O28, O17, D9i - item 17): a new value each time its
+# declaration runs, so the references a loop keeps each name their own turn's value. Each test reads them back after an
+# arena churn (what a closed turn left would be written over), and the evaluator - its placement its own - decides the
+# same values while compiling.
+
+type P struct(x I64, y I64) {
+    x, y
+}
+
+type H struct(p P&) {
+    R P& = p
+}
+
+type VH struct(v Vec<I64>&) {
+    V Vec<I64>& = v
+}
+
+type AH struct(a Array<I64>&) {
+    A Array<I64>& = a
+}
+
+# what a closed scope left behind is written over
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+fn sumOf(hs Vec<H>&) I64 {
+    s := 0
+    for h in hs { s += h.R.x * 10 + h.R.y }
+    return s
+}
+
+# a struct local kept by reference every turn
+fn everyTurn(n I64) Vec<H> {
+    hs := Vec<H>()
+    for i in range n {
+        p := P(i, 1)
+        hs.Push(H(p))
+    }
+    return hs
+}
+
+# kept on some turns only: the turns kept are each their own
+fn someTurns(n I64) Vec<H> {
+    hs := Vec<H>()
+    for i in range n {
+        p := P(i, 2)
+        if i % 3 == 0: hs.Push(H(p))
+    }
+    return hs
+}
+
+# a Vec kept by a holder: its elements pushed after it is kept are seen through the holder
+fn vecs(n I64) I64 {
+    hs := Vec<VH>()
+    for i in range n {
+        v := Vec<I64>()
+        hs.Push(VH(v))
+        for j in range i + 1 { v.Push(i * 100 + j) }
+    }
+    churn()
+    s := 0
+    for h in hs { s += h.V.Len() * 1000 + h.V[h.V.Len() - 1] }
+    return s
+}
+
+# an array local lent whole to a holder
+fn arrays(n I64) I64 {
+    hs := Vec<AH>()
+    for i in range n {
+        a := Array<I64>(i + 1, i)
+        hs.Push(AH(a))
+    }
+    churn()
+    s := 0
+    for h in hs { s += h.A.Len() * 100 + h.A[0] }
+    return s
+}
+
+# kept in an outer block that is itself a loop turn: each outer turn's values are its own, and gone with it
+fn nested(n I64) I64 {
+    total := 0
+    for j in range n {
+        hs := Vec<H>()
+        for i in range 4 {
+            p := P(i + j, j)
+            hs.Push(H(p))
+        }
+        churn()
+        total += sumOf(hs)
+    }
+    return total
+}
+
+# a local assigned whole after a reference to it is kept: the reference names the local's storage, which now holds the
+# new value - still one storage per turn
+fn reassigned(n I64) I64 {
+    hs := Vec<H>()
+    for i in range n {
+        p := P(i, 0)
+        hs.Push(H(p))
+        p = P(i + 100, 0)
+        assert p.x == i + 100
+    }
+    churn()
+    return sumOf(hs)
+}
+
+# a local copied whole at its last mention into what outlives its turn is moved there (D9i): its text lives with it
+fn rows(n I64) I64 {
+    all := Vec<Vec<String&>>()
+    for k in range n {
+        rec := Vec<String&>()
+        rec.Push($k "-text")
+        rec.Push($(k * 2))
+        all.Push(rec)
+    }
+    churn()
+    s := 0
+    for r in all { s += r[0].Len() * 100 + r[1].Len() }
+    return s
+}
+
+# text a turn builds, converted and stored into a result (os.Args' shape): built where the result keeps it
+fn texts(n I64) Array<String&> {
+    out := Array<String&>(n, "")
+    for i in range n {
+        chars := Array<Char>(i + 1, 'a')
+        chars[0] = 'z'
+        out[i] = String(chars)
+    }
+    return out
+}
+
+fn textsSum(n I64) I64 {
+    t := texts(n)
+    churn()
+    s := 0
+    for x in t { s += x.Len() * 10 + (1 if x[0] == 'z' else 0) }
+    return s
+}
+
+fn everyTurnSum(n I64) I64 {
+    hs := everyTurn(n)
+    churn()
+    return sumOf(hs)
+}
+
+fn someTurnsSum(n I64) I64 {
+    hs := someTurns(n)
+    churn()
+    return sumOf(hs)
+}
+
+test everyTurn "keeps each turn's local, each its own" {
+    assert everyTurnSum(5) == 105
+}
+
+test someTurns "keeps the turns that keep it, each its own" {
+    assert someTurnsSum(7) == 96
+}
+
+test vecs "keeps a Vec by reference and sees what is pushed after" {
+    assert vecs(4) == 10606
+}
+
+test arrays "keeps an array lent whole" {
+    assert arrays(3) == 603
+}
+
+test nested "keeps in an outer turn's block" {
+    assert nested(3) == 312
+}
+
+test reassigned "keeps the local's storage, which a later assignment writes" {
+    assert reassigned(3) == 3030
+}
+
+test rows "moves a whole local into what outlives its turn" {
+    assert rows(4) == 2404
+}
+
+test texts "builds text where the result keeps it" {
+    assert textsSum(4) == 104
+}
+
+# an enum case holding a by-value parameter that holds a reference, given to a local - declared as one, assigned one,
+# or pushed into a local's collection (T17c, C2): the payload lives where its value does, so the local's references live
+# where the parameter's do (lifted there, as a local kept is); writing through the payload's reference reaches the
+# caller's
+type Note struct() {
+    seen := Vec<I64>()
+}
+
+type W struct(id I64, log mut Note&) {
+    id, log
+}
+
+type Opt enum { None, Some(w W) }
+
+fn caseLocals(w W, keep Bool) I64 {
+    a := Opt.Some(w)
+    b := Opt.None
+    if keep: b = Opt.Some(w)
+    ms := Vec<Opt>()
+    for _ in range 3: ms.Push(Opt.Some(w))
+    churn()
+    n := 0
+    if a == Opt.Some {
+        a.w.log.seen.Push(a.w.id)
+        n += a.w.id
+    }
+    if b == Opt.Some: n += b.w.id * 10
+    for m in ms {
+        if m == Opt.Some: n += m.w.id * 100
+    }
+    return n * 10 + w.log.seen.Len()
+}
+
+fn caseLocalsSum() I64 {
+    t := Note()
+    return caseLocals(W(2, t), true) + caseLocals(W(3, t), false)
+}
+
+test caseLocals "gives locals an enum case holding a parameter's reference" {
+    assert caseLocalsSum() == 15253
+}
+
+# the same, computed while compiling
+assert everyTurnSum(5) == 105 and someTurnsSum(7) == 96 and vecs(4) == 10606 and arrays(3) == 603
+assert nested(3) == 312 and reassigned(3) == 3030 and rows(4) == 2404 and textsSum(4) == 104
+assert caseLocalsSum() == 15253

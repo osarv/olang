@@ -1,0 +1,26 @@
+import "std/io"
+
+# no destructor: a unique value owning storage, a reference to the element kept across Truncate
+type Blob unique struct(id I64) {
+    id
+    data := Array<I64>(16 + id.Mod(2), id)
+}
+
+fn kept(n I64) I64 {
+    ls := Vec<Blob>()
+    other := Vec<Blob>()
+    s := 0
+    for k in range n {
+        ls.Push(Blob(k + 1))
+        r Blob& = ls[0]
+        ls.Truncate(0)
+        other.Push(Blob(-1000))
+        other.Truncate(0)
+        s += r.data[3]
+    }
+    return s
+}
+
+fn main() {
+    io.Println($kept(1000))!
+}

@@ -1,0 +1,45 @@
+# written on 2026-11-06: functions making a module's types, literals with the element type in front,
+# the prelude's builders as methods
+import "std/io"
+import "std/net"
+import "std/time"
+import "std/json"
+import "std/os"
+
+type Pt struct(x I64, y I64) { x, y }
+
+type Bag struct(items Vec<I64>) { items }
+
+fn Pt.Origin() Pt { return Pt(0, 0) }
+
+fn Pt.Of(a I64) Pt { return Pt(a, a) }
+
+fn Bag.make(xs Array<I64>&) Bag {
+    v := Vec<I64>()
+    for x in xs { v.Push(x) }
+    return Bag(v)
+}
+
+fn sum(xs Array<I64>&) I64 {
+    s := 0
+    for x in xs { s += x }
+    return s
+}
+
+fn main() ? {
+    a := Array<I64>[1, 2, 3]
+    b := Array<F64>[x * 2.0 for x in Array<F64>[1.0, 2.0]]
+    p := Pt.Origin()
+    q := Pt.Of(sum(a))
+    bag := Bag.make(Array<I64>[4, 5])
+    ip := try net.ParseIP("127.0.0.1") catch net.Error default net.IP.Loopback4()
+    d := time.Duration.Millis(5)
+    j := try json.Json.Parse("[1, 2]") catch json.Error default json.Json.Null
+    n := try I64.Parse("42", 10) catch default 0
+    f := F64.FromBits(U64(4607182418800017408))
+    _ = j
+    try io.Println($a " " $b " " $p " " $q " " $bag.items.View() " " $ip " " $d " " $n " " $f)
+    try os.ReadFile("/nonexistent/x") catch os.Error e {
+        try io.Println("os " $e)
+    }
+}

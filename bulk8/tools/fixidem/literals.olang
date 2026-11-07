@@ -1,0 +1,159 @@
+# literals (E19-E21, E27, S13h, D19): the type before a literal's "[" is the type of the value it makes - an Array<T>'s
+# elements laid out, any other type through its FromIter handed a walk of the items; the keyed form for a type whose
+# FromIter takes MapEntry values; a comprehension made into any of them; "$" renders each as the literal making it
+
+import "std/list"
+import "std/set"
+import "std/deque"
+import "std/bitset"
+
+# a collection of a program's own: its FromIter generic over the iterator, counting what it was handed
+type Bag<T> struct() {
+    items Vec<T> = Vec<T>()
+    reserved I64 = -1
+}
+
+fn Bag<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) Bag<T> ? E {
+    b := Bag<T>()
+    match I {
+        case ArrayIter<T> { b.reserved = it.Rest().Len() }   # a literal's count known before the first element
+        case _ { }
+    }
+    for x in try it { b.items.Push(x) }
+    return b
+}
+
+fn (b Bag<T>&) Len() I64 { return b.items.Len() }
+
+# one whose FromIter takes a concrete iterator type, and can fail
+type Strict struct(total I64 = 0) {
+    total
+}
+
+fn Strict.FromIter(it mut ArrayIter<I64>&) Strict ? Negative {
+    s := Strict()
+    for x in it {
+        if x < 0: error Negative
+        s.total += x
+    }
+    return s
+}
+
+# a keyed one: its FromIter takes entries
+type Pairs struct() {
+    keys Vec<String> = Vec<String>()
+    sum I64 = 0
+}
+
+fn Pairs.FromIter<I Iterator<MapEntry<String, I64> ? E> ? E>(it mut I&) Pairs ? E {
+    p := Pairs()
+    for e in try it {
+        p.keys.Push(e.Key)
+        p.sum += e.Value
+    }
+    return p
+}
+
+type Color enum { Red, Green, Blue }
+
+type Pt struct(x I64, y I64) { x, y }
+
+fn made() String {
+    a := Array<I64>[1, 2, 3]
+    v := Vec<I64>[4, 5, 6]
+    w := Vec<I64>[x * x for x in a]
+    m := Map<String, I64>["a": 1, "b": 2]
+    e := Map<String, I64>[]
+    l := list.List<I64>[7, 8]
+    s := set.Set<I64>[x % 2 for x in a]
+    d := deque.Deque<I64>[9]
+    c := bitset.BitSet<Color>[Color.Red, Color.Blue]
+    t := Columns<Pt>[Pt(1, 2), Pt(3, 4)]
+    return $a " " $v " " $w " " $m " " $e " " $l " " $s.Len() " " $d " " $c " " $t
+}
+
+Made String = made()
+
+fn bags() String {
+    b := Bag<String>["x", "y", "z"]
+    g := Bag<I64>[x for x in range 5 if x % 2 == 0]
+    p := Pairs["a": 1, "b": 2, "c": 3]
+    ok := try Strict[1, 2, 3] catch default Strict()
+    bad := try Strict[1, -2] catch Negative default Strict(-1)
+    return $b.Len() " " $b.reserved " " $g.Len() " " $p.sum " " $ok.total " " $bad.total
+}
+
+Bags String = bags()
+
+fn shapes(xs Array<I64>&) String {
+    return match xs {
+        case Array<I64>[]: "none"
+        case Array<I64>[only]: "one " $only
+        case Array<I64>[first, ...rest]: "first " $first " then " $rest.Len()
+    }
+}
+
+fn vecShape(v Vec<I64>&) String {
+    return match v {
+        case Vec<I64>[]: "empty"
+        case Vec<I64>[x, ...]: "starts " $x
+    }
+}
+
+test "literals make the type before their bracket" {
+    want := "Array<I64>[1, 2, 3] Vec<I64>[4, 5, 6] Vec<I64>[1, 4, 9] Map<String, I64>[\"a\": 1, \"b\": 2] Map<String, I64>[] " "list.List<I64>[7, 8] 2 deque.Deque<I64>[9] bitset.BitSet<Color>[Color.Red, Color.Blue] Columns<Pt>[Pt(1, 2), Pt(3, 4)]"
+    assert made() == want, made()
+    assert Made == want                                 # the evaluator makes them as the run time does (K2)
+}
+
+assert Made == "Array<I64>[1, 2, 3] Vec<I64>[4, 5, 6] Vec<I64>[1, 4, 9] Map<String, I64>[\"a\": 1, \"b\": 2] Map<String, I64>[] " "list.List<I64>[7, 8] 2 deque.Deque<I64>[9] bitset.BitSet<Color>[Color.Red, Color.Blue] Columns<Pt>[Pt(1, 2), Pt(3, 4)]", "decided while compiling (S17a)"
+
+test "a program's FromIter: generic, concrete, keyed, fallible" {
+    assert bags() == "3 3 3 6 6 -1", bags()
+    assert Bags == "3 3 3 6 6 -1"
+}
+
+assert Bags == "3 3 3 6 6 -1", "decided while compiling (S17a)"
+
+test "FromIter is an ordinary call too" {
+    v := Vec<I64>.FromIter(Array<I64>[3, 1, 2].Iter())
+    a := Array<I64>.FromIter(v.Iter())
+    m := Map<String, I64>.FromIter(Array<MapEntry<String, I64>>[MapEntry<String, I64>("k", 1)].Iter())
+    assert v.Len() == 3 and a == Array<I64>[3, 1, 2] and (try m.Get("k") catch default 0) == 1
+}
+
+test "a rendering reads back as the literal making it" {
+    v := Vec<I64>[1, 2]
+    assert $v == "Vec<I64>[1, 2]" and v == Vec<I64>[1, 2]
+    aa := Array<Array<I64>>[Array<I64>[1], Array<I64>[2, 3]]
+    assert $aa == "Array<Array<I64>>[Array<I64>[1], Array<I64>[2, 3]]"
+    assert $Array<String>["a", "b"] == "Array<String>[\"a\", \"b\"]"
+}
+
+test "array patterns write the matched value's type" {
+    assert shapes(Array<I64>[]) == "none" and shapes(Array<I64>[4]) == "one 4" and shapes(Array<I64>[5, 6, 7]) == "first 5 then 2"
+    assert vecShape(Vec<I64>[]) == "empty" and vecShape(Vec<I64>[8, 9]) == "starts 8"
+    t := "--name"
+    r := match t {
+        case Array<Char>['-', '-', ...rest]: $rest
+        case _: ""
+    }
+    assert r == "name"
+}
+
+fn walked(k I64, xs Array<I64>&) String {
+    s := set.Set<I64>[x * k for x in xs if x != 2]                        # a capture, read where the walk is
+    l := list.List<Array<I64>>[Array<I64>[y for y in range x] for x in xs]    # a comprehension inside one walked
+    d := deque.Deque<String>[$x for x in xs]
+    c := Columns<Pt>[Pt(x, -x) for x in xs]
+    total := 0
+    for r in l { total += r.Len() }
+    return $s.Len() " " $total " " $d " " $c
+}
+
+Walked String = walked(10, Array<I64>[1, 2, 3])
+
+test "a comprehension made into another collection is walked by its FromIter" {
+    for _ in range 3 { assert walked(10, Array<I64>[1, 2, 3]) == "2 6 deque.Deque<String>[\"1\", \"2\", \"3\"] Columns<Pt>[Pt(1, -1), Pt(2, -2), Pt(3, -3)]", walked(10, Array<I64>[1, 2, 3]) }
+    assert Walked == walked(10, Array<I64>[1, 2, 3])
+}

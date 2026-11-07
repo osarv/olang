@@ -1,0 +1,91 @@
+import "std/io"
+
+type Log struct() { seen := Vec<String>() }
+
+type Res unique struct(id I64, log mut Log&) { id, log } destruct { log.seen.Push("d" $id) }
+
+type Box struct(a Res, b Res) { a, b }
+
+type PE error { Bad(n I64) }
+
+Live mut I64 = 0
+
+fn use(r Res, n I64) I64 ? PE {
+    if n > 2: error PE.Bad(n)
+    return r.id + n
+}
+
+fn gen(log mut Log&, n I64) Iterator<I64> {
+    r := Res(100 + n, log)
+    for i in range n {
+        log.seen.Push("y" $i)
+        yield i + r.id
+    }
+}
+
+fn loop(log mut Log&) {
+    for i in range 5 {
+        r := Res(10 + i, log)
+        if i == 1: continue
+        if i == 3: break
+        log.seen.Push("b" $i)
+    }
+}
+
+fn errs(log mut Log&) ? PE {
+    a := Res(20, log)
+    defer log.seen.Push("defer")
+    errdefer log.seen.Push("errdefer")
+    for i in range 5 {
+        try use(Res(30 + i, log), i + Live)
+    }
+}
+
+fn holders(log mut Log&) {
+    v := Vec<Res>()
+    for i in range 3 { v.Push(Res(40 + i, log)) }
+    b := Box(Res(50, log), Res(51, log))
+    m := Map<I64, Res>()
+    m.Put(1, Res(60, log))
+    m.Put(2, Res(61, log))
+    m.Put(1, Res(62, log))
+    log.seen.Push("mid" $b.a.id)
+    x := v.Pop()!
+    log.seen.Push("popped" $x.id)
+}
+
+fn tasks(log mut Log&) {
+    out := Array<I64>(3)
+    join {
+        for i in range 3 {
+            spawn out[i] = try use(Res(70 + i, log), i) catch default -1
+        }
+    }
+    log.seen.Push($out)
+}
+
+fn main() {
+    log := Log()
+    loop(log)
+    io.Println($log.seen.View())!
+    log2 := Log()
+    try errs(log2) catch PE e { log2.seen.Push("caught " $e) }
+    io.Println($log2.seen.View())!
+    log3 := Log()
+    holders(log3)
+    io.Println($log3.seen.View())!
+    log4 := Log()
+    s := 0
+    for x in gen(log4, 4 + Live) {
+        if x == 106: break
+        s += x
+    }
+    log4.seen.Push("s" $s)
+    g := gen(log4, 3 + Live)
+    y := try g.Next() catch default 0
+    log4.seen.Push("y" $y)
+    io.Println($log4.seen.View())!
+    log5 := Log()
+    tasks(log5)
+    io.Println($log5.seen.View())!
+}

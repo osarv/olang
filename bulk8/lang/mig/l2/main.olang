@@ -1,0 +1,10 @@
+import "std/io"
+import bag "bag"
+import "std/set"
+
+fn main() {
+    b := Array<bag.Bag>[1, 2, 3]
+    s := set.Set<I64>[1, 2, 2]
+    t := Array<bag.Bag>[b, b]
+    io.Println($b.N " " $b.Sum " " $s.Len() " " $t.Len())!
+}

@@ -1,0 +1,242 @@
+# T13b: a value of a unique type exists in one place - a fresh value (a constructor's or a call's result) lands by value
+# where it is put, and any other copy of it is a reference: "w := f" names f, a walk's name and a binding name the
+# element where it is held. A by-value parameter given a fresh value hands it on once, where it is mentioned last
+# (a Vec's Push); a returned local is the result itself. A holder of a unique part by value is unique, and so is a
+# collection of them - an element is reached where the collection holds it (x[i] through RefMut, a walk through Ref).
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn (t mut Token&) Use() { t.uses++ }
+
+fn (t Token&) Uses() I64 { return t.uses }
+
+# a holder of one by value - unique itself
+type Slot struct(tok Token, label String) {
+    tok, label
+}
+
+# a case carrying one
+type Held enum {
+    Empty
+    One(tok Token)
+}
+
+# made where it is used, handed back fresh: a returned local is the result
+fn Token.mint(id I64) Token {
+    t := Token(id)
+    t.Use()
+    return t
+}
+
+# a by-value parameter handed on at its last mention - into a value made
+fn Slot.slotOf(t Token, label String) Slot { return Slot(t, label) }
+
+# ... or on one path, not the other
+fn keepIf(v mut Vec<Token>&, t Token, keep Bool) I64 {
+    if keep {
+        v.Push(t)
+        return 1
+    }
+    return t.id
+}
+
+fn names(f mut Token&) I64 {
+    w := f # a reference to f, never a copy
+    w.Use()
+    w.Use()
+    return f.uses
+}
+
+fn walked(v Vec<Token>&) I64 {
+    n I64 = 0
+    for t in v { n += t.id * 10 + t.uses }
+    return n
+}
+
+fn kept() I64 {
+    v := Vec<Token>()
+    v.Push(Token(1))
+    v.Push(Token.mint(2))
+    keepIf(v, Token(3), true)
+    left := keepIf(v, Token(4), false)
+    v[0].Use() # in place, through RefMut
+    v.RefMut(2).Use()
+    first := v[0] # a reference to the element
+    first.Use()
+    p := try v.Pop() catch VecError { return -1 }
+    return walked(v) * 100 + p.id * 10 + left
+}
+
+fn held() I64 {
+    s := Slot(Token.mint(7), "seven")
+    r := s # Slot is unique: a reference
+    r.tok.Use()
+    h := Held.One(Token(8))
+    n I64 = 0
+    match h {
+        case Held.One(t) {
+            t.Use() # the payload's own, where h holds it
+            n = t.id
+        }
+        case _ { }
+    }
+    if h == Held.One: n = n * 10 + h.tok.uses
+    return s.tok.uses * 1000 + n
+}
+
+fn tokenUses() I64 {
+    t := Token(9)
+    return names(t) * 10 + Slot.slotOf(Token(5), "five").tok.id
+}
+
+# while compiling as at run time (K2, S17a)
+Kept := kept()
+Held_ := held()
+Uses := tokenUses()
+assert Kept == 3334 and Held_ == 2081 and Uses == 25
+
+test "a unique value is one place: copies are references, fresh values land by value" {
+    assert tokenUses() == Uses
+    a := Token(1)
+    b := a
+    b.Use()
+    assert a.uses == 1 and a.Uses() == 1
+    s := Slot.slotOf(Token.mint(3), "x")
+    assert s.tok.uses == 1 and s.label == "x"
+}
+
+test "a Vec of unique values: Push takes fresh ones, x[i] is the element in place, a walk names each where it is" {
+    assert kept() == Kept
+    v := Vec<Token>()
+    for i in range 4 { v.Push(Token(i)) }
+    for i in range 4 { v[i].Use() }
+    total I64 = 0
+    for t in v { total += t.uses }
+    assert total == 4 and v.Len() == 4
+    t := try v.TakeAt(1)
+    assert t.id == 1 and v.Len() == 3 and v.Ref(1).id == 2
+}
+
+test "a holder of a unique part is unique: its copies are references too, its payload bound in place" {
+    assert held() == Held_
+}
+
+test "a Map of unique values: Put takes fresh ones, Take hands one back" {
+    m := Map<String, Token>()
+    m.Put("a", Token(1))
+    m.Put("b", Token(2))
+    m.Put("a", Token(3))
+    t := try m.Take("a")
+    assert t.id == 3 and m.Len() == 1 and (try m.Ref("b")).id == 2
+}
+
+# a name made from a by-value parameter (a reference, a closure over it) used before the value is handed on, and a
+# plain read of a part beside the hand-on in one call - none of them reaches the value once it is handed on (bulk
+# review 7, F15, F16)
+fn Slot.aliasBefore(t Token) Slot {
+    alias := t
+    seen := fn() I64 { return t.id }
+    alias.Use()
+    n := seen()
+    return Slot(t, $n)
+}
+
+fn Slot.tagged(n I64, t Token) Slot { return Slot(t, $n) }
+
+fn Slot.idBeside(t Token) Slot { return Slot.tagged(t.id, t) }
+
+test Slot.aliasBefore "hands a parameter on after the names made from it are done" {
+    s := Slot.aliasBefore(Token(4))
+    assert s.tok.uses == 1 and s.label == "4"
+    u := Slot.idBeside(Token(6))
+    assert u.label == "6"
+}
+
+assert Slot.aliasBefore(Token(4)).tok.uses == 1 and Slot.idBeside(Token(6)).label == "6"
+
+# T13b, O8d: a unique value owning storage - an array of a run-time length - handed on by value is moved, never copied:
+# one call deep, two, into a constructor's field (a pun, and a field declared with its type), into a Map and a Vec;
+# replaced, removed, taken out to a holder; read back after the arena churned. Each argument is built where the value is
+# kept (section 8's obligation on the parameter), so nothing is read after its scope closed
+type Blob unique struct(n I64) {
+    n
+    data := Array<I64>(n.Mod(7) + 2, n)
+}
+
+type Boxed unique struct(b Blob, tag I64) {
+    b
+    tag
+}
+
+type Jar unique struct(x Blob) {
+    inner Blob = x
+}
+
+type Shelf struct() {
+    m Map<I64, Blob>
+    v Vec<Blob>
+    w Map<I64, Boxed>
+    k Vec<Jar>
+}
+
+fn (s mut Shelf&) put(i I64, b Blob) { s.m.Put(i % 5, b) }
+
+fn (s mut Shelf&) pass(i I64, b Blob) { s.put(i, b) }
+
+fn (s mut Shelf&) box(i I64, b Blob) { s.w.Put(i % 3, Boxed(b, i)) }
+
+fn (s mut Shelf&) keep(b Blob) { s.k.Push(Jar(b)) }
+
+# storage allocated and given back, so what a scope closed too soon would be read as is something else
+fn churnArena() I64 {
+    t I64 = 0
+    for i in range 50 {
+        a := Array<I64>(64, -1)
+        t += a[i % 64]
+    }
+    return t
+}
+
+# what a shelf holds after n turns of hand-ons, summed
+fn shelved(n I64) I64 {
+    s Shelf = Shelf()
+    acc I64 = 0
+    for i in range n {
+        s.put(i, Blob(i))
+        s.pass(i + 1, Blob(i * 3))
+        s.box(i, Blob(i + 7))
+        if i % 4 == 0: s.keep(Blob(i * 5))
+        s.v.Push(Blob(i + 2))
+        if s.v.Len() > 3: s.v.Truncate(1)
+        if i % 3 == 0: s.m.Remove((i + 2) % 5)
+        if i % 5 == 1 and s.m.Has(i % 5) {
+            got Blob = s.m.Take(i % 5)!
+            acc += got.data[got.data.Len() - 1]
+        }
+        acc += churnArena()
+    }
+    for key in range 5 {
+        if s.m.Has(key): acc = acc * 3 + s.m.Ref(key)!.data[0]
+        if s.w.Has(key): acc = acc * 5 + s.w.Ref(key)!.b.data[0] + s.w.Ref(key)!.tag
+    }
+    for b in s.v { acc = acc * 7 + b.data[0] }
+    for kp in s.k { acc = acc * 11 + kp.inner.data[kp.inner.data.Len() - 1] }
+    return acc
+}
+
+# while compiling as at run time (K2)
+Shelved := shelved(40)
+
+test "a unique value owning storage handed on by value is moved - into a Map, a Vec, a constructor's field" {
+    assert shelved(40) == Shelved
+    s Shelf = Shelf()
+    s.pass(3, Blob(10))
+    s.box(4, Blob(11))
+    s.keep(Blob(12))
+    churnArena()
+    assert s.m.Ref(3)!.data.Len() == 5 and s.m.Ref(3)!.data[4] == 10
+    assert s.w.Ref(1)!.b.n == 11 and s.w.Ref(1)!.tag == 4 and s.k[0].inner.data[0] == 12
+}

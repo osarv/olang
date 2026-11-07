@@ -17,7 +17,7 @@ type Grip unique struct(id I64) {
     id
     held Lamp?& = null
 } destruct {
-    if held is not null: held!.log.seen.Push(id * 10 + (1 if held!.open else 0))
+    if held is not null: held!.log.seen.Push(id * 1000 + held!.data[3] * 10 + (1 if held!.open else 0))
 }
 
 # a holder whose parts refer to one another: the earlier part refers to the later
