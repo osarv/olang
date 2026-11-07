@@ -952,3 +952,8 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   over a destructor value through an element was a checker gap; the prelude's sorts stored over vacated positions;
   Destroy() of a holder declared in a loop body. Merge after structpat's verify: seed taken from drops (bootstrap
   proves it), goldens recaptured with the merged compiler.
+- 2026-11-07 ~10:45 CET: started round interp (wt-interp, opus high, /home/user/review/rounds/interp-brief.md) and the
+  section-8 design note (wt-sec8, opus xhigh, /home/user/review/rounds/sec8-brief.md: NLL, O27 as placement, T22a
+  relations, C3/C4/C6, T25d), both from wt-merge fe143d3. Merge queue: structpat's merge verify running; drops next
+  (seed from drops, goldens with the merged compiler); then errors carrying data (round 1, after interp - both touch
+  eval.olang), packed structs beside the section-8 build.
