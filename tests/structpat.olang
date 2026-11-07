@@ -38,7 +38,7 @@ fn where(p Point) String {
         case Point(x = 0, y): "y" $y
         case Point(x, y = 0): "x" $x
         case Point(x, y) if x == y: "diag" $x
-        case Point(y, x): $x "," $y    # names in any order
+        case Point(y, x): $x "," $y # names in any order
     }
 }
 
@@ -151,8 +151,8 @@ fn all(z I64) String {
 AllBaked := all(0)
 
 Want := ("origin;y5;x3;diag4;1,2;from origin to diag3;to the y axis;from x2;hot 313;freezing;283K;flat;thin 5;"
-         "square 2;rect 12;round on the axis;round 1,2;dot;one past;no;first on the axis at 7;second on the x axis at 6;"
-         "neither;three;four b;t 5;6;0 then 1;last 1;node 5;none;9;2;7;-1;8;9;0")
+    "square 2;rect 12;round on the axis;round 1,2;dot;one past;no;first on the axis at 7;second on the x axis at 6;"
+    "neither;three;four b;t 5;6;0 then 1;last 1;node 5;none;9;2;7;-1;8;9;0")
 
 # a binding is a copy of the field: writing it leaves the value matched as it was (S13b)
 fn copies(p Point) I64 {
@@ -170,6 +170,6 @@ assert where(Point(2, 2)) == "diag2"
 test Point "S13i: struct patterns take a struct apart by its fields, at run time and while compiling" {
     assert all(Live) == Want
     assert AllBaked == Want
-    assert all(0) == Want     # decided while compiling (S18c)
+    assert all(0) == Want # decided while compiling (S18c)
     assert copies(Point(1, 2)) == 102
 }
