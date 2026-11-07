@@ -2946,3 +2946,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   where it is kept on every turn, also turns keeping nothing (~17 bytes a turn for a 16-byte struct kept 1 turn in
   1000) - a recorded limit; (3) a failed check is no way out for the drop analysis (a test build's unwind ends holders,
   but nothing resumes to see it).
+- QCW ANSWERED 2026-11-07 (the user: "Yeah, add deprecation only as a comment and kind of surrounding tools thing. It
+  should not break the compiler. I think the main way you would deprecate things in OLang is just removing them between
+  versions. Maybe that's even better."): no keyword, no attribute - a doc comment paragraph beginning `Deprecated:`,
+  read by tools only (olang doc marks it, the language server's hover, completion tag and a hint at uses, olang api
+  lists it as not breaking); the compiler gives it no meaning. Removal between versions stays the main way to
+  deprecate (olang api says what breaks, olang fix migrates); the note is a courtesy before a removal. Being built:
+  round deprec (wt-deprec).

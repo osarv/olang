@@ -905,3 +905,6 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   objects. Started side by side from ab1253e: round drops (wt-drops - destructor collections by value, then unique
   Part C; opus xhigh; /home/user/review/rounds/drops-brief.md) and round asm (wt-asm - explain -asm/-ir with LLVM's
   remarks; opus high; asm-brief.md). The /tmp sweep of old build temporaries was refused by the permission check.
+- 2026-11-07 ~08:00 CET: the merged tip's verify passed; master and the designated branch at f913d9b. Started round
+  deprec (wt-deprec from f913d9b; sonnet medium; /home/user/review/rounds/deprec-brief.md): QCW's `Deprecated:`
+  doc-comment convention in olang doc, the language server, mcp and olang api - beside rounds drops and asm.
