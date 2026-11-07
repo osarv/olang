@@ -1341,9 +1341,12 @@ type Cond struct(C Expr&, A Expr?&, B Expr&) {
 
 # statements run in the block the Seq stands in - their hidden locals are that block's - then X, the value: null, the
 # Seq's type Void, for none (R21's "try x[i] += v" as a statement)
-type Seq struct(Stmts Array<Stmt&>&, X Expr?&) {
+type Seq struct(Stmts Array<Stmt&>&, X Expr?&, Gone Bool = false) {
     Stmts
     X
+    # a hand-on (O15, T13b): X read whole, its holder's flag cleared by Stmts - as an argument, once the call is made,
+    # after every other argument (a later one that leaves leaves the value with its holder)
+    Gone
 }
 
 # a match: Held runs first (the subject held once in a hidden local, which the tests read; empty where the subject is

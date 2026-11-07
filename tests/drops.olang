@@ -215,3 +215,34 @@ test mkRef "ends a holder whose storage flowed out where that storage lives" {
 
 # (decided only at run time: the values flowing out are registered where they land, which the evaluator refuses
 # while compiling - K2c)
+
+# a by-value parameter handed on as an argument lets go of its value only once the call is made: a later argument
+# leaving first - an error passed on, a clause's return - leaves the value with it, ended as it is (bulk review 7, F3)
+fn eat(r Res, n I64) I64 { return r.id + n }
+
+fn count(bad Bool) I64 ? Gone {
+    if bad: error Gone
+    return 4
+}
+
+fn handOver(r Res, bad Bool) I64 ? Gone { return eat(r, try count(bad)) }
+
+fn handOverClause(r Res, bad Bool) I64 { return eat(r, try count(bad) catch Gone { return -1 }) }
+
+fn leftBehind() String {
+    t := Tally()
+    try handOver(Res(1, t), true) catch Gone { }
+    a := t.Text()
+    handOverClause(Res(2, t), true)
+    b := t.Text()
+    handOverClause(Res(3, t), false)
+    return $a "/" $b "/" $t.Text()
+}
+
+test handOver "ends a value handed on to a call that is never made" {
+    assert leftBehind() == "1/12/123"
+}
+
+LeftBehind := leftBehind()
+
+assert LeftBehind == "1/12/123", "decided while compiling: " $LeftBehind

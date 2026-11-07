@@ -20322,7 +20322,7 @@ fn (c mut Checker&) handOn(x typed.Expr&, l I64) typed.Expr& {
     if not c.fr().dropFlags.Has(l): return x
     from := c.stmts.Len()
     c.dropsGone(x.Span(), l)
-    return typed.Expr.Seq(x.Span(), typeOf(x), typed.Seq(gather(c.stmts, from), x))
+    return typed.Expr.Seq(x.Span(), typeOf(x), typed.Seq(gather(c.stmts, from), x, true))
 }
 
 # "x.Destroy()" of by-value local l, rx its read: its destructors run now, where it still holds a value, and it holds none

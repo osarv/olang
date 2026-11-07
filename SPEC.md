@@ -6824,8 +6824,10 @@ reference - has its destructors run exactly once, **where its holder lets go of 
 - a variable or a parameter holding it by value (`f File = File(3)`, `fn use(f File)`, a copy where its type declares
   Copy, E31d) lets go as the block declaring it is left - its function's body for a parameter - on every way out but the
   process-ending ones (S19c), as deferred code registered at its declaration does (S19); unless it no longer holds the
-  value there: a by-value parameter handed on at its last mention (T13b), a whole variable returned (O26a) or made a
-  constructor's field (a pun, C4), a variable's `Destroy()` (C9b). A constructor's fields go into its instance at its
+  value there: a by-value parameter handed on at its last mention (T13b) - as an argument, once the call is made, after
+  every argument is evaluated, so a later argument that leaves (an error passed on, a clause's `return`) leaves the
+  value with it, ended as the block is left -, a whole variable returned (O26a) or made a constructor's field (a pun,
+  C4), a variable's `Destroy()` (C9b). A constructor's fields go into its instance at its
   end, and one failing part way lets go of those it built. A variable declared with no value and no zero value (D13d)
   holds one once it is assigned. A lambda capturing such a variable names it where it is held (D16c). A variable whose
   storage flows out of its block - returned as a reference or an `any`, held by a returned value's reference field,

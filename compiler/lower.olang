@@ -2412,8 +2412,11 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         case typed.Callee.Body(id): I64(id)
         case _: I64(-1)
     }
+    # (bulk review 7, F3) the hand-ons among the arguments: each holder lets go once the call is made, after every
+    # argument - a later one leaving (an error passed on, a clause's return) leaves the value with its holder
+    gone mut Vec<typed.Stmt&>& = Vec<typed.Stmt&>()
     for i in range c.Args.Len() {
-        a := c.Args[i]
+        a := ln.handedOver(c.Args[i], gone)
         if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) { ln.readHere(a, c) }
         if not task: ln.argView(a, body, i)
         ro := i < ps.Len() and t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) == 0
@@ -2428,7 +2431,21 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         }
         ops[i] = v
     }
+    for st in gone { ln.stmt(st) }
     return ln.F.Args(ops)
+}
+
+# an argument that hands a holder's value on (a Gone Seq, under conversions): the value read, its flag's clearing kept in
+# gone for after every argument
+fn (ln mut lowering&) handedOver(a typed.Expr&, gone mut Vec<typed.Stmt&>&) typed.Expr& {
+    match a {
+        case typed.Expr.Seq(_, _, q) {
+            if not q.Gone or q.X is null: return a
+            for st in q.Stmts { gone.Push(st) }
+            return q.X!
+        }
+        case _ { return a }
+    }
 }
 
 # a value given storage for a read-only reference parameter of a call that keeps nothing of it and hands back nothing
