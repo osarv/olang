@@ -335,6 +335,10 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     # the statement ends - or handed back as it is by a return (a view of this body's arguments): a call of a function
     # handing back views copies its result at every other site
     reads Map<I64, Bool>
+    # O15 (QCZ): which of a block's by-value holders hold which - typed.DropHolds of B, made where a level's drops are
+    # first ordered or a holder's guard registered
+    holding typed.DropHolding = typed.DropHolding()
+    holdingMade Bool = false
     # the locals this body hands back holding views of its arguments, with the parameters
     # each views (typed.ViewWalk.Settle, as check recorded them); the copies left out for them and for the locals holding
     # views in place of their copies (viewLocals) - a MakeKind.Copy by its site, a value array local's T7b copy at its
@@ -805,16 +809,74 @@ fn (ln mut lowering&) runDefers(i I64, phase deferPhase) {
     # what runs here is no longer pending while it runs: a path leaving from inside deferred code (one that cannot be
     # taken - S19 lets none leave - or is caught there) does not run it again, which would lower it without end
     for k in mine { ln.deferAt[k] = mir.ScopeId(-1) }
-    for k := mine.Len() - 1, k >= 0, k-- {
+    for k in ln.runOrder(mine) {
         # no longer pending once it runs here (B3e): a stop inside it does not run it again - an errdefer has no cleanup
-        if ln.L.Cleanups and not ln.onError(mine[k]) {
-            ln.emit(mir.Stmt.Deferred(ln.B.Blocks[I64(ln.defers[mine[k]].Id)].Sp, lv.S, mir.NoBlock))
+        if ln.L.Cleanups and not ln.onError(k) {
+            ln.emit(mir.Stmt.Deferred(ln.B.Blocks[I64(ln.defers[k].Id)].Sp, lv.S, mir.NoBlock))
         }
         # deferred code runs as a block of its own, inside the block it is registered in
-        ln.block(ln.defers[mine[k]])
+        ln.block(ln.defers[k])
     }
     for k in mine { ln.deferAt[k] = lv.S }
     for saved.Len() > 0 { ln.levels.Push(try saved.Pop() catch { unreachable }) }
+}
+
+# a level's deferred code mine (by registration) in the order it runs: the last registered first, but a by-value holder's
+# drop before the drops of the holders of its block it holds (O15, QCZ) - a held one's waits until every one holding it
+# here has run, so no destructor reads what was ended (a cycle, check's error, runs as registered)
+fn (ln mut lowering&) runOrder(mine Vec<I64>&) Vec<I64> {
+    out Vec<I64>
+    pending Vec<I64>
+    for j := mine.Len() - 1, j >= 0, j-- {
+        k := mine[j]
+        if ln.waits(k, mine, out) {
+            pending.Push(k)
+            continue
+        }
+        out.Push(k)
+        ln.release(pending, mine, out)
+    }
+    for k in pending { out.Push(k) }
+    return out
+}
+
+# the drops pending whose holders have all run, run now, in their order - each one's run may let another go
+fn (ln mut lowering&) release(pending mut Vec<I64>&, mine Vec<I64>&, out mut Vec<I64>&) {
+    for {
+        at := -1
+        for i in range pending.Len() {
+            if not ln.waits(pending[i], mine, out) {
+                at = i
+                break
+            }
+        }
+        if at < 0: return
+        out.Push(pending[at])
+        pending.RemoveAt(at)!
+    }
+}
+
+# whether deferred code k is a drop some other holder's drop among mine, not yet run (out), holds
+fn (ln mut lowering&) waits(k I64, mine Vec<I64>&, out Vec<I64>&) Bool {
+    v := ln.holderOf(k)
+    if v < 0: return false
+    for k2 in mine {
+        if k2 == k or out.Has(k2): continue
+        h := ln.holderOf(k2)
+        if h >= 0 and ln.holds().Holds(h, v): return true
+    }
+    return false
+}
+
+# the local deferred code k ends, a by-value holder's drop; -1 for any other
+fn (ln mut lowering&) holderOf(k I64) I64 { return typed.DropHolder(ln.B, ln.defers[k]) if ln.isDrop(k) else -1 }
+
+fn (ln mut lowering&) holds() typed.DropHolding& {
+    if not ln.holdingMade {
+        ln.holding = typed.DropHolds(ln.T, ln.B)
+        ln.holdingMade = true
+    }
+    return ln.holding
 }
 
 # whether deferred code k runs in this phase of its level's way out
@@ -970,7 +1032,10 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             ln.deferAt.Push(ln.top().S)
             # B3e: a stop interpret meets is no error leaving, so an errdefer has no cleanup (S19c, S19e)
             if ln.L.Cleanups and not ln.onError(ln.defers.Len() - 1) { ln.cleanup(sp, ln.defers.Len() - 1) }
-            if ln.isDrop(ln.defers.Len() - 1) { ln.guardHolder(sp, bl) }
+            if ln.isDrop(ln.defers.Len() - 1) {
+                ln.guardHolder(sp, bl)
+                ln.guardAgain(sp)
+            }
         }
         case typed.Stmt.Join(sp, j) { ln.join(sp, j) }
         case typed.Stmt.Spawn(sp, sw) { ln.spawn(sp, sw) }
@@ -4686,6 +4751,22 @@ fn (ln mut lowering&) guardIf(sp source.Span, f typed.If&) {
     s := ln.innermost()
     gr := ln.into(t.Ref(gty, types.Writable), mir.Rvalue.New(s, gv, t.Ref(gty, types.Writable)), sp)
     ln.emit(mir.Stmt.RegisterDtor(sp, s, gty, gr))
+}
+
+# a test build's guards kept in the order its block's holders end (runOrder, O15): where the holder just registered is
+# held by holders registered before it, their guards are registered again after its own, each holder before what it
+# holds - a guard whose holder holds no value any more does nothing, so the unwinding still ends each once
+fn (ln mut lowering&) guardAgain(sp source.Span) {
+    if not ln.L.Tests: return
+    s := ln.top().S
+    drops Vec<I64>
+    for k in range ln.defers.Len() {
+        if ln.deferAt[k] == s and ln.isDrop(k): drops.Push(k)
+    }
+    if drops.Len() < 2: return
+    order := ln.runOrder(drops)
+    p := try order.IndexOf(ln.defers.Len() - 1) catch default 0
+    for i := p - 1, i >= 0, i-- { ln.guardHolder(sp, ln.defers[order[i]]) }
 }
 
 # the place a holder's drop statement ("Drop(&x)") ends, else null

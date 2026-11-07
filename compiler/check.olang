@@ -251,6 +251,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # attempt, to reach what could change the collection - kept from one attempt to the next, as factPresets is
     inPlaceReads Vec<inPlaceRead>
     landings Vec<landing>                  # T13b: unique values handed on out of a parameter or a returned local
+    dropBodies Map<I64, Bool>              # O15: the bodies registering a by-value holder's drop (settleDropOrder)
     globalTop Bool = false                 # resolving a global's written type: its "mut" is the binding's (S6)
     copyBodies Vec<I64>                    # E31d: the bodies of the declared Copies a copy calls, made by wantCopy
     copyWanted Map<types.TypeId, Bool>     # ... the types wantCopy has walked
@@ -627,6 +628,7 @@ fn (c mut Checker&) CheckProgram() {
             if moved { c.factsUndecided() }
             if inPlaceMoved { c.inPlaceUndecided() }
             c.settleFixed()
+            c.settleDropOrder()
             c.copyEffects()
             c.orderGlobals()
             c.settleAllViews()
@@ -662,6 +664,7 @@ fn (c mut Checker&) reset() {
     c.Bodies = Vec<mut typed.Body&>()
     c.copyBodies = Vec<I64>()
     c.landings = Vec<landing>()
+    c.dropBodies = Map<I64, Bool>()
     c.copyWanted = Map<types.TypeId, Bool>()
     c.viewBodies = Vec<pair.Pair<I64, I64>>()
     c.testKeys = StringBuilder()   # B7a's targets are said once an attempt (another attempt had found every one twice)
@@ -20388,6 +20391,7 @@ fn (c mut Checker&) dropOnExit(l I64, sp source.Span, set Bool) {
     flag := c.hidden(sp, types.BoolT)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(flag)), c.lit(sp, types.BoolT, 1 if set else 0)))
     c.fr().dropFlags.Put(l, flag)
+    c.dropBodies.Put(c.fr().Body, true)
     c.fr().deferBlocks.Push(c.fr().Block)
     c.fr().dropBlocks.Push(c.fr().Block)
     from := c.stmts.Len()
@@ -20408,6 +20412,36 @@ fn (c mut Checker&) dropIfHeld(sp source.Span, p typed.Lvalue&, flag I64) typed.
     c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Local(sp, types.BoolT, typed.LocalId(I32(flag))), c.lit(sp, types.BoolT, 0)))
     then := c.close(id, outer, mark, from)
     return typed.Stmt.If(sp, typed.If(c.readLocal(sp, flag), then, null))
+}
+
+# O15 (QCZ): a block's by-value holders end holders first (lowering's runOrder) - two that may hold each other cannot,
+# each an error naming both, said at the later one's declaration
+fn (c mut Checker&) settleDropOrder() {
+    for b in c.dropBodies.Keys() {
+        if b >= c.Bodies.Len(): continue
+        body := c.Bodies[b]
+        d := typed.DropHolds(c.P.T, body)
+        for k in range d.Holders.Len() {
+            for v in d.Held[k] {
+                h := d.Holders[k]
+                if d.Holds(v, h) and registeredBefore(d, h, v): c.dropCycle(body, h, v)
+            }
+        }
+    }
+}
+
+# whether holder h's drop is registered before holder v's
+fn registeredBefore(d typed.DropHolding&, h I64, v I64) Bool {
+    for x in d.Holders {
+        if x == h: return true
+        if x == v: return false
+    }
+    return false
+}
+
+fn (c mut Checker&) dropCycle(body typed.Body&, a I64, b I64) {
+    lb := body.Locals[b]
+    c.P.L.Diags.Error(diag.Where.Span(body.File, I64(lb.Sp.Start), I64(lb.Sp.End)), msgs.DropCycle(c.text(body.Locals[a].Name), c.text(lb.Name)))
 }
 
 # local l's value gone on - its destructors with it (its flag cleared)

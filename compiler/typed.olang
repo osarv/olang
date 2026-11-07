@@ -2406,6 +2406,388 @@ fn (w mut dropWalk&) place(p Lvalue?&) {
     }
 }
 
+# ---- holders ended before what they hold (O15, QCZ) ----
+
+# the local a holder's Drop block (check's dropOnExit: "if flag { Drop(&x) ... }") ends, -1 for any other deferred code
+fn DropHolder(b Body&, d Block&) I64 {
+    if DropFlag(b, d) < 0: return -1
+    s0 := d.Stmts[0]
+    if s0 != Stmt.If or s0.i.Then.Stmts.Len() == 0: return -1
+    s1 := s0.i.Then.Stmts[0]
+    if s1 != Stmt.Eval: return -1
+    x := s1.x
+    if x != Expr.Prim or x.op != PrimOp.Drop or x.args.Len() != 1: return -1
+    a := x.args[0]
+    if a != Expr.Borrow: return -1
+    p := a.p
+    if p != Lvalue.Local: return -1
+    return I64(p.id)
+}
+
+# a body's by-value holders (DropHolder) and, of each block's, which ones each may hold a reference to: V is held by
+# H where a reference into V's storage may be stored into H's, or into storage H's references reach - by a store, by a
+# call given storage H reaches writably and a reference reaching V (any call, whatever its callee: what a function may
+# store is read off what it is given, never off its body), or by a lambda capturing both - through any number of steps
+# (H holds a reference to a local holding one to V), each one possible by types (types.RefInto). A may-relation, flow-
+# insensitive. Read once the body is checked, by check (a cycle is an error) and by lowering (the order a block's
+# holders end in: holders before what they hold), with a plan and without, so the run time, the evaluator and
+# interpret agree
+type DropHolding struct() {
+    Holders Vec<I64>        # the holder locals, in the order their drops are registered
+    Blocks Vec<BlockId>     # ... the block each one's drop is registered in
+    Held Vec<Vec<I64>>      # ... the holders of the same block each one may hold (local ids)
+}
+
+# whether holder local h may hold holder local v (both of one block)
+fn (d DropHolding&) Holds(h I64, v I64) Bool {
+    for k in range d.Holders.Len() {
+        if d.Holders[k] == h: return d.Held[k].Has(v)
+    }
+    return false
+}
+
+fn DropHolds(t types.Table&, b Body&) DropHolding {
+    out := DropHolding()
+    if b.Root is null: return out
+    findHolders(b, b.Root!, out)
+    if not sharedBlock(out.Blocks) {
+        for _ in out.Holders { out.Held.Push(Vec<I64>()) }
+        return out
+    }
+    w := holdWalk(t, b)
+    for _ in range b.Locals.Len() { w.reach.Push(Vec<I64>()) }
+    for {
+        w.changed = false
+        w.block(b.Root)
+        if not w.changed: break
+    }
+    for k in range out.Holders.Len() {
+        seen := w.closure(one(out.Holders[k]).ToArray())
+        held Vec<I64>
+        for j in range out.Holders.Len() {
+            if j != k and out.Blocks[j] == out.Blocks[k] and seen.Has(out.Holders[j]): held.Push(out.Holders[j])
+        }
+        out.Held.Push(held)
+    }
+    return out
+}
+
+# the Drop blocks registered in block bl and the blocks inside it, in order
+fn findHolders(b Body&, bl Block&, out mut DropHolding&) {
+    for s in bl.Stmts {
+        match s {
+            case Stmt.Defer(_, d) {
+                h := DropHolder(b, d)
+                if h >= 0 {
+                    out.Holders.Push(h)
+                    out.Blocks.Push(bl.Id)
+                }
+            }
+            case Stmt.Block(_, d): findHolders(b, d, out)
+            case Stmt.If(_, i) {
+                findHolders(b, i.Then, out)
+                if i.Else is not null: findHolders(b, i.Else!, out)
+            }
+            case Stmt.Loop(_, body, post) {
+                findHolders(b, body, out)
+                if post is not null: findHolders(b, post, out)
+            }
+            case Stmt.Join(_, j): findHolders(b, j.Code, out)
+            case _ { }
+        }
+    }
+}
+
+# whether two holders' drops are registered in one block
+fn sharedBlock(bs Vec<BlockId>&) Bool {
+    for i in range bs.Len() {
+        for j in range i + 1, bs.Len() {
+            if bs[i] == bs[j]: return true
+        }
+    }
+    return false
+}
+
+# DropHolds's points-to walk: by local, the locals whose storage its value may refer into (a reference local its
+# referents, a value its references'), grown by every store and call until it settles
+type holdWalk struct(T types.Table&, B Body&) {
+    T, B
+    reach Vec<Vec<I64>>
+    changed Bool = false
+    targets Vec<Array<I64>>     # the Assigns being walked: each one's target's storage (Lvalue.Target)
+    yields Vec<Vec<I64>>        # the Collects being walked: what their Yields give
+}
+
+fn (w mut holdWalk&) add(x I64, y I64) {
+    if x == y or w.reach[x].Has(y): return
+    w.reach[x].Push(y)
+    w.changed = true
+}
+
+# what x's value refers into, of what a value of x's type may hold a reference into
+fn (w mut holdWalk&) typed(x Expr?&) Vec<I64> {
+    out Vec<I64>
+    if x is null: return out
+    ty := x.Type()
+    for y in w.refs(x) {
+        if w.T.RefInto(ty, w.B.Locals[y].Ty): out.Push(y)
+    }
+    return out
+}
+
+# ys stored into the storage of each local of xs, each one only where xs's type may hold a reference into it
+fn (w mut holdWalk&) store(xs Vec<I64>&, ys Vec<I64>&) {
+    for x in xs {
+        for y in ys {
+            if w.T.RefInto(w.B.Locals[x].Ty, w.B.Locals[y].Ty): w.add(x, y)
+        }
+    }
+}
+
+# the locals xs reach: themselves and, through what each refers into, every step after
+fn (w mut holdWalk&) closure(xs Array<I64>&) Vec<I64> {
+    out Vec<I64>
+    for x in xs {
+        if not out.Has(x): out.Push(x)
+    }
+    for k := 0, k < out.Len(), k++ {
+        for y in w.reach[out[k]] {
+            if not out.Has(y): out.Push(y)
+        }
+    }
+    return out
+}
+
+fn one(x I64) Vec<I64> {
+    out Vec<I64>
+    out.Push(x)
+    return out
+}
+
+fn union(into mut Vec<I64>&, xs Vec<I64>&) {
+    for x in xs {
+        if not into.Has(x): into.Push(x)
+    }
+}
+
+# a call (or a lambda made, whose body may do anything with what it captures): every storage reachable writably from
+# what it is given may come to hold a reference to anything reachable from any of it
+fn (w mut holdWalk&) mix(xs Array<Expr&>&) {
+    if xs.Len() == 0: return
+    all Vec<I64>
+    writable Vec<I64>
+    for x in xs {
+        got := w.closure(w.typed(x).ToArray())
+        union(all, got)
+        if w.T.ReachesWrite(x.Type()): union(writable, got)
+    }
+    if writable.Len() > 0: w.store(writable, all)
+}
+
+fn (w mut holdWalk&) block(bl Block?&) {
+    if bl is null: return
+    for s in bl.Stmts { w.stmt(s) }
+}
+
+fn (w mut holdWalk&) stmt(s Stmt&) {
+    match s {
+        case Stmt.Let(_, l, init): w.store(one(I64(l)), w.typed(init))
+        case Stmt.Assign(_, target, value) {
+            into := w.storage(target)
+            w.targets.Push(into.ToArray())
+            got := w.typed(value)
+            w.targets.Pop()!
+            w.store(into, got)
+        }
+        case Stmt.Eval(_, x), Stmt.Reraise(_, x, _): w.refs(x)
+        case Stmt.Assert(_, x, m) {
+            w.refs(x)
+            w.refs(m)
+        }
+        case Stmt.If(_, i) {
+            w.refs(i.Test)
+            w.block(i.Then)
+            w.block(i.Else)
+        }
+        case Stmt.Loop(_, body, post) {
+            w.block(body)
+            w.block(post)
+        }
+        case Stmt.Return(_, x), Stmt.Suspend(_, x), Stmt.Exit(_, _, x): w.refs(x)
+        case Stmt.Block(_, d), Stmt.Defer(_, d): w.block(d)
+        case Stmt.Join(_, j) {
+            w.block(j.Code)
+            w.clauses(j.Clauses)
+        }
+        case Stmt.Spawn(_, sw) {
+            got := w.typed(sw.Task)
+            for p in sw.Targets {
+                if p is not null: w.store(w.storage(p), got)
+            }
+            for c in sw.Clauses { w.refs(c.Handler) }
+        }
+        case Stmt.Yield(_, x) {
+            got := w.typed(x)
+            if w.yields.Len() == 0: return
+            top := w.yields.Pop()!
+            union(top, got)
+            w.yields.Push(top)
+        }
+        case _ { }
+    }
+}
+
+fn (w mut holdWalk&) clauses(cs Array<Clause&>&) {
+    for c in cs {
+        w.block(c.Code)
+        for d in c.Defaults { w.refs(d) }
+    }
+}
+
+# the locals whose storage place p lies in - walking what its index and reference expressions do on the way
+fn (w mut holdWalk&) storage(p Lvalue&) Vec<I64> {
+    return match p {
+        case Lvalue.Local(_, _, id): one(I64(id))
+        case Lvalue.Deref(_, _, r): w.refs(r)
+        case Lvalue.Field(_, _, base, _): w.storage(base)
+        case Lvalue.Elem(_, _, e): w.elemStorage(e)
+        case Lvalue.Payload(_, _, py): w.storage(py.Base)
+        case Lvalue.Temp(_, _, v, _): w.tempStorage(v)
+        case Lvalue.Target(_, _): w.target()
+        case _: Vec<I64>()
+    }
+}
+
+fn (w mut holdWalk&) elemStorage(e Elem&) Vec<I64> {
+    w.refs(e.Index)
+    return w.storage(e.Base)
+}
+
+# a temporary has no local: a reference to it reaches what it holds, so it stands for that
+fn (w mut holdWalk&) tempStorage(v Expr&) Vec<I64> { return w.refs(v) }
+
+fn (w mut holdWalk&) target() Vec<I64> {
+    out Vec<I64>
+    if w.targets.Len() > 0 {
+        for x in w.targets[w.targets.Len() - 1] { out.Push(x) }
+    }
+    return out
+}
+
+# what the value place p holds refers into
+fn (w mut holdWalk&) held(p Lvalue&) Vec<I64> {
+    if p == Lvalue.Temp: return w.storage(p)
+    out Vec<I64>
+    for x in w.storage(p) { union(out, w.reach[x]) }
+    return out
+}
+
+# what x's value refers into, walking what it does on the way (stores in a Seq, calls given storage, lambdas made)
+fn (w mut holdWalk&) refs(x Expr?&) Vec<I64> {
+    out Vec<I64>
+    if x is null: return out
+    match x {
+        case Expr.Read(_, _, p, _), Expr.Take(_, _, p): return w.held(p)
+        # (a reference value lent as a place: what it names)
+        case Expr.Borrow(_, _, p): return w.held(p) if w.T.KindOf(p.Type()) == types.Kind.Ref else w.storage(p)
+        case Expr.Promote(_, _, pr): return w.refs(pr.X)
+        case Expr.Call(_, _, c): return w.call(c)
+        case Expr.Make(_, _, m) {
+            for i in m.Items { union(out, w.refs(i)) }
+            w.refs(m.Length)
+        }
+        case Expr.Collect(_, _, c) {
+            w.refs(c.Reserve)
+            w.yields.Push(Vec<I64>())
+            w.block(c.Loop)
+            out = w.yields.Pop()!
+        }
+        case Expr.Prim(_, _, op, _, args) {
+            if op == PrimOp.Drop: return out
+            for a in args { union(out, w.refs(a)) }
+        }
+        case Expr.Slice(_, _, sl) {
+            w.refs(sl.Lo)
+            w.refs(sl.Hi)
+            return w.storage(sl.Base)
+        }
+        case Expr.Cond(_, _, k) {
+            w.refs(k.C)
+            union(out, w.refs(k.A))
+            union(out, w.refs(k.B))
+        }
+        case Expr.Seq(_, _, q) {
+            for s in q.Stmts { w.stmt(s) }
+            return w.refs(q.X)
+        }
+        case Expr.Match(_, _, m): return w.match(m)
+        case Expr.Try(_, _, tr) {
+            out = w.refs(tr.X)
+            for c in tr.Clauses {
+                w.block(c.Code)
+                for d in c.Defaults { union(out, w.refs(d)) }
+            }
+        }
+        case Expr.Fn(_, _, f): return w.fnVal(f)
+        case Expr.Text(_, _, tx) {
+            for p in tx.Pieces {
+                if p == Piece.Render: w.refs(p.x)
+            }
+        }
+        case Expr.Away(_, _, y): return w.refs(y)
+        case _ { }
+    }
+    return out
+}
+
+# a call: what it is given mixed (mix), and its value taken to refer into anything its arguments do
+fn (w mut holdWalk&) call(c Call&) Vec<I64> {
+    out Vec<I64>
+    given Vec<Expr&>
+    match c.Target {
+        case Callee.Value(f) { given.Push(f) }
+        case _ { }
+    }
+    for a in c.Args { given.Push(a) }
+    for a in given { union(out, w.refs(a)) }
+    w.mix(given.ToArray())
+    return out
+}
+
+fn (w mut holdWalk&) match(m Match&) Vec<I64> {
+    out Vec<I64>
+    for s in m.Held { w.stmt(s) }
+    for a in m.Arms { union(out, w.arm(a)) }
+    if m.NoMatch is not null: union(out, w.arm(m.NoMatch!))
+    return out
+}
+
+fn (w mut holdWalk&) arm(a Arm&) Vec<I64> {
+    for alt in a.Alts {
+        w.refs(alt.Test)
+        for bd in alt.Binds { w.store(one(I64(bd.To)), w.typed(bd.From)) }
+    }
+    w.refs(a.Guard)
+    w.block(a.Code)
+    return w.refs(a.Value)
+}
+
+# a function value: a lambda's what its captures refer into, which its body may mix as a call does
+fn (w mut holdWalk&) fnVal(f FnVal&) Vec<I64> {
+    out Vec<I64>
+    match f {
+        case FnVal.Lambda(_, caps, _) {
+            given Vec<Expr&>
+            for cp in caps { given.Push(cp.Outer) }
+            for g in given { union(out, w.refs(g)) }
+            w.mix(given.ToArray())
+        }
+        case FnVal.Adapter(_, r, _): out = w.refs(r)
+        case _ { }
+    }
+    return out
+}
+
 # ---- reading a tree ----
 
 fn (x Expr&) Span() source.Span {

@@ -29517,3 +29517,55 @@ closed). Memory-safe today (the storage lives until the scope closes), but C11's
 released resource") does not hold, and it is what blocks freeing at drops. Rust's dropck refuses the store (a value with
 a destructor may not hold a reference to one ended before it); olang's equivalent would refuse a by-value holder storing
 a reference to a holder declared later in its block - for the user.
+
+## Holders ended before what they hold (2026-11-07, wt-dropord, O15, QCZ)
+
+The user's decision (QCZ, "let the compiler order them"): no Rust-style drop check refusing a holder that refers to a
+value declared after it - the compiler orders the ends itself, holders before what they hold, and only a cycle is an
+error. Before: a block's by-value holders ended in reverse declaration order, so `g Grip = Grip(1); l Lamp = Lamp(2, t);
+g.held = l` ended `l` first and `g`'s destructor read an ended `l` (checked with the old compiler: the destructor saw it
+closed - `210` where `112` is right). Memory-safe while storage waits for the scope's close, and the one hazard that
+blocked unique Part C (freeing storage at the destructor).
+
+**The rule (SPEC O15).** A block's variables end in reverse declaration order, among its deferred code, except that a
+held one's end waits until every variable of the block holding it has been ended, and runs then. Only the held drop
+moves, and only later: deferred code registered between a holder and what it holds keeps running before the holder, as
+before (moving the holder earlier instead would end it before deferred code registered after it, which may read it - a
+read Part C would turn into a use after free). A cycle - two variables each holding the other, directly or through
+steps - is an error at the later declaration naming both, saying how to remove it (a block of its own, a `Destroy()`,
+holding one by reference).
+
+**What "holds" is (decided, mine).** `typed.DropHolds`: a flow-insensitive points-to walk over the checked body, by
+local, of the locals whose storage its value may refer into, grown to a fixed point by every Let, store (into a place's
+storage: a local's own, a referent's through a Deref), match binding, spawn target and Yield, and by **every call given
+storage reachable writably (a `mut` reference, a function value or an `any` among what it is given) together with a
+reference reaching another local** - whatever the callee is. The callee's body is never read: the alternative, section
+8's obligations of the callee, is more precise but exists only once the scope pass has run, and the compile-time
+evaluator lowers bodies before it (the stand-in placement) - the order must be one decision with and without a plan,
+as `typed.AnyItemNew` is. It also means an edit to a callee's body never reorders a caller's destructors, and a reader
+can see the order at the call. A lambda capturing both mixes them as a call does (its body may do anything with its
+captures). Every step is filtered by types (`types.RefInto`: a value of the stored type can hold - through its parts and
+the references it reaches - a reference into a value of the other's type or a part it holds by value; a function value,
+an `any`, a type variable can hold any; an extern type's reference none), so `f.Write(data)` with a File of no
+reference fields relates nothing, and `touch(s, l)` with a Stone that can hold no reference leaves the reverse order.
+Run only for a body registering two holders' drops in one block (`check.dropBodies`; lowering asks at the first level
+ordering two drops) - most bodies never pay it.
+
+**Built.** `typed.DropHolder` (the local a Drop block ends), `DropHolds`/`DropHolding` (holders, their blocks, what each
+holds); lowering's `runOrder` (the level's deferred code in run order: reverse registration, a held drop pending until
+its holders have run, released in order; a cycle left as registered) replacing the reverse loop in `runDefers` for every
+phase (a join's Waited/Failed drops too); `guardAgain` in test builds: a holder's guard registered again after a value it
+holds, so the unwinding of a failed check ends holders first (a guard whose holder holds nothing does nothing - its flag);
+`check.settleDropOrder` and `msgs.DropCycle` (O15). The evaluator and `interpret` run lowering's MIR, so they agree:
+tests/drops.olang's `holders` (stored, through a call, past deferred code, through a shelf of references, in a closure,
+a holder declared after, a type that can hold none) baked into a global and asserted while compiling as at run time,
+`-sanitize` clean; checks cases o15dropcycle (direct and through a call) and o15dropcyclestep (through a shelf).
+
+**Found on the way.** A holder whose references live in an outer scope - `h Holder = Holder(1, t)` with `t` from
+outside, so section 8 gives `h`'s references that scope - has a value stored into it lifted there (O28, item 17), and
+the lifted holder's drop registered where its storage lives (bulk review 7's F4): it ends after the block, holders-first
+by that. So the hazard was only where a holder's references live in its own block. Not changed. **Limits (recorded):**
+a value registered with the scope (O16 - an argument for a reference parameter, a call standing as a statement) ends at
+the scope's close after the block's variables, unordered by holding (Part C keeps the storage of any variable such a
+value may reference); interpret's stop cleanups (B3e: deferred code run when interpret meets what it cannot run) keep
+registration order; a holder's parts end its own destructor first, then the last part first, unordered by holding.

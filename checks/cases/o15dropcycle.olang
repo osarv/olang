@@ -1,0 +1,16 @@
+# check: fail error[O15]: 'a' and 'b' may each hold a reference to the other, and both have destructors to run
+# O15 (QCZ): two by-value holders of one block each holding the other - neither can be ended first
+Ended mut I64 = 0
+type Node unique struct(id I64) {
+    id
+    other Node?& = null
+} destruct {
+    if other is not null: Ended += other!.id
+}
+fn link(a mut Node&, b Node&) { a.other = b }
+fn main() {
+    a Node = Node(1)
+    b Node = Node(2)
+    link(a, b)
+    b.other = a
+}

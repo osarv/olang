@@ -6917,9 +6917,21 @@ reference - has its destructors run exactly once, **where its holder lets go of 
   a call standing as a statement, a part read through `open(1).fd`) is held where the call lands (O16): registered with
   that scope, and its destructors run when the scope closes (O1), in the reverse order of the registrations - unless a
   `Destroy()` ran them before (C9b).
-A block's variables let go before its scope closes - in the reverse order they were declared, among its deferred code -
-and the scope's registered values after; a join block's variables let go after its wait (P1b), where its tasks have
-ended, after its deferred code. Where in the scope an instance's storage lies, and whether it was reserved
+A block's variables let go before its scope closes - in the reverse order they were declared, among its deferred code,
+except that **a variable holding a reference to another is ended before it**: the held one's end waits until every
+variable of the block holding it has been ended, and runs then, so no destructor reads a value already ended - and the
+scope's registered values after; a join block's variables let go after its wait (P1b), where its tasks have ended, after
+its deferred code. A variable *holds* another of its block (both holding values with destructors to run) where a
+reference into the other's storage - to it, or to a part it holds by value - may be stored into the first's storage or
+into storage the first's references reach: by an assignment, by a call given both - storage it reaches writably (through
+a `mut` reference, a function value or an `any` among what it is given) and a reference reaching the other, whatever the
+callee does with them, so the order is read off the function itself - or by a lambda capturing both; and through any
+number of such steps (`h` holding a reference to a collection that holds one to `r`), each one possible by the types: a
+value of the type stored can hold - through its parts and the references it reaches - a reference into a value of the
+other's type or a part of it (a function value, an `any` or a type variable can hold any). Two variables of a block each holding the other
+- a cycle of such references - is a compile-time error naming both: whichever were ended first, the other's destructor
+could read it; ending one before the other refers to it (a block of its own, a `Destroy()`) or holding one by reference
+removes it. A test ended by a failed check (P1d) ends its holders in the same order. Where in the scope an instance's storage lies, and whether it was reserved
 before its constructor's arguments were built, is not observable. A global and a generator's
 parameter hold such a value by reference, and a type argument holds it by value only where its instance ends it (C11):
 the program's scope, a walk left part way and an array of a run-time length outside a collection have no holder that

@@ -752,3 +752,104 @@ assert LoopDestroyed == "0.1.2", "decided while compiling: " $LoopDestroyed
 test loopDestroyed "destroys a holder its loop's body declares, every turn" {
     assert loopDestroyed() == "0.1.2"
 }
+
+# ---- holders ended before what they hold (O15, QCZ) ----
+
+# a value with a destructor that says, at its end, whether it was still open - read by what holds it
+type Lamp unique struct(id I64, log mut Tally&) {
+    id, log
+    open := true
+} destruct {
+    log.seen.Push(id)
+    open = false
+}
+
+# holds a reference to a Lamp and nothing else, so its references live where it does: at its end it reads the Lamp
+# (ten times its id, one more where the Lamp was still open)
+type Grip unique struct(id I64) {
+    id
+    held Lamp?& = null
+} destruct {
+    if held is not null: held!.log.seen.Push(id * 10 + (1 if held!.open else 0))
+}
+
+fn (g mut Grip&) Hold(l Lamp&) { g.held = l }
+
+# holds a reference to a shelf, which holds references to Lamps: at its end it reads each
+type Rack unique struct(id I64) {
+    id
+    shelf Lamps?& = null
+} destruct {
+    if shelf is null: return
+    for l in shelf!.items { l.log.seen.Push(id * 10 + (1 if l.open else 0)) }
+}
+
+type Lamps struct() {
+    items := Vec<Lamp&>()
+}
+
+# holds a function value, called at its end
+type Hook unique struct(id I64) {
+    id
+    then fn?&() = null
+} destruct {
+    if then is not null: then!()
+}
+
+# can hold no reference at all: given beside a Lamp, it holds none
+type Stone unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct { log.seen.Push(id) }
+
+fn touch(s mut Stone&, l Lamp&) { s.id += l.id - l.id }
+
+fn holders() String {
+    t := Tally()
+    {
+        g Grip = Grip(1)
+        l Lamp = Lamp(2, t)
+        g.held = l
+    }
+    {
+        g Grip = Grip(3)
+        l Lamp = Lamp(4, t)
+        g.Hold(l)
+    }
+    {
+        g Grip = Grip(5)
+        defer t.seen.Push(9)
+        l Lamp = Lamp(6, t)
+        g.held = l
+    }
+    {
+        k Rack = Rack(7)
+        s := Lamps()
+        k.shelf = s
+        l Lamp = Lamp(8, t)
+        s.items.Push(l)
+    }
+    {
+        h Hook = Hook(1)
+        l Lamp = Lamp(2, t)
+        h.then = fn() { l.log.seen.Push(30 + (1 if l.open else 0)) }
+    }
+    {
+        l Lamp = Lamp(4, t)
+        g Grip = Grip(5)
+        g.held = l
+    }
+    {
+        s Stone = Stone(6, t)
+        l Lamp = Lamp(7, t)
+        touch(s, l)
+    }
+    return t.Listed()
+}
+
+HoldersEnded := holders()
+assert HoldersEnded == "11.2.31.4.9.51.6.71.8.31.2.51.4.7.6", "decided while compiling: " $HoldersEnded
+
+test "a holder is ended before what it holds - stored, through a call, past deferred code, through a shelf, in a closure" {
+    assert holders() == "11.2.31.4.9.51.6.71.8.31.2.51.4.7.6"
+    assert HoldersEnded == holders()
+}

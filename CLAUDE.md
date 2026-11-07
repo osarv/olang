@@ -695,6 +695,25 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   the call (a read by reference would need `T&` of a number, T24); a `Destroy()` of a collection after pushes of values
   built from a local makes that local a holder (bulk review 7's F16 rule). tests/drops.olang decides each order while
   compiling as at run time and under `interpret`.
+- **Holders ended before what they hold (O15, QCZ, the user's decision 2026-11-07: "let the compiler order them"; built
+  2026-11-07, wt-dropord, details mine).** A block's by-value holders end last declared first, except that one holding
+  a reference to another of its block is ended before it: the held one's end waits until every holder of it has run
+  (lowering's `runOrder` over the level's deferred code - only a held drop moves, later, so deferred code registered
+  between keeps its place before the holder); two that may hold each other - a cycle - is a compile-time error naming
+  both (`check.settleDropOrder`, after the last attempt). "Holds" is `typed.DropHolds`, a flow-insensitive points-to
+  over the body: a reference into V's storage stored into H or into storage H's references reach - by an assignment, by
+  any call given storage H reaches writably and a reference reaching V (decided, mine: the call's callee is never read,
+  so the order is read off the function itself, with and without the scope pass - the evaluator lowers before it runs -
+  and an edit to a callee's body never reorders a caller's destructors), by a lambda capturing both - through any
+  number of steps, each possible by types (`types.RefInto`: the stored type can hold a reference into the other's type
+  or a by-value part of it; a function value, an `any`, a type variable can hold any). Test builds register a held
+  value's holders' guards again after its own (a guard of a holder holding nothing does nothing), so a failed check's
+  unwinding ends holders first too. The evaluator and `interpret` run lowering's MIR, so they agree (tests/drops.olang's
+  `holders`, baked and asserted while compiling). Limits (recorded): a value registered with the scope (O16) still ends at
+  its close after the block's variables, unordered by holding; interpret's stop cleanups (B3e) run in registration order;
+  a holder whose references live in an outer scope (it holds a reference from outside) gets what is stored into it lifted
+  there by section 8 (O28) - its drop then registered where it lives, after the block (the old order was right there by
+  that, the hazard only where a holder's references live in its own block: checked before, `210` where `112` is right).
 - **Declared types are nominal (T29).** `type Meters I32`, `type Name Array<T>`; `extends` inherits the base's methods
   and operators (T29f, the user's design); `Name(x)` converts and names the argument's storage (T29a) - a copy to or
   from an immut type (T13a); a declared

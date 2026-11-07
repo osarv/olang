@@ -357,6 +357,7 @@ type Diag enum {
     UniqueLentHere
     UniqueAlias
     DestroyedAfter
+    DropCycle
     UniqueKind
     UniqueNeedsCopy
     DestructNotUnique
@@ -1879,6 +1880,9 @@ fn UniqueAfter(name String&, ty String&) Msg { return Msg(Diag.UniqueAfter, "T13
 fn UniqueLentHere(name String&, ty String&) Msg { return Msg(Diag.UniqueLentHere, "T13b", "'" $name "' is handed on here while the same call also reaches it, and " $ty " is unique - one value would be in two places: give the call '" $name "' once, or hand it on in a call of its own") }
 fn UniqueAlias(name String&, ty String&, alias String&) Msg { return Msg(Diag.UniqueAlias, "T13b", "'" $name "' is handed on here, and " $ty " is unique - '" $alias "', which reaches it, is used after: use '" $alias "' before handing '" $name "' on, or no longer after") }
 fn DestroyedAfter(name String&) Msg { return Msg(Diag.DestroyedAfter, "C9b", "'" $name "' is destructed here, and mentioned after - nothing reaches a value its Destroy() ended") }
+
+# ERR_DROP_CYCLE
+fn DropCycle(a String&, b String&) Msg { return Msg(Diag.DropCycle, "O15", "'" $a "' and '" $b "' may each hold a reference to the other, and both have destructors to run - whichever is ended first, the other's destructor could read it: end one of them before the other refers to it (a block of its own, or its Destroy()), or hold one by reference") }
 
 # ERR_UNIQUE_KIND
 fn UniqueKind(what String&) Msg { return Msg(Diag.UniqueKind, "T13b", "'unique' says a value exists in one place - " $what " has no values of its own") }
