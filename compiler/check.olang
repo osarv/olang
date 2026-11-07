@@ -25611,7 +25611,7 @@ test "for-in walks iterators, runs, iterables and indexables; comprehensions (S9
     l := testLoad(dir, ("type Ix struct() { }\nfn (x Ix&) At(i I64) I64 { return i * 2 }\nfn (x Ix&) Len() I64 { return 3 }\n"
                        "fn main() ? {\n    l := Vec<I64>()\n    l.Push(1)\n    t I64 = 0\n    for x in l { t += x }\n"
                        "    for k, x in l.Iter() { t += x + k }\n    for x in Ix() { t += x }\n"
-                       "    a := I64[x * 2 for x in range 4 if x > 1]\n    b := I64[x for x in l]\n"
+                       "    a := Array<I64>[x * 2 for x in range 4 if x > 1]\n    b := Array<I64>[x for x in l]\n"
                        "    for x in a { if x > 3 { break }\n        t += x }\n    assert t + b.Len() > 0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -25629,7 +25629,7 @@ test "lambdas: expected types, inference, captures, generic calls (D16, D16a-D16
     l := testLoad(dir, ("fn apply(f fn&(x I64) I64, v I64) I64 { return f(v) }\n"
                        "fn main() ? {\n    k I64 = 3\n    a := apply(fn(x) { return x + k }, 4)\n"
                        "    g := fn(x I64) { return x * 2 }\n    b := g(5)\n"
-                       "    xs := I64[1, 2, 3]\n    n := xs.Count(fn(x) { return x > 1 })\n"
+                       "    xs := Array<I64>[1, 2, 3]\n    n := xs.Count(fn(x) { return x > 1 })\n"
                        "    t := xs.Fold(0, fn(acc I32, x I64) I32 { return acc + I32(x) })\n"
                        "    m := xs.Iter().Count(fn(x) { return x > k })\n"
                        "    assert a + b + n + I64(t) + m > 0\n}\n"))

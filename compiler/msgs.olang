@@ -2570,7 +2570,7 @@ fn SpreadAlone() r.Msg { return r.Msg(Diag.SpreadAlone, "D8g", "'...a' passes an
 fn VariadicArgCount(n1 I64, text String&, n2 I64) r.Msg { return r.Msg(Diag.VariadicArgCount, "E14", "expected at least " $n1 " argument" $text ", found " $n2) }
 
 # ERR_REST_NOT_HERE
-fn RestNotHere() r.Msg { return r.Msg(Diag.RestNotHere, "S13h", "'...' stands among an array pattern's items, for the elements they do not name - 'case String&[first, ...rest]'") }
+fn RestNotHere() r.Msg { return r.Msg(Diag.RestNotHere, "S13h", "'...' stands among an array pattern's items, for the elements they do not name - 'case Array<String&>[first, ...rest]'") }
 
 # ERR_REST_TWICE
 fn RestTwice() r.Msg { return r.Msg(Diag.RestTwice, "S13h", "an array pattern has one '...', for the elements its other items do not name") }
