@@ -1,0 +1,20 @@
+# check: fail T22a
+# also: 'keepIt' ties where what it is given lives to what it keeps or gives back
+# T13b, O8d: a function storing a unique value it is given by value moves it - its caller builds the argument where the
+# value is kept (section 8's obligation on the parameter) - so it cannot become a function value, whose caller cannot
+# know where to build it; a lambda calling it can (it keeps its own copy)
+import "std/io"
+
+type Buf unique struct(n I64) {
+    n
+    data := Array<I64>(n % 5 + 3, n)
+}
+
+fn keepIt(v mut Vec<Buf>&, b Buf) { v.Push(b) }
+
+fn main() {
+    v := Vec<Buf>()
+    f := keepIt
+    f(v, Buf(3))
+    io.Println($v.Len())!
+}
