@@ -154,6 +154,27 @@ Want := ("origin;y5;x3;diag4;1,2;from origin to diag3;to the y axis;from x2;hot 
     "square 2;rect 12;round on the axis;round 1,2;dot;one past;no;first on the axis at 7;second on the x axis at 6;"
     "neither;three;four b;t 5;6;0 then 1;last 1;node 5;none;9;2;7;-1;8;9;0")
 
+type Opt<T> enum {
+    Some(v T)
+    None
+}
+
+# found on the way: a computed position beside a binding, and a generic case written with its arguments, bind (S13b)
+fn mixed(s Shape, o Opt<I64>, k I64) I64 {
+    a := match s {
+        case Shape.Rect(k + 1, h): h
+        case _: 0
+    }
+    b := match o {
+        case Opt<I64>.Some(v = 1): -1
+        case Opt<I64>.Some(x): x
+        case Opt.None: 0
+    }
+    return a * 100 + b
+}
+
+MixedBaked := mixed(Shape.Rect(3, 4), Opt<I64>.Some(5), 2)
+
 # a binding is a copy of the field: writing it leaves the value matched as it was (S13b)
 fn copies(p Point) I64 {
     match p {
@@ -172,4 +193,6 @@ test Point "S13i: struct patterns take a struct apart by its fields, at run time
     assert AllBaked == Want
     assert all(0) == Want # decided while compiling (S18c)
     assert copies(Point(1, 2)) == 102
+    assert MixedBaked == 405 and mixed(Shape.Rect(3, 4), Opt<I64>.Some(5), 2 + Live) == 405
+    assert mixed(Shape.Rect(3, 4), Opt<I64>.Some(1), 1 + Live) == -1
 }

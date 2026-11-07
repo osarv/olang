@@ -2162,7 +2162,7 @@ f30146f2d3929763 0bc1df5608a076ff tests/raisedlex.olang
 9eae251fdb164a20 4e201838ddeb9973 tests/reflmod.olang
 1ff21e7a84f7f063 11eb778add6a9574 tests/runner.olang
 2ce73cd2646ca25f ee2ae15424b8615d tests/shared.olang
-b4fc7ffa791dec5d be97f603134cd088 tests/structpat.olang
+13f0a963a5059bbb ff9ee36f853b90b4 tests/structpat.olang
 218679c29f9473be 9865cedc10f79165 tests/textslot.olang
 38ad7d920d9fd40b 3ee8354de338a4da tests/topassert.olang
 55be07be2b03b5da 6f08d9398d4aae27 tests/unique.olang
