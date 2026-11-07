@@ -922,3 +922,10 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   the compiler is done (no syntax - the user's rule); errors carrying data and struct patterns re-asked. Queued, next
   free slot (the machine was full: drops, asm, deprec running, load ~10): round "interp" - evaldump/evaldiff fixed, the
   corpus and std run under interpret, differences fixed, the comparison into make verify.
+- 2026-11-07 ~09:05 CET: the user's two interrupts while dictating stopped all three running rounds (drops, asm,
+  deprec - the harness reports them killed and will not resume them without the user's word). State at the stop:
+  deprec and asm had committed and started their final verifies (still running as background processes: wt/deprec's
+  verify2.log, wt/asm's verify.log); drops was at f24af92 with "quick, seed, verify, scopesan, scopefuzz, fuzz free,
+  dead regions, goldens" left. Asked the user whether to restart them. Started round structpat (wt-structpat, opus
+  high, /home/user/review/rounds/structpat-brief.md): struct patterns by field name, enums by both. Errors carrying
+  data is decided; its build follows drops and structpat (same check.olang areas; the named payload items reused).

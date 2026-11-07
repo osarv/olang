@@ -3035,3 +3035,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   field order, promised by nobody, part of every match elsewhere, and positions over visible fields would make one
   pattern bind different fields inside and outside the module. Recommendation unchanged: structs by name, enums and
   arrays by position. Still asked.
+- QCX (3) DECIDED 2026-11-07 (the user: "structs by name, arrays by position, and enums by both", then "go"): struct
+  patterns name fields (`case Point(x = 0, y)`, a bare name binding its field, unmentioned fields ignored, readable
+  fields only); arrays by position as today; enum payloads by position as today and by field name too
+  (`case Shape.Rect(h = 0)`, positional items first). In `case` patterns only. Being built: round structpat.
