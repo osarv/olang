@@ -23,12 +23,12 @@ to be finished today. So no unnecessary reviews or verifications. Just do one at
   (guard clauses, `:` one-line bodies, `case P: v`, narrowing, comprehensions, errors raised by name).
 - Report at the end: what was built, your decisions (numbered), bugs found and fixed, quick's result, what was left.
 
-Rounds running at the same time (keep to your files where you can; small overlaps are merged by the coordinator):
-- interp (/home/user/wt/interp): compiler/interp.olang, compiler/eval.olang, compiler/tools/evaldump/evaldiff, makefile.
-- sec8 design note (/home/user/wt/sec8): docs only.
-- errdata2 (/home/user/wt/errdata2): errors carrying data - check's error paths, lower's raise/clauses, emit, eval,
-  std/runtime/runtime.ll, std's error declarations.
-- packed (/home/user/wt/packed): packed structs - types' layout, emit's field access, eval, cabi and C imports,
-  reflection, $ / == / Hash.
-- dropord (/home/user/wt/dropord): drop order, unique Part C, reuse in place, the C-call rule - check's drop flags,
-  lower's deferred-code order, free.olang, effects.olang.
+Rounds running at the same time (from 2026-11-07 afternoon; keep to your files where you can; the coordinator merges):
+- sec8r2 (/home/user/wt/sec8r2): section 8 round 2 - O27 as placement, the unique hand-on move - compiler/scope.olang,
+  free.olang, typed.olang, emit's generator elision test, olang.olang's -memory rows.
+- literals (/home/user/wt/literals): the type in front of every literal and comprehension, FromIter - parser, check's
+  literals and comprehensions, the prelude and std collections, a migration tool rewriting `T[...]` everywhere (its
+  output committed separately; the coordinator re-runs it after merging the others, so do not hand-edit literal
+  syntax in other rounds' files).
+- tidy2 (/home/user/wt/tidy2): small fixes - diagnostics, reflection, explain, the profiler's handler, reproducible
+  builds, msgs.olang's generator, StringBuilder, json keys, cheaper region headers in the runtime.
