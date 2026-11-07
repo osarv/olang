@@ -1132,6 +1132,7 @@ fn (x mut Exec&) RunTests(d mut diag.Diagnostics&, words Array<String&>& = Array
     if tests.Len() == 0 and words.Len() > 0 { return 3 }
     for t in tests { x.Need(mir.FnKey.Body(typed.BodyId(I32(t)))) }
     x.InitGlobals()
+    x.M.TestUnwind = true
     pass, fail I64 = 0, 0
     none := Array<I64>(0)
     x.M.TestFile = $x.P.L.Mods[x.P.L.Root].Path

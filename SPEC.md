@@ -7766,7 +7766,10 @@ every test where none is given) run as its test binary runs them (B3a) - each gl
 or what stopped it and `FAIL - NAME` (`FAIL - NAME: T.W` and the trace where an error left it, S16, S18d), then the
 counts, the status 1 where one failed and 3 where the words name none of its tests. The test binary's command line
 (B4a) is its path as `test` builds it, then the words; the running test's name and file are given to std as the
-harness gives them (B19), and no fuzzer runs (`std/fuzz`'s input is the empty one). A forked child that takes its
+harness gives them (B19), and no fuzzer runs (`std/fuzz`'s input is the empty one). A test a check fails (S16, S18a) is
+left as the harness leaves it (P1d): every scope still open, in every frame, closed innermost first and its
+destructors run - no deferred code; a `!` that failed it is followed by its error's trace (E35, S18d); words that name
+none of a file's tests are said as `test` says them, the nearest target or description suggested (B7a). A forked child that takes its
 test's recovery point away ends on a failed check as the built child does. `-define` and `-update` apply; an option
 saying how to build - `-debug`, `-race`, `-sanitize`, `-quick`, `-memory`, `-fuzz` - is an error beside it, and so is a
 `-target` naming another machine (B12a).

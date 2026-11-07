@@ -451,6 +451,9 @@ type Machine struct(T mut types.Table&, When Mode) {
     TestFile String& = ""
     TestName String& = ""
     Detached Bool = false
+    # P1d, B3e: requests are tests, so one that a failed check stops unwinds as the harness unwinds it (closeOpen)
+    TestUnwind Bool = false
+    unwinding Bool = false   # closeOpen is closing a stopped test's scopes: a task's failure no join takes is dropped
     # S18d: the error being returned's last places, oldest first - its file, span, what it did and its own text (a
     # requirement's "pick: y > x", D17), four words a place
     trace Vec<I64>
@@ -5167,7 +5170,10 @@ fn (m mut Machine&) taskEnded(fr frame) {
                 m.payDrop(tk.PayBase)   # T19b: a later-spawned failure's payload dropped, the join keeping the earliest's
             }
         }
-        case _ { m.refuse(WhyNoClause) }
+        case _ {
+            # (P1d: a test's unwinding joins the tasks a failed check left, their failures dropped as the harness's)
+            if m.unwinding { m.payDrop(tk.PayBase) } else { m.refuse(WhyNoClause) }
+        }
     }
     m.freeTask(slot)
 }
@@ -5337,6 +5343,7 @@ fn (m mut Machine&) unwind(base I64) {
     if m.halted and m.When == Mode.Run and m.nFs > base {
         match m.Stopped {
             case Stop.Refused(_, _, _) { m.runCleanups(base) }
+            case Stop.Exited(_, _, _, _), Stop.Raised(_) { if m.TestUnwind: m.closeOpen(base) }
             case _ { }
         }
     }
@@ -5429,6 +5436,49 @@ fn (m mut Machine&) runCleanups(base I64) {
     }
     m.halted, m.Stopped = true, first
     m.WaitTaskFile, m.WaitTaskSp = waitFile, waitSp
+}
+
+# P1d, B3e: a test a failed check stops leaves its blocks as its binary's harness leaves them (__olang_unwind_to):
+# every scope still open in every frame - innermost frame first, innermost scope first - closed, a join's tasks run
+# first, its registrations run (a destructor) and what it holds freed; no deferred code runs (S16d). A stop while it
+# closes ends it, the first stop the one reported
+fn (m mut Machine&) closeOpen(base I64) {
+    first := m.Stopped
+    m.unwinding = true
+    m.halted, m.Stopped = false, Stop.None
+    for m.nFs > base and not m.halted {
+        fi := m.nFs - 1
+        m.dropOwnDefers(fi)
+        fr := m.fs[fi]
+        for i := fr.Vars - fr.Scopes - 1, i >= 0 and not m.halted, i-- {
+            id := m.ws[fr.Scopes + i]
+            m.ws[fr.Scopes + i] = 0
+            if m.live(id): m.closeNow(fi, id)
+        }
+        if not m.halted and m.live(fr.Store): m.closeNow(fi, fr.Store)
+        if not m.halted: m.dropFrame()
+    }
+    m.unwinding = false
+    m.halted, m.Stopped = true, first
+}
+
+# scope id of frame fi closed now (closeOpen): a join's tasks still to run run first (P1d, their failures no one's),
+# then its registrations, newest first
+fn (m mut Machine&) closeNow(fi I64, id I64) {
+    sc := id & slotMask
+    for m.scopes[sc].Tasks >= 0 and not m.halted {
+        slot := m.scopes[sc].Tasks
+        m.scopes[sc].Tasks = m.tasks[slot].Next
+        if m.scopes[sc].Tasks < 0 { m.scopes[sc].TasksEnd = -1 }
+        m.startTask(fi, slot)
+        if m.nFs > fi + 1: m.loop(fi + 1)
+    }
+    if m.halted: return
+    m.closing.Push(id)
+    for m.closing.Len() > m.fs[fi].Closing and not m.halted {
+        m.stepClose()
+        if m.nFs > fi + 1: m.loop(fi + 1)
+    }
 }
 
 fn (m mut Machine&) dropScope(id I64) {
