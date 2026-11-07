@@ -336,7 +336,7 @@ room after 1-11, enum layout before the final review (it changes T.Size, layout-
 - (e) The LICENCE stays the user's ("the last thing we do"): ask when the compiler is declared done.
 - QCU 1-3 are open; Columns<T> waits for them and for FromIter (QBU/QBW).
 
-## Added 2026-11-07 (QCX, the user: "Add it then, not done")
+## Proposed 2026-11-07 (QCX) - NOT decided: the user's "Add it then, not done" fixed a typo, it was no answer; re-asked
 
 - N1. Errors carrying data (deferred 2026-10-24): design note docs/errdata.md (wt-errdata) -> the user's direction
   questions -> build round (check, lower, emit, eval, scope; std migration).
