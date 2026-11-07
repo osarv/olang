@@ -1,10 +1,16 @@
-# B3e: interpret refuses what a build refuses, section 8's errors included - a view of a block's text kept in a list
-# outside it (O27: no storage is extended for a view)
+# B3e: interpret refuses what a build refuses, section 8's errors included - a view of a block's resource kept in a list
+# outside it (O27, O15: storage holding a value whose destructor is still to run is never built longer for a view)
+Ended mut I64 = 0
+
+type Res unique struct(n String&) {
+    name := $n
+} destruct { Ended++ }
+
 fn main() {
     keep := Vec<String&>()
     for i in range 3 {
-        t := "inner" $i
-        keep.Push(t[0:2])
+        f := Res("inner" $i)
+        keep.Push(f.name[0:2])
     }
     assert keep.Len() == 3
 }
