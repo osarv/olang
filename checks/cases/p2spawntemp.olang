@@ -1,6 +1,8 @@
-# check: fail error[P2]: this argument refers to storage that closes before the join does
-# P2: a temporary argument is built in the join block, but it holds a reference to a loop body's array, which closes
-# while the task may still read it
+# check: run
+# flags: -sanitize
+# P2: a temporary argument is built in the join block, holding a reference to a loop body's array - refused while the
+# array closed with the turn, while the task might still read it; since item 17 the array is built where the temporary
+# keeping it is (the join block), one each turn, so each task reads its own
 type W struct(a Array<I64>&) {
     a
 }
@@ -17,4 +19,5 @@ fn main() ? {
             spawn out[i] = total(W(a))
         }
     }
+    assert out[0] == 1000 and out[1] == 2000 and out[2] == 3000 and out[3] == 4000
 }

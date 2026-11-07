@@ -1,6 +1,9 @@
-# check: fail error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-# C2d/O23a: a reference read through a "&p" field and copied into a local is built through as the direct form
-# "grow(w.at[0])" is - refused: what grow builds would be reclaimed with the view's scope, not where the element lives
+# check: run
+# flags: -sanitize
+# C2d/O23a: a reference read through a field with a binding of its own and copied into a local is built through as the
+# direct form "grow(w.at[0])" is. It was refused - what grow builds would have been reclaimed with the view's scope, not
+# where the element lives; since C1 (2026-11-07) a build through a derived scope, which exists at no run time, goes to
+# the program's scope, which outlives the element - read back after an arena churn
 import "std/io"
 type Node struct(v I64) {
     v

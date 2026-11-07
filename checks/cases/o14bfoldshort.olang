@@ -1,6 +1,19 @@
-# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
+# check: run
+# flags: -sanitize
 # O14b/T22a: a lambda handing back one of its arguments fits Fold's callback - whose type-variable result requires each
-# argument to outlive the result - so Fold's result lives no longer than the words; kept past their block, it would not
+# argument to outlive the result - so Fold's result lives no longer than the words. Refused while the words lived in
+# the loop's block; since item 17 they are built where the reference keeping one is; read back after an arena churn
+
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
 fn main() ? {
     keep := Vec<String&>()
     keep.Push("x")
@@ -10,5 +23,6 @@ fn main() ? {
         words.Push($i "abc")
         longest = words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
     }
-    assert $longest != ""
+    churn()
+    assert longest == "1abc"
 }

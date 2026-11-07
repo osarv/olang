@@ -1,6 +1,9 @@
-# check: fail error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-# C2d/O23a: a callback handed elements read through a "&p" field of a view over the receiver's array would build where
-# the element's derived scope resolves at the call - an underestimate - so it is refused (C3)
+# check: run
+# flags: -sanitize
+# C2d/O23a: a callback handed elements read through a field with a binding of its own of a view over the receiver's array
+# builds through the element's derived scope. It was refused (C3: where that scope resolves at the call is an
+# underestimate); since C1 (2026-11-07) a build through a derived scope, which exists at no run time, goes to the
+# program's scope, which outlives the element - read back after an arena churn
 import "std/io"
 type Node struct(v I64) {
     v

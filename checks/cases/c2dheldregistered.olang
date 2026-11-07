@@ -1,0 +1,29 @@
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
+# C2d, O16 (C3's boundary): a by-value holder's value is landed where a by-value parameter's references live - but not
+# one that also holds a destructor value by reference (registered where it is built, O16), whose destructor landing it
+# longer would run later than where the call stands
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+type Res unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct { log.seen.Push(id) }
+
+type W struct(id I64, log mut Tally&) {
+    id, log
+}
+
+type Pin struct(r Res, g Res&, w W) {
+    r, g, w
+}
+
+fn pinned(w W, t mut Tally&) I64 {
+    h Pin = Pin(Res(1, t), Res(2, t), w)
+    return h.w.id + h.g.id
+}
+
+fn main() {
+    t := Tally()
+    assert pinned(W(3, t), t) == 5
+}

@@ -1,11 +1,24 @@
-# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+# check: run
+# flags: -sanitize
 # P1g: with several targets, each is judged as the assignment of its own result, as a single target is - here a
-# reference borrowed from a local of the join block, stored into one declared before it, which outlives that block
+# reference borrowed from a local of the join block, stored into one declared before it. Refused while the local closed
+# with the join block; since item 17 it is built where the target keeping it lives - read back after an arena churn
 import "std/io"
 type Node struct() {
     v I64 = 0
 }
 fn pick(n Node&) Node&, I64 { return n, 1 }
+
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
 fn main() ? {
     x Node& = Node()
     k I64 = 0
@@ -14,5 +27,6 @@ fn main() ? {
         m.v = 42
         spawn x, k = pick(m)
     }
+    churn()
     try io.Println($x.v " " $k)
 }

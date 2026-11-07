@@ -1769,7 +1769,8 @@ fn literalAfter(t String&, from I64) I64, I64 {
 }
 # O26a across modules: a call to a function of a module found after the caller's is read by its checked body - a
 # view mat.View returns holds the local array it is given, which lives in the result scope (read back after a churn,
-# under -debug -sanitize), and cannot be kept in a list outliving the loop that made it (C2d)
+# under -debug -sanitize), and one a loop's turn made, kept in a list outliving the loop, is built where the list is
+# (item 17; it was C2d's refusal)
 test "a view from a module found after the caller's holds the caller's array" { assert passed("latermodule") }
 
 # every program in bench/ still compiles (-c: checked and compiled, not linked). They are timed by hand, never run by a
@@ -1795,9 +1796,8 @@ fn latermodule(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/latermodule/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize view.olang > out.txt 2>&1") == 0, "view build", dir)
     try r.expect(sh(dir, "./build/view.debug.san > out.txt 2>&1") == 0 and outOf(dir) == "1.5 2\n", "view", dir)
-    try r.expect(sh(dir, "\"$OLANG\" build kept.olang > out.txt 2>&1") != 0, "kept.olang compiled", dir)
-    want := "error[C2d]: this instance holds a reference to an argument it would outlive"
-    try r.expect(outOf(dir).Contains(want), "kept.olang: expected C2d", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize kept.olang > out.txt 2>&1") == 0, "kept build", dir)
+    try r.expect(sh(dir, "./build/kept.debug.san > out.txt 2>&1") == 0 and outOf(dir) == "0 2\n", "kept", dir)
 }
 
 # O8b: the arena's pool is bounded, and gives the least recently given back chunks to the system beyond the bound -

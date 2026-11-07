@@ -1,8 +1,14 @@
-# check: fail error[T17c]: this value's payload refers to storage the value would outlive
-# O25h/T17c: a reference handed to an enum case's payload is a copy of what it names - the case is held to it, as an
-# instance is (C2d)
+# check: run
+# flags: -sanitize
+# O25h/T17c: a reference handed to an enum case's payload is a copy of what it names, its references where the
+# referent's are. It was refused (the case's value lived in its local's block, which those references outlive, and
+# something can be stored through them); since C2 (2026-11-07) the local's references are placed where they must be, as
+# a struct holding the same copy's are (C2d) - a node built through the payload is read back through the parameter after
+# an arena churn
+import "std/io"
 type Node struct() {
     next mut Node?& = null
+    v I64 = 0
 }
 type Box struct() {
     head mut Node& = Node()
@@ -11,8 +17,26 @@ type E enum {
     A(b Box)
     Z
 }
-fn viaPayload(r mut Box&) {
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+fn viaPayload(r mut Box&, k I64) {
     e := E.A(r)
+    if e == E.A {
+        n := Node()
+        n.v = k
+        e.b.head.next = n
+    }
 }
 fn main() ? {
+    b := Box()
+    viaPayload(b, 7)
+    churn()
+    try io.Println($b.head.next!.v)
 }

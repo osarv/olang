@@ -49,6 +49,28 @@ fn (s mut Scoper&) mayHoldDtor(ty types.TypeId) Bool {
     return w.Holds(ty)
 }
 
+# whether a value of a type may reach an instance whose destructor is to run through a reference (or an any, a type
+# variable's value) - registered where it was built (O16) - rather than only hold ones by value, which its holder ends
+# (O15)
+fn (s mut Scoper&) dtorThroughRef(ty types.TypeId) Bool {
+    r := s.P.T.Repr(ty)
+    return match s.P.T.KindOf(r) {
+        case types.Kind.Ref: s.mayHoldDtor(s.P.T.Referent(r))
+        case types.Kind.Any, types.Kind.Var: true
+        case types.Kind.Array: s.dtorThroughRef(s.P.T.Elem(r))
+        case types.Kind.Tuple, types.Kind.Record: s.partsReach(s.P.T.Items(s.P.T.Parts(r)))
+        case types.Kind.Named: not s.P.T.HasBody(r) or s.partsReach(s.P.T.Items(s.P.T.Fields(r))) or s.partsReach(s.P.T.Items(s.P.T.Cases(r)))
+        case _: false
+    }
+}
+
+fn (s mut Scoper&) partsReach(ps Array<types.TypeId>&) Bool {
+    for p in ps {
+        if p != types.TypeId(0) and s.dtorThroughRef(p): return true
+    }
+    return false
+}
+
 # whether a term is a block's scope - the frame's or one nested in it (S21)
 fn isBlockTerm(t Term) Bool {
     return match t {
@@ -359,6 +381,10 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     lifts Map<pair.Pair<I64, I64>, Term>   # by (body, local): the term the inference gives its claim
     siteLifts Map<pair.Pair<I64, I64>, Term> # by (body, call site): where the inference lands the call
     liftStor Map<pair.Pair<I64, I64>, Bool> # ... and its own storage too (a value local borrowed whole and kept)
+    # item 17: by body, its copies of a whole value local made at that local's last mention (typed.LastCopies), by site:
+    # the local - found once a body, for the moves lowering may make (D9i)
+    lastCopied Map<pair.Pair<I64, I64>, I64>
+    lastSeen Map<I64, Bool>
     wLocals Map<pair.Pair<I64, I64>, Bool>  # ... a local whose uses need it to outlive two scope variables no obligation orders
     partLifts Map<pair.Pair<I64, I64>, Bool> # ... lifted because a part of it - a field, an element - is kept (counted, 2.6)
     partFlow Bool = false                   # the proposal being made is for a part of the local
@@ -368,6 +394,12 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     viewOf Vec<I64>                        # by local: the local whose storage it is a view of (O27), -1 none
     fitTarget I64 = -1                     # the local whose claim the slot of the fit judged is, -1 none
     promoteLocal I64 = -1                  # the local the temporary judged next is declared as (a Promote), -1 none
+    caseLocal I64 = -1                     # ... and the local an enum case judged next is the whole value of (T17c, C2),
+    caseStor Bool = false                  # its storage lifted with it where propose would take it,
+    casePart Bool = false                  # and read for a part of it (caseFrom)
+    fitStor Bool = false                   # the same of the fit judged, for fitTarget
+    fitPart Bool = false
+    slotCall I64 = -1                      # the call whose value a by-value holder's slot takes as it is (O15), -1 none
     obligeView Bool = false                # the obligation recorded next keeps a view of storage, not a whole value (O27)
     # the field inference (2.6): quiet judgings of the program collecting the declarations whose fields a refusal needs
     # given a binding of their own, by declaration; what was promoted and given back, by (declaration, field)
@@ -4610,11 +4642,16 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         # ... where the inference lifted it, its value built or its call landed there (2.4)
         dest := lift if lift != Term.None else s.blockTerm(loc.In)
         s.promoteLocal = I64(l)
+        s.caseLocal = I64(l)
+        hc := typed.CallOf(s.unAway(x!)) if not s.isRef(t) and s.P.T.NeedsDrop(t) else null
+        s.slotCall = I64(hc.Site) if hc is not null else -1
         s.landing = land and not part and lift == Term.None
         if part { s.tempLand = 1 if land and lift == Term.None else 0 }
         s.lastGenArg = Term.None
         v := s.val(x, dest)
         s.promoteLocal = -1
+        s.caseLocal = -1
+        s.slotCall = -1
         s.landing = false
         s.tempLand = -1
         s.noteOrigin(I64(l), x!, v)
@@ -5058,6 +5095,7 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     savedLand, savedLandSp := s.landSite, s.landSp
     ac := typed.CallOf(x)
     if ac is not null { s.landSite, s.landSp = I64(ac.Site), s.eqAfter(p.Span()) }
+    s.caseLocal = wholeLocal(p)
     v := s.val(x, slot if slot.Runs() else s.here())
     s.landSite, s.landSp = savedLand, savedLandSp
     if wholeLocal(p) >= 0 { s.noteLate(wholeLocal(p), x) }
@@ -6017,6 +6055,9 @@ fn (s mut Scoper&) calleeType(c typed.Call&) types.TypeId {
 fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
     if x is null { return plain() }
     d := dest if dest.Runs() else s.here()
+    # (the local a value is declared as, for the outermost expression of its initializer only - C2)
+    whole, wholeStor, wholePart := s.caseLocal, s.caseStor, s.casePart
+    s.caseLocal, s.caseStor, s.casePart = -1, false, false
     match x {
         case typed.Expr.Lit(_, ty, _) {
             if s.holds(ty) { return Val(ValKind.Null, Term.None) }
@@ -6059,6 +6100,9 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
         }
         case typed.Expr.Call(sp, ty, c) { return s.call(sp, ty, c, dest) }
         case typed.Expr.Make(_, ty, m) {
+            # (C2) an enum case a local is declared as: its payload lives where it does (T17c), so a payload exactly
+            # where a longer scope's references are proposes that local's claim there (the inference, 2.4)
+            if m.Kind != typed.MakeKind.Case { whole = -1 }
             if m.Kind == typed.MakeKind.Copy { return s.ownCopy(m, ty, d) }
             kind := FitAnyCopy if s.anyItems else s.itemKind(m.Kind)
             s.anyItems = false
@@ -6072,7 +6116,10 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             for k in range m.Items.Len() {
                 # an "any"'s copy of an array holding no reference keeps nothing of where it was (T32a)
                 copied := kind == FitAnyCopy and not s.holds(m.Items[k].Type())
-                if agreed and vs[k].K == ValKind.Existing and not copied { s.fit(vs[k].T, d, s.storeThrough(m.Items[k].Type()), m.Items[k], kind) }
+                if not agreed or vs[k].K != ValKind.Existing or copied: continue
+                s.fitTarget, s.fitStor, s.fitPart = whole, wholeStor, wholePart
+                s.fit(vs[k].T, d, s.storeThrough(m.Items[k].Type()), m.Items[k], kind)
+                s.fitTarget, s.fitStor, s.fitPart = -1, false, false
             }
             if not s.holds(ty) and m.Site < typed.SiteId(0) { return plain() }
             return fresh(d)
@@ -6165,11 +6212,39 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
 # (types.SharesRefs), must outlive d, as an "any"'s copy's do (T32a)
 fn (s mut Scoper&) ownCopy(m typed.Make&, ty types.TypeId, d Term) Val {
     if m.Site >= typed.SiteId(0) { s.build(m.Site, d) }
+    if s.liftGather { s.liftCopied(m, d) }
     x := m.Items[0]
     v := s.val(x, Term.None)
     # (the copy's type, not what it copies: an array of references to text copied into an array of text shares nothing)
     if v.K == ValKind.Existing and s.P.T.SharesRefs(ty) { s.fit(v.T, d, s.storeThrough(ty), x, FitValue) }
     return fresh(d)
+}
+
+# item 17: a value local copied whole at its last mention into storage kept beyond its block - built where that copy
+# goes, so lowering moves it there (D9i) rather than copying it out of a block that closes first. Not a local named
+# another way (assigned whole, escaping, a second name): lowering would keep that copy, the local built longer for
+# nothing
+fn (s mut Scoper&) liftCopied(m typed.Make&, d Term) {
+    if not d.Runs() or m.Site < typed.SiteId(0): return
+    l := s.lastCopy(I64(m.Site))
+    if l < 0 or not s.liftable(l) or s.isRef(s.B!.Locals[l].Ty) or s.B!.Locals[l].Unset: return
+    own := s.blockTerm(s.B!.Locals[l].In)
+    if s.joinTerm(own, d) == own: return
+    s.liftLocal(l, d, true)
+}
+
+# the local copy site is a whole copy of at its last mention, plainly named (typed.LastCopies, LocalUses); -1 for none
+fn (s mut Scoper&) lastCopy(site I64) I64 {
+    if not s.lastSeen.Has(s.Id) {
+        s.lastSeen.Put(s.Id, true)
+        u := typed.Uses(s.P.T, s.B!)
+        for en in typed.LastCopies(s.B!) {
+            l := en.Value
+            if u.Whole[l] or u.EscHard[l] or u.AliasOf.View().Some(fn(a): return a == l): continue
+            s.lastCopied.Put(pair.Pair<I64, I64>(s.Id, en.Key), l)
+        }
+    }
+    return try s.lastCopied.Get(pair.Pair<I64, I64>(s.Id, site)) catch default -1
 }
 
 # whether a reference default dv lives where the call's result cv does (R11, O25): existing storage exactly there, a
@@ -6789,7 +6864,12 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         a := c.Args[i]
         if landed[i] { continue }
         if owner[i] >= 0 and (s.isFresh(a) or s.isHeldFresh(a)) {
+            # (an enum case built where another argument's local decides - `ms.Push(Maybe.Some(r))` - may lift that local
+            # for its payload, as one it is declared as does: T17c, C2)
+            fa := s.bindingArg(callee, owner[i], firstArg)
+            if fa >= 0 and fa != i: s.caseFrom(c.Args[fa])
             vals[i] = s.argTemp(a, beta, owner[i], here, spawned, j)
+            s.caseLocal = -1
         } else if owner[i] < 0 {
             vals[i] = s.val(a, Term.None)
         }
@@ -7331,6 +7411,27 @@ fn (s mut Scoper&) isHeldFresh(x typed.Expr&) Bool {
         case _ { }
     }
     return false
+}
+
+# (C2) an enum case built where argument x's local decides: that local proposed as propose(x) would propose it
+fn (s mut Scoper&) caseFrom(x typed.Expr&) {
+    s.caseLocal = s.claimRoot(x)
+    s.caseStor = s.keepsStorage(x)
+    s.casePart = partRead(unPassed(s.unAway(x)))
+}
+
+# the argument whose local decided where a call's scope variable v is bound: the one that bound it, else the one a
+# callee's obligation ties it to (requiredBy) - -1 for none
+fn (s mut Scoper&) bindingArg(callee I64, v I64, firstArg Array<I64>&) I64 {
+    if firstArg[v] >= 0 or callee < 0 or not (s.sums[callee].Done or s.sums[callee].Judging): return firstArg[v]
+    for r in s.sums[callee].Rels {
+        if r.Hi != Term.Var(v): continue
+        match r.Lo {
+            case Term.Var(k) { if k < firstArg.Len() and firstArg[k] >= 0: return firstArg[k] }
+            case _ { }
+        }
+    }
+    return -1
 }
 
 # the term the callee's obligations require scope variable v to live in: a bound one it must outlive or equal (O18b);
@@ -8243,7 +8344,9 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
         s.propose(x, slot)
     }
     if s.liftGather and k == Holds and exact and t != slot and s.order(slot, t) == FailsBlock {
-        s.proposeLocal(s.fitTarget, t, false)
+        s.partFlow = s.fitPart
+        s.proposeLocal(s.fitTarget, t, s.fitStor)
+        s.partFlow = false
     }
     if k == Holds and exact and t != slot {
         k = s.order(slot, t)
@@ -8676,8 +8779,7 @@ fn (s mut Scoper&) siteLift(site I64) Term {
 }
 
 # a lift proposed for local l - for the local its claim was taken from, where ":=" took it - to outlive t, its storage
-# with it where stor: lowering homes a local's storage in its frame, a scope variable or the program's (O26a), so its
-# storage goes only to one of those
+# with it where stor (a value local kept whole: built where it is kept, item 17)
 fn (s mut Scoper&) proposeLocal(l I64, t Term, stor Bool) {
     for _ in range s.origin.Len() {
         if l < 0 or l >= s.origin.Len() or s.origin[l] < 0 { break }
@@ -8730,10 +8832,12 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
         s.wLocals.Put(key, true)
     }
     grows := nt != cur
-    # a run-time array's elements are built where lowering says it keeps them (storageOf), a block's arena included; any
-    # other local's own storage only in a scope variable or the program's (O26a's homes)
+    # its own storage goes with it where that is elsewhere than its own block (item 17): lowering homes a local's storage
+    # where the plan stores it - its frame, a scope variable, the program's or an outer block's arena (a new object each
+    # time its declaration runs), and a run-time array's elements where it says it keeps them (storageOf)
     arr := s.arenaValue(s.B!.Locals[l].Ty) and not s.isRef(s.B!.Locals[l].Ty)
-    if stor and (arr or not isBlockTerm(nt)) and not s.liftStor.Has(key) {
+    moves := not isBlockTerm(nt) or nt != s.blockTerm(s.B!.Locals[l].In)
+    if stor and (arr or moves) and not s.liftStor.Has(key) {
         s.liftStor.Put(key, true)
         grows = true
     }
@@ -8759,7 +8863,10 @@ fn (s mut Scoper&) liftAtCall(c typed.Call&, r rel, lo Term) {
     if rv < 0 or r.Hi != Term.Var(rv) { return }
     # a result that may hold a destructor is never landed longer for what its callee requires of it - its destructor
     # would run later than where it stands (2.5's destructor timing); kept whole somewhere, it lifts with what keeps it
-    if s.mayHoldDtor(s.P.T.Result(s.calleeType(c))) { return }
+    # - unless the value is a by-value holder's (O15: its slot takes it as it is, nothing registered where the call lands)
+    # and holds no destructor through a reference (registered where its constructor built it, O16): C3
+    res := s.P.T.Result(s.calleeType(c))
+    if s.mayHoldDtor(res) and (I64(c.Site) != s.slotCall or s.dtorThroughRef(res)) { return }
     s.proposeSite(I64(c.Site), lo)
 }
 
@@ -9135,6 +9242,11 @@ fn (s mut Scoper&) buildsInto(t Term, sp source.Span, file I64, at source.Span) 
 # a build through a call at sp into term t, the callee building into its scope variable v there (E11c's note: the
 # callee's innermost site)
 fn (s mut Scoper&) buildsThrough(t Term, sp source.Span, callee I64, v I64) {
+    # (C1) bound to a derived scope - a field's binding of its own, which exists at no run time (O23a): the call is passed
+    # the program's scope there (the plan's Inert), which outlives whatever the field's referent lives in, so the callee
+    # builds there - never given back to the container's scope, which would ask the field's argument to live exactly
+    # where every instance does
+    if isDerived(t) { return }
     known := callee >= 0 and v >= 0 and (s.sums[callee].Done or s.sums[callee].Judging) and v < s.sums[callee].BuildAt.Len()
     saved := s.standIn
     # a callee building only its tasks' stand-ins there builds a stand-in here too

@@ -1,5 +1,8 @@
-# check: fail error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, hold it by value in a field, or give it a copy ('x.Copy()')
-# P2: a by-value argument is copied to the task, but what it refers to is the loop body's
+# check: run
+# flags: -sanitize
+# P2: a by-value argument is copied to the task, holding a reference to the loop body's array - refused while the array
+# closed with the turn; since item 17 it is built where the value keeping it is, one each turn, so each task reads its
+# own
 type W struct(a Array<I64>&) {
     a
 }
@@ -17,4 +20,5 @@ fn main() ? {
             spawn out[i] = total(wv)
         }
     }
+    assert out[0] == 1000 and out[1] == 2000 and out[2] == 3000 and out[3] == 4000
 }

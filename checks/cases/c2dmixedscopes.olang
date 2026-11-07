@@ -1,6 +1,9 @@
-# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
+# check: run
+# flags: -sanitize
 # C2d/O25e: a context struct whose writable field can be written through (diag) and whose other field refers to a Vec
-# the instance holds - built again in an inner block from that block's sink, it would outlive what it holds there
+# the instance holds - built again in an inner block from that block's diag. Refused while the inner block's local
+# closed with it; since item 17 that local is built where the instance keeping it is (the function's block); read back
+# after an arena churn
 import "std/io"
 Run mut I64 = 1
 type Diag struct() {
@@ -10,14 +13,27 @@ type Ctx struct(diag mut Diag&, nums Vec<I64>&) {
     diag
     nums
 }
+
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
 fn check() I64 {
     nums := Vec<I64>()
     nums.Push(4)
     c := Ctx(Diag(), nums)
     if Run > 0 {
         d := Diag()
+        d.col = 7
         c = Ctx(d, nums)
     }
-    return c.nums.Len()
+    churn()
+    return c.nums.Len() + c.diag.col
 }
 fn main() ? { try io.Println($check()) }

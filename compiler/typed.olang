@@ -1714,6 +1714,698 @@ fn (pl Plan&) Passed(site SiteId, i I64) Scope {
     return pl.passed[at - 1 + i]
 }
 
+# ---- copies at a local's last use (D9i) ----
+
+# where each local of a body is mentioned last, in the order the body evaluates them, and the copies of a value local
+# check made (MakeKind.Copy of a read of it) - a mention inside deferred code, a task or a join's clauses counts as
+# after everything (it may run later); one inside a loop is where it stands, the loop running before what follows it,
+# and a copy inside a loop not around the local's declaration is never its last use (it may run again)
+type LastUses struct(N I64) {
+    N
+    Last mut Array<I64>& = Array<I64>(N, -1)
+    depth mut Array<I64>& = Array<I64>(N, -1)   # the loop depth each local is declared at
+    seq I64 = 0
+    loops I64 = 0
+    later I64 = 0                                # > 0 inside code that runs after (defer, a task, a join's clauses)
+    CopySite Vec<I64>
+    CopyLocal Vec<I64>
+    CopyAt Vec<I64>       # the copy's position, -1 where it is in a loop the local is declared outside, or in later code
+    Said Vec<I64>         # the local each mention named, by its position (seq - 1)
+}
+
+fn (w mut LastUses&) mention(id LocalId) {
+    i := I64(id)
+    if i < 0 or i >= w.N: return
+    w.seq++
+    w.Said.Push(i)
+    w.Last[i] = I64.Max if w.later > 0 else w.Last[i].Max(w.seq)
+}
+
+fn (w mut LastUses&) declare(id LocalId) {
+    if I64(id) >= 0 and I64(id) < w.N and w.depth[I64(id)] < 0: w.depth[I64(id)] = w.loops
+}
+
+fn (w mut LastUses&) Block(b Block?&) {
+    if b is null: return
+    for s in b.Stmts { w.stmt(s) }
+}
+
+fn (w mut LastUses&) stmts(ss Array<Stmt&>&) {
+    for s in ss { w.stmt(s) }
+}
+
+fn (w mut LastUses&) laterBlock(b Block?&) {
+    w.later++
+    w.Block(b)
+    w.later--
+}
+
+fn (w mut LastUses&) stmt(s Stmt&) {
+    match s {
+        case Stmt.Let(_, l, x) {
+            w.declare(l)
+            w.expr(x)
+            w.mention(l)
+        }
+        case Stmt.Assign(_, p, x) {
+            w.place(p)
+            w.expr(x)
+        }
+        case Stmt.Eval(_, x), Stmt.Yield(_, x), Stmt.Reraise(_, x, _): w.expr(x)
+        case Stmt.Return(_, x), Stmt.Suspend(_, x), Stmt.Exit(_, _, x): w.expr(x)
+        case Stmt.If(_, f) {
+            w.expr(f.Test)
+            w.Block(f.Then)
+            w.Block(f.Else)
+        }
+        case Stmt.Loop(_, body, post) {
+            w.loops++
+            w.Block(body)
+            w.Block(post)
+            w.loops--
+        }
+        case Stmt.Assert(_, c, m) {
+            w.expr(c)
+            w.expr(m)
+        }
+        case Stmt.Block(_, b): w.Block(b)
+        case Stmt.Defer(_, b): w.laterBlock(b)
+        case Stmt.Join(_, j) {
+            w.Block(j.Code)
+            w.later++
+            w.clauses(j.Clauses)
+            w.later--
+        }
+        case Stmt.Spawn(_, sw) {
+            w.later++
+            for tg in sw.Targets {
+                if tg is not null: w.place(tg)
+            }
+            w.expr(sw.Task)
+            for c in sw.Clauses { w.expr(c.Handler) }
+            w.later--
+        }
+        case Stmt.Jump(_, _, _), Stmt.Raise(_, _, _) { }
+    }
+}
+
+fn (w mut LastUses&) clauses(cs Array<Clause&>&) {
+    for c in cs {
+        w.Block(c.Code)
+        w.exprs(c.Defaults)
+    }
+}
+
+fn (w mut LastUses&) exprs(xs Array<Expr&>&) {
+    for x in xs { w.expr(x) }
+}
+
+fn (w mut LastUses&) expr(x Expr?&) {
+    if x is null: return
+    match x {
+        case Expr.Lit(_, _, _), Expr.Data(_, _, _, _) { }
+        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p): w.place(p)
+        case Expr.Promote(_, _, pr): w.expr(pr.X)
+        case Expr.Call(_, _, c) {
+            s0, c0 := w.seq, w.CopySite.Len()
+            match c.Target {
+                case Callee.Value(f) { w.expr(f) }
+                case _ { }
+            }
+            w.exprs(c.Args)
+            w.apart(s0, c0)
+        }
+        case Expr.Make(_, _, m) {
+            s0, c0 := w.seq, w.CopySite.Len()
+            w.copyOf(m)
+            w.exprs(m.Items)
+            w.expr(m.Length)
+            w.apart(s0, c0)
+        }
+        case Expr.Collect(_, _, c) {
+            w.expr(c.Reserve)
+            w.loops++
+            w.Block(c.Loop)
+            w.loops--
+        }
+        case Expr.Prim(_, _, _, _, args): w.exprs(args)
+        case Expr.Slice(_, _, sl) {
+            w.place(sl.Base)
+            w.expr(sl.Lo)
+            w.expr(sl.Hi)
+        }
+        case Expr.Cond(_, _, k) {
+            w.expr(k.C)
+            w.expr(k.A)
+            w.expr(k.B)
+        }
+        case Expr.Seq(_, _, q) {
+            w.stmts(q.Stmts)
+            w.expr(q.X)
+        }
+        case Expr.Match(_, _, m) {
+            w.stmts(m.Held)
+            for a in m.Arms { w.arm(a) }
+            if m.NoMatch is not null: w.arm(m.NoMatch!)
+        }
+        case Expr.Try(_, _, tr) {
+            w.expr(tr.X)
+            w.clauses(tr.Clauses)
+        }
+        case Expr.Fn(_, _, f) { w.fnVal(f) }
+        case Expr.Text(_, _, tx) {
+            for pc in tx.Pieces {
+                if pc == Piece.Render: w.expr(pc.x)
+            }
+        }
+        case Expr.Away(_, _, y): w.expr(y)
+    }
+}
+
+fn (w mut LastUses&) fnVal(f FnVal&) {
+    match f {
+        case FnVal.Lambda(_, caps, _) { for cp in caps { w.expr(cp.Outer) } }
+        case FnVal.Adapter(_, recv, _) { w.expr(recv) }
+        case FnVal.Named(_) { }
+    }
+}
+
+fn (w mut LastUses&) arm(a Arm&) {
+    for alt in a.Alts {
+        w.expr(alt.Test)
+        for bd in alt.Binds {
+            w.declare(bd.To)
+            w.expr(bd.From)
+            w.mention(bd.To)
+        }
+    }
+    w.expr(a.Guard)
+    w.Block(a.Code)
+    w.expr(a.Value)
+}
+
+fn (w mut LastUses&) place(p Lvalue&) {
+    match p {
+        case Lvalue.Local(_, _, id): w.mention(id)
+        case Lvalue.Deref(_, _, r): w.expr(r)
+        case Lvalue.Field(_, _, base, _): w.place(base)
+        case Lvalue.Elem(_, _, e) {
+            w.place(e.Base)
+            w.expr(e.Index)
+        }
+        case Lvalue.Payload(_, _, py): w.place(py.Base)
+        case Lvalue.Temp(_, _, v, _): w.expr(v)
+        case Lvalue.Global(_, _, _, _), Lvalue.Target(_, _) { }
+    }
+}
+
+# (bulk review 7, F1) a copy made in one call's (or one made value's) operands is no move where another operand of it
+# mentions the same local - `peek(t, t)` lends t beside its copy, `part(t.a, t)` reads a part of it, `t.Peek(t)` is its
+# receiver: those names are alive for the very call the copy is an argument of, so the copy stays a copy
+fn (w mut LastUses&) apart(s0 I64, c0 I64) {
+    for k in range c0, w.CopySite.Len() {
+        at := w.CopyAt[k]
+        if at < 0: continue
+        for q in range s0 + 1, w.seq + 1 {
+            if q != at and w.Said[q - 1] == w.CopyLocal[k]: w.CopyAt[k] = -1
+        }
+    }
+}
+
+# a copy of a whole local's value (`P(t)`'s argument, `x.f = t`): recorded with where its read is - the mention the
+# walk makes next
+fn (w mut LastUses&) copyOf(m Make&) {
+    if m.Kind != MakeKind.Copy or m.Items.Len() != 1 or m.Site < SiteId(0): return
+    l := wholeLocal(m.Items[0])
+    if l < 0 or l >= w.N: return
+    w.CopySite.Push(I64(m.Site))
+    w.CopyLocal.Push(l)
+    late := w.later > 0 or (w.depth[l] >= 0 and w.loops > w.depth[l])
+    w.CopyAt.Push(-1 if late else w.seq + 1)
+}
+
+# the local whose whole value an expression reads, -1 for any other
+fn wholeLocal(x Expr&) I64 {
+    return match x {
+        case Expr.Read(_, _, p, _): I64(p.id) if p == Lvalue.Local else -1
+        case Expr.Away(_, _, y): wholeLocal(y)
+        case _: -1
+    }
+}
+
+# the copies of a whole value local body b's check made where it is mentioned last (D9i's candidates), by site: the
+# local each copies - lowering moves such a copy where nothing could tell (movable), and the scope pass builds the
+# local where a copy kept beyond its block goes (item 17)
+fn LastCopies(b Body&) Map<I64, I64> {
+    out Map<I64, I64>
+    if b.Root is null or b.Gen: return out
+    w := LastUses(b.Locals.Len())
+    w.Block(b.Root!)
+    for k in range w.CopySite.Len() {
+        l := w.CopyLocal[k]
+        if w.CopyAt[k] >= 0 and w.Last[l] == w.CopyAt[k]: out.Put(w.CopySite[k], l)
+    }
+    return out
+}
+
+# ---- where a holder's drop may run (O15) ----
+
+# the flags of body b's holders whose drop may run (check's dropOnExit: a Drop block registered with its block, `if flag
+# { Drop(x) }`): those set on some path reaching a way out of the block where deferred code runs - its end, a return, a
+# break or a continue leaving it, an error that may leave it (a raise, a call or an operation inside a try - leaving the
+# blocks inside its operand for a clause, and every open block where what no clause takes goes on - a try join). A flag
+# cleared before every such way out - a value handed on on every path - never runs its drop, so what effects say a body
+# does is what lowering's code does (A5). Conservative: an error going on leaves every open block (an outer clause may
+# take it), clearings in deferred code count for nothing, a loop is walked until its state settles. Not a way out: a
+# failed check - outside a test it ends the process, and in a test build the unwind ends the holders still holding (F5)
+# of a test that is over, which no caller resumes to see
+fn DropsRun(b Body&) Map<I64, Bool> {
+    w := dropWalk(b)
+    w.find(b.Root)
+    if w.flags.Len() > 0 and b.Root is not null: w.block(b.Root!)
+    return w.Run
+}
+
+type dropWalk struct(B Body&) {
+    B
+    flags Map<I64, I64>       # by flag local: its index in the state
+    may Vec<Bool>             # by flag: set on some path reaching here
+    dead Bool = false         # no path reaches here
+    depth I64 = 0             # the blocks open
+    pendFlag Vec<I64>         # the drops registered, by flag, and the depth of their block
+    pendAt Vec<I64>
+    loopBody Vec<BlockId>     # the loops being walked: each one's body, its depth, what its breaks and continues leave
+    loopAt Vec<I64>
+    brk Vec<Bool>             # (flags.Len() + 1 per loop, a loop's after the one before it - a save's shape, the last
+    cont Vec<Bool>            # "no path"
+    tryLeaves Vec<Bool>       # the trys around here, innermost last: whether what their clauses do not take leaves
+    tryDepth Vec<I64>         # ... the blocks open where each stands
+    tryFail Vec<Bool>         # ... and the paths reaching a point inside one that may fail (flags.Len() + 1 per try)
+    Run Map<I64, Bool>
+}
+
+# each Drop block's flag numbered, walked once over the body's deferred code
+fn (w mut dropWalk&) find(b Block?&) {
+    if b is null: return
+    for s in b.Stmts {
+        match s {
+            case Stmt.Defer(_, d): w.number(w.flagOf(d))
+            case Stmt.Block(_, d): w.find(d)
+            case Stmt.If(_, i) {
+                w.find(i.Then)
+                w.find(i.Else)
+            }
+            case Stmt.Loop(_, body, post) {
+                w.find(body)
+                w.find(post)
+            }
+            case Stmt.Join(_, j): w.find(j.Code)
+            case _ { }
+        }
+    }
+}
+
+fn (w mut dropWalk&) flagOf(d Block&) I64 { return DropFlag(w.B, d) }
+
+# flag f (-1: no Drop block's) given its place in the state
+fn (w mut dropWalk&) number(f I64) {
+    if f < 0 or w.flags.Has(f): return
+    w.flags.Put(f, w.may.Len())
+    w.may.Push(false)
+}
+
+# the flag local of body b's holder whose Drop block d is (check's dropOnExit), -1 for any other deferred code
+fn DropFlag(b Body&, d Block&) I64 {
+    if I64(d.Id) < 0 or I64(d.Id) >= b.Blocks.Len() or b.Blocks[I64(d.Id)].Kind != BlockKind.Drop: return -1
+    if d.Stmts.Len() != 1: return -1
+    s0 := d.Stmts[0]
+    if s0 != Stmt.If: return -1
+    t := s0.i.Test
+    if t != Expr.Read: return -1
+    p := t.p
+    if p != Lvalue.Local: return -1
+    return I64(p.id)
+}
+
+fn (w mut dropWalk&) save() Array<Bool> {
+    s := Array<Bool>(w.may.Len() + 1, false)
+    for k in range w.may.Len() { s[k] = w.may[k] }
+    s[w.may.Len()] = w.dead
+    return s
+}
+
+fn (w mut dropWalk&) restore(s Array<Bool>&) {
+    for k in range w.may.Len() { w.may[k] = s[k] }
+    w.dead = s[w.may.Len()]
+}
+
+# the paths of s joined into this one's
+fn (w mut dropWalk&) join(s Array<Bool>&) {
+    if s[w.may.Len()]: return
+    if w.dead {
+        w.restore(s)
+        return
+    }
+    for k in range w.may.Len() { w.may[k] = w.may[k] or s[k] }
+}
+
+# a point that may fail - a raise, a call or an operation inside a try: its path reaches the clauses of every try around
+# it, leaving the blocks opened inside the innermost one's operand on its way there, and where one of them lets an error
+# on, every open block is left
+fn (w mut dropWalk&) failHere(raised Bool) {
+    if w.dead: return
+    nf := w.may.Len()
+    leaves := raised
+    if w.tryDepth.Len() > 0: w.leave(w.tryDepth[w.tryDepth.Len() - 1])
+    for k in range w.tryLeaves.Len() {
+        b := k * (nf + 1)
+        for i in range nf { w.tryFail[b + i] = w.tryFail[b + i] or w.may[i] }
+        w.tryFail[b + nf] = false
+        if w.tryLeaves[k]: leaves = true
+    }
+    if leaves: w.leave(-1)
+}
+
+# a way out here leaving the blocks deeper than d: the drops they registered run where their flags may be set
+fn (w mut dropWalk&) leave(d I64) {
+    if w.dead: return
+    for k in range w.pendFlag.Len() {
+        if w.pendAt[k] > d and w.may[try w.flags.Get(w.pendFlag[k]) catch default 0]: w.Run.Put(w.pendFlag[k], true)
+    }
+}
+
+fn (w mut dropWalk&) block(b Block?&) {
+    if b is null: return
+    w.depth++
+    n := w.pendFlag.Len()
+    for s in b.Stmts { w.stmt(s) }
+    w.leave(w.depth - 1)
+    for w.pendFlag.Len() > n {
+        w.pendFlag.Pop()!
+        w.pendAt.Pop()!
+    }
+    w.depth--
+}
+
+# local l given x: a flag's state follows a literal (a clearing, a declaration), anything else may set it
+fn (w mut dropWalk&) setLocal(l I64, x Expr?&) {
+    k := try w.flags.Get(l) catch { return }
+    w.may[k] = not (x is not null and x == Expr.Lit and x.bits == 0)
+}
+
+fn (w mut dropWalk&) stmt(s Stmt&) {
+    if w.dead: return
+    match s {
+        case Stmt.Let(_, l, x) {
+            w.expr(x)
+            w.setLocal(I64(l), x)
+        }
+        case Stmt.Assign(_, p, x) {
+            w.place(p)
+            w.expr(x)
+            if p == Lvalue.Local: w.setLocal(I64(p.id), x)
+        }
+        case Stmt.Eval(_, x), Stmt.Yield(_, x): w.expr(x)
+        case Stmt.Suspend(_, x): w.expr(x)
+        case Stmt.Return(_, x) {
+            w.expr(x)
+            w.leave(-1)
+            w.dead = true
+        }
+        case Stmt.Reraise(_, x, _) {
+            w.expr(x)
+            w.failHere(true)
+            w.dead = true
+        }
+        case Stmt.Raise(_, _, _) {
+            w.failHere(true)
+            w.dead = true
+        }
+        # (what ends the process runs no deferred code)
+        case Stmt.Exit(_, _, m) {
+            w.expr(m)
+            w.dead = true
+        }
+        case Stmt.Assert(_, c, m) {
+            w.expr(c)
+            w.expr(m)
+        }
+        case Stmt.If(_, i) {
+            w.expr(i.Test)
+            s0 := w.save()
+            w.block(i.Then)
+            a := w.save()
+            w.restore(s0)
+            w.block(i.Else)
+            w.join(a)
+        }
+        case Stmt.Loop(_, body, post): w.loop(body, post)
+        case Stmt.Jump(_, kind, lp): w.jump(kind, lp)
+        case Stmt.Block(_, b): w.block(b)
+        case Stmt.Defer(_, d) {
+            f := w.flagOf(d)
+            # (one find did not number - in an arm's or a clause's code - runs, as far as this walk says)
+            if f >= 0 and not w.flags.Has(f): w.Run.Put(f, true)
+            if f >= 0 and w.flags.Has(f) {
+                w.pendFlag.Push(f)
+                w.pendAt.Push(w.depth)
+            }
+        }
+        case Stmt.Join(_, j) {
+            w.block(j.Code)
+            if j.Tried: w.failHere(true)
+            s0 := w.save()
+            for c in j.Clauses {
+                a := w.save()
+                w.restore(s0)
+                w.block(c.Code)
+                w.join(a)
+            }
+        }
+        case Stmt.Spawn(_, sw) {
+            for tg in sw.Targets { w.place(tg) }
+            w.expr(sw.Task)
+        }
+    }
+}
+
+# a loop: its body walked from what reaches its start - the way in, and each turn's end or continue - until that
+# settles; after it, what its breaks leave
+fn (w mut dropWalk&) loop(body Block&, post Block?&) {
+    nf := w.may.Len()
+    k := w.loopBody.Len()
+    w.loopBody.Push(body.Id)
+    w.loopAt.Push(w.depth)
+    for _ in range nf + 1 {
+        w.brk.Push(false)
+        w.cont.Push(false)
+    }
+    w.brk[k * (nf + 1) + nf] = true
+    start := w.save()
+    for {
+        w.restore(start)
+        for i in range nf + 1 { w.cont[k * (nf + 1) + i] = i == nf }
+        w.block(body)
+        w.join(w.loopState(false, k))
+        w.block(post)
+        if w.widen(start) == 0: break
+    }
+    w.restore(w.loopState(true, k))
+    w.loopBody.Pop()!
+    w.loopAt.Pop()!
+    for _ in range nf + 1 {
+        w.brk.Pop()!
+        w.cont.Pop()!
+    }
+}
+
+# loop k's share of its breaks' or its continues' state, as save gives one
+fn (w mut dropWalk&) loopState(brk Bool, k I64) Array<Bool> {
+    b := k * (w.may.Len() + 1)
+    return Bool[(w.brk[b + i] if brk else w.cont[b + i]) for i in range w.may.Len() + 1]
+}
+
+# start widened by what a turn's end brings it: how many flags (or a path) it had not got
+fn (w mut dropWalk&) widen(start mut Array<Bool>&) I64 {
+    if w.dead: return 0
+    n := 1 if start[w.may.Len()] else 0
+    start[w.may.Len()] = false
+    for i in range w.may.Len() {
+        if w.may[i] and not start[i]: n++
+        start[i] = start[i] or w.may[i]
+    }
+    return n
+}
+
+# a break or continue of the loop whose body is lp: the blocks inside it left, its state kept for after the loop or the
+# next turn
+fn (w mut dropWalk&) jump(kind JumpKind, lp BlockId) {
+    for k := w.loopBody.Len() - 1, k >= 0, k-- {
+        if w.loopBody[k] != lp: continue
+        w.leave(w.loopAt[k])
+        w.keepFor(kind == JumpKind.Break, k)
+        break
+    }
+    w.dead = true
+}
+
+# this path's state joined into loop k's share of its breaks' or its continues' state
+fn (w mut dropWalk&) keepFor(brk Bool, k I64) {
+    nf := w.may.Len()
+    b := k * (nf + 1)
+    for i in range nf {
+        if not w.may[i]: continue
+        if brk: w.brk[b + i] = true
+        else: w.cont[b + i] = true
+    }
+    if brk: w.brk[b + nf] = false
+    else: w.cont[b + nf] = false
+}
+
+fn (w mut dropWalk&) exprs(xs Array<Expr&>&) {
+    for x in xs { w.expr(x) }
+}
+
+fn (w mut dropWalk&) expr(x Expr?&) {
+    if x is null or w.dead: return
+    match x {
+        case Expr.Lit(_, _, _), Expr.Data(_, _, _, _) { }
+        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p): w.place(p)
+        case Expr.Promote(_, _, pr): w.expr(pr.X)
+        case Expr.Call(_, _, c): w.call(c)
+        case Expr.Make(_, _, m) {
+            w.exprs(m.Items)
+            w.expr(m.Length)
+        }
+        case Expr.Collect(_, _, c) {
+            w.expr(c.Reserve)
+            w.loop(c.Loop, null)
+        }
+        case Expr.Prim(_, _, _, _, args) {
+            w.exprs(args)
+            w.failHere(false)
+        }
+        case Expr.Slice(_, _, sl) {
+            w.place(sl.Base)
+            w.expr(sl.Lo)
+            w.expr(sl.Hi)
+        }
+        case Expr.Cond(_, _, k) {
+            w.expr(k.C)
+            s0 := w.save()
+            w.expr(k.A)
+            a := w.save()
+            w.restore(s0)
+            w.expr(k.B)
+            w.join(a)
+        }
+        case Expr.Seq(_, _, q) {
+            for st in q.Stmts { w.stmt(st) }
+            w.expr(q.X)
+        }
+        case Expr.Match(_, _, m): w.match(m)
+        case Expr.Try(_, _, t): w.try(t)
+        case Expr.Text(_, _, tx) {
+            for pc in tx.Pieces {
+                if pc == Piece.Render: w.expr(pc.x)
+            }
+        }
+        case Expr.Away(_, _, y): w.expr(y)
+        case Expr.Fn(_, _, f) {
+            match f {
+                case FnVal.Lambda(_, caps, _) { for cp in caps { w.expr(cp.Outer) } }
+                case FnVal.Adapter(_, recv, _) { w.expr(recv) }
+                case FnVal.Named(_) { }
+            }
+        }
+    }
+}
+
+# a call: its arguments in order, a hand-on's clearing after every one of them (lowering's handedOver), then the call
+fn (w mut dropWalk&) call(c Call&) {
+    match c.Target {
+        case Callee.Value(f) { w.expr(f) }
+        case _ { }
+    }
+    gone Vec<Stmt&>
+    for a in c.Args {
+        if a == Expr.Seq and a.s.Gone and a.s.X is not null {
+            for st in a.s.Stmts { gone.Push(st) }
+            w.expr(a.s.X)
+        } else {
+            w.expr(a)
+        }
+    }
+    for st in gone { w.stmt(st) }
+    w.failHere(false)
+}
+
+fn (w mut dropWalk&) match(m Match&) {
+    for st in m.Held { w.stmt(st) }
+    s0 := w.save()
+    out := w.save()
+    out[w.may.Len()] = true
+    arms Vec<Arm&>
+    for a in m.Arms { arms.Push(a) }
+    if m.NoMatch is not null: arms.Push(m.NoMatch!)
+    for a in arms {
+        w.restore(s0)
+        for alt in a.Alts {
+            w.expr(alt.Test)
+            for bd in alt.Binds { w.expr(bd.From) }
+        }
+        w.expr(a.Guard)
+        w.block(a.Code)
+        w.expr(a.Value)
+        cur := w.save()
+        w.restore(out)
+        w.join(cur)
+        out = w.save()
+    }
+    w.restore(out)
+}
+
+# a try: what its operand may fail with that no clause takes leaves (an end, "!", runs no deferred code); each clause
+# runs from the points inside the operand that may fail
+fn (w mut dropWalk&) try(t Try&) {
+    nf := w.may.Len()
+    k := w.tryLeaves.Len()
+    w.tryLeaves.Push(t.Left and not t.Ends)
+    w.tryDepth.Push(w.depth)
+    for _ in range nf { w.tryFail.Push(false) }
+    w.tryFail.Push(true)
+    w.expr(t.X)
+    fail := Array<Bool>(nf + 1, false)
+    for i in range nf + 1 { fail[i] = w.tryFail[k * (nf + 1) + i] }
+    w.tryLeaves.Pop()!
+    w.tryDepth.Pop()!
+    for _ in range nf + 1 { w.tryFail.Pop()! }
+    if t.Clauses.Len() == 0: return
+    s1 := fail
+    for c in t.Clauses {
+        a := w.save()
+        w.restore(s1)
+        w.block(c.Code)
+        w.exprs(c.Defaults)
+        w.join(a)
+    }
+}
+
+fn (w mut dropWalk&) place(p Lvalue?&) {
+    if p is null: return
+    match p {
+        case Lvalue.Deref(_, _, r): w.expr(r)
+        case Lvalue.Field(_, _, base, _): w.place(base)
+        case Lvalue.Elem(_, _, e) {
+            w.place(e.Base)
+            w.expr(e.Index)
+        }
+        case Lvalue.Payload(_, _, py): w.place(py.Base)
+        case Lvalue.Temp(_, _, v, _): w.expr(v)
+        case _ { }
+    }
+}
+
 # ---- reading a tree ----
 
 fn (x Expr&) Span() source.Span {

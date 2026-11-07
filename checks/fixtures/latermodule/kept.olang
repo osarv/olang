@@ -1,9 +1,20 @@
-# beside view.olang: mat.View's result holds its data, so a view of an array made in a loop's body cannot be kept in a
-# list outliving the loop (O10c) - it was accepted, and read freed memory: Mat's Data field is a conditional (a slice of
-# the data, else a new array), and a constructor field given one was not held to the instance (C2d). d is fixed storage
-# (T7d), lent to View as its widened reference: the instance View returns holding it is what is said
+# beside view.olang: mat.View's result holds its data, so a view of an array made in a loop's body, kept in a list
+# outliving the loop, holds that array - it was accepted reading freed memory (Mat's Data field is a conditional, a
+# slice of the data or a new array, and a constructor field given one was not held to the instance, C2d), then refused;
+# since item 17 the array, a loop turn's local lent whole, is built where the list keeping it is - one each turn, read
+# back after an arena churn. d is fixed storage (T7d), lent to View as its widened reference
 import "std/io"
 import "mat"
+
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
 
 fn main() ? {
     ms := Vec<mat.Mat<F64>>()
@@ -11,5 +22,6 @@ fn main() ? {
         d := Array<F64>(4, F64(i))
         ms.Push(try mat.View(d, 0, 2, 2))
     }
+    churn()
     io.Println($ms[0].Get(1, 1) " " $ms[2].Get(1, 1))!
 }

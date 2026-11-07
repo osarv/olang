@@ -29052,3 +29052,182 @@ function, where the error points.
 **Found on the way, not fixed (pre-existing):** C2d refuses `h HeldTwo = HeldTwo(r, 4)` where `r` is a by-value
 parameter of a unique type holding a `mut` reference (`Res(id, log mut Tally&)`) - the same family as wt-uniq's T17c
 over-rejection (a by-value parameter holding a reference put into an enum case), queued as step 7 of the week's plan.
+
+## A kept local built where it is kept; drop flags in effects; three over-rejections (2026-11-07, wt-kept)
+
+The round after bulk review 7's fixes: item 17 (the user's decision of 2026-11-03, "If we store something that we create
+in a loop ... we should be creating it at the scope of the thing we're storing it in. Basically just the already
+existing scoping rules"), drop flags in the effect summaries (LIST.md A5), and three over-rejections found by wt-uniq and
+bulk review 7 (C1, C2, `HeldTwo(r, 4)`). Built in wt-kept by two agents - the first was stopped by a container restart
+after committing item 17's code; the second checked it, gave it its records and the evaluator's agreement, and did the
+rest.
+
+**Item 17: a local kept past its block or loop turn is built where it is kept (O28, O17, D9i).** Until now the scope
+pass lifted a value local's *parts* where they were kept, but its own storage only to a scope variable or the
+program's (O26a's homes): a local lent whole to a callee keeping a reference to it (`hs.Push(H(p))` with `H struct(p
+P&)`), or borrowed by a reference kept longer, stayed in its frame slot - one slot every turn of a loop reuses - so
+every kept reference would have named the last turn's value. Bulk review 6 (F3) had made that an error (O17's "binds
+where its own storage is", C2d at the keeping call); the user's decision made it placement instead. **How (the first
+agent's, mine to describe):** (1) `scope.liftLocal` takes the local's own storage with it wherever the lift's term is
+other than its own block - an outer block included (`liftStor`, `plan.Stored`); (2) `lower.homeKept` homes such a
+local's storage in that block's arena from its declaration on - its `Live` makes a new object there each time the
+declaration runs, so a loop's turns never share one; an array of a run-time length keeps its frame slot (its reference
+is the pair naming its elements, which `storageOf` already builds where the plan keeps them), a fixed one moves with
+the rest; (3) a whole local copied at its last mention into storage outliving its block (`rows.Push(rec)`, check's
+`MakeKind.Copy` of a read of it, D9i's candidates - `typed.LastCopies`, the last-use walk moved from lowering to typed
+so both passes ask the same) is lifted to where that copy goes (`scope.liftCopied`), so D9i's "lives at least as long
+as where the copy is built" holds and lowering moves it there instead of copying it out of a turn that closes first;
+(4) a value's own copy, or a conversion of one (`String(chars)`), promoted to a reference of a run-time-length array is
+made where the reference goes (`lower.promotedCopy`), not made and copied there again - os.Args' per-argument copy.
+
+**What the second agent found checking it.** (a) The twenty `checks/cases` programs the commit turned from must-fail into
+run cases each still test what their names say, now as soundness tests: every one runs under `-sanitize` and reads what
+it kept back after an arena churn (`churn()`, three hundred turns writing text and arrays where a closed turn's storage
+would be reused), and the ones that guarded bulk review 6's F3 (`o17ownturn*`) print every kept value, so a placement
+that shared one slot between turns fails their stored output (`recs 12345`, not `55555`). The one case whose point was
+the refusal itself, `c2dnoclone` (a value of a type with no Clone is not told to copy it), was moved onto a by-value
+parameter - storage the caller made, which nothing can build where the instance goes - and still fails as named. (b) The
+commit had no records: SPEC's O17 still said "a loop turn's local is one slot every turn reuses, so keeping it past the
+turn is the error C2d names", O28 and D9i said nothing of it, and neither HISTORY nor CLAUDE.md had it - written now.
+(c) **The compile-time evaluator disagreed with the run time** - checklist step 3. A body lowered while compiling has no
+plan; the stand-in placement homed in the program's scope only a local escaping hard or flowing into a reference-holding
+result, so a local lent read-only or writably to a callee keeping a reference to it kept its frame slot: the evaluator
+gave every kept reference the last turn's value (`vecs(4)`, `nested(3)`, `reassigned(3)` decided false while compiling)
+or read a closed frame ("uses storage after the scope it was made in closed"), where the run time and `interpret`
+(placed by the scope pass, B3e) read each turn's own. `lower.standInAway` now also homes in the program's scope a local
+given to a body that may keep a reference to it - read-only (`escapes`: a `RefAt` whose callee's `keepsNoRef` fails)
+or writably (`lendsKeep`: a `LendAt` whose callee does not `preserve` it) - its `Live` making a new value per
+declaration as the planned placement's does. Conservative (a Vec pushed to in a loop is homed so too; the stand-in
+already built its buffer in the program's scope, so the cost is its record per turn), and only while compiling.
+`tests/kept.olang` holds eight shapes - every turn, some turns, a Vec kept and pushed to after, an array lent whole, an
+outer block that is itself a turn, a local assigned whole after it is kept, a whole local moved into what outlives its
+turn, text a turn builds stored into a result - each read back after a churn at run time and decided by top-level
+asserts while compiling.
+
+**Soundness (for the next bulk review).** The placement only lengthens where a local lives - from its own block to an
+enclosing block's (or a scope variable's, or the program's) - so no reference the scope pass already judged against the
+local can outlive it; it is judged against the new term (`plan.Stored`) wherever it is read. Each execution of the
+declaration makes a new object (`Live` in that arena), so values of different turns are never one storage, which is
+what F3's refusal protected. A holder of a value with destructors so homed lets go where it lives (bulk review 7's F4,
+`escapedHome`), never at its own block's end. `liftCopied` only lifts; whether the copy is then left out stays
+lowering's `movable` decision (D9i's conditions), so where it is not, the local is built longer and copied - memory,
+never safety. The stand-in's extra homes are the program's scope, which outlives everything the evaluator runs.
+
+**Measured.** os.Args (std/os `Args`, a program built at -O3 + LTO by master 654d60d's sources against this round's):
+`Args` 341 -> 320 instructions, three `memcpy` calls -> one (the argument's bytes from argv; the String's own copy of
+them gone), four allocation sites -> three. Memory (`/usr/bin/time`, maximum resident): 2M turns each keeping a
+16-byte struct by reference beside a text temporary - 66 MB (the temporaries reclaimed per turn; 48 MB is what is
+kept, the rest the holder Vec's doubling); the same keeping one turn in a thousand - 34 MB, ~17 bytes a turn: the
+placement is the program's, not a turn's, so the local is built where it is kept on every turn, kept or not (what
+O26a already did for a local returned from a loop body - stated in O28 now). A `Vec<I64>` kept by a holder costs ~620
+bytes a turn, kept or not (its buffer's first growth makes an early-freeing region - a 152-byte header and a chunk -
+in the outer scope, round 8's machinery; a Vec moved into a `Vec<Vec<I64>>` costs ~155): recorded as a limit, the
+region for a buffer nothing lets go of being an optimization for later.
+
+**Drop flags in the effect summaries (LIST.md A5).** wt-uniq's holders let go through deferred code registered at
+their declaration, `if flag { Drop(x) }` (check's `dropOnExit`), the flag cleared where the value is handed on. The
+effect summaries (compiler/effects.olang - explain's `# effects:` line, G42's facts, E31d's "a declared Copy only
+builds", E31b's in-place calls) walked that deferred code like any other and counted the drop wherever it stood, flag or
+no flag: `fn wrap(r Res) Kept { return Kept(r) }` read as running `Res`'s destructor, so a holder's declared Copy calling
+it was E31d's error though no path ever runs the drop. Now (`typed.DropsRun`, begun by the first agent, finished by the
+second) a forward walk over the body's typed core finds the flags set on some path reaching a way out of the block that
+registered the drop - its end, a return, a break or continue leaving it, an error that may leave it (a raise, a call or
+operation inside a try: the blocks inside its operand are left on the way to a clause, every open block where what no
+clause takes goes on; a try join) - and effects walk only those drops; the others are deferred code that never runs its
+body. **Decided (mine):** a hand-on's clearing comes after every argument of its call, as lowering clears it (F3), so an
+argument leaving before the call keeps the drop counted; an error going on is taken to leave every open block (an outer
+clause may take it - conservative); clearings in deferred code count for nothing; a Drop block in an arm's or a
+clause's code (none is made there today) counts as running; loops are walked until their state settles (breaks and
+continues carry their state, a continue reaching the next turn's start). A failed check is no way out here: outside a
+test it ends the process, and in a test build the unwind ends the holders still holding (bulk review 7, F5) of a test
+that is over - no caller resumes to observe it, and no reader of the summaries (E31b's in-place write, which never lands
+then) needs it. Fixed on the way in the first agent's draft: an error a try's clause takes left no block inside the
+try's operand (a drop registered there and still holding would have been missed - unsound for E31b), a lambda's
+captures and an adapter's receiver were not walked, and a continue from a turn whose end no path reached was lost.
+**Soundness:** the walk over-approximates where lowering's code runs a drop - every way out lowering's `runDefers` runs
+deferred code on is a `leave` here, every flag store is followed (a literal 0 clears, anything else may set), and every
+merge is a union - so a drop it leaves out runs on no path; what it leaves out is exactly what the flag never allows.
+tests/drops.olang: a declared Copy calling a function handing its parameter on (run and decided while compiling) and
+G42's `WritesGlobals` pinned on one handing it on in every branch (false) and in one (true);
+checks/cases/e31dcopydroperror.olang: a Copy calling one that may fail after the hand-on, the holder still holding, is
+still E31d's error.
+
+**C1: a destructor building through its instance's reference field by a method (O23a, C2d).** `destruct { log.Saw(id)
+}`, `Saw` growing a Vec in the Tally `log` refers to, made every instance holding a local's Tally in an inner block C2d's
+"this instance holds a reference to an argument it would outlive", where `destruct { log.seen.Push(id) }` written
+inline was accepted (tests/drops.olang wrote it inline). Found (traced through the call bindings): `log` is a field the
+inference gives a binding of its own (O23a: the instance is shorter-lived than the Tally), read in the destructor at a
+derived scope; `Saw` builds into its receiver's scope variable, and a build through a derived scope - which exists at no
+run time - was refused and the field's promotion given back (2.6, step 4), so the field read at the instance's scope
+and the receiver had to be exactly there: C2d at every instance shorter-lived than its Tally. The inline form escaped
+only because `Push`'s receiver type admits no stores, so no build was counted - and the plan, holding no run-time scope
+for a derived one (`Inert`), passed the program's: the grown buffer was built in the program's scope. **Fixed (mine):**
+a call building into a scope variable bound to a derived scope is passed the program's scope there - what the plan
+already passed - and neither refused nor given back (`scope.buildsThrough`), so the method form means what the inline
+form meant. SPEC O23a and C2d say so. **Soundness:** what the callee builds lives in the program's scope, which
+outlives the field's referent wherever that lives, so nothing it stores into the referent can dangle; every relation
+the callee's obligations state between that variable and others is still judged against the derived scope (the
+referent's own scope, resolved per call - O23a), unchanged, so a reference the callee stores or hands back is held to
+the referent's real lifetime, never to the program's; only the storage made is longer-lived. Temporaries put where a
+derived scope's referent lives, or a result landing there, stay refused (O12's and O23a's errors). The cost is memory:
+what such a call builds stays until the program ends (the grown buffers of a long-lived Tally - which the inline form
+already paid). Two must-fail cases had been refused only for this - a reference read through a field with a binding of
+its own built through (`derivedcopybuild`, `strderivedcallback`): their builds now go to the program's scope, so they
+became `-sanitize` run cases reading the built node back after an arena churn. tests/drops.olang: `Logged`, whose
+destructor calls `log.Saw(id)`, made in an inner block and in 38 loop turns, read back after a churn, run and decided
+while compiling.
+
+**C2: an enum case holding a by-value parameter's reference, given to a local (T17c).** `m := Maybe.Some(r)` (and `m
+Maybe = ...`, `m = Maybe.Some(r)`, `ms.Push(Maybe.Some(r))` into a local Vec), `r` a by-value parameter holding a `mut`
+reference, was T17c's "this value's payload refers to storage the value would outlive" - plain structs as well as
+unique ones - while `return Maybe.Some(r)` and the same struct (`HeldR(r)`) were accepted. A payload lives where its
+value does (T17c), so its references must be exactly where the value is where something can be stored through them;
+the value was the local's, in the local's block, and the inference never proposed the local longer: an enum case is a
+value made (`MakeKind.Case`), not a call, so the payload's fit ran with no local to lift (`fitTarget` -1), where a
+constructor's C2d obligations lift through `liftAtCall`. **Fixed (mine):** the local an enum case is declared or
+assigned as (`caseLocal`, consumed by the outermost expression `val` judges), or the local whose argument decides where
+it is built when it is passed by value (`bindingArg`: the argument that bound the scope variable, or the one a callee's
+obligation ties it to - `ms` for `ms.Push(...)`), is the payload fit's target: a payload exactly where a longer scope's
+references are proposes that local's claim there, its storage with it where `propose` would take it (a lent Vec's, so it
+is no split value - O17). SPEC T17c says so. **Soundness:** only the local's references' scope is lengthened - to the
+scope of what its payload refers to, which outlives the local's block - the same placement O28 makes for any local whose
+value must outlive its block; the exact fit is then judged against the new claim, and a payload from a scope that cannot
+be placed there (a by-value parameter's own storage, the callee's copy) stays refused
+(checks/cases/t17ccaseparamcopy.olang, C2d at the case's argument). One must-fail case had pinned the old refusal,
+`rv3payloadcopy` (`e := E.A(r)`, `r` a `mut Box&`, the payload a copy of the Box whose `head` reference something can be
+stored through): the same copy held by a struct (`h := HB(r)`) was accepted on master, and now the case's local's
+references are placed where the Box's are, so a node built through `e.b.head` lands where `r`'s referent lives - it
+became a `-sanitize` run case reading that node back through `r` after a churn. A local assigned a case referring to a local of
+the function after one referring to a parameter's referent has that local lifted too (built where the parameter's
+references live, a new one per call) - checked at run time under `-sanitize`. tests/kept.olang: a local declared,
+assigned and pushed into, a write through the payload's reference reaching the caller's, after a churn, run and decided
+while compiling; tests/drops.olang: the same with a destructor value, ended at the function's end.
+
+**C3: `h HeldTwo = HeldTwo(r, 4)` (C2d, O16, bfix7's "found on the way").** With `r` a by-value parameter of a unique
+type holding a `mut` reference and HeldTwo holding it by value, the instance's references had to be exactly where
+`r`'s are, which the inference meets by landing the constructor's call there - but `liftAtCall` refuses to land longer
+any call whose result may hold a destructor (2.5's destructor timing: a value registered where its call lands, O16,
+would have its destructor run later). Without a destructor the same program was accepted. **Fixed (mine):** a call
+whose value a by-value holder's slot takes as it is (O15: `check.heldValue` peeled its Promote, so nothing is
+registered where it lands; `slotCall`, the Let's initializer call when the local's type `NeedsDrop`) may be landed
+longer, unless its value also holds a destructor value through a reference (`dtorThroughRef` - registered where it was
+built, O16) - checks/cases/c2dheldregistered.olang keeps that refused. SPEC O16 says so. **Soundness:** landing changes
+the call's result scope (where its constructor builds the instance's storage-owning parts), not where the holder's own
+storage is - `h` stays in its block's frame slot, its drop flag and deferred drop unchanged, so its destructors run as
+its block is left, as before (tests/drops.olang reads the order back: `142536`, each value ended at its function's end);
+what the constructor builds lives in a scope that outlives the block, so nothing the instance refers to dangles. The
+refusal still holds wherever a destructor value is registered by the landing, which is what 2.5 protects.
+
+**Found on the way, not fixed (pre-existing - master 654d60d too).** Building `tests/runner.olang`'s tests a second
+time in one build directory fails to link: `undefined reference to tests/runner.DoubleIt` (a function of the root
+module that worker.olang, which runner imports and which imports runner back, also calls). `OLANG_CHECKREUSE=1` says
+the root's object differs from a fresh emission: with worker's object reused (B3i), the root's object no longer holds
+the root's own function the tests call. A clean build (`make verify`) never meets it; a second `make rungold` did, and
+recorded runner as failing - its stored lines were restored from the first capture. Not reduced to a small program (a
+two-module cycle with a test and a main builds again cleanly); left for the next round on objects reused.
+
+**The round's gate.** `make verify` passed on c5e751b (the clean build, the bootstrap from the seed - no seed needed,
+nothing the seed's compiler cannot build - and the suite); the next commit only reorders the scope pass's new fields
+and moves two functions above another's comment (its tokens, tree and layout goldens recaptured), and `make quick`
+passed on it, then `make scopesan` and `make scopefuzz` (100 programs, 474 scenarios, 726 refused by the compiler, 0
+findings).

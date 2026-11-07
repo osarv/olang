@@ -1,7 +1,9 @@
-# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
+# check: run
+# flags: -sanitize
 # C2g, D16d (the unpar review): a constructor field's lambda captures the argument, so the instance holds it - kept in a
-# list outliving the loop body the argument dies with, it is refused. It was accepted, the closure in the
-# constructor's frame, and read freed memory
+# list outliving the loop body. It was accepted with the closure in the constructor's frame, reading freed memory, then
+# refused; since item 17 the argument, a loop turn's local, is built where the instance keeping it is - read back after
+# an arena churn
 import "std/io"
 
 type M struct(n I64, data Array<I64>&) {
