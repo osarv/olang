@@ -318,6 +318,50 @@ test "a narrowed payload's array field is indexed in place" {
     assert second(Live - 5) == -10 and second(Live + 2) == 2
 }
 
+# T19b (bulk review 8): text and arrays held by value inside a payload's structs, enums, arrays and error values are the
+# payload's own, as text at its top is
+type Where struct(file String, row I64) { file, row }
+type Shape enum { Named(t String), Anon }
+type Inner error { Bad(msg String) }
+type Nested error { At(at Where), Kind(s Shape), Many(names Array<String>), Wrap(inner Inner) }
+
+fn nested(i I64) ? Nested {
+    t := $"f" $i
+    if i % 4 == 0: error Nested.At(Where($t ".olang", i))
+    if i % 4 == 1: error Nested.Kind(Shape.Named($"n" $t))
+    if i % 4 == 2: error Nested.Many(Array<String>[$t, $"x" $i])
+    error Nested.Wrap(Inner.Bad($"inner " $t))
+}
+
+fn nestedSaid(i I64) String {
+    try nested(i) catch Nested e { return $e }
+    return "none"
+}
+
+fn nestedKept(n I64) Vec<Nested> {
+    out := Vec<Nested>()
+    for i in range n {
+        try nested(i) catch Nested e { out.Push(e) }
+        for _ in range 20 {
+            v := Vec<String>()
+            v.Push("churn" $i)
+        }
+    }
+    return out
+}
+
+NestedBaked String = nestedSaid(6)
+assert nestedSaid(1) == "Nested.Kind(Shape.Named(\"nf1\"))"
+
+test "text inside a payload's structs, enums, arrays and errors is its own" {
+    assert NestedBaked == "Nested.Many(Array<String>[\"f6\", \"x6\"])" and nestedSaid(Live + 6) == NestedBaked
+    ks := nestedKept(Live + 8)
+    assert $ks[0] == "Nested.At(Where(\"f0.olang\", 0))" and $ks[3] == "Nested.Wrap(Inner.Bad(\"inner f3\"))"
+    assert $ks[5] == "Nested.Kind(Shape.Named(\"nf5\"))" and $ks[7] == "Nested.Wrap(Inner.Bad(\"inner f7\"))"
+    k := ks[2]
+    if k == Nested.Many: assert k.names[1] == "x2"
+}
+
 # R3b (bulk review 8): the module's first raise in source order settles a raised error's fields, whichever is checked
 # first - lateA's, though lateA calls lateB, whose raise is met before it
 fn lateA(n I32) I64 ? {
