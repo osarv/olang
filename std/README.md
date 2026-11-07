@@ -12,7 +12,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `filepath.olang` | path text: `Dir`, `Base`, `Ext`, `Join`, `Clean`, `Rel` |
 | `time.olang` | monotonic and wall clocks, `Duration` and `Sleep`, `Date` with RFC 3339 `Format`/`Parse`, `After`'s timers, and `Virtual(f)` - a virtual clock for tests |
 | `rand.olang` | seeded xoshiro256** generator |
-| `list.olang` | `List<T>`: a growable sequence that never moves what it stores (chunks doubling in size) - for when a `Vec`'s growth copying its elements is what is to be avoided; `list.List.Of(a)`, `list.List.From(it)`, `list.Error`, `list.Iter` |
+| `list.olang` | `List<T>`: a growable sequence that never moves what it stores (chunks doubling in size) - for when a `Vec`'s growth copying its elements is what is to be avoided; `list.List.Of(a)`, `list.List.FromIter(it)`, `list.Error`, `list.Iter` |
 | `set.olang`, `deque.olang`, `heap.olang` | `Set<T>` over Map, a double-ended ring `Deque<T>`, a binary `Heap<T>` ordered by a function |
 | `bitset.olang` | `BitSet<T>`, the cases of a payload-free enum (at most 64) in one `U64`: `in`, `\| & - ^`, a walk in case order, `Bits`/`Flags` for C flag words |
 | `order.olang` | `ByFields<T>`, a `less` function for a struct or enum made from its fields (`xs.Sort(order.ByFields<T>)`) |
@@ -75,7 +75,7 @@ stays in.
   record's rows held as one array per field, T7e); every other container is a module above (QZ2). Vec,
   Map, StringBuilder, Set, Deque and Heap hold their storage by value - a copy is one of their own, shared only through
   `&`, an element changed in place with `Ref`/`RefMut` - and std/list's `List` is the one handle (a copy names the
-  same list - its `Copy()` shares it, `list.List.From(l.Iter())` builds a list of its own). Every value has a `Copy()` (E31d).
+  same list - its `Copy()` shares it, `list.List.FromIter(l.Iter())` builds a list of its own). Every value has a `Copy()` (E31d).
   `array`, `text` (`String`), `vec`, `map`, `iterator` (the helpers - `Map`, `Filter` and `ToVec` building a Vec - and the adapters `Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `TakeWhile`, `SkipWhile`, `StepBy`, `FlatMap`, `Sum`, `Min`/`Max`, `MinBy`/`MaxBy`, and `Partition` into two Vecs, `Scan`, `GroupBy`, `ChunkBy`, `Dedup`, `Unzip`, `Product`, `Last`, `Nth`; `Reversed`, `Cycle`, `LowerBound` and `BinarySearch` for a Vec or any type with `At` and `Len`; an array's `Reversed`, `Windows`, `TakeWhile`/`SkipWhile` views, `Partition`, `Cycle`, `LowerBound`, `BinarySearch` and `ChunkBy` views), `hash`, `number` (the numeric traits,
   the constants `Pi`, `Euler`, `Inf`, `NaN`, and the numbers' methods: every C math function on the floats -
   `x.Sqrt()`, `y.Atan2(x)` - and `Abs`, `Min`, `Max`, `Clamp`, `Pow`, `Sqrt` on the integers), `float`, `complex`, `f8`,

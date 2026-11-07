@@ -640,6 +640,11 @@ type Diag enum {
     NestedArrayLiteral
     ErrorAsResult
     ComprehensionReferences
+    LiteralNoFromIter
+    LiteralNotMade
+    FromIterShape
+    LiteralEntries
+    LiteralNoEntries
     NotAnEnum
     TakesNoArgs
     MethodAmbiguous
@@ -2577,7 +2582,7 @@ fn RestNoSlice(ty String&) r.Msg { return r.Msg(Diag.RestNoSlice, "S13h", "a nam
 fn ElemsNotSeq(ty String&) r.Msg { return r.Msg(Diag.ElemsNotSeq, "S13h", "an array pattern matches an array, text or a type declaring At and Len - " $ty " is none of them") }
 
 # ERR_ELEMS_TYPE
-fn ElemsType(written String&, elem String&) r.Msg { return r.Msg(Diag.ElemsType, "S13h", "this array pattern's elements are " $written ", and what is matched holds " $elem " - write '" $elem "[...]'") }
+fn ElemsType(written String&, elem String&) r.Msg { return r.Msg(Diag.ElemsType, "S13h", "this array pattern's elements are " $written ", and what is matched holds " $elem " - write 'Array<" $elem ">[...]'") }
 
 # ERR_STRUCT_PAT_NO_FIELD
 fn StructPatNoField(ty String&, text String&, hint String&) r.Msg { return r.Msg(Diag.StructPatNoField, "S13i", $ty " has no field '" $text "' - a struct pattern names the fields it matches, never its constructor's parameters" $hint) }
@@ -2836,10 +2841,25 @@ fn BangNothingFails() r.Msg { return r.Msg(Diag.BangNothingFails, "E35", "nothin
 # ERR_TRY_ONLY_CHECKS
 
 # ERR_NESTED_ARRAY_LITERAL
-fn NestedArrayLiteral() r.Msg { return r.Msg(Diag.NestedArrayLiteral, "E21", "there are no nested array literals - each array is a literal of its own: Array<I32, 2>[I32[1, 2], I32[3, 4]]") }
+fn NestedArrayLiteral() r.Msg { return r.Msg(Diag.NestedArrayLiteral, "E21", "there are no nested array literals - each array is a literal of its own: Array<Array<I32>>[Array<I32>[1, 2], Array<I32>[3, 4]]") }
 
 # ERR_COMPREHENSION_REFERENCES
 fn ComprehensionReferences() r.Msg { return r.Msg(Diag.ComprehensionReferences, "E27", "a comprehension's elements may not be or hold references yet - build the array with a loop") }
+
+# ERR_LITERAL_NO_FROM_ITER
+fn LiteralNoFromIter(ty String&) r.Msg { return r.Msg(Diag.LiteralNoFromIter, "E19", "a literal makes the type before its '[', through that type's FromIter, and " $ty " has none - for an array of " $ty ", write Array<" $ty ">[...]") }
+
+# ERR_LITERAL_NOT_MADE
+fn LiteralNotMade(ty String&) r.Msg { return r.Msg(Diag.LiteralNotMade, "E19", "a literal makes the type before its '[', and " $ty " is a reference - an array of them is Array<" $ty ">[...]") }
+
+# ERR_FROM_ITER_SHAPE
+fn FromIterShape(ty String&) r.Msg { return r.Msg(Diag.FromIterShape, "E19", $ty "'s FromIter takes no one iterator, so no literal can call it - call it as " $ty ".FromIter(...)") }
+
+# ERR_LITERAL_ENTRIES
+fn LiteralEntries(ty String&) r.Msg { return r.Msg(Diag.LiteralEntries, "E19", "a literal of " $ty " holds no 'key: value' entries - its elements are no MapEntry") }
+
+# ERR_LITERAL_NO_ENTRIES
+fn LiteralNoEntries() r.Msg { return r.Msg(Diag.LiteralNoEntries, "E19", "a keyed literal's items are each 'key: value' - every one of them or none") }
 
 # ERR_NOT_AN_ENUM
 fn NotAnEnum(tok String&) r.Msg { return r.Msg(Diag.NotAnEnum, "E22", $tok " is not an enum type, so it has no values 'T.Case'") }

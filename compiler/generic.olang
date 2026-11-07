@@ -2336,7 +2336,7 @@ fn (p mut Program&) Infer(c Context&, known Map<source.NameId, types.TypeId>&, x
         case ast.Expr.Unary(_, op, y): p.unaryType(c, known, op, y)
         case ast.Expr.Join(_, _): p.textType()
         case ast.Expr.Name(sp, n): try known.Get(n) catch default p.nameType(c, sp, n)
-        case ast.Expr.ArrayLit(_, elem, items): p.T.Array(p.itemsElem(c, known, p.Resolve(c, elem), items), p.T.Const(p.T.Prim("I64"), items.Len()))
+        case ast.Expr.ArrayLit(_, made, items): p.literalMade(c, known, p.Resolve(c, made), items)
         case ast.Expr.Index(_, y, items): p.literalOf(c, y, items)
         case ast.Expr.Call(_, f, cargs): p.madeType(c, known, f, cargs)
         case ast.Expr.Try(_, y, _): p.Infer(c, known, y)
@@ -2344,6 +2344,12 @@ fn (p mut Program&) Infer(c Context&, known Map<source.NameId, types.TypeId>&, x
         case ast.Expr.Binary(_, op, a, b): p.binaryType(c, known, op, a, b)
         case _: types.UnknownT
     }
+}
+
+# a literal's type (E19, E20): an Array<T> literal's an array of its items' count, any other the type it makes
+fn (p mut Program&) literalMade(c Context&, known Map<source.NameId, types.TypeId>&, made types.TypeId, items Array<ast.Expr&>&) types.TypeId {
+    if made == types.UnknownT or p.T.KindOf(made) != types.Kind.Array { return made }
+    return p.T.Array(p.itemsElem(c, known, p.T.Elem(made), items), p.T.Const(p.T.Prim("I64"), items.Len()))
 }
 
 # an array literal's element type: the written one, or where that is an array value of no known length, the items' one
@@ -2358,15 +2364,14 @@ fn (p mut Program&) itemsElem(c Context&, known Map<source.NameId, types.TypeId>
     return first
 }
 
-# T[a, b] where T names a type: an array literal, its length its items' count (T7c)
+# C[a, b] where C names a type: a literal of it (E19, E20)
 fn (p mut Program&) literalOf(c Context&, y ast.Expr&, items Array<ast.Expr&>&) types.TypeId {
     match y {
         case ast.Expr.Name(sp, n) {
             ref := p.R.Use(p.file(c.Mi), sp.Start)
             if ref.Kind != names.What.Type and ref.Kind != names.What.Builtin and ref.Kind != names.What.TypeVar { return types.UnknownT }
-            el := p.Resolve(c, ast.TypeRef.Named(sp, Array<source.NameId>(1, n), Array<ast.TypeRef&>(0)))
-            if el == types.UnknownT { return types.UnknownT }
-            return p.T.Array(el, p.T.Const(p.T.Prim("I64"), items.Len()))
+            made := p.Resolve(c, ast.TypeRef.Named(sp, Array<source.NameId>(1, n), Array<ast.TypeRef&>(0)))
+            return made if p.T.KindOf(made) != types.Kind.Array else types.UnknownT
         }
         case _ { return types.UnknownT }
     }

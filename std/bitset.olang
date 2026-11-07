@@ -71,6 +71,14 @@ fn BitSet<T>.Of(a Array<T>&) BitSet<T> {
     return s
 }
 
+# the set of the cases an iterator gives (D19) - what a BitSet's literal and comprehension call (E19, E27):
+# "bitset.BitSet<Color>[Color.Red, Color.Blue]". Fails with what the iterator fails with
+fn BitSet<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) BitSet<T> ? E {
+    s := BitSet<T>.of(0)
+    for x in try it { s.bits |= U64(1) << index(x) }
+    return s
+}
+
 # the set whose case-index bits are b; bits past the last case fail
 fn BitSet<T>.FromBits(b U64) BitSet<T> ? Error.OutOfRange {
     if b & ~mask<T>() != 0 { error Error.OutOfRange }
@@ -158,7 +166,8 @@ fn (it mut Iter<T>&) Next() T ? Exhausted {
 # how "$" renders a BitSet: its cases in braces, in declaration order - "BitSet{Color.Red, Color.Blue}"
 fn (s BitSet<T>&) Str() String {
     b := StringBuilder()
-    b.Push("BitSet{")
+    t := $Array<T>(0)                                   # "Array<T>[]"
+    b.Push("bitset.BitSet<" $t[6:t.Len() - 3] ">[")
     n I64 = 0
     for c in T.Cases {
         if s.Has(c()) {
@@ -167,7 +176,7 @@ fn (s BitSet<T>&) Str() String {
             b.Push($c())
         }
     }
-    b.PushChar('}')
+    b.PushChar(']')
     return b.ToString()
 }
 

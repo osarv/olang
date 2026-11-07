@@ -910,7 +910,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
         }
         case ast.Expr.Binary(_, op, a, b) {
             w.expr(a)
-            w.put(" ")
+            if op != token.Tok.Colon: w.put(" ")   # a keyed literal's entry is "k: v" (E19)
             w.put(op.Text())
             w.put(" ")
             w.expr(b)

@@ -1,0 +1,363 @@
+# literal_migrate - E19, E27, S13h (QBU, QBW): the type before a literal's "[" is the type of the value it makes, no longer
+# its elements' - so every literal and comprehension written the old way, its element type in front, gets the array it
+# made written there: `I64[1, 2]` becomes `Array<I64>[1, 2]`, `String&["a"]` `Array<String&>["a"]`, `any Shape&[c]`
+# `Array<any Shape&>[c]`, `Node?&[n]` `Array<Node?&>[n]`, `lib.Pt[p]` `Array<lib.Pt>[p]`, `T[a, b]` (a type variable)
+# `Array<T>[a, b]`, `U8[c - 32 for c in t]` `Array<U8>[c - 32 for c in t]`, and an array pattern alike
+# (`case String&["test", ...]`). A front is read as old where it names a type with nothing after it but a marker -
+# a primitive, a type of the file, the prelude or std, an imported module's (through its alias), a type variable the
+# file's declarations introduce - or carries a marker ("&", "?&", a scope "&x") before its "[" whatever it is. A generic
+# type with no marker in front (`Vec<I64>[1, 2]`, `Array<I64>[...]`) is read as new and left alone - which is what
+# makes the tool idempotent, and why an old literal of generic elements held by value (`Array<F32>[F32[1, 2]]`, an
+# array of arrays) is migrated by hand. A type of the file declaring a `FromIter` is new where it stands bare. Comments
+# and text are left alone. A Markdown file is migrated in its code: fenced blocks and inline `code`, std's types known.
+#
+#     olang build tools/literal_migrate.olang && build/tools_literal_migrate [--std DIR] [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "std/filepath"
+import "srcmask"
+
+fn main() {
+    args := os.Args()
+    check := false
+    verbose := false
+    std := $srcmask.RepoRoot() "/std"
+    files Vec<String&>
+    k := 1
+    for k < args.Len() {
+        a := args[k]
+        if a == "--check": check = true
+        else if a == "-v": verbose = true
+        else if a == "--std" and k + 1 < args.Len() {
+            k++
+            std = $args[k]
+        } else if os.IsDir(a): srcmask.Walk(a, files)
+        else: files.Push(a)
+        k++
+    }
+    kn := known.load(std)
+    changed := 0
+    for path in files {
+        text := try srcmask.ReadText(path) catch os.Error {
+            srcmask.SayErr("literal_migrate: " $path ": cannot be read")
+            continue
+        }
+        out := migrateMarkdown(text, kn) if path.EndsWith(".md") else migrate(path, text, kn)
+        if out == text { continue }
+        changed++
+        if verbose or check: srcmask.Say(path)
+        if not check: os.WriteFile(path, out)!
+    }
+    if check and changed > 0: os.Exit(1)
+}
+
+# the types every file knows: the primitives, the prelude's, and each std module's by its base name
+type known struct() {
+    bare Map<String, Bool>
+    mods Map<String, Map<String, Bool>>       # a module's file path -> the types it declares
+    std String = ""
+}
+
+Prims Array<String&> = String&["Bool", "Char", "String", "F16", "BF16", "F32", "F64"]
+
+fn known.load(std String&) known {
+    k := known()
+    k.std = $std
+    for p in Prims { k.bare.Put($p, true) }
+    for i in range 1, 129 {
+        k.bare.Put($"I" $i, true)
+        k.bare.Put($"U" $i, true)
+    }
+    names := try os.ReadDir($std "/prelude") catch default Array<String&>(0)
+    for n in names {
+        if not n.EndsWith(".olang") { continue }
+        text := try srcmask.ReadText($std "/prelude/" $n) catch os.Error { continue }
+        for t in declaredTypes(text) { k.bare.Put($t, true) }
+    }
+    return k
+}
+
+# the types a module's file declares, read once
+fn (k mut known&) typesOf(path String&) Map<String, Bool>& {
+    if k.mods.Has($path) { return try k.mods.Ref($path) catch { unreachable } }
+    m Map<String, Bool>
+    text := try srcmask.ReadText(path) catch default ""
+    for t in declaredTypes(text) { m.Put($t, true) }
+    k.mods.Put($path, m)
+    return try k.mods.Ref($path) catch { unreachable }
+}
+
+# the names a text declares as types: "type Name" and "extern type Name", indented or not
+fn declaredTypes(text String&) Vec<String> {
+    out Vec<String>
+    for line in text.Split("\n") {
+        t := srcmask.Strip(line)
+        if t.StartsWith("extern type ") { t = t[7:] }
+        if not t.StartsWith("type ") { continue }
+        n := word(t, 5)
+        if n.Len() > 0: out.Push($n)
+    }
+    return out
+}
+
+# the name starting at i of t, "" where none does
+fn word(t String&, i I64) String& {
+    if i >= t.Len() or not srcmask.IsIdStart(t[i]) { return "" }
+    j := i
+    for j < t.Len() and srcmask.IsWord(t[j]) { j++ }
+    return t[i:j]
+}
+
+# what one file knows besides: its own types, the type variables its declarations introduce, the types of the modules
+# it imports by their aliases, and the types of it that declare a FromIter (new where they stand bare)
+type scope struct() {
+    own Map<String, Bool>
+    aliases Map<String, String>               # alias -> module file
+    builders Map<String, Bool>
+}
+
+fn scope.of(path String&, text String&, mask String&, k mut known&) scope {
+    s := scope()
+    for t in declaredTypes(text) { s.own.Put($t, true) }
+    for line in text.Split("\n") {
+        t := srcmask.Strip(line)
+        if t.StartsWith("import ") { s.addImport(path, t, k) }
+        if t.StartsWith("fn ") and ".FromIter" in t {
+            n := word(t, 3)
+            if n.Len() > 0: s.builders.Put($n, true)
+        }
+        if t.StartsWith("fn ") or t.StartsWith("type ") or t.StartsWith("extern type ") { s.addVars(t, k) }
+    }
+    return s
+}
+
+# "import alias "path"" or "import "path"": the alias and the module's file - std's, or one beside the file; none for a C
+# import or a remote one
+fn (s mut scope&) addImport(path String&, line String&, k mut known&) {
+    q := try line.FindByte('"') catch { return }
+    rest := line[q + 1:]
+    e := try rest.FindByte('"') catch { return }
+    mod := rest[:e]
+    if mod.EndsWith(".h") or mod.EndsWith(".c") { return }
+    head := srcmask.Strip(line[7:q])
+    alias := $head if head.Len() > 0 else $filepath.Base(mod)
+    file := ""
+    if mod.StartsWith("std/") {
+        file = $k.std "/" $mod[4:] ".olang"
+    } else if not ("." in filepath.Base(mod) and "/" in mod) {
+        file = $filepath.Join(filepath.Dir(path), mod) ".olang"
+    }
+    if file.Len() == 0 or not os.Exists(file) { return }
+    s.aliases.Put(alias, file)
+}
+
+# the capitalized names inside a declaration's angle brackets that name no type known - its type variables
+fn (s mut scope&) addVars(line String&, k known&) {
+    depth := 0
+    for i in range line.Len() {
+        c := line[i]
+        if c == '<' { depth++ } else if c == '>' { depth-- }
+        if depth <= 0 or not c.IsUpper() { continue }
+        if i > 0 and (srcmask.IsWord(line[i - 1]) or line[i - 1] == '.') { continue }
+        n := word(line, i)
+        if k.bare.Has($n) or s.own.Has($n) { continue }
+        s.own.Put($n, true)
+    }
+}
+
+# whether name names a type here
+fn (s scope&) names(name String&, k known&) Bool { return k.bare.Has($name) or s.own.Has($name) }
+
+# a front read at i: where it ends (the index of its "["), whether it carried a marker, a type's arguments, or "any",
+# and its path; End -1 where what stands at i is no front before a "["
+type front struct(End I64, Marked Bool, Generic Bool, Any Bool, Path Vec<String>) {
+    End
+    Marked
+    Generic
+    Any
+    Path
+}
+
+fn front.none() front { return front(-1, false, false, false, Vec<String>()) }
+
+# what stands at i, read as a literal's front: [any] path [<args>] [?] [& [name]] "["
+fn front.read(text String&, mask String&, i I64) front {
+    j := i
+    anyForm := false
+    if word(text, j) == "any" and j + 4 < text.Len() and text[j + 3] == ' ' {
+        anyForm = true
+        j += 4
+    }
+    path Vec<String>
+    for {
+        n := word(text, j)
+        if n.Len() == 0 { return front.none() }
+        path.Push($n)
+        j += n.Len()
+        if j < text.Len() - 1 and text[j] == '.' and srcmask.IsIdStart(text[j + 1]) {
+            j++
+            continue
+        }
+        break
+    }
+    generic := false
+    if j < text.Len() and text[j] == '<' {
+        e := closeAngle(text, mask, j)
+        if e < 0 { return front.none() }
+        generic = true
+        j = e
+    }
+    marked := false
+    if j < text.Len() and text[j] == '?' { j++ }
+    if j < text.Len() and text[j] == '&' {
+        marked = true
+        j++
+        n := word(text, j)
+        if n.Len() > 0 and n != "any" { j += n.Len() }
+    }
+    if j >= text.Len() or text[j] != '[' or mask[j] != 'c' { return front.none() }
+    return front(j, marked, generic, anyForm, path)
+}
+
+# the index just past the ">" closing the "<" at i, on its line - or -1
+fn closeAngle(text String&, mask String&, i I64) I64 {
+    depth := 0
+    for j in range i, text.Len() {
+        c := text[j]
+        if c == '\n' or c == '{' or c == '}' or c == ';' { return -1 }
+        if mask[j] != 'c' { continue }
+        if c == '<' { depth++ }
+        if c == '>' and j > 0 and text[j - 1] != '-' {
+            depth--
+            if depth == 0 { return j + 1 }
+        }
+    }
+    return -1
+}
+
+# whether a front is the old form: an element type before an array's "["
+fn (k mut known&) old(s scope&, f front&) Bool {
+    if f.Any { return true }
+    if f.Generic { return f.Marked }
+    if f.Path.Len() == 1 {
+        n := f.Path[0]
+        if s.builders.Has(n) and not f.Marked { return false }
+        return s.names(n, k)
+    }
+    if f.Path.Len() == 2 and s.aliases.Has(f.Path[0]) {
+        file := try s.aliases.Get(f.Path[0]) catch { return false }
+        return k.typesOf(file).Has(f.Path[1])
+    }
+    return false
+}
+
+# a file's text with every old front written as the array it makes
+fn migrate(path String&, text String&, k mut known&) String {
+    mask := srcmask.Mask(text, false)
+    s := scope.of(path, text, mask, k)
+    return rewrite(text, mask, s, k)
+}
+
+fn rewrite(text String&, mask String&, s scope&, k mut known&) String {
+    edits Vec<I64>                                # pairs: where "Array<" goes, where ">" goes
+    i := 0
+    for i < text.Len() {
+        if mask[i] != 'c' or not srcmask.IsIdStart(text[i]) or (i > 0 and (srcmask.IsWord(text[i - 1]) or text[i - 1] == '.')) {
+            i++
+            continue
+        }
+        f := front.read(text, mask, i)
+        if f.End >= 0 and k.old(s, f) {
+            edits.Push(i)
+            edits.Push(f.End)
+        }
+        i += word(text, i).Len()
+    }
+    if edits.Len() == 0 { return $text }
+    b := StringBuilder()
+    at := 0
+    for e := 0, e < edits.Len(), e += 2 {
+        b.Push(text[at:edits[e]])
+        b.Push("Array<")
+        b.Push(text[edits[e]:edits[e + 1]])
+        b.Push(">")
+        at = edits[e + 1]
+    }
+    b.Push(text[at:])
+    return b.ToString()
+}
+
+# a Markdown file's code migrated: each fenced block and each inline `code` span, read as code of its own with std's
+# types known (every module's by its base name) and a single capital letter a type variable
+fn migrateMarkdown(text String&, k mut known&) String {
+    s := scope()
+    names := try os.ReadDir(k.std) catch default Array<String&>(0)
+    for n in names {
+        if n.EndsWith(".olang") { s.aliases.Put($n[:n.Len() - 6], $k.std "/" $n) }
+    }
+    for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" { s.own.Put($c, true) }
+    b := StringBuilder()
+    fenced := false
+    first := true
+    for line in text.Split("\n") {
+        if not first: b.PushChar('\n')
+        first = false
+        t := srcmask.Strip(line)
+        if t.StartsWith("```") {
+            fenced = not fenced
+            b.Push(line)
+        } else if fenced {
+            b.Push(rewrite(line, srcmask.Mask(line, false), s, k))
+        } else {
+            b.Push(spans(line, s, k))
+        }
+    }
+    return b.ToString()
+}
+
+# a prose line's inline `code` spans migrated, the rest as it is
+fn spans(line String&, s scope&, k mut known&) String {
+    if not ("`" in line) { return $line }
+    b := StringBuilder()
+    i := 0
+    for i < line.Len() {
+        o := try line[i:].FindByte('`') catch {
+            b.Push(line[i:])
+            break
+        }
+        b.Push(line[i:i + o + 1])
+        start := i + o + 1
+        e := try line[start:].FindByte('`') catch {
+            b.Push(line[start:])
+            break
+        }
+        code := line[start:start + e]
+        b.Push(rewrite(code, srcmask.Mask(code, false), s, k))
+        b.PushChar('`')
+        i = start + e + 1
+    }
+    return b.ToString()
+}
+
+if TestBuild {
+
+test "old fronts become the array they made; new ones are left as they are" {
+    k := known()
+    for p in Prims { k.bare.Put($p, true) }
+    k.bare.Put("I64", true)
+    k.bare.Put("I32", true)
+    text := "type Node struct() { }\nfn f<T>(a T) {\n    x := I64[1, 2]\n    y := String&[\"a\"]\n    z := Node?&[null]\n    w := T[a, a]\n    v := Vec<I64>[1, 2]\n    u := any Shape&[c]\n    c := I32[x * 2 for x in a]\n    q := Array<I32>&[r]\n    r := a[0]\n    s := xs.Node[0]\n    # I64[3] in a comment\n    t := \"I64[3]\"\n}\n"
+    want := "type Node struct() { }\nfn f<T>(a T) {\n    x := Array<I64>[1, 2]\n    y := Array<String&>[\"a\"]\n    z := Array<Node?&>[null]\n    w := Array<T>[a, a]\n    v := Vec<I64>[1, 2]\n    u := Array<any Shape&>[c]\n    c := Array<I32>[x * 2 for x in a]\n    q := Array<Array<I32>&>[r]\n    r := a[0]\n    s := xs.Node[0]\n    # I64[3] in a comment\n    t := \"I64[3]\"\n}\n"
+    got := migrate("x.olang", text, k)
+    assert got == want, got
+    assert migrate("x.olang", got, k) == got
+}
+
+test "Markdown: the code in fences and spans" {
+    k := known()
+    k.bare.Put("I64", true)
+    got := migrateMarkdown("a `I64[1]` and T[2]\n```\nx := I64[3]\n```\n", k)
+    assert got == "a `Array<I64>[1]` and T[2]\n```\nx := Array<I64>[3]\n```\n", got
+}
+
+}

@@ -7894,7 +7894,7 @@ fn (c mut Checker&) expr1(x ast.Expr?&, want types.TypeId, accept Bool) typed.Ex
         }
         case ast.Expr.Member(sp, y, n) { return c.member(sp, y, n, want) }
         case ast.Expr.Index(sp, y, items) { return c.index(sp, y, items) }
-        case ast.Expr.ArrayLit(sp, elem, items) { return c.arrayLit(sp, c.resolve(elem), items) }
+        case ast.Expr.ArrayLit(sp, made, items) { return c.madeLit(sp, made!.Span(), c.resolve(made!), items) }
         case ast.Expr.Join(sp, parts) { return c.join(sp, parts) }
         case ast.Expr.Try(sp, y, clauses) { return c.tryExpr(sp, y, clauses, want) }
         case ast.Expr.Postfix(sp, op, y) if op == token.Tok.Bang { return c.bang(sp, y, want) }
@@ -15124,8 +15124,7 @@ fn (c mut Checker&) unrolled(sp source.Span, f ast.ForIn&, l reflList) {
 
 # T[e for x in T.Fields if c] (G33): unrolled into an array literal of the items its filter keeps - the filter decided
 # per item while compiling
-fn (c mut Checker&) unrolledCompr(sp source.Span, cm ast.Compr&, l reflList) typed.Expr& {
-    et := c.resolve(cm.Elem)
+fn (c mut Checker&) unrolledCompr(sp source.Span, cm ast.Compr&, l reflList, et types.TypeId) typed.Expr& {
     items := c.listItems(cm.Source.Span(), l)
     from := c.exprs.Len()
     n I64 = 0
@@ -15633,7 +15632,7 @@ fn (c mut Checker&) enumFrom(sp source.Span, nsp source.Span, et types.TypeId, a
 # x[i]: an array's element (E16); T[a, b] where x names a type: an array literal (E19)
 fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) typed.Expr& {
     et := c.typeNamed(x)
-    if et >= types.TypeId(0) { return c.arrayLit(sp, et, items) }
+    if et >= types.TypeId(0) { return c.madeLit(sp, x.Span(), et, items) }
     # G33: an item of a list known while compiling, by a constant index
     rl := c.listOf(x)
     if rl.Ok {
@@ -15736,6 +15735,168 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Lvalue&, items Array<ast.E
         if v.Ok and not v.IsFloat and not v.Big and (v.I < 0 or v.I >= n) { c.err(items[0].Span(), msgs.IndexOutOfRange(v.I, n)) }
     }
     return typed.Lvalue.Elem(sp, c.P.T.Elem(at), typed.Elem(base, i, chk))
+}
+
+# C[a, b] (E19): a literal of the type made before its "[" - an Array<T>'s elements laid out (arrayLit), any other type's
+# through its FromIter, handed a walk of an array of the items (or of the entries "k: v", MapEntry values)
+fn (c mut Checker&) madeLit(sp source.Span, msp source.Span, made types.TypeId, items Array<ast.Expr&>&) typed.Expr& {
+    if made == types.UnknownT {
+        c.dropItems(items)
+        return c.unknown(sp)
+    }
+    if c.P.T.KindOf(made) == types.Kind.Array {
+        ek := c.entryAt(items)
+        if ek >= 0 {
+            c.err(items[ek].Span(), msgs.LiteralEntries(c.ty(made)))
+            c.dropItems(items)
+            return c.unknown(sp)
+        }
+        return c.arrayLit(sp, c.P.T.Elem(made), items)
+    }
+    b := c.literalBuilder(msp, made)
+    if b.F < 0 {
+        c.dropItems(items)
+        return c.unknown(sp)
+    }
+    arr := c.entriesLit(sp, b.Elem, items) if c.entryAt(items) >= 0 else c.plainLit(sp, b.Elem, items)
+    if typeOf(arr) == types.UnknownT { return c.unknown(sp) }
+    return c.fromIter(sp, msp, b, made, arr)
+}
+
+# the builder a literal of made calls (E19, D19): its FromIter taking one iterator, and the elements it takes - F -1
+# where there is none, said
+type litBuilder struct(F I64, Elem types.TypeId) {
+    F
+    Elem
+}
+
+fn (c mut Checker&) literalBuilder(msp source.Span, made types.TypeId) litBuilder {
+    if c.isRef(made) or c.P.T.KindOf(made) == types.Kind.Any {
+        c.err(msp, msgs.LiteralNotMade(c.ty(made)))
+        return litBuilder(-1, types.UnknownT)
+    }
+    f := c.P.BuilderOf(made, c.P.L.Names.Intern("FromIter"))
+    if f < 0 {
+        c.needErr(msp, made, "a builder 'FromIter'", msgs.LiteralNoFromIter(c.ty(made)))
+        return litBuilder(-1, types.UnknownT)
+    }
+    c.builderVisible(f, msp, made)
+    el := c.fromIterElem(f, made)
+    if el == types.UnknownT {
+        c.err(msp, msgs.FromIterShape(c.ty(made)))
+        return litBuilder(-1, types.UnknownT)
+    }
+    return litBuilder(f, el)
+}
+
+# what builder f, made's FromIter, walks: the element its one required parameter is an iterator of - a type variable
+# constrained by a trait giving it as its first argument (Iterator<T ? E>), or an iterator type whose Next gives it;
+# Unknown where f takes no one iterator
+fn (c mut Checker&) fromIterElem(f I64, made types.TypeId) types.TypeId {
+    sig := c.P.BuilderSig(f, made)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    if ps.Len() == 0 { return types.UnknownT }
+    if ps.Len() > 1 and c.P.FnDecl(f).S.Params[1].Dflt is null { return types.UnknownT }
+    pt := c.deref(ps[0])
+    owner := generic.FnOwner(f)
+    if c.P.T.KindOf(pt) == types.Kind.Var and c.P.T.A(pt) == owner {
+        vals := c.P.OwnerBinding(f, made)
+        for i in range vals.Len() {
+            if vals[i] == types.UnknownT { vals[i] = c.P.T.Var(owner, i, types.ReadOnly) }
+        }
+        bound := c.P.VarAt(owner, c.P.T.B(pt)).Bound
+        if bound == types.UnknownT { return types.UnknownT }
+        bt := c.P.Subst(bound, owner, c.P.T.List(vals))
+        tr := bt if c.P.T.KindOf(bt) != types.Kind.Tuple else c.P.T.Items(c.P.T.Args(bt))[0]
+        if c.P.T.KindOf(tr) != types.Kind.Named { return types.UnknownT }
+        args := c.P.T.Items(c.P.T.Args(tr))
+        if args.Len() == 0 or c.mentionsVar(args[0], owner) { return types.UnknownT }
+        return args[0]
+    }
+    m := c.roleMethod(pt, "Next", 0)
+    if m < 0 or not c.iterShaped(m) { return types.UnknownT }
+    r := c.P.T.Result(c.P.MethodSig(m, pt))
+    return types.UnknownT if c.mentionsVar(r, owner) else r
+}
+
+# made.FromIter(arr.Iter()) - the builder b handed a walk of the array the items made (E19, E27)
+fn (c mut Checker&) fromIter(sp source.Span, msp source.Span, b litBuilder, made types.TypeId, arr typed.Expr&) typed.Expr& {
+    im := c.roleMethod(typeOf(arr), "Iter", 0)
+    if im < 0 {
+        c.gap(sp, "an array with no Iter")
+        return c.unknown(sp)
+    }
+    it := c.invoke(sp, msp, im, arr, Array<ast.Expr&>(0), Array<typed.Expr&>(0))
+    if typeOf(it) == types.UnknownT { return c.unknown(sp) }
+    return c.invoke(sp, msp, b.F, null, Array<ast.Expr&>(0), typed.Expr&[it], c.P.OwnerBinding(b.F, made))
+}
+
+# where the first entry "k: v" stands among a literal's items, -1 for none (E19)
+fn (c Checker&) entryAt(items Array<ast.Expr&>&) I64 {
+    for i in range items.Len() {
+        if isEntry(items[i]) { return i }
+    }
+    return -1
+}
+
+fn isEntry(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Binary(_, op, _, _): op == token.Tok.Colon
+        case _: false
+    }
+}
+
+# a literal's items checked for their own errors where the literal makes nothing - an entry's key and value each
+fn (c mut Checker&) dropItems(items Array<ast.Expr&>&) {
+    for it in items {
+        match it {
+            case ast.Expr.Binary(_, op, k, v) if op == token.Tok.Colon {
+                c.expr(k, types.UnknownT)
+                c.expr(v, types.UnknownT)
+            }
+            case _ { c.expr(it, types.UnknownT) }
+        }
+    }
+}
+
+# the array of el a literal's plain items make - none of them an entry (E19)
+fn (c mut Checker&) plainLit(sp source.Span, el types.TypeId, items Array<ast.Expr&>&) typed.Expr& {
+    ek := c.entryAt(items)
+    if ek >= 0 {
+        c.err(items[ek].Span(), msgs.LiteralNoEntries())
+        c.dropItems(items)
+        return c.unknown(sp)
+    }
+    return c.arrayLit(sp, el, items)
+}
+
+# the array of MapEntry<K, V> a keyed literal's entries make, each "k: v" its MapEntry(k, v) - el its builder's element,
+# which must be a MapEntry (E19)
+fn (c mut Checker&) entriesLit(sp source.Span, el types.TypeId, items Array<ast.Expr&>&) typed.Expr& {
+    me := c.P.PreludeType("std/prelude/map", "MapEntry")
+    if not c.isNamed(c.deref(el)) or c.P.T.DeclOf(c.deref(el)) != c.P.T.DeclOf(me) {
+        c.err(items[c.entryAt(items)].Span(), msgs.LiteralEntries(c.ty(el)))
+        c.dropItems(items)
+        return c.unknown(sp)
+    }
+    from := c.exprs.Len()
+    for it in items {
+        match it {
+            case ast.Expr.Binary(esp, op, k, v) if op == token.Tok.Colon {
+                x := c.construct(esp, esp, c.deref(el), ast.Expr&[k, v])
+                c.exprs.Push(c.partCopy(x))
+            }
+            case _ {
+                c.exprs.Truncate(from)
+                c.err(it.Span(), msgs.LiteralNoEntries())
+                c.dropItems(items)
+                return c.unknown(sp)
+            }
+        }
+    }
+    xs := gather(c.exprs, from)
+    at := c.P.T.Array(c.deref(el), c.P.T.Const(c.i64(), xs.Len()))
+    return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Array, 0, xs, null, c.site(typed.SiteKind.Make, sp), typed.Check.None))
 }
 
 # T[a, b]: an array literal, its length its items' count (E19)
@@ -19519,10 +19680,33 @@ fn (c mut Checker&) lambdaErrs(e typed.Expr?&, errs types.ListId) typed.Expr?& {
 # T[e for x in s if c] (E27): an Array<T> filled by the walk for-in makes over s, e yielded where c holds; its
 # storage reserved from an array's length or a range's count where the walk knows it, else grown (Reserve null)
 fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr& {
+    made := c.resolve(cm.Elem)
+    if made == types.UnknownT or c.P.T.KindOf(made) == types.Kind.Array {
+        return c.comprArray(sp, cm, c.P.T.Elem(made) if made != types.UnknownT else types.UnknownT)
+    }
+    # E27: made into any other type, the array its builder's elements make, walked by its FromIter
+    msp := cm.Elem!.Span()
+    b := c.literalBuilder(msp, made)
+    if b.F < 0 {
+        c.dropCompr(cm)
+        return c.unknown(sp)
+    }
+    arr := c.comprArray(sp, cm, b.Elem)
+    if typeOf(arr) == types.UnknownT { return c.unknown(sp) }
+    return c.fromIter(sp, msp, b, made, arr)
+}
+
+# a comprehension that makes nothing, its parts checked for their own errors
+fn (c mut Checker&) dropCompr(cm ast.Compr&) {
+    c.expr(cm.Source, types.UnknownT)
+}
+
+# Array<T>[e for x in s if c] (E27) for the element type et
+fn (c mut Checker&) comprArray(sp source.Span, cm ast.Compr&, elem types.TypeId) typed.Expr& {
     # G33: over a list known while compiling, unrolled into an array literal
     rl := c.listOf(cm.Source)
-    if rl.Ok { return c.unrolledCompr(sp, cm, rl) }
-    et := c.errValueType(c.resolve(cm.Elem))
+    if rl.Ok { return c.unrolledCompr(sp, cm, rl, elem) }
+    et := c.errValueType(elem)
     if et != types.UnknownT and (c.isRef(et) or c.P.T.HoldsRefs(et)) {
         # E27: not yet - where such elements live would be the array's
         c.err(c.opAfter(cm.Elem!.Span(), 1), msgs.ComprehensionReferences())
@@ -23788,12 +23972,28 @@ fn (c mut Checker&) seqType(t types.TypeId) seqOf ? NotSeq {
 
 # the element type an array pattern writes before its "[" - its literal's, or a type a path names; less than 0 where
 # the path names no type, so the alternative is a value
-fn (c mut Checker&) elemsWritten(x ast.Expr&) types.TypeId {
+fn (c mut Checker&) elemsWritten(x ast.Expr&, t types.TypeId) types.TypeId {
     match x {
-        case ast.Expr.ArrayLit(_, elem, _) { return c.resolve(elem) }
-        case ast.Expr.Index(_, ty, _) { return c.typeNamed(ty) }
+        case ast.Expr.ArrayLit(_, made, _) { return c.patElem(c.resolve(made!), t) }
+        case ast.Expr.Index(_, ty, _) {
+            tt := c.typeNamed(ty)
+            return tt if tt < types.TypeId(0) else c.patElem(tt, t)
+        }
         case _ { return types.TypeId(-1) }
     }
+}
+
+# S13h: the element type of the type an array pattern writes, made as a literal makes it - an Array<T>'s T, the matched
+# value's own type its elements (a Vec<T> matched as Vec<T>[...]); any other type as written, which ElemsType says
+fn (c mut Checker&) patElem(made types.TypeId, t types.TypeId) types.TypeId {
+    if made == types.UnknownT { return made }
+    if c.P.T.KindOf(made) == types.Kind.Array { return c.P.T.Elem(made) }
+    d := c.deref(t)
+    if d != types.UnknownT and c.P.T.Same(c.P.T.Plain(made), c.P.T.Plain(d)) {
+        sq := try c.seqType(d) catch NotSeq { return made }
+        return sq.Elem
+    }
+    return made
 }
 
 # where an array pattern's "..." stands among its items, -1 for none; -2 where there are several, said
@@ -23822,7 +24022,7 @@ fn isRest(p ast.Pattern&) Bool {
 # counted from the end; the rest a view of the elements between, bound where it is named
 fn (c mut Checker&) elemsPattern(sp source.Span, x ast.Expr&, subs Array<ast.Pattern&>&, place typed.Lvalue&, t types.TypeId
                                  binds mut Vec<typed.Bind&>&, arm I64) typed.Expr& {
-    wt := c.elemsWritten(x)
+    wt := c.elemsWritten(x, t)
     if wt < types.TypeId(0) { return c.valueTest(sp, place, x, t) }
     sq := try c.seqType(t) catch NotSeq {
         if t != types.UnknownT { c.err(sp, msgs.ElemsNotSeq(c.ty(c.deref(t)))) }

@@ -52,6 +52,14 @@ type Map<K Hashable<K>, V> struct() {
 
 fn (m Map<K, V>&) Len() I64 { return m.count }
 
+# a new Map of every entry an iterator gives, a later key's value replacing an earlier one's (D19) - what a Map's keyed
+# literal calls (E19): "Map<String&, I64>["a": 1, "b": 2]". Fails with what the iterator fails with
+fn Map<K, V>.FromIter<K Hashable<K>, I Iterator<MapEntry<K, V> ? E> ? E>(it mut I&) Map<K, V> ? E {
+    out Map<K, V>
+    for e in try it { out.Put(e.Key, e.Value) }
+    return out
+}
+
 fn (m Map<K, V>&) bucketOf(key K) I64 { return key.Hash() & (m.buckets.Len() - 1) }
 
 # an emptied slot's next link, which holds the emptied slot after it, f (-1 for none), below every chain's link
@@ -221,7 +229,7 @@ fn (m Map<K, V>&) Hash() I64 {
 # other value: text quoted, a Char as a character literal, a value whose type declares Str as its Str says (once each)
 fn (m Map<K, V>&) Str() String {
     b := StringBuilder()
-    b.Push("Map<" $typeWritten(Array<K>(0)) ", " $typeWritten(Array<V>(0)) ">{")
+    b.Push("Map<" $typeWritten(Array<K>(0)) ", " $typeWritten(Array<V>(0)) ">[")
     n I64 = 0
     # (the slots read where they are: an entry made of a value holding "mut" references, read through this read-only
     # receiver, would be a read-only copy, QC)
@@ -235,7 +243,7 @@ fn (m Map<K, V>&) Str() String {
         v := $alone(m.ents[i].Value)
         b.Push(v[1:v.Len() - 4])
     }
-    b.PushChar('}')
+    b.PushChar(']')
     return b.ToString()
 }
 
@@ -249,8 +257,8 @@ fn typeWritten<T>(a Array<T>&) String {
         case Char { return "Char" }                            # an array of Char renders as text
         case _ { }
     }
-    r := $a[0:0]                                               # "T[]"
-    return $r[:r.Len() - 2]
+    r := $a[0:0]                                               # "Array<T>[]"
+    return $r[6:r.Len() - 3]
 }
 
 # a position in a Map - handed out fresh by Iter(), so the map keeps none and every loop gets its own: the next slot to

@@ -25,6 +25,14 @@ type Deque<T> struct() {
     for k := n - 1, k >= 0, k-- { buf[(head + k) % buf.Len()].vacate() }   # back to front (C11: Deque<File> only)
 }
 
+# a Deque of every value an iterator gives, front to back (D19) - what a Deque's literal and comprehension call (E19,
+# E27): "deque.Deque<I64>[1, 2, 3]". Fails with what the iterator fails with
+fn Deque<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) Deque<T> ? E {
+    d := Deque<T>()
+    for x in try it { d.PushBack(x) }
+    return d
+}
+
 # room for one more, the elements moved into a buffer twice the size when the ring is full, front first - the rest of
 # it never filled, so no zero value is needed (D13c): each position is written by a Push before it is read
 fn (d mut Deque<T>&) room() {
@@ -138,9 +146,8 @@ fn (d Deque<T>&) Hash() I64 {
 
 # how "$" renders a Deque: its elements front to back, as an array renders, after "Deque" - "Deque[1, 2, 3]"
 fn (d Deque<T>&) Str() String {
-    r := $d.ToArray()                                    # "T[...]"
-    open := try r.Find("[") catch default 0
-    return "Deque" $r[open:]
+    r := $d.ToArray()                                    # "Array<T>[...]", the literal making it (E19)
+    return "deque.Deque" $r[5:]
 }
 
 if TestBuild {

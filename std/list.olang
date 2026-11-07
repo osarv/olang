@@ -358,8 +358,9 @@ fn List<T>.Of(a Array<T>&) List<T> {
     return out
 }
 
-# a new List of every value an iterator gives, in order: "list.From(m.Keys())". Fails with what the iterator fails with
-fn List<T>.From<I Iterator<T ? E> ? E>(it mut I&) List<T> ? E {
+# a new List of every value an iterator gives, in order (D19) - what a List's literal and comprehension call (E19, E27):
+# "list.List<I64>[1, 2]", "list.List.FromIter(m.Keys())". Fails with what the iterator fails with
+fn List<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) List<T> ? E {
     out := List<T>()
     for x in try it { out.Push(x) }
     return out
@@ -638,14 +639,14 @@ fn (l List<T>&) Str() String {
     b := StringBuilder()
     match T {
         case Char { # an array of Char renders as text, so these are written here
-            b.Push("List<Char>[")
+            b.Push("list.List<Char>[")
             for i, c in l {
                 if i > 0 { b.Push(", ") }
                 b.Push(charLiteral(c))
             }
         }
         case _ {
-            b.Push("List<" $typeWritten(Array<T>(0)) ">[")
+            b.Push("list.List<" $typeWritten(Array<T>(0)) ">[")
             at I64 = 0
             for {
                 run := try l.RunFrom(at) catch Exhausted { break }
@@ -663,8 +664,8 @@ fn (l List<T>&) Str() String {
 
 # T as written - what "$" puts before an array's items
 fn typeWritten<T>(a Array<T>&) String {
-    r := $a[0:0] # "T[]"
-    return $r[:r.Len() - 2]
+    r := $a[0:0] # "Array<T>[]"
+    return $r[6:r.Len() - 3]
 }
 
 # c as a character literal writes it - how "$" renders a Char inside another value (E11a)
@@ -1205,10 +1206,10 @@ if TestBuild {
         f := List.Of(Array<I64>(100, 7)) # n copies of one value
         assert f.Len() == 100 and f[99] == 7 and f[8] == 7
         assert List.Of(Array<I32>(0)).Len() == 0
-        m := List.From(I32[x * x for x in range I32(10)].Iter())
+        m := List.FromIter(I32[x * x for x in range I32(10)].Iter())
         assert m.Len() == 10 and m[9] == 81
         evens := List<I64>.listUpTo(30).Iter().Filter(fn(x) { return x % 2 == 0 })
-        assert List.From(evens.Iter()).Len() == 15
+        assert List.FromIter(evens.Iter()).Len() == 15
     }
 
     test "Join puts a separator between the texts of a List" {
@@ -1288,7 +1289,7 @@ if TestBuild {
         b.Push(2)
         a.Push(3)
         assert b.Len() == 3 and a.Len() == 3 and b[1] == 2 and a[2] == 3
-        c := List.From(a.Iter()) # a list of its own
+        c := List.FromIter(a.Iter()) # a list of its own
         c.Push(4)
         a[0] = 10
         assert a.Len() == 3 and c.Len() == 4 and c[0] == 1 and c[3] == 4 and a[0] == 10
@@ -1327,7 +1328,7 @@ if TestBuild {
         kept := List<I64>()
         if kept.Len() == 0 {
             src := List<I64>.listUpTo(100) # chunks of 8, 16, 32 and 64
-            kept = List.From(src.Iter())
+            kept = List.FromIter(src.Iter())
             src.Push(100)
             src[0] = -1
         }
@@ -1336,7 +1337,7 @@ if TestBuild {
         words := List<String&>()
         line String& = "a bb ccc"
         for w in line.Split(" ") { words.Push(w) }
-        copy := List.From(words.Iter()) # a List of references copies to the same references
+        copy := List.FromIter(words.Iter()) # a List of references copies to the same references
         assert copy.Len() == 3 and copy[2] == words[2]
     }
 
@@ -1346,7 +1347,7 @@ if TestBuild {
         s I64 = 0
         for n in I64[0, 1, 7, 8, 9, 23, 24, 25, 56, 57] {
             l := List<I64>.listUpTo(n)
-            c := List.From(l.Iter())
+            c := List.FromIter(l.Iter())
             c.Push(1000)
             l.Push(2000)
             assert c.Len() == n + 1 and l.Len() == n + 1 and c[n] == 1000 and l[n] == 2000, "From of " $n

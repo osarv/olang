@@ -17,6 +17,14 @@ fn Set<T>.Of<T Hashable<T>>(a Array<T>&) Set<T> {
     return s
 }
 
+# a Set of every value an iterator gives, each once (D19) - what a Set's literal and comprehension call (E19, E27):
+# "set.Set<I64>[1, 2, 2]". Fails with what the iterator fails with
+fn Set<T>.FromIter<T Hashable<T>, I Iterator<T ? E> ? E>(it mut I&) Set<T> ? E {
+    s := Set<T>()
+    for x in try it { s.m.Put(x, true) }
+    return s
+}
+
 # adds x, and says whether it was not there before
 fn (s mut Set<T>&) Add(x T) Bool {
     if s.m.Has(x) { return false }
@@ -95,7 +103,8 @@ fn (s Set<T>&) Hash() I64 {
 # how "$" renders a Set: its elements in braces, in the order a walk gives them - "Set{1, 2, 3}"
 fn (s Set<T>&) Str() String {
     b := StringBuilder()
-    b.Push("Set{")
+    t := $Array<T>(0)                                   # "Array<T>[]"
+    b.Push("set.Set<" $t[6:t.Len() - 3] ">[")
     n I64 = 0
     for x in s.m.Keys() {
         if n > 0: b.Push(", ")
@@ -104,7 +113,7 @@ fn (s Set<T>&) Str() String {
         open := try r.Find("[") catch default 0
         b.Push(r[open + 1:r.Len() - 1])
     }
-    b.PushChar('}')
+    b.PushChar(']')
     return b.ToString()
 }
 

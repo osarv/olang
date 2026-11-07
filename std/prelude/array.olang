@@ -199,6 +199,13 @@ fn (a mut Array<T>&) Reverse() {
     }
 }
 
+# a new array of every value an iterator gives, in order (D19): "Array<I64>.FromIter(it)" - an array's literal and
+# comprehension are made directly (E19, E27), this the call any walk takes. Fails with what the iterator fails with
+fn Array<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) Array<T> ? E {
+    v := try Vec<T>.FromIter(it)
+    return v.ToArray()
+}
+
 # a new Vec - in the caller's scope - holding the elements, in order: "I32[3, 1, 2].ToVec()", or n copies of one value,
 # "Array<I32>(n, v).ToVec()". The reverse of Vec's ToArray
 fn (a Array<T>&) ToVec() mut Vec<T>& {
