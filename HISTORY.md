@@ -29598,5 +29598,13 @@ its fields by position, as a declared word does (`e == OutOfRange(-1, 10)`). (11
 without its payload and `doc` listed the hidden enum with the error's doc comment; did-you-mean could offer the hidden
 name; `MethodOnForeignType` existed and was never reported.
 
-**Left.** Patterns on payloads (`case ParseError.Bad(l, _)`, `e == ParseError.Bad(3, _)`) were not built - a payload is
-read by name after narrowing; a clause filters on words only (the note's decision 8).
+**Patterns (the brief: S13b's named items).** In a `match` on an error value a name holds, `case ParseError.Bad(line,
+col = 0)` matches as an enum case's payload does - positions, then names, a name binding its field, `_`, a value compared
+by `==`. Built on the if-chain the error match already is (`caughtCaseTest`: `e == W and e.f == v`, the narrowing of the
+`and` reading the field; `payloadBinds`: `name := e.f` before the case's block); a case comparing a value covers nothing
+for exhaustiveness (`altsCovered.Partial`). Decided (mine): names are bound only in a match statement (a value match's
+case is an expression, nothing to declare them in - reading `e.f` after the test does it) and in a case of one
+alternative; the subject must be a name (a pinned expression has nothing narrowing can read through).
+
+**Left.** `e == ParseError.Bad(3, _)` - a case test with `_` in a payload position on an error value - is not built (a
+value written whole compares whole); a clause still filters on words only (the note's decision 8).
