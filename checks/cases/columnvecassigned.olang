@@ -1,9 +1,0 @@
-# check: fail error[T7e]: a column is never assigned whole
-# T7e: a ColumnVec's column is a view of its buffer's first Len() elements - written element by element, never whole
-type P struct(X F32, Y F32) { X, Y }
-fn main() {
-    v := ColumnVec<P>()
-    v.Push(P(1.0, 2.0))
-    v.X = v.Y
-    assert v.Len() == 1
-}

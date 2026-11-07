@@ -13644,8 +13644,36 @@ fn (c mut Checker&) notRecord(row types.TypeId) String {
     }
 }
 
-# T7e: whether p is a column as a whole - a Columns' field, a ColumnVec's "cv.x" - which a program never assigns (its
-# length is the table's; its elements are assigned, or its lanes, "c.x *= 2.0"). The prelude's own code does
+# T7e: a column assigned whole, "c.x = v": v's lanes - an array or lanes of the table's length, checked once and aborting
+# as lanes of different lengths do (E39's LaneLen), or one value for every element - written into the column's own
+# storage element by element, so a view of the column sees them (T11b); a ColumnVec's through its view
+fn (c mut Checker&) columnStore(sp source.Span, p typed.Lvalue&, value ast.Expr&) {
+    t := c.deref(p.Type())
+    e := c.laneElemOf(t)
+    h := c.laneTarget(sp, p)
+    vk := c.laneLeaf(c.laneArg(value, e))
+    if c.laneNodes[vk].Elem == types.UnknownT: return
+    lv := laneVals()
+    c.laneHoldLeaves(vk, lv)
+    c.laneLength(sp, vk, lv)
+    n := c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, h), null)
+    if c.laneNodes[vk].Kind != LaneScalar {
+        from := c.exprs.Len()
+        c.exprs.Push(n)
+        c.exprs.Push(c.laneCount(sp, vk, lv))
+        n = typed.Expr.Prim(sp, c.i64(), typed.PrimOp.LaneLen, typed.Check.Abort, gather(c.exprs, from))
+    }
+    count := c.hidden(sp, c.i64())
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(count)), n))
+    i, id, outer, mark, lfrom := c.laneLoopOpen(sp, c.readLocal(sp, count))
+    x := c.partCopy(c.fit(c.laneElem(sp, vk, lv, c.readLocal(sp, i)), e, value.Span()))
+    base typed.Lvalue& = typed.Lvalue.Deref(sp, t, c.readLocal(sp, h))
+    c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Elem(sp, e, typed.Elem(base, c.readLocal(sp, i), typed.Check.None)), x))
+    c.laneLoopClose(sp, i, id, outer, mark, lfrom)
+}
+
+# T7e: whether p is a column as a whole - a Columns' field, a ColumnVec's "cv.x" - which a program assigns only alone, its
+# length checked against the table's (columnStore). The prelude's own code assigns its buffers freely
 fn (c mut Checker&) wholeColumn(p typed.Lvalue&) Bool {
     if c.P.L.Mods[c.fr().Mi].Prelude: return false
     match p {
@@ -17639,8 +17667,7 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         return
     }
     if op == token.Tok.Assign and c.wholeColumn(p) {
-        c.err(c.argSpan(target), msgs.ColumnAssigned())
-        c.expr(value, types.UnknownT)
+        c.columnStore(sp, p, value)
         return
     }
     osp := c.opAfter(target.Span(), 1 if op == token.Tok.Assign else 2)

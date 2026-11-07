@@ -1,0 +1,31 @@
+# columns - the particles as a Columns<P> (T7e): the structure of arrays soa.olang writes by hand, laid out by the
+# compiler from the record type, the step written as the same loop over the columns. Arguments: particles, steps.
+import "std/io"
+import "common"
+
+fn step(s mut Columns<common.P>&) {
+    x mut Array<F32>& = s.X                            # the columns named, not copied
+    y mut Array<F32>& = s.Y
+    vx mut Array<F32>& = s.Vx
+    vy mut Array<F32>& = s.Vy
+    for i in range s.Len() {
+        vy[i] -= 9.8 * common.Dt
+        x[i] += vx[i] * common.Dt
+        y[i] += vy[i] * common.Dt
+        if y[i] < 0.0 {
+            y[i] = -y[i]
+            vy[i] = -vy[i] * 0.9
+        }
+    }
+}
+
+fn main() ? {
+    n, steps := common.Arg(1, 4000000), common.Arg(2, 25)
+    r := common.Rand(5)
+    s := Columns<common.P>(n)
+    for i in range n: s[i] = r.Particle()
+    for _ in range steps: step(s)
+    sum := F64(0.0)
+    for p in s: sum += F64(p.X + p.Y)
+    try io.Println("columns: " $sum)
+}

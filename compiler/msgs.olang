@@ -3293,7 +3293,7 @@ fn ColumnsNotRecord(ty String&, row String&, why String&) Msg { return Msg(Diag.
 fn ColumnNamedLikeMethod(ty String&, row String&, name String&) Msg { return Msg(Diag.ColumnNamedLikeMethod, "T7e", $row "'s field '" $name "' would be a column of " $ty " named like its method '" $name "' (M19) - rename the field") }
 
 # ERR_COLUMN_ASSIGNED
-fn ColumnAssigned() Msg { return Msg(Diag.ColumnAssigned, "T7e", "a column is never assigned whole - its length is its table's; assign its elements ('c.x[i] = v') or its lanes ('c.x *= 2.0'), or the row ('c[i] = p')") }
+fn ColumnAssigned() Msg { return Msg(Diag.ColumnAssigned, "T7e", "a column is assigned whole only alone - 'c.x = v', its length checked against its table's") }
 
 test "a message is its text, its arguments in their places" {
     m := Expected("'}'", Tok("South"))
