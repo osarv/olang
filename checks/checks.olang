@@ -547,7 +547,7 @@ fn landing(r mut report&) ? Failed {
     #through its later piece holds nothing across the call (60,000 deep overflowed the stack)
     try r.expect(sh(dir, "\"$OLANG\" build joinleak.olang > out.txt 2>&1") == 0, "joinleak build", dir)
     try r.expect(sh(dir, "(ulimit -v 150000 && ./build/joinleak) > out.txt 2>&1") == 0, "joinleak", dir)
-    try r.expect(outOf(dir) == "805138895\n", "joinleak output", dir)
+    try r.expect(outOf(dir) == "808638895\n", "joinleak output", dir)
     try r.expect(sh(dir, "\"$OLANG\" build joindepth.olang > out.txt 2>&1 && ./build/joindepth > out.txt 2>&1") == 0
                  "joindepth", dir)
     try r.expect(outOf(dir) == "1\n", "joindepth output", dir)

@@ -15,8 +15,8 @@ fn (r Re&) Str() String {
     return "r" $r.n
 }
 fn main() ? {
-    assert $Rs == "Re[r1, r2, r3]" and Seen == 3
-    assert $Rs == "Re[r7, r9]" and Seen == 5        # the second's Str writes its own receiver before reading it
+    assert $Rs == "Array<Re>[r1, r2, r3]" and Seen == 3
+    assert $Rs == "Array<Re>[r7, r9]" and Seen == 5        # the second's Str writes its own receiver before reading it
     Rs = Array<Re>[Re(8), Re(5)]                           # the same length: written in place (T11b) - the Str of the first
-    assert $Rs == "Re[r8, r9]" and Seen == 7       # element writes the second before the rendering reaches it
+    assert $Rs == "Array<Re>[r8, r9]" and Seen == 7       # element writes the second before the rendering reaches it
 }

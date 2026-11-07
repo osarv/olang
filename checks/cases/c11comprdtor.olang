@@ -1,4 +1,4 @@
-# check: fail error[C11]: R has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<R>, or hold R& ones
+# check: fail error[C11]: R has a destructor to run, and Array<R> keeps values of it where no holder ends them - write R&, or keep them in a Vec<R>
 # C11: a comprehension of a run-time length makes values with destructors no holder ends (found 2026-11-07: they were
 # made and never ended; a count known while compiling makes a fixed array, which ends them)
 Ended mut I64 = 0

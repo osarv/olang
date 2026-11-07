@@ -4,10 +4,10 @@ false false true true
 true
 seven small
 true true
-I64[7, 8] I64[1, 1]
+Array<I64>[7, 8] Array<I64>[1, 1]
 true 100
 8 12
 12 16 15
 1 5 9 5
-F16[0, 2.5, 3.5] BF16[0.5, 1.5, 0]
+Array<F16>[0, 2.5, 3.5] Array<BF16>[0.5, 1.5, 0]
 12 30 16 45 true
