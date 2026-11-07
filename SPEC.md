@@ -79,8 +79,8 @@ The array rules - lengths known while compiling and fixed storage (§2.3 T7a-T7d
 D9b), inline array fields (C2e) and instances per length (§12.7 G29-G31) - are implemented
 but for these, each marked where it is stated: a result's inferred length (D8f; a declared function's array result
 has a length known only at run time); a constructor taking an array by value (G29; a constructor's
-array parameter is taken by reference, D9a); and three sources of a known length (T7c) - a reference local, a mutable
-private global, and a comprehension, all of whose lengths are known only at run time.
+array parameter is taken by reference, D9a); and two sources of a known length (T7c, T7d) - a reference local and a
+mutable private global, whose lengths are known only at run time.
 
 ## 1. Lexical Structure
 
