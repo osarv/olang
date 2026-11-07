@@ -327,6 +327,7 @@
 | ok - a rendering reads back as the literal making it
 | ok - array patterns write the matched value's type
 | ok - a comprehension made into another collection is walked by its FromIter
+| ok - Strict.FromIter: takes a comprehension through the array its elements make
 === test tests/match.olang
 | status 0
 | ok - a value match's clauses give their values after ':', a value running on over lines

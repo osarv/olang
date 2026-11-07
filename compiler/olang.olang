@@ -389,13 +389,14 @@ fn CommandLine.Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Dia
     # the tools that only analyze need no clang, as interpret does not (B12)
     tool := cl.Mode == Doc or cl.Mode == Lsp or cl.Mode == Mcp or cl.Mode == Api
     interpreting := cl.Mode == Interp or c.Interpreted
-    c.Target = try target.Target.Resolve(cl.Spec, c.Clang, interpreting or (tool and c.Clang == ""), d) catch target.Bad {
-        error Bad.Usage
-    }
     # B12a: another architecture is compiled, built and linked for with its C library, and its programs and tests run
-    # through an emulator; what runs in this process - interpret, the tools - is for this machine only
+    # through an emulator; what runs in this process - interpret, the tools - is for this machine only, said before
+    # whether this clang can build for it
     foreignOk := cl.Mode == Compile or cl.Mode == Build or (cl.Mode == Test and not c.Interpreted) or cl.Mode == Run or
         cl.Listing != ""
+    here := modeName(cl.Mode) if not foreignOk and not interpreting else ""
+    c.Target = try target.Target.Resolve(cl.Spec, c.Clang, interpreting or (tool and c.Clang == ""), d, here = here)
+        catch target.Bad { error Bad.Usage }
     if c.Target.Foreign and not foreignOk { try usage(d, msgs.TargetForeignMode(modeName(cl.Mode), cl.Spec)) }
     c.Tests = cl.Mode == Test
     c.Profile = cl.Mode == Profile

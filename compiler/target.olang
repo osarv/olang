@@ -158,15 +158,15 @@ fn (t Target&) Runner() Array<String&> ? Bad {
 # what "-target spec" names (B12), for a build that interprets (interpret) or not, with clang ("" for none). A spec is a
 # CPU of this machine's architecture ("native", "x86-64-v3", "skylake"), or a triple ARCH-linux-gnu (any vendor between)
 # with ":CPU" after it where the architecture's baseline is not the CPU wanted. What cannot be built for is reported to
-# d
-fn Target.Resolve(spec String&, clang String&, interpreting Bool, d mut diag.Diagnostics&) Target ? Bad {
+# d; here names a mode that runs only on this machine, so a foreign target is refused for it before clang is asked
+fn Target.Resolve(spec String&, clang String&, interpreting Bool, d mut diag.Diagnostics&, here String& = "") Target ? Bad {
     hostOs, hostArch := Host()
-    return try Target.ResolveOn(spec, clang, interpreting, hostOs, hostArch, d)
+    return try Target.ResolveOn(spec, clang, interpreting, hostOs, hostArch, d, here = here)
 }
 
 # Resolve, on a machine running hostOs on hostArch
 fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs String&, hostArch String&
-    d mut diag.Diagnostics&) Target ? Bad {
+    d mut diag.Diagnostics&, here String& = "") Target ? Bad {
     t := Target()
     t.Spec = $spec
     # a triple begins with an architecture and a '-'; anything else is a CPU of this machine's architecture
@@ -206,6 +206,7 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
     }
     if hasCpu and cpu == "native" and t.Foreign { try refuse(d, msgs.TargetNativeForeign(spec)) }
     if t.Foreign and interpreting { try refuse(d, msgs.TargetForeignMode("interpret", spec)) }
+    if t.Foreign and here != "" { try refuse(d, msgs.TargetForeignMode(here, spec)) }
     # interpret runs the program without clang and needs one only to know the target: this machine's own CPU, or an
     # x86-64 level, it knows without - the level this processor supports standing for its CPU
     if clang == "" {

@@ -441,6 +441,18 @@
 | RETURN 4:33-4:45
 | -- diagnostics
 | error T21 3:12
+=== checks/cases/t22ainstancename.olang
+| EXPR 11:36-11:45
+| EXPR 14:24-14:41
+| FIELD 7:5-7:6
+| FIELD 8:5-8:40
+| FN 11:1-11:47
+| FN 13:1-15:2
+| FORIN 14:5-14:43
+| IMPORT 4:1-4:16
+| TYPE 6:1-9:2
+| -- diagnostics
+| error  19:21
 === checks/cases/t30sep.olang
 | FN 4:1-4:16
 | -- diagnostics
