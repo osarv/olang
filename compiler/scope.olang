@@ -10376,15 +10376,65 @@ fn (s mut Scoper&) viewRoot(x typed.Expr&) I64 {
 fn (s mut Scoper&) viewSource(x typed.Expr&) I64 {
     v := s.viewRoot(x)
     if v >= 0 { return try s.walkSrc.Get(v) catch default v }    # (a walk's elements view what its generator borrows)
+    dc := s.dtorCall(unPassed(s.unAway(x)))
+    if dc >= 0 { return dc }
     l := s.wholeRoot(x)
     for _ in range 16 {
         if l < 0 or l >= s.viewOf.Len() { return -1 }
         if s.walkSrc.Has(l) { return try s.walkSrc.Get(l) catch default -1 }
         if s.viewOf[l] >= 0 { return try s.walkSrc.Get(s.viewOf[l]) catch default s.viewOf[l] }
+        if s.origin[l] == -2 { return s.dtorInit(l) }
         if s.origin[l] < 0 { return -1 }
         l = s.origin[l]
     }
     return -1
+}
+
+# O27, O15 (docs/sec8.md 4.3): the value local whose own storage the result of call x shows, where that local may hold
+# a value whose destructor is still to run - an argument borrowing the local or a part of it, which the callee's result
+# lives where (its obligations: the argument's scope outlives the result's, O13) - never built longer for the view kept,
+# its end staying where its holder lets go (bulk review 8, F3); -1 for none
+fn (s mut Scoper&) dtorCall(x typed.Expr&) I64 {
+    c := typed.Call.Of(x)
+    if c is null { return -1 }
+    for ai in range c.Args.Len() {
+        l := s.dtorLocal(c.Args[ai])
+        if l >= 0 and s.resultViews(c, ai) { return l }
+    }
+    return -1
+}
+
+# the value local an argument borrows (whole or a part, no reference between) where it may hold a value whose destructor
+# is still to run, else -1
+fn (s mut Scoper&) dtorLocal(a typed.Expr&) I64 {
+    u := unPassed(s.unAway(a))
+    if u != typed.Expr.Borrow { return -1 }
+    p := u.p
+    if flThroughRef(p) { return -1 }
+    l := flRoot(p)
+    if l < 0 or s.isRef(s.B!.Locals[l].Ty) or not s.mayHoldDtor(s.B!.Locals[l].Ty) { return -1 }
+    return l
+}
+
+# whether call c's callee hands back what its argument ai names: one of its obligations has that argument's scope outlive
+# its result's
+fn (s mut Scoper&) resultViews(c typed.Call&, ai I64) Bool {
+    cb := match c.Target {
+        case typed.Callee.Body(id): I64(id)
+        case _: -1
+    }
+    rv := s.resultVarOf(s.calleeType(c))
+    if rv < 0 or cb < 0 or cb >= s.sums.Len() { return false }
+    for r in s.sums[cb].Rels {
+        if r.Lo == Term.Var(rv) and s.argOfVar(c, r.Hi) == ai { return true }
+    }
+    return false
+}
+
+# ... where local l was declared from such a call's result (its claim, origin -2): that local, else -1
+fn (s mut Scoper&) dtorInit(l I64) I64 {
+    init := try s.inits.Get(l) catch { return -1 }
+    return s.dtorCall(unPassed(s.unAway(init)))
 }
 
 # O27's error for value x, a view of a local's storage kept too long, said at sp: true where it was one. With O27 as
@@ -10452,6 +10502,9 @@ fn (s mut Scoper&) proposeIn(x typed.Expr&, t Term) {
     r := s.claimRoot(x)
     if r < 0 {
         if s.proposeView(u, t) { return }
+        # (a call handing back a view of a value local's own storage holding a value whose destructor is still to run:
+        # never landed longer for it, nor the local lifted - the view kept is O27's error, bulk review 8 F3)
+        if s.dtorCall(u) >= 0 { return }
         s.proposeCall(u, t)
         return
     }
@@ -10823,7 +10876,11 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
 # the local the call's result lands for where that side is the callee's result scope
 fn (s mut Scoper&) liftAtCall(c typed.Call&, r rel, lo Term) {
     ai := s.argOfVar(c, r.Hi)
+    # (a callee handing back a view of a value local's own storage holding a value whose destructor is still to run:
+    # neither the local nor the call's landing is lifted for it, the view kept is O27's error - bulk review 8, F3)
+    rv0 := s.resultVarOf(s.calleeType(c))
     if ai >= 0 {
+        if rv0 >= 0 and r.Lo == Term.Var(rv0) and s.dtorLocal(c.Args[ai]) >= 0 { return }
         s.propose(c.Args[ai], lo)
         return
     }

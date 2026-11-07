@@ -30583,3 +30583,15 @@ receiver. Both are D9h/D9i work of their own; the copy stays ~1% of a builder-he
   drops.olang's `gripsHeld` (decided while compiling and at run time) and `registeredHeld` (a registered holder of an
   earlier registered value, run time only - K2c); checks' o15registeredholds, o15registeredlater, o15registeredtemp,
   o15registeredinner.
+- **F3 (ViewKeptDestructor through a callee).** `views.Push(first2(h))`, `fn first2(h H&) Array<I64>& { return
+  h.arr[0:2] }`, compiled where `views.Push(h.arr[0:2])` is O27's error: the callee's inferred relation (its argument's
+  scope outlives its result's) failed at the call, the inference lifted the call's landing (`liftAtCall`'s result path,
+  then `proposeIn`'s call proposal) and then the argument with its storage - the holder placed in the loop's enclosing
+  scope, its destructor run there (escapedHome) instead of where its holder lets go. SPEC O27 already lists what a callee
+  hands back of an argument as a view and refuses storage holding a destructor value; the code now holds it: a call one of
+  whose arguments borrows a value local's own storage (whole or a part, no reference between) that may hold a destructor
+  value, where the callee's obligations hand that argument back (`scope.dtorCall`, `resultViews`), is neither landed
+  longer nor its argument lifted, and `viewSource` names the local - so the error is the direct case's, word for word,
+  through a local holding the view too (`v := first2(h)`). A plain struct's storage is still placed (o27callplaced: 1275
+  read back after a churn), and a holder that already outlives the views needs nothing. checks' o27destructorcall,
+  o27callplaced.
