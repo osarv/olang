@@ -780,17 +780,12 @@ callrecvreadonly.olang:12:38: error[T25c]: a read-only reference cannot become w
       |                                      ^
 compilation failed with 1 error
 === callvaluekeeps.olang
-callvaluekeeps.olang:20:13: error[T22a, E31]: Keeper's Call ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it by name
+callvaluekeeps.olang:20:13: error[T22a, E31]: Keeper's Call ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it by name, or hold the value in a local and call it there
    20 |     keepVia(kp, fn() I64 { return n.v + k })
       |             ^~
 compilation failed with 1 error
-=== callvaluekeepsblock.olang
-callvaluekeepsblock.olang:21:26: error[T22a, E31]: Keeper's Call ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it by name
-   21 |     s fn&(x fn&() I64) = kp
-      |                          ^~
-compilation failed with 1 error
 === callvaluekeepsframe.olang
-callvaluekeepsframe.olang:22:13: error[T22a, E31]: Keeper's Call ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it by name
+callvaluekeepsframe.olang:22:13: error[T22a, E31]: Keeper's Call ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it by name, or hold the value in a local and call it there
    22 |     keepVia(kp, c)
       |             ^~
 compilation failed with 1 error
@@ -6311,24 +6306,54 @@ t21nullnever.olang:4:9: note: the type is written here - write '?&' for '&' wher
     4 |     f fn&(x I64) I64 = null
       |         ^
 compilation failed with 1 error
+=== t22acapture.olang
+t22acapture.olang:11:17: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this capture holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+   11 |     f := fn() { g(x, N(2)) }
+      |                 ^
+compilation failed with 1 error
 === t22afallible.olang
 t22afallible.olang:10:16: error[E12]: expected fn&(n I32) I32, found fn&(n I32) I32 ? E
    10 |     k := apply(bad, 5)
       |                ^~~
 compilation failed with 1 error
+=== t22agivenvalue.olang
+t22agivenvalue.olang:16:9: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+   16 |     put(get, x)
+      |         ^~~
+compilation failed with 1 error
+=== t22agivesarg.olang
+t22agivesarg.olang:10:9: error[T22a]: this lambda keeps 'k' beyond the call, and this argument holds only what its written function type says of every call - keep a copy instead, or hold the lambda in a local and call it there
+   10 |     use(adder(gone))
+      |         ^~~~~
+compilation failed with 1 error
 === t22alambdakeeps.olang
-t22alambdakeeps.olang:12:17: error[T22a]: this lambda keeps 'k' beyond the call, which a call through a function value cannot check - keep a copy instead
+t22alambdakeeps.olang:12:15: error[T22a]: this lambda keeps 'k' beyond the call, and this store holds only what its written function type says of every call - keep a copy instead, or hold the lambda in a local and call it there
    12 |     c.onEvict = fn(k String&) { goneRef.Push(k) }
-      |                 ^~
+      |               ^
+compilation failed with 1 error
+=== t22alatelambda.olang
+t22alatelambda.olang:15:9: error[T22a]: this lambda keeps 'b' beyond the call, and this call - reached in a loop's next turn by a value assigned after it - holds only what its written function type says of every call - keep a copy instead, or hold the lambda in a local and call it there
+   15 |         op(x, N(i))
+      |         ^~
 compilation failed with 1 error
 === t22aobligation.olang
 t22aobligation.olang:8:12: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     8 |     a.next = b
       |            ^
-t22aobligation.olang:17:11: error[T22a]: 'hang' ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it directly
+t22aobligation.olang:17:11: error[T22a]: 'hang' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
    17 |     apply(hang, a, b)
       |           ^~~~
 compilation failed with 2 errors
+=== t22apushed.olang
+t22apushed.olang:11:13: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+   11 |     fs.Push(g)
+      |             ^
+compilation failed with 1 error
+=== t22areturncycle.olang
+t22areturncycle.olang:10:24: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this return (from a function calling itself, or among several results) holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+   10 |     if n == 0 { return link }
+      |                        ^~~~
+compilation failed with 1 error
 === t22avalueexact.olang
 t22avalueexact.olang:12:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         w := g(v, t)
@@ -6353,17 +6378,17 @@ t22callunsafe.olang:20:48: error[E12]: expected fn&(n P&) I64, found R
       |                                                ^~~~
 compilation failed with 2 errors
 === t22sharedscope.olang
-t22sharedscope.olang:13:9: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it directly
+t22sharedscope.olang:13:9: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
    13 |     put(link, x, 42)
       |         ^~~~
 compilation failed with 1 error
 === t22sharedscopegeneric.olang
-t22sharedscopegeneric.olang:14:15: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it directly
+t22sharedscopegeneric.olang:14:15: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
    14 |     f := keep(link)
       |               ^~~~
 compilation failed with 1 error
 === t22sharedscopetype.olang
-t22sharedscopetype.olang:15:9: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, which a call through a function value cannot check - call it directly
+t22sharedscopetype.olang:15:9: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
    15 |     put(link, x)
       |         ^~~~
 compilation failed with 1 error
