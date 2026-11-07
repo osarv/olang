@@ -29151,3 +29151,65 @@ tests/drops.olang: a declared Copy calling a function handing its parameter on (
 G42's `WritesGlobals` pinned on one handing it on in every branch (false) and in one (true);
 checks/cases/e31dcopydroperror.olang: a Copy calling one that may fail after the hand-on, the holder still holding, is
 still E31d's error.
+
+**C1: a destructor building through its instance's reference field by a method (O23a, C2d).** `destruct { log.Saw(id)
+}`, `Saw` growing a Vec in the Tally `log` refers to, made every instance holding a local's Tally in an inner block C2d's
+"this instance holds a reference to an argument it would outlive", where `destruct { log.seen.Push(id) }` written
+inline was accepted (tests/drops.olang wrote it inline). Found (traced through the call bindings): `log` is a field the
+inference gives a binding of its own (O23a: the instance is shorter-lived than the Tally), read in the destructor at a
+derived scope; `Saw` builds into its receiver's scope variable, and a build through a derived scope - which exists at no
+run time - was refused and the field's promotion given back (2.6, step 4), so the field read at the instance's scope
+and the receiver had to be exactly there: C2d at every instance shorter-lived than its Tally. The inline form escaped
+only because `Push`'s receiver type admits no stores, so no build was counted - and the plan, holding no run-time scope
+for a derived one (`Inert`), passed the program's: the grown buffer was built in the program's scope. **Fixed (mine):**
+a call building into a scope variable bound to a derived scope is passed the program's scope there - what the plan
+already passed - and neither refused nor given back (`scope.buildsThrough`), so the method form means what the inline
+form meant. SPEC O23a and C2d say so. **Soundness:** what the callee builds lives in the program's scope, which
+outlives the field's referent wherever that lives, so nothing it stores into the referent can dangle; every relation
+the callee's obligations state between that variable and others is still judged against the derived scope (the
+referent's own scope, resolved per call - O23a), unchanged, so a reference the callee stores or hands back is held to
+the referent's real lifetime, never to the program's; only the storage made is longer-lived. Temporaries put where a
+derived scope's referent lives, or a result landing there, stay refused (O12's and O23a's errors). The cost is memory:
+what such a call builds stays until the program ends (the grown buffers of a long-lived Tally - which the inline form
+already paid). Two must-fail cases had been refused only for this - a reference read through a field with a binding of
+its own built through (`derivedcopybuild`, `strderivedcallback`): their builds now go to the program's scope, so they
+became `-sanitize` run cases reading the built node back after an arena churn. tests/drops.olang: `Logged`, whose
+destructor calls `log.Saw(id)`, made in an inner block and in 38 loop turns, read back after a churn, run and decided
+while compiling.
+
+**C2: an enum case holding a by-value parameter's reference, given to a local (T17c).** `m := Maybe.Some(r)` (and `m
+Maybe = ...`, `m = Maybe.Some(r)`, `ms.Push(Maybe.Some(r))` into a local Vec), `r` a by-value parameter holding a `mut`
+reference, was T17c's "this value's payload refers to storage the value would outlive" - plain structs as well as
+unique ones - while `return Maybe.Some(r)` and the same struct (`HeldR(r)`) were accepted. A payload lives where its
+value does (T17c), so its references must be exactly where the value is where something can be stored through them;
+the value was the local's, in the local's block, and the inference never proposed the local longer: an enum case is a
+value made (`MakeKind.Case`), not a call, so the payload's fit ran with no local to lift (`fitTarget` -1), where a
+constructor's C2d obligations lift through `liftAtCall`. **Fixed (mine):** the local an enum case is declared or
+assigned as (`caseLocal`, consumed by the outermost expression `val` judges), or the local whose argument decides where
+it is built when it is passed by value (`bindingArg`: the argument that bound the scope variable, or the one a callee's
+obligation ties it to - `ms` for `ms.Push(...)`), is the payload fit's target: a payload exactly where a longer scope's
+references are proposes that local's claim there, its storage with it where `propose` would take it (a lent Vec's, so it
+is no split value - O17). SPEC T17c says so. **Soundness:** only the local's references' scope is lengthened - to the
+scope of what its payload refers to, which outlives the local's block - the same placement O28 makes for any local whose
+value must outlive its block; the exact fit is then judged against the new claim, and a payload from a scope that cannot
+be placed there (a by-value parameter's own storage, the callee's copy) stays refused
+(checks/cases/t17ccaseparamcopy.olang, C2d at the case's argument). A local assigned a case referring to a local of
+the function after one referring to a parameter's referent has that local lifted too (built where the parameter's
+references live, a new one per call) - checked at run time under `-sanitize`. tests/kept.olang: a local declared,
+assigned and pushed into, a write through the payload's reference reaching the caller's, after a churn, run and decided
+while compiling; tests/drops.olang: the same with a destructor value, ended at the function's end.
+
+**C3: `h HeldTwo = HeldTwo(r, 4)` (C2d, O16, bfix7's "found on the way").** With `r` a by-value parameter of a unique
+type holding a `mut` reference and HeldTwo holding it by value, the instance's references had to be exactly where
+`r`'s are, which the inference meets by landing the constructor's call there - but `liftAtCall` refuses to land longer
+any call whose result may hold a destructor (2.5's destructor timing: a value registered where its call lands, O16,
+would have its destructor run later). Without a destructor the same program was accepted. **Fixed (mine):** a call
+whose value a by-value holder's slot takes as it is (O15: `check.heldValue` peeled its Promote, so nothing is
+registered where it lands; `slotCall`, the Let's initializer call when the local's type `NeedsDrop`) may be landed
+longer, unless its value also holds a destructor value through a reference (`dtorThroughRef` - registered where it was
+built, O16) - checks/cases/c2dheldregistered.olang keeps that refused. SPEC O16 says so. **Soundness:** landing changes
+the call's result scope (where its constructor builds the instance's storage-owning parts), not where the holder's own
+storage is - `h` stays in its block's frame slot, its drop flag and deferred drop unchanged, so its destructors run as
+its block is left, as before (tests/drops.olang reads the order back: `142536`, each value ended at its function's end);
+what the constructor builds lives in a scope that outlives the block, so nothing the instance refers to dangles. The
+refusal still holds wherever a destructor value is registered by the landing, which is what 2.5 protects.

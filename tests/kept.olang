@@ -190,6 +190,49 @@ test texts "builds text where the result keeps it" {
     assert textsSum(4) == 104
 }
 
+# an enum case holding a by-value parameter that holds a reference, given to a local - declared as one, assigned one,
+# or pushed into a local's collection (T17c, C2): the payload lives where its value does, so the local's references live
+# where the parameter's do (lifted there, as a local kept is); writing through the payload's reference reaches the
+# caller's
+type Note struct() {
+    seen := Vec<I64>()
+}
+
+type W struct(id I64, log mut Note&) {
+    id, log
+}
+
+type Opt enum { None, Some(w W) }
+
+fn caseLocals(w W, keep Bool) I64 {
+    a := Opt.Some(w)
+    b := Opt.None
+    if keep: b = Opt.Some(w)
+    ms := Vec<Opt>()
+    for _ in range 3: ms.Push(Opt.Some(w))
+    churn()
+    n := 0
+    if a == Opt.Some {
+        a.w.log.seen.Push(a.w.id)
+        n += a.w.id
+    }
+    if b == Opt.Some: n += b.w.id * 10
+    for m in ms {
+        if m == Opt.Some: n += m.w.id * 100
+    }
+    return n * 10 + w.log.seen.Len()
+}
+
+fn caseLocalsSum() I64 {
+    t := Note()
+    return caseLocals(W(2, t), true) + caseLocals(W(3, t), false)
+}
+
+test caseLocals "gives locals an enum case holding a parameter's reference" {
+    assert caseLocalsSum() == 15253
+}
+
 # the same, computed while compiling
 assert everyTurnSum(5) == 105 and someTurnsSum(7) == 96 and vecs(4) == 10606 and arrays(3) == 603
 assert nested(3) == 312 and reassigned(3) == 3030 and rows(4) == 2404 and textsSum(4) == 104
+assert caseLocalsSum() == 15253

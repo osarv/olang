@@ -602,7 +602,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   emit, the evaluator, `interpret` and section 8 needed nothing else (the flags fold where nothing hands the value on). A
   D13d zero is never left out for such a type (its holder ends it); the Landings walk and definit skip a Drop's
   borrow (no use); effects and early freeing count a holder's parts' destructors, a constructor no longer charged with
-  its type's (its caller holds the value), and effects count a holder's drop only where a path reaches a way out of its
+  its type's (its caller holds the value); a call whose value a by-value holder takes as it is may be landed longer for
+  its callee's obligations unless it holds a destructor value through a reference (O16; C3, 2026-11-07: `h HeldTwo =
+  HeldTwo(r, 4)`), and effects count a holder's drop only where a path reaches a way out of its
   block still holding the value (`typed.DropsRun`, A5, 2026-11-07: a by-value parameter handed on on every path runs
   none, so a declared Copy may call such a function); a constructor that cannot fail gives its punned parameters and fields no
   flag (the instance takes them on every way out), one that may fail ends the fields it built. A capture of such a
@@ -627,7 +629,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   does; an enum reference's zero is null; a null matches no case pattern. A case may carry one type written whole,
   `Round Circle` (the coordinator's decision 2026-10-24): `Shape.Round(c)` builds it, a narrowed value is that type
   (`e.r`, `e.Area()`), `case Shape.Round(c)` and `e as Shape.Round` give it; so `{ North South }` on one line is one case
-  carrying a `South`.
+  carrying a `South`. A local declared or assigned an enum case whose payload must be exactly where a longer scope's
+  references are (a by-value parameter's, `m := Maybe.Some(r)`), or a local collection one is pushed into, has its
+  references placed there (O28, T17c; C2, 2026-11-07 - it had been T17c's error, a struct's equivalent accepted).
 - **Enum raw values (T17e, the user's decision 2026-10-24).** `type Op enum String { Plus = "+" }`, `type Status enum
   U8 { Ok, Busy = 9 }`: a table of constants beside the cases, never their representation (a value still holds its
   case; `$op` is `Op.Plus`). Text defaults to the case's name, an integer to 0 or one more than the case before; values
@@ -1293,7 +1297,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Lending (O17, O17a, O17b).** A value whose references live elsewhere than its storage is lent only to callees that
   keep nothing in it, read off their bodies; a handle (a struct of one reference) is lent as its reference.
 - **Derived and unknown scopes (O12, O23, O23a).** A field holding a view of what a constructor's reference parameter
-  refers to has a binding of its own (inferred, O28), read at a derived scope resolved per call; a scope not known here (alternatives from different scopes) is read but never built into.
+  refers to has a binding of its own (inferred, O28), read at a derived scope resolved per call; a scope not known here (alternatives from different scopes) is read but never built into. A derived scope exists at no run time: a
+  callee that may build into one is passed the program's scope there (C1, 2026-11-07: a destructor's `log.Saw(id)`
+  growing a Vec through its field was C2d's error where the same write inline was accepted) - its relations still
+  judged against the derived scope, only the storage it makes longer-lived.
 - **Constructors (C2d, C2g).** A bare field lives with the instance; an argument binds the instance only where the
   body can make it hold it; a constructor's top level allocates into the instance scope. A field given a lambda or an
   adapter is never "a local only ever called" (D16d's frame latitude): the instance is assembled from it, so the

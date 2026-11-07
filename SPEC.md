@@ -904,8 +904,10 @@ is built in that one scope - a tree written as one expression lives in one scope
 somewhere is stored as it is, and the value may not outlive it: it must live in exactly the value's scope where
 something can be stored through it (O25g, O25c), and otherwise outlive it. That is checked wherever the value lands - a
 declaration, an assignment, a return, an argument, another payload - and two such arguments from two scopes hold the
-value to the shorter-lived where only outliving is asked, and are an error where exactness is. A payload parameter may
-name nothing - where each lives is inferred (O28).
+value to the shorter-lived where only outliving is asked, and are an error where exactness is. Where exactness asks a
+local holding the value - declared or assigned as it, or a collection it is pushed into - to live where a longer scope's
+argument does (a by-value parameter's references, `m := Maybe.Some(r)`), the local's references are placed there (O28),
+its own storage staying in its block. A payload parameter may name nothing - where each lives is inferred (O28).
 
 A reference read out of a payload (a match binding, S13b, or `as`, E32) lives where the payload does: exactly in the
 reference's scope for an enum held by reference (T17d), and for one held by value where the argument it was built from
@@ -6379,14 +6381,14 @@ from it (O25a), through a call's result (O13c), and through the hidden locals of
 container is a **parameter** `p` of the function, the binding was made by whoever built the argument, so a field of
 it tagged with the scope variable `V` of `p`'s type reads at a **derived scope** of the function: "where the argument
 for `p` bound `V`". A derived scope behaves as one of the function's own scope variables (O3) - it outlives every block
-of the body (O10a), and a relation between it and another scope variable is an obligation (O10b) - except that
-nothing is built into it (C2d's restriction on such a field): a temporary put where a derived scope's referent lives, a
-result that would land there, a reference living in one - read through the field, or a copy
-of that reference in a local, a `for ... in` element or a lambda's capture - passed for a parameter of a callee that may
-build into it (something can be stored through the parameter and the callee may write it, or its result is equated with
-it, or its body builds there), or a copy out of such a field handed by value to a callee that can build through what it
-holds (the copy's references being where the field's referent is), is a compile-time error: what the callee built would
-be in the scope the field was read through, which the referent outlives. At each call it
+of the body (O10a), and a relation between it and another scope variable is an obligation (O10b) - except that it
+exists at no run time, so nothing is built into it (C2d's restriction on such a field): a temporary put where a derived
+scope's referent lives, or a result that would land there, is a compile-time error. A callee that may build into a
+derived scope - given a reference living in one (read through the field, or a copy of that reference in a local, a `for
+... in` element or a lambda's capture) for a parameter something can be stored through and the callee may write, or
+whose result is equated with it, or whose body builds there, or given a copy out of such a field by value that it can
+build through - is passed the program's scope for it: what it builds lives as long as the program, which outlives the
+referent wherever that lives (never the scope the field was read through, which the referent may outlive). At each call it
 is resolved from the argument: the binding the argument's value carries for `V`, or, for an argument that is itself a
 parameter of the caller, the caller's own derived scope; where neither is known, the argument's own scope (O23).
 Writing such a field is held to the derived scope too, so no write can falsify the binding a caller resolves it
@@ -6878,7 +6880,13 @@ destructed exactly once (C10). No storage location is registered on its own acco
 never-constructed storage is registered at all — in particular, a zero-filled aggregate (D13)
 contains no instances and causes no destructor to run. A constructor call no reference takes - one standing as a
 statement, read through (`Wrap(x).a.v`), rendered (`$Wrap(x)`) - is an instance all the same: it is registered with
-the scope it was built in (where its constructor's instance landed, C2d) and destructed once when that closes.
+the scope it was built in (where its constructor's instance landed, C2d) and destructed once when that closes. So a
+call whose value is registered where it lands - or holds a destructor value through a reference, registered where it
+was built - is never landed longer for what its callee's obligations ask of its result scope (O18c, O28): its
+destructor would run later than where the call stands. A value a place written for it takes as it is (O15), holding
+destructor values only by value, may be: its destructors are its holder's, run where the holder lets go
+(`h HeldTwo = HeldTwo(r, 4)`, `r` a by-value parameter holding a `mut` reference, lands where `r`'s references live,
+`h`'s destructor still run as its block is left).
 
 Reclaiming storage early (O8d) never runs a destructor: storage holding an instance whose destructor is still to run is
 kept until the instance's scope closes, and the destructor runs there, in the order above. `Destroy()` (C9b) is the one
@@ -6953,10 +6961,10 @@ bare pun, where matching one is the whole point) or with an earlier field's name
   anything else lives with the instance, as a bare field does. The constructed value carries these bindings, so a
   short-lived instance may refer into longer-lived storage — a cursor or a view into a structure. A function
   receiving such a value as a parameter reads the field at a derived scope standing for that binding (O23a), which
-  each call resolves, so it may read, walk, relate and repoint through the field but not **build** through it: a
-  temporary stored into the field or anything reached through it, or the field - or a copy of what it refers to, in a
-  local, a `for ... in` element or a capture - passed for a parameter the callee may build into, is a compile-time
-  error there;
+  each call resolves, so it may read, walk, relate and repoint through the field but not **build** into that scope: a
+  temporary stored into the field or anything reached through it is a compile-time error there, and the field - or a
+  copy of what it refers to, in a local, a `for ... in` element or a capture - passed for a parameter the callee may
+  build into gives the callee the program's scope for it (O23a);
 - a reference parameter written with a bare `&` has its own scope variable, determined by an argument that is
   existing storage (O17); a temporary argument is built in the instance scope (O18a). So does a parameter written
   `T` in a generic type where the instantiation binds `T` to a reference, or to a value holding references (O4b);

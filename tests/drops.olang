@@ -406,3 +406,79 @@ test gSome "runs its parameter's destructor where it does not hand it on" {
     }
     assert Ends == 12
 }
+
+# a destructor calling a method that builds through the instance's reference field (a Vec there grown - C1): the field's
+# referent outlives the instance, which may be made in an inner block or a loop's turn; what the method builds goes to
+# a scope that outlives the referent (the program's - where that lives exists at no run time in the destructor), as the
+# same write written inline already did
+fn (t mut Tally&) Saw(id I64) { t.seen.Push(id) }
+
+type Logged unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct { log.Saw(id) }
+
+fn churn() I64 {
+    n := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        n += s.Len() + a[3]
+    }
+    return n
+}
+
+fn logged() String {
+    t := Tally()
+    {
+        a Logged = Logged(1, t)
+        assert a.id == 1
+    }
+    for k in range 2, 40 {
+        b Logged = Logged(k, t)
+        assert b.id == k
+    }
+    churn()
+    s := 0
+    for x in t.seen { s += x }
+    return $t.seen.Len() "/" $s
+}
+
+test Logged "builds through its field from its destructor, the instance made in an inner block" {
+    assert logged() == "39/780"
+}
+
+assert logged() == "39/780", "decided while compiling"
+
+# a by-value holder given a constructor's value holding a by-value parameter that holds a reference (C3), and a local
+# declared as an enum case holding one (T17c, C2): the holder's and the local's references live where the parameter's
+# do, their own storage and their destructors where they are - each ended at its function's end
+type HeldTwo struct(r Res, n I64) {
+    r, n
+}
+
+fn heldTwo(r Res) I64 {
+    h HeldTwo = HeldTwo(r, 4)
+    return h.n + h.r.id
+}
+
+fn caseHeld(r Res) I64 {
+    m := Maybe.Some(r)
+    return m.r.id * 10 if m == Maybe.Some else 0
+}
+
+fn heldTwos() String {
+    t := Tally()
+    s := 0
+    for k in range 1, 4 {
+        s += heldTwo(Res(k, t))
+        s += caseHeld(Res(k + 3, t))
+    }
+    churn()
+    return $s "/" $t.Text()
+}
+
+test heldTwo "holds a parameter's reference where the parameter's references live, ended at its end" {
+    assert heldTwos() == "168/142536"
+}
+
+assert heldTwos() == "168/142536", "decided while compiling"

@@ -1,0 +1,24 @@
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
+# T17c, C2d (C2's boundary): a local declared as an enum case holding a by-value parameter's reference lives where that
+# reference's referent does (lifted there) - and is then given a case holding a reference to another by-value
+# parameter's own storage, which is the callee's copy and can be built nowhere else: refused
+type Note struct() {
+    seen := Vec<I64>()
+}
+
+type W struct(id I64, log mut Note&) {
+    id, log
+}
+
+type Opt enum { None, Some(w W) }
+
+fn mix(w W, n Note) I64 {
+    m := Opt.Some(w)
+    m = Opt.Some(W(1, n))
+    return m.w.id if m == Opt.Some else 0
+}
+
+fn main() {
+    t := Note()
+    assert mix(W(2, t), Note()) == 1
+}
