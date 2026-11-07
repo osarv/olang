@@ -10243,6 +10243,101 @@ if TestBuild {
         return -1
     }
 
+    nllVersions String& = ("type N struct(v I64) {\n"
+                           "    v\n"
+                           "    next mut N?& = null\n"
+                           "}\n"
+                           "fn walk(h mut N&, k I64) I64 {\n"
+                           "    at mut N& = h\n"
+                           "    if k > 0 { at = N(1) }\n"
+                           "    t := at.v\n"
+                           "    for at.next is not null {\n"
+                           "        at = at.next!\n"
+                           "    }\n"
+                           "    u := at.v\n"
+                           "    for i in range k {\n"
+                           "        u += at.v\n"
+                           "        at = N(i)\n"
+                           "    }\n"
+                           "    at = N(2)\n"
+                           "    return at.v + t + u\n"
+                           "}\n"
+                           "fn fails(k I64) ? {\n"
+                           "    if k > 1 { error Gone }\n"
+                           "}\n"
+                           "fn pick(k I64) I64 {\n"
+                           "    a := N(1)\n"
+                           "    c mut N& = a\n"
+                           "    try fails(k) catch { c = N(5) }\n"
+                           "    return c.v\n"
+                           "}\n"
+                           "fn main() {\n"
+                           "    assert walk(N(0), 2) + pick(3) > 0\n"
+                           "}\n")
+
+    # the offset of text in nllVersions - a statement's start, the key its reaching sets are kept under
+    fn nllAt(text String&) I64 { return try nllVersions.Find(text) catch default -1 }
+
+    # the definitions of local l reaching the statement starting at text, each named by where it is (its statement's text)
+    fn nllReach(v typed.Versions&, l I64, text String&, defs Array<String&>&) String {
+        out := StringBuilder()
+        for d in v.Reaching(nllAt(text), l) {
+            for t in defs {
+                if v.DefOf(nllAt(t), l) == d: out.Push($"[" $t "]")
+            }
+        }
+        return out.ToString()
+    }
+
+    test "versions: the definitions of a reference local reaching each statement, through branches, loops and a catch clause, and the loops they cross (O25i)" {
+        dir := try os.MkTemp() catch os.Error { unreachable }
+        defer { try os.RemoveAll(dir) catch os.Error { } }
+        try os.WriteFile($dir "/main.olang", nllVersions) catch os.Error { }
+        consts := cond.Consts()
+        consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
+        l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+                         source.Names(), diag.Diagnostics(false))
+        l.Load($dir "/main.olang")
+        r := names.Resolver(l)
+        r.Resolve()
+        p := generic.Program(l, r)
+        c := typecheck.Checker(p, false)
+        c.CheckProgram()
+        s := Scoper(p, c.Bodies)
+        s.Run()
+        assert rootRules(l) == "", rootRules(l)
+        b := bodyAt(l, c.Bodies, 5)
+        assert b >= 0
+        v := s.versionsOf(b)
+        assert v is not null
+        at := -1
+        for k in range c.Bodies[b].Locals.Len() {
+            if p.L.Names.Text(c.Bodies[b].Locals[k].Name) == "at": at = k
+        }
+        assert at >= 0 and v.Cursor[at]
+        defs := String&["at mut N& = h", "at = N(1)", "at = at.next!", "at = N(i)", "at = N(2)"]
+        assert nllReach(v, at, "t := at.v", defs) == "[at mut N& = h][at = N(1)]", nllReach(v, at, "t := at.v", defs)
+        assert nllReach(v, at, "u := at.v", defs) == "[at mut N& = h][at = N(1)][at = at.next!]"
+        got := nllReach(v, at, "u += at.v", defs)
+        assert got == "[at mut N& = h][at = N(1)][at = at.next!][at = N(i)]", got
+        assert nllReach(v, at, "return at.v", defs) == "[at = N(2)]"
+        # the turn's own definition reaches the next turn's read across the loop body; one made before the loop does not
+        loopDef := v.DefOf(nllAt("at = N(i)"), at)
+        assert v.Across(nllAt("u += at.v"), loopDef) >= typed.BlockId(0)
+        assert v.Across(nllAt("u += at.v"), v.DefOf(nllAt("at = N(1)"), at)) < typed.BlockId(0)
+        # a catch clause's definition reaches the read after the try, beside the declaration's
+        pb := bodyAt(l, c.Bodies, 23)
+        assert pb >= 0
+        pv := s.versionsOf(pb)
+        assert pv is not null
+        cl := -1
+        for k in range c.Bodies[pb].Locals.Len() {
+            if p.L.Names.Text(c.Bodies[pb].Locals[k].Name) == "c": cl = k
+        }
+        got = nllReach(pv, cl, "return c.v", String&["c mut N& = a", "c = N(5)"])
+        assert got == "[c mut N& = a][c = N(5)]", got
+    }
+
     jpTasks String& = ("type P struct(v I64) { v }\n"
                        "fn work(p P&) I64 { return p.v }\n"
                        "fn spawnOne() I64 {\n"
