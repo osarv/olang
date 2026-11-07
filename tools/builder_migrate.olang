@@ -52,6 +52,10 @@ type Mod struct(Path String, Text String, toks Array<token.Token>) {
     built Map<String, Move> = Map<String, Move>()    # a builder declared already, by its name: its owner and variables
     skips Map<I64, Bool> = Map<I64, Bool>()    # offsets of names that declare something else: a method's, a case's
     locals Map<String, Bool> = Map<String, Bool>()   # names declared as locals or parameters somewhere in the file
+    cases Map<String, Bool> = Map<String, Bool>()    # "Type.Case" of each enum the file declares - no builder's name
+    tops Map<String, Bool> = Map<String, Bool>()     # its top-level functions, types and globals, by name
+    every Vec<Move> = Vec<Move>()                    # every builder declared already, each type's alike
+    clashes Vec<String> = Vec<String>()              # moves left as they are: their name a case of their type
 }
 
 type Tool struct(Std String, Prelude String) {
@@ -196,7 +200,11 @@ fn collectDecls(m mut Mod&, decls Array<ast.Decl&>&, names source.Names&, types 
     for d in decls {
         match d {
             case ast.Decl.Fn(f) { judge(m, f, names, types) }
-            case ast.Decl.Type(_, td) { skipMembers(m, td) }
+            case ast.Decl.Type(_, td) {
+                m.tops.Put($names.Text(td.Name), true)
+                skipMembers(m, td, names)
+            }
+            case ast.Decl.Global(_, v) { for n in v.Names { m.tops.Put($names.Text(n), true) } }
             case ast.Decl.If(_, ti) { collectIf(m, ti, names, types) }
             case _ { }
         }
@@ -229,12 +237,23 @@ fn renamed(m mut Mod&) {
     keys Vec<String>
     for e in m.moves.Iter() {
         s := try want.Get(e.Key) catch default ""
-        if s != e.Key and (try count.Get($e.Value.Type "." $s) catch default 0) == 1 { keys.Push(e.Key.Copy()) }
+        if s == e.Key or $e.Value.Type "." $s in m.cases: continue    # D19: a builder is never named like a case
+        if (try count.Get($e.Value.Type "." $s) catch default 0) == 1 { keys.Push(e.Key.Copy()) }
     }
     for k in keys {
         mv := try m.moves.Get(k) catch { continue }
         mv.Name = try want.Get(k) catch default k.Copy()
         m.moves.Put(k, mv)
+    }
+    # a move whose own name is a case of its type cannot be made: left for a person, said by the run
+    gone Vec<String>
+    for e in m.moves.Iter() {
+        if $e.Value.Type "." $e.Value.Name in m.cases: gone.Push(e.Key.Copy())
+    }
+    for k in gone {
+        mv := try m.moves.Get(k) catch { continue }
+        m.clashes.Push($k " makes a " $mv.Type ", and " $mv.Type "." $mv.Name " would name a case of it - rename it, then declare it fn " $mv.Type ".NAME")
+        m.moves.Remove(k)
     }
 }
 
@@ -265,10 +284,16 @@ fn leftName(name String&, left String&) String {
 }
 
 # an enum's cases and a trait's methods are names of their own, never a use of a function's
-fn skipMembers(m mut Mod&, td ast.TypeDecl&) {
+fn skipMembers(m mut Mod&, td ast.TypeDecl&, names source.Names&) {
     if td.Body is null { return }
+    ty := names.Text(td.Name)
     match td.Body {
-        case ast.TypeBody.Enum(cases, _) { for c in cases { m.skips.Put(I64(c.Sp.Start), true) } }
+        case ast.TypeBody.Enum(cases, _) {
+            for c in cases {
+                m.skips.Put(I64(c.Sp.Start), true)
+                m.cases.Put($ty "." $names.Text(c.Name), true)
+            }
+        }
         case ast.TypeBody.Trait(ms, _, _) { for f in ms { m.skips.Put(I64(f.Sp.Start), true) } }
         case _ { }
     }
@@ -281,7 +306,9 @@ fn judge(m mut Mod&, f ast.Func&, names source.Names&, types Map<String, Bool>&)
         n := $names.Text(f.Member)
         ty := $names.Text(f.OwnerName())
         if n in m.builders and (try m.builders.Get(n) catch default "") != ty { m.builders.Put(n, "") } else { m.builders.Put(n, ty) }
-        m.built.Put(n.Copy(), Move.built(m, f, names, ty))
+        mv := Move.built(m, f, names, ty)
+        m.built.Put(n.Copy(), mv)
+        m.every.Push(mv)
         return
     }
     if f.Recv is not null {
@@ -290,6 +317,7 @@ fn judge(m mut Mod&, f ast.Func&, names source.Names&, types Map<String, Bool>&)
         return
     }
     name := $names.Text(f.Name)
+    m.tops.Put(name.Copy(), true)
     if f.Export or name == "main" or f.S.Results.Len() != 1 or ast.FirstYield(f.Body).Start >= I32(0) { return }
     base := plain(f.S.Results[0])
     if base is null { return }
@@ -591,6 +619,9 @@ fn (t mut Tool&) rewrite(i I64) String {
         eligible(decls, names, declared)
         mm.moves = Map<String, Move>()
         mm.skips = Map<I64, Bool>()
+        mm.cases = Map<String, Bool>()
+        mm.every = Vec<Move>()
+        mm.clashes = Vec<String>()
         collect(mm, decls, names, declared)
     }
     m := t.mods[i]
@@ -642,10 +673,44 @@ fn (t Tool&) viaAlias(m Mod&, text String&, toks Array<token.Token>&, k I64, nam
         return
     }
     ty := try o.builders.Get(name) catch default ""
-    if ty == "" { return }
-    bm := try o.built.Get(name) catch { return }
-    useEdit(text, toks, k, name, bm, edits)
+    if ty != "" {
+        bm := try o.built.Get(name) catch { return }
+        useEdit(text, toks, k, name, bm, edits)
+        return
+    }
+    if name in o.tops { return }
+    rm := try t.renamedOf(o, name) catch NotRenamed { return }
+    useEdit(text, toks, k, name, rm, edits)
 }
+
+# a name a module no longer declares, read as a function of it that became a builder under another name - a call
+# written before that module was migrated (by an earlier run, std's in its own round): std's renames no stripping
+# explains (StdRenames), else the one builder whose name is the old one with its type's name taken out (renamed's
+# rule read backward: "ParseIP" for IP.Parse, "DateOf" for Date.Of, "ListenUDP" for UDP.Listen)
+fn (t Tool&) renamedOf(o Mod&, name String&) Move ? NotRenamed {
+    for r in StdRenames {
+        if not o.Path.EndsWith($"/" $r.Module ".olang") or not o.Path.StartsWith(t.stdReal()) or r.Old != name { continue }
+        return Move($r.Owner, $r.Type, r.Params.Copy(), r.Moved.Copy(), r.Err, $r.New, true)
+    }
+    found Vec<Move>
+    for mv in o.every {
+        if mv.Name != name and stripped(name, mv.Type) == mv.Name { found.Push(mv) }
+    }
+    if found.Len() != 1 { error NotRenamed }
+    return found[0]
+}
+
+fn (t Tool&) stdReal() String { return try os.RealPath(t.Std) catch default $t.Std }
+
+# a function of std that became a builder under a name no stripping explains: its module, its old name, the builder's
+# owner as written, type and name, and the old function's type variables in its list's order (which move to the owner)
+type Renamed struct(Module String, Old String, Owner String, Type String, New String, Params Array<String>
+                    Moved Array<Bool>, Err Bool) {
+    Module, Old, Owner, Type, New, Params, Moved, Err
+}
+
+StdRenames Array<Renamed> = Array<Renamed>[
+    Renamed("list", "From", "List<T>", "List", "FromIter", Array<String>["I", "T", "E"], Array<Bool>[false, true, false], true)]
 
 # "fn name<list>(" becoming "fn Owner.name<rest>(": the owner's variables leave the list
 fn declEdit(text String&, toks Array<token.Token>&, k I64, name String&, mv Move, edits mut Vec<Edit>&) {
@@ -828,6 +893,7 @@ fn run() I32 {
         if m.Text.StartsWith("# check: fail error[D19a]") { continue }
         old := $m.Text
         out := t.rewrite(k)
+        for c in t.mods[k].clashes { srcmask.Say($"by hand: " $m.Path ": " $c) }
         if out == old { continue }
         changed++
         if verbose { srcmask.Say(m.Path) }
