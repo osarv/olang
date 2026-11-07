@@ -208,7 +208,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `SetAt` stores through it, its index evaluated at its place (2026-11-03: `ps[i], ps[j] = ps[j], ps[i]` on a Vec was
   E31's refusal - the references study's bug). An assigned value
   borrowing storage within the place takes its old value as a copy, decided by types (S4d) - in stage 0 too since
-  2026-10-18 (it had asked the callee's body, `calleeMayKeepArg`).
+  2026-10-18 (it had asked the callee's body, `calleeMayKeepArg`). A parallel declaration or assignment copies each value as
+  one alone does (bulk review 7, F7: `m, n := g, g` had shared g's array).
 - **Every path of a function with a result must return (D10a)** - structural, loops never count, `for { }` with no
   `break` of its own leaves, a leaving `join` counts, a `noreturn` call counts. `unreachable` is checked, never assumed
   (S16d), and behaves as a failed assert. `os.Exit(code)` for any status (B5b), process-wide, tests included.
@@ -441,7 +442,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   join clauses and a loop not around the declaration count as after), the local's storage its own (no view held, no
   alias, no escape, never assigned whole, no O8d region) and outliving the copy's block; a constructor viewing only
   moved locals owns what it views (`movedViews`). `t := mk(20M); P(t)` 682 MB / 0.44 s -> 420 MB / 0.23 s, as
-  `P(mk(20M))`.
+  `P(mk(20M))`. Never where another operand of the same call (or value made) mentions the local - `peek(t, t)` lends
+  it beside its copy (bulk review 7, F1); a spawned call's arguments get no frame slot (`stackArg`, F12).
   A value owning parts handed back from storage that is no view of the arguments (a global's) is copied by the function
   (`retOwns`; while compiling every such value, so the evaluator agrees).
   Rows laid out in place given where run-time rows are wanted are widened each in turn (they were read as pairs). **T25d** (found by round 3b, on the default path too): text written in the program given a
@@ -575,7 +577,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   a returned one (the user: "taking a unique value by value doesn't work either, whether by a parameter or a new
   local"); a `:=` constructor field is a slot (a value), never a reference; a unique value renders, compares and is
   read through its fields as any value. `tools/unique_migrate.olang` (in `olang fix`) declared std's and the corpus's
-  destructor types unique.
+  destructor types unique. Since bulk review 7 (HISTORY.md "Bulk review 7, fixed"): a name made from a by-value
+  parameter - a reference local, a binding, a closure capturing it - counts as a mention of it, so its use after the
+  hand-on is an error naming it, and a hand-on beside a lend of the same value in one call is one too (`typed.Landings`
+  holders and `apart`); `Array<T>(n, fill)` of a unique T is refused (in a generic at the binding call); an immut generic
+  instance holding a unique part is refused where it is asked for; a try's value of a fresh call is fresh.
 - **Destructors run where the holder lets go - Rust's drop (O15, O16, C9, C9b, C11, T13b rule 10, the user's decision
   2026-11-03 "unique DECIDED"; built 2026-11-03, wt-uniq Part B, details mine).** A value with a destructor to run (a
   struct declaring one, or a value holding one by value - `types.NeedsDrop`, deep through values) is held by value in a
@@ -599,7 +605,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   its type's (its caller holds the value); a constructor that cannot fail gives its punned parameters and fields no
   flag (the instance takes them on every way out), one that may fail ends the fields it built. A capture of such a
   variable borrows it (D16c, as a unique one). Measured: bench machine code identical (addresses masked), the
-  self-build unchanged; tests/drops.olang's order decided while compiling (a top-level assert) as at run time. Not
+  self-build unchanged; tests/drops.olang's order decided while compiling (a top-level assert) as at run time. Since
+  bulk review 7: a join block's holders let go after its wait (`BlockKind.Drop`, lowering's three phases); a holder whose
+  storage the scope pass homes elsewhere (returned as a reference, captured by a returned closure, pushed into a
+  parameter's collection) registers its value where it lives (O16) instead of ending it (`escapedHome`); a hand-on's flag
+  clears once the call is made, after every argument (`Seq.Gone`); a failed requirement ends the by-value parameters
+  taken; a test ended by a failed check ends its holders (a guard registered with the block, test builds only,
+  `HelperKind.Guard`); a deferred `x.Destroy()` ends only what the holder still holds, and a holder may be given a new
+  value after its `Destroy()` (C9b). Not
   built: collections holding such values by value (`Vec<File>`: their own moves, growth and room would need a drop
   walking their count - a round of its own).
 - **Declared types are nominal (T29).** `type Meters I32`, `type Name Array<T>`; `extends` inherits the base's methods
@@ -760,7 +773,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   gathering the arguments into one before named ones are placed. std: filepath.Join, os.Exec/Start/ExecUntil (the
   token first)/ExecInPlace, http.Get/Post's headers, csv.Record; `tools/variadic_migrate.olang` (in `olang fix`).
 - **Lambdas (D16, the user's design).** `fn(x) { return ... }`, `return` always written; captures copied (plain values
-  read-only, references still naming their instance, value arrays borrowed); types from the expected function type
+  read-only - what a value owns copied with it, by its declared Copy, since bulk review 7 F8 -, references still naming
+  their instance, value arrays borrowed); types from the expected function type
   (D16a) or the body (D16b). A function value is `{code, environment}`, identity by both words, never null unless its
   type says `fn?&` (T21, below).
   `(args)` after any postfix expression calls (E13b). `spawn fn() { }` runs a lambda as a task (D16e).
@@ -815,7 +829,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   from the argument, no parameter sharing its scope, the settled body storing nothing into it); a conversion of a place
   to a type over a declared array type (`Lab`, `Path` over `String`) names its storage (the place path takes the
   underlying kind); one return-copy decision with a plan and without; a local a scoped call declares lives where the
-  argument says; `interpret` runs the scope pass and refuses what a build refuses (B3e).
+  argument says; `interpret` runs the scope pass and refuses what a build refuses (B3e) - a check gap
+  included since bulk review 7 (F11).
 - **No `volatile` (X3b)** - a foreign call is an opaque barrier, atomics cover threads, MMIO is inexpressible.
 - **TBAA (T36).** Every numeric primitive, the array descriptor and a reference to a struct or an enum have element and
   field tags (references since 2026-10-18, so a handle's reference hoists out of a loop); the runtime's scope and chunk
