@@ -1,0 +1,84 @@
+# check: run
+# flags: -debug -sanitize
+# O8d, M19d (bulk review 8, F1 - found no bug): a reference to a collection's element kept across a removal (Truncate,
+# RemoveAt, SwapRemove, Pop, Clear, a Map's Remove) reads the position the removal left empty: an element owning
+# storage moved out of it leaves an empty value there (its arrays empty), never storage early freeing released - so
+# reading its parts gives zeros and lengths of 0, built, under the sanitizer and interpreted alike (indexing into the
+# empty array is the program's own out-of-range index, E16e). Read after the arena churned and other storage reused
+import "std/io"
+
+type Rec struct(id I64) {
+    id
+    data := Array<I64>(16 + id.Mod(2), id)
+}
+
+type Blob unique struct(id I64) {
+    id
+    data := Array<I64>(16 + id.Mod(2), id)
+}
+
+fn churn() I64 {
+    t := 0
+    for _ in range 20 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+
+# what a reference still shows of a removed element: its id and its data's length, its first element where it has one
+fn seen(r Rec&) I64 { return r.id + r.data.Len() + (r.data[0] if r.data.Len() > 0 else 0) }
+fn seenBlob(b Blob&) I64 { return b.id + b.data.Len() + (b.data[0] if b.data.Len() > 0 else 0) }
+
+fn removals(n I64) I64 {
+    ls := Vec<Rec>()
+    other := Vec<Rec>()
+    m := Map<I64, Rec>()
+    s := 0
+    for k in range n {
+        ls.Push(Rec(k + 1))
+        ls.Push(Rec(k + 2))
+        r Rec& = ls.Ref(1)
+        q Rec& = ls.Ref(0)
+        ls.RemoveAt(1)!
+        other.Push(Rec(-1000))
+        other.Truncate(0)
+        churn()
+        s += seen(r)
+        ls.SwapRemove(0)!
+        s += seen(q)
+        ls.Push(Rec(k + 3))
+        p Rec& = ls.Ref(0)
+        ls.Pop()!
+        s += seen(p)
+        m.Put(1, Rec(k + 4))
+        e Rec& = m.Ref(1)!
+        m.Remove(1)
+        churn()
+        s += seen(e)
+    }
+    return s
+}
+
+fn blobs(n I64) I64 {
+    ls := Vec<Blob>()
+    s := 0
+    for k in range n {
+        ls.Push(Blob(k + 1))
+        w := ls[0]
+        ls.Clear()
+        churn()
+        s += seenBlob(w)
+        ls.Push(Blob(k + 2))
+        for b in ls {
+            ls.Truncate(0)
+            churn()
+            s += seenBlob(b)
+        }
+    }
+    return s
+}
+
+fn main() {
+    io.Println($removals(100) " " $blobs(100))!
+}

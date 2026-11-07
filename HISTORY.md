@@ -30549,3 +30549,14 @@ receiver. Both are D9h/D9i work of their own; the copy stays ~1% of a builder-he
   capturing the local in a lambda, stays T22a's boundary error (the existing t22a* cases). So the refusal the hand-on
   round recorded as its cost is lifted, and kept lifted: the case is a run case under `-debug -sanitize` with those
   three shapes, SPEC T13b's sentence says what holds now, and CLAUDE.md's hand-on entry with it.
+- **F1 (a reference to an element kept across a removal) - no bug of early freeing.** The reproducers read
+  `r.data[3]` through a `Ref` kept across `Truncate`/`Clear`/`RemoveAt`/`SwapRemove`/`Pop`/a Map's `Remove` and
+  segfaulted; `interpret` said "it indexes outside the array". What a removal leaves in the vacated position is the
+  empty value: lowering's `take` (a vacate) moves an owning element out and leaves zeros (QCE), and the evaluator empties
+  the place - whether or not early freeing releases anything (the `-memory` rows said kept, and kept they were). So the
+  reference reads an element whose array is empty, and index 3 of it is the program's own out-of-range index (E16e) - a
+  null data pointer in a build, which the interpreter names. Reading its fields and lengths gives 0 built, under
+  `-debug -sanitize` and interpreted alike. Nothing changed; checks' `o8dremovedelemref` (a run case under `-debug
+  -sanitize`) pins what such a read gives - a release without the emptying would read freed storage there. Left as a
+  question for the language, not taken here: a reference to an element read after its removal could be refused within
+  a function as M19g refuses a stale view after growth.
