@@ -1,0 +1,23 @@
+# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it
+# O25i/O17: a reference local given two parameters' referents (c := q, then c = p) stores through whichever it holds -
+# the keeps analysis counts a store through it against every region any of its versions names, so a split value lent
+# for p is refused (since O25i nothing makes p's and q's scopes one at 'c = p', so this count is all that guards it)
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+fn f(p mut N&, q mut N&) {
+    c := q
+    c = p
+    c.next = N(7)
+}
+fn main() {
+    arr := Array<N>(3, N(0))
+    for i in range 3 {
+        x := N(1)
+        t := arr[i]
+        f(t, x)
+        arr[i] = t
+    }
+    assert arr[0].v == 0
+}

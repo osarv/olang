@@ -1,6 +1,10 @@
-# check: fail error[O25]: a reference never narrows - declare it with ':=' from what it is given
+# check: run
+# flags: -debug -sanitize
 # R9a: a default is judged where the call's result lands - here the outer variable keep - not where the try is
-# written; inner dies with the loop body, so keep would be left pointing into a reclaimed arena
+# written; inner dies with the loop body, so keep would be left pointing into a reclaimed arena - so since O25i (keep
+# typed per assignment, the version 'keep = ... inner' read after the loop) inner is built where that read needs it, in
+# main's block, a new one each turn, and keep reads it there after a churn under the scope sanitizer (it was refused
+# with O25 before: keep's one scope was outer's)
 type Stop error {
     Here
 }
@@ -11,6 +15,14 @@ fn mk(k I64) Node& ? {
     if k > -5 { error Stop.Here }
     return Node(7)
 }
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+        s := $k "-" $(k * 7)
+        assert s.Len() > 0
+    }
+}
 fn main() ? {
     outer Node& = Node(1)
     keep Node& = outer
@@ -18,5 +30,6 @@ fn main() ? {
         inner mut Node& = Node(42)
         keep = try mk(i) catch default inner
     }
-    assert $keep != ""
+    churn()
+    assert keep.v == 42
 }

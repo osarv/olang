@@ -1,0 +1,19 @@
+# check: fail error[O25i, O12]
+# also: 'at' is given a value here
+# O25i/O12: a reference local typed per assignment holds, after the if, a version of either scope - a store through it
+# builds into storage whose scope is not known there, so it is refused, naming both assignments
+type N struct(v I64) {
+    v
+    next mut N?& = null
+}
+fn main() {
+    outer mut N& = N(1)
+    for i in range 3 {
+        inner mut N& = N(2)
+        at mut N& = outer
+        if i == 1 { at = inner }
+        at.next = N(9)
+        assert at.v > 0
+    }
+    assert outer.v == 1
+}

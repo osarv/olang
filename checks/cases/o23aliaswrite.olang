@@ -1,6 +1,8 @@
-# check: fail error[O20]: 'c.at' lives where 'c' does, which closes first - keep a copy ('$c.at'), or keep what 'c' was made from
+# check: fail error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
 # O23/O11: a field written '&of' lives where the instance's constructor argument did, which every reader of c believes
 # (c.at reads at outer's scope) - storing through an element that aliases c could falsify that, so it is rejected
+# (O25i: 'keep' is typed per assignment now, so the error is at the read after the loop, which the version
+# 'keep = c.at' reaches - storage of the loop body's)
 type N struct(v I32) {
     v
 }
