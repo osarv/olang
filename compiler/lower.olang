@@ -312,6 +312,9 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     dead Bool = false
     gapped Bool = false
     levels Vec<level>
+    # a constructor's field holding an array of a run-time length that the scope pass keeps in a scope variable (its
+    # instance's, QCE): where its elements are made (storageOf), its slot - the pair naming them - staying in the frame
+    fieldStor Map<I64, mir.ScopeRef>
     # deferred code registered (S19), each with the scope of the level it was registered at, in order
     defers Vec<typed.Block&>
     deferAt Vec<mir.ScopeId>
@@ -394,6 +397,12 @@ fn (ln mut lowering&) run() {
             }
         }
         if away[i]: home = mir.ScopeRef.Program
+        # (a constructor's run-time array field: a reference to it is the pair naming its elements, never its slot, so the
+        # slot needs no storage in the instance - only its elements do; one per call there grew where the instance lives)
+        if home != mir.ScopeRef.Frame and not away[i] and l.Kind == typed.LocalKind.Field and ln.runArrayLocal(l.Ty) {
+            ln.fieldStor.Put(i, home)
+            home = mir.ScopeRef.Frame
+        }
         ln.F.AddLocal(mir.Local(l.Name, l.Sp, l.Ty, k, home))
     }
     for p in b.Params { ln.F.Params.Push(mir.LocalId(I32(p))) }
@@ -1228,6 +1237,7 @@ fn (ln mut lowering&) storageOf(l typed.LocalId) mir.ScopeRef {
     if not ln.planned { return mir.ScopeRef.Program }
     h := ln.F.Locals[I64(l)].Home
     if h != mir.ScopeRef.Frame { return h }
+    if ln.fieldStor.Has(I64(l)) { return try ln.fieldStor.Get(I64(l)) catch default h }
     # an array value whose elements the scope pass keeps in an outer block's arena (the inference's lift, 2.4)
     if I64(l) < ln.plan.Stored.Len() {
         match ln.plan.Stored[I64(l)] {
@@ -4293,6 +4303,13 @@ fn (ln mut lowering&) arrayOf(ty types.TypeId) types.TypeId {
     r := t.Repr(ty)
     if t.IsRef(r) { r = t.Repr(t.Referent(r)) }
     return r if t.KindOf(r) == types.Kind.Array else types.UnknownT
+}
+
+# whether a local of type ty holds an array of a run-time length by value (not a reference, no fixed length)
+fn (ln mut lowering&) runArrayLocal(ty types.TypeId) Bool {
+    if ln.T.IsRef(ty): return false
+    at := ln.arrayOf(ty)
+    return at != types.UnknownT and ln.fixedLen(at) < 0
 }
 
 # a fixed array's length, -1 for a run-time one

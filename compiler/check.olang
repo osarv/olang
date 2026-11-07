@@ -18262,8 +18262,9 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
             id := c.local(source.NameId(0), nsp, c.localType(pid), typed.LocalKind.Field, c.cur().Locals[pid].Marked)
             c.roNeed(typed.Lvalue.Local(nsp, c.localType(pid), typed.LocalId(I32(pid))))   # T25c: the instance keeps it
             # (O15: the parameter's destructors handed on into the instance with its value - the field and the
-            # parameter are one name in the body, C4)
-            x := c.handOn(c.readLocal(nsp, pid), pid)
+            # parameter are one name in the body, C4; a unique one moved, T13b, as every hand-on of it is)
+            pt := c.localType(pid)
+            x := c.handOn(c.readLocal(nsp, pid), pid, not c.isRef(pt) and pt != types.UnknownT and c.P.Unique(pt) and c.movesHere())
             c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x))
             c.cur().Fields.Push(typed.LocalId(I32(id)))
             c.dropOnExit(id, nsp, true)
@@ -18361,6 +18362,7 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         # T25c: ":=" of a read-only copy is one, and a reference read out of one is read-only; a written type declares
         # a writable value
         inferred := i < v.Values.Len() and (v.Ty is null or v.Infer)
+        moved := false
         # T13b: a unique value existing elsewhere - a reference to it, where nothing written says what holds it; a slot
         # laid out for the value (a written type, a constructor's field) takes only a fresh one
         if i < v.Values.Len() and not c.isRef(t) and c.uniqueExisting(x!) {
@@ -18368,6 +18370,7 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
                 x = c.uniqueRef(x!, v.Values[i].Span())
                 t = typeOf(x)
             } else {
+                moved = c.uniqueMoved(x!)
                 x = c.uniqueLand(x!, "'" $c.text(v.Names[i]) "'")
             }
         }
@@ -18387,7 +18390,7 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         # S8c: a plain scalar with a value of its own may be fixed - if its body never writes it
         if not v.Field and i < v.Values.Len() and c.plainScalar(t) { c.fixedInits.Put(pair.Pair(c.fr().Body, id), fixedInit(v.Values[i], t)) }
         # (QCE: a value whose parts own storage, given existing storage, is its own copy)
-        if i < v.Values.Len() and not c.isRef(t) and c.P.T.OwnsParts(t) { x = c.ownCopy(x!) }
+        if i < v.Values.Len() and not c.isRef(t) and c.P.T.OwnsParts(t) and not moved { x = c.ownCopy(x!) }
         c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x!))
         if v.Field { c.cur().Fields.Push(typed.LocalId(I32(id))) }
         c.dropOnExit(id, nsp, not pend.NoZero or pend.Group < 0)   # O15: held until its block is left
@@ -21533,7 +21536,7 @@ fn (c mut Checker&) uniqueLand(x typed.Expr&, what String&, own Bool = false) ty
     l := c.handedOn(x, own)
     if l >= 0 {
         c.landings.Push(landing(c.fr().Body, l, x.Span(), typeOf(x), c.boundMention(typeOf(x))))
-        return c.handOn(x, l)
+        return c.handOn(x, l, not own and c.movesHere())
     }
     c.uniqueErr(x.Span(), typeOf(x), what)
     return x
@@ -21549,6 +21552,20 @@ fn (c mut Checker&) uniqueFill(sp source.Span, elem types.TypeId) {
         return
     }
     c.err(sp, msgs.UniqueFill(c.ty(elem)))
+}
+
+# T13b, O8d: whether x is a unique value handed on out of a by-value parameter at its last mention - moved, never copied:
+# the parameter is the caller's storage, its owned parts where the caller built them (section 8's obligation on the
+# parameter's scope variable), so a holder taking it is the only one left. Not in a lambda, which is called through a
+# function value - no caller there can meet such an obligation (T22a) - so it keeps its own copy, as before
+fn (c mut Checker&) uniqueMoved(x typed.Expr&) Bool { return c.movesHere() and c.uniqueExisting(x) and c.handedOn(x, false) >= 0 }
+
+# whether a unique by-value parameter's hand-on moves in the body being checked: every body but a lambda's (T22a)
+fn (c mut Checker&) movesHere() Bool {
+    return match c.cur().Of {
+        case typed.BodyOf.Lambda(_): false
+        case _: true
+    }
 }
 
 # the local whose whole value x reads where that value may be handed on - a by-value parameter's, or (own) a value
@@ -21809,9 +21826,14 @@ fn (c mut Checker&) dropsGone(sp source.Span, l I64) {
     if flag >= 0: c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Local(sp, types.BoolT, typed.LocalId(I32(flag))), c.lit(sp, types.BoolT, 0)))
 }
 
-# x, the whole value of local l, handed on - its destructors go with it
-fn (c mut Checker&) handOn(x typed.Expr&, l I64) typed.Expr& {
-    if not c.fr().dropFlags.Has(l): return x
+# x, the whole value of local l, handed on - its destructors go with it. moved: a unique value moved out of a
+# by-value parameter (T13b, never copied) is marked so - a Gone Seq around it, with nothing to clear where it holds no
+# destructors - which early freeing reads the move off (free.movedPar)
+fn (c mut Checker&) handOn(x typed.Expr&, l I64, moved Bool = false) typed.Expr& {
+    if not c.fr().dropFlags.Has(l) {
+        if not moved: return x
+        return typed.Expr.Seq(x.Span(), typeOf(x), typed.Seq(Array<typed.Stmt&>(0), x, true))
+    }
     from := c.stmts.Len()
     c.dropsGone(x.Span(), l)
     return typed.Expr.Seq(x.Span(), typeOf(x), typed.Seq(gather(c.stmts, from), x, true))
@@ -21908,7 +21930,9 @@ fn (c mut Checker&) once(x typed.Expr&) typed.Expr& {
 fn (c mut Checker&) storeCopy(p typed.Lvalue&, x typed.Expr&) typed.Expr& {
     t := p.Type()
     if c.isRef(t) { return x }
+    moved := c.uniqueMoved(x)
     x = c.uniqueLand(x, c.slotWhat(p))
+    if moved: return x
     if c.P.T.OwnsParts(t) or (c.P.T.OwnedPart(t) and partPlace(p)) { return c.ownCopy(x) }
     return x
 }
@@ -21918,8 +21942,9 @@ fn (c mut Checker&) storeCopy(p typed.Lvalue&, x typed.Expr&) typed.Expr& {
 # is D9b's (copied by the callee where its body writes it)
 fn (c mut Checker&) valueArg(x typed.Expr&, want types.TypeId) typed.Expr& {
     if want == types.UnknownT or c.isRef(want) { return x }
+    moved := c.uniqueMoved(x)
     x = c.uniqueLand(x, "the parameter")
-    if not c.P.T.OwnsParts(want) { return x }
+    if moved or not c.P.T.OwnsParts(want) { return x }
     return c.ownCopy(x)
 }
 
@@ -21927,8 +21952,9 @@ fn (c mut Checker&) valueArg(x typed.Expr&, want types.TypeId) typed.Expr& {
 fn (c mut Checker&) partCopy(x typed.Expr&) typed.Expr& {
     t := typeOf(x)
     if c.isRef(t) { return x }
+    moved := c.uniqueMoved(x)
     x = c.uniqueLand(x, "a part of a value made")
-    if not (c.P.T.OwnsParts(t) or c.P.T.OwnedPart(t)) { return x }
+    if moved or not (c.P.T.OwnsParts(t) or c.P.T.OwnedPart(t)) { return x }
     return c.ownCopy(x)
 }
 

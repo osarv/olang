@@ -614,11 +614,37 @@ fn FreshViews(plan Plan&, c Call&, views I64, viewsOf fn&(id BodyId) I64, varsOf
     if home == Scope.Unset: return false
     for k in range c.Args.Len().Min(ViewBits) {
         if (views & (I64(1) << k)) == 0: continue
+        # (a unique value moved out of a parameter, T13b: nothing else holds it, and section 8 holds the parameter's
+        # storage to outlive the instance - the constructor's obligation on it)
+        if MovedArg(c.Args[k]): continue
         a := Call.fresh(c.Args[k], 0)
         if a is null or a.Site < SiteId(0): return false
         id := CalleeBody(a)
         if id < 0 or viewsOf(BodyId(I32(id))) != 0: return false
         if Scope.result(plan, a.Site, varsOf(BodyId(I32(id)))) != home: return false
+    }
+    return true
+}
+
+# T13b: whether an argument is a unique value moved out of a by-value parameter - check's hand-on, a Gone Seq around the
+# parameter's read (in an argument, only a hand-on makes one: check.handOn)
+fn MovedArg(x Expr&) Bool {
+    match x {
+        case Expr.Seq(_, _, q) {
+            if not q.Gone or q.X is null: return false
+            y := q.X!
+            return y == Expr.Read and y.p == Lvalue.Local
+        }
+        case Expr.Away(_, _, y) { return MovedArg(y) }
+        case _ { return false }
+    }
+}
+
+# whether every argument a constructor call's instance views (views, its parameters' bits) is moved (MovedArg)
+fn ViewsMoved(c Call&, views I64) Bool {
+    if views <= 0 or (views & ViewOther) != 0: return false
+    for k in range c.Args.Len().Min(ViewBits) {
+        if (views & (I64(1) << k)) != 0 and not MovedArg(c.Args[k]): return false
     }
     return true
 }

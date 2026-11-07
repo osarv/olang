@@ -1574,6 +1574,11 @@ fn Program(seed U64, n I64, keep Array<Bool>&) String& {
 # tasks, no destructors and no run-time trait values - each would make the whole program keep - so early freeing is
 # on. Built -d -s (a freed region poisoned and held back) and interpreted in dead-region mode (a read of a freed region
 # stops), the two must print the same.
+#
+# A hand-on scenario (one in three, T13b's move) hands unique values owning storage (Buf) on through by-value parameters
+# - one call deep, two, into a constructor's field - into a Map and a Vec held by value, replaces and removes them, takes
+# them out to holders, and keeps views of them across the let-goes (which must keep): Buf's destructor reads what it owns,
+# so storage released too soon is read under -s and stops the evaluator.
 
 FreePrelude := (
     "import \"std/io\"\n"
@@ -1649,6 +1654,104 @@ fn freeHolder(k I64) String& {
             "    if h.keepR is not null { t = t * 5 + h.keepR!.t.Len() }\n"
             "    return t * 11 + Ends\n"
             "}\n")
+}
+
+# a hand-on scenario's pool and its helpers: unique Bufs - a value owning storage, whose destructor reads what it owns
+# - handed on by value into its Map and Vec, one call deep (put), two (pass), into a constructor's field (wrapPut),
+# reading the value before handing it on (peek). Its own Buf type, so what keeps in one scenario keeps in it alone
+fn handHolder(k I64) String& {
+    p := "Pool" $k
+    w := "Wrap" $k
+    bf := "Buf" $k
+    return ("type " $bf " unique struct(n I64) {\n"
+            "    n\n"
+            "    data := Array<I64>(n.Mod(5) + 3, n)\n"
+            "} destruct {\n"
+            "    Ends = Ends * 7 + n + data[data.Len() - 1]\n"
+            "}\n"
+            "type " $w " unique struct(b " $bf ", tag I64) {\n"
+            "    b\n"
+            "    tag\n"
+            "}\n"
+            "type " $p " struct() {\n"
+            "    bm Map<I64, " $bf ">\n"
+            "    bv Vec<" $bf ">\n"
+            "    wm Map<I64, " $w ">\n"
+            "}\n"
+            "fn put" $k "(p mut " $p "&, i I64, b " $bf ") { p.bm.Put(i % 4, b) }\n"
+            "fn pass" $k "(p mut " $p "&, i I64, b " $bf ") { put" $k "(p, i, b) }\n"
+            "fn push" $k "(p mut " $p "&, b " $bf ") { p.bv.Push(b) }\n"
+            "fn wrapPut" $k "(p mut " $p "&, i I64, b " $bf ") { p.wm.Put(i % 3, " $w "(b, i)) }\n"
+            "fn peek" $k "(p mut " $p "&, i I64, b " $bf ") I64 {\n"
+            "    t := b.data[0] + b.n\n"
+            "    p.bm.Put(i % 4, b)\n"
+            "    return t\n"
+            "}\n"
+            "fn sum" $k "(p " $p "&) I64 {\n"
+            "    t I64 = Ends\n"
+            "    for key in range 4 {\n"
+            "        if p.bm.Has(key) {\n"
+            "            b := try p.bm.Ref(key) catch { unreachable }\n"
+            "            t = t * 3 + key + b.n + b.data[b.data.Len() - 1]\n"
+            "        }\n"
+            "        if p.wm.Has(key) {\n"
+            "            w := try p.wm.Ref(key) catch { unreachable }\n"
+            "            t = t * 7 + w.tag + w.b.data[0]\n"
+            "        }\n"
+            "    }\n"
+            "    for b in p.bv { t = t * 5 + b.n + b.data[0] }\n"
+            "    return t * 11 + Ends\n"
+            "}\n")
+}
+
+# one statement on pool p in turn i: a hand-on, a replace, a removal, a move out, a view kept across a let-go (keeps, but
+# in a clean scenario)
+fn (g mut SG&) handOp(ind String&, clean Bool) String& {
+    v := g.val()
+    x := g.name("x")
+    kk := g.k
+    bf := "Buf" $kk
+    k := g.r(14)
+    for clean and k in HandKeeps { k = g.r(14) }
+    if k == 0 { return $ind "put" $kk "(p, i, " $bf "(i + " $v "))\n" }
+    if k == 1 { return $ind "pass" $kk "(p, i, " $bf "(i * " $v "))\n" }
+    if k == 2 { return $ind "p.bm.Put(i % 4, " $bf "(i - " $v "))\n" }
+    if k == 3 { return $ind "push" $kk "(p, " $bf "(i + " $v "))\n" $ind "if p.bv.Len() > 3 { p.bv.Truncate(1) }\n" }
+    if k == 4 { return $ind "p.bm.Remove((i + 1) % 4)\n" }
+    if k == 5 { return $ind "wrapPut" $kk "(p, i, " $bf "(i + " $v "))\n" }
+    if k == 6 { return $ind "acc += peek" $kk "(p, i, " $bf "(i + " $v "))\n" }
+    if k == 7 {    # taken out to a holder, ended at its block's end
+        return ($ind "if p.bm.Has(i % 4) {\n" $ind "    " $x " " $bf " = try p.bm.Take(i % 4) catch { unreachable }\n" $ind
+                "    acc += " $x ".data[0]\n" $ind "}\n")
+    }
+    if k == 8 {    # a view of a value, used after Remove lets go of it: the place keeps
+        return ($ind "if p.bm.Has(i % 4) {\n" $ind "    " $x " := (try p.bm.Ref(i % 4) catch { unreachable }).data[0:2]\n" $ind
+                "    p.bm.Remove(i % 4)\n" $ind "    acc += " $x "[1]\n" $ind "}\n")
+    }
+    if k == 9 {    # a view of a value, used after a Put stores over it: the place keeps
+        return ($ind "if p.bm.Has(i % 4) {\n" $ind "    " $x " := (try p.bm.Ref(i % 4) catch { unreachable }).data[0:2]\n" $ind
+                "    put" $kk "(p, i, " $bf "(" $v "))\n" $ind "    acc += " $x "[0]\n" $ind "}\n")
+    }
+    if k == 10 { return $ind "if p.bv.Len() > 0 { acc += (try p.bv.Pop() catch { unreachable }).n }\n" }
+    if k == 11 { return $ind "p.wm.Remove(i % 3)\n" }
+    if k == 12 {    # a view of the Vec's element kept across a Truncate: the place keeps
+        return ($ind "if p.bv.Len() > 0 {\n" $ind "    " $x " := p.bv.Ref(0).data[0:1]\n" $ind "    p.bv.Truncate(0)\n" $ind
+                "    acc += " $x "[0]\n" $ind "}\n")
+    }
+    return $ind "acc += churn() % 3\n"
+}
+
+# the hand-on statements that keep (views across a let-go): a clean scenario writes none, so its places free at once
+HandKeeps Array<I64> = Array<I64>[8, 9, 12]
+
+fn (g mut SG&) handScenario(k I64) String& {
+    clean := g.chance(50)
+    body String& = ""
+    for _ in range 3 + g.r(5) { body = $body $g.handOp("        ", clean) }
+    turns := 20 + g.r(40)
+    return ("# scenario " $k "\n" $handHolder(k) "fn s" $k "() I64 {\n    p Pool" $k " = Pool" $k "()\n    acc I64 = 0\n"
+            "    for i in range " $turns " {\n" $body "        if i % 7 == 0 { acc += churn() }\n    }\n    churn()\n"
+            "    return acc * 7 + sum" $k "(p)\n}\n")
 }
 
 # the statements that keep (views across a let-go, views stored elsewhere): a clean scenario writes none
@@ -1735,6 +1838,7 @@ fn (g mut SG&) freeOp(h String&, ind String&, clean Bool) String& {
 }
 
 fn (g mut SG&) freeScenario(k I64) String& {
+    if g.chance(33): return g.handScenario(k)
     h := "h"
     head String& = freeHolder(k)
     decl String& = $"    h := Hold" $k "()\n"

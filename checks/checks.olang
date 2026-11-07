@@ -497,17 +497,20 @@ fn earlyfree(r mut report&) ? Failed {
     # vecreassign (bulk review 6 F13): a Vec local and a Vec field given a new value each turn
     # dropvec (Part C): a Vec of values with destructors truncated, each one's storage freed where it is ended
     # exportquiet (condition 3's sharper rule): an export fn no C is given stops no early freeing
+    # maptake, mapput, mapdrop (T13b's hand-on move): a Map of unique values put and taken, replaced, put and removed
     progs := Array<String&>["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec", "vecreassign"
-                     "dropvec", "exportquiet"]
-    small := Array<String&>["300", "100", "2000", "2000", "5", "300", "2000", "200", "2000", "300", "2000", "300"]
+                     "dropvec", "exportquiet", "maptake", "mapput", "mapdrop"]
+    small := Array<String&>["300", "100", "2000", "2000", "5", "300", "2000", "200", "2000", "300", "2000", "300", "2000", "2000"
+                     "2000"]
     full := Array<String&>["example.com\n", "3000000\n", "100\n"
                     "line 999999 of the file - a status text padded out to about a hundred bytes ......................\n"
                     "3071\n", "12000000000000\n", "999936 64\n", "16\n", "63 504\n", "2000980000000 2000980000000\n"
-                    "1000000 499999500000\n", "40039400000\n"]
+                    "1000000 499999500000\n", "40039400000\n", "999968 250000000000 32\n", "999936 499999500000 64\n"
+                    "999968 32\n"]
     part := Array<String&>["example.com\n", "3000\n", "100\n"
                     "line 1999 of the file - a status text padded out to about a hundred bytes ......................\n"
                     "3071\n", "270000\n", "1936 64\n", "16\n", "64 512\n", "5970000 5970000\n", "2000 1999000\n"
-                    "149100\n"]
+                    "149100\n", "1968 1000000 32\n", "1936 1999000 64\n", "1968 32\n"]
     for i in range progs.Len() {
         p := progs[i]
         try r.expect(sh(dir, $"\"$OLANG\" build " $p ".olang > out.txt 2>&1") == 0, $p " build", dir)

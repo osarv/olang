@@ -856,9 +856,16 @@ of a value made, a by-value parameter or receiver, a result - given an existing 
 reference form (`File&`): the slot cannot hold a reference instead. Two places hand on what they hold, since nothing
 reads it after: a **by-value parameter**, given a fresh value at every call, may land once more where it is mentioned
 **last** - stored, given to a by-value parameter, made a part of a value, returned (`fn (v mut Vec<T>&) Push(x T)` stores
-`x` so) - and a **local returned whole** (`return f`) is the result itself (O26a). Last is judged on every path from the
-landing, in the order the function evaluates: another branch's mentions are not after it, a loop running again
-reaches its body's mentions before it, and a mention in deferred code, a task or a join's clauses runs after
+`x` so) - and a **local returned whole** (`return f`) is the result itself (O26a). A by-value parameter's hand-on is a
+**move**, never a copy: the parameter is the caller's value, what it owns (its arrays, T7a) where the caller built it,
+so the place it lands in becomes the value's one holder - a `Map`'s slot, a `Vec`'s element, an instance's field - and
+§8 holds the parameter to outlive that place (an obligation of the function, O10b, its callers building the argument
+where the value is kept, O18b). A function moving a value so into what outlives the call therefore cannot become a
+function value (T22a): `f := keepIt` is refused where `fn keepIt(v mut Vec<File>&, f File) { v.Push(f) }`. A lambda,
+which is called only through a function value, keeps its own copy of what it hands on instead, as a by-value argument
+of any other type is copied (D9) - unobservable but in memory, the value being nowhere else. Last is judged on every
+path from the landing, in the order the function evaluates: another branch's mentions are not after it, a loop running
+again reaches its body's mentions before it, and a mention in deferred code, a task or a join's clauses runs after
 everything; a mention after the landing is a compile-time error. A **name made from** the parameter - a reference local
 or a binding naming it (`alias := t`), a lambda capturing it, a value lent to a call that is also given a reference to
 it (`seen.Push(t)` into a `Vec<Res&>`) - counts as a mention of it, so using that name after the
@@ -2312,7 +2319,8 @@ held in place of its copy (D9h) - named by no other local, escaping nowhere, nev
 freeing made (O8d), and lives at least as long as where the copy would be built - a local whose copy at its last
 mention goes into storage outliving its block is built there (O28), so `rows.Push(rec)` in a loop moves each turn's
 `rec` into `rows` rather than copying it out of the turn; a constructor's instance viewing only
-such moved locals is its own (no D9h copy where it is kept). Unobservable: the evaluator copies and agrees. Neither
+such moved locals - or unique values a by-value parameter hands on (T13b), moved too - is its own (no D9h copy where
+it is kept). Unobservable: the evaluator copies and agrees. Neither
 D9h's left-out copies nor D9i's moves apply to a value whose copy runs a declared Copy (E31d), which may make what the
 value refers to anew: it is copied wherever the program copies it. A copy D9h's caller makes of a view a callee handed
 back is the callee's own copy of what it was given - the parts it views copied, never the value's declared Copy.
@@ -6423,7 +6431,9 @@ destructor has run. What it held is reclaimed then - not when its scope closes -
 holder**:
 1. it was **made for the place**: built there (a constructor call, an enum case, an array, a literal, text rendered or
    joined, a call's built result, O13), `null`, or constant data (T25d); or moved there from a place that was its only
-   holder (a collection's `Pop`, `TakeAt` or `Take`, and the last use of a local given one);
+   holder (a collection's `Pop`, `TakeAt` or `Take`, and the last use of a local given one); or handed on into it - by
+   a by-value parameter of a unique type, moved (T13b), through any number of calls and constructors - from an
+   argument made for it at the call that began the chain;
 2. no reference into it - to it, or to anything built where it lives - was **stored anywhere else**: in another place,
    another value of the same place included (each value is its own: a node one holder holds linked from another
    holder's node is stored elsewhere), a global, a closure kept past the call that made it, a task, or a call that may
@@ -6448,8 +6458,8 @@ the place lets go of it, under the same conditions, made for the place meaning a
 nothing else is built into it while the place holds it - so a value of it changed in place (a store into it, a writable
 reference to it handed to a call) makes the place keep, and so does a value holding it made with no store into the place
 (a copy of a struct, a `Map` or an array holding it; a value a call hands back as a view, copied where it is kept, D9h -
-but not a constructor's instance viewing only storage made for the call, which owns it), and a local's value handed
-back.
+but not a constructor's instance viewing only storage made for the call, or unique values moved into it, which it
+owns), and a local's value handed back.
 A collection's **own storage** - a `Vec`'s buffer, a `Map`'s slot arrays, any array of a run-time length a struct holds
 by value - is a place too: what the collection's growth replaces is reclaimed as it grows, where the conditions hold -
 no view of the old storage in use across the growth (`View()`, `Ref()`, an element's reference, condition 6), every

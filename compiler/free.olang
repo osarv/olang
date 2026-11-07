@@ -222,6 +222,9 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     parEsc Vec<mut Vec<I64>&>
     parEscC Vec<mut Vec<I64>&>  # by body: the parameters a copy of which it keeps - their references, not their owned parts
     parMulti Vec<mut Vec<I64>&>   # the parameters a body stores more than once on a path (a loop, two stores)
+    # by body: the parameters whose unique value it moves whole into a struct held in place, or into its own instance's
+    # field (T13b's hand-on, never a copy) - each call's argument is then the value those leaves are given there (wholeArg)
+    parWhole Vec<mut Vec<I64>&>
     lets Vec<mut Vec<I64>&>
     letsAll Vec<Bool>
     mustRes Vec<I64>
@@ -676,6 +679,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64, destroys Bool = true) {
         f.parEsc.Push(Vec<I64>())
         f.parEscC.Push(Vec<I64>())
         f.parMulti.Push(Vec<I64>())
+        f.parWhole.Push(Vec<I64>())
         f.lets.Push(Vec<I64>())
         f.letsAll.Push(false)
         f.mustRes.Push(MustTop)
@@ -1149,6 +1153,8 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     goEnd Vec<I64>
     closes Map<I64, Vec<types.TypeId>>
     handing I64 = 0             # a unique value being handed on (Seq.Gone): moved, so no view of it is in use here
+    # by hidden local: the parameter whose unique value it holds, moved there to be stored (check.storeOver's held value)
+    heldPar Map<I64, I64>
     yieldOrig Vec<mut Vec<I64>&>  # what each Collect being walked yields may refer into
     stmtSp source.Span = source.Span(0, 0)     # the statement being walked
     readPlace Vec<I64>        # view reads: the place, the statement
@@ -1199,6 +1205,7 @@ fn walker.newWalker(f mut Free&, b I64, final Bool) mut walker& {
     w.storeWithin = -1
     w.storeInside = -1
     w.heldCopy.Clear()
+    w.heldPar.Clear()
     w.copyExempt = -1
     w.copyRead = -1
     w.reset()
@@ -1471,6 +1478,9 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             lk := w.body().Locals[I64(l)].Kind
             site := ownCopySite(x) if lk == typed.LocalKind.Held or lk == typed.LocalKind.Hidden else -1
             if site >= 0: w.heldCopy.Put(I64(l), x)
+            # (a unique value moved out of a parameter into a held local, to be stored: still that parameter's value)
+            mp := w.movedPar(x) if lk == typed.LocalKind.Held or lk == typed.LocalKind.Hidden else -1
+            if mp >= 0: w.heldPar.Put(I64(l), mp)
             # (and a constructor's field given a copy of a value handed on - QCE's ownCopy of a parameter - its leaves'
             # value, made right there: copyLeaves)
             fk := try w.fields.Get(I64(l)) catch default -1
@@ -1488,6 +1498,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             w.give(I64(l), o)
             k := try w.fields.Get(I64(l)) catch default -1
             if k >= 0 { w.storeField(k, x, o, sp) }
+            if k >= 0 { w.wholeField(k, x) }
             w.destroyStore(I64(l), x, sp)
             ol := w.ownLocal(I64(l))
             if ol >= 0 { w.store(ol, x, o, sp, w.localName(I64(l))) }
@@ -1614,6 +1625,7 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
             w.give(I64(l), o)
             k := try w.fields.Get(I64(l)) catch default -1
             if k >= 0 { w.storeField(k, x, o, sp) }
+            if k >= 0 { w.wholeField(k, x) }
             w.destroyStore(I64(l), x, sp)
             ol := w.ownLocal(I64(l))
             if ol >= 0 {
@@ -1647,7 +1659,7 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
             # value's - which a constructor's own stores account for, and a copy stores elsewhere
             lvs := w.F.leaves(p.Type())
             for lf in lvs { w.go(lf.PlaceId, LLeaf, p.Span(), source.Span(0, 0), -1) }
-            if lvs.Len() > 0 { o = w.copyInto(lvs, p.Type(), x, o, sp, cm) }
+            if lvs.Len() > 0 and not w.storedWhole(x, cm) { o = w.copyInto(lvs, p.Type(), x, o, sp, cm) }
         }
         case typed.Lvalue.Elem(_, _, _) {
             # an element given a value: never a let-go - the program's own copies between elements are not known
@@ -1659,13 +1671,23 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
                 return
             }
             lvs := w.F.leaves(p.Type())
-            if lvs.Len() > 0 { o = w.copyInto(lvs, p.Type(), x, o, sp, cm) }
+            if lvs.Len() > 0 and not w.storedWhole(x, cm) { o = w.copyInto(lvs, p.Type(), x, o, sp, cm) }
         }
         case _ { }
     }
     if fr < 0 { w.escape(o, sp, w.text(p.Span()), true, w.withinOf(p), w.storeInside) }
     w.storeWithin = -1
     w.storeInside = -1
+}
+
+# a unique value moved out of a parameter (movedPar, no copy cm) stored whole into a struct held in place: the
+# parameter's argument is what the place's leaves are given, judged at each call (parWhole, wholeArg)
+fn (w mut walker&) storedWhole(x typed.Expr&, cm typed.Expr?&) Bool {
+    if cm is not null: return false
+    j := w.movedPar(x)
+    if j < 0: return false
+    if not w.Final and addTo(w.F.parWhole[w.Id], j) > 0 { w.F.changed = true }
+    return true
 }
 
 # a struct value given to a struct held in place: what it holds beyond its candidate leaves, which the place's own
@@ -1683,7 +1705,9 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
     b2 := typed.CalleeBody(c) if c is not null else -1
     if b2 >= 0 and f.Bodies[b2].Root is not null and t.Role(f.Bodies[b2].Ty) == types.RoleCtor and
        t.Results(f.Bodies[b2].Ty).Len() == 1 and t.Same(t.Repr(t.Results(f.Bodies[b2].Ty)[0]), t.Repr(ty)) {
-        if f.viewsOf(b2) != 0 { w.viewCtor(lvs, c!, x, sp) }
+        # (an instance viewing only unique values moved out of parameters holds them whole, no copy: what their leaves
+        # are given is judged at the call, by the constructor's parWhole)
+        if f.viewsOf(b2) != 0 and not typed.ViewsMoved(c!, f.viewsOf(b2)) { w.viewCtor(lvs, c!, x, sp) }
         out Vec<I64>
         w.quiet++
         args Vec<Vec<I64>>
@@ -2125,12 +2149,58 @@ fn (w mut walker&) store(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, wher
 fn (w mut walker&) paramOf(x typed.Expr&) I64 {
     return match x {
         case typed.Expr.Read(_, _, p, _): match p {
-            case typed.Lvalue.Local(_, _, l): try w.params.Get(I64(l)) catch default -1
+            case typed.Lvalue.Local(_, _, l): try w.params.Get(I64(l)) catch default w.movedPar(x)
             case _: -1
         }
         case typed.Expr.Away(_, _, y): w.paramOf(y)
-        case _: -1
+        case _: w.movedPar(x)
     }
+}
+
+# T13b, O8d: the parameter whose unique value x is, handed on - moved (check.handOn's Gone Seq around the parameter's
+# read), or held by a hidden local it was moved into (heldPar) - -1 for anything else. Its owned parts are where the
+# caller built them (section 8's obligation on the parameter), and nothing reads the parameter after
+fn (w mut walker&) movedPar(x typed.Expr&) I64 {
+    match x {
+        case typed.Expr.Seq(_, _, q) {
+            if not q.Gone or q.X is null: return -1
+            y := q.X!
+            j := try w.params.Get(readLocalOf(y)) catch default -1
+            if j < 0 or w.T().IsRef(y.Type()) or not w.T().Unique(y.Type()): return -1
+            return j
+        }
+        case typed.Expr.Read(_, _, p, _) {
+            if p != typed.Lvalue.Local: return -1
+            return try w.heldPar.Get(I64(p.id)) catch default -1
+        }
+        case typed.Expr.Away(_, _, y) { return w.movedPar(y) }
+        case _ { return -1 }
+    }
+}
+
+# a constructor's field k given parameter j's unique value moved whole (movedPar), a struct holding candidate leaves
+# and no place of its own: the instance holds what the argument's leaves hold - judged at each call (wholeArg)
+fn (w mut walker&) wholeField(k I64, x typed.Expr&) {
+    j := w.movedPar(x)
+    if j < 0 or w.Final or w.F.placeKey(w.ctorTy, k) >= 0 or w.F.leaves(x.Type()).Len() == 0: return
+    if addTo(w.F.parWhole[w.Id], j) > 0 { w.F.changed = true }
+}
+
+# argument a of a call whose callee moves its unique value whole into leaves (parWhole), its origins o: the caller's
+# own moved parameter passes the requirement on; anything else is judged as the value of a struct held in place is
+# (copyInto) - a constructor of its type stores into its leaves itself, any other value gives them one not made for them
+fn (w mut walker&) wholeArg(a typed.Expr&, o Vec<I64>&, sp source.Span) {
+    f := w.F
+    j := w.movedPar(a)
+    if j >= 0 {
+        if not w.Final and addTo(f.parWhole[w.Id], j) > 0 { f.changed = true }
+        return
+    }
+    lvs := f.leaves(a.Type())
+    if lvs.Len() == 0 { return }
+    cm := a if ownCopySite(a) >= 0 else null
+    oo Vec<I64> = o
+    w.copyInto(lvs, a.Type(), a, oo, sp, cm)
 }
 
 # ---- what a value may refer into ----
@@ -2230,11 +2300,19 @@ fn (w mut walker&) readOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
     k := f.placeOfPlace(p)
     if k >= 0 {
         addTo(o, orig(OPl, k))
-    } else {
+    } else if not w.movedRead(p, ty) {
         for lf in f.leaves(ty) { addTo(o, orig(OPl, lf.PlaceId)) }
     }
     if w.holds(ty) { w.viewRead(o) }
     return o
+}
+
+# whether reading p reads a unique value moved whole out of a parameter (T13b's hand-on, movedPar) - the value itself,
+# moved on, no view of the leaves it holds
+fn (w mut walker&) movedRead(p typed.Lvalue&, ty types.TypeId) Bool {
+    if p != typed.Lvalue.Local or w.T().IsRef(ty) or not w.T().Unique(ty): return false
+    l := I64(p.id)
+    return w.heldPar.Has(l) or (w.handing > 0 and w.params.Has(l))
 }
 
 # a place's storage borrowed: what it is part of - the places passed through on the way, read - but not the places a
@@ -2514,6 +2592,9 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
                 multi := f.storedMore(b2, j)
                 w.storeAs(k, c.Args[j], args[j], sp, "", multi, ctor)
             }
+        }
+        for j in f.parWhole[b2] {
+            if j < args.Len(): w.wholeArg(c.Args[j], args[j], sp)
         }
         for j in f.parEsc[b2] {
             if j < args.Len(): w.escape(args[j], sp, "", false)
@@ -4527,8 +4608,8 @@ fn (f mut Free&) Dump() String {
         b.Push($"letgo place " $g.PlaceId " body " $g.Body " kind " $g.Kind " at " $f.P.L.Diags.Locate(g.File, I64(g.Sp.Start)) " " $f.placeName(g) "\n")
     }
     for i in range f.Bodies.Len() {
-        if f.parStored[i].Len() == 0 and f.parEsc[i].Len() == 0 and f.parMulti[i].Len() == 0: continue
-        b.Push($"body " $i " " $f.fnName(i) " stored " $f.parStored[i] " esc " $f.parEsc[i] " multi " $f.parMulti[i] " res " $f.resFrom[i] "\n")
+        if f.parStored[i].Len() == 0 and f.parEsc[i].Len() == 0 and f.parMulti[i].Len() == 0 and f.parWhole[i].Len() == 0: continue
+        b.Push($"body " $i " " $f.fnName(i) " stored " $f.parStored[i] " esc " $f.parEsc[i] " multi " $f.parMulti[i] " whole " $f.parWhole[i] " res " $f.resFrom[i] "\n")
     }
     b.Push($"tasks " $f.tasks " hidden " $f.hidden "\n")
     return b.ToString()
