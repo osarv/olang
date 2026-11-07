@@ -799,7 +799,8 @@ written into is an `Array<Char>` (or a declared type over one, or built by a `St
 
 **T13b (`unique`).** A type declared with the word `unique` before its body - `type File unique struct(fd I32) { fd
 }`, an enum or a type over a number or an array alike - holds values that **exist in exactly one place**. A **fresh
-value** - a constructor's or a call's result, a value made (E31d) - lands by value where it is put: a local (`f :=
+value** - a constructor's or a call's result, a value made (E31d), and so one a `try` or a `!` gives of such a call, its
+catch defaults each such a value - lands by value where it is put: a local (`f :=
 File(3)`), a field or an element typed `File` (`Box(File(3))`, `v.Push(File(3))`), a by-value parameter (`use(File(3))`),
 a result. **Any other copy of a unique value is a reference to it**: a unique place read where nothing written says what
 holds the value - a `:=` (`w := f` makes `w` a `File&` naming `f`), a `for` walk's name over an array of them (S9a), a
