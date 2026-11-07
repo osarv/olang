@@ -3077,3 +3077,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   their review): generic type variables stop function-value records (`keep<F>(f F) F`, one case in the repository, stays
   refused); a view of storage holding a destructor value is never placed longer (refused, naming a copy - a file would
   stay open past its holder); a function's written result type carries records. Section-8 round 1 (NLL) started.
+- DECIDED 2026-11-07 (the user: "do argument error carry the failed conditions text and do two column types"):
+  `ArgumentError.Invalid` carries the failed condition's text (replacing D17's thread-local slot; round errdata2);
+  QCU (3): TWO types - `Columns<T>` acting like Array (length set where made, a value laid out in place in structs
+  where known, passed by value, never grows) and a growable one acting like Vec, named `ColumnVec<T>` (mine). Round
+  columns started; round qbt (type-level builders, QBT) started; a three-slot build lock (/home/user/blk) keeps seven
+  rounds' builds from the out-of-memory killer.
