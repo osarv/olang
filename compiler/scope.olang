@@ -953,7 +953,7 @@ fn (s mut Scoper&) bndError(x typed.Expr&, b I64, adapter Bool, place I64) {
             name := s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name)
             match u {
                 case typed.Expr.Fn(sp, _, f) {
-                    if f == typed.FnVal.Named {
+                    if f == typed.FnVal.Named and I64(f.body) == b {
                         at = s.lastName(sp)
                         text := try s.texts.Get(s.B!.File) catch default ""
                         if I64(at.End) <= text.Len() { name = text[I64(at.Start):I64(at.End)] }
@@ -972,6 +972,44 @@ fn (s mut Scoper&) bndError(x typed.Expr&, b I64, adapter Bool, place I64) {
             s.err(at, msgs.LambdaValueObligations(kept, pl) if kept != "" else msgs.LambdaValueRelates(pl))
         }
     }
+}
+
+# B11b (docs/sec8.md 5.5): a function body b's returns give - a function, or a lambda, whose relations a written
+# function type does not cover: its name ("a lambda" for one), "" for none. Read once every body is judged
+fn (s Scoper&) GivesHeld(b I64) String {
+    seen Map<I64, Bool>
+    seen.Put(b, true)
+    g := s.givesHeld(b, seen)
+    if g < 0 { return "" }
+    return match s.Bodies[g].Of {
+        case typed.BodyOf.Fn(inst): $"'" $s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name) "'"
+        case _: "a lambda"
+    }
+}
+
+fn (s Scoper&) givesHeld(b I64, seen mut Map<I64, Bool>&) I64 {
+    if b < 0 or b >= s.sums.Len() { return -1 }
+    for r in s.sums[b].ResFn.Recs {
+        if seen.Has(r.Body) { continue }
+        seen.Put(r.Body, true)
+        if not s.heldOK(r.Body, r.Adapter) { return r.Body }
+        g := s.givesHeld(r.Body, seen)
+        if g >= 0 { return g }
+    }
+    return -1
+}
+
+fn (s Scoper&) heldOK(b I64, adapter Bool) Bool {
+    rels := s.sums[b].Rels
+    if rels.Len() == 0 { return true }
+    if adapter { return false }
+    if s.covered.Has(b) { return true }
+    body := s.Bodies[b]
+    lambda := match body.Of {
+        case typed.BodyOf.Lambda(_): true
+        case _: false
+    }
+    return lambda and s.P.T.ResultFrom(body.Ty, 0) == types.FromTypeVar and resultsOnly(body, rels)
 }
 
 # the place a boundary is, as T22a's error says it
@@ -4703,6 +4741,19 @@ fn (s mut Scoper&) sumPuts(cb I64, k I64) Bool {
     return s.sums[cb].Puts[k]
 }
 
+# a call through a value whose records are all known (T22a, 5.3): whether any record's body keeps (what 0), puts (1) or
+# stores (2) something in what argument k names - a value not followed may (true)
+fn (s mut Scoper&) valueArgBy(c typed.Call&, k I64, what I64) Bool {
+    rs := try s.callRecs.Get(I64(c.Site)) catch { return true }
+    if not rs.Full { return true }
+    for x in rs.Recs {
+        q := k + 1 if x.Adapter else k
+        by := s.sumKeeps(x.Body, q) if what == 0 else (s.sumPuts(x.Body, q) if what == 1 else s.sumStores(x.Body, q))
+        if by { return true }
+    }
+    return false
+}
+
 # whether a callee may keep something in what its argument k names
 fn (s mut Scoper&) calleeKeepsArg(c typed.Call&, k I64) Bool {
     match c.Target {
@@ -4714,6 +4765,7 @@ fn (s mut Scoper&) calleeKeepsArg(c typed.Call&, k I64) Bool {
             return s.sums[cb].Keeps[k]
         }
         case typed.Callee.Extern(_), typed.Callee.Helper(_, _) { return false }
+        case typed.Callee.Value(_) { return s.valueArgBy(c, k, 0) }
         case _ { return true }
     }
 }
@@ -4728,6 +4780,7 @@ fn (s mut Scoper&) calleePutsArg(c typed.Call&, k I64) Bool {
             return s.sums[cb].Puts[k]
         }
         case typed.Callee.Extern(_), typed.Callee.Helper(_, _) { return false }
+        case typed.Callee.Value(_) { return s.valueArgBy(c, k, 1) }
         case _ { return true }
     }
 }
@@ -4743,6 +4796,7 @@ fn (s mut Scoper&) calleeStoresArg(c typed.Call&, k I64) Bool {
             return s.sums[cb].Stores[k]
         }
         case typed.Callee.Extern(_), typed.Callee.Helper(_, _) { return false }
+        case typed.Callee.Value(_) { return s.valueArgBy(c, k, 2) }
         case _ { return true }
     }
 }
@@ -8396,6 +8450,8 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             if not spawned {
                 recs = s.recsOf(x)
                 s.lateRecs(recs, x)
+                # (what each record's body keeps of its arguments, for the lending its arguments are judged by, O17)
+                if recs.Recs.Len() > 0 { s.callRecs.Put(I64(c.Site), recs) }
             }
         }
         case _ { }
@@ -8564,7 +8620,6 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         # each record judged as the direct call it is (5.3); a value not followed by what its type says (T22)
         for i in range recs.Recs.Len() { s.dischargeRels(sp, rrels[i], recs.Recs[i].Body, s.recBeta(recs.Recs[i], rmaps[i], beta), c, agreed) }
         if not recs.Full { s.dischargeRels(sp, s.valueRels(fty, vars, rv, sp), -1, beta, c, agreed) }
-        if recs.Recs.Len() > 0 { s.callRecs.Put(I64(c.Site), recs) }
     }
     # what its result carries, where it is a function value (5.2)
     if s.isFunc(ty) { s.siteRecs.Put(I64(c.Site), s.resultRecs(c, callee, recs, vars, rv, beta)) }

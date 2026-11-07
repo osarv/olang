@@ -1,0 +1,13 @@
+# check: fail error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this capture holds only what its written function type says of every call
+# T22a (decision 15): a capture is a boundary - inside the lambda's body the captured value is judged by its type alone
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+fn link(a mut N&, b N&) { a.next = b }
+fn main() {
+    x mut N& = N(1)
+    g := link
+    f := fn() { g(x, N(2)) }
+    f()
+}

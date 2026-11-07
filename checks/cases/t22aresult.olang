@@ -1,0 +1,20 @@
+# check: run
+# flags: -debug -sanitize
+# T22a, O13c: a closure a call hands back carries what it keeps - each text it is given kept where 'gone' lives, the
+# argument of the call that made it; refused until 2026-11-07 (the lambda made a value); read back after a churn
+import "std/io"
+fn adder(names mut Vec<String&>&) fn&(k String&) {
+    return fn(k String&) { names.Push(k) }
+}
+fn churn() I64 {
+    t := 0
+    for i in range 200 { t += ($i "-" $(i * 3)).Len() }
+    return t
+}
+fn main() ? {
+    gone := Vec<String&>()
+    f := adder(gone)
+    for i in range 4 { f($i "!") }
+    t := churn()
+    try io.Println($gone.Join(",") " " $(t > 0))
+}

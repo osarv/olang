@@ -1,0 +1,14 @@
+# check: fail error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call
+# T22a: a local holding a function with relations, handed on as an argument (here into a Vec's elements): a boundary
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+fn link(a mut N&, b N&) { a.next = b }
+fn main() {
+    fs := Vec<fn&(a mut N&, b N&)>()
+    g := link
+    fs.Push(g)
+    x mut N& = N(1)
+    fs[0](x, N(3))
+}

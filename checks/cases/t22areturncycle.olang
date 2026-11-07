@@ -1,0 +1,17 @@
+# check: fail error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this return (from a function calling itself, or among several results) holds only what its written function type says of every call
+# T22a, O13c: a function calling itself is not wholly checked when its callers read its returns - a function value it
+# returns is a boundary
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+fn link(a mut N&, b N&) { a.next = b }
+fn pick(n I64) fn&(a mut N&, b N&) {
+    if n == 0 { return link }
+    return pick(n - 1)
+}
+fn main() {
+    x mut N& = N(1)
+    h := pick(2)
+    h(x, N(1))
+}

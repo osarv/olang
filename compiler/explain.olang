@@ -371,10 +371,14 @@ fn noValue(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, f I
 # T22a (docs/sec8.md 5.5): where a function whose scope obligations are more than a written function type says of every
 # call may go as a value - "" for one any value of its type may be
 fn AsValueWhere(c mut typecheck.Checker&, sc scope.Scoper&, body I64) String {
-    if body < 0 or sc.ValueCovered(body) { return "" }
+    if body < 0 { return "" }
     obs := sc.Obligations(body, c.P.L.Names)
-    if obs.Len() == 0 { return "" }
-    return $"held in locals and results only - its scopes (" $obs.Join(", ") ") are more than a written function type says of every call (T22a)"
+    if obs.Len() > 0 and not sc.ValueCovered(body) {
+        return $"held in locals and results only - its scopes (" $obs.Join(", ") ") are more than a written function type says of every call (T22a)"
+    }
+    g := sc.GivesHeld(body)
+    if g == "" { return "" }
+    return $"held in locals and results only - the function it gives, " $g ", ties scopes more than a written function type says of every call (T22a)"
 }
 
 # why function f cannot become a value (T21) - "" where it can: a method is called as one, an extern by its name; one

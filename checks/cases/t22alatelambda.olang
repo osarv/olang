@@ -1,0 +1,18 @@
+# check: fail error[T22a]: this lambda keeps 'b' beyond the call, and this call - reached in a loop's next turn by a value assigned after it - holds only what its written function type says of every call
+# T22a, O25i: a version given in a loop after the call reaches it in the next turn before it is judged - a lambda whose
+# captures' scopes are not known there is judged as at a boundary
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+fn setv(a mut N&, b N&) { a.v = b.v }
+fn main() {
+    x mut N& = N(1)
+    keep := Vec<N&>()
+    kr mut Vec<N&>& = keep
+    op := setv
+    for i in range 3 {
+        op(x, N(i))
+        op = fn(a mut N&, b N&) { kr.Push(b) }
+    }
+}

@@ -1,0 +1,17 @@
+# check: fail error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call
+# T22a, O13c: a function giving a function with relations, handed on as a value - every function a call of it may give
+# is held to what a written function type says too
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+fn link(a mut N&, b N&) { a.next = b }
+fn get() fn&(a mut N&, b N&) {
+    g := link
+    return g
+}
+fn put(mk fn&() fn&(a mut N&, b N&), x mut N&) { mk()(x, N(5)) }
+fn main() {
+    x mut N& = N(1)
+    put(get, x)
+}

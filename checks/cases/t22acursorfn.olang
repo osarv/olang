@@ -1,0 +1,20 @@
+# check: run
+# flags: -debug -sanitize
+# T22a, O25i: a function-valued local given another function in a loop - each version reaching the call judged, the
+# one given after it in the loop's next turn too (a function named needs no term of the judging)
+import "std/io"
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+fn link(a mut N&, b N&) { a.next = b }
+fn setv(a mut N&, b N&) { a.v = b.v }
+fn main() ? {
+    x mut N& = N(0)
+    op := setv
+    for i in range 3 {
+        op(x, N(i + 10))
+        op = link
+    }
+    try io.Println($x.v " " $x.next!.v)
+}

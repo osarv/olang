@@ -1305,16 +1305,31 @@ function type says nothing more of where its references live (QCB): every parame
 references may hand back what its reference parameters refer to - whole, or a view of it (T22a). So a call through a
 value of the type holds each reference argument to outlive the scope the result lands in (§8 O10c), exactly that scope
 where something can be stored through both the parameter and the result (O25g), and as a view: an argument's storage
-the caller builds is built where the result lands (O27).
+the caller builds is built where the result lands (O27). A value the inference follows - held in a local, given by a
+call - is held instead to the relations its function has (T22a).
 
-**T22a.** A function whose signature carries a **scope obligation** (§8 O10b) - a relation between its
-parameters' scopes that every caller must establish - cannot be used as a function value: a call through a
-value of function type checks nothing of the kind, so the obligation would go unchecked. Using such a function
-as a value is a compile-time error naming the obligation (an inferred one: none is written), and `olang explain`
-says of every function that cannot become a value that it cannot and why (B11b). An obligation its type says of every
-call (T22) is none of these: a function whose obligations are only each reference parameter's scope outliving its
-result's - exactly where something can be stored through both - hands back what an argument refers to and is a value
-(`fn first(a Array<I64>&) Array<I64>& { return a[0:1] }`, `g := first`). The exception is a function type whose result is written as
+**T22a.** A function's inferred relations (§8 O10b) - between its parameters' scopes and its result's, and, for a
+lambda or a type's `Call` (E31), between those and what it captured (its receiver) - are carried by the function value
+it becomes wherever the inference follows that value whole: through the locals of the body holding it (each version,
+O25i, whatever type the local is written with), a conditional's or a `match`'s value, a `catch` default, a conversion
+to a nullable or a declared function type (T21b), and a call's result (what every `return` of the callee gives, O13c).
+A call through such a value is held to each relation its value may carry as a direct call is held to its callee's
+obligations (O10c) - its temporaries built where they say (O18b), what a lambda captured taken where it lived when the
+lambda was made, what the callee may keep of an argument counted as a direct call's is (O17) - and a value whose
+relations are not followed (a parameter's, a field's, an element's) by what its type says of every call (T22). A
+**boundary** is a place where the value meets code judged once for many values: an argument for a parameter, a store
+into anything but a whole local (a field, an element, a payload, a global, a constructor's field), a value an array, a
+tuple or an enum case is made of, a capture, a task's function, argument or result, an `any` (T32a), a `yield`, a
+binding of a pattern, a `return` of a function whose result is not one function value or that calls itself (O13c), and
+a call a cursor's version reaches before it is given (a loop's next turn, O25i); a type variable's binding is an
+argument. At a boundary a value may carry only what its written function type says of every call: each reference
+parameter's scope outliving its result's - exactly where something can be stored through both - so a function whose
+obligations are only these hands back what an argument refers to and is a value anywhere (`fn first(a Array<I64>&)
+Array<I64>& { return a[0:1] }`, `g := first`); and so must every function a call of it may give. A value carrying
+more there is a compile-time error naming the function (a lambda by the parameter it keeps), what it relates and the
+place - `g := link; g(x, N(5))` compiles, `put(link, x)` with `put(f fn&(a mut N&, b N&), ..)` does not; and `olang
+explain` says of every function carrying more that it is a value held in locals and results only, and why (B11b). The
+exception is a function type whose result is written as
 a **type variable** bound to a reference, or to a value holding references (a callback's `fn&(acc U, x T) U`):
 such a result may hand back one of the arguments (O14b), so the type itself requires each reference argument to
 outlive its result scope - and to be exactly it where something can be stored through the argument (O25g) - and a call
@@ -2190,7 +2205,7 @@ are checked as at run time, failing the same way. A condition the evaluator cann
 
 **D17f (contracts and function values).** A function with conditions may be made a function value (T21); its type's
 error set holds `ArgumentError`, and a call through the value checks the conditions on entry as a direct call does.
-One carrying a scope obligation may not (T22a). Lambdas, `extern fn`s and destructors take no contract. A trait's
+One whose scope obligations are more than its type says is a value only where the inference follows it (T22a). Lambdas, `extern fn`s and destructors take no contract. A trait's
 method may take one, written after its parameter list as a function's is (`mut Withdraw(n I64) [n > 0] I64`), reading
 the parameters alone: a call through an `any` of the trait (T32b) checks it before the
 dispatch, and then the method the instance's type supplies checks its own on entry. A call through generic code (G19)
@@ -6967,7 +6982,7 @@ that can keep what it builds in the value's own slots (O17 - `l.Push(x)` on a `L
 one), and one a reference is assigned into (`h.name = a`). Its construction recorded nothing about what was put there
 afterwards. A returned local is in the result scope (O26a), where whatever it holds is.
 
-**O13c (what a result carries).** A function's body decides, for the value it returns, two things a call adds to its
+**O13c (what a result carries).** A function's body decides, for the value it returns, three things a call adds to its
 result where every `return` agrees:
 
 - the **per-instance bindings** of the returned value's type (O23a) that are scopes of the function: a call's result
@@ -6977,10 +6992,12 @@ result where every `return` agrees:
   returns what `copyOf` built, whatever `id` is;
 - for a result handed back from a parameter's field with a binding of its own, the derived scope (O23a) every `return`
   gave a value in: the call's result then lives where that resolves to - the referent of the argument's own field -
-  rather than where the argument does, which it outlives.
+  rather than where the argument does, which it outlives;
+- for a result that is a function value, the functions every `return` may give and where what each captured lives
+  (T22a), resolved through the call: `f := mk(gone)` knows `f` keeps what it is given where `gone` lives.
 
 A function whose body is not wholly checked (in a cycle of calls, O10c) adds nothing, and a call falls back to its
-signature.
+signature - its returns of a function value are T22a's boundaries.
 
 ### 8.6 Binding scope variables at a call
 
@@ -7013,9 +7030,9 @@ storage it is - its inline fields and elements, a view of them (`b`, `b.data`) -
 elsewhere than its references, so storing one of them into the region is a store like any other. A **local holding only
 what it read out of the region** brings in nothing new either: one whose initializer and every value written into it, or
 into a part of it, anywhere in the body, is such a read - `t := a[i]  a[i] = a[j]  a[j] = t` - and which is never lent
-writably nor given a task's result. A call through a **function value** keeps nothing of its arguments beyond the call but
-in its result (T22a), so it stores nothing where an argument leads whose parameter's type lets nothing be stored through
-it (O25g) - `less(a[i], a[j])` with `less fn&(x T, y T) Bool` and `T` a read-only reference or a value holding none; a
+writably nor given a task's result. A call through a **function value** whose functions are not followed (T22a) keeps nothing of
+its arguments beyond the call but in its result, so it stores nothing where an argument leads whose parameter's type
+lets nothing be stored through it (O25g) - one whose functions are followed keeps and stores what each of them does - `less(a[i], a[j])` with `less fn&(x T, y T) Bool` and `T` a read-only reference or a value holding none; a
 parameter through which something can be stored keeps counting as a store. So a callee that only permutes the elements
 - `Reverse`, `Sort`, a swap through a local - may be lent the value. A callee that only reads the value, or writes
 numbers into it, may be lent it: `toks := split(line);
@@ -8098,8 +8115,10 @@ function value or an `any` is `anything`, and so is a call of C (G42's) in a pro
 `# T needs: Less, a walk ...` for each type variable says what its body asks of it beyond its written constraint
 (G18a). Under a function that cannot become a value (T21), a line `# not a value: ...` says why: a method is called as
 one (M19), an extern by its name (X1), a generic is a value only named with its type arguments (G12), one compiled per
-length of an array it takes by value (G29) has none, and one whose scope obligations tie where what it is given lives to what it keeps or gives back cannot
-be called through a function value (T22a). `doc` (B14) and the language server's hover (B15) show the same lines.
+length of an array it takes by value (G29) has none. Under a function whose scope obligations are more than a written
+function type says of every call - or which gives such a function - a line `# as a value: held in locals and results
+only - ...` names its scopes, or the function it gives (T22a). `doc` (B14) and the language server's hover (B15) show
+the same lines.
 
 **B11c (what imports reach).** `explain -caps FILE` prints, for the program `FILE` is the root of once it has checked,
 each module it loads - the root first, then its imports in the order loaded - with what code of the module may reach,

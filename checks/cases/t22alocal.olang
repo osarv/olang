@@ -1,0 +1,23 @@
+# check: run
+# flags: -debug -sanitize
+# T22a: a function whose obligations are more than a written function type says (link keeps b in a) is a value held in
+# a local, and a call through it is judged as the direct call it is - the temporary 'N(5)' built where 'x' lives
+# (O18b); refused until 2026-11-07 (T22a's "cannot be used as a function value"); read back after a churn
+import "std/io"
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+fn link(a mut N&, b N&) { a.next = b }
+fn churn() I64 {
+    t := 0
+    for i in range 200 { t += ($i "-" $(i * 3)).Len() }
+    return t
+}
+fn main() ? {
+    x mut N& = N(1)
+    g := link
+    g(x, N(5))
+    t := churn()
+    try io.Println($x.next!.v " " $(t > 0))
+}

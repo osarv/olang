@@ -1,0 +1,11 @@
+# check: fail error[T22a]: this lambda keeps 'k' beyond the call, and this argument holds only what its written function type says of every call
+# T22a, O13c: what a call gives is followed (the callee's returns) - handed on as an argument it is a boundary, and the
+# closure it gives is named
+fn adder(names mut Vec<String&>&) fn&(k String&) {
+    return fn(k String&) { names.Push(k) }
+}
+fn use(f fn&(k String&)) { f("z") }
+fn main() {
+    gone := Vec<String&>()
+    use(adder(gone))
+}
