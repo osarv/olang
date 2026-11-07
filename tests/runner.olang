@@ -121,7 +121,7 @@ test "a two-hop alias chain names a re-exported enum type's word, and matches on
 # a private enum case is still perfectly usable through the declaring module's own function - the value
 # crosses the boundary even though its NAME cannot
 test "a private enum case's value still crosses the boundary" {
-    d wk.Base.BaseDir = wk.Base.BaseSouth()
+    d wk.Base.BaseDir = wk.Base.BaseDir.BaseSouth()
     assert d != wk.Base.BaseDir.North
 }
 

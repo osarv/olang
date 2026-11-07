@@ -2500,7 +2500,7 @@ fn words(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" help > out.txt 2>&1") == 0 and outOf(dir).Contains("  interpret ") and
                  outOf(dir).Contains("  format "), "help", dir)
     try r.expect(sh(dir, "\"$OLANG\" help format > out.txt 2>&1") == 0 and outOf(dir).Contains("-check"), "help format", dir)
-    try r.expect(sh(dir, "\"$OLANG\" explain b.olang Color > out.txt 2>&1") == 0 and outOf(dir).Contains("    fn FromHex(t String&) Color ? ColorError\n    fn Gray(level U8) Color&\n    fn (c Color&) Hex()")
+    try r.expect(sh(dir, "\"$OLANG\" explain b.olang Color > out.txt 2>&1") == 0 and outOf(dir).Contains("    fn Color.FromHex(t String&) Color ? ColorError\n    fn Color.Gray(level U8) Color&\n    fn (c Color&) Hex()")
                  "explain lists a type's builders before its methods (B11b)", dir)
     try r.expect(sh(dir, "\"$OLANG\" explain B3g > out.txt 2>&1") == 0 and outOf(dir).Contains("running a file"), "explain", dir)
     # D18c, QCB: a generator's borrowed elements are written as a reference - no scope written - and their scope said

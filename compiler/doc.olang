@@ -556,7 +556,9 @@ fn declAt(c mut typecheck.Checker&, mi I64, name String&) I64 {
     if dot > 0 {
         d := typeDecl(c, mi, name[:dot])
         if d < types.DeclId(0) { return -1 }
-        f := c.P.MethodOf(c.P.SelfType(d), c.P.L.Names.Intern(name[dot + 1:]))
+        member := c.P.L.Names.Intern(name[dot + 1:])
+        f := c.P.MethodOf(c.P.SelfType(d), member)
+        if f < 0: f = c.P.BuilderOf(c.P.SelfType(d), member, true)   # D19: a builder, "Color.FromHex"
         return -1 if f < 0 else I64(c.P.FnDecl(f).Sp.Start)
     }
     id := c.P.L.Names.Intern(name)

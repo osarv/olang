@@ -23928,6 +23928,8 @@ fn (c mut Checker&) factFn(x ast.Expr&) I64 {
     }
     f := c.genericFn(x)
     if f >= 0 { return f }
+    f = c.builderNamed(x)
+    if f >= 0 { return f }
     dt := c.descTypeOf(x)
     if dt < types.TypeId(0) or dt == types.UnknownT { return -1 }
     ds := c.P.DescOf(dt)
@@ -23939,6 +23941,7 @@ fn (c mut Checker&) factFn(x ast.Expr&) I64 {
 fn (c mut Checker&) factInst(x ast.Expr&, f I64) I64 {
     owner := generic.FnOwner(f)
     if c.P.VarCount(owner) == 0 { return c.P.FnInstance(f, types.ListId(0)) }
+    if c.P.FnDecl(f).IsBuilder() { return c.builderFactInst(x, f) }
     match x {
         case ast.Expr.Generic(sp, _, targs) {
             given := c.explicitArgs(f, targs, sp)
@@ -23957,6 +23960,35 @@ fn (c mut Checker&) factInst(x ast.Expr&, f I64) I64 {
     recv := c.deref(ps[0])
     if not c.isNamed(recv) or c.P.T.Items(c.P.T.Args(recv)).Len() != c.P.VarCount(owner) { return -1 }
     return c.P.FnInstance(f, c.P.T.Args(recv))
+}
+
+# D19: the builder "Owner.n" names, for its facts (G42); -1 where x is no such name
+fn (c mut Checker&) builderNamed(x ast.Expr&) I64 {
+    match x {
+        case ast.Expr.Member(_, y, n) {
+            o := c.ownerOf(y)
+            if o.T == types.UnknownT: return -1
+            return c.P.BuilderOf(o.T, n, o.Bare)
+        }
+        case _: return -1
+    }
+}
+
+# the instance of a builder with variables whose facts "Owner<A>.n" reads: the one its written owner binds whole; -1
+# for a generic owner named bare or a builder with variables of its own
+fn (c mut Checker&) builderFactInst(x ast.Expr&, f I64) I64 {
+    o := ownerAt(types.UnknownT, false)
+    match x {
+        case ast.Expr.Member(_, y, _): o = c.ownerOf(y)
+        case _: return -1
+    }
+    if o.T == types.UnknownT or o.Bare: return -1
+    ex := c.P.OwnerBinding(f, o.T)
+    if ex.Len() != c.P.VarCount(generic.FnOwner(f)): return -1
+    for t in ex {
+        if t == types.UnknownT: return -1
+    }
+    return c.P.FnInstance(f, c.P.T.List(ex))
 }
 
 # G42, once an attempt has checked every body: each fact read set to what the bodies found - whether any was read as
@@ -24625,9 +24657,9 @@ test "errors said: escaping, not produced, clauses, nothing to try (R3, R9, R11,
 test "writes: an immutable global, a read-only reference, a value a call gave back (S6, T25b, E31)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("type P struct(x I64) { x }\nG I64 = 3\nM mut I64 = 4\nfn mk() P { return P(1) }\n"
+    l := testLoad(dir, ("type P struct(x I64) { x }\nG I64 = 3\nM mut I64 = 4\nfn P.mk() P { return P(1) }\n"
                        "fn f(p P&, q mut P&) {\n    q.x = 2\n    p.x = 3\n}\n"
-                       "fn main() ? {\n    M = 5\n    G = 6\n    mk().x = 4\n}\n"))
+                       "fn main() ? {\n    M = 5\n    G = 6\n    P.mk().x = 4\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)

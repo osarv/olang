@@ -1,15 +1,15 @@
 # check: doc
 # also: type Color struct(R U8, G U8, B U8)
 # also:     builders
-# also:     fn FromHex(t String&) Color ? ColorError
+# also:     fn Color.FromHex(t String&) Color ? ColorError
 # also:         a color from "RRGGBB"
-# also:     fn Gray(level U8) Color&
+# also:     fn Color.Gray(level U8) Color&
 # also:     fn (c Color&) Hex() String
 # also: fn Luminance(c Color&) F64
 # also: fn Both(c Color&) Color, Color
-# never: fn parse
+# never: fn Color.parse
 # also: type Pair<T> struct(A T, B T)
-# also:     fn Of<T>(x T) Pair<T>
+# also:     fn Pair<T>.Of(x T) Pair<T>
 # a module whose functions that build a type are listed under it (B14): the type's one constructor, then the others
 
 type ColorError error { Bad }

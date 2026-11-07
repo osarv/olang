@@ -9736,12 +9736,12 @@ if TestBuild {
                          "type Holder struct(src mut Node&) {\n"
                          "    r mut Node& = src\n"
                          "}\n"
-                         "fn mkNode(i I64) mut Node& { return Node(i) }\n"
+                         "fn Node.mk(i I64) mut Node& { return Node(i) }\n"
                          "fn setIt(h mut Holder&, i I64) {\n"
-                         "    join { spawn h.r = mkNode(i) }\n"
+                         "    join { spawn h.r = Node.mk(i) }\n"
                          "}\n"
                          "fn setOne(h mut Holder&, i I64) {\n"
-                         "    h.r = mkNode(i)\n"
+                         "    h.r = Node.mk(i)\n"
                          "}\n")
 
     test "C2d, P1g: a task's built result stored into a field of a parameter is built where the field lives, as the assignment's is" {

@@ -357,8 +357,12 @@ fn NoValueWhy(c mut typecheck.Checker&, sc scope.Scoper&, f I64, body I64) Strin
     if decl.Recv is not null { return "a method is called as one (M19) - a lambda calling it is a value" }
     if c.P.FnIsExtern(f) { return "an extern fn is called by its name (X1) - a lambda calling it is a value" }
     owner := generic.FnOwner(f)
-    if c.P.VarCount(owner) > decl.TypeParams.Len() {
+    written := decl.TypeParams.Len() + (c.P.OwnerVarCount(f) if decl.IsBuilder() else 0)
+    if c.P.VarCount(owner) > written {
         return "it is compiled once per length of an array it takes by value (G29) - pass a lambda calling it"
+    }
+    if c.P.VarCount(owner) > 0 and decl.IsBuilder() {
+        return $"a generic builder is a value only named with its type arguments, '" $ast.OwnerTarget(decl, c.P.L.Names) "<...>." $c.P.L.Names.Text(decl.Member) "' (G12, D19)"
     }
     if c.P.VarCount(owner) > 0 { return $"a generic is a value only named with its type arguments, '" $name "<...>' (G12)" }
     if body >= 0 and sc.Obligations(body, c.P.L.Names).Len() > 0 and not sc.ValueCovered(body) {
