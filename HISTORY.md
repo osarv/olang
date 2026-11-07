@@ -30129,3 +30129,9 @@ the dozen old arrays of generic values held by value (`Array<F32>[F32[1, 2]]`, `
 code spans (a type variable `C`, a global `G` and the removed form named as an error repaired by hand); rendering
 expectations in tests rewritten by a throwaway script and by hand. The compiler was first built from the unmigrated
 source by sec8r2's base compiler, then rebuilt from the migrated source by itself; the seed is the coordinator's.
+Measured: bench's nbody and knucleotide (array literals, text arrays) compile to byte-identical IR against the base
+compiler on the old source (the literal path is the old `arrayLit`). Found and fixed on the way (not this round's):
+compiler/tools/evaldiff.olang still called `toolkit.GoldenRead` after the builders round, so no `interp@` target had
+built since; left for the coordinator: the scope fuzzer's generator writes functions D19a now calls builders (every
+generated program refused - the builders round's), and run.txt, layout and drvdiff rows other rounds left stale
+(renamed tests, new files, `-interpret`).
