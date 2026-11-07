@@ -28926,3 +28926,128 @@ separate fixed `InlineArray` in 6.2 for it); and per-length instances (G29), ass
 checked while compiling exist because an array's length cannot change. Columns can be one type because none of these
 applies to it.
 
+
+## Bulk review 7, fixed (2026-11-07)
+
+Bulk review 7 (/home/user/review/bulk7, over 11b8d38..db71837: hybrid round 1 - D9h, D9i, E31b's two-phase calls -,
+E31d's Copy, T13a immut and String immutable, S4c's parallel stores, T13b unique and O15's drop flags) found sixteen
+things, F1-F16, and an over-rejection beside them (its work/d12.olang). The coordinator's directions, one rule over
+all of them: never run a destructor earlier than is certain, never move where another name may still see the value,
+never accept a duplication of a unique value - keep, copy or refuse instead. Built in wt-bfix7, a commit or two each.
+
+**F1 (D9i): a copy the same call also lends stays a copy.** `peek(t, t)` with `fn peek(r Buf&, own Buf)` moved `t` into
+`own` at its last mention, so the callee's writes to its own value showed through `r` (99 built, 1 baked: the run time,
+`interpret` and the evaluator disagreed). `lastUses` judged a copy by the local's last mention, and the reference beside
+it in the same call is no later mention - it is alive for the very call. Fixed in `lower.lastUses.apart`: a copy made
+among one call's operands (or one value made's parts) is no move where another operand mentions the same local - a
+borrow, a part read (`part(t.a, t)`), the receiver (`t.Peek(t)`). Decided (mine): judged by mention, not by kind of use,
+so a plain read beside it keeps the copy too (cheap and never wrong).
+
+**F12 (D9h): a spawned call's arguments never share a frame slot.** `spawn out[k] = slow(pts[k])` in a loop gave every
+task the last element: `stackArg` put a read-only argument's promote in one stack slot of the spawner's frame, which
+the next turn overwrote while earlier tasks still read it. `lowering.taskArgs`, the flag meant to turn the frame slot
+(and `readHere`/`argView`) off for a task's arguments, had never been set anywhere since bulk review 5 added it - so
+those two optimizations had been reading task arguments in place too. `lower.spawn` sets it; each task's argument is
+built where its plan says. Closures and generators were checked for the pattern: a lambda's or a generator's body calls
+synchronously, so a frame slot there lives no longer than its call.
+
+**F15, F16 (T13b): a unique value lent and handed on at once, or used through a name made from it, is refused.**
+`both(s, s)` with `fn both(r Res&, x Res)` handed `s` on at its last mention while the same call lent it; and `alias :=
+t` (a reference, T13b) or a lambda capturing `t` was used after `Holder(t)` handed `t` on - two copies of one unique
+value, one read after its destructor ran. `typed.Landings` knew only the local's own mentions. It now logs every
+mention with whether it names the storage (a borrow, a slice, a whole read, through a holder); a local given a value
+whose making named a watched local by a reference (a reference local, a binding, a closure - `Holds`, from
+`HoldsRefs` of its type) becomes its holder, and the holder's later mentions are the watched local's (transitively);
+and a landing among one call's operands where another operand reaches the same local is Bad (`apart`). Two new
+diagnostics name the cause: T13b `'s' is handed on here while the same call also reaches it` and `'t' is handed on here,
+and Res is unique - 'alias', made from it, is used after`. Decided (mine): a plain read of a part beside the hand-on
+(`tagged(t.id, t)`) is no mention of this kind - nothing of the value is reached; a value handed on into a local (a read
+of it whole) makes that local its new holder, never an alias.
+
+**F2 (O15): a join block's holders let go after its wait.** A by-value holder declared in a join block, borrowed by a
+spawned task, was ended by its drop - deferred code, which runs before the join's wait (S19) - while the task still
+read it. A holder's drop is now a block of its own kind, `typed.BlockKind.Drop`, and lowering's `runDefers` runs a join
+level's deferred code in three phases: before the wait (every defer but the drops), after a failed wait (the errdefers
+and the drops), after a wait that did not fail (the drops). Elsewhere a drop is deferred code as before.
+
+**F4 (O15): a holder whose storage flows out lets go where it lands.** `fn mk(n I64) Res& { x Res = Res(n); return x
+}` (and `x` returned as an `any`, held by a returned value's reference field, pushed by reference into a parameter's
+collection, captured by a returned closure): the scope pass homes `x` where it flows (O26a), but its drop still ran at
+`mk`'s end - the caller read a value whose destructor had run. Lowering now asks where the scope pass put a holder's
+storage (`lower.escapedHome`: its MIR home, or a plan's block other than its own): outside its own block, the holder's
+drop registers its value with the scope it lives in (`Stmt.RegisterDtor`, as a call's value no slot takes is, O16),
+and its destructors run as that scope closes. A constructor's field is excluded: it lives with the instance, and is let
+go of only where the constructor fails - and then now. Every escape the scope pass places is so followed; one it cannot
+place it already refuses (O27, O20), so no new refusal was needed. **Found on the way (pre-existing):** the
+evaluator refused, as reading closed storage, any compile-time evaluation of a function returning a reference to a
+by-value local of its own - the stand-in placement (a body lowered while compiling has no plan) left such a local in
+the frame its return closes. `lower.standInAway` homes, in the stand-in only, a value local the body's uses say escapes
+hard or flows into a reference-holding result in the program's scope, as everything else the stand-in builds is
+(`typed.LocalUses`: a holder's own drop no longer counts as an escape - `PrimOp.Drop` borrows as an argument; a holder
+of destructors keeps its frame, so its drop is not moved and a compile-time evaluation reaching one is refused as K2c
+says, never run in another order). A top-level assert over such a function now decides (tests/reads.olang `pinned`).
+
+**F6 (T13b): `Array<T>(n, fill)` of a unique T is refused.** It made n independent copies of one unique value, from an
+existing one or a fresh one alike, and in a generic instance too. `check.uniqueFill` refuses it, naming a comprehension
+(`Token[Token(i) for i in range n]`, each element fresh) or an array of references; in a generic, at the call that
+bound the type (G18a), as other copies are.
+
+**F3 (O15): a hand-on lets go once the call is made.** `wrap(r, try num(bad))` cleared `r`'s drop flag where the
+argument was read; the later argument then left (an error passed on, a clause's `return`) before the call, and `Res(1)`
+was never ended. `check.handOn`'s `Seq` is marked `Gone`, and `lower.args` lowers such an argument's value in its place
+but the flag's clearing after every argument (`handedOver`), so a later argument leaving leaves the value with its holder,
+which ends it. Other places a hand-on stands (a store, a return) lower it as before - nothing follows them.
+
+**F7 (S4c): a parallel declaration or assignment copies each value.** `m, n := g, g` left `g`, `m` and `n` one array (a
+Vec two names over one buffer with separate counts; a declared Copy never ran). `check.multi` now gives each value
+what `x := v` (a unique value's reference, an owning value's own copy) or `p = v` (`storeCopy`) gives it alone, made
+when the values are, before any store.
+
+**F8 (D16c, E31d): a captured value is the lambda's own copy.** A capture of a struct owning an array, or of a Vec, was
+shallow - the lambda saw later writes to the array or buffer - and no capture ran a declared Copy, though E31d lists a
+capture among the copies that call it. D16c and E31d agree once read together: a value captured is copied, a value
+array itself is borrowed. Decided (the direction): E31d's "a capture is a copy" for owning values, and D16c's borrow for
+an array captured as itself (read-only). `lower.lambda` copies a capture read by value whose type owns parts
+(`ownCopyOf`, made in the closure's scope - where the lambda lives), and `check.captureIn` makes the declared Copy's
+body wanted. SPEC D16c says it.
+
+**F10 (D17): a failed requirement ends the by-value parameters taken.** A function or constructor whose contract failed
+never ended its `Res` parameter: the requirement checks were emitted before the parameters' drop flags were registered.
+`check.rootStmts` registers them first.
+
+**F14 (O15, T13b): what a try gives is a fresh value.** `x = try mk(bad)`, `x = mk(bad)!` and `x = try mk(bad) catch Nope
+default Res(0)` over a holder of a destructor type were T13b's "held elsewhere" - `check.held`'s promote of the call was
+under the `Try`, which `heldValue` (the slot taking a held value as it is) did not look through. It now peels a try, its
+operand and each default, building the try over the values.
+
+**F9 and work/d12.olang (C9b): a deferred Destroy() and a holder renewed after Destroy() are accepted.** `x Res = Res(id);
+defer x.Destroy(); return x.id` was C9b's "mentioned after" (deferred code counts as after everything), and `errdefer
+x.Destroy(); ... return x` T13b's too; `y.Destroy(); y = Res(8)` was refused as a mention after. A by-value holder's
+Destroy() runs only where its drop flag says it still holds a value (`destroyHeld`), so a deferred one ends nothing
+where the value was handed on: such a landing (`destroyedHeld`) is no "later" mention for the reads before it
+(`Landings.Guarded`), while deferred code running after it (registered before it) still is; and a whole store to the
+local renews it - what its earlier reads handed on or ended is no longer what it holds (`renewed`).
+
+**F11 (B3e): interpret refuses what a build refuses, a check gap included.** A build stops at a construct the checker
+does not check yet (`get(b).a = Res(3)`, a store over a value with destructors reached through a call); `interpret` ran
+it and never ended the old value. `Passes.Interpret` stops on the checker's gaps as `Analyze` does (checks fixture
+interp/gap.olang).
+
+**F5 (O15, P1d): a test ended by a failed check ends its holders.** A failed check unwinds the open scopes (P1d), running
+their registered destructors but no deferred code, so a by-value holder was never ended. In a test build only, a
+holder's drop also registers a guard with its block (`mir.HelperKind.Guard` over `mir.GuardType` - its flag's and its
+own place): as the block's scope closes the guard ends what the holder still holds and clears the flag; a holder
+letting go clears the flag itself (`dropIfHeld`), so on every ordinary way out the guard finds nothing to do. Decided
+(mine): test builds only - no cost anywhere else; on the unwinding the holder ends among the block's registered values,
+last registered first (checks fixture testends/heldends.olang).
+
+**F13 (T13b): an immut generic instance holding a unique part is refused where it is asked for.** `Box<Token>` of
+`type Box<T> immut struct(x T)` was accepted, then `c := b` said T13a's "nothing changes after its constructor" - the
+rule that applies (never both) was checked only for written types. `check.instImmutUnique` refuses the instance at its
+origin with T13b's message, and a unique value's reference (`uniqueRef`) of an immut type is read-only, so no T13a
+error follows the one. Limit: an instance inferred from its arguments (`Box(Token(2))`) has its origin at the enclosing
+function, where the error points.
+
+**Found on the way, not fixed (pre-existing):** C2d refuses `h HeldTwo = HeldTwo(r, 4)` where `r` is a by-value
+parameter of a unique type holding a `mut` reference (`Res(id, log mut Tally&)`) - the same family as wt-uniq's T17c
+over-rejection (a by-value parameter holding a reference put into an enum case), queued as step 7 of the week's plan.
