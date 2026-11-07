@@ -327,6 +327,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     comprOut I64 = -1
     comprIdx I64 = -1
     comprKnown I64 = -1
+    comprGen Bool = false     # a comprehension walked as a generator (E27): its elements given by Suspend, not collected
+    comprBad Bool = false     # comprWalk said an error
     noClear Bool = false        # D14d: the Array<T>(n) being checked is filled by the loop after it - made with no clear
     # D17: each function's or constructor's body's contract, its items made bodies of their own, by body - made the
     # first time it is asked for (ctDone says it was, Contracts holds it where there is one); the calls whose
@@ -19684,16 +19686,85 @@ fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr& {
     if made == types.UnknownT or c.P.T.KindOf(made) == types.Kind.Array {
         return c.comprArray(sp, cm, c.P.T.Elem(made) if made != types.UnknownT else types.UnknownT)
     }
-    # E27: made into any other type, the array its builder's elements make, walked by its FromIter
+    # E27: made into a Vec, the array the elements make, handed to its FromIter; made into any other type, a generator
+    # of the elements its FromIter walks - each computed when the builder asks for the next, no array made
     msp := cm.Elem!.Span()
     b := c.literalBuilder(msp, made)
     if b.F < 0 {
         c.dropCompr(cm)
         return c.unknown(sp)
     }
+    if not c.isVec(made) or c.listOf(cm.Source).Ok {
+        g := c.comprWalk(sp, cm, b.Elem)
+        if g is not null { return c.invoke(sp, msp, b.F, null, Array<ast.Expr&>(0), Array<typed.Expr&>[g], c.P.OwnerBinding(b.F, made)) }
+        if c.comprBad { return c.unknown(sp) }
+    }
     arr := c.comprArray(sp, cm, b.Elem)
     if typeOf(arr) == types.UnknownT { return c.unknown(sp) }
     return c.fromIter(sp, msp, b, made, arr)
+}
+
+# whether t is the prelude's Vec
+fn (c mut Checker&) isVec(t types.TypeId) Bool {
+    v := try c.P.FindDecl("std/prelude/vec", "Vec") catch { return false }
+    return c.isNamed(t) and c.P.T.DeclOf(t) == v
+}
+
+# E27: the walk of a comprehension's elements as a Generator<el> - a lambda whose body is the comprehension's loop, each
+# element given by a Suspend where its filter holds (a coroutine, as a generator's Next is, D18), capturing what the
+# comprehension reads; null where the walk cannot be one (c.comprBad then says whether an error was said)
+fn (c mut Checker&) comprWalk(sp source.Span, cm ast.Compr&, el types.TypeId) typed.Expr?& {
+    c.comprBad = false
+    if c.listOf(cm.Source).Ok { return null }                       # G33: an unrolled list makes its array
+    if el != types.UnknownT and (c.isRef(el) or c.P.T.HoldsRefs(el)) {
+        c.err(c.opAfter(cm.Elem!.Span(), 1), msgs.ComprehensionReferences())
+        c.comprBad = true
+        return null
+    }
+    gd := try c.P.FindDecl("std/prelude/iterator", "Generator") catch { return null }
+    none := c.P.ErrSetOf(c.P.T.List(Array<types.TypeId>(0)))
+    gt := c.P.Instance(gd, c.P.T.List(Array<types.TypeId>[el, none]))
+    csig := c.P.CtorSig(gt)
+    if csig == types.UnknownT or c.P.T.Items(c.P.T.Params(csig)).Len() != 1 { return null }
+    ft := c.P.T.Items(c.P.T.Params(csig))[0]
+    parent := c.fr()
+    pfi := c.frames.Len() - 1
+    id := c.newBody(typed.BodyOf.Lambda(typed.BodyId(I32(parent.Body))), ft, parent.Mi, sp)
+    c.state[id] = 1
+    fr := c.push(id, parent.Mi, c.P.T.Result(ft), c.P.T.Errors(ft))
+    fr.Ctx = parent.Ctx
+    fr.Parent = pfi
+    fr.Gen = true
+    c.cur().Gen = true
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    c.cur().SetVars(c.P.ScopeVarsOf(c.cur().Ty))
+    from := c.stmts.Len()
+    f := ast.ForIn(cm.Key, cm.Name, cm.Source, false, Array<ast.Stmt&>(0), Array<ast.Catch&>(0))
+    wState, wGen, wKnown := c.comprState, c.comprGen, c.comprKnown
+    c.comprState, c.comprGen, c.comprKnown = 0, true, -1
+    fails := fr.LoopFails
+    lid, outer, mark := c.open(typed.BlockKind.Plain, sp)
+    c.walk(sp, f, cm, el)
+    lb := c.close(lid, outer, mark, from)
+    c.comprState, c.comprGen, c.comprKnown = wState, wGen, wKnown
+    if c.fr().LoopFails > fails {
+        fa := try c.src(sp).Find(" for ") catch default -1
+        c.err(source.Span(sp.Start + I32(fa + 1), sp.Start + I32(fa + 4)) if fa >= 0 else sp, msgs.ComprWalkFails())
+    }
+    c.fr().LoopFails = fails
+    c.emit(typed.Stmt.Block(sp, lb))
+    c.emit(c.genEnd(source.Span(sp.End - 1, sp.End)))
+    c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    caps := c.fr().captures.ToArray()
+    c.pop()
+    c.state[id] = 2
+    lam := typed.Expr.Fn(sp, ft, typed.FnVal.Lambda(typed.BodyId(I32(id)), caps, c.site(typed.SiteKind.Closure, sp)))
+    ctor := c.ctorBody(gt)
+    was := c.ctorCalled
+    c.ctorCalled = gt
+    call := c.callBody(sp, sp, csig, typed.Callee.Body(typed.BodyId(I32(ctor))), -1, null, Array<ast.Expr&>(0), Array<typed.Expr&>[lam])
+    c.ctorCalled = was
+    return call
 }
 
 # a comprehension that makes nothing, its parts checked for their own errors
@@ -19706,6 +19777,9 @@ fn (c mut Checker&) comprArray(sp source.Span, cm ast.Compr&, elem types.TypeId)
     # G33: over a list known while compiling, unrolled into an array literal
     rl := c.listOf(cm.Source)
     if rl.Ok { return c.unrolledCompr(sp, cm, rl, elem) }
+    wasGen := c.comprGen
+    c.comprGen = false                            # a comprehension inside a walked one collects its own
+    defer { c.comprGen = wasGen }
     et := c.errValueType(elem)
     if et != types.UnknownT and (c.isRef(et) or c.P.T.HoldsRefs(et)) {
         # E27: not yet - where such elements live would be the array's
@@ -20500,13 +20574,14 @@ fn (c mut Checker&) walkBody(f ast.ForIn&, cm ast.Compr?&, ce types.TypeId) {
         c.emit(typed.Stmt.Assign(sp, dst, c.fit(v, ce, sp)))
         return
     }
+    give typed.Stmt& = typed.Stmt.Suspend(sp, v) if c.comprGen else typed.Stmt.Yield(sp, v)
     if cm.Filter is null {
-        c.emit(typed.Stmt.Yield(sp, v))
+        c.emit(give)
         return
     }
     k := c.cond1(cm.Filter!)
     from := c.stmts.Len()
-    c.stmts.Push(typed.Stmt.Yield(sp, v))
+    c.stmts.Push(give)
     y typed.Block& = typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, from))
     c.emit(typed.Stmt.If(cm.Filter!.Span(), typed.If(k, y, null)))
 }

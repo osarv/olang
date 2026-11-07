@@ -45,7 +45,7 @@ test "E5a: '**' calls Pow - tighter than '-', to the right, '**=' with it" {
 }
 
 test "E5a, E39: '**' lane by lane" {
-    want := "F64[1, 4, 9] I64[4, 9, 16] 1"
+    want := "Array<F64>[1, 4, 9] Array<I64>[4, 9, 16] 1"
     assert lanes(Live) == want and LanesBaked == want
 }
 

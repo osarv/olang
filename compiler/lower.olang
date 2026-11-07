@@ -6014,7 +6014,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
     parts, isParts := ln.partsOf(ty), mir.HasFields(ln.T, ty)
     cases, isEnum := ln.casesOf(ty), mir.HasCases(ln.T, ty)
     if isParts {
-        if t.KindOf(r) == types.Kind.Named { ln.word(b, ln.T.Names.Text(t.DeclName(t.DeclOf(r))), sp) }
+        if t.KindOf(r) == types.Kind.Named { ln.word(b, $ln.L.errQualifier(t.DeclOf(r)) $ln.T.Names.Text(t.DeclName(t.DeclOf(r))), sp) }
         ln.word(b, "(", sp)
         for i in range parts.Len() {
             if i > 0 { ln.word(b, ", ", sp) }
@@ -6024,7 +6024,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
     } else if isEnum {
         caseNames := t.CaseNames(r) if t.KindOf(r) == types.Kind.Named else t.ShapeNames(r)
         tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(a)), sp)
-        prefix := "" if t.KindOf(r) != types.Kind.Named else $ln.T.Names.Text(t.DeclName(t.DeclOf(r))) "."
+        prefix := "" if t.KindOf(r) != types.Kind.Named else $ln.L.errQualifier(t.DeclOf(r)) $ln.T.Names.Text(t.DeclName(t.DeclOf(r))) "."
         after := ln.F.NewBlock()
         cs := Array<mir.Case>(cases.Len())
         bs := Array<mir.BlockId>(cases.Len())
@@ -6169,7 +6169,8 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
     t := ln.T
     k := t.KindOf(ty)
     if k == types.Kind.Named {
-        name := ln.T.Names.Text(t.DeclName(t.DeclOf(ty)))
+        # as source writes it outside its module (E11a, B5): "list.List<I64>", the prelude's and the root's own bare
+        name := $ln.L.errQualifier(t.DeclOf(ty)) $ln.T.Names.Text(t.DeclName(t.DeclOf(ty)))
         args := t.Items(t.Args(ty))
         if args.Len() == 0 { return $name }
         out := StringBuilder()

@@ -143,7 +143,7 @@ Parallel := parallel()
 
 test parallel "copies each value of a parallel declaration and assignment" {
     assert Parallel == parallel()
-    assert parallel() == "I64[0, 0]I64[5, 0]I64[0, 6]Vec<I64>[1]Vec<I64>[9, 2]Vec<I64>[1]1112I64[7, 0]I64[0, 0]"
+    assert parallel() == "Array<I64>[0, 0]Array<I64>[5, 0]Array<I64>[0, 6]Vec<I64>[1]Vec<I64>[9, 2]Vec<I64>[1]1112Array<I64>[7, 0]Array<I64>[0, 0]"
 }
 
 # a lambda's capture of a value is its own copy, made as the lambda is: what the value owns copied too (a struct's

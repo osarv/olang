@@ -3697,9 +3697,14 @@ its type: the value written the way it would be in source:
   `Array<Node&>[...]`. An array of a declared type over `Char` is such an array: `Array<Letter>['a', 'b']`. So every
   rendering of an array, as every rendering of a collection the library declares (a `Vec`, a `Map`, a `List`: E19's
   literals, through their `Str`), reads back as the literal making it.
-- a struct — its declared name, then its fields in declaration order in parentheses: `Point(1, -2)`.
+- a struct — its name, then its fields in declaration order in parentheses: `Point(1, -2)`.
 - an enum — `Type.Case`, followed by the payload's fields in parentheses when the live case carries one:
   `Shape.Rect(3, 4)`.
+
+  A struct's, an enum's or any declared type's name, in a value and in a rendering's type alike (a literal's made type,
+  a type argument, an element type), is written as source writes it outside its module: its module's alias before it
+  (`pair.Pair("k", 0.5)`, `list.List<json.Json>[json.Json.Null]`), the prelude's and the running program's own bare -
+  as an error's is (B5).
 - an error value (T20) — the error's name as an unhandled error prints it (B5), `ParseError.Empty`, `os.Error.Denied`
   with another module's type by its module's name; `null` for no error. An error type or a named set written as part
   of a rendering's type - an array literal's element type, a type argument - is qualified the same way:

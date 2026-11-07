@@ -606,7 +606,7 @@ test Error "an address refused carries the text, a name not found the name" {
     assert RefusedBaked == "Error.Address(\"::1:80\")"
     assert refused("1.2.3.4:x") == "Error.Address(\"1.2.3.4:x\")" and refused("[::1]:443") == "ok"
     try IP.Parse("256.1.1.1") catch Error.Address e { assert e.text == "256.1.1.1" }
-    try IP.IPv6(Array<U8>[1, 2]) catch Error.Address e { assert e.text == "U8[1, 2]" }
+    try IP.IPv6(Array<U8>[1, 2]) catch Error.Address e { assert e.text == "Array<U8>[1, 2]" }
     try Lookup("") catch Error.UnknownHost e { assert e.host == "" } catch { unreachable "an empty name" }
 }
 

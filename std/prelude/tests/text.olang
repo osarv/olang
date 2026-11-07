@@ -80,7 +80,7 @@ test "Join puts a separator between the texts of an array" {
     assert Array<String&>["", "", ""].Join("-") == "--" and Array<String&>["x", "y"].Join("") == "xy"
     parts := "2026-10-09".Split("-")
     assert parts.Join("/") == "2026/10/09"
-    assert $Array<String&>["a", "b"] == "String&[\"a\", \"b\"]"                   # $ renders the array as source
+    assert $Array<String&>["a", "b"] == "Array<String&>[\"a\", \"b\"]"                   # $ renders the array as source
 }
 
 # ParseFloat's value of text, or a NaN when it fails

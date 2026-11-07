@@ -639,14 +639,14 @@ fn (l List<T>&) Str() String {
     b := StringBuilder()
     match T {
         case Char { # an array of Char renders as text, so these are written here
-            b.Push("list.List<Char>[")
+            b.Push($typeWritten(Array<List<Char>>(0)) "[")
             for i, c in l {
                 if i > 0 { b.Push(", ") }
                 b.Push(charLiteral(c))
             }
         }
         case _ {
-            b.Push("list.List<" $typeWritten(Array<T>(0)) ">[")
+            b.Push($typeWritten(Array<List<T>>(0)) "[")   # "list.List<T>" outside std/list
             at I64 = 0
             for {
                 run := try l.RunFrom(at) catch Exhausted { break }
@@ -1465,7 +1465,7 @@ if TestBuild {
     test "$ renders a List's elements, not its storage" {
         r := listRendered()
         assert r == ("List<I64>[] List<I64>[0, 1, 2] List<String&>[\"a\\\"b\", \"\"] List<Char>['x', '\\n', '\\''] "
-            "List<List<I64>>[List<I64>[0, 1], List<I64>[]] List<Pair<String&, F64>>[Pair(\"k\", 0.5)]")
+            "List<List<I64>>[List<I64>[0, 1], List<I64>[]] List<pair.Pair<String&, F64>>[pair.Pair(\"k\", 0.5)]")
         assert listRenderedBaked == r # the evaluator renders as the run time does
         long := List<I64>.listUpTo(1000)        # many chunks: their spare slots are never shown
         expect := StringBuilder()

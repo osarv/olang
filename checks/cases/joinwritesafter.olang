@@ -31,12 +31,12 @@ fn (h H&) Str() String {
 }
 fn main() ? {
     s := $G $bump()
-    assert s == "I64[123456789012345, 987654321098765]7"
+    assert s == "Array<I64>[123456789012345, 987654321098765]7"
     t := $Name $rename() $Name
     assert t == "xb8xb"
     u := $X $P $inc() $X $P
     assert u == "1S(5)940S(50)"
     w := $H(1) $P $G       # a Str runs as its piece renders: the struct was taken before, the array's elements after
-    assert w == "hS(50)I64[123456789012345, 3]"
+    assert w == "hS(50)Array<I64>[123456789012345, 3]"
     assert P.v == 77
 }

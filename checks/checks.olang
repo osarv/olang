@@ -990,7 +990,7 @@ fn interp(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build tasks.olang > out.txt 2>&1 && ./build/tasks > want.txt 2>&1") == 0, "tasks build", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret tasks.olang > out.txt 2>&1") == 0, "-i tasks.olang failed", dir)
     try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i ran tasks.olang unlike the built program", dir)
-    try r.expect(outOf(dir) == "squares I64[1, 4, 9, 16]\nsum 10\ncleanup ran\n", "-i tasks.olang output", dir)
+    try r.expect(outOf(dir) == "squares Array<I64>[1, 4, 9, 16]\nsum 10\ncleanup ran\n", "-i tasks.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret tasks.olang x > out.txt 2>&1") == 1, "-i tasks.olang x did not stop", dir)
     try r.expect(outOf(dir).Contains("sum 10\ncleanup ran\nolang interpret: ") and outOf(dir).Contains(": it waits for another task") and
                  outOf(dir).Contains("in the task spawned at tasks.olang:39"), "-i tasks.olang x output", dir)
@@ -1104,7 +1104,7 @@ fn testfuzz(r mut report&) ? Failed {
     ran = sh(dir, "\"$OLANG\" test -fuzztime 3 parse.olang > out.txt 2>&1")
     try r.expect(ran == 1 and outOf(dir).Contains("error[B19]: -fuzztime says how long -fuzz runs"), "-fuzztime alone", dir)
     ran = sh(dir, "\"$OLANG\" test planted.olang > out.txt 2>&1")
-    try r.expect(ran == 1 and outOf(dir).Contains("prop: a failing case, shrunk to:\n  argument 1: I64[50]\n  argument 2: Pt(0, 0)\n") and
+    try r.expect(ran == 1 and outOf(dir).Contains("prop: a failing case, shrunk to:\n  argument 1: Array<I64>[50]\n  argument 2: Pt(0, 0)\n") and
                  outOf(dir).Contains("assertion failed: an element of 50 or more"), "a property's failing case shrunk", dir)
     ran = sh(dir, "\"$OLANG\" test planted.olang > out.txt 2>&1")
     replayed = outOf(dir).Contains("prop: replaying testdata/fuzz/every_element_below_50/input-")
@@ -1415,7 +1415,7 @@ fn definit(r mut report&) ? Failed {
     dir := fresh("definit")
     os.Run("cp checks/fixtures/definit/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build definit.olang > out.txt 2>&1 && ./build/definit > out.txt 2>&1") == 0, "definit", dir)
-    try r.expect(outOf(dir) == "1 F32[0, 1, 4, 9] F32[0, 0.5, 1, 1.5] F32[1, 1, 1, 0, 0] 7\n", "definit output", dir)
+    try r.expect(outOf(dir) == "1 Array<F32>[0, 1, 4, 9] Array<F32>[0, 0.5, 1, 1.5] Array<F32>[1, 1, 1, 0, 0] 7\n", "definit output", dir)
     ll String& = "build/definit.main.ll"
     try r.expect(not bodyHas(dir, ll, "assigned", "Vec[^ ]*ctor|scope_alloc"), "a zero Vec made before its first value", dir)
     for f in Array<String&>["squares", "filled"] {
@@ -1425,7 +1425,7 @@ fn definit(r mut report&) ? Failed {
     try r.expect(bodyHas(dir, ll, "stopped", "scope_alloc_zeroed"), "a loop that may stop early lost its clear", dir)
     try r.expect(irHas(dir, ll, $gsym("definit", "Root") " = constant <\\{ ptr \\}> <\\{ ptr @"), "Root is not baked", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret definit.olang > out.txt 2>&1") == 0, "definit interpreted", dir)
-    try r.expect(outOf(dir) == "1 F32[0, 1, 4, 9] F32[0, 0.5, 1, 1.5] F32[1, 1, 1, 0, 0] 7\n", "definit interpreted output", dir)
+    try r.expect(outOf(dir) == "1 Array<F32>[0, 1, 4, 9] Array<F32>[0, 0.5, 1, 1.5] Array<F32>[1, 1, 1, 0, 0] 7\n", "definit interpreted output", dir)
 }
 
 # T36: every numeric primitive has alias tags of its own - a BF16 or F16 element stored through a struct carries one, as

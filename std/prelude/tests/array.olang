@@ -159,7 +159,7 @@ test "Chunks cuts an array into consecutive pieces, the last holding what is lef
     e := Array<I64>(0)
     assert chunkLens(e, 3) == "" and e.Chunks(3).Len() == 0
     p := a.Chunks(4)
-    assert p[1][0] == 4 and p[2][1] == 9 and $p[2] == "I64[8, 9]"
+    assert p[1][0] == 4 and p[2][1] == 9 and $p[2] == "Array<I64>[8, 9]"
     p[1][0] = 40                                         # a piece is a view: writing it writes the array
     assert a[4] == 40
     t Array<Char> = "abcdefg"                            # (writable pieces: text that may be written, T13a)

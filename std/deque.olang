@@ -144,10 +144,12 @@ fn (d Deque<T>&) Hash() I64 {
     return h
 }
 
-# how "$" renders a Deque: its elements front to back, as an array renders, after "Deque" - "Deque[1, 2, 3]"
+# how "$" renders a Deque: as the literal making it (E19), its elements front to back - "deque.Deque<I64>[1, 2, 3]"
 fn (d Deque<T>&) Str() String {
-    r := $d.ToArray()                                    # "Array<T>[...]", the literal making it (E19)
-    return "deque.Deque" $r[5:]
+    r := $d.ToArray()                                    # "Array<T>[...]"
+    t := $Array<Deque<T>>(0)                             # "Array<deque.Deque<T>>[]"
+    o := try r.FindByte('[') catch default 0
+    return $t[6:t.Len() - 3] $r[o:]                      # the literal making it (E19)
 }
 
 if TestBuild {
@@ -184,14 +186,14 @@ test "a Deque used as a ring wraps and grows in order" {
     d.PushBack(5)
     assert c == d and c.Hash() == d.Hash()
     d[0] = 77
-    assert d.Front()! == 77 and $Deque<I64>() == "Deque[]"
+    assert d.Front()! == 77 and $Deque<I64>() == "Deque<I64>[]"
 }
 
 test "a Deque of text" {
     q := Deque<String&>()
     q.PushBack("b")
     q.PushFront("a")
-    assert $q == "Deque[\"a\", \"b\"]" and q.PopBack()! == "b"
+    assert $q == "Deque<String&>[\"a\", \"b\"]" and q.PopBack()! == "b"
 }
 
 }

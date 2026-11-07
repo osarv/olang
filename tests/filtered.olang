@@ -19,6 +19,6 @@ fn flMix(n I64) String {
 FlBaked String& = flMix(9)
 
 test "a filtered comprehension's result is an array of its own" {
-    want := "I64[99, 6, 12, 18, 24] I64[100, 7, 13, 19, 25] 11 970 0 I64[0, 24, 48]"
+    want := "Array<I64>[99, 6, 12, 18, 24] Array<I64>[100, 7, 13, 19, 25] 11 970 0 Array<I64>[0, 24, 48]"
     assert flMix(9) == want and FlBaked == want
 }

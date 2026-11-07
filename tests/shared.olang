@@ -2015,7 +2015,7 @@ test "E11a: a Char array renders as text, in every shape; a U8 array as numbers 
     run Array<Char> = "hi"
     assert bytesEq($run, "hi")
     nums := Array<U8>[104, 105]
-    assert bytesEq($nums, "U8[104, 105]")
+    assert bytesEq($nums, "Array<U8>[104, 105]")
 }
 
 test "E11a: a declared type renders from its fields, whatever methods it has" {
@@ -2055,13 +2055,13 @@ type RenderHolder struct(at mut Pt3&, tag String&) {
 
 test "E11a: a struct, an array and an enum render from their parts" {
     assert bytesEq($Point(1, -2), "Point(1, -2)")
-    assert bytesEq($Array<I32>[1, 2, 3], "I32[1, 2, 3]")
+    assert bytesEq($Array<I32>[1, 2, 3], "Array<I32>[1, 2, 3]")
     assert bytesEq($RenderPair("ab", 7, 'z', false), "RenderPair(\"ab\", 7, 'z', false)")
     assert bytesEq($Figure.Rect(3, 4), "Figure.Rect(3, 4)")
     assert bytesEq($Figure.Nothing, "Figure.Nothing")
     assert bytesEq($Direction.SOUTH, "Direction.SOUTH")
     pts := Array<Point>[Point(1, 2), Point(3, 4)]
-    assert bytesEq($pts, "Point[Point(1, 2), Point(3, 4)]")
+    assert bytesEq($pts, "Array<Point>[Point(1, 2), Point(3, 4)]")
     m RenderMeters = RenderMeters(5)
     assert bytesEq($m, "5")
 }
@@ -2082,9 +2082,9 @@ test "E11a: nested text is escaped the way a literal would write it" {
 test "E11a: a run-time-length array renders all its elements, and an empty one renders as Type[]" {
     n := 3
     xs := Array<I64>(n, 9)
-    assert bytesEq($xs, "I64[9, 9, 9]")
+    assert bytesEq($xs, "Array<I64>[9, 9, 9]")
     none := Array<I32>(0)
-    assert bytesEq($none, "I32[]")
+    assert bytesEq($none, "Array<I32>[]")
 }
 
 test "E11a: a reference renders its referent, null as null, and a cycle is cut off" {
@@ -2118,7 +2118,7 @@ test "E11a: functions render as signatures" {
     h := RenderFnHolder(renderAdd)
     assert bytesEq($h, "RenderFnHolder(fn&(a I32, b I32) I32)")
     rs := Array<Point&>[Point(1, 2)]
-    assert bytesEq($rs, "Point&[Point(1, 2)]")
+    assert bytesEq($rs, "Array<Point&>[Point(1, 2)]")
 }
 
 # E11a/QY: an error set is listed with commas; a function type's several items are parenthesized
@@ -6513,7 +6513,7 @@ test "L18c: a function type of several results grouped whole in a list" {
     keep fn&(n I64) I64 ? L18cErr, L18cOther = fn(n I64) I64 ? L18cErr, L18cOther { return n * 2 }
     assert (try l18cFails(keep, L18cAt) catch { unreachable }) == 6
     assert $keep == "fn&(n I64) I64 ? L18cErr, L18cOther"
-    assert $m == "Map<String&, (fn&(I64) I64, I64)>{\"p\": (fn&(I64) I64, I64)}"
+    assert $m == "Map<String&, (fn&(I64) I64, I64)>[\"p\": (fn&(I64) I64, I64)]"
 }
 
 test "D8c: spawn binds several results" {
@@ -7714,8 +7714,8 @@ fn comprNothing(n I32) String {
 ComprNothingBaked String = comprNothing(0)
 
 test "E27/T2c: a comprehension over an empty source is an empty array" {
-    assert ComprNothingBaked == "U16[] true U16[] true U16[] true"
-    assert comprNothing(0) == "U16[] true U16[] true U16[] true"
+    assert ComprNothingBaked == "Array<U16>[] true Array<U16>[] true Array<U16>[] true"
+    assert comprNothing(0) == "Array<U16>[] true Array<U16>[] true Array<U16>[] true"
     n I32 = 0
     n++
     n--
@@ -10109,8 +10109,8 @@ test "E11c: $ renders through a declared Str, wherever the value sits" {
     m := StrMoney(StrCount)
     assert $m == "$2.50"
     o := StrOrder(7, StrMoney(199), StrMoney(5), Array<StrMoney>[StrMoney(1), StrMoney(StrCount)])
-    assert $o == "StrOrder(7, $1.99, $0.5, StrMoney[$0.1, $2.50])"
-    assert StrBaked == "StrOrder(7, $1.99, $0.5, StrMoney[$0.1, $1.0])"
+    assert $o == "StrOrder(7, $1.99, $0.5, Array<StrMoney>[$0.1, $2.50])"
+    assert StrBaked == "StrOrder(7, $1.99, $0.5, Array<StrMoney>[$0.1, $1.0])"
     n StrMoney?& = null
     assert $n == "null"
     assert $StrCents(StrCount) == "250c"
@@ -10436,7 +10436,7 @@ fn charAll(n I32) Bool {
     methods Bool = next == 'b' and c.IsLower() and s[0].IsUpper() and s[2].IsSpace() and s[3].IsDigit() and c.ToUpper() == 'A'
     text Bool = $c == "a" and $u == "97" and $Array<Char>['x', 'y'] == "xy" and $s[0] == "H" and k == 65
     raw := Array<U8>(2, U8(104 + n))
-    bytes Bool = charBytes(s) == 72 + 4 and String(raw) == "ii" and $raw == "U8[105, 105]"
+    bytes Bool = charBytes(s) == 72 + 4 and String(raw) == "ii" and $raw == "Array<U8>[105, 105]"
     return methods and text and bytes
 }
 CharBaked := charAll(1)
@@ -12013,7 +12013,7 @@ fn evInPlace(k I64) String {
 }
 EvInPlaceBaked String = evInPlace(7)
 test "T7: an array or struct value is assigned into the storage it has, unless an array's length changes" {
-    assert EvInPlaceBaked == "I64[7, 8] I64[7, 7] I64[1, 1] 7 yz"
+    assert EvInPlaceBaked == "Array<I64>[7, 8] Array<I64>[7, 7] Array<I64>[1, 1] 7 yz"
     assert evInPlace(evRun + 6) == EvInPlaceBaked
 }
 
@@ -12188,7 +12188,7 @@ fn fzFill(n I64) String {
 }
 FzFillBaked String = fzFill(3)
 test "T8: an array filled with a reference names one instance in every element" {
-    want String& = "String&[\"ab\", \"ab\", \"ab\"] Array<Char>&[\"xd\", \"xd\", \"xd\"] true Array<I32>&[I32[7, 9, 7], I32[7, 9, 7], I32[7, 9, 7]] true I32[7, 9, 7]"
+    want String& = "Array<String&>[\"ab\", \"ab\", \"ab\"] Array<Char>&[\"xd\", \"xd\", \"xd\"] true Array<I32>&[Array<I32>[7, 9, 7], Array<I32>[7, 9, 7], Array<I32>[7, 9, 7]] true Array<I32>[7, 9, 7]"
     assert FzFillBaked == want and fzFill(3) == want
     assert fzFill(fzRun + 2) == want
 }
@@ -12337,7 +12337,7 @@ FzAtomicsBaked String = fzAtomics(1)
 FzAtomicsGlobal mut I32 = 4
 FzAtomicsRead I32 = FzAtomicsGlobal.AtomicLoad()           # a mutable global: read at startup, not while compiling
 test "K1/P9: atomic operations are evaluated while compiling, and agree with the run time" {
-    assert FzAtomicsBaked == "8 11 99 5 5 251 U8[1, 251]" and fzAtomics(1) == FzAtomicsBaked
+    assert FzAtomicsBaked == "8 11 99 5 5 251 Array<U8>[1, 251]" and fzAtomics(1) == FzAtomicsBaked
     assert fzAtomics(I32(fzRun)) == FzAtomicsBaked and FzAtomicsRead == 4
 }
 
@@ -12366,7 +12366,7 @@ fn fzTasks(n I64) String {
 }
 FzTasksBaked String = fzTasks(4)
 test "K1/P1: a join's tasks are evaluated while compiling, in sequence, and agree with the run time" {
-    assert FzTasksBaked == "I64[1, 4, 9, 16] 5 3 1106" and fzTasks(4) == FzTasksBaked
+    assert FzTasksBaked == "Array<I64>[1, 4, 9, 16] 5 3 1106" and fzTasks(4) == FzTasksBaked
     assert fzTasks(fzRun + 3) == FzTasksBaked
 }
 
@@ -12416,7 +12416,7 @@ fn fzNullArr(n I64) String {
 }
 FzNullArrBaked String = fzNullArr(3)
 test "E10, T2c: a reference to an array with no storage renders as the empty array" {
-    assert FzNullArrBaked == "U16[] true U16[] true" and fzNullArr(3) == FzNullArrBaked
+    assert FzNullArrBaked == "Array<U16>[] true Array<U16>[] true" and fzNullArr(3) == FzNullArrBaked
     assert fzNullArr(fzRun + 2) == FzNullArrBaked
 }
 
@@ -13659,7 +13659,7 @@ test "T7d: fixed storage is a value, laid out in place" {
     assert kValues() == 295638 and KValuesBaked == 295638
     a := Array<I32>[1, 2, 3]
     assert a == Array<I32>[1, 2, 3] and a != Array<I32>[1, 2, 4]
-    assert $a == "I32[1, 2, 3]"
+    assert $a == "Array<I32>[1, 2, 3]"
     bl := KBlock4()
     bl.m[1][2] = 3.5
     copy KBlock4 = bl
@@ -15743,8 +15743,8 @@ fn strOnceTrace(k I64) String {
     return $one "|" $three "|" $listed "|" $two "|" $arr "|" $some "|" $mapped "|" $c.n
 }
 StrOnceBaked := strOnceTrace(0)
-StrOnceWant String& = ("a1|x2-y3-z4|Vec<strOnceTick>[p5, q6, r7]|strOnceTwo(m8, n9)|strOnceTick[e10, e11]|"
-                       "strOnceMaybe.Some(s12, 7)|Map<I64, strOnceTick>{1: v13}|13")
+StrOnceWant String& = ("a1|x2-y3-z4|Vec<strOnceTick>[p5, q6, r7]|strOnceTwo(m8, n9)|Array<strOnceTick>[e10, e11]|"
+                       "strOnceMaybe.Some(s12, 7)|Map<I64, strOnceTick>[1: v13]|13")
 
 # ...and a Str changing the value being rendered part way through changes nothing already read: an enum is read whole
 # before its payload is (here the Str puts another case where it is), a field when the rendering reaches it
@@ -15807,7 +15807,7 @@ test "E11c: a Str writing a global is called once per rendering - keys and value
     assert s == "k1,k2" and StrOnceCalls == calls + 2
     m := Map<strOnceKey, strOnceKey>()
     m.Put(strOnceKey(3), strOnceKey(4))
-    assert $m == "Map<strOnceKey, strOnceKey>{k3: k4}" and StrOnceCalls == calls + 4
+    assert $m == "Map<strOnceKey, strOnceKey>[k3: k4]" and StrOnceCalls == calls + 4
     l := Vec<strOnceKey>()
     l.Push(strOnceKey(5))
     l.Push(strOnceKey(6))
@@ -15834,7 +15834,7 @@ fn joinOrder(k I64) String {
 JoinOrderBaked := joinOrder(0)
 
 test "E11b: a join's operands are evaluated before any piece renders - while compiling as at run time" {
-    want := "3joinOpS(5)I64[7, 2]9joinOpS(50)I64[7, 2]"
+    want := "3joinOpS(5)Array<I64>[7, 2]9joinOpS(50)Array<I64>[7, 2]"
     assert JoinOrderBaked == want and joinOrder(I64(ctRuntimeZero)) == want
     assert joinOrder(0) == want
 }
@@ -15872,7 +15872,7 @@ test "E11c: a Str walking a Map and a List of its receiver renders the same afte
     m.Put(1, Array<I64>[4, 5].ToVec())
     t := $m
     churnArena()
-    assert s == "37/1/30" and t == "Map<I64, Vec<I64>>{1: Vec<I64>[4, 5]}"
+    assert s == "37/1/30" and t == "Map<I64, Vec<I64>>[1: Vec<I64>[4, 5]]"
 }
 
 # S16/E11c: a test failing inside a Str closes the scope "$" opened for the Str's result and the Str's own block, their
@@ -16147,10 +16147,10 @@ fn renChars(c Char) String {
 }
 RenCharsBaked String = renChars('a')
 test "E11a: a declared type over Char renders as a character, extends or not, alone and inside another value" {
-    assert RenCharsBaked == "a a a RenLetter['a', 'a'] RenHolder('a', Array<I64>[I64[1, 2, 3]])"
+    assert RenCharsBaked == "a a a Array<RenLetter>['a', 'a'] RenHolder('a', Array<I64>[Array<I64>[1, 2, 3]])"
     assert renChars(RenRunChar) == RenCharsBaked
     u U8 = 97
-    assert $u == "97" and $Array<U8>[u] == "U8[97]" and $RenRunChar == "a"
+    assert $u == "97" and $Array<U8>[u] == "Array<U8>[97]" and $RenRunChar == "a"
 }
 
 fn renRows(n I64) String {
@@ -16163,8 +16163,8 @@ fn renRows(n I64) String {
 }
 RenRowsBaked String = renRows(1)
 test "E11a/E21: an array of arrays writes each element as an array of its own, its element type whole" {
-    assert RenRowsBaked == ("Array<I64>[I64[1, 2, 3], I64[4, 5, 6]] Array<I64>&[I64[1, 2, 3]] "
-        "Array<I32>&[I32[1], I32[]] Array<Char>[\"ab\", \"cd\"] Array<I64>&[]")
+    assert RenRowsBaked == ("Array<I64>[Array<I64>[1, 2, 3], Array<I64>[4, 5, 6]] Array<I64>&[Array<I64>[1, 2, 3]] "
+        "Array<I32>&[Array<I32>[1], Array<I32>[]] Array<Char>[\"ab\", \"cd\"] Array<I64>&[]")
     assert renRows(RenRunN) == RenRowsBaked
 }
 
@@ -16178,7 +16178,7 @@ fn renPerms(n I64) String {
 }
 RenPermsBaked String = renPerms(1)
 test "E11a/T25b: a rendered type writes each inner level's mut, as source writes it" {
-    assert RenPermsBaked == ("RenBox<mut RenNode&>[RenBox(RenNode(1))] RenNode&[RenNode(1)] Array<mut RenNode&>&[RenNode&[RenNode(1)]] "
+    assert RenPermsBaked == ("RenBox<mut RenNode&>[RenBox(RenNode(1))] Array<RenNode&>[RenNode(1)] Array<mut RenNode&>&[Array<RenNode&>[RenNode(1)]] "
         "fn&(b RenBox<mut RenNode&>&) mut RenNode&")
     assert renPerms(RenRunN) == RenPermsBaked
 }
@@ -16756,8 +16756,8 @@ fn rv9EmptyText() String {
 Rv9EmptyBaked String = rv9EmptyText()
 rv9EmptyRun mut I64 = 0
 test "E10/K1: a slice of an empty fixed array is empty, not null, while compiling and at run time" {
-    assert rv9EmptyText() == "I16[] true true true"
-    assert Rv9EmptyBaked == "I16[] true true true" and Rv9EmptyBaked == rv9EmptyText()
+    assert rv9EmptyText() == "Array<I16>[] true true true"
+    assert Rv9EmptyBaked == "Array<I16>[] true true true" and Rv9EmptyBaked == rv9EmptyText()
 }
 
 # S4c: a parallel assignment's temporary for a reference field of a global is held where the global's referent lives -

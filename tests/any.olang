@@ -325,7 +325,7 @@ fn labels(n I64) String {
 BakedLabels String = labels(2)
 
 test "T32a: arrays and conversions of them are copied into the box" {
-    assert BakedBumped == "hello I64[1, 2, 3] Zello"
+    assert BakedBumped == "hello Array<I64>[1, 2, 3] Zello"
     assert bumped(Live) == BakedBumped
     assert BakedLabels == "label lab0-0, label lab1-7"
     assert labels(Live - 1) == BakedLabels
@@ -520,7 +520,7 @@ fn listed(n I64) String {
 BakedListed String = listed(4)
 
 test "E19: an array literal of anys, rendered as written" {
-    assert BakedListed == "any Named&[Cat(\"c4\"), 4, Lev.High] any Named?&[null, Cat(\"c4\")] 3"
+    assert BakedListed == "Array<any Named&>[Cat(\"c4\"), 4, Lev.High] Array<any Named?&>[null, Cat(\"c4\")] 3"
     churn()
     assert listed(Live + 1) == BakedListed
 }
@@ -751,7 +751,7 @@ fn aScoped(n I64) String {
 BakedAScoped String = aScoped(2)
 
 test "T7b, E25: a scoped call's array of plain data is copied where it is returned or boxed" {
-    want := "text0-0 text0-0 0 I64[0, 0] text0-0; text1-7 text1-7 1 I64[1, 2] text1-7; "
+    want := "text0-0 text0-0 0 Array<I64>[0, 0] text0-0; text1-7 text1-7 1 Array<I64>[1, 2] text1-7; "
     want = $want "label text0-0, label text0-0, label text1-7, label text1-7"
     assert BakedAScoped == want
     assert aScoped(Live - 1) == want
@@ -887,7 +887,7 @@ fn spawnStores(k I64) String {
 BakedSpawnStores String = spawnStores(2)
 
 test "P1g, T11b: a spawn target holding an array by value is stored as its assignment" {
-    want := "two2-14 2 try2-14 I64[2, 14, 22] text1-7 tex"
+    want := "two2-14 2 try2-14 Array<I64>[2, 14, 22] text1-7 tex"
     assert BakedSpawnStores == want
     assert spawnStores(Live - 1) == want
 }

@@ -167,7 +167,7 @@ fn errRendered() String {
 ErrRenderedBaked := errRendered()
 
 test "an error type in a rendering is qualified as its values are" {
-    want := "Vec<os.Error>[os.Error.Denied(\"d\")] os.Error[os.Error.Denied(\"d\")] Vec<AnyErr>[NetErr.Down]"
+    want := "Vec<os.Error>[os.Error.Denied(\"d\")] Array<os.Error>[os.Error.Denied(\"d\")] Vec<AnyErr>[NetErr.Down]"
     assert errRendered() == want and ErrRenderedBaked == want
 }
 

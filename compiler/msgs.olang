@@ -645,6 +645,7 @@ type Diag enum {
     FromIterShape
     LiteralEntries
     LiteralNoEntries
+    ComprWalkFails
     NotAnEnum
     TakesNoArgs
     MethodAmbiguous
@@ -2857,6 +2858,9 @@ fn FromIterShape(ty String&) r.Msg { return r.Msg(Diag.FromIterShape, "E19", $ty
 
 # ERR_LITERAL_ENTRIES
 fn LiteralEntries(ty String&) r.Msg { return r.Msg(Diag.LiteralEntries, "E19", "a literal of " $ty " holds no 'key: value' entries - its elements are no MapEntry") }
+
+# ERR_COMPR_WALK_FAILS
+fn ComprWalkFails() r.Msg { return r.Msg(Diag.ComprWalkFails, "E27", "a comprehension made into a collection other than an array or a Vec walks its elements as the collection asks for them, and may not fail by calls of its own - write a generator function and call the collection's FromIter with it") }
 
 # ERR_LITERAL_NO_ENTRIES
 fn LiteralNoEntries() r.Msg { return r.Msg(Diag.LiteralNoEntries, "E19", "a keyed literal's items are each 'key: value' - every one of them or none") }

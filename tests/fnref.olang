@@ -77,7 +77,7 @@ fn zeros() String {
 
 ZerosBaked String = zeros()
 
-assert zeros() == "null null null String?&[null, null] true null", "decided while compiling (S17a)"
+assert zeros() == "null null null Array<String?&>[null, null] true null", "decided while compiling (S17a)"
 
 # T2c (bulk review 6 F4, the tidy pass's question 1): a null inside a value renders null - a field, a Vec's or an
 # array's element, a payload - and an enum's zero is its first case of its payload's zero values, a null array's null
@@ -97,7 +97,7 @@ fn nested() String {
 
 NestedBaked String = nested()
 
-assert nested() == "Held(null, null) Vec<String?&>[null, \"x\"] String?&[null, \"y\"] Maybe.Some(null, 1) Maybe.Some(null, 0) Wrap(Maybe.Some(null, 0))", "decided while compiling (S17a)"
+assert nested() == "Held(null, null) Vec<String?&>[null, \"x\"] Array<String?&>[null, \"y\"] Maybe.Some(null, 1) Maybe.Some(null, 0) Wrap(Maybe.Some(null, 0))", "decided while compiling (S17a)"
 
 test nested "a null inside a value renders null, and an enum's zero holds its payload's zero values" {
     assert nested() == NestedBaked
@@ -140,7 +140,7 @@ test sample "the evaluator agrees: baked while compiling as at run time" {
 }
 
 test zeros "an array that may be null, given no value, starts as null: baked while compiling as at run time" {
-    assert zeros() == "null null null String?&[null, null] true null"
+    assert zeros() == "null null null Array<String?&>[null, null] true null"
     assert ZerosBaked == zeros() and ZeroBaked is null
     v := Vec<String?&>()
     v.Push(null)
