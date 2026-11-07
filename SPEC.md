@@ -772,6 +772,45 @@ its fields sees the new value.
 reference-shapedness (T25a). A length is never part of an array's type, so two arrays of different lengths are of one
 type; where storage is fixed, T7d says what may be stored in it.
 
+### 2.3.1 Structures of arrays
+
+**T7e (`Columns<T>` and `ColumnVec<T>`).** The prelude's `Columns<T>` is a table of rows of type `T` held as one array
+per field of `T` - a **column** - rather than one array of `T`, and `ColumnVec<T>` the growable one: as `Array<T>` and
+`Vec<T>` are two, so are these.
+
+- **The rows' type** is a **record**: a struct whose constructor declares exactly its fields, each a parameter written
+  bare (C4: `type P struct(X F32, Y F32) { X, Y }`) - no other statement, no condition (D17), no destructor (C7), at
+  least one field. Any other type argument - a number, an enum, a struct whose constructor computes a field or checks
+  what it is given - is a compile-time error where the instance is asked for, naming why: a column is written element
+  by element, so nothing would keep such a type's rows as its constructor made them. So is a field named like a method
+  of the table type (M19), since the column is a member of that name.
+- **`Columns<T>`** is a struct the compiler lays out: one field per field of `T`, in order and named as it, of type
+  `Array<F>` for the field's type `F`, a run-time length every column shares. `Columns<T>(n)` makes `n` rows, each `T`'s
+  zero value (D13c - a `T` with none, a never-null reference field, needs the fill), and `Columns<T>(n, v)` `n` rows
+  each `v`; a negative `n` aborts the program (D14b). Its length never changes. It is a value, as an array is: a copy
+  (a `:=`, an assignment, a field, a by-value argument) is a table of its own (T7a), `==` compares the columns, so the
+  rows, `Hash` follows (E10b).
+- **`ColumnVec<T>`** holds a `Columns<T>` as its buffers and a count: `ColumnVec<T>(cap)` starts empty with room for
+  `cap` rows; `Push`, `Insert`, `Pop`, `RemoveAt`, `SwapRemove`, `Swap`, `Truncate`, `Clear`, `Reserve`, `Cap` act as a
+  `Vec`'s (M19d, failing with `VecError` as it does), moving every column together; growth replaces every buffer as a
+  `Vec`'s does (twice the size, 8 at first, the old ones retired - B2f). It is a value, `==` and `Hash` by its rows.
+- **Columns.** `c.x` is the column of `T`'s field `x`: an `Array<F>` place of a `Columns`, and for a `ColumnVec` a view
+  of its buffer's first `Len()` elements carrying the table's permission (E16a) - good until it grows, as a `Vec`'s
+  `View()` is. Elements are read and written through it, lane operators apply (`c.x += c.vx * dt`, E39), and it is lent
+  as any array is. A column is visible where `T`'s field is (M6a: a private field's column only in `T`'s module).
+  Assigned whole, `c.x = v`, a column is written in place element by element (T11b) - `v` an array or lanes of the
+  table's length, checked once and aborting as lanes of different lengths do (E39), or one value for every element; in a
+  parallel assignment (S4c) a column is an error, there being no one place for that check.
+- **Rows.** `c[i]` is row `i`, a `T` assembled from the columns (`At`, E31; unchecked as an index is, E16), `try
+  c.Get(i)` checked (`ArrayError.OutOfRange` for a `Columns`, `VecError.OutOfRange` for a `ColumnVec`), `c[i] = v`
+  writes `v`'s fields into the columns (`SetAt`, E31b), `for p in c` walks the rows (S9d), `c.Len()` counts them;
+  `Sort(less)` sorts the rows stably, every column moved together; `$c` renders the rows as an array of them with the
+  type in front (`Columns<P>[P(1, 2)]`).
+- **Conversions**: `c.ToArray()` and `c.ToVec()` give the rows; `c.ToColumnVec()` and `v.ToColumns()` copy between the
+  two; `a.ToColumns()`, `a.ToColumnVec()` on an `Array<T>` or a `Vec<T>` of records lay rows out as columns.
+- Reflection (G32) sees a `Columns` as the struct it is - `T.Kind` is `Struct`, `T.Fields` its columns - and `T.Element`
+  of either type is its rows' type.
+
 ### 2.4 Struct types
 
 **T13.** Every struct type is declared with a constructor (§9): `type Name struct[ fn-type-params ]( params ) [ error-list ]
@@ -2714,8 +2753,8 @@ with no import, and no module may declare a type, a global, a function, a local 
 types get their methods; those methods are visible in every module. The prelude's traits are `Iterator` and `Indexable`
 (T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c); its `TypeKind` enum is what
 reflection's `T.Kind` gives (G32), and its `FieldInfo`, `CaseInfo`, `ParamInfo` and `ResultInfo` are the types of
-reflection's descriptors (G34), made only by the compiler. Its collections are `Vec` (the growable array), `Map` and
-`StringBuilder` - `String` and `Array` are built in - and every other container is a module of the standard library,
+reflection's descriptors (G34), made only by the compiler. Its collections are `Vec` (the growable array), `Map`,
+`StringBuilder` and the structures of arrays `Columns` and `ColumnVec` (T7e) - `String` and `Array` are built in - and every other container is a module of the standard library,
 imported by name: `std/list`'s `List`, `std/pair`'s `Pair`, `std/set`, `std/deque`, `std/heap`. A program wanting methods over a built-in type declares a type of its own over it
 (T29) and gives that its methods. The prelude's methods taking a callback - an array's `Some`, `Every`, `FindIndex`,
 `Count`, `Map`, `Filter`, `Fold` and `Sort` (its comparator), a `Vec`'s `Sort` (and `std/list`'s `List.Sort`), the iterator helpers
@@ -8821,7 +8860,7 @@ variable, or a type G38 names - these members are read with a `.`, alongside a n
   or a named set as a value's type) `Error`. Coarse on purpose: the exact type is `match T`'s (G13). A trait and an
   extern type have none, an error.
 - `T.Base` - the type a declared type is over (T29, `Meters.Base` is `F64`), else `T` itself.
-- `T.Element` - an array's element type (an error for another type); `T.Target` - a reference's referent (`Node&`'s
+- `T.Element` - an array's element type, a `Columns`' or `ColumnVec`'s rows' type (T7e) (an error for another type); `T.Target` - a reference's referent (`Node&`'s
   `Node`).
 - `T.Length` - an array's length where it is known while compiling (T7c), an `I64`; for another type an error.
 - `T.Size`, `T.Align` - the size and alignment in bytes as the type is laid out (C's `sizeof` and `_Alignof` of the C
@@ -8878,7 +8917,7 @@ A field, a case, a parameter and a function also have `x.Attr<A>()` and `x.HasAt
 
 **Visibility.** A list holds only the members the module whose code reads it may see (M6a): a struct's private fields
 (lowercase) are in `T.Fields` only in the module declaring the type, and in a generic only where the generic is
-declared there. So another module's reflection cannot read or build what it could not name. An enum case's fields are
+declared there. So another module's reflection cannot read or build what it could not name. The prelude's own code, which supplies `Columns<T>` over any record (T7e), sees every field. An enum case's fields are
 read by every module that reads the case (E32, S13), so `c.Fields` holds them all.
 
 **G35 (decided while compiling).** A condition built from reflected constants - `T.Kind == TypeKind.Struct`,

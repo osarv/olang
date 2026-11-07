@@ -12,8 +12,8 @@
 # computes has nothing that would keep its rows as it made them. "c.x" is field x's column as an array - lane operators
 # apply ("c.x += c.vx * dt"); a ColumnVec's is a view of its first Len() elements, good until it grows, as a Vec's View
 # is. "c[i]" is row i as a T, a copy assembled from the columns, "c[i] = p" writes p's fields into them, "for p in c"
-# walks the rows. A private field's column is read where the field is (M6a), and a column is never assigned whole: its
-# length is its table's. The compiler lays a Columns out - one field per column, named as T's field, each an array of
+# walks the rows. A private field's column is read where the field is (M6a), and a column assigned whole ("c.x = v")
+# is written in place, v's length checked once against the table's. The compiler lays a Columns out - one field per column, named as T's field, each an array of
 # that field's type - and writes its constructor; everything else is here, over reflection (G32-G37), which here sees
 # every field of T.
 
