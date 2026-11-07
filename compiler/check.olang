@@ -6202,6 +6202,25 @@ fn typeOf(x typed.Expr?&) types.TypeId {
 }
 
 # the place a value reads; null where it is no Read
+# T13c: the field of a packed value a place passes through (its span, as written), else a span starting at -1
+fn (c mut Checker&) packedPart(p typed.Lvalue&) source.Span {
+    return match p {
+        case typed.Lvalue.Field(sp, _, base, _): sp if c.P.T.Packed(c.P.T.Repr(base.Type())) else c.packedPart(base)
+        case typed.Lvalue.Elem(_, _, e): c.packedPart(e.Base)
+        case typed.Lvalue.Payload(_, _, py): c.packedPart(py.Base)
+        case _: source.Span(-1, -1)
+    }
+}
+
+# T13c: a place lent to a reference, or sliced, where it lies in a packed value - an error naming the field and the copy
+# to write; whether it was one
+fn (c mut Checker&) lendsPacked(p typed.Lvalue&, sp source.Span) Bool {
+    fsp := c.packedPart(p)
+    if fsp.Start < 0 { return false }
+    c.err(sp, msgs.PackedLend(c.src(fsp)))
+    return true
+}
+
 fn readPlace(x typed.Expr&) typed.Lvalue?& {
     match x {
         case typed.Expr.Read(_, _, p, _) { return p }
@@ -6907,6 +6926,7 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
             b := c.tryBorrowed(x, want, sp)
             if b is not null { return b }
             p := readPlace(x)
+            if p is not null and c.lendsPacked(p, sp) { return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp))) }
             if p is not null {
                 if (c.P.T.PermOf(want) & types.Writable) != 0 {
                     c.mustWrite(p, sp, false)
@@ -6938,6 +6958,7 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
             # elements are held as the wanted one's are (an Array<Char> lent as an Array<U8>&: Char extends U8, T29h) -
             # it had been copied and the copy lent, so what the callee wrote was lost
             if p is not null and hk == types.Kind.Array and (c.P.T.Length(have) != types.TypeId(0) or c.sameRepr(have, r)) {
+                if c.lendsPacked(p, sp) { return typed.Expr.Promote(sp, want, typed.Promote(c.fit(x, r, sp), c.site(typed.SiteKind.Promote, sp))) }
                 if (c.P.T.PermOf(want) & types.Writable) != 0 {
                     c.mustWrite(p, sp, false)
                     c.roDeepNeed(x)
@@ -7131,7 +7152,7 @@ fn (c mut Checker&) externArray(target typed.Callee&, x typed.Expr&, want types.
     if wa == types.UnknownT or c.P.T.Length(wa) != types.TypeId(0) { return null }
     if c.P.T.KindOf(have) != types.Kind.Array or c.P.T.Length(have) == types.TypeId(0) { return null }
     p := readPlace(x)
-    if p is null { return null }
+    if p is null or c.lendsPacked(p, sp) { return null }
     # a parameter held by reference ("Array<U8>&") takes the borrow itself, one by value the array it names
     if c.isRef(want) { return c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(have, types.Writable), p), c.P.T.Ref(c.P.T.Referent(want), types.Writable)) }
     b := c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(have, types.Writable), p), c.P.T.Ref(want, types.Writable))
@@ -7194,6 +7215,7 @@ fn (c mut Checker&) cBorrow(x typed.Expr&, want types.TypeId, sp source.Span) ty
         c.err(sp, msgs.CPointerTemporary(c.ty(have)))
         return x
     }
+    if c.lendsPacked(p, sp) { return x }
     if c.writable(want) { c.mustWrite(p, sp, false) }
     return typed.Expr.Borrow(sp, c.P.T.Ref(have, types.Writable if c.writable(want) else 0), p)
 }
@@ -9209,6 +9231,7 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr?&, hi ast.Exp
 # a slice of what a place holds (E16a): its bounds checked once - aborting for x[lo:hi] (E16b), failing as written with
 # ArrayError.OutOfRange for x.SliceOf(lo, hi) (E16c)
 fn (c mut Checker&) sliceOf(sp source.Span, b typed.Lvalue&, lo ast.Expr?&, hi ast.Expr?&, check typed.Check) typed.Expr& {
+    if c.lendsPacked(b, sp) { return c.unknown(sp) }   # T13c: a slice is a reference to the elements
     base typed.Lvalue& = b
     t := base.Type()
     # E16a: a slice carries its base's permission - of a value array, the place's own (an immutable global's is
@@ -13423,6 +13446,7 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
             c.err(c.operandAt(x), msgs.AtomicNotPlace())
             return c.unknown(sp)
         }
+        if c.lendsPacked(p, c.operandAt(x)) { return c.unknown(sp) }
         if op != typed.PrimOp.AtomicLoad { c.noteWrite(p) }
         if op != typed.PrimOp.AtomicLoad and not c.placeWritable(p) {
             c.err(c.operandAt(x), msgs.AtomicNotWritable())
@@ -14105,7 +14129,7 @@ fn (c mut Checker&) reflLen(y ast.Expr&, n source.NameId, args Array<ast.Expr&>&
 }
 
 # a reflected member known while compiling (G32, G34): a type's Name, Kind, Size, Align, Length; a descriptor's Name,
-# Offset, HasDefault
+# Offset, BitOffset, Bits, HasDefault
 fn (c mut Checker&) reflConst(y ast.Expr&, n source.NameId) reflVal {
     name := c.text(n)
     t := c.reflType(y)
@@ -14156,6 +14180,10 @@ fn (c mut Checker&) reflConst(y ast.Expr&, n source.NameId) reflVal {
     if name == "Offset" and ds.K == generic.DescField {
         off := c.fieldOffset(ds)
         return rvInt(off) if off >= 0 else noRefl()
+    }
+    if (name == "BitOffset" or name == "Bits") and ds.K == generic.DescField {
+        b := c.fieldBits(ds, name == "Bits")
+        return rvInt(b) if b >= 0 else noRefl()
     }
     return noRefl()
 }
@@ -14225,6 +14253,17 @@ fn (c mut Checker&) fieldOffset(ds generic.Desc) I64 {
     return 8 + offs[ds.At] if ds.At < offs.Len() else -1
 }
 
+# G34, T13c: where a field starts and how many bits it takes - a packed struct's exactly, any other's in whole bytes
+fn (c mut Checker&) fieldBits(ds generic.Desc, width Bool) I64 {
+    off := c.fieldOffset(ds)
+    if off < 0 { return -1 }
+    r := c.P.ReflUnder(ds.Of)
+    fs := c.P.T.Items(c.P.T.Fields(r)) if c.isStruct(r) else c.P.T.Items(c.P.T.Parts(c.P.T.Items(c.P.T.Cases(r))[ds.Case]))
+    if ds.At >= fs.Len() { return -1 }
+    if c.P.T.Packed(r) { return c.P.T.PackedBits(fs[ds.At]) if width else c.P.T.BitOffsets(r)[ds.At] }
+    return 8 * c.P.T.Size(fs[ds.At]) if width else 8 * off
+}
+
 # a reflected value written into the program: a literal of its type
 fn (c mut Checker&) reflExpr(sp source.Span, v reflVal) typed.Expr& {
     if v.K == RvBool { return c.lit(sp, types.BoolT, v.I) }
@@ -14282,7 +14321,7 @@ fn (c mut Checker&) reflMember(sp source.Span, nsp source.Span, x ast.Expr&, n s
     v := c.reflConst(x, n)
     if v.Ok { return c.reflExpr(sp, v) }
     have := match ds.K {
-        case generic.DescField: "Name, Type, Offset, Of, Attr and HasAttr"
+        case generic.DescField: "Name, Type, Offset, BitOffset, Bits, Of, Attr and HasAttr"
         case generic.DescCase: "Name, Fields, Attr and HasAttr"
         case generic.DescParam: "Name, Type, HasDefault, Default, Attr and HasAttr"
         case generic.DescFunc: "Name, Type, Params, Results, Errors, Attr, HasAttr, NoReturn, Exported, Extern, Commutes and G42's facts - and it is called"
@@ -18062,11 +18101,14 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt& {
     # a condition B9a left to evaluation: asked for, the if checked as a running one meanwhile
     asked := false
     if not dead and i.Then!.Group >= 0 and d.IsPending(i.Then!.Group) {
-        b := c.CondBody(c.fr().Mi, i.Cond!)
+        # (never in a generic's instance: a decision is kept by the condition's place, which every instance shares - a
+        # walk of a type's fields unrolled to none fixed a local there, and its if was S8a's dead branch, json.Encode of
+        # a struct of private fields refused)
+        b := -1 if c.fr().Ctx.Vars.Len() > 0 else c.CondBody(c.fr().Mi, i.Cond!)
         if b >= 0 {
             c.Asks.Push(Ask(b, c.fr().File, i.Cond!.Span().Start, i, c.fr().Body, c.lastFixed.ToArray()))
             asked = true
-        } else if not c.readsConst(i.Cond) {
+        } else if c.fr().Ctx.Vars.Len() > 0 or not c.readsConst(i.Cond) {
             # it reads a local no evaluation can stand for: the running program's, what its branches hold reported (S7)
             c.Running(i)
         }
