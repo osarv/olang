@@ -1,0 +1,9 @@
+# check: fail error[R3b, T19b]: a field an error raised by name carries is named by the raise
+# R3b, T19b: an argument of a raise by name that is neither a bare name nor "name = value" names no field
+fn find(at I64) I64 ? {
+    if at < 0: error OutOfRange(at + 1)
+    return at
+}
+fn main() {
+    find(1)!
+}

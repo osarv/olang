@@ -88,6 +88,8 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     T := types.NewTable(L.Names)
     declAt Map<I64, types.DeclId>      # by module and entry, (module << 32) | entry
     payloads Map<I64, types.TypeId>    # T19b: an error type's payload enum by its declaration (PayloadOf), UnknownT for none
+    raisedFields Map<I64, types.ListId>    # T19b, R3b: an error raised by name's payload field types by its payload enum's
+                                           # declaration, once its first raise settled them (SettleRaised)
     unifyDepth I64 = 0                 # how far inside a type's arguments Unify is (G9d binds a value given whole alone)
     declMi Vec<I64>                   # by DeclId: its module and its entry in the module's name table
     declEi Vec<I64>
@@ -1585,7 +1587,7 @@ fn (p mut Program&) anonEnum(c Context&, cases Array<ast.CaseDecl&>&) types.Type
     fs Vec<source.NameId>
     for i in range cases.Len() {
         ns[i] = cases[i].Name
-        ps[i] = p.payload(c, cases[i])
+        ps[i] = p.payload(c, cases[i], types.DeclId(-1))
         if cases[i].Payload.Len() > 0 {
             for f in cases[i].Payload { fs.Push(f.Name) }
         }
@@ -1594,9 +1596,35 @@ fn (p mut Program&) anonEnum(c Context&, cases Array<ast.CaseDecl&>&) types.Type
 }
 
 # an enum case's payload: a record of its fields, none (0) for a case carrying none
-fn (p mut Program&) payload(c Context&, cd ast.CaseDecl&) types.TypeId {
+fn (p mut Program&) payload(c Context&, cd ast.CaseDecl&, d types.DeclId) types.TypeId {
     if cd.Payload.Len() == 0 { return types.TypeId(0) }
+    if cd.Payload[0].Ty is null { return p.T.Record(try p.raisedFields.Get(I64(d)) catch default p.unknowns(cd.Payload.Len())) }
     return p.T.Record(p.paramTypes(c, cd.Payload))
+}
+
+# n unknown types: an error raised by name's payload before its first raise settles it (T19b)
+fn (p mut Program&) unknowns(n I64) types.ListId { return p.T.List(Array<types.TypeId>(n, types.UnknownT)) }
+
+# T19b, R3b: the payload field types an error raised by name carries, settled by its first raise - its payload enum's
+# one case given them
+fn (p mut Program&) SettleRaised(pt types.TypeId, ts Array<types.TypeId>&) {
+    d := p.T.DeclOf(pt)
+    l := p.T.List(ts)
+    p.raisedFields.Put(I64(d), l)
+    p.T.SetEnumBody(pt, p.T.CaseNames(pt), p.T.List(types.TypeId[p.T.Record(l)]))
+}
+
+# whether an error raised by name carrying a payload has had its field types settled (T19b)
+fn (p mut Program&) RaisedSettled(pt types.TypeId) Bool { return p.raisedFields.Has(I64(p.T.DeclOf(pt))) }
+
+# where an error raised by name is first raised: its declaration's span (R3b), the raise's word
+fn (p mut Program&) RaisedAt(d types.DeclId) source.Span {
+    e := p.errorDecl(d)
+    if e is null { return source.Span(0, 0) }
+    return match e {
+        case ast.Decl.Errors(sp, _, _, _, _): sp
+        case _: source.Span(0, 0)
+    }
 }
 
 fn (p mut Program&) paramTypes(c Context&, ps Array<ast.Param&>&) types.ListId {
@@ -2242,7 +2270,7 @@ fn (p mut Program&) Body(t types.TypeId) Bool {
             ps := Array<types.TypeId>(cases.Len())
             for i in range cases.Len() {
                 ns[i] = cases[i].Name
-                ps[i] = p.payload(c, cases[i])
+                ps[i] = p.payload(c, cases[i], d)
             }
             p.T.SetEnumBody(t, ns, p.T.List(ps))
         }
@@ -2745,8 +2773,20 @@ fn (p mut Program&) typeKey(t types.TypeId) I64 {
         case types.Kind.Array: ArrayKey
         case types.Kind.Bool, types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64, types.Kind.U8, types.Kind.U16
              types.Kind.U32, types.Kind.U64, types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64, types.Kind.Int: keyPrim(x)
+        case types.Kind.ErrVal: keyDecl(p.ErrDeclOf(x)) if p.ErrDeclOf(x) >= types.DeclId(0) else -1
         case _: -1
     }
+}
+
+# the error type or named set whose methods an error value's type has (T20, T19b): the named set it was written as,
+# else the one error type its entries are words of; -1 for an unnamed set of several types
+fn (p mut Program&) ErrDeclOf(t types.TypeId) types.DeclId {
+    if not p.T.IsErrVal(t) { return types.DeclId(-1) }
+    n := p.T.ErrValName(t)
+    if n >= types.DeclId(0) { return n }
+    xs := p.T.Items(p.T.ErrValItems(t))
+    if xs.Len() != 1 { return types.DeclId(-1) }
+    return p.T.DeclOf(p.T.ErrOf(xs[0]))
 }
 
 # a type's method of that name (M19): its own, else - where it extends another (T29f) - its base's; -1 for none
@@ -3435,6 +3475,12 @@ fn (p mut Program&) CaseSig(t types.TypeId, tag I64) types.TypeId {
             if tag < 0 or tag >= cases.Len() { return types.UnknownT }
             ps := cases[tag].Payload
             if ps.Len() == 0 { return p.T.Func(types.ListId(0), t, types.ListId(0)) }
+            if ps[0].Ty is null {
+                # an error raised by name's payload (T19b): its types as its first raise settled them
+                fs := try p.raisedFields.Get(I64(p.T.DeclOf(t))) catch default p.unknowns(ps.Len())
+                shares := Array<I64>(ps.Len(), types.OwnScope)
+                return p.T.Func(fs, t, types.ListId(0), p.T.Scopes(types.RoleCtor, shares, I64[types.OwnScope]))
+            }
             return p.paramsSig(p.InstanceContext(t), ps, null, t)
         }
         case _ { return types.UnknownT }

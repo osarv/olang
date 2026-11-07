@@ -1258,6 +1258,24 @@ fn (c mut Checker&) namesType(mi I64, n source.NameId) Bool {
     return false
 }
 
+# T20, M19: a method of an error type or a named set is declared in its module, and never one the language gives every
+# error value (Eq, Hash, Str, Copy: an error compares, hashes, renders and copies as T20 says)
+fn (c mut Checker&) errorMethod(f I64, rt types.TypeId, name String&) {
+    fd := c.P.FnDecl(f)
+    d := c.P.ErrDeclOf(rt)
+    if d < types.DeclId(0) {
+        c.err(c.nameSpan(fd), msgs.MethodOnBuiltinType(c.ty(rt)))
+        return
+    }
+    if c.P.T.DeclModule(d) != c.P.FnModule(f) {
+        c.err(c.nameSpan(fd), msgs.MethodOnForeignType(c.ty(c.P.SelfType(d))))
+        return
+    }
+    for x in String&["Eq", "eq", "Hash", "hash", "Str", "str", "Copy", "copy"] {
+        if x == name: c.err(c.nameSpan(fd), msgs.ErrorMethodGiven(c.ty(rt), name))
+    }
+}
+
 # T29e: a method of a type extending its base may not take a name an inherited one has - save the protocol methods the
 # compiler consults (Eq, Hash, Str), which replace the base's
 fn (c mut Checker&) inheritClash(f I64) {
@@ -1267,6 +1285,11 @@ fn (c mut Checker&) inheritClash(f I64) {
     if ps.Len() == 0 { return }
     rt := c.deref(ps[0])
     c.push(-1, c.P.FnModule(f), types.VoidT, types.ListId(0))
+    if c.P.T.IsErrVal(rt) {
+        c.errorMethod(f, rt, name)
+        c.pop()
+        return
+    }
     # M19d: a built-in type's methods are the prelude's alone
     if not c.isNamed(rt) and rt != types.UnknownT and c.P.T.KindOf(rt) != types.Kind.Var and c.P.T.FuncTag(rt) == types.UnknownT and
        not c.P.L.Mods[c.P.FnModule(f)].Prelude {
@@ -2477,7 +2500,7 @@ fn (c mut Checker&) testTarget(mi I64, nsp source.Span, target ast.Path?&) {
     # the nearest of the file's functions, types and methods
     near mut msgs.Nearest& = msgs.Nearest(t)
     for e in tab.Entries {
-        if e.Kind == names.What.Func or e.Kind == names.What.Type { near.Offer(c.text(e.Name)) }
+        if (e.Kind == names.What.Func or e.Kind == names.What.Type) and not c.text(e.Name).Contains("$") { near.Offer(c.text(e.Name)) }
     }
     c.P.AllFns()
     for f in range c.P.FnCount() {
@@ -4708,12 +4731,22 @@ fn (c mut Checker&) contractChecks(b I64, args Vec<I64>&, gen Bool) {
         bfrom := c.stmts.Len()
         id, outer, bmark := c.open(typed.BlockKind.Plain, sp)
         c.leaks1(raised)
+        c.argumentPush(sp, ae, word, $info.Name ": " $info.ReqTexts[i])
         c.stmts.Push(typed.Stmt.Raise(sp, ae, word))
         blk := c.close(id, outer, bmark, bfrom)
         c.emit(typed.Stmt.If(sp, typed.If(c.negate(sp, x), blk, null)))
         c.cur().RaiseAt.Push(sp.Start)
         c.cur().RaiseWhat.Push($info.Name ": " $info.ReqTexts[i])
     }
+}
+
+# D17, T19b: a false requirement's ArgumentError.Invalid carries the condition, "f: cond" - pushed before it is raised
+fn (c mut Checker&) argumentPush(sp source.Span, ae types.TypeId, word I64, what String&) {
+    pt := c.P.PayloadOf(ae)
+    if pt == types.UnknownT: return
+    x := typed.Expr.Data(sp, c.P.T.Ref(c.textType(), types.ReadOnly), c.fr().File, typed.Const.Bytes(what))
+    pv := c.enumCase(sp, sp, pt, c.P.ErrorWords(c.P.T.DeclOf(ae))[word], ast.Expr&[ast.Expr.Lit(sp, token.Tok.StrLit)], typed.Expr&[x])
+    c.stmts.Push(typed.Stmt.Eval(sp, c.prim(sp, types.VoidT, typed.PrimOp.ErrPush, pv, null)))
 }
 
 # a function's own check asks for its contract (checkFn, ctorChecked) - one made first where its errors were forgotten
@@ -4879,11 +4912,16 @@ fn (c mut Checker&) dispatchChecks(sp source.Span, r types.TypeId, target typed.
             fr.Fallible++
             v = typed.Expr.Try(sp, types.BoolT, typed.Try(v, Array<typed.Clause&>(0)))
         }
-        if ae != types.UnknownT { c.leaks1(ae) }
+        if ae == types.UnknownT { continue }
+        c.leaks1(ae)
         fr.Fallible++
-        from := c.exprs.Len()
-        c.exprs.Push(v)
-        c.emit(typed.Stmt.Eval(sp, typed.Expr.Prim(sp, types.BoolT, typed.PrimOp.Holds, typed.Check.Try, gather(c.exprs, from))))
+        # D17, T19b: false, the call fails with ArgumentError.Invalid carrying the condition
+        bfrom := c.stmts.Len()
+        id, outer, bmark := c.open(typed.BlockKind.Plain, sp)
+        c.argumentPush(sp, ae, 0, $info.Name ": " $info.ReqTexts[i])
+        c.stmts.Push(typed.Stmt.Raise(sp, ae, 0))
+        blk := c.close(id, outer, bmark, bfrom)
+        c.emit(typed.Stmt.If(sp, typed.If(c.negate(sp, v), blk, null)))
         c.cur().RaiseAt.Push(sp.Start)
         c.cur().RaiseWhat.Push($info.Name ": " $info.ReqTexts[i])
     }
@@ -11520,6 +11558,12 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
         c.dropArgs(args)
         return c.unknown(sp)
     }
+    # T19b, R3b: an error raised by name carrying a payload, written as a value with its fields by position
+    if k == types.DeclKind.Error and c.P.IsRaisedError(c.P.T.DeclOf(t)) {
+        pt := c.P.PayloadOf(t)
+        if pt != types.UnknownT: c.settleRaised(t, pt)
+        return c.enumCase(sp, nsp, t, c.P.T.DeclName(c.P.T.DeclOf(t)), args)
+    }
     c.gap(nsp, "a type of this kind called")
     return c.unknown(sp)
 }
@@ -16288,6 +16332,7 @@ fn (c mut Checker&) errField(sp source.Span, nsp source.Span, x ast.Expr&, n sou
     pt := c.P.PayloadOf(et)
     f := c.P.PayloadField(t, pos)
     if pt == types.UnknownT or f == 0: return c.unknown(sp)
+    c.settleRaised(et, pt)
     rec := c.P.T.Items(c.P.T.Cases(pt))[w]
     ft := c.P.T.Items(c.P.T.Parts(rec))[i]
     base := typed.Lvalue.Field(sp, pt, typed.Lvalue.Local(sp, t, typed.LocalId(I32(id))), f)
@@ -21347,9 +21392,78 @@ fn (c mut Checker&) pushPayload(sp source.Span, word ast.Path&, et types.TypeId,
         c.dropArgs(given)
         return
     }
-    pv := c.enumCase(sp, wsp, pt, c.P.ErrorWords(d)[w], given)
+    pre := Array<typed.Expr&>(0)
+    if c.P.IsRaisedError(d) {
+        given = c.raisedArgs(wsp, wtext, fields, given)
+        if given.Len() != fields.Len(): return
+        if word.Sp != c.P.RaisedAt(d): c.settleRaised(et, pt)
+        if not c.P.RaisedSettled(pt): pre = c.settleBy(pt, given, fields)
+    }
+    pv := c.enumCase(sp, wsp, pt, c.P.ErrorWords(d)[w], given, pre)
     if typeOf(pv) == types.UnknownT: return
     c.emit(typed.Stmt.Eval(sp, c.prim(sp, types.VoidT, typed.PrimOp.ErrPush, pv, null)))
+}
+
+# R3b, T19b: the values a raise of an error raised by name gives, the names it gives them (a pun's, or "name = value")
+# the first raise's in its order - its values bare; none (said) where they differ
+fn (c mut Checker&) raisedArgs(wsp source.Span, wtext String&, fields Array<ast.Param&>&, args Array<ast.Expr&>&) Array<ast.Expr&>& {
+    out Vec<ast.Expr&>
+    for i, a in args {
+        n := source.NameId(0)
+        x := a
+        match a {
+            case ast.Expr.Named(_, m, y) {
+                n = m
+                x = y
+            }
+            case ast.Expr.Name(_, m): n = m
+            case _ { }
+        }
+        if n != fields[i].Name {
+            c.err(a.Span(), msgs.RaisedFieldsDiffer(wtext, fieldNames(c, fields)))
+            c.dropArgs(args)
+            return Array<ast.Expr&>(0)
+        }
+        out.Push(x)
+    }
+    return out.ToArray()
+}
+
+# T19b, R3b: an error raised by name's payload field types, settled by its first raise - its function's body checked
+# now where nothing has checked it (the module's first raise, its declaration's span, is in it)
+fn (c mut Checker&) settleRaised(et types.TypeId, pt types.TypeId) {
+    if not c.P.IsRaisedError(c.P.T.DeclOf(et)) or c.P.RaisedSettled(pt): return
+    d := c.P.T.DeclOf(et)
+    at := c.P.RaisedAt(d)
+    file := c.P.L.Mods[c.P.T.DeclModule(d)].File
+    best I64 = -1
+    for i in range c.Bodies.Len() {
+        b := c.Bodies[i]
+        if b.File != file or b.Sp.Start > at.Start or b.Sp.End < at.End or c.state[i] != 0: continue
+        if best < 0 or b.Sp.End - b.Sp.Start < c.Bodies[best].Sp.End - c.Bodies[best].Sp.Start: best = i
+    }
+    if best >= 0: c.checkNow(best)
+}
+
+# T19b, R3b: the first raise of an error raised by name settles its payload's field types - each value's own (a
+# literal's, T6a), a reference's referent (copied in); the values checked, for the payload to be made of
+fn (c mut Checker&) settleBy(pt types.TypeId, given Array<ast.Expr&>&, fields Array<ast.Param&>&) Array<typed.Expr&>& {
+    xs := Array<typed.Expr&>(given.Len(), c.hole)
+    ts := Array<types.TypeId>(given.Len(), types.UnknownT)
+    for i, g in given {
+        x := c.expr(g, types.UnknownT)
+        xs[i] = x
+        t := c.deref(typeOf(x))
+        if t == types.UnknownT or t == types.NullT: continue
+        what := c.payloadBad(t)
+        if what != "" {
+            c.err(g.Span(), msgs.PayloadHoldsRef(c.text(fields[i].Name), c.ty(t), what))
+            continue
+        }
+        ts[i] = t
+    }
+    c.P.SettleRaised(pt, ts)
+    return xs
 }
 
 # T19b: word w of error type et as code here writes it - "os.Error.Denied", an error raised by name its name alone

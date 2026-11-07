@@ -1166,7 +1166,12 @@ took (R11b), and it is used in these ways and no others:
 - a value fits where its set is expected only when every word it can be is in that set (a wider set's value after
   narrowing has shown it is): `l LoadError = e` with `e` a `ParseError` fits; the other way is a compile-time error
   naming the test that narrows;
-- `error e` raises it (R3a).
+- `error e` raises it (R3a);
+- a method of its type (M19): an error type and a named set may have methods of their own, declared in their module as
+  any type's are (`fn (e ParseError) Where() String`), called on a value of that type - a set's value calls its set's
+  methods and none of its members', a value of one error type (a clause's name taking it or some of its words) the
+  type's. A method may not be one the language gives every error value - `Eq`, `Hash`, `Str` or `Copy` - which is a
+  compile-time error naming T20.
 
 It has no arithmetic, no ordering and no conversion to or from a number. At run time a value is the 32-bit code of
 the error-union convention (R6) under its own set, `0` for `null`; a value going where a wider or narrower set is
@@ -2063,8 +2068,9 @@ never written (QCB): what a body needs of its parameters' scopes is inferred fro
 receiver, the parameters and anything a function body reads at its top level (globals, constants, functions) - a call
 in it, a fallible one, a lambda among its arguments included. It writes nothing: the parameters are read-only in it.
 Each condition is checked **on entry**, in every build, in the order written, before the body runs: a false one makes
-the call fail with the prelude's `ArgumentError.Invalid` (§7.6), its trace (S18d) and a `!`'s message naming the
-function and the condition as written (`pick: y > x`). A call in a condition that fails leaves the function with its
+the call fail with the prelude's `ArgumentError.Invalid(what String)` (§7.6), carrying the function and the condition
+as written, `"pick: y > x"`, as its payload (T19b) - so `$e`, a `!`'s message (E35) and an error escaping `main` (B5)
+say it (`ArgumentError.Invalid("pick: y > x")`), and its trace (S18d) names it too. A call in a condition that fails leaves the function with its
 own error, as a call in the body would (R6), and the conditions after it are not evaluated. The call has taken its
 arguments by then: a by-value parameter holding a value with a destructor lets go of it as the failing call leaves
 (O15), as on any other way out.
@@ -5206,9 +5212,8 @@ function and the condition as written, at the condition:
 - when an error escapes `main` (B5), after `unhandled error: TypeName.WORD`;
 - when a `!` takes an error (E35), after its `FILE:LINE: TypeName.WORD` line.
 
-In a build that keeps no trace the last two print `(build with -debug to see where it came from)` instead - after the
-false requirement's `FILE:LINE: f: cond` line where the error is one a requirement raised (D17a), which every build keeps
-for this: one thread-local write where the requirement is false, cleared where a clause takes the error. A program run
+In a build that keeps no trace the last two print `(build with -debug to see where it came from)` instead (a false
+requirement's condition is said there all the same: it is its error's payload, D17a). A program run
 with `interpret` (B3e) prints the trace as a debug build does.
 
 **S18b.** Leaving a test early — by a failed assert, a failed runtime check, `unreachable`, a `!` or an
@@ -5829,6 +5834,15 @@ reserved everywhere (D3a). A name raised that is **one edit** from another error
 distance at most one, and within a third of the word, B11) is taken for a misspelling: a compile-time error naming the
 other, with did-you-mean - the other a declared error type or set, or a name raised more often (as often and raised
 first) - unless a function raising it names it after its `?` (`fn f() ? NotFond`), which says it is meant.
+An error raised by name may **carry a payload** (T19b), its fields named by the raise: `error NotFound(path)`, `error
+OutOfRange(index = i, limit = n)` - an argument that is a bare name is a pun, the field named as the name is, any other
+is written `name = value`, and an argument with neither is a compile-time error naming the form. The module's **first
+raise** of the name (source order) settles the payload: its fields' names and order, and their types - each value's own
+(a literal's, T6a), a reference's referent (the field holds its own copy). Every other raise gives the same names in the
+same order, each value fitted to its field (E12) - other names, or another count, are compile-time errors naming the
+first raise's fields. The rest is T19b's: the payload holds values only, is read where the error is named (`catch
+NotFound e { e.path }`), and `$e` renders it (`NotFound("conf.toml")`); written as a value the error is called with its
+fields by position (`e == NotFound("a")`).
 
 **R3a (raising a held error).** `error e`, with `e` an error value (T20) - a local, a parameter or a global holding
 one, the name a catch clause gave the error it took (R11b) among them - raises the error it holds, its type and word, with the payload it holds (T19b).

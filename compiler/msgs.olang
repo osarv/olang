@@ -859,6 +859,9 @@ type Diag enum {
     PlainWordCalled
     PayloadFieldUnnarrowed
     PayloadArgs
+    RaisedFieldUnnamed
+    RaisedFieldsDiffer
+    ErrorMethodGiven
     FlagAmongResults
     FlagWithOutParam
     RaiseNeedsQuestion
@@ -1406,6 +1409,15 @@ fn PayloadFieldUnnarrowed(name String&, field String&) Msg { return Msg(Diag.Pay
 
 # ERR_PAYLOAD_ARGS
 fn PayloadArgs(word String&, want I64, got I64) Msg { return Msg(Diag.PayloadArgs, "T19b", $word " carries " $want " field" $("" if want == 1 else "s") ", " $got " given") }
+
+# ERR_RAISED_FIELD_UNNAMED
+fn RaisedFieldUnnamed() Msg { return Msg(Diag.RaisedFieldUnnamed, "R3b, T19b", "a field an error raised by name carries is named by the raise: a bare name, or 'name = value'") }
+
+# ERR_ERROR_METHOD_GIVEN
+fn ErrorMethodGiven(ty String&, name String&) Msg { return Msg(Diag.ErrorMethodGiven, "T20", "an error value's " $name " is the language's (T20) - " $ty " cannot declare one; choose another name") }
+
+# ERR_RAISED_FIELDS_DIFFER
+fn RaisedFieldsDiffer(name String&, first String&) Msg { return Msg(Diag.RaisedFieldsDiffer, "R3b, T19b", $name " carries (" $first "), as its first raise names them - give the same fields in that order") }
 
 # ERR_RAISE_NEAR_ERROR
 fn RaiseNearError(tok String&, near String&) Msg { return Msg(Diag.RaiseNearError, "R3b", "no error of this module is named " $tok " - did you mean " $near "? To raise a new error of that name, name it after this function's '?'") }

@@ -153,3 +153,66 @@ test "a loop raising and taking payloads stays flat" {
     }
     assert total == 1600000
 }
+
+# R3b with T19b: an error raised by name carries what its raise names - a pun's field named as the name is, any other
+# value written "name = value" - typed by the module's first raise (a reference's referent, copied in)
+fn find(key String&, at I64) I64 ? {
+    if at < 0: error OutOfRange(index = at, limit = 10)
+    if key == "": error NoKey(key)
+    if at > 10: error OutOfRange(index = at, limit = 10 * 2)
+    return at
+}
+
+# what find said, as "$" renders it
+fn found(key String&, at I64) String {
+    return try $find(key, at) catch OutOfRange e default $e catch NoKey e default $e
+}
+
+# the index an OutOfRange carried
+fn indexOf(key String&, at I64) I64 {
+    return try find(key, at) catch OutOfRange e default (e.index - e.limit) catch default -1
+}
+
+Found String = found("k", -4)
+FoundKey String = found("", 3)
+
+test "an error raised by name carries what its raise names" {
+    assert Found == "OutOfRange(-4, 10)" and found("k", -4) == Found
+    assert FoundKey == "NoKey(\"\")" and found("", Live + 3) == FoundKey
+    assert found("k", 12 + Live) == "OutOfRange(12, 20)"
+    assert indexOf("k", -4) == -14 and indexOf("k", Live + 30) == 10
+    try find("k", -1) catch OutOfRange e { assert e == OutOfRange(-1, 10) and e != OutOfRange(-1, 20) } catch NoKey { unreachable }
+}
+
+# T20: an error type's own methods, declared in its module; a named set has methods of its own, none of its members'
+fn (e ParseErr) Where() String {
+    if e == ParseErr.Bad: return $e.line ":" $e.col
+    return "nowhere"
+}
+
+fn (e LoadErr) Remote() Bool { return e == NetErr }
+
+fn whereOf(n I64) String { return try $parse(n) catch ParseErr e default e.Where() }
+
+fn remote(n I64) Bool { return try load(n) > 0 catch LoadErr e default e.Remote() }
+
+WhereBaked String = whereOf(-5)
+
+test "an error type's methods read what it carries" {
+    assert WhereBaked == "-5:7" and whereOf(Live - 5) == WhereBaked and whereOf(Live) == "nowhere"
+    assert remote(Live + 1000) and not remote(Live - 1) and remote(Live + 1001)
+    try parse(Live - 2) catch ParseErr.Bad e { assert e.Where() == "-2:7" }
+}
+
+# D17, T19b: a false requirement's ArgumentError.Invalid carries the function's name and the condition
+fn half(n I64) [n % 2 == 0] I64 ? { return n / 2 }
+
+fn why(n I64) String { return try $half(n) catch ArgumentError e default $e }
+
+WhyHalf String = why(3)
+
+test "a false requirement's ArgumentError carries the condition" {
+    assert WhyHalf == "ArgumentError.Invalid(\"half: n % 2 == 0\")" and why(Live + 3) == WhyHalf
+    assert why(Live + 4) == "2"
+    try half(Live + 5) catch ArgumentError.Invalid e { assert e.what == "half: n % 2 == 0" }
+}

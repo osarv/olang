@@ -127,11 +127,13 @@ type Resolver struct(L mut load.Loader&) {
     paramStarts Map<I64, I64>      # a parameter's local: where its declaration starts (load.ParamWritten's key, D9h)
 }
 
-# R3b: "error X" met by the survey, X naming nothing - where, and whether its function's signature names X
-type raised struct(Name source.NameId, Sp source.Span, Named Bool) {
+# R3b: "error X" met by the survey, X naming nothing - where, whether its function's signature names X, and what it
+# carries (T19b: "error X(path)", null for none)
+type raised struct(Name source.NameId, Sp source.Span, Named Bool, Args Array<ast.Expr&>?&) {
     Name
     Sp
     Named
+    Args
 }
 
 # ---- the program ----
@@ -230,7 +232,7 @@ fn (r mut Resolver&) surveyBodies(mi I64, decls Array<ast.Decl&>&) {
 }
 
 # "error X" during the survey: X naming nothing here is a candidate
-fn (r mut Resolver&) surveyRaise(word ast.Path?&) {
+fn (r mut Resolver&) surveyRaise(word ast.Path?&, args Array<ast.Expr&>?&) {
     if word is null or word.Parts.Len() != 1 { return }
     n := word.Parts[0]
     if r.lookup(n).Kind != What.None or n in r.Tables[r.mi].waiting or r.text(n) == "_" { return }
@@ -239,7 +241,7 @@ fn (r mut Resolver&) surveyRaise(word ast.Path?&) {
     for i in range from, r.sigNames.Len() {
         if r.sigNames[i] == n { named = true }
     }
-    r.raises.Push(raised(n, word.Sp, named))
+    r.raises.Push(raised(n, word.Sp, named, args))
 }
 
 # the signature of the function whose body is walked: the one-part names after its "?"
@@ -264,11 +266,11 @@ fn (r mut Resolver&) firstRaises() Vec<raisedName> {
         x := r.raises[i]
         k := indexOfRaised(out, x.Name)
         if k < 0 {
-            out.Push(raisedName(x.Name, x.Sp, 1, x.Named, out.Len()))
+            out.Push(raisedName(x.Name, x.Sp, 1, x.Named, out.Len(), x.Args))
             continue
         }
         y := out[k]
-        out[k] = raisedName(y.Name, y.Sp, y.Count + 1, y.Named or x.Named, y.Order)
+        out[k] = raisedName(y.Name, y.Sp, y.Count + 1, y.Named or x.Named, y.Order, y.Args)
     }
     return out
 }
@@ -280,13 +282,15 @@ fn indexOfRaised(xs Vec<raisedName>&, n source.NameId) I64 {
     return -1
 }
 
-# one name raised: its first raise, how often, whether a signature names it, and its place among the names
-type raisedName struct(Name source.NameId, Sp source.Span, Count I64, Named Bool, Order I64) {
+# one name raised: its first raise, how often, whether a signature names it, its place among the names, and what its
+# first raise carries (T19b)
+type raisedName struct(Name source.NameId, Sp source.Span, Count I64, Named Bool, Order I64, Args Array<ast.Expr&>?&) {
     Name
     Sp
     Count
     Named
     Order
+    Args
 }
 
 # each name entered as a type of module mi, and its declaration added to the module's: an error type of one word, the
@@ -297,10 +301,27 @@ fn (r mut Resolver&) declareRaised(mi I64, firsts Vec<raisedName>&) {
     for f in firsts {
         r.addType(mi, f.Name, f.Sp, null)
         r.L.Mods[mi].Types.Push($r.text(f.Name))
-        ds.Push(ast.Decl.Errors(f.Sp, f.Name, Array<source.NameId>(1, f.Name), Array<ast.Path&>(0)
-                                ast.CaseDecl&[ast.CaseDecl(f.Sp, f.Name, Array<ast.Param&>(0))]))
+        cases := ast.CaseDecl&[ast.CaseDecl(f.Sp, f.Name, r.raisedFields(mi, f.Args))]
+        ds.Push(ast.Decl.Errors(f.Sp, f.Name, Array<source.NameId>(1, f.Name), Array<ast.Path&>(0), cases))
+        r.payloadEnum(mi, f.Sp, f.Name, cases)
     }
     r.L.Mods[mi].Decls = ds.ToArray()
+}
+
+# T19b: the payload fields an error raised by name carries, named by its first raise - a pun's name (a bare name), or the
+# name an argument "name = value" gives - their types left to the checker, which settles them by that raise's values;
+# an argument that is neither is an error naming "name = value"
+fn (r mut Resolver&) raisedFields(mi I64, args Array<ast.Expr&>?&) Array<ast.Param&>& {
+    if args is null: return Array<ast.Param&>(0)
+    out Vec<ast.Param&>
+    for a in args {
+        match a {
+            case ast.Expr.Name(sp, n) { out.Push(ast.Param(sp, n, null, null)) }
+            case ast.Expr.Named(sp, n, _) { out.Push(ast.Param(sp, n, null, null)) }
+            case _ { r.L.Diags.Error(r.at(mi, a.Span()), msgs.RaisedFieldUnnamed()) }
+        }
+    }
+    return out.ToArray()
 }
 
 # R3b: a name raised that is one edit from another error of the module - a declared one, or one raised more often (or
@@ -1109,7 +1130,7 @@ fn (r mut Resolver&) stmt(s ast.Stmt?&) {
             if msg is not null { r.expr(msg) }
         }
         case ast.Stmt.Raise(_, word, args) {
-            if r.survey: r.surveyRaise(word) else: r.path(word)
+            if r.survey: r.surveyRaise(word, args) else: r.path(word)
             if args is not null {
                 for a in args { r.expr(a) }
             }

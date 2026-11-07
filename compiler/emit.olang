@@ -2011,14 +2011,7 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
 # S18d: what a Raise at sp did, as the evaluator reads it (eval.traced): passed on the error of the call or join
 # at the same place - "try passed it on", a join's failure restarting the trace with its own line - else it raised it
 fn (fe mut fnEm&) trace(sp source.Span) {
-    if not fe.E.traced() {
-        # D17, E35: where no trace is kept, a requirement false on entry is kept alone, for a "!" to name
-        if fe.F.RaiseText(sp).Len() > 0 {
-            fe.E.declare("__olang_ert_req_set", "void @__olang_ert_req_set(ptr)")
-            fe.w($"call void @__olang_ert_req_set(ptr " $fe.located(sp, $": " $fe.F.RaiseText(sp) "\n") ")")
-        }
-        return
-    }
+    if not fe.E.traced() { return }
     if not fe.sited {
         fe.sited = true
         for blockIx in range fe.F.Blocks.Len() {
@@ -2799,9 +2792,6 @@ fn (fe mut fnEm&) run() {
         if taken.Has(b) and fe.E.traced() {
             fe.E.runtime("__olang_ert_clear")
             fe.w("call void @__olang_ert_clear()")
-        } else if taken.Has(b) {
-            fe.E.declare("__olang_ert_req_clear", "void @__olang_ert_req_clear()")
-            fe.w("call void @__olang_ert_req_clear()")
         }
         fe.curBlock = b
         for i in range bb.Stmts.Len() {
@@ -6564,8 +6554,8 @@ fn (e mut Emitter&) entry(inits Vec<I64>, mainBody I64) {
         e.declare("__olang_ert_print", "void @__olang_ert_print(ptr)")
         b.Push("  call void @__olang_ert_print(ptr %s)\n  ret i32 1\n}\n\n")
     } else {
-        e.declare("__olang_ert_req_print", "void @__olang_ert_req_print(ptr)")
-        b.Push("  call void @__olang_ert_req_print(ptr %s)\n  ret i32 1\n}\n\n")
+        e.declare("__olang_debug_hint", "void @__olang_debug_hint(ptr)")
+        b.Push("  call void @__olang_debug_hint(ptr %s)\n  ret i32 1\n}\n\n")
     }
     e.item("main", e.P.L.Root, b.ToString())
 }

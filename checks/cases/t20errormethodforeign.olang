@@ -1,0 +1,6 @@
+# check: fail error[M19]: a method of os.Error is declared in that type's module
+# T20, M19: an error type's methods are declared in its module, as any type's are
+import "std/os"
+fn (e os.Error) Where() String { return "" }
+fn main() {
+}

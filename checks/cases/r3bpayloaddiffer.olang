@@ -1,0 +1,10 @@
+# check: fail error[R3b, T19b]: OutOfRange carries (index, limit), as its first raise names them
+# R3b, T19b: every raise of an error raised by name gives the fields its first raise named, in that order
+fn find(at I64) I64 ? {
+    if at < 0: error OutOfRange(index = at, limit = 10)
+    if at > 10: error OutOfRange(limit = 10, index = at)
+    return at
+}
+fn main() {
+    find(1)!
+}

@@ -184,45 +184,22 @@ entry:
   unreachable
 }
 
-; D17, E35: in a build that keeps no trace, the requirement whose falseness raised the error being returned ("FILE:LINE:
-; f: cond\n") - one thread-local write, on the failure path only - for a "!" or main to name; a clause taking the error
-; clears it
-@__olang_ert_req = thread_local(initialexec) global ptr null
+; D17, E35, T19b: in a build that keeps no trace, the hint that a -debug build says where an error came from (a false
+; requirement's condition is the payload of its ArgumentError.Invalid, said with the error)
 @__olang_msg_debughint = unnamed_addr constant [47 x i8] c"(build with -debug to see where it came from)\0A\00"
 
-define void @__olang_ert_req_set(ptr %line) cold {
+define void @__olang_debug_hint(ptr %stream) {
 entry:
-  store ptr %line, ptr @__olang_ert_req
-  ret void
-}
-
-define void @__olang_ert_req_clear() {
-entry:
-  store ptr null, ptr @__olang_ert_req
-  ret void
-}
-
-; the requirement kept, if one is, then the hint that a -debug build says more
-define void @__olang_ert_req_print(ptr %stream) {
-entry:
-  %r = load ptr, ptr @__olang_ert_req
-  %none = icmp eq ptr %r, null
-  br i1 %none, label %hint, label %say
-say:
-  call i32 @fputs(ptr %r, ptr %stream)
-  store ptr null, ptr @__olang_ert_req
-  br label %hint
-hint:
   call i32 @fputs(ptr @__olang_msg_debughint, ptr %stream)
   ret void
 }
 
-; E35 in a build that keeps no trace: the "!"'s message, the requirement that raised the error where one did, the hint
+; E35 in a build that keeps no trace: the "!"'s message, then the hint
 define void @__olang_bang_failed_plain(ptr %msg) cold noreturn {
 entry:
   %stream = call ptr @__olang_check_stream()
   call i32 @fputs(ptr %msg, ptr %stream)
-  call void @__olang_ert_req_print(ptr %stream)
+  call void @__olang_debug_hint(ptr %stream)
   call void @__olang_check_end()
   unreachable
 }
@@ -250,7 +227,7 @@ trace:
   call void @__olang_ert_print(ptr %stream)
   br label %done
 plain:
-  call void @__olang_ert_req_print(ptr %stream)
+  call void @__olang_debug_hint(ptr %stream)
   br label %done
 done:
   call void @__olang_check_end()
@@ -272,7 +249,7 @@ trace:
   call void @__olang_ert_print(ptr %stream)
   br label %done
 plain:
-  call void @__olang_ert_req_print(ptr %stream)
+  call void @__olang_debug_hint(ptr %stream)
   br label %done
 done:
   call void @exit(i32 1)
