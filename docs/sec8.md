@@ -459,7 +459,8 @@ call". **D16d** is unchanged: where a lambda lives is still where its captures d
 - **Stops** at every place that code judged once for many values reads: an argument (whatever the callee - its
   parameter's type is all its body was judged with), a store into a field, an element, a payload, a global, a type
   argument (`v.Push(f)`), a capture (inside the lambda's body a captured function value is unknown - its maker's
-  records are not followed into it, decision 15), a task's function or argument, an `any`, a `yield`, and a generic's type variable [question 1].
+  records are not followed into it, decision 15), a task's function or argument, an `any`, a `yield`, and a generic's
+  type variable [question 1].
 
 ### 5.3 A call through a value that carries a record
 
