@@ -2930,3 +2930,19 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   was superseded the same day by "Collections DECIDED" (ordinary types with a Copy, unique exactly when their elements
   are, copies left out where neither side is written) and never built - a Vec is a value, shared by writing `&`.
 
+- Attributes talk 2026-11-07: the user asked what giving attributes compiler meaning would be ("then they would clash
+  with keywords, right? That would be a problem") - agreed: a second way to mark declarations beside keywords (C's
+  `_Noreturn` and `[[noreturn]]`); everything other languages use compiler attributes for, olang covers by a keyword,
+  inference, a top-level `if`, supplied methods or S3 - QBO's rule stands (attributes mean nothing to the compiler).
+- QCW ASKED 2026-11-07 (the user: "Should we add the deprecation keyword then?"): recommended no keyword - olang has
+  no warnings (every diagnostic is an error, so marking a use would break callers, which deprecation exists to avoid);
+  instead Go's convention: a doc comment paragraph beginning `Deprecated:` (L4b), read by tools - `olang doc` marks it,
+  the language server shows it on hover and strikes the name through (LSP's deprecated tag, a hint, never an error),
+  `olang api` lists newly deprecated items as not breaking. No syntax, no compiler meaning, no attribute type. In
+  effect: nothing; if yes, a small tooling round (doc, lsp, api, SPEC L4b).
+- Round kept's decisions (2026-11-07, mine, for the user's review): (1) a call building into a derived scope (a field's
+  own binding) builds into the program's scope instead of being refused - memory held until exit, as the inline form
+  already was (C1, SPEC O23a); (2) item 17's placement (O28) is decided once per declaration, so the local is built
+  where it is kept on every turn, also turns keeping nothing (~17 bytes a turn for a 16-byte struct kept 1 turn in
+  1000) - a recorded limit; (3) a failed check is no way out for the drop analysis (a test build's unwind ends holders,
+  but nothing resumes to see it).

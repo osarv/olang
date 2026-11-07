@@ -896,3 +896,12 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   through /home/user/vlock (one slot), agents told. Running: round "kept" (item 17, drop flags in effects, C1, C2,
   HeldTwo's C2d; /home/user/wt/kept, brief /home/user/review/rounds/kept-brief.md).
 
+- 2026-11-07 ~07:35 CET: round kept merged (wt-kept f97dcf3, merge ab1253e; full verify passed on c5e751b, quick,
+  scopesan and scopefuzz on b87af0c; the merged tip's verify running): item 17 (O28: a value local kept past its block
+  or turn built where it is kept; os.Args 341 -> 320 instructions, one memcpy), drop flags in effects (typed.DropsRun,
+  A5), C1 (a build through a derived scope goes to the program's scope), C2 (a case payload holding a by-value
+  parameter's reference lifts its local), HeldTwo (a by-value holder's slot takes a held call). Found, not fixed:
+  tests/runner.olang built twice in one build directory fails to link (B3i reuse, master too) - for a round on reused
+  objects. Started side by side from ab1253e: round drops (wt-drops - destructor collections by value, then unique
+  Part C; opus xhigh; /home/user/review/rounds/drops-brief.md) and round asm (wt-asm - explain -asm/-ir with LLVM's
+  remarks; opus high; asm-brief.md). The /tmp sweep of old build temporaries was refused by the permission check.
