@@ -695,6 +695,35 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   the call (a read by reference would need `T&` of a number, T24); a `Destroy()` of a collection after pushes of values
   built from a local makes that local a holder (bulk review 7's F16 rule). tests/drops.olang decides each order while
   compiling as at run time and under `interpret`.
+- **Packed structs (T13c, X11a, X18, the user's QCX 2, 2026-11-07; built 2026-11-07, wt-packed, details mine).** `type
+  Header packed struct(version U4, ihl U4, length U16) { version, ihl, length }` (`packed` a word of one place, right
+  before `struct`, after `immut`/`unique` where written; before `enum`/`extends`/`trait`/`error` an error naming T13c):
+  no padding, fields from the lowest bit up in declaration order (bit b in byte b/8, least significant first - GCC's and
+  clang's packed bitfields on little-endian x86-64 and AArch64), size its bits rounded up to bytes, alignment 1, the
+  bits above the last field zero. A field's width: an integer's own (any width, T4a), Bool 1, a float its bits, a
+  payload-free enum its integer raw type's (the raw value held, T17e) or the fewest bits counting its cases (the
+  position held; text raw values too), a packed struct its fields' bits (nested bit by bit, not rounded), a fixed array
+  its elements' one after another; a reference, a run-time array (text), a function value, an `any`, an error value, an
+  ordinary struct, an enum with a payload is T13c's error at the field, and so are type parameters and a destructor. A
+  field is read by a shift and a mask and stored by replacing its bits (the place up to the packed value evaluated
+  once); **no reference names one** - lending it read-only or writably, a receiver, a slice, a walk of an array field is
+  T13c's error naming the copy to write (`v := h.lanes`). ==, Hash, `$`, json, Copy go by the fields; reflection's
+  `f.Offset` is the byte holding a field's lowest bit, and every field has `f.BitOffset` and `f.Bits` (an ordinary
+  struct's 8x its offset and size). C: by reference always, by value only holding integer bits (as C's struct of its
+  bytes: one or two integer registers to 16 bytes, memory beyond - clang measured), a float in one held by value at the
+  boundary X11a's error; `build -library` writes `struct __attribute__((packed))` of one bitfield per field (an array
+  one per element, `name_0`); C imports translate a packed record into a packed struct where every member is a
+  bitfield of an integer/_Bool type or an integer, float or integer array member at a whole byte of the running bits
+  (else opaque words, as before - a packed record of byte-aligned members had been taken for a plain struct, laid out
+  with padding: wrong offsets, fixed). Decided (mine): built as two MIR prims over the whole value - `Unpack` and
+  `Repack` - which lowering makes for a place through a packed field (`pl.Pk`, the prefix place once, the value read,
+  changed and stored back; an array field unpacked whole into a temporary and indexed there), emit computes over the
+  value as one `iN` loaded from its bytes (`[N x i8]` in memory and in other structs' types, so LLVM lays no `i24` out
+  with its own alignment) and the evaluator over its bytes, bit by bit - so interpret, baking (K2) and decided asserts
+  agree with run time (tests/packed.olang). Found on the way (pre-existing, fixed): an `if` in a generic's instance
+  whose condition a fixed local decided was asked of the evaluator by its place, which every instance shares - a walk
+  of `T.Fields` unrolled to none (a struct of private fields) fixed json's `first` and made `json.Encode` of such a
+  struct S8a's dead-branch error; no such `if` is asked now (check.ifOf).
 - **Declared types are nominal (T29).** `type Meters I32`, `type Name Array<T>`; `extends` inherits the base's methods
   and operators (T29f, the user's design); `Name(x)` converts and names the argument's storage (T29a) - a copy to or
   from an immut type (T13a); a declared

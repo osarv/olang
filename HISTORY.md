@@ -29517,3 +29517,82 @@ closed). Memory-safe today (the storage lives until the scope closes), but C11's
 released resource") does not hold, and it is what blocks freeing at drops. Rust's dropck refuses the store (a value with
 a destructor may not hold a reference to one ended before it); olang's equivalent would refuse a by-value holder storing
 a reference to a holder declared later in its block - for the user.
+
+## Packed structs (T13c, X11a, X18, 2026-11-07, wt-packed)
+
+The user decided packed / declared-layout structs on 2026-11-07 (QCX 2): `type Header packed struct(version U4, ihl U4,
+length U16)`, no padding, every field at its exact bit width - for wire formats, file headers, hardware registers and
+the FPGA path, now that integers of every width exist (T4a). Everything below the decision is mine.
+
+**Spelling.** `packed` is a word of one place (L9b), as `immut` and `unique` are: right before `struct`, after either of
+those where one is written, an ordinary name everywhere else (`t.packed` still compiles). Written before `enum`,
+`extends`, `trait` or `error` it is an error naming T13c rather than a parse error two tokens later. Only a struct is
+packed: an enum's value is a case (and a payload's layout is the payload's), and a type over another has its base's
+layout.
+
+**Layout.** GCC's and clang's for a `__attribute__((packed))` struct of bitfields on little-endian x86-64 and AArch64,
+checked against clang: fields from bit 0 up in order, bit b in byte b/8 at bit b%8, size the bits rounded up to bytes,
+alignment 1. Widths: an integer's own, Bool 1, a float its IEEE bits, a payload-free enum its integer raw type's width
+(the raw value held - what a wire format carries) or the fewest bits counting its cases (its position held; an enum of
+text raw values too - the brief listed text raw values among the refusals, but nothing is lost holding such an enum by
+its case, so it is allowed), a packed struct its fields' exact bits (so `Flags(syn Bool, ack Bool, fin Bool)` is 3 bits
+inside a header, 1 byte alone), a fixed array its elements' widths one after another. Refused at the field (T13c): a
+reference, a run-time array (text included), a function value, an `any`, an error value, an ordinary struct (its own
+padding - declare it packed), an enum carrying a payload. A packed struct takes no type parameters (its layout is its
+declaration's; a generic one would need the refusals per instance for little gain) and declares no destructor (plain
+data). `types.PackedBits`/`BitOffsets` compute widths on demand; layout stores each field's byte (the one holding its
+lowest bit) as its offset, so reflection's `f.Offset` reads naturally; generic's layout records an enum field's raw
+type before laying out (its width is the raw type's), the checker its raw values for emit and the evaluator.
+
+**Fields are no places.** A field at a bit offset has no address, so it is read by a shift and a mask and stored by
+replacing its bits in the value. The choice for lending was between copying in and out (unobservable only when nothing
+else writes the struct during the call) and refusing; refusing is principle 2's answer (a copy is something written),
+so lending a packed field to any reference - read-only or writable, a receiver, a slice, a walk of an array field, an
+atomic - is T13c's error naming the local copy to write. Reads, stores, compound stores and increments work, at any
+depth (`h.flags.syn = true`, `h.lanes[i] += 1`, `frames[k].hdr.len = n`).
+
+**How it is built.** Two prims on whole values, `typed.PrimOp.Unpack` (args [x, k]: field k's value) and `Repack`
+(args [x, k, v]: x with field k's bits replaced). The checker builds field places as for any struct; lowering's place
+(`pl`) records where the steps into a packed value begin (`Pk`, `PkTy`), and a read of such a place is the chain of
+Unpacks from a copy of the packed value (an array field unpacked whole into a temporary and indexed there), a store the
+chain read, each value given its new part from the last step back (Repack, or a store into the temporary array), and the
+packed value stored whole where it lies - the place before it computed once, so `hs[f()].len += 2` calls f once.
+Compiler-made read-only borrows of such a place (a helper's) borrow a temporary of its value; == , Hash and `$` walk a
+packed struct's fields through the same places. Emit: a packed struct is `[N x i8]` in memory and inside other structs'
+LLVM types (an `i24` there would take LLVM's alignment and size 4), and its fields are computed over the value as one
+`iN` loaded straight from its place (or its value spilled): `lshr`/`trunc` out, `and`/`or` in, a float by `bitcast`, an
+enum by `zext`/`trunc` of its position or a `select` chain between raw values and positions; a constructor's value and a
+Repack stored into a place go in as the `iN` directly. The evaluator does the same over the value's bytes, bit by bit,
+and refuses a raw value no case holds (only C can write one - X1a's hole). Baking needed nothing: images are bytes.
+
+**Reflection.** `T.Size` the bytes, `T.Align` 1, `f.Offset` the byte holding the field's lowest bit; `f.BitOffset` and
+`f.Bits` are new for every struct field (an ordinary field's are 8 times its offset and size), so generic code can lay
+out or check wire formats.
+
+**C (X11a, X18).** By reference always - the C side declares the same struct, and the header a library writes declares
+it as `struct __attribute__((packed)) NAME` with one bitfield per field (an unsigned or signed `<stdint.h>` type of at
+least the width, `unsigned __int128` past 64, `bool` for a Bool, a float as its bits' unsigned type, an array one
+bitfield per element `name_0` ...): every member a bitfield, so the layout is exact in C whatever the field (a plain
+member would start at the next byte). By value only where every field holds integer bits: clang passes such a packed
+struct as its struct of bytes (measured: up to 8 bytes one integer register, to 16 two, beyond in memory on x86-64; the
+same with a reference to a copy on AArch64), so cabi flattens it to bytes; a packed struct with a float is classified
+otherwise by clang (an unaligned double sends the whole to memory, aligned floats to SSE), and rather than reproduce
+that, a float held by value at the boundary is X11a's error naming the reference. C imports translate a record with
+`PackedAttr` into a packed struct where its members are bitfields of integer or `_Bool` types (a signed type's an `I`n)
+or integer, float or integer-array members at whole bytes of the running bits (where GCC puts a non-bitfield member) -
+else, as before, opaque words; a non-bitfield `_Bool` (a byte in C, a bit here) keeps it opaque. A function taking or
+giving such a record holding a float by value is left out of the translation with its reason. Checked against clang in
+tests/cimport.olang (tests/cdemo: C writes fields the program reads, and the reverse, by pointer and by value) and with
+a library's header compiled by clang and called.
+
+**Found on the way (pre-existing, fixed).** (1) A packed C record whose members were all byte-aligned (no bitfields) had
+been translated as a plain struct - padded, so its offsets were wrong; it is a packed struct now. (2) `json.Encode` of a
+struct with only private fields, from another module, failed with S8a ("this condition is the same on every build"):
+`T.Fields` holds no private field outside its module (M6a), so json's unrolled walk had no copies, its `first` stayed
+`true` and was taken for a fixed local (S8c); the `if not first` was asked of the evaluator and found constant - and
+the decision is kept by the condition's place, which every instance of the generic shares, so even a correct decision
+would be wrong for the next instance. No `if` in a generic's instance is asked now (it runs; LLVM folds it).
+
+**Left.** A text-raw enum field holds its position, not text (nothing else is possible in bits); `interpret` passes a
+packed struct to C by reference but, as any struct, not by value (B3e's stated limit); DWARF describes a packed field at
+its byte, not as a bitfield.

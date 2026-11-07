@@ -25,7 +25,7 @@ Records for every change: `SPEC.md` (the rule), `CLAUDE.md` (current-state entry
 | `tests/`, `checks/cases/` | a run test, an evaluator-decided test, a must-fail case naming the diagnostic |
 | `docs/README.md` / `std/README.md` | only if a doc teaches the form |
 
-## A word of one place (L9b: `commutes`, `immut`, `unique`)
+## A word of one place (L9b: `commutes`, `immut`, `unique`, `packed`)
 
 Not reserved, so no `Keyword`/session/nvim entry: `compiler/parse.olang` reads it as an identifier where it stands (and
 `unparse.olang` writes it back); `ast.olang` holds what it says; `SPEC.md` L9b names it; `explain.olang` shows it in an
