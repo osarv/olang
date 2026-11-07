@@ -1,12 +1,23 @@
-# check: fail the callee needs one argument's scope to outlive another's
-# D16c/D16d: a lambda capturing a value holding references lives where they do - here the loop's block, which the list
-# of functions outlives
+# check: run
+# flags: -debug -sanitize
+# D16c/D16d, O27 as placement: a lambda capturing a value holding references lives where they do - the list of
+# functions outliving the loop's block has what each captured built where the list lives, a new one each turn (it was
+# O10c's error); each called after a churn
 import "std/io"
 type Reading struct(Sensor String&, Value F64) {
     Sensor
     Value
 }
 
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
 fn main() ? {
     fs := Vec<fn&() I64>()
     for k in range 3 {
@@ -14,5 +25,6 @@ fn main() ? {
         x := Reading(t, 1.5)
         fs.Push(fn() I64 { return x.Sensor.Len() })
     }
+    churn()
     for f in fs { try io.Println($f()) }
 }

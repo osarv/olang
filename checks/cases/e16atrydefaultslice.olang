@@ -1,6 +1,8 @@
-# check: fail this value lives in this function's own scope, which closes first
-# E16a/R9a (U3): a slice of "try a[0] catch default v" returned as a borrow of a - the try's value is a copy made
-# where it is read, a temporary of the function's own block, so the slice cannot outlive it
+# check: run
+# flags: -debug -sanitize
+# E16a/R9a (U3), O27 as placement: a slice of "try a.Get(0) catch default v" returned - the try's value is a copy made
+# where it is read, a temporary, and returned as a view it is built in the result scope (it was O10d's error: it lived
+# in the function's own block); read back after a churn and a recursion over the stack
 import "std/io"
 fn churn() ? io.Error {
     for k in range 200 {
