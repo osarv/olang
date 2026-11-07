@@ -7160,7 +7160,7 @@ mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" 
             | "bindgen" | "profile" | "api"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps"
+            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir"
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -7175,7 +7175,7 @@ beginning with `-` that is no option is an error:
 |---|---|---|
 | `-output PATH` | build, compile, bindgen, profile | B3h, §11 X16, B20 |
 | `-debug`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2b, B2f |
-| `-quick` | running a file, build, compile, test, profile | B2g, B20 |
+| `-quick` | running a file, build, compile, test, profile, explain | B2g, B20, B11d |
 | `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
 | `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp, profile | B10, §4 M23c |
 | `-check` | format, fix | B13, B17 |
@@ -7184,6 +7184,7 @@ beginning with `-` that is no option is an error:
 | `-memory` | running a file, build, test | B18 |
 | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
 | `-caps` | explain | B11c |
+| `-asm`, `-ir` | explain | B11d |
 
 `build`, `compile`, `bindgen` and `profile` take exactly one file, `api` two versions (commits or directories) and a
 file or directory, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
@@ -7722,6 +7723,30 @@ reading, writing or closing a descriptor already open (the standard streams amon
 covers all of its own code - its functions, lambdas and the instances of its generics the program makes - so what a
 call through a function value or an `any` runs is some module's code, said on that module's line. The prelude and C
 imports have no line. The mode reads what the checker already holds; no other build computes it.
+
+**B11d (a function's code).** `explain -asm FILE NAME` prints the machine code of the function `NAME` names, and
+`explain -ir FILE NAME` its optimized LLVM IR, as `build` compiles the program `FILE` is the root of (B3): at `-O3` with
+link-time optimization - the code the link generates, which is where it is final - or at `-O2` per module under
+`-quick` (B2g); for the machine `-target` names (B12, another architecture's code included); with `-define`'s
+constants (B10) and `-update` (§4 M23c). `NAME` is a function or `Type.Method`, as B11b takes it; a name of no
+function is an error. The build differs from `build`'s in one thing, which makes its objects distinct artifacts (B4,
+named with `.listing`) and changes no instruction: its debug information holds each function's lines and names (B20a's),
+as a profile build's does (B20), and nothing else - no frame pointers, no sampler - while LLVM's optimization remarks are
+kept beside each object and gathered from the link. Nothing is run, and no program is written.
+
+The function's code is printed as LLVM's back end writes it, each line of source it comes from interleaved as a comment
+before the instructions made from it - `FILE:LINE` and the line's text, the line of a function inlined into it being
+that function's own (in its own file); code the compiler writes itself, which no line of the program holds, is marked as
+such once. Beneath a line's comment come the remarks LLVM made there about the function - what the inliner, the loop and
+SLP vectorizers, the unrollers, LICM, GVN, the loop idiom and deletion passes, tail-call elimination, the register
+allocator and the assembly printer did (`passed`), declined and why (`missed`), and found (`analysis`) - each said once,
+with how many times it was made; a remark on a line left with no code of its own is listed after the code with its
+place. A header comment gives the function as B11b prints its signature, its instructions as the assembly printer
+counted them, and the functions inlined into it. A generic function's code is printed for each instance the program
+makes, in turn. A function the link left no code of its own says so: inlined at every call - naming where, and, where
+that is one function, printing that function's code in its place - or never called. Comments are written as the code's
+own language writes them: `#` in x86-64 assembly, `//` in AArch64's, `;` in IR. `-asm`, `-ir` and `-caps` exclude one
+another; `-quick` and another machine's `-target` apply to `explain` only with `-asm` or `-ir`.
 
 ### 10.8 Formatting
 
