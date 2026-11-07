@@ -154,3 +154,66 @@ Walked := walk(tree(50), Rand(3), 200)
 test walk "is the value the evaluator baked" {
     assert Walked == walk(tree(50), Rand(3), 200)
 }
+
+# a local lent and copied in one call is copied, never moved at the copy (bulk review 7, F1): the callee's own value is
+# no name for the caller's storage, so its writes never show through the reference beside it
+type Buf struct(a Array<I64>) {
+    a
+}
+
+fn peek(r Buf&, own Buf) I64 {
+    own.a[0] = 99
+    return r.a[0]
+}
+
+fn (b Buf&) Peek(own Buf) I64 {
+    own.a[0] = 99
+    return b.a[0]
+}
+
+fn part(a Array<I64>&, own Buf) I64 {
+    own.a[0] = 99
+    return a[0]
+}
+
+fn lentAndCopied() I64 {
+    t := Buf(Array<I64>(3, 1))
+    u := Buf(Array<I64>(3, 2))
+    w := Buf(Array<I64>(3, 3))
+    return peek(t, t) * 100 + u.Peek(u) * 10 + part(w.a, w)
+}
+
+test peek "copies a by-value argument the same call also lends" {
+    assert lentAndCopied() == 123
+}
+
+assert lentAndCopied() == 123
+
+# a task's read-only argument is the task's own: each turn's spawn reads its own element, never one frame slot every
+# turn overwrites while earlier tasks still run (bulk review 7, F12)
+type Pt struct(x I64, y I64) {
+    x, y
+}
+
+fn slowRead(p Pt&) I64 {
+    s := 0
+    for i in range 200000 { s += i % 3 }
+    return p.x * 1000 + p.y + s - s
+}
+
+test slowRead "gives each spawned task its own argument" {
+    pts := Vec<Pt>()
+    for i in range 8 { pts.Push(Pt(i, i * 2)) }
+    out := Array<I64>(8, 0)
+    made := Array<I64>(8, 0)
+    join {
+        for k in range 8 {
+            spawn out[k] = slowRead(pts[k])
+            spawn made[k] = slowRead(Pt(k, k * 2))
+        }
+    }
+    for k in range 8 {
+        assert out[k] == k * 1002
+        assert made[k] == k * 1002
+    }
+}

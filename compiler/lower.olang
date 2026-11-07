@@ -1530,13 +1530,16 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
         case typed.Expr.Call(csp, _, c) {
             callee, ty := ln.callee(c.Target, csp)
             if ln.dead { return }
+            # (a task's arguments are read beside its spawner: no frame slot of the spawner's, no view in place of
+            # their copies - bulk review 7, F12: the flag had never been set, so every turn's task shared one slot)
+            ln.taskArgs = true
             args := ln.args(c, callee, ty)
             if ln.dead { return }
             match callee {
                 case mir.Callee.Dispatch(_, k, dty) { callee = mir.Callee.Dispatch(ln.F.Ops[I64(args.At)], k, dty) }
                 case _ { }
             }
-            cls := Array<mir.TaskClause>(sw.Clauses.Len())
+            cls :=Array<mir.TaskClause>(sw.Clauses.Len())
             for i in range sw.Clauses.Len() {
                 cl := sw.Clauses[i]
                 h := mir.Operand.None
@@ -3151,12 +3154,14 @@ type lastUses struct(N I64) {
     CopySite Vec<I64>
     CopyLocal Vec<I64>
     CopyAt Vec<I64>       # the copy's position, -1 where it is in a loop the local is declared outside, or in later code
+    Said Vec<I64>         # the local each mention named, by its position (seq - 1)
 }
 
 fn (w mut lastUses&) mention(id typed.LocalId) {
     i := I64(id)
     if i < 0 or i >= w.N: return
     w.seq++
+    w.Said.Push(i)
     w.last[i] = I64.Max if w.later > 0 else w.last[i].Max(w.seq)
 }
 
@@ -3246,16 +3251,20 @@ fn (w mut lastUses&) expr(x typed.Expr?&) {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p): w.place(p)
         case typed.Expr.Promote(_, _, pr): w.expr(pr.X)
         case typed.Expr.Call(_, _, c) {
+            s0, c0 := w.seq, w.CopySite.Len()
             match c.Target {
                 case typed.Callee.Value(f) { w.expr(f) }
                 case _ { }
             }
             w.exprs(c.Args)
+            w.apart(s0, c0)
         }
         case typed.Expr.Make(_, _, m) {
+            s0, c0 := w.seq, w.CopySite.Len()
             w.copyOf(m)
             w.exprs(m.Items)
             w.expr(m.Length)
+            w.apart(s0, c0)
         }
         case typed.Expr.Collect(_, _, c) {
             w.expr(c.Reserve)
@@ -3331,6 +3340,19 @@ fn (w mut lastUses&) place(p typed.Lvalue&) {
         case typed.Lvalue.Payload(_, _, py): w.place(py.Base)
         case typed.Lvalue.Temp(_, _, v, _): w.expr(v)
         case typed.Lvalue.Global(_, _, _, _), typed.Lvalue.Target(_, _) { }
+    }
+}
+
+# (bulk review 7, F1) a copy made in one call's (or one made value's) operands is no move where another operand of it
+# mentions the same local - `peek(t, t)` lends t beside its copy, `part(t.a, t)` reads a part of it, `t.Peek(t)` is its
+# receiver: those names are alive for the very call the copy is an argument of, so the copy stays a copy
+fn (w mut lastUses&) apart(s0 I64, c0 I64) {
+    for k in range c0, w.CopySite.Len() {
+        at := w.CopyAt[k]
+        if at < 0: continue
+        for q in range s0 + 1, w.seq + 1 {
+            if q != at and w.Said[q - 1] == w.CopyLocal[k]: w.CopyAt[k] = -1
+        }
     }
 }
 
