@@ -13744,7 +13744,9 @@ fn (c mut Checker&) notInModule(at I64, n source.NameId, nsp source.Span) {
     # B11: the nearest name it exports - all its names to itself
     near mut msgs.Nearest& = msgs.Nearest(c.text(n))
     for e in c.P.R.Tables[at].Entries {
-        if e.Kind != names.What.Import and (at == c.fr().Mi or load.Public(c.text(e.Name)) or m.C) { near.Offer(c.text(e.Name)) }
+        if e.Kind == names.What.Import or not (at == c.fr().Mi or load.Public(c.text(e.Name)) or m.C) { continue }
+        near.Offer(c.text(e.Name))
+        near.OfferBuilder(c.text(e.Name))
     }
     c.err(nsp, msgs.NotInModule($"module " $m.Identity, c.tok(n), near.Hint()))
 }
@@ -16095,6 +16097,7 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
         return c.unknown(sp)
     }
     asks := c.ContractAsks.Len()
+    said := c.P.L.Diags.Count()
     fr.Tries++
     x := c.expr(y, want)
     fr.Tries--
@@ -16107,7 +16110,9 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
         return x if clauses.Len() == 0 else c.unknown(sp)
     }
     end := fr.leaks.Len()
-    c.produced(clauses, mark, end)
+    # B11: an operand that said an error of its own (a name a module does not declare) tells nothing of what it fails
+    # with, so its clauses are not judged by it - one cause, one error
+    if c.P.L.Diags.Count() == said: c.produced(clauses, mark, end)
     # T2c: a "default null" beside a reference never null gives one that may be - the try's value, its operand as it is
     rt := typeOf(x)
     if asValue and c.neverNull(rt) and nullDefault(clauses) and (want == types.UnknownT or c.P.T.IsNullable(want)) {

@@ -65,6 +65,23 @@ fn (n mut Nearest&) Offer(cand String&) {
     }
 }
 
+# a builder offered as "Owner.Member" (D19): taken before any near name where the word is its old name - the member
+# with its owner's name as one of its words ("ParseIP" for IP.Parse, "DateOf" for Date.Of), what a function making the
+# type was called before it became the builder (builder_migrate's renaming read backward)
+fn (n mut Nearest&) OfferBuilder(cand String&) {
+    dot := try cand.FindByte('.') catch { return }
+    owner := cand[:dot]
+    member := cand[dot + 1:]
+    if owner.Len() == 0 or owner.Len() >= n.Word.Len() or n.Far == 0 { return }
+    at := try n.Word.Find(owner) catch { return }
+    end := at + owner.Len()
+    before := at == 0 or n.Word[at - 1].IsLower() or n.Word[at - 1].IsDigit()
+    after := end == n.Word.Len() or n.Word[end].IsUpper()
+    if not before or not after or $n.Word[:at] $n.Word[end:] != member { return }
+    n.Best = $cand
+    n.Far = 0
+}
+
 # " - did you mean 'x'?" for the nearest name offered, "" for none
 fn (n Nearest&) Hint() String { return $" - did you mean '" $n.Best "'?" if n.Best.Len() > 0 else "" }
 
@@ -1377,7 +1394,7 @@ fn PreludeConstRedeclared(tok String&) r.Msg { return r.Msg(Diag.PreludeConstRed
 fn ShadowsType(tok String&) r.Msg { return r.Msg(Diag.ShadowsType, "D3a", $tok " is a type's name - choose another") }
 fn TypeHasNoConstructor(tok String&) r.Msg { return r.Msg(Diag.TypeHasNoConstructor, "", "type " $tok " has no constructor - an enum's values are its cases") }
 fn MethodCalledAsFunction(tok String&, text String&) r.Msg { return r.Msg(Diag.MethodCalledAsFunction, "M19", $tok " is a method - call it on its receiver: x." $text "(...)") }
-fn NotInModule(text String&, tok String&, hint String&) r.Msg { return r.Msg(Diag.NotInModule, "", $text " declares no " $tok $hint) }
+fn NotInModule(text String&, tok String&, hint String&) r.Msg { return r.Msg(Diag.NotInModule, "M9", $text " declares no " $tok $hint) }
 fn VarIsPrivate(tok String&) r.Msg { return r.Msg(Diag.VarIsPrivate, "M6", $tok " is private to its module") }
 fn ShiftUnadapted() r.Msg { return r.Msg(Diag.ShiftUnadapted, "E8a, E4a", "this shift is past its literal's width, and nothing adapts it to a wider type - convert the literal, as I64(1) << 40") }
 fn ScopeMayNotOutlive() r.Msg { return r.Msg(Diag.ScopeMayNotOutlive, "O10", "this reference lives in a scope that may not outlive where it is put") }
