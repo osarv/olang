@@ -1,0 +1,13 @@
+import "std/io"
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn main() {
+    v := Vec<Token>()
+    v.Push(Token(1))
+    w := v.View().Windows(1)
+    io.Println($w.Len())!
+}

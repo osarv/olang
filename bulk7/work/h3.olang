@@ -1,0 +1,21 @@
+import "std/io"
+
+type Pt struct(x I64, y I64) {
+    x, y
+}
+
+fn slow(p Pt&) I64 {
+    return p.x * 1000 + p.y
+}
+
+fn main() {
+    pts := Vec<Pt>()
+    for i in range 4 { pts.Push(Pt(i, i * 2)) }
+    fs := Vec<fn&() I64>()
+    for k in range 4 {
+        fs.Push(fn() I64 { return slow(pts[k]) })
+    }
+    out := Array<I64>(4, 0)
+    for k in range 4 { out[k] = fs[k]() }
+    io.Println($out)!
+}

@@ -1,0 +1,16 @@
+import "std/io"
+
+Name mut String& = "init"
+
+fn set(n I64) {
+    s := $n
+    Name = s
+}
+
+fn main() {
+    set(12345)
+    junk := Array<I64>(1000, 7)
+    io.Println($Name " " $junk[0])!
+    junk2 := Array<I64>(1000, 7)
+    io.Println($Name " " $junk2[0])!
+}

@@ -1,0 +1,31 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type Named trait {
+    Id() I64
+}
+
+fn (r Res&) Id() I64 { return r.id }
+
+fn mk(n I64) any Named& {
+    x Res = Res(n)
+    return x
+}
+
+fn mk2(r Res) any Named& {
+    return r
+}
+
+fn main() {
+    a := mk(5)
+    io.Println("any " $a.Id() " ended " $Ended)!
+    b := mk2(Res(6))
+    io.Println("any " $b.Id() " ended " $Ended)!
+}

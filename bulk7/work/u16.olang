@@ -1,0 +1,28 @@
+import "std/io"
+
+type Res unique struct(id I64) {
+    id
+    open Bool = true
+} destruct {
+    io.Println("ended " $id)!
+}
+
+fn (r mut Res&) Close() { r.open = false }
+
+# r and x are one value handed in twice: x ends it, then r is read
+fn both(r Res&, x Res) Bool {
+    x.Close()
+    x.Destroy()
+    return r.open
+}
+
+fn pass(t Token2, s Res) Bool {
+    return both(s, s)
+}
+
+type Token2 struct() { }
+
+fn main() {
+    still := pass(Token2(), Res(1))
+    io.Println("r still open after its value ended: " $still)!
+}

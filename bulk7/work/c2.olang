@@ -1,0 +1,50 @@
+import "std/io"
+
+type Cell struct(v I64, gen I64 = 0) {
+    v, gen
+}
+
+fn (c Cell&) Copy() Cell { return Cell(c.v, c.gen + 1) }
+
+type Box struct(c Cell) {
+    c
+}
+
+fn byValue(c Cell) I64 { return c.gen }
+
+fn ret(c Cell) Cell { return c }
+
+fn main() {
+    a := Cell(1)
+    b := a
+    io.Println("let " $b.gen)!
+    d Cell = Cell(2)
+    d = a
+    io.Println("assign " $d.gen)!
+    io.Println("arg " $byValue(a))!
+    bx := Box(a)
+    io.Println("ctor " $bx.c.gen)!
+    v := Vec<Cell>()
+    v.Push(a)
+    io.Println("push " $v.Ref(0).gen)!
+    e := v[0]
+    io.Println("at " $e.gen)!
+    arr := Cell[a, a]
+    io.Println("lit " $arr[0].gen)!
+    for x in arr { io.Println("walk " $x.gen)! }
+    r := ret(a)
+    io.Println("ret " $r.gen)!
+    f := fn() I64 { return a.gen }
+    io.Println("capture " $f())!
+    k := Cell(5)
+    m := k
+    io.Println("last use " $m.gen)!
+    p, q := a, a
+    io.Println("par " $p.gen " " $q.gen)!
+    big := Box(Cell(7))
+    big2 := big
+    io.Println("part " $big2.c.gen)!
+    sl := arr[0:1]
+    s2 := sl[0]
+    io.Println("slice elem " $s2.gen)!
+}

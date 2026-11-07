@@ -1,0 +1,38 @@
+# F8b: E31d - a declared Copy is not run for `p, q := a, a` (F7) nor for a capture; expected "1 1 1 1 0 0 1 1 1"
+# (s, t are references and repoint), got "1 0 0 0 0 0 0 0 0" built, interpret and baked alike.
+#   /home/user/wt/review7/build/olang f8b_copy_skipped.olang
+import "std/io"
+
+# a declared Copy marking its copies (gen + 1): SPEC E31d - every copy calls it, a capture and a declaration included
+type Cell struct(v I64, gen I64 = 0) {
+    v, gen
+}
+
+fn (c Cell&) Copy() Cell { return Cell(c.v, c.gen + 1) }
+
+type Big struct(xs Array<I64>, gen I64 = 0) {
+    xs, gen
+}
+
+fn (b Big&) Copy() Big { return Big(b.xs, b.gen + 1) }
+
+fn gens() String {
+    a := Cell(1)
+    b := a
+    p, q := a, a
+    f := fn() I64 { return a.gen }
+    s mut Cell& = Cell(9)
+    t mut Cell& = Cell(9)
+    s, t = a, a
+    g := Big(Array<I64>(2, 0))
+    h := fn() I64 { return g.gen }
+    m, n := g, g
+    return $b.gen " " $p.gen " " $q.gen " " $f() " " $s.gen " " $t.gen " " $h() " " $m.gen " " $n.gen
+}
+
+G := gens()
+
+fn main() {
+    io.Println(gens())!
+    io.Println(G)!
+}

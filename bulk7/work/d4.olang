@@ -1,0 +1,44 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+# r not kept: it must end with the constructor
+type W struct(r Res, n I64) {
+    n
+    k := r.id
+}
+
+# r kept under another name
+type V struct(r Res) {
+    held := r
+}
+
+# r kept on one path only
+type U struct(r Res, keep Bool) {
+    m Maybe = Maybe.Some(r) if keep else Maybe.None
+}
+
+type Maybe enum {
+    None
+    Some(r Res)
+}
+
+fn main() {
+    {
+        w := W(Res(1), 2)
+        io.Println("w " $w.k)!
+    }
+    io.Println("after W: " $Ended)!
+    Ended = 0
+    {
+        v := V(Res(2))
+        io.Println("v " $v.held.id " " $Ended)!
+    }
+    io.Println("after V: " $Ended)!
+}

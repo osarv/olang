@@ -1,0 +1,19 @@
+import "std/io"
+
+type Cell struct(v I64) {
+    v
+}
+
+type Big struct(xs Array<I64>, n I64) {
+    xs, n
+}
+
+fn main() {
+    c := Cell(1)
+    f := fn() I64 { return c.v }
+    c.v = 5
+    g := Big(Array<I64>(2, 0), 1)
+    h := fn() I64 { return g.n }
+    g.n = 5
+    io.Println($f() " " $h())!
+}

@@ -1,0 +1,50 @@
+import "std/io"
+
+type Log struct() {
+    seen := Vec<I64>()
+}
+
+type Res unique struct(id I64, log mut Log&) {
+    id, log
+} destruct {
+    log.seen.Push(id)
+}
+
+type Pair struct(a Res, b Res) {
+    a, b
+}
+
+type Srv struct(p Pair, n I64) {
+    p, n
+}
+
+type Opt enum {
+    None
+    One(p Pair)
+}
+
+fn churn(s mut Srv&, l mut Log&) {
+    for i in range 3 {
+        s.p = Pair(Res(i, l), Res(i + 10, l))
+        s.p.a = Res(i + 20, l)
+    }
+}
+
+fn run() String {
+    l := Log()
+    {
+        s Srv = Srv(Pair(Res(100, l), Res(101, l)), 0)
+        churn(s, l)
+        o Opt = Opt.One(Pair(Res(50, l), Res(51, l)))
+        if o == Opt.One: l.seen.Push(o.p.b.id * 1000)
+        o = Opt.None
+    }
+    return $l.seen
+}
+
+G := run()
+
+fn main() {
+    io.Println(run())!
+    io.Println(G)!
+}

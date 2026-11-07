@@ -1,0 +1,35 @@
+# F7 (wrong result: a value shared where a copy is due): a parallel declaration or assignment of a value owning storage
+# makes no copy - `m, n := g, g` (and `m, n = g, g`, and `x, y := g, 1`) leaves g, m and n one array; a Vec gives
+# two names over one buffer with separate counts. Expected "I64[0, 0] I64[5, 0] I64[0, 6] | Vec<I64>[1] Vec<I64>[9, 2]
+# Vec<I64>[1] | ..." ; got "I64[5, 6] I64[5, 6] I64[5, 6] | Vec<I64>[9] Vec<I64>[9, 2] Vec<I64>[9] | ...". Built,
+# interpret and the baked global agree on the wrong value. check.multi stores read(held) with no storeCopy/ownCopy
+# (the single `b := a` copies). Plain arrays are copied correctly.
+#   /home/user/wt/review7/build/olang f7_parallel_no_copy.olang
+import "std/io"
+
+type Big struct(xs Array<I64>) {
+    xs
+}
+
+fn run() String {
+    g := Big(Array<I64>(2, 0))
+    m, n := g, g
+    m.xs[0] = 5
+    n.xs[1] = 6
+    v := Vec<I64>()
+    v.Push(1)
+    w, u := v, v
+    w.Push(2)
+    w[0] = 9
+    arr := Array<I64>(2, 0)
+    c, d := arr, arr
+    c[0] = 3
+    return $g.xs " " $m.xs " " $n.xs " | " $v " " $w " " $u " | " $arr " " $c " " $d
+}
+
+G := run()
+
+fn main() {
+    io.Println(run())!
+    io.Println(G)!
+}

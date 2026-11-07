@@ -1,0 +1,31 @@
+# F1 (D9i, new in f61fd13): a by-value argument moved at its last use while the same call also lends the local by
+# reference - the callee's own copy IS the caller's storage, so its write shows through the other parameter.
+# Expected "1 1" (own is a copy). Got: built "99 1", interpret "99 99"; the baked global G (compile time) is 1, and
+# the same function under `olang test` gives 1 - the three executions disagree.
+#   /home/user/wt/review7/build/olang f1_move_aliased_arg.olang            -> 99 1
+#   /home/user/wt/review7/build/olang interpret f1_move_aliased_arg.olang  -> 99 99
+# (`build -memory` reports "3 copies are moves at a last use".) The move's proof (movable/escapes) treats a
+# reference argument the callee keeps nothing of as no alias, but the borrow is alive for the very call the copy is
+# an argument of.
+import "std/io"
+
+type Buf struct(a Array<I64>) {
+    a
+}
+
+fn peek(r Buf&, own Buf) I64 {
+    own.a[0] = 99
+    return r.a[0]
+}
+
+fn run() I64 {
+    t := Buf(Array<I64>(3, 1))
+    n := peek(t, t)
+    return n
+}
+
+G := run()
+
+fn main() {
+    io.Println($run() " " $G)!
+}

@@ -1,0 +1,21 @@
+type Buf struct(a Array<I64>) {
+    a
+}
+
+fn peek(r Buf&, own Buf) I64 {
+    own.a[0] = 99
+    return r.a[0]
+}
+
+fn run() I64 {
+    t := Buf(Array<I64>(3, 1))
+    n := peek(t, t)
+    return n
+}
+
+G := run()
+assert G == 1, "while compiling: " $G
+
+test "run" {
+    assert run() == 1, "run: " $run()
+}

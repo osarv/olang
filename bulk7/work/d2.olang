@@ -1,0 +1,51 @@
+import "std/io"
+
+type Log struct() {
+    seen := Vec<I64>()
+}
+
+type Res unique struct(id I64, log mut Log&) {
+    id, log
+} destruct {
+    log.seen.Push(id)
+}
+
+type Pair struct(a Res, b Res) {
+    a, b
+}
+
+type Maybe enum {
+    None
+    Some(r Res)
+}
+
+fn reset(p mut Pair&, l mut Log&) {
+    p.a = Res(9, l)
+}
+
+fn text(l Log&) String {
+    b := StringBuilder()
+    for x in l.seen { b.Push($x " ") }
+    return b.ToString()
+}
+
+fn run() String {
+    l := Log()
+    {
+        p Pair = Pair(Res(1, l), Res(2, l))
+        reset(p, l)
+        p = Pair(Res(3, l), Res(4, l))
+        m Maybe = Maybe.Some(Res(5, l))
+        m = Maybe.None
+        m = Maybe.Some(Res(6, l))
+        if m == Maybe.None: return "x"
+    }
+    return text(l)
+}
+
+G := run()
+
+fn main() {
+    io.Println(run())!
+    io.Println(G)!
+}

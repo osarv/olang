@@ -1,0 +1,36 @@
+# F15 (unsound acceptance - a unique value in two places, read after its destructor ran; NEW, T13b/O15): a by-value
+# parameter handed on (its last mention) as one argument of a call that also lends it by reference in an earlier
+# argument - `both(s, s)` with `fn both(r Res&, x Res)` - is accepted (T13b's Landings sees no mention after the
+# landing). Inside, r and x are two copies of one unique value: x is closed and destroyed ("ended 1"), and r still reads
+# the value as it was before (open == true) - a reference to a value whose destructor already ran. The unique type
+# without a destructor shows the duplication the same way (work/u15.olang: r.uses stays 0 while x.uses is 2).
+# Expected: an error (the value is lent and handed on in one call), as Rust's `both(&s, s)`.
+#   /home/user/wt/review7/build/olang f15_unique_lent_and_handed_on.olang   (interpret agrees)
+import "std/io"
+
+type Res unique struct(id I64) {
+    id
+    open Bool = true
+} destruct {
+    io.Println("ended " $id)!
+}
+
+fn (r mut Res&) Close() { r.open = false }
+
+# r and x are one value handed in twice: x ends it, then r is read
+fn both(r Res&, x Res) Bool {
+    x.Close()
+    x.Destroy()
+    return r.open
+}
+
+fn pass(t Token2, s Res) Bool {
+    return both(s, s)
+}
+
+type Token2 struct() { }
+
+fn main() {
+    still := pass(Token2(), Res(1))
+    io.Println("r still open after its value ended: " $still)!
+}

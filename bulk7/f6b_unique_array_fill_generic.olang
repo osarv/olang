@@ -1,0 +1,16 @@
+import "std/io"
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn (t mut Token&) Use() { t.uses++ }
+
+fn fill<T>(x T) Array<T> { return Array<T>(3, x) }
+
+fn main() {
+    a := fill(Token(1))
+    a[0].Use()
+    io.Println($a[1].uses " " $a.Len())!
+}

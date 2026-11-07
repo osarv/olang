@@ -1,0 +1,13 @@
+import "std/io"
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    io.Println("ended " $id)!
+}
+
+fn main() ? Nope {
+    x Res = Res(1)
+    y := Res(2)
+    if x.id + y.id > 0: error Nope
+}

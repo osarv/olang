@@ -1,0 +1,43 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type Maybe enum {
+    None
+    Some(r Res)
+}
+
+# r kept on one path only
+type U struct(r Res, keep Bool) {
+    m Maybe = Maybe.Some(r) if keep else Maybe.None
+}
+
+fn pick(r Res, keep Bool) Maybe {
+    return Maybe.Some(r) if keep else Maybe.None
+}
+
+fn main() {
+    {
+        u := U(Res(1), false)
+        io.Println("u " $(u.m == Maybe.None))!
+    }
+    io.Println("after U(false): " $Ended)!
+    Ended = 0
+    {
+        u := U(Res(2), true)
+        io.Println("u " $(u.m == Maybe.None))!
+    }
+    io.Println("after U(true): " $Ended)!
+    Ended = 0
+    {
+        m := pick(Res(3), false)
+        io.Println("m " $(m == Maybe.None))!
+    }
+    io.Println("after pick(false): " $Ended)!
+}

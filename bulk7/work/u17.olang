@@ -1,0 +1,30 @@
+import "std/io"
+
+type Res unique struct(id I64) {
+    id
+    open Bool = true
+} destruct {
+    io.Println("ended " $id)!
+}
+
+fn (r mut Res&) Close() { r.open = false }
+
+type Holder struct(r Res) {
+    r
+}
+
+fn keep(t Res) Holder {
+    alias := t
+    h Holder = Holder(t)
+    h.r.Close()
+    io.Println("alias sees open " $alias.open)!
+    return h
+}
+
+fn main() {
+    {
+        h := keep(Res(1))
+        io.Println("held " $h.r.open)!
+    }
+    io.Println("done")!
+}

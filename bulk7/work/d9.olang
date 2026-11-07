@@ -1,0 +1,30 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type Box struct() {
+    items := Vec<Res&>()
+}
+
+fn put(b mut Box&, n I64) {
+    x Res = Res(n)
+    b.items.Push(x)
+}
+
+fn main() {
+    b := Box()
+    put(b, 7)
+    io.Println("kept " $b.items[0].id " ended " $Ended)!
+    c := Box()
+    {
+        y Res = Res(8)
+        c.items.Push(y)
+    }
+    io.Println("kept " $c.items[0].id " ended " $Ended)!
+}

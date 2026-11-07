@@ -1,0 +1,31 @@
+import "std/io"
+
+type Node struct(id I64) {
+    id
+    kids := Vec<I64>()
+}
+
+type Tree struct() {
+    nodes := Vec<Node>()
+}
+
+fn (t mut Tree&) add(k I64) I64 {
+    t.nodes.Push(Node(k))
+    t.nodes[0].kids.Push(-k)
+    return t.nodes.Len()
+}
+
+fn run() String {
+    t := Tree()
+    t.nodes.Push(Node(0))
+    for k in range 40 { t.nodes[0].kids.Push(t.add(k)) }
+    for k in range 5 { t.nodes[k % 3].kids.Push(t.add(k)) }
+    return $t.nodes.Len() " " $t.nodes[0].kids.Len() " " $t.nodes[0].kids[0] " " $t.nodes[0].kids[1] " " $t.nodes[1].kids
+}
+
+G := run()
+
+fn main() {
+    io.Println(run())!
+    io.Println(G)!
+}

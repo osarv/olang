@@ -1,0 +1,29 @@
+# F16b (same cause as F16): a lambda capturing t (borrowed, D16c) is called after t was handed on and ended:
+# prints "ended 1" then "open true". /home/user/wt/review7/build/olang f16b_unique_capture_after_handon.olang
+import "std/io"
+
+type Res unique struct(id I64) {
+    id
+    open Bool = true
+} destruct {
+    io.Println("ended " $id)!
+}
+
+fn (r mut Res&) Close() { r.open = false }
+
+type Holder struct(r Res) {
+    r
+}
+
+fn keep(t Res) {
+    f := fn() Bool { return t.open }   # captures t (borrowed, D16c)
+    {
+        h Holder = Holder(t)
+        h.r.Close()
+    }
+    io.Println("captured, after its value ended: open " $f())!
+}
+
+fn main() {
+    keep(Res(1))
+}

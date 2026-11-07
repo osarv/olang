@@ -1,0 +1,22 @@
+# F5 (low; NEW, O15): a test ended by a failed check closes its scopes, destructors included (S19c, P1d) - the value
+# held where its call lands (y, O16) is ended, but a by-value holder's destructor (x) is deferred code, which a failed
+# check skips. The second test sees Ended == 2; expected 21.
+#   /home/user/wt/review7/build/olang test f5_failed_test_skips_drop.olang
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+test "fails holding one by value" {
+    x Res = Res(1)
+    y := Res(2)
+    assert x.id + y.id == 0
+}
+
+test "after" {
+    assert Ended == 21, "ended: " $Ended
+}

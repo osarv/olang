@@ -1,0 +1,22 @@
+# F4c (same cause as F4): a lambda capturing a by-value holder (captures of such variables are borrowed, D16c),
+# returned - x lives where the closure goes, but is ended at mk's end. Prints 'closure 3 ended 3'; expected 'ended 0'.
+#   /home/user/wt/review7/build/olang f4c_drop_captured.olang
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+fn mk(n I64) fn&() I64 {
+    x Res = Res(n)
+    return fn() I64 { return x.id }
+}
+
+fn main() {
+    f := mk(3)
+    io.Println("closure " $f() " ended " $Ended)!
+}

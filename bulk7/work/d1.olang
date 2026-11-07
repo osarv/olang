@@ -1,0 +1,28 @@
+import "std/io"
+
+type Log struct() {
+    seen := Vec<I64>()
+}
+
+type Res unique struct(id I64, log mut Log&) {
+    id, log
+    live Bool = true
+} destruct {
+    log.seen.Push(id)
+}
+
+fn use(r Res&) I64 {
+    s I64 = 0
+    for i in range 2000000 { s += i % 7 }
+    return r.id + s - s + I64(r.log.seen.Len()) * 1000
+}
+
+fn main() {
+    l := Log()
+    n I64 = 0
+    join {
+        x Res = Res(1, l)
+        spawn n = use(x)
+    }
+    io.Println($n " " $l.seen.Len())!
+}

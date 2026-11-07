@@ -1,0 +1,23 @@
+import "std/io"
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn (t mut Token&) Use() { t.uses++ }
+
+fn grow(v mut Vec<Token>&) {
+    for i in range 100 { v.Push(Token(i)) }
+}
+
+fn main() {
+    v := Vec<Token>()
+    v.Push(Token(1))
+    v.Push(Token(2))
+    for t in v {
+        if t.id == 1: v.Push(Token(500))
+        if t.id == 1: grow(v)
+    }
+    io.Println($v.Len() " " $v[0].id)!
+}

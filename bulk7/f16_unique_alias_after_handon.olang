@@ -1,0 +1,35 @@
+# F16 (unsound acceptance / use after release; NEW, T13b/O15): a by-value parameter t of a unique type with a
+# destructor, named by a reference local (`alias := t`, which T13b makes a reference), is handed on at t's last
+# mention (`Holder(t)`) while alias is still alive; Landings counts mentions of t only. The holder ends the value
+# ("ended 1") and alias then reads it - and sees the state from before the hand-on (open true, though h.r.Close() ran):
+# two copies of one unique value, one read after its destructor ran.
+# Expected an error (t is named by alias after the landing), Rust-style.
+#   /home/user/wt/review7/build/olang f16_unique_alias_after_handon.olang   (interpret and -sanitize agree)
+# work/u17.olang: the same returning the holder - alias sees open true while h.r.open is false.
+import "std/io"
+
+type Res unique struct(id I64) {
+    id
+    open Bool = true
+} destruct {
+    io.Println("ended " $id)!
+}
+
+fn (r mut Res&) Close() { r.open = false }
+
+type Holder struct(r Res) {
+    r
+}
+
+fn keep(t Res) {
+    alias := t   # a reference to t (T13b)
+    {
+        h Holder = Holder(t)   # t handed on: its last mention
+        h.r.Close()
+    }                          # h ends here: "ended 1"
+    io.Println("alias, after its value ended: id " $alias.id " open " $alias.open)!
+}
+
+fn main() {
+    keep(Res(1))
+}

@@ -1,0 +1,39 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+fn mk(id I64, bad Bool) Res ? Nope {
+    x Res = Res(id)
+    errdefer x.Destroy()
+    if bad: error Nope
+    return x
+}
+
+fn deferred(id I64) I64 {
+    x Res = Res(id)
+    defer x.Destroy()
+    return x.id
+}
+
+fn main() {
+    {
+        r := try mk(1, true) catch Nope { Res(0) }
+        io.Println("got " $r.id " ended " $Ended)!
+    }
+    io.Println("ended " $Ended)!
+    Ended = 0
+    {
+        r := try mk(2, false) catch Nope { Res(0) }
+        io.Println("got " $r.id " ended " $Ended)!
+    }
+    io.Println("ended " $Ended)!
+    Ended = 0
+    deferred(3)
+    io.Println("deferred ended " $Ended)!
+}

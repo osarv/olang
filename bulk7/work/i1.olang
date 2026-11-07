@@ -1,0 +1,16 @@
+import "std/io"
+
+type Buf extends Array<Char>
+
+fn main() {
+    t := $12345
+    s := t
+    x := Buf(s)
+    x[0] = 'z'
+    io.Println($t " " $x)!
+    a := "abc"
+    y := Buf(a)
+    y[0] = 'q'
+    io.Println($y)!
+    io.Println("abc")!
+}

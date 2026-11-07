@@ -1,0 +1,10 @@
+Ran mut I64 = 0
+
+test "fails with a defer" {
+    defer { Ran = 1 }
+    assert Ran == 5
+}
+
+test "after" {
+    assert Ran == 1, "ran: " $Ran
+}

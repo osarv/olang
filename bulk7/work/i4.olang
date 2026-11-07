@@ -1,0 +1,28 @@
+import "std/io"
+
+type Buf extends Array<Char>
+
+type Holder struct(r mut Array<Char>&) {
+    r
+}
+
+fn poke(h Holder&) { h.r[0] = 'z' }
+
+fn main() {
+    buf := Array<Char>(3, 'a')
+    h := Holder(buf)
+    s := String(buf)
+    poke(h)
+    io.Println(s)!
+    b2 := Array<Char>(3, 'b')
+    r mut Array<Char>& = b2
+    t := String(b2)
+    r[0] = 'y'
+    io.Println(t)!
+    b3 := Array<Char>(3, 'c')
+    f := fn() { r[1] = 'w' }
+    r = b3
+    u := String(b3)
+    f()
+    io.Println(u)!
+}

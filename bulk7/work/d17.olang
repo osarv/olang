@@ -1,0 +1,28 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type Pair struct(a Res, b Res) {
+    a, b
+}
+
+type Box struct(p Pair) {
+    p
+}
+
+fn get(b mut Box&) mut Pair& { return b.p }
+
+fn main() {
+    {
+        b Box = Box(Pair(Res(1), Res(2)))
+        get(b).a = Res(3)
+        io.Println("stored, ended " $Ended)!
+    }
+    io.Println("ended " $Ended)!
+}

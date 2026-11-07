@@ -1,0 +1,44 @@
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type Named trait {
+    Id() I64
+}
+
+fn (r Res&) Id() I64 { return r.id }
+
+fn take(r Res) I64 { return r.id }
+
+fn main() {
+    f := fn(r Res) I64 { return r.id }
+    {
+        io.Println("lambda " $f(Res(1)))!
+    }
+    io.Println("after lambda: " $Ended)!
+    Ended = 0
+    g fn&(r Res) I64 = take
+    {
+        io.Println("value " $g(Res(2)))!
+    }
+    io.Println("after fn value: " $Ended)!
+    Ended = 0
+    {
+        a any Named& = Res(3)
+        io.Println("any " $a.Id())!
+    }
+    io.Println("after any: " $Ended)!
+    Ended = 0
+    {
+        x Res = Res(4)
+        a any Named& = x
+        io.Println("any of var " $a.Id())!
+    }
+    io.Println("after any of var: " $Ended)!
+}

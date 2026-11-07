@@ -1,0 +1,18 @@
+import "std/io"
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn (t mut Token&) Use() { t.uses++ }
+
+fn main() {
+    v := Vec<Token>()
+    v.Push(Token(1))
+    t := Token(2)
+    w := v.Iter().Partition(fn(t Token&) Bool { return true })
+    t.Use()
+    v[0].Use()
+    io.Println($w)!
+}

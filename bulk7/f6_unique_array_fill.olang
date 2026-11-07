@@ -1,0 +1,27 @@
+# F6 (unsound acceptance; NEW, T13b 9f80557): `Array<T>(n, fill)` copies its fill value n times, and for a unique T it is
+# accepted - written directly with an existing value (`Array<Token>(3, t)`), with a fresh one (`Array<Token>(2,
+# Token(5))`), and inside a generic (`fn fill<T>(x T) Array<T> { return Array<T>(3, x) }` called with `Token(1)`, no
+# "fill needs a copy" at the call). Every other duplication route tried is refused (T[x, x], comprehensions, Repeat,
+# ToVec, Copy, dup returning x twice, Cycle's Next). Prints "1 1 0" and "1 0": independent copies of one unique value
+# (expected: an error naming '&' / "needs a copy").
+#   /home/user/wt/review7/build/olang f6_unique_array_fill.olang     (interpret agrees)
+# Generic form: work/u1.olang prints "0 3".
+import "std/io"
+
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+
+fn (t mut Token&) Use() { t.uses++ }
+
+fn main() {
+    t := Token(1)
+    a := Array<Token>(3, t)
+    a[0].Use()
+    t.Use()
+    io.Println($t.uses " " $a[0].uses " " $a[1].uses)!
+    c := Array<Token>(2, Token(5))
+    c[0].Use()
+    io.Println($c[0].uses " " $c[1].uses)!
+}

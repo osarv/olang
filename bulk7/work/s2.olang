@@ -1,0 +1,26 @@
+import "std/io"
+
+type Big struct(xs Array<I64>) {
+    xs
+}
+
+fn run() String {
+    v := Vec<Big>()
+    v.Push(Big(Array<I64>(1, 1)))
+    v.Push(Big(Array<I64>(1, 2)))
+    g := Big(Array<I64>(1, 9))
+    v[0], v[1] = v[1], v[0]
+    v[0].xs[0] = 20
+    a := v[1]
+    v[1], v[0] = g, g
+    v[0].xs[0] = 30
+    g.xs[0] = 40
+    return $v " " $a.xs " " $g.xs
+}
+
+G := run()
+
+fn main() {
+    io.Println(run())!
+    io.Println(G)!
+}

@@ -1,0 +1,39 @@
+# F3 (wrong result - a destructor never runs; NEW, O15 48a4e5b): a by-value parameter handed on as a call's argument
+# (its drop flag cleared where it is read, check.handOn) when a LATER argument of the same call leaves first - an error
+# passed on by `try`, or a clause's `return` - so the call that would take the value never happens, and nothing ends it.
+# Expected "after a failure: 1", "after a success: 12". Got 0 and 2 (Res(1) never ended), built and interpret alike.
+# Same with a constructor `Holder(r, try num(bad))` and with `try num(bad) catch Nope { return -1 }`.
+#   /home/user/wt/review7/build/olang f3_handon_then_leave.olang
+import "std/io"
+
+Ended mut I64 = 0
+
+type Res unique struct(id I64) {
+    id
+} destruct {
+    Ended = Ended * 10 + id
+}
+
+type Holder struct(r Res, n I64) {
+    r, n
+}
+
+fn wrap(r Res, n I64) Holder { return Holder(r, n) }
+
+fn num(bad Bool) I64 ? Nope {
+    if bad: error Nope
+    return 4
+}
+
+# r is handed on as wrap's first argument; the second argument fails before wrap is called
+fn pass(r Res, bad Bool) I64 ? Nope {
+    h := wrap(r, try num(bad))
+    return h.n
+}
+
+fn main() {
+    try pass(Res(1), true) catch Nope { }
+    io.Println("after a failure: " $Ended)!
+    try pass(Res(2), false) catch Nope { }
+    io.Println("after a success: " $Ended)!
+}

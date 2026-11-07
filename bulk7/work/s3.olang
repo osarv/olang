@@ -1,0 +1,13 @@
+import "std/io"
+
+type Token unique struct(id I64) {
+    id
+}
+
+fn main() {
+    v := Vec<Token>()
+    v.Push(Token(1))
+    v.Push(Token(2))
+    v[0], v[1] = v[1], v[0]
+    io.Println($v[0].id " " $v[1].id)!
+}

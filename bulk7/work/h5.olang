@@ -1,0 +1,35 @@
+import "std/io"
+
+type Node struct(id I64, kids Vec<I64>) {
+    id, kids
+}
+
+fn find(v Vec<Node>&, want I64) Node {
+    for i in range v.Len() {
+        n := v[i]
+        if n.id == want: return n
+    }
+    return Node(-1, Vec<I64>())
+}
+
+fn findKids(v Vec<Node>&, want I64) Vec<I64> {
+    for i in range v.Len() {
+        n := v[i]
+        if n.id == want: return n.kids
+    }
+    return Vec<I64>()
+}
+
+fn main() {
+    v := Vec<Node>()
+    for i in range 4 {
+        ks := Vec<I64>()
+        for j in range 50 { ks.Push(i * 100 + j) }
+        v.Push(Node(i, ks))
+    }
+    a := find(v, 2)
+    b := findKids(v, 3)
+    junk := Vec<I64>()
+    for _ in range 500 { junk.Push(-1) }
+    io.Println($a.id " " $a.kids[7] " " $b[7] " " $junk[0])!
+}

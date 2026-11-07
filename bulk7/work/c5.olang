@@ -1,0 +1,19 @@
+import "std/io"
+
+type Big struct(xs Array<I64>) {
+    xs
+}
+
+fn two() Big, Big { return Big(Array<I64>(2, 0)), Big(Array<I64>(2, 0)) }
+
+fn main() {
+    g := Big(Array<I64>(2, 0))
+    m, n := two()
+    m, n = g, g
+    m.xs[0] = 5
+    n.xs[1] = 6
+    io.Println($g.xs " " $m.xs " " $n.xs)!
+    x, y := g, 1
+    x.xs[0] = 7
+    io.Println($g.xs " " $x.xs " " $y)!
+}
