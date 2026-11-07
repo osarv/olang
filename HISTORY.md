@@ -30386,3 +30386,82 @@ and of the free mode (two programs, 19 places freeing at once) found nothing. sc
 slices, a generator's borrowed words, a view handed back of what a helper builds, closures over a turn's node - kept in
 lists outliving them); round 2's view placements counted no join of unordered scope variables (`wLocals`: 0 on the new
 programs, the same 3 as before on compiler/).
+
+## The unique hand-on move (T13b, O8d, D9i; 2026-11-07, wt-handon)
+
+**Why.** A unique value handed on out of a by-value parameter - `Map.Put(key, value)` storing `value`, `Vec.Push(x)`,
+a constructor taking it into a field - was copied at every hand-on (check's `valueArg`, `partCopy`, `storeCopy` and a
+typed field's declaration made a `MakeKind.Copy` wherever the type owns parts, QCE), so the place it came from was never
+its only holder and early freeing could release nothing a Map's slot let go of: put and taken, replaced by Put, put and
+removed stayed at 388, 260 and 388 MB over 1M cycles of a 256-byte value (the drop-order round's "Unique Part C, built"
+left them so; its attempt to move instead read freed storage under `-sanitize`, and sec8r2 wrote down a five-step
+plan: the move in check, a scope variable for such a parameter, section 8's read giving its owned storage a term, free
+reading the move, the gates).
+
+**What was built.**
+- check: `uniqueMoved` - a unique value handed on out of a by-value parameter at its last mention (uniqueLand's hand-on
+  path) is moved: the copy sites skip `ownCopy`. `handOn` marks a move with a Gone Seq even where the parameter holds no
+  destructors (an empty one), so the passes below can read the move off the typed core; a constructor's pun of a
+  unique parameter is marked so too (it never copied, but nothing said it moved).
+- Section 8 needed nothing: step 2 and 3 of the plan were already true. `types.HoldsRefs` counts a part that is an
+  array of a run-time length held by value (`OwnedPart`, listHolds' `owned`), so a by-value parameter of a type owning
+  parts already has a scope variable and its read gives `Val.existing(Var(k))`; storing the moved value into a longer
+  place is fitted against the slot's storage term, an obligation of the function (O10b), and its callers build the
+  argument where the value is kept (O18b). `olang explain` shows it: `fn keep(b mut Box&, r Res)` now says `# scopes: r
+  outlives b`. What made the drop-order round's move read freed storage was not reproduced - every pattern, the
+  corpus's unique and drops tests and the early-free fuzzer run clean under `-debug -sanitize` and `interpret`.
+- free.olang (early freeing): `parWhole` - by body, the parameters whose unique value it moves whole into a struct held
+  in place (assign's leaf paths, `storedWhole`) or into its own instance's field (`wholeField`); each call judges the
+  argument given such a parameter (`wholeArg`) as `copyInto` judges a value stored into a struct held in place - a
+  constructor of the type stores into its leaves itself, any other value gives them one not made for them - or, where the
+  argument is the caller's own moved parameter, passes the requirement on. `movedPar` reads the move (the Gone Seq, or a
+  held local storeOver moved it into - `heldPar`), and a moved read is no view of its leaves (`movedRead`). `paramOf`
+  sees a moved value as its parameter, so a moved value stored into a place of its own (an owner place, a no-destructor
+  `Res` as a `MapEntry`'s field) takes the parameter-store path.
+- typed/lower/free: a constructor's instance viewing only unique values moved out of parameters is its own - no D9h copy
+  where it is kept (`typed.MovedArg`, `FreshViews` accepting one, `ViewsMoved` skipping `viewCtor`), as D9i's moved
+  locals already were: `Wrap(r, i)` stored into a Map was copied again where kept (the pun makes the instance view `r`).
+- lower: a constructor's field holding an array of a run-time length that the scope pass keeps in the instance scope
+  keeps its slot - the pair naming the elements - in the frame, only its elements made in the instance (`fieldStor`,
+  `storageOf`). The slot had been allocated in the instance scope, 16 bytes per constructor call, which grew wherever an
+  instance is built where it is kept - and the move builds every Map value there now (mapput measured 18 MB with it).
+  Every Vec, Map and StringBuilder constructor had paid it.
+
+**Decided (mine).**
+1. The move is check's (`uniqueMoved` where uniqueLand takes the hand-on path); section 8's obligation on the
+   parameter does the rest, so the evaluator, lowering and emit are unchanged (the evaluator never copied by reading
+   the plan: it copies where `ownCopy` is written, and a move is unobservable for a unique value).
+2. A lambda keeps its own copy: it is called only through a function value, whose caller can meet no obligation
+   (T22a) - moving there turned `fn(b Buf) { vr.Push(b) }` into T22a's "keeps 'b' beyond the call" (and its "keep a copy
+   instead" is no advice for a unique value). Named functions move: one storing a unique value it is given into what
+   outlives the call is no function value now (`f := keepIt` refused, checks/cases/t13bmovedvalue) - write a lambda
+   calling it. sec8r3's function values carrying their relations may lift that.
+3. Early freeing judges a moved chain at the call that began it, by `copyInto`'s rules - a constructor of the type, else
+   keep; a call's result handed on (`m.Put(k, mk())`) keeps, as a store of it always did.
+4. `r := m.Take(k)!` stays held where the call lands (O16), registered there, which releases nothing, so the place
+   keeps; `r Res = m.Take(k)!` (a holder by value, O15) releases at its block's end. The earlyfree fixture writes the
+   holder; releasing where a registered value is ended is left.
+5. A function handing back a view of a moved parameter (`fn wrap(r Res) Wrap { return Wrap(r, 0) }`) is still copied
+   where its result is kept (D9h): FreshViews is a constructor's rule. Left.
+6. fuzz/scopegen's early-free mode gained hand-on scenarios (one in three): each its own unique `Buf` type owning an
+   array, handed on one call deep, two, through a constructor's pun, into a Map and a Vec, replaced, removed, taken out to
+   holders, with views kept across the let-goes in half of them (which must keep). Runs: `fuzz free 1 80 1 6` - 355
+   scenarios, 125 refused (the existing refusal shapes), 320 places freeing at once, 0 findings; `fuzz scope 1 24 1 12`
+   as the base compiler (0 findings, the same refusals).
+
+**Measured.** Over 1M cycles of a unique `Res` with a destructor owning `Array<I64>(32)`, `Map<I64, Res>`, key `i %
+64`: put + taken (`r Res = m.Take(k)!`) 388 MB -> 1.9 MB, replaced by Put 260 -> 1.9, put + removed 388 -> 1.9, through a
+constructor's pun 260 -> 1.9, a Vec pushed and truncated (dropvec) 1.9 -> 1.9; each under `-debug -sanitize` and
+`interpret` printing the same. Bench (callgrind, baseline x86-64): binarytrees, sum, nbody, spectral, fannkuch,
+mandelbrot, matmul, sha256 unchanged; text -44, vec -13, dispatch -10/-539, regex -1,526 instructions (the constructors'
+field slots); the IR differs only there.
+
+**B8 not built: StringBuilder's ToString handing its buffer over.** The move gives nothing to a builder: it is no unique
+value and `ToString` takes a read-only receiver. Two shapes were tried: `return String(b.chars.View())` reads the
+characters through View's borrowed reference, which `ViewWalk.Roots` does not trace through a call (`refRoots` of a
+call is -1), so it is still the function's own copy - one block copy instead of the element loop: text -0.16%, regex
++0.03% (short strings pay the copy's call); reverted. Handing the buffer over needs (a) D9h's roots traced through a
+call handing back a borrowed reference, so the String is a view its caller copies only where something could tell, and
+(b) for the common build-and-return shape, the builder local lifted to where its text goes and that copy left out
+where it is the builder's last use - D9i's moved-local rule extended from constructors to a call whose result views its
+receiver. Both are D9h/D9i work of their own; the copy stays ~1% of a builder-heavy run (the tidy round's measure).

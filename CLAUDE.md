@@ -666,8 +666,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   or payload of a value made, a by-value parameter or receiver, a result) given an existing one is an error naming
   `File&`. A by-value parameter, fresh at every call, hands its value on once where it is mentioned last - judged on every
   path (`typed.Landings`: another branch is no "after", a loop's next turn is, deferred code, tasks and join clauses run
-  after everything) - so `Vec.Push(x T)` and `Map.Put` store unique elements as written; a returned whole local is the
-  result itself (O26a). A unique type declares no Copy, and `x.Copy()` of one is an error; a struct, enum, array or
+  after everything) - so `Vec.Push(x T)` and `Map.Put` store unique elements as written, moved, never copied (since
+  2026-11-07, "The unique hand-on is a move" below); a returned whole local is the result itself (O26a). A unique type declares no Copy, and `x.Copy()` of one is an error; a struct, enum, array or
   collection holding a unique part by value is unique unless it declares a Copy (`types.Unique`, structural, cached once
   every part is typed; `Table.MarkUnique` from `generic.DeclFor`); unique and immut are never one type's (both words, one
   over the other, an immut type holding a unique part); not on a trait, an extern type or a function type. A generic
@@ -1665,12 +1665,31 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   a value with destructors is freed early where a `Destroy()` ends it, or where a holder by value ends it (unique Part
   C, O8d condition 4, 2026-11-07 wt-dropord, mine: a destructor whose type is never registered with a scope, outside
   test builds, is walked as a call where its holder lets go, its let-goes judged there; a holder's drop releases the
-  holder's leaves after the destructor - a Vec of them truncated 260 MB -> 1.9 MB) - but not a Map's value put and
-  taken or replaced (388/260 MB unchanged): every hand-on of a unique value to a by-value parameter is a copy (QCE's
-  `ownCopy`; moving it instead read freed storage - section 8 places a by-value parameter's parts as the frame's own),
-  and a constructor viewing such a copy is copied again where kept (D9h), each copy's source never released (HISTORY.md
-  "Unique Part C, built"); a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
-  port's §8 pass.
+  holder's leaves after the destructor - a Vec of them truncated 260 MB -> 1.9 MB), and a Map's unique values put and
+  taken, replaced or removed since the hand-on move (388/260/388 MB -> 1.9 MB, the next entry) - but not one taken into
+  a `:=` local (`r := m.Take(k)!` is held where the call lands, registered there, O16, which releases nothing: write
+  `r Res = m.Take(k)!`), nor one handed back by a function viewing it (D9h's caller copy); a value `List<String&>` has
+  one scope for chunks and referents (G11); a few over-rejections are left for the port's §8 pass.
+- **The unique hand-on is a move (T13b, O8d, D9i, 2026-11-07 wt-handon, LIST.md's hand-on move; details mine).** A
+  unique value handed on out of a by-value parameter at its last mention - a by-value argument, a store, a part of a
+  value made, a field declared with its type, a constructor's pun - is moved, never copied (check's `uniqueMoved`: the
+  copy sites skip `ownCopy`; `handOn` marks the move with a Gone Seq). §8 needed nothing new: a by-value parameter of a
+  type owning parts already has a scope variable (HoldsRefs counts owned parts), so storing the moved value into a longer
+  place is the function's obligation and its callers build the argument there (sec8r2's analysis had it as missing).
+  Early freeing (free.olang) reads the move: `parWhole` by body (the parameters moved whole into a struct held in place
+  or an instance's field), each call judging its argument as `copyInto` judges a value stored into such a struct - a
+  constructor of the type, else not made for the leaves - or passing it on (`wholeArg`, `movedPar`, a moved read no
+  view of its leaves); a constructor's instance viewing only moved parameters is its own (`typed.MovedArg`,
+  `FreshViews`, `ViewsMoved`: no D9h copy). Decided (mine): a lambda keeps its own copy (it is called only through a
+  function value, which can carry no obligation, T22a); a named function moving a unique value into what outlives the
+  call is no function value (T22a, the cost: `f := keepIt` refused - write a lambda calling it); a constructor's
+  run-time array field keeps its slot in the frame, only its elements in the instance (lower's `fieldStor`: 16 bytes per
+  constructor call grew where the instance lives - every Vec, Map and StringBuilder constructor's, bench a few
+  instructions fewer). Measured over 1M cycles: put + taken 388 MB -> 1.9 MB, replaced 260 -> 1.9, put + removed 388 ->
+  1.9, a pun through a constructor 260 -> 1.9; bench's callgrind counts unchanged or lower (regex -1.5k of 156M).
+  checks' earlyfree maptake/mapput/mapdrop, cases t13bhandonlambda and t13bmovedvalue, tests/unique.olang's shelves,
+  fuzz/scopegen's hand-on scenarios (the early-free mode). B8 (StringBuilder's ToString handing its buffer over) not
+  built: HISTORY.md "The unique hand-on move".
 - **More scope rules (O2d, O13a, O13c, O14b/O14c, O16, O18a, O20, O26).** A binding records the depth it was made at;
   each return in a loop is judged again by later assignments in that loop; a call's result carries its callee's result
   bindings; a by-value parameter's references returned are an obligation; destructors register once per constructor
