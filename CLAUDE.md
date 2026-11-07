@@ -923,8 +923,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   one without loses its lines) and the runtime's sampler (`std/runtime/prof.ll`, hooked into runtime.ll by `; @prof`
   lines a compiler without it reads as comments) - objects `.prof`, nothing of it in any other build (their IR is the
   same as before; checked on nbody and regex). Each runtime thread has a `CLOCK_THREAD_CPUTIME_ID` timer signalling
-  itself each ms; the handler walks frame pointers (bounded by the thread's first frame and its stack pointer, 128 deep)
-  into a reserved buffer, no allocation, no lock; a sample weighs 1 + the timer's overrun (a 250 Hz kernel: one each 4 ms
+  itself each ms; the handler, on the thread's alternate stack (2026-11-07), walks frame pointers (bounded by the
+  thread's first frame and its stack pointer, 128 deep) into a reserved buffer, no allocation, no lock - a record's
+  length stored first, marked pending, so the end waits a bounded while for unfinished records and the reader steps
+  over one left pending; a sample weighs 1 + the timer's overrun (a 250 Hz kernel: one each 4 ms
   weighing 4 - their sum is the CPU time, 8.575 s against 8.579 s measured). Written at exit, os.Exit, an error leaving
   main, a failed check and SIGINT/SIGTERM/SIGHUP left to end the program (never on a crash, never by a forked child) to
   `build/profile/NAME.samples` with /proc/self/maps. The driver forks and execs the program (its stdin, output and

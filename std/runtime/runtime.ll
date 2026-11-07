@@ -3313,14 +3313,24 @@ out:
 ; of the widest vector registers and the handler's few calls
 define void @__olang_alt_stack() {
 entry:
-  %ss = alloca [24 x i8], align 8
-  %have = load ptr, ptr @__olang_crash_stack
-  %made = icmp ne ptr %have, null
-  br i1 %made, label %done, label %check
-check:
   %m = load atomic ptr, ptr @__olang_crash_msg acquire, align 8
   %none = icmp eq ptr %m, null
   br i1 %none, label %done, label %make
+make:
+  call void @__olang_alt_stack_make()
+  br label %done
+done:
+  ret void
+}
+
+; this thread's alternate stack made, where it has none: OnCrash's handler runs on it, and so does the profiler's
+; sampler (B20), which makes it at a thread's start - the one stack serves both, given back as the thread ends
+define void @__olang_alt_stack_make() {
+entry:
+  %ss = alloca [24 x i8], align 8
+  %have = load ptr, ptr @__olang_crash_stack
+  %made = icmp ne ptr %have, null
+  br i1 %made, label %done, label %make
 make:
   %mem = call ptr @malloc(i64 65536)
   %got = icmp ne ptr %mem, null

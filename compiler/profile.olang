@@ -150,7 +150,8 @@ fn word(b Array<U8>&, i I64) I64 {
 
 # a profile's bytes read: its header ("OLPROF01", the period, its words of records, the samples dropped, the threads),
 # the records - a header word (the frame count, and above bit 8 the weight) then the addresses - and the map. A record
-# whose header is still zero was being written as the program ended: it and what follows are left out
+# whose header is still pending (bit 63 set over its count) was being written as the program ended: it is stepped over;
+# one whose header is still zero ends the records, since nothing says where the next begins
 fn Profile.Read(b Array<U8>&) Profile ? Bad {
     p := Profile()
     if b.Len() < 40 or String(b[:8]) != "OLPROF01" { error Bad.Malformed }
@@ -164,6 +165,10 @@ fn Profile.Read(b Array<U8>&) Profile ? Bad {
         h := word(b, 5 + i)
         n := h & 0xFF
         if h == 0 or n == 0 or i + 1 + n > words { break }
+        if h < 0 {
+            i += n + 1
+            continue
+        }
         p.Samples.Push(Sample(h >> 8, p.Addrs.Len(), n))
         for k in range n { p.Addrs.Push(word(b, 5 + i + 1 + k)) }
         i += n + 1
@@ -839,6 +844,12 @@ fn sampleFile(words Array<I64>&, maps String&) Array<U8> {
     }
     for ch in maps { b.Push(U8(ch)) }
     return b.ToArray()
+}
+
+test Profile.Read "a record still pending as the program ended is stepped over, the records after it read" {
+    pending := I64.Min | 1
+    p := try Profile.Read(sampleFile(I64[(1 << 8) | 1, 0x5010, pending, 0, (2 << 8) | 1, 0x5030], ""))
+    assert p.Samples.Len() == 2 and p.Addrs.Len() == 2 and p.Addrs[1] == 0x5030 and p.Total() == 3
 }
 
 test Profile.Read "a samples file's header, records and map; a record cut short ends the records" {

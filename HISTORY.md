@@ -30090,3 +30090,17 @@ program differed by the compiler's pid. Now build.olang writes `source_filename 
 directory) at the top of every IR it hands clang, unless the IR names one already (a C import's, which clang wrote,
 says "-"). Measured: a program built twice, plain and `-debug`, in a clean `build/` each time gives the same bytes; the
 compiler's own bootstrap still compares its second and third builds equal.
+
+**C12, the profiler's handler.** Two gaps HI:26403 recorded. (1) The SIGPROF handler ran on the stack it samples, so a
+thread near the end of its stack (deep recursion, a small os.RunOnStack stack) could be pushed past it by the handler's
+own 1 KB of frames. It now runs on the thread's alternate stack (SA_ONSTACK): `__olang_prof_thread` makes one at a
+thread's start through runtime.ll's `__olang_alt_stack_make` - the 64 KB stack OnCrash's handler already used, now
+made by either and given back as the thread ends (`__olang_alt_stack_free`, unchanged). (2) A record another thread
+had reserved but not finished when `__olang_prof_stop` ran had a zero header, and olang profile read no record past it
+- every later sample lost. Now the handler stores the record's length first, marked pending (bit 63 of the header
+word), then the addresses, then the header (release, as before); stop waits for unfinished records (`__olang_prof_settle`,
+sched_yield at most 1000 times over the walk - a handler the stopping thread itself interrupted never finishes) and
+writes them all; profile.olang steps over a record still pending, its length known, and stops only at one whose length
+was never stored (the instant between the reservation and the first store). Decided (mine): the alternate stack is
+shared with OnCrash's rather than a second one per thread. A test of Profile.Read reads past a pending record; a
+profile of a program with deep recursion and three tasks reads as before.

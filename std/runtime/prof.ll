@@ -19,13 +19,16 @@
 ; below the stack pointer, so it reads only the thread's own stack whatever a C function left in the register), at most
 ; MaxDepth return addresses, and copies the stack into the buffer as one record: a header word (the frame count, and
 ; above bit 8 the periods the sample stands for - 1 plus the timer's overrun, the expirations the kernel's tick folded
-; into this signal) then the addresses, leaf first. A record's space is reserved with one atomic add, and its header
-; is stored last (release), so a record is complete once its header is not zero. A full buffer drops what follows,
-; counted. Nothing is allocated, nothing locked.
+; into this signal) then the addresses, leaf first. A record's space is reserved with one atomic add, its length
+; stored at once marked pending (bit 63 of the header word), and its header stored last (release), so a record is
+; complete once its header is positive. A full buffer drops what follows, counted. Nothing is allocated, nothing
+; locked. The handler runs on its thread's alternate stack (SA_ONSTACK), so a thread near the end of its own stack is
+; sampled as any other.
 ;
 ; At exit - main returning, os.Exit, an error escaping main (all three through exit(), so atexit), a failed check's
 ; abort (runtime.ll's hook), or SIGINT, SIGTERM or SIGHUP where the program has left them to end it (an interrupt typed
-; at the terminal) - __olang_prof_stop writes the file with open/write/close alone (so it may run where a signal
+; at the terminal) - __olang_prof_stop waits, a bounded while, for records other threads reserved and have not
+; finished (__olang_prof_settle), then writes the file with open/write/close alone (so it may run where a signal
 ; arrived): a header - "OLPROF01", the period in nanoseconds, the words of records, the samples dropped, the threads
 ; sampled - then the records, then /proc/self/maps as it reads at that moment, which olang profile needs to find each
 ; address's file. Only the process that started the profile writes it: a child it forks inherits the atexit, not the
@@ -39,6 +42,7 @@ declare i32 @getpid()
 declare i32 @timer_create(i32, ptr, ptr)
 declare i32 @timer_settime(ptr, i32, ptr, ptr)
 declare i32 @timer_delete(ptr)
+declare i32 @sched_yield()
 
 ; the buffer (mmap'd, its pages taken as they are written) and its size in words, the words reserved so far, the samples
 ; dropped, whether sampling is on, the threads given a timer, and the file the samples go to
@@ -89,8 +93,10 @@ mapped:
   call void @llvm.memset.p0.i64(ptr %sa, i8 0, i64 @@SIGACTION_BYTES@@, i1 false)
   store ptr @__olang_prof_handler, ptr %sa
   %flagsp = getelementptr i8, ptr %sa, i64 @@SIGACTION_FLAGS@@
-  ; SA_SIGINFO | SA_RESTART: the handler is given the context, and a system call it interrupts goes on
-  store i32 268435460, ptr %flagsp
+  ; SA_SIGINFO | SA_RESTART | SA_ONSTACK: the handler is given the context, a system call it interrupts goes on, and it
+  ; runs on its thread's alternate stack (made by __olang_prof_thread) - never on the stack it samples, which may be
+  ; near its end
+  store i32 402653188, ptr %flagsp
   %sr = call i32 @sigaction(i32 27, ptr %sa, ptr null) ; SIGPROF
   %pid = call i32 @getpid()
   store i32 %pid, ptr @__olang_prof_pid
@@ -133,8 +139,9 @@ entry:
   ret void
 }
 
-; a thread's start: its top frame kept and its CPU-time timer made, signalling SIGPROF to this thread each PeriodNs.
-; Nothing while no profile is being taken
+; a thread's start: its top frame kept, its alternate stack made (the handler runs there; runtime.ll's, shared with
+; OnCrash's and given back as the thread ends) and its CPU-time timer made, signalling SIGPROF to this thread each
+; PeriodNs. Nothing while no profile is being taken
 define void @__olang_prof_thread(ptr %top) {
 entry:
   %ev = alloca [64 x i8], align 8
@@ -146,6 +153,7 @@ entry:
 make:
   %t = ptrtoint ptr %top to i64
   store i64 %t, ptr @__olang_prof_top
+  call void @__olang_alt_stack_make()
   call void @llvm.memset.p0.i64(ptr %ev, i8 0, i64 64, i1 false)
   %signo = getelementptr i8, ptr %ev, i64 8
   store i32 27, ptr %signo ; SIGPROF
@@ -264,6 +272,9 @@ drop:
 write:
   %buf = load ptr, ptr @__olang_prof_buf
   %rec = getelementptr i64, ptr %buf, i64 %at
+  ; the record's length first, marked pending (bit 63), so a reader at the end can step over one never finished
+  %pend = or i64 %cnt, -9223372036854775808
+  store atomic i64 %pend, ptr %rec monotonic, align 8
   %body = getelementptr i64, ptr %rec, i64 1
   %bytes = shl i64 %cnt, 3
   call void @llvm.memcpy.p0.p0.i64(ptr %body, ptr %frames, i64 %bytes, i1 false)
@@ -318,7 +329,8 @@ head:
   %used = load atomic i64, ptr @__olang_prof_used monotonic, align 8
   %cap = load i64, ptr @__olang_prof_cap
   %over = icmp ugt i64 %used, %cap
-  %words = select i1 %over, i64 %cap, i64 %used
+  %reserved = select i1 %over, i64 %cap, i64 %used
+  %words = call i64 @__olang_prof_settle(i64 %reserved)
   %magic = load i64, ptr @__olang_prof_magic, align 1
   store i64 %magic, ptr %hdr
   %h1 = getelementptr i64, ptr %hdr, i64 1
@@ -353,4 +365,46 @@ closing:
   br label %out
 out:
   ret void
+}
+
+; the words of records worth writing at the end, of the first %words reserved: a record a handler on another thread
+; reserved and has not finished is waited for (sched_yield, 1000 times at most over the whole walk - a handler this very
+; thread interrupted to end the program never finishes); one still pending is kept, its length known, for olang
+; profile to step over; one whose length was never stored ends the records, since nothing says where the next begins
+define internal i64 @__olang_prof_settle(i64 %words) {
+entry:
+  %buf = load ptr, ptr @__olang_prof_buf
+  br label %loop
+loop:
+  %i = phi i64 [ 0, %entry ], [ %next, %step ]
+  %left = phi i64 [ 1000, %entry ], [ %left1, %step ]
+  %more = icmp ult i64 %i, %words
+  br i1 %more, label %look, label %out
+look:
+  %leftw = phi i64 [ %left, %loop ], [ %left2, %wait ]
+  %rec = getelementptr i64, ptr %buf, i64 %i
+  %h = load atomic i64, ptr %rec acquire, align 8
+  %done = icmp sgt i64 %h, 0
+  %spent = icmp eq i64 %leftw, 0
+  %go = or i1 %done, %spent
+  br i1 %go, label %decide, label %wait
+wait:
+  %y = call i32 @sched_yield()
+  %left2 = sub i64 %leftw, 1
+  br label %look
+decide:
+  %never = icmp eq i64 %h, 0
+  br i1 %never, label %out, label %step
+step:
+  %cnt = and i64 %h, 255
+  %empty = icmp eq i64 %cnt, 0
+  %n1 = add i64 %cnt, 1
+  %next = add i64 %i, %n1
+  %left1 = add i64 %leftw, 0
+  %past = icmp ugt i64 %next, %words
+  %stop = or i1 %empty, %past
+  br i1 %stop, label %out, label %loop
+out:
+  %end = phi i64 [ %words, %loop ], [ %i, %decide ], [ %i, %step ]
+  ret i64 %end
 }
