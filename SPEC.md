@@ -829,7 +829,9 @@ of an array it holds by value - is **unique itself**, unless it declares a Copy 
 (copying it there is this rule's error); an array of unique elements is unique, and so is a collection holding them by
 value (`Vec<File>`, `Map<String, File>`) - each follows its elements (E31d). A type declaring a destructor is declared
 `unique` (C11), and its value's one place is the holder that runs its destructor as it lets go (O15). `unique` and `immut` (T13a) are never one type's: written together, written over one another (`type L
-unique extends String`, `type Fs immut Array<File>`) or an immut type holding a unique part, each a compile-time error -
+unique extends String`, `type Fs immut Array<File>`) or an immut type holding a unique part - an instance of a generic
+immut type too, whose type argument makes it hold one (`Box<Token>` of `type Box<T> immut struct(x T)`), refused where
+the instance is asked for -, each a compile-time error -
 an immut value is copied freely, a unique one never. `unique` on a trait, an extern type or a function type is an error:
 none has values of its own. A generic whose body copies a value of a type its call's binding makes unique - a `:=` or `=`
 from an existing value, a by-value argument, a store, a part, a result (but a by-value parameter handed on as above, and
