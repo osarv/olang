@@ -1308,6 +1308,7 @@ fn (r mut Resolver&) pattern(p ast.Pattern&, bound mut Vec<source.NameId>&) {
             }
         }
         case ast.Pattern.Elems(_, x, subs) { r.elemsPattern(x, subs, bound) }
+        case ast.Pattern.Field(_, _, sub) { r.pattern(sub, bound) }
         case ast.Pattern.Rest(sp, n) {
             if r.text(n) != "_" and n not in bound {
                 bound.Push(n)

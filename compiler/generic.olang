@@ -546,6 +546,7 @@ fn (g mut genRoots&) binds(pt ast.Pattern&, r I64) {
         case ast.Pattern.Case(_, _, subs), ast.Pattern.Elems(_, _, subs) {
             for q in subs: g.binds(q, r)
         }
+        case ast.Pattern.Field(_, _, sub) { g.binds(sub, r) }
         case _ { }
     }
 }

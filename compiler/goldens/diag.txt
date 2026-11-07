@@ -4675,10 +4675,35 @@ s13anested.olang:12:11: error[S13a]: case A of S is not covered - add it, or 'ca
    12 |     match s {
       |           ^
 compilation failed with 1 error
+=== s13bbothways.olang
+s13bbothways.olang:9:28: error[S13b]: field 'w' is matched by position and again by name
+    9 |         case Shape.Rect(w, w = 1) { return w }
+      |                            ^
+compilation failed with 1 error
+=== s13bnamedfirst.olang
+s13bnamedfirst.olang:9:32: error[S13b]: an item by position follows one by name - items by position come first, as a call's arguments do
+    9 |         case Shape.Rect(h = 1, w) { return w }
+      |                                ^
+compilation failed with 1 error
+=== s13bnamednotcovered.olang
+s13bnamednotcovered.olang:8:11: error[S13a]: case Rect of Shape is not covered - add it, or 'case _ { }'
+    8 |     match s {
+      |           ^
+compilation failed with 1 error
 === s13bpattype.olang
 s13bpattype.olang:13:18: error[S13b]: a pattern here names a case of I32, found 'T'
    13 |         case S.A(T.P) { return 1 }
       |                  ^
+compilation failed with 1 error
+=== s13bpayloadnofield.olang
+s13bpayloadnofield.olang:9:25: error[S13b]: case Shape.Rect has no field 'hh' - did you mean 'h'?
+    9 |         case Shape.Rect(hh = 1): 1
+      |                         ^~
+compilation failed with 1 error
+=== s13bwholenamed.olang
+s13bwholenamed.olang:10:26: error[S13b]: case Shape.Round carries one whole Point and has no field names - match its fields with a struct pattern, 'Shape.Round(Point(field = ...))'
+   10 |         case Shape.Round(x = 1): 1
+      |                          ^
 compilation failed with 1 error
 === s13caltnames.olang
 s13caltnames.olang:9:29: error[S13c]: every alternative binds the same names - bind it in each, write '_', or split the case
@@ -4782,6 +4807,41 @@ compilation failed with 1 error
 s13hshadow.olang:5:18: error: 'z' is declared twice
     5 |         case I64[z] { return 1 }
       |                  ^
+compilation failed with 1 error
+=== s13ifieldtwice.olang
+s13ifieldtwice.olang:6:27: error[S13b]: field 'x' is named twice in this pattern
+    6 |         case Point(x = 1, x) { return x }
+      |                           ^
+compilation failed with 1 error
+=== s13inofield.olang
+s13inofield.olang:6:20: error[S13i]: Point has no field 'xx' - a struct pattern names the fields it matches, never its constructor's parameters - did you mean 'x'?
+    6 |         case Point(xx = 2): 1
+      |                    ^~
+compilation failed with 1 error
+=== s13ipositional.olang
+s13ipositional.olang:6:20: error[S13i]: a struct pattern names the fields it matches - write 'field = pattern' or a field's name: the order of Point's fields is no part of it
+    6 |         case Point(1, y) { return y }
+      |                    ^
+compilation failed with 1 error
+=== s13ipunnofield.olang
+s13ipunnofield.olang:10:20: error[S13i]: Point has no field 'a' - a struct pattern names the fields it matches, never its constructor's parameters
+   10 |         case Point(a, b) { return a + b }
+      |                    ^
+compilation failed with 1 error
+=== s13ishadow.olang
+s13ishadow.olang:6:20: error: 'x' is declared twice
+    6 |         case Point(x) { return x }
+      |                    ^
+compilation failed with 1 error
+=== s13itype.olang
+s13itype.olang:7:14: error[S13i]: the value matched here is Point, and this struct pattern matches 'Line'
+    7 |         case Line(a): 1
+      |              ^~~~
+compilation failed with 1 error
+=== s13ivalueuncovered.olang
+s13ivalueuncovered.olang:5:12: error[S12b]: a match over Flag gives a value only when its cases cover every value - add 'case _: v'
+    5 |     return match s {
+      |            ^~~~~
 compilation failed with 1 error
 === s15returnvalue.olang
 s15returnvalue.olang:4:5: error[S15]: a test has no result - a bare 'return' ends it as passed

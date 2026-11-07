@@ -174,6 +174,8 @@ type Pattern enum {
     # as written, a value compared where what is before its "[" names no type
     Elems(sp source.Span, x Expr&, subs Array<Pattern&>&)
     Rest(sp source.Span, name source.NameId)           # "...words", "...": the elements an array pattern does not name
+    # "h = 0" in Shape.Rect(h = 0) or Point(x = 0, y): a field matched by name, a payload's or a struct's (S13b, S13i)
+    Field(sp source.Span, name source.NameId, sub Pattern&)
 }
 
 # a declaration of names: "x T = v", "x := v", "a, b T = 1, 2", and a constructor's fields - its puns too ("x",
@@ -551,6 +553,7 @@ fn (p Pattern&) Span() source.Span {
     return match p {
         case Pattern.Wild(sp), Pattern.Path(sp, _), Pattern.Case(sp, _, _), Pattern.Bind(sp, _): sp
         case Pattern.Value(sp, _), Pattern.Type(sp, _, _, _), Pattern.Elems(sp, _, _), Pattern.Rest(sp, _): sp
+        case Pattern.Field(sp, _, _): sp
     }
 }
 

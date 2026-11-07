@@ -1,0 +1,9 @@
+# check: fail error[S12b]: a match over Flag gives a value only when its cases cover every value - add 'case _: v'
+# S13i, S12b: a value match over a struct needs its patterns to cover every value - on=false is missing
+type Flag struct(on Bool, n I64) { on, n }
+fn f(s Flag) I64 {
+    return match s {
+        case Flag(on = true): 1
+    }
+}
+fn main() { assert f(Flag(true, 1)) == 1 }

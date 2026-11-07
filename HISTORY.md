@@ -29331,3 +29331,58 @@ drops the whole module's debug information ("ignoring invalid debug info") - eve
 generator lost that module's names and lines (checked: `olang profile` of a small generator program said so on master),
 and the listing build of the compiler lost generic.olang's. The call now takes the function's line (`dbgEntry`).
 `-debug` builds were not hit: there the runtime's functions carry no body to inline.
+
+## Struct patterns by field name, payload fields by name (S13i, S13b, 2026-11-07, wt-structpat)
+
+The user: pattern matching takes values apart - "structs by name, arrays by position, and enums by both" - "we just need
+to read the value, and given that it's a public value, we can read it. Or given that we're in the same module, it's
+private, we can also read it ... it looks like a constructor, but it's not really a constructor." So `case Point(x =
+0, y)` reads Point's fields x and y: `name = p` matches a field by a pattern, a bare `name` binds the field to a local
+of that name, fields not mentioned are ignored, and nothing runs. Python's class patterns (`case Point(x=0, y=y)`) are
+the precedent; Rust's and Swift's positional struct patterns were not taken, since a struct is built by a constructor
+whose parameters need not be its fields (C2) - the order of the fields was never part of what a struct promises, so a
+struct pattern has no item by position, and `case Point(a, b)` is the unknown-field error saying that struct patterns
+name fields. An enum case's payload keeps its positions (a case is built by position) and gains names, positions first
+as call arguments are (E14b): `case Shape.Rect(w, h = 0)`. Arrays stay positional (S13h).
+
+Decided (mine):
+
+1. Payload fields by name carry no privacy check - a payload is readable by position wherever its case is, so a name
+   would hide nothing. A struct's fields follow M6a: public anywhere, private in the struct's own module; the error is
+   M6a's `member 'inner' of Box is private to its module`, and the did-you-mean of an unknown field offers only the
+   fields the module may name.
+2. A case carrying one whole type (T17a, `Round Circle`) takes no names (it has no field names): one position, matched
+   by a struct pattern there, `case Shape.Round(Circle(r))`; a name is an error naming that form. Accepting
+   `Shape.Round(r = 2.0)` as a shorthand would be a second way to write the same thing.
+3. A field matched by a computed value (`case Point(x = k + 1)`) compares by `==`, as a payload position always has.
+4. A generic struct is named bare against the matched value's instance (`case Box(v = 3)`), as G6b's cases are; written
+   with arguments (`case Box<I64>(v = 4)`) they must be the value's.
+5. A field named twice, a field by position and again by name, and a position after a name are one set of errors,
+   under S13b, for payloads and structs alike; with any name, unmentioned payload fields are ignored, while a pattern
+   of positions only keeps E14's count.
+6. A struct pattern behind a nullable reference tests for null first (`Same` against null, then a read through), so a
+   null matches no struct pattern, as it holds no case.
+7. Exhaustiveness: a struct column is expanded into its fields' columns (Maranget, one constructor), each pattern's
+   items normalized to one per field, `_` where none is named; so `case Flag(on = true)` and `case Flag(on = false)`
+   cover every Flag and a value match over a struct needs no `case _` when they do. Enum rows go through the same
+   normalization, so named payload items count for S13a too.
+8. A struct matched by a constructor's value (`case Point(1, 2)`, compared by `==`) is gone: in a pattern a struct
+   type's parentheses are a struct pattern. tests/shared.olang's two such matches moved - classifyPoint to `case
+   Point(x = 1, y = 2)`, and eqMatch, whose point is E10a's Eq inside a match, to guards (`case _ if l ==
+   EqLabel("x")`), since field patterns compare fields, not through Eq. A declared type over a primitive or an array
+   (`case Label("x")`) is no struct and stays a value.
+
+How it was built: the parser reads a call argument `name = x` in a pattern as `ast.Pattern.Field(sp, name, sub)`; the
+checker's `byField` turns any item list into one pattern per field (positions, names, wildcards; errors said where
+asked, quiet for exhaustiveness), used by `payloadPattern` (S13b, shared by the parsed and the value routes) and
+`structPattern` (the struct's fields read by `check.field`, a null tested first); `coversStruct` expands struct columns.
+The tests and bindings are field reads, compares and the existing binding locals, so lowering, emit, the evaluator and
+`interpret` needed nothing: tests/structpat.olang decides every case while compiling (a baked global and an assert)
+beside the run time.
+
+Found on the way (pre-existing): the parser turned a whole case into a value when one position held a computed value,
+and the resolver then read that alternative as an expression - so `case Shape.Rect(k + 1, h)` said "unknown name 'h'"
+though the checker would have bound it; and a case written with its enum's arguments (`case Opt<I64>.Some(x)`) was no
+pattern for the parser at all (its path is not a plain path), so `x` was unknown. The parser now keeps such a call a
+pattern - computed positions as values compared in place, a generic path allowed - and the checker reads a call of
+what is neither a case nor a struct as the value it builds, as before.

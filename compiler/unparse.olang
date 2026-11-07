@@ -840,6 +840,11 @@ fn (w mut writer&) pattern(p ast.Pattern&) {
             w.put("...")
             if w.names.Text(n) != "_": w.name(n)     # a bare "..." holds the name "_"
         }
+        case ast.Pattern.Field(_, n, sub) {
+            w.name(n)
+            w.put(" = ")
+            w.pattern(sub)
+        }
     }
 }
 

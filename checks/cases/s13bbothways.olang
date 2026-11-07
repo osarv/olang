@@ -1,0 +1,13 @@
+# check: fail error[S13b]: field 'w' is matched by position and again by name
+# S13b: a payload field is not given by position and again by name
+type Shape enum {
+    Rect(w I64, h I64)
+    Dot
+}
+fn f(s Shape) I64 {
+    match s {
+        case Shape.Rect(w, w = 1) { return w }
+        case _ { return 0 }
+    }
+}
+fn main() { assert f(Shape.Rect(1, 1)) == 1 }

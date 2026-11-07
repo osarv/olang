@@ -1,0 +1,14 @@
+# check: fail error[S13i]: Point has no field 'a' - a struct pattern names the fields it matches, never its constructor's parameters
+# S13i: a bare name in a struct pattern is a field of that name - Point has none called a
+type Point struct(x I64, y I64) { x, y }
+type Shape enum {
+    Rect(w I64, h I64)
+    Round Point
+}
+fn f(p Point) I64 {
+    match p {
+        case Point(a, b) { return a + b }
+        case _ { return 0 }
+    }
+}
+fn main() { assert f(Point(1, 2)) == 3 }

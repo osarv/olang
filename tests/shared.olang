@@ -126,15 +126,14 @@ fn describe(n I32) I32 {
     return result
 }
 
-# match's case values may be struct/array literals, not just scalars - a case value is checked
-# structurally against the matched expression (cgDeepEq in codegen.c), not by identity
+# a struct is matched by its fields (S13i): "Point(x = 1, y = 2)" compares each field, no constructor called
 fn classifyPoint(p Point) I32 {
     result I32 = 0
     match p {
-        case Point(1, 2) {
+        case Point(x = 1, y = 2) {
             result = 100
         }
-        case Point(3, 4) {
+        case Point(x = 3, y = 4) {
             result = 200
         }
         case _ {
@@ -10050,8 +10049,8 @@ EqLen mut I32 = 2
 fn eqText(n I32) String { return $("abcdefgh"[:n]) }
 fn eqMatch(l EqLabel) I32 {
     match l {
-        case EqLabel("x") { return 1 }
-        case EqLabel("yy") { return 2 }
+        case _ if l == EqLabel("x") { return 1 }    # a struct pattern compares fields (S13i): Eq is "=="'s
+        case _ if l == EqLabel("yy") { return 2 }
         case _ { return 0 }
     }
 }
