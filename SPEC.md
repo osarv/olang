@@ -819,7 +819,9 @@ or a binding naming it (`alias := t`), a lambda capturing it - counts as a menti
 landing is the same error, naming it; and a landing that is one argument of a call (or one part of a value made) whose
 other arguments reach the same parameter - lend it (`both(s, s)` with `fn both(r Res&, x Res)`), slice it, or go through a
 name made from it - is a compile-time error too: the value would be in two places at once. A plain read of a part beside
-it (`tagged(t.id, t)`) reaches nothing of the value and is no such mention. A unique type declares no Copy (E31d), an error at its
+it (`tagged(t.id, t)`) reaches nothing of the value and is no such mention. `Array<T>(n, fill)` copies its fill into
+every element, so a unique `T` is a compile-time error there, fresh fill or not (a comprehension makes each element:
+`Token[Token(i) for i in range n]`); in a generic, at the call that bound it, as below. A unique type declares no Copy (E31d), an error at its
 name, and `x.Copy()` of a unique value is an error: a new value from an existing one is made by an ordinary function
 or constructor (`File(dup(f.fd))`). A struct or an enum holding a unique part by value - a field, a payload, an element
 of an array it holds by value - is **unique itself**, unless it declares a Copy (E31d), which then makes that part anew

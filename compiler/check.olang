@@ -11092,6 +11092,7 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
         x := filled if filled is not null else c.exprTo(args[1], elem)
         c.nullDecl = wasFill
         if not c.isRef(elem) { c.roStore(x, args[1].Span(), RoStored) }   # T25c: every element is writable
+        c.uniqueFill(args[1].Span(), elem)
         c.exprs.Push(x)
     }
     # no fill: each element its type's zero value (D13c), a struct's made by its constructor
@@ -20079,6 +20080,18 @@ fn (c mut Checker&) uniqueLand(x typed.Expr&, what String&, own Bool = false) ty
     }
     c.uniqueErr(x.Span(), typeOf(x), what)
     return x
+}
+
+# T13b (bulk review 7, F6): Array<T>(n, fill) copies its fill into every element - never of a unique T, fresh or not;
+# in a generic, refused at the call that bound it (G18a)
+fn (c mut Checker&) uniqueFill(sp source.Span, elem types.TypeId) {
+    if elem == types.UnknownT or c.isRef(elem) or not c.P.Unique(elem): return
+    inst := c.boundMention(elem)
+    if inst >= 0 {
+        c.needsCopy(inst, sp, elem)
+        return
+    }
+    c.err(sp, msgs.UniqueFill(c.ty(elem)))
 }
 
 # the local whose whole value x reads where that value may be handed on - a by-value parameter's, or (own) a value
