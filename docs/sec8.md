@@ -75,16 +75,18 @@ Each shape below was built with the compiler of fe143d3 (scratch programs, not c
 | C3: `x2 := x1; return x2` of a constructed local, with and without `x1` read after | **accepted, clean under `-debug -sanitize`** | - | pinned by a run case (round 1) |
 | C6: `chan.Select(chan.SendOf(r, 9), chan.SendOf(full, 4))` written inside a join block | **accepted, clean under `-debug -sanitize`** | - | pinned by a run case (round 1) |
 
-C3 was fixed on the way by D9i's widenings (a returned whole-local copy placing the local where the result goes,
-String immutable's batch); C6 by the kept round (C1: a callee building into a derived scope is given the program's
-scope; item 17). Neither has a case that holds it: round 1 adds both.
+Both were fixed on the way without a round naming them - C3 most likely by D9i's widenings (a returned whole-local copy
+placing the local where the result goes, String immutable's batch), C6 most likely by the kept round's C1 (a callee
+building into a derived scope is given the program's scope) or item 17. Neither has a case that holds it: round 1 adds
+both.
 
 Two things the probes showed that shape the design:
 
 - **A reassigned reference local is already conservative in the keeps analysis.** `fn f(p mut N&, q mut N&) { c :=
   q; c = p; c.next = N(7) }` is refused for a split value lent for either parameter (O17) - the store through `c` is
-  counted against both regions. Today that holds because `c = p` makes `p` and `q` one scope (O25b's equality); NLL
-  removes the equality, so the keeps analysis must keep naming every region any version names (3.6, decision 8).
+  counted against both regions. Today O25b also makes `p`'s and `q`'s scopes one at `c = p`; NLL removes that equality,
+  so the keeps analysis' own counting is all that stands between such a store and O17 - it must keep naming every
+  region any version names (3.6, decision 8).
 - **Function values held only in locals are refused today**, though a call through such a local sees exactly which
   function it calls: the commonest is a local helper closure pushing into a captured collection (`add := fn(k
   String&) { names.Push(k) }`), refused as "this lambda keeps 'k' beyond the call".
@@ -163,8 +165,8 @@ judges it - no dataflow over terms is needed for it.
   its head stop growing (bit sets: a few passes), `Jump` sends its state to the loop's exit or head, `Return`, `Raise`,
   `Reraise`, `Exit`, a `become` and a `noreturn` call end a path; a `match`'s arms and a conditional's values (statements
   inside expressions, `Seq`) merge as branches; a `catch` clause starts from the union of the states inside what its
-  `try` covers; `Defer`, a join's clauses and deferred code read every definition of the cursor in the body (they run
-  at a way out, after anything - `Landings`' "later"); a `Spawn`'s task and a lambda read where they stand.
+  `try` covers; deferred code and a join's clauses read every definition of the cursor in the body (they run at a way
+  out, after anything - `Landings`' "later"); a `Spawn`'s task and a lambda read where they stand.
 - **Keys.** A statement is named by where it starts. Two statements check makes at one place (a desugared `do ... for`,
   a for-in's hidden statements) get the union of what reaches either - sound, never more precise than needed. A
   statement holding a nested assignment of a cursor (in a `catch` block or a `match` arm inside it) reads that cursor
@@ -181,8 +183,8 @@ judges it - no dataflow over terms is needed for it.
   assignment's `fit` against the local's claim goes, for cursors only (`assign`'s `FitLocal` path; the WIP patch's
   `cursorAssign` did the opposite and is not taken).
 - **A cursor's term at a statement** is the term of the definitions reaching it: before `stmt` judges a statement it
-  sets `terms[l]` of each cursor to `setOf` their terms (one term where they agree). So the 28 places that read a local's
-  term (`terms[...]`, `peekPlace`, `slotOf`, `valTerm`) read the right version with no change of their own - the one
+  sets `terms[l]` of each cursor to `setOf` their terms (one term where they agree). So the 28 sites that touch a local's
+  term (`terms[...]` in `peekPlace`, `slotOf`, `valTerm` ...) read the right version with no change of their own - the one
   reason to key the walk by statement.
 - **Across a body's judgings.** A definition later in the walk than a read it reaches (a loop's next turn) has no term
   yet when the read is judged: the read uses what the definition had in the body's previous judging - none in the first.
@@ -231,7 +233,8 @@ a reference local is built where the local's whole claim is (decision 6).
 
 - **The keeps analysis** (O17: `computeKeeps`, `aliasOf`, `regionOnly`). A cursor names, for what a body keeps and
   stores, every region any of its versions names: `aliasOf` becomes a set for cursors, and a store through one is a store
-  into each region (decision 8). Today's conservatism (section 1) came from O25b's equality; it must not go with it.
+  into each region (decision 8). Today's counting already does this (section 1); with O25b's equality gone it is the only
+  guard, so it must not regress.
   Cases: the two probes of section 1, as O17 fail cases.
 - **Records** (O23a's per-instance bindings of a local, `late`, `noteLate`) stay as today: a reassigned local's record
   is the merge of every value it is given. Per-version records are a refinement left out (nothing refused needs it).
@@ -308,9 +311,9 @@ its turn (`keep.Push($t[0:1])`). A part of an instance a local's constructor bui
 of its own where the constructor can bind it (O28), else has the instance built where the part is kept. Storage that
 cannot be built elsewhere stays where it is, and keeping a view of it longer is a compile-time error naming a copy of
 what the view shows: a by-value parameter's own storage (the call's copy, O14, C2d), a match binding's or a capture's
-own copy (S13b, D16c), a generator `Next()`'s result scope
-(D18b), storage reached through a derived scope or a scope not known here (O23a, O12), and storage holding a value
-whose destructor is still to run (O15: it would run later than its holder lets go) [question 2]."
+own copy (S13b, D16c), a generator `Next()`'s result scope (D18b), storage reached through a derived scope or a scope
+not known here (O23a, O12), and storage holding a value whose destructor is still to run (O15: it would run later than
+its holder lets go) [question 2]."
 
 **O28** (its last paragraph): "The placement never extends storage past the loop turn or the block that made it for a
 part of it (O27)" becomes "The placement extends storage only for what is kept: a whole value where it is kept, the
@@ -353,7 +356,7 @@ Every edge lifts; the rest is when.
   inference has settled - promoting a field costs nothing, building the instance longer costs memory, so the field
   inference gets the refusals first (its gathering judgings never lift for a part). A program accepted today has no
   failing view or part fit once whole lifts have settled, so it proposes nothing new and places exactly as today - its
-  plans byte-identical (decision 10). (Without the phases, a view proposal arriving first could change which of two
+  plans byte-identical (decision 11). (Without the phases, a view proposal arriving first could change which of two
   unordered scope variables a join keeps - `joinTerm` keeps the first, hidden variables `W` not being built - and with it
   the obligations.)
 - **Conditionals and matches** propose each value as though stored alone (E28 - `propose` already walks them); a value
@@ -384,7 +387,7 @@ The decision trades refusals for memory, so the memory must be visible and the f
 - **`-memory`** gets a section of placements made for a view (B18 above). The scope pass records each lift whose
   proposal came from a view, a part or a capture (`placed`: body, local or site, the term, the view's place); the
   driver prints them after early freeing's rows (olang.olang, where `fr.Report()` is printed). For o27genborrow:
-  `o27genborrow.olang:22:46: memory: 't' is built where 'out' lives (main's scope), a new one each time it is made, for
+  `o27genborrow.olang:22:38: memory: 't' is built where 'out' lives (main's scope), a new one each time it is made, for
   a view of it kept here - keep a copy of what it shows ('$w') to build it per turn`.
 - **The language server** publishes the same as a hint (severity 4, as deprecation's) at the view - no compiler
   warning: the compiler says errors only.
@@ -399,9 +402,9 @@ for that edge; the judgment after the lift is the same FIT as before with a long
 re-judged: a store into the lifted storage (`t.x = y`, now in a longer scope) must have `y` outlive the new term, and
 proposes or fails in the next round; a lifted local is exactly in its new term (it is built there), so stores through it
 build there (I2). Lifts go only into terms that exist at run time (`Runs`) and only of storage the program builds
-(`liftable`: a local or a hidden one, never a parameter's, a capture's or a match binding's copy), and they only lengthen (`joinTerm`), in a finite
-lattice, so the iteration ends at a least solution. A destructor never runs later than its holder lets go (4.3). A
-view handed to a task is built at the join's level, so P2 holds.
+(`liftable`: a local or a hidden one, never a parameter's, a capture's or a match binding's copy), and they only
+lengthen (`joinTerm`), in a finite lattice, so the iteration ends at a least solution. A destructor never runs later
+than its holder lets go (4.3). A view handed to a task is built at the join's level, so P2 holds.
 
 ### 4.6 Cost
 
@@ -455,8 +458,8 @@ call". **D16d** is unchanged: where a lambda lives is still where its captures d
   the `return`).
 - **Stops** at every place that code judged once for many values reads: an argument (whatever the callee - its
   parameter's type is all its body was judged with), a store into a field, an element, a payload, a global, a type
-  argument (`v.Push(f)`), a capture (a lambda's body is judged once, before the body making it, so its captures are
-  unknown inside it), a task's function or argument, an `any`, a `yield`, and a generic's type variable [question 1].
+  argument (`v.Push(f)`), a capture (inside the lambda's body a captured function value is unknown - its maker's
+  records are not followed into it, decision 15), a task's function or argument, an `any`, a `yield`, and a generic's type variable [question 1].
 
 ### 5.3 A call through a value that carries a record
 
@@ -518,18 +521,19 @@ callvaluekeepsframe (an adapter given to keepVia's written parameter), t32anysco
 ## 6. The folded items
 
 - **C3** (`x2 := x1; return x2` of a constructed local, O10d): compiles today, with and without `x1` read after the
-  copy, clean under `-debug -sanitize` (section 1) - D9i's move at a last use and the returned whole-local copy placed
-  where the result goes closed it. Round 1 adds `checks/cases/c3secondname.olang` (run, both shapes, read back after a
+  copy, clean under `-debug -sanitize` (section 1) - most likely closed by D9i's move at a last use and the returned
+  whole-local copy placed where the result goes. Round 1 adds `checks/cases/c3secondname.olang` (run, both shapes, read back after a
   churn) so it stays closed.
 - **C6** (`chan.Select(chan.SendOf(r, 9), ...)` inside a join block, C2d): compiles and runs clean under `-debug
-  -sanitize` today (the kept round's C1 and item 17). Round 1 adds `checks/cases/c6selectjoin.olang` (run: the std/chan
+  -sanitize` today (most likely since the kept round's C1 or item 17). Round 1 adds `checks/cases/c6selectjoin.olang` (run: the std/chan
   test's shape with both `SendOf`s written inside the join) and drops the "Limit" sentence from CLAUDE.md's std entry
   and HISTORY's note.
 - **C4** (held/gen_walkkept: the generator body's O27 and the consumer's O10c for one cause): round 2 accepts the
   program (4.7). For what stays refused, one cause gives one error: a body whose reporting judging said a section-8
   error of its own is marked in its summary, and its callers do not discharge - and so do not report - the obligations
   it recorded (it did not check; a caller judged against it would only repeat it). Round 2, with a case: a generator
-  yielding a view of a by-value parameter's storage and a consumer keeping it - one error, in the generator.
+  yielding views of a local that holds a destructor value (4.3) and a consumer keeping them - one error, in the
+  generator.
 - **The T25d imprecision** (an element of a constant literal scoped to the literal's temporary block): round 1. In
   `val`/`read`, an element read by an index, a slice of, or a binding of an array pattern over an array literal of
   constant data (`staticLiteral`'s test, without the promotion it asks today) is `ValKind.Static` - the program's
@@ -540,14 +544,14 @@ callvaluekeepsframe (an adapter given to keepVia's written parameter), t32anysco
 ## 7. The evaluator and `interpret` (K1, B3e)
 
 - **Compile-time evaluation** runs before the scope pass on lowering's stand-in placement (everything in the program's
-  scope): versions, placements and records change nothing it computes. Each round still gives it tests it runs, beside
+  scope; item 17's rule homes a kept local there, which covers a local placed for a view too): versions, placements
+  and records change nothing it computes. Each round still gives it tests it runs, beside
   the run-time ones (checklist step 3): round 1 a global baked through a function walking a list with a cursor and
   appending to its tail (K2), and a top-level assert over the widget's click loop (S17a); round 2 a global baked from
   `fn head() String& { t := $"abc"; return t[0:2] }` (today O27's error) and an assert over words kept from a turn's
   text; round 3 a global baked through `g := link; g(x, N(5))` and through a local closure keeping its argument.
 - **`interpret`** places by the plans (B3e) and refuses what a build refuses, since it runs the scope pass: placements
-  from rounds 1-2 are followed with nothing new; records are compile-time only. Its stand-in placement for item 17's
-  kept locals (the program's scope) covers placed views too.
+  from rounds 1-2 are followed with nothing new; records are compile-time only.
 - **The dead-region evaluator** (`OLANG_DEADREGIONS=1`, early freeing's gate) runs over the new tests: placement moves
   storage into longer scopes, where early freeing may then free it.
 
@@ -603,8 +607,8 @@ places, so they run one after another, never beside each other or beside another
   relations, closures propose their captures, the two phases (whole, then views; parts after `inferFields` settles), the
   refusals of 4.3 with `viewKept`/`partKept` reworded, the placements recorded, C4's mark; D18e's walk landing where its
   elements are kept, and emit's elision (D18e's `.walk` form, destroyed as its loop's block is left) refused for such a
-  walk - D18b's arena path instead (emit.olang's elision test gains the condition); olang.olang prints the placements under `-memory`; session.olang publishes the hint;
-  msgs.olang reworded, `make diaggold`.
+  walk - D18b's arena path instead (emit.olang's elision test gains the condition); olang.olang prints the placements
+  under `-memory`; session.olang publishes the hint; msgs.olang reworded, `make diaggold`.
 - **Tests**: tests/viewplace.olang (words kept from a turn's text, slices of temporaries into a parameter's field, a
   generator's views of a local kept by the consumer, a closure over a turn's local kept - read back after churns; K2 and
   S17a of section 7); the cases of 4.7 become run cases (`-debug -sanitize`, each keeping its comment and saying what it
