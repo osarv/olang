@@ -6825,7 +6825,11 @@ reference - has its destructors run exactly once, **where its holder lets go of 
   value there: a by-value parameter handed on at its last mention (T13b), a whole variable returned (O26a) or made a
   constructor's field (a pun, C4), a variable's `Destroy()` (C9b). A constructor's fields go into its instance at its
   end, and one failing part way lets go of those it built. A variable declared with no value and no zero value (D13d)
-  holds one once it is assigned. A lambda capturing such a variable names it where it is held (D16c);
+  holds one once it is assigned. A lambda capturing such a variable names it where it is held (D16c). A variable whose
+  storage flows out of its block - returned as a reference or an `any`, held by a returned value's reference field,
+  stored by reference into what a parameter refers to, captured by a returned closure - lives where it flows (O26a),
+  and lets go there: as its block is left it is registered with the scope its storage lives in, as a value no place
+  takes is (O16), and its destructors run as that scope closes;
 - a value holding parts lets go of them with itself: its own destructor first, then each part's, the last part first;
 - a store over a place holding such a value (S4) lets go of the old one after the new value is made and before it is
   stored (a variable's only while it holds one); a place reached through what a call gives is not stored over so;
