@@ -3437,6 +3437,21 @@ fn MathExtern(name String&, arity I64) Bool {
     return false
 }
 
+# X13: the C library's functions that never call a function they are given or one they reach - its input and output,
+# text, memory and time functions: a call of one is no way back into the program's export fns (effects, free.olang's
+# condition 3), whatever the program hands to C
+fn NoCallbackExtern(name String&) Bool { return name in noCallbackNames }
+
+noCallbackNames := String&["read", "write", "pread", "pwrite", "readv", "writev", "open", "openat", "creat", "close"
+    "lseek", "fsync", "fdatasync", "ftruncate", "fstat", "stat", "lstat", "fstatat", "access", "unlink", "rename", "mkdir"
+    "rmdir", "opendir", "readdir", "closedir", "getcwd", "chdir", "dup", "dup2", "pipe", "poll", "isatty", "fopen"
+    "fclose", "fread", "fwrite", "fflush", "fputs", "fgets", "puts", "putchar", "getchar", "printf", "fprintf"
+    "snprintf", "sprintf", "perror", "strlen", "strnlen", "strcmp", "strncmp", "strcpy", "strncpy", "strcat", "strncat"
+    "strchr", "strrchr", "strstr", "strdup", "strndup", "strtol", "strtoll", "strtoul", "strtoull", "strtod", "strtof"
+    "strerror", "memcpy", "memmove", "memset", "memcmp", "memchr", "malloc", "calloc", "realloc", "free", "aligned_alloc"
+    "posix_memalign", "mmap", "munmap", "mprotect", "madvise", "time", "clock_gettime", "clock_getres", "gettimeofday"
+    "nanosleep", "usleep", "sleep", "localtime_r", "gmtime_r", "mktime", "timegm", "strftime"]
+
 # whether x reads a temporary holding a value made for it - a call's result, a value built - rather than one reading
 # existing storage (E31d: returning it is no copy)
 fn FreshTemp(x Expr&) Bool {

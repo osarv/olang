@@ -1202,10 +1202,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `if` is S8a's dead branch, as any constant condition (in an unrolled walk it differs per copy and is fine); check
   marks the bounded loops (`typed.Body.Bounded`: counted for-ins, unrolled walks). tests/facts.olang. Since bulk
   review 6b (the summaries every reader shares - facts, the effects line, `-caps`, E31b's in-place calls): a destructor
-  is a body a constructor of its type, a value of it given storage, or `x.Destroy()` may call (O16, C9b); and where the
-  program has an export fn a call of C - but C's math, the runtime's own and the C known to return at once - may do
-  anything (C may call the export fn back, X13 - free.olang's condition 3), said `anything - it calls C, which may call
-  the program's export fns`.
+  is a body a constructor of its type, a value of it given storage, or `x.Destroy()` may call (O16, C9b); and in a
+  program C may call back a call of C - but C's math, the runtime's own, the C known to return at once and the C
+  library's input and output, text, memory and time functions (`typed.NoCallbackExtern`) - may do anything (C may call
+  the export fn back, X13 - free.olang's condition 3), said `anything - it calls C, which may call the program's export
+  fns`. **The sharper rule (item 27, the user's "do the sharper rule" 2026-11-03; built 2026-11-07, wt-dropord):** a
+  program C may call back is one giving an export fn to a C function (X13 - check records each, `Loader.HandedToC`),
+  built `-library` (X14), or - mine, since C linked in can call an export fn by its name (the cinterop scenario's
+  callback.o does) - having one and linking C of its own (a `.c` import or a `link`, `Loader.LinksOwnC`); an export fn
+  merely declared no longer makes every C call "anything" or stops early freeing.
 
 ### Errors
 
@@ -1442,8 +1447,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   one statement - since a place key names every instance (F2); every fixed point runs to convergence, never cut at a
   round count (F3); a place whose made-for value's building may register a destructor in its region (a constructor's
   O16 temporary, a callee's built result: a may-summary per body) keeps, only `Destroy()` ending such early (F4); an
-  extern call lets go of anything where an export fn may, and a program with an export fn frees nothing early (C may
-  call it from its own threads, condition 3) (F6). Also: a generator resumed inside its own walk fails a guaranteed check
+  extern call lets go of anything where an export fn C may call may, and a program C may call back frees nothing early
+  (C may call it from its own threads, condition 3 - since 2026-11-07 only one giving an export fn to C, built
+  `-library`, or linking C of its own) (F6). Also: a generator resumed inside its own walk fails a guaranteed check
   (S20, one compare a Next; F5); an embed in std or a remote repository is judged by its real path (E38, F7); std/json
   keeps whole numbers an F64 cannot hold as `Json.Int`/`Json.Uint`, exact through Decode and Encode, U64's whole range
   (F8); a generator's contract is its first Next's, `ArgumentError` written among `Iterator<T ? E>`'s errors (D18, F9);

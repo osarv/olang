@@ -914,6 +914,7 @@ fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnost
     nm mut source.Names& = source.Names()
     l mut load.Loader& = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
     l.Clang = $cfg.Clang
+    l.SharedLib = cfg.Library
     for x in cfg.CFlags() { l.CFlags.Push($x) }
     l.Load(root)
     p.Loaded = l.Mods.Len()

@@ -1,0 +1,24 @@
+import "std/io"
+
+# O8d condition 3 (the sharper rule): an export fn no C function is given, in a program linking no C of its own and not
+# built as a library, is never called from C's threads - so early freeing goes on (a Vec local given a new value each
+# turn: 620 MB kept where every export fn stopped it, over 200,000 turns of a 100-element Vec)
+N I64 = 200000
+
+export fn olang_total(n I64) I64 { return n * 2 }
+
+fn mk(k I64) Vec<I64> {
+    v := Vec<I64>()
+    for i in range 100 { v.Push(i + k) }
+    return v
+}
+
+fn main() {
+    v := mk(0)
+    t := 0
+    for k in range N {
+        v = mk(k)
+        t += v[99]
+    }
+    io.Println($olang_total(t))!
+}

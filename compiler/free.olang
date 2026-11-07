@@ -230,7 +230,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # parameter's scope - so in a region a call of it builds into (F4): a destructor still to run when the region's
     # place would let go of it (O16, condition 4)
     regOut Vec<Bool>
-    exports Vec<I64>          # the export fns' bodies (X12): C may call them from any extern call (F6)
+    exports Vec<I64>          # the export fns' bodies C may call (X12-X14): from any extern call but the C library's own (F6)
     changed Bool = false
     # the program: whether it has tasks (or an extern given a function value), whether a destructor, Str, Eq or Hash
     # lets go of something (they run where no call is written)
@@ -682,7 +682,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64, destroys Bool = true) {
         f.resFresh.Push(true)
         f.regOut.Push(false)
         match f.Bodies[b].Of {
-            case typed.BodyOf.Fn(i) { if f.P.FnDecl(f.P.InstanceFn(i)).Export { f.exports.Push(b) } }
+            case typed.BodyOf.Fn(i) { if f.P.FnDecl(f.P.InstanceFn(i)).Export and f.handedToC(i) { f.exports.Push(b) } }
             case _ { }
         }
         f.mustLocals.Push(Vec<I64>())
@@ -961,6 +961,12 @@ fn (w mut walker&) escapedHolder(d typed.Block&) {
     own := s == typed.Scope.Frame or s == typed.Scope.Unset or (s == typed.Scope.Block and s.b == b.Locals[l].In)
     if not own and w.F.Debug { try io.PrintErr($"free: escaped holder " $l " in " $w.F.fnName(w.Id) " " $s " in " $b.Locals[l].In "\n") catch io.Error { } }
     if not own { w.F.register(b.Locals[l].Ty) }
+}
+
+# whether C may call instance i, an export fn (X12-X14): the program is built as a library, a C function is given it
+# (X13 - check records each it meets), or the program links C of its own, which may name it
+fn (f Free&) handedToC(i I64) Bool {
+    return f.P.L.SharedLib or f.P.L.HandedToC.Has(f.P.InstanceFn(i)) or f.P.L.LinksOwnC()
 }
 
 # whether a body runs where no call is written: a destructor, or a method lowering calls by its name (E11c, E10a)
@@ -2450,6 +2456,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     unknown := true
     helper := false
     foreign := false
+    calls := false      # (a C function that may call an export fn back)
     match c.Target {
         case typed.Callee.Body(id) {
             b2 = I64(id)
@@ -2464,7 +2471,12 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         }
         case typed.Callee.Dispatch(_, _, _) { if not w.Final { f.setRegOut(w.Id) } }
         case typed.Callee.Helper(_, _) { helper = true }
-        case typed.Callee.Extern(_) { foreign = true }
+        case typed.Callee.Extern(fi) {
+            foreign = true
+            # (the runtime's own and the C library's input and output, text, memory and time functions call nothing back)
+            nm := f.P.L.Names.Text(f.P.FnDecl(fi).Name)
+            calls = not nm.StartsWith("__olang_") and not typed.NoCallbackExtern(nm)
+        }
         case _ { }
     }
     args Vec<Vec<I64>>
@@ -2532,6 +2544,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         # anything (F6) - walked again when an export fn's summary changes
         lets := false
         for e in f.exports {
+            if not calls: break
             if not w.Final { addTo(f.callers[e], w.Id) }
             if f.lets[e].Len() > 0 or f.letsAll[e]: lets = true
         }
@@ -3733,8 +3746,9 @@ fn (f mut Free&) decide() {
         # can let go of it
         if f.isDestroy(k): continue
         if f.tasks { f.keep(k, RTask, -1, source.Span(0, 0), "a task can reach it: nothing is freed early where a program has tasks") }
-        # C may call an export fn (X12) from a thread of its own - one of a library's (X13) from any (condition 3)
-        if f.exports.Len() > 0 { f.keep(k, RTask, -1, source.Span(0, 0), "C may call an export fn from a thread of its own: nothing is freed early where a program has one") }
+        # C may call an export fn (X12) from a thread of its own - one it is given (X13), or any of a library's (X14) -
+        # condition 3
+        if f.exports.Len() > 0 { f.keep(k, RTask, -1, source.Span(0, 0), "C may call an export fn from a thread of its own: nothing is freed early where C is given one, links C of its own, or is a library") }
         if f.hidden or has(f.hiddenAt, k) { f.keep(k, RDtor, -1, source.Span(0, 0), "a destructor, Str, Eq or Hash lets go of it where no call is written") }
     }
     # condition 4 judged by what a region would hold, not only by the value's type (F4): a value made for a place whose

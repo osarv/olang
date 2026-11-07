@@ -6166,8 +6166,9 @@ holder**:
    another value of the same place included (each value is its own: a node one holder holds linked from another
    holder's node is stored elsewhere), a global, a closure kept past the call that made it, a task, or a call that may
    keep it (O10b, O26a);
-3. nothing it holds is reached by more than one thread (§6.8) - nor is anything, in a program with an export fn, which
-   C may call from a thread of its own (X12);
+3. nothing it holds is reached by more than one thread (§6.8) - nor is anything in a program C may call back (X12):
+   one giving an export fn to a C function (X13), built as a library (X14), or linking C of its own that may name
+   one (a `.c` import, a `link`, X9, X21) - C may call it from a thread of its own;
 4. nothing it holds, nor anything built where it lives - an instance a constructor builds and no reference takes
    (O16) among it - is an instance whose destructor is still to run (O15): only a `Destroy()` (C9b) ends that early -
    but a value held by value, ended where its holder lets go of it, is reclaimed right after its destructor runs, where
@@ -6196,8 +6197,9 @@ such a value held in a place that reclaims it whole.
 A reference read from what a place holds that is still in use after the place lets go - in the function holding the
 reference, or across a call that may make it let go (condition 6) - makes the place keep what it lets go of. Each
 condition is the compiler's to prove, over the whole program: where a fact it needs cannot be shown - a body not known
-(a function value, an `extern` - which may call back any export fn, X12 - so a place one may let go of is let go of
-across it), code in a module compiled on its own (B3i), a cycle of calls not settled - the place keeps, as O8c says;
+(a function value, an `extern` - which, in a program C may call back (condition 3), may call any export fn C may call,
+X12, but the C library's input and output, text, memory and time functions, which call nothing back - so a place one
+may let go of is let go of across it), code in a module compiled on its own (B3i), a cycle of calls not settled - the place keeps, as O8c says;
 nothing is reclaimed on a guess, and no fact is taken from a fixed point not run to its end. A generator (D18) lets go
 as a function does, its `yield` giving a value as a `return` does - and a `yield` is a call that may make any place let
 go, for what its frame holds across it: its consumer runs what it likes before the next `Next()`. What the
@@ -7791,8 +7793,8 @@ Vec`, `starts tasks`, the classes of B11c it reaches (`files`, `network`, `proce
 else `calls C`, `may end the program`, `may block` or `never blocks`, `recursive`, `always ends` (G42's `Terminates`),
 and `may be computed while compiling` (K1a: no C but C's math, no mutable global read or written) - a destructor the body
 registers or runs counted as G42's facts count it. A call through a
-function value or an `any` is `anything`, and so is a call of C (G42's) where the program has an export fn - `anything -
-it calls C, which may call the program's export fns`; a body that did not check is `not known`. Under a generic function, a line
+function value or an `any` is `anything`, and so is a call of C (G42's) in a program C may call back (O8d condition 3)
+- `anything - it calls C, which may call the program's export fns`; a body that did not check is `not known`. Under a generic function, a line
 `# T needs: Less, a walk ...` for each type variable says what its body asks of it beyond its written constraint
 (G18a). Under a function that cannot become a value (T21), a line `# not a value: ...` says why: a method is called as
 one (M19), an extern by its name (X1), a generic is a value only named with its type arguments (G12), one compiled per
@@ -9051,9 +9053,10 @@ none at its end, while one an error may leave with before the hand-on does):
 | `Recursive` | call itself, directly or through others |
 | `Terminates` | **always end**: every loop of it is a for-in over an array or a range (a count known before the loop starts), it is not recursive, and nothing of it waits or calls C not known to return - the one fact true where nothing is known against it |
 
-A call through a function value or an `any` may do anything, and so may a body that did not check, and - where the
-program has an export fn (X12), which C may call from any C call (X13) - a call of C but C's math, the runtime's own and
-the C functions known to return at once without calling back: such a function has every fact but `Terminates`, so no
+A call through a function value or an `any` may do anything, and so may a body that did not check, and - in a program
+C may call back (an export fn given to a C function, X13; built as a library, X14; or linking C of its own, a `.c`
+import or a `link`, which may name one) - a call of C but C's math, the runtime's own, the C functions known to return
+at once, and the C library's input and output, text, memory and time functions, none of which calls back: such a function has every fact but `Terminates`, so no
 fact is claimed that a run could prove false. A fact is decided once the
 program has checked, from every body: read in a body, it is the constant the bodies give - an attempt reads each as
 its cautious value first and the program is checked again with the values found, until what is read is what is found

@@ -1083,7 +1083,11 @@ fn (c mut Checker&) callbackArg(x typed.Expr&, sp source.Span) {
     match x {
         case typed.Expr.Fn(_, _, typed.FnVal.Named(body)) {
             inst := c.Bodies[I64(body)].Inst()
-            if inst >= 0 and c.P.FnDecl(c.P.InstanceFn(inst)).Export { return }
+            if inst >= 0 and c.P.FnDecl(c.P.InstanceFn(inst)).Export {
+                # (C may call it back from here on: effects and early freeing read it - X12's sharper rule)
+                c.P.L.HandedToC.Put(c.P.InstanceFn(inst), true)
+                return
+            }
         }
         case _ { }
     }

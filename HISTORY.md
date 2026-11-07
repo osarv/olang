@@ -29611,3 +29611,43 @@ build); registration propagated through a type's by-value parts (`types.ValuePar
 then held where its call lands (O16) keeps the place (a scope close releases nothing of it). **Found on the way:** none
 in master; the `viewCtor` gap above is unreachable while those copies stay untracked (they keep the place) - recorded
 for the section-8 round.
+
+## Reuse in place: measured, not built (2026-11-07, wt-dropord)
+
+The decision of 2026-11-03 ("just build it", LIST.md A7) came with "build only where it is real". **Measured** (this
+branch's compiler with early freeing, against the same compiler with every place kept - a measurement-only switch, not
+committed): a struct's Vec field given `mk(k)` (100 pushes) each turn, 2M turns: 0.5 s / 1.8 MB freeing against 3.1 s /
+4.1 GB keeping - early freeing already reclaims it, and olang's own profiler puts about 45% of what is left in the
+allocator (`__olang_region_alloc` 22%, malloc and free ~25%: each region a malloc'd 152-byte header and its first block,
+each Vec growth a region of its own); a String local given a rendered line each turn (5M) and a tree of `Node?&`
+rebuilt into a holder's field (20,000 x 511 nodes): 123 MB and 250 MB both ways, 0.15-0.3 s - their places are not sole
+(the text's value is an existing-storage view, the nodes' fields are kept), so neither early freeing nor reuse in place
+reaches them. Reuse in place could only apply where early freeing already does - one of the three shapes - and there the
+cost is the region per allocation rather than the missing reuse. **Not built.** What would gain everywhere early
+freeing works: regions cheaper to make and drop (a per-thread free list of region headers and first blocks in the
+runtime, instead of malloc and free per region) - an optimization recorded for a runtime round (runtime.ll was another
+round's file today).
+
+## The sharper C-call rule (2026-11-07, wt-dropord, item 27, X12-X14, O8d condition 3, G42)
+
+The user's decision of 2026-11-03 ("do the sharper rule"; LIST.md A15): a C call counts as "anything" (effects'
+Unknown/Back, free.olang's condition 3) only in a program that hands an export fn to C or is built `-library`, and even
+then not for the C library's I/O, string, memory and time functions. Before: any export fn declared anywhere made every
+non-quick C call "anything" and stopped early freeing for the whole program (countExports counted every export fn).
+
+**Built.** check records each export fn it meets given for a C function pointer (X13's `callbackArg`) in
+`Loader.HandedToC`; the driver sets `Loader.SharedLib` for `-library`; `typed.NoCallbackExtern` lists the C library's
+input and output (read, write, open, stdio ...), text (str*, strto*), memory (malloc ... mmap, mem*) and time (clock_gettime,
+nanosleep, usleep, strftime ...) functions, which never call a function back; effects' `cMayCallBack` and free.olang's
+`handedToC` replace the count. **Decided (mine): C of the program's own counts as handing every export fn** - an export
+fn has a C entry by its name (X12), and C linked in can call it so without being given its address (the cinterop
+scenario's callback.o calls `olang_reset` by name, and its view-across-the-call check needs that): a program linking
+C of its own - a `.c` import or any `link` (an extern block's or a C import's, in any branch: `Loader.LinksOwnC`) - and
+having an export fn is one C may call back. Only the C library and system headers, which name none of the program's
+functions, leave an export fn uncalled. The extern-call let-goes (F6) skip the runtime's own and the no-callback
+functions too. **Tests:** checks cases g42exportback (qsort given the export fn: a function calling it writes a global
+- rewritten from usleep, which calls nothing back now), g42exportquiet (usleep beside a handed export fn: no write),
+g42exportkept (getuid with an export fn no C is given: no write), e31bexportback (the in-place call refused where qsort
+is given a growing export fn - rewritten), e31bexportquiet (made in place where none can call back, runs); checks'
+earlyfree `exportquiet` (a Vec local reassigned 200,000 times beside an export fn: under 8 MB, the master compiler runs
+out). The cinterop scenario's callback fixture still keeps its view (C of its own linked).

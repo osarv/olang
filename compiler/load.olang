@@ -117,6 +117,10 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     stdReal String& = ""
     cwd String& = ""
     embedded Map<String&, Array<U8>&>  # E38: every file an embed read, by path - read once in a compilation
+    # X12-X14: whether C may call the program's export fns - it is built as a library (-library), or a C function is
+    # given one (by function index, as check meets it): only then may a C call reach back into the program
+    SharedLib Bool = false
+    HandedToC Map<I64, Bool>
     Clang String& = ""                 # the clang a C import is translated with (X17), "" for none
     CFlags Vec<String&>                # what it is translated and compiled with: the target's, and the defines (X18)
 }
@@ -983,6 +987,37 @@ fn (l mut Loader&) branchGroup(mi I64, b ast.TopBranch&, chosen I64, index I64) 
 }
 
 # ---- what later passes ask ----
+
+# X12, X13: whether the program links C of its own that may name an export fn and call it: a `.c` import (X21), or a
+# library or object a `link` names (X9) - in any branch. The C library and the system's headers name none of the
+# program's functions
+fn (l Loader&) LinksOwnC() Bool {
+    for m in l.Mods {
+        if m.C and m.Real.EndsWith(".c"): return true
+        for imp in m.Imports {
+            if imp.Link != "": return true
+        }
+        if declsLink(m.Decls): return true
+    }
+    return false
+}
+
+fn declsLink(ds Array<ast.Decl&>&) Bool {
+    for d in ds {
+        match d {
+            case ast.Decl.ExternBlock(_, link, _) { if link.End > I32(0): return true }
+            case ast.Decl.If(_, ti) { if ifLinks(ti): return true }
+            case _ { }
+        }
+    }
+    return false
+}
+
+fn ifLinks(ti ast.TopIf&) Bool {
+    if ti.Then is not null and declsLink(ti.Then!.Decls): return true
+    if ti.ElseIf is not null and ifLinks(ti.ElseIf!): return true
+    return ti.Else is not null and declsLink(ti.Else!.Decls)
+}
 
 # X9: what the program's link names besides its objects, from every module's links - an import's (X17) where the
 # import is in a chosen branch, an extern block's in a chosen branch - each once, in the modules' order: a library's
