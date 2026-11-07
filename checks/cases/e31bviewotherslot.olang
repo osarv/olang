@@ -21,7 +21,7 @@ fn main() ? {
     l.Push(V(Array<I64>(1), 0))
     l[0].Mark(l)
     assert l[0].d[0] == 0 and l[1].d[0] == 99, "list " $l[0].d[0] " " $l[1].d[0]
-    a := V[V(Array<I64>(1), 0), V(Array<I64>(1), 0)]
+    a := Array<V>[V(Array<I64>(1), 0), V(Array<I64>(1), 0)]
     a[0].MarkA(a)
     assert a[0].d[0] == 99 and a[1].d[0] == 0, "array " $a[0].d[0] " " $a[1].d[0]
 }

@@ -375,7 +375,7 @@ test "Rows reports what is not CSV, and where" {
             n = -1
             break
         }
-        assert rows.Line == I64[1, 2, 4][n] and row.Len() == 2
+        assert rows.Line == Array<I64>[1, 2, 4][n] and row.Len() == 2
         n++
     }
     assert n == -1
@@ -393,7 +393,7 @@ test "Record quotes what must be, and Rows reads it back" {
     assert try Record("x,y", "two\nlines", "", "cr\r") == "\"x,y\",\"two\nlines\",,\"cr\r\"\n"
     assert try Record("a;b", "c,d", sep = ';') == "\"a;b\";c,d\n"
     assert try Record(...Array<String&>(0)) == "\n"
-    fields := String&["", "\"", "a,\"b\"\r\nc", " lead", "x"]
+    fields := Array<String&>["", "\"", "a,\"b\"\r\nc", " lead", "x"]
     text := try Record(...fields)
     for row in try Rows(text) {
         assert row.Len() == 5
@@ -424,7 +424,7 @@ type item struct(Name String&, @Column("price") Cost F64, Count I64 = 1, @Skip N
     Fresh
 }
 
-itemsBaked String = try Encode(item[item("pen", 1.5, 3, "x")]) catch default ""
+itemsBaked String = try Encode(Array<item>[item("pen", 1.5, 3, "x")]) catch default ""
 
 test Decode "records read as structs by their header's names, written back by Encode" {
     assert itemsBaked == "Name,price,Count,Fresh\npen,1.5,3,true\n"

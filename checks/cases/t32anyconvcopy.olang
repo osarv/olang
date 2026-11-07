@@ -18,7 +18,7 @@ fn main() {
     for i in range 3 {
         t := "lab" $i
         xs.Push(aLab(t))
-        c := I64[i, 7]
+        c := Array<I64>[i, 7]
         xs.Push(aNums(c[0:2]))
     }
     for k in range 200 {

@@ -39,7 +39,7 @@ fn workers() I64 {
 # the last check to finish is a short one. A scenario is a function reporting into a report (r.expect(ok, what, dir) for
 # each thing it checks), named here and in scenario(), with a test reporting it: one missing from either is reported as
 # a failure, never skipped.
-Scenarios := String&["fix", "strheld", "fuzz", "testfuzz", "bench", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
+Scenarios := Array<String&>["fix", "strheld", "fuzz", "testfuzz", "bench", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
                      "scopesan", "frameenv", "crash", "interp", "target", "assertloc", "objnames", "spawnerr", "generators", "runfile"
                      "chunkpool", "capscope", "reuse", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
@@ -63,7 +63,7 @@ Target String& = try os.Env("CHECKS_TARGET") catch default ""
 
 # the cases not built for another architecture: what links libffi for std/ffi's calls, which the cross C library of
 # the distribution does not hold
-CrossSkip := String&["externruntime2.olang"]
+CrossSkip := Array<String&>["externruntime2.olang"]
 
 fn withParts(names Array<String&>&) Array<String&>& {
     all Vec<String&>
@@ -496,14 +496,14 @@ fn earlyfree(r mut report&) ? Failed {
     # vecreassign (bulk review 6 F13): a Vec local and a Vec field given a new value each turn
     # dropvec (Part C): a Vec of values with destructors truncated, each one's storage freed where it is ended
     # exportquiet (condition 3's sharper rule): an export fn no C is given stops no early freeing
-    progs := String&["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec", "vecreassign"
+    progs := Array<String&>["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec", "vecreassign"
                      "dropvec", "exportquiet"]
-    small := String&["300", "100", "2000", "2000", "5", "300", "2000", "200", "2000", "300", "2000", "300"]
-    full := String&["example.com\n", "3000000\n", "100\n"
+    small := Array<String&>["300", "100", "2000", "2000", "5", "300", "2000", "200", "2000", "300", "2000", "300"]
+    full := Array<String&>["example.com\n", "3000000\n", "100\n"
                     "line 999999 of the file - a status text padded out to about a hundred bytes ......................\n"
                     "3071\n", "12000000000000\n", "999936 64\n", "16\n", "63 504\n", "2000980000000 2000980000000\n"
                     "1000000 499999500000\n", "40039400000\n"]
-    part := String&["example.com\n", "3000\n", "100\n"
+    part := Array<String&>["example.com\n", "3000\n", "100\n"
                     "line 1999 of the file - a status text padded out to about a hundred bytes ......................\n"
                     "3071\n", "270000\n", "1936 64\n", "16\n", "64 512\n", "5970000 5970000\n", "2000 1999000\n"
                     "149100\n"]
@@ -1165,7 +1165,7 @@ fn apicaps(r mut report&) ? Failed {
     os.Run("cp -r checks/fixtures/apicaps/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" api old new lib.olang > out.txt 2>&1") == 1, "api: a breaking change gives status 1", dir)
     out := outOf(dir)
-    for want in String&["  breaking  added case: Blue\n", "  ok        added fn: fn (p Point) Max() I64\n"
+    for want in Array<String&>["  breaking  added case: Blue\n", "  ok        added fn: fn (p Point) Max() I64\n"
             "  breaking  changed fn: fn Grow(a I64) I64\n              now: fn Grow(a I64, b I64) I64\n"
             "  ok        value of global: Limit I64 = 3\n", "  breaking  removed fn: fn Old() I64\n"
             "  breaking  changed word: Lost\n              now: Lost(n I64)\n", "4 breaking changes\n"] {
@@ -1235,10 +1235,10 @@ fn assertloc(r mut report&) ? Failed {
     # and a check the language guarantees - a slice, an array length, an 'as' under '!' (a copy into fixed storage is never
     # checked: its length is known while compiling, T7d)
     try r.expect(sh(dir, "\"$OLANG\" build guaranteed.olang > out.txt 2>&1") == 0, "guaranteed did not build", dir)
-    wants := String&["guaranteed.olang:15: slice bounds out of range\n", "guaranteed.olang:16: array length out of range\n"
+    wants := Array<String&>["guaranteed.olang:15: slice bounds out of range\n", "guaranteed.olang:16: array length out of range\n"
                      "guaranteed.olang:19: CaseError.WrongCase\n", "guaranteed.olang:21: null reached\n"
                      "guaranteed.olang:17: lane lengths differ\n"]
-    args := String&["", " a", " a b", " a b c", " a b c d e"]
+    args := Array<String&>["", " a", " a b", " a b c", " a b c d e"]
     for i, w in wants {
         try r.expect(sh(dir, "./build/guaranteed" $args[i] " > out.txt 2>&1") == 134 and outOf(dir).StartsWith(w), w, dir)
         try r.expect(sh(dir, "\"$OLANG\" interpret guaranteed.olang" $args[i] " > out.txt 2>&1") == 134 and
@@ -1418,7 +1418,7 @@ fn definit(r mut report&) ? Failed {
     try r.expect(outOf(dir) == "1 F32[0, 1, 4, 9] F32[0, 0.5, 1, 1.5] F32[1, 1, 1, 0, 0] 7\n", "definit output", dir)
     ll String& = "build/definit.main.ll"
     try r.expect(not bodyHas(dir, ll, "assigned", "Vec[^ ]*ctor|scope_alloc"), "a zero Vec made before its first value", dir)
-    for f in String&["squares", "filled"] {
+    for f in Array<String&>["squares", "filled"] {
         try r.expect(not bodyHas(dir, ll, f, "scope_alloc_zeroed|llvm\\.memset"), $f ": an array filled once is cleared", dir)
         try r.expect(bodyHas(dir, ll, f, "call ptr @__olang_scope_alloc\\("), $f ": no plain allocation", dir)
     }
@@ -1469,7 +1469,7 @@ fn protopriv(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build use.olang > out.txt 2>&1 && ./build/use") == 0, "protopriv", dir)
     try r.expect(irHas(dir, "build/kk*.ll", $gsym("kk", "Baked") " = .*(i1 true|c\"\\\\01\")"), "Inside() was not baked", dir)
     try r.expect(sh(dir, "\"$OLANG\" build bad.olang > out.txt 2>&1") != 0, "bad.olang compiled", dir)
-    for what in String&["'==' needs Key's eq", "'$' needs Key's str", "'+' needs Vec2's plus", "'>' needs Vec2's less"
+    for what in Array<String&>["'==' needs Key's eq", "'$' needs Key's str", "'+' needs Vec2's plus", "'>' needs Vec2's less"
                         "'[' needs Bag's at", "'for' needs Bag's at", "'in' needs Bag's has", "'for' needs Gen's next"
                         "needs Adder's call", "'Hash' needs Key's hash", "compilation failed with 14 errors"] {
         try r.expect(outOf(dir).Contains(what), "bad.olang: expected " $what, dir)
@@ -1683,13 +1683,13 @@ fn vechandle(r mut report&) ? Failed {
     try r.expect(sh(dir, "grep -q '^1051 1051 51 539924 -1 999$' b.txt") == 0, "handle output", dir)
     plain := "\"$OLANG\" build stale.olang > out.txt 2>&1 && ./build/stale > out.txt 2>&1 && grep -qx 5 out.txt"
     try r.expect(sh(dir, plain) == 0, "stale built plainly: the old element", dir)
-    for flags in String&["-sanitize", "-debug -sanitize"] {
+    for flags in Array<String&>["-sanitize", "-debug -sanitize"] {
         bin := "./build/stale" $(".debug" if flags == "-debug -sanitize" else "") ".san"
         try r.expect(sh(dir, "\"$OLANG\" build " $flags " stale.olang > out.txt 2>&1") == 0, "stale " $flags, dir)
         try r.expect(sh(dir, $bin " > out.txt 2>&1") == 134 and outOf(dir).Contains("stale view: storage a collection replaced")
                      "stale " $flags " was not reported", dir)
     }
-    for flags in String&["-sanitize", "-debug -sanitize"] {
+    for flags in Array<String&>["-sanitize", "-debug -sanitize"] {
         bin := "./build/stalecopy" $(".debug" if flags == "-debug -sanitize" else "") ".san"
         try r.expect(sh(dir, "\"$OLANG\" build " $flags " stalecopy.olang > out.txt 2>&1") == 0, "stalecopy " $flags, dir)
         try r.expect(sh(dir, $bin " > out.txt 2>&1") == 134 and outOf(dir).Contains("stale view: storage a collection replaced")
@@ -2218,7 +2218,7 @@ fn crashes(r mut report&) ? Failed {
     dir := fresh("crash")
     os.Run("cp checks/fixtures/crash/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build crash.olang > out.txt 2>&1") == 0, "crash did not build", dir)
-    for how in String&["overflow", "small", "task", "shallow"] {
+    for how in Array<String&>["overflow", "small", "task", "shallow"] {
         o := crashRun(dir, "./build/crash " $how)
         try r.expect(o.Status == 139 and o.Stderr == "crash.olang crashed: " $how "\n" and o.Stdout == ""
                      "crash " $how ": status " $o.Status ", " $o.Stderr, dir)
@@ -2236,7 +2236,7 @@ fn crashes(r mut report&) ? Failed {
                  f.Stderr.Contains("while interpreting"), "OnCrash -i: status " $f.Status ", " $f.Stderr, dir)
     # T2c, E35: "x!" on a null ends the program where it is written, optimized (where the optimizer can see the null)
     # and not - nothing after it runs - and interpret stops there alike
-    for flags in String&["", "-debug"] {
+    for flags in Array<String&>["", "-debug"] {
         try r.expect(sh(dir, "\"$OLANG\" build " $flags " nullpeek.olang > out.txt 2>&1") == 0, "nullpeek did not build", dir)
         bin := "./build/nullpeek" $(".debug" if flags == "-debug" else "")
         n := crashRun(dir, bin)
@@ -2298,13 +2298,13 @@ test "joins reaching a Str give what they did when reviewed" { assert passed("st
 
 # the programs strheld builds, each a part of its own (Checks), in a directory of its own taking what the others built
 # from the store (B3j): built, built -s and built -d, and interpreted but for the ones in StrheldNotInterpreted
-StrheldPrograms Array<String&>& = String&["concurrent", "deferred", "earlyexits", "eqwrites", "globals", "manyplaces"
+StrheldPrograms Array<String&>& = Array<String&>["concurrent", "deferred", "earlyexits", "eqwrites", "globals", "manyplaces"
                                           "mapalone", "opmethods", "order", "samescope", "shrinks", "strchanges", "lambdaany"
                                           "lambdamade", "lambdafold", "lambdaspawn", "lambdabyvalue", "adapterlocal"
                                           "adaptercallee", "g9dorder", "condlanding", "trydefault", "helperlambda"
                                           "transientlambda", "condliteral", "regbattery", "regreturns", "g9deval"
                                           "g9dcontainers"]
-StrheldNotInterpreted Array<String&>& = String&["earlyexits", "manyplaces", "g9dorder", "condlanding", "trydefault"
+StrheldNotInterpreted Array<String&>& = Array<String&>["earlyexits", "manyplaces", "g9dorder", "condlanding", "trydefault"
                                                 "regbattery", "regreturns", "g9deval", "g9dcontainers"]
 
 fn strheldProgram(r mut report&, n String&) ? Failed {
@@ -2345,7 +2345,7 @@ test "a local lambda only ever called keeps its environment in the frame, and no
 fn frameenv(r mut report&) ? Failed {
     dir := fresh("frameenv")
     os.Run("cp checks/fixtures/frameenv/* " $os.Quote(dir))
-    for n in String&["frameonly", "frameescapes"] {
+    for n in Array<String&>["frameonly", "frameescapes"] {
         try r.expect(sh(dir, "\"$OLANG\" build " $n ".olang > out.txt 2>&1 && ./build/" $n " > out.txt 2>&1") == 0, n, dir)
         try r.expect(sh(dir, "\"$OLANG\" build -sanitize " $n ".olang > out.txt 2>&1 && ./build/" $n ".san > out.txt 2>&1") == 0
                      $n " -s", dir)
@@ -2369,7 +2369,7 @@ fn regions(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build -debug stub.olang > out.txt 2>&1") == 0, "stub.olang did not build", dir)
     try r.expect(sh(dir, "clang -O0 drive.c build/olang_runtime.*.debug.o -o drive -lpthread -ldl -lm > out.txt 2>&1") == 0
                  "drive.c did not link", dir)
-    for want in String&["small 2 0", "large 2 0", "null 0 0", "kept 4 0", "chain 200000 0"] {
+    for want in Array<String&>["small 2 0", "large 2 0", "null 0 0", "kept 4 0", "chain 200000 0"] {
         mode := want[:try want.FindByte(' ') catch default 0]
         try r.expect(sh(dir, "./drive " $mode " > out.txt 2>&1") == 0 and outOf(dir) == $want "\n", "drive " $mode, dir)
     }
@@ -2388,7 +2388,7 @@ fn testends(r mut report&) ? Failed {
     try r.expect(sh(dir, "cmp -s out.txt ends.want") == 0, "ends output", dir)
     try r.expect(sh(dir, "\"$OLANG\" test heldends.olang > out.txt 2>&1") != 0, "heldends", dir)
     try r.expect(outOf(dir).Contains("ok - after") and outOf(dir).Contains("1 passed, 1 failed"), "heldends output", dir)
-    for n in String&["traced", "banged", "spawnbanged", "checkbanged", "contractbanged", "why"] {
+    for n in Array<String&>["traced", "banged", "spawnbanged", "checkbanged", "contractbanged", "why"] {
         try r.expect(sh(dir, "\"$OLANG\" build " $n ".olang > out.txt 2>&1") == 0, $n " build", dir)
         # the shell adds its own "Aborted" line after what a program stopped by '!' printed
         try r.expect(sh(dir, "./build/" $n " > b.txt 2>&1; grep -v '^Aborted' b.txt | cmp -s - " $n ".b.want") == 0, n, dir)

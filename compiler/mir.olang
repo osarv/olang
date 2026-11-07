@@ -666,8 +666,8 @@ fn (f mut Fn&) addConstItems(xs Array<typed.Const&>&) Range {
 fn HelperType(t mut types.Table&, kind HelperKind, ty types.TypeId) types.TypeId {
     r := t.Ref(ty, types.ReadOnly)
     return match kind {
-        case HelperKind.Render: t.Func(t.List(types.TypeId[r, I64T]), types.VoidT, types.ListId(0))
-        case HelperKind.Equal: t.Func(t.List(types.TypeId[r, r]), types.BoolT, types.ListId(0))
+        case HelperKind.Render: t.Func(t.List(Array<types.TypeId>[r, I64T]), types.VoidT, types.ListId(0))
+        case HelperKind.Equal: t.Func(t.List(Array<types.TypeId>[r, r]), types.BoolT, types.ListId(0))
         case HelperKind.Hash: t.Func(t.List1(r), I64T, types.ListId(0))
         case HelperKind.Zero: t.Func(types.ListId(0), ty, types.ListId(0))
         case HelperKind.Copy, HelperKind.Parts: t.Func(t.List1(r), ty, types.ListId(0))
@@ -677,7 +677,7 @@ fn HelperType(t mut types.Table&, kind HelperKind, ty types.TypeId) types.TypeId
 
 # a by-value holder's guard (HelperKind.Guard): its flag's place and its own, both writable references
 fn GuardType(t mut types.Table&, held types.TypeId) types.TypeId {
-    return t.Tuple(t.List(types.TypeId[t.Ref(types.BoolT, types.Writable), t.Ref(held, types.Writable)]))
+    return t.Tuple(t.List(Array<types.TypeId>[t.Ref(types.BoolT, types.Writable), t.Ref(held, types.Writable)]))
 }
 
 # the type a guard is of (its holder's), else UnknownT
@@ -1100,14 +1100,14 @@ fn (v mut verifier&) termShape(t Term) {
 fn (v mut verifier&) succs(t Term) Array<BlockId> {
     f := v.F
     return match t {
-        case Term.Goto(b): BlockId[b]
-        case Term.Branch(_, y, n): BlockId[y, n]
+        case Term.Goto(b): Array<BlockId>[b]
+        case Term.Branch(_, y, n): Array<BlockId>[y, n]
         case Term.Switch(_, r, o): v.switchSuccs(r, o)
-        case Term.Call(_, c): (BlockId[f.Calls[I64(c)].Ok] if f.Calls[I64(c)].Err == NoBlock
-                                 else BlockId[f.Calls[I64(c)].Ok, f.Calls[I64(c)].Err])
-        case Term.Wait(_, _, ok, _, failed): BlockId[ok] if failed == NoBlock else BlockId[ok, failed]
-        case Term.Suspend(_, _, b, _): BlockId[b]
-        case _: BlockId[]
+        case Term.Call(_, c): (Array<BlockId>[f.Calls[I64(c)].Ok] if f.Calls[I64(c)].Err == NoBlock
+                                 else Array<BlockId>[f.Calls[I64(c)].Ok, f.Calls[I64(c)].Err])
+        case Term.Wait(_, _, ok, _, failed): Array<BlockId>[ok] if failed == NoBlock else Array<BlockId>[ok, failed]
+        case Term.Suspend(_, _, b, _): Array<BlockId>[b]
+        case _: Array<BlockId>[]
     }
 }
 
@@ -1684,7 +1684,7 @@ fn (v mut verifier&) sliceType(of types.TypeId, lo Operand, hi Operand, ty types
     if a == types.UnknownT or s == types.UnknownT or not t.Same(t.Repr(t.Elem(a)), t.Repr(t.Elem(s))) {
         v.bad("a slice " $v.canon(ty) " of a " $v.canon(of))
     }
-    for x in Operand[lo, hi] {
+    for x in Array<Operand>[lo, hi] {
         if not t.IsInt(t.Repr(v.operandType(x))) { v.bad("a slice's bound that is no integer") }
     }
     return ty
@@ -2512,12 +2512,12 @@ fn expect(t mut types.Table&, f Fn&, want String&) {
 # "fn add(a I32, b I32) I32 { s := a + b; return s }", as lower would make it
 fn Fn.add(t mut types.Table&) Fn {
     i32 := t.Prim("I32")
-    f := Fn.tfn(t, t.Func(t.List(types.TypeId[i32, i32]), i32, types.ListId(0)))
+    f := Fn.tfn(t, t.Func(t.List(Array<types.TypeId>[i32, i32]), i32, types.ListId(0)))
     f.Locals[0] = Local(t.Names.Intern("a"), Sp0, i32, LocalKind.Param, ScopeRef.Frame)
     f.Locals[1] = Local(t.Names.Intern("b"), Sp0, i32, LocalKind.Param, ScopeRef.Frame)
     s := f.AddLocal(Local(t.Names.Intern("s"), Sp0, i32, LocalKind.Var, ScopeRef.Frame))
     b0 := BlockId(0)
-    f.Add(b0, Stmt.Assign(Sp0, Lvalue.L(s), Rvalue.Prim(typed.PrimOp.Add, i32, f.Args(Operand[Operand.Copy(Lvalue.L(LocalId(0)))
+    f.Add(b0, Stmt.Assign(Sp0, Lvalue.L(s), Rvalue.Prim(typed.PrimOp.Add, i32, f.Args(Array<Operand>[Operand.Copy(Lvalue.L(LocalId(0)))
                                                                                         Operand.Copy(Lvalue.L(LocalId(1)))]))))
     f.Add(b0, Stmt.Close(Sp0, ScopeId(0)))
     f.End(b0, Term.Return(Sp0, Operand.Copy(Lvalue.L(s))))
@@ -2553,14 +2553,14 @@ fn Fn.loop(t mut types.Table&) Fn {
     f.Add(BlockId(0), Stmt.Assign(Sp0, Lvalue.L(i), Rvalue.Use(Operand.Const(i64, 0))))
     f.End(BlockId(0), Term.Goto(head))
     f.Add(head, Stmt.Assign(Sp0, Lvalue.L(c), Rvalue.Prim(typed.PrimOp.Lt, types.BoolT
-                                                   f.Args(Operand[Operand.Copy(Lvalue.L(i)), Operand.Copy(Lvalue.L(n))]))))
+                                                   f.Args(Array<Operand>[Operand.Copy(Lvalue.L(i)), Operand.Copy(Lvalue.L(n))]))))
     f.End(head, Term.Branch(Operand.Copy(Lvalue.L(c)), turn, exit))
     f.Add(turn, Stmt.Open(Sp0, body))
-    call := f.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), g), f.Args(Operand[Operand.Copy(Lvalue.L(i))]), Empty
+    call := f.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), g), f.Args(Array<Operand>[Operand.Copy(Lvalue.L(i))]), Empty
                            Lvalue.L(r), true, next, code, failed))
     f.End(turn, Term.Call(Sp0, call))
     f.Add(next, Stmt.Assign(Sp0, Lvalue.L(i), Rvalue.Prim(typed.PrimOp.Add, i64
-                                                   f.Args(Operand[Operand.Copy(Lvalue.L(i)), Operand.Const(i64, 1)]))))
+                                                   f.Args(Array<Operand>[Operand.Copy(Lvalue.L(i)), Operand.Const(i64, 1)]))))
     f.Add(next, Stmt.Close(Sp0, body))
     f.End(next, Term.Goto(head))
     f.Add(exit, Stmt.Close(Sp0, ScopeId(0)))
@@ -2703,23 +2703,23 @@ test "a malformed function: every malformation is caught" {
     # a check written as an operation; a switch with a value twice
     f18 := Fn.add(t)
     f18.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, Lvalue.L(LocalId(2)), Rvalue.Prim(typed.PrimOp.Holds, i32
-                                         f18.Args(Operand[Operand.Copy(Lvalue.L(LocalId(0)))])))
+                                         f18.Args(Array<Operand>[Operand.Copy(Lvalue.L(LocalId(0)))])))
     expect(t, f18, "Holds is a check: a test and a branch in MIR")
     f19 := Fn.add(t)
-    f19.End(b0, Term.Switch(Operand.Copy(Lvalue.L(LocalId(0))), f19.AddCases(Case[Case(1, b0), Case(1, b0)]), b0))
+    f19.End(b0, Term.Switch(Operand.Copy(Lvalue.L(LocalId(0))), f19.AddCases(Array<Case>[Case(1, b0), Case(1, b0)]), b0))
     expect(t, f19, "a switch with the value 1 twice")
     # calls: arguments counted and typed, an error edge exactly where the callee can fail; a raise only where this can
     g := t.Func(t.List1(i32), i32, t.List1(types.DefaultErrT))
     f20 := Fn.add(t)
     b20 := f20.NewBlock()
     f20.Blocks.RefMut(0).Stmts.Truncate(2)
-    k20 := f20.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), g), f20.Args(Operand[Operand.Const(i64, 1)]), Empty
+    k20 := f20.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), g), f20.Args(Array<Operand>[Operand.Const(i64, 1)]), Empty
                             Lvalue.L(LocalId(2)), true, b20, NoLocal, NoBlock))
     f20.End(b0, Term.Call(Sp0, k20))
     f20.Add(b20, Stmt.Close(Sp0, ScopeId(0)))
     f20.End(b20, Term.Raise(Sp0, Operand.Const(i32, 65536)))
     got20 := f20.Verify(t)
-    for w in String&["argument 0 is a I64, where a I32 is wanted", "a call that can fail with no error edge"
+    for w in Array<String&>["argument 0 is a I64, where a I32 is wanted", "a call that can fail with no error edge"
                      "a raise in a function that cannot fail"] {
         assert (try got20.Find(w) catch default -1) >= 0, got20
     }
@@ -2728,7 +2728,7 @@ test "a malformed function: every malformation is caught" {
     b24, e24 := f24.NewBlock(), f24.NewBlock()
     f24.Blocks.RefMut(0).Stmts.Truncate(2)
     c24 := f24.AddTemp(I32T, Sp0)
-    k24 := f24.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), h), f24.Args(Operand[Operand.Const(i32, 1)
+    k24 := f24.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), h), f24.Args(Array<Operand>[Operand.Const(i32, 1)
                                                                                        Operand.Const(i32, 2)])
                             Empty, Lvalue.L(LocalId(2)), true, b24, c24, e24))
     f24.End(b0, Term.Call(Sp0, k24))
@@ -2737,14 +2737,14 @@ test "a malformed function: every malformation is caught" {
     f24.Add(e24, Stmt.Close(Sp0, ScopeId(0)))
     f24.End(e24, Term.Exit(Sp0, ExitKind.Unreachable, Operand.None))
     got24 := f24.Verify(t)
-    for w in String&["a call of 2 arguments to a function of 1 parameters", "an error edge for a call that cannot fail"] {
+    for w in Array<String&>["a call of 2 arguments to a function of 1 parameters", "an error edge for a call that cannot fail"] {
         assert (try got24.Find(w) catch default -1) >= 0, got24
     }
     # joins: a spawn outside a join, a join closed with its tasks not waited for, a wait missing its failed edge
     unit := t.Func(types.ListId(0), types.VoidT, types.ListId(0))
     f21 := Fn.add(t)
     j21 := f21.AddScope(ScopeKind.Join, ScopeId(0), typed.BlockId(1), Sp0)
-    k21 := f21.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Lvalue[], TaskClause[])
+    k21 := f21.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Array<Lvalue>[], Array<TaskClause>[])
     try f21.Blocks.RefMut(0).Stmts.Insert(1, Stmt.Open(Sp0, j21))
     try f21.Blocks.RefMut(0).Stmts.Insert(2, Stmt.Spawn(Sp0, j21, k21))
     try f21.Blocks.RefMut(0).Stmts.Insert(3, Stmt.Close(Sp0, j21))
@@ -2760,7 +2760,7 @@ test "a malformed function: every malformation is caught" {
     f22.End(b22, Term.Return(Sp0, Operand.Copy(Lvalue.L(LocalId(2)))))
     assert f22.Verify(t) == "bb0[term]: a wait for a join that can fail with no failed edge\n", f22.Verify(t)
     f23 := Fn.add(t)
-    k23 := f23.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Lvalue[], TaskClause[])
+    k23 := f23.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Array<Lvalue>[], Array<TaskClause>[])
     try f23.Blocks.RefMut(0).Stmts.Insert(1, Stmt.Spawn(Sp0, ScopeId(0), k23))
     expect(t, f23, "a spawn into S0, which is no join")
 }
@@ -2771,9 +2771,9 @@ test "error codes are each function's own: an error's type's position from 1, it
     m := t.AddModule("t")
     e := t.Named(t.AddDecl(m, names.Intern("E"), types.DeclKind.Error, 0), types.ListId(0))
     o := t.Named(t.AddDecl(m, names.Intern("O"), types.DeclKind.Error, 0), types.ListId(0))
-    named := t.List(types.TypeId[o, e])
+    named := t.List(Array<types.TypeId>[o, e])
     assert ErrorCode(t, named, e, 3) == ((2 << 16) | 3) and ErrorCode(t, named, o, 0) == 1 << 16
-    general := t.List(types.TypeId[e, types.DefaultErrT])
+    general := t.List(Array<types.TypeId>[e, types.DefaultErrT])
     assert ErrorCode(t, general, o, 5) == 2 << 16 and ErrorCode(t, t.List1(e), o, 1) == -1
     assert ExitText(ExitKind.SliceBounds) == "slice bounds out of range" and ExitText(ExitKind.Done) == ""
     assert Key.Assert(typed.BodyId(3), source.Span(4, 9)).Text() == "assert B3 4:9"
@@ -2783,7 +2783,7 @@ test "constants are flattened into the function's tables; helpers' ABI is their 
     names := source.Names()
     t := types.Table.New(names)
     f := Fn.add(t)
-    c := f.AddConst(typed.Const.Items(typed.Const&[typed.Const.Bytes(U8[104, 105]), typed.Const.Bits(7)]))
+    c := f.AddConst(typed.Const.Items(Array<typed.Const&>[typed.Const.Bytes(Array<U8>[104, 105]), typed.Const.Bits(7)]))
     w mut dumper& = dumper(f, t)
     assert w.constant(c) == "[text 2 7]" and f.Bytes.Len() == 2 and f.ConstItems.Len() == 2
     i64 := t.Prim("I64")

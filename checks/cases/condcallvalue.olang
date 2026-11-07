@@ -14,7 +14,7 @@ fn main() ? {
     w := lc(1) if k > 2 else lc(2)
     assert w == "1:2"
     assert pick(1) == "10:11" and pick(5) == "5:6"
-    churn := I64[0]
+    churn := Array<I64>[0]
     for i in range 1000 {
         a := Array<I64>(64, i)
         churn[0] += a[3]

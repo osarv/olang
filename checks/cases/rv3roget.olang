@@ -8,6 +8,6 @@ fn f(m Map<I64, Vec<I64>>&) I64 {
 }
 fn main() ? {
     m := Map<I64, Vec<I64>>()
-    m.Put(1, I64[5].ToVec())
+    m.Put(1, Array<I64>[5].ToVec())
     assert f(m) == 21
 }

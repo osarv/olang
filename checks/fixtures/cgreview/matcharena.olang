@@ -7,7 +7,7 @@ fn work(n I64) I64 {
     t I64 = 0
     for i in range n {
         v I64 = match i % 2 {
-            case 0: I64[($x "abcdefghijklmnopqrstuvwxyz").Len() for x in range 50].Len()
+            case 0: Array<I64>[($x "abcdefghijklmnopqrstuvwxyz").Len() for x in range 50].Len()
             case _: 1
         }
         t = t + v

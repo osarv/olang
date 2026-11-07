@@ -36,17 +36,17 @@ fn foldsFailing(a Array<I64>&) String {
     return $r " " $n1 " " $n2 " " $r2 " " $m1 " " $m2 " " $f " " $g
 }
 
-FoldsBaked String& = foldsAll(I64[5, 3, 8, 1, 9, 2])
-FoldsFailingBaked String& = foldsFailing(I64[5, 3, 8, 1, 9, 2])
+FoldsBaked String& = foldsAll(Array<I64>[5, 3, 8, 1, 9, 2])
+FoldsFailingBaked String& = foldsFailing(Array<I64>[5, 3, 8, 1, 9, 2])
 
 test "Take and Skip fold as Next walks them, with Sum, Count, Min and Max through Fold" {
-    a := I64[5, 3, 8, 1, 9, 2]
+    a := Array<I64>[5, 3, 8, 1, 9, 2]
     want := "17 20 12 1 9 4 16 11 0 0 0 20"
     assert foldsAll(a) == want and FoldsBaked == want
 }
 
 test "a fold failing part way leaves Take and Skip where Next would" {
-    a := I64[5, 3, 8, 1, 9, 2]
+    a := Array<I64>[5, 3, 8, 1, 9, 2]
     want := "-1 1 -7 -1 1 -7 28 -7"
     assert foldsFailing(a) == want and FoldsFailingBaked == want
 }

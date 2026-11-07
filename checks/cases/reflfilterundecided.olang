@@ -6,5 +6,5 @@ type Shape enum {
     Circle(r F64)
     Empty
 }
-fn g(k I64) Array<String&> { return String&[f.Name for f in Point.Fields if k > 0] }
+fn g(k I64) Array<String&> { return Array<String&>[f.Name for f in Point.Fields if k > 0] }
 fn main() { a := g(1) }

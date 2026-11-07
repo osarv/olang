@@ -15,7 +15,7 @@ type Body struct(x F64, y F64, z F64, vx F64, vy F64, vz F64, mass F64) {
 }
 
 fn planets() Array<Body> {
-    return Body[
+    return Array<Body>[
         Body(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, SolarMass)
         Body(4.84143144246472090e+00, -1.16032004402742839e+00, -1.03622044471123109e-01
              1.66007664274403694e-03 * DaysPerYear, 7.69901118419740425e-03 * DaysPerYear

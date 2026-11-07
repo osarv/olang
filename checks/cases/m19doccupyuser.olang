@@ -2,7 +2,7 @@
 # M19d: occupy, as vacate, is the library's - it says which positions of a collection hold values - and no method of a
 # program's types
 fn main() {
-    a := I64[1, 2]
+    a := Array<I64>[1, 2]
     a[0].occupy(5)
     assert a[0] == 5
 }

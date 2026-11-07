@@ -18,7 +18,7 @@ fn assigned(n I64) I64 {
 }
 
 # a comprehension over a range: exact storage, no clear, each element written once (E27)
-fn squares(n I64) Array<F32> { return F32[F32(i * i) for i in range n] }
+fn squares(n I64) Array<F32> { return Array<F32>[F32(i * i) for i in range n] }
 
 # Array<T>(n) filled by the loop after it: no clear (D14d)
 fn filled(n I64) Array<F32> {

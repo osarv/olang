@@ -255,7 +255,7 @@ fn stripped(name String&, ty String&) String {
 # what is left of a name, where it is still one of the same visibility and no member reflection reads; else the name
 fn leftName(name String&, left String&) String {
     if left.Len() == 0 or not left[0].IsLetter() or left[0].IsUpper() != name[0].IsUpper() { return name.Copy() }
-    for r in String&["Name", "Kind", "Base", "Element", "Length", "Target", "Size", "Align", "Fields", "Cases", "Params"
+    for r in Array<String&>["Name", "Kind", "Base", "Element", "Length", "Target", "Size", "Align", "Fields", "Cases", "Params"
                      "Results", "Errors", "Functions", "Methods", "Max", "Min", "Inf", "NaN", "Epsilon", "Here", "From"
                      "Type", "Attr", "HasAttr", "fn", "if", "for", "in", "is", "as", "and", "or", "not", "type"] {
         if left == r { return name.Copy() }

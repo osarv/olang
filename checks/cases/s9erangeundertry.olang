@@ -4,7 +4,7 @@
 import "std/io"
 import "std/arith"
 fn main() ? {
-    try io.Println($I32[x for x in range I32(10) if x % 2 == 0])
-    n := try arith.Add(I64[x * 2 for x in range 4].Len(), 1)
+    try io.Println($Array<I32>[x for x in range I32(10) if x % 2 == 0])
+    n := try arith.Add(Array<I64>[x * 2 for x in range 4].Len(), 1)
     assert n == 5
 }

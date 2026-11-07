@@ -295,7 +295,7 @@ fn shrink<F>(f F, start Array<U8>&, budget I64) Array<U8> {
     for better and tries < budget {
         better = false
         # runs of 8, 4, 2 and 1 bytes cut out
-        for size in I64[8, 4, 2, 1] {
+        for size in Array<I64>[8, 4, 2, 1] {
             i := 0
             for i + size <= best.Len() and tries < budget {
                 cand := Array<U8>(best.Len() - size)
@@ -405,7 +405,7 @@ test search "finds a failing case, which shrink makes smallest" {
     assert seed != 0
     small := shrink(f, record(f, seed), 2000)
     s := source.newSource(small, 0)
-    assert (try gen<Array<I64>>(s) catch skip default I64[]) == I64[50]
+    assert (try gen<Array<I64>>(s) catch skip default Array<I64>[]) == Array<I64>[50]
 }
 
 test search "finds nothing where every case passes" {
@@ -413,9 +413,9 @@ test search "finds nothing where every case passes" {
 }
 
 test gen "draws the least values from zero bytes" {
-    s := source.newSource(U8[0, 0, 0, 0], 0)
+    s := source.newSource(Array<U8>[0, 0, 0, 0], 0)
     assert (try gen<I64>(s)) == 0 and not (try gen<Bool>(s)) and (try gen<String>(s)) == ""
     assert (try gen<Array<I64>>(s)).Len() == 0 and (try gen<Shape>(s)) == Shape.Dot
-    r := source.newSource(U8[1, 5], 0)
+    r := source.newSource(Array<U8>[1, 5], 0)
     assert (try gen<Percent>(r).v catch skip default -1) == -1    # -5, which the contract refuses
 }

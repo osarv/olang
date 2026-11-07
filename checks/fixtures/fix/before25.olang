@@ -11,7 +11,7 @@ fn f(n I64) I64 ? E { if n > 100 { error E.BAD } return n }
 fn g(b Bool) Bool ? E { if not b { error E.BAD } return b }
 fn pick(x I64, y I64) I64 [y > x] { return y - x }
 fn main() ? {
-  a := I64[1, 2, 3]
+  a := Array<I64>[1, 2, 3]
   n := os.Args().Len()
   x := 2 * checked a[n] + 1
   y := try f(n) + 1

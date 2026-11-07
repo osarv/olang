@@ -28,7 +28,7 @@ import "srcmask"
 Word String& = "check" "ed"
 OldError String& = "Check" "Error"
 
-Numbers Array<String&> = String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64"]
+Numbers Array<String&> = Array<String&>["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64"]
 
 type Result struct() {
     changes I64 = 0
@@ -198,7 +198,7 @@ fn chainCovers(x String&) Bool {
 fn renameWords(seg String&, kind String&, c mut Result&) String {
     if kind.Len() == 0 { return $seg }
     s := $seg
-    pairs := String&[$OldError ".OUT_OF_BOUNDS", "ArrayError.OutOfRange", $OldError ".WRONG_CASE", "CaseError.WrongCase"
+    pairs := Array<String&>[$OldError ".OUT_OF_BOUNDS", "ArrayError.OutOfRange", $OldError ".WRONG_CASE", "CaseError.WrongCase"
                      $OldError ".OVERFLOW", "NumberError.Overflow", $OldError ".INVALID", "NumberError.Invalid"]
     if kind == "ArgumentError" {
         contract := $OldError ".CONTRACT"

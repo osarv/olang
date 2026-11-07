@@ -22,14 +22,14 @@ import "benchlib"
 # machine (B12: native by default) - and -ffp-contract=off keeps C's floating point exactly as written, as olang's is
 # (B12c): clang's default would fuse a*b+c into one FMA wherever the target has one, which changes results (and so the
 # outputs would no longer agree)
-fn cflags() Array<String&>& { return String&["-O3", "-flto", "-march=native", "-ffp-contract=off"] }
+fn cflags() Array<String&>& { return Array<String&>["-O3", "-flto", "-march=native", "-ffp-contract=off"] }
 
 # baseline x86-64: olang -target x86-64, and C with no -march
-fn baseFlags() Array<String&>& { return String&["-O3", "-flto"] }
+fn baseFlags() Array<String&>& { return Array<String&>["-O3", "-flto"] }
 
 # name | olang program | C program | arguments (the same for both)
 fn table() Array<String&>& {
-    return String&[
+    return Array<String&>[
         "nbody|nbody|nbody|10000000"
         "spectral-norm|spectral|spectral|3000"
         "mandelbrot|mandelbrot|mandelbrot|3000"
@@ -175,7 +175,7 @@ fn build(olang String&, rows Vec<String&>&, base Bool) {
         if "o." $prog not in built {
             if base {
                 # baseline x86-64
-                buildOlang(olang, prog, String&["-target", "x86-64"])
+                buildOlang(olang, prog, Array<String&>["-target", "x86-64"])
                 try os.Output.Exec("cp", "build/" $prog, "build/" $prog ".base", dir = benchlib.Dir) catch os.Error { }
             }
             buildOlang(olang, prog, Array<String&>(0))
@@ -203,7 +203,7 @@ fn clang(opts Array<String&>&, out String&, cprog String&) {
     args := Vec<String&>()
     args.Push("clang")
     for f in opts { args.Push($f) }
-    for a in String&["-o", out, "c/" $cprog ".c", "-lm", "-lpthread"] { args.Push($a) }
+    for a in Array<String&>["-o", out, "c/" $cprog ".c", "-lm", "-lpthread"] { args.Push($a) }
     benchlib.Must(args.ToArray())
 }
 

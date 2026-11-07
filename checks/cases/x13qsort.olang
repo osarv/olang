@@ -10,7 +10,7 @@ extern fn qsort(base mut Array<Item>&, n I64, size I64, cmp fn&(a Item&, b Item&
 export fn byKey(a Item&, b Item&) I32 { return a.key - b.key }
 
 fn main() ? {
-    xs := Item[Item(5, 'e'), Item(2, 'b'), Item(9, 'i'), Item(1, 'a')]
+    xs := Array<Item>[Item(5, 'e'), Item(2, 'b'), Item(9, 'i'), Item(1, 'a')]
     qsort(xs, xs.Len(), 8, byKey)
     assert xs[0].key == 1 and xs[1].tag == 'b' and xs[3].key == 9
     # an export fn is an ordinary function in olang too

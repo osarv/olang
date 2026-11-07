@@ -43,12 +43,12 @@ fn all(n I64) Bool {
         $(a.LanesLess(b * 3.0) xor i.LanesEqual(i * 0 + 1)) == "Bool[false, false, true, true]"
     sel Bool = $lesser(a, b * 3.0) == "F64[0, 1, 2, 3]" and $lesser(b * 3.0, a) == "F64[0, 1, 2, 3]" and
         $a.LanesLess(b * 3.0).Select(a, 0.0) == "F64[0, 1, 2, 3]" and $i.LanesEqual(i * 0 + 1).Select(i, -1) == "I32[-1, 1, -1, -1]"
-    fixed Bool = $(F64[1.0, 2.0] + F64[3.0, 4.0]) == "F64[4, 6]" and (F64[1.0, 2.0] * F64[3.0, 4.0]).Sum() == 11.0
-    wrap Bool = U8[200, 100].Sum() == 44 and $(U8[250, 5] + U8[10, 1]) == "U8[4, 6]"
-    v := Vec3(F64[1.0, 2.0])
+    fixed Bool = $(Array<F64>[1.0, 2.0] + Array<F64>[3.0, 4.0]) == "F64[4, 6]" and (Array<F64>[1.0, 2.0] * Array<F64>[3.0, 4.0]).Sum() == 11.0
+    wrap Bool = Array<U8>[200, 100].Sum() == 44 and $(Array<U8>[250, 5] + Array<U8>[10, 1]) == "U8[4, 6]"
+    v := Vec3(Array<F64>[1.0, 2.0])
     w Vec3 = v + v * 2.0 # an extending type's operands give it again (T29e)
     kept Bool = $w == "F64[3, 6]" and w.Sum() == 9.0
-    c := C64[C64(1.0, 2.0), C64(3.0, 4.0)]
+    c := Array<C64>[C64(1.0, 2.0), C64(3.0, 4.0)]
     complex Bool = $(c * c) == "C64[C64(-3, 4), C64(-7, 24)]" and (c * c).Sum() == C64(-10.0, 28.0) and $(c + C64(1.0, 0.0)) == "C64[C64(2, 2), C64(4, 4)]"
     y := Array<F32>(n, 1.0)
     axpy(2.0, Array<F32>(n, 0.5), y)
@@ -62,9 +62,9 @@ fn all(n I64) Bool {
 }
 
 AllBaked := all(4)
-DotBaked := (F64[1.0, 2.0, 3.0] * F64[4.0, 5.0, 6.0]).Sum()
-MaxBaked := try (I64[3, 9, 2] * 2).Max() catch default -1
-LanesBaked := F64[1.0, 2.0] * 3.0 + 1.0
+DotBaked := (Array<F64>[1.0, 2.0, 3.0] * Array<F64>[4.0, 5.0, 6.0]).Sum()
+MaxBaked := try (Array<I64>[3, 9, 2] * 2).Max() catch default -1
+LanesBaked := Array<F64>[1.0, 2.0] * 3.0 + 1.0
 
 Four mut I64 = 4 # read at run time, so all() runs as the program as well as in the evaluator
 
@@ -85,11 +85,11 @@ test "E39: a fused total makes no array, and an empty one" {
 
 test "E39: Min and Max by '<', a float's NaN the answer once met, ties the first" {
     nan := F64.NaN
-    a := F64[2.0, nan, 1.0]
+    a := Array<F64>[2.0, nan, 1.0]
     assert (try a.Min() catch default 9.0).IsNan() and (try a.Max() catch default 9.0).IsNan()
-    b := F64[nan, 1.0]
-    assert (try b.Min() catch default 9.0).IsNan() and (try F64[1.0, 3.0].Max() catch default 9.0) == 3.0
-    assert (try F64[0.0, -0.0].Min() catch default 9.0).Bits() == F64(0.0).Bits()
+    b := Array<F64>[nan, 1.0]
+    assert (try b.Min() catch default 9.0).IsNan() and (try Array<F64>[1.0, 3.0].Max() catch default 9.0) == 3.0
+    assert (try Array<F64>[0.0, -0.0].Min() catch default 9.0).Bits() == F64(0.0).Bits()
 }
 
 fn churn() I64 {

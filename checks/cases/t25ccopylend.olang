@@ -1,7 +1,7 @@
 # check: run
 # T25c, QCE: 'x := G' copies an immutable global's Vec - a Vec of its own since 2026-11-01, so a 'mut' receiver may write
 # it and G stays as it was (a handle's copy was read-only: Push would have changed G's list)
-G Vec<I64> = I64[1].ToVec()
+G Vec<I64> = Array<I64>[1].ToVec()
 fn main() ? {
     x := G
     x.Push(1)

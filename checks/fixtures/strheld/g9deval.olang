@@ -8,7 +8,7 @@ type Res unique struct(k I64) {
 }
 fn id<T>(x T) T { return x }
 fn pick<T>(a T, b T, c Bool) T { return a if c else b }
-fn twice<T>(x T) Array<T> { return T[x, x] }
+fn twice<T>(x T) Array<T> { return Array<T>[x, x] }
 G := id(Res(5))
 H := pick(Res(6), Res(7), false)
 A := twice(Res(8))

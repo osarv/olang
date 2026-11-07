@@ -347,7 +347,7 @@ Prelude := (
 
 # the targets: what a scenario declares, and what it returns (the last, a Str scenario, declares its own - strScenario)
 Targets I64 = 12
-Decls := String&[
+Decls := Array<String&>[
     "x := Node(1)"
     "w := W(Box())"
     "l := list.List<mut Node&>()\n    l.Push(Node(1))"
@@ -361,7 +361,7 @@ Decls := String&[
     ""                                    # a node a callee built and returned
     ""                                    # a Str scenario
 ]
-Checks := String&[
+Checks := Array<String&>[
     "chain(x)"
     "chain(w.b.head)"
     "sumList(l)"
@@ -549,7 +549,7 @@ fn (g mut SG&) failOp(a String&, ind String&) String& {
 fn (g mut SG&) dtorOp(a String&, ind String&) String& {
     k := g.r(4)
     v := g.val()
-    rt := String&["ResA", "ResB", "ResC"][g.r(3)]
+    rt := Array<String&>["ResA", "ResB", "ResC"][g.r(3)]
     r := g.name("r")
     y := g.name("y")
     if k == 0 and not g.global {    # over the target, destructed when its scope closes
@@ -1079,7 +1079,7 @@ fn (g mut SG&) strBody(ind String&, d I64) String& {
 fn (g mut SG&) strScenario(k I64) String& {
     t := "R" $k
     body := g.strBody("    ", 2)
-    rd := String&["$r", "\"<\" $r \">\"", "$r $r", "$r.n.v $r"][g.r(4)]
+    rd := Array<String&>["$r", "\"<\" $r \">\"", "$r $r", "$r.n.v $r"][g.r(4)]
     return ("type " $t " struct(n mut Node&, l list.List<mut Node&>, m Map<I64, mut Node&>, a Array<mut Node&>&) {\n    n\n    l\n    m\n"
             "    a\n}\n" "fn (r " $t "&) Str() String {\n    acc I64 = 0\n" $body "    return \"r\" $acc \":\" $chain(r.n)\n}\n"
             "fn s" $k "() I64 {\n    x := Node(1)\n    x.next = Node(2)\n    l := list.List<mut Node&>()\n    l.Push(Node(3))\n"
@@ -1105,7 +1105,7 @@ fn (g mut SG&) textScenario(k I64) String& {
 fn (g mut SG&) textOp(ind String&) String& {
     v := g.val()
     q := g.name("q")
-    texts := String&["retAt(t, ", "retAtChain(t, ", "retLocal(", "retDirect(", "retCond(t, ", "retTry(", "mkText(", "retConv("
+    texts := Array<String&>["retAt(t, ", "retAtChain(t, ", "retLocal(", "retDirect(", "retCond(t, ", "retTry(", "mkText(", "retConv("
                      "retConvCond("]
     call String& = $texts[g.r(texts.Len())] $v ")"
     k := g.r(10)
@@ -1279,7 +1279,7 @@ fn (g mut SG&) secondScenario(k I64) String& {
         probe = "    k := TK(\"c\")\n    x := " $f "(k, i)\n    x[0] = 'Q'\n    return $k.s \" \" $x\n"
     } else if kind == 7 or kind == 8 or kind == 9 {
         # a callee one of whose parameters - its receiver too - shares the borrow's scope (the fifth review's 2)
-        use String& = String&["    h.Add(s)\n", "    h.Add(s[0:2])\n", "    s.AddTo(h)\n"][kind - 7]
+        use String& = Array<String&>["    h.Add(s)\n", "    h.Add(s[0:2])\n", "    s.AddTo(h)\n"][kind - 7]
         head = "fn " $f "(h mut TH&, i I64) Tx {\n" $sbody $use "    return s\n}\n"
         probe = ("    keep := list.List<Tx&>()\n    h := TH(keep)\n    x := " $f "(h, i)\n    x[0] = 'Q'\n"
                  "    return $keep \" \" $x\n")
@@ -1288,7 +1288,7 @@ fn (g mut SG&) secondScenario(k I64) String& {
         probe = "    keep := list.List<Tx&>()\n    x := " $f "(keep, i)\n    x[0] = 'Q'\n    return $keep \" \" $x\n"
     } else if kind == 11 {
         # a returned conditional, match or catch default of a parameter's text (the fifth review's 4)
-        ret String& = String&["p if i > 0 else q", "match i { case 0: p case _: q }", "try txNo(i) catch default q"][g.r(3)]
+        ret String& = Array<String&>["p if i > 0 else q", "match i { case 0: p case _: q }", "try txNo(i) catch default q"][g.r(3)]
         head = "fn " $f "(p Tx&, q Tx&, i I64) Tx { return " $ret " }\n"
         probe = ("    s := Tx(\"abc\" $i)\n    u := Tx(\"def\" $i)\n    x := " $f "(s, u, i)\n    x[0] = 'Q'\n"
                  "    return $s \" \" $u \" \" $x\n")
@@ -1320,7 +1320,7 @@ fn (g mut SG&) cursorScenario(k I64) String& {
     for _ in range 8 { g.next() }        # (seeds of one program differ in their low bits: stir them first)
     body := $g.cursorStmts(2, "    ") $g.cursorStmts(2, "    ")
     return ("fn s" $k "() I64 {\n    root mut Node& = Node(" $g.val() ")\n    outer mut Node& = Node(" $g.val() ")\n"
-            "    cur mut Node& = " $(String&["root", "outer"][g.r(2)]) "\n    acc I64 = 0\n" $body "    churn()\n"
+            "    cur mut Node& = " $(Array<String&>["root", "outer"][g.r(2)]) "\n    acc I64 = 0\n" $body "    churn()\n"
             "    return acc * 7 + chain(root) * 3 + chain(outer) + chain(cur)\n}\n")
 }
 
@@ -1548,7 +1548,7 @@ fn freeHolder(k I64) String& {
 }
 
 # the statements that keep (views across a let-go, views stored elsewhere): a clean scenario writes none
-FreeKeeps Array<I64> = I64[10, 11, 12, 13, 14, 15, 16, 23, 25, 26, 27]
+FreeKeeps Array<I64> = Array<I64>[10, 11, 12, 13, 14, 15, 16, 23, 25, 26, 27]
 
 # one statement on holder h in turn i: a let-go, a view kept across one, a store of a view elsewhere, a move out
 fn (g mut SG&) freeOp(h String&, ind String&, clean Bool) String& {

@@ -28,7 +28,7 @@ fn verify(s Src&) I64 {
 }
 
 fn main() {
-    args := String&["a", "bb", "ccc"]
+    args := Array<String&>["a", "bb", "ccc"]
     dir String& = "d"
     total I64 = 0
     for k in range args.Len() {

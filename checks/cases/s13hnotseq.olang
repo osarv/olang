@@ -3,7 +3,7 @@ type P struct(x I64) { x }
 
 fn f(p P) I64 {
     match p {
-        case I64[a] { return a }
+        case Array<I64>[a] { return a }
         case _ { return 0 }
     }
 }

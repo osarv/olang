@@ -955,7 +955,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
                     # T17: a payload of one type written whole, "Round Circle"
                     tat := p.here()
                     ty := try p.typeExpr()
-                    payload = ast.Param&[ast.Param(p.from(tat), cn, ty, null)]
+                    payload = Array<ast.Param&>[ast.Param(p.from(tat), cn, ty, null)]
                     whole = true
                 }
                 value ast.Expr?& = null
@@ -1838,7 +1838,7 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
             values Array<ast.Expr&>& = Array<ast.Expr&>(0)
             if not p.atEnd() and p.lamItem {
                 # a lambda's one-line body, the lambda an item of a list: its "," is the list's (L18c)
-                values = ast.Expr&[try p.expr()]
+                values = Array<ast.Expr&>[try p.expr()]
             } else if not p.atEnd() {
                 p.listTry = p.here()
                 values = try p.exprList()
@@ -2367,7 +2367,7 @@ fn (p mut Parser&) lineBody() Array<ast.Stmt&>& ? Fail {
         }
         case _ { }
     }
-    return ast.Stmt&[st]
+    return Array<ast.Stmt&>[st]
 }
 
 # what a one-line body may not begin with (S1b), as its error names it; "" for a simple statement's start
@@ -2430,12 +2430,12 @@ fn (p mut Parser&) forStmt(comptimeAt I32 = -1) ast.Stmt& ? Fail {
             v ast.VarDecl?& = null
             if p.accept(token.Tok.Define) {
                 x := try p.expr()
-                v = ast.VarDecl(names.Names, names.Sps, null, ast.Expr&[x], true, false)
+                v = ast.VarDecl(names.Names, names.Sps, null, Array<ast.Expr&>[x], true, false)
             } else {
                 ty := try p.typeExpr()
                 try p.want(token.Tok.Assign)
                 x := try p.expr()
-                v = ast.VarDecl(names.Names, names.Sps, ty, ast.Expr&[x], false, false)
+                v = ast.VarDecl(names.Names, names.Sps, ty, Array<ast.Expr&>[x], false, false)
             }
             init := ast.Stmt.Var(p.from(iat), v!)
             try p.want(token.Tok.Comma)
@@ -3979,11 +3979,11 @@ test "a statement met at the limit is too deep at its first token, and one that 
         # every statement is first read as one starting with an operand, so the limit is said at its first token;
         # break, error E.A and return nest nothing and are read whole; the others nest an operand or a block and end
         # the item
-        for stmt in String&["break", "error E.A", "return"] {
+        for stmt in Array<String&>["break", "error E.A", "return"] {
             s := atLimit(stmt)
             assert s == "fn f: var1 := if; fn g: !L21", s
         }
-        for stmt in String&["x++", "y := 2", "z I64 = 1", "try f()", "{ }"] {
+        for stmt in Array<String&>["x++", "y := 2", "z I64 = 1", "try f()", "{ }"] {
             s := atLimit(stmt)
             assert s == "fn f: -; fn g: !L21", $stmt ": " $s
         }

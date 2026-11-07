@@ -45,7 +45,7 @@ test "E38: an embed in a loop or a generic is its one instance's bytes each time
         c := embed "embedded/word.txt"
         assert c == Word and String(c).Trim() == "olang"
     }
-    assert first(embed "embedded/word.txt") == U8('o') and first(I64[7, 8]) == 7
+    assert first(embed "embedded/word.txt") == U8('o') and first(Array<I64>[7, 8]) == 7
 }
 
 fn first<T>(a Array<T>&) T { return a[0] }

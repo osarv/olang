@@ -1,7 +1,7 @@
 # check: run
 # T25c, QCE: a by-value result is writable to its caller - a copy of an immutable global's Vec returned is one of its
 # own since 2026-11-01 (a handle's copy was refused: pushing to it would have changed G)
-G Vec<I64> = I64[1].ToVec()
+G Vec<I64> = Array<I64>[1].ToVec()
 fn get() Vec<I64> { return G }
 fn main() ? {
     v := get()

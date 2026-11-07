@@ -67,7 +67,7 @@ fn swapIn<F>(a mut Array<F>&, i I64, j I64) {
 # sorts the rows in place so that less(c[i], c[i - 1]) holds nowhere, every column moved together - stable, as an
 # array's Sort is: the rows' order is found by sorting their positions, then each column is laid out in it
 fn (c mut Columns<T>&) Sort<? E>(less fn&(x T, y T) Bool ? E) ? E {
-    order := I64[k for k in range c.Len()]
+    order := Array<I64>[k for k in range c.Len()]
     try order.Sort(fn(a I64, b I64) Bool ? E: return less(c[a], c[b]))
     for f in Columns<T>.Fields { reorder(f.Of(c), order) }
 }
@@ -290,7 +290,7 @@ fn insertIn<F>(a mut Array<F>&, i I64, n I64, x F) {
 
 # sorts the rows in place, every column moved together - stable, as Columns' Sort is
 fn (v mut ColumnVec<T>&) Sort<? E>(less fn&(x T, y T) Bool ? E) ? E {
-    order := I64[k for k in range v.n]
+    order := Array<I64>[k for k in range v.n]
     try order.Sort(fn(a I64, b I64) Bool ? E: return less(v.data[a], v.data[b]))
     for f in Columns<T>.Fields { reorder(f.Of(v.data)[:v.n], order) }
 }

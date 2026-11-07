@@ -90,7 +90,7 @@ fn sig<F>() String {
     return s
 }
 
-fn names<T>() Array<String&> { return String&[f.Name for f in T.Fields if f.Type.Kind != TypeKind.Reference] }
+fn names<T>() Array<String&> { return Array<String&>[f.Name for f in T.Fields if f.Type.Kind != TypeKind.Reference] }
 
 # baked while compiling (K2), through reflection
 Built := build<Point>(4)

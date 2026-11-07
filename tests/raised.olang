@@ -47,12 +47,12 @@ test "the evaluator agrees: values baked while compiling" {
 }
 
 test "another module's: named through its alias, private ones caught whole, a set listing them" {
-    assert (try raisedlex.Find(I64[5, 6], 6)) == 1
-    assert (try raisedlex.Find(I64[5], 9) catch raisedlex.NotFound default -1) == -1
+    assert (try raisedlex.Find(Array<I64>[5, 6], 6)) == 1
+    assert (try raisedlex.Find(Array<I64>[5], 9) catch raisedlex.NotFound default -1) == -1
     assert (try raisedlex.Hidden(-1) catch default -2) == -2
-    assert (try raisedlex.Pick(I64[1, 1], 1) catch raisedlex.Ambiguous default -3) == -3
-    assert (try raisedlex.Pick(I64[1], 2) catch raisedlex.LookupError default -4) == -4
+    assert (try raisedlex.Pick(Array<I64>[1, 1], 1) catch raisedlex.Ambiguous default -3) == -3
+    assert (try raisedlex.Pick(Array<I64>[1], 2) catch raisedlex.LookupError default -4) == -4
     m := ""
-    try raisedlex.Find(I64[], 1) catch e { m = $e }
+    try raisedlex.Find(Array<I64>[], 1) catch e { m = $e }
     assert m == "raisedlex.NotFound"
 }

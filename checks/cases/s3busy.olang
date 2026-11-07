@@ -29,7 +29,7 @@ fn main() ? {
     call(fn(): return 3)
     try check(2)
     check(3)!
-    n := first(I64[1])
+    n := first(Array<I64>[1])
     v := Vec<I64>()
     v.Push(1)
     try io.Println("" $Count " " $b.v " " $v.Len())

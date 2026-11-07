@@ -1183,7 +1183,7 @@ type opShape struct(Name String&, Operands I64, Result Bool, MayFail Bool) {
     MayFail
 }
 
-OpShapes Array<opShape> = opShape[opShape("Plus", 1, true, true), opShape("Minus", 1, true, true)
+OpShapes Array<opShape> = Array<opShape>[opShape("Plus", 1, true, true), opShape("Minus", 1, true, true)
     opShape("Mul", 1, true, true), opShape("Div", 1, true, true), opShape("Rem", 1, true, true)
     opShape("MatMul", 1, true, true), opShape("Neg", 0, true, true), opShape("Less", 1, true, true)
     opShape("At", 1, true, true), opShape("SetAt", 2, false, true), opShape("Slice", 2, true, true)
@@ -1433,7 +1433,7 @@ fn (c mut Checker&) errorMethod(f I64, rt types.TypeId, name String&) {
         c.err(c.nameSpan(fd), msgs.MethodOnForeignType($load.ErrQualifier(c.P.L.Mods[dm].Identity, dm == c.P.L.Root) $c.text(c.P.T.DeclName(d))))
         return
     }
-    for x in String&["Eq", "eq", "Hash", "hash", "Str", "str", "Copy", "copy"] {
+    for x in Array<String&>["Eq", "eq", "Hash", "hash", "Str", "str", "Copy", "copy"] {
         if x == name: c.err(c.nameSpan(fd), msgs.ErrorMethodGiven(c.ty(rt), name))
     }
 }
@@ -1460,7 +1460,7 @@ fn (c mut Checker&) inheritClash(f I64) {
         return
     }
     c.bothSpellings(f, rt, name, ps.Len() - 1)
-    for x in String&["Eq", "eq", "Hash", "hash", "Str", "str"] {
+    for x in Array<String&>["Eq", "eq", "Hash", "hash", "Str", "str"] {
         if x == name {
             c.pop()
             return
@@ -2299,7 +2299,7 @@ fn (c mut Checker&) traitHeader(mi I64, td ast.TypeDecl?&) {
                 if not isTrait and not c.caseTypeWritten(m) { continue }
                 t := c.P.Resolve(c.fr().Ctx, m) if isTrait else c.resolve(m)
                 if t == types.UnknownT { continue }
-                listed := types.TypeId[t]
+                listed := Array<types.TypeId>[t]
                 if isTrait and not c.P.IsClosedTrait(t) {
                     c.err(m.Span(), msgs.TraitMemberOpen(c.src(m.Span())))
                     continue
@@ -2352,7 +2352,7 @@ fn (c mut Checker&) partHashes(t types.TypeId, depth I64) {
     d := c.deref(t)
     r := d if c.isNamed(d) else c.P.T.Repr(d)
     if depth > 0 and c.isNamed(r) {
-        for name in String&["Hash", "hash"] {
+        for name in Array<String&>["Hash", "hash"] {
             m := c.P.MethodOf(r, c.P.L.Names.Intern(name))
             if m < 0 or c.P.VarCount(generic.FnOwner(m)) > 0 { continue }
             if name == "hash" and c.P.FnModule(m) != c.fr().Mi {
@@ -3229,7 +3229,7 @@ fn (c mut Checker&) b5aStr(w mut b5aWalk&, t types.TypeId, depth I64) {
     match c.P.T.KindOf(t) {
         case types.Kind.Ref { c.b5aStr(w, c.P.T.Referent(t), depth + 1) }
         case types.Kind.Named {
-            for name in String&["Str", "str"] {
+            for name in Array<String&>["Str", "str"] {
                 m := c.P.MethodOf(t, c.P.T.Names.Intern(name))
                 if m >= 0 {
                     c.b5aFn(w, c.b5aStrBody(m, t))
@@ -3812,7 +3812,7 @@ fn (c mut Checker&) dtorBody(t types.TypeId, mi I64) I64 {
         }
     }
     ty := c.P.T.Func(c.P.T.List1(c.P.T.Ref(t, types.Writable)), types.VoidT, types.ListId(0)
-                     c.P.T.Scopes(types.RoleDtor, I64[types.OwnScope], Array<I64>(0)))
+                     c.P.T.Scopes(types.RoleDtor, Array<I64>[types.OwnScope], Array<I64>(0)))
     return c.newBody(typed.BodyOf.Dtor(t), ty, mi, source.Span(0, 0))
 }
 
@@ -4328,7 +4328,7 @@ fn (c mut Checker&) attrRead(sp source.Span, g ast.Expr&, targs Array<ast.TypeRe
     # an attribute of a type holding a "mut" reference is an error where it is written (G39), and nothing more here
     if c.holdsWritable(c.globalType(mi, gn)) { return c.unknown(sp) }
     v := c.read(sp, typed.Lvalue.Global(sp, c.globalType(mi, gn), mi, gn))
-    return c.invoke(sp, nsp, c.P.PreludeFn("std/prelude/reflect", "attrGot"), null, Array<ast.Expr&>(0), typed.Expr&[v])
+    return c.invoke(sp, nsp, c.P.PreludeFn("std/prelude/reflect", "attrGot"), null, Array<ast.Expr&>(0), Array<typed.Expr&>[v])
 }
 
 # the receiver and the name of "x.Attr" or "x.HasAttr" (G40), "" for another
@@ -4980,7 +4980,7 @@ fn (c mut Checker&) argumentPush(sp source.Span, ae types.TypeId, word I64, what
     pt := c.P.PayloadOf(ae)
     if pt == types.UnknownT: return
     x := typed.Expr.Data(sp, c.P.T.Ref(c.textType(), types.ReadOnly), c.fr().File, typed.Const.Bytes(what))
-    pv := c.enumCase(sp, sp, pt, c.P.ErrorWords(c.P.T.DeclOf(ae))[word], ast.Expr&[ast.Expr.Lit(sp, token.Tok.StrLit)], typed.Expr&[x])
+    pv := c.enumCase(sp, sp, pt, c.P.ErrorWords(c.P.T.DeclOf(ae))[word], Array<ast.Expr&>[ast.Expr.Lit(sp, token.Tok.StrLit)], Array<typed.Expr&>[x])
     c.stmts.Push(typed.Stmt.Eval(sp, c.prim(sp, types.VoidT, typed.PrimOp.ErrPush, pv, null)))
 }
 
@@ -5018,7 +5018,7 @@ fn (c mut Checker&) ctBody(b I64, index I64, sig types.TypeId, sp source.Span) I
         shares.Push(c.P.T.ShareOf(sig, i))
     }
     ty := c.P.T.Func(c.P.T.List(tys.ToArray()), types.BoolT, c.P.T.List1(types.DefaultErrT)
-                     c.P.T.Scopes(types.RoleFn, shares.ToArray(), I64[types.OwnScope]))
+                     c.P.T.Scopes(types.RoleFn, shares.ToArray(), Array<I64>[types.OwnScope]))
     id := c.newBody(typed.BodyOf.Contract(typed.BodyId(I32(b)), typed.ContractKind.Req, index), ty, sr.Mi, sp)
     c.state[id] = 1
     c.inferring.Put(id, true)
@@ -5076,7 +5076,7 @@ fn (c mut Checker&) fitsTest(sp source.Span, x typed.Expr&, t types.TypeId) type
     dfrom := c.exprs.Len()
     c.exprs.Push(c.lit(sp, types.BoolT, 0))
     cl := typed.Clause(sp, Array<typed.Item>(0), true, null, gather(c.exprs, dfrom))
-    return typed.Expr.Try(sp, types.BoolT, typed.Try(seq, typed.Clause&[cl], false, false))
+    return typed.Expr.Try(sp, types.BoolT, typed.Try(seq, Array<typed.Clause&>[cl], false, false))
 }
 
 # an error said in a contract, in the module it is written in whatever frame asked for the contract
@@ -5465,7 +5465,7 @@ fn (c mut Checker&) stmtsOf(body Array<ast.Stmt&>&) {
         }
         # S8e: a path just given a value never null is known not to be null from here
         if fr.nonNullSet.Len() > 0 and fr.nonNullSet.Len() == 1 {
-            fr.nulls.Push(nullNarrow(source.NameId[n for n in fr.nonNullSet], fr.Block))
+            fr.nulls.Push(nullNarrow(Array<source.NameId>[n for n in fr.nonNullSet], fr.Block))
             fr.nonNullSet = Array<source.NameId>(0)
         }
     }
@@ -6535,11 +6535,11 @@ fn (c mut Checker&) convWords(from types.TypeId, to types.TypeId) Array<types.Ty
     t := c.under(to)
     over := c.preludeWord("std/prelude/number", "NumberError", "Overflow")
     none := Array<types.TypeId>(0)
-    if c.P.T.IsFloat(f) and not c.P.T.IsFloat(t) { return types.TypeId[c.preludeWord("std/prelude/number", "NumberError", "Invalid"), over] }
-    if c.P.T.IsFloat(f) { return types.TypeId[over] if c.P.T.Bits(t) < c.P.T.Bits(f) or t != f else none }
-    if c.P.T.IsFloat(t) { return types.TypeId[over] if c.P.T.Bits(t) <= 16 else none }
+    if c.P.T.IsFloat(f) and not c.P.T.IsFloat(t) { return Array<types.TypeId>[c.preludeWord("std/prelude/number", "NumberError", "Invalid"), over] }
+    if c.P.T.IsFloat(f) { return Array<types.TypeId>[over] if c.P.T.Bits(t) < c.P.T.Bits(f) or t != f else none }
+    if c.P.T.IsFloat(t) { return Array<types.TypeId>[over] if c.P.T.Bits(t) <= 16 else none }
     if c.P.Meet(f, t) == t { return none }
-    return types.TypeId[over]
+    return Array<types.TypeId>[over]
 }
 
 fn (c mut Checker&) prim(sp source.Span, t types.TypeId, op typed.PrimOp, a typed.Expr&, b typed.Expr?&) typed.Expr& {
@@ -9512,7 +9512,7 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
         base = typed.Lvalue.Temp(sp, xt, x, c.site(typed.SiteKind.Temp, sp))
     }
     # E32: "as" fails as written, with CaseError.WrongCase where the value holds another case
-    chk := c.failOp(types.TypeId[c.wrongCase()], c.between(a.Span(), tr.Span(), 2), true)
+    chk := c.failOp(Array<types.TypeId>[c.wrongCase()], c.between(a.Span(), tr.Span(), 2), true)
     rec := c.P.T.Items(c.P.T.Cases(et))[k]
     ps := c.P.T.Items(c.P.T.Params(c.P.CaseSig(et, k)))
     if ps.Len() == 0 {
@@ -10783,7 +10783,7 @@ fn (c mut Checker&) suggest(name String&, withVars Bool) String {
             if imp.Target >= 0 { near.Offer(imp.Alias) }
         }
     }
-    for x in String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "Array"] {
+    for x in Array<String&>["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "Array"] {
         near.Offer(x)
     }
     for mi in range c.P.L.Mods.Len() {
@@ -10973,7 +10973,7 @@ fn (c mut Checker&) wantStr(t types.TypeId, seen mut Map<types.TypeId, Bool>&, d
     match c.P.T.KindOf(t) {
         case types.Kind.Ref { c.wantStr(c.P.T.Referent(t), seen, depth + 1) }
         case types.Kind.Named {
-            for name in String&["Str", "str"] {
+            for name in Array<String&>["Str", "str"] {
                 m := c.P.MethodOf(t, c.P.T.Names.Intern(name))
                 if m >= 0 {
                     if c.strAt.Start >= 0 { c.privateRole(m, t, "Str", c.strAt, "'$'") }
@@ -11826,7 +11826,7 @@ fn (c mut Checker&) narrowCall(sp source.Span, nsp source.Span, rx typed.Expr&, 
         return c.unknown(sp)
     }
     ws := c.convWords(xt, t)
-    if ws.Len() == 0 { ws = types.TypeId[c.preludeWord("std/prelude/number", "NumberError", "Overflow")] }
+    if ws.Len() == 0 { ws = Array<types.TypeId>[c.preludeWord("std/prelude/number", "NumberError", "Overflow")] }
     k := c.failOp(ws, nsp)
     from := c.exprs.Len()
     c.exprs.Push(x)
@@ -12280,7 +12280,7 @@ fn (c mut Checker&) literalBinding(owner I64, b mut generic.Binding&, ps Array<t
 
 # the types a literal-only variable may take where its own fails a constraint, widest first, a float before an
 # integer of its width (G9a)
-literalOrder := String&["F64", "I64", "U64", "F32", "I32", "U32", "F16", "BF16", "I16", "U16", "I8", "U8"]
+literalOrder := Array<String&>["F64", "I64", "U64", "F32", "I32", "U32", "F16", "BF16", "I16", "U16", "I8", "U8"]
 
 # a pattern unified with a type into what b leaves unbound, or bound by literals only: never moving what an argument
 # bound (a lambda's type may be looser than its parameter, T22)
@@ -13709,7 +13709,7 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         }
         p := readPlace(rx)
         if p is null { p = typed.Lvalue.Temp(x.Span(), typeOf(rx), rx, c.site(typed.SiteKind.Temp, x.Span())) }
-        chk := c.failOp(types.TypeId[c.outOfRange()], nsp)
+        chk := c.failOp(Array<types.TypeId>[c.outOfRange()], nsp)
         ep := c.elemPlace(sp, p!, args[:1], chk)
         if ep is null {
             c.expr(args[1], types.UnknownT)
@@ -13730,7 +13730,7 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         }
         p := readPlace(rx)
         if p is null { p = typed.Lvalue.Temp(x.Span(), typeOf(rx), rx, c.site(typed.SiteKind.Temp, x.Span())) }
-        chk := c.failOp(types.TypeId[c.outOfRange()], nsp)
+        chk := c.failOp(Array<types.TypeId>[c.outOfRange()], nsp)
         if name == "SliceOf" { return c.sliceOf(sp, p!, args[0], args[1], chk) }
         ep := c.elemPlace(sp, p!, args, chk)
         if ep is null { return c.unknown(sp) }
@@ -14301,8 +14301,8 @@ fn (c mut Checker&) placeHere(sp source.Span, nsp source.Span, n source.NameId) 
     }
     d := c.P.L.Diags
     path := d.PathOf(file)
-    bytes := U8[U8(ch) for ch in path]
-    pre := typed.Expr&[typed.Expr.Data(sp, c.P.T.Ref(c.textType(), types.ReadOnly), c.fr().File, typed.Const.Bytes(bytes))
+    bytes := Array<U8>[U8(ch) for ch in path]
+    pre := Array<typed.Expr&>[typed.Expr.Data(sp, c.P.T.Ref(c.textType(), types.ReadOnly), c.fr().File, typed.Const.Bytes(bytes))
                        c.lit(sp, c.i64(), d.LineAt(file, at)), c.lit(sp, c.i64(), d.ColumnAt(file, at))]
     id := c.ctorBody(t)
     was := c.ctorCalled
@@ -14372,7 +14372,7 @@ fn (c mut Checker&) limit(sp source.Span, nsp source.Span, t types.TypeId, n sou
 
 # a limit's position in [Max, Min, Inf, NaN, Epsilon, SmallestNormal] (E36), -1 for a name that is none
 fn limitIndex(name String&) I64 {
-    ns := String&["Max", "Min", "Inf", "NaN", "Epsilon", "SmallestNormal"]
+    ns := Array<String&>["Max", "Min", "Inf", "NaN", "Epsilon", "SmallestNormal"]
     for i in range ns.Len() {
         if ns[i] == name { return i }
     }
@@ -14389,10 +14389,10 @@ fn limitBits(tt types.Table&, u types.TypeId, k I64) I64 {
         if k == 0 { return (-1 if w == 64 else (I64(1) << w) - 1) if uns else (I64(1) << (w - 1)) - 1 }
         return 0 if uns else -(I64(1) << (w - 1))
     }
-    if u == types.TypeId(13) { return I64[0x7F7FFFFF, 0xFF7FFFFF, 0x7F800000, 0x7FC00000, 0x34000000, 0x00800000][k] }
-    if u == types.TypeId(11) { return I64[0x7BFF, 0xFBFF, 0x7C00, 0x7E00, 0x1400, 0x0400][k] }
-    if u == types.TypeId(12) { return I64[0x7F7F, 0xFF7F, 0x7F80, 0x7FC0, 0x3C00, 0x0080][k] }
-    return I64[0x7FEFFFFFFFFFFFFF, 0xFFEFFFFFFFFFFFFF, 0x7FF0000000000000, 0x7FF8000000000000, 0x3CB0000000000000, 0x0010000000000000][k]
+    if u == types.TypeId(13) { return Array<I64>[0x7F7FFFFF, 0xFF7FFFFF, 0x7F800000, 0x7FC00000, 0x34000000, 0x00800000][k] }
+    if u == types.TypeId(11) { return Array<I64>[0x7BFF, 0xFBFF, 0x7C00, 0x7E00, 0x1400, 0x0400][k] }
+    if u == types.TypeId(12) { return Array<I64>[0x7F7F, 0xFF7F, 0x7F80, 0x7FC0, 0x3C00, 0x0080][k] }
+    return Array<I64>[0x7FEFFFFFFFFFFFFF, 0xFFEFFFFFFFFFFFFF, 0x7FF0000000000000, 0x7FF8000000000000, 0x3CB0000000000000, 0x0010000000000000][k]
 }
 
 # ---- compile-time reflection (G32-G38) ----
@@ -14417,7 +14417,7 @@ fn listIndex(name String&) I64 {
     }
 }
 
-fn listName(k I64) String { return String&["Fields", "Cases", "Params", "Results", "Functions", "Methods", "Functions"][k] }
+fn listName(k I64) String { return Array<String&>["Fields", "Cases", "Params", "Results", "Functions", "Methods", "Functions"][k] }
 
 # the module an import's alias - or an alias chain - names, -1 where x is none (G41)
 fn (c mut Checker&) aliasModule(x ast.Expr&) I64 {
@@ -15331,7 +15331,7 @@ fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n 
                 c.dropArgs(args)
                 return c.unknown(sp)
             }
-            vt := c.P.ErrValOf(types.TypeId[t])
+            vt := c.P.ErrValOf(Array<types.TypeId>[t])
             j := 0
             set := c.P.T.Items(c.P.T.ErrValItems(vt))
             for q in range set.Len() {
@@ -15614,7 +15614,7 @@ fn (c mut Checker&) enumFrom(sp source.Span, nsp source.Span, et types.TypeId, a
     vals := typed.Expr.Make(sp, c.P.T.Array(vt, c.P.T.Const(c.i64(), n)), typed.Make(typed.MakeKind.Array, 0
                             gather(c.exprs, from), null, c.site(typed.SiteKind.Make, sp), typed.Check.None))
     f := c.P.PreludeFn("std/prelude/enums", "caseIndex")
-    i := c.invoke(sp, nsp, f, null, Array<ast.Expr&>(0), typed.Expr&[v, vals])
+    i := c.invoke(sp, nsp, f, null, Array<ast.Expr&>(0), Array<typed.Expr&>[v, vals])
     if typeOf(i) == types.UnknownT { return c.unknown(sp) }
     sfrom := c.stmts.Len()
     pi := c.heldOf(sp, i)
@@ -15828,7 +15828,7 @@ fn (c mut Checker&) fromIter(sp source.Span, msp source.Span, b litBuilder, made
     }
     it := c.invoke(sp, msp, im, arr, Array<ast.Expr&>(0), Array<typed.Expr&>(0))
     if typeOf(it) == types.UnknownT { return c.unknown(sp) }
-    return c.invoke(sp, msp, b.F, null, Array<ast.Expr&>(0), typed.Expr&[it], c.P.OwnerBinding(b.F, made))
+    return c.invoke(sp, msp, b.F, null, Array<ast.Expr&>(0), Array<typed.Expr&>[it], c.P.OwnerBinding(b.F, made))
 }
 
 # where the first entry "k: v" stands among a literal's items, -1 for none (E19)
@@ -15883,7 +15883,7 @@ fn (c mut Checker&) entriesLit(sp source.Span, el types.TypeId, items Array<ast.
     for it in items {
         match it {
             case ast.Expr.Binary(esp, op, k, v) if op == token.Tok.Colon {
-                x := c.construct(esp, esp, c.deref(el), ast.Expr&[k, v])
+                x := c.construct(esp, esp, c.deref(el), Array<ast.Expr&>[k, v])
                 c.exprs.Push(c.partCopy(x))
             }
             case _ {
@@ -17537,7 +17537,7 @@ fn (c mut Checker&) payloadBinds(m ast.Match&, cs ast.Case&) Array<ast.Stmt&>& {
             match fp.Sub {
                 case ast.Pattern.Bind(bsp, n) {
                     v := ast.VarDecl(Array<source.NameId>(1, n), Array<source.Span>(1, bsp), null
-                                     ast.Expr&[ast.Expr.Member(bsp, m.Subject, fp.Name)], true, false)
+                                     Array<ast.Expr&>[ast.Expr.Member(bsp, m.Subject, fp.Name)], true, false)
                     out.Push(ast.Stmt.Var(bsp, v))
                 }
                 case _ { }
@@ -20074,14 +20074,14 @@ fn (c mut Checker&) laneBinary(sp source.Span, opSp source.Span, op token.Tok, x
     a := c.laneLeaf(x)
     b := c.laneLeaf(y)
     e := c.laneBinType(op, c.laneNodes[a].Elem, c.laneNodes[b].Elem)
-    ks := I64[a, b]
+    ks := Array<I64>[a, b]
     return c.laneHold(sp, c.laneAdd(laneNode(LaneBin, op, sp, opSp, a, b, -1, null, e, c.laneLen(ks, opSp), c.laneDecl(ks, e))))
 }
 
 fn (c mut Checker&) laneUnary(sp source.Span, op token.Tok, x typed.Expr&) typed.Expr& {
     a := c.laneLeaf(x)
     e := c.laneUnType(op, c.laneNodes[a].Elem)
-    ks := I64[a]
+    ks := Array<I64>[a]
     return c.laneHold(sp, c.laneAdd(laneNode(LaneUn, op, sp, sp, a, -1, -1, null, e, c.laneNodes[a].Len, c.laneDecl(ks, e))))
 }
 
@@ -20101,7 +20101,7 @@ fn (c mut Checker&) laneMethod(sp source.Span, nsp source.Span, name String&, rx
         ea, eb := c.laneNodes[k].Elem, c.laneNodes[b].Elem
         e := types.BoolT if ea != types.UnknownT and eb != types.UnknownT else types.UnknownT
         op := token.Tok.EqEq if name == "LanesEqual" else token.Tok.Lt
-        ks := I64[k, b]
+        ks := Array<I64>[k, b]
         return c.laneHold(sp, c.laneAdd(laneNode(LaneCmp, op, sp, nsp, k, b, -1, null, e, c.laneLen(ks, nsp), types.UnknownT)))
     }
     if name == "Select" {
@@ -20128,8 +20128,8 @@ fn (c mut Checker&) laneMethod(sp source.Span, nsp source.Span, name String&, rx
                 c.err(nsp, msgs.OperandsDiffer("'Select'", c.ty(ea), c.ty(eb)))
             }
         }
-        ks := I64[k, a, b]
-        return c.laneHold(sp, c.laneAdd(laneNode(LaneSel, token.Tok.Plus, sp, nsp, k, a, b, null, e, c.laneLen(ks, nsp), c.laneDecl(I64[a, b], e))))
+        ks := Array<I64>[k, a, b]
+        return c.laneHold(sp, c.laneAdd(laneNode(LaneSel, token.Tok.Plus, sp, nsp, k, a, b, null, e, c.laneLen(ks, nsp), c.laneDecl(Array<I64>[a, b], e))))
     }
     return c.laneTotal(sp, nsp, name, k)
 }
@@ -20389,7 +20389,7 @@ fn (c mut Checker&) laneTotal(sp source.Span, nsp source.Span, name String&, k I
         return typed.Expr.Seq(sp, types.BoolT, typed.Seq(gather(c.stmts, from), c.readLocal(sp, r)))
     }
     # Min, Max
-    chk := c.failOp(types.TypeId[c.preludeWord("std/prelude/array", "ArrayError", "Empty")], nsp)
+    chk := c.failOp(Array<types.TypeId>[c.preludeWord("std/prelude/array", "ArrayError", "Empty")], nsp)
     c.emit(typed.Stmt.Eval(sp, typed.Expr.Prim(sp, types.VoidT, typed.PrimOp.NonEmpty, chk, c.one(cnt))))
     # the first lane, built with nothing said - the loop's, built for the lanes after it, says what is wrong with it
     z := c.hidden(sp, c.i64())   # lane 0 through a local: a constant index into a fixed array of none is an error
@@ -20445,7 +20445,7 @@ fn (c mut Checker&) laneStore(sp source.Span, osp source.Span, op token.Tok, t t
     rt := c.localType(h)
     tk := c.laneLeaf(c.readLocal(sp, h))
     e := c.laneElemOf(t)
-    ks := I64[tk, vk]
+    ks := Array<I64>[tk, vk]
     ok := c.laneAdd(laneNode(LaneBin, op, sp, osp, tk, vk, -1, null, c.laneBinType(op, e, c.laneNodes[vk].Elem), c.laneLen(ks, osp), types.UnknownT))
     if c.laneNodes[ok].Elem == types.UnknownT {
         c.laneSay(sp, ok)
@@ -20469,7 +20469,7 @@ fn (c mut Checker&) laneStore(sp source.Span, osp source.Span, op token.Tok, t t
 fn (c mut Checker&) laneMethodCalled(k I64) String {
     n := c.laneNodes[k]
     if n.Kind == LaneArr or n.Kind == LaneScalar { return "" }
-    for sub in I64[n.A, n.B, n.C] {
+    for sub in Array<I64>[n.A, n.B, n.C] {
         if sub < 0 { continue }
         m := c.laneMethodCalled(sub)
         if m != "" { return m }
@@ -20519,7 +20519,7 @@ fn (c mut Checker&) exhaustedOrBreak(sp source.Span, call typed.Expr&, loop I64)
     code := typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, from))
     items mut Array<typed.Item>& = Array<typed.Item>(1)
     items[0] = typed.Item(ex, -1)
-    cl := typed.Clause&[typed.Clause(sp, items, false, code, Array<typed.Expr&>(0))]
+    cl := Array<typed.Clause&>[typed.Clause(sp, items, false, code, Array<typed.Expr&>(0))]
     return typed.Expr.Try(sp, typeOf(call), typed.Try(call, cl, false, true))
 }
 
@@ -20906,7 +20906,7 @@ fn (c mut Checker&) pushNulls(guard ast.Expr&, positive Bool, b I64) {
     nullTests(guard, positive, paths)
     for p in paths {
         # S8e, as S8d: a local or a parameter only - a field may change under a call
-        if p.Len() == 1 { c.fr().nulls.Push(nullNarrow(source.NameId[n for n in p], b)) }
+        if p.Len() == 1 { c.fr().nulls.Push(nullNarrow(Array<source.NameId>[n for n in p], b)) }
     }
 }
 
@@ -21529,7 +21529,7 @@ fn (c mut Checker&) landingsOf(b I64) {
     }
     holds := Array<Bool>(body.Locals.Len(), false)
     for i in range body.Locals.Len() { holds[i] = c.P.T.HoldsRefs(body.Locals[i].Ty) }
-    guarded := Bool[mine[k].Inst == destroyedHeld for k in range mine.Len()]
+    guarded := Array<Bool>[mine[k].Inst == destroyedHeld for k in range mine.Len()]
     w := typed.Landings(ls, at, holds, guarded)
     w.Body(body.Root!)
     for k in range mine.Len() {
@@ -22154,7 +22154,7 @@ fn (c mut Checker&) genRoot(fd ast.Func&, sig types.TypeId, el I64) typed.Block&
     ctor := c.ctorBody(gt)
     was := c.ctorCalled
     c.ctorCalled = gt
-    call := c.callBody(sp, sp, csig, typed.Callee.Body(typed.BodyId(I32(ctor))), -1, null, Array<ast.Expr&>(0), typed.Expr&[next])
+    call := c.callBody(sp, sp, csig, typed.Callee.Body(typed.BodyId(I32(ctor))), -1, null, Array<ast.Expr&>(0), Array<typed.Expr&>[next])
     c.ctorCalled = was
     c.emit(typed.Stmt.Return(sp, call))
     return typed.Block(typed.BlockId(0), gather(c.stmts, from))
@@ -23148,7 +23148,7 @@ fn (c mut Checker&) anyInstance(sp source.Span, x typed.Expr&, mt types.TypeId, 
 fn (c mut Checker&) anyAs(sp source.Span, x typed.Expr&, a ast.Expr&, tr ast.TypeRef&) typed.Expr& {
     mt := c.anyCaseType(c.between(a.Span(), tr.Span(), 2), typeOf(x), tr)
     if mt == types.UnknownT { return c.unknown(sp) }
-    return c.anyInstance(sp, x, mt, c.failOp(types.TypeId[c.wrongCase()], c.between(a.Span(), tr.Span(), 2), true))
+    return c.anyInstance(sp, x, mt, c.failOp(Array<types.TypeId>[c.wrongCase()], c.between(a.Span(), tr.Span(), 2), true))
 }
 
 # S13g: whether case k of enum t carries a value of a type that has none - an enum declaring no case, held by value or
@@ -23262,7 +23262,7 @@ fn (c mut Checker&) coversRows(rows Vec<Array<ast.Pattern&>&>&, ts Array<types.T
     t := c.deref(ts[0])
     rest := ts[1:]
     if t == types.BoolT {
-        seen := I64[0, 0]
+        seen := Array<I64>[0, 0]
         for r in rows {
             bv := c.patBool(r[0])
             if bv >= 0 { seen[bv] = 1 }

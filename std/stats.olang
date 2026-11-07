@@ -273,21 +273,21 @@ fn selectRank(v mut Array<F64>&, k I64) {
 }
 
 test "Sum, Mean, Variance and StdDev" {
-    a := F64[2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
+    a := Array<F64>[2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
     assert a.Sum() == 40.0 and Array<F64>(0).Sum() == 0.0     # the array's own Sum (E39)
     assert (try Mean(a) catch default -1.0) == 5.0
     assert (try PopulationVariance(a) catch default -1.0) == 4.0
     assert (try PopulationStdDev(a) catch default -1.0) == 2.0
     assert (try Variance(a) catch default -1.0) == 32.0 / 7.0
-    assert (try Mean(I32[1, 2, 3, 4]) catch default -1.0) == 2.5           # integers too, in F64
-    assert (try Mean(F16[0.5, 1.5]) catch default -1.0) == 1.0
+    assert (try Mean(Array<I32>[1, 2, 3, 4]) catch default -1.0) == 2.5           # integers too, in F64
+    assert (try Mean(Array<F16>[0.5, 1.5]) catch default -1.0) == 1.0
     assert (try Mean(Array<F64>(0)) catch Error.TooFew default -1.0) == -1.0
-    assert (try Variance(F64[3.0]) catch Error.TooFew default -1.0) == -1.0
-    assert (try PopulationVariance(F64[3.0]) catch default -1.0) == 0.0
+    assert (try Variance(Array<F64>[3.0]) catch Error.TooFew default -1.0) == -1.0
+    assert (try PopulationVariance(Array<F64>[3.0]) catch default -1.0) == 0.0
     # values large and close together: the two-pass variance keeps them, a sum of squares would lose every digit
-    big := F64[1e9 + 4.0, 1e9 + 7.0, 1e9 + 13.0, 1e9 + 16.0]
+    big := Array<F64>[1e9 + 4.0, 1e9 + 7.0, 1e9 + 13.0, 1e9 + 16.0]
     assert (try Variance(big) catch default -1.0) == 30.0
-    nan := F64[1.0, NaN, 3.0]
+    nan := Array<F64>[1.0, NaN, 3.0]
     assert (try Mean(nan) catch default 0.0).IsNan() and (try Variance(nan) catch default 0.0).IsNan()
 }
 
@@ -301,22 +301,22 @@ test "pairwise sums keep the mean's error small" {
 }
 
 test "Median and Percentile interpolate between the closest ranks, as numpy does" {
-    a := F64[15.0, 20.0, 35.0, 40.0, 50.0]
+    a := Array<F64>[15.0, 20.0, 35.0, 40.0, 50.0]
     assert (try Median(a) catch default -1.0) == 35.0
-    assert (try Median(F64[4.0, 1.0, 3.0, 2.0]) catch default -1.0) == 2.5
+    assert (try Median(Array<F64>[4.0, 1.0, 3.0, 2.0]) catch default -1.0) == 2.5
     assert (try Percentile(a, 0.0) catch default -1.0) == 15.0 and (try Percentile(a, 100.0) catch default -1.0) == 50.0
     assert (try Percentile(a, 40.0) catch default -1.0) == 29.0                # numpy.percentile([15,20,35,40,50], 40)
     assert (try Percentile(a, 30.0) catch default -1.0) == 23.0
-    assert (try Percentile(I64[7], 90.0) catch default -1.0) == 7.0
+    assert (try Percentile(Array<I64>[7], 90.0) catch default -1.0) == 7.0
     assert (try Median(Array<I32>(0)) catch Error.TooFew default -1.0) == -1.0
-    assert (try Median(F64[1.0, NaN]) catch default 0.0).IsNan()
-    ps := try Percentiles(a, F64[0.0, 30.0, 40.0, 50.0, 100.0])
-    assert ps == F64[15.0, 23.0, 29.0, 35.0, 50.0]
+    assert (try Median(Array<F64>[1.0, NaN]) catch default 0.0).IsNan()
+    ps := try Percentiles(a, Array<F64>[0.0, 30.0, 40.0, 50.0, 100.0])
+    assert ps == Array<F64>[15.0, 23.0, 29.0, 35.0, 50.0]
     # the selection agrees with sorting, on values with repeats, in any order
     v := Array<F64>(1001)
     for i in range 1001 { v[i] = F64((i * 7919) % 97) }
-    sorted := try Percentiles(v, F64[1.0, 25.0, 50.0, 62.5, 99.9])
-    for j, p in F64[1.0, 25.0, 50.0, 62.5, 99.9] {
+    sorted := try Percentiles(v, Array<F64>[1.0, 25.0, 50.0, 62.5, 99.9])
+    for j, p in Array<F64>[1.0, 25.0, 50.0, 62.5, 99.9] {
         assert (try Percentile(v, p) catch default -1.0) == sorted[j]
     }
     assert v[0] == 0.0 and v[1] == F64(7919 % 97)                              # left as it was
@@ -324,21 +324,21 @@ test "Median and Percentile interpolate between the closest ranks, as numpy does
 
 test "Min, Max and Histogram" {
     # the arrays' own Min and Max (E39)
-    assert (try I32[4, -2, 9].Min() catch default 0) == -2 and (try I32[4, -2, 9].Max() catch default 0) == 9
-    assert (try F32[1.5, 2.5].Max() catch default 0.0) == 2.5
-    assert (try F64[1.0, NaN, 2.0].Max() catch default 0.0).IsNan()
+    assert (try Array<I32>[4, -2, 9].Min() catch default 0) == -2 and (try Array<I32>[4, -2, 9].Max() catch default 0) == 9
+    assert (try Array<F32>[1.5, 2.5].Max() catch default 0.0) == 2.5
+    assert (try Array<F64>[1.0, NaN, 2.0].Max() catch default 0.0).IsNan()
     assert (try Array<F64>(0).Min() catch ArrayError.Empty default -1.0) == -1.0
-    h := try Histogram(F64[0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, -1.0, 9.0, NaN], F64[0.0, 1.0, 2.0, 3.0])
-    assert h == I64[2, 2, 3]                     # the last bin holds its right edge; -1, 9 and NaN in none
+    h := try Histogram(Array<F64>[0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, -1.0, 9.0, NaN], Array<F64>[0.0, 1.0, 2.0, 3.0])
+    assert h == Array<I64>[2, 2, 3]                     # the last bin holds its right edge; -1, 9 and NaN in none
     e := try Edges(0.0, 1.0, 4)
-    assert e == F64[0.0, 0.25, 0.5, 0.75, 1.0]
-    assert try Histogram(I32[1, 2, 2, 3, 3, 3], Edges(1.0, 3.0, 2)) == I64[1, 5]
+    assert e == Array<F64>[0.0, 0.25, 0.5, 0.75, 1.0]
+    assert try Histogram(Array<I32>[1, 2, 2, 3, 3, 3], Edges(1.0, 3.0, 2)) == Array<I64>[1, 5]
     # a caller's mistake is an error, never a stop
-    assert (try Percentile(F64[1.0], 101.0) catch Error.OutOfRange default -1.0) == -1.0
-    bad := try Histogram(F64[1.0], F64[2.0, 1.0]) catch Error.BadEdges default I64[-1]
-    assert bad == I64[-1]
-    noBins := try Edges(0.0, 1.0, 0) catch Error.BadEdges default F64[-1.0]
-    assert noBins == F64[-1.0]
+    assert (try Percentile(Array<F64>[1.0], 101.0) catch Error.OutOfRange default -1.0) == -1.0
+    bad := try Histogram(Array<F64>[1.0], Array<F64>[2.0, 1.0]) catch Error.BadEdges default Array<I64>[-1]
+    assert bad == Array<I64>[-1]
+    noBins := try Edges(0.0, 1.0, 0) catch Error.BadEdges default Array<F64>[-1.0]
+    assert noBins == Array<F64>[-1.0]
 }
 
 # while compiling as at run time (K2)

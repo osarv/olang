@@ -42,7 +42,7 @@ fn firstWord(t Array<Char>&) Array<Char> {
 }
 
 test letters "reads Split's pieces and walks over them where they stand" {
-    assert letters("a bb ccc") == 6 and lineLengths("x\nyy\n") == 30 and total(I64[1, 2, 3]) == 12
+    assert letters("a bb ccc") == 6 and lineLengths("x\nyy\n") == 30 and total(Array<I64>[1, 2, 3]) == 12
 }
 
 test firstWord "a piece handed back is a copy the caller keeps" {
@@ -82,14 +82,14 @@ test total "a built result read where it stands, then kept as a copy" {
 }
 
 # the evaluator's reading (K2: baked while compiling) - it copies wherever the run time reads in place, so the two agree
-Baked I64 = letters("a bb ccc") + lineLengths("x\nyy\n") + total(I64[1, 2, 3])
+Baked I64 = letters("a bb ccc") + lineLengths("x\nyy\n") + total(Array<I64>[1, 2, 3])
 assert Baked == 48
 
 KeptWord Array<Char> = firstWord("one two")
 assert KeptWord == "one"
 
 test letters "the run time agrees with what the evaluator baked" {
-    assert Baked == letters("a bb ccc") + lineLengths("x\nyy\n") + total(I64[1, 2, 3]) and KeptWord == firstWord("one two")
+    assert Baked == letters("a bb ccc") + lineLengths("x\nyy\n") + total(Array<I64>[1, 2, 3]) and KeptWord == firstWord("one two")
 }
 
 type Kid struct(w I64) {

@@ -6,7 +6,7 @@ type Holder struct() {
   s Bytes& = Bytes(Array<U8>(0))
 }
 fn keep(h mut Holder&) {
-  local Array<U8> = U8[104, 105, 106]
+  local Array<U8> = Array<U8>[104, 105, 106]
   h.s = Bytes(local)
 }
 fn main() ? { }

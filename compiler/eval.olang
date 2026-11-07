@@ -5732,10 +5732,10 @@ fn tdefine(t mut types.Table&, m mut Machine&, f mut mir.Fn&) {
 
 # "fn(a T, b T) R { return op(a, b) }", keyed Body(id); unary where one is false
 fn opFn(t mut types.Table&, id I64, op typed.PrimOp, ty types.TypeId, rt types.TypeId, two Bool) mir.Fn {
-    ps := t.List(types.TypeId[ty, ty]) if two else t.List1(ty)
+    ps := t.List(Array<types.TypeId>[ty, ty]) if two else t.List1(ty)
     f := tfn(t, id, t.Func(ps, rt, types.ListId(0)))
     r := f.AddTemp(rt, Sp0)
-    args := f.Args(mir.Operand[tcopy(0), tcopy(1)]) if two else f.Args(mir.Operand[tcopy(0)])
+    args := f.Args(Array<mir.Operand>[tcopy(0), tcopy(1)]) if two else f.Args(Array<mir.Operand>[tcopy(0)])
     f.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(r), mir.Rvalue.Prim(op, rt, args)))
     f.Add(B0, mir.Stmt.Close(Sp0, S0))
     f.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.Lvalue.L(r))))
@@ -5744,9 +5744,9 @@ fn opFn(t mut types.Table&, id I64, op typed.PrimOp, ty types.TypeId, rt types.T
 
 # "fn(a T, b T) Bool { return overflows(op(a, b)) }"
 fn ovFn(t mut types.Table&, id I64, op typed.PrimOp, ty types.TypeId) mir.Fn {
-    f := tfn(t, id, t.Func(t.List(types.TypeId[ty, ty]), types.BoolT, types.ListId(0)))
+    f := tfn(t, id, t.Func(t.List(Array<types.TypeId>[ty, ty]), types.BoolT, types.ListId(0)))
     r := f.AddTemp(types.BoolT, Sp0)
-    f.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(r), mir.Rvalue.Overflows(op, ty, f.Args(mir.Operand[tcopy(0), tcopy(1)]))))
+    f.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(r), mir.Rvalue.Overflows(op, ty, f.Args(Array<mir.Operand>[tcopy(0), tcopy(1)]))))
     f.Add(B0, mir.Stmt.Close(Sp0, S0))
     f.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.Lvalue.L(r))))
     return f
@@ -5780,10 +5780,10 @@ fn hostCmp<T>(op typed.PrimOp, a T, b T) Bool {
     }
 }
 
-IntOps Array<typed.PrimOp>& = typed.PrimOp[typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div
+IntOps Array<typed.PrimOp>& = Array<typed.PrimOp>[typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div
                                           typed.PrimOp.Rem, typed.PrimOp.BitAnd, typed.PrimOp.BitOr
                                           typed.PrimOp.BitXor]
-CmpOps Array<typed.PrimOp>& = typed.PrimOp[typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le
+CmpOps Array<typed.PrimOp>& = Array<typed.PrimOp>[typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le
                                           typed.PrimOp.Gt, typed.PrimOp.Ge]
 
 # every operation on every pair of xs, at the type named, against the host: a zero divisor and the most negative value
@@ -5796,7 +5796,7 @@ fn intsAgree<T>(t mut types.Table&, name String&, xs Array<T>&, ns Array<T>&, si
         tdefine(t, m, opFn(t, id, op, ty, ty, true))
         for a in xs {
             for b in xs {
-                s := m.Eval(tkey(id), I64[hostBits(a), hostBits(b)])
+                s := m.Eval(tkey(id), Array<I64>[hostBits(a), hostBits(b)])
                 if (op == typed.PrimOp.Div or op == typed.PrimOp.Rem) and hostBits(b) == 0 {
                     assert s == Stop.Refused(WhyDivZero, 0, Sp0), $name " " $op " " $a " " $b
                     continue
@@ -5817,40 +5817,40 @@ fn intsAgree<T>(t mut types.Table&, name String&, xs Array<T>&, ns Array<T>&, si
         tdefine(t, m, opFn(t, id, op, ty, types.BoolT, true))
         for a in xs {
             for b in xs {
-                assert m.Eval(tkey(id), I64[hostBits(a), hostBits(b)]) == Stop.None
+                assert m.Eval(tkey(id), Array<I64>[hostBits(a), hostBits(b)]) == Stop.None
                 assert (m.Int(m.Result, types.BoolT) == 1) == hostCmp(op, a, b), $name " " $op " " $a " " $b
             }
         }
         id++
     }
-    for op in typed.PrimOp[typed.PrimOp.Shl, typed.PrimOp.Shr] {
+    for op in Array<typed.PrimOp>[typed.PrimOp.Shl, typed.PrimOp.Shr] {
         tdefine(t, m, opFn(t, id, op, ty, ty, true))
         for a in xs {
             for n in ns {
-                assert m.Eval(tkey(id), I64[hostBits(a), hostBits(n)]) == Stop.None
+                assert m.Eval(tkey(id), Array<I64>[hostBits(a), hostBits(n)]) == Stop.None
                 want := a << n if op == typed.PrimOp.Shl else a >> n
                 assert m.Int(m.Result, ty) == hostBits(want), $name " " $op " " $a " " $n
             }
             # a count of the width or more is undefined (E8a)
-            assert m.Eval(tkey(id), I64[hostBits(a), 8 * m.width(ty)]) == Stop.Refused(WhyShift, 0, Sp0)
+            assert m.Eval(tkey(id), Array<I64>[hostBits(a), 8 * m.width(ty)]) == Stop.Refused(WhyShift, 0, Sp0)
         }
         id++
     }
-    for op in typed.PrimOp[typed.PrimOp.Neg, typed.PrimOp.BitNot] {
+    for op in Array<typed.PrimOp>[typed.PrimOp.Neg, typed.PrimOp.BitNot] {
         tdefine(t, m, opFn(t, id, op, ty, ty, false))
         for a in xs {
-            assert m.Eval(tkey(id), I64[hostBits(a)]) == Stop.None
+            assert m.Eval(tkey(id), Array<I64>[hostBits(a)]) == Stop.None
             want := (xs[0] - xs[0]) - a if op == typed.PrimOp.Neg else ~a
             assert m.Int(m.Result, ty) == hostBits(want), $name " " $op " " $a
         }
         id++
     }
     # Overflows: + - * against the true result
-    for op in typed.PrimOp[typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul] {
+    for op in Array<typed.PrimOp>[typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul] {
         tdefine(t, m, ovFn(t, id, op, ty))
         for a in xs {
             for b in xs {
-                assert m.Eval(tkey(id), I64[hostBits(a), hostBits(b)]) == Stop.None
+                assert m.Eval(tkey(id), Array<I64>[hostBits(a), hostBits(b)]) == Stop.None
                 got := m.Int(m.Result, types.BoolT) == 1
                 assert got == trueOverflows(op, hostBits(a), hostBits(b), m.width(ty), signed), $name " overflows " $op " " $a " " $b
             }
@@ -5898,15 +5898,15 @@ fn overflows64(op typed.PrimOp, a I64, b I64, signed Bool) Bool {
 test "integers at every width agree with the run time: wrapping, comparisons, shifts, the undefined refused" {
     names := source.Names()
     t := types.Table.New(names)
-    intsAgree(t, "I8", I8[0, 1, -1, 7, -128, 127, 100], I8[0, 1, 7], true, -128)
-    intsAgree(t, "I16", I16[0, 1, -1, 300, -32768, 32767, -999], I16[0, 3, 15], true, -32768)
-    intsAgree(t, "I32", I32[0, 1, -1, 70000, -2147483648, 2147483647, -5], I32[0, 9, 31], true, -2147483648)
-    intsAgree(t, "I64", I64[0, 1, -1, 5000000000, -9223372036854775807 - 1, 9223372036854775807, -3], I64[0, 33, 63]
+    intsAgree(t, "I8", Array<I8>[0, 1, -1, 7, -128, 127, 100], Array<I8>[0, 1, 7], true, -128)
+    intsAgree(t, "I16", Array<I16>[0, 1, -1, 300, -32768, 32767, -999], Array<I16>[0, 3, 15], true, -32768)
+    intsAgree(t, "I32", Array<I32>[0, 1, -1, 70000, -2147483648, 2147483647, -5], Array<I32>[0, 9, 31], true, -2147483648)
+    intsAgree(t, "I64", Array<I64>[0, 1, -1, 5000000000, -9223372036854775807 - 1, 9223372036854775807, -3], Array<I64>[0, 33, 63]
               true, -9223372036854775807 - 1)
-    intsAgree(t, "U8", U8[0, 1, 2, 128, 255, 77], U8[0, 1, 7], false, 0)
-    intsAgree(t, "U16", U16[0, 1, 2, 40000, 65535], U16[0, 5, 15], false, 0)
-    intsAgree(t, "U32", U32[0, 1, 3, 3000000000, 4294967295], U32[0, 17, 31], false, 0)
-    intsAgree(t, "U64", U64[0, 1, 3, 9223372036854775808, 18446744073709551615, 12345678901234], U64[0, 1, 63], false
+    intsAgree(t, "U8", Array<U8>[0, 1, 2, 128, 255, 77], Array<U8>[0, 1, 7], false, 0)
+    intsAgree(t, "U16", Array<U16>[0, 1, 2, 40000, 65535], Array<U16>[0, 5, 15], false, 0)
+    intsAgree(t, "U32", Array<U32>[0, 1, 3, 3000000000, 4294967295], Array<U32>[0, 17, 31], false, 0)
+    intsAgree(t, "U64", Array<U64>[0, 1, 3, 9223372036854775808, 18446744073709551615, 12345678901234], Array<U64>[0, 1, 63], false
               0)
 }
 
@@ -5921,7 +5921,7 @@ fn hostFloat<T>(op typed.PrimOp, a T, b T) T {
     }
 }
 
-FloatOps Array<typed.PrimOp>& = typed.PrimOp[typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div]
+FloatOps Array<typed.PrimOp>& = Array<typed.PrimOp>[typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div]
 
 # + - * / and the comparisons on every pair of xs, at the float type named, against the host: the same bits, a NaN
 # wherever the host gives one (whose payload E33a leaves unspecified); negation the sign flipped
@@ -5934,7 +5934,7 @@ fn floatsAgree<T>(t mut types.Table&, name String&, xs Array<T>&) {
         tdefine(t, m, opFn(t, id, op, ty, ty, true))
         for a in xs {
             for b in xs {
-                assert m.Eval(tkey(id), I64[fbits(a), fbits(b)]) == Stop.None
+                assert m.Eval(tkey(id), Array<I64>[fbits(a), fbits(b)]) == Stop.None
                 want := hostFloat(op, a, b)
                 got := m.Bits(m.Result, w)
                 if want != want {
@@ -5950,7 +5950,7 @@ fn floatsAgree<T>(t mut types.Table&, name String&, xs Array<T>&) {
         tdefine(t, m, opFn(t, id, op, ty, types.BoolT, true))
         for a in xs {
             for b in xs {
-                assert m.Eval(tkey(id), I64[fbits(a), fbits(b)]) == Stop.None
+                assert m.Eval(tkey(id), Array<I64>[fbits(a), fbits(b)]) == Stop.None
                 assert (m.Int(m.Result, types.BoolT) == 1) == hostCmp(op, a, b), $name " " $op " " $a " " $b
             }
         }
@@ -5958,7 +5958,7 @@ fn floatsAgree<T>(t mut types.Table&, name String&, xs Array<T>&) {
     }
     tdefine(t, m, opFn(t, id, typed.PrimOp.Neg, ty, ty, false))
     for a in xs {
-        assert m.Eval(tkey(id), I64[fbits(a)]) == Stop.None
+        assert m.Eval(tkey(id), Array<I64>[fbits(a)]) == Stop.None
         assert m.Bits(m.Result, w) == fbits(-a) or a != a, $name " Neg " $a
     }
 }
@@ -5975,17 +5975,17 @@ test "floats at every width agree with the run time: one rounding at their own t
     names := source.Names()
     t := types.Table.New(names)
     z16 := F16(0.0)
-    floatsAgree(t, "F16", F16[0.0, -z16, 1.0, -2.5, 0.1, 65504.0, 0.00006103515625, 0.000000059604645, 1.0 / z16
+    floatsAgree(t, "F16", Array<F16>[0.0, -z16, 1.0, -2.5, 0.1, 65504.0, 0.00006103515625, 0.000000059604645, 1.0 / z16
                               z16 / z16, 3.140625])
     zb := BF16(0.0)
-    floatsAgree(t, "BF16", BF16[0.0, -zb, 1.0, -2.5, 0.1, 3.0e38, 1.0e-38, 1.0 / zb, zb / zb, 7.0])
+    floatsAgree(t, "BF16", Array<BF16>[0.0, -zb, 1.0, -2.5, 0.1, 3.0e38, 1.0e-38, 1.0 / zb, zb / zb, 7.0])
     z32 := F32(0.0)
-    floatsAgree(t, "F32", F32[0.0, -z32, 1.0, -2.5, 0.1, 3.4e38, 1.0e-45, 1.0e-38, 1.0 / z32, z32 / z32, 16777217.0])
+    floatsAgree(t, "F32", Array<F32>[0.0, -z32, 1.0, -2.5, 0.1, 3.4e38, 1.0e-45, 1.0e-38, 1.0 / z32, z32 / z32, 16777217.0])
     z64 := 0.0
-    floatsAgree(t, "F64", F64[0.0, -z64, 1.0, -2.5, 0.1, 1.7e308, 5.0e-324, 1.0 / z64, z64 / z64, 0.3, 1.0e16])
+    floatsAgree(t, "F64", Array<F64>[0.0, -z64, 1.0, -2.5, 0.1, 1.7e308, 5.0e-324, 1.0 / z64, z64 / z64, 0.3, 1.0e16])
 }
 
-NumNames Array<String&>& = String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64"]
+NumNames Array<String&>& = Array<String&>["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64"]
 
 # x converted to the numeric type named, by the host, as that type's bits
 fn hostConv<S>(to String&, x S) I64 {
@@ -6016,7 +6016,7 @@ fn convsAgree<S>(t mut types.Table&, name String&, xs Array<S>&, bits fn&(x S) I
         tdefine(t, m, opFn(t, id, typed.PrimOp.Convert, from, ty, false))
         w := m.width(ty)
         for x in xs {
-            s := m.Eval(tkey(id), I64[bits(x)])
+            s := m.Eval(tkey(id), Array<I64>[bits(x)])
             if m.shape(from) == vFloat and m.shape(ty) != vFloat and not floatFits(F64(x), m.ibits(ty), m.shape(ty) == vInt) {
                 assert s == Stop.Refused(WhyConvert, 0, Sp0), $name " " $x " to " $to ": " $s
                 continue
@@ -6033,29 +6033,29 @@ fn convsAgree<S>(t mut types.Table&, name String&, xs Array<S>&, bits fn&(x S) I
 test "conversions between every pair of numeric types agree with the run time: one rounding, the undefined refused" {
     names := source.Names()
     t := types.Table.New(names)
-    convsAgree(t, "I8", I8[0, -1, 127, -128, 5], fn(x I8) I64 { return I64(x) })
-    convsAgree(t, "I16", I16[0, -1, 32767, -32768, 300], fn(x I16) I64 { return I64(x) })
-    convsAgree(t, "I32", I32[0, -1, 16777217, -2147483648, 70000], fn(x I32) I64 { return I64(x) })
-    convsAgree(t, "I64", I64[0, -1, 9223372036854775807, -9223372036854775807 - 1, 9007199254740993, 65505], fn(x I64) I64 { return I64(x) })
-    convsAgree(t, "U8", U8[0, 255, 128], fn(x U8) I64 { return I64(x) })
-    convsAgree(t, "U16", U16[0, 65535, 2049], fn(x U16) I64 { return I64(x) })
-    convsAgree(t, "U32", U32[0, 4294967295, 16777217], fn(x U32) I64 { return I64(x) })
-    convsAgree(t, "U64", U64[0, 18446744073709551615, 9223372036854775808, 9007199254740993], fn(x U64) I64 { return I64(x) })
+    convsAgree(t, "I8", Array<I8>[0, -1, 127, -128, 5], fn(x I8) I64 { return I64(x) })
+    convsAgree(t, "I16", Array<I16>[0, -1, 32767, -32768, 300], fn(x I16) I64 { return I64(x) })
+    convsAgree(t, "I32", Array<I32>[0, -1, 16777217, -2147483648, 70000], fn(x I32) I64 { return I64(x) })
+    convsAgree(t, "I64", Array<I64>[0, -1, 9223372036854775807, -9223372036854775807 - 1, 9007199254740993, 65505], fn(x I64) I64 { return I64(x) })
+    convsAgree(t, "U8", Array<U8>[0, 255, 128], fn(x U8) I64 { return I64(x) })
+    convsAgree(t, "U16", Array<U16>[0, 65535, 2049], fn(x U16) I64 { return I64(x) })
+    convsAgree(t, "U32", Array<U32>[0, 4294967295, 16777217], fn(x U32) I64 { return I64(x) })
+    convsAgree(t, "U64", Array<U64>[0, 18446744073709551615, 9223372036854775808, 9007199254740993], fn(x U64) I64 { return I64(x) })
     z16 := F16(0.0)
-    convsAgree(t, "F16", F16[0.0, -z16, 1.5, -2.75, 65504.0, 255.9, 1.0 / z16, z16 / z16, -128.5], fn(x F16) I64 { return I64(x.Bits()) })
+    convsAgree(t, "F16", Array<F16>[0.0, -z16, 1.5, -2.75, 65504.0, 255.9, 1.0 / z16, z16 / z16, -128.5], fn(x F16) I64 { return I64(x.Bits()) })
     zb := BF16(0.0)
-    convsAgree(t, "BF16", BF16[0.0, 1.5, -2.75, 3.0e38, -3.0e38, 1.0 / zb, zb / zb, 4.0e9], fn(x BF16) I64 { return I64(x.Bits()) })
+    convsAgree(t, "BF16", Array<BF16>[0.0, 1.5, -2.75, 3.0e38, -3.0e38, 1.0 / zb, zb / zb, 4.0e9], fn(x BF16) I64 { return I64(x.Bits()) })
     z32 := F32(0.0)
-    convsAgree(t, "F32", F32[0.0, 1.5, -2.75, 16777217.0, 2147483520.0, 2147483648.0, -2147483648.0
+    convsAgree(t, "F32", Array<F32>[0.0, 1.5, -2.75, 16777217.0, 2147483520.0, 2147483648.0, -2147483648.0
                               9.2233715e18, 1.8446743e19, 1.0 / z32, z32 / z32, 0.1], fn(x F32) I64 { return I64(x.Bits()) })
     z64 := 0.0
-    convsAgree(t, "F64", F64[0.0, 1.5, -2.75, 0.1, 65519.0, 65520.0, 9223372036854775807.0, -9223372036854775808.0
+    convsAgree(t, "F64", Array<F64>[0.0, 1.5, -2.75, 0.1, 65519.0, 65520.0, 9223372036854775807.0, -9223372036854775808.0
                               18446744073709549568.0, 18446744073709551616.0, -0.9, -1.0, 1.0 / z64, z64 / z64
                               9007199254740993.0, 1.0e300], fn(x F64) I64 { return I64(x.Bits()) })
 }
 
 fn tprim(f mut mir.Fn&, b mir.BlockId, dst I64, op typed.PrimOp, ty types.TypeId, x mir.Operand, y mir.Operand) {
-    f.Add(b, mir.Stmt.Assign(Sp0, tl(dst), mir.Rvalue.Prim(op, ty, f.Args(mir.Operand[x, y]))))
+    f.Add(b, mir.Stmt.Assign(Sp0, tl(dst), mir.Rvalue.Prim(op, ty, f.Args(Array<mir.Operand>[x, y]))))
 }
 
 # "fn sum(n I64) I64 { i, s := 0, 0; for i < n { [x := Array<I64>(4)]; s += i; i++ }; return s }": a loop whose body
@@ -6099,11 +6099,11 @@ fn fibFn(t mut types.Table&, id I64) mir.Fn {
     f.Add(small, mir.Stmt.Close(Sp0, S0))
     f.End(small, mir.Term.Return(Sp0, tcopy(0)))
     tprim(f, big, I64(a), typed.PrimOp.Sub, i64, tcopy(0), mir.Operand.Const(i64, 1))
-    k1 := f.AddCall(mir.Call(mir.Callee.Fn(tkey(id), ty), f.Args(mir.Operand[mir.Operand.Copy(mir.Lvalue.L(a))]), mir.Empty
+    k1 := f.AddCall(mir.Call(mir.Callee.Fn(tkey(id), ty), f.Args(Array<mir.Operand>[mir.Operand.Copy(mir.Lvalue.L(a))]), mir.Empty
                              mir.Lvalue.L(r1), true, second, mir.NoLocal, mir.NoBlock))
     f.End(big, mir.Term.Call(Sp0, k1))
     tprim(f, second, I64(b), typed.PrimOp.Sub, i64, tcopy(0), mir.Operand.Const(i64, 2))
-    k2 := f.AddCall(mir.Call(mir.Callee.Fn(tkey(id), ty), f.Args(mir.Operand[mir.Operand.Copy(mir.Lvalue.L(b))]), mir.Empty
+    k2 := f.AddCall(mir.Call(mir.Callee.Fn(tkey(id), ty), f.Args(Array<mir.Operand>[mir.Operand.Copy(mir.Lvalue.L(b))]), mir.Empty
                              mir.Lvalue.L(r2), true, sum, mir.NoLocal, mir.NoBlock))
     f.End(second, mir.Term.Call(Sp0, k2))
     tprim(f, sum, I64(r), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.Lvalue.L(r1)), mir.Operand.Copy(mir.Lvalue.L(r2)))
@@ -6122,13 +6122,13 @@ test "loops and recursion: a loop's scope every turn, calls to depth, a loop tha
     tdefine(t, m, sumFn(t, 2, true))
     tdefine(t, m, fibFn(t, 3))
     i64 := t.Prim("I64")
-    assert m.Eval(tkey(1), I64[1000]) == Stop.None and m.Int(m.Result, i64) == 499500
-    assert m.Eval(tkey(3), I64[20]) == Stop.None and m.Int(m.Result, i64) == fibHost(20)
+    assert m.Eval(tkey(1), Array<I64>[1000]) == Stop.None and m.Int(m.Result, i64) == 499500
+    assert m.Eval(tkey(3), Array<I64>[20]) == Stop.None and m.Int(m.Result, i64) == fibHost(20)
     # memory: the same after 10 turns and 100,000, with and without an allocation every turn
-    for k in I64[1, 2] {
-        assert m.Eval(tkey(k), I64[10]) == Stop.None
+    for k in Array<I64>[1, 2] {
+        assert m.Eval(tkey(k), Array<I64>[10]) == Stop.None
         heap, allocs, scopes := m.HeapBytes(), m.Allocations(), m.ScopeSlots()
-        assert m.Eval(tkey(k), I64[100000]) == Stop.None and m.Int(m.Result, i64) == 4999950000
+        assert m.Eval(tkey(k), Array<I64>[100000]) == Stop.None and m.Int(m.Result, i64) == 4999950000
         assert m.HeapBytes() == heap and m.Allocations() == allocs and m.ScopeSlots() == scopes, ("fn " $k ": heap " $heap " -> " $m.HeapBytes() ", allocations " $allocs " -> " $m.Allocations()
                 ", scopes " $scopes " -> " $m.ScopeSlots())
     }
@@ -6161,12 +6161,12 @@ fn catchFn(t mut types.Table&, id I64, g I64, gty types.TypeId, word2 I64) mir.F
     f := tfn(t, id, t.Func(t.List1(i64), i64, types.ListId(0)))
     r, code := f.AddTemp(i64, Sp0), f.AddTemp(mir.I32T, Sp0)
     ok, err, two, other := f.NewBlock(), f.NewBlock(), f.NewBlock(), f.NewBlock()
-    k := f.AddCall(mir.Call(mir.Callee.Fn(tkey(g), gty), f.Args(mir.Operand[tcopy(0)]), mir.Empty, mir.Lvalue.L(r), true, ok
+    k := f.AddCall(mir.Call(mir.Callee.Fn(tkey(g), gty), f.Args(Array<mir.Operand>[tcopy(0)]), mir.Empty, mir.Lvalue.L(r), true, ok
                             code, err))
     f.End(B0, mir.Term.Call(Sp0, k))
     f.Add(ok, mir.Stmt.Close(Sp0, S0))
     f.End(ok, mir.Term.Return(Sp0, mir.Operand.Copy(mir.Lvalue.L(r))))
-    f.End(err, mir.Term.Switch(mir.Operand.Copy(mir.Lvalue.L(code)), f.AddCases(mir.Case[mir.Case(word2, two)]), other))
+    f.End(err, mir.Term.Switch(mir.Operand.Copy(mir.Lvalue.L(code)), f.AddCases(Array<mir.Case>[mir.Case(word2, two)]), other))
     f.Add(two, mir.Stmt.Close(Sp0, S0))
     f.End(two, mir.Term.Return(Sp0, mir.Operand.Const(i64, -1)))
     f.Add(other, mir.Stmt.Close(Sp0, S0))
@@ -6180,7 +6180,7 @@ fn passFn(t mut types.Table&, id I64, g I64, gty types.TypeId, from types.ListId
     f := tfn(t, id, t.Func(t.List1(i64), i64, to))
     r, code, mine := f.AddTemp(i64, Sp0), f.AddTemp(mir.I32T, Sp0), f.AddTemp(mir.I32T, Sp0)
     ok, err := f.NewBlock(), f.NewBlock()
-    k := f.AddCall(mir.Call(mir.Callee.Fn(tkey(g), gty), f.Args(mir.Operand[tcopy(0)]), mir.Empty, mir.Lvalue.L(r), true, ok
+    k := f.AddCall(mir.Call(mir.Callee.Fn(tkey(g), gty), f.Args(Array<mir.Operand>[tcopy(0)]), mir.Empty, mir.Lvalue.L(r), true, ok
                             code, err))
     f.End(B0, mir.Term.Call(Sp0, k))
     f.Add(ok, mir.Stmt.Close(Sp0, S0))
@@ -6197,28 +6197,28 @@ test "errors: raised under the function's own list, dispatched by a switch, re-e
     m mut Machine& = Machine.New(t, Mode.Compile)
     i64 := t.Prim("I64")
     e, o := terr(t, names, "E"), terr(t, names, "O")
-    el := t.List(types.TypeId[o, e])
+    el := t.List(Array<types.TypeId>[o, e])
     gty := t.Func(t.List1(i64), i64, el)
     word2 := mir.ErrorCode(t, el, e, 2)
     tdefine(t, m, failFn(t, 1, el, word2))
     tdefine(t, m, catchFn(t, 2, 1, gty, word2))
     tdefine(t, m, failFn(t, 3, el, mir.ErrorCode(t, el, o, 0)))
     tdefine(t, m, catchFn(t, 4, 3, gty, word2))
-    assert m.Eval(tkey(1), I64[5]) == Stop.None and m.Int(m.Result, i64) == 5
-    assert m.Eval(tkey(1), I64[-5]) == Stop.Raised(word2)
-    assert m.Eval(tkey(2), I64[7]) == Stop.None and m.Int(m.Result, i64) == 7
-    sx := m.Eval(tkey(2), I64[-7])
+    assert m.Eval(tkey(1), Array<I64>[5]) == Stop.None and m.Int(m.Result, i64) == 5
+    assert m.Eval(tkey(1), Array<I64>[-5]) == Stop.Raised(word2)
+    assert m.Eval(tkey(2), Array<I64>[7]) == Stop.None and m.Int(m.Result, i64) == 7
+    sx := m.Eval(tkey(2), Array<I64>[-7])
     assert sx == Stop.None and m.Int(m.Result, i64) == -1, $sx " " $m.Int(m.Result, i64)
-    assert m.Eval(tkey(4), I64[-7]) == Stop.None and m.Int(m.Result, i64) == -2
+    assert m.Eval(tkey(4), Array<I64>[-7]) == Stop.None and m.Int(m.Result, i64) == -2
     # passed on: under a list naming E second, the same error; under one naming only the default error, that (R17)
-    named := t.List(types.TypeId[e])
+    named := t.List(Array<types.TypeId>[e])
     tdefine(t, m, passFn(t, 5, 1, gty, el, named))
-    s5 := m.Eval(tkey(5), I64[-1])
+    s5 := m.Eval(tkey(5), Array<I64>[-1])
     assert s5 == Stop.Raised(65538), $s5
     def := t.List1(types.DefaultErrT)
     tdefine(t, m, passFn(t, 6, 1, gty, el, def))
-    assert m.Eval(tkey(6), I64[-1]) == Stop.Raised(1 << 16)
-    assert m.Eval(tkey(6), I64[3]) == Stop.None and m.Int(m.Result, i64) == 3
+    assert m.Eval(tkey(6), Array<I64>[-1]) == Stop.Raised(1 << 16)
+    assert m.Eval(tkey(6), Array<I64>[3]) == Stop.None and m.Int(m.Result, i64) == 3
 }
 
 # a function of no parameters giving an I64, keyed Body(id), its blocks to be filled
@@ -6239,13 +6239,13 @@ test "undefined behaviour stops with where: outside an array, after a scope clos
     f1.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(a1), mir.Rvalue.NewArray(mir.ScopeRef.Scope(S0), arr, mir.Operand.Const(i64, 3)
                                                                    mir.Operand.Const(i64, 9))))
     f1.Add(B0, mir.Stmt.Assign(tspan(7), mir.Lvalue.L(x1), mir.Rvalue.Use(mir.Operand.Copy(
-        f1.Place(mir.Base.Local(a1), mir.Proj[mir.Proj.Index(mir.LocalId(0))])))))
+        f1.Place(mir.Base.Local(a1), Array<mir.Proj>[mir.Proj.Index(mir.LocalId(0))])))))
     f1.Add(B0, mir.Stmt.Close(Sp0, S0))
     f1.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.Lvalue.L(x1))))
     tdefine(t, m, f1)
-    assert m.Eval(tkey(1), I64[2]) == Stop.None and m.Int(m.Result, i64) == 9
-    assert m.Eval(tkey(1), I64[3]) == Stop.Refused(WhyOutside, 0, tspan(7))
-    assert m.Eval(tkey(1), I64[-1]) == Stop.Refused(WhyOutside, 0, tspan(7))
+    assert m.Eval(tkey(1), Array<I64>[2]) == Stop.None and m.Int(m.Result, i64) == 9
+    assert m.Eval(tkey(1), Array<I64>[3]) == Stop.Refused(WhyOutside, 0, tspan(7))
+    assert m.Eval(tkey(1), Array<I64>[-1]) == Stop.Refused(WhyOutside, 0, tspan(7))
     # a reference into a block's arena read after the block closed
     f2 := nfn(t, 2)
     blk := f2.AddScope(mir.ScopeKind.Block, S0, typed.BlockId(1), Sp0)
@@ -6254,21 +6254,21 @@ test "undefined behaviour stops with where: outside an array, after a scope clos
     f2.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(r2), mir.Rvalue.New(mir.ScopeRef.Scope(blk), mir.Operand.Const(i64, 5), ri)))
     f2.Add(B0, mir.Stmt.Close(Sp0, blk))
     f2.Add(B0, mir.Stmt.Assign(tspan(11), mir.Lvalue.L(x2), mir.Rvalue.Use(mir.Operand.Copy(
-        f2.Place(mir.Base.Local(r2), mir.Proj[mir.Proj.Deref])))))
+        f2.Place(mir.Base.Local(r2), Array<mir.Proj>[mir.Proj.Deref])))))
     f2.Add(B0, mir.Stmt.Close(Sp0, S0))
     f2.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.Lvalue.L(x2))))
     tdefine(t, m, f2)
-    assert m.Eval(tkey(2), I64[]) == Stop.Refused(WhyClosed, 0, tspan(11))
+    assert m.Eval(tkey(2), Array<I64>[]) == Stop.Refused(WhyClosed, 0, tspan(11))
     # a null reference read
     f3 := nfn(t, 3)
     r3, x3 := f3.AddTemp(ri, Sp0), f3.AddTemp(i64, Sp0)
     f3.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(r3), mir.Rvalue.Use(mir.Operand.Const(ri, 0))))
     f3.Add(B0, mir.Stmt.Assign(tspan(13), mir.Lvalue.L(x3), mir.Rvalue.Use(mir.Operand.Copy(
-        f3.Place(mir.Base.Local(r3), mir.Proj[mir.Proj.Deref])))))
+        f3.Place(mir.Base.Local(r3), Array<mir.Proj>[mir.Proj.Deref])))))
     f3.Add(B0, mir.Stmt.Close(Sp0, S0))
     f3.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.Lvalue.L(x3))))
     tdefine(t, m, f3)
-    assert m.Eval(tkey(3), I64[]) == Stop.Refused(WhyNull, 0, tspan(13))
+    assert m.Eval(tkey(3), Array<I64>[]) == Stop.Refused(WhyNull, 0, tspan(13))
     # steps: a loop that never ends
     f4 := nfn(t, 4)
     spin := f4.NewBlock()
@@ -6276,7 +6276,7 @@ test "undefined behaviour stops with where: outside an array, after a scope clos
     f4.End(spin, mir.Term.Goto(spin))
     tdefine(t, m, f4)
     m.StepBudget = 10000
-    sx := m.Eval(tkey(4), I64[])
+    sx := m.Eval(tkey(4), Array<I64>[])
     assert sx == Stop.Refused(WhySteps, 0, Sp0) and m.Steps == 10001, $sx " " $m.Steps
     m.StepBudget = 20000000
     # depth: a recursion that never ends, 2,000 frames deep
@@ -6284,13 +6284,13 @@ test "undefined behaviour stops with where: outside an array, after a scope clos
     f5 := tfn(t, 5, i64fn)
     r5 := f5.AddTemp(i64, Sp0)
     back := f5.NewBlock()
-    k5 := f5.AddCall(mir.Call(mir.Callee.Fn(tkey(5), i64fn), f5.Args(mir.Operand[tcopy(0)]), mir.Empty, mir.Lvalue.L(r5), true
+    k5 := f5.AddCall(mir.Call(mir.Callee.Fn(tkey(5), i64fn), f5.Args(Array<mir.Operand>[tcopy(0)]), mir.Empty, mir.Lvalue.L(r5), true
                               back, mir.NoLocal, mir.NoBlock))
     f5.End(B0, mir.Term.Call(tspan(17), k5))
     f5.Add(back, mir.Stmt.Close(Sp0, S0))
     f5.End(back, mir.Term.Return(Sp0, mir.Operand.Copy(mir.Lvalue.L(r5))))
     tdefine(t, m, f5)
-    assert m.Eval(tkey(5), I64[1]) == Stop.Refused(WhyDepth, 0, tspan(17))
+    assert m.Eval(tkey(5), Array<I64>[1]) == Stop.Refused(WhyDepth, 0, tspan(17))
     assert m.nFs == 0 and m.closing.Len() == 0
     # memory: a loop keeping an array every turn in the frame's scope
     f6 := nfn(t, 6)
@@ -6304,10 +6304,10 @@ test "undefined behaviour stops with where: outside an array, after a scope clos
     tdefine(t, m, f6)
     m.MemBudget = 1 << 20
     live := m.Live
-    assert m.Eval(tkey(6), I64[]) == Stop.Refused(WhyMemory, 0, tspan(19))
+    assert m.Eval(tkey(6), Array<I64>[]) == Stop.Refused(WhyMemory, 0, tspan(19))
     assert m.Live == live, "live " $live " -> " $m.Live
     # and the machine goes on afterwards
-    assert m.Eval(tkey(1), I64[0]) == Stop.None and m.Int(m.Result, i64) == 9
+    assert m.Eval(tkey(1), Array<I64>[0]) == Stop.None and m.Int(m.Result, i64) == 9
 }
 
 test "exits: a failed check stops with FILE:LINE and its message (S18a); done and fail are refused while compiling" {
@@ -6316,23 +6316,23 @@ test "exits: a failed check stops with FILE:LINE and its message (S18a); done an
     u8 := t.Prim("U8")
     text := t.Ref(t.Array(u8, types.TypeId(0)), types.ReadOnly)
     f := nfn(t, 1)
-    c := f.AddConst(typed.Const.Bytes(U8[98, 111, 111, 109]))
+    c := f.AddConst(typed.Const.Bytes(Array<U8>[98, 111, 111, 109]))
     f.End(B0, mir.Term.Exit(source.Span(4, 9), mir.ExitKind.Assert, mir.Operand.Data(text, c, 0, source.Span(20, 25))))
     g := nfn(t, 2)
     g.End(B0, mir.Term.Exit(source.Span(2, 3), mir.ExitKind.Unreachable, mir.Operand.None))
     h := nfn(t, 3)
     h.End(B0, mir.Term.Exit(Sp0, mir.ExitKind.Done, mir.Operand.None))
     src := source.Source("a.olang", "one\ntwo\nthree\n")
-    for mode in Mode[Mode.Compile, Mode.Run] {
+    for mode in Array<Mode>[Mode.Compile, Mode.Run] {
         m mut Machine& = Machine.New(t, mode)
         tdefine(t, m, f)
         tdefine(t, m, g)
         tdefine(t, m, h)
-        s := m.Eval(tkey(1), I64[])
+        s := m.Eval(tkey(1), Array<I64>[])
         assert s == Stop.Exited(mir.ExitKind.Assert, 0, source.Span(4, 9), "boom"), $s
         assert s.Text(src) == "a.olang:2: assertion failed: boom", s.Text(src)
-        assert m.Eval(tkey(2), I64[]).Text(src) == "a.olang:1: unreachable reached"
-        ended := m.Eval(tkey(3), I64[])
+        assert m.Eval(tkey(2), Array<I64>[]).Text(src) == "a.olang:1: unreachable reached"
+        ended := m.Eval(tkey(3), Array<I64>[])
         if mode == Mode.Compile {
             assert ended == Stop.Refused(WhyEnds, 0, Sp0)
         } else {
@@ -6353,47 +6353,47 @@ test "aggregates, enums, arrays and references: laid out as the target lays them
     i32, i64 := t.Prim("I32"), t.Prim("I64")
     # struct P(x I32, y I64): "p := P(3, 40); r := &p; r.x = 7; return I64(p.x) + p.y"
     pt := tdecl(t, names, types.DeclKind.Struct, "P")
-    t.SetStructBody(pt, t.List(types.TypeId[i32, i64]), false)
+    t.SetStructBody(pt, t.List(Array<types.TypeId>[i32, i64]), false)
     rp := t.Ref(pt, types.Writable)
     f := nfn(t, 1)
     p, r, x, y := f.AddTemp(pt, Sp0), f.AddTemp(rp, Sp0), f.AddTemp(i64, Sp0), f.AddTemp(i64, Sp0)
-    f.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(p), mir.Rvalue.Aggregate(pt, 0, f.Args(mir.Operand[mir.Operand.Const(i32, 3)
+    f.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(p), mir.Rvalue.Aggregate(pt, 0, f.Args(Array<mir.Operand>[mir.Operand.Const(i32, 3)
                                                                                          mir.Operand.Const(i64, 40)]))))
     f.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(r), mir.Rvalue.Ref(mir.Lvalue.L(p), rp)))
-    f.Add(B0, mir.Stmt.Assign(Sp0, f.Place(mir.Base.Local(r), mir.Proj[mir.Proj.Deref, mir.Proj.Field(0)])
+    f.Add(B0, mir.Stmt.Assign(Sp0, f.Place(mir.Base.Local(r), Array<mir.Proj>[mir.Proj.Deref, mir.Proj.Field(0)])
                               mir.Rvalue.Use(mir.Operand.Const(i32, 7))))
-    f.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(x), mir.Rvalue.Prim(typed.PrimOp.Convert, i64, f.Args(mir.Operand[
-        mir.Operand.Copy(f.Place(mir.Base.Local(p), mir.Proj[mir.Proj.Field(0)]))]))))
+    f.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(x), mir.Rvalue.Prim(typed.PrimOp.Convert, i64, f.Args(Array<mir.Operand>[
+        mir.Operand.Copy(f.Place(mir.Base.Local(p), Array<mir.Proj>[mir.Proj.Field(0)]))]))))
     tprim(f, B0, I64(y), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.Lvalue.L(x))
-          mir.Operand.Copy(f.Place(mir.Base.Local(p), mir.Proj[mir.Proj.Field(1)])))
+          mir.Operand.Copy(f.Place(mir.Base.Local(p), Array<mir.Proj>[mir.Proj.Field(1)])))
     f.Add(B0, mir.Stmt.Close(Sp0, S0))
     f.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.Lvalue.L(y))))
     tdefine(t, m, f)
-    assert m.Eval(tkey(1), I64[]) == Stop.None and m.Int(m.Result, i64) == 47
+    assert m.Eval(tkey(1), Array<I64>[]) == Stop.None and m.Int(m.Result, i64) == 47
     assert m.size(pt) == 16 and m.partOffset(pt, 1) == 8
     # enum Shape { Circle(r I64)  Empty }: "s := Shape.Circle(5) if k == 0 else Shape.Empty; match s { ... }"
     st := tdecl(t, names, types.DeclKind.Enum, "Shape")
-    t.SetEnumBody(st, source.NameId[names.Intern("Circle"), names.Intern("Empty")]
-                  t.List(types.TypeId[t.Record(t.List1(i64)), types.TypeId(0)]))
+    t.SetEnumBody(st, Array<source.NameId>[names.Intern("Circle"), names.Intern("Empty")]
+                  t.List(Array<types.TypeId>[t.Record(t.List1(i64)), types.TypeId(0)]))
     g := tfn(t, 2, t.Func(t.List1(i64), i64, types.ListId(0)))
     sv, tag, c := g.AddTemp(st, Sp0), g.AddTemp(i64, Sp0), g.AddTemp(types.BoolT, Sp0)
     circle, empty, probe, isc, other := g.NewBlock(), g.NewBlock(), g.NewBlock(), g.NewBlock(), g.NewBlock()
     tprim(g, B0, I64(c), typed.PrimOp.Eq, types.BoolT, tcopy(0), mir.Operand.Const(i64, 0))
     g.End(B0, mir.Term.Branch(mir.Operand.Copy(mir.Lvalue.L(c)), circle, empty))
-    g.Add(circle, mir.Stmt.Assign(Sp0, mir.Lvalue.L(sv), mir.Rvalue.Aggregate(st, 0, g.Args(mir.Operand[mir.Operand.Const(i64, 5)]))))
+    g.Add(circle, mir.Stmt.Assign(Sp0, mir.Lvalue.L(sv), mir.Rvalue.Aggregate(st, 0, g.Args(Array<mir.Operand>[mir.Operand.Const(i64, 5)]))))
     g.End(circle, mir.Term.Goto(probe))
     g.Add(empty, mir.Stmt.Assign(Sp0, mir.Lvalue.L(sv), mir.Rvalue.Aggregate(st, 1, mir.Empty)))
     g.End(empty, mir.Term.Goto(probe))
     g.Add(probe, mir.Stmt.Assign(Sp0, mir.Lvalue.L(tag), mir.Rvalue.Tag(mir.Lvalue.L(sv))))
-    g.End(probe, mir.Term.Switch(mir.Operand.Copy(mir.Lvalue.L(tag)), g.AddCases(mir.Case[mir.Case(0, isc)]), other))
+    g.End(probe, mir.Term.Switch(mir.Operand.Copy(mir.Lvalue.L(tag)), g.AddCases(Array<mir.Case>[mir.Case(0, isc)]), other))
     g.Add(isc, mir.Stmt.Close(Sp0, S0))
-    g.End(isc, mir.Term.Return(Sp0, mir.Operand.Copy(g.Place(mir.Base.Local(sv), mir.Proj[mir.Proj.Payload(0)
+    g.End(isc, mir.Term.Return(Sp0, mir.Operand.Copy(g.Place(mir.Base.Local(sv), Array<mir.Proj>[mir.Proj.Payload(0)
                                                                                            mir.Proj.Field(0)]))))
     g.Add(other, mir.Stmt.Close(Sp0, S0))
     g.End(other, mir.Term.Return(Sp0, mir.Operand.Const(i64, -1)))
     tdefine(t, m, g)
-    assert m.Eval(tkey(2), I64[0]) == Stop.None and m.Int(m.Result, i64) == 5
-    assert m.Eval(tkey(2), I64[1]) == Stop.None and m.Int(m.Result, i64) == -1
+    assert m.Eval(tkey(2), Array<I64>[0]) == Stop.None and m.Int(m.Result, i64) == 5
+    assert m.Eval(tkey(2), Array<I64>[1]) == Stop.None and m.Int(m.Result, i64) == -1
     assert m.size(st) == 16
     # arrays: "a := Array<I64>(5, 2); copy [10, 20, 30] in; s := a[1:4]; return a[0] + a.Len() + s[0] + a[4]"
     arr := t.Array(i64, types.TypeId(0))
@@ -6401,36 +6401,36 @@ test "aggregates, enums, arrays and references: laid out as the target lays them
     h := nfn(t, 3)
     a, sl, n, v1, v2, v3 := h.AddTemp(arr, Sp0), h.AddTemp(ra, Sp0), h.AddTemp(i64, Sp0), h.AddTemp(i64, Sp0), h.AddTemp(i64, Sp0), h.AddTemp(i64, Sp0)
     lit, ref := h.AddTemp(ra, Sp0), h.AddTemp(ra, Sp0)
-    k := h.AddConst(typed.Const.Items(typed.Const&[typed.Const.Bits(10), typed.Const.Bits(20), typed.Const.Bits(30)]))
+    k := h.AddConst(typed.Const.Items(Array<typed.Const&>[typed.Const.Bits(10), typed.Const.Bits(20), typed.Const.Bits(30)]))
     h.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(a), mir.Rvalue.NewArray(mir.ScopeRef.Scope(S0), arr, mir.Operand.Const(i64, 5)
                                                                  mir.Operand.Const(i64, 2))))
     h.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(lit), mir.Rvalue.Use(mir.Operand.Data(ra, k, 0, tspan(30)))))
-    h.Add(B0, mir.Stmt.CopyElems(Sp0, mir.Lvalue.L(a), h.Place(mir.Base.Local(lit), mir.Proj[mir.Proj.Deref]), mir.Operand.Const(i64, 3)))
+    h.Add(B0, mir.Stmt.CopyElems(Sp0, mir.Lvalue.L(a), h.Place(mir.Base.Local(lit), Array<mir.Proj>[mir.Proj.Deref]), mir.Operand.Const(i64, 3)))
     h.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(sl), mir.Rvalue.Slice(mir.Lvalue.L(a), mir.Operand.Const(i64, 1)
                                                                mir.Operand.Const(i64, 4), ra)))
-    h.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(n), mir.Rvalue.Prim(typed.PrimOp.Len, i64, h.Args(mir.Operand[mir.Operand.Copy(mir.Lvalue.L(a))]))))
+    h.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(n), mir.Rvalue.Prim(typed.PrimOp.Len, i64, h.Args(Array<mir.Operand>[mir.Operand.Copy(mir.Lvalue.L(a))]))))
     tprim(h, B0, I64(v1), typed.PrimOp.Add, i64
-          mir.Operand.Copy(h.Place(mir.Base.Local(a), mir.Proj[mir.Proj.At(0)])), mir.Operand.Copy(mir.Lvalue.L(n)))
+          mir.Operand.Copy(h.Place(mir.Base.Local(a), Array<mir.Proj>[mir.Proj.At(0)])), mir.Operand.Copy(mir.Lvalue.L(n)))
     tprim(h, B0, I64(v2), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.Lvalue.L(v1))
-          mir.Operand.Copy(h.Place(mir.Base.Local(sl), mir.Proj[mir.Proj.Deref, mir.Proj.At(0)])))
+          mir.Operand.Copy(h.Place(mir.Base.Local(sl), Array<mir.Proj>[mir.Proj.Deref, mir.Proj.At(0)])))
     tprim(h, B0, I64(v3), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.Lvalue.L(v2))
-          mir.Operand.Copy(h.Place(mir.Base.Local(a), mir.Proj[mir.Proj.At(4)])))
+          mir.Operand.Copy(h.Place(mir.Base.Local(a), Array<mir.Proj>[mir.Proj.At(4)])))
     h.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(ref), mir.Rvalue.Ref(mir.Lvalue.L(a), ra)))
     h.Add(B0, mir.Stmt.Close(Sp0, S0))
     h.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.Lvalue.L(v3))))
     tdefine(t, m, h)
-    assert m.Eval(tkey(3), I64[]) == Stop.None and m.Int(m.Result, i64) == 37
+    assert m.Eval(tkey(3), Array<I64>[]) == Stop.None and m.Int(m.Result, i64) == 37
     # constant data is read-only: a write through a reference to it refused
     w := nfn(t, 4)
     wl := w.AddTemp(ra, Sp0)
-    w.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(wl), mir.Rvalue.Use(mir.Operand.Data(ra, w.AddConst(typed.Const.Bytes(U8[1, 2]))
+    w.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(wl), mir.Rvalue.Use(mir.Operand.Data(ra, w.AddConst(typed.Const.Bytes(Array<U8>[1, 2]))
                                                                                0, tspan(40)))))
-    w.Add(B0, mir.Stmt.Assign(tspan(41), w.Place(mir.Base.Local(wl), mir.Proj[mir.Proj.Deref, mir.Proj.At(0)])
+    w.Add(B0, mir.Stmt.Assign(tspan(41), w.Place(mir.Base.Local(wl), Array<mir.Proj>[mir.Proj.Deref, mir.Proj.At(0)])
                               mir.Rvalue.Use(mir.Operand.Const(i64, 9))))
     w.Add(B0, mir.Stmt.Close(Sp0, S0))
     w.End(B0, mir.Term.Return(Sp0, mir.Operand.Const(i64, 0)))
     m.Define(w)
-    assert m.Eval(tkey(4), I64[]) == Stop.Refused(WhyReadOnly, 0, tspan(41))
+    assert m.Eval(tkey(4), Array<I64>[]) == Stop.Refused(WhyReadOnly, 0, tspan(41))
 }
 
 # "fn() I64 { return x }" over the operand made by mk, keyed Body(id)
@@ -6469,25 +6469,25 @@ test "globals while compiling: an immutable one initialized when first read (K2)
     m.DefineGlobal(7, ga, i64, false, tkey(10))
     m.DefineGlobal(7, gb, i64, false, tkey(11))
     tdefine(t, m, retFn(t, 1, mir.Operand.Copy(gplace(t, gb))))
-    assert m.Eval(tkey(1), I64[]) == Stop.None and m.Int(m.Result, i64) == 43
+    assert m.Eval(tkey(1), Array<I64>[]) == Stop.None and m.Int(m.Result, i64) == 43
     assert m.Global(7, ga) == Stop.None and m.Int(m.Result, i64) == 42
     # a mutable global read; a global written
     tdefine(t, m, retFn(t, 12, mir.Operand.Const(i64, 5)))
     m.DefineGlobal(7, gm, i64, true, tkey(12))
     tdefine(t, m, retFn(t, 2, mir.Operand.Copy(gplace(t, gm))))
-    assert m.Eval(tkey(2), I64[]) == Stop.Refused(WhyMutableGlobal, 0, Sp0)
+    assert m.Eval(tkey(2), Array<I64>[]) == Stop.Refused(WhyMutableGlobal, 0, Sp0)
     w := nfn(t, 3)
     w.Add(B0, mir.Stmt.Assign(tspan(3), gplace(t, gm), mir.Rvalue.Use(mir.Operand.Const(i64, 1))))
     w.Add(B0, mir.Stmt.Close(Sp0, S0))
     w.End(B0, mir.Term.Return(Sp0, mir.Operand.Const(i64, 0)))
     tdefine(t, m, w)
-    assert m.Eval(tkey(3), I64[]) == Stop.Refused(WhyWritesGlobalVar, 0, tspan(3))
+    assert m.Eval(tkey(3), Array<I64>[]) == Stop.Refused(WhyWritesGlobalVar, 0, tspan(3))
     # C = D + 1, D = C + 1: defined in terms of each other
     tdefine(t, m, retFn(t, 13, mir.Operand.Copy(gplace(t, gd))))
     tdefine(t, m, retFn(t, 14, mir.Operand.Copy(gplace(t, gc))))
     m.DefineGlobal(7, gc, i64, false, tkey(13))
     m.DefineGlobal(7, gd, i64, false, tkey(14))
-    assert m.Eval(tkey(13), I64[]) == Stop.Refused(WhyCycle, 0, Sp0)
+    assert m.Eval(tkey(13), Array<I64>[]) == Stop.Refused(WhyCycle, 0, Sp0)
     # K1a: what keeps a function from ever being evaluated, found before running it
     why, _, sp := m.Why(tkey(3))
     assert why == WhyWritesGlobalVar and sp == tspan(3), why
@@ -6510,7 +6510,7 @@ test "scopes and destructors under -i: a scope's registrations run as it closes,
     x := d.AddTemp(i64, Sp0)
     tprim(d, B0, I64(x), typed.PrimOp.Mul, i64, mir.Operand.Copy(gplace(t, log)), mir.Operand.Const(i64, 10))
     tprim(d, B0, I64(x), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.Lvalue.L(x))
-          mir.Operand.Copy(d.Place(mir.Base.Local(mir.LocalId(0)), mir.Proj[mir.Proj.Deref, mir.Proj.Field(0)])))
+          mir.Operand.Copy(d.Place(mir.Base.Local(mir.LocalId(0)), Array<mir.Proj>[mir.Proj.Deref, mir.Proj.Field(0)])))
     d.Add(B0, mir.Stmt.Assign(Sp0, gplace(t, log), mir.Rvalue.Use(mir.Operand.Copy(mir.Lvalue.L(x)))))
     d.Add(B0, mir.Stmt.Close(Sp0, S0))
     d.End(B0, mir.Term.Return(Sp0, mir.Operand.None))
@@ -6525,7 +6525,7 @@ test "scopes and destructors under -i: a scope's registrations run as it closes,
     for v in range 1, 4 {
         r := f.AddTemp(rr, Sp0)
         agg := f.AddTemp(rt, Sp0)
-        f.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(agg), mir.Rvalue.Aggregate(rt, 0, f.Args(mir.Operand[mir.Operand.Const(i64, v)]))))
+        f.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(agg), mir.Rvalue.Aggregate(rt, 0, f.Args(Array<mir.Operand>[mir.Operand.Const(i64, v)]))))
         f.Add(B0, mir.Stmt.Assign(Sp0, mir.Lvalue.L(r), mir.Rvalue.New(mir.ScopeRef.Scope(blk), mir.Operand.Copy(mir.Lvalue.L(agg)), rr)))
         f.Add(B0, mir.Stmt.RegisterDtor(Sp0, mir.ScopeRef.Scope(blk), rt, mir.Operand.Copy(mir.Lvalue.L(r))))
     }
@@ -6533,12 +6533,12 @@ test "scopes and destructors under -i: a scope's registrations run as it closes,
     f.Add(B0, mir.Stmt.Close(Sp0, S0))
     f.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(gplace(t, log))))
     tdefine(t, m, f)
-    s := m.Eval(tkey(1), I64[])
+    s := m.Eval(tkey(1), Array<I64>[])
     assert s == Stop.None and m.Int(m.Result, i64) == 321, $s " " $m.Int(m.Result, i64)
     # while compiling, building a value whose destructor would run is refused (K1)
     c mut Machine& = Machine.New(t, Mode.Compile)
     c.Define(d)
     c.DefineDestructor(rt, tkey(20))
     tdefine(t, c, f)
-    assert c.Eval(tkey(1), I64[]) == Stop.Refused(WhyDestructor, 0, Sp0)
+    assert c.Eval(tkey(1), Array<I64>[]) == Stop.Refused(WhyDestructor, 0, Sp0)
 }

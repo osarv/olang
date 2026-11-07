@@ -178,7 +178,7 @@ SmileBack I64 = Count("a😀b")!
 test "code points are written and read back" {
     assert Smile.Len() == 4 and Smile[0] == Char(0xF0) and Smile == "😀"
     assert SmileBack == 3
-    for v in U32[0, 0x41, 0x7F, 0x80, 0x7FF, 0x800, 0xFFFD, 0xFFFF, 0x10000, 0x10FFFF] {
+    for v in Array<U32>[0, 0x41, 0x7F, 0x80, 0x7FF, 0x800, 0xFFFD, 0xFFFF, 0x10000, 0x10FFFF] {
         t := Encode(Rune(v))!
         r, n := Decode(t, 0)!
         assert U32(r) == v and n == t.Len() and n == Rune(v).Len()
@@ -191,14 +191,14 @@ test "code points are written and read back" {
 
 test "what is not UTF-8 is refused, and walked as replacement characters" {
     bad := Array<String&>(8)
-    bad[0] = bytes(U8[0x80])
-    bad[1] = bytes(U8[0xC0, 0x80])                  # overlong
-    bad[2] = bytes(U8[0xC3])                        # cut short
-    bad[3] = bytes(U8[0xE0, 0x80, 0x80])            # overlong
-    bad[4] = bytes(U8[0xED, 0xA0, 0x80])            # a surrogate
-    bad[5] = bytes(U8[0xF4, 0x90, 0x80, 0x80])      # past U+10FFFF
-    bad[6] = bytes(U8[0xFF])
-    bad[7] = bytes(U8[0x61, 0xC3, 0x28])
+    bad[0] = bytes(Array<U8>[0x80])
+    bad[1] = bytes(Array<U8>[0xC0, 0x80])                  # overlong
+    bad[2] = bytes(Array<U8>[0xC3])                        # cut short
+    bad[3] = bytes(Array<U8>[0xE0, 0x80, 0x80])            # overlong
+    bad[4] = bytes(Array<U8>[0xED, 0xA0, 0x80])            # a surrogate
+    bad[5] = bytes(Array<U8>[0xF4, 0x90, 0x80, 0x80])      # past U+10FFFF
+    bad[6] = bytes(Array<U8>[0xFF])
+    bad[7] = bytes(Array<U8>[0x61, 0xC3, 0x28])
     for b in bad {
         assert not Valid(b)
         try Count(b) catch Error.Invalid { continue }
@@ -207,7 +207,7 @@ test "what is not UTF-8 is refused, and walked as replacement characters" {
     assert (try Encode(Rune(0xD800)) catch Error.Invalid default "x") == "x"
     assert (try Encode(Rune(0x110000)) catch Error.Invalid default "y") == "y"
     seen := Vec<Rune>()
-    for r in RuneIter.Runes(bytes(U8[0x61, 0xFF, 0x62, 0xE2, 0x82])) { seen.Push(r) }
+    for r in RuneIter.Runes(bytes(Array<U8>[0x61, 0xFF, 0x62, 0xE2, 0x82])) { seen.Push(r) }
     assert seen.Len() == 5 and seen[0] == Rune('a') and seen[1] == Replacement and seen[2] == Rune('b')
     assert seen[3] == Replacement and seen[4] == Replacement
 }

@@ -251,7 +251,7 @@ test "T32b: an any Iterator walked by for-in and its defaults" {
     l := Vec<I64>()
     for i in range 5 { l.Push(i) }
     assert sumIt(l.Iter()) == 10
-    a := I64[1, 2, 3]
+    a := Array<I64>[1, 2, 3]
     assert sumIt(a.Iter()) == 6
     it mut any Iterator<I64>& = a.Iter()
     assert it.Count(fn(x I64) Bool { return x > 1 }) == 2
@@ -302,7 +302,7 @@ fn bumped(k I64) String {
     s := "hello"
     b mut any Bump& = BLab(s)
     b.Bump()
-    a := I64[1, 2, k]
+    a := Array<I64>[1, 2, k]
     c mut any Bump& = BNums(a)
     c.Bump()
     l := Vec<mut any Bump&>()
@@ -513,8 +513,8 @@ test "D8a: a trait's defaults through an any" {
 # E19, E11a (the any review, finding 6): an array of anys is written as $ renders it, "any Named&[...]", and reads back
 fn listed(n I64) String {
     c := Cat("c" $n)
-    xs := any Named&[c, Count(n), Lev.High]
-    ys := any Named?&[null, c]
+    xs := Array<any Named&>[c, Count(n), Lev.High]
+    ys := Array<any Named?&>[null, c]
     return $xs " " $ys " " $xs.Len()
 }
 BakedListed String = listed(4)
@@ -713,7 +713,7 @@ test "M21: Eq and Hash of one instance are not another's" {
 # T7b, E25, O26a (the fourth any review, A): a call given a scope argument puts its array where that says whatever it
 # holds - text and arrays of numbers too - so a function returning one copies it into its result, a local declared from
 # one is not moved, and a box of a call returning one is a copy; each value read back after a churn
-fn saArr(i I64) Array<I64> { return I64[i, i * 2] }
+fn saArr(i I64) Array<I64> { return Array<I64>[i, i * 2] }
 fn saText(p String&, i I64) String { return sArg(i) }
 fn saChain(p String&, i I64) String { return saText(p, i) }
 fn saNums(p String&, i I64) Array<I64> { return saArr(i) }
@@ -863,7 +863,7 @@ fn spTry(i I64) String ? ChOops {
     if i > 100 { error ChOops.Bad }
     return "try" $i "-" $(i * 7)
 }
-fn spNums(i I64) Array<I64> { return I64[i, i * 7, i * 11] }
+fn spNums(i I64) Array<I64> { return Array<I64>[i, i * 7, i * 11] }
 fn spawnStores(k I64) String {
     a := ""
     n I64 = 0

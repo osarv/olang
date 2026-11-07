@@ -215,7 +215,7 @@ seven mut I64 = 7
 bakedMod I64 = I64(-7).Mod(3)
 bakedDivFloor I64 = I64(-7).DivFloor(2)
 bakedDivCeil I64 = I64(7).DivCeil(2)
-bakedDivs := I64[I64(7).Mod(-3), I64(-7).DivCeil(2), I64(-6).DivFloor(2), I64(-6).DivCeil(-2), I64(6).Mod(3)]
+bakedDivs := Array<I64>[I64(7).Mod(-3), I64(-7).DivCeil(2), I64(-6).DivFloor(2), I64(-6).DivCeil(-2), I64(6).Mod(3)]
 
 test "Mod is floored, its sign the divisor's; DivFloor and DivCeil round down and up, where % and / truncate" {
     assert bakedMod == 2 and minusSeven.Mod(3) == 2 and minusSeven % 3 == -1

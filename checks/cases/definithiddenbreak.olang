@@ -43,7 +43,7 @@ fn literal() I64 {
     c Node&
     i I64 = 0
     for {
-        sink(I64[1, try g(i) catch { break }].Len())
+        sink(Array<I64>[1, try g(i) catch { break }].Len())
         i++
     }
     return c.v
@@ -94,6 +94,6 @@ fn through() I64 {
     return k.v
 }
 fn main() {
-    xs := I64[1, 2, 3, 4]
+    xs := Array<I64>[1, 2, 3, 4]
     sink(index(xs) + slice(xs) + literal() + text() + field() + ret() + asserted() + through())
 }

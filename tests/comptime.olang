@@ -2,7 +2,7 @@
 # what the compile-time evaluator bakes (K2) and decides (S18c)
 import "std/io"
 
-fn squares(n I64) Array<I64> { return I64[i * i for i in range n] }
+fn squares(n I64) Array<I64> { return Array<I64>[i * i for i in range n] }
 
 fn fib(n I64) I64 {
     if n < 2: return n
@@ -11,7 +11,7 @@ fn fib(n I64) I64 {
 
 # a global's whole initializer: baked, or an error
 Table := comptime squares(8)
-Coeffs := I64[3, 1, 4, 1, 5]
+Coeffs := Array<I64>[3, 1, 4, 1, 5]
 
 fn size<T>() I64 { return comptime T.Size * 2 }
 
@@ -58,7 +58,7 @@ fn lens() I64 {
 
 fn flags() I64 {
     t I64 = 0
-    comptime for b in Bool[true, false] {
+    comptime for b in Array<Bool>[true, false] {
         if b: t += 1
         if not b: t += 10
     }
@@ -96,7 +96,7 @@ fn letters() I64 {
 }
 
 BakedHot I64 = hot(3)
-BakedDot I64 = dot(I64[1, 2, 3, 4, 5])
+BakedDot I64 = dot(Array<I64>[1, 2, 3, 4, 5])
 BakedTri I64 = tri()
 
 test "comptime gives constant data" {
@@ -110,7 +110,7 @@ test "comptime gives constant data" {
 }
 
 test "comptime for unrolls" {
-    assert dot(I64[1, 1, 1, 1, 1]) == 14
+    assert dot(Array<I64>[1, 1, 1, 1, 1]) == 14
     assert evens() == 20
     assert lens() == 6 + 600
     assert flags() == 11
@@ -122,7 +122,7 @@ test "comptime for unrolls" {
 
 test "the evaluator agrees" {
     assert BakedHot == hot(3) and BakedHot == 5 + 3 * 6765
-    assert BakedDot == 46 and BakedDot == dot(I64[1, 2, 3, 4, 5])
+    assert BakedDot == 46 and BakedDot == dot(Array<I64>[1, 2, 3, 4, 5])
     assert BakedTri == 4
     assert evens() == 20 # decided while compiling (S18c)
     assert lens() == 606

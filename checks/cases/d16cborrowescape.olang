@@ -3,7 +3,7 @@
 # D16d, O26a (bulk review 6 F9: refused until then): a lambda borrowing a local array, returned - the array flows into
 # the result through the capture, so it lives where the result goes; read back after an arena churn
 fn leak() fn&(x I32) I32 {
-    a := I32[1, 2, 3]
+    a := Array<I32>[1, 2, 3]
     return fn(x) { return a[0] + x }
 }
 

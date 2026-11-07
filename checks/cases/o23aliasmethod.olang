@@ -13,7 +13,7 @@ fn main() ? {
     for _ in range 2 {
         x mut N& = N(42)
         c := Cur(outer)
-        arr Array<mut Cur&> = Cur&[c]
+        arr Array<mut Cur&> = Array<Cur&>[c]
         arr[0].Set(x)
         keep = c.at
     }

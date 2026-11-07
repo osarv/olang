@@ -11,7 +11,7 @@ type Acc struct() {
 fn bump(c mut Acc&) { c.N++ }
 fn bumpPt(p mut Pt&) { p.X++ }
 fn main() ? {
-    a := Acc[Acc(), Acc()]
+    a := Array<Acc>[Acc(), Acc()]
     k := a.Len()
     bump(a[0] if k > 0 else a[1])
     try io.Println("array N " $a[0].N)

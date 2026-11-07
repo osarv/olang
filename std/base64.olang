@@ -98,7 +98,7 @@ test "the RFC 4648 test vectors" {
     assert Encode("") == "" and Encode("f") == "Zg==" and Encode("fo") == "Zm8=" and Encode("foo") == "Zm9v"
     assert Encode("foob") == "Zm9vYg==" and Encode("fooba") == "Zm9vYmE=" and Encode("foobar") == "Zm9vYmFy"
     assert Hello == "SGVsbG8sIHdvcmxkIQ=="
-    for t in String&["", "f", "fo", "foo", "foob", "fooba", "foobar"] {
+    for t in Array<String&>["", "f", "fo", "foo", "foob", "fooba", "foobar"] {
         assert String(Decode(Encode(t))!) == t and String(DecodeURL(EncodeURL(t))!) == t
     }
 }
@@ -107,15 +107,15 @@ test "every byte round-trips, in both alphabets" {
     all := Array<U8>(256)
     for i in range 256 { all[i] = U8(i) }
     assert Decode(Encode(all))! == all and DecodeURL(EncodeURL(all))! == all
-    assert EncodeURL(U8[0xFB, 0xFF]) == "-_8" and Encode(U8[0xFB, 0xFF]) == "+/8="
+    assert EncodeURL(Array<U8>[0xFB, 0xFF]) == "-_8" and Encode(Array<U8>[0xFB, 0xFF]) == "+/8="
 }
 
 test "decoding is strict" {
-    for bad in String&["Zg", "Zg=", "Z===", "Zh==", "Zm9v!", "Zm=v", "Zg==Zg=="] {
+    for bad in Array<String&>["Zg", "Zg=", "Z===", "Zh==", "Zm9v!", "Zm=v", "Zg==Zg=="] {
         try Decode(bad) catch Error.Invalid { continue }
         unreachable
     }
-    for bad in String&["Zg==", "Z", "+/8", "Zh"] {
+    for bad in Array<String&>["Zg==", "Z", "+/8", "Zh"] {
         try DecodeURL(bad) catch Error.Invalid { continue }
         unreachable
     }

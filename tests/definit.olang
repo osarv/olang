@@ -96,7 +96,7 @@ type DiPair struct(big Bool) {
 }
 
 # a comprehension of a count known while compiling is a fixed array (T7c); one over a run-time range is exact
-fn diSquares(n I64) Array<I64> { return I64[i * i for i in range n] }
+fn diSquares(n I64) Array<I64> { return Array<I64>[i * i for i in range n] }
 
 fn diFill(n I64) Array<F32> {
     a := Array<F32>(n)
@@ -171,10 +171,10 @@ DiAreaBaked := diArea(DiShape.Square(4))
 DiZeroBaked := diZero(true)
 DiSquaresBaked := diSquares(4)
 DiFillBaked := diFill(3)
-DiFixedLen := I64[i for i in range 6].Len()
+DiFixedLen := Array<I64>[i for i in range 6].Len()
 DiAfterDoBaked := diAfterDo(3)
 DiMovedBaked := diMoved(50)
-DiAfterHiddenBaked := diAfterHidden(I64[4, 5, 6, 7])
+DiAfterHiddenBaked := diAfterHidden(Array<I64>[4, 5, 6, 7])
 
 test "a never-null reference assigned in both branches (D13d)" {
     assert diPick(true) == 1
@@ -210,7 +210,7 @@ test "a zero value read after a loop that ends by a break it holds anywhere (D13
     assert diAfterDo(3) == 10
     assert diAfterDo(0) == 8
     assert DiAfterDoBaked == 10
-    xs := I64[4, 5, 6, 7]
+    xs := Array<I64>[4, 5, 6, 7]
     assert diAfterHidden(xs) == 715
     assert DiAfterHiddenBaked == 715
 }
@@ -230,25 +230,25 @@ test "a global given its value by a top-level if (D13e)" {
 }
 
 test "comprehensions write each element once (E27, T7c)" {
-    a := I64[i * 3 for i in range 5]
+    a := Array<I64>[i * 3 for i in range 5]
     assert a.Len() == 5
-    assert a == I64[0, 3, 6, 9, 12]
+    assert a == Array<I64>[0, 3, 6, 9, 12]
     assert DiFixedLen == 6
     n := 4
-    assert diSquares(n) == I64[0, 1, 4, 9]
-    assert DiSquaresBaked == I64[0, 1, 4, 9]
-    b := I64[x + 1 for x in a]
-    assert b == I64[1, 4, 7, 10, 13]
-    c := I64[x for x in a if x % 2 == 0]
-    assert c == I64[0, 6, 12]
-    d := I32[I32(i) for i in range 2, n * 2, 2]
-    assert d == I32[2, 4, 6]
-    assert I64[i for i in range 0].Len() == 0
+    assert diSquares(n) == Array<I64>[0, 1, 4, 9]
+    assert DiSquaresBaked == Array<I64>[0, 1, 4, 9]
+    b := Array<I64>[x + 1 for x in a]
+    assert b == Array<I64>[1, 4, 7, 10, 13]
+    c := Array<I64>[x for x in a if x % 2 == 0]
+    assert c == Array<I64>[0, 6, 12]
+    d := Array<I32>[I32(i) for i in range 2, n * 2, 2]
+    assert d == Array<I32>[2, 4, 6]
+    assert Array<I64>[i for i in range 0].Len() == 0
 }
 
 test "Array<T>(n) filled by the loop after it (D14d)" {
-    assert diFill(4) == F32[0.0, 0.5, 1.0, 1.5]
-    assert DiFillBaked == F32[0.0, 0.5, 1.0]
+    assert diFill(4) == Array<F32>[0.0, 0.5, 1.0, 1.5]
+    assert DiFillBaked == Array<F32>[0.0, 0.5, 1.0]
 }
 
 test "a counted fill whose counter is assigned keeps its clear (D14d)" {

@@ -85,7 +85,7 @@ test "Vec: growth keeps every element, the buffer doubling from 8" {
     t := 0
     for x in v { t += x }
     assert v.Len() == 1000 and t == 499500 and v[999] == 999 and v[0] == 0
-    v.PushAll(I32[1, 2, 3])
+    v.PushAll(Array<I32>[1, 2, 3])
     assert v.Len() == 1003 and v[1002] == 3
 }
 
@@ -136,7 +136,7 @@ test "Vec: equal Vecs compare and hash alike, and render as their elements" {
     b.Push(9)
     assert a != b
     try b.Pop() catch { unreachable }
-    assert a == b and a.Hash() == b.Hash() and a.Hash() == I64[0, 1, 2, 3, 4].HashElements()
+    assert a == b and a.Hash() == b.Hash() and a.Hash() == Array<I64>[0, 1, 2, 3, 4].HashElements()
     assert $a == "Vec<I64>[0, 1, 2, 3, 4]" and $Vec<String&>() == "Vec<String&>[]"
 }
 
@@ -257,7 +257,7 @@ test "Vec: room made up front, Reserve, Cap, Remove and Join" {
     assert t.Join(", ") == "a, b, c" and Vec<String&>().Join("-") == ""
     o := Vec<String>()
     for i in range 3 { o.Push($i) }
-    assert o.Join("+") == "0+1+2" and Vec<String>().Join("-") == "" and String["x", "y"].Join("") == "xy"
+    assert o.Join("+") == "0+1+2" and Vec<String>().Join("-") == "" and Array<String>["x", "y"].Join("") == "xy"
 }
 
 fn vecJoined(n I64) String {

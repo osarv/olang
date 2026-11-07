@@ -216,7 +216,7 @@ fn Table.New(names mut source.Names&) Table {
     t.lists.Push(Array<TypeId>(0))
     t.scopes.Push(Array<I64>(0))
     t.nameLists.Push(Array<I64>(0))
-    for k in Kind[Kind.Unknown, Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32
+    for k in Array<Kind>[Kind.Unknown, Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32
                   Kind.U64, Kind.F16, Kind.BF16, Kind.F32, Kind.F64, Kind.Null, Kind.DefaultErr, Kind.Noreturn] {
         t.intern(data(k, 0, 0, 0), 1)
     }
@@ -289,10 +289,10 @@ fn (t Table&) Prim(name String&) TypeId {
     return UnknownT
 }
 
-primNames := String&["", "", "Bool", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64"]
-primLlvm := String&["", "void", "i1", "i8", "i16", "i32", "i64", "i8", "i16", "i32", "i64", "half", "bfloat", "float"
+primNames := Array<String&>["", "", "Bool", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64"]
+primLlvm := Array<String&>["", "void", "i1", "i8", "i16", "i32", "i64", "i8", "i16", "i32", "i64", "half", "bfloat", "float"
                     "double"]
-primBits := I64[0, 0, 1, 8, 16, 32, 64, 8, 16, 32, 64, 16, 16, 32, 64]
+primBits := Array<I64>[0, 0, 1, 8, 16, 32, 64, 8, 16, 32, 64, 16, 16, 32, 64]
 
 fn (t mut Table&) intern(d data, depth I32) TypeId {
     id := try t.keys.Get(d) catch default TypeId(-1)
@@ -338,7 +338,7 @@ fn (t mut Table&) List(xs Array<TypeId>&) ListId {
     return id
 }
 
-fn (t mut Table&) List1(a TypeId) ListId { return t.List(TypeId[a]) }
+fn (t mut Table&) List1(a TypeId) ListId { return t.List(Array<TypeId>[a]) }
 
 # the types of a list
 fn (t Table&) Items(l ListId) Array<TypeId>& { return t.lists[I64(l)] }
@@ -727,7 +727,7 @@ fn (t Table&) Results(f TypeId) Array<TypeId> {
         for i in range xs.Len() { out[i] = xs[i] }
         return out
     }
-    return TypeId[r]
+    return Array<TypeId>[r]
 }
 
 # a type with every function type's scopes left out: T22's identity (O5)
@@ -1344,7 +1344,7 @@ fn (t mut Table&) partsOwn(l ListId, depth I64) Bool {
 # captures are its environment's, never the type's (D16c)
 fn (t mut Table&) ScopeVarsOf(f TypeId) Array<I64> {
     role := t.Role(f)
-    if role == RoleDtor { return I64[ClosingVar] }
+    if role == RoleDtor { return Array<I64>[ClosingVar] }
     out Vec<I64>
     ps := t.Items(t.Params(f))
     for i in range ps.Len() {
@@ -2094,10 +2094,10 @@ test "types are interned: the same parts give the same id, permission and shape 
     r := t.Ref(a, ReadOnly)
     w := t.Ref(a, Writable)
     assert r != w and t.Ref(a, ReadOnly) == r
-    l1 := t.List(TypeId[i64, r])
-    assert t.List(TypeId[i64, r]) == l1 and t.List(TypeId[r, i64]) != l1 and t.List(TypeId[]) == ListId(0)
+    l1 := t.List(Array<TypeId>[i64, r])
+    assert t.List(Array<TypeId>[i64, r]) == l1 and t.List(Array<TypeId>[r, i64]) != l1 and t.List(Array<TypeId>[]) == ListId(0)
     f := t.Func(l1, VoidT, ListId(0))
-    assert t.Func(t.List(TypeId[i64, r]), VoidT, ListId(0)) == f
+    assert t.Func(t.List(Array<TypeId>[i64, r]), VoidT, ListId(0)) == f
     n3 := t.Const(i64, 3)
     assert t.Const(i64, 3) == n3 and t.Array(i64, n3) != a
     assert t.Depth(t.Ref(t.Array(t.Array(i64, n3), TypeId(0)), Writable)) == 4
@@ -2114,7 +2114,7 @@ test "canonical texts name every kind of type" {
     assert t.Canon(t.Ref(li, Writable)) == "mut std/prelude/list:List<I64>&"
     assert t.Canon(t.Ref(t.Array(i64, TypeId(0)), Writable)) == "mut Array<I64>&"
     assert t.Canon(t.Array(t.Prim("U8"), t.Const(i64, 16))) == "Array<U8, 16>"
-    f := t.Func(t.List(TypeId[i64, t.Prim("F32")]), t.Tuple(t.List(TypeId[i64, i64])), t.List1(DefaultErrT))
+    f := t.Func(t.List(Array<TypeId>[i64, t.Prim("F32")]), t.Tuple(t.List(Array<TypeId>[i64, i64])), t.List1(DefaultErrT))
     assert t.Canon(f) == "fn(I64, F32) (I64, I64) ?"
     g := t.Func(ListId(0), f, ListId(0))
     assert t.Canon(g) == "fn() (fn(I64, F32) (I64, I64) ?)"
@@ -2129,19 +2129,19 @@ test "layouts follow C's: fields at their alignment, enums a tag word and their 
     m := t.AddModule("t")
     p := t.Named(t.AddDecl(m, names.Intern("P"), DeclKind.Struct, 0), ListId(0))
     i32, i64, u8 := t.Prim("I32"), t.Prim("I64"), t.Prim("U8")
-    t.SetStructBody(p, t.List(TypeId[i32, i64, u8]), false)
-    for x in TypeId[i32, i64, u8] { assert t.ComputeLayout(x) }
+    t.SetStructBody(p, t.List(Array<TypeId>[i32, i64, u8]), false)
+    for x in Array<TypeId>[i32, i64, u8] { assert t.ComputeLayout(x) }
     assert t.ComputeLayout(p)
-    assert t.Size(p) == 24 and t.Align(p) == 8 and t.Offsets(p) == I64[0, 8, 16]
+    assert t.Size(p) == 24 and t.Align(p) == 8 and t.Offsets(p) == Array<I64>[0, 8, 16]
     assert t.Llvm(p) == "%\"t:P\"" and t.StructBody(p) == "{ i32, i64, i8 }"
     e := t.Named(t.AddDecl(m, names.Intern("E"), DeclKind.Enum, 0), ListId(0))
-    rec := t.Record(t.List(TypeId[i64, u8]))
-    assert t.ComputeLayout(rec) and t.Size(rec) == 16 and t.Offsets(rec) == I64[0, 8]
-    t.SetEnumBody(e, source.NameId[names.Intern("A"), names.Intern("B")], t.List(TypeId[rec, TypeId(0)]))
+    rec := t.Record(t.List(Array<TypeId>[i64, u8]))
+    assert t.ComputeLayout(rec) and t.Size(rec) == 16 and t.Offsets(rec) == Array<I64>[0, 8]
+    t.SetEnumBody(e, Array<source.NameId>[names.Intern("A"), names.Intern("B")], t.List(Array<TypeId>[rec, TypeId(0)]))
     assert t.ComputeLayout(e)
     assert t.Size(e) == 24 and t.Align(e) == 8 and t.Llvm(e) == "{ i64, [2 x i64] }"
     plain := t.Named(t.AddDecl(m, names.Intern("D"), DeclKind.Enum, 0), ListId(0))
-    t.SetEnumBody(plain, source.NameId[names.Intern("N")], t.List1(TypeId(0)))
+    t.SetEnumBody(plain, Array<source.NameId>[names.Intern("N")], t.List1(TypeId(0)))
     assert t.ComputeLayout(plain) and t.Size(plain) == 4 and t.Llvm(plain) == "i32"
 }
 
@@ -2149,12 +2149,12 @@ test "a function type's ABI: the error union, large results through memory, func
     names := source.Names()
     t := Table.New(names)
     i64 := t.Prim("I64")
-    for x in TypeId[i64, VoidT] { assert t.ComputeLayout(x) }
+    for x in Array<TypeId>[i64, VoidT] { assert t.ComputeLayout(x) }
     f := t.Func(t.List1(i64), i64, t.List1(DefaultErrT))
     assert t.RetLlvm(f) == "{ i32, i64 }" and t.Passing(f) == "v"
     big := t.Array(i64, t.Const(i64, 20))
     assert t.ComputeLayout(big) and t.Size(big) == 160 and t.ViaMemory(big)
-    g := t.Func(t.List(TypeId[big, f]), big, ListId(0))
+    g := t.Func(t.List(Array<TypeId>[big, f]), big, ListId(0))
     assert t.RetLlvm(g) == "void" and t.Passing(g) == "ms"
     h := t.Func(ListId(0), VoidT, t.List1(DefaultErrT))
     assert t.RetLlvm(h) == "i32"
@@ -2168,25 +2168,25 @@ test "function types carry their scopes; identity leaves them out; a call's scop
     i64 := t.Prim("I64")
     t.SetStructBody(n, t.List1(i64), false)
     mutN, roN := t.Ref(n, Writable), t.Ref(n, ReadOnly)
-    params := t.List(TypeId[mutN, roN, i64])
+    params := t.List(Array<TypeId>[mutN, roN, i64])
     plain := t.Func(params, VoidT, ListId(0))
-    assert t.Func(params, VoidT, ListId(0), t.Scopes(RoleFn, I64[OwnScope, OwnScope, OwnScope], I64[])) == plain
-    shared := t.Func(params, VoidT, ListId(0), t.Scopes(RoleFn, I64[OwnScope, 0, OwnScope], I64[]))
+    assert t.Func(params, VoidT, ListId(0), t.Scopes(RoleFn, Array<I64>[OwnScope, OwnScope, OwnScope], Array<I64>[])) == plain
+    shared := t.Func(params, VoidT, ListId(0), t.Scopes(RoleFn, Array<I64>[OwnScope, 0, OwnScope], Array<I64>[]))
     assert shared != plain and t.Plain(shared) == plain and t.Same(shared, plain)
-    assert t.ScopeVarsOf(plain) == I64[0, 1] and t.ScopeVarsOf(shared) == I64[0]
+    assert t.ScopeVarsOf(plain) == Array<I64>[0, 1] and t.ScopeVarsOf(shared) == Array<I64>[0]
     assert t.Canon(shared) == "fn(mut t:N&, t:N&, I64) ~[0,3,-1,0,-1]"
     built := t.Func(t.List1(roN), roN, ListId(0))
-    borrowed := t.Func(t.List1(roN), roN, ListId(0), t.Scopes(RoleFn, I64[OwnScope], I64[0]))
-    assert t.ScopeVarsOf(built) == I64[0, ResultVar] and t.ScopeVarsOf(borrowed) == I64[0]
+    borrowed := t.Func(t.List1(roN), roN, ListId(0), t.Scopes(RoleFn, Array<I64>[OwnScope], Array<I64>[0]))
+    assert t.ScopeVarsOf(built) == Array<I64>[0, ResultVar] and t.ScopeVarsOf(borrowed) == Array<I64>[0]
     # T22: one type, but a function value fits only a type saying where its references live as it does
     assert not t.ScopesFit(shared, plain) and not t.ScopesFit(plain, shared) and t.ScopesFit(shared, shared)
     assert not t.ScopesFit(built, borrowed) and not t.ScopesFit(borrowed, built)
-    typeVarResult := t.Func(t.List1(roN), roN, ListId(0), t.Scopes(RoleFn, I64[OwnScope], I64[FromTypeVar]))
+    typeVarResult := t.Func(t.List1(roN), roN, ListId(0), t.Scopes(RoleFn, Array<I64>[OwnScope], Array<I64>[FromTypeVar]))
     assert t.ScopesFit(built, typeVarResult) and not t.ScopesFit(borrowed, typeVarResult)
     assert not t.ScopesFit(t.Array(shared, TypeId(0)), t.Array(plain, TypeId(0)))
-    ctor := t.Func(t.List1(i64), n, ListId(0), t.Scopes(RoleCtor, I64[OwnScope], I64[OwnScope]))
-    dtor := t.Func(t.List1(mutN), VoidT, ListId(0), t.Scopes(RoleDtor, I64[OwnScope], I64[]))
-    assert t.ScopeVarsOf(ctor) == I64[ResultVar] and t.ScopeVarsOf(dtor) == I64[ClosingVar]
+    ctor := t.Func(t.List1(i64), n, ListId(0), t.Scopes(RoleCtor, Array<I64>[OwnScope], Array<I64>[OwnScope]))
+    dtor := t.Func(t.List1(mutN), VoidT, ListId(0), t.Scopes(RoleDtor, Array<I64>[OwnScope], Array<I64>[]))
+    assert t.ScopeVarsOf(ctor) == Array<I64>[ResultVar] and t.ScopeVarsOf(dtor) == Array<I64>[ClosingVar]
     # a function with no result read as having a first one, or a parameter past its last, is OwnScope - the record has
     # no entry there (the scope pass asked shared's result 0 and read beyond the record: a crash building target.olang)
     assert t.ResultFrom(shared, 0) == OwnScope and t.ResultFrom(dtor, 0) == OwnScope and t.ShareOf(shared, 3) == OwnScope
@@ -2197,7 +2197,7 @@ test "function types carry their scopes; identity leaves them out; a call's scop
     list := t.AddDecl(m, names.Intern("List"), DeclKind.Struct, 1)
     assert t.Named(list, t.List1(shared)) == t.Named(list, t.List1(plain))
     assert not t.HoldsRefs(i64) and not t.HoldsRefs(n) and t.HoldsRefs(roN) and t.HoldsRefs(plain)
-    assert t.HoldsRefs(t.Tuple(t.List(TypeId[i64, roN]))) and not t.HoldsRefs(t.Array(i64, TypeId(0)))
+    assert t.HoldsRefs(t.Tuple(t.List(Array<TypeId>[i64, roN]))) and not t.HoldsRefs(t.Array(i64, TypeId(0)))
 }
 
 test "symbols are injective and bounded" {
@@ -2212,12 +2212,12 @@ test "symbols are injective and bounded" {
 AnySlotBase I64 = 3
 
 test Demangle "a symbol olang wrote read back as its text; any other as it is" {
-    for text in String&["std/io.Println", "compiler/check.compiler/check:Checker.joinStmt", "a_b.c<I64, Array<U8>&>", "x.$y"] {
+    for text in Array<String&>["std/io.Println", "compiler/check.compiler/check:Checker.joinStmt", "a_b.c<I64, Array<U8>&>", "x.$y"] {
         assert Demangle(Symbol(text)) == text
     }
     xs := StringBuilder()
     for _ in range 150 { xs.PushChar('x') }
     long := $"m." $xs.ToString()
     assert Symbol(long).Len() == 122 and Demangle(Symbol(long)) == $long[:86] "..."
-    for sym in String&["__olang_scope_alloc", "memcpy", "_start", "olang_lambda_3", "main"] { assert Demangle(sym) == sym }
+    for sym in Array<String&>["__olang_scope_alloc", "memcpy", "_start", "olang_lambda_3", "main"] { assert Demangle(sym) == sym }
 }

@@ -4,5 +4,5 @@
 fn first<T>(a Array<T>) T { return a[0] }
 fn main() {
     f := first<I64>
-    assert f(I64[4, 5]) == 4 and f(Array<I64>(3, 7)) == 7
+    assert f(Array<I64>[4, 5]) == 4 and f(Array<I64>(3, 7)) == 7
 }

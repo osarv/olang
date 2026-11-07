@@ -7,6 +7,6 @@ type Shape enum {
     Empty
 }
 fn main() {
-    xs := I64[1, 2]
+    xs := Array<I64>[1, 2]
     p := Point(x for x in xs)
 }

@@ -149,7 +149,7 @@ fn serve(fd I32) {
     body := ""
     path := req.Path
     method := req.Method
-    if not (method in String&["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"]) {
+    if not (method in Array<String&>["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"]) {
         send(fd, response(501, Vec<String&>(), "unsupported method " $method, true))
         return
     }

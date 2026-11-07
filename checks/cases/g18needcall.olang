@@ -11,7 +11,7 @@ fn pick<T>(a T, b T) T { return b if a < b else a }
 fn Largest<T>(xs Array<T>&) T { return pick(xs[0], xs[1]) }
 
 fn main() {
-    ps := Point[Point(1, 2), Point(3, 4)]
+    ps := Array<Point>[Point(1, 2), Point(3, 4)]
     p := Largest(ps)
     assert p.X > 0
 }

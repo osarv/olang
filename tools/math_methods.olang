@@ -25,11 +25,11 @@ import "std/filepath"
 import "srcmask"
 
 # std/math's constants, and what each is now
-ConstNames Array<String&>& = String&["Pi", "E", "Inf", "NaN", "Sqrt2", "Ln2", "Ln10"]
-ConstNow Array<String&>& = String&["Pi", "Euler", "Inf", "NaN", "F64(2).Sqrt()", "F64(2).Log()", "F64(10).Log()"]
+ConstNames Array<String&>& = Array<String&>["Pi", "E", "Inf", "NaN", "Sqrt2", "Ln2", "Ln10"]
+ConstNow Array<String&>& = Array<String&>["Pi", "Euler", "Inf", "NaN", "F64(2).Sqrt()", "F64(2).Log()", "F64(10).Log()"]
 
 # the functions that take a number of any type: an integer literal stays one for them
-AnyNumber Array<String&>& = String&["Abs", "Min", "Max", "Clamp"]
+AnyNumber Array<String&>& = Array<String&>["Abs", "Min", "Max", "Clamp"]
 
 # whether text has s at position i
 fn hasAt(text String&, i I64, s String&) Bool {

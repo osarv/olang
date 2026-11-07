@@ -3,6 +3,6 @@
 fn sum(xs ...I64) I64 { return xs.Len() }
 
 fn main() {
-    a := I64[1, 2]
+    a := Array<I64>[1, 2]
     assert sum(0, ...a) == 3
 }

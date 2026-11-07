@@ -32,7 +32,7 @@ test "pairs compare and hash by their parts" {
 }
 
 test "a pair of things with no Hash is still a pair" {
-    x := Pair(I32[1, 2], 3)
+    x := Pair(Array<I32>[1, 2], 3)
     assert x.First[1] == 2
 }
 

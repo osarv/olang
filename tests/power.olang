@@ -24,8 +24,8 @@ fn powers(z I64) String {
 PowersBaked := powers(0)
 
 fn lanes(z I64) String {
-    a := F64[1.0, 2.0, 3.0 + F64(z)]
-    b := I64[2, 3, 4 + z]
+    a := Array<F64>[1.0, 2.0, 3.0 + F64(z)]
+    b := Array<I64>[2, 3, 4 + z]
     sq := a ** 2.0
     a **= 0.5
     return $sq " " $(b ** 2) " " $a[0]

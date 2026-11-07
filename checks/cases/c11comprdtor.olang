@@ -6,7 +6,7 @@ type R unique struct(id I64) {
     id
 } destruct { Ended++ }
 fn mk(n I64) I64 {
-    xs := R[R(i) for i in range n]
+    xs := Array<R>[R(i) for i in range n]
     return xs.Len()
 }
 fn main() { assert mk(3) == 3 }

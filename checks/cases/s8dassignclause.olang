@@ -18,10 +18,10 @@ fn f(e Shape) I64 {
 }
 fn h(q N?&) I64 {
     if q is not null {
-        sink(I64[try g() catch { q = null } default 0])
+        sink(Array<I64>[try g() catch { q = null } default 0])
         return q.v
     }
     return 0
 }
 fn sink(a Array<I64>&) { }
-fn main() { sink(I64[f(Shape.Holder(N(1))), h(N(2))]) }
+fn main() { sink(Array<I64>[f(Shape.Holder(N(1))), h(N(2))]) }

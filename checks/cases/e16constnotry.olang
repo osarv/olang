@@ -4,7 +4,7 @@
 # - and none for "a.Get(i)" (E16d), which fails with ArrayError.OutOfRange at run time
 import "std/io"
 fn main() ? {
-    z Array<I32> = I32[1, 2]
+    z Array<I32> = Array<I32>[1, 2]
     a := try z.Get(7) catch default 0
     b := z[5]
     try io.Println($a $b)

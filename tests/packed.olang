@@ -127,9 +127,9 @@ test Pub "json writes and reads a packed struct by its fields" {
 
 test Header "an array field stored whole, and its copy's lanes" {
     h := Header.header(U16(Live))
-    h.Lanes = U3[1, 2, 3, 4]
+    h.Lanes = Array<U3>[1, 2, 3, 4]
     l := h.Lanes
-    l += U3[1, 1, 1, 1]
+    l += Array<U3>[1, 1, 1, 1]
     h.Lanes = l[0:4]
-    assert h.Lanes == U3[2, 3, 4, 5] and h.Lanes.Len() == 4 and h.Code == Op.Put
+    assert h.Lanes == Array<U3>[2, 3, 4, 5] and h.Lanes.Len() == 4 and h.Code == Op.Put
 }

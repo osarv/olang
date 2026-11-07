@@ -19,7 +19,7 @@ fn (s mut Server&) Retune(n I64) {
 }
 
 fn tuned(n I64) I64 {
-    s := Server(Config("a", I64[1, 2, 3], 4), 0)
+    s := Server(Config("a", Array<I64>[1, 2, 3], 4), 0)
     before := s.cfg
     s.Retune(n)
     return before.Total() * 1000 + s.cfg.Total() * 10 + s.hits
@@ -30,7 +30,7 @@ Tuned := tuned(10)
 assert Tuned == 10161
 
 test "an immut value is read, held and replaced whole, never changed" {
-    c := Config("cfg", I64[5], 1)
+    c := Config("cfg", Array<I64>[5], 1)
     d := c
     assert d.name == "cfg" and d.Total() == 6
     s := Server(c, 0)

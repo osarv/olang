@@ -18,6 +18,6 @@ fn sorted(xs mut Array<Item>&) { qsort(xs, xs.Len(), 4, olang_count) }
 assert not sorted.WritesGlobals
 
 fn main() {
-    xs := Item[Item(2), Item(1)]
+    xs := Array<Item>[Item(2), Item(1)]
     sorted(xs)
 }

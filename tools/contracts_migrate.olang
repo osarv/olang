@@ -296,7 +296,7 @@ test "a contract moved after the parameters, its results' names and guarantees d
 
 test "what is already moved, and what has no contract, is left alone" {
     r := Result()
-    for t in String&["fn p(x I64) [x > 0] I64 { }\n", "fn f(a Array<I64>&) I64 { return a[0] }\n"
+    for t in Array<String&>["fn p(x I64) [x > 0] I64 { }\n", "fn f(a Array<I64>&) I64 { return a[0] }\n"
                      "fn l(a mut N&, b N&) [b outlives a] { }\n", "x := a[1] { }\n"] {
         assert migrate("f", t, r) == t
     }

@@ -33,7 +33,7 @@ type Tally struct(n I64) { n }
 fn (t mut Tally&) Add(xs ...I64) { for x in xs { t.n += x } }
 
 fn calls(z I64) String {
-    a := I64[4, 5, 6 + z]
+    a := Array<I64>[4, 5, 6 + z]
     v := Vec<I64>()
     v.Push(10)
     v.Push(20)
@@ -92,7 +92,7 @@ fn countAll(xs Array<I64>&) I64 { return xs.Len() }
 fn forms(z I64) String {
     f fn&(xs Array<I64>&) I64 = sum
     g fn&(xs ...I64) I64 = countAll
-    return $f(I64[1, 2 + z]) " " $g(5, 6, 7)
+    return $f(Array<I64>[1, 2 + z]) " " $g(5, 6, 7)
 }
 
 FormsBaked := forms(0)

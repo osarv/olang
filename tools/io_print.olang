@@ -20,8 +20,8 @@ import "std/os"
 import "srcmask"
 
 # the four print words, and what each becomes in std/io
-Words Array<String&>& = String&["eprintln", "eprint", "println", "print"]
-Renamed Array<String&>& = String&["PrintErrln", "PrintErr", "Println", "Print"]
+Words Array<String&>& = Array<String&>["eprintln", "eprint", "println", "print"]
+Renamed Array<String&>& = Array<String&>["PrintErrln", "PrintErr", "Println", "Print"]
 
 # whether text has s at position i
 fn hasAt(text String&, i I64, s String&) Bool {

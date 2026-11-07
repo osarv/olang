@@ -32,11 +32,11 @@ import "srcmask"
 import "diagedit"
 
 # words a bare list of names before "mut" must not contain, or it is no pun
-Blockers Array<String&>& = String&["return", "error", "break", "continue", "done", "fail", "mut", "fn", "type"]
+Blockers Array<String&>& = Array<String&>["return", "error", "break", "continue", "done", "fail", "mut", "fn", "type"]
 
 # the first rule of a diagnostic and the start of its message, for the "mut" the compiler says to remove
-DropRules Array<String&>& = String&["D9", "C3", "D11a", "D11a"]
-DropTexts Array<String&>& = String&["a by-value parameter is the callee's own copy", "a field is writable wherever its instance is"
+DropRules Array<String&>& = Array<String&>["D9", "C3", "D11a", "D11a"]
+DropTexts Array<String&>& = Array<String&>["a by-value parameter is the callee's own copy", "a field is writable wherever its instance is"
                                     "a local is always writable - 'mut' is for a reference"
                                     "':=' gives a local its initializer's permission"]
 

@@ -3,7 +3,7 @@
 # G13: a type match's subject is a type known while compiling
 type Rec struct(Fields Array<I64>&) { Fields }
 fn main() {
-    r := Rec(I64[1, 2])
+    r := Rec(Array<I64>[1, 2])
     for f in r.Fields {
         match f.Type { case _ { } }
     }

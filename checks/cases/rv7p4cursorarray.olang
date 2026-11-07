@@ -11,7 +11,7 @@ type Cur struct(of Bag&) {
     c mut Cell& = of.c
 }
 fn (b Bag&) Str() String {
-    cs := Cur[Cur(b)]
+    cs := Array<Cur>[Cur(b)]
     cs[0].c.v++
     return "b" $b.c.v
 }

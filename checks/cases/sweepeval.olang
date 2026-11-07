@@ -41,7 +41,7 @@ fn sweep<T Integer>(z T, k I64) U64 {
         d = mixU(d, U64(I64(x)))
         d = mixU(d, U64(F64(x).Bits()))
         d = mixU(d, U64(($x).Hash()))
-        for s in I64[0, 1 % w, w / 2, w - 1] {
+        for s in Array<I64>[0, 1 % w, w / 2, w - 1] {
             d = mix(d, x << s)
             d = mix(d, x >> s)
         }

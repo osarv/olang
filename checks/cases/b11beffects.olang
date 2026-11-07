@@ -7,5 +7,5 @@ fn Scale(out mut Array<F64>&, a Array<F64>&, k F64) {
 
 fn main() {
     out := Array<F64>(1)
-    Scale(out, F64[1.0], 2.0)
+    Scale(out, Array<F64>[1.0], 2.0)
 }

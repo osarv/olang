@@ -32,7 +32,7 @@ fn total(words Array<String&>&) I64 {
     return sum.Len()
 }
 fn main() ? {
-    t := total(String&["x", "y", "x"])
+    t := total(Array<String&>["x", "y", "x"])
     assert t == 2
     try io.Println($t)
 }

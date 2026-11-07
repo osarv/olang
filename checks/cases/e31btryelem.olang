@@ -7,7 +7,7 @@ type Acc struct() {
 fn bump(a mut Acc&) { a.N++ }
 fn (a mut Acc&) Add() { a.N += 10 }
 fn main() ? {
-    a := Acc[Acc(), Acc(), Acc()]
+    a := Array<Acc>[Acc(), Acc(), Acc()]
     bump(try a.Get(0))
     (try a.Get(2)).Add()
     bump(a[0])

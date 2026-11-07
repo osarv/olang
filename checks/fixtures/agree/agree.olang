@@ -9,7 +9,7 @@ fn f32Bits(n I64) U32 { return F32(n).Bits() }
 fn bf16Bits(n I64) U16 { return BF16(n).Bits() }
 
 fn identity(n I64) String {
-    arr := I32[1, 2, 3, 4, 5]
+    arr := Array<I32>[1, 2, 3, 4, 5]
     a Array<I32>& = arr[1:3]
     b Array<I32>& = arr[1:n]
     e Array<I32>& = Array<I32>(n - 2)
@@ -40,12 +40,12 @@ fn sites(n I64) String {
 }
 
 fn inPlace(k I64) String {
-    a := I64[1, 2, 3]
+    a := Array<I64>[1, 2, 3]
     s := a[0:2]
-    a = I64[k, 8, 9]
+    a = Array<I64>[k, 8, 9]
     d := Array<I64>(2, 1)
     e := d[:]
-    d = I64[4, 5, 6]
+    d = Array<I64>[4, 5, 6]
     return $s " " $e
 }
 
@@ -59,7 +59,7 @@ fn (a N) Less(b N) Bool {
 fn chain(base I32) Bool { return N(base) < N(base + 10) < N(base + 20) }
 fn comprDeep(n I64) I64 {
     if n == 0 { return 0 }
-    a := I64[comprDeep(n - 1) + x for x in range 1]
+    a := Array<I64>[comprDeep(n - 1) + x for x in range 1]
     return a[0] + 1
 }
 
@@ -129,9 +129,9 @@ fn main() ? io.Error {
     try io.Print($F(4) " " $Early " " $Late "\n")
     Hold.a[0] = 9
     try io.Print($Poked " " $After " " $Hold.a[0] " " $Hold.a[1] "\n")
-    h := F16[1.5, 2.5, 3.5]
+    h := Array<F16>[1.5, 2.5, 3.5]
     k := Array<BF16>(3)
-    m I64 = memset(h, 0, 2) + memcpy(k, BF16[0.5, 1.5, 2.5], 4)
+    m I64 = memset(h, 0, 2) + memcpy(k, Array<BF16>[0.5, 1.5, 2.5], 4)
     assert m != 0
     try io.Print($h " " $k "\n")
     try io.Print($adapters(I32(run) + 1) "\n")

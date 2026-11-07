@@ -2,12 +2,12 @@
 # S13h: past the longest pattern written, one length stands for every longer one
 fn f(xs Array<I64>&) I64 {
     return match xs {
-        case I64[]: 0
-        case I64[a]: a
-        case I64[a, b]: a + b
+        case Array<I64>[]: 0
+        case Array<I64>[a]: a
+        case Array<I64>[a, b]: a + b
     }
 }
 
 fn main() {
-    assert f(I64[1, 2]) == 3
+    assert f(Array<I64>[1, 2]) == 3
 }

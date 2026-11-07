@@ -4,7 +4,7 @@
 # -d -s and interpreted, the three print alike
 import "std/io"
 
-Data := I64[3, 1, 4, 1, 5, 9, 2, 6]
+Data := Array<I64>[3, 1, 4, 1, 5, 9, 2, 6]
 Drops mut I64 = 0
 
 type Res unique struct(id I64) {

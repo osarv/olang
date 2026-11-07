@@ -103,7 +103,7 @@ fn main() ? {
         for x in upto(p) { s += x }
     }
     try io.Println("sum " $s)
-    c := I64[x * 2 for x in held(80, 4) if x != 1]
+    c := Array<I64>[x * 2 for x in held(80, 4) if x != 1]
     try io.Println("comprehension " $c)
     for y in outer(90, 5) {
         if y == 20 { break }

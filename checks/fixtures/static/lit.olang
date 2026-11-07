@@ -8,7 +8,7 @@ fn total(a Array<I32>&) I32 {
 fn lenOf(s String&) I64 { return s.Len() }
 type E error { X }
 fn main() ? E {
-    assert total(I32[3, 4, 5]) + Live == 13
+    assert total(Array<I32>[3, 4, 5]) + Live == 13
     assert lenOf("static text") + I64(Live) == 12
     mine Array<Char> = "copied"      # (written: an Array<Char> - a String never changes, T13a)
     mine[0] = 'C'

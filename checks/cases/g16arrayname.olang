@@ -4,7 +4,7 @@ type Box<T> struct(v T&) { v }
 fn main() ? {
   s := "hello"
   a := Box<String>(s)
-  raw Array<Char> = Char['x', 'y']
+  raw Array<Char> = Array<Char>['x', 'y']
   b := Box<Array<Char>>(raw)
   t := b.v.Trim()
 }

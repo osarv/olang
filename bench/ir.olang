@@ -15,18 +15,18 @@ fn main() {
     cprog := $args[2] if args.Len() > 2 else prog
     dir := benchlib.Dir
     try os.MkDirAll($dir "/build/lto") catch os.Error { benchlib.Fail("cannot make bench/build/lto", 1) }
-    others := benchlib.Objects(dir, String&[".main.ll", ".test.ll"])
+    others := benchlib.Objects(dir, Array<String&>[".main.ll", ".test.ll"])
     link := Vec<String&>()
-    for a in String&["clang", "-O3", "-flto", "-o", "build/lto/" $prog ".olang", "build/" $prog ".main.ll"] { link.Push($a) }
+    for a in Array<String&>["clang", "-O3", "-flto", "-o", "build/lto/" $prog ".olang", "build/" $prog ".main.ll"] { link.Push($a) }
     for o in others { link.Push($o) }
-    for a in String&["-lm", "-lpthread", "-Wl,-plugin-opt=save-temps"] { link.Push($a) }
+    for a in Array<String&>["-lm", "-lpthread", "-Wl,-plugin-opt=save-temps"] { link.Push($a) }
     benchlib.Must(link.ToArray())
-    benchlib.Must(String&["llvm-dis", "build/lto/" $prog ".olang.0.5.precodegen.bc", "-o", "build/lto/" $prog ".olang.ll"])
-    benchlib.MustInto(String&["llvm-objdump", "-d", "--no-show-raw-insn", "build/lto/" $prog ".olang"], dir, "build/lto/" $prog ".olang.s")
-    benchlib.Must(String&["clang", "-O3", "-flto", "-o", "build/lto/" $cprog ".c", "c/" $cprog ".c", "-lm", "-lpthread"
+    benchlib.Must(Array<String&>["llvm-dis", "build/lto/" $prog ".olang.0.5.precodegen.bc", "-o", "build/lto/" $prog ".olang.ll"])
+    benchlib.MustInto(Array<String&>["llvm-objdump", "-d", "--no-show-raw-insn", "build/lto/" $prog ".olang"], dir, "build/lto/" $prog ".olang.s")
+    benchlib.Must(Array<String&>["clang", "-O3", "-flto", "-o", "build/lto/" $cprog ".c", "c/" $cprog ".c", "-lm", "-lpthread"
                           "-Wl,-plugin-opt=save-temps"])
-    benchlib.Must(String&["llvm-dis", "build/lto/" $cprog ".c.0.5.precodegen.bc", "-o", "build/lto/" $cprog ".c.ll"])
-    benchlib.MustInto(String&["llvm-objdump", "-d", "--no-show-raw-insn", "build/lto/" $cprog ".c"], dir, "build/lto/" $cprog ".c.s")
+    benchlib.Must(Array<String&>["llvm-dis", "build/lto/" $cprog ".c.0.5.precodegen.bc", "-o", "build/lto/" $cprog ".c.ll"])
+    benchlib.MustInto(Array<String&>["llvm-objdump", "-d", "--no-show-raw-insn", "build/lto/" $cprog ".c"], dir, "build/lto/" $cprog ".c.s")
     # rm -f build/lto/*.bc build/lto/*.o build/lto/*.resolution.txt
     names := try os.ReadDir($dir "/build/lto") catch default Array<String&>(0)
     for n in names {

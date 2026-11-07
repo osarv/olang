@@ -209,7 +209,7 @@ fn churn() I64 {
 }
 
 # Go's own table for Clean: each path, then what it cleans to
-cleanCases := String&[
+cleanCases := Array<String&>[
     "", "."
     "abc", "abc"
     "abc/def", "abc/def"
@@ -280,7 +280,7 @@ test "Clean borrows the path where its clean form is the path's own beginning, a
 }
 
 # each path, then its Base, then its Dir
-partCases := String&[
+partCases := Array<String&>[
     "", ".", "."
     ".", ".", "."
     "/.", ".", "/"
@@ -337,7 +337,7 @@ test "Join makes one clean path of its parts, leaving empty ones out" {
 }
 
 # Go's table for Rel: base, target, then what Rel gives - "!" where it fails
-relCases := String&[
+relCases := Array<String&>[
     "a/b", "a/b", "."
     "a/b/.", "a/b", "."
     "a/b", "a/b/.", "."

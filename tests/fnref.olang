@@ -52,7 +52,7 @@ fn sample() String {
     hs Vec<Handler&>
     hs.Push(h)
     return ($press(a, 1) " " $press(b, 1) " " $fire(h, Event(3)) " " $h.Twice(Event(4)) " " $f(Event(5)) " "
-            $plain(Event(6)) " " $(longest(String&["a", "ccc", "bb"])!) " " $(longest(String&[]) is null) " "
+            $plain(Event(6)) " " $(longest(Array<String&>["a", "ccc", "bb"])!) " " $(longest(Array<String&>[]) is null) " "
             $lenOr(none, -1) " " $lenOr(empty, -1) " " $(none == empty) " " $none " " $empty "|" " " $hs.Len() " "
             $(b.on!(Event(2))))
 }
@@ -92,7 +92,7 @@ fn nested() String {
     v.Push("x")
     m Maybe
     w Wrap
-    return $Held(z, null) " " $v " " $String?&[z, "y"] " " $Maybe.Some(z, 1) " " $m " " $w
+    return $Held(z, null) " " $v " " $Array<String?&>[z, "y"] " " $Maybe.Some(z, 1) " " $m " " $w
 }
 
 NestedBaked String = nested()
@@ -121,7 +121,7 @@ test press "a function value that may be null is called once a test says it is n
 }
 
 test longest "an array that may be null: null distinct from empty, read once narrowed" {
-    assert longest(String&["x", "yyy"])! == "yyy" and longest(String&[]) is null
+    assert longest(Array<String&>["x", "yyy"])! == "yyy" and longest(Array<String&>[]) is null
     n String?& = null
     e String?& = ""
     assert n is null and e is not null and n != e and e.Len() == 0
@@ -130,7 +130,7 @@ test longest "an array that may be null: null distinct from empty, read once nar
     assert z is null
     w String&                                    # one never null starts as the empty array, as a value array does
     assert w.Len() == 0
-    assert $n == "null" and $e == "" and $Array<I64>?&[] == "Array<I64>?&[]"
+    assert $n == "null" and $e == "" and $Array<Array<I64>?&>[] == "Array<I64>?&[]"
 }
 
 test sample "the evaluator agrees: baked while compiling as at run time" {

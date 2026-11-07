@@ -133,7 +133,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
         if unrolls.Has(a.Key) or unrollWhy.Has(a.Key) { continue }
         made++
         match x.unrolled(a) {
-            case Unrolled.Values(vals) { unrolls.Put($a.Key, I64[v for v in vals]) }
+            case Unrolled.Values(vals) { unrolls.Put($a.Key, Array<I64>[v for v in vals]) }
             case Unrolled.Refused(why) { unrollWhy.Put($a.Key, $why) }
         }
     }
@@ -789,7 +789,7 @@ fn (x mut Exec&) unrolled(a typecheck.UnrollAsk&) Unrolled {
         if r[2] <= 0: return Unrolled.Refused("its range's step is not positive")
         n := (r[1] - r[0] + r[2] - 1) / r[2] if r[1] > r[0] else 0
         if n > 1 << 20: return Unrolled.Refused($"its range holds " $n " elements")
-        return Unrolled.Values(I64[r[0] + k * r[2] for k in range n])
+        return Unrolled.Values(Array<I64>[r[0] + k * r[2] for k in range n])
     }
     k := mir.FnKey.Body(typed.BodyId(I32(a.Source)))
     x.Need(k)
@@ -881,7 +881,7 @@ fn (x mut Exec&) buildDefault(m I64, ty types.TypeId, mutable Bool) Bool {
     if mutable { return false }
     mod := x.P.L.Mods[m]
     if mod.Prelude or mod.Identity.StartsWith("std/") { return false }
-    for name in String&["Bool", "I32", "I64", "U64", "F64"] {
+    for name in Array<String&>["Bool", "I32", "I64", "U64", "F64"] {
         if ty == x.P.T.Prim(name) { return true }
     }
     return ty == x.P.PreludeType("std/prelude/text", "String")

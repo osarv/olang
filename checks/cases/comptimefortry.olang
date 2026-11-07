@@ -2,6 +2,6 @@
 # K3a: an unrolled walk has nothing to fail at run time
 fn main() {
     t I64 = 0
-    comptime for k in try I64[1, 2] { t += k } catch { }
+    comptime for k in try Array<I64>[1, 2] { t += k } catch { }
     assert t == 3
 }

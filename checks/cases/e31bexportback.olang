@@ -13,7 +13,7 @@ export fn olang_grow(a Item&, b Item&) I32 {
     return a.key - b.key
 }
 fn (b mut blk&) Bump() {
-    xs := Item[Item(2), Item(1)]
+    xs := Array<Item>[Item(2), Item(1)]
     qsort(xs, xs.Len(), 4, olang_grow)
     b.n = 99
 }

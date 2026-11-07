@@ -265,7 +265,7 @@ fn (c Config&) DataFlags() Vec<String&> {
 # clang's own version, which every object's name holds: another clang may compile the same IR to another object
 fn (c mut Config&) clangVersion() String& {
     if c.version == "" {
-        out := try target.ClangSays(String&[$c.Clang, "--version"], "", true) catch os.Error { return "" }
+        out := try target.ClangSays(Array<String&>[$c.Clang, "--version"], "", true) catch os.Error { return "" }
         c.version = $out.Stdout
     }
     return c.version
@@ -280,7 +280,7 @@ fn (c Config&) width() I64 {
 
 # ---- content hashes: SHA-256 (FIPS 180-4) ----
 
-ShaK Array<U32> = U32[0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5
+ShaK Array<U32> = Array<U32>[0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5
     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174
     0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da
     0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967
@@ -291,7 +291,7 @@ ShaK Array<U32> = U32[0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b
 
 # a hash being taken: Write the bytes, then Sum the hex digest
 type Sha256 struct() {
-    h Array<U32> = U32[0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]
+    h Array<U32> = Array<U32>[0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]
     buf := Array<U8>(64)
     n I64 = 0
     total I64 = 0
@@ -365,8 +365,8 @@ fn (s mut Sha256&) compress(b Array<U8>&, at I64) {
 # the digest of everything written, as 64 hex digits; the hash is finished by it
 fn (s mut Sha256&) Sum() String {
     bits := U64(s.total) * 8
-    s.Write(U8[128])
-    for s.n != 56 { s.Write(U8[0]) }
+    s.Write(Array<U8>[128])
+    for s.n != 56 { s.Write(Array<U8>[0]) }
     size := Array<U8>(8)
     for i in range 8 { size[i] = U8(bits >> U64(56 - 8 * i)) }
     s.Write(size)
@@ -380,7 +380,7 @@ fn HashOf(parts Vec<String&>&) String {
     s := Sha256()
     for p in parts {
         s.Write(p)
-        s.Write(U8[0])
+        s.Write(Array<U8>[0])
     }
     return s.Sum()
 }
@@ -1102,7 +1102,7 @@ fn (c mut Config&) listLink(objs Vec<String&>&, prog Program&, dir String&, ir B
     args.Push($dir "/code")
     for o in objs { args.Push($o) }
     for x in prog.Links { args.Push($x) }
-    for x in String&["-lm", "-lpthread", "-ldl"] { args.Push($x) }
+    for x in Array<String&>["-lm", "-lpthread", "-ldl"] { args.Push($x) }
     if prog.Dyncall != "" { args.Push("-lffi") }
     if c.Clang == "" { error Failed.Unbuilt }
     parts Vec<String&>
@@ -1138,7 +1138,7 @@ fn (c Config&) bitcodeText(dir String&, d mut diag.Diagnostics&) ? Failed {
         args.Push($c.Clang)
         if c.Target.Foreign { args.Push($"--target=" $c.Target.Triple) }
         bc := $dir "/" $n
-        for a in String&["-S", "-emit-llvm", "-x", "ir", "-Xclang", "-disable-llvm-passes", "-o", $bc ".ll", bc] { args.Push($a) }
+        for a in Array<String&>["-S", "-emit-llvm", "-x", "ir", "-Xclang", "-disable-llvm-passes", "-o", $bc ".ll", bc] { args.Push($a) }
         cmds.Push(args.ToArray())
     }
     status, said := RunAll(cmds.ToArray(), c.width())
@@ -1186,7 +1186,7 @@ fn (c mut Config&) listQuick(prog Program&, dir String&, ir Bool, out mut Listed
         for f in c.CompileFlags(text) { args.Push($f) }
         args.Push("-S")
         if ir { args.Push("-emit-llvm") }
-        for a in String&["-o", $dir "/u" $i $(".ll" if ir else ".s"), input, $"-foptimization-record-file=" $dir "/u" $i ".yaml"] { args.Push($a) }
+        for a in Array<String&>["-o", $dir "/u" $i $(".ll" if ir else ".s"), input, $"-foptimization-record-file=" $dir "/u" $i ".yaml"] { args.Push($a) }
         cmds.Push(args.ToArray())
         sizes.Push(text.Len())
     }
@@ -1280,8 +1280,8 @@ test "an object's name is its identity made readable and a hash of its IR, its f
 
 test "commands run side by side, each one's status and output kept by its number" {
     cmds Vec<Array<String&>&>
-    for i in range 9 { cmds.Push(String&["/bin/sh", "-c", $"echo out" $i "; exit " $(i % 3)]) }
-    cmds.Push(String&["/no/such/program"])
+    for i in range 9 { cmds.Push(Array<String&>["/bin/sh", "-c", $"echo out" $i "; exit " $(i % 3)]) }
+    cmds.Push(Array<String&>["/no/such/program"])
     status, said := RunAll(cmds.ToArray(), 4)
     for i in range 9 {
         assert status[i] == I32(i % 3)
@@ -1289,7 +1289,7 @@ test "commands run side by side, each one's status and output kept by its number
     }
     assert status[9] == 127
     # started heaviest first, each one's status and output still kept by its own number
-    weights := I64[3, 9, 1, 7, 5, 2, 8, 4, 6, 0]
+    weights := Array<I64>[3, 9, 1, 7, 5, 2, 8, 4, 6, 0]
     status2, said2 := RunAll(cmds.ToArray(), 2, weights)
     for i in range 9 {
         assert status2[i] == I32(i % 3)
@@ -1384,7 +1384,7 @@ test "a build compiles and links only what changed: modules, -define, the target
     assert Compile(fe, c, "app.olang", d) == 0
     assert c.Linked == 7
     assert d.Errors() == 0
-    assert Interpret(fe, c, "app.olang", String&["a", "b"], d) == 2
+    assert Interpret(fe, c, "app.olang", Array<String&>["a", "b"], d) == 2
 }
 
 test "B3j: an object another directory's build left in the store is taken from it, never compiled again" {
@@ -1455,12 +1455,12 @@ test "listed test files run one after another in processes of their own, a signa
     chmod := try os.Output.Exec("chmod", "+x", exe)
     assert chmod.Status == 0
     c := Config()
-    assert TestFiles(c, exe, String&["-debug"], String&["a_ok.olang", "b_ok.olang"]) == 0
-    assert TestFiles(c, exe, String&[], String&["x_kill.olang", "y_bad.olang", "z_ok.olang"]) == 1
+    assert TestFiles(c, exe, Array<String&>["-debug"], Array<String&>["a_ok.olang", "b_ok.olang"]) == 0
+    assert TestFiles(c, exe, Array<String&>[], Array<String&>["x_kill.olang", "y_bad.olang", "z_ok.olang"]) == 1
     # B3a: a file whose tests the words name none of (3) fails the run only where every listed file is such
-    assert TestFiles(c, exe, String&[], String&["c_none.olang", "d_ok.olang"], String&["w"]) == 0
-    assert TestFiles(c, exe, String&[], String&["e_none.olang", "f_none.olang"], String&["w"]) == 1
-    assert TestFiles(c, exe, String&[], String&["g_none.olang", "h_bad.olang"], String&["w"]) == 1
+    assert TestFiles(c, exe, Array<String&>[], Array<String&>["c_none.olang", "d_ok.olang"], Array<String&>["w"]) == 0
+    assert TestFiles(c, exe, Array<String&>[], Array<String&>["e_none.olang", "f_none.olang"], Array<String&>["w"]) == 1
+    assert TestFiles(c, exe, Array<String&>[], Array<String&>["g_none.olang", "h_bad.olang"], Array<String&>["w"]) == 1
     text := try os.ReadFile(log)
     assert text == ("test -debug a_ok.olang\ntest -debug b_ok.olang\ntest x_kill.olang\ntest y_bad.olang\ntest z_ok.olang\n"
                     "test c_none.olang w\ntest d_ok.olang w\ntest e_none.olang w\ntest f_none.olang w\ntest g_none.olang w\ntest h_bad.olang w\n")

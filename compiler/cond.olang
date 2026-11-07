@@ -821,7 +821,7 @@ fn (e Eval&) Error() source.Span, diagmsg.Msg { return e.errAt, e.err }
 
 test "a -D value reads as its literal would" {
     c := Consts()
-    for f in String&["A=5", "B=true", "C=1.5", "D=1.2.3", "E=-0x10", "F=18446744073709551615"] {
+    for f in Array<String&>["A=5", "B=true", "C=1.5", "D=1.2.3", "E=-0x10", "F=18446744073709551615"] {
         try c.define(f) catch { unreachable }
     }
     assert c.values[0].Kind == ValueKind.Int and c.values[0].I == 5 and c.values[0].Bits == 64

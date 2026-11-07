@@ -433,7 +433,7 @@ test "parentheses around a try's operand taken off, a try read on wrapped with -
 
 test "a second run changes nothing" {
     r := Result()
-    for t in String&["    x := try a + b catch default 0\n", "    y := 2 * (try f()) + 1\n", "    try join {\n"] {
+    for t in Array<String&>["    x := try a + b catch default 0\n", "    y := 2 * (try f()) + 1\n", "    try join {\n"] {
         assert migrate("f", t, true, r) == t
     }
     assert r.changes == 0

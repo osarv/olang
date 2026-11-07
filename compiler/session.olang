@@ -1146,7 +1146,7 @@ fn (a Analysis&) Names(it mut Items&, real String&, at I64) {
     for w in Keywords { it.Add(w, CompKeyword, "") }
 }
 
-Keywords Array<String&> = String&["fn", "type", "struct", "enum", "trait", "extends", "import", "test", "extern", "if"
+Keywords Array<String&> = Array<String&>["fn", "type", "struct", "enum", "trait", "extends", "import", "test", "extern", "if"
     "else", "for", "do", "in", "range", "match", "case", "return", "break", "continue", "error", "try", "catch"
     "default", "join", "spawn", "defer", "errdefer", "embed", "yield", "become", "comptime", "assert", "unreachable", "noreturn", "mut"
     "and", "or", "not", "xor", "is", "as", "null", "true", "false", "destruct"]
@@ -1450,7 +1450,7 @@ fn StdModule(spec String&) String {
 # every module of the standard library: std's files, then the prelude's
 fn stdModules(out mut Vec<String&>&) {
     std := load.StdDir()
-    for dir in String&["", "prelude"] {
+    for dir in Array<String&>["", "prelude"] {
         at := filepath.Join(std, dir) if dir != "" else $std
         found := try os.ReadDir(at) catch os.Error { continue }
         for n in found {

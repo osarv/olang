@@ -79,8 +79,8 @@ fn computed(p Point, k I64) String {
 
 fn firstOnAxis(ps Array<Point>&) String {
     return match ps {
-        case Point[Point(x = 0, y), ...]: "first on the axis at " $y
-        case Point[_, Point(y = 0, x), ...]: "second on the x axis at " $x
+        case Array<Point>[Point(x = 0, y), ...]: "first on the axis at " $y
+        case Array<Point>[_, Point(y = 0, x), ...]: "second on the x axis at " $x
         case _: "neither"
     }
 }
@@ -127,18 +127,18 @@ fn either(s Shape) I64 {
 
 fn all(z I64) String {
     b := StringBuilder()
-    for p in Point[Point(0, 0), Point(0, 5 + z), Point(3, 0), Point(4, 4), Point(1, 2)] {
+    for p in Array<Point>[Point(0, 0), Point(0, 5 + z), Point(3, 0), Point(4, 4), Point(1, 2)] {
         b.Push(where(p))
         b.Push(";")
     }
     b.Push($lines(Line(Point(0, z), Point(3, 3))) ";" $lines(Line(Point(1, 1), Point(0, 9))) ";" $lines(Line(Point(2, 0), Point(5, 5))) ";")
     b.Push($temps(Temp(40 + z)) ";" $temps(Temp(0)) ";" $temps(Temp(10)) ";")
-    for s in Shape[Shape.Rect(5, 0), Shape.Rect(5, 1), Shape.Rect(2, 2), Shape.Rect(3, 4), Shape.Round(Point(0, z)), Shape.Round(Point(1, 2)), Shape.Dot] {
+    for s in Array<Shape>[Shape.Rect(5, 0), Shape.Rect(5, 1), Shape.Rect(2, 2), Shape.Rect(3, 4), Shape.Round(Point(0, z)), Shape.Round(Point(1, 2)), Shape.Dot] {
         b.Push(shapes(s))
         b.Push(";")
     }
     b.Push($computed(Point(3, 0), 2) ";" $computed(Point(3, 0), z) ";")
-    b.Push($firstOnAxis(Point[Point(0, 7)]) ";" $firstOnAxis(Point[Point(1, 1), Point(6, 0)]) ";" $firstOnAxis(Point[Point(1, 1)]) ";")
+    b.Push($firstOnAxis(Array<Point>[Point(0, 7)]) ";" $firstOnAxis(Array<Point>[Point(1, 1), Point(6, 0)]) ";" $firstOnAxis(Array<Point>[Point(1, 1)]) ";")
     b.Push($boxes(Box(3, "a")) ";" $boxes(Box(4, "b")) ";" $boxes(Box(5, "t")) ";" $boxes(Box(6 + z, "u")) ";")
     last := Node(1, null)
     first := Node(0, last)

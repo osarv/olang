@@ -6,5 +6,5 @@ type W struct(s String&) {
 fn (a W) Plus(b W) W { return a }
 fn main() {
     w := W("x")
-    v := W[w, w] + W[w, w]
+    v := Array<W>[w, w] + Array<W>[w, w]
 }

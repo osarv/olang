@@ -151,7 +151,7 @@ fn (w mut walker&) traitMethods(tr types.TypeId, out mut Vec<String&>&) {
 
 # whether a need is an operator's, which a closed trait's members (numbers) have built in
 fn opNeed(n String&) Bool {
-    for o in String&["Less", "Plus", "Minus", "Mul", "Div", "Rem", "Neg", "BitAnd", "BitOr", "BitXor", "ShiftLeft", "ShiftRight"] {
+    for o in Array<String&>["Less", "Plus", "Minus", "Mul", "Div", "Rem", "Neg", "BitAnd", "BitOr", "BitXor", "ShiftLeft", "ShiftRight"] {
         if n == o { return true }
     }
     return false

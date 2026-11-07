@@ -2,5 +2,5 @@
 # an array literal that does not close leaves what it read - "f(I32[)" was "f()"
 fn f() I32 { return 7 }
 fn main() ? {
-    assert f(I32[) == 7
+    assert f(Array<I32>[) == 7
 }

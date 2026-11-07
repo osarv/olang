@@ -93,7 +93,7 @@ test "facts are constants the running program reads too" {
     assert commuting() == 1
     assert Scale.Terminates and not Settle.Terminates
     out := Array<F64>(2)
-    Scale(out, F64[1.0, 2.0], 2.0)
+    Scale(out, Array<F64>[1.0, 2.0], 2.0)
     assert out[1] == 4.0 and Fact(5) == 120 and Settle(9) == 1 and Label(3) == "#3"
     Bump()
     Note(7)

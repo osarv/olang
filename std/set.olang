@@ -124,7 +124,7 @@ test "a Set holds each value once" {
     assert s.Add(3) and s.Add(4) and not s.Add(3)
     assert s.Len() == 2 and 3 in s and 5 not in s
     assert s.Remove(3) and not s.Remove(3) and s.Len() == 1
-    t := Set.Of(I64[1, 2, 2, 3])
+    t := Set.Of(Array<I64>[1, 2, 2, 3])
     assert t.Len() == 3
     sum := 0
     for x in t { sum += x }
@@ -134,13 +134,13 @@ test "a Set holds each value once" {
 }
 
 test "Set algebra" {
-    a := Set.Of(I64[1, 2, 3, 4])
-    b := Set.Of(I64[3, 4, 5])
-    assert a.Union(b) == Set.Of(I64[1, 2, 3, 4, 5])
-    assert a.Intersect(b) == Set.Of(I64[3, 4])
-    assert a.Difference(b) == Set.Of(I64[1, 2])
-    assert Set.Of(I64[3]).IsSubset(b) and not a.IsSubset(b)
-    assert a.Hash() == Set.Of(I64[4, 3, 2, 1]).Hash()
+    a := Set.Of(Array<I64>[1, 2, 3, 4])
+    b := Set.Of(Array<I64>[3, 4, 5])
+    assert a.Union(b) == Set.Of(Array<I64>[1, 2, 3, 4, 5])
+    assert a.Intersect(b) == Set.Of(Array<I64>[3, 4])
+    assert a.Difference(b) == Set.Of(Array<I64>[1, 2])
+    assert Set.Of(Array<I64>[3]).IsSubset(b) and not a.IsSubset(b)
+    assert a.Hash() == Set.Of(Array<I64>[4, 3, 2, 1]).Hash()
     c := a                                                 # a copy: a set of its own
     c.Add(9)
     assert 9 not in a and a.Len() == 4 and 9 in c
@@ -154,7 +154,7 @@ test "a Set of text" {
     line := "the cat and the hat"
     for word in line.Split(" ") { w.Add(word) }
     assert w.Len() == 4 and "cat" in w and "dog" not in w
-    assert $Set.Of(String&["x"]) == "Set{\"x\"}" and $Set.Of(I64[7]) == "Set{7}"
+    assert $Set.Of(Array<String&>["x"]) == "Set{\"x\"}" and $Set.Of(Array<I64>[7]) == "Set{7}"
 }
 
 }

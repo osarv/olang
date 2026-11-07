@@ -12,7 +12,7 @@ fn next(n I64) I64 {
     return Counter + n
 }
 fn main() ? {
-    a := Ticket[Ticket(1), Ticket(2)]
+    a := Array<Ticket>[Ticket(1), Ticket(2)]
     c := chan.Chan<Ticket>(4)       # a channel's ring is made as values arrive: no zero value needed
     assert not c.IsClosed()
     assert a.Len() == 2

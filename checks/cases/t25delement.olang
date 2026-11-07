@@ -16,16 +16,16 @@ fn churn() {
 fn main() ? {
     keep := Vec<String&>()
     for k in range 3 {
-        keep.Push(String&["a", "b", "c"][k])
+        keep.Push(Array<String&>["a", "b", "c"][k])
     }
     w String& = "x"
     for k in range 3 {
-        w = String&["a", "b", "c"][k]
+        w = Array<String&>["a", "b", "c"][k]
     }
-    for nm in String&["ann", "bob"] { keep.Push(nm) }
+    for nm in Array<String&>["ann", "bob"] { keep.Push(nm) }
     op := " < "
     for k in range 5 {
-        if k >= 2 { op = String&[" + ", " - ", " * "][k - 2] }
+        if k >= 2 { op = Array<String&>[" + ", " - ", " * "][k - 2] }
     }
     churn()
     assert keep.Len() == 5 and keep[1] == "b" and keep[4] == "bob"

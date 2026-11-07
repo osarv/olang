@@ -408,7 +408,7 @@ test asReference "a copy of a place made a reference to it" {
 }
 
 test reassigned "a copy kept as the old value" {
-    ls := String&["fn f() {", "    saved := c.out", "    c.out = Map<I64, I64>()", "    defer c.out = saved", "}"].ToVec()
+    ls := Array<String&>["fn f() {", "    saved := c.out", "    c.out = Map<I64, I64>()", "    defer c.out = saved", "}"].ToVec()
     assert reassigned(ls, 1, "c.out") and not reassigned(ls, 1, "c.in")
     e := edit("f", 1, 5, "ref", "saved", "", "c")
     assert declValue("    saved := c.out  # x", e) == "c.out"

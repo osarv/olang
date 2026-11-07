@@ -14,7 +14,7 @@ fn Src.read(path String&) Src { return Src(path, $path "!") }
 fn retext(s mut Src&, t String&) { s.Text = t }
 
 fn main() {
-    args := String&["a", "bb"]
+    args := Array<String&>["a", "bb"]
     dir String& = "d"
     kept Vec<String&>
     for k in range args.Len() {

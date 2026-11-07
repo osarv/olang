@@ -154,7 +154,7 @@ fn Read(path String&) String& {
 
 # the files git tracks that match pattern ("*.olang"), sorted
 fn Tracked(pattern String&) Vec<String&> {
-    o := Run(String&["git", "ls-files", pattern])
+    o := Run(Array<String&>["git", "ls-files", pattern])
     return Sorted(Rows(o.Stdout))
 }
 
@@ -196,7 +196,7 @@ fn Compiler() String {
 fn Diff(dir String&, a String&, b String&) String {
     Write($dir "/diff.a", a)
     Write($dir "/diff.b", b)
-    o := Run(String&["diff", $dir "/diff.a", $dir "/diff.b"])
+    o := Run(Array<String&>["diff", $dir "/diff.a", $dir "/diff.b"])
     return $o.Stdout
 }
 
@@ -338,7 +338,7 @@ test "sorting is by bytes" {
 }
 
 test "a golden section reads back as its body, whatever the body holds" {
-    for body in String&["", "a\n", "a\nb", "=== x\n| y\n\n", "\n\n", "z"] {
+    for body in Array<String&>["", "a\n", "a\nb", "=== x\n| y\n\n", "\n\n", "z"] {
         g := Golden.Parse($GoldenSection("k one", body) $GoldenSection("k2", "x\n"), "test")
         assert g.Keys.Len() == 2
         assert g.Keys[0] == "k one"

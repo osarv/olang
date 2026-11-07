@@ -342,7 +342,7 @@ fn setInt(fd I32, level I32, name I32, v I32) {
 # what getsockname or getpeername says of fd
 fn Addr.nameOf(fd I32, peer Bool) Addr ? Error {
     sa := Array<U8>(28)
-    len := U32[28]
+    len := Array<U32>[28]
     rc := sock.getpeername(fd, sa, len) if peer else sock.getsockname(fd, sa, len)
     if rc < 0 { try raise(__olang_err()) }
     return Addr.fromSockaddr(sa)
@@ -367,7 +367,7 @@ fn Lookup(host String&) Array<IP> ? Error.UnknownHost, Error.Unreachable, Error.
     if host != "localhost" {
         numeric := true
         ip := try IP.Parse(host) catch { numeric = false } default IP()
-        if numeric { return IP[ip] }
+        if numeric { return Array<IP>[ip] }
     }
     hints := netdb.addrinfo()
     hints.ai_socktype = sockStream
@@ -445,7 +445,7 @@ fn (l Listener&) Addr() Addr ? Error { return try Addr.nameOf(l.fd, false) }
 fn (l mut Listener&) Accept() mut Conn& ? Error {
     for {
         sa := Array<U8>(28)
-        len := U32[28]
+        len := Array<U32>[28]
         fd := sock.accept4(l.fd, sa, len, sockCloexec)
         if fd >= 0 { return Conn(fd) }
         if not interrupted() { try raise(__olang_err()) }
@@ -548,7 +548,7 @@ fn (u UDP&) SendTo(data Array<U8>&, a Addr&) ? Error {
 fn (u UDP&) RecvFrom(buf mut Array<U8>&) Array<U8>&, Addr ? Error {
     for {
         sa := Array<U8>(28)
-        len := U32[28]
+        len := Array<U32>[28]
         n := sock.recvfrom(u.fd, buf, U64(buf.Len()), 0, sa, len)
         if n >= 0 { return buf[:n], Addr.fromSockaddr(sa) }
         if not interrupted() { try raise(__olang_err()) }
@@ -581,14 +581,14 @@ test "addresses are read and written as text" {
     assert $IP.Parse("2001:db8:0:0:1:0:0:1")! == "2001:db8::1:0:0:1" and $IP.Parse("2001:db8:0:1:1:1:1:1")! == "2001:db8:0:1:1:1:1:1"
     assert $IP.Parse("::ffff:1.2.3.4")! == "::ffff:102:304" and IP.Parse("::1")!.IsLoopback()
     assert IP.Parse("10.0.0.1")! == IP.IPv4(10, 0, 0, 1) and IP.Parse("::1")! == IP.Loopback6()
-    for bad in String&["", "1.2.3", "1.2.3.4.5", "256.1.1.1", "01.2.3.4", "1::2::3", ":1", "1:", "1:2:3:4:5:6:7:8:9", "g::1"
+    for bad in Array<String&>["", "1.2.3", "1.2.3.4.5", "256.1.1.1", "01.2.3.4", "1::2::3", ":1", "1:", "1:2:3:4:5:6:7:8:9", "g::1"
         "example.com"] {
         try IP.Parse(bad) catch Error.Address { continue }
         unreachable
     }
     a := Addr.Parse("127.0.0.1:8080")!
     assert a.Port == 8080 and $a == "127.0.0.1:8080" and $Addr.Parse("[::1]:443")! == "[::1]:443"
-    for bad in String&["127.0.0.1", "127.0.0.1:65536", "::1:80", "[::1]80", "1.2.3.4:x"] {
+    for bad in Array<String&>["127.0.0.1", "127.0.0.1:65536", "::1:80", "[::1]80", "1.2.3.4:x"] {
         try Addr.Parse(bad) catch Error.Address { continue }
         unreachable
     }
@@ -606,19 +606,19 @@ test Error "an address refused carries the text, a name not found the name" {
     assert RefusedBaked == "Error.Address(\"::1:80\")"
     assert refused("1.2.3.4:x") == "Error.Address(\"1.2.3.4:x\")" and refused("[::1]:443") == "ok"
     try IP.Parse("256.1.1.1") catch Error.Address e { assert e.text == "256.1.1.1" }
-    try IP.IPv6(U8[1, 2]) catch Error.Address e { assert e.text == "U8[1, 2]" }
+    try IP.IPv6(Array<U8>[1, 2]) catch Error.Address e { assert e.text == "U8[1, 2]" }
     try Lookup("") catch Error.UnknownHost e { assert e.host == "" } catch { unreachable "an empty name" }
 }
 
 test "names are resolved through the C library, numbers read as they are" {
     for ip in Lookup("localhost")! { assert ip.IsLoopback() }
-    assert Lookup("10.1.2.3")! == IP[IP.IPv4(10, 1, 2, 3)] and Lookup("::1")! == IP[IP.Loopback6()]
+    assert Lookup("10.1.2.3")! == Array<IP>[IP.IPv4(10, 1, 2, 3)] and Lookup("::1")! == Array<IP>[IP.Loopback6()]
     a := Addr.Resolve("localhost:8080")!
     assert a.Port == 8080 and a.Host.IsLoopback() and $Addr.Resolve("[::1]:443")! == "[::1]:443"
     try Lookup("") catch Error.UnknownHost { } catch { unreachable "an empty name" }
     # a name the standard reserves never to exist (RFC 6761) - or a machine with no name server, which cannot say
     try Lookup("no-such-host.invalid") catch Error.UnknownHost, Error.Unreachable { } catch { unreachable "resolved" }
-    for bad in String&["localhost", "localhost:", "localhost:65536", "[::1]80"] {
+    for bad in Array<String&>["localhost", "localhost:", "localhost:65536", "[::1]80"] {
         try Addr.Resolve(bad) catch Error.Address { continue } catch { }
         unreachable $bad
     }
@@ -644,7 +644,7 @@ type counted struct() {
 }
 
 test "a TCP connection over loopback carries bytes both ways" {
-    for host in String&["127.0.0.1", "::1"] {
+    for host in Array<String&>["127.0.0.1", "::1"] {
         l := try Listener.Listen(Addr(IP.Parse(host)!, 0)) catch Error.Address { continue }     # a machine without IPv6
         at := l.Addr()!
         assert at.Port != 0

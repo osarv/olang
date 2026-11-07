@@ -22,7 +22,7 @@ fn main() ? {
     l.Push(V(Array<I64>(2), 1))
     seen := work(l[0], l)
     assert seen == 1 and l[0].d[0] == 0 and l[0].n == 7, "list " $seen " " $l[0].d[0] " " $l[0].n
-    a := V[V(Array<I64>(2), 1)]
+    a := Array<V>[V(Array<I64>(2), 1)]
     seenA := workA(a[0], a)
     assert seenA == 7 and a[0].d[0] == 5 and a[0].n == 7, "array " $seenA " " $a[0].d[0] " " $a[0].n
 }

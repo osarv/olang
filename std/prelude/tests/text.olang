@@ -12,7 +12,7 @@ test "ToUpper and ToLower change ASCII letters and nothing else" {
     assert "Hello, World! 123".ToUpper() == "HELLO, WORLD! 123"
     assert "Hello, World! 123".ToLower() == "hello, world! 123"
     assert "".ToUpper() == "" and "@[`{".ToUpper() == "@[`{" and "@[`{".ToLower() == "@[`{"   # the bytes around the letters
-    e := String(U8[0xC3, 0xA9, 'a', 0xC3, 0x89])                        # "éaÉ": UTF-8 left as it is
+    e := String(Array<U8>[0xC3, 0xA9, 'a', 0xC3, 0x89])                        # "éaÉ": UTF-8 left as it is
     u := e.ToUpper()
     assert u[0] == 0xC3 and u[1] == 0xA9 and u[2] == 'A' and u[3] == 0xC3 and u[4] == 0x89 and e.ToLower() == e
     s String& = "MiXeD"
@@ -75,12 +75,12 @@ test "Lines gives each line without its newline, as io.Lines reads a file's" {
 }
 
 test "Join puts a separator between the texts of an array" {
-    assert String&["a", "b", "c"].Join(", ") == "a, b, c"
-    assert String&["only"].Join(", ") == "only" and Array<String&>(0).Join(", ") == ""
-    assert String&["", "", ""].Join("-") == "--" and String&["x", "y"].Join("") == "xy"
+    assert Array<String&>["a", "b", "c"].Join(", ") == "a, b, c"
+    assert Array<String&>["only"].Join(", ") == "only" and Array<String&>(0).Join(", ") == ""
+    assert Array<String&>["", "", ""].Join("-") == "--" and Array<String&>["x", "y"].Join("") == "xy"
     parts := "2026-10-09".Split("-")
     assert parts.Join("/") == "2026/10/09"
-    assert $String&["a", "b"] == "String&[\"a\", \"b\"]"                   # $ renders the array as source
+    assert $Array<String&>["a", "b"] == "String&[\"a\", \"b\"]"                   # $ renders the array as source
 }
 
 # ParseFloat's value of text, or a NaN when it fails
@@ -124,14 +124,14 @@ test "ParseFloat reads the infinities and NaN, so what $ writes reads back" {
     assert float("INF") == 1.0 / 0.0 and float("-InFiNiTy") == -1.0 / 0.0
     n := float("nan")
     assert n != n and float("NaN").Bits() == U64(0x7FF8000000000000) and float("-nan").Bits() == U64(0xFFF8000000000000)
-    for x in F64[0.1, -2.5, 1e300, 5e-324, 1.0 / 3.0, -0.0, 123456789.125, 1.0 / 0.0, -1.0 / 0.0, 2.0 / 3.0] {
+    for x in Array<F64>[0.1, -2.5, 1e300, 5e-324, 1.0 / 3.0, -0.0, 123456789.125, 1.0 / 0.0, -1.0 / 0.0, 2.0 / 3.0] {
         assert float($x).Bits() == x.Bits()
     }
 }
 
 test "ParseFloat names what was wrong" {
     assert floatProblem("") == "EMPTY" and floatProblem("1.5") == "ok"
-    for bad in String&["-", "+", ".", "-.", "e5", "1e", "1e+", "1.5x", " 1", "1 ", "1_000", "0x10", "--1", "1.2.3", "infin"
+    for bad in Array<String&>["-", "+", ".", "-.", "e5", "1e", "1e+", "1.5x", " 1", "1 ", "1_000", "0x10", "--1", "1.2.3", "infin"
         "nana", "in", "1e5e5", "+-1"] {
         assert floatProblem(bad) == "INVALID"
     }
@@ -164,7 +164,7 @@ test "ShortestDecimal gives the fewest digits that read back" {
     failed = false
     f, e = try F64(1.0 / 0.0).ShortestDecimal() catch { failed = true } default 0, 0
     assert failed
-    for x in F64[0.1, 1.0 / 3.0, 2.0 / 3.0, 1e23, 9007199254740993.0, 2.2250738585072014e-308, 123.456, 3.141592653589793] {
+    for x in Array<F64>[0.1, 1.0 / 3.0, 2.0 / 3.0, 1e23, 9007199254740993.0, 2.2250738585072014e-308, 123.456, 3.141592653589793] {
         d, p := try x.ShortestDecimal() catch { unreachable }
         assert float($d "e" $p) == x
     }
@@ -174,7 +174,7 @@ test "ShortestDecimal gives the fewest digits that read back" {
 # and the shortest digits, exactly as at run time
 fn floatsRead() U64 {
     h U64 = 0
-    for t in String&["0.1", "1e23", "9007199254740993", "2.4703282292062328e-324", "123456789012345678901234567890"
+    for t in Array<String&>["0.1", "1e23", "9007199254740993", "2.4703282292062328e-324", "123456789012345678901234567890"
         "0.1000000000000000055511151231257827021181583404541015625", "-1.5e-300", "inf"] {
         h = h * 1099511628211 + (try t.ParseFloat() catch default 0.0).Bits()
     }
@@ -230,7 +230,7 @@ test "base 0 reads an integer as olang writes its literal (L10)" {
     assert uintIn("0xFFFF_FFFF_FFFF_FFFF", 0) == "18446744073709551615" and uintIn("0x1_0000_0000_0000_0000", 0) == "OVERFLOW"
     assert uintIn("0b" $"1".Repeat(64), 0) == "18446744073709551615" and uintIn("0b1" $"0".Repeat(64), 0) == "OVERFLOW"
     # a '_' stands between two digits (L10b), and a prefix needs digits of its own base after it
-    for bad in String&["0x", "0b", "0x_FF", "0b_1", "1_", "_1", "1__0", "1_x", "0xFG", "0b12", "1e3", "1.0", "0o7", " 1"
+    for bad in Array<String&>["0x", "0b", "0x_FF", "0b_1", "1_", "_1", "1__0", "1_x", "0xFG", "0b12", "1e3", "1.0", "0o7", " 1"
                        "0x-1", "--1", "0_x1"] {
         assert intIn(bad, 0) == "INVALID" and uintIn(bad, 0) == "INVALID"
     }
@@ -242,8 +242,8 @@ test "base 0 reads an integer as olang writes its literal (L10)" {
 fn parsedAll(rounds I64) String {
     b := StringBuilder()
     for _ in range rounds {
-        for t in String&["0", "-17", "ff", "0xFF_FF", "0b1_0", "-0x10", "1_000", "18446744073709551615", "zz", "", "0x"] {
-            for base in I64[0, 2, 10, 16, 36] {
+        for t in Array<String&>["0", "-17", "ff", "0xFF_FF", "0b1_0", "-0x10", "1_000", "18446744073709551615", "zz", "", "0x"] {
+            for base in Array<I64>[0, 2, 10, 16, 36] {
                 b.Push(intIn(t, base))
                 b.PushChar(' ')
                 b.Push(uintIn(t, base))
@@ -308,10 +308,10 @@ test "Format writes an integer in any base from 2 to 36, read back by ParseInt a
     m U64 = U64(least)
     assert m.Format(16) == "8000000000000000" # an I64's bits, read unsigned
     for base in range 2, 37 {
-        for v in I64[0, 1, -1, 35, -36, 1000003, -987654321, big, least] {
+        for v in Array<I64>[0, 1, -1, 35, -36, 1000003, -987654321, big, least] {
             assert (try v.Format(Radix(base)).ParseInt(Radix(base)) catch default 0) == v
         }
-        for v in U64[0, 7, 18446744073709551615, 12345678901234567890] {
+        for v in Array<U64>[0, 7, 18446744073709551615, 12345678901234567890] {
             assert (try v.Format(Radix(base)).ParseUint(Radix(base)) catch default 1) == v
         }
     }
@@ -320,8 +320,8 @@ test "Format writes an integer in any base from 2 to 36, read back by ParseInt a
 # Format's texts, computed while compiling (K2) into formatBaked and at run time from a mutable global
 fn formattedAll(start I64) String {
     b := StringBuilder()
-    for base in I64[2, 8, 10, 16, 36] {
-        for v in I64[start, -start, start * 1000003, -9223372036854775807 - 1] {
+    for base in Array<I64>[2, 8, 10, 16, 36] {
+        for v in Array<I64>[start, -start, start * 1000003, -9223372036854775807 - 1] {
             b.Push(v.Format(Radix(base)!))
             b.PushChar(' ')
             b.Push(U64(v).Format(Radix(base)!))
@@ -362,7 +362,7 @@ extern fn strerror(code I32) CStr?&
 test "text goes to C NUL-terminated and comes back copied (X15)" {
     c := "abc".ToC()
     assert c.Len() == 4 and c[3] == 0 and c[0] == 'a'
-    assert "".ToC() == U8[0]
+    assert "".ToC() == Array<U8>[0]
     e := strerror(2)
     assert e is not null
     s := String.FromC(e, 100)

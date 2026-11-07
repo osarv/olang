@@ -1,7 +1,7 @@
 # check: fail the callee needs one argument's scope to outlive another's
 # O18c (F5): an element of a call's value result, and a call's result built from such a field, likewise
 type Box struct(s String&) { s }
-fn boxes(s String&) Array<Box> { return Box[Box(s)] }
+fn boxes(s String&) Array<Box> { return Array<Box>[Box(s)] }
 
 fn main() ? {
     bs := Vec<Box>()

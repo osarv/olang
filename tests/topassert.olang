@@ -2,8 +2,8 @@
 # checks/cases' (topassert*.olang)
 import "std/io"
 
-Kinds Array<String&> = String&["a", "b", "c"]
-Widths Array<I64> = I64[1, 2, 4]
+Kinds Array<String&> = Array<String&>["a", "b", "c"]
+Widths Array<I64> = Array<I64>[1, 2, 4]
 
 fn total(a Array<I64>&) I64 {
     t I64 = 0

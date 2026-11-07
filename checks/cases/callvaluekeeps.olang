@@ -11,7 +11,7 @@ type Keeper struct() {
 fn (k mut Keeper&) Call(x fn&() I64) { k.kept = x }
 fn keepVia(s fn&(x fn&() I64), g fn&() I64) { s(g) }
 fn churn(d I64) I64 {
-    a := I64[d, d, d, d, d, d, d, d]
+    a := Array<I64>[d, d, d, d, d, d, d, d]
     if d == 0 { return 0 }
     return churn(d - 1) + a[3] - d
 }

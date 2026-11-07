@@ -14,14 +14,14 @@ import "std/io"
 import "load"
 
 # the architectures the facts are for, and each fact's value on each, in that order
-Archs Array<String&> = String&["x86_64", "aarch64"]
-FactNames Array<String&> = String&["STAT_BYTES", "STAT_MODE", "STAT_SIZE", "STAT_MTIM_SEC", "STAT_MTIM_NSEC"
+Archs Array<String&> = Array<String&>["x86_64", "aarch64"]
+FactNames Array<String&> = Array<String&>["STAT_BYTES", "STAT_MODE", "STAT_SIZE", "STAT_MTIM_SEC", "STAT_MTIM_NSEC"
     "DIRENT_NAME", "SPAWN_FILE_ACTIONS_BYTES", "PTHREAD_ATTR_BYTES", "JMP_BUF_BYTES", "SIGACTION_BYTES"
     "SIGACTION_FLAGS", "FFI_DEFAULT_ABI", "UC_PC", "UC_FP", "UC_SP"]
 # UC_PC, UC_FP, UC_SP (B20): where a signal's ucontext_t holds the interrupted pc, frame pointer and stack pointer -
 # x86-64's uc_mcontext.gregs[REG_RIP], [REG_RBP], [REG_RSP]; AArch64's uc_mcontext.pc, regs[29], sp
-FactX86 Array<I64> = I64[144, 24, 48, 88, 96, 19, 80, 56, 200, 152, 136, 2, 168, 120, 160]
-FactArm Array<I64> = I64[128, 16, 48, 88, 96, 19, 80, 64, 312, 152, 136, 1, 440, 416, 432]
+FactX86 Array<I64> = Array<I64>[144, 24, 48, 88, 96, 19, 80, 56, 200, 152, 136, 2, 168, 120, 160]
+FactArm Array<I64> = Array<I64>[128, 16, 48, 88, 96, 19, 80, 64, 312, 152, 136, 1, 440, 416, 432]
 
 # a runtime file that is not there or cannot be read as a runtime file: said already
 type Bad error { Unreadable }

@@ -2,7 +2,7 @@
 # K3a: a source the evaluator cannot compute is an error saying why
 fn boom(n I64) Array<I64> {
     assert n > 5
-    return I64[1]
+    return Array<I64>[1]
 }
 fn main() {
     t I64 = 0

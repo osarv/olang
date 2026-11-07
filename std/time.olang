@@ -427,12 +427,12 @@ test "dates are written as RFC 3339 and read back" {
 }
 
 test "Parse refuses what is not a date" {
-    for bad in String&["", "2026-10-24", "2026-10-24T13:05:01", "2026-1-24T13:05:01Z", "2026-10-24T13:05:01.Z"
+    for bad in Array<String&>["", "2026-10-24", "2026-10-24T13:05:01", "2026-1-24T13:05:01Z", "2026-10-24T13:05:01.Z"
         "2026-10-24T13:05:01+0200", "2026-10-24T13:05:01Zx", "2026-10-24T13:05:01.1234567890Z"] {
         try Date.Parse(bad) catch Error.Syntax { continue } catch Error.Range { unreachable }
         unreachable
     }
-    for bad in String&["2026-13-01T00:00:00Z", "2025-02-29T00:00:00Z", "2026-10-24T24:00:00Z", "2026-10-24T13:60:00Z"
+    for bad in Array<String&>["2026-13-01T00:00:00Z", "2025-02-29T00:00:00Z", "2026-10-24T24:00:00Z", "2026-10-24T13:60:00Z"
         "2026-10-24T13:05:01+24:00"] {
         try Date.Parse(bad) catch Error.Range { continue } catch Error.Syntax { unreachable }
         unreachable

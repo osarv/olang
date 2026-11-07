@@ -51,12 +51,12 @@ fn Inside() Bool {
     for x in b { total += x }
     g := Gen()
     for y in g { total += y }
-    keys := Key[Key(1), Key(2)]
+    keys := Array<Key>[Key(1), Key(2)]
     add := Adder(2)
     ok := Key(1) == Key(11) and $Key(5) == "K5" and (Vec2(1) + Vec2(2)).X == 3 and Vec2(1) < Vec2(2) and Vec2(3) > Vec2(2)
     ok = ok and b[1] == 5 and 4 in b and add(3) == 5 and apply(add, 4) == 6 and total == 15
-    ok = ok and Wrap(Key(3)) == Wrap(Key(13)) and keys == Key[Key(11), Key(12)] and $Wrap(Key(2)) == "Wrap(K2)"
-    return ok and Wrap(Key(4)).Hash() == Wrap(Key(14)).Hash() and keys.Hash() == Key[Key(21), Key(32)].Hash()
+    ok = ok and Wrap(Key(3)) == Wrap(Key(13)) and keys == Array<Key>[Key(11), Key(12)] and $Wrap(Key(2)) == "Wrap(K2)"
+    return ok and Wrap(Key(4)).Hash() == Wrap(Key(14)).Hash() and keys.Hash() == Array<Key>[Key(21), Key(32)].Hash()
 }
 
 # the same, decided while compiling (S18c) and baked into a global (K2), as at run time

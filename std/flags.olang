@@ -399,11 +399,11 @@ test "flags are read in every spelling, the rest are arguments" {
     o := p.Text("output", 'o', "out.txt", "where to write")
     r := p.Float("rate", 0, 0.5, "how fast")
     assert n.Get() == 10 and not v.Get() and o.Get() == "out.txt" and r.Get() == 0.5
-    p.Parse(String&["tool", "a", "--count", "3", "-vq", "b", "--output=x.txt", "--rate=2.5", "--", "-n", "c"])!
+    p.Parse(Array<String&>["tool", "a", "--count", "3", "-vq", "b", "--output=x.txt", "--rate=2.5", "--", "-n", "c"])!
     assert n.Get() == 3 and v.Get() and q.Get() and o.Get() == "x.txt" and r.Get() == 2.5 and n.IsSet()
     args := p.Args()
     assert args.Len() == 4 and args[0] == "a" and args[1] == "b" and args[2] == "-n" and args[3] == "c"
-    p.Parse(String&["tool", "-n=0x10", "--verbose=false", "-o", "y"])!
+    p.Parse(Array<String&>["tool", "-n=0x10", "--verbose=false", "-o", "y"])!
     assert n.Get() == 16 and not v.Get() and o.Get() == "y" and p.Args().Len() == 0
 }
 
@@ -411,16 +411,16 @@ test "what the declarations do not allow fails, with a message" {
     p := Flags("tool")
     p.Int("count", 'n', 10, "how many")
     p.Bool("verbose", 'v', "say more")
-    try p.Parse(String&["tool", "--colour"]) catch Error.Unknown { } catch Error { unreachable }
+    try p.Parse(Array<String&>["tool", "--colour"]) catch Error.Unknown { } catch Error { unreachable }
     assert p.Message() == "tool: unknown flag --colour (see --help)"
-    try p.Parse(String&["tool", "-n"]) catch Error.Missing { } catch Error { unreachable }
-    try p.Parse(String&["tool", "-n", "ten"]) catch Error.BadValue { } catch Error { unreachable }
+    try p.Parse(Array<String&>["tool", "-n"]) catch Error.Missing { } catch Error { unreachable }
+    try p.Parse(Array<String&>["tool", "-n", "ten"]) catch Error.BadValue { } catch Error { unreachable }
     assert p.Message() == "tool: -n takes an integer, not \"ten\" (see --help)"
-    try p.Parse(String&["tool", "-vn"]) catch Error.Missing { } catch Error { unreachable }
-    try p.Parse(String&["tool", "--verbose=maybe"]) catch Error.BadValue { } catch Error { unreachable }
-    try p.Parse(String&["tool", "x", "--help"]) catch Error.Help { } catch Error { unreachable }
+    try p.Parse(Array<String&>["tool", "-vn"]) catch Error.Missing { } catch Error { unreachable }
+    try p.Parse(Array<String&>["tool", "--verbose=maybe"]) catch Error.BadValue { } catch Error { unreachable }
+    try p.Parse(Array<String&>["tool", "x", "--help"]) catch Error.Help { } catch Error { unreachable }
     p.Bool("very", 'v', "clash")
-    try p.Parse(String&["tool"]) catch Error.DeclaredTwice { } catch Error { unreachable }
+    try p.Parse(Array<String&>["tool"]) catch Error.DeclaredTwice { } catch Error { unreachable }
 }
 
 # flags declared by a struct (G39)
@@ -431,7 +431,7 @@ type options struct(@Help("how many") @Short('n') Count I64 = 10, @Help("say mor
 
 test Flags.Read "a struct's parameters are flags, its attributes their help" {
     p := Flags("tool", "does things")
-    o := p.Read<options>(String&["tool", "-n", "3", "--out", "x", "--max-len=9", "rest"])!
+    o := p.Read<options>(Array<String&>["tool", "-n", "3", "--out", "x", "--max-len=9", "rest"])!
     assert o.Count == 3 and not o.Verbose and o.MaxLen == 9 and o.Out == "x" and p.Args()[0] == "rest"
     assert p.Help() == ("usage: tool [flags] [arguments]\ndoes things\n\nflags:\n"
         "  -n, --count INT    how many (default 10)\n"
@@ -440,10 +440,10 @@ test Flags.Read "a struct's parameters are flags, its attributes their help" {
         "      --out TEXT\n"
         "  -h, --help         show this help\n")
     q := Flags("tool")
-    try q.Read<options>(String&["tool"]) catch Error.Required { } catch { unreachable }
+    try q.Read<options>(Array<String&>["tool"]) catch Error.Required { } catch { unreachable }
     assert q.Message() == "tool: --out is required (see --help)"
     r := Flags("tool")
-    try r.Read<options>(String&["tool", "--out", "y", "--max-len", "300"]) catch Error.BadValue { } catch { unreachable }
+    try r.Read<options>(Array<String&>["tool", "--out", "y", "--max-len", "300"]) catch Error.BadValue { } catch { unreachable }
     assert dashed("HTTPServer") == "http-server" and dashed("max_len") == "max-len"
 }
 
@@ -470,10 +470,10 @@ fn said(args Array<String&>&) String {
     return "ok"
 }
 
-saidBaked String = said(String&["tool", "-n", "ten"])
+saidBaked String = said(Array<String&>["tool", "-n", "ten"])
 
 test Error "an error names the flag and what it was given" {
-    assert saidBaked == "Error.BadValue(\"-n\", \"ten\")" and said(String&["tool", "-n", "ten"]) == saidBaked
-    assert said(String&["tool", "--colour"]) == "Error.Unknown(\"--colour\")"
-    assert said(String&["tool", "-vn"]) == "Error.Missing(\"-n\")"
+    assert saidBaked == "Error.BadValue(\"-n\", \"ten\")" and said(Array<String&>["tool", "-n", "ten"]) == saidBaked
+    assert said(Array<String&>["tool", "--colour"]) == "Error.Unknown(\"--colour\")"
+    assert said(Array<String&>["tool", "-vn"]) == "Error.Missing(\"-n\")"
 }

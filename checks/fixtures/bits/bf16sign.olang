@@ -1,7 +1,7 @@
 # E33/T4: the sign bit of a BF16 read from memory (an element, a value also stored, a choice of two) - which LLVM 18's
 # x86 selection took for a known zero, so each test was false under -d and -r, and the stored one crashed the -O3 link
 # (fuzz/repro/bf16signbit.ll). Built -b and -d; the globals are mutable so nothing is decided while compiling
-A mut Array<BF16>& = BF16[1.0, -2.0]
+A mut Array<BF16>& = Array<BF16>[1.0, -2.0]
 Pick mut Bool = false
 fn stored(a Array<BF16>&, b mut Array<BF16>&) U16 {
     x := a[1]
