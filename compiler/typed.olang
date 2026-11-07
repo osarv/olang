@@ -2478,6 +2478,13 @@ type DropHolding struct() {
     Holders Vec<I64>        # the holder locals, in the order their drops are registered
     Blocks Vec<BlockId>     # ... the block each one's drop is registered in
     Held Vec<Vec<I64>>      # ... the holders of the same block each one may hold (local ids)
+    # (check's only, DropHolding.Judged) the values registered with a scope (O16) that may hold what is ended before
+    # them: each a registered local - or, -1, a temporary at RefusedSp - and the holder or later registered local it may
+    # hold (O15: a registered value is ended as its scope closes, after its block's variables)
+    Refused Vec<I64>
+    RefusedSp Vec<source.Span>
+    RefusedHeld Vec<I64>
+    RefusedTy Vec<types.TypeId>     # ... a temporary's type (its referent's)
 }
 
 # whether holder local h may hold holder local v (both of one block)
@@ -2488,21 +2495,33 @@ fn (d DropHolding&) Holds(h I64, v I64) Bool {
     return false
 }
 
-fn DropHolding.DropHolds(t types.Table&, b Body&) DropHolding {
+fn DropHolding.DropHolds(t types.Table&, b Body&) DropHolding { return DropHolding.holding(t, b, false) }
+
+# check's: DropHolds, and the values registered with a scope that may hold what is ended before them (Refused)
+fn DropHolding.Judged(t types.Table&, b Body&) DropHolding { return DropHolding.holding(t, b, true) }
+
+fn DropHolding.holding(t types.Table&, b Body&, judge Bool) DropHolding {
     out := DropHolding()
     if b.Root is null: return out
     findHolders(b, b.Root!, out)
-    if not sharedBlock(out.Blocks) {
+    if not judge and not sharedBlock(out.Blocks) {
         for _ in out.Holders { out.Held.Push(Vec<I64>()) }
         return out
     }
     w := holdWalk(t, b)
+    for h in out.Holders { w.holders.Push(h) }
+    for bl in out.Blocks { w.holderIn.Push(bl) }
     for _ in range b.Locals.Len() { w.reach.Push(Vec<I64>()) }
     for {
         w.changed = false
+        w.temps.Clear()
+        w.tempHeld.Clear()
+        w.tempIn.Clear()
+        w.tempTy.Clear()
         w.block(b.Root)
         if not w.changed: break
     }
+    if judge: w.refusals(out)
     for k in range out.Holders.Len() {
         seen := w.closure(one(out.Holders[k]).ToArray())
         held Vec<I64>
@@ -2558,6 +2577,22 @@ type holdWalk struct(T types.Table&, B Body&) {
     changed Bool = false
     targets Vec<Array<I64>>     # the Assigns being walked: each one's target's storage (Lvalue.Target)
     yields Vec<Vec<I64>>        # the Collects being walked: what their Yields give
+    holders Vec<I64>            # the body's by-value holders (DropHolding's), and the block each is ended in
+    holderIn Vec<BlockId>
+    blocks Vec<BlockId>         # the blocks being walked, the innermost last
+    # O16: a reference local given a value registered with a scope where its call lands (a Promote of a value with
+    # destructors) stands for that value's storage - its referents include itself. Each registration once: where it
+    # stands (its statement's start), the local, the block
+    regs Vec<I64>
+    regAt Vec<I64>
+    regOf Vec<I64>
+    regIn Vec<BlockId>
+    # a registered temporary given writably to a call (no local holds it): its span, and the holders and registered
+    # locals the call may make it hold - this round's (the settled walk's last)
+    temps Vec<source.Span>
+    tempHeld Vec<Vec<I64>>
+    tempIn Vec<BlockId>
+    tempTy Vec<types.TypeId>
 }
 
 fn (w mut holdWalk&) add(x I64, y I64) {
@@ -2572,16 +2607,23 @@ fn (w mut holdWalk&) typed(x Expr?&) Vec<I64> {
     if x is null: return out
     ty := x.Type()
     for y in w.refs(x) {
-        if w.T.RefInto(ty, w.B.Locals[y].Ty): out.Push(y)
+        if w.T.RefInto(ty, w.stTy(y)): out.Push(y)
     }
     return out
+}
+
+# the type of local y's storage: a registered local's is its referent's (it stands for that storage), else its own
+fn (w holdWalk&) stTy(y I64) types.TypeId {
+    ty := w.B.Locals[y].Ty
+    if not w.regs.Has(y) or w.T.KindOf(ty) != types.Kind.Ref: return ty
+    return w.T.Referent(ty)
 }
 
 # ys stored into the storage of each local of xs, each one only where xs's type may hold a reference into it
 fn (w mut holdWalk&) store(xs Vec<I64>&, ys Vec<I64>&) {
     for x in xs {
         for y in ys {
-            if w.T.RefInto(w.B.Locals[x].Ty, w.B.Locals[y].Ty): w.add(x, y)
+            if w.T.RefInto(w.stTy(x), w.stTy(y)): w.add(x, y)
         }
     }
 }
@@ -2628,13 +2670,48 @@ fn (w mut holdWalk&) mix(xs Array<Expr&>&) {
 
 fn (w mut holdWalk&) block(bl Block?&) {
     if bl is null: return
+    w.blocks.Push(bl.Id)
     for s in bl.Stmts { w.stmt(s) }
+    w.blocks.Pop()!
+}
+
+fn (w holdWalk&) inBlock() BlockId { return w.blocks[w.blocks.Len() - 1] if w.blocks.Len() > 0 else BlockId(-1) }
+
+# whether x is a value registered with a scope where its call lands (O16): a call's value with destructors to run that
+# no place written for it takes (check's held Promote), under a try or a sequence too
+fn (w holdWalk&) registered(x Expr?&) Bool {
+    if x is null: return false
+    return match x {
+        case Expr.Promote(_, _, pr): w.T.NeedsDrop(pr.X.Type())
+        case Expr.Try(_, _, tr): w.registered(tr.X)
+        case Expr.Seq(_, _, q): w.registered(q.X)
+        case _: false
+    }
+}
+
+# local l given a registered value by the statement at sp: it stands for that value's storage from now on
+fn (w mut holdWalk&) register(l I64, sp source.Span) {
+    at := I64(sp.Start)
+    for k in range w.regAt.Len() {
+        if w.regAt[k] == at and w.regOf[k] == l: return
+    }
+    w.regAt.Push(at)
+    w.regOf.Push(l)
+    w.regIn.Push(w.inBlock())
+    if not w.regs.Has(l): w.regs.Push(l)
+    if w.reach[l].Has(l): return
+    w.reach[l].Push(l)
+    w.changed = true
 }
 
 fn (w mut holdWalk&) stmt(s Stmt&) {
     match s {
-        case Stmt.Let(_, l, init): w.store(one(I64(l)), w.typed(init))
-        case Stmt.Assign(_, target, value) {
+        case Stmt.Let(sp, l, init) {
+            if w.registered(init): w.register(I64(l), sp)
+            w.store(one(I64(l)), w.typed(init))
+        }
+        case Stmt.Assign(sp, target, value) {
+            if target == Lvalue.Local and w.registered(value): w.register(I64(target.id), sp)
             into := w.storage(target)
             w.targets.Push(into.ToArray())
             got := w.typed(value)
@@ -2793,7 +2870,102 @@ fn (w mut holdWalk&) call(c Call&) Vec<I64> {
     for a in c.Args { given.Push(a) }
     for a in given { union(out, w.refs(a)) }
     w.mix(given.ToArray())
+    for i in range given.Len() {
+        if w.registered(given[i]) and w.T.ReachesWrite(given[i].Type()): w.tempGiven(i, given)
+    }
     return out
+}
+
+# the registered temporary given[i], given writably to a call with the rest: the holders the call may make it hold (a
+# mix's store into it, by types)
+fn (w mut holdWalk&) tempGiven(i I64, given Vec<Expr&>&) {
+    ty := given[i].Type()
+    held Vec<I64>
+    for j in range given.Len() {
+        if j == i: continue
+        for y in w.closure(w.typed(given[j]).ToArray()) {
+            if w.holders.Has(y) and w.T.RefInto(ty, w.stTy(y)) and not held.Has(y): held.Push(y)
+        }
+    }
+    if held.Len() == 0: return
+    w.temps.Push(given[i].Span())
+    w.tempHeld.Push(held)
+    w.tempIn.Push(w.inBlock())
+    w.tempTy.Push(w.T.Referent(ty) if w.T.KindOf(ty) == types.Kind.Ref else ty)
+}
+
+# O15, O16: a value registered with a scope is ended as that scope closes, after the variables of its block - so one
+# that may hold a by-value holder, or a value registered after it, could have its destructors read what was ended
+# already: each such registered local (a reference local given one) or temporary, with the first it may hold
+fn (w mut holdWalk&) refusals(out mut DropHolding&) {
+    for r in w.regs {
+        h := w.heldBefore(r)
+        if h < 0: continue
+        out.Refused.Push(r)
+        out.RefusedSp.Push(w.B.Locals[r].Sp)
+        out.RefusedHeld.Push(h)
+        out.RefusedTy.Push(w.stTy(r))
+    }
+    for k in range w.temps.Len() {
+        h := w.tempHolds(k)
+        if h < 0: continue
+        out.Refused.Push(-1)
+        out.RefusedSp.Push(w.temps[k])
+        out.RefusedHeld.Push(h)
+        out.RefusedTy.Push(w.tempTy[k])
+    }
+}
+
+# the first holder, or registered local not registered before it, registered local r may hold; -1 for none - a holder
+# anywhere in the body (conservative: one of an enclosing block is ended after r only where r's value is not placed
+# there, which the scope pass decides)
+fn (w mut holdWalk&) heldBefore(r I64) I64 {
+    for y in w.closure(one(r).ToArray()) {
+        if y == r: continue
+        if w.holders.Has(y): return y
+        if w.regs.Has(y) and not w.registeredBefore(y, r): return y
+    }
+    return -1
+}
+
+# whether registered local y is registered once, before every registration of r and in a block enclosing each: then it
+# is ended after r (a scope ends its registered values the last registered first, an outer scope after an inner one)
+fn (w holdWalk&) registeredBefore(y I64, r I64) Bool {
+    at := -1
+    yIn := BlockId(-1)
+    for k in range w.regOf.Len() {
+        if w.regOf[k] != y: continue
+        if at >= 0: return false
+        at = w.regAt[k]
+        yIn = w.regIn[k]
+    }
+    if at < 0: return false
+    for k in range w.regOf.Len() {
+        if w.regOf[k] == r and (w.regAt[k] <= at or not w.encloses(yIn, w.regIn[k])): return false
+    }
+    return true
+}
+
+# whether block outer is block inner or one around it
+fn (w holdWalk&) encloses(outer BlockId, inner BlockId) Bool {
+    b := inner
+    for _ in range w.B.Blocks.Len() + 1 {
+        if b == outer: return true
+        if b < BlockId(0): return false
+        b = w.B.Blocks[I64(b)].Parent
+    }
+    return false
+}
+
+# the first holder of the block a registered temporary stands in that the call it is given to may make it hold (its
+# scope closes after that block's variables); -1 for none
+fn (w holdWalk&) tempHolds(k I64) I64 {
+    for y in w.tempHeld[k] {
+        for j in range w.holders.Len() {
+            if w.holders[j] == y and w.holderIn[j] == w.tempIn[k]: return y
+        }
+    }
+    return -1
 }
 
 fn (w mut holdWalk&) match(m Match&) Vec<I64> {
@@ -3539,8 +3711,13 @@ type Landings struct(Locals Array<I64>&, Starts Array<I64>&, Holds Array<Bool>&,
     dead Bool = false                                            # no path reaches here
     loops Vec<landLoop>
     later I64 = 0                                                # > 0 inside code that runs after
+    laterTasks I64 = 0                                           # ... of which a task's or a join's clauses (not deferred)
     laterLocals Map<I64, Bool>                                   # the locals mentioned there
     laterVia Map<I64, I64>                                       # ... and the holder each was mentioned through
+    # a watched read in deferred code that runs once (no loop around or in it, no task or join): the landing itself,
+    # which runs last - no mention after it but another later one (bulk review 8, F4). Its local and where it starts
+    lastL Vec<I64>
+    lastAt Vec<I64>
     # every mention, in the order walked: its local, where it starts, whether it reads the local whole
     saidL Vec<I64>
     saidAt Vec<I64>
@@ -3600,10 +3777,28 @@ fn orInto(to mut Array<Bool>&, from Array<Bool>&) {
 fn (w mut Landings&) Body(b Block&) {
     w.block(b)
     for k in range w.Locals.Len() {
-        if not w.laterLocals.Has(w.Locals[k]): continue
+        if not w.laterLocals.Has(w.Locals[k]) and not w.lastAfter(k): continue
         w.Bad[k] = true
         w.Via[k] = try w.laterVia.Get(w.Locals[k]) catch default -1
     }
+}
+
+# whether a landing in deferred code other than watched read k hands its local on - after k, wherever k stands
+fn (w Landings&) lastAfter(k I64) Bool {
+    for j in range w.lastL.Len() {
+        if w.lastL[j] == w.Locals[k] and w.lastAt[j] != w.Starts[k]: return true
+    }
+    return false
+}
+
+# whether the read of local l starting at at is a watched read in deferred code that runs once (T13b: deferred code
+# runs after everything, so its landing is the last mention where nothing else later mentions the local)
+fn (w Landings&) deferredLanding(l I64, at I64) Bool {
+    if w.laterTasks > 0 or w.loops.Len() > 0 or w.via >= 0: return false
+    for k in range w.Locals.Len() {
+        if w.Locals[k] == l and w.Starts[k] == at: return true
+    }
+    return false
 }
 
 fn (w mut Landings&) mention(id LocalId, at I64, read Bool) {
@@ -3623,6 +3818,11 @@ fn (w mut Landings&) mention(id LocalId, at I64, read Bool) {
     }
     if w.later > 0 {
         if read and w.guardedAt(l, at): return
+        if read and w.deferredLanding(l, at) {
+            w.lastL.Push(l)
+            w.lastAt.Push(at)
+            return
+        }
         w.laterLocals.Put(l, true)
         if w.via >= 0: w.laterVia.Put(l, w.via)
         return
@@ -3688,16 +3888,20 @@ fn (w mut Landings&) stmt(s Stmt&) {
         case Stmt.Join(_, j) {
             w.block(j.Code)
             w.later++
+            w.laterTasks++
             w.clauses(j.Clauses)
+            w.laterTasks--
             w.later--
         }
         case Stmt.Spawn(_, sw) {
             w.later++
+            w.laterTasks++
             for tg in sw.Targets {
                 if tg is not null: w.place(tg)
             }
             w.expr(sw.Task)
             for c in sw.Clauses { w.expr(c.Handler) }
+            w.laterTasks--
             w.later--
         }
     }

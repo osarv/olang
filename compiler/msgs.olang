@@ -361,6 +361,8 @@ type Diag enum {
     UniqueAlias
     DestroyedAfter
     DropCycle
+    DropRegistered
+    DropTempRegistered
     UniqueKind
     UniqueNeedsCopy
     DestructNotUnique
@@ -1334,6 +1336,8 @@ fn UniqueAfter(name String&, ty String&) r.Msg { return r.Msg(Diag.UniqueAfter, 
 fn UniqueLentHere(name String&, ty String&) r.Msg { return r.Msg(Diag.UniqueLentHere, "T13b", "'" $name "' is handed on here while the same call also reaches it, and " $ty " is unique - one value would be in two places: give the call '" $name "' once, or hand it on in a call of its own") }
 fn UniqueAlias(name String&, ty String&, alias String&) r.Msg { return r.Msg(Diag.UniqueAlias, "T13b", "'" $name "' is handed on here, and " $ty " is unique - '" $alias "', which reaches it, is used after: use '" $alias "' before handing '" $name "' on, or no longer after") }
 fn DestroyedAfter(name String&) r.Msg { return r.Msg(Diag.DestroyedAfter, "C9b", "'" $name "' is destructed here, and mentioned after - nothing reaches a value its Destroy() ended") }
+fn DropRegistered(h String&, v String&, t String&) r.Msg { return r.Msg(Diag.DropRegistered, "O15, O16", "'" $h "' holds a value where its call landed, ended as that scope closes - after '" $v "', which it may hold a reference to, so its destructors could read '" $v "' already ended: declare it by value, '" $h " " $t " = ...', and its block ends it first") }
+fn DropTempRegistered(v String&, t String&) r.Msg { return r.Msg(Diag.DropTempRegistered, "O15, O16", "this value is held where its call lands, ended as that scope closes - after '" $v "', which the call may make it hold a reference to, so its destructors could read '" $v "' already ended: declare it by value first, 'x " $t " = ...', and give the call that") }
 fn DropCycle(a String&, b String&) r.Msg { return r.Msg(Diag.DropCycle, "O15", "'" $a "' and '" $b "' may each hold a reference to the other, and both have destructors to run - whichever is ended first, the other's destructor could read it: end one of them before the other refers to it (a block of its own, or its Destroy()), or hold one by reference") }
 fn UniqueKind(what String&) r.Msg { return r.Msg(Diag.UniqueKind, "T13b", "'unique' says a value exists in one place - " $what " has no values of its own") }
 fn UniqueNeedsCopy(text String&, ty String&) r.Msg { return r.Msg(Diag.UniqueNeedsCopy, "T13b, G18", $text " needs a copy, and " $ty " is unique - its values are never copied: call " $text " with a reference ('" $ty "&') or with a type that copies") }

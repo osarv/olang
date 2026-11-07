@@ -1,0 +1,56 @@
+# check: run
+# flags: -debug -sanitize
+# O27 as placement (bulk review 8, F3's other side): what a callee hands back of a plain value local's storage, kept
+# past its turn, has the local built where the view is kept, a new one each turn; a holder of a destructor value that
+# already outlives the views needs nothing built longer - both read back after the arena churned
+import "std/io"
+
+type H unique struct(n I64) {
+    n
+    arr := Array<I64>(4 + n.Mod(3), n)
+} destruct {
+    arr[0] = -99
+}
+
+type P struct(n I64) {
+    n
+    arr := Array<I64>(4 + n.Mod(3), n)
+}
+
+fn first2(h H&) Array<I64>& { return h.arr[0:2] }
+fn firstP(p P&) Array<I64>& { return p.arr[0:2] }
+
+fn churn() I64 {
+    t := 0
+    for _ in range 20 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+
+fn plain(n I64) I64 {
+    views := Vec<Array<I64>&>()
+    for k in range n {
+        p P = P(k + 1)
+        views.Push(firstP(p))
+        churn()
+    }
+    s := 0
+    for v in views { s += v[0] }
+    return s
+}
+
+fn outlived(n I64) I64 {
+    h H = H(7)
+    views := Vec<Array<I64>&>()
+    for _ in range n { views.Push(first2(h)) }
+    churn()
+    s := 0
+    for v in views { s += v[1] }
+    return s
+}
+
+fn main() {
+    io.Println($plain(50) " " $outlived(5))!
+}

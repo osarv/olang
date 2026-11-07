@@ -1,0 +1,16 @@
+# check: fail error[T13b]: 'l' is handed on here, and Blob is unique
+# T13b (bulk review 8, F4): deferred code registered in a loop runs once a turn, so a hand-on there would land the
+# parameter each turn - refused as any hand-on a loop reaches again
+type Blob unique struct(id I64) {
+    id
+}
+
+fn d(v mut Vec<Blob>&, w mut Vec<Blob>&, l Blob) {
+    for _ in range 2 { defer v.Push(l) }
+}
+
+fn main() {
+    v := Vec<Blob>()
+    w := Vec<Blob>()
+    d(v, w, Blob(1))
+}

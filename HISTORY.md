@@ -30613,3 +30613,79 @@ the deferred code, as the plain word's line is); a raise met before its first ra
 being refused (the program the spec accepts compiles); an extern type's reference in a payload stays accepted as
 before (HoldsRefs counts it as no reference, X10); `test -interpret` unwinds only the tests' requests, not a global's
 initializer.
+## Bulk review 8, fixed
+
+### bfix8a (section 8 and memory; 2026-11-07, wt-bfix8a)
+
+- **t13bmovedvalue is a run case (the coordinator's item, from the full verify on e5f4561).** The hand-on round
+  (wt-handon) refused a named function moving a unique value into what outlives the call as a function value (`f :=
+  keepIt`, T22a), the move being an obligation of the function that no written function type carries. sec8r3's records
+  (T22a: a function value carries its inferred relations wherever the inference follows it whole, a local's versions
+  included) were merged beside it, and the case compiled on the merged tree. Checked whether accepting it is sound:
+  `f := keepIt; f(v, Buf(k))` in a loop with the Vec outside it, a local chosen by a conditional between `keepIt` and
+  a lambda, and a local reassigned in the loop - built `-debug -sanitize`, run plain and interpreted after the arena
+  churned, every Buf read back whole (`1 41000 5250 5050` alike). A call through the local is judged as the direct call
+  is, so each argument is built where the Vec lives; passing `keepIt` to a parameter of a written function type, or
+  capturing the local in a lambda, stays T22a's boundary error (the existing t22a* cases). So the refusal the hand-on
+  round recorded as its cost is lifted, and kept lifted: the case is a run case under `-debug -sanitize` with those
+  three shapes, SPEC T13b's sentence says what holds now, and CLAUDE.md's hand-on entry with it.
+- **F1 (a reference to an element kept across a removal) - no bug of early freeing.** The reproducers read
+  `r.data[3]` through a `Ref` kept across `Truncate`/`Clear`/`RemoveAt`/`SwapRemove`/`Pop`/a Map's `Remove` and
+  segfaulted; `interpret` said "it indexes outside the array". What a removal leaves in the vacated position is the
+  empty value: lowering's `take` (a vacate) moves an owning element out and leaves zeros (QCE), and the evaluator empties
+  the place - whether or not early freeing releases anything (the `-memory` rows said kept, and kept they were). So the
+  reference reads an element whose array is empty, and index 3 of it is the program's own out-of-range index (E16e) - a
+  null data pointer in a build, which the interpreter names. Reading its fields and lengths gives 0 built, under
+  `-debug -sanitize` and interpreted alike. Nothing changed; checks' `o8dremovedelemref` (a run case under `-debug
+  -sanitize`) pins what such a read gives - a release without the emptying would read freed storage there - and that a
+  view of the element's array taken before the removal (a Vec's, a Map's, a unique element's) still reads what it held
+  (O8d condition 6 keeps the place's storage: 15150 read back after a churn). Left as a
+  question for the language, not taken here: a reference to an element read after its removal could be refused within
+  a function as M19g refuses a stale view after growth.
+- **F2 (a holder that is an element of a collection) - the registered value, not holdWalk.** `gs := Vec<Grip>()` is a
+  call's value no place written for it takes - held where the call lands and registered with that scope (O16, a
+  Promote) - and a registered value ends at its scope's close, after every variable of the block: the recorded limit
+  of the drop-order round. So `gs[0].held = l` (by RefMut), a Map's element, a call given both - every variant the
+  review isolated - ended the Lamp first and its storage was released (Part C) before the Grip's destructor read it.
+  `gs Vec<Grip> = Vec<Grip>()` holds the Vec by value and DropHolds orders every one of those variants right (checked:
+  `11.2.`, `31.4.` ... built and interpreted). And the walk itself could not see such stores: storage through a
+  registered reference local was what that local refers into, and the Promote's temporary has no local. Fixed
+  (conservative, nothing at run time): `typed.DropHolding.Judged` - check's - models a reference local given a registered
+  value as standing for that value's storage (its referents include itself, its storage type the referent's), records a
+  registered temporary given writably to a call, and refuses a registered local that may hold a by-value holder of the
+  body, or a value registered after it (two registrations, a later one, or one in a block not around it, count as after:
+  a scope ends its registered values last registered first, an outer one after an inner one), and a temporary a call
+  may make hold a holder of its block - O15's new error at the registered value naming `gs Vec<Grip> = ...`
+  (`DropRegistered`, `DropTempRegistered`; SPEC O15). Decided (mine): refuse rather than order - a registered value's end
+  is the runtime's scope close, which no deferred code can be moved around, and ending it early (a Destroy-like unlink)
+  would be new machinery in the runtime; a registered value of an inner block holding an outer variable is refused too,
+  since a store through its own field places it where the variable lives (O28) - an over-refusal where a call relates
+  them instead, the error naming the form that compiles. Lowering's DropHolds sees the same registrations; in a program
+  the refusal accepts no registered value holds a holder, so no holder's order changes. tests/
+  drops.olang's `gripsHeld` (decided while compiling and at run time) and `registeredHeld` (a registered holder of an
+  earlier registered value, run time only - K2c); checks' o15registeredholds, o15registeredlater, o15registeredtemp,
+  o15registeredinner.
+- **F3 (ViewKeptDestructor through a callee).** `views.Push(first2(h))`, `fn first2(h H&) Array<I64>& { return
+  h.arr[0:2] }`, compiled where `views.Push(h.arr[0:2])` is O27's error: the callee's inferred relation (its argument's
+  scope outlives its result's) failed at the call, the inference lifted the call's landing (`liftAtCall`'s result path,
+  then `proposeIn`'s call proposal) and then the argument with its storage - the holder placed in the loop's enclosing
+  scope, its destructor run there (escapedHome) instead of where its holder lets go. SPEC O27 already lists what a callee
+  hands back of an argument as a view and refuses storage holding a destructor value; the code now holds it: a call one of
+  whose arguments borrows a value local's own storage (whole or a part, no reference between) that may hold a destructor
+  value, where the callee's obligations hand that argument back (`scope.dtorCall`, `resultViews`), is neither landed
+  longer nor its argument lifted, and `viewSource` names the local - so the error is the direct case's, word for word,
+  through a local holding the view too (`v := first2(h)`). A plain struct's storage is still placed (o27callplaced: 1275
+  read back after a churn), and a holder that already outlives the views needs nothing. checks' o27destructorcall,
+  o27callplaced.
+- **F4 (a hand-on in deferred code refused).** `defer v.Push(l)` of a unique by-value parameter said "'l' is mentioned
+  after" with nothing after it: the Landings walk counted every mention in later code (deferred, a task, a join's clauses)
+  as after every watched read - the landing's own mention included. A watched read in deferred code that runs once - no
+  loop around or in it, no task or join clause, not through a holder - is now recorded apart and counts as after only for
+  the other watched reads of its local (so `defer v.Push(l); w.Push(l)` and two deferred hand-ons stay refused, and so
+  does one in a loop); the flag the hand-on clears is cleared there at run time, so an errdefer's hand-on leaves the
+  parameter to its drop where no error leaves (SPEC T13b's sentence). tests/drops.olang's `deferPush` (decided while
+  compiling and at run time); checks' t13bhandondeferred (run, `-debug -sanitize`, churned), t13bhandondeferredtwice,
+  t13bhandondeferredloop, t13bhandondeferredafter.
+- **F5 (T22a naming the type argument).** `use(keepIt<Blob>, v)` said "'Blob' ties where ...", the caret on `Blob`: the
+  error took the last name of the value's span. It takes the last name before a `<` and the type arguments with it now
+  (`scope.fnNameAt`): "'keepIt<Blob>' ties where ...", the caret on all of it. checks' t22ainstancename.

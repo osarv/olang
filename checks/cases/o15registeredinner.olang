@@ -1,0 +1,28 @@
+# check: fail error[O15, O16]: 'g' holds a value where its call landed, ended as that scope closes - after 'l'
+# O15, O16 (bulk review 8, F2): a registered value of an inner block holding a variable of an enclosing one - a store
+# through its own field places it where the variable lives (O28), so it would be ended after the variable
+type Tally struct() {
+    n I64 = 0
+}
+
+type Lamp unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct {
+    log.n += id
+}
+
+type Grip unique struct(id I64) {
+    id
+    held Lamp?& = null
+} destruct {
+    if held is not null: held!.log.n += held!.id * 10
+}
+
+fn main() {
+    t := Tally()
+    l Lamp = Lamp(10, t)
+    {
+        g := Grip(9)
+        g.held = l
+    }
+}

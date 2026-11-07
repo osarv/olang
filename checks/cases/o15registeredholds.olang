@@ -1,0 +1,34 @@
+# check: fail error[O15, O16]: 'gs' holds a value where its call landed, ended as that scope closes - after 'l'
+# also: declare it by value, 'gs Vec<Grip> = ...', and its block ends it first
+# O15, O16 (bulk review 8, F2): a value registered with a scope - a call's value a ":=" names - is ended as that scope
+# closes, after the variables of its block; this Vec's element holds a reference to the Lamp, a variable of the block,
+# so its destructor would read the Lamp ended - its storage released. Written by value, it is ended first (O15's order)
+type Tally struct() {
+    n I64 = 0
+}
+
+type Lamp unique struct(id I64, log mut Tally&) {
+    id, log
+    data := Array<I64>(16 + id.Mod(2), id)
+} destruct {
+    log.n += id
+}
+
+type Grip unique struct(id I64) {
+    id
+    held Lamp?& = null
+} destruct {
+    if held is not null: held!.log.n += held!.data[3]
+}
+
+fn hold(t mut Tally&) {
+    gs := Vec<Grip>()
+    gs.Push(Grip(1))
+    l Lamp = Lamp(2, t)
+    gs[0].held = l
+}
+
+fn main() {
+    t := Tally()
+    hold(t)
+}

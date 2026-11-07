@@ -1,8 +1,11 @@
-# check: fail T22a
-# also: 'keepIt' ties where what it is given lives to what it keeps or gives back
-# T13b, O8d: a function storing a unique value it is given by value moves it - its caller builds the argument where the
-# value is kept (section 8's obligation on the parameter) - so it cannot become a function value, whose caller cannot
-# know where to build it; a lambda calling it can (it keeps its own copy)
+# check: run
+# flags: -debug -sanitize
+# T13b, O8d, T22a: a function storing a unique value it is given by value moves it - its caller builds the argument where
+# the value is kept (section 8's obligation on the parameter). Held in a local, the function value carries that relation
+# (T22a's records: a local holding a function value is judged as the call it names), so each call through the local
+# builds its argument where the Vec lives - chosen by a condition beside a lambda (which keeps its own copy) and
+# reassigned in the loop too; read back after the arena churned. Passing it to a parameter of a written function type
+# stays T22a's error (t22agivenvalue and kin). Until the records came (bulk review 8) it was refused as a value outright
 import "std/io"
 
 type Buf unique struct(n I64) {
@@ -12,9 +15,55 @@ type Buf unique struct(n I64) {
 
 fn keepIt(v mut Vec<Buf>&, b Buf) { v.Push(b) }
 
+fn churn() I64 {
+    t := 0
+    for _ in range 20 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+
+fn fill(n I64) I64 {
+    v := Vec<Buf>()
+    f := keepIt
+    for k in range n {
+        f(v, Buf(k + 3))
+        churn()
+    }
+    s := 0
+    for b in v { s += b.data[b.data.Len() - 1] + b.n }
+    return s
+}
+
+fn chosen(n I64) I64 {
+    v := Vec<Buf>()
+    for k in range n {
+        f := keepIt if k % 2 == 0 else fn(w mut Vec<Buf>&, b Buf) { w.Push(b) }
+        f(v, Buf(k + 3))
+        churn()
+    }
+    s := 0
+    for b in v { s += b.data[b.data.Len() - 1] }
+    return s
+}
+
+fn reassigned(n I64) I64 {
+    v := Vec<Buf>()
+    f := keepIt
+    for k in range n {
+        f(v, Buf(k + 1))
+        churn()
+        f = keepIt
+    }
+    s := 0
+    for b in v { s += b.data[0] }
+    return s
+}
+
 fn main() {
     v := Vec<Buf>()
     f := keepIt
     f(v, Buf(3))
-    io.Println($v.Len())!
+    io.Println($v.Len() " " $fill(200) " " $chosen(100) " " $reassigned(100))!
 }

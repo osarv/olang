@@ -1,0 +1,39 @@
+# check: fail error[O27, O15]: this keeps a view of 'h', whose destructor runs when its block ends
+# O27 as placement, O15 (bulk review 8, F3): what a callee hands back of an argument (O13) is a view of that argument's
+# storage, so a value local holding a value whose destructor is still to run is never built longer for it either -
+# directly or through a local holding the view; written `views.Push(h.arr[0:2])` it was refused alike
+import "std/io"
+
+type H unique struct(n I64) {
+    n
+    arr := Array<I64>(4 + n.Mod(3), n)
+} destruct {
+    arr[0] = -99
+}
+
+fn first2(h H&) Array<I64>& { return h.arr[0:2] }
+
+fn keep(n I64) I64 {
+    views := Vec<Array<I64>&>()
+    for k in range n {
+        h H = H(k + 1)
+        views.Push(first2(h))
+    }
+    s := 0
+    for v in views { s += v[0] }
+    return s
+}
+
+fn viaLocal(n I64) I64 {
+    views := Vec<Array<I64>&>()
+    for k in range n {
+        h H = H(k + 1)
+        v := first2(h)
+        views.Push(v)
+    }
+    return views.Len()
+}
+
+fn main() {
+    io.Println($keep(50) " " $viaLocal(3))!
+}

@@ -667,7 +667,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   or payload of a value made, a by-value parameter or receiver, a result) given an existing one is an error naming
   `File&`. A by-value parameter, fresh at every call, hands its value on once where it is mentioned last - judged on every
   path (`typed.Landings`: another branch is no "after", a loop's next turn is, deferred code, tasks and join clauses run
-  after everything) - so `Vec.Push(x T)` and `Map.Put` store unique elements as written, moved, never copied (since
+  after everything, so a landing in deferred code that runs once is the last mention where nothing else later mentions
+  the parameter - `defer v.Push(l)`, bulk review 8 F4) - so `Vec.Push(x T)` and `Map.Put` store unique elements as written, moved, never copied (since
   2026-11-07, "The unique hand-on is a move" below); a returned whole local is the result itself (O26a). A unique type declares no Copy, and `x.Copy()` of one is an error; a struct, enum, array or
   collection holding a unique part by value is unique unless it declares a Copy (`types.Unique`, structural, cached once
   every part is typed; `Table.MarkUnique` from `generic.DeclFor`); unique and immut are never one type's (both words, one
@@ -791,8 +792,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   or a by-value part of it; a function value, an `any`, a type variable can hold any). Test builds register a held
   value's holders' guards again after its own (a guard of a holder holding nothing does nothing), so a failed check's
   unwinding ends holders first too. The evaluator and `interpret` run lowering's MIR, so they agree (tests/drops.olang's
-  `holders`, baked and asserted while compiling). Limits (recorded): a value registered with the scope (O16) still ends at
-  its close after the block's variables, unordered by holding; interpret's stop cleanups (B3e) run in registration order;
+  `holders`, baked and asserted while compiling). A value registered with the scope (O16) still ends at its close after
+  the block's variables - so one that may hold a variable of its block, or a value registered after it (`gs :=
+  Vec<Grip>()` whose element is given a reference to `l Lamp`, a temporary `hold(Grip(1), l)`), is an error naming the
+  by-value form `gs Vec<Grip> = ...` (bulk review 8, F2: it ran the Grip's destructor on a Lamp Part C had released; the
+  points-to now models a registered local as standing for its value's storage - `DropHolding.Judged`, check's
+  `dropRegistered`; conservative: one in an inner block holding an outer variable is refused too, as O28 may place it
+  there). Limits (recorded): interpret's stop cleanups (B3e) run in registration order;
   a holder whose references live in an outer scope (it holds a reference from outside) gets what is stored into it lifted
   there by section 8 (O28) - its drop then registered where it lives, after the block (the old order was right there by
   that, the hazard only where a holder's references live in its own block: checked before, `210` where `112` is right).
@@ -1565,7 +1571,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   settled (O20). Still refused, the errors saying which: a by-value parameter's own storage, a match binding's or a
   capture's copy (ViewKeptCopy), a `Next()` result scope, a derived or unknown scope (ViewKept, reworded), and storage
   holding a value whose destructor is still to run (ViewKeptDestructor, PartKeptDestructor - docs/sec8.md question 2:
-  its end stays where its holder lets go). Decided (mine): the inference gathers whole lifts first, exactly as before,
+  its end stays where its holder lets go) - what a callee hands back of such a local included, directly or through a
+  local (bulk review 8, F3: the call's landing was lifted, which placed the holder longer; `scope.dtorCall`). Decided (mine): the inference gathers whole lifts first, exactly as before,
   and only where the settled judging still has a view, part or capture kept too long (`viewWanted`) judges again with
   those proposing - so a program accepted before places byte-identically (bench IR checked) and pays no extra judging;
   part lifts only once the field inference has settled (`partsOn`, a round judged afresh), and then only in that second
@@ -1708,7 +1715,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   view of its leaves); a constructor's instance viewing only moved parameters is its own (`typed.MovedArg`,
   `FreshViews`, `ViewsMoved`: no D9h copy). Decided (mine): a lambda keeps its own copy (it is called only through a
   function value, which can carry no obligation, T22a); a named function moving a unique value into what outlives the
-  call is no function value (T22a, the cost: `f := keepIt` refused - write a lambda calling it); a constructor's
+  call carries that relation as a value (T22a's records, merged with it: `f := keepIt; f(v, Buf(3))` builds the argument
+  where `v` lives; bulk review 8 found the refusal this round recorded lifted and kept it so - checks' t13bmovedvalue a
+  run case now; a parameter of a written function type stays T22a's boundary error); a constructor's
   run-time array field keeps its slot in the frame, only its elements in the instance (lower's `fieldStor`: 16 bytes per
   constructor call grew where the instance lives - every Vec, Map and StringBuilder constructor's, bench a few
   instructions fewer). Measured over 1M cycles: put + taken 388 MB -> 1.9 MB, replaced 260 -> 1.9, put + removed 388 ->

@@ -860,13 +860,18 @@ reads it after: a **by-value parameter**, given a fresh value at every call, may
 **move**, never a copy: the parameter is the caller's value, what it owns (its arrays, T7a) where the caller built it,
 so the place it lands in becomes the value's one holder - a `Map`'s slot, a `Vec`'s element, an instance's field - and
 §8 holds the parameter to outlive that place (an obligation of the function, O10b, its callers building the argument
-where the value is kept, O18b). A function moving a value so into what outlives the call therefore cannot become a
-function value (T22a): `f := keepIt` is refused where `fn keepIt(v mut Vec<File>&, f File) { v.Push(f) }`. A lambda,
+where the value is kept, O18b). A function moving a value so into what outlives the call therefore carries that
+relation as a function value (T22a): held in a local, `f := keepIt; f(v, File(3))` builds the argument where `v`'s
+storage lives, as the direct call does, where `fn keepIt(v mut Vec<File>&, f File) { v.Push(f) }`; at a boundary (a
+parameter of a written function type, a field, a capture) it is T22a's error. A lambda,
 which is called only through a function value, keeps its own copy of what it hands on instead, as a by-value argument
 of any other type is copied (D9) - unobservable but in memory, the value being nowhere else. Last is judged on every
 path from the landing, in the order the function evaluates: another branch's mentions are not after it, a loop running
 again reaches its body's mentions before it, and a mention in deferred code, a task or a join's clauses runs after
-everything; a mention after the landing is a compile-time error. A **name made from** the parameter - a reference local
+everything; a mention after the landing is a compile-time error. So a landing in deferred code that runs once - no loop
+around it or in it, no task or join clause - is the last mention where nothing else in deferred code, a task or a join's
+clauses mentions the parameter (`defer v.Push(l)`, `errdefer v.Push(l)`, the parameter ended at the callee's end where an
+errdefer does not run): the body's own mentions all run before it. A **name made from** the parameter - a reference local
 or a binding naming it (`alias := t`), a lambda capturing it, a value lent to a call that is also given a reference to
 it (`seen.Push(t)` into a `Vec<Res&>`) - counts as a mention of it, so using that name after the
 landing is the same error, naming it; and a landing that is one argument of a call (or one part of a value made) whose
@@ -7253,7 +7258,13 @@ value of the type stored can hold - through its parts and the references it reac
 other's type or a part of it (a function value, an `any` or a type variable can hold any). Two variables of a block each holding the other
 - a cycle of such references - is a compile-time error naming both: whichever were ended first, the other's destructor
 could read it; ending one before the other refers to it (a block of its own, a `Destroy()`) or holding one by reference
-removes it. A test ended by a failed check (P1d) ends its holders in the same order. Where in the scope an instance's storage lies, and whether it was reserved
+removes it. A value **registered with a scope** (O16) - a call's value a `:=` names (`gs := Vec<Grip>()`) or a
+temporary given to a reference parameter - is ended as that scope closes, after the variables of its block, and values
+registered with one scope end the last registered first; so one that may hold (as above, through any number of steps) a
+variable holding a value with destructors to run, or a value registered after it, is a compile-time error naming the
+declaration that holds it by value (`gs Vec<Grip> = Vec<Grip>()`), which its block then ends in the order above - one
+holding a value registered before it, in its block or an enclosing one, is ended first and needs nothing. A test ended
+by a failed check (P1d) ends its holders in the same order. Where in the scope an instance's storage lies, and whether it was reserved
 before its constructor's arguments were built, is not observable. A global and a generator's
 parameter hold such a value by reference, and a type argument holds it by value only where its instance ends it (C11):
 the program's scope, a walk left part way and an array of a run-time length outside a collection have no holder that

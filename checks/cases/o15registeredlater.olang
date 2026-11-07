@@ -1,0 +1,34 @@
+# check: fail error[O15, O16]: 'gs' holds a value where its call landed, ended as that scope closes - after 'ls'
+# also: declare it by value, 'gs Vec<Grip> = ...'
+# O15, O16 (bulk review 8, F2): values registered with one scope end the last registered first, so a registered value
+# holding one registered after it is ended after it - the Grip's destructor would read a Lamp already ended
+type Tally struct() {
+    n I64 = 0
+}
+
+type Lamp unique struct(id I64, log mut Tally&) {
+    id, log
+    data := Array<I64>(16 + id.Mod(2), id)
+} destruct {
+    log.n += id
+}
+
+type Grip unique struct(id I64) {
+    id
+    held Lamp?& = null
+} destruct {
+    if held is not null: held!.log.n += held!.data[3]
+}
+
+fn twoVecs(t mut Tally&, k I64) {
+    gs := Vec<Grip>()
+    gs.Push(Grip(5))
+    ls := Vec<Lamp>()
+    ls.Push(Lamp(k, t))
+    gs[0].held = ls[0]
+}
+
+fn main() {
+    t := Tally()
+    twoVecs(t, 4)
+}
