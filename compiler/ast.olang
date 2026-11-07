@@ -257,7 +257,7 @@ type Stmt enum {
     Assert(sp source.Span, cond Expr&, msg Expr?&)
     # become f(x) (S21): the function becomes the call - its scopes closed, then the call made in its place
     Become(sp source.Span, x Expr&)
-    Raise(sp source.Span, word Path?&)                  # error T.WORD
+    Raise(sp source.Span, word Path?&, args Array<Expr&>?&)   # error T.WORD, error T.WORD(args) (T19b): null for none
     Spawn(sp source.Span, targets Array<Expr&>&, call Expr&)
     Join(sp source.Span, j JoinS&)
     Defer(sp source.Span, s Stmt&, onError Bool)    # onError: errdefer (S19e)
@@ -388,8 +388,9 @@ type Decl enum {
     # the path's span holds its quotes; link the library a C header's declarations are in (X9), its quotes too - (0, 0)
     # for none
     Import(sp source.Span, alias source.NameId, path source.Span, link source.Span)
-    # type Name error [Member, ...] [{ Words }] (T19, T19a): an error type's own words, and the members of a named set
-    Errors(sp source.Span, name source.NameId, words Array<source.NameId>&, members Array<Path&>&)
+    # type Name error [Member, ...] [{ Words }] (T19, T19a): an error type's own words, and the members of a named set;
+    # cases: each word as an enum case declares it - its name and its payload's fields, none for a plain word (T19b)
+    Errors(sp source.Span, name source.NameId, words Array<source.NameId>&, members Array<Path&>&, cases Array<CaseDecl&>&)
     # test [Target] "description" { } (B14): Target a function, a type or Type.Method of the file, null for none
     Test(sp source.Span, name source.Span, body Array<Stmt&>&, target Path?&)
     If(sp source.Span, i TopIf&)
@@ -467,7 +468,7 @@ fn (s Stmt&) Span() source.Span {
         case Stmt.ExprS(sp, _), Stmt.Var(sp, _), Stmt.Multi(sp, _), Stmt.Assign(sp, _, _, _): sp
         case Stmt.TryStore(sp, _, _), Stmt.If(sp, _), Stmt.Forever(sp, _), Stmt.While(sp, _, _), Stmt.For3(sp, _): sp
         case Stmt.ForIn(sp, _), Stmt.DoFor(sp, _, _), Stmt.MatchS(sp, _), Stmt.Return(sp, _), Stmt.Jump(sp, _, _): sp
-        case Stmt.Assert(sp, _, _), Stmt.Raise(sp, _), Stmt.Spawn(sp, _, _), Stmt.Join(sp, _), Stmt.Defer(sp, _, _): sp
+        case Stmt.Assert(sp, _, _), Stmt.Raise(sp, _, _), Stmt.Spawn(sp, _, _), Stmt.Join(sp, _), Stmt.Defer(sp, _, _): sp
         case Stmt.Block(sp, _), Stmt.Yield(sp, _), Stmt.Become(sp, _): sp
     }
 }
@@ -510,7 +511,7 @@ fn yieldIn(st Stmt?&) source.Span {
         case Stmt.Spawn(_, _, call): yieldInExpr(call)
         case Stmt.Join(_, j): yieldOr(FirstYield(j.Body), yieldInCatches(j.Clauses))
         case Stmt.Defer(_, d, _): yieldIn(d)
-        case Stmt.Raise(_, _): NoYield
+        case Stmt.Raise(_, _, _): NoYield
     }
 }
 

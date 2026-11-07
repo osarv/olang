@@ -1,0 +1,6 @@
+# check: fail error[T19b]: ParseError2.Bad carries line, col - give them
+type ParseError2 error { Bad(line I64, col I64), Eof }
+fn main() {
+    e := ParseError2.Bad
+    assert e != ParseError2.Eof
+}

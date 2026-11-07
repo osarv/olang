@@ -831,30 +831,34 @@ fn (p mut Parser&) errorDecl(at I32, name source.NameId) ast.Decl& ? Fail {
             if not p.accept(token.Tok.Comma) { break }
         }
     }
-    words Array<source.NameId>& = Array<source.NameId>(0)
+    cases mut Vec<ast.CaseDecl&>& = Vec<ast.CaseDecl&>()
     if p.sees(token.Tok.LBrace) {
-        words = try p.errorWords()
+        try p.errorWords(cases)
     } else if ms.Len() == 0 {
         try p.fail("an error type's words or a set's members")
     }
+    words := Array<source.NameId>(cases.Len())
+    for i in range cases.Len(): words[i] = cases[i].Name
     sp := p.from(at)
     if p.sees(token.Tok.StmtEnd) { p.advance() }
-    return ast.Decl.Errors(sp, name, words, ms.ToArray())
+    return ast.Decl.Errors(sp, name, words, ms.ToArray(), cases.ToArray())
 }
 
-# an error type's words: "{" then one per line, or several on one line separated by "," (T19, QY), at least one
-fn (p mut Parser&) errorWords() Array<source.NameId>& ? Fail {
+# an error type's words: "{" then one per line, or several on one line separated by "," (T19, QY), at least one; a word
+# may carry a payload, its fields in parentheses as an enum case's (T19b): "Bad(line I64, col I64)"
+fn (p mut Parser&) errorWords(cases mut Vec<ast.CaseDecl&>&) ? Fail {
     try p.want(token.Tok.LBrace)
-    from := p.ids.Len()
     p.skipEnds()
     if p.sees(token.Tok.RBrace) { try p.fail("an error word") }
     for not p.sees(token.Tok.RBrace) {
+        at := p.here()
         w := try p.name()
-        p.ids.Push(w)
+        payload Array<ast.Param&>& = Array<ast.Param&>(0)
+        if p.accept(token.Tok.LParen) { payload = try p.params(false) }
+        cases.Push(ast.CaseDecl(p.from(at), w, payload))
         try p.entryEnd()
     }
     p.advance()
-    return gather(p.ids, from)
 }
 
 fn (p mut Parser&) typeDeclRest(at I32, name source.NameId) ast.Decl& ? Fail {
@@ -1883,9 +1887,12 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
         case token.Tok.Error {
             p.advance()
             word := try p.path()
+            # T19b: a word carrying a payload raised with its fields, "error ParseError.Bad(line, col)"
+            args Array<ast.Expr&>?& = null
+            if p.sees(token.Tok.LParen) { args = try p.args() }
             sp := p.from(at)
             try p.endStmt()
-            return ast.Stmt.Raise(sp, word)
+            return ast.Stmt.Raise(sp, word, args)
         }
         case token.Tok.Spawn {
             p.advance()

@@ -1,0 +1,10 @@
+# check: fail error[T19b]: payload field node of type Node holds a reference
+# R3b, T19b: an error raised by name holds values only - a value holding a reference is no field of one
+type Node struct(v I64, next Node?&) { v, next }
+fn walk(n Node) I64 ? {
+    if n.v < 0: error Lost(node = n)
+    return n.v
+}
+fn main() {
+    walk(Node(1, null))!
+}

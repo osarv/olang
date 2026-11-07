@@ -280,6 +280,7 @@ fn Module.Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi 
         name := $nm.Text(e.Name)
         if not all and not Exported(name) { continue }
         if name.StartsWith("@") { continue }        # an attribute's hidden global (G39), written with what it is on
+        if name.Contains("$") { continue }          # an error type's hidden payload enum (T19b), shown with its words
         if e.Kind == names.What.Func {
             f := c.P.FnNamed(mi, e.Name)
             if f < 0 or c.P.FnDecl(f).Recv is not null { continue }

@@ -1667,7 +1667,7 @@ fn stmtSpan(s mir.Stmt&) source.Span {
         case mir.Stmt.Close(sp, _), mir.Stmt.RegisterDtor(sp, _, _, _), mir.Stmt.Release(sp, _): sp
         case mir.Stmt.Settle(sp, _, _), mir.Stmt.Write(sp, _, _, _): sp
         case mir.Stmt.CopyElems(sp, _, _, _), mir.Stmt.Spawn(sp, _, _), mir.Stmt.Raised(sp): sp
-        case mir.Stmt.Deferred(sp, _, _): sp
+        case mir.Stmt.Deferred(sp, _, _), mir.Stmt.ErrSet(sp, _), mir.Stmt.ErrPop(sp): sp
     }
 }
 
@@ -2011,14 +2011,7 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
 # S18d: what a Raise at sp did, as the evaluator reads it (eval.traced): passed on the error of the call or join
 # at the same place - "try passed it on", a join's failure restarting the trace with its own line - else it raised it
 fn (fe mut fnEm&) trace(sp source.Span) {
-    if not fe.E.traced() {
-        # D17, E35: where no trace is kept, a requirement false on entry is kept alone, for a "!" to name
-        if fe.F.RaiseText(sp).Len() > 0 {
-            fe.E.declare("__olang_ert_req_set", "void @__olang_ert_req_set(ptr)")
-            fe.w($"call void @__olang_ert_req_set(ptr " $fe.located(sp, $": " $fe.F.RaiseText(sp) "\n") ")")
-        }
-        return
-    }
+    if not fe.E.traced() { return }
     if not fe.sited {
         fe.sited = true
         for blockIx in range fe.F.Blocks.Len() {
@@ -2799,9 +2792,6 @@ fn (fe mut fnEm&) run() {
         if taken.Has(b) and fe.E.traced() {
             fe.E.runtime("__olang_ert_clear")
             fe.w("call void @__olang_ert_clear()")
-        } else if taken.Has(b) {
-            fe.E.declare("__olang_ert_req_clear", "void @__olang_ert_req_clear()")
-            fe.w("call void @__olang_ert_req_clear()")
         }
         fe.curBlock = b
         for i in range bb.Stmts.Len() {
@@ -3542,6 +3532,14 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
             }
         }
         case mir.Stmt.Raised(sp) { fe.trace(sp) }
+        case mir.Stmt.ErrSet(_, x) {
+            fe.E.runtime("__olang_errpay_set")
+            fe.w("call void @__olang_errpay_set(ptr " $fe.val(x) ")")
+        }
+        case mir.Stmt.ErrPop(_) {
+            fe.E.runtime("__olang_errpay_pop")
+            fe.w("call void @__olang_errpay_pop()")
+        }
         case mir.Stmt.Deferred(_, _, _) { fe.gap("a cleanup (interpret's)") }
         case mir.Stmt.RegisterDtor(_, sr, ty, x) {
             k := try mir.FnKey.DropFn(t, ty, try fe.E.dtorOf.Get(ty) catch default -1) catch {
@@ -4146,6 +4144,15 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             r := fe.let("call ptr @__olang_region_or(ptr " $o ", ptr " $fe.scope(s) ")")
             return fe.let("ptrtoint ptr " $r " to i64")
         }
+        case mir.Rvalue.ErrPush {
+            fe.E.runtime("__olang_errpay_push")
+            r := fe.let("call ptr @__olang_errpay_push()")
+            return fe.let("ptrtoint ptr " $r " to i64")
+        }
+        case mir.Rvalue.ErrTop(_) {
+            fe.E.runtime("__olang_errpay_top_get")
+            return fe.let("call ptr @__olang_errpay_top_get()")
+        }
     }
 }
 
@@ -4572,6 +4579,26 @@ fn (fe mut fnEm&) recode(code String&, from types.ListId, to types.ListId) Strin
 }
 
 # an error type's position from 1 in an error list, 0 where it names none
+# T19b: an i1 saying whether error code (of list l) is of a type carrying a payload, its names prefixed by tag - "" where no
+# type of l carries one
+fn (e mut Emitter&) carriesText(b mut StringBuilder&, code String&, l types.ListId, tag String&) String {
+    t := e.T
+    xs := t.Items(l)
+    got := ""
+    for k in range xs.Len() {
+        if e.P.PayloadOf(t.ErrOf(xs[k])) == types.UnknownT: continue
+        if got == "" { b.Push("  %" $tag "h = lshr i32 " $code ", 16\n") }
+        b.Push("  %" $tag "e" $k " = icmp eq i32 %" $tag "h, " $(k + 1) "\n")
+        if got == "" {
+            got = "%" $tag "e" $k
+        } else {
+            b.Push("  %" $tag "o" $k " = or i1 " $got ", %" $tag "e" $k "\n")
+            got = "%" $tag "o" $k
+        }
+    }
+    return got
+}
+
 fn (e mut Emitter&) position(l types.ListId, err types.TypeId) I64 {
     t := e.T
     xs := t.Items(l)
@@ -5486,14 +5513,31 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
     if kind == mir.ExitKind.Escaped {
         # S16, S18d: "left the test" in the trace, the error named on the test's FAIL line
         text := ""
+        dyn := true
         match msg {
-            case mir.Operand.Data(_, c, _, _) { text = fe.constText(c) }
+            case mir.Operand.Data(_, c, _, _) {
+                text = fe.constText(c)
+                dyn = false
+            }
             case _ { }
         }
         fe.E.declare("__olang_ert_pass", "void @__olang_ert_pass(ptr)")
-        fe.E.declare("__olang_test_error", "void @__olang_test_error(ptr) cold noreturn")
         fe.w("call void @__olang_ert_pass(ptr " $fe.located(sp, ": left the test\n") ")")
-        fe.w("call void @__olang_test_error(ptr " $fe.E.cstr(text) ")")
+        if dyn {
+            # T19b: a name rendered with the payload its error carries
+            fe.E.runtime("__olang_test_error_text")
+            fe.w("call void @__olang_test_error_text({ i64, ptr } " $fe.textPair(msg) ")")
+        } else {
+            fe.E.declare("__olang_test_error", "void @__olang_test_error(ptr) cold noreturn")
+            fe.w("call void @__olang_test_error(ptr " $fe.E.cstr(text) ")")
+        }
+        fe.w("unreachable")
+        return
+    }
+    if kind == mir.ExitKind.Unhandled {
+        tr := "true" if fe.E.traced() else "false"
+        fe.E.runtime("__olang_unhandled_text")
+        fe.w("call void @__olang_unhandled_text({ i64, ptr } " $fe.textPair(msg) ", i1 " $tr ")")
         fe.w("unreachable")
         return
     }
@@ -5502,7 +5546,14 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
         text := ""
         match msg {
             case mir.Operand.Data(_, c, _, _) { text = fe.constText(c) }
-            case _ { }
+            case _ {
+                # T19b: a name rendered with the payload its error carries
+                fe.E.runtime("__olang_bang_failed_text")
+                tr := "true" if fe.E.traced() else "false"
+                fe.w("call void @__olang_bang_failed_text(ptr " $fe.located(sp, ": ") ", { i64, ptr } " $fe.textPair(msg) ", i1 " $tr ")")
+                fe.w("unreachable")
+                return
+            }
         }
         # where no trace is kept, the requirement that raised it is named, then the hint (D17)
         f := "__olang_bang_failed" if fe.E.traced() else "__olang_bang_failed_plain"
@@ -5526,6 +5577,14 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
         }
     }
     fe.w("unreachable")
+}
+
+# a text operand (an array of Chars, or a reference to one) as the pair { length, data } C's side reads
+fn (fe mut fnEm&) textPair(msg mir.Operand) String {
+    mt := fe.otype(msg)
+    v := fe.val(msg, mt)
+    data, n := fe.arrayParts(v, mt)
+    return fe.pair(n, data)
 }
 
 # a call (MIR's Call terminator): its arguments as its callee takes them, its result stored on its ok edge, its error
@@ -6251,6 +6310,18 @@ fn (e mut Emitter&) exportEntry(i I64) {
         fe.w($"br i1 " $bad ", label %failed, label %done")
         fe.code.Push("failed:\n")
         fe.w($"call void @__olang_scope_close(ptr " $sc ")")
+        # T19b: C is given the code alone - the payload its error carries popped, so a failing entry leaves nothing
+        cb := StringBuilder()
+        cw := e.carriesText(cb, code, t.Errors(ty), "xp")
+        if cw != "" {
+            e.runtime("__olang_errpay_pop")
+            fe.code.Push(cb.ToString())
+            fe.w($"br i1 " $cw ", label %xpyes, label %xpno")
+            fe.code.Push("xpyes:\n")
+            fe.w("call void @__olang_errpay_pop()")
+            fe.w("br label %xpno")
+            fe.code.Push("xpno:\n")
+        }
         lib := t.List(e.ExportErrors().ToArray())
         fe.w($"ret i32 " $fe.recode(code, t.Errors(ty), lib))
         fe.code.Push("done:\n")
@@ -6704,8 +6775,8 @@ fn (e mut Emitter&) entry(inits Vec<I64>, mainBody I64) {
         e.declare("__olang_ert_print", "void @__olang_ert_print(ptr)")
         b.Push("  call void @__olang_ert_print(ptr %s)\n  ret i32 1\n}\n\n")
     } else {
-        e.declare("__olang_ert_req_print", "void @__olang_ert_req_print(ptr)")
-        b.Push("  call void @__olang_ert_req_print(ptr %s)\n  ret i32 1\n}\n\n")
+        e.declare("__olang_debug_hint", "void @__olang_debug_hint(ptr)")
+        b.Push("  call void @__olang_debug_hint(ptr %s)\n  ret i32 1\n}\n\n")
     }
     e.item("main", e.P.L.Root, b.ToString())
 }
@@ -7171,8 +7242,9 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
             fe.store(fields[i], vals[i], at)
         }
     }
-    # the task's node (%olang.task: next, done, merges, error) and its stand-ins' merge records
-    node := fe.let("call ptr @__olang_scope_alloc_a(ptr " $js ", i64 32, i64 8)")
+    # the task's node (%olang.task: next, done, merges, error, the payload record its error carries - T19b) and its
+    # stand-ins' merge records
+    node := fe.let("call ptr @__olang_scope_alloc_a(ptr " $js ", i64 40, i64 8)")
     head := "null"
     for sub in subs {
         mn := fe.let("call ptr @__olang_scope_alloc_a(ptr " $js ", i64 16, i64 8)")
@@ -7180,9 +7252,10 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
         fe.store("ptr", sub, fe.let("getelementptr { ptr, ptr }, ptr " $mn ", i32 0, i32 1"))
         head = mn
     }
-    fe.store("ptr", head, fe.let("getelementptr { ptr, i64, ptr, i64 }, ptr " $node ", i32 0, i32 2"))
-    fe.store("i64", "0", fe.let("getelementptr { ptr, i64, ptr, i64 }, ptr " $node ", i32 0, i32 1"))
-    fe.store("i64", "0", fe.let("getelementptr { ptr, i64, ptr, i64 }, ptr " $node ", i32 0, i32 3"))
+    fe.store("ptr", head, fe.let("getelementptr { ptr, i64, ptr, i64, ptr }, ptr " $node ", i32 0, i32 2"))
+    fe.store("i64", "0", fe.let("getelementptr { ptr, i64, ptr, i64, ptr }, ptr " $node ", i32 0, i32 1"))
+    fe.store("i64", "0", fe.let("getelementptr { ptr, i64, ptr, i64, ptr }, ptr " $node ", i32 0, i32 3"))
+    fe.store("ptr", "null", fe.let("getelementptr { ptr, i64, ptr, i64, ptr }, ptr " $node ", i32 0, i32 4"))
     name := fe.trampoline(envT, fields, isValue, callee, ty, I64(k.Scopes.N), k, fe.F.Scopes[I64(j)].Errors, copyF)
     e.declare("__olang_worker_get", "ptr @__olang_worker_get()")
     e.declare("__olang_worker_start", "void @__olang_worker_start(ptr, ptr, ptr, ptr)")
@@ -7285,6 +7358,12 @@ fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, ca
             b.Push("ok:\n")
         } else {
             rc := e.recodeText(b, code, t.Errors(ty), joinErrs)
+            # T19b: the payload its error carries detached from this thread's stack for the join
+            cw := e.carriesText(b, code, t.Errors(ty), "pd")
+            if cw != "" {
+                e.runtime("__olang_errpay_detach")
+                b.Push("  br i1 " $cw ", label %pdyes, label %pdno\npdyes:\n  call void @__olang_errpay_detach()\n  br label %pdno\npdno:\n")
+            }
             b.Push("  %rc64 = zext i32 " $rc " to i64\n  %rp = inttoptr i64 %rc64 to ptr\n  ret ptr %rp\nok:\n")
         }
     }
@@ -7403,6 +7482,13 @@ fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty typ
             }
         }
         b.Push("  br i1 " $cond ", label %take" $ci ", label %pass" $ci "\ntake" $ci ":\n")
+        # T19b: a clause on the task's thread pops the payload record its error carries
+        cw := e.carriesText(b, code, errs, "pt" $ci)
+        if cw != "" {
+            e.runtime("__olang_errpay_pop")
+            b.Push("  br i1 " $cw ", label %ptyes" $ci ", label %ptno" $ci "\nptyes" $ci ":\n  call void @__olang_errpay_pop()\n")
+            b.Push("  br label %ptno" $ci "\nptno" $ci ":\n")
+        }
         if cl.Handler != mir.Operand.None {
             ht := fe.otype(cl.Handler)
             e.signature(ht)

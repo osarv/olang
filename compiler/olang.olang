@@ -1336,8 +1336,9 @@ test "explain FILE NAME prints an item as the compiler sees it: inferred errors,
     assert explained("Answer") == "Answer I64 = 42\n"
     assert explained("Sh") == "type Sh enum\n    Whole N\n    Parts(a I64, b I64)\n    None\n"
     # D17: a contract's conditions as written; a scope relation the body asks among the obligations, inferred (O10b)
+    # T19b: a false condition's ArgumentError carries its text, a copy made where it is raised - so it allocates
     assert explained("pct") == ("fn pct(part I64, whole I64) I64 ? ArgumentError   # its error set inferred\n    [whole > 0]\n" $
-            "    [part >= 0]\n    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
+            "    [part >= 0]\n    # effects: allocates; never blocks; always ends; may be computed while compiling\n")
     assert explained("link") == ("fn link(a mut N&, b N&)\n    # scopes: b outlives a\n" $
             "    # not a value: its scope obligations (# scopes, above) tie where what it is given lives to what it keeps or gives back, which a call through a function value cannot check (T22a) - call it directly\n" $
             "    # effects: writes through 'a'; allocates nothing; never blocks; always ends; may be computed while compiling\n")

@@ -1,0 +1,14 @@
+# check: fail error[T19b, S13b]: a payload pattern binds names only in a match statement
+# T19b, S13b: a value match reads a field after the test - its cases bind no names
+type ReadErr error { Bad(line I64), Eof }
+fn read(n I64) I64 ? ReadErr {
+    if n < 0: error ReadErr.Bad(n)
+    error ReadErr.Eof
+}
+fn main() {
+    l := try read(-1) catch ReadErr e default match e {
+        case ReadErr.Bad(line): line
+        case ReadErr.Eof: 0
+    }
+    assert l < 0
+}

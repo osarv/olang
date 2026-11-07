@@ -36,7 +36,8 @@ shutWr I32 = 1
 # Timeout: a timeout set on the socket passed, or the connection attempt timed out; RESET: the other side reset or
 # closed the connection while this side was writing; UNREACHABLE: no route to the network or host; ADDRESS: text that
 # is no address, a port outside 0-65535, or an address this machine does not have (an IPv6 one where IPv6 is off);
-# UnknownHost: a name Lookup or Resolve was given has no address (or the name server says it does not exist);
+# UnknownHost: a name Lookup or Resolve was given has no address (or the name server says it does not exist); Address
+# carries the text or address refused ("" where a call on a socket gave it), UnknownHost the name;
 # Closed: the other side closed the connection, so there is nothing more to read - the end of the stream - or this side
 # did; Denied: not permitted (a port below 1024, say); Failed: any other reason
 type Error error {
@@ -45,15 +46,16 @@ type Error error {
     Timeout
     Reset
     Unreachable
-    Address
-    UnknownHost
+    Address(text String)
+    UnknownHost(host String)
     Closed
     Denied
     Failed
 }
 
-# fails with the Error naming "why" - what __olang_err() said (X6's classes) right after a call reported failure
-fn raise(why I32) ? Error {
+# fails with the Error naming "why" - what __olang_err() said (X6's classes) right after a call reported failure, an
+# Address one carrying "at", the address the call was given
+fn raise(why I32, at String = "") ? Error {
     match why {
         case 3 { error Error.Denied }
         case 7 { error Error.Refused }
@@ -61,7 +63,7 @@ fn raise(why I32) ? Error {
         case 9 { error Error.Timeout }
         case 10 { error Error.Reset }
         case 11 { error Error.Unreachable }
-        case 12 { error Error.Address }
+        case 12 { error Error.Address(at) }
         case _ { error Error.Failed }
     }
 }
@@ -88,8 +90,8 @@ fn IP.IPv4(a U8, b U8, c U8, d U8) IP {
 }
 
 # the IPv6 address of sixteen bytes, in order - failing with ADDRESS for another number of them
-fn IP.IPv6(b Array<U8>&) IP ? Error.Address {
-    if b.Len() != 16 { error Error.Address }
+fn IPv6(b Array<U8>&) IP ? Error.Address {
+    if b.Len() != 16 { error Error.Address($b) }
     ip := IP(true)
     for i in range 16 { ip.bytes[i] = b[i] }
     return ip
@@ -122,30 +124,30 @@ fn (ip IP&) IsLoopback() Bool {
 }
 
 # a decimal number of at most "most" from at, and where it ends - failing with ADDRESS where there is none
-fn decimalAt(t String&, at I64, most I64) I64, I64 ? Error.Address {
+fn decimalAt(t String&, at I64, most I64) I64, I64 ? noAddress {
     v I64 = 0
     i := at
     for i < t.Len() and t[i].IsDigit() and i - at < 5 {
         v = v * 10 + I64(t[i] - '0')
         i++
     }
-    if i == at or v > most or (i - at > 1 and t[at] == '0') { error Error.Address }
+    if i == at or v > most or (i - at > 1 and t[at] == '0') { error noAddress }
     return v, i
 }
 
-fn IP.parse4(t String&) IP ? Error.Address {
+fn parse4(t String&) IP ? noAddress {
     ip := IP()
     at I64 = 0
     for k in range 4 {
         if k > 0 {
-            if at >= t.Len() or t[at] != '.' { error Error.Address }
+            if at >= t.Len() or t[at] != '.' { error noAddress }
             at++
         }
         v, next := try decimalAt(t, at, 255)
         ip.bytes[k] = U8(v)
         at = next
     }
-    if at != t.Len() { error Error.Address }
+    if at != t.Len() { error noAddress }
     return ip
 }
 
@@ -158,7 +160,7 @@ fn hexDigit(c Char) I64 {
 
 # RFC 4291's text: eight groups of up to four hex digits, "::" standing for one run of zero groups, the last two groups
 # optionally written as an IPv4 address ("::ffff:1.2.3.4")
-fn IP.parse6(t String&) IP ? Error.Address {
+fn parse6(t String&) IP ? noAddress {
     groups := Array<I64>(8)
     n I64 = 0
     gap I64 = -1                                  # where "::" stands, in groups
@@ -168,13 +170,13 @@ fn IP.parse6(t String&) IP ? Error.Address {
         at = 2
     }
     for at < t.Len() {
-        if n == 8 { error Error.Address }
+        if n == 8 { error noAddress }
         # an IPv4 tail
         dot := try t[at:].FindByte('.') catch default -1
         colon := try t[at:].FindByte(':') catch default -1
         if dot >= 0 and (colon < 0 or dot < colon) {
-            if n > 6 { error Error.Address }
-            v4 := try IP.parse4(t[at:])
+            if n > 6 { error noAddress }
+            v4 := try parse4(t[at:])
             groups[n] = I64(v4.bytes[0]) << 8 | I64(v4.bytes[1])
             groups[n + 1] = I64(v4.bytes[2]) << 8 | I64(v4.bytes[3])
             n += 2
@@ -187,21 +189,21 @@ fn IP.parse6(t String&) IP ? Error.Address {
             v = v * 16 + hexDigit(t[at])
             at++
         }
-        if at == start { error Error.Address }
+        if at == start { error noAddress }
         groups[n] = v
         n++
         if at == t.Len() { break }
-        if t[at] != ':' { error Error.Address }
+        if t[at] != ':' { error noAddress }
         at++
         if at < t.Len() and t[at] == ':' {
-            if gap >= 0 { error Error.Address }
+            if gap >= 0 { error noAddress }
             gap = n
             at++
         } else if at == t.Len() {
-            error Error.Address                     # a trailing single ':'
+            error noAddress                     # a trailing single ':'
         }
     }
-    if gap < 0 and n != 8 or gap >= 0 and n == 8 { error Error.Address }
+    if gap < 0 and n != 8 or gap >= 0 and n == 8 { error noAddress }
     ip := IP(true)
     zeros := 8 - n
     k I64 = 0
@@ -220,8 +222,8 @@ fn IP.Parse(t String&) IP ? Error.Address {
     if t == "localhost" { return IP.Loopback4() }
     found := true
     try t.FindByte(':') catch { found = false }
-    if found { return try IP.parse6(t) }
-    return try IP.parse4(t)
+    if found { return try parse6(t) catch noAddress { error Error.Address(t) } }
+    return try parse4(t) catch noAddress { error Error.Address(t) }
 }
 
 # how "$" renders an IP: dotted decimal, or RFC 5952's IPv6 text - lowercase, leading zeros dropped, the longest run of
@@ -266,20 +268,24 @@ type Addr struct(host IP, port U16) {
 }
 
 # "host:port" - an IPv6 host in brackets, "[::1]:8080" - read into an Addr, failing with ADDRESS for anything else
-fn Addr.Parse(t String&) Addr ? Error.Address {
+fn ParseAddr(t String&) Addr ? Error.Address {
+    return try hostPort(t) catch noAddress { error Error.Address(t) }
+}
+
+fn hostPort(t String&) Addr ? noAddress {
     if t.Len() > 0 and t[0] == '[' {
-        shut := try t.FindByte(']') catch { error Error.Address }
-        if shut + 1 >= t.Len() or t[shut + 1] != ':' { error Error.Address }
-        host := try IP.parse6(t[1:shut])
+        shut := try t.FindByte(']') catch { error noAddress }
+        if shut + 1 >= t.Len() or t[shut + 1] != ':' { error noAddress }
+        host := try parse6(t[1:shut])
         port, end := try decimalAt(t, shut + 2, 65535)
-        if end != t.Len() { error Error.Address }
+        if end != t.Len() { error noAddress }
         return Addr(host, U16(port))
     }
-    colon := try t.FindLast(":") catch { error Error.Address }
-    host := try IP.Parse(t[:colon])
-    if host.V6 { error Error.Address }              # an IPv6 host is written in brackets
+    colon := try t.FindLast(":") catch { error noAddress }
+    host := try ParseIP(t[:colon]) catch Error.Address { error noAddress }
+    if host.V6 { error noAddress }                  # an IPv6 host is written in brackets
     port, end := try decimalAt(t, colon + 1, 65535)
-    if end != t.Len() { error Error.Address }
+    if end != t.Len() { error noAddress }
     return Addr(host, U16(port))
 }
 
@@ -320,7 +326,7 @@ fn Addr.fromSockaddr(sa Array<U8>&) Addr {
 # a new socket of the kind for a's family - an IPv6 one taking IPv4 connections too where a is IPv6's "any" address
 fn open(a Addr&, kind I32) I32 ? Error {
     fd := sock.socket(afInet6 if a.Host.V6 else afInet, kind | sockCloexec, 0)
-    if fd < 0 { try raise(__olang_err()) }
+    if fd < 0 { try raise(__olang_err(), $a) }
     return fd
 }
 
@@ -346,9 +352,9 @@ fn Addr.nameOf(fd I32, peer Bool) Addr ? Error {
 
 # getaddrinfo's answers that say the name has no address: EAI_NONAME, EAI_NODATA, EAI_FAIL, EAI_ADDRFAMILY (glibc's
 # numbers); EAI_AGAIN is the name server not answering
-fn lookupFailed(rc I32) ? Error.UnknownHost, Error.Unreachable, Error.Failed {
+fn lookupFailed(rc I32, host String&) ? Error.UnknownHost, Error.Unreachable, Error.Failed {
     match rc {
-        case -2, -5, -4, -9 { error Error.UnknownHost }
+        case -2, -5, -4, -9 { error Error.UnknownHost(host) }
         case -3 { error Error.Unreachable }
         case _ { error Error.Failed }
     }
@@ -357,7 +363,7 @@ fn lookupFailed(rc I32) ? Error.UnknownHost, Error.Unreachable, Error.Failed {
 # every address a name has - the C library's answer (its hosts file, then DNS), in its order, each once. A name that is
 # an address already is that address, asked of no one; an empty name or one with no address fails with UnknownHost
 fn Lookup(host String&) Array<IP> ? Error.UnknownHost, Error.Unreachable, Error.Failed {
-    if host == "" { error Error.UnknownHost }
+    if host == "" { error Error.UnknownHost(host) }
     if host != "localhost" {
         numeric := true
         ip := try IP.Parse(host) catch { numeric = false } default IP()
@@ -367,7 +373,7 @@ fn Lookup(host String&) Array<IP> ? Error.UnknownHost, Error.Unreachable, Error.
     hints.ai_socktype = sockStream
     out := Array<CVoid?&>(1)
     rc := netdb.getaddrinfo(host.ToC(), "0".ToC(), hints, out)
-    if rc != 0 { try lookupFailed(rc) }
+    if rc != 0 { try lookupFailed(rc, host) }
     head := out[0]
     ips := Vec<IP>()
     p := head
@@ -384,17 +390,17 @@ fn Lookup(host String&) Array<IP> ? Error.UnknownHost, Error.Unreachable, Error.
         p = f.ai_next
     }
     if head is not null { netdb.freeaddrinfo(head) }
-    if ips.Len() == 0 { error Error.UnknownHost }
+    if ips.Len() == 0 { error Error.UnknownHost(host) }
     return ips.ToArray()
 }
 
 # "host:port" - a name or an address, an IPv6 one in brackets - read into the Addr of the host's first address, failing
 # with ADDRESS for text of another shape and as Lookup does for a name with no address
-fn Addr.Resolve(t String&) Addr ? Error.Address, Error.UnknownHost, Error.Unreachable, Error.Failed {
-    if t.Len() > 0 and t[0] == '[' { return try Addr.Parse(t) }
-    colon := try t.FindLast(":") catch { error Error.Address }
-    port, end := try decimalAt(t, colon + 1, 65535)
-    if end != t.Len() { error Error.Address }
+fn Resolve(t String&) Addr ? Error.Address, Error.UnknownHost, Error.Unreachable, Error.Failed {
+    if t.Len() > 0 and t[0] == '[' { return try ParseAddr(t) }
+    colon := try t.FindLast(":") catch { error Error.Address(t) }
+    port, end := try decimalAt(t, colon + 1, 65535) catch noAddress { error Error.Address(t) }
+    if end != t.Len() { error Error.Address(t) }
     ips := try Lookup(t[:colon])
     return Addr(ips[0], U16(port))
 }
@@ -427,7 +433,7 @@ fn Listener.Listen(a Addr&, backlog I32 = 128) mut Listener& ? Error {
     if sock.bind(fd, sa, U32(sa.Len())) < 0 or sock.listen(fd, backlog) < 0 {
         why := __olang_err()
         unistd.close(fd)
-        try raise(why)
+        try raise(why, $a)
     }
     return Listener(fd)
 }
@@ -454,7 +460,7 @@ fn Conn.Dial(a Addr&) mut Conn& ? Error {
     if sock.connect(fd, sa, U32(sa.Len())) < 0 {
         why := __olang_err()
         unistd.close(fd)
-        try raise(why)
+        try raise(why, $a)
     }
     return Conn(fd)
 }
@@ -524,7 +530,7 @@ fn UDP.Listen(a Addr&) mut UDP& ? Error {
     if sock.bind(fd, sa, U32(sa.Len())) < 0 {
         why := __olang_err()
         unistd.close(fd)
-        try raise(why)
+        try raise(why, $a)
     }
     return UDP(fd)
 }
@@ -533,7 +539,7 @@ fn UDP.Listen(a Addr&) mut UDP& ? Error {
 fn (u UDP&) SendTo(data Array<U8>&, a Addr&) ? Error {
     sa := sockaddr(a)
     for sock.sendto(u.fd, data, U64(data.Len()), msgNosignal, sa, U32(sa.Len())) < 0 {
-        if not interrupted() { try raise(__olang_err()) }
+        if not interrupted() { try raise(__olang_err(), $a) }
     }
 }
 
@@ -586,6 +592,22 @@ test "addresses are read and written as text" {
         try Addr.Parse(bad) catch Error.Address { continue }
         unreachable
     }
+}
+
+# what refusing t says ($e: this file the root here, so unqualified)
+fn refused(t String&) String {
+    try ParseAddr(t) catch Error e { return $e }
+    return "ok"
+}
+
+RefusedBaked String = refused("::1:80")
+
+test Error "an address refused carries the text, a name not found the name" {
+    assert RefusedBaked == "Error.Address(\"::1:80\")"
+    assert refused("1.2.3.4:x") == "Error.Address(\"1.2.3.4:x\")" and refused("[::1]:443") == "ok"
+    try ParseIP("256.1.1.1") catch Error.Address e { assert e.text == "256.1.1.1" }
+    try IPv6(U8[1, 2]) catch Error.Address e { assert e.text == "U8[1, 2]" }
+    try Lookup("") catch Error.UnknownHost e { assert e.host == "" } catch { unreachable "an empty name" }
 }
 
 test "names are resolved through the C library, numbers read as they are" {

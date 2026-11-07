@@ -1032,13 +1032,15 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             v := ln.val(x)
             if not ln.dead {
                 l := ln.local(v, x.Type(), sp)
-                nz := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(l)), mir.Operand.Const(x.Type(), 0)], sp)
+                code := ln.into(mir.I32T, mir.Rvalue.Use(ln.errCodeOf(l, x.Type())), sp)
+                nz := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[code, mir.Operand.Const(mir.I32T, 0)], sp)
                 some, none := ln.F.NewBlock(), ln.F.NewBlock()
                 ln.end(mir.Term.Branch(nz, some, none))
                 ln.start(none)
                 ln.end(mir.Term.Exit(sp, mir.ExitKind.NullError, mir.Operand.None))
                 ln.start(some)
-                v = mir.Operand.Copy(mir.Lvalue.L(l))
+                ln.pushHeld(l, x.Type(), code, sp)   # T19b: what it holds raised with it
+                v = code
             }
             if not ln.dead and ln.T.Items(ln.T.Errors(ln.B.Ty)).Len() > 0 {
                 ln.raise(sp, ln.into(mir.I32T, mir.Rvalue.Recode(v, from, ln.T.Errors(ln.B.Ty)), sp))
@@ -1532,11 +1534,46 @@ fn (ln mut lowering&) raise(sp source.Span, code mir.Operand) {
         return
     }
     l := ln.local(code, mir.I32T, sp)
+    if ln.isMain() { ln.mainPayloads(mir.Operand.Copy(mir.L(l)), sp) }
     was := ln.erroring
     ln.erroring = true
     ln.leave(0)
     ln.erroring = was
     ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.Lvalue.L(l))))
+}
+
+# whether the body being lowered is the program's main
+fn (ln mut lowering&) isMain() Bool {
+    p := ln.L.P
+    match ln.B.Of {
+        case typed.BodyOf.Fn(inst) {
+            f := p.InstanceFn(inst)
+            return p.FnModule(f) == p.L.Root and ln.T.Names.Text(p.FnDecl(f).Name) == "main"
+        }
+        case _ { return false }
+    }
+}
+
+# B5, T19b: an error leaving main whose word carries a payload is said here, with its payload ("unhandled error:
+# PErr.Bad(3, 7)"), the program ending with the status 1 - the words carrying none go on to main's caller, which names
+# them by their codes
+fn (ln mut lowering&) mainPayloads(code mir.Operand, sp source.Span) {
+    mine := ln.T.Errors(ln.B.Ty)
+    xs := ln.bangNames(mine, sp)
+    for i in range 0, xs.Len(), 2 {
+        k := match xs[i] {
+            case mir.Operand.Const(_, bits): bits
+            case _: 0
+        }
+        et := ln.T.ErrOf(ln.T.Items(mine)[(k >> 16) - 1])
+        if ln.L.P.PayloadOf(et) == types.UnknownT or ln.L.P.WordFields(ln.T.DeclOf(et), k & 65535).Len() == 0: continue
+        yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[code, xs[i]], sp), yes, no))
+        ln.start(yes)
+        ln.emit(mir.Stmt.Raised(sp))   # (S18d: where it leaves main, as a Raise would say)
+        ln.end(mir.Term.Exit(sp, mir.ExitKind.Unhandled, ln.withPayload(xs[i], xs[i + 1], mine, sp)))
+        ln.start(no)
+    }
 }
 
 # an assert (S17, S18): the test, its message computed only on the failing path
@@ -1946,10 +1983,42 @@ fn (ln mut lowering&) bang(code mir.Operand, from types.ListId, sp source.Span, 
         same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[code, xs[i]], sp)
         ln.end(mir.Term.Branch(same, yes, no))
         ln.start(yes)
-        ln.end(mir.Term.Exit(sp, kind, xs[i + 1]))
+        ln.end(mir.Term.Exit(sp, kind, ln.withPayload(xs[i], xs[i + 1], from, sp)))
         ln.start(no)
     }
     ln.end(mir.Term.Exit(sp, kind, ln.textData("unhandled error", sp)))
+}
+
+# T19b: what "!", a test's FAIL line and an escaping error say of error code c (a constant of list from): its name as
+# constant text, or, for a word carrying a payload, the name then the payload the top of the payload stack holds, as "$"
+# renders an error value ("json.Error.Unexpected(3, 14)") - text made in the program's scope, the program ending
+fn (ln mut lowering&) withPayload(c mir.Operand, name mir.Operand, from types.ListId, sp source.Span) mir.Operand {
+    t := ln.T
+    p := ln.L.P
+    code := match c {
+        case mir.Operand.Const(_, bits): bits
+        case _: 0
+    }
+    xs := t.Items(from)
+    j := (code >> 16) - 1
+    w := code & 65535
+    if j < 0 or j >= xs.Len(): return name
+    et := t.ErrOf(xs[j])
+    pt := p.PayloadOf(et)
+    if pt == types.UnknownT or p.WordFields(t.DeclOf(et), w).Len() == 0: return name
+    d := t.DeclOf(et)
+    dm := t.DeclModule(d)
+    b := ln.F.AddScope(mir.ScopeKind.Builder, ln.top().S, typed.BlockId(-1), sp)
+    ln.emit(mir.Stmt.Open(sp, b))
+    bref := mir.ScopeRef.Scope(b)
+    ln.word(bref, $load.ErrQualifier(p.L.Mods[dm].Identity, dm == p.L.Root) $p.ErrorWordName(d, w), sp)
+    rt := t.Ref(pt, types.ReadOnly)
+    r := ln.local(ln.into(rt, mir.Rvalue.ErrTop(rt), sp), rt, sp)
+    ln.renderPayload(ln.with(pl(mir.Base.Local(r)), mir.Proj.Deref), w, t.Items(t.Cases(pt))[w], bref, sp)
+    txt := ln.into(ln.L.text(), mir.Rvalue.Text(bref, mir.ScopeRef.Program, ln.L.text()), sp)
+    ln.emit(mir.Stmt.Close(sp, b))
+    tr := t.Ref(ln.L.text(), types.ReadOnly)
+    return ln.into(tr, mir.Rvalue.New(mir.ScopeRef.Program, txt, tr), sp)
 }
 
 # the errors of list from as "!" names them: for each word, its code (an I32 constant) and its name as text data
@@ -1970,6 +2039,144 @@ fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(
         }
     }
     return out.ToArray()
+}
+
+# ---- payloads (T19b) ----
+
+# the code an error value local x of type ty holds: the value itself, or its tuple's first part
+fn (ln mut lowering&) errCodeOf(x mir.LocalId, ty types.TypeId) mir.Operand {
+    if not ln.T.ErrCarries(ty): return mir.Operand.Copy(mir.L(x))
+    return mir.Operand.Copy(ln.mk(ln.with(pl(mir.Base.Local(x)), mir.Proj.Field(0))))
+}
+
+# the positions, from 0, of the error types of list l whose words carry payloads - an error of one of them has a record
+# on the payload stack from its raise until it is taken
+fn (ln mut lowering&) carrying(l types.ListId) Vec<I64> {
+    out Vec<I64>
+    xs := ln.T.Items(l)
+    for j in range xs.Len() {
+        if ln.L.P.PayloadOf(ln.T.ErrOf(xs[j])) != types.UnknownT: out.Push(j)
+    }
+    return out
+}
+
+# whether error code (under its list) is of the type at position j of the list
+fn (ln mut lowering&) typeIs(code mir.Operand, j I64, sp source.Span) mir.Operand {
+    hi := ln.prim(typed.PrimOp.Shr, mir.I32T, mir.Operand[code, mir.Operand.Const(mir.I32T, 16)], sp)
+    return ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[hi, mir.Operand.Const(mir.I32T, j + 1)], sp)
+}
+
+# whether error code of list l carries a payload; None where no type of l does
+fn (ln mut lowering&) carries(code mir.Operand, l types.ListId, sp source.Span) mir.Operand {
+    got := mir.Operand.None
+    for j in ln.carrying(l) {
+        one := ln.typeIs(code, j, sp)
+        got = one if got == mir.Operand.None else ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[got, one], sp)
+    }
+    return got
+}
+
+# the payload record of error code (of list l) popped where its type carries one
+fn (ln mut lowering&) popIf(code mir.Operand, l types.ListId, sp source.Span) {
+    c := ln.carries(code, l, sp)
+    if c == mir.Operand.None: return
+    yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(c, yes, no))
+    ln.start(yes)
+    ln.emit(mir.Stmt.ErrPop(sp))
+    ln.goto(no)
+    ln.start(no)
+}
+
+# T19b: the payload error value local l (of type ty, its code code) holds for its error's type, pushed - "error e"
+fn (ln mut lowering&) pushHeld(l mir.LocalId, ty types.TypeId, code mir.Operand, sp source.Span) {
+    t := ln.T
+    if not t.ErrCarries(ty): return
+    set := t.Items(t.ErrValItems(ty))
+    for j in range set.Len() {
+        pt := ln.L.P.PayloadOf(t.ErrOf(set[j]))
+        if pt == types.UnknownT: continue
+        yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(ln.typeIs(code, j, sp), yes, no))
+        ln.start(yes)
+        part := mir.Operand.Copy(ln.mk(ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(ln.L.P.PayloadField(ty, j)))))
+        ln.errPush(part, pt, sp)
+        ln.goto(no)
+        ln.start(no)
+    }
+}
+
+# T19b: error value v of type from as one of type to (T20): its code recoded (R6) and, for a set carrying payloads, the
+# payload of its code's type moved into the target's part for that type - every other part its zero
+fn (ln mut lowering&) errConvert(v mir.Operand, from types.TypeId, to types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    x := ln.local(v, from, sp)
+    code := ln.into(mir.I32T, mir.Rvalue.Recode(ln.errCodeOf(x, from), t.ErrValItems(from), t.ErrValItems(to)), sp)
+    if not t.ErrCarries(to): return code
+    res := ln.temp(to, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(mir.Operand.Const(to, 0))))
+    rp := pl(mir.Base.Local(res))
+    ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(rp, mir.Proj.Field(0))), mir.Rvalue.Use(code)))
+    if not t.ErrCarries(from): return mir.Operand.Copy(mir.L(res))
+    fs := t.Items(t.ErrValItems(from))
+    ts := t.Items(t.ErrValItems(to))
+    for i in range fs.Len() {
+        et := t.ErrOf(fs[i])
+        if ln.L.P.PayloadOf(et) == types.UnknownT: continue
+        for j in range ts.Len() {
+            if t.ErrOf(ts[j]) != et: continue
+            # (an error of type et, under from at i, is under to at j: its part moved across where its code says so)
+            yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+            ln.end(mir.Term.Branch(ln.typeIs(code, j, sp), yes, no))
+            ln.start(yes)
+            src := mir.Operand.Copy(ln.mk(ln.with(pl(mir.Base.Local(x)), mir.Proj.Field(ln.L.P.PayloadField(from, i)))))
+            ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(rp, mir.Proj.Field(ln.L.P.PayloadField(to, j)))), mir.Rvalue.Use(src)))
+            ln.goto(no)
+            ln.start(no)
+        }
+    }
+    return mir.Operand.Copy(mir.L(res))
+}
+
+# payload v (a payload enum's value, of type pt) pushed: a record on top of the payload stack, v's own copy built in its
+# region, the record pointing at it
+fn (ln mut lowering&) errPush(v mir.Operand, pt types.TypeId, sp source.Span) {
+    h := ln.temp(mir.I64T, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(h), mir.Rvalue.ErrPush))
+    at := mir.ScopeRef.Held(h)
+    # (the copy's calls placed beside the raise, never at its span, which the trace reads as the raise's own - S18d)
+    own := ln.ownCopyOf(v, pt, at, source.Span(sp.Start + 1, sp.End))
+    rt := ln.T.Ref(pt, types.ReadOnly)
+    r := ln.into(rt, mir.Rvalue.New(at, own, rt), sp)
+    ln.emit(mir.Stmt.ErrSet(sp, r))
+}
+
+# a clause's error value v (of type ty, its code set) with the payload its error carries read off the top of the stack -
+# shallow, the stack's own; every other payload part its zero
+fn (ln mut lowering&) errCaught(v mir.Operand, ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    x := ln.local(v, ty, sp)
+    res := ln.temp(ty, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(mir.Operand.Const(ty, 0))))
+    code := ln.into(mir.I32T, mir.Rvalue.Use(ln.errCodeOf(x, ty)), sp)
+    rp := pl(mir.Base.Local(res))
+    ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(rp, mir.Proj.Field(0))), mir.Rvalue.Use(code)))
+    set := t.Items(t.ErrValItems(ty))
+    for j in range set.Len() {
+        pt := ln.L.P.PayloadOf(t.ErrOf(set[j]))
+        if pt == types.UnknownT: continue
+        f := ln.L.P.PayloadField(ty, j)
+        yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(ln.typeIs(code, j, sp), yes, no))
+        ln.start(yes)
+        rt := t.Ref(pt, types.ReadOnly)
+        r := ln.local(ln.into(rt, mir.Rvalue.ErrTop(rt), sp), rt, sp)
+        top := ln.F.Place(mir.Base.Local(r), mir.Proj[mir.Proj.Deref])
+        ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(rp, mir.Proj.Field(f))), mir.Rvalue.Use(mir.Operand.Copy(top))))
+        ln.goto(no)
+        ln.start(no)
+    }
+    return mir.Operand.Copy(mir.L(res))
 }
 
 # text as constant data (T25d), a String&
@@ -2071,10 +2278,22 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
 # (R11b), then the scopes opened since the try closed, then a jump to the clause's entry
 fn (ln mut lowering&) toClause(ti I64, ci I64, code mir.Operand, from types.ListId) {
     cl := ln.tries.Ref(ti).Clauses[ci]
+    named := false
     if cl.Caught >= 0 {
-        bind := mir.Lvalue.L(mir.LocalId(I32(cl.Caught)))
-        ln.emit(mir.Stmt.Assign(cl.Sp, bind, mir.Rvalue.Recode(code, from, cl.CaughtSet)))
+        bl := mir.LocalId(I32(cl.Caught))
+        bt := ln.F.Locals[I64(bl)].Ty
+        if ln.T.ErrCarries(bt) {
+            # T19b: its code here; the clause's block gives it its payload and pops the record (check's caughtPayload)
+            named = true
+            ln.emit(mir.Stmt.Assign(cl.Sp, mir.L(bl), mir.Rvalue.Use(mir.Operand.Const(bt, 0))))
+            at := ln.mk(ln.with(pl(mir.Base.Local(bl)), mir.Proj.Field(0)))
+            ln.emit(mir.Stmt.Assign(cl.Sp, at, mir.Rvalue.Recode(code, from, cl.CaughtSet)))
+        } else {
+            ln.emit(mir.Stmt.Assign(cl.Sp, mir.L(bl), mir.Rvalue.Recode(code, from, cl.CaughtSet)))
+        }
     }
+    # T19b: a clause taking an error whose type carries a payload, and naming none, pops its record
+    if not named: ln.popIf(code, from, cl.Sp)
     was := ln.erroring
     ln.erroring = true
     ln.leave(ln.tries.Ref(ti).Depth)
@@ -4292,6 +4511,25 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         }
         return ln.prim(op, ty, mir.Operand[x], sp)
     }
+    if op == typed.PrimOp.ErrPush {
+        # T19b: the payload of the error raised next, on the thread's payload stack - its own copy, in its record's region
+        v := ln.val(args[0])
+        if ln.dead { return mir.Operand.None }
+        ln.errPush(v, args[0].Type(), sp)
+        return mir.Operand.None
+    }
+    if op == typed.PrimOp.ErrCaught {
+        v := ln.val(args[0])
+        if ln.dead { return mir.Operand.None }
+        return ln.errCaught(v, ty, sp)
+    }
+    if op == typed.PrimOp.ErrTaken {
+        v := ln.val(args[0])
+        if ln.dead { return mir.Operand.None }
+        x := ln.local(v, args[0].Type(), sp)
+        ln.popIf(ln.errCodeOf(x, args[0].Type()), ln.T.ErrValItems(args[0].Type()), sp)
+        return mir.Operand.None
+    }
     if op == typed.PrimOp.Drop {
         # O15, T13b: a by-value holder letting go - the value's destructors run in the closing block's scope (C9a)
         match args[0] {
@@ -4386,11 +4624,19 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
     if ln.dead { return mir.Operand.None }
     # T20: an error value made one of a set holding it - its code renumbered (R6)
     if op == typed.PrimOp.Convert and args.Len() == 1 and t.KindOf(ty) == types.Kind.ErrVal and t.KindOf(args[0].Type()) == types.Kind.ErrVal {
+        if t.ErrCarries(ty) or t.ErrCarries(args[0].Type()): return ln.errConvert(ops[0], args[0].Type(), ty, sp)
         return ln.into(ty, mir.Rvalue.Recode(ops[0], t.ErrValItems(args[0].Type()), t.ErrValItems(ty)), sp)
     }
     if ln.widening(op, args, ty) { return ln.widen(ops[0], args[0].Type(), ty, sp, ln.innermost()) }
     if op == typed.PrimOp.IsCase and t.IsRef(t.Repr(args[0].Type())) { return ln.isCaseRef(ops[0], args[0].Type(), ops[1], sp) }
     if chk != typed.Check.None { ln.primChecks(op, chk, ops, args, ty, sp) }
+    if (op == typed.PrimOp.Eq or op == typed.PrimOp.Ne) and args.Len() == 2 and t.ErrCarries(args[0].Type()) {
+        # T19b: error values carrying payloads equal where their codes and their payloads do (E10)
+        et := args[0].Type()
+        x, y := ln.local(ops[0], et, sp), ln.local(ops[1], et, sp)
+        e := ln.equalAt(pl(mir.Base.Local(x)), pl(mir.Base.Local(y)), et, sp)
+        return e if op == typed.PrimOp.Eq else ln.prim(typed.PrimOp.Not, types.BoolT, mir.Operand[e], sp)
+    }
     return ln.prim(op, ty, ops, sp)
 }
 
@@ -4698,10 +4944,18 @@ fn (ln mut lowering&) renderErr(b mir.ScopeRef, v mir.Operand, ty types.TypeId, 
     t := ln.T
     p := ln.L.P
     x := ln.local(v, ty, sp)
+    code := ln.into(mir.I32T, mir.Rvalue.Use(ln.errCodeOf(x, ty)), sp)
     codes Vec<I64>
     texts Vec<String&>
     codes.Push(0)
     texts.Push("null")
+    # T19b: a word carrying a payload renders it after its name, as an enum case's ("ParseError.Bad(3, 7)")
+    pays Vec<I64>     # the payload part of the word at each index, 0 for none
+    tags Vec<I64>
+    recs Vec<types.TypeId>
+    pays.Push(0)
+    tags.Push(0)
+    recs.Push(types.TypeId(0))
     es := t.Items(t.ErrValItems(ty))
     for j in range es.Len() {
         et := t.ErrOf(es[j])
@@ -4709,28 +4963,40 @@ fn (ln mut lowering&) renderErr(b mir.ScopeRef, v mir.Operand, ty types.TypeId, 
         dm := t.DeclModule(d)
         q := load.ErrQualifier(p.L.Mods[dm].Identity, dm == p.L.Root)
         ws := p.ErrorWords(d)
+        pt := p.PayloadOf(et)
         for w in range ws.Len() {
             if w < 64 and (t.ErrMask(es[j]) & (U64(1) << w)) == 0 { continue }
             codes.Push(((j + 1) << 16) | w)
             texts.Push($q $p.ErrorWordName(d, w))
+            carried := pt != types.UnknownT and p.WordFields(d, w).Len() > 0
+            pays.Push(p.PayloadField(ty, j) if carried else 0)
+            tags.Push(w)
+            recs.Push(t.Items(t.Cases(pt))[w] if carried else types.TypeId(0))
         }
     }
     after := ln.F.NewBlock()
     for i in range codes.Len() {
-        if i == codes.Len() - 1 {
-            ln.word(b, texts[i], sp)
+        last := i == codes.Len() - 1
+        if not last {
+            hit := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[code, mir.Operand.Const(mir.I32T, codes[i])], sp)
+            yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+            ln.end(mir.Term.Branch(hit, yes, no))
+            ln.start(yes)
+            ln.errWord(b, x, texts[i], pays[i], tags[i], recs[i], sp)
             ln.goto(after)
-            break
+            ln.start(no)
+            continue
         }
-        hit := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(x)), mir.Operand.Const(ty, codes[i])], sp)
-        yes, no := ln.F.NewBlock(), ln.F.NewBlock()
-        ln.end(mir.Term.Branch(hit, yes, no))
-        ln.start(yes)
-        ln.word(b, texts[i], sp)
+        ln.errWord(b, x, texts[i], pays[i], tags[i], recs[i], sp)
         ln.goto(after)
-        ln.start(no)
     }
     ln.start(after)
+}
+
+# an error word's name written, then the payload error value x holds in part f (0 for none), the case tag of record rec
+fn (ln mut lowering&) errWord(b mir.ScopeRef, x mir.LocalId, text String&, f I64, tag I64, rec types.TypeId, sp source.Span) {
+    ln.word(b, text, sp)
+    if f > 0: ln.renderPayload(ln.with(pl(mir.Base.Local(x)), mir.Proj.Field(f)), tag, rec, b, sp)
 }
 
 # text: an array of Chars, or a reference to one - what a Bytes write appends
@@ -5413,7 +5679,8 @@ fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = f
 fn (ln mut lowering&) hashErr(v mir.Operand, ty types.TypeId, sp source.Span) mir.Operand {
     t := ln.T
     p := ln.L.P
-    x := ln.asI64(v, ty, sp)
+    l := ln.local(v, ty, sp)
+    x := ln.asI64(ln.into(mir.I32T, mir.Rvalue.Use(ln.errCodeOf(l, ty)), sp), mir.I32T, sp)
     hi := ln.prim(typed.PrimOp.Shr, mir.I64T, mir.Operand[x, ln.constI64(16)], sp)
     w := ln.prim(typed.PrimOp.BitAnd, mir.I64T, mir.Operand[x, ln.constI64(65535)], sp)
     res := ln.temp(mir.I64T, sp)
@@ -5428,7 +5695,13 @@ fn (ln mut lowering&) hashErr(v mir.Operand, ty types.TypeId, sp source.Span) mi
         ln.end(mir.Term.Branch(hit, yes, no))
         ln.start(yes)
         h := ln.mix(ln.prim(typed.PrimOp.BitXor, mir.I64T, mir.Operand[ln.constI64(key), w], sp), sp)
-        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(res), mir.Rvalue.Use(h)))
+        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(h)))
+        # T19b: and what its payload holds - hashing follows equality (E10b)
+        pt := p.PayloadOf(t.ErrOf(es[j]))
+        if pt != types.UnknownT {
+            part := ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(p.PayloadField(ty, j)))
+            ln.combine(res, ln.hashAt(part, pt, sp), sp)
+        }
         ln.goto(after)
         ln.start(no)
     }

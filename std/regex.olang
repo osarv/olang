@@ -31,17 +31,18 @@ import "utf8"
 
 # why a pattern does not compile: a group or class not closed, an escape that is not one, a repetition with nothing
 # to repeat or a count past 1000 or inverted, a class range written backwards, a group name repeated or not a name, a
-# flag that is not one, or a program too large (over 100,000 instructions once counted repetitions are written out)
+# flag that is not one, or a program too large (over 100,000 instructions once counted repetitions are written out);
+# each carries the byte offset in the pattern where reading stopped (TooBig 0: the whole pattern is too large)
 type SyntaxError error {
-    UnclosedGroup
-    UnmatchedParen
-    UnclosedClass
-    BadEscape
-    BadRepeat
-    BadRange
-    BadName
-    BadFlag
-    TooBig
+    UnclosedGroup(at I64)
+    UnmatchedParen(at I64)
+    UnclosedClass(at I64)
+    BadEscape(at I64)
+    BadRepeat(at I64)
+    BadRange(at I64)
+    BadName(at I64)
+    BadFlag(at I64)
+    TooBig(at I64)
 }
 
 # Find fails with NotFound, an error raised by name (R3b), when the pattern matches nowhere, and Group when a group took
@@ -240,12 +241,12 @@ fn (q mut parser&) escapedRune(c Char) U32 ? SyntaxError.BadEscape {
                     v = v * 16 + hexValue(q.peek())
                     q.at++
                 }
-                if q.at == start or not q.more() or q.peek() != '}' or v > 0x10FFFF { error SyntaxError.BadEscape }
+                if q.at == start or not q.more() or q.peek() != '}' or v > 0x10FFFF { error SyntaxError.BadEscape(q.at) }
                 q.at++
                 return U32(v)
             }
             for _ in range 2 {
-                if not q.more() or hexValue(q.peek()) < 0 { error SyntaxError.BadEscape }
+                if not q.more() or hexValue(q.peek()) < 0 { error SyntaxError.BadEscape(q.at) }
                 v = v * 16 + hexValue(q.peek())
                 q.at++
             }
@@ -253,7 +254,7 @@ fn (q mut parser&) escapedRune(c Char) U32 ? SyntaxError.BadEscape {
         }
         case _ {
             # any punctuation escapes itself; a letter or digit with no meaning is an error, as in RE2
-            if c.IsLetter() or c.IsDigit() or c >= 0x80 { error SyntaxError.BadEscape }
+            if c.IsLetter() or c.IsDigit() or c >= 0x80 { error SyntaxError.BadEscape(q.at) }
             return U32(c)
         }
     }
@@ -261,7 +262,7 @@ fn (q mut parser&) escapedRune(c Char) U32 ? SyntaxError.BadEscape {
 
 # the ranges of [:name:], at the parser just after "[:"
 fn (q mut parser&) posixClass() ? SyntaxError.UnclosedClass, SyntaxError.BadRange {
-    end := try q.t[q.at:].Find(":]") catch TextError { error SyntaxError.UnclosedClass }
+    end := try q.t[q.at:].Find(":]") catch TextError { error SyntaxError.UnclosedClass(q.at) }
     name := q.t[q.at:q.at + end]
     q.at += end + 2
     match name {
@@ -304,7 +305,7 @@ fn (q mut parser&) posixClass() ? SyntaxError.UnclosedClass, SyntaxError.BadRang
             q.addRange('A', 'F')
             q.addRange('a', 'f')
         }
-        case _ { error SyntaxError.BadRange }
+        case _ { error SyntaxError.BadRange(q.at) }
     }
 }
 
@@ -318,7 +319,7 @@ fn (q mut parser&) class() I64 ? SyntaxError {
     from := q.p.ranges.Len()
     first := true
     for {
-        if not q.more() { error SyntaxError.UnclosedClass }
+        if not q.more() { error SyntaxError.UnclosedClass(q.at) }
         c := q.peek()
         if c == ']' and not first {
             q.at++
@@ -333,7 +334,7 @@ fn (q mut parser&) class() I64 ? SyntaxError {
         lo U32 = 0
         if c == '\\' {
             q.at++
-            if not q.more() { error SyntaxError.BadEscape }
+            if not q.more() { error SyntaxError.BadEscape(q.at) }
             e := q.peek()
             q.at++
             if q.perlClass(e) { continue }
@@ -350,14 +351,14 @@ fn (q mut parser&) class() I64 ? SyntaxError {
             q.at++
             if q.peek() == '\\' {
                 q.at++
-                if not q.more() { error SyntaxError.BadEscape }
+                if not q.more() { error SyntaxError.BadEscape(q.at) }
                 e := q.peek()
                 q.at++
                 hi = try q.escapedRune(e)
             } else {
                 hi = q.rune()
             }
-            if hi < lo { error SyntaxError.BadRange }
+            if hi < lo { error SyntaxError.BadRange(q.at) }
         }
         q.addRange(lo, hi)
     }
@@ -403,10 +404,10 @@ fn (q mut parser&) atom() I64 ? SyntaxError {
         if c == '^' { n.a = atLineStart if q.multi else atTextStart } else { n.a = atLineEnd if q.multi else atTextEnd }
         return q.add(n)
     }
-    if c == '*' or c == '+' or c == '?' { error SyntaxError.BadRepeat }
+    if c == '*' or c == '+' or c == '?' { error SyntaxError.BadRepeat(q.at) }
     if c == '\\' {
         q.at++
-        if not q.more() { error SyntaxError.BadEscape }
+        if not q.more() { error SyntaxError.BadEscape(q.at) }
         e := q.peek()
         q.at++
         if e == 'b' or e == 'B' or e == 'A' or e == 'z' {
@@ -479,7 +480,7 @@ fn (q mut parser&) repeated() I64 ? SyntaxError {
                 break
             }
             q.at++
-            if min > maxRepeat or max > maxRepeat or (max >= 0 and max < min) { error SyntaxError.BadRepeat }
+            if min > maxRepeat or max > maxRepeat or (max >= 0 and max < min) { error SyntaxError.BadRepeat(q.at) }
         } else {
             break
         }
@@ -491,7 +492,7 @@ fn (q mut parser&) repeated() I64 ? SyntaxError {
             n.greedy = false
             q.at++
         }
-        if q.nodes[a].kind == nRepeat or q.nodes[a].kind == nEmpty { error SyntaxError.BadRepeat }
+        if q.nodes[a].kind == nRepeat or q.nodes[a].kind == nEmpty { error SyntaxError.BadRepeat(q.at) }
         a = q.add(n)
     }
     return a
@@ -559,11 +560,11 @@ fn (q mut parser&) flags() Bool ? SyntaxError.BadFlag {
         } else {
             q.at = save
             if c == 'P' or c == '<' { return false }
-            error SyntaxError.BadFlag
+            error SyntaxError.BadFlag(q.at)
         }
         q.at++
     }
-    error SyntaxError.BadFlag
+    error SyntaxError.BadFlag(q.at)
 }
 
 # a group, the parser just after its '('
@@ -576,17 +577,17 @@ fn (q mut parser&) group() I64 ? SyntaxError {
         q.at++
         if q.more() and (q.peek() == 'P' or q.peek() == '<') {
             if q.peek() == 'P' { q.at++ }
-            if not q.more() or q.peek() != '<' { error SyntaxError.BadName }
+            if not q.more() or q.peek() != '<' { error SyntaxError.BadName(q.at) }
             q.at++
-            end := try q.t[q.at:].FindByte('>') catch TextError { error SyntaxError.BadName }
+            end := try q.t[q.at:].FindByte('>') catch TextError { error SyntaxError.BadName(q.at) }
             name := q.t[q.at:q.at + end]
             q.at += end + 1
-            if name.Len() == 0 or name[0].IsDigit() { error SyntaxError.BadName }
+            if name.Len() == 0 or name[0].IsDigit() { error SyntaxError.BadName(q.at) }
             for c in name {
-                if not (c.IsLetter() or c.IsDigit() or c == '_') { error SyntaxError.BadName }
+                if not (c.IsLetter() or c.IsDigit() or c == '_') { error SyntaxError.BadName(q.at) }
             }
             for other in q.p.names.View() {
-                if other == name { error SyntaxError.BadName }
+                if other == name { error SyntaxError.BadName(q.at) }
             }
             capture = q.groups
             q.groups++
@@ -594,7 +595,7 @@ fn (q mut parser&) group() I64 ? SyntaxError {
         } else {
             on := true
             for {
-                if not q.more() { error SyntaxError.UnclosedGroup }
+                if not q.more() { error SyntaxError.UnclosedGroup(q.at) }
                 c := q.peek()
                 q.at++
                 if c == ':' { break }
@@ -607,7 +608,7 @@ fn (q mut parser&) group() I64 ? SyntaxError {
                 } else if c == 's' {
                     q.dotAll = on
                 } else {
-                    error SyntaxError.BadFlag
+                    error SyntaxError.BadFlag(q.at)
                 }
             }
         }
@@ -617,7 +618,7 @@ fn (q mut parser&) group() I64 ? SyntaxError {
         q.p.names.Push("")
     }
     body := try q.alternation()
-    if not q.more() or q.peek() != ')' { error SyntaxError.UnclosedGroup }
+    if not q.more() or q.peek() != ')' { error SyntaxError.UnclosedGroup(q.at) }
     q.at++
     q.fold = fold
     q.multi = multi
@@ -632,7 +633,7 @@ fn (q mut parser&) group() I64 ? SyntaxError {
 
 fn (q mut parser&) emitNode(i I64) ? SyntaxError.TooBig {
     p := q.p
-    if p.op.Len() > maxProgram { error SyntaxError.TooBig }
+    if p.op.Len() > maxProgram { error SyntaxError.TooBig(0) }
     n := q.nodes[i]
     match n.kind {
         case nEmpty { }
@@ -697,7 +698,7 @@ fn (q mut parser&) emitNode(i I64) ? SyntaxError.TooBig {
                     split := p.emit(opSplit, 0, 0, 0)
                     splits.Push(split)
                     try q.emitNode(n.a)
-                    if p.op.Len() > maxProgram { error SyntaxError.TooBig }
+                    if p.op.Len() > maxProgram { error SyntaxError.TooBig(0) }
                 }
                 out := p.op.Len()
                 for split in splits.View() {
@@ -739,7 +740,7 @@ fn Regex.Compile(pattern String&) Regex ? SyntaxError {
     q := parser(pattern)
     q.p.names.Push("")
     root := try q.alternation()
-    if q.more() { error SyntaxError.UnmatchedParen }        # only a ')' stops the top level early
+    if q.more() { error SyntaxError.UnmatchedParen(q.at) }        # only a ')' stops the top level early
     p := q.p
     p.emit(opSave, 0, 0, 0)
     try q.emitNode(root)
@@ -1573,6 +1574,23 @@ Baked String = firstOf("(\\d+)-(\\d+)", "tel 555-1234")
 
 test "a match is computed while compiling as at run time" {
     assert Baked == "4-12:555-1234"
+}
+
+# why pattern does not compile ($e, the file itself the root here, so unqualified), "ok" when it does
+fn whyNot(pattern String&) String {
+    try Compile(pattern) catch SyntaxError e { return $e }
+    return "ok"
+}
+
+WhyBaked String = whyNot("ab(c")
+
+test SyntaxError "an error carries the offset where the pattern went wrong" {
+    assert WhyBaked == "SyntaxError.UnclosedGroup(4)"
+    assert whyNot("ab(c") == WhyBaked
+    assert whyNot("a)b") == "SyntaxError.UnmatchedParen(1)"
+    assert whyNot("x[b-a]") == "SyntaxError.BadRange(5)"
+    assert whyNot("ab") == "ok"
+    try Compile("a**") catch SyntaxError.BadRepeat e { assert e.at == 3 } catch SyntaxError { unreachable }
 }
 
 }

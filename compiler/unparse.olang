@@ -119,7 +119,7 @@ fn (w mut writer&) decl(d ast.Decl&) {
                 w.span(link)
             }
         }
-        case ast.Decl.Errors(_, name, words, members) {
+        case ast.Decl.Errors(_, name, words, members, cases) {
             w.put("type ")
             w.name(name)
             w.put(" error")
@@ -130,9 +130,14 @@ fn (w mut writer&) decl(d ast.Decl&) {
             if words.Len() > 0 {
                 w.put(" {")
                 w.ind++
-                for x in words {
+                for i, x in words {
                     w.nl()
                     w.name(x)
+                    if i < cases.Len() and cases[i].Payload.Len() > 0 {
+                        w.put("(")
+                        w.params(cases[i].Payload)
+                        w.put(")")
+                    }
                 }
                 w.ind--
                 w.nl()
@@ -721,11 +726,16 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
                 w.expr(msg)
             }
         }
-        case ast.Stmt.Raise(_, word) {
+        case ast.Stmt.Raise(_, word, args) {
             w.put("error")
             if word is not null {
                 w.put(" ")
                 w.path(word)
+            }
+            if args is not null {
+                w.put("(")
+                w.items(args)
+                w.put(")")
             }
         }
         case ast.Stmt.Spawn(_, targets, call) {

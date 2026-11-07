@@ -183,6 +183,7 @@ type Table struct(Names mut source.Names&) {
     bodies Map<TypeId, body>
     caseNames Map<TypeId, Array<source.NameId>&>
     errValNames Map<TypeId, DeclId>     # T20: the named set an error value's type was first written as, for spelling
+    errReprs Map<TypeId, TypeId>        # T19b: an error value's type whose set holds payload words, its record
     # layouts, per type
     state Vec<I64>
     sizes Vec<I64>
@@ -532,6 +533,17 @@ fn (t mut Table&) NameErrVal(id TypeId, d DeclId) {
     if not t.errValNames.Has(id) { t.errValNames.Put(id, d) }
 }
 
+# T19b: an error value's type whose set holds an error type with payload words is laid out as a record - its code (an
+# I32), then one payload enum per such member type, in the set's order, the one of the code's type holding the error's
+# data and the others their zero; generic's ErrValOf records it
+fn (t mut Table&) SetErrRepr(id TypeId, tuple TypeId) { t.errReprs.Put(id, tuple) }
+
+# the tuple an error value's type is laid out as (SetErrRepr), UnknownT for one that is its code alone
+fn (t Table&) ErrRepr(id TypeId) TypeId { return try t.errReprs.Get(id) catch default UnknownT }
+
+# whether an error value's type holds data beside its code (T19b)
+fn (t Table&) ErrCarries(id TypeId) Bool { return t.KindOf(id) == Kind.ErrVal and t.errReprs.Has(id) }
+
 # an error-set argument's entries
 fn (t Table&) ErrSetItems(id TypeId) ListId { return ListId(I32(t.A(id))) if t.KindOf(id) == Kind.ErrSet else ListId(0) }
 
@@ -778,6 +790,7 @@ fn (t Table&) ScopesFit(a TypeId, b TypeId) Bool {
 # counts as holding one
 fn (t mut Table&) HoldsRefs(id TypeId) Bool {
     k := t.KindOf(id)
+    if k == Kind.ErrVal { return t.errReprs.Has(id) and t.HoldsRefs(t.Repr(id)) }   # T19b: as its record
     if t.ForeignRef(id) { return false }   # X10: an extern type's reference is C's, in no scope of olang's
     # an any's instance is of a type not known here (T32): it may hold one
     if k == Kind.Ref or k == Kind.Func or k == Kind.Var or k == Kind.Any { return true }
@@ -1452,6 +1465,7 @@ fn (t Table&) Align(id TypeId) I64 { return t.aligns[I64(id)] }
 
 # a struct's, tuple's or record's field offsets, in order
 fn (t Table&) Offsets(id TypeId) Array<I64> {
+    if t.KindOf(id) == Kind.ErrVal and t.errReprs.Has(id): return t.Offsets(t.Repr(id))   # T19b
     n := t.Items(t.fieldList(id)).Len()
     out := Array<I64>(n)
     at := t.offsetsAt[I64(id)]
@@ -1467,6 +1481,7 @@ fn (t Table&) fieldList(id TypeId) ListId {
     return match t.KindOf(id) {
         case Kind.Named: t.Fields(id)
         case Kind.Tuple, Kind.Record: t.Parts(id)
+        case Kind.ErrVal: t.Parts(t.Repr(id)) if t.errReprs.Has(id) else ListId(0)
         case _: ListId(0)
     }
 }
@@ -1505,7 +1520,7 @@ fn (w mut DtorWalk&) some(ts Array<TypeId>&) Bool {
 
 # what a type's value is: the representation its layout follows, past any declared type over another (T29)
 fn (t Table&) Repr(id TypeId) TypeId {
-    if t.KindOf(id) == Kind.ErrVal { return TypeId(5) }   # T20: its code, an I32
+    if t.KindOf(id) == Kind.ErrVal { return try t.errReprs.Get(id) catch default TypeId(5) }   # T20: its code, an I32
     r := id
     for t.KindOf(r) == Kind.Named and t.DeclKindOf(t.DeclOf(r)) == DeclKind.Over and t.HasBody(r) { r = t.Base(r) }
     return r
@@ -1533,6 +1548,9 @@ fn (t Table&) Embedded(id TypeId) Array<TypeId> {
             for f in t.Items(t.Parts(id)) { out.Push(f) }
         }
         case Kind.AnonEnum { pushPayloads(t.Items(t.ShapeCases(id)), out) }
+        case Kind.ErrVal {
+            if t.Repr(id) != TypeId(5) { out.Push(t.Repr(id)) }
+        }
         case _ { }
     }
     return out.ToArray()
@@ -1559,7 +1577,16 @@ fn (t mut Table&) ComputeLayout(id TypeId) Bool {
             align = size
         }
         case Kind.Int { size, align = IntBytes(d.A), IntBytes(d.A) }
-        case Kind.DefaultErr, Kind.ErrVal { size, align = 4, 4 }
+        case Kind.DefaultErr { size, align = 4, 4 }
+        case Kind.ErrVal {
+            r := t.Repr(id)
+            if r == TypeId(5) {
+                size, align = 4, 4
+            } else {
+                if t.LayoutState(r) != LaidOut { return false }
+                size, align = t.Size(r), t.Align(r)
+            }
+        }
         case Kind.Func { size, align = 16, 8 }   # T21: the pair (code, environment)
         case Kind.Ref {
             # a reference to a run-time-length array is the pair (length, storage), as the array's value is (T11); an
@@ -1684,7 +1711,8 @@ fn (t mut Table&) spellLlvm(id TypeId) String {
         case Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16
              Kind.BF16, Kind.F32, Kind.F64: $primLlvm[I64(id)]
         case Kind.Int: "i" $d.A
-        case Kind.DefaultErr, Kind.ErrVal: "i32"
+        case Kind.DefaultErr: "i32"
+        case Kind.ErrVal: "i32" if t.Repr(id) == TypeId(5) else t.Llvm(t.Repr(id))
         case Kind.Noreturn: "void"
         case Kind.Func: "{ ptr, ptr }"
         case Kind.Ref: "{ i64, ptr }" if t.runTimeArray(t.Referent(id)) else "{ ptr, ptr }" if t.KindOf(t.Referent(id)) == Kind.Any else "ptr"

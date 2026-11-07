@@ -1044,6 +1044,7 @@ fn StopText(s eval.Stop, d mut diag.Diagnostics&) String {
             what := mir.ExitText(kind)
             # E35: an error a "!" took, where the "!" is - as a debug build says it
             if kind == mir.ExitKind.Error { return $line(d, file, sp) ": " $msg }
+            if kind == mir.ExitKind.Unhandled { return "unhandled error: " $msg }
             if what == "" { return $msg }
             if msg == "" { return $line(d, file, sp) ": " $what }
             return $line(d, file, sp) ": " $what ": " $msg
@@ -1157,8 +1158,8 @@ fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
         case eval.Stop.Exited(kind, _, _, _) {
             sayErr($x.StopText(s, entry, d) "\n")
             # E35, S18d: where the error a "!" took came from, as a debug build prints it
-            if kind == mir.ExitKind.Error { sayErr(x.TraceText(d)) }
-            return 134
+            if kind == mir.ExitKind.Error or kind == mir.ExitKind.Unhandled { sayErr(x.TraceText(d)) }
+            return 1 if kind == mir.ExitKind.Unhandled else 134   # T19b: main's escaping error, its payload said
         }
         case _ {
             sayErr($x.StopText(s, entry, d) "\n")

@@ -18,7 +18,7 @@ Live mut I64 = 0
 fn load(n I64) I64 ? LoadErr {
     if n == 0 { error ParseErr.Empty }
     if n == 1 { error ParseErr.Bad }
-    if n == 2 { error os.Error.Denied }
+    if n == 2 { error os.Error.Denied("d") }
     return n * 10
 }
 
@@ -92,7 +92,7 @@ fn captured(e LoadErr) String {
 }
 
 fn firstBad(from I64) I64 {
-    es := LoadErr[ParseErr.Empty, null, os.Error.Denied]
+    es := LoadErr[ParseErr.Empty, null, os.Error.Denied("d")]
     k I64 = 0
     for e in es {
         if e is not null and e != ParseErr.Empty { return k }
@@ -106,12 +106,12 @@ BakedKinds := kinds(0, 4)
 BakedCount := counted(0, 5)
 BakedCaptured := captured(ParseErr.Bad)
 BakedFirstBad := firstBad(0)
-BakedReraised := I64[try reraised(null) catch default -1, try reraised(os.Error.Denied) catch default -1
+BakedReraised := I64[try reraised(null) catch default -1, try reraised(os.Error.Denied("d")) catch default -1
                      try reraised(ParseErr.Bad) catch ParseErr.Bad default 7 catch default -1]
 BakedSame := same(ParseErr.Bad, ParseErr.Bad) and not same(ParseErr.Bad, NetErr.Down) and isParse(ParseErr.Empty)
 
 test "an error value is stored in a field, a local and a Vec, null where nothing failed" {
-    want := "Outcome(-1, ParseErr.Empty) Outcome(-1, ParseErr.Bad) Outcome(-1, os.Error.Denied) Outcome(30, null) "
+    want := "Outcome(-1, ParseErr.Empty) Outcome(-1, ParseErr.Bad) Outcome(-1, os.Error.Denied(\"d\")) Outcome(30, null) "
     assert BakedRendered == want
     assert rendered(Live, 4) == want
     last LoadErr
@@ -129,7 +129,7 @@ test "an error value is matched, null among the cases" {
 
 test "an error value is compared with words, types, sets and other values, passed and captured" {
     assert BakedSame
-    assert same(ParseErr.Bad, ParseErr.Bad) and not same(os.Error.Denied, NetErr.Down)
+    assert same(ParseErr.Bad, ParseErr.Bad) and not same(os.Error.Denied("d"), NetErr.Down)
     assert BakedCaptured == "got ParseErr.Bad"
     assert captured(ParseErr.Empty) == "got ParseErr.Empty"
     assert BakedFirstBad == 2 and firstBad(Live) == 2
@@ -157,8 +157,8 @@ test "a caught error is held past its clause" {
 # B5, E11a: an error type in a rendering's type is written as its values are - another module's qualified by its name
 fn errRendered() String {
     v := Vec<os.Error>()
-    v.Push(os.Error.Denied)
-    a := os.Error[os.Error.Denied]
+    v.Push(os.Error.Denied("d"))
+    a := os.Error[os.Error.Denied("d")]
     w := Vec<AnyErr>()
     w.Push(NetErr.Down)
     return $v " " $a " " $w
@@ -167,7 +167,7 @@ fn errRendered() String {
 ErrRenderedBaked := errRendered()
 
 test "an error type in a rendering is qualified as its values are" {
-    want := "Vec<os.Error>[os.Error.Denied] os.Error[os.Error.Denied] Vec<AnyErr>[NetErr.Down]"
+    want := "Vec<os.Error>[os.Error.Denied(\"d\")] os.Error[os.Error.Denied(\"d\")] Vec<AnyErr>[NetErr.Down]"
     assert errRendered() == want and ErrRenderedBaked == want
 }
 
@@ -179,8 +179,8 @@ fn errHashes() Bool {
     a AnyErr = l
     m := Map<AnyErr, I64>()
     m.Put(p, 1)
-    m.Put(os.Error.Denied, 2)
-    n LoadErr = os.Error.Denied
+    m.Put(os.Error.Denied("d"), 2)
+    n LoadErr = os.Error.Denied("d")
     return p.Hash() == l.Hash() and l.Hash() == a.Hash() and p == a and (try m.Get(l) catch default 0) == 1 and
            (try m.Get(n) catch default 0) == 2 and ParseErr.Empty.Hash() != ParseErr.Bad.Hash()
 }

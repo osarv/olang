@@ -248,6 +248,11 @@ type Rvalue enum {
     # ...the region the object reference x names was built in, or otherwise, for null and constant data: where what is
     # built through a sole place's value goes
     RegionOr(x Operand, otherwise ScopeRef)
+    # T19b: a new payload record pushed on the thread's payload stack - its region (an I64 handle, which ScopeRef.Held
+    # names), where the payload is copied before ErrSet points the record at it
+    ErrPush
+    # T19b: the payload of the error in flight, the top record's - a reference of type ty to it
+    ErrTop(ty types.TypeId)
 }
 
 # what a Write appends to a builder: an array of U8 or Char as bytes, a Char as itself, a number as E11a writes it
@@ -286,6 +291,8 @@ type Stmt enum {
     CopyElems(sp source.Span, dst Lvalue, src Lvalue, n Operand)     # n elements of array src into array dst, from 0
     Spawn(sp source.Span, j ScopeId, task I32)    # f.Tasks[task] started in join j (P1): see Task
     Raised(sp source.Span)    # S18d: an error raised at sp that a "!" takes in this body - its trace's first place
+    ErrSet(sp source.Span, x Operand)   # T19b: the top payload record's payload: what reference x names, in its region
+    ErrPop(sp source.Span)              # T19b: the top payload record popped, its region reclaimed
     # B3e: deferred code registered at s, its cleanup at entry - blocks reached by nothing but this, a copy of the
     # deferred code ending in Resume, which interpret runs for each block a stop leaves (S19's "on every way out", as
     # the built program, going on, would run it); with entry NoBlock, the newest registered at s about to run on this
@@ -327,6 +334,7 @@ type ExitKind enum {
     Unreachable    # S16d: "unreachable reached" - a value match no clause selects too (S12b); msg its message
     NullReached    # T2c, E35: "null reached" - "x!" on a null reference
     NullError      # T20, R3a: "raised a null error" - "error e" with e holding no error
+    Unhandled      # B5, T19b: an error carrying a payload escapes main - "unhandled error: " msg, the trace, status 1
     Assert         # S18: "assertion failed"
     SliceBounds    # E16b: "slice bounds out of range"
     ArrayLength    # D14b: "array length out of range"
@@ -341,7 +349,7 @@ type ExitKind enum {
 # what a failed check prints after "FILE:LINE: " (S18a); "" for done and fail, which print nothing
 fn ExitText(k ExitKind) String& {
     return match k {
-        case ExitKind.Done, ExitKind.Fail, ExitKind.Error, ExitKind.Escaped: ""
+        case ExitKind.Done, ExitKind.Fail, ExitKind.Error, ExitKind.Escaped, ExitKind.Unhandled: ""
         case ExitKind.Abort: "aborted"
         case ExitKind.Unreachable: "unreachable reached"
         case ExitKind.NullReached: "null reached"
@@ -1005,7 +1013,8 @@ fn (v mut verifier&) stmtShape(st Stmt&) {
             v.scope(j)
             if k < I32(0) or I64(k) >= v.F.Tasks.Len() { v.bad("no task " $k) }
         }
-        case Stmt.Raised(_) { }
+        case Stmt.Raised(_), Stmt.ErrPop(_) { }
+        case Stmt.ErrSet(_, x) { v.operand(x) }
         case Stmt.Deferred(_, s, e) {
             v.scope(s)
             if e != NoBlock { v.block(e) }
@@ -1047,6 +1056,7 @@ fn (v mut verifier&) rvalueShape(rv Rvalue) {
             v.operand(x)
             v.ref(s)
         }
+        case Rvalue.ErrPush, Rvalue.ErrTop(_) { }
     }
 }
 
@@ -1430,6 +1440,8 @@ fn (v mut verifier&) rvalueType(rv Rvalue) types.TypeId {
         case Rvalue.Text(b, _, ty): v.textType(b, ty)
         case Rvalue.Region(_): I64T
         case Rvalue.RegionOr(x, _): v.regionOrType(v.operandType(x))
+        case Rvalue.ErrPush: I64T
+        case Rvalue.ErrTop(ty): ty
     }
 }
 
@@ -2081,7 +2093,8 @@ fn (v mut verifier&) stmtFlow(s Stmt&) {
             for i in range task.Clauses.N { v.reads(f.Clauses[I64(task.Clauses.At) + i].Handler) }
             v.pend[I64(j)] = true
         }
-        case Stmt.Raised(_) { }
+        case Stmt.Raised(_), Stmt.ErrPop(_) { }
+        case Stmt.ErrSet(_, x) { v.reads(x) }
         # a cleanup entered with the state where its deferred code is registered, inside the scope registering it
         case Stmt.Deferred(_, x, e) {
             if not v.open(x) { v.bad("deferred code registered at S" $x ", which is not open") }
@@ -2144,6 +2157,7 @@ fn (v mut verifier&) rvalueFlow(rv Rvalue) {
             v.reads(x)
             v.usesScope(s)
         }
+        case Rvalue.ErrPush, Rvalue.ErrTop(_) { }
     }
 }
 
@@ -2374,6 +2388,8 @@ fn (w mut dumper&) rvalue(rv Rvalue) String {
         case Rvalue.Text(b, into, ty): "text " $w.ref(b) " in " $w.ref(into) ": " $t.Canon(ty)
         case Rvalue.Region(s): "region in " $w.ref(s)
         case Rvalue.RegionOr(x, s): "region of " $w.operand(x) " or " $w.ref(s)
+        case Rvalue.ErrPush: "payload push"
+        case Rvalue.ErrTop(ty): "payload top: " $t.Canon(ty)
     }
 }
 
@@ -2391,6 +2407,8 @@ fn (w mut dumper&) stmt(s Stmt&) String {
         case Stmt.CopyElems(_, d, src, n): "copy " $w.operand(n) " from " $w.place(src) " to " $w.place(d)
         case Stmt.Spawn(_, j, k): "spawn in S" $j " " $w.task(w.F.Tasks[I64(k)])
         case Stmt.Raised(_): "raised"
+        case Stmt.ErrSet(_, x): "payload set " $w.operand(x)
+        case Stmt.ErrPop(_): "payload pop"
         case Stmt.Deferred(_, x, e): "deferred at S" $x $(" cleanup bb" $e if e != NoBlock else " runs")
     }
 }

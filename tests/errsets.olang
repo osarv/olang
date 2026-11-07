@@ -20,7 +20,7 @@ fn load(n I64) I64 ? LoadErr {
     if n == 0 { error ParseErr.Empty }
     if n == 1 { error ParseErr.Bad }
     if n == 2 { error LoadErr.Timeout }
-    if n == 3 { error os.Error.Denied }
+    if n == 3 { error os.Error.Denied("d") }
     return n * 10
 }
 
@@ -87,7 +87,7 @@ test "a caught error renders as its name prints, decided while compiling and at 
     assert BakedLabel == "failed: ParseErr.Empty"
     assert BakedTimeout == "failed: LoadErr.Timeout"
     assert label(0) == "failed: ParseErr.Empty"
-    assert label(Live + 3) == "failed: os.Error.Denied"
+    assert label(Live + 3) == "failed: os.Error.Denied(\"d\")"
     assert label(Live + 1) == "failed: ParseErr.Bad"
     assert label(Live + 5) == "50"
 }

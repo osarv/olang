@@ -246,9 +246,9 @@ type Date struct(Year I64, Month I64, Day I64, Hour I64 = 0, Minute I64 = 0, Sec
 }
 
 # what Parse fails with: text that is not an RFC 3339 date and time (SYNTAX), or one naming a day, hour, minute, second
-# or offset that does not exist (RANGE)
+# or offset that does not exist (RANGE); Syntax carries the offset in the text where it stopped being one
 type Error error {
-    Syntax
+    Syntax(at I64)
     Range
 }
 
@@ -344,18 +344,18 @@ fn Format(wall I64, offset I64 = 0) String { return Date.Of(wall, offset).Str() 
 
 # n digits of t from at, as a number - failing with SYNTAX when they are not all there
 fn digitsAt(t String&, at I64, n I64) I64 ? Error.Syntax {
-    if at + n > t.Len() { error Error.Syntax }
+    if at + n > t.Len() { error Error.Syntax(t.Len()) }
     v I64 = 0
     for i in range n {
         c := t[at + i]
-        if not c.IsDigit() { error Error.Syntax }
+        if not c.IsDigit() { error Error.Syntax(at + i) }
         v = v * 10 + I64(c - '0')
     }
     return v
 }
 
 fn expect(t String&, at I64, c Char) ? Error.Syntax {
-    if at >= t.Len() or t[at] != c { error Error.Syntax }
+    if at >= t.Len() or t[at] != c { error Error.Syntax(at) }
 }
 
 # an RFC 3339 date and time read into a Date: "YYYY-MM-DDTHH:MM:SS", a fraction of up to nine digits after a '.', and
@@ -367,7 +367,7 @@ fn Date.Parse(t String&) Date ? Error {
     mo := try digitsAt(t, 5, 2)
     try expect(t, 7, '-')
     d := try digitsAt(t, 8, 2)
-    if t.Len() <= 10 or (t[10] != 'T' and t[10] != 't' and t[10] != ' ') { error Error.Syntax }
+    if t.Len() <= 10 or (t[10] != 'T' and t[10] != 't' and t[10] != ' ') { error Error.Syntax(10) }
     h := try digitsAt(t, 11, 2)
     try expect(t, 13, ':')
     mi := try digitsAt(t, 14, 2)
@@ -380,14 +380,14 @@ fn Date.Parse(t String&) Date ? Error {
         start := at
         scale I64 = 100000000
         for at < t.Len() and t[at].IsDigit() {
-            if at - start >= 9 { error Error.Syntax }
+            if at - start >= 9 { error Error.Syntax(at) }
             nano += I64(t[at] - '0') * scale
             scale = scale / 10
             at++
         }
-        if at == start { error Error.Syntax }
+        if at == start { error Error.Syntax(at) }
     }
-    if at >= t.Len() { error Error.Syntax }
+    if at >= t.Len() { error Error.Syntax(at) }
     off I64 = 0
     if t[at] == 'Z' or t[at] == 'z' {
         at++
@@ -400,9 +400,9 @@ fn Date.Parse(t String&) Date ? Error {
         if t[at] == '-' { off = -off }
         at += 6
     } else {
-        error Error.Syntax
+        error Error.Syntax(at)
     }
-    if at != t.Len() { error Error.Syntax }
+    if at != t.Len() { error Error.Syntax(at) }
     if mo < 1 or mo > 12 or d < 1 or d > daysIn(y, mo) or h > 23 or mi > 59 or s > 59 { error Error.Range }
     return Date(y, mo, d, h, mi, s, nano, off)
 }
@@ -437,4 +437,21 @@ test "Parse refuses what is not a date" {
         try Date.Parse(bad) catch Error.Range { continue } catch Error.Syntax { unreachable }
         unreachable
     }
+}
+
+# why t is no date ($e: this file the root here, so unqualified), "ok" when it is one
+fn whyNot(t String&) String {
+    try Parse(t) catch Error e { return $e }
+    return "ok"
+}
+
+WhyBaked String = whyNot("2026-10-24T13:05:01+0200")
+
+test Error "Syntax carries the offset where the text stopped being a date" {
+    assert WhyBaked == "Error.Syntax(22)"
+    assert whyNot("2026-1-24T13:05:01Z") == "Error.Syntax(6)"
+    assert whyNot("2026-10-24") == "Error.Syntax(10)"
+    assert whyNot("2026-10-24T13:05:01Zx") == "Error.Syntax(20)"
+    assert whyNot("2026-13-01T00:00:00Z") == "Error.Range"
+    assert whyNot("2026-10-24T13:05:01Z") == "ok"
 }

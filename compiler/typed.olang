@@ -1327,6 +1327,15 @@ type PrimOp enum {
     # T34: args [x, w]: whether the instance an "any" x holds is of the type w's type names - w a Lit of that type,
     # nothing but its type read
     AnyIs
+    # T19b: args [p], an error type's payload enum value: pushed on the thread's payload stack - its own copy, the
+    # payload of the error raised next (a Raise follows)
+    ErrPush
+    # T19b: args [e], a clause's error value holding its code alone: that value with the payload the error carries
+    # read from the top of the payload stack - shallow: it is copied (a MakeKind.Copy around it) where the value lives
+    ErrCaught
+    # T19b: args [e], a clause's error value: the payload record its error carries popped off the stack, where its
+    # error type carries one
+    ErrTaken
 }
 
 type Slice struct(Base Lvalue&, Lo Expr&, Hi Expr&, Checked Check) {

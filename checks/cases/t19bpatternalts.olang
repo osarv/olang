@@ -1,0 +1,15 @@
+# check: fail error[T19b, S13b]: a payload pattern binding a name stands alone in its case
+# T19b, S13b: alternatives of one case bind nothing from payloads
+type ReadErr error { Bad(line I64), Worse(line I64), Eof }
+fn read(n I64) I64 ? ReadErr {
+    if n < 0: error ReadErr.Bad(n)
+    error ReadErr.Eof
+}
+fn main() {
+    try read(-1) catch ReadErr e {
+        match e {
+            case ReadErr.Bad(line), ReadErr.Worse(line) { assert line < 0 }
+            case ReadErr.Eof { }
+        }
+    }
+}

@@ -31,11 +31,11 @@
 # DeclaredTwice: two declarations share a name or a short name
 type Error error {
     Help
-    Unknown
-    Missing
-    BadValue
-    DeclaredTwice
-    Required            # Read: a flag declared by a parameter with no default was not given
+    Unknown(flag String)                   # as written: "--colour", "-x"
+    Missing(flag String)                   # a flag that takes a value given none
+    BadValue(flag String, text String)     # a value that is none of its flag's type
+    DeclaredTwice(flag String)
+    Required(flag String)                  # Read: a flag declared by a parameter with no default was not given
 }
 
 # a flag's help, written on a parameter Read declares it from (G39)
@@ -132,18 +132,18 @@ fn (s mut state&) say(what String&) {
     s.message = $s.program ": " $what " (see --help)"
 }
 
-fn (s state&) byName(name String&) mut flag& ? Error.Unknown {
+fn (s state&) byName(name String&) mut flag& ? noFlag {
     for f in s.all {
         if f.name == name: return f
     }
-    error Error.Unknown
+    error noFlag
 }
 
-fn (s state&) byShort(c Char) mut flag& ? Error.Unknown {
+fn (s state&) byShort(c Char) mut flag& ? noFlag {
     for f in s.all {
         if f.short != 0 and f.short == c: return f
     }
-    error Error.Unknown
+    error noFlag
 }
 
 # value given to the flag f, read as its type
@@ -152,19 +152,19 @@ fn (s mut state&) setValue(f mut flag&, value String&, shown String&) ? Error {
         case Kind.Bool {
             if value == "true" { f.b = true } else if value == "false" { f.b = false } else {
                 s.say($shown " takes true or false, not \"" $value "\"")
-                error Error.BadValue
+                error Error.BadValue(shown, value)
             }
         }
         case Kind.Int {
             f.i = try value.ParseInt(0) catch ParseError {
                 s.say($shown " takes an integer, not \"" $value "\"")
-                error Error.BadValue
+                error Error.BadValue(shown, value)
             }
         }
         case Kind.Float {
             f.f = try value.ParseFloat() catch ParseError {
                 s.say($shown " takes a number, not \"" $value "\"")
-                error Error.BadValue
+                error Error.BadValue(shown, value)
             }
         }
         case Kind.Text { f.t = $value }
@@ -183,7 +183,7 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
             b := s.all[j]
             if a.name == b.name or (a.short != 0 and a.short == b.short) {
                 s.say("--" $a.name " is declared twice")
-                error Error.DeclaredTwice
+                error Error.DeclaredTwice("--" $a.name)
             }
         }
     }
@@ -209,29 +209,29 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
         key := body[:eq] if eq >= 0 else body
         f mut flag?& = null
         if long {
-            f = try s.byName(key) catch Error.Unknown {
+            f = try s.byName(key) catch noFlag {
                 s.say("unknown flag --" $key)
-                error Error.Unknown
+                error Error.Unknown("--" $key)
             }
         } else if key.Len() > 1 and eq < 0 {
             # several one-letter Bools together: "-qv"
             for c in key {
-                g := try s.byShort(c) catch Error.Unknown {
+                g := try s.byShort(c) catch noFlag {
                     s.say("unknown flag -" $c)
-                    error Error.Unknown
+                    error Error.Unknown("-" $c)
                 }
                 if g.kind != Kind.Bool {
                     s.say("-" $c " takes a value, and is written alone")
-                    error Error.Missing
+                    error Error.Missing("-" $c)
                 }
                 g.b = true
                 g.isSet = true
             }
             continue
         } else {
-            f = try s.byShort(key[0]) catch Error.Unknown {
+            f = try s.byShort(key[0]) catch noFlag {
                 s.say("unknown flag -" $key)
-                error Error.Unknown
+                error Error.Unknown("-" $key)
             }
         }
         fl := f!    # set by both branches that reach here
@@ -244,7 +244,7 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
         } else {
             if i >= args.Len() {
                 s.say($shown " takes a value")
-                error Error.Missing
+                error Error.Missing(shown)
             }
             try s.setValue(fl, args[i], shown)
             i++
@@ -303,10 +303,10 @@ fn (p mut Flags&) declare<Q>(q Q) {
 # a parameter's value: its flag's, as the parameter's type - REQUIRED where a parameter with no default was not given
 fn (s mut state&) valueOf<Q>(q Q) Q.Type ? Error {
     name := dashed(q.Name)
-    f := try s.byName(name) catch Error.Unknown { unreachable }
+    f := try s.byName(name) catch noFlag { unreachable }
     if not q.HasDefault and not f.isSet {
         s.say("--" $name " is required")
-        error Error.Required
+        error Error.Required("--" $name)
     }
     match Q.Type {
         case Bool { return f.b }
@@ -319,7 +319,7 @@ fn (s mut state&) valueOf<Q>(q Q) Q.Type ? Error {
             if Q.Type.Kind == TypeKind.Integer {
                 return Q.Type(try f.i.Narrow<Q.Type.Base>() catch NumberError {
                     s.say("--" $name " takes an integer of " $Q.Type.Name)
-                    error Error.BadValue
+                    error Error.BadValue("--" $name, $f.i)
                 })
             } else {
                 return Q.Type(Q.Type.Base(f.f))
@@ -459,4 +459,21 @@ test "the help text lists every flag" {
         "  -h, --help         show this help\n")
 }
 
+}
+
+# T19b: which flag, and what it was given, carried by the error
+fn said(args Array<String&>&) String {
+    p := Flags("tool")
+    p.Int("count", 'n', 10, "how many")
+    p.Bool("verbose", 'v', "say more")
+    try p.Parse(args) catch Error e { return $e }
+    return "ok"
+}
+
+saidBaked String = said(String&["tool", "-n", "ten"])
+
+test Error "an error names the flag and what it was given" {
+    assert saidBaked == "Error.BadValue(\"-n\", \"ten\")" and said(String&["tool", "-n", "ten"]) == saidBaked
+    assert said(String&["tool", "--colour"]) == "Error.Unknown(\"--colour\")"
+    assert said(String&["tool", "-vn"]) == "Error.Missing(\"-n\")"
 }

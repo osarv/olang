@@ -706,7 +706,7 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
                 w.leaf(b, nm.Text(v.Names[k]), KindVariable, I64(sp.Start), I64(sp.End), I64(ns.Start), I64(ns.End), "")
             }
         }
-        case ast.Decl.Errors(sp, n, words, _) {
+        case ast.Decl.Errors(sp, n, words, _, _) {
             name := nm.Text(n)
             s := nameIn(t, I64(sp.Start), name)
             w.open(b, name, KindEnum, I64(sp.Start), I64(sp.End), s, s + name.Len(), "error")
@@ -930,6 +930,7 @@ fn (a Analysis&) moduleNames(it mut Items&, mi I64, own Bool) {
     for e in c!.P.R.Tables[mi].Entries {
         name := nm.Text(e.Name)
         if not own and not doc.Exported(name) { continue }
+        if name.Contains("$") { continue }              # an error type's hidden payload enum (T19b)
         if e.Kind == names.What.Func {
             f := c!.P.FnNamed(mi, e.Name)
             if f < 0 or c!.P.FnDecl(f).Recv is not null { continue }

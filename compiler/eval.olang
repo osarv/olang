@@ -202,6 +202,7 @@ type task struct() {
     Task I64 = 0
     Buf I64 = 0
     Next I64 = -1
+    PayBase I64 = 0   # T19b: the payload stack's depth as it starts - a failure that grew it carries a payload
 }
 
 # how a frame returns: to the frame below's Call, as the request's result, from a destructor, as a task, as a task's
@@ -352,6 +353,9 @@ type Machine struct(T mut types.Table&, When Mode) {
     MemBudget I64 = 1 << 28
     DepthBudget I64 = 2000
     eqDepth I64 = 0             # how many Equal helpers' frames are live (E10)
+    # T19b: the payload stack - each record's region and its payload, newest last (tasks run in sequence at their join)
+    payScopes Vec<I64>
+    payPtrs Vec<Ptr>
     Steps I64 = 0
     Live I64 = 0                 # bytes allocated and not freed
     # dead-region mode (OLANG_DEADREGIONS, docs/memory.md 3.6): the allocations a release reclaimed, so a read of one
@@ -2167,6 +2171,19 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
             if id == 0 { id = m.scopeOf(fi, s) }
             m.wr(dst, 8, id)
         }
+        case mir.Rvalue.ErrPush {
+            id := m.newScope(sRegion)
+            m.payScopes.Push(id)
+            m.payPtrs.Push(NullPtr)
+            m.wr(dst, 8, id)
+        }
+        case mir.Rvalue.ErrTop(_) {
+            if m.payPtrs.Len() == 0 {
+                m.refuse(WhyNotModelled)
+                return
+            }
+            m.wrPtr(dst, m.payPtrs[m.payPtrs.Len() - 1])
+        }
     }
 }
 
@@ -3664,6 +3681,28 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
             m.atK(fk, sp)
             m.write(fi, b, how, x)
         }
+        case mir.Stmt.ErrSet(sp, x) {
+            m.atK(fk, sp)
+            if m.payPtrs.Len() == 0 {
+                m.refuse(WhyNotModelled)
+                return
+            }
+            m.payPtrs[m.payPtrs.Len() - 1] = m.rdPtr(m.addr(fi, x, 1))
+        }
+        case mir.Stmt.ErrPop(sp) {
+            m.atK(fk, sp)
+            id := try m.payScopes.Pop() catch {
+                m.refuse(WhyNotModelled)
+                return
+            }
+            m.payPtrs.Truncate(m.payPtrs.Len() - 1)
+            n := m.closing.Len()
+            m.closeRegion(id)
+            if m.closing.Len() > n {
+                m.fs[fi].Pending = true
+                return
+            }
+        }
         case mir.Stmt.CopyElems(sp, d, src, n) {
             m.atK(fk, sp)
             dp, dt := m.place(fi, d)
@@ -4904,6 +4943,7 @@ fn (m mut Machine&) wait(fi I64, j mir.ScopeId, ok mir.BlockId, code mir.LocalId
 }
 
 fn (m mut Machine&) startTask(fi I64, slot I64) {
+    m.tasks[slot].PayBase = m.payScopes.Len()
     tk := m.tasks[slot]
     f := m.fns.Ref(tk.Fn)
     k := f.Tasks[tk.Task]
@@ -5061,6 +5101,7 @@ fn (m mut Machine&) taskEnded(fr frame) {
             if m.T.Same(it.Err, et) and (it.Word < 0 or it.Word == word) { takes = true }
         }
         if not takes { continue }
+        m.payDrop(tk.PayBase)   # T19b: a clause on the task's thread takes its payload
         if cl.Handler == mir.Operand.None {
             m.freeTask(slot)
             return
@@ -5114,11 +5155,21 @@ fn (m mut Machine&) taskEnded(fr frame) {
             sc := js & slotMask
             if m.scopes[sc].Kept == 0 {
                 m.scopes[sc].Kept = m.recode(fr.Code, errs, types.ListId(I32(m.scopes[sc].Errors)))
+            } else {
+                m.payDrop(tk.PayBase)   # T19b: a later-spawned failure's payload dropped, the join keeping the earliest's
             }
         }
         case _ { m.refuse(WhyNoClause) }
     }
     m.freeTask(slot)
+}
+
+# T19b: the payload record a task's failure pushed, popped - where the stack grew past base while the task ran
+fn (m mut Machine&) payDrop(base I64) {
+    if m.payScopes.Len() <= base: return
+    id := try m.payScopes.Pop() catch default 0
+    m.payPtrs.Truncate(m.payPtrs.Len() - 1)
+    if id != 0: m.closeRegion(id)
 }
 
 # ---- the loop ----
