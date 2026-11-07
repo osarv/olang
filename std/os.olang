@@ -32,47 +32,47 @@ extern {
 }
 
 # why a file-system call failed - errno's commonest answers, by name (X6's classes, in their order), and Failed for
-# every other
+# every other - each carrying the path the call named (T19b), "" for a call on a descriptor or on no path
 type Error error {
-    NotFound
-    Exists
-    Denied
-    NotDir
-    IsDir
-    NotEmpty
-    Failed
+    NotFound(path String)
+    Exists(path String)
+    Denied(path String)
+    NotDir(path String)
+    IsDir(path String)
+    NotEmpty(path String)
+    Failed(path String)
 }
 
 # fails with the Error naming "code" - what __olang_err() said, asked right after the call that failed, before
-# anything else could change errno
-fn raise(code I32) ? Error {
+# anything else could change errno - about "path"
+fn raise(code I32, path String&) ? Error {
     match code {
-        case 1 { error Error.NotFound }
-        case 2 { error Error.Exists }
-        case 3 { error Error.Denied }
-        case 4 { error Error.NotDir }
-        case 5 { error Error.IsDir }
-        case 6 { error Error.NotEmpty }
-        case _ { error Error.Failed }
+        case 1 { error Error.NotFound(path) }
+        case 2 { error Error.Exists(path) }
+        case 3 { error Error.Denied(path) }
+        case 4 { error Error.NotDir(path) }
+        case 5 { error Error.IsDir(path) }
+        case 6 { error Error.NotEmpty(path) }
+        case _ { error Error.Failed(path) }
     }
 }
 
-# fails with what errno says when "result" - a C call's, made just before - says it failed, by being negative
-fn check(result I64) ? Error {
-    if result < 0 { try raise(__olang_err()) }
+# fails with what errno says when "result" - a C call's on "path", made just before - says it failed, by being negative
+fn check(result I64, path String& = "") ? Error {
+    if result < 0 { try raise(__olang_err(), path) }
 }
 
 # text a runtime function copies out (X6): fill(buf) copies what fits of it into buf and gives its whole length, or
 # a negative one when it fails. Measured, then filled at that length - again if it grew in between, as a directory
 # being written to can.
-fn copyOut(fill fn&(buf mut Array<U8>&) I64) String& ? Error {
+fn copyOut(fill fn&(buf mut Array<U8>&) I64, path String& = "") String& ? Error {
     n := fill(Array<U8>(0))
     for {
-        try check(n)
+        try check(n, path)
         text := Array<U8>(n)
         got := fill(text)
         if got <= n {
-            try check(got)
+            try check(got, path)
             return String(text[:got])
         }
         n = got
@@ -97,7 +97,7 @@ fn Args() mut Array<String&>& {
 fn Env(name String&) String& ? Error {
     key := $name "\0"
     return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_env(key, buf, buf.Len()) })
-        catch Error { error Error.NotFound }
+        catch Error { error Error.NotFound(name) }
 }
 
 # B5b: ends the process with "code" as its exit status (the platform passes on its low 8 bits), by the process's
@@ -181,17 +181,17 @@ fn ExecUntil(tok cancel.Token&, args ...String&, input Array<U8>& = "", capture 
 # program cannot be started, failing as Exec does - NotFound, Denied, or Failed for no arguments or one holding a zero
 # byte
 fn ExecInPlace(path String&, args ...String&) ? Error {
-    if args.Len() == 0 { error Error.Failed }
+    if args.Len() == 0 { error Error.Failed(path) }
     size I64 = 0
     for a in args {
         zero := true
         try a.FindByte(0) catch { zero = false }
-        if zero { error Error.Failed }
+        if zero { error Error.Failed(path) }
         size += a.Len() + 1
     }
     zero := true
     try path.FindByte(0) catch { zero = false }
-    if zero { error Error.Failed }
+    if zero { error Error.Failed(path) }
     line := Array<U8>(size)                         # the arguments, each ended by a zero byte
     at I64 = 0
     for a in args {
@@ -202,8 +202,8 @@ fn ExecInPlace(path String&, args ...String&) ? Error {
         at++
     }
     __olang_exec($path "\0", line, args.Len())
-    try raise(__olang_err())
-    error Error.Failed
+    try raise(__olang_err(), path)
+    error Error.Failed(path)
 }
 
 # a program Start started: Wait for it, once, to have what it did; Kill it to end it sooner. Its descriptors are closed
@@ -224,20 +224,20 @@ fn (p Process&) Pid() I32 { return p.pid }
 # running, without waiting for it: a program to run beside this one (a server a test talks to, several commands at
 # once), or one to give up on. Fails as Exec does when it cannot be started
 fn Start(args ...String&, input Array<U8>& = "", capture Bool = true, dir String& = "") Process ? Error {
-    if args.Len() == 0 { error Error.Failed }
+    if args.Len() == 0 { error Error.Failed("") }
     size I64 = 0
     for a in args {
         zero := true
         try a.FindByte(0) catch { zero = false }
-        if zero { error Error.Failed }
+        if zero { error Error.Failed(a) }
         size += a.Len() + 1
     }
     zero := true
     try dir.FindByte(0) catch { zero = false }
-    if zero { error Error.Failed }
+    if zero { error Error.Failed(dir) }
     if dir.Len() > 0 {                                  # said here, where a missing program could not be mistaken for it
         info := try Stat(dir)
-        if info.Kind != FileKind.DIR { error Error.NotDir }
+        if info.Kind != FileKind.DIR { error Error.NotDir(dir) }
     }
     line := Array<U8>(size)                         # the arguments, each ended by a zero byte
     at I64 = 0
@@ -250,14 +250,14 @@ fn Start(args ...String&, input Array<U8>& = "", capture Bool = true, dir String
     }
     feed := try memFile()
     defer unistd.close(feed)
-    try io.Write(feed, input) catch io.Error { error Error.Failed }
+    try io.Write(feed, input) catch io.Error { error Error.Failed(args[0]) }
     unistd.lseek(feed, 0, 0)
     out I32 = -1                                        # -1: this program's own, which the child inherits
     errs I32 = -1
     if capture {                                        # the Process keeps both: closed by Wait, or here if Start fails
         out = try memFile()
         e := mman.memfd_create("olang\0", 1)
-        if e < 0 { try closeAndRaise(out, __olang_err()) }
+        if e < 0 { try closeAndRaise(out, __olang_err(), "") }
         errs = e
     }
     pid := __olang_spawn(line, args.Len(), feed, out, errs, $dir "\0")
@@ -267,7 +267,7 @@ fn Start(args ...String&, input Array<U8>& = "", capture Bool = true, dir String
             unistd.close(out)
             unistd.close(errs)
         }
-        try raise(code)
+        try raise(code, args[0])
     }
     return Process(pid, out, errs, capture)
 }
@@ -275,7 +275,7 @@ fn Start(args ...String&, input Array<U8>& = "", capture Bool = true, dir String
 # waits for the program to end and gives what it did - its status, and what it wrote when Start captured it, built where
 # the caller puts it. Fails with Failed when it was waited for already
 fn (p mut Process&) Wait() Output ? Error {
-    if p.waited { error Error.Failed }
+    if p.waited { error Error.Failed("") }
     waited := Array<I32>(1)
     if syswait.waitpid(p.pid, waited, 0) < 0 { try p.lost(__olang_err()) }
     return try p.ended(waited[0])
@@ -288,14 +288,14 @@ fn (p mut Process&) lost(code I32) ? Error {
         unistd.close(p.out)
         unistd.close(p.errs)
     }
-    try raise(code)
+    try raise(code, "")
 }
 
 # Wait, killing the program once tok fires and it has not ended: then it fails with the token's reason, once the
 # program has ended. Asks every few milliseconds at most - sooner while the program is young, so a short one is not
 # kept waiting - as nothing can wait for a child and a token at once
 fn (p mut Process&) WaitUntil(tok cancel.Token&) Output ? Error, cancel.Stopped {
-    if p.waited { error Error.Failed }
+    if p.waited { error Error.Failed("") }
     waited := Array<I32>(1)
     nap := ctime.timespec()
     left := ctime.timespec()
@@ -347,14 +347,14 @@ fn memFile() I32 ? Error {
 # everything written to the file fd, from its start, as text built where the caller puts it
 fn readBack(fd I32) String& ? Error {
     size := unistd.lseek(fd, 0, 2)
-    if size < 0 { try raise(__olang_err()) }
+    if size < 0 { try raise(__olang_err(), "") }
     unistd.lseek(fd, 0, 0)
     text := Array<U8>(size)
     got I64 = 0
     for got < size {
         n := unistd.read(fd, text[got:], U64(size - got))
-        if n < 0 { try raise(__olang_err()) }
-        if n == 0 { error Error.Failed }
+        if n < 0 { try raise(__olang_err(), "") }
+        if n == 0 { error Error.Failed("") }
         got += n
     }
     return String(text)
@@ -363,9 +363,9 @@ fn readBack(fd I32) String& ? Error {
 # the whole of the file at "path", built where the caller puts it, or where the scope argument says
 # ("os.ReadFile&x(p)" builds it where x lives)
 fn ReadFile(path String&) String& ? Error {
-    if IsDir(path) { error Error.IsDir }            # a directory opens, and its size means nothing
+    if IsDir(path) { error Error.IsDir(path) }      # a directory opens, and its size means nothing
     fd := fcntl.open($path "\0", 0)
-    try check(fd)
+    try check(fd, path)
     # the size is where reading starts from, nothing more: the end is where a read finds it. A byte past the size, so the
     # read that finds the end is the next one, and room doubled for a file longer than it said - one in /proc, or a pipe,
     # has no size to give (lseek fails or says 0), and a file may grow while it is read
@@ -380,7 +380,7 @@ fn ReadFile(path String&) String& ? Error {
             text = more
         }
         n := unistd.read(fd, text[got:], U64(text.Len() - got))
-        if n < 0 { try closeAndRaise(fd, __olang_err()) }
+        if n < 0 { try closeAndRaise(fd, __olang_err(), path) }
         if n == 0 { break }
         got += n
     }
@@ -390,16 +390,16 @@ fn ReadFile(path String&) String& ? Error {
 
 # closes fd and fails with the Error naming "code" - for a call that failed on an open descriptor, whose errno has
 # to be read before close can change it
-fn closeAndRaise(fd I32, code I32) ? Error {
+fn closeAndRaise(fd I32, code I32, path String&) ? Error {
     unistd.close(fd)
-    try raise(code)
+    try raise(code, path)
 }
 
 # the file at "path" holding "data" and nothing else: created, or emptied first when it is there already
 fn WriteFile(path String&, data Array<U8>&) ? Error {
     fd := try Create(path)
     try io.Write(fd, data) catch io.Error {
-        try closeAndRaise(fd, __olang_err())
+        try closeAndRaise(fd, __olang_err(), path)
     }
     try Close(fd)
 }
@@ -408,14 +408,14 @@ fn WriteFile(path String&, data Array<U8>&) ? Error {
 # as C's creat gives it. Close it once written.
 fn Create(path String&) I32 ? Error {
     fd := fcntl.creat($path "\0", 0x1B6)
-    try check(fd)
+    try check(fd, path)
     return fd
 }
 
 # a descriptor to read the file at "path" through (io.Read). Close it once read.
 fn Open(path String&) I32 ? Error {
     fd := fcntl.open($path "\0", 0)
-    try check(fd)
+    try check(fd, path)
     return fd
 }
 
@@ -442,7 +442,7 @@ type FileInfo struct(Kind FileKind, Size I64, ModTime I64) {
 # what is at "path", following a symbolic link to what it names
 fn Stat(path String&) FileInfo ? Error {
     out := Array<I64>(3)
-    try check(__olang_stat($path "\0", out))
+    try check(__olang_stat($path "\0", out), path)
     kind := FileKind.OTHER
     if out[0] == 1 { kind = FileKind.FILE }
     if out[0] == 2 { kind = FileKind.DIR }
@@ -463,7 +463,7 @@ fn IsDir(path String&) Bool {
 
 # makes the directory "path" - 0777 less the process's umask - whose parent must be there already
 fn MkDir(path String&) ? Error {
-    try check(sysstat.mkdir($path "\0", 0x1FF))
+    try check(sysstat.mkdir($path "\0", 0x1FF), path)
 }
 
 # makes the directory "path" and every one above it that is missing; a directory already there is left as it is, and
@@ -475,15 +475,15 @@ fn MkDirAll(path String&) ? Error {
         part := path[:i]
         if sysstat.mkdir($part "\0", 0x1FF) != 0 {
             code := __olang_err()
-            if code != 2 { try raise(code) }            # 2 is Exists: fine, when what exists is a directory
-            if not IsDir(part) { error Error.NotDir }
+            if code != 2 { try raise(code, part) }      # 2 is Exists: fine, when what exists is a directory
+            if not IsDir(part) { error Error.NotDir(part) }
         }
     }
 }
 
 # removes the file, the symbolic link or the empty directory at "path"
 fn Remove(path String&) ? Error {
-    try check(stdio.remove($path "\0"))
+    try check(stdio.remove($path "\0"), path)
 }
 
 # removes what is at "path" and, when it is a directory, everything in it, depth first - as "rm -rf" does. A symbolic
@@ -497,7 +497,7 @@ fn RemoveAll(path String&) ? Error {
     s := e
     for s > 0 and path[s - 1] != '/' { s -= 1 }
     name := path[s:e]
-    if name == "." or name == ".." { error Error.Failed }
+    if name == "." or name == ".." { error Error.Failed(path) }
     try removeTree(path)
 }
 
@@ -508,9 +508,9 @@ fn removeTree(path String&) ? Error {
     if stdio.remove(p) == 0 { return }
     code := __olang_err()
     if code == 1 { return }                            # NotFound: nothing to remove
-    if code != 6 and code != 2 { try raise(code) }      # NotEmpty, or Exists, which POSIX allows rmdir to say
+    if code != 6 and code != 2 { try raise(code, path) }   # NotEmpty, or Exists, which POSIX allows rmdir to say
     for n in try ReadDir(path) { try removeTree($path "/" $n) }
-    try check(stdio.remove(p))
+    try check(stdio.remove(p), path)
 }
 
 # a new, empty directory, made where no other directory or file is, and its path, built where the caller puts it: in
@@ -518,11 +518,11 @@ fn removeTree(path String&) ? Error {
 # "prefix" followed by six characters chosen to make the name unused. Only this user may read, write or enter it
 # (mode 0700). Removing it once done is the caller's - RemoveAll
 fn MkTemp(dir String& = "", prefix String& = "") String& ? Error {
-    if prefix.Contains("/") { error Error.Failed }      # a name, never a path below "dir"
+    if prefix.Contains("/") { error Error.Failed(prefix) }   # a name, never a path below "dir"
     base := tempDir(dir)
     sep := "" if base.EndsWith("/") else "/"
     path Array<Char> = $base $sep $prefix "XXXXXX\0"      # (mkdtemp writes the six characters: no String's)
-    if __olang_mkdtemp(path) != 0 { try raise(__olang_err()) }
+    if __olang_mkdtemp(path) != 0 { try raise(__olang_err(), base) }
     return String(path[:path.Len() - 1])
 }
 
@@ -536,13 +536,13 @@ fn tempDir(dir String&) String {
 
 # moves what is at "from" to "to", in one step, replacing a file already at "to"
 fn Rename(from String&, to String&) ? Error {
-    try check(stdio.rename($from "\0", $to "\0"))
+    try check(stdio.rename($from "\0", $to "\0"), from)
 }
 
 # a second name, "to", for the file at "from" - a hard link: one file under two names, on one file system. Fails with
 # EXISTS where "to" is taken
 fn Link(from String&, to String&) ? Error {
-    try check(unistd.link($from "\0", $to "\0"))
+    try check(unistd.link($from "\0", $to "\0"), from)
 }
 
 # what the symbolic link at "path" holds, as it was written - not resolved further
@@ -556,14 +556,14 @@ fn ReadLink(path String&) String& ? Error {
         buf = Array<U8>(cap)
         n = unistd.readlink(p, buf, U64(cap))
     }
-    try check(n)
+    try check(n, path)
     return String(buf[:n])
 }
 
 # "path" made absolute, with every symbolic link, "." and ".." resolved - what it really names, which must exist
 fn RealPath(path String&) String& ? Error {
     p := $path "\0"
-    return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_realpath(p, buf, buf.Len()) })
+    return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_realpath(p, buf, buf.Len()) }, path)
 }
 
 # the directory the program is working in, as an absolute path
@@ -574,7 +574,7 @@ fn Cwd() String& ? Error {
 # the names in the directory "path", in byte order, without "." and ".."
 fn ReadDir(path String&) Array<String&>& ? Error {
     p := $path "\0"
-    all String& = try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_dir(p, buf, buf.Len()) })
+    all String& = try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_dir(p, buf, buf.Len()) }, path)
     if all.Len() == 0 { return Array<String&>(0) }
     names := all[:all.Len() - 1].Split("\0")      # each name ends in a NUL, the last one included
     names.Sort(fn(a, b) { return a.Compare(b) < 0 })
