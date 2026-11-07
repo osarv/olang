@@ -2962,9 +2962,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   the test runner (`olang test -bench`) - yes, small; (5) coverage (`olang test -cover`) - yes, medium; (6) a REPL and
   a Jupyter kernel on it - yes, after the compiler is done; (7) saturating arithmetic in std/arith - yes, small (fixed
   point waits for FPGA). Platforms (macOS, Windows, WASM) later. In effect: none queued.
-- QCX ANSWERED 2026-11-07 (the user: "Add it then, not done." - reading taken and stated: add the recommended items to
-  the remaining work, the compiler not done until they are in, the REPL moved before "done"; struct patterns (3) and
-  platforms stay later): (1) errors carrying data - a design note first (wt-errdata, docs/errdata.md), its direction
-  questions to the user, then a build round; (2) packed / declared-layout structs; (4) benchmarks in the test runner
-  (`olang test -bench`); (5) coverage (`olang test -cover`); (6) a REPL and a Jupyter kernel on it; (7) saturating
-  arithmetic in std/arith.
+- QCX MISREAD, corrected 2026-11-07 (the user: "the adds it then was fixing a typo. give me the options to build
+  again"): "Add it then, not done." fixed a dictation slip in the user's own previous message ("add it done" meant "add
+  it then", the yes to QCW's deprecation) - it was no answer to QCX. I had read it as "add the list, the compiler not
+  done until it is in" and queued six items; that queue is withdrawn. QCX is still ASKED (re-asked the same day, the
+  same eight options). Nothing of it was built: only the design note for (1), docs/errdata.md on wt-errdata (b746af3,
+  no code) - kept unmerged as the basis if (1) is chosen; its three direction questions (payload types of an error
+  raised by name inferred from its first raise; methods on error types; ArgumentError carrying its failed condition)
+  wait until then. In effect: none queued.

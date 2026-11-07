@@ -908,10 +908,12 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
 - 2026-11-07 ~08:00 CET: the merged tip's verify passed; master and the designated branch at f913d9b. Started round
   deprec (wt-deprec from f913d9b; sonnet medium; /home/user/review/rounds/deprec-brief.md): QCW's `Deprecated:`
   doc-comment convention in olang doc, the language server, mcp and olang api - beside rounds drops and asm.
-- 2026-11-07 ~08:15 CET: QCX answered - added before "done": errors carrying data (design note running: wt-errdata,
-  opus high, /home/user/review/rounds/errdata-brief.md; build after its questions are answered, serialized with the
-  section-8 round on check.olang), packed structs (types/emit/eval/cabi - beside the section-8 round), benchmarks in the
-  test runner and saturating arithmetic (small, sonnet), coverage (emit counters + report), a REPL and a Jupyter kernel
-  (driver + interp, the largest tooling item). The order after drops/asm/deprec: section-8 round; packed structs beside
-  it; errors carrying data; reuse in place + C-call rule; QBT then QBU+QBW; Columns<T>; tooling items in free slots;
-  the smaller items and tidy; the final review and verify.
+- 2026-11-07 ~08:15 CET: QCX read as answered (wrongly - see the correction below) and the errdata design note started
+  (wt-errdata, opus high, /home/user/review/rounds/errdata-brief.md); it finished: docs/errdata.md (b746af3, no code,
+  not merged).
+- 2026-11-07 CORRECTION (the user: "the adds it then was fixing a typo. give me the options to build again"): QCX is
+  NOT answered - "Add it then, not done" fixed a typo in the deprecation reply. Nothing of QCX is queued; re-asked. The
+  order after drops/asm/deprec, without them: the section-8 round (design note first); reuse in place + the C-call
+  rule; QBT then QBU+QBW; Columns<T> (needs FromIter and QCU 1-3); the smaller items and tidy; the final review and
+  verify. What the user picks from QCX slots in by its files (errors carrying data on check.olang after the section-8
+  round; packed structs beside it; the tooling items in free slots).
