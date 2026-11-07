@@ -508,6 +508,21 @@ builtinmethod.olang:2:12: error[M19d]: only the prelude declares methods of I32 
     2 | fn (n I32) Tw() I32 { return n * 2 }
       |            ^~
 compilation failed with 1 error
+=== c11arraydtor.olang
+c11arraydtor.olang:8:10: error[C11]: R has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<R>, or hold R& ones
+    8 |     b := Array<R>(n)
+      |          ^~~~~~~~~~~
+compilation failed with 1 error
+=== c11comprdtor.olang
+c11comprdtor.olang:9:11: error[C11]: R has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<R>, or hold R& ones
+    9 |     xs := R[R(i) for i in range n]
+      |           ^~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== c11copyrunarray.olang
+c11copyrunarray.olang:10:12: error[C11]: Kept has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<Kept>, or hold Kept& ones
+   10 |     c := a.Copy()
+      |            ^~~~
+compilation failed with 1 error
 === c11destructnotunique.olang
 c11destructnotunique.olang:6:3: error[C11, T13b]: a destructor releases what one value holds, so Conn is unique - declare it 'type Conn unique struct(...)'
     6 | } destruct { Closed++ }
@@ -524,14 +539,29 @@ c11dtorglobal.olang:7:3: error[C11]: Conn has a destructor to run, so a global h
       |   ^~~~
 compilation failed with 1 error
 === c11dtortypearg.olang
-c11dtortypearg.olang:8:14: error[C11]: Conn has a destructor to run, so a type argument holds it by reference - write Conn&
-    8 |     v := Vec<Conn>()
-      |              ^~~~
+c11dtortypearg.olang:10:20: error[C11]: Conn has a destructor to run, and List<Conn> keeps values of it where no holder ends them - write Conn&, or keep them in a Vec<Conn>
+   10 |     v := list.List<Conn>()
+      |                    ^~~~
 compilation failed with 1 error
 === c11holdertypearg.olang
-c11holdertypearg.olang:9:14: error[C11]: Pool has a destructor to run, so a type argument holds it by reference - write Pool&
-    9 |     v := Vec<Pool>()
+c11holdertypearg.olang:13:14: error[C11]: Pool has a destructor to run, and Buf<Pool> keeps values of it where no holder ends them - write Pool&, or keep them in a Vec<Pool>
+   13 |     v := Buf<Pool>()
       |              ^~~~
+compilation failed with 1 error
+=== c11keptvec.olang
+c11keptvec.olang:11:14: error[C11]: Kept has a destructor to run and copies (its Copy), and a copy of Vec<Kept> would copy what it holds past its count - hold them by reference, Kept&
+   11 |     v := Vec<Kept>()
+      |              ^~~~
+compilation failed with 1 error
+=== c11unendedparam.olang
+c11unendedparam.olang:8:18: error[C11]: Conn has a destructor to run, and Array<Conn> keeps values of it where no holder ends them - write Conn&, or keep them in a Vec<Conn>
+    8 | fn count(a Array<Conn>) I64 { return a.Len() }
+      |                  ^~~~
+compilation failed with 1 error
+=== c11vecofdtorcopy.olang
+c11vecofdtorcopy.olang:10:19: error[T13b]: Vec<Conn> is unique: this value is held elsewhere, and 'c' holds one of its own - write a reference ('Vec<Conn>&'), or make a new Vec<Conn> here
+   10 |     c Vec<Conn> = v
+      |                   ^
 compilation failed with 1 error
 === c2afieldparam.olang
 c2afieldparam.olang:6:5: error[C2a]: field 'n' has a parameter's name - write it bare to take the parameter's value, or name it apart
@@ -1092,8 +1122,8 @@ compilation failed with 1 error
 d18cheldfield.olang:18:29: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    18 |         for w in h.g { kept.Push(w) }
       |                             ^~~~
-$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
-   60 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
+   68 |     v.data[v.n].occupy(x)
       |     ^
 d18cheldfield.olang:18:34: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
    18 |         for w in h.g { kept.Push(w) }
@@ -1101,8 +1131,8 @@ d18cheldfield.olang:18:34: note: this text lives in a block that closes first - 
 d18cheldfield.olang:19:29: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    19 |         for w in h.g { kept.Push(w) }
       |                             ^~~~
-$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
-   60 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
+   68 |     v.data[v.n].occupy(x)
       |     ^
 d18cheldfield.olang:19:34: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
    19 |         for w in h.g { kept.Push(w) }
@@ -1112,8 +1142,8 @@ compilation failed with 2 errors
 d18cheldlocal.olang:14:27: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    14 |         for w in g { kept.Push(w) }
       |                           ^~~~
-$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
-   60 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
+   68 |     v.data[v.n].occupy(x)
       |     ^
 d18cheldlocal.olang:14:32: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
    14 |         for w in g { kept.Push(w) }
@@ -1121,8 +1151,8 @@ d18cheldlocal.olang:14:32: note: this text lives in a block that closes first - 
 d18cheldlocal.olang:15:27: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |         for w in g { kept.Push(w) }
       |                           ^~~~
-$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
-   60 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
+   68 |     v.data[v.n].occupy(x)
       |     ^
 d18cheldlocal.olang:15:32: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
    15 |         for w in g { kept.Push(w) }
@@ -1142,8 +1172,8 @@ compilation failed with 1 error
 d18cviewkept.olang:13:31: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    13 |     for w in labels(3) { kept.Push(w) }
       |                               ^~~~
-$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
-   60 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
+   68 |     v.data[v.n].occupy(x)
       |     ^
 d18cviewkept.olang:13:36: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
    13 |     for w in labels(3) { kept.Push(w) }
@@ -1518,8 +1548,8 @@ compilation failed with 1 error
 e10aprivateeq.olang:12:5: error[M6b]: '==' needs K's eq, which is private to its module - declare it Eq to use it here
    12 |   m.Put(K(1), 5)
       |     ^~~
-$ROOT/std/prelude/map.olang:108:26: note: in the standard library's code, here
-  108 |         if m.ents[i].Key == key {
+$ROOT/std/prelude/map.olang:117:26: note: in the standard library's code, here
+  117 |         if m.ents[i].Key == key {
       |                          ^~
 e10aprivateeq.olang:12:5: note: instantiated here, with K = K, V = I32
    12 |   m.Put(K(1), 5)
@@ -3122,6 +3152,11 @@ m19dintsqrtnotry.olang:6:18: error[E15]: this call can fail - write 'try', and c
     6 |     s := I32(17).Sqrt()
       |                  ^~~~
 compilation failed with 1 error
+=== m19doccupyuser.olang
+m19doccupyuser.olang:6:10: error[M19]: I64 has no method 'occupy'
+    6 |     a[0].occupy(5)
+      |          ^~~~~~
+compilation failed with 1 error
 === m19g01push.olang
 m19g01push.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    11 |     try io.Println($d[0])
@@ -3387,8 +3422,8 @@ compilation failed with 1 error
 m6bonce.olang:14:7: error[M6b]: '==' needs K's eq, which is private to its module - declare it Eq to use it here
    14 |     m.Put(P(K(1), K(2)), 5)
       |       ^~~
-$ROOT/std/prelude/map.olang:108:26: note: in the standard library's code, here
-  108 |         if m.ents[i].Key == key {
+$ROOT/std/prelude/map.olang:117:26: note: in the standard library's code, here
+  117 |         if m.ents[i].Key == key {
       |                          ^~
 m6bonce.olang:14:7: note: instantiated here, with K = P, V = I32
    14 |     m.Put(P(K(1), K(2)), 5)
@@ -3703,8 +3738,8 @@ compilation failed with 1 error
 o18cprojectionfresh.olang:15:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |         keep.Push(t)
       |              ^~~~
-$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
-   60 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
+   68 |     v.data[v.n].occupy(x)
       |     ^
 o18cprojectionfresh.olang:14:9: note: 't' is declared here, in a block that closes first - declare it where 'keep' lives, 't String&', and assign it here
    14 |         t := p.mk().text
@@ -4505,8 +4540,8 @@ compilation failed with 1 error
 rv3roat.olang:5:7: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
     5 |     ls[0].Push(9)
       |       ^
-$ROOT/std/prelude/vec.olang:59:5: note: the callee is no view of the element because of this statement
-   59 |     if v.n == v.data.Len() { v.room(v.n + 1) }
+$ROOT/std/prelude/vec.olang:67:5: note: the callee is no view of the element because of this statement
+   67 |     if v.n == v.data.Len() { v.room(v.n + 1) }
       |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === rv3roclone.olang
@@ -5018,8 +5053,8 @@ compilation failed with 1 error
 s5capturestruct.olang:15:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |         fs.Push(fn() I64 { return x.Sensor.Len() })
       |            ^~~~
-$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
-   60 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
+   68 |     v.data[v.n].occupy(x)
       |     ^
 compilation failed with 1 error
 === s5e31bargs.olang
@@ -5039,8 +5074,8 @@ compilation failed with 1 error
 s5handlenote.olang:10:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         names[0][0] = t
       |                     ^
-$ROOT/std/prelude/vec.olang:113:40: note: the callee requires it because of this statement
-  113 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
+$ROOT/std/prelude/vec.olang:121:40: note: the callee requires it because of this statement
+  121 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
       |                                        ^
 s5handlenote.olang:9:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives, 't mut String&', and assign it here
     9 |         t := $k "-loop-text-of-moderate-length"
@@ -5072,8 +5107,8 @@ compilation failed with 1 error
 s5projection.olang:16:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    16 |         bs.Push(pairish(t).a)
       |            ^~~~
-$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
-   60 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
+   68 |     v.data[v.n].occupy(x)
       |     ^
 s5projection.olang:15:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives, 't mut String&', and assign it here
    15 |         t := $k "-text"
@@ -5083,8 +5118,8 @@ compilation failed with 1 error
 s5projectionelem.olang:10:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         bs.Push(boxes(t)[0])
       |            ^~~~
-$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
-   60 |     v.data[v.n] = x
+$ROOT/std/prelude/vec.olang:68:5: note: the callee requires it because of this statement
+   68 |     v.data[v.n].occupy(x)
       |     ^
 compilation failed with 1 error
 === s5spawnhandle.olang
@@ -5096,8 +5131,8 @@ compilation failed with 1 error
 s6handlestore.olang:12:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         names[i][0] = t
       |                     ^
-$ROOT/std/prelude/vec.olang:113:40: note: the callee requires it because of this statement
-  113 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
+$ROOT/std/prelude/vec.olang:121:40: note: the callee requires it because of this statement
+  121 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
       |                                        ^
 s6handlestore.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives, 't mut String&', and assign it here
    11 |         t := $i "-loop-text"
@@ -5775,8 +5810,8 @@ compilation failed with 1 error
 t13bvecat.olang:7:16: error[T13b, G18]: Get needs a copy, and File is unique - its values are never copied: call Get with a reference ('File&') or with a type that copies
     7 |     f := try v.Get(0) catch VecError { return }
       |                ^~~
-$ROOT/std/prelude/vec.olang:102:12: note: Get needs a copy here
-  102 |     return v.data[i]
+$ROOT/std/prelude/vec.olang:110:12: note: Get needs a copy here
+  110 |     return v.data[i]
       |            ^~~~~~~~~
 compilation failed with 1 error
 === t13holdsitself.olang

@@ -1,0 +1,11 @@
+# check: fail error[C11]: R has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<R>, or hold R& ones
+# C11: Array<T>(n) of a run-time length made zero values with destructors no holder ended (found 2026-11-07)
+Ended mut I64 = 0
+type R unique struct(id I64 = 0) {
+    id
+} destruct { Ended++ }
+fn mk(n I64) I64 {
+    b := Array<R>(n)
+    return b.Len()
+}
+fn main() { assert mk(3) == 3 }

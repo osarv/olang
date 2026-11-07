@@ -289,7 +289,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     unknownSaid Map<pair.Pair<I64, I64>, Bool>     # (body, name): an unknown name said there (S13f's), not again
     paramTypes Bool = false                         # a declared function's parameters' types being checked (G29)
     underRef Bool = false                           # a written type under a reference marker being checked (T21b)
-    argPlace Bool = false                           # a written type in a type argument being checked (C11)
+    refMarked Bool = false                          # ... under a reference marker itself, not named as an expression's
+    unendedSaid Map<types.TypeId, Bool>             # C11: the types an unended value was said of, and those reached
     declMade Bool = false                           # a declaration's type, its value given: what T7d's lengths come from
     syntaxMark I64 = -1                             # the diagnostics said before checking began: the syntax errors
     # B9c, S8b: the local ifs whose condition the build decides that evaluation decided, by (file, the condition's
@@ -1692,7 +1693,7 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
     match td.Body {
         case ast.TypeBody.Struct(sb) {
             c.ctorVarRules(td, sb)
-            for prm in sb.Params { c.dtorWritten(prm.Ty, false) }   # C11: a parameter's type is checked nowhere else
+            for prm in sb.Params { c.dtorWritten(prm.Ty) }   # C11: a parameter's type is checked nowhere else
         }
         case ast.TypeBody.Enum(cases, _) {
             # T4, T17: a payload's types are known ones, said where they are written
@@ -1779,7 +1780,8 @@ fn (c mut Checker&) uniqueRules(sp source.Span, td ast.TypeDecl&, d types.DeclId
     match td.Body {
         case ast.TypeBody.Struct(sb) {
             if c.P.Immut(self) { c.immutHoldsUnique(self, fieldSpans(sb)) }
-            if sb.Dtor.Len() > 0 and td.Word != ast.DeclWord.Unique {
+            # (a collection of the library's ends its elements: a destructor its instances holding none have not, C11)
+            if sb.Dtor.Len() > 0 and td.Word != ast.DeclWord.Unique and not c.P.T.Ends(self) {
                 c.err(source.Span(sb.DtorSp.Start, sb.DtorSp.Start + 8), msgs.DestructNotUnique(c.text(td.Name)))
             }
         }
@@ -3468,7 +3470,8 @@ fn (c mut Checker&) ctorChecked(id I64, t types.TypeId, twin types.ListId) {
                 for _ in range pushed { c.P.L.Diags.PopContext() }
                 if s.DtorSp.End > 0 {
                     c.pop()
-                    c.dtorBody(t, mi)
+                    # (a collection's of the library's only where it holds values with destructors - C11)
+                    if c.P.T.Destructs(t): c.dtorBody(t, mi)
                     return
                 }
             }
@@ -3512,7 +3515,7 @@ fn (c mut Checker&) fieldTypes(t types.TypeId) {
             filled = true
         }
     }
-    if filled { c.P.T.SetStructBody(t, c.P.T.List(out), c.P.T.Destructs(t)) }
+    if filled { c.P.T.SetStructBody(t, c.P.T.List(out), c.P.T.DtorWritten(t)) }
 }
 
 # a type's destructor's body (C9), made once its constructor is checked: a function of "mut T&" in the scope closing
@@ -10655,43 +10658,63 @@ fn (c mut Checker&) foreignNamed(tr ast.TypeRef&) Bool {
     }
 }
 
-# C11: a type declaring a destructor written as a type argument by value - said at it; under a reference marker the type
-# itself is its referent, its arguments places of their own (arg)
-fn (c mut Checker&) dtorWritten(tr ast.TypeRef?&, under Bool, arg Bool = false) {
+# C11: a constructor's parameter type holding a value with destructors where no holder ends it (unendedArgs) - said at
+# it, through its reference markers
+fn (c mut Checker&) dtorWritten(tr ast.TypeRef?&) {
     if tr is null: return
     match tr {
-        case ast.TypeRef.Named(nsp, _, args) {
-            if arg and not under and c.destructNamed(tr) {
-                c.err(nsp, msgs.DestructTypeByValue(c.src(tr.Span()), c.src(tr.Span())))
-                return
-            }
-            for a in args { c.dtorWritten(a, false, true) }
+        case ast.TypeRef.Named(_, _, args) {
+            if args.Len() > 0: c.unendedArgs(args, c.P.Resolve(c.fr().Ctx, tr))
         }
-        case ast.TypeRef.Ref(_, of, _) { c.dtorWritten(of, true, arg) }
-        case ast.TypeRef.Perm(_, of, _) { c.dtorWritten(of, under, arg) }
-        case ast.TypeRef.Spread(_, of) { c.dtorWritten(of, false, arg) }
+        case ast.TypeRef.Ref(_, of, _) { c.dtorWritten(of) }
+        case ast.TypeRef.Perm(_, of, _) { c.dtorWritten(of) }
+        case ast.TypeRef.Spread(_, of) { c.dtorWritten(of) }
         case _ { }
     }
 }
 
-# C11: whether a written type names a struct declaring a destructor
-fn (c mut Checker&) destructNamed(tr ast.TypeRef&) Bool {
-    match tr {
-        case ast.TypeRef.Named(nsp, path, _) {
-            ref := c.P.R.Use(c.fr().File, nsp.Start)
-            if path.Len() > 1 { ref = c.P.R.Member(c.fr().File, nsp.End) }
-            if ref.Kind != names.What.Type or ref.Index < 0 { return false }
-            d := c.P.DeclFor(ref.Module, ref.Index)
-            if c.P.T.DeclKindOf(d) != types.DeclKind.Struct: return false
-            td := c.P.TypeDecl(d)
-            if td is null: return false
-            return match td.Body {
-                case ast.TypeBody.Struct(sb): sb.Dtor.Len() > 0
-                case _: false
-            }
+# C11: the element a run-time array written in the constructor of a collection whose destructor ends what it holds
+# stands for - its buffer, whose live elements its destructor ends (types.Table.Ends) - else t
+fn (c mut Checker&) ownBuffer(t types.TypeId) types.TypeId {
+    if not c.fr().InCtor or not c.P.T.Ends(c.fr().CtorOf): return t
+    r := c.P.T.Repr(t)
+    return c.P.T.Elem(r) if c.P.T.KindOf(r) == types.Kind.Array and c.P.T.Length(r) == types.TypeId(0) else t
+}
+
+# C11: a written type with arguments, rt what it resolves to, holding a value with destructors to run that no holder
+# ends (generic.Program.UnendedDrop: in an array of a run-time length outside a collection whose destructor ends it - a
+# bare Array<File>, std/list's chunks behind a reference) - said at the argument giving it, naming the reference form
+# and a Vec; whether it holds none. Said once: the types its walk went through are not judged again (written in the
+# bodies of the instances it names)
+fn (c mut Checker&) unendedArgs(args Array<ast.TypeRef&>&, rt types.TypeId) Bool {
+    if rt == types.UnknownT or c.unendedSaid.Has(rt): return true
+    seen Map<types.TypeId, Bool>
+    u := c.P.Unended(rt, seen)
+    if u == types.UnknownT: return true
+    for t in seen.Keys() { c.unendedSaid.Put(t, true) }
+    at := args[0]
+    for a in args {
+        if generic.IsErrsArgOf(a): continue
+        ra := c.P.Resolve(c.fr().Ctx, a)
+        if not c.isRef(ra) and c.P.UnendedDrop(c.P.T.Array(ra, types.TypeId(0))) != types.UnknownT {
+            at = a
+            break
         }
-        case _ { return false }
     }
+    c.err(at.Span(), msgs.DestructTypeByValue(c.ty(u), c.ty(rt)) if c.P.Unique(u) else msgs.DestructCopiedHeld(c.ty(u), c.ty(rt)))
+    return false
+}
+
+# C11: a value made an array of a run-time length - Array<T>(n), a comprehension, a copy of one - whose elements have a
+# destructor to run: nothing would end them (an array has no holder of its elements; a library collection's buffer is
+# its destructor's) - said at sp; whether it is none
+fn (c mut Checker&) runArrayEnds(t types.TypeId, sp source.Span) Bool {
+    r := c.P.T.Repr(c.deref(t))
+    if c.P.T.KindOf(r) != types.Kind.Array or c.P.T.Length(r) != types.TypeId(0): return true
+    el := c.P.T.Elem(r)
+    if c.isRef(el) or not c.P.T.NeedsDrop(el): return true
+    c.err(sp, msgs.DestructRunArray(c.ty(el)))
+    return false
 }
 
 # T20: an error type or a named set written as a function's result - an error is raised, never returned: said at its
@@ -10762,9 +10785,12 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
             if c.traitWritten(of, tr) { return false }
             if c.foreignNamed(of) { return true }    # X10: "Db&", "Db?&"
             was := c.underRef
+            wasMarked := c.refMarked
             c.underRef = true
+            c.refMarked = true
             met := c.writtenMet(of)
             c.underRef = was
+            c.refMarked = wasMarked
             if not met { return false }
             # T24: only a struct, an enum or an array is held by reference
             rt := c.P.Resolve(c.fr().Ctx, of)
@@ -10832,13 +10858,9 @@ fn (c mut Checker&) namedMet(tr ast.TypeRef&, nsp source.Span, path Array<source
         c.err(nsp, msgs.FuncDeclBare(c.src(tr.Span())))
         return false
     }
-    if c.argPlace and not c.underRef and c.destructNamed(tr) {
-        # C11: a collection's or a generic's value of a type declaring a destructor is held by reference (O15: its
-        # destructor follows a value held in one place written for it - a variable, a parameter, a result, a field)
-        c.err(nsp, msgs.DestructTypeByValue(c.src(tr.Span()), c.src(tr.Span())))
-        return false
-    }
+    marked := c.refMarked  # (a reference to it holds nothing - C11 below)
     c.underRef = false   # its type arguments are places of their own
+    c.refMarked = false
 
     if c.foreignNamed(tr) {
         # X10: an extern type is held by reference alone
@@ -10862,6 +10884,10 @@ fn (c mut Checker&) namedMet(tr ast.TypeRef&, nsp source.Span, path Array<source
         if not c.typeArgMet(a) { return false }
     }
     rt := c.P.Resolve(c.fr().Ctx, tr)
+    # C11: a value with destructors held where its holder ends it (O15) - a field, a payload, a collection's element
+    # its destructor ends - never in an array of a run-time length nothing ends. A collection's own buffer, declared in
+    # its constructor, is its destructor's to end: judged by what its elements hold
+    if not marked and not c.unendedArgs(args, c.ownBuffer(rt)): return false
     return c.instancesMet(rt, args[0].Span())
 }
 
@@ -10896,19 +10922,11 @@ fn (c mut Checker&) typeArgCountMet(path Array<source.NameId>&, args Array<ast.T
     return false
 }
 
-# a type argument met: no "mut" before a value type (mutOnValue), then writtenMet - a value with destructors to run by
-# reference only (C11), a holder of one too where its parts are known
+# a type argument met: no "mut" before a value type (mutOnValue), then writtenMet - where its value is held is the type
+# it is an argument of's to say (C11, unendedArgs)
 fn (c mut Checker&) typeArgMet(a ast.TypeRef&) Bool {
     if c.mutOnValue(a): return false
-    was := c.argPlace
-    c.argPlace = true
-    met := c.writtenMet(a)
-    c.argPlace = was
-    if not met: return false
-    rt := c.P.Resolve(c.fr().Ctx, a)
-    if rt == types.UnknownT or c.isRef(rt) or not c.P.T.NeedsDrop(rt) or c.destructNamed(a): return true
-    c.err(a.Span(), msgs.DestructTypeByValue(c.src(a.Span()), c.src(a.Span())))
-    return false
+    return c.writtenMet(a)
 }
 
 # T25b: "mut" before a type argument is a reference's permission - written before one that is no reference, said;
@@ -10926,9 +10944,6 @@ fn (c mut Checker&) mutOnValue(a ast.TypeRef&) Bool {
 
 # a function type's signature, as written: its parameters' and results' types (T21)
 fn (c mut Checker&) sigWritten(s ast.Sig&) Bool {
-    was := c.argPlace
-    c.argPlace = false   # a function type's parameters and results are its own places
-    defer c.argPlace = was
     for prm in s.Params {
         if not c.writtenMet(prm.Ty) { return false }
     }
@@ -11154,6 +11169,9 @@ fn (c mut Checker&) leadWord(sp source.Span) source.Span {
 }
 
 # Array<T>(n[, fill]), T written tr: its arguments, then the array made (QP1)
+# Array<T>(n) made: of a run-time length, its elements with no destructor to run (C11)
+fn (c mut Checker&) arrayMade(sp source.Span, x typed.Expr&) typed.Expr& { return x if c.runArrayEnds(typeOf(x), sp) else c.unknown(sp) }
+
 fn (c mut Checker&) arrayCall(sp source.Span, tr ast.TypeRef&, args Array<ast.Expr&>&, want types.TypeId) typed.Expr& {
     if args.Len() < 1 or args.Len() > 2 {
         c.err(sp, msgs.ArgCountRange(1, 2, args.Len()))
@@ -11169,7 +11187,7 @@ fn (c mut Checker&) arrayCall(sp source.Span, tr ast.TypeRef&, args Array<ast.Ex
         c.dropArgs(args)
         return c.unknown(sp)
     }
-    if not c.runArrayValue(el) or args.Len() != 2 { return c.arrayMake(sp, el, args, want) }
+    if not c.runArrayValue(el) or args.Len() != 2 { return c.arrayMade(sp, c.arrayMake(sp, el, args, want)) }
     # T7d: elements held by value take their length from the fill, where it has one known while compiling
     fx := c.expr(args[1], types.UnknownT)
     ft := typeOf(fx)
@@ -11177,7 +11195,7 @@ fn (c mut Checker&) arrayCall(sp source.Span, tr ast.TypeRef&, args Array<ast.Ex
         return c.arrayMake(sp, ft, args, want, fx)
     }
     # QCE: else run-time elements, each its own copy of the fill
-    if ft != types.UnknownT { return c.arrayMake(sp, el, args, want, c.fit(fx, el, args[1].Span())) }
+    if ft != types.UnknownT { return c.arrayMade(sp, c.arrayMake(sp, el, args, want, c.fit(fx, el, args[1].Span()))) }
     c.exprTo(args[0], c.i64())
     return c.unknown(sp)
 }
@@ -11226,6 +11244,7 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
             if ref.Kind == names.What.Type and ref.Index >= 0 {
                 t := c.P.Apply(c.fr().Ctx, c.P.DeclFor(ref.Module, ref.Index), targs)
                 if t == types.UnknownT { return c.unknown(sp) }
+                if targs.Len() > 0 and not c.unendedArgs(targs, t) { return c.unknown(sp) }   # C11, as namedMet's
                 if targs.Len() > 0 and not c.instancesMet(t, targs[0].Span()) { return c.unknown(sp) }
                 return c.construct(sp, msp, t, args)
             }
@@ -12631,9 +12650,9 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         return c.invoke(sp, nsp, m0, rx, args, Array<typed.Expr&>(0), ex)
     }
     name := c.text(n)
-    # the prelude's vacate takes the place itself, whatever it holds - an any, or a reference that may be null - reading
-    # nothing through it
-    vacates := name == "vacate" and args.Len() == 0 and c.P.L.Mods[c.fr().Mi].Prelude
+    # the library's vacate and occupy take the place itself, whatever it holds - an any, or a reference that may be null -
+    # reading nothing through it
+    vacates := ((name == "vacate" and args.Len() == 0) or (name == "occupy" and args.Len() == 1)) and c.P.Library(c.fr().Mi)
     # T32b: a call through an "any" goes through its table
     if c.P.T.KindOf(c.deref(rt)) == types.Kind.Any and not vacates { return c.anyCall(sp, x, rx, n, nsp, args) }
     m := c.P.MethodOf(c.deref(rt), n)
@@ -13236,13 +13255,13 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         if c.under(nt) != c.i64() { n = c.prim(args[0].Span(), c.i64(), typed.PrimOp.Convert, n, null) }
         return c.prim(sp, rt, bop, x0, n)
     }
-    if name == "retire" and args.Len() == 0 and c.arrayOf(rt) != types.UnknownT and c.P.L.Mods[c.fr().Mi].Prelude {
+    if name == "retire" and args.Len() == 0 and c.arrayOf(rt) != types.UnknownT and c.P.Library(c.fr().Mi) {
         # M19g: where a collection stops using an array - nothing at run time but under -sanitize (B2f), where its
         # storage is poisoned; a module that retires arrays gives its arrays chunks of their own there
         c.P.L.Mods[c.fr().Mi].Retires = true
         return c.prim(sp, types.VoidT, typed.PrimOp.Retire, c.value(rx, sp), null)
     }
-    if name == "grown" and args.Len() == 1 and c.isRef(typeOf(rx)) and c.arrayOf(rt) != types.UnknownT and c.P.L.Mods[c.fr().Mi].Prelude {
+    if name == "grown" and args.Len() == 1 and c.isRef(typeOf(rx)) and c.arrayOf(rt) != types.UnknownT and c.P.Library(c.fr().Mi) {
         # M19d: a collection's buffer grown - a new array of n elements, the first a.Len() moved out of a (each as
         # vacate moves it) and the rest unwritten, as E39's exact collect leaves none: the prelude's claim that its
         # collection writes each before reading it (a Vec's room past its count), which the compiler cannot infer
@@ -13286,10 +13305,11 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         if c.fr().dropFlags.Has(lid): return c.destroyHeld(sp, rx, lid)
         return c.prim(sp, types.VoidT, typed.PrimOp.Destroy, rx, null)
     }
-    if name == "vacate" and args.Len() == 0 and c.P.L.Mods[c.fr().Mi].Prelude {
+    if name == "vacate" and args.Len() == 0 and c.P.Library(c.fr().Mi) {
         # docs/memory.md 3.4, O8d: what a place holds given and the place left empty - as a statement, what it held let
-        # go of. The prelude's alone: it says which of a collection's positions are live, which the compiler cannot
-        # infer. A move out of the place (Take), which lowering makes a plain read where nothing is freed early
+        # go of, a value with destructors ended there (exprStmt). The library's alone: it says which of a collection's
+        # positions are live, which the compiler cannot infer. A move out of the place (Take), which lowering makes a
+        # plain read where nothing is freed early
         p := readPlace(rx)
         if p is null or not c.placeWritable(p) {
             c.err(c.operandAt(x), msgs.VacateNotPlace())
@@ -13297,6 +13317,18 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         }
         c.noteWrite(p)
         return typed.Expr.Take(sp, p.Type(), p)
+    }
+    if name == "occupy" and args.Len() == 1 and c.P.Library(c.fr().Mi) {
+        # C11, O15: a value stored into a place holding none - a collection's room past its count, a position it vacated
+        # - so nothing is ended there, as a store over a place ends what it held: vacate's other half, the library's alone
+        p := readPlace(rx)
+        if p is null or not c.placeWritable(p) {
+            c.err(c.operandAt(x), msgs.VacateNotPlace())
+            return c.unknown(sp)
+        }
+        from := c.stmts.Len()
+        c.storeInto(sp, p, args[0], args[0].Span(), null, true)
+        return typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
     }
     if name.StartsWith("Atomic") {
         op := typed.PrimOp.AtomicLoad
@@ -13355,6 +13387,7 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         }
         v := c.read(sp, typed.Lvalue.Deref(sp, c.P.T.Referent(t), rx)) if c.isRef(t) else rx
         if not existingValue(v) { return v }
+        if not c.runArrayEnds(typeOf(v), nsp) { return c.unknown(sp) }   # C11
         c.wantCopy(typeOf(v), 0)
         sp0 := v.Span()
         from := c.exprs.Len()
@@ -16589,6 +16622,9 @@ fn (c mut Checker&) exprStmt(sp source.Span, x ast.Expr&) {
                 }
                 case _ { }
             }
+            # O15: the library's vacate standing as a statement ends what the place held - its destructors run there, the
+            # place then let go of as before (C11: a collection ending the elements it removes or holds as it is ended)
+            if e == typed.Expr.Take and not c.isRef(e.ty) and c.P.T.NeedsDrop(e.ty): c.emit(c.dropIfHeld(sp, e.p, -1))
             # S3: a call giving a value it drops is judged once every body is checked - one doing nothing else is an
             # error. Not in a generic's body, where what a call does differs between instances
             t := typeOf(e)
@@ -17408,7 +17444,7 @@ fn (c mut Checker&) samePlace(a typed.Lvalue&, b typed.Lvalue&) Bool {
 # Lvalue.Target
 # a value stored into a place (S4): it fits the place's type, said at osp; target is what was written as the place, where
 # one was (a narrowed reference's path is known not null after it)
-fn (c mut Checker&) storeInto(sp source.Span, p typed.Lvalue&, value ast.Expr&, osp source.Span, target ast.Expr?&) {
+fn (c mut Checker&) storeInto(sp source.Span, p typed.Lvalue&, value ast.Expr&, osp source.Span, target ast.Expr?&, room Bool = false) {
     t := p.Type()
     # E12: the value fits the target, said at the "=" as stage 0 says it - a borrow in it of the place itself, or of
     # storage within it, its old value where the value can hold a reference (S4d)
@@ -17427,6 +17463,10 @@ fn (c mut Checker&) storeInto(sp source.Span, p typed.Lvalue&, value ast.Expr&, 
     if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Lvalue.Deref(sp, t, x)) }
     # T25c: a read-only copy is not stored where it can be written - save into a read-only copy itself
     if not c.isRef(t) and c.roRoot(p) < 0 { c.roStore(x, value.Span(), RoStored) }
+    if room {
+        c.emit(typed.Stmt.Assign(sp, p, c.storeCopy(p, x)))   # (occupy: p holds no value to end)
+        return
+    }
     c.storeOver(sp, p, c.storeCopy(p, x))
 }
 
@@ -18486,6 +18526,8 @@ fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr& {
         c.err(source.Span(sp.Start + I32(fa + 1), sp.Start + I32(fa + 4)) if fa >= 0 else sp, msgs.ComprNeedsTry())
     }
     c.fr().LoopFails = fails
+    # C11: elements with destructors in an array of a run-time length - ended by nothing
+    if state != 3 and not c.runArrayEnds(at, sp) { return c.unknown(sp) }
     if state == 3 {
         # T7c: no if, a count known while compiling - a fixed array, each element written once in place
         r := c.readLocal(sp, out)
@@ -20410,10 +20452,12 @@ fn (c mut Checker&) storeOver(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
         c.emit(typed.Stmt.Assign(sp, p, x))
         return
     }
-    if not purePlace(p) {
+    sp0 := c.stable(p)
+    if sp0 is null {
         c.gap(sp, "a store over a value with destructors to run, reached through what a call gives (O15)")
         return
     }
+    p = sp0
     h := c.hidden(sp, t)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), x))
     flag := -1
@@ -20421,6 +20465,46 @@ fn (c mut Checker&) storeOver(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     c.emit(c.dropIfHeld(sp, p, flag))
     c.emit(typed.Stmt.Assign(sp, p, c.read(sp, typed.Lvalue.Local(sp, t, typed.LocalId(I32(h))))))
     if flag >= 0: c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Local(sp, types.BoolT, typed.LocalId(I32(flag))), c.lit(sp, types.BoolT, 1)))
+}
+
+# place p as one read twice gives the same - its first place for the old value's drop, its second for the store (O15): an
+# index or a reference it reads through evaluated once, here, into a hidden local where it is more than a local's read
+# or a literal (an element's place in a collection, "v.data[(head + i) % len]"); null where p reaches through what a
+# call gives
+fn (c mut Checker&) stable(p typed.Lvalue&) typed.Lvalue?& {
+    match p {
+        case typed.Lvalue.Local(_, _, _), typed.Lvalue.Global(_, _, _, _) { return p }
+        case typed.Lvalue.Field(sp, ty, base, k) {
+            b := c.stable(base)
+            return typed.Lvalue.Field(sp, ty, b, k) if b is not null else null
+        }
+        case typed.Lvalue.Payload(sp, ty, py) {
+            b := c.stable(py.Base)
+            return typed.Lvalue.Payload(sp, ty, typed.Payload(b, py.Tag, py.Checked)) if b is not null else null
+        }
+        case typed.Lvalue.Elem(sp, ty, e) {
+            b := c.stable(e.Base)
+            if b is null: return null
+            return typed.Lvalue.Elem(sp, ty, typed.Elem(b, c.once(e.Index), e.Checked))
+        }
+        case typed.Lvalue.Deref(sp, ty, r) { return p if pureRead(r) else typed.Lvalue.Deref(sp, ty, c.once(r)) }
+        case _ { return null }
+    }
+}
+
+# x evaluated once: as it is where it is a local's read or a literal, else into a hidden local read where it was
+fn (c mut Checker&) once(x typed.Expr&) typed.Expr& {
+    match x {
+        case typed.Expr.Lit(_, _, _) { return x }
+        case typed.Expr.Read(_, _, q, _) {
+            if q == typed.Lvalue.Local: return x
+        }
+        case _ { }
+    }
+    sp := x.Span()
+    h := c.hidden(sp, typeOf(x))
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), x))
+    return c.readLocal(sp, h)
 }
 
 # ---- values that own their parts (QCE: T7a relaxed) ----
@@ -20459,6 +20543,7 @@ fn (c mut Checker&) partCopy(x typed.Expr&) typed.Expr& {
 # site, as any value made is)
 fn (c mut Checker&) ownCopy(x typed.Expr&) typed.Expr& {
     if not existingValue(x) { return x }
+    if not c.runArrayEnds(typeOf(x), x.Span()) { return x }   # C11
     c.wantCopy(typeOf(x), 0)
     sp := x.Span()
     from := c.exprs.Len()

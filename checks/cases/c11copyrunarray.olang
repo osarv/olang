@@ -1,0 +1,13 @@
+# check: fail error[C11]: Kept has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<Kept>, or hold Kept& ones
+# C11: a copy of an array of a run-time length makes its own values with destructors - an array no holder ends
+Ended mut I64 = 0
+type R unique struct(id I64) {
+    id
+} destruct { Ended++ }
+type Kept struct(r R) { r }
+fn (k Kept&) Copy() Kept { return Kept(R(k.r.id + 1)) }
+fn cp(a Array<Kept>&) I64 {
+    c := a.Copy()
+    return c.Len()
+}
+fn main() { assert Ended == 0 }

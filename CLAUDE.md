@@ -641,8 +641,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   nothing mentioning it after. A call's value no place written for it takes (`r := Res(1)`, an argument for a reference
   parameter) is held where the call lands, registered there as before (O16): constructors give values, a call of a
   type with destructors to run is held at the call (`check.held`, a Promote) and a slot laid out for the value takes it as
-  it is (`heldValue`, fit's peel). A type argument (`Vec<Res&>`, a holder of one too - `Vec<Pool>` refused), a global
-  and a generator's parameter hold one by reference (C11, the error naming `T&`); no variable holds one across a `yield`
+  it is (`heldValue`, fit's peel). A global and a generator's parameter hold one by reference (C11, the
+  error naming `T&`), a type argument by value only where its instance ends it (the next entry); no variable holds one across a `yield`
   (S20) or a `become` (S21), said as such. Built (mine) as deferred code: each such variable gets a hidden Bool flag and
   a deferred `if flag { Drop(x) }` registered at its declaration (`check.dropOnExit`), a landing clearing the flag
   (`handOn`); `typed.PrimOp.Drop` lowers to the type's Drop helper (`mir.HelperKind.Drop`: its destructor's body, then
@@ -664,9 +664,37 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   clears once the call is made, after every argument (`Seq.Gone`); a failed requirement ends the by-value parameters
   taken; a test ended by a failed check ends its holders (a guard registered with the block, test builds only,
   `HelperKind.Guard`); a deferred `x.Destroy()` ends only what the holder still holds, and a holder may be given a new
-  value after its `Destroy()` (C9b). Not
-  built: collections holding such values by value (`Vec<File>`: their own moves, growth and room would need a drop
-  walking their count - a round of its own).
+  value after its `Destroy()` (C9b).
+- **Collections hold values with destructors by value (C11 relaxed, O15, M19d, the user's "Collections DECIDED"
+  2026-11-03; built 2026-11-07, wt-drops, LIST.md A4, details mine).** `Vec<File>`, `Map<String, File>`, std's
+  `Deque<File>` (and `Set`/`Heap` through the Map/Vec they hold, `Box<File>` of a plain field) are unique as their
+  elements are and end them: a removal giving nothing (Truncate, Clear, RemoveAt, SwapRemove, Remove, a Map's Remove and
+  Clear) ends what it removes, one that gives (Pop, TakeAt, SwapTake, Map.Take - which ends the key -, PopFront/PopBack)
+  hands it out, a store over an element (`v[i] = x`, Put of a key there) is O15's store over a place, growth moves and
+  ends nothing, and the holder letting go ends the live elements **the last first** (O15's parts order: a Vec from its last
+  position, a Map by slot from the last used, a Deque back to front). How (mine): the library says which positions are
+  live - `p.vacate()` as a statement now ENDS the value (a Drop of the place, then the old let-go), and the new
+  `p.occupy(x)` stores into room or a vacated slot ending nothing (for plain types both are the typed code they were, so
+  bench is byte-identical); a generic struct of the prelude or std not declared unique may declare `destruct` - a
+  **conditional destructor** (`types.Table.Ends`, marked at the declaration, `generic.EndsHeld`): it exists only in
+  instances holding a value with destructors by value through their parts, run-time arrays included
+  (`Table.Destructs` decides per instance; the body made only there), so `Vec<I64>` has none, stays copyable and pays
+  nothing; its body vacates the live positions. The primitives (vacate, occupy, grown, retire) are now the library's,
+  prelude and std (`generic.Library`: std/deque holds its ring itself) - reversing "vacate stays prelude-only until
+  real code needs it". C11 is judged on the instance (`generic.Program.UnendedDrop`, at the written type or the member
+  call's arguments, said once): refused where an array of a run-time length of such values is reached outside a
+  collection's own buffer - through parts or references - so std/list's `List<File>` (its copies are second holders of
+  its chunks) and a program's `Buf<T> { a Array<T> }` are errors naming `T&` or a Vec; and a collection holds them only
+  where they are unique (a copy copies its whole buffer, vacated positions too - a Copy-declaring holder is refused).
+  Found on the way (pre-existing, fixed): a comprehension of a run-time length, `Array<T>(n)` and `a.Copy()` of an array
+  made values with destructors that were never ended - each now that C11 error; G9d's reference binding applied inside a
+  type's arguments too (`Vec<T>` against `Vec<Res>` bound `T` to `mut Res&`) - now only to a value given whole
+  (`unifyDepth`); a store over a destructor value through an element was a checker gap - the place is evaluated once
+  (`check.stable`). Limits: Map keys and Heap's comparator take values (`bucketOf(key K)`, `less fn&(a T, b T)`), and a
+  unique value is lent to no by-value parameter, so `Set<File>`, `Map<File, V>` and `Heap<File>`'s Push/Pop are refused at
+  the call (a read by reference would need `T&` of a number, T24); a `Destroy()` of a collection after pushes of values
+  built from a local makes that local a holder (bulk review 7's F16 rule). tests/drops.olang decides each order while
+  compiling as at run time and under `interpret`.
 - **Declared types are nominal (T29).** `type Meters I32`, `type Name Array<T>`; `extends` inherits the base's methods
   and operators (T29f, the user's design); `Name(x)` converts and names the argument's storage (T29a) - a copy to or
   from an immut type (T13a); a declared
@@ -1425,7 +1453,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   only call results landing where it does is not copied where kept (`typed.FreshViews`), so `b := box(mk(0))` then
   `b.v = mk(k)` frees as it goes.
 - **Recorded limits:** long-lived mutated structures holding values a task can reach still only grow (ledger QF), and
-  values with destructors are freed only where a `Destroy()` ends them; a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
+  values with destructors are freed only where a `Destroy()` ends them (unique Part C, LIST.md A3, measured and tried
+  2026-11-07 and not built: a holder's drop and a collection's destructor are let-goes no call is written for, where
+  views in use cannot be checked - two holders of a block end in reverse order and one may read the other's ended value
+  in its destructor (no drop check); HISTORY.md "Unique Part C"); a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
   port's §8 pass.
 - **More scope rules (O2d, O13a, O13c, O14b/O14c, O16, O18a, O20, O26).** A binding records the depth it was made at;
   each return in a loop is judged again by later assignments in that loop; a call's result carries its callee's result

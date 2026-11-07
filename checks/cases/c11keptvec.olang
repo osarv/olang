@@ -1,0 +1,13 @@
+# check: fail error[C11]: Kept has a destructor to run and copies (its Copy), and a copy of Vec<Kept> would copy what it holds past its count - hold them by reference, Kept&
+# C11: a collection holds values with destructors by value only where they are unique - a copy of it copies its whole
+# buffer, the positions it vacated too
+Ended mut I64 = 0
+type R unique struct(id I64) {
+    id
+} destruct { Ended++ }
+type Kept struct(r R) { r }
+fn (k Kept&) Copy() Kept { return Kept(R(k.r.id + 1)) }
+fn main() {
+    v := Vec<Kept>()
+    assert v.Len() == 0
+}
