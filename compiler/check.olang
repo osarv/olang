@@ -574,6 +574,7 @@ type roFn struct(Body I64, First I64, At diag.Where, What String&) {
 # bound the type when it is a generic's need (-1 for none)
 # a landing's Inst for a variable's Destroy() (C9b): its value ended there, not handed on
 destroyedAt := -2
+destroyedHeld := -3   # (a Destroy() its holder's flag guards, O15)
 
 type landing struct(Body I64, Local I64, At source.Span, Ty types.TypeId, Inst I64) {
     Body
@@ -20264,16 +20265,17 @@ fn (c mut Checker&) landingsOf(b I64) {
     }
     holds := Array<Bool>(body.Locals.Len(), false)
     for i in range body.Locals.Len() { holds[i] = c.P.T.HoldsRefs(body.Locals[i].Ty) }
-    w := typed.Landings(ls, at, holds)
+    guarded := Bool[mine[k].Inst == destroyedHeld for k in range mine.Len()]
+    w := typed.Landings(ls, at, holds, guarded)
     w.Body(body.Root!)
     for k in range mine.Len() {
         if not w.Bad[k]: continue
         ld := mine[k]
-        if (w.Lent[k] or w.Via[k] >= 0) and ld.Inst != destroyedAt {
+        if (w.Lent[k] or w.Via[k] >= 0) and ld.Inst != destroyedAt and ld.Inst != destroyedHeld {
             c.landedNamed(body, ld, w.Via[k] if not w.Lent[k] else -1)
             continue
         }
-        if ld.Inst == destroyedAt {
+        if ld.Inst == destroyedAt or ld.Inst == destroyedHeld {
             named := w.Via[k] if w.Via[k] >= 0 else ld.Local
             c.P.L.Diags.Error(diag.Where.Span(body.File, I64(ld.At.Start), I64(ld.At.End)), msgs.DestroyedAfter(c.text(body.Locals[named].Name)))
             continue
@@ -20363,11 +20365,12 @@ fn (c mut Checker&) handOn(x typed.Expr&, l I64) typed.Expr& {
 
 # "x.Destroy()" of by-value local l, rx its read: its destructors run now, where it still holds a value, and it holds none
 fn (c mut Checker&) destroyHeld(sp source.Span, rx typed.Expr&, l I64) typed.Expr& {
-    c.landings.Push(landing(c.fr().Body, l, rx.Span(), typeOf(rx), destroyedAt))
+    flag := try c.fr().dropFlags.Get(l) catch default -1
+    c.landings.Push(landing(c.fr().Body, l, rx.Span(), typeOf(rx), destroyedHeld if flag >= 0 else destroyedAt))
     from := c.stmts.Len()
     t := c.localType(l)
     c.emit(typed.Stmt.Eval(rx.Span(), rx))
-    c.emit(c.dropIfHeld(sp, typed.Lvalue.Local(sp, t, typed.LocalId(I32(l))), try c.fr().dropFlags.Get(l) catch default -1))
+    c.emit(c.dropIfHeld(sp, typed.Lvalue.Local(sp, t, typed.LocalId(I32(l))), flag))
     c.dropsGone(sp, l)
     return typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
 }

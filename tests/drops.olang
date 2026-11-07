@@ -300,3 +300,46 @@ test mkFresh "stores over a holder what a try gives" {
 StoredOver := storedOver()
 
 assert StoredOver == "12467", "decided while compiling: " $StoredOver
+
+# a holder's Destroy() deferred - by defer, or by errdefer with the holder returned - and a holder given a new value
+# after its Destroy() (C9b; bulk review 7, F9): the deferred one ends only what the holder still holds when it runs
+fn deferredEnd(id I64, t mut Tally&) I64 {
+    x Res = Res(id, t)
+    defer x.Destroy()
+    return x.id
+}
+
+fn opened(id I64, bad Bool, t mut Tally&) Res ? Gone {
+    x Res = Res(id, t)
+    errdefer x.Destroy()
+    if bad: error Gone
+    return x
+}
+
+fn ended() String {
+    t := Tally()
+    n := deferredEnd(1, t)
+    {
+        a Res = try opened(2, false, t) catch Gone default Res(0, t)
+        b Res = try opened(3, true, t) catch Gone default Res(4, t)
+        n += a.id + b.id
+    }
+    {
+        y Res = Res(5, t)
+        y.Destroy()
+        y = Res(6, t)
+        for i in range 2 {
+            y.Destroy()
+            y = Res(7 + i, t)
+        }
+    }
+    return $n "/" $t.Text()
+}
+
+test deferredEnd "ends a held value by a deferred Destroy, and a holder given a new one after its Destroy" {
+    assert ended() == "7/13425678"
+}
+
+Ended := ended()
+
+assert Ended == "7/13425678", "decided while compiling: " $Ended

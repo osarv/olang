@@ -2394,10 +2394,13 @@ fn freshValue(x Expr&) Bool {
 # local - is its local's last mention on every path from it, in the order the body evaluates: Bad[k] where some path
 # mentions the local after read k. A branch's mentions are no other branch's; a loop running again reaches its body's
 # mentions before the read; a mention in deferred code, a task or a join's clauses runs after everything
-type Landings struct(Locals Array<I64>&, Starts Array<I64>&, Holds Array<Bool>&) {
+type Landings struct(Locals Array<I64>&, Starts Array<I64>&, Holds Array<Bool>&, Guarded Array<Bool>&) {
     Locals                                                       # each watched read's local
     Starts                                                       # ... and where it starts
     Holds                                                        # whether each local of the body may name another's storage
+    Guarded                                                      # each read a Destroy() of a holder its flag guards (O15):
+                                                                 # in deferred code it ends only what the holder still
+                                                                 # holds, so it is no mention for the reads before it
     Bad mut Array<Bool>& = Array<Bool>(Locals.Len(), false)
     Via mut Array<I64>& = Array<I64>(Locals.Len(), -1)           # the local whose mention after made it Bad (-1: itself)
     Lent mut Array<Bool>& = Array<Bool>(Locals.Len(), false)     # Bad because the same call also mentions it
@@ -2488,6 +2491,7 @@ fn (w mut Landings&) mention(id LocalId, at I64, read Bool) {
         w.via = was
     }
     if w.later > 0 {
+        if read and w.guardedAt(l, at): return
         w.laterLocals.Put(l, true)
         if w.via >= 0: w.laterVia.Put(l, w.via)
         return
@@ -2518,10 +2522,14 @@ fn (w mut Landings&) stmt(s Stmt&) {
         }
         case Stmt.Eval(_, x), Stmt.Yield(_, x), Stmt.Reraise(_, x, _): w.expr(x)
         case Stmt.Assign(_, p, x) {
-            w.place(p)
+            # (a whole local's store mentions nothing of what it held: its value is new - C9b, bulk review 7)
+            if p != Lvalue.Local: w.place(p)
             i0 := w.saidL.Len()
             w.expr(x)
-            if p == Lvalue.Local: w.holds(I64(p.id), i0)
+            if p == Lvalue.Local {
+                w.renewed(I64(p.id))
+                w.holds(I64(p.id), i0)
+            }
         }
         case Stmt.Suspend(_, x): w.expr(x)
         case Stmt.Return(_, x) {
@@ -2572,6 +2580,21 @@ fn (w mut Landings&) holds(l I64, i0 I64) {
         if m == l or not w.saidRef[j] or not w.watched(m): continue
         w.holder.Push(l)
         w.holderOf.Push(m)
+    }
+}
+
+fn (w Landings&) guardedAt(l I64, at I64) Bool {
+    for k in range w.Locals.Len() {
+        if w.Locals[k] == l and w.Starts[k] == at and w.Guarded[k]: return true
+    }
+    return false
+}
+
+# local l assigned whole: a new value, so what its earlier reads handed on or ended is no longer what it holds
+fn (w mut Landings&) renewed(l I64) {
+    if w.dead or w.later > 0: return
+    for k in range w.Locals.Len() {
+        if w.Locals[k] == l: w.open[k] = false
     }
 }
 

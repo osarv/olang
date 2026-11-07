@@ -7074,7 +7074,10 @@ scope's destructors not yet run still run, each once (C10).
 
 **C9b (Destroy).** On a variable `x` holding a value with a destructor by value (O15), `x.Destroy()` runs its
 destructors now - its holder letting go - and `x` holds no value after it: a mention of `x` after the call on any path
-(T13b's rule for a landing) is a compile-time error. On a local `x` holding a reference to an instance of a struct type
+(T13b's rule for a landing) is a compile-time error, but giving `x` a new value whole (`x = Res(2)`), after which `x`
+holds that one. A `Destroy()` in deferred code (`defer x.Destroy()`, `errdefer x.Destroy()`) ends only what `x` still
+holds when it runs - nothing where `x` handed its value on (returned it, T13b) - so the statements before it may mention
+`x`; deferred code that runs after it (registered before it, S19) may not. On a local `x` holding a reference to an instance of a struct type
 that declares a destructor, `x.Destroy()` runs that instance's destructor now - and the destructors of what was built where it lives, newest
 first, as its scope's close would - and reclaims its storage; nothing runs for it when its scope closes. It compiles
 only where the compiler proves `x` the only way left to reach the instance, by the analysis that frees early (O8d):
