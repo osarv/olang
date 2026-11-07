@@ -9,14 +9,14 @@ type Info struct(Offset I64, Len I64) {
 type Ref struct(r Info&) { r }
 type W struct(x Ref) { x }
 type G struct() { n I64 = 0 }
-fn h(g G&, i Info&, d I64) Ref {
-    if d < 5 { return m(g, i, d + 1) }
+fn Ref.h(g G&, i Info&, d I64) Ref {
+    if d < 5 { return Ref.m(g, i, d + 1) }
     return Ref(i)
 }
-fn m(g G&, i Info&, d I64) Ref { return h(g, i, d) }
+fn Ref.m(g G&, i Info&, d I64) Ref { return Ref.h(g, i, d) }
 fn (g G&) A(k I64) W {
     i := Info(k, k + 1)
-    return W(m(g, i, 0))
+    return W(Ref.m(g, i, 0))
 }
 fn churn() I64 {
     t I64 = 0

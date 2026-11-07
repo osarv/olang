@@ -61,12 +61,12 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Arra
         say($"olang profile: " $name " wrote no profile - it ended by a signal (" $build.SignalName(status - 128) ")\n")
         return status
     }
-    p := try Read(bytes) catch Bad {
+    p := try Profile.Read(bytes) catch Bad {
         say($"olang profile: " $samples " is not a profile this compiler writes\n")
         return status
     }
     tool := Symbolizer()
-    places := Resolve(p, tool)
+    places := Places.Resolve(p, tool)
     say(Report(name, p, places))
     if tool == "" { say("olang profile: no llvm-symbolizer found beside clang or on PATH - functions named by their addresses\n") }
     try os.WriteFile(html, FlameGraph(name, p, places)) catch os.Error {
@@ -151,7 +151,7 @@ fn word(b Array<U8>&, i I64) I64 {
 # a profile's bytes read: its header ("OLPROF01", the period, its words of records, the samples dropped, the threads),
 # the records - a header word (the frame count, and above bit 8 the weight) then the addresses - and the map. A record
 # whose header is still zero was being written as the program ended: it and what follows are left out
-fn Read(b Array<U8>&) Profile ? Bad {
+fn Profile.Read(b Array<U8>&) Profile ? Bad {
     p := Profile()
     if b.Len() < 40 or String(b[:8]) != "OLPROF01" { error Bad.Malformed }
     p.PeriodNs = word(b, 1)
@@ -336,7 +336,7 @@ fn Symbolizer() String {
 # each address of p made its places: its mapping's file and the address there, given to the symbolizer at tool (all at
 # once, one line each) - a return address less one, so that the call is what it names and not the line after it. An
 # address no file holds, or that the symbolizer cannot name, is named by itself and its file
-fn Resolve(p Profile&, tool String&) Places {
+fn Places.Resolve(p Profile&, tool String&) Places {
     pl := Places()
     maps := mappings(p.Maps)
     segs Map<String&, Vec<I64>>
@@ -383,7 +383,7 @@ fn Resolve(p Profile&, tool String&) Places {
             asked++
         }
         if asked > 0 {
-            out := try os.Exec($tool, "--inlining", "--functions=short", input = ask.ToString())
+            out := try os.Output.Exec($tool, "--inlining", "--functions=short", input = ask.ToString())
                 catch os.Error default os.Output(1, "", "")
             if out.Status == 0 {
                 for l in out.Stdout.Lines() { said.Push($l) }
@@ -527,7 +527,7 @@ type Tally struct() {
 
 fn add(m mut Map<I64, I64>&, k I64, w I64) { m.Put(k, (try m.Get(k) catch default 0) + w) }
 
-fn Tallied(p Profile&, pl mut Places&) Tally {
+fn Tally.Tallied(p Profile&, pl mut Places&) Tally {
     t := Tally()
     for s in p.Samples {
         st := pl.stack(p, s)
@@ -561,7 +561,7 @@ fn pct(w I64, total I64) String { return $(F64(w) * 100.0 / F64(total if total >
 # the report, as olang profile prints it: what was sampled, the functions by self time (their total beside), the
 # hottest lines, and who calls the hottest functions
 fn Report(name String&, p Profile&, pl mut Places&) String {
-    t := Tallied(p, pl)
+    t := Tally.Tallied(p, pl)
     total := p.Total()
     b := StringBuilder()
     secs := F64(total) * F64(p.PeriodNs) / 1e9
@@ -841,9 +841,9 @@ fn sampleFile(words Array<I64>&, maps String&) Array<U8> {
     return b.ToArray()
 }
 
-test Read "a samples file's header, records and map; a record cut short ends the records" {
+test Profile.Read "a samples file's header, records and map; a record cut short ends the records" {
     maps := "5000-6000 r-xp 00001000 fe:00 7 /bin/prog\n"
-    p := try Read(sampleFile(I64[(4 << 8) | 2, 0x5010, 0x5020, (1 << 8) | 1, 0x5030, 0, 0x99], maps))
+    p := try Profile.Read(sampleFile(I64[(4 << 8) | 2, 0x5010, 0x5020, (1 << 8) | 1, 0x5030, 0, 0x99], maps))
     assert p.PeriodNs == 1000000 and p.Dropped == 2 and p.Threads == 1
     assert p.Samples.Len() == 2 and p.Samples[0].Weight == 4 and p.Samples[0].Count == 2 and p.Samples[1].Start == 2
     assert p.Addrs.Len() == 3 and p.Addrs[2] == 0x5030 and p.Total() == 5
@@ -851,7 +851,7 @@ test Read "a samples file's header, records and map; a record cut short ends the
     m := mappings(p.Maps)
     assert m.Len() == 1 and m[0].Start == 0x5000 and m[0].End == 0x6000 and m[0].Offset == 0x1000 and m[0].Path == "/bin/prog"
     bad := false
-    try Read(Array<U8>(8)) catch Bad { bad = true }
+    try Profile.Read(Array<U8>(8)) catch Bad { bad = true }
     assert bad
 }
 

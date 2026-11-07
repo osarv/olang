@@ -3,7 +3,7 @@
 # program runs - read after what it was built in closes, as the description below says it would be
 # O18c: the same through a function of the program's own and a Map, its note naming the text to make elsewhere
 type Box struct(s String&) { s }
-fn box(s String&) Box { return Box(s) }
+fn Box.box(s String&) Box { return Box(s) }
 fn keep(l mut Vec<Box>&, b Box) { l.Push(b) }
 
 fn main() ? {
@@ -11,7 +11,7 @@ fn main() ? {
     m := Map<I64, Box>()
     for k in range 4 {
         t := $k "-text"
-        keep(bs, box(t))
-        m.Put(k, box(t))
+        keep(bs, Box.box(t))
+        m.Put(k, Box.box(t))
     }
 }

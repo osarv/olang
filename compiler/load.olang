@@ -21,6 +21,7 @@ import "ast"
 import "parse"
 import "diag"
 import "msgs"
+import "diagmsg"
 import "cond"
 import "fetch"
 import "bindgen"
@@ -184,7 +185,7 @@ fn (l mut Loader&) LoadPrelude() {
     }
     for f in files {
         text := try os.ReadFile(f) catch os.Error { continue }
-        ts := scan.Scan(text)
+        ts := scan.Tokens.Scan(text)
         for name in typeNames(text, ts) { l.preludeTypes.Push($name) }
     }
     for f in files { l.load(f, l.rootIdentity(f), true) }
@@ -225,7 +226,7 @@ fn (l mut Loader&) load(path String&, identity String&, prelude Bool, c Bool = f
     if real in l.Overlay {
         m.Src = source.Source($m.Path, l.Overlay.Get(real)!)
     } else {
-        m.Src = try source.Read(m.Path) catch os.Error {
+        m.Src = try source.Source.Read(m.Path) catch os.Error {
             f := l.Diags.AddFile(m.Path, "")
             l.Diags.Error(diag.Where.File(f), msgs.CannotOpen())
             try l.Mods.Pop() catch { }
@@ -234,10 +235,10 @@ fn (l mut Loader&) load(path String&, identity String&, prelude Bool, c Bool = f
     }
     m.C = c
     m.File = l.Diags.AddFile(m.Path, m.Src!.Text, m.Identity.StartsWith("std/") or c)
-    m.Toks = scan.Scan(m.Src!.Text)
+    m.Toks = scan.Tokens.Scan(m.Src!.Text)
     for d in m.Toks!.Diags {
         line := d.Start
-        l.Diags.Error(diag.Where.Span(m.File, I64(line), I64(d.End)), msgs.Msg(msgs.Diag.UnknownChar, d.Rule(), d.Message()))
+        l.Diags.Error(diag.Where.Span(m.File, I64(line), I64(d.End)), diagmsg.Msg(msgs.Diag.UnknownChar, d.Rule(), d.Message()))
     }
     l.prescan(m)
     m.Oracle = parse.Oracle()
@@ -681,7 +682,7 @@ fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
     base := $dir "/" $ck
     text := cachedTranslation(base)
     if text == "" {
-        tr := bindgen.Translate(include, own, l.Clang, l.CFlags.ToArray(), tag, spec)
+        tr := bindgen.Translation.Translate(include, own, l.Clang, l.CFlags.ToArray(), tag, spec)
         if tr.Why != "" {
             if tr.NotFound {
                 l.Diags.Error(at, msgs.CHeaderNotFound(spec))
@@ -692,7 +693,7 @@ fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
         }
         deps := StringBuilder()
         for d in tr.Deps {
-            info := try os.Stat(d) catch os.Error { continue }
+            info := try os.FileInfo.Stat(d) catch os.Error { continue }
             deps.Push($info.Size " " $info.ModTime " " $d "\n")
         }
         stamp := sha256.Hex(deps.ToString())[:16]
@@ -706,7 +707,7 @@ fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
     i := l.load($base ".olang", identity, false, true)
     if i < 0 { return -1 }
     t := l.Mods[i]
-    if os.Exists($base ".c") and (try os.Stat($base ".c") catch os.Error default os.FileInfo(os.FileKind.OTHER, 0, 0)).Size > 0 {
+    if os.Exists($base ".c") and (try os.FileInfo.Stat($base ".c") catch os.Error default os.FileInfo(os.FileKind.OTHER, 0, 0)).Size > 0 {
         t.CUnit = $base ".c"
     }
     skipping := false
@@ -739,7 +740,7 @@ fn cachedTranslation(base String&) String {
         b := try line[a + 1:].FindByte(' ') catch { return "" }
         size := try line[:a].ParseInt() catch { return "" }
         time := try line[a + 1:a + 1 + b].ParseInt() catch { return "" }
-        info := try os.Stat(line[a + 2 + b:]) catch os.Error { return "" }
+        info := try os.FileInfo.Stat(line[a + 2 + b:]) catch os.Error { return "" }
         if info.Size != size or info.ModTime != time { return "" }
     }
     return try os.ReadFile($base ".olang") catch os.Error default ""
@@ -762,7 +763,7 @@ fn fileStamp(clang String&) String {
     if clang == "" { return "" }
     real := try os.RealPath(target.WhereIs(clang)) catch default ""
     if real == "" { return $clang }
-    info := try os.Stat(real) catch os.Error { return $real }
+    info := try os.FileInfo.Stat(real) catch os.Error { return $real }
     return $real " " $info.Size " " $info.ModTime
 }
 
@@ -1157,7 +1158,7 @@ fn (l Loader&) Graph() String {
 # ---- tests ----
 
 # a loader over the repository's std, with the host's build constants
-fn testLoader(lock String&) Loader {
+fn Loader.test(lock String&) Loader {
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
     return Loader("std", consts, fetch.Fetcher(lock, $lock ".cache", "file:///nowhere/", false, true), source.Names()
@@ -1186,7 +1187,7 @@ test "a program's modules: relative imports, a cycle, the prelude and identities
     write(dir, "lib/util.olang", "import \"helper\"\ntype Box struct() { }\n")
     write(dir, "lib/helper.olang", "import \"util\"\nfn H() I64 { return 1 }\n")
     write(dir, "lib/pub.olang", "import \"std/stats\"\n")
-    l := testLoader($dir "/olang.lock")
+    l := Loader.test($dir "/olang.lock")
     root := l.Load($dir "/main.olang")
     assert root >= 0 and l.Diags.Errors() == 0, rules(l)
     g := l.Graph()
@@ -1203,12 +1204,12 @@ test "imports that are wrong are reported where they are written" {
     write(dir, "a.olang", "")
     write(dir, "b/a.olang", "")
     write(dir, "main.olang", "import \"a.olang\"\nimport \"nothere\"\nimport \"a\"\nimport \"b/a\"\nimport \"std/../x\"\n")
-    l := testLoader($dir "/olang.lock")
+    l := Loader.test($dir "/olang.lock")
     l.Load($dir "/main.olang")
     r := rules(l)
     assert r.Contains("M23") and r.Contains("M5"), r
     assert l.Diags.Errors() == 4, r
-    l2 := testLoader($dir "/olang.lock")
+    l2 := Loader.test($dir "/olang.lock")
     assert l2.Load($dir "/absent.olang") < 0 and l2.Diags.Errors() == 1
 }
 
@@ -1219,7 +1220,7 @@ test "a top-level if decides which imports exist, and a pending one waits for De
     write(dir, "win.olang", "")
     write(dir, "late.olang", "")
     write(dir, "main.olang", "Big := 3\nif TargetOs == \"linux\" and Big > 2 {\n    import \"lin\"\n} else {\n    import \"win\"\n}\nif f() {\n    import \"late\"\n}\nfn f() Bool { return true }\n")
-    l := testLoader($dir "/olang.lock")
+    l := Loader.test($dir "/olang.lock")
     root := l.Load($dir "/main.olang")
     assert l.Diags.Errors() == 0, rules(l)
     g := l.Graph()
@@ -1236,18 +1237,18 @@ test "M16 and M17: one file reached twice, and a re-export back to its importer"
     write(dir, "c.olang", "")
     write(dir, "b.olang", "import C \"c\"\n")
     write(dir, "main.olang", "import B \"b\"\nimport \"c\"\n")
-    l := testLoader($dir "/olang.lock")
+    l := Loader.test($dir "/olang.lock")
     l.Load($dir "/main.olang")
     assert rules(l).Contains("M16"), rules(l)
     write(dir, "x.olang", "import Y \"y\"\n")
     write(dir, "y.olang", "import X \"x\"\n")
-    l2 := testLoader($dir "/olang.lock")
+    l2 := Loader.test($dir "/olang.lock")
     l2.Load($dir "/x.olang")
     assert rules(l2).Contains("M17"), rules(l2)
 }
 
 fn git(dir String&, args Array<String&>&) Bool {
-    out := try os.Exec(...args, dir = dir) catch os.Error { return false }
+    out := try os.Output.Exec(...args, dir = dir) catch os.Error { return false }
     return out.Status == 0
 }
 

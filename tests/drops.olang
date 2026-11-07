@@ -50,7 +50,7 @@ fn take(r Res) I64 { return r.id }
 
 fn give(r Res) Res { return r }
 
-fn make(id I64, log mut Tally&) Res { return Res(id, log) }
+fn Res.make(id I64, log mut Tally&) Res { return Res(id, log) }
 
 # handed on into a value made on one path only: the other's ends with the callee
 fn wrapIf(r Res, keep Bool) I64 {
@@ -72,7 +72,7 @@ fn order() String {
     {
         k Res = give(Res(2, t))
         assert t.Text() == "1"
-        k = make(3, t)
+        k = Res.make(3, t)
         assert t.Text() == "12"
     }
     {
@@ -108,7 +108,7 @@ test "a value a call gave that nothing holds by value is held where the call lan
     {
         r := Res(1, t)
         assert r.id == 1 and t.Text() == ""
-        make(2, t)
+        Res.make(2, t)
         assert t.Text() == ""
     }
     assert t.Text() == "21" or t.Text() == "12"
@@ -177,12 +177,12 @@ type Shelf struct() {
     items := Vec<Res&>()
 }
 
-fn mkRef(n I64, t mut Tally&) Res& {
+fn Res.mkRef(n I64, t mut Tally&) Res& {
     x Res = Res(n, t)
     return x
 }
 
-fn wrapRef(n I64, t mut Tally&) RefTo {
+fn RefTo.wrapRef(n I64, t mut Tally&) RefTo {
     x Res = Res(n, t)
     return RefTo(x)
 }
@@ -201,8 +201,8 @@ fn flowedOut() String {
     t := Tally()
     seen := ""
     {
-        a := mkRef(5, t)
-        b := wrapRef(6, t)
+        a := Res.mkRef(5, t)
+        b := RefTo.wrapRef(6, t)
         s := Shelf()
         shelve(s, 7, t)
         f := closeOver(8, t)
@@ -211,7 +211,7 @@ fn flowedOut() String {
     return $seen "/" $t.Text()
 }
 
-test mkRef "ends a holder whose storage flowed out where that storage lives" {
+test Res.mkRef "ends a holder whose storage flowed out where that storage lives" {
     assert flowedOut() == "5678//8765"
 }
 
@@ -277,7 +277,7 @@ assert Refused == "-1/3/31/2/312", "decided while compiling: " $Refused
 
 # a store over a holder - or a declaration - from what a try, a "!" or a catch default gives is a fresh value, as from
 # the call alone: the old value ended after the new one is made (bulk review 7, F14)
-fn mkFresh(id I64, bad Bool, t mut Tally&) Res ? Gone {
+fn Res.mkFresh(id I64, bad Bool, t mut Tally&) Res ? Gone {
     if bad: error Gone
     return Res(id, t)
 }
@@ -286,16 +286,16 @@ fn storedOver() String {
     t := Tally()
     {
         x Res = Res(1, t)
-        x = mkFresh(2, false, t)!
-        x = try mkFresh(3, true, t) catch Gone default Res(4, t)
-        y Res = try mkFresh(5, true, t) catch Gone default Res(6, t)
-        x = try mkFresh(7, false, t) catch Gone default Res(8, t)
+        x = Res.mkFresh(2, false, t)!
+        x = try Res.mkFresh(3, true, t) catch Gone default Res(4, t)
+        y Res = try Res.mkFresh(5, true, t) catch Gone default Res(6, t)
+        x = try Res.mkFresh(7, false, t) catch Gone default Res(8, t)
         assert x.id == 7 and y.id == 6
     }
     return t.Text()
 }
 
-test mkFresh "stores over a holder what a try gives" {
+test Res.mkFresh "stores over a holder what a try gives" {
     assert storedOver() == "12467"
 }
 
@@ -311,7 +311,7 @@ fn deferredEnd(id I64, t mut Tally&) I64 {
     return x.id
 }
 
-fn opened(id I64, bad Bool, t mut Tally&) Res ? Gone {
+fn Res.opened(id I64, bad Bool, t mut Tally&) Res ? Gone {
     x Res = Res(id, t)
     errdefer x.Destroy()
     if bad: error Gone
@@ -322,8 +322,8 @@ fn ended() String {
     t := Tally()
     n := deferredEnd(1, t)
     {
-        a Res = try opened(2, false, t) catch Gone default Res(0, t)
-        b Res = try opened(3, true, t) catch Gone default Res(4, t)
+        a Res = try Res.opened(2, false, t) catch Gone default Res(0, t)
+        b Res = try Res.opened(3, true, t) catch Gone default Res(4, t)
         n += a.id + b.id
     }
     {
@@ -353,9 +353,9 @@ type Wrapped struct(r Res) {
     r
 }
 
-fn wrapOn(r Res) Wrapped { return Wrapped(r) }
+fn Wrapped.wrapOn(r Res) Wrapped { return Wrapped(r) }
 
-fn (w Wrapped&) Copy() Wrapped { return wrapOn(Res(w.r.id + 50, w.r.log)) }
+fn (w Wrapped&) Copy() Wrapped { return Wrapped.wrapOn(Res(w.r.id + 50, w.r.log)) }
 
 fn wrappedCopies() String {
     t := Tally()
@@ -367,7 +367,7 @@ fn wrappedCopies() String {
     return t.Text()
 }
 
-test wrapOn "hands its parameter on, so a declared Copy may call it" {
+test Wrapped.wrapOn "hands its parameter on, so a declared Copy may call it" {
     assert wrappedCopies() == "511"
 }
 
@@ -383,7 +383,7 @@ type GHeld struct(r GRes) {
     r
 }
 
-fn gEvery(r GRes, keep Bool) GHeld {
+fn GHeld.gEvery(r GRes, keep Bool) GHeld {
     if keep: return GHeld(r)
     return GHeld(r)
 }
@@ -396,14 +396,14 @@ fn gSome(r GRes, keep Bool) I64 {
     return 0
 }
 
-assert not gEvery.WritesGlobals and gSome.WritesGlobals, "decided while compiling (G42)"
+assert not GHeld.gEvery.WritesGlobals and gSome.WritesGlobals, "decided while compiling (G42)"
 
 test gSome "runs its parameter's destructor where it does not hand it on" {
     Ends = 0
     assert gSome(GRes(3), true) == 3 and Ends == 3
     assert gSome(GRes(4), false) == 0 and Ends == 7
     {
-        h := gEvery(GRes(5), false)
+        h := GHeld.gEvery(GRes(5), false)
         assert h.r.id == 5 and Ends == 7
     }
     assert Ends == 12

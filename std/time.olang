@@ -60,12 +60,12 @@ test "the wall clock is a date after this was written" {
 # functions below; read back in one with its methods. An I64 of nanoseconds spans 292 years either way, so a Date's Wall() holds the years 1678 to 2262
 type Duration extends I64
 
-fn Nanos(n I64) Duration { return Duration(n) }
-fn Micros(n I64) Duration { return Duration(n * 1000) }
-fn Millis(n I64) Duration { return Duration(n * 1000000) }
-fn Seconds(n I64) Duration { return Duration(n * 1000000000) }
-fn Minutes(n I64) Duration { return Duration(n * 60000000000) }
-fn Hours(n I64) Duration { return Duration(n * 3600000000000) }
+fn Duration.Nanos(n I64) Duration { return Duration(n) }
+fn Duration.Micros(n I64) Duration { return Duration(n * 1000) }
+fn Duration.Millis(n I64) Duration { return Duration(n * 1000000) }
+fn Duration.Seconds(n I64) Duration { return Duration(n * 1000000000) }
+fn Duration.Minutes(n I64) Duration { return Duration(n * 60000000000) }
+fn Duration.Hours(n I64) Duration { return Duration(n * 3600000000000) }
 
 # the duration as a whole count of a unit, rounded toward zero, or in seconds as a float
 fn (d Duration) Nanos() I64 { return I64(d) }
@@ -74,7 +74,7 @@ fn (d Duration) Millis() I64 { return I64(d) / 1000000 }
 fn (d Duration) Seconds() F64 { return F64(I64(d)) / 1e9 }
 
 # the time passed since t, a reading of Now(), as a Duration
-fn Elapsed(t I64) Duration { return Duration(Now() - t) }
+fn Duration.Elapsed(t I64) Duration { return Duration(Now() - t) }
 
 # how "$" renders a Duration: the largest units first, as Go writes one - "1h2m3.5s", "2m0s", "1.5s", "250ms",
 # "12.5us", "800ns", "0s" - seconds and smaller with as many decimals as they need and no trailing zeros, and a "-"
@@ -181,7 +181,7 @@ type Timer struct(At I64) {
 }
 
 # a timer ready once d has passed - Select's timeout: "chan.Select(c, time.After(time.Millis(50)))"
-fn After(d Duration) Timer { return Timer(Now() + I64(d)) }
+fn Timer.After(d Duration) Timer { return Timer(Now() + I64(d)) }
 
 # the clock's reading where the timer is ready; Exhausted before then
 fn (t mut Timer&) TryNow() I64 ? Exhausted {
@@ -197,32 +197,32 @@ test Virtual "sleeps take no time, and the clock reads what was slept" {
     real := read(clockMonotonic)
     Virtual(fn() {
         assert Now() == VirtualStart and Wall() == VirtualStart and IsVirtual()
-        Sleep(Hours(2))
-        assert Now() == VirtualStart + I64(Hours(2))
-        assert DateOf(Wall()).Hour == 2
-        t := After(Seconds(5))
+        Sleep(Duration.Hours(2))
+        assert Now() == VirtualStart + I64(Duration.Hours(2))
+        assert Date.Of(Wall()).Hour == 2
+        t := Timer.After(Duration.Seconds(5))
         assert (try t.TryNow() catch Exhausted default -1) == -1
-        Sleep(Seconds(5))
-        assert (try t.TryNow() catch Exhausted default -1) == VirtualStart + I64(Hours(2) + Seconds(5))
+        Sleep(Duration.Seconds(5))
+        assert (try t.TryNow() catch Exhausted default -1) == VirtualStart + I64(Duration.Hours(2) + Duration.Seconds(5))
     })
     assert not IsVirtual()
     assert read(clockMonotonic) - real < 1000000000    # two virtual hours, well under a real second
 }
 
 test "durations are made, read back, compared and rendered" {
-    assert Seconds(2) == Millis(2000) and Minutes(1) == Seconds(1) * 60
-    d := Seconds(1) + Millis(500)
+    assert Duration.Seconds(2) == Duration.Millis(2000) and Duration.Minutes(1) == Duration.Seconds(1) * 60
+    d := Duration.Seconds(1) + Duration.Millis(500)
     assert d.Millis() == 1500 and d.Seconds() == 1.5 and d.Micros() == 1500000
-    assert $d == "1.5s" and $(Hours(1) + Minutes(2) + Millis(3500)) == "1h2m3.5s"
-    assert $Minutes(2) == "2m0s" and $Millis(250) == "250ms" and $Nanos(12500) == "12.5us"
-    assert $Nanos(800) == "800ns" and $Duration(0) == "0s" and $(-Millis(3)) == "-3ms"
-    assert d * 2 == Seconds(3) and d / 3 == Millis(500) and Millis(1) < Seconds(1)
+    assert $d == "1.5s" and $(Duration.Hours(1) + Duration.Minutes(2) + Duration.Millis(3500)) == "1h2m3.5s"
+    assert $Duration.Minutes(2) == "2m0s" and $Duration.Millis(250) == "250ms" and $Duration.Nanos(12500) == "12.5us"
+    assert $Duration.Nanos(800) == "800ns" and $Duration(0) == "0s" and $(-Duration.Millis(3)) == "-3ms"
+    assert d * 2 == Duration.Seconds(3) and d / 3 == Duration.Millis(500) and Duration.Millis(1) < Duration.Seconds(1)
 }
 
 test "Sleep waits at least what it is given" {
     start := Now()
-    Sleep(Millis(20))
-    assert Elapsed(start) >= Millis(20) and Elapsed(start) < Seconds(10)
+    Sleep(Duration.Millis(20))
+    assert Duration.Elapsed(start) >= Duration.Millis(20) and Duration.Elapsed(start) < Duration.Seconds(10)
     Sleep(Duration(-5))
     Sleep(Duration(0))
 }
@@ -272,7 +272,7 @@ fn daysIn(y I64, m I64) I64 {
 
 # the date and time "wall" - nanoseconds since 1970-01-01 00:00 UTC, as Wall() gives - is, written in the time zone
 # "offset" minutes ahead of UTC: "time.DateOf(time.Wall())" is now in UTC
-fn DateOf(wall I64, offset I64 = 0) Date {
+fn Date.Of(wall I64, offset I64 = 0) Date {
     ns := wall + offset * 60000000000
     days := ns / 86400000000000
     rest := ns % 86400000000000
@@ -340,7 +340,7 @@ fn (d Date&) Str() String {
 }
 
 # the instant "wall" (as Wall() gives) as RFC 3339 text, in the time zone "offset" minutes ahead of UTC
-fn Format(wall I64, offset I64 = 0) String { return DateOf(wall, offset).Str() }
+fn Format(wall I64, offset I64 = 0) String { return Date.Of(wall, offset).Str() }
 
 # n digits of t from at, as a number - failing with SYNTAX when they are not all there
 fn digitsAt(t String&, at I64, n I64) I64 ? Error.Syntax {
@@ -361,7 +361,7 @@ fn expect(t String&, at I64, c Char) ? Error.Syntax {
 # an RFC 3339 date and time read into a Date: "YYYY-MM-DDTHH:MM:SS", a fraction of up to nine digits after a '.', and
 # 'Z' or "+HH:MM"/"-HH:MM" - with 't', 'z' and a space for the 'T' allowed, as the RFC allows. Fails with SYNTAX for any
 # other text and RANGE for a part that names nothing (a 13th month, February 30th, a 25th hour, a 61st second)
-fn Parse(t String&) Date ? Error {
+fn Date.Parse(t String&) Date ? Error {
     y := try digitsAt(t, 0, 4)
     try expect(t, 4, '-')
     mo := try digitsAt(t, 5, 2)
@@ -415,26 +415,26 @@ test "dates are written as RFC 3339 and read back" {
     assert EpochText == "1970-01-01T00:00:00Z" and Billion == "2001-09-09T01:46:40Z"
     assert Format(-1) == "1969-12-31T23:59:59.999999999Z"
     assert Format(1500000000, 120) == "1970-01-01T02:00:01.5+02:00"
-    d := DateOf(1790000000000000000)
+    d := Date.Of(1790000000000000000)
     assert d.Year == 2026 and d.Month == 9 and d.Day == 21 and d.Weekday() == 1 and d.YearDay() == 264
     assert d.Wall() == 1790000000000000000
-    p := Parse("2026-10-24T15:05:01.25+02:00")!
+    p := Date.Parse("2026-10-24T15:05:01.25+02:00")!
     assert p.Hour == 15 and p.Offset == 120 and p.Nano == 250000000 and $p == "2026-10-24T15:05:01.25+02:00"
-    assert p.Wall() == Parse("2026-10-24T13:05:01.25Z")!.Wall()
-    assert DateOf(p.Wall()) == Parse("2026-10-24t13:05:01.250z")!
-    assert Date(2024, 2, 29).Wall() + Hours(24) == Date(2024, 3, 1).Wall()
-    assert DateOf(Date(1700, 12, 31, 23, 59, 59).Wall()).Year == 1700
+    assert p.Wall() == Date.Parse("2026-10-24T13:05:01.25Z")!.Wall()
+    assert Date.Of(p.Wall()) == Date.Parse("2026-10-24t13:05:01.250z")!
+    assert Date(2024, 2, 29).Wall() + Duration.Hours(24) == Date(2024, 3, 1).Wall()
+    assert Date.Of(Date(1700, 12, 31, 23, 59, 59).Wall()).Year == 1700
 }
 
 test "Parse refuses what is not a date" {
     for bad in String&["", "2026-10-24", "2026-10-24T13:05:01", "2026-1-24T13:05:01Z", "2026-10-24T13:05:01.Z"
         "2026-10-24T13:05:01+0200", "2026-10-24T13:05:01Zx", "2026-10-24T13:05:01.1234567890Z"] {
-        try Parse(bad) catch Error.Syntax { continue } catch Error.Range { unreachable }
+        try Date.Parse(bad) catch Error.Syntax { continue } catch Error.Range { unreachable }
         unreachable
     }
     for bad in String&["2026-13-01T00:00:00Z", "2025-02-29T00:00:00Z", "2026-10-24T24:00:00Z", "2026-10-24T13:60:00Z"
         "2026-10-24T13:05:01+24:00"] {
-        try Parse(bad) catch Error.Range { continue } catch Error.Syntax { unreachable }
+        try Date.Parse(bad) catch Error.Range { continue } catch Error.Syntax { unreachable }
         unreachable
     }
 }

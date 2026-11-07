@@ -10,11 +10,11 @@ type R struct(Code I64, Note String&) {
     Code
     Note
 }
-fn fromLocal() Words {
+fn Words.fromLocal() Words {
     t := String(Array<Char>(3, 'a'))
     return Words(t)
 }
-fn check(n I64) R {
+fn R.check(n I64) R {
     note := ""
     if n > 3 { note = "big: " $n }
     return R(n, note)
@@ -28,9 +28,9 @@ fn churn() I64 {
     return t
 }
 fn main() ? {
-    w := fromLocal()
-    a := check(2)
-    b := check(7)
+    w := Words.fromLocal()
+    a := R.check(2)
+    b := R.check(7)
     churn()
     assert w.items.Len() == 1 and w.items[0] == "aaa"
     assert a.Note == "" and b.Note == "big: 7" and b.Code == 7

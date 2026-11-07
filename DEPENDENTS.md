@@ -51,7 +51,7 @@ odd-width paths (`tests/intsweep.olang`); `tools/precedence_migrate.olang` if pr
 | place | why |
 |---|---|
 | `SPEC.md`: `**RULE.**` paragraph | `olang explain RULE` and the diagnostics' `error[RULE]` read it from here; a removed rule leaves a gap, never reused |
-| `compiler/msgs.olang`: one function and a `Diag` case | the table's source; its rule must exist in SPEC (held by `checks/checks.olang`) |
+| `compiler/msgs.olang`: one function (`) r.Msg { return r.Msg(Diag.X, ...`) and a `Diag` case | the table's source; its rule must exist in SPEC (held by `checks/checks.olang`) |
 | `compiler/goldens/diag.txt` (`make diaggold`) | the stored text of every failing case |
 | `checks/cases/NAME.olang` | `# check: fail TEXT` names the diagnostic |
 | `compiler/README.md`, `checks/README.md` | counts and descriptions |

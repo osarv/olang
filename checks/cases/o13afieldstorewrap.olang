@@ -8,14 +8,14 @@ type H struct(r String&) {
 type W struct(h H) {
     h
 }
-fn mk(n I64, s String&) W {
+fn W.mk(n I64, s String&) W {
     e := H(s)
     e.r = $n $n
     return W(e)
 }
 fn main() ? {
     q String& = "x"
-    w := mk(12, q)
+    w := W.mk(12, q)
     churn()
     assert w.h.r.Len() == 4 and w.h.r == "1212"
 }

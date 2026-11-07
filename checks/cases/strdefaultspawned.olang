@@ -28,10 +28,10 @@ fn f(n mut Node&) mut Node& ? {
     if n.v > 0 { error Stop.Here }
     return n
 }
-fn g(v I64) mut Node& { return Node(v) }
+fn Node.g(v I64) mut Node& { return Node(v) }
 fn (b Bag&) Str() String {
     join { spawn fn() {
-        x := try f(b.head) catch default g(5)
+        x := try f(b.head) catch default Node.g(5)
         b.head.next = x
     }() }
     return "b" $b.k

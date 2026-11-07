@@ -19,6 +19,7 @@
 
 import "std/os"
 import "msgs"
+import "diagmsg"
 import "source"
 
 # what a diagnostic is about: a span of a file's text, a line of one known only by its number, a whole file, or the
@@ -146,12 +147,12 @@ fn (d mut Diagnostics&) Locate(file I64, at I64) String {
 
 # reports an error at where m is about; the number it gives names it to Note, and is -1 for an error not reported (the
 # second about where something lives in one statement, ScopeGroupStart)
-fn (d mut Diagnostics&) Error(at Where, m msgs.Msg) I64 { return d.report(at, m, false) }
+fn (d mut Diagnostics&) Error(at Where, m diagmsg.Msg) I64 { return d.report(at, m, false) }
 
 # the same, unless an error of m's kind was already reported this way on that line - one cause several checks meet
-fn (d mut Diagnostics&) ErrorOncePerLine(at Where, m msgs.Msg) I64 { return d.report(at, m, true) }
+fn (d mut Diagnostics&) ErrorOncePerLine(at Where, m diagmsg.Msg) I64 { return d.report(at, m, true) }
 
-fn (d mut Diagnostics&) report(at Where, m msgs.Msg, oncePerLine Bool) I64 {
+fn (d mut Diagnostics&) report(at Where, m diagmsg.Msg, oncePerLine Bool) I64 {
     if d.Quiet { return -1 }
     if d.scopeOn and isScopeRule(m.Rule) {
         if d.scopeSeen { return -1 }
@@ -196,13 +197,13 @@ fn (d mut Diagnostics&) report(at Where, m msgs.Msg, oncePerLine Bool) I64 {
 # call that bound it, which those notes would only repeat
 # an error said only of a program with no other: one any other error takes the place of, wherever that is reported -
 # earlier or later, by another pass (D3b: an unread local is most often what another mistake left out)
-fn (d mut Diagnostics&) ErrorAlone(at Where, m msgs.Msg) I64 {
+fn (d mut Diagnostics&) ErrorAlone(at Where, m diagmsg.Msg) I64 {
     r := d.Error(at, m)
     d.alone.Push(r)
     return r
 }
 
-fn (d mut Diagnostics&) ErrorBare(at Where, m msgs.Msg) I64 {
+fn (d mut Diagnostics&) ErrorBare(at Where, m diagmsg.Msg) I64 {
     if d.Quiet { return -1 }
     group I64 = -1 if d.held.Len() == 0 else d.held[d.held.Len() - 1]
     d.records.Push(record(at, $m.Rule, $m.Text, m.Kind, group, false))
@@ -210,7 +211,7 @@ fn (d mut Diagnostics&) ErrorBare(at Where, m msgs.Msg) I64 {
 }
 
 # a note on the error numbered rec - nothing when that error was not reported
-fn (d mut Diagnostics&) Note(rec I64, at Where, m msgs.Msg) {
+fn (d mut Diagnostics&) Note(rec I64, at Where, m diagmsg.Msg) {
     if rec < 0 { return }
     d.notes.Push(note(rec, at, $m.Text))
 }
@@ -222,7 +223,7 @@ fn (d mut Diagnostics&) Yield(rec I64) {
 }
 
 # an error that ends the compilation: Render writes it after every other, as a row with no line and no excerpt
-fn (d mut Diagnostics&) Fatal(at Where, m msgs.Msg) {
+fn (d mut Diagnostics&) Fatal(at Where, m diagmsg.Msg) {
     d.fatal = true
     d.fatalAt = at
     d.fatalRule = $m.Rule
@@ -449,7 +450,7 @@ fn (d mut Diagnostics&) Reopen(g I64) { d.held.Push(g) }
 
 # an error held by no group, whatever groups are open: what ends more than the branch it is met in (a nesting limit, a
 # block left open) is reported whichever branch is taken
-fn (d mut Diagnostics&) ErrorUnheld(at Where, m msgs.Msg) I64 {
+fn (d mut Diagnostics&) ErrorUnheld(at Where, m diagmsg.Msg) I64 {
     saved := d.held.ToArray()
     d.held.Clear()
     rec := d.report(at, m, false)
@@ -636,7 +637,7 @@ type Item struct(Error Bool, Rule String&, File I64, Start I64, End I64, Line I6
     Text
 }
 
-fn item(isError Bool, rule String&, at Where, text String&) Item {
+fn Item.item(isError Bool, rule String&, at Where, text String&) Item {
     return match at {
         case Where.Span(f, s, e): Item(isError, $rule, f, s, e, 0, $text)
         case Where.Line(f, l): Item(isError, $rule, f, -1, -1, l, $text)
@@ -650,12 +651,12 @@ fn (d mut Diagnostics&) Items() Vec<Item> {
     l Vec<Item>
     for r in d.written() {
         rec := d.records[r]
-        l.Push(item(true, rec.rule, rec.at, rec.text))
+        l.Push(Item.item(true, rec.rule, rec.at, rec.text))
         for nt in d.notes {
-            if nt.rec == r { l.Push(item(false, "", nt.at, nt.text)) }
+            if nt.rec == r { l.Push(Item.item(false, "", nt.at, nt.text)) }
         }
     }
-    if d.fatal { l.Push(item(true, d.fatalRule, d.fatalAt, d.fatalText)) }
+    if d.fatal { l.Push(Item.item(true, d.fatalRule, d.fatalAt, d.fatalText)) }
     return l
 }
 
@@ -692,7 +693,7 @@ fn (d mut Diagnostics&) Summary() String {
 }
 
 # a mistake in the command line, before any compilation: "olang: error[RULE]: text"
-fn (d mut Diagnostics&) Usage(m msgs.Msg) String {
+fn (d mut Diagnostics&) Usage(m diagmsg.Msg) String {
     b := StringBuilder()
     d.putLocation(b, Where.Nowhere)
     b.Push(d.errorWord(m.Rule))
@@ -953,11 +954,11 @@ test "a statement reports one error about where something lives" {
     d := Diagnostics(false)
     f := d.AddFile("f.olang", "abc\n")
     saved := d.ScopeGroupStart()
-    first := d.Error(Where.Span(f, 0, 1), msgs.Msg(msgs.Diag.CannotOpen, "O25", "first"))
-    second := d.Error(Where.Span(f, 1, 2), msgs.Msg(msgs.Diag.CannotOpen, "C2d", "second"))
-    other := d.Error(Where.Span(f, 2, 3), msgs.Msg(msgs.Diag.CannotOpen, "T6", "other"))
+    first := d.Error(Where.Span(f, 0, 1), diagmsg.Msg(msgs.Diag.CannotOpen, "O25", "first"))
+    second := d.Error(Where.Span(f, 1, 2), diagmsg.Msg(msgs.Diag.CannotOpen, "C2d", "second"))
+    other := d.Error(Where.Span(f, 2, 3), diagmsg.Msg(msgs.Diag.CannotOpen, "T6", "other"))
     d.ScopeGroupEnd(saved)
-    third := d.Error(Where.Span(f, 2, 3), msgs.Msg(msgs.Diag.CannotOpen, "O10c", "third"))
+    third := d.Error(Where.Span(f, 2, 3), diagmsg.Msg(msgs.Diag.CannotOpen, "O10c", "third"))
     assert first >= 0 and second < 0 and other >= 0 and third >= 0
     assert d.Errors() == 3
 }
@@ -966,18 +967,18 @@ test "what a branch holds is reported once the branch is chosen, never when it i
     d := Diagnostics(false)
     f := d.AddFile("g.olang", "abc\n")
     taken := d.Hold()
-    d.Error(Where.Span(f, 0, 1), msgs.Msg(msgs.Diag.CannotOpen, "", "taken"))
+    d.Error(Where.Span(f, 0, 1), diagmsg.Msg(msgs.Diag.CannotOpen, "", "taken"))
     inner := d.Hold()
-    d.Error(Where.Span(f, 1, 2), msgs.Msg(msgs.Diag.CannotOpen, "", "inner"))
+    d.Error(Where.Span(f, 1, 2), diagmsg.Msg(msgs.Diag.CannotOpen, "", "inner"))
     d.EndHold()
     d.EndHold()
     untaken := d.Hold()
-    d.Error(Where.Span(f, 2, 3), msgs.Msg(msgs.Diag.CannotOpen, "", "untaken"))
+    d.Error(Where.Span(f, 2, 3), diagmsg.Msg(msgs.Diag.CannotOpen, "", "untaken"))
     d.EndHold()
     d.Hold()
-    d.Error(Where.Span(f, 2, 3), msgs.Msg(msgs.Diag.CannotOpen, "", "undecided"))
+    d.Error(Where.Span(f, 2, 3), diagmsg.Msg(msgs.Diag.CannotOpen, "", "undecided"))
     d.EndHold()
-    d.Error(Where.Span(f, 0, 1), msgs.Msg(msgs.Diag.CannotOpen, "", "plain"))
+    d.Error(Where.Span(f, 0, 1), diagmsg.Msg(msgs.Diag.CannotOpen, "", "plain"))
     d.Choose(taken)
     d.Drop(untaken)
     out := d.Render()

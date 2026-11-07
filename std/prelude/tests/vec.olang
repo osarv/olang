@@ -287,13 +287,13 @@ fn (l mut vecLexer&) run() {
         line++
     }
 }
-fn vecLex(src String&) vecLexer {               # a result holding a Vec field
+fn vecLexer.vecLex(src String&) vecLexer {               # a result holding a Vec field
     l := vecLexer(src)
     l.run()
     return l
 }
 fn vecLexWork(k I64) I64 {
-    l := vecLex("let x = 42 + y")
+    l := vecLexer.vecLex("let x = 42 + y")
     for i in range 30 { l.toks.Push(vecTok("t" $(i * k), i)) }
     first := l.toks[0]                          # a value element holding text, kept across the growth below
     l.toks.Sort(fn(a vecTok, b vecTok) Bool { return a.text < b.text })
@@ -313,7 +313,7 @@ test "Vec: a struct holding a Vec in a field - built, grown, sorted, replaced - 
 }
 
 test "Vec: a Vec field filled by a method, its elements' text read back after the arena churns" {
-    l := vecLex("alpha beta gamma delta")
+    l := vecLexer.vecLex("alpha beta gamma delta")
     churn()
     assert l.toks.Len() == 4 and l.toks[2].text == "gamma" and l.toks[3].line == 3
     for i in range 50 { l.toks.Push(vecTok("w" $i, i)) }   # the buffer replaced several times
@@ -334,7 +334,7 @@ test "Vec: a Vec two structs deep, replaced through each level" {
     w := vecWrap()
     w.lx.run()
     assert w.lx.toks.Len() == 2 and w.lx.toks[1].text == "two"
-    w.lx = vecLex("a b c")                      # the inner struct replaced, and its Vec
+    w.lx = vecLexer.vecLex("a b c")                      # the inner struct replaced, and its Vec
     churn()
     assert w.lx.toks.Len() == 3 and w.lx.toks[2].text == "c"
     w = vecWrap()                               # and the outer one

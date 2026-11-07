@@ -365,8 +365,8 @@ test "text goes to C NUL-terminated and comes back copied (X15)" {
     assert "".ToC() == U8[0]
     e := strerror(2)
     assert e is not null
-    s := e.StringFromC(100)
+    s := String.FromC(e, 100)
     assert s == "No such file or directory"
-    assert e.StringFromC(2) == "No" and e.StringFromC(0) == ""
+    assert String.FromC(e, 2) == "No" and String.FromC(e, 0) == ""
     assert ("hi".ToC()).Len() == 3
 }

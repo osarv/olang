@@ -68,7 +68,7 @@ fn run(args Array<String&>&) {
     consts := cond.Consts()
     # B12: built for this machine, as stage 0 builds by default - what the target constants say and every function
     # carries
-    tg := try target.Resolve("native", target.FindClang(), false, d) catch target.Bad {
+    tg := try target.Target.Resolve("native", target.FindClang(), false, d) catch target.Bad {
         try io.PrintErr(d.Render()) catch io.Error { }
         os.Exit(1)
     }
@@ -97,7 +97,7 @@ fn run(args Array<String&>&) {
         upto := d.RecordCount()
         for b in range c.Bodies.Len() {
             body := c.Bodies[b]
-            if d.ErrorWithin(body.File, I64(body.Sp.Start), I64(body.Sp.End), upto) { sc.Plans[b] = typed.NewPlan(body) }
+            if d.ErrorWithin(body.File, I64(body.Sp.Start), I64(body.Sp.End), upto) { sc.Plans[b] = typed.Plan.New(body) }
         }
         lw.Plans = sc.Plans
     }
@@ -128,7 +128,7 @@ fn run(args Array<String&>&) {
 # the runtime's files filled in for this machine (B12), written into dir: compiler/runtime.olang's, as the driver builds
 fn runtimeFiles(dir String&) {
     d := diag.Diagnostics(false)
-    tg := try target.Resolve("native", target.FindClang(), false, d) catch target.Bad {
+    tg := try target.Target.Resolve("native", target.FindClang(), false, d) catch target.Bad {
         try io.PrintErr(d.Render()) catch io.Error { }
         os.Exit(1)
     }

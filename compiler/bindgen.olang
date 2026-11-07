@@ -358,7 +358,7 @@ fn usable(name String&) Bool {
     for c in name {
         if not (c.IsLetter() or c.IsDigit() or c == '_') { return false }
     }
-    return token.Keyword(name, 0, name.Len()) == token.Tok.Iden
+    return token.Tok.Keyword(name, 0, name.Len()) == token.Tok.Iden
 }
 
 # ---- C types ----
@@ -1255,7 +1255,7 @@ type cparse struct(toks Array<String&>&, params Array<String&>&) {
 
 fn (p cparse&) at() String { return $p.toks[p.pos] if p.pos < p.toks.Len() else "" }
 
-fn lit(t String&, k I64) cx { return cx(t, k, -1, "") }
+fn cx.lit(t String&, k I64) cx { return cx(t, k, -1, "") }
 
 # C's binary operators, by precedence: 0 for none
 fn cPrec(op String&) I64 {
@@ -1307,7 +1307,7 @@ fn (g mut gen&) cBinary(p mut cparse&, min I64) cx ? Skip {
             a := g.cNum(l)
             b := g.cNum(r)
             k := a if pr == 8 else g.cLead(a, b)
-            if pr == 8 and a.Kind == KInt and b.Kind != KInt { k = lit("", KInt) }
+            if pr == 8 and a.Kind == KInt and b.Kind != KInt { k = cx.lit("", KInt) }
             l = cx($"(" $a.Text " " $op " " $b.Text ")", k.Kind, k.Var, k.Ty)
         }
     }
@@ -1318,8 +1318,8 @@ fn (g mut gen&) cBinary(p mut cparse&, min I64) cx ? Skip {
 fn (g gen&) cLead(a cx, b cx) cx {
     if a.Kind == KVar or a.Kind == KType { return a }
     if b.Kind == KVar or b.Kind == KType { return b }
-    if a.Kind == KFloat or b.Kind == KFloat { return lit("", KFloat) }
-    return lit("", KInt)
+    if a.Kind == KFloat or b.Kind == KFloat { return cx.lit("", KFloat) }
+    return cx.lit("", KInt)
 }
 
 fn (g gen&) cBool(x cx) cx {
@@ -1329,7 +1329,7 @@ fn (g gen&) cBool(x cx) cx {
 
 fn (g gen&) cNum(x cx) cx {
     if x.Kind != KBool { return x }
-    return lit($"(1 if " $x.Text " else 0)", KInt)
+    return cx.lit($"(1 if " $x.Text " else 0)", KInt)
 }
 
 fn (g mut gen&) cUnary(p mut cparse&) cx ? Skip {
@@ -1390,12 +1390,12 @@ fn (g mut gen&) cPrimary(p mut cparse&) cx ? Skip {
         return x
     }
     if t[0].IsDigit() or t[0] == '.' { return try g.cNumber(t) }
-    if t[0] == '\'' { return lit($(try charValue(t)), KInt) }
+    if t[0] == '\'' { return cx.lit($(try charValue(t)), KInt) }
     if t[0] == '"' { try g.skip("it holds text where an expression is wanted") }
     k := try p.params.FindIndex(fn(x String&) Bool { return x == t }) catch default -1
     if k >= 0 { return cx($"a" $k, KVar, k, "") }
     v := try g.enumVals.Get(t) catch default I64.Min
-    if v != I64.Min { return lit($"(" $v ")" if v < 0 else $v, KInt) }
+    if v != I64.Min { return cx.lit($"(" $v ")" if v < 0 else $v, KInt) }
     if p.at() == "(" {
         r := try g.fnResults.Get(t) catch default ""
         if r == "" { try g.skip($"it calls " $t ", which is no function of numbers here") }
@@ -1417,7 +1417,7 @@ fn (g mut gen&) cPrimary(p mut cparse&) cx ? Skip {
         return cx(b.ToString(), KType if r != "Bool" else KBool, -1, r)
     }
     try g.skip($"it names " $t ", which has no value here")
-    return lit("", KInt)
+    return cx.lit("", KInt)
 }
 
 # a C number's olang text: its suffix dropped, an octal integer written in decimal, a float given its point
@@ -1437,11 +1437,11 @@ fn (g mut gen&) cNumber(t String&) cx ? Skip {
         b.Push(d[:x])
         if not d[:x].Contains(".") { b.Push(".0") } else if d[x - 1] == '.' { b.PushChar('0') }
         b.Push(d[x:])
-        return lit(b.ToString(), KFloat)
+        return cx.lit(b.ToString(), KFloat)
     }
-    if isHex or d.StartsWith("0b") or d == "0" or not d.StartsWith("0") { return lit($d, KInt) }
+    if isHex or d.StartsWith("0b") or d == "0" or not d.StartsWith("0") { return cx.lit($d, KInt) }
     v := try d[1:].ParseInt(8) catch { try g.skip($"'" $t "', which is no number read here") } default 0
-    return lit($v, KInt)
+    return cx.lit($v, KInt)
 }
 
 # a character literal's value, as C reads it: 'a', '\n', '\x41', '\101'
@@ -1651,7 +1651,7 @@ fn (g mut gen&) macroFn(m cMacro&) String ? Skip {
 
 # clang's output for args, or why it could not be run
 fn clangSays(args Array<String&>&) os.Output ? Skip {
-    out := try os.Exec(...args) catch os.Error { error Skip.Why }
+    out := try os.Output.Exec(...args) catch os.Error { error Skip.Why }
     return out
 }
 
@@ -1676,7 +1676,7 @@ type Translation struct() {
 
 # include is the probe's "#include" line, own the path of the file whose declarations alone the module has ("" for a
 # header: everything it reaches), flags clang's (the target's, and the defines), tag what its wrappers are named by
-fn Translate(include String&, own String&, clang String&, flags Array<String&>&, tag String&, display String&) Translation {
+fn Translation.Translate(include String&, own String&, clang String&, flags Array<String&>&, tag String&, display String&) Translation {
     tr := Translation()
     if clang == "" {
         tr.Why = "a C import needs clang, and there is none on the PATH"
@@ -1762,7 +1762,7 @@ fn (g mut gen&) dump(clang String&, flags Array<String&>&, probe String&) json.J
         error Skip.Why
     }
     if o.Stdout.Len() == 0 { try g.skip(firstError(o.Stderr)) }
-    return try json.Parse(o.Stdout) catch json.Error {
+    return try json.Json.Parse(o.Stdout) catch json.Error {
         g.why = "clang's tree could not be read"
         error Skip.Why
     }

@@ -152,7 +152,7 @@ fn dropPunMut(src String&) String, I64 {
 fn editsFrom(output String&, allowed Vec<String&>&, out mut Vec<diagedit.Request>&) {
     current := ""
     for row in output.Split("\n") {
-        parsed := try diagedit.ParseRow(row) catch { continue }
+        parsed := try diagedit.Row.Parse(row) catch { continue }
         path, line, col, isError, rule, msg := parsed.Path, parsed.Line, parsed.Col, parsed.IsError, parsed.Rule, parsed.Msg
         full := diagedit.RealPathOf(path)
         if isError {

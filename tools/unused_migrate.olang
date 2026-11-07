@@ -143,7 +143,7 @@ type DeclEdit enum {
     Leave
 }
 
-fn declEdit(text String&, at I64) DeclEdit {
+fn DeclEdit.declEdit(text String&, at I64) DeclEdit {
     v := valueAt(text, at)
     if v >= 0 {
         k := v
@@ -224,7 +224,7 @@ fn main() ? {
         requests Vec<diagedit.Request>
         for o in outputs {
             for row in o.Split("\n") {
-                parsed := try diagedit.ParseRow(row) catch { continue }
+                parsed := try diagedit.Row.Parse(row) catch { continue }
                 path, line, col, isError, msg := parsed.Path, parsed.Line, parsed.Col, parsed.IsError, parsed.Msg
                 full := diagedit.RealPathOf(path)
                 if not isError or not diagedit.Allowed(full, allowed) { continue }
@@ -348,7 +348,7 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
                     continue
                 }
                 if r.Kind == KindDecl {
-                    edit := declEdit(text, at)
+                    edit := DeclEdit.declEdit(text, at)
                     drop = edit == DeclEdit.Drop
                     if edit == DeclEdit.Keep: out = edit.line
                 }
@@ -390,16 +390,16 @@ test "a name never read made '_'" {
 }
 
 test "a declaration never read: its line left out, or its one call kept" {
-    assert declEdit("    x := 3", 4) == DeclEdit.Drop
-    assert declEdit("    y := build(a) # made", 4) == DeclEdit.Keep("    build(a)")
-    assert declEdit("    z := a + f(b)", 4) == DeclEdit.Leave
-    assert declEdit("    t I64 = 0", 4) == DeclEdit.Drop
-    assert declEdit("    v Vec<I64>", 4) == DeclEdit.Drop
-    assert declEdit("    w := try load(p)!", 4) == DeclEdit.Keep("    try load(p)!")
-    assert declEdit("    if c { k := 1 }", 15) == DeclEdit.Leave
-    assert declEdit("    for _ in range 3 { x := try it.Next() catch Exhausted { unreachable } }", 23) == DeclEdit.Keep("    for _ in range 3 { try it.Next() catch Exhausted { unreachable } }")
-    assert declEdit("    failed := try f() catch Bad {", 4) == DeclEdit.Keep("    try f() catch Bad {")
-    assert declEdit("    r Res& = Res(1)", 4) == DeclEdit.Keep("    Res(1)")
+    assert DeclEdit.declEdit("    x := 3", 4) == DeclEdit.Drop
+    assert DeclEdit.declEdit("    y := build(a) # made", 4) == DeclEdit.Keep("    build(a)")
+    assert DeclEdit.declEdit("    z := a + f(b)", 4) == DeclEdit.Leave
+    assert DeclEdit.declEdit("    t I64 = 0", 4) == DeclEdit.Drop
+    assert DeclEdit.declEdit("    v Vec<I64>", 4) == DeclEdit.Drop
+    assert DeclEdit.declEdit("    w := try load(p)!", 4) == DeclEdit.Keep("    try load(p)!")
+    assert DeclEdit.declEdit("    if c { k := 1 }", 15) == DeclEdit.Leave
+    assert DeclEdit.declEdit("    for _ in range 3 { x := try it.Next() catch Exhausted { unreachable } }", 23) == DeclEdit.Keep("    for _ in range 3 { try it.Next() catch Exhausted { unreachable } }")
+    assert DeclEdit.declEdit("    failed := try f() catch Bad {", 4) == DeclEdit.Keep("    try f() catch Bad {")
+    assert DeclEdit.declEdit("    r Res& = Res(1)", 4) == DeclEdit.Keep("    Res(1)")
 }
 
 test "a declaration whose block names it again is left" {

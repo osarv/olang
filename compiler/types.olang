@@ -210,7 +210,7 @@ type Table struct(Names mut source.Names&) {
 
 # a table holding the types every program has, each at a fixed id: Unknown 0, Void 1, Bool 2, the numbers in T4's order
 # from I8 3 to F64 14, Null 15, the inferred set's mark 16, noreturn 17
-fn NewTable(names mut source.Names&) Table {
+fn Table.New(names mut source.Names&) Table {
     t := Table(names)
     t.lists.Push(Array<TypeId>(0))
     t.scopes.Push(Array<I64>(0))
@@ -2058,7 +2058,7 @@ fn hash128(text String&) U64, U64 {
 
 test "types are interned: the same parts give the same id, permission and shape are part of identity" {
     names := source.Names()
-    t := NewTable(names)
+    t := Table.New(names)
     i64 := t.Prim("I64")
     assert i64 == TypeId(6) and t.Prim("F64") == TypeId(14) and t.Prim("Bool") == BoolT
     a := t.Array(i64, TypeId(0))
@@ -2077,7 +2077,7 @@ test "types are interned: the same parts give the same id, permission and shape 
 
 test "canonical texts name every kind of type" {
     names := source.Names()
-    t := NewTable(names)
+    t := Table.New(names)
     m := t.AddModule("std/prelude/list")
     list := t.AddDecl(m, names.Intern("List"), DeclKind.Struct, 1)
     i64 := t.Prim("I64")
@@ -2097,7 +2097,7 @@ test "canonical texts name every kind of type" {
 
 test "layouts follow C's: fields at their alignment, enums a tag word and their largest payload" {
     names := source.Names()
-    t := NewTable(names)
+    t := Table.New(names)
     m := t.AddModule("t")
     p := t.Named(t.AddDecl(m, names.Intern("P"), DeclKind.Struct, 0), ListId(0))
     i32, i64, u8 := t.Prim("I32"), t.Prim("I64"), t.Prim("U8")
@@ -2119,7 +2119,7 @@ test "layouts follow C's: fields at their alignment, enums a tag word and their 
 
 test "a function type's ABI: the error union, large results through memory, function values split" {
     names := source.Names()
-    t := NewTable(names)
+    t := Table.New(names)
     i64 := t.Prim("I64")
     for x in TypeId[i64, VoidT] { assert t.ComputeLayout(x) }
     f := t.Func(t.List1(i64), i64, t.List1(DefaultErrT))
@@ -2134,7 +2134,7 @@ test "a function type's ABI: the error union, large results through memory, func
 
 test "function types carry their scopes; identity leaves them out; a call's scope variables come from the type alone" {
     names := source.Names()
-    t := NewTable(names)
+    t := Table.New(names)
     m := t.AddModule("t")
     n := t.Named(t.AddDecl(m, names.Intern("N"), DeclKind.Struct, 0), ListId(0))
     i64 := t.Prim("I64")

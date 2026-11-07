@@ -100,7 +100,7 @@ fn (s mut Server&) send(body String&) { session.WriteFramed(1, body) }
 
 # one message from the editor
 fn (s mut Server&) handle(body String&) {
-    msg := try json.Parse(body) catch json.Error {
+    msg := try json.Json.Parse(body) catch json.Error {
         s.send(errorReply("null", -32700, "the message is not JSON"))
         return
     }
@@ -356,7 +356,7 @@ fn (s mut Server&) fromWorker() {
         }
         if body.StartsWith("{\"jsonrpc\":\"2.0\",\"id\":") {
             # an answer: no longer waited for
-            msg := try json.Parse(body) catch json.Error { continue }
+            msg := try json.Json.Parse(body) catch json.Error { continue }
             n := try idOf(msg).ParseInt() catch default -1
             s.Waiting.Remove(n)
         }
@@ -366,7 +366,7 @@ fn (s mut Server&) fromWorker() {
 
 # the worker's note on a file it checked: {"olang":"checked","slot":k,"deps":[...],"foreign":[...]}
 fn (s mut Server&) note(body String&) {
-    msg := try json.Parse(body) catch json.Error { return }
+    msg := try json.Json.Parse(body) catch json.Error { return }
     k := try msg["slot"].AsInt() catch json.Error default -1
     if k < 0 or k >= s.Docs.Len() { return }
     s.Pending.Remove(k)
@@ -411,7 +411,7 @@ type worker struct(s Server&, Cfg mut build.Config&, In I32, Out I32) {
 # the analysis of the open file in slot k as the files are now: the last one where it is that file's
 fn (w mut worker&) analysis(k I64, d mut diag.Diagnostics&) mut session.Analysis& {
     if k == w.lastSlot and w.last is not null { return w.last! }
-    a := session.Analyze(w.s.Docs[k].Path, w.Cfg, d, w.overlay)
+    a := session.Analysis.Analyze(w.s.Docs[k].Path, w.Cfg, d, w.overlay)
     w.last = a
     w.lastSlot = k
     return a
@@ -442,7 +442,7 @@ fn (w mut worker&) check(k I64) {
     d mut diag.Diagnostics& = diag.Diagnostics(false)
     # what the checker says is published as soon as it is said; section 8's errors, which take a while longer on a large
     # program, follow if there are any
-    a := session.Analyze(doc.Path, cfg, d, w.overlay, false)
+    a := session.Analysis.Analyze(doc.Path, cfg, d, w.overlay, false)
     said := d.Errors()
     foreign := w.publishAll(k, a, d, doc.Foreign)
     session.Hold(a, cfg)
@@ -602,7 +602,7 @@ fn (w worker&) rangeOf(b mut StringBuilder&, p session.Positions&, it diag.Item&
 
 # a request answered
 fn (w mut worker&) answer(body String&) {
-    msg := try json.Parse(body) catch json.Error { return }
+    msg := try json.Json.Parse(body) catch json.Error { return }
     id := idOf(msg)
     method := str(msg, "method")
     p := try msg["params"] catch json.Error {
@@ -701,10 +701,10 @@ fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut 
         overlay := Map<String&, String&>()
         for e in w.overlay { overlay.Put($e.Key, $e.Value) }
         overlay.Put($doc.Real, cut)
-        a := session.Analyze(doc.Path, cfg, d, overlay)
+        a := session.Analysis.Analyze(doc.Path, cfg, d, overlay)
         a.Members(it, doc.Real, dot)
     } else {
-        a := session.Analyze(doc.Path, cfg, d, w.overlay)
+        a := session.Analysis.Analyze(doc.Path, cfg, d, w.overlay)
         a.Names(it, doc.Real, at)
     }
     w.send(reply(id, $"{\"isIncomplete\":false,\"items\":[" $it.B.ToString() "]}"))
@@ -846,12 +846,12 @@ test "olang lsp answers a scripted session: diagnostics, hover, definition, symb
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"textDocument/noSuchThing\",\"params\":{}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
     assert out.Status == 0, "olang lsp ended with " $out.Status ": " $out.Stderr
     got := Map<String&, String&>()
     diags := ""
     for m in frames(out.Stdout) {
-        msg := try json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " $m }
+        msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " $m }
         if str(msg, "method") == "textDocument/publishDiagnostics" { diags = $m }
         id := idOf(msg)
         if id != "" { got.Put($id, $m) }
@@ -879,7 +879,7 @@ test "a file that does not parse gets its diagnostics, and requests on it answer
                   uri "\"},\"position\":{\"line\":0,\"character\":4}}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
     assert out.Status == 0, out.Stderr
     assert out.Stdout.Contains("textDocument/publishDiagnostics") and out.Stdout.Contains("\"severity\":1")
     assert out.Stdout.Contains("{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":null}"), out.Stdout
@@ -909,7 +909,7 @@ test "a hover on a function shows the first test naming it and how many more the
                   ",\"position\":{\"line\":3,\"character\":18}}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
     assert out.Status == 0, out.Stderr
     assert out.Stdout.Contains("Example: doubles") and out.Stdout.Contains("assert Twice(2) == 4"), out.Stdout
     assert out.Stdout.Contains("+1 more test") and not out.Stdout.Contains("doubles a negative"), out.Stdout
@@ -944,12 +944,12 @@ test "a deprecated item: hover shows the note, completion tags it, its uses get 
                   ",\"position\":{\"line\":5,\"character\":4}}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
     assert out.Status == 0, out.Stderr
     got := Map<String&, String&>()
     diags := ""
     for m in frames(out.Stdout) {
-        msg := try json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " $m }
+        msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " $m }
         if str(msg, "method") == "textDocument/publishDiagnostics" { diags = $m }
         if idOf(msg) != "" { got.Put(idOf(msg), $m) }
     }

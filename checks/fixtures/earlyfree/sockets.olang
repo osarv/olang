@@ -9,7 +9,7 @@ type Server struct() {
     socks Map<I64, net.UDP&>
 }
 
-fn (s mut Server&) open(i I64) ? net.Error { s.socks.Put(i, try net.ListenUDP(net.Addr(net.Loopback4(), 0))) }
+fn (s mut Server&) open(i I64) ? net.Error { s.socks.Put(i, try net.UDP.Listen(net.Addr(net.IP.Loopback4(), 0))) }
 
 fn (s mut Server&) done(i I64) ? MapError {
     u := try s.socks.Take(i)

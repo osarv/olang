@@ -65,22 +65,22 @@ fn sameName(a String&, b String&) Bool {
 }
 
 # the response to a GET of url, sending the header fields given after it
-fn Get(url String&, headers ...Header) Response ? Error {
-    return try Send("GET", url, headers, "")
+fn Response.Get(url String&, headers ...Header) Response ? Error {
+    return try Response.Send("GET", url, headers, "")
 }
 
 # the response to a POST of body to url, as contentType ("application/json", say), with the header fields given after it
-fn Post(url String&, contentType String&, body Array<U8>&, headers ...Header) Response ? Error {
+fn Response.Post(url String&, contentType String&, body Array<U8>&, headers ...Header) Response ? Error {
     all := Array<Header>(headers.Len() + 1, Header("Content-Type", contentType))     # every field written below
     for i, h in headers { all[i] = h }
     all[headers.Len()] = Header("Content-Type", contentType)
-    return try Send("POST", url, all, body)
+    return try Response.Send("POST", url, all, body)
 }
 
 # the response to a request of any method - "PUT", "DELETE", "PATCH", "HEAD" ... - with the header fields given and,
 # for any method but GET and HEAD, body as the request's body, sent with exactly the header fields given (none that
 # curl would add for a body of its own). timeoutMs, when above 0, bounds the whole request in milliseconds.
-fn Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, timeoutMs I64 = 0) Response ? Error {
+fn Response.Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, timeoutMs I64 = 0) Response ? Error {
     if method.Len() == 0 or not method.Every(fn(c Char) Bool { return c.IsLetter() }) { error Error.Invalid }
     args := Vec<String&>()
     for a in String&["curl", "-q", "-s", "--proto", "=http,https", "--proto-redir", "=http,https", "-L"
@@ -120,11 +120,11 @@ fn Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, ti
     args.Push("--url")
     args.Push(url)
     if url.Has(0) { error Error.Invalid }      # no command line can carry a zero byte
-    run os.Output& = try os.Exec(...args.ToArray(), input = body if sending else "")
+    run os.Output& = try os.Output.Exec(...args.ToArray(), input = body if sending else "")
         catch os.Error.NotFound, os.Error.Denied { error Error.NoCurl }
         catch os.Error { error Error.Failed }
     if run.Status != 0 { try transportError(run.Status) }
-    return try response(run.Stderr, run.Stdout)
+    return try Response.response(run.Stderr, run.Stdout)
 }
 
 # the Error curl's exit status names
@@ -144,7 +144,7 @@ fn transportError(status I32) ? Error {
 
 # the response whose header fields curl wrote as "dump" - every response it received, each a status line, its fields
 # and an empty line, the last the one answered with - and whose body is "body"
-fn response(dump String&, body String&) Response ? Error {
+fn Response.response(dump String&, body String&) Response ? Error {
     # the last block: from after the last empty line that has a status line after it
     lines := dump.Split("\n")
     start I64 = -1
@@ -177,7 +177,7 @@ if TestBuild {
 
     # the word Send fails with, or "ok"
     fn failure(method String&, url String&, headers Array<Header>&, timeoutMs I64) String& {
-        try Send(method, url, headers, "", timeoutMs) catch Error.NoCurl { return "NO_CURL" }
+        try Response.Send(method, url, headers, "", timeoutMs) catch Error.NoCurl { return "NO_CURL" }
             catch Error.BadUrl { return "BAD_URL" } catch Error.Invalid { return "INVALID" }
             catch Error.Resolve { return "RESOLVE" } catch Error.Connect { return "CONNECT" }
             catch Error.Timeout { return "TIMEOUT" } catch Error.Tls { return "TLS" }
@@ -197,7 +197,7 @@ if TestBuild {
     }
 
     test "the response is the last of what curl received" {
-        plain := try response("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nX-Two:  a b \r\n\r\n", "body")
+        plain := try Response.response("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nX-Two:  a b \r\n\r\n", "body")
         assert plain.Status == 200 and plain.Body == "body" and plain.Headers.Len() == 2
         assert plain.Headers[1].Name == "X-Two" and plain.Headers[1].Value == "a b"
         assert (try plain.Header("content-type") catch default "") == "text/plain"
@@ -206,11 +206,11 @@ if TestBuild {
         try plain.Header("X-None") catch { missing = true }
         assert missing
         chain := "HTTP/1.1 200 Connection established\r\n\r\nHTTP/1.1 100 Continue\r\n\r\n" "HTTP/1.1 302 Found\r\nLocation: /b\r\n\r\nHTTP/2 404 \r\nserver: x\r\nset-cookie: a=1\r\nset-cookie: b=2\r\n\r\n"
-        last := try response(chain, "")
+        last := try Response.response(chain, "")
         assert last.Status == 404 and last.Headers.Len() == 3 and (try last.Header("Set-Cookie") catch default "") == "a=1"
         assert last.Headers[2].Value == "b=2" and "Location" != last.Headers[0].Name
         bad := false
-        try response("", "") catch Error.Transfer { bad = true } catch { }
+        try Response.response("", "") catch Error.Transfer { bad = true } catch { }
         assert bad
     }
 
@@ -250,32 +250,32 @@ if TestBuild {
     # one request of each kind against the test server - skipped, as passed, where curl is missing
     fn live(port I64) ? Error {
         base := "http://127.0.0.1:" $port
-        hello := try Get($base "/hello")
+        hello := try Response.Get($base "/hello")
         assert hello.Status == 200 and hello.Body == "hello" and (try hello.Header("x-test") catch default "") == "a"
         assert hello.Headers.Count(fn(h Header) Bool { return h.Name == "X-Test" }) == 2
-        echo := try Post($base "/echo", "application/json", "{\"a\":1}", Header("X-Ask", "yes"))
+        echo := try Response.Post($base "/echo", "application/json", "{\"a\":1}", Header("X-Ask", "yes"))
         assert echo.Body == "{\"a\":1}" and (try echo.Header("X-Seen") catch default "") == "yes"
         assert (try echo.Header("X-Type") catch default "") == "application/json"
-        put := try Send("PUT", $base "/echo", Array<Header>(0), "data")
+        put := try Response.Send("PUT", $base "/echo", Array<Header>(0), "data")
         assert put.Body == "data" and (try put.Header("X-Method") catch default "") == "PUT"
         assert (try put.Header("X-Type") catch default "") == "-"                 # curl's form type left out
-        gone := try Send("DELETE", $base "/echo", Array<Header>(0), "")
+        gone := try Response.Send("DELETE", $base "/echo", Array<Header>(0), "")
         assert gone.Status == 200 and (try gone.Header("X-Method") catch default "") == "DELETE"
-        head := try Send("HEAD", $base "/hello", Array<Header>(0), "")
+        head := try Response.Send("HEAD", $base "/hello", Array<Header>(0), "")
         assert head.Status == 200 and head.Body == "" and (try head.Header("Content-Length") catch default "") == "5"
-        missing := try Get($base "/status/404")
+        missing := try Response.Get($base "/status/404")
         assert missing.Status == 404 and missing.Body == "status 404"
-        broken := try Get($base "/status/500")
+        broken := try Response.Get($base "/status/500")
         assert broken.Status == 500
-        moved := try Get($base "/redirect")
+        moved := try Response.Get($base "/redirect")
         assert moved.Status == 200 and moved.Body == "hello"
-        data := try Get($base "/json")
-        doc := try json.Parse(data.Body) catch json.Error { error Error.Failed }
+        data := try Response.Get($base "/json")
+        doc := try json.Json.Parse(data.Body) catch json.Error { error Error.Failed }
         assert (try doc["a"][1] as json.Json.Num catch default 0.0) == 2.5
         assert failure("GET", $base "/slow", Array<Header>(0), 300) == "TIMEOUT"
         assert failure("GET", "ftp://127.0.0.1:" $port "/", Array<Header>(0), 0) == "BAD_URL"
         assert failure("GET", "http://127.0.0.1:1/", Array<Header>(0), 0) == "CONNECT"
-        try Get($base "/quit")
+        try Response.Get($base "/quit")
     }
 
     test "requests against a local server" {

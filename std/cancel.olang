@@ -38,7 +38,7 @@ type Token struct(deadlineNs I64 = 0) {
 }
 
 # a token that fires by itself once ms milliseconds have passed - and on Cancel(), like any other
-fn After(ms I64) mut Token& {
+fn Token.After(ms I64) mut Token& {
     return Token(NowNs() + ms * 1000000)
 }
 
@@ -101,7 +101,7 @@ test "a token fires on Cancel, and not before" {
 # fired unless its whole 20ms has passed, and once it fires they have
 test "a token with a deadline fires by itself" {
     start := NowNs()
-    t := After(20)
+    t := Token.After(20)
     assert not t.Cancelled() or NowNs() - start >= 20000000
     for not t.Cancelled() { }
     assert NowNs() - start >= 20000000
@@ -109,15 +109,15 @@ test "a token with a deadline fires by itself" {
 }
 
 # inside time.Virtual a deadline fires on the virtual clock: when a task sleeps past it, and at once for a wait
-test After "a deadline fires on the virtual clock" {
+test Token.After "a deadline fires on the virtual clock" {
     time.Virtual(fn() {
-        t := After(20000)
+        t := Token.After(20000)
         assert not t.Cancelled()
-        time.Sleep(time.Seconds(19))
+        time.Sleep(time.Duration.Seconds(19))
         assert not t.Cancelled()
-        time.Sleep(time.Seconds(1))
+        time.Sleep(time.Duration.Seconds(1))
         assert t.Cancelled()
-        u := After(500)
+        u := Token.After(500)
         ts := Array<I64>(2)
         u.WakeAt(ts)
         assert u.Cancelled()
@@ -163,7 +163,7 @@ fn spinRecord(t Token&, n mut stopCount&) {
     n.why = t.Why()
 }
 fn cancelOnExit(fails Bool, n mut stopCount&) ? stepFailed {
-    t := After(5000)
+    t := Token.After(5000)
     join {
         defer t.Cancel()
         spawn spinRecord(t, n)

@@ -1,0 +1,9 @@
+# check: fail error[T30b]: Pt does not satisfy the constraint Parsed on T: it has no builder 'Parse' that fits
+# T30b: a trait's builder requirement is met only by a builder of that name and signature
+type Parsed<T> trait { T.Parse(t String&) T ? ParseError }
+type Pt struct(X I64) { X }
+fn read<T Parsed<T>>(t String&) T ? ParseError { return try T.Parse(t) }
+fn main() ? {
+    p := try read<Pt>("1")
+    assert p.X == 1
+}

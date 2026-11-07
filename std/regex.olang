@@ -735,7 +735,7 @@ fn (p prog&) pack() mut Array<I64>& {
 }
 
 # the pattern compiled - failing with the SyntaxError naming what is wrong with it
-fn Compile(pattern String&) Regex ? SyntaxError {
+fn Regex.Compile(pattern String&) Regex ? SyntaxError {
     q := parser(pattern)
     q.p.names.Push("")
     root := try q.alternation()
@@ -1411,14 +1411,14 @@ if TestBuild {
 
 # the first match of pattern in text as "start-end:text", "-" for none, or "error" when it does not compile
 fn firstOf(pattern String&, text String&) String {
-    re := try Compile(pattern) catch SyntaxError { return "error" }
+    re := try Regex.Compile(pattern) catch SyntaxError { return "error" }
     m := try re.Find(text) catch NotFound { return "-" }
     return $m.Start "-" $m.End ":" $m.Text()
 }
 
 # every group of the first match, "(a)(b)" -> "a|b", a group taking no part written "?"
 fn groupsOf(pattern String&, text String&) String {
-    re := Compile(pattern)!
+    re := Regex.Compile(pattern)!
     m := re.Find(text)!
     b := StringBuilder()
     for i in range 1, re.Groups() + 1 {
@@ -1486,7 +1486,7 @@ test "capture groups" {
     assert groupsOf("(?:x(y))+", "xyxy") == "y"
     assert groupsOf("(a+)(a+)", "aaaa") == "aaa|a"
     assert groupsOf("(a+?)(a+)", "aaaa") == "a|aaa"
-    re := Compile("(?P<year>\\d{4})-(?<month>\\d\\d)")!
+    re := Regex.Compile("(?P<year>\\d{4})-(?<month>\\d\\d)")!
     assert re.Groups() == 2 and re.GroupNamed("month")! == 2
     m := re.Find("on 2026-10-24")!
     assert m.Group(re.GroupNamed("year")!)! == "2026" and m.Group(0)! == "2026-10"
@@ -1496,20 +1496,20 @@ test "capture groups" {
 }
 
 test "FindAll, Replace and Split" {
-    re := Compile("\\d+")!
+    re := Regex.Compile("\\d+")!
     all := re.FindAll("a1 b22 c333")
     assert all.Len() == 3 and all[2].Text() == "333" and re.Count("x") == 0
-    assert Compile("a*")!.Count("baaac") == 3                   # "" before b, "aaa", "" after c - as Go and RE2
+    assert Regex.Compile("a*")!.Count("baaac") == 3                   # "" before b, "aaa", "" after c - as Go and RE2
     assert re.Replace("a1 b22", "<$0>") == "a<1> b<22>"
-    d := Compile("(\\w+)=(\\w+)")!
+    d := Regex.Compile("(\\w+)=(\\w+)")!
     assert d.Replace("x=1, y=2", "$2:$1") == "1:x, 2:y" and d.Replace("k=v", "$$ ${1}") == "$ k"
-    n := Compile("(?P<k>\\w+)=(?P<v>\\w+)")!
+    n := Regex.Compile("(?P<k>\\w+)=(?P<v>\\w+)")!
     assert n.Replace("a=b", "${v}${k}") == "ba"
     assert re.ReplaceFunc("a1b22", fn(m Match) String { return $m.Text().Len() }) == "a1b2"
-    parts := Compile(",\\s*")!.Split("a, b,c,  d")
+    parts := Regex.Compile(",\\s*")!.Split("a, b,c,  d")
     assert parts.Len() == 4 and parts[1] == "b" and parts[3] == "d"
-    assert Compile("x")!.Split("axbx").Len() == 3
-    assert Compile("")!.Replace("ab", "-") == "-a-b-"
+    assert Regex.Compile("x")!.Split("axbx").Len() == 3
+    assert Regex.Compile("")!.Replace("ab", "-") == "-a-b-"
 }
 
 test "what does not compile" {
@@ -1517,7 +1517,7 @@ test "what does not compile" {
         "(?P<a>x)(?P<a>y)", "(?z)a", "[[:nope:]]", "\\x{110000}"] {
         assert firstOf(bad, "") == "error", $bad
     }
-    try Compile("(a{1000}){1000}") catch SyntaxError.TooBig { } catch SyntaxError { unreachable }
+    try Regex.Compile("(a{1000}){1000}") catch SyntaxError.TooBig { } catch SyntaxError { unreachable }
 }
 
 test "matching takes linear time where backtracking takes exponential" {
@@ -1526,8 +1526,8 @@ test "matching takes linear time where backtracking takes exponential" {
     for _ in range 30 { p.Push("a?") }
     for _ in range 30 { p.PushChar('a') }
     text := "a".Repeat(30)
-    assert Compile(p.ToString())!.Matches(text)
-    assert Compile("(x+x+)+y")!.Matches("x".Repeat(5000)) == false
+    assert Regex.Compile(p.ToString())!.Matches(text)
+    assert Regex.Compile("(x+x+)+y")!.Matches("x".Repeat(5000)) == false
 }
 
 # every match's groups' spans, by the DFAs and the Pike VM or by the Pike VM alone - the two must agree
@@ -1564,7 +1564,7 @@ test "the DFAs find the matches the Pike VM finds" {
         texts.Push(t.ToString())
     }
     for pat in patterns {
-        re := Compile(pat)!
+        re := Regex.Compile(pat)!
         for t in texts { assert spans(re, t, true) == spans(re, t, false), ($pat " on " $t) }
     }
 }

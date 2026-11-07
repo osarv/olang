@@ -1,0 +1,12 @@
+# diagmsg - what a diagnostic is: which one (msgs.Diag), the rule of the specification it applies, and its text. msgs
+# makes every one, by a function of its own; diag records one against where it is about. Apart from msgs so that msgs's
+# functions are no builders of a type of their own module (D19a): they make a diagmsg.Msg, as anything may.
+
+import "msgs"
+
+# a diagnostic: which one it is, the rule it applies (empty where no rule states it), and its text
+type Msg struct(Kind msgs.Diag, Rule String&, Text String&) {
+    Kind
+    Rule
+    Text
+}

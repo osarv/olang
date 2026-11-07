@@ -24,10 +24,10 @@ type holder struct(s Array<Char>) {
     s
 }
 
-fn mk(t Array<Char>&) holder { return holder(t) }
+fn holder.mk(t Array<Char>&) holder { return holder(t) }
 
 # a part stored from a block's own text outlives the block, and a later write to that text is not seen
-fn stored() person {
+fn person.stored() person {
     p := person($"x", 1)
     {
         t Array<Char> = $"inner"
@@ -47,7 +47,7 @@ fn words() Array<Array<Char>> {
     return out
 }
 
-fn renamed() person {
+fn person.renamed() person {
     p := person($"bob", 3)
     q := p
     q.name[0] = 'B'
@@ -55,19 +55,19 @@ fn renamed() person {
 }
 
 # evaluated while compiling (K2, S17a): the evaluator copies as the run time does
-Baked person = renamed()
-assert renamed().name == "Bob" and stored().name == "inner"
+Baked person = person.renamed()
+assert person.renamed().name == "Bob" and person.stored().name == "inner"
 assert words()[2] == "w2"
 
 test "a part store copies its value in" {
-    p := stored()
+    p := person.stored()
     assert p.name == "inner"
     a := words()
     assert a[0] == "w0" and a[2] == "w2"
-    h := mk($"kept")
+    h := holder.mk($"kept")
     assert h.s == "kept"
     t Array<Char> = $"abc"
-    g := mk(t)
+    g := holder.mk(t)
     t[0] = 'x'
     assert g.s == "abc"
 }
@@ -108,7 +108,7 @@ test "a whole copy is its own" {
     tm.members.Push($"m1")
     tm.tags[0] = $"z"
     assert tm.members.Len() == 1 and tm.members[0] == "m1" and tm.title == "t" and tm.tags[0] == "z"
-    assert Baked.name == "Bob" and renamed() == Baked
+    assert Baked.name == "Bob" and person.renamed() == Baked
 }
 
 type node struct(v I64) { v }

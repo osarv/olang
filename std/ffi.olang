@@ -80,7 +80,7 @@ fn Has(name String&) Bool {
 
 # calls the C function "name" with the arguments "words" holds, as "kinds" describes them, and gives its result's bits
 # - the result coded "result", 0 for none: an integer extended to 64 bits as its type extends, a float's IEEE bits
-# (F64FromBits, F32FromBits). What the function writes into an array argument is in "words" after the call. Fails with
+# (F64.FromBits, F32.FromBits). What the function writes into an array argument is in "words" after the call. Fails with
 # NotFound when there is no such function, UNSUPPORTED for a kind nothing can pass, and BadArguments for kinds
 # holding a 0 or words holding less than the kinds describe; the prototype the kinds describe is the
 # program's word, as an extern declaration's is (X1a): a wrong one is undefined behaviour
@@ -139,10 +139,10 @@ test "Call passes numbers and gives each kind of result" {
     w := U64[U64(m42)]
     assert I64(try Call("labs", U8[Code(Kind.I64)], w, Code(Kind.I64)) catch default 0) == 42
     x := U64[F64(6.25).Bits()]
-    assert (try Call("sqrt", U8[Code(Kind.F64)], x, Code(Kind.F64)) catch default 0).F64FromBits() == 2.5
+    assert F64.FromBits(try Call("sqrt", U8[Code(Kind.F64)], x, Code(Kind.F64)) catch default 0) == 2.5
     f F32 = 2.25
     y := U64[U64(f.Bits())]
-    assert U32(try Call("sqrtf", U8[Code(Kind.F32)], y, Code(Kind.F32)) catch default 0).F32FromBits() == 1.5
+    assert F32.FromBits(U32(try Call("sqrtf", U8[Code(Kind.F32)], y, Code(Kind.F32)) catch default 0)) == 1.5
     m5 I64 = -5
     neg := U64[U64(m5)]
     assert I64(try Call("abs", U8[Code(Kind.I32)], neg, Code(Kind.I32)) catch default 0) == 5     # an I32, extended

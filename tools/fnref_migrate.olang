@@ -27,7 +27,7 @@ fn bareAt(path String&, text String&) Vec<I32> {
     names := source.Names()
     d := diag.Diagnostics(false)
     file := d.AddFile(src.Path, src.Text)
-    ts := scan.Scan(src.Text)
+    ts := scan.Tokens.Scan(src.Text)
     p := parse.Parser(src, ts, names, parse.Oracle(), d, file)
     p.File()
     return p.BareFuncs

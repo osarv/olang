@@ -10,10 +10,10 @@ type Bag struct(c mut Cell&) {
 type Cur struct(of Bag&) {
     c mut Cell& = of.c
 }
-fn mk(b Bag&) Cur { return Cur(b) }
+fn Cur.mk(b Bag&) Cur { return Cur(b) }
 fn (b Bag&) Str() String {
     k := b.c.v
-    cur := Cur(b) if k >= 0 else mk(b)
+    cur := Cur(b) if k >= 0 else Cur.mk(b)
     cur.c.v++
     return "b" $b.c.v
 }

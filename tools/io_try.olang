@@ -65,7 +65,7 @@ fn main() ? {
     files Vec<String&>
     for i in range 1, args.Len() {
         root := args[i]
-        info := try os.Stat(root) catch { continue }
+        info := try os.FileInfo.Stat(root) catch { continue }
         if info.Kind == os.FileKind.FILE {
             files.Push($root)
         } else if info.Kind == os.FileKind.DIR and not inBuildOrGit(root) {

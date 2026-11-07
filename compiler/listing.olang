@@ -24,7 +24,7 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, name Stri
     c.ListName = $name
     c.Quiet = true
     prog := build.Program()
-    files := try build.ListingCode(fe, c, file, ir, prog, d) catch build.Failed.Reported {
+    files := try build.Listed.ListingCode(fe, c, file, ir, prog, d) catch build.Failed.Reported {
         return build.Finish(d)
     } catch build.Failed.Unbuilt { return 1 }
     say(Render(Inputs(prog, files, how(c, ir), commentOf(c, ir), ir)))
@@ -207,7 +207,7 @@ type Namer struct() {
     root String& = ""       # the root's identity
 }
 
-fn MakeNamer(prog build.Program&) Namer {
+fn Namer.Make(prog build.Program&) Namer {
     n := Namer()
     for u in prog.Units {
         if u.Holds == build.UnitKind.Main or u.Holds == build.UnitKind.Tests { n.root = $u.Identity }
@@ -266,7 +266,7 @@ type Sources struct() {
     std String& = ""
 }
 
-fn MakeSources() Sources {
+fn Sources.Make() Sources {
     s := Sources()
     s.std = $(try os.RealPath(load.StdDir()) catch default load.StdDir())
     return s
@@ -294,8 +294,8 @@ fn (s Sources&) Shown(name String&) String {
 # the listing: each of the function's instances in turn, a blank line between
 fn Render(li Inputs&) String {
     b := StringBuilder()
-    names := MakeNamer(li.Prog)
-    src := MakeSources()
+    names := Namer.Make(li.Prog)
+    src := Sources.Make()
     parts := readParts(li.Files.Parts)
     if li.Prog.Named.Len() == 0 {
         b.Push($li.Comment " " $li.Prog.Named.Len() " instances: the program makes no instance of it, so it has no code\n")

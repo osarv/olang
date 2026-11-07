@@ -47,7 +47,7 @@ fn (c Counts&) Describe() String {
 # the text's tokens, statement ends dropped; the last is Eof
 fn vtokens(src String&) Vec<VT> {
     out Vec<VT>
-    for tk in scan.Scan(src).Toks {
+    for tk in scan.Tokens.Scan(src).Toks {
         if tk.Kind == token.Tok.StmtEnd: continue
         out.Push(VT(tk.Kind, I64(tk.Start), I64(tk.End), tk.Has(token.LineBreak)))
     }

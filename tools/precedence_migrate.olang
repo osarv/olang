@@ -28,7 +28,7 @@ fn mixed(path String&, text String&, std String&, prelude String&) Vec<source.Sp
     d := diag.Diagnostics(false)
     o := layout.OracleFor(path, std, prelude, names)
     file := d.AddFile(src.Path, src.Text)
-    ts := scan.Scan(src.Text)
+    ts := scan.Tokens.Scan(src.Text)
     p := parse.Parser(src, ts, names, o, d, file)
     p.OldBitwise = true
     p.File()
@@ -43,7 +43,7 @@ fn reading(path String&, text String&, std String&, prelude String&, old Bool) S
     d := diag.Diagnostics(false)
     o := layout.OracleFor(path, std, prelude, names)
     file := d.AddFile(src.Path, src.Text)
-    ts := scan.Scan(src.Text)
+    ts := scan.Tokens.Scan(src.Text)
     p := parse.Parser(src, ts, names, o, d, file)
     p.OldBitwise = old
     p.RecordOperators = true

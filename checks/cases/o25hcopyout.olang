@@ -7,12 +7,12 @@ type Link struct(v I64, next Link?&) {
     v
     next
 }
-fn mk(i I64) Link { return Link(i, Link(i + 1, null)) }
+fn Link.mk(i I64) Link { return Link(i, Link(i + 1, null)) }
 N mut I64 = 3
 fn main() ? {
     o := Link(0, null)
     for i in range N {
-        m := mk(i)
+        m := Link.mk(i)
         o = m
     }
     assert $o != ""

@@ -23,7 +23,7 @@ fn viaLocal() Vec<Tok> {
     l.toks.Push(Tok(t, 1))
     return l.toks
 }
-fn viaField() Lex2 {
+fn Lex2.viaField() Lex2 {
     t := "y" $6 "-function-block-text"
     v := Vec<Tok>()
     v.Push(Tok(t, 1))
@@ -33,7 +33,7 @@ fn viaField() Lex2 {
 }
 fn main() ? {
     a := viaLocal()
-    b := viaField()
+    b := Lex2.viaField()
     churn()
     s := a[0].text
     u := b.toks[0].text

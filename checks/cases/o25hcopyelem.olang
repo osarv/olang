@@ -7,13 +7,13 @@ type WC struct(word String&, count I64) {
     word
     count
 }
-fn mk(n I64) WC {
+fn WC.mk(n I64) WC {
     a := Array<WC>(1)
     a[0] = WC($n $n, 1)
     b := a
     return b[0]
 }
 fn main() ? {
-    w := mk(12)
+    w := WC.mk(12)
     assert w.count == 1
 }

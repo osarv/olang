@@ -12,16 +12,16 @@ type Node struct(left mut Node?&, right mut Node?&) {
     right
 }
 
-fn byArgs(depth I64) Node& {
+fn Node.byArgs(depth I64) Node& {
     if depth == 0 { return Node(null, null) }
-    return Node(byArgs(depth - 1), byArgs(depth - 1))        # children allocated first
+    return Node(Node.byArgs(depth - 1), Node.byArgs(depth - 1))        # children allocated first
 }
 
-fn parentFirst(depth I64) Node& {
+fn Node.parentFirst(depth I64) Node& {
     n mut Node& = Node(null, null)                    # parent allocated first
     if depth == 0 { return n }
-    n.left = parentFirst(depth - 1)
-    n.right = parentFirst(depth - 1)
+    n.left = Node.parentFirst(depth - 1)
+    n.right = Node.parentFirst(depth - 1)
     return n
 }
 
@@ -34,7 +34,7 @@ fn check(n Node&) I64 {
 fn walk(depth I64, times I64, parentFirstOrder Bool) I64 {
     total I64 = 0
     for _ in range times {
-        t := parentFirst(depth) if parentFirstOrder else byArgs(depth)
+        t := Node.parentFirst(depth) if parentFirstOrder else Node.byArgs(depth)
         total += check(t)
     }
     return total

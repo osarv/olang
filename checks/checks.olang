@@ -335,7 +335,7 @@ fn runCase(name String&) String& {
         if sh(dir, $run " > out.txt 2> err.txt") != 0 {
             return $failure($name " built but did not run cleanly", dir) $(try os.ReadFile($dir "/err.txt") catch default "")
         }
-        want := storedOutput(name)
+        want := stored.storedOutput(name)
         got := outOf(dir).Replace(dir, "$CASE").Replace(root(), "$ROOT")
         if want.Stored and want.Out != got {
             return ("check FAIL: " $name " printed other than compiler/goldens/run.txt stores (make rungold captures it " $
@@ -353,7 +353,7 @@ type stored struct() {
 
 # a case's stored run, read from its section - "=== run NAME", "| status N", then its output a row "| ROW" each, and
 # "\\ no newline at end" after the last when it ends in none (compiler/tools/toolkit.olang)
-fn storedOutput(name String&) stored {
+fn stored.storedOutput(name String&) stored {
     r := stored()
     at := try StoredRuns.Find($"=== run " $name "\n") catch { return r }
     rest := StoredRuns[at:]
@@ -2093,11 +2093,11 @@ test "every message of compiler/msgs.olang names rules the specification states,
         rest = rest[at + 4:]
         open := try rest.FindByte('(') catch default 0
         name := rest[:open]
-        call := try rest.Find(") Msg { return Msg(Diag.") catch default -1
+        call := try rest.Find(") r.Msg { return r.Msg(Diag.") catch default -1
         eol := try rest.FindByte('\n') catch default rest.Len()
         if call < 0 or call > eol { continue }
         functions++
-        kindAt I64 = call + 24
+        kindAt I64 = call + 28
         kindEnd I64 = kindAt + (try rest[kindAt:].FindByte(',') catch default 0)
         kind := rest[kindAt:kindEnd]
         if kind != name {
@@ -2210,7 +2210,7 @@ test "os.OnCrash reports a crash on every thread, and os.RunOnStack makes room" 
 
 # the fixture program, run in dir with its arguments and no core file left behind, through no shell of its own
 fn crashRun(dir String&, args String&) os.Output {
-    return try os.Exec("sh", "-c", "cd " $os.Quote(dir) " && ulimit -c 0 && exec " $args) catch { unreachable }
+    return try os.Output.Exec("sh", "-c", "cd " $os.Quote(dir) " && ulimit -c 0 && exec " $args) catch { unreachable }
 }
 
 fn crashes(r mut report&) ? Failed {
@@ -2518,7 +2518,7 @@ fn words(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" help > out.txt 2>&1") == 0 and outOf(dir).Contains("  interpret ") and
                  outOf(dir).Contains("  format "), "help", dir)
     try r.expect(sh(dir, "\"$OLANG\" help format > out.txt 2>&1") == 0 and outOf(dir).Contains("-check"), "help format", dir)
-    try r.expect(sh(dir, "\"$OLANG\" explain b.olang Color > out.txt 2>&1") == 0 and outOf(dir).Contains("    fn FromHex(t String&) Color ? ColorError\n    fn Gray(level U8) Color&\n    fn (c Color&) Hex()")
+    try r.expect(sh(dir, "\"$OLANG\" explain b.olang Color > out.txt 2>&1") == 0 and outOf(dir).Contains("    fn Color.FromHex(t String&) Color ? ColorError\n    fn Color.Gray(level U8) Color&\n    fn (c Color&) Hex()")
                  "explain lists a type's builders before its methods (B11b)", dir)
     try r.expect(sh(dir, "\"$OLANG\" explain B3g > out.txt 2>&1") == 0 and outOf(dir).Contains("running a file"), "explain", dir)
     # D18c, QCB: a generator's borrowed elements are written as a reference - no scope written - and their scope said
@@ -2530,9 +2530,9 @@ fn words(r mut report&) ? Failed {
 }
 
 test "a run case's stored output is read back from compiler/goldens/run.txt" {
-    one := storedOutput("c2dctorbuilds.olang")
+    one := stored.storedOutput("c2dctorbuilds.olang")
     assert one.Stored and one.Out.Len() > 0 and one.Out.EndsWith("\n")
-    none := storedOutput("c2swap.olang")
+    none := stored.storedOutput("c2swap.olang")
     assert none.Stored and none.Out == ""
-    assert not storedOutput("no such case.olang").Stored
+    assert not stored.storedOutput("no such case.olang").Stored
 }

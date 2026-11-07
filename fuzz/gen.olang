@@ -712,7 +712,7 @@ fn (g mut Gen&) fromBits(t I32, d I64) String& {
     } else if t == 10 {
         u = 6
     }
-    return "(" $Prims[u] "(" $g.ex(u, d - 1) ")." $Prims[t] "FromBits())"
+    return $Prims[t] ".FromBits(" $Prims[u] "(" $g.ex(u, d - 1) "))"
 }
 
 fn (g mut Gen&) exBool(d I64) String& {
@@ -2650,11 +2650,19 @@ fn (g mut Gen&) genCase(ci I64) I32 {
     } else {
         ret = g.retVal(rt)
     }
-    g.decls = $g.decls "fn c" $ci "(" $sig.ToString() ") " $g.tn(rt) " {\n" $body "    return " $ret "\n}\n" "K" $ci " " $g.tn(rt) " = c" $ci "(" $lits.ToString() ")\n" $inputs.ToString()
+    c := $g.caseFn(rt) $ci   # D19a: a case making a type the program declares is that type's builder
+    g.decls = $g.decls "fn " $c "(" $sig.ToString() ") " $g.tn(rt) " {\n" $body "    return " $ret "\n}\n" "K" $ci " " $g.tn(rt) " = " $c "(" $lits.ToString() ")\n" $inputs.ToString()
     g.lits = lits.ToString()
     g.vars = vars.ToString()
     g.resets = resets.ToString()
     return rt
+}
+
+# the name case functions are called by before their number: "c", or "S1_0.c" where the case makes a type the program
+# declares (D19a: it is that type's builder)
+fn (g Gen&) caseFn(rt I32) String& {
+    if 100 <= rt < 300 or isGen(rt): return $g.tn(rt) ".c"
+    return "c"
 }
 
 # the program for "seed", of "ncase" cases - only case "only" when it is not negative - asserting that case i
@@ -2669,15 +2677,15 @@ fn Program(seed U64, ncase I64, only I64, atomics Bool, expect Array<String&>&, 
     prints := StringBuilder()
     resets := StringBuilder()
     for ci in range ncase {
-        g.genCase(ci)
+        c := $g.caseFn(g.genCase(ci)) $ci
         if only < 0 or only == ci {
             b.Push(g.decls)
             resets.Push(g.resets)
             # each case's assert just before its line, so one failing at run time shows which
             if ci < has.Len() and has[ci] {
-                prints.Push("    assert $c" $ci "(" $g.lits ") == " $quoted(expect[ci]) "\n")
+                prints.Push("    assert $" $c "(" $g.lits ") == " $quoted(expect[ci]) "\n")
             }
-            prints.Push("    try io.Print(\"" $ci ": \" $K" $ci " \" | \" $c" $ci "(" $g.vars ") \"\\n\")\n")
+            prints.Push("    try io.Print(\"" $ci ": \" $K" $ci " \" | \" $" $c "(" $g.vars ") \"\\n\")\n")
         }
     }
     b.Push("fn main() ? io.Error {\n    if os.Args().Len() > 1000 {\n")

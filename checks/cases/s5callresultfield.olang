@@ -5,13 +5,13 @@
 # loop's block holds - so it cannot be kept in a list the loop's block does not outlive
 import "std/io"
 type Box struct(s String&) { s }
-fn box(s String&) Box { return Box(s) }
+fn Box.box(s String&) Box { return Box(s) }
 
 fn main() ? {
     ss := Vec<String&>()
     for k in range 4 {
         t := $k "-text"
-        ss.Push(box(t).s)
+        ss.Push(Box.box(t).s)
     }
     for s in ss { try io.Println(s) }
 }

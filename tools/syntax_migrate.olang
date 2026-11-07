@@ -91,7 +91,7 @@ fn (c Counts&) Describe() String {
 
 # the text's tokens as VT, statement ends dropped and "<<"/">>" split; the last is Eof
 fn vtokens(src String&) Vec<VT> {
-    ts := scan.Scan(src)
+    ts := scan.Tokens.Scan(src)
     out Vec<VT>
     for tk in ts.Toks {
         if tk.Kind == token.Tok.StmtEnd { continue }

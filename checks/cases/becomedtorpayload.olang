@@ -7,13 +7,13 @@ type Res unique struct(n I64) { n } destruct { io.Println("destroy " $n)! }
 
 type Slot enum { Full(r Res&), Empty }
 
-fn mk(n I64) Slot { return Slot.Full(Res(n)) }
+fn Slot.mk(n I64) Slot { return Slot.Full(Res(n)) }
 
 fn size(s Slot) I64 { return 1 if s == Slot.Full else 0 }
 
 fn f(n I64) I64 {
     if n == 0: return 0
-    if size(mk(n)) > 0 {
+    if size(Slot.mk(n)) > 0 {
         become f(n - 1)
     }
     return n

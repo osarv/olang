@@ -25,6 +25,7 @@ import "std/pair"
 import "source"
 import "diag"
 import "msgs"
+import "diagmsg"
 import "types"
 import "generic"
 import "typed"
@@ -134,11 +135,11 @@ type Val struct(K ValKind, T Term) {
     T
 }
 
-fn plain() Val { return Val(ValKind.Plain, Term.None) }
+fn Val.plain() Val { return Val(ValKind.Plain, Term.None) }
 
-fn fresh(t Term) Val { return Val(ValKind.Fresh, t) }
+fn Val.fresh(t Term) Val { return Val(ValKind.Fresh, t) }
 
-fn existing(t Term) Val { return Val(ValKind.Existing, t) }
+fn Val.existing(t Term) Val { return Val(ValKind.Existing, t) }
 
 # ---- the pass over a program ----
 
@@ -479,7 +480,7 @@ fn (s mut Scoper&) judgeAll(report Bool) {
         s.runs.Clear()
     }
     for i in range s.Bodies.Len() {
-        s.Plans.Push(typed.NewPlan(s.Bodies[i]))
+        s.Plans.Push(typed.Plan.New(s.Bodies[i]))
         s.sums.Push(summary())
         s.judged.Push(false)
     }
@@ -1042,7 +1043,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.walkSrc.Clear()
     s.lastGenArg = Term.None
     s.report = report
-    s.plan = typed.NewPlan(body)
+    s.plan = typed.Plan.New(body)
     s.buildsVar.Clear()
     s.realVar.Clear()
     s.buildSp.Clear()
@@ -1343,7 +1344,7 @@ type walked struct() {
     FieldIdx Vec<I64>            # value, written through a reference
 }
 
-fn walkBody(s mut Scoper&, b I64) walked {
+fn walked.walkBody(s mut Scoper&, b I64) walked {
     out walked
     body := s.Bodies[b]
     if body.Root is not null { collectBlock(body.Root, out) }
@@ -1546,7 +1547,7 @@ fn (s mut Scoper&) components() {
     n := s.Bodies.Len()
     for i in range n {
         s.edgeFrom.Push(s.edgeTo.Len())
-        w := walkBody(s, i)
+        w := walked.walkBody(s, i)
         for c in w.Callees { s.edgeTo.Push(c) }
         s.assignedFrom.Push(s.assignedTo.Len())
         for l in w.Assigned { s.assignedTo.Push(l) }
@@ -1776,7 +1777,7 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
         case typed.Mark.None, typed.Mark.Infer { }
         case _ { return }
     }
-    c := typed.CallOf(x)
+    c := typed.Call.Of(x)
     if c is null {
         # a part of a call's built result: the call lands as ":=" from it would (O18c)
         c = s.partCallOf(x)
@@ -1970,7 +1971,7 @@ fn (s mut Scoper&) placeCallOf(p typed.Lvalue&) typed.Call?& {
         case typed.Lvalue.Field(_, _, b, _): s.placeCallOf(b)
         case typed.Lvalue.Elem(_, _, e): s.placeCallOf(e.Base)
         case typed.Lvalue.Payload(_, _, pl): s.placeCallOf(pl.Base)
-        case typed.Lvalue.Temp(_, _, v, _): typed.CallOf(v) if s.isFresh(v) else null
+        case typed.Lvalue.Temp(_, _, v, _): typed.Call.Of(v) if s.isFresh(v) else null
         case _: null
     }
 }
@@ -2142,7 +2143,7 @@ fn (s mut Scoper&) callRels(c typed.Call&) Vec<rel> {
 # where a call's result lands by its obligations (O18c), read off its arguments without judging them - an argument that
 # is itself such a call where that one lands ("v.RefMut(i).RefMut(j)": where v lives); None where it does not
 fn (s mut Scoper&) landTerm(a typed.Expr&) Term {
-    c := typed.CallOf(a)
+    c := typed.Call.Of(a)
     if c is null { return Term.None }
     fty := s.calleeType(c)
     callee := s.bodyOf(c.Target)
@@ -2212,7 +2213,7 @@ fn (s mut Scoper&) runLength(t types.TypeId) Bool {
 # whether a call's result holds what an argument living in one of this function's blocks refers to: its callee holds
 # that argument's scope to outlive its result scope (O26a: such a local is not moved by a flow)
 fn (s mut Scoper&) tiedToBlock(x typed.Expr&) Bool {
-    c := typed.CallOf(x)
+    c := typed.Call.Of(x)
     if c is null { return false }
     fty := s.calleeType(c)
     callee := s.bodyOf(c.Target)
@@ -4567,7 +4568,7 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
     }
     # a held local: its temporary is built where its one use puts it (typed.LocalKind.Held) - a call's several results
     # passed on as another's arguments (D8d) where the first of them is
-    spreadCall := loc.Kind == typed.LocalKind.Hidden and s.P.T.KindOf(t) == types.Kind.Tuple and typed.CallOf(x) is not null
+    spreadCall := loc.Kind == typed.LocalKind.Hidden and s.P.T.KindOf(t) == types.Kind.Tuple and typed.Call.Of(x) is not null
     if (loc.Kind == typed.LocalKind.Held or spreadCall) and s.isFresh(x) {
         s.held.Put(I64(l), x!)
         s.terms[I64(l)] = Term.None
@@ -4643,7 +4644,7 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         dest := lift if lift != Term.None else s.blockTerm(loc.In)
         s.promoteLocal = I64(l)
         s.caseLocal = I64(l)
-        hc := typed.CallOf(s.unAway(x!)) if not s.isRef(t) and s.P.T.NeedsDrop(t) else null
+        hc := typed.Call.Of(s.unAway(x!)) if not s.isRef(t) and s.P.T.NeedsDrop(t) else null
         s.slotCall = I64(hc.Site) if hc is not null else -1
         s.landing = land and not part and lift == Term.None
         if part { s.tempLand = 1 if land and lift == Term.None else 0 }
@@ -4664,7 +4665,7 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         s.lastGenArg = Term.None
         s.lastGenLocal = -1
         # (and the element its Next gives, as its view - O27's words)
-        ec := typed.CallOf(unPassed(s.unAway(x!)))
+        ec := typed.Call.Of(unPassed(s.unAway(x!)))
         if ec is not null and ec.Args.Len() > 0 {
             wk := s.argLocal(ec.Args[0])
             if wk >= 0 and s.walkSrc.Has(wk): s.walkSrc.Put(I64(l), try s.walkSrc.Get(wk) catch default -1)
@@ -4677,7 +4678,7 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
             s.terms[I64(l)] = dest
             # (D9h: where the call hands back a view, this function copies it where the local keeps it - in the local's
             # block, wherever the viewed storage lives - so a copy made in a loop turn goes with the turn, O2)
-            oc := typed.CallOf(x!)
+            oc := typed.Call.Of(x!)
             if oc is not null { s.build(oc.Site, dest) }
         }
         h := try s.splitHome.Get(I64(l)) catch default Term.None
@@ -4760,7 +4761,7 @@ fn (s mut Scoper&) noteOrigin(l I64, x typed.Expr&, v Val) {
     if v.K != ValKind.Existing { return }
     s.viewOf[l] = s.viewSource(x)
     # a call the inference landed where the local's uses need is the local's own, as a call landing at the local is
-    c := typed.CallOf(unPassed(s.unAway(x)))
+    c := typed.Call.Of(unPassed(s.unAway(x)))
     if c is not null and s.siteLift(I64(c.Site)) != Term.None { return }
     r := s.claimRoot(x)
     ok := r >= 0 and r != l and (s.liftable(r) or s.held.Has(r) or s.heldCall(r) >= 0)
@@ -4789,7 +4790,7 @@ fn (s mut Scoper&) bindLocal(l typed.LocalId, x typed.Expr&) {
         }
         return
     }
-    c := typed.CallOf(s.unPromoted(x))
+    c := typed.Call.Of(s.unPromoted(x))
     if c is null or I64(c.Site) != s.ctorSite { return }
     s.bindFrom.Put(I64(l), s.ctorFrom)
 }
@@ -4809,7 +4810,7 @@ fn (s mut Scoper&) noteResBind(x typed.Expr&) {
     n := s.ctorParams(x.Type())
     if n == 0 { return }
     from := -1
-    c := typed.CallOf(s.unPromoted(x))
+    c := typed.Call.Of(s.unPromoted(x))
     if c is not null and I64(c.Site) == s.ctorSite {
         from = s.ctorFrom
     } else {
@@ -4850,7 +4851,7 @@ fn (s mut Scoper&) hasLateLocals(b I64) Bool {
 fn (s mut Scoper&) noteLate(l I64, x typed.Expr&) {
     if not s.lateGather or s.lateNone.Has(l) { return }
     n := s.ctorParams(s.B!.Locals[l].Ty)
-    c := typed.CallOf(s.unPromoted(x))
+    c := typed.Call.Of(s.unPromoted(x))
     if n == 0 or c is null or I64(c.Site) != s.ctorSite or s.ctorFrom + n > s.bindTerms.Len() {
         s.lateNone.Put(l, true)
         return
@@ -4894,7 +4895,7 @@ fn (s mut Scoper&) recAt(from I64, w I64) Term {
 # just now, or a local whose bindings are known; -1 for none
 fn (s mut Scoper&) argRec(a typed.Expr&) I64 {
     x := s.unPromoted(s.unAway(a))
-    c := typed.CallOf(x)
+    c := typed.Call.Of(x)
     if c is not null { return try s.siteRec.Get(I64(c.Site)) catch default -1 }
     match x {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) { return s.recOf(p) }
@@ -5093,7 +5094,7 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     if s.isRef(t) { s.splitBorrow(x) }
     # a call assigned: what its result holds is said at the "=" (C2d through a function's result)
     savedLand, savedLandSp := s.landSite, s.landSp
-    ac := typed.CallOf(x)
+    ac := typed.Call.Of(x)
     if ac is not null { s.landSite, s.landSp = I64(ac.Site), s.eqAfter(p.Span()) }
     s.caseLocal = wholeLocal(p)
     v := s.val(x, slot if slot.Runs() else s.here())
@@ -5138,7 +5139,7 @@ fn (s mut Scoper&) instanceOutlivesArg(x typed.Expr&, slot Term) Bool {
     if l < 0 or s.isRef(s.B!.Locals[l].Ty) { return false }
     from := try s.bindFrom.Get(l) catch default -1
     init := try s.inits.Get(l) catch default null
-    c := typed.CallOf(s.unPromoted(init)) if init is not null else null
+    c := typed.Call.Of(s.unPromoted(init)) if init is not null else null
     if from < 0 or c is null or s.P.T.Role(s.calleeType(c)) != types.RoleCtor { return false }
     callee := s.bodyOf(c.Target)
     rv := s.resultVarOf(s.calleeType(c))
@@ -5394,8 +5395,8 @@ fn (s mut Scoper&) tempVal(v typed.Expr&) Val {
     s.plainRead = false
     # a part holding no reference read out of it, nothing put anywhere: it lands by its obligations only where they need
     # its result scope to outlive an argument's (O18a, O18c - "pick(r, Res(2), true).k" builds Res(2) in this block)
-    if plainRead and decided == -1 and typed.CallOf(v) is not null and s.isFresh(v) { return s.val(v, Term.None) }
-    if typed.CallOf(v) is not null and s.isFresh(v) and decided != 0 {
+    if plainRead and decided == -1 and typed.Call.Of(v) is not null and s.isFresh(v) { return s.val(v, Term.None) }
+    if typed.Call.Of(v) is not null and s.isFresh(v) and decided != 0 {
         s.landing = true
         x := s.val(v, Term.None)
         s.landing = false
@@ -5532,7 +5533,7 @@ fn (s mut Scoper&) tempTerm(v typed.Expr&, site typed.SiteId) Term {
     s.build(site, h)
     t = x.T if x.T != Term.None else h
     # a call's array value holds no reference, but its elements are where its result scope is bound (T7b)
-    if x.T == Term.None and s.arenaValue(v.Type()) and typed.CallOf(v) is not null and s.resAt.Runs() { t = s.resAt }
+    if x.T == Term.None and s.arenaValue(v.Type()) and typed.Call.Of(v) is not null and s.resAt.Runs() { t = s.resAt }
     s.temps.Put(I64(site), t)
     return t
 }
@@ -6053,7 +6054,7 @@ fn (s mut Scoper&) calleeType(c typed.Call&) types.TypeId {
 # an expression judged: what it is to section 8, every temporary in it built where it lands - in dest where dest is a
 # run-time term, else where the expression stands (O18a's last row)
 fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
-    if x is null { return plain() }
+    if x is null { return Val.plain() }
     d := dest if dest.Runs() else s.here()
     # (the local a value is declared as, for the outermost expression of its initializer only - C2)
     whole, wholeStor, wholePart := s.caseLocal, s.caseStor, s.casePart
@@ -6061,14 +6062,14 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
     match x {
         case typed.Expr.Lit(_, ty, _) {
             if s.holds(ty) { return Val(ValKind.Null, Term.None) }
-            return plain()
+            return Val.plain()
         }
         case typed.Expr.Data(_, _, _, _) { return Val(ValKind.Static, Term.Program) }
         case typed.Expr.Read(_, ty, p, _) { return s.read(p, ty, dest) }
         case typed.Expr.Take(_, ty, p) { return s.read(p, ty, dest) }
         case typed.Expr.Borrow(_, _, p) {
             s.placeOperands(p)
-            return existing(s.storOf(p))
+            return Val.existing(s.storOf(p))
         }
         case typed.Expr.Promote(_, _, pr) {
             box := s.anyBox
@@ -6086,7 +6087,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             cp := s.convertedPlace(pr.X) if not box else null
             if cp is not null {
                 t := s.peekPlace(cp, false)
-                if t != Term.None { return existing(t) }
+                if t != Term.None { return Val.existing(t) }
             }
             # a copy of existing storage holding references - an array copied into an "any" (T32a) - is new storage built
             # in d, its references still naming what they did: what they refer to outlives d, as an array literal's
@@ -6096,7 +6097,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
                 s.fit(pv.T, d, s.storeThrough(pr.X.Type()), pr.X, FitAnyCopy if box else FitValue)
                 s.fitTarget = -1
             }
-            return fresh(d)
+            return Val.fresh(d)
         }
         case typed.Expr.Call(sp, ty, c) { return s.call(sp, ty, c, dest) }
         case typed.Expr.Make(_, ty, m) {
@@ -6121,8 +6122,8 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
                 s.fit(vs[k].T, d, s.storeThrough(m.Items[k].Type()), m.Items[k], kind)
                 s.fitTarget, s.fitStor, s.fitPart = -1, false, false
             }
-            if not s.holds(ty) and m.Site < typed.SiteId(0) { return plain() }
-            return fresh(d)
+            if not s.holds(ty) and m.Site < typed.SiteId(0) { return Val.plain() }
+            return Val.fresh(d)
         }
         case typed.Expr.Collect(_, _, c) {
             s.build(c.Site, d)
@@ -6130,7 +6131,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             s.collectAt.Push(d)
             s.block(c.Loop)
             try s.collectAt.Pop() catch { }
-            return fresh(d)
+            return Val.fresh(d)
         }
         case typed.Expr.Prim(_, ty, op, _, args) {
             # a conversion names its argument's storage (T29a): an array value's too
@@ -6141,7 +6142,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
                 return v
             }
             for a in args { s.val(a, Term.None) }
-            return plain()
+            return Val.plain()
         }
         case typed.Expr.Slice(sp, ty, sl) {
             # a slice of a call's built result put elsewhere has its call land there (O18a)
@@ -6154,7 +6155,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             s.val(sl.Hi, Term.None)
             st := s.sliceTerm(sl.Base)
             if pk >= 0 { s.partDest.Remove(pk) }
-            return existing(st)
+            return Val.existing(st)
         }
         case typed.Expr.Cond(_, _, c) {
             s.val(c.C, Term.None)
@@ -6201,7 +6202,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
                     case _ { }
                 }
             }
-            return fresh(d)
+            return Val.fresh(d)
         }
         case typed.Expr.Away(_, _, y) { return s.val(y, dest) }
     }
@@ -6217,7 +6218,7 @@ fn (s mut Scoper&) ownCopy(m typed.Make&, ty types.TypeId, d Term) Val {
     v := s.val(x, Term.None)
     # (the copy's type, not what it copies: an array of references to text copied into an array of text shares nothing)
     if v.K == ValKind.Existing and s.P.T.SharesRefs(ty) { s.fit(v.T, d, s.storeThrough(ty), x, FitValue) }
-    return fresh(d)
+    return Val.fresh(d)
 }
 
 # item 17: a value local copied whole at its last mention into storage kept beyond its block - built where that copy
@@ -6237,7 +6238,7 @@ fn (s mut Scoper&) liftCopied(m typed.Make&, d Term) {
 fn (s mut Scoper&) lastCopy(site I64) I64 {
     if not s.lastSeen.Has(s.Id) {
         s.lastSeen.Put(s.Id, true)
-        u := typed.Uses(s.P.T, s.B!)
+        u := typed.LocalUses.Uses(s.P.T, s.B!)
         for en in typed.LastCopies(s.B!) {
             l := en.Value
             if u.Whole[l] or u.EscHard[l] or u.AliasOf.View().Some(fn(a): return a == l): continue
@@ -6356,7 +6357,7 @@ fn (s mut Scoper&) builtOK(x typed.Expr?&, t Term) Bool {
         case typed.Expr.Away(_, _, y) { return s.builtOK(y, t) }
         case _ { }
     }
-    c := typed.CallOf(x)
+    c := typed.Call.Of(x)
     if c is null { return false }
     fty := s.calleeType(c)
     callee := s.bodyOf(c.Target)
@@ -6395,7 +6396,7 @@ fn (s mut Scoper&) builtCall(x typed.Expr?&) I64 {
     }
     # an array value a call gives is built in its result scope (T7b)
     if not s.isFresh(x) and not s.arenaValue(x.Type()) { return -1 }
-    c := typed.CallOf(x)
+    c := typed.Call.Of(x)
     return I64(c.Site) if c is not null else -1
 }
 
@@ -6408,8 +6409,8 @@ fn (s mut Scoper&) readPart(p typed.Lvalue&, ty types.TypeId, dest Term) Val {
             # copies - as a borrowed result's was)
             if dest != Term.None and s.arenaValue(ty) and s.isFresh(r) and not s.keptCall(r) {
                 v := s.val(r, dest)
-                if not s.holds(ty) { return plain() }
-                return existing(v.T)
+                if not s.holds(ty) { return Val.plain() }
+                return Val.existing(v.T)
             }
         }
         case _ { }
@@ -6439,11 +6440,11 @@ fn (s mut Scoper&) readPart(p typed.Lvalue&, ty types.TypeId, dest Term) Val {
             }
         }
     }
-    if not s.holds(ty) { return plain() }
+    if not s.holds(ty) { return Val.plain() }
     match p {
-        case typed.Lvalue.Local(_, _, id) { return existing(s.whereLives(id)) }
-        case typed.Lvalue.Deref(_, _, r) { return existing(s.val(r, Term.None).T) }
-        case _ { return existing(s.partsTerm(p)) }
+        case typed.Lvalue.Local(_, _, id) { return Val.existing(s.whereLives(id)) }
+        case typed.Lvalue.Deref(_, _, r) { return Val.existing(s.val(r, Term.None).T) }
+        case _ { return Val.existing(s.partsTerm(p)) }
     }
 }
 
@@ -6512,7 +6513,7 @@ fn (s mut Scoper&) join(a Val, b Val, d Term) Val {
     if a.K == ValKind.Null or a.K == ValKind.Static { return b }
     if b.K == ValKind.Null or b.K == ValKind.Static { return a }
     if a.T == b.T { return Val(ValKind.Existing if a.K == ValKind.Existing or b.K == ValKind.Existing else a.K, a.T) }
-    return existing(s.setOf(a.T, b.T))
+    return Val.existing(s.setOf(a.T, b.T))
 }
 
 fn (s mut Scoper&) setOf(a Term, b Term) Term {
@@ -6556,7 +6557,7 @@ fn (s mut Scoper&) match(m typed.Match&, dest Term) Val {
         if not dest.Runs() { dest = s.here() }
     }
     d := dest if dest.Runs() else s.here()
-    v := plain()
+    v := Val.plain()
     first := true
     for a in m.Arms {
         av := s.arm(a, dest)
@@ -6571,7 +6572,7 @@ fn (s mut Scoper&) match(m typed.Match&, dest Term) Val {
 }
 
 fn (s mut Scoper&) arm(a typed.Arm?&, dest Term) Val {
-    if a is null { return plain() }
+    if a is null { return Val.plain() }
     bound Vec<I64>
     for alt in a.Alts {
         s.val(alt.Test, Term.None)
@@ -6594,7 +6595,7 @@ fn (s mut Scoper&) arm(a typed.Arm?&, dest Term) Val {
         }
     }
     s.val(a.Guard, Term.None)
-    v := plain()
+    v := Val.plain()
     if a.Code is not null {
         s.blocks.Push(a.Code!.Id)
         s.stmts(a.Code!.Stmts)
@@ -6619,7 +6620,7 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
     match f {
         case typed.FnVal.Named(b) {
             if s.report { s.fnUses.Push(fnUse(s.B!.File, s.lastName(sp), I64(b), FnNamed, types.UnknownT)) }
-            return existing(Term.Program)
+            return Val.existing(Term.Program)
         }
         case typed.FnVal.Lambda(id, caps, site) {
             if s.report { s.fnUses.Push(fnUse(s.B!.File, s.firstToken(s.B!.File, sp), I64(id), FnLambda, types.UnknownT)) }
@@ -6652,12 +6653,12 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
                     s.build(site, d)
                 }
                 s.plan.Pass(site, scopes.ToArray())
-                return fresh(d)
+                return Val.fresh(d)
             }
             if frame {
                 s.onFrameAt(site)
                 s.plan.Pass(site, scopes.ToArray())
-                return existing(s.here())
+                return Val.existing(s.here())
             }
             # what captured a Str's receiver's parts lives in the block it is made in - a task's, in its join block (D16e)
             if s.noBuildTerm(home) { home = d if spawned and d.Runs() else s.here() }
@@ -6670,7 +6671,7 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
             for t in terms {
                 if t != home and s.order(t, home) != Holds { whole = s.setOf(whole, t) }
             }
-            return existing(whole)
+            return Val.existing(whole)
         }
         case typed.FnVal.Adapter(cb, r, site) {
             if s.report { s.fnUses.Push(fnUse(s.B!.File, s.opTok(r), I64(cb), FnCall, r.Type())) }
@@ -6684,14 +6685,14 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
                 if s.buildsSum(I64(cb), k) { s.buildsThrough(t, at, I64(cb), k) }
                 s.onFrameAt(site)
                 s.plan.Pass(site, typed.Scope[s.scopeOf(t)])
-                return existing(s.here())
+                return Val.existing(s.here())
             }
             s.buildSite(site, t if t.Runs() else s.here(), at)
             # what the adapted Call builds where its receiver lives is built where the instance is
             k := s.paramVar(I64(cb), 0)
             if s.buildsSum(I64(cb), k) { s.buildsThrough(t, at, I64(cb), k) }
             s.plan.Pass(site, typed.Scope[s.scopeOf(t)])
-            return existing(t)
+            return Val.existing(t)
         }
     }
 }
@@ -6777,7 +6778,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     }
     if fty == types.UnknownT {
         for a in c.Args { s.val(a, Term.None) }
-        return plain() if not s.holds(ty) else fresh(dest if dest.Runs() else s.here())
+        return Val.plain() if not s.holds(ty) else Val.fresh(dest if dest.Runs() else s.here())
     }
     vars := s.P.T.ScopeVarsOf(fty)
     n := c.Args.Len()
@@ -6804,7 +6805,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     landed := Array<Bool>(n)
     firstArg := Array<I64>(vars.Len(), -1)   # by scope variable: the argument that bound it first
     for i in range n {
-        vals[i] = plain()
+        vals[i] = Val.plain()
         a := c.Args[i]
         if owner[i] < 0 { continue }
         v := s.argVal(c, i, fty, owner, beta, ev, dest, landed)
@@ -6923,7 +6924,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     if callee >= 0 { s.discharge(sp, callee, beta, c, agreed) }
     if callee < 0 and c.Target == typed.Callee.Value { s.dischargeRels(sp, s.valueRels(fty, vars, rv, sp), -1, beta, c, agreed) }
     s.resAt = beta[rv] if rv >= 0 else here
-    if not s.holds(ty) { return plain() }
+    if not s.holds(ty) { return Val.plain() }
     if s.P.T.Role(fty) != types.RoleCtor and callee >= 0 and s.summed(callee) and s.sums[callee].ResBind.Len() > 0 {
         # the instance it gives carries the bindings its callee's returns had, through this call's (O13c): "it :=
         # l.Iter()" knows its iterator reads l
@@ -6945,7 +6946,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             s.bindKids.Push(s.argRec(c.Args[p]))
         }
         s.siteRec.Put(I64(c.Site), s.ctorFrom)
-        return s.liftedVal(fresh(beta[rv] if rv >= 0 else here), sl, want)
+        return s.liftedVal(Val.fresh(beta[rv] if rv >= 0 else here), sl, want)
     }
     # D18c: a generator whose elements borrow from parameter p: where p's argument lives, for the walk it may make
     if callee >= 0 { s.noteGenArg(callee, beta, owner, c) }
@@ -6953,16 +6954,16 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     # D18c: the Next of a walk a for-in makes of such a generator gives elements living where that argument does
     if n > 0 and s.isRef(ty) {
         wl := s.argLocal(c.Args[0])
-        if wl >= 0 and s.walkElem.Has(wl) { return existing(try s.walkElem.Get(wl) catch default Term.Untraced) }
+        if wl >= 0 and s.walkElem.Has(wl) { return Val.existing(try s.walkElem.Get(wl) catch default Term.Untraced) }
     }
     if e >= 0 {
         # a result borrowed from parameter e lives where its argument's referent does (O13)
         for v in range vars.Len() {
-            if vars[v] == e or (e < n and owner[e] == v) { return existing(beta[v]) }
+            if vars[v] == e or (e < n and owner[e] == v) { return Val.existing(beta[v]) }
         }
-        return existing(Term.Untraced)
+        return Val.existing(Term.Untraced)
     }
-    return s.liftedVal(fresh(beta[rv] if rv >= 0 else here), sl, want)
+    return s.liftedVal(Val.fresh(beta[rv] if rv >= 0 else here), sl, want)
 }
 
 # a call through function value x: a task's lambda - what it captured is handed to the task too (P2), and it is built to
@@ -7002,7 +7003,7 @@ fn (s mut Scoper&) argVal(c typed.Call&, i I64, fty types.TypeId, owner Array<I6
         s.landing = false
         s.build(pr.Site, s.here())
         landed[i] = true
-        if v.K == ValKind.Fresh { v = existing(v.T) }
+        if v.K == ValKind.Fresh { v = Val.existing(v.T) }
         if not ctorCallee and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) { v = s.keptCopy(c, i, a, pr.X, v) }
         return v
     }
@@ -7014,7 +7015,7 @@ fn (s mut Scoper&) argVal(c typed.Call&, i I64, fty types.TypeId, owner Array<I6
         s.val(pr.X, Term.None)
         s.build(pr.Site, t)
         landed[i] = true
-        return existing(t)
+        return Val.existing(t)
     }
     if pr is not null and not s.isFresh(pr.X) and s.holds(pr.X.Type()) and not ctorCallee {
         # a value with no storage of its own whose references already live somewhere - a copy out of a place, a
@@ -7027,7 +7028,7 @@ fn (s mut Scoper&) argVal(c typed.Call&, i I64, fty types.TypeId, owner Array<I6
             s.wantPromotion(pr.X)
             if s.report { s.err(s.argAt(a), msgs.BorrowSplitScopes()) }
         }
-        if v.K == ValKind.Fresh { v = existing(v.T) }
+        if v.K == ValKind.Fresh { v = Val.existing(v.T) }
         return v
     }
     if s.isFresh(a) and s.argLands(a) {
@@ -7035,10 +7036,10 @@ fn (s mut Scoper&) argVal(c typed.Call&, i I64, fty types.TypeId, owner Array<I6
         v := s.val(a, Term.None)
         s.landing = false
         landed[i] = true
-        if v.K == ValKind.Fresh { v = existing(v.T) }
+        if v.K == ValKind.Fresh { v = Val.existing(v.T) }
         return v
     }
-    if s.isFresh(a) or s.isHeldFresh(a) { return plain() }
+    if s.isFresh(a) or s.isHeldFresh(a) { return Val.plain() }
     return s.argExisting(c, i, owner, beta, ev, dest)
 }
 
@@ -7047,7 +7048,7 @@ fn (s mut Scoper&) keptCopy(c typed.Call&, i I64, a typed.Expr&, x typed.Expr&, 
     if s.atCall(x) and not s.calleeStoresArg(c, i) {
         # x[i]'s copy kept, never stored into: its variable is bound where the copy's storage is, which the callee's
         # obligations then judge (O10c), as stage 0 binds it
-        return existing(s.here())
+        return Val.existing(s.here())
     }
     if s.fieldGather and s.finalQuiet {
         s.wantHits++   # a refusal not said, so this judging cannot be the reporting one (inferFields)
@@ -7074,7 +7075,7 @@ fn (s mut Scoper&) argExisting(c typed.Call&, i I64, owner Array<I64>&, beta Arr
     if cr != Term.None {
         # a choice of places is a copy of this block's (E28)
         rf = cr
-        v = existing(s.here())
+        v = Val.existing(s.here())
     }
     if rf == Term.None or rf == v.T { return v }
     # a value whose references live elsewhere than its storage is lent where they are, to a callee keeping nothing in it
@@ -7096,7 +7097,7 @@ fn (s mut Scoper&) argExisting(c typed.Call&, i I64, owner Array<I64>&, beta Arr
     }
     # (QCE: a value owning storage and sharing no reference - a by-value parameter's own copy - lent to a callee keeping
     # nothing of it holds nothing but its parts, which the callee builds where they are: lent there)
-    if cr != Term.None or handle or owns or not loop { return existing(rf) }
+    if cr != Term.None or handle or owns or not loop { return Val.existing(rf) }
     return v
 }
 
@@ -7186,7 +7187,7 @@ fn (s mut Scoper&) noteGenArg(callee I64, beta Array<Term>&, owner Array<I64>&, 
 # whether x is a call of a body that may hand back existing storage (summary.HandsBack) - one of the component being
 # judged by what the rounds so far found, one not judged yet as may
 fn (s mut Scoper&) keptCall(x typed.Expr&) Bool {
-    c := typed.CallOf(s.unAway(x))
+    c := typed.Call.Of(s.unAway(x))
     if c is null: return false
     return match c.Target {
         case typed.Callee.Body(id): s.sums[I64(id)].HandsBack or not (s.sums[I64(id)].Done or s.sums[I64(id)].Judging)
@@ -7196,7 +7197,7 @@ fn (s mut Scoper&) keptCall(x typed.Expr&) Bool {
 
 # whether x is a call the inference landed (a site lift)
 fn (s mut Scoper&) liftedCall(x typed.Expr&) Bool {
-    c := typed.CallOf(unPassed(s.unAway(x)))
+    c := typed.Call.Of(unPassed(s.unAway(x)))
     return c is not null and s.siteLift(I64(c.Site)) != Term.None
 }
 
@@ -7204,7 +7205,7 @@ fn (s mut Scoper&) liftedCall(x typed.Expr&) Bool {
 # there, which what it is put into judges as any (exactly where something can be stored through it, O25g)
 fn (s mut Scoper&) liftedVal(v Val, sl Term, want Term) Val {
     if sl == Term.None or not want.Runs() or v.T == want { return v }
-    return existing(v.T)
+    return Val.existing(v.T)
 }
 
 # whether an argument living at t, one of several scopes (O11, O12), is lent for parameter type pt whose scope variable v
@@ -7260,7 +7261,7 @@ fn (s mut Scoper&) splitRefs(a typed.Expr&) Term {
 # it from - D9h's caller copies a view it keeps, and a returned view is copied where the body has no plan (T7b)
 fn (s mut Scoper&) ownCall(t types.TypeId, x typed.Expr&) Bool {
     if not s.ownsUnshared(t) { return false }
-    c := typed.CallOf(x)
+    c := typed.Call.Of(x)
     return c is not null and s.bodyOf(c.Target) >= 0
 }
 
@@ -7778,7 +7779,7 @@ fn (s mut Scoper&) shownLocal(l I64, depth I64) I64 {
             # variable it was read from lives (O17b)
             if loc.Kind == typed.LocalKind.Var and s.isHandle(loc.Ty) {
                 xi := try s.inits.Get(l) catch default null
-                c := typed.CallOf(s.unAway(xi)) if xi is not null else null
+                c := typed.Call.Of(s.unAway(xi)) if xi is not null else null
                 if c is not null and c.Args.Len() > 0 and (s.isMethodCall(c) or s.indexCall(c)) {
                     r := s.shownLocal(flRootExpr(s.unAway(c.Args[0])), depth + 1)
                     if r >= 0 { return r }
@@ -7791,7 +7792,7 @@ fn (s mut Scoper&) shownLocal(l I64, depth I64) I64 {
             for _ in range 16 {
                 if x is null { return -1 }
                 x = s.unAway(x)
-                c := typed.CallOf(x)
+                c := typed.Call.Of(x)
                 if c is null or c.Args.Len() == 0 or not (s.isMethodCall(c) or s.indexCall(c)) { break }
                 x = c.Args[0]
             }
@@ -7919,7 +7920,7 @@ fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr?&, w I64, wname Strin
             case _ { break }
         }
     }
-    c0 := typed.CallOf(cx)
+    c0 := typed.Call.Of(cx)
     if c0 is not null and s.P.T.Role(s.calleeType(c0)) != types.RoleCtor and s.noteThroughResult(rec, c0, w, wname, depth) { return }
     made := s.madeLocal(short, 0)
     if made < 0 or made == w { return }
@@ -7937,7 +7938,7 @@ fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr?&, w I64, wname Strin
         return
     }
     init := try s.inits.Get(made) catch default null
-    ic := typed.CallOf(init) if init is not null else null
+    ic := typed.Call.Of(init) if init is not null else null
     if ic is not null and s.P.T.Role(s.calleeType(ic)) != types.RoleCtor {
         # a result whose references come from an argument is fixed where that argument is made
         if s.noteThroughResult(rec, ic, w, wname, depth) { return }
@@ -8756,7 +8757,7 @@ fn (s mut Scoper&) genResult(t Term) Bool { return s.B!.Gen and s.resultVar >= 0
 
 # a lift proposed for the call value x is, where it is one: it lands at a term outliving t (2.4)
 fn (s mut Scoper&) proposeCall(x typed.Expr&, t Term) {
-    c := typed.CallOf(x)
+    c := typed.Call.Of(x)
     if c is not null { s.proposeSite(I64(c.Site), t) }
 }
 
@@ -8805,7 +8806,7 @@ fn (s mut Scoper&) heldCall(l I64) I64 {
     x := try s.inits.Get(l) catch { return -1 }
     k := s.B!.Locals[l].Kind
     if k != typed.LocalKind.Hidden and k != typed.LocalKind.Held { return -1 }
-    c := typed.CallOf(x)
+    c := typed.Call.Of(x)
     return I64(c.Site) if c is not null else -1
 }
 
@@ -9271,11 +9272,11 @@ fn (s mut Scoper&) scopeOf(t Term) typed.Scope {
 
 # ---- diagnostics ----
 
-fn (s mut Scoper&) err(sp source.Span, m msgs.Msg) I64 {
+fn (s mut Scoper&) err(sp source.Span, m diagmsg.Msg) I64 {
     return s.P.L.Diags.Error(diag.Where.Span(s.B!.File, I64(sp.Start), I64(sp.End)), m)
 }
 
-fn (s mut Scoper&) note(rec I64, file I64, sp source.Span, m msgs.Msg) {
+fn (s mut Scoper&) note(rec I64, file I64, sp source.Span, m diagmsg.Msg) {
     s.P.L.Diags.Note(rec, diag.Where.Span(file, I64(sp.Start), I64(sp.End)), m)
 }
 
@@ -9735,12 +9736,12 @@ if TestBuild {
                          "type Holder struct(src mut Node&) {\n"
                          "    r mut Node& = src\n"
                          "}\n"
-                         "fn mkNode(i I64) mut Node& { return Node(i) }\n"
+                         "fn Node.mk(i I64) mut Node& { return Node(i) }\n"
                          "fn setIt(h mut Holder&, i I64) {\n"
-                         "    join { spawn h.r = mkNode(i) }\n"
+                         "    join { spawn h.r = Node.mk(i) }\n"
                          "}\n"
                          "fn setOne(h mut Holder&, i I64) {\n"
-                         "    h.r = mkNode(i)\n"
+                         "    h.r = Node.mk(i)\n"
                          "}\n")
 
     test "C2d, P1g: a task's built result stored into a field of a parameter is built where the field lives, as the assignment's is" {

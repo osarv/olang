@@ -205,7 +205,7 @@ fn (lw mut Lowerer&) anyRender(ti I64, top Bool) mir.Fn {
     ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.AnyRender(ti, top), hty))
     sp := source.Span(0, 0)
     ln.prologue(mir.VarKind[mir.VarKind.Builder])
-    ln.rdepth = mir.Operand.Copy(mir.L(mir.LocalId(1)))
+    ln.rdepth = mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(1)))
     place := ln.at(mir.LocalId(0))
     if tab.Stored != tab.Concrete { place = ln.with(place, mir.Proj.Field(0)) }
     if top {
@@ -467,7 +467,7 @@ fn (ln mut lowering&) assemble(res types.TypeId) {
         return
     }
     ops := Array<mir.Operand>(b.Fields.Len())
-    for i in range b.Fields.Len() { ops[i] = mir.Operand.Copy(mir.L(mir.LocalId(I32(b.Fields[i])))) }
+    for i in range b.Fields.Len() { ops[i] = mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(I32(b.Fields[i])))) }
     v := ln.into(inst, mir.Rvalue.Aggregate(inst, 0, ln.F.Args(ops)), b.Sp)
     if inst != res {
         # an instance of a reference-only type (C11): made where it lands, its instance scope, and a destructor-bearing
@@ -532,11 +532,11 @@ fn (ln mut lowering&) temp(ty types.TypeId, sp source.Span) mir.LocalId { return
 # rv computed into a temporary of type ty: a copy of it
 fn (ln mut lowering&) into(ty types.TypeId, rv mir.Rvalue, sp source.Span) mir.Operand {
     l := ln.temp(ty, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(l), rv))
-    return mir.Operand.Copy(mir.L(l))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(l), rv))
+    return mir.Operand.Copy(mir.Lvalue.L(l))
 }
 
-fn (ln mut lowering&) copyLocal(l mir.LocalId) mir.Operand { return mir.Operand.Copy(mir.L(l)) }
+fn (ln mut lowering&) copyLocal(l mir.LocalId) mir.Operand { return mir.Operand.Copy(mir.Lvalue.L(l)) }
 
 # an operand as a local: itself where it is a copy of a local, else held in a temporary
 fn (ln mut lowering&) local(x mir.Operand, ty types.TypeId, sp source.Span) mir.LocalId {
@@ -552,7 +552,7 @@ fn (ln mut lowering&) local(x mir.Operand, ty types.TypeId, sp source.Span) mir.
         case _ { }
     }
     l := ln.temp(ty, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(x)))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(l), mir.Rvalue.Use(x)))
     return l
 }
 
@@ -629,7 +629,7 @@ fn (ln mut lowering&) regionOf(site I64) mir.ScopeRef {
     if root is not null {
         o := ln.val(root)
         h0 := ln.temp(mir.I64T, sp)
-        ln.emit(mir.Stmt.Assign(sp, mir.L(h0), mir.Rvalue.RegionOr(o, parent)))
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h0), mir.Rvalue.RegionOr(o, parent)))
         if kind == 2 {
             ln.regions.Put(site, h0)
             return mir.ScopeRef.Held(h0)
@@ -637,7 +637,7 @@ fn (ln mut lowering&) regionOf(site I64) mir.ScopeRef {
         parent = mir.ScopeRef.Held(h0)
     }
     h := ln.temp(mir.I64T, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(h), mir.Rvalue.Region(parent)))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), mir.Rvalue.Region(parent)))
     ln.regions.Put(site, h)
     return mir.ScopeRef.Held(h)
 }
@@ -805,7 +805,7 @@ fn (ln mut lowering&) exitLevel(i I64) {
             # (and its holders' drops, O15)
             ln.runDefers(i, deferPhase.Failed)
             ln.emit(mir.Stmt.Close(sp, lv.S))
-            ln.joinFailed(i, lv.S, mir.Operand.Copy(mir.L(code)), errs, sp)
+            ln.joinFailed(i, lv.S, mir.Operand.Copy(mir.Lvalue.L(code)), errs, sp)
         }
         ln.start(ok)
         ln.runDefers(i, deferPhase.Waited)
@@ -971,13 +971,13 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
                 # D13d: assigned on every path before any read - nothing is written for its declaration; its storage
                 # is marked set with no value (Use(None) writes nothing), so element stores may follow
                 if ln.F.Locals[I64(l)].Home != mir.ScopeRef.Frame { ln.emit(mir.Stmt.Live(sp, mir.LocalId(I32(l)))) }
-                ln.emit(mir.Stmt.Assign(sp, mir.L(mir.LocalId(I32(l))), mir.Rvalue.Use(mir.Operand.None)))
+                ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(mir.LocalId(I32(l))), mir.Rvalue.Use(mir.Operand.None)))
                 return
             }
             # D18e: a for-in's own generator, made by a direct call - the call marked as the walk this block finishes
             ln.walkSite = typed.SiteId(-1)
             if indexOf(ln.B.Walks, l) >= 0 {
-                c := typed.CallOf(init)
+                c := typed.Call.Of(init)
                 if c is not null { ln.walkSite = c.Site }
             }
             # a fixed array widened is made where the local keeps it, the local's own (T7b, T7c)
@@ -988,7 +988,7 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
                 v = ln.slotCopy(v, ty, n, sp) if n >= 0 else ln.arrayCopy(v, ty, sp, ln.storageOf(l))
             }
             if ln.F.Locals[I64(l)].Home != mir.ScopeRef.Frame { ln.emit(mir.Stmt.Live(sp, mir.LocalId(I32(l)))) }
-            ln.emit(mir.Stmt.Assign(sp, mir.L(mir.LocalId(I32(l))), mir.Rvalue.Use(v)))
+            ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(mir.LocalId(I32(l))), mir.Rvalue.Use(v)))
         }
         case typed.Stmt.Assign(sp, target, value) {
             p := ln.place(target)
@@ -1010,7 +1010,7 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
                 old := mir.NoLocal
                 if rel.Len() > 0 and not ln.dead {
                     old = ln.temp(target.Type(), sp)
-                    ln.emit(mir.Stmt.Assign(sp, mir.L(old), mir.Rvalue.Use(mir.Operand.Copy(ln.mk(p)))))
+                    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(old), mir.Rvalue.Use(mir.Operand.Copy(ln.mk(p)))))
                 }
                 ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(v)))
                 if old != mir.NoLocal { ln.releaseAt(old, rel, sp) }
@@ -1032,13 +1032,13 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             v := ln.val(x)
             if not ln.dead {
                 l := ln.local(v, x.Type(), sp)
-                nz := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(l)), mir.Operand.Const(x.Type(), 0)], sp)
+                nz := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(l)), mir.Operand.Const(x.Type(), 0)], sp)
                 some, none := ln.F.NewBlock(), ln.F.NewBlock()
                 ln.end(mir.Term.Branch(nz, some, none))
                 ln.start(none)
                 ln.end(mir.Term.Exit(sp, mir.ExitKind.NullError, mir.Operand.None))
                 ln.start(some)
-                v = mir.Operand.Copy(mir.L(l))
+                v = mir.Operand.Copy(mir.Lvalue.L(l))
             }
             if not ln.dead and ln.T.Items(ln.T.Errors(ln.B.Ty)).Len() > 0 {
                 ln.raise(sp, ln.into(mir.I32T, mir.Rvalue.Recode(v, from, ln.T.Errors(ln.B.Ty)), sp))
@@ -1149,12 +1149,12 @@ fn (ln mut lowering&) arrayCopy(v mir.Operand, ty types.TypeId, sp source.Span, 
     # (QCE: elements owning storage of their own - arrays of a run-time length - copied too)
     if ln.T.OwnsParts(ty) { return ln.ownCopyOf(v, ty, at, sp, parts) }
     src := ln.local(v, ty, sp)
-    n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
+    n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(src))], sp)
     buf := ln.temp(ty, sp)
     # no fill: every element is copied in at once
-    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.None)))
-    ln.emit(mir.Stmt.CopyElems(sp, mir.L(buf), mir.L(src), n))
-    return mir.Operand.Copy(mir.L(buf))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.None)))
+    ln.emit(mir.Stmt.CopyElems(sp, mir.Lvalue.L(buf), mir.Lvalue.L(src), n))
+    return mir.Operand.Copy(mir.Lvalue.L(buf))
 }
 
 # a value array local's copy of constant data (a text literal, T25d) in a stack slot of the frame rather than its
@@ -1194,10 +1194,10 @@ fn (ln mut lowering&) slotCopy(v mir.Operand, ty types.TypeId, n I64, sp source.
     src := ln.local(v, ty, sp)
     ft := t.Array(t.Elem(ln.arrayOf(ty)), t.Const(mir.I64T, n))
     slot := ln.temp(ft, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Use(mir.Operand.None)))
-    ln.emit(mir.Stmt.CopyElems(sp, mir.L(slot), mir.L(src), mir.Operand.Const(mir.I64T, n)))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(slot), mir.Rvalue.Use(mir.Operand.None)))
+    ln.emit(mir.Stmt.CopyElems(sp, mir.Lvalue.L(slot), mir.Lvalue.L(src), mir.Operand.Const(mir.I64T, n)))
     rt := t.Ref(ft, types.Writable)
-    r := ln.into(rt, mir.Rvalue.Ref(mir.L(slot), rt), sp)
+    r := ln.into(rt, mir.Rvalue.Ref(mir.Lvalue.L(slot), rt), sp)
     return ln.prim(typed.PrimOp.Convert, ty, mir.Operand[r], sp)
 }
 
@@ -1237,7 +1237,7 @@ fn (ln mut lowering&) standInAway() Array<Bool> {
     b := ln.B
     out := Array<Bool>(b.Locals.Len(), false)
     if ln.planned or b.Root is null: return out
-    u := typed.Uses(ln.T, b)
+    u := typed.LocalUses.Uses(ln.T, b)
     refs := ln.T.HoldsRefs(ln.T.Result(b.Ty))
     for i in range b.Locals.Len() {
         l := b.Locals[i]
@@ -1293,15 +1293,15 @@ fn (ln mut lowering&) arrayStore(dst mir.Lvalue, v mir.Operand, ty types.TypeId,
     at mir.ScopeRef) {
     src := ln.local(v, ty, sp)
     old := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(dst)], sp)
-    n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
+    n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(src))], sp)
     same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[old, n], sp)
     inPlace, fresh, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
     ln.end(mir.Term.Branch(same, inPlace, fresh))
     ln.start(inPlace)
-    ln.emit(mir.Stmt.CopyElems(sp, dst, mir.L(src), n))
+    ln.emit(mir.Stmt.CopyElems(sp, dst, mir.Lvalue.L(src), n))
     ln.goto(after)
     ln.start(fresh)
-    w := ln.arrayCopy(mir.Operand.Copy(mir.L(src)), ty, sp, at) if copies else mir.Operand.Copy(mir.L(src))
+    w := ln.arrayCopy(mir.Operand.Copy(mir.Lvalue.L(src)), ty, sp, at) if copies else mir.Operand.Copy(mir.Lvalue.L(src))
     ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(w)))
     ln.goto(after)
     ln.start(after)
@@ -1380,7 +1380,7 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr?&) {
     l := ln.local(v, res, sp)
     if not view and not ln.fits(value, res) and not ln.widens(value, res) { ln.retArrays(l, res, value, sp) }
     ln.leave(0)
-    ln.end(mir.Term.Return(sp, mir.Operand.Copy(mir.L(l))))
+    ln.end(mir.Term.Return(sp, mir.Operand.Copy(mir.Lvalue.L(l))))
 }
 
 # a become's call (S21): its arguments evaluated, each held in a temporary of the frame, then every scope closed (the
@@ -1417,7 +1417,7 @@ fn (ln mut lowering&) suspend(sp source.Span, value typed.Expr&) {
     held := Array<mir.ScopeRef>(ln.levels.Len(), mir.ScopeRef.Frame)
     for i in range ln.levels.Len() { held[i] = mir.ScopeRef.Scope(ln.levels[ln.levels.Len() - 1 - i].S) }
     resume := ln.F.NewBlock()
-    ln.end(mir.Term.Suspend(sp, mir.Operand.Copy(mir.L(l)), resume, ln.F.ScopeRefs(held)))
+    ln.end(mir.Term.Suspend(sp, mir.Operand.Copy(mir.Lvalue.L(l)), resume, ln.F.ScopeRefs(held)))
     ln.start(resume)
 }
 
@@ -1431,8 +1431,8 @@ fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Exp
     t := ln.T
     if ln.valueArray(res) {
         if ln.retCopies(value, res) {
-            cp := ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp, ln.resultScope())
-            ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(cp)))
+            cp := ln.arrayCopy(mir.Operand.Copy(mir.Lvalue.L(l)), res, sp, ln.resultScope())
+            ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(l), mir.Rvalue.Use(cp)))
         }
         return
     }
@@ -1440,8 +1440,8 @@ fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Exp
     # copied as an array is; while compiling no body's result is such a view, so each is copied here)
     if ln.retOwns(res) {
         if ln.retCopies(value, res) {
-            cp := ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp, ln.resultScope())
-            ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(cp)))
+            cp := ln.arrayCopy(mir.Operand.Copy(mir.Lvalue.L(l)), res, sp, ln.resultScope())
+            ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(l), mir.Rvalue.Use(cp)))
         }
         return
     }
@@ -1536,7 +1536,7 @@ fn (ln mut lowering&) raise(sp source.Span, code mir.Operand) {
     ln.erroring = true
     ln.leave(0)
     ln.erroring = was
-    ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.L(l))))
+    ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.Lvalue.L(l))))
 }
 
 # an assert (S17, S18): the test, its message computed only on the failing path
@@ -1690,8 +1690,8 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
         if sw.Targets[i] is null {
             dt := rs[i] if i < rs.Len() else types.UnknownT
             d := ln.temp(dt, sp)
-            ln.emit(mir.Stmt.Assign(sp, mir.L(d), mir.Rvalue.Use(mir.Operand.Const(dt, 0))))
-            places[i] = mir.L(d)
+            ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(d), mir.Rvalue.Use(mir.Operand.Const(dt, 0))))
+            places[i] = mir.Lvalue.L(d)
         } else {
             places[i] = ln.mk(ln.place(sw.Targets[i]))
         }
@@ -2072,7 +2072,7 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
 fn (ln mut lowering&) toClause(ti I64, ci I64, code mir.Operand, from types.ListId) {
     cl := ln.tries.Ref(ti).Clauses[ci]
     if cl.Caught >= 0 {
-        bind := mir.L(mir.LocalId(I32(cl.Caught)))
+        bind := mir.Lvalue.L(mir.LocalId(I32(cl.Caught)))
         ln.emit(mir.Stmt.Assign(cl.Sp, bind, mir.Rvalue.Recode(code, from, cl.CaughtSet)))
     }
     was := ln.erroring
@@ -2101,7 +2101,7 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
     done := try ln.tries.Pop() catch { return mir.Operand.None }
     ends Vec<mir.BlockId>
     if not ln.dead and slot != mir.NoLocal and v != mir.Operand.None {
-        ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Use(v)))
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(slot), mir.Rvalue.Use(v)))
         if relK >= 0 {
             rel Vec<Array<I64>>
             rel.Push(I64[0] if relK == 1 else Array<I64>(0))
@@ -2112,7 +2112,7 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
     ln.clauses(done, t.Clauses, slot, ty, ends)
     ln.patch(ends)
     if slot == mir.NoLocal { return mir.Operand.None }
-    return mir.Operand.Copy(mir.L(slot))
+    return mir.Operand.Copy(mir.Lvalue.L(slot))
 }
 
 # the clauses errors reached, each from its entry: its code as a block of its own, then its defaults into the slot;
@@ -2128,11 +2128,11 @@ fn (ln mut lowering&) clauses(tc tryCtx, cls Array<typed.Clause&>&, slot mir.Loc
         if not ln.dead and slot != mir.NoLocal and cl.Defaults.Len() > 0 {
             if cl.Defaults.Len() == 1 {
                 d := ln.val(cl.Defaults[0])
-                ln.emit(mir.Stmt.Assign(cl.Sp, mir.L(slot), mir.Rvalue.Use(d)))
+                ln.emit(mir.Stmt.Assign(cl.Sp, mir.Lvalue.L(slot), mir.Rvalue.Use(d)))
             } else {
                 ops := Array<mir.Operand>(cl.Defaults.Len())
                 for k in range cl.Defaults.Len() { ops[k] = ln.val(cl.Defaults[k]) }
-                ln.emit(mir.Stmt.Assign(cl.Sp, mir.L(slot), mir.Rvalue.Aggregate(ty, 0, ln.F.Args(ops))))
+                ln.emit(mir.Stmt.Assign(cl.Sp, mir.Lvalue.L(slot), mir.Rvalue.Aggregate(ty, 0, ln.F.Args(ops))))
             }
         }
         ln.leaveOpen(ends)
@@ -2166,8 +2166,8 @@ fn (ln mut lowering&) settled(rs I64, held mir.ScopeRef, v mir.Operand, ty types
     }
     if h == mir.NoLocal { return v }
     l := ln.local(v, ty, sp)
-    ln.emit(mir.Stmt.Settle(sp, h, mir.L(l)))
-    return mir.Operand.Copy(mir.L(l))
+    ln.emit(mir.Stmt.Settle(sp, h, mir.Lvalue.L(l)))
+    return mir.Operand.Copy(mir.Lvalue.L(l))
 }
 
 fn (ln mut lowering&) value(x typed.Expr&) mir.Operand {
@@ -2265,18 +2265,18 @@ fn (ln mut lowering&) widen(v mir.Operand, from types.TypeId, to types.TypeId, s
     te := ln.T.Elem(ln.T.Repr(to))
     if ln.laidApart(fe, te) {
         # QCE: rows laid out in place made rows of a run-time length - each widened in turn, made where the array is
-        ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, to, n, mir.Operand.None)))
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(buf), mir.Rvalue.NewArray(at, to, n, mir.Operand.None)))
         for i in range k {
             e := ln.into(fe, mir.Rvalue.Use(mir.Operand.Copy(ln.F.Place(mir.Base.Local(src), mir.Proj[mir.Proj.At(i)]))), sp)
             w := ln.widen(e, fe, te, sp, at)
             ln.emit(mir.Stmt.Assign(sp, ln.F.Place(mir.Base.Local(buf), mir.Proj[mir.Proj.At(i)]), mir.Rvalue.Use(w)))
         }
-        return mir.Operand.Copy(mir.L(buf))
+        return mir.Operand.Copy(mir.Lvalue.L(buf))
     }
     # no fill: every element is copied in at once
-    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, to, n, mir.Operand.None)))
-    ln.emit(mir.Stmt.CopyElems(sp, mir.L(buf), mir.L(src), n))
-    return mir.Operand.Copy(mir.L(buf))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(buf), mir.Rvalue.NewArray(at, to, n, mir.Operand.None)))
+    ln.emit(mir.Stmt.CopyElems(sp, mir.Lvalue.L(buf), mir.Lvalue.L(src), n))
+    return mir.Operand.Copy(mir.Lvalue.L(buf))
 }
 
 # whether arrays of element types a and b lay their elements out apart: a's elements arrays laid out in place, b's of a
@@ -2349,7 +2349,7 @@ fn (ln mut lowering&) evalStmt(sp source.Span, x typed.Expr&) {
     match x {
         case typed.Expr.Take(_, _, p) { rel = ln.releases(p) }
         case _ {
-            c := typed.CallOf(x)
+            c := typed.Call.Of(x)
             if ln.freeing and c is not null {
                 k := ln.L.Free!.DroppedMove(c)
                 handle := k >= 0 and ln.L.Free!.IsHandle(k)
@@ -2446,7 +2446,7 @@ fn (ln mut lowering&) promotedCopy(pr typed.Promote&, ty types.TypeId, sp source
     ln.adoptSite, ln.adoptAt = sv, sa
     if ln.dead { return mir.Operand.None }
     slot := ln.local(v, x.Type(), sp)
-    return ln.into(ty, mir.Rvalue.Ref(mir.L(slot), ty), sp)
+    return ln.into(ty, mir.Rvalue.Ref(mir.Lvalue.L(slot), ty), sp)
 }
 
 # whether a promoted value is a copy promotedCopy makes where the reference goes: no region's (O8d) on either side, and a
@@ -2510,14 +2510,14 @@ fn (ln mut lowering&) cond(c typed.Cond&, ty types.TypeId, sp source.Span) mir.O
     ends Vec<mir.BlockId>
     ln.start(yes)
     a := ln.val(c.A)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Use(a)))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(slot), mir.Rvalue.Use(a)))
     ln.leaveOpen(ends)
     ln.start(no)
     b := ln.val(c.B)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Use(b)))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(slot), mir.Rvalue.Use(b)))
     ln.leaveOpen(ends)
     ln.patch(ends)
-    return mir.Operand.Copy(mir.L(slot))
+    return mir.Operand.Copy(mir.Lvalue.L(slot))
 }
 
 # a match (S12, S13): the subject held, then each arm's alternatives tested in order; the first that holds binds, then
@@ -2542,7 +2542,7 @@ fn (ln mut lowering&) match(m typed.Match&, ty types.TypeId, sp source.Span) mir
             ln.start(yes)
             for bd in alt.Binds {
                 v := ln.val(bd.From)
-                ln.emit(mir.Stmt.Assign(a.Sp, mir.L(mir.LocalId(I32(bd.To))), mir.Rvalue.Use(v)))
+                ln.emit(mir.Stmt.Assign(a.Sp, mir.Lvalue.L(mir.LocalId(I32(bd.To))), mir.Rvalue.Use(v)))
             }
             ln.leaveOpen(hit)
             ln.start(no)
@@ -2573,7 +2573,7 @@ fn (ln mut lowering&) match(m typed.Match&, ty types.TypeId, sp source.Span) mir
     }
     ln.patch(ends)
     if slot == mir.NoLocal { return mir.Operand.None }
-    return mir.Operand.Copy(mir.L(slot))
+    return mir.Operand.Copy(mir.Lvalue.L(slot))
 }
 
 # an arm's code, as a block of its own, then its value into the slot
@@ -2581,7 +2581,7 @@ fn (ln mut lowering&) arm(a typed.Arm&, slot mir.LocalId) {
     if a.Code is null {
         if a.Value is not null and slot != mir.NoLocal {
             v := ln.val(a.Value)
-            ln.emit(mir.Stmt.Assign(a.Sp, mir.L(slot), mir.Rvalue.Use(v)))
+            ln.emit(mir.Stmt.Assign(a.Sp, mir.Lvalue.L(slot), mir.Rvalue.Use(v)))
         }
         return
     }
@@ -2589,7 +2589,7 @@ fn (ln mut lowering&) arm(a typed.Arm&, slot mir.LocalId) {
         for s in a.Code!.Stmts { ln.stmt(s) }
         if a.Value is not null and slot != mir.NoLocal {
             v := ln.val(a.Value)
-            ln.emit(mir.Stmt.Assign(a.Sp, mir.L(slot), mir.Rvalue.Use(v)))
+            ln.emit(mir.Stmt.Assign(a.Sp, mir.Lvalue.L(slot), mir.Rvalue.Use(v)))
         }
         return
     }
@@ -2597,7 +2597,7 @@ fn (ln mut lowering&) arm(a typed.Arm&, slot mir.LocalId) {
     for s in a.Code!.Stmts { ln.stmt(s) }
     if a.Value is not null and slot != mir.NoLocal {
         v := ln.val(a.Value)
-        ln.emit(mir.Stmt.Assign(a.Sp, mir.L(slot), mir.Rvalue.Use(v)))
+        ln.emit(mir.Stmt.Assign(a.Sp, mir.Lvalue.L(slot), mir.Rvalue.Use(v)))
     }
     ln.closeBlock()
 }
@@ -2670,7 +2670,7 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         held := t.IsRef(a.Type()) and t.Same(t.Plain(t.Referent(a.Type())), t.Plain(t.Referent(ps[i]))) if i < ps.Len() and t.IsRef(ps[i]) else true
         if helper and i < ps.Len() and t.IsRef(ps[i]) and not held {
             l := ln.local(v, a.Type(), a.Span())
-            v = ln.into(ps[i], mir.Rvalue.Ref(mir.L(l), ps[i]), a.Span())
+            v = ln.into(ps[i], mir.Rvalue.Ref(mir.Lvalue.L(l), ps[i]), a.Span())
         }
         ops[i] = v
     }
@@ -2708,7 +2708,7 @@ fn (ln mut lowering&) stackArg(a typed.Expr&, body I64, i I64) mir.Operand {
     v := ln.val(pr.X)
     if ln.dead { return mir.Operand.None }
     l := ln.local(v, o, a.Span())
-    return ln.into(rt, mir.Rvalue.Ref(mir.L(l), rt), a.Span())
+    return ln.into(rt, mir.Rvalue.Ref(mir.Lvalue.L(l), rt), a.Span())
 }
 
 # a rendered operand's own copy (check's, of a value owning storage) left out where nothing in its statement could
@@ -2763,13 +2763,13 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
         code = ln.temp(mir.I32T, sp)
         eb = ln.F.NewBlock()
     }
-    k := ln.F.AddCall(mir.Call(callee, args, scopes, mir.L(dest) if dest != mir.NoLocal else mir.NoPlace
+    k := ln.F.AddCall(mir.Call(callee, args, scopes, mir.Lvalue.L(dest) if dest != mir.NoLocal else mir.NoPlace
                                dest != mir.NoLocal, ok, code, eb))
     if c.Site == ln.walkSite and c.Site >= typed.SiteId(0) { ln.markWalk(k, callee, fty, scopes) }
     ln.end(mir.Term.Call(sp, k))
     if eb != mir.NoBlock {
         ln.start(eb)
-        ln.dispatch(mir.Operand.Copy(mir.L(code)), errs, sp)
+        ln.dispatch(mir.Operand.Copy(mir.Lvalue.L(code)), errs, sp)
     }
     ln.start(ok)
     if res == types.NoreturnT {
@@ -2787,10 +2787,10 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
             ln.L.ViewReads++
         } else {
             ln.L.ViewCopies++
-            return ln.arrayCopy(mir.Operand.Copy(mir.L(dest)), ty, sp, ln.viewCopyAt(c.Site, ln.resultOf(fty, scopes)), true)
+            return ln.arrayCopy(mir.Operand.Copy(mir.Lvalue.L(dest)), ty, sp, ln.viewCopyAt(c.Site, ln.resultOf(fty, scopes)), true)
         }
     }
-    return mir.Operand.Copy(mir.L(dest))
+    return mir.Operand.Copy(mir.Lvalue.L(dest))
 }
 
 # where a view call's copy is made (D9h): where the scope pass put the value (its Built - a local's block, so a copy made
@@ -3218,11 +3218,11 @@ fn (ln mut lowering&) zero(ty types.TypeId, sp source.Span, site typed.SiteId = 
     ok := ln.F.NewBlock()
     dest := ln.temp(ty, sp)
     # its scopes the plan's for the call: where the value lands (D13c) - the program's only for a zero no call names
-    k := ln.F.AddCall(mir.Call(callee, mir.Empty, ln.passed(mir.PassedCount(t, callee, hty), site), mir.L(dest), true, ok
+    k := ln.F.AddCall(mir.Call(callee, mir.Empty, ln.passed(mir.PassedCount(t, callee, hty), site), mir.Lvalue.L(dest), true, ok
                                mir.NoLocal, mir.NoBlock))
     ln.end(mir.Term.Call(sp, k))
     ln.start(ok)
-    return mir.Operand.Copy(mir.L(dest))
+    return mir.Operand.Copy(mir.Lvalue.L(dest))
 }
 
 # ---- views kept in place of copies (D9h, docs/rework.md 17) ----
@@ -3233,7 +3233,7 @@ fn (ln mut lowering&) zero(ty types.TypeId, sp source.Span, site typed.SiteId = 
 # pass's plan: while compiling, every copy is made, so what the evaluator computes is the copies' and agrees
 fn (ln mut lowering&) settleViews() {
     if not ln.planned: return
-    u := typed.Uses(ln.T, ln.B)
+    u := typed.LocalUses.Uses(ln.T, ln.B)
     views := ln.L.ViewsOf(ln.B.Id)
     if views > 0 { ln.resultViews(u, views) }
     ln.viewLocals(u)
@@ -3519,7 +3519,7 @@ fn (ln mut lowering&) movable(u typed.LocalUses&, l I64, site I64) Bool {
         if (ln.vl.Has(j) or ln.rvl.Has(j)) and u.Init[j] is not null and valueRootLocal(u.Init[j]!) == l: return false
     }
     if site >= ln.plan.Built.Len() or ln.plan.RegionKind[site] != 0: return false
-    init := typed.CallOf(u.Init[l])
+    init := typed.Call.Of(u.Init[l])
     if init is not null and init.Site >= typed.SiteId(0) and ln.plan.RegionKind[I64(init.Site)] != 0: return false
     dest := ln.plan.Built[site]
     # (a local the scope pass homed in the result scope a returned copy of it is built in: O26a's, T13a's String(out))
@@ -3820,7 +3820,7 @@ fn (lw mut Lowerer&) keepsNoRef(body I64, k I64) Bool {
 
 fn (lw mut Lowerer&) noRefKept(b typed.Body&, k I64) Bool {
     if b.Root is null or k >= b.Params.Len(): return false
-    u := typed.Uses(lw.P.T, b)
+    u := typed.LocalUses.Uses(lw.P.T, b)
     p := I64(b.Params[k])
     # (handed back in a value result - a view the D9h handover gives where the parameter is read, which its caller copies
     # where it keeps it - is no keeping; in a reference result it is)
@@ -3896,7 +3896,7 @@ fn (lw mut Lowerer&) freshResult(body I64) Bool {
 
 fn (lw mut Lowerer&) allFresh(b typed.Body&) Bool {
     if b.Root is null or not lw.T().IsRef(lw.T().Result(b.Ty)): return false
-    u := typed.Uses(lw.P.T, b)
+    u := typed.LocalUses.Uses(lw.P.T, b)
     for x in u.Rets {
         if not lw.freshRet(b, u, x): return false
     }
@@ -3962,7 +3962,7 @@ fn (lw mut Lowerer&) freshParam(body I64, k I64) Bool {
 
 fn (lw mut Lowerer&) keepsNothing(b typed.Body&, k I64) Bool {
     if b.Root is null or k >= b.Params.Len(): return false
-    u := typed.Uses(lw.P.T, b)
+    u := typed.LocalUses.Uses(lw.P.T, b)
     p := I64(b.Params[k])
     if u.Esc[p] or u.Ret[p]: return false
     for j in range u.AliasOf.Len() {
@@ -3976,7 +3976,7 @@ fn (lw mut Lowerer&) keepsNothing(b typed.Body&, k I64) Bool {
 
 fn (lw mut Lowerer&) keepsParts(b typed.Body&, k I64) Bool {
     if b.Root is null or k >= b.Params.Len(): return false
-    u := typed.Uses(lw.P.T, b)
+    u := typed.LocalUses.Uses(lw.P.T, b)
     p := I64(b.Params[k])
     if u.WrOther[p] or u.Whole[p] or u.Esc[p] or u.Ret[p]: return false
     for j in range u.StoreAt.Len() {
@@ -4080,14 +4080,14 @@ fn (ln mut lowering&) arrayLit(m typed.Make&, ty types.TypeId, sp source.Span, a
     }
     el := t.Elem(at)
     a := ln.temp(ty, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(a), mir.Rvalue.NewArray(into if adopt else ln.madeAt(m.Site), ty, ln.constI64(ops.Len())
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(a), mir.Rvalue.NewArray(into if adopt else ln.madeAt(m.Site), ty, ln.constI64(ops.Len())
                                                              mir.Operand.Const(el, 0))))
     deref := t.IsRef(t.Repr(ty))
     for i in range ops.Len() {
         p := ln.F.Place(mir.Base.Local(a), mir.Proj[mir.Proj.Deref, mir.Proj.At(i)] if deref else mir.Proj[mir.Proj.At(i)])
         ln.emit(mir.Stmt.Assign(sp, p, mir.Rvalue.Use(ops[i])))
     }
-    return mir.Operand.Copy(mir.L(a))
+    return mir.Operand.Copy(mir.Lvalue.L(a))
 }
 
 # Array<T>(n, fill) (D14, T8): its length checked (D14b), its storage n of the fill - or of the zero value
@@ -4114,16 +4114,16 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
         if zero and n != mir.Operand.None and not ln.dead {
             # an element type's zero value made only for an array that has an element: Array<T>(0) needs none (D13c)
             v := ln.temp(el, sp)
-            ln.emit(mir.Stmt.Assign(sp, mir.L(v), mir.Rvalue.Use(fv)))
+            ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(v), mir.Rvalue.Use(fv)))
             some := ln.prim(typed.PrimOp.Gt, types.BoolT, mir.Operand[ln.asI64(n, m.Length!.Type(), sp), ln.constI64(0)], sp)
             yes, after := ln.F.NewBlock(), ln.F.NewBlock()
             ln.end(mir.Term.Branch(some, yes, after))
             ln.start(yes)
             z := ln.val(m.Items[0])
-            if not ln.dead { ln.emit(mir.Stmt.Assign(sp, mir.L(v), mir.Rvalue.Use(z))) }
+            if not ln.dead { ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(v), mir.Rvalue.Use(z))) }
             ln.goto(after)
             ln.start(after)
-            fv = mir.Operand.Copy(mir.L(v))
+            fv = mir.Operand.Copy(mir.Lvalue.L(v))
         } else {
             fv = ln.val(m.Items[0])
         }
@@ -4166,7 +4166,7 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
     ln.eachIndex(n64, sp, fn(i mir.LocalId) {
         ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(bp, mir.Proj.Index(i))), mir.Rvalue.Use(ln.ownCopyOf(fv, el, where, sp))))
     })
-    return mir.Operand.Copy(mir.L(buf))
+    return mir.Operand.Copy(mir.Lvalue.L(buf))
 }
 
 # a comprehension (E27): its buffer made at its reservation (or 100), each Yield stored at its count, the buffer grown
@@ -4199,21 +4199,21 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
         # but where an element owns storage (QCE) the array is cleared, so that a copy of the whole (a grown buffer's
         # room past a Vec's count, M19d) copies empty parts rather than whatever the bytes held
         fill0 := mir.Operand.Const(el, 0) if ln.ownsStorage(el) else mir.Operand.None
-        ln.emit(mir.Stmt.Assign(sp, mir.L(out0), mir.Rvalue.NewArray(s0, ty, cap, fill0)))
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(out0), mir.Rvalue.NewArray(s0, ty, cap, fill0)))
         n0 := ln.temp(mir.I64T, sp)
-        ln.emit(mir.Stmt.Assign(sp, mir.L(n0), mir.Rvalue.Use(ln.constI64(0))))
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(n0), mir.Rvalue.Use(ln.constI64(0))))
         ln.collects.Push(collectCtx(out0, n0, el, ty, s0, true, t.IsRef(t.Repr(ty))))
         ln.block(c.Loop)
         try ln.collects.Pop() catch { }
         if ln.dead { return mir.Operand.None }
-        return mir.Operand.Copy(mir.L(out0))
+        return mir.Operand.Copy(mir.Lvalue.L(out0))
     }
     buf := ln.temp(bt, sp)
     s := ln.built(c.Site)
     # no fill: an element is yielded before anything reads it, and only the yielded ones are copied out
-    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(s, bt, cap, mir.Operand.None)))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(buf), mir.Rvalue.NewArray(s, bt, cap, mir.Operand.None)))
     n := ln.temp(mir.I64T, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(n), mir.Rvalue.Use(ln.constI64(0))))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(n), mir.Rvalue.Use(ln.constI64(0))))
     ln.collects.Push(collectCtx(buf, n, el, bt, s))
     ln.block(c.Loop)
     try ln.collects.Pop() catch { }
@@ -4223,16 +4223,16 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
         # result, with no copy - the room past them kept as long as the copy would have kept the buffer
         rt := t.Ref(t.Array(el, types.TypeId(0)), types.Writable)
         whole := ln.F.Place(mir.Base.Local(buf), mir.Proj[mir.Proj.Deref])
-        view := ln.into(rt, mir.Rvalue.Slice(whole, ln.constI64(0), mir.Operand.Copy(mir.L(n)), rt), sp)
+        view := ln.into(rt, mir.Rvalue.Slice(whole, ln.constI64(0), mir.Operand.Copy(mir.Lvalue.L(n)), rt), sp)
         if t.IsRef(t.Repr(ty)) { return view }
         return ln.prim(typed.PrimOp.Convert, ty, mir.Operand[view], sp)
     }
     out := ln.temp(ty, sp)
     # no fill: every element is copied in at once
-    ln.emit(mir.Stmt.Assign(sp, mir.L(out), mir.Rvalue.NewArray(ln.madeAt(c.Site), ty, mir.Operand.Copy(mir.L(n)), mir.Operand.None)))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(out), mir.Rvalue.NewArray(ln.madeAt(c.Site), ty, mir.Operand.Copy(mir.Lvalue.L(n)), mir.Operand.None)))
     dst := ln.F.Place(mir.Base.Local(out), mir.Proj[mir.Proj.Deref] if t.IsRef(t.Repr(ty)) else mir.Proj[])
-    ln.emit(mir.Stmt.CopyElems(sp, dst, ln.F.Place(mir.Base.Local(buf), mir.Proj[mir.Proj.Deref]), mir.Operand.Copy(mir.L(n))))
-    return mir.Operand.Copy(mir.L(out))
+    ln.emit(mir.Stmt.CopyElems(sp, dst, ln.F.Place(mir.Base.Local(buf), mir.Proj[mir.Proj.Deref]), mir.Operand.Copy(mir.Lvalue.L(n))))
+    return mir.Operand.Copy(mir.Lvalue.L(out))
 }
 
 fn (ln mut lowering&) yield(sp source.Span, x typed.Expr&) {
@@ -4243,30 +4243,30 @@ fn (ln mut lowering&) yield(sp source.Span, x typed.Expr&) {
     cc := ln.collects[ln.collects.Len() - 1]
     v := ln.val(x)
     if ln.dead { return }
-    n := mir.Operand.Copy(mir.L(cc.N))
+    n := mir.Operand.Copy(mir.Lvalue.L(cc.N))
     if cc.Exact {
         at := ln.F.Place(mir.Base.Local(cc.Buf), mir.Proj[mir.Proj.Deref, mir.Proj.Index(cc.N)] if cc.ByRef else mir.Proj[mir.Proj.Index(cc.N)])
         ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(v)))
-        ln.emit(mir.Stmt.Assign(sp, mir.L(cc.N), mir.Rvalue.Prim(typed.PrimOp.Add, mir.I64T, ln.F.Args(mir.Operand[n, ln.constI64(1)]))))
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(cc.N), mir.Rvalue.Prim(typed.PrimOp.Add, mir.I64T, ln.F.Args(mir.Operand[n, ln.constI64(1)]))))
         return
     }
     deref := ln.F.Place(mir.Base.Local(cc.Buf), mir.Proj[mir.Proj.Deref])
     full := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[n, ln.prim(typed.PrimOp.Len, mir.I64T
-                                                                       mir.Operand[mir.Operand.Copy(mir.L(cc.Buf))], sp)], sp)
+                                                                       mir.Operand[mir.Operand.Copy(mir.Lvalue.L(cc.Buf))], sp)], sp)
     grow, store := ln.F.NewBlock(), ln.F.NewBlock()
     ln.end(mir.Term.Branch(full, grow, store))
     ln.start(grow)
     more := ln.prim(typed.PrimOp.Add, mir.I64T, mir.Operand[ln.prim(typed.PrimOp.Mul, mir.I64T
                                                                    mir.Operand[n, ln.constI64(2)], sp), ln.constI64(1)], sp)
     nb := ln.temp(cc.ArrT, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(nb), mir.Rvalue.NewArray(cc.At, cc.ArrT, more, mir.Operand.None)))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(nb), mir.Rvalue.NewArray(cc.At, cc.ArrT, more, mir.Operand.None)))
     ln.emit(mir.Stmt.CopyElems(sp, ln.F.Place(mir.Base.Local(nb), mir.Proj[mir.Proj.Deref]), deref, n))
-    ln.emit(mir.Stmt.Assign(sp, mir.L(cc.Buf), mir.Rvalue.Use(mir.Operand.Copy(mir.L(nb)))))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(cc.Buf), mir.Rvalue.Use(mir.Operand.Copy(mir.Lvalue.L(nb)))))
     ln.goto(store)
     ln.start(store)
     ln.emit(mir.Stmt.Assign(sp, ln.F.Place(mir.Base.Local(cc.Buf), mir.Proj[mir.Proj.Deref, mir.Proj.Index(cc.N)])
                             mir.Rvalue.Use(v)))
-    ln.emit(mir.Stmt.Assign(sp, mir.L(cc.N), mir.Rvalue.Prim(typed.PrimOp.Add, mir.I64T, ln.F.Args(mir.Operand[n, ln.constI64(1)]))))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(cc.N), mir.Rvalue.Prim(typed.PrimOp.Add, mir.I64T, ln.F.Args(mir.Operand[n, ln.constI64(1)]))))
 }
 
 # ---- operations ----
@@ -4420,18 +4420,18 @@ fn (ln mut lowering&) anyMake(args Array<typed.Expr&>&, ty types.TypeId, sp sour
 # whether what an enum reference names holds a case: false for a null reference (E32, T17d)
 fn (ln mut lowering&) isCaseRef(r mir.Operand, rt types.TypeId, tag mir.Operand, sp source.Span) mir.Operand {
     slot := ln.temp(types.BoolT, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Use(ln.constBool(false, sp))))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(slot), mir.Rvalue.Use(ln.constBool(false, sp))))
     l := ln.local(r, rt, sp)
-    nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(l)), mir.Operand.Const(rt, 0)], sp)
+    nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(l)), mir.Operand.Const(rt, 0)], sp)
     yes, after := ln.F.NewBlock(), ln.F.NewBlock()
     ln.end(mir.Term.Branch(nn, yes, after))
     ln.start(yes)
     tg := ln.into(mir.I64T, mir.Rvalue.Tag(ln.F.Place(mir.Base.Local(l), mir.Proj[mir.Proj.Deref])), sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Prim(typed.PrimOp.Eq, types.BoolT
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(slot), mir.Rvalue.Prim(typed.PrimOp.Eq, types.BoolT
                                                              ln.F.Args(mir.Operand[tg, ln.asI64(tag, mir.I64T, sp)]))))
     ln.goto(after)
     ln.start(after)
-    return mir.Operand.Copy(mir.L(slot))
+    return mir.Operand.Copy(mir.Lvalue.L(slot))
 }
 
 # what a checked conversion tests before it runs: an array of a run-time length copied into fixed storage, its length
@@ -4665,7 +4665,7 @@ fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp 
     }
     ty = ln.L.helperTy(mir.HelperKind.Render, ty)
     hty := mir.HelperType(t, mir.HelperKind.Render, ty)
-    ref := ln.into(t.Items(t.Params(hty))[0], mir.Rvalue.Ref(mir.L(ln.local(v, ty, sp)), t.Items(t.Params(hty))[0]), sp)
+    ref := ln.into(t.Items(t.Params(hty))[0], mir.Rvalue.Ref(mir.Lvalue.L(ln.local(v, ty, sp)), t.Items(t.Params(hty))[0]), sp)
     callee := mir.Callee.Fn(mir.FnKey.Helper(mir.HelperKind.Render, ty), hty)
     ln.L.Want(mir.FnKey.Helper(mir.HelperKind.Render, ty))
     ok := ln.F.NewBlock()
@@ -4680,14 +4680,14 @@ fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp 
 fn (ln mut lowering&) renderMaybeText(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp source.Span
                                       how mir.WriteKind = mir.WriteKind.Bytes) {
     x := ln.local(v, ty, sp)
-    isNull := ln.prim(typed.PrimOp.Same, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, -1)], sp)
+    isNull := ln.prim(typed.PrimOp.Same, types.BoolT, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(x)), mir.Operand.Const(ty, -1)], sp)
     none, some, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
     ln.end(mir.Term.Branch(isNull, none, some))
     ln.start(none)
     ln.word(b, "null", sp)
     ln.goto(after)
     ln.start(some)
-    ln.emit(mir.Stmt.Write(sp, b, how, mir.Operand.Copy(mir.L(x))))
+    ln.emit(mir.Stmt.Write(sp, b, how, mir.Operand.Copy(mir.Lvalue.L(x))))
     ln.goto(after)
     ln.start(after)
 }
@@ -4722,7 +4722,7 @@ fn (ln mut lowering&) renderErr(b mir.ScopeRef, v mir.Operand, ty types.TypeId, 
             ln.goto(after)
             break
         }
-        hit := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, codes[i])], sp)
+        hit := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(x)), mir.Operand.Const(ty, codes[i])], sp)
         yes, no := ln.F.NewBlock(), ln.F.NewBlock()
         ln.end(mir.Term.Branch(hit, yes, no))
         ln.start(yes)
@@ -4812,7 +4812,7 @@ fn (ln mut lowering&) helper(kind mir.HelperKind, ty types.TypeId) {
         }
         case mir.HelperKind.Render {
             ln.prologue(mir.VarKind[mir.VarKind.Builder])
-            ln.rdepth = mir.Operand.Copy(mir.L(mir.LocalId(1)))
+            ln.rdepth = mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(1)))
             ln.renderAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp, true)
             ln.epilogue(mir.Operand.None)
         }
@@ -5003,12 +5003,12 @@ fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
         el := t.Elem(r)
         n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(a))], sp)
         buf := ln.temp(ty, sp)
-        ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.None)))
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.None)))
         ln.eachIndex(n, sp, fn(i mir.LocalId) {
             e := ln.copyAt(ln.with(a, mir.Proj.Index(i)), el, at, sp)
             ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(pl(mir.Base.Local(buf)), mir.Proj.Index(i))), mir.Rvalue.Use(e)))
         })
-        return mir.Operand.Copy(mir.L(buf))
+        return mir.Operand.Copy(mir.Lvalue.L(buf))
     }
     if not top { return ln.helperCall(mir.HelperKind.Copy, ty, mir.Operand[ln.refTo(a, ty, sp)], mir.ScopeRef[at], ty, sp) }
     # its bytes, then each owning part copied over the part it shares
@@ -5029,7 +5029,7 @@ fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
     } else {
         ln.gap(sp, "a Copy helper for a type with no parts")
     }
-    return mir.Operand.Copy(mir.L(d))
+    return mir.Operand.Copy(mir.Lvalue.L(d))
 }
 
 # E31d: the copy of what place a holds, of a type declaring its own Copy, made in scope at - its Copy called on it, the
@@ -5057,7 +5057,7 @@ fn (ln mut lowering&) declaredCopy(a pl, ty types.TypeId, at mir.ScopeRef, sp so
         after = ln.F.NewBlock()
         ln.end(mir.Term.Branch(live, some, room))
         ln.start(room)
-        ln.emit(mir.Stmt.Assign(sp, mir.L(dest), mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a)))))
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(dest), mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a)))))
         ln.goto(after)
         ln.start(some)
     }
@@ -5067,7 +5067,7 @@ fn (ln mut lowering&) declaredCopy(a pl, ty types.TypeId, at mir.ScopeRef, sp so
     xs := Array<mir.ScopeRef>(vs.Len())
     for i in range vs.Len() { xs[i] = at if vs[i] == types.ResultVar else mir.ScopeRef.Program }
     ok := ln.F.NewBlock()
-    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.F.ScopeRefs(xs), mir.L(dest), true, ok, mir.NoLocal
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.F.ScopeRefs(xs), mir.Lvalue.L(dest), true, ok, mir.NoLocal
                                mir.NoBlock))
     ln.end(mir.Term.Call(sp, k))
     ln.start(ok)
@@ -5075,7 +5075,7 @@ fn (ln mut lowering&) declaredCopy(a pl, ty types.TypeId, at mir.ScopeRef, sp so
         ln.goto(after)
         ln.start(after)
     }
-    return mir.Operand.Copy(mir.L(dest))
+    return mir.Operand.Copy(mir.Lvalue.L(dest))
 }
 
 # the body of the Copy a type declares (E31d), -1 for none
@@ -5124,12 +5124,12 @@ fn (ln mut lowering&) derefCopy(v mir.Operand, from types.TypeId, ty types.TypeI
     el := t.Elem(ln.arrayOf(ty))
     n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(sp0))], sp)
     buf := ln.temp(ty, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.None)))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.None)))
     ln.eachIndex(n, sp, fn(i mir.LocalId) {
         e := ln.copyAt(ln.with(ln.with(sp0, mir.Proj.Index(i)), mir.Proj.Deref), el, at, sp)
         ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(pl(mir.Base.Local(buf)), mir.Proj.Index(i))), mir.Rvalue.Use(e)))
     })
-    return mir.Operand.Copy(mir.L(buf))
+    return mir.Operand.Copy(mir.Lvalue.L(buf))
 }
 
 # a part of a copy being made, of type ty, its own copy where it owns storage - over the bytes it shares with the original
@@ -5159,11 +5159,11 @@ fn (ln mut lowering&) helperCall(kind mir.HelperKind, ty types.TypeId, args Arra
     dest := mir.NoLocal
     if res != types.VoidT { dest = ln.temp(res, sp) }
     c := ln.F.AddCall(mir.Call(mir.Callee.Fn(k, hty), ln.F.Args(args), ln.F.ScopeRefs(scopes)
-                               mir.L(dest) if dest != mir.NoLocal else mir.NoPlace, dest != mir.NoLocal, ok, mir.NoLocal
+                               mir.Lvalue.L(dest) if dest != mir.NoLocal else mir.NoPlace, dest != mir.NoLocal, ok, mir.NoLocal
                                mir.NoBlock))
     ln.end(mir.Term.Call(sp, c))
     ln.start(ok)
-    return mir.Operand.None if dest == mir.NoLocal else mir.Operand.Copy(mir.L(dest))
+    return mir.Operand.None if dest == mir.NoLocal else mir.Operand.Copy(mir.Lvalue.L(dest))
 }
 
 # a struct's, a tuple's or a record's fields; none for anything else
@@ -5188,7 +5188,7 @@ fn (ln mut lowering&) scalar(ty types.TypeId) Bool {
 # a Bool slot set true, then false along the way where a test fails; its value at the end
 fn (ln mut lowering&) flag(v Bool, sp source.Span) mir.LocalId {
     f := ln.temp(types.BoolT, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(f), mir.Rvalue.Use(ln.constBool(v, sp))))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(f), mir.Rvalue.Use(ln.constBool(v, sp))))
     return f
 }
 
@@ -5271,10 +5271,10 @@ fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span, top B
     }
     ln.leaveOpen(ends)
     ln.start(no)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(ln.constBool(false, sp))))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(res), mir.Rvalue.Use(ln.constBool(false, sp))))
     ln.leaveOpen(ends)
     ln.patch(ends)
-    return mir.Operand.Copy(mir.L(res))
+    return mir.Operand.Copy(mir.Lvalue.L(res))
 }
 
 # for each case of an enum with a payload: the code each gives, run where the tag tag (an I64) is that case's
@@ -5303,16 +5303,16 @@ fn (ln mut lowering&) payloads(cases Array<types.TypeId>&, tag mir.Operand, sp s
 # a counted loop, i from 0 below n: the code each gives run for each i
 fn (ln mut lowering&) eachIndex(n mir.Operand, sp source.Span, each fn&(i mir.LocalId)) {
     i := ln.temp(mir.I64T, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(i), mir.Rvalue.Use(ln.constI64(0))))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(i), mir.Rvalue.Use(ln.constI64(0))))
     head, body, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
     ln.goto(head)
     ln.start(head)
-    more := ln.prim(typed.PrimOp.Lt, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(i)), n], sp)
+    more := ln.prim(typed.PrimOp.Lt, types.BoolT, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(i)), n], sp)
     ln.end(mir.Term.Branch(more, body, after))
     ln.start(body)
     each(i)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(i), mir.Rvalue.Prim(typed.PrimOp.Add, mir.I64T
-                                                         ln.F.Args(mir.Operand[mir.Operand.Copy(mir.L(i)), ln.constI64(1)]))))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(i), mir.Rvalue.Prim(typed.PrimOp.Add, mir.I64T
+                                                         ln.F.Args(mir.Operand[mir.Operand.Copy(mir.Lvalue.L(i)), ln.constI64(1)]))))
     ln.goto(head)
     ln.start(after)
 }
@@ -5326,8 +5326,8 @@ fn (ln mut lowering&) mix(x mir.Operand, sp source.Span) mir.Operand {
 
 # h, then one more part's hash combined in, as the prelude's HashElements combines an array's
 fn (ln mut lowering&) combine(h mir.LocalId, x mir.Operand, sp source.Span) {
-    m := ln.prim(typed.PrimOp.Mul, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(h)), ln.constI64(1099511628211)], sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(h), mir.Rvalue.Prim(typed.PrimOp.Add, mir.I64T, ln.F.Args(mir.Operand[m, x]))))
+    m := ln.prim(typed.PrimOp.Mul, mir.I64T, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(h)), ln.constI64(1099511628211)], sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), mir.Rvalue.Prim(typed.PrimOp.Add, mir.I64T, ln.F.Args(mir.Operand[m, x]))))
 }
 
 # the supplied Hash (E10b): an integer, Bool or Char by the prelude's mixHash, a reference to an array by its
@@ -5345,11 +5345,11 @@ fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = f
         recv := ln.into(p0, mir.Rvalue.Ref(ln.mk(a), p0), sp) if t.IsRef(p0) else ln.into(p0, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
         ok := ln.F.NewBlock()
         dest := ln.temp(mir.I64T, sp)
-        k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.passed(mir.PassedCount(t, callee, fty)), mir.L(dest)
+        k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.passed(mir.PassedCount(t, callee, fty)), mir.Lvalue.L(dest)
                                    true, ok, mir.NoLocal, mir.NoBlock))
         ln.end(mir.Term.Call(sp, k))
         ln.start(ok)
-        return mir.Operand.Copy(mir.L(dest))
+        return mir.Operand.Copy(mir.Lvalue.L(dest))
     }
     if t.KindOf(ty) == types.Kind.ErrVal { return ln.hashErr(ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp), ty, sp) }
     if ln.scalar(ty) {
@@ -5370,20 +5370,20 @@ fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = f
     if t.IsRef(r) {
         x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
         res := ln.temp(mir.I64T, sp)
-        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(ln.constI64(0))))
-        nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(res), mir.Rvalue.Use(ln.constI64(0))))
+        nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(x)), mir.Operand.Const(ty, 0)], sp)
         some, after := ln.F.NewBlock(), ln.F.NewBlock()
         ln.end(mir.Term.Branch(nn, some, after))
         ln.start(some)
         h := ln.hashAt(ln.at(x), t.Referent(r), sp)
-        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(h)))
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(res), mir.Rvalue.Use(h)))
         ln.goto(after)
         ln.start(after)
-        return mir.Operand.Copy(mir.L(res))
+        return mir.Operand.Copy(mir.Lvalue.L(res))
     }
     if not top { return ln.helperCall(mir.HelperKind.Hash, ty, mir.Operand[ln.refTo(a, ty, sp)], mir.ScopeRef[], mir.I64T, sp) }
     h := ln.temp(mir.I64T, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(h), mir.Rvalue.Use(ln.constI64(0))))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), mir.Rvalue.Use(ln.constI64(0))))
     parts, isParts := ln.partsOf(ty), mir.HasFields(ln.T, ty)
     cases, isEnum := ln.casesOf(ty), mir.HasCases(ln.T, ty)
     if isParts {
@@ -5404,7 +5404,7 @@ fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = f
     } else {
         ln.gap(sp, "a Hash helper for a type with no parts")
     }
-    return mir.Operand.Copy(mir.L(h))
+    return mir.Operand.Copy(mir.Lvalue.L(h))
 }
 
 # T20, E10b: an error value's hash by the error it holds - its type's identity and its word - never by its code, which
@@ -5417,7 +5417,7 @@ fn (ln mut lowering&) hashErr(v mir.Operand, ty types.TypeId, sp source.Span) mi
     hi := ln.prim(typed.PrimOp.Shr, mir.I64T, mir.Operand[x, ln.constI64(16)], sp)
     w := ln.prim(typed.PrimOp.BitAnd, mir.I64T, mir.Operand[x, ln.constI64(65535)], sp)
     res := ln.temp(mir.I64T, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(ln.mix(ln.constI64(0), sp))))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(res), mir.Rvalue.Use(ln.mix(ln.constI64(0), sp))))
     after := ln.F.NewBlock()
     es := t.Items(t.ErrValItems(ty))
     for j in range es.Len() {
@@ -5428,13 +5428,13 @@ fn (ln mut lowering&) hashErr(v mir.Operand, ty types.TypeId, sp source.Span) mi
         ln.end(mir.Term.Branch(hit, yes, no))
         ln.start(yes)
         h := ln.mix(ln.prim(typed.PrimOp.BitXor, mir.I64T, mir.Operand[ln.constI64(key), w], sp), sp)
-        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(h)))
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(res), mir.Rvalue.Use(h)))
         ln.goto(after)
         ln.start(no)
     }
     ln.goto(after)
     ln.start(after)
-    return mir.Operand.Copy(mir.L(res))
+    return mir.Operand.Copy(mir.Lvalue.L(res))
 }
 
 # a text's FNV-1a hash, the same in every compilation: an error type's identity
@@ -5464,11 +5464,11 @@ fn (ln mut lowering&) zeroOf(ty types.TypeId, sp source.Span, inResult Bool = fa
         n := mir.PassedCount(t, callee, fty)
         xs := Array<mir.ScopeRef>(n)
         for i in range n { xs[i] = mir.ScopeRef.Var(0) if inResult else mir.ScopeRef.Program }
-        k := ln.F.AddCall(mir.Call(callee, mir.Empty, ln.F.ScopeRefs(xs), mir.L(dest), true, ok, mir.NoLocal
+        k := ln.F.AddCall(mir.Call(callee, mir.Empty, ln.F.ScopeRefs(xs), mir.Lvalue.L(dest), true, ok, mir.NoLocal
                                    mir.NoBlock))
         ln.end(mir.Term.Call(sp, k))
         ln.start(ok)
-        return mir.Operand.Copy(mir.L(dest))
+        return mir.Operand.Copy(mir.Lvalue.L(dest))
     }
     return mir.Operand.Const(ty, 0)
 }
@@ -5524,8 +5524,8 @@ fn (ln mut lowering&) adapterBody(call typed.BodyId, cty types.TypeId, recv type
     ln.emit(mir.Stmt.Open(sp, frame))
     ln.levels.Push(level(frame, typed.BlockId(-1), mir.ScopeKind.Frame))
     args := Array<mir.Operand>(ln.F.Params.Len() + 1)
-    args[0] = mir.Operand.Copy(mir.L(inst))
-    for i in range ln.F.Params.Len() { args[i + 1] = mir.Operand.Copy(mir.L(ln.F.Params[i])) }
+    args[0] = mir.Operand.Copy(mir.Lvalue.L(inst))
+    for i in range ln.F.Params.Len() { args[i + 1] = mir.Operand.Copy(mir.Lvalue.L(ln.F.Params[i])) }
     res := t.Result(cty)
     ok := ln.F.NewBlock()
     dest := mir.NoLocal
@@ -5538,19 +5538,19 @@ fn (ln mut lowering&) adapterBody(call typed.BodyId, cty types.TypeId, recv type
     }
     callee := mir.Callee.Fn(mir.FnKey.Body(call), cty)
     k := ln.F.AddCall(mir.Call(callee, ln.F.Args(args), ln.adapterPassed(cty, recv)
-                               mir.L(dest) if dest != mir.NoLocal else mir.NoPlace, dest != mir.NoLocal, ok, code, eb))
+                               mir.Lvalue.L(dest) if dest != mir.NoLocal else mir.NoPlace, dest != mir.NoLocal, ok, code, eb))
     ln.end(mir.Term.Call(sp, k))
     if eb != mir.NoBlock {
         ln.start(eb)
         ln.leave(0)
-        ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.L(code))))
+        ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.Lvalue.L(code))))
     }
     ln.start(ok)
     if res == types.NoreturnT {
         ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None))
         return
     }
-    ln.epilogue(mir.Operand.None if dest == mir.NoLocal else ln.viewCopied(call, mir.Operand.Copy(mir.L(dest)), res, sp))
+    ln.epilogue(mir.Operand.None if dest == mir.NoLocal else ln.viewCopied(call, mir.Operand.Copy(mir.Lvalue.L(dest)), res, sp))
 }
 
 # D9h: what a call of body made in a function lowering makes for a caller that cannot know what it returns
@@ -5592,7 +5592,7 @@ fn (ln mut lowering&) copiedBody(body typed.BodyId, ty types.TypeId) {
     ln.emit(mir.Stmt.Open(sp, frame))
     ln.levels.Push(level(frame, typed.BlockId(-1), mir.ScopeKind.Frame))
     args := Array<mir.Operand>(ln.F.Params.Len())
-    for i in range ln.F.Params.Len() { args[i] = mir.Operand.Copy(mir.L(ln.F.Params[i])) }
+    for i in range ln.F.Params.Len() { args[i] = mir.Operand.Copy(mir.Lvalue.L(ln.F.Params[i])) }
     passed := Array<mir.ScopeRef>(vs.Len())
     for k in range vs.Len() { passed[k] = mir.ScopeRef.Var(k) }
     res := t.Result(ty)
@@ -5604,16 +5604,16 @@ fn (ln mut lowering&) copiedBody(body typed.BodyId, ty types.TypeId) {
         code = ln.temp(mir.I32T, sp)
         eb = ln.F.NewBlock()
     }
-    k := ln.F.AddCall(mir.Call(mir.Callee.Fn(mir.FnKey.Body(body), ty), ln.F.Args(args), ln.F.ScopeRefs(passed), mir.L(dest)
+    k := ln.F.AddCall(mir.Call(mir.Callee.Fn(mir.FnKey.Body(body), ty), ln.F.Args(args), ln.F.ScopeRefs(passed), mir.Lvalue.L(dest)
                                true, ok, code, eb))
     ln.end(mir.Term.Call(sp, k))
     if eb != mir.NoBlock {
         ln.start(eb)
         ln.leave(0)
-        ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.L(code))))
+        ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.Lvalue.L(code))))
     }
     ln.start(ok)
-    ln.epilogue(ln.viewCopied(body, mir.Operand.Copy(mir.L(dest)), res, sp))
+    ln.epilogue(ln.viewCopied(body, mir.Operand.Copy(mir.Lvalue.L(dest)), res, sp))
 }
 
 # a module's initialization (B5a): each of its globals' initializers run, each after the globals it reads - check's
@@ -5679,14 +5679,14 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
             ln.goto(some)
         } else if t.ArrayRef(r) {
             # T2c: an array that may be null is null where its length is -1 (its zero bits are the empty array)
-            isNull := ln.prim(typed.PrimOp.Same, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, -1)], sp)
+            isNull := ln.prim(typed.PrimOp.Same, types.BoolT, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(x)), mir.Operand.Const(ty, -1)], sp)
             none := ln.F.NewBlock()
             ln.end(mir.Term.Branch(isNull, none, some))
             ln.start(none)
             ln.word(b, "null", sp)
             ln.goto(after)
         } else {
-            nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
+            nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(x)), mir.Operand.Const(ty, 0)], sp)
             none := ln.F.NewBlock()
             ln.end(mir.Term.Branch(nn, some, none))
             ln.start(none)
@@ -5721,7 +5721,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
     }
     if t.KindOf(r) == types.Kind.Func {
         x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
-        nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
+        nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(x)), mir.Operand.Const(ty, 0)], sp)
         some, none, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
         ln.end(mir.Term.Branch(nn, some, none))
         ln.start(none)
@@ -5773,7 +5773,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.word(b, $ln.spell(ln.readOnly(el), true, true) "[", sp)
         n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(a))], sp)
         ln.eachIndex(n, sp, fn(i mir.LocalId) {
-            first := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(i)), ln.constI64(0)], sp)
+            first := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(i)), ln.constI64(0)], sp)
             sep, item := ln.F.NewBlock(), ln.F.NewBlock()
             ln.end(mir.Term.Branch(first, item, sep))
             ln.start(sep)
@@ -5794,7 +5794,7 @@ fn (ln mut lowering&) renderAny(b mir.ScopeRef, v mir.Operand, ty types.TypeId, 
     x := ln.local(v, ty, sp)
     after := ln.F.NewBlock()
     if t.IsNullable(t.Repr(ty)) {
-        nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
+        nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.Lvalue.L(x)), mir.Operand.Const(ty, 0)], sp)
         some, none := ln.F.NewBlock(), ln.F.NewBlock()
         ln.end(mir.Term.Branch(nn, some, none))
         ln.start(none)
@@ -5813,9 +5813,9 @@ fn (ln mut lowering&) renderAny(b mir.ScopeRef, v mir.Operand, ty types.TypeId, 
     ln.start(deeper)
     d1 := ln.prim(typed.PrimOp.Add, mir.I64T, mir.Operand[d, ln.constI64(1)], sp)
     hty := mir.HelperType(t, mir.HelperKind.Render, t.Referent(t.Repr(ty)))
-    callee := mir.Callee.Dispatch(mir.Operand.Copy(mir.L(x)), -1 if top else -2, hty)
+    callee := mir.Callee.Dispatch(mir.Operand.Copy(mir.Lvalue.L(x)), -1 if top else -2, hty)
     ok := ln.F.NewBlock()
-    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[mir.Operand.Copy(mir.L(x)), d1]), ln.F.ScopeRefs(mir.ScopeRef[b])
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[mir.Operand.Copy(mir.Lvalue.L(x)), d1]), ln.F.ScopeRefs(mir.ScopeRef[b])
                                mir.NoPlace, false, ok, mir.NoLocal, mir.NoBlock))
     ln.end(mir.Term.Call(sp, k))
     ln.start(ok)
@@ -6073,11 +6073,11 @@ fn (ln mut lowering&) renderStr(a pl, ty types.TypeId, b mir.ScopeRef, sp source
     vs := t.ScopeVarsOf(fty)
     xs := Array<mir.ScopeRef>(vs.Len())
     for i in range vs.Len() { xs[i] = mir.ScopeRef.Scope(rs) if vs[i] == types.ResultVar else mir.ScopeRef.Program }
-    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.F.ScopeRefs(xs), mir.L(dest)
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.F.ScopeRefs(xs), mir.Lvalue.L(dest)
                                true, ok, mir.NoLocal, mir.NoBlock))
     ln.end(mir.Term.Call(sp, k))
     ln.start(ok)
-    ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Bytes, mir.Operand.Copy(mir.L(dest))))
+    ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Bytes, mir.Operand.Copy(mir.Lvalue.L(dest))))
     ln.emit(mir.Stmt.Close(sp, rs))
     return true
 }

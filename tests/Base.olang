@@ -65,7 +65,7 @@ type BaseDir enum {
     south
 }
 
-fn BaseSouth() BaseDir {
+fn BaseDir.BaseSouth() BaseDir {
     return BaseDir.south
 }
 

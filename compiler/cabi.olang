@@ -94,13 +94,13 @@ fn Ext(t types.Table&, arch String&, ty types.TypeId) String {
 }
 
 # how a parameter of this type crosses to C (regs: what x86-64 has left, updated)
-fn Param(t mut types.Table&, arch String&, ty types.TypeId, regs mut Regs&) Way {
+fn Way.Param(t mut types.Table&, arch String&, ty types.TypeId, regs mut Regs&) Way {
     if not IsStruct(t, ty) {
         r := t.Repr(ty)
         if t.IsFloat(r) { regs.Sse-- } else { regs.Int-- }
         return Way(Pass.Direct, Vec<String&>(), Vec<I64>(), Vec<I64>(), Ext(t, arch, ty))
     }
-    w := Classify(t, arch, ty, false)
+    w := Way.Classify(t, arch, ty, false)
     if arch == "x86_64" and w.Kind == Pass.Parts {
         ni, ns I64 = 0, 0
         for p in w.Parts {
@@ -114,16 +114,16 @@ fn Param(t mut types.Table&, arch String&, ty types.TypeId, regs mut Regs&) Way 
 }
 
 # how a result of this type comes back from C
-fn Result(t mut types.Table&, arch String&, ty types.TypeId) Way {
+fn Way.Result(t mut types.Table&, arch String&, ty types.TypeId) Way {
     if not IsStruct(t, ty) { return Way(Pass.Direct, Vec<String&>(), Vec<I64>(), Vec<I64>(), Ext(t, arch, ty)) }
-    return Classify(t, arch, ty, true)
+    return Way.Classify(t, arch, ty, true)
 }
 
 # whether a part is passed in an SSE register (x86-64)
 fn inSse(p String&) Bool { return p.StartsWith("float") or p.StartsWith("double") or p.StartsWith("half") or p.StartsWith("bfloat") or p.StartsWith("<") }
 
 # a struct's classification, as a parameter or (result) a result
-fn Classify(t mut types.Table&, arch String&, ty types.TypeId, result Bool) Way {
+fn Way.Classify(t mut types.Table&, arch String&, ty types.TypeId, result Bool) Way {
     size := t.Size(ty)
     sc Vec<Scalar>
     Flatten(t, ty, 0, sc)
@@ -285,7 +285,7 @@ fn testStruct(t mut types.Table&, names mut source.Names&, n String&, fields Arr
 
 # "T f(T a)" as clang declares it for arch, a parameter spelled as a C declaration's
 fn testDecl(t mut types.Table&, arch String&, ty types.TypeId) String {
-    r := Result(t, arch, ty)
+    r := Way.Result(t, arch, ty)
     regs := Regs(6, 8)
     ret := match r.Kind {
         case Pass.Direct: $t.Llvm(ty)
@@ -297,7 +297,7 @@ fn testDecl(t mut types.Table&, arch String&, ty types.TypeId) String {
         ps.Push("sret, ")
         regs.Int--
     }
-    p := Param(t, arch, ty, regs)
+    p := Way.Param(t, arch, ty, regs)
     ps.Push(match p.Kind {
         case Pass.Direct: $t.Llvm(ty)
         case Pass.Parts: PartsList(p)
@@ -310,7 +310,7 @@ fn testDecl(t mut types.Table&, arch String&, ty types.TypeId) String {
 
 test "a struct crosses to C as clang 18 passes it, on x86-64 and on AArch64 (X11)" {
     names := source.Names()
-    t := types.NewTable(names)
+    t := types.Table.New(names)
     t.AddModule("t")
     i8, i16, i32, i64 := t.Prim("I8"), t.Prim("I16"), t.Prim("I32"), t.Prim("I64")
     u8, f16, bf16, f32, f64 := t.Prim("U8"), t.Prim("F16"), t.Prim("BF16"), t.Prim("F32"), t.Prim("F64")
@@ -364,7 +364,7 @@ test "a struct crosses to C as clang 18 passes it, on x86-64 and on AArch64 (X11
     assert testDecl(t, x, i5) == "void(sret, byval)"
     # registers run out: a struct is passed on the stack whole
     regs := Regs(1, 8)
-    assert Param(t, x, l2, regs).Kind == Pass.Byval and regs.Int == 1
+    assert Way.Param(t, x, l2, regs).Kind == Pass.Byval and regs.Int == 1
     a := "aarch64"
     # clang spells an aggregate result by its struct type; its members, as here, are what the back end reads
     assert testDecl(t, a, i2) == "i64(i64)"
@@ -394,7 +394,7 @@ test "a struct crosses to C as clang 18 passes it, on x86-64 and on AArch64 (X11
 
 test "a narrow integer or a Bool crosses extended on x86-64, as itself on AArch64" {
     names := source.Names()
-    t := types.NewTable(names)
+    t := types.Table.New(names)
     assert Ext(t, "x86_64", t.Prim("I8")) == "signext" and Ext(t, "x86_64", t.Prim("U16")) == "zeroext"
     assert Ext(t, "x86_64", types.BoolT) == "zeroext" and Ext(t, "x86_64", t.Prim("I32")) == ""
     assert Ext(t, "aarch64", t.Prim("I8")) == "" and Ext(t, "aarch64", types.BoolT) == ""

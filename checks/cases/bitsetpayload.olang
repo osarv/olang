@@ -8,6 +8,6 @@ type Shape enum {
     Empty
 }
 fn main() {
-    s := bitset.Empty<Shape>()
+    s := bitset.BitSet<Shape>.Empty()
     assert s.Len() == 0
 }

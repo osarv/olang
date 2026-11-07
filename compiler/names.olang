@@ -406,6 +406,11 @@ fn (r mut Resolver&) collect(mi I64, decls Array<ast.Decl&>&) {
                 }
             }
             case ast.Decl.Fn(f), ast.Decl.Extern(f) {
+                if f.IsBuilder() {
+                    # D19: a builder lives in its owner's namespace, in no set of the module's (D2)
+                    r.addValue(mi, f.Name, r.nameSpan(mi, f.Owner!.Span().End, f.Member), false, true, true, null)
+                    continue
+                }
                 from := f.Recv!.Sp.End if f.Recv is not null else f.Sp.Start
                 r.addValue(mi, f.Name, r.nameSpan(mi, from, f.Name), false, true, f.Recv is not null, null)
             }
@@ -838,6 +843,11 @@ fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
     if f.Recv is not null and f.Recv!.Ty is not null {
         r.receiverVars(f.Recv!.Ty, false)
         r.typeRef(f.Recv!.Ty)
+    }
+    if f.Owner is not null {
+        # D19: a builder's owner introduces its type's variables as a receiver does ("fn List<T>.Of")
+        r.receiverVars(f.Owner, false)
+        r.typeRef(f.Owner)
     }
     for p in s.Params {
         r.typeRef(p.Ty)

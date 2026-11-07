@@ -1,0 +1,5 @@
+# check: fail error[D19]: a builder of Color takes no value of it, and c does
+# D19: one taking a value of its owner is a method or a function of the module - each shape has one place
+type Color struct(R U8) { R }
+fn Color.Darker(c Color) Color { return Color(c.R / 2) }
+fn main() { assert Color.Darker(Color(8)).R == 4 }

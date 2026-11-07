@@ -13,13 +13,13 @@ fn put(s mut Store&, k String&, v String&) {
     s.keys.Push(v)
 }
 fn mk(n I64) String& { return $n "x" }
-fn load(n I64) Store& {
+fn Store.load(n I64) Store& {
     st mut Store& = Store()
     text := mk(n)
     put(st, text[:1], text[1:])
     return st
 }
 fn main() ? {
-    s := load(4)
+    s := Store.load(4)
     assert s.keys.Len() == 2
 }

@@ -8,7 +8,7 @@ type Counts struct() {
     m Map<String&, I64> = Map<String&, I64>()
     n I64 = 0
 }
-fn countWords(words Array<String&>&) Counts {
+fn Counts.countWords(words Array<String&>&) Counts {
     c := Counts()
     for w in words {
         c.m.Update(w, 0, fn(n I64) I64 { return n + 1 })
@@ -21,8 +21,8 @@ fn merge(into mut Map<String&, I64>&, from Counts&) {
 }
 fn total(words Array<String&>&) I64 {
     parts := Array<Counts>(2, Counts())
-    parts[0] = countWords(words)
-    parts[1] = countWords(words)
+    parts[0] = Counts.countWords(words)
+    parts[1] = Counts.countWords(words)
     sum := Map<String&, I64>()
     for p in parts { merge(sum, p) }
     return sum.Len()

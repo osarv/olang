@@ -121,7 +121,7 @@ test "a two-hop alias chain names a re-exported enum type's word, and matches on
 # a private enum case is still perfectly usable through the declaring module's own function - the value
 # crosses the boundary even though its NAME cannot
 test "a private enum case's value still crosses the boundary" {
-    d wk.Base.BaseDir = wk.Base.BaseSouth()
+    d wk.Base.BaseDir = wk.Base.BaseDir.BaseSouth()
     assert d != wk.Base.BaseDir.North
 }
 
@@ -194,7 +194,7 @@ test "the prelude's methods on a built-in type are visible without an import" {
 }
 
 test "M23: a file in a directory imports by its path, its alias the last element" {
-    assert measure.Area(rect.Square(4)) == 16
+    assert measure.Area(rect.Rect.Square(4)) == 16
     r rect.Rect = rect.Rect(3, 7)
     assert measure.Area(r) == 21
 }

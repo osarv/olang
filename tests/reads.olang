@@ -221,7 +221,7 @@ test slowRead "gives each spawned task its own argument" {
 # a by-value local whose storage flows out as a reference - the scope pass homes it where the result goes (O26a) - is
 # read by the caller alike while compiling: the evaluator's placement gives it storage that outlives the call (bulk
 # review 7, found with F4)
-fn pinned(n I64) Pt& {
+fn Pt.pinned(n I64) Pt& {
     x Pt = Pt(n, n + 1)
     return x
 }
@@ -229,13 +229,13 @@ fn pinned(n I64) Pt& {
 fn readPinned() I64 {
     k := 0
     {
-        p := pinned(5)
+        p := Pt.pinned(5)
         k = p.x * 10 + p.y
     }
     return k
 }
 
-test pinned "reads a returned local's storage where the result went" {
+test Pt.pinned "reads a returned local's storage where the result went" {
     assert readPinned() == 56
 }
 

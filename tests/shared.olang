@@ -145,7 +145,7 @@ fn classifyPoint(p Point) I32 {
 
 # O13/O26: a bare "&" result is built where the caller puts it, the result scope - so the Point is allocated
 # there rather than in makePoint's, which closes at the return.
-fn makePoint(x I32, y I32) Point& {
+fn Point.make(x I32, y I32) Point& {
     p mut Point& = Point(x, y)
     return p
 }
@@ -159,7 +159,7 @@ fn takesHeapPoint(p Point&) I32 {
     return p.x
 }
 
-fn returnsHeapPoint() Point& {
+fn Point.returnsHeap() Point& {
     return Point(9, 8)
 }
 
@@ -388,7 +388,7 @@ fn useHandleLocally() I32 {
 # with the caller's scope at construction (O16), not with makeHandle's own, so nothing fires when
 # makeHandle returns. This replaces the old "return <bare local> skips its own destructor" special case:
 # the scope tag now expresses that fact directly, so no dataflow exception is needed for it at all.
-fn makeHandle(n I32) Handle& {
+fn Handle.make(n I32) Handle& {
     h mut Handle& = Handle(n)
     return h
 }
@@ -396,7 +396,7 @@ fn makeHandle(n I32) Handle& {
 # proves the deferral is scoped to exactly the instance tagged to the caller's scope, not a blanket "no
 # destructors fire in this function": "discard" is tagged to makeAndDiscardOne's OWN scope, so it is
 # destructed when that function returns, while "keep" survives into the caller's.
-fn makeAndDiscardOne(n I32) Handle& {
+fn Handle.makeAndDiscardOne(n I32) Handle& {
     keep mut Handle& = Handle(n)
     discard Handle& = Handle(n + 100)
     return keep
@@ -444,14 +444,14 @@ type ScopedBox struct(seed mut Point&) {
     inner mut Point& = seed
 }
 
-fn fillBoxViaCtor() Point& {
+fn Point.fillBoxViaCtor() Point& {
     b := ScopedBox(Point(7, 8))
     return b.inner
 }
 
 # a by-value result holding a reference: its references live in the result scope (O13), and "inner" keeps
 # seed's own scope, which outlives this function - so returning the box is sound
-fn makeScopedBoxPlain(seed mut Point&) ScopedBox {
+fn ScopedBox.makePlain(seed mut Point&) ScopedBox {
     return ScopedBox(seed)
 }
 
@@ -466,14 +466,14 @@ fn narrowNamedIntoOwn(seed Point&) I32 {
 # a call operand (constructor or function) carries what each of the callee's scopes was bound to, and a
 # later member access is checked against the caller's frame: box's "seed" is bound to the result scope here,
 # so returning box.inner is a verified exact match
-fn fillBoxViaCtorChecked(x I32, y I32) Point& {
+fn Point.fillBoxViaCtorChecked(x I32, y I32) Point& {
     box := ScopedBox(Point(x, y))
     return box.inner
 }
 
 # the same for an ordinary call: makePoint's result lands where this function's result does
-fn makePointChecked(x I32, y I32) Point& {
-    return makePoint(x, y)
+fn Point.makeChecked(x I32, y I32) Point& {
+    return Point.make(x, y)
 }
 
 # "field of a field": Mid's "leaf" tracks Mid's argument; Outer's bare "mid" field lives with the Outer, and
@@ -486,7 +486,7 @@ type Outer struct(x I32, y I32) {
     mid mut Mid& = Mid(Point(x, y))
 }
 
-fn fieldOfFieldChecked(x I32, y I32) Point& {
+fn Point.fieldOfFieldChecked(x I32, y I32) Point& {
     o := Outer(x, y)
     return o.mid.leaf
 }
@@ -500,7 +500,7 @@ type PunnedBox struct(w mut WrappedPoint&) {
     wrapped mut WrappedPoint& = w
 }
 
-fn makePunnedBoxChecked(x I32, y I32) Point& {
+fn Point.makePunnedBoxChecked(x I32, y I32) Point& {
     b := PunnedBox(WrappedPoint(Point(x, y)))
     return b.wrapped.inner
 }
@@ -512,7 +512,7 @@ type DualWrapped struct(l mut WrappedPoint&, r mut WrappedPoint&) {
     right mut WrappedPoint& = r
 }
 
-fn dualWrappedFieldChecked(leftX I32, leftY I32, rightX I32, rightY I32) Point& {
+fn Point.dualWrappedFieldChecked(leftX I32, leftY I32, rightX I32, rightY I32) Point& {
     l mut WrappedPoint& = WrappedPoint(Point(leftX, leftY))
     r mut WrappedPoint& = WrappedPoint(Point(rightX, rightY))
     d DualWrapped& = DualWrapped(l, r)
@@ -526,7 +526,7 @@ type Holder struct(b DualWrapped&) {
     box DualWrapped& = b
 }
 
-fn holderFieldChecked(leftX I32, leftY I32, rightX I32, rightY I32) Point& {
+fn Point.holderFieldChecked(leftX I32, leftY I32, rightX I32, rightY I32) Point& {
     l mut WrappedPoint& = WrappedPoint(Point(leftX, leftY))
     r mut WrappedPoint& = WrappedPoint(Point(rightX, rightY))
     d DualWrapped& = DualWrapped(l, r)
@@ -544,14 +544,14 @@ type SiblingPair struct(o WrappedPoint&, t LeafWrap&) {
     two LeafWrap& = t
 }
 
-fn siblingPairOneChecked(x1 I32, y1 I32, x2 I32, y2 I32) Point& {
+fn Point.siblingPairOneChecked(x1 I32, y1 I32, x2 I32, y2 I32) Point& {
     one WrappedPoint& = WrappedPoint(Point(x1, y1))
     two LeafWrap& = LeafWrap(WrappedPoint(Point(x2, y2)))
     p SiblingPair& = SiblingPair(one, two)
     return p.one.inner
 }
 
-fn siblingPairTwoLeafChecked(x1 I32, y1 I32, x2 I32, y2 I32) Point& {
+fn Point.siblingPairTwoLeafChecked(x1 I32, y1 I32, x2 I32, y2 I32) Point& {
     one WrappedPoint& = WrappedPoint(Point(x1, y1))
     two LeafWrap& = LeafWrap(WrappedPoint(Point(x2, y2)))
     p SiblingPair& = SiblingPair(one, two)
@@ -560,14 +560,14 @@ fn siblingPairTwoLeafChecked(x1 I32, y1 I32, x2 I32, y2 I32) Point& {
 
 # reassignment tracking: "box = ScopedBox(...)" re-binds box's own map, so box.inner after it is checked
 # against what box holds now
-fn reassignSameScopeChecked(x I32, y I32) Point& {
+fn Point.reassignSameScopeChecked(x I32, y I32) Point& {
     box ScopedBox& = ScopedBox(Point(1, 2))
     box = ScopedBox(Point(x, y))
     return box.inner
 }
 
 # two branches reassigning box into one agreed scope merge to that scope
-fn reassignBothBranchesAgreeChecked(cond Bool, x I32, y I32) Point& {
+fn Point.reassignBothBranchesAgreeChecked(cond Bool, x I32, y I32) Point& {
     box ScopedBox& = ScopedBox(Point(1, 2))
     if cond {
         box = ScopedBox(Point(x, y))
@@ -583,7 +583,7 @@ type NestedBox struct(inner mut Point&) {
     inner
 }
 
-fn makeNestedBox(x I32, y I32) NestedBox& {
+fn NestedBox.make(x I32, y I32) NestedBox& {
     return NestedBox(Point(x, y))
 }
 
@@ -1875,9 +1875,9 @@ test "...and the task really had finished before the next test began" {
 # the destructor half, and it reaches through frames: the handles below live in three different scopes -
 # this test body's, a callee's own, and a block nested inside that callee - and all three are unwound
 fn handlesDeeper() I32 {
-    h Handle& = makeHandle(1)
+    h Handle& = Handle.make(1)
     for _ in range 1 {
-        g Handle& = makeHandle(2)
+        g Handle& = Handle.make(2)
         resourcesClosed = resourcesClosed + 0
     }
     return 0
@@ -1885,7 +1885,7 @@ fn handlesDeeper() I32 {
 
 test "a test left early runs the destructors of every scope it abandons" {
     resourcesClosed = 0
-    top Handle& = makeHandle(0)
+    top Handle& = Handle.make(0)
     handlesDeeper()
     return
 }
@@ -3024,7 +3024,7 @@ test "a loop inside a join starts one task per iteration" {
 # onto one list head. That is glibc-level heap corruption, not a lost update: this test aborted inside
 # malloc's own consistency assertion roughly four runs in five. Each task now allocates into a private
 # arena standing in for the scope it was given, and the spawner folds them back in after the join.
-fn churnInto(times I32) Crate2& {
+fn Crate2.churnInto(times I32) Crate2& {
     last mut Crate2& = Crate2(0)
     for i in range times {
         last = Crate2(i)
@@ -3034,8 +3034,8 @@ fn churnInto(times I32) Crate2& {
 
 test "two tasks may allocate into one scope" {
     join {
-        spawn churnInto(20000)
-        spawn churnInto(20000)
+        spawn Crate2.churnInto(20000)
+        spawn Crate2.churnInto(20000)
     }
     assert true
 }
@@ -3070,8 +3070,8 @@ test "a value a task allocates into the caller's scope survives the join" {
 # (produceInto above), and the test below it shows that surviving the join.
 fn handlesOnTasks() I32 {
     join {
-        spawn makeHandle(1)
-        spawn makeHandle(2)
+        spawn Handle.make(1)
+        spawn Handle.make(2)
     }
     return resourcesClosed
 }
@@ -3727,14 +3727,14 @@ test "R17: a try statement catching part of what its call can fail with, in a ba
 }
 
 test "an undetermined scope variable binds to the caller's own scope" {
-    p Point& = makePoint(3, 4)
+    p Point& = Point.make(3, 4)
     assert p.x == 3
     assert p.y == 4
 }
 
 test "a plain struct literal promotes correctly into a heap-indirect parameter and return type" {
     assert takesHeapPoint(Point(5, 6)) == 5
-    q Point& = returnsHeapPoint()
+    q Point& = Point.returnsHeap()
     assert q.x == 9
     assert q.y == 8
 }
@@ -3854,7 +3854,7 @@ test "destructor runs when the instance's own scope closes at function return" {
 
 test "an instance tagged to a passed-in scope outlives the function that constructed it" {
     before I32 = resourcesClosed
-    h Handle& = makeHandle(42)
+    h Handle& = Handle.make(42)
         # makeHandle has already returned - h was registered with the caller's scope at construction, so
         # nothing fired when makeHandle returned; if it had, resourcesClosed would be before+1 here
     assert resourcesClosed == before
@@ -3863,7 +3863,7 @@ test "an instance tagged to a passed-in scope outlives the function that constru
 
 test "deferral is scoped to exactly the caller-tagged instance, not every instance in that function" {
     before I32 = resourcesClosed
-    kept Handle& = makeAndDiscardOne(1)
+    kept Handle& = Handle.makeAndDiscardOne(1)
         # "discard" (tagged to makeAndDiscardOne's own scope) is already destructed by the time that
         # function returns; "kept" survives into this scope, so exactly one destructor has fired so far
     assert resourcesClosed == before + 1
@@ -4012,7 +4012,7 @@ test "a parameter type may reference an earlier parameter as its scope tag" {
 }
 
 test "a constructor field's scope tag, naming the constructor's own scope variable, survives the constructor call returning" {
-    q Point& = fillBoxViaCtor()
+    q Point& = Point.fillBoxViaCtor()
     assert q.x == 7
     assert q.y == 8
 
@@ -4029,7 +4029,7 @@ test "a constructor field's scope tag, naming the constructor's own scope variab
 
 test "a struct returned entirely by value still compiles fine when its nested reference field is named, not bare" {
     seed mut Point& = Point(3, 4)
-    box ScopedBox = makeScopedBoxPlain(seed)
+    box ScopedBox = ScopedBox.makePlain(seed)
     assert box.inner.x == 3
     assert box.inner.y == 4
 }
@@ -4040,7 +4040,7 @@ test "a struct returned entirely by value still compiles fine when its nested re
 type C2dBox struct(v I32) { inner Point& = Point(v, v + 1) }
 type C2dPair struct(v I32) { box C2dBox& = C2dBox(v) }
 
-fn makeC2dBox(v I32) C2dBox& { return C2dBox(v) }
+fn C2dBox.make(v I32) C2dBox& { return C2dBox(v) }
 
 fn c2dChurn() {
     noise I32 = 0
@@ -4061,7 +4061,7 @@ test "C2d: a by-value instance's field lives in the caller's scope" {
 }
 
 test "C2d: an instance returned into a named scope takes its fields with it" {
-    b C2dBox& = makeC2dBox(9)
+    b C2dBox& = C2dBox.make(9)
     c2dChurn()
     assert b.inner.x == 9
 }
@@ -4073,7 +4073,7 @@ test "C2d: a constructor call inside a field initializer lands with the outer in
 }
 
 test "a plain struct's bare '&' field survives a function boundary by inheriting its container's own target scope" {
-    nb NestedBox& = makeNestedBox(11, 22)
+    nb NestedBox& = NestedBox.make(11, 22)
     assert nb.inner.x == 11
     assert nb.inner.y == 22
 
@@ -4114,37 +4114,37 @@ test "the static scope checker allows a received named scope to narrow into this
 }
 
 test "the static scope checker verifies a constructor field's scope tag through a call's own binding map" {
-    b Point& = fillBoxViaCtorChecked(3, 4)
+    b Point& = Point.fillBoxViaCtorChecked(3, 4)
     assert b.x == 3
     assert b.y == 4
 }
 
 test "the static scope checker verifies an ordinary function's return-type scope tag through a call's own binding map" {
-    p Point& = makePointChecked(5, 6)
+    p Point& = Point.makeChecked(5, 6)
     assert p.x == 5
     assert p.y == 6
 }
 
 test "the static scope checker traces a scope tag through a field of a field, not just one level" {
-    p Point& = fieldOfFieldChecked(9, 10)
+    p Point& = Point.fieldOfFieldChecked(9, 10)
     assert p.x == 9
     assert p.y == 10
 }
 
 test "the static scope checker traces a scope tag through a bare-pun field, not just an explicit one" {
-    p Point& = makePunnedBoxChecked(11, 12)
+    p Point& = Point.makePunnedBoxChecked(11, 12)
     assert p.x == 11
     assert p.y == 12
 }
 
 test "the static scope checker disambiguates two bare-pun fields of the same type tagged to different scopes" {
-    p Point& = dualWrappedFieldChecked(13, 14, 15, 16)
+    p Point& = Point.dualWrappedFieldChecked(13, 14, 15, 16)
     assert p.x == 13
     assert p.y == 14
 }
 
 test "the static scope checker resolves a scope tag through three levels of nested bare-pun forwarding" {
-    p Point& = holderFieldChecked(17, 18, 19, 20)
+    p Point& = Point.holderFieldChecked(17, 18, 19, 20)
     assert p.x == 17
     assert p.y == 18
 }
@@ -4158,7 +4158,7 @@ fn longerScopeIntoOwn(p Point&) I32 {
 }
 
 # scratch lives in this function's block and keep where the result goes - two scopes, neither of them named
-fn twoScopeVars(n I32) Point& {
+fn Point.twoScopeVars(n I32) Point& {
     scratch Point& = Point(n, n)
     keep mut Point& = Point(scratch.x, n)
     return keep
@@ -4187,9 +4187,9 @@ test "a longer-lived scope satisfies a target asking for a shorter-lived one" {
 }
 
 test "a built result is built where the caller puts it" {
-    r Point& = twoScopeVars(5)
+    r Point& = Point.twoScopeVars(5)
     assert r.x == 5
-    q Point& = twoScopeVars(6)
+    q Point& = Point.twoScopeVars(6)
     assert q.y == 6
 }
 
@@ -4202,25 +4202,25 @@ test "a scope obligation recorded from a body is discharged at every call" {
 }
 
 test "two same-typed sibling fields at different nesting depths never collide" {
-    a Point& = siblingPairOneChecked(21, 22, 23, 24)
+    a Point& = Point.siblingPairOneChecked(21, 22, 23, 24)
     assert a.x == 21
     assert a.y == 22
-    b Point& = siblingPairTwoLeafChecked(21, 22, 23, 24)
+    b Point& = Point.siblingPairTwoLeafChecked(21, 22, 23, 24)
     assert b.x == 23
     assert b.y == 24
 }
 
 test "the static scope checker tracks a var's scope binding through a plain reassignment" {
-    p Point& = reassignSameScopeChecked(11, 12)
+    p Point& = Point.reassignSameScopeChecked(11, 12)
     assert p.x == 11
     assert p.y == 12
 }
 
 test "the static scope checker merges two branches that reassign a var to the same agreed scope" {
-    p Point& = reassignBothBranchesAgreeChecked(true, 13, 14)
+    p Point& = Point.reassignBothBranchesAgreeChecked(true, 13, 14)
     assert p.x == 13
     assert p.y == 14
-    q Point& = reassignBothBranchesAgreeChecked(false, 13, 14)
+    q Point& = Point.reassignBothBranchesAgreeChecked(false, 13, 14)
     assert q.x == 14
     assert q.y == 13
 }
@@ -5124,7 +5124,7 @@ type Figure enum {
 
 # there is no constructor on an enum and deliberately so: picking a case IS the interesting logic, and
 # an ordinary function expresses it - fallibly if it wants to, unlike a struct's infallible literal
-fn classify(w I32, h I32) Figure {
+fn Figure.classify(w I32, h I32) Figure {
     if w == 0 { return Figure.Nothing }
     if w == h { return Figure.Circle(w) }
     return Figure.Rect(w, h)
@@ -5161,9 +5161,9 @@ test "an enum value is created by naming a case, and nothing else" {
     c := Figure.Rect(4, 4)
     assert area(c) == 16
         # and "construction with logic" is an ordinary function returning the type
-    assert area(classify(0, 9)) == 0
-    assert area(classify(3, 3)) == 27
-    assert area(classify(2, 6)) == 12
+    assert area(Figure.classify(0, 9)) == 0
+    assert area(Figure.classify(3, 3)) == 27
+    assert area(Figure.classify(2, 6)) == 12
 }
 
 # the payload buffer is sized for the LARGEST case, so a bigger case can follow a smaller one into the
@@ -5290,15 +5290,15 @@ type Parcel enum {
     Empty
 }
 
-fn parcelOf(c Crate&) Parcel { return Parcel.Held(c) }
+fn Parcel.parcelOf(c Crate&) Parcel { return Parcel.Held(c) }
 
 # O13/O18a: a fresh payload has nothing to determine its scope, so it is built where the value lands - here
 # the result scope, which follows the call. This is the factory shape: build a new payload directly where
 # the caller puts it.
-fn freshParcel(seed I32) Parcel { return Parcel.Held(Crate(seed)) }
+fn Parcel.fresh(seed I32) Parcel { return Parcel.Held(Crate(seed)) }
 
 test "a scope argument supplies the scope a fresh payload is built into" {
-    p Parcel = freshParcel(4)
+    p Parcel = Parcel.fresh(4)
     match p {
         case Parcel.Held(c) { assert c.v == 4 }
         case Parcel.Empty { unreachable }
@@ -5310,8 +5310,8 @@ test "a scope argument supplies the scope a fresh payload is built into" {
 # binding allocated its own slot, stored into it, and then every read resolved to the FIRST arm's slot by
 # name, so the second match silently reported the first match's payload.
 test "two match arms may bind the same name without colliding" {
-    a Parcel = parcelOf(Crate(1))
-    b Parcel = parcelOf(Crate(2))
+    a Parcel = Parcel.parcelOf(Crate(1))
+    b Parcel = Parcel.parcelOf(Crate(2))
     match a {
         case Parcel.Held(c) { assert c.v == 1 }
         case Parcel.Empty { unreachable }
@@ -5324,7 +5324,7 @@ test "two match arms may bind the same name without colliding" {
 
 test "an enum carries a reference out of the function that built it" {
     outer mut Crate& = Crate(7)
-    p Parcel = parcelOf(outer)
+    p Parcel = Parcel.parcelOf(outer)
     match p {
         case Parcel.Held(c) { assert c.v == 7 }
         case Parcel.Empty { unreachable }
@@ -5662,9 +5662,9 @@ fn astLeaves(e Ast&, out mut Vec<Ast&>&) {
 }
 
 # (depth + 1) * (depth) * ... * 2 * (x + 0), built in the result scope wherever the call's result lands
-fn astBuild(depth I64) Ast& {
+fn Ast.astBuild(depth I64) Ast& {
     if depth == 0 { return Ast.Add(Ast.Var("x"), Ast.Num(0)) }
-    return Ast.Mul(Ast.Add(Ast.Num(depth), Ast.Num(1)), astBuild(depth - 1))
+    return Ast.Mul(Ast.Add(Ast.Num(depth), Ast.Num(1)), Ast.astBuild(depth - 1))
 }
 
 # trees built and folded inside a loop, each in that iteration's block - which hands its chunks back to be reused
@@ -5678,13 +5678,13 @@ fn astChurn() I64 {
 }
 
 AstFolded Ast& = astFold(Ast.Neg(Ast.Neg(Ast.Add(Ast.Num(2), Ast.Mul(Ast.Num(3), Ast.Num(4))))))
-AstAt4 I64 = astEval(astFold(astBuild(3)), 4)
+AstAt4 I64 = astEval(astFold(Ast.astBuild(3)), 4)
 AstTree Ast& = Ast.Add(Ast.Var("x"), Ast.Mul(Ast.Num(2), Ast.Var("y")))
 
 test "T17d: an expression tree of enums held by reference, folded with nested patterns" {
     assert $AstFolded == "Ast.Num(14)"            # computed while compiling and baked as data (K2)
     assert AstAt4 == 4 * 3 * 2 * 4                # decided while compiling (S18c)
-    e := astBuild(3)
+    e := Ast.astBuild(3)
     f := astFold(e)
     assert $f == "Ast.Mul(Ast.Num(4), Ast.Mul(Ast.Num(3), Ast.Mul(Ast.Num(2), Ast.Var(\"x\"))))"
     leaves := Vec<Ast&>()
@@ -5747,7 +5747,7 @@ fn astCopy(e Ast&) Ast& {
 # from an outer block may go into a tree in an inner one - it need only outlive the tree - and a List hands its
 # elements out
 test "T17d: a copy built in the result scope, and trees across blocks" {
-    c := astCopy(astBuild(2))
+    c := astCopy(Ast.astBuild(2))
     x := astChurn()
     assert x != 0 and $c == "Ast.Mul(Ast.Add(Ast.Num(2), Ast.Num(1)), Ast.Mul(Ast.Add(Ast.Num(1), Ast.Num(1)), Ast.Add(Ast.Var(\"x\"), Ast.Num(0))))"
     outer Ast& = Ast.Num(10)
@@ -5882,15 +5882,15 @@ fn mtLabel(k I32) String& {
         case _: $k "+" $(k * 2)
     }
 }
-fn mtCrate(k I32) Crate& {
+fn Crate.mtCrate(k I32) Crate& {
     return match k { case 1: Crate(10) case _: Crate(k) }
 }
 
 test "a match's value is built where it lands" {
     a := mtLabel(2)
     b := mtLabel(5)
-    c := mtCrate(1)
-    d := mtCrate(7)
+    c := Crate.mtCrate(1)
+    d := Crate.mtCrate(7)
     t I32 = 0
     for i in range 100 {
         s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
@@ -6030,11 +6030,11 @@ type Parcel3 struct(b mut Crate2&) {
     held mut Crate2& = b
 }
 
-fn wrapValid(valid mut Crate2&) Parcel3 { return Parcel3(valid) }
+fn Parcel3.wrapValid(valid mut Crate2&) Parcel3 { return Parcel3(valid) }
 
 test "a struct holding a reference can be returned when the scope is named" {
     outer mut Crate2& = Crate2(5)
-    p Parcel3 = wrapValid(outer)
+    p Parcel3 = Parcel3.wrapValid(outer)
     assert p.held.v == 5
     outer.v = 6
     assert p.held.v == 6        # the same instance, borrowed, still live
@@ -6060,7 +6060,7 @@ test "a struct holding a reference can be returned when the scope is named" {
 # ambiguous rather than silently picking one. Ambiguous is then treated as unverifiable and rejected,
 # because "it could be more than one thing" includes "it could be this function's own scope" whenever any
 # arm bound it there - and that arm would return a reference to a scope that closed at the return.
-fn mergedSame(a mut Crate2&, b mut Crate2&, c Bool) Parcel3 {
+fn Parcel3.mergedSame(a mut Crate2&, b mut Crate2&, c Bool) Parcel3 {
     h Parcel3 = Parcel3(a)
     if c { h = Parcel3(b) }        # both arms bind s to p - they agree
     return h
@@ -6068,7 +6068,7 @@ fn mergedSame(a mut Crate2&, b mut Crate2&, c Bool) Parcel3 {
 
 # arms binding two DIFFERENT named scopes: no single name for the meet, but both candidates outlive the
 # call, so every check against them passes and the value is returnable
-fn mergedDiffer(a mut Crate2&, b mut Crate2&, c Bool) Parcel3 {
+fn Parcel3.mergedDiffer(a mut Crate2&, b mut Crate2&, c Bool) Parcel3 {
     h Parcel3 = Parcel3(a)
     if c { h = Parcel3(b) }
     return h
@@ -6077,10 +6077,10 @@ fn mergedDiffer(a mut Crate2&, b mut Crate2&, c Bool) Parcel3 {
 test "branches that agree on a scope keep it" {
     x mut Crate2& = Crate2(4)
     y mut Crate2& = Crate2(9)
-    assert mergedSame(x, y, false).held.v == 4
-    assert mergedSame(x, y, true).held.v == 9
-    assert mergedDiffer(x, y, false).held.v == 4
-    assert mergedDiffer(x, y, true).held.v == 9
+    assert Parcel3.mergedSame(x, y, false).held.v == 4
+    assert Parcel3.mergedSame(x, y, true).held.v == 9
+    assert Parcel3.mergedDiffer(x, y, false).held.v == 4
+    assert Parcel3.mergedDiffer(x, y, true).held.v == 9
 }
 
 # these are compile errors and so can only be named here:
@@ -6193,12 +6193,12 @@ test "a field of a container parameter can be written, and the caller discharges
 # to outlive the container's construction scope, which outlives wherever the container now sits. And it
 # only works because O22 keeps the WRITE side precise - weakening both halves to the container's scope
 # costs per-field precision, weakening only the read costs nothing.
-fn innerOf(w Held3&) Crate2& { return w.held! }
+fn Crate2.innerOf(w Held3&) Crate2& { return w.held! }
 
 test "a field of a container parameter can be read out at the container's scope" {
     c mut Crate2& = Crate2(31)
     h Held3& = Held3(c)
-    assert innerOf(h).v == 31
+    assert Crate2.innerOf(h).v == 31
 }
 
 # ---- building through a container parameter (C2d) ----
@@ -6234,7 +6234,7 @@ fn takesNamed(c Crate2&) I32 { return c.v }
 fn passesOn(w Wrap2&) I32 { return takesNamed(w.inner) }
 
 # an instance-scoped field can be built into and returned, borrowed from the container
-fn namedBoth(w mut Held5&) Crate2& {
+fn Crate2.namedBoth(w mut Held5&) Crate2& {
     w.held = Crate2(4)        # allocation: lands in w's scope, the caller's arena
     return w.held
 }
@@ -6245,7 +6245,7 @@ test "a field is read through and passed on; an instance-scoped one is built int
     assert narrows(w) == 7
     assert passesOn(w) == 7
     h mut Held5& = Held5(seed)
-    assert namedBoth(h).v == 4
+    assert Crate2.namedBoth(h).v == 4
     assert h.held.v == 4
 }
 
@@ -6398,12 +6398,12 @@ test "O25: a bare parameter's scope is adopted for reading" {
 # D15: ":=" takes its type from any call returning a value, "try" calls included. A reference result takes
 # the call's exact scope (O25a), so it is written through exactly as a declared one would be.
 fn sevenFold(n I32) I32 { return n * 7 }
-fn freshLink(n I32) mut Link& { return Link(n) }
+fn Link.fresh(n I32) mut Link& { return Link(n) }
 
 test "D15: := from a call" {
     a := sevenFold(3)
     assert a == 21
-    l := freshLink(4)
+    l := Link.fresh(4)
     l.next = Link(5)
     churnLinks()
     assert l.next!.v == 5
@@ -6547,7 +6547,7 @@ fn keepLinkD(l mut Link&, n I32) mut Link& {
     l.v = l.v + n
     return l
 }
-fn spreadFromInnerD() Link& { return keepLinkD(linkPairD(9)) }
+fn Link.spreadFromInnerD() Link& { return keepLinkD(linkPairD(9)) }
 SpreadBakedD I32 = addD(divmodD(17, 5))   # K2: computed while compiling
 
 test "D8d: several results passed as a call's arguments" {
@@ -6567,7 +6567,7 @@ test "D8d: several results passed as a call's arguments" {
 
 test "D8d: a spread reference lives where the outer result lands" {
     x := keepLinkD(linkPairD(7))
-    y := spreadFromInnerD()
+    y := Link.spreadFromInnerD()
     churnLinks()
     assert x.v == 14 and y.v == 18
 }
@@ -8933,25 +8933,25 @@ type LandE struct(v I32, l LandE?&) {
     v
     l
 }
-fn landMk(v I32) mut LandE& { return LandE(v, null) }
-fn landPair(a I32, b I32) LandE& { return LandE(a, landMk(b)) }
-fn landChain(n I32) LandE& {
-    left mut LandE& = landMk(0)
+fn LandE.landMk(v I32) mut LandE& { return LandE(v, null) }
+fn LandE.landPair(a I32, b I32) LandE& { return LandE(a, LandE.landMk(b)) }
+fn LandE.landChain(n I32) LandE& {
+    left mut LandE& = LandE.landMk(0)
     for i in range n { left = LandE(i + 1, left) }
     return left
 }
 
 test "O18a: a result lands in an outer variable from an inner block" {
-    x LandE& = landMk(1)
-    if x.v == 1 { x = landMk(2) }
+    x LandE& = LandE.landMk(1)
+    if x.v == 1 { x = LandE.landMk(2) }
     noise I32 = 0
     for i in range I32(30) { noise = noise + noisePoint(i) }
     assert x.v == 2
 }
 
 test "O18a: nested builders land with their caller's result" {
-    p LandE& = landPair(3, 4)
-    c LandE& = landChain(3)
+    p LandE& = LandE.landPair(3, 4)
+    c LandE& = LandE.landChain(3)
     noise I32 = 0
     for i in range I32(30) { noise = noise + noisePoint(i) }
     assert p.v == 3 and p.l!.v == 4
@@ -8984,7 +8984,7 @@ fn oxChain(seed mut OxN&) {
     }
 }
 
-fn oxMk(v I32) mut OxN& { return OxN(v, null) }
+fn OxN.oxMk(v I32) mut OxN& { return OxN(v, null) }
 
 # reuses every chunk a closed block gave back, so a value wrongly built in one reads back as garbage
 fn oxChurn() I32 {
@@ -8998,9 +8998,9 @@ fn oxChurn() I32 {
 
 fn oxGraft(at mut OxN&) {
     for _ in range 1 {
-        x := oxMk(5)
+        x := OxN.oxMk(5)
         at.next = x
-        x.next = oxMk(6)
+        x.next = OxN.oxMk(6)
     }
 }
 
@@ -9022,7 +9022,7 @@ test "O4a: &x naming a block-scoped local builds there, from an inner block" {
     outer := OxN(1, null)
     for _ in range 1 {
         inner mut OxN& = OxN(7, null)
-        called mut OxN& = oxMk(8)
+        called mut OxN& = OxN.oxMk(8)
         outer.next = inner
         inner.next = called
     }
@@ -9034,7 +9034,7 @@ test "O4a: &x naming a block-scoped local builds there, from an inner block" {
 test "E25 (inferred, QCB): a call's result built where what it is kept in lives" {
     outer := OxN(1, null)
     for _ in range 1 {
-        x := oxMk(4)
+        x := OxN.oxMk(4)
         outer.next = x
     }
     assert oxChurn() > 0
@@ -9057,18 +9057,18 @@ type OE struct(v I32, l mut OE?&, r mut OE?&) {
 
 type OHolder struct(x mut OxN&) { n mut OxN& = x }
 
-fn oNum(v I32) mut OE& { return OE(v, null, null) }
+fn OE.oNum(v I32) mut OE& { return OE(v, null, null) }
 
-fn oTerm(n I32) mut OE& {
-    left mut OE& = oNum(1)
+fn OE.oTerm(n I32) mut OE& {
+    left mut OE& = OE.oNum(1)
     for i in range n {
-        right mut OE& = oNum(I32(i) + 2)
+        right mut OE& = OE.oNum(I32(i) + 2)
         left = OE(0, left, right)
     }
     return left
 }
 
-fn oBuild(v I32) OHolder {
+fn OHolder.oBuild(v I32) OHolder {
     h := OHolder(OxN(v, null))
     h.n.next = OxN(v + 1, null)
     return h
@@ -9080,7 +9080,7 @@ fn (l OxN&) oLast() OxN& {
     return c
 }
 
-fn oFresh() OxN& {
+fn OxN.oFresh() OxN& {
     x mut OxN?& = null
     for i in range 3 { x = OxN(I32(i), x) }
     return x!
@@ -9094,11 +9094,11 @@ fn oSum(e OE?&) I32 {
 }
 
 test "O13/O26: built results and returned locals live where the result goes" {
-    outer := oNum(0)
-    hh := oBuild(0)
+    outer := OE.oNum(0)
+    hh := OHolder.oBuild(0)
     for _ in range 1 {
-        outer.left = oTerm(3)
-        hh = oBuild(7)
+        outer.left = OE.oTerm(3)
+        hh = OHolder.oBuild(7)
     }
     assert oxChurn() > 0
     assert oSum(outer) == 2 + 3 + 4 + 1
@@ -9106,16 +9106,16 @@ test "O13/O26: built results and returned locals live where the result goes" {
     assert hh.n.next!.v == 8
     a := OxN(1, OxN(2, OxN(3, null)))
     assert a.oLast().v == 3
-    assert oFresh().v == 2
+    assert OxN.oFresh().v == 2
     p, q := oPair()
     assert p.v + q.v == 3
 }
 
 test "O18a: a by-value result is built where it lands - a loop body's own block, or straight into an outer value" {
-    h := oBuild(0)
+    h := OHolder.oBuild(0)
     for _ in range 1 {
-        tmp := oBuild(9)            # built in the loop body, reclaimed with it; "h = tmp" would be an error (O25h)
-        h = oBuild(tmp.n.v)         # built where h is
+        tmp := OHolder.oBuild(9)            # built in the loop body, reclaimed with it; "h = tmp" would be an error (O25h)
+        h = OHolder.oBuild(tmp.n.v)         # built where h is
     }
     assert oxChurn() > 0
     assert h.n.v == 9
@@ -9152,9 +9152,9 @@ test "C2d/E25: a cursor over a longer-lived list, and a constructor built where 
 
 # O26/O28: a call's result returned is built in this function's result scope, and ":=" takes that scope, so
 # the local can be built on and returned. A typed local's scope is inferred, and it never adopts.
-fn oChainRet(n I32) mut OxN& {
-    x := oxMk(n)
-    x.next = oxMk(n + 1)
+fn OxN.oChainRet(n I32) mut OxN& {
+    x := OxN.oxMk(n)
+    x.next = OxN.oxMk(n + 1)
     return x
 }
 
@@ -9165,7 +9165,7 @@ fn (l OxN&) oSecond() OxN& {
 
 test "O26/O25a (inferred, QCB): a result built where the result goes, := adopting it, a typed local holding it" {
     out := OxN(0, null)
-    for _ in range 1 { out.next = oChainRet(5) }
+    for _ in range 1 { out.next = OxN.oChainRet(5) }
     assert oxChurn() > 0
     assert out.next!.v == 5
     assert out.next!.next!.v == 6
@@ -9193,7 +9193,7 @@ fn pctCheck(n I32) I32 ? PctError {
 
 PctFull Pct = Pct(250)
 PctLit Pct = 180          # T29d: a literal enters through the constructor, run while compiling - 100
-fn pctLit() Pct { return 150 }
+fn Pct.pctLit() Pct { return 150 }
 
 test "T29d: a primitive type's constructor checks the way in, and arithmetic keeps working" {
     assert I32(Pct(150)) == 100
@@ -9203,7 +9203,7 @@ test "T29d: a primitive type's constructor checks the way in, and arithmetic kee
     assert q + 1 == Pct(41)
     assert I32(PctFull) == 100
     lit Pct = 150
-    assert I32(lit) == 100 and I32(PctLit) == 100 and I32(pctLit()) == 100
+    assert I32(lit) == 100 and I32(PctLit) == 100 and I32(Pct.pctLit()) == 100
     assert (try pctCheck(5) catch default -1) == 5
     assert (try pctCheck(-5) catch default -1) == -1
 }
@@ -9530,7 +9530,7 @@ type CtMixed enum {
     Pair(w I32, h I32)
     Odd(k CtShape, f F32, i CtInner, t Bool)
 }
-fn ctMixed(k I32) CtMixed {
+fn CtMixed.ctMixed(k I32) CtMixed {
     if k == 0 { return CtMixed.Dot }
     if k == 1 { return CtMixed.Real(2.5) }
     if k == 2 { return CtMixed.Pair(-3, 40000) }
@@ -9540,11 +9540,11 @@ type CtMixedBox struct(m CtMixed, x I32) {
     m
     x
 }
-CtMixed0 := ctMixed(0)
-CtMixed1 := ctMixed(1)
-CtMixed2 := ctMixed(2)
-CtMixed3 := ctMixed(3)
-CtMixedIn := CtMixedBox(ctMixed(3), 7)
+CtMixed0 := CtMixed.ctMixed(0)
+CtMixed1 := CtMixed.ctMixed(1)
+CtMixed2 := CtMixed.ctMixed(2)
+CtMixed3 := CtMixed.ctMixed(3)
+CtMixedIn := CtMixedBox(CtMixed.ctMixed(3), 7)
 
 # T29c: written text declares a String with ":=" wherever ":=" is written - a global too
 CtWritten := "n=" $3
@@ -9619,9 +9619,9 @@ test "the evaluator models function values and interfaces, and bakes enums carry
     assert CtFaces.Eq(ctFaces(k))
     assert CtFaces.Eq("ctTwice(n I32) I32 fn&(n I32) I32")
     assert CtSameFn
-    assert CtMixed0 == ctMixed(k) and CtMixed1 == ctMixed(k + 1) and CtMixed2 == ctMixed(k + 2)
-    assert CtMixed3 == ctMixed(k + 3) and CtMixedIn.m == ctMixed(k + 3) and CtMixedIn.x == 7
-    assert ($CtMixed3).Eq($ctMixed(k + 3)) and ($CtMixed1).Eq($ctMixed(k + 1))
+    assert CtMixed0 == CtMixed.ctMixed(k) and CtMixed1 == CtMixed.ctMixed(k + 1) and CtMixed2 == CtMixed.ctMixed(k + 2)
+    assert CtMixed3 == CtMixed.ctMixed(k + 3) and CtMixedIn.m == CtMixed.ctMixed(k + 3) and CtMixedIn.x == 7
+    assert ($CtMixed3).Eq($CtMixed.ctMixed(k + 3)) and ($CtMixed1).Eq($CtMixed.ctMixed(k + 1))
 }
 
 # D16: lambdas - a function written where it is used. Its parameter types, result and errors come from the
@@ -9903,7 +9903,7 @@ type PermNode struct(v I32, next mut PermNode?&) {
 }
 fn permFirst(l PermNode&) PermNode& { return l }               # borrowed read-only
 fn permGrab(l mut PermNode&) mut PermNode& { return l }        # borrowed writable
-fn permFresh(n I32) mut PermNode& { return PermNode(n, null) }    # written writable (T25c)
+fn PermNode.permFresh(n I32) mut PermNode& { return PermNode(n, null) }    # written writable (T25c)
 fn permBump(p mut PermNode&) { p.v++ }
 fn permSum(a Array<PermNode&>&) I32 {                         # reads through read-only elements
     t I32 = 0
@@ -9914,13 +9914,13 @@ PermRO PermNode& = PermNode(1, null)
 
 test "T25b: writable and read-only references, by type" {
     k I32 = ctRuntimeZero
-    n := permFresh(k + 3)              # a result is as writable as it is written
+    n := PermNode.permFresh(k + 3)              # a result is as writable as it is written
     permBump(n)
     assert n.v == 4
     g := permGrab(n)
     g.v = 10
     assert n.v == 10
-    other := permFresh(k + 1)
+    other := PermNode.permFresh(k + 1)
     r := permFirst(n)                  # read-only: may be read and repointed, not written through
     assert r.v == 10
     r = permFirst(other)
@@ -10492,25 +10492,25 @@ type BtHold struct(h F16, b BF16, f F32, d F64) {
 fn bitsAll(one I32) Bool {
     known Bool = F64(1).Bits() == 0x3FF0000000000000 and F32(-2).Bits() == 0xC0000000 and F16(1).Bits() == 0x3C00
     known2 Bool = BF16(1).Bits() == 0x3F80 and F64(-0.0).Bits() == U64(0x8000000000000000) and F16(65504).Bits() == 0x7BFF
-    back Bool = U64(I64(0x4004000000000000) * one).F64FromBits() == 2.5 and U32(0x3E800000).F32FromBits() == 0.25
-    back2 Bool = U16(0x3E00).F16FromBits() == 1.5 and U16(0xBFC0).BF16FromBits() == -1.5 and U32(1).F32FromBits() > 0
-    edges Bool = U16(1).F16FromBits() == 0.000000059604644775390625 and U16(0x7C00).F16FromBits() == 1.0 / 0.0
+    back Bool = F64.FromBits(U64(I64(0x4004000000000000) * one)) == 2.5 and F32.FromBits(U32(0x3E800000)) == 0.25
+    back2 Bool = F16.FromBits(U16(0x3E00)) == 1.5 and BF16.FromBits(U16(0xBFC0)) == -1.5 and F32.FromBits(U32(1)) > 0
+    edges Bool = F16.FromBits(U16(1)) == 0.000000059604644775390625 and F16.FromBits(U16(0x7C00)) == 1.0 / 0.0
     x F64 = 0.1 * F64(one)
-    trip Bool = x.Bits().F64FromBits() == x and F32(x).Bits().F32FromBits() == F32(x) and F16(x).Bits().F16FromBits() == F16(x)
-    q16 := U16(0xFE01 * one).F16FromBits()
-    qb := U16(0xFFC1).BF16FromBits()
-    q32 := U32(0x7FC00123).F32FromBits()
-    q64 := U64(0xFFF8000000000123 * I64(one)).F64FromBits()      # negative, quiet, payload 0x123
+    trip Bool = F64.FromBits(x.Bits()) == x and F32.FromBits(F32(x).Bits()) == F32(x) and F16.FromBits(F16(x).Bits()) == F16(x)
+    q16 := F16.FromBits(U16(0xFE01 * one))
+    qb := BF16.FromBits(U16(0xFFC1))
+    q32 := F32.FromBits(U32(0x7FC00123))
+    q64 := F64.FromBits(U64(0xFFF8000000000123 * I64(one)))      # negative, quiet, payload 0x123
     h := BtHold(q16, qb, q32, q64)
     moved Bool = q16 != q16 and q16.Bits() == 0xFE01 and btPass16(q16).Bits() == 0xFE01 and btPassB(qb).Bits() == 0xFFC1
     held Bool = btPass32(q32).Bits() == 0x7FC00123 and h.h.Bits() == 0xFE01 and h.b.Bits() == 0xFFC1 and h.f.Bits() == 0x7FC00123
     held2 Bool = h.d.Bits() == U64(0xFFF8000000000123) and (q16 if one == 1 else F16(0)).Bits() == 0xFE01
     z F64 = F64(one - 1)
-    text Bool = $q64 == "nan" and $(z / z) == "nan" and $(-(z / z)) == "nan" and $U16(0xFC00).F16FromBits() == "-inf"
+    text Bool = $q64 == "nan" and $(z / z) == "nan" and $(-(z / z)) == "nan" and $F16.FromBits(U16(0xFC00)) == "-inf"
     b := F64(2).Bits()
     n := I32[1, 2, 3].Len()
     named Bool = b == 0x4000000000000000 and n == 3 and BtTemp(1.5).Bits() == 0x3FF8000000000000
-    named2 Bool = BtMask(0x3F800000).F32FromBits() == 1
+    named2 Bool = F32.FromBits(BtMask(0x3F800000)) == 1
     return known and known2 and back and back2 and edges and trip and moved and held and held2 and text and named and named2
 }
 BitsBaked := bitsAll(1)
@@ -10526,10 +10526,10 @@ test "E33: a float's bits, and a float from bits" {
 # reading such a NaN's bits is refused while compiling.
 test "E33a: a signalling NaN keeps its payload, quieted or not" {
     one I32 = WdMutable / 2000000000
-    s16 := U16(0x7C01 * one).F16FromBits()
-    sb := U16(0xFF81 * one).BF16FromBits()
-    s32 := U32(0x7F800001 * one).F32FromBits()
-    s64 := U64(I64(0x7FF0000000000001) * I64(one)).F64FromBits()
+    s16 := F16.FromBits(U16(0x7C01 * one))
+    sb := BF16.FromBits(U16(0xFF81 * one))
+    s32 := F32.FromBits(U32(0x7F800001 * one))
+    s64 := F64.FromBits(U64(I64(0x7FF0000000000001) * I64(one)))
     h := BtHold(s16, sb, s32, s64)
     for b in U16[s16.Bits(), btPass16(s16).Bits(), h.h.Bits()] { assert b == 0x7C01 or b == 0x7E01 }
     for b in U16[sb.Bits(), btPassB(sb).Bits(), h.b.Bits()] { assert b == 0xFF81 or b == 0xFFC1 }
@@ -11124,7 +11124,7 @@ type CgBig struct(seed I64) {
     data := Array<I64>(40)
     tag I64 = seed
 }
-fn cgBigMk(n I64) CgBig {
+fn CgBig.cgBigMk(n I64) CgBig {
     b := CgBig(n)
     for i in range 40 { b.data[i] = n * 100 + i }
     return b
@@ -11148,9 +11148,9 @@ fn cgBigDoubled<T>(b T) T {
     c.tag = b.tag * 2
     return c
 }
-fn cgBigTry(n I64) CgBig ? DfErr {
+fn CgBig.cgBigTry(n I64) CgBig ? DfErr {
     if n < 0 { error DfErr.Bad }
-    return cgBigMk(n)
+    return CgBig.cgBigMk(n)
 }
 fn cgBigWork<T>(b T) T {
     c T = b
@@ -11158,30 +11158,30 @@ fn cgBigWork<T>(b T) T {
     return c
 }
 fn cgBigAll<T>(n I64, z T) I64 {
-    a := cgBigMk(n)
+    a := CgBig.cgBigMk(n)
     s1 := cgBigSum(a)
     q := cgBigBump(a)
     f fn&(b T) I64 = fn(b T) I64 { return cgBigSum(b) }
     m := fn(b T) I64 { return b.tag + a.tag }
-    b := try cgBigTry(3) catch default cgBigMk(0)
-    c := try cgBigTry(-1) catch default cgBigMk(9)
+    b := try CgBig.cgBigTry(3) catch default CgBig.cgBigMk(0)
+    c := try CgBig.cgBigTry(-1) catch default CgBig.cgBigMk(9)
     d := cgBigDoubled(a)
-    h := cgBigMk(8)
+    h := CgBig.cgBigMk(8)
     s2 := cgBigBoth(h, cgBigTouch(h))
-    e CgBig = cgBigMk(1) if n > 0 else cgBigMk(2)
+    e CgBig = CgBig.cgBigMk(1) if n > 0 else CgBig.cgBigMk(2)
     g CgBig = match n {
-        case 2: cgBigMk(4)
-        case _: cgBigMk(5)
+        case 2: CgBig.cgBigMk(4)
+        case _: CgBig.cgBigMk(5)
     }
-    return s1 + q + f(a) + m(cgBigMk(5)) + b.tag + c.tag + d.tag + s2 + a.data[0] + e.tag + g.tag + z.tag
+    return s1 + q + f(a) + m(CgBig.cgBigMk(5)) + b.tag + c.tag + d.tag + s2 + a.data[0] + e.tag + g.tag + z.tag
 }
 CgBigBaked I64 = cgBigAll(2, CgBig(0))
 test "a big struct is passed and returned through memory, with value semantics" {
     assert CgBigBaked == 26792
     assert cgBigAll(I64(WdMutable / 1000000000), CgBig(0)) == 26792
-    r CgBig = cgBigMk(0)
+    r CgBig = CgBig.cgBigMk(0)
     join {
-        spawn r = cgBigWork(cgBigMk(20))
+        spawn r = cgBigWork(CgBig.cgBigMk(20))
     }
     assert r.tag == 21 and r.data[39] == 2039
 }
@@ -11443,15 +11443,15 @@ WlGS mut String& = ""
 WlGB mut WlBox = WlBox(null)
 WlGW mut Array<I64> = Array<I64>(2, 0)
 
-fn wlMkNode(v I64) mut WlNode& { return WlNode(v) }
-fn wlMkBox(v I64) WlBox { return WlBox(WlNode(v)) }
+fn WlNode.wlMkNode(v I64) mut WlNode& { return WlNode(v) }
+fn WlBox.wlMkBox(v I64) WlBox { return WlBox(WlNode(v)) }
 fn wlSetGlobals(n I64) {
     WlGA = WlNode(n)
     WlGS = "v=" $n
-    WlGB = wlMkBox(n + 1)
+    WlGB = WlBox.wlMkBox(n + 1)
     WlGW = Array<I64>(4, n)
 }
-fn wlSetGlobalCall(n I64) { WlGA = wlMkNode(n) }
+fn wlSetGlobalCall(n I64) { WlGA = WlNode.wlMkNode(n) }
 
 type WlCell struct() {
     next mut WlNode?& = null
@@ -11461,7 +11461,7 @@ WlGR mut WlCell& = WlCell()
 WlGE mut Array<mut WlNode?&>& = Array<mut WlNode?&>(2, null)
 fn wlSetInside(n I64) {
     WlGV.next = WlNode(n)               # a field of a global value
-    WlGR.next = wlMkNode(n + 1)         # a field of a global's referent, from a call
+    WlGR.next = WlNode.wlMkNode(n + 1)         # a field of a global's referent, from a call
     WlGE[1] = WlNode(n + 2)             # an element of a global array
 }
 
@@ -11504,7 +11504,7 @@ test "P2/P1g: what a task builds lives where its call bound it, not in the join 
     r WlNode?& = null
     h mut WlHolder& = WlHolder()
     join {
-        spawn r = wlMkNode(wlRun)
+        spawn r = WlNode.wlMkNode(wlRun)
         spawn wlFill(h, wlRun + 1)
     }
     obChurn()
@@ -11514,20 +11514,20 @@ test "P2/P1g: what a task builds lives where its call bound it, not in the join 
 type WlErr error {
     Bad
 }
-fn wlMaybe(x I64) WlNode& ? WlErr {
+fn WlNode.wlMaybe(x I64) WlNode& ? WlErr {
     if x < 0 { error WlErr.Bad }
     return WlNode(x)
 }
-fn wlWrap(x I64) WlNode& { return try wlMaybe(x) catch default WlNode(7) }
+fn WlNode.wlWrap(x I64) WlNode& { return try WlNode.wlMaybe(x) catch default WlNode(7) }
 
 test "R9a: a catch default is built where the call's result lives" {
     a WlNode?& = null
     b WlNode?& = null
     if wlRun > 0 {
-        a = try wlMaybe(wlRun) catch default WlNode(6)
-        b = try wlMaybe(0 - wlRun) catch default WlNode(7)
+        a = try WlNode.wlMaybe(wlRun) catch default WlNode(6)
+        b = try WlNode.wlMaybe(0 - wlRun) catch default WlNode(7)
     }
-    c := wlWrap(0 - wlRun)
+    c := WlNode.wlWrap(0 - wlRun)
     obChurn()
     assert a!.v == 5 and b!.v == 7 and c.v == 7
 }
@@ -11551,7 +11551,7 @@ fn wlPureArr(n I64) Array<I64> {
 fn wlBakeSum(n I64) I64 {
     r := wlPureArr(n)
     t := wlText(n)
-    c := wlWrap(0 - n)
+    c := WlNode.wlWrap(0 - n)
     return r[0] + r.Len() + t.Len() + c.v
 }
 WlBaked := wlBakeSum(3)
@@ -11579,7 +11579,7 @@ sfRun mut I64 = 5
 type SfErr error {
     Bad
 }
-fn sfMk(k I64) mut SfNode& ? SfErr {
+fn SfNode.sfMk(k I64) mut SfNode& ? SfErr {
     if k > -100 { error SfErr.Bad }
     return SfNode(k)
 }
@@ -11587,7 +11587,7 @@ fn sfTwo(k I64) mut SfNode&, mut SfNode& ? SfErr {
     if k > -100 { error SfErr.Bad }
     return SfNode(k), SfNode(k + 1)
 }
-fn sfFallback(a mut SfNode&) mut SfNode& { return try sfMk(1) catch default a }
+fn sfFallback(a mut SfNode&) mut SfNode& { return try SfNode.sfMk(1) catch default a }
 
 test "R9a: a reference default is judged where the call's result lands, not where the try is written" {
     outer mut SfNode& = SfNode(sfRun)
@@ -11596,7 +11596,7 @@ test "R9a: a reference default is judged where the call's result lands, not wher
     b SfNode& = keep
     for i in range 2 {
         scratch := Array<I64>(8, 9)
-        keep = try sfMk(i) catch default outer          # outer lives where keep does
+        keep = try SfNode.sfMk(i) catch default outer          # outer lives where keep does
         a, b = try sfTwo(i) catch default outer, outer
         scratch[0] = 1
     }
@@ -11604,41 +11604,41 @@ test "R9a: a reference default is judged where the call's result lands, not wher
     assert keep.v == 5 and a.v == 5 and b.v == 5 and sfFallback(outer).v == 5
 }
 
-fn sfMkBox(v I64) SfBox& { return SfBox(SfNode(v)) }
+fn SfBox.sfMkBox(v I64) SfBox& { return SfBox(SfNode(v)) }
 fn sfMkNodes(v I64) Array<mut SfNode&>& {
     n mut SfNode& = SfNode(v)
     return Array<mut SfNode&>(2, n)
 }
 fn sfMkArr(v I64) Array<I64>& { return Array<I64>(4, v) }
-fn sfMkPk(v I64) SfPk& { return SfPk.Has(SfNode(v)) }
+fn SfPk.sfMkPk(v I64) SfPk& { return SfPk.Has(SfNode(v)) }
 
 test "O18a: a field, an element, a slice or a payload of a call's built result lands where it is put" {
     f SfNode& = SfNode(0)
     e SfNode& = f
     s Array<I64>& = Array<I64>(1)
-    p SfNode& = (sfMkPk(0) as SfPk.Has)!      # a payload is read-only, so p is
+    p SfNode& = (SfPk.sfMkPk(0) as SfPk.Has)!      # a payload is read-only, so p is
     for _ in range 2 {
-        f = sfMkBox(sfRun + 40).n
+        f = SfBox.sfMkBox(sfRun + 40).n
         e = sfMkNodes(sfRun + 41)[0]
         s = sfMkArr(sfRun + 42)[0:2]
-        p = (sfMkPk(sfRun + 43) as SfPk.Has)!
+        p = (SfPk.sfMkPk(sfRun + 43) as SfPk.Has)!
     }
     obChurn()
     assert f.v == 45 and e.v == 46 and s[1] == 47 and s.Len() == 2 and p.v == 48
 }
 
 fn sfLit(v I64) Array<mut SfNode&>& { return SfNode&[SfNode(v)] }
-fn sfCond(v I64, c Bool) SfBox& { return SfBox(SfNode(v)) if c else SfBox(SfNode(1)) }
-fn sfPayload(v I64) SfPk { return SfPk.Has(SfNode(v)) }
-fn sfMatch(v I64) SfBox& { return match v { case 1: SfBox(SfNode(1))  case _: SfBox(SfNode(v)) } }
+fn SfBox.sfCond(v I64, c Bool) SfBox& { return SfBox(SfNode(v)) if c else SfBox(SfNode(1)) }
+fn SfPk.sfPayload(v I64) SfPk { return SfPk.Has(SfNode(v)) }
+fn SfBox.sfMatch(v I64) SfBox& { return match v { case 1: SfBox(SfNode(1))  case _: SfBox(SfNode(v)) } }
 fn sfFillBoxes(v I64) Array<mut SfBox&>& { return Array<mut SfBox&>(1, SfBox(SfNode(v))) }
 fn sfFillNodes(v I64) Array<mut SfNode&>& { return Array<mut SfNode&>(2, SfNode(v)) }
 
 test "T7/O18a: an array literal or fill built from temporaries, returned, holds them where the array lands" {
     x1 := sfLit(sfRun + 36)
-    x2 := sfCond(sfRun + 37, true)
-    x3 := sfPayload(sfRun + 38)
-    x4 := sfMatch(sfRun + 39)
+    x2 := SfBox.sfCond(sfRun + 37, true)
+    x3 := SfPk.sfPayload(sfRun + 38)
+    x4 := SfBox.sfMatch(sfRun + 39)
     x5 := sfFillBoxes(sfRun + 40)
     x6 := sfFillNodes(sfRun + 41)
     obChurn()
@@ -11789,7 +11789,7 @@ fn sfBakeSum(n I64) I64 {
     a SfNode& = SfNode(0)
     b SfNode& = a
     for i in range 2 { a, b = sfPair(n + i) }
-    f SfNode& = sfMkBox(n).n
+    f SfNode& = SfBox.sfMkBox(n).n
     e := sfMkNodes(n + 1)[0]
     k SfNode& = a if n > 3 else SfNode(1)
     l mut Vec<String&>& = Vec<String&>()
@@ -12024,11 +12024,11 @@ type EvHolder struct(a mut Array<I64>&, b mut Array<I64>&) {
     a
     b
 }
-fn evMkHolder() EvHolder {
+fn EvHolder.evMkHolder() EvHolder {
     arr mut Array<I64>& = Array<I64>(4)
     return EvHolder(arr, arr[1:3])
 }
-EvHold EvHolder = evMkHolder()
+EvHold EvHolder = EvHolder.evMkHolder()
 fn evHeld(i I64) I64 { return EvHold.a[i] }
 fn evPoke() I64 {
     x := EvHold.a
@@ -12049,12 +12049,12 @@ test "K1: a global reaching what a writable reference can change is not a compil
 type EvNode struct(v I64) {
     v
 }
-fn evMk(v I64) EvNode& {
+fn EvNode.evMk(v I64) EvNode& {
     n mut EvNode& = EvNode(v)
     return n
 }
 fn evIdr(n EvNode&) EvNode& { return n }
-EvA EvNode& = evMk(4)
+EvA EvNode& = EvNode.evMk(4)
 EvB EvNode& = EvA
 EvC EvNode& = evIdr(EvA)
 EvSameAB Bool = EvA == EvB
@@ -12207,8 +12207,8 @@ test "T4: an integer converted to F16 overflows to infinity, at -O3 too" {
 # LLVM 18 merged the two bitcasts into one between half and bfloat, then read it as the type the bits came from in the
 # conversion after it: 5 for every value here (fuzz/repro/bf16bitcastfold.olang, .ll)
 fn fzReinterp(x I32) String {
-    hb := F16(x).Bits().BF16FromBits()
-    bh := BF16(x).Bits().F16FromBits()
+    hb := BF16.FromBits(F16(x).Bits())
+    bh := F16.FromBits(BF16(x).Bits())
     return $hb " " $F64(hb) " " $I32(hb) " " $bh " " $F64(bh) " " $I32(bh) " " $(hb + hb) " " $(bh < F16(3))
 }
 FzReinterpBaked String = fzReinterp(5)
@@ -12227,7 +12227,7 @@ fn bfNarrowRight(one U32) Bool {
     want := U16[0x3F80, 0x3F82, 0x3F81, 0x3F81, 0x0000, 0x0002, 0x0080, 0x0000
                 0x7F7F, 0x7F80, 0x7F80, 0xFF80, 0x7F80, 0x8000, 0xBF80, 0x8002]
     for i, u in ins {
-        if BF16((u * one).F32FromBits()).Bits() != want[i] { return false }
+        if BF16(F32.FromBits(u * one)).Bits() != want[i] { return false }
     }
     a := BF16(1.0 * F32(one)) + BF16(0.00390625)    # 1 + 2^-8, exact in F32: a tie, to even
     b := BF16(1.0078125 * F32(one)) + BF16(0.00390625)
@@ -12248,7 +12248,7 @@ test "T4: an F32 narrows to a BF16 inline, rounded once, ties to even" {
     # a NaN stays a NaN - one whose payload is all in the bits narrowing drops included; which NaN is unspecified
     # (E33a), and the code generator keeps the top of the payload and makes it quiet, as __truncsfbf2 did
     for u in U32[0x7F800001, 0xFFC12345, 0x7FA00000, 0x7FFFFFFF] {
-        b := BF16((u * one).F32FromBits())
+        b := BF16(F32.FromBits(u * one))
         assert b != b
     }
 }
@@ -13061,7 +13061,7 @@ test "C2d: a Map of lists reuses a removed key's slot" {
 type sbBox struct(n I64, from Array<I64>& = Array<I64>(0)) {
     Data mut Array<I64>& = Array<I64>(n)
 }
-fn sbCopyOf(b Array<I64>&) sbBox {
+fn sbBox.sbCopyOf(b Array<I64>&) sbBox {
     c := sbBox(b.Len() + 2)
     for i in range b.Len() { c.Data[i] = b[i] }
     return c
@@ -13069,7 +13069,7 @@ fn sbCopyOf(b Array<I64>&) sbBox {
 fn (b sbBox&) size() I64 { return b.Data.Len() }
 fn sbFill(d mut Array<I64>&, v I64) { for i in range d.Len() { d[i] = v } }
 # O17/O25h: a value built in the result scope is borrowed by a read-only method, and its field passed on, where it lives
-fn sbMade(n I64) sbBox {
+fn sbBox.sbMade(n I64) sbBox {
     id := sbBox(n, Array<I64>(0))
     sbFill(id.Data, 3)
     b := sbBox(n + id.size())
@@ -13080,8 +13080,8 @@ fn sbMade(n I64) sbBox {
 fn sbFresh(n I64) I64 {
     id := sbBox(n, Array<I64>(0))
     sbFill(id.Data, 5)
-    c := sbCopyOf(id.Data)
-    m := sbMade(n)
+    c := sbBox.sbCopyOf(id.Data)
+    m := sbBox.sbMade(n)
     sbChurn()
     return c.Data[0] * 100 + c.Data.Len() * 10 + m.Data[m.size() - 1]
 }
@@ -13388,13 +13388,13 @@ fn rsText(z U64) String {
     s := StringBuilder()
     for b in U64[0x1, 0x2, 0x3, 0x7FE0000000000000, 0x0010000000000000, 0x43E0000000000000, 0x0170000000000000
                  0x0060000000000000] {
-        s.Push($((b + z).F64FromBits()) " ")
+        s.Push($(F64.FromBits(b + z)) " ")
     }
     for x in F64[1e23, 0.3, 123456789012345680.0, 5e-5, 1e-4, 1e17, 99999999999999980.0] { s.Push($(x + F64(z)) " ") }
-    for b in U32[0x1, 0x3, 0x00800000, 0x7F000000, 0x7F7FFFFF, 0x0D800000] { s.Push($((b + U32(z)).F32FromBits()) " ") }
+    for b in U32[0x1, 0x3, 0x00800000, 0x7F000000, 0x7F7FFFFF, 0x0D800000] { s.Push($(F32.FromBits(b + U32(z))) " ") }
     for x in F32[16777216, 0.1] { s.Push($(x + F32(z)) " ") }
-    for b in U16[0x1, 0x3, 0x400, 0x7BFF, 0x3C00, 0x3555, 0x200] { s.Push($((b + U16(z)).F16FromBits()) " ") }
-    for b in U16[0x1, 0x80, 0x7F7F, 0x3F80, 0x3E4D, 0x400] { s.Push($((b + U16(z)).BF16FromBits()) " ") }
+    for b in U16[0x1, 0x3, 0x400, 0x7BFF, 0x3C00, 0x3555, 0x200] { s.Push($(F16.FromBits(b + U16(z))) " ") }
+    for b in U16[0x1, 0x80, 0x7F7F, 0x3F80, 0x3E4D, 0x400] { s.Push($(BF16.FromBits(b + U16(z))) " ") }
     return s.ToString()
 }
 RsBaked String = rsText(0)
@@ -13403,7 +13403,7 @@ test "E11a: a float's text, computed directly, is the shortest that reads back -
     assert RsBaked == RsWant, RsBaked
     assert rsText(RsZero) == RsWant, rsText(RsZero)
     assert $F64(5e-324) == "5e-324" and $F32(1e-45) == "1e-45" and $(0.1 + 0.2) == "0.30000000000000004"
-    f, e := try (0x0060000000000000 + RsZero).F64FromBits().ShortestDecimal() catch { unreachable }
+    f, e := try F64.FromBits(0x0060000000000000 + RsZero).ShortestDecimal() catch { unreachable }
     assert $f "e" $e == "7120236347223045e-322"         # the prelude's digits are $'s
 }
 
@@ -13788,7 +13788,7 @@ type KfHuge struct() {
     a := Array<I64>(20000)
     n I64 = 0
 }
-fn kfMkHuge(k I64) KfHuge {
+fn KfHuge.kfMkHuge(k I64) KfHuge {
     h := KfHuge()
     h.a[k] = k
     h.n = k
@@ -13804,7 +13804,7 @@ test "T7d: a fixed-array local beyond a stack frame's size" {
     for i in range 50 {
         a := Array<I64>(100000)
         a[KfX] = i
-        h := kfMkHuge(i)
+        h := KfHuge.kfMkHuge(i)
         c := a
         t = t + c[KfX] + kfHugeSum(h) + (1 if a == c else 0)
     }
@@ -13847,7 +13847,7 @@ type c3Box struct(name String&) {
 fn (b mut c3Box&) fill(n I64) {
     for i in range n { b.items.Push(i * 2) }
 }
-fn c3MakeBox(name String&, n I64) c3Box {
+fn c3Box.c3MakeBox(name String&, n I64) c3Box {
     b := c3Box(name)
     b.fill(n)
     return b
@@ -13880,11 +13880,11 @@ fn c3Texts(n I64) Array<String&> {
     if n > 0 { items = String&["x" $n, "y" $n] }
     return items
 }
-C3Baked I64 = c3Sum(c3MkList(10)) + c3Sum(c3MakeBox("b", 4).items) + c3Sum(c3Destructured(3))
+C3Baked I64 = c3Sum(c3MkList(10)) + c3Sum(c3Box.c3MakeBox("b", 4).items) + c3Sum(c3Destructured(3))
 test "O26a: a returned List, Map, struct, conditional, destructured local and reference result outlive the call" {
     l := c3MkList(sbRun * 100)
     m := c3Table(sbRun * 20)
-    b := c3MakeBox("box" $sbRun, sbRun * 10)
+    b := c3Box.c3MakeBox("box" $sbRun, sbRun * 10)
     p := c3Pick(sbRun * 5, false)
     d := c3Destructured(sbRun * 5)
     r := c3RefResult(sbRun * 5)
@@ -13898,7 +13898,7 @@ test "O26a: a returned List, Map, struct, conditional, destructured local and re
     assert c3Sum(r) == 10
     assert t.Len() == 2 and t[0] == "x1" and t[1] == "y1"
     assert C3Baked == 45 + 12 + 6
-    assert c3Sum(c3MkList(10)) + c3Sum(c3MakeBox("b", 4).items) + c3Sum(c3Destructured(3)) == 63
+    assert c3Sum(c3MkList(10)) + c3Sum(c3Box.c3MakeBox("b", 4).items) + c3Sum(c3Destructured(3)) == 63
 }
 
 # O26a/T7b: text a function returns from a conditional's or a match's value, or a try's default, holding a local made in
@@ -14091,7 +14091,7 @@ fn c3Vowels(t String&) Array<Char> {
     } }
     return out[:k]
 }
-fn c3FromLocal() c3Counts {
+fn c3Counts.c3FromLocal() c3Counts {
     t := String(Array<Char>(3, 'a'))
     return c3Counts(t)
 }
@@ -14105,11 +14105,11 @@ type c3Lent struct() {
     r mut Vec<I64>& = v
     r.Push(5)
 }
-C3HolderLen I64 = c3Holder().items.Len() + c3FromLocal().letters
+C3HolderLen I64 = c3Holder().items.Len() + c3Counts.c3FromLocal().letters
 test "C2d/C2g: a constructor reads an argument it does not keep, and grows what its fields hold" {
     h := c3Holder()
     q := c3Lent()
-    c := c3FromLocal()
+    c := c3Counts.c3FromLocal()
     sbChurn()
     assert h.items[0] == 6 and h.items.Len() == 41 and h.items[40] == 39
     assert q.r.Len() == 1 and q.r[0] == 5
@@ -14398,26 +14398,26 @@ fn sc3Apply(op Char, a I64, b I64) I64 {
         case _: a / b
     }
 }
-fn sc3Parse(src String&) sc3Expr& {
+fn sc3Expr.sc3Parse(src String&) sc3Expr& {
     toks := sc3Lex(src)
     p := sc3Parser(toks)
     return p.expr(1)
 }
-fn sc3ParseTyped(src String&) sc3Expr& {
+fn sc3Expr.sc3ParseTyped(src String&) sc3Expr& {
     toks := sc3Lex(src)
     p := sc3Parser(toks)
     return p.exprTyped(1)
 }
-Sc3PrattBaked I64 = sc3Eval(sc3Parse("1 + 2 * (3 - -4) - 6 / 2"))
+Sc3PrattBaked I64 = sc3Eval(sc3Expr.sc3Parse("1 + 2 * (3 - -4) - 6 / 2"))
 test "O26a: a Pratt parser's reference locals, rebuilt in a loop and returned, outlive the call" {
     src := "1 + 2 * (3 - -4) - " $(sbRun * 6) " / 2"
-    e := sc3Parse(src)
-    f := sc3ParseTyped("2 * 3 + 4 - " $sbRun)
+    e := sc3Expr.sc3Parse(src)
+    f := sc3Expr.sc3ParseTyped("2 * 3 + 4 - " $sbRun)
     sbChurn()
     assert sc3Eval(e) == 12
     assert sc3Eval(f) == 9
     assert Sc3PrattBaked == 12
-    assert sc3Eval(sc3Parse("2 * 3 + 4")) == 10
+    assert sc3Eval(sc3Expr.sc3Parse("2 * 3 + 4")) == 10
 }
 
 # O17: a value local whose references live elsewhere than its storage may be lent to a callee that only reads it, or
@@ -14547,13 +14547,13 @@ type sc3Room struct(name String&) {
 type sc3Game struct() {
     rooms Map<String&, mut sc3Room&>
 }
-fn sc3World() sc3Game {
+fn sc3Game.sc3World() sc3Game {
     g := sc3Game()
     for name in String&["hall", "kitchen"] { g.rooms.Put(name, sc3Room(name)) }
     return g
 }
 test "T25d: static names kept by rooms in a returned game" {
-    g := sc3World()
+    g := sc3Game.sc3World()
     sbChurn()
     assert g.rooms.Len() == 2
     k := try g.rooms.Get("kitchen") catch default null
@@ -14587,7 +14587,7 @@ fn sc3Validate(text String&) Vec<String&> ? sc3Bad {
     l.Push(text)
     return l
 }
-fn sc3BagOf(text String&) sc3Bag ? sc3Bad {
+fn sc3Bag.sc3BagOf(text String&) sc3Bag ? sc3Bad {
     if text.Len() == 0 { error sc3Bad.No }
     b := sc3Bag(text)
     b.items.Push(text)
@@ -14600,13 +14600,13 @@ fn sc3Keep(text String&) Vec<String&> {
 }
 fn sc3Defaults(text String&) I64 {
     n := (try sc3Validate(text) catch default Vec<String&>()).Len()
-    b := try sc3BagOf(text) catch default sc3Bag("none")
+    b := try sc3Bag.sc3BagOf(text) catch default sc3Bag("none")
     return n * 100 + sc3Keep(text).Len() + (1000 if b.label == "none" else 0)
 }
 Sc3DefaultsBaked I64 = sc3Defaults("")
 test "R11: a default List and a default struct of written text, filled afterwards" {
     k := sc3Keep("" if sbRun == 1 else "x")
-    b := try sc3BagOf("" if sbRun == 1 else "x") catch default sc3Bag("none")
+    b := try sc3Bag.sc3BagOf("" if sbRun == 1 else "x") catch default sc3Bag("none")
     sbChurn()
     assert k.Len() == 50 and k[49] == "p49"
     assert b.label == "none" and b.items.Len() == 0
@@ -14735,12 +14735,12 @@ fn (p mut c4Parser&) maybe(b Bool) c4Node& {
     if b { items = c4Node&[p.leaf(), p.leaf()] }
     return c4Node.Many(items)
 }
-fn c4Build(n I64) c4Node {
+fn c4Node.c4Build(n I64) c4Node {
     l := Vec<c4Node&>()
     for i in range n { l.Push(c4Node.Leaf(i)) }
     return c4Node.Many(l.ToArray())
 }
-fn c4BuildRef(n I64) c4Node& {
+fn c4Node.c4BuildRef(n I64) c4Node& {
     l := Vec<c4Node&>()
     for i in range n { l.Push(c4Node.Leaf(i * 2)) }
     return c4Node.Many(l.ToArray())
@@ -14756,14 +14756,14 @@ fn c4Sum(n c4Node&) I64 {
         case _ { return 0 }
     }
 }
-C4Built := c4Build(5)
+C4Built := c4Node.c4Build(5)
 test "O26a: a returned value built from a local List's elements keeps them where the result lives" {
     k I64 = I64(ctRuntimeZero)
     p := c4Parser()
     a := p.many(3 + k)
     b := p.maybe(true)
-    c := c4Build(5 + k)
-    d := c4BuildRef(4 + k)
+    c := c4Node.c4Build(5 + k)
+    d := c4Node.c4BuildRef(4 + k)
     sbChurn()
     assert c4Sum(a) == 6 and c4Sum(b) == 9 and c4Sum(c) == 10 and c4Sum(d) == 12
     assert c4Sum(C4Built) == 10 and c4Sum(C4Built) == c4Sum(c)
@@ -14819,18 +14819,18 @@ type rvShape enum {
     Leaf(v I64)
     Branch(t rvTree)
 }
-fn rvTreeOf(d I64) rvTree {
+fn rvTree.rvTreeOf(d I64) rvTree {
     if d == 0 { return rvTree(0, Array<rvTree>(0)) }
-    return rvTree(d, rvTree[rvTreeOf(d - 1), rvTreeOf(d - 1)])
+    return rvTree(d, rvTree[rvTree.rvTreeOf(d - 1), rvTree.rvTreeOf(d - 1)])
 }
 fn rvRecursiveEq(k I64) I64 {
     s I64 = 0
-    if rvTreeOf(4 + k) == rvTreeOf(4) { s += 1 }
-    if rvTreeOf(4 + k) != rvTreeOf(3) { s += 2 }
+    if rvTree.rvTreeOf(4 + k) == rvTree.rvTreeOf(4) { s += 1 }
+    if rvTree.rvTreeOf(4 + k) != rvTree.rvTreeOf(3) { s += 2 }
     if rvA(1, rvB[rvB(2, rvA[rvA(3, rvB[])])]) == rvA(1 + k, rvB[rvB(2, rvA[rvA(3, rvB[])])]) { s += 4 }
     if rvA(1, rvB[rvB(2, rvA[rvA(3, rvB[])])]) != rvA(1 + k, rvB[rvB(2, rvA[rvA(4, rvB[])])]) { s += 8 }
     if rvG<I64>(1, rvG<I64>[rvG<I64>(2 + k, rvG<I64>[])]) == rvG<I64>(1, rvG<I64>[rvG<I64>(2, rvG<I64>[])]) { s += 16 }
-    if rvShape.Branch(rvTreeOf(2 + k)) == rvShape.Branch(rvTreeOf(2)) { s += 32 }
+    if rvShape.Branch(rvTree.rvTreeOf(2 + k)) == rvShape.Branch(rvTree.rvTreeOf(2)) { s += 32 }
     return s
 }
 RvRecursiveEqBaked := rvRecursiveEq(0)
@@ -15211,7 +15211,7 @@ type o26nSummary struct() {
 }
 fn o26nLine(i I64) String& { return "line " $i " took " $(i % 97) "ms" }
 fn o26nMeasure(t String&) I64 { return t.Len() }
-fn o26nScan(n I64) o26nSummary {
+fn o26nSummary.o26nScan(n I64) o26nSummary {
     s := o26nSummary()
     for i in range n {
         line := o26nLine(i)
@@ -15225,7 +15225,7 @@ fn o26nScan(n I64) o26nSummary {
     return s
 }
 test "O26a: a number computed from a local carries nothing into the result" {
-    s := o26nScan(300)
+    s := o26nSummary.o26nScan(300)
     sbChurn()
     assert s.best == 18 and s.longest.Len() == 3
     assert s.longest[0] == "line 0" and s.longest[1] == "line 1" and s.longest[2] == "line 1"
@@ -15238,20 +15238,20 @@ type o26bNote struct(code I64, note String&) {
     note
 }
 type o26bView struct(xs Array<I64>&) { xs }
-fn o26bCheck(n I64) o26bNote {
+fn o26bNote.o26bCheck(n I64) o26bNote {
     note := ""
     if n > 3 { note = "big: " $n }
     return o26bNote(n, note)
 }
-fn o26bSlice(n I64) o26bView {
+fn o26bView.o26bSlice(n I64) o26bView {
     a := I64[1, 2, 3, 4]
     a[0] = n
     return o26bView(a[0:3])
 }
 test "O26a: a local a returned value borrows lives in the result scope" {
-    a := o26bCheck(2)
-    b := o26bCheck(9)
-    v := o26bSlice(42)
+    a := o26bNote.o26bCheck(2)
+    b := o26bNote.o26bCheck(9)
+    v := o26bView.o26bSlice(42)
     sbChurn()
     assert a.note == "" and b.note == "big: 9" and b.code == 9
     assert v.xs.Len() == 3 and v.xs[0] == 42 and v.xs[2] == 3
@@ -15294,7 +15294,7 @@ fn o26sLine(i I64) String& ? {
     if i < 0 { error Oops.Bad }
     return "k" $(i % 5) " tail " $i
 }
-fn o26sCollect(n I64) o26sCounts {
+fn o26sCounts.o26sCollect(n I64) o26sCounts {
     s := o26sCounts()
     for i in range n {
         line := try o26sLine(i) catch { continue }
@@ -15304,7 +15304,7 @@ fn o26sCollect(n I64) o26sCounts {
     return s
 }
 test "O26a: a receiver a method's result holds flows into the result" {
-    s := o26sCollect(50)
+    s := o26sCounts.o26sCollect(50)
     sbChurn()
     assert s.counts.Len() == 5 and (try s.counts.Get("k3") catch default 0) == 10
 }
@@ -16188,7 +16188,7 @@ test "E11a/T25b: a rendered type writes each inner level's mut, as source writes
 # O18c (study 5, r01): a call's value result holding what its argument refers to, passed straight to another call, lives
 # where that argument does - "bs.Push(box(t))" is "b := box(t); bs.Push(b)" - so made where the list lives it is kept
 type s5Box struct(s String&) { s }
-fn s5MkBox(s String&) s5Box { return s5Box(s) }
+fn s5Box.s5MkBox(s String&) s5Box { return s5Box(s) }
 fn s5One(s String&) Vec<String&> {
     c := Vec<String&>()
     c.Push(s)
@@ -16200,8 +16200,8 @@ fn s5Kept(n I64) I64 {
     outer := "outer"
     for k in range n {
         t String& = $k "-kept-text"
-        bs.Push(s5MkBox(t))
-        bs.Push(s5MkBox(outer))
+        bs.Push(s5Box.s5MkBox(t))
+        bs.Push(s5Box.s5MkBox(outer))
         rows.Push(s5One(t))
         rec mut Vec<String&>& = Vec<String&>()
         rec.Push($k "-in-rec")
@@ -16224,8 +16224,8 @@ fn s5KeptField(n I64) I64 {
     outer := "outer-field"
     for k in range n {
         t String& = $k "-field"
-        ss.Push(s5MkBox(t).s)
-        ss.Push(s5MkBox(outer).s)
+        ss.Push(s5Box.s5MkBox(t).s)
+        ss.Push(s5Box.s5MkBox(outer).s)
         sbChurn()
     }
     sbChurn()
@@ -16491,17 +16491,17 @@ type s5PairT struct(a s5FBox, n I64) {
     a
     n
 }
-fn s5Pairish(s String&) s5PairT { return s5PairT(s5FBox(s), 1) }
+fn s5PairT.s5Pairish(s String&) s5PairT { return s5PairT(s5FBox(s), 1) }
 fn s5Boxes(s String&) Array<s5FBox> { return s5FBox[s5FBox(s)] }
 fn s5Wrap(b s5FBox) s5FBox { return b }
 fn s5Projections(n I64) I64 {
     bs := Vec<s5FBox>()
     t := "outer-text-of-moderate-length"
     for _ in range n {
-        bs.Push(s5Pairish(t).a)
+        bs.Push(s5PairT.s5Pairish(t).a)
         bs.Push(s5Boxes(t)[0])
-        bs.Push(s5Wrap(s5Pairish(t).a))
-        bs.Push(s5Pairish("lit").a)
+        bs.Push(s5Wrap(s5PairT.s5Pairish(t).a))
+        bs.Push(s5PairT.s5Pairish("lit").a)
         sbChurn()
     }
     sbChurn()
@@ -16673,7 +16673,7 @@ type Rv9Keep struct(k I64) {
     r Array<I64>& = Array<I64>(0)
     t Array<Char>& = Array<Char>(0)
 }
-fn rv9Mk(n I64) Rv9Big { return Rv9Big(n) }
+fn Rv9Big.rv9Mk(n I64) Rv9Big { return Rv9Big(n) }
 fn rv9Arr(n I64) Array<I64> { return Array<I64>(4, n + 1) }
 fn rv9Sum(a Array<I64>&) I64 {
     s I64 = 0
@@ -16681,11 +16681,11 @@ fn rv9Sum(a Array<I64>&) I64 {
     return s
 }
 fn rv9Local(n I64) I64 {
-    x := rv9Mk(n).a[0:2]
+    x := Rv9Big.rv9Mk(n).a[0:2]
     y Array<I64>& = Rv9Big(n).a[1:3]
     s I64 = 0
-    for v in rv9Mk(n).a[0:2] { s += v }
-    return x[1] + y[0] + rv9Sum(rv9Mk(n).a[0:2]) + s
+    for v in Rv9Big.rv9Mk(n).a[0:2] { s += v }
+    return x[1] + y[0] + rv9Sum(Rv9Big.rv9Mk(n).a[0:2]) + s
 }
 fn rv9Store(h mut Rv9Keep&, n I64) {
     h.r = rv9Arr(n)[0:2]
@@ -16803,7 +16803,7 @@ type c5Holder struct() {
     ref c5Info?& = null
 }
 fn (h mut c5Holder&) keep(i c5Info&) { h.ref = i }
-fn c5Build(x I64) c5Holder {
+fn c5Holder.c5Build(x I64) c5Holder {
     h := c5Holder()
     i := c5Info(x, x + 1)
     h.keep(i)
@@ -16820,7 +16820,7 @@ fn c5Views(n I64, churn fn&() I64) I64 {
     t I64 = 0
     for _ in range 3 { t += g.measured(0).Len }
     w := g.picked(0)
-    h := c5Build(n * 10)
+    h := c5Holder.c5Build(n * 10)
     a := Array<I64>(10, 3)
     a[n + 1] = 40
     v := c5Window(a, n)
@@ -17161,7 +17161,7 @@ test "P4a: a task with several targets gives each a default" {
 type peNode struct(v I64) {
     v
 }
-fn peMk(n I64) peNode& ? peErr {
+fn peNode.peMk(n I64) peNode& ? peErr {
     if n < 0 { error peErr.Neg }
     return peNode(n * 10)
 }
@@ -17183,11 +17183,11 @@ test "P4a: defaults holding references outlive the join" {
     join {
         spawn a = try peText(5 * sbRun) catch default "none"
         spawn b = try peText(-5 * sbRun) catch default "none"
-        spawn p = try peMk(4 * sbRun) catch default peNode(-1)
-        spawn q = try peMk(-4 * sbRun) catch default peNode(-1)
+        spawn p = try peNode.peMk(4 * sbRun) catch default peNode(-1)
+        spawn q = try peNode.peMk(-4 * sbRun) catch default peNode(-1)
         spawn l1 = try peMany(3 * sbRun) catch default Vec<I64>()
         spawn l2 = try peMany(-3 * sbRun) catch default Vec<I64>()
-        spawn z = try peMk(-sbRun) catch default null
+        spawn z = try peNode.peMk(-sbRun) catch default null
     }
     sbChurn()
     assert a == "n=5" and b == "none" and p!.v == 40 and q!.v == -1
@@ -17473,12 +17473,12 @@ test "C10: a destructor calls a method on a field it reads bare" {
 type b6PNode struct(v I64) {
     v
 }
-fn b6PMake(i I64) mut b6PNode& { return b6PNode(i) }
+fn b6PNode.b6PMake(i I64) mut b6PNode& { return b6PNode(i) }
 fn b6Pars() I64 {
     k I64 = 0
     a mut b6PNode& = b6PNode(0)
-    a, k = b6PMake(2), k + 1
-    a, k = b6PMake(3), k + 1
+    a, k = b6PNode.b6PMake(2), k + 1
+    a, k = b6PNode.b6PMake(3), k + 1
     s String& = ""
     s, k = "t" $k, k + 1
     return a.v * 100 + k * 10 + s.Len()
@@ -17492,9 +17492,9 @@ test "S4c: several parallel assignments in one function" {
     a mut b6PNode& = b6PNode(0)
     l mut Vec<I64>& = Vec<I64>()
     l, k = Vec<I64>(), 1
-    a, k = b6PMake(2), k + 1
-    a, k = b6PMake(3), k + 1
-    a, k = b6PMake(4), k + 1
+    a, k = b6PNode.b6PMake(2), k + 1
+    a, k = b6PNode.b6PMake(3), k + 1
+    a, k = b6PNode.b6PMake(4), k + 1
     s String& = ""
     s, k = "t" $k, k + 1
     assert a.v == 4 and k == 5 and s == "t4" and l.Len() == 0
@@ -17558,7 +17558,7 @@ type b6TaskErr error {
 type b6FBox struct(f fn&(x I64) I64) {
     f
 }
-fn b6GetF(n I64) b6FBox ? b6TaskErr {
+fn b6FBox.b6GetF(n I64) b6FBox ? b6TaskErr {
     if n < 0 { error b6TaskErr.Neg }
     return b6FBox(fn(x I64) I64 { return x * 2 })
 }
@@ -17566,7 +17566,7 @@ fn b6TaskDefault(n I64) I64 {
     b b6FBox = b6FBox(fn(x I64) I64 { return x })
     join {
         k I64 = 41
-        spawn b = try b6GetF(n) catch default b6FBox(fn(x I64) I64 { return x + k })
+        spawn b = try b6FBox.b6GetF(n) catch default b6FBox(fn(x I64) I64 { return x + k })
     }
     return b.f(1)
 }
@@ -17578,7 +17578,7 @@ test "P4a/D16d: a task's default may hold a lambda capturing only values" {
     b b6FBox = b6FBox(fn(x I64) I64 { return x })
     join {
         k I64 = 41
-        spawn b = try b6GetF(-b6Run) catch default b6FBox(fn(x I64) I64 { return x + k })
+        spawn b = try b6FBox.b6GetF(-b6Run) catch default b6FBox(fn(x I64) I64 { return x + k })
     }
     sbChurn()
     assert b.f(1) == 42
@@ -17683,13 +17683,13 @@ fn (b ebBox&) Twice() I64 ? {
     if b.v > 50 { error ebB.Y }
     return b.v * 2
 }
-fn ebMake(v I64) ebBox ? {
+fn ebBox.ebMake(v I64) ebBox ? {
     if v < 0 { error ebA.X }
     return ebBox(v)
 }
 fn ebCovered(v I64) I64 {
-    chain := try ebMake(v).Twice() catch ebA default -1 catch ebB default -2
-    sum := try ebLeaf(v) + ebMake(v + 1).Twice() catch default -3
+    chain := try ebBox.ebMake(v).Twice() catch ebA default -1 catch ebB default -2
+    sum := try ebLeaf(v) + ebBox.ebMake(v + 1).Twice() catch default -3
     return chain * 100 + sum
 }
 EbCoveredBaked := ebCovered(3) * 1000000 + ebCovered(-1) * 1000 + ebCovered(60)
@@ -17750,7 +17750,7 @@ test "E31: a fallible operator" {
 }
 
 # E35: "!" ends the program on what fails as written, needing no "?"; here nothing fails
-fn ebBang(n I64) I64 { return ebBoth(n)! + ebMake(n).Twice()! }
+fn ebBang(n I64) I64 { return ebBoth(n)! + ebBox.ebMake(n).Twice()! }
 EbBangBaked := ebBang(5)
 test "E35: a postfix '!' gives the value where nothing fails" {
     assert ebBang(5) == 15 and EbBangBaked == 15
@@ -17846,14 +17846,14 @@ fn r2Sum(t R2Tree&) I64 {
         return r2Sum(t.l) + r2Sum(t.r)
     }
 }
-fn r2Tree(n I64) R2Tree& {
+fn R2Tree.r2Tree(n I64) R2Tree& {
     if n <= 1 { return R2Tree.Leaf(n) }
-    return R2Tree.Pair(r2Tree(n - 1), R2Tree.Leaf(n))
+    return R2Tree.Pair(R2Tree.r2Tree(n - 1), R2Tree.Leaf(n))
 }
 fn r2Kinds(s R2Shape) String {
     return ("round" if s == R2Shape.Round else "box" if s == R2Shape.Box(_, 2.0) else "other")
 }
-R2Baked F64 = r2Area(R2Shape.Round(R2Disk(1.0))) + r2Area(R2Shape.Box(2.0, 3.0)) + F64(r2Sum(r2Tree(4)))
+R2Baked F64 = r2Area(R2Shape.Round(R2Disk(1.0))) + r2Area(R2Shape.Box(2.0, 3.0)) + F64(r2Sum(R2Tree.r2Tree(4)))
 R2KindsBaked String& = $r2Kinds(R2Shape.Round(R2Disk(2.0))) " " $r2Kinds(R2Shape.Box(1.0, 2.0)) " " $r2Kinds(R2Shape.Box(1.0, 3.0))
 R2ListBaked Bool = I64[1, 2].ToVec() == I64[1, 2].ToVec() and I64[1, 2].ToVec() != I64[1, 3].ToVec()
 R2Run mut I64 = 4
@@ -17870,7 +17870,7 @@ test "E10, E32, S8d: case tests with '==', '_', narrowing in every form, whole p
         case R2Shape.Round(c) { assert c.Area() == 12.0 }
         case _ { unreachable }
     }
-    t := r2Tree(R2Run)
+    t := R2Tree.r2Tree(R2Run)
     assert r2Sum(t) == 10 and t == R2Tree.Pair(_, R2Tree.Leaf(4)) and t != R2Tree.Leaf
     n R2Tree?& = null
     assert n != R2Tree.Leaf and n is null
@@ -17905,15 +17905,15 @@ fn w8Leaf(t R2Tree&) I64 {
     return t.v
 }
 W8Baked := w8Big(R2Shape.Round(R2Disk(2.0))) and not w8Big(R2Shape.Round(R2Disk(1.0))) and w8W(R2Shape.Box(2.0, 1.0)) == 2.0 and
-    w8H(R2Shape.Box(2.0, 5.0)) == 5.0 and w8Depth(r2Tree(5)) == 4 and w8Leaf(R2Tree.Leaf(3)) == 3
+    w8H(R2Shape.Box(2.0, 5.0)) == 5.0 and w8Depth(R2Tree.r2Tree(5)) == 4 and w8Leaf(R2Tree.Leaf(3)) == 3
 test "S8d: case narrowing in and, or, conditionals, after an assert, in and after loops, agreeing while compiling" {
     assert W8Baked
     assert w8Big(R2Shape.Round(R2Disk(2.0))) and not w8Big(R2Shape.Dot)
     assert w8Flat(R2Shape.Dot) and w8Flat(R2Shape.Box(1.0, 0.5)) and not w8Flat(R2Shape.Box(1.0, 2.0))
     assert w8W(R2Shape.Box(3.0, 1.0)) == 3.0 and w8W(R2Shape.Dot) == -1.0
     assert w8H(R2Shape.Box(1.0, 4.0)) == 4.0
-    assert w8Depth(r2Tree(R2Run)) == 3 and w8Depth(R2Tree.Leaf(1)) == 0
-    assert w8Leaf(r2Tree(R2Run)) == 7 and w8Leaf(R2Tree.Leaf(2)) == 2
+    assert w8Depth(R2Tree.r2Tree(R2Run)) == 3 and w8Depth(R2Tree.Leaf(1)) == 0
+    assert w8Leaf(R2Tree.r2Tree(R2Run)) == 7 and w8Leaf(R2Tree.Leaf(2)) == 2
 }
 
 # E10, E10a, E10b: List and Map declare Eq (and Hash) by their contents, so two of them compare by what they hold and a
@@ -18047,40 +18047,40 @@ type UcHolder struct(N I64) {
 }
 fn (h mut UcHolder&) Keep(s String&) { h.L.Push(s) }
 fn ucMk(s String&) String { return $s "-made" }
-fn ucCond(t String&, at I64) UcPair {
+fn UcPair.ucCond(t String&, at I64) UcPair {
     e := UcPair($t, ucMk(t) if at >= 0 else "")
     return e
 }
-fn ucStatic(t String&, at I64) UcPair {
+fn UcPair.ucStatic(t String&, at I64) UcPair {
     e := UcPair($t, "" if at < 0 else ucMk(t))
     return e
 }
-fn ucMatch(t String&, k UcKind) UcPair {
+fn UcPair.ucMatch(t String&, k UcKind) UcPair {
     return UcPair($t, match k {
         case UcKind.New: ucMk(t)
         case UcKind.Empty: ""
     })
 }
-fn ucBoth(t String&, k UcKind) UcPair {
+fn UcPair.ucBoth(t String&, k UcKind) UcPair {
     e := UcPair($t, match k {
         case UcKind.New: ucMk(t)
         case UcKind.Empty: $t "-empty"
     })
     return e
 }
-fn ucNested(t String&, at I64) UcOuter {
+fn UcOuter.ucNested(t String&, at I64) UcOuter {
     w := UcOuter(UcPair($t, ucMk(t) if at >= 0 else ""))
     return w
 }
-fn ucByValue(t String&, at I64) UcVal {
+fn UcVal.ucByValue(t String&, at I64) UcVal {
     v := UcVal(UcPair($t, ucMk(t) if at >= 0 else ""), at)
     return v
 }
-fn ucNull(t String&, at I64) UcOuter {
+fn UcOuter.ucNull(t String&, at I64) UcOuter {
     w := UcOuter(UcPair($t, $t) if at >= 0 else null)
     return w
 }
-fn ucLocal(t String&, at I64) UcPair {
+fn UcPair.ucLocal(t String&, at I64) UcPair {
     b := ucMk(t) if at >= 0 else ""
     return UcPair($t, b)
 }
@@ -18098,16 +18098,16 @@ test "C2d/E28: a conditional or match passed to a constructor lands with the ins
     kept := Vec<UcPair>()
     h := UcHolder(0)
     for i in range UcRun {
-        a := ucCond("x", i)
-        b := ucStatic("x", i)
-        c := ucMatch("x", UcKind.New)
-        d := ucBoth("x", UcKind.Empty)
-        e := ucNested("x", i)
-        f := ucByValue("x", i)
-        g := ucNull("x", i)
-        l := ucLocal("x", i)
+        a := UcPair.ucCond("x", i)
+        b := UcPair.ucStatic("x", i)
+        c := UcPair.ucMatch("x", UcKind.New)
+        d := UcPair.ucBoth("x", UcKind.Empty)
+        e := UcOuter.ucNested("x", i)
+        f := UcVal.ucByValue("x", i)
+        g := UcOuter.ucNull("x", i)
+        l := UcPair.ucLocal("x", i)
         ucKeep(h, "x", i)
-        kept.Push(ucCond("y", i))
+        kept.Push(UcPair.ucCond("y", i))
         lp := ucLoop("z")
         obChurn()
         assert a.B == "x-made" and b.B == "x-made" and c.B == "x-made" and d.B == "x-empty"
@@ -18117,7 +18117,7 @@ test "C2d/E28: a conditional or match passed to a constructor lands with the ins
     obChurn()
     assert kept[UcRun - 1].B == "y-made" and h.L.Len() == UcRun
     # decided while compiling (S18c), as at run time
-    assert ucCond("k", 1).B == "k-made" and ucMatch("k", UcKind.Empty).B == "" and ucNested("k", -1).X!.B == ""
+    assert UcPair.ucCond("k", 1).B == "k-made" and UcPair.ucMatch("k", UcKind.Empty).B == "" and UcOuter.ucNested("k", -1).X!.B == ""
 }
 
 # ---- T30a, T31a, G19: traits that extend, closed traits, intersections ----
@@ -18363,12 +18363,12 @@ fn destroyOrder(k I64) I64 {
     return a.text.Len() + f.id
 }
 
-fn destroyBuilt(i I64) DestroyRes& { return DestroyRes(i) }
+fn DestroyRes.destroyBuilt(i I64) DestroyRes& { return DestroyRes(i) }
 
 fn destroyLooped() I64 {
     t I64 = 0
     for i in range 4 {
-        r := destroyBuilt(i + 1)
+        r := DestroyRes.destroyBuilt(i + 1)
         t += r.text.Len()
         if i % 2 == 0 { r.Destroy() }
     }
@@ -18380,7 +18380,7 @@ type DestroyFail error {
 }
 
 # destroyed on the path that fails, returned on the other: a return or an error after it ends its path
-fn destroyOpen(i I64) DestroyRes& ? DestroyFail {
+fn DestroyRes.destroyOpen(i I64) DestroyRes& ? DestroyFail {
     r := DestroyRes(i)
     if i < 0 {
         r.Destroy()
@@ -18409,10 +18409,10 @@ test "C9b: Destroy() runs the destructor now, and the others still run in revers
 
 test "C9b: a Destroy() before an error, a deferred one, and one after a call that keeps nothing" {
     DestroyLog = 0
-    try destroyOpen(-7 + ctRuntimeZero) catch DestroyFail { }
+    try DestroyRes.destroyOpen(-7 + ctRuntimeZero) catch DestroyFail { }
     assert DestroyLog == -7
     DestroyLog = 0
-    r := destroyOpen(6 + ctRuntimeZero)!
+    r := DestroyRes.destroyOpen(6 + ctRuntimeZero)!
     churnArena()
     assert r.text == "res 6 - its text built where it lives" and DestroyLog == 0
     assert destroyDeferred(8 + ctRuntimeZero) == 37 and DestroyLog == 8
@@ -18425,7 +18425,7 @@ test "C9b: a Destroy() before an error, a deferred one, and one after a call tha
 
 # C9b, S19e: an errdefer's Destroy() runs only where an error leaves its block - there at once, before the caller goes
 # on - so the instance may be returned on the other ways out
-fn destroyOnError(i I64) DestroyRes& ? DestroyFail {
+fn DestroyRes.destroyOnError(i I64) DestroyRes& ? DestroyFail {
     r := DestroyRes(i)
     errdefer r.Destroy()
     churnArena()
@@ -18483,10 +18483,10 @@ LetGoBaked := letGoLoop(4)
 
 test "C9b: an errdefer's Destroy() runs where an error leaves, and a Destroy() between a generator's yields" {
     DestroyLog = 0
-    try destroyOnError(-3 + ctRuntimeZero) catch DestroyFail { }
+    try DestroyRes.destroyOnError(-3 + ctRuntimeZero) catch DestroyFail { }
     assert DestroyLog == -3
     DestroyLog = 0
-    r := destroyOnError(4 + ctRuntimeZero)!
+    r := DestroyRes.destroyOnError(4 + ctRuntimeZero)!
     churnArena()
     assert r.text == "res 4 - its text built where it lives" and DestroyLog == 0
     t I64 = 0

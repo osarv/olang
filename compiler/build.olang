@@ -13,6 +13,7 @@ import "std/os"
 import "std/chan"
 import "diag"
 import "msgs"
+import "diagmsg"
 import "cond"
 import "target"
 import "std/io"
@@ -443,7 +444,7 @@ fn RunAll(cmds Array<Array<String&>&>&, width I64, weights Array<I64>& = Array<I
 
 fn runner(queue mut chan.Chan<I64>&, cmds Array<Array<String&>&>&, status mut Array<I32>&, said mut Array<String&>&) {
     for k in queue {
-        out := try os.Exec(...cmds[k]) catch os.Error {
+        out := try os.Output.Exec(...cmds[k]) catch os.Error {
             status[k] = 127
             said[k] = $"cannot run " $cmds[k][0] "\n"
             continue
@@ -552,7 +553,7 @@ fn (j mut compiles&) claim(path String&) Bool {
 # hour ago - a compile never takes that long, and a process number is reused. A lock not yet holding its number is
 # taken for alive for a minute
 fn holderAlive(lock String&) Bool {
-    info := try os.Stat(lock) catch os.Error { return false }
+    info := try os.FileInfo.Stat(lock) catch os.Error { return false }
     age := time.Wall() - info.ModTime
     if age > 1800 * 1000000000 { return false }
     pid := try os.ReadFile($lock "/pid") catch os.Error { return age < 60 * 1000000000 }
@@ -562,7 +563,7 @@ fn holderAlive(lock String&) Bool {
 }
 
 # an error about a whole file the build writes or reads
-fn fileFatal(path String&, m msgs.Msg, d mut diag.Diagnostics&) {
+fn fileFatal(path String&, m diagmsg.Msg, d mut diag.Diagnostics&) {
     f := d.AddFile(path, "")
     d.Fatal(diag.Where.File(f), m)
 }
@@ -697,17 +698,17 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
     if linkCurrent(bin, stamp, h) { return }
     try os.Remove(stamp) catch os.Error { }
     if c.Clang == "" { error Failed.Unbuilt }
-    out := try os.Exec(...args.ToArray(), capture = false) catch os.Error { error Failed.Reported }
+    out := try os.Output.Exec(...args.ToArray(), capture = false) catch os.Error { error Failed.Reported }
     if out.Status != 0 { error Failed.Reported }
     c.Linked++
-    info := try os.Stat(bin) catch os.Error { return }
+    info := try os.FileInfo.Stat(bin) catch os.Error { return }
     try os.WriteFile(stamp, $h " " $info.Size " " $info.ModTime "\n") catch os.Error { }
 }
 
 # whether bin is the binary a link hashed h made, and nothing has changed it since
 fn linkCurrent(bin String&, stamp String&, h String&) Bool {
     text := try os.ReadFile(stamp) catch os.Error { return false }
-    info := try os.Stat(bin) catch os.Error { return false }
+    info := try os.FileInfo.Stat(bin) catch os.Error { return false }
     return text == $h " " $info.Size " " $info.ModTime "\n"
 }
 
@@ -849,7 +850,7 @@ fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Str
 
 # test FILE with one file: its test binary built and run here (B3a). 0 when every test passed
 fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&, filters Array<String&>& = Array<String&>(0)) I32 {
-    info := try os.Stat(file) catch os.Error { return c.unusable(file, msgs.CannotOpen(), d) }
+    info := try os.FileInfo.Stat(file) catch os.Error { return c.unusable(file, msgs.CannotOpen(), d) }
     if info.Kind == os.FileKind.DIR { return c.unusable(file, msgs.IsDirectory(), d) }
     if info.Kind != os.FileKind.FILE { return c.unusable(file, msgs.NotRegular(), d) }
     prog := Program()
@@ -872,7 +873,7 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     if c.Fuzz != "" { return c.fuzzRun(cmd, prog) }
     # B7a: the words naming the tests to run, read by the test binary's harness
     for w in filters { cmd.Push($w) }
-    out := try os.Exec(...cmd.ToArray(), capture = false) catch os.Error { return 1 }
+    out := try os.Output.Exec(...cmd.ToArray(), capture = false) catch os.Error { return 1 }
     if out.Status > 128 {
         sayln(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
     }
@@ -923,7 +924,7 @@ fn closeness(word String&, text String&) I64 {
 fn (c Config&) fuzzRun(cmd mut Vec<String&>&, prog Program&) I32 {
     if c.FuzzTime > 0 { cmd.Push($"-max_total_time=" $c.FuzzTime) }
     sayln(c.paint("36", $"fuzzing " $c.Fuzz ": failing inputs go to " $prog.FuzzCorpus "/"))
-    out := try os.Exec(...cmd.ToArray(), capture = false) catch os.Error { return 1 }
+    out := try os.Output.Exec(...cmd.ToArray(), capture = false) catch os.Error { return 1 }
     if out.Status == 0 {
         sayln(c.paint("32", $"fuzzing " $c.Fuzz ": nothing failed"))
         return 0
@@ -942,14 +943,14 @@ fn (c Config&) runner(d mut diag.Diagnostics&) Array<String&> ? Failed {
 }
 
 # a listed file that is no file to build: said, and the others still run (B3a)
-fn (c Config&) unusable(file String&, m msgs.Msg, d mut diag.Diagnostics&) I32 {
+fn (c Config&) unusable(file String&, m diagmsg.Msg, d mut diag.Diagnostics&) I32 {
     fileError(file, m, d)
     say(d.Render())
     sayln(c.paint("31", $file ": cannot be built, skipping"))
     return 1
 }
 
-fn fileError(path String&, m msgs.Msg, d mut diag.Diagnostics&) {
+fn fileError(path String&, m diagmsg.Msg, d mut diag.Diagnostics&) {
     f := d.AddFile(path, "")
     d.Error(diag.Where.File(f), m)
 }
@@ -973,7 +974,7 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
         for p in passed { args.Push($p) }
         args.Push($f)
         for w in filters { args.Push($w) }
-        out := try os.Exec(...args.ToArray(), capture = false) catch os.Error {
+        out := try os.Output.Exec(...args.ToArray(), capture = false) catch os.Error {
             sayln(c.paint("31", $f ": lost track of its build, skipping"))
             failed = true
             continue
@@ -1041,7 +1042,7 @@ type Listed struct() {
 # program (emit-asm, emit-llvm), its remarks beside it. Under -quick, where code is final once a module is compiled, each
 # module is compiled again to assembly or IR, with its remarks. What a run made is kept with a stamp of what it was made
 # from (made), so asking again of an unchanged program links nothing. Fails, having reported why, where it does not build
-fn ListingCode<F Frontend>(fe mut F&, c mut Config&, file String&, ir Bool, prog mut Program&, d mut diag.Diagnostics&) Listed ? Failed {
+fn Listed.ListingCode<F Frontend>(fe mut F&, c mut Config&, file String&, ir Bool, prog mut Program&, d mut diag.Diagnostics&) Listed ? Failed {
     try fe.Analyze(file, Kind.Program, c, prog, d)
     if d.Errors() > 0 or prog.Units.Len() == 0 { error Failed.Reported }
     try c.ensureDir(d)
@@ -1113,7 +1114,7 @@ fn (c mut Config&) listLink(objs Vec<String&>&, prog Program&, dir String&, ir B
         return
     }
     try afresh(dir, d)
-    ran := try os.Exec(...args.ToArray()) catch os.Error default os.Output(127, "", "")
+    ran := try os.Output.Exec(...args.ToArray()) catch os.Error default os.Output(127, "", "")
     if ran.Status != 0 {
         sayErr($ran.Stdout $ran.Stderr)
         d.Fatal(diag.Where.Nowhere, msgs.LinkFailed($dir "/code"))
@@ -1333,7 +1334,7 @@ fn (s mut stubFrontend&) Explain(root String&, name String&, cfg mut Config&, d 
 
 # the status the binary at bin ends with
 fn statusOf(bin String&) I32 {
-    out := try os.Exec($bin) catch os.Error { return -1 }
+    out := try os.Output.Exec($bin) catch os.Error { return -1 }
     return out.Status
 }
 
@@ -1347,7 +1348,7 @@ test "a build compiles and links only what changed: modules, -define, the target
     c.Dir = $dir
     c.Clang = $clang
     c.Quiet = true
-    c.Target = try target.Resolve("native", clang, false, d)
+    c.Target = try target.Target.Resolve("native", clang, false, d)
     fe := stubFrontend()
     bin := $dir "/app"
     assert BuildProgram(fe, c, "app.olang", d) == 0, $"first build: " $d.Render()
@@ -1369,7 +1370,7 @@ test "a build compiles and links only what changed: modules, -define, the target
     assert BuildProgram(fe, c, "app.olang", d) == 0
     assert c.Compiled == 7 and c.Linked == 4 and statusOf(bin) == 42
     # another target: every object, the runtime's too
-    c.Target = try target.Resolve("x86-64", clang, false, d)
+    c.Target = try target.Target.Resolve("x86-64", clang, false, d)
     assert BuildProgram(fe, c, "app.olang", d) == 0
     assert c.Compiled == 12 and c.Linked == 5 and statusOf(bin) == 42
     # a binary that is gone, or not the one linked, is linked again from the objects there
@@ -1398,7 +1399,7 @@ test "B3j: an object another directory's build left in the store is taken from i
     one.Clang = $clang
     one.Quiet = true
     one.Store = $dir "/store"
-    one.Target = try target.Resolve("native", clang, false, d)
+    one.Target = try target.Target.Resolve("native", clang, false, d)
     assert BuildProgram(fe, one, "app.olang", d) == 0, $"first build: " $d.Render()
     assert one.Compiled == 5
     kept := try os.ReadDir(one.Store)
@@ -1451,7 +1452,7 @@ test "listed test files run one after another in processes of their own, a signa
     script := ("#!/bin/sh\necho \"$@\" >> " $log "\nfor a in \"$@\"; do case \"$a\" in *.olang) last=$a ;; esac; done\n" $
             "case \"$last\" in *ok*) exit 0 ;; *bad*) exit 1 ;; *none*) exit 3 ;; *kill*) kill -9 $$ ;; esac\n")
     try os.WriteFile(exe, script)
-    chmod := try os.Exec("chmod", "+x", exe)
+    chmod := try os.Output.Exec("chmod", "+x", exe)
     assert chmod.Status == 0
     c := Config()
     assert TestFiles(c, exe, String&["-debug"], String&["a_ok.olang", "b_ok.olang"]) == 0

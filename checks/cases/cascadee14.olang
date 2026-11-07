@@ -17,14 +17,14 @@ fn (r R&) find(name String&) String& ? {
     }
     error Lookup.Missing
 }
-fn make(url String&) R ? {
+fn R.make(url String&) R ? {
     if url.Len() == 0 { error Lookup.Missing }
     hs mut Array<H>& = Array<H>(1)
     hs[0] = H("a", "b")
     return R(hs)
 }
 fn f() String& {
-    r := try make("u", 3) catch { return "none" }
+    r := try R.make("u", 3) catch { return "none" }
     return "<" $(try r.find("a") catch default "-") ">"
 }
 fn main() ? {

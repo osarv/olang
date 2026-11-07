@@ -31,31 +31,31 @@ type Box<T> struct(x T) {
     x
 }
 fn takeR(r Res&) I64 { return r.k }
-fn mkR(k I64) Res& ? E {
+fn Res.mkR(k I64) Res& ? E {
     if k < 0 { error E.X }
     return Res(k)
 }
-fn mkV(k I64) Res& ? E {
+fn Res.mkV(k I64) Res& ? E {
     if k < 0 { error E.X }
     return Res(k)
 }
-fn retCond(c Bool) Res& { return Res(1) if c else Res(2) }
-fn retMatch(k I64) Res& {
+fn Res.retCond(c Bool) Res& { return Res(1) if c else Res(2) }
+fn Res.retMatch(k I64) Res& {
     return match k {
         case 1: Res(1)
         case _: Res(2)
     }
 }
 fn task(r mut Res&) { r.k++ }
-fn mk(k I64) Res& { return Res(k) }
+fn Res.mk(k I64) Res& { return Res(k) }
 fn main() ? {
     c := true
     {
-        a := try mkR(1) catch default Res(2)
+        a := try Res.mkR(1) catch default Res(2)
     }
     try io.Println("0: " $(Made - Gone))
     {
-        a2 := try mkR(-1) catch default Res(3)
+        a2 := try Res.mkR(-1) catch default Res(3)
     }
     try io.Println("1: " $(Made - Gone))
     {
@@ -102,11 +102,11 @@ fn main() ? {
     }
     try io.Println("11: " $(Made - Gone))
     {
-        k := retCond(c)
+        k := Res.retCond(c)
     }
     try io.Println("12: " $(Made - Gone))
     {
-        l := retMatch(1)
+        l := Res.retMatch(1)
     }
     try io.Println("13: " $(Made - Gone))
     {
@@ -139,19 +139,19 @@ fn main() ? {
     try io.Println("18: " $(Made - Gone))
     {
         s Res& = Res(0)
-        join { spawn s = mk(26) }
+        join { spawn s = Res.mk(26) }
     }
     try io.Println("19: " $(Made - Gone))
     {
-        t := id(try mkR(-1) catch default Res(2))
+        t := id(try Res.mkR(-1) catch default Res(2))
     }
     try io.Println("20: " $(Made - Gone))
     {
-        u := (try mkR(-5) catch default Res(9)) if c else Res(10)
+        u := (try Res.mkR(-5) catch default Res(9)) if c else Res(10)
     }
     try io.Println("21: " $(Made - Gone))
     {
-        u2 := try mkV(-5) catch default Res(9)
+        u2 := try Res.mkV(-5) catch default Res(9)
     }
     try io.Println("22: " $(Made - Gone))
     {

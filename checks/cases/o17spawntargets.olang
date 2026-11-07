@@ -11,12 +11,12 @@ type Box struct() {
     tag I64 = 0
 }
 type W struct(b Box) { b }
-fn mkNode() mut Node& {
+fn Node.mkNode() mut Node& {
     n := Node()
     n.v = 42
     return n
 }
-fn two() mut Node&, I64 { return mkNode(), 5 }
+fn two() mut Node&, I64 { return Node.mkNode(), 5 }
 fn grow(b mut Box&) {
     k I64 = 0
     join { spawn b.head.next, k = two() }

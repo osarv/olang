@@ -11,9 +11,9 @@ fn churn() I64 {
     return t
 }
 type Txt extends Array<Char>          # text that may be written (a String never changes, T13a)
-fn asText(v Vec<Char>&) Txt& { return Txt(v.View()) }
+fn Txt.asText(v Vec<Char>&) Txt& { return Txt(v.View()) }
 fn grow(w mut Vec<Char>&) ? io.Error {
-    t := asText(w)                        # a borrowed result; its type is Txt (nominal), not Array<Char>
+    t := Txt.asText(w)                        # a borrowed result; its type is Txt (nominal), not Array<Char>
     for _ in range 1000 { w.Push('b') }   # may grow the Vec, replacing its buffer
     churn()                               # reuse what was freed
     try io.Println($t)

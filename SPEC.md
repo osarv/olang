@@ -553,7 +553,7 @@ signed or unsigned integer type of that many bits - `I1`, `U7`, `I24`, `U63`, `I
 name nothing. The eight of 8, 16, 32 and 64 bits are ordinary members of the family, and every integer rule holds at
 every width: arithmetic wraps modulo 2^w (E6c), `I1`'s values are -1 and 0, the T6b lattice widens one width into
 another (`U7` into `I8`, `I24` into `I65`), a literal adapts where its value fits (T6), `T.Max` and `T.Min` (E36),
-`std/arith` and `x.Narrow<T>()` (E26b), `$` (E11a), the supplied `Hash` (E10b), `Format`, `ParseAs` and E37's bit
+`std/arith` and `x.Narrow<T>()` (E26b), `$` (E11a), the supplied `Hash` (E10b), `Format`, `T.Parse` and E37's bit
 operations, and the `Integer` trait (T35c). A value is held in the bytes its width needs, rounded up to 1, 2, 4, 8 or
 16 (as LLVM lays `iN` out and C a `_BitInt`): a `U12` takes two bytes, an `I24` four, an `I65` sixteen, aligned to its
 size; packing bits closer is a declared layout's work, not a type's. The compiler computes every width exactly, at
@@ -1107,7 +1107,7 @@ answered vacuously forever. The instantiation is where the question has an answe
 
 **G18a (needs).** What a generic's body asks of a type variable - a method of a value of its type, an operator (its
 method: `Less` for a comparison, `Plus` for `+`), an index (`At`, `SetAt`), a slice, a walk, a membership test, a field,
-a call - is the variable's **need**, and a generic requires nothing more of a type than its needs and its written
+a call, a builder through its name (`T.Parse(t)`, D19) - is the variable's **need**, and a generic requires nothing more of a type than its needs and its written
 constraint (G19); no constraint has to be written for a need. A call binding a variable to a type lacking one of its
 needs is a compile-time error **at that call** - the program's own call that began the chain of instances, where the
 type it gave became the variable's binding: `Max needs Less ('<'), and Point has none`, with a note where the body
@@ -1602,8 +1602,9 @@ destructor, no storage:
 
 ```
 trait-body ::= "trait" [ "extends" type-ref { "," type-ref } ] [ "for" type-ref { "," type-ref } ]
-               "{" [ STMNT_END ] { method-sig STMNT_END } "}"
+               "{" [ STMNT_END ] { ( method-sig | builder-sig ) STMNT_END } "}"
 method-sig ::= [ "mut" ] IDEN func-sig
+builder-sig ::= IDEN "." IDEN func-sig                  (T30b)
 ```
 
 `func-sig` is the parameter list, optional return type and optional error list of §3.4, written without a leading
@@ -1633,7 +1634,10 @@ of that name whose
   is one the signature lists (R1b),
 - `noreturn` agrees (D8e): a `noreturn` signature is met only by a `noreturn` method - generic code counts a call to it
   as leaving (D10a) - and a `noreturn` method meets a signature with no result and no errors, which it does all of by
-  never returning (T22).
+  never returning (T22),
+
+and, for every builder the trait requires (T30b), the type its parameter names has that builder (D19), a default
+builder of a trait it satisfies included (M19e).
 
 A private method name (M6) belongs to the module that wrote it, so only a type declared in *that* module, or a
 built-in type it gives the method, can supply it - a type declared elsewhere that inherits the method through
@@ -1645,6 +1649,15 @@ satisfying types, and satisfaction is decided from the two declarations alone, w
 (G19). Implicit satisfaction is what lets a module fit a type it did not declare to a trait of its own: under M19
 only a type's declaring module can write its methods, so a declaration of intent would have to be made there too,
 and could name only traits that module already knows; a built-in type has no declaring module at all.
+
+**T30b (a builder required).** A trait may require a **builder** (D19) of a type its parameters name: `IDEN "."
+IDEN func-sig`, the first name one of the trait's type parameters - `type Parsed<T> trait { T.Parse(t String&) T ?
+ParseError }`. Its application `Parsed<X>` requires `X` to have a builder of that name whose signature agrees, on T31's
+terms for everything but a receiver: parameters, result (the trait's variables substituted), errors held by the
+signature's, `noreturn` alike. Generic code constrained by it calls the builder through the type variable: `fn read<T
+Parsed<T>>(t String&) T ? ParseError { return try T.Parse(t) }`. A builder requirement is no method: a value's method
+does not meet it, nor a builder a method's. A trait requiring a builder has no run-time value (T32): there is no
+instance to dispatch on; writing `any` of it is a compile-time error.
 
 **T30a (extends).** A trait may name traits it **extends**, after `extends`: `type Dwelling trait extends Shape, House
 { Name() String }`. Its methods are its own and every method of the traits it extends, at any depth, so a type
@@ -1866,11 +1879,11 @@ its set of types is not written down, and a method the trait lacks is what to ad
 **D1.** A module (source file) is a sequence of zero or more top-level declarations, in any order:
 
 ```
-top-decl ::= type-decl | import-decl | error-decl | func-decl | var-decl | test-decl
+top-decl ::= type-decl | import-decl | error-decl | func-decl | builder-decl | var-decl | test-decl
            | extern-decl | export-func-decl | top-if | top-assert
 ```
 
-A `type-decl`, a `func-decl` and an `export-func-decl` may be preceded by attributes (§12.8 G39).
+A `type-decl`, a `func-decl`, a `builder-decl` (§3.4.3 D19) and an `export-func-decl` may be preceded by attributes (§12.8 G39).
 
 `import-decl` is specified in §4; `test-decl` in
 §10.4; `extern-decl` and `export-func-decl` in §11 (X1, X10, X12); `top-if`, conditional compilation, in §10.5 (B9). The remaining four are covered below.
@@ -2425,6 +2438,59 @@ local's block - whatever the generator was given: the generator is made there - 
 lives, a constant's text or a global's array in the program's scope - and dropped as that block is left (D18b), its
 storage reclaimed and the scopes it holds closed, their destructors run.
 
+### 3.4.3 Builders
+
+**D19 (builders).** A **builder** is a function of a type rather than of its module: one more way to make a value of
+the type, found under its name.
+
+```
+builder-decl ::= "fn" owner "." IDEN [ fn-type-params ] func-sig block
+owner        ::= IDEN [ type-args ]
+```
+
+```
+fn Color.FromHex(t String&) Color ? ParseError { ... }       # called Color.FromHex("#ff8000")
+fn List<T>.Of(a Array<T>&) List<T> { ... }                    # list.List<I64>.Of(a), list.List.Of(a)
+fn T.Parse<T Integer>(t String&, base Radix = 10) T ? ParseError { ... }   # I64.Parse("12"), U8.Parse(t)
+```
+
+The **owner** before the `.` is the type the builder makes: a type its own module declares - a struct, an enum, a type
+declared over another or an extern type (X10); in the prelude (M19d) also a built-in type or one of the prelude's
+(`F64.FromBits(u)`, `String.FromC(p, max)`); or a type variable constrained by a trait the module declares (the prelude:
+any of its traits), which makes
+the builder a **default** of that trait (M19e): a builder of every type satisfying it, `fn T.Parse<T Integer>(...)`
+being every integer type's `Parse`. A generic owner is written with its arguments, and a name among them that is no
+type introduces a variable, as a receiver's does (G3, QW): `fn List<T>.Of(...)`; one written with types is a builder of
+that instance alone (M21), `fn Box<String&>.Of(...)`. Its own type variables are listed after its name.
+
+A builder gives **a value of its owner**: one result (D8c), the owner itself, a reference to it (`T&`, `T?&`) or an
+instance of it, with any error set; and it takes **no value of its owner** - no parameter's type names the owner
+anywhere, as a value, a reference, an element or a type argument (one that does is a method, D7, or a function of the
+module, D19a). It has no receiver. Anything else declared so is a compile-time error naming what is wrong.
+
+A builder lives in its owner's namespace, beside an enum's cases and what the language reads through a type's name (a
+number type's limits, E36; reflection's members, G32-G41; `From`, T17e; `Here`, E40), and in no set of D2's: two
+builders of one owner and name, a builder named like a case of its enum or like one of those members, are compile-time
+errors. Its first letter makes it public or private (M6): `Color.fromHex` is its module's alone.
+
+It is reached **only through its owner's name**: `Color.FromHex(t)`; `gfx.Color.FromHex(t)` through an import's alias
+(M8); `List<I64>.Of(a)` through an instance, which gives the owner's variables (a bare `list.List.Of(a)` infers them from
+the arguments, as G9 infers a generic call's); `T.Parse(t)` through a type variable in generic code, the builder of the
+type each instance binds it to (§12: a need of the variable, G18a, or a trait's requirement, T30b). A value never
+reaches one: `c.FromHex(t)` is a method call (M19), and a builder is never found by a bare name. A call is in every
+other respect a call of a function (§5.4): defaults, arguments by name, explicit type arguments after its name
+(`Vec<I64>.FromIter<ArrayIter<I64>>(it)`, G12), `try`, `!`, the evaluator (K1). A builder that is no generic one (its
+owner's variables and its own) is a function value where it is written without a call, as a function's name is (T21):
+`texts.Map(Color.FromHex)`. A builder is never inherited through `extends` (T29f): it makes its own owner, which the
+extending type is not.
+
+**D19a (where a function goes).** A function making a value of a type its module declares is that type's builder: a
+top-level function - not a method, an `extern fn` (X1), an `export fn` (X12), a test or `main` - whose one result is a
+struct, an enum or a type declared over another that its module declares (the type itself, a reference to it or an
+instance of it, with any error set) and none of whose parameters' types names that type is a compile-time error naming
+the builder to declare, `fn Color.FromHex(...)`. So a reader finds a type's ways to be made under the type - in its
+documentation, its completion, its reflection - and never among the module's other functions.
+
 ### 3.5 Variable declarations
 
 **D10a.** A function declaring a result type must produce one on **every** path: control may not reach
@@ -2778,14 +2844,18 @@ axes, E12's conversions, and §8's containment check. Whether `x.f()` writes thr
 function's own signature, exactly as it would be at a plain call.
 
 Requiring a declared type's methods to live in its own module is a coherence rule: no module can attach
-one to a foreign type and no two modules can disagree about what `x.f` means. No module is exempt from it.
+one to a foreign type and no two modules can disagree about what `x.f` means. No module is exempt from it. A type's
+builders (D19) are held to the same rule and live in a namespace of their own, keyed by their owner, reached only
+through the owner's name (`Color.FromHex(t)`), never through a value.
 
 **M19d (the prelude).** Every program includes the **prelude**: the files of the standard library's
 `prelude` directory, each an ordinary module, loaded before any other module. Their exported types and
 their exported immutable globals - the **constants of the prelude** - are visible in every module by their bare names,
 with no import, and no module may declare a type, a global, a function, a local or a parameter of the same name
 (D2, D3a). They are the only modules that may declare methods on a built-in type, which is how the built-in
-types get their methods; those methods are visible in every module. The prelude's traits are `Iterator` and `Indexable`
+types get their methods; those methods are visible in every module. So with builders (D19): the prelude declares those
+of the built-in types and of its own - `String.FromC(p, max)` (X15), the floats' `FromBits` (E33), every integer type's
+`Parse` (`I64.Parse(t)`, `U8.Parse(t, 16)`) - visible in every module. The prelude's traits are `Iterator` and `Indexable`
 (T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c); its `TypeKind` enum is what
 reflection's `T.Kind` gives (G32), and its `FieldInfo`, `CaseInfo`, `ParamInfo` and `ResultInfo` are the types of
 reflection's descriptors (G34), made only by the compiler. Its collections are `Vec` (the growable array), `Map`,
@@ -2840,8 +2910,8 @@ any types held as one, named `pair.Pair` once imported, its type arguments infer
 the container to choose over a `Vec` where that matters: an element is never copied by a growth, and no run of them a
 walk holds is ever replaced: `Push(x)` and `PushAll(a)`
 (every element of an array, in order) add at the end, `Len()` counts, `ToArray()` copies the elements into one new
-array in the caller's scope, and `Has(x)` asks by `==` (E29); `list.Of(a)` is the other way, a new `List` of an array's elements
-(`list.Of(Array<I32>(n, v))` for `n` copies of one value), and `list.From(it)` a new `List` of every value an
+array in the caller's scope, and `Has(x)` asks by `==` (E29); `list.List.Of(a)` is the other way, a new `List` of an array's elements
+(`list.List.Of(Array<I32>(n, v))` for `n` copies of one value), and `list.List.From(it)` a new `List` of every value an
 iterator gives. It indexes (E31): `l[i]` is `At(i)`, a copy of
 the element, and `l[i] = x` is `SetAt(i, x)`, which replaces one - both unchecked, as an array index is (E16), with
 `try l.Get(i)` checking `i` against `Len()`, failing with `list.Error.OutOfRange`. Every one of these costs the same whatever
@@ -2874,7 +2944,7 @@ A `List` is a **handle**: its chunks and its counts are one record, made where t
 a `List` value is one reference to that record. So a copy of the value - `b := a`, an assignment, a field, an element,
 a by-value argument - is a second name for the same list: a `Push` through either is seen through both, as through
 two references (and as with a Go map) - its supplied `Copy()` (E31d) shares the record, as a copy of a value holding a
-reference does. `list.From(l.Iter())` builds a new `List` with the same elements in the same order and storage of its
+reference does. `list.List.From(l.Iter())` builds a new `List` with the same elements in the same order and storage of its
 own, built where its result lands; elements are copied as values (each by its own Copy), so a list of references
 gives a list of the same references. `std/list` says nothing of the positions it empties (it uses no `vacate`): a position past a
 `List`'s end may still hold what was there, so early freeing (O8d) takes a `List`'s removals for no let-go, and what they
@@ -2919,7 +2989,7 @@ room for `n` more the same way; `Len()` and `Cap()` count. It has the operations
 names and on the same terms but `RunFrom`, failing with `VecError`'s words (`Empty`, `NotFound`, `OutOfRange`) - `v[i]` and `v[i] = x` (E31,
 unchecked), `Get` (checked), `First`, `Last`, `Pop`, `Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`,
 `Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`, `Join` (of a `Vec` of texts, `Vec<String&>`
-or `Vec<String>`) and `ToArray` - a `List` built by `list.From(l.Iter())` is a `Vec`'s copy; an array's `ToVec()` is a new `Vec` of its elements (`Array<I32>(n, v).ToVec()` for `n` copies of one
+or `Vec<String>`) and `ToArray` - a `List` built by `list.List.From(l.Iter())` is a `Vec`'s copy; an array's `ToVec()` is a new `Vec` of its elements (`Array<I32>(n, v).ToVec()` for `n` copies of one
 value), and an iterator's `ToVec()` one of every value it gives; `Pop`, `Clear` and `Truncate` keep the buffer. `for x in v` walks it by `At` and `Len` (S9d), reading the
 `Vec` each step, so a walk that pushes sees what it pushed; `v.Iter()` is an `Indexable`'s (M19e). `View()` is the one
 way to have its elements as an array - `Array<T>&`, `ViewMut()` writably - a window on the buffer as it is now, good
@@ -3038,13 +3108,14 @@ with a `_` between two digits as L10b allows it; a hexadecimal or binary literal
 as an `I64` (L10a: `"0xFFFFFFFFFFFFFFFF".ParseInt(0)` is `-1`, a `-` before it negating that reading as `-` does,
 E6c) and by `ParseUint` as the `U64` it is. Each fails with `Empty` for no text, `Invalid` for text that is not such a
 number (a sign alone included) and `Overflow` for a number beyond its type's range; the base is a `Radix`, below, refused
-where it is made, so a literal base cannot fail. `t.ParseAs<T>(base Radix = 10) T ? ParseError` reads an integer of
-any type `T` of the `Integer` trait (T4a): as `ParseInt` reads it for a signed `T` and `ParseUint` for an unsigned one,
-failing with `Overflow` outside `T`'s range (`"128".ParseAs<U7>()`) and `Invalid` for a `-` before an unsigned one's
-digits; a type wider than 64 bits takes digits up to its own range (`"340282366920938463463374607431768211455".ParseAs<U128>()`),
+where it is made, so a literal base cannot fail. Every integer type `T` of every width (T4a) has the builder (D19)
+`T.Parse(t String&, base Radix = 10) T ? ParseError`, a default of the `Integer` trait: the integer `t` writes, read as
+`ParseInt` reads it for a signed `T` and `ParseUint` for an unsigned one, failing with `Overflow` outside `T`'s range
+(`U7.Parse("128")`) and `Invalid` for a `-` before an unsigned one's digits; a type wider than 64 bits takes digits up to
+its own range (`U128.Parse("340282366920938463463374607431768211455")`),
 and base `0`'s prefixed literal is read as a program reads one (L10a): a pattern of at most 64 bits as `ParseInt` or
 `ParseUint` reads it, then fitting `T`, and a wider one - up to 128 bits - worth its bits read unsigned, fitting `T`
-where that value does (`"0x1FFFFFFFFFFFFFFFF".ParseAs<U128>(0)` is 2^65 - 1; a `-` before it negates that value). Text has
+where that value does (`U128.Parse("0x1FFFFFFFFFFFFFFFF", 0)` is 2^65 - 1; a `-` before it negates that value). Text has
 `PadStart(width, fill = ' ')` and
 `PadEnd(width, fill = ' ')`: new text `width` characters wide, `fill` repeated before or after it - the text whole,
 never cut, when it is that wide already. Every integer type of every width (T4a) has the same two, padding its decimal
@@ -4346,12 +4417,13 @@ s := Dot(w[0:4], x)           # Dot at length 4 (G29), if it takes its arrays by
 
 **E33.** `x.Bits()` — every float type has a method `Bits()` giving the IEEE 754 bit pattern of `x`'s value as the
 unsigned integer type of the same width: an `F16` or a `BF16` gives a `U16`, an `F32` a `U32`, an `F64` a `U64`. The
-other way is a method of that unsigned type, named for the float it makes: `u.F16FromBits()` and `u.BF16FromBits()`
-on a `U16`, `u.F32FromBits()` on a `U32`, `u.F64FromBits()` on a `U64` give the float whose bit pattern `u` is.
+other way is a builder of the float (D19): `F16.FromBits(u)` and `BF16.FromBits(u)` take a `U16`, `F32.FromBits(u)` a
+`U32`, `F64.FromBits(u)` a `U64` (an argument of another type is an error naming the one to convert to first), each
+giving the float whose bit pattern `u` is.
 
 ```
 F64(1).Bits()                 # 0x3FF0000000000000
-U16(0x3C00).F16FromBits()     # 1.0
+F16.FromBits(0x3C00)          # 1.0
 ```
 
 Both are **total**: every bit pattern is a float of the type — an infinity, a subnormal, a negative zero, a NaN of
@@ -4360,17 +4432,16 @@ same bits; nothing is computed, and nothing is checked. It is a reinterpretation
 no place is read as a type other than the one it holds (T36).
 
 They are supplied by the compiler rather than declared, since nothing else in the language reaches a value's
-representation; in every other respect they are methods (§4.4 M19). A declared type extending a float or an unsigned
-integer type (T29f) has them as it has its base's other methods, and may not declare a method of the same name
-(T29e); a declared type that does not extend its base has none of them. A `FromBits` method on any other number is a
-compile-time error, which names the unsigned type to convert to first.
+representation; in every other respect they are a method (§4.4 M19) and builders (D19). A declared type extending a
+float (T29f) has `Bits` as it has its base's other methods, and may not declare a method of the same name (T29e); a
+declared type that does not extend its base has none, and no declared type has the builders (D19: never inherited).
 
 **E33a (NaN bits).** A NaN keeps its sign and payload while it is only **moved** — assigned, passed, returned, stored
 and read back, chosen by a conditional expression (E28), or converted to its own type — with one exception: a
 **signalling** NaN (one whose payload's top bit, the quiet bit, is clear) may be **quieted** wherever it is moved,
 its quiet bit set and the rest of its bits kept. Whether that happens is unspecified, and may differ between builds of
 one program. A NaN that an **operation** makes — arithmetic, negation, a conversion between float types — has an
-unspecified sign and payload: it is a NaN, and which one is not specified. So `u.F32FromBits().Bits() == u` holds for
+unspecified sign and payload: it is a NaN, and which one is not specified. So `F32.FromBits(u).Bits() == u` holds for
 every `u` except a signalling NaN's pattern, which may come back quiet; and the bits of a NaN computed from other
 values are some NaN's.
 
@@ -6940,7 +7011,7 @@ so in `h := ll[0][0].S`, `e := ll[0][0]` and `h := lll[0][0]` the outer `At`'s r
 are, and so is what is read through it. A **value** result so landed holds what its
 callee's obligations say it holds of its arguments, so it then determines the parameter's scope where its result scope
 landed, as existing storage does: `bs.Push(box(t))`, `box` giving a struct holding `t`, is `b := box(t); bs.Push(b)`, and
-with `t` in a loop's block and `bs` outside it the call is an error, as is `rows.Push(list.From(rec.Iter()))` for a loop's list `rec`
+with `t` in a loop's block and `bs` outside it the call is an error, as is `rows.Push(list.List.From(rec.Iter()))` for a loop's list `rec`
 - never a value taken for a temporary and built where the list lives while what it holds stays in the loop. A field, an
 element or a slice read out of such a result and passed on by value is a copy out of it whose references are where the
 result landed: `bs.Push(pair(t).a)`, `bs.Push(boxes(t)[0])` and `bs.Push(wrap(pair(t).a))` are
@@ -7651,8 +7722,8 @@ decision.
 (S16).
 
 **B7a (a test's target).** A test may name what it is an example of, before its description: `test Twice "doubles"
-{ }` - a function, a type, or `Type.Method`, of its own file (private ones included; for a method, the method's
-declaration is in the file, its type anywhere). A method's type is the receiver its declaration writes: `Array` for an
+{ }` - a function, a type, `Type.Method` or `Type.Builder` (D19), of its own file (private ones included; for a
+method or a builder, its declaration is in the file, its type anywhere). A method's type is the receiver its declaration writes: `Array` for an
 array's method (`test Array.Windows "..."`, `fn (a Array<T>&) Windows`), and for a default over a constrained type
 variable the trait that constrains it (`test Iterator.TakeWhile "..."`, `fn (it mut I&) TakeWhile<I Iterator<T>, T>`).
 A target naming nothing of the file, or something another file
@@ -7862,12 +7933,12 @@ error.
 
 **B11b.** `explain FILE NAME` prints one top-level item of `FILE` as the compiler sees it, once the program `FILE` is the
 root of has checked: nothing is built, and a program with errors reports them instead. `NAME` is a function, a type, an
-error type, a global, or `Type.Method`. A function is printed with its whole signature - its receiver, parameters with
+error type, a global, `Type.Method` or `Type.Builder` (D19). A function is printed with its whole signature - its receiver, parameters with
 their types, results, and its error set, an inferred one (`?` alone, R1a) written out - then its contract's
 conditions (D17), each a line `[cond]` as written, and its scope
 obligations (O10b), each a line `# scopes: a outlives b`, `return` standing for its result scope; a generic one is printed as
 declared, then each instance the program made with its own errors and obligations. A struct is printed with its
-constructor's signature, its fields, its builders (B14), its methods and the traits with no type parameters it meets; an enum with its
+constructor's signature, its fields, its builders (D19, B14), its methods and the traits with no type parameters it meets; an enum with its
 cases, an error type with its words, a trait with its methods; a constructor's contract follows its signature. A
 function's or a type's attributes (G39) are printed as written on the lines above it, a field's and a case's before
 its name (a pun's being its parameter's). A global is printed with its type and, where it is baked
@@ -7961,7 +8032,7 @@ formatter is part of the compiler: `format` lays files out as the compiler that 
 exported top-level items - a function, a type, an error type, a global - in the order the file declares them, each with
 its signature as `explain FILE NAME` gives it (B11b) and its doc comment beneath, indented, a deprecated item (L4b) with `# deprecated` ending its first line (in HTML its listing struck through and the note in bold); a type's fields, cases,
 words and methods each with their own, and each item's examples - the tests of its file naming it (B7a), by
-description, their bodies beneath - after its doc comment. A type has one constructor; the other ways to make a value are ordinary functions of the type's module, and a listing groups them under the type as its *builders* - after its fields, before its methods, under a `builders` line, and no longer among the module's plain functions: an exported top-level function with one result (a function with several is none) that is the type, a reference to it, or an instance of it, where the type is a struct, an enum or a type declared over another and is declared by the function's own module (the errors it may fail with do not matter). A type is listed with its builders only when the type is itself listed. `explain FILE Type` lists them too, one line each, and the language server's hover on a type shows them. With `NAME` (a top-level item or `Type.Method`, exported or not) it prints that
+description, their bodies beneath - after its doc comment. A type has one constructor; the other ways to make a value are its builders (D19), which a listing gives under the type - after its fields, before its methods, under a `builders` line - the exported ones, as declared. A type is listed with its builders only when the type is itself listed. `explain FILE Type` lists them too, one line each, and the language server's hover on a type shows them. With `NAME` (a top-level item, `Type.Method` or `Type.Builder`, exported or not) it prints that
 item alone. The program `FILE` is the root of is checked first; one with errors reports them instead. `doc -html DIR
 [FILE...]` writes the documentation of each `FILE` - of every module of the standard library when none is named - as
 static HTML into the directory `DIR`, one page per module and an index, each example a section that opens to its body; a module that does not check is left out, its
@@ -8393,7 +8464,8 @@ array as a pointer and its `int64_t` length (`const char *t, int64_t t_len` for 
 `t.ToC()`, a method every `String` has (§4 M19d, the prelude): a new `Array<U8>` holding the text's bytes and a NUL
 after them, which an extern's `Array<U8>` parameter hands over as the `char *` (X3); a NUL inside the text ends the
 string C sees there. C's string comes back as a reference to the prelude's extern type `CStr` (X10) - a function
-declared `extern fn getenv(name Array<U8>) CStr?&` - and is read as text with `p.StringFromC(max)`: a new `String`
+declared `extern fn getenv(name Array<U8>) CStr?&` - and is read as text with the prelude's builder
+`String.FromC(p, max)` (D19): a new `String`
 holding its bytes up to the first NUL, or its first `max` where there is none sooner (none for a `max` of 0 or less).
 That `p` names a C string at all, and that what it names is still there, is the foreign function's word, taken as
 its prototype is (X1a). Nothing else reads what a `CStr&` names.
@@ -8726,7 +8798,7 @@ constraint's check (G19).
 call's variables, or a reference to one, that no argument, receiver, constraint or lambda bound, binds that variable to
 its default's type - the default checked as the declaration writes it, before any instance is known: `fn
 f<A Named, B Named>(a A, b B = Idle()) String` called as `f(x)` is `f` at `B = Idle`, the default then given as D8a
-gives it. A variable G9c reaches through such a binding's constraint binds then too (std/chan's `Select(a, b)` binding
+gives it. A variable G9c reaches through such a binding's constraint binds then too (std/chan's `Ready.Select(a, b)` binding
 its third and fourth cases' types to the defaults' never-ready case). A default that does not say a type (`null`) binds
 nothing, and G4 says what is missing.
 
@@ -9126,6 +9198,9 @@ the copies differ as instances do.
 - `T.Methods`: the methods declared with `T` as their receiver that apply to it (M21), in order - not a trait's
   defaults nor a method with a type list of its own - another module's private ones left out; of an instance
   (`Box<I64>.Methods`), with the instance's types.
+- `T.Functions`: the builders declared with `T` as their owner (D19) that apply to it, in order - not a trait's default
+  builders nor a builder with a type list of its own - another module's private ones left out; of an instance
+  (`List<I64>.Functions`), with the instance's types. Calling one is the call `T.Name(args)` is.
 
 Calling a descriptor, `f(args)`, is the call its name would be - defaults, named arguments, errors and all; a
 method's receiver is its first argument, `m(v, args)` being `v.Name(args)`. A function's descriptor also says how it is
@@ -9145,7 +9220,8 @@ fn routes() Map<String&, fn&(r Request&) Response> {
 ```
 
 **G42 (function facts).** What a function may do is read while compiling, through its name - `mix.Allocates`,
-`dsp.mix.Allocates` through an import's alias, `pick<I64>.Allocates` for a generic's instance (a generic named without
+`dsp.mix.Allocates` through an import's alias, `pick<I64>.Allocates` for a generic's instance, `Color.FromHex.Allocates`
+for a builder (D19) and `Box<I64>.Of.Allocates` for an instance of one over a generic owner (a generic named without
 its type arguments has no facts: an error naming that form) - and on a function's descriptor (G41, `f.Allocates` in a
 walk of `m.Functions` or `T.Methods`, each copy its own function's). Each is a `Bool`, true where the function or any
 body it may call - a destructor among them where a body registers one (a constructor of a type with one, a value of one

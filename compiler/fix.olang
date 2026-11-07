@@ -32,8 +32,8 @@ ToolNames Array<String&> = String&["bare_typevars", "perm_mut", "int_literal_i64
     "helper_rename", "null_migrate", "checkerror_rename", "stutter_rename", "checked_migrate", "contracts_migrate"
     "try_migrate", "as_migrate", "errortype_migrate", "list_vec", "link_migrate", "match_migrate", "question_migrate"
     "unused_migrate", "errorcase_rename", "variadic_migrate", "scopes_migrate", "fnref_migrate", "clone_migrate"
-    "textbuild_migrate", "unique_migrate"]
-ToolKinds Array<I64> = I64[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0]
+    "textbuild_migrate", "unique_migrate", "builder_migrate"]
+ToolKinds Array<I64> = I64[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0, 1]
 
 fn driven(kind I64) Bool { return kind >= DrivenOpt }
 
@@ -97,7 +97,7 @@ fn ToolsDir(exe String&) String {
 
 # the modification time of a file (ns), or 0 where it is not there
 fn mtime(path String&) I64 {
-    info := try os.Stat(path) catch os.Error { return 0 }
+    info := try os.FileInfo.Stat(path) catch os.Error { return 0 }
     return info.ModTime
 }
 
@@ -114,7 +114,7 @@ fn newest(dir String&) I64 {
 # what a tool's program is made from, beyond its own source: the compiler that builds it (where it is, its size and when
 # it was made) - a program built by another compiler, or by this one before it was rebuilt, is built again
 fn builtBy(exe String&) String {
-    info := try os.Stat(exe) catch os.Error { return $exe }
+    info := try os.FileInfo.Stat(exe) catch os.Error { return $exe }
     return $exe " " $info.Size " " $info.ModTime "\n"
 }
 
@@ -140,7 +140,7 @@ fn ensureBuilt(exe String&, tools String&, bin String&, name String&, std String
     sources := newest(tools).Max(newest(filepath.Join(tools, "../compiler"))).Max(lib)
     if from == builtBy(exe) and mtime(program) > sources { return }
     try os.Remove(stamp) catch os.Error { }
-    out := try os.Exec(exe, "build", "-output", program, filepath.Join(tools, $name ".olang"), dir = bin) catch os.Error {
+    out := try os.Output.Exec(exe, "build", "-output", program, filepath.Join(tools, $name ".olang"), dir = bin) catch os.Error {
         said.Write("olang: fix: cannot run " $exe "\n")
         error NotBuilt
     }
@@ -192,7 +192,7 @@ fn Files(check Bool, paths Array<String&>&, exe String&, std String&) I32 {
         program := filepath.Join(bin, "tools_" $name)
         for at in range 0, files.Len(), Batch {
             run := files[at:(at + Batch).Min(files.Len())]
-            r := try os.Exec(...arguments(program, ToolKinds[t], exe, std, run)) catch os.Error {
+            r := try os.Output.Exec(...arguments(program, ToolKinds[t], exe, std, run)) catch os.Error {
                 said.Write("olang: fix: cannot run " $program "\n")
                 status = 2
                 break

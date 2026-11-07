@@ -7,12 +7,12 @@ import "std/io"
 type H struct(x String&, n I64) {
     y String& = $n "-new-text-in-x's-scope"
 }
-fn mk(p String&) H { return H(p, 5) }
+fn H.mk(p String&) H { return H(p, 5) }
 fn main() ? {
-    h := mk("outer")
+    h := H.mk("outer")
     for i in range 2 {
         t := $i "-inner-block-text"
-        h = mk(t)
+        h = H.mk(t)
     }
     churn()
     try io.Println(h.y)

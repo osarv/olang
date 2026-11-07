@@ -112,7 +112,7 @@ type badRequest error {
 }
 
 # the request in text, or badRequest.Line when it is not one
-fn parse(text String&) Request ? {
+fn Request.parse(text String&) Request ? {
     end := try text.Find("\r\n\r\n")
     lines := text[:end].Split("\r\n")
     parts := lines[0].Split(" ")
@@ -140,7 +140,7 @@ fn response(code I64, headers Vec<String&>, body String&, withBody Bool) String 
 # answers one connection
 fn serve(fd I32) {
     text := receive(fd)
-    req := try parse(text) catch {
+    req := try Request.parse(text) catch {
         send(fd, response(400, Vec<String&>(), "bad request", true))
         return
     }

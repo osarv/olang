@@ -91,7 +91,7 @@ type notVariable error {
 # the type variable written with its "<" at i, else notVariable.Here. names: the variables of the item when known (then
 # only those are taken) - hasNames says whether it is. A "<" right after a name is one only after a parameter's name
 # ("a<T>"), never after a type's ("Box<T>" is type arguments) and never for a name a type has
-fn occurrenceAt(src String&, mask String&, i I64, hi I64, hasNames Bool, names Map<String&, Bool>&
+fn Occ.occurrenceAt(src String&, mask String&, i I64, hi I64, hasNames Bool, names Map<String&, Bool>&
                 known Map<String&, Bool>&) Occ ? {
     if src[i] != '<' or mask[i] != 'c' or i + 1 >= hi or not srcmask.IsIdStart(src[i + 1]) { error notVariable.Here }
     prev := ' '
@@ -130,7 +130,7 @@ fn occurrences(src String&, mask String&, lo I64, hi I64, hasNames Bool, names M
     out Vec<Occ>
     for i in range lo, hi {
         if src[i] == '<' {
-            o := try occurrenceAt(src, mask, i, hi, hasNames, names, known) catch { continue }
+            o := try Occ.occurrenceAt(src, mask, i, hi, hasNames, names, known) catch { continue }
             out.Push(o)
         }
     }

@@ -29,7 +29,7 @@ type H struct(N I64) {
 fn (h mut H&) Keep(s String&) { h.L.Push(s) }
 fn mk(s String&) String { return $s "-made" }
 
-fn byMatch(t String&, k K) E {
+fn E.byMatch(t String&, k K) E {
     e := E($t, match k {
         case K.One: mk(t)
         case K.Two: ""
@@ -37,29 +37,29 @@ fn byMatch(t String&, k K) E {
     return e
 }
 
-fn allNew(t String&, k K) E {
+fn E.allNew(t String&, k K) E {
     return E($t, match k {
         case K.One: mk(t)
         case K.Two: $t "-two"
     })
 }
 
-fn nested(t String&, at I64) W {
+fn W.nested(t String&, at I64) W {
     w := W(E($t, mk(t) if at >= 0 else ""))
     return w
 }
 
-fn byValue(t String&, at I64) V {
+fn V.byValue(t String&, at I64) V {
     v := V(E($t, mk(t) if at >= 0 else ""), at)
     return v
 }
 
-fn orNull(t String&, at I64) W {
+fn W.orNull(t String&, at I64) W {
     w := W(E($t, $t) if at >= 0 else null)
     return w
 }
 
-fn local(t String&, at I64) E {
+fn E.local(t String&, at I64) E {
     b := mk(t) if at >= 0 else ""
     return E($t, b)
 }
@@ -86,12 +86,12 @@ fn main() {
     n I64 = 0
     h := H(0)
     for i in range 300 {
-        a := byMatch("a", K.One)
-        b := allNew("b", K.Two)
-        c := nested("c", i)
-        d := byValue("d", i)
-        e := orNull("e", i)
-        f := local("f", i)
+        a := E.byMatch("a", K.One)
+        b := E.allNew("b", K.Two)
+        c := W.nested("c", i)
+        d := V.byValue("d", i)
+        e := W.orNull("e", i)
+        f := E.local("f", i)
         keep(h, "g", i)
         l := loop("l")
         churn()

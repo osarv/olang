@@ -9,7 +9,7 @@ type H struct(r String&) {
 type W struct(h H) {
     h
 }
-fn mk(n I64, s String&) W {
+fn W.mk(n I64, s String&) W {
     e := H(s)
     e.r = $n $n
     f := e
@@ -17,6 +17,6 @@ fn mk(n I64, s String&) W {
 }
 fn main() ? {
     q String& = "x"
-    w := mk(12, q)
+    w := W.mk(12, q)
     assert w.h.r.Len() == 4
 }

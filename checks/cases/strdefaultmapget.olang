@@ -16,9 +16,9 @@ fn churn(d I64) I64 {
     if d == 0 { return 0 }
     return churn(d - 1) + a[3] - d
 }
-fn g(v I64) mut Node& { return Node(v) }
+fn Node.g(v I64) mut Node& { return Node(v) }
 fn (b Bag&) Str() String {
-    b.head.next = try b.m.Get(7) catch default g(5)
+    b.head.next = try b.m.Get(7) catch default Node.g(5)
     return "b"
 }
 fn main() ? {

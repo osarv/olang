@@ -268,7 +268,7 @@ test "the ring buffer wraps" {
 test "a wait with a token returns what is there, and gives up when the deadline passes" {
     c mut Chan<I32>& = Chan<I32>(1)
     Init(c)
-    tok := cancel.After(30)
+    tok := cancel.Token.After(30)
     try SendUntil(c, 5, tok)
     assert (try RecvUntil(c, tok) catch default -1) == 5
     start := cancel.NowNs()
@@ -385,10 +385,10 @@ test "a channel of capacity 0 is a rendezvous" {
     }
     assert total.v == 4950 and sentAll.v == 1
     # nobody receives, so a send with a deadline gives up - and its value is withdrawn, not left behind
-    tok := cancel.After(20)
+    tok := cancel.Token.After(20)
     try SendUntil(c, 7, tok) catch cancel.Stopped.TimedOut { }
     assert c.count == 0
-    tok2 := cancel.After(20)
+    tok2 := cancel.Token.After(20)
     assert (try RecvUntil(c, tok2) catch cancel.Stopped.TimedOut default -1 catch default -2) == -1
 }
 
@@ -404,7 +404,7 @@ test "a closed channel gives what it holds, then fails with CLOSED" {
     Close(c)                                 # again: nothing changes
     assert c.IsClosed()
     assert (try Recv(c) catch default -1) == 1
-    tok := cancel.After(1000)
+    tok := cancel.Token.After(1000)
     assert (try RecvUntil(c, tok) catch default -1) == 2
     sum := 0
     for v in c { sum += v }                  # the rest, then the loop ends
@@ -446,7 +446,7 @@ test "Close wakes every task waiting to receive, and RecvUntil sees it before it
     Init(c)
     seen mut sumBox& = sumBox(0)
     got mut sumBox& = sumBox(0)
-    tok := cancel.After(60000)
+    tok := cancel.Token.After(60000)
     start := cancel.NowNs()
     join {
         for _ in range 3 { spawn walkCount(c, seen) }
@@ -556,11 +556,11 @@ fn (s SendOf<T>&) Due() I64 { return 0 }
 # case fails with (Error.Closed: a channel received from or sent on is closed). No case is given priority but by its
 # position; a wait polls - holding no lock - backing off from a spin to a sleep of a millisecond at most, and wakes for
 # the earliest timer it has
-fn Select<A, B, C, D, I Case<A ? E>, J Case<B ? E>, K Case<C ? E>, L Case<D ? E> ? E>(a mut I&, b mut J&
+fn Ready<A, B, C, D>.Select<I Case<A ? E>, J Case<B ? E>, K Case<C ? E>, L Case<D ? E> ? E>(a mut I&, b mut J&
     c mut K& = idle(), d mut L& = idle()) Ready<A, B, C, D> ? E {
     round I64 = 0
     for {
-        r := try pick(a, b, c, d) catch Exhausted {
+        r := try Ready.pick(a, b, c, d) catch Exhausted {
             pause(round, earliest(earliest(a.Due(), b.Due()), earliest(c.Due(), d.Due())))
             round++
             continue
@@ -570,7 +570,7 @@ fn Select<A, B, C, D, I Case<A ? E>, J Case<B ? E>, K Case<C ? E>, L Case<D ? E>
 }
 
 # the first case ready, in order, taken; Exhausted where none is
-fn pick<A, B, C, D, I Case<A ? E>, J Case<B ? E>, K Case<C ? E>, L Case<D ? E> ? E>(a mut I&, b mut J&, c mut K&
+fn Ready<A, B, C, D>.pick<I Case<A ? E>, J Case<B ? E>, K Case<C ? E>, L Case<D ? E> ? E>(a mut I&, b mut J&, c mut K&
     d mut L&) Ready<A, B, C, D> ? E, Exhausted {
     x := try a.TryNow() catch Exhausted {
         y := try b.TryNow() catch Exhausted {
@@ -621,34 +621,34 @@ fn fill(c mut Chan<I64>&, n I64) {
     for i in range n: try Send(c, i) catch Error { }
 }
 
-test Select "takes the first case ready, in order" {
+test Ready.Select "takes the first case ready, in order" {
     a := Chan<I64>(4)
     Init(a)
     b := Chan<String&>(4)
     Init(b)
     try Send(b, "hi")
-    match try Select(a, b) {
+    match try Ready.Select(a, b) {
         case Ready.First(_) { unreachable }
         case Ready.Second(s) { assert s == "hi" }
     }
     try Send(a, 7)
     try Send(b, "later")
     # both ready: the first given wins
-    match try Select(a, b) {
+    match try Ready.Select(a, b) {
         case Ready.First(v) { assert v == 7 }
         case Ready.Second(_) { unreachable }
     }
     join { spawn fill(a, 3) }
     got I64 = 0
     for _ in range 4 {
-        match try Select(a, b) {
+        match try Ready.Select(a, b) {
             case Ready.First(v) { got += v }
             case Ready.Second(s) { assert s == "later" }
         }
     }
     assert got == 3
     try Send(a, 5)
-    r := try Select(a, b)
+    r := try Ready.Select(a, b)
     assert r == Ready.First(5) and $r == "Ready.First(5)"
 }
 
@@ -656,13 +656,13 @@ fn take(c mut Chan<I64>&, got mut sumBox&) {
     got.v = I32(try Recv(c) catch Error default -1)
 }
 
-test Select "sends through SendOf, a rendezvous handing its value to a waiting receiver" {
+test Ready.Select "sends through SendOf, a rendezvous handing its value to a waiting receiver" {
     full := Chan<I64>(1)
     Init(full)
     try Send(full, 1)
     room := Chan<I64>(1)
     Init(room)
-    match try Select(SendOf(full, 2), SendOf(room, 3)) {
+    match try Ready.Select(SendOf(full, 2), SendOf(room, 3)) {
         case Ready.First(_) { unreachable }
         case Ready.Second(_) { assert (try Recv(room)) == 3 }
     }
@@ -673,7 +673,7 @@ test Select "sends through SendOf, a rendezvous handing its value to a waiting r
     more := SendOf(full, 4)
     join {
         spawn take(r, got)
-        match try Select(hand, more) {
+        match try Ready.Select(hand, more) {
             case Ready.First(_) { }
             case Ready.Second(_) { unreachable }
         }
@@ -681,29 +681,29 @@ test Select "sends through SendOf, a rendezvous handing its value to a waiting r
     assert got.v == 9
 }
 
-test Select "times out on time.After, on the virtual clock in no time" {
+test Ready.Select "times out on time.After, on the virtual clock in no time" {
     c mut Chan<I64>& = Chan<I64>(1)
     Init(c)
     time.Virtual(fn() {
         start := time.Now()
-        match try Select(c, time.After(time.Seconds(30))) catch Error { unreachable } {
+        match try Ready.Select(c, time.Timer.After(time.Duration.Seconds(30))) catch Error { unreachable } {
             case Ready.First(_) { unreachable }
             case Ready.Second(at) { assert at >= start + 30000000000 }
         }
     })
     real := time.Now()
-    match try Select(c, time.After(time.Millis(5))) {
+    match try Ready.Select(c, time.Timer.After(time.Duration.Millis(5))) {
         case Ready.First(_) { unreachable }
         case Ready.Second(at) { assert at - real >= 5000000 }
     }
 }
 
-test Select "fails with CLOSED once a channel it receives from is closed and drained" {
+test Ready.Select "fails with CLOSED once a channel it receives from is closed and drained" {
     a := Chan<I64>(1)
     Init(a)
     b := Chan<I64>(1)
     Init(b)
     Close(a)
-    try Select(a, b) catch Error.Closed { return }
+    try Ready.Select(a, b) catch Error.Closed { return }
     unreachable
 }

@@ -52,7 +52,7 @@ fn RealOf(path String&) String {
 
 # the program root is the root of, checked as "olang test" checks it (its tests too) - with each file of overlay (by
 # real path) read from there instead of from disk - and, where held is true, held to section 8 (Hold)
-fn Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&, overlay Map<String&, String&>&, held Bool = true) mut Analysis& {
+fn Analysis.Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&, overlay Map<String&, String&>&, held Bool = true) mut Analysis& {
     f mut fetch.Fetcher& = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, true)
     nm mut source.Names& = source.Names()
     l mut load.Loader& = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
@@ -186,7 +186,7 @@ fn (a Analysis&) target(mi I64, w source.Span) Target {
     for e in r.Tables[mi].Entries {
         if e.Sp.Start == w.Start and e.Kind != names.What.Import {
             f := c!.P.FnNamed(mi, e.Name)
-            if e.Kind == names.What.Func and f >= 0 and c!.P.FnDecl(f).Recv is not null { break }
+            if e.Kind == names.What.Func and (f < 0 or c!.P.FnDecl(f).Recv is not null) { break }   # a method's, a builder's
             return Target.Item(mi, $name)
         }
     }
@@ -197,6 +197,10 @@ fn (a Analysis&) target(mi I64, w source.Span) Target {
     for f in range c!.P.FnCount() {
         if c!.P.FnModule(f) != mi { continue }
         decl := c!.P.FnDecl(f)
+        if decl.IsBuilder() and c!.P.L.Names.Text(decl.Member) == name and I64(decl.Sp.Start) <= I64(w.Start) and
+           I64(w.Start) < I64(decl.Sp.End) and (decl.Body.Len() == 0 or I64(w.Start) < I64(decl.Body[0].Span().Start)) {
+            return Target.Method(f)   # D19: a builder's name where it is declared
+        }
         if decl.Recv is null or c!.P.L.Names.Text(decl.Name) != name { continue }
         if I64(decl.Sp.Start) <= I64(w.Start) and I64(w.Start) < I64(decl.Sp.End) and
            (decl.Body.Len() == 0 or I64(w.Start) < I64(decl.Body[0].Span().Start)) {
@@ -239,7 +243,9 @@ fn (a Analysis&) describe(tg Target) Found ? Nothing {
         case Target.Method(f) {
             mi := c!.P.FnModule(f)
             at := I64(c!.P.FnDecl(f).Sp.Start)
-            ex := exampleText(c!, mi, $doc.ReceiverName(c!, f) "." $c!.P.L.Names.Text(c!.P.FnDecl(f).Name))
+            fd := c!.P.FnDecl(f)
+            tgt := $ast.OwnerTarget(fd, c!.P.L.Names) "." $c!.P.L.Names.Text(fd.Member) if fd.IsBuilder() else $doc.ReceiverName(c!, f) "." $c!.P.L.Names.Text(fd.Name)
+            ex := exampleText(c!, mi, tgt)
             return Found($hover(explain.FnText(c!, a.Sc!, f), doc.Above(a.TextOf(mi), at)) $ex, $a.L.Mods[mi].Real, at)
         }
         case Target.Field(t, index) {
@@ -505,6 +511,11 @@ fn (f mut finder&) bodyCallee(sp source.Span, of typed.BodyOf) {
     match of {
         case typed.BodyOf.Fn(inst) {
             fi := f.c.P.InstanceFn(inst)
+            if f.c.P.FnDecl(fi).IsBuilder() {
+                # D19: a builder called, by the name after its owner's "."
+                if f.c.P.L.Names.Text(f.c.P.FnDecl(fi).Member) == f.name { f.take(sp, Target.Method(fi)) }
+                return
+            }
             if f.c.P.L.Names.Text(f.c.P.FnDecl(fi).Name) != f.name { return }
             if f.c.P.FnDecl(fi).Recv is not null { f.take(sp, Target.Method(fi)) } else { f.take(sp, Target.Item(f.c.P.FnModule(fi), $f.name)) }
         }
@@ -663,7 +674,13 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
             s := nameIn(t, I64(f.Sp.Start), name)
             detail := ""
             if f.Recv is not null and f.Recv!.Ty is not null { detail = $t[I64(f.Recv!.Ty!.Span().Start):I64(f.Recv!.Ty!.Span().End)] }
-            w.leaf(b, name, KindMethod if f.Recv is not null else KindFunction, I64(f.Sp.Start), I64(f.Sp.End), s, s + name.Len(), detail)
+            if f.IsBuilder() {
+                # D19: a builder, named after its owner's "."; its owner the detail, as a method's receiver is
+                detail = $t[I64(f.Owner!.Span().Start):I64(f.Owner!.Span().End)]
+                name = nm.Text(f.Member)
+                s = nameIn(t, I64(f.Owner!.Span().End), name)
+            }
+            w.leaf(b, name, KindMethod if f.Recv is not null or f.IsBuilder() else KindFunction, I64(f.Sp.Start), I64(f.Sp.End), s, s + name.Len(), detail)
         }
         case ast.Decl.Type(sp, td) {
             name := nm.Text(td.Name)
@@ -813,6 +830,17 @@ fn (a Analysis&) Members(it mut Items&, real String&, dot I64) {
         if ref.Kind == names.What.None { ref = c!.P.R.Member(file, w.End) }
         if ref.Kind == names.What.Import {
             a.moduleNames(it, ref.Module, false)
+            return
+        }
+        if ref.Kind == names.What.Type and ref.Index >= 0 {
+            # D19: a type's builders, after its name
+            self := c!.P.SelfType(c!.P.DeclFor(ref.Module, ref.Index))
+            for f in c!.P.BuildersOf(self) {
+                decl := c!.P.FnDecl(f)
+                bn := c!.P.L.Names.Text(decl.Member)
+                if not doc.Exported(bn) and c!.P.FnModule(f) != mi { continue }
+                it.AddDep(bn, CompMethod, firstLine(explain.FnText(c!, a.Sc!, f)), a.deprecatedAt(c!.P.FnModule(f), I64(decl.Sp.Start), false))
+            }
             return
         }
     }
@@ -1137,7 +1165,7 @@ fn Format(path String&, text String&) String ? fmt.Unparsable {
 # status 1 where the program does not check
 fn CapsMode(file String&, cfg mut build.Config&) I32 {
     d mut diag.Diagnostics& = diag.Diagnostics(diag.ColorWanted())
-    a := Analyze(file, cfg, d, Map<String&, String&>(), false)
+    a := Analysis.Analyze(file, cfg, d, Map<String&, String&>(), false)
     if d.Errors() > 0 or a.C is null {
         say(d.Render())
         say(d.Summary())
@@ -1155,7 +1183,7 @@ fn CapsMode(file String&, cfg mut build.Config&) I32 {
 fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Config&) I32 {
     if html == "" {
         d mut diag.Diagnostics& = diag.Diagnostics(diag.ColorWanted())
-        a := Analyze(files[0], cfg, d, Map<String&, String&>())
+        a := Analysis.Analyze(files[0], cfg, d, Map<String&, String&>())
         if d.Errors() > 0 or a.C is null or a.Sc is null {
             say(d.Render())
             say(d.Summary())
@@ -1170,7 +1198,7 @@ fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Conf
             say(text)
             return 0
         }
-        say(doc.Of(a.C!, a.Sc!, a.X!, a.L.Root, false).Text())
+        say(doc.Module.Of(a.C!, a.Sc!, a.X!, a.L.Root, false).Text())
         return 0
     }
     roots Vec<String&>
@@ -1205,12 +1233,12 @@ fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Conf
 # written (its diagnostics said)
 fn docPage(root String&, cfg mut build.Config&, html String&) I32 {
     d mut diag.Diagnostics& = diag.Diagnostics(diag.ColorWanted())
-    a := Analyze(root, cfg, d, Map<String&, String&>())
+    a := Analysis.Analyze(root, cfg, d, Map<String&, String&>())
     if d.Errors() > 0 or a.C is null or a.Sc is null {
         say(d.Render())
         return 1
     }
-    md := doc.Of(a.C!, a.Sc!, a.X!, a.L.Root, false)
+    md := doc.Module.Of(a.C!, a.Sc!, a.X!, a.L.Root, false)
     path := filepath.Join(html, doc.PageName(md.Identity))
     try os.WriteFile(path, md.Html()) catch os.Error {
         say($"olang: " $path ": cannot be written\n")

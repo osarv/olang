@@ -1,0 +1,4 @@
+# check: fail error[D19]: 'Dark' is already a case of Shade - name the builder otherwise
+type Shade enum { Light, Dark }
+fn Shade.Dark() Shade { return Shade.Light }
+fn main() { }

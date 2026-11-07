@@ -26,7 +26,7 @@ fn spin(n I64, k I64) I64 ? E {
     if t < 0 { return 0 }
     return try sq(n)
 }
-fn mk(n I64) Node& ? E {
+fn Node.mk(n I64) Node& ? E {
     if n < 0 { error E.Neg }
     return Node(n * 10)
 }
@@ -137,8 +137,8 @@ fn main() ? E, io.Error {
     join {
         spawn a = try text(5 * run) catch default "none"
         spawn b = try text(-5 * run) catch default "none"
-        spawn p = try mk(4 * run) catch default Node(-1)
-        spawn q = try mk(-4 * run) catch default Node(-1)
+        spawn p = try Node.mk(4 * run) catch default Node(-1)
+        spawn q = try Node.mk(-4 * run) catch default Node(-1)
         spawn l1 = try many(3 * run) catch default Vec<I64>()
         spawn l2 = try many(-3 * run) catch default Vec<I64>()
         spawn d1, d2 = try divmod(17, 5 * run) catch default -1, -2

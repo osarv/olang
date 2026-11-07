@@ -71,6 +71,6 @@ type Big enum {
     C64
 }
 fn main() {
-    s := bitset.Empty<Big>()
+    s := bitset.BitSet<Big>.Empty()
     assert s.Len() == 0
 }

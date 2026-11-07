@@ -7,7 +7,7 @@
 import "std/io"
 type Ix Array<I64>
 fn view(v Vec<I64>&) Array<I64>& { return v.View() }
-fn asIx(v Vec<I64>&) Ix& { return Ix(v.View()) }
+fn Ix.asIx(v Vec<I64>&) Ix& { return Ix(v.View()) }
 fn asText(v Vec<Char>&) String& { return String(v.View()) }
 fn first(a Array<I64>&) Array<I64>& { return a[:1] }
 type CB struct() {
@@ -19,7 +19,7 @@ fn main() ? {
     v.Push(10)
     v.Push(20)
     d := view(v)
-    x := asIx(v)
+    x := Ix.asIx(v)
     assert d[1] == 20 and x[0] == 10
     v.Push(30)
     t := Vec<Char>()

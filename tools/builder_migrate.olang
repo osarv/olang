@@ -1,0 +1,869 @@
+# builder_migrate - D19, D19a (QBT, the user's decision 2026-10-27, built 2026-11-07): a function making a value of a
+# type its module declares, and taking none of it, is that type's builder - declared "fn Color.FromHex(...)" and
+# called "Color.FromHex(t)", through an import "gfx.Color.FromHex(t)". This moves every such function onto its type:
+#
+#   - its declaration: "fn FromHex(t String&) Color" becomes "fn Color.FromHex(t String&) Color"; a generic type's
+#     builder takes the result's type as written, "fn Of<T>(a Array<T>&) List<T>" becoming "fn List<T>.Of(a
+#     Array<T>&) List<T>" - a type variable the owner names, with no constraint, leaving the function's own list;
+#   - every use in its module, "FromHex(t)" becoming "Color.FromHex(t)" (a generic type's bare, "List.Of(a)", its
+#     variables inferred; one given type arguments, "Of<I64>(a)", its instance, "List<I64>.Of(a)"), a function value
+#     and a test's target ("test Color.FromHex") alike;
+#   - every use through an import's alias in the files given, "gfx.FromHex(t)" becoming "gfx.Color.FromHex(t)" - a
+#     builder already declared so (the standard library's, after its own migration) included;
+#   - the prelude's methods that became builders: "u.F64FromBits()" (and F32, F16, BF16) becomes "F64.FromBits(u)",
+#     "p.StringFromC(n)" "String.FromC(p, n)", and "t.ParseAs<T>(b)" "T.Parse(t, b)".
+#
+# The files are read with the compiler's own scanner and parser, so comments and text are never touched; a function
+# is judged by its declaration as written (its result's type declared in the same file - a struct, an enum or a type
+# declared over another - and no parameter's type naming it). Modules imported by the files given are read too (and
+# std, from --std, default "std" where it is there, else OLANG_STD), so a use of another module's builder is
+# rewritten, but only the files given are written. Re-running changes nothing (idempotent). --check writes nothing and
+# the exit status says whether anything would change; a file that does not parse is named and left.
+#
+#     $OLANG build tools/builder_migrate.olang && build/tools_builder_migrate [--std DIR] [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "std/filepath"
+import "srcmask"
+import "../compiler/source"
+import "../compiler/scan"
+import "../compiler/parse"
+import "../compiler/diag"
+import "../compiler/ast"
+import "../compiler/token"
+import layout "../compiler/fmt"
+
+type Unparsable error { Syntax }
+
+# a function to move onto its type: its owner as written ("List<T>", "Color"), the type's bare name, its own type
+# variables in its list's order (its error-set variable last, Err set) and whether each moves into the owner
+type Move struct(Owner String, Type String, Params Array<String>, Moved Array<Bool>, Err Bool, Name String, Generic Bool) {
+    Owner, Type, Params, Moved, Err, Name, Generic
+}
+
+# a module read: its real path, text and tokens, its imports (alias -> module, -1 for one not read), the functions to
+# move (by name) and the builders already declared (by name -> the type's name, "" where two types have one so named)
+type Mod struct(Path String, Text String, toks Array<token.Token>) {
+    Path, Text, toks
+    ok Bool = false
+    imports Map<String, I64> = Map<String, I64>()
+    moves Map<String, Move> = Map<String, Move>()
+    builders Map<String, String> = Map<String, String>()
+    built Map<String, Move> = Map<String, Move>()    # a builder declared already, by its name: its owner and variables
+    skips Map<I64, Bool> = Map<I64, Bool>()    # offsets of names that declare something else: a method's, a case's
+    locals Map<String, Bool> = Map<String, Bool>()   # names declared as locals or parameters somewhere in the file
+}
+
+type Tool struct(Std String, Prelude String) {
+    Std, Prelude
+    mods Vec<Mod> = Vec<Mod>()
+}
+
+# the module at path, read once with what it imports; -1 where there is no such file
+fn (t mut Tool&) load(path String&) I64 {
+    real := try os.RealPath(path) catch os.Error { return -1 }
+    for i in range t.mods.Len() {
+        if t.mods[i].Path == real { return i }
+    }
+    text := try srcmask.ReadText(real) catch os.Error { return -1 }
+    i := t.mods.Len()
+    t.mods.Push(Mod($real, text, scan.Tokens.Scan(text).Toks))
+    t.read(i)
+    return i
+}
+
+fn (t mut Tool&) read(i I64) {
+    aliases Vec<String>
+    path := t.mods[i].Path.Copy()
+    {
+        m := t.mods.RefMut(i)
+        names := source.Names()
+        decls := try parsed($m.Path, $m.Text, $t.Std, $t.Prelude, names) catch Unparsable { return }
+        m.ok = true
+        importsOf(m)
+        declared Map<String, Bool>
+        eligible(decls, names, declared)
+        collect(m, decls, names, declared)
+        for e in m.imports.Iter() { aliases.Push(e.Key.Copy()) }
+    }
+    for a in aliases {
+        k := t.target(path, a)
+        t.mods.RefMut(i).imports.Put(a, k)
+    }
+}
+
+# the file a module's import names, loaded: "std/x" under std, a remote one (its first part holds a dot) none, anything
+# else beside the importer; kept on the module by its alias, the path first held there as text
+fn (t mut Tool&) target(importer String&, alias String&) I64 {
+    ipath := importPath(t.mods[t.indexOf(importer)], alias)
+    if ipath == "" { return -1 }
+    first := ipath
+    slash := try ipath.FindByte('/') catch default -1
+    if slash >= 0 { first = ipath[:slash] }
+    if (first.Contains(".") and first != "." and first != "..") or ipath.EndsWith(".h") or ipath.EndsWith(".c") { return -1 }
+    if ipath.StartsWith("std/") { return t.load($filepath.Join(t.Std, ipath[4:]) ".olang") }
+    return t.load($filepath.Join(filepath.Dir(importer), ipath) ".olang")
+}
+
+fn (t Tool&) indexOf(path String&) I64 {
+    for i in range t.mods.Len() {
+        if t.mods[i].Path == path { return i }
+    }
+    return -1
+}
+
+# the path an import of this alias names, read again from the tokens; "" for none
+fn importPath(m Mod&, alias String&) String {
+    n := m.toks.Len()
+    for i in range n {
+        if m.toks[i].Kind != token.Tok.Import { continue }
+        j := i + 1
+        a := ""
+        if j < n and m.toks[j].Kind == token.Tok.Iden {
+            a = $m.Text[m.toks[j].Start:m.toks[j].End]
+            j++
+        }
+        if j >= n or m.toks[j].Kind != token.Tok.StrLit { continue }
+        ip := scan.LiteralText(m.Text[m.toks[j].Start:m.toks[j].End])
+        if a == "" { a = $filepath.Base(ip) }
+        if a == alias { return $ip }
+    }
+    return ""
+}
+
+# every import's alias, its module still to be found (-1)
+fn importsOf(m mut Mod&) {
+    n := m.toks.Len()
+    for i in range n {
+        if m.toks[i].Kind != token.Tok.Import { continue }
+        j := i + 1
+        a := ""
+        if j < n and m.toks[j].Kind == token.Tok.Iden {
+            a = $m.Text[m.toks[j].Start:m.toks[j].End]
+            j++
+        }
+        if j >= n or m.toks[j].Kind != token.Tok.StrLit { continue }
+        ip := scan.LiteralText(m.Text[m.toks[j].Start:m.toks[j].End])
+        if a == "" { a = $filepath.Base(ip) }
+        m.imports.Put(a, -1)
+    }
+}
+
+fn parsed(path String&, text String&, std String&, prelude String&, names mut source.Names&) Array<ast.Decl&>& ? Unparsable {
+    src := source.Source($path, $text)
+    d := diag.Diagnostics(false)
+    o := layout.OracleFor(path, std, prelude, names)
+    file := d.AddFile(src.Path, src.Text)
+    ts := scan.Tokens.Scan(src.Text)
+    p := parse.Parser(src, ts, names, o, d, file)
+    decls := p.File()
+    if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 { error Unparsable.Syntax }
+    return decls
+}
+
+# the types a file declares that a builder makes: structs, enums and types declared over another - in its top-level
+# ifs' branches too
+fn eligible(decls Array<ast.Decl&>&, names source.Names&, out mut Map<String, Bool>&) {
+    for d in decls {
+        match d {
+            case ast.Decl.Type(_, td) {
+                if td.Body is null { continue }
+                match td.Body {
+                    case ast.TypeBody.Struct(_), ast.TypeBody.Enum(_, _), ast.TypeBody.Over(_, _) { out.Put($names.Text(td.Name), true) }
+                    case _ { }
+                }
+            }
+            case ast.Decl.If(_, ti) { eligibleIf(ti, names, out) }
+            case _ { }
+        }
+    }
+}
+
+fn eligibleIf(ti ast.TopIf?&, names source.Names&, out mut Map<String, Bool>&) {
+    if ti is null { return }
+    if ti.Then is not null { eligible(ti.Then!.Decls, names, out) }
+    if ti.Else is not null { eligible(ti.Else!.Decls, names, out) }
+    eligibleIf(ti.ElseIf, names, out)
+}
+
+# a file's functions to move, the builders it declares already, and the names that declare something else
+fn collect(m mut Mod&, decls Array<ast.Decl&>&, names source.Names&, types Map<String, Bool>&) {
+    collectDecls(m, decls, names, types)
+    renamed(m)
+}
+
+fn collectDecls(m mut Mod&, decls Array<ast.Decl&>&, names source.Names&, types Map<String, Bool>&) {
+    for d in decls {
+        match d {
+            case ast.Decl.Fn(f) { judge(m, f, names, types) }
+            case ast.Decl.Type(_, td) { skipMembers(m, td) }
+            case ast.Decl.If(_, ti) { collectIf(m, ti, names, types) }
+            case _ { }
+        }
+    }
+}
+
+fn collectIf(m mut Mod&, ti ast.TopIf?&, names source.Names&, types Map<String, Bool>&) {
+    if ti is null { return }
+    if ti.Then is not null { collectDecls(m, ti.Then!.Decls, names, types) }
+    if ti.Else is not null { collectDecls(m, ti.Else!.Decls, names, types) }
+    collectIf(m, ti.ElseIf, names, types)
+}
+
+# a moved function's name with its type's name taken out where it is a word of it ("ParseIP" -> "Parse" for IP,
+# "DateOf" -> "Of" for Date, "newChecker" -> "new" for Checker: under the type, the type's name says nothing) - kept
+# whole where what is left is no name, would change whether it is public, or would be another builder's of the type
+fn renamed(m mut Mod&) {
+    want Map<String, String>
+    count Map<String, I64>
+    for e in m.moves.Iter() {
+        s := stripped(e.Key, e.Value.Type)
+        want.Put(e.Key.Copy(), s.Copy())
+        key := $e.Value.Type "." $s
+        count.Put(key, (try count.Get(key) catch default 0) + 1)
+    }
+    for e in m.builders.Iter() {
+        key := $e.Value "." $e.Key
+        count.Put(key, (try count.Get(key) catch default 0) + 1)
+    }
+    keys Vec<String>
+    for e in m.moves.Iter() {
+        s := try want.Get(e.Key) catch default ""
+        if s != e.Key and (try count.Get($e.Value.Type "." $s) catch default 0) == 1 { keys.Push(e.Key.Copy()) }
+    }
+    for k in keys {
+        mv := try m.moves.Get(k) catch { continue }
+        mv.Name = try want.Get(k) catch default k.Copy()
+        m.moves.Put(k, mv)
+    }
+}
+
+fn stripped(name String&, ty String&) String {
+    if ty.Len() == 0 or ty.Len() >= name.Len() { return name.Copy() }
+    at := try name.Find(ty) catch default -1
+    for at >= 0 {
+        end := at + ty.Len()
+        before := at == 0 or name[at - 1].IsLower() or name[at - 1].IsDigit()
+        after := end == name.Len() or name[end].IsUpper()
+        if before and after { return leftName(name, $name[:at] $name[end:]) }
+        at = try name[end:].Find(ty) catch default -1
+        if at >= 0 { at += end }
+    }
+    return name.Copy()
+}
+
+# what is left of a name, where it is still one of the same visibility and no member reflection reads; else the name
+fn leftName(name String&, left String&) String {
+    if left.Len() == 0 or not left[0].IsLetter() or left[0].IsUpper() != name[0].IsUpper() { return name.Copy() }
+    for r in String&["Name", "Kind", "Base", "Element", "Length", "Target", "Size", "Align", "Fields", "Cases", "Params"
+                     "Results", "Errors", "Functions", "Methods", "Max", "Min", "Inf", "NaN", "Epsilon", "Here", "From"
+                     "Type", "Attr", "HasAttr", "fn", "if", "for", "in", "is", "as", "and", "or", "not", "type"] {
+        if left == r { return name.Copy() }
+    }
+    if left[0].IsLower() and left.Len() < 3 { return name.Copy() }
+    return left.Copy()
+}
+
+# an enum's cases and a trait's methods are names of their own, never a use of a function's
+fn skipMembers(m mut Mod&, td ast.TypeDecl&) {
+    if td.Body is null { return }
+    match td.Body {
+        case ast.TypeBody.Enum(cases, _) { for c in cases { m.skips.Put(I64(c.Sp.Start), true) } }
+        case ast.TypeBody.Trait(ms, _, _) { for f in ms { m.skips.Put(I64(f.Sp.Start), true) } }
+        case _ { }
+    }
+}
+
+# one function: a builder already, a method (its name skipped), or one to move
+fn judge(m mut Mod&, f ast.Func&, names source.Names&, types Map<String, Bool>&) {
+    for p in f.S.Params { m.locals.Put($names.Text(p.Name), true) }
+    if f.IsBuilder() {
+        n := $names.Text(f.Member)
+        ty := $names.Text(f.OwnerName())
+        if n in m.builders and (try m.builders.Get(n) catch default "") != ty { m.builders.Put(n, "") } else { m.builders.Put(n, ty) }
+        m.built.Put(n.Copy(), Move.built(m, f, names, ty))
+        return
+    }
+    if f.Recv is not null {
+        m.skips.Put(nameAfter(m, f.Recv!.Sp.End), true)
+        m.locals.Put($names.Text(f.Recv!.Name), true)
+        return
+    }
+    name := $names.Text(f.Name)
+    if f.Export or name == "main" or f.S.Results.Len() != 1 or ast.FirstYield(f.Body).Start >= I32(0) { return }
+    base := plain(f.S.Results[0])
+    if base is null { return }
+    match base {
+        case ast.TypeRef.Named(sp, path, args) {
+            if path.Len() != 1 { return }
+            ty := $names.Text(path[0])
+            if ty not in types { return }
+            for p in f.S.Params {
+                if mentions(p.Ty, path[0]) { return }
+            }
+            owner := $m.Text[sp.Start:sp.End] if args.Len() > 0 else ty.Copy()
+            ps Vec<String>
+            moved Vec<Bool>
+            err := false
+            for tp in f.TypeParams {
+                ps.Push($names.Text(tp.Name))
+                moved.Push(tp.Ty is null and tp.Also.Len() == 0 and mentions(base, tp.Name))
+                if tp.ErrSet { err = true }
+            }
+            generic := false
+            for tp in f.TypeParams { generic = generic or mentions(base, tp.Name) }
+            m.moves.Put(name, Move(owner, ty, ps.ToArray(), moved.ToArray(), err, name.Copy(), generic))
+        }
+        case _ { }
+    }
+}
+
+# a builder declared already, as a move it might have been: its owner as written, the variables the owner introduces
+# (bare short names among its arguments) first and its own list's after - an old call's type arguments in that order
+fn Move.built(m Mod&, f ast.Func&, names source.Names&, ty String&) Move {
+    osp := f.Owner!.Span()
+    ps Vec<String>
+    moved Vec<Bool>
+    match f.Owner! {
+        case ast.TypeRef.Named(_, _, args) {
+            for a in args {
+                match a {
+                    case ast.TypeRef.Named(_, ap, aargs) if ap.Len() == 1 and aargs.Len() == 0 and names.Text(ap[0]).Len() <= 2 {
+                        ps.Push($names.Text(ap[0]))
+                        moved.Push(true)
+                    }
+                    case _ { }
+                }
+            }
+        }
+        case _ { }
+    }
+    err := false
+    for tp in f.TypeParams {
+        if ps.Has($names.Text(tp.Name)) { continue }
+        ps.Push($names.Text(tp.Name))
+        moved.Push(false)
+        if tp.ErrSet { err = true }
+    }
+    some := false
+    for b in moved { some = some or b }
+    return Move($m.Text[osp.Start:osp.End], ty.Copy(), ps.ToArray(), moved.ToArray(), err, $names.Text(f.Member), some)
+}
+
+# the offset of the first name at or after from
+fn nameAfter(m Mod&, from I32) I64 {
+    for tk in m.toks {
+        if tk.Start >= from and tk.Kind == token.Tok.Iden { return I64(tk.Start) }
+    }
+    return -1
+}
+
+# a result's type less its reference marker and permission
+fn plain(t ast.TypeRef?&) ast.TypeRef?& {
+    if t is null { return null }
+    match t {
+        case ast.TypeRef.Ref(_, of, _) { return plain(of) }
+        case ast.TypeRef.Perm(_, of, _) { return plain(of) }
+        case _ { return t }
+    }
+}
+
+# whether a written type names n anywhere in it
+fn mentions(t ast.TypeRef?&, n source.NameId) Bool {
+    if t is null { return false }
+    match t {
+        case ast.TypeRef.Named(_, path, args) {
+            if path.Len() == 1 and path[0] == n { return true }
+            for a in args {
+                if mentions(a, n) { return true }
+            }
+            return false
+        }
+        case ast.TypeRef.Func(_, s) {
+            for p in s.Params {
+                if mentions(p.Ty, n) { return true }
+            }
+            for r in s.Results {
+                if mentions(r, n) { return true }
+            }
+            return false
+        }
+        case ast.TypeRef.Ref(_, of, _), ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { return mentions(of, n) }
+        case ast.TypeRef.Perm(_, of, _) { return mentions(of, n) }
+        case ast.TypeRef.Errs(_, items) {
+            for e in items {
+                if e.Parts.Len() == 1 and e.Parts[0] == n { return true }
+            }
+            return false
+        }
+        case _ { return false }
+    }
+}
+
+# ---- rewriting ----
+
+# a replacement of text[From:To]
+type Edit struct(From I64, To I64, With String&) {
+    From, To, With
+}
+
+fn applied(text String&, edits mut Vec<Edit>&) String {
+    if edits.Len() == 0 { return $text }
+    edits.Sort(fn(a Edit, b Edit) Bool { return a.From < b.From })
+    out := StringBuilder()
+    at I64 = 0
+    for e in edits {
+        if e.From < at { continue }    # overlapping: the first wins, a later run takes the rest
+        out.Push(text[at:e.From])
+        out.Push(e.With)
+        at = e.To
+    }
+    out.Push(text[at:])
+    return out.ToString()
+}
+
+# the token index of the bracket matching the opening one at i (forward), -1 for none
+fn closeOf(toks Array<token.Token>&, i I64) I64 {
+    depth I64 = 0
+    for j in range i, toks.Len() {
+        k := toks[j].Kind
+        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace { depth++ }
+        if k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace {
+            depth--
+            if depth == 0 { return j }
+        }
+    }
+    return -1
+}
+
+# the token index of the bracket opening the closing one at i (backward), -1 for none
+fn openOf(toks Array<token.Token>&, i I64) I64 {
+    depth I64 = 0
+    j := i
+    for j >= 0 {
+        k := toks[j].Kind
+        if k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace { depth++ }
+        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace {
+            depth--
+            if depth == 0 { return j }
+        }
+        j--
+    }
+    return -1
+}
+
+# the token index of the ">" closing type arguments opened at i ("<"), touching tokens on one line; -1 for none
+fn angleClose(toks Array<token.Token>&, i I64) I64 {
+    depth I64 = 0
+    parens I64 = 0
+    for j in range i, toks.Len() {
+        k := toks[j].Kind
+        if k == token.Tok.StmtEnd or k == token.Tok.LBrace or k == token.Tok.Eof { return -1 }
+        if k == token.Tok.LParen { parens++ }
+        if k == token.Tok.RParen {
+            parens--
+            if parens < 0 { return -1 }
+        }
+        if k == token.Tok.Lt { depth++ }
+        if k == token.Tok.Gt { depth-- }
+        if k == token.Tok.Shr { depth -= 2 }
+        if depth <= 0 { return j if depth == 0 else -1 }
+    }
+    return -1
+}
+
+# the token index of the "<" opening the type arguments closed at i (">"), -1 for none
+fn angleOpen(toks Array<token.Token>&, i I64) I64 {
+    depth I64 = 0
+    j := i
+    for j >= 0 {
+        k := toks[j].Kind
+        if k == token.Tok.Gt { depth++ }
+        if k == token.Tok.Shr { depth += 2 }
+        if k == token.Tok.Lt {
+            depth--
+            if depth == 0 { return j }
+        }
+        if k == token.Tok.StmtEnd or k == token.Tok.LBrace or k == token.Tok.RBrace { return -1 }
+        j--
+    }
+    return -1
+}
+
+# the first token of the receiver a method call's "." at dot follows: a postfix chain - names, literals, calls,
+# indexes, type arguments, "!" - read backward; -1 where it cannot be told
+fn recvStart(toks Array<token.Token>&, dot I64) I64 {
+    j := dot - 1
+    for j >= 0 {
+        k := toks[j].Kind
+        if k == token.Tok.RParen or k == token.Tok.RBrack {
+            o := openOf(toks, j)
+            if o < 0 { return -1 }
+            if o > 0 and toks[o - 1].End == toks[o].Start and chains(toks[o - 1].Kind) {
+                j = o - 1
+                continue
+            }
+            return o
+        }
+        if k == token.Tok.Gt {
+            o := angleOpen(toks, j)
+            if o <= 0 { return -1 }
+            j = o - 1
+            continue
+        }
+        if k == token.Tok.Not and toks[j].End - toks[j].Start == 1 {
+            j--
+            continue
+        }
+        if k == token.Tok.Iden {
+            if j >= 2 and toks[j - 1].Kind == token.Tok.Dot {
+                j -= 2
+                continue
+            }
+            return j
+        }
+        if k == token.Tok.IntLit or k == token.Tok.FloatLit or k == token.Tok.StrLit or k == token.Tok.CharLit { return j }
+        return -1
+    }
+    return -1
+}
+
+fn chains(k token.Tok) Bool {
+    return k == token.Tok.Iden or k == token.Tok.Gt or k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.Not
+}
+
+# the text of tokens a..b inclusive, as written; a receiver that is one parenthesized group loses its parentheses
+fn recvText(text String&, toks Array<token.Token>&, a I64, b I64) String {
+    if toks[a].Kind == token.Tok.LParen and closeOf(toks, a) == b { return $text[toks[a + 1].Start:toks[b - 1].End] }
+    return $text[toks[a].Start:toks[b].End]
+}
+
+# the prelude's methods that became builders (E33, X15, T.Parse): edits for one pass - each call rewritten whose
+# receiver holds none still to rewrite
+fn methodEdits(text String&, toks Array<token.Token>&, out mut Vec<Edit>&) {
+    n := toks.Len()
+    for i in range 1, n - 2 {
+        if toks[i].Kind != token.Tok.Dot or toks[i + 1].Kind != token.Tok.Iden { continue }
+        name := text[toks[i + 1].Start:toks[i + 1].End]
+        float := name == "F64FromBits" or name == "F32FromBits" or name == "F16FromBits" or name == "BF16FromBits"
+        if not float and name != "StringFromC" and name != "ParseAs" { continue }
+        s := recvStart(toks, i)
+        if s < 0 { continue }
+        recv := recvText(text, toks, s, i - 1)
+        at := i + 2
+        ty String& = ""
+        if name == "ParseAs" {
+            if toks[at].Kind != token.Tok.Lt { continue }
+            g := angleClose(toks, at)
+            if g < 0 { continue }
+            ty = $text[toks[at + 1].Start:toks[g - 1].End]
+            at = g + 1
+        }
+        if at >= n or toks[at].Kind != token.Tok.LParen { continue }
+        c := closeOf(toks, at)
+        if c < 0 { continue }
+        args := $text[toks[at].End:toks[c].Start] if c > at + 1 else ""
+        with String& = ""
+        if float { with = $name[:name.Len() - 8] ".FromBits(" $recv ")" }
+        if name == "StringFromC" { with = $"String.FromC(" $recv ", " $args ")" }
+        if name == "ParseAs" { with = $ty ".Parse(" $recv $(", " $args if args.Len() > 0 else "") ")" }
+        out.Push(Edit(I64(toks[s].Start), I64(toks[c].End), with))
+    }
+}
+
+# the rewritten text of module i: the prelude's methods first, to a fixed point, then the moves
+fn (t mut Tool&) rewrite(i I64) String {
+    text := t.mods[i].Text.Copy()
+    for _ in range 16 {
+        edits Vec<Edit>
+        methodEdits(text, scan.Tokens.Scan(text).Toks, edits)
+        if edits.Len() == 0 { break }
+        text = applied(text, edits)
+    }
+    if text != t.mods[i].Text {
+        # the moves' offsets are the old text's: read the file again before moving
+        mm := t.mods.RefMut(i)
+        mm.Text = text.Copy()
+        mm.toks = scan.Tokens.Scan(text).Toks
+        names := source.Names()
+        decls := try parsed($mm.Path, text, $t.Std, $t.Prelude, names) catch Unparsable { return text }
+        declared Map<String, Bool>
+        eligible(decls, names, declared)
+        mm.moves = Map<String, Move>()
+        mm.skips = Map<I64, Bool>()
+        collect(mm, decls, names, declared)
+    }
+    m := t.mods[i]
+    toks := m.toks
+    edits Vec<Edit>
+    n := toks.Len()
+    for k in range n {
+        if toks[k].Kind != token.Tok.Iden { continue }
+        name := $text[toks[k].Start:toks[k].End]
+        prev := toks[k - 1].Kind if k > 0 else token.Tok.Eof
+        if prev == token.Tok.Dot {
+            t.viaAlias(m, text, toks, k, name, edits)
+            continue
+        }
+        if prev == token.Tok.At or I64(toks[k].Start) in m.skips { continue }
+        if name in m.moves {
+            mv := try m.moves.Get(name) catch { continue }
+            if prev == token.Tok.Fn {
+                declEdit(text, toks, k, name, mv, edits)
+            } else if prev == token.Tok.Test {
+                edits.Push(Edit(I64(toks[k].Start), I64(toks[k].End), $mv.Type "." $mv.Name))
+            } else {
+                useEdit(text, toks, k, name, mv, edits)
+            }
+            continue
+        }
+        # a builder of this module's already, called bare: where no local of the name is declared in the file
+        ty := try m.builders.Get(name) catch default ""
+        if ty != "" and prev != token.Tok.Fn and name not in m.locals and k + 1 < n and
+           (toks[k + 1].Kind == token.Tok.LParen or toks[k + 1].Kind == token.Tok.Lt) {
+            bm := try m.built.Get(name) catch { continue }
+            useEdit(text, toks, k, name, bm, edits)
+        }
+    }
+    return applied(text, edits)
+}
+
+# alias.name: a function another module moves, or a builder it declares already
+fn (t Tool&) viaAlias(m Mod&, text String&, toks Array<token.Token>&, k I64, name String&, edits mut Vec<Edit>&) {
+    if k < 2 or toks[k - 2].Kind != token.Tok.Iden { return }
+    if k >= 3 and toks[k - 3].Kind == token.Tok.Dot { return }
+    alias := text[toks[k - 2].Start:toks[k - 2].End]
+    target := try m.imports.Get(alias) catch default -1
+    if target < 0 or not t.mods[target].ok { return }
+    o := t.mods[target]
+    if name in o.moves {
+        mv := try o.moves.Get(name) catch { return }
+        useEdit(text, toks, k, name, mv, edits)
+        return
+    }
+    ty := try o.builders.Get(name) catch default ""
+    if ty == "" { return }
+    bm := try o.built.Get(name) catch { return }
+    useEdit(text, toks, k, name, bm, edits)
+}
+
+# "fn name<list>(" becoming "fn Owner.name<rest>(": the owner's variables leave the list
+fn declEdit(text String&, toks Array<token.Token>&, k I64, name String&, mv Move, edits mut Vec<Edit>&) {
+    edits.Push(Edit(I64(toks[k].Start), I64(toks[k].End), $mv.Owner "." $mv.Name))
+    if k + 1 >= toks.Len() or toks[k + 1].Kind != token.Tok.Lt { return }
+    some := false
+    for b in mv.Moved { some = some or b }
+    if not some { return }
+    g := angleClose(toks, k + 1)
+    if g < 0 { return }
+    items := splitTop(text[toks[k + 1].End:toks[g].Start])
+    kept Vec<String&>
+    keptErr String& = ""
+    for j in range items.Len() {
+        it := items[j]
+        if j < mv.Moved.Len() and mv.Moved[j] { continue }
+        if it.StartsWith("?") { keptErr = $it } else { kept.Push($it) }
+    }
+    with := StringBuilder()
+    if kept.Len() > 0 or keptErr != "" {
+        with.PushChar('<')
+        with.Push(kept.Join(", "))
+        if keptErr != "" { with.Push($(" " if kept.Len() > 0 else "") $keptErr) }
+        with.PushChar('>')
+    }
+    edits.Push(Edit(I64(toks[k + 1].Start), I64(toks[g].End), with.ToString()))
+}
+
+# a use of a function moved: "name" becoming "Owner.name"; its type arguments, where written, split between the
+# owner's instance and its own
+fn useEdit(text String&, toks Array<token.Token>&, k I64, name String&, mv Move, edits mut Vec<Edit>&) {
+    touching := k + 1 < toks.Len() and toks[k + 1].Kind == token.Tok.Lt and toks[k + 1].Start == toks[k].End
+    g := angleClose(toks, k + 1) if touching else -1
+    if g < 0 {
+        # no type arguments: a generic owner's variables inferred (its bare name), any other owner as written
+        edits.Push(Edit(I64(toks[k].Start), I64(toks[k].End), $(mv.Type if mv.Generic else mv.Owner) "." $mv.Name))
+        return
+    }
+    args := splitTop(text[toks[k + 1].End:toks[g].Start])
+    given Map<String, String>
+    own Vec<String&>
+    ai I64 = 0
+    for j in range mv.Params.Len() {
+        isErr := mv.Err and j == mv.Params.Len() - 1
+        a String& = ""
+        if isErr {
+            for x in args {
+                if x.StartsWith("?") { a = $x[1:].Trim() }
+            }
+        } else if ai < args.Len() and not args[ai].StartsWith("?") {
+            a = $args[ai]
+            ai++
+        }
+        if ownerHas(mv.Owner, mv.Params[j]) {
+            if a != "" { given.Put($mv.Params[j], a) }
+        } else if a != "" {
+            own.Push($("? " if isErr else "") $a)
+        }
+    }
+    owner := substituted(mv.Owner, given) if given.Len() > 0 else (mv.Type if mv.Generic else mv.Owner)
+    tail := $"<" $own.Join(", ") ">" if own.Len() > 0 else ""
+    edits.Push(Edit(I64(toks[k].Start), I64(toks[g].End), $owner "." $mv.Name $tail))
+}
+
+# whether an owner's text names a type variable
+fn ownerHas(owner String&, name String&) Bool {
+    i I64 = 0
+    for i < owner.Len() {
+        if not srcmask.IsIdStart(owner[i]) {
+            i++
+            continue
+        }
+        j := i
+        for j < owner.Len() and srcmask.IsWord(owner[j]) { j++ }
+        if owner[i:j] == name { return true }
+        i = j
+    }
+    return false
+}
+
+# an owner's text with each type variable given replaced by what is given for it
+fn substituted(owner String&, given Map<String, String>&) String {
+    out := StringBuilder()
+    i I64 = 0
+    for i < owner.Len() {
+        if srcmask.IsIdStart(owner[i]) {
+            j := i
+            for j < owner.Len() and srcmask.IsWord(owner[j]) { j++ }
+            w := owner[i:j]
+            out.Push(try given.Get(w) catch default $w)
+            i = j
+            continue
+        }
+        out.PushChar(owner[i])
+        i++
+    }
+    return out.ToString()
+}
+
+# a list's items at its top level, each trimmed: "A, Map<K, V>, ? E" - "A", "Map<K, V>", "? E"
+fn splitTop(t String&) Vec<String&> {
+    out Vec<String&>
+    depth I64 = 0
+    start I64 = 0
+    for i in range t.Len() {
+        c := t[i]
+        if c == '<' or c == '(' or c == '[' { depth++ }
+        if c == '>' or c == ')' or c == ']' { depth-- }
+        if depth == 0 and (c == ',' or (c == '?' and i > start and t[start:i].Trim().Len() > 0)) {
+            out.Push($t[start:i].Trim())
+            start = i + 1 if c == ',' else i
+        }
+    }
+    last := t[start:].Trim()
+    if last.Len() > 0 { out.Push($last) }
+    return out
+}
+
+fn main() ? {
+    os.RunOnStack(1 << 30, fn() { os.Exit(run()) })
+}
+
+fn run() I32 {
+    check := false
+    verbose := false
+    std String& = ""
+    paths Vec<String&>
+    args := os.Args()
+    i I64 = 1
+    for i < args.Len() {
+        a := args[i]
+        if a == "--check" {
+            check = true
+        } else if a == "-v" {
+            verbose = true
+        } else if a == "--std" and i + 1 < args.Len() {
+            i++
+            std = $args[i]
+        } else {
+            paths.Push($a)
+        }
+        i++
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_builder_migrate [--std DIR] [--check] [-v] FILE|DIR...")
+        return 2
+    }
+    if std == "" { std = "std" if os.IsDir("std/prelude") else (try os.Env("OLANG_STD") catch default "std") }
+    t := Tool(std, layout.PreludeTypes(std))
+    files Vec<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    given Vec<I64>
+    for path in files {
+        if not path.EndsWith(".olang") { continue }
+        k := t.load($path)
+        if k < 0 {
+            srcmask.SayErr("builder_migrate: cannot read " $path)
+            return 2
+        }
+        given.Push(k)
+    }
+    # std's own modules, so a use of one of its builders is found from any file
+    stdFiles Vec<String&>
+    if os.IsDir(std) { srcmask.Walk(std, stdFiles) }
+    for sf in stdFiles {
+        if sf.EndsWith(".olang") { t.load($sf) }
+    }
+    changed I64 = 0
+    status I32 = 0
+    for k in given {
+        m := t.mods[k]
+        if not m.ok {
+            srcmask.SayErr("builder_migrate: " $m.Path " does not parse - left as it is")
+            status = 1
+            continue
+        }
+        # a case of checks/ that must fail by D19a says so in its first line: it is left as written
+        if m.Text.StartsWith("# check: fail error[D19a]") { continue }
+        old := $m.Text
+        out := t.rewrite(k)
+        if out == old { continue }
+        changed++
+        if verbose { srcmask.Say(m.Path) }
+        if not check {
+            try os.WriteFile(m.Path, out) catch {
+                srcmask.SayErr("builder_migrate: cannot write " $m.Path)
+                return 2
+            }
+        }
+    }
+    srcmask.Say($"builder_migrate: " $changed " files" $(" would change" if check else " changed"))
+    if check and changed > 0 { return 1 }
+    return status
+}
+
+test "a list's items at its top level" {
+    xs := splitTop("A, Map<K, V>, ? E")
+    assert xs.Len() == 3 and xs[0] == "A" and xs[1] == "Map<K, V>" and xs[2] == "? E"
+}
+
+test "a type's name taken out of a builder's" {
+    assert stripped("ParseIP", "IP") == "Parse" and stripped("DateOf", "Date") == "Of" and stripped("IPv4", "IP") == "IPv4"
+    assert stripped("newChecker", "Checker") == "new" and stripped("Gray", "Color") == "Gray" and stripped("Color", "Color") == "Color"
+    assert stripped("BoxName", "Box") == "BoxName" and stripped("mkBox", "Box") == "mkBox"
+}
+
+test "an owner's variables given" {
+    g := Map<String, String>()
+    g.Put("T", "I64")
+    assert substituted("Box<T, Tee>", g) == "Box<I64, Tee>"
+}
+
+test "the prelude's methods become builders" {
+    text := "fn f(u U64, p CStr&, t String&) { a := u.F64FromBits()\n b := (u | 1).F32FromBits()\n c := p.StringFromC(9)\n d := t[1:].ParseAs<U8>(16)! }"
+    edits Vec<Edit>
+    methodEdits(text, scan.Tokens.Scan(text).Toks, edits)
+    out := applied(text, edits)
+    assert out == "fn f(u U64, p CStr&, t String&) { a := F64.FromBits(u)\n b := F32.FromBits(u | 1)\n c := String.FromC(p, 9)\n d := U8.Parse(t[1:], 16)! }"
+}

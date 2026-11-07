@@ -17,7 +17,7 @@ fn (p mut Parser&) parse() mut Ast& {
 fn (p Parser&) describe() String& {
     return $p.src.Len() "!"
 }
-fn Parse(n I64) mut Ast& {
+fn Ast.Parse(n I64) mut Ast& {
     src := $n $n $n
     p := Parser(src)
     return p.parse()
@@ -27,16 +27,16 @@ fn Desc(n I64) String& {
     p := Parser(src)
     return p.describe()
 }
-fn wrapLen(p Parser&) Ast& { return Ast.Leaf(p.src.Len()) }
-fn Wrapped(n I64) Ast& {
+fn Ast.wrapLen(p Parser&) Ast& { return Ast.Leaf(p.src.Len()) }
+fn Ast.Wrapped(n I64) Ast& {
     src := $n
     p := Parser(src)
-    return wrapLen(p)
+    return Ast.wrapLen(p)
 }
 fn main() ? {
-    a := Parse(12)
+    a := Ast.Parse(12)
     d := Desc(7)
-    w := Wrapped(5)
+    w := Ast.Wrapped(5)
     churn()
     assert $a == "Ast.Pair(Ast.Leaf(6), Ast.Leaf(1))" and d == "2!" and $w == "Ast.Leaf(1)"
 }

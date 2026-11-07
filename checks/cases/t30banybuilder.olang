@@ -1,0 +1,4 @@
+# check: fail error[T30b]: Parsed<I64> requires the builder 'Parse', so it has no run-time value
+type Parsed<T> trait { T.Parse(t String&) T ? ParseError }
+fn read(p any Parsed<I64>&) { }
+fn main() { }

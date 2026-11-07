@@ -1,0 +1,4 @@
+# check: fail error[D19]: a builder is declared in its owner's module, and I64 is not this module's - declare it there
+# D19: a builder of a built-in type is the prelude's alone, as its methods are (M19d)
+fn I64.Twice(n I64) I64 { return n * 2 }
+fn main() { assert I64.Twice(2) == 4 }

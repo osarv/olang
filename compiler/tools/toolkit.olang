@@ -34,7 +34,7 @@ fn Run(args Array<String&>&, env Array<String&>& = Array<String&>(0), dir String
         for e in env { full.Push(e) }
     }
     for a in args { full.Push(a) }
-    o := try os.Exec(...full.ToArray(), dir = dir) catch os.Error {
+    o := try os.Output.Exec(...full.ToArray(), dir = dir) catch os.Error {
         Die("cannot run " $args[0])
         unreachable
     }
@@ -261,7 +261,7 @@ fn GoldenSection(key String&, body String&) String {
 }
 
 # a golden's text read into its sections; rows of another shape end the tool, since the file is not one
-fn GoldenParse(t String&, what String&) Golden {
+fn Golden.Parse(t String&, what String&) Golden {
     g := Golden()
     key String& = ""
     body := StringBuilder()
@@ -291,12 +291,12 @@ fn GoldenParse(t String&, what String&) Golden {
 }
 
 # the golden at path, read; a missing one ends the tool, naming the target that captures it
-fn GoldenRead(path String&, target String&) Golden {
+fn Golden.Read(path String&, target String&) Golden {
     t := try os.ReadFile(path) catch os.Error {
         Die("no golden " $path " - capture it with make " $target)
         unreachable
     }
-    return GoldenParse(t, path)
+    return Golden.Parse(t, path)
 }
 
 # writes a golden whole, through a file beside it renamed into place
@@ -339,7 +339,7 @@ test "sorting is by bytes" {
 
 test "a golden section reads back as its body, whatever the body holds" {
     for body in String&["", "a\n", "a\nb", "=== x\n| y\n\n", "\n\n", "z"] {
-        g := GoldenParse($GoldenSection("k one", body) $GoldenSection("k2", "x\n"), "test")
+        g := Golden.Parse($GoldenSection("k one", body) $GoldenSection("k2", "x\n"), "test")
         assert g.Keys.Len() == 2
         assert g.Keys[0] == "k one"
         assert (try g.Bodies.Get("k one") catch default "?") == body
@@ -379,7 +379,7 @@ type StoredRun struct() {
     Out String& = ""
 }
 
-fn RunParse(body String&) StoredRun {
+fn StoredRun.RunParse(body String&) StoredRun {
     r := StoredRun()
     nl := try body.FindByte('\n') catch default body.Len()
     head := Fields(body[:nl])
@@ -413,9 +413,9 @@ fn TestName(n String&) String {
 }
 
 test "a stored run reads back" {
-    r := RunParse(RunBody(3, false, "a\nb"))
+    r := StoredRun.RunParse(RunBody(3, false, "a\nb"))
     assert r.Status == 3 and r.Stable and r.Out == "a\nb"
-    u := RunParse(RunBody(0, true, ""))
+    u := StoredRun.RunParse(RunBody(0, true, ""))
     assert u.Status == 0 and not u.Stable and u.Out == ""
     assert RunKey("checks/cases/x.olang") == "run x.olang"
     assert RunKey("tests/shared.olang") == "test tests/shared.olang"
@@ -425,13 +425,13 @@ test "a stored run reads back" {
 }
 
 # the run stored for a file in a golden; Found is false where it holds none
-fn RunStored(g Golden&, f String&) StoredRun {
+fn StoredRun.RunStored(g Golden&, f String&) StoredRun {
     body := try g.Bodies.Get(RunKey(f)) catch {
         r := StoredRun()
         r.Found = false
         return r
     }
-    return RunParse(body)
+    return StoredRun.RunParse(body)
 }
 
 # a program's output as a stored run holds it: the working directory - the repository's root - written $ROOT
@@ -449,7 +449,7 @@ fn RunText(out String&) String {
 # captured again.
 
 # a dump tool's rendering split at its "== PATH" headers: the paths in order, and each path's rows
-fn DumpSections(t String&) Golden {
+fn Golden.DumpSections(t String&) Golden {
     g := Golden()
     key String& = ""
     body := StringBuilder()
@@ -478,7 +478,7 @@ type HashGolden struct() {
 }
 
 # the hashed golden at BASE.txt and BASE.full.txt; a missing one ends the tool, naming the target that captures it
-fn HashGoldenRead(base String&, target String&) HashGolden {
+fn HashGolden.Read(base String&, target String&) HashGolden {
     h := HashGolden()
     table := try os.ReadFile($base ".txt") catch os.Error {
         Die("no golden " $base ".txt - capture it with make " $target)
@@ -492,7 +492,7 @@ fn HashGoldenRead(base String&, target String&) HashGolden {
         h.Source.Put($f[2], $f[0])
         h.Dump.Put($f[2], $f[1])
     }
-    h.Full = GoldenRead($base ".full.txt", target)
+    h.Full = Golden.Read($base ".full.txt", target)
     for f in h.Full.Keys {
         if Hash(try h.Full.Bodies.Get(f) catch default "") != (try h.Dump.Get(f) catch default "") {
             Die($base ".full.txt: " $f "'s section is not the one " $base ".txt hashes - capture it again (make " $target ")")
@@ -537,7 +537,7 @@ fn HashGoldenCheck(h HashGolden&, dir String&, f String&, body String&) String {
 }
 
 test "dump sections are split at their headers" {
-    g := DumpSections("== a\n1 x\n2 y\n== b\n== c\nz\n")
+    g := Golden.DumpSections("== a\n1 x\n2 y\n== b\n== c\nz\n")
     assert g.Keys.Len() == 3
     assert (try g.Bodies.Get("a") catch default "?") == "1 x\n2 y\n"
     assert (try g.Bodies.Get("b") catch default "?") == ""

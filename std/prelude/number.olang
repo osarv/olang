@@ -44,7 +44,7 @@ Pi F64 = 3.141592653589793
 Euler F64 = 2.718281828459045
 Inf F64 = 1.0 / 0.0
 # the quiet NaN with no sign and no payload, made from its bits so that its bits are known (E33a)
-NaN F64 = U64(0x7FF8000000000000).F64FromBits()
+NaN F64 = F64.FromBits(U64(0x7FF8000000000000))
 
 # ---- the floats' methods ----
 #

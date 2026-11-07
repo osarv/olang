@@ -14,13 +14,13 @@ type Kept struct(r Res) {
     r
 }
 
-fn wrapThen(r Res, n I64) Kept ? Bad {
+fn Kept.wrapThen(r Res, n I64) Kept ? Bad {
     k Kept = Kept(r)
     if n > 3: error Bad
     return k
 }
 
-fn (k Kept&) Copy() Kept { return try wrapThen(Res(k.r.id + 200), k.r.id) catch Bad default Kept(Res(0)) }
+fn (k Kept&) Copy() Kept { return try Kept.wrapThen(Res(k.r.id + 200), k.r.id) catch Bad default Kept(Res(0)) }
 
 fn main() ? {
     a Kept = Kept(Res(1))

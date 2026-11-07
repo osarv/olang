@@ -7,13 +7,13 @@ type Res unique struct(n I64) { n } destruct { io.Println("destroy " $n)! }
 
 type Wrap struct(r Res&) { r }
 
-fn mkw(n I64) Wrap { return Wrap(Res(n)) }
+fn Wrap.mkw(n I64) Wrap { return Wrap(Res(n)) }
 
 fn peek(w Wrap) I64 { return w.r.n }
 
 fn f(n I64) I64 {
     if n == 0: return 0
-    k := peek(mkw(n))
+    k := peek(Wrap.mkw(n))
     become f(k - 1)
 }
 

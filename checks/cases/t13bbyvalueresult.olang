@@ -2,8 +2,8 @@
 # T13b: a result handing back a value held elsewhere - a part of what the function was given
 type File unique struct(fd I32) { fd }
 type Box struct(f File) { f }
-fn inner(b Box&) File { return b.f }
+fn File.inner(b Box&) File { return b.f }
 fn main() {
     b := Box(File(3))
-    assert inner(b).fd == 3
+    assert File.inner(b).fd == 3
 }

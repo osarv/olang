@@ -151,7 +151,7 @@ fn main() {
     exe := $args[2] if capture else toolkit.Env("DRVDIFF_DRIVER", "build/compiler_olang")
     if not toolkit.Built(exe) { toolkit.Die("drvdiff: " $exe " is not built (make " $exe ")") }
     gpath := "compiler/goldens/drv.txt"
-    g := toolkit.Golden() if capture else toolkit.GoldenRead(gpath, "drvgold")
+    g := toolkit.Golden() if capture else toolkit.Golden.Read(gpath, "drvgold")
     here := try os.Cwd() catch os.Error { toolkit.Die("drvdiff: no working directory") }
     work := toolkit.Scratch("drvdiff")
     defer toolkit.Clean(work)

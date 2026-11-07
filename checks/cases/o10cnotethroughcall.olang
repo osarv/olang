@@ -8,12 +8,12 @@ type Module struct(name String&, path String&) {
     name
     path
 }
-fn parse(name String&, path String&) Module { return Module(name, path) }
+fn Module.parse(name String&, path String&) Module { return Module(name, path) }
 fn load(dir String&, keep mut Vec<Module>&) {
     base := $dir "/"
     for i in range 2 {
         path := $base $i
-        m := parse(base, path)
+        m := Module.parse(base, path)
         keep.Push(m)
     }
 }

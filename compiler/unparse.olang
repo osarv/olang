@@ -210,7 +210,14 @@ fn (w mut writer&) func(f ast.Func&) {
         w.param(f.Recv!)
         w.put(") ")
     }
-    w.name(f.Name)
+    if f.IsBuilder() {
+        # D19: "fn List<T>.Of(...)"
+        w.ty(f.Owner!)
+        w.put(".")
+        w.name(f.Member)
+    } else {
+        w.name(f.Name)
+    }
     w.typeParams(f.TypeParams)
     w.sig(f.S)
     w.put(" ")
@@ -431,7 +438,7 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
             for m in methods {
                 w.nl()
                 if m.Recv is not null { w.put("mut ") }
-                w.name(m.Name)
+                w.name(m.Name)   # a builder required (T30b): "T.Parse", its joined name
                 w.sig(m.S)
             }
             w.ind--

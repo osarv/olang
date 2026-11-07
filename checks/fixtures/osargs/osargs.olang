@@ -24,7 +24,7 @@ fn main() ? Bad {
     try say("value: " $(try os.Env("OLANG_CHECK_VALUE") catch default "unset"))
     try os.MkDirAll("work/a/b") catch { try say("MkDirAll failed") }
     try os.WriteFile("work/a/b/f.txt", "hello") catch { try say("WriteFile failed") }
-    info := try os.Stat("work/a/b/f.txt") catch default os.FileInfo(os.FileKind.OTHER, -1, -1)
+    info := try os.FileInfo.Stat("work/a/b/f.txt") catch default os.FileInfo(os.FileKind.OTHER, -1, -1)
     try say("size " $info.Size " file " $(info.Kind == os.FileKind.FILE) " dated " $(info.ModTime > 0))
     try os.Rename("work/a/b/f.txt", "work/a/g.txt") catch { try say("Rename failed") }
     names := try os.ReadDir("work/a") catch default Array<String&>(0)
@@ -33,6 +33,6 @@ fn main() ? Bad {
     }
     try say("read back: " $(try os.ReadFile("work/a/g.txt") catch default "?"))
     try os.Remove("work/a") catch os.Error.NotEmpty { try say("work/a is not empty") } catch { }
-    try os.Stat("work/none") catch os.Error.NotFound { try say("work/none is not found") } catch { }
+    try os.FileInfo.Stat("work/none") catch os.Error.NotFound { try say("work/none is not found") } catch { }
     try say("real ends right: " $(try os.RealPath("work/a/../a/g.txt") catch default "").EndsWith("/work/a/g.txt"))
 }

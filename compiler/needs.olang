@@ -141,7 +141,9 @@ fn (w mut walker&) traitMethods(tr types.TypeId, out mut Vec<String&>&) {
     if td is null { return }
     match td.Body {
         case ast.TypeBody.Trait(ms, _, _) {
-            for m in ms { out.Push($w.C.P.L.Names.Text(m.Name)) }
+            for m in ms {
+                if m.IsBuilder() { out.Push($w.C.P.L.Names.Text(m.Member) " (a builder)") } else { out.Push($w.C.P.L.Names.Text(m.Name)) }
+            }
         }
         case _ { }
     }
@@ -394,6 +396,10 @@ fn (w mut walker&) binary(op token.Tok, a ast.Expr&, b ast.Expr&) {
 # variable of its own stands - what that one needs of it
 fn (w mut walker&) call(f ast.Expr&, args Array<ast.Expr&>&) {
     match f {
+        case ast.Expr.Member(_, ast.Expr.Name(_, tn), n) if w.vars.Has(tn) {
+            # D19: a builder through the variable's name, "T.Parse(t)"
+            w.need(try w.vars.Get(tn) catch default -1, $w.C.P.L.Names.Text(n) " (a builder)")
+        }
         case ast.Expr.Member(_, y, n) {
             w.need(w.valOf(y), $w.C.P.L.Names.Text(n))
             w.expr(y)
