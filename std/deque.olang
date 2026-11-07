@@ -25,6 +25,14 @@ type Deque<T> struct() {
     for k := n - 1, k >= 0, k-- { buf[(head + k) % buf.Len()].vacate() }   # back to front (C11: Deque<File> only)
 }
 
+# a Deque of every value an iterator gives, front to back (D19) - what a Deque's literal and comprehension call (E19,
+# E27): "deque.Deque<I64>[1, 2, 3]". Fails with what the iterator fails with
+fn Deque<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) Deque<T> ? E {
+    d := Deque<T>()
+    for x in try it { d.PushBack(x) }
+    return d
+}
+
 # room for one more, the elements moved into a buffer twice the size when the ring is full, front first - the rest of
 # it never filled, so no zero value is needed (D13c): each position is written by a Push before it is read
 fn (d mut Deque<T>&) room() {
@@ -136,11 +144,12 @@ fn (d Deque<T>&) Hash() I64 {
     return h
 }
 
-# how "$" renders a Deque: its elements front to back, as an array renders, after "Deque" - "Deque[1, 2, 3]"
+# how "$" renders a Deque: as the literal making it (E19), its elements front to back - "deque.Deque<I64>[1, 2, 3]"
 fn (d Deque<T>&) Str() String {
-    r := $d.ToArray()                                    # "T[...]"
-    open := try r.Find("[") catch default 0
-    return "Deque" $r[open:]
+    r := $d.ToArray()                                    # "Array<T>[...]"
+    t := $Array<Deque<T>>(0)                             # "Array<deque.Deque<T>>[]"
+    o := try r.FindByte('[') catch default 0
+    return $t[6:t.Len() - 3] $r[o:]                      # the literal making it (E19)
 }
 
 if TestBuild {
@@ -177,14 +186,14 @@ test "a Deque used as a ring wraps and grows in order" {
     d.PushBack(5)
     assert c == d and c.Hash() == d.Hash()
     d[0] = 77
-    assert d.Front()! == 77 and $Deque<I64>() == "Deque[]"
+    assert d.Front()! == 77 and $Deque<I64>() == "Deque<I64>[]"
 }
 
 test "a Deque of text" {
     q := Deque<String&>()
     q.PushBack("b")
     q.PushFront("a")
-    assert $q == "Deque[\"a\", \"b\"]" and q.PopBack()! == "b"
+    assert $q == "Deque<String&>[\"a\", \"b\"]" and q.PopBack()! == "b"
 }
 
 }

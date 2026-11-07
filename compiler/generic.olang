@@ -1618,7 +1618,7 @@ fn (p mut Program&) SettleRaised(pt types.TypeId, ts Array<types.TypeId>&) {
     d := p.T.DeclOf(pt)
     l := p.T.List(ts)
     p.raisedFields.Put(I64(d), l)
-    p.T.SetEnumBody(pt, p.T.CaseNames(pt), p.T.List(types.TypeId[p.T.Record(l)]))
+    p.T.SetEnumBody(pt, p.T.CaseNames(pt), p.T.List(Array<types.TypeId>[p.T.Record(l)]))
 }
 
 # whether an error raised by name carrying a payload has had its field types settled (T19b)
@@ -2338,7 +2338,7 @@ fn (p mut Program&) Infer(c Context&, known Map<source.NameId, types.TypeId>&, x
         case ast.Expr.Unary(_, op, y): p.unaryType(c, known, op, y)
         case ast.Expr.Join(_, _): p.textType()
         case ast.Expr.Name(sp, n): try known.Get(n) catch default p.nameType(c, sp, n)
-        case ast.Expr.ArrayLit(_, elem, items): p.T.Array(p.itemsElem(c, known, p.Resolve(c, elem), items), p.T.Const(p.T.Prim("I64"), items.Len()))
+        case ast.Expr.ArrayLit(_, made, items): p.literalMade(c, known, p.Resolve(c, made), items)
         case ast.Expr.Index(_, y, items): p.literalOf(c, y, items)
         case ast.Expr.Call(_, f, cargs): p.madeType(c, known, f, cargs)
         case ast.Expr.Try(_, y, _): p.Infer(c, known, y)
@@ -2346,6 +2346,12 @@ fn (p mut Program&) Infer(c Context&, known Map<source.NameId, types.TypeId>&, x
         case ast.Expr.Binary(_, op, a, b): p.binaryType(c, known, op, a, b)
         case _: types.UnknownT
     }
+}
+
+# a literal's type (E19, E20): an Array<T> literal's an array of its items' count, any other the type it makes
+fn (p mut Program&) literalMade(c Context&, known Map<source.NameId, types.TypeId>&, made types.TypeId, items Array<ast.Expr&>&) types.TypeId {
+    if made == types.UnknownT or p.T.KindOf(made) != types.Kind.Array { return made }
+    return p.T.Array(p.itemsElem(c, known, p.T.Elem(made), items), p.T.Const(p.T.Prim("I64"), items.Len()))
 }
 
 # an array literal's element type: the written one, or where that is an array value of no known length, the items' one
@@ -2360,15 +2366,14 @@ fn (p mut Program&) itemsElem(c Context&, known Map<source.NameId, types.TypeId>
     return first
 }
 
-# T[a, b] where T names a type: an array literal, its length its items' count (T7c)
+# C[a, b] where C names a type: a literal of it (E19, E20)
 fn (p mut Program&) literalOf(c Context&, y ast.Expr&, items Array<ast.Expr&>&) types.TypeId {
     match y {
         case ast.Expr.Name(sp, n) {
             ref := p.R.Use(p.file(c.Mi), sp.Start)
             if ref.Kind != names.What.Type and ref.Kind != names.What.Builtin and ref.Kind != names.What.TypeVar { return types.UnknownT }
-            el := p.Resolve(c, ast.TypeRef.Named(sp, Array<source.NameId>(1, n), Array<ast.TypeRef&>(0)))
-            if el == types.UnknownT { return types.UnknownT }
-            return p.T.Array(el, p.T.Const(p.T.Prim("I64"), items.Len()))
+            made := p.Resolve(c, ast.TypeRef.Named(sp, Array<source.NameId>(1, n), Array<ast.TypeRef&>(0)))
+            return made if p.T.KindOf(made) != types.Kind.Array else types.UnknownT
         }
         case _ { return types.UnknownT }
     }
@@ -3210,7 +3215,7 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     }
     sig := p.sigType(c, row.F.S, recv, recvName)
     if row.F.Owner is not null { p.ownerT.Put(f, p.Resolve(c, row.F.Owner)) }   # D19
-    if p.viewNext(row) { sig = p.T.Func(p.T.Params(sig), p.T.Result(sig), p.T.Errors(sig), p.T.Scopes(types.RoleFn, Array<I64>(p.T.Items(p.T.Params(sig)).Len(), types.OwnScope), I64[0])) }
+    if p.viewNext(row) { sig = p.T.Func(p.T.Params(sig), p.T.Result(sig), p.T.Errors(sig), p.T.Scopes(types.RoleFn, Array<I64>(p.T.Items(p.T.Params(sig)).Len(), types.OwnScope), Array<I64>[0])) }
     if not p.FnIsExtern(f) and not row.F.Export { p.flagBans(c, row.F.S, sig, recv != types.UnknownT) }
     # D18: a function whose result is written Iterator<T ? E> and whose body yields is a generator - its result the
     # prelude's Generator<T ? E>, its errors its Next's alone (written on the signature, they are the checker's to say)
@@ -3452,7 +3457,7 @@ fn (p mut Program&) BoundOf(c Context&, tp ast.TypeParam&) types.TypeId {
 # the traits a constraint names: its one trait, or each of an intersection's (G19)
 fn (p mut Program&) BoundTraits(b types.TypeId) Array<types.TypeId> {
     if p.T.KindOf(b) == types.Kind.Tuple { return p.T.Items(p.T.Parts(b)) }
-    return types.TypeId[b]
+    return Array<types.TypeId>[b]
 }
 
 # the constraint a type-parameter list gives a name, or null
@@ -3703,7 +3708,7 @@ fn (p mut Program&) CaseSig(t types.TypeId, tag I64) types.TypeId {
                 # an error raised by name's payload (T19b): its types as its first raise settled them
                 fs := try p.raisedFields.Get(I64(p.T.DeclOf(t))) catch default p.unknowns(ps.Len())
                 shares := Array<I64>(ps.Len(), types.OwnScope)
-                return p.T.Func(fs, t, types.ListId(0), p.T.Scopes(types.RoleCtor, shares, I64[types.OwnScope]))
+                return p.T.Func(fs, t, types.ListId(0), p.T.Scopes(types.RoleCtor, shares, Array<I64>[types.OwnScope]))
             }
             return p.paramsSig(p.InstanceContext(t), ps, null, t)
         }
@@ -3718,7 +3723,7 @@ fn (p mut Program&) paramsSig(c Context&, params Array<ast.Param&>&, errs ast.Si
         ps.Push(p.Resolve(c, prm.Ty))
         shares.Push(types.OwnScope)
     }
-    scopes := p.T.Scopes(types.RoleCtor, shares.ToArray(), I64[types.OwnScope])
+    scopes := p.T.Scopes(types.RoleCtor, shares.ToArray(), Array<I64>[types.OwnScope])
     el := p.errorList(c, errs.HasErrors, errs.Errors) if errs is not null else types.ListId(0)
     return p.T.Func(p.T.List(ps.ToArray()), result, el, scopes)
 }
@@ -4648,7 +4653,7 @@ fn (p mut Program&) FuncDescriptor(f I64, recv types.TypeId, owner types.TypeId 
     if sig == types.UnknownT { return types.UnknownT }
     key := p.FnKey(f)
     p.fnByKey.Put(key, f)
-    return p.Instance(d, p.T.List(types.TypeId[sig, p.T.Const(p.T.Prim("I64"), key)]))
+    return p.Instance(d, p.T.List(Array<types.TypeId>[sig, p.T.Const(p.T.Prim("I64"), key)]))
 }
 
 # a function's key (G41): FNV-1a over "identity:Receiver.name", made positive
@@ -5051,7 +5056,7 @@ fn (p mut Program&) ReflItems(t types.TypeId, list I64, cs I64, mi I64) Array<I6
             for i in range p.T.CaseNames(r).Len() { out.Push(i) }
             return out.ToArray(), ""
         }
-        if p.isStructT(r) { return I64[0], "" }
+        if p.isStructT(r) { return Array<I64>[0], "" }
         return none, "only a struct and an enum have cases"
     }
     # fields: a struct's (its one case's), or an enum case's
@@ -5172,7 +5177,7 @@ fn (p mut Program&) projectPath(c Context&, sp source.Span, h types.TypeId, path
         if not p.T.Closed(t) {
             key := p.T.ConstExpr("refl:" $c.Owner ":" $c.Mi ":" $sp.Start ":" $sp.End)
             # its own copy of the path, made where the patterns live
-            p.patterns.Put(p.T.A(key), pattern(null, c.Mi, c.Owner, types.UnknownT, ast.TypeRef.Named(sp, source.NameId[x for x in path], Array<ast.TypeRef&>(0))))
+            p.patterns.Put(p.T.A(key), pattern(null, c.Mi, c.Owner, types.UnknownT, ast.TypeRef.Named(sp, Array<source.NameId>[x for x in path], Array<ast.TypeRef&>(0))))
             return key
         }
         name := p.text(path[k])
@@ -5228,7 +5233,7 @@ fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? BadCanon, Undeclare
     if c.eat("fn(") { return try p.canonFunc(c, false) }
     if c.eat("fn?(") { return try p.canonFunc(c, true) }
     # T21b: a declared function type, "fn[m:Handler](...)"
-    for nullable in Bool[false, true] {
+    for nullable in Array<Bool>[false, true] {
         if not c.eat("fn?[" if nullable else "fn[") { continue }
         tag := try p.canonType(c)
         if not c.eat("](") { error BadCanon.Text }
@@ -5410,7 +5415,7 @@ test "declared types and instances: laid out as C lays them out, their canonical
     assert p.Layout(mt) and p.T.Size(mt) == 4
     bf := try p.ParseCanon($m ":Buf") catch { unreachable }
     assert p.Layout(bf) and p.T.Size(bf) == 5 and p.T.Align(bf) == 1
-    for text in String&["I32", "Array<U8>", "Array<I64, 4>", $m ":Box<mut " $m ":P&>", "fn(I32, std/prelude/text:String&) I64 ? " $m ":E"
+    for text in Array<String&>["I32", "Array<U8>", "Array<I64, 4>", $m ":Box<mut " $m ":P&>", "fn(I32, std/prelude/text:String&) I64 ? " $m ":E"
                         "fn() (I32, Bool) ?", "(I32, Bool)", "struct(I64, F32)", "enum{A(I32) B}"
                         "mut Array<std/prelude/text:String&>&", $m ":Box<" $m ":Box<Array<F64>>>"] {
         assert p.roundTrip(text), text
@@ -5450,7 +5455,7 @@ test "a known length folds as the program computes it (T7c): typed, wrapping, fr
     r.Resolve()
     p := Program(l, r)
     m := l.Mods[l.Root].Identity
-    want := I64[0, 10, 17, 256]
+    want := Array<I64>[0, 10, 17, 256]
     for i in range 4 {
         t := try p.ParseCanon($m ":S" $i) catch { unreachable }
         assert p.Layout(t) and p.T.Size(t) == want[i], $i " " $p.T.Size(t)
@@ -5544,18 +5549,18 @@ test "a closed trait (T31a): the prelude's Float, Integer and Number are met by 
     fl := try p.ParseCanon("std/prelude/number:Float") catch { unreachable }
     it := try p.ParseCanon("std/prelude/number:Integer") catch { unreachable }
     nu := try p.ParseCanon("std/prelude/number:Number") catch { unreachable }
-    for x in String&["F16", "BF16", "F32", "F64"] {
+    for x in Array<String&>["F16", "BF16", "F32", "F64"] {
         t := try p.ParseCanon(x) catch { unreachable }
         assert p.Satisfies(t, fl) and p.Satisfies(t, nu) and not p.Satisfies(t, it), x
     }
-    for x in String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64"] {
+    for x in Array<String&>["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64"] {
         t := try p.ParseCanon(x) catch { unreachable }
         assert p.Satisfies(t, it) and p.Satisfies(t, nu) and not p.Satisfies(t, fl), x
     }
     bo := try p.ParseCanon("Bool") catch { unreachable }
     ch := try p.ParseCanon("std/prelude/text:Char") catch { unreachable }
     assert not p.Satisfies(bo, nu) and not p.Satisfies(ch, it) and not p.Satisfies(ch, nu)
-    for x in String&[":D", ":M", ":Fake"] {
+    for x in Array<String&>[":D", ":M", ":Fake"] {
         t := try p.ParseCanon($m $x) catch { unreachable }
         assert not p.Satisfies(t, fl) and not p.Satisfies(t, nu), x
     }
@@ -5574,24 +5579,24 @@ test "every reference parameter has a scope variable of its own, a reference res
     m := l.Mods[l.Root].Identity
     # QCB: no scope is written - what relates them is the body's, inferred (O10b)
     link := p.Sig(p.FnNamed(l.Root, l.Names.Intern("link")))
-    assert p.T.ShareOf(link, 1) == types.OwnScope and p.ScopeVarsOf(link) == I64[0, 1]
+    assert p.T.ShareOf(link, 1) == types.OwnScope and p.ScopeVarsOf(link) == Array<I64>[0, 1]
     first := p.Sig(p.FnNamed(l.Root, l.Names.Intern("first")))
-    assert p.T.ResultFrom(first, 0) == types.OwnScope and p.ScopeVarsOf(first) == I64[0, types.ResultVar]
+    assert p.T.ResultFrom(first, 0) == types.OwnScope and p.ScopeVarsOf(first) == Array<I64>[0, types.ResultVar]
     make := p.Sig(p.FnNamed(l.Root, l.Names.Intern("make")))
-    assert p.ScopeVarsOf(make) == I64[types.ResultVar]
+    assert p.ScopeVarsOf(make) == Array<I64>[types.ResultVar]
     nt := try p.ParseCanon($m ":N") catch { unreachable }
     put := p.MethodSig(p.MethodOf(nt, l.Names.Intern("Put")), p.T.Ref(nt, types.Writable))
-    assert p.T.ShareOf(put, 1) == types.OwnScope and p.ScopeVarsOf(put) == I64[0, 1]
+    assert p.T.ShareOf(put, 1) == types.OwnScope and p.ScopeVarsOf(put) == Array<I64>[0, 1]
     apply := p.Sig(p.FnNamed(l.Root, l.Names.Intern("apply")))
-    assert p.ScopeVarsOf(apply) == I64[0, 1, 2]
+    assert p.ScopeVarsOf(apply) == Array<I64>[0, 1, 2]
     count := p.Sig(p.FnNamed(l.Root, l.Names.Intern("count")))
-    assert p.ScopeVarsOf(count) == I64[1]   # a number holds no reference, so passes no scope
+    assert p.ScopeVarsOf(count) == Array<I64>[1]   # a number holds no reference, so passes no scope
     # a result written as a type variable: a result scope where it becomes a reference (O14b), none for a number
     f := p.FnNamed(l.Root, l.Names.Intern("id"))
     assert p.T.ResultFrom(p.Sig(f), 0) == types.FromTypeVar
     atI64 := p.FnInstance(f, p.T.List1(p.T.Prim("I64")))
     atRef := p.FnInstance(f, p.T.List1(p.T.Ref(nt, types.ReadOnly)))
-    assert p.ScopeVarsOf(p.InstanceSig(atI64)) == I64[] and p.ScopeVarsOf(p.InstanceSig(atRef)) == I64[0, types.ResultVar]
+    assert p.ScopeVarsOf(p.InstanceSig(atI64)) == Array<I64>[] and p.ScopeVarsOf(p.InstanceSig(atRef)) == Array<I64>[0, types.ResultVar]
     # an instance remembers where it was first asked for (G16b)
     p.Asking = Origin(7, source.Span(3, 9), atI64)
     bx := try p.ParseCanon($m ":Box<I32>") catch { unreachable }

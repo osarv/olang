@@ -301,7 +301,7 @@ fn (r mut Resolver&) declareRaised(mi I64, firsts Vec<raisedName>&) {
     for f in firsts {
         r.addType(mi, f.Name, f.Sp, null)
         r.L.Mods[mi].Types.Push($r.text(f.Name))
-        cases := ast.CaseDecl&[ast.CaseDecl(f.Sp, f.Name, r.raisedFields(mi, f.Args))]
+        cases := Array<ast.CaseDecl&>[ast.CaseDecl(f.Sp, f.Name, r.raisedFields(mi, f.Args))]
         ds.Push(ast.Decl.Errors(f.Sp, f.Name, Array<source.NameId>(1, f.Name), Array<ast.Path&>(0), cases))
         r.payloadEnum(mi, f.Sp, f.Name, cases)
     }
@@ -1537,7 +1537,7 @@ fn (r mut Resolver&) suggests(name String&) Bool {
     }
     if name == "Byte" { return true }
     best := 2 if name.Len() <= 4 else 3
-    for t in String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "Array"] {
+    for t in Array<String&>["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "Array"] {
         if msgs.Distance(name, t) < best { return true }
     }
     for e in r.Tables[r.mi].Entries {
@@ -1789,18 +1789,18 @@ fn lineCol(text String&, at I64) I64, I64 {
 }
 
 test "D2, D3a and M20: a name means one thing in a module; nothing is reached bare that no import gave" {
-    got := testRules(String&["main.olang", "import \"util\"\nfn Circle() I32 { return 3 }\ntype Circle struct() { }\nCount I32 = 1\nfn f(Count I32, I32 I32) { for c in I32[1] { c := 2 } }\nfn print() { }\nutil := 3\nfn main() ? { }\n", "util.olang", ""], String&[])
+    got := testRules(Array<String&>["main.olang", "import \"util\"\nfn Circle() I32 { return 3 }\ntype Circle struct() { }\nCount I32 = 1\nfn f(Count I32, I32 I32) { for c in Array<I32>[1] { c := 2 } }\nfn print() { }\nutil := 3\nfn main() ? { }\n", "util.olang", ""], Array<String&>[])
     assert got.Contains("D2 3:6\n") and got.Contains("D3a 5:6\n") and got.Contains("D3a 5:17\n"), got
-    assert got.Contains(" 5:46\n") and not got.Contains("M19f") and got.Contains("M20 7:1\n"), got
+    assert got.Contains(" 5:53\n") and not got.Contains("M19f") and got.Contains("M20 7:1\n"), got
 }
 
 test "B10, B10c: build constants and their defaults, and an unknown name in a condition" {
-    got := testRules(String&["main.olang", "Port I64 = 8080\nLevel U8 = 3\nfn Mode() { }\nfn main() ? {\n    if Profil == 1 { }\n    TargetOs := 1\n}\n"], String&["Port=x", "Level=1", "Mode=2"])
+    got := testRules(Array<String&>["main.olang", "Port I64 = 8080\nLevel U8 = 3\nfn Mode() { }\nfn main() ? {\n    if Profil == 1 { }\n    TargetOs := 1\n}\n"], Array<String&>["Port=x", "Level=1", "Mode=2"])
     assert got.Contains("B10c 1:1\n") and got.Contains("B10c 2:1\n") and got.Contains("B10 3:4\n"), got
     assert got.Contains("B10 5:8\n") and got.Contains("D3a 6:5\n"), got
 }
 
 test "D3a, E29: a for-in declares new names; a local if the build decides chooses its branch" {
-    got := testRules(String&["main.olang", "fn main() ? {\n    x := 2\n    for x in I32[1] { }\n    if TargetOs == \"none\" { y := missing }\n}\n"], String&[])
+    got := testRules(Array<String&>["main.olang", "fn main() ? {\n    x := 2\n    for x in Array<I32>[1] { }\n    if TargetOs == \"none\" { y := missing }\n}\n"], Array<String&>[])
     assert got == "D3a, E29 3:9\n", got
 }

@@ -8,7 +8,7 @@ type Bag struct(c mut Cell&) {
     c
 }
 fn (b Bag&) Str() String {
-    n := I64[1, 2].Count(fn(x I64) Bool {
+    n := Array<I64>[1, 2].Count(fn(x I64) Bool {
         b.c.v++
         return true
     })

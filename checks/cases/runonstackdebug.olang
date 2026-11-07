@@ -6,7 +6,7 @@
 import "std/os"
 fn main() ? {
     x mut Array<I64>& = Array<I64>(1)
-    for sz in I64[65536, 20000, 16384, 4096, 0] {
+    for sz in Array<I64>[65536, 20000, 16384, 4096, 0] {
         os.RunOnStack(sz, fn() { x[0] = x[0] + 1 })
     }
     assert x[0] == 5

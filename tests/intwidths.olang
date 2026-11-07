@@ -285,8 +285,8 @@ test "T4a: Sqrt, PadStart and PadEnd at the new widths" {
 test "T4a: an array of a new width made in a function is read back after an arena churn, its lanes adding" {
     w := wides(Four)
     assert churn() > 0
-    assert $w == "U100[0, 1237940039285380274899124224, 2475880078570760549798248448, 3713820117856140824697372672]"
-    assert $(w + w) == ("U100[0, 2475880078570760549798248448, 4951760157141521099596496896, "
+    assert $w == "Array<U100>[0, 1237940039285380274899124224, 2475880078570760549798248448, 3713820117856140824697372672]"
+    assert $(w + w) == ("Array<U100>[0, 2475880078570760549798248448, 4951760157141521099596496896, "
         "7427640235712281649394745344]")
     assert w.Sum() == U100(6) << 90
 }

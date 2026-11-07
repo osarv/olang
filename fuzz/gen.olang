@@ -34,21 +34,21 @@ import "std/os"
 # FUZZ_WIDTHS=odd: the signed integers I9, I17 and I33 in place of I8, I16 and I32 (T4a) - widths no case of the
 # evaluator's or std's names - and no atomics, which take the eight widths only
 OddWidths := (try os.Env("FUZZ_WIDTHS") catch default "") == "odd"
-Prims := String&["I9", "I17", "I33", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "String"] if OddWidths else
-    String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "String"]
-Widths := I32[8, 16, 32, 64, 8, 16, 32, 64, 16, 16, 32, 64, 1, 0]
+Prims := Array<String&>["I9", "I17", "I33", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "String"] if OddWidths else
+    Array<String&>["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "String"]
+Widths := Array<I32>[8, 16, 32, 64, 8, 16, 32, 64, 16, 16, 32, 64, 1, 0]
 TBool I32 = 12
 TStr I32 = 13
 
-Arith := String&["+", "-", "*"]
-ArithFn := String&["Add", "Sub", "Mul"]
+Arith := Array<String&>["+", "-", "*"]
+ArithFn := Array<String&>["Add", "Sub", "Mul"]
 # text a String is compared with or searched for: pieces renderings are made of
-Texts := String&["", "0", "1", "-", "-1", "0.5", "e+", "nan", "inf", "true", "I32[", ", ", " ", "S0_0(", "C1"]
-Bits := String&["&", "|", "^"]
-Orders := String&["<", "<=", ">", ">="]
-Compares := String&["<", "<=", ">", ">=", "==", "!="]
-IntAssigns := String&["+=", "-=", "*=", "&=", "|=", "^="]
-FloatAssigns := String&["+=", "-=", "*=", "/="]
+Texts := Array<String&>["", "0", "1", "-", "-1", "0.5", "e+", "nan", "inf", "true", "I32[", ", ", " ", "S0_0(", "C1"]
+Bits := Array<String&>["&", "|", "^"]
+Orders := Array<String&>["<", "<=", ">", ">="]
+Compares := Array<String&>["<", "<=", ">", ">=", "==", "!="]
+IntAssigns := Array<String&>["+=", "-=", "*=", "&=", "|=", "^="]
+FloatAssigns := Array<String&>["+=", "-=", "*=", "/="]
 
 fn isInt(t I32) Bool { return 0 <= t <= 7 }
 fn isList(t I32) Bool { return 500 <= t < 600 }
@@ -429,12 +429,12 @@ fn (g mut Gen&) floatBody(t I32) String& {
     if p == 1 { return "1.0" }
     if p == 2 { return "0.5" }
     if p == 3 { return "0.1" }
-    if p == 4 { return $String&["65504.0", "3.38e38", "3.4e38", "1.7976931348623157e308"][t - 8] }
-    if p == 5 { return $String&["6e-08", "9.2e-41", "1.4e-45", "5e-324"][t - 8] }
-    if p == 6 { return $String&["0.00006103515625", "1.1754943508222875e-38", "1.1754943508222875e-38", "2.2250738585072014e-308"][t - 8] }
+    if p == 4 { return $Array<String&>["65504.0", "3.38e38", "3.4e38", "1.7976931348623157e308"][t - 8] }
+    if p == 5 { return $Array<String&>["6e-08", "9.2e-41", "1.4e-45", "5e-324"][t - 8] }
+    if p == 6 { return $Array<String&>["0.00006103515625", "1.1754943508222875e-38", "1.1754943508222875e-38", "2.2250738585072014e-308"][t - 8] }
     if p < 10 and p > 6 { return $g.r(1000) "." $g.r(1000) }
     if p > 9 {
-        hi I64 = I64[3, 37, 37, 307][t - 8]
+        hi I64 = Array<I64>[3, 37, 37, 307][t - 8]
         return $(g.r(9) + 1) "." $g.r(100000) "e" $(g.r(hi + 40) - 40)
     }
     return "0.0"
@@ -658,7 +658,7 @@ fn (g mut Gen&) checkedInt(t I32, d I64) String& {
 fn (g mut Gen&) exFloat(t I32, d I64) String& {
     k := g.r(23)
     if k < 4 {
-        ops := String&["+", "-", "*", "/"]
+        ops := Array<String&>["+", "-", "*", "/"]
         return g.bin(t, d, ops[k])
     }
     if k == 4 { return "(-" $g.solid(t, d - 1) ")" }
@@ -671,7 +671,7 @@ fn (g mut Gen&) exFloat(t I32, d I64) String& {
         return g.conv(t, s, g.ex(s, d - 1))
     }
     if k == 7 or k == 8 {
-        ops := String&["Add", "Sub", "Mul", "Div"]
+        ops := Array<String&>["Add", "Sub", "Mul", "Div"]
         b := g.ex(t, d - 1)
         a String& = ""
         if isLit(b) {
@@ -737,7 +737,7 @@ fn (g mut Gen&) exBool(d I64) String& {
         return "(" $a " " $Orders[g.r(4)] " " $b " " $Orders[g.r(4)] " " $c ")"
     }
     if k == 4 {
-        ops := String&["and", "or", "xor", "==", "!="]
+        ops := Array<String&>["and", "or", "xor", "==", "!="]
         return "(" $g.ex(TBool, d - 1) " " $ops[g.r(5)] " " $g.ex(TBool, d - 1) ")"
     }
     if k == 5 { return "(not " $g.ex(TBool, d - 1) ")" }
@@ -822,7 +822,7 @@ fn (g mut Gen&) piece(d I64) String& {
     if p == 7 {
         t := g.primT()
         b := StringBuilder()
-        b.Push("$(" $Prims[t] "[")
+        b.Push("$(" "Array<" $Prims[t] ">[")
         n := g.r(4)
         for i in range n {
             if i > 0 { b.Push(", ") }
@@ -853,7 +853,7 @@ fn (g mut Gen&) piece(d I64) String& {
         c String& = ""
         if g.chance(40) { c = " if " $g.ex(TBool, d - 1) }
         g.nv = x
-        return "$(" $Prims[t] "[" $e " for " $g.bare(x) " in range " $n $c "])"
+        return "$(" "Array<" $Prims[t] ">[" $e " for " $g.bare(x) " in range " $n $c "])"
     }
     return "$(" $g.ex(g.primT(), d) ")"
 }
@@ -1047,7 +1047,7 @@ fn (g mut Gen&) newFn(t I32, d I64, fallible Bool) String& {
     b.Push(") " $Prims[t] $errs " {\n")
     g.hdepth += 1
     b.Push(g.stmts(1 + g.r(3), 1, "    "))
-    if fallible { b.Push("    if " $g.depCond(1) " { error Err" $g.ci "." $String&["A", "B", "C"][g.r(3)] " }\n") }
+    if fallible { b.Push("    if " $g.depCond(1) " { error Err" $g.ci "." $Array<String&>["A", "B", "C"][g.r(3)] " }\n") }
     b.Push("    return " $g.fit(t, 2) "\n}\n")
     g.hdepth -= 1
     g.decls = $g.decls $b.ToString()
@@ -1329,7 +1329,7 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
         }
     }
     if k == 24 and g.fallible {
-        return $ind "if " $g.depCond(2) " { error Err" $g.ci "." $String&["A", "B", "C"][g.r(3)] " }\n"
+        return $ind "if " $g.depCond(2) " { error Err" $g.ci "." $Array<String&>["A", "B", "C"][g.r(3)] " }\n"
     }
     if k == 25 and d > 0 and g.hdepth < 2 and g.nh < 6 {  # a fallible call as a statement
         call := g.newFn(g.primT(), 2, true)
@@ -1400,7 +1400,7 @@ fn (g mut Gen&) arrayDecl(d I64, ind String&) String& {
     n I64 = -1
     if p == 0 {
         n = 1 + g.r(4)
-        b.Push($Prims[t] "[")
+        b.Push("Array<" $Prims[t] ">[")
         for i in range n {
             if i > 0 { b.Push(", ") }
             b.Push(g.fit(t, 3))
@@ -1426,11 +1426,11 @@ fn (g mut Gen&) arrayDecl(d I64, ind String&) String& {
                 walked = g.vwalk[r]
                 g.vwalk[r] = true
             }
-            b.Push($Prims[t] "[" $g.fit(t, 3) " for " $g.bare(y) " in " $srcName)
+            b.Push("Array<" $Prims[t] ">[" $g.fit(t, 3) " for " $g.bare(y) " in " $srcName)
         } else {
             n = g.r(7)
             y := g.push(3, -1, false, true)
-            b.Push($Prims[t] "[" $g.fit(t, 3) " for " $g.bare(y) " in range " $n)
+            b.Push("Array<" $Prims[t] ">[" $g.fit(t, 3) " for " $g.bare(y) " in range " $n)
         }
         if g.chance(40) {
             n = -1
@@ -1820,7 +1820,7 @@ fn (g mut Gen&) refStmt(ind String&) String& {
         if g.chance(50) {
             b.Push("Array<" $Prims[et] ">(" $n ", " $g.fit(et, 2) ")")
         } else {
-            b.Push($Prims[et] "[")
+            b.Push("Array<" $Prims[et] ">[")
             for i in range n {
                 if i > 0 { b.Push(", ") }
                 b.Push(g.fit(et, 2))
@@ -1976,7 +1976,7 @@ fn (g mut Gen&) fixedVal(t I32, d I64) String& {
     n := fixN(t)
     if n == 0 or g.chance(15) { return "Array<" $Prims[et] ">(" $n ")" }
     b := StringBuilder()
-    b.Push($Prims[et] "[")
+    b.Push("Array<" $Prims[et] ">[")
     for i in range n {
         if i > 0 { b.Push(", ") }
         b.Push(g.fit(et, d - 1))
@@ -2107,7 +2107,7 @@ fn (g mut Gen&) constCall(t I32, d I64) String& {
     if recursive {
         a := g.push(I32(2000 + et * 16 + 15), -1, false, true)
         g.np = 0
-        ops := String&["+", "-", "*", "^", "&", "|"]
+        ops := Array<String&>["+", "-", "*", "^", "&", "|"]
         op := ops[g.r(6) if isInt(et) else g.r(3)]
         b.Push("fn " $name "(x" $a " Array<" $Prims[et] ">) " $Prims[t] " {\n")
         b.Push("    if x" $a ".Len() == 0 { return " $g.lit(t) " } else { return x" $a "[0] " $op " " $name "(x" $a "[1:]) }\n}\n")
@@ -2225,8 +2225,8 @@ fn (g mut Gen&) genStmt(ind String&) String& {
 
 # ---- the numbers' methods, Format and ParseInt, Fixed ----
 
-Unary := String&["Sqrt", "Cbrt", "Exp", "Exp2", "Expm1", "Log", "Log2", "Log10", "Log1p", "Sin", "Cos", "Tan", "Asin", "Acos", "Atan", "Sinh", "Cosh", "Tanh", "Erf", "Erfc", "Floor", "Ceil", "Trunc", "Round", "RoundEven", "Abs"]
-Binary := String&["Pow", "Hypot", "Atan2", "Min", "Max"]
+Unary := Array<String&>["Sqrt", "Cbrt", "Exp", "Exp2", "Expm1", "Log", "Log2", "Log10", "Log1p", "Sin", "Cos", "Tan", "Asin", "Acos", "Atan", "Sinh", "Cosh", "Tanh", "Erf", "Erfc", "Floor", "Ceil", "Trunc", "Round", "RoundEven", "Abs"]
+Binary := Array<String&>["Pow", "Hypot", "Atan2", "Min", "Max"]
 
 # one of a float's methods (M19d, the C math library's functions, X8) on a value of type t - the receiver never a
 # literal, so it is of type t (E13c)
@@ -2478,7 +2478,7 @@ fn (g mut Gen&) retVal(rt I32) String& {
         n := g.r(5)
         if n == 0 { return "Array<" $Prims[et] ">(0)" }
         b := StringBuilder()
-        b.Push($Prims[et] "[")
+        b.Push("Array<" $Prims[et] ">[")
         for i in range n {
             if i > 0 { b.Push(", ") }
             b.Push(g.fit(et, 2))

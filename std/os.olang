@@ -879,7 +879,7 @@ test "Exec fails only when the program cannot be started" {
     try Output.Exec(...Array<String&>(0)) catch Error.Failed { nothing = true } catch { }
     assert nothing
     zero := false
-    try Output.Exec("echo", String(U8['a', 0, 'b'])) catch Error.Failed { zero = true } catch { }
+    try Output.Exec("echo", String(Array<U8>['a', 0, 'b'])) catch Error.Failed { zero = true } catch { }
     assert zero
     assert Run("chmod +x build/os_files/noexec.sh") == 0
     ok := try Output.Exec("build/os_files/noexec.sh")
@@ -965,7 +965,7 @@ test "RemoveAll removes a tree, depth first, and never follows a link" {
     try RemoveAll("")
     try RemoveAll("build/os_files/ra/keep/k")       # a file is removed as Remove would
     assert not Exists("build/os_files/ra/keep/k") and IsDir("build/os_files/ra/keep")
-    for bad in String&["build/os_files/ra/keep/.", "build/os_files/ra/keep/..", ".", "..", "build/os_files/ra/keep/./"] {
+    for bad in Array<String&>["build/os_files/ra/keep/.", "build/os_files/ra/keep/..", ".", "..", "build/os_files/ra/keep/./"] {
         refused := false
         try RemoveAll(bad) catch Error.Failed { refused = true } catch { }
         assert refused and IsDir("build/os_files/ra/keep")
@@ -980,7 +980,7 @@ test "MkTemp makes a new directory only its user can enter, and names it" {
     b := try MkTemp("build/os_files/mt/", "run-") catch default ""
     assert a.StartsWith("build/os_files/mt/run-") and a.Len() == "build/os_files/mt/run-".Len() + 6
     assert b.StartsWith("build/os_files/mt/run-") and not b.Contains("//") and a != b and IsDir(a) and IsDir(b)
-    assert (try ReadDir(a) catch default String&["x"]).Len() == 0
+    assert (try ReadDir(a) catch default Array<String&>["x"]).Len() == 0
     assert Run("test \"$(stat -c %a " $Quote(a) ")\" = 700") == 0
     plain := try MkTemp("build/os_files/mt") catch default ""
     assert plain.Len() == "build/os_files/mt/".Len() + 6 and IsDir(plain)

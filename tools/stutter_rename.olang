@@ -19,8 +19,8 @@ type Count struct() { n I64 = 0 }
 
 # the module (its file std/NAME.olang), the old error type and its new name. Each old name is written in two pieces so
 # that the tool run over itself changes nothing
-Modules Array<String&> = String&["io", "os", "json", "csv", "stats", "rand", "http", "chan", "ffi", "filepath"]
-OldNames Array<String&> = String&["Io" "Error", "Os" "Error", "Json" "Error", "Csv" "Error", "Stats" "Error", "Rand" "Error", "Http" "Error", "Chan" "Error", "Ffi" "Error", "Path" "Error"]
+Modules Array<String&> = Array<String&>["io", "os", "json", "csv", "stats", "rand", "http", "chan", "ffi", "filepath"]
+OldNames Array<String&> = Array<String&>["Io" "Error", "Os" "Error", "Json" "Error", "Csv" "Error", "Stats" "Error", "Rand" "Error", "Http" "Error", "Chan" "Error", "Ffi" "Error", "Path" "Error"]
 
 fn isDeclaringFile(path String&, module String&) Bool {
     file := "std/" $module ".olang"

@@ -24,6 +24,6 @@ fn main() ? {
     v := Vec<cell>()
     v.Push(cell())
     v[0].n = grow(v)
-    v[3].xs = I64[1, 2].ToVec()
+    v[3].xs = Array<I64>[1, 2].ToVec()
     assert v[0].n == 7 and v.Len() == 21 and v[3].xs.Len() == 2
 }

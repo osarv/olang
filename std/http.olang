@@ -83,7 +83,7 @@ fn Response.Post(url String&, contentType String&, body Array<U8>&, headers ...H
 fn Response.Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, timeoutMs I64 = 0) Response ? Error {
     if method.Len() == 0 or not method.Every(fn(c Char) Bool { return c.IsLetter() }) { error Error.Invalid }
     args := Vec<String&>()
-    for a in String&["curl", "-q", "-s", "--proto", "=http,https", "--proto-redir", "=http,https", "-L"
+    for a in Array<String&>["curl", "-q", "-s", "--proto", "=http,https", "--proto-redir", "=http,https", "-L"
         "--max-redirs", "10", "-D", "/dev/stderr"] { args.Push(a) }
     head Bool = method == "HEAD"
     if head {                                       # a HEAD's response has no body; curl would write its fields there
@@ -224,9 +224,9 @@ if TestBuild {
         none := Array<Header>(0)
         assert failure("GE T", "http://127.0.0.1:1/", none, 0) == "INVALID"
         assert failure("", "http://127.0.0.1:1/", none, 0) == "INVALID"
-        assert failure("GET", "http://127.0.0.1:1/", Header[Header("X-A", "one\r\nX-B: two")], 0) == "INVALID"
-        assert failure("GET", "http://127.0.0.1:1/", Header[Header("X:A", "v")], 0) == "INVALID"
-        assert failure("GET", "http://127.0.0.1:1/", Header[Header("", "v")], 0) == "INVALID"
+        assert failure("GET", "http://127.0.0.1:1/", Array<Header>[Header("X-A", "one\r\nX-B: two")], 0) == "INVALID"
+        assert failure("GET", "http://127.0.0.1:1/", Array<Header>[Header("X:A", "v")], 0) == "INVALID"
+        assert failure("GET", "http://127.0.0.1:1/", Array<Header>[Header("", "v")], 0) == "INVALID"
         assert failure("GET", "http://127.0.0.1:1/" $Char(0), none, 0) == "INVALID"
     }
 

@@ -75,7 +75,7 @@ fn width(c U8) I64 {
 
 # whether "name" is a function the process can call this way - in what it has loaded, or in the C math library
 fn Has(name String&) Bool {
-    return __olang_dyncall_check($name "\0", U8[0], 0) != 1
+    return __olang_dyncall_check($name "\0", Array<U8>[0], 0) != 1
 }
 
 # calls the C function "name" with the arguments "words" holds, as "kinds" describes them, and gives its result's bits
@@ -136,18 +136,18 @@ test "Has finds the C library's functions, and the math library's" {
 
 test "Call passes numbers and gives each kind of result" {
     m42 I64 = -42           # its bits read unsigned (D17g: a constant -42 does not fit U64)
-    w := U64[U64(m42)]
-    assert I64(try Call("labs", U8[Code(Kind.I64)], w, Code(Kind.I64)) catch default 0) == 42
-    x := U64[F64(6.25).Bits()]
-    assert F64.FromBits(try Call("sqrt", U8[Code(Kind.F64)], x, Code(Kind.F64)) catch default 0) == 2.5
+    w := Array<U64>[U64(m42)]
+    assert I64(try Call("labs", Array<U8>[Code(Kind.I64)], w, Code(Kind.I64)) catch default 0) == 42
+    x := Array<U64>[F64(6.25).Bits()]
+    assert F64.FromBits(try Call("sqrt", Array<U8>[Code(Kind.F64)], x, Code(Kind.F64)) catch default 0) == 2.5
     f F32 = 2.25
-    y := U64[U64(f.Bits())]
-    assert F32.FromBits(U32(try Call("sqrtf", U8[Code(Kind.F32)], y, Code(Kind.F32)) catch default 0)) == 1.5
+    y := Array<U64>[U64(f.Bits())]
+    assert F32.FromBits(U32(try Call("sqrtf", Array<U8>[Code(Kind.F32)], y, Code(Kind.F32)) catch default 0)) == 1.5
     m5 I64 = -5
-    neg := U64[U64(m5)]
-    assert I64(try Call("abs", U8[Code(Kind.I32)], neg, Code(Kind.I32)) catch default 0) == 5     # an I32, extended
+    neg := Array<U64>[U64(m5)]
+    assert I64(try Call("abs", Array<U8>[Code(Kind.I32)], neg, Code(Kind.I32)) catch default 0) == 5     # an I32, extended
     none := Array<U64>(0)
-    assert (try Call("getpid", U8[], none, Code(Kind.I32)) catch default 0) > 0
+    assert (try Call("getpid", Array<U8>[], none, Code(Kind.I32)) catch default 0) > 0
 }
 
 test "Call hands an array over and reads back what the function wrote" {
@@ -155,13 +155,13 @@ test "Call hands an array over and reads back what the function wrote" {
     w := Array<U64>(1 + WordsFor(text.Len() + 1))
     w[0] = U64(text.Len() + 1)
     Pack(w, 1, text)                                      # a zero byte after it: the words were zero
-    assert (try Call("strlen", U8[ArrayOf(Kind.U8)], w, Code(Kind.I64)) catch default 0) == 12
+    assert (try Call("strlen", Array<U8>[ArrayOf(Kind.U8)], w, Code(Kind.I64)) catch default 0) == 12
     # memset(buf, 'z', 5) writes into the array, which is in the words after
     m := Array<U64>(1 + 1 + 1 + 1)
     m[0] = 8
     m[2] = U64('z')
     m[3] = 5
-    try Call("memset", U8[ArrayOf(Kind.U8), Code(Kind.I32), Code(Kind.I64)], m)
+    try Call("memset", Array<U8>[ArrayOf(Kind.U8), Code(Kind.I32), Code(Kind.I64)], m)
     back := Array<U8>(8)
     Unpack(m, 1, back)
     assert back[0] == 'z' and back[4] == 'z' and back[5] == 0
@@ -169,12 +169,12 @@ test "Call hands an array over and reads back what the function wrote" {
 
 test "Call fails on a function it cannot find, and on a kind nothing can pass" {
     missing := false
-    try Call("olang_no_such_function_anywhere", U8[], Array<U64>(0)) catch Error.NotFound { missing = true } catch { }
+    try Call("olang_no_such_function_anywhere", Array<U8>[], Array<U64>(0)) catch Error.NotFound { missing = true } catch { }
     assert missing
     half := false
-    try Call("sqrtf", U8[Code(Kind.F16)], U64[0], Code(Kind.F32)) catch Error.Unsupported { half = true } catch { }
+    try Call("sqrtf", Array<U8>[Code(Kind.F16)], Array<U64>[0], Code(Kind.F32)) catch Error.Unsupported { half = true } catch { }
     assert half
     arrayResult := false
-    try Call("strlen", U8[ArrayOf(Kind.U8)], U64[0, 0], ArrayOf(Kind.U8)) catch Error.Unsupported { arrayResult = true } catch { }
+    try Call("strlen", Array<U8>[ArrayOf(Kind.U8)], Array<U64>[0, 0], ArrayOf(Kind.U8)) catch Error.Unsupported { arrayResult = true } catch { }
     assert arrayResult
 }

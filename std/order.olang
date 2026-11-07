@@ -101,7 +101,7 @@ test ByFields "orders a struct by its fields in order" {
 }
 
 test ByFields "is the comparator Sort takes" {
-    v := Version[Version(2, 0, "x"), Version(1, 5, "z"), Version(1, 5, "a"), Version(1, 0, "q")]
+    v := Array<Version>[Version(2, 0, "x"), Version(1, 5, "z"), Version(1, 5, "a"), Version(1, 0, "q")]
     v.Sort(ByFields<Version>)
     assert v[0] == Version(1, 0, "q") and v[1] == Version(1, 5, "a") and v[2] == Version(1, 5, "z") and v[3] == Version(2, 0, "x")
 }
@@ -132,7 +132,7 @@ test ByFields "a field's own Less wins over its fields" {
 
 # decided while compiling (K2): the evaluator orders as the run time does
 fn evalSorted() Array<Version> {
-    v := Version[Version(2, 0, "x"), Version(1, 5, "z"), Version(1, 5, "a")]
+    v := Array<Version>[Version(2, 0, "x"), Version(1, 5, "z"), Version(1, 5, "a")]
     v.Sort(ByFields<Version>)
     return v
 }

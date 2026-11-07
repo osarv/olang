@@ -4,8 +4,8 @@
 # (std/list's List, a handle: its Clone went with E31d, a list of its own is built by From)
 import "std/list"
 fn f(ro list.List<list.List<I64>>&, ok list.List<I64>&) I64 {
-    a := list.List.From(ok.Iter())
-    c := list.List.From(ro.Iter())
+    a := list.List.FromIter(ok.Iter())
+    c := list.List.FromIter(ro.Iter())
     return a.Len() + c.Len()
 }
 fn main() ? {

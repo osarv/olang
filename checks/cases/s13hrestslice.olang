@@ -2,7 +2,7 @@
 # S13h: a type with At and Len is matched element by element; a named rest needs its Slice
 fn f(v Vec<I64>&) I64 {
     match v {
-        case I64[a, ...rest] { return a + rest.Len() }
+        case Array<I64>[a, ...rest] { return a + rest.Len() }
         case _ { return 0 }
     }
 }

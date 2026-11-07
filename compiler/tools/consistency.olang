@@ -231,12 +231,12 @@ type CommandLine struct() {
 
 fn CommandLine.commandLine(compiler String&) CommandLine {
     c := CommandLine()
-    c.Modes = modesOf(toolkit.Run(String&[compiler, "help"]).Stdout)
+    c.Modes = modesOf(toolkit.Run(Array<String&>[compiler, "help"]).Stdout)
     names := Vec<String&>()
     for m in c.Modes { names.Push(m) }
     names.Push("run")
     for m in names {
-        for o in optionsOf(toolkit.Run(String&[compiler, "help", m]).Stdout) {
+        for o in optionsOf(toolkit.Run(Array<String&>[compiler, "help", m]).Stdout) {
             addOption(c, o, specMode(m))
         }
     }
@@ -529,7 +529,7 @@ fn listedIn(p mut Problems&, dir String&, suffix String&, readme String&) {
 }
 
 # the files the repository's root holds; any other tracked file there was committed by mistake
-RootFiles := String&[".gitignore", "CLAUDE.md", "DEPENDENTS.md", "HISTORY.md", "PRINCIPLES.md", "README.md", "SPEC.md", "makefile"]
+RootFiles := Array<String&>[".gitignore", "CLAUDE.md", "DEPENDENTS.md", "HISTORY.md", "PRINCIPLES.md", "README.md", "SPEC.md", "makefile"]
 
 # each tracked file of the root that is not in RootFiles
 fn checkRoot(p mut Problems&) {

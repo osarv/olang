@@ -9,7 +9,7 @@ type Bag struct(c mut Cell&) {
 }
 fn pokeArr(a mut Array<mut Cell&>&) { a[0].v++ }
 fn (b Bag&) Str() String {
-    pokeArr(Cell&[b.c])
+    pokeArr(Array<Cell&>[b.c])
     return "b" $b.c.v
 }
 fn main() ? {

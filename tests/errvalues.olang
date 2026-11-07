@@ -92,7 +92,7 @@ fn captured(e LoadErr) String {
 }
 
 fn firstBad(from I64) I64 {
-    es := LoadErr[ParseErr.Empty, null, os.Error.Denied("d")]
+    es := Array<LoadErr>[ParseErr.Empty, null, os.Error.Denied("d")]
     k I64 = 0
     for e in es {
         if e is not null and e != ParseErr.Empty { return k }
@@ -106,7 +106,7 @@ BakedKinds := kinds(0, 4)
 BakedCount := counted(0, 5)
 BakedCaptured := captured(ParseErr.Bad)
 BakedFirstBad := firstBad(0)
-BakedReraised := I64[try reraised(null) catch default -1, try reraised(os.Error.Denied("d")) catch default -1
+BakedReraised := Array<I64>[try reraised(null) catch default -1, try reraised(os.Error.Denied("d")) catch default -1
                      try reraised(ParseErr.Bad) catch ParseErr.Bad default 7 catch default -1]
 BakedSame := same(ParseErr.Bad, ParseErr.Bad) and not same(ParseErr.Bad, NetErr.Down) and isParse(ParseErr.Empty)
 
@@ -137,7 +137,7 @@ test "an error value is compared with words, types, sets and other values, passe
 
 test "an error value is a Map key, and is raised again" {
     assert BakedCount == 3 and counted(Live, 5) == 3
-    assert BakedReraised == I64[0, 1, 7]
+    assert BakedReraised == Array<I64>[0, 1, 7]
     assert (try reraised(ParseErr.Empty) catch ParseErr e default (1 if e == ParseErr.Empty else 2)) == 1
 }
 
@@ -158,7 +158,7 @@ test "a caught error is held past its clause" {
 fn errRendered() String {
     v := Vec<os.Error>()
     v.Push(os.Error.Denied("d"))
-    a := os.Error[os.Error.Denied("d")]
+    a := Array<os.Error>[os.Error.Denied("d")]
     w := Vec<AnyErr>()
     w.Push(NetErr.Down)
     return $v " " $a " " $w
@@ -167,7 +167,7 @@ fn errRendered() String {
 ErrRenderedBaked := errRendered()
 
 test "an error type in a rendering is qualified as its values are" {
-    want := "Vec<os.Error>[os.Error.Denied(\"d\")] os.Error[os.Error.Denied(\"d\")] Vec<AnyErr>[NetErr.Down]"
+    want := "Vec<os.Error>[os.Error.Denied(\"d\")] Array<os.Error>[os.Error.Denied(\"d\")] Vec<AnyErr>[NetErr.Down]"
     assert errRendered() == want and ErrRenderedBaked == want
 }
 

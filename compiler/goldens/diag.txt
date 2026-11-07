@@ -514,9 +514,9 @@ c11arraydtor.olang:8:10: error[C11]: R has a destructor to run, and an array of 
       |          ^~~~~~~~~~~
 compilation failed with 1 error
 === c11comprdtor.olang
-c11comprdtor.olang:9:11: error[C11]: R has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<R>, or hold R& ones
-    9 |     xs := R[R(i) for i in range n]
-      |           ^~~~~~~~~~~~~~~~~~~~~~~~
+c11comprdtor.olang:9:17: error[C11]: R has a destructor to run, and Array<R> keeps values of it where no holder ends them - write R&, or keep them in a Vec<R>
+    9 |     xs := Array<R>[R(i) for i in range n]
+      |                 ^
 compilation failed with 1 error
 === c11copyrunarray.olang
 c11copyrunarray.olang:10:12: error[C11]: Kept has a destructor to run, and an array of a run-time length ends none of its elements - keep them in a Vec<Kept>, or hold Kept& ones
@@ -809,6 +809,39 @@ charnopad.olang:5:17: error[M19, T29f]: Char has no method 'PadStart' - a charac
     5 |     s := "x" $c.PadStart(3)
       |                 ^~~~~~~~
 compilation failed with 1 error
+=== columnassigned.olang
+columnassigned.olang:7:5: error[T7e]: a column is assigned whole only alone - 'c.x = v', its length checked against its table's
+    7 |     c.X, c.Y = c.Y, c.X
+      |     ^~~
+columnassigned.olang:7:10: error[T7e]: a column is assigned whole only alone - 'c.x = v', its length checked against its table's
+    7 |     c.X, c.Y = c.Y, c.X
+      |          ^~~
+compilation failed with 2 errors
+=== columnscontract.olang
+columnscontract.olang:5:18: error[T7e]: Columns<Pos> takes a record for its rows, and Pos has a constructor that checks or fails - a record is a struct whose constructor declares exactly its fields, each a parameter written bare: 'type P struct(X F32, Y F32) { X, Y }'
+    5 |     c := Columns<Pos>(1, Pos(1)!)
+      |                  ^~~
+compilation failed with 1 error
+=== columnsnamedmethod.olang
+columnsnamedmethod.olang:5:18: error[T7e]: R's field 'Len' would be a column of Columns<R> named like its method 'Len' (M19) - rename the field
+    5 |     c := Columns<R>(2)
+      |                  ^
+compilation failed with 1 error
+=== columnsnotrecord.olang
+columnsnotrecord.olang:9:18: error[T7e]: Columns<Q> takes a record for its rows, and Q has a field its constructor computes - a record is a struct whose constructor declares exactly its fields, each a parameter written bare: 'type P struct(X F32, Y F32) { X, Y }'
+    9 |     c := Columns<Q>(4)
+      |                  ^
+compilation failed with 1 error
+=== columnsnotstruct.olang
+columnsnotstruct.olang:4:20: error[T7e]: ColumnVec<I64> takes a record for its rows, and I64 is no struct - a record is a struct whose constructor declares exactly its fields, each a parameter written bare: 'type P struct(X F32, Y F32) { X, Y }'
+    4 |     v := ColumnVec<I64>()
+      |                    ^~~
+compilation failed with 1 error
+=== columnsnozero.olang
+columnsnozero.olang:8:20: error[T7e]: ColumnVec<R> takes a record for its rows, and R has no zero value (a never-null reference field - hold it as ?&) - a record is a struct whose constructor declares exactly its fields, each a parameter written bare: 'type P struct(X F32, Y F32) { X, Y }'
+    8 |     v := ColumnVec<R>()
+      |                    ^
+compilation failed with 1 error
 === commaendsline.olang
 commaendsline.olang:5:17: error[L18a]: a comma never ends a line - items on different lines are separated by the line break; remove it
     5 |     assert add(1,
@@ -820,24 +853,24 @@ compoundnarrow.olang:7:7: error[T6b]: I32 does not flow into U8 - convert it, as
       |       ^~
 compilation failed with 1 error
 === comprfilter.olang
-comprfilter.olang:4:41: error: a condition is a Bool, found I32
-    4 |     a := I32[x for x in range I32(3) if x]
-      |                                         ^
+comprfilter.olang:4:48: error: a condition is a Bool, found I32
+    4 |     a := Array<I32>[x for x in range I32(3) if x]
+      |                                                ^
 compilation failed with 1 error
 === comprneedstry.olang
-comprneedstry.olang:12:17: error[E27, S9e]: this comprehension's own calls can fail - write 'try T[e for x in c]'
-   12 |     xs := I32[x for x in t]
-      |                 ^~~
+comprneedstry.olang:12:24: error[E27, S9e]: this comprehension's own calls can fail - write 'try Array<T>[e for x in c]'
+   12 |     xs := Array<I32>[x for x in t]
+      |                        ^~~
 compilation failed with 1 error
 === comprnotype.olang
-comprnotype.olang:4:10: error: expected an element type before the [, as in I32[...], found '['
+comprnotype.olang:4:10: error: expected the type a literal makes before the [, as in Array<I32>[...], found '['
     4 |     a := [y for y in range 3]
       |          ^
 compilation failed with 1 error
 === comprref.olang
-comprref.olang:5:17: error[E27]: a comprehension's elements may not be or hold references yet - build the array with a loop
-    5 |     a := String&[t for _ in t]
-      |                 ^
+comprref.olang:5:24: error[E27]: a comprehension's elements may not be or hold references yet - build the array with a loop
+    5 |     a := Array<String&>[t for _ in t]
+      |                        ^
 compilation failed with 1 error
 === comptimebudget.olang
 comptimebudget.olang:7:20: error[K3]: a comptime is computed while compiling, and this one cannot be: the computation runs longer than compile-time evaluation allows
@@ -866,7 +899,7 @@ comptimeforsource.olang:5:23: error[K3a]: a comptime for walks a range or an arr
 compilation failed with 1 error
 === comptimefortry.olang
 comptimefortry.olang:5:5: error[K3a]: a comptime for's elements are computed while compiling, so nothing of its walk fails at run time - write 'comptime for x in e'
-    5 |     comptime for k in try I64[1, 2] { t += k } catch { }
+    5 |     comptime for k in try Array<I64>[1, 2] { t += k } catch { }
       |     ^~~~~~~~
 compilation failed with 1 error
 === comptimeforwhile.olang
@@ -1407,8 +1440,8 @@ d8gctor.olang:2:20: error[D8g]: a variadic parameter is a function's, not a cons
 compilation failed with 1 error
 === d8gdefault.olang
 d8gdefault.olang:2:20: error[D8g]: a variadic parameter takes no default - a call giving it no argument gives it the empty array
-    2 | fn sum(xs ...I64 = I64[1]) I64 { return xs.Len() }
-      |                    ^~~~~~
+    2 | fn sum(xs ...I64 = Array<I64>[1]) I64 { return xs.Len() }
+      |                    ^~~~~~~~~~~~~
 compilation failed with 1 error
 === d8gelement.olang
 d8gelement.olang:6:19: error[E12]: expected I64, found String
@@ -1598,8 +1631,8 @@ compilation failed with 1 error
 e10aprivateeq.olang:12:5: error[M6b]: '==' needs K's eq, which is private to its module - declare it Eq to use it here
    12 |   m.Put(K(1), 5)
       |     ^~~
-$ROOT/std/prelude/map.olang:117:26: note: in the standard library's code, here
-  117 |         if m.ents[i].Key == key {
+$ROOT/std/prelude/map.olang:125:26: note: in the standard library's code, here
+  125 |         if m.ents[i].Key == key {
       |                          ^~
 e10aprivateeq.olang:12:5: note: instantiated here, with K = K, V = I32
    12 |   m.Put(K(1), 5)
@@ -1667,9 +1700,9 @@ e13bfieldtry.olang:11:10: error[E15]: this call can fail - write 'try', and catc
       |          ^
 compilation failed with 1 error
 === e13bnotfn.olang
-e13bnotfn.olang:4:22: error[E13b]: I32 is not a function, and declares no Call
-    4 |     n := I32[1, 2][0](3)
-      |                      ^
+e13bnotfn.olang:4:29: error[E13b]: I32 is not a function, and declares no Call
+    4 |     n := Array<I32>[1, 2][0](3)
+      |                             ^
 compilation failed with 1 error
 === e13btry.olang
 e13btry.olang:6:16: error[E15]: this call can fail - write 'try', and catch or pass on its errors
@@ -1742,6 +1775,31 @@ e16slicenumber.olang:4:19: error[E16]: I64 cannot be indexed
     4 | fn main() { x := $Live[:1] }
       |                   ^~~~~~~~
 compilation failed with 1 error
+=== e19entries.olang
+e19entries.olang:4:22: error[E19]: a literal of Array<I64> holds no 'key: value' entries - its elements are no MapEntry
+    4 |     xs := Array<I64>[1: 2]
+      |                      ^~~~
+compilation failed with 1 error
+=== e19heap.olang
+e19heap.olang:5:10: error[E19]: Heap<I64>'s FromIter takes no one iterator, so no literal can call it - call it as Heap<I64>.FromIter(...)
+    5 |     h := heap.Heap<I64>[3, 1, 2]
+      |          ^~~~~~~~~~~~~~
+compilation failed with 1 error
+=== e19mixed.olang
+e19mixed.olang:4:39: error: expected ':', found ']'
+    4 |     m := Map<String&, I64>["a": 1, "b"]
+      |                                       ^
+compilation failed with 1 error
+=== e19nofromiter.olang
+e19nofromiter.olang:4:11: error[E19]: a literal makes the type before its '[', through that type's FromIter, and I64 has none - for an array of I64, write Array<I64>[...]
+    4 |     xs := I64[1, 2]
+      |           ^~~
+compilation failed with 1 error
+=== e19reference.olang
+e19reference.olang:6:11: error[E19]: a literal makes the type before its '[', and Node& is a reference - an array of them is Array<Node&>[...]
+    6 |     xs := Node&[n]
+      |           ^~~~~
+compilation failed with 1 error
 === e23lenclash.olang
 e23lenclash.olang:4:14: error[E23, E33, E37, P9, T17e]: the compiler supplies Len for Nums& - choose another name
     4 | fn (n Nums&) Len() I64 { return 7 }
@@ -1761,6 +1819,11 @@ compilation failed with 1 error
 e26bnarrownotry.olang:5:12: error[E15]: this call can fail - write 'try', and catch or pass on its errors
     5 |     m := n.Narrow<I32>()
       |            ^~~~~~
+compilation failed with 1 error
+=== e27walkfails.olang
+e27walkfails.olang:9:36: error[E27]: a comprehension made into a collection other than an array or a Vec walks its elements as the collection asks for them, and may not fail by calls of its own - write a generator function and call the collection's FromIter with it
+    9 |     s := try set.Set<I64>[parse(x) for x in Array<I64>[1, 2]]
+      |                                    ^~~
 compilation failed with 1 error
 === e28condarraylent.olang
 e28condarraylent.olang:16:15: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
@@ -3034,9 +3097,9 @@ l16unknown.olang:6:8: error[L16]: unexpected character '`'
       |        ^
 compilation failed with 1 error
 === l18atrailing.olang
-l18atrailing.olang:4:19: error[L18a]: a comma before ']' separates nothing - remove it
-    4 |     xs := I32[1, 2,]
-      |                   ^
+l18atrailing.olang:4:26: error[L18a]: a comma before ']' separates nothing - remove it
+    4 |     xs := Array<I32>[1, 2,]
+      |                          ^
 compilation failed with 1 error
 === l18bifline.olang
 l18bifline.olang:8:10: error: expected '{', found 'else'
@@ -3125,19 +3188,19 @@ laneinplacerefs.olang:10:7: error[E39]: lane operators give elements that may no
       |       ^~
 compilation failed with 1 error
 === lanelengths.olang
-lanelengths.olang:4:24: error[E39]: these arrays are of lengths 2 and 3 - a lane operation takes arrays of one length
-    4 |     a := F64[1.0, 2.0] + F64[1.0, 2.0, 3.0]
-      |                        ^
+lanelengths.olang:4:31: error[E39]: these arrays are of lengths 2 and 3 - a lane operation takes arrays of one length
+    4 |     a := Array<F64>[1.0, 2.0] + Array<F64>[1.0, 2.0, 3.0]
+      |                               ^
 compilation failed with 1 error
 === lanemaxtry.olang
-lanemaxtry.olang:4:20: error[E15]: this call can fail - write 'try', and catch or pass on its errors
-    4 |     m := I64[1, 2].Max()
-      |                    ^~~
+lanemaxtry.olang:4:27: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+    4 |     m := Array<I64>[1, 2].Max()
+      |                           ^~~
 compilation failed with 1 error
 === lanereferences.olang
 lanereferences.olang:9:10: error[E39]: lane operators give elements that may not be or hold references - build the array with a loop
-    9 |     v := W[w, w] + W[w, w]
-      |          ^~~~~~~~~~~~~~~~~
+    9 |     v := Array<W>[w, w] + Array<W>[w, w]
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === laneselectbool.olang
 laneselectbool.olang:5:12: error[E39]: 'Select' takes lanes of Bool, found F64
@@ -3145,9 +3208,9 @@ laneselectbool.olang:5:12: error[E39]: 'Select' takes lanes of Bool, found F64
       |            ^~~~~~
 compilation failed with 1 error
 === lanesomebool.olang
-lanesomebool.olang:4:18: error[E39]: 'Some()' takes lanes of Bool, found I32
-    4 |     if I32[1, 2].Some() { }
-      |                  ^~~~
+lanesomebool.olang:4:25: error[E39]: 'Some()' takes lanes of Bool, found I32
+    4 |     if Array<I32>[1, 2].Some() { }
+      |                         ^~~~
 compilation failed with 1 error
 === lanethroughatop.olang
 lanethroughatop.olang:16:12: error[E31b]: x[i] gives a copy of the element, and this store would run M's 'Plus' between reading it and writing it back - write 't := x[i]', the store into 't', then 'x[i] = t'
@@ -3472,8 +3535,8 @@ compilation failed with 1 error
 m6bonce.olang:14:7: error[M6b]: '==' needs K's eq, which is private to its module - declare it Eq to use it here
    14 |     m.Put(P(K(1), K(2)), 5)
       |       ^~~
-$ROOT/std/prelude/map.olang:117:26: note: in the standard library's code, here
-  117 |         if m.ents[i].Key == key {
+$ROOT/std/prelude/map.olang:125:26: note: in the standard library's code, here
+  125 |         if m.ents[i].Key == key {
       |                          ^~
 m6bonce.olang:14:7: note: instantiated here, with K = P, V = I32
    14 |     m.Put(P(K(1), K(2)), 5)
@@ -3510,6 +3573,27 @@ nextflag.olang:9:14: error[S9a]: It& cannot be walked - 'for ... in' takes an ar
     9 |     for _ in t { }
       |              ^
 compilation failed with 2 errors
+=== nllkeepsunion1.olang
+nllkeepsunion1.olang:19:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
+   19 |         f(x, t)
+      |              ^
+compilation failed with 1 error
+=== nllkeepsunion2.olang
+nllkeepsunion2.olang:19:11: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
+   19 |         f(t, x)
+      |           ^
+compilation failed with 1 error
+=== nllmerge.olang
+nllmerge.olang:15:17: error[O25i, O12]: 'at' may hold values of different scopes here, so where its referent lives is not known - nothing new is built or stored through it: give it values of one scope, or store through each where it is assigned
+   15 |         at.next = N(9)
+      |                 ^
+nllmerge.olang:13:9: note: 'at' is given a value here
+   13 |         at mut N& = outer
+      |         ^~
+nllmerge.olang:14:21: note: 'at' is given a value here
+   14 |         if i == 1 { at = inner }
+      |                     ^~~~~~~~~~
+compilation failed with 1 error
 === noextendsmethod.olang
 noextendsmethod.olang:6:12: error[T29f]: Nums declares no 'Count', and does not extend its base, which has one - declare it with 'extends'
     6 |     c := n.Count(fn(x) { return x > 1 })
@@ -3790,9 +3874,12 @@ o18claterkept.olang:24:16: error[O17]: this value's references live where its ow
       |                ^
 compilation failed with 1 error
 === o18cprojectionborrow.olang
-o18cprojectionborrow.olang:17:14: error[O10]: this reference lives in a scope that may not outlive where it is put
-   17 |         held = x
-      |              ^
+o18cprojectionborrow.olang:21:20: error[O25i]: this reads 'held', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
+   21 |     try io.Println(held!.s)
+      |                    ^~~~
+o18cprojectionborrow.olang:19:9: note: 'held' is given a value here
+   19 |         held = x
+      |         ^~~~~~~~
 compilation failed with 1 error
 === o18cprojectionfresh.olang
 o18cprojectionfresh.olang:15:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -3814,9 +3901,12 @@ o1blambdaglobal.olang:14:30: error[O1b]: a global holds only what lives as long 
       |                              ^
 compilation failed with 1 error
 === o23adepth.olang
-o23adepth.olang:17:14: error[O20]: 'v.n' lives where 'v' does, which closes first - keep a copy ('$v.n'), or keep what 'v' was made from
-   17 |         keep = v.n
-      |              ^
+o23adepth.olang:22:13: error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
+   22 |     assert $keep != ""
+      |             ^~~~
+o23adepth.olang:19:9: note: 'keep' is given a value here
+   19 |         keep = v.n
+      |         ^~~~~~~~~~
 compilation failed with 1 error
 === o23aliasmethod.olang
 o23aliasmethod.olang:17:16: error[O23, O11]: this stores into a field whose binding is not known through this path - store through a variable holding the instance
@@ -3827,9 +3917,12 @@ o23aliasmethod.olang:9:33: note: the callee requires it because of this statemen
       |                                 ^
 compilation failed with 1 error
 === o23aliaswrite.olang
-o23aliaswrite.olang:18:14: error[O20]: 'c.at' lives where 'c' does, which closes first - keep a copy ('$c.at'), or keep what 'c' was made from
-   18 |         keep = c.at
-      |              ^
+o23aliaswrite.olang:22:13: error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
+   22 |     assert $keep != ""
+      |             ^~~~
+o23aliaswrite.olang:20:9: note: 'keep' is given a value here
+   20 |         keep = c.at
+      |         ^~~~~~~~~~~
 compilation failed with 1 error
 === o25enote.olang
 o25enote.olang:19:5: error[O27]: this keeps a view of 'text', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Copy()'
@@ -4048,14 +4141,14 @@ parcount.olang:5:10: error[S4c]: 2 targets need as many values, found 3
       |          ^
 compilation failed with 1 error
 === parsedropcomp.olang
-parsedropcomp.olang:4:15: error: expected an expression, found ']'
-    4 |     a := I32[~]
-      |               ^
+parsedropcomp.olang:4:22: error: expected an expression, found ']'
+    4 |     a := Array<I32>[~]
+      |                      ^
 compilation failed with 1 error
 === parsedroplit.olang
-parsedroplit.olang:5:18: error: expected ']', found ')'
-    5 |     assert f(I32[) == 7
-      |                  ^
+parsedroplit.olang:5:25: error: expected ']', found ')'
+    5 |     assert f(Array<I32>[) == 7
+      |                         ^
 compilation failed with 1 error
 === parsedropop.olang
 parsedropop.olang:5:15: error: expected an expression, found ')'
@@ -4375,11 +4468,6 @@ r8trynothing.olang:4:20: error[R8]: nothing here can fail - write it without 'tr
     4 | fn main() ? { x := try inc(1) }
       |                    ^~~
 compilation failed with 1 error
-=== r9adefaultinner.olang
-r9adefaultinner.olang:19:14: error[O25]: a reference never narrows - declare it with ':=' from what it is given
-   19 |         keep = try Node.mk(i) catch default inner
-      |              ^
-compilation failed with 1 error
 === r9adefaultlocal.olang
 r9adefaultlocal.olang:15:12: error[O10d]: this value lives in this function's own scope, which closes first
    15 |     return try Node.mk(1) catch default seed
@@ -4451,7 +4539,7 @@ redefd.olang:6:4: error[B10]: 'Level' is a build constant - choose another name
       |    ^~~~~
 compilation failed with 1 error
 === reflargcompr.olang
-reflargcompr.olang:11:27: error[G37]: a comprehension written as a call's arguments walks a list known while compiling - 'T.Params', 'T.Fields' ...; another is written in brackets, 'T[e for x in c]'
+reflargcompr.olang:11:27: error[G37]: a comprehension written as a call's arguments walks a list known while compiling - 'T.Params', 'T.Fields' ...; another is written in brackets, 'Array<T>[e for x in c]'
    11 |     p := Point(x for x in xs)
       |                           ^~
 compilation failed with 1 error
@@ -4479,9 +4567,9 @@ reflfilterargs.olang:5:67: error[G33]: a comprehension over a list known while c
       |                                                                   ^~~~~
 compilation failed with 1 error
 === reflfilterundecided.olang
-reflfilterundecided.olang:9:77: error[G33]: a comprehension over a list known while compiling keeps an element by a filter decided while compiling - this one is known only at run time
-    9 | fn g(k I64) Array<String&> { return String&[f.Name for f in Point.Fields if k > 0] }
-      |                                                                             ^~~~~
+reflfilterundecided.olang:9:84: error[G33]: a comprehension over a list known while compiling keeps an element by a filter decided while compiling - this one is known only at run time
+    9 | fn g(k I64) Array<String&> { return Array<String&>[f.Name for f in Point.Fields if k > 0] }
+      |                                                                                    ^~~~~
 compilation failed with 1 error
 === reflfncall.olang
 reflfncall.olang:6:35: error[G41]: 'Get' is called with 1 arguments (a method's receiver first), found 0
@@ -4621,16 +4709,16 @@ $ROOT/std/prelude/vec.olang:67:5: note: the callee is no view of the element bec
 compilation failed with 1 error
 === rv3roclone.olang
 rv3roclone.olang:8:20: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-    8 |     c := list.List.From(ro.Iter())
-      |                    ^~~~
-$ROOT/std/list.olang:364:18: note: in the standard library's code, here
-  364 |     for x in try it { out.Push(x) }
+    8 |     c := list.List.FromIter(ro.Iter())
+      |                    ^~~~~~~~
+$ROOT/std/list.olang:365:18: note: in the standard library's code, here
+  365 |     for x in try it { out.Push(x) }
       |                  ^~
 rv3roclone.olang:8:20: note: instantiated here, with T = List<I64>, I = Iter<List<I64>>, E = nothing
-    8 |     c := list.List.From(ro.Iter())
-      |                    ^~~~
-$ROOT/std/list.olang:391:5: note: the callee requires it because of this statement
-  391 |     return it.chunk[it.i - 1]
+    8 |     c := list.List.FromIter(ro.Iter())
+      |                    ^~~~~~~~
+$ROOT/std/list.olang:392:5: note: the callee requires it because of this statement
+  392 |     return it.chunk[it.i - 1]
       |     ^~~~~~
 compilation failed with 1 error
 === rv3roforin.olang
@@ -4704,9 +4792,12 @@ rv5matchborrow.olang:9:22: note: the callee requires it because of this statemen
       |                      ^~~~~~
 compilation failed with 1 error
 === rv5matchkeep.olang
-rv5matchkeep.olang:15:44: error[O10]: this reference lives in a scope that may not outlive where it is put
-   15 |             case E.A(y) { if i == 0 { keep = y } }
-      |                                            ^
+rv5matchkeep.olang:21:21: error[O25i]: this reads 'keep', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
+   21 |     try io.Println($keep.v)
+      |                     ^~~~~~
+rv5matchkeep.olang:17:39: note: 'keep' is given a value here
+   17 |             case E.A(y) { if i == 0 { keep = y } }
+      |                                       ^~~~~~~~
 compilation failed with 1 error
 === rv9slicetemp.olang
 rv9slicetemp.olang:18:9: error[O20]: the container outlives what this refers to - build it where the container lives, or keep a copy ('$x', 'x.Copy()')
@@ -4879,9 +4970,9 @@ s13gnovalue.olang:8:18: error[S13a]: case Right of Either<I64, Bool> is not cove
       |                  ^
 compilation failed with 1 error
 === s13helemtype.olang
-s13helemtype.olang:4:14: error[S13h]: this array pattern's elements are F64, and what is matched holds I64 - write 'I64[...]'
-    4 |         case F64[x] { return I64(x) }
-      |              ^~~~~~
+s13helemtype.olang:4:14: error[S13h]: this array pattern's elements are F64, and what is matched holds I64 - write 'Array<I64>[...]'
+    4 |         case Array<F64>[x] { return I64(x) }
+      |              ^~~~~~~~~~~~~
 compilation failed with 1 error
 === s13hlength.olang
 s13hlength.olang:4:12: error[S13h]: a match over Array<I64>& gives a value only when its cases cover every value - none matches an array of 1 element; add a case for it, or 'case _: v'
@@ -4895,28 +4986,28 @@ s13hlengthmore.olang:4:12: error[S13h]: a match over Array<I64>& gives a value o
 compilation failed with 1 error
 === s13hnotseq.olang
 s13hnotseq.olang:6:14: error[S13h]: an array pattern matches an array, text or a type declaring At and Len - P is none of them
-    6 |         case I64[a] { return a }
-      |              ^~~~~~
+    6 |         case Array<I64>[a] { return a }
+      |              ^~~~~~~~~~~~~
 compilation failed with 1 error
 === s13hrestpayload.olang
-s13hrestpayload.olang:9:22: error[S13h]: '...' stands among an array pattern's items, for the elements they do not name - 'case String&[first, ...rest]'
+s13hrestpayload.olang:9:22: error[S13h]: '...' stands among an array pattern's items, for the elements they do not name - 'case Array<String&>[first, ...rest]'
     9 |         case Cmd.Run(...rest) { return 1 }
       |                      ^~~~~~~
 compilation failed with 1 error
 === s13hrestslice.olang
-s13hrestslice.olang:5:21: error[S13h]: a named rest is a slice of what is matched, and Vec<I64> declares no Slice - write a bare '...', or match the elements as an array (a Vec's View())
-    5 |         case I64[a, ...rest] { return a + rest.Len() }
-      |                     ^~~~~~~
+s13hrestslice.olang:5:28: error[S13h]: a named rest is a slice of what is matched, and Vec<I64> declares no Slice - write a bare '...', or match the elements as an array (a Vec's View())
+    5 |         case Array<I64>[a, ...rest] { return a + rest.Len() }
+      |                            ^~~~~~~
 compilation failed with 1 error
 === s13hresttwice.olang
-s13hresttwice.olang:4:27: error[S13h]: an array pattern has one '...', for the elements its other items do not name
-    4 |         case I64[a, ...r, ...s] { return a + r.Len() + s.Len() }
-      |                           ^~~~
+s13hresttwice.olang:4:34: error[S13h]: an array pattern has one '...', for the elements its other items do not name
+    4 |         case Array<I64>[a, ...r, ...s] { return a + r.Len() + s.Len() }
+      |                                  ^~~~
 compilation failed with 1 error
 === s13hshadow.olang
-s13hshadow.olang:5:18: error: 'z' is declared twice
-    5 |         case I64[z] { return 1 }
-      |                  ^
+s13hshadow.olang:5:25: error: 'z' is declared twice
+    5 |         case Array<I64>[z] { return 1 }
+      |                         ^
 compilation failed with 1 error
 === s13ifieldtwice.olang
 s13ifieldtwice.olang:6:27: error[S13b]: field 'x' is named twice in this pattern
@@ -5149,8 +5240,8 @@ compilation failed with 1 error
 s5handlenote.olang:10:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         names[0][0] = t
       |                     ^
-$ROOT/std/prelude/vec.olang:121:40: note: the callee requires it because of this statement
-  121 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
+$ROOT/std/prelude/vec.olang:134:40: note: the callee requires it because of this statement
+  134 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
       |                                        ^
 s5handlenote.olang:9:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives, 't mut String&', and assign it here
     9 |         t := $k "-loop-text-of-moderate-length"
@@ -5206,8 +5297,8 @@ compilation failed with 1 error
 s6handlestore.olang:12:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         names[i][0] = t
       |                     ^
-$ROOT/std/prelude/vec.olang:121:40: note: the callee requires it because of this statement
-  121 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
+$ROOT/std/prelude/vec.olang:134:40: note: the callee requires it because of this statement
+  134 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
       |                                        ^
 s6handlestore.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives, 't mut String&', and assign it here
    11 |         t := $i "-loop-text"
@@ -5475,11 +5566,6 @@ compilation failed with 1 error
 strcondnode.olang:24:34: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    24 |     x := b.head if b.k == 0 else Node(1, null)
       |                                  ^~~~~~~~~~~~~
-compilation failed with 1 error
-=== strcursornewnode.olang
-strcursornewnode.olang:24:9: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   24 |     x = Node(7, null)
-      |         ^~~~~~~~~~~~~
 compilation failed with 1 error
 === strcycledeps.olang
 strcycledeps.olang:20:5: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -5885,8 +5971,8 @@ compilation failed with 1 error
 t13bvecat.olang:7:16: error[T13b, G18]: Get needs a copy, and File is unique - its values are never copied: call Get with a reference ('File&') or with a type that copies
     7 |     f := try v.Get(0) catch VecError { return }
       |                ^~~
-$ROOT/std/prelude/vec.olang:110:12: note: Get needs a copy here
-  110 |     return v.data[i]
+$ROOT/std/prelude/vec.olang:123:12: note: Get needs a copy here
+  123 |     return v.data[i]
       |            ^~~~~~~~~
 compilation failed with 1 error
 === t13cdestruct.olang
@@ -6404,9 +6490,9 @@ t25ccopyfuncvalue.olang:9:10: error[T25c]: this lambda writes through or keeps i
       |          ^~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === t25ccopylit.olang
-t25ccopylit.olang:9:14: error[T25c]: a copy of a read-only Box cannot be stored where it can be written - store one of its own, made from its parts
-    9 |     a := Box[GB]
-      |              ^~
+t25ccopylit.olang:9:21: error[T25c]: a copy of a read-only Box cannot be stored where it can be written - store one of its own, made from its parts
+    9 |     a := Array<Box>[GB]
+      |                     ^~
 compilation failed with 1 error
 === t25ccopymatch.olang
 t25ccopymatch.olang:16:31: error[T25c]: this writes through a reference a read-only copy holds - a copy of a place reached read-only writes nothing it shares
@@ -6919,7 +7005,7 @@ t7cnegative.olang:4:21: error[T7c]: an array's length is from 0 to the largest w
 compilation failed with 1 error
 === t7dsize.olang
 t7dsize.olang:6:9: error[T7d]: an array of 2 elements stored where 3 are laid out - fixed storage takes an array of its own length
-    6 |     m.a = I32[1, 2]
+    6 |     m.a = Array<I32>[1, 2]
       |         ^
 t7dsize.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors

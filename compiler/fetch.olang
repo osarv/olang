@@ -194,13 +194,13 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
         f.say("olang: fetching " $key " into " $cache " at " $locked[:12] ", as olang.lock says")
         dir := $parent "/" $locked
         # a shallow fetch of the one commit where the server allows it, else the whole history and a checkout
-        shallow := git(String&["git", "init", "-q", tmp]) and
-                   git(String&["git", "-C", tmp, "fetch", "-q", "--depth", "1", "--", url, locked]) and
-                   git(String&["git", "-C", tmp, "checkout", "-q", "FETCH_HEAD"])
+        shallow := git(Array<String&>["git", "init", "-q", tmp]) and
+                   git(Array<String&>["git", "-C", tmp, "fetch", "-q", "--depth", "1", "--", url, locked]) and
+                   git(Array<String&>["git", "-C", tmp, "checkout", "-q", "FETCH_HEAD"])
         if not shallow {
             try os.RemoveAll(tmp) catch os.Error { }
-            if git(String&["git", "clone", "-q", "--", url, tmp]) {
-                git(String&["git", "-C", tmp, "checkout", "-q", locked])
+            if git(Array<String&>["git", "clone", "-q", "--", url, tmp]) {
+                git(Array<String&>["git", "-C", tmp, "checkout", "-q", locked])
             }
         }
         if head(tmp) != locked {
@@ -220,7 +220,7 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
     branch := "--branch=" $ref if at < repoAt.Len() else "--quiet"
     try os.RemoveAll(tmp) catch os.Error { }
     h := ""
-    if git(String&["git", "clone", "--quiet", "--depth", "1", branch, "--", url, tmp]) { h = head(tmp) }
+    if git(Array<String&>["git", "clone", "--quiet", "--depth", "1", branch, "--", url, tmp]) { h = head(tmp) }
     if h == "" {
         try os.RemoveAll(tmp) catch os.Error { }
         error FetchError.Failed
@@ -260,9 +260,9 @@ fn makeRepo(base String&, name String&, text String&) String {
     dir := $base "/example.com/me/" $name
     try os.MkDirAll(dir) catch os.Error { return "" }
     try os.WriteFile($dir "/lib.olang", text) catch os.Error { return "" }
-    ok := sh(dir, String&["git", "init", "-q"]) and
-          sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "add", "."]) and
-          sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q"
+    ok := sh(dir, Array<String&>["git", "init", "-q"]) and
+          sh(dir, Array<String&>["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "add", "."]) and
+          sh(dir, Array<String&>["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q"
                           "-m", "x"])
     return head(dir) if ok else ""
 }
@@ -270,7 +270,7 @@ fn makeRepo(base String&, name String&, text String&) String {
 fn commitAgain(base String&, name String&, text String&) String {
     dir := $base "/example.com/me/" $name
     try os.WriteFile($dir "/lib.olang", text) catch os.Error { return "" }
-    ok := sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q"
+    ok := sh(dir, Array<String&>["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q"
                           "-a", "-m", "y"])
     return head(dir) if ok else ""
 }

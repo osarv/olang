@@ -18,7 +18,7 @@
 import "std/os"
 import "toolkit"
 
-Cases Array<String&> = String&[
+Cases Array<String&> = Array<String&>[
     # nothing to do, and options alone
     ""
     "-debug"
@@ -115,9 +115,9 @@ Cases Array<String&> = String&[
 ]
 
 # the programs the whole builds use, by file name, and their text
-ProgramNames Array<String&> = String&["hello.olang", "args.olang", "exit.olang", "fails.olang", "tests.olang"
+ProgramNames Array<String&> = Array<String&>["hello.olang", "args.olang", "exit.olang", "fails.olang", "tests.olang"
     "bad.olang", "defs.olang", "ugly.olang"]
-ProgramTexts Array<String&> = String&[
+ProgramTexts Array<String&> = Array<String&>[
     "import \"std/io\"\n\nfn main() {\n    io.Println(\"hello \" $(40 + 2))!\n}\n"
     ("import \"std/io\"\nimport \"std/os\"\n\nfn main() {\n    for a in os.Args() { io.Println(a)! }\n}\n")
     "import \"std/os\"\n\nfn main() {\n    os.Exit(3)\n}\n"
@@ -130,7 +130,7 @@ ProgramTexts Array<String&> = String&[
 ]
 
 # the command lines the whole builds run, each in a directory holding Programs
-Builds Array<String&> = String&[
+Builds Array<String&> = Array<String&>[
     "build hello.olang"
     "hello.olang"
     "args.olang a -b c"

@@ -581,7 +581,7 @@ fn (f mut Free&) leaves(ty types.TypeId) Vec<leaf> {
     for i in range fs.Len() {
         k := f.placeKey(r, i)
         if k >= 0 {
-            out.Push(leaf(I64[i], k))
+            out.Push(leaf(Array<I64>[i], k))
             continue
         }
         fr := t.Repr(fs[i])
@@ -4327,7 +4327,7 @@ fn (f mut Free&) DroppedMove(c typed.Call&) I64 {
 
 # the removals of the prelude's collections a program writes: a let-go in the prelude reported where the program calls
 # one (2.8) - an insertion that may replace (Put) is no removal
-RemovalNames Array<String&> = String&["Pop", "TakeAt", "RemoveAt", "SwapRemove", "Remove", "Clear", "Truncate", "Take"
+RemovalNames Array<String&> = Array<String&>["Pop", "TakeAt", "RemoveAt", "SwapRemove", "Remove", "Clear", "Truncate", "Take"
     "SwapTake"]
 
 # whether a let-go is one the report shows: in the program's own code, an assignment, a vacate, a moved value dropped,

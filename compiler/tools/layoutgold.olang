@@ -24,7 +24,7 @@ fn fromPort(out String&) {
     dump := toolkit.Env("LAYOUTDIFF_DUMP", "build/compiler_tools_dump")
     golden := "compiler/goldens/layout.txt"
     if not toolkit.Built(dump) { toolkit.Die("layoutgold: " $dump " is not built (make " $dump ")") }
-    o := toolkit.Run(String&[dump, "layout", golden])
+    o := toolkit.Run(Array<String&>[dump, "layout", golden])
     if o.Status != 0 or o.Stderr.Len() > 0 {
         toolkit.Say(o.Stderr)
         toolkit.Die("layoutgold: " $dump " layout failed")

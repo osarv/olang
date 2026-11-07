@@ -40,26 +40,26 @@ test "G1a: an instance at the empty set is called without try" {
 }
 
 test "QAH: the helpers take callbacks that fail" {
-    a := I64[1, 2, 3, 4]
+    a := Array<I64>[1, 2, 3, 4]
     assert a.Fold(0, fn(acc I64, x I64) I64 { return acc + x }) == 10
     assert (try a.Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1) == 10
-    b := I64[1, -2, 3]
+    b := Array<I64>[1, -2, 3]
     assert (try b.Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1) == -1
     assert (try b.Iter().Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1) == -1
     assert (try a.Some(fn(x I64) Bool { return try even(x) == 2 }) catch Other default false) == false
-    assert (try I64[2, 4].Every(fn(x I64) Bool { return try even(x) > 0 }) catch Other default false)
+    assert (try Array<I64>[2, 4].Every(fn(x I64) Bool { return try even(x) > 0 }) catch Other default false)
     assert (try a.Count(fn(x I64) Bool { return try parsePos(x) > 1 }) catch Bad default -1) == 3
-    assert (try a.Map(fn(x I64) I64 { return try parsePos(x) * 10 }) catch Bad default I64[]) == I64[10, 20, 30, 40]
-    assert (try b.Filter(fn(x I64) Bool { return try parsePos(x) > 0 }) catch Bad default I64[7]) == I64[7]
+    assert (try a.Map(fn(x I64) I64 { return try parsePos(x) * 10 }) catch Bad default Array<I64>[]) == Array<I64>[10, 20, 30, 40]
+    assert (try b.Filter(fn(x I64) Bool { return try parsePos(x) > 0 }) catch Bad default Array<I64>[7]) == Array<I64>[7]
     assert (try a.Iter().Map(fn(x I64) I64 { return try parsePos(x) }) catch Bad default Vec<I64>()).Len() == 4
     assert (try a.FindIndex(fn(x I64) Bool { return try parsePos(x) == 3 }) catch Bad default -1 catch ArrayError default -2) == 2
 }
 
 test "QAH: a comparator that fails stops the sort" {
-    a := I64[3, 1, 2]
+    a := Array<I64>[3, 1, 2]
     try a.Sort(fn(x I64, y I64) Bool { return try parsePos(x) < try parsePos(y) }) catch Bad { unreachable }
-    assert a == I64[1, 2, 3]
-    b := I64[3, -1, 2]
+    assert a == Array<I64>[1, 2, 3]
+    b := Array<I64>[3, -1, 2]
     failed := false
     try b.Sort(fn(x I64, y I64) Bool { return try parsePos(x) < try parsePos(y) }) catch Bad { failed = true }
     assert failed
@@ -98,22 +98,22 @@ fn total<I Iterator<I64 ? Bad>>(it mut I&) I64 ? Bad {
 }
 
 test "QAH: an iterator's own errors reach what walks it" {
-    assert (try readAll(I64[1, 2, 3]) catch Bad default -1) == 6
-    assert (try readAll(I64[1, -2, 3]) catch Bad default -1) == -1
-    r := Reader(I64[4, 5])
+    assert (try readAll(Array<I64>[1, 2, 3]) catch Bad default -1) == 6
+    assert (try readAll(Array<I64>[1, -2, 3]) catch Bad default -1) == -1
+    r := Reader(Array<I64>[4, 5])
     assert (try r.Fold(0, fn(acc I64, x I64) I64 { return acc + x }) catch Bad default -1) == 9
     # the iterator's errors and the callback's, together
-    q := Reader(I64[4, 5])
+    q := Reader(Array<I64>[4, 5])
     assert (try q.Fold(0, fn(acc I64, x I64) I64 { return acc + try even(x) }) catch Bad default -1 catch Other default -2) == -2
-    p := Reader(I64[1, 2, 3, 4])
+    p := Reader(Array<I64>[1, 2, 3, 4])
     assert (try p.Take(2).Fold(0, fn(acc I64, x I64) I64 { return acc + x }) catch Bad default -1) == 3
-    s := Reader(I64[10, 20])
+    s := Reader(Array<I64>[10, 20])
     assert (try total(s) catch Bad default -1) == 30
     # an iterator that cannot fail meets "Iterator<I64 ? Bad>" too: its set is held by Bad, Exhausted (T31)
-    assert (try total(I64[7, 8].Iter()) catch Bad default -1) == 15
-    w := Reader(I64[1, -1])
+    assert (try total(Array<I64>[7, 8].Iter()) catch Bad default -1) == 15
+    w := Reader(Array<I64>[1, -1])
     assert (try w.ToVec() catch Bad default Vec<I64>()).Len() == 0
-    v := Reader(I64[1, 2])
+    v := Reader(Array<I64>[1, 2])
     assert (try v.ToVec() catch Bad default Vec<I64>()).Len() == 2
 }
 
@@ -157,19 +157,19 @@ fn either<I Iterator<I64 ? Both>>(it mut I&) I64 ? Both {
 }
 
 test "T19a: a named set as an error-set argument" {
-    r := Reader(I64[1, 2])
+    r := Reader(Array<I64>[1, 2])
     assert (try either(r) catch Bad default -1 catch Other default -2) == 3
 }
 
 # K1: the evaluator gives what the run time gives
-Baked I64 = try I64[1, 2, 3].Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1
-BakedBad I64 = try I64[1, -2].Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1
+Baked I64 = try Array<I64>[1, 2, 3].Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1
+BakedBad I64 = try Array<I64>[1, -2].Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1
 BakedNone I64 = apply(5, fn(x I64) I64 { return x + 1 })
 
 test "K1: error-set instances are evaluated while compiling" {
     assert Baked == 6 and BakedBad == -1 and BakedNone == 6
     assert (try apply(-1, parsePos) catch Bad default 99) == 99
-    rt := I64[1, -2]
+    rt := Array<I64>[1, -2]
     assert (try rt.Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1) == BakedBad
 }
 
@@ -178,8 +178,8 @@ test "G12: an instance named with its error set, and one whose set is left to in
     assert (try apply<I64, I64 ? Bad>(4, parsePos) catch Bad default -1) == 4
     f := apply<I64, I64 ? Bad>
     assert (try f(-4, parsePos) catch Bad default -1) == -1
-    ys := I64[1, 2].Map<F64>(fn(x I64) F64 { return F64(x) / 2.0 })
-    assert ys == F64[0.5, 1.0]
+    ys := Array<I64>[1, 2].Map<F64>(fn(x I64) F64 { return F64(x) / 2.0 })
+    assert ys == Array<F64>[0.5, 1.0]
 }
 
 # a fallible iterator as a run-time trait value (T32), and one whose Next writes its set in another order (T31: held by)

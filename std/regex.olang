@@ -169,7 +169,7 @@ fn (q mut parser&) rune() U32 {
     return U32(r)
 }
 
-fn (q mut parser&) addRange(lo U32, hi U32) { q.p.ranges.PushAll(U32[lo, hi]) }
+fn (q mut parser&) addRange(lo U32, hi U32) { q.p.ranges.PushAll(Array<U32>[lo, hi]) }
 
 # a class node over the ranges added since "from"
 fn (q mut parser&) classNode(from I64, neg Bool) I64 {
@@ -207,11 +207,11 @@ fn (q mut parser&) negatedPerl(c Char) {
     k := from
     out := Vec<U32>()
     for k < q.p.ranges.Len() {
-        if q.p.ranges[k] > lo: out.PushAll(U32[lo, q.p.ranges[k] - 1])
+        if q.p.ranges[k] > lo: out.PushAll(Array<U32>[lo, q.p.ranges[k] - 1])
         lo = q.p.ranges[k + 1] + 1
         k += 2
     }
-    out.PushAll(U32[lo, 0x10FFFF])
+    out.PushAll(Array<U32>[lo, 0x10FFFF])
     q.p.ranges.Truncate(from)
     q.p.ranges.PushAll(out.View())
 }
@@ -641,7 +641,7 @@ fn (q mut parser&) emitNode(i I64) ? SyntaxError.TooBig {
             if n.fold {
                 from := p.ranges.Len()
                 lower := n.a | 32
-                p.ranges.PushAll(U32[U32(lower - 32), U32(lower - 32), U32(lower), U32(lower)])
+                p.ranges.PushAll(Array<U32>[U32(lower - 32), U32(lower - 32), U32(lower), U32(lower)])
                 p.emit(opClass, from, 2, 0)
             } else {
                 p.emit(opChar, n.a, 0, 0)
@@ -1430,7 +1430,7 @@ fn groupsOf(pattern String&, text String&) String {
 }
 
 test "literals, classes, repetition and alternation" {
-    cases := String&[
+    cases := Array<String&>[
         "abc", "xxabcxx", "2-5:abc"
         "abc", "ab", "-"
         "a.c", "a\nc abc", "4-7:abc"
@@ -1514,7 +1514,7 @@ test "FindAll, Replace and Split" {
 }
 
 test "what does not compile" {
-    for bad in String&["(", "(a", "a)", "[a", "[z-a]", "*a", "a**", "a{1001}", "a{3,2}", "\\q", "(?P<1>a)"
+    for bad in Array<String&>["(", "(a", "a)", "[a", "[z-a]", "*a", "a**", "a{1001}", "a{3,2}", "\\q", "(?P<1>a)"
         "(?P<a>x)(?P<a>y)", "(?z)a", "[[:nope:]]", "\\x{110000}"] {
         assert firstOf(bad, "") == "error", $bad
     }
@@ -1552,7 +1552,7 @@ fn spans(re Regex&, t String&, dfaToo Bool) String {
 }
 
 test "the DFAs find the matches the Pike VM finds" {
-    patterns := String&["a+b", "(a|ab)(c|bcd)", "[ab]*c", "a*", "(a+)(b*)", "x|y|", "(?i)AB+", "^ab", "(ab|a)(bc|c)?"
+    patterns := Array<String&>["a+b", "(a|ab)(c|bcd)", "[ab]*c", "a*", "(a+)(b*)", "x|y|", "(?i)AB+", "^ab", "(ab|a)(bc|c)?"
         "a{2,4}?b", "[^a]+", "é.", "(a*)+b", ".", "b(a|b)*?a", "(?:ab){2}", "c$"]
     texts := Vec<String&>()
     x U32 = 7
@@ -1560,7 +1560,7 @@ test "the DFAs find the matches the Pike VM finds" {
         t := StringBuilder()
         for _ in range 70 + k * 5 {
             x = x * 1664525 + 1013904223
-            t.Push(String&["a", "b", "c", "ab", "é", "\n", "A", "x"][(x >> 16) % 8])
+            t.Push(Array<String&>["a", "b", "c", "ab", "é", "\n", "A", "x"][(x >> 16) % 8])
         }
         texts.Push(t.ToString())
     }

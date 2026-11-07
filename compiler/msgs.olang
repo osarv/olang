@@ -639,6 +639,11 @@ type Diag enum {
     NestedArrayLiteral
     ErrorAsResult
     ComprehensionReferences
+    LiteralNoFromIter
+    LiteralNotMade
+    FromIterShape
+    LiteralEntries
+    ComprWalkFails
     NotAnEnum
     TakesNoArgs
     MethodAmbiguous
@@ -988,7 +993,7 @@ fn ReflTypeNotValue(name String&) r.Msg { return r.Msg(Diag.ReflTypeNotValue, "G
 fn typeNotValue(name String&) String { return $"'" $name "' is a type, not a value - write it where a type goes: a declaration ('x " $name " = ...'), a type argument or a match's subject" }
 fn ReflCaseOther(c String&, ty String&) r.Msg { return r.Msg(Diag.ReflCaseOther, "G34", $"this case is " $c "'s, and the value is " $ty) }
 fn ReflCaseUnreachable() r.Msg { return r.Msg(Diag.ReflCaseUnreachable, "G36", "no type can reach this case - a case before it takes every type it does") }
-fn ReflArgCompr() r.Msg { return r.Msg(Diag.ReflArgCompr, "G37", "a comprehension written as a call's arguments walks a list known while compiling - 'T.Params', 'T.Fields' ...; another is written in brackets, 'T[e for x in c]'") }
+fn ReflArgCompr() r.Msg { return r.Msg(Diag.ReflArgCompr, "G37", "a comprehension written as a call's arguments walks a list known while compiling - 'T.Params', 'T.Fields' ...; another is written in brackets, 'Array<T>[e for x in c]'") }
 fn ReflNoType(name String&, ty String&, why String&) r.Msg { return r.Msg(Diag.ReflNoType, "G38", $"'" $name "' of " $ty ": " $why) }
 
 # attributes (G39, G40) and the functions reflection reads (G41)
@@ -1548,11 +1553,11 @@ fn VariadicDefault() r.Msg { return r.Msg(Diag.VariadicDefault, "D8g", "a variad
 fn SpreadNotHere() r.Msg { return r.Msg(Diag.SpreadNotHere, "D8g", "'...a' passes an array on as a variadic parameter's arguments, and stands nowhere else - pass the array itself, 'a'") }
 fn SpreadAlone() r.Msg { return r.Msg(Diag.SpreadAlone, "D8g", "'...a' passes an array on as all of a variadic parameter's arguments - alone, with no others beside it") }
 fn VariadicArgCount(n1 I64, text String&, n2 I64) r.Msg { return r.Msg(Diag.VariadicArgCount, "E14", "expected at least " $n1 " argument" $text ", found " $n2) }
-fn RestNotHere() r.Msg { return r.Msg(Diag.RestNotHere, "S13h", "'...' stands among an array pattern's items, for the elements they do not name - 'case String&[first, ...rest]'") }
+fn RestNotHere() r.Msg { return r.Msg(Diag.RestNotHere, "S13h", "'...' stands among an array pattern's items, for the elements they do not name - 'case Array<String&>[first, ...rest]'") }
 fn RestTwice() r.Msg { return r.Msg(Diag.RestTwice, "S13h", "an array pattern has one '...', for the elements its other items do not name") }
 fn RestNoSlice(ty String&) r.Msg { return r.Msg(Diag.RestNoSlice, "S13h", "a named rest is a slice of what is matched, and " $ty " declares no Slice - write a bare '...', or match the elements as an array (a Vec's View())") }
 fn ElemsNotSeq(ty String&) r.Msg { return r.Msg(Diag.ElemsNotSeq, "S13h", "an array pattern matches an array, text or a type declaring At and Len - " $ty " is none of them") }
-fn ElemsType(written String&, elem String&) r.Msg { return r.Msg(Diag.ElemsType, "S13h", "this array pattern's elements are " $written ", and what is matched holds " $elem " - write '" $elem "[...]'") }
+fn ElemsType(written String&, elem String&) r.Msg { return r.Msg(Diag.ElemsType, "S13h", "this array pattern's elements are " $written ", and what is matched holds " $elem " - write 'Array<" $elem ">[...]'") }
 fn StructPatNoField(ty String&, text String&, hint String&) r.Msg { return r.Msg(Diag.StructPatNoField, "S13i", $ty " has no field '" $text "' - a struct pattern names the fields it matches, never its constructor's parameters" $hint) }
 fn StructPatPositional(ty String&) r.Msg { return r.Msg(Diag.StructPatPositional, "S13i", "a struct pattern names the fields it matches - write 'field = pattern' or a field's name: the order of " $ty "'s fields is no part of it") }
 fn StructPatType(ty String&, text String&) r.Msg { return r.Msg(Diag.StructPatType, "S13i", "the value matched here is " $ty ", and this struct pattern matches " $text) }
@@ -1695,8 +1700,15 @@ fn DefaultNoValue() r.Msg { return r.Msg(Diag.DefaultNoValue, "R11", "this call 
 fn DefaultNeedsCatch() r.Msg { return r.Msg(Diag.DefaultNeedsCatch, "R11", "a default belongs to a catch clause: 'catch default v'") }
 fn TryNothingFails(text String&) r.Msg { return r.Msg(Diag.TryNothingFails, "R8", "nothing here can fail - write it without '" $text "'") }
 fn BangNothingFails() r.Msg { return r.Msg(Diag.BangNothingFails, "E35", "nothing here can fail - write it without '!'") }
-fn NestedArrayLiteral() r.Msg { return r.Msg(Diag.NestedArrayLiteral, "E21", "there are no nested array literals - each array is a literal of its own: Array<I32, 2>[I32[1, 2], I32[3, 4]]") }
+
+
+fn NestedArrayLiteral() r.Msg { return r.Msg(Diag.NestedArrayLiteral, "E21", "there are no nested array literals - each array is a literal of its own: Array<Array<I32>>[Array<I32>[1, 2], Array<I32>[3, 4]]") }
 fn ComprehensionReferences() r.Msg { return r.Msg(Diag.ComprehensionReferences, "E27", "a comprehension's elements may not be or hold references yet - build the array with a loop") }
+fn LiteralNoFromIter(ty String&) r.Msg { return r.Msg(Diag.LiteralNoFromIter, "E19", "a literal makes the type before its '[', through that type's FromIter, and " $ty " has none - for an array of " $ty ", write Array<" $ty ">[...]") }
+fn LiteralNotMade(ty String&) r.Msg { return r.Msg(Diag.LiteralNotMade, "E19", "a literal makes the type before its '[', and " $ty " is a reference - an array of them is Array<" $ty ">[...]") }
+fn FromIterShape(ty String&) r.Msg { return r.Msg(Diag.FromIterShape, "E19", $ty "'s FromIter takes no one iterator, so no literal can call it - call it as " $ty ".FromIter(...)") }
+fn LiteralEntries(ty String&) r.Msg { return r.Msg(Diag.LiteralEntries, "E19", "a literal of " $ty " holds no 'key: value' entries - its elements are no MapEntry") }
+fn ComprWalkFails() r.Msg { return r.Msg(Diag.ComprWalkFails, "E27", "a comprehension made into a collection other than an array or a Vec walks its elements as the collection asks for them, and may not fail by calls of its own - write a generator function and call the collection's FromIter with it") }
 fn NotAnEnum(tok String&) r.Msg { return r.Msg(Diag.NotAnEnum, "E22", $tok " is not an enum type, so it has no values 'T.Case'") }
 fn TakesNoArgs(tok String&) r.Msg { return r.Msg(Diag.TakesNoArgs, "E14", $tok " takes no arguments") }
 fn MethodAmbiguous(tok String&) r.Msg { return r.Msg(Diag.MethodAmbiguous, "M22", "two imported modules declare " $tok " for this type - import only the one meant") }
@@ -1726,7 +1738,7 @@ fn JoinNextLine() r.Msg { return r.Msg(Diag.JoinNextLine, "S3, E11b", "text on a
 fn ConditionConstant() r.Msg { return r.Msg(Diag.ConditionConstant, "S8a", "this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it") }
 fn RangeNotInt(ty String&) r.Msg { return r.Msg(Diag.RangeNotInt, "S9b", "a range's bounds and step are integers, found " $ty) }
 fn RangeStep() r.Msg { return r.Msg(Diag.RangeStep, "S9b", "a range only counts upward, so its step is positive") }
-fn ComprNeedsTry() r.Msg { return r.Msg(Diag.ComprNeedsTry, "E27, S9e", "this comprehension's own calls can fail - write 'try T[e for x in c]'") }
+fn ComprNeedsTry() r.Msg { return r.Msg(Diag.ComprNeedsTry, "E27, S9e", "this comprehension's own calls can fail - write 'try Array<T>[e for x in c]'") }
 fn ForInNeedsTry() r.Msg { return r.Msg(Diag.ForInNeedsTry, "S9e", "this loop's own calls can fail - write 'for x in try c', with catch clauses after the body") }
 fn ForInTryNothing() r.Msg { return r.Msg(Diag.ForInTryNothing, "S9e", "nothing this loop calls by itself can fail - drop the 'try'") }
 fn ForInClauseExit() r.Msg { return r.Msg(Diag.ForInClauseExit, "S9e", "a loop's catch clause runs after the loop has ended, so it has no loop to break or continue - set a flag") }

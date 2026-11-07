@@ -11,4 +11,4 @@ fn f(a Array<N?&>&) I64 {
     }
     return p.v
 }
-fn main() { assert f(N?&[null, N(4)]) == 4 }
+fn main() { assert f(Array<N?&>[null, N(4)]) == 4 }

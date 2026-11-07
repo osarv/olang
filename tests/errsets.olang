@@ -70,9 +70,9 @@ fn twice(n I64) I64 ? ParseErr {
 
 BakedLabel := label(0)
 BakedTimeout := label(2)
-BakedKinds := I64[kind(0), kind(1), kind(2), kind(3), kind(9), kind(5)]
-BakedValues := I64[kindValue(1), kindValue(2), kindValue(3), kindValue(9)]
-BakedTwice := I64[try twice(0) catch ParseErr e default (10 if e == ParseErr.Empty else 20), try twice(1) catch default -9, try twice(3) catch default -9]
+BakedKinds := Array<I64>[kind(0), kind(1), kind(2), kind(3), kind(9), kind(5)]
+BakedValues := Array<I64>[kindValue(1), kindValue(2), kindValue(3), kindValue(9)]
+BakedTwice := Array<I64>[try twice(0) catch ParseErr e default (10 if e == ParseErr.Empty else 20), try twice(1) catch default -9, try twice(3) catch default -9]
 
 test "an error type and a set are declared as types, and a set stands for its members" {
     f fn&(n I64) I64 ? os.Error, ParseErr, LoadErr = load
@@ -93,14 +93,14 @@ test "a caught error renders as its name prints, decided while compiling and at 
 }
 
 test "a caught error is compared, narrowed and matched" {
-    assert BakedKinds == I64[100, 200, 300, 500, 400, 50]
-    for i, n in I64[0, 1, 2, 3, 9, 5] { assert kind(n + Live) == BakedKinds[i] }
-    assert BakedValues == I64[1, 2, 3, 2]
+    assert BakedKinds == Array<I64>[100, 200, 300, 500, 400, 50]
+    for i, n in Array<I64>[0, 1, 2, 3, 9, 5] { assert kind(n + Live) == BakedKinds[i] }
+    assert BakedValues == Array<I64>[1, 2, 3, 2]
     assert kindValue(Live + 9) == 2 and kindValue(Live + 3) == 3
 }
 
 test "a caught error is raised again, held to the set the narrowing leaves" {
-    assert BakedTwice == I64[10, 7, -1]
+    assert BakedTwice == Array<I64>[10, 7, -1]
     assert (try onlyParse(Live) catch ParseErr e default (1 if e == ParseErr.Empty else 2)) == 1
     assert (try twice(Live + 1) catch default -1) == 7
     assert (try onlyParse(Live + 3) catch default -9) == -1

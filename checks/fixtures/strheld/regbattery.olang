@@ -116,7 +116,7 @@ fn main() ? {
     }
     try io.Println("14: " $(Made - Gone))
     {
-        n := Res&[Res(19), id(Res(20))]
+        n := Array<Res&>[Res(19), id(Res(20))]
         assert n.Len() == 2
     }
     try io.Println("15: " $(Made - Gone))

@@ -5,7 +5,7 @@
 type Txt extends Array<Char>          # text that may be written (a String never changes, T13a)
 fn view(a Array<Char>&) Array<Char>& { return a }
 fn named() I64 {
-    b Array<Char> = Char['a', 'a', 'a', 'a']
+    b Array<Char> = Array<Char>['a', 'a', 'a', 'a']
     w Txt& = Txt(view(b))
     b[0] = 'z'
     return 1 if w[0] == 'z' and w.Len() == 4 else 0

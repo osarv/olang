@@ -70,7 +70,7 @@ BakedMixed := connect("h", 81, retries = 5, timeout = 9)
 BakedDefault := connect("h", default, timeout = 1)
 BakedConn := $Conn("x", secure = true)
 BakedUrl := Conn("x", port = 8).Url(query = "?a")
-BakedPad := pad(I64[1, 2], 0, before = true)
+BakedPad := pad(Array<I64>[1, 2], 0, before = true)
 BakedTotal := total(Node(1, next = Node(2, next = Node(3))))
 BakedArea := area(Sq(3), 2)
 BakedPairs := pairs(3)
@@ -91,7 +91,7 @@ test "constructors and methods take arguments by name" {
 
 test "a generic's, a reference's and an any's parameters by name" {
     assert BakedPad.Len() == 4 and BakedPad[0] == 0 and BakedPad[3] == 2
-    p := pad(I64[1, 2], Live, width = 3)
+    p := pad(Array<I64>[1, 2], Live, width = 3)
     assert p.Len() == 3 and p[2] == 0
     assert BakedTotal == 6 and total(Node(1, next = Node(2 + Live, next = Node(3)))) == 6
     assert BakedArea == 18 and area(Sq(3 + Live), 2) == 18

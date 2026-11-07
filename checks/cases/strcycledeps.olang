@@ -21,7 +21,7 @@ fn (b Bag&) Str() String {
     return "b" $b.head.v
 }
 fn churn(d I64) I64 {
-    a := I64[d, d, d, d, d, d, d, d]
+    a := Array<I64>[d, d, d, d, d, d, d, d]
     if d == 0 { return 0 }
     return churn(d - 1) + a[3] - d
 }

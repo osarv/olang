@@ -9,5 +9,5 @@ type It struct() {
 fn (t mut It&) Next() I32 ? E, Exhausted { error E.X }
 fn main() ? {
     t mut It& = It()
-    xs := I32[x for x in t]
+    xs := Array<I32>[x for x in t]
 }

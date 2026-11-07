@@ -64,7 +64,7 @@ fn roomFor(bytes I64) Bool {
 # ---- the command line ----
 
 # the modes, by number: running a file (no word - a file ending in .olang written first, B3g), then each mode's word
-ModeWords Array<String&> = String&["", "build", "compile", "test", "interpret", "format", "explain", "help", "doc", "lsp"
+ModeWords Array<String&> = Array<String&>["", "build", "compile", "test", "interpret", "format", "explain", "help", "doc", "lsp"
     "mcp"
     "fix"
     "bindgen"
@@ -87,7 +87,7 @@ Profile I64 = 13
 Api I64 = 14
 
 # what each mode is, for help
-ModeUsage Array<String&> = String&[
+ModeUsage Array<String&> = Array<String&>[
     "olang [OPTION...] FILE.olang [ARGUMENT...]"
     "olang build [OPTION...] FILE.olang"
     "olang compile [OPTION...] FILE.olang"
@@ -104,7 +104,7 @@ ModeUsage Array<String&> = String&[
     "olang profile [OPTION...] FILE.olang [ARGUMENT...]"
     "olang api OLD NEW FILE.olang|DIR"
 ]
-ModeWhat Array<String&> = String&[
+ModeWhat Array<String&> = Array<String&>[
     "builds the program FILE.olang is the root of, as build does, and runs it with the arguments after the file"
     "builds one program, FILE.olang its root module, into build/ (B3)"
     "compiles one module to an object, linking nothing (B2)"
@@ -124,12 +124,12 @@ ModeWhat Array<String&> = String&[
 
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
 # what they do
-OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
+OptWords Array<String&> = Array<String&>["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
     "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime", "-caps", "-asm", "-ir", "-interpret"]
-OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", "", "NAME", "SECONDS", "", "", ""
+OptValues Array<String&> = Array<String&>["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", "", "NAME", "SECONDS", "", "", ""
     ""]
-OptModes Array<I64> = I64[12294, 15, 15, 15, 1887, 10079, 10079, 2080, 8271, 256, 2, 11, 8, 8, 64, 64, 64, 8]
-OptWhat Array<String&> = String&[
+OptModes Array<I64> = Array<I64>[12294, 15, 15, 15, 1887, 10079, 10079, 2080, 8271, 256, 2, 11, 8, 8, 64, 64, 64, 8]
+OptWhat Array<String&> = Array<String&>[
     "writes the executable, the object, bindgen's declarations or profile's flame graph to PATH (B3h, X16, B20)"
     "builds unoptimized, with debug information (B2c, B2e)"
     "builds with the data race detector (B2b)"
@@ -327,7 +327,7 @@ fn buildWord(c build.Config&) String {
 # the eight built-in constants (B10a), once the target is known; a -define naming one is a mistake, the first such in
 # their order reported
 fn builtins(c mut build.Config&, testBuild Bool, d mut diag.Diagnostics&) ? Bad {
-    for name in String&["TargetOs", "TargetArch", "TargetCpu", "TargetVectorBits", "TargetHasFma", "DebugBuild"
+    for name in Array<String&>["TargetOs", "TargetArch", "TargetCpu", "TargetVectorBits", "TargetHasFma", "DebugBuild"
         "RaceBuild", "TestBuild"] {
         if c.Consts.Has(name) { try usage(d, msgs.DefineBuiltin(name)) }
     }
@@ -1033,7 +1033,7 @@ fn cIr(unit String&, text String&, cfg build.Config&) String {
         # B11d: C's lines named where explain -asm shows code inlined from it
         args.Push("-gline-tables-only")
     }
-    for a in String&["-O2", "-Xclang", "-disable-llvm-passes", "-w", "-x", "c", "-S", "-emit-llvm", "-o", "-", "-"] { args.Push($a) }
+    for a in Array<String&>["-O2", "-Xclang", "-disable-llvm-passes", "-w", "-x", "c", "-S", "-emit-llvm", "-o", "-", "-"] { args.Push($a) }
     kb := StringBuilder()
     for a in args { kb.Push($a "\n") }
     kb.Push(cfg.Target.Attrs)
@@ -1064,7 +1064,7 @@ fn retarget(ir String&, attrs String&) String {
             continue
         }
         rest := $line
-        for key in String&["\"target-cpu\"=\"", "\"target-features\"=\"", "\"tune-cpu\"=\""] {
+        for key in Array<String&>["\"target-cpu\"=\"", "\"target-features\"=\"", "\"tune-cpu\"=\""] {
             k := try rest.Find(key) catch default -1
             if k < 0 { continue }
             e := try rest[k + key.Len():].FindByte('"') catch default -1
@@ -1093,7 +1093,7 @@ fn cLibrary(unit String&, cfg build.Config&) String {
         args Vec<String&>
         args.Push($cfg.Clang)
         for f in cfg.CFlags() { args.Push($f) }
-        for a in String&["-shared", "-fPIC", "-O2", "-w", "-x", "c", "-o", $so ".tmp", unit] { args.Push($a) }
+        for a in Array<String&>["-shared", "-fPIC", "-O2", "-w", "-x", "c", "-o", $so ".tmp", unit] { args.Push($a) }
         out := try os.Output.Exec(...args.ToArray()) catch os.Error { return "clang could not be run" }
         if out.Status != 0 { return $"clang could not compile it: " $out.Stderr.Trim() }
         try os.Rename($so ".tmp", so) catch os.Error { return "its library cannot be written" }
@@ -1146,53 +1146,53 @@ fn mistake(words Array<String&>&) String {
 }
 
 test "a command line's mistakes are said as stage 0 says them" {
-    assert mistake(String&[]) == ("olang: error[B1]: nothing to do - write a file to build and run, as 'olang " $
+    assert mistake(Array<String&>[]) == ("olang: error[B1]: nothing to do - write a file to build and run, as 'olang " $
             "main.olang', or a mode ('olang help' lists them)\n")
-    assert mistake(String&["-x"]) ==
+    assert mistake(Array<String&>["-x"]) ==
         "olang: error[B1]: unknown option '-x' - 'olang help' lists the options of running a file\n"
-    assert mistake(String&["build", "-b", "m.olang"]) ==
+    assert mistake(Array<String&>["build", "-b", "m.olang"]) ==
         "olang: error[B1]: unknown option '-b' - 'olang help' lists the options of build\n"
-    assert mistake(String&["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, " $
+    assert mistake(Array<String&>["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, " $
             "interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run\n")
-    assert mistake(String&["build", "m.olang", "-target"]) ==
+    assert mistake(Array<String&>["build", "m.olang", "-target"]) ==
         "olang: error[B1]: -target needs a value after it: NAME\n"
-    assert mistake(String&["test", "-output", "x", "m.olang"]) ==
+    assert mistake(Array<String&>["test", "-output", "x", "m.olang"]) ==
         "olang: error[B1]: -output applies to build, compile, bindgen and profile, not to test\n"
     # B20: profile takes -quick, not the builds of other programs, nor another machine's
-    assert mistake(String&["profile", "-race", "m.olang"]) ==
+    assert mistake(Array<String&>["profile", "-race", "m.olang"]) ==
         "olang: error[B1]: -race applies to running a file, build, compile and test, not to profile\n"
-    assert mistake(String&["profile", "-target", "aarch64", "m.olang"]) ==
+    assert mistake(Array<String&>["profile", "-target", "aarch64", "m.olang"]) ==
         "olang: error[B1]: -target applies to running a file, build, compile, test, interpret, explain, doc, lsp and mcp, not to profile\n"
-    assert mistake(String&["format", "-debug", "m.olang"]) ==
+    assert mistake(Array<String&>["format", "-debug", "m.olang"]) ==
         "olang: error[B1]: -debug applies to running a file, build, compile and test, not to format\n"
-    assert mistake(String&["build", "-define", "X"]) == "olang: error[B10]: -define takes Name=value, found 'X'\n"
-    assert mistake(String&["build", "-define", "X=1", "-define", "X=2"]) ==
+    assert mistake(Array<String&>["build", "-define", "X"]) == "olang: error[B10]: -define takes Name=value, found 'X'\n"
+    assert mistake(Array<String&>["build", "-define", "X=1", "-define", "X=2"]) ==
         "olang: error[B10]: -define X=2: defined twice\n"
-    assert mistake(String&["explain", "B1", "B2"]) ==
+    assert mistake(Array<String&>["explain", "B1", "B2"]) ==
         "olang: error[B11a]: explain takes one rule, as 'olang explain B1'\n"
-    assert mistake(String&["help", "a", "b"]) == "olang: error[B1]: help takes at most one mode\n"
-    assert mistake(String&["-debug", "build"]) == "olang: error[B1]: the mode comes first: 'olang build' and then its options\n"
-    assert mistake(String&["-debug", "x.txt"]) ==
+    assert mistake(Array<String&>["help", "a", "b"]) == "olang: error[B1]: help takes at most one mode\n"
+    assert mistake(Array<String&>["-debug", "build"]) == "olang: error[B1]: the mode comes first: 'olang build' and then its options\n"
+    assert mistake(Array<String&>["-debug", "x.txt"]) ==
         "olang: error[B1]: 'x.txt' is no olang file to run - a file's name ends in .olang\n"
     # the first mistake is the one said, and what follows a run's or interpret's file is the program's
-    assert mistake(String&["-x", "-y"]) == mistake(String&["-x"])
-    assert mistake(String&["interpret", "p.olang", "-x", "-define"]) == "no mistake: interpret"
-    assert mistake(String&["-debug", "p.olang", "-race", "x"]) == "no mistake: running a file"
+    assert mistake(Array<String&>["-x", "-y"]) == mistake(Array<String&>["-x"])
+    assert mistake(Array<String&>["interpret", "p.olang", "-x", "-define"]) == "no mistake: interpret"
+    assert mistake(Array<String&>["-debug", "p.olang", "-race", "x"]) == "no mistake: running a file"
     # B2g: -quick is an optimization level of its own
-    assert mistake(String&["build", "-quick", "-debug", "m.olang"]) ==
+    assert mistake(Array<String&>["build", "-quick", "-debug", "m.olang"]) ==
         "olang: error[B2g]: -quick and -debug each say how much to optimize - give one\n"
-    assert mistake(String&["test", "-race", "-quick", "m.olang"]) ==
+    assert mistake(Array<String&>["test", "-race", "-quick", "m.olang"]) ==
         "olang: error[B2g]: -quick and -race each say how much to optimize - give one\n"
-    assert mistake(String&["interpret", "-quick", "m.olang"]) ==
+    assert mistake(Array<String&>["interpret", "-quick", "m.olang"]) ==
         "olang: error[B1]: -quick applies to running a file, build, compile, test, explain and profile, not to interpret\n"
-    assert mistake(String&["build", "-quick", "m.olang"]) == "no mistake: build"
+    assert mistake(Array<String&>["build", "-quick", "m.olang"]) == "no mistake: build"
     # B3e: test -interpret builds nothing, so no option saying how to build goes beside it
-    assert mistake(String&["test", "-interpret", "m.olang", "Box"]) == "no mistake: test"
-    assert mistake(String&["test", "-interpret", "-quick", "m.olang"]) ==
+    assert mistake(Array<String&>["test", "-interpret", "m.olang", "Box"]) == "no mistake: test"
+    assert mistake(Array<String&>["test", "-interpret", "-quick", "m.olang"]) ==
         "olang: error[B3e]: -interpret builds nothing, and -quick says how to build - give one\n"
-    assert mistake(String&["test", "-sanitize", "-interpret", "m.olang"]) ==
+    assert mistake(Array<String&>["test", "-sanitize", "-interpret", "m.olang"]) ==
         "olang: error[B3e]: -interpret builds nothing, and -sanitize says how to build - give one\n"
-    assert mistake(String&["build", "-interpret", "m.olang"]) ==
+    assert mistake(Array<String&>["build", "-interpret", "m.olang"]) ==
         "olang: error[B1]: -interpret applies to test, not to build\n"
 }
 
@@ -1208,7 +1208,7 @@ test "-quick builds at -O2 with no link-time optimization, its objects apart (B2
 test "the options are recorded wherever they stand, and passed on as written" {
     d := diag.Diagnostics(false)
     c := build.Config()
-    cl := try CommandLine.Parse(String&["olang", "test", "-race", "a.olang", "-define", "N=3", "-target", "x86-64", "b.olang"
+    cl := try CommandLine.Parse(Array<String&>["olang", "test", "-race", "a.olang", "-define", "N=3", "-target", "x86-64", "b.olang"
         "-debug"], c, d) catch Bad { unreachable }
     assert cl.Mode == Test and cl.Files.Len() == 2 and cl.Files[0] == "a.olang" and cl.Files[1] == "b.olang"
     assert c.Race and c.Debug and not c.San and not c.Update and cl.Spec == "x86-64"
@@ -1217,11 +1217,11 @@ test "the options are recorded wherever they stand, and passed on as written" {
     assert p.Len() == 6 and p[0] == "-race" and p[1] == "-define" and p[2] == "N=3" and p[3] == "-target"
     assert p[4] == "x86-64" and p[5] == "-debug"
     c2 := build.Config()
-    i := try CommandLine.Parse(String&["olang", "interpret", "-update", "p.olang", "-sanitize", "x"], c2, d) catch Bad { unreachable }
+    i := try CommandLine.Parse(Array<String&>["olang", "interpret", "-update", "p.olang", "-sanitize", "x"], c2, d) catch Bad { unreachable }
     assert i.Mode == Interp and i.Files.Len() == 1 and i.Args.Len() == 2 and i.Args[0] == "-sanitize" and c2.Update and not c2.San
     # B20: profile's arguments after the file are the program's, -output its flame graph's path
     c3 := build.Config()
-    pr := try CommandLine.Parse(String&["olang", "profile", "-quick", "-output", "f.html", "p.olang", "-quick", "7"], c3, d) catch Bad { unreachable }
+    pr := try CommandLine.Parse(Array<String&>["olang", "profile", "-quick", "-output", "f.html", "p.olang", "-quick", "7"], c3, d) catch Bad { unreachable }
     assert pr.Mode == Profile and pr.Files.Len() == 1 and pr.Args.Len() == 2 and pr.Args[0] == "-quick" and c3.Quick
     assert pr.Output == "f.html"
 }
@@ -1236,34 +1236,34 @@ fn prepared(words Array<String&>&) String {
 
 test "the modes: each said wrong as stage 0 says it" {
     if target.FindClang() == "" { return } # the target is resolved by asking clang
-    assert prepared(String&["build"]) == "olang: error[B1]: build needs a file\n"
-    assert prepared(String&["compile", "a.olang", "b.olang"]) == "olang: error[B1]: compile takes exactly one file\n"
-    assert prepared(String&["test"]) == "olang: error[B1]: test needs a file\n"
-    assert prepared(String&["explain"]) == "olang: error[B11a]: explain takes one rule, as 'olang explain B1'\n"
-    assert prepared(String&["build", "-define", "TargetOs=x", "m.olang"]) ==
+    assert prepared(Array<String&>["build"]) == "olang: error[B1]: build needs a file\n"
+    assert prepared(Array<String&>["compile", "a.olang", "b.olang"]) == "olang: error[B1]: compile takes exactly one file\n"
+    assert prepared(Array<String&>["test"]) == "olang: error[B1]: test needs a file\n"
+    assert prepared(Array<String&>["explain"]) == "olang: error[B11a]: explain takes one rule, as 'olang explain B1'\n"
+    assert prepared(Array<String&>["build", "-define", "TargetOs=x", "m.olang"]) ==
         "olang: error[B10a]: -define cannot redefine the built-in constant TargetOs\n"
     # B12a: another architecture is built and tested for where this clang can, interpreted never
-    arm := prepared(String&["build", "-target", "aarch64-linux-gnu", "m.olang"])
+    arm := prepared(Array<String&>["build", "-target", "aarch64-linux-gnu", "m.olang"])
     assert arm == "no mistake: build" or arm.Contains("error[B12a]: this clang cannot build")
-    assert prepared(String&["interpret", "-target", "aarch64-linux-gnu", "m.olang"]).Contains("error[B12a]: interpret runs")
-    assert prepared(String&["interpret", "p.olang", "x", "-y"]) == "no mistake: interpret"
-    assert prepared(String&["explain", "zz9"]) == "no mistake: explain"
-    assert prepared(String&["explain", "m.olang"]) ==
+    assert prepared(Array<String&>["interpret", "-target", "aarch64-linux-gnu", "m.olang"]).Contains("error[B12a]: interpret runs")
+    assert prepared(Array<String&>["interpret", "p.olang", "x", "-y"]) == "no mistake: interpret"
+    assert prepared(Array<String&>["explain", "zz9"]) == "no mistake: explain"
+    assert prepared(Array<String&>["explain", "m.olang"]) ==
         "olang: error[B11b]: explain m.olang takes the name of one of its items, as 'olang explain m.olang main'\n"
-    assert prepared(String&["help"]) == "no mistake: help"
+    assert prepared(Array<String&>["help"]) == "no mistake: help"
     # B11d: a function's code - a file and a name, one of -asm, -ir and -caps, -quick and another machine only with it
-    assert prepared(String&["explain", "-asm", "m.olang", "f"]) == "no mistake: explain"
-    assert prepared(String&["explain", "-ir", "-quick", "m.olang", "Box.Get"]) == "no mistake: explain"
-    assert prepared(String&["explain", "-asm", "m.olang"]) ==
+    assert prepared(Array<String&>["explain", "-asm", "m.olang", "f"]) == "no mistake: explain"
+    assert prepared(Array<String&>["explain", "-ir", "-quick", "m.olang", "Box.Get"]) == "no mistake: explain"
+    assert prepared(Array<String&>["explain", "-asm", "m.olang"]) ==
         "olang: error[B11d]: explain -asm takes a program's file and the name of one of its functions, as 'olang explain -asm main.olang main'\n"
-    assert prepared(String&["explain", "-asm", "-ir", "m.olang", "f"]) ==
+    assert prepared(Array<String&>["explain", "-asm", "-ir", "m.olang", "f"]) ==
         "olang: error[B11d]: -asm, -ir and -caps exclude one another - explain shows one of them at a time\n"
-    assert prepared(String&["explain", "-caps", "-ir", "m.olang"]) ==
+    assert prepared(Array<String&>["explain", "-caps", "-ir", "m.olang"]) ==
         "olang: error[B11d]: -asm, -ir and -caps exclude one another - explain shows one of them at a time\n"
-    assert prepared(String&["explain", "-quick", "m.olang", "f"]) ==
+    assert prepared(Array<String&>["explain", "-quick", "m.olang", "f"]) ==
         "olang: error[B11d]: -quick applies to explain only with -asm or -ir, which show code as a build makes it\n"
-    assert prepared(String&["explain", "-target", "aarch64-linux-gnu", "m.olang", "f"]).Contains("error[B12a]: explain runs")
-    armAsm := prepared(String&["explain", "-asm", "-target", "aarch64-linux-gnu", "m.olang", "f"])
+    assert prepared(Array<String&>["explain", "-target", "aarch64-linux-gnu", "m.olang", "f"]).Contains("error[B12a]: explain runs")
+    armAsm := prepared(Array<String&>["explain", "-asm", "-target", "aarch64-linux-gnu", "m.olang", "f"])
     assert armAsm == "no mistake: explain" or armAsm.Contains("error[B12a]: this clang cannot build")
 }
 
@@ -1303,19 +1303,19 @@ fn explained(name String&) String {
 }
 
 test "doc, lsp and mcp: their files, names and options (B14-B16)" {
-    assert prepared(String&["doc"]) == "olang: error[B1]: doc needs a file\n"
-    assert prepared(String&["doc", "a.olang", "b.olang"]) == "olang: error[B1]: doc takes exactly one file\n"
-    assert mistake(String&["doc", "a.olang", "Item", "More"]) ==
+    assert prepared(Array<String&>["doc"]) == "olang: error[B1]: doc needs a file\n"
+    assert prepared(Array<String&>["doc", "a.olang", "b.olang"]) == "olang: error[B1]: doc takes exactly one file\n"
+    assert mistake(Array<String&>["doc", "a.olang", "Item", "More"]) ==
         "olang: error[B14]: doc a.olang takes at most the name of one of its items, as 'olang doc a.olang main'\n"
-    assert prepared(String&["lsp", "a.olang"]) == "olang: error[B1]: lsp takes no files - its client names them as it goes\n"
-    assert mistake(String&["mcp", "-quick"]) ==
+    assert prepared(Array<String&>["lsp", "a.olang"]) == "olang: error[B1]: lsp takes no files - its client names them as it goes\n"
+    assert mistake(Array<String&>["mcp", "-quick"]) ==
         "olang: error[B1]: -quick applies to running a file, build, compile, test, explain and profile, not to mcp\n"
-    assert mistake(String&["build", "-html", "d", "a.olang"]) == "olang: error[B1]: -html applies to doc, not to build\n"
+    assert mistake(Array<String&>["build", "-html", "d", "a.olang"]) == "olang: error[B1]: -html applies to doc, not to build\n"
     if target.FindClang() == "" { return }
-    assert prepared(String&["doc", "-html", "out"]) == "no mistake: doc"
-    assert prepared(String&["doc", "a.olang", "Item"]) == "no mistake: doc"
-    assert prepared(String&["lsp"]) == "no mistake: lsp"
-    assert prepared(String&["mcp", "-define", "X=1"]) == "no mistake: mcp"
+    assert prepared(Array<String&>["doc", "-html", "out"]) == "no mistake: doc"
+    assert prepared(Array<String&>["doc", "a.olang", "Item"]) == "no mistake: doc"
+    assert prepared(Array<String&>["lsp"]) == "no mistake: lsp"
+    assert prepared(Array<String&>["mcp", "-define", "X=1"]) == "no mistake: mcp"
 }
 
 test "explain FILE NAME prints an item as the compiler sees it: inferred errors, obligations, instances, members, a baked value (B11b)" {

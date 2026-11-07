@@ -9,8 +9,8 @@ fn kind(a Array<I64>) I64 {
     return a.Len() * 10
 }
 
-K3 := kind(I64[1, 2, 3])
-K4 := kind(I64[1, 2, 3, 4])
+K3 := kind(Array<I64>[1, 2, 3])
+K4 := kind(Array<I64>[1, 2, 3, 4])
 
 fn main() {
     n := os.Args().Len() + 2

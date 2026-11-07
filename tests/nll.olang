@@ -96,7 +96,7 @@ fn ops(n I64) String {
     out := StringBuilder()
     op String& = " < "
     for k in range n {
-        if k >= 2 { op = String&[" + ", " - ", " * "][(k - 2) % 3] }
+        if k >= 2 { op = Array<String&>[" + ", " - ", " * "][(k - 2) % 3] }
         out.Push(op)
     }
     churn()
@@ -118,7 +118,7 @@ fn check(v I64) ? {
 fn caught(v I64) I64 {
     a := Node(1)
     b := Node(2)
-    xs := Node&[a, b]
+    xs := Array<Node&>[a, b]
     got Node& = a
     try check(v) catch {
         got = b
@@ -137,7 +137,7 @@ fn lastSeen(xs Array<Node&>&, out mut Box&) {
 
 fn deferred() I64 {
     out := Box()
-    lastSeen(Node&[Node(4), Node(5), Node(6)], out)
+    lastSeen(Array<Node&>[Node(4), Node(5), Node(6)], out)
     churn()
     return out.v
 }
@@ -177,7 +177,7 @@ fn twoOfOne(k I64) I64 {
 
 Chain := chainSum(5)
 
-assert clickDepth() == 210 and chainSum(4) == 123 and planAt(String&["-o", "x", "-plan", "p.txt"]) == "p.txt"
+assert clickDepth() == 210 and chainSum(4) == 123 and planAt(Array<String&>["-o", "x", "-plan", "p.txt"]) == "p.txt"
 assert ops(6) == " <  <  +  -  *  + " and caught(2) == 2 and caught(7) == 2 and deferred() == 6
 assert captured(0) == 10 and captured(1) == 20 and afterLoop(4) == 9 and twoOfOne(1) == 129
 
@@ -190,7 +190,7 @@ test appendTail "appends at the tail a cursor found" {
 }
 
 test planAt "keeps an option from a parameter's array" {
-    assert planAt(String&["-plan", "a", "-o", "b"]) == "a" and planAt(String&["-o"]) == ""
+    assert planAt(Array<String&>["-plan", "a", "-o", "b"]) == "a" and planAt(Array<String&>["-o"]) == ""
 }
 
 test ops "keeps an element of a constant literal" {

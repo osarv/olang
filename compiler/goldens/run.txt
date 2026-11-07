@@ -274,6 +274,14 @@
 | ok - E39, E31b: an in-place lane store through x[i] is written back, or goes where a reference read out of it points
 | ok - E39: an in-place operand overlapping its target reads the lanes already stored
 | ok - E39: Max runs the operation once a lane
+=== test tests/literals.olang
+| status 0
+| ok - literals make the type before their bracket
+| ok - a program's FromIter: generic, concrete, keyed, fallible
+| ok - FromIter is an ordinary call too
+| ok - a rendering reads back as the literal making it
+| ok - array patterns write the matched value's type
+| ok - a comprehension made into another collection is walked by its FromIter
 === test tests/match.olang
 | status 0
 | ok - a value match's clauses give their values after ':', a value running on over lines
@@ -2451,7 +2459,7 @@
 | status 0
 === run s9erangeundertry.olang
 | status 0
-| I32[0, 2, 4, 6, 8]
+| Array<I32>[0, 2, 4, 6, 8]
 === run stradapterbody.olang
 | status 0
 | b3
@@ -2534,11 +2542,11 @@
 === run t32anyconvcopy.olang
 | status 0
 | lab0
-| I64[0, 7]
+| Array<I64>[0, 7]
 | lab1
-| I64[1, 7]
+| Array<I64>[1, 7]
 | lab2
-| I64[2, 7]
+| Array<I64>[2, 7]
 | hello Zello
 === run t32anyglobal.olang
 | status 0

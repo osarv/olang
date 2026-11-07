@@ -2235,7 +2235,7 @@ fn (w mut dropWalk&) loop(body Block&, post Block?&) {
 # loop k's share of its breaks' or its continues' state, as save gives one
 fn (w mut dropWalk&) loopState(brk Bool, k I64) Array<Bool> {
     b := k * (w.may.Len() + 1)
-    return Bool[(w.brk[b + i] if brk else w.cont[b + i]) for i in range w.may.Len() + 1]
+    return Array<Bool>[(w.brk[b + i] if brk else w.cont[b + i]) for i in range w.may.Len() + 1]
 }
 
 # start widened by what a turn's end brings it: how many flags (or a path) it had not got
@@ -3349,7 +3349,7 @@ test "a body: locals, blocks and sites, read back and printed" {
     t := types.Table.New(names)
     i32 := t.Prim("I32")
     sp := source.Span(0, 10)
-    b := Body(BodyId(0), BodyOf.Fn(0), t.Func(t.List(types.TypeId[i32, i32]), i32, types.ListId(0)), 0, sp)
+    b := Body(BodyId(0), BodyOf.Fn(0), t.Func(t.List(Array<types.TypeId>[i32, i32]), i32, types.ListId(0)), 0, sp)
     root := b.AddBlock(BlockId(-1), BlockKind.Body, sp)
     a := b.AddLocal(Local(names.Intern("a"), sp, i32, root, LocalKind.Param, Mark.None))
     c := b.AddLocal(Local(names.Intern("b"), sp, i32, root, LocalKind.Param, Mark.None))
@@ -3357,9 +3357,9 @@ test "a body: locals, blocks and sites, read back and printed" {
     b.Params.Push(a)
     b.Params.Push(c)
     none := SiteId(-1)
-    sum := Expr.Prim(sp, i32, PrimOp.Add, Check.None, Expr&[Expr.Read(sp, i32, Lvalue.Local(sp, i32, a), none)
+    sum := Expr.Prim(sp, i32, PrimOp.Add, Check.None, Array<Expr&>[Expr.Read(sp, i32, Lvalue.Local(sp, i32, a), none)
                                                               Expr.Read(sp, i32, Lvalue.Local(sp, i32, c), none)])
-    b.Root = Block(root, Stmt&[Stmt.Let(sp, s, sum), Stmt.Return(sp, Expr.Read(sp, i32, Lvalue.Local(sp, i32, s), none))])
+    b.Root = Block(root, Array<Stmt&>[Stmt.Let(sp, s, sum), Stmt.Return(sp, Expr.Read(sp, i32, Lvalue.Local(sp, i32, s), none))])
     assert sum.Type() == i32 and sum.Span() == sp
     assert b.Local(s).Marked == Mark.Infer and b.Encloses(root, root)
     got := b.Print(t)
@@ -3380,7 +3380,7 @@ test "a plan: what each site builds into and each call passes, Unset where nothi
     pl := Plan.New(b)
     assert pl.Built[I64(mk)] == Scope.Unset and pl.Passed(call, 0) == Scope.Unset and pl.Stored.Len() == 0
     pl.Built[I64(mk)] = Scope.Block(loop)
-    pl.Pass(call, Scope[Scope.Var(0), Scope.Program])
+    pl.Pass(call, Array<Scope>[Scope.Var(0), Scope.Program])
     assert pl.Built[I64(mk)] == Scope.Block(loop)
     assert pl.Passed(call, 0) == Scope.Var(0) and pl.Passed(call, 1) == Scope.Program and pl.Passed(call, 2) == Scope.Unset
 }
@@ -3394,8 +3394,8 @@ test "a body's marks and scope variables come from its type; constants, temporar
     i64 := t.Prim("I64")
     t.SetStructBody(n, t.List1(i64), false)
     mutN, roN := t.Ref(n, types.Writable), t.Ref(n, types.ReadOnly)
-    ty := t.Func(t.List(types.TypeId[mutN, roN]), roN, types.ListId(0)
-                 t.Scopes(types.RoleFn, I64[types.OwnScope, 0], I64[0]))
+    ty := t.Func(t.List(Array<types.TypeId>[mutN, roN]), roN, types.ListId(0)
+                 t.Scopes(types.RoleFn, Array<I64>[types.OwnScope, 0], Array<I64>[0]))
     sp := source.Span(0, 4)
     b := Body(BodyId(1), BodyOf.Fn(0), ty, 0, sp)
     root := b.AddBlock(BlockId(-1), BlockKind.Body, sp)
@@ -3409,7 +3409,7 @@ test "a body's marks and scope variables come from its type; constants, temporar
     assert b.ResultMark(t, 0) == Mark.Of(a)
     # a constructor's result scope is its instance's
     k := Body(BodyId(2), BodyOf.Ctor(n, types.ListId(0))
-              t.Func(t.List1(i64), n, types.ListId(0), t.Scopes(types.RoleCtor, I64[types.OwnScope], I64[types.OwnScope]))
+              t.Func(t.List1(i64), n, types.ListId(0), t.Scopes(types.RoleCtor, Array<I64>[types.OwnScope], Array<I64>[types.OwnScope]))
               0, sp)
     k.Params.Push(k.AddLocal(Local(names.Intern("v"), sp, i64, BlockId(0), LocalKind.Param, Mark.None)))
     k.SetVars(t.ScopeVarsOf(k.Ty))
@@ -3425,23 +3425,23 @@ test "a body's marks and scope variables come from its type; constants, temporar
     assert w.place(temp) == "tmp (lit I64 7) site 1" and temp.Type() == i64
     chars := t.Ref(t.Array(t.Prim("U8"), types.TypeId(0)), types.ReadOnly)
     words := Expr.Data(sp, t.Ref(t.Array(chars, types.TypeId(0)), types.ReadOnly), 3
-                       Const.Items(Const&[Const.Bytes(U8[104, 105]), Const.Bytes(U8[])]))
+                       Const.Items(Array<Const&>[Const.Bytes(Array<U8>[104, 105]), Const.Bytes(Array<U8>[])]))
     assert w.expr(words) == "(data Array<Array<U8>&>& 3 [text 2 text 0])", w.expr(words)
     # a valueless Seq, and a match whose nomatch is an empty arm where nothing happens
-    seq := Expr.Seq(sp, types.VoidT, Seq(Stmt&[Stmt.Eval(sp, Expr.Lit(sp, i64, 0))], null))
+    seq := Expr.Seq(sp, types.VoidT, Seq(Array<Stmt&>[Stmt.Eval(sp, Expr.Lit(sp, i64, 0))], null))
     assert w.expr(seq) == "(seq 1 _)"
-    none := Arm(sp, Alt&[], null, Block(root, Stmt&[]), null)
-    mt := Expr.Match(sp, types.VoidT, Match(Stmt&[], Arm&[], none, false))
+    none := Arm(sp, Array<Alt&>[], null, Block(root, Array<Stmt&>[]), null)
+    mt := Expr.Match(sp, types.VoidT, Match(Array<Stmt&>[], Array<Arm&>[], none, false))
     assert w.expr(mt) == "(match 0 arms, nomatch 0)"
 }
 
 # the C math library's functions (X8): evaluated while compiling, each under its own name for F64 and with "f" after
 # it for F32 - the host's library is the target's, as long as the target is this machine (B12a is the driver's). They
 # compute their value and nothing else, so a call of one does nothing more (S3)
-mathNames := String&["sqrt", "fma", "floor", "ceil", "trunc", "round", "roundeven", "fabs", "copysign", "cbrt", "exp"
+mathNames := Array<String&>["sqrt", "fma", "floor", "ceil", "trunc", "round", "roundeven", "fabs", "copysign", "cbrt", "exp"
                      "exp2", "expm1", "log", "log2", "log10", "log1p", "pow", "sin", "cos", "tan", "asin", "acos", "atan"
                      "atan2", "sinh", "cosh", "tanh", "erf", "erfc", "hypot"]
-mathArity := I64[1, 3, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2]
+mathArity := Array<I64>[1, 3, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2]
 
 fn MathExtern(name String&, arity I64) Bool {
     for i, n in mathNames {
@@ -3455,7 +3455,7 @@ fn MathExtern(name String&, arity I64) Bool {
 # condition 3), whatever the program hands to C
 fn NoCallbackExtern(name String&) Bool { return name in noCallbackNames }
 
-noCallbackNames := String&["read", "write", "pread", "pwrite", "readv", "writev", "open", "openat", "creat", "close"
+noCallbackNames := Array<String&>["read", "write", "pread", "pwrite", "readv", "writev", "open", "openat", "creat", "close"
     "lseek", "fsync", "fdatasync", "ftruncate", "fstat", "stat", "lstat", "fstatat", "access", "unlink", "rename", "mkdir"
     "rmdir", "opendir", "readdir", "closedir", "getcwd", "chdir", "dup", "dup2", "pipe", "poll", "isatty", "fopen"
     "fclose", "fread", "fwrite", "fflush", "fputs", "fgets", "puts", "putchar", "getchar", "printf", "fprintf"

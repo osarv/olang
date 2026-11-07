@@ -11,7 +11,7 @@ type Acc struct() {
 fn bump(c mut Acc&) { c.N++ }
 fn bumpPt(p mut Pt&) { p.X++ }
 fn f() I64 {
-    a := Acc[Acc(), Acc()]
+    a := Array<Acc>[Acc(), Acc()]
     bumpPt((try a.Get(1) catch default Acc()).P)
     return a[1].P.X
 }

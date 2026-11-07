@@ -12,7 +12,7 @@ type Acc struct() {
 fn bump(c mut Acc&) { c.N++ }
 fn bumpPt(p mut Pt&) { p.X++ }
 fn main() ? {
-    a := Acc[Acc(), Acc()]
+    a := Array<Acc>[Acc(), Acc()]
     bumpPt((try a.Get(1) catch default Acc()).P)
     try io.Println("array P " $a[1].P.X)
 }

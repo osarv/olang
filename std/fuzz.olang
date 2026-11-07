@@ -130,6 +130,6 @@ test Slug "a test's name as a directory names it" {
 test Check "outside -fuzz, runs on the empty input" {
     seen mut Vec<I64>& = Vec<I64>()
     Check(fn(data Array<U8>&) { seen.Push(data.Len()) })
-    assert seen.ToArray() == I64[0] and Saved().Len() == 0
+    assert seen.ToArray() == Array<I64>[0] and Saved().Len() == 0
     assert (try Input() catch Error default "x") == "x"
 }

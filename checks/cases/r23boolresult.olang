@@ -7,6 +7,6 @@ fn find(xs Array<I64>&, k I64) I64, Bool {
     return 0, false
 }
 fn main() {
-    i, ok := find(I64[1], 1)
+    i, ok := find(Array<I64>[1], 1)
     assert ok and i == 0
 }

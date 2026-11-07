@@ -83,6 +83,19 @@ fn (v mut Vec<T>&) PushAll(a Array<T>&) {
 
 fn (v Vec<T>&) Len() I64 { return v.n }
 
+# a new Vec of every value an iterator gives, in order (D19) - what a Vec's literal and comprehension call (E19, E27):
+# "Vec<I64>[1, 2, 3]". A walk of an array reserves its count first, so the buffer is made once. Fails with what the
+# iterator fails with
+fn Vec<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) Vec<T> ? E {
+    out Vec<T>
+    match I {
+        case ArrayIter<T> { out.Reserve(it.Rest().Len()) }
+        case _ { }
+    }
+    for x in try it { out.Push(x) }
+    return out
+}
+
 # how many elements fit before the buffer is replaced
 fn (v Vec<T>&) Cap() I64 { return v.data.Len() if v.data.Len() > v.want else v.want }
 
@@ -294,9 +307,8 @@ fn (v Vec<T>&) Str() String {
             return b.ToString()
         }
         case _ {
-            r := $v.data[:v.n]
-            o := try r.FindByte('[') catch { unreachable }
-            return "Vec<" $r[:o] ">" $r[o:]
+            r := $v.data[:v.n]                             # "Array<T>[...]"
+            return "Vec" $r[5:]
         }
     }
 }

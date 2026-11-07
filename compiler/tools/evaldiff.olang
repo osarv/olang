@@ -22,7 +22,7 @@ import "toolkit"
 
 # the differences the interpreter is known to have, by name - a file ("FILE": its status, any test of it) or one test
 # ("FILE: NAME", NAME as the run names it) - each with why after " - "
-Expected Array<String&> = String&[
+Expected Array<String&> = Array<String&>[
     # B3e: a join's tasks run one after another at the join, so a wait for another task stops the run, saying so
     "std/chan.olang: a bounded channel carries values between two tasks - a task waits for another (B3e)"
     "std/chan.olang: a channel carries any element type - a task waits for another (B3e)"
@@ -43,7 +43,7 @@ Expected Array<String&> = String&[
 # the tests the interpreter is not given at all, since they would never end - by name, as Expected names a test: a task
 # spinning or blocked in C until another runs beside it, which under interpret never happens (B3e). The file's other
 # tests run, named by the words test takes (B7a). A whole file named is not run (a program too slow interpreted)
-Skipped Array<String&> = String&[
+Skipped Array<String&> = Array<String&>[
     "checks/cases/gemmflat.olang - matrix products over ten minutes interpreted (the memory it holds flat is the build's)"
     "std/cancel.olang: a busy task stops when the token is cancelled - a task spins until another cancels it (B3e)"
     "std/chan.olang: Select: sends through SendOf, a rendezvous handing its value to a waiting receiver - Select polls for a task (B3e)"
@@ -76,7 +76,7 @@ fn main() {
         cases := runCases()
         for i in range part - 1, cases.Len(), parts { files.Push(cases[i]) }
     } else if files.Len() == 0 {
-        for d in String&["tests", "std", "std/prelude/tests"] {
+        for d in Array<String&>["tests", "std", "std/prelude/tests"] {
             for f in toolkit.Matching(d, ".olang") { files.Push($f) }
         }
         for f in runCases() { files.Push(f) }
@@ -130,7 +130,7 @@ fn result.tests(s0 toolkit.StoredRun&, olang String&, f String&, v Bool) result 
     a := outcomes(toolkit.Rows(s0.Out))
     skip := skipped(f, a)
     args := Vec<String&>()
-    for w in String&["timeout", limit(), olang, "test", "-interpret", f] { args.Push(w) }
+    for w in Array<String&>["timeout", limit(), olang, "test", "-interpret", f] { args.Push(w) }
     if skip.Len() > 0 {
         # the file's other tests named, each by its whole name and by what follows its target (B7a's words)
         for name in a.Keys() {
@@ -189,7 +189,7 @@ fn result.program(s0 toolkit.StoredRun&, olang String&, f String&) result {
     text := toolkit.Read(f)
     toolkit.Write($dir "/" $name, text)
     args := Vec<String&>()
-    for a in String&["timeout", limit(), olang, "interpret"] { args.Push(a) }
+    for a in Array<String&>["timeout", limit(), olang, "interpret"] { args.Push(a) }
     flags := toolkit.Fields(headerLine(text, "# flags: "))
     for i in range flags.Len() {
         if (flags[i] == "-define" or flags[i] == "-target") and i + 1 < flags.Len() {

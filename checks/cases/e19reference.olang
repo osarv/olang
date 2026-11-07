@@ -1,0 +1,8 @@
+# check: fail error[E19]: a literal makes the type before its '[', and Node& is a reference - an array of them is Array<Node&>[...]
+# E19: a reference is an element's type, written inside the made type's arguments
+type Node struct(v I64) { v }
+fn main() {
+    n := Node(1)
+    xs := Node&[n]
+    assert xs.Len() == 1
+}

@@ -17,7 +17,7 @@ GsSum mut I64 = gsTwice(GsBase) + 1            # a call and an immutable global,
 GsAt mut GsPoint = GsPoint(3, 1.5)
 GsOn mut Bool = true
 GsWide mut U128 = U128(1) << 100
-GsList mut Array<I64>& = I64[1, 2, 3]          # holds a reference: set at startup
+GsList mut Array<I64>& = Array<I64>[1, 2, 3]          # holds a reference: set at startup
 GsAfter mut I64 = GsBase + 2
 
 fn gsBump() I64 {

@@ -424,7 +424,7 @@ fn walkSum(c mut Chan<I32>&, total mut sumBox&) {
 }
 
 test "for v in c receives until the channel is closed and drained" {
-    for cap in I32[3, 0] {
+    for cap in Array<I32>[3, 0] {
         c mut Chan<I32>& = Chan<I32>(cap)
         Init(c)
         total mut sumBox& = sumBox(0)
@@ -468,7 +468,7 @@ fn waitClosed(c mut Chan<I32>&, tok cancel.Token&, seen mut sumBox&, got mut sum
 
 # a capacity is a count, an I64 as every length and count is: one computed from a length goes in as it is
 test "a channel's capacity is an I64" {
-    items := I64[4, 5, 6]
+    items := Array<I64>[4, 5, 6]
     c mut Chan<I64>& = Chan<I64>(items.Len())
     Init(c)
     for x in items { try Send(c, x) }

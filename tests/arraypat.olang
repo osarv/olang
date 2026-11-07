@@ -9,24 +9,24 @@ Live mut I64 = 0
 
 fn describe(args Array<String&>&) String {
     return match args {
-        case String&[]: "nothing"
-        case String&["test", file, ...words]: "test " $file " with " $words.Len() " words"
-        case String&["run", ...]: "run"
-        case String&[only]: "one: " $only
-        case String&[first, ...rest, last]: $first ".." $last " (" $rest.Len() " between)"
+        case Array<String&>[]: "nothing"
+        case Array<String&>["test", file, ...words]: "test " $file " with " $words.Len() " words"
+        case Array<String&>["run", ...]: "run"
+        case Array<String&>[only]: "one: " $only
+        case Array<String&>[first, ...rest, last]: $first ".." $last " (" $rest.Len() " between)"
     }
 }
 
 fn describeAll(z I64) String {
     w := "x" if z == 0 else "?"
     b := StringBuilder()
-    for a in Array<String&>&[String&[], String&["test", "a.olang", w, "y"], String&["run", "z"], String&["hi"]] {
+    for a in Array<Array<String&>&>[Array<String&>[], Array<String&>["test", "a.olang", w, "y"], Array<String&>["run", "z"], Array<String&>["hi"]] {
         b.Push(describe(a))
         b.Push("; ")
     }
-    b.Push(describe(String&["a", "b", "c", "d"]))
+    b.Push(describe(Array<String&>["a", "b", "c", "d"]))
     b.Push("; ")
-    b.Push(describe(String&["a", w]))
+    b.Push(describe(Array<String&>["a", w]))
     return b.ToString()
 }
 
@@ -34,24 +34,24 @@ DescribeBaked := describeAll(0)
 
 fn total(xs Array<I64>&) I64 {
     return match xs {
-        case I64[]: 0
-        case I64[first, ...rest]: first + total(rest)
+        case Array<I64>[]: 0
+        case Array<I64>[first, ...rest]: first + total(rest)
     }
 }
 
 # the elements after a rest counted from the end
 fn ends(xs Array<I64>&) I64 {
     return match xs {
-        case I64[a, ..., 0]: a
-        case I64[..., b, c]: b * 10 + c
+        case Array<I64>[a, ..., 0]: a
+        case Array<I64>[..., b, c]: b * 10 + c
         case _: -1
     }
 }
 
 fn shape(t String&) String {
     return match t {
-        case Char['-', '-', ...name]: "long " $name
-        case Char['-', c]: "short " $c
+        case Array<Char>['-', '-', ...name]: "long " $name
+        case Array<Char>['-', c]: "short " $c
         case _: "word " $t
     }
 }
@@ -63,7 +63,7 @@ type Cmd enum {
 
 fn cmd(c Cmd) String {
     match c {
-        case Cmd.Run(String&["ls", ...rest]) { return "ls " $rest.Len() }
+        case Cmd.Run(Array<String&>["ls", ...rest]) { return "ls " $rest.Len() }
         case Cmd.Run(_) { return "run" }
         case Cmd.Quit { return "quit" }
     }
@@ -71,8 +71,8 @@ fn cmd(c Cmd) String {
 
 fn vecs(v Vec<I64>&) String {
     return match v {
-        case I64[a, b]: "two " $(a + b)
-        case I64[a, ...]: "many from " $a
+        case Array<I64>[a, b]: "two " $(a + b)
+        case Array<I64>[a, ...]: "many from " $a
         case _: "none"
     }
 }
@@ -84,10 +84,10 @@ fn others(z I64) String {
     v.Push(4)
     s2 := vecs(v)
     v.Push(5)
-    xs := I64[1, 2, 3 + z, 4]
-    a := $total(xs) " " $ends(I64[7, 8, 0]) " " $ends(I64[7, 8, 9]) " " $ends(I64[1])
+    xs := Array<I64>[1, 2, 3 + z, 4]
+    a := $total(xs) " " $ends(Array<I64>[7, 8, 0]) " " $ends(Array<I64>[7, 8, 9]) " " $ends(Array<I64>[1])
     b := $shape("--help") " " $shape("-v") " " $shape("go")
-    c := $cmd(Cmd.Run(String&["ls", "-l"])) " " $cmd(Cmd.Run(String&["x"])) " " $cmd(Cmd.Quit)
+    c := $cmd(Cmd.Run(Array<String&>["ls", "-l"])) " " $cmd(Cmd.Run(Array<String&>["x"])) " " $cmd(Cmd.Quit)
     return $a " " $b " " $c " " $s0 " " $s2 " " $vecs(v)
 }
 

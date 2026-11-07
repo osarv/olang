@@ -1,7 +1,7 @@
 # check: run
 # T25c, QCE: a mutable global's initializer is stored where it can be written - a copy of an immutable global's Vec is
 # a Vec of its own (a value since 2026-11-01; a handle copy was refused, as pushes to it would have changed that list)
-G Vec<I32> = I32[1, 2].ToVec()
+G Vec<I32> = Array<I32>[1, 2].ToVec()
 M mut Vec<I32> = G
 fn main() ? {
     M.Push(3)

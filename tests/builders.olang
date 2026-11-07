@@ -113,11 +113,11 @@ test "a builder is a value where nothing generic is left" {
 }
 
 test "a trait requires a builder, and a generic calls it through its variable" {
-    v := try readAll<I64>(String&["1", "22", "-3"])
+    v := try readAll<I64>(Array<String&>["1", "22", "-3"])
     assert v.Len() == 3 and v[2] == -3
-    w := try readAll<U8>(String&["255"])
+    w := try readAll<U8>(Array<String&>["255"])
     assert w[0] == 255
-    try readAll<U8>(String&["256"]) catch ParseError.Overflow { return }
+    try readAll<U8>(Array<String&>["256"]) catch ParseError.Overflow { return }
     assert false, "256 is no U8"
 }
 

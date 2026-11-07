@@ -17,6 +17,14 @@ fn Set<T>.Of<T Hashable<T>>(a Array<T>&) Set<T> {
     return s
 }
 
+# a Set of every value an iterator gives, each once (D19) - what a Set's literal and comprehension call (E19, E27):
+# "set.Set<I64>[1, 2, 2]". Fails with what the iterator fails with
+fn Set<T>.FromIter<T Hashable<T>, I Iterator<T ? E> ? E>(it mut I&) Set<T> ? E {
+    s := Set<T>()
+    for x in try it { s.m.Put(x, true) }
+    return s
+}
+
 # adds x, and says whether it was not there before
 fn (s mut Set<T>&) Add(x T) Bool {
     if s.m.Has(x) { return false }
@@ -92,10 +100,12 @@ fn (s Set<T>&) Hash() I64 {
     return h
 }
 
-# how "$" renders a Set: its elements in braces, in the order a walk gives them - "Set{1, 2, 3}"
+# how "$" renders a Set: as the literal making it (E19), its elements in the order a walk gives them -
+# "set.Set<I64>[1, 2, 3]"
 fn (s Set<T>&) Str() String {
     b := StringBuilder()
-    b.Push("Set{")
+    t := $Array<Set<T>>(0)                              # "Array<set.Set<T>>[]"
+    b.Push($t[6:t.Len() - 3] "[")
     n I64 = 0
     for x in s.m.Keys() {
         if n > 0: b.Push(", ")
@@ -104,7 +114,7 @@ fn (s Set<T>&) Str() String {
         open := try r.Find("[") catch default 0
         b.Push(r[open + 1:r.Len() - 1])
     }
-    b.PushChar('}')
+    b.PushChar(']')
     return b.ToString()
 }
 
@@ -115,7 +125,7 @@ test "a Set holds each value once" {
     assert s.Add(3) and s.Add(4) and not s.Add(3)
     assert s.Len() == 2 and 3 in s and 5 not in s
     assert s.Remove(3) and not s.Remove(3) and s.Len() == 1
-    t := Set.Of(I64[1, 2, 2, 3])
+    t := Set.Of(Array<I64>[1, 2, 2, 3])
     assert t.Len() == 3
     sum := 0
     for x in t { sum += x }
@@ -125,13 +135,13 @@ test "a Set holds each value once" {
 }
 
 test "Set algebra" {
-    a := Set.Of(I64[1, 2, 3, 4])
-    b := Set.Of(I64[3, 4, 5])
-    assert a.Union(b) == Set.Of(I64[1, 2, 3, 4, 5])
-    assert a.Intersect(b) == Set.Of(I64[3, 4])
-    assert a.Difference(b) == Set.Of(I64[1, 2])
-    assert Set.Of(I64[3]).IsSubset(b) and not a.IsSubset(b)
-    assert a.Hash() == Set.Of(I64[4, 3, 2, 1]).Hash()
+    a := Set.Of(Array<I64>[1, 2, 3, 4])
+    b := Set.Of(Array<I64>[3, 4, 5])
+    assert a.Union(b) == Set.Of(Array<I64>[1, 2, 3, 4, 5])
+    assert a.Intersect(b) == Set.Of(Array<I64>[3, 4])
+    assert a.Difference(b) == Set.Of(Array<I64>[1, 2])
+    assert Set.Of(Array<I64>[3]).IsSubset(b) and not a.IsSubset(b)
+    assert a.Hash() == Set.Of(Array<I64>[4, 3, 2, 1]).Hash()
     c := a                                                 # a copy: a set of its own
     c.Add(9)
     assert 9 not in a and a.Len() == 4 and 9 in c
@@ -145,7 +155,7 @@ test "a Set of text" {
     line := "the cat and the hat"
     for word in line.Split(" ") { w.Add(word) }
     assert w.Len() == 4 and "cat" in w and "dog" not in w
-    assert $Set.Of(String&["x"]) == "Set{\"x\"}" and $Set.Of(I64[7]) == "Set{7}"
+    assert $Set.Of(Array<String&>["x"]) == "Set<String&>[\"x\"]" and $Set.Of(Array<I64>[7]) == "Set<I64>[7]"
 }
 
 }

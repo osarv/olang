@@ -5,10 +5,10 @@
 import "std/io"
 fn main() ? {
     outer String& = "outer"
-    keep Array<String&>& = String&[""]
+    keep Array<String&>& = Array<String&>[""]
     for i in range 2 {
         x String& = "w" $i
-        keep = String&[x if i == 1 else outer]
+        keep = Array<String&>[x if i == 1 else outer]
     }
     try io.Println(keep[0])
 }

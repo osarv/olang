@@ -15,15 +15,15 @@ fn main() {
     name := $args[1]
     dir := "bench/repro"
     olang := benchlib.Compiler()
-    benchlib.MustQuietly(String&[olang, "build", $name ".olang"], dir)
-    others := benchlib.Objects(dir, String&[".main.ll", ".opt.ll"])
+    benchlib.MustQuietly(Array<String&>[olang, "build", $name ".olang"], dir)
+    others := benchlib.Objects(dir, Array<String&>[".main.ll", ".opt.ll"])
     try os.MkDirAll($dir "/build/lto") catch os.Error { benchlib.Fail("cannot make " $dir "/build/lto", 1) }
     link := Vec<String&>()
-    for a in String&["clang", "-O3", "-flto", "-o", "build/lto/" $name, "build/" $name ".main.ll"] { link.Push($a) }
+    for a in Array<String&>["clang", "-O3", "-flto", "-o", "build/lto/" $name, "build/" $name ".main.ll"] { link.Push($a) }
     for o in others { link.Push($o) }
-    for a in String&["-lm", "-lpthread", "-Wl,-plugin-opt=save-temps"] { link.Push($a) }
+    for a in Array<String&>["-lm", "-lpthread", "-Wl,-plugin-opt=save-temps"] { link.Push($a) }
     benchlib.Must(link.ToArray(), dir)
-    benchlib.Must(String&["llvm-dis", "build/lto/" $name ".0.5.precodegen.bc", "-o", "build/" $name ".opt.ll"], dir)
+    benchlib.Must(Array<String&>["llvm-dis", "build/lto/" $name ".0.5.precodegen.bc", "-o", "build/" $name ".opt.ll"], dir)
     try os.RemoveAll($dir "/build/lto") catch os.Error { }
     benchlib.Say("build/" $name ".opt.ll\n")
 }

@@ -16,6 +16,14 @@ type Heap<T> struct(less fn&(a T, b T) Bool) {
     items Vec<T> = Vec<T>()
 }
 
+# a Heap ordered by less holding every value an iterator gives (D19) - its ordering a second argument, so a Heap has
+# no literal (E19): "heap.Heap.FromIter(xs.Iter(), less)". Fails with what the iterator fails with
+fn Heap<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&, less fn&(a T, b T) Bool) Heap<T> ? E {
+    h := Heap<T>(less)
+    for x in try it { h.Push(x) }
+    return h
+}
+
 fn (h Heap<T>&) Len() I64 { return h.items.Len() }
 
 # x added
@@ -73,9 +81,9 @@ if TestBuild {
 
 test "a Heap gives its elements least first" {
     h := Heap<I64>(fn(a I64, b I64) Bool { return a < b })
-    for x in I64[5, 1, 9, 3, 7, 3, 8, 2] { h.Push(x) }
+    for x in Array<I64>[5, 1, 9, 3, 7, 3, 8, 2] { h.Push(x) }
     assert h.Len() == 8 and h.Peek()! == 1
-    assert h.Drain() == I64[1, 2, 3, 3, 5, 7, 8, 9]
+    assert h.Drain() == Array<I64>[1, 2, 3, 3, 5, 7, 8, 9]
     assert h.Len() == 0
     assert (try h.Pop() catch Error.Empty default -1) == -1
 }

@@ -5,4 +5,4 @@ fn walk(a Array<I64>&, i I64) I64 {
     b := Array<I64>(a.Len(), 1)
     become walk(b, i + 1)
 }
-fn main() { assert walk(I64[1, 2], 0) == 1 }
+fn main() { assert walk(Array<I64>[1, 2], 0) == 1 }

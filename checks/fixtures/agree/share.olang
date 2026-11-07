@@ -17,7 +17,7 @@ fn Holder.mkHolder() Holder {
     return Holder(arr)
 }
 H Holder = Holder.mkHolder()
-Arr Array<I32>& = I32[1, 2, 3, 4]
+Arr Array<I32>& = Array<I32>[1, 2, 3, 4]
 Sl Array<I32>& = Arr[1:3]
 fn main() ? {
     H.a[0] = 3

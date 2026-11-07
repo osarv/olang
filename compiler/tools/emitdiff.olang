@@ -86,16 +86,16 @@ fn absolute(p String&) String {
 # machine (what a program declaring nothing but an import of std/ffi leaves in its build/)
 fn runtime(olang String&, emitdump String&, dir String&) Array<String&> {
     try os.MkDirAll($dir "/rtport") catch os.Error { toolkit.Die("emitdiff: cannot make " $dir "/rtport") }
-    e := toolkit.Run(String&[emitdump, "-rt", $dir "/rtport"])
+    e := toolkit.Run(Array<String&>[emitdump, "-rt", $dir "/rtport"])
     if e.Status != 0 { toolkit.Die("emitdiff: the port's runtime was not filled in: " $e.Stderr) }
     prt String& = $dir "/rtport/olang_runtime.ll"
     pdc String& = $dir "/rtport/olang_dyncall.ll"
     if not toolkit.Built(olang) {
         toolkit.Say("runtime: not compared (no " $olang ")\n")
-        return String&[prt, pdc]
+        return Array<String&>[prt, pdc]
     }
     toolkit.Write($dir "/rt/rt.olang", "import \"std/ffi\"\nfn main() { }\n")
-    toolkit.Run(String&[$olang, "build", "rt.olang"], String&[], $dir "/rt")
+    toolkit.Run(Array<String&>[$olang, "build", "rt.olang"], Array<String&>[], $dir "/rt")
     rt String& = ""
     dc String& = ""
     for n in toolkit.Matching($dir "/rt/build", ".ll") {
@@ -105,7 +105,7 @@ fn runtime(olang String&, emitdump String&, dir String&) Array<String&> {
     if rt == "" or dc == "" { toolkit.Die("emitdiff: " $olang " left no runtime in " $dir "/rt/build") }
     same := toolkit.Read(prt) == toolkit.Read(rt) and toolkit.Read(pdc) == toolkit.Read(dc)
     toolkit.Say("runtime: " $(("the text " $olang " fills in") if same else ("differs from the text " $olang " fills in")) "\n")
-    return String&[prt, pdc]
+    return Array<String&>[prt, pdc]
 }
 
 type result struct() {
@@ -140,13 +140,13 @@ fn result.compare(gold toolkit.Golden&, emitdump String&, level String&, rt Arra
         r.Row = $f ": not emitted (status " $e.Status ")" "\n"
         return r
     }
-    c := toolkit.Run(String&["clang", "-O" $level, "-w", $out ".ll", rt[0], rt[1], "-o", $out, "-lm", "-lpthread", "-ldl", "-lffi"])
+    c := toolkit.Run(Array<String&>["clang", "-O" $level, "-w", $out ".ll", rt[0], rt[1], "-o", $out, "-lm", "-lpthread", "-ldl", "-lffi"])
     if c.Status != 0 {
         r.Broken = true
         r.Row = $f ": does not compile - " $firstLine(c.Stderr) "\n"
         return r
     }
-    p := toolkit.Run(String&["timeout", "600", $out])
+    p := toolkit.Run(Array<String&>["timeout", "600", $out])
     if program {
         r.Equal = (not s0.Stable or toolkit.RunText(p.Stdout) == s0.Out) and p.Status == s0.Status
         r.Row = $f ": " $("same" if r.Equal else "differs (status " $s0.Status " / " $p.Status ")") $gapsText(gaps) "\n"

@@ -476,7 +476,7 @@ test "a lambda in a list is parenthesized whole, its body with it" {
 }
 
 test "what is already new is left as it is" {
-    for t in String&["fn divmod(a I64, b I64) I64, I64 { }\n", "m Map<String&, (fn(x I64) I64, I64 ? A, B)>\n"
+    for t in Array<String&>["fn divmod(a I64, b I64) I64, I64 { }\n", "m Map<String&, (fn(x I64) I64, I64 ? A, B)>\n"
         "fn r() (fn() I64, I64) { }\n", "x := (a + b) * (c)\n", "fn f() I64 ? A, B { }\n", "s := \"fn f() (I64, I64)\"\n"] {
         assert run(t) == t, t
     }

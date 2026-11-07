@@ -67,7 +67,7 @@ fn swapIn<F>(a mut Array<F>&, i I64, j I64) {
 # sorts the rows in place so that less(c[i], c[i - 1]) holds nowhere, every column moved together - stable, as an
 # array's Sort is: the rows' order is found by sorting their positions, then each column is laid out in it
 fn (c mut Columns<T>&) Sort<? E>(less fn&(x T, y T) Bool ? E) ? E {
-    order := I64[k for k in range c.Len()]
+    order := Array<I64>[k for k in range c.Len()]
     try order.Sort(fn(a I64, b I64) Bool ? E: return less(c[a], c[b]))
     for f in Columns<T>.Fields { reorder(f.Of(c), order) }
 }
@@ -106,6 +106,18 @@ fn (c Columns<T>&) ToColumnVec() ColumnVec<T> {
     return v
 }
 
+# a Columns of every row an iterator gives, in order (D19) - what its literal and comprehension call (E19, E27):
+# "Columns<P>[P(1, 2), P(3, 4)]". A walk of an array is laid out column by column at once; any other gathered as a
+# ColumnVec gathers and handed over at its count. Fails with what the iterator fails with
+fn Columns<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) Columns<T> ? E {
+    match I {
+        case ArrayIter<T> { return it.Rest().ToColumns() }
+        case _ { }
+    }
+    v := try ColumnVec<T>.FromIter(it)
+    return v.ToColumns()
+}
+
 # the rows, held as columns: a Columns of an array's elements
 fn (a Array<T>&) ToColumns() Columns<T> {
     out Columns<T>
@@ -131,9 +143,8 @@ fn columnOf<T, D>(a Array<T>&, d D) Array<D.Type> {
 
 # how "$" renders a Columns (E11c): as an array of its rows renders, the type named in front - "Columns<P>[P(1, 2)]"
 fn (c Columns<T>&) Str() String {
-    r := $c.ToArray()
-    o := try r.FindByte('[') catch { unreachable }
-    return "Columns<" $r[:o] ">" $r[o:]
+    r := $c.ToArray()                                    # "Array<T>[...]"
+    return "Columns" $r[5:]
 }
 
 # ---- ColumnVec ----
@@ -144,6 +155,18 @@ type ColumnVec<T> struct(cap I64 = 0) {
     data Columns<T>        # the buffers: each column's first n elements are the rows'
     n I64 = 0
     want I64 = cap         # the room asked for while there are no buffers
+}
+
+# a ColumnVec of every row an iterator gives, in order (D19) - what its literal and comprehension call (E19, E27). A
+# walk of an array reserves its count first. Fails with what the iterator fails with
+fn ColumnVec<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) ColumnVec<T> ? E {
+    out ColumnVec<T>
+    match I {
+        case ArrayIter<T> { out.Reserve(it.Rest().Len()) }
+        case _ { }
+    }
+    for x in try it { out.Push(x) }
+    return out
 }
 
 # room for at least need rows, every column moved into a buffer twice the size (8 at first), or need, or what was asked
@@ -267,7 +290,7 @@ fn insertIn<F>(a mut Array<F>&, i I64, n I64, x F) {
 
 # sorts the rows in place, every column moved together - stable, as Columns' Sort is
 fn (v mut ColumnVec<T>&) Sort<? E>(less fn&(x T, y T) Bool ? E) ? E {
-    order := I64[k for k in range v.n]
+    order := Array<I64>[k for k in range v.n]
     try order.Sort(fn(a I64, b I64) Bool ? E: return less(v.data[a], v.data[b]))
     for f in Columns<T>.Fields { reorder(f.Of(v.data)[:v.n], order) }
 }
@@ -307,9 +330,8 @@ fn (v ColumnVec<T>&) Hash() I64 {
 
 # how "$" renders a ColumnVec (E11c): as its rows render, the type named in front - "ColumnVec<P>[P(1, 2)]"
 fn (v ColumnVec<T>&) Str() String {
-    r := $v.ToArray()
-    o := try r.FindByte('[') catch { unreachable }
-    return "ColumnVec<" $r[:o] ">" $r[o:]
+    r := $v.ToArray()                                    # "Array<T>[...]"
+    return "ColumnVec" $r[5:]
 }
 
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the

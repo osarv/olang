@@ -16,7 +16,7 @@ fn main() {
     io.Println("area " $bind_area(r))!
     bind_grow(r, 1.0)
     io.Println("grown " $bind_area(r) " " $r.label[0])!
-    io.Println("sum " $bind_sum(I32[1, 2, 3, 4], 4) " length " $bind_length("abcdef".ToC()))!
+    io.Println("sum " $bind_sum(Array<I32>[1, 2, 3, 4], 4) " length " $bind_length("abcdef".ToC()))!
     g := bind_greeting()
     if g is not null { io.Println(String.FromC(g, 100))! }
     out := Array<bind_counter?&>(1)

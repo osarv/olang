@@ -358,8 +358,9 @@ fn List<T>.Of(a Array<T>&) List<T> {
     return out
 }
 
-# a new List of every value an iterator gives, in order: "list.From(m.Keys())". Fails with what the iterator fails with
-fn List<T>.From<I Iterator<T ? E> ? E>(it mut I&) List<T> ? E {
+# a new List of every value an iterator gives, in order (D19) - what a List's literal and comprehension call (E19, E27):
+# "list.List<I64>[1, 2]", "list.List.FromIter(m.Keys())". Fails with what the iterator fails with
+fn List<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) List<T> ? E {
     out := List<T>()
     for x in try it { out.Push(x) }
     return out
@@ -638,14 +639,14 @@ fn (l List<T>&) Str() String {
     b := StringBuilder()
     match T {
         case Char { # an array of Char renders as text, so these are written here
-            b.Push("List<Char>[")
+            b.Push($typeWritten(Array<List<Char>>(0)) "[")
             for i, c in l {
                 if i > 0 { b.Push(", ") }
                 b.Push(charLiteral(c))
             }
         }
         case _ {
-            b.Push("List<" $typeWritten(Array<T>(0)) ">[")
+            b.Push($typeWritten(Array<List<T>>(0)) "[")   # "list.List<T>" outside std/list
             at I64 = 0
             for {
                 run := try l.RunFrom(at) catch Exhausted { break }
@@ -663,8 +664,8 @@ fn (l List<T>&) Str() String {
 
 # T as written - what "$" puts before an array's items
 fn typeWritten<T>(a Array<T>&) String {
-    r := $a[0:0] # "T[]"
-    return $r[:r.Len() - 2]
+    r := $a[0:0] # "Array<T>[]"
+    return $r[6:r.Len() - 3]
 }
 
 # c as a character literal writes it - how "$" renders a Char inside another value (E11a)
@@ -823,10 +824,10 @@ if TestBuild {
     test "a comprehension walks a List" {
         l mut List<I32>& = List<I32>()
         for i in range I32(250) { l.Push(i) }
-        evens := I32[x for x in l if x % 2 == 0]
+        evens := Array<I32>[x for x in l if x % 2 == 0]
         assert evens.Len() == 125
         assert evens[124] == 248
-        all := I32[x for x in l]
+        all := Array<I32>[x for x in l]
         assert all.Len() == 250 and all[249] == 249
     }
 
@@ -890,7 +891,7 @@ if TestBuild {
     test "PushAll appends an array across chunk boundaries" {
         l mut List<I32>& = List<I32>()
         l.Push(-1)
-        l.PushAll(I32[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) # fills the first chunk and spills into the second
+        l.PushAll(Array<I32>[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) # fills the first chunk and spills into the second
         big := Array<I32>(100)
         for i in range 100 { big[i] = I32(i) + 10 }
         l.PushAll(big)
@@ -944,7 +945,7 @@ if TestBuild {
         for x in l { sum += x }
         assert sum == 1225
         assert indexedTotal(l) == 1225
-        assert I32[x for x in l if x >= 40].Len() == 10
+        assert Array<I32>[x for x in l if x >= 40].Len() == 10
         assert l.Iter().Count(fn(x) { return x % 10 == 0 }) == 5
         it Iter<I32> = l.Iter() # List's own Iter, not Indexable's IndexIter
         assert (try it.Next() catch default -1) == 0
@@ -955,7 +956,7 @@ if TestBuild {
     fn listIndexed() I64 {
         l := List<I64>()
         for i in range 40 { l.Push(i) }
-        l.PushAll(I64[100, 200])
+        l.PushAll(Array<I64>[100, 200])
         l[8] = 1000
         l[41] += 1
         s I64 = 0
@@ -1018,7 +1019,7 @@ if TestBuild {
         pairs I64 = 0
         for a in l { for b in l { if a == b { pairs++ } } } # nested loops over one list keep their own places
         assert pairs == 100
-        sq := I64[x * x for x in l if x < 10] # a comprehension walks it too
+        sq := Array<I64>[x * x for x in l if x < 10] # a comprehension walks it too
         assert sq.Len() == 5 and sq[4] == 64
         for _ in List<I32>() { unreachable }
     }
@@ -1083,7 +1084,7 @@ if TestBuild {
         assert missed
         for i in range 30 { l.Push(i * 10) } # the chunks Pop emptied are filled again
         assert l.Len() == 30 and l[0] == 0 and l[7] == 70 and l[8] == 80 and l[29] == 290
-        assert listShow(l) == listShow(List.Of(I64[x * 10 for x in range 30]))
+        assert listShow(l) == listShow(List.Of(Array<I64>[x * 10 for x in range 30]))
     }
 
     test "Pop and Push back and forth at a chunk boundary, and a work list" {
@@ -1155,7 +1156,7 @@ if TestBuild {
 
     test "TakeAt, RemoveAt and Insert move the elements after the position, across chunk boundaries" {
         l := List<I64>.listUpTo(60)
-        model := List.Of(I64[x for x in range 60])
+        model := List.Of(Array<I64>[x for x in range 60])
         assert (try l.TakeAt(7)) == 7 # the last of the first chunk
         assert (try l.TakeAt(7)) == 8 # what moved into its place, from the second
         assert (try l.TakeAt(0)) == 0
@@ -1180,7 +1181,7 @@ if TestBuild {
     }
 
     test "Reverse and Sort reorder a List in place" {
-        for n in I64[0, 1, 2, 8, 9, 24, 25, 57] {
+        for n in Array<I64>[0, 1, 2, 8, 9, 24, 25, 57] {
             l := List<I64>.listUpTo(n)
             l.Reverse()
             assert l.Len() == n
@@ -1200,15 +1201,15 @@ if TestBuild {
     }
 
     test "an array, and an iterator, made into a List" {
-        a := List.Of(I32[3, 1, 2])
+        a := List.Of(Array<I32>[3, 1, 2])
         assert a.Len() == 3 and a[0] == 3 and a[2] == 2
         f := List.Of(Array<I64>(100, 7)) # n copies of one value
         assert f.Len() == 100 and f[99] == 7 and f[8] == 7
         assert List.Of(Array<I32>(0)).Len() == 0
-        m := List.From(I32[x * x for x in range I32(10)].Iter())
+        m := List.FromIter(Array<I32>[x * x for x in range I32(10)].Iter())
         assert m.Len() == 10 and m[9] == 81
         evens := List<I64>.listUpTo(30).Iter().Filter(fn(x) { return x % 2 == 0 })
-        assert List.From(evens.Iter()).Len() == 15
+        assert List.FromIter(evens.Iter()).Len() == 15
     }
 
     test "Join puts a separator between the texts of a List" {
@@ -1288,7 +1289,7 @@ if TestBuild {
         b.Push(2)
         a.Push(3)
         assert b.Len() == 3 and a.Len() == 3 and b[1] == 2 and a[2] == 3
-        c := List.From(a.Iter()) # a list of its own
+        c := List.FromIter(a.Iter()) # a list of its own
         c.Push(4)
         a[0] = 10
         assert a.Len() == 3 and c.Len() == 4 and c[0] == 1 and c[3] == 4 and a[0] == 10
@@ -1327,7 +1328,7 @@ if TestBuild {
         kept := List<I64>()
         if kept.Len() == 0 {
             src := List<I64>.listUpTo(100) # chunks of 8, 16, 32 and 64
-            kept = List.From(src.Iter())
+            kept = List.FromIter(src.Iter())
             src.Push(100)
             src[0] = -1
         }
@@ -1336,7 +1337,7 @@ if TestBuild {
         words := List<String&>()
         line String& = "a bb ccc"
         for w in line.Split(" ") { words.Push(w) }
-        copy := List.From(words.Iter()) # a List of references copies to the same references
+        copy := List.FromIter(words.Iter()) # a List of references copies to the same references
         assert copy.Len() == 3 and copy[2] == words[2]
     }
 
@@ -1344,9 +1345,9 @@ if TestBuild {
     # a second is made - and the next chunks': the new list holds the same elements and grows apart from the list
     fn listFromEdges() I64 {
         s I64 = 0
-        for n in I64[0, 1, 7, 8, 9, 23, 24, 25, 56, 57] {
+        for n in Array<I64>[0, 1, 7, 8, 9, 23, 24, 25, 56, 57] {
             l := List<I64>.listUpTo(n)
-            c := List.From(l.Iter())
+            c := List.FromIter(l.Iter())
             c.Push(1000)
             l.Push(2000)
             assert c.Len() == n + 1 and l.Len() == n + 1 and c[n] == 1000 and l[n] == 2000, "From of " $n
@@ -1361,7 +1362,7 @@ if TestBuild {
     }
 
     test "Truncate keeps the first n, across chunk boundaries, and Push carries on after them" {
-        for n in I64[0, 1, 7, 8, 9, 23, 24, 25, 100] {
+        for n in Array<I64>[0, 1, 7, 8, 9, 23, 24, 25, 100] {
             l := List<I64>.listUpTo(100)
             l.Truncate(n)
             assert l.Len() == n, "Truncate(" $n ")"
@@ -1371,7 +1372,7 @@ if TestBuild {
             }
             assert ok
             l.Push(-1) # the next Push goes right after them, into the chunk they ended in
-            l.PushAll(I64[-2, -3])
+            l.PushAll(Array<I64>[-2, -3])
             assert l.Len() == n + 3 and l[n] == -1 and l[n + 2] == -3
             assert (try l.Last() catch default 0) == -3
         }
@@ -1379,7 +1380,7 @@ if TestBuild {
         l.Truncate(9) # more than it holds: nothing changes
         assert listShow(l) == "[0 1 2 3 4]"
         # top k: sorted, then cut
-        s := List.Of(I64[5, 1, 9, 3, 7, 8])
+        s := List.Of(Array<I64>[5, 1, 9, 3, 7, 8])
         s.Sort(fn(a, b) { return a > b })
         s.Truncate(3)
         assert listShow(s) == "[9 8 7]"
@@ -1418,7 +1419,7 @@ if TestBuild {
         assert (try m.SwapTake(0)) == 8 and m[0] == 7 and m.Len() == 7
         m.Push(100)
         assert listShow(m) == "[7 1 2 3 4 5 6 100]"
-        one := List.Of(I64[5])
+        one := List.Of(Array<I64>[5])
         assert (try one.SwapTake(0)) == 5 and one.Len() == 0 and (try one.IndexOf(5) catch default -1) == -1
         words := List.Of("to be or not to be".Split(" ")) # text compares by its contents
         assert (try words.IndexOf("be") catch default -1) == 1 and words.Remove("to") and words[0] == "be"
@@ -1464,7 +1465,7 @@ if TestBuild {
     test "$ renders a List's elements, not its storage" {
         r := listRendered()
         assert r == ("List<I64>[] List<I64>[0, 1, 2] List<String&>[\"a\\\"b\", \"\"] List<Char>['x', '\\n', '\\''] "
-            "List<List<I64>>[List<I64>[0, 1], List<I64>[]] List<Pair<String&, F64>>[Pair(\"k\", 0.5)]")
+            "List<List<I64>>[List<I64>[0, 1], List<I64>[]] List<pair.Pair<String&, F64>>[pair.Pair(\"k\", 0.5)]")
         assert listRenderedBaked == r # the evaluator renders as the run time does
         long := List<I64>.listUpTo(1000)        # many chunks: their spare slots are never shown
         expect := StringBuilder()

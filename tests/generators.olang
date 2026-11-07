@@ -369,7 +369,7 @@ test "D18c: a generator's elements borrowed from what it was given live where th
     b := try g.Next() catch default ""
     churnText()
     assert a == "alpha" and b == "beta"
-    lens := I64[w.Len() for w in spans(t)]
+    lens := Array<I64>[w.Len() for w in spans(t)]
     assert lens.Len() == 3 and lens[2] == 5
     assert SpanTotal == 11 and spanTotal("ab c") == 3 # decided while compiling (S18c)
     assert spanTotal(t) == 14
@@ -445,7 +445,7 @@ test "D18e: a walk a for-in makes is dropped as the loop's block is left, whatev
 
 # D18e: a generator a local holds, walked once in its block by a for-in or a comprehension and named nowhere else, is
 # that walk's own - dropped as the local's block closes; walked twice, in a loop, or named again, it keeps D18b's path
-HeldData := I64[3, 1, 4, 1, 5, 9, 2, 6]
+HeldData := Array<I64>[3, 1, 4, 1, 5, 9, 2, 6]
 
 fn heldEach(a Array<I64>&) Iterator<I64> {
     for x in a { yield x }
@@ -453,7 +453,7 @@ fn heldEach(a Array<I64>&) Iterator<I64> {
 
 fn heldCompr() I64 {
     g := heldEach(HeldData)
-    xs := I64[x * 2 for x in g if x > 2]
+    xs := Array<I64>[x * 2 for x in g if x > 2]
     return xs.Len() * 100 + xs[0]
 }
 
@@ -538,7 +538,7 @@ fn sumOf(r Array<I64>&) I64 {
 }
 
 fn arrayLent(k I64) Iterator<I64> {
-    a := I64[k, k + 1, k + 2]
+    a := Array<I64>[k, k + 1, k + 2]
     r Array<I64>& = a
     for i in range 3 { yield r[i] + sumOf(r) }
 }

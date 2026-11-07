@@ -51,7 +51,7 @@ fn build(olang String&, path String&, src String&) String {
         srcmask.SayErr("io_fix: cannot make " $dir)
         os.Exit(1)
     }
-    args := String&[olang, mode, srcmask.AbsPath(path)]
+    args := Array<String&>[olang, mode, srcmask.AbsPath(path)]
     return try srcmask.Capture(args, dir, 600000) catch {
         srcmask.SayErr("io_fix: " $olang " " $mode " " $path " did not run to its end")
         os.Exit(1)

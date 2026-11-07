@@ -4,7 +4,7 @@
 # an inner block's array, read through a reference kept past that block: must fail
 import "std/io"
 fn main() ? {
-    y Array<I64>& = I64[0]
+    y Array<I64>& = Array<I64>[0]
     {
         x mut Array<I64>& = Array<I64>(4)
         y = x

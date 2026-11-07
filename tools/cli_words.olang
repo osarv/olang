@@ -47,14 +47,14 @@ fn isWord(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
 
 # the end of the invoker starting at i of line, or -1
 fn invoker(line String&, i I64) I64 {
-    for p in String&["\\\"$OLANG\\\"", "\"$OLANG\"", "$(OLANG)", "${OLANG}"] {
+    for p in Array<String&>["\\\"$OLANG\\\"", "\"$OLANG\"", "$(OLANG)", "${OLANG}"] {
         if line[i:].StartsWith(p) { return i + p.Len() }
     }
     if line[i:].StartsWith("$OLANG") {
         e := i + 6
         if e == line.Len() or not isWord(line[e]) { return e }
     }
-    for p in String&["build/out", "build/stage0", "build/olang", "olang"] {
+    for p in Array<String&>["build/out", "build/stage0", "build/olang", "olang"] {
         if not line[i:].StartsWith(p) { continue }
         e := i + p.Len()
         if i > 0 and (isWord(line[i - 1]) or line[i - 1] == '/' or line[i - 1] == '.' or line[i - 1] == '-') { continue }

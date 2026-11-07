@@ -44,7 +44,7 @@ fn declared(line String&) String, String {
     if i == 0: return "", $line
     name := t[:i]
     rest := t[i:]
-    for pre in String&[" := String(Array<Char>(", " mut String& = String(Array<Char>(", " String& = String(Array<Char>(", " := String(Array<U8>("
+    for pre in Array<String&>[" := String(Array<Char>(", " mut String& = String(Array<Char>(", " String& = String(Array<Char>(", " := String(Array<U8>("
                        " mut String& = String(Array<U8>(", " String& = String(Array<U8>("] {
         if not rest.StartsWith(pre) or not rest.EndsWith("))"): continue
         args := rest[pre.Len():rest.Len() - 2]

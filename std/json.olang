@@ -1408,10 +1408,10 @@ if TestBuild {
         assert problem("\"\\ud83dx\"") == "BAD_ESCAPE 1:2" and problem("\"\\x\"") == "BAD_ESCAPE 1:2"
         assert problem("\"\\u12g4\"") == "BAD_ESCAPE 1:6" and problem("\"\\u12") == "UNTERMINATED 1:6"
         assert problem("\"tab\there\"") == "UNEXPECTED 1:5" and problem("\"open") == "UNTERMINATED 1:6"
-        bad := String(U8['"', 0xC3, '"'])
+        bad := String(Array<U8>['"', 0xC3, '"'])
         assert problem(bad) == "BAD_UTF8 1:2"
-        assert problem(String(U8['"', 0xED, 0xA0, 0x80, '"'])) == "BAD_UTF8 1:2"       # a surrogate written in UTF-8
-        assert problem(String(U8['"', 0xC0, 0xAF, '"'])) == "BAD_UTF8 1:2"             # overlong
+        assert problem(String(Array<U8>['"', 0xED, 0xA0, 0x80, '"'])) == "BAD_UTF8 1:2"       # a surrogate written in UTF-8
+        assert problem(String(Array<U8>['"', 0xC0, 0xAF, '"'])) == "BAD_UTF8 1:2"             # overlong
     }
 
     test "what is wrong, and where" {
@@ -1427,7 +1427,7 @@ if TestBuild {
         assert problem("{\n  \"a\": [1,\n        oops]\n}") == "UNEXPECTED 3:9"
         assert problem("[\"é\", x]") == "UNEXPECTED 1:7"                          # a column counts characters
         assert problem(" {\"a\":[{}, [], \"\", 0, -1.5e-3, true, false, null]} \n") == "ok"
-        assert problem(String(U8[0xEF, 0xBB, 0xBF, '1'])) == "ok"                   # a byte order mark is passed over
+        assert problem(String(Array<U8>[0xEF, 0xBB, 0xBF, '1'])) == "ok"                   # a byte order mark is passed over
     }
 
     test "nesting is bounded by MaxDepth" {
@@ -1449,15 +1449,15 @@ if TestBuild {
         assert Encode(doc, "  ") == "{\n  \"a\": [\n    1,\n    2.5,\n    \"x\\ny\"\n  ],\n  \"b\": {},\n  \"c\": [],\n  \"d\": null,\n  \"e\": true\n}"
         assert Encode(doc, "\t").StartsWith("{\n\t\"a\": [\n\t\t1,")
         assert $doc == Encode(doc)
-        control := Json.Str(String(U8['"', '\\', 1, 0x1F, 0x7F, 'q']))
+        control := Json.Str(String(Array<U8>['"', '\\', 1, 0x1F, 0x7F, 'q']))
         assert Encode(control) == "\"\\\"\\\\\\u0001\\u001f" $Char(0x7F) "q\""
-        nums := Json&[Json.Num(0.1), Json.Num(100.0), Json.Num(-0.0), Json.Num(1e21), Json.Num(1.5e-7), Json.Num(5e-324)
+        nums := Array<Json&>[Json.Num(0.1), Json.Num(100.0), Json.Num(-0.0), Json.Num(1e21), Json.Num(1.5e-7), Json.Num(5e-324)
             Json.Num(123456789.125), Json.Num(1e16), Json.Num(1e17), Json.Num(0.0 / 0.0), Json.Num(1.0 / 0.0)]
         assert Encode(Json.Arr(nums)) == "[0.1,100,-0,1e+21,1.5e-07,5e-324,123456789.125,10000000000000000,1e+17,null,null]"
     }
 
     test "a number is written as the shortest text that reads back as it" {
-        for x in F64[0.1, 1.0 / 3.0, 2.0 / 3.0, 1e23, 9007199254740993.0, 2.2250738585072014e-308, 4.9406564584124654e-324
+        for x in Array<F64>[0.1, 1.0 / 3.0, 2.0 / 3.0, 1e23, 9007199254740993.0, 2.2250738585072014e-308, 4.9406564584124654e-324
             1.7976931348623157e308, 7.120236347223045e-307, 123.456, -98765.4321e-12, 3.141592653589793] {
             text := Encode(Json.Num(x))
             assert num(text) == x and text.Len() <= ($x).Len()
@@ -1505,9 +1505,9 @@ if TestBuild {
     }
 
     test "values built in code" {
-        o := try Object(String&["name", "tags", "ok"], Json&[Json.Str("olang"), Json.Arr(Json&[Json.Num(1.0), Json.Null])
+        o := try Object(Array<String&>["name", "tags", "ok"], Array<Json&>[Json.Str("olang"), Json.Arr(Array<Json&>[Json.Num(1.0), Json.Null])
             Json.Bool(true)])
-        uneven := try Object(String&["a", "b"], Json&[Json.Null]).Len() catch Error.Uneven default -1
+        uneven := try Object(Array<String&>["a", "b"], Array<Json&>[Json.Null]).Len() catch Error.Uneven default -1
         assert uneven == -1
         doc Json& = Json.Obj(o)
         assert Encode(doc) == "{\"name\":\"olang\",\"tags\":[1,null],\"ok\":true}"
@@ -1586,7 +1586,7 @@ if TestBuild {
     type Percent struct(V I64) [V >= 0 and V <= 100] ? { V }
     type Hidden struct(Open I64, shut I64) { Open, shut }
 
-    fn Report.sample() Report { return Report(Member(7, "ada"), Wind.Gust(2.5, 'N'), I32[1, 2], true) }
+    fn Report.sample() Report { return Report(Member(7, "ada"), Wind.Gust(2.5, 'N'), Array<I32>[1, 2], true) }
     report := Report.sample()
     # K1: written, read back and written again while compiling - baked (values, so nothing writable is reached)
     bakedReport String = Encode(Report.sample())
@@ -1596,7 +1596,7 @@ if TestBuild {
     test "a value of any type written by its type" {
         assert bakedReport == "{\"Who\":{\"Id\":7,\"Name\":\"ada\",\"Score\":0.5,\"Tags\":[]},\"Air\":{\"Gust\":{\"Speed\":2.5,\"Dir\":\"N\"}},\"Days\":[1,2],\"Ok\":true}"
         assert Encode(report) == bakedReport
-        assert Encode(Wind.Calm) == "\"Calm\"" and Encode(I64[1, 2], " ") == "[\n 1,\n 2\n]"
+        assert Encode(Wind.Calm) == "\"Calm\"" and Encode(Array<I64>[1, 2], " ") == "[\n 1,\n 2\n]"
         m := Map<String&, I64>()
         m.Put("a", 1)
         assert Encode(m) == "{\"a\":1}" and Encode(Hidden(1, 2)) == "{\"Open\":1,\"shut\":2}"

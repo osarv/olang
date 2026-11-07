@@ -191,7 +191,7 @@ fn sigLine(line String&) String {
 fn itemKind(line String&) String {
     if line.StartsWith("fn ") or line.StartsWith("extern fn ") { return "fn" }
     if not line.StartsWith("type ") { return "global" }
-    for k in String&["enum", "error", "trait", "struct", "extends"] {
+    for k in Array<String&>["enum", "error", "trait", "struct", "extends"] {
         if line.Contains($" " $k) { return k }
     }
     return "type"

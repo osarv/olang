@@ -2,7 +2,7 @@
 # T25c, QCE: a written type declares a writable value - a copy of an immutable global's Vec initializes one, a Vec of its
 # own since 2026-11-01 (a handle's copy was read-only, and refused here)
 import "std/io"
-G Vec<I64> = I64[1].ToVec()
+G Vec<I64> = Array<I64>[1].ToVec()
 fn main() ? {
     y Vec<I64> = G
     y.Push(2)

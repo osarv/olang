@@ -6,6 +6,6 @@ type Counter trait {
 fn n<C Counter>(c C&) I64 { return c.Count(fn(x I32) Bool { return x > 1 }) }
 type Ints extends Array<I32>
 fn main() ? {
-  a Ints = Ints(I32[1, 2, 3])
+  a Ints = Ints(Array<I32>[1, 2, 3])
   assert n(a) == 2
 }

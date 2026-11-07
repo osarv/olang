@@ -23,13 +23,13 @@ type moved struct(Module String&, Name String&, Old Array<String&>&, Before Arra
     Before
 }
 
-Moved Array<moved> = moved[moved("std/os", "Exec", String&["*args", "input=\"\"", "capture=true", "dir=\"\""], String&[])
-    moved("std/os", "Start", String&["*args", "input=\"\"", "capture=true", "dir=\"\""], String&[])
-    moved("std/os", "ExecUntil", String&["*args", "tok", "input=\"\"", "capture=true", "dir=\"\""], String&["tok"])
-    moved("std/os", "ExecInPlace", String&["path", "*args"], String&["path"])
-    moved("std/http", "Get", String&["url", "*headers"], String&["url"])
-    moved("std/http", "Post", String&["url", "contentType", "body", "*headers"], String&["url", "contentType", "body"])
-    moved("std/csv", "Record", String&["*fields", "sep=','"], String&[])]
+Moved Array<moved> = Array<moved>[moved("std/os", "Exec", Array<String&>["*args", "input=\"\"", "capture=true", "dir=\"\""], Array<String&>[])
+    moved("std/os", "Start", Array<String&>["*args", "input=\"\"", "capture=true", "dir=\"\""], Array<String&>[])
+    moved("std/os", "ExecUntil", Array<String&>["*args", "tok", "input=\"\"", "capture=true", "dir=\"\""], Array<String&>["tok"])
+    moved("std/os", "ExecInPlace", Array<String&>["path", "*args"], Array<String&>["path"])
+    moved("std/http", "Get", Array<String&>["url", "*headers"], Array<String&>["url"])
+    moved("std/http", "Post", Array<String&>["url", "contentType", "body", "*headers"], Array<String&>["url", "contentType", "body"])
+    moved("std/csv", "Record", Array<String&>["*fields", "sep=','"], Array<String&>[])]
 
 fn main() {
     args := os.Args()

@@ -70,7 +70,7 @@ test "a collection's elements are copied by their own Copy" {
     w := v
     w.RefMut(0).root.v = 10
     assert v[0].root.v == 1 and w[0].root.v == 10
-    arr := tree[tree.mk(5), tree.mk(6)]
+    arr := Array<tree>[tree.mk(5), tree.mk(6)]
     brr := arr
     brr[1].root.v = 60
     assert arr[1].root.v == 6 and brr[1].root.v == 60
@@ -94,7 +94,7 @@ test "Copy() written calls it, supplied or declared" {
     n := node(2)
     m := n.Copy()
     assert m.v == 2
-    xs := I64[1, 2, 3]
+    xs := Array<I64>[1, 2, 3]
     r Array<I64>& = xs
     ys := r.Copy()
     ys[0] = 9
@@ -143,7 +143,7 @@ Parallel := parallel()
 
 test parallel "copies each value of a parallel declaration and assignment" {
     assert Parallel == parallel()
-    assert parallel() == "I64[0, 0]I64[5, 0]I64[0, 6]Vec<I64>[1]Vec<I64>[9, 2]Vec<I64>[1]1112I64[7, 0]I64[0, 0]"
+    assert parallel() == "Array<I64>[0, 0]Array<I64>[5, 0]Array<I64>[0, 6]Vec<I64>[1]Vec<I64>[9, 2]Vec<I64>[1]1112Array<I64>[7, 0]Array<I64>[0, 0]"
 }
 
 # a lambda's capture of a value is its own copy, made as the lambda is: what the value owns copied too (a struct's

@@ -250,9 +250,9 @@ fn SayErr(t String&) {
 # ---- expressions, as the try and checked migrations read them ----
 
 # the operators an expression continues with, longest first so "<<" is not read as "<"
-Ops Array<String&> = String&["<<=", ">>=", "<<", ">>", "<=", ">=", "==", "!=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^="
+Ops Array<String&> = Array<String&>["<<=", ">>=", "<<", ">>", "<=", ">=", "==", "!=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^="
                              "+", "-", "*", "/", "%", "&", "|", "^", "<", ">", "@"]
-Words Array<String&> = String&["and", "or", "xor", "in", "not", "is", "as", "if"]
+Words Array<String&> = Array<String&>["and", "or", "xor", "in", "not", "is", "as", "if"]
 
 # the operator the text t starts with ("" for none) - an assignment is none, for a store is no expression
 fn OpAt(t String&) String {
@@ -432,11 +432,11 @@ test "Strip and Prefix work as Python's str methods do" {
 
 test "ValidUtf8 refuses what Python's decoder refuses" {
     assert ValidUtf8("plain and héllo")
-    assert not ValidUtf8(String(U8[0xE9]))
-    assert not ValidUtf8(String(U8[0xC0, 0x80]))
-    assert not ValidUtf8(String(U8[0xED, 0xA0, 0x80]))
-    assert not ValidUtf8(String(U8[0x61, 0x62, 0xE2, 0x82]))
-    assert ValidUtf8(String(U8[0xE2, 0x82, 0xAC]))
+    assert not ValidUtf8(String(Array<U8>[0xE9]))
+    assert not ValidUtf8(String(Array<U8>[0xC0, 0x80]))
+    assert not ValidUtf8(String(Array<U8>[0xED, 0xA0, 0x80]))
+    assert not ValidUtf8(String(Array<U8>[0x61, 0x62, 0xE2, 0x82]))
+    assert ValidUtf8(String(Array<U8>[0xE2, 0x82, 0xAC]))
 }
 
 test "operators read where they stand" {

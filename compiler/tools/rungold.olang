@@ -25,7 +25,7 @@ fn main() {
     golden := toolkit.Env("RUNGOLD_OUT", "compiler/goldens/run.txt")
     out := StringBuilder()
     for f in TestFiles() {
-        o := toolkit.Run(String&["timeout", "600", olang, "test", f])
+        o := toolkit.Run(Array<String&>["timeout", "600", olang, "test", f])
         out.Push(toolkit.GoldenSection(toolkit.RunKey(f), toolkit.RunBody(o.Status, false, toolkit.TestEndings(o.Stdout))))
         toolkit.Say("rungold: " $f " status " $o.Status "\n")
     }
@@ -56,7 +56,7 @@ fn main() {
 # the files of tests emitdiff and evaldiff run by default: the corpus, std, std's prelude's tests
 fn TestFiles() Vec<String&> {
     l := Vec<String&>()
-    for d in String&["tests", "std", "std/prelude/tests"] {
+    for d in Array<String&>["tests", "std", "std/prelude/tests"] {
         for f in toolkit.Matching(d, ".olang") { l.Push($f) }
     }
     return l

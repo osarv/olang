@@ -6,7 +6,7 @@ type Fir struct(taps Array<I16>) {
     taps
 }
 fn main() ? {
-    t := I16[1, 2, 3]
+    t := Array<I16>[1, 2, 3]
     f := Fir(t)
     t[0] = 9
     assert f.taps[0] == 1

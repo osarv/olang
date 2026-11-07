@@ -285,7 +285,7 @@ test "Print and Println write text, Println with its line end" {
 test Show "gives its value back after writing it, with the place of the call, to the standard error" {
     assert Show(41) + 1 == 42
     assert Show("io.olang: Show") == "io.olang: Show"
-    xs := Show(I64[1, 2, 3])
+    xs := Show(Array<I64>[1, 2, 3])
     assert xs.Len() == 3 and xs[2] == 3
 }
 
@@ -306,7 +306,7 @@ fn checkReadIsEmpty(fd I32, buf mut Array<U8>&) ? Error {
 
 test "Read returns a slice of the caller's own buffer" {
     buf := Array<U8>(8)
-    path := U8['/', 'd', 'e', 'v', '/', 'n', 'u', 'l', 'l', 0]
+    path := Array<U8>['/', 'd', 'e', 'v', '/', 'n', 'u', 'l', 'l', 0]
     fd I32 = openReadOnly(path)
     assert fd >= 0
     ok Bool = true

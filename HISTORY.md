@@ -30229,3 +30229,62 @@ unique hand-on move the section-8 round (sec8r2) is building, not something the 
 takes a read-only receiver, and a view of the buffer returned would tie the text to the builder). Measured meanwhile:
 the copy compiles to a vectorized loop (no clear first, D14d) - 2,000 builds of 20,000 pushes each, ~1% of the time.
 Left for after sec8r2.
+## The type in front of every literal; FromIter (E19-E21, E27, S13h, E11a, D19; QBU, QBW; 2026-11-07, wt-literals)
+
+**Why.** `$v` of a Vec wrote `Vec<I64>[1, 2, 3]`, which as source was an array of Vecs - so E11b's promise (a value
+renders as source writes it) failed for every collection, and `Map<K, V>{k: v}` was no source form at all (T13 removed
+braces). The user (2026-10-27, QBU): "type in front for sure. I like the Of containers too" - the type before a
+literal's `[` is the type of the value made; then (QBW) "do only fromIter": one protocol, a type-level builder `FromIter`
+generic over the iterator, no FromArray, no Collection/Keyed traits, no default literal; QBX (target-typed literals,
+no type in front) declined for parity with constructors (`Point(1, 2)`).
+
+**What was built.** The parser was already reading a front type and a bracket; the change is what the type means.
+`check.madeLit`: an `Array<T>` front is the array literal as before (`arrayLit`, so bench code is unchanged); any other
+type needs a builder `FromIter` (`literalBuilder`), whose element type `fromIterElem` reads off its one required
+parameter - a type variable of the builder constrained by a trait whose first argument is the element (`Iterator<E ?
+Err>`, after the owner's binding is substituted), or a concrete iterator type whose shaped Next gives it; the items are
+checked as an array literal of that element, `.Iter()` called on it and the builder invoked with the walk (`fromIter`,
+typed arguments through `invoke`'s pre-checked list). The keyed form `C[k: v]`: the parser reads an entry where the first
+item is followed by `:` and makes every item one, held as a binary `:` (so every walker - names, effects, scope - sees
+both sides with no new AST case); `entriesLit` builds each as `MapEntry<K, V>(k, v)` through the constructor; entries
+where the builder takes no MapEntry are LiteralEntries. Comprehensions: an Array as before (`comprArray`); a Vec the array
+then its FromIter; any other type `comprWalk` - a lambda frame marked a generator (as `genLambda` makes a generator's Next),
+the comprehension walked inside it with `comprGen` set so the walk's body gives each element by `Suspend` instead of a
+Collect's `Yield`, `genEnd` after the loop, the lambda handed to `Generator<E>`'s constructor and that to FromIter - so
+no array is made and section 8, lowering's coroutines, the evaluator and `interpret` needed nothing new (the baked
+global in tests/literals.olang walks a Set's and a Columns' comprehension while compiling). Its own fallible calls
+are one error, ComprWalkFails (the lambda frame counts them under a stand-in try, the outer try kept quiet). Array
+patterns (`patElem`): an `Array<T>` front gives T, the subject's own type (a `Vec<I64>[...]` on a Vec) its elements.
+
+**Renderings.** lower's array rendering writes `Array<` + the element type + `>[`; Map's Str `[k: v]`; Vec's `"Vec" $r[5:]`
+of its array's rendering; Columns/ColumnVec likewise; List, Set, Deque and BitSet through the compiler's spelling of
+their own type (`$Array<Set<T>>(0)` cut to the type) - written `set.Set<I64>[...]` outside std/set and `Set<I64>[...]`
+inside it, as every type is. The spelling itself now qualifies: lower's `spell` and the struct and enum renderings put
+the module's alias before a declared type's name (load.ErrQualifier, B5's rule for errors - the prelude's and the root
+program's bare), so `list.List<pair.Pair<String&, F64>>[pair.Pair("k", 0.5)]` reads back. Found on the way: a nested
+generic type argument rendered bare (`list.List<List<I64>>`) - the spelling fix.
+
+**Decided (mine).** No trait requires FromIter, so T35 (no builder generic over its own variables required by a trait)
+is not relaxed: the literal finds the builder by name, as `for` finds Iter. A declared array type (String) has no literal
+of its own: `Array<Char>` makes text that is written, `String(...)` names it. `List.From` renamed FromIter (one name);
+`Of(array)` builders kept (an existing array value). Heap's FromIter takes its ordering, so a Heap has no literal
+(FromIterShape names the call to write). LiteralNoEntries went before it was used: the parser decides a keyed literal by
+its first item, so a mixed one is a syntax error. The formatter writes `k: v` (a colon at the top of a `[` touching a
+`>` or holding a `,`). A Vec's literal copies its items' array into a buffer reserved once (no adoption of the array's
+storage - a Vec owns its buffer by value, QCE, and a store copies; a recorded limit).
+
+**The migration.** `tools/literal_migrate.olang` (a std tool, `olang fix` runs it last of the text tools): an old front -
+a primitive, a type of the file, the prelude, std, an import (through re-export chains), or a type variable a
+declaration introduces, with nothing after it but a marker, or any front with a `&`/`?&` before its `[` - is written
+`Array<front>`; a generic front with no marker is read as new and left alone, which keeps the tool idempotent and is why
+the dozen old arrays of generic values held by value (`Array<F32>[F32[1, 2]]`, `RenBox<mut RenNode&>[...]`,
+`rvG<I64>[...]`) were migrated by hand. Run over std, compiler/, tests, checks, tools, bench, fuzz (339 files) and SPEC's
+code spans (a type variable `C`, a global `G` and the removed form named as an error repaired by hand); rendering
+expectations in tests rewritten by a throwaway script and by hand. The compiler was first built from the unmigrated
+source by sec8r2's base compiler, then rebuilt from the migrated source by itself; the seed is the coordinator's.
+Measured: bench's nbody and knucleotide (array literals, text arrays) compile to byte-identical IR against the base
+compiler on the old source (the literal path is the old `arrayLit`). Found and fixed on the way (not this round's):
+compiler/tools/evaldiff.olang still called `toolkit.GoldenRead` after the builders round, so no `interp@` target had
+built since; left for the coordinator: the scope fuzzer's generator writes functions D19a now calls builders (every
+generated program refused - the builders round's), and run.txt, layout and drvdiff rows other rounds left stale
+(renamed tests, new files, `-interpret`).

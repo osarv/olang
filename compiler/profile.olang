@@ -331,7 +331,7 @@ fn Symbolizer() String {
             if target.WhereIs(beside) != "" { return beside }
         }
     }
-    for n in String&["llvm-symbolizer-20", "llvm-symbolizer-19", "llvm-symbolizer-18", "llvm-symbolizer"] {
+    for n in Array<String&>["llvm-symbolizer-20", "llvm-symbolizer-19", "llvm-symbolizer-18", "llvm-symbolizer"] {
         w := target.WhereIs(n)
         if w != "" { return w }
     }
@@ -797,9 +797,9 @@ fn twoStacks() Profile, Places {
     p.Threads = 1
     p.Samples.Push(Sample(3, 0, 2))
     p.Samples.Push(Sample(1, 2, 2))
-    for a in I64[100, 201, 300, 201] { p.Addrs.Push(a) }
+    for a in Array<I64>[100, 201, 300, 201] { p.Addrs.Push(a) }
     pl := Places()
-    for i, a in I64[100, 200, 300] {
+    for i, a in Array<I64>[100, 200, 300] {
         pl.Index.Put(a, i)
         pl.First.Push(i)
         pl.Count.Push(1)
@@ -836,7 +836,7 @@ test FlameGraph "a frame for each stack's function, the root's at the bottom, na
 fn sampleFile(words Array<I64>&, maps String&) Array<U8> {
     b := Vec<U8>()
     for ch in "OLPROF01" { b.Push(U8(ch)) }
-    for w in I64[1000000, words.Len(), 2, 1] {
+    for w in Array<I64>[1000000, words.Len(), 2, 1] {
         for k in range 8 { b.Push(U8((w >> (k * 8)) & 0xFF)) }
     }
     for w in words {
@@ -854,7 +854,7 @@ test Profile.Read "a record still pending as the program ended is stepped over, 
 
 test Profile.Read "a samples file's header, records and map; a record cut short ends the records" {
     maps := "5000-6000 r-xp 00001000 fe:00 7 /bin/prog\n"
-    p := try Profile.Read(sampleFile(I64[(4 << 8) | 2, 0x5010, 0x5020, (1 << 8) | 1, 0x5030, 0, 0x99], maps))
+    p := try Profile.Read(sampleFile(Array<I64>[(4 << 8) | 2, 0x5010, 0x5020, (1 << 8) | 1, 0x5030, 0, 0x99], maps))
     assert p.PeriodNs == 1000000 and p.Dropped == 2 and p.Threads == 1
     assert p.Samples.Len() == 2 and p.Samples[0].Weight == 4 and p.Samples[0].Count == 2 and p.Samples[1].Start == 2
     assert p.Addrs.Len() == 3 and p.Addrs[2] == 0x5030 and p.Total() == 5

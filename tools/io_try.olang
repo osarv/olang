@@ -12,7 +12,7 @@ import "std/os"
 import "srcmask"
 
 # the names of std/io's print functions
-Names Array<String&>& = String&["Println", "PrintErrln", "PrintErr", "Print"]
+Names Array<String&>& = Array<String&>["Println", "PrintErrln", "PrintErr", "Print"]
 
 # whether the text before position i ends in "try" and some whitespace, "try" starting a word - looking only at the
 # twelve characters before i, as the Python script did

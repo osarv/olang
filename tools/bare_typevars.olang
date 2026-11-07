@@ -21,13 +21,13 @@ import "std/os"
 import "srcmask"
 
 # words that are never a type variable's name
-Keywords Array<String&>& = String&["mut", "fn", "and", "or", "not", "in", "is", "as", "if", "else", "for", "range", "try"
+Keywords Array<String&>& = Array<String&>["mut", "fn", "and", "or", "not", "in", "is", "as", "if", "else", "for", "range", "try"
                                    "null", "true", "false", "default", "return", "match", "case"]
 # the built-in types' names
-BuiltinTypes Array<String&>& = String&["Array", "Bool", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16"
+BuiltinTypes Array<String&>& = Array<String&>["Array", "Bool", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16"
                                        "F32", "F64"]
 # words that, in a constraint's place, show it is no constraint
-NotConstraint Array<String&>& = String&["and", "or", "not", "in", "is", "as", "if", "else", "for", "range"]
+NotConstraint Array<String&>& = Array<String&>["and", "or", "not", "in", "is", "as", "if", "else", "for", "range"]
 # the cstart of an occurrence written without a constraint
 NoC I64 = -2
 

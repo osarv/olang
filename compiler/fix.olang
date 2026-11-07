@@ -27,20 +27,20 @@ DrivenOpt I64 = 2      # tools_NAME --olang COMPILER FILE...
 DrivenArg I64 = 3      # tools_NAME COMPILER FILE...
 
 # the tools in the order the changes were made (their dates in tools/README.md): the text tools first, then the driven
-ToolNames Array<String&> = String&["bare_typevars", "perm_mut", "int_literal_i64", "errors_migrate", "cli_words"
+ToolNames Array<String&> = Array<String&>["bare_typevars", "perm_mut", "int_literal_i64", "errors_migrate", "cli_words"
     "donefail_migrate", "syntax_migrate", "math_methods", "arrays_migrate", "results_migrate", "equality_migrate"
     "helper_rename", "null_migrate", "checkerror_rename", "stutter_rename", "checked_migrate", "contracts_migrate"
     "try_migrate", "as_migrate", "errortype_migrate", "list_vec", "link_migrate", "match_migrate", "question_migrate"
     "unused_migrate", "errorcase_rename", "variadic_migrate", "scopes_migrate", "fnref_migrate", "clone_migrate"
-    "textbuild_migrate", "unique_migrate", "builder_migrate"]
-ToolKinds Array<I64> = I64[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0, 1]
+    "textbuild_migrate", "unique_migrate", "builder_migrate", "literal_migrate"]
+ToolKinds Array<I64> = Array<I64>[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0, 1, 1]
 
 fn driven(kind I64) Bool { return kind >= DrivenOpt }
 
 # the tools in the order they run: the text tools in table order, then the driven ones in table order
 fn Order() Array<I64> {
     out Vec<I64>
-    for want in String&["text", "driven"] {
+    for want in Array<String&>["text", "driven"] {
         for t in range ToolNames.Len() {
             if driven(ToolKinds[t]) == (want == "driven") { out.Push(t) }
         }
@@ -271,7 +271,7 @@ test "the text tools run before the driven ones, each group in the order the cha
 }
 
 test "a tool's command line has its compiler or std before the files" {
-    f := String&["a.olang", "b.olang"]
+    f := Array<String&>["a.olang", "b.olang"]
     assert arguments("p", TextTool, "olang", "std", f).Len() == 3
     s := arguments("p", StdTool, "olang", "std", f)
     assert s.Len() == 5 and s[1] == "--std" and s[2] == "std" and s[3] == "a.olang"

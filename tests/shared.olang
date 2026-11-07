@@ -419,7 +419,7 @@ fn useManyHandlesLocally(n I32) I32 {
 # constructed and registered individually (O16); no per-element destructor walk is involved anywhere,
 # that machinery is gone.
 fn makeHandleArrayRef() Array<Handle&>& {
-    return Handle&[Handle(20), Handle(21), Handle(22)]
+    return Array<Handle&>[Handle(20), Handle(21), Handle(22)]
 }
 
 fn useHandleArrayLocally() I32 {
@@ -432,7 +432,7 @@ fn useHandleArrayLocally() I32 {
 # one above). Still no destructor registration in the promotion itself: the three Handles registered
 # themselves when they were constructed, wherever the references to them later end up.
 fn useHandleArrayLocallyRuntimeLength() I32 {
-    arr Array<Handle&>& = Handle&[Handle(30), Handle(31), Handle(32)]
+    arr Array<Handle&>& = Array<Handle&>[Handle(30), Handle(31), Handle(32)]
     return arr[0].id + arr[1].id + arr[2].id
 }
 
@@ -1008,7 +1008,7 @@ fn takesExactlyThree(a Array<I32>&) I32 {
 fn declaredRuntimeLengthAdoptsIt() I32 {
         # a VALUE declaration adopts the literal's length, so this is an I32[3] that a "I32[3]&" parameter
         # borrows. (A reference declaration no longer does - D15a: its length rides beside its pointer.)
-    y Array<I32> = I32[4, 5, 6]
+    y Array<I32> = Array<I32>[4, 5, 6]
     return takesExactlyThree(y)
 }
 
@@ -1412,7 +1412,7 @@ type Wide struct(a I64, b I64) {
 fn mixedAlignment(n I32) I32 {
     total I64 = 0
     for i in range n {
-        odd Array<I32>& = I32[1, 2, 3]
+        odd Array<I32>& = Array<I32>[1, 2, 3]
         w Wide& = Wide(7, 8)
         h Handle& = Handle(i)
         total = total + w.a + odd[0] + h.id
@@ -1510,8 +1510,8 @@ test "a 'Array<T>' initialized from a runtime-length value stays runtime-length"
 }
 
 test "array literal construction, compile-time- and runtime-length" {
-    fixed Array<I32> = I32[10, 20, 30]
-    dyn Array<I32> = I32[10, 20, 30]
+    fixed Array<I32> = Array<I32>[10, 20, 30]
+    dyn Array<I32> = Array<I32>[10, 20, 30]
     assert fixed[0] == 10
     assert fixed[2] == 30
     assert dyn[0] == 10
@@ -1527,7 +1527,7 @@ test "array literal construction, compile-time- and runtime-length" {
 # from - see the report. "src" here is a genuine local variable, not a literal; mutating it afterward
 # proves the promotion is a real, independent copy, not an alias of the source's own storage.
 test "an existing (non-literal) compile-time-length-array value promotes into a runtime-length target too" {
-    src := I32[10, 20, 30]
+    src := Array<I32>[10, 20, 30]
     copied Array<I32> = src
     src[0] = 999
     assert copied[0] == 10
@@ -1544,9 +1544,9 @@ test "an existing (non-literal) compile-time-length-array value promotes into a 
 # inline I32[3]. Rectangular by construction - the element type states the row length once, so every row
 # has it.
 test "an array of references to compile-time-length rows: each row separately allocated, all the same length" {
-    r0 := I32[1, 2, 3]
-    r1 := I32[4, 5, 6]
-    rows := Array<I32>&[r0, r1]
+    r0 := Array<I32>[1, 2, 3]
+    r1 := Array<I32>[4, 5, 6]
+    rows := Array<Array<I32>&>[r0, r1]
     assert rows.Len() == 2
     assert rows[0].Len() == 3
     assert rows[1][2] == 6
@@ -2014,8 +2014,8 @@ test "E11a: a Char array renders as text, in every shape; a U8 array as numbers 
     assert bytesEq($(fixed[0:1]), "z")
     run Array<Char> = "hi"
     assert bytesEq($run, "hi")
-    nums := U8[104, 105]
-    assert bytesEq($nums, "U8[104, 105]")
+    nums := Array<U8>[104, 105]
+    assert bytesEq($nums, "Array<U8>[104, 105]")
 }
 
 test "E11a: a declared type renders from its fields, whatever methods it has" {
@@ -2055,13 +2055,13 @@ type RenderHolder struct(at mut Pt3&, tag String&) {
 
 test "E11a: a struct, an array and an enum render from their parts" {
     assert bytesEq($Point(1, -2), "Point(1, -2)")
-    assert bytesEq($I32[1, 2, 3], "I32[1, 2, 3]")
+    assert bytesEq($Array<I32>[1, 2, 3], "Array<I32>[1, 2, 3]")
     assert bytesEq($RenderPair("ab", 7, 'z', false), "RenderPair(\"ab\", 7, 'z', false)")
     assert bytesEq($Figure.Rect(3, 4), "Figure.Rect(3, 4)")
     assert bytesEq($Figure.Nothing, "Figure.Nothing")
     assert bytesEq($Direction.SOUTH, "Direction.SOUTH")
-    pts := Point[Point(1, 2), Point(3, 4)]
-    assert bytesEq($pts, "Point[Point(1, 2), Point(3, 4)]")
+    pts := Array<Point>[Point(1, 2), Point(3, 4)]
+    assert bytesEq($pts, "Array<Point>[Point(1, 2), Point(3, 4)]")
     m RenderMeters = RenderMeters(5)
     assert bytesEq($m, "5")
 }
@@ -2075,16 +2075,16 @@ type RenderQuoted struct(t String&, q Char, b Char) {
 test "E11a: nested text is escaped the way a literal would write it" {
     r := RenderQuoted("a\"b\\\n\0", '\'', '"')
     assert bytesEq($r, "RenderQuoted(\"a\\\"b\\\\\\n\\0\", '\\'', '\"')")
-    tab := Char['\t', 'x']
+    tab := Array<Char>['\t', 'x']
     assert bytesEq($tab, "\tx")
 }
 
 test "E11a: a run-time-length array renders all its elements, and an empty one renders as Type[]" {
     n := 3
     xs := Array<I64>(n, 9)
-    assert bytesEq($xs, "I64[9, 9, 9]")
+    assert bytesEq($xs, "Array<I64>[9, 9, 9]")
     none := Array<I32>(0)
-    assert bytesEq($none, "I32[]")
+    assert bytesEq($none, "Array<I32>[]")
 }
 
 test "E11a: a reference renders its referent, null as null, and a cycle is cut off" {
@@ -2117,8 +2117,8 @@ test "E11a: functions render as signatures" {
     assert bytesEq($renderAdd, "renderAdd(a I32, b I32) I32")
     h := RenderFnHolder(renderAdd)
     assert bytesEq($h, "RenderFnHolder(fn&(a I32, b I32) I32)")
-    rs := Point&[Point(1, 2)]
-    assert bytesEq($rs, "Point&[Point(1, 2)]")
+    rs := Array<Point&>[Point(1, 2)]
+    assert bytesEq($rs, "Array<Point&>[Point(1, 2)]")
 }
 
 # E11a/QY: an error set is listed with commas; a function type's several items are parenthesized
@@ -2210,7 +2210,7 @@ fn Summed(a I32, b I32) I32 { return a + b }
 test "M19: methods on types declared over a primitive and over an array" {
     n Num = 7
     assert n.Tripled() == 21
-    lit Nums& = I32[1, 2, 3]
+    lit Nums& = Array<I32>[1, 2, 3]
     assert lit.Summed() == 6
     k I32 = 4
     run := Array<I32>(k, 5)
@@ -2238,9 +2238,9 @@ test "a one-element array holding a variable" {
     one := Array<I32>(1, k)
     assert one.Len() == 1
     assert one[0] == 3
-    two := I32[k, k]
+    two := Array<I32>[k, k]
     assert two.Len() == 2
-    lit := I32[k]
+    lit := Array<I32>[k]
     assert lit.Len() == 1 and lit[0] == 3
 }
 
@@ -2364,13 +2364,13 @@ test "T36: and in a loop, where a reordering optimizer has room to move things" 
 # told two accesses to one location cannot alias. Written as a value round-trip that would go wrong if the
 # two ever diverged.
 test "T36: an array literal's elements read back through indexing" {
-    a Array<I32> = I32[3, 1, 4, 1, 5, 9]
+    a Array<I32> = Array<I32>[3, 1, 4, 1, 5, 9]
     s I32 = 0
     for i in range 6 { s = s + a[i] }
     assert s == 23
     a[0] = 100
     assert a[0] == 100
-    b Array<Point> = Point[Point(1, 2), Point(3, 4)]
+    b Array<Point> = Array<Point>[Point(1, 2), Point(3, 4)]
     assert b[1].y == 4
     b[1].y = 7
     assert b[1].y == 7
@@ -2520,7 +2520,7 @@ test "T11a: a sized reference declaration allocates, and its type is length-free
     buf Array<I32>& = Array<I32>(4, 7)
     assert buf.Len() == 4
     assert buf[3] == 7
-    other := I32[1, 2]
+    other := Array<I32>[1, 2]
     buf = other
     assert buf.Len() == 2
 }
@@ -2574,8 +2574,8 @@ fn g16Kinds(k I32) I64 {
     m mut G16Node& = G16Node(2 + k)
     b := G16Id(m)
     b.v = 7
-    n G16Nums = G16Nums(I32[1, 2])
-    arr Array<I32> = I32[3, 4, 5]
+    n G16Nums = G16Nums(Array<I32>[1, 2])
+    arr Array<I32> = Array<I32>[3, 4, 5]
     ro := Vec<G16Node&>()
     ro.Push(G16Ro)
     rw := Vec<mut G16Node&>()
@@ -2729,7 +2729,7 @@ test "G8a: a variable introduced inside type-args" {
 # match's operand - and generic code written so is evaluated while compiling as any other (K2, S18c)
 type Trio<T> struct(a T, b T, c T) {
     a
-    all Array<T>& = T[a, b, c]
+    all Array<T>& = Array<T>[a, b, c]
 }
 fn (t Trio<T>&) Sum() T {
     s T = t.a
@@ -2753,7 +2753,7 @@ test "G8b: a variable is written bare after its introduction" {
     t := Trio(1, 2, 3)
     assert t.Sum() == 6
     assert t.all[2] == 3
-    assert (try firstOf(I32[4, 7, 9], fn(x) { return x > 5 }) catch default 0) == 7
+    assert (try firstOf(Array<I32>[4, 7, 9], fn(x) { return x > 5 }) catch default 0) == 7
     assert widthOf(I32(1)) == 32 and widthOf(1) == 64   # decided while compiling; a literal alone binds I64 (T6a)
     assert widthOf(I64(1)) == 64
     assert TrioBaked == 6
@@ -2969,7 +2969,7 @@ fn fanOut(ts mut Array<mut Tally&>&, lo I32, hi I32) {
 }
 
 test "a helper's fan-out overlaps the caller's own work with no signature effect" {
-    ts mut Array<mut Tally&>& = Tally&[Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0)]
+    ts mut Array<mut Tally&>& = Array<Tally&>[Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0)]
     ran I32 = 0
     join {
         spawn fanOut(ts, 0, 4)
@@ -3008,7 +3008,7 @@ fn addUpIdx(ts mut Array<mut Tally&>&, i I32, times I32) {
 }
 
 test "a loop inside a join starts one task per iteration" {
-    ts mut Array<mut Tally&>& = Tally&[Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0)]
+    ts mut Array<mut Tally&>& = Array<Tally&>[Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0), Tally(0)]
     join {
         for i in range I32(8) {
             spawn addUpIdx(ts, i, 1000)
@@ -3121,7 +3121,7 @@ test "G12: big<I64> names one instance, called or as a value" {
     assert G12Baked == 9
     assert g12Big<I64>(G12At, 7) == 7
     assert g12Big<F32>(1.5, 0.5) == 1.5         # the literals adapt to the instance's parameters
-    assert g12Sum<I32>(I32[1, 2, 3]) == 6
+    assert g12Sum<I32>(Array<I32>[1, 2, 3]) == 6
     f := g12Big<F32>
     assert f(F32(G12At), 0.5) == 2.0
     g fn&(a I64, b I64) I64 = g12Big<I64>
@@ -3141,8 +3141,8 @@ test "G12: x.M<T>(...) names a method's own type arguments" {
     assert G12mBaked == 2.5
     c := b.Conv<F32>(fn(x I64) F32 { return F32(x) })
     assert c.v == 20.0
-    ys := I64[1, 2, 3].Map<F64>(fn(x I64) F64 { return F64(x) * 1.5 })
-    assert ys == F64[1.5, 3.0, 4.5]
+    ys := Array<I64>[1, 2, 3].Map<F64>(fn(x I64) F64 { return F64(x) * 1.5 })
+    assert ys == Array<F64>[1.5, 3.0, 4.5]
     a, d := G12At, G12At + 1
     assert a < d and d > (a)                    # C#'s rule: no "(" right after the ">", a comparison
     assert g12mBox<I64>(3).As<I32>() == 3       # decided while compiling (S18c)
@@ -3224,7 +3224,7 @@ fn CallIt<T>(cmp fn&(a T, b T) Bool) Bool {
 }
 
 test "a generic parameterised by a callback can actually call it" {
-    a Array<I32> = I32[3, 1, 2]
+    a Array<I32> = Array<I32>[3, 1, 2]
     SortBy(a, lessInt)
     assert a[0] == 1
     assert a[2] == 3
@@ -3247,7 +3247,7 @@ fn sumSlice(b Array<I32>&) I32 {
 }
 
 test "slicing a compile-time-length array, with either bound omitted" {
-    a := I32[1, 2, 3, 4, 5]
+    a := Array<I32>[1, 2, 3, 4, 5]
     assert a[1:4].Len() == 3
     assert sumSlice(a[1:4]) == 9
     assert sumSlice(a[:2]) == 3
@@ -3260,7 +3260,7 @@ test "slicing a compile-time-length array, with either bound omitted" {
 # type is written at the declaration, and a slice's is - its base's element type with a runtime length.
 # An ordinary call stays rejected, since its return type lives in another declaration entirely.
 test "':=' infers a slice's type from the slice expression" {
-    a := I32[1, 2, 3, 4, 5]
+    a := Array<I32>[1, 2, 3, 4, 5]
     s := a[1:4]
     assert s.Len() == 3
     assert s[0] == 2
@@ -3274,10 +3274,10 @@ test "':=' infers a slice's type from the slice expression" {
 # D15: an array's Len() and the atomic methods that give a value are calls like any other, so ":=" reads their types
 # off them - "n := a.Len()" was rejected while the same call on a List compiled. The global is computed while
 # compiling (K2), so the evaluator agrees with the run time on it.
-LenOfLiteral := I32[4, 5, 6, 7].Len()
+LenOfLiteral := Array<I32>[4, 5, 6, 7].Len()
 
 test "':=' infers from an array's Len() and from an atomic method" {
-    a := I32[1, 2, 3]
+    a := Array<I32>[1, 2, 3]
     n := a.Len()
     assert n == 3 and LenOfLiteral == 4
     c I64 = 5
@@ -3290,7 +3290,7 @@ test "':=' infers from an array's Len() and from an atomic method" {
 # E23/D15: "a.Len()" is written as a method call like any other, though the compiler supplies it, so ":=" takes
 # its I64 - it used to be refused, while "n := l.Len()" on a List compiled
 test "':=' infers an I64 from an array's Len()" {
-    a := I32[1, 2, 3]
+    a := Array<I32>[1, 2, 3]
     n := a.Len()
     assert n == 3
     n = 5000000000          # an I64: this does not fit an I32
@@ -3325,7 +3325,7 @@ fn expectSliceLen(buf Array<U8>&, n I32, want I32) ? {
 }
 
 test "a tried slice yields its value when the bounds hold" {
-    buf := U8[1, 2, 3, 4, 5, 6]
+    buf := Array<U8>[1, 2, 3, 4, 5, 6]
     ok Bool = true
     try expectSliceLen(buf, 3, 3) catch {
         ok = false
@@ -3334,7 +3334,7 @@ test "a tried slice yields its value when the bounds hold" {
 }
 
 test "an out-of-range tried slice propagates rather than aborting" {
-    buf := U8[1, 2, 3, 4, 5, 6]
+    buf := Array<U8>[1, 2, 3, 4, 5, 6]
     failed Bool = false
     try expectSliceLen(buf, 99, 0) catch {
         failed = true
@@ -3351,7 +3351,7 @@ test "an out-of-range tried slice propagates rather than aborting" {
 # shapes ("a[0:4]", "a[2:1]", "a[n:2]" with n negative, on a 3-element array) cannot be written as tests
 # here: they would abort the run rather than report anything.
 test "the in-range edges of a slice are all accepted" {
-    a := I32[1, 2, 3]
+    a := Array<I32>[1, 2, 3]
     assert a[0:3].Len() == 3
     assert a[3:3].Len() == 0
     assert a[0:a.Len()].Len() == 3
@@ -3396,7 +3396,7 @@ test "an unmarked local is borrowed by a '&' parameter, of either array length k
     fillFirstByte(runtimeLen)
     assert runtimeLen[0] == 'X'
 
-    fixedLen Array<U8> = U8[0, 0, 0, 0]
+    fixedLen Array<U8> = Array<U8>[0, 0, 0, 0]
     fillFirstByte(fixedLen)
     assert fixedLen[0] == 'X'
     assert fixedLen.Len() == 4
@@ -3500,8 +3500,8 @@ test "a marked runtime-length array is a reference: assignment repoints, '==' co
 }
 
 test "a marked compile-time-length array is a reference too - same rule, other length kind" {
-    pv := I32[1, 2, 3]
-    qv := I32[1, 2, 3]
+    pv := Array<I32>[1, 2, 3]
+    qv := Array<I32>[1, 2, 3]
     p Array<I32>& = pv
     q Array<I32>& = qv
     assert p == q
@@ -3524,7 +3524,7 @@ type RefCell struct(v I32) {
 }
 
 fn makeCellRefs(a RefCell&, b RefCell&) Array<RefCell&>& {
-    return RefCell&[a, b]
+    return Array<RefCell&>[a, b]
 }
 
 test "an array of references keeps its elements' reference-shapedness as part of its own type" {
@@ -3552,7 +3552,7 @@ test "a value promotes into a reference target, and a reference copies out into 
     p RefCell& = RefCell(1)
     q RefCell = p
     assert q.val == 1
-    r := I32[1, 2, 3]
+    r := Array<I32>[1, 2, 3]
     assert copyOutOfRef(r) == 100
 }
 
@@ -3560,12 +3560,12 @@ test "a value promotes into a reference target, and a reference copies out into 
 # reference takes its length from what it points to. The whole thing crosses a function boundary like any
 # other reference, its rows inheriting its scope.
 fn makeRows(a Array<I32>&, b Array<I32>&) Array<Array<I32>&>& {
-    return Array<I32>&[a, b]
+    return Array<Array<I32>&>[a, b]
 }
 
 test "T11a: an array of array references, rows of their own lengths" {
-    r0 := I32[1, 2, 3]
-    r1 := I32[4, 5]
+    r0 := Array<I32>[1, 2, 3]
+    r1 := Array<I32>[4, 5]
     g Array<Array<I32>&>& = makeRows(r0, r1)
     assert g.Len() == 2
     assert g[0].Len() == 3
@@ -3578,16 +3578,16 @@ test "T11a: an array of array references, rows of their own lengths" {
 # suffix, so it got silently swallowed and the whole literal misparsed as indexing instead) - the new
 # "T[v1, ...]" syntax has no suffix loop to cause that, so both now just work.
 test "a single-value and an empty array literal both parse correctly" {
-    one Array<I32> = I32[42]
+    one Array<I32> = Array<I32>[42]
     assert one[0] == 42
-    empty Array<I32> = I32[]
+    empty Array<I32> = Array<I32>[]
     assert empty.Len() == 0
 }
 
 # the array literal itself never restates a type - "Point" (a struct type) works exactly like "I32"
 # does, each element checked against it the same way a struct literal checks each field
 test "an array literal of struct values" {
-    pts Array<Point> = Point[Point(1, 2), Point(3, 4)]
+    pts Array<Point> = Array<Point>[Point(1, 2), Point(3, 4)]
     assert pts[0].x == 1
     assert pts[1].y == 4
 }
@@ -3598,7 +3598,7 @@ test "an array literal of struct values" {
 # uninitialized floatLiteralVal and silently produced 0.0 - invisible before now because nothing in the
 # existing suite passed a bare int literal where a float was expected.
 test "an int literal widens to float inside an array literal" {
-    f Array<F32> = F32[1, 2.5]
+    f Array<F32> = Array<F32>[1, 2.5]
     assert f[0] == 1.0
     assert f[1] == 2.5
 }
@@ -3610,7 +3610,7 @@ test "an int literal widens to float inside an array literal" {
 # already gets, going through the exact same malloc-promotion/scope-arena machinery. A genuinely
 # runtime-length ("Array<I32>&") reference is deliberately not addressed yet - see the report.
 fn makeFixedArrayRef() Array<I32>& {
-    return I32[7, 8, 9]
+    return Array<I32>[7, 8, 9]
 }
 
 # "T[expr]" with no initializer (expr not a compile-time constant) - a runtime-sized array, arena-
@@ -3634,13 +3634,13 @@ test "a compile-time-length array reference survives crossing a function boundar
 # Compile-time-known dimensions (embedded, or a compile-time-length "&" reference) cost nothing at runtime;
 # only a genuinely runtime-length array reads its length from the runtime slice - see OperandLen/cgLen.
 test "Len() works uniformly across embedded, fixed-reference, and runtime-length arrays" {
-    embedded Array<I32> = I32[1, 2, 3, 4]
+    embedded Array<I32> = Array<I32>[1, 2, 3, 4]
     assert embedded.Len() == 4
 
     ref Array<I32>& = makeFixedArrayRef()
     assert ref.Len() == 3
 
-    dyn Array<I32> = I32[10, 20, 30]
+    dyn Array<I32> = Array<I32>[10, 20, 30]
     assert dyn.Len() == 3
 }
 
@@ -3882,7 +3882,7 @@ test "destructor runs for every heap-indirect instance when their scope closes, 
 # the pre-suffix position existed, an array of references was not expressible at all - for any type, not
 # just destructor-bearing ones - and this had to be faked with a value struct wrapping a reference.
 fn makePointsRef() Array<Point&>& {
-    return Point&[Point(1, 2), Point(3, 4)]
+    return Array<Point&>[Point(1, 2), Point(3, 4)]
 }
 
 # an element-position marker may not carry a scope NAME: a reference nested inside a larger value always
@@ -3892,7 +3892,7 @@ fn makePointsRef() Array<Point&>& {
 # Confirmed by construction: a bare-"&"-element array returned as "&s" has its elements survive into s,
 # not die with the callee's own scope, which is exactly why an independent element tag is meaningless.
 fn elementsFollowTheArraysScope() Array<Handle&>& {
-    return Handle&[Handle(50), Handle(51)]
+    return Array<Handle&>[Handle(50), Handle(51)]
 }
 
 test "elements of a returned array follow the array's own scope, not the callee's" {
@@ -4945,7 +4945,7 @@ test "assigning to a reference parameter repoints this function's own cursor" {
 # counterpart above it (T[N] -> Array<T>) does allocate and copy, which is why the two must not be confused:
 # this path used to run through that one and emit invalid IR, GEP-ing a bare "ptr" as an "[N x T]".
 test "a compile-time-length array reference widens into a runtime-length reference parameter" {
-    a mut Array<U8>& = U8[U8(1), U8(2), U8(3)]
+    a mut Array<U8>& = Array<U8>[U8(1), U8(2), U8(3)]
     n I64 = fillFirst(a)
     assert n == 3
     assert a[0] == 'X'
@@ -5099,7 +5099,7 @@ fn (a AnyShape) Area() I32 {
 }
 
 test "a collection of mixed types is an enum of them" {
-    items := AnyShape[AnyShape.Sq(Square(3)), AnyShape.Tr(Tri(4, 5)), AnyShape.Rg(Ring(6))]
+    items := Array<AnyShape>[AnyShape.Sq(Square(3)), AnyShape.Tr(Tri(4, 5)), AnyShape.Rg(Ring(6))]
     sum I32 = 0
     for x in items { sum += x.Area() }
     assert sum == 25
@@ -5266,7 +5266,7 @@ test "a payload's fields compare by their own kind, not by their bytes" {
     assert Tagged.Pair(Pair2(1, 2)) == Tagged.Pair(Pair2(1, 2))        # a value struct, memberwise
     assert Tagged.Pair(Pair2(1, 2)) != Tagged.Pair(Pair2(1, 3))
 
-    buf Array<U8> = U8[U8(1), U8(2), U8(3)]
+    buf Array<U8> = Array<U8>[U8(1), U8(2), U8(3)]
     assert Tagged.Bytes(buf) == Tagged.Bytes(buf)
     assert Tagged.Bytes(buf) != Tagged.Void
 
@@ -5810,7 +5810,7 @@ fn astSize(e Ast&) I64 {
 }
 test "T17d: structs and enums holding each other by reference" {
     d AstDef& = AstDef("y", Ast.Mul(Ast.Var("x"), Ast.Num(2)))
-    prog := AstStmt&[AstStmt.Let(d), AstStmt.Show(Ast.Neg(Ast.Var("y")))]
+    prog := Array<AstStmt&>[AstStmt.Let(d), AstStmt.Show(Ast.Neg(Ast.Var("y")))]
     total I64 = 0
     for st in prog { total += st.Size() }
     assert total == 3 + 2
@@ -5864,9 +5864,9 @@ test "a match used as a value" {
     assert mtArea(MtShape.Circle(2)) == 12 and mtArea(MtShape.Rect(2, 5)) == 10
     assert mtArea(MtShape.Square(3)) == 9 and mtArea(MtShape.Dot) == 0
     assert mtWord(0) == "none" and mtWord(2) == "few" and mtWord(3) == "3" and mtWord(9) == "many"
-    assert mtFirstBig(I32[0, 1, 0, 5]) == 50
-    assert mtFirstBig(I32[0, -1, 5]) == -1
-    assert mtFirstBig(I32[1, 2]) == 0
+    assert mtFirstBig(Array<I32>[0, 1, 0, 5]) == 50
+    assert mtFirstBig(Array<I32>[0, -1, 5]) == -1
+    assert mtFirstBig(Array<I32>[1, 2]) == 0
     assert mtBytes(I32(1)) == 4 and mtBytes(1) == 8 and mtBytes(U64(1)) == 8 and mtBytes(true) == 0
     k I32 = match MtShape.Square(4) { case MtShape.Square(n) if n > 3: n case _: 0 }
     assert k == 4
@@ -5904,7 +5904,7 @@ test "a match's value is built where it lands" {
 # run time. Found writing it: a value built in a "return" through a reference result came back from the evaluator
 # as a bare value rather than a reference to one, so "mtLabel(2) == "2 two"" - whose Eq first asks "== null" - was
 # false while compiling and true at run time
-MtValBaked I32 = mtArea(MtShape.Rect(2, 5)) + mtFirstBig(I32[0, 1, 0, 5]) * 100 + I32(mtBytes(I64(1))) * 10000
+MtValBaked I32 = mtArea(MtShape.Rect(2, 5)) + mtFirstBig(Array<I32>[0, 1, 0, 5]) * 100 + I32(mtBytes(I64(1))) * 10000
 MtWordBaked := mtWord(3)
 MtLabelBaked Bool = mtLabel(5) == "5+10" and mtLabel(1) == "one"
 
@@ -5914,7 +5914,7 @@ test "the evaluator gives a match's value as the run time does" {
     assert MtLabelBaked
     assert mtLabel(2) == "2 two"        # decided while compiling (S18c)
     z I32 = mtRuntimeZero
-    assert MtValBaked == mtArea(MtShape.Rect(2 + z, 5)) + mtFirstBig(I32[0, 1 + z, 0, 5]) * 100 + I32(mtBytes(I64(1 + z))) * 10000
+    assert MtValBaked == mtArea(MtShape.Rect(2 + z, 5)) + mtFirstBig(Array<I32>[0, 1 + z, 0, 5]) * 100 + I32(mtBytes(I64(1 + z))) * 10000
     assert MtWordBaked == mtWord(3 + I64(z))
     assert mtLabel(5 + z) == "5+10"
 }
@@ -5933,7 +5933,7 @@ test "the evaluator gives a match's value as the run time does" {
 # times - that cost is per slice expression, never per element access.
 
 test "indexing in range is unaffected" {
-    a Array<I32> = I32[10, 20, 30]
+    a Array<I32> = Array<I32>[10, 20, 30]
     assert a[0] == 10
     assert a[2] == 30
     sum I32 = 0
@@ -6513,7 +6513,7 @@ test "L18c: a function type of several results grouped whole in a list" {
     keep fn&(n I64) I64 ? L18cErr, L18cOther = fn(n I64) I64 ? L18cErr, L18cOther { return n * 2 }
     assert (try l18cFails(keep, L18cAt) catch { unreachable }) == 6
     assert $keep == "fn&(n I64) I64 ? L18cErr, L18cOther"
-    assert $m == "Map<String&, (fn&(I64) I64, I64)>{\"p\": (fn&(I64) I64, I64)}"
+    assert $m == "Map<String&, (fn&(I64) I64, I64)>[\"p\": (fn&(I64) I64, I64)]"
 }
 
 test "D8c: spawn binds several results" {
@@ -6649,7 +6649,7 @@ test "E13b: a field holding a function is called as x.f(args)" {
 # E24: "try" before a chain covers its last call - a method called on a call's result, an element or a parenthesized
 # value included (it reached only a method on a name chain: "try g().Parse()" said Parse was not tried)
 fn textE() String& { return " 42 " }
-fn textsE() Array<String&>& { return String&["7", "x8"] }
+fn textsE() Array<String&>& { return Array<String&>["7", "x8"] }
 type ParserE struct(t String&) { t }
 fn (p ParserE&) Text() String& { return p.t }
 fn chainTriedE() I64 {
@@ -6755,7 +6755,7 @@ test "R9a: a default binds as tightly as the try, and is one value inside an arg
 }
 
 test "R9a: a checked index and a slice take a default for out-of-range" {
-    a Array<I32> = I32[1, 2, 3]
+    a Array<I32> = Array<I32>[1, 2, 3]
     assert (try a.Get(1) catch default -1) == 2
     three I32 = 3
     assert (try a.Get(three) catch default -1) == -1
@@ -6884,7 +6884,7 @@ test "R9b: an error no clause names still propagates" {
 }
 
 test "R9b: break and continue leave a clause in value position" {
-    ks Array<I32> = I32[4, 1, 5, 2, 3, 6]
+    ks Array<I32> = Array<I32>[4, 1, 5, 2, 3, 6]
     total := 0
     for i in range ks.Len() {
         v := try r9f(ks[i]) catch R9E { continue } catch R9F { break }
@@ -6894,7 +6894,7 @@ test "R9b: break and continue leave a clause in value position" {
 }
 
 test "R9b: a checked index names the bare error, and several defaults sit in one clause" {
-    a Array<I32> = I32[1, 2]
+    a Array<I32> = Array<I32>[1, 2]
     j I32 = 7
     assert (try a.Get(j) catch default -1) == -1
     n, m := try safeDivD(7, 0) catch DivError default 5, 6
@@ -7374,7 +7374,7 @@ test "S9: a loop's condition is evaluated in the turn it decides" {
 }
 
 test "S9a: for-in over an array gives each element, and the index when asked" {
-    a := I32[10, 20, 30]
+    a := Array<I32>[10, 20, 30]
     sum := 0
     for x in a { sum += x }
     assert sum == 60
@@ -7387,7 +7387,7 @@ test "S9a: for-in over an array gives each element, and the index when asked" {
 }
 
 test "S9a: the element is a copy - writing it leaves the array alone" {
-    a := I32[1, 2]
+    a := Array<I32>[1, 2]
     for x in a {
         x = 99
         assert x == 99
@@ -7411,7 +7411,7 @@ test "S9a: for-in over an iterator, and over one a collection hands out" {
 }
 
 test "S9a: break and continue in a for-in" {
-    a := I32[1, 2, 3, 4, 5]
+    a := Array<I32>[1, 2, 3, 4, 5]
     s := 0
     for x in a {
         if x == 2 { continue }
@@ -7583,7 +7583,7 @@ fn drainBoth() I32 {
 }
 
 fn arrayIterTotal() I64 {
-    a := I64[4, 5, 6]
+    a := Array<I64>[4, 5, 6]
     return iterTotal(a.Iter())
 }
 
@@ -7602,7 +7602,7 @@ test "K1: interface calls are evaluated while compiling, and agree with the run 
 
 test "T35b: every array hands out an Iterator, so code written over Iterator takes arrays too" {
     assert ArrayIterBaked == 15
-    a := I32[1, 2, 3]
+    a := Array<I32>[1, 2, 3]
     a[2] = 30
     assert iterTotal(a.Iter()) == 33
     it := a.Iter()
@@ -7622,16 +7622,16 @@ test "T35b: every array hands out an Iterator, so code written over Iterator tak
 # E27: a comprehension - a new array of one expression per value walked, those the filter keeps. The element type
 # is written, as an array literal's is; the array is built where it lands, like "Array<T>(n)".
 fn comprEvens(a Array<I32>&) Array<I32> {
-    return I32[x * 2 for x in a if x > 3]
+    return Array<I32>[x * 2 for x in a if x > 3]
 }
 
 fn comprSquares(n I32) Array<I64> {
-    return I64[I64(i) * I64(i) for i in range n]
+    return Array<I64>[I64(i) * I64(i) for i in range n]
 }
 
 # returned through a built reference result: it must be built in the result's scope, not the function's
 fn comprKeep(a Array<I32>&) Array<I32>& {
-    return I32[x for x in a if x != 0]
+    return Array<I32>[x for x in a if x != 0]
 }
 
 fn allocKeep() Array<I32>& {
@@ -7648,29 +7648,29 @@ type ComprPt struct(x I32, y I32) {
 }
 
 ComprSquaresBaked := comprSquares(5)
-ComprEvensBaked := comprEvens(I32[1, 5, 2, 7])
+ComprEvensBaked := comprEvens(Array<I32>[1, 5, 2, 7])
 
 test "E27: comprehensions over arrays, ranges and text, with and without a filter" {
-    a := I32[1, 5, 2, 7]
+    a := Array<I32>[1, 5, 2, 7]
     e := comprEvens(a)
     assert e.Len() == 2
     assert e[0] == 10 and e[1] == 14
     s := comprSquares(4)
     assert s.Len() == 4 and s[3] == 9
-    idx := I64[i * 10 + x for i, x in a]
+    idx := Array<I64>[i * 10 + x for i, x in a]
     assert idx[3] == 37
-    none := I32[x for x in a if x > 100]
+    none := Array<I32>[x for x in a if x > 100]
     assert none.Len() == 0
     t := "hello"
-    up := U8[c - 32 for c in t]
+    up := Array<U8>[c - 32 for c in t]
     assert String(up).Eq("HELLO")
-    nested := I64[I32[y for y in range x].Len() for x in range I32(4)]
+    nested := Array<I64>[Array<I32>[y for y in range x].Len() for x in range I32(4)]
     assert nested[3] == 3
-    ps := ComprPt[ComprPt(i, i * i) for i in range I32(3)]
+    ps := Array<ComprPt>[ComprPt(i, i * i) for i in range I32(3)]
     assert ps[2].y == 4
     total := 0
     for r in range I32(1000) {
-        row := I32[x + r for x in range I32(3)]
+        row := Array<I32>[x + r for x in range I32(3)]
         total += row[2]
     }
     assert total == 501500
@@ -7682,12 +7682,12 @@ test "E27: a comprehension is evaluated while compiling, and agrees with the run
     n I32 = 5
     n++
     assert comprSquares(n - 1)[4] == ComprSquaresBaked[4]
-    assert comprEvens(I32[1, 5, 2, 7])[1] == ComprEvensBaked[1]
-    assert I32[x for x in range I32(4) if x % 2 == 1][1] == 3
+    assert comprEvens(Array<I32>[1, 5, 2, 7])[1] == ComprEvensBaked[1]
+    assert Array<I32>[x for x in range I32(4) if x % 2 == 1][1] == 3
 }
 
 test "E27/T7: a comprehension or Array<T>(n) returned through a reference result is built in the result's scope" {
-    k := comprKeep(I32[0, 1, 0, 2])
+    k := comprKeep(Array<I32>[0, 1, 0, 2])
     comprChurn()
     assert k.Len() == 2
     assert k[1] == 2
@@ -7701,12 +7701,12 @@ test "E27/T7: a comprehension or Array<T>(n) returned through a reference result
 # (K2) and an assert decided while compiling (S18c) agree
 fn comprNothing(n I32) String {
     m := Map<I8, U32>()
-    a Array<U16> = U16[1 for _ in m.Values()]
+    a Array<U16> = Array<U16>[1 for _ in m.Values()]
     ra Array<U16>& = a
     l := Vec<U16>()
-    e Array<U16> = U16[3 for x in l if x > 0]
+    e Array<U16> = Array<U16>[3 for x in l if x > 0]
     re Array<U16>& = e
-    r Array<U16> = U16[2 for _ in range n]
+    r Array<U16> = Array<U16>[2 for _ in range n]
     rr Array<U16>& = r
     return $ra " " $(ra.Len() == 0) " " $re " " $(re.Len() == 0) " " $rr " " $(rr.Len() == 0)
 }
@@ -7714,14 +7714,14 @@ fn comprNothing(n I32) String {
 ComprNothingBaked String = comprNothing(0)
 
 test "E27/T2c: a comprehension over an empty source is an empty array" {
-    assert ComprNothingBaked == "U16[] true U16[] true U16[] true"
-    assert comprNothing(0) == "U16[] true U16[] true U16[] true"
+    assert ComprNothingBaked == "Array<U16>[] true Array<U16>[] true Array<U16>[] true"
+    assert comprNothing(0) == "Array<U16>[] true Array<U16>[] true Array<U16>[] true"
     n I32 = 0
     n++
     n--
     assert comprNothing(n) == ComprNothingBaked
     l := Vec<I64>()
-    empty := I64[x for x in l]
+    empty := Array<I64>[x for x in l]
     er Array<I64>& = empty
     assert empty.Len() == 0 and er.Len() == 0
 }
@@ -7742,12 +7742,12 @@ fn condMark(l mut CondLog&, d I32) I32 {
 
 fn condColl(l mut CondLog&) Array<I32> {
     condMark(l, 2)
-    return I32[1, 2]
+    return Array<I32>[1, 2]
 }
 
 CondMaxBaked := condMax(3, 9)
 ChainBaked Bool = 0 <= 5 < 10
-InBaked Bool = 3 in I32[1, 2, 3]
+InBaked Bool = 3 in Array<I32>[1, 2, 3]
 
 test "E28: a conditional expression evaluates only the value its condition chooses" {
     assert condMax(4, 2) == 4 and condMax(1, 7) == 7
@@ -7761,7 +7761,7 @@ test "E28: a conditional expression evaluates only the value its condition choos
     assert label.Eq("bob")
     t := $n if n > 5 else "small"
     assert t.Eq("small")
-    clipped := I32[x if x > 0 else 0 for x in I32[-1, 2, -3]]
+    clipped := Array<I32>[x if x > 0 else 0 for x in Array<I32>[-1, 2, -3]]
     assert clipped[0] == 0 and clipped[1] == 2
     pt := ComprPt(1, 2) if n > 0 else ComprPt(3, 4)
     assert pt.y == 2
@@ -7782,7 +7782,7 @@ test "E30: ordering comparisons chain, each operand evaluated once; == does not 
 }
 
 test "E29: membership - Has for an element, Contains for a run of the collection's own type" {
-    a := I32[1, 2, 3]
+    a := Array<I32>[1, 2, 3]
     assert 2 in a
     assert 7 not in a
     s := "hello"
@@ -7790,7 +7790,7 @@ test "E29: membership - Has for an element, Contains for a run of the collection
     assert "ll" in s and "lx" not in s
     assert "" in s
     vowels := "aeiou"
-    found := I32[1 for ch in "banana" if ch in vowels]
+    found := Array<I32>[1 for ch in "banana" if ch in vowels]
     assert found.Len() == 3
     l mut CondLog& = CondLog()
     assert condMark(l, 1) in condColl(l)
@@ -7810,14 +7810,14 @@ test "E28/E29/E30: evaluated while compiling, as at run time" {
 FzLive mut I64 = 3
 fn fzChain(x U64, y U64) Bool { return 5 > x >= 2 and x < 9 <= y }
 fn fzIndex(k I64) I64 {
-    a := I64[10, 20, 30]
+    a := Array<I64>[10, 20, 30]
     u := U64(k)
     return a[(match k { case 1: U64(2) case _: u })] + a[(U64(1) if k > 0 else u)]
 }
 fn fzLeast() String { return $(-9223372036854775808) " " $((-9223372036854775808)) }
 fn fzArrays(k I64) Bool {
-    a := I64[1, 2]
-    b := I64[k]
+    a := Array<I64>[1, 2]
+    b := Array<I64>[k]
     return a != b and not (b == a)
 }
 FzBaked String = $fzChain(3, 9) " " $fzIndex(1) " " $fzLeast() " " $fzArrays(1)
@@ -7896,7 +7896,7 @@ type CondColor enum {
 }
 fn (c CondColor) Name() String { return "red" if c == CondColor.Red else "blue" }
 fn condLits(k Bool) I64 {
-    a := I32[1] if k else I32[1, 2]
+    a := Array<I32>[1] if k else Array<I32>[1, 2]
     return a.Len()
 }
 fn condTexts(k I32) Bool {
@@ -7933,7 +7933,7 @@ test "S4c/D12b: parallel assignment swaps; several names share one type" {
     a, b := 1, 2
     a, b = b, a
     assert a == 2 and b == 1
-    arr := I32[5, 6, 7]
+    arr := Array<I32>[5, 6, 7]
     arr[0], arr[2] = arr[2], arr[0]
     assert arr[0] == 7 and arr[2] == 5
     assert parFib(10) == 55 and ParFibBaked == 55
@@ -8005,7 +8005,7 @@ test "G19: interfaces constrain type variables of functions and of generic types
     assert h.v.Area() == 4
     h2 := CnHolder(CnSq(5))
     assert h2.v.Area() == 25
-    assert I32[1, 2].Has(2)
+    assert Array<I32>[1, 2].Has(2)
     assert CnAreaBaked == 16
 }
 
@@ -8073,7 +8073,7 @@ type OpGrid struct(w I64, h I64) {
 fn (g OpGrid&) At(i I64) I32 { return g.cells[i] }
 fn (g mut OpGrid&) SetAt(i I64, v I32) { g.cells[i] = v }
 fn (g OpGrid&) Len() I64 { return g.cells.Len() }
-fn (g OpGrid&) Slice(lo I64, hi I64) Array<I32> { return I32[g.cells[i] for i in range lo, hi] }
+fn (g OpGrid&) Slice(lo I64, hi I64) Array<I32> { return Array<I32>[g.cells[i] for i in range lo, hi] }
 
 # O20: a slice of a reference field lives where the field's array does - its container's scope - so returning one
 # borrowed from the receiver is legal
@@ -8159,14 +8159,14 @@ fn (g OpSafe&) At(i I64) I32 ? OpGridError {
 
 fn (g OpSafe&) Slice(lo I64, hi I64) Array<I32> ? OpGridError {
     if lo < 0 or hi > g.n { error OpGridError.Out }
-    return I32[g.cells[i] for i in range lo, hi]
+    return Array<I32>[g.cells[i] for i in range lo, hi]
 }
 
 fn (g OpSafe&) Len() I64 { return g.n }
 
 fn opMaybeArray(n I32) Array<I32> ? {
     if n > 3 { error Oops.Bad }
-    return I32[1, 2]
+    return Array<I32>[1, 2]
 }
 
 OpCallBaked := OpScale(3)(7)
@@ -8224,18 +8224,18 @@ test "E31: Call makes a value callable and passable as a function; a fallible At
     double := OpScale(2)
     assert double(21) == 42 and opApply(double, 5) == 10
     seen mut OpSeen& = OpSeen()
-    big := I32[1, 5, 2, 7].Iter().Filter(seen)
+    big := Array<I32>[1, 5, 2, 7].Iter().Filter(seen)
     assert big.Len() == 2 and seen.n == 4
     assert OpCallBaked == 21
     g OpSafe& = OpSafe(3)
     g.cells[1] = 5
     assert (try g[1] catch default -1) == 5
     assert (try g[7] catch OpGridError.Out default -2) == -2
-    s := try g[0:2] catch default I32[9]
+    s := try g[0:2] catch default Array<I32>[9]
     assert s.Len() == 2
-    t := try g[0:9] catch default I32[9]
+    t := try g[0:9] catch default Array<I32>[9]
     assert t.Len() == 1
-    u := try opMaybeArray(5) catch default I32[4, 4, 4]
+    u := try opMaybeArray(5) catch default Array<I32>[4, 4, 4]
     assert u.Len() == 3
 }
 
@@ -8288,7 +8288,7 @@ fn opChurn() Array<I32>& { return Array<I32>(1000, 7) }
 
 test "E31: operators in generic code, in a constraint, and while compiling" {
     a := OpVec(1, 2)
-    s := opSum(OpVec[a, OpVec(3, 4)], OpVec(0, 0))
+    s := opSum(Array<OpVec>[a, OpVec(3, 4)], OpVec(0, 0))
     assert s.y == 6
     t := opTwice(a)
     assert t.x == 2
@@ -8319,7 +8319,7 @@ type IfmQ struct(v I32) {
 fn (q IfmQ) IfmName() I32 { return q.v }
 fn (p IfmP) Whisper() I32 { return 100 }
 
-IfmCountBaked := I32[1, 2, 3, 4].Iter().Count(fn(x) { return x > 2 })
+IfmCountBaked := Array<I32>[1, 2, 3, 4].Iter().Count(fn(x) { return x > 2 })
 
 test "M19e: defaults reach satisfying types; a type's own method wins" {
     p := IfmP(5)
@@ -8328,7 +8328,7 @@ test "M19e: defaults reach satisfying types; a type's own method wins" {
     assert ifmWhisper(p) == 100 # from generic code the type's own version runs too
     m := IfmQ(5)
     assert m.Whisper() == 4 and m.Shout() == 10 and ifmWhisper(m) == 4
-    assert I32[1, 2, 3].Iter().Some(fn(x) { return x == 3 })
+    assert Array<I32>[1, 2, 3].Iter().Some(fn(x) { return x == 3 })
     assert IfmCountBaked == 2
 }
 
@@ -8493,8 +8493,8 @@ fn txReads() I32 {
     for i in range I64(4) { g[i] = I32(i) * 10 }
     a := try g.Get(2) catch default -1
     b := try g.Get(7) catch ArrayError.OutOfRange default -1
-    s := try g.SliceOf(1, 3) catch default I32[0]
-    t := try g.SliceOf(3, 9) catch default I32[5, 5, 5]
+    s := try g.SliceOf(1, 3) catch default Array<I32>[0]
+    t := try g.SliceOf(3, 9) catch default Array<I32>[5, 5, 5]
     sp TxSparse& = TxSparse(1)
     x := try sp[3] catch default 0
     y := try sp[1] catch TxErr default 7
@@ -8580,7 +8580,7 @@ fn txMember(down Bool) I32 {
 
 fn txCollect(n I32, failAt I32) I32 {
     l mut TxLines& = TxLines(n, failAt)
-    xs := try I32[x * 2 for x in l if x != 2] catch TxErr default I32[-1]
+    xs := try Array<I32>[x * 2 for x in l if x != 2] catch TxErr default Array<I32>[-1]
     t I32 = 0
     for x in xs { t += x }
     return t
@@ -8829,8 +8829,8 @@ test "T7c: each instantiation of a generic type has its own fixed length" {
 # T7/D15: an array a declaration holds has no length in its type - one initialized from a literal, either
 # way it is declared, may later be given an array of any length
 test "an array declared from a literal can later hold one of another length" {
-    x Array<I32> = I32[1, 2, 3]
-    y := I32[1, 2]
+    x Array<I32> = Array<I32>[1, 2, 3]
+    y := Array<I32>[1, 2]
     x = Array<I32>(5)
     y = Array<I32>(7)
     assert x.Len() == 5 and y.Len() == 7
@@ -9266,7 +9266,7 @@ fn builtinCode(a Array<I32>&, i I64) I32 {
 }
 
 test "ArrayError.OutOfRange from a.Get(i), caught by name and propagated" {
-    a := I32[4, 5, 6]
+    a := Array<I32>[4, 5, 6]
     assert builtinCode(a, 1) == 5
     assert builtinCode(a, 7) == -1
     assert (try a.Get(9) catch ArrayError.OutOfRange default -2) == -2
@@ -9284,7 +9284,7 @@ test "ArrayError.OutOfRange from a.Get(i), caught by name and propagated" {
 # E16d (the lang25 review): a.Set(i, v) stores with the index checked, as a.Get(i) reads - ArrayError.OutOfRange, nothing
 # stored; while compiling as at run time, an element holding a reference included
 fn setChecked(k I64) I64 {
-    a := I64[1, 2, 3]
+    a := Array<I64>[1, 2, 3]
     try a.Set(1, 20) catch { return -1 }
     try a.Set(k, 9) catch ArrayError.OutOfRange { }
     r := a[0] + a[1] + a[2]
@@ -9354,7 +9354,7 @@ test "std/arith checks arithmetic and shifts, Narrow conversions, Get indices" {
     b U8 = 200
     assert ckByteAdd(b, b) == 0 and ckByteAdd(1, 2) == 3
     assert ckNeg(m) == 7 and ckNeg(5) == -5
-    arr := I32[1, 2]
+    arr := Array<I32>[1, 2]
     assert ckMixed(arr, 1, 3) == 6 and ckMixed(arr, 5, 3) == -1 and ckMixed(arr, 1, big) == -2
 }
 
@@ -9427,7 +9427,7 @@ fn ctNarrow(v I64) I32 { return try v.Narrow<I32>() catch default -1 }
 fn ctToInt(f F64) I32 { return try f.Narrow<I32>() catch NumberError.Invalid default -2 catch NumberError.Overflow default -1 }
 fn ctFmul(a F64, b F64) F64 { return try arith.Mul(a, b) catch arith.Error.Overflow default -1.0 catch default -2.0 }
 fn ctIdx(i I64) I32 {
-    a := I32[1, 2, 3]
+    a := Array<I32>[1, 2, 3]
     return try arith.Mul(a.Get(i), I32(2)) catch ArrayError.OutOfRange default -1 catch default -2
 }
 fn ctProp(a I32, b I32) I32 ? arith.Error { return try arith.Mul(a, b) }
@@ -9476,7 +9476,7 @@ fn ctArea(s CtShape) I32 {
 }
 
 fn ctSliceSum(k I32) I32 {
-    a := I32[1, 2, 3, 4, 5]
+    a := Array<I32>[1, 2, 3, 4, 5]
     s := a[1:4]
     s[0] = s[0] + k
     t I32 = 0
@@ -9490,7 +9490,7 @@ fn ctRender(k I32) String {
     f F64 = 2.5
     b U8 = 'q'
     word := "say \"hi\"\n"
-    return $p " " $I32[k, 2] " " $CtShape.Rect(3, 4) " " $CtShape.Empty " " $n " " $f " " $b " " $true " " $word " " $CtW(word)
+    return $p " " $Array<I32>[k, 2] " " $CtShape.Rect(3, 4) " " $CtShape.Empty " " $n " " $f " " $b " " $true " " $word " " $CtW(word)
 }
 
 CtArea I32 = ctArea(CtShape.Rect(3, 4)) + ctArea(CtShape.Circle(2))
@@ -9646,8 +9646,8 @@ fn lamDoubler() fn&(x I32) I32 { return fn(x) { return x * 2 } }
 type LamErr error { Neg }
 
 LamBaked I32 = lamApply(fn(x) { return x * 7 }, 6)
-LamMapped := lamMap(I32[1, 2, 3], fn(x) { return I64(x) * 10 })
-LamCounted I32 = lamCount(I32[1, 5, 2, 8], fn(x) { return x > 3 })
+LamMapped := lamMap(Array<I32>[1, 2, 3], fn(x) { return I64(x) * 10 })
+LamCounted I32 = lamCount(Array<I32>[1, 5, 2, 8], fn(x) { return x > 3 })
 
 test "D16: lambdas take their types from where they are passed, and from their bodies" {
     k I32 = ctRuntimeZero
@@ -9658,10 +9658,10 @@ test "D16: lambdas take their types from where they are passed, and from their b
     tens fn&(x I32) I32 = fn(y) { return y * 10 }
     assert tens(k + 3) == 30
     assert lamApply(lamDoubler(), k + 3) == 6
-    evens := lamMap(I32[1, 2, 3, 4], fn(x) { return x % 2 == 0 })   # U bound from the result
+    evens := lamMap(Array<I32>[1, 2, 3, 4], fn(x) { return x % 2 == 0 })   # U bound from the result
     assert evens[1] and not evens[2]
     assert LamBaked == lamApply(fn(x) { return x * 7 }, k + 6)
-    assert LamMapped[2] == 30 and LamCounted == lamCount(I32[1, 5, 2, 8 + k], fn(x) { return x > 3 })
+    assert LamMapped[2] == 30 and LamCounted == lamCount(Array<I32>[1, 5, 2, 8 + k], fn(x) { return x > 3 })
     assert (try lamTry(fn(a) {
         if a < 0 { error LamErr.Neg }
         return a + 1
@@ -9713,7 +9713,7 @@ fn lamIdentity(n I32) Bool {
     return f == g and lamAdder(n) != lamAdder(n) and lamApply == lamApply
 }
 LamAdded I32 = lamApply(lamAdder(5), 2)
-LamOver I32 = lamCountOver(I32[1, 5, 9], 4)
+LamOver I32 = lamCountOver(Array<I32>[1, 5, 9], 4)
 LamSame Bool = lamIdentity(1)
 
 # D16, S1b: a lambda's one-line body - its statement ends at its line's end, at the bracket closing around the lambda,
@@ -9721,11 +9721,11 @@ LamSame Bool = lamIdentity(1)
 fn lamOneLine(k I32) Bool {
     big := fn(x I32) Bool: return x > 3
     d := lamApply(fn(x): return x * k, 6)
-    n := lamCount(I32[1, 5, 2, 8 * k], fn(x): return x > 3)
-    m := lamMap(I32[1, 2, 3], fn(x): return I64(x) * 10 + I64(k))
-    w := I32[1, 2, 3].Fold(0, fn(acc, x): return acc + x * k)
+    n := lamCount(Array<I32>[1, 5, 2, 8 * k], fn(x): return x > 3)
+    m := lamMap(Array<I32>[1, 2, 3], fn(x): return I64(x) * 10 + I64(k))
+    w := Array<I32>[1, 2, 3].Fold(0, fn(acc, x): return acc + x * k)
     t := lamTry(fn(x): return x + k, 1)! == 2
-    return big(4) and not big(3) and d == 6 * k and n == 2 and m == I64[11, 21, 31] and w == 6 and t
+    return big(4) and not big(3) and d == 6 * k and n == 2 and m == Array<I64>[11, 21, 31] and w == 6 and t
 }
 LamOneLine := lamOneLine(1)
 
@@ -9737,7 +9737,7 @@ test "D16, S1b: a lambda's one-line body" {
 test "D16c: a lambda captures values by copy and references by reference" {
     k I32 = ctRuntimeZero
     limit I32 = k + 3
-    a := I32[1, 2, 3, 4, 5]
+    a := Array<I32>[1, 2, 3, 4, 5]
     assert lamCount(a, fn(x) { return x > limit }) == 2
     f := fn(x I32) { return x * limit }       # a copy of limit, taken now
     limit = 100
@@ -9755,7 +9755,7 @@ test "D16c: a lambda captures values by copy and references by reference" {
     assert add5(1) == 6 and plus(1) == 8
     p.x = 10
     assert plus(1) == 11
-    assert LamAdded == lamApply(lamAdder(k + 5), 2) and LamOver == lamCountOver(I32[1, 5, 9], k + 4)
+    assert LamAdded == lamApply(lamAdder(k + 5), 2) and LamOver == lamCountOver(Array<I32>[1, 5, 9], k + 4)
     assert LamSame == lamIdentity(k + 1) and LamSame
     none fn?&(x I32) I32 = null
     assert none is null and ($none).Eq("null")
@@ -9866,7 +9866,7 @@ test "T29e: String and a program's own array type inherit the array methods" {
     assert s.Count(fn(c) { return c == 'o' }) == 2 and s.Some(fn(c) { return c == ' ' })
     assert (try s.FindIndex(fn(c) { return c == 'w' }) catch default -1) == 6
     assert (try s.Find("world") catch default -1) == 6   # String's own Find too
-    n := LamNums(I32[3, 1, 2])
+    n := LamNums(Array<I32>[3, 1, 2])
     n.Sort(fn(x, y) { return x < y })
     assert n[0] == 1 and n.Total() == 6
     assert LamVowels == 5
@@ -9875,7 +9875,7 @@ test "T29e: String and a program's own array type inherit the array methods" {
 # D16c/T7b: a value array is never copied implicitly - a lambda borrows it, read-only, and sees later writes
 fn lamTwoArrays() Array<I32>, I32 { return Array<I32>(1000, 7), 2 }
 fn lamBorrowSees(k I32) I32 {
-    a := I32[1, 2]
+    a := Array<I32>[1, 2]
     second := fn() { return a[1] }
     a[1] = k
     return second()
@@ -9886,7 +9886,7 @@ test "T7b: a captured array is borrowed, and a destructured array result is take
     name := "bob"
     words := "x bob y bob".Split(" ")
     assert lamCount(words, fn(w) { return w.Eq(name) }) == 2
-    hits := I32[5, 6]
+    hits := Array<I32>[5, 6]
     at := fn(i I64) { return hits[i] }
     hits[0] = 50                                # the lambda reads the array itself
     assert at(0) == 50
@@ -9929,7 +9929,7 @@ test "T25b: writable and read-only references, by type" {
     keep[0] = r                        # an array of read-only references takes a read-only one
     keep[1] = n                        # ...and a writable one, giving up the permission
     assert permSum(keep) == 11
-    many Array<mut PermNode&>& = PermNode&[PermNode(1, null), PermNode(2, null)]   # a literal adapts
+    many Array<mut PermNode&>& = Array<PermNode&>[PermNode(1, null), PermNode(2, null)]   # a literal adapts
     for p in many { permBump(p) }
     assert many[0].v == 2 and many[1].v == 3
     words := "b a".Split(" ")          # its own array is writable, its pieces read-only
@@ -10017,7 +10017,7 @@ fn permOwn<K>(x K, y mut Array<I64>&) I64 {
 # an array whose length is known only at run time (T7c): a copy of what a reference names
 fn runLen<T>(xs Array<T>&) Array<T> { return xs }
 fn permAlias(v I64) I64 {
-    a := runLen(I64[v, 2])
+    a := runLen(Array<I64>[v, 2])
     seen := permSee(a, a)
     a[0] = v
     return seen * 100 + permOwn(a, a)
@@ -10066,9 +10066,9 @@ fn eqAll() Bool {
     a := EqLabel(t)
     label Bool = a == EqLabel("zz") and a != EqLabel("zzz")
     field Bool = EqBox(a, 1) == EqBox(EqLabel("qq"), 1) and EqBox(a, 1) != EqBox(EqLabel("qq"), 2)
-    elems Bool = EqLabel[a, EqLabel("x")] == EqLabel[EqLabel("12"), EqLabel("y")]
+    elems Bool = Array<EqLabel>[a, EqLabel("x")] == Array<EqLabel>[EqLabel("12"), EqLabel("y")]
     payload Bool = EqShape.Named(a) == EqShape.Named(EqLabel("..")) and EqShape.Both(1, a) != EqShape.Both(2, a)
-    cases Bool = EqShape.Blank != EqShape.Named(a) and eqMatch(a) == 2 and EqLabel("..") in EqLabel[EqLabel("1"), a]
+    cases Bool = EqShape.Blank != EqShape.Named(a) and eqMatch(a) == 2 and EqLabel("..") in Array<EqLabel>[EqLabel("1"), a]
     return label and field and elems and payload and cases
 }
 EqBaked := eqAll()
@@ -10103,14 +10103,14 @@ type StrOrder struct(id I32, price StrMoney, tip StrMoney&, parts Array<StrMoney
     parts
 }
 StrCount mut I64 = 250
-StrBaked := $StrOrder(7, StrMoney(199), StrMoney(5), StrMoney[StrMoney(1), StrMoney(100)])
+StrBaked := $StrOrder(7, StrMoney(199), StrMoney(5), Array<StrMoney>[StrMoney(1), StrMoney(100)])
 
 test "E11c: $ renders through a declared Str, wherever the value sits" {
     m := StrMoney(StrCount)
     assert $m == "$2.50"
-    o := StrOrder(7, StrMoney(199), StrMoney(5), StrMoney[StrMoney(1), StrMoney(StrCount)])
-    assert $o == "StrOrder(7, $1.99, $0.5, StrMoney[$0.1, $2.50])"
-    assert StrBaked == "StrOrder(7, $1.99, $0.5, StrMoney[$0.1, $1.0])"
+    o := StrOrder(7, StrMoney(199), StrMoney(5), Array<StrMoney>[StrMoney(1), StrMoney(StrCount)])
+    assert $o == "StrOrder(7, $1.99, $0.5, Array<StrMoney>[$0.1, $2.50])"
+    assert StrBaked == "StrOrder(7, $1.99, $0.5, Array<StrMoney>[$0.1, $1.0])"
     n StrMoney?& = null
     assert $n == "null"
     assert $StrCents(StrCount) == "250c"
@@ -10264,7 +10264,7 @@ fn adoptFresh(n I64) I64 {
     h.a = Array<I64>(n)
     h.a[0] = 5
     h.rows = Array<mut Array<I64>&>(2)
-    h.rows[0] = I64[x * 2 for x in range n]
+    h.rows[0] = Array<I64>[x * 2 for x in range n]
     h.rows[1] = h.rows[0]
     h.rows[1][1] = 40
     h.s = $(n * 11) "!"
@@ -10386,7 +10386,7 @@ test "T4: signed, unsigned and half-width float types" {
 # at every digit-count boundary, both signs, the extremes of each width; the same text at run time as while compiling
 fn renderInts(k I64) String {
     lo I64 = -9223372036854775807 - k
-    edges := I64[0, 9, 10, 99, 100, 999999999, 1000000000, 999999999999999999, 1000000000000000000, -1, -10, -100]
+    edges := Array<I64>[0, 9, 10, 99, 100, 999999999, 1000000000, 999999999999999999, 1000000000000000000, -1, -10, -100]
     t := StringBuilder()
     for v in edges { t.Push($v " ") }
     t.Push($lo " " $(lo + 1) " " $(U64(0) - U64(k)) " " $U64(10000000000000000000) " " $U8(200) " " $I8(-128) " ")
@@ -10434,9 +10434,9 @@ fn charAll(n I32) Bool {
     u U8 = c
     s := "Hi 9"
     methods Bool = next == 'b' and c.IsLower() and s[0].IsUpper() and s[2].IsSpace() and s[3].IsDigit() and c.ToUpper() == 'A'
-    text Bool = $c == "a" and $u == "97" and $Char['x', 'y'] == "xy" and $s[0] == "H" and k == 65
+    text Bool = $c == "a" and $u == "97" and $Array<Char>['x', 'y'] == "xy" and $s[0] == "H" and k == 65
     raw := Array<U8>(2, U8(104 + n))
-    bytes Bool = charBytes(s) == 72 + 4 and String(raw) == "ii" and $raw == "U8[105, 105]"
+    bytes Bool = charBytes(s) == 72 + 4 and String(raw) == "ii" and $raw == "Array<U8>[105, 105]"
     return methods and text and bytes
 }
 CharBaked := charAll(1)
@@ -10508,7 +10508,7 @@ fn bitsAll(one I32) Bool {
     z F64 = F64(one - 1)
     text Bool = $q64 == "nan" and $(z / z) == "nan" and $(-(z / z)) == "nan" and $F16.FromBits(U16(0xFC00)) == "-inf"
     b := F64(2).Bits()
-    n := I32[1, 2, 3].Len()
+    n := Array<I32>[1, 2, 3].Len()
     named Bool = b == 0x4000000000000000 and n == 3 and BtTemp(1.5).Bits() == 0x3FF8000000000000
     named2 Bool = F32.FromBits(BtMask(0x3F800000)) == 1
     return known and known2 and back and back2 and edges and trip and moved and held and held2 and text and named and named2
@@ -10531,10 +10531,10 @@ test "E33a: a signalling NaN keeps its payload, quieted or not" {
     s32 := F32.FromBits(U32(0x7F800001 * one))
     s64 := F64.FromBits(U64(I64(0x7FF0000000000001) * I64(one)))
     h := BtHold(s16, sb, s32, s64)
-    for b in U16[s16.Bits(), btPass16(s16).Bits(), h.h.Bits()] { assert b == 0x7C01 or b == 0x7E01 }
-    for b in U16[sb.Bits(), btPassB(sb).Bits(), h.b.Bits()] { assert b == 0xFF81 or b == 0xFFC1 }
-    for b in U32[s32.Bits(), btPass32(s32).Bits(), h.f.Bits()] { assert b == 0x7F800001 or b == 0x7FC00001 }
-    for b in U64[s64.Bits(), h.d.Bits()] { assert b == 0x7FF0000000000001 or b == 0x7FF8000000000001 }
+    for b in Array<U16>[s16.Bits(), btPass16(s16).Bits(), h.h.Bits()] { assert b == 0x7C01 or b == 0x7E01 }
+    for b in Array<U16>[sb.Bits(), btPassB(sb).Bits(), h.b.Bits()] { assert b == 0xFF81 or b == 0xFFC1 }
+    for b in Array<U32>[s32.Bits(), btPass32(s32).Bits(), h.f.Bits()] { assert b == 0x7F800001 or b == 0x7FC00001 }
+    for b in Array<U64>[s64.Bits(), h.d.Bits()] { assert b == 0x7FF0000000000001 or b == 0x7FF8000000000001 }
     assert s16 != s16 and sb != sb and s32 != s32 and s64 != s64
 }
 
@@ -10552,7 +10552,7 @@ fn lmSpan<T>(x T) T { return T.Max - T.Min }
 fn limitsAll(one I64) Bool {
     ints Bool = I8.Max == 127 and I8.Min == -128 and I16.Max == 32767 and I32.Min == -2147483648 and I64.Max == 9223372036854775807
     ints2 Bool = U8.Max == 255 and U8.Min == 0 and U16.Max == 65535 and U32.Max == 4294967295 and U64.Max == U64(0) - 1
-    gen Bool = lmLargest(I32[-5, -9, -1 * I32(one)]) == -1 and lmLargest(U8[3, 7, 2]) == 7 and lmSpan(I8(one)) == -1
+    gen Bool = lmLargest(Array<I32>[-5, -9, -1 * I32(one)]) == -1 and lmLargest(Array<U8>[3, 7, 2]) == 7 and lmSpan(I8(one)) == -1
     gen2 Bool = lmSpan(U16(one)) == 65535 and LmChar.Max == LmChar(255) and Char.Max == Char(255)
     fs Bool = F64.Max == 1.7976931348623157e308 and F64.Min == -F64.Max and F32.Max == F32(3.4028234663852886e38)
     fs2 Bool = F16.Max == 65504 and BF16.Max.Bits() == 0x7F7F and F64.Inf == 1.0 / F64(one - 1) and F64.NaN != F64.NaN
@@ -10593,7 +10593,7 @@ fn boPop(x U64, w I64) I64 {
 }
 fn bitOpsAll(one I64) Bool {
     ok := true
-    for v in I64[0, 1, 2, 3, 0x80, 0x7F, 0xFF00, 0x1234, -1, -2, I64.Min, I64.Max, 0x0F0F0F0F0F0F0F0F * one, 12345678901 * one] {
+    for v in Array<I64>[0, 1, 2, 3, 0x80, 0x7F, 0xFF00, 0x1234, -1, -2, I64.Min, I64.Max, 0x0F0F0F0F0F0F0F0F * one, 12345678901 * one] {
         u := U64(v)
         ok = ok and v.LeadingZeros() == boCount(u, 64, true) and v.TrailingZeros() == boCount(u, 64, false)
         ok = ok and v.PopCount() == boPop(u, 64) and u.PopCount() == boPop(u, 64)
@@ -10604,7 +10604,7 @@ fn bitOpsAll(one I64) Bool {
         ok = ok and h.PopCount() == boPop(U64(h), 16) and I16(v).TrailingZeros() == boCount(U64(h), 16, false)
         q := U32(v)
         ok = ok and I32(v).LeadingZeros() == boCount(U64(q), 32, true) and q.PopCount() == boPop(U64(q), 32)
-        for k in I64[0, 1, 7, 8, 13, 31, 32, 63, 64, 65, -1, -9] {
+        for k in Array<I64>[0, 1, 7, 8, 13, 31, 32, 63, 64, 65, -1, -9] {
             ok = ok and u.RotateLeft(k).RotateRight(k) == u and b.RotateLeft(k).RotateRight(I32(k)) == b
             ok = ok and u.RotateLeft(k) == u.RotateRight(64 - (k % 64 + 64) % 64) and q.RotateLeft(k).PopCount() == q.PopCount()
             ok = ok and I16(v).RotateRight(U8(k & 0xFF)).PopCount() == I16(v).PopCount()
@@ -10658,7 +10658,7 @@ test "L13-L15, L14a: escapes by number, and raw text" {
 fn precAll(one I64) Bool {
     odd := 5 * one
     a Bool = odd & 1 == 1 and odd | 8 == 13 and odd ^ 4 == 1 and 6 & 3 < 3 and not (odd & 2 == 2)
-    b Bool = odd & 4 != 0 and (odd << 1) & 2 == 2 and odd & 1 in I64[1, 3] and 3 | odd & 1 == 3
+    b Bool = odd & 4 != 0 and (odd << 1) & 2 == 2 and odd & 1 in Array<I64>[1, 3] and 3 | odd & 1 == 3
     return a and b
 }
 PrecBaked := precAll(1)
@@ -10701,7 +10701,7 @@ fn rvAll(one I64) Bool {
     h := try RvOp.From("*") catch default RvOp.Minus
     missed := false
     try RvKey.From('x') catch CaseError { missed = true }
-    for st in RvStatus[RvStatus.Ok, RvStatus.Busy, RvStatus.Gone] {
+    for st in Array<RvStatus>[RvStatus.Ok, RvStatus.Busy, RvStatus.Gone] {
         back := try RvStatus.From(st.Value()) catch default RvStatus.Ok
         if back != st { return false }
     }
@@ -10770,7 +10770,7 @@ fn dfLate(l mut DfLog&) I64 {
     return x
 }
 fn dfArray() Array<I64> {
-    a := I64[1, 2]
+    a := Array<I64>[1, 2]
     defer a[0] = 9                      # after the result was computed, so it does not change it
     return a
 }
@@ -11105,7 +11105,7 @@ type CgRes unique struct(id I64) {
 }
 fn cgMatchBlocks(k I64) I64 {
     v I64 = match k {
-        case 0: I64[cgResId(CgRes(x + 1)) for x in range 3].Len()
+        case 0: Array<I64>[cgResId(CgRes(x + 1)) for x in range 3].Len()
         case _: 0
     }
     return cgResLog * 10 + v           # every element's resource was released before the match finished
@@ -11627,7 +11627,7 @@ test "O18a: a field, an element, a slice or a payload of a call's built result l
     assert f.v == 45 and e.v == 46 and s[1] == 47 and s.Len() == 2 and p.v == 48
 }
 
-fn sfLit(v I64) Array<mut SfNode&>& { return SfNode&[SfNode(v)] }
+fn sfLit(v I64) Array<mut SfNode&>& { return Array<SfNode&>[SfNode(v)] }
 fn SfBox.sfCond(v I64, c Bool) SfBox& { return SfBox(SfNode(v)) if c else SfBox(SfNode(1)) }
 fn SfPk.sfPayload(v I64) SfPk { return SfPk.Has(SfNode(v)) }
 fn SfBox.sfMatch(v I64) SfBox& { return match v { case 1: SfBox(SfNode(1))  case _: SfBox(SfNode(v)) } }
@@ -11778,7 +11778,7 @@ test "O1b/O25e: a global argument binds the callee's scope to the program's, rea
 test "T25d: constant text elements read through a for-in are static, and may be stored anywhere" {
     l mut Vec<String&>& = Vec<String&>()
     if sfRun > 0 {
-        for nm in String&["x", "yy"] { l.Push(nm) }
+        for nm in Array<String&>["x", "yy"] { l.Push(nm) }
     }
     obChurn()
     assert l[1] == "yy" and l.Len() == 2
@@ -11793,7 +11793,7 @@ fn sfBakeSum(n I64) I64 {
     e := sfMkNodes(n + 1)[0]
     k SfNode& = a if n > 3 else SfNode(1)
     l mut Vec<String&>& = Vec<String&>()
-    for nm in String&["x", "yy"] { l.Push(nm) }
+    for nm in Array<String&>["x", "yy"] { l.Push(nm) }
     pl mut Vec<pair.Pair<String&, I64>>& = Vec<pair.Pair<String&, I64>>()
     for s in l { pl.Push(pair.Pair(s, s.Len())) }
     return a.v + b.v + f.v + e.v + k.v + pl[1].Second
@@ -11832,7 +11832,7 @@ test "T4: an integer rounds once to a float, while compiling and at run time" {
 
 # E10: arrays compare by what they hold, the run time and the evaluator alike
 fn evIdentity(n I64) String {
-    arr := I32[1, 2, 3, 4, 5]
+    arr := Array<I32>[1, 2, 3, 4, 5]
     a Array<I32>& = arr[1:3]
     b Array<I32>& = arr[1:n]
     c Array<I32>& = arr[0:0]
@@ -11861,8 +11861,8 @@ fn evCopyArr(a Array<I64>&) Array<I64> { return a }
 fn evCopies(n I64) String {
     a EvP& = EvP(n)
     b := EvP(n)
-    x Array<I64>& = I64[n, 2]
-    y := I64[n, 2]
+    x Array<I64>& = Array<I64>[n, 2]
+    y := Array<I64>[n, 2]
     return $(evCopyOut(a) == b) " " $(b == evCopyOut(a)) " " $(evCopyArr(x) == y) " " $(evCopyOut(a) != b)
 }
 EvCopiesBaked String = evCopies(3)
@@ -11928,7 +11928,7 @@ fn evTwoArr(a Array<I32>&, b Array<I32>&) Bool { return a == b }   # E10c: "==" 
 fn evSites(n I64) String {
     l := Vec<String&>()
     for _ in range n { l.Push("hello") }
-    return $evTwo(l[0], l[1]) " " $evTwo("hey", "hey") " " $evTwoArr(I32[1, 2], I32[1, 2])
+    return $evTwo(l[0], l[1]) " " $evTwo("hey", "hey") " " $evTwoArr(Array<I32>[1, 2], Array<I32>[1, 2])
 }
 EvSitesBaked String = evSites(2)
 test "T25d/E10: static literals compare by what they hold, wherever they were written" {
@@ -11994,15 +11994,15 @@ type EvOut struct(a I64, b I64) {
     b
 }
 fn evInPlace(k I64) String {
-    a := I64[1, 2, 3]
+    a := Array<I64>[1, 2, 3]
     s := a[0:2]
-    a = I64[k, 8, 9]                 # the same length: written into a's storage, which s borrows
+    a = Array<I64>[k, 8, 9]                 # the same length: written into a's storage, which s borrows
     b := Array<I64>(3, 5)
     c := b[1:]
     b = Array<I64>(3, k)
     d := Array<I64>(2, 1)
     e := d[:]
-    d = I64[4, 5, 6]                 # another length: new storage, and e keeps naming the old
+    d = Array<I64>[4, 5, 6]                 # another length: new storage, and e keeps naming the old
     p := EvOut(1, 2)
     r EvIn& = p.inner
     p = EvOut(k, 3)                  # a struct is written in place, a reference to its field sees it
@@ -12013,7 +12013,7 @@ fn evInPlace(k I64) String {
 }
 EvInPlaceBaked String = evInPlace(7)
 test "T7: an array or struct value is assigned into the storage it has, unless an array's length changes" {
-    assert EvInPlaceBaked == "I64[7, 8] I64[7, 7] I64[1, 1] 7 yz"
+    assert EvInPlaceBaked == "Array<I64>[7, 8] Array<I64>[7, 7] Array<I64>[1, 1] 7 yz"
     assert evInPlace(evRun + 6) == EvInPlaceBaked
 }
 
@@ -12058,7 +12058,7 @@ EvA EvNode& = EvNode.evMk(4)
 EvB EvNode& = EvA
 EvC EvNode& = evIdr(EvA)
 EvSameAB Bool = EvA == EvB
-EvArr Array<I64>& = I64[1, 2, 3, 4]
+EvArr Array<I64>& = Array<I64>[1, 2, 3, 4]
 EvSl Array<I64>& = EvArr[1:3]
 EvSameSl Bool = EvSl == EvArr[1:3]
 test "K2b: globals sharing an instance or a slice of one share it in the program's data too" {
@@ -12078,7 +12078,7 @@ fn (a EvChainN) Less(b EvChainN) Bool {
 fn evChain(base I32) Bool { return EvChainN(base) < EvChainN(base + 10) < EvChainN(base + 20) }
 fn evComprDeep(n I64) I64 {
     if n == 0 { return 0 }
-    a := I64[evComprDeep(n - 1) + x for x in range 1]
+    a := Array<I64>[evComprDeep(n - 1) + x for x in range 1]
     return a[0] + 1
 }
 EvChainBaked Bool = evChain(0)
@@ -12188,7 +12188,7 @@ fn fzFill(n I64) String {
 }
 FzFillBaked String = fzFill(3)
 test "T8: an array filled with a reference names one instance in every element" {
-    want String& = "String&[\"ab\", \"ab\", \"ab\"] Array<Char>&[\"xd\", \"xd\", \"xd\"] true Array<I32>&[I32[7, 9, 7], I32[7, 9, 7], I32[7, 9, 7]] true I32[7, 9, 7]"
+    want String& = "Array<String&>[\"ab\", \"ab\", \"ab\"] Array<Array<Char>&>[\"xd\", \"xd\", \"xd\"] true Array<Array<I32>&>[Array<I32>[7, 9, 7], Array<I32>[7, 9, 7], Array<I32>[7, 9, 7]] true Array<I32>[7, 9, 7]"
     assert FzFillBaked == want and fzFill(3) == want
     assert fzFill(fzRun + 2) == want
 }
@@ -12222,9 +12222,9 @@ test "E33: the bits of one 16-bit float made into the other are read as the othe
 # B12c, LLVM 18 has no other lowering): to nearest, ties to even, through the subnormals and into infinity, a NaN kept
 # and made quiet. Decided while compiling (an assert, a baked global) and computed at run time, the same bits
 fn bfNarrowRight(one U32) Bool {
-    ins := U32[0x3F808000, 0x3F818000, 0x3F80FFFF, 0x3F808001, 0x00008000, 0x00018000, 0x007FFFFF, 0x00000001
+    ins := Array<U32>[0x3F808000, 0x3F818000, 0x3F80FFFF, 0x3F808001, 0x00008000, 0x00018000, 0x007FFFFF, 0x00000001
                0x7F7F7FFF, 0x7F7F8000, 0x7F7FFFFF, 0xFF7FFFFF, 0x7F800000, 0x80000000, 0xBF808000, 0x80018000]
-    want := U16[0x3F80, 0x3F82, 0x3F81, 0x3F81, 0x0000, 0x0002, 0x0080, 0x0000
+    want := Array<U16>[0x3F80, 0x3F82, 0x3F81, 0x3F81, 0x0000, 0x0002, 0x0080, 0x0000
                 0x7F7F, 0x7F80, 0x7F80, 0xFF80, 0x7F80, 0x8000, 0xBF80, 0x8002]
     for i, u in ins {
         if BF16(F32.FromBits(u * one)).Bits() != want[i] { return false }
@@ -12247,7 +12247,7 @@ test "T4: an F32 narrows to a BF16 inline, rounded once, ties to even" {
     one U32 = U32(fzRun)
     # a NaN stays a NaN - one whose payload is all in the bits narrowing drops included; which NaN is unspecified
     # (E33a), and the code generator keeps the top of the payload and makes it quiet, as __truncsfbf2 did
-    for u in U32[0x7F800001, 0xFFC12345, 0x7FA00000, 0x7FFFFFFF] {
+    for u in Array<U32>[0x7F800001, 0xFFC12345, 0x7FA00000, 0x7FFFFFFF] {
         b := BF16(F32.FromBits(u * one))
         assert b != b
     }
@@ -12337,7 +12337,7 @@ FzAtomicsBaked String = fzAtomics(1)
 FzAtomicsGlobal mut I32 = 4
 FzAtomicsRead I32 = FzAtomicsGlobal.AtomicLoad()           # a mutable global: read at startup, not while compiling
 test "K1/P9: atomic operations are evaluated while compiling, and agree with the run time" {
-    assert FzAtomicsBaked == "8 11 99 5 5 251 U8[1, 251]" and fzAtomics(1) == FzAtomicsBaked
+    assert FzAtomicsBaked == "8 11 99 5 5 251 Array<U8>[1, 251]" and fzAtomics(1) == FzAtomicsBaked
     assert fzAtomics(I32(fzRun)) == FzAtomicsBaked and FzAtomicsRead == 4
 }
 
@@ -12366,7 +12366,7 @@ fn fzTasks(n I64) String {
 }
 FzTasksBaked String = fzTasks(4)
 test "K1/P1: a join's tasks are evaluated while compiling, in sequence, and agree with the run time" {
-    assert FzTasksBaked == "I64[1, 4, 9, 16] 5 3 1106" and fzTasks(4) == FzTasksBaked
+    assert FzTasksBaked == "Array<I64>[1, 4, 9, 16] 5 3 1106" and fzTasks(4) == FzTasksBaked
     assert fzTasks(fzRun + 3) == FzTasksBaked
 }
 
@@ -12416,7 +12416,7 @@ fn fzNullArr(n I64) String {
 }
 FzNullArrBaked String = fzNullArr(3)
 test "E10, T2c: a reference to an array with no storage renders as the empty array" {
-    assert FzNullArrBaked == "U16[] true U16[] true" and fzNullArr(3) == FzNullArrBaked
+    assert FzNullArrBaked == "Array<U16>[] true Array<U16>[] true" and fzNullArr(3) == FzNullArrBaked
     assert fzNullArr(fzRun + 2) == FzNullArrBaked
 }
 
@@ -12512,12 +12512,12 @@ CbListsBaked I32 = cbAdd(
     2
 )
 test "L18a: lists, literals, comprehensions and joins run over several lines inside brackets" {
-    xs := I32[
+    xs := Array<I32>[
         1
         2
         3
     ]
-    ys := I32[(x * 2)
+    ys := Array<I32>[(x * 2)
               for x in xs
               if x > 1
     ]
@@ -12594,18 +12594,18 @@ type s1bPct struct(v I64) ? S1bError {
     if v < 0: error S1bError.Neg
     v
 }
-S1bBaked I64 = s1bSign(-3) * 1000 + s1bSum(I64[1, 2, 3]) + (try s1bCheck(-1) catch S1bError default 7)
+S1bBaked I64 = s1bSign(-3) * 1000 + s1bSum(Array<I64>[1, 2, 3]) + (try s1bCheck(-1) catch S1bError default 7)
 test "S1b: one-line bodies run as the blocks they stand for, at run time and while compiling" {
     n I64 = 0
     n -= 3
     assert s1bSign(n) == -1 and s1bSign(n + 3) == 0 and s1bSign(n + 9) == 1
-    assert s1bSum(I64[1, 2, 3]) == 415
+    assert s1bSum(Array<I64>[1, 2, 3]) == 415
     assert S1bBaked == -1000 + 415 + 7
     assert (try s1bCheck(n) catch S1bError default 7) == 7 and (try s1bCheck(5) catch S1bError default 7) == 5
     p := try s1bPct(n + 8) catch S1bError { unreachable "a positive percentage" }
     assert p.v == 5 and (try s1bPct(n) catch S1bError default s1bPct(1)!).v == 1
     out Vec<I64>
-    for x in I64[4, 5, 6]: out.Push(x * 2)
+    for x in Array<I64>[4, 5, 6]: out.Push(x * 2)
     assert out.Len() == 3 and out[2] == 12
 }
 
@@ -12620,9 +12620,9 @@ fn cbFind(a Array<I32>&, x I32) I64 {
         }
     }
 }
-CbFindBaked I64 = cbFind(I32[4, 5, 6], 6)
+CbFindBaked I64 = cbFind(Array<I32>[4, 5, 6], 6)
 test "D10a: a loop with no condition and no break of its own never falls through" {
-    assert CbFindBaked == 2 and cbFind(I32[4, 5, 6], I32(evRun) + 4) == 1
+    assert CbFindBaked == 2 and cbFind(Array<I32>[4, 5, 6], I32(evRun) + 4) == 1
 }
 
 # E8b: a shift of a literal takes the type it lands in, as its literal would - so "x I64 = 1 << s" shifts an I64
@@ -12685,7 +12685,7 @@ fn hashKeys() Bool {
     pts Bool = try m.Get(hPt(1, 2)) catch default 0 == 5 and try m.Get(hPt(2, 1)) catch default 0 == 6
     tagged Bool = try t.Get(hTagged("ab", hPt(0, 0))) catch default 0 == 1 and hTagged(n, hPt(0, 0)).Hash() == hTagged(n, hPt(0, 0)).Hash()
     shapes Bool = try e.Get(hShape.Rect(1, 2)) catch default 0 == 4 and not (hShape.Rect(2, 1) in e) and not (hShape.Blank in e)
-    arrays Bool = I32[1, 2].Hash() == I32[1, 2].Hash() and I32[1, 2].Hash() != I32[2, 1].Hash()
+    arrays Bool = Array<I32>[1, 2].Hash() == Array<I32>[1, 2].Hash() and Array<I32>[1, 2].Hash() != Array<I32>[2, 1].Hash()
     return pts and tagged and shapes and arrays and hPt(1, 2).Hash() != hPt(2, 1).Hash()
 }
 hashKeysBaked := hashKeys()
@@ -12985,7 +12985,7 @@ test "O25a: Fold with a reference accumulator" {
 # outlives the loop that read them
 fn sbNames() Array<String&>& {
     all mut Array<String&>& = Array<String&>(2)
-    for i, s in String&["alpha", "beta"] { all[i] = s }
+    for i, s in Array<String&>["alpha", "beta"] { all[i] = s }
     return all
 }
 test "T25d: a static literal's elements stored into a longer-lived array" {
@@ -13160,17 +13160,17 @@ fn lbPrivateProtocols(k I32) I64 {
     for x in t { total += x }
     c := lbCount()
     for y in c { total += y }
-    keys := lbKey[lbKey(k), lbKey(k + 1)]
+    keys := Array<lbKey>[lbKey(k), lbKey(k + 1)]
     adder := lbAdd(2 * k)
     score I64 = 0
     if lbKey(k) == lbKey(k + 10) and lbKey(k) != lbKey(k + 1) { score += 1 }
     if $lbKey(5 * k) == "K5" and $lbBox(lbKey(2 * k)) == "lbBox(K2)" { score += 10 }
     if (adder + lbAdd(3 * k)).K == 5 and adder < lbAdd(3 * k) and lbAdd(3 * k) >= adder { score += 100 }
     if t[1] == 5 and 4 in t and 7 not in t and adder(3) == 5 and lbApply(adder, 4) == 6 { score += 1000 }
-    if lbBox(lbKey(3 * k)) == lbBox(lbKey(13)) and keys == lbKey[lbKey(11), lbKey(12)] and lbSame(lbKey(4 * k), lbKey(14)) {
+    if lbBox(lbKey(3 * k)) == lbBox(lbKey(13)) and keys == Array<lbKey>[lbKey(11), lbKey(12)] and lbSame(lbKey(4 * k), lbKey(14)) {
         score += 10000
     }
-    if lbBox(lbKey(4 * k)).Hash() == lbBox(lbKey(14)).Hash() and keys.Hash() == lbKey[lbKey(21), lbKey(32)].Hash() {
+    if lbBox(lbKey(4 * k)).Hash() == lbBox(lbKey(14)).Hash() and keys.Hash() == Array<lbKey>[lbKey(21), lbKey(32)].Hash() {
         score += 100000
     }
     return score * 100 + total
@@ -13308,7 +13308,7 @@ test "a generic's by-value array parameter: borrowed for a call, and its own cop
     assert gvEq("1bc", s) and gvPass(s) == 3
     w Array<Char> = s
     assert gvBump(w) == 3 and w == "1bc"
-    n := I64[GvSeen, 2]
+    n := Array<I64>[GvSeen, 2]
     assert gvBumpNums(n) == 11 and n[0] == 1
     m Array<I64> = Array<I64>(3, GvSeen)
     assert gvBumpNums(m) == 12 and m[0] == 1
@@ -13386,15 +13386,15 @@ RsWant String = ("5e-324 1e-323 1.5e-323 8.98846567431158e+307 2.225073858507201
                   "6e-08 2e-07 6.104e-05 65500 1 0.3333 3.05e-05 9e-41 1.18e-38 3.39e+38 1 0.2 1.51e-36 ")
 fn rsText(z U64) String {
     s := StringBuilder()
-    for b in U64[0x1, 0x2, 0x3, 0x7FE0000000000000, 0x0010000000000000, 0x43E0000000000000, 0x0170000000000000
+    for b in Array<U64>[0x1, 0x2, 0x3, 0x7FE0000000000000, 0x0010000000000000, 0x43E0000000000000, 0x0170000000000000
                  0x0060000000000000] {
         s.Push($(F64.FromBits(b + z)) " ")
     }
-    for x in F64[1e23, 0.3, 123456789012345680.0, 5e-5, 1e-4, 1e17, 99999999999999980.0] { s.Push($(x + F64(z)) " ") }
-    for b in U32[0x1, 0x3, 0x00800000, 0x7F000000, 0x7F7FFFFF, 0x0D800000] { s.Push($(F32.FromBits(b + U32(z))) " ") }
-    for x in F32[16777216, 0.1] { s.Push($(x + F32(z)) " ") }
-    for b in U16[0x1, 0x3, 0x400, 0x7BFF, 0x3C00, 0x3555, 0x200] { s.Push($(F16.FromBits(b + U16(z))) " ") }
-    for b in U16[0x1, 0x80, 0x7F7F, 0x3F80, 0x3E4D, 0x400] { s.Push($(BF16.FromBits(b + U16(z))) " ") }
+    for x in Array<F64>[1e23, 0.3, 123456789012345680.0, 5e-5, 1e-4, 1e17, 99999999999999980.0] { s.Push($(x + F64(z)) " ") }
+    for b in Array<U32>[0x1, 0x3, 0x00800000, 0x7F000000, 0x7F7FFFFF, 0x0D800000] { s.Push($(F32.FromBits(b + U32(z))) " ") }
+    for x in Array<F32>[16777216, 0.1] { s.Push($(x + F32(z)) " ") }
+    for b in Array<U16>[0x1, 0x3, 0x400, 0x7BFF, 0x3C00, 0x3555, 0x200] { s.Push($(F16.FromBits(b + U16(z))) " ") }
+    for b in Array<U16>[0x1, 0x80, 0x7F7F, 0x3F80, 0x3E4D, 0x400] { s.Push($(BF16.FromBits(b + U16(z))) " ") }
     return s.ToString()
 }
 RsBaked String = rsText(0)
@@ -13450,13 +13450,13 @@ fn kConcat<T>(a Array<T>, b Array<T>) Array<T> {
     for i in range b.Len() { out[a.Len() + i] = b[i] }
     return out
 }
-KDotBaked := kDot(I64[1, 2, 3], I64[4, 5, 6])          # an array literal is an instance's length (T7c)
-KConcatBaked := kConcat(I32[1, 2], I32[3, 4, 5])
+KDotBaked := kDot(Array<I64>[1, 2, 3], Array<I64>[4, 5, 6])          # an array literal is an instance's length (T7c)
+KConcatBaked := kConcat(Array<I32>[1, 2], Array<I32>[3, 4, 5])
 test "G29: arrays by value, an instance per length" {
-    a := F32[1.0, 2.0, 3.0]
-    b := F32[4.0, 5.0, 6.0]
+    a := Array<F32>[1.0, 2.0, 3.0]
+    b := Array<F32>[4.0, 5.0, 6.0]
     assert kDot(a, b) == 32.0 and KDotBaked == 32
-    c := kConcat(I32[1, 2], I32[3, 4, 5])
+    c := kConcat(Array<I32>[1, 2], Array<I32>[3, 4, 5])
     assert c.Len() == 5 and c[4] == 5 and KConcatBaked.Len() == 5 and KConcatBaked[2] == 3
 }
 
@@ -13464,7 +13464,7 @@ test "G29: arrays by value, an instance per length" {
 # run time
 fn kFive(a Array<I32>) I32 { return a[4] }
 fn kFixedBack() I32 {
-    c := I32[1, 2, 3, 4, 5]
+    c := Array<I32>[1, 2, 3, 4, 5]
     d := c
     d[4] = 9
     return kFive(c) * 10 + kFive(d)
@@ -13472,8 +13472,8 @@ fn kFixedBack() I32 {
 KFixedBackBaked := kFixedBack()
 test "D15: := copies fixed storage; a local assigned another length holds it at run time" {
     assert kFixedBack() == 59 and KFixedBackBaked == 59
-    lit := I32[1, 2]
-    lit = I32[1, 2, 3]
+    lit := Array<I32>[1, 2]
+    lit = Array<I32>[1, 2, 3]
     assert lit.Len() == 3
 }
 
@@ -13528,9 +13528,9 @@ fn kViaLocal(a Array<I32>) I64 {
     if n > 3 { return 1 }
     return 0
 }
-KTotalBaked := kTotal(I64[1, 2, 3, 4, 5])
+KTotalBaked := kTotal(Array<I64>[1, 2, 3, 4, 5])
 test "G30: decided per instance - a recursion on a length ends where it is chosen to" {
-    t := I64[4, 3, 2, 1]
+    t := Array<I64>[4, 3, 2, 1]
     assert kTotal(t) == 10 and KTotalBaked == 15
     e := Array<I32>(0)
     s := Array<I32>(2)
@@ -13563,10 +13563,10 @@ fn kKindOf<T>(x T) String {
     }
     return "other " $x.Len()
 }
-KFirstSumBaked := kFirstSum(I64[3, 4])
+KFirstSumBaked := kFirstSum(Array<I64>[3, 4])
 test "G30: what follows a decided if that leaves is not checked in that instance" {
-    assert kFirstSum(I64[3, 4]) == 6 and kFirstSum(I64[]) == -1 and KFirstSumBaked == 6
-    assert kLenNamed(Array<I32>(0)) == "none" and kLenNamed(I32[7]) == "first 7"
+    assert kFirstSum(Array<I64>[3, 4]) == 6 and kFirstSum(Array<I64>[]) == -1 and KFirstSumBaked == 6
+    assert kLenNamed(Array<I32>(0)) == "none" and kLenNamed(Array<I32>[7]) == "first 7"
     assert kKindOf(5) == "int" and kKindOf("abc") == "other 3"
 }
 
@@ -13606,15 +13606,15 @@ fn kScaled(a Array<I64>) I64 {
     times := fn(x I64) I64 { return x * n }
     return times(n.Hash() & 7) + ($n).Len()
 }
-KWidenBaked := kWiden(I32[1, 2, 3], 9)
-KScaledBaked := kScaled(I64[1, 2, 3])
+KWidenBaked := kWiden(Array<I32>[1, 2, 3], 9)
+KScaledBaked := kScaled(Array<I64>[1, 2, 3])
 test "G29: an instance's lengths are constants, read as any value" {
-    w := kWiden(I32[4, 5], 7)
+    w := kWiden(Array<I32>[4, 5], 7)
     assert w.Len() == 4 and w[1] == 5 and w[3] == 7
     assert KWidenBaked.Len() == 6 and KWidenBaked[2] == 3 and KWidenBaked[5] == 9
-    assert kLast(I32[1, 2], I32[3, 4]) == 6
+    assert kLast(Array<I32>[1, 2], Array<I32>[3, 4]) == 6
     three I64 = 3
-    assert kScaled(I64[4, 5, 6]) == (three.Hash() & 7) * 3 + 1 and KScaledBaked == kScaled(I64[4, 5, 6])
+    assert kScaled(Array<I64>[4, 5, 6]) == (three.Hash() & 7) * 3 + 1 and KScaledBaked == kScaled(Array<I64>[4, 5, 6])
 }
 
 # T7c, T7d: inline fields whose lengths a call or a global computed by one give - decided once the program has checked
@@ -13647,19 +13647,19 @@ fn kValues() I64 {
     a[1] = 5
     b Array<I32> = a
     b[1] = 6
-    m := Array<I32>[I32[1, 2], I32[3, 4]]
+    m := Array<Array<I32>>[Array<I32>[1, 2], Array<I32>[3, 4]]
     cells := Array<KCell>(2)
     cells[1] = KCell(7, 8)
-    sh := KShape.Tri(I32[1, 2, 9])
+    sh := KShape.Tri(Array<I32>[1, 2, 9])
     p := (sh as KShape.Tri)!
     return a[1] * 1000 + b[1] * 100 + m[1][0] * 10 + I64(cells[1].y) + p[2] * 10000 + cells.Len() * 100000
 }
 KValuesBaked := kValues()
 test "T7d: fixed storage is a value, laid out in place" {
     assert kValues() == 295638 and KValuesBaked == 295638
-    a := I32[1, 2, 3]
-    assert a == I32[1, 2, 3] and a != I32[1, 2, 4]
-    assert $a == "I32[1, 2, 3]"
+    a := Array<I32>[1, 2, 3]
+    assert a == Array<I32>[1, 2, 3] and a != Array<I32>[1, 2, 4]
+    assert $a == "Array<I32>[1, 2, 3]"
     bl := KBlock4()
     bl.m[1][2] = 3.5
     copy KBlock4 = bl
@@ -13675,12 +13675,12 @@ fn kSum(a Array<I32>&) I64 {
     return s
 }
 fn kView(r Array<I32>&) I64 {
-    v := try r.SliceOf(0, 3) catch default I32[0, 0, 0]
+    v := try r.SliceOf(0, 3) catch default Array<I32>[0, 0, 0]
     return kSum(v)
 }
-KViewBaked I64 = kView(I32[1, 2, 3]) * 10 + kView(I32[1, 2])
+KViewBaked I64 = kView(Array<I32>[1, 2, 3]) * 10 + kView(Array<I32>[1, 2])
 test "E12, E16a: fixed storage is lent; a slice views part of an array" {
-    a := I32[1, 2, 3]
+    a := Array<I32>[1, 2, 3]
     assert kSum(a) == 6
     r := Array<I32>(3, 4)
     f Array<I32> = r                                       # a copy
@@ -13698,9 +13698,9 @@ fn kfThird(v KVec3&) F32 { return v[2] }
 fn kfRun(n I64) Array<F32> { return Array<F32>(n, 1.5) }
 KfThirdBaked F32 = kfThird(KVec3(kfRun(3)))
 test "T29f: a declared type extends an array whose length is inferred" {
-    v := KVec3(F32[1.0, 2.0, 2.0])
+    v := KVec3(Array<F32>[1.0, 2.0, 2.0])
     assert v.Norm2() == 9.0 and v.Len() == 3
-    b := F32[1.5, 2.5, 3.5]
+    b := Array<F32>[1.5, 2.5, 3.5]
     assert kfThird(KVec3(b)) == 3.5
     w KVec3 = KVec3(b)                                     # a value declared from a conversion copies it
     w[1] = 9.0
@@ -13738,14 +13738,14 @@ fn kfTake4(a Array<U8>) I64 { return a.Len() }
 fn kfGen<T>(x T) T { return x }
 test "D15: ':=' keeps fixed storage, and copies it" {
     a := Array<U8>(4)
-    b := I32[1, 2, 3]
+    b := Array<I32>[1, 2, 3]
     c := b
     d := kfGen(b)
     assert kfTake4(a) == 4 and c.Len() == 3 and d[2] == 3
     c[0] = 9
     assert b[0] == 1
-    l := I32[1, 2]
-    l = I32[1, 2, 3]                                       # assigned again: its length is held at run time
+    l := Array<I32>[1, 2]
+    l = Array<I32>[1, 2, 3]                                       # assigned again: its length is held at run time
     assert l.Len() == 3
 }
 
@@ -13776,7 +13776,7 @@ test "D9a/D16a: a lambda over an array of fixed arrays" {
 
 # E10c: two references viewing the same storage over the same length are one instance, whatever their lengths' kind
 test "E10c: 'is' meets a reference to fixed storage and one to a run-time length as '==' does" {
-    a := I64[1, 2, 3, 4]
+    a := Array<I64>[1, 2, 3, 4]
     f := a[0:3]
     r Array<I64>& = a[0:3]
     q Array<I64>& = a[0:2]
@@ -13877,7 +13877,7 @@ fn c3RefResult(n I64) Vec<I64>& {
 }
 fn c3Texts(n I64) Array<String&> {
     items := Array<String&>(1)
-    if n > 0 { items = String&["x" $n, "y" $n] }
+    if n > 0 { items = Array<String&>["x" $n, "y" $n] }
     return items
 }
 C3Baked I64 = c3Sum(c3MkList(10)) + c3Sum(c3Box.c3MakeBox("b", 4).items) + c3Sum(c3Destructured(3))
@@ -14049,7 +14049,7 @@ fn (p mut c3Parser&) direct(c Bool) c3Node& {
 }
 fn (p mut c3Parser&) maybe(c Bool) c3Node& {
     x := p.node() if c else null
-    return c3Node.Many(c3Node&[x!])
+    return c3Node.Many(Array<c3Node&>[x!])
 }
 fn (p mut c3Parser&) orNew(c Bool) c3Node& {
     x := p.first() if c else c3Leaf(5)
@@ -14150,7 +14150,7 @@ fn c3Through(xs Array<F64>&, g fn&(x F64) F64, k F64) F64 {
     return c3Apply(xs, fn(x) { return g(x) * k })
 }
 test "D16d: a lambda capturing a function value, made for one call in a loop" {
-    xs := F64[1.0, 2.0, 3.0]
+    xs := Array<F64>[1.0, 2.0, 3.0]
     t F64 = 0.0
     for i in range 3 { t += c3Through(xs, fn(x) { return x + 1.0 }, F64(i)) }
     assert t == 27.0
@@ -14171,29 +14171,29 @@ type s3Holder struct(a Array<I64>&) {
     a
 }
 fn s3ArrayRefEq() I64 {
-    a Array<I64>& = I64[1, 2, 3]
-    b Array<I64>& = I64[1, 2, 3]
+    a Array<I64>& = Array<I64>[1, 2, 3]
+    b Array<I64>& = Array<I64>[1, 2, 3]
     s I64 = 0
     if a == b { s += 1 }
-    if a == I64[1, 2, 3] { s += 2 }
+    if a == Array<I64>[1, 2, 3] { s += 2 }
     if a[:2] == b[:2] and a[1:3] != b[:2] { s += 4 }
     n Array<I64>& = Array<I64>(0)
     e Array<I64>& = Array<I64>(0)
     e2 Array<I64>& = Array<I64>(0)
     if n != a and n.Len() == 0 and e == n and e == e2 { s += 8 }
     if s3Holder(a) == s3Holder(b) { s += 16 }
-    f Array<I64>& = I64[1, 2, 3]
+    f Array<I64>& = Array<I64>[1, 2, 3]
     if f == a[0:3] { s += 32 }
-    ps Array<s3Pt&>& = s3Pt&[s3Pt(1, 5), s3Pt(2, 6)]
-    qs Array<s3Pt&>& = s3Pt&[s3Pt(1, 7), s3Pt(2, 8)]
+    ps Array<s3Pt&>& = Array<s3Pt&>[s3Pt(1, 5), s3Pt(2, 6)]
+    qs Array<s3Pt&>& = Array<s3Pt&>[s3Pt(1, 7), s3Pt(2, 8)]
     if ps == qs { s += 64 }               # each element by its own Eq
     l := Vec<I64>()
     for i in range 20 { l.Push(i) }
     if l.ToArray() == l.ToArray() { s += 128 }
     m := Map<Array<I64>&, I64>()
-    m.Put(I64[4, 5], 9)
-    k Array<I64>& = I64[4, 5]
-    if (try m.Get(k) catch default -1) == 9 and I64[4, 5] in Vec<Array<I64>&>() == false { s += 256 }
+    m.Put(Array<I64>[4, 5], 9)
+    k Array<I64>& = Array<I64>[4, 5]
+    if (try m.Get(k) catch default -1) == 9 and Array<I64>[4, 5] in Vec<Array<I64>&>() == false { s += 256 }
     return s
 }
 S3ArrayRefEqBaked := s3ArrayRefEq()
@@ -14211,17 +14211,17 @@ fn s3CopyOutLocal(a Array<F64>&) Array<F64> {
     return v
 }
 fn s3RowOf(row Array<F64>&) Array<F64> {
-    v := try row.SliceOf(0, 3) catch default F64[0.0, 0.0, 0.0]
+    v := try row.SliceOf(0, 3) catch default Array<F64>[0.0, 0.0, 0.0]
     return v
 }
 fn s3BigOut(a Array<I64>&) Array<I64> { return a }     # big enough to be returned through memory
 fn s3FixedOut() F64 {
-    y Array<F64> = F64[1.0, 2.0, 3.0]
+    y Array<F64> = Array<F64>[1.0, 2.0, 3.0]
     a := s3CopyOut(y)
     y[0] = 9.0                                    # the result is a copy, not the caller's storage
     b := s3CopyOutLocal(y)
-    c := s3RowOf(F64[4.0, 5.0, 6.0])
-    d := s3RowOf(F64[1.0])
+    c := s3RowOf(Array<F64>[4.0, 5.0, 6.0])
+    d := s3RowOf(Array<F64>[1.0])
     big Array<I64> = Array<I64>(40)
     big[39] = 7
     g := s3BigOut(big)
@@ -14549,7 +14549,7 @@ type sc3Game struct() {
 }
 fn sc3Game.sc3World() sc3Game {
     g := sc3Game()
-    for name in String&["hall", "kitchen"] { g.rooms.Put(name, sc3Room(name)) }
+    for name in Array<String&>["hall", "kitchen"] { g.rooms.Put(name, sc3Room(name)) }
     return g
 }
 test "T25d: static names kept by rooms in a returned game" {
@@ -14564,7 +14564,7 @@ test "T25d: static names kept by rooms in a returned game" {
 # read-only fits where a writable one is passed
 type sc3Box struct(v I32) { v }
 test "G9a, T22: Fold's literal start and a read-only lambda parameter" {
-    a := I32[1, 2, 3]
+    a := Array<I32>[1, 2, 3]
     total := a.Fold(0, fn(acc I64, x I32) I64 { return acc + x })
     assert total == 6
     l := Vec<mut sc3Box&>()
@@ -14732,7 +14732,7 @@ fn (p mut c4Parser&) many(n I64) c4Node& {
 }
 fn (p mut c4Parser&) maybe(b Bool) c4Node& {
     items := Array<c4Node&>(0)
-    if b { items = c4Node&[p.leaf(), p.leaf()] }
+    if b { items = Array<c4Node&>[p.leaf(), p.leaf()] }
     return c4Node.Many(items)
 }
 fn c4Node.c4Build(n I64) c4Node {
@@ -14821,15 +14821,15 @@ type rvShape enum {
 }
 fn rvTree.rvTreeOf(d I64) rvTree {
     if d == 0 { return rvTree(0, Array<rvTree>(0)) }
-    return rvTree(d, rvTree[rvTree.rvTreeOf(d - 1), rvTree.rvTreeOf(d - 1)])
+    return rvTree(d, Array<rvTree>[rvTree.rvTreeOf(d - 1), rvTree.rvTreeOf(d - 1)])
 }
 fn rvRecursiveEq(k I64) I64 {
     s I64 = 0
     if rvTree.rvTreeOf(4 + k) == rvTree.rvTreeOf(4) { s += 1 }
     if rvTree.rvTreeOf(4 + k) != rvTree.rvTreeOf(3) { s += 2 }
-    if rvA(1, rvB[rvB(2, rvA[rvA(3, rvB[])])]) == rvA(1 + k, rvB[rvB(2, rvA[rvA(3, rvB[])])]) { s += 4 }
-    if rvA(1, rvB[rvB(2, rvA[rvA(3, rvB[])])]) != rvA(1 + k, rvB[rvB(2, rvA[rvA(4, rvB[])])]) { s += 8 }
-    if rvG<I64>(1, rvG<I64>[rvG<I64>(2 + k, rvG<I64>[])]) == rvG<I64>(1, rvG<I64>[rvG<I64>(2, rvG<I64>[])]) { s += 16 }
+    if rvA(1, Array<rvB>[rvB(2, Array<rvA>[rvA(3, Array<rvB>[])])]) == rvA(1 + k, Array<rvB>[rvB(2, Array<rvA>[rvA(3, Array<rvB>[])])]) { s += 4 }
+    if rvA(1, Array<rvB>[rvB(2, Array<rvA>[rvA(3, Array<rvB>[])])]) != rvA(1 + k, Array<rvB>[rvB(2, Array<rvA>[rvA(4, Array<rvB>[])])]) { s += 8 }
+    if rvG<I64>(1, Array<rvG<I64>>[rvG<I64>(2 + k, Array<rvG<I64>>[])]) == rvG<I64>(1, Array<rvG<I64>>[rvG<I64>(2, Array<rvG<I64>>[])]) { s += 16 }
     if rvShape.Branch(rvTree.rvTreeOf(2 + k)) == rvShape.Branch(rvTree.rvTreeOf(2)) { s += 32 }
     return s
 }
@@ -14849,13 +14849,13 @@ fn rvSee<T>(k T, x T, w mut Array<I32>&) I32 {
     return x[0] + I32(x.Len()) * 1000
 }
 fn rvShared(v I32) I32 {
-    a := runLen(I32[v, 6])
+    a := runLen(Array<I32>[v, 6])
     r mut Array<I32>& = a
     viaRef := rvSee(a, r, r)
     a[0] = v
     viaSlice := rvSee(a, a[0:1], a)
     a[0] = v
-    f Array<I32> = I32[v, 6]
+    f Array<I32> = Array<I32>[v, 6]
     fr mut Array<I32>& = f
     viaFixed := rvSee(a, fr, fr)
     n Array<I32>& = Array<I32>(0)
@@ -15057,9 +15057,9 @@ test "S4c: a parallel assignment's enum case and array literal read their values
     n I64 = 1
     e := s4dE.Lit(0)
     n, e = 5, s4dE.Lit(n)
-    w := I64[0, 0]
+    w := Array<I64>[0, 0]
     k I64 = 2
-    k, w = 7, I64[k, k]
+    k, w = 7, Array<I64>[k, k]
     assert n == 5 and s4dEval(e) == 1 and k == 7 and w[0] == 2 and w[1] == 2
 }
 
@@ -15191,14 +15191,14 @@ test "P2: a task calls a function value read out of storage that lasts until the
 # it runs, so a generic over the length can ask for an element one instantiation has and another has not. The globals
 # are baked while compiling, the asserts decided there too, and the mutable ones read at run time
 fn e16Third(a Array<I32>) I32 { return try a.Get(2) catch default -1 }
-E16Has := e16Third(I32[4, 5, 6])
-E16HasNot := e16Third(I32[4, 5])
-e16Short mut Array<I32> = I32[1, 2]
+E16Has := e16Third(Array<I32>[4, 5, 6])
+E16HasNot := e16Third(Array<I32>[4, 5])
+e16Short mut Array<I32> = Array<I32>[1, 2]
 test "E16: try on a constant index known to be out of range compiles, and fails where it runs" {
     assert E16Has == 6 and E16HasNot == -1
     assert (try e16Short.Get(5) catch default 9) == 9
     assert (try e16Short.Get(1) catch default 9) == 2
-    x Array<I32> = I32[7, 8, 9]
+    x Array<I32> = Array<I32>[7, 8, 9]
     assert e16Third(x) == 9
 }
 
@@ -15244,7 +15244,7 @@ fn o26bNote.o26bCheck(n I64) o26bNote {
     return o26bNote(n, note)
 }
 fn o26bView.o26bSlice(n I64) o26bView {
-    a := I64[1, 2, 3, 4]
+    a := Array<I64>[1, 2, 3, 4]
     a[0] = n
     return o26bView(a[0:3])
 }
@@ -15278,8 +15278,8 @@ fn o26xByType(srcs Array<String&>&) Vec<o26xLine> {
     return out
 }
 test "O26a: '&x' of a returned local is the result scope" {
-    a := o26xByArg(String&["a\nbb", "c"])
-    b := o26xByType(String&["dd\ne"])
+    a := o26xByArg(Array<String&>["a\nbb", "c"])
+    b := o26xByType(Array<String&>["dd\ne"])
     sbChurn()
     assert a.Len() == 3 and a[1].t == "bb" and a[2].t == "c"
     assert b.Len() == 2 and b[0].t == "dd"
@@ -15415,17 +15415,17 @@ test "O20: a value copied out of a reference holds what its referent holds" {
 # conditional does
 fn s12bPick(k I64) Array<I64> {
     return match k {
-        case 1: I64[1, 2, 3]
-        case 2: I64[7]
-        case _: I64[4, 5]
+        case 1: Array<I64>[1, 2, 3]
+        case 2: Array<I64>[7]
+        case _: Array<I64>[4, 5]
     }
 }
 S12bTwo := s12bPick(2)
 test "S12b: array literals of different lengths in a match value" {
     assert s12bPick(1).Len() == 3 and s12bPick(3)[1] == 5 and S12bTwo[0] == 7
     x := match S12bTwo.Len() {
-        case 1: I64[9, 9]
-        case _: I64[0]
+        case 1: Array<I64>[9, 9]
+        case _: Array<I64>[0]
     }
     assert x.Len() == 2
 }
@@ -15456,7 +15456,7 @@ fn qcMake(n I64) Vec<I64> {
     return l
 }
 QcList Vec<I64> = qcMake(3)
-QcBoxG qcBox = qcBox(I64[4, 5, 6])
+QcBoxG qcBox = qcBox(Array<I64>[4, 5, 6])
 fn qcTotal(l Vec<I64>) I64 {
     t I64 = 0
     for x in l { t += x }
@@ -15475,7 +15475,7 @@ fn qcGrown(l Vec<I64>&, n I64) I64 {
 }
 fn qcAll(k I64) I64 {
     l := qcMake(3 + k)
-    bs := qcBox[qcBox(I64[4, 5]), qcBox(I64[6])]
+    bs := Array<qcBox>[qcBox(Array<I64>[4, 5]), qcBox(Array<I64>[6])]
     return qcTotal(l) + qcSumBoxes(bs) + qcGrown(l, 2)
 }
 QcBaked I64 = qcAll(0)
@@ -15495,7 +15495,7 @@ test "T25c: a read-only copy is read, iterated and passed by value; a writable o
     c := QcList
     c.Push(4 + k)
     assert c.Len() == 4 and QcList.Len() == 3
-    bs := qcBox[qcBox(I64[1, 2]), qcBox(I64[3])]
+    bs := Array<qcBox>[qcBox(Array<I64>[1, 2]), qcBox(Array<I64>[3])]
     for bb in bs { bb.P[0] = 9 + k }
     assert bs[0].P[0] == 9 and bs[1].P[0] == 9
     assert QcBaked == 42 and qcAll(k) == QcBaked and qcAll(0) == 42
@@ -15645,10 +15645,10 @@ fn (p rv3Pt&) Str() String {
     sb.Push($(n + seen.Len()))
     return sb.ToString()
 }
-fn rv3PtText(k I64) String { return $rv3Pt(I64[1, 2 + k].ToVec(), "nm") }
+fn rv3PtText(k I64) String { return $rv3Pt(Array<I64>[1, 2 + k].ToVec(), "nm") }
 Rv3PtText := rv3PtText(0)
 test "E11c: a Str building only for itself renders the same while compiling as at run time" {
-    p := rv3Pt(I64[1, 2].ToVec(), "nm")
+    p := rv3Pt(Array<I64>[1, 2].ToVec(), "nm")
     assert $p == "nm123" and Rv3PtText == "nm123" and rv3PtText(I64(ctRuntimeZero)) == Rv3PtText
 }
 
@@ -15743,8 +15743,8 @@ fn strOnceTrace(k I64) String {
     return $one "|" $three "|" $listed "|" $two "|" $arr "|" $some "|" $mapped "|" $c.n
 }
 StrOnceBaked := strOnceTrace(0)
-StrOnceWant String& = ("a1|x2-y3-z4|Vec<strOnceTick>[p5, q6, r7]|strOnceTwo(m8, n9)|strOnceTick[e10, e11]|"
-                       "strOnceMaybe.Some(s12, 7)|Map<I64, strOnceTick>{1: v13}|13")
+StrOnceWant String& = ("a1|x2-y3-z4|Vec<strOnceTick>[p5, q6, r7]|strOnceTwo(m8, n9)|Array<strOnceTick>[e10, e11]|"
+                       "strOnceMaybe.Some(s12, 7)|Map<I64, strOnceTick>[1: v13]|13")
 
 # ...and a Str changing the value being rendered part way through changes nothing already read: an enum is read whole
 # before its payload is (here the Str puts another case where it is), a field when the rendering reaches it
@@ -15807,7 +15807,7 @@ test "E11c: a Str writing a global is called once per rendering - keys and value
     assert s == "k1,k2" and StrOnceCalls == calls + 2
     m := Map<strOnceKey, strOnceKey>()
     m.Put(strOnceKey(3), strOnceKey(4))
-    assert $m == "Map<strOnceKey, strOnceKey>{k3: k4}" and StrOnceCalls == calls + 4
+    assert $m == "Map<strOnceKey, strOnceKey>[k3: k4]" and StrOnceCalls == calls + 4
     l := Vec<strOnceKey>()
     l.Push(strOnceKey(5))
     l.Push(strOnceKey(6))
@@ -15827,14 +15827,14 @@ fn joinOpBump(s mut joinOpS&, a mut Array<I64>&) I64 {
 }
 fn joinOrder(k I64) String {
     s := joinOpS(5 + k)
-    a := I64[1, 2]
+    a := Array<I64>[1, 2]
     x I64 = 3
     return $x $s $a $joinOpBump(s, a) $s $a
 }
 JoinOrderBaked := joinOrder(0)
 
 test "E11b: a join's operands are evaluated before any piece renders - while compiling as at run time" {
-    want := "3joinOpS(5)I64[7, 2]9joinOpS(50)I64[7, 2]"
+    want := "3joinOpS(5)Array<I64>[7, 2]9joinOpS(50)Array<I64>[7, 2]"
     assert JoinOrderBaked == want and joinOrder(I64(ctRuntimeZero)) == want
     assert joinOrder(0) == want
 }
@@ -15869,10 +15869,10 @@ test "E11c: a Str walking a Map and a List of its receiver renders the same afte
     b.l.Push(20)
     s := $b
     m := Map<I64, Vec<I64>>()
-    m.Put(1, I64[4, 5].ToVec())
+    m.Put(1, Array<I64>[4, 5].ToVec())
     t := $m
     churnArena()
-    assert s == "37/1/30" and t == "Map<I64, Vec<I64>>{1: Vec<I64>[4, 5]}"
+    assert s == "37/1/30" and t == "Map<I64, Vec<I64>>[1: Vec<I64>[4, 5]]"
 }
 
 # S16/E11c: a test failing inside a Str closes the scope "$" opened for the Str's result and the Str's own block, their
@@ -15915,18 +15915,18 @@ fn rv3First<T>(l Vec<T>&) T { return l[0] }
 fn rv3ReadOnly(ls Vec<Vec<I64>>&) I64 { return ls[0].Len() + rv3First(ls).Len() }
 fn rv3Handles(k I64, n I64) I64 {
     m := Map<I64, Vec<I64>>()
-    m.Put(1, I64[1, 2].ToVec())
+    m.Put(1, Array<I64>[1, 2].ToVec())
     g := try m.RefMut(1) catch { return -1 }
     g.Push(3 + k)
     mm := try m.Get(1) catch { return -2 }
     ll := Vec<Vec<I64>>()
     ll.Push(Vec<I64>())
-    ll.Push(I64[5].ToVec())
+    ll.Push(Array<I64>[5].ToVec())
     c := ll
     c.RefMut(0).Push(6)
     first := rv3First(ll)
     first.Push(8)
-    arr := Array<Vec<I64>>(1, I64[7].ToVec())
+    arr := Array<Vec<I64>>(1, Array<I64>[7].ToVec())
     t := arr.ToVec()
     f := arr.Filter(fn(x Vec<I64>) Bool { return x.Len() > 0 })
     rv3Churn(n)
@@ -16142,43 +16142,43 @@ fn renChars(c Char) String {
     a := RenLetter(c)
     b := RenPlain(c)
     o := RenOver(b)
-    ls := RenLetter[a, RenLetter(c)]
-    return $a " " $b " " $o " " $ls " " $RenHolder(a, Array<I64>[I64[1, 2, 3]])
+    ls := Array<RenLetter>[a, RenLetter(c)]
+    return $a " " $b " " $o " " $ls " " $RenHolder(a, Array<Array<I64>>[Array<I64>[1, 2, 3]])
 }
 RenCharsBaked String = renChars('a')
 test "E11a: a declared type over Char renders as a character, extends or not, alone and inside another value" {
-    assert RenCharsBaked == "a a a RenLetter['a', 'a'] RenHolder('a', Array<I64>[I64[1, 2, 3]])"
+    assert RenCharsBaked == "a a a Array<RenLetter>['a', 'a'] RenHolder('a', Array<Array<I64>>[Array<I64>[1, 2, 3]])"
     assert renChars(RenRunChar) == RenCharsBaked
     u U8 = 97
-    assert $u == "97" and $U8[u] == "U8[97]" and $RenRunChar == "a"
+    assert $u == "97" and $Array<U8>[u] == "Array<U8>[97]" and $RenRunChar == "a"
 }
 
 fn renRows(n I64) String {
-    aa Array<Array<I64>> = Array<I64>[I64[n, 2, 3], I64[4, 5, 6]]
+    aa Array<Array<I64>> = Array<Array<I64>>[Array<I64>[n, 2, 3], Array<I64>[4, 5, 6]]
     l := Vec<Array<I64>&>()
     l.Push(aa[0])
-    r Array<Array<I32>&> = Array<I32>&[I32[1], I32[]]
-    cs Array<Array<Char>> = Array<Char>["ab", "cd"]
+    r Array<Array<I32>&> = Array<Array<I32>&>[Array<I32>[1], Array<I32>[]]
+    cs Array<Array<Char>> = Array<Array<Char>>["ab", "cd"]
     return $aa " " $l.ToArray() " " $r " " $cs " " $Array<Array<I64>&>(0)
 }
 RenRowsBaked String = renRows(1)
 test "E11a/E21: an array of arrays writes each element as an array of its own, its element type whole" {
-    assert RenRowsBaked == ("Array<I64>[I64[1, 2, 3], I64[4, 5, 6]] Array<I64>&[I64[1, 2, 3]] "
-        "Array<I32>&[I32[1], I32[]] Array<Char>[\"ab\", \"cd\"] Array<I64>&[]")
+    assert RenRowsBaked == ("Array<Array<I64>>[Array<I64>[1, 2, 3], Array<I64>[4, 5, 6]] Array<Array<I64>&>[Array<I64>[1, 2, 3]] "
+        "Array<Array<I32>&>[Array<I32>[1], Array<I32>[]] Array<Array<Char>>[\"ab\", \"cd\"] Array<Array<I64>&>[]")
     assert renRows(RenRunN) == RenRowsBaked
 }
 
 fn renPerms(n I64) String {
     node mut RenNode& = RenNode(n)
-    boxes Array<RenBox<mut RenNode&>> = RenBox<mut RenNode&>[RenBox<mut RenNode&>(node)]
-    refs Array<mut RenNode&> = RenNode&[node]
-    nested Array<Array<mut RenNode&>&> = Array<mut RenNode&>&[refs]
+    boxes Array<RenBox<mut RenNode&>> = Array<RenBox<mut RenNode&>>[RenBox<mut RenNode&>(node)]
+    refs Array<mut RenNode&> = Array<RenNode&>[node]
+    nested Array<Array<mut RenNode&>&> = Array<Array<mut RenNode&>&>[refs]
     f := fn(b RenBox<mut RenNode&>&) mut RenNode& { return RenNode(2) }
     return $boxes " " $refs " " $nested " " $f
 }
 RenPermsBaked String = renPerms(1)
 test "E11a/T25b: a rendered type writes each inner level's mut, as source writes it" {
-    assert RenPermsBaked == ("RenBox<mut RenNode&>[RenBox(RenNode(1))] RenNode&[RenNode(1)] Array<mut RenNode&>&[RenNode&[RenNode(1)]] "
+    assert RenPermsBaked == ("Array<RenBox<mut RenNode&>>[RenBox(RenNode(1))] Array<RenNode&>[RenNode(1)] Array<Array<mut RenNode&>&>[Array<RenNode&>[RenNode(1)]] "
         "fn&(b RenBox<mut RenNode&>&) mut RenNode&")
     assert renPerms(RenRunN) == RenPermsBaked
 }
@@ -16492,7 +16492,7 @@ type s5PairT struct(a s5FBox, n I64) {
     n
 }
 fn s5PairT.s5Pairish(s String&) s5PairT { return s5PairT(s5FBox(s), 1) }
-fn s5Boxes(s String&) Array<s5FBox> { return s5FBox[s5FBox(s)] }
+fn s5Boxes(s String&) Array<s5FBox> { return Array<s5FBox>[s5FBox(s)] }
 fn s5Wrap(b s5FBox) s5FBox { return b }
 fn s5Projections(n I64) I64 {
     bs := Vec<s5FBox>()
@@ -16756,8 +16756,8 @@ fn rv9EmptyText() String {
 Rv9EmptyBaked String = rv9EmptyText()
 rv9EmptyRun mut I64 = 0
 test "E10/K1: a slice of an empty fixed array is empty, not null, while compiling and at run time" {
-    assert rv9EmptyText() == "I16[] true true true"
-    assert Rv9EmptyBaked == "I16[] true true true" and Rv9EmptyBaked == rv9EmptyText()
+    assert rv9EmptyText() == "Array<I16>[] true true true"
+    assert Rv9EmptyBaked == "Array<I16>[] true true true" and Rv9EmptyBaked == rv9EmptyText()
 }
 
 # S4c: a parallel assignment's temporary for a reference field of a global is held where the global's referent lives -
@@ -17086,27 +17086,27 @@ fn peClassify(a I64, b I64) I64 {
 }
 # P4b/K1: the evaluator runs a join's tasks in spawn order, keeps the first failure and fails the join with it - so a
 # global computed through one is baked to what the running program computes
-PeBaked := peFirst(I64[1, 2, 3])
-PeBakedNeg := peFirst(I64[1, -2, 3000])
-PeBakedBig := peFirst(I64[1, 3000, -2])
-PeBakedDefaults := peDefaulted(I64[1, -2, 3000, 4])
+PeBaked := peFirst(Array<I64>[1, 2, 3])
+PeBakedNeg := peFirst(Array<I64>[1, -2, 3000])
+PeBakedBig := peFirst(Array<I64>[1, 3000, -2])
+PeBakedDefaults := peDefaulted(Array<I64>[1, -2, 3000, 4])
 PeBakedMixed := peClassify(7, -1)
 test "P4: a join's tasks that fail - evaluated while compiling" {
     assert PeBaked == 14 and PeBakedNeg == -1 and PeBakedBig == -2
     assert PeBakedDefaults == 1017 and PeBakedMixed == 70
-    assert peFirst(I64[2, 2]) == 8 and peFirst(I64[-2, 2000]) == -1 and peClassify(1, 2000) == 90
+    assert peFirst(Array<I64>[2, 2]) == 8 and peFirst(Array<I64>[-2, 2000]) == -1 and peClassify(1, 2000) == 90
 }
 test "P4: ...and the same at run time" {
-    a := I64[1, 2, 3]
+    a := Array<I64>[1, 2, 3]
     a[0] = sbRun
     assert peFirst(a) == 14
-    b := I64[1, -2, 3000]
+    b := Array<I64>[1, -2, 3000]
     b[0] = sbRun
     assert peFirst(b) == -1
-    c := I64[1, 3000, -2]
+    c := Array<I64>[1, 3000, -2]
     c[0] = sbRun
     assert peFirst(c) == -2
-    d := I64[1, -2, 3000, 4]
+    d := Array<I64>[1, -2, 3000, 4]
     d[0] = sbRun
     assert peDefaulted(d) == 1017
     assert peClassify(6 + sbRun, -sbRun) == 70 and peClassify(sbRun, -sbRun) == 80 and peClassify(sbRun, 2000) == 90
@@ -17804,9 +17804,9 @@ test "E27, D9b: a grown comprehension and a written by-value String, read back a
     l mut Vec<I64>& = Vec<I64>()
     for i in range 300 { l.Push(i) }
     t I64 = 0
-    keep := I64[0]
+    keep := Array<I64>[0]
     for _ in range 20 {
-        a := I64[x * 2 for x in l]
+        a := Array<I64>[x * 2 for x in l]
         t = t + a[299]
         keep = a
     }
@@ -17855,7 +17855,7 @@ fn r2Kinds(s R2Shape) String {
 }
 R2Baked F64 = r2Area(R2Shape.Round(R2Disk(1.0))) + r2Area(R2Shape.Box(2.0, 3.0)) + F64(r2Sum(R2Tree.r2Tree(4)))
 R2KindsBaked String& = $r2Kinds(R2Shape.Round(R2Disk(2.0))) " " $r2Kinds(R2Shape.Box(1.0, 2.0)) " " $r2Kinds(R2Shape.Box(1.0, 3.0))
-R2ListBaked Bool = I64[1, 2].ToVec() == I64[1, 2].ToVec() and I64[1, 2].ToVec() != I64[1, 3].ToVec()
+R2ListBaked Bool = Array<I64>[1, 2].ToVec() == Array<I64>[1, 2].ToVec() and Array<I64>[1, 2].ToVec() != Array<I64>[1, 3].ToVec()
 R2Run mut I64 = 4
 test "E10, E32, S8d: case tests with '==', '_', narrowing in every form, whole payloads, agreeing while compiling" {
     s := R2Shape.Box(2.0, 3.0)
@@ -18018,7 +18018,7 @@ test "T2c: an array is never null - its zero value is the empty array" {
     z Array<I64>&
     s String&
     assert nlLen(z) == 0 and s.Len() == 0 and s == ""
-    z = I64[1, 2]
+    z = Array<I64>[1, 2]
     assert nlLen(z) == 2
 }
 
@@ -18157,14 +18157,14 @@ fn trTotal<I trWalk<E>, E Integer>(it mut I&) E {
     return t
 }
 
-TrBaked := trBoth(trHut(3)) + trTwice(I64(20)) + trTwice(I8(1)) + trTotal(I64[1, 2, 3].Iter())
+TrBaked := trBoth(trHut(3)) + trTwice(I64(20)) + trTwice(I8(1)) + trTotal(Array<I64>[1, 2, 3].Iter())
 TrText := trDescribe(trHut(2))
 
 test "T30a, T31a, G19: an extended trait's methods, a closed trait's types, an intersection - baked and run" {
     assert TrBaked == 11 + 40 + 2 + 6 and TrText == "hut 4 2"
     assert trBoth(trHut(4)) == 18 and trDescribe(trHut(1)) == "hut 1 2"
     assert trTwice(I16(5)) == 7 and trTwice(I8(3)) == 4 and trTwice(I64(-3)) == -6
-    assert trTotal(I32[4, 5].Iter()) == 9
+    assert trTotal(Array<I32>[4, 5].Iter()) == 9
 }
 
 # ---- D17: contracts - a function's requirements checked on entry in every build, failing with ArgumentError.Invalid;
@@ -18198,7 +18198,7 @@ fn dkPushedLen() I64 {
 }
 
 # each call the evaluator runs here checks its requirements as the run time does: baked, it agrees with the run time
-DkBaked := dkPercent(30, 60)! + dkPushedLen() + dkSum(I64[1, 2, 3])!
+DkBaked := dkPercent(30, 60)! + dkPushedLen() + dkSum(Array<I64>[1, 2, 3])!
 DkDiv := dkDivQR()
 DkFailed := dkTryHalf(7)
 
@@ -18218,7 +18218,7 @@ test "D17e: requirements hold where the evaluator computes the calls - baked and
     l := Vec<I64>()
     l.dkPushSmall(1)!
     l.dkPushSmall(1)!
-    assert dkPercent(30, whole)! + l.Len() + dkSum(I64[1, 2, 3])! == DkBaked
+    assert dkPercent(30, whole)! + l.Len() + dkSum(Array<I64>[1, 2, 3])! == DkBaked
 }
 
 # D17e (the lang25 review): a call with closed arguments whose ArgumentError a clause takes is no compile-time error - it
@@ -18261,7 +18261,7 @@ test "D17: requirements checked on entry, in every build, failing with ArgumentE
 }
 
 test "D17a: conditions calling functions and lambdas, a call in one failing as itself, a constructor's contract" {
-    a := I64[1, -2, 3]
+    a := Array<I64>[1, -2, 3]
     s := try dkSum(a) catch ArgumentError.Invalid default -99
     assert s == -99
     a[1] = 2

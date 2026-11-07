@@ -39,14 +39,14 @@ type Bad error { Target }
 
 # B12: the architectures olang builds for, how clang is told a CPU of each, and each one's baseline CPU. A 64-bit,
 # little-endian machine is what the layouts assume, and the runtime's facts about the C library are known for these
-Archs := String&["x86_64", "aarch64"]
-ArchCpuFlags := String&["-march=", "-mcpu="]
-ArchDefaultCpus := String&["x86-64", "generic"]
+Archs := Array<String&>["x86_64", "aarch64"]
+ArchCpuFlags := Array<String&>["-march=", "-mcpu="]
+ArchDefaultCpus := Array<String&>["x86-64", "generic"]
 
 # B12c: target features whose instructions LLVM would select for ordinary IR but which do not compute what IEEE 754
 # (and so the compile-time evaluator, K1) computes - VCVTNEPS2BF16 treats subnormal inputs as zero and flushes subnormal
 # results - so a target's extensions are taken without them, the conversion then being correct on every target
-IeeeUnsafe := String&["avx512bf16", "avxneconvert"]
+IeeeUnsafe := Array<String&>["avx512bf16", "avxneconvert"]
 
 fn archIndex(a String&) I64 {
     for i, n in Archs {
@@ -93,7 +93,7 @@ fn FindClang() String {
 }
 
 # the clangs looked for on PATH, newest first: the LLVM versions olang's IR is written for (B12d)
-Clangs := String&["clang-20", "clang-19", "clang-18", "clang"]
+Clangs := Array<String&>["clang-20", "clang-19", "clang-18", "clang"]
 
 # the file a command's name runs, for another module: whereIs
 fn WhereIs(name String&) String { return whereIs(name) }
@@ -138,7 +138,7 @@ fn (t Target&) Runner() Array<String&> ? Bad {
         out[0] = whereIs(out[0]) # run by its path: the program is put in this process's place by it
         return out.ToArray()
     }
-    for name in String&[$"qemu-" $t.Arch, $"qemu-" $t.Arch "-static"] {
+    for name in Array<String&>[$"qemu-" $t.Arch, $"qemu-" $t.Arch "-static"] {
         at := whereIs(name)
         if at == "" { continue }
         out.Push($at)
@@ -217,7 +217,7 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
     args.Push($clang)
     if triple != "" { args.Push($"--target=" $triple) }
     if hasCpu { args.Push($ArchCpuFlags[ai] $cpu) }
-    for a in String&["-S", "-emit-llvm", "-o", "-", "-x", "c", "-"] { args.Push(a) }
+    for a in Array<String&>["-S", "-emit-llvm", "-o", "-", "-x", "c", "-"] { args.Push(a) }
     out := try ClangSays(args.ToArray(), "void olang_target_probe(void) { }\n", not interpreting) catch os.Error {
         try refuse(d, msgs.TargetUnknown(spec))
         unreachable
@@ -322,7 +322,7 @@ fn StripUnsafe(features String&) String {
 fn canCompileBf16(clang String&, triple String&) Bool {
     ir := "define float @f(float %x) {\n  %b = fptrunc float %x to bfloat\n  %c = fadd bfloat %b, %b\n" $
         "  %r = fpext bfloat %c to float\n  ret float %r\n}\n"
-    args := String&[$clang, $"--target=" $triple, "-fno-crash-diagnostics", "-c", "-x", "ir", "-", "-o", "/dev/null"]
+    args := Array<String&>[$clang, $"--target=" $triple, "-fno-crash-diagnostics", "-c", "-x", "ir", "-", "-o", "/dev/null"]
     out := try os.Output.Exec(...args, input = ir) catch os.Error { return false }
     return out.Status == 0
 }
@@ -399,7 +399,7 @@ fn cpuFlags() String {
 }
 
 # x86-64-v2, -v3 and -v4: the features each level adds, as /proc/cpuinfo names them
-LevelFlags := String&["cx16 lahf_lm popcnt sse4_1 sse4_2 ssse3", "avx avx2 bmi1 bmi2 f16c fma abm movbe xsave"
+LevelFlags := Array<String&>["cx16 lahf_lm popcnt sse4_1 sse4_2 ssse3", "avx avx2 bmi1 bmi2 f16c fma abm movbe xsave"
     "avx512f avx512bw avx512cd avx512dq avx512vl"]
 
 # the x86-64 level a processor with these flags (" a b c ") supports: 1 to 4

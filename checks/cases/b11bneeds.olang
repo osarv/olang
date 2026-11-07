@@ -14,4 +14,4 @@ fn Largest<T>(xs Array<T>&) T {
     }
 }
 
-fn main() { assert Largest(I64[1, 2]) == -4 }
+fn main() { assert Largest(Array<I64>[1, 2]) == -4 }

@@ -251,7 +251,7 @@ test "T32b: an any Iterator walked by for-in and its defaults" {
     l := Vec<I64>()
     for i in range 5 { l.Push(i) }
     assert sumIt(l.Iter()) == 10
-    a := I64[1, 2, 3]
+    a := Array<I64>[1, 2, 3]
     assert sumIt(a.Iter()) == 6
     it mut any Iterator<I64>& = a.Iter()
     assert it.Count(fn(x I64) Bool { return x > 1 }) == 2
@@ -302,7 +302,7 @@ fn bumped(k I64) String {
     s := "hello"
     b mut any Bump& = BLab(s)
     b.Bump()
-    a := I64[1, 2, k]
+    a := Array<I64>[1, 2, k]
     c mut any Bump& = BNums(a)
     c.Bump()
     l := Vec<mut any Bump&>()
@@ -325,7 +325,7 @@ fn labels(n I64) String {
 BakedLabels String = labels(2)
 
 test "T32a: arrays and conversions of them are copied into the box" {
-    assert BakedBumped == "hello I64[1, 2, 3] Zello"
+    assert BakedBumped == "hello Array<I64>[1, 2, 3] Zello"
     assert bumped(Live) == BakedBumped
     assert BakedLabels == "label lab0-0, label lab1-7"
     assert labels(Live - 1) == BakedLabels
@@ -513,14 +513,14 @@ test "D8a: a trait's defaults through an any" {
 # E19, E11a (the any review, finding 6): an array of anys is written as $ renders it, "any Named&[...]", and reads back
 fn listed(n I64) String {
     c := Cat("c" $n)
-    xs := any Named&[c, Count(n), Lev.High]
-    ys := any Named?&[null, c]
+    xs := Array<any Named&>[c, Count(n), Lev.High]
+    ys := Array<any Named?&>[null, c]
     return $xs " " $ys " " $xs.Len()
 }
 BakedListed String = listed(4)
 
 test "E19: an array literal of anys, rendered as written" {
-    assert BakedListed == "any Named&[Cat(\"c4\"), 4, Lev.High] any Named?&[null, Cat(\"c4\")] 3"
+    assert BakedListed == "Array<any Named&>[Cat(\"c4\"), 4, Lev.High] Array<any Named?&>[null, Cat(\"c4\")] 3"
     churn()
     assert listed(Live + 1) == BakedListed
 }
@@ -713,7 +713,7 @@ test "M21: Eq and Hash of one instance are not another's" {
 # T7b, E25, O26a (the fourth any review, A): a call given a scope argument puts its array where that says whatever it
 # holds - text and arrays of numbers too - so a function returning one copies it into its result, a local declared from
 # one is not moved, and a box of a call returning one is a copy; each value read back after a churn
-fn saArr(i I64) Array<I64> { return I64[i, i * 2] }
+fn saArr(i I64) Array<I64> { return Array<I64>[i, i * 2] }
 fn saText(p String&, i I64) String { return sArg(i) }
 fn saChain(p String&, i I64) String { return saText(p, i) }
 fn saNums(p String&, i I64) Array<I64> { return saArr(i) }
@@ -751,7 +751,7 @@ fn aScoped(n I64) String {
 BakedAScoped String = aScoped(2)
 
 test "T7b, E25: a scoped call's array of plain data is copied where it is returned or boxed" {
-    want := "text0-0 text0-0 0 I64[0, 0] text0-0; text1-7 text1-7 1 I64[1, 2] text1-7; "
+    want := "text0-0 text0-0 0 Array<I64>[0, 0] text0-0; text1-7 text1-7 1 Array<I64>[1, 2] text1-7; "
     want = $want "label text0-0, label text0-0, label text1-7, label text1-7"
     assert BakedAScoped == want
     assert aScoped(Live - 1) == want
@@ -863,7 +863,7 @@ fn spTry(i I64) String ? ChOops {
     if i > 100 { error ChOops.Bad }
     return "try" $i "-" $(i * 7)
 }
-fn spNums(i I64) Array<I64> { return I64[i, i * 7, i * 11] }
+fn spNums(i I64) Array<I64> { return Array<I64>[i, i * 7, i * 11] }
 fn spawnStores(k I64) String {
     a := ""
     n I64 = 0
@@ -887,7 +887,7 @@ fn spawnStores(k I64) String {
 BakedSpawnStores String = spawnStores(2)
 
 test "P1g, T11b: a spawn target holding an array by value is stored as its assignment" {
-    want := "two2-14 2 try2-14 I64[2, 14, 22] text1-7 tex"
+    want := "two2-14 2 try2-14 Array<I64>[2, 14, 22] text1-7 tex"
     assert BakedSpawnStores == want
     assert spawnStores(Live - 1) == want
 }

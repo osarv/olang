@@ -14,5 +14,5 @@ fn joined(dir String&, names Array<String&>&, out mut Vec<String&>&) {
 }
 fn main() ? {
     l := Vec<String&>()
-    joined("d", String&["a", "b"], l)
+    joined("d", Array<String&>["a", "b"], l)
 }

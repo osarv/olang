@@ -29,7 +29,7 @@ fn main() {
     out := StringBuilder()
     n I64 = 0
     bad := false
-    for mode in String&["", "-t"] {
+    for mode in Array<String&>["", "-t"] {
         for f in roots {
             key := $mode " " $f
             new := loader(dump, mode, f)
@@ -87,11 +87,11 @@ fn loader(dump String&, mode String&, f String&) String {
 # the root programs of the repository
 fn defaultRoots() Vec<String&> {
     roots := Vec<String&>()
-    for dir in String&["tests", "tests/geom", "std", "compiler", "compiler/tools"] {
+    for dir in Array<String&>["tests", "tests/geom", "std", "compiler", "compiler/tools"] {
         for f in toolkit.Matching(dir, ".olang") { roots.Push($f) }
     }
     roots.Push("checks/checks.olang")
-    for dir in String&["fuzz", "bench"] {
+    for dir in Array<String&>["fuzz", "bench"] {
         for f in toolkit.Matching(dir, ".olang") { roots.Push($f) }
     }
     return roots
@@ -128,7 +128,7 @@ fn lockKeys(t String&) String {
 # git with a fixed identity and no signing, in dir
 fn gitIn(dir String&, rest Array<String&>&) {
     args := Vec<String&>()
-    for a in String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"] { args.Push(a) }
+    for a in Array<String&>["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"] { args.Push(a) }
     for a in rest { args.Push($a) }
     toolkit.Run(args.ToArray(), Array<String&>(0), dir)
 }
@@ -144,12 +144,12 @@ fn remote(work String&, dump String&) String {
     try os.MkDirAll($r "/part") catch os.Error { toolkit.Die("modgraph: cannot make " $r) }
     toolkit.Write($r "/lib.olang", "import \"part/inner\"\nfn F() I64 { return 1 }\n")
     toolkit.Write($r "/part/inner.olang", "import \"../lib\"\n")
-    gitIn(r, String&["init", "-q"])
-    gitIn(r, String&["add", "."])
-    gitIn(r, String&["commit", "-qm", "x"])
+    gitIn(r, Array<String&>["init", "-q"])
+    gitIn(r, Array<String&>["add", "."])
+    gitIn(r, Array<String&>["commit", "-qm", "x"])
     toolkit.Write($base "/main.olang", "import T \"example.com/me/tools/lib\"\nfn main() ? { }\n")
-    env := String&["OLANG_CACHE=" $base "/cache", "OLANG_GIT_BASE=file://" $base "/remote/", "OLANG_STD=" $root "/std"]
-    o := toolkit.RunShowing(String&[$root "/" $dump, "modules", "main.olang"], env, base)
+    env := Array<String&>["OLANG_CACHE=" $base "/cache", "OLANG_GIT_BASE=file://" $base "/remote/", "OLANG_STD=" $root "/std"]
+    o := toolkit.RunShowing(Array<String&>[$root "/" $dump, "modules", "main.olang"], env, base)
     graph := withoutHeaders(withoutBuildModule(o.Stdout))
     lock := try os.ReadFile($base "/olang.lock") catch default ""
     return $graph "-- lock\n" $lockKeys(lock)

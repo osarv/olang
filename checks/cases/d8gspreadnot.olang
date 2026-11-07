@@ -3,6 +3,6 @@
 fn count(xs Array<I64>&) I64 { return xs.Len() }
 
 fn main() {
-    a := I64[1, 2]
+    a := Array<I64>[1, 2]
     assert count(...a) == 2
 }

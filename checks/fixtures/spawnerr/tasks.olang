@@ -126,8 +126,8 @@ fn nested() I64 {
 fn main() ? E, io.Error {
     try io.Println($earliest())
     try io.Println($classify(7, 1) " " $classify(1, -1) " " $classify(7, -1) " " $classify(1, 2000))
-    try io.Println($(try sumSq(I64[1, 2, 3]) catch default -9) " " $(try sumSq(I64[1, -2, 3000]) catch E.Neg default -1 catch default -2))
-    try io.Println(defaulted(I64[3, -3, 3000, 4]))
+    try io.Println($(try sumSq(Array<I64>[1, 2, 3]) catch default -9) " " $(try sumSq(Array<I64>[1, -2, 3000]) catch E.Neg default -1 catch default -2))
+    try io.Println(defaulted(Array<I64>[3, -3, 3000, 4]))
     try io.Println(counted())
     try io.Println($(try returned() catch E.Neg default 30) " " $broken() " " $nested())
     a, b String

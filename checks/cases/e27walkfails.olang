@@ -1,0 +1,11 @@
+# check: fail error[E27]: a comprehension made into a collection other than an array or a Vec walks its elements as the collection asks for them, and may not fail by calls of its own
+# E27: a comprehension walked by a FromIter is a generator, and its own calls may not fail
+import "std/set"
+fn parse(x I64) I64 ? Bad {
+    if x < 0: error Bad
+    return x
+}
+fn main() ? {
+    s := try set.Set<I64>[parse(x) for x in Array<I64>[1, 2]]
+    assert s.Len() == 2
+}

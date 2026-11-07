@@ -1028,7 +1028,7 @@ fn (s mut Scoper&) judgeOnce(b I64, report Bool) Bool {
     for i in range addedF, s.wantNewField.Len() { s.wantField.Remove(s.wantNewField[i]) }
     s.wantNew.Truncate(added)
     s.wantNewField.Truncate(addedF)
-    s.dropLifts(I64[b])
+    s.dropLifts(Array<I64>[b])
     s.sums[b] = summary()
     return false
 }
@@ -3799,7 +3799,7 @@ fn (s mut Scoper&) kwCall(c typed.Call&) {
         case _ { }
     }
     fty := s.calleeType(c)
-    ps := s.P.T.Items(s.P.T.Params(fty)) if fty != types.UnknownT else types.TypeId[]
+    ps := s.P.T.Items(s.P.T.Params(fty)) if fty != types.UnknownT else Array<types.TypeId>[]
     for k in range c.Args.Len() {
         a := c.Args[k]
         r := s.handedRegion(a)
@@ -4312,7 +4312,7 @@ fn (s mut Scoper&) ueCall(b typed.Body&, c typed.Call&, l I64, mode I64) Bool {
         case _ { }
     }
     fty := s.calleeType(c)
-    ps := s.P.T.Items(s.P.T.Params(fty)) if fty != types.UnknownT else types.TypeId[]
+    ps := s.P.T.Items(s.P.T.Params(fty)) if fty != types.UnknownT else Array<types.TypeId>[]
     callee := match c.Target {
         case typed.Callee.Body(id): I64(id)
         case _: -1
@@ -7459,14 +7459,14 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
                 k := s.paramVar(I64(cb), 0)
                 if s.buildsSum(I64(cb), k) { s.buildsThrough(t, at, I64(cb), k) }
                 s.onFrameAt(site)
-                s.plan.Pass(site, typed.Scope[s.scopeOf(t)])
+                s.plan.Pass(site, Array<typed.Scope>[s.scopeOf(t)])
                 return Val.existing(s.here())
             }
             s.buildSite(site, t if t.Runs() else s.here(), at)
             # what the adapted Call builds where its receiver lives is built where the instance is
             k := s.paramVar(I64(cb), 0)
             if s.buildsSum(I64(cb), k) { s.buildsThrough(t, at, I64(cb), k) }
-            s.plan.Pass(site, typed.Scope[s.scopeOf(t)])
+            s.plan.Pass(site, Array<typed.Scope>[s.scopeOf(t)])
             return Val.existing(t)
         }
     }
@@ -10453,7 +10453,7 @@ if TestBuild {
             if p.L.Names.Text(c.Bodies[b].Locals[k].Name) == "at": at = k
         }
         assert at >= 0 and v.Cursor[at]
-        defs := String&["at mut N& = h", "at = N(1)", "at = at.next!", "at = N(i)", "at = N(2)"]
+        defs := Array<String&>["at mut N& = h", "at = N(1)", "at = at.next!", "at = N(i)", "at = N(2)"]
         assert nllReach(v, at, "t := at.v", defs) == "[at mut N& = h][at = N(1)]", nllReach(v, at, "t := at.v", defs)
         assert nllReach(v, at, "u := at.v", defs) == "[at mut N& = h][at = N(1)][at = at.next!]"
         got := nllReach(v, at, "u += at.v", defs)
@@ -10472,7 +10472,7 @@ if TestBuild {
         for k in range c.Bodies[pb].Locals.Len() {
             if p.L.Names.Text(c.Bodies[pb].Locals[k].Name) == "c": cl = k
         }
-        got = nllReach(pv, cl, "return c.v", String&["c mut N& = a", "c = N(5)"])
+        got = nllReach(pv, cl, "return c.v", Array<String&>["c mut N& = a", "c = N(5)"])
         assert got == "[c mut N& = a][c = N(5)]", got
     }
 
@@ -10630,7 +10630,7 @@ if TestBuild {
         assert stored, "nt is stored where the result goes"
         # shout's array and label's text are what they return: each built in its function's result scope, the one
         # scope variable an array value's result gives it
-        for n in I64[13, 17] {
+        for n in Array<I64>[13, 17] {
             k := bodyAt(l, c.Bodies, n)
             assert k >= 0
             assert c.Bodies[k].Vars.Len() == 1, $c.Bodies[k].Vars.Len()

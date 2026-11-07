@@ -16,7 +16,7 @@ type shape enum {
 type team struct(title String) {
     title
     members Vec<String> = Vec<String>()
-    tags Array<String> = String["a", "bc"]
+    tags Array<String> = Array<String>["a", "bc"]
 }
 
 # a holder of what it is given: its own copy, not the caller's storage kept
@@ -92,7 +92,7 @@ test "payloads, literals and fills" {
     s := shape.Named(t, 2)
     t[0] = 'L'
     assert s == shape.Named("lab", 2)
-    xs := String["a", "bc", "def"]
+    xs := Array<String>["a", "bc", "def"]
     assert xs[2] == "def" and xs.Len() == 3
     f := Array<Array<Char>>(3, "ab")
     f[0][0] = 'X'
@@ -123,11 +123,11 @@ fn churn() I64 {
 }
 
 test "a comprehension's elements are its own" {
-    ws := Array<Char>["ab", "c", "def"]
-    up := String[$w "!" for w in ws]
-    same := Array<Char>[w for w in ws]
-    some := Array<Char>[w for w in ws if w.Len() > 1]
-    ns := node[node(i) for i in range 3]
+    ws := Array<Array<Char>>["ab", "c", "def"]
+    up := Array<String>[$w "!" for w in ws]
+    same := Array<Array<Char>>[w for w in ws]
+    some := Array<Array<Char>>[w for w in ws if w.Len() > 1]
+    ns := Array<node>[node(i) for i in range 3]
     ws[0][0] = 'X'
     assert churn() > 0
     assert up[0] == "ab!" and up[2] == "def!" and same[0] == "ab" and same[1] == "c" and some[1] == "def" and some[0] == "ab"
@@ -183,10 +183,10 @@ test "a part stored through a parameter outlives the call" {
 }
 
 test "a clone of an array is its own, its elements' parts too" {
-    a := I64[1, 2, 3]
+    a := Array<I64>[1, 2, 3]
     b := a.Copy()
     b[0] = 9
-    ws := Array<Char>["ab", "c"]
+    ws := Array<Array<Char>>["ab", "c"]
     vs := ws.Copy()
     vs[0][0] = 'X'
     assert a[0] == 1 and b[0] == 9 and ws[0] == "ab" and vs[0] == "Xb"

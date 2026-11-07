@@ -8,6 +8,6 @@ fn pos(x I64) I64 ? Bad {
 }
 
 fn main() {
-    a := I64[1, 2]
+    a := Array<I64>[1, 2]
     n := a.Fold(0, fn(acc I64, x I64) I64 { return acc + try pos(x) })
 }

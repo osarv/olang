@@ -34,7 +34,7 @@ fn Compiler() String {
     path String = $given
     if path.Len() == 0 {
         path = "build/olang"
-        if not os.Exists(path) { Capture(String&["make", path]) }
+        if not os.Exists(path) { Capture(Array<String&>["make", path]) }
     }
     if not path.StartsWith("/") { path = $root "/" $path }
     return path

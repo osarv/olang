@@ -53,7 +53,7 @@ fn main() {
     l := N(1, N(2, null))
     assert first(l) == 1 and first(null) == 0 and orElse(null) == -1 and orElse(l) == 1
     assert walk(l) == 3 and walk(null) == 0 and guarded(l.next) and not guarded(null) and either(null)
-    assert later(N?&[null, null, N(7, null)]) == 7 and assigned() == 5 and asserted(l) == 1
+    assert later(Array<N?&>[null, null, N(7, null)]) == 7 and assigned() == 5 and asserted(l) == 1
     assert l.next!.v == 2 and texts(W("a"), W("a")) and not texts(null, W("a"))
     m N?& = null
     r N& = N(9, null)

@@ -37,7 +37,7 @@ fn sign(n I64) I64 {
 
 fn half(n I64) I64 { return n / 2 if n % 2 == 0 else unreachable "odd: " $n }
 
-BakedSum I64 = sum(I64[1, 2, 3])
+BakedSum I64 = sum(Array<I64>[1, 2, 3])
 BakedHalf I64 = twice(half(10) if true else unreachable)
 
 test "unreachable gives way to the values beside it" {
@@ -55,8 +55,8 @@ test "unreachable gives way to the values beside it" {
 }
 
 test "the evaluator agrees" {
-    assert BakedSum == 6 and BakedSum == sum(I64[3, 2, 1])
+    assert BakedSum == 6 and BakedSum == sum(Array<I64>[3, 2, 1])
     assert BakedHalf == 10 and half(10) == 5
-    assert sum(I64[1, 2]) == 3 # decided while compiling (S18c)
+    assert sum(Array<I64>[1, 2]) == 3 # decided while compiling (S18c)
     assert half(8) == 4
 }

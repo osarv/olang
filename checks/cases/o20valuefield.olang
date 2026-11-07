@@ -34,5 +34,5 @@ fn main() ? {
     for _ in range 20 { f(b) }
     churn()
     assert b.m.inner.k == 20 and b.m.inner.l.Len() == 20 and b.m.inner.l[19] == 200
-    assert $b.m.inner.l.ToArray()[:3] == "I64[10, 20, 30]"
+    assert $b.m.inner.l.ToArray()[:3] == "Array<I64>[10, 20, 30]"
 }

@@ -7,6 +7,6 @@ fn Total(a Array<I64>) I64 {
     return a[1] + Total(a[1:])
 }
 fn main() ? {
-    x := I64[1, 2, 3]
+    x := Array<I64>[1, 2, 3]
     try io.Println($Total(x))
 }

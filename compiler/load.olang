@@ -1258,9 +1258,9 @@ test "a remote import is fetched, locked, and its relative imports stay inside i
     repo := $dir "/remote/example.com/me/tools"
     write(repo, "lib.olang", "import \"part/inner\"\nfn F() I64 { return 1 }\n")
     write(repo, "part/inner.olang", "import \"../lib\"\n")
-    ok := git(repo, String&["git", "init", "-q"]) and
-          git(repo, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "add", "."]) and
-          git(repo, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit"
+    ok := git(repo, Array<String&>["git", "init", "-q"]) and
+          git(repo, Array<String&>["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "add", "."]) and
+          git(repo, Array<String&>["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit"
                             "-q", "-m", "x"])
     if not ok { return }   # no git here: nothing to fetch with
     write(dir, "main.olang", "import T \"example.com/me/tools/lib\"\nfn main() ? { }\n")

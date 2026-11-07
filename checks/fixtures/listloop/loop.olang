@@ -17,7 +17,7 @@ fn main() ? {
     for i in range 30 { l.Push(I16(i)) }
     sum I16 = 0
     for x in l { sum += x }
-    evens := I16[x for x in l if x % 2 == 0]
+    evens := Array<I16>[x for x in l if x % 2 == 0]
     big := l.Iter().Count(fn(x) { return x > 20 })
     if sum != 435 or evens.Len() != 15 or big != 9 or total(l) != 435 { error Stop.Here }
 }

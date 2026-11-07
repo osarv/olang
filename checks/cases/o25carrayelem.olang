@@ -12,16 +12,16 @@ fn f() Array<mut Node&>& {
 }
 fn g() Array<mut Node&>& {
     n mut Node& = Node(42)
-    return Node&[n]
+    return Array<Node&>[n]
 }
 fn main() ? {
     outer mut Node& = Node(1)
     c Array<mut Node&>& = Array<mut Node&>(1, outer)
-    d Array<mut Node&>& = Node&[outer]
+    d Array<mut Node&>& = Array<Node&>[outer]
     for _ in range 2 {
         inner mut Node& = Node(43)
         c = Array<mut Node&>(1, inner)
-        d = Node&[inner]
+        d = Array<Node&>[inner]
     }
     assert $c != ""
     assert $d != ""

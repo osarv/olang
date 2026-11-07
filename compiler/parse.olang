@@ -955,7 +955,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
                     # T17: a payload of one type written whole, "Round Circle"
                     tat := p.here()
                     ty := try p.typeExpr()
-                    payload = ast.Param&[ast.Param(p.from(tat), cn, ty, null)]
+                    payload = Array<ast.Param&>[ast.Param(p.from(tat), cn, ty, null)]
                     whole = true
                 }
                 value ast.Expr?& = null
@@ -1690,7 +1690,7 @@ fn (p mut Parser&) exprAsType(x ast.Expr&) ast.TypeRef& ? Fail {
             }
             case _ {
                 p.ids.Truncate(from)
-                try p.fail("an element type before the [, as in I32[...]")
+                try p.fail("the type a literal makes before the [, as in Array<I32>[...]")
             }
         }
     }
@@ -1838,7 +1838,7 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
             values Array<ast.Expr&>& = Array<ast.Expr&>(0)
             if not p.atEnd() and p.lamItem {
                 # a lambda's one-line body, the lambda an item of a list: its "," is the list's (L18c)
-                values = ast.Expr&[try p.expr()]
+                values = Array<ast.Expr&>[try p.expr()]
             } else if not p.atEnd() {
                 p.listTry = p.here()
                 values = try p.exprList()
@@ -2367,7 +2367,7 @@ fn (p mut Parser&) lineBody() Array<ast.Stmt&>& ? Fail {
         }
         case _ { }
     }
-    return ast.Stmt&[st]
+    return Array<ast.Stmt&>[st]
 }
 
 # what a one-line body may not begin with (S1b), as its error names it; "" for a simple statement's start
@@ -2430,12 +2430,12 @@ fn (p mut Parser&) forStmt(comptimeAt I32 = -1) ast.Stmt& ? Fail {
             v ast.VarDecl?& = null
             if p.accept(token.Tok.Define) {
                 x := try p.expr()
-                v = ast.VarDecl(names.Names, names.Sps, null, ast.Expr&[x], true, false)
+                v = ast.VarDecl(names.Names, names.Sps, null, Array<ast.Expr&>[x], true, false)
             } else {
                 ty := try p.typeExpr()
                 try p.want(token.Tok.Assign)
                 x := try p.expr()
-                v = ast.VarDecl(names.Names, names.Sps, ty, ast.Expr&[x], false, false)
+                v = ast.VarDecl(names.Names, names.Sps, ty, Array<ast.Expr&>[x], false, false)
             }
             init := ast.Stmt.Var(p.from(iat), v!)
             try p.want(token.Tok.Comma)
@@ -3107,6 +3107,14 @@ fn (p mut Parser&) postfixFrom(first ast.Expr&) ast.Expr& ? Fail {
     }
 }
 
+# whether x is a name the oracle knows as a type of this module or the prelude
+fn (p Parser&) namesBareType(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Name(_, n): p.oracle.bare.Has(n)
+        case _: false
+    }
+}
+
 # whether x is a path whose text the oracle knows as a qualified type: alias.Name
 fn (p Parser&) isQualifiedType(x ast.Expr&) Bool {
     if not isPath(x) { return false }
@@ -3134,6 +3142,14 @@ fn (p mut Parser&) index(x ast.Expr&) ast.Expr& ? Fail {
             if p.comprehends() {
                 elem := try p.exprAsType(x)
                 return try p.comprehension(start, elem, lo)
+            }
+            # E19: "Names[k: v, ...]" - a keyed literal of a type the oracle knows, never a slice of it
+            if p.sees(token.Tok.Colon) and (p.isQualifiedType(x) or p.namesBareType(x)) {
+                from := p.exprs.Len()
+                p.exprs.Push(try p.entry(lo))
+                for try p.sep(token.Tok.RBrack) { p.exprs.Push(try p.entry(try p.elem())) }
+                try p.want(token.Tok.RBrack)
+                return ast.Expr.ArrayLit(p.from(start), try p.exprAsType(x), gather(p.exprs, from))
             }
         }
         if p.accept(token.Tok.Colon) {
@@ -3358,7 +3374,7 @@ fn (p mut Parser&) primary() ast.Expr& ? Fail {
             return ast.Expr.Name(p.from(at), name)
         }
         # a bracket with no element type before it (E19): a literal states its element type once
-        case token.Tok.LBrack { try p.fail("an element type before the [, as in I32[...]") }
+        case token.Tok.LBrack { try p.fail("the type a literal makes before the [, as in Array<I32>[...]") }
         case _ { try p.fail("an expression") }
     }
     unreachable
@@ -3406,8 +3422,15 @@ fn (p mut Parser&) arrayLit(at I32, elem ast.TypeRef&) ast.Expr& ? Fail {
         if p.sees(token.Tok.RParen) or p.sees(token.Tok.RBrace) { try p.fail(token.Tok.RBrack.Describe()) }
         first := try p.elem()
         if p.comprehends() { return try p.comprehension(at, elem, first) }
+        # E19: "k: v" - the keyed form, every item an entry, held as a binary ":" no other expression is
+        keyed := p.sees(token.Tok.Colon)
+        if keyed { first = try p.entry(first) }
         p.exprs.Push(first)
-        for try p.sep(token.Tok.RBrack) { p.exprs.Push(try p.elem()) }
+        for try p.sep(token.Tok.RBrack) {
+            x ast.Expr& = try p.elem()
+            if keyed { x = try p.entry(x) }
+            p.exprs.Push(x)
+        }
     }
     if not p.sees(token.Tok.RBrack) {
         p.exprs.Truncate(from)
@@ -3415,6 +3438,13 @@ fn (p mut Parser&) arrayLit(at I32, elem ast.TypeRef&) ast.Expr& ? Fail {
     }
     p.advance()
     return ast.Expr.ArrayLit(p.from(at), elem, gather(p.exprs, from))
+}
+
+# an entry of a keyed literal after its key: ": value" (E19)
+fn (p mut Parser&) entry(k ast.Expr&) ast.Expr& ? Fail {
+    try p.want(token.Tok.Colon)
+    v := try p.elem()
+    return ast.Expr.Binary(source.Span(k.Span().Start, v.Span().End), token.Tok.Colon, k, v)
 }
 
 # after a bracket's first item, the "for" of a comprehension, read - on its line or a later one, since a comprehension
@@ -3959,11 +3989,11 @@ test "a statement met at the limit is too deep at its first token, and one that 
         # every statement is first read as one starting with an operand, so the limit is said at its first token;
         # break, error E.A and return nest nothing and are read whole; the others nest an operand or a block and end
         # the item
-        for stmt in String&["break", "error E.A", "return"] {
+        for stmt in Array<String&>["break", "error E.A", "return"] {
             s := atLimit(stmt)
             assert s == "fn f: var1 := if; fn g: !L21", s
         }
-        for stmt in String&["x++", "y := 2", "z I64 = 1", "try f()", "{ }"] {
+        for stmt in Array<String&>["x++", "y := 2", "z I64 = 1", "try f()", "{ }"] {
             s := atLimit(stmt)
             assert s == "fn f: -; fn g: !L21", $stmt ": " $s
         }

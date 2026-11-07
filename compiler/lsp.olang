@@ -151,7 +151,7 @@ fn (s mut Server&) handle(body String&) {
 }
 
 # the requests a worker answers
-Requests := String&["textDocument/hover", "textDocument/definition", "textDocument/documentSymbol"
+Requests := Array<String&>["textDocument/hover", "textDocument/definition", "textDocument/documentSymbol"
                     "textDocument/completion", "textDocument/formatting"]
 
 fn (s mut Server&) initialize(msg json.Json&, id String&) {

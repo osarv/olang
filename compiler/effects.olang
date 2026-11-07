@@ -833,13 +833,13 @@ fn capOf(name String&) I64 {
     return 0
 }
 
-fileNames := String&["open", "openat", "creat", "fopen", "mkdir", "rmdir", "remove", "unlink", "rename", "link", "symlink"
+fileNames := Array<String&>["open", "openat", "creat", "fopen", "mkdir", "rmdir", "remove", "unlink", "rename", "link", "symlink"
     "readlink", "realpath", "opendir", "chdir", "getcwd", "truncate", "chmod", "access", "mkstemp", "mkdtemp"
     "__olang_stat", "__olang_dir", "__olang_realpath", "__olang_mkdtemp"]
-netNames := String&["socket", "connect", "bind", "listen", "accept", "accept4", "getaddrinfo"]
-procNames := String&["fork", "vfork", "execv", "execve", "execvp", "posix_spawn", "posix_spawnp", "system", "kill"
+netNames := Array<String&>["socket", "connect", "bind", "listen", "accept", "accept4", "getaddrinfo"]
+procNames := Array<String&>["fork", "vfork", "execv", "execve", "execvp", "posix_spawn", "posix_spawnp", "system", "kill"
     "waitpid", "__olang_spawn", "__olang_exec"]
-envNames := String&["getenv", "setenv", "unsetenv", "putenv", "__olang_env"]
+envNames := Array<String&>["getenv", "setenv", "unsetenv", "putenv", "__olang_env"]
 
 # C functions known to return at once, never waiting: the runtime's queries, memory and text helpers, clocks, unlocking
 fn quickC(name String&) Bool {
@@ -849,7 +849,7 @@ fn quickC(name String&) Bool {
     return false
 }
 
-quickNames := String&["__olang_err", "__olang_arg_count", "__olang_arg", "__olang_env", "memcpy", "memmove", "memset", "memcmp"
+quickNames := Array<String&>["__olang_err", "__olang_arg_count", "__olang_arg", "__olang_env", "memcpy", "memmove", "memset", "memcmp"
     "strlen", "strcmp", "strncmp", "clock_gettime", "time", "getenv", "isatty", "getpid", "pthread_mutex_unlock"
     "pthread_rwlock_unlock", "pthread_cond_signal", "pthread_cond_broadcast", "pthread_mutex_init", "pthread_cond_init"
     "freeaddrinfo", "getsockname", "getpeername", "setsockopt"]

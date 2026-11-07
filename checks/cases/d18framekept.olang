@@ -22,7 +22,7 @@ fn sumOf(r Array<I64>&) I64 {
     return t
 }
 fn viaArray(k I64) Iterator<I64> {
-    a := I64[k, k + 1, k + 2]
+    a := Array<I64>[k, k + 1, k + 2]
     r Array<I64>& = a
     for i in range 3 { yield r[i] + sumOf(r) }
 }

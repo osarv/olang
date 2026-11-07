@@ -20,7 +20,7 @@ fn pause() { unistd.usleep(0) }
 assert not pause.WritesGlobals
 
 fn main() {
-    xs := Item[Item(2), Item(1)]
+    xs := Array<Item>[Item(2), Item(1)]
     qsort(xs, xs.Len(), 4, olang_count)
     pause()
 }

@@ -3,5 +3,5 @@
 type M struct() { a := Array<I32>(3) }
 test "never runs" {
     m M = M()
-    m.a = I32[1, 2]
+    m.a = Array<I32>[1, 2]
 }

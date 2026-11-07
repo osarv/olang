@@ -1,0 +1,6 @@
+# check: fail error[E19]: a literal of Array<I64> holds no 'key: value' entries - its elements are no MapEntry
+# E19: the keyed form is for a type whose FromIter takes MapEntry elements
+fn main() {
+    xs := Array<I64>[1: 2]
+    assert xs.Len() == 1
+}

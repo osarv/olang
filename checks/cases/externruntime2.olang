@@ -13,7 +13,7 @@ fn main() ? {
     assert raise(0) == 0                                  # signal 0: nothing is sent
     assert write(1, "", 0) == 0
     assert dlsym(0, "strlen\0") != 0                      # RTLD_DEFAULT is the null handle
-    assert __olang_dyncall_check("strlen\0", U8[0x85, 0], 4) == 0
-    assert __olang_dyncall_check("olang_no_such_function\0", U8[0], 0) == 1
+    assert __olang_dyncall_check("strlen\0", Array<U8>[0x85, 0], 4) == 0
+    assert __olang_dyncall_check("olang_no_such_function\0", Array<U8>[0], 0) == 1
     os.RunOnStack(1 << 16, fn() { assert raise(0) == 0 })
 }

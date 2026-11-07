@@ -70,10 +70,10 @@ fn radius(s Shape) F64 {
     return 0.0
 }
 
-Areas := F64[area(Shape.Circle(1.0)), area(Shape.Rect(2.0, 3.0)), area(Shape.Dot)]
-Signs := I64[sign(0), sign(-5), sign(5)]
-Inner := F64[inner(Wrap.One(Shape.Circle(2.5))), inner(Wrap.One(Shape.Rect(2.0, 3.0))), inner(Wrap.One(Shape.Rect(1.0, 3.0))), inner(Wrap.None)]
-Kinds := String&[kind(1), kind(3), kind(9)]
+Areas := Array<F64>[area(Shape.Circle(1.0)), area(Shape.Rect(2.0, 3.0)), area(Shape.Dot)]
+Signs := Array<I64>[sign(0), sign(-5), sign(5)]
+Inner := Array<F64>[inner(Wrap.One(Shape.Circle(2.5))), inner(Wrap.One(Shape.Rect(2.0, 3.0))), inner(Wrap.One(Shape.Rect(1.0, 3.0))), inner(Wrap.None)]
+Kinds := Array<String&>[kind(1), kind(3), kind(9)]
 
 test "a value match's clauses give their values after ':', a value running on over lines" {
     assert area(Shape.Circle(1.0)) == 3.0 and area(Shape.Rect(2.0, 3.0)) == 6.0 and area(Shape.Dot) == 0.0

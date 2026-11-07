@@ -333,7 +333,7 @@ fn instance(li Inputs&, code build.Code&, parts Vec<String&>&, names Namer&, src
     said := ""
     for sym == "" and chain.Len() <= 8 {
         last := chain[chain.Len() - 1]
-        callers := callersOf(Remarks(li.Files.Remarks, String&[$last], names), last)
+        callers := callersOf(Remarks(li.Files.Remarks, Array<String&>[$last], names), last)
         if callers.Len() != 1 {
             b.Push(noCode(cm, said, callers, names))
             return b.ToString()
@@ -580,7 +580,7 @@ fn (w mut Writer&) asmLine(line String&, t String&, files Map<I64, String&>&, di
         w.reach(name, name if name.StartsWith("/") or dir == "" else $dir "/" $name, n)
         return
     }
-    for skip in String&[".cfi_", ".p2align", "#DEBUG_VALUE", ".file", ".type", ".size"] {
+    for skip in Array<String&>[".cfi_", ".p2align", "#DEBUG_VALUE", ".file", ".type", ".size"] {
         if t.StartsWith(skip) { return }
     }
     if t == "" { return }
@@ -700,7 +700,7 @@ test "a remark's YAML read: its kind, pass, place, function and message, the inl
     out Vec<Remark>
     n := Namer()
     n.root = "v"
-    readRemarks(yaml, String&["v_2escale"], n, out)
+    readRemarks(yaml, Array<String&>["v_2escale"], n, out)
     assert out.Len() == 1
     r := out[0]
     assert r.Kind == "passed" and r.Pass == "inline" and r.File == "v.olang" and r.Line == 6 and r.Callee == "v_2etwice"

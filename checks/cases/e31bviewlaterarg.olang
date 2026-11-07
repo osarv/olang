@@ -20,7 +20,7 @@ fn main() ? {
     l.Push(V(old, 0))
     l[0].Put(replace(l))
     assert l[0].d[0] == 0 and old[0] == 5, "list " $l[0].d[0] " " $old[0]
-    a := V[V(Array<I64>(1), 0)]
+    a := Array<V>[V(Array<I64>(1), 0)]
     a[0].Put(replaceA(a))
     assert a[0].d[0] == 5, "array " $a[0].d[0]
 }

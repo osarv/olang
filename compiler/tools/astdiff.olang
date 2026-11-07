@@ -123,7 +123,7 @@ fn pos(at String&) I64 {
 fn isSpan(t String&) Bool {
     dash := try t.FindByte('-') catch default -1
     if dash < 0 { return false }
-    for half in String&[t[0:dash], t[dash + 1:]] {
+    for half in Array<String&>[t[0:dash], t[dash + 1:]] {
         colon := try half.FindByte(':') catch default -1
         if colon < 0 or not toolkit.IsNumber(half[0:colon]) or not toolkit.IsNumber(half[colon + 1:]) { return false }
     }

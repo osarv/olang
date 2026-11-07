@@ -40,7 +40,7 @@ test "bytes are written as hex and read back" {
     all := Array<U8>(256)
     for i in range 256 { all[i] = U8(i) }
     assert Decode(Encode(all))! == all
-    for bad in String&["4", "4g", "zz", "123"] {
+    for bad in Array<String&>["4", "4g", "zz", "123"] {
         try Decode(bad) catch Error.Invalid { continue }
         unreachable
     }

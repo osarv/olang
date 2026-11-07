@@ -10,7 +10,7 @@ type Keeper struct() {
 fn (k mut Keeper&) Call(x fn&() I64) { k.kept = x }
 fn apply(s fn&(x fn&() I64), g fn&() I64) { s(g) }
 fn churn(d I64) I64 {
-    a := I64[d, d, d, d, d, d, d, d]
+    a := Array<I64>[d, d, d, d, d, d, d, d]
     l := Vec<I64>()
     for i in range 40 { l.Push(i) }
     if d == 0 { return 0 }

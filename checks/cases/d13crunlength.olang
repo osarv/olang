@@ -19,5 +19,5 @@ fn f(e E) I64 {
     }
 }
 fn main() ? {
-    try io.Println($f(E.A(Box(I64[1, 2, 3]))))
+    try io.Println($f(E.A(Box(Array<I64>[1, 2, 3]))))
 }

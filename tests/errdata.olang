@@ -91,7 +91,7 @@ assert said(0) == "ParseErr.Eof"
 assert line(-9) == -9 and line(0) == -1
 assert named(200) == "big 200"
 assert againSaid(-4) == "ParseErr.Bad(-4, 7)"
-Kept Vec<LoadErr> = kept(I64[0, -2, 300, 1000, 1001])
+Kept Vec<LoadErr> = kept(Array<I64>[0, -2, 300, 1000, 1001])
 assert Kept.Len() == 5
 assert $Kept[2] == "ParseErr.Named(\"big 300\")" and $Kept[3] == "NetErr.Gone(\"host1000\")"
 
@@ -108,7 +108,7 @@ test "error e raises the payload it holds" {
 }
 
 test "a value kept outlives the clause and the scopes after it" {
-    ks := kept(I64[Live, Live - 2, Live + 300, Live + 1000, Live + 1001])
+    ks := kept(Array<I64>[Live, Live - 2, Live + 300, Live + 1000, Live + 1001])
     for i in range 50 {
         v := Vec<String>()
         v.Push("churn" $i)

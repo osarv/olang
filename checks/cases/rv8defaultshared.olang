@@ -12,7 +12,7 @@ type Box struct(n Node&, w I64) {
 }
 fn pickd(r Node&, n Node& = Node(7)) Node& { return n }
 fn boxd(r Node&, b Box& = Box(Node(5), 2)) Node& { return b.n }
-fn listd(r Node&, xs Array<I64>& = I64[3, 4]) I64 { return xs[1] }
+fn listd(r Node&, xs Array<I64>& = Array<I64>[3, 4]) I64 { return xs[1] }
 fn one(a Node&) I64 { return pickd(a).v + boxd(a).v + listd(a) }
 fn deep(b Node&, k I64) I64 {
     s I64 = 0
