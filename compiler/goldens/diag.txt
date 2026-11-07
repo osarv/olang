@@ -3634,6 +3634,26 @@ o15dropcyclestep.olang:18:5: error[O15]: 'h' and 'g' may each hold a reference t
    18 |     g Hold = Hold(2)
       |     ^
 compilation failed with 1 error
+=== o15registeredholds.olang
+o15registeredholds.olang:25:5: error[O15, O16]: 'gs' holds a value where its call landed, ended as that scope closes - after 'l', which it may hold a reference to, so its destructors could read 'l' already ended: declare it by value, 'gs Vec<Grip> = ...', and its block ends it first
+   25 |     gs := Vec<Grip>()
+      |     ^~
+compilation failed with 1 error
+=== o15registeredinner.olang
+o15registeredinner.olang:25:9: error[O15, O16]: 'g' holds a value where its call landed, ended as that scope closes - after 'l', which it may hold a reference to, so its destructors could read 'l' already ended: declare it by value, 'g Grip = ...', and its block ends it first
+   25 |         g := Grip(9)
+      |         ^
+compilation failed with 1 error
+=== o15registeredlater.olang
+o15registeredlater.olang:24:5: error[O15, O16]: 'gs' holds a value where its call landed, ended as that scope closes - after 'ls', which it may hold a reference to, so its destructors could read 'ls' already ended: declare it by value, 'gs Vec<Grip> = ...', and its block ends it first
+   24 |     gs := Vec<Grip>()
+      |     ^~
+compilation failed with 1 error
+=== o15registeredtemp.olang
+o15registeredtemp.olang:27:10: error[O15, O16]: this value is held where its call lands, ended as that scope closes - after 'l', which the call may make it hold a reference to, so its destructors could read 'l' already ended: declare it by value first, 'x Grip = ...', and give the call that
+   27 |     hold(Grip(1), l)
+      |          ^~~~~~~
+compilation failed with 1 error
 === o17bbitand.olang
 o17bbitand.olang:20:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    20 |         b.stash()
@@ -3864,6 +3884,14 @@ o26own.olang:7:6: note: 'n' is the call's own copy of its argument - take it by 
     7 | fn f(n N) N& {
       |      ^
 compilation failed with 1 error
+=== o27destructorcall.olang
+o27destructorcall.olang:20:15: error[O27, O15]: this keeps a view of 'h', whose destructor runs when its block ends - its storage is not kept longer for a view: keep a copy of what it shows, '$x' or 'x.Copy()'
+   20 |         views.Push(first2(h))
+      |               ^~~~
+o27destructorcall.olang:31:14: error[O27, O15]: this keeps a view of 'h', whose destructor runs when its block ends - its storage is not kept longer for a view: keep a copy of what it shows, '$x' or 'x.Copy()'
+   31 |         v := first2(h)
+      |              ^~~~~~
+compilation failed with 2 errors
 === o27destructorgen.olang
 o27destructorgen.olang:12:21: error[O27, O15]: this keeps a view of 'f', whose destructor runs when its block ends - its storage is not kept longer for a view: keep a copy of what it shows, '$x' or 'x.Copy()'
    12 |         yield f.name[0:1]
@@ -5799,6 +5827,24 @@ t13bfillunique.olang:5:26: error[T13b]: Array<Token>(n, fill) copies its fill in
     5 |     c := Array<Token>(2, Token(5))
       |                          ^~~~~~~~
 compilation failed with 1 error
+=== t13bhandondeferredafter.olang
+t13bhandondeferredafter.olang:10:12: error[T13b]: 'l' is handed on here, and Blob is unique - a unique value given by value lands once more only at its last mention, and 'l' is mentioned after
+   10 |     w.Push(l)
+      |            ^
+compilation failed with 1 error
+=== t13bhandondeferredloop.olang
+t13bhandondeferredloop.olang:9:37: error[T13b]: 'l' is handed on here, and Blob is unique - a unique value given by value lands once more only at its last mention, and 'l' is mentioned after
+    9 |     for _ in range 2 { defer v.Push(l) }
+      |                                     ^
+compilation failed with 1 error
+=== t13bhandondeferredtwice.olang
+t13bhandondeferredtwice.olang:9:18: error[T13b]: 'l' is handed on here, and Blob is unique - a unique value given by value lands once more only at its last mention, and 'l' is mentioned after
+    9 |     defer v.Push(l)
+      |                  ^
+t13bhandondeferredtwice.olang:10:18: error[T13b]: 'l' is handed on here, and Blob is unique - a unique value given by value lands once more only at its last mention, and 'l' is mentioned after
+   10 |     defer w.Push(l)
+      |                  ^
+compilation failed with 2 errors
 === t13bimmutgenericunique.olang
 t13bimmutgenericunique.olang:9:1: error[T13b]: Token is unique, so it is no part of Box<Token>, which is immut - an immut value is copied freely, a unique one never; hold a reference, 'Token&'
     9 | fn main() {
@@ -5824,8 +5870,6 @@ t13blentandhanded.olang:18:38: error[T13b]: 's' is handed on here while the same
    18 | fn pass(s Res) Bool { return both(s, s) }
       |                                      ^
 compilation failed with 1 error
-=== t13bmovedvalue.olang
-built ./build/t13bmovedvalue
 === t13bneedscopy.olang
 t13bneedscopy.olang:12:10: error[T13b, G18]: twice needs a copy, and File is unique - its values are never copied: call twice with a reference ('File&') or with a type that copies
    12 |     v := twice(File(3))
@@ -6222,6 +6266,11 @@ compilation failed with 1 error
 t22agivesarg.olang:10:9: error[T22a]: this lambda keeps 'k' beyond the call, and this argument holds only what its written function type says of every call - keep a copy instead, or hold the lambda in a local and call it there
    10 |     use(adder(gone))
       |         ^~~~~
+compilation failed with 1 error
+=== t22ainstancename.olang
+t22ainstancename.olang:19:9: error[T22a]: 'keepIt<Blob>' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+   19 |     use(keepIt<Blob>, v)
+      |         ^~~~~~~~~~~~
 compilation failed with 1 error
 === t22alambdakeeps.olang
 t22alambdakeeps.olang:12:15: error[T22a]: this lambda keeps 'k' beyond the call, and this store holds only what its written function type says of every call - keep a copy instead, or hold the lambda in a local and call it there
