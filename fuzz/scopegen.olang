@@ -231,7 +231,7 @@ Prelude := (
     "fn putRet(p mut Node&, v I64) String {\n    p.next = mkNode(v)\n    return \"r\" $v\n}\n"
     "fn stashLab(l mut list.List<any Ag&>&, v I64) String {\n    l.Push(Lab(mkText(v)))\n    return \"r\" $v\n}\n"
     "# for text scenarios (the fourth any review's A): arrays of plain data a scope argument puts elsewhere, returned on\n"
-    "fn mkNums(v I64) Array<I64> { return I64[v, v * 2, v * 3] }\n"
+    "fn mkNums(v I64) Array<I64> { return Array<I64>[v, v * 2, v * 3] }\n"
     "fn retAt(p String&, v I64) String { return mkText(v) }\n"
     "fn retAtChain(p String&, v I64) String { return retAt(p, v) }\n"
     "fn retNumsAt(p String&, v I64) Array<I64> { return mkNums(v) }\n"
@@ -1194,7 +1194,7 @@ fn (g mut SG&) genScenario(k I64) String& {
         }
         if w == 5 {
             q := g.name("c")
-            body = ($body $ind $q " := I64[s.Len() for s in " $gn "(" $v ", " $n ", t) if s.Len() > 3]\n" $ind "churn()\n" $ind
+            body = ($body $ind $q " := Array<I64>[s.Len() for s in " $gn "(" $v ", " $n ", t) if s.Len() > 3]\n" $ind "churn()\n" $ind
                     "acc = acc * 31 + " $q ".Len()\n")
         }
         if w == 6 {

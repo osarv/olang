@@ -822,7 +822,7 @@ fn (g mut Gen&) piece(d I64) String& {
     if p == 7 {
         t := g.primT()
         b := StringBuilder()
-        b.Push("$(" $Prims[t] "[")
+        b.Push("$(" "Array<" $Prims[t] ">[")
         n := g.r(4)
         for i in range n {
             if i > 0 { b.Push(", ") }
@@ -853,7 +853,7 @@ fn (g mut Gen&) piece(d I64) String& {
         c String& = ""
         if g.chance(40) { c = " if " $g.ex(TBool, d - 1) }
         g.nv = x
-        return "$(" $Prims[t] "[" $e " for " $g.bare(x) " in range " $n $c "])"
+        return "$(" "Array<" $Prims[t] ">[" $e " for " $g.bare(x) " in range " $n $c "])"
     }
     return "$(" $g.ex(g.primT(), d) ")"
 }
@@ -1400,7 +1400,7 @@ fn (g mut Gen&) arrayDecl(d I64, ind String&) String& {
     n I64 = -1
     if p == 0 {
         n = 1 + g.r(4)
-        b.Push($Prims[t] "[")
+        b.Push("Array<" $Prims[t] ">[")
         for i in range n {
             if i > 0 { b.Push(", ") }
             b.Push(g.fit(t, 3))
@@ -1426,11 +1426,11 @@ fn (g mut Gen&) arrayDecl(d I64, ind String&) String& {
                 walked = g.vwalk[r]
                 g.vwalk[r] = true
             }
-            b.Push($Prims[t] "[" $g.fit(t, 3) " for " $g.bare(y) " in " $srcName)
+            b.Push("Array<" $Prims[t] ">[" $g.fit(t, 3) " for " $g.bare(y) " in " $srcName)
         } else {
             n = g.r(7)
             y := g.push(3, -1, false, true)
-            b.Push($Prims[t] "[" $g.fit(t, 3) " for " $g.bare(y) " in range " $n)
+            b.Push("Array<" $Prims[t] ">[" $g.fit(t, 3) " for " $g.bare(y) " in range " $n)
         }
         if g.chance(40) {
             n = -1
@@ -1820,7 +1820,7 @@ fn (g mut Gen&) refStmt(ind String&) String& {
         if g.chance(50) {
             b.Push("Array<" $Prims[et] ">(" $n ", " $g.fit(et, 2) ")")
         } else {
-            b.Push($Prims[et] "[")
+            b.Push("Array<" $Prims[et] ">[")
             for i in range n {
                 if i > 0 { b.Push(", ") }
                 b.Push(g.fit(et, 2))
@@ -1976,7 +1976,7 @@ fn (g mut Gen&) fixedVal(t I32, d I64) String& {
     n := fixN(t)
     if n == 0 or g.chance(15) { return "Array<" $Prims[et] ">(" $n ")" }
     b := StringBuilder()
-    b.Push($Prims[et] "[")
+    b.Push("Array<" $Prims[et] ">[")
     for i in range n {
         if i > 0 { b.Push(", ") }
         b.Push(g.fit(et, d - 1))
@@ -2478,7 +2478,7 @@ fn (g mut Gen&) retVal(rt I32) String& {
         n := g.r(5)
         if n == 0 { return "Array<" $Prims[et] ">(0)" }
         b := StringBuilder()
-        b.Push($Prims[et] "[")
+        b.Push("Array<" $Prims[et] ">[")
         for i in range n {
             if i > 0 { b.Push(", ") }
             b.Push(g.fit(et, 2))
