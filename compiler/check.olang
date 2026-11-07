@@ -15926,6 +15926,13 @@ fn (c mut Checker&) literalBuilder(msp source.Span, made types.TypeId) litBuilde
         c.err(msp, msgs.FromIterShape(c.ty(made)))
         return litBuilder(-1, types.UnknownT)
     }
+    # T13b: the walk FromIter is handed gives references to the items (an array's walk names its elements in place, S9a;
+    # a comprehension's a local per turn), which no FromIter can keep without a copy a unique value never has - said
+    # here, once, rather than as the builder's own copy inside the prelude (bulk review 8)
+    if c.P.T.Unique(el) {
+        c.err(msp, msgs.LiteralUnique(c.ty(made), c.ty(el)))
+        return litBuilder(-1, types.UnknownT)
+    }
     return litBuilder(f, el)
 }
 
@@ -19849,7 +19856,7 @@ fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr& {
         c.dropCompr(cm)
         return c.unknown(sp)
     }
-    if not c.isVec(made) or c.listOf(cm.Source).Ok {
+    if (not c.isVec(made) or c.listOf(cm.Source).Ok) and c.walksAny(b.F, made) {
         g := c.comprWalk(sp, cm, b.Elem)
         if g is not null { return c.invoke(sp, msp, b.F, null, Array<ast.Expr&>(0), Array<typed.Expr&>[g], c.P.OwnerBinding(b.F, made)) }
         if c.comprBad { return c.unknown(sp) }
@@ -19857,6 +19864,15 @@ fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr& {
     arr := c.comprArray(sp, cm, b.Elem)
     if typeOf(arr) == types.UnknownT { return c.unknown(sp) }
     return c.fromIter(sp, msp, b, made, arr)
+}
+
+# E27: whether a FromIter takes any iterator - its parameter a type variable of its own - and so a comprehension's
+# generator; one taking a concrete iterator type (an ArrayIter) is handed the array the elements make, as a literal is
+fn (c mut Checker&) walksAny(f I64, made types.TypeId) Bool {
+    ps := c.P.T.Items(c.P.T.Params(c.P.BuilderSig(f, made)))
+    if ps.Len() == 0 { return false }
+    pt := c.deref(ps[0])
+    return c.P.T.KindOf(pt) == types.Kind.Var and c.P.T.A(pt) == generic.FnOwner(f)
 }
 
 # whether t is the prelude's Vec

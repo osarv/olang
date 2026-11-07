@@ -4085,9 +4085,14 @@ whose elements are no `MapEntry` are a compile-time error, and so are plain item
 either form. An entry's `:` is no slice's (E16): a slice has its base before the `[`.
 
 The literal is the one way to write a collection's values in place; `C.FromIter(it)` is an ordinary call (D19), so
-any walk becomes any collection: `set.Set<I64>.FromIter(words.Iter().Map(len).Iter())`. The prelude's `Array<T>` and
-`Vec<T>` declare `FromIter` too - a walk of unknown length gathered as a `Vec` gathers - though their literals and
-comprehensions are built directly.
+any walk becomes any collection: `set.Set<I64>.FromIter(words.Iter().Map(len).Iter())`. The prelude's `Array<T>`
+declares `FromIter` too - a walk of unknown length gathered as a `Vec` gathers - though its literals and comprehensions
+are laid out directly; a `Vec<T>`'s are its `FromIter`'s call, as above.
+
+A literal made through `FromIter` hands it a walk of references to its items (S9a), so a made type whose elements are
+unique (T13b) - `Vec<File>[...]`, `Map<I64, File>[1: f]` - has no literal: a compile-time error naming the calls that
+add each value (`v.Push(File(3))`, `m.Put(1, File(5))`), each value then handed on fresh. An `Array<File>[...]` is laid
+out and has one.
 
 `arr-item ::= expr | "[" [ arr-item { "," arr-item } ] "]"` - a plain expression, or a nested bracketed group with no
 restated type, which is an error (E21).
@@ -4202,7 +4207,10 @@ Made into a **`Vec<T>`**, it is built as the array would be and handed to `Vec`'
 are (E19), its count reserved once. Made into **any other type** declaring `FromIter` (E19), it is
 `C.FromIter(walk)`, the walk a generator (D18) of the elements - each element computed when the builder asks for the
 next, the condition first, no array made: `set.Set<I64>[x % 7 for x in xs]`. A comprehension made so may not fail by
-calls of its own (a walk handing errors to a builder is written as a generator function and its `FromIter` called).
+calls of its own (a walk handing errors to a builder is written as a generator function and its `FromIter` called). A
+`FromIter` taking a concrete iterator type rather than any iterator (`fn Bag.FromIter(it mut ArrayIter<I64>&)`) is handed
+the array the elements make, as a literal's items are. A comprehension of unique elements made into anything but an
+array is E19's error, as its literal is.
 
 An element type that is or holds a reference (T24) is not admitted: a comprehension's elements are values.
 

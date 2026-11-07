@@ -658,6 +658,7 @@ type Diag enum {
     ErrorAsResult
     ComprehensionReferences
     LiteralNoFromIter
+    LiteralUnique
     LiteralNotMade
     FromIterShape
     LiteralEntries
@@ -1726,6 +1727,7 @@ fn BangNothingFails() r.Msg { return r.Msg(Diag.BangNothingFails, "E35", "nothin
 
 fn NestedArrayLiteral() r.Msg { return r.Msg(Diag.NestedArrayLiteral, "E21", "there are no nested array literals - each array is a literal of its own: Array<Array<I32>>[Array<I32>[1, 2], Array<I32>[3, 4]]") }
 fn ComprehensionReferences() r.Msg { return r.Msg(Diag.ComprehensionReferences, "E27", "a comprehension's elements may not be or hold references yet - build the array with a loop") }
+fn LiteralUnique(ty String&, elem String&) r.Msg { return r.Msg(Diag.LiteralUnique, "E19, T13b", "a literal or comprehension of " $ty " hands its FromIter a walk of references to the values, and " $elem " is unique - its values are never copied: make the " $ty " and add each value by its own call (Push, Put)") }
 fn LiteralNoFromIter(ty String&) r.Msg { return r.Msg(Diag.LiteralNoFromIter, "E19", "a literal makes the type before its '[', through that type's FromIter, and " $ty " has none - for an array of " $ty ", write Array<" $ty ">[...]") }
 fn LiteralNotMade(ty String&) r.Msg { return r.Msg(Diag.LiteralNotMade, "E19", "a literal makes the type before its '[', and " $ty " is a reference - an array of them is Array<" $ty ">[...]") }
 fn FromIterShape(ty String&) r.Msg { return r.Msg(Diag.FromIterShape, "E19", $ty "'s FromIter takes no one iterator, so no literal can call it - call it as " $ty ".FromIter(...)") }
