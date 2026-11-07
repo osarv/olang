@@ -65,6 +65,23 @@ fn (n mut Nearest&) Offer(cand String&) {
     }
 }
 
+# a builder offered as "Owner.Member" (D19): taken before any near name where the word is its old name - the member
+# with its owner's name as one of its words ("ParseIP" for IP.Parse, "DateOf" for Date.Of), what a function making the
+# type was called before it became the builder (builder_migrate's renaming read backward)
+fn (n mut Nearest&) OfferBuilder(cand String&) {
+    dot := try cand.FindByte('.') catch { return }
+    owner := cand[:dot]
+    member := cand[dot + 1:]
+    if owner.Len() == 0 or owner.Len() >= n.Word.Len() or n.Far == 0 { return }
+    at := try n.Word.Find(owner) catch { return }
+    end := at + owner.Len()
+    before := at == 0 or n.Word[at - 1].IsLower() or n.Word[at - 1].IsDigit()
+    after := end == n.Word.Len() or n.Word[end].IsUpper()
+    if not before or not after or $n.Word[:at] $n.Word[end:] != member { return }
+    n.Best = $cand
+    n.Far = 0
+}
+
 # " - did you mean 'x'?" for the nearest name offered, "" for none
 fn (n Nearest&) Hint() String { return $" - did you mean '" $n.Best "'?" if n.Best.Len() > 0 else "" }
 
@@ -385,6 +402,7 @@ type Diag enum {
     BuilderNameTaken
     BuilderTwice
     BuilderExpected
+    BuilderOwnerBare
     NoBuilder
     BuilderPrivate
     BuilderNotValue
@@ -642,6 +660,7 @@ type Diag enum {
     ErrorAsResult
     ComprehensionReferences
     LiteralNoFromIter
+    LiteralUnique
     LiteralNotMade
     FromIterShape
     LiteralEntries
@@ -1362,7 +1381,8 @@ fn BuilderResult(owner String&, got String&) r.Msg { return r.Msg(Diag.BuilderRe
 fn BuilderTakesOwner(owner String&, param String&) r.Msg { return r.Msg(Diag.BuilderTakesOwner, "D19", "a builder of " $owner " takes no value of it, and " $param " does - make it a method, 'fn (x " $owner ") ...', or a function of the module") }
 fn BuilderNameTaken(owner String&, tok String&, what String&) r.Msg { return r.Msg(Diag.BuilderNameTaken, "D19", $tok " is already " $what " of " $owner " - name the builder otherwise") }
 fn BuilderTwice(owner String&, tok String&) r.Msg { return r.Msg(Diag.BuilderTwice, "D19", $owner " has two builders named " $tok) }
-fn BuilderExpected(tok String&, ty String&, name String&) r.Msg { return r.Msg(Diag.BuilderExpected, "D19a", $tok " makes a " $ty " its module declares and takes none - declare it as the type's builder, 'fn " $ty "." $name "(...)', and call it '" $ty "." $name "(...)'") }
+fn BuilderExpected(tok String&, ty String&, owner String&, name String&) r.Msg { return r.Msg(Diag.BuilderExpected, "D19a", $tok " makes a " $ty " its module declares and takes none - declare it as the type's builder, 'fn " $owner "." $name "(...)', and call it '" $ty "." $name "(...)'") }
+fn BuilderOwnerBare(ty String&, every String&, one String&, name String&) r.Msg { return r.Msg(Diag.BuilderOwnerBare, "D19", $ty " is generic, and a builder's owner is written with its arguments - 'fn " $every "." $name "(...)' for every instance, 'fn " $one "." $name "(...)' for one") }
 fn NoBuilder(ty String&, tok String&, hint String&) r.Msg { return r.Msg(Diag.NoBuilder, "D19", $ty " has no builder, case or member " $tok $hint) }
 fn BuilderPrivate(ty String&, tok String&) r.Msg { return r.Msg(Diag.BuilderPrivate, "M6", $ty "'s builder " $tok " is private to its module") }
 fn BuilderNotValue(tok String&) r.Msg { return r.Msg(Diag.BuilderNotValue, "T21", "the builder " $tok " is generic, so it is no value by its name alone - call it, or pass a lambda calling it") }
@@ -1381,7 +1401,7 @@ fn PreludeConstRedeclared(tok String&) r.Msg { return r.Msg(Diag.PreludeConstRed
 fn ShadowsType(tok String&) r.Msg { return r.Msg(Diag.ShadowsType, "D3a", $tok " is a type's name - choose another") }
 fn TypeHasNoConstructor(tok String&) r.Msg { return r.Msg(Diag.TypeHasNoConstructor, "", "type " $tok " has no constructor - an enum's values are its cases") }
 fn MethodCalledAsFunction(tok String&, text String&) r.Msg { return r.Msg(Diag.MethodCalledAsFunction, "M19", $tok " is a method - call it on its receiver: x." $text "(...)") }
-fn NotInModule(text String&, tok String&, hint String&) r.Msg { return r.Msg(Diag.NotInModule, "", $text " declares no " $tok $hint) }
+fn NotInModule(text String&, tok String&, hint String&) r.Msg { return r.Msg(Diag.NotInModule, "M9", $text " declares no " $tok $hint) }
 fn VarIsPrivate(tok String&) r.Msg { return r.Msg(Diag.VarIsPrivate, "M6", $tok " is private to its module") }
 fn ShiftUnadapted() r.Msg { return r.Msg(Diag.ShiftUnadapted, "E8a, E4a", "this shift is past its literal's width, and nothing adapts it to a wider type - convert the literal, as I64(1) << 40") }
 fn ScopeMayNotOutlive() r.Msg { return r.Msg(Diag.ScopeMayNotOutlive, "O10", "this reference lives in a scope that may not outlive where it is put") }
@@ -1711,6 +1731,7 @@ fn BangNothingFails() r.Msg { return r.Msg(Diag.BangNothingFails, "E35", "nothin
 
 fn NestedArrayLiteral() r.Msg { return r.Msg(Diag.NestedArrayLiteral, "E21", "there are no nested array literals - each array is a literal of its own: Array<Array<I32>>[Array<I32>[1, 2], Array<I32>[3, 4]]") }
 fn ComprehensionReferences() r.Msg { return r.Msg(Diag.ComprehensionReferences, "E27", "a comprehension's elements may not be or hold references yet - build the array with a loop") }
+fn LiteralUnique(ty String&, elem String&) r.Msg { return r.Msg(Diag.LiteralUnique, "E19, T13b", "a literal or comprehension of " $ty " hands its FromIter a walk of references to the values, and " $elem " is unique - its values are never copied: make the " $ty " and add each value by its own call (Push, Put)") }
 fn LiteralNoFromIter(ty String&) r.Msg { return r.Msg(Diag.LiteralNoFromIter, "E19", "a literal makes the type before its '[', through that type's FromIter, and " $ty " has none - for an array of " $ty ", write Array<" $ty ">[...]") }
 fn LiteralNotMade(ty String&) r.Msg { return r.Msg(Diag.LiteralNotMade, "E19", "a literal makes the type before its '[', and " $ty " is a reference - an array of them is Array<" $ty ">[...]") }
 fn FromIterShape(ty String&) r.Msg { return r.Msg(Diag.FromIterShape, "E19", $ty "'s FromIter takes no one iterator, so no literal can call it - call it as " $ty ".FromIter(...)") }

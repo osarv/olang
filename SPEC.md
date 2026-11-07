@@ -798,7 +798,7 @@ per field of `T` - a **column** - rather than one array of `T`, and `ColumnVec<T
   `Vec`'s does (twice the size, 8 at first, the old ones retired - B2f). It is a value, `==` and `Hash` by its rows.
 - **Columns.** `c.x` is the column of `T`'s field `x`: an `Array<F>` place of a `Columns`, and for a `ColumnVec` a view
   of its buffer's first `Len()` elements carrying the table's permission (E16a) - good until it grows, as a `Vec`'s
-  `View()` is. Elements are read and written through it, lane operators apply (`c.x += c.vx * dt`, E39), and it is lent
+  `View()` is, and a use of one after a growth is M19g's error where the same `ColumnVec` is visible on both sides. Elements are read and written through it, lane operators apply (`c.x += c.vx * dt`, E39), and it is lent
   as any array is. A column is visible where `T`'s field is (M6a: a private field's column only in `T`'s module).
   Assigned whole, `c.x = v`, a column is written in place element by element (T11b) - `v` an array or lanes of the
   table's length, checked once and aborting as lanes of different lengths do (E39), or one value for every element; in a
@@ -2052,7 +2052,7 @@ value) are both unambiguous with nothing but an optional bare type-expr ever app
 value); a function with no `ret-type` returns no value (bare `return`/fall-through only).
 `alias-chain IDEN` (§4.4 M8) never carries an array suffix or reference marker in this position
 (§2.6's error types are never array or reference-shaped, unlike the general `type-ref`, T24). Each
-`error-list-item` must name a declared error type (§2.6), one of its words (`ListError.EMPTY`, R1c), or a named set
+`error-list-item` must name a declared error type (§2.6), one of its words (`ListError.Empty`, R1c), or a named set
 (`LoadError`, T19a), which stands for its members. `?` with
 nothing after it declares an **inferred** error set (§7.1 R1a); a list declares those types and words and nothing else.
 See §7 for what a `error-list`'s combined set means. A function type or a lambda (T2, D16) written as an item of a
@@ -2235,7 +2235,8 @@ copied at the call - a copy left out wherever nothing could tell it from the arg
 parameter nowhere, keeps it nowhere and hands it back nowhere, and nothing changes the argument while the call runs).
 Where the body **decides something on the length** - `a.Len()` in the condition of an `if`, an `assert` or a `match`,
 after a conditional's or a guard's `if`, in a `comptime`, or giving an array its length (`Array<T>(a.Len())`, a
-comprehension over `range a.Len()`) - the function is compiled once for each length its calls give it (G29), and in
+comprehension over `range a.Len()`), or hands the array on whole, as an argument, to a function of its module whose
+parameter there decides something on it - the function is compiled once for each length its calls give it (G29), and in
 each it is fixed storage (T7d) whose `Len()` is a constant (T7c), so that decision is made while compiling (G30); a call
 giving a length known only at run time has an instance of its own, in which the decision is made at run time. The same
 holds for every array level held by value beneath the parameter - the elements of an `Array<Array<F64>>&` parameter,
@@ -3101,7 +3102,7 @@ of the language; they say which of a collection's positions are live, which the 
 **M19g (a Vec's views).** A **view** is what `v.View()` or `v.ViewMut()` gives - the elements of `v`'s buffer as it is
 when the view is taken - and so is a reference into the buffer, what `v.Ref(i)` and `v.RefMut(i)` give (and a `Map`'s
 `m.Ref(k)`, `m.RefMut(k)`, a reference into its slots, which a `Put` that grows them replaces just as a `Vec`'s growth
-does), and what is made of one: a slice of it, a conversion of it (`String(v.View())`), an
+does; and a `ColumnVec`'s column `cv.x`, T7e, a view of the buffer its `Push` replaces), and what is made of one: a slice of it, a conversion of it (`String(v.View())`), an
 element of it borrowed in place by a reference parameter (E12c), a value holding one (a struct built from it, a lambda
 capturing it, a collection a call is known to keep it in), and a function's result where the function's body hands
 back a view of a `Vec` its argument reaches. A view is **stale** from a growth of its `Vec` on: a `Push`, `PushAll`,
@@ -4090,9 +4091,14 @@ whose elements are no `MapEntry` are a compile-time error, and so are plain item
 either form. An entry's `:` is no slice's (E16): a slice has its base before the `[`.
 
 The literal is the one way to write a collection's values in place; `C.FromIter(it)` is an ordinary call (D19), so
-any walk becomes any collection: `set.Set<I64>.FromIter(words.Iter().Map(len).Iter())`. The prelude's `Array<T>` and
-`Vec<T>` declare `FromIter` too - a walk of unknown length gathered as a `Vec` gathers - though their literals and
-comprehensions are built directly.
+any walk becomes any collection: `set.Set<I64>.FromIter(words.Iter().Map(len).Iter())`. The prelude's `Array<T>`
+declares `FromIter` too - a walk of unknown length gathered as a `Vec` gathers - though its literals and comprehensions
+are laid out directly; a `Vec<T>`'s are its `FromIter`'s call, as above.
+
+A literal made through `FromIter` hands it a walk of references to its items (S9a), so a made type whose elements are
+unique (T13b) - `Vec<File>[...]`, `Map<I64, File>[1: f]` - has no literal: a compile-time error naming the calls that
+add each value (`v.Push(File(3))`, `m.Put(1, File(5))`), each value then handed on fresh. An `Array<File>[...]` is laid
+out and has one.
 
 `arr-item ::= expr | "[" [ arr-item { "," arr-item } ] "]"` - a plain expression, or a nested bracketed group with no
 restated type, which is an error (E21).
@@ -4207,7 +4213,10 @@ Made into a **`Vec<T>`**, it is built as the array would be and handed to `Vec`'
 are (E19), its count reserved once. Made into **any other type** declaring `FromIter` (E19), it is
 `C.FromIter(walk)`, the walk a generator (D18) of the elements - each element computed when the builder asks for the
 next, the condition first, no array made: `set.Set<I64>[x % 7 for x in xs]`. A comprehension made so may not fail by
-calls of its own (a walk handing errors to a builder is written as a generator function and its `FromIter` called).
+calls of its own (a walk handing errors to a builder is written as a generator function and its `FromIter` called). A
+`FromIter` taking a concrete iterator type rather than any iterator (`fn Bag.FromIter(it mut ArrayIter<I64>&)`) is handed
+the array the elements make, as a literal's items are. A comprehension of unique elements made into anything but an
+array is E19's error, as its literal is.
 
 An element type that is or holds a reference (T24) is not admitted: a comprehension's elements are values.
 
@@ -5996,15 +6005,15 @@ stands for (T19a). A written list is a
 **promise** the body is held to: an error the body can produce that the list does not name is a compile-time error
 naming it (R9).
 
-**R1c (words in an error set).** An `error-list-item` may name one **word** of an error type - `? ListError.EMPTY`,
-`? ListError.EMPTY, io.Error`, `? TextError.NotFound, TextError.BadBase` - and the set then holds that word of the
+**R1c (words in an error set).** An `error-list-item` may name one **word** of an error type - `? ListError.Empty`,
+`? ListError.Empty, io.Error`, `? TextError.NotFound, TextError.BadBase` - and the set then holds that word of the
 type and no other, so a function promises exactly the words it raises: `fn (l mut List<T>&) Pop() T ?
-ListError.EMPTY` fails only with `Empty`, and `catch ListError.EMPTY` on it is complete (R14). Several words of one
+ListError.Empty` fails only with `Empty`, and `catch ListError.Empty` on it is complete (R14). Several words of one
 type are one entry of the set, holding each; a type named whole holds every word, whatever words of it are named
 beside it. An `error` statement (R3) raising a word a written set does not hold is a compile-time error, and so is a
 `try` letting one through (R9), word by word. An inferred set (R1a) holds words too: the words of its `error`
 statements, and what its tried calls let through - each callee's words, less those its clauses take (R11) - so a
-function written `?` calling only `Pop` fails with `ListError.EMPTY`. A function type (R1b) may name words, and a
+function written `?` calling only `Pop` fails with `ListError.Empty`. A function type (R1b) may name words, and a
 function value fits a type whose set holds every word it can fail with (T22); a set's words are part of a function
 type's identity (T27). Codes (R6) do not change: a word's ordinal is its position in its type's declaration, and a
 type's the position of its one entry in the set. Words beyond a type's 64th cannot be named one at a time.
@@ -6246,8 +6255,8 @@ nothing actually escapes uncaught.
 
 **R14.** Coverage (R9, R13) is judged at the level of the called function's own
 `error-list` (R1) - the words it names, or, where it names a type whole, every one of that type's words, even if the
-callee happens to only ever produce a subset of them internally. A callee written `? ListError.EMPTY` is covered by
-`catch ListError.EMPTY` (R1c); catching a word the callee's set does not hold is a compile-time error, as catching a
+callee happens to only ever produce a subset of them internally. A callee written `? ListError.Empty` is covered by
+`catch ListError.Empty` (R1c); catching a word the callee's set does not hold is a compile-time error, as catching a
 type it does not name is (R13). A named set (T19a) as an item is an error only where nothing it stands for can come
 from the operand.
 
@@ -7873,7 +7882,7 @@ uncaught, it leaves `main`'s blocks as it leaves any function's - their deferred
 TypeName.WORD\n` to `stderr` (naming the specific declared error type and word that escaped) and exits with status `1`.
 `main` is the root module's plain function of that name: a method or a builder named `main` is an ordinary function. The type is named as source writes it outside its
 module: with its module's alias before it (`io.Error.Failed`, `chan.Error.Closed`), except a type of the prelude, or of the
-root program itself, which is written bare (`ListError.EMPTY`). The same name stands in a failed test's line, in `!`'s
+root program itself, which is written bare (`ListError.Empty`). The same name stands in a failed test's line, in `!`'s
 message and in the error trace, whether the program is built or interpreted. What follows that line is the error's trace in a
 test or debug build, and how to get one in any other (§6.7 S18d).
 
@@ -9255,7 +9264,7 @@ constant there. Each has its members, and asking another is an error listing the
   is a value of the field's type's owner (or a reference to one), else an error; one value, else an error. A case's
   field is read only where `v` is known to hold that case - narrowed by a test (S8d), the walk's `if v == c` with `c` a
   case descriptor included - as `as` reads it.
-- A case: `c.Name`, `c.Fields` (a list, G33) - an error value's word named as `$` writes it (`io.Error.FULL`, B5), its
+- A case: `c.Name`, `c.Fields` (a list, G33) - an error value's word named as `$` writes it (`io.Error.Failed`, B5), its
   fields none, `c()` its value. `v == c` tests the case (E32): with `v` of the case's own type, the case;
   with `v` the struct a struct's one case describes, `true`; with `v` of another type, an error. After such a test `v` is
   narrowed to that case (S8d) and `f.Of(v)` reads its fields. `c(args)` builds the case, as the case's name would

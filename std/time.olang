@@ -271,7 +271,7 @@ fn daysIn(y I64, m I64) I64 {
 }
 
 # the date and time "wall" - nanoseconds since 1970-01-01 00:00 UTC, as Wall() gives - is, written in the time zone
-# "offset" minutes ahead of UTC: "time.DateOf(time.Wall())" is now in UTC
+# "offset" minutes ahead of UTC: "time.Date.Of(time.Wall())" is now in UTC
 fn Date.Of(wall I64, offset I64 = 0) Date {
     ns := wall + offset * 60000000000
     days := ns / 86400000000000

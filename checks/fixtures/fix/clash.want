@@ -1,0 +1,11 @@
+# a function making an enum's value whose name, with the type's name taken out, is a case of the enum: the builder keeps
+# its whole name (D19 - a builder is never named like a case)
+import "std/io"
+
+type Col enum String { Red, Blue }
+
+fn Col.RedCol() Col { return Col.Red }
+
+fn main() {
+    io.Println($Col.RedCol())!
+}

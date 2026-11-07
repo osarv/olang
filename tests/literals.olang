@@ -157,3 +157,19 @@ test "a comprehension made into another collection is walked by its FromIter" {
     for _ in range 3 { assert walked(10, Array<I64>[1, 2, 3]) == "2 6 deque.Deque<String>[\"1\", \"2\", \"3\"] Columns<Pt>[Pt(1, -1), Pt(2, -2), Pt(3, -3)]", walked(10, Array<I64>[1, 2, 3]) }
     assert Walked == walked(10, Array<I64>[1, 2, 3])
 }
+
+# E27 (bulk review 8): a FromIter taking a concrete iterator type is handed the array a comprehension's elements make
+fn strictSum(n I64) I64 ? Negative {
+    s := try Strict[x * x for x in range n if x != 2]
+    return s.total
+}
+
+StrictSum I64 = strictSum(4)!
+
+test Strict.FromIter "takes a comprehension through the array its elements make" {
+    assert strictSum(4)! == 0 + 1 + 9
+    assert StrictSum == 10
+    churn := 0
+    for i in range 1000 { churn += ($"x" $i).Len() }
+    assert strictSum(5)! == 26 and churn > 0
+}

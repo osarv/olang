@@ -1,0 +1,14 @@
+# code of today that an old reading of its literals would change: an import's type declaring a FromIter in front, and a
+# type variable in front (E19) - olang fix leaves it as it is
+import "std/io"
+import "std/set"
+import bag "bag"
+
+fn make<C>() C {
+    return C[3, 1, 2, 1]
+}
+
+fn main() {
+    s := make<set.Set<I64>>()
+    io.Println($bag.Bag[bag.Bag(2), bag.Bag(3)] " " $s.Len())!
+}

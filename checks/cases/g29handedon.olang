@@ -1,0 +1,16 @@
+# check: fail error[S18c]: this assertion is false, evaluated while compiling: empty: 0
+# also: note: instantiated here, with T = I64, xs.Len() = 0
+# G29, D9a (bulk review 8): a generic handing its by-value array on whole to a function deciding on its length takes
+# the length from its own call, so the assert is decided while compiling, as a direct call's is
+fn first<T>(xs Array<T>) T {
+    assert xs.Len() > 0, "empty: " $xs.Len()
+    return xs[xs.Len() - 1]
+}
+
+fn wrap<T>(xs Array<T>) T { return first(xs) }
+
+fn main() {
+    assert wrap(Array<I64>[4, 5]) == 5
+    e := Array<I64>(0)
+    assert wrap(e) == 0
+}

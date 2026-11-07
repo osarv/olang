@@ -1302,7 +1302,10 @@ fn (c mut Checker&) builderRules(f I64) {
     fd := c.P.FnDecl(f)
     mi := c.P.FnModule(f)
     o := c.P.OwnerOf(f)
-    if o == types.UnknownT { return }   # said where the owner is written
+    if o == types.UnknownT {
+        c.bareOwner(f, mi)   # a generic type named bare reads as nothing; anything else is said where it is written
+        return
+    }
     c.push(-1, mi, types.VoidT, types.ListId(0))
     defer c.pop()
     nsp := c.nameSpan(fd)
@@ -1357,8 +1360,51 @@ fn (c mut Checker&) builderOwnerOk(f I64, o types.TypeId, osp source.Span) Bool 
         return false
     }
     dm := c.P.DeclModule(c.P.T.DeclOf(o))
-    if dm == mi or (prelude and c.P.L.Mods[dm].Prelude) { return true }
-    c.err(osp, msgs.BuilderOwnerElsewhere(c.ty(o)))
+    if dm != mi and not (prelude and c.P.L.Mods[dm].Prelude) {
+        c.err(osp, msgs.BuilderOwnerElsewhere(c.ty(o)))
+        return false
+    }
+    return c.ownerWritten(f, o, osp)
+}
+
+# D19: "fn Bag.Of" with Bag generic: its owner, written with no arguments, names no type - said, naming the two forms
+fn (c mut Checker&) bareOwner(f I64, mi I64) {
+    fd := c.P.FnDecl(f)
+    match fd.Owner! {
+        case ast.TypeRef.Named(_, path, args) if path.Len() == 1 and args.Len() == 0 {
+            e := c.P.TypeEntry(mi, path[0])
+            if e < 0 { return }
+            d := c.P.DeclFor(mi, e)
+            c.push(-1, mi, types.VoidT, types.ListId(0))
+            defer c.pop()
+            c.ownerWritten(f, c.P.SelfType(d), fd.Owner!.Span())
+        }
+        case _ { }
+    }
+}
+
+# D19: a generic owner is written with its arguments - "fn Bag<T>.Of" for every instance, "fn Bag<String&>.Of" for one;
+# a bare "fn Bag.Of" said, naming both (the one its result gives where it gives an instance)
+fn (c mut Checker&) ownerWritten(f I64, o types.TypeId, osp source.Span) Bool {
+    fd := c.P.FnDecl(f)
+    td := c.P.TypeDecl(c.P.T.DeclOf(o))
+    if td is null or td.Params.Len() == 0 { return true }
+    match fd.Owner! {
+        case ast.TypeRef.Named(_, _, args) if args.Len() > 0 { return true }
+        case _ { }
+    }
+    name := c.text(td.Name)
+    vars Vec<String>
+    errs := ""
+    for tp in td.Params {
+        if tp.ErrSet: errs = $" ? " $c.text(tp.Name)
+        else: vars.Push($c.text(tp.Name))
+    }
+    every := $name "<" $vars.Join(", ") $errs ">"
+    r := c.P.T.Plain(c.deref(c.P.T.Result(c.P.Sig(f))))
+    one := c.ty(r) if c.P.T.KindOf(r) == types.Kind.Named and c.P.T.DeclOf(r) == c.P.T.DeclOf(o) and c.ty(r) != every else
+           $name "<I64>"
+    c.err(osp, msgs.BuilderOwnerBare(name, every, one, c.text(fd.Member)))
     return false
 }
 
@@ -1427,7 +1473,8 @@ fn (c mut Checker&) placement(f I64) {
         if c.typeNames(p, r, 0) { return }
     }
     c.push(-1, mi, types.VoidT, types.ListId(0))
-    c.err(c.nameSpan(fd), msgs.BuilderExpected(c.tok(fd.Name), c.text(c.P.T.DeclName(d)), c.text(fd.Name)))
+    # the owner as the result writes it: a generic type's instance, "fn Bag<String&>.mk(...)" (D19)
+    c.err(c.nameSpan(fd), msgs.BuilderExpected(c.tok(fd.Name), c.text(c.P.T.DeclName(d)), c.ty(r), c.text(fd.Name)))
     c.pop()
 }
 
@@ -8259,6 +8306,18 @@ fn (c mut Checker&) ownerOf(x ast.Expr&) ownerAt {
     return ownerAt(types.UnknownT, false)
 }
 
+# an instance of a generic struct written with its arguments before a "." - "Bag<I64>" in "Bag<I64>.mk(7)" - whose
+# builders the call looked among; -1 for anything else (an enum's instance names its cases, G6b)
+fn (c mut Checker&) instanceWritten(x ast.Expr&) types.TypeId {
+    match x {
+        case ast.Expr.Generic(_, _, _) { }
+        case _ { return types.TypeId(-1) }
+    }
+    o := c.ownerOf(x)
+    if o.T == types.UnknownT or o.Bare or c.isEnum(o.T) { return types.TypeId(-1) }
+    return o.T
+}
+
 # D19: a builder called through its owner's name - its owner's variables bound by the instance written (or inferred, for
 # a generic named bare), its own by type arguments written after its name or by the call; null where x names no type
 # with a builder n - the caller goes on to cases, reflection and the rest
@@ -11669,6 +11728,7 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
                 }
             }
             et := c.typeNamed(x)
+            if et < types.TypeId(0) { et = c.instanceWritten(x) }   # D19: "Bag<I64>.mk(7)" with no builder of that instance
             if et >= types.TypeId(0) and c.text(n) == "From" and c.isEnum(et) and not c.hasCase(et, n) { return c.enumFrom(sp, nsp, et, args) }
             if et >= types.TypeId(0) and not c.isEnum(et) and not (c.isNamed(et) and c.declKind(et) == types.DeclKind.Error) {   # an error word with a payload is built as its case (T19b)
                 c.noBuilder(nsp, x, et, n)
@@ -12597,8 +12657,15 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         k++
     }
     for k < ps.Len() {
-        c.exprs.Push(c.callDefault(nsp, sp, target, f, k, recv is not null, ps[k]))
+        d := c.callDefault(nsp, sp, target, f, k, recv is not null, ps[k])
+        c.exprs.Push(d)
         k++
+        if typeOf(d) != types.UnknownT { continue }
+        # B11: the first argument left off with no default said it (E14) - the rest are the same cause
+        for k < ps.Len() {
+            c.exprs.Push(c.unknown(sp))
+            k++
+        }
     }
     c.inWrittenOrder(order, from + (1 if recv is not null else 0))
     errs := types.ListId(0) if decided else c.calleeErrors(target, sig)
@@ -13774,7 +13841,9 @@ fn (c mut Checker&) notInModule(at I64, n source.NameId, nsp source.Span) {
     # B11: the nearest name it exports - all its names to itself
     near mut msgs.Nearest& = msgs.Nearest(c.text(n))
     for e in c.P.R.Tables[at].Entries {
-        if e.Kind != names.What.Import and (at == c.fr().Mi or load.Public(c.text(e.Name)) or m.C) { near.Offer(c.text(e.Name)) }
+        if e.Kind == names.What.Import or not (at == c.fr().Mi or load.Public(c.text(e.Name)) or m.C) { continue }
+        near.Offer(c.text(e.Name))
+        near.OfferBuilder(c.text(e.Name))
     }
     c.err(nsp, msgs.NotInModule($"module " $m.Identity, c.tok(n), near.Hint()))
 }
@@ -15894,6 +15963,13 @@ fn (c mut Checker&) literalBuilder(msp source.Span, made types.TypeId) litBuilde
         c.err(msp, msgs.FromIterShape(c.ty(made)))
         return litBuilder(-1, types.UnknownT)
     }
+    # T13b: the walk FromIter is handed gives references to the items (an array's walk names its elements in place, S9a;
+    # a comprehension's a local per turn), which no FromIter can keep without a copy a unique value never has - said
+    # here, once, rather than as the builder's own copy inside the prelude (bulk review 8)
+    if c.P.T.Unique(el) {
+        c.err(msp, msgs.LiteralUnique(c.ty(made), c.ty(el)))
+        return litBuilder(-1, types.UnknownT)
+    }
     return litBuilder(f, el)
 }
 
@@ -16132,6 +16208,7 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
         return c.unknown(sp)
     }
     asks := c.ContractAsks.Len()
+    said := c.P.L.Diags.Count()
     fr.Tries++
     x := c.expr(y, want)
     fr.Tries--
@@ -16144,7 +16221,9 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
         return x if clauses.Len() == 0 else c.unknown(sp)
     }
     end := fr.leaks.Len()
-    c.produced(clauses, mark, end)
+    # B11: an operand that said an error of its own (a name a module does not declare) tells nothing of what it fails
+    # with, so its clauses are not judged by it - one cause, one error
+    if c.P.L.Diags.Count() == said: c.produced(clauses, mark, end)
     # T2c: a "default null" beside a reference never null gives one that may be - the try's value, its operand as it is
     rt := typeOf(x)
     if asValue and c.neverNull(rt) and nullDefault(clauses) and (want == types.UnknownT or c.P.T.IsNullable(want)) {
@@ -19821,7 +19900,7 @@ fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr& {
         c.dropCompr(cm)
         return c.unknown(sp)
     }
-    if not c.isVec(made) or c.listOf(cm.Source).Ok {
+    if (not c.isVec(made) or c.listOf(cm.Source).Ok) and c.walksAny(b.F, made) {
         g := c.comprWalk(sp, cm, b.Elem)
         if g is not null { return c.invoke(sp, msp, b.F, null, Array<ast.Expr&>(0), Array<typed.Expr&>[g], c.P.OwnerBinding(b.F, made)) }
         if c.comprBad { return c.unknown(sp) }
@@ -19829,6 +19908,15 @@ fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr& {
     arr := c.comprArray(sp, cm, b.Elem)
     if typeOf(arr) == types.UnknownT { return c.unknown(sp) }
     return c.fromIter(sp, msp, b, made, arr)
+}
+
+# E27: whether a FromIter takes any iterator - its parameter a type variable of its own - and so a comprehension's
+# generator; one taking a concrete iterator type (an ArrayIter) is handed the array the elements make, as a literal is
+fn (c mut Checker&) walksAny(f I64, made types.TypeId) Bool {
+    ps := c.P.T.Items(c.P.T.Params(c.P.BuilderSig(f, made)))
+    if ps.Len() == 0 { return false }
+    pt := c.deref(ps[0])
+    return c.P.T.KindOf(pt) == types.Kind.Var and c.P.T.A(pt) == generic.FnOwner(f)
 }
 
 # whether t is the prelude's Vec

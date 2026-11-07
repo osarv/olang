@@ -30689,3 +30689,73 @@ initializer.
 - **F5 (T22a naming the type argument).** `use(keepIt<Blob>, v)` said "'Blob' ties where ...", the caret on `Blob`: the
   error took the last name of the value's span. It takes the last name before a `<` and the type arguments with it now
   (`scope.fnNameAt`): "'keepIt<Blob>' ties where ...", the caret on all of it. checks' t22ainstancename.
+## Bulk review 8, fixed
+
+### bfix8c - migration tools, builders, literals, diagnostics (2026-11-07)
+
+The findings are /home/user/review/bulk8/lang/NOTES.md and tools/NOTES.md; each fix is its own commit, each pinned by a
+test.
+
+- **lang F5 (medium): `literal_migrate` changed today's code.** It read a literal through an imported type's `FromIter`
+  (`bag.Bag[a, b]`, E19) and a type variable's literal (`C[3, 1, 2, 1]`, E19's own example) as the old element-typed
+  form and wrote `Array<bag.Bag>[...]` / `Array<C>[...]` - a silent change of meaning, or a file that no longer
+  compiled - and `olang fix` runs it on every file, so fix was not idempotent on current code. The tool now reads an
+  import's module for the types it declares a `FromIter` for (as it did the file's own) and takes a type variable in
+  front for today's literal. Decided (mine): an old literal of a type variable's elements (`T[a, b]`, an array of T) is
+  then left as written - the text cannot tell it from today's, and a wrong rewrite would change meaning silently where
+  leaving it makes the compiler name the new form (E19: the bound type has no FromIter); Markdown's single capitals are
+  type variables too. The tool's own test, the fix scenario's `today.olang` (bag.Bag[...] and a generic `C[...]` over a
+  Set, unchanged by fix and run).
+- **lang F4 (low): `builder_migrate` named a builder like a case** - `fn RedCol() Col` became `Col.Red`, a case of Col
+  (D19's error), and fix stopped half way. The tool now knows each enum's cases: a short name that is a case keeps the
+  long one (`Col.RedCol`); a move whose own name is a case cannot be made and is a `by hand:` line (fix ends 1).
+- **tools F2 (medium): `olang fix` left calls of std functions renamed into builders** (`net.ParseIP`, `net.ParseAddr`,
+  `time.DateOf`, `net.ListenUDP`, `list.From`): the tool reads std as it is now, where those names are gone. It now reads
+  such a call backward - a name the module no longer declares whose stripping by a builder's type gives that builder's
+  name (`ParseIP` - `IP` = `Parse`, so `net.IP.Parse`) - and keeps a table for what stripping does not explain
+  (`list.From` -> `list.List.FromIter`, with the old function's type-variable order for written type arguments). The
+  diagnostic for such a call - `module std/net declares no 'ParseIP'` - had no rule tag, no hint and came with a second
+  R14 error for the same cause: it is M9's now (the final identifier of an alias chain looked up in the module reached),
+  names the builder whose old name it is (`did you mean 'IP.Parse'?`, `msgs.Nearest.OfferBuilder`), and a `try` whose
+  operand said an error of its own judges no clause by it (one cause, one error). The fix scenario's `before1107.olang`
+  (fixed, then run) and checks/cases/m9builderold.olang.
+- **`olang fix: cannot run tools_X` on a first run.** Both reviewers ran fix at the same time against one compiler,
+  so one cache directory: one run rebuilt a tool program in place while the other executed it (a program half
+  written, or ETXTBSY). A tool is now built into a temporary directory of its own and renamed into place, and the os
+  error is said when a program cannot be run. Measured: two fixes over one fresh cache side by side both succeed.
+- **tools F3 (low, older): `P()` said E14 three times** (found 0, found 1, found 2) - one row per argument left off.
+  The first missing argument with no default says it; the rest are left (checks/cases/e14once.olang).
+- **tools F8 (low): `olang api` called a raised error's change a "changed global".** An `error Name(...)` line is an
+  `error` row now (`api.itemKind`, its test).
+- **lang F6 (low): a bare generic builder owner** (`fn Bag.mk2(n I64) Bag<String&>`, Bag generic) was accepted - its
+  owner resolved to nothing and no rule ran - though D19 says a generic owner is written with its arguments; D19a's
+  hint suggested that bare form; and a call through an instance with no builder (`Bag<I64>.mk2(7)`) stopped the build as
+  a checker gap. Now: D19's error naming both forms (`fn Bag<T>.mk2` for every instance, `fn Bag<String&>.mk2` for the
+  one its result gives); D19a names the owner its result writes (`fn Bag<String&>.mk2(...)`, called `Bag.mk2(...)`);
+  the instance call is D19's "has no builder" (checks/cases/d19bareowner.olang). No file of the repository had a bare
+  generic owner.
+- **lang F7 (low): M19g did not see a ColumnVec's column view.** T7e says `cv.x` is good until the table grows, as a
+  Vec's View() is, and M19g refused the Vec shape only: the views pass now takes a ColumnVec's `data` (its Columns) as
+  its buffer, a column of it a slice of the buffer, and a program calling ColumnVec's functions as one that may hold a
+  view; the columns module's own bodies are walked for summaries only, as Vec's. SPEC T7e and M19g say so
+  (checks/cases/m19g11column.olang).
+- **lang F8 (low): literals of unique values, and a concrete FromIter's comprehension.** `Vec<Tok>[Tok(3)]` and
+  `Map<I64, Tok>[1: Tok(5)]` were refused inside the prelude's FromIter with advice that does not fit a literal. Decided
+  (mine): refused, at the literal - a FromIter is handed a walk of references to the items, which no FromIter can keep
+  without a copy a unique value never has (building such literals directly would be a moving walk, a design of its
+  own) - the error naming the calls that add each value (Push, Put); an `Array<Tok>[...]` is laid out and stays
+  allowed. SPEC E19's last paragraph said Vec's literals were "built directly", contradicting its first bullet: it
+  says now that Array's are laid out and Vec's are its FromIter's call. A comprehension into a type whose FromIter takes
+  a concrete iterator (`ArrayIter<I64>`, which E19 allows) was refused (it was handed a generator): it is handed the
+  array its elements make, as a literal's items are (E27; tests/literals.olang, baked and run).
+- **tools F10 (low, older): a length lost through a generic handing its array on.** `wrap<T>(xs Array<T>)` returning
+  `first(xs)`, `first` asserting `xs.Len() > 0`: wrap decided nothing on the length, so it had one instance of a
+  run-time length and first's assert ran at run time. A body handing a by-value array parameter on whole, as an
+  argument, to a function of its module whose parameter decides on the length decides on it too (`generic.handedOn`,
+  read from the text as LengthDecided is, a cycle deciding nothing through itself), so the length known at the
+  program's call follows the call through and the assert is decided while compiling. Decided (mine): only a plain
+  function of the same module - a method's, an alias's or a value's call follows nothing (decided at run time, as
+  before).
+- **Stale texts:** SPEC's error words written upper case (`ListError.EMPTY`, `io.Error.FULL` - io.Error has no such
+  word) are CamelCase (`ListError.Empty`, `io.Error.Failed`); std/json's comments alike; std/net's and std/time's
+  headers name `IP.Parse`, `Addr.Parse`, `Date.Of`.

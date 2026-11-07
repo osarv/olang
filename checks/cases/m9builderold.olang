@@ -1,0 +1,14 @@
+# check: fail error[M9]: module std/net declares no 'ParseIP' - did you mean 'IP.Parse'?
+# also: error[M9]: module std/time declares no 'DateOf' - did you mean 'Date.Of'?
+# never: R14
+# M9, D19 (bulk review 8): a call of a function std made a builder under a shorter name names the builder, and the
+# clause after it is not judged by a call that names nothing (one cause, one error)
+import "std/io"
+import "std/net"
+import "std/time"
+
+fn main() ? {
+    ip := try net.ParseIP("127.0.0.1") catch net.Error default net.IP.Loopback4()
+    d := time.DateOf(0)
+    try io.Println($ip " " $d.Year)
+}

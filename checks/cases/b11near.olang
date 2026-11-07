@@ -3,7 +3,7 @@
 # also: error: Box has no member 'valeu' - did you mean 'value'?
 # also: error[M19]: Box has no method 'Aera' - did you mean 'Area'?
 # also: error[T17]: Shape has no case 'Cricle' - did you mean 'Circle'?
-# also: error: module std/io declares no 'Prinln' - did you mean 'Println'?
+# also: error[M9]: module std/io declares no 'Prinln' - did you mean 'Println'?
 # B11: an unknown name ends its message with the nearest one allowed there
 import "std/io"
 

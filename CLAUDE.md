@@ -402,10 +402,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   checks case failing with E19 keeps the old form. Array patterns write the matched value's type (`case
   Array<I64>[x, ...r]`, `case Vec<I64>[...]`, text `case Array<Char>['-', ...r]`). `tools/literal_migrate.olang` (a std
   tool in `olang fix`: an old front - a known type with only a marker after it, or any marked one - written as the array
-  it made; a generic front unmarked read as new, so idempotent; re-export chains followed; Markdown code spans too)
+  it made; a generic front unmarked, a type declaring FromIter (the file's or an import's) and a type variable
+  read as new, so idempotent on today's code (bulk review 8); re-export chains followed; Markdown code spans too)
   migrated std, compiler/, tests, checks, tools, bench, fuzz and SPEC; old arrays of generic values held by value were
   written by hand. Limits: a Vec's literal copies its items' array into its buffer (reserved once); comments keep old
-  forms.
+  forms. Since bulk review 8: a literal or comprehension through FromIter of unique elements is E19's error naming
+  Push/Put (its walk gives references); a comprehension into a FromIter taking a concrete iterator is handed the array
+  its elements make (E27).
 - **Error words, enum cases and constructor fields follow the listing rule (T17/T19/C2, QY):** commas on a line, line
   breaks between lines; a named set's members are on its line (T19a).
 - **Keywords as names (L9/L9a):** any keyword names a method after a receiver or `.`; statement-like and non-value
@@ -570,7 +573,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   be **passed by value** (D9a): a function is compiled once per argument length (an instance, G29), in which `a.Len()`
   is a constant and an `if`, conditional or `match` on it is decided per instance (G30) - only where the body decides
   something on the length (2026-11-01, `generic.LengthDecided`: `a.Len()` in an if/assert/match condition, a comptime,
-  an array's length; else one instance taking any length); a run-time-length argument is copied at the call where
+  an array's length, or the array handed on whole to a function of its module deciding on it - bulk review 8; else one
+  instance taking any length); a run-time-length argument is copied at the call where
   something could tell (D9h). No size cap (D9c removed 2026-11-01). A run-time array stored into fixed field or element storage is an error naming a slice of its length (`s.m =
   v[0:16]`, T7d) - no store is checked. Storage over 64KB is never on the stack. No 2-D arrays (the user's call) -
   arrays of arrays. `x.Len()` is an `I64` (E23/T10, the user's design; `len` is gone). Not yet built: inferred result
@@ -599,7 +603,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   private as its field (M6a); the prelude's reflection sees every field (to supply Columns over any record);
   `T.Element` of either is the rows' type; `$` renders `Columns<P>[P(1, 2)]` (its literal, through its
   FromIter); conversions `ToArray ToVec ToColumnVec ToColumns` (on arrays and Vecs too). Measured on the references
-  study's particles: 2.0 instructions an update, as hand-written columns (an `Array<P>` 13.0).
+  study's particles: 2.0 instructions an update, as hand-written columns (an `Array<P>` 13.0). A column view used after a
+  growth is M19g's error, as a Vec's View() is (bulk review 8).
 - **Lane operators (E39, docs/ideas.md #4, the user's decision 2026-10-18; built 2026-10-26).** An array's operators
   work lane by lane (`a * b + c`, `x * 2.0`, `-a`, `and`/`or`/`not` on `Bool` lanes), each lane as the operation on two
   values (T6b, E6c, E31 - C64 and a user's types too); a whole expression is one loop, and `a.Sum()`, `Min()`/`Max()`
@@ -848,7 +853,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   builder)"). `tools/builder_migrate.olang` (in `olang fix`, the compiler's parser, std read for its builders) migrated the
   repository: a moved function's name loses its type's name where it is a word of it (`net.ParseIP` -> `net.IP.Parse`,
   `time.DateOf` -> `time.Date.Of`), else keeps it (`time.Millis` -> `time.Duration.Millis`, `os.Exec` -> `os.Output.Exec`,
-  `chan.Select` -> `chan.Ready.Select`). compiler/msgs.olang's `Msg` moved to `compiler/diagmsg.olang` (an import cycle,
+  `chan.Select` -> `chan.Ready.Select`); since bulk review 8 (HISTORY.md "Bulk review 8, fixed", bfix8c) it rewrites
+  calls of functions that became builders under a shorter name (the stripping read backward, a table for `list.From`),
+  never names a builder like a case of its enum, and a generic owner written bare is D19's error naming `fn Bag<T>.mk`
+  and the instance form, as D19a's hint now writes the owner its result gives. compiler/msgs.olang's `Msg` moved to `compiler/diagmsg.olang` (an import cycle,
   M2), so msgs's 840 functions make another module's type and stay functions. **Found on the way (pre-existing,
   fixed):** the formatter's loader (fmt.olang) took a `../x` import for a remote one (its first part holds a dot), so its
   oracle missed the names such an import reaches.
@@ -2302,7 +2310,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   compiler built from other sources) by the running compiler on first use - and again when the compiler that built a
   tool changed or its sources (tools/, compiler/, std/) are newer - rather than
   linked in: they are standalone programs with their own `main`, tests and the module `srcmask` they share, and several
-  call the compiler themselves; `olang format` is a linked module only because the formatter is a library of the compiler
+  call the compiler themselves; a program is built into a temporary directory and renamed into place, so runs
+  sharing the cache never run one half written (bulk review 8); `olang format` is a linked module only because the formatter is a library of the compiler
   too. The tools sit beside the compiler's `std/` (`../tools`, `OLANG_TOOLS` names another place). (2) **Two phases:** the
   tools that read the text alone first, in the order of introduction, then those driven by the compiler's diagnostics
   (`perm_mut`, `int_literal_i64`, `errors_migrate`, `null_migrate`) - an old file does not parse, so the compiler has

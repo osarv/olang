@@ -2531,6 +2531,17 @@ fn fixing(r mut report&) ? Failed {
                  sh(dir, "grep -q '2 places above may mean something else' err.txt") == 0, "fix lists what it cannot settle", dir)
     try r.expect(sh(dir, "cmp -s b.olang before25.want") == 0, "fix's result for code before 2026-10-25", dir)
     try r.expect(sh(dir, "\"$OLANG\" b.olang > out.txt 2>&1") == 0 and outOf(dir) == "5 2 13 3 5 2 false 2 2 2\n", "the program fixed computes what it did", dir)
+    # bulk review 8: std's functions renamed when they became builders (net.ParseIP is net.IP.Parse, list.From
+    # list.List.FromIter), a builder kept whole where its short name is a case of its enum, and code of today - an
+    # import's type with a FromIter, a type variable in front of a literal (E19) - left as it is
+    os.Run("cd " $os.Quote(dir) " && cp before1107.olang n.olang && cp clash.olang c.olang && cp today.olang t.olang")
+    try r.expect(sh(dir, $env "\"$OLANG\" fix n.olang c.olang t.olang > out.txt 2> err.txt") == 0 and
+                 outOf(dir) == "n.olang\nc.olang\n", "fix lists the two old files", dir)
+    try r.expect(sh(dir, "cmp -s n.olang before1107.want && cmp -s c.olang clash.want && cmp -s t.olang today.olang") == 0
+                 "fix's result for std's renamed builders, a case-named builder and code of today", dir)
+    try r.expect(sh(dir, "\"$OLANG\" n.olang > out.txt 2>&1") == 0 and outOf(dir) == "127.0.0.1 127.0.0.1:80 1970 3\n"
+                 "the program using std's renamed builders runs", dir)
+    try r.expect(sh(dir, "\"$OLANG\" t.olang > out.txt 2>&1") == 0 and outOf(dir) == "bag.Bag(5) 3\n", "code of today runs as before", dir)
 }
 
 # B1: the command line is words - a mode, options checked against the modes they apply to, help - and a one-character

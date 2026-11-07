@@ -1,0 +1,22 @@
+# check: fail error[M19g]: 'xs' holds a view of 'v' taken before 'v' may have grown
+# also: error[M19g]: 'ys' holds a view of 'v' taken before 'v' may have grown
+# M19g, T7e (bulk review 8): a ColumnVec's column is a view of its buffer, stale once the table grows - in the function
+# or through a call given it - as a Vec's View() is
+type P struct(X I64, Y I64) { X, Y }
+
+fn grow(v mut ColumnVec<P>&) {
+    for i in range 20 { v.Push(P(i, i)) }
+}
+
+fn main() {
+    v := ColumnVec<P>()
+    v.Push(P(1, 2))
+    xs := v.X
+    grow(v)
+    xs[0] = 99
+    ys := v.Y
+    v.Push(P(5, 5))
+    assert ys[0] == 2
+    zs := v.X
+    assert zs[0] == 1   # taken after the growth: no error
+}
