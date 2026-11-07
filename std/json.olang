@@ -14,24 +14,25 @@
 # a field or a list it is put in holds it where that lives. Nothing of it borrows the text: strings are copied, so the
 # text may be dropped as soon as Parse returns.
 #
-# Errors: one error type for reading and for asking (Error). An error carries no data, so where a parse stopped
-# is written into a Position its caller passes ("try json.Parse(text, at)"), when it passes one.
+# Errors: one error type for reading and for asking (Error). A reading error carries where the parse stopped - its line
+# and column, from 1, the column counting characters (T19b): "catch json.Error e { $e }" says
+# "json.Error.Unexpected(3, 14)"; a missing member carries what was asked.
 
 import "list"
 
 # why a text is not JSON, or what a question asked of a value could not answer
 type Error error {
-    Unexpected          # a character that cannot be where it is: a missing ',' or ':', a misspelt true, a raw control
-                        # character in a string
-    Unterminated        # the text ends inside a string, an array or an object - or before any value at all
-    BadEscape          # a backslash not followed by one of Json's escapes, or a \u naming half a surrogate pair
-    BadNumber          # not a Json number (01, 1., -, 1e), or too large for an F64
-    BadUtf8            # a string's bytes are not Utf-8
-    Trailing            # something follows the value
-    Depth               # arrays and objects nest more than MaxDepth deep
-    Missing             # no member by that name, or no item at that index
-    WrongKind          # the value is not the kind asked for: AsNum on a string, a name asked of an array
-    Uneven              # an Object built from names and values of different counts
+    # a character that cannot be where it is: a missing ',' or ':', a misspelt true, a raw control character in a string
+    Unexpected(line I64, col I64)
+    Unterminated(line I64, col I64)   # the text ends inside a string, an array or an object - or before any value at all
+    BadEscape(line I64, col I64)      # a backslash not followed by one of Json's escapes, or a \u naming half a pair
+    BadNumber(line I64, col I64)      # not a Json number (01, 1., -, 1e), or too large for an F64
+    BadUtf8(line I64, col I64)        # a string's bytes are not Utf-8
+    Trailing(line I64, col I64)       # something follows the value
+    Depth(line I64, col I64)          # arrays and objects nest more than MaxDepth deep
+    Missing(key String)               # no member by that name, or no item at that index (the index as text)
+    WrongKind                         # the value is not the kind asked for: AsNum on a string, a name asked of an array
+    Uneven                            # an Object built from names and values of different counts
 }
 
 # how deeply arrays and objects may nest in a text Parse reads - a bound that keeps code walking a tree recursively,
@@ -64,16 +65,6 @@ type Object struct(Keys Array<String&>&, Values Array<Json&>&) ? Error {
     index Array<I32>& = nameIndex(Keys)         # empty, or slots of member position + 1 (0 an empty slot)
 }
 
-# where Parse stopped: the byte offset into the text, and the line and the column there, both from 1 - a column
-# counting characters (UTF-8 sequences), not bytes. "$at" is "LINE:COL".
-type Position struct() {
-    Offset I64 = 0
-    Line I64 = 1
-    Col I64 = 1
-}
-
-fn (p Position&) Str() String { return $p.Line ":" $p.Col }
-
 # ---- asking a value ----
 
 # the member named key of an object (a String), or the item at index key of an array (an I32 or I64): "try doc["name"]",
@@ -84,20 +75,20 @@ fn (j Json&) At<K>(key K) Json& ? Error {
     match K {
         case String {
             match j {
-                case Json.Obj(o) { return o.Values[try o.find(key) catch { error Error.Missing }] }
+                case Json.Obj(o) { return o.Values[try o.find(key) catch { error Error.Missing(key) }] }
                 case _ { error Error.WrongKind }
             }
         }
         case String& {
             match j {
-                case Json.Obj(o) { return o.Values[try o.find(key) catch { error Error.Missing }] }
+                case Json.Obj(o) { return o.Values[try o.find(key) catch { error Error.Missing(key) }] }
                 case _ { error Error.WrongKind }
             }
         }
         case I32 {
             match j {
                 case Json.Arr(items) {
-                    if key < 0 or I64(key) >= items.Len() { error Error.Missing }
+                    if key < 0 or I64(key) >= items.Len() { error Error.Missing($key) }
                     return items[I64(key)]
                 }
                 case _ { error Error.WrongKind }
@@ -106,7 +97,7 @@ fn (j Json&) At<K>(key K) Json& ? Error {
         case I64 {
             match j {
                 case Json.Arr(items) {
-                    if key < 0 or key >= items.Len() { error Error.Missing }
+                    if key < 0 or key >= items.Len() { error Error.Missing($key) }
                     return items[key]
                 }
                 case _ { error Error.WrongKind }
@@ -202,7 +193,7 @@ fn (o Object&) Len() I64 { return o.Keys.Len() }
 
 # the value of the member named key - the last, when several are - failing with Missing when there is none
 fn (o Object&) At(key String&) Json& ? Error {
-    return o.Values[try o.find(key) catch { error Error.Missing }]
+    return o.Values[try o.find(key) catch { error Error.Missing(key) }]
 }
 
 # whether a member is named key: "name" in o
@@ -213,24 +204,24 @@ fn (o Object&) Has(key String&) Bool {
 
 # where the last member named key is, failing with Missing when none is. Names are compared byte by
 # byte rather than with "==", so that key may be text passed by value (a generic's String), which it can only index
-fn (o Object&) find<K>(key K) I64 ? Error {
+fn (o Object&) find<K>(key K) I64 ? noMember {
     if o.index.Len() == 0 {
         i I64 = o.Keys.Len() - 1
         for i >= 0 {
             if sameName(o.Keys[i], key) { return i }
             i--
         }
-        error Error.Missing
+        error noMember
     }
     mask I64 = o.index.Len() - 1
     s I64 = nameHash(key) & mask
     for _ in range o.index.Len() {
         at I64 = I64(o.index[s])
-        if at == 0 { error Error.Missing }
+        if at == 0 { error noMember }
         if sameName(o.Keys[at - 1], key) { return at - 1 }
         s = (s + 1) & mask
     }
-    error Error.Missing
+    error noMember
 }
 
 fn sameName<K>(a String&, b K) Bool {
@@ -372,13 +363,10 @@ fn (j Json&) Hash() I64 {
 # ---- reading ----
 
 # the value the JSON text holds: one value, with nothing but whitespace around it (a byte order mark before it is
-# ignored). Fails with the Error that says why the text is not JSON; "at", when given, is set to where reading
-# stopped - the start of the problem, or the end of the text.
-fn Parse(text String&, at mut Position?& = null) Json& ? Error {
+# ignored). Fails with the Error that says why the text is not JSON, carrying where reading stopped - the start of the
+# problem, or the end of the text
+fn Parse(text String&) Json& ? Error {
     r mut reader& = reader(text)
-    defer {
-        if at is not null { r.place(at) }
-    }
     try r.run()
     return r.vals[0]
 }
@@ -398,20 +386,27 @@ type reader struct(src String&) {
     depth I64 = 0
 }
 
-# where pos is, as a Position
-fn (r reader&) place(at mut Position&) {
-    at.Offset = r.pos
-    at.Line = 1
-    at.Col = 1
-    for i in range r.pos {
+# the line pos is on, from 1
+fn (r reader&) line() I64 {
+    n I64 = 1
+    for i in range r.pos.Min(r.src.Len()) {
+        if r.src[i] == '\n': n++
+    }
+    return n
+}
+
+# the column pos is at, from 1, counting characters (UTF-8 sequences), not bytes
+fn (r reader&) col() I64 {
+    n I64 = 1
+    for i in range r.pos.Min(r.src.Len()) {
         c := r.src[i]
         if c == '\n' {
-            at.Line++
-            at.Col = 1
+            n = 1
         } else if (c & 0xC0) != 0x80 {
-            at.Col++
+            n++
         }
     }
+    return n
 }
 
 fn (r mut reader&) push(v mut Json&) {
@@ -435,7 +430,7 @@ fn (r mut reader&) pushName(name String&) {
 }
 
 fn (r mut reader&) open(isObject Bool) ? Error {
-    if r.depth == MaxDepth { error Error.Depth }
+    if r.depth == MaxDepth { error Error.Depth(r.line(), r.col()) }
     if r.depth == r.starts.Len() {
         old := r.starts
         oldNames := r.nameStarts
@@ -506,7 +501,7 @@ fn (r mut reader&) run() ? Error {
     for {
         # a value is next
         r.skipSpace()
-        if r.pos == r.src.Len() { error Error.Unterminated }
+        if r.pos == r.src.Len() { error Error.Unterminated(r.line(), r.col()) }
         c := r.src[r.pos]
         if c == '[' {
             try r.open(false)
@@ -532,11 +527,11 @@ fn (r mut reader&) run() ? Error {
         for {
             if r.depth == 0 {
                 r.skipSpace()
-                if r.pos < r.src.Len() { error Error.Trailing }
+                if r.pos < r.src.Len() { error Error.Trailing(r.line(), r.col()) }
                 return
             }
             r.skipSpace()
-            if r.pos == r.src.Len() { error Error.Unterminated }
+            if r.pos == r.src.Len() { error Error.Unterminated(r.line(), r.col()) }
             d := r.src[r.pos]
             if d == ',' {
                 r.pos++
@@ -546,7 +541,7 @@ fn (r mut reader&) run() ? Error {
             if d == ('}' if r.inObject() else ']') {
                 r.close()
             } else {
-                error Error.Unexpected
+                error Error.Unexpected(r.line(), r.col())
             }
         }
     }
@@ -555,12 +550,12 @@ fn (r mut reader&) run() ? Error {
 # an object member's name and the ':' after it
 fn (r mut reader&) name() ? Error {
     r.skipSpace()
-    if r.pos == r.src.Len() { error Error.Unterminated }
-    if r.src[r.pos] != '"' { error Error.Unexpected }
+    if r.pos == r.src.Len() { error Error.Unterminated(r.line(), r.col()) }
+    if r.src[r.pos] != '"' { error Error.Unexpected(r.line(), r.col()) }
     r.pushName(try r.string())
     r.skipSpace()
-    if r.pos == r.src.Len() { error Error.Unterminated }
-    if r.src[r.pos] != ':' { error Error.Unexpected }
+    if r.pos == r.src.Len() { error Error.Unterminated(r.line(), r.col()) }
+    if r.src[r.pos] != ':' { error Error.Unexpected(r.line(), r.col()) }
     r.pos++
 }
 
@@ -582,14 +577,14 @@ fn (r mut reader&) scalar(c Char) ? Error {
         try r.word("null")
         r.push(Json.Null)
     } else {
-        error Error.Unexpected
+        error Error.Unexpected(r.line(), r.col())
     }
 }
 
 fn (r mut reader&) word(w String&) ? Error {
     for i in range w.Len() {
-        if r.pos == r.src.Len() { error Error.Unterminated }
-        if r.src[r.pos] != w[i] { error Error.Unexpected }
+        if r.pos == r.src.Len() { error Error.Unterminated(r.line(), r.col()) }
+        if r.src[r.pos] != w[i] { error Error.Unexpected(r.line(), r.col()) }
         r.pos++
     }
 }
@@ -607,13 +602,13 @@ fn (r mut reader&) string() String& ? Error {
     # the rest: checked, and measured, then decoded into text of exactly that length
     size I64 = r.pos - start
     for {
-        if r.pos == r.src.Len() { error Error.Unterminated }
+        if r.pos == r.src.Len() { error Error.Unterminated(r.line(), r.col()) }
         c := r.src[r.pos]
         if c == '"' { break }
         if c == '\\' {
             size += try r.escape(start, Array<Char>(0))
         } else if c < 0x20 {
-            error Error.Unexpected
+            error Error.Unexpected(r.line(), r.col())
         } else if c < 0x80 {
             size++
             r.pos++
@@ -646,7 +641,7 @@ fn (r mut reader&) string() String& ? Error {
 fn (r mut reader&) escape(w I64, out mut Array<Char>&) I64 ? Error {
     if r.pos + 1 == r.src.Len() {
         r.pos++
-        error Error.Unterminated
+        error Error.Unterminated(r.line(), r.col())
     }
     e := r.src[r.pos + 1]
     b Char = 0
@@ -668,24 +663,24 @@ fn (r mut reader&) escape(w I64, out mut Array<Char>&) I64 ? Error {
         r.pos += 6
         if cp >= 0xDC00 and cp <= 0xDFFF {
             r.pos = at
-            error Error.BadEscape
+            error Error.BadEscape(r.line(), r.col())
         }
         if cp >= 0xD800 and cp <= 0xDBFF {          # the first half of a pair: the second must follow at once
             if r.pos + 1 >= r.src.Len() or r.src[r.pos] != '\\' or r.src[r.pos + 1] != 'u' {
                 r.pos = at
-                error Error.BadEscape
+                error Error.BadEscape(r.line(), r.col())
             }
             lo := try r.hex4(r.pos + 2)
             if lo < 0xDC00 or lo > 0xDFFF {
                 r.pos = at
-                error Error.BadEscape
+                error Error.BadEscape(r.line(), r.col())
             }
             r.pos += 6
             cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00)
         }
         return putUtf8(cp, w, out)
     } else {
-        error Error.BadEscape
+        error Error.BadEscape(r.line(), r.col())
     }
     if out.Len() > 0 { out[w] = b }
     r.pos += 2
@@ -698,7 +693,7 @@ fn (r mut reader&) hex4(i I64) I64 ? Error {
     for k in range i, i + 4 {
         if k >= r.src.Len() {
             r.pos = r.src.Len()
-            error Error.Unterminated
+            error Error.Unterminated(r.line(), r.col())
         }
         c := r.src[k]
         d I64 = 0
@@ -710,7 +705,7 @@ fn (r mut reader&) hex4(i I64) I64 ? Error {
             d = I64(c - 'A') + 10
         } else {
             r.pos = k
-            error Error.BadEscape
+            error Error.BadEscape(r.line(), r.col())
         }
         v = v * 16 + d
     }
@@ -765,13 +760,13 @@ fn (r reader&) utf8() I64 ? Error {
         if c == 0xF0 { lo = 0x90 }
         if c == 0xF4 { hi = 0x8F }
     } else {
-        error Error.BadUtf8
+        error Error.BadUtf8(r.line(), r.col())
     }
-    if r.pos + n > r.src.Len() { error Error.BadUtf8 }
+    if r.pos + n > r.src.Len() { error Error.BadUtf8(r.line(), r.col()) }
     b := r.src[r.pos + 1]
-    if b < lo or b > hi { error Error.BadUtf8 }
+    if b < lo or b > hi { error Error.BadUtf8(r.line(), r.col()) }
     for k in range 2, n {
-        if (r.src[r.pos + k] & 0xC0) != 0x80 { error Error.BadUtf8 }
+        if (r.src[r.pos + k] & 0xC0) != 0x80 { error Error.BadUtf8(r.line(), r.col()) }
     }
     return n
 }
@@ -786,12 +781,12 @@ fn (r mut reader&) number() F64 ? Error {
     start I64 = r.pos
     neg Bool = r.src[r.pos] == '-'
     if neg { r.pos++ }
-    if not r.digitAt(r.pos) { error Error.BadNumber }
+    if not r.digitAt(r.pos) { error Error.BadNumber(r.line(), r.col()) }
     whole I64 = 0
     digits I64 = 0
     if r.src[r.pos] == '0' {
         r.pos++
-        if r.digitAt(r.pos) { error Error.BadNumber }     # no leading zeros
+        if r.digitAt(r.pos) { error Error.BadNumber(r.line(), r.col()) }     # no leading zeros
     } else {
         for r.digitAt(r.pos) {
             whole = whole * 10 + I64(r.src[r.pos] - '0')
@@ -803,20 +798,20 @@ fn (r mut reader&) number() F64 ? Error {
     if r.pos < r.src.Len() and r.src[r.pos] == '.' {
         simple = false
         r.pos++
-        if not r.digitAt(r.pos) { error Error.BadNumber }
+        if not r.digitAt(r.pos) { error Error.BadNumber(r.line(), r.col()) }
         for r.digitAt(r.pos) { r.pos++ }
     }
     if r.pos < r.src.Len() and (r.src[r.pos] == 'e' or r.src[r.pos] == 'E') {
         simple = false
         r.pos++
         if r.pos < r.src.Len() and (r.src[r.pos] == '+' or r.src[r.pos] == '-') { r.pos++ }
-        if not r.digitAt(r.pos) { error Error.BadNumber }
+        if not r.digitAt(r.pos) { error Error.BadNumber(r.line(), r.col()) }
         for r.digitAt(r.pos) { r.pos++ }
     }
     if simple { return -F64(whole) if neg else F64(whole) }
     v := try r.src[start:r.pos].ParseFloat() catch {
         r.pos = start
-        error Error.BadNumber
+        error Error.BadNumber(r.line(), r.col())
     }
     return v
 }
@@ -949,8 +944,8 @@ fn keyFor<F>(f F, keys Naming) String {
 # its default.
 # Fails with what Parse fails with, with Error.Missing and Error.WrongKind where the text does not fit
 # the type, and with what a constructor fails with
-fn Decode<T>(text String&, at mut Position?& = null, keys Naming = Naming.Exact) T ? {
-    j := try Parse(text, at)
+fn Decode<T>(text String&, keys Naming = Naming.Exact) T ? {
+    j := try Parse(text)
     return try From<T>(j, keys)
 }
 
@@ -1307,14 +1302,13 @@ if TestBuild {
 
     # why text is not JSON, as "WORD LINE:COL", or "ok"
     fn problem(text String&) String& {
-        at := Position()
-        try Parse(text, at) catch Error.Unexpected { return "UNEXPECTED " $at }
-            catch Error.Unterminated { return "UNTERMINATED " $at }
-            catch Error.BadEscape { return "BAD_ESCAPE " $at }
-            catch Error.BadNumber { return "BAD_NUMBER " $at }
-            catch Error.BadUtf8 { return "BAD_UTF8 " $at }
-            catch Error.Trailing { return "TRAILING " $at }
-            catch Error.Depth { return "DEPTH " $at }
+        try Parse(text) catch Error.Unexpected e { return "UNEXPECTED " $e.line ":" $e.col }
+            catch Error.Unterminated e { return "UNTERMINATED " $e.line ":" $e.col }
+            catch Error.BadEscape e { return "BAD_ESCAPE " $e.line ":" $e.col }
+            catch Error.BadNumber e { return "BAD_NUMBER " $e.line ":" $e.col }
+            catch Error.BadUtf8 e { return "BAD_UTF8 " $e.line ":" $e.col }
+            catch Error.Trailing e { return "TRAILING " $e.line ":" $e.col }
+            catch Error.Depth e { return "DEPTH " $e.line ":" $e.col }
             catch Error { return "OTHER" }
         return "ok"
     }
@@ -1554,10 +1548,10 @@ if TestBuild {
 
     test "the fixture file" {
         text := try os.ReadFile("checks/fixtures/json/sample.json")
-        at := Position()
-        doc := try Parse(text, at)
-        assert at.Offset == text.Len() and at.Line == 15 and at.Col == 1
+        doc := try Parse(text)
         try fixture(doc)
+        # T19b: where a text stops being JSON is carried by the error
+        assert (try $Parse("{\"a\":\n  [1, 2,]}") catch Error e default $e) == "Error.Unexpected(2, 9)"
         assert (try Parse(Encode(doc, "  "))) == doc
     }
 
@@ -1691,9 +1685,12 @@ if TestBuild {
     test "error values are written as their words, and read back" {
         want := "{\"N\":3,\"E\":\"" $jsErr.Bad "\",\"A\":\"" $jsAny.Timeout "\",\"Seen\":[\"" $jsErr.Bad "\",null]}"
         assert errText == want and errBack == jsErr.Bad
-        r := try Decode<jsRec>(Encode(jsRec(4, null, os.Error.Denied, jsSeen())))
-        assert r.N == 4 and r.E is null and r.A == os.Error.Denied and r.Seen.Len() == 2 and r.Seen[0] == jsErr.Bad
-        assert r.Seen[1] is null and $r.A == "os.Error.Denied"
+        r := try Decode<jsRec>(Encode(jsRec(4, null, jsAny.Timeout, jsSeen())))
+        assert r.N == 4 and r.E is null and r.A == jsAny.Timeout and r.Seen.Len() == 2 and r.Seen[0] == jsErr.Bad
+        assert r.Seen[1] is null and $r.A == "jsAny.Timeout"
+        # T19b: an error carrying a payload is written as "$" writes it - read back only where its word carries none
+        assert Encode(jsRec(5, null, os.Error.Denied("p"), jsSeen())).Contains("os.Error.Denied(\\\"p\\\")")
+        assert (try Decode<jsAny>("\"os.Error.Denied(\\\"p\\\")\"") catch Error.WrongKind default jsAny.Timeout) == jsAny.Timeout
         assert (try Decode<jsErr>("\"jsErr.NOPE\"") catch Error.WrongKind default jsErr.Empty) == jsErr.Empty
         assert (try Decode<jsErr>("3") catch Error.WrongKind default jsErr.Empty) == jsErr.Empty
         assert jsErr.Kind == TypeKind.Error and jsErr.Cases.Len() == 2 and jsAny.Cases.Len() > 3

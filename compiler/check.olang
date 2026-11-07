@@ -7062,7 +7062,24 @@ fn (c mut Checker&) errWordCalled(sp source.Span, r types.TypeId, k I64, args Ar
         c.dropArgs(args)
         return c.unknown(sp)
     }
-    return c.lit(sp, r, codes[k])
+    if not c.P.T.ErrCarries(r): return c.lit(sp, r, codes[k])
+    # T19b: a word of a set carrying payloads - one carrying a payload itself with its fields' zero values (a
+    # descriptor gives no payload of its own)
+    code := codes[k]
+    j := (code >> 16) - 1
+    et := c.P.T.ErrOf(c.P.T.Items(c.P.T.ErrValItems(r))[j])
+    pt := c.P.PayloadOf(et)
+    pv typed.Expr?& = null
+    if pt != types.UnknownT {
+        w := code & 65535
+        rec := c.P.T.Items(c.P.T.Cases(pt))[w]
+        from := c.exprs.Len()
+        if rec != types.TypeId(0) {
+            for ft in c.P.T.Items(c.P.T.Parts(rec)) { c.exprs.Push(c.zero(sp, ft)) }
+        }
+        pv = typed.Expr.Make(sp, pt, typed.Make(typed.MakeKind.Case, w, gather(c.exprs, from), null, typed.SiteId(-1), typed.Check.None))
+    }
+    return c.errValue(sp, r, j, code, pv)
 }
 
 # a value's type as a message spells it: written text as a String (E12, T29c)
@@ -14616,13 +14633,13 @@ fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n 
             # T19b: a word carrying a payload is written with its fields, a plain word without
             fields := c.P.WordFields(d, k)
             if fields.Len() == 0 and args.Len() > 0 {
-                c.err(nsp, msgs.PlainWordCalled(c.P.ErrorWordName(d, k)))
+                c.err(nsp, msgs.PlainWordCalled(c.wordText(t, k)))
                 c.dropArgs(args)
                 return c.unknown(sp)
             }
             if fields.Len() > 0 and args.Len() != fields.Len() {
-                if args.Len() == 0 { c.err(nsp, msgs.PayloadWordBare(c.P.ErrorWordName(d, k), fieldNames(c, fields))) }
-                if args.Len() > 0 { c.err(nsp, msgs.PayloadArgs(c.P.ErrorWordName(d, k), fields.Len(), args.Len())) }
+                if args.Len() == 0 { c.err(nsp, msgs.PayloadWordBare(c.wordText(t, k), fieldNames(c, fields))) }
+                if args.Len() > 0 { c.err(nsp, msgs.PayloadArgs(c.wordText(t, k), fields.Len(), args.Len())) }
                 c.dropArgs(args)
                 return c.unknown(sp)
             }
@@ -21312,7 +21329,7 @@ fn (c mut Checker&) pushPayload(sp source.Span, word ast.Path&, et types.TypeId,
     d := c.P.T.DeclOf(et)
     fields := c.P.WordFields(d, w)
     wsp := c.pathPart(word, 0)
-    wtext := c.P.ErrorWordName(d, w)
+    wtext := c.wordText(et, w)
     if fields.Len() > 0 and args is null {
         c.err(wsp, msgs.PayloadWordBare(wtext, fieldNames(c, fields)))
         return
@@ -21333,6 +21350,13 @@ fn (c mut Checker&) pushPayload(sp source.Span, word ast.Path&, et types.TypeId,
     pv := c.enumCase(sp, wsp, pt, c.P.ErrorWords(d)[w], given)
     if typeOf(pv) == types.UnknownT: return
     c.emit(typed.Stmt.Eval(sp, c.prim(sp, types.VoidT, typed.PrimOp.ErrPush, pv, null)))
+}
+
+# T19b: word w of error type et as code here writes it - "os.Error.Denied", an error raised by name its name alone
+fn (c mut Checker&) wordText(et types.TypeId, w I64) String {
+    d := c.P.T.DeclOf(et)
+    if c.P.IsRaisedError(d): return c.ty(et)
+    return $c.ty(et) "." $c.text(c.P.ErrorWords(d)[w])
 }
 
 # a word's payload fields as source writes their names: "line, col"
