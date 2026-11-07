@@ -1676,6 +1676,7 @@ fn (ln mut lowering&) with(p pl, x mir.Proj) pl {
 fn (ln mut lowering&) borrow(p typed.Lvalue&, bt types.TypeId, sp source.Span) mir.Operand {
     q := ln.place(p)
     if q.Pk < 0 or ln.dead { return ln.into(bt, mir.Rvalue.Ref(ln.mk(q), bt), sp) }
+    if (ln.T.PermOf(bt) & types.Writable) != 0 { ln.gap(sp, "a field of a packed struct lent writably") }
     l := ln.local(ln.packedRead(q, p.Type(), sp), p.Type(), sp)
     return ln.into(bt, mir.Rvalue.Ref(mir.L(l), bt), sp)
 }
