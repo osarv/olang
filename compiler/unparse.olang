@@ -327,6 +327,7 @@ fn (w mut writer&) typeDecl(t ast.TypeDecl&) {
     w.typeParams(t.Params)
     if t.Word == ast.DeclWord.Immut { w.put(" immut") }
     if t.Word == ast.DeclWord.Unique { w.put(" unique") }
+    if t.Packed { w.put(" packed") }
     if t.Extends { w.put(" extends") }
     w.put(" ")
     w.typeBody(t.Body!)

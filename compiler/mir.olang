@@ -1473,7 +1473,7 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
         case typed.PrimOp.Len, typed.PrimOp.AtomicLoad, typed.PrimOp.Retire, typed.PrimOp.AnyInstance: 1
         case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount, typed.PrimOp.ByteSwap: 1
         case typed.PrimOp.Holds: -1
-        case typed.PrimOp.AtomicCompareSwap: 3
+        case typed.PrimOp.AtomicCompareSwap, typed.PrimOp.Repack: 3
         case _: 2
     }
     if want < 0 {
@@ -1565,6 +1565,12 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
         case typed.PrimOp.AnyIs {
             if not t.IsAny(ra) { v.bad("AnyIs of a " $v.canon(a)) }
             if ty != types.BoolT { v.bad("AnyIs typed " $v.canon(ty)) }
+        }
+        case typed.PrimOp.Unpack, typed.PrimOp.Repack {
+            # T13c: a packed value, a field's position, and for Repack the field's new value
+            if not t.Packed(ra) { v.bad($short($op) " of a " $v.canon(a)) }
+            if t.Repr(v.operandType(v.arg(r, 1))) != I64T { v.bad($short($op) "'s field not an I64") }
+            if op == typed.PrimOp.Repack and not t.Same(t.Repr(ty), ra) { v.bad("Repack typed " $v.canon(ty)) }
         }
         case _ {
             # the atomics: a writable reference to an integer place, then values of its type

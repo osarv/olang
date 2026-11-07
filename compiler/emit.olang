@@ -1701,7 +1701,7 @@ fn (e mut Emitter&) need(t types.TypeId) {
     r := tt.Repr(t)
     match tt.KindOf(r) {
         case types.Kind.Named {
-            if tt.DeclKindOf(tt.DeclOf(r)) == types.DeclKind.Struct and not e.namedSeen.Has(r) {
+            if tt.DeclKindOf(tt.DeclOf(r)) == types.DeclKind.Struct and not tt.Packed(r) and not e.namedSeen.Has(r) {
                 e.namedSeen.Put(r, true)
                 e.named.Push(r)
                 for x in tt.Embedded(r) { e.need(x) }
@@ -2928,6 +2928,12 @@ fn (fe mut fnEm&) intoPlace(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool {
             if k == types.Kind.AnonEnum or (k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum) {
                 return false
             }
+            if t.Packed(r) {
+                bits := fe.packedMake(r, args)
+                at, _ := fe.addr(p)
+                if fe.size(r) > 0 { fe.store("i" $(8 * fe.size(r)), bits, at) }
+                return true
+            }
             if fe.apart(p, args) {
                 at, _ := fe.addr(p)
                 fe.buildInto(at, pt, args)
@@ -3479,6 +3485,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
         case mir.Stmt.Assign(_, p, rv) {
             if rv == mir.Rvalue.Use(mir.Operand.None) { return }   # declared, nothing written (D13d)
             pt := fe.placeType(p)
+            if fe.packedInto(p, pt, rv) { return }
             if fe.fillInPlace(p, pt, rv) { return }
             if fe.viaMem(pt) and fe.intoPlace(p, pt, rv) { return }
             v := fe.rvalue(rv, pt)
@@ -4354,7 +4361,186 @@ fn (fe mut fnEm&) aggregate(ty types.TypeId, tag I64, args mir.Range) String {
         xs := Array<types.TypeId>(n, t.Elem(a))
         return fe.parts(a, xs, args)
     }
+    if t.Packed(r) { return fe.asPacked(fe.packedMake(r, args), r) }
     return fe.parts(r, t.Items(fe.fieldList(r)), args)
+}
+
+# ---- packed structs (T13c) ----
+
+# a packed struct's field read out (Unpack) or replaced (Repack): shifts and masks over the value's bits as one integer
+# of its whole bytes
+fn (fe mut fnEm&) packedPrim(op typed.PrimOp, ty types.TypeId, args mir.Range) String {
+    t := fe.E.T
+    x := fe.arg(args, 0)
+    pt := t.Repr(fe.otype(x))
+    k := match fe.arg(args, 1) {
+        case mir.Operand.Const(_, v): v
+        case _: 0
+    }
+    n := 8 * fe.size(pt)
+    ft := t.Items(t.Fields(pt))[k]
+    off, w := t.BitOffsets(pt)[k], t.PackedBits(ft)
+    acc := fe.packedBits(x, pt)
+    if op == typed.PrimOp.Unpack { return fe.fromBits(fe.cut(acc, n, off, w), w, ft) }
+    put := fe.placeBits(acc, n, off, w, fe.toBits(fe.val(fe.arg(args, 2), ft), ft, w))
+    return fe.asPacked(put, pt)
+}
+
+# a packed value made or given a new field, stored straight into its place as its bits
+fn (fe mut fnEm&) packedInto(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool {
+    t := fe.E.T
+    r := t.Repr(pt)
+    if not t.Packed(r) or fe.size(r) == 0 { return false }
+    bits := ""
+    match rv {
+        case mir.Rvalue.Aggregate(_, _, args) { bits = fe.packedMake(r, args) }
+        case mir.Rvalue.Prim(op, _, args) {
+            if op != typed.PrimOp.Repack { return false }
+            x := fe.arg(args, 0)
+            k := match fe.arg(args, 1) {
+                case mir.Operand.Const(_, v): v
+                case _: 0
+            }
+            ft := t.Items(t.Fields(r))[k]
+            w := t.PackedBits(ft)
+            bits = fe.placeBits(fe.packedBits(x, r), 8 * fe.size(r), t.BitOffsets(r)[k], w, fe.toBits(fe.val(fe.arg(args, 2), ft), ft, w))
+        }
+        case _ { return false }
+    }
+    at, _ := fe.addr(p)
+    fe.store("i" $(8 * fe.size(r)), bits, at)
+    return true
+}
+
+# a packed value's bits as one integer (iN, N its bytes' bits): loaded from its place, else its value spilled
+fn (fe mut fnEm&) packedBits(x mir.Operand, pt types.TypeId) String {
+    n := 8 * fe.size(pt)
+    match x {
+        case mir.Operand.Copy(p) {
+            at, _ := fe.addr(p)
+            return fe.load("i" $n, at)
+        }
+        case mir.Operand.Const(_, _), mir.Operand.None { return "0" }
+        case _ { return fe.asInt(fe.val(x, pt), pt) }
+    }
+}
+
+# a packed value as its bits, and back: through a slot of the frame, which LLVM folds away
+fn (fe mut fnEm&) asInt(v String&, pt types.TypeId) String {
+    sz := fe.size(pt)
+    s := fe.alloca("[" $sz " x i8]", 1)
+    fe.store("[" $sz " x i8]", v, s)
+    return fe.load("i" $(8 * sz), s)
+}
+
+fn (fe mut fnEm&) asPacked(bits String&, pt types.TypeId) String {
+    sz := fe.size(pt)
+    if sz == 0 { return "zeroinitializer" }
+    s := fe.alloca("[" $sz " x i8]", 1)
+    fe.store("i" $(8 * sz), bits, s)
+    return fe.load("[" $sz " x i8]", s)
+}
+
+# the w bits of the n-bit integer acc from bit off, as an iw
+fn (fe mut fnEm&) cut(acc String&, n I64, off I64, w I64) String {
+    v := fe.let("lshr i" $n " " $acc ", " $off) if off > 0 else $acc
+    return fe.let("trunc i" $n " " $v " to i" $w) if w < n else v
+}
+
+# acc with its w bits from off replaced by the iw b
+fn (fe mut fnEm&) placeBits(acc String&, n I64, off I64, w I64, b String&) String {
+    if w == 0 { return $acc }
+    nt := "i" $n
+    z := fe.let("zext i" $w " " $b " to " $nt) if w < n else $b
+    sh := fe.let("shl " $nt " " $z ", " $off) if off > 0 else z
+    ones := fe.let("lshr " $nt " -1, " $(n - w)) if w < n else "-1"
+    mk := fe.let("shl " $nt " " $ones ", " $off) if off > 0 else ones
+    keep := fe.let("and " $nt " " $acc ", " $fe.let("xor " $nt " " $mk ", -1"))
+    return fe.let("or " $nt " " $keep ", " $sh)
+}
+
+# a field's value of type ft made from its w bits (an iw)
+fn (fe mut fnEm&) fromBits(b String&, w I64, ft types.TypeId) String {
+    t := fe.E.T
+    r := t.Repr(ft)
+    if r == types.BoolT or t.IsInt(r) { return $b }
+    if t.IsFloat(r) { return fe.bitcast(b, "i" $w, fe.ty(r)) }
+    if t.Packed(r) {
+        n2 := 8 * fe.size(r)
+        return fe.asPacked(fe.let("zext i" $w " " $b " to i" $n2) if w < n2 else b, r)
+    }
+    a := fe.arrayOf(r)
+    if a != types.UnknownT {
+        el := t.Elem(a)
+        ew := t.PackedBits(el)
+        lt := fe.ty(a)
+        cur := "undef"
+        for i in range fe.fixedLen(a) {
+            v := fe.fromBits(fe.cut(b, w, i * ew, ew), ew, el)
+            cur = fe.let("insertvalue " $lt " " $cur ", " $fe.ty(el) " " $v ", " $i)
+        }
+        return cur
+    }
+    # a payload-free enum: its case's position from 0, or its raw value mapped to the case holding it (T17e)
+    raws := t.RawBits(r)
+    if t.RawType(r) == types.UnknownT or raws.Len() == 0 { return fe.let("zext i" $w " " $b " to i32") if w < 32 else fe.let("trunc i" $w " " $b " to i32") if w > 32 else $b }
+    cur := "0"
+    for i in range raws.Len() {
+        c := fe.let("icmp eq i" $w " " $b ", " $(raws[i] & bmaskOf(w)))
+        cur = fe.let("select i1 " $c ", i32 " $i ", i32 " $cur)
+    }
+    return cur
+}
+
+# a field's value v of type ft as its w bits (an iw)
+fn (fe mut fnEm&) toBits(v String&, ft types.TypeId, w I64) String {
+    t := fe.E.T
+    r := t.Repr(ft)
+    if r == types.BoolT or t.IsInt(r) { return $v }
+    if t.IsFloat(r) { return fe.bitcast(v, fe.ty(r), "i" $w) }
+    if t.Packed(r) {
+        n2 := 8 * fe.size(r)
+        i := fe.asInt(v, r)
+        return fe.let("trunc i" $n2 " " $i " to i" $w) if w < n2 else i
+    }
+    a := fe.arrayOf(r)
+    if a != types.UnknownT {
+        el := t.Elem(a)
+        ew := t.PackedBits(el)
+        lt := fe.ty(a)
+        acc := "0"
+        for i in range fe.fixedLen(a) {
+            e := fe.let("extractvalue " $lt " " $v ", " $i)
+            acc = fe.placeBits(acc, w, i * ew, ew, fe.toBits(e, el, ew))
+        }
+        return acc
+    }
+    raws := t.RawBits(r)
+    if t.RawType(r) == types.UnknownT or raws.Len() == 0 { return fe.let("trunc i32 " $v " to i" $w) if w < 32 else fe.let("zext i32 " $v " to i" $w) if w > 32 else $v }
+    cur := "0"
+    for i in range raws.Len() {
+        c := fe.let("icmp eq i32 " $v ", " $i)
+        cur = fe.let("select i1 " $c ", i" $w " " $(raws[i] & bmaskOf(w)) ", i" $w " " $cur)
+    }
+    return cur
+}
+
+# the low w bits of a raw value, as LLVM writes a constant of w bits (unsigned; LLVM reads it modulo 2^w)
+fn bmaskOf(w I64) I64 { return -1 if w >= 64 else (I64(1) << w) - 1 }
+
+# a packed struct made of its fields' values: their bits placed one after another
+fn (fe mut fnEm&) packedMake(pt types.TypeId, args mir.Range) String {
+    t := fe.E.T
+    n := 8 * fe.size(pt)
+    if n == 0 { return "0" }
+    fs := t.Items(t.Fields(pt))
+    offs := t.BitOffsets(pt)
+    acc := "0"
+    for i in range fs.Len() {
+        w := t.PackedBits(fs[i])
+        acc = fe.placeBits(acc, n, offs[i], w, fe.toBits(fe.val(fe.arg(args, i), fs[i]), fs[i], w))
+    }
+    return acc
 }
 
 fn (fe mut fnEm&) parts(ty types.TypeId, ps Array<types.TypeId>&, args mir.Range) String {
@@ -4401,6 +4587,7 @@ fn (e mut Emitter&) position(l types.ListId, err types.TypeId) I64 {
 # ---- operations ----
 
 fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String {
+    if op == typed.PrimOp.Unpack or op == typed.PrimOp.Repack { return fe.packedPrim(op, ty, args) }
     t := fe.E.T
     a0 := fe.arg(args, 0)
     t0 := fe.otype(a0)

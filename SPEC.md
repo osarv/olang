@@ -168,8 +168,10 @@ C2a). Anywhere else - a parameter, a local, a function, a type - the words stay 
 
 **L9b (words of one place).** `commutes` is a word only right after a method's result (E31c), and `immut` and `unique`
 only right before a type declaration's body (T13a: `type Config immut struct(...)`, T13b: `type File unique
-struct(...)`, a type name - or `struct`, `enum`, `extends`, `trait`, `error`, `fn` - following it), an ordinary name
-everywhere else. The two are never written together (T13b).
+struct(...)`, a type name - or `struct`, `enum`, `extends`, `trait`, `error`, `fn` - following it), and `packed` only
+right before `struct` in a type declaration, after either of those where one is written (T13c: `type Header packed
+struct(...)`; before `enum`, `extends`, `trait` or `error` it is an error naming T13c) - an ordinary name everywhere else.
+`immut` and `unique` are never written together (T13b).
 
 **L9c (`any`).** `any` is a word only where a type is written and the name of a type follows it on its line (T32):
 `s any Shape&`, `List<any Shape&>`, `fn f() any Shape&`; anywhere else it is an ordinary name.
@@ -842,6 +844,38 @@ from an existing value, a by-value argument, a store, a part, a result (but a by
 a walk's or a binding's name, which are references) - is refused at the program's call that bound it, as a generic's
 needs are (G18a): `Push needs a copy, and File is unique`, the note where the body copies. `unique` is a word only in
 that position (L9b); it names nothing.
+
+**T13c (`packed`).** A struct declared with the word `packed` right before `struct` - `type Header packed struct(version
+U4, ihl U4, length U16) { version, ihl, length }`, after `immut` or `unique` where one is written (`type Reg immut packed
+struct(...)`) - is laid out with **no padding, each field at its exact width in bits**: its fields in declaration order
+from the lowest bit up, field k starting at the bit after field k-1 ends, bit b of the value being bit `b % 8` (the
+least significant first) of its byte `b / 8` - the layout GCC and clang give a `__attribute__((packed))` struct of
+bitfields on little-endian x86-64 and AArch64 (X11a). Its size is its bits rounded up to whole bytes, its alignment 1,
+and the bits above its last field are always zero. A field's **width** is:
+- an integer type of any width (T4a) and a type declared over one - `Char` (8) included - its width; `Bool` 1;
+- `F16`, `BF16` 16, `F32` 32, `F64` 64: the float's bits (E33);
+- an enum carrying no payload: its raw type's width where it declares integer raw values (T17e), the field holding the
+  case's raw value; else the fewest bits that count its cases (`⌈log2 n⌉`, at least 1), the field holding the case's
+  position from 0;
+- a packed struct: its fields' bits - not rounded to bytes, so packed structs nest bit by bit;
+- an array laid out in place with a length known while compiling (T7c) of any of these: its length times its
+  element's width, element i at i times that width.
+Any other field type - a reference (`&`, `?&`), an array of a run-time length (text included), a function value, an
+`any`, an error value, a struct that is not packed, an enum carrying a payload or declaring text raw values (or raw
+values past 64 bits) - is a compile-time error at the field naming this rule. A packed struct takes no type parameters
+(its layout is its declaration's) and declares no destructor (it holds plain data), each an error naming the rule;
+`packed` before anything but `struct` - `enum`, `extends`, `trait`, `error` - is an error saying so.
+
+A field of a packed value is **no place a reference can name**: it lies at a bit offset, so reading it is a shift and a
+mask of the value, and storing into it - `h.ihl = 5`, `h.length += 20`, `h.flags.syn = true`, `h.lanes[i] = x` - writes
+that field's bits alone (the value read, the bits replaced, the value stored; the place up to the packed value
+evaluated once, S4). Lending such a field to a reference - a reference parameter or receiver, read-only or writable, a
+reference local, a slice of an array field, a walk of one by reference - is a compile-time error naming this rule and
+saying to copy it into a local (`lanes := h.lanes`), the copy written where it is wanted (principle 2); a method with a
+by-value receiver and an argument by value read the field as any value. A packed struct is otherwise a struct: it is
+built only by its constructor (T13), compares (`==`, E10), hashes, renders (`$h` is `Header(4, 5, 20)`), copies and
+reflects (G34) by its fields, and is computed while compiling as at run time (K1). `packed` is a word only in that
+position (L9b); it names nothing.
 
 **T14.** A struct type is a value type: assignment, parameter passing, and return copy the whole value
 member-wise, and `==`/`!=` compare structurally (see §5.2 E10), unless referenced through a marker
@@ -1851,8 +1885,9 @@ keeps from being checked.
 
 ### 3.3 Type and error declarations
 
-**D4.** `type-decl ::= "type" IDEN [ type-params ] [ decl-word ] [ "extends" ] type-expr [ prim-ctor ] [ STMNT_END ]`
-(`extends`: T29f; `decl-word ::= "immut" | "unique"`, T13a, T13b - a word only there, L9b), with
+**D4.** `type-decl ::= "type" IDEN [ type-params ] [ decl-word ] [ "packed" ] [ "extends" ] type-expr [ prim-ctor ] [ STMNT_END ]`
+(`extends`: T29f; `decl-word ::= "immut" | "unique"`, T13a, T13b, and `"packed"` right before a struct body, T13c -
+words only there, L9b), with
 `prim-ctor ::= "(" param-list ")" [ "?" error-list ] block` valid only over a primitive (T29d), where `type-params`
 (§12.3 G6) declares type parameters and is valid only for a
 struct type, and `type-expr` is defined in
@@ -8214,6 +8249,21 @@ and the program's declaration is taken at its word as any prototype is (X1a). It
 `Point&` crossing as a `struct Point *` naming the program's own instance, which the foreign function may write; an
 array of them crosses as a pointer to the first (X3).
 
+**X11a (packed structs and C).** A packed struct (T13c) is laid out as GCC and clang on little-endian x86-64 and
+AArch64 lay out a `__attribute__((packed))` struct whose members are all bitfields, one per field in the same order and
+of the same width: bitfields of a packed struct follow one another bit by bit from bit 0, whatever their declared types,
+and the size is rounded up to bytes with alignment 1. (A member that is no bitfield - `uint16_t len;` - starts at the
+next byte, so it agrees exactly where the bits before it are a whole number of bytes, as `uint16_t len : 16` always
+does.) It crosses the C boundary by reference (`struct H *`) always, the foreign function reading and writing the
+program's own bits; by value only where every field is an integer, `Bool`, `Char` or payload-free enum, or a packed
+struct or array of these, deep - passed as C passes a struct of its size in bytes (on x86-64 one or two integer
+registers up to 16 bytes, memory beyond; on AArch64 the same up to 16 bytes, a reference to a copy beyond) - and a float
+in one held by value at the boundary is a compile-time error naming the reference form. A library's header (X14) writes
+it as `struct __attribute__((packed)) NAME { ... }` of one bitfield per field - an unsigned (signed for a signed
+integer) `<stdint.h>` type of at least its width (`unsigned __int128` past 64 bits), `bool` for a `Bool`; a float a
+bitfield of its bits' unsigned type, an array one bitfield per element (`lanes_0`, `lanes_1` ...) - so its layout is
+exact in C whatever the field.
+
 **X12 (export fns).** `export-func-decl ::= "export" func-decl`, `export` a word only there (followed by `fn`, at a
 module's top level), declares an ordinary function (D7) that C may call too: besides being called from olang as any
 function is, it has a **C entry**, a symbol of exactly its name following the platform's C convention (X2). Such a
@@ -8311,7 +8361,11 @@ into these:
   build compiles from the header (X20);
 - each struct and union a declaration reaches, or the file defines, as a plain-data struct (X11) of its fields where it
   is one; else, where it is complete and no function gives it back by pointer - a union, bitfields, a field of no form,
-  an unnamed member - as a struct of **opaque words** of its size and alignment (`bytes := Array<I64>(5)`, never read,
+  an unnamed member - as a packed struct (T13c) where the record is `__attribute__((packed))`, every member is a bitfield
+of an integer or `_Bool` type (none of width 0), an integer, `_Bool` or floating member, or an array of integers, and
+each member that is no bitfield starts at a whole byte of the running bits (so X11a's layout and C's agree), bitfields
+as integers of their width (signed where their type is signed: `int x : 3` an `I3`), `_Bool x : 1` a `Bool`; else as a
+struct of **opaque words** of its size and alignment (`bytes := Array<I64>(5)`, never read,
   C's to read and write), which may be held in place and passed by reference but crosses by value nowhere; else as an
   extern type (X10);
 - each enumerator, and each macro defined as an object whose value clang computes as an integer constant, as an
@@ -8825,7 +8879,8 @@ variable, or a type G38 names - these members are read with a `.`, alongside a n
   `Node`).
 - `T.Length` - an array's length where it is known while compiling (T7c), an `I64`; for another type an error.
 - `T.Size`, `T.Align` - the size and alignment in bytes as the type is laid out (C's `sizeof` and `_Alignof` of the C
-  layout, §10), `I64`s; a type that is not laid out (a trait, an error type, an extern type) has none.
+  layout, §10), `I64`s - a packed struct's (T13c) its bits rounded up to bytes, and 1; a type that is not laid out (a
+  trait, an error type, an extern type) has none.
 - `T.Fields`, `T.Cases`, `T.Params`, `T.Results` - lists (G33) of descriptors (G34): a struct's fields; an enum's cases
   (a struct's being its one case, named as the struct, so one walk covers both), an error value's words (each a case
   of no fields, in its set's order, R1a); a constructor's parameters, or a
@@ -8853,7 +8908,9 @@ describes, so a generic taking one (`fn arg<P>(p P) P.Type`) is compiled once pe
 constant there. Each has its members, and asking another is an error listing them:
 
 - A field: `f.Name` (a `String`), `f.Type` (a type, G38), `f.Offset` (an `I64`: its offset in bytes where the type is
-  laid out - a case's field counted from the start of the enum, past its tag), and `f.Of(v)`. `f.Of(v)` is that field
+  laid out - a case's field counted from the start of the enum, past its tag; a packed struct's field (T13c) the byte
+  holding its lowest bit), `f.BitOffset` and `f.Bits` (`I64`s: where the field starts and how many bits it takes - a
+  packed struct's field its exact bits, any other field 8 times its offset and its size in bytes), and `f.Of(v)`. `f.Of(v)` is that field
   of `v`, a **place** (S4): read, assigned and incremented where `v` is writable (T25b), lent as the field would be. `v`
   is a value of the field's type's owner (or a reference to one), else an error; one value, else an error. A case's
   field is read only where `v` is known to hold that case - narrowed by a test (S8d), the walk's `if v == c` with `c` a

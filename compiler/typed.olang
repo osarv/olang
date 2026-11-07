@@ -1313,6 +1313,10 @@ type PrimOp enum {
     # E39: args [n], a length: nothing, once it is above zero - a total that needs an element (Min, Max), checked Try:
     # ArrayError.Empty
     NonEmpty
+    # T13c: args [x, k] - field k (a constant) of the packed value x, its bits read out as the field's type ty
+    Unpack
+    # T13c: args [x, k, v] - the packed value x, of type ty, with field k's bits replaced by v's
+    Repack
     # T32: args [r, t], r a reference to an instance - a borrow, a temporary's, a copy's box (T32a) - made an "any", ty:
     # the pair of r and table t (a Lit, its index in generic.Program's AnyTables). Where the "any" lives is where r's
     # referent does: a conversion, to section 8
