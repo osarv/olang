@@ -780,13 +780,13 @@ per field of `T` - a **column** - rather than one array of `T`, and `ColumnVec<T
 
 - **The rows' type** is a **record**: a struct whose constructor declares exactly its fields, each a parameter written
   bare (C4: `type P struct(X F32, Y F32) { X, Y }`) - no other statement, no condition (D17), no destructor (C7), at
-  least one field. Any other type argument - a number, an enum, a struct whose constructor computes a field or checks
+  least one field, and a zero value (D13c: no never-null reference field, T2c), which an empty table starts as. Any other type argument - a number, an enum, a struct whose constructor computes a field or checks
   what it is given - is a compile-time error where the instance is asked for, naming why: a column is written element
   by element, so nothing would keep such a type's rows as its constructor made them. So is a field named like a method
   of the table type (M19), since the column is a member of that name.
 - **`Columns<T>`** is a struct the compiler lays out: one field per field of `T`, in order and named as it, of type
   `Array<F>` for the field's type `F`, a run-time length every column shares. `Columns<T>(n)` makes `n` rows, each `T`'s
-  zero value (D13c - a `T` with none, a never-null reference field, needs the fill), and `Columns<T>(n, v)` `n` rows
+  zero value (D13c), and `Columns<T>(n, v)` `n` rows
   each `v`; a negative `n` aborts the program (D14b). Its length never changes. It is a value, as an array is: a copy
   (a `:=`, an assignment, a field, a by-value argument) is a table of its own (T7a), `==` compares the columns, so the
   rows, `Hash` follows (E10b).

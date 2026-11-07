@@ -13604,6 +13604,8 @@ fn (c mut Checker&) columnsMet(t types.TypeId, sp source.Span) Bool {
     row := c.P.ColumnsRow(t)
     if row == types.UnknownT or not c.P.T.Closed(row): return true
     why := c.notRecord(row)
+    # (an empty table's buffers start as its rows' zero value: a record holding a never-null reference has none)
+    if why == "" and c.neverNullIn(row, 0) { why = "has no zero value (a never-null reference field - hold it as ?&)" }
     if why != "" {
         c.err(sp, msgs.ColumnsNotRecord(c.ty(t), c.ty(row), why))
         return false
@@ -13614,6 +13616,17 @@ fn (c mut Checker&) columnsMet(t types.TypeId, sp source.Span) Bool {
         return false
     }
     return true
+}
+
+# whether a value of t holds a never-null reference by value (T2c: it has no zero value) - through a struct's fields
+fn (c mut Checker&) neverNullIn(t types.TypeId, depth I64) Bool {
+    if depth > 16: return false
+    if c.neverNull(t): return true
+    if not c.isStruct(t) or c.isRef(t) or not c.P.Body(t): return false
+    for f in c.P.T.Items(c.P.T.Fields(t)) {
+        if c.neverNullIn(f, depth + 1): return true
+    }
+    return false
 }
 
 # why a type is no record T7e takes as a row ("" where it is one)

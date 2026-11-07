@@ -556,7 +556,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   prelude code over reflection (std/prelude/columns.olang: rows assembled through `T(cell(c, p, i) for p in T.Params)`,
   written field by field), so lowering, emit, the evaluator, `interpret` and section 8 needed nothing new. Decided
   (mine): T must be a **record** - a struct whose constructor only puns its fields (no computed field, condition or
-  destructor, at least one field) - since columns are written element by element, refused where the instance is asked
+  destructor, at least one field, a zero value - no never-null reference field) - since columns are written element by element, refused where the instance is asked
   for (`columnsMet`, at `instancesIn`), and so is a field named like the table type's method (M19); a run-time length,
   not laid out in place even where known (a recorded limit - the brief's "in place like a fixed array" and G29's
   per-length instances are not built); `cv.x` of a ColumnVec is a view of the first Len() elements (a slice, its

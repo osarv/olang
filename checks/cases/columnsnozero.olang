@@ -1,0 +1,11 @@
+# check: fail error[T7e]: ColumnVec<R> takes a record for its rows, and R has no zero value (a never-null reference field - hold it as ?&)
+# T7e: an empty table's buffers start as its rows' zero value (D13c), so a record holding a never-null reference (T2c),
+# which has none, is no row type - said where the instance is asked for, not inside the prelude
+type N struct(v I64) { v }
+type R struct(n N&, k I64) { n, k }
+fn main() {
+    a := N(1)
+    v := ColumnVec<R>()
+    v.Push(R(a, 2))
+    assert v.k[0] == 2
+}

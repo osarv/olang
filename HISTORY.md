@@ -29545,8 +29545,9 @@ no other statement, no condition, no destructor, at least one field: columns are
 constructor's checks or computed fields would keep no promise; it also makes "build a row through the constructor"
 exactly the raw assembly. Refused at the written instance (`check.columnsMet` beside G19's bounds in `instancesIn`)
 naming why, and a field named like a method of the table (M19). (2) The fill's default is the prelude's `zeroRow<T>()`
-(T's zero value, D13c), so a record holding a never-null reference has no `Columns<T>(n)`, and - since a ColumnVec's
-buffer starts as Columns' zero value - no ColumnVec (a recorded limit). (3) A run-time length always: the brief's
+(T's zero value, D13c), and a ColumnVec's buffer starts as Columns' zero value, so a record holding a never-null
+reference (T2c) has neither: refused with the record check (`neverNullIn`, a recorded limit - it had surfaced as D13d
+inside the prelude's zeroRow). (3) A run-time length always: the brief's
 "laid out in place where its length is known, as a fixed array" and G29's per-length instances are not built - a struct
 body is one per instance type, and a length per instance would need Array's const operand on the struct (a recorded
 limit; `Columns` is still a value, held in place inside a struct as its column descriptors, storage where it lives).
