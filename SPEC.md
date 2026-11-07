@@ -6872,8 +6872,8 @@ view shows (`$x`, `x.Copy()`): a by-value parameter's own storage (the call's co
 capture's own copy (S13b, D16c), a generator `Next()`'s result scope (D18b), storage reached through a derived scope
 or a scope not known here (O23a, O12), and storage holding a value whose destructor is still to run (O15: it would run
 later than its holder lets go of it) - so `f := File(p); keep.Push(f.name[0:1])` in a loop is refused, naming
-`$f.name[0:1]`. A body that said such an error of its own has the obligations it recorded left undischarged at its
-callers: one cause, one error.
+`$f.name[0:1]`. What a body that said such an error of its own requires is not said again at its calls: one cause,
+one error.
 
 **O28 (scopes inferred).** No scope is written (QCB): the compiler places each local, each call's result, each
 temporary and each constructor field in the shortest-lived scope every use of it allows, over the whole program, as it

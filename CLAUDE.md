@@ -1510,8 +1510,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   part lifts only once the field inference has settled (`partsOn`, a round judged afresh), and then only in that second
   phase; a local declared from a conditional or a match proposes each value as stored alone (E28); `-memory` lists each
   placement at the view with the copy that would let it go (B18, `Scoper.Placements`), and the language server shows it
-  as a hint (severity 4, code O27); C4 (docs/sec8.md 6): a body whose reporting judging said a section-8 error has its
-  obligations left undischarged at its callers (`summary.Erred`) - one cause, one error; the stand-in placement the
+  as a hint (severity 4, code O27); C4 (docs/sec8.md 6): what a body whose reporting judging said a section-8 error
+  requires is not said again at its calls (`summary.Erred`, the obligations still passing up - left out of the reuse
+  comparison, so the field inference's rounds judge as before) - one cause, one error; the stand-in placement the
   evaluator runs on homes a viewed temporary in the program's scope (it read a slice of one from a closed frame). Newly
   compiling, run cases under `-debug -sanitize` read back after a churn and agreeing under `interpret`:
   d18cinputoutlived, d18cyieldframe, d18cyieldlocal, o10celementstash, o25enote, o27genborrow, t22aviewkept,

@@ -30091,8 +30091,11 @@ generator's argument), or from a borrowed call or a conditional/match (each valu
 the proposal on at the end of its origin chain (`proposeFrom`); a callee's relation marked `View` lifts at the call
 (`dischargeRels`, `builtOK`). **Phases**: `inferClaims` gathers whole lifts to their fixed point exactly as before, and
 only if the last of those judgings met a view, part or capture kept too long (`viewWanted`) judges again with them
-proposing - so a program accepted before is placed as before and pays no extra judging (bench's 16 programs: IR
-byte-identical, every module); `judgeOnce` lets views propose (a judging that proposes is redone by the phases anyway).
+proposing - so a program accepted before is placed as before and pays no extra judging (bench's 16 programs and the
+compiler's own 315 modules: IR byte-identical; OLANG_SCOPESTATS on compiler/ the same lifts, landings and re-judgings
+as the base, "0 second phases for views", the scope phase 3.6-3.9 s on both). Everything a view adds is gated by the
+phase, a borrowed call's own landing (a whole value's) kept in both; `judgeOnce` proposes no view (a view kept too long
+is an error there, which redoes the body by the phases).
 **Parts** (a field read out of what a local's constructor built) propose only once the field inference has settled: a
 settled round that still refused a part (`partWanted`, from the last judging of a body's gathering) turns `partsOn` on
 and judges every component afresh (no component taken again), part lifts then made only in a body's second phase -
@@ -30110,8 +30113,11 @@ storage holding a value whose destructor is still to run (docs/sec8.md question 
 file would stay open as long as a list keeps a slice of its name: `ViewKeptDestructor`, `PartKeptDestructor`, rule
 `O27, O15`), a match binding's or a capture's copy (`ViewKeptCopy`), a derived or unknown scope (`ViewKept`, reworded:
 "where no storage can be built for it"), a by-value parameter's own storage (O14/C2d's errors, as before), a `Next()`
-result scope. **C4** (docs/sec8.md 6): a body whose reporting judging said an error has `summary.Erred`, and its callers
-do not discharge its obligations - one cause, one error; bulk 6's gen_walkkept itself now compiles (its generator
+result scope. **C4** (docs/sec8.md 6): a body whose reporting judging said an error has `summary.Erred`, and what it
+requires is not said again at its calls - one cause, one error. (First built as "its callers do not discharge its
+obligations": that changed what the field inference's intermediate rounds judged - a callee erring in one round
+lifted nothing at its callers - and cost the scope phase on compiler/ 15-20%; the obligations now pass up and lift as
+before, only the reports are left out, and `Erred` is no part of the reuse comparison.) bulk 6's gen_walkkept itself now compiles (its generator
 builds its local where it lives, its consumer makes the walk where the words are kept), and a generator yielding views
 of a destructor-holding local gives its one O27 error in the generator (o27destructorgen).
 
