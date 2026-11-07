@@ -4,6 +4,8 @@
 # old value where a store replaces it, a variable's at its Destroy(). A value nothing holds by value is held where its
 # call lands (O16), as before.
 
+import "std/deque"
+
 # what the destructors saw, in order
 type Tally struct() {
     seen := Vec<I64>()
@@ -482,3 +484,227 @@ test heldTwo "holds a parameter's reference where the parameter's references liv
 }
 
 assert heldTwos() == "168/142536", "decided while compiling"
+
+# ---- collections holding values with destructors by value (C11, O15) ----
+# A Vec, a Map, a Deque of values with destructors is unique as they are and ends them: a removal that gives nothing
+# ends what it removes, one that gives hands the value out, a store over an element ends the old one, growth moves and
+# ends nothing, and the holder letting go of the collection ends its live elements, the last first - decided while
+# compiling (by-value holders, so nothing waits for a scope to close) as at run time
+
+fn (t Tally&) Listed() String {
+    b := StringBuilder()
+    for i in range t.seen.Len() {
+        if i > 0: b.Push(".")
+        b.Push($t.seen[i])
+    }
+    return b.ToString()
+}
+
+fn vecEnds() String {
+    t := Tally()
+    {
+        v Vec<Res> = Vec<Res>()
+        for i in range 6 { v.Push(Res(i, t)) }
+        p Res = v.Pop()!
+        v.RemoveAt(1)!
+        q Res = v.TakeAt(0)!
+        v.SwapRemove(0)!
+        v.Insert(0, Res(6, t))!
+        v[2] = Res(7, t)
+        r Res = v.SwapTake(0)!
+        v.Push(Res(8, t))
+        v.Push(Res(9, t))
+        v.Truncate(2)
+        assert p.id == 5 and q.id == 0 and r.id == 6 and v[0].id == 7 and v.Ref(1).id == 4
+    }
+    {
+        w Vec<Res> = Vec<Res>()
+        for i in range 10, 13 { w.Push(Res(i, t)) }
+        w.Clear()
+        w.Push(Res(13, t))
+    }
+    return t.Listed()
+}
+
+VecEnds := vecEnds()
+assert VecEnds == "1.2.3.9.8.6.0.5.4.7.12.11.10.13", "decided while compiling: " $VecEnds
+
+test vecEnds "ends what a Vec of destructor values removes, the last first, and every element where it is let go" {
+    assert vecEnds() == "1.2.3.9.8.6.0.5.4.7.12.11.10.13"
+}
+
+fn mapEnds() String {
+    t := Tally()
+    {
+        m Map<String, Res> = Map<String, Res>()
+        m.Put("a", Res(1, t))
+        m.Put("b", Res(2, t))
+        m.Put("c", Res(3, t))
+        m.Put("d", Res(4, t))
+        m.Put("b", Res(5, t))
+        m.Remove("a")
+        x Res = m.Take("c")!
+        m.Put("e", Res(6, t))
+        assert x.id == 3 and m.Ref("e")!.id == 6 and m.Len() == 3
+    }
+    {
+        n Map<I64, Res> = Map<I64, Res>()
+        for k in range 3 { n.Put(k, Res(7 + k, t)) }
+        n.Remove(1)
+        n.Clear()
+        n.Put(5, Res(10, t))
+    }
+    return t.Listed()
+}
+
+MapEnds := mapEnds()
+assert MapEnds == "2.1.3.4.6.5.8.9.7.10", "decided while compiling: " $MapEnds
+
+test mapEnds "ends what a Map of destructor values removes or replaces, and its live entries where it is let go" {
+    assert mapEnds() == "2.1.3.4.6.5.8.9.7.10"
+}
+
+fn dequeEnds() String {
+    t := Tally()
+    {
+        d deque.Deque<Res> = deque.Deque<Res>()
+        for i in range 20, 23 { d.PushBack(Res(i, t)) }
+        d.PushFront(Res(19, t))
+        f Res = d.PopFront()!
+        b Res = d.PopBack()!
+        d[0] = Res(23, t)
+        for i in range 24, 34 { d.PushBack(Res(i, t)) }
+        assert f.id == 19 and b.id == 22 and d.Len() == 12
+    }
+    {
+        e deque.Deque<Res> = deque.Deque<Res>()
+        e.PushBack(Res(40, t))
+        e.PushFront(Res(41, t))
+        e.Clear()
+        e.PushBack(Res(42, t))
+    }
+    return t.Listed()
+}
+
+DequeEnds := dequeEnds()
+assert DequeEnds == "20.22.19.33.32.31.30.29.28.27.26.25.24.21.23.40.41.42", "decided while compiling: " $DequeEnds
+
+test dequeEnds "a Deque of destructor values ends its ring back to front, and what Clear removes" {
+    assert dequeEnds() == "20.22.19.33.32.31.30.29.28.27.26.25.24.21.23.40.41.42"
+}
+
+# collections in collections and in values: each part let go with its holder, the last first
+type Pool struct() {
+    files Vec<Res>
+}
+
+type Boxed<T> struct(v T) {
+    v
+}
+
+fn nestedEnds() String {
+    t := Tally()
+    {
+        p Pool = Pool()
+        p.files.Push(Res(1, t))
+        p.files.Push(Res(2, t))
+        bx Boxed<Res> = Boxed<Res>(Res(3, t))
+        vv Vec<Vec<Res>> = Vec<Vec<Res>>()
+        vv.Push(Vec<Res>())
+        vv.RefMut(0).Push(Res(4, t))
+        vv.RefMut(0).Push(Res(5, t))
+        vv.Push(Vec<Res>())
+        vv.RefMut(1).Push(Res(6, t))
+        mv Map<I64, Vec<Res>> = Map<I64, Vec<Res>>()
+        mv.Put(1, Vec<Res>())
+        mv.RefMut(1)!.Push(Res(7, t))
+        mv.Put(1, Vec<Res>())
+        assert vv[0][1].id == 5 and bx.v.id == 3 and p.files[1].id == 2 and t.Listed() == "7"
+    }
+    return t.Listed()
+}
+
+NestedEnds := nestedEnds()
+assert NestedEnds == "7.6.5.4.3.2.1", "decided while compiling: " $NestedEnds
+
+test nestedEnds "a collection held in a collection or a value is let go with its holder" {
+    assert nestedEnds() == "7.6.5.4.3.2.1"
+}
+
+# a Vec of them ended by Destroy(), handed to a by-value parameter (ended at the callee's end), returned (the caller's)
+fn destroyedVec(t mut Tally&) {
+    w Vec<Res> = Vec<Res>()
+    w.Push(Res(1, t))
+    w.Push(Res(2, t))
+    w.Destroy()
+}
+
+fn madeVec(n I64, from I64, t mut Tally&) Vec<Res> {
+    v Vec<Res> = Vec<Res>()
+    for i in range n { v.Push(Res(from + i, t)) }
+    return v
+}
+
+fn consumedVec(v Vec<Res>) I64 { return v.Len() }
+
+fn passedVecs() String {
+    t := Tally()
+    destroyedVec(t)
+    t.seen.Push(0)
+    n := consumedVec(madeVec(3, 3, t))
+    t.seen.Push(0)
+    {
+        k Vec<Res> = madeVec(2, 6, t)
+        assert k[1].id == 7 and n == 3
+    }
+    return t.Listed()
+}
+
+PassedVecs := passedVecs()
+assert PassedVecs == "2.1.0.5.4.3.0.7.6", "decided while compiling: " $PassedVecs
+
+test destroyedVec "a Vec of destructor values ended by Destroy, by its by-value parameter, by its caller" {
+    assert passedVecs() == "2.1.0.5.4.3.0.7.6"
+}
+
+# what the elements hold, built in a loop, read back after an arena churn - and ended once each
+type Named unique struct(name String, log mut Tally&) {
+    name, log
+} destruct { log.seen.Push(name.Len()) }
+
+fn namedKept() String {
+    t := Tally()
+    b := StringBuilder()
+    {
+        v Vec<Named> = Vec<Named>()
+        for i in range 5 { v.Push(Named($i "-" $(i * 11), t)) }
+        churn()
+        for x in v {
+            b.Push(x.name)
+            b.Push(" ")
+        }
+    }
+    churn()
+    return $b.ToString() "/" $t.Listed()
+}
+
+test Named "a Vec of destructor values built in a loop reads its elements back after a churn" {
+    assert namedKept() == "0-0 1-11 2-22 3-33 4-44 /4.4.4.4.3"
+}
+
+assert namedKept() == "0-0 1-11 2-22 3-33 4-44 /4.4.4.4.3", "decided while compiling"
+
+# the effect summaries see a collection's elements ended (G42): where its holder lets go, not where it hands it on
+fn gVecHeld(r GRes) I64 {
+    v Vec<GRes> = Vec<GRes>()
+    v.Push(r)
+    return v.Len()
+}
+
+fn gVecGiven(r GRes) Vec<GRes> {
+    v Vec<GRes> = Vec<GRes>()
+    v.Push(r)
+    return v
+}
+
+assert gVecHeld.WritesGlobals and not gVecGiven.WritesGlobals, "decided while compiling (G42)"

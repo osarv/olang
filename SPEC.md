@@ -2799,9 +2799,9 @@ a by-value argument - is a second name for the same list: a `Push` through eithe
 two references (and as with a Go map) - its supplied `Copy()` (E31d) shares the record, as a copy of a value holding a
 reference does. `list.From(l.Iter())` builds a new `List` with the same elements in the same order and storage of its
 own, built where its result lands; elements are copied as values (each by its own Copy), so a list of references
-gives a list of the same references. Being an ordinary module, `std/list` says nothing of the positions it empties
-(`vacate` is the prelude's): a position past a `List`'s end may still hold what was there, so early freeing (O8d) takes
-a `List`'s removals for no let-go, and what they removed is reclaimed with the list's scope.
+gives a list of the same references. `std/list` says nothing of the positions it empties (it uses no `vacate`): a position past a
+`List`'s end may still hold what was there, so early freeing (O8d) takes a `List`'s removals for no let-go, and what they
+removed is reclaimed with the list's scope - and so a `List` holds no value with a destructor by value (C11).
 
 The prelude declares `type Map<K Hashable<K>, V>`, values found by key, keys compared with `==` (E10) and hashed
 with `Hash()` (E10b): `Put(k, v)` sets the value for `k`, replacing the one it had; `Get(k)` gives it, failing with
@@ -2835,7 +2835,7 @@ view (below), such a reference is good until the `Vec` grows or shrinks. A copy 
 copies is not made (D9h): an element read where it stands (`v[i].xs.Len()`), a `for x in v` whose body changes nothing
 `v` reaches, an argument a callee only reads. It is
 an ordinary value - a type argument (`List<Vec<T>>`, `Map<K, Vec<V>>`, `Vec<Vec<T>>`), a field, a global - and its
-element type needs no zero value: a new buffer is filled with the element being stored. `Vec<T>(cap = 0)` is empty, with
+element type needs no zero value: a new buffer is grown from the old, its room past the count never filled (M19d). `Vec<T>(cap = 0)` is empty, with
 room for `cap` elements before its buffer is replaced, made by its first `Push`; `Push(x)` adds at the end, and when the
 buffer is full first replaces it by one twice as large (8 at first), every element copied into it; `Reserve(n)` makes
 room for `n` more the same way; `Len()` and `Cap()` count. It has the operations of `std/list`'s `List` by the same
@@ -2856,17 +2856,21 @@ same `Vec` is seen on both sides (M19g), and elsewhere a mistake the compile-tim
 sanitizer reports (B2f). `==` compares its elements (E10), it hashes as they do
 (E10b), and `$` renders it as an array with `Vec` named in front: `Vec<I64>[1, 2, 3]`, `Vec<Char>['a']` (each `Char`
 a character literal, an array of them rendering as text). A `Vec` is the growable array; `std/list`'s `List` is for
-what its chunks give - a `Push` never moves what is stored, so no view of it is ever stale. The prelude's
-collections say what they stop using, and how a buffer grows, with three operations only the prelude has:
+what its chunks give - a `Push` never moves what is stored, so no view of it is ever stale. The library's
+collections (the prelude's and std's) say what they stop using, and how a buffer grows, with operations only the
+library has:
 `a.grown(n)`, a new array of `n` elements whose first `a.Len()` are `a`'s, moved out of it as `vacate` moves them, and
 whose rest is never filled - the prelude's claim that it writes each of those before reading it, as a `Vec`'s room past
 its count is, so a doubling writes each byte once; `a.retire()`, where they stop using an
-array - nothing at run time, it is what the evaluator and the sanitizer learn a replaced buffer from - and `p.vacate()`,
-which gives what the place `p` holds and leaves `p` empty, and as a statement lets go of it (O8d): a removal (`Pop`,
-`TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`, `Clear`, `Truncate`, a `Map`'s `Remove`, `Take` and `Clear`) vacates
-the positions it empties, and a shift moves each element with it, so a position that no longer holds an element of
-the collection is left empty. These are no part of the language; they say which of a collection's positions
-are live, which the compiler cannot infer.
+array - nothing at run time, it is what the evaluator and the sanitizer learn a replaced buffer from - `p.vacate()`,
+which gives what the place `p` holds and leaves `p` empty, and as a statement lets go of it (O8d) - a value with a
+destructor to run ended there (O15) - and `p.occupy(x)`, which stores `x` into a place holding no value - room past a
+count, a position a removal vacated - and so ends nothing there, where a store over a place ends what it held (O15):
+for a value with no destructor it is the assignment it was. A removal (`Pop`, `TakeAt`, `RemoveAt`, `SwapTake`,
+`SwapRemove`, `Clear`, `Truncate`, a `Map`'s `Remove`, `Take` and `Clear`) vacates the positions it empties, and a
+shift moves each element with it into the room the last one left (occupy), so a position that no longer holds an
+element of the collection is left empty; a collection's destructor (C11) vacates its live positions. These are no part
+of the language; they say which of a collection's positions are live, which the compiler cannot infer.
 
 **M19g (a Vec's views).** A **view** is what `v.View()` or `v.ViewMut()` gives - the elements of `v`'s buffer as it is
 when the view is taken - and so is a reference into the buffer, what `v.Ref(i)` and `v.RefMut(i)` give (and a `Map`'s
@@ -6858,6 +6862,14 @@ reference - has its destructors run exactly once, **where its holder lets go of 
   and lets go there: as its block is left it is registered with the scope its storage lives in, as a value no place
   takes is (O16), and its destructors run as that scope closes;
 - a value holding parts lets go of them with itself: its own destructor first, then each part's, the last part first;
+- a collection of the library's holding such values (C11) lets go of its **live elements** with itself, the last first -
+  a `Vec`'s from its last position down, a `Map`'s entries by slot from the last one used, a `Deque`'s from the back to
+  the front (and a `Set` or a `Heap`, which hold a `Map` or a `Vec`, as that does) - never the room past them: what
+  positions hold elements its own code says (M19d's `vacate` and `occupy`). A removal that gives nothing (`Truncate`,
+  `Clear`, `RemoveAt`, `SwapRemove`, `Remove`, a `Map`'s `Remove` and `Clear`, a `Deque`'s `Clear`) ends what it
+  removes, in the same order; one that gives (`Pop`, `TakeAt`, `SwapTake`, a `Map`'s `Take`, a `Deque`'s `PopFront` and
+  `PopBack`) hands the value out, ending nothing (a `Map`'s `Take` ends the key); a store over an element (`v[i] = x`,
+  a `Map`'s `Put` of a key it has) is a store over a place, below; growth moves the elements and ends none;
 - a store over a place holding such a value (S4) lets go of the old one after the new value is made and before it is
   stored (a variable's only while it holds one); a place reached through what a call gives is not stored over so;
 - a value a call gives that no place written for its value takes (`r := Res(1)`, an argument for a reference parameter,
@@ -6867,9 +6879,10 @@ reference - has its destructors run exactly once, **where its holder lets go of 
 A block's variables let go before its scope closes - in the reverse order they were declared, among its deferred code -
 and the scope's registered values after; a join block's variables let go after its wait (P1b), where its tasks have
 ended, after its deferred code. Where in the scope an instance's storage lies, and whether it was reserved
-before its constructor's arguments were built, is not observable. A global, a type argument and a generator's
-parameter hold such a value by reference (C11): the program's scope, a collection's elements and a walk left part way
-have no holder that lets go; and no variable holds one by value across a `yield` (S20).
+before its constructor's arguments were built, is not observable. A global and a generator's
+parameter hold such a value by reference, and a type argument holds it by value only where its instance ends it (C11):
+the program's scope, a walk left part way and an array of a run-time length outside a collection have no holder that
+lets go; and no variable holds one by value across a `yield` (S20).
 
 **O16.** A value with a destructor that no place written for its value takes (O15) is registered with the scope its
 call lands in at the point the call - its **constructor call** (C6), or a call giving it by value - completes, not at
@@ -7068,8 +7081,8 @@ never evaluated.
 every fallible call within it must be fully caught by a `catch` that leaves nothing uncaught
 (§7.5),
 since a destructor is never invoked by ordinary calling code and so has no caller to propagate an
-error to. Declaring this block is declaring the type `unique` (T13b) - see C11 and O15 for where its values are held
-and destructed.
+error to. Declaring this block is declaring the type `unique` (T13b), but for a collection of the library's, whose
+destructor ends what it holds - see C11 and O15 for where its values are held and destructed.
 
 **C8.** Inside a `destruct` block, a bare identifier that names one of the type's own fields (and is
 not itself shadowed by a local of the same name) reads that field of the instance being destructed
@@ -7130,13 +7143,24 @@ than once for the same instance, and never runs for storage no constructor call 
 instance in (O16).
 
 **C11.** A struct type that declares a `destruct` block is declared `unique` (T13b) - one without the word is a
-compile-time error naming it: a destructor releases what one value holds. A value with a destructor to run (O15) is held
-by value only in a place written for it whose holder lets go of it - a variable, a parameter (a constructor's included),
-a result, a struct field, an enum payload, an element of an array held by value - and its destructors run there (O15).
-A **type argument** (`Vec<Res>`, where `Vec<Res&>` holds them; a holder of one by value, `Vec<Pool>`, alike), a
-**global's** type and a **generator's parameter** hold it by reference: a bare `type-ref` naming it there is a
-compile-time error naming the reference form - a collection's elements, the program's scope and a walk left part way
-(S20) have no holder that lets go. The type named where an expression is - a constructor called (`Res(1)`, `Box<Res>(r)`
+compile-time error naming it: a destructor releases what one value holds. The one exception is a **collection of the
+library's** - a generic struct of the prelude or std, not declared unique, declaring a destructor (`Vec`, `Map`, std's
+`Deque`): its destructor ends the elements it holds, and exists only in its instances holding, by value through their
+parts (the elements of an array of a run-time length included), a value with a destructor to run - which are unique by
+T13b, as their elements are; every other instance (`Vec<I64>`) has no destructor, is no unique type and copies. A value
+with a destructor to run (O15) is held by value only in a place written for it whose holder lets go of it - a variable,
+a parameter (a constructor's included), a result, a struct field, an enum payload, an element of an array held by
+value, an element of such a collection - and its destructors run there (O15). So a **type argument** may hold one by
+value (`Vec<Res>`, `Map<String, Res>`, `Box<Res>` of `type Box<T> struct(v T)`, a holder of one alike, `Vec<Pool>`)
+where the instance holds every such value in one of those places - but not where an **array of a run-time length**
+holds it outside such a collection, anywhere the instance reaches through its parts or its references: such an array
+has no count of live elements, so nothing could end them - a written `Array<Res>`, a type's own buffer (`type Buf<T>
+struct() { a Array<T> }` as `Buf<Res>`), std/list's `List<Res>`, whose chunks a reference names (its copies are second
+holders of them). That is a compile-time error at the argument, naming the reference form and a `Vec`: `Res has a
+destructor to run, and List<Res> keeps values of it where no holder ends them - write Res&, or keep them in a
+Vec<Res>`. A **global's** type and a **generator's parameter** hold it by reference: a bare `type-ref` naming it there is a
+compile-time error naming the reference form - the program's scope and a walk left part way (S20) have no holder that
+lets go. The type named where an expression is - a constructor called (`Res(1)`, `Box<Res>(r)`
 naming its own arguments), a case of it - holds no value there; a call's value no place written for it takes is held
 where the call lands (O16, D15).
 
