@@ -16170,7 +16170,7 @@ test "E11a/E21: an array of arrays writes each element as an array of its own, i
 
 fn renPerms(n I64) String {
     node mut RenNode& = RenNode(n)
-    boxes Array<RenBox<mut RenNode&>> = RenBox<mut RenNode&>[RenBox<mut RenNode&>(node)]
+    boxes Array<RenBox<mut RenNode&>> = Array<RenBox<mut RenNode&>>[RenBox<mut RenNode&>(node)]
     refs Array<mut RenNode&> = Array<RenNode&>[node]
     nested Array<Array<mut RenNode&>&> = Array<Array<mut RenNode&>&>[refs]
     f := fn(b RenBox<mut RenNode&>&) mut RenNode& { return RenNode(2) }
