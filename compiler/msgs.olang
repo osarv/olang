@@ -991,7 +991,7 @@ fn ReflDescNoMember(what String&, name String&, have String&) r.Msg { return r.M
 fn ReflTypeNotValue(name String&) r.Msg { return r.Msg(Diag.ReflTypeNotValue, "G38", $"'" $name "' is a type, not a value - write it where a type goes, as 'x " $name " = ...'") }
 fn ReflCaseOther(c String&, ty String&) r.Msg { return r.Msg(Diag.ReflCaseOther, "G34", $"this case is " $c "'s, and the value is " $ty) }
 fn ReflCaseUnreachable() r.Msg { return r.Msg(Diag.ReflCaseUnreachable, "G36", "no type can reach this case - a case before it takes every type it does") }
-fn ReflArgCompr() r.Msg { return r.Msg(Diag.ReflArgCompr, "G37", "a comprehension written as a call's arguments walks a list known while compiling - 'T.Params', 'T.Fields' ...; another is written in brackets, 'T[e for x in c]'") }
+fn ReflArgCompr() r.Msg { return r.Msg(Diag.ReflArgCompr, "G37", "a comprehension written as a call's arguments walks a list known while compiling - 'T.Params', 'T.Fields' ...; another is written in brackets, 'Array<T>[e for x in c]'") }
 fn ReflNoType(name String&, ty String&, why String&) r.Msg { return r.Msg(Diag.ReflNoType, "G38", $"'" $name "' of " $ty ": " $why) }
 
 # attributes (G39, G40) and the functions reflection reads (G41)
@@ -2951,7 +2951,7 @@ fn RangeNotInt(ty String&) r.Msg { return r.Msg(Diag.RangeNotInt, "S9b", "a rang
 fn RangeStep() r.Msg { return r.Msg(Diag.RangeStep, "S9b", "a range only counts upward, so its step is positive") }
 
 # ERR_COMPR_NEEDS_TRY
-fn ComprNeedsTry() r.Msg { return r.Msg(Diag.ComprNeedsTry, "E27, S9e", "this comprehension's own calls can fail - write 'try T[e for x in c]'") }
+fn ComprNeedsTry() r.Msg { return r.Msg(Diag.ComprNeedsTry, "E27, S9e", "this comprehension's own calls can fail - write 'try Array<T>[e for x in c]'") }
 
 # ERR_FOR_IN_NEEDS_TRY
 fn ForInNeedsTry() r.Msg { return r.Msg(Diag.ForInNeedsTry, "S9e", "this loop's own calls can fail - write 'for x in try c', with catch clauses after the body") }

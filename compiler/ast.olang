@@ -94,7 +94,7 @@ type Expr enum {
     Slice(sp source.Span, x Expr&, lo Expr?&, hi Expr?&)
     ArrayLit(sp source.Span, elem TypeRef?&, items Array<Expr&>&)   # an element type that is a literal's by its form
     Row(sp source.Span, items Array<Expr&>&)           # "[...]" nested in a literal: no 2-D arrays (E21), kept to report
-    Compr(sp source.Span, c Compr&)                    # T[e for x in s if c] (E27)
+    Compr(sp source.Span, c Compr&)                    # C[e for x in s if c] (E27): C the type made
     Join(sp source.Span, parts Array<Expr&>&)          # "a" $b "c" (E11b)
     Try(sp source.Span, x Expr&, clauses Array<Catch&>&)    # try (E24)
     Lambda(sp source.Span, f Func&)

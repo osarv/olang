@@ -15124,7 +15124,7 @@ fn (c mut Checker&) unrolled(sp source.Span, f ast.ForIn&, l reflList) {
     c.emit(typed.Stmt.Loop(sp, ob, null))
 }
 
-# T[e for x in T.Fields if c] (G33): unrolled into an array literal of the items its filter keeps - the filter decided
+# Array<T>[e for x in T.Fields if c] (G33): unrolled into an array literal of the items its filter keeps - the filter decided
 # per item while compiling
 fn (c mut Checker&) unrolledCompr(sp source.Span, cm ast.Compr&, l reflList, et types.TypeId) typed.Expr& {
     items := c.listItems(cm.Source.Span(), l)
@@ -15631,7 +15631,7 @@ fn (c mut Checker&) enumFrom(sp source.Span, nsp source.Span, et types.TypeId, a
     return r
 }
 
-# x[i]: an array's element (E16); T[a, b] where x names a type: an array literal (E19)
+# x[i]: an array's element (E16); C[a, b] where x names a type: a literal of it (E19)
 fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) typed.Expr& {
     et := c.typeNamed(x)
     if et >= types.TypeId(0) { return c.madeLit(sp, x.Span(), et, items) }
@@ -15889,7 +15889,7 @@ fn (c mut Checker&) entriesLit(sp source.Span, el types.TypeId, items Array<ast.
     return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Array, 0, xs, null, c.site(typed.SiteKind.Make, sp), typed.Check.None))
 }
 
-# T[a, b]: an array literal, its length its items' count (E19)
+# Array<T>[a, b]: an array literal, its length its items' count (E19)
 fn (c mut Checker&) arrayLit(sp source.Span, elem types.TypeId, items Array<ast.Expr&>&) typed.Expr& {
     elem = c.errValueType(elem)
     # T7a, T7d: arrays held by value as elements are laid out at the one known length the items give them - each item
@@ -19667,7 +19667,7 @@ fn (c mut Checker&) lambdaErrs(e typed.Expr?&, errs types.ListId) typed.Expr?& {
     }
 }
 
-# T[e for x in s if c] (E27): an Array<T> filled by the walk for-in makes over s, e yielded where c holds; its
+# Array<T>[e for x in s if c] (E27): an Array<T> filled by the walk for-in makes over s, e yielded where c holds; its
 # storage reserved from an array's length or a range's count where the walk knows it, else grown (Reserve null)
 fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr& {
     made := c.resolve(cm.Elem)
