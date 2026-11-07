@@ -217,56 +217,6 @@ hint:
   ret void
 }
 
-; T19b: the payload stack - what an error raised carries beside its code, last in first out per thread (errors in
-; flight nest: deferred code and destructors raise nothing that leaves them). A record is { prev, region, payload }, made
-; in a region of its own - a kid of this thread's parent scope below, never closed but by a pop - which the payload's own
-; copy is built in; a pop drops the region, everything in it with it. Nothing here runs on a success path
-@__olang_errpay_top = thread_local(initialexec) global ptr null
-@__olang_errpay_parent = thread_local(initialexec) global %olang.scope zeroinitializer
-
-; a new record on top: its region returned, the payload set by __olang_errpay_set once copied there
-define ptr @__olang_errpay_push() cold {
-entry:
-  %r = call ptr @__olang_region_make(ptr @__olang_errpay_parent)
-  %rec = call ptr @__olang_region_alloc(ptr %r, i64 24, i64 8)
-  %prev = load ptr, ptr @__olang_errpay_top
-  store ptr %prev, ptr %rec
-  %rp = getelementptr ptr, ptr %rec, i64 1
-  store ptr %r, ptr %rp
-  %pp = getelementptr ptr, ptr %rec, i64 2
-  store ptr null, ptr %pp
-  store ptr %rec, ptr @__olang_errpay_top
-  ret ptr %r
-}
-
-define void @__olang_errpay_set(ptr %payload) cold {
-entry:
-  %rec = load ptr, ptr @__olang_errpay_top
-  %pp = getelementptr ptr, ptr %rec, i64 2
-  store ptr %payload, ptr %pp
-  ret void
-}
-
-; the payload of the error in flight
-define ptr @__olang_errpay_top_get() {
-entry:
-  %rec = load ptr, ptr @__olang_errpay_top
-  %pp = getelementptr ptr, ptr %rec, i64 2
-  %p = load ptr, ptr %pp
-  ret ptr %p
-}
-
-define void @__olang_errpay_pop() {
-entry:
-  %rec = load ptr, ptr @__olang_errpay_top
-  %prev = load ptr, ptr %rec
-  store ptr %prev, ptr @__olang_errpay_top
-  %rp = getelementptr ptr, ptr %rec, i64 1
-  %r = load ptr, ptr %rp
-  tail call void @__olang_region_drop(ptr %r)
-  ret void
-}
-
 ; E35 in a build that keeps no trace: the "!"'s message, the requirement that raised the error where one did, the hint
 define void @__olang_bang_failed_plain(ptr %msg) cold noreturn {
 entry:
@@ -500,7 +450,7 @@ done:
 ; would not do: a join block inside a loop would grow the stack by a node per task.
 %olang.unwind = type { ptr, ptr, ptr }
 ; prev frame's node, this block's scope, its join head
-%olang.task = type { ptr, i64, ptr, i64 }
+%olang.task = type { ptr, i64, ptr, i64, ptr }
 ; next, done flag, merge list, error code (P4b: 0 when none)
 ; P1e: a cached worker thread. It owns the mutex/condvar it parks on, so waiting for one task
 ; never blocks another. glibc's PTHREAD_MUTEX_INITIALIZER is all-zero, which is what lets the
@@ -1637,6 +1587,10 @@ run:
   ; done flag below, under the lock that orders it for the joiner (P8)
   %rv = call ptr %fn(ptr %env)
   %rc = ptrtoint ptr %rv to i64
+  ; T19b: the payload its error carries, if any, kept with it
+  %prec = call ptr @__olang_errpay_taken()
+  %precp = getelementptr %olang.task, ptr %tk, i32 0, i32 4
+  store ptr %prec, ptr %precp
   ; O8b: a worker about to park keeps at most a batch of its pool (1MB), the rest going where every thread can take
   ; it - before the task is reported finished, so that what the task gave back is there for whoever its join lets
   ; go on. Not a worker about to retire (P1f), which gives its pool back to the system instead: the load that made
@@ -1776,11 +1730,18 @@ entry:
 task:
   %cur = phi ptr [ %head, %entry ], [ %tnext, %aftermerge ]
   %acc = phi i64 [ 0, %entry ], [ %acc1, %aftermerge ]
+  %accrec = phi ptr [ null, %entry ], [ %accrec1, %aftermerge ]
   call void @__olang_task_wait(ptr %cur)
   %errp = getelementptr %olang.task, ptr %cur, i32 0, i32 3
   %err = load i64, ptr %errp
   %failed = icmp ne i64 %err, 0
   %acc1 = select i1 %failed, i64 %err, i64 %acc
+  ; T19b: the payload of the failure kept so far, replaced by a later-walked (earlier-spawned) failure's, dropped
+  %recp = getelementptr %olang.task, ptr %cur, i32 0, i32 4
+  %rec = load ptr, ptr %recp
+  %dropped = select i1 %failed, ptr %accrec, ptr %rec
+  call void @__olang_errpay_attach(ptr %dropped, i1 false)
+  %accrec1 = select i1 %failed, ptr %rec, ptr %accrec
   %mheadptr = getelementptr %olang.task, ptr %cur, i32 0, i32 2
   %mhead = load ptr, ptr %mheadptr
   %nomerge = icmp eq ptr %mhead, null
@@ -1801,6 +1762,8 @@ aftermerge:
   br i1 %tatend, label %done, label %task
 done:
   %res = phi i64 [ 0, %entry ], [ %acc1, %aftermerge ]
+  %resrec = phi ptr [ null, %entry ], [ %accrec1, %aftermerge ]
+  call void @__olang_errpay_attach(ptr %resrec, i1 true)
   ret i64 %res
 }
 
@@ -2374,6 +2337,143 @@ run:
   br label %chain
 closed:
   call void @__olang_close_kids(ptr %r)
+  br label %done
+done:
+  ret void
+}
+
+; T19b: the payload stack - what an error raised carries beside its code, last in first out per thread (errors in
+; flight nest: deferred code and destructors raise nothing that leaves them). A record is { prev, region, payload }, made
+; in a region of its own - a kid of this thread's parent scope below, never closed but by a pop - which the payload's own
+; copy is built in; a pop drops the region, everything in it with it. Nothing here runs on a success path
+@__olang_errpay_top = thread_local(initialexec) global ptr null
+@__olang_errpay_parent = thread_local(initialexec) global %olang.scope zeroinitializer
+
+; a new record on top: its region returned, the payload set by __olang_errpay_set once copied there
+define ptr @__olang_errpay_push() cold {
+entry:
+  %r = call ptr @__olang_region_make(ptr @__olang_errpay_parent)
+  %rec = call ptr @__olang_region_alloc(ptr %r, i64 24, i64 8)
+  %prev = load ptr, ptr @__olang_errpay_top
+  store ptr %prev, ptr %rec
+  %rp = getelementptr ptr, ptr %rec, i64 1
+  store ptr %r, ptr %rp
+  %pp = getelementptr ptr, ptr %rec, i64 2
+  store ptr null, ptr %pp
+  store ptr %rec, ptr @__olang_errpay_top
+  ret ptr %r
+}
+
+define void @__olang_errpay_set(ptr %payload) cold {
+entry:
+  %rec = load ptr, ptr @__olang_errpay_top
+  %pp = getelementptr ptr, ptr %rec, i64 2
+  store ptr %payload, ptr %pp
+  ret void
+}
+
+; the payload of the error in flight
+define ptr @__olang_errpay_top_get() {
+entry:
+  %rec = load ptr, ptr @__olang_errpay_top
+  %pp = getelementptr ptr, ptr %rec, i64 2
+  %p = load ptr, ptr %pp
+  ret ptr %p
+}
+
+define void @__olang_errpay_pop() {
+entry:
+  %rec = load ptr, ptr @__olang_errpay_top
+  %prev = load ptr, ptr %rec
+  store ptr %prev, ptr @__olang_errpay_top
+  %rp = getelementptr ptr, ptr %rec, i64 1
+  %r = load ptr, ptr %rp
+  tail call void @__olang_region_drop(ptr %r)
+  ret void
+}
+
+; P4b, T19b: a task's error carrying a payload goes to its join: the trampoline detaches the top record - popped off the
+; task thread's stack, its region taken out of the thread's kids - into @__olang_errpay_out, which the worker keeps in
+; the task's node; the join attaches the earliest-spawned failure's onto the joiner's stack and drops the others
+@__olang_errpay_out = thread_local(initialexec) global ptr null
+
+define void @__olang_errpay_detach() cold {
+entry:
+  %rec = load ptr, ptr @__olang_errpay_top
+  %prev = load ptr, ptr %rec
+  store ptr %prev, ptr @__olang_errpay_top
+  %rp = getelementptr ptr, ptr %rec, i64 1
+  %r = load ptr, ptr %rp
+  ; unlinked from its parent's kids, as __olang_region_drop does, then left with neither neighbour nor parent
+  %pp = getelementptr %olang.region, ptr %r, i32 0, i32 2
+  %prevr = load ptr, ptr %pp
+  %np = getelementptr %olang.region, ptr %r, i32 0, i32 3
+  %next = load ptr, ptr %np
+  %hasnext = icmp ne ptr %next, null
+  br i1 %hasnext, label %fixnext, label %fixprev
+fixnext:
+  %npp = getelementptr %olang.region, ptr %next, i32 0, i32 2
+  store ptr %prevr, ptr %npp
+  br label %fixprev
+fixprev:
+  %hasprev = icmp ne ptr %prevr, null
+  br i1 %hasprev, label %intoprev, label %intoparent
+intoprev:
+  %pnp = getelementptr %olang.region, ptr %prevr, i32 0, i32 3
+  store ptr %next, ptr %pnp
+  br label %out
+intoparent:
+  %parp = getelementptr %olang.region, ptr %r, i32 0, i32 4
+  %parent = load ptr, ptr %parp
+  %kp = getelementptr %olang.scope, ptr %parent, i32 0, i32 6
+  store ptr %next, ptr %kp
+  br label %out
+out:
+  store ptr null, ptr %pp
+  store ptr null, ptr %np
+  store ptr %rec, ptr @__olang_errpay_out
+  ret void
+}
+
+; the record a task's trampoline detached, taken by the worker for the task's node; null for none
+define ptr @__olang_errpay_taken() {
+entry:
+  %rec = load ptr, ptr @__olang_errpay_out
+  store ptr null, ptr @__olang_errpay_out
+  ret ptr %rec
+}
+
+; a detached record made this thread's: its region a kid of this thread's parent; then on top of its stack (keep), or
+; dropped
+define void @__olang_errpay_attach(ptr %rec, i1 %keep) {
+entry:
+  %none = icmp eq ptr %rec, null
+  br i1 %none, label %done, label %link
+link:
+  %rp = getelementptr ptr, ptr %rec, i64 1
+  %r = load ptr, ptr %rp
+  %kp = getelementptr %olang.scope, ptr @__olang_errpay_parent, i32 0, i32 6
+  %first = load ptr, ptr %kp
+  %np = getelementptr %olang.region, ptr %r, i32 0, i32 3
+  store ptr %first, ptr %np
+  %has = icmp ne ptr %first, null
+  br i1 %has, label %back, label %head
+back:
+  %fpp = getelementptr %olang.region, ptr %first, i32 0, i32 2
+  store ptr %r, ptr %fpp
+  br label %head
+head:
+  store ptr %r, ptr %kp
+  %parp = getelementptr %olang.region, ptr %r, i32 0, i32 4
+  store ptr @__olang_errpay_parent, ptr %parp
+  br i1 %keep, label %push, label %drop
+push:
+  %top = load ptr, ptr @__olang_errpay_top
+  store ptr %top, ptr %rec
+  store ptr %rec, ptr @__olang_errpay_top
+  br label %done
+drop:
+  call void @__olang_region_drop(ptr %r)
   br label %done
 done:
   ret void
