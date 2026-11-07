@@ -29217,3 +29217,11 @@ storage is - `h` stays in its block's frame slot, its drop flag and deferred dro
 its block is left, as before (tests/drops.olang reads the order back: `142536`, each value ended at its function's end);
 what the constructor builds lives in a scope that outlives the block, so nothing the instance refers to dangles. The
 refusal still holds wherever a destructor value is registered by the landing, which is what 2.5 protects.
+
+**Found on the way, not fixed (pre-existing - master 654d60d too).** Building `tests/runner.olang`'s tests a second
+time in one build directory fails to link: `undefined reference to tests/runner.DoubleIt` (a function of the root
+module that worker.olang, which runner imports and which imports runner back, also calls). `OLANG_CHECKREUSE=1` says
+the root's object differs from a fresh emission: with worker's object reused (B3i), the root's object no longer holds
+the root's own function the tests call. A clean build (`make verify`) never meets it; a second `make rungold` did, and
+recorded runner as failing - its stored lines were restored from the first capture. Not reduced to a small program (a
+two-module cycle with a test and a main builds again cleanly); left for the next round on objects reused.
