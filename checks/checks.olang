@@ -46,7 +46,7 @@ Scenarios := String&["fix", "strheld", "fuzz", "testfuzz", "bench", "agree", "la
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
-                     "profile", "apicaps", "listing"]
+                     "profile", "apicaps", "listing", "memoryplaced"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -436,6 +436,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "profile" { try profiled(r) }
         case "apicaps" { try apicaps(r) }
         case "listing" { try listed(r) }
+        case "memoryplaced" { try memoryplaced(r) }
         case "tbaa" { try tbaa(r) }
         case "opvis" { try opvis(r) }
         case "protopriv" { try protopriv(r) }
@@ -1391,6 +1392,25 @@ fn retslot(r mut report&) ? Failed {
 # alignment - an array under 32 bytes otherwise takes 8 (the second bulk review's P1); its elements read back at -O3 and
 # at -debug
 test "an array of 128-bit elements is 16-aligned" { assert passed("widealign") }
+
+# O27 as placement, B18: storage built where a view of it is kept, listed by -memory at the view with the copy that would
+# let it go with its turn - a generator's borrowed elements and a slice kept past their turn; a program keeping nothing
+# longer than its storage lists none
+test "-memory lists the storage built where a view of it is kept" { assert passed("memoryplaced") }
+
+fn memoryplaced(r mut report&) ? Failed {
+    dir := fresh("memoryplaced")
+    os.Run("cp checks/fixtures/memoryplaced/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build -memory memoryplaced.olang > out.txt 2>&1") == 0, "memoryplaced did not build", dir)
+    o := outOf(dir)
+    try r.expect(o.Contains("memoryplaced.olang:20:38: memory: 't' is built in main's scope, a new one each time it is made, for a view of it kept here"), "no row for t", dir)
+    try r.expect(o.Contains("memoryplaced.olang:25:21: memory: 'u' is built in main's scope"), "no row for u", dir)
+    try r.expect(o.Contains("memoryplaced.olang:19:9: note: made here - a copy of what is kept"), "no note at t", dir)
+    try r.expect(o.Contains("memory: 2 placements made for a view kept longer than its storage (O27)"), "no count", dir)
+    try r.expect(sh(dir, "./build/memoryplaced > run.txt 2>&1 && grep -q '\"0\", \"a\", \"1\", \"a\", \"2\", \"a\"' run.txt") == 0, "memoryplaced printed otherwise", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory plain.olang > out.txt 2>&1") == 0, "plain did not build", dir)
+    try r.expect(not outOf(dir).Contains("placement"), "plain listed a placement", dir)
+}
 
 fn widealign(r mut report&) ? Failed {
     dir := fresh("widealign")
