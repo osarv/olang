@@ -1,0 +1,15 @@
+# check: fail error[O27, O15]: this keeps a view of 'f', whose destructor runs when its block ends
+# O27 as placement, O15 (docs/sec8.md 4.3, question 2): storage holding a value whose destructor is still to run is never
+# built longer for a view - its end stays where its holder lets go of it; the view kept past the turn names a copy
+import "std/io"
+type Res unique struct(n String&) {
+    name := $n
+} destruct { io.Println("end " $name)! }
+fn main() {
+    keep := Vec<String&>()
+    for i in range 3 {
+        f := Res($i "-file")
+        keep.Push(f.name[0:1])
+    }
+    io.Println($keep)!
+}

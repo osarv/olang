@@ -1,5 +1,8 @@
-# check: fail error[O27]: this keeps a view of
-# D18c: an element borrowed from what 't' refers to lives no longer than it - not in a list outliving it
+# check: run
+# flags: -debug -sanitize
+# D18c, O27 as placement (docs/sec8.md 4): an element borrowed from what 't' refers to lives no longer than it - kept in a
+# list that outlives the block, it has 't' built where the list lives (it was O27's error), read back after a churn
+import "std/io"
 fn words(t String&) Iterator<String&> {
     i I64 = 0
     for i < t.Len() {
@@ -11,10 +14,22 @@ fn words(t String&) Iterator<String&> {
     }
 }
 
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
 fn main() {
     kept := Vec<String&>()
     {
         t := $"a b"
         for w in words(t) { kept.Push(w) }
     }
+    churn()
+    io.Println($kept)!
 }

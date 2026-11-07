@@ -1,0 +1,28 @@
+# check: run
+# flags: -debug -sanitize
+# C4 (bulk review 6's held/gen_walkkept2), D18c, O27 as placement: views of what the walk keeps (a Vec the generator
+# fills), the generator made inside a loop turn, the views kept outside the loop - each walk made where the views are
+# kept, a new one each turn; read back after a churn
+import "std/io"
+
+fn seen(n I64) Iterator<String&> {
+    keep := Vec<String>()
+    for i in range n {
+        keep.Push($i "-seen")
+        yield keep.Ref(keep.Len() - 1)
+    }
+}
+
+fn main() {
+    out := Vec<String&>()
+    for k in range 1, 4 {
+        g := seen(k)
+        for w in g { out.Push(w) }
+    }
+    for k in range 1, 4 {
+        for w in seen(k) { out.Push(w) }
+    }
+    junk := Vec<String>()
+    for i in range 100 { junk.Push("zzzzzzzzzzzzzzzzzz" $i) }
+    io.Println($out " " $junk.Len())!
+}

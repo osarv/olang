@@ -1,6 +1,9 @@
-# check: fail error[O27]: this keeps a view of 't', which lives only until its block or loop turn ends
-# T22, T22a: a function handing back its argument is a value (open point 5), and a call through the value holds the
-# argument to outlive where the result lands - kept past the argument, refused (it was T22a's error, the function no value)
+# check: run
+# flags: -debug -sanitize
+# T22, T22a, O27 as placement: a function handing back its argument is a value (open point 5), and a call through the
+# value holds the argument to outlive where the result lands - kept past the argument, the argument is built where the
+# result goes (it was O27's error naming 't'); read back after a churn
+import "std/io"
 type N struct(v I64) {
     v
     next N?& = null
@@ -10,7 +13,19 @@ fn keep(f fn&(a mut N&) N&, out mut N&, i I64) {
     t := N(i)
     out.next = f(t)
 }
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
 fn main() {
     x mut N& = N(1)
     keep(self, x, 42)
+    churn()
+    io.Println($x.next!.v)!
 }

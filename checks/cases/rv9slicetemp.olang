@@ -1,8 +1,8 @@
-# check: fail error[O20]: the container outlives what this refers to
-# also: note: this borrows a value made here, which lives only in this block
-# E16a (tonight9's review): a slice of a temporary - here an inline field of a call's value result - borrows that
-# temporary where it is made, the block the slice is written in, so it is not stored where it outlives that block. It
-# was accepted, and h.r pointed into set's dead frame
+# check: run
+# flags: -debug -sanitize
+# E16a, O27 as placement: a slice of a temporary - here an inline field of a call's value result - kept in a parameter's
+# field has the temporary built where the field lives, a new one each call (it was O20's error: a slice of a temporary
+# borrows it where it is made, and h.r had pointed into set's dead frame); read back after a churn
 import "std/io"
 type Big struct(n I64) {
     a := Array<I64>(4)
@@ -17,8 +17,18 @@ fn Big.mk(n I64) Big { return Big(n) }
 fn set(h mut H&, n I64) {
     h.r = Big.mk(n).a[0:2]
 }
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
 fn main() ? {
     h mut H& = H(1)
     set(h, 7)
+    churn()
     try io.Println($h.r[1])
 }

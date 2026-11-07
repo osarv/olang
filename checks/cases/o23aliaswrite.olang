@@ -2,7 +2,9 @@
 # O23/O11: a field written '&of' lives where the instance's constructor argument did, which every reader of c believes
 # (c.at reads at outer's scope) - storing through an element that aliases c could falsify that, so it is rejected
 # (O25i: 'keep' is typed per assignment now, so the error is at the read after the loop, which the version
-# 'keep = c.at' reaches - storage of the loop body's)
+# 'keep = c.at' reaches - storage of the loop body's; O27 as placement, docs/sec8.md 4.7: the part 'c.at' is read through an
+# instance an element aliases, which no placement of the part's instance serves - it stays refused, as sound as being
+# accepted with c and x built in main's block would be)
 type N struct(v I32) {
     v
 }

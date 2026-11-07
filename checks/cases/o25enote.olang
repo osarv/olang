@@ -1,10 +1,9 @@
-# check: fail error[O27]: this keeps a view of 'text', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Copy()'
+# check: run
+# flags: -debug -sanitize
 # never: error[O10d]
-# B11: arguments a signature requires in one scope, one made in a block that closes first - one error for the one
-# cause, with a note naming the declaration to change and what to write there. (Handed to a method called on "st",
-# "text" would flow into what the function returns and be made in the result scope, O26a; through a plain function
-# the flow is not read, and the text is made in the block. It was O10d once: a slice of "text" was taken for a call
-# still landing, and landed mk's result through the variable's read - a variable's read never lands, O18a.)
+# B11, O27 as placement: arguments a signature requires in one scope, slices of text made in the function - kept in what
+# the function returns, the text is built in the result scope (it was O27's error naming 'text'); read back after a churn
+import "std/io"
 type Store struct() {
     keys mut Vec<String&>& = Vec<String&>()
 }
@@ -19,7 +18,19 @@ fn Store.load(n I64) Store& {
     put(st, text[:1], text[1:])
     return st
 }
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
 fn main() ? {
     s := Store.load(4)
+    churn()
     assert s.keys.Len() == 2
+    try io.Println($s.keys)
 }

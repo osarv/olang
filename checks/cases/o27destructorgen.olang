@@ -1,0 +1,19 @@
+# check: fail error[O27, O15]: this keeps a view of 'f', whose destructor runs when its block ends
+# never: error[O10c]
+# C4, O27 as placement: a generator yielding views of a local that holds a value with a destructor (refused: its storage
+# is never built longer for a view) and a consumer keeping them - one error, in the generator, none at the consumer
+import "std/io"
+type Res unique struct(n String&) {
+    name := $n
+} destruct { io.Println("end " $name)! }
+fn names(n I64) Iterator<String&> {
+    for i in range n {
+        f := Res($i "-file")
+        yield f.name[0:1]
+    }
+}
+fn main() {
+    out := Vec<String&>()
+    for w in names(3) { out.Push(w) }
+    io.Println($out)!
+}
