@@ -15,10 +15,17 @@ import "doc"
 import "session"
 
 # one exported thing as one side has it: its key ("Point", "Point.X", "Point meets Shape"), its kind and its line
-type sig struct(Key String&, Kind String&, Line String&) { Key, Kind, Line }
+type sig struct(Key String&, Kind String&, Line String&, Dep Bool) { Key, Kind, Line, Dep }
 
-# a change found: whether it breaks an importer, what it is, and the lines before and after ("" for none)
-type change struct(Breaks Bool, What String&, Old String&, New String&) { Breaks, What, Old, New }
+# a change found: whether it breaks an importer, what it is, and the lines before and after ("" for none); Deprecated
+# marks the row of an item newly marked deprecated (L4b), which breaks nothing
+type change struct(Breaks Bool, What String&, Old String&, New String&) {
+    Breaks
+    What
+    Old
+    New
+    Deprecated Bool = false
+}
 
 # a side that is neither a directory nor a commit, or a file not readable: said already
 type Unread error { Side }
@@ -64,7 +71,7 @@ fn said(d mut diag.Diagnostics&) I32 {
 }
 
 fn rowOf(c change&) String {
-    mark := "breaking" if c.Breaks else "ok      "
+    mark := "breaking" if c.Breaks else "deprecated" if c.Deprecated else "ok      "
     if c.Old == "" { return $"  " $mark "  " $c.What ": " $c.New "\n" }
     if c.New == "" { return $"  " $mark "  " $c.What ": " $c.Old "\n" }
     return $"  " $mark "  " $c.What ": " $c.Old "\n              now: " $c.New "\n"
@@ -135,7 +142,7 @@ fn entries(root String&, rel String&, scratch String&, cfg mut build.Config&) Ve
     text := try os.ReadFile(scratch) catch os.Error { error Unread.Side }
     for line in text.Lines() {
         parts := line.Split("\t")
-        if parts.Len() == 3 { out.Push(sig($parts[0], $parts[1], $parts[2])) }
+        if parts.Len() == 4 { out.Push(sig($parts[0], $parts[1], $parts[2], parts[3] == "deprecated")) }
     }
     return out
 }
@@ -158,16 +165,19 @@ fn writeSigs(file String&, scratch String&, cfg mut build.Config&) I32 {
 fn itemSigs(b mut StringBuilder&, it doc.Entry&) {
     line := sigLine(it.Line)
     kind := itemKind(line)
-    b.Push($it.Name "\t" $kind "\t" $line "\n")
+    b.Push($it.Name "\t" $kind "\t" $line "\t" $depMark(it) "\n")
     for m in it.Members {
         ml := sigLine(m.Line)
         if ml.StartsWith("meets ") {
-            b.Push($it.Name " " $ml "\tmeets\t" $ml "\n")
+            b.Push($it.Name " " $ml "\tmeets\t" $ml "\t\n")
             continue
         }
-        b.Push($it.Name "." $m.Name "\t" $memberKind(kind, ml, m.Builder) "\t" $ml "\n")
+        b.Push($it.Name "." $m.Name "\t" $memberKind(kind, ml, m.Builder) "\t" $ml "\t" $depMark(m) "\n")
     }
 }
+
+# "deprecated" for an item whose doc comment carries a Deprecated: note (L4b), else ""
+fn depMark(it doc.Entry&) String { return "deprecated" if doc.Deprecation(it.Doc) != "" else "" }
 
 # a doc line's signature: its first line past its attributes, its comment taken off
 fn sigLine(line String&) String {
@@ -210,6 +220,7 @@ fn compare(olds Vec<sig>&, news Vec<sig>&) Vec<change> {
             continue
         }
         if o.Line != n.Line { out.Push(changed(o, n)) }
+        if n.Dep and not o.Dep { out.Push(deprecation(n)) }
     }
     now Map<String&, Bool>
     for n in news { now.Put($n.Key, true) }
@@ -217,6 +228,13 @@ fn compare(olds Vec<sig>&, news Vec<sig>&) Vec<change> {
         if not now.Has(o.Key) { out.Push(change(true, $"removed " $o.Kind, $o.Line, "")) }
     }
     return out
+}
+
+# an item newly marked deprecated: listed, not breaking
+fn deprecation(n sig) change {
+    c := change(false, $n.Kind, "", $n.Line)
+    c.Deprecated = true
+    return c
 }
 
 # whether adding a thing of a kind breaks an importer: an enum's case (its matches are no longer complete, S13a), an

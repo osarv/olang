@@ -19,14 +19,14 @@ import typecheck "check"
 # ---- doc comments (L4b) ----
 
 # where the line holding offset at begins
-fn lineStart(t String&, at I64) I64 {
+fn LineStart(t String&, at I64) I64 {
     i := at
     for i > 0 and t[i - 1] != '\n' { i-- }
     return i
 }
 
 # where the line beginning at from ends: its newline, or the text's end
-fn lineEnd(t String&, from I64) I64 {
+fn LineEnd(t String&, from I64) I64 {
     i := from
     for i < t.Len() and t[i] != '\n' { i++ }
     return i
@@ -34,7 +34,7 @@ fn lineEnd(t String&, from I64) I64 {
 
 # the column (from 0) of the '#' opening a line comment in line, outside text and character literals - -1 for none,
 # and -1 where a block comment opens on the line and does not close on it (what follows is no line comment)
-fn commentColumn(line String&) I64 {
+fn CommentColumn(line String&) I64 {
     i I64 = 0
     for i < line.Len() {
         ch := line[i]
@@ -78,15 +78,15 @@ fn commentText(line String&) String {
 # line, less the leading ones continuing a line comment that ends the line above them
 fn Above(t String&, at I64) String {
     starts Vec<I64>
-    pos := lineStart(t, at)
+    pos := LineStart(t, at)
     # G39: the attributes on lines of their own above a declaration are part of it - its comment is above them
     for pos > 0 {
-        from := lineStart(t, pos - 1)
+        from := LineStart(t, pos - 1)
         if not t[from:pos - 1].TrimStart().StartsWith("@") { break }
         pos = from
     }
     for pos > 0 {
-        from := lineStart(t, pos - 1)
+        from := LineStart(t, pos - 1)
         line := t[from:pos - 1]
         if not commentOnly(line) { break }
         if from == 0 and line.StartsWith("#!") { break }
@@ -97,11 +97,11 @@ fn Above(t String&, at I64) String {
     # the lines run bottom to top in starts; pos is the topmost's start
     k := starts.Len() - 1
     if pos > 0 {
-        before := t[lineStart(t, pos - 1):pos - 1]
-        col := commentColumn(before)
+        before := t[LineStart(t, pos - 1):pos - 1]
+        col := CommentColumn(before)
         if col >= 0 and before[:col].Trim().Len() > 0 {
             for k >= 0 {
-                line := t[starts[k]:lineEnd(t, starts[k])]
+                line := t[starts[k]:LineEnd(t, starts[k])]
                 if line.Len() - line.TrimStart().Len() != col { break }
                 k--
             }
@@ -110,7 +110,7 @@ fn Above(t String&, at I64) String {
     b := StringBuilder()
     for i := k, i >= 0, i-- {
         if i < k { b.PushChar('\n') }
-        b.Push(commentText(t[starts[i]:lineEnd(t, starts[i])]))
+        b.Push(commentText(t[starts[i]:LineEnd(t, starts[i])]))
     }
     return b.ToString()
 }
@@ -118,16 +118,16 @@ fn Above(t String&, at I64) String {
 # the line comment ending the line holding offset at, with the comment-only lines below it whose '#' stands in its column
 # (L4b's continuation) - "" for none
 fn Trailing(t String&, at I64) String {
-    from := lineStart(t, at)
-    end := lineEnd(t, from)
+    from := LineStart(t, at)
+    end := LineEnd(t, from)
     line := t[from:end]
-    col := commentColumn(line)
+    col := CommentColumn(line)
     if col < 0 or line[:col].Trim().Len() == 0 { return "" }
     b := StringBuilder()
     b.Push(commentText(line[col:]))
     next := end + 1
     for next < t.Len() {
-        e := lineEnd(t, next)
+        e := LineEnd(t, next)
         l := t[next:e]
         if not commentOnly(l) or l.Len() - l.TrimStart().Len() != col { break }
         b.PushChar('\n')
@@ -148,27 +148,90 @@ fn Comment(t String&, at I64, member Bool) String {
 # declaration's, the line after them neither blank nor an import
 fn ModuleDoc(t String&) String {
     pos I64 = 0
-    if t.StartsWith("#!") { pos = lineEnd(t, 0) + 1 }
+    if t.StartsWith("#!") { pos = LineEnd(t, 0) + 1 }
     first := pos
     for pos < t.Len() {
-        e := lineEnd(t, pos)
+        e := LineEnd(t, pos)
         if not commentOnly(t[pos:e]) { break }
         pos = e + 1
     }
     if pos == first { return "" }
     if pos < t.Len() {
-        next := t[pos:lineEnd(t, pos)].Trim()
+        next := t[pos:LineEnd(t, pos)].Trim()
         if next != "" and not next.StartsWith("import ") and not next.StartsWith("import\"") { return "" }
     }
     b := StringBuilder()
     p := first
     for p < pos {
-        e := lineEnd(t, p)
+        e := LineEnd(t, p)
         if p > first { b.PushChar('\n') }
         b.Push(commentText(t[p:e]))
         p = e + 1
     }
     return b.ToString()
+}
+
+# ---- deprecation (L4b) ----
+
+# The deprecation convention: a paragraph of a doc comment beginning "Deprecated:" marks its declaration deprecated. It
+# is read by the tools alone - the compiler gives it no meaning.
+
+# the deprecation note of a doc comment: its first paragraph beginning "Deprecated:", on one line - "" for none
+fn Deprecation(doc String&) String {
+    para := StringBuilder()
+    starts := true      # whether the next line begins a paragraph
+    noted := false      # whether the paragraph being read is the note
+    for line in doc.Lines() {
+        if line == "" {
+            if noted { break }
+            starts = true
+            continue
+        }
+        if starts and line.StartsWith("Deprecated:") { noted = true }
+        starts = false
+        if not noted { continue }
+        if para.Len() > 0 { para.PushChar(' ') }
+        para.Push(line.Trim())
+    }
+    return para.ToString()
+}
+
+# the words of a line of code
+fn wordsOf(line String&) Vec<String&> {
+    out Vec<String&>
+    i I64 = 0
+    for i < line.Len() {
+        if not (line[i].IsLetter() or line[i] == '_') {
+            i++
+            continue
+        }
+        s := i
+        for i < line.Len() and wordChar(line[i]) { i++ }
+        out.Push($line[s:i])
+    }
+    return out
+}
+
+# the words of the declaration lines that carry a deprecation note in t: the line below a doc comment holding a
+# "Deprecated:" paragraph, or a line ending in a comment that begins so
+fn DeprecatedNames(t String&) Vec<String&> {
+    out Vec<String&>
+    marked := false
+    for line in t.Lines() {
+        if commentOnly(line) {
+            if commentText(line).StartsWith("Deprecated:") { marked = true }
+            continue
+        }
+        code := line
+        col := CommentColumn(line)
+        trailing := col >= 0 and commentText(line[col:]).StartsWith("Deprecated:")
+        if col >= 0 { code = $line[:col] }
+        if (marked or trailing) and code.Trim() != "" {
+            for w in wordsOf(code) { out.Push(w) }
+        }
+        marked = false
+    }
+    return out
 }
 
 # ---- a module's documentation (B14) ----
@@ -299,8 +362,8 @@ fn examplesIn(c mut typecheck.Checker&, ds Array<ast.Decl&>&, text String&, targ
 # own line as written there
 fn bodyText(text String&, body Array<ast.Stmt&>&) String {
     if body.Len() == 0 { return "" }
-    from := lineStart(text, I64(body[0].Span().Start))
-    to := lineEnd(text, I64(body[body.Len() - 1].Span().End))
+    from := LineStart(text, I64(body[0].Span().Start))
+    to := LineEnd(text, I64(body[body.Len() - 1].Span().End))
     if text[from:to].TrimStart().StartsWith("test ") {
         return $text[I64(body[0].Span().Start):I64(body[body.Len() - 1].Span().End)]
     }
@@ -408,7 +471,7 @@ fn item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
         mat := memberAt(c, mi, d, mname)
         if mat >= 0 {
             # a member written on its declaration's own line has the declaration's comments, none of its own
-            if at < 0 or lineStart(text, mat) != lineStart(text, at) { me.Doc = Comment(text, mat, true) }
+            if at < 0 or LineStart(text, mat) != LineStart(text, at) { me.Doc = Comment(text, mat, true) }
             me.File = m.File
             me.At = mat
         }
@@ -587,7 +650,12 @@ fn (md Module&) Text() String {
 }
 
 fn entryText(b mut StringBuilder&, e Entry&, indent String&) {
-    for line in e.Line.Lines() { b.Push($indent $line "\n") }
+    mark := "   # deprecated" if Deprecation(e.Doc) != "" else ""
+    first := true
+    for line in e.Line.Lines() {
+        b.Push($indent $line $(mark if first else "") "\n")
+        first = false
+    }
     if e.Doc != "" { indented(b, e.Doc, $indent "    ") }
     for x in e.Examples {
         b.Push($indent "    example \"" $x.Desc "\"\n")
@@ -631,7 +699,7 @@ fn PageName(identity String&) String {
 Style String& = ("body{font-family:system-ui,sans-serif;max-width:52rem;margin:2rem auto;padding:0 1rem;line-height:1.5;" $
                  "color:#1d1d1f;background:#fff}pre{background:#f5f5f7;padding:.5rem .75rem;border-radius:4px;" $
                  "overflow-x:auto;margin:.25rem 0}code,pre{font-family:ui-monospace,Menlo,monospace;font-size:.9em}" $
-                 ".doc{margin:.25rem 0 1rem 1rem}.example{margin:.25rem 0 .5rem 1rem}summary{cursor:pointer}.member{margin-left:1.5rem}h2{border-bottom:1px solid #ddd;" $
+                 ".dep{text-decoration:line-through}.note{font-weight:bold}.doc{margin:.25rem 0 1rem 1rem}.example{margin:.25rem 0 .5rem 1rem}summary{cursor:pointer}.member{margin-left:1.5rem}h2{border-bottom:1px solid #ddd;" $
                  "padding-bottom:.25rem;margin-top:2rem}a{color:#0b57d0}@media(prefers-color-scheme:dark){body{" $
                  "color:#e8e8ea;background:#18181b}pre{background:#26262b}a{color:#8ab4f8}h2{border-color:#333}}")
 
@@ -650,7 +718,9 @@ fn docHtml(b mut StringBuilder&, doc String&) {
     flush := fn(p mut StringBuilder&, out mut StringBuilder&, asPre Bool) {
         if p.Len() == 0 { return }
         text := p.ToString()
-        if asPre { out.Push($"<pre>" $Escape(text) "</pre>") } else { out.Push($"<p>" $Escape(text) "</p>") }
+        if asPre { out.Push($"<pre>" $Escape(text) "</pre>") }
+        else if text.StartsWith("Deprecated:") { out.Push($"<p class=\"note\">" $Escape(text) "</p>") }
+        else { out.Push($"<p>" $Escape(text) "</p>") }
         p.Clear()
     }
     for line in doc.Lines() {
@@ -671,7 +741,8 @@ fn docHtml(b mut StringBuilder&, doc String&) {
 fn entryHtml(b mut StringBuilder&, e Entry&, member Bool) {
     if member { b.Push("<div class=\"member\">") }
     id := e.Name
-    b.Push($"<pre id=\"" $Escape(id) "\">" $Escape(e.Line) "</pre>\n")
+    dep := Deprecation(e.Doc) != ""
+    b.Push($"<pre id=\"" $Escape(id) "\"" $(" class=\"dep\"" if dep else "") ">" $Escape(e.Line) "</pre>\n")
     docHtml(b, e.Doc)
     for x in e.Examples {
         b.Push($"<details class=\"example\"><summary>Example: " $Escape(x.Desc) "</summary><pre>" $Escape(x.Body) "</pre></details>\n")
@@ -693,7 +764,10 @@ fn (md Module&) Html() String {
     docHtml(b, md.Doc)
     if md.Items.Len() > 0 {
         b.Push("<h2>Index</h2>\n<ul>\n")
-        for e in md.Items { b.Push($"<li><a href=\"#" $Escape(e.Name) "\"><code>" $Escape(e.Name) "</code></a></li>\n") }
+        for e in md.Items {
+            cls := " class=\"dep\"" if Deprecation(e.Doc) != "" else ""
+            b.Push($"<li><a href=\"#" $Escape(e.Name) "\"><code" $cls ">" $Escape(e.Name) "</code></a></li>\n")
+        }
         b.Push("</ul>\n<h2>Items</h2>\n")
     }
     for e in md.Items { entryHtml(b, e, false) }
@@ -752,4 +826,25 @@ test "pages and their names" {
     assert PageName("std/json") == "std.json.html"
     assert Escape("a<b & \"c\">") == "a&lt;b &amp; &quot;c&quot;&gt;"
     assert firstSentence("Reads JSON. Writes it.\nmore") == "Reads JSON."
+}
+
+test "a Deprecated: paragraph of a doc comment marks its declaration (L4b)" {
+    assert Deprecation("Reads.\n\nDeprecated: use Read2,\nit is faster.\n\nmore") == "Deprecated: use Read2, it is faster."
+    assert Deprecation("Reads. Deprecated: no.\nNot Deprecated: here") == ""
+    t := "# Deprecated: gone soon\nfn Old(x I64) I64 { }\n\n# fine\nfn New() { }\nA := 1   # Deprecated: use B\n"
+    found := DeprecatedNames(t)
+    assert found.Has("Old") and found.Has("A") and not found.Has("New")
+}
+
+test "an item's deprecation is marked in the text and the HTML of its documentation (B14)" {
+    e := Entry("fn Old(x I64) I64", "Deprecated: use New", "Old")
+    b := StringBuilder()
+    entryText(b, e, "")
+    assert b.ToString() == "fn Old(x I64) I64   # deprecated\n    Deprecated: use New\n"
+    h := StringBuilder()
+    entryHtml(h, e, false)
+    assert h.ToString().Contains("class=\"dep\"") and h.ToString().Contains("<p class=\"note\">Deprecated: use New</p>")
+    plain := StringBuilder()
+    entryText(plain, Entry("fn New()", "fine", "New"), "")
+    assert plain.ToString() == "fn New()\n    fine\n"
 }

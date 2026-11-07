@@ -149,6 +149,18 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   file begins with. Read from the text by the declaration's span (`compiler/doc.olang`) - scanner and parser unchanged.
   `olang doc FILE [NAME]` prints them with explain's signatures; `doc -html DIR [FILE...]` writes static HTML (all of
   std when no file is named). Exported items only in a listing (mine).
+- **Deprecation is a doc-comment convention, read by tools only (L4b, QCW, the user's "add deprecation only as a comment
+  and kind of surrounding tools thing. It should not break the compiler", 2026-11-07; built 2026-11-07, details mine).** A
+  doc-comment paragraph beginning `Deprecated:` marks its declaration; the compiler gives it no meaning (every diagnostic
+  stays an error). `olang doc` ends the item's first line with `# deprecated` (HTML: the listing struck through, the
+  note bold; `mcp`'s `doc` the same text); `olang lsp` hovers the note with the doc comment, tags the completion item
+  (`"tags":[1]`) and publishes each use in the open file as a Hint (severity 4, `"tags":[2]`) - the one non-error it
+  publishes; `olang api` lists an item newly deprecated as a `deprecated` row, not breaking, status unchanged. Removing
+  between versions stays the main way (std/README.md, "Deprecation"); no std item is deprecated. Decided (mine): a use
+  is a word in the open file naming a declaration whose line is read from a `Deprecated:` comment anywhere in the
+  program, resolved by the resolver's target (`Analysis.target`, no scope pass needed, so the hints arrive with the
+  checker's diagnostics), skipping the declaration's own line; a program with no such comment pays one scan of its
+  modules' texts. `doc.Deprecation`, `doc.DeprecatedNames`, `session.DeprecatedUses`.
 - **`olang lsp` (B15) and `olang mcp` (B16), 2026-10-24 (the user: "we need this, both for MCP and neovim
   integration").** LSP over stdio - diagnostics, hover, definition, symbols, completion, formatting; MCP over stdio -
   `check`, `explain`, `doc`, `format`, `test`. Each analysis runs in a forked process (mine): a compiler crash never

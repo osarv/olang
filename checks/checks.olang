@@ -1114,6 +1114,10 @@ fn apicaps(r mut report&) ? Failed {
     }
     try r.expect(sh(dir, "\"$OLANG\" api old old lib.olang > out.txt 2>&1") == 0 and outOf(dir) == "0 breaking changes\n"
                  "api: a version against itself", dir)
+    # L4b: an item newly marked deprecated is listed and breaks nothing
+    try r.expect(sh(dir, "\"$OLANG\" api old dep lib.olang > out.txt 2>&1") == 0 and
+                 outOf(dir).Contains("  deprecated  fn: fn Same(a I64) I64\n") and outOf(dir).EndsWith("0 breaking changes\n")
+                 "api: a deprecated item is listed, not breaking", dir)
     try r.expect(sh(dir, "\"$OLANG\" api old nowhere lib.olang > out.txt 2>&1") == 2 and outOf(dir).Contains("error[B21]")
                  "api: a side that is neither", dir)
     try r.expect(sh(dir, "\"$OLANG\" explain -caps caps.olang > out.txt 2>&1") == 0, "caps", dir)

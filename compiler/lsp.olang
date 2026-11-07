@@ -504,6 +504,7 @@ fn (w mut worker&) publishAll(k I64, a session.Analysis&, d mut diag.Diagnostics
     for j in range files.Len() {
         if files[j] == doc.Real { mine = lists[j] }
     }
+    w.deprecations(mine, a, doc.Real)
     w.send(publish(doc.Uri, $"[" $mine.ToString() "]"))
     for j in range files.Len() {
         if files[j] == doc.Real or w.slotPending(files[j]) { continue }
@@ -515,6 +516,20 @@ fn (w mut worker&) publishAll(k I64, a session.Analysis&, d mut diag.Diagnostics
         if f not in foreign { w.send(publish(f, "[]")) }
     }
     return foreign
+}
+
+# the uses of deprecated items in the file at real path (L4b) as Hint diagnostics tagged Deprecated, added to b - the one
+# kind of diagnostic published that is no error, so editors strike the name through
+fn (w worker&) deprecations(b mut StringBuilder&, a session.Analysis&, real String&) {
+    p := session.Positions(w.textOf(a, real), w.s.Utf8)
+    for u in a.DeprecatedUses(real) {
+        if b.Len() > 0 { b.PushChar(',') }
+        b.Push("{\"range\":")
+        p.Range(b, u.Start, u.End)
+        b.Push(",\"severity\":4,\"source\":\"olang\",\"tags\":[2],\"message\":")
+        session.JsonStr(b, u.Note)
+        b.PushChar('}')
+    }
 }
 
 # whether a file is itself one of the open files to be checked here, as a root
@@ -898,4 +913,50 @@ test "a hover on a function shows the first test naming it and how many more the
     assert out.Status == 0, out.Stderr
     assert out.Stdout.Contains("Example: doubles") and out.Stdout.Contains("assert Twice(2) == 4"), out.Stdout
     assert out.Stdout.Contains("+1 more test") and not out.Stdout.Contains("doubles a negative"), out.Stdout
+}
+
+DeprecatedSrc String& = """
+    # Deprecated: use New
+    fn Old() I64 { return 1 }
+    fn New() I64 { return 2 }
+    fn main() {
+        x := Old() + New()
+        assert x > 0
+    }
+    """
+
+test "a deprecated item: hover shows the note, completion tags it, its uses get a Hint tagged Deprecated (L4b, B15)" {
+    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    defer try os.RemoveAll(dir) catch os.Error { }
+    path := $dir "/d.olang"
+    try os.WriteFile(path, DeprecatedSrc) catch os.Error { unreachable "no file" }
+    uri := UriOf(path)
+    td := $"{\"uri\":\"" $uri "\"}"
+    t := StringBuilder()
+    session.JsonStr(t, DeprecatedSrc)
+    b := StringBuilder()
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{}}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"" $uri $
+                  "\",\"languageId\":\"olang\",\"version\":1,\"text\":" $t.ToString() "}}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"textDocument/hover\",\"params\":{\"textDocument\":" $td $
+                  ",\"position\":{\"line\":4,\"character\":10}}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"textDocument/completion\",\"params\":{\"textDocument\":" $td $
+                  ",\"position\":{\"line\":5,\"character\":4}}}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"shutdown\"}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
+    out := try os.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    assert out.Status == 0, out.Stderr
+    got := Map<String&, String&>()
+    diags := ""
+    for m in frames(out.Stdout) {
+        msg := try json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " $m }
+        if str(msg, "method") == "textDocument/publishDiagnostics" { diags = $m }
+        if idOf(msg) != "" { got.Put(idOf(msg), $m) }
+    }
+    assert (got.Get("2")!).Contains("Deprecated: use New"), got.Get("2")!
+    comp := got.Get("3")!
+    assert comp.Contains("\"label\":\"Old\"") and comp.Split("\"tags\":[1]").Len() == 2, comp
+    assert diags.Contains("\"severity\":4") and diags.Contains("\"tags\":[2]"), diags
+    assert diags.Contains("\"start\":{\"line\":4,\"character\":9}") and not diags.Contains("\"line\":1,"), diags
+    assert not diags.Contains("\"severity\":1"), diags
 }

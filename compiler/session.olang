@@ -778,7 +778,10 @@ type Items struct() {
     seen Vec<String&>
 }
 
-fn (it mut Items&) Add(label String&, kind I64, detail String&) {
+fn (it mut Items&) Add(label String&, kind I64, detail String&) { it.AddDep(label, kind, detail, false) }
+
+# an item, tagged deprecated (LSP's CompletionItemTag.Deprecated, 1) where dep is true (L4b)
+fn (it mut Items&) AddDep(label String&, kind I64, detail String&, dep Bool) {
     for s in it.seen {
         if s == label { return }
     }
@@ -792,6 +795,7 @@ fn (it mut Items&) Add(label String&, kind I64, detail String&) {
         it.B.Push(",\"detail\":")
         JsonStr(it.B, detail)
     }
+    if dep { it.B.Push(",\"tags\":[1]") }
     it.B.PushChar('}')
 }
 
@@ -818,6 +822,79 @@ fn (a Analysis&) Members(it mut Items&, real String&, dot I64) {
     a.typeMembers(it, t)
 }
 
+# whether the declaration at offset at of module mi carries a "Deprecated:" note in its doc comment (L4b); a member or a
+# global may carry it as its trailing comment
+fn (a Analysis&) deprecatedAt(mi I64, at I64, member Bool) Bool {
+    if mi < 0 or at < 0 or a.L.Mods[mi].Src is null { return false }
+    return doc.Deprecation(doc.Comment(a.TextOf(mi), at, member)) != ""
+}
+
+# a use of a deprecated item: where the name stands in the file, and the note
+type Use struct(Start I64, End I64, Note String&) { Start, End, Note }
+
+# the uses of deprecated items in the file at real path (L4b): each word that names a deprecated declaration of the
+# program and resolves to it, other than the declaration's own. None where nothing in the program is deprecated - the
+# common case costs one scan of the modules' texts.
+fn (a Analysis&) DeprecatedUses(real String&) Vec<Use> {
+    out Vec<Use>
+    mi := a.ModuleOf(real)
+    if mi < 0 or a.C is null { return out }
+    deprecated Vec<String&>
+    for k in range a.L.Mods.Len() {
+        if a.L.Mods[k].Src is null { continue }
+        for n in doc.DeprecatedNames(a.TextOf(k)) { deprecated.Push(n) }
+    }
+    if deprecated.Len() == 0 { return out }
+    text := a.TextOf(mi)
+    pos I64 = 0
+    for pos <= text.Len() {
+        end := doc.LineEnd(text, pos)
+        col := doc.CommentColumn(text[pos:end])
+        stop := end if col < 0 else pos + col
+        i := pos
+        for i < stop {
+            if not WordChar(text[i]) {
+                i++
+                continue
+            }
+            s := i
+            for i < stop and WordChar(text[i]) { i++ }
+            word := $text[s:i]
+            if not deprecated.Has(word) { continue }
+            tg := a.target(mi, source.Span(I32(s), I32(i)))
+            note, at, home := a.noteOf(tg)
+            if note != "" and not (home == mi and doc.LineStart(text, at) == doc.LineStart(text, s)) {
+                out.Push(Use(s, i, note))
+            }
+        }
+        pos = end + 1
+    }
+    return out
+}
+
+# the deprecation note of what a target names, the offset it is declared at and the module it is in - "" for none. Read
+# from the doc comment alone, so it needs no more than the checker has said.
+fn (a Analysis&) noteOf(tg Target) String, I64, I64 {
+    c := a.C
+    match tg {
+        case Target.Item(mi, name) {
+            at := declOf(c!, mi, name)
+            return doc.Deprecation(doc.Comment(a.TextOf(mi), at, true) if at >= 0 else ""), at, mi
+        }
+        case Target.Method(f) {
+            mi := c!.P.FnModule(f)
+            at := I64(c!.P.FnDecl(f).Sp.Start)
+            return doc.Deprecation(doc.Above(a.TextOf(mi), at)), at, mi
+        }
+        case Target.Field(t, index) {
+            fd := try a.field(t, index) catch Nothing { return "", -1, -1 }
+            return doc.Deprecation(fd.Doc), fd.At, a.ModuleOf(fd.Real)
+        }
+        case Target.Decl(mi, at, docText, _) { return doc.Deprecation(docText), at, mi }
+        case _ { return "", -1, -1 }
+    }
+}
+
 # the names a module offers: every one where own is true (the module itself), else its exported ones
 fn (a Analysis&) moduleNames(it mut Items&, mi I64, own Bool) {
     c := a.C
@@ -828,11 +905,11 @@ fn (a Analysis&) moduleNames(it mut Items&, mi I64, own Bool) {
         if e.Kind == names.What.Func {
             f := c!.P.FnNamed(mi, e.Name)
             if f < 0 or c!.P.FnDecl(f).Recv is not null { continue }
-            it.Add(name, CompFunction, c!.Ty(c!.P.Sig(f)))
+            it.AddDep(name, CompFunction, c!.Ty(c!.P.Sig(f)), a.deprecatedAt(mi, I64(e.Sp.Start), false))
         } else if e.Kind == names.What.Type {
-            it.Add(name, CompStruct, "")
+            it.AddDep(name, CompStruct, "", a.deprecatedAt(mi, I64(e.Sp.Start), false))
         } else if e.Kind == names.What.Global and not name.StartsWith("@") {
-            it.Add(name, CompVariable if e.Mut else CompConstant, "")
+            it.AddDep(name, CompVariable if e.Mut else CompConstant, "", a.deprecatedAt(mi, I64(e.Sp.Start), true))
         } else if e.Kind == names.What.Import {
             it.Add(name, CompModule, "")
         }
@@ -874,7 +951,7 @@ fn (a Analysis&) fieldMembers(it mut Items&, tt types.TypeId) {
             l := body.Locals[I64(body.Fields[i])]
             name := (a.L.Diags.TextOf(body.File)[I64(l.Sp.Start):I64(l.Sp.End)] if l.Name == source.NameId(0)
                      else c!.P.L.Names.Text(l.Name))
-            it.Add(name, CompField, c!.Ty(tys[i] if i < tys.Len() else l.Ty))
+            it.AddDep(name, CompField, c!.Ty(tys[i] if i < tys.Len() else l.Ty), a.deprecatedAt(a.moduleOfFile(body.File), I64(l.Sp.Start), true))
         }
         return
     }
@@ -894,7 +971,7 @@ fn (a Analysis&) typeMembers(it mut Items&, t types.TypeId) {
         if not sameShape(c!, recv, tt) { continue }
         name := c!.P.L.Names.Text(decl.Name)
         if not doc.Exported(name) and c!.P.FnModule(f) != a.L.Root { continue }
-        it.Add(name, CompMethod, firstLine(explain.FnText(c!, a.Sc!, f)))
+        it.AddDep(name, CompMethod, firstLine(explain.FnText(c!, a.Sc!, f)), a.deprecatedAt(c!.P.FnModule(f), I64(decl.Sp.Start), false))
     }
 }
 
