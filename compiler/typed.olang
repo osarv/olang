@@ -3711,8 +3711,13 @@ type Landings struct(Locals Array<I64>&, Starts Array<I64>&, Holds Array<Bool>&,
     dead Bool = false                                            # no path reaches here
     loops Vec<landLoop>
     later I64 = 0                                                # > 0 inside code that runs after
+    laterTasks I64 = 0                                           # ... of which a task's or a join's clauses (not deferred)
     laterLocals Map<I64, Bool>                                   # the locals mentioned there
     laterVia Map<I64, I64>                                       # ... and the holder each was mentioned through
+    # a watched read in deferred code that runs once (no loop around or in it, no task or join): the landing itself,
+    # which runs last - no mention after it but another later one (bulk review 8, F4). Its local and where it starts
+    lastL Vec<I64>
+    lastAt Vec<I64>
     # every mention, in the order walked: its local, where it starts, whether it reads the local whole
     saidL Vec<I64>
     saidAt Vec<I64>
@@ -3772,10 +3777,28 @@ fn orInto(to mut Array<Bool>&, from Array<Bool>&) {
 fn (w mut Landings&) Body(b Block&) {
     w.block(b)
     for k in range w.Locals.Len() {
-        if not w.laterLocals.Has(w.Locals[k]): continue
+        if not w.laterLocals.Has(w.Locals[k]) and not w.lastAfter(k): continue
         w.Bad[k] = true
         w.Via[k] = try w.laterVia.Get(w.Locals[k]) catch default -1
     }
+}
+
+# whether a landing in deferred code other than watched read k hands its local on - after k, wherever k stands
+fn (w Landings&) lastAfter(k I64) Bool {
+    for j in range w.lastL.Len() {
+        if w.lastL[j] == w.Locals[k] and w.lastAt[j] != w.Starts[k]: return true
+    }
+    return false
+}
+
+# whether the read of local l starting at at is a watched read in deferred code that runs once (T13b: deferred code
+# runs after everything, so its landing is the last mention where nothing else later mentions the local)
+fn (w Landings&) deferredLanding(l I64, at I64) Bool {
+    if w.laterTasks > 0 or w.loops.Len() > 0 or w.via >= 0: return false
+    for k in range w.Locals.Len() {
+        if w.Locals[k] == l and w.Starts[k] == at: return true
+    }
+    return false
 }
 
 fn (w mut Landings&) mention(id LocalId, at I64, read Bool) {
@@ -3795,6 +3818,11 @@ fn (w mut Landings&) mention(id LocalId, at I64, read Bool) {
     }
     if w.later > 0 {
         if read and w.guardedAt(l, at): return
+        if read and w.deferredLanding(l, at) {
+            w.lastL.Push(l)
+            w.lastAt.Push(at)
+            return
+        }
         w.laterLocals.Put(l, true)
         if w.via >= 0: w.laterVia.Put(l, w.via)
         return
@@ -3860,16 +3888,20 @@ fn (w mut Landings&) stmt(s Stmt&) {
         case Stmt.Join(_, j) {
             w.block(j.Code)
             w.later++
+            w.laterTasks++
             w.clauses(j.Clauses)
+            w.laterTasks--
             w.later--
         }
         case Stmt.Spawn(_, sw) {
             w.later++
+            w.laterTasks++
             for tg in sw.Targets {
                 if tg is not null: w.place(tg)
             }
             w.expr(sw.Task)
             for c in sw.Clauses { w.expr(c.Handler) }
+            w.laterTasks--
             w.later--
         }
     }

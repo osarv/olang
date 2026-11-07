@@ -667,7 +667,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   or payload of a value made, a by-value parameter or receiver, a result) given an existing one is an error naming
   `File&`. A by-value parameter, fresh at every call, hands its value on once where it is mentioned last - judged on every
   path (`typed.Landings`: another branch is no "after", a loop's next turn is, deferred code, tasks and join clauses run
-  after everything) - so `Vec.Push(x T)` and `Map.Put` store unique elements as written, moved, never copied (since
+  after everything, so a landing in deferred code that runs once is the last mention where nothing else later mentions
+  the parameter - `defer v.Push(l)`, bulk review 8 F4) - so `Vec.Push(x T)` and `Map.Put` store unique elements as written, moved, never copied (since
   2026-11-07, "The unique hand-on is a move" below); a returned whole local is the result itself (O26a). A unique type declares no Copy, and `x.Copy()` of one is an error; a struct, enum, array or
   collection holding a unique part by value is unique unless it declares a Copy (`types.Unique`, structural, cached once
   every part is typed; `Table.MarkUnique` from `generic.DeclFor`); unique and immut are never one type's (both words, one

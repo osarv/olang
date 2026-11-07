@@ -1,0 +1,66 @@
+# check: run
+# flags: -debug -sanitize
+# T13b, O15 (bulk review 8, F4): deferred code runs after everything, so a by-value parameter handed on in it - by a
+# defer, or an errdefer where an error leaves - is handed on at its last mention: moved once, its flag cleared there, the
+# value ended by the holder it lands in; a read of it written after the defer runs before the hand-on. Read back after
+# the arena churned
+import "std/io"
+
+type Tally struct() {
+    ends I64 = 0
+    ids := Vec<I64>()
+}
+
+type Lamp unique struct(id I64, log mut Tally&) {
+    id, log
+    data := Array<I64>(3 + id.Mod(2), id)
+} destruct {
+    log.ends++
+    log.ids.Push(id)
+}
+
+type Bad error { No }
+
+fn idx(k I64) I64 ? {
+    if k > 0: error Bad.No
+    return 0
+}
+
+fn deferPush(v mut Vec<Lamp>&, l Lamp) {
+    defer v.Push(l)
+    assert l.data.Len() >= 3
+}
+
+fn withErrdefer(v mut Vec<Lamp>&, l Lamp, k I64) ? {
+    errdefer v.Push(l)
+    try idx(k)
+}
+
+fn churn() I64 {
+    t := 0
+    for _ in range 20 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+    }
+    return t
+}
+
+fn main() {
+    t := Tally()
+    {
+        v := Vec<Lamp>()
+        for k in range 4 {
+            deferPush(v, Lamp(k + 1, t))
+            churn()
+        }
+        try withErrdefer(v, Lamp(8, t), 0) catch { }
+        try withErrdefer(v, Lamp(9, t), 1) catch { }
+        churn()
+        s := 0
+        for l in v { s += l.data[l.data.Len() - 1] }
+        io.Println("held " $v.Len() " sum " $s)!
+    }
+    b := StringBuilder()
+    for x in t.ids { b.Push($x ",") }
+    io.Println("ends " $t.ends " " $b.ToString())!
+}

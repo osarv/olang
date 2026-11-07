@@ -30595,3 +30595,12 @@ receiver. Both are D9h/D9i work of their own; the copy stays ~1% of a builder-he
   through a local holding the view too (`v := first2(h)`). A plain struct's storage is still placed (o27callplaced: 1275
   read back after a churn), and a holder that already outlives the views needs nothing. checks' o27destructorcall,
   o27callplaced.
+- **F4 (a hand-on in deferred code refused).** `defer v.Push(l)` of a unique by-value parameter said "'l' is mentioned
+  after" with nothing after it: the Landings walk counted every mention in later code (deferred, a task, a join's clauses)
+  as after every watched read - the landing's own mention included. A watched read in deferred code that runs once - no
+  loop around or in it, no task or join clause, not through a holder - is now recorded apart and counts as after only for
+  the other watched reads of its local (so `defer v.Push(l); w.Push(l)` and two deferred hand-ons stay refused, and so
+  does one in a loop); the flag the hand-on clears is cleared there at run time, so an errdefer's hand-on leaves the
+  parameter to its drop where no error leaves (SPEC T13b's sentence). tests/drops.olang's `deferPush` (decided while
+  compiling and at run time); checks' t13bhandondeferred (run, `-debug -sanitize`, churned), t13bhandondeferredtwice,
+  t13bhandondeferredloop, t13bhandondeferredafter.

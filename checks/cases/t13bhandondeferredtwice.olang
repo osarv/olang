@@ -1,0 +1,17 @@
+# check: fail error[T13b]: 'l' is handed on here, and Blob is unique
+# T13b (bulk review 8, F4): a hand-on in deferred code is its parameter's last mention only where nothing else later
+# mentions the parameter - here a second deferred hand-on, so the value would land twice
+type Blob unique struct(id I64) {
+    id
+}
+
+fn d(v mut Vec<Blob>&, w mut Vec<Blob>&, l Blob) {
+    defer v.Push(l)
+    defer w.Push(l)
+}
+
+fn main() {
+    v := Vec<Blob>()
+    w := Vec<Blob>()
+    d(v, w, Blob(1))
+}

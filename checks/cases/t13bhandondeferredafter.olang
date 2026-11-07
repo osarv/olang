@@ -1,0 +1,17 @@
+# check: fail error[T13b]: 'l' is handed on here, and Blob is unique
+# T13b (bulk review 8, F4): a hand-on in deferred code runs after everything - after this landing in the body too, so
+# the body's landing is not the last mention
+type Blob unique struct(id I64) {
+    id
+}
+
+fn d(v mut Vec<Blob>&, w mut Vec<Blob>&, l Blob) {
+    defer v.Push(l)
+    w.Push(l)
+}
+
+fn main() {
+    v := Vec<Blob>()
+    w := Vec<Blob>()
+    d(v, w, Blob(1))
+}

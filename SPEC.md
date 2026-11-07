@@ -868,7 +868,10 @@ which is called only through a function value, keeps its own copy of what it han
 of any other type is copied (D9) - unobservable but in memory, the value being nowhere else. Last is judged on every
 path from the landing, in the order the function evaluates: another branch's mentions are not after it, a loop running
 again reaches its body's mentions before it, and a mention in deferred code, a task or a join's clauses runs after
-everything; a mention after the landing is a compile-time error. A **name made from** the parameter - a reference local
+everything; a mention after the landing is a compile-time error. So a landing in deferred code that runs once - no loop
+around it or in it, no task or join clause - is the last mention where nothing else in deferred code, a task or a join's
+clauses mentions the parameter (`defer v.Push(l)`, `errdefer v.Push(l)`, the parameter ended at the callee's end where an
+errdefer does not run): the body's own mentions all run before it. A **name made from** the parameter - a reference local
 or a binding naming it (`alias := t`), a lambda capturing it, a value lent to a call that is also given a reference to
 it (`seen.Push(t)` into a `Vec<Res&>`) - counts as a mention of it, so using that name after the
 landing is the same error, naming it; and a landing that is one argument of a call (or one part of a value made) whose

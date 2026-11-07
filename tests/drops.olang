@@ -907,3 +907,34 @@ test registeredHeld "ends a registered holder before a value registered before i
     assert registeredHeld() == "71.8"
 }
 
+# ---- a hand-on in deferred code (T13b; bulk review 8, F4) ----
+
+# deferred code runs after everything, so a by-value parameter handed on there is handed on at its last mention: once,
+# on every way out - an errdefer's only where an error leaves, the parameter ended at the callee's end otherwise
+fn deferPush(v mut Vec<Res>&, r Res) { defer v.Push(r) }
+
+type Late error { No }
+
+fn errdeferPush(v mut Vec<Res>&, r Res, fail Bool) ? {
+    errdefer v.Push(r)
+    if fail: error Late.No
+}
+
+fn deferredHandOn() String {
+    t := Tally()
+    {
+        v Vec<Res> = Vec<Res>()
+        deferPush(v, Res(1, t))
+        try errdeferPush(v, Res(2, t), false) catch { }
+        try errdeferPush(v, Res(3, t), true) catch { }
+        t.seen.Push(0)
+    }
+    return t.Text()
+}
+
+DeferredHandOn := deferredHandOn()
+assert DeferredHandOn == "2031", "decided while compiling: " $DeferredHandOn
+
+test deferPush "hands its by-value parameter on from deferred code, once" {
+    assert deferredHandOn() == "2031"
+}
