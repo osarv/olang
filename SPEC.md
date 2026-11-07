@@ -4608,8 +4608,10 @@ the order is left to right, as S4's is; a destructuring (S4b) composes the same 
 place is, then `x.SetAt(i, value)` - so `ps[i], ps[j] = ps[j], ps[i]` swaps two elements of a `Vec`. A value with
 no storage of its own (§5.3 E12c) going into a reference target is built, when it is evaluated, where that target's
 referent lives - where S4 alone would build it: the program's scope for a global, or a field reached from one (O1b),
-so `G.next, k = Node(i), i` is `G.next = Node(i)` beside `k = i`. With `:=` each name is
-declared from its value as by D15, in order. Any other count of values is a compile-time error. The list is not a
+so `G.next, k = Node(i), i` is `G.next = Node(i)` beside `k = i`. Each value is the target's own as S4 alone makes it -
+a copy where the target owns its parts (QCE), by the declared Copy (E31d), made when the values are, before any store;
+a unique one only fresh or handed on (T13b). With `:=` each name is declared from its value as by D15, in order, as
+`x := v` alone declares it: `m, n := g, g` gives each its own copy (a unique value existing elsewhere a reference). Any other count of values is a compile-time error. The list is not a
 value of its own - there is no tuple type - and exists only in this statement.
 
 **S8.** `if-stmnt ::= "if" expr body [ "else" ( if-stmnt | body ) ]` (`body`, S1b: a block, or `:` and one simple

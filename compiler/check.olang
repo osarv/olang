@@ -17134,6 +17134,13 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
             # T29c: text written in the program declares a String value, as "x := text" does
             vsp := m.Values[i].Span()
             if t == c.textType() and c.isRef(typeOf(v)) { v = c.read(vsp, typed.Lvalue.Deref(vsp, t, v)) }
+            # (bulk review 7, F7) each name declared as "x := v" alone declares it: a unique value existing elsewhere a
+            # reference to it (T13b), a value owning parts its own copy (QCE, E31d)
+            if not c.isRef(t) and c.uniqueExisting(v) {
+                v = c.uniqueRef(v, vsp)
+                t = typeOf(v)
+            }
+            if not c.isRef(t) and c.P.T.OwnsParts(t) { v = c.ownCopy(v) }
             c.putTarget(m.Targets[i], true, v, t)
         }
         return
@@ -17158,6 +17165,9 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
         st := sets[i]
         want := st.Elem if st is not null else places[i]!.Type() if places[i] is not null else types.UnknownT
         v := c.exprTo(m.Values[i], want)
+        # (bulk review 7, F7) each value as "p = v" alone stores it: its own copy where p owns its parts (QCE, E31d),
+        # a unique one only fresh or handed on (T13b) - made when the values are, before any store (S4c)
+        if places[i] is not null { v = c.storeCopy(places[i]!, v) }
         h := c.local(source.NameId(0), m.Values[i].Span(), typeOf(v), typed.LocalKind.Held, typed.Mark.None)
         c.emit(typed.Stmt.Let(m.Values[i].Span(), typed.LocalId(I32(h)), v))
         held.Push(h)
