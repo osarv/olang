@@ -41,6 +41,9 @@ Built after olang version 1 on the settled language, redesigned keeping what can
 tensor: the tensor holds what describes the data, the network and its structure the transformations. Kernels in
 olang with no BLAS ("No external unnecessary dependencies"); CPU, FPGA and GPU all needed (CUDA and the like are
 necessary dependencies). The user will hand over saved papers (an arXiv connector if there is one).
+**I am the research agent (the user, 2026-11-08):** reading papers, compiling them, trying things out is part of my
+job building oagent; "feel free to use the Arxiv connector frivolously" (alphaXiv, connected). Paper notes live in
+oagent's papers/. The L2-regression (delta-rule) update the user mentions comes from the Nested Learning paper.
 
 **oann and the matrix library (2026-10-09):** "Oann btw is very incomplete. It should be written in Olang as well. I want
 the matrix library to be efficient. It should work as the base for all operations and operands." oann gets rewritten
