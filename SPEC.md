@@ -5972,19 +5972,27 @@ the call); and so is each of the following, since a jump cannot keep a promise t
 - a parameter or the result is passed **through memory** (over 128 bytes, an aggregate's or a bare type variable's):
   the function's frame would hold it;
 - it is written in **deferred code**, an assert's or an `unreachable`'s message, a task's clause or a `join` block, or
-  with **deferred code pending** in a block around it - which would run before the call (S19, S19e), a variable
-  holding a value with a destructor by value included (O15);
-- an **argument is storage of a scope the become closes** (§8): what is handed on is a value, or lives where the
-  function was given it (its parameters' scopes, its result scope - a temporary for the callee is built there, as a
-  `return f(x)`'s would be), or in the program's. `become walk(b, i + 1)` with `b` a local array of the function is
-  the error - and so is any argument whose own storage is an arena's (a run-time-length array or text, bound to a
-  by-value type variable, D9b) other than a parameter the function has no copy of, what a reference it was given names,
-  a global, a slice or conversion of one of these, or constant data: a local's, one made in the function, a call's
-  result;
-- the function holds, or builds in one of its blocks, an instance whose **destructor** would run as that block closes
-  (O16) - before the call, where a `return` would run it after; or a value that may hold one (an `any`, a type
-  variable's). A call's result built in one of its blocks counts whenever its type may reach such an instance - through
-  references, elements, fields or cases (`Wrap(r Res&)` given by value), an `any`, a type variable's.
+  with **deferred code pending** in a block around it - which would run before the call (S19, S19e);
+- a **by-value parameter holding a value with a destructor** is not handed on by the call (a move at its last mention,
+  T13b): its destructor would run as the function ends, before the call (O15).
+
+What a `become` hands on, and what would be ended as the scopes it closes close, is **kept for the chain** instead, in
+the function's **tail scope**: a scope the function is given as it is given its result scope (§8) - its result scope,
+where it has one - bound by the first call of the chain that is not a `become` to where that call's result lands, and
+passed unchanged down the chain, each `become` handing on its own. Built there, rather than in the function's scopes:
+- an argument that is storage made in the function - a local's (`become walk(b, i + 1)` with `b` a local array), a
+  temporary, a call's result, text rendered, a by-value run-time array parameter's own copy (D9b), a part or a slice of
+  one of these - or whose references name such storage (§8);
+- an instance with a destructor built in a block the `become` closes - held by a variable, by value or by reference, or
+  by no one (`Res(n).n`, a call's result whose type may reach one) - registered with the tail scope as its block is
+  left (O15, O16) and ended as that scope closes, last registered first: the order `return` and the call would end
+  them in.
+
+So a chain keeps what each of its steps built until its first caller lets go of the result - the memory the `return`
+form keeps, its frames' scopes all open until the innermost returns - while the stack stays constant; `-memory` (B18)
+says each site that builds there. A chain wanting constant memory hands on values. Through a function value the tail
+scope is one made for the call and closed as it returns (its result holds no reference, or it would be the result
+scope).
 
 ```
 fn isEven(n I64) Bool {
