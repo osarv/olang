@@ -1,8 +1,10 @@
 # Round 6 (F6): scopes found at run time from an address (O29) - progress
 
-Brief: docs/fnvalues.md section 12 and round 6; docs/wholeprog.md 10.1/10.2. Branch wt-scopefind. Not committed.
+Brief: docs/fnvalues.md section 12 and round 6; docs/wholeprog.md 10.1/10.2. Branch wt-scopefind.
 
 ## Done
+- 1. runtime.ll (slots, owner word, large table, slabs, `__olang_scope_of(p, q)`), san.ll; checks/fixtures/scopefind
+  (C driver: small, large, region, none, thread), wired as checks' "scopefind".
 
 ## Decided (details, mine)
 - The owner word is the header's field 6 (`prev`), which a chunk uses only while pooled: a chunk is in exactly one of
@@ -14,7 +16,6 @@ Brief: docs/fnvalues.md section 12 and round 6; docs/wholeprog.md 10.1/10.2. Bra
 - Slots exhausted (or refused): chunks from aligned_alloc entered in the large table, so they are found too.
 
 ## Next
-1. runtime.ll: slots, owner, large table, slabs, __olang_scope_of; san.ll; C-driven test (checks/fixtures/scopefind)
 2. MIR Rvalue.ScopeOf, emit, eval, interp; typed.Scope.Found; lower
 3. scope.olang: the refusals of 12.4 become Found placements
 4. SPEC, CLAUDE.md, HISTORY.md, DEPENDENTS walk, cases -> run cases, seed, verify, gates

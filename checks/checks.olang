@@ -46,7 +46,7 @@ Scenarios := Array<String&>["fix", "strheld", "fuzz", "testfuzz", "bench", "agre
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
-                     "profile", "apicaps", "listing", "memoryplaced"]
+                     "profile", "apicaps", "listing", "memoryplaced", "scopefind"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -461,6 +461,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "crash" { try crashes(r) }
         case "scopesan" { try scopesan(r) }
         case "regions" { try regions(r) }
+        case "scopefind" { try scopefind(r) }
         case "vecalias" { try vecalias(r) }
         case "vechandle" { try vechandle(r) }
         case "inferfield" { try inferfield(r) }
@@ -2447,6 +2448,22 @@ fn regions(r mut report&) ? Failed {
     for want in Array<String&>["small 2 0", "large 2 0", "null 0 0", "kept 4 0", "chain 200000 0"] {
         mode := want[:try want.FindByte(' ') catch default 0]
         try r.expect(sh(dir, "./drive " $mode " > out.txt 2>&1") == 0 and outOf(dir) == $want "\n", "drive " $mode, dir)
+    }
+}
+
+# O29: the runtime finds the scope storage lives in from its address, driven from C: small chunks (slots), large ones
+# (the large table), a region's blocks read as the scope it lives in, a stack, constant data and C's memory as the
+# program's, and from another thread its own part of the scope, closed with it
+test "the runtime finds a scope from an address" { assert passed("scopefind") }
+
+fn scopefind(r mut report&) ? Failed {
+    dir := fresh("scopefind")
+    os.Run("cp checks/fixtures/scopefind/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build -debug stub.olang > out.txt 2>&1") == 0, "stub.olang did not build", dir)
+    try r.expect(sh(dir, "clang -O0 drive.c build/olang_runtime.*.debug.o -o drive -lpthread -ldl -lm > out.txt 2>&1") == 0
+                 "drive.c did not link", dir)
+    for mode in Array<String&>["small", "large", "region", "none", "thread"] {
+        try r.expect(sh(dir, "./drive " $mode " > out.txt 2>&1") == 0 and outOf(dir) == $mode " 0\n", "drive " $mode, dir)
     }
 }
 
