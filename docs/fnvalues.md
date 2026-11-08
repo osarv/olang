@@ -702,3 +702,171 @@ word), and leaves fields and methods (L9a). Idempotent. The repository's own nam
   relation word) or effects.olang (an effect word: its fact in `Fact.Named`); explain's `# fits:`; session.olang's
   completion; editors/nvim; msgs.olang and diag.txt; `checks/cases`. One new **[checked]** edge for `make consistency`:
   every effect word and `pure`/`returns` has its G42 fact in effects.olang's `Fact.Named` and SPEC G42's table.
+
+## 10. Views of storage holding a value with a destructor (O27, O15)
+
+The user, 2026-11-08, on docs/sec8.md question 2: "let the view be built wherever we want, and then treat it more as a
+memory question, and when we need the destructor effect, we make sure to call [Destroy] manually". Today O27 refuses
+it - `ViewKeptDestructor` ("this keeps a view of 'f', whose destructor runs when its block ends"), `PartKeptDestructor`
+- in checks/cases o27destructorview, o27destructorcall and o27destructorgen.
+
+### 10.1 The rule, as SPEC would state it
+
+**The destructor belongs to whoever holds the whole value; a view of a part is memory.**
+
+**O27** loses the last item of its refusals - "and storage holding a value whose destructor is still to run (O15: it
+would run later than its holder lets go of it) - so `f := File(p); keep.Push(f.name[0:1])` in a loop is refused" - and
+gains: "Storage holding a value with a destructor to run is built where the view is kept like any other, and only its
+memory goes there: the value's destructors run where its holder lets go of it (O15), or at its `Destroy()` (C9b), as
+though no view were kept, and the view then shows what they left - memory-safe, since the storage lives where the view
+is kept: `for i in range 3 { f := Res($i \"-file\"); keep.Push(f.name[0:1]) }` ends each turn's `f` as the turn ends and
+keeps its text where `keep` lives."
+
+**O15** gains, after its item for a variable whose storage flows out of its block: "That item is about the **whole**
+value - returned as a reference, held by a returned value's reference field, stored by reference, captured by a
+returned closure: its holder is then where it flows, and its destructors run there. A view of a **part** - a slice of a
+field, what a callee hands back of the value (O13), a part read out - moves only the storage (O27): the destructors run
+where the variable lets go of it, as though nothing were kept."
+
+**C9b** (Destroy) gains: "A view of a part kept elsewhere (O27) does not stop `x.Destroy()`: the destructor runs now;
+the storage, which the view keeps, is freed only where nothing else can reach it (O8d)."
+
+**B18** (`-memory`): the row for such a placement says where the destructor runs too: `'f' is built where 'keep'
+lives, a new one each time it is made, for a view of it kept here; its destructor runs where 'f' lets go of it (O15) -
+the view shows what the destructor left`.
+
+### 10.2 What changes, and where
+
+- **scope.olang.** `liftable` stops refusing a local whose type `mayHoldDtor` for a view or a part lift (`viewKept`'s
+  and `partKept`'s destructor messages go: `viewKeptMsg`, `partKept`); the placement is recorded as today, with its kind
+  (`placed`: `PlaceView`, `PlacePart`, `PlaceCapture` - never a whole lift), and the kind goes into the plan
+  (`Plan.StoredFor`, by local: whole or view) so lowering and early freeing can tell the two apart.
+- **lower.olang.** `escapedHome` (bulk review 7's F4: a by-value holder homed outside its block registers its value
+  where the storage lives instead of ending it) applies to a **whole** placement only. A holder placed for a view keeps
+  its Drop as its block is left (O15): its storage lives where the view is kept (`homeKept`), its destructors run where
+  it is declared - a new value each time the declaration runs, each ended in its own turn.
+- **free.olang (Part C).** A by-value holder's let-go of its leaves (`LHeld`: the leaves its value owns released after
+  its destructors run) is no let-go for a holder placed for a view: the view still reads them, so they stay with the
+  storage and go where its scope closes - or earlier, by O8d, where every view's holder lets go of it and nothing else
+  holds them. `escapedHolder` likewise registers only a whole placement. A `Destroy()` of such a local runs the
+  destructor and frees nothing (the analysis already proves it "the only way left to reach it", which a kept view
+  denies).
+- **The evaluator and `interpret`.** `interpret` places by the plans and runs destructors where holders let go
+  (B3e) - so it runs `f`'s destructor at the turn's end and keeps its storage where the plan put it, as the build does;
+  compile-time evaluation refuses destructor-bearing values outside a global's own frame (K2c), unchanged. The
+  dead-region evaluator (`OLANG_DEADREGIONS`) checks that nothing reads storage Part C released: the gate for the
+  Part C change.
+- **msgs.olang**: `ViewKeptDestructor` and `PartKeptDestructor` go (their numbers in `Diag` with them); `make diaggold`.
+
+### 10.3 Why it is sound
+
+Memory: the storage a view names is built where the view is kept (O27's placement, sound by sec8 4.5), and nothing
+releases it earlier - Part C's leaves of a view-placed holder are kept, and O8d frees a place only where it was the only
+holder and nothing read from it is in use (a kept view is such a use). Destructors: each still runs exactly once,
+where the holder lets go (O15) - the placement moves no destructor, so drop order, `Destroy()` and the holders-first
+order (QCZ) are unchanged. What a destructor did to the storage (`arr[0] = -99`, a field set) is what the view then
+shows - ordinary writes the view observes, as any view sees writes through its base. The difference from F4 is the
+rule's own: a reference to the whole value keeps the value, so its holder - and its end - move with it; a view of a part
+keeps memory, and the value ends where its holder lets go.
+
+### 10.4 Programs
+
+o27destructorview, o27destructorcall (both shapes) and o27destructorgen become run cases (`-debug -sanitize`, read back
+after a churn, keeping their comments and saying what they were): each prints every destructor's line at its turn's end
+and then the kept views, showing what the destructors left (`arr[0]` reading -99). New cases: a `Destroy()` of a
+view-placed local (the destructor runs, the view still reads), Part C under `OLANG_DEADREGIONS=1` and `fuzz free`, and a
+whole-value escape beside a part's view in one body (the whole's destructor where it flows, the part's holder's where
+it lets go).
+
+## 11. Building where a field's referent lives (C1, O23a)
+
+The user, 2026-11-08, on C1 (a call building through a reference field whose referent's scope is a derived scope now
+builds into the program's scope, SPEC O23a and C2d, HISTORY "C1: a destructor building through its instance's
+reference field"): "they should find the right scope".
+
+### 11.1 Today, measured
+
+`type Logged unique struct(id I64, log mut Tally&) { id, log } destruct { log.Saw(id) }`, `Saw` pushing into the
+Tally's Vec. A loop of 200,000 turns, each making a `Tally` and 64 `Logged` holding it (the shape of tests/drops.olang),
+built with the compiler of 1879ade: **197 MB peak and 0.166 s**; the same pushes written directly into the turn's Tally:
+**12.5 MB and 0.028 s**. The destructor's call of `Saw` is passed the program's scope for the Tally's referent (O23a: a
+derived scope exists at no run time), so every grown buffer stays until the program ends - about 1 KB a turn.
+
+### 11.2 At compile time: a derived scope passed where the call knows it
+
+A derived scope `Derived(p, V)` - where the argument for parameter `p` bound its field's binding `V` (O23a) - is resolved
+at each call already, for judging. Where the call knows it as a scope that exists at run time, it can **pass** it, as it
+passes every reference parameter's scope (O4b), per call, never as a word stored with the instance (the user's standing
+rule: no run-time scope word per instance or field):
+
+- **What a call knows.** The argument's per-instance bindings (O23a, O13c: carried through locals from a constructor's
+  call, through a call's result, through a for-in's hidden locals). Where the binding for `V` is a block, a scope
+  variable or the program's scope of the caller - or a derived scope the caller was itself passed - the call knows it.
+  A holder's drop knows its local's bindings (`a Logged = Logged(j + k, t)`: `log` was bound where `t` lives).
+- **The twin.** A body that may build into `Derived(p, V)` (its summary records it: `Builds` over its derived
+  positions, today dropped by `buildsThrough`) is judged, for calls that know the scope, as a twin keyed by its passed
+  derived positions (beside 4.3's patterns: one key, two kinds of input). In the twin, `Derived(p, V)` is backed by a
+  hidden scope parameter (`typed.ScopeVar.Passed(p, V)`): builds through the field go there, a callee given the field's
+  referent (`log.Saw(id)`: Saw's receiver) is passed it as its receiver's scope - an ordinary scope argument, so `Saw`
+  itself needs nothing new - and every relation is still judged against the derived scope, as today (O23a).
+- **Chains.** A twin handing the instance on to another body that builds through the same field passes the scope on,
+  as 4.2 hands a followed function on.
+- **Drops.** A by-value holder's drop (O15, deferred code at its block's end) calls the destructor with the local's
+  bindings known; a collection's conditional destructor ending its elements (C11) knows them where the collection's
+  element claim is one known scope (its elements made from one place). A value registered with a scope (O16) is ended
+  by the runtime walking the scope's list, with no call to pass a scope at - it keeps the fallback (11.3).
+- **Code.** A twin with a passed derived scope always has code of its own (an extra hidden parameter); made in the root
+  object only (B3d). A program with no build through a derived scope has none, and its plans are unchanged.
+
+So the measured loop's destructor is called, at each holder's drop, with the turn's Tally scope; `Saw` grows the Vec
+there; the turn's buffers go with the turn - the 12.5 MB of the direct form.
+
+**O23a** (revised, its sentence "A callee that may build into a derived scope ... is passed the program's scope for
+it"): "A callee that may build into a derived scope is passed, at a call that knows where the argument's field refers -
+the binding its value carries, a block, a scope variable or the program's scope of the caller, or a derived scope the
+caller was passed - that scope, as a reference parameter's is (O4b), and builds there; where no call knows it, the
+program's scope (11.3), which outlives the referent wherever that lives." **C2d**'s sentence on C1 the same.
+
+### 11.3 Where no call can know
+
+Left: an instance read out of a collection whose elements were made from several places (one claim for all, O23's
+underestimate), an instance a value registered with a scope holds (O16, ended by the runtime), a body reached through an
+`any`, a function value whose functions are not followed (T22c's limits, a field's), an instance reached through a
+cursor whose versions differ (O25i, O12). The options:
+
+1. **The program's scope, as today.** No cost at run time; the memory built there stays until the program ends. `-memory`
+   gains a row at each such call - `built in the program's scope: where 'log' refers is not known at this call` - so it
+   is visible, and the fix (make the instances from one place, call the method where the instance is known) can be read.
+2. **The scope found from the storage's address.** At such a call only, the referent's address names its chunk, and the
+   chunk its scope: the call passes that (on another thread's scope, its own part of it, `__olang_capture_scope`). What
+   the allocator needs: an owner word per **chunk** - not per instance or field - written when a scope takes a chunk
+   (`__olang_new_chunk` and the pool's hand-out, its slow path: one store); a page map from an address to its chunk (a
+   two-level table over 64KB pages, written when a chunk comes from the system, mmap or aligned_alloc; chunks are
+   aligned to 64 bytes only today, and their sizes vary by class, so a mask alone cannot find a header); and storage that
+   is in no chunk - a frame's slot, a global's, constant data, C's - read as the program's scope. Cost: on that path, a
+   page-map lookup (two dependent loads) and the owner read, about the cost of an allocation's slow path; everywhere
+   else, nothing. Not measured: it needs the allocator's change to measure.
+3. **Refuse** where no call knows - a compile-time error with no fix the program can write in most of these shapes;
+   against the user's "make them work" direction. Not recommended.
+
+**Recommended: 1 now, with the `-memory` row, and 2 when a program shows the growth** - after 11.2 every shape a call
+can see is placed exactly, the measured loop among them, and what is left is rare; option 2 is a run-time cost (small,
+on that path only) and a new piece of allocator metadata, which the user's rule asks to be weighed first ("anything with
+a run-time cost is not done lightly"). It is question 2 (section 14).
+
+### 11.4 Why it is sound
+
+A field with a binding of its own refers into the scope the binding names, and every write of the field is held to it
+(O23a's last sentence), so the binding a call reads from the argument is where the referent lives; building there is
+what a reference parameter's build is (O18c), sound by the same argument (I1: what is stored into the referent was built
+in its scope; I2: the binding is that scope exactly, a reference's tag being exact, O25). Bindings not known stay
+unpassed, and the program's scope outlives every referent (today's rule). A passed scope is passed as every scope
+argument is - a task given one gets its private stand-in (P2).
+
+### 11.5 Programs
+
+The measured loop becomes a run case and a bench row (memory read by the case: the turn's buffers reclaimed - peak
+within a few MB of the direct form); tests/drops.olang's `Logged` keeps passing, now building in the Tally's scope;
+`derivedcopybuild` and `strderivedcallback` (run cases since C1) read back after a churn as before; `-memory`'s new row
+in a checks scenario for an instance read out of a mixed collection. Evaluator: a global baked through a destructor's
+build in a known scope (K2c's own frame) and an S17a assert over `logged()` (as tests/drops.olang has).
