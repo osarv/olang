@@ -1103,6 +1103,16 @@ DEPENDENTS.md (section 9).
 
 ### Round 4 - promise words and the relation words (sections 2.2, 3; opus, xhigh)
 
+Built 2026-11-08 (wt-promises; HISTORY.md, "Promise words and the relation words"). Where it went otherwise than
+below: no promise says an argument is kept in a global (2.2.1's named function keeping `x` in a global is refused - a
+value held in a block-scoped field would otherwise let a call keep block storage in a global), and a named function
+held as a `keeps x` type is constant data fitting any home; `keeps b in a.f` where `f` has no binding of its own means
+`keeps b in a` (bindings are inferred, so it is no error); a type writing `keeps x` is one something can be stored
+through, so its values are held exactly where they live, and a lambda held as it is never placed in a caller's frame;
+the boundary's coverage was found looser than what a call discharges (a result kept in an argument, through a
+read-only result type) and now follows the bound exactly. The effect words are parsed, kept in identity and spelled;
+round 5 judges them (check records no place list yet - round 5 adds it).
+
 - **Spec**: T21's grammar, T21c, T22, T22b, T22a (3.4's boundary and error), O17's sentence.
 - **Code**: parse.olang, ast.olang, unparse.olang, fmt.olang (the words, where they end); types.olang (identity,
   spelling, `$`, what `ScopesOf`/`ResultFrom` read of `borrows`/`noborrow`); check.olang (T21c's errors, E12's fit across
