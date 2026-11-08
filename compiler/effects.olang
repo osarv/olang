@@ -292,6 +292,7 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     rets Map<I64, Vec<I64>>   # by body giving a function value whose returns give only named functions and null: those
     whole Vec<Facts>     # by body: with what it may call, once settled (its slots' calls not counted: named does)
     callsOf Vec<I64>     # by body: whole's Calls, once settled (read without its Facts)
+    fnSlots Vec<I64>     # by body: whether a parameter of it holds a function value - 1, 0, -1 not yet seen
     merged Vec<I64>      # by body: the last component (stamp) whose facts it was merged into - each callee once
     stamp I64 = 0
     gives Vec<Bool>      # by body: whether it gives a slot a function value or makes a lambda or an adapter, so what
@@ -351,6 +352,7 @@ fn (e mut Effects&) grow() {
         e.links.Push(Vec<link>())
         e.whole.Push(Facts())
         e.callsOf.Push(0)
+        e.fnSlots.Push(-1)
         e.merged.Push(-1)
         e.gives.Push(false)
         e.state.Push(0)
@@ -398,6 +400,7 @@ fn (e mut Effects&) Of(b I64) Facts {
     }
     e.grow()
     if e.state[b] < 2 { e.visit(b) }
+    if e.callsOf[b] == 0: return e.whole[b]
     return e.named(b)
 }
 
@@ -468,6 +471,19 @@ fn (e Effects&) writesUnowned(b I64, writes I64) Bool {
 }
 
 fn (e Effects&) isFn(t types.TypeId) Bool { return e.P.T.KindOf(t) == types.Kind.Func }
+
+# whether body w has a parameter holding a function value, which a call of it gives
+fn (e mut Effects&) takesFn(w I64) Bool {
+    if w < 0 or w >= e.Bodies.Len(): return true
+    if e.fnSlots[w] < 0 {
+        e.fnSlots[w] = 0
+        body := e.Bodies[w]
+        for l in body.Params {
+            if e.isFn(body.Locals[I64(l)].Ty): e.fnSlots[w] = 1
+        }
+    }
+    return e.fnSlots[w] == 1
+}
 
 # ---- the call graph ----
 
@@ -737,16 +753,16 @@ fn (e mut Effects&) walkBody(b I64) {
     e.cur = Facts()
     e.curCalls = Vec<I64>()
     e.curLinks = Vec<link>()
-    e.curGivs.Clear()
-    e.pends.Clear()
-    e.fnDefs.Clear()
-    e.fnSome.Clear()
-    e.refDefs.Clear()
-    e.outs.Clear()
+    if e.curGivs.Len() > 0: e.curGivs.Clear()
+    if e.pends.Len() > 0: e.pends.Clear()
+    if e.fnDefs.Len() > 0: e.fnDefs.Clear()
+    if e.fnSome.Len() > 0: e.fnSome.Clear()
+    if e.refDefs.Len() > 0: e.refDefs.Clear()
+    if e.outs.Len() > 0: e.outs.Clear()
     e.outLinks = false
     e.giving = false
-    e.curRets.Clear()
-    e.curRetNamed.Clear()
+    if e.curRets.Len() > 0: e.curRets.Clear()
+    if e.curRetNamed.Len() > 0: e.curRetNamed.Clear()
     e.curRetKnown = false
     e.retFn = e.P.T.KindOf(body.Ty) == types.Kind.Func and e.isFn(e.P.T.Result(body.Ty))
     e.paramAt = Map<I64, I64>()
@@ -975,8 +991,9 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
         case typed.Stmt.Assign(_, t, v) {
             e.place(t, true)
             e.expr(v)
+            # (a reference's slots read off its declaration's value alone, as before; every value where Pure is asked)
             match t {
-                case typed.Lvalue.Local(_, _, id) { e.define(I64(id), v) }
+                case typed.Lvalue.Local(_, ty, id) { if e.WantPure or e.isFn(ty): e.define(I64(id), v) }
                 case _ { }
             }
         }
@@ -1203,7 +1220,7 @@ fn (e mut Effects&) call(cl typed.Call&) {
             e.curCalls.Push(I64(id))
             for j in range cl.Args.Len() {
                 e.argLink(I64(id), j, cl.Args[j])
-                if e.isFn(cl.Args[j].Type()) {
+                if e.takesFn(I64(id)) and e.isFn(cl.Args[j].Type()) {
                     e.pends.Push(pend(site, j, cl.Args[j]))
                     e.giving = true
                 }
