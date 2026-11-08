@@ -996,3 +996,12 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   `nonspawning`, `nonforeign`, `confined`, `a keeps b`, `keeps x`, `returns a`, `fresh`. Read as approving the
   specialization of function values too (the package was asked together). Design note running: wt-fnvalues,
   docs/fnvalues.md (opus xhigh). Calls 4 and 5 of the push still ASKED.
+- Promise words, the user 2026-11-08: "I like the shorter versions more, like no return, no alloc, no block ... In one
+  word. No return already exists as a keyword ... I don't want us to have two tiers of keywords. Is there a way to do
+  this even better?" PROPOSED: `noalloc`, `noblock`, `nospawn`, `norecurse`, `noextern`, `pure` (D's weak purity:
+  writes only through `mut` parameters, no mutable global), `halts`; relations `a keeps b`, `keeps x`, `a.f keeps b`,
+  `return a`, `noborrow` (`in` not reused - `[b in a]` is a membership condition); `noreturn` MOVES into the brackets
+  (`fn Exit(code I32) [noreturn]`), so every promise has one place; ONE TIER: every such word an ordinary keyword, and
+  L9b/L9c's words of one place (`commutes`, `immut`, `unique`, `packed`, `any`) made plain keywords too - L9a already
+  lets any keyword name a field or method after `.`, a tool renames the locals/functions using them. ASKED (the note
+  wt-fnvalues told to carry it as a question).
