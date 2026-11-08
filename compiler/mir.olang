@@ -1550,7 +1550,11 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
             if not t.IsInt(ra) { v.bad("ByteSwap of a " $v.canon(a)) }
             v.sameArgs(op, r, ty)
         }
-        case typed.PrimOp.RotateLeft, typed.PrimOp.RotateRight {
+        case typed.PrimOp.SatAdd, typed.PrimOp.SatSub, typed.PrimOp.SatMul {
+            if not t.IsInt(ra) { v.bad($short($op) " of a " $v.canon(a)) }
+            v.sameArgs(op, r, ty)
+        }
+        case typed.PrimOp.RotateLeft, typed.PrimOp.RotateRight, typed.PrimOp.SatShl {
             if not t.IsInt(ra) or t.Repr(v.operandType(v.arg(r, 1))) != I64T { v.bad($short($op) " of a " $v.canon(a)) }
             if not v.fits(a, ty) { v.bad($short($op) " of a " $v.canon(a) " typed " $v.canon(ty)) }
         }

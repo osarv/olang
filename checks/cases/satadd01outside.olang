@@ -1,0 +1,7 @@
+# check: fail error[M19]: I16 has no method 'satAdd'
+# E15a: the saturating operations are std/arith's own - a program clamps through arith.Saturating, never by the method
+fn main() {
+    x := I16(3)
+    y := x.satAdd(4)
+    assert y == 7
+}

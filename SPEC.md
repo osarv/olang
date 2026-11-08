@@ -3557,7 +3557,8 @@ signed type (`I32`, `I64`) is two's complement, so `I32` 2147483647 + 1 is -2147
 negative value is itself; `U8` is unsigned, so 255 + 1 is 0 and 0 - 1 is 255. `<<` discards the bits shifted
 out; `>>` shifts in the sign bit for a signed type and zeros for `U8`. Overflow is never undefined, never
 checked and never trapped, and compile-time evaluation (§13 K1) wraps identically - so hashing and checksums may
-rely on it. A program wanting overflow detected checks for it itself, or calls `std/arith` (E15a), which checks it there.
+rely on it. A program wanting overflow detected checks for it itself, or calls `std/arith` (E15a), which checks it there;
+one wanting results clamped at the type's limits instead writes `arith.Saturating` (E15a).
 Wrapping is deliberate, not a gap: it is the one defined result that costs nothing, where a check on every operation
 would be a cost the code does not show. Division is the exception, by E6a.
 
@@ -3970,6 +3971,15 @@ results, or undefined (E6a, E16, E26a). A check is asked for by calling somethin
 `ShiftLeft`, `ShiftRight`) and a struct `Checked<T>` whose operators are those functions, failing where the true result
 does not fit (`Overflow` - never `Rem`, whose result always fits: the least value's remainder by `-1` is `0`), on a zero divisor (`DivideByZero`) and on IEEE's invalid operation or a shift amount out
 of range (`Invalid`). They are ordinary olang, so the compile-time evaluator computes them as the program does.
+
+`std/arith` also gives `Saturating<T>`, an integer of any width (T4a) whose operators **clamp** instead of wrapping:
+`arith.Saturating(a) + b` is the true sum where it fits, else `T.Max` above the range and `T.Min` below it - so is
+`-` and `*` (each step clamped, the next going on from the clamped value), unary `-` (the least value's negation is
+`T.Max`, an unsigned value's is `0`), `/` (the least value divided by `-1` is `T.Max`), `<<` (the true value `a *
+2^n` clamped; an amount outside the width is undefined as E8a says) and `**`. The other operand is a plain `T`; `+`
+and `*` commute (E31c). Nothing fails and nothing is checked beyond the operation itself, which is one of the
+target's saturating instructions where it has them; an array of `Saturating<T>` takes lane operators (E39) as one
+vector loop. The compile-time evaluator computes the same results.
 
 ### 5.5 Indexing and member access
 

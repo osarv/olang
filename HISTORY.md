@@ -30798,6 +30798,37 @@ Decisions, mine:
 9. The evaluator: `__olang_bench_*` are allowed while compiling (no effect skipping would show - no benchmark build is
    evaluated): `on`, the counters give 0, the instruction counter -1, `keep` nothing; so a function calling `bench.Run`
    is evaluable and runs the work once (std/bench's top-level assert decides it).
+### Saturating arithmetic: `arith.Saturating<T>` (E15a, E6c, T4a, QCX 7; 2026-11-08, wt-satarith)
+
+The user said yes to saturating arithmetic in std/arith (QCX 7, 2026-11-07), after "done", no syntax; and on
+2026-11-08 that widths stay primitive while wrapping, checking and saturating are behaviour, in std. Built as a struct
+beside `Checked<T>`: `type Saturating<T Integer> struct(Value T)`, operators `Plus` and `Mul` (commuting), `Minus`,
+`Neg`, `Div`, `ShiftLeft`, `ShiftRight` and `Pow`, the other operand a plain `T` as Checked's is. No new primitive
+type, no keyword.
+
+How it is built (mine): `+ - * <<` call four library-only supplied methods of every integer, `satAdd satSub satMul
+satShl`, as `retire` is the prelude's (lowercase, accepted only in a std module, `checks/cases/satadd01outside`), each a
+MIR primitive (`typed.PrimOp.SatAdd` ...) emitted as LLVM's `llvm.{s,u}add.sat`, `{s,u}sub.sat`, `{s,u}shl.sat`. The
+product: up to 32 bits it is the exact product at twice the width clamped by `smin`/`smax` (`umin`) and truncated,
+because the loop vectorizer takes that form and LLVM's fixed-point multiply (`{s,u}mul.fix.sat`, scale 0) stayed one
+lane at a time; above 32 bits the fixed-point multiply, which x86 lowers to the multiply, its overflow flag and a
+select. `Neg` is `0 - a` saturated, `Div` tests the one overflowing case (least value by -1), `ShiftRight` and the rest
+are plain olang. `Pow` multiplies by squaring with each product clamped: a clamped product keeps the true one's sign
+and stays past the limit, so the final clamp is the true power's; `x ** 0` is 1, or `T.Max` for `I1`, which cannot hold
+1. A shift amount outside the width stays undefined (E8a), as `<<`'s is; the evaluator refuses it as it refuses a
+plain shift.
+
+The evaluator computes the same at every width with its 128-bit helpers: the true result where it fits, else the limit
+on its side (`Machine.saturate`). std/arith's tests check every limit from both sides at I1, U1, U7, I8, U8, I16, I24,
+I32, I64, U64, I65, I128 and U128, baked into a global, decided while compiling and run, plus lanes, under build,
+`-debug` and `test -interpret`.
+
+Measured (x86-64 with AVX-512, the instructions of each operation without the call's own): wrapping I16 `+` 1;
+saturating I16 `+` 6 (x86 has no scalar saturating add: LLVM adds, tests the overflow flag and selects); U8 `-` 3; U64
+`*` 3 (mul, mov, cmovo); I64 `*` 7; I32 `*` 9 and I16 `*` 9 by the widened form (the fixed-point form was 6 for I16 -
+three more scalar instructions bought the vector loop); I32 `<<` 7. Lanes: `xs += ys` over `Array<Saturating<I16>>` is
+one `vpaddsw` per 32 lanes; `xs *= ys` is `vpmovsxwd`, `vpmulld` and the saturating pack `vpmovsdw` per 16 lanes (the
+fixed-point form had stayed a scalar `imulw` + `cmovo` per lane).
 
 ## From CLAUDE.md's settled decisions, moved 2026-11-07
 

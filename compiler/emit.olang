@@ -4724,6 +4724,9 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
             fe.E.declare(intr, $lt " @" $intr "(" $lt ", " $lt ", " $lt ")")
             return fe.let("call " $lt " @" $intr "(" $lt " " $x ", " $lt " " $x ", " $lt " " $n ")")
         }
+        case typed.PrimOp.SatAdd, typed.PrimOp.SatSub, typed.PrimOp.SatMul, typed.PrimOp.SatShl {
+            return fe.saturating(op, r, x, args)
+        }
         case _ { }
     }
     y := fe.val(fe.arg(args, 1), t0)
@@ -4801,6 +4804,53 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
             return "undef"
         }
     }
+}
+
+# E15a: std/arith's Saturating - one of LLVM's saturating instructions, the signed or the unsigned one by r's type:
+# add, sub and a shift (its count, an I64 within the width, taken to x's width) as their own; a product as the fixed-point
+# multiply of scale 0, which the target lowers to a multiply with its overflow test and a select
+fn (fe mut fnEm&) saturating(op typed.PrimOp, r types.TypeId, x String&, args mir.Range) String {
+    t := fe.E.T
+    lt := fe.ty(r)
+    s := "u" if t.IsUnsigned(r) else "s"
+    if op == typed.PrimOp.SatShl {
+        n := fe.width(fe.val(fe.arg(args, 1), mir.I64T), mir.I64T, r)
+        intr := "llvm." $s "shl.sat." $lt
+        fe.E.declare(intr, $lt " @" $intr "(" $lt ", " $lt ")")
+        return fe.let("call " $lt " @" $intr "(" $lt " " $x ", " $lt " " $n ")")
+    }
+    y := fe.val(fe.arg(args, 1), fe.otype(fe.arg(args, 1)))
+    b := t.Bits(t.Repr(r))
+    if op == typed.PrimOp.SatMul and b <= 32 { return fe.satMulWide(s, lt, b, x, y) }
+    if op == typed.PrimOp.SatMul {
+        intr := "llvm." $s "mul.fix.sat." $lt
+        fe.E.declare(intr, $lt " @" $intr "(" $lt ", " $lt ", i32)")
+        return fe.let("call " $lt " @" $intr "(" $lt " " $x ", " $lt " " $y ", i32 0)")
+    }
+    intr := "llvm." $s $("add" if op == typed.PrimOp.SatAdd else "sub") ".sat." $lt
+    fe.E.declare(intr, $lt " @" $intr "(" $lt ", " $lt ")")
+    return fe.let("call " $lt " @" $intr "(" $lt " " $x ", " $lt " " $y ")")
+}
+
+# a saturating product of at most 32 bits: the exact product at twice the width, clamped to the type's limits and
+# truncated - plain multiplies, minimums and maximums, which the loop vectorizer takes where LLVM's fixed-point multiply
+# would stay a lane at a time
+fn (fe mut fnEm&) satMulWide(s String&, lt String&, b I64, x String&, y String&) String {
+    wt := "i" $(2 * b)
+    ext := "zext " if s == "u" else "sext "
+    wx, wy := fe.let($ext $lt " " $x " to " $wt), fe.let($ext $lt " " $y " to " $wt)
+    p := fe.let("mul " $("nuw " if s == "u" else "nsw ") $wt " " $wx ", " $wy)
+    if s == "u" { p = fe.minMax("umin", wt, p, (I64(1) << b) - 1) } else {
+        p = fe.minMax("smax", wt, fe.minMax("smin", wt, p, (I64(1) << (b - 1)) - 1), 0 - (I64(1) << (b - 1)))
+    }
+    return fe.let("trunc " $wt " " $p " to " $lt)
+}
+
+# one of LLVM's integer minimums or maximums of v and a constant, at the type wt
+fn (fe mut fnEm&) minMax(f String&, wt String&, v String&, k I64) String {
+    intr := "llvm." $f "." $wt
+    fe.E.declare(intr, $wt " @" $intr "(" $wt ", " $wt ")")
+    return fe.let("call " $wt " @" $intr "(" $wt " " $v ", " $wt " " $k ")")
 }
 
 # an integer value of type from at the width of type to

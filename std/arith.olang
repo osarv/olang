@@ -154,6 +154,47 @@ fn (a Checked<T>) Div(b T) Checked<T> ? { return Checked<T>(try Div(a.Value, b))
 fn (a Checked<T>) Neg() Checked<T> ? { return Checked<T>(try Neg(a.Value)) }
 fn (a Checked<T>) Pow(n U32) Checked<T> ? { return Checked<T>(try Pow(a.Value, n)) } # "**" (E5a), an integer's
 
+# an integer whose operators clamp at its type's limits instead of wrapping (E6c): a true result above T.Max gives
+# T.Max, one below T.Min gives T.Min - "arith.Saturating(a) * b + c", each step from the clamped result before it.
+# Every integer width (T4a); "+", "-", "*" and "<<" are each one of the machine's saturating operations, so a lane
+# operator over an array of them (E39) stays one vector loop. The other operand is a plain number; "+" and "*" commute
+# (E31c). Value is the number
+type Saturating<T Integer> struct(Value T) { Value }
+
+fn (a Saturating<T>) Plus(b T) Saturating<T> commutes { return Saturating<T>(a.Value.satAdd(b)) }
+fn (a Saturating<T>) Minus(b T) Saturating<T> { return Saturating<T>(a.Value.satSub(b)) }
+fn (a Saturating<T>) Mul(b T) Saturating<T> commutes { return Saturating<T>(a.Value.satMul(b)) }
+# -a: the least value's negation is the greatest, an unsigned value's is 0
+fn (a Saturating<T>) Neg() Saturating<T> { return Saturating<T>(T(0).satSub(a.Value)) }
+# a / b: the least value divided by -1 is the greatest; a zero divisor is undefined, as "/"'s is (E6a)
+fn (a Saturating<T>) Div(b T) Saturating<T> {
+    if T.Min < 0 and b == ~T(0): return a.Neg()
+    return Saturating<T>(a.Value / b)
+}
+# a << n: the true value a * 2^n clamped; an amount outside [0, the width) is undefined, as "<<"'s is (E8a)
+fn (a Saturating<T>) ShiftLeft(n I64) Saturating<T> { return Saturating<T>(a.Value.satShl(n)) }
+# a >> n, which always fits
+fn (a Saturating<T>) ShiftRight(n I64) Saturating<T> { return Saturating<T>(a.Value >> n) }
+# "**" (E5a): the true power clamped - each product clamped, which keeps the true one's side and stays past the limit
+fn (a Saturating<T>) Pow(n U32) Saturating<T> {
+    if n == 0 {
+        if T.Max < 1 { return Saturating<T>(T.Max) } else { return Saturating<T>(1) }
+    }
+    r Saturating<T> = a
+    started := false
+    b Saturating<T> = a
+    e U32 = n
+    for e > 0 {
+        if (e & 1) == 1 {
+            r = r * b.Value if started else b
+            started = true
+        }
+        e = e >> 1
+        if e > 0: b = b * b.Value
+    }
+    return r
+}
+
 # a float result r of a and b, checked: Invalid for a NaN made from operands that are not, Overflow for an infinity
 # made from finite operands
 fn floatResult<T Float>(a T, b T, r T) ? {
@@ -278,4 +319,78 @@ test "every width: Neg, Shift, Div, Mul, Rem and Pow at widths no case names - b
     assert BakedWidths == WantWidths
     assert widths(one) == WantWidths
     assert widths(1) == WantWidths # S18c: decided while compiling
+}
+
+# saturating steps at every width (T4a): each limit reached from both sides, a product, a shift, a negation, a division
+# and a power - the same while compiling as at run time
+fn sats(k I64) String {
+    m := I64(0) - k # -1
+    a := (Saturating(I8(100) * I8(k)) + 27).Value
+    b := (Saturating(I8(100) * I8(k)) + 28).Value
+    c := (Saturating(I8(-100) * I8(k)) - 29).Value
+    d := (Saturating(U8(200) * U8(k)) + 56).Value
+    e := (Saturating(U8(5) * U8(k)) - 6).Value
+    f := (Saturating(I32(46341) * I32(k)) * 46341).Value
+    g := (Saturating(I32(-46341) * I32(k)) * 46341).Value
+    h := (Saturating(I64.Min * I64(k)) * -1).Value
+    i := (-Saturating(I8.Min * I8(k))).Value
+    j := (-Saturating(U8(3) * U8(k))).Value
+    l := (Saturating(I8(k)) << 6).Value
+    n := (Saturating(I8(k)) << 7).Value
+    o := (Saturating(I8(m)) << 7).Value
+    p := (Saturating(I8(-2) * I8(k)) << 7).Value
+    q := (Saturating(U7(3) * U7(k)) << 6).Value
+    r := (Saturating(I24.Max * I24(k)) + 1).Value
+    s := (Saturating(I128.Max * I128(k)) + 1).Value
+    t := (Saturating(U128(k)) - 2).Value
+    u := (Saturating(I128(k) << 100) << 27).Value
+    v := (Saturating(I128(m) << 100) * 1099511627776).Value
+    w := (Saturating(I1(m)) + I1(m)).Value
+    x := (Saturating(I1(m)) * I1(m)).Value
+    y := (-Saturating(I1(m))).Value
+    z := (Saturating(I8.Min * I8(k)) / -1).Value
+    aa := (Saturating(I8(-7) * I8(k)) / 2).Value
+    bb := (Saturating(I16(3) * I16(k)) ** 11).Value
+    cc := (Saturating(I16(-3) * I16(k)) ** 11).Value
+    dd := (Saturating(I16(-3) * I16(k)) ** 2).Value
+    ee := (2 * Saturating(U8(100) * U8(k))).Value
+    ff := (3 * Saturating(U8(100) * U8(k))).Value
+    gg := (Saturating(U64(k) << 32) * (U64(1) << 32)).Value
+    hh := (Saturating(I65.Min * I65(k)) - 1).Value
+    ii := (Saturating(U1(k)) ** 0).Value
+    jj := (Saturating(I1(m)) ** 0).Value
+    return ($a " " $b " " $c " " $d " " $e " " $f " " $g " " $h " " $i " " $j " " $l " " $n " " $o " " $p " " $q " " $r " "
+        $s " " $t " " $u " " $v " " $w " " $x " " $y " " $z " " $aa " " $bb " " $cc " " $dd " " $ee " " $ff " " $gg " "
+        $hh " " $ii " " $jj)
+}
+
+BakedSats := sats(1)
+WantSats := ("127 127 -128 255 0 2147483647 -2147483648 9223372036854775807 127 0 64 127 -128 -128 127 8388607 "
+    "170141183460469231731687303715884105727 0 170141183460469231731687303715884105727 "
+    "-170141183460469231731687303715884105728 -1 0 0 127 -3 32767 -32768 9 200 255 18446744073709551615 "
+    "-18446744073709551616 1 0")
+
+test Saturating "clamped at the limits at every width - baked, decided and run alike (T4a)" {
+    assert BakedSats == WantSats
+    assert sats(one) == WantSats
+    assert sats(1) == WantSats # S18c: decided while compiling
+}
+
+# lanes of saturating numbers: one vector loop, each lane clamped
+fn lanes(k I64) String {
+    a := Array<Saturating<I16>>[Saturating(I16(30000) * I16(k)), Saturating(I16(-30000) * I16(k)), Saturating(I16(k))]
+    b := Array<I16>[I16(5000), I16(-5000), I16(7)]
+    c := a + b
+    d := a * b
+    e := a - b
+    return ($c[0].Value " " $c[1].Value " " $c[2].Value " " $d[0].Value " " $d[1].Value " " $d[2].Value " " $e[0].Value " "
+        $e[1].Value " " $e[2].Value)
+}
+
+BakedLanes := lanes(1)
+
+test Saturating "lane by lane (E39), baked and run alike" {
+    want := "32767 -32768 8 32767 32767 7 25000 -25000 -6"
+    assert BakedLanes == want
+    assert lanes(one) == want
 }
