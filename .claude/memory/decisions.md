@@ -960,3 +960,12 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   explained: no view - two mechanisms (O16 registration for `:=` from a call, O15 holder for a written slot) and early
   freeing releases only at a holder's drop; mine: a `:=` from a call of a destructor type becomes a holder too.
   ASKED: go on (3), (4), (5).
+- Function values, the user 2026-11-08: "runtime function types ... really are a problem for this language, aren't
+  they?" Answered: yes, the one place the compiler's body-reading analyses go blind (T22a, effects "anything", early
+  freeing keeps, O17 lending, M19g, inlining); everyone has it - Rust avoids it by a type per closure and
+  monomorphizing `F: Fn` generics, so only `dyn Fn` pays (written lifetimes or 'static). PROPOSED: olang does that
+  inside, no syntax - a function taking a function value through a parameter is specialized per function or lambda a
+  call passes where the call can see it (the scope twins of (3), generalized past generics; one instance shared where
+  plans agree, a cap falling back to the written type's contract), so callbacks, Map/Filter/Sort and the like judge
+  and inline as direct calls; a function value stored in a field, collection, `any` or handed to C stays judged by its
+  written type (the irreducible dynamic case). ASKED, folded into (3).
