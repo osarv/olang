@@ -6,7 +6,8 @@ Random olang programs, each run several ways. A difference between the runs is a
 |---|---|
 | `gen.olang` | writes random programs whose every value is defined, for the evaluator fuzzer. Each case is computed three ways: a global baked while compiling (K2), an assert decided while compiling (S18c), and the same call at run time. |
 | `scopegen.olang` | writes programs that store, lend, copy and return values where scopes close (§8), for the scope fuzzer. |
-| `fuzz.olang` | the driver for both: builds, runs, compares, keeps the findings. |
+| `editgen.olang` | writes programs of several modules of scopegen's scenarios and edits them step by step, for the edit fuzzer. |
+| `fuzz.olang` | the driver for all of them: builds, runs, compares, keeps the findings. |
 | `repro/` | reproducers of bugs the fuzzers found, small programs (some with `.ll`). |
 
 ## The evaluator fuzzer (K1)
@@ -44,6 +45,18 @@ the builds' `-memory` reports free at once, so a run that frees nothing is seen 
 build/fuzz_fuzz.debug free 1 400 3 6
 ```
 
+## The edit fuzzer (B3i)
+
+A program of several modules (a chain, each with one of scopegen's scenarios) is edited step by step - a scenario
+written again, a mutable reference global added (D9h), a G42 fact read added, an export fn handed to C and taken back,
+a number changed, an edit undone - and each step is built in the directory of the builds before it and in a clean
+one. Objects (by their IR's hashes), what the builds said and what the program printed must agree, and an undone edit
+must lower nothing (docs/wholeprog.md 10.3, T5). `make verify` runs a fixed set (`editfuzzcheck`).
+
+```
+make editfuzz SEED=1 COUNT=20 STEPS=8 MODULES=3
+```
+
 ## Driver commands
 
 ```
@@ -53,6 +66,7 @@ build/fuzz_fuzz.debug scope START COUNT [JOBS [SCENARIOS [avoid]]]
 build/fuzz_fuzz.debug scopeshow SEED [SCENARIOS [ONLY]]
 build/fuzz_fuzz.debug free START COUNT [JOBS [SCENARIOS]]
 build/fuzz_fuzz.debug freeshow SEED [SCENARIOS]
+build/fuzz_fuzz edit START COUNT [STEPS [MODULES]]
 ```
 
 Build it first with `build/olang build -debug fuzz/fuzz.olang` (the make targets do). Each run works in
