@@ -3157,11 +3157,11 @@ fn (w mut walker&) views() {
         }
         # in a local used after it
         for l in viewers {
-            any := false
+            found := false
             for q in viewed[l] {
-                if (k < 0 or q == k) and f.whyKind[q] == RNone and not f.isDestroy(q): any = true
+                if (k < 0 or q == k) and f.whyKind[q] == RNone and not f.isDestroy(q): found = true
             }
-            if not any: continue
+            if not found: continue
             u := w.usedAfter(l, s, usesOf[l])
             if u < 0: continue
             name := f.P.L.Names.Text(body.Locals[l].Name)
@@ -3477,29 +3477,29 @@ fn (f mut Free&) mustOf(b I64) {
     # to the greatest fixed point, never cut short (F3): each local only moves down from Top to a place to none, so it
     # settles - stopped early, a must-fact would be too optimistic
     for {
-        any := false
+        found := false
         for a in range m.assigned.Len() {
             l := m.assigned[a]
             if l < 0 or m.isParam(l): continue
             v := meet(m.must[l], m.exprMust(m.values[a]))
             if v != m.must[l] {
                 m.must[l] = v
-                any = true
+                found = true
             }
             u := meet(m.within[l], m.F.withinExpr(m.within, m.values[a]))
             if u != m.within[l] {
                 m.within[l] = u
-                any = true
+                found = true
             }
         }
-        if not any: break
+        if not found: break
     }
     wl := f.withinLocals[b]
     wl.Clear()
     for x in m.within { wl.Push(x) }
     r := MustTop
     fresh := true
-    for x in m.returns {
+    for x in m.returned {
         r = meet(r, m.exprMust(x))
         if not m.fresh(x, 0): fresh = false
     }
@@ -3522,13 +3522,13 @@ fn (f mut Free&) mustOf(b I64) {
 # whether every value local l holds is an object the body made: given one, and each a new object
 fn (m mut mustW&) freshLocal(l I64) Bool {
     if m.isParam(l) { return false }
-    any := false
+    found := false
     for a in range m.assigned.Len() {
         if m.assigned[a] != l: continue
         if not m.fresh(m.values[a], 1): return false
-        any = true
+        found = true
     }
-    return any
+    return found
 }
 
 type mustW struct(F mut Free&, Id I64) {
@@ -3538,7 +3538,7 @@ type mustW struct(F mut Free&, Id I64) {
     within Vec<I64>
     assigned Vec<I64>          # each assignment of a local: the local, its value
     values Vec<typed.Expr&>
-    returns Vec<typed.Expr&>
+    returned Vec<typed.Expr&>
 }
 
 fn (m mut mustW&) isParam(l I64) Bool {
@@ -3581,7 +3581,7 @@ fn (m mut mustW&) stmt(st typed.Stmt&) {
         }
         case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) {
             if x is not null {
-                m.returns.Push(x)
+                m.returned.Push(x)
                 m.expr(x)
             }
         }
@@ -3870,14 +3870,14 @@ fn (f mut Free&) decide() {
     for k in range n { f.destroySole[k] = f.dtorVal[k] and f.whyKind[k] == RNone }
     # each only ever turns false, so both settle; never cut short (F3)
     for {
-        any := false
+        found := false
         for st in f.stores {
             if st.Kind == SMove and f.dtorVal[st.PlaceId] and f.destroySole[st.PlaceId] and st.Of != st.PlaceId and not f.destroySole[st.Of] {
                 f.destroySole[st.PlaceId] = false
-                any = true
+                found = true
             }
         }
-        if not any: break
+        if not found: break
     }
     for k in range n {
         if f.dtorVal[k] {
@@ -3898,15 +3898,15 @@ fn (f mut Free&) decide() {
     }
     # a move from a place that is not sole moves nothing a region holds
     for {
-        any := false
+        found := false
         for st in f.stores {
             if st.Kind == SMove and f.Sole[st.PlaceId] and not f.Sole[st.Of] {
                 f.Sole[st.PlaceId] = false
                 f.keep(st.PlaceId, RMade, st.File, st.Sp, "its new value is moved out of a place that keeps")
-                any = true
+                found = true
             }
         }
-        if not any: break
+        if not found: break
     }
     # C9b: each Destroy() compiles where its target is sole - every value it is given built for it at a block's site
     # (its region made there, its destructor registered on the block's list and on the region's chain), or moved out
@@ -4438,7 +4438,7 @@ fn (f mut Free&) Report() String {
     d := f.P.L.Diags
     b := StringBuilder()
     places I64 = 0
-    keeps I64 = 0
+    kept I64 = 0
     rows Vec<String&>
     for k in range f.keyTy.Len() {
         if not f.reported(k): continue
@@ -4453,7 +4453,7 @@ fn (f mut Free&) Report() String {
         if first < 0: continue
         places++
         if f.IsSole(k) or (f.dtorVal[k] and f.destroyUse[k]): continue
-        keeps++
+        kept++
         row := first
         if f.whyKind[k] == RView { row = try f.viewGo.Get(k) catch default first }
         g := f.goes[row]
@@ -4481,8 +4481,8 @@ fn (f mut Free&) Report() String {
         b.Push("memory: no place lets go of storage in code that runs again\n")
         return b.ToString()
     }
-    frees := places - keeps
-    b.Push($"memory: " $places " place" $("" if places == 1 else "s") " let" $("s" if places == 1 else "") " go of storage in code that runs again - " $frees " free" $("s" if frees == 1 else "") " it at once, " $keeps " keep" $("s" if keeps == 1 else "") " it" $(" (above)" if keeps > 0 else "") "\n")
+    frees := places - kept
+    b.Push($"memory: " $places " place" $("" if places == 1 else "s") " let" $("s" if places == 1 else "") " go of storage in code that runs again - " $frees " free" $("s" if frees == 1 else "") " it at once, " $kept " keep" $("s" if kept == 1 else "") " it" $(" (above)" if kept > 0 else "") "\n")
     return b.ToString()
 }
 

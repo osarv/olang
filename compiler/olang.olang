@@ -418,11 +418,11 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
     m := Run if cl.Word == "run" else modeNumber(cl.Word)
     if m < 0 { try usage(d, msgs.NotAMode(cl.Word)) }
     b.Push($"usage: " $ModeUsage[m] "\n" $ModeWhat[m] "\n")
-    any := false
+    found := false
     for o in range OptWords.Len() {
         if ((OptModes[o] >> m) & 1) == 0 { continue }
-        if not any { b.Push("\noptions:\n") }
-        any = true
+        if not found { b.Push("\noptions:\n") }
+        found = true
         w := $OptWords[o] $(" " if OptValues[o] != "" else "") $OptValues[o]
         b.Push($"  " $w.PadEnd(18) " " $OptWhat[o] "\n")
     }

@@ -4001,13 +4001,13 @@ fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Boo
 # trait's, so I bound to ListIter<I64> binds T in Iterator<T> through its Next. Repeated while it binds anything
 fn (p mut Program&) InferThroughBounds(b mut Binding&) {
     for _ in range b.N {
-        any := false
+        found := false
         for i in range b.N {
             row := p.VarAt(b.Owner, i)
             if row.Bound == types.UnknownT or b.Vals[i] == types.UnknownT { continue }
-            if p.unifyBound(b.Vals[i], row.Bound, b) > 0 { any = true }
+            if p.unifyBound(b.Vals[i], row.Bound, b) > 0 { found = true }
         }
-        if not any { break }
+        if not found { break }
     }
 }
 

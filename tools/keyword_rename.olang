@@ -1,0 +1,189 @@
+# keyword_rename - one tier of keywords (2026-11-08, SPEC.md L9): `any`, `unique`, `immut`, `packed`, `commutes` and the
+# promise words `returns`, `noalloc`, `noblock`, `nospawn`, `norecurse`, `noextern`, `pure`, `keeps`, `borrows`, `noborrow`
+# are reserved everywhere. A local, parameter, function, type or global named by one gets a `_` after it (L6 allows it):
+# `keeps := 0` becomes `keeps_ := 0`, `fn pure(x I64)` becomes `fn pure_(x I64)`.
+#
+# Left alone: the word after `.` (a member's name, L9a), the word in the place the language gives it - `any` before a
+# type that ends in `&`; `unique`, `immut` and `packed` between `type NAME` and the declaration's body; `commutes` after an
+# operator method's result; a promise word on a line holding a function type (`fn&(`, `fn?&(`, `type X fn(`) before it - and
+# a field declared at a line's start (`keeps I64`, `returns := x`) in a file that reads `.keeps`, which L9a allows. Code
+# only: comments and text are left alone. Re-runnable: a renamed name no longer is the word.
+#
+#     olang build tools/keyword_rename.olang && build/tools_keyword_rename FILE...    rewrites the files, naming each one changed
+
+import "std/os"
+import "std/io"
+import "srcmask"
+
+Words Array<String&> = Array<String&>["any", "unique", "immut", "packed", "commutes", "returns", "noalloc", "noblock"
+    "nospawn", "norecurse", "noextern", "pure", "keeps", "borrows", "noborrow"]
+DeclWords Array<String&> = Array<String&>["unique", "immut", "packed"]
+
+fn main() ? io.Error {
+    args := os.Args()
+    for k in range 1, args.Len() {
+        path := args[k]
+        text := try os.ReadFile(path) catch os.Error {
+            try io.PrintErrln("keyword_rename: " $path ": cannot be read")
+            continue
+        }
+        out := migrate(text)
+        if out == text: continue
+        try os.WriteFile(path, out) catch os.Error { try io.PrintErrln("keyword_rename: " $path ": cannot be written") }
+        try io.Println(path)
+    }
+}
+
+# the text with every name spelled like a keyword given its `_`
+fn migrate(text String&) String {
+    mask := srcmask.Mask(text, false)
+    b := StringBuilder()
+    from I64 = 0
+    i I64 = 0
+    for i < text.Len() {
+        if mask[i] != 'c' or not srcmask.IsWord(text[i]) {
+            i++
+            continue
+        }
+        j := i
+        for j < text.Len() and srcmask.IsWord(text[j]) { j++ }
+        if renamed(text, i, j) {
+            b.Push(text[from:j])
+            b.Push("_")
+            from = j
+        }
+        i = j
+    }
+    b.Push(text[from:])
+    return b.ToString()
+}
+
+# whether the word at [i, j) in code is a keyword standing as a name
+fn renamed(text String&, i I64, j I64) Bool {
+    w := text[i:j]
+    if w not in Words or (i > 0 and text[i - 1] == '.'): return false
+    ls := lineStart(text, i)
+    before := text[ls:i]
+    if methodNamePlace(before): return false
+    if w == "any": return not anyPlace(text, j)
+    if w in DeclWords: return not declPlace(before)
+    if w == "commutes": return not commutesPlace(text, before, j)
+    if fnTypeBefore(before): return false
+    return not fieldAt(text, w, before)
+}
+
+# a method's name, right after its declaration's receiver clause (L9a): `fn (w mut writer&) any<T>(...)`
+fn methodNamePlace(before String&) Bool {
+    t := srcmask.StripStart(before)
+    if not t.StartsWith("fn (") or not t.EndsWith(") "): return false
+    close := try t.Find(")") catch { return false }
+    return close == t.Len() - 2
+}
+
+# `any` before a type whose path (arguments included) ends in a marker: `any Shape&`, `mut any Iterator<I64>?&`
+fn anyPlace(text String&, j I64) Bool {
+    k := j
+    if k >= text.Len() or text[k] != ' ': return false
+    for k < text.Len() and text[k] == ' ' { k++ }
+    if text[k:].StartsWith("mut "): k += 4
+    depth I64 = 0
+    for k < text.Len() and text[k] != '\n' {
+        c := text[k]
+        if c == '<' {
+            depth++
+        } else if c == '>' {
+            depth--
+        } else if depth == 0 and not srcmask.IsWord(c) and c != '.' {
+            return c == '&' or (c == '?' and text[k:].StartsWith("?&"))
+        }
+        k++
+    }
+    return false
+}
+
+# `unique`, `immut`, `packed` right after `type NAME` (and its parameters) and the other such words: `before` is the
+# line's text up to the word
+fn declPlace(before String&) Bool {
+    t := srcmask.Strip(before)
+    if not t.StartsWith("type "): return false
+    rest := srcmask.StripStart(t[5:])
+    k I64 = 0
+    for k < rest.Len() and srcmask.IsWord(rest[k]) { k++ }
+    rest = rest[k:]
+    if rest.StartsWith("<") {
+        close := try rest.Find(">") catch { return false }
+        rest = rest[close + 1:]
+    }
+    return onlyDeclWords(srcmask.Strip(rest))
+}
+
+# whether t is nothing but declaration words and spaces
+fn onlyDeclWords(t String&) Bool {
+    k I64 = 0
+    for k < t.Len() {
+        if t[k] == ' ' {
+            k++
+            continue
+        }
+        e := k
+        for e < t.Len() and srcmask.IsWord(t[e]) { e++ }
+        if e == k or t[k:e] not in DeclWords: return false
+        k = e
+    }
+    return true
+}
+
+# `commutes` closing an operator method's signature: a method declaration whose line goes on with `?`, `{` or nothing
+fn commutesPlace(text String&, before String&, j I64) Bool {
+    if not srcmask.StripStart(before).StartsWith("fn (") { return false }
+    k := j
+    for k < text.Len() and text[k] == ' ' { k++ }
+    return k >= text.Len() or text[k] == '?' or text[k] == '{' or text[k] == '\n' or text[k] == '#'
+}
+
+# whether the line holds a function type before the word: `fn&(`, `fn?&(` or `type X fn(`
+fn fnTypeBefore(before String&) Bool {
+    return before.Contains("fn&(") or before.Contains("fn?&(") or (before.Contains("type ") and before.Contains(" fn("))
+}
+
+# a field declared at its line's start, in a file that reads the field after a dot (L9a)
+fn fieldAt(text String&, w String&, before String&) Bool {
+    return srcmask.Strip(before) == "" and text.Contains("." $w)
+}
+
+fn lineStart(text String&, i I64) I64 {
+    k := i
+    for k > 0 and text[k - 1] != '\n' { k-- }
+    return k
+}
+
+test migrate "a name spelled like a keyword gets a _; the words in their places, members and comments are left" {
+    assert migrate("    keeps := 0\n    x = keeps + 1\n") == "    keeps_ := 0\n    x = keeps_ + 1\n"
+    assert migrate("fn pure(x I64) I64 { return x }\n") == "fn pure_(x I64) I64 { return x }\n"
+    assert migrate("any := false\nif any { return }\n") == "any_ := false\nif any_ { return }\n"
+    assert migrate("fn run(from I64, any Bool) Bool { return any }\n") == "fn run(from I64, any_ Bool) Bool { return any_ }\n"
+    assert migrate("fn f(x any Shape&, y mut any Iterator<I64>?&) { }\n") == "fn f(x any Shape&, y mut any Iterator<I64>?&) { }\n"
+    assert migrate("type File unique struct(fd I32) { fd }\ntype C<T> packed struct(a U4) { a }\n") == "type File unique struct(fd I32) { fd }\ntype C<T> packed struct(a U4) { a }\n"
+    assert migrate("type K unique immut struct(n I64) { n }\n") == "type K unique immut struct(n I64) { n }\n"
+    assert migrate("unique := 3\npacked = unique\n") == "unique_ := 3\npacked_ = unique_\n"
+    assert migrate("fn (a A) Plus(b A) A commutes { return a }\n") == "fn (a A) Plus(b A) A commutes { return a }\n"
+    assert migrate("fn (a A) Plus(b A) A commutes ? E { return a }\n") == "fn (a A) Plus(b A) A commutes ? E { return a }\n"
+    assert migrate("commutes := true\n") == "commutes_ := true\n"
+    assert migrate("fn (w mut writer&) any<T>(v T) { }\nfn (t mut Table&) unique(id I64) Bool { }\n") == "fn (w mut writer&) any<T>(v T) { }\nfn (t mut Table&) unique(id I64) Bool { }\n"
+    assert migrate("x := s.keeps + t.pure()\n") == "x := s.keeps + t.pure()\n"
+    assert migrate("# keeps in a comment\ns := \"pure\"\n") == "# keeps in a comment\ns := \"pure\"\n"
+}
+
+test migrate "promise words after a function type stay; a field read after a dot stays" {
+    fnt := "onClick fn&(e Event&) noalloc noblock pure\n"
+    assert migrate(fnt) == fnt
+    assert migrate("type H fn(a mut N&, b N&) keeps b in a\n") == "type H fn(a mut N&, b N&) keeps b in a\n"
+    field := "type S struct {\n    returns Vec<I64>\n}\nfn f(s S&) I64 { return s.returns.Len() }\n"
+    assert migrate(field) == field
+    assert migrate("    returns := 1\n") == "    returns_ := 1\n"
+}
+
+test migrate "idempotent" {
+    once := migrate("keeps := 1\nany := keeps\n")
+    assert migrate(once) == once
+}

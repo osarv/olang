@@ -3508,13 +3508,13 @@ fn (ln mut lowering&) settleViews() {
 # handed to a helper, "a.Iter().Fold(...)"): the call read where it stands where what it views is stable
 fn (ln mut lowering&) viewTemps(u typed.LocalUses&) {
     for k in range u.TempX.Len() {
-        keeps := ln.L.preserves(u.TempBody[k], u.TempParam[k])
+        kept := ln.L.preserves(u.TempBody[k], u.TempParam[k])
         c := viewCallIn(u.TempX[k])
         if c is null: continue
         ln.vlIn = u.TempIn[k]
-        held := keeps and ln.heldViews(u, c)
+        held := kept and ln.heldViews(u, c)
         if held { ln.L.ViewLocals++ }
-        if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(u.TempX[k].Span().Start)) ": a temporary " $("holds views" if held else "copies" if keeps else "copies (lent to a body that may change its parts)")) }
+        if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(u.TempX[k].Span().Start)) ": a temporary " $("holds views" if held else "copies" if kept else "copies (lent to a body that may change its parts)")) }
     }
 }
 

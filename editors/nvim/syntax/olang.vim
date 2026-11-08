@@ -9,7 +9,8 @@ syn keyword olangConditional if else match case
 syn keyword olangRepeat for in range do
 syn keyword olangException try catch default
 syn keyword olangOperator and or not xor is as embed
-syn keyword olangStorage mut
+syn keyword olangStorage mut any unique immut packed commutes
+syn keyword olangKeyword returns noalloc noblock nospawn norecurse noextern pure keeps borrows noborrow
 syn keyword olangBoolean true false
 syn keyword olangConstant null
 syn keyword olangType Bool I8 I16 I32 I64 U8 U16 U32 U64 F16 BF16 F32 F64 Array String Char List Map Vec StringBuilder

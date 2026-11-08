@@ -661,10 +661,10 @@ fn (v mut Viewer&) bufferElem(p typed.Lvalue&, st state&, out mut Vec<place>&) ?
 }
 
 # a summary's place below where a call's argument is
-fn (v mut Viewer&) below(a place, path I64, show I64, any Bool) place {
+fn (v mut Viewer&) below(a place, path I64, show I64, found Bool) place {
     if a.Any { return a }
     s := v.strs[a.Path].Len() + show if show > 0 else a.Show
-    return place(a.R, v.str($v.strs[a.Path] $v.strs[path]), s, any)
+    return place(a.R, v.str($v.strs[a.Path] $v.strs[path]), s, found)
 }
 
 # whether path a is path b, or a place above it, at a field's boundary
@@ -894,25 +894,25 @@ fn (v mut Viewer&) grow(g place, sp source.Span, grewIn I64, innerFile I64, inne
 fn (v mut Viewer&) factPut(fs mut Vec<fact>&, param I64, module I64, name source.NameId, g place, sp source.Span) {
     path := v.strs[g.Path]
     pid := g.Path
-    any := g.Any
+    found := g.Any
     d I64 = 0
     for k in range path.Len() {
         if path[k] == '.' {
             d++
             if d > 8 {
                 pid = v.str(path[:k])
-                any = true
+                found = true
                 break
             }
         }
     }
     for f in fs {
         if f.Param != param or f.Module != module or f.Name != name { continue }
-        if f.Path == pid and (f.Any or not any) { return }
+        if f.Path == pid and (f.Any or not found) { return }
         if f.Any and v.prefix(f.Path, pid) { return }
     }
     show := g.Show if g.Show <= v.strs[pid].Len() else v.strs[pid].Len()
-    fs.Push(fact(param, module, name, pid, show, any, v.B!.File, sp))
+    fs.Push(fact(param, module, name, pid, show, found, v.B!.File, sp))
     v.changed = true
 }
 
@@ -1467,8 +1467,8 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
     if v.carries(ty) {
         for i in range n {
             if viewed[i] { continue }
-            keeps := value or (callee >= 0 and (not known or (i < v.sums[callee].Passes.Len() and v.sums[callee].Passes[i])))
-            if keeps {
+            kept := value or (callee >= 0 and (not known or (i < v.sums[callee].Passes.Len() and v.sums[callee].Passes[i])))
+            if kept {
                 for r in argRefs[i] { viewAdd(out, r) }
             }
             # a function value handing back an array borrowed from a Vec it was given: a view of it, as far as is known
