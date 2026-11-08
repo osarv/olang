@@ -35209,3 +35209,14 @@ every value of which is built there, links through such locals) followed only wh
 `pure` place (`WantPure`, set by the checker; a summary made earlier in an attempt is made again where Pure is then
 read). 9. Decided with it: a local's later whole assignments are followed for a function value, and for its slots and
 freshness only where Pure is asked - its slots read off its declaration as before otherwise.
+
+## std/pool: a slotmap of generational handles (docs/genrefs.md section 11 and round 8; 2026-11-08, wt-pool2)
+
+`Pool<T>` stores values in slots named by a `Handle` (slot index, generation). `Add` reuses a freed slot, `Remove`
+frees its slot at once and raises its generation, so a handle kept past the removal is stale: `Get`, `Ref`, `RefMut`,
+`Set`, `Remove` and `Take` through it fail with `pool.Error.Stale` (the error is `Error`, not `PoolError`, by the
+naming rule that std names never repeat the module's). Built on `Vec`s (values, generations, liveness, free slots);
+a Pool is a value with the Vec's copy. `for x in p` and `p.Handles()` are generators over the live slots; `FromIter`
+makes `pool.Pool<I64>[1, 2]`. A removed slot keeps its last value until an Add overwrites it (a Vec cannot hold a
+hole), unread. Tests name their targets and one is decided while compiling (a top-level assert and a baked global);
+`test -interpret` agrees. The earlier attempt's trap: test `RefMut` with a Vec, not an I64 (T24: no reference to a number).

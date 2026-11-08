@@ -1534,6 +1534,14 @@
 | ok - pairs compare and hash by their parts
 | ok - a pair of things with no Hash is still a pair
 | ok - a pair of written text holds a reference to it
+=== test std/pool.olang
+| status 0
+| ok - Pool.Add: values are added, read and changed through handles
+| ok - Pool.Remove: a removed handle is stale, also once its slot is reused
+| ok - Pool.RefMut: a Vec in a pool is changed in place
+| ok - Pool.Take: records are taken out and walked with their handles
+| ok - Pool.FromIter: a Pool is made from a literal
+| ok - Pool: a pool computed while compiling agrees with the run time
 === test std/prop.olang
 | status 0
 | ok - Check: passes a property that holds, of every kind of value it makes
