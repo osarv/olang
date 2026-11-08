@@ -541,7 +541,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **The scope of storage is found at run time from its address only where no call knows it (the user 2026-11-08: "Yeah,
   do runtime building scope findings with just looking up the base address"; "Never do program scope callbacks").**
   Aligned chunks, a lookup for large allocations, nothing stored per object; no program-scope fallback anywhere, and
-  derived scopes (O23a) go where the hidden scope argument and the lookup cover them.
+  derived scopes (O23a) go where the hidden scope argument and the lookup cover them. **Built as O29 (round 6 of
+  docs/fnvalues.md, 2026-11-08):** chunks up to 128 KB in aligned slots of one reserved range, each header naming its
+  scope, larger ones in a sorted table, `__olang_scope_of`; a build into a scope of several (O12, O25i), a derived one
+  (O23a), an untraced one (O11) or a reference `Str` receiver's (E11c) is placed `Found` and built where the storage
+  it goes through is found - from a reference read again with no effect, or the call's own argument. Left: a value
+  argument holding two references and a task's result into such a place (o12spawntarget) are refused or, for C1's
+  derived case, still given the program's scope.
 - **A reference never narrows (O25, the user's decision).** A local's type says where it lives (O25a); `:=` takes its
   initializer's scope; exactness is required only where something can be stored through (O25g). Copies of
   reference-holding values keep their references where the source's are (O25h).
