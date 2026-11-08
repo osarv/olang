@@ -62,9 +62,15 @@ odd-width paths (`tests/intsweep.olang`); `tools/precedence_migrate.olang` if pr
 | a refusal that becomes accepted | its `checks/cases` become `# check: run` cases (saying what they were), `make rungold` |
 
 A `-memory` row (B18) is said in one place and read in two: early freeing's in `compiler/free.olang`, a placement's
-(O27, its destructor sentence, O15) in `scope.olang`'s `Placements`, which `olang.olang`'s `-memory` and
-`session.olang`'s `Placed` (the language server's hint) both print. A change to one: SPEC B18's quoted text, the
-`checks` scenarios `memoryplaced` and the earlyfree fixtures that grep it.
+(O27, its destructor sentence, O15; a become chain's tail scope, S21, `Placement.Tail`) in `scope.olang`'s
+`Placements`, which `olang.olang`'s `-memory` and `session.olang`'s `Placed` (the language server's hint) both print. A
+change to one: SPEC B18's quoted text, the `checks` scenarios `memoryplaced` (its `tail.olang` for S21) and the
+earlyfree fixtures that grep it.
+
+A function's hidden scope arguments (`types.ScopeVarsOf`) are read off its type alone; a role that adds one (`RoleTail`,
+S21's tail scope, given in `scope.olang`'s `giveTails` before any body is judged) changes every call's: the scope pass
+(`call`, `retOne`), lowering (`passed`), `emit.olang`'s header and its function-value `thunk` (a scope made for the
+call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 
 ## A command-line mode or option
 

@@ -174,8 +174,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **`become f(x)` (S21, docs/survey2.md 2.3, the user's "Build it now" 2026-10-26).** A guaranteed tail call. Only a
   call of a function or method declared with `fn`, in one (never main, export fn, lambda, generator, test,
   constructor or destructor), with one signature and error set; nothing passed through memory; not in deferred code,
-  a message, a task clause or a join; no argument is storage of a closing scope. Its errors are the function's own,
-  so no `try`.
+  a message, a task clause or a join. Its errors are the function's own, so no `try`. **The tail scope (the user's
+  "Yes, do A" 2026-11-08, docs/refusals.md R5; built 2026-11-08)**: what a step makes and hands on, and a destructor
+  value in a block the become closes, is built in a hidden scope bound by the chain's first ordinary call where its
+  result lands and passed down unchanged (the result scope, or a `RoleTail` one) - memory as `return`'s, constant stack,
+  `-memory` names each site; a by-value parameter holding a destructor value must be handed on.
 - **`defer` is block-scoped (S19, the user's decision).** Last registered first, on every way out but the
   process-ending ones; deferred code runs before a join's wait and before the scope closes; it may not leave.
 - **`errdefer` (S19e, the user's decision 2026-10-18).** `errdefer STATEMENT` / `errdefer { }`: deferred code run only
@@ -332,7 +335,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   destructor is held by value in a variable, parameter, result, field or payload, and its destructors run once where
   that holder lets go (block exit, callee's end unless handed on, a store over a place after the new value is made);
   parts last first. A call's value no place takes is held where the call lands (O16). A global and a generator's
-  parameter hold one by reference (C11); none is held across a `yield` or a `become`. C9b is gone: the one-path early
+  parameter hold one by reference (C11); none is held across a `yield`; one in a block a `become` closes is kept in its
+  chain's tail scope (S21). C9b is gone: the one-path early
   end is written with a block or a helper function, `Destroy` is an ordinary method name, and `tools/destroy_migrate.olang`
   (in `olang fix`) deletes `defer x.Destroy()` and a last-in-block `x.Destroy()` and lists the rest.
 - **Collections hold values with destructors by value (C11 relaxed, O15, M19d, the user's "Collections DECIDED"

@@ -34798,3 +34798,76 @@ Found on the way: early freeing's `-memory` row for such a holder ("'g' keeps wh
 closes") can put its note at another local's store in the same loop (`keep.Push(f.name)` named for `g`, whose view is
 pushed on the next line); the row itself is right (the holder's storage is kept), only the note's position is off. Not
 fixed here (free.olang's notes, outside this round); reported.
+
+## A become chain's tail scope (S21, B18, O15, O16; 2026-11-08, wt-becometail, round R5 of docs/refusals.md)
+
+The user's answer to the refusal audit's question 6, 2026-11-08: "Yes, do A". Until now a `become` refused to hand on
+anything its function had made (`BecomeBorrows`: a local array lent, a by-value array or text given to a type variable,
+a by-value parameter's own D9b copy, a call's result) and refused any function holding or building a value with a
+destructor (`BecomeDestructor`, the checker's "it holds a value of Res&" and the scope pass's "an instance is built in
+one of them") - ten must-fail cases. Moving storage outward never makes a reference dangle; the jump only needs what it
+hands on to outlive the chain. So such storage is now built in the chain's **tail scope**: bound by the first ordinary
+call of the chain to where that call's result lands, passed unchanged down the chain - each step's storage kept until
+the first caller lets go of the result, the memory the `return` form keeps (its frames' scopes all open until the
+innermost returns), with `become`'s constant stack. Keeping the refusal so that `become` also meant constant memory was
+declined.
+
+How it is built:
+- **The tail scope is a result scope.** Where a function's result holds references it already has one (`ResultVar`),
+  bound by its first caller where the result lands and handed by each `become` to its callee (a become is checked as the
+  return of its call). A function whose result holds none gets one through its type's role: `types.RoleTail`, for which
+  `ScopeVarsOf` adds `ResultVar` - so every call of it passes one, read off its type alone as every hidden scope is
+  (DESIGN.md 1.6.1), and `musttail` keeps matching prototypes. Which bodies get it is decided before any body is judged
+  (`Scoper.giveTails`, in `components`): the becomes' calls read off each typed body (`walked.Tails`, and the block each
+  stands in), a body "needs" one where a become hands on something it may have made (`tailBuilt`: a value holding
+  references or arena storage that is no reference parameter's referent, global, constant data, or by-value parameter
+  the body never writes or borrows - a part or slice of these) or where it may hold or build a value with a destructor
+  (its locals, its calls' and made values' types, a second walk of that body only); the flag then spreads over the
+  becomes' calls both ways, since the chain's functions share one signature. Conservative by construction: a body
+  flagged that keeps nothing there passes one more pointer; one not flagged that the judging finds keeping something
+  would still be refused (`BecomeBorrows`, `BecomeDestructor`, kept as that safety net - no case reaches them now).
+- **The scope pass** (`call`): at a become, an argument whose callee scope variable is bound to a block of the function,
+  or whose own arena storage the function made, is lifted into the tail scope (`tailLifts`, through `propose` and
+  `proposeLocal` - O28's placement, built there a new one each time its declaration runs); a run-time array or text made
+  at the become is made there (its dest); `retOne` binds a become's callee's result scope to the function's own even
+  where the result holds no reference. A value with a destructor landing in a block a become closes - a call's or
+  constructor's result, a promoted temporary (`m := Res(n).n`), a by-value holder of the checker's (`r Res = Res(n)`, a
+  call's value held where it lands) - is built in the tail scope instead (`tailCloses`, the blocks enclosing each
+  become), registered there as its block is left (lowering's `escapedHome`, unchanged) and ended as that scope closes,
+  last registered first: the order `return f(...)` would end them in. One in a block closed before the become still
+  ends there.
+- **The checker** drops `tailSets`' local-with-a-destructor refusal and lets a become stand where the only deferred code
+  pending is holders' drops. A by-value parameter holding a destructor value is the caller's, not the function's to keep:
+  unless the become hands it on (a move at its last mention, T13b - s21becomeheld) it is still refused, now with a
+  message of its own, `BecomeHeldParam` (`becomeheldparam`).
+- **Code generation**: the D9b prologue copy of a by-value run-time array parameter is made in the tail scope in a body
+  holding a become (`fnEm.tailCopies`), so the become hands it on; a function value of a `RoleTail` function, whose
+  written type passes no such scope, goes through its thunk, which makes a scope for the call and closes it as the call
+  returns (its result holds no reference, or the scope would be the result scope).
+- **The evaluator** follows the plans as `interpret` always does; a call through a function value into a `RoleTail` body
+  gets a scope of its own (`frame.Tail`), handed on by `Machine.tail` and closed after the frame's storage, so built and
+  interpreted runs end destructors in one order.
+- **`-memory` (B18)**: a row per site - `'b' is built in the tail scope of its become chain, ... for the become here,
+  kept until its chain's first caller lets go of the result`, `a temporary` for text or a call's value made at it,
+  `'a' (its own copy)` for a D9b copy, and at a destructor value made in a closed block `for a become closing its block
+  ... - its destructor runs as that scope closes, not at the end of its block` - with its note and a count line of its
+  own; the language server's hint says the same (`Placement.Tail`).
+
+Decisions (mine): (1) the tail scope is the result scope - a function whose result holds references already passes the
+very scope the chain needs, so only functions whose results hold none get a new role, and no second hidden scope exists;
+(2) whether a body gets one is decided from its typed tree before judging, over its become component, conservatively -
+the ABI must be known at every call before the call is judged, and a judging-time decision would reach callers judged
+earlier; (3) only values in blocks enclosing a become move, so a block closed before it ends its values as before; (4)
+through a function value the tail scope is made per call and closed at its return, never the program's (the user's
+"never do program scope callbacks"); (5) `BecomeBorrows` and `BecomeDestructor` stay as the conservative net rather than
+being removed.
+
+Tests: the ten former cases run under `-debug -sanitize`, read back after a churn, their output in run.txt (the
+destructor cases print the order: `becomedtor` ends its three instances after `used` and before `after`,
+`becomedtortemp` ends the instances of blocks closed before the become at once and the rest after `done`);
+`becomeheldparam` fails with the new message; tests/become.olang's `grow`, `widen`/`narrow`, `spell` and `probe` tests (a
+chain's arrays read after a churn, a call through a function value, destructor order, evaluator-baked `BakedGrow` and
+`BakedSpell` and an assert decided while compiling); the `memoryplaced` scenario's `tail.olang` checks the rows.
+
+Found on the way: `Placements` read a site's lift under the row's key, `(body, -1 - site)`, where `siteLifts` keys it
+`(body, site)` - so every O27 row for a temporary named its scope "a longer-lived scope"; fixed.

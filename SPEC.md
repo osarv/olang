@@ -8269,7 +8269,13 @@ here`, `for a closure of it kept here`), SCOPE as above or `the result scope`, `
 ending `- its destructor runs as that scope closes, not at the end of its turn` where X holds a value with a destructor
 to run (O15, O27); a
 `note:` row at X's declaration naming the copy that would let it go with its turn (`keep a copy of what the view shows,
-'$x'`) - and a line counting them.
+'$x'`) - and a line counting them. Then, likewise, a row for each site whose storage a `become` keeps in its chain's tail
+scope (S21) - `'X' is built in the tail scope of its become chain, a new one each time it is made, for the become here,
+kept until its chain's first caller lets go of the result` at the `become` (`a temporary` for a value made at it, `'X'
+(its own copy)` for a by-value parameter's), or at an instance with a destructor made in a block a `become` closes, `for
+a become closing its block, ...`, ending `- its destructor runs as that scope closes, not at the end of its block` -
+SCOPE `the result scope` where the function has one; a `note:` row naming what would let it go with its step (a value
+handed on instead, or `return` and the call); and a line counting them.
 
 **B19 (fuzzing).** `test -fuzz NAME FILE` fuzzes one test of one file: the test NAME names - as a word of B3a's
 names a test, by its target, its target's type or text of its description; naming none, or several, is an error at

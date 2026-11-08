@@ -17,6 +17,10 @@ is built and what this note proposes is built after it.
 - Not done: the same strip experiment over std/ and tools/ (compiler/'s 246 sites were run, section 9); a run of each
   (b) shape under a hand-placed prototype (the soundness arguments are reasoned, section 5, not measured).
 - A fresh agent continuing would start at section 9 (std/ and tools/) or section 10 (refining a round).
+- Built: R5 (5.5, 2026-11-08, wt-becometail) - the tail scope is the result scope (`RoleTail` gives one where the result
+  holds no reference); the ten cases run; a by-value parameter holding a destructor value that the become does not hand
+  on stays refused (`BecomeHeldParam`, becomeheldparam); `BecomeBorrows` and `BecomeDestructor` are kept as the net for
+  a body the pre-judging read did not flag. HISTORY.md, "A become chain's tail scope".
 
 ## 0. Summary
 
