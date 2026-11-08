@@ -35,7 +35,6 @@
 ; timers. A crash (SIGSEGV) writes nothing.
 declare i32 @atexit(ptr)
 declare i32 @open(ptr, i32, ...)
-declare i64 @read(i32, ptr, i64)
 declare i32 @close(i32)
 declare i32 @gettid()
 declare i32 @getpid()

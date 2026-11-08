@@ -125,10 +125,11 @@ ModeWhat Array<String&> = Array<String&>[
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
 # what they do
 OptWords Array<String&> = Array<String&>["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
-    "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime", "-caps", "-asm", "-ir", "-interpret"]
+    "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime", "-caps", "-asm", "-ir", "-interpret", "-bench"]
 OptValues Array<String&> = Array<String&>["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", "", "NAME", "SECONDS", "", "", ""
+    ""
     ""]
-OptModes Array<I64> = Array<I64>[12294, 15, 15, 15, 1887, 10079, 10079, 2080, 8271, 256, 2, 11, 8, 8, 64, 64, 64, 8]
+OptModes Array<I64> = Array<I64>[12294, 15, 15, 15, 1887, 10079, 10079, 2080, 8271, 256, 2, 11, 8, 8, 64, 64, 64, 8, 8]
 OptWhat Array<String&> = Array<String&>[
     "writes the executable, the object, bindgen's declarations or profile's flame graph to PATH (B3h, X16, B20)"
     "builds unoptimized, with debug information (B2c, B2e)"
@@ -148,6 +149,7 @@ OptWhat Array<String&> = Array<String&>[
     "prints a function's machine code as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)"
     "prints a function's optimized LLVM IR as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)"
     "runs the tests by compile-time evaluation instead of building them, as interpret runs a program (B3e)"
+    "measures each benchmark the tests run (std/bench): its time, allocations and bytes an operation, in a build counting them (B19b)"
 ]
 
 fn modeName(m I64) String { return "running a file" if m == Run else $ModeWords[m] }
@@ -255,6 +257,7 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
             if o == 12 { c.Fuzz = $v }
             if o == 14 { cl.Caps = true }
             if o == 17 { c.Interpreted = true }
+            if o == 18 { c.Bench = true }
             if o == 15 or o == 16 {
                 if cl.Listing != "" { try usage(d, msgs.ListingAlone()) }
                 cl.Listing = $a
@@ -321,6 +324,7 @@ fn buildWord(c build.Config&) String {
     if c.Quick { return "-quick" }
     if c.Memory { return "-memory" }
     if c.Fuzz != "" { return "-fuzz" }
+    if c.Bench { return "-bench" }
     return ""
 }
 
@@ -379,6 +383,8 @@ fn CommandLine.Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Dia
     }
     # B19: one test of one file fuzzed, for as long as -fuzztime says
     if c.FuzzTime > 0 and c.Fuzz == "" { try usage(d, msgs.FuzzTimeAlone()) }
+    # B19b: a benchmark build runs the tests it measures; a fuzz build runs one test on the fuzzer's inputs
+    if c.Bench and c.Fuzz != "" { try usage(d, msgs.BenchFuzz()) }
     if c.Fuzz != "" and cl.Files.Len() != 1 { try usage(d, msgs.ModeOneFile("fuzzing")) }
     if cl.Mode == Format or cl.Mode == Fix { return cl }
     if cl.Output != "" { try checkOutput(cl.Output, d) }
@@ -666,12 +672,12 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         for x in e.ExportNames() { prog.Exports.Push($x) }
         prog.Header = e.Header(build.LibName(root), root)
     }
-    prog.Runtime = try rt.Ir(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile) catch rt.Bad {
+    prog.Runtime = try rt.Ir(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile, cfg.Bench) catch rt.Bad {
         error build.Failed.Reported
     }
     if e.Library { prog.Runtime = libraryIr(prog.Runtime) }
     if dyncall {
-        prog.Dyncall = try rt.DyncallIr(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile) catch rt.Bad {
+        prog.Dyncall = try rt.DyncallIr(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile, cfg.Bench) catch rt.Bad {
             error build.Failed.Reported
         }
         if e.Library { prog.Dyncall = libraryIr(prog.Dyncall) }
@@ -696,6 +702,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.San = cfg.San
     e.Debug = cfg.Debug
     e.Prof = cfg.Profile
+    e.Bench = cfg.Bench
     e.Lines = cfg.Profile or cfg.Listing
     e.VerifyMir = tests
     e.BF16Opaque = cfg.Debug or cfg.Race
@@ -728,7 +735,7 @@ fn buildInputs(cfg build.Config&, tests Bool) String {
     info := try os.FileInfo.Stat(exe) catch os.Error { return "" }
     cwd := try os.Cwd() catch default ""
     t := cfg.Target
-    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests $(" prof" if cfg.Profile else "") $(" listing" if cfg.Listing else "") $(" fuzz" if cfg.Fuzz != "" else "") "\n" $
+    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests $(" prof" if cfg.Profile else "") $(" listing" if cfg.Listing else "") $(" fuzz" if cfg.Fuzz != "" else "") $(" bench" if cfg.Bench else "") "\n" $
             t.Triple "\n" $t.Arch "\n" $t.Cpu "\n" $t.Attrs "\n" $cfg.Consts.Fingerprint() "\n" $cwd "\n" $load.StdDir())
 }
 

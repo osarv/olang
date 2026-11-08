@@ -117,6 +117,7 @@ type Diag enum {
     InterpretBuilds
     FuzzTimeNotNumber
     FuzzTimeAlone
+    BenchFuzz
     FuzzNoTest
     FuzzManyTests
     NotASource
@@ -1049,6 +1050,7 @@ fn QuickAlone(text String&) r.Msg { return r.Msg(Diag.QuickAlone, "B2g", "-quick
 fn InterpretBuilds(text String&) r.Msg { return r.Msg(Diag.InterpretBuilds, "B3e", "-interpret builds nothing, and " $text " says how to build - give one") }
 fn FuzzTimeNotNumber(text String&) r.Msg { return r.Msg(Diag.FuzzTimeNotNumber, "B19", "-fuzztime takes a whole number of seconds, at least 1, and '" $text "' is none") }
 fn FuzzTimeAlone() r.Msg { return r.Msg(Diag.FuzzTimeAlone, "B19", "-fuzztime says how long -fuzz runs - give -fuzz NAME with it") }
+fn BenchFuzz() r.Msg { return r.Msg(Diag.BenchFuzz, "B19b", "-bench measures the tests a build runs, and -fuzz runs one test on a fuzzer's inputs - give one") }
 fn FuzzNoTest(word String&) r.Msg { return r.Msg(Diag.FuzzNoTest, "B19", "-fuzz " $word " names no test of this file - give a test's target, its target's type or a word of its description") }
 fn FuzzManyTests(word String&, names String&) r.Msg { return r.Msg(Diag.FuzzManyTests, "B19", "-fuzz " $word " names several tests (" $names ") - give a word that names one") }
 fn NotASource(text String&) r.Msg { return r.Msg(Diag.NotASource, "B1", "'" $text "' is no olang file to run - a file's name ends in .olang") }

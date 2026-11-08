@@ -61,8 +61,9 @@ fn directive(line String&) I64 {
 }
 
 # the runtime file named file (in std/runtime), filled in for architecture arch, with the scope sanitizer or not, and
-# with the profiler's hooks ("; @prof" lines) or not (B20)
-fn Fill(file String&, arch String&, san Bool, prof Bool = false) String ? Bad {
+# with the profiler's hooks ("; @prof" lines) or not (B20), and with a benchmark build's counting ("; @bench" lines,
+# B19b) or not
+fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = false) String ? Bad {
     path := $load.StdDir() "/runtime/" $file
     bytes := try os.ReadFile(path) catch os.Error {
         try io.PrintErrln($"olang: " $path ": cannot open this file") catch io.Error { }
@@ -78,9 +79,11 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false) String ? Bad {
     ifLine I64 = 0
     for written in text.Lines() {
         n++
-        # B20: a line of the profiler's hooks, code in a profile build and a comment in every other - so a compiler that
-        # knows nothing of them reads the file as it always has
-        line := written[8:] if prof and written.StartsWith("; @prof ") else written
+        # B20, B19b: a line of the profiler's hooks or of a benchmark build's counting, code in that build and a comment
+        # in every other - so a compiler that knows nothing of them reads the file as it always has
+        line := written
+        if prof and written.StartsWith("; @prof "): line = written[8:]
+        if bench and written.StartsWith("; @bench "): line = written[9:]
         d := directive(line)
         if d == 0 {
             if inIf { try malformed(path, n, "\"; @if\" inside another") }
@@ -144,11 +147,11 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false) String ? Bad {
 
 # the runtime's own part (runtime.ll, san.ll under -sanitize, prof.ll in a profile build - B20) filled in, or the
 # dynamic call's (dyncall.ll)
-fn Text(arch String&, san Bool, dyncall Bool, prof Bool = false) String ? Bad {
-    if dyncall { return try Fill("dyncall.ll", arch, san, prof) }
-    text := try Fill("runtime.ll", arch, san, prof)
-    if san { text = $text "\n" $(try Fill("san.ll", arch, san, prof)) }
-    if prof { text = $text "\n" $(try Fill("prof.ll", arch, san, prof)) }
+fn Text(arch String&, san Bool, dyncall Bool, prof Bool = false, bench Bool = false) String ? Bad {
+    if dyncall { return try Fill("dyncall.ll", arch, san, prof, bench) }
+    text := try Fill("runtime.ll", arch, san, prof, bench)
+    if san { text = $text "\n" $(try Fill("san.ll", arch, san, prof, bench)) }
+    if prof { text = $text "\n" $(try Fill("prof.ll", arch, san, prof, bench)) }
     return text
 }
 
@@ -194,8 +197,8 @@ fn WithAttributes(ir String&, attrs String&, race Bool) String {
 
 # the runtime's IR for a build for triple and arch, with attrs on its functions: what build compiles into the
 # runtime's object
-fn Ir(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Bool = false) String ? Bad {
-    body := try Text(arch, san, false, prof)
+fn Ir(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Bool = false, bench Bool = false) String ? Bad {
+    body := try Text(arch, san, false, prof, bench)
     return WithAttributes($"target triple = \"" $triple "\"\n\n" $body, attrs, race)
 }
 
@@ -315,9 +318,9 @@ HeaderTbaa String& = ("!49 = !{!\"scopehdr\", !20, i64 0}\n!50 = !{!\"chunkhdr\"
 
 # the dynamic call's IR (S3), an object of its own linked only into a program declaring it: it reaches the rest of the
 # runtime as any module does, through what Decls derives
-fn DyncallIr(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Bool = false) String ? Bad {
-    core := try Text(arch, san, false, prof)
-    dc := try Text(arch, san, true, prof)
+fn DyncallIr(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Bool = false, bench Bool = false) String ? Bad {
+    core := try Text(arch, san, false, prof, bench)
+    dc := try Text(arch, san, true, prof, bench)
     body := $"target triple = \"" $triple "\"\n\n" $Decls(core) $dc "\n!20 = !{!\"olang\"}\n" $HeaderTbaa
     return WithAttributes(body, attrs, race)
 }
@@ -342,6 +345,15 @@ test "the runtime is filled in for an architecture and a mode, every placeholder
     r := try Ir("x86_64-pc-linux-gnu", "x86_64", "", false, true)
     assert r.Contains("attributes #0 = { null_pointer_is_valid sanitize_thread  nounwind }")
     assert r.Contains("@__olang_crash_handler(") and r.Contains(") #1 {")
+}
+
+test "a benchmark build's runtime counts allocations, and no other build's does" {
+    plain := try Text("x86_64", false, false)
+    counting := try Text("x86_64", false, false, bench = true)
+    assert plain.Contains("define i64 @__olang_bench_on()") and not plain.Contains("\nstore i64 1, ptr %on\n")
+    assert counting.Contains("\nstore i64 1, ptr %on\n") and counting.Contains("\nstore i64 %bna1, ptr @__olang_bench_allocs")
+    assert not plain.Contains("\nstore i64 %bna1") and plain.Contains("@syscall(i64 298") and not plain.Contains("@syscall(i64 241")
+    assert (try Text("aarch64", false, false)).Contains("@syscall(i64 241")
 }
 
 test "the attribute rewrite puts groups before the brace and linkonce_odr globals in comdats" {

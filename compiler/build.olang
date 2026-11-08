@@ -112,6 +112,7 @@ type Config struct() {
     Fuzz String& = ""   # -fuzz NAME: the test fuzzed, built with libFuzzer (B19); "" for none
     FuzzTime I64 = 0    # -fuzztime SECONDS: how long it runs, 0 until a failure is found or it is stopped
     Profile Bool = false    # olang profile: frame pointers, line tables and the runtime's sampler (B20)
+    Bench Bool = false      # test -bench: the runtime counting allocations, std/bench measuring (B19b)
     Listing Bool = false    # explain -asm/-ir: line tables, LLVM's optimization remarks kept beside each object (B11d)
     ListName String& = ""   # and the function it shows, the front end giving its code's symbols (Program.Named)
     Update Bool = false
@@ -173,7 +174,7 @@ fn (c Config&) paint(code String&, text String&) String {
 # ".race", ".debug", ".quick", ".san" - which modes an object or a binary was built for, for a reader (its hash says it
 # anyway)
 fn (c Config&) modeSuffix() String {
-    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "") $(".lib" if c.Library else "") $(".fuzz" if c.Fuzz != "" else "") $(".prof" if c.Profile else "") $(".listing" if c.Listing else "")
+    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "") $(".lib" if c.Library else "") $(".fuzz" if c.Fuzz != "" else "") $(".prof" if c.Profile else "") $(".listing" if c.Listing else "") $(".bench" if c.Bench else "")
 }
 
 # what every function of the build carries (B12): the target's CPU and features, and in a profile build (B20) a frame

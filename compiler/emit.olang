@@ -47,6 +47,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     # or -ir makes (B11d): line tables and each function's readable name in its debug information
     Prof Bool = false
     Lines Bool = false
+    Bench Bool = false              # B19b: a benchmark build - the runtime's bodies a module carries count allocations
     Library Bool = false            # a shared library (X14): its globals set as it loads, no main
     # each function's MIR verified before it is written (mir.Fn.Verify), one not well formed stubbed and reported:
     # in test builds, where the compiler is tested; any other build trusts lowering, the verifier's walk having been a
@@ -6653,7 +6654,7 @@ fn (e mut Emitter&) arrayOfE(r types.TypeId) types.TypeId {
 fn (e mut Emitter&) runtimeItems() {
     if e.rtRead { return }
     e.rtRead = true
-    text := try olrt.Text(e.Arch, e.San, false, e.Prof) catch olrt.Bad {
+    text := try olrt.Text(e.Arch, e.San, false, e.Prof, e.Bench) catch olrt.Bad {
         e.gap("the runtime's text (std/runtime/runtime.ll could not be filled in)")
         return
     }
