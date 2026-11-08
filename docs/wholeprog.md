@@ -30,7 +30,8 @@ a recommendation (sections 6-7). Section 8 is a bug found on the way. Section 9 
 - **One fact already leaks across the boundary, wrongly.** G42's `f.WritesGlobals` depends on whether the program
   hands an export fn to C, a whole-program fact, but the reuse record of the module reading it is keyed on that
   module and its imports. Built after another program in the same directory, a program prints `true` where a clean
-  build prints `false` (section 8). This is exactly the failure "facts with readers" is designed to prevent.
+  build prints `false` (section 8). This is exactly the failure "facts with readers" is designed to prevent. Fixed
+  2026-11-08 by keying the record on the facts read, with E31b's in-place calls, found the same way.
 - **Recommendation: facts with readers, delivered in three forms.** Keep objects per module and shared between
   programs. A whole-program fact reaches code (1) as a link-time constant where it chooses between two paths at a site
   (early freeing, generational types): objects stay program-independent and LTO folds the constant; (2) in the root's
@@ -58,7 +59,7 @@ calls this function with what, who stores what into this field - is either:
   (T32a), export fns' C entries and error numbering (X12, X14), and, as designed in fnvalues 4.4, twins and clones;
 - **not used for code at all**: early freeing outside the root's object (free.olang: "code in a module compiled on its
   own ... makes no regions"), genrefs' reclaiming in a non-generic structure's own module;
-- **used by accident**: G42's C facts (section 8).
+- **used by accident**: G42's C facts and E31b's in-place calls (section 8; now keyed).
 
 The scope pass, the field-binding inference (O23a, "a monotone whole-program fixed point") and inferred error sets
 (R1a) run over the whole program, but what each puts into a module's code follows from callees only: a caller's needs
@@ -122,7 +123,7 @@ function is given an export fn, or the program links C of its own and has one. T
 and coarse: once any export fn is given to qsort, a `getuid()` call in an unrelated module may "write globals". With
 the program's facts per C library (which export fns are given to which library's functions, `link "name"`), a call into
 library L could call back only what L was given. C compiled as IR (`import fast "fast.c"`) could be read directly: does
-its IR name an export fn or call through a pointer. Today the fact also reaches module code unkeyed (section 8).
+its IR name an export fn or call through a pointer. The fact reached module code unkeyed until section 8's fix.
 
 ### 2.4 Field sets (row 4, question 4)
 
@@ -298,7 +299,7 @@ and known for slow builds; Zig compiles one unit and is building incremental com
 6. **Do not compile the whole program as one unit.** It gives up object sharing and parallel compilation for gains LTO
    already gives in the default build.
 
-## 8. A bug found on the way: a G42 fact read from a reused record
+## 8. A bug found on the way: a G42 fact read from a reused record (fixed 2026-11-08)
 
 `effects.olang` decides whether C may call an export fn back (`cMayCallBack`) from the whole program. A G42 fact read
 in a body is a constant folded into that module's IR. But the module's reuse record (`build/rec`) is keyed on the
@@ -316,9 +317,22 @@ fn Quiet() Bool { return not work.WritesGlobals }
 `OLANG_CHECKREUSE=1` reports `reuse check: uid differs`. The stale part is the record (`build/rec`); objects are named
 by their IR and stay correct. Fix: the module's key holds the hash of
 the program-wide inputs `cMayCallBack` reads (built `-library`, an export fn given to C, own C linked with an export
-fn) whenever its lowering read a G42 fact - the first fact with readers. Not fixed here (this note changes no compiler
-code); the programs are in this note's text. A check case should pin it: two roots sharing a module, built in turn
-under `OLANG_CHECKREUSE`.
+fn) whenever its lowering read a G42 fact - the first fact with readers.
+
+**Fixed (2026-11-08, wt-reusekey), keyed by the values read rather than by the inputs.** Check's `ProgramReads(file)`
+is the one accessor: each G42 fact read in a file, by its place and the value read, and the calls through `x[i]` there
+refused the in-place form (E31b) - a second decision of the same kind, found by the search: `settleInPlace` refuses the
+in-place call where the method may write a global, which `cMayCallBack` decides too, and the call site's code differs
+(`RefMut` against a copy). A module's key holds its own file's reads, and the fact reads of every module its imports
+reach, since a fact's value reaches an importer's code through a baked global (K2) or a decided condition. Keying by the
+values is cleaner than by `cMayCallBack`'s inputs: it covers whatever a fact hangs on now or later (section 2.3's per
+library callbacks), a program whose inputs differ but whose facts read alike still reuses the record, and the key of a
+module that reads no fact is unchanged. It is section 4.2's reader record in its smallest form. Pinned by the checks
+scenario `reusefact` (`checks/fixtures/reusefact`: `back` then `quiet` built in one directory, then both again under
+`OLANG_CHECKREUSE`). Searched and clean: the other settled facts of the checker (views handed back, idle calls, unset
+locals, landings, drop order) read callees' bodies only, which are imports; early freeing's `handedToC` is used only in
+the root's object; the root-relative names of errors and functions (`ErrQualifier`) are right in both orders of an
+import cycle, under `OLANG_CHECKREUSE`.
 
 ## 9. Direction questions
 
