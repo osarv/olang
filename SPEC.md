@@ -6465,8 +6465,7 @@ holder**:
    one giving an export fn to a C function (X13), built as a library (X14), or linking C of its own that may name
    one (a `.c` import, a `link`, X9, X21) - C may call it from a thread of its own;
 4. nothing it holds, nor anything built where it lives - an instance a constructor builds and no reference takes
-   (O16) among it - is an instance whose destructor is still to run (O15): only a `Destroy()` (C9b) ends that early -
-   but a value held by value, ended where its holder lets go of it, is reclaimed right after its destructor runs, where
+   (O16) among it - is an instance whose destructor is still to run (O15) - but a value held by value, ended where its holder lets go of it, is reclaimed right after its destructor runs, where
    no value of its type (or of a type holding it) is ever registered with a scope (O16) and no test build may run its
    destructor where a failed check unwinds (S16) - its destructor then runs only where a holder lets go, each a call
    whose let-goes are judged there;
@@ -7239,7 +7238,7 @@ reference - has its destructors run exactly once, **where its holder lets go of 
   value there: a by-value parameter handed on at its last mention (T13b) - as an argument, once the call is made, after
   every argument is evaluated, so a later argument that leaves (an error passed on, a clause's `return`) leaves the
   value with it, ended as the block is left -, a whole variable returned (O26a) or made a constructor's field (a pun,
-  C4), a variable's `Destroy()` (C9b). A constructor's fields go into its instance at its
+  C4). A constructor's fields go into its instance at its
   end, and one failing part way lets go of those it built. A variable declared with no value and no zero value (D13d)
   holds one once it is assigned. A lambda capturing such a variable names it where it is held (D16c). A variable whose
   storage flows out of its block - returned as a reference or an `any`, held by a returned value's reference field,
@@ -7259,8 +7258,7 @@ reference - has its destructors run exactly once, **where its holder lets go of 
   stored (a variable's only while it holds one); a place reached through what a call gives is not stored over so;
 - a value a call gives that no place written for its value takes (`r := Res(1)`, an argument for a reference parameter,
   a call standing as a statement, a part read through `open(1).fd`) is held where the call lands (O16): registered with
-  that scope, and its destructors run when the scope closes (O1), in the reverse order of the registrations - unless a
-  `Destroy()` ran them before (C9b).
+  that scope, and its destructors run when the scope closes (O1), in the reverse order of the registrations.
 A block's variables let go before its scope closes - in the reverse order they were declared, among its deferred code,
 except that **a variable holding a reference to another is ended before it**: the held one's end waits until every
 variable of the block holding it has been ended, and runs then, so no destructor reads a value already ended - and the
@@ -7274,7 +7272,7 @@ number of such steps (`h` holding a reference to a collection that holds one to 
 value of the type stored can hold - through its parts and the references it reaches - a reference into a value of the
 other's type or a part of it (a function value, an `any` or a type variable can hold any). Two variables of a block each holding the other
 - a cycle of such references - is a compile-time error naming both: whichever were ended first, the other's destructor
-could read it; ending one before the other refers to it (a block of its own, a `Destroy()`) or holding one by reference
+could read it; ending one before the other refers to it (a block of its own) or holding one by reference
 removes it. A value **registered with a scope** (O16) - a call's value a `:=` names (`gs := Vec<Grip>()`) or a
 temporary given to a reference parameter - is ended as that scope closes, after the variables of its block, and values
 registered with one scope end the last registered first; so one that may hold (as above, through any number of steps) a
@@ -7305,8 +7303,7 @@ destructor values only by value, may be: its destructors are its holder's, run w
 `h`'s destructor still run as its block is left).
 
 Reclaiming storage early (O8d) never runs a destructor: storage holding an instance whose destructor is still to run is
-kept until the instance's scope closes, and the destructor runs there, in the order above. `Destroy()` (C9b) is the one
-way to run one sooner, and reclaims the storage with it.
+kept until the instance's scope closes, and the destructor runs there, in the order above.
 
 ## 9. Constructors and Destructors
 
@@ -7496,7 +7493,7 @@ something when its instance's scope closes, and an empty one releases nothing.
 
 **C9.** A destructor runs, for a given instance, exactly once: where its holder lets go of it (O15) - the scope it was
 registered in closing (O16), the block of the variable or parameter holding it by value left, a store over the place
-holding it - or earlier at a `Destroy()` of it (C9b), regardless of which function made it or which function happens to
+holding it, a collection's removal of it - regardless of which function made it or which function happens to
 be executing at that point. The scope being closed (C9a) is, for a by-value holder's, the block it is left from.
 
 **C9a.** A destructor runs as part of closing its instance's scope, and that scope is its own: what its body
@@ -7509,37 +7506,6 @@ the task's to build into as any scope a closure captured is, and what the task b
 nested blocks keep scopes of their own (O2). Each destructor is taken off its scope's list before it runs, so a check
 failing inside one while a test runs (S18) ends that destructor alone: the test's unwind closes the scope, and the
 scope's destructors not yet run still run, each once (C10).
-
-**C9b (Destroy).** On a variable `x` holding a value with a destructor by value (O15), `x.Destroy()` runs its
-destructors now - its holder letting go - and `x` holds no value after it: a mention of `x` after the call on any path
-(T13b's rule for a landing) is a compile-time error, but giving `x` a new value whole (`x = Res(2)`), after which `x`
-holds that one. A `Destroy()` in deferred code (`defer x.Destroy()`, `errdefer x.Destroy()`) ends only what `x` still
-holds when it runs - nothing where `x` handed its value on (returned it, T13b) - so the statements before it may mention
-`x`; deferred code that runs after it (registered before it, S19) may not. On a local `x` holding a reference to an instance of a struct type
-that declares a destructor, `x.Destroy()` runs that instance's destructor now - and the destructors of what was built where it lives, newest
-first, as its scope's close would - and reclaims its storage; nothing runs for it when its scope closes. It compiles
-only where the compiler proves `x` the only way left to reach the instance, by the analysis that frees early (O8d):
-- every value `x` is given was made for it: built where `x` is given it (a constructor call, or a call whose result is
-  built, O13), or moved out of a collection's place that held it alone (`Take`, `Pop`, `TakeAt`, `SwapTake`) - in a
-  collection whose values, as a place, keep nothing elsewhere (O8d's conditions but 4 and 5);
-- no reference to it, or to anything built where it lives, is stored anywhere else, captured, handed to a task, or given
-  to a call that may keep it - a callee storing it, returning something holding it, or passing it on to one that may,
-  read off the callee's body; a call through a function value, an `extern` or a body not known is taken to have kept it;
-- no other local holding it is used after the call;
-- `x` is not a parameter (its caller holds the instance too), a constructor's field, or a match's binding.
-
-`x` is not read after the call - later in its function, in deferred code registered before the call, or in a later turn
-of a loop around it that `x` is declared outside of - even after it is given another value: a `return`, an `error` or an
-`unreachable` after the call in its block ends that path, and so does a `break` or a `continue` of a loop whose body
-declares `x` (its next turn declares it again). `defer x.Destroy()` runs it where its block ends, so `x` may
-be used until then, and is not returned there; `errdefer x.Destroy()` runs it only where an error leaves the block
-(S19e), so `x` may also be returned there - on that way out nothing is returned. A generator's `yield` gives a value as
-a `return` does and ends no path (D18) - and an instance a generator holds across a `yield` is reached by it while the
-consumer runs, so no `Destroy()` there ends it. A value taken out of a collection is destroyed only in code compiled with
-the program it is in - its own module, or an instance (B3i, B3d). Where the proof fails it is a compile-time error
-naming what else may reach the instance. So every destructor runs exactly once, at its scope's close or at a proven
-`Destroy()`, and early destruction never leaves a reference to what it ended. A struct type declaring a destructor may
-not declare a method named `Destroy`.
 
 **C10.** A destructor never runs for a struct type that declares no `destruct` block, never runs more
 than once for the same instance, and never runs for storage no constructor call ever produced an
@@ -7575,7 +7541,7 @@ A destructor releases something at the moment its holder lets go, so every name 
 thing afterwards must be one that §8 can see. The value has one place (T13b: any other copy of it is a reference to that
 place), whose holder is the one that lets go; every reference to it is checked by §8 not to outlive that place - the
 by-value holder's block, or the scope it was registered in - and a variable's own mention after its value went on is
-an error (T13b, C9b). So nothing reaches a released resource, and exactly-once holds: one place, one letting go.
+an error (T13b). So nothing reaches a released resource, and exactly-once holds: one place, one letting go.
 
 ## 10. Compilation Model
 
@@ -8285,8 +8251,7 @@ the program's places are reported - fields of its types, and what its collection
 library's collections, whose storage goes with what holds them. SCOPE is the scope of what the place's expression
 starts from: a parameter's referent's, named by its type (`the Server's scope`), or a local's function's (`main's
 scope`). Places that free at once are counted, not listed; rows for one cause are written once. A collection whose
-values have destructors keeps what it lets go of (condition 4), and is counted as freeing at once where a `Destroy()`
-takes its values out (C9b). Then a line for D9h: how many returns hand a view back, and how many calls read one where it
+values have destructors keeps what it lets go of (condition 4). Then a line for D9h: how many returns hand a view back, and how many calls read one where it
 stands or copy it. After early freeing's rows, a row for each placement made for a view, a part or a capture (O27), in
 source order - `path:line:column: memory:
 'X' is built in SCOPE, a new one each time it is made, for a view of it kept here` at the view (`for a part of it kept
@@ -9459,7 +9424,7 @@ for a builder (D19) and `Box<I64>.Of.Allocates` for an instance of one over a ge
 its type arguments has no facts: an error naming that form) - and on a function's descriptor (G41, `f.Allocates` in a
 walk of `m.Functions` or `T.Methods`, each copy its own function's). Each is a `Bool`, true where the function or any
 body it may call - a destructor among them where a body registers one (a constructor of a type with one, a value of one
-given storage of its own, O16) or runs it (`x.Destroy()`, C9b; a holder letting go, O15, where it may still hold its
+given storage of its own, O16) or runs it (a holder letting go, O15, where it may still hold its
 value - on a way out of its block that a path reaches holding it, so a by-value parameter handed on on every path runs
 none at its end, while one an error may leave with before the hand-on does):
 

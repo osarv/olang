@@ -332,7 +332,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   destructor is held by value in a variable, parameter, result, field or payload, and its destructors run once where
   that holder lets go (block exit, callee's end unless handed on, a store over a place after the new value is made);
   parts last first. A call's value no place takes is held where the call lands (O16). A global and a generator's
-  parameter hold one by reference (C11); none is held across a `yield` or a `become`.
+  parameter hold one by reference (C11); none is held across a `yield` or a `become`. C9b is gone: the one-path early
+  end is written with a block or a helper function, `Destroy` is an ordinary method name, and `tools/destroy_migrate.olang`
+  (in `olang fix`) deletes `defer x.Destroy()` and a last-in-block `x.Destroy()` and lists the rest.
 - **Collections hold values with destructors by value (C11 relaxed, O15, M19d, the user's "Collections DECIDED"
   2026-11-03).** `Vec<File>`, `Map<String, File>`, `Deque<File>` are unique as their elements are and end them (a
   removal giving nothing ends what it removes; the holder letting go ends the live elements last first). `vacate` as a

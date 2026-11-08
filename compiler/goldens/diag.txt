@@ -237,7 +237,7 @@ b11near.olang:22:22: error[M19]: Box has no method 'Aera' - did you mean 'Area'?
 b11near.olang:23:16: error[T17]: Shape has no case 'Cricle' - did you mean 'Circle'?
    23 |     s := Shape.Cricle
       |                ^~~~~~
-b11near.olang:24:12: error: module std/io declares no 'Prinln' - did you mean 'Println'?
+b11near.olang:24:12: error[M9]: module std/io declares no 'Prinln' - did you mean 'Println'?
    24 |     try io.Prinln($n $s)
       |            ^~~~~~
 compilation failed with 6 errors
@@ -653,135 +653,6 @@ compilation failed with 2 errors
 c7destructinbody.olang:5:5: error[C7]: 'destruct' follows the constructor's body - close the body first: 'type T unique struct(...) { ... } destruct { ... }'
     5 |     destruct { assert n >= 0 }
       |     ^~~~~~~~
-compilation failed with 1 error
-=== c9bafter.olang
-c9bafter.olang:13:16: error[C9b]: 'd' is used after 'd.Destroy()' (line 12)
-   13 |     assert n + d.id == 8
-      |                ^
-c9bafter.olang:12:5: note: 'd.Destroy()' is here; give it a new local if it is needed again
-   12 |     d.Destroy()
-      |     ^~~~~~~~~~~
-compilation failed with 1 error
-=== c9bcallkeeps.olang
-c9bcallkeeps.olang:17:5: error[C9b]: 'b.Destroy()' needs 'b' to be the only way left to reach its instance
-   17 |     b.Destroy()
-      |     ^~~~~~~~~~~
-c9bcallkeeps.olang:16:5: note: it is handed here to what may keep it
-   16 |     keep(bx, b)
-      |     ^~~~~~~~~~~
-compilation failed with 1 error
-=== c9bcapture.olang
-c9bcapture.olang:12:5: error[C9b]: 'c.Destroy()' needs 'c' to be the only way left to reach its instance
-   12 |     c.Destroy()
-      |     ^~~~~~~~~~~
-c9bcapture.olang:11:10: note: it is handed here to what may keep it
-   11 |     g := fn() I64 { return c.id }
-      |          ^~~~~~~~~~~~~~~~~~~~~~~~
-compilation failed with 1 error
-=== c9bclash.olang
-c9bclash.olang:9:13: error[C9b]: the compiler supplies Destroy() for Res&, which declares a destructor - choose another name
-    9 | fn (r Res&) Destroy() { }
-      |             ^~~~~~~
-compilation failed with 1 error
-=== c9bdefault.olang
-c9bdefault.olang:13:5: error[C9b]: 'c.Destroy()' needs 'c' to be the only way left to reach its instance
-   13 |     c.Destroy()
-      |     ^~~~~~~~~~~
-c9bdefault.olang:12:5: note: its value may be a try's default, not built for it
-   12 |     c := try m.Take(1) catch default Spare
-      |     ^
-compilation failed with 1 error
-=== c9bdeferret.olang
-c9bdeferret.olang:11:11: error[C9b]: 'r.Destroy()' needs 'r' to be the only way left to reach its instance
-   11 |     defer r.Destroy()
-      |           ^~~~~~~~~~~
-c9bdeferret.olang:11:11: note: it is returned (line 12), and its Destroy() is deferred: it runs as the function leaves
-   11 |     defer r.Destroy()
-      |           ^~~~~~~~~~~
-compilation failed with 1 error
-=== c9bdestroyedafter.olang
-c9bdestroyedafter.olang:9:5: error[C9b]: 'c' is destructed here, and mentioned after - nothing reaches a value its Destroy() ended
-    9 |     c.Destroy()
-      |     ^
-compilation failed with 1 error
-=== c9berrdefer.olang
-c9berrdefer.olang:24:12: error[C9b]: 'r' is used after 'r.Destroy()' (line 21)
-   24 |     assert r.id == 4
-      |            ^
-c9berrdefer.olang:21:18: note: 'r.Destroy()' is here; give it a new local if it is needed again
-   21 |         errdefer r.Destroy()
-      |                  ^~~~~~~~~~~
-compilation failed with 1 error
-=== c9bfnvalue.olang
-c9bfnvalue.olang:13:5: error[C9b]: 'k.Destroy()' needs 'k' to be the only way left to reach its instance
-   13 |     k.Destroy()
-      |     ^~~~~~~~~~~
-c9bfnvalue.olang:12:5: note: it is handed here to what may keep it
-   12 |     f(k)
-      |     ^~~~
-compilation failed with 1 error
-=== c9bloop.olang
-c9bloop.olang:12:9: error[C9b]: 'x.Destroy()' runs again in the loop's next turn, on what it ended - declare 'x' inside the loop
-   12 |         x.Destroy()
-      |         ^~~~~~~~~~~
-compilation failed with 1 error
-=== c9bnodtor.olang
-c9bnodtor.olang:6:7: error[C9b]: Destroy() runs a destructor, and P declares none
-    6 |     p.Destroy()
-      |       ^~~~~~~
-compilation failed with 1 error
-=== c9bnotlocal.olang
-c9bnotlocal.olang:14:8: error[C9b]: Destroy() is called on a local - a variable of this function holding the instance
-   14 |     bx.r.Destroy()
-      |        ^
-compilation failed with 1 error
-=== c9bothermap.olang
-c9bothermap.olang:16:5: error[C9b]: 'c.Destroy()' needs 'c' to be the only way left to reach its instance
-   16 |     c.Destroy()
-      |     ^~~~~~~~~~~
-c9bothermap.olang:13:5: note: it is taken out of a collection whose values are not each held only there: its new value is existing storage: 'r'; give it new storage - a constructor call, '$...', 'Copy()'
-   13 |     m.Put(1, r)
-      |     ^~~~~~~~~~~
-compilation failed with 1 error
-=== c9bparam.olang
-c9bparam.olang:9:18: error[C9b]: 'r.Destroy()' needs 'r' to be the only way left to reach its instance
-    9 | fn end(r Res&) { r.Destroy() }
-      |                  ^~~~~~~~~~~
-c9bparam.olang:9:18: note: 'r' is a parameter: its caller holds the instance too
-    9 | fn end(r Res&) { r.Destroy() }
-      |                  ^~~~~~~~~~~
-compilation failed with 1 error
-=== c9bstored.olang
-c9bstored.olang:17:5: error[C9b]: 'a.Destroy()' needs 'a' to be the only way left to reach its instance
-   17 |     a.Destroy()
-      |     ^~~~~~~~~~~
-c9bstored.olang:16:5: note: a reference to it is stored here, in 'bx.r'
-   16 |     bx.r = a
-      |     ^~~~~~~~
-compilation failed with 1 error
-=== c9btask.olang
-c9btask.olang:15:5: error[C9b]: 't.Destroy()' needs 't' to be the only way left to reach its instance
-   15 |     t.Destroy()
-      |     ^~~~~~~~~~~
-c9btask.olang:13:9: note: it is handed to a task here, which may use it after the Destroy()
-   13 |         spawn show(t)
-      |         ^~~~~~~~~~~~~
-compilation failed with 1 error
-=== c9bview.olang
-c9bview.olang:15:5: error[C9b]: 'c.Destroy()' needs 'c' to be the only way left to reach its instance
-   15 |     c.Destroy()
-      |     ^~~~~~~~~~~
-c9bview.olang:16:12: note: it is taken out of a collection whose values are not each held only there: 'v' (line 13) is used here, after it lets go of it (line 15); read what you need from 'v' before
-   16 |     assert v.id == 3
-      |            ^
-compilation failed with 1 error
-=== c9byield.olang
-c9byield.olang:44:17: error[C9b]: 'r.Destroy()' needs 'r' to be the only way left to reach its instance
-   44 |                 r.Destroy()
-      |                 ^~~~~~~~~~~
-c9byield.olang:34:11: note: it is taken out of a collection whose values are not each held only there: 'r' (line 32) is used here, after 'yield 1' (line 33), where the generator's caller may let go of it; read what you need from 'r' before the yield
-   34 |     yield r.t.Len() * 1000 + I64(r.t[9]) + r.n
-      |           ^
 compilation failed with 1 error
 === callparammut.olang
 callparammut.olang:12:9: error[E12]: expected fn&(n Node&), found Writer
@@ -1210,6 +1081,17 @@ d19aexpected.olang:4:4: error[D19a]: 'gray' makes a Color its module declares an
     4 | fn gray(v U8) Color { return Color(v) }
       |    ^~~~
 compilation failed with 1 error
+=== d19bareowner.olang
+d19bareowner.olang:9:4: error[D19]: Bag is generic, and a builder's owner is written with its arguments - 'fn Bag<T>.mk(...)' for every instance, 'fn Bag<String&>.mk(...)' for one
+    9 | fn Bag.mk(n I64) Bag<String&> { return Bag(Vec<String&>()) }
+      |    ^~~
+d19bareowner.olang:11:4: error[D19a]: 'two' makes a Bag its module declares and takes none - declare it as the type's builder, 'fn Bag<I64>.two(...)', and call it 'Bag.two(...)'
+   11 | fn two() Bag<I64> { return Bag(Vec<I64>[1, 2]) }
+      |    ^~~
+d19bareowner.olang:17:19: error[D19]: Bag<F64> has no builder, case or member 'one'
+   17 |     b := Bag<F64>.one()
+      |                   ^~~
+compilation failed with 3 errors
 === d19nametaken.olang
 d19nametaken.olang:3:10: error[D19]: 'Dark' is already a case of Shade - name the builder otherwise
     3 | fn Shade.Dark() Shade { return Shade.Light }
@@ -1687,6 +1569,11 @@ e14bvalue.olang:6:17: error[E14b]: a call through a function value takes its arg
     6 |     x := f("h", port = 2)
       |                 ^~~~~~~~
 compilation failed with 1 error
+=== e14once.olang
+e14once.olang:9:10: error[E14]: expected 3 arguments, found 0
+    9 |     p := P()
+      |          ^~~
+compilation failed with 1 error
 === e15atryonlychecks.olang
 e15atryonlychecks.olang:3:37: error[R8]: nothing here can fail - write it without 'try'
     3 | fn add(a I32, b I32) I32 ? { return try a + b }
@@ -1732,6 +1619,14 @@ e19reference.olang:6:11: error[E19]: a literal makes the type before its '[', an
     6 |     xs := Node&[n]
       |           ^~~~~
 compilation failed with 1 error
+=== e19unique.olang
+e19unique.olang:10:10: error[E19, T13b]: a literal or comprehension of Vec<Tok> hands its FromIter a walk of references to the values, and Tok is unique - its values are never copied: make the Vec<Tok> and add each value by its own call (Push, Put)
+   10 |     v := Vec<Tok>[Tok(3), Tok(4)]
+      |          ^~~~~~~~
+e19unique.olang:11:10: error[E19, T13b]: a literal or comprehension of Map<I64, Tok> hands its FromIter a walk of references to the values, and MapEntry<I64, Tok> is unique - its values are never copied: make the Map<I64, Tok> and add each value by its own call (Push, Put)
+   11 |     m := Map<I64, Tok>[1: Tok(5)]
+      |          ^~~~~~~~~~~~~
+compilation failed with 2 errors
 === e23lenclash.olang
 e23lenclash.olang:4:14: error[E23, E33, E37, P9, T17e]: the compiler supplies Len for Nums& - choose another name
     4 | fn (n Nums&) Len() I64 { return 7 }
@@ -2731,6 +2626,17 @@ g23narrow.olang:4:14: error[T6b]: I64 does not flow into U8 - convert it, as U8(
     4 |     x U8 = a.Len()
       |              ^~~
 compilation failed with 1 error
+=== g29handedon.olang
+g29handedon.olang:15:12: error[S18c]: this assertion is false, evaluated while compiling: empty: 0
+   15 |     assert wrap(e) == 0
+      |            ^~~~
+g29handedon.olang:6:21: note: here
+    6 |     assert xs.Len() > 0, "empty: " $xs.Len()
+      |                     ^
+g29handedon.olang:10:36: note: instantiated here, with T = I64, xs.Len() = 0
+   10 | fn wrap<T>(xs Array<T>) T { return first(xs) }
+      |                                    ^~~~~
+compilation failed with 1 error
 === g42exportback.olang
 g42exportback.olang:18:8: error[S17a]: this top-level assert is false, decided while compiling
    18 | assert not sorted.WritesGlobals
@@ -2944,6 +2850,14 @@ k2abortsread.olang:6:5: note: here
     6 |     assert n < 2, "too big"
       |     ^~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
+=== keywordlocal.olang
+keywordlocal.olang:4:5: error[L9a]: 'keeps' is a keyword, not a name - a field named by one is reached only after '.', never by the name alone
+    4 |     keeps := 0
+      |     ^~~~~
+keywordlocal.olang:5:5: error[L9a]: 'keeps' is a keyword, not a name - a field named by one is reached only after '.', never by the name alone
+    5 |     keeps++
+      |     ^~~~~
+compilation failed with 2 errors
 === l10bdouble.olang
 l10bdouble.olang:4:11: error[L10b]: '_' in a number must stand between two digits
     4 |     x := 1__000
@@ -3302,6 +3216,23 @@ m19g10through.olang:13:12: note: 'l.toks' may grow here, in 'Push' - take the vi
    13 |     l.toks.Push(2)
       |            ^~~~
 compilation failed with 1 error
+=== m19g11column.olang
+m19g11column.olang:16:5: error[M19g]: 'xs' holds a view of 'v' taken before 'v' may have grown
+   16 |     xs[0] = 99
+      |     ^~
+m19g11column.olang:15:5: note: 'v' may grow here, in 'grow' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+   15 |     grow(v)
+      |     ^~~~
+m19g11column.olang:8:27: note: 'grow' may grow it here
+    8 |     for i in range 20 { v.Push(P(i, i)) }
+      |                           ^~~~
+m19g11column.olang:19:12: error[M19g]: 'ys' holds a view of 'v' taken before 'v' may have grown
+   19 |     assert ys[0] == 2
+      |            ^~
+m19g11column.olang:18:7: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+   18 |     v.Push(P(5, 5))
+      |       ^~~~
+compilation failed with 2 errors
 === m19g11lambda.olang
 m19g11lambda.olang:10:21: error[M19g]: 'f' holds a view of 'v' taken before 'v' may have grown
    10 |     try io.Println($f())
@@ -3490,6 +3421,14 @@ m6bprivatelen.olang:9:14: note: 'len' is Len's private spelling with Len's param
     9 | fn (n Node&) len() I32 { return 1 }
       |              ^~~
 compilation failed with 1 error
+=== m9builderold.olang
+m9builderold.olang:11:19: error[M9]: module std/net declares no 'ParseIP' - did you mean 'IP.Parse'?
+   11 |     ip := try net.ParseIP("127.0.0.1") catch net.Error default net.IP.Loopback4()
+      |                   ^~~~~~~
+m9builderold.olang:12:15: error[M9]: module std/time declares no 'DateOf' - did you mean 'Date.Of'?
+   12 |     d := time.DateOf(0)
+      |               ^~~~~~
+compilation failed with 2 errors
 === membershipneedstry.olang
 membershipneedstry.olang:12:10: error[E29]: Has can fail here - write 'try x in c'
    12 |     if 3 in r { }
@@ -3625,12 +3564,12 @@ o14returnglobal.olang:8:26: error[T25c]: a read-only reference cannot become wri
       |                          ^~~~~~
 compilation failed with 1 error
 === o15dropcycle.olang
-o15dropcycle.olang:13:5: error[O15]: 'a' and 'b' may each hold a reference to the other, and both have destructors to run - whichever is ended first, the other's destructor could read it: end one of them before the other refers to it (a block of its own, or its Destroy()), or hold one by reference
+o15dropcycle.olang:13:5: error[O15]: 'a' and 'b' may each hold a reference to the other, and both have destructors to run - whichever is ended first, the other's destructor could read it: end one of them before the other refers to it (a block of its own), or hold one by reference
    13 |     b Node = Node(2)
       |     ^
 compilation failed with 1 error
 === o15dropcyclestep.olang
-o15dropcyclestep.olang:18:5: error[O15]: 'h' and 'g' may each hold a reference to the other, and both have destructors to run - whichever is ended first, the other's destructor could read it: end one of them before the other refers to it (a block of its own, or its Destroy()), or hold one by reference
+o15dropcyclestep.olang:18:5: error[O15]: 'h' and 'g' may each hold a reference to the other, and both have destructors to run - whichever is ended first, the other's destructor could read it: end one of them before the other refers to it (a block of its own), or hold one by reference
    18 |     g Hold = Hold(2)
       |     ^
 compilation failed with 1 error
@@ -5342,6 +5281,11 @@ compilation failed with 1 error
 samevalue.olang:6:14: error[E10c]: 'is' tests for null and nothing else - compare with '=='
     6 |     assert a is b
       |              ^~
+compilation failed with 1 error
+=== satadd01outside.olang
+satadd01outside.olang:5:12: error[M19]: I16 has no method 'satAdd'
+    5 |     y := x.satAdd(4)
+      |            ^~~~~~
 compilation failed with 1 error
 === setatcompound.olang
 setatcompound.olang:10:10: error[E31]: Box& declares SetAt but not At, which reading x[i] calls

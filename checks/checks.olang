@@ -491,7 +491,7 @@ test "what a long-lived place lets go of is freed at once" { assert passed("earl
 fn earlyfree(r mut report&) ? Failed {
     dir := fresh("earlyfree")
     os.Run("cp checks/fixtures/earlyfree/* " $os.Quote(dir))
-    # C9b: conns and sockets hold values with destructors, freed by a Destroy() after each is taken out - sockets'
+    # C9b: conns and sockets hold values with destructors, held by value in a Map and freed by a removal - sockets'
     # descriptors too, under a limit of 64 open at once
     # mapvec (QF): a Map of Vecs whose values are replaced and removed
     # vecreassign (bulk review 6 F13): a Vec local and a Vec field given a new value each turn

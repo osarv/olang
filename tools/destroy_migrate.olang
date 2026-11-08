@@ -1,0 +1,140 @@
+# destroy_migrate - `x.Destroy()` removed (2026-11-08, SPEC.md O15; docs/fnvalues.md section 13). A value with a
+# destructor is ended where its holder lets go - a block's end, a store over a place, a collection's removal, a
+# by-value parameter's end - so the two mechanical forms are deleted:
+#
+#     defer x.Destroy()  /  errdefer x.Destroy()      a line by itself: O15 ends a by-value holder on every way out
+#     x.Destroy()                                      a line by itself, the last statement of the block declaring x
+#
+# Every other use is left and listed for a person (`by hand: FILE:LINE: ...`): the one-path early end needs a block of
+# its own around the part of the code the value lives in, or a helper function. Code only: comments and text are left
+# alone. Re-runnable: a deleted line is gone.
+#
+#     olang build tools/destroy_migrate.olang && build/tools_destroy_migrate FILE...    rewrites the files, naming each one changed
+
+import "std/os"
+import "std/io"
+import "srcmask"
+
+fn main() ? io.Error {
+    args := os.Args()
+    for k in range 1, args.Len() {
+        path := args[k]
+        text := try os.ReadFile(path) catch os.Error {
+            try io.PrintErrln("destroy_migrate: " $path ": cannot be read")
+            continue
+        }
+        left Vec<String&>
+        out := migrate(path, text, left)
+        for l in left { srcmask.Say("by hand: " $l) }
+        if out == text: continue
+        try os.WriteFile(path, out) catch os.Error { try io.PrintErrln("destroy_migrate: " $path ": cannot be written") }
+        try io.Println(path)
+    }
+}
+
+# the text without the lines that are only a Destroy() the holder's end does; what stays is added to left
+fn migrate(path String&, text String&, left mut Vec<String&>&) String {
+    mask := srcmask.Mask(text, false)
+    lines := text.Split("\n")
+    codes Vec<String&>
+    for i in range lines.Len() { codes.Push(codeOf(lines, mask, i)) }
+    drop := Array<Bool>(lines.Len(), false)
+    for i in range lines.Len() {
+        name := destroyed(codes[i])
+        if name == "" {
+            if codes[i].Contains(".Destroy(") { left.Push($path ":" $(i + 1) ": " $codes[i] " - Destroy() is gone: end the value where its holder lets go, in a block of its own or a helper function") }
+            continue
+        }
+        drop[i] = codes[i].StartsWith("defer ") or codes[i].StartsWith("errdefer ") or (lastInBlock(lines, codes, i) and declaredIn(lines, codes, i, name))
+        if not drop[i] { left.Push($path ":" $(i + 1) ": " $codes[i] " - Destroy() is gone: end the value where its holder lets go, in a block of its own or a helper function") }
+    }
+    b := StringBuilder()
+    for i in range lines.Len() {
+        if drop[i]: continue
+        b.Push(lines[i])
+        if i + 1 < lines.Len(): b.Push("\n")
+    }
+    return b.ToString()
+}
+
+# line i's code alone, its comments and literals taken out, trimmed
+fn codeOf(lines Array<String&>&, mask String&, i I64) String& {
+    at I64 = 0
+    for k in range i { at += lines[k].Len() + 1 }
+    b := StringBuilder()
+    for k in range lines[i].Len() {
+        if mask[at + k] == 'c': b.Push(lines[i][k:k + 1])
+    }
+    return srcmask.Strip(b.ToString())
+}
+
+# the variable a line `x.Destroy()`, `defer x.Destroy()` or `errdefer x.Destroy()` ends; "" for any other line
+fn destroyed(code String&) String {
+    rest := code
+    for p in Array<String&>["errdefer ", "defer "] {
+        if rest.StartsWith(p) {
+            rest = rest[p.Len():]
+            break
+        }
+    }
+    if not rest.EndsWith(".Destroy()") { return "" }
+    name := rest[:rest.Len() - 10]
+    if name.Len() == 0: return ""
+    for c in name {
+        if not srcmask.IsWord(c): return ""
+    }
+    return $name
+}
+
+fn indent(line String&) I64 {
+    n I64 = 0
+    for n < line.Len() and line[n] == ' ' { n++ }
+    return n
+}
+
+# whether line i is the last statement of its block: the next line with code is indented less
+fn lastInBlock(lines Array<String&>&, codes Vec<String&>&, i I64) Bool {
+    for j in range i + 1, lines.Len() {
+        if codes[j] == "": continue
+        return indent(lines[j]) < indent(lines[i])
+    }
+    return true
+}
+
+# whether the block line i is in declares name at its own level, before it
+fn declaredIn(lines Array<String&>&, codes Vec<String&>&, i I64, name String&) Bool {
+    n := indent(lines[i])
+    for j := i - 1, j >= 0, j-- {
+        if codes[j] == "": continue
+        if indent(lines[j]) < n: return false
+        if indent(lines[j]) > n or not codes[j].StartsWith($name " "): continue
+        after := codes[j][name.Len() + 1:]
+        if after.StartsWith(":=") or (after.Len() > 0 and after[0].IsUpper()): return true
+    }
+    return false
+}
+
+test migrate "a deferred Destroy and the last Destroy of the block declaring the variable are deleted" {
+    left Vec<String&>
+    assert migrate("f", "fn f() {\n    x := A()\n    defer x.Destroy()\n    use(x)\n}\n", left) == "fn f() {\n    x := A()\n    use(x)\n}\n"
+    assert migrate("f", "fn f() {\n    x := A()\n    errdefer x.Destroy()\n    use(x)\n}\n", left) == "fn f() {\n    x := A()\n    use(x)\n}\n"
+    assert migrate("f", "fn f() {\n    x Res = A()\n    use(x)\n    x.Destroy()\n}\n", left) == "fn f() {\n    x Res = A()\n    use(x)\n}\n"
+    assert left.Len() == 0
+    nested := "fn f() {\n    x := A()\n    if c {\n        use(x)\n        x.Destroy()\n    }\n}\n"
+    assert migrate("f", nested, left) == nested and left.Len() == 1
+}
+
+test migrate "every other use is left and listed for a person" {
+    left Vec<String&>
+    src := "fn f() {\n    x := A()\n    x.Destroy()\n    use()\n}\nfn g() {\n    x := A()\n    if c { x.Destroy() }\n}\n"
+    assert migrate("f.olang", src, left) == src
+    assert left.Len() == 2 and left[0].StartsWith("f.olang:3:") and left[1].StartsWith("f.olang:8:")
+}
+
+test migrate "a Destroy in a comment or a text is left alone, and the migration is idempotent" {
+    left Vec<String&>
+    src := "# x.Destroy() in a comment\ns := \"x.Destroy()\"\n"
+    assert migrate("f", src, left) == src and left.Len() == 0
+    once := migrate("f", "fn f() {\n    x := A()\n    defer x.Destroy()\n}\n", left)
+    assert migrate("f", once, left) == once
+}

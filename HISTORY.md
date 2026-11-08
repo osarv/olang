@@ -34728,3 +34728,27 @@ method's signature, a promise word on a line holding a function type (`fn&(`, `f
 method's name after its receiver clause, and as a field declared at a line's start in a file reading `.word`
 (L9a allows the field; the tool cannot see other files). Idempotent: a renamed name no longer is the word. The
 evaluator and `interpret` read the same tokens, so no semantics changed; the compile-time tests are the existing ones.
+
+## `x.Destroy()` removed (O15; 2026-11-08, wt-destroy, round 2 of docs/fnvalues.md)
+
+The user, 2026-11-08: "Yeah, remove dot destroy" (after "I think .destruct doesn't really do anything extra"). A value with
+a destructor is ended where its holder lets go (O15); with section 10 a destructor runs where its storage lives, and a
+`Destroy()` of a value whose storage was placed further out would contradict that unless the analysis proved it the only
+way left to reach the value. C9b is removed (its number left as a gap); what a program loses is the one-path early end
+(`if k > 5 { e.Destroy() }`), written instead with a block or a helper function around the part of the code the value
+lives in.
+
+Removed: the checker's `Destroy` method, `PrimOp.Destroy`, its landing machinery (`destroyedAt`, `destroyedHeld`,
+`Landings.Guarded`), lowering's Release for it, effects' destructor call, nine diagnostics; free.olang's destroy targets
+(`findDestroy`, `destroyStore`, `destroyMade`, `handedToTask`, `destroys`, `destroyAfter`, `destroyErrors`, the `dGoD`..
+walker state, `LDestroy`, `destroySole`/`destroyUse`, the writePlans pass for them) - a dtor place is now simply kept
+(RDtor), and `Decide` with no root returns at once. A method may be named `Destroy`. SPEC C9b and its citations (O15,
+O8d, B18, G42, T13b), PRINCIPLES.md principle 1.
+
+Migrated: std/net (`echoOnce`; the test's listener in a block; **decision (mine): `UDP.Listen` returns `UDP` by value,
+not `mut UDP&`**, so a `Map<I64, net.UDP>` can hold sockets by value, C11 relaxed), tests/drops and tests/shared (blocks
+and ends of functions; the order a test reads changed where a value is now ended later, e.g. `DestroyLog` 31 and 1425),
+the earlyfree fixtures (`Map<I64, Conn>`/`Map<I64, net.UDP>` by value with `Remove`), g42dtor, fuzz/scopegen (22-26 are
+plain blocks now; 27 is gone). The 18 `c9b*` cases went with the rule. `tools/destroy_migrate.olang` (text tool, last in
+`olang fix`'s table): deletes `defer`/`errdefer x.Destroy()` and a last-in-block `x.Destroy()` of a variable declared
+in that block; every other use is a `by hand:` row.

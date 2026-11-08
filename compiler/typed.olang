@@ -1317,9 +1317,6 @@ type PrimOp enum {
     # evaluator marks it and stops on a later use of it, or of a view of it (K1, M19g), naming where the program grew
     # the collection
     Retire
-    # "x.Destroy()" (C9b): args [a read of the local x] - the instance x names destructed now and its storage reclaimed,
-    # where early freeing's analysis (compiler/free.olang) proves x the only way left to reach it; lowered as a Release
-    Destroy
     # O15, T13b: args [a borrow of a place holding a value by value] - the destructors that value has to run run now, in
     # the closing block's scope (its own, then its parts', C9): a by-value holder letting go of what it holds - its
     # block's end, a store over it. Lowered as a call of the type's Drop helper
@@ -3704,13 +3701,10 @@ fn freshValue(x Expr&) Bool {
 # local - is its local's last mention on every path from it, in the order the body evaluates: Bad[k] where some path
 # mentions the local after read k. A branch's mentions are no other branch's; a loop running again reaches its body's
 # mentions before the read; a mention in deferred code, a task or a join's clauses runs after everything
-type Landings struct(Locals Array<I64>&, Starts Array<I64>&, Holds Array<Bool>&, Guarded Array<Bool>&) {
+type Landings struct(Locals Array<I64>&, Starts Array<I64>&, Holds Array<Bool>&) {
     Locals                                                       # each watched read's local
     Starts                                                       # ... and where it starts
     Holds                                                        # whether each local of the body may name another's storage
-    Guarded                                                      # each read a Destroy() of a holder its flag guards (O15):
-                                                                 # in deferred code it ends only what the holder still
-                                                                 # holds, so it is no mention for the reads before it
     Bad mut Array<Bool>& = Array<Bool>(Locals.Len(), false)
     Via mut Array<I64>& = Array<I64>(Locals.Len(), -1)           # the local whose mention after made it Bad (-1: itself)
     Lent mut Array<Bool>& = Array<Bool>(Locals.Len(), false)     # Bad because the same call also mentions it
@@ -3824,7 +3818,6 @@ fn (w mut Landings&) mention(id LocalId, at I64, read Bool) {
         w.via = was
     }
     if w.later > 0 {
-        if read and w.guardedAt(l, at): return
         if read and w.deferredLanding(l, at) {
             w.lastL.Push(l)
             w.lastAt.Push(at)
@@ -3940,13 +3933,6 @@ fn (w mut Landings&) keptBy(i0 I64) {
             w.holderOf.Push(w.saidL[j])
         }
     }
-}
-
-fn (w Landings&) guardedAt(l I64, at I64) Bool {
-    for k in range w.Locals.Len() {
-        if w.Locals[k] == l and w.Starts[k] == at and w.Guarded[k]: return true
-    }
-    return false
 }
 
 # local l assigned whole: a new value, so what its earlier reads handed on or ended is no longer what it holds

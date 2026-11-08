@@ -4608,20 +4608,6 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         }
         return mir.Operand.None
     }
-    if op == typed.PrimOp.Destroy {
-        # C9b: the region the local's instance was built in released - its destructors run, newest first, and its
-        # storage reclaimed (std/runtime's __olang_region_release) - and the local left null; free.olang made every
-        # value it can hold in a region of its own, or refused the call
-        match args[0] {
-            case typed.Expr.Read(_, _, p, _) {
-                q := ln.mk(ln.place(p))
-                if ln.dead { return mir.Operand.None }
-                ln.emit(mir.Stmt.Release(sp, q))
-            }
-            case _ { }
-        }
-        return mir.Operand.None
-    }
     if op == typed.PrimOp.LaneLen {
         # E39: two lanes' lengths, the first once they agree - a guaranteed check, once per lane operation
         a := ln.val(args[0])
