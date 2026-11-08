@@ -365,3 +365,207 @@ contract states no scope relation") and D17f stand: a declaration states no prom
   into lives (2.2.1). So the run-time invariants I1 and I2 (docs/scope-model.md) follow from O10c's argument unchanged.
 - *Nothing at run time.* Promises change no code and no representation; a program's meaning is the same with every
   promise removed (it is then refused or accepted, never different).
+
+## 4. Following function values into calls
+
+### 4.1 The rule, as SPEC would state it
+
+**T22c (function values followed into calls).** A value whose functions are followed (T22a: every one of them known)
+given as an argument for a parameter whose type is a function type - written (`fn&`, `fn?&`, a declared function type,
+T21b) or a type variable bound to one (G16) - is **followed into the callee**: the callee is judged as though the
+parameter held those very functions. There, a call through the parameter is judged as the direct calls it is (O10c,
+O17, O18b), a `return` of it gives those functions back to the caller (O13c), an argument of it for another such
+parameter follows them on, a lambda capturing it (D16c) is judged with them, and every other place it reaches is a
+boundary judged by that place's type (T22a, T22b). A function value a lambda captures is followed into the lambda's
+body the same way. What a call through such a parameter requires is what the functions' bodies require, read as their
+**pattern** - their obligations, what they keep and build, what their results carry, in the positions of the
+parameter's type - so a callee is judged once for each pattern its arguments bring, never once per function, and its
+one judgment serves every argument its parameter's type covers (T22b), as before. Where following stops - a callee
+already judged for an implementation-defined number of patterns, a pattern nested deeper than an implementation-defined
+depth, an argument some of whose functions are not known - the argument is a boundary, judged by the parameter's
+written type. Nothing is written for any of it, and nothing changes at run time but which compiled code a call reaches:
+a program means the same whichever functions are followed.
+
+**B2c** gains a sentence: "A function a call gives one known function for a parameter may be compiled once more for it,
+its calls through the parameter made directly - unobservable but in speed and size."
+
+### 4.2 What is followed, and what stays dynamic
+
+Followed (a callee, a lambda or a caller sees the functions):
+
+- an argument for a parameter of a function type, written or a type variable's (`keep<F>(f F) F`): the parameter holds
+  the argument's records in the callee's judgment;
+- a capture of a function value: the lambda's body is judged with the capture holding the records it had where the
+  lambda was made (D16c's copy, never repointed) - sec8's decision 15 (a capture is a boundary) reversed;
+- a `return` of a followed parameter, of a local holding one, of a conditional of them: the callee's summary records a
+  **pass-through** ("what was given for parameter k", `summary.ResFn`), and the caller resolves it to the argument's
+  records - so `f := keep(link)` holds `link`, with no twin at all (sec8 question 1);
+- `os.RunOnStack`'s runtime call (`__olang_run_on_stack(bytes, f)`): followed as the call `f()` it is, as the evaluator
+  already runs it (K1).
+
+Dynamic (a boundary, judged by the place's written type, T22b): a store into a field, an element, a payload, a global
+or a constructor's field - so `v.Push(f)` is followed into `Push`, whose store into its buffer is the boundary, judged
+by the element type; a value an array, a tuple or an enum case is made of; a task's function, argument or result; an
+`any`; a `yield`; a pattern's binding; an argument for an `extern fn`; a `return` in a cycle of calls; a value some of
+whose functions are not known (a parameter's in a judgment that does not follow it, a field's, an element's) - its
+known records judged at the boundary, as today.
+
+So TakeWhile's `keep`, stored into `TakeWhileIter.pred` by its constructor, and every generator's walk, stored into
+`Generator.next`, stay dynamic - question 1 asks whether a function a constructor fixes in a field and nothing assigns
+again should be followed with the instance, as O23a's per-instance bindings are.
+
+### 4.3 Twins: the key, the judging, the errors, the limits
+
+- **When one is made.** At a call of a body (`Callee.Body`) the scope pass reads, for each parameter of a function
+  type, the records of its argument (`recsOf`, as a call through a value does today). Where they are all known and some
+  record's pattern is not covered by the parameter's type (T22b), the call is judged against the twin keyed by the body
+  and the pattern set of each such argument; arguments whose patterns are covered take no part in the key (judged by
+  their type, as today). Where every argument is covered, the call is today's.
+- **The key.** The body, and for each followed input (a parameter, or a lambda's capture) the sorted canonical texts of
+  its records' patterns. Twins are interned per program (`twins: Map<String, I64>`), so a pattern brought by any number of
+  functions, through any number of calls, is judged once.
+- **A symbolic record.** Inside a twin, a followed input holds records of a pattern, not of a body: `fnRec` gains a
+  pattern in place of `Body` (sec8's `recRels` reads the pattern's relations, `Keeps`, `ResFn` instead of a summary's).
+  A pattern's capture positions become scope variables of the twin (a new `typed.ScopeVar.Follow(input, k)`), bound at
+  each call to the twin by the argument records' capture terms (sec8's `recBeta`), passed as hidden scope arguments
+  where the twin builds there - the scope twins of sec8 round 4.
+- **Judging.** Twins are nodes of the call graph beside bodies; Tarjan's components run over them, callees first, and a
+  component is judged quietly to its fixed point and once more reporting, as bodies are. A twin's summary is what a call
+  routed to it discharges (O10c), lends by (O17) and lands by (O18c). The plan of the calling body records which twin
+  each call reaches (`Plan.Twin(site)`) for lowering, interpret and free.olang.
+- **Errors.** A twin's errors are said at the call that first asked for it, as an instance's are (G16b): "this argument
+  'link' is kept in a field of 'Wrapper' whose type says nothing of that - write 'keeps b in a' after its signature",
+  with a note at the store in the callee. An error its ordinary judgment also gives is not said again (one cause, one
+  error, as sec8's C4).
+- **Recursion.** A twin calling its own body with the parameter handed on unchanged has its own key: a component of one
+  node, judged to its fixed point like a recursive body. A call handing on a new lambda wrapping the parameter brings
+  that lambda's pattern - its positions are its type's and its captures', so patterns are finitely many, though they may
+  nest.
+- **Limits.** At most 16 twins of one body, patterns nested at most 4 deep (a pattern of a function a captured function
+  captured ...), and the program's twins at most 2% of its bodies (and at least 256). Past one, the argument is a
+  boundary: where its pattern is not covered the error names the limit and the word that would let the parameter's type
+  hold it - as G17 bounds generic instances, with an error, never a guess.
+
+### 4.4 Code: twins with plans of their own, and clones where they pay
+
+**A twin's code.** Where a twin's plan is the ordinary plan - every placement and scope argument the same, no hidden
+scope variable of its own passed or built into - calls routed to it reach the ordinary code. Otherwise lowering reads the
+typed body with the twin's plan and emit compiles it on its own, its name the body's with the key's canonical text
+spelled injectively as G16a spells instances; its follow variables are hidden scope parameters (O4b). Twins are made in
+the root object only, as instances are (B3d).
+
+**Clones.** A clone is lowering's choice, made in the root object, in `-O3` and `-quick` builds (not `-debug`), where:
+
+1. a call - of a body or a twin - gives a function parameter `k` a value whose functions are exactly one known body
+   `L`: a named function, a lambda (its environment still passed as the value's second word), a type's `Call`;
+2. the callee calls through `k` inside a loop, or hands `k` on, unchanged, to a callee that does (followed at most 4
+   deep), and is not a body LLVM inlines whole anyway (an estimate: under ~32 MIR instructions with one call site); and
+3. the limits allow it: at most 8 clones of one callee, and the clones' MIR at most 3% of the program's, the deepest
+   loops first.
+
+In the clone every call through `k` is a direct call of `L`'s code with the value's environment; a call handing `k` on
+unchanged to a callee cloned for `L` goes to that clone (so a sort's whole chain - `sortMergeRuns`,
+`sortMergeForward`, `sortInsert` - is cloned for one comparison); a call of itself handing `k` on unchanged goes to
+itself. LLVM then inlines `L` where it is small. A clone is named by the callee's symbol and `L`'s. It computes exactly
+what the call through the value computes (the same body with the same environment): unobservable. Calls through a value
+whose type is `pure` may also carry LLVM's memory attributes (argument memory and the runtime's only) - measured, kept
+only where they move a row (11, decision 8).
+
+### 4.5 Effects through parameters, with no instances
+
+effects.olang's `Facts` gain:
+
+- `Calls I64`: by parameter, whether the body calls through the function value given for it - or hands it to code that
+  may (a callee that calls through its own parameter, the `links` effects keeps for `Writes` already; a call through
+  another value, which may call what it is given);
+- for a lambda, the same of each captured function value;
+- per-fact bounds in place of the one `Unknown`: a call through a value nothing is known of contributes its type's bound
+  - every fact true but those its words make false - so `noalloc` alone still says "may block".
+
+A body's own call through a value counts, by what the value is:
+
+| the value | its facts |
+|---|---|
+| a named function, a lambda, an adapter written there; a local whose versions (`typed.Versions`) hold only such; a call's result where its callee's every return gives one such function | those bodies' facts, as calls (`curCalls`) |
+| a parameter, or a capture | its `Calls` bit |
+| anything else (a field, an element, an `any`, another call's result) | its type's bound (`pure` included: writes only through the call's `mut` arguments, mapped through `links`) |
+
+At a call of a body, each `Calls` bit is resolved by the argument given for it: by its functions' facts where they are
+known as above, by the caller's own bit where it is the caller's parameter or capture, and otherwise by its type's
+bound. A function's facts read through its name (G42: `Apply.Allocates`) resolve its bits by its parameters' written
+types. The least fixed point over the call graph's components is unchanged. effects.olang reads the records it needs
+itself (syntactic ones and `typed.Versions`), so it keeps running after check and before the scope pass, as G42's
+facts need (they are read back into check).
+
+**Effect words checked.** Where check fits a function value to a function type with effect words or `pure` (E12), it
+records the place; once the facts settle, each place is judged: the value's facts, as the table above gives them, must
+be within the type's bound - else T22b's error, with a note at what breaks it ("its call of 'io.Println' allocates").
+The effects pass runs in a build only where something asks: an explain or a doc line, a fact read (G42), or a function
+type with an effect word or `pure` - so a program that writes no word pays nothing new.
+
+### 4.6 Lending, early freeing, D9h, E31b and M19g
+
+Every analysis that gave up at a call through a value now reads it in three ways - by the bodies where the value's
+functions are followed, by the composition of 4.5 where it is a parameter, and by the type's words otherwise:
+
+- **Lending (O17).** A call through followed functions lends by their bodies (since sec8's round 3), through a twin's
+  followed parameter by the pattern's `Keeps`, `Stores`, `Puts`, and through an unfollowed value by its type's bound: a
+  `keeps b in a` makes `a` stored into and `b` kept; without one it keeps nothing beyond the result (T22's sentence of
+  O17, kept).
+- **Early freeing (O8d, free.olang).** (1) A call through a value whose records the scope pass followed - its per-site
+  records, written into the plan for free.olang - is judged as direct calls to each record's body (the union of their
+  `resFrom`, `parStored`, `parEsc`, `lets`); (2) a call through an unfollowed value keeps what its type's `keeps` words
+  name (an escape of the kept argument into the named place, `storeAs`) and, where its type is `pure`, lets go only
+  through its `mut` arguments' places (`go` for those rather than `goAll`); otherwise today's; (3) a body's calls
+  through a function parameter compose as effects' do - `letsVia` and `escVia` bits per function parameter, resolved at
+  each call by the argument. A twin with a plan of its own is analysed as a body of its own; one sharing the ordinary
+  plan shares its analysis.
+- **D9h (lower.olang's quiet statements).** "A value reaching a function value" counts as a possible write today; now a
+  call through followed functions counts what their bodies write, and one whose type is `pure` writes only through its
+  `mut` arguments (judged by type, as D9h judges a direct call). So a view read across a call of a `pure` callback given
+  nothing writable is left uncopied.
+- **E31b (check.olang's in-place calls).** An argument, or an element's field, holding a function value no longer counts
+  as a way to reach the collection where its type is `pure` (it writes only through its `mut` parameters, given by the
+  method's body, which E31b already reads) or where it is a function or lambda written at the call whose body reaches no
+  collection of the type (the attempts read bodies already).
+- **M19g (views.olang).** A call through a `pure` value grows only what its `mut` arguments reach; a call through
+  followed functions grows what their bodies grow.
+
+### 4.7 Why it is sound
+
+- *Patterns are complete.* Everything scope.olang's `call` reads of a callee for a direct call - the relations it
+  discharges, where it forces a result or an argument to land (O18b, O18c), where it may build, what it keeps, stores and
+  puts (O17), what its result carries (`ResBind`, `ResFn`), whether it hands back existing storage - is in the pattern,
+  so a call through a symbolic record of pattern P is judged exactly as a direct call of any body of pattern P, and
+  O10c's argument applies unchanged. A `-debug` compiler checks it: each call a twin judges through a followed
+  parameter is judged again against each actual body the pattern stood for, and the two must agree.
+- *Following is complete.* A followed parameter's value reaches in the callee only calls through it (judged by the
+  pattern), returns (resolved by the caller to the argument's records), arguments for other function parameters
+  (followed again), captures (followed into the lambda), locals (versions, O25i), and every other place - a boundary,
+  judged by the place's type (T22b). Function values are immutable: nothing writes through one (T21) and a capture's copy
+  is never repointed (D16c), so the records a parameter holds at the call are the records it holds wherever it reaches.
+- *Twins only accept more.* The ordinary judgment is the twin with every input judged by its type; a call goes to a twin
+  only where an argument's pattern is not covered by its parameter's type - exactly where T22a refuses today. For every
+  program accepted today no twin is made and its plans are unchanged (round 4's gate: compiler/'s and bench's IR
+  byte-identical before clones).
+- *Limits fall back to today's rule*, which is sound, and they say so.
+- *Clones and composition change no meaning.* A clone runs the same body with the same environment, its code pointer
+  known; effects' and free.olang's composition takes, for each call through a parameter, every function the argument
+  may be (followed records, else the type's bound, itself checked where values came to be held) - an over-approximation
+  of what runs.
+- *Nothing at run time* but which compiled code a call reaches; `interpret` follows the twins' plans (section 7).
+
+### 4.8 Cost
+
+- **Scope pass.** No twin on any program accepted today. The new work is, at each call passing a function value, its
+  records' patterns (the projection of summaries already computed, interned once) and the coverage test T22a makes today
+  at that very argument: ~200 calls in compiler/. Expected within the noise of the scope phase (~1.35 s on compiler/);
+  measured with `OLANG_TIMES`, twins and patterns counted in `OLANG_SCOPESTATS`; gate +1%.
+- **Effects.** A bit set per body and a resolution per call passing a function value; and it runs only where something
+  asks (4.5), so a build of a program writing no word is unchanged.
+- **Clones.** compiler/ passes ~91 lambdas and its named functions to ~81 calls of the walks (`Count`, `Some`, `Map`,
+  `Fold`, `Sort` ...) and to ~14 function parameters of its own; most reach small walks LLVM inlines whole (no clone), so
+  the clones that pay are the sorts and the folds over loops - an estimated few dozen of a few hundred instructions
+  each, about +0.5% IR. Gate: the self-build's time and peak memory within +2%; bench within noise but its new row, a
+  sort with a lambda against the same sort written with `<` (from the C measurement, ~1.4x faster with the clone).
+- **Twins of programs refused today.** A whole judging of the body per twin, bounded by the limits.
