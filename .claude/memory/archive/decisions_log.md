@@ -3699,13 +3699,15 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   the `return` form; stack constant; a `-memory` row). Built in round R5.
 
 
-## 2026-11-08 evening, the user on docs/wholeprog.md and docs/genrefs.md
+## 2026-11-08 evening, the user on docs/wholeprog.md
 
-The user: "If we are going to do it eventually, just do it now, because we are building the language now and we don't
-want to do too many refactorings and full verifies. On all of the ones you recommended, yes, do yes." So every
-recommendation of both lists is decided as recommended, and wholeprog question 5 (an incremental front end) is yes now
-rather than later. genrefs: 1 `weak` yes; 2 accepted; 3 the count of owning places (b), now; 4 superseded by
-wholeprog (facts with readers); 5 yes; 6 `std/pool` yes. The entries as they stood:
+The user asked why question 5 was "not now", then: "If we are going to do it eventually, just do it now, because we
+are building the language now and we don't want to do too many refactorings and full verifies. On all of the ones you
+recommended, yes, do yes." Then, correcting my wider reading: "I meant only on the whole program compilation ... the
+four ones you recommended yes on, and then I asked you on the fifth one ... Build it with a lot of testing though,
+because ... one small bug there can be disastrous. Not necessarily that you're gonna do a lot of verifies now, but you
+want the testing suites to cover it really." So questions 1-4 as recommended and 5 yes, now, covered by the suite. The
+entry as it stood:
 
 - docs/wholeprog.md's direction questions (asked 2026-11-08 evening; the user wants "compile one module at a time"
   rescoped). Defaults: today's rule. 1. replace the per-module rule with facts with readers (link-time constants, the
@@ -3713,10 +3715,3 @@ wholeprog (facts with readers); 5 yes; 6 `std/pool` yes. The entries as they sto
   constants, with genrefs' questions 4-5 - yes, after fnvalues round 6; 3. a precompiled library's defining module
   decides its fields' scope sets - yes, into B3i now; 4. field sets of two scopes (refusals question 4) - allow, after
   round 6 or when real code hits it; 5. an incremental front end - not now.
-- docs/genrefs.md's direction questions (asked 2026-11-08; the note's section 14; the user: "We will settle this in a
-  couple of hours" - no agent depending on it starts before). My proposal after discussing it: settle the language now
-  - 1. `weak` written on back links, yes; 2. a weak link does not keep its node and reads null once it is freed,
-  accept - built as genrefs round 1 beside a one-holder rule (early freeing of nodes only ever held by one owning
-  link, compile time only, the user's idea); the reclaiming of nodes with back links later, after fnvalues round 6.
-  3. holder record (a) bit or (b) count of owning places - (b), may wait; 4. per module - default; 5. early freeing
-  in every module through link-time constants - yes, later; 6. `std/pool` of generational handles - yes.

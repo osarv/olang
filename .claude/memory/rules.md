@@ -455,10 +455,10 @@ not just an implementation gap). A "does this generalize / is this handled" ques
 grounds to just fix it, not merely report it and wait.
 
 ## Build what we will build anyway now (the user, 2026-11-08)
-"If we are going to do it eventually, just do it now, because we are building the language now and we don't want to do
-too many refactorings and full verifies." **How to apply:** a recommendation of mine of the form "yes, later" or
-"not now, revisit when" for something we will clearly do is built now, ordered so refactorings and full verifies are
-shared; "later" only where it truly depends on something unbuilt.
+Said of the incremental front end: "If we are going to do it eventually, just do it now, because we are building the
+language now and we don't want to do too many refactorings and full verifies." **How to apply:** where I would
+recommend "yes, later" for something we will clearly build, say so and offer it now; the user decides per question
+(their "yes" that evening covered only the question asked - never widen an answer to other lists).
 
 ## Optimizations are mine to decide
 The user, 2026-10-27 (asked whether to fuse comprehensions over lane expressions): "yes of course, all these kinda
@@ -516,11 +516,12 @@ the link, LTO), as generic instances do. A design that makes an edit in one modu
 and goes to the user. Every design brief says so. Not absolute (the user, the same day: "if this constraint is too
 much to actually make this memory safe and effective, then I'm willing to give it up as well"): where whole-program
 facts make memory safety or freeing clearly better, both variants are measured and the choice goes to the user.
-**Rescoped (the user, 2026-11-08 evening: yes to docs/wholeprog.md's recommendations, and "If we are going to do it
-eventually, just do it now").** Facts with readers replace "one module at a time": the front end may use whole-program
+**Rescoped (the user, 2026-11-08 evening: yes to docs/wholeprog.md's questions 1-5, question 5 with "If we are going to
+do it eventually, just do it now").** Facts with readers replace "one module at a time": the front end may use whole-program
 facts; each fact records the modules that read it, delivered as a link-time constant, in the root's object, or in a
 module's object keyed by the facts it read; an edit recompiles exactly what read a changed fact; the front end itself
-becomes incremental on the same records. At a precompiled library's boundary the defining module decides. The
+becomes incremental on the same records, built with tests that make the suite cover it ("one small
+bug there can be disastrous ... you want the testing suites to cover it really"). At a precompiled library's boundary the defining module decides. The
 paragraphs above stand where they do not conflict.
 
 ## Models for the compiler/ refactor

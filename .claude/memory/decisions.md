@@ -24,3 +24,12 @@ Open questions:
 - The licence: the user, 2026-11-07, "we'll still push it into the future" (postponed again). Default: no licence file. Ask when publishing. Context: archive/decisions_log.md, the entry "2026-11-07, the user on four answers".
 - The refusal audit's question 5 (asked 2026-11-08; docs/refusals.md, "Questions"): `any` copyable through a Copy in
   its table. Default: refused. Recommendation: not now. (Question 4 moved into docs/wholeprog.md's question 4.)
+- docs/genrefs.md's direction questions (asked 2026-11-08; the note's section 14; the user: "We will settle this in a
+  couple of hours" - no agent depending on it starts before). My proposal after discussing it: settle the language now
+  - 1. `weak` written on back links, yes; 2. a weak link does not keep its node and reads null once it is freed,
+  accept - built as genrefs round 1 beside a one-holder rule (early freeing of nodes only ever held by one owning
+  link, compile time only, the user's idea); the reclaiming of nodes with back links later, after fnvalues round 6.
+  3. holder record (a) bit or (b) count of owning places - (b), may wait; 4. per module - default; 5. early freeing
+  in every module through link-time constants - yes, later; 6. `std/pool` of generational handles - yes.
+  Since docs/wholeprog.md was decided (facts with readers, 2026-11-08 evening), questions 3-5 and the one-holder rule
+  may use whole-program facts; std/pool depends on nothing. Re-raise when the user returns to it.
