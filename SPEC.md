@@ -7904,6 +7904,15 @@ build whose module has the same inputs takes that IR as the module's and does no
 checked, as every module is, but nothing of it is lowered or emitted, and the instantiations its object names are made
 in the root's as before (B3d). What is built is the same program either way.
 
+A module whose object is made apart from the program that uses it - by `compile`, or kept as a library of objects - is
+a **precompiled module**, and at its boundary **the defining module decides**. Every decision its object carries is made
+from that module and the inputs above alone: where the storage its code builds is placed and what that code frees early,
+and which scopes a field it declares may be given. What a program using it reads of it is what an importer reads of any
+module (its declarations and the facts of its own code). Nothing a program using it does changes what its object does:
+where code of the program would need one of its decisions to be otherwise - a store giving a field the module declares
+storage of a scope the module's own code does not give that field - the error is in the program's code, at that store,
+naming the field, never in the precompiled module.
+
 **B3j.** An object is named by a hash of what it is made from (B3), so builds in different directories that make the
 same object make it under the same name. With the environment variable `OLANG_OBJECTS` naming a directory, `build`,
 `compile` and `test` take an object they need from that directory when it holds one of that name, instead of compiling
