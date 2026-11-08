@@ -1,0 +1,217 @@
+# pool - Pool<T>: a slotmap. Values are stored in slots and named by a Handle holding the slot's index and its
+# generation; "h := p.Add(v)" gives the handle, "try p.Get(h)" reads the value, and "p.Remove(h)" frees the slot, which
+# the next Add reuses under a new generation - so a handle kept past its value's removal is STALE, and every access
+# through it fails with Error.Stale instead of reading what took its place. Records linking to one another hold handles
+# rather than references; memory stays flat (a removed slot is reused at once) and every access is a named call that
+# can fail. Imported with `import "std/pool"`; the types are pool.Pool<T> and pool.Handle.
+#
+# A Pool is a VALUE, as Vec and Set are: a copy ("q := p", a field, an argument) is a pool of its own holding the same
+# elements under the same handles, and sharing one is written "&" ("p mut pool.Pool<T>&"). Handles are plain values,
+# valid in a copy as in the pool they came from. A Ref or RefMut is good until the pool grows (an Add), as a Vec's is
+# (M19g). A removed slot keeps its old value until an Add overwrites it; nothing reads it meanwhile.
+
+# what a Pool's operations fail with: an access or removal through a handle whose value was removed (or never was this
+# pool's)
+type Error error {
+    Stale
+}
+
+# names a value in a pool: its slot and the generation the slot had when the value was added
+type Handle struct(slot I64, gen I64) {
+    slot, gen
+}
+
+type Pool<T> struct() {
+    vals Vec<T>                                  # the slots' values; a free slot holds its last value, unread
+    gens Vec<I64>                                # each slot's generation, raised by every removal
+    live Vec<Bool>
+    free Vec<I64>                                # free slots, the last freed reused first
+}
+
+# a Pool holding every value an iterator gives, added in order (D19) - what a Pool's literal and comprehension call
+# (E19, E27): "pool.Pool<I64>[1, 2, 3]". Fails with what the iterator fails with
+fn Pool<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) Pool<T> ? E {
+    p := Pool<T>()
+    for x in try it { p.Add(x) }
+    return p
+}
+
+# the number of live values
+fn (p Pool<T>&) Len() I64 { return p.vals.Len() - p.free.Len() }
+
+# stores x and gives the handle naming it; a freed slot is reused, under its new generation
+fn (p mut Pool<T>&) Add(x T) Handle {
+    if p.free.Len() > 0 {
+        i := p.free.Pop()!
+        p.vals[i] = x
+        p.live[i] = true
+        return Handle(i, p.gens[i])
+    }
+    p.vals.Push(x)
+    p.gens.Push(0)
+    p.live.Push(true)
+    return Handle(p.vals.Len() - 1, 0)
+}
+
+# whether h names a live value
+fn (p Pool<T>&) Has(h Handle) Bool {
+    return h.slot >= 0 and h.slot < p.vals.Len() and p.live[h.slot] and p.gens[h.slot] == h.gen
+}
+
+# the value h names - a copy
+fn (p Pool<T>&) Get(h Handle) T ? Error.Stale {
+    if not p.Has(h) { error Error.Stale }
+    return p.vals[h.slot]
+}
+
+# the value h names where the pool holds it, read with no copy made. Good until the pool grows
+fn (p Pool<T>&) Ref(h Handle) T& ? Error.Stale {
+    if not p.Has(h) { error Error.Stale }
+    return p.vals.Ref(h.slot)
+}
+
+# ...writable, to change in place - "p.RefMut(h).Push(x)" for a Pool of Vecs
+fn (p mut Pool<T>&) RefMut(h Handle) mut T& ? Error.Stale {
+    if not p.Has(h) { error Error.Stale }
+    return p.vals.RefMut(h.slot)
+}
+
+# replaces the value h names
+fn (p mut Pool<T>&) Set(h Handle, x T) ? Error.Stale {
+    if not p.Has(h) { error Error.Stale }
+    p.vals[h.slot] = x
+}
+
+# frees h's slot at once, for the next Add; every handle to it is stale from now on. Removing a stale handle fails
+fn (p mut Pool<T>&) Remove(h Handle) ? Error.Stale {
+    if not p.Has(h) { error Error.Stale }
+    p.live[h.slot] = false
+    p.gens[h.slot]++
+    p.free.Push(h.slot)
+}
+
+# removes h's value and gives it
+fn (p mut Pool<T>&) Take(h Handle) T ? Error.Stale {
+    x := try p.Get(h)
+    try p.Remove(h)
+    return x
+}
+
+# removes every value, every handle going stale; the slots are kept for the next Adds
+fn (p mut Pool<T>&) Clear() {
+    p.free.Clear()
+    for i in range p.vals.Len() {
+        if p.live[i] { p.gens[i]++ }
+        p.live[i] = false
+        p.free.Push(p.vals.Len() - 1 - i)         # slot 0 is reused first
+    }
+}
+
+# the live values in slot order: "for x in p" walks them
+fn (p Pool<T>&) Iter() Iterator<T> {
+    for i in range p.vals.Len() {
+        if p.live[i]: yield p.vals[i]
+    }
+}
+
+# the handles of the live values in slot order: "for h in p.Handles()"
+fn (p Pool<T>&) Handles() Iterator<Handle> {
+    for i in range p.vals.Len() {
+        if p.live[i]: yield Handle(i, p.gens[i])
+    }
+}
+
+if TestBuild {
+
+type Rec struct(a I64, b I64) {
+    a
+    b
+}
+
+test Pool.Add "values are added, read and changed through handles" {
+    p := Pool<I64>()
+    a := p.Add(10)
+    b := p.Add(20)
+    assert p.Len() == 2 and p.Get(a)! == 10 and p.Get(b)! == 20 and p.Has(a)
+    p.Set(a, 11)!
+    assert p.Get(a)! == 11 and p.Get(b)! == 20
+    sum := 0
+    for x in p { sum += x }
+    assert sum == 31
+}
+
+test Pool.Remove "a removed handle is stale, also once its slot is reused" {
+    p := Pool<I64>()
+    a := p.Add(1)
+    b := p.Add(2)
+    p.Remove(a)!
+    assert p.Len() == 1 and not p.Has(a)
+    assert (try p.Get(a) catch Error.Stale default -1) == -1
+    removed := true
+    try p.Remove(a) catch Error.Stale { removed = false }
+    assert not removed
+    c := p.Add(3)                                  # takes a's slot
+    assert p.Get(c)! == 3 and p.Get(b)! == 2 and p.Len() == 2
+    stale := false
+    try p.Get(a) catch Error.Stale { stale = true }
+    assert stale and a != c
+    try p.Set(a, 9) catch Error.Stale { stale = false }
+    assert not stale and p.Get(c)! == 3
+}
+
+test Pool.RefMut "a Vec in a pool is changed in place" {
+    p := Pool<Vec<I64>>()
+    h := p.Add(Vec<I64>())
+    p.RefMut(h)!.Push(5)
+    p.RefMut(h)!.Push(6)
+    assert p.Ref(h)!.Len() == 2 and p.Get(h)!.Len() == 2 and p.Ref(h)!.At(1) == 6
+    q := p                                         # a pool of its own
+    q.RefMut(h)!.Push(7)
+    assert q.Get(h)!.Len() == 3 and p.Get(h)!.Len() == 2
+    p.Remove(h)!
+    gone := false
+    try p.Ref(h) catch Error.Stale { gone = true }
+    assert gone
+}
+
+test Pool.Take "records are taken out and walked with their handles" {
+    p := Pool<Rec>()
+    hs := Vec<Handle>()
+    for i in range 5 { hs.Push(p.Add(Rec(i, i * i))) }
+    t := p.Take(hs[2])!
+    assert t.a == 2 and t.b == 4 and p.Len() == 4
+    n := 0
+    for h in p.Handles() { n += p.Get(h)!.a }
+    assert n == 0 + 1 + 3 + 4
+    p.Clear()
+    assert p.Len() == 0 and not p.Has(hs[0])
+    g := p.Add(Rec(7, 7))
+    assert p.Len() == 1 and not p.Has(hs[0]) and p.Has(g)
+}
+
+test Pool.FromIter "a Pool is made from a literal" {
+    p := Pool<I64>[3, 4, 5]
+    assert p.Len() == 3
+    total := 0
+    for x in p { total += x }
+    assert total == 12
+}
+
+# decided while compiling (S17a, K2)
+fn poolSum() I64 {
+    p := Pool<I64>()
+    a := p.Add(4)
+    b := p.Add(5)
+    p.Remove(a)!
+    c := p.Add(6)
+    return p.Get(b)! + p.Get(c)! + (1 if not p.Has(a) else 0)
+}
+
+assert poolSum() == 12
+baked I64 = comptime poolSum()
+
+test Pool "a pool computed while compiling agrees with the run time" {
+    assert baked == 12 and poolSum() == baked
+}
+
+}

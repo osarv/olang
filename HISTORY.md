@@ -35001,3 +35001,14 @@ base commit's compiler/ and bench/ sources and the check's program built by the 
 Lowerer's result scope is, the checker's, so a build's memory is the sum over its functions rather than the largest.
 Freeing it per function would need the lowering's state apart from what it holds writably (the Lowerer, the type
 table) - a restructuring of lower.olang, not done here.
+
+## std/pool: a slotmap of generational handles (docs/genrefs.md section 11 and round 8; 2026-11-08, wt-pool2)
+
+`Pool<T>` stores values in slots named by a `Handle` (slot index, generation). `Add` reuses a freed slot, `Remove`
+frees its slot at once and raises its generation, so a handle kept past the removal is stale: `Get`, `Ref`, `RefMut`,
+`Set`, `Remove` and `Take` through it fail with `pool.Error.Stale` (the error is `Error`, not `PoolError`, by the
+naming rule that std names never repeat the module's). Built on `Vec`s (values, generations, liveness, free slots);
+a Pool is a value with the Vec's copy. `for x in p` and `p.Handles()` are generators over the live slots; `FromIter`
+makes `pool.Pool<I64>[1, 2]`. A removed slot keeps its last value until an Add overwrites it (a Vec cannot hold a
+hole), unread. Tests name their targets and one is decided while compiling (a top-level assert and a baked global);
+`test -interpret` agrees. The earlier attempt's trap: test `RefMut` with a Vec, not an I64 (T24: no reference to a number).

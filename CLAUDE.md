@@ -752,7 +752,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (errors at `Flush`); `io.Lines` reads lines.
 - **Libraries:** `std/os`, `std/json` (immutable recursive enum tree), `std/http` (over curl), `std/csv`, `std/stats`,
   `std/rand`, `std/time`, `std/filepath`, `std/cancel`, `std/chan`, `std/ffi` (libffi), `std/sync` (`Mutex<T>` reached
-  only in `m.With(fn(v mut T&) { })`, `RWLock`, `Once`), `std/net` (blocking TCP and UDP), `std/set`, `std/deque`,
+  only in `m.With(fn(v mut T&) { })`, `RWLock`, `Once`), `std/net` (blocking TCP and UDP), `std/set`, `std/deque`, `std/pool` (a slotmap of generational handles: `Add`, `try p.Get(h)`/`Ref`/`RefMut`/`Remove` failing with `pool.Error.Stale`; the user 2026-11-08),
   `std/heap`, `std/utf8`, `std/base64`, `std/hex`, `std/sha256`, `std/crc32`, `std/flags`, `std/regex` (RE2's syntax,
   linear time) - survey items 7-8, the user: "Yes all of that", 2026-10-24; names mine, by the user's naming rule.
   Prelude iterator adapters `Take Skip Enumerate Zip Chain Sum Min Max MinBy MaxBy`.
