@@ -953,7 +953,7 @@ fn reusefact(r mut report&) ? Failed {
 
 # B3i, docs/wholeprog.md 10.3 (T2): an edit of every kind an input of the program can take, each built in the previous
 # build's directory and in a clean one and compared - the objects by their IR's hashes, the binary's output, -memory,
-# explain of the edited item and every diagnostic byte for byte; the modules of the program's own lowered again are
+# explain of the edited item and every diagnostic byte for byte (not how many facts were read); the modules of the program's own lowered again are
 # exactly those named (an extra one is a speed bug, a missing one a stale object); and the edit undone lowers nothing,
 # its first build's records taken again. A round adding a whole-program fact adds its edit kind here
 test "an edit of every kind built incrementally is the program built clean, lowering only what read it" { assert passed("incremental") }
@@ -1014,15 +1014,15 @@ fn incEdit(r mut report&, dir String&, e Edit&) ? Failed {
     incBuild(dir, "inc", e.flags, "here", e.file, e.item)
     os.Run("cd " $os.Quote(dir) " && rm -rf clean && mkdir clean && cp inc/*.olang inc/*.c inc/*.txt clean/")
     incBuild(dir, "clean", e.flags, "there", e.file, e.item)
-    try r.expect(sh(dir, "grep -v '^olang: \\(reused\\|lowered\\) ' here | sort > a && grep -v '^olang: \\(reused\\|lowered\\) ' " $
+    try r.expect(sh(dir, "grep -v '^olang: \\(reused\\|lowered\\|facts\\) ' here | sort > a && grep -v '^olang: \\(reused\\|lowered\\|facts\\) ' " $
                     "there | sort > b && cmp -s a b") == 0, $"the build " $what " is not the clean one's (here, there)", dir)
     sh(dir, "grep '^olang: lowered ' here | grep -v 'lowered std/' | grep -v 'lowered <' | cut -d' ' -f3 | sort | tr '\\n' ' ' > low")
     low := (try os.ReadFile($dir "/low") catch default "").Trim()
     try r.expect(low == e.lowered, $"the modules lowered " $what ": expected '" $e.lowered "', not '" $low "'", dir)
     try r.expect(sh($dir "/inc", "rm -f *.olang *.c *.txt && cp ../orig/* .") == 0, $"undoing " $what, dir)
     try r.expect(incBuild(dir, "inc", "", "undone", "main.olang", "main") == 0, $"the build undoing " $what, dir)
-    try r.expect(sh(dir, "! grep -q '^olang: lowered ' undone && grep -v '^olang: reused ' undone > a && grep -v '^olang: \\(reused\\|" $
-                    "lowered\\) ' base > b && cmp -s a b") == 0, $"the build undoing " $what " lowered something or differs (undone, base)", dir)
+    try r.expect(sh(dir, "! grep -q '^olang: lowered ' undone && grep -v '^olang: \\(reused\\|facts\\) ' undone > a && grep -v " $
+                    "'^olang: \\(reused\\|lowered\\|facts\\) ' base > b && cmp -s a b") == 0, $"the build undoing " $what " lowered something or differs (undone, base)", dir)
 }
 
 # B3i, docs/wholeprog.md 10.3 (T3): every run case built under OLANG_CHECKREUSE in one shared directory, in two orders
@@ -2359,7 +2359,7 @@ test "the differential fuzzer finds nothing on its fixed seeds" { assert passed(
 
 fn fuzz(r mut report&) ? Failed {
     dir := fresh("fuzz")
-    os.Run("cp fuzz/fuzz.olang fuzz/gen.olang fuzz/scopegen.olang " $os.Quote(dir))
+    os.Run("cp fuzz/fuzz.olang fuzz/gen.olang fuzz/scopegen.olang fuzz/editgen.olang " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -debug fuzz.olang > out.txt 2>&1") == 0, "fuzz did not build", dir)
     # the compiler it tests is this one, handed on: fuzz's own default is under the directory it runs in
     try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug run 1 2 2 12 > out.txt 2>&1") == 0, "fuzz found something (build/checks/fuzz/build/fz/run*/found)", dir)

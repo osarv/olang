@@ -27,6 +27,11 @@
 #                                                   out the shapes of use-after-frees known when it was written
 #     fuzz scopeshow SEED [SCENARIOS [ONLY]]      prints a scope program - or only its scenario ONLY (-1: all)
 #
+# The edit fuzzer (B3i, editgen.olang) builds a program of several modules of scopegen's scenarios, edits it step by
+# step and builds each step in the directory of the builds before it and in a clean one: they must agree.
+#
+#     fuzz edit START COUNT [STEPS [MODULES]]   seeds START.., each edited STEPS times (8) on MODULES modules (3)
+#
 # Its early-free mode (docs/memory.md 3.6) runs scopegen's FreeProgram instead - scenarios replacing and removing in
 # long-lived places, views kept across the let-goes and stored elsewhere, resources taken out of a Map
 # (O15) - built -d -s -memory, and interpreted in the
@@ -42,6 +47,7 @@ import "std/os"
 import "std/chan"
 import "gen"
 import "scopegen"
+import "editgen"
 
 Olang mut String& = ""
 Root mut String& = ""
@@ -92,6 +98,10 @@ fn main() ? {
         try scopeMain(args)
         return
     }
+    if args[1] == "edit" and args.Len() >= 4 {
+        try editMain(args)
+        return
+    }
     if args[1] == "freeshow" {
         seed := try args[2].ParseInt() catch default 1
         if args.Len() > 3 { Scenarios = try args[3].ParseInt() catch default 12 }
@@ -139,7 +149,7 @@ fn endRun() String& {
 
 fn usage() ? io.Error {
     try io.PrintErr(("usage: fuzz run START COUNT [JOBS [CASES]] | fuzz show SEED [CASES [ONLY]]"
-                     " | fuzz scope START COUNT [JOBS [SCENARIOS [avoid]]] | fuzz scopeshow SEED [SCENARIOS [ONLY [avoid]]]"
+                     " | fuzz edit START COUNT [STEPS [MODULES]] | fuzz scope START COUNT [JOBS [SCENARIOS [avoid]]] | fuzz scopeshow SEED [SCENARIOS [ONLY [avoid]]]"
                      " | fuzz free START COUNT [JOBS [SCENARIOS]] | fuzz freeshow SEED [SCENARIOS]\n"))
     os.Exit(1)
 }
@@ -273,6 +283,26 @@ fn finding(dir String&, seed I64, ci I64, what String&, detail String&) ? io.Err
     if detail.Len() > 0 {
         try os.WriteFile($to "/detail" $ci ".txt", detail) catch { }
     }
+}
+
+# ---- the edit fuzzer (B3i, editgen.olang) ----
+
+# seeds START.. each edited STEPS times on a program of MODULES modules, one seed after another in this run's directory
+fn editMain(args Array<String&>&) ? io.Error {
+    start := try args[2].ParseInt() catch default 1
+    count := try args[3].ParseInt() catch default 1
+    steps := try args[4].ParseInt() catch default 8 if args.Len() > 4 else 8
+    mods := try args[5].ParseInt() catch default 3 if args.Len() > 5 else 3
+    try newRun()
+    for seed in range start, start + count {
+        found := try editgen.Seed(Olang, Run, seed, steps, mods) catch os.Error default "cannot write the program"
+        Ran++
+        if found == "": continue
+        Found++
+        try io.Print($"fuzz edit: seed " $seed ": " $found "\n")
+    }
+    try io.Print($"fuzz edit: " $Ran " programs edited " $steps " times each, " $Found " findings" $endRun() "\n")
+    if Found > 0 { os.Exit(1) }
 }
 
 # ---- the scope fuzzer ----
