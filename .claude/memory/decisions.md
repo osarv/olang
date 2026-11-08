@@ -1065,3 +1065,8 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   generation, `try pool.Get(h)` fails on a stale handle - a named call, no hidden cost; nodes freed and reused at once)
   for structures that churn, plain references for those that live and die together. Rec (1)+(3), counting dropped.
   ASKED.
+- docs/fnvalues.md MERGED 2026-11-08 (design only; 12-round build plan; 27 decisions of the agent's, section 15).
+  ASKED from its section 16: (1) follow functions a constructor fixes in a field (Generator.next, the lazy walks,
+  Heap's `less`) with the instance - rec yes; default dynamic; (2) promise words on a trait's methods, so calls
+  through an `any` rely on them - rec yes, with (1)'s round; default none. QCR (2) (counting) still ASKED. The build
+  waits for the user's go.
