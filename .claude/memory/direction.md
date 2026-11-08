@@ -48,7 +48,8 @@ oagent's papers/. The L2-regression (delta-rule) update the user mentions comes 
 slot for a second; they will spec and buy GPUs and RAM eventually. No paid cloud GPUs (HF Jobs and the like cost).
 The machine (2026-11-08): RTX 4060 (8 GB, compute capability 8.9, Ada: tensor cores with FP8/BF16/INT8; the GPU
 backend targets sm_89 first), Ryzen 5 7600 (Zen 4, 6 cores/12 threads, AVX-512 with VNNI and BF16), 7.4 GiB visible
-in WSL (WSL's default share of the host's RAM).
+in WSL of 16 GB (2x8 GB Kingston DDR5-5200 at 4800, 2 of 4 slots), ASUS TUF GAMING B650-E WIFI, one 500 GB SSD.
+The full specs are oagent's machine/specs.txt (the user reruns the command in it when hardware changes).
 
 **oann and the matrix library (2026-10-09):** "Oann btw is very incomplete. It should be written in Olang as well. I want
 the matrix library to be efficient. It should work as the base for all operations and operands." oann gets rewritten
