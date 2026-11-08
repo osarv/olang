@@ -59,6 +59,12 @@ odd-width paths (`tests/intsweep.olang`); `tools/precedence_migrate.olang` if pr
 | `checks/cases/NAME.olang` | `# check: fail TEXT` names the diagnostic |
 | `compiler/README.md`, `checks/README.md` | counts and descriptions |
 | code that reworded a message | grep `checks/cases` and `checks/checks.olang` for the old text |
+| a refusal that becomes accepted | its `checks/cases` become `# check: run` cases (saying what they were), `make rungold` |
+
+A `-memory` row (B18) is said in one place and read in two: early freeing's in `compiler/free.olang`, a placement's
+(O27, its destructor sentence, O15) in `scope.olang`'s `Placements`, which `olang.olang`'s `-memory` and
+`session.olang`'s `Placed` (the language server's hint) both print. A change to one: SPEC B18's quoted text, the
+`checks` scenarios `memoryplaced` and the earlyfree fixtures that grep it.
 
 ## A command-line mode or option
 

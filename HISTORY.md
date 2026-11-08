@@ -34752,3 +34752,47 @@ the earlyfree fixtures (`Map<I64, Conn>`/`Map<I64, net.UDP>` by value with `Remo
 plain blocks now; 27 is gone). The 18 `c9b*` cases went with the rule. `tools/destroy_migrate.olang` (text tool, last in
 `olang fix`'s table): deletes `defer`/`errdefer x.Destroy()` and a last-in-block `x.Destroy()` of a variable declared
 in that block; every other use is a `by hand:` row.
+
+## A value's destructor runs where its storage lives (O27, O15, B18; 2026-11-08, wt-dtorstore, round 3 of docs/fnvalues.md)
+
+The user, 2026-11-08, on docs/sec8.md question 2: a destructor runs "when the value that has the destructor leaves any
+scope. So if we place it in a list, then that list also has to go ... it's about scope closure." Until now O27 placed
+storage where a view of it was kept for every value but one holding a destructor still to run, which it refused
+(`ViewKeptDestructor`, `PartKeptDestructor`; o27destructorview, o27destructorcall - bulk review 8's F3 - and
+o27destructorgen): `f := File(p); keep.Push(f.name[0:1])` in a loop had to keep a copy. Now one rule: a value's
+destructors run where its storage lives. Storage holding a destructor value is built where the view is kept like any
+other, and the value goes with it - registered with that scope as its block is left (O16) and ended as the scope
+closes, which is bulk review 7's F4 (`escapedHome`, a whole value flowing out) extended to storage built longer for a
+view, a part or a capture.
+
+What changed: scope.olang alone in the passes - the six places that refused a lift for a local that `mayHoldDtor`
+(`proposeStorage`, the part lift in `liftLocal`, `convertsStorage`, a closure's captures, a borrowed call's argument in
+`proposeView`, and the `dtorCall` guards in `proposeIn` and `liftAtCall`) lift it as any other. `dtorCall`, `dtorLocal`
+and `dtorInit` became `viewCall`, `borrowedLocal`, `viewInit`: they now only name the local an O27 error is about,
+for any local (the diagnostics' goldens did not move but for the three cases). Lowering's `escapedHome` and
+free.olang's `escapedHolder` needed nothing: a holder whose plan stores it outside its block was already registered
+where it lives, whatever moved it, and Part C lets go of no leaf at its block end. `interpret` places by the same plans
+and runs registered destructors as their scope closes, so it agrees with the build on every new case;
+compile-time evaluation still refuses a value registered with a scope (K2c), so the tests' expectations are run-time
+and `interpret`'s (a top-level assert of `viewsKept()` is refused with K2c's message, recorded beside the test).
+`-memory` (B18) ends such a placement's row with "- its destructor runs as that scope closes, not at the end of its
+turn", which the language server's hint repeats (both read `Placements`).
+
+Decisions (mine): the row's sentence is appended to the existing placement row rather than a row of its own (one row
+per placement, the note at the declaration already naming the copy); the generalised `viewCall` keeps naming the local
+for any O27 error through a call's result, not only a destructor-holding one. A by-value holder (`f Res = Res(...)`)
+held across a `yield` is still S20's error even when a view moves its storage: its registration happens as its block
+is left, which a walk stopped at the yield never reaches (`f := Res(...)`, a call's landing, is registered where it is
+built and so runs on a stopped walk too - checked with a consumer that breaks).
+
+Tests: the three o27destructor cases are run cases (`-debug -sanitize`, read back after a churn; the views print, then
+every destructor last made first as the outer scope closes; the call case's destructor writes -99 into the array the
+views read, which they never see); o27destructorfiles keeps views of open files' names, reads each descriptor back
+through `/proc/self/fd` while the views are in use and finds them all closed once the function keeping them returned;
+the `memoryplaced` scenario's fixture `dtor.olang` checks the row and the run's order; tests/drops.olang's `Viewed`
+test, through a callee handing back a field too.
+
+Found on the way: early freeing's `-memory` row for such a holder ("'g' keeps what it lets go of until main's scope
+closes") can put its note at another local's store in the same loop (`keep.Push(f.name)` named for `g`, whose view is
+pushed on the next line); the row itself is right (the holder's storage is kept), only the note's position is off. Not
+fixed here (free.olang's notes, outside this round); reported.

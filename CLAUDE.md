@@ -599,8 +599,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   assignment, holding the value's exact scope; each read is judged by the versions reaching it.
 - **Storage kept for a view (O27 as placement, the user's QCR (1a) 2026-11-03).** A view of storage (slice, borrow of a
   part, what a callee hands back of an argument, closure) kept where that storage does not live has the storage built
-  where the view is kept. A value holding a destructor whose storage is placed this way has its destructor run where
-  that storage's scope closes (the user, 2026-11-08). `-memory` lists each placement (B18).
+  where the view is kept. A value holding a destructor whose storage is placed this way goes with it, its destructor
+  run where that storage's scope closes (O15; the user, 2026-11-08; built 2026-11-08, ViewKeptDestructor and
+  PartKeptDestructor gone). `-memory` lists each placement (B18), saying where such a destructor runs.
 - **Obligations (O10b/O10c).** Inferred from the body, held at every call to the callee's whole body; temporaries built
   where the obligation says (O18b/O18c).
 - **A returned local lives where the result goes (O26a).** A value or reference local the function returns, or that
