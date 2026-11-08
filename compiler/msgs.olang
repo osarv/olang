@@ -782,6 +782,8 @@ type Diag enum {
     ValueBeyondType
     LambdaKeepsOuter
     FuncTypeBeyond
+    EffectBeyond
+    NoteEffect
     PromiseMisplaced
     PromiseNoParam
     PromiseTwice
@@ -1865,6 +1867,9 @@ fn ValueBeyondType(subject String&, does String&, place String&, word String&) r
 # 2.2.1: a lambda keeping an argument in a capture that outlives the lambda, held where "keeps x" is all the type says
 fn LambdaKeepsOuter(text String&) r.Msg { return r.Msg(Diag.LambdaKeepsOuter, "T22b", "this lambda keeps '" $text "' in what it captured from a scope that outlives where the lambda lives, and 'keeps " $text "' says only that '" $text "' outlives the lambda - capture from one scope, or hold the lambda in a local and call it there") }
 # a function value whose functions are not followed, held as a type promising more than its own (T22b)
+# a function value whose functions are followed doing what an effect word of the type it is held as denies (T22b)
+fn EffectBeyond(what String&, does String&, want String&, word String&) r.Msg { return r.Msg(Diag.EffectBeyond, "T22b", $what " may " $does ", and '" $want "', the type it is held as here, promises '" $word "' - give a function that does not, or hold it as a type without '" $word "'") }
+fn NoteEffect(text String&) r.Msg { return r.Msg(Diag.NoteEffect, "", text) }
 fn FuncTypeBeyond(have String&, want String&, word String&) r.Msg { return r.Msg(Diag.FuncTypeBeyond, "T22b", "a value of type '" $have "' may do what '" $want "' does not say ('" $word "'), and which functions it holds is not known here - write '" $word "' after the signature of the type it is held as, or give a function directly") }
 
 # T21c: a promise's misuses

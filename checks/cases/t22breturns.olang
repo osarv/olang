@@ -1,0 +1,12 @@
+# check: fail error[T22b]: this lambda may end the program, and 'fn&(x I64) I64 returns', the type it is held as here, promises 'returns'
+# also: note: it may end the program here
+# T22b: returns rules out an ending the program writes - an assert not decided true while compiling is one
+fn Run(f fn&(x I64) I64 returns, x I64) I64 { return f(x) }
+
+fn main() {
+    k := Run(fn(x I64) I64 {
+        assert x > 0, "positive"
+        return x
+    }, 3)
+    assert k == 3
+}

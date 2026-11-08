@@ -1,0 +1,15 @@
+# check: fail error[T22b]: this lambda may write through what it was not given writably, and 'fn&(x I64) I64 pure', the type it is held as here, promises 'pure'
+# also: note: it may write through what it was not given writably here
+# T22b: pure writes only through its mut parameters - a store through a captured reference is none
+type N struct(v I64) { v }
+
+fn Run(f fn&(x I64) I64 pure, x I64) I64 { return f(x) }
+
+fn main() {
+    n mut N& = N(1)
+    k := Run(fn(x I64) I64 {
+        n.v = x
+        return x
+    }, 3)
+    assert k == 3 and n.v == 3
+}
