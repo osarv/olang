@@ -413,7 +413,8 @@ by agreement on scope.olang.
    generic struct may declare a conditional destructor, a global may hold one by value. Recommendation: all three.
    Default: refused.
 4. **A field slot given storage of another scope** (o25gfieldbinding, the alias cases): needs fields to carry a set of
-   possible scopes, a whole-program analysis. Recommendation: not now - record it. Default: refused.
+   possible scopes, a whole-program analysis. Recommendation: not now - record it. Default: refused. **Answered
+   2026-11-08 as docs/wholeprog.md's question 4: allowed, with whole-program field scope sets (its section 10, W4).**
 5. **Copying an `any`'s instance** (`it.Take(2)` on an `any Iterator<I64>&`): through a Copy and a size in its table.
    Recommendation: not now. Default: refused.
 6. **`become` and memory.** Built in the tail scope, what each level of a `become` chain builds stays until the chain's
