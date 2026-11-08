@@ -870,3 +870,206 @@ within a few MB of the direct form); tests/drops.olang's `Logged` keeps passing,
 `derivedcopybuild` and `strderivedcallback` (run cases since C1) read back after a churn as before; `-memory`'s new row
 in a checks scenario for an instance read out of a mixed collection. Evaluator: a global baked through a destructor's
 build in a known scope (K2c's own frame) and an S17a assert over `logged()` (as tests/drops.olang has).
+
+## 12. The build plan
+
+One agent per round, each starting from this note and a PROGRESS.md hand-off, committing coherent pieces as it goes;
+targeted tests and `make quick` while developing, one full `make verify` through `/home/user/vlock` at the end. Rounds
+2, 3, 5 and 6 all change scope.olang, so they run one after another, never beside each other or beside another
+scope.olang batch; round 1 touches nearly every file lightly and runs alone, first. Every round walks the checklist
+(CLAUDE.md) and DEPENDENTS.md (section 9).
+
+### Round 1 - keywords, one tier (sonnet, medium)
+
+- **Spec**: L9's list, L9a's field list; L9b and L9c removed (gaps); T13a-T13c, E31c, T32 lose "a word only ...".
+- **Code**: token.olang (`Tok`, `Text`, `Keyword`); parse.olang reads `any`, `unique`, `immut`, `packed`, `commutes`
+  as tokens where they stood; session.olang's `Keywords`; editors/nvim's syntax; the ~20 names renamed by meaning;
+  `tools/keyword_rename.olang` (with its tests) in `compiler/fix.olang`'s table and tools/README.md.
+- **Tests**: checks cases `keywordlocal` (fail: a local named `keeps`, L9), `keywordfield` (run: fields named `keeps` and
+  `returns` declared with their types, reached after `.`; a method named `pure`, L9a); the tool's test blocks;
+  `make tokgold astgold`.
+- **Gates**: verify; `make consistency` (the keyword lists).
+
+### Round 2 - views of destructor storage placed (section 10; opus, high)
+
+- **Spec**: O27, O15, C9b, B18 (10.1).
+- **Code**: scope.olang's `liftable`/`viewKeptMsg`/`partKept`; `Plan.StoredFor`; lower.olang's `escapedHome` for whole
+  placements only; free.olang's `LHeld` and `escapedHolder`; msgs.olang (two messages gone), `make diaggold`.
+- **Tests**: o27destructorview, o27destructorcall, o27destructorgen as run cases; the cases of 10.4; the evaluator's
+  `interpret` comparison over them.
+- **Gates**: verify, scopesan, scopefuzz, fuzz free, dead regions (Part C's change); bench and compiler/ IR
+  byte-identical (no program accepted today places a destructor holder for a view).
+
+### Round 3 - promise words and the relation words (sections 2.2, 3; opus, xhigh)
+
+- **Spec**: T21's grammar, T21c, T22, T22b, T22a (3.4's boundary and error), D17d/D17f unchanged, O17's sentence.
+- **Code**: parse.olang, ast.olang, unparse.olang, fmt.olang (the words, where they end); types.olang (identity,
+  spelling, `$`, what `ScopesOf`/`ResultFrom` read of `borrows`/`noborrow`); check.olang (T21c's errors, E12's fit across
+  words with its places recorded); scope.olang (`valueRels` and `valueCovered` read the words, 2.2.1's capture check, the
+  boundary errors naming the word, O17 by the words); msgs.olang, `make diaggold`.
+- **Tests**: tests/promises.olang (run): a cache's `onEvict fn?&(k String&) keeps k` holding a keeping lambda, called
+  through after an arena churn; `Vec<fn&(a mut N&, b N&) keeps b in a>` pushed into and called through; `borrows a`
+  letting a temporary second argument go early, `noborrow` keeping a result past both arguments - each read back after a
+  churn; a K2 global baked through a call through a `keeps k` field; an S18c assert decided. Checks: fail - a word naming
+  no parameter, written twice, `borrows` on a result holding no reference, `keeps x` of a lambda keeping into an outer
+  capture (2.2.1), `keeps b in a.f.g`; t22apushed, t22alambdakeeps, t22areturncycle reworded to name the word, and run
+  cases beside them with the word written.
+- **Gates**: verify, scopesan, scopefuzz; compiler/'s and bench's IR byte-identical (no program writes a word yet).
+
+### Round 4 - effect words, and effects through parameters (sections 3.5, 4.5; opus, high)
+
+Beside round 3 once round 3's grammar and types have merged (effects.olang, and check.olang's place list only).
+
+- **Spec**: G42 (its table gains `Pure` and `Returns`; its last paragraph, 3.5), T21c's effect rows.
+- **Code**: effects.olang (`Calls` bits, per-fact bounds for unknown calls, `Pure`, `Returns`, `Fact.Named`, the
+  effect words checked at the places check records, its own records through `typed.Versions`); explain's `# effects:`
+  line through the composition.
+- **Tests**: tests/facts.olang: S17a asserts `not Apply.Allocates` with `f fn&(x I64) I64 noalloc`, `Sum.Pure`,
+  `Sum.Returns`, `not Use.Allocates` through `Twice`; g42factvalue kept, a passing twin of it; checks: fail - a lambda
+  calling `io.Println` given for `noalloc`, a lambda writing through a captured reference given for `pure`, one reaching
+  an `assert` given for `returns`, a field of type `fn&() noblock` given a value of type `fn&()`.
+- **Gates**: verify; the effects pass's time on compiler/ (`explain -caps`) within +5% of today's.
+
+### Round 5 - following into calls: twins (sections 4.1-4.3, 4.6's lending; opus, xhigh)
+
+- **Spec**: T22c, T22a's boundary list, O13c's pass-through, D16c (a captured function value followed), O17's
+  sentence; B2c's sentence.
+- **Code**: scope.olang (patterns and their interning, pass-through `ResFn`, arguments and captures followed, symbolic
+  records, twins as call-graph nodes, limits, errors at the asking call, `Plan.Twin`); typed.olang
+  (`ScopeVar.Follow`, `Plan.Twin`); lower.olang and emit.olang (a twin's code where its plan differs, its symbol, hidden
+  follow parameters); interp.olang (a call routed to its twin's plan); free.olang (a twin with a plan of its own analysed
+  on its own); fuzz/scopegen.olang (higher-order calls given keeping callbacks, chains, captures); msgs.olang.
+- **Tests**: tests/follow.olang (run, read back after churns): the Count shape, a chain three deep, a recursive callee
+  handing its parameter on, a captured function value, `keep(link)`, a twin with a plan of its own (`put(link, x, 42)`),
+  checked by a checks IR scenario (`irHas`: two symbols for `put`); K2 and S18c through a twin; the ten cases of 8 as run
+  cases; fail cases - followed into a store into a field (the error at the call, with a note in the callee, naming the
+  word), a pattern past a limit; the `-debug` compiler's pattern check (4.7) over the suite.
+- **Gates**: verify, scopesan, scopefuzz (`COUNT=300`), fuzz free, dead regions; compiler/'s and bench's IR
+  byte-identical (no twin on programs accepted today); the scope phase within +1% (`OLANG_TIMES`).
+
+### Round 6 - derived scopes passed (section 11; opus, xhigh)
+
+- **Spec**: O23a, C2d, B18 (the fallback's row).
+- **Code**: scope.olang (`Builds` over derived positions, the passed-derived key, `ScopeVar.Passed`, drops passing the
+  holder's bindings, a collection's element claim); lower.olang/emit.olang (the hidden parameter); olang.olang's
+  `-memory` row for the fallback.
+- **Tests**: the measured loop as a run case reading its own peak (within a few MB of the direct form) and a bench row;
+  tests/drops.olang's `Logged` unchanged in output; derivedcopybuild and strderivedcallback unchanged; a checks scenario
+  for the fallback's `-memory` row (a mixed collection).
+- **Gates**: as round 5. Then a **narrow soundness review** (opus, high) of rounds 2, 5 and 6 - placement of destructor
+  storage, followed values and patterns, passed derived scopes - before clones build on the twins.
+
+### Round 7 - clones (section 4.4; opus, high)
+
+- **Spec**: none beyond B2c's sentence (round 5).
+- **Code**: lower.olang (where it pays, the limits, the clone's direct calls, the chain), emit.olang (symbols, the root
+  object only, `-debug` none); optional LLVM memory attributes on calls through `pure` values, kept only where measured.
+- **Tests**: a checks IR scenario: a `-O3` build of a sort given a lambda has no indirect call in its merge loop (the
+  comparison inlined) and the recursion calls the clone; bench's new row; compiler/'s IR diffed - only clones added.
+- **Gates**: verify; the self-build's time and peak memory within +2%; bench within noise but the new rows.
+
+### Round 8 - lending, early freeing, D9h, E31b, M19g read what is followed and promised (section 4.6; opus, high)
+
+- **Spec**: O8d, D9h, E31b, M19g sentences (4.6).
+- **Code**: free.olang (followed records as direct calls, the words, `letsVia`/`escVia`), lower.olang (D9h),
+  check.olang (E31b), views.olang (M19g); `-memory`'s reasons.
+- **Tests**: `-memory` rows for a Vec let go inside a higher-order call given a `pure` callback; a D9h view read across
+  a `pure` callback left uncopied (lower's D9h count, as its cases read it); an E31b in-place call given a `pure`
+  callback; an M19g case through a `pure` value.
+- **Gates**: verify, scopesan, scopefuzz, fuzz free, dead regions. Then the **bulk review** of rounds 1-8 with its fixes.
+
+### Round 9 - the tools (section 9; sonnet, medium)
+
+explain's `# fits:`, twins and clones listed; doc; the language server's hover and completion; mcp; `olang api`'s
+variance with the checks scenario `apicaps` extended; DEPENDENTS.md's "A promise word" and its consistency edge;
+compiler/README.md, checks/README.md counts. Gates: verify; explain's and doc's goldens.
+
+### Round 10 - only if question 1 (or 3) is answered yes (opus, xhigh)
+
+Functions a constructor fixes in a field followed with the instance (`Generator.next`, the lazy walks, `Heap`'s
+`less`), as O23a's per-instance bindings are: a field no code assigns after its constructor (read off the program, as
+G42's facts are) carries its value's records through the instance's locals and call results, and a method of the
+instance calling through it is judged per pattern (the receiver an input of the twin's key). And, for question 3, a
+trait's method signatures taking the words, a call through an `any` relying on them (T32a relaxed). Design pass first.
+
+### The checklist, per round
+
+1 spec first (above); 2 the passes named; 3 the evaluator computes nothing new - each round gives it the tests of
+section 7 and its own (K2 globals, S17a/S18c asserts), and `interpret` follows twins' plans (round 5); 4 tests and cases
+(above); 5 migration: only round 1's renames - every other change accepts more, and the cases that were refused become
+run cases (old tests kept); 6 diagnostics (above, `make diaggold`); 7 CLAUDE.md's "Function types (T22, T22a)",
+"Function facts", "Storage kept for a view", "Derived and unknown scopes", "Keywords as names" entries, HISTORY.md, the
+ledger; 8 DEPENDENTS.md (section 9); 9 verify.
+
+## 13. Decided here (mine, within the user's decisions - to object to)
+
+1. Twins are keyed by **patterns**, never by function, and an argument its parameter's type covers takes no part in the
+   key: programs accepted today get no twin and keep their plans byte for byte.
+2. A function value a lambda captures is followed into the lambda's body (sec8's decision 15 - a capture is a boundary
+   - reversed): a capture is a copy made once and never repointed (D16c), so following it is as sound as following an
+   argument.
+3. A `return` of a followed parameter is a pass-through the caller resolves - so `keep<F>(f F) F` needs no twin (sec8's
+   question 1, which the user answered "we don't want to over reject").
+4. A value with any unknown function is not followed; its known ones are judged at the boundary, as today.
+5. Limits: 16 twins of one body, patterns nested 4 deep, twins at most 2% of the program's bodies (at least 256); past
+   one, the argument is a boundary and the error names the limit and the word to write.
+6. Twins are made in the root object only and share the ordinary code wherever their plans agree; a twin's symbol spells
+   its key's canonical text injectively, as G16a spells instances.
+7. Clones are lowering's: in `-O3` and `-quick` builds, where a call through the parameter is in a loop (or a callee it
+   is handed to has one) and the callee is not one LLVM inlines whole; at most 8 per callee and 3% of the program's MIR;
+   followed 4 deep. LLVM memory attributes on calls through `pure` values only where a bench row moves.
+8. Effects compose through per-parameter `Calls` bits, and an unknown call contributes its type's bound fact by fact (no
+   single `Unknown`); effects.olang reads the records it needs itself (syntactic ones and `typed.Versions`), so it
+   keeps running before the scope pass, as G42's facts need.
+9. `WritesGlobals` and `Terminates` stay facts with no word; `Pure` and `Returns` are added to G42, so every promise word
+   is a fact a library can pin with S17a.
+10. `returns` is G42's `Terminates` and no ending the program writes (a `noreturn` call, `unreachable`, `!`, an `assert`
+    not decided true); the language's own checks (slice bounds, array lengths, memory, stack) aside.
+11. `pure` writes only through `mut` parameters - a `Call` adapter's receiver is none -, reads and writes no mutable
+    global, calls only what is pure, runs only pure destructors; it may allocate, wait and start tasks whose calls are
+    pure.
+12. `keeps x` means "where the function value lives"; a lambda keeping `x` in a capture that lives longer than it is
+    refused where it comes to be held with the word (2.2.1), never moved.
+13. `keeps b in a.f` names one field with a binding of its own; a longer path is an error (O23 reads deeper stores at the
+    first field's binding).
+14. Promises are part of a function type's identity, by position; a value fits across them at the outermost level only
+    (E12), never inside a type argument; the checker accepts the fit and the pass owning each fact judges it.
+15. T21c's misuses are errors: a word naming no parameter, written twice, contradicting another, or saying nothing about
+    the type (`borrows` on a result holding no reference, `keeps` of a plain value).
+16. Where the words end is the table of 3.1; they never need parentheses, and after an error set the first word ends it.
+17. `os.RunOnStack`'s runtime call is followed as the call `f()` it is, as K1 evaluates it.
+18. std writes no promise word in this work; words come where a caller needs one, measured.
+19. explain's `# fits:` line - the tightest function type a function is a value of - replaces `# not a value` / `# as a
+    value`; twins and clones are listed as a generic's instances are.
+20. `olang api` compares each exported function's `# fits:` type by variance (a word lost breaks, a word gained does
+    not), and written function types in signatures by their position (parameters contravariant, results and fields
+    covariant, a declared function type either way).
+21. The repository's names that become keywords are renamed by meaning; `tools/keyword_rename.olang` appends `_` for
+    other code; L9b's and L9c's numbers are left as gaps.
+22. A destructor belongs to whoever holds the whole value; a view of a part moves memory only (`Plan.StoredFor` tells
+    lowering and early freeing apart); a view-placed holder's leaves are not let go of by Part C; its `Destroy()` frees
+    nothing.
+23. A derived scope is passed by a call that knows it, through twins keyed by passed derived positions; a holder's drop
+    passes its local's bindings; a value registered with a scope (O16) keeps the fallback.
+24. A narrow soundness review of rounds 2, 5 and 6 before clones; the bulk review after round 8.
+25. Round order: keywords alone first; the section-8 rounds (2, 3, 5, 6) one after another; effects beside round 3.
+
+## 14. Direction questions
+
+1. **Functions a constructor fixes in a field.** `Generator.next` (every generator's walk), the lazy walks' `pred`,
+   `make` and `step` (`TakeWhile`, `SkipWhile`, `FlatMap`, `Scan`, `ChunkBy`) and `Heap`'s `less` are stored in a field
+   by a constructor and never assigned again. Followed with the instance - as O23a's per-instance bindings are, through
+   its locals and call results, the instance's methods judged per pattern - every `for x in gen()` gets the generator's
+   own effects instead of "anything", and `xs.Iter().TakeWhile(fn(x) { kept.Push(x); ... })` compiles. It is a field,
+   which the user's rule keeps dynamic; this would be the one exception, read off the program (no code assigns the field
+   after its constructor). **Recommended:** yes, as round 10. **Default if unanswered:** dynamic (judged by the field's
+   type).
+2. **Where no call knows a field's referent (C1's rest, 11.3).** **Recommended:** the program's scope, as today, with a
+   `-memory` row at each such call; the address lookup (an owner word per chunk, a page map, a lookup on that path only)
+   built when a program shows the growth. **Default if unanswered:** the program's scope.
+3. **Promises on a trait's methods.** An `any` holds a value whose calls go through its trait's method signatures; the
+   words on those signatures (`type Shape trait { Area() F64 noalloc pure }`) would be checked against every method a
+   type gives the trait and relied on by every call through an `any` - so t32anyscopes' shape (a method whose result
+   borrows from the instance) could be said, and an `any`'s calls stop being "anything". The user's decision named
+   function types only. **Recommended:** yes, with round 10. **Default if unanswered:** no words on trait methods; an
+   `any`'s call does anything, and T32a refuses a method requiring a relation.
