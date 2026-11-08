@@ -1,4 +1,4 @@
-# check: fail error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+# check: fail error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
 # T22: a function type may say its parameters share a scope ('b N&a'), and a call through a value of it is held to that
 # as a direct call is
 type N struct(v I64) {

@@ -1,4 +1,4 @@
-# check: fail error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this capture holds only what its written function type says of every call
+# check: fail error[T22b]: 'link' keeps 'b' in 'a', and the function type of this capture says nothing of that - write 'keeps b in a' after its signature
 # T22a (decision 15): a capture is a boundary - inside the lambda's body the captured value is judged by its type alone
 type N struct(v I64) {
     v

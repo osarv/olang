@@ -505,7 +505,7 @@ fn (t Table&) PromiseText(f TypeId) String {
     for i in range PromiseNames.Len() {
         if (w & (I64(1) << i)) != 0 { b.Push(" " $PromiseNames[i]) }
     }
-    for x in t.BorrowsOf(f) { b.Push(" borrows " $t.paramName(f, x)) }
+    for x in t.BorrowsOf(f) { b.Push(" borrows " $t.ParamName(f, x)) }
     ks := t.KeepsOf(f)
     for k in range ks.Len() / 3 { b.Push(" " $t.KeepsText(f, ks[3 * k], ks[3 * k + 1], ks[3 * k + 2])) }
     return b.ToString()
@@ -513,13 +513,13 @@ fn (t Table&) PromiseText(f TypeId) String {
 
 # one "keeps" promise as source writes it: "keeps b", "keeps b in a", "keeps b in a.f"
 fn (t Table&) KeepsText(f TypeId, kept I64, into I64, field I64) String {
-    if into == KeepsHome { return "keeps " $t.paramName(f, kept) }
+    if into == KeepsHome { return "keeps " $t.ParamName(f, kept) }
     fs := "." $t.Names.Text(source.NameId(I32(field))) if field != 0 else ""
-    return "keeps " $t.paramName(f, kept) " in " $t.paramName(f, into) $fs
+    return "keeps " $t.ParamName(f, kept) " in " $t.ParamName(f, into) $fs
 }
 
 # parameter i of a function type by the name it was written with, else by position ("#1" the first)
-fn (t Table&) paramName(f TypeId, i I64) String {
+fn (t Table&) ParamName(f TypeId, i I64) String {
     ns := t.NamesOf(f)
     if i < ns.Len() { return t.Names.Text(source.NameId(I32(ns[i]))) }
     return "#" $(i + 1)
