@@ -2142,6 +2142,10 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
                 m.wrPtr(dst, m.rdPtr(m.addr(fi, m.arg(fi, args, 0), 1)))
                 return
             }
+            if satOp(op) {
+                m.saturate(fi, dst, op, ty, args)
+                return
+            }
             if m.wideOp(fi, ty, args) {
                 m.primWide(fi, dst, op, ty, args)
                 return
@@ -3489,6 +3493,71 @@ fn (m mut Machine&) primWide(fi I64, dst Ptr, op typed.PrimOp, ty types.TypeId, 
         }
     }
     m.putInt(dst, ty, lo, hi)
+}
+
+# std/arith's saturating operations (E15a)
+fn satOp(op typed.PrimOp) Bool {
+    return match op {
+        case typed.PrimOp.SatAdd, typed.PrimOp.SatSub, typed.PrimOp.SatMul, typed.PrimOp.SatShl: true
+        case _: false
+    }
+}
+
+# a saturating operation's result written at dst, at any width: the wrapping result where the true one fits ty, else the
+# limit on the true result's side - as LLVM's saturating instructions give it (E15a)
+fn (m mut Machine&) saturate(fi I64, dst Ptr, op typed.PrimOp, ty types.TypeId, args mir.Range) {
+    b := m.ibits(ty)
+    signed := not m.T.IsUnsigned(m.T.Repr(ty))
+    alo, ahi := m.wideOf(fi, m.arg(fi, args, 0))
+    blo, bhi := m.wideOf(fi, m.arg(fi, args, 1))
+    if m.halted { return }
+    if op == typed.PrimOp.SatShl {
+        # the count within [0, the width) - the library's claim, a shift's
+        if bhi != 0 or not ult64(blo, b) {
+            m.refuse(WhyShift)
+            return
+        }
+        l, h := shl128(alo, ahi, blo)
+        lo, hi := extend128(l, h, b, signed)
+        blo2, bhi2 := shr128(lo, hi, blo, signed)
+        if blo2 == alo and bhi2 == ahi {
+            m.putInt(dst, ty, lo, hi)
+            return
+        }
+        m.putLimit(dst, ty, b, signed, not signed or ahi >= 0)
+        return
+    }
+    plain := match op {
+        case typed.PrimOp.SatAdd: typed.PrimOp.Add
+        case typed.PrimOp.SatSub: typed.PrimOp.Sub
+        case _: typed.PrimOp.Mul
+    }
+    if not m.overflowsWide(fi, plain, ty, args) {
+        lo, hi := mul128(alo, ahi, blo, bhi)
+        if plain == typed.PrimOp.Add: lo, hi = add128(alo, ahi, blo, bhi)
+        if plain == typed.PrimOp.Sub: lo, hi = sub128(alo, ahi, blo, bhi)
+        m.putInt(dst, ty, lo, hi)
+        return
+    }
+    up := match plain {
+        case typed.PrimOp.Add: not signed or bhi >= 0
+        case typed.PrimOp.Sub: signed and bhi < 0
+        case _: not signed or (ahi < 0) == (bhi < 0)
+    }
+    m.putLimit(dst, ty, b, signed, up)
+}
+
+# an integer type's greatest value (up) or least written at dst
+fn (m mut Machine&) putLimit(dst Ptr, ty types.TypeId, b I64, signed Bool, up Bool) {
+    if up {
+        lo, hi := wideMax(b, signed)
+        m.putInt(dst, ty, lo, hi)
+    } else if signed {
+        lo, hi := wideMin(b)
+        m.putInt(dst, ty, lo, hi)
+    } else {
+        m.putInt(dst, ty, 0, 0)
+    }
 }
 
 # whether op's true result over args does not fit ty (E15a's Overflow), where a wide integer is among them

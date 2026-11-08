@@ -4723,6 +4723,9 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
             fe.E.declare(intr, $lt " @" $intr "(" $lt ", " $lt ", " $lt ")")
             return fe.let("call " $lt " @" $intr "(" $lt " " $x ", " $lt " " $x ", " $lt " " $n ")")
         }
+        case typed.PrimOp.SatAdd, typed.PrimOp.SatSub, typed.PrimOp.SatMul, typed.PrimOp.SatShl {
+            return fe.saturating(op, r, x, args)
+        }
         case _ { }
     }
     y := fe.val(fe.arg(args, 1), t0)
@@ -4803,6 +4806,30 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
 }
 
 # an integer value of type from at the width of type to
+# E15a: std/arith's Saturating - one of LLVM's saturating instructions, the signed or the unsigned one by r's type:
+# add, sub and a shift (its count, an I64 within the width, taken to x's width) as their own; a product as the fixed-point
+# multiply of scale 0, which the target lowers to a multiply with its overflow test and a select
+fn (fe mut fnEm&) saturating(op typed.PrimOp, r types.TypeId, x String&, args mir.Range) String {
+    t := fe.E.T
+    lt := fe.ty(r)
+    s := "u" if t.IsUnsigned(r) else "s"
+    if op == typed.PrimOp.SatShl {
+        n := fe.width(fe.val(fe.arg(args, 1), mir.I64T), mir.I64T, r)
+        intr := "llvm." $s "shl.sat." $lt
+        fe.E.declare(intr, $lt " @" $intr "(" $lt ", " $lt ")")
+        return fe.let("call " $lt " @" $intr "(" $lt " " $x ", " $lt " " $n ")")
+    }
+    y := fe.val(fe.arg(args, 1), fe.otype(fe.arg(args, 1)))
+    if op == typed.PrimOp.SatMul {
+        intr := "llvm." $s "mul.fix.sat." $lt
+        fe.E.declare(intr, $lt " @" $intr "(" $lt ", " $lt ", i32)")
+        return fe.let("call " $lt " @" $intr "(" $lt " " $x ", " $lt " " $y ", i32 0)")
+    }
+    intr := "llvm." $s $("add" if op == typed.PrimOp.SatAdd else "sub") ".sat." $lt
+    fe.E.declare(intr, $lt " @" $intr "(" $lt ", " $lt ")")
+    return fe.let("call " $lt " @" $intr "(" $lt " " $x ", " $lt " " $y ")")
+}
+
 fn (fe mut fnEm&) width(v String&, from types.TypeId, to types.TypeId) String {
     t := fe.E.T
     a, b := t.Bits(t.Repr(from)), t.Bits(t.Repr(to))

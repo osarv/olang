@@ -13944,6 +13944,17 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         if c.under(nt) != c.i64() { n = c.prim(args[0].Span(), c.i64(), typed.PrimOp.Convert, n, null) }
         return c.prim(sp, rt, bop, x0, n)
     }
+    sop := satOp(name)
+    if sop != typed.PrimOp.Retire and c.P.T.IsInt(u) and c.P.Library(c.fr().Mi) {
+        # E15a: std/arith's Saturating - an integer's operation clamped at its type's limits, the library's alone
+        if args.Len() != 1 {
+            c.err(sp, msgs.ArgCount(1, "", args.Len()))
+            c.dropArgs(args)
+            return c.unknown(sp)
+        }
+        want := c.i64() if sop == typed.PrimOp.SatShl else rt
+        return c.prim(sp, rt, sop, c.value(rx, sp), c.exprTo(args[0], want))
+    }
     if name == "retire" and args.Len() == 0 and c.arrayOf(rt) != types.UnknownT and c.P.Library(c.fr().Mi) {
         # M19g: where a collection stops using an array - nothing at run time but under -sanitize (B2f), where its
         # storage is poisoned; a module that retires arrays gives its arrays chunks of their own there
@@ -14103,6 +14114,17 @@ fn bitOp(name String&) typed.PrimOp {
         case "RotateLeft": typed.PrimOp.RotateLeft
         case "RotateRight": typed.PrimOp.RotateRight
         case "ByteSwap": typed.PrimOp.ByteSwap
+        case _: typed.PrimOp.Retire
+    }
+}
+
+# E15a: the saturating operation a library-only method's name names (std/arith's Saturating); Retire for none
+fn satOp(name String&) typed.PrimOp {
+    return match name {
+        case "satAdd": typed.PrimOp.SatAdd
+        case "satSub": typed.PrimOp.SatSub
+        case "satMul": typed.PrimOp.SatMul
+        case "satShl": typed.PrimOp.SatShl
         case _: typed.PrimOp.Retire
     }
 }

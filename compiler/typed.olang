@@ -1362,6 +1362,13 @@ type PrimOp enum {
     # T19b: args [e], a clause's error value: the payload record its error carries popped off the stack, where its
     # error type carries one
     ErrTaken
+    # std/arith's Saturating (E15a): args [x, y], both of x's integer type: x + y, x - y, x * y clamped at the type's
+    # limits instead of wrapping - the library's alone (std/), each one of LLVM's saturating instructions
+    SatAdd
+    SatSub
+    SatMul
+    # args [x, n], n an I64 within [0, x's width) - the library's claim, as a shift's count: x * 2^n clamped
+    SatShl
 }
 
 type Slice struct(Base Lvalue&, Lo Expr&, Hi Expr&, Checked Check) {
