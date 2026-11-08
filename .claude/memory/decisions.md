@@ -980,3 +980,10 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   QCB (written relations removed 2026-11-02, "make manual scopes impossible") - stated: no scope is written, only what
   the function does with its parameters, checked, never trusted. Open: effects promises too (`[not Allocates]`, G42's
   facts) in the same brackets. ASKED.
+- Relation items, listed for the user 2026-11-08 ("Which are the function relations we could add in such a block?"):
+  scope relations - `a keeps b` (b stored into what a reaches; by-value b a move), `keeps x` (kept in the value's own
+  environment), `result from a` (narrowing the default "a result may borrow from every reference parameter"), `new
+  result` (borrows from none), `a.f keeps b` (into what a field refers to - finer, later); a both-ways keep is
+  "together" (no item of its own). Effect promises from G42's facts - `not Allocates`, `not Blocks`, `not WritesGlobals`,
+  `not CallsC`, `not Spawns`, `Terminates`. Already in the type, so no items: `mut` (writes), `?` (errors), `noreturn`.
+  Recommended for a first build: the two keeps and the result items; effects later. ASKED which.
