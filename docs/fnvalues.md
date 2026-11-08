@@ -1,7 +1,8 @@
-# Function values followed into calls, and promises on their types (fnvalues)
+# Function values followed into calls, promises on their types, and scopes found at run time (fnvalues)
 
-The design note for function values (2026-11-08, for review; nothing built). It designs what the user decided on
-2026-11-08 ("Function values DECIDED" in `.claude/memory/decisions.md`, and the spellings settled the same day):
+The design note for function values and the section-8 decisions that came with them (2026-11-08, for review; nothing
+built). It designs what the user decided on 2026-11-08 ("Function values DECIDED" in `.claude/memory/decisions.md`,
+and the decisions that followed the same day, through the coordinator):
 
 1. **Followed into calls, no syntax.** A function taking a function value through a parameter is followed per function
    or lambda a call passes, wherever the call can see it, through chains of calls - judged once per relation
@@ -18,29 +19,43 @@ The design note for function values (2026-11-08, for review; nothing built). It 
    error names the exact word to add.
 3. **One tier of keywords.** Every promise word is an ordinary reserved keyword, and so are the words of one place
    (L9b's `commutes`, `immut`, `unique`, `packed`, L9c's `any`).
+4. **A value's destructor runs where its storage lives** - "it's about scope closure": storage holding a value with a
+   destructor that a kept view needs is built where the view is kept, and the destructor runs as that scope closes.
+5. **C1: the right scope.** A build through a field whose referent's scope is known only per instance goes where the
+   referent lives: passed by a call that knows it, found at run time where none does.
+6. **Scopes found at run time from an address** (the user's choice of two): chunks aligned so a masked pointer gives its
+   header and its scope, a lookup for large chunks, nothing stored per object - used only where no call knows the scope
+   while compiling. It lets go of every "not known here" refusal of a build.
+7. **`x.Destroy()` removed**: blocks, stores and a collection's removals end values.
 
-The current state is SPEC.md T21-T22a, D8e, D16c-D16d, D17d/D17f, G42, L9-L9c and section 8 (O10b-O17b, O23a, O8d),
-D9h, E31b and M19g; docs/sec8.md section 5 (records), its round 4 and question 1 (the "scope twins" designed here).
+The current state is SPEC.md T21-T22a, D8e, D16c-D16d, D17d/D17f, G42, L9-L9c, C9b, E11c and section 8 (O10b-O17b,
+O11-O12, O15, O23a, O25i, O27, O8d), D9h, E31b and M19g; docs/sec8.md section 5 (records), its round 4 and questions 1
+and 2 (the "scope twins" designed here, and the destructor views).
 
 ## Progress
 
 Hand-off for a fresh agent after a restart. Output: this file only, committed on wt-fnvalues and pushed (docs/README.md
 needs one line for it - `make consistency` lists docs/ - left to the merge, the brief allowing this file alone).
 Probes: the compiler of 1879ade (`/home/user/wt/merge/build/olang`, copied to the scratchpad) run with
-`OLANG_STD=/home/user/wt/fnvalues/std`; scratch programs, not committed.
+`OLANG_STD=/home/user/wt/fnvalues/std`; a copy of std with runtime.ll counting every scope allocation, used to build a
+counting compiler; scratch programs, none committed.
 
-- [x] read: SPEC T21-T22a, L9-L9c, D7/D8/D8e, D16c/D16d, D17-D17g, G42, O10b-O17b, O23a, O13c, D9h, E31b; docs/sec8.md;
-  DEPENDENTS.md; decisions.md (2026-11-08 entries); scope.olang (records, `summary`, `boundary`, `valueRels`,
-  `valueCovered`, the call through a value), effects.olang (`Facts`, the call, lambdas), free.olang (calls), parse.olang
-  (`sig`, `contract`), api.olang
-- [x] measured (section 1): the shapes refused today, effects "anything" through values and generator walks, the
-  indirect call per comparison in a merge sort, the names the one-tier keywords would take
-- [x] the user's settled spelling folded in (2026-11-08, through the coordinator): words after the signature, function
-  types only, inferred elsewhere; `noreturn` stays as D8e has it and is no promise in kind; `keeps n in list`,
-  `borrows a`, `noborrow`, `returns`, `pure`; one tier of keywords. The earlier drafts (promises in the contract
-  brackets, `noreturn` moved into them, promises on declarations) are dropped
-- [x] sections 0-12
-- next: nothing - the note is complete; a build starts from section 10's round 1
+- [x] read: SPEC T21-T22a, L9-L9c, D7/D8/D8e, D16c/D16d, D17-D17g, G42, O10b-O17b, O23a, O13c, O15, O27, C9b, E11c, D9h,
+  E31b; docs/sec8.md; DEPENDENTS.md; decisions.md (2026-11-08 entries); scope.olang (records, `summary`, `boundary`,
+  `valueRels`, `valueCovered`, the call through a value, `buildsThrough`, the view refusals), effects.olang, free.olang
+  (calls, Part C, `escapedHolder`), lower.olang (`escapedHome`), parse.olang, api.olang, runtime.ll (chunks, the pool,
+  the bump path)
+- [x] measured (section 1, 11.1, 12.7, 13.2): the shapes refused today, effects "anything" through values and generator
+  walks, the indirect call per comparison in a merge sort, the names the one-tier keywords take, C1's growth (197 MB
+  against 12.5 MB), the self-build's and bench's allocations (what a word per object would cost), `Destroy()`'s uses
+- [x] the user's decisions folded in as they came (2026-11-08, through the coordinator): the spellings (words after a
+  function type's signature, function types only, `noreturn` no promise in kind, `keeps n in list`, `borrows a`,
+  `noborrow`, `returns`, `pure`), one tier of keywords; destructors follow storage; C1 to find the right scope; scopes
+  found from an address; `Destroy()` removed; the reference-counting comparison cut to a paragraph. Dropped drafts:
+  promises in the contract brackets, `noreturn` moved, promises on declarations, a destructor staying with its holder
+  while a view keeps its storage, C1's program-scope fallback as the answer
+- [x] sections 0-16
+- next: nothing - the note is complete; a build starts from section 14's round 1
 
 ## 0. Summary
 
@@ -49,7 +64,9 @@ pass judges it by the written type (T22) and refuses at a boundary any function 
 effect summaries say "anything" (G42), early freeing keeps (O8d), lending (O17), D9h's left-out copies and E31b's
 in-place calls give up, and nothing is inlined. The most common callback shape is refused today -
 `words.Count(fn(w String&) Bool { o.Push(w); return true })` - and the most common higher-order calls make their
-callers' effects "anything".
+callers' effects "anything". Beside it, section 8 still refuses every build into a scope it cannot name while
+compiling, builds C1's into the program's scope (197 MB where 12.5 MB will do, 11.1), and refuses a view of storage
+holding a destructor value.
 
 **The design in a few lines.**
 
@@ -74,11 +91,24 @@ callers' effects "anything".
 4. **Keywords (L9).** Every promise word is an ordinary reserved keyword, and so are `commutes`, `immut`, `unique`,
    `packed` and `any` (L9b and L9c removed); about twenty names in the repository are renamed, by an `olang fix` tool for
    other code.
+5. **Destructors follow storage (O27, O15, section 10).** One rule with bulk review 7's F4: a value's destructors run
+   as the scope its storage was built in closes - so a view kept longer moves the value's end with its storage, said by
+   `-memory`. `ViewKeptDestructor` and `PartKeptDestructor` go.
+6. **C1 (O23a, section 11).** A body building through a field with a binding of its own takes a hidden scope parameter
+   for it - passed by a call that knows the binding, else found at run time; a holder's drop knows it. The measured loop
+   goes from 197 MB to the 12.5 MB of the direct form.
+7. **Scopes found at run time (O29, section 12).** Chunks of up to 128 KB sit in 128 KB-aligned slots of one reserved
+   range, so `p & ~(128K - 1)` is a chunk's header, which now names its scope; larger chunks are found in a sorted
+   table; storage in no chunk is the program's. Nothing per object (the self-build makes 96.6 million allocations of 105
+   bytes on average: a word each would be 772 MB more); a lookup only where the compiler could not place. O12's, E11c's,
+   O25i's and O23a's refusals of a build become programs (~42 cases).
+8. **`x.Destroy()` removed (section 13)**, with `tools/destroy_migrate.olang`.
 
-**Rounds** (section 10): 1 keywords one tier; 2 promises' grammar and the relation promises; 3 effect promises and
-effects through parameters (beside 2's checking half); 4 following into calls (twins); 5 clones; 6 early freeing,
-lending, D9h, E31b and M19g read what is followed and promised; 7 the tools; 8 (only if question 1 says yes) functions
-fixed in a constructor's field followed, and promises on a trait's methods for `any`.
+**Rounds** (section 14): 1 keywords one tier; 2 `Destroy()` removed; 3 destructors follow storage; 4 promise words and
+the relation words; 5 effect words and effects through parameters (beside 4); 6 scopes found at run time; 7 following
+into calls (twins); 8 derived scopes passed; 9 clones; 10 early freeing, lending, D9h, E31b and M19g read what is
+followed and promised; 11 the tools; 12 (only if question 1 or 2 says yes) functions fixed in a constructor's field
+followed, and promises on a trait's methods for `any`.
 
 ## 1. Where things stand (measured at 1879ade)
 
@@ -86,20 +116,20 @@ Each shape was built with the compiler of 1879ade, or is a case in `checks/cases
 
 | shape | today | after |
 |---|---|---|
-| `o mut Vec<String&>& = out` then `words.Count(fn(w String&) Bool { o.Push(w); return w.Len() > 1 })` | T22a: "this lambda keeps 'w' beyond the call, and this argument holds only what its written function type says" | compiles (round 4): Count judged once for the lambda's pattern, `keep(x)` as the direct call |
-| `apply(hang, a, b)` (t22aobligation), `put(link, x, 42)` (t22sharedscope), `put(link, x)` with a local (t22sharedscopetype) | T22a | compile (round 4); put's twin builds `N(i)` where `a` lives (O18b through link's relation) - a plan of its own |
-| `keep<F>(f F) F`, `f := keep(link)` (t22sharedscopegeneric) | T22a (sec8 question 1's default) | compiles (round 4): the result gives back what was given for `f` |
-| `put(get, x)` with `get` giving `link` (t22agivenvalue); `use(adder(gone))` (t22agivesarg); `use(keepIt<Blob>, v)` (t22ainstancename) | T22a | compile (round 4) |
-| `keepVia(kp, fn() I64 { ... })` with `kp` a `Call` adapter keeping it (callvaluekeeps, callvaluekeepsframe) | T22a | compile (round 4) |
-| a lambda capturing `g := link` and calling it (t22acapture) | T22a (a capture is a boundary, sec8 decision 15) | compiles (round 4: captured function values followed) |
-| `fs.Push(g)` into `Vec<fn&(a mut N&, b N&)>` (t22apushed); `c.onEvict = fn(k String&) { goneRef.Push(k) }` (t22alambdakeeps) | T22a | refused, the error naming `keeps b in a` / `keeps k` for the element's or field's type; compile once written (round 2) |
-| `pick` calling itself and returning `link` (t22areturncycle) | T22a | refused unless its result type writes `keeps b in a` (round 2) |
+| `o mut Vec<String&>& = out` then `words.Count(fn(w String&) Bool { o.Push(w); return w.Len() > 1 })` | T22a: "this lambda keeps 'w' beyond the call, and this argument holds only what its written function type says" | compiles (round 7): Count judged once for the lambda's pattern, `keep(x)` as the direct call |
+| `apply(hang, a, b)` (t22aobligation), `put(link, x, 42)` (t22sharedscope), `put(link, x)` with a local (t22sharedscopetype) | T22a | compile (round 7); put's twin builds `N(i)` where `a` lives (O18b through link's relation) - a plan of its own |
+| `keep<F>(f F) F`, `f := keep(link)` (t22sharedscopegeneric) | T22a (sec8 question 1's default) | compiles (round 7): the result gives back what was given for `f` |
+| `put(get, x)` with `get` giving `link` (t22agivenvalue); `use(adder(gone))` (t22agivesarg); `use(keepIt<Blob>, v)` (t22ainstancename) | T22a | compile (round 7) |
+| `keepVia(kp, fn() I64 { ... })` with `kp` a `Call` adapter keeping it (callvaluekeeps, callvaluekeepsframe) | T22a | compile (round 7) |
+| a lambda capturing `g := link` and calling it (t22acapture) | T22a (a capture is a boundary, sec8 decision 15) | compiles (round 7: captured function values followed) |
+| `fs.Push(g)` into `Vec<fn&(a mut N&, b N&)>` (t22apushed); `c.onEvict = fn(k String&) { goneRef.Push(k) }` (t22alambdakeeps) | T22a | refused, the error naming `keeps b in a` / `keeps k` for the element's or field's type; compile once written (round 4) |
+| `pick` calling itself and returning `link` (t22areturncycle) | T22a | refused unless its result type writes `keeps b in a` (round 4) |
 | a version of a cursor reached in a loop's next turn before it is judged (t22alatelambda) | T22a | unchanged (judged at the read as at a boundary, sec8 5.2) |
-| a method an `any` calls requiring a scope relation (t32anyscopes) | T32a | unchanged unless question 1 (round 8) |
-| effects of `Use() { return Apply(Twice, 3) }`, of `xs.Fold(0, fn(a I64, x I64) I64: return a + x)`'s caller | "anything - it calls through a function value or an 'any'" | `Twice`'s facts, the lambda's facts (round 3) |
-| effects of a `for x in Gen(4)` over a generator | "anything" (the walk calls `Generator.next`, a field) | unchanged, unless question 1 (round 8) |
-| `assert not Apply.Allocates` with `f fn&(x I64) I64` (g42factvalue) | false: decided while compiling | unchanged; true with `f fn&(x I64) I64 noalloc` (round 3) |
-| `v.Sort(fn(x I64, y I64) Bool: return x < y)` | an indirect call per comparison through `sortMergeRuns`, `sortMergeForward` ... | a clone of the sort with the comparison direct, inlined by LLVM (round 5) |
+| a method an `any` calls requiring a scope relation (t32anyscopes) | T32a | unchanged unless question 2 (round 12) |
+| effects of `Use() { return Apply(Twice, 3) }`, of `xs.Fold(0, fn(a I64, x I64) I64: return a + x)`'s caller | "anything - it calls through a function value or an 'any'" | `Twice`'s facts, the lambda's facts (round 5) |
+| effects of a `for x in Gen(4)` over a generator | "anything" (the walk calls `Generator.next`, a field) | unchanged, unless question 1 (round 12) |
+| `assert not Apply.Allocates` with `f fn&(x I64) I64` (g42factvalue) | false: decided while compiling | unchanged; true with `f fn&(x I64) I64 noalloc` (round 5) |
+| `v.Sort(fn(x I64, y I64) Bool: return x < y)` | an indirect call per comparison through `sortMergeRuns`, `sortMergeForward` ... | a clone of the sort with the comparison direct, inlined by LLVM (round 9) |
 
 The cost of the indirect comparison, measured on the C equivalent (a recursive merge sort of 4M `long`s, clang 18
 `-O3`, a comparator through a pointer against the same comparison written in): 0.51 s against 0.36 s - 1.4x. Clang 18
@@ -343,7 +373,7 @@ may do anything" becomes
 > do. A function's facts read through its name (`apply.Allocates`) take each call through a function parameter by that
 > parameter's written type; a call of it takes them by the functions the call gives.
 
-`WritesGlobals` and `Terminates` stay facts with no word (`pure` and `returns` say more; 11, decision 9). D17d ("a
+`WritesGlobals` and `Terminates` stay facts with no word (`pure` and `returns` say more; 15, decision 9). D17d ("a
 contract states no scope relation") and D17f stand: a declaration states no promise, and a lambda takes no contract.
 
 ### 3.6 Why it is sound
@@ -469,7 +499,7 @@ unchanged to a callee cloned for `L` goes to that clone (so a sort's whole chain
 itself. LLVM then inlines `L` where it is small. A clone is named by the callee's symbol and `L`'s. It computes exactly
 what the call through the value computes (the same body with the same environment): unobservable. Calls through a value
 whose type is `pure` may also carry LLVM's memory attributes (argument memory and the runtime's only) - measured, kept
-only where they move a row (11, decision 8).
+only where they move a row (15, decision 7).
 
 ### 4.5 Effects through parameters, with no instances
 
@@ -546,7 +576,7 @@ functions are followed, by the composition of 4.5 where it is a parameter, and b
   is never repointed (D16c), so the records a parameter holds at the call are the records it holds wherever it reaches.
 - *Twins only accept more.* The ordinary judgment is the twin with every input judged by its type; a call goes to a twin
   only where an argument's pattern is not covered by its parameter's type - exactly where T22a refuses today. For every
-  program accepted today no twin is made and its plans are unchanged (round 4's gate: compiler/'s and bench's IR
+  program accepted today no twin is made and its plans are unchanged (round 7's gate: compiler/'s and bench's IR
   byte-identical before clones).
 - *Limits fall back to today's rule*, which is sound, and they say so.
 - *Clones and composition change no meaning.* A clone runs the same body with the same environment, its code pointer
@@ -618,36 +648,40 @@ word), and leaves fields and methods (L9a). Idempotent. The repository's own nam
 | file | what changes | round |
 |---|---|---|
 | token.olang | `Tok` cases, `Text`, `Keyword` for the seventeen words | 1 |
-| parse.olang | the five old words read as tokens where they stood (`packedWord`, `commutes`, `any`); T21c's words after a function type's signature (`sig` for a type), the list ending as 3.1 says | 1, 2 |
-| ast.olang, unparse.olang, fmt.olang | `ast.Sig` holds the words and the names they take; written back one space apart | 2 |
-| types.olang | a function type's promises - canonical, by position - part of its identity (`Canon`, G16a's spelling) and its rendering (`$`, E11a); what `ScopesOf` and `ResultFrom` read of `borrows`/`noborrow` | 2 |
-| check.olang | T21c's errors; E12 fits a function value across words and records the place for the passes; E31b reads `pure` | 2, 3, 6 |
-| typed.olang | `ScopeVar.Follow(input, k)`, `Plan.Twin(site)`, the per-site records free.olang reads; the core otherwise unchanged | 4 |
-| scope.olang | `valueRels` and `valueCovered` read the words; 2.2.1's capture check; T22a/T22b's errors naming the word; O17 by the words; then patterns, pass-through results, arguments and captures followed, symbolic records, twins as call-graph nodes with their components, limits, the twin a call reaches in the plan | 2, 4 |
-| effects.olang | `Calls` bits, per-fact bounds for unknown calls, `Pure` and `Returns`, `Fact.Named`, the effect words checked at the places check recorded | 3 |
-| free.olang | calls through followed functions as direct calls; the words; `letsVia`/`escVia`; a twin with its own plan analysed on its own | 4, 6 |
-| lower.olang | a twin's code from its plan; clones; D9h reading `pure` and followed functions | 4, 5, 6 |
-| emit.olang | twins' and clones' symbols, the hidden follow parameters, the root object only | 4, 5 |
-| views.olang | M19g reading `pure` and followed functions | 6 |
-| eval.olang, interp.olang | `interpret` follows a call into its twin's plan (B3e); nothing else | 4 |
-| explain.olang, doc.olang, session.olang, lsp.olang, mcp.olang, api.olang | `# fits:`, twins and clones listed, hover, completion, `api`'s variance | 7 |
-| msgs.olang, goldens/diag.txt | T21c's errors, T22a/T22b reworded to name the word, the limits' error | 2-4 |
-| fuzz/scopegen.olang | higher-order calls given keeping callbacks, chains, fields with words | 4 |
-| bench/ | a sort with a lambda beside the same sort with `<` | 5 |
+| parse.olang | the five old words read as tokens where they stood (`packedWord`, `commutes`, `any`); T21c's words after a function type's signature (`sig` for a type), the list ending as 3.1 says | 1, 4 |
+| ast.olang, unparse.olang, fmt.olang | `ast.Sig` holds the words and the names they take; written back one space apart | 4 |
+| types.olang | a function type's promises - canonical, by position - part of its identity (`Canon`, G16a's spelling) and its rendering (`$`, E11a); what `ScopesOf` and `ResultFrom` read of `borrows`/`noborrow` | 4 |
+| check.olang | `Destroy` gone; T21c's errors; E12 fits a function value across words and records the place for the passes; E31b reads `pure` | 2, 4, 5, 10 |
+| typed.olang | `PrimOp.Destroy` gone; `Scope.Inert` becomes `Scope.Found`; `ScopeVar.Follow(input, k)`, `ScopeVar.Passed(p, V)`, `Plan.Twin(site)`, the per-site records free.olang reads; the core otherwise unchanged | 2, 6, 7, 8 |
+| scope.olang | destructor storage placed for a view; `valueRels` and `valueCovered` read the words, 2.2.1's capture check, T22a/T22b's errors naming the word, O17 by the words; sites placed `Found` where a build's scope is not known, the refusals of 12.4 gone; patterns, pass-through results, arguments and captures followed, symbolic records, twins as call-graph nodes, limits, the twin a call reaches in the plan; derived scopes passed | 3, 4, 6, 7, 8 |
+| effects.olang | `Destroy` gone; `Calls` bits, per-fact bounds for unknown calls, `Pure` and `Returns`, `Fact.Named`, the effect words checked at the places check recorded | 2, 5 |
+| free.olang | the destroy targets gone; a twin with its own plan analysed on its own; calls through followed functions as direct calls, the words, `letsVia`/`escVia` | 2, 7, 10 |
+| lower.olang | `__olang_scope_of` where a site is `Found`; a twin's code from its plan; the derived scopes' hidden parameter; clones; D9h reading `pure` and followed functions | 6, 7, 8, 9, 10 |
+| emit.olang | the found scope's call; twins' and clones' symbols, the hidden parameters, the root object only | 6, 7, 8, 9 |
+| views.olang | M19g reading `pure` and followed functions | 10 |
+| std/runtime/runtime.ll, san.ll | slots, the chunk's `owner`, the large table, `__olang_scope_of`; quarantined slots | 6 |
+| eval.olang, interp.olang | `interpret` runs a moved destructor where its storage's scope closes, builds a found scope in the referent's own, follows a call into its twin's plan | 3, 6, 7 |
+| olang.olang, session.olang | `-memory`'s row and the language server's hint for a moved destructor | 3 |
+| explain.olang, doc.olang, session.olang, lsp.olang, mcp.olang, api.olang | `# fits:`, twins and clones listed, hover, completion, `api`'s variance | 11 |
+| msgs.olang, goldens/diag.txt | `Destroy`'s and the destructor views' messages gone; T21c's errors, T22a/T22b reworded to name the word; the refusals 12.4 lets go; the limits' error | 2-8 |
+| std/net.olang, tests, checks, fuzz/scopegen.olang | `Destroy()` uses migrated (13.2); higher-order calls given keeping callbacks, chains, fields with words | 2, 7 |
+| tools/ | `keyword_rename.olang`, `destroy_migrate.olang` in `olang fix` | 1, 2 |
+| bench/ | the measured C1 loop; a sort with a lambda beside the same sort with `<` | 8, 9 |
+| seed/ | regenerated: the runtime is in it | 6 |
 
 ## 7. The evaluator and `interpret` (K1, B3e)
 
 - **Compile-time evaluation** runs before the scope pass on lowering's stand-in placement: twins, words and clones change
   nothing it computes (a call through a value is evaluated when the function it reaches is, K1, and its words are no
-  run-time thing). Each round still gives it tests it runs, beside the run-time ones (checklist step 3): round 2 a global
-  baked through a call through a field written `keeps k` (K2); round 3 top-level asserts reading facts through a promised
+  run-time thing). Each round still gives it tests it runs, beside the run-time ones (checklist step 3): round 4 a global
+  baked through a call through a field written `keeps k` (K2); round 5 top-level asserts reading facts through a promised
   parameter (S17a: `assert not Apply.Allocates` with `f fn&(x I64) I64 noalloc`, `assert Sum.Pure`, `assert
-  Sum.Returns`); round 4 a global baked through `Count` given a keeping lambda, and an assert decided (S18c) in a callee
+  Sum.Returns`); round 7 a global baked through `Count` given a keeping lambda, and an assert decided (S18c) in a callee
   given a keeping function.
 - **`interpret`** places by the plans (B3e): a call the plan routes to a twin uses the twin's plan, so the interpreted
   run reclaims what the built run reclaims; clones are code only. The comparison (`interp@FILE`) runs every new test file;
   no new entry in evaldiff's `Expected` is foreseen.
-- **The dead-region evaluator** (`OLANG_DEADREGIONS=1`) runs over the new tests in round 6, where early freeing starts
+- **The dead-region evaluator** (`OLANG_DEADREGIONS=1`) runs over the new tests in round 10, where early freeing starts
   reading followed functions and words.
 
 ## 8. Existing code and programs
@@ -667,10 +701,9 @@ word), and leaves fields and methods (L9a). Idempotent. The repository's own nam
   callback's `fn&(buf mut Array<F32>&) noalloc noblock` - are where programs write words.
 - **Newly compiling** (each becomes a run case built `-debug -sanitize`, read back after a churn, keeping its comment and
   saying what it was): t22aobligation, t22sharedscope, t22sharedscopetype, t22sharedscopegeneric, t22agivenvalue,
-  t22agivesarg, t22ainstancename, t22acapture, callvaluekeeps, callvaluekeepsframe (round 4); with the word written, new
-  run cases beside t22apushed, t22alambdakeeps and t22areturncycle, whose fail cases stay with their messages naming the
-  word (round 2).
-- **Staying refused**: t22alatelambda; t32anyscopes (unless question 1); g42factvalue (its parameter writes no word -
+  t22agivesarg, t22ainstancename, t22acapture, callvaluekeeps, callvaluekeepsframe (round 7); with the word written, new
+  run cases beside t22apushed, t22alambdakeeps and t22areturncycle, whose fail cases stay with their messages naming the word (round 4).
+- **Staying refused**: t22alatelambda; t32anyscopes (unless question 2); g42factvalue (its parameter writes no word -
   kept, with a passing twin writing `noalloc`); t22afallible and t22callunsafe (types); new fail cases for a lambda
   keeping `x` in a capture that outlives it (2.2.1), a pattern past a limit, an effect word broken, `pure` broken by a
   write through a capture, `returns` broken by an `assert`, and T21c's misplaced words.
