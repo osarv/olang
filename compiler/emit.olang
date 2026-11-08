@@ -4805,7 +4805,6 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
     }
 }
 
-# an integer value of type from at the width of type to
 # E15a: std/arith's Saturating - one of LLVM's saturating instructions, the signed or the unsigned one by r's type:
 # add, sub and a shift (its count, an I64 within the width, taken to x's width) as their own; a product as the fixed-point
 # multiply of scale 0, which the target lowers to a multiply with its overflow test and a select
@@ -4830,6 +4829,7 @@ fn (fe mut fnEm&) saturating(op typed.PrimOp, r types.TypeId, x String&, args mi
     return fe.let("call " $lt " @" $intr "(" $lt " " $x ", " $lt " " $y ")")
 }
 
+# an integer value of type from at the width of type to
 fn (fe mut fnEm&) width(v String&, from types.TypeId, to types.TypeId) String {
     t := fe.E.T
     a, b := t.Bits(t.Repr(from)), t.Bits(t.Repr(to))
