@@ -3654,6 +3654,8 @@ fn (f mut Free&) writePlans() {
         pl := f.Plans.Ref(st.Body)
         if pl.RegionKind[top] != 0: continue
         at := f.siteScope(st.Body, x)
+        # O29: a value built where its place's storage is found at run time is built there, never in a region of its own
+        if at == typed.Scope.Found: continue
         pl.RegionKind[top] = 1
         pl.RegionParent[top] = at
         f.redirect(st.Body, x, top, at, true)

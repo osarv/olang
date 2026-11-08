@@ -1,4 +1,7 @@
-# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# check: run
+# flags: -debug -sanitize
+# O29 (round 6): refused until a scope no call knows while compiling was found while the program runs from the
+# address of the storage built through - now built where that storage lives, read back after a churn. Before:
 # E11c/O12: a helper handed the receiver's node gives a new node as a catch default for a call borrowing from it, built where
 # the call's result lives (R9a): refused
 import "std/io"

@@ -364,6 +364,10 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     buildsVar Vec<Bool>                   # by scope variable: whether this body builds into it, directly or through a call
     realVar Vec<Bool>                     # ... a value, not only a task's stand-in
     standIn Bool = false                   # the build buildsInto records next is a task's stand-in (P2)
+    # O29: while a value is placed into a slot whose scope is not known here (foundTerm), the reference whose referent's
+    # scope its builds go into, found at run time; null for none
+    foundRoot typed.Expr?& = null
+    foundTerm Term = Term.None
     buildSp Vec<source.Span>              # by scope variable: where in this body it first builds there
     buildFile Vec<I64>                    # ... and that build's innermost site (a callee's, through a call)
     buildAt Vec<source.Span>
@@ -2086,7 +2090,10 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
         nb := false
         if str {
             match body.Vars[k] {
-                case typed.ScopeVar.Param(l) { nb = body.Params.Len() > 0 and l == body.Params[0] }
+                # (O29: a reference receiver's own scope is passed found from it - only a value's stays unknown)
+                case typed.ScopeVar.Param(l) {
+                    nb = body.Params.Len() > 0 and l == body.Params[0] and not s.isRef(body.Locals[I64(l)].Ty)
+                }
                 case _ { }
             }
         }
@@ -7001,7 +7008,10 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     ac := typed.Call.Of(x)
     if ac is not null { s.landSite, s.landSp = I64(ac.Site), s.eqAfter(p.Span()) }
     s.caseLocal = wholeLocal(p)
-    v := s.val(x, slot if slot.Runs() else s.here())
+    found := s.findInto(p, slot)
+    v := s.val(x, slot if slot.Runs() or found else s.here())
+    s.foundRoot = null
+    s.foundTerm = Term.None
     s.landSite, s.landSp = savedLand, savedLandSp
     if wholeLocal(p) >= 0 { s.noteLate(wholeLocal(p), x) }
     if v.K == ValKind.Existing and s.bindingUnknown(p, slot) {
@@ -7026,8 +7036,18 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
         s.fitTarget = -1
         s.fitAt, s.fitSp = savedAt, savedSp
     }
-    if v.K == ValKind.Fresh and not slot.Runs() and slot != Term.None { s.freshIntoUnknown(sp, p, slot) }
+    if v.K == ValKind.Fresh and not slot.Runs() and slot != Term.None and not found { s.freshIntoUnknown(sp, p, slot) }
     try s.targets.Pop() catch { }
+}
+
+# O29: a value stored into place p whose slot is not known here (O12's set, a derived scope, O23a; one not traced, O11)
+# is built where p's storage is found at run time - where p's root evaluates with no effect; false where it has none
+fn (s mut Scoper&) findInto(p typed.Lvalue&, slot Term) Bool {
+    if slot.Runs() or slot == Term.None: return false
+    root := s.rootOf(p)
+    if root is null: return false
+    s.foundRoot, s.foundTerm = root, slot
+    return true
 }
 
 # the reference local a store through whose referent's own fields p is (q.next, q.inner.next) - its slot where q's
@@ -8003,7 +8023,7 @@ fn (s mut Scoper&) calleeType(c typed.Call&) types.TypeId {
 # run-time term, else where the expression stands (O18a's last row)
 fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
     if x is null { return Val.plain() }
-    d := dest if dest.Runs() else s.here()
+    d := dest if dest.Runs() or s.finds(dest) else s.here()
     # (the local a value is declared as, for the outermost expression of its initializer only - C2)
     whole, wholeStor, wholePart := s.caseLocal, s.caseStor, s.casePart
     s.caseLocal, s.caseStor, s.casePart = -1, false, false
@@ -8799,7 +8819,10 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         vals[i] = v
         if v.K != ValKind.Existing { continue }
         # an argument whose scope is one of several (O12): read through, never built into
-        if s.report and i < ps.Len() and s.buildsIntoSet(c, i, ps[i], owner[i], v.T) { s.err(s.opTok(a), msgs.BuildIntoUnknownScope()) }
+        # (O29: built where the argument's referent is found at run time, where reading it again has no effect)
+        if s.report and i < ps.Len() and s.buildsIntoSet(c, i, ps[i], owner[i], v.T) and s.argRoot(a) is null {
+            s.err(s.opTok(a), msgs.BuildIntoUnknownScope())
+        }
         k := owner[i]
         if beta[k] == Term.None {
             beta[k] = v.T
@@ -8834,7 +8857,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     }
     if rrels.Len() > 0 { s.valRelsAt.Put(I64(c.Site), s.unionRels(rrels, recs.Full, fty, vars, rv)) }
     if rv >= 0 {
-        beta[rv] = dest if dest.Runs() else here
+        beta[rv] = dest if dest.Runs() or s.finds(dest) else here
         # S21: a value with a destructor landing in a block a become closes is built in the tail scope instead
         if isBlockTerm(beta[rv]) and s.resultVar >= 0 and s.mayHoldDtor(ty) and s.tailCloses(beta[rv]) {
             beta[rv] = Term.Var(s.resultVar)
@@ -8903,7 +8926,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         s.dtorAt = s.nameSpan(sp)
     }
     scopes := Array<typed.Scope>(vars.Len())
-    for v in range vars.Len() { scopes[v] = s.scopeOf(beta[v]) }
+    for v in range vars.Len() { scopes[v] = s.passedScope(c, owner, v, beta[v]) }
     s.plan.Pass(c.Site, scopes)
     # what the callee may build into, recorded as this body's building there (O18c, E11c); a task is handed a stand-in for
     # every scope it binds, made where that scope is (P2)
@@ -11797,6 +11820,10 @@ fn (s mut Scoper&) build(site typed.SiteId, t Term) {
 # site built in term t, the expression it builds at sp
 fn (s mut Scoper&) buildSite(site typed.SiteId, t Term, sp source.Span) {
     if site < typed.SiteId(0) or I64(site) >= s.plan.Built.Len() { return }
+    if s.finds(t) {
+        s.plan.Built[I64(site)] = s.plan.Find(s.foundRoot!)
+        return
+    }
     u := t if t.Runs() else s.here()
     s.plan.Built[I64(site)] = s.scopeOf(u)
     s.buildsInto(u, sp, s.B!.File, sp)
@@ -11846,8 +11873,10 @@ fn (s mut Scoper&) buildsThrough(t Term, sp source.Span, callee I64, v I64) {
     s.standIn = saved
 }
 
-# a term as the plan says it: Inert for one nothing exists for at run time
+# a term as the plan says it: Found where it is the slot a value is being placed into whose scope is found at run time
+# (O29), Inert for any other one nothing exists for at run time
 fn (s mut Scoper&) scopeOf(t Term) typed.Scope {
+    if s.finds(t): return s.plan.Find(s.foundRoot!)
     return match t {
         case Term.Block(b): typed.Scope.Block(b)
         case Term.Var(i): typed.Scope.Var(i)
@@ -11855,6 +11884,73 @@ fn (s mut Scoper&) scopeOf(t Term) typed.Scope {
         case _: typed.Scope.Inert
     }
 }
+
+# the scope a call passes for its callee's variable v, bound to t: where t is not known here (O12's set, a derived
+# scope, one not traced) and an argument binding v is a reference reading which again has no effect, the scope its
+# referent is found in at run time (O29)
+fn (s mut Scoper&) passedScope(c typed.Call&, owner Array<I64>&, v I64, t Term) typed.Scope {
+    if t.Runs() or t == Term.None or s.finds(t): return s.scopeOf(t)
+    for i in range owner.Len() {
+        if owner[i] != v: continue
+        root := s.argRoot(c.Args[i])
+        if root is not null: return s.plan.Find(root)
+    }
+    return s.scopeOf(t)
+}
+
+# O29: an argument as the root a scope is found from - a reference whose evaluating has no effect; null for none
+fn (s mut Scoper&) argRoot(a typed.Expr&) typed.Expr?& {
+    if s.isRef(a.Type()): return a
+    return s.valueRoot(a)
+}
+
+# O29: a value argument's one reference, read again, as the root its references' scope is found from - where the
+# value is a struct whose only part holding references is one reference field, read from a place reading which has no
+# effect (with two, they may live in different scopes, and what is built must outlive each); null for none
+fn (s mut Scoper&) valueRoot(a typed.Expr&) typed.Expr?& {
+    match a {
+        case typed.Expr.Read(sp, ty, p, _) {
+            if not s.isStruct(ty) or not typed.PurePlace(p): return null
+            fs := s.P.T.Items(s.P.T.Fields(ty))
+            at := -1
+            for k in range fs.Len() {
+                if not s.P.T.HoldsRefs(fs[k]): continue
+                if at >= 0 or not s.isRef(fs[k]): return null
+                at = k
+            }
+            if at < 0: return null
+            return typed.Expr.Read(sp, fs[at], typed.Lvalue.Field(sp, fs[at], p, at), typed.SiteId(-1))
+        }
+        case typed.Expr.Away(_, _, y) { return s.valueRoot(y) }
+        case _ { return null }
+    }
+}
+
+# O29: whether what is built in term t goes where a root's referent is found at run time
+fn (s Scoper&) finds(t Term) Bool {
+    return s.foundRoot is not null and not t.Runs() and t != Term.None and t == s.foundTerm
+}
+
+# O29: the reference whose referent the storage of place p is in - the container a field, element or payload is read
+# through, else the place's own old value where it is a reference - where evaluating it has no effect; null for none
+fn (s mut Scoper&) rootOf(p typed.Lvalue&) typed.Expr?& {
+    inner := match p {
+        case typed.Lvalue.Field(_, _, base, _): s.throughRoot(base)
+        case typed.Lvalue.Elem(_, _, e): s.throughRoot(e.Base)
+        case typed.Lvalue.Payload(_, _, q): s.throughRoot(q.Base)
+        case typed.Lvalue.Deref(_, _, r): r if typed.Pure(r) else null
+        case _: null
+    }
+    if inner is not null or not s.isRef(p.Type()) or not typed.PurePlace(p): return inner
+    return typed.Expr.Read(p.Span(), p.Type(), p, typed.SiteId(-1))
+}
+
+# the root of a part read through base: base itself where it is a reference, else what base's storage is in
+fn (s mut Scoper&) throughRoot(base typed.Lvalue&) typed.Expr?& {
+    if not s.isRef(base.Type()): return s.rootOf(base)
+    return typed.Expr.Read(base.Span(), base.Type(), base, typed.SiteId(-1)) if typed.PurePlace(base) else null
+}
+
 
 # ---- the placements made for views (O27 as placement, B18) ----
 

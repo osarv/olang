@@ -1872,6 +1872,10 @@
 | status 0
 === run c2dbuildlocal.olang
 | status 0
+=== run c2dcapturebuild.olang
+| status 0
+| b
+| 5
 === run c2dcondarg.olang
 | status 0
 | 1000 0
@@ -1951,6 +1955,10 @@
 === run condmixedstore.olang
 | status 0
 | 42
+=== run condvaluefield.olang
+| status 0
+| 20 20 200
+| Array<I64>[10, 20, 30]
 === run condvaluesame.olang
 | status 0
 === run ctorlambdafield.olang
@@ -2191,6 +2199,8 @@
 | status 0
 | ok
 === run methodnamedlocal.olang
+| status 0
+=== run nllmerge.olang
 | status 0
 === run numtraitsqrtlit.olang
 | status 0
@@ -2497,11 +2507,17 @@
 | status 0
 === run reflfnoneself.olang
 | status 0
+=== run rendercopyc2d.olang
+| status 0
+| 39
+| 9
 === run renderoperandhere.olang
 | status 0
 === run runonstackdebug.olang
 | status 0
 === run rv3assigncopy.olang
+| status 0
+=== run rv3condstore.olang
 | status 0
 === run rv3copyrun.olang
 | status 0
@@ -2522,6 +2538,9 @@
 | status 0
 === run rv3strwrites.olang
 | status 0
+=== run rv5condmember.olang
+| status 0
+| 44
 === run rv5ctorblock.olang
 | status 0
 | 42
@@ -2739,28 +2758,94 @@
 === run s9erangeundertry.olang
 | status 0
 | Array<I32>[0, 2, 4, 6, 8]
+=== run stradapter.olang
+| status 0
+| 42
 === run stradapterbody.olang
 | status 0
 | b3
+=== run strarraycallback.olang
+| status 0
+| n1
 === run strborrowedcond.olang
 | status 0
+=== run strcallbackbuilds.olang
+| status 0
+| n1
+| n1
+=== run strcalleeadapter.olang
+| status 0
+| 42
+=== run strcalleecatch.olang
+| status 0
+| 1
+=== run strcalleecond.olang
+| status 0
+| 1
 === run strcalleegeneric.olang
 | status 0
 | 3 10
 === run strcalleelambda.olang
 | status 0
 | 4
+=== run strcalleespawn.olang
+| status 0
+| 4
+| 4
+=== run strcalleespawnlambda.olang
+| status 0
+| 4
+| 4
+=== run strcatchnode.olang
+| status 0
+| 0
+=== run strcondnode.olang
+| status 0
+| 1 2
+| 1 2
+| 1 2
 === run strcondtext.olang
 | status 0
 === run strcursornewnode.olang
 | status 0
 | 7
+=== run strcycledeps.olang
+| status 0
+| b1
+| 101 0
+=== run strdefaultfnvalue.olang
+| status 0
+| b3
+| 5 0
+=== run strdefaulthelper.olang
+| status 0
+| b3
+| 5 0
+=== run strdefaultindex.olang
+| status 0
+| b3
+| 5 0
+=== run strdefaultlanding.olang
+| status 0
+| b3
+| 5 0
+=== run strdefaultmapget.olang
+| status 0
+| b
+| 5 0
+=== run strdefaultspawned.olang
+| status 0
+| b3
+| 5 0
 === run strderivedcallback.olang
 | status 0
 | b3
 | 103 0
 === run streffect.olang
 | status 0
+=== run strescapinglambda.olang
+| status 0
+| b4
 === run strhelperiter.olang
 | status 0
 | 6 6
@@ -2772,6 +2857,17 @@
 | 2000000
 === run strlambdahere.olang
 | status 0
+=== run strmovedlocal.olang
+| status 0
+| b31
+| 0 0
+=== run strmovedlocalkept.olang
+| status 0
+| b31
+| 1 0
+=== run strnotecopies.olang
+| status 0
+| 2 1
 === run stro20condstore.olang
 | status 0
 | 42
@@ -2779,13 +2875,63 @@
 | 44
 | 45
 | 46
+=== run strobligation.olang
+| status 0
+| b
+| 9
+=== run strreassignedcallback.olang
+| status 0
+| b1
+| 101 0
 === run strrenderchanges.olang
 | status 0
+=== run strselfrecdeps.olang
+| status 0
+| b1
+| 101 0
 === run strshape.olang
 | status 0
+=== run strspawnbuilds.olang
+| status 0
+| b7
+=== run strspawnclausedefault.olang
+| status 0
+| b1
+| 101 0
+=== run strspawnnobuild.olang
+| status 0
+| b6
+=== run strspawnpart.olang
+| status 0
+| 4
+| b
+=== run strstoredtor.olang
+| status 0
+| b
+| 9
+=== run strstorelambda.olang
+| status 0
+| b
+| 5
+=== run strstorelocal.olang
+| status 0
+| b
+| 5
+=== run strstorespawn.olang
+| status 0
+| b
+| 5
+=== run strstoresreceiver.olang
+| status 0
+=== run strtransientadapter.olang
+| status 0
+| b5
 === run strtransientbuilds.olang
 | status 0
 | b2b5
+=== run strtransientinner.olang
+| status 0
+| b4
 === run strwalks.olang
 | status 0
 === run t13bhandondeferred.olang

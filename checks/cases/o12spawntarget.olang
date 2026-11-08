@@ -1,4 +1,4 @@
-# check: fail error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
+# check: fail error[O12]: where this place's references live is not known here, so nothing new is built into it
 # O12/P1g: a task's built result stored into an element of an array whose scope is one of two - judged as the plain
 # assignment it is (review port1 l04)
 import "std/io"

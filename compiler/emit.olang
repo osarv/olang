@@ -4168,6 +4168,12 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             r := fe.let("call ptr @__olang_region_or(ptr " $o ", ptr " $fe.scope(s) ")")
             return fe.let("ptrtoint ptr " $r " to i64")
         }
+        case mir.Rvalue.ScopeOf(x) {
+            fe.E.runtime("__olang_scope_of")
+            o := fe.objectPtr(fe.val(x), fe.otype(x))
+            r := fe.let("call ptr @__olang_scope_of(ptr " $o ", ptr null)")
+            return fe.let("ptrtoint ptr " $r " to i64")
+        }
         case mir.Rvalue.ErrPush {
             fe.E.runtime("__olang_errpay_push")
             r := fe.let("call ptr @__olang_errpay_push()")

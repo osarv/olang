@@ -31,8 +31,6 @@
 ; recording them in a ring of their own, so that a view kept across a Vec's growth is reported where it is next read or
 ; written. The chunk stays in its scope's list, its header readable, and is quarantined with the rest when the scope
 ; closes; the ring forgets it then (or, full, its oldest entry, made readable again).
-declare i32 @mprotect(ptr, i64, i32)
-declare i32 @madvise(ptr, i64, i32)
 ; a quarantined chunk: the chunk, how much of it is protected (0: none, when the system refused or it is not
 ; mapped), and the bytes it counts against the bound
 %olang.sanq = type { ptr, i64, i64 }
@@ -54,6 +52,64 @@ declare i32 @madvise(ptr, i64, i32)
 @__olang_san_rnext = global i64 0
 @__olang_san_rcount = global i64 0
 @__olang_msg_san_len = unnamed_addr constant [117 x i8] c"use after scope closed: an allocation of more than 2^60 bytes - a length read from storage a closed scope gave back\0A\00"
+
+@__olang_msg_san_owner = unnamed_addr constant [97 x i8] c"scope sanitizer: a chunk a scope gives back does not name that scope as its owner (O29) - a bug\0A\00"
+
+; O29: whether chunk c names scope s as its owner - s itself; the region whose inner arena s is; a stand-in folded at its
+; join, followed to what it forwards to; or a part folded already, which names its root (__olang_chunks_own)
+define i1 @__olang_san_owns(ptr %c, ptr %s) {
+entry:
+  %op = getelementptr %olang.chunk, ptr %c, i32 0, i32 6
+  %o0 = load ptr, ptr %op
+  %si = ptrtoint ptr %s to i64
+  %inner = sub i64 %si, 56
+  %oi0 = ptrtoint ptr %o0 to i64
+  %isinner = icmp eq i64 %oi0, %inner
+  br i1 %isinner, label %yes, label %walk
+walk:
+  %o = phi ptr [ %o0, %entry ], [ %fwd, %follow ]
+  %same = icmp eq ptr %o, %s
+  br i1 %same, label %yes, label %fwdq
+fwdq:
+  %isnull = icmp eq ptr %o, null
+  br i1 %isnull, label %no, label %head
+head:
+  %hp = getelementptr %olang.scope, ptr %o, i32 0, i32 0
+  %h = load ptr, ptr %hp
+  %isfwd = icmp eq ptr %h, @__olang_fwd_chunk
+  br i1 %isfwd, label %follow, label %no
+follow:
+  %tp = getelementptr %olang.scope, ptr %o, i32 0, i32 2
+  %fwd = load ptr, ptr %tp
+  br label %walk
+yes:
+  ret i1 1
+no:
+  ret i1 0
+}
+
+; O29: every chunk scope s gives back names s as its owner, else the check fails - the bookkeeping a scope found from an
+; address reads
+define void @__olang_san_check_owner(ptr %head, ptr %s) noinline {
+entry:
+  br label %each
+each:
+  %cur = phi ptr [ %head, %entry ], [ %next, %ok ]
+  %end = icmp eq ptr %cur, null
+  br i1 %end, label %done, label %check
+check:
+  %owns = call i1 @__olang_san_owns(ptr %cur, ptr %s)
+  br i1 %owns, label %ok, label %bad
+bad:
+  call void @__olang_check_failed(ptr @__olang_msg_san_owner)
+  br label %ok
+ok:
+  %nextptr = getelementptr %olang.chunk, ptr %cur, i32 0, i32 0
+  %next = load ptr, ptr %nextptr
+  br label %each
+done:
+  ret void
+}
 
 ; what a closing scope gives back (__olang_scope_close): each of its chunks into the quarantine
 define void @__olang_san_quarantine_list(ptr %head) noinline {
@@ -136,6 +192,9 @@ follow:
   %fwd = load ptr, ptr %fwdptr
   br label %find
 link:
+  ; O29: the chunk names the scope holding it
+  %ownerptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 6
+  store ptr %s, ptr %ownerptr
   %nextptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 0
   %tailptr = getelementptr %olang.scope, ptr %s, i32 0, i32 2
   %none = icmp eq ptr %head, null

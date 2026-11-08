@@ -521,14 +521,6 @@ c2afieldparam.olang:5:15: note: 'n' is declared here
     5 | type T struct(n I32) {
       |               ^~~~~
 compilation failed with 1 error
-=== c2dcapturebuild.olang
-c2dcapturebuild.olang:18:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   18 |     f := fn() { w.hh.next = Node(5, null) }
-      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-c2dcapturebuild.olang:18:29: note: built here, where the receiver's part it was handed lives
-   18 |     f := fn() { w.hh.next = Node(5, null) }
-      |                             ^~~~~~~~~~~~~
-compilation failed with 1 error
 === c2de25once.olang
 c2de25once.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
    16 |         x := Env(local)
@@ -762,11 +754,6 @@ compilation failed with 1 error
 condtypes.olang:6:15: error[E28]: both values of 'a if c else b' have one type, found I32 and I64
     6 |     x I64 = n if true else m
       |               ^~
-compilation failed with 1 error
-=== condvaluefield.olang
-condvaluefield.olang:33:33: error[O11, O12]: where this reference's referent lives is not known here, and the callee may build there - give it one known scope
-   33 |         w((i if j < 0 else o).m.inner)
-      |                                 ^~~~~
 compilation failed with 1 error
 === constraintarg.olang
 constraintarg.olang:10:16: error[G19]: I64 does not satisfy the constraint CtShape on T: it has no method Area that fits
@@ -3398,17 +3385,6 @@ nllkeepsunion2.olang:19:11: error[O17]: this value's references live where its o
    19 |         f(t, x)
       |           ^
 compilation failed with 1 error
-=== nllmerge.olang
-nllmerge.olang:15:17: error[O25i, O12]: 'at' may hold values of different scopes here, so where its referent lives is not known - nothing new is built or stored through it: give it values of one scope, or store through each where it is assigned
-   15 |         at.next = N(9)
-      |                 ^
-nllmerge.olang:13:9: note: 'at' is given a value here
-   13 |         at mut N& = outer
-      |         ^~
-nllmerge.olang:14:21: note: 'at' is given a value here
-   14 |         if i == 1 { at = inner }
-      |                     ^~~~~~~~~~
-compilation failed with 1 error
 === noextendsmethod.olang
 noextendsmethod.olang:6:12: error[T29f]: Nums declares no 'Count', and does not extend its base, which has one - declare it with 'extends'
     6 |     c := n.Count(fn(x) { return x > 1 })
@@ -3474,7 +3450,7 @@ o10dd9bslice.olang:8:10: note: instantiated here, with T = String
       |          ^~~~~~
 compilation failed with 1 error
 === o12spawntarget.olang
-o12spawntarget.olang:12:29: error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
+o12spawntarget.olang:12:29: error[O12]: where this place's references live is not known here, so nothing new is built into it - reach the place through a local, so its scope is found from it while the program runs (O29), or store what already lives there
    12 |         join { spawn arr[0] = Node.mkNode(i + 50) }
       |                             ^
 compilation failed with 1 error
@@ -4465,11 +4441,6 @@ reflunknownhead.olang:5:7: error[M10]: 'zz' is no import here
     5 |     x zz.T = 3
       |       ^~
 compilation failed with 1 error
-=== rendercopyc2d.olang
-rendercopyc2d.olang:25:16: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
-   25 |     s := $Wrap(x)
-      |                ^
-compilation failed with 1 error
 === retire01assert.olang
 retire01assert.olang:21:20: error[S18c, K1]: evaluated while compiling, this assertion stops on a stale view: it uses a view of a collection's elements taken before the collection grew, which shows the retired buffer - its elements owning storage emptied
    21 |     assert work(5) == 5
@@ -4508,11 +4479,6 @@ roglobaltext.olang:15:14: error[S6]: V cannot be written - only a local, a param
    15 |     c.strcpy(V, "ab")
       |              ^
 compilation failed with 3 errors
-=== rv3condstore.olang
-rv3condstore.olang:13:12: error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
-   13 |     d.head = Node()
-      |            ^
-compilation failed with 1 error
 === rv3roat.olang
 rv3roat.olang:5:7: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
     5 |     ls[0].Push(9)
@@ -4570,11 +4536,6 @@ compilation failed with 1 error
 rv5condas.olang:34:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    34 |         grow(y)
       |              ^
-compilation failed with 1 error
-=== rv5condmember.olang
-rv5condmember.olang:37:15: error[O11, O12]: where this reference's referent lives is not known here, and the callee may build there - give it one known scope
-   37 |         growv(h)
-      |               ^
 compilation failed with 1 error
 === rv5ctormatch.olang
 rv5ctormatch.olang:19:30: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -5267,19 +5228,6 @@ stepnotnumber.olang:5:6: error[S3a, E31]: '++' and '--' step a number, or a type
     5 |     a++
       |      ^~
 compilation failed with 1 error
-=== stradapter.olang
-stradapter.olang:30:22: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   30 |     return $applyI(b.g)
-      |                      ^
-compilation failed with 1 error
-=== strarraycallback.olang
-strarraycallback.olang:9:21: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-    9 |     long := b.words.Count(fn(s String&) Bool { return s.Len() > 1 })
-      |                     ^~~~~
-$ROOT/std/prelude/array.olang:86:16: note: built here, where the receiver's part it was handed lives
-   86 |         if try keep(x) { n++ }
-      |                ^~~~
-compilation failed with 1 error
 === strayfnbody.olang
 strayfnbody.olang:4:12: error[L16]: unexpected character '`'
     4 |     x := 1 ` 2
@@ -5288,152 +5236,6 @@ strayfnbody.olang:4:14: error: expected end of line, found '2'
     4 |     x := 1 ` 2
       |              ^
 compilation failed with 2 errors
-=== strcallbackbuilds.olang
-strcallbackbuilds.olang:10:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   10 |     n := b.words.Count(fn(s String&) Bool {
-      |                  ^~~~~
-$ROOT/std/prelude/array.olang:86:16: note: built here, where the receiver's part it was handed lives
-   86 |         if try keep(x) { n++ }
-      |                ^~~~
-strcallbackbuilds.olang:20:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   20 |     n := via(b.words, fn(s String&) Bool {
-      |          ^~~
-$ROOT/std/prelude/array.olang:86:16: note: built here, where the receiver's part it was handed lives
-   86 |         if try keep(x) { n++ }
-      |                ^~~~
-compilation failed with 2 errors
-=== strcalleeadapter.olang
-strcalleeadapter.olang:30:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   30 |     return $peek(b.g)
-      |             ^~~~
-strcalleeadapter.olang:24:40: note: built here, where the receiver's part it was handed lives
-   24 | fn peek(g Getter&) I64 { return applyI(g) }
-      |                                        ^
-compilation failed with 1 error
-=== strcalleecatch.olang
-strcalleecatch.olang:34:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   34 |     return $pick(b.head)
-      |             ^~~~
-strcalleecatch.olang:30:39: note: built here, where the receiver's part it was handed lives
-   30 |     x := try find(n, 1) catch default Node(1, null)
-      |                                       ^~~~~~~~~~~~~
-compilation failed with 1 error
-=== strcalleecond.olang
-strcalleecond.olang:27:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   27 |     return $pick(b.head)
-      |             ^~~~
-strcalleecond.olang:23:29: note: built here, where the receiver's part it was handed lives
-   23 |     x := n if n.v == 0 else Node(1, null)
-      |                             ^~~~~~~~~~~~~
-compilation failed with 1 error
-=== strcalleespawn.olang
-strcalleespawn.olang:28:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   28 |     return $peek(b.head)
-      |             ^~~~
-strcalleespawn.olang:24:18: note: built here, where the receiver's part it was handed lives
-   24 |     join { spawn show(n) }
-      |                  ^~~~
-compilation failed with 1 error
-=== strcalleespawnlambda.olang
-strcalleespawnlambda.olang:26:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   26 |     return $peek(b.head)
-      |             ^~~~
-strcalleespawnlambda.olang:22:18: note: built here, where the receiver's part it was handed lives
-   22 |     join { spawn fn() { try io.Println($n.v) catch io.Error { } } }
-      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-compilation failed with 1 error
-=== strcatchnode.olang
-strcatchnode.olang:19:44: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   19 |     x := try find(b.head, 9) catch default Node(0, null)
-      |                                            ^~~~~~~~~~~~~
-compilation failed with 1 error
-=== strcondnode.olang
-strcondnode.olang:24:34: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   24 |     x := b.head if b.k == 0 else Node(1, null)
-      |                                  ^~~~~~~~~~~~~
-compilation failed with 1 error
-=== strcycledeps.olang
-strcycledeps.olang:20:5: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   20 |     ca(fn(x mut Node&) { }, b.head, 2)
-      |     ^~
-strcycledeps.olang:14:5: note: built here, where the receiver's part it was handed lives
-   14 |     g(n)
-      |     ^
-compilation failed with 1 error
-=== strdefaultfnvalue.olang
-strdefaultfnvalue.olang:35:38: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   35 |     x := try f(b.head) catch default h()
-      |                                      ^
-compilation failed with 1 error
-=== strdefaulthelper.olang
-strdefaulthelper.olang:35:19: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   35 |     b.head.next = pick(b.head)
-      |                   ^~~~
-strdefaulthelper.olang:32:37: note: built here, where the receiver's part it was handed lives
-   32 | fn Node.g(v I64) mut Node& { return Node(v) }
-      |                                     ^~~~~~~
-compilation failed with 1 error
-=== strdefaultindex.olang
-strdefaultindex.olang:21:59: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   21 |     b.arr[0].next = try b.arr.Get(b.k) catch default Node.g(5)
-      |                                                           ^
-strdefaultindex.olang:19:37: note: built here, where the receiver's part it was handed lives
-   19 | fn Node.g(v I64) mut Node& { return Node(v) }
-      |                                     ^~~~~~~
-compilation failed with 1 error
-=== strdefaultlanding.olang
-strdefaultlanding.olang:34:52: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   34 |     b.head.next = try f(b.head) catch default Node.g(5)
-      |                                                    ^
-strdefaultlanding.olang:32:37: note: built here, where the receiver's part it was handed lives
-   32 | fn Node.g(v I64) mut Node& { return Node(v) }
-      |                                     ^~~~~~~
-compilation failed with 1 error
-=== strdefaultmapget.olang
-strdefaultmapget.olang:21:53: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   21 |     b.head.next = try b.m.Get(7) catch default Node.g(5)
-      |                                                     ^
-strdefaultmapget.olang:19:37: note: built here, where the receiver's part it was handed lives
-   19 | fn Node.g(v I64) mut Node& { return Node(v) }
-      |                                     ^~~~~~~
-compilation failed with 1 error
-=== strdefaultspawned.olang
-strdefaultspawned.olang:33:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   33 |     join { spawn fn() {
-      |                  ^~~~~~
-strdefaultspawned.olang:31:37: note: built here, where the receiver's part it was handed lives
-   31 | fn Node.g(v I64) mut Node& { return Node(v) }
-      |                                     ^~~~~~~
-compilation failed with 1 error
-=== strescapinglambda.olang
-strescapinglambda.olang:16:40: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   16 | fn (b Bag&) Str() String { return "b" $peek(b.head) }
-      |                                        ^~~~
-strescapinglambda.olang:12:10: note: built here, where the receiver's part it was handed lives
-   12 |     f := fn() I64 { return n.v }
-      |          ^~~~~~~~~~~~~~~~~~~~~~~
-compilation failed with 1 error
-=== strmovedlocal.olang
-strmovedlocal.olang:29:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   29 |     x := h(b.head)
-      |          ^
-strmovedlocal.olang:25:10: note: built here, where the receiver's part it was handed lives
-   25 |     p := P2(n)
-      |          ^~~~~
-compilation failed with 1 error
-=== strmovedlocalkept.olang
-strmovedlocalkept.olang:29:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   29 |     x := h(b.head)
-      |          ^
-strmovedlocalkept.olang:24:10: note: built here, where the receiver's part it was handed lives
-   24 |     p := P2(n)
-      |          ^~~~~
-compilation failed with 1 error
-=== strnotecopies.olang
-strnotecopies.olang:13:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   13 |     l := Vec<Node&>()
-      |          ^~~~~~~~~~~~
-compilation failed with 1 error
 === stro17captures.olang
 stro17captures.olang:36:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
    36 |     b.grow2()
@@ -5442,107 +5244,10 @@ stro17captures.olang:40:5: error[O17]: this value's references live where its ow
    40 |     b.grow3()
       |     ^
 compilation failed with 2 errors
-=== strobligation.olang
-strobligation.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
-   16 |     x Res& = Res(b.head)
-      |                  ^~~~~~
-compilation failed with 1 error
 === strofnothing.olang
 strofnothing.olang:5:10: error[E11a]: '$' has nothing to render - this call returns no value
     5 |     t := $nothing()
       |          ^
-compilation failed with 1 error
-=== strreassignedcallback.olang
-strreassignedcallback.olang:17:5: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   17 |     hook(fn(x mut Node&) { }, b.head)
-      |     ^~~~
-strreassignedcallback.olang:14:5: note: built here, where the receiver's part it was handed lives
-   14 |     g(n)
-      |     ^
-compilation failed with 1 error
-=== strselfrecdeps.olang
-strselfrecdeps.olang:17:5: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   17 |     rec(fn(x mut Node&) { }, b.head, 1)
-      |     ^~~
-strselfrecdeps.olang:14:5: note: built here, where the receiver's part it was handed lives
-   14 |     g(n)
-      |     ^
-compilation failed with 1 error
-=== strspawnbuilds.olang
-strspawnbuilds.olang:21:40: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   21 | fn (b Bag&) Str() String { return "b" $hjoin(b.head) }
-      |                                        ^~~~~
-strspawnbuilds.olang:18:22: note: built here, where the receiver's part it was handed lives
-   18 |     join { spawn x = grow(n) }
-      |                      ^~~~
-compilation failed with 1 error
-=== strspawnclausedefault.olang
-strspawnclausedefault.olang:18:46: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   18 |     join { spawn b.head.next = try f(b.head) catch default Node(b.head.v + 100) }
-      |                                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-strspawnclausedefault.olang:18:60: note: built here, where the receiver's part it was handed lives
-   18 |     join { spawn b.head.next = try f(b.head) catch default Node(b.head.v + 100) }
-      |                                                            ^~~~~~~~~~~~~~~~~~~~
-compilation failed with 1 error
-=== strspawnnobuild.olang
-strspawnnobuild.olang:17:40: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   17 | fn (b Bag&) Str() String { return "b" $hjoin(b.head) }
-      |                                        ^~~~~
-strspawnnobuild.olang:14:22: note: built here, where the receiver's part it was handed lives
-   14 |     join { spawn x = hr(n) }
-      |                      ^~
-compilation failed with 1 error
-=== strspawnpart.olang
-strspawnpart.olang:24:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   24 |     join { spawn show(b.head) }
-      |                  ^~~~
-compilation failed with 1 error
-=== strstoredtor.olang
-strstoredtor.olang:16:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
-   16 |     x Res& = Res(b.head)
-      |                  ^~~~~~
-compilation failed with 1 error
-=== strstorelambda.olang
-strstorelambda.olang:13:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   13 |     f := fn() { b.head.next = Node(5, null) }
-      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-strstorelambda.olang:13:31: note: built here, where the receiver's part it was handed lives
-   13 |     f := fn() { b.head.next = Node(5, null) }
-      |                               ^~~~~~~~~~~~~
-compilation failed with 1 error
-=== strstorelocal.olang
-strstorelocal.olang:15:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   15 |     w Wr& = Wr(b.head)
-      |             ^~~~~~~~~~
-compilation failed with 1 error
-=== strstorespawn.olang
-strstorespawn.olang:12:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   12 |     join { spawn fn() { b.head.next = Node(5, null) } }
-      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-strstorespawn.olang:12:39: note: built here, where the receiver's part it was handed lives
-   12 |     join { spawn fn() { b.head.next = Node(5, null) } }
-      |                                       ^~~~~~~~~~~~~
-compilation failed with 1 error
-=== strstoresreceiver.olang
-strstoresreceiver.olang:13:5: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   13 |     grow(b.head)
-      |     ^~~~
-strstoresreceiver.olang:8:33: note: built here, where the receiver's part it was handed lives
-    8 | fn grow(n mut Node&) { n.next = Node(6, null) }
-      |                                 ^~~~~~~~~~~~~
-compilation failed with 1 error
-=== strtransientadapter.olang
-strtransientadapter.olang:13:48: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   13 | fn (b Bag&) Str() String { return "b" $apply(b.c) }
-      |                                                ^
-compilation failed with 1 error
-=== strtransientinner.olang
-strtransientinner.olang:13:16: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
-   13 |     n := apply(fn() I64 {
-      |                ^~~~~~~~~~
-strtransientinner.olang:14:14: note: built here, where the receiver's part it was handed lives
-   14 |         h := fn() I64 { return b.head.v }
-      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === sweepeval.olang
 sweepeval.olang:94:29: error[S18c]: this assertion is false, evaluated while compiling: I33

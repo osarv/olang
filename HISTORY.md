@@ -35219,3 +35219,38 @@ a Pool is a value with the Vec's copy. `for x in p` and `p.Handles()` are genera
 makes `pool.Pool<I64>[1, 2]`. A removed slot keeps its last value until an Add overwrites it (a Vec cannot hold a
 hole), unread. Tests name their targets and one is decided while compiling (a top-level assert and a baked global);
 `test -interpret` agrees. The earlier attempt's trap: test `RefMut` with a Vec, not an I64 (T24: no reference to a number).
+
+## O29: scopes found at run time from an address (docs/fnvalues.md section 12, round 6; 2026-11-08, wt-scopefind)
+
+The user chose, of the coordinator's two ways to build where no call knows the scope, finding it from the address of
+the storage (no word per object). **Runtime.** At start one range of address space is reserved (1 TB `MAP_NORESERVE`,
+halved until granted, `PROT_NONE` plus an `mprotect` per slot where overcommit is strict) and carved into 128 KB slots;
+every chunk up to that size starts a slot of its own, its header's `prev` word (used only while pooled) now the
+`owner`: the scope, part or region whose list holds it. Region first blocks come from per-size slabs in slots, the
+block found by stride. Larger chunks are entered in a sorted table behind a lock. `__olang_scope_of(p, q)` masks `p` to
+its slot's header (or searches the table), reads the owner, reads a region as the scope it lives in, and returns this
+thread's part of it (`__olang_capture_scope`); storage in no chunk is the program's, or `q`'s. san.ll writes the owner
+for its own-page arrays. A C driver (checks scenario `scopefind`) covers slots, the table, regions, a stack, constant
+data, C's memory and another thread's part.
+
+**Compiler.** `typed.Scope.Found(i)` names `Plan.Roots[i]`, a reference; lowering emits MIR `Rvalue.ScopeOf(x)` into a
+handle local `ScopeRef.Held` names (as `RegionOr` does), at each build - per-statement reuse was not needed for any
+measured case and was left. The operand is the call's own lowered argument where the root is one (so nothing is
+evaluated twice), else the root read again, which the scope pass allows only where reading it has no effect
+(`typed.Pure`: locals, fields, elements, derefs, literals, unchecked operators, conditionals of those). The scope pass
+places `Found`: a store whose slot is a set, derived or untraced (`findInto`: the container's reference, else the
+place's own old reference), the value's builds placed in that slot term (`finds`), constructor results landing there;
+a call's scope variable bound to such a term (`passedScope`: a reference argument, or a struct argument whose only
+reference-holding part is one reference field - with two, they may live apart and a build must outlive each); a `$`
+call of a `Str` taking its receiver by reference passes the receiver's found scope, so only by-value receivers keep
+E11c's no-build rule. The evaluator's `foundScope` gives an allocation's scope, a region read as its owner or parent,
+the program's for frame storage. free.olang makes no region for a site placed `Found` - found by the run of nllmerge
+under the sanitizer (a region made for `at.next`'s new node and released at the next store: a use after free the old
+refusal had hidden).
+
+**Cases.** 41 refusals became run cases (`-debug -sanitize`, each agreeing with `interpret` and an -O3 build):
+rv3condstore, rv5condmember, condvaluefield, nllmerge, c2dcapturebuild, rendercopyc2d and 35 `str*` cases; strstoresreceiver
+reads its text so D3b does not fire. Still refused: o12spawntarget (a task's result into a place of several scopes), the
+C2d instance cases, O25i reads of storage that may be gone, O23's field bindings. Messages reworded to say a local
+makes the scope findable. Found on the way: in the scope pass, `s.foundRoot, s.foundTerm = null, Term.None` was refused
+with O20 where the two assignments written apart are not - a parallel assignment giving `null` to a `?&` field (queued as its own task).

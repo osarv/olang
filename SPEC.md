@@ -3889,22 +3889,15 @@ another case where the enum is, leaves the rest of that rendering on what was re
 skipped at run time is refused (K1 - a global written, a mutable global read, an `extern` called), a `Str` with such an
 effect leaves its rendering to run time.
 
-`$` does not know where a part it renders lives, so where `Str`'s receiver - and anything it reaches - lives is not
-known in `Str`'s body (O12): `Str` may read and walk all of it, and build what it uses in its own blocks or in its
-result's scope (one `$` opens for the call and closes once the text is copied), but may **build or store nothing**
-where its receiver reaches - no new value built into such a scope, nothing it built or was handed stored into what the
-receiver reaches (O17's region; a reference or a value holding references read out of that region being all it may put
-there) - and may require nothing of such a scope (an obligation, O10b, naming one). Each is a compile-time error at
-`Str`; `$` hands its receiver's scope variables the scope it opens for the call, in which nothing is ever built through
-them. The same holds through whatever `Str` does with a part
-of what its receiver reaches: a function it passes the part to, a closure capturing it (D16d), a task handed it (P2), a
-function value adapting it (E31), a conditional's or a match's new value, or a catch default - a call in it whose result
-follows the default's included - placed with it (E28, S12b, R9a), a local a function hands back, made where its
-borrowed result lives (O26a) - each is judged by what is built where that part lives, and building there is the error,
-at `Str`. A call
-through a function value - a callback a function was handed included - is a body not known there, so it is judged to build
-wherever it binds such a scope, whatever is passed for it; a task handed a part gets a stand-in made where the part lives
-(P2), and a function value adapting a part (E31) is made there, so each is building there too.
+`$` does not know while compiling where a part it renders lives, so it passes a `Str` taking its receiver by reference
+the scope that receiver is **found** in while the program runs (O29): `Str` may build there and store what it builds
+into what the receiver reaches, as any function given that scope may. What the receiver's references reach beyond its
+own storage is built through as any reference whose scope is not known here is (O12, O29). A `Str` taking its receiver
+**by value** is passed the program's scope for where the receiver's references live: it may read and walk what they
+reach, and build what it uses in its own blocks or its result's scope (one `$` opens for the call and closes once the
+text is copied), but may build or store nothing there, and may require nothing of such a scope (an obligation, O10b,
+naming one) - each a compile-time error at `Str`, the same through a function it passes a part to, a closure capturing
+one (D16d), a task handed one (P2) or a function value adapting one (E31).
 And since `$` renders read-only values too (an immutable global, a part of a read-only reference, T25c), a by-value
 receiver of `Str` is one that takes a read-only copy: one whose body lends what it holds writably, or keeps it, is a
 compile-time error.
@@ -6709,7 +6702,8 @@ distinct from O10b's obligations, which arise only when *both* sides are success
 variables and merely lack a known order: this checker's guarantee is only as complete as what it can trace,
 but it is sound within that limit, rejecting anything it cannot prove safe rather than optimistically
 accepting it. Extending what this tracing can follow can only ever accept more programs that are genuinely
-safe; it can never turn an already-rejected program newly unsafe.
+safe; it can never turn an already-rejected program newly unsafe. What is **built** through such a reference is not
+judged here but placed: it is built where the reference's referent is found to live while the program runs (O29).
 
 **O12.** A variable whose scope tag becomes genuinely ambiguous — reassigned to different scopes on different
 branches that are merged back together, or (for a constructor field) forwarded from two different same-typed
@@ -6722,10 +6716,12 @@ where versions living in different scopes reach it (O25i), or through anything e
 **where it lives is not known**: it may be read,
 walked and compared, but it never equals an exact scope (O25), never determines a scope variable of a parameter
 through which something can be stored (O25g) or which a call's result is equated with (the callee could build there).
-Nothing new is built into a place holding such a reference by value either - a
-value local copied from a conditional or a match whose values' references live in different scopes, say: what is
-assigned there is a value whose references already live somewhere, never a temporary, since a temporary would be built
-in one scope and kept where the place's references really are. A conditional or a `match` gives such a reference when
+What is built **through** such a reference, or into a place holding one, is
+built where the storage it is built through or into is found to live while the program runs (O29) - a value local
+copied from a conditional whose values' references live in different scopes, given a new node, has it built where the
+node it held lives; a call given such a reference for a parameter it may build through is passed the scope found from
+the argument. Where the reference cannot be read again without an effect (a call's result read through), it is a
+compile-time error as before. A conditional or a `match` gives such a reference when
 the values it can give live - or, for values held by value, hold their references - in different scopes, or in one not
 traced: `w((i if k else o).m.inner)` with `i` and `o` from different blocks lends a value whose scope is not known
 (a value built for the conditional lands with it, and decides nothing).
@@ -6826,9 +6822,10 @@ value where it dangles. Accordingly:
      the version names is built where the read needs it, if it can be (O28) - a new one each time the assignment is
      reached - else the read is a compile-time error naming the assignment and a copy (`$x`, `x.Copy()`);
   2. the value read lives where its versions do: one version, exactly there; several living in different scopes, where
-     it lives is not known here (O12) - it may be read, compared, walked and passed where outliving suffices, but
-     nothing is built or stored through it, and it determines no scope variable through which something can be stored
-     (O25e, O25g): an error there names the assignments whose scopes differ.
+     it lives is not known here (O12) - it may be read, compared, walked and passed where outliving suffices; what is
+     built through it is built where its referent is found to live while the program runs (O29); nothing existing is
+     stored through it, and it determines no scope variable through which something can be stored (O25e, O25g): an
+     error there names the assignments whose scopes differ.
 
   A version is judged by what it holds, never by the local's other versions: `at = at.parent` walks a chain of parents
   whatever their scopes. `null` given holds no scope. Storage reached only through a version lives where the reads it
@@ -6854,13 +6851,15 @@ container is a **parameter** `p` of the function, the binding was made by whoeve
 it tagged with the scope variable `V` of `p`'s type reads at a **derived scope** of the function: "where the argument
 for `p` bound `V`". A derived scope behaves as one of the function's own scope variables (O3) - it outlives every block
 of the body (O10a), and a relation between it and another scope variable is an obligation (O10b) - except that it
-exists at no run time, so nothing is built into it (C2d's restriction on such a field): a temporary put where a derived
-scope's referent lives, or a result that would land there, is a compile-time error. A callee that may build into a
+exists at no run time: a temporary put where a derived scope's referent lives, or a result that would land there, is
+built where that referent is found to live while the program runs (O29), and where it cannot be found (nothing to read
+it from with no effect) is a compile-time error. A callee that may build into a
 derived scope - given a reference living in one (read through the field, or a copy of that reference in a local, a `for
 ... in` element or a lambda's capture) for a parameter something can be stored through and the callee may write, or
 whose result is equated with it, or whose body builds there, or given a copy out of such a field by value that it can
-build through - is passed the program's scope for it: what it builds lives as long as the program, which outlives the
-referent wherever that lives (never the scope the field was read through, which the referent may outlive). At each call it
+build through - is passed the scope that argument's referent is found in while the program runs (O29), or, where the
+argument cannot be read again with no effect, the program's scope, which outlives the referent wherever that lives
+(never the scope the field was read through, which the referent may outlive). At each call it
 is resolved from the argument: the binding the argument's value carries for `V`, or, for an argument that is itself a
 parameter of the caller, the caller's own derived scope; where neither is known, the argument's own scope (O23).
 Writing such a field is held to the derived scope too, so no write can falsify the binding a caller resolves it
@@ -7101,6 +7100,18 @@ placed first; storage for views only once they are, and an instance for a part o
 are decided - so a program whose views all fit where their storage already lives is placed as though views lifted
 nothing. A block stays a scope (O2): what it built that nothing
 outside keeps is reclaimed at its close. `olang explain` shows a function's obligations (B11b).
+
+**O29 (a scope found at run time).** Where something is built into a scope the compiler cannot name while compiling -
+one of several (O12, E28), one a reference local's versions differ on (O25i), a derived one (O23a), one not traced
+(O11), where a `Str`'s receiver lives (E11c) - it is built in the scope the storage it is built through or into lives
+in, **found while the program runs from that storage's address**: the reference built through, the container of the
+place stored into, or the place's own reference. Nothing is stored per value for it: a value's size, `T.Size`, a
+struct's layout and C's view of it (X11) are what they are without it. Storage on a stack, in a global, in constant data
+or in memory C made is found as the program's scope; a region (O8d) is found as the scope it lives in. What is built
+there lives as long as what it is reached through. Only where the compiler cannot place a build is it found; every
+judgment of this section about existing storage - that a reference outlives what it is stored in, exactly where
+something can be stored through it (O25g) - is made while compiling as before, so storing **existing** storage into a
+place whose scope is not known stays a compile-time error.
 
 **O13a.** A returned value whose **type** declares scope variables (T17c, or a constructor-bearing struct's
 tagged field) carries whatever those were bound to where the value was built. If one of them was bound to one

@@ -1,5 +1,7 @@
-# check: fail error[O25i, O12]
-# also: 'at' is given a value here
+# check: run
+# flags: -debug -sanitize
+# O29 (round 6): refused until a scope no call knows while compiling was found while the program runs from the
+# address of the storage built through - now built where that storage lives, read back after a churn. Before:
 # O25i/O12: a reference local typed per assignment holds, after the if, a version of either scope - a store through it
 # builds into storage whose scope is not known there, so it is refused, naming both assignments
 type N struct(v I64) {

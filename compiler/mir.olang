@@ -248,6 +248,10 @@ type Rvalue enum {
     # ...the region the object reference x names was built in, or otherwise, for null and constant data: where what is
     # built through a sole place's value goes
     RegionOr(x Operand, otherwise ScopeRef)
+    # O29: the scope the storage reference x names lives in, found while the program runs from its address - the
+    # program's for storage in no chunk (a stack, a global, constant data, C's), a region read as the scope it lives in -
+    # as a scope handle (an I64), which ScopeRef.Held names: where what is built through x goes
+    ScopeOf(x Operand)
     # T19b: a new payload record pushed on the thread's payload stack - its region (an I64 handle, which ScopeRef.Held
     # names), where the payload is copied before ErrSet points the record at it
     ErrPush
@@ -1099,6 +1103,7 @@ fn (v mut verifier&) rvalueShape(rv Rvalue) {
             v.operand(x)
             v.ref(s)
         }
+        case Rvalue.ScopeOf(x) { v.operand(x) }
         case Rvalue.ErrPush, Rvalue.ErrTop(_) { }
     }
 }
@@ -1483,6 +1488,7 @@ fn (v mut verifier&) rvalueType(rv Rvalue) types.TypeId {
         case Rvalue.Text(b, _, ty): v.textType(b, ty)
         case Rvalue.Region(_): I64T
         case Rvalue.RegionOr(x, _): v.regionOrType(v.operandType(x))
+        case Rvalue.ScopeOf(x): v.regionOrType(v.operandType(x))
         case Rvalue.ErrPush: I64T
         case Rvalue.ErrTop(ty): ty
     }
@@ -2204,6 +2210,7 @@ fn (v mut verifier&) rvalueFlow(rv Rvalue) {
             v.reads(x)
             v.usesScope(s)
         }
+        case Rvalue.ScopeOf(x) { v.reads(x) }
         case Rvalue.ErrPush, Rvalue.ErrTop(_) { }
     }
 }
@@ -2435,6 +2442,7 @@ fn (w mut dumper&) rvalue(rv Rvalue) String {
         case Rvalue.Text(b, into, ty): "text " $w.ref(b) " in " $w.ref(into) ": " $t.Canon(ty)
         case Rvalue.Region(s): "region in " $w.ref(s)
         case Rvalue.RegionOr(x, s): "region of " $w.operand(x) " or " $w.ref(s)
+        case Rvalue.ScopeOf(x): "scope of " $w.operand(x)
         case Rvalue.ErrPush: "payload push"
         case Rvalue.ErrTop(ty): "payload top: " $t.Canon(ty)
     }

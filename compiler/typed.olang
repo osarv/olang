@@ -1707,6 +1707,9 @@ type Scope enum {
     # a live scope nothing is built in: passed where a callee only reads - a value O12 lends for reading, the receiver
     # of a Str "$" calls (E11c) - lowering opens one, and the MIR verifier refuses any build into it
     Inert
+    # O29: a scope no call knows while compiling, found while the program runs from the address of the storage built
+    # through or into - the reference the plan's Roots holds at i
+    Found(i I64)
 }
 
 # the scope pass's decisions for one body: where each site builds (Built), where each local's storage is (Stored: a
@@ -1732,6 +1735,9 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     RegionKind mut Array<I64>& = Array<I64>(Sites)
     RegionParent mut Array<Scope>& = Array<Scope>(Sites)
     RegionRoot mut Array<Expr?&>& = Array<Expr?&>(Sites)
+    # O29: the references whose referents' scopes Found builds go into, found at run time - each one evaluating has no
+    # effect of (a local, a field read, a conditional of those)
+    Roots Vec<Expr&>
     passedAt mut Array<I64>& = Array<I64>(Sites)  # 1 + where a call's scopes start in passed; 0 for none recorded
     passedN mut Array<I64>& = Array<I64>(Sites)
     passed Vec<Scope>
@@ -1740,6 +1746,38 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
 fn Plan.New(b Body&) Plan { return Plan(b.Sites.Len(), b.Locals.Len(), b.Vars.Len()) }
 
 # what a call at a site passes, one scope per callee variable that is not a Capture, in order
+# whether reading a place has no effect: a local or global, a field, element or payload of one, through references
+fn PurePlace(p Lvalue&) Bool {
+    return match p {
+        case Lvalue.Local(_, _, _), Lvalue.Global(_, _, _, _): true
+        case Lvalue.Field(_, _, base, _): PurePlace(base)
+        case Lvalue.Elem(_, _, e): PurePlace(e.Base) and Pure(e.Index)
+        case Lvalue.Payload(_, _, q): PurePlace(q.Base)
+        case Lvalue.Deref(_, _, r): Pure(r)
+        case Lvalue.Temp(_, _, x, _): Pure(x)
+        case _: false
+    }
+}
+
+# whether evaluating an expression has no effect: a literal, a read or borrow of a place reading which has none, a
+# comparison or arithmetic of those, a conditional of those (O29: what a scope is found from, evaluated again)
+fn Pure(x Expr&) Bool {
+    return match x {
+        case Expr.Lit(_, _, _): true
+        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p): PurePlace(p)
+        case Expr.Away(_, _, y): Pure(y)
+        case Expr.Prim(_, _, _, check, args): check == Check.None and args.Every(fn(y): return Pure(y))
+        case Expr.Cond(_, _, c): Pure(c.C) and (c.A is null or Pure(c.A!)) and Pure(c.B)
+        case _: false
+    }
+}
+
+# O29: the scope found at run time from root's referent
+fn (pl mut Plan&) Find(root Expr&) Scope {
+    pl.Roots.Push(root)
+    return Scope.Found(pl.Roots.Len() - 1)
+}
+
 fn (pl mut Plan&) Pass(site SiteId, scopes Array<Scope>&) {
     pl.passedAt[I64(site)] = pl.passed.Len() + 1
     pl.passedN[I64(site)] = scopes.Len()

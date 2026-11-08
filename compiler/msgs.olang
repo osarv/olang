@@ -1440,10 +1440,10 @@ fn NoteReadOnlyCopyOf(text1 String&, text2 String&, text3 String&, text4 String&
 fn TypeNotInferable() r.Msg { return r.Msg(Diag.TypeNotInferable, "D15", "':=' takes its type from the initializer, and a call returning nothing has none") }
 fn DeclFromNull() r.Msg { return r.Msg(Diag.DeclFromNull, "D15", "':=' takes its type from the initializer, and null has none - write the type: 'x T?& = null'") }
 fn ScopeArgProgram(tok String&) r.Msg { return r.Msg(Diag.ScopeArgProgram, "E25, O1b", $tok " lives in the program's scope, which a result reaches by being stored there, not by a scope argument") }
-fn BuildIntoUnknownScope() r.Msg { return r.Msg(Diag.BuildIntoUnknownScope, "O11, O12", "where this reference's referent lives is not known here, and the callee may build there - give it one known scope") }
-fn StoreIntoUnknownScope() r.Msg { return r.Msg(Diag.StoreIntoUnknownScope, "O12", "where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope") }
+fn BuildIntoUnknownScope() r.Msg { return r.Msg(Diag.BuildIntoUnknownScope, "O11, O12", "where this reference's referent lives is not known here, and the callee may build there - put it in a local first, so its scope is found from it while the program runs (O29), or give it one known scope") }
+fn StoreIntoUnknownScope() r.Msg { return r.Msg(Diag.StoreIntoUnknownScope, "O12", "where this place's references live is not known here, so nothing new is built into it - reach the place through a local, so its scope is found from it while the program runs (O29), or store what already lives there") }
 fn TagUnknownScope(tok1 String&, tok2 String&) r.Msg { return r.Msg(Diag.TagUnknownScope, "O12", "where " $tok1 " lives is not known here, so nothing is declared to live there - read it through " $tok2 ", or declare the local with ':='") }
-fn BuildThroughUnknownScope() r.Msg { return r.Msg(Diag.BuildThroughUnknownScope, "C2d", "this builds through a field whose scope is not known here - build where it lives, in the function that knows") }
+fn BuildThroughUnknownScope() r.Msg { return r.Msg(Diag.BuildThroughUnknownScope, "C2d", "this builds through a field whose scope is not known here - read the field into a local first, so its scope is found from it while the program runs (O29), or build where it lives") }
 fn ReturnTypeMismatch(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.ReturnTypeMismatch, "D8", "this function returns " $ty1 ", found " $ty2) }
 fn ArgCount(n1 I64, text String&, n2 I64) r.Msg { return r.Msg(Diag.ArgCount, "E14", "expected " $n1 " argument" $text ", found " $n2) }
 fn ArgCountRange(n1 I64, n2 I64, n3 I64) r.Msg { return r.Msg(Diag.ArgCountRange, "E14", "expected " $n1 " to " $n2 " arguments, found " $n3) }
@@ -1501,7 +1501,7 @@ fn CaptureReadOnly() r.Msg { return r.Msg(Diag.CaptureReadOnly, "D16c", "a lambd
 fn ReadOnlyRefWrite() r.Msg { return r.Msg(Diag.ReadOnlyRefWrite, "T25b", "this writes through a read-only reference - one with no 'mut' in its type") }
 fn WriteIntoCallValue() r.Msg { return r.Msg(Diag.WriteIntoCallValue, "E31", "this writes into a value a call gave back, a copy no one holds - store the whole element: x[i] = v") }
 fn Immutable(text String&) r.Msg { return r.Msg(Diag.Immutable, "S6", $text " cannot be written - only a local, a parameter or a 'mut' global can") }
-fn StrStoresInReceiver() r.Msg { return r.Msg(Diag.StrStoresInReceiver, "E11c, O12", "'$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here") }
+fn StrStoresInReceiver() r.Msg { return r.Msg(Diag.StrStoresInReceiver, "E11c, O12", "'$' does not say where a value it renders lives, so a Str taking its receiver by value builds and stores nothing where the receiver's references reach - take the receiver by reference ('x T&'), or build what it needs here") }
 fn StrReceiverWritable() r.Msg { return r.Msg(Diag.StrReceiverWritable, "E11c, T25c", "'$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only") }
 fn NoteUnassignedDecl() r.Msg { return r.Msg(Diag.NoteUnassignedDecl, "", "declared here with no value") }
 fn NoteUnassignedNoElse() r.Msg { return r.Msg(Diag.NoteUnassignedNoElse, "", "when this condition is false nothing assigns it - this 'if' has no 'else'") }
