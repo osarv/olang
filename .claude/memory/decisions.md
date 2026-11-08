@@ -1017,3 +1017,10 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   opposite of `noreturn`); the result relation became `borrows a` / `noborrow`. Layout confirmed by the user's
   reading: `fn name(params) [conditions and promises] Result ? Errors { body }`; type words stay in the type
   declaration, `commutes` after an operator method's result. Sent to the note.
+- The user 2026-11-08: "they're only used in type declarations and argument declarations. We won't actually write them
+  on real functions ... always be inferred ... do we actually need some extra syntax ... or can we just append all the
+  words to ... the variable type?" Agreed: promises are for function TYPES only (declarations infer them; a library
+  pins one with a top-level `assert not f.Allocates`); no brackets - words follow the function type's signature,
+  space-separated, where `noreturn` already sits (so `noreturn` stays put, the first of them): `onClick fn&(e Event&)
+  noalloc noblock pure`, `type Handler fn(e Event&) noalloc noblock`, `fn&(list mut Vec<Node&>&, n Node&) keeps n in
+  list`, `keeps x`, `borrows a`, `noborrow`, `returns`. PROPOSED, ASKED to confirm; sent to the note.
