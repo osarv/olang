@@ -33,3 +33,8 @@ Open questions:
   in every module through link-time constants - yes, later; 6. `std/pool` of generational handles - yes.
   Since docs/wholeprog.md was decided (facts with readers, 2026-11-08 evening), questions 3-5 and the one-holder rule
   may use whole-program facts; std/pool depends on nothing. Re-raise when the user returns to it.
+  Added 2026-11-08 (the user asked what a list with every link weak does): it loses its nodes, and today's design
+  makes that depend on what the compiler proves. Proposed with question 2: a weak read gives null as soon as no
+  owning place holds the node (the count in the header word the read loads anyway; needs 3(b)), and a compile-time
+  error where a fresh node is stored only into weak places, or a type weak links name is held owning nowhere
+  (whole-program). Recommendation: both.
