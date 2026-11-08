@@ -43,7 +43,7 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `unique.olang` - unique types (T13b): fresh values land by value, any other copy is a reference, a by-value parameter
   handed on at its last mention, holders and collections following their parts; baked and decided while compiling.
 - `drops.olang` - destructors run where the holder lets go (O15): a by-value variable's as its block is left, a
-  parameter's at the callee's end unless handed on, a holder's parts, a store over a place, a variable's Destroy(); the
+  parameter's at the callee's end unless handed on, a holder's parts, a store over a place; the
   whole order decided while compiling beside the run time.
 - `kept.olang` - a local kept past its block or loop turn is built where it is kept (O28, O17, D9i): each turn's value its
   own, read back after an arena churn; decided while compiling beside the run time.

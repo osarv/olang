@@ -1,6 +1,6 @@
 # check: run
 # G42 (review 6b F2): a destructor is what a body registering it may lead to - a constructor of a type with one, a
-# value given storage of its own, x.Destroy() - so a function whose only effect is a destructor it runs writes the
+# value given storage of its own, a block ending it - so a function whose only effect is a destructor it runs writes the
 # global the destructor writes and allocates what it allocates; the facts said neither, and computable while compiling
 import "std/io"
 G mut Vec<I64>
@@ -11,8 +11,9 @@ fn touch() {
     g := guard()
 }
 fn ended() {
-    g := guard()
-    g.Destroy()
+    {
+        g := guard()
+    }
 }
 assert touch.WritesGlobals and touch.Allocates, "touch's destructor grows G"
 assert ended.WritesGlobals and ended.Allocates, "ended's destructor grows G"

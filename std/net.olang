@@ -5,8 +5,8 @@
 # Lookup and Resolve, through the C library's getaddrinfo (its linked list of addrinfo walked by the pointers C gives,
 # each node copied out into its plain-data struct, X22); IP.Parse and Addr.Parse read only numbers (and "localhost").
 #
-# A Conn, a Listener and a UDP socket close their descriptor when their scope closes (a destructor, C9), or sooner at
-# x.Destroy() (C9b); each is held by reference (C11). Linux's socket constants, the same on x86-64 and AArch64.
+# A Conn, a Listener and a UDP socket close their descriptor when their holder lets go (a destructor, C9, O15); each is
+# held by reference (C11). Linux's socket constants, the same on x86-64 and AArch64.
 # Imported with `import "std/net"`.
 
 import "time"
@@ -407,8 +407,8 @@ fn Addr.Resolve(t String&) Addr ? Error.Address, Error.UnknownHost, Error.Unreac
 
 # ---- TCP ----
 
-# a connection, either side's: read and written as a stream of bytes until it is destroyed (its scope's end, or
-# Destroy())
+# a connection, either side's: read and written as a stream of bytes until it is destroyed (where its holder
+# lets go)
 type Conn unique struct(fd I32) {
     fd
 } destruct {
@@ -523,7 +523,7 @@ type UDP unique struct(fd I32) {
 }
 
 # a UDP socket bound to a (port 0 for one the system chooses, Local() saying which)
-fn UDP.Listen(a Addr&) mut UDP& ? Error {
+fn UDP.Listen(a Addr&) UDP ? Error {
     fd := try open(a, sockDgram)
     if a.Host.V6: setInt(fd, ipprotoIpv6, ipv6V6only, 0)
     sa := sockaddr(a)
@@ -636,7 +636,6 @@ fn echoOnce(l mut Listener&, served mut counted&) ? Error {
         c.Write(out)!
         served.n += got.Len()
     }
-    c.Destroy()
 }
 
 type counted struct() {
@@ -671,10 +670,12 @@ test "a TCP connection over loopback carries bytes both ways" {
 }
 
 test "dialing where nothing listens is refused, and a taken address is in use" {
-    l := Listener.Listen(Addr(IP.Loopback4(), 0))!
-    at := l.Addr()!
-    try Listener.Listen(at) catch Error.InUse { } catch Error { unreachable }
-    l.Destroy()
+    at := Addr(IP.Loopback4(), 0)
+    {
+        l := Listener.Listen(at)!
+        at = l.Addr()!
+        try Listener.Listen(at) catch Error.InUse { } catch Error { unreachable }
+    }
     try Conn.Dial(at) catch Error.Refused { return }
     unreachable
 }

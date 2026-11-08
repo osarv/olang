@@ -29,10 +29,10 @@ and counted. Its scenarios include generators walked every way a loop can end (D
 make scopefuzz                    # SEED=1 COUNT=100 JOBS=2 SCENARIOS=12
 ```
 
-## The early-free fuzzer (O8d, C9b)
+## The early-free fuzzer (O8d, O15)
 
 Programs that replace and remove in long-lived places, keep views across the let-goes, store views elsewhere, and
-take resources out of a Map to `Destroy()` them, each scenario with a holder type of its own. One scenario in three
+take resources out of a Map, each scenario with a holder type of its own. One scenario in three
 hands unique values owning storage on through by-value parameters (T13b's move) - one call deep, two, through a
 constructor's field - into a Map and a Vec held by value, replaces, removes and takes them out to holders, and in half
 of them keeps views across those let-goes. Each is built

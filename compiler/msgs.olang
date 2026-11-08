@@ -377,7 +377,6 @@ type Diag enum {
     PackedByValueC
     UniqueLentHere
     UniqueAlias
-    DestroyedAfter
     DropCycle
     DropRegistered
     DropTempRegistered
@@ -495,14 +494,6 @@ type Diag enum {
     AtomicNotPlace
     AtomicNotWritable
     VacateNotPlace
-    DestroyNotLocal
-    DestroyNoDestructor
-    DestroyNotSole
-    DestroyUsedAfter
-    DestroyInLoop
-    DestroyDeclared
-    NoteDestroyWhy
-    NoteDestroyHere
     ConversionRepresentation
     ConvertNotNumber
     NotIndexable
@@ -1356,10 +1347,9 @@ fn PackedByValueC(ty String&) r.Msg { return r.Msg(Diag.PackedByValueC, "X11a", 
 fn UniqueAfter(name String&, ty String&) r.Msg { return r.Msg(Diag.UniqueAfter, "T13b", "'" $name "' is handed on here, and " $ty " is unique - a unique value given by value lands once more only at its last mention, and '" $name "' is mentioned after") }
 fn UniqueLentHere(name String&, ty String&) r.Msg { return r.Msg(Diag.UniqueLentHere, "T13b", "'" $name "' is handed on here while the same call also reaches it, and " $ty " is unique - one value would be in two places: give the call '" $name "' once, or hand it on in a call of its own") }
 fn UniqueAlias(name String&, ty String&, alias String&) r.Msg { return r.Msg(Diag.UniqueAlias, "T13b", "'" $name "' is handed on here, and " $ty " is unique - '" $alias "', which reaches it, is used after: use '" $alias "' before handing '" $name "' on, or no longer after") }
-fn DestroyedAfter(name String&) r.Msg { return r.Msg(Diag.DestroyedAfter, "C9b", "'" $name "' is destructed here, and mentioned after - nothing reaches a value its Destroy() ended") }
 fn DropRegistered(h String&, v String&, t String&) r.Msg { return r.Msg(Diag.DropRegistered, "O15, O16", "'" $h "' holds a value where its call landed, ended as that scope closes - after '" $v "', which it may hold a reference to, so its destructors could read '" $v "' already ended: declare it by value, '" $h " " $t " = ...', and its block ends it first") }
 fn DropTempRegistered(v String&, t String&) r.Msg { return r.Msg(Diag.DropTempRegistered, "O15, O16", "this value is held where its call lands, ended as that scope closes - after '" $v "', which the call may make it hold a reference to, so its destructors could read '" $v "' already ended: declare it by value first, 'x " $t " = ...', and give the call that") }
-fn DropCycle(a String&, b String&) r.Msg { return r.Msg(Diag.DropCycle, "O15", "'" $a "' and '" $b "' may each hold a reference to the other, and both have destructors to run - whichever is ended first, the other's destructor could read it: end one of them before the other refers to it (a block of its own, or its Destroy()), or hold one by reference") }
+fn DropCycle(a String&, b String&) r.Msg { return r.Msg(Diag.DropCycle, "O15", "'" $a "' and '" $b "' may each hold a reference to the other, and both have destructors to run - whichever is ended first, the other's destructor could read it: end one of them before the other refers to it (a block of its own), or hold one by reference") }
 fn UniqueKind(what String&) r.Msg { return r.Msg(Diag.UniqueKind, "T13b", "'unique' says a value exists in one place - " $what " has no values of its own") }
 fn UniqueNeedsCopy(text String&, ty String&) r.Msg { return r.Msg(Diag.UniqueNeedsCopy, "T13b, G18", $text " needs a copy, and " $ty " is unique - its values are never copied: call " $text " with a reference ('" $ty "&') or with a type that copies") }
 fn DestructNotUnique(ty String&) r.Msg { return r.Msg(Diag.DestructNotUnique, "C11, T13b", "a destructor releases what one value holds, so " $ty " is unique - declare it 'type " $ty " unique struct(...)'") }
@@ -1479,29 +1469,6 @@ fn AtomicNotWritable() r.Msg { return r.Msg(Diag.AtomicNotWritable, "P9", "this 
 # the prelude's vacate() on what is no writable place (docs/memory.md 3.4)
 fn VacateNotPlace() r.Msg { return r.Msg(Diag.VacateNotPlace, "M19d", "vacate() empties a place - a writable variable, field or element") }
 
-# x.Destroy() on what is no local of this function (C9b)
-fn DestroyNotLocal() r.Msg { return r.Msg(Diag.DestroyNotLocal, "C9b", "Destroy() is called on a local - a variable of this function holding the instance") }
-
-# x.Destroy() on an instance of a type with no destructor (C9b)
-fn DestroyNoDestructor(ty String&) r.Msg { return r.Msg(Diag.DestroyNoDestructor, "C9b", "Destroy() runs a destructor, and " $ty " declares none") }
-
-# x.Destroy() where x may not be the only way left to reach its instance (C9b); a note says what else may reach it
-fn DestroyNotSole(name String&) r.Msg { return r.Msg(Diag.DestroyNotSole, "C9b", "'" $name ".Destroy()' needs '" $name "' to be the only way left to reach its instance") }
-
-# a local read after its Destroy() (C9b)
-fn DestroyUsedAfter(name String&, line I64) r.Msg { return r.Msg(Diag.DestroyUsedAfter, "C9b", "'" $name "' is used after '" $name ".Destroy()' (line " $line ")") }
-
-# x.Destroy() in a loop x is declared outside of: its next turn destroys again (C9b)
-fn DestroyInLoop(name String&) r.Msg { return r.Msg(Diag.DestroyInLoop, "C9b", "'" $name ".Destroy()' runs again in the loop's next turn, on what it ended - declare '" $name "' inside the loop") }
-
-# a method named Destroy declared on a type with a destructor, which has the compiler's (C9b)
-fn DestroyDeclared(ty String&) r.Msg { return r.Msg(Diag.DestroyDeclared, "C9b", "the compiler supplies Destroy() for " $ty ", which declares a destructor - choose another name") }
-
-# what else may reach an instance a Destroy() is refused for
-fn NoteDestroyWhy(text String&) r.Msg { return r.Msg(Diag.NoteDestroyWhy, "", $text) }
-
-# where the Destroy() a use follows is
-fn NoteDestroyHere(name String&) r.Msg { return r.Msg(Diag.NoteDestroyHere, "", "'" $name ".Destroy()' is here; give it a new local if it is needed again") }
 fn ConversionRepresentation(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.ConversionRepresentation, "T29", $ty1 " cannot become " $ty2 " - their representations differ") }
 fn ConvertNotNumber(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.ConvertNotNumber, "E26", $ty1 " is no number, so " $ty2 "(x) cannot convert it") }
 fn NotIndexable(ty String&) r.Msg { return r.Msg(Diag.NotIndexable, "E16", $ty " cannot be indexed") }

@@ -1755,15 +1755,15 @@ fn (g mut SG&) handScenario(k I64) String& {
 }
 
 # the statements that keep (views across a let-go, views stored elsewhere): a clean scenario writes none
-FreeKeeps Array<I64> = Array<I64>[10, 11, 12, 13, 14, 15, 16, 23, 25, 26, 27]
+FreeKeeps Array<I64> = Array<I64>[10, 11, 12, 13, 14, 15, 16, 23, 25, 26]
 
 # one statement on holder h in turn i: a let-go, a view kept across one, a store of a view elsewhere, a move out
 fn (g mut SG&) freeOp(h String&, ind String&, clean Bool) String& {
     v := g.val()
     x := g.name("x")
     kk := g.k
-    k := g.r(28)
-    for clean and k in FreeKeeps { k = g.r(28) }
+    k := g.r(27)
+    for clean and k in FreeKeeps { k = g.r(27) }
     if k == 0 { return $ind $h ".t = \"t\" $i \"-" $v "\"\n" }
     if k == 1 { return $ind $h ".n = Node(i + " $v ")\n" }
     if k == 2 { return $ind $h ".n = Node.mkChain(i, " $(1 + g.r(3)) ")\n" }
@@ -1804,35 +1804,30 @@ fn (g mut SG&) freeOp(h String&, ind String&, clean Bool) String& {
                 "\n" $ind "}\n")
     }
     if k == 20 { return $ind $h ".t = $" $h ".t.Len() \"x\"\n" }
-    # C9b: resources built, kept in a Map, taken out and destroyed - and the shapes Destroy() refuses
+    # O15: resources built, kept in a Map, taken out - ended where their holders let go - and shapes the scope rules may refuse
     if k == 22 {
         r := g.name("r")
-        return $ind "{\n" $ind "    " $r " := Res(i + " $v ")\n" $ind "    acc += " $r ".t.Len()\n" $ind "    " $r ".Destroy()\n" $ind "}\n"
+        return $ind "{\n" $ind "    " $r " := Res(i + " $v ")\n" $ind "    acc += " $r ".t.Len()\n" $ind "}\n"
     }
-    if k == 23 {    # a second reference stored: refused
+    if k == 23 {    # a second reference stored
         r := g.name("r")
-        return $ind "{\n" $ind "    " $r " := Res(i)\n" $ind "    " $h ".keepR = " $r "\n" $ind "    " $r ".Destroy()\n" $ind "}\n"
+        return $ind "{\n" $ind "    " $r " := Res(i)\n" $ind "    " $h ".keepR = " $r "\n" $ind "}\n"
     }
     if k == 24 {
         r := g.name("r")
         return ($ind $h ".rm.Put(i % 4, Res(i * " $v "))\n" $ind "if " $h ".rm.Has((i + 2) % 4) {\n" $ind "    " $r " := try " $h
-                ".rm.Take((i + 2) % 4) catch { unreachable }\n" $ind "    acc += " $r ".n\n" $ind "    " $r ".Destroy()\n" $ind "}\n")
+                ".rm.Take((i + 2) % 4) catch { unreachable }\n" $ind "    acc += " $r ".n\n" $ind "}\n")
     }
-    if k == 25 {    # a view of the Map's value used after one is taken out and destroyed: refused
+    if k == 25 {    # a view of the Map's value used after one is taken out
         r := g.name("r")
         y := g.name("y")
         return ($ind "if " $h ".rm.Has(i % 4) {\n" $ind "    " $y " := try " $h ".rm.Get(i % 4) catch { unreachable }\n" $ind "    " $r
-                " := try " $h ".rm.Take(i % 4) catch { unreachable }\n" $ind "    " $r ".Destroy()\n" $ind "    acc += " $y ".n\n" $ind "}\n")
+                " := try " $h ".rm.Take(i % 4) catch { unreachable }\n" $ind "    acc += " $y ".n + " $r ".n\n" $ind "}\n")
     }
-    if k == 26 {    # captured, then destroyed: refused
+    if k == 26 {    # captured
         r := g.name("r")
         f := g.name("f")
-        return ($ind "{\n" $ind "    " $r " := Res(i)\n" $ind "    " $f " := fn() I64 { return " $r ".n }\n" $ind "    " $r ".Destroy()\n"
-                $ind "    acc += " $f "()\n" $ind "}\n")
-    }
-    if k == 27 {    # used after: refused
-        r := g.name("r")
-        return $ind "{\n" $ind "    " $r " := Res(i)\n" $ind "    " $r ".Destroy()\n" $ind "    acc += " $r ".n\n" $ind "}\n"
+        return ($ind "{\n" $ind "    " $r " := Res(i)\n" $ind "    " $f " := fn() I64 { return " $r ".n }\n" $ind "    acc += " $f "()\n" $ind "}\n")
     }
     return $ind "if " $h ".v.Len() > 2 { try " $h ".v.Pop() catch { } }\n"
 }

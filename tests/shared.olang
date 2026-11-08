@@ -18344,7 +18344,7 @@ test "E24: a try covers the whole expression after it, and the evaluator agrees"
     assert TrReachBaked == 5000 + 100 + 70 + 8
 }
 
-# ---- C9b: x.Destroy() runs an instance's destructor now and reclaims it; every other destructor keeps O15's order ----
+# ---- O15: a destructor runs where its holder lets go, in reverse construction order ----
 
 DestroyLog mut I64 = 0
 type DestroyRes unique struct(id I64) {
@@ -18356,9 +18356,12 @@ type DestroyRes unique struct(id I64) {
 
 fn destroyOrder(k I64) I64 {
     a := DestroyRes(1)
-    e := DestroyRes(2)
+    if k > 5 {
+        e := DestroyRes(2)
+        churnArena()
+        assert e.id == 2
+    }
     f := DestroyRes(3)
-    if k > 5 { e.Destroy() }
     churnArena()
     return a.text.Len() + f.id
 }
@@ -18370,7 +18373,6 @@ fn destroyLooped() I64 {
     for i in range 4 {
         r := DestroyRes.destroyBuilt(i + 1)
         t += r.text.Len()
-        if i % 2 == 0 { r.Destroy() }
     }
     return t
 }
@@ -18379,37 +18381,35 @@ type DestroyFail error {
     Neg
 }
 
-# destroyed on the path that fails, returned on the other: a return or an error after it ends its path
+# ended on the path that fails, returned on the other
 fn DestroyRes.destroyOpen(i I64) DestroyRes& ? DestroyFail {
     r := DestroyRes(i)
-    if i < 0 {
-        r.Destroy()
-        error DestroyFail.Neg
-    }
+    if i < 0 { error DestroyFail.Neg }
     return r
 }
 
 fn destroyDeferred(i I64) I64 {
     r := DestroyRes(i)
-    defer r.Destroy()
     churnArena()
     return r.text.Len()
 }
 
 fn destroyLen(r DestroyRes&) I64 { return r.text.Len() }
 
-test "C9b: Destroy() runs the destructor now, and the others still run in reverse construction order" {
+test "O15: destructors run where their holders let go, in reverse construction order" {
     DestroyLog = 0
-    assert destroyOrder(1 + ctRuntimeZero) == 40 and DestroyLog == 321
+    assert destroyOrder(1 + ctRuntimeZero) == 40 and DestroyLog == 31
     DestroyLog = 0
     assert destroyOrder(9 + ctRuntimeZero) == 40 and DestroyLog == 231
     DestroyLog = 0
     assert destroyLooped() == 4 * 37 and DestroyLog == 1234
 }
 
-test "C9b: a Destroy() before an error, a deferred one, and one after a call that keeps nothing" {
+test "O15: a value ended by an error leaving, by its function, and by its block after a call that keeps nothing" {
     DestroyLog = 0
-    try DestroyRes.destroyOpen(-7 + ctRuntimeZero) catch DestroyFail { }
+    {
+        try DestroyRes.destroyOpen(-7 + ctRuntimeZero) catch DestroyFail { }
+    }
     assert DestroyLog == -7
     DestroyLog = 0
     r := DestroyRes.destroyOpen(6 + ctRuntimeZero)!
@@ -18417,30 +18417,29 @@ test "C9b: a Destroy() before an error, a deferred one, and one after a call tha
     assert r.text == "res 6 - its text built where it lives" and DestroyLog == 0
     assert destroyDeferred(8 + ctRuntimeZero) == 37 and DestroyLog == 8
     DestroyLog = 0
-    k := DestroyRes(5)
-    n := destroyLen(k)
-    k.Destroy()
+    n I64 = 0
+    {
+        k := DestroyRes(5)
+        n = destroyLen(k)
+    }
     assert n == 37 and DestroyLog == 5
 }
 
-# C9b, S19e: an errdefer's Destroy() runs only where an error leaves its block - there at once, before the caller goes
-# on - so the instance may be returned on the other ways out
+# O15: the value is ended where an error leaves, there at once, and handed on by the return
 fn DestroyRes.destroyOnError(i I64) DestroyRes& ? DestroyFail {
     r := DestroyRes(i)
-    errdefer r.Destroy()
     churnArena()
     if i < 0 { error DestroyFail.Neg }
     return r
 }
 
-# C9b, D18: a generator's frame holds its destroy target across a yield - destroyed before the instance built after it,
-# which its block's close destructs - and a walk stopped part way reclaims what the frame holds, in reverse
+# O15, D18: a generator's frame holds its values across a yield - ended at the block's close, last declared first - and
+# a walk stopped part way ends what the frame holds, in reverse
 fn destroyGen(n I64) Iterator<I64> {
     for i in range n {
-        r := DestroyRes(i + 1)
         q := DestroyRes(i + 4)
+        r := DestroyRes(i + 1)
         yield r.text.Len() + r.id + q.id
-        r.Destroy()
     }
 }
 
@@ -18481,9 +18480,11 @@ fn letGoLoop(n I64) I64 {
 
 LetGoBaked := letGoLoop(4)
 
-test "C9b: an errdefer's Destroy() runs where an error leaves, and a Destroy() between a generator's yields" {
+test "O15: a value ended where an error leaves, and the values of a generator's turns" {
     DestroyLog = 0
-    try DestroyRes.destroyOnError(-3 + ctRuntimeZero) catch DestroyFail { }
+    {
+        try DestroyRes.destroyOnError(-3 + ctRuntimeZero) catch DestroyFail { }
+    }
     assert DestroyLog == -3
     DestroyLog = 0
     r := DestroyRes.destroyOnError(4 + ctRuntimeZero)!
@@ -18499,7 +18500,7 @@ test "C9b: an errdefer's Destroy() runs where an error leaves, and a Destroy() b
     {
         for v in destroyGen(5 + ctRuntimeZero) { if v == 44 { break } }
     }
-    assert DestroyLog == 1452
+    assert DestroyLog == 1425
 }
 
 test "O8d: a place let go of between a generator's yields and in an errdefer - baked, decided and run alike" {
@@ -18633,7 +18634,7 @@ test "O8d, F4: a destructor a let-go would run early runs at its scope's close" 
     assert bulkDtorTurns() == 0 and BulkEnds == 6
 }
 
-# C9b: a break or a continue of the loop whose body declares the local ends its path, as a return does
+# O15: a break or a continue of the loop whose body declares the local ends it, as a return does
 BulkDestroyed mut I64 = 0
 
 type BulkConn unique struct(n I64) {
@@ -18646,20 +18647,14 @@ fn bulkSkipOne(z I64) I64 {
     t I64 = 0
     for i in range 4 {
         r := BulkConn(i + z)
-        if i == 1 {
-            r.Destroy()
-            continue
-        }
-        if i == 3 {
-            r.Destroy()
-            break
-        }
+        if i == 1: continue
+        if i == 3: break
         t += r.n
     }
     return t * 10 + BulkDestroyed
 }
 
-test "C9b: r.Destroy(); continue - and break - in the loop that declares r" {
+test "O15: a continue - and a break - in the loop that declares r end it" {
     BulkDestroyed = 0
     assert bulkSkipOne(I64(ctRuntimeZero)) == 24 and BulkDestroyed == 4
 }

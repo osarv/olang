@@ -549,7 +549,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     if d.Errors() > 0 {
         # section 8 judges what checked too, as stage 0 reports its errors beside the checker's: a body the checker
         # left an unknown type in is not judged (scope.judge)
-        if not d.HasFatal() { try placement(c, cfg, -1, false) }
+        if not d.HasFatal() { try placement(c, cfg) }
         error build.Failed.Reported
     }
     # a construct the checker does not check yet: never built as though it were not there (a store it left out was a
@@ -914,7 +914,7 @@ fn inferStats(sc mut scope.Scoper&) {
 
 # where lowering puts things: the scope pass's plans (M6), its errors reported - section 8 holds the program, each
 # temporary built where the pass places it and each local where it homes it
-fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, destroys Bool = true) mut free.Free& ? build.Failed {
+fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1) mut free.Free& ? build.Failed {
     sc mut scope.Scoper& = scope.Scoper(c.P, c.Bodies)
     # its notes name types, and the instantiation an error is in, as the checker spells them (B11, G16b)
     sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
@@ -934,7 +934,7 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, des
     fr mut free.Free& = free.Free(c.P, c.Bodies, sc)
     fr.Debug = (try os.Env("OLANG_FREEDUMP") catch default "") != ""
     fr.Tests = cfg.Tests
-    fr.Decide(sc.Plans, root, destroys)
+    fr.Decide(sc.Plans, root)
     return fr
 }
 
