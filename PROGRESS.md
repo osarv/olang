@@ -15,7 +15,14 @@ Brief: docs/fnvalues.md section 12 and round 6; docs/wholeprog.md 10.1/10.2. Bra
 - A part's chunks folded into its root at a close get the root as owner (parts' headers are freed there).
 - Slots exhausted (or refused): chunks from aligned_alloc entered in the large table, so they are found too.
 
+- 2. typed.Scope.Found(i) + Plan.Roots; MIR Rvalue.ScopeOf (mir, emit, eval foundScope, lowering foundOf: the call's
+  own argument operand where the root is one, else the root read again - only typed.Pure roots).
+- 3. scope.olang: stores into set/derived/untraced slots (findInto, finds), call variables (passedScope: ref args, a
+  struct of one reference), a by-reference Str receiver passed found (renderStr); free.olang makes no region for a
+  Found site. 41 fail cases became run cases; o12spawntarget, C2d instance cases, O25i reads stay refused.
+- 4. SPEC O29 (+ O11, O12, O23a, O25i, E11c), docs/settled.md, HISTORY.md, msgs reworded, diag golden, seed.
+
 ## Next
-2. MIR Rvalue.ScopeOf, emit, eval, interp; typed.Scope.Found; lower
-3. scope.olang: the refusals of 12.4 become Found placements
-4. SPEC, CLAUDE.md, HISTORY.md, DEPENDENTS walk, cases -> run cases, seed, verify, gates
+- make verify; then the round's other gates (scopesan, scopefuzz, race, cross, bench) if time allows.
+- Left for a later round: per-statement reuse of a lookup; o12spawntarget (a task's result into a place of several
+  scopes); C1's program scope for a value argument holding two references; OLANG_SCOPESTATS counter.
