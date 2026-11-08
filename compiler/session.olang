@@ -868,7 +868,9 @@ fn (a Analysis&) Placed(real String&) Vec<Use> {
     if mi < 0 or a.Sc is null { return out }
     file := a.L.Mods[mi].File
     for p in a.Sc!.Placements() {
-        if p.File == file { out.Push(Use(p.Start, p.End, $p.Text " - a copy of what is kept ('$x') would let it go with its turn")) }
+        if p.File != file { continue }
+        hint := " - handing on a value instead would let it go with its step" if p.Tail else " - a copy of what is kept ('$x') would let it go with its turn"
+        out.Push(Use(p.Start, p.End, $p.Text $hint))
     }
     return out
 }

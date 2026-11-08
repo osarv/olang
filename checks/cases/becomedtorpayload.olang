@@ -1,6 +1,8 @@
-# check: fail error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then
-# S21, O16: an enum whose case holds a reference to an instance with a destructor, given by a call in a block of the
-# function - its instance closes with the block, before the become's call
+# check: run
+# flags: -debug -sanitize
+# S21, O16 (docs/refusals.md 5.5; refused - "an instance is built in one of them whose destructor would run then" -
+# until the user's "Yes, do A" of 2026-11-08): an enum whose case holds a reference to an instance with a destructor,
+# given by a call in a block a become closes, is built in the chain's tail scope and ended as it closes
 import "std/io"
 
 type Res unique struct(n I64) { n } destruct { io.Println("destroy " $n)! }

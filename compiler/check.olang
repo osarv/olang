@@ -22230,9 +22230,7 @@ fn (c mut Checker&) becomeStmt(sp source.Span, x ast.Expr&) {
         inner = "a task's clause"
     } else if fr.joins.Len() > 0 {
         inner = "a join block, whose tasks it would leave behind"
-    } else if fr.deferBlocks.Len() > 0 and fr.deferBlocks.Len() == fr.dropBlocks.Len() {
-        inner = "a block whose variable holds a value with a destructor, which would run before the call"
-    } else if fr.deferBlocks.Len() > 0 {
+    } else if fr.deferBlocks.Len() > fr.dropBlocks.Len() {
         inner = "a block with deferred code registered, which would run before the call"
     }
     if inner != "" {
@@ -22344,8 +22342,8 @@ fn (c mut Checker&) viaMemoryJump(sig types.TypeId) Bool {
 }
 
 # S21, once every set is final: a become's function fails with what its callee does, in one order - the callee's failure
-# is the function's own; and nothing the function holds runs a destructor when its scopes close (O16), which would run
-# before the call
+# is the function's own. (What it holds with a destructor in a block the become closes is kept in its tail scope: the
+# scope pass)
 fn (c mut Checker&) tailSets() {
     for a in c.tails {
         ea := c.bodyErrors(a.Caller)
@@ -22362,16 +22360,6 @@ fn (c mut Checker&) tailSets() {
         }
         bsp := source.Span(a.Sp.Start, a.Sp.Start + 6)
         if not same { c.err(bsp, msgs.BecomeErrors(c.errsText(ea), c.errsText(eb))) }
-        b := c.Bodies[a.Caller]
-        w := types.DtorWalk(c.P.T)
-        for l in b.Locals {
-            if l.Kind == typed.LocalKind.Param { continue }
-            if w.Holds(l.Ty) {
-                rec := c.P.L.Diags.ErrorOncePerLine(c.at(bsp), msgs.BecomeDestructor($"it holds a value of " $c.ty(l.Ty) ", which may hold an instance"))
-                c.P.L.Diags.Note(rec, c.at(l.Sp), msgs.NoteHere())
-                break
-            }
-        }
         c.pop()
     }
 }

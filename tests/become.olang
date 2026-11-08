@@ -79,6 +79,57 @@ fn inside(t String&, i I64) I64 {
     become inside(t, i + 1)
 }
 
+# the tail scope (S21): what a step makes and hands on is built where the chain's first call's result lands, so each
+# step's array is kept until then - as the return form keeps its frames' - in one frame
+fn grow(a Array<I64>&, i I64, n I64) I64 {
+    if i >= n: return a.Len() * 1000 + a[0]
+    b := Array<I64>(a.Len() + 1, i)
+    become grow(b, i + 1, n)
+}
+
+# ... and two states, one making, one handing on what it was given
+fn widen(a Array<I64>&, n I64) I64 {
+    if n == 0: return a.Len()
+    b := Array<I64>(a.Len() + 1, n)
+    become narrow(b, n - 1)
+}
+
+fn narrow(a Array<I64>&, n I64) I64 {
+    if n == 0: return a[0]
+    become widen(a, n - 1)
+}
+
+# text rendered at the become, handed to a by-value type variable
+fn spell<T>(t T, n I64) I64 {
+    if n == 0: return t.Len()
+    become spell($t "ab", n - 1)
+}
+
+# instances with a destructor made in the blocks a become closes are ended as the tail scope closes, last made first
+Ended mut I64 = 0
+EndOrder mut I64 = 0
+
+type Probe unique struct(n I64) { n } destruct {
+    Ended++
+    EndOrder = EndOrder * 10 + n
+}
+
+fn probe(n I64) I64 {
+    p := Probe(n)
+    if n == 1: return p.n + Ended * 100
+    become probe(n - 1)
+}
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+
+BakedGrow I64 = grow(Array<I64>[7], 0, 30)
+BakedSpell I64 = spell("x", 4)
+
 BakedSum I64 = sum(1000, 0)
 BakedEven Bool = isEven(1001)
 BakedPad String = pad(3, "x")
@@ -114,7 +165,34 @@ test "a run-time array a generic was given is handed on" {
     assert ends(t, 10) == I64('7') + I64('d')
 }
 
+test grow "what a chain makes and hands on is kept in its tail scope" {
+    for n in range 3 {
+        r := grow(Array<I64>[5, 6], 0, n + 100)
+        churn()
+        assert r == (102 + n) * 1000 + n + 99
+    }
+    assert widen(Array<I64>[1], 7) == 1
+    assert spell("q", 1000) == 2001
+    f := grow
+    assert f(Array<I64>[1], 0, 3) == 4002
+}
+
+test probe "instances a become's blocks made end as the tail scope closes, last made first" {
+    Ended = 0
+    EndOrder = 0
+    {
+        assert probe(3) == 1
+        assert Ended == 0
+    }
+    assert Ended == 3 and EndOrder == 123
+    g := probe
+    assert g(4) == 301 and Ended == 7 and EndOrder == 1231234
+}
+
 test "the evaluator agrees" {
+    assert BakedGrow == grow(Array<I64>[7], 0, 30) and BakedGrow == 31029
+    assert BakedSpell == spell("x", 4) and BakedSpell == 9
+    assert grow(Array<I64>[1, 1], 0, 5) == 7004   # decided while compiling (S18c)
     assert BakedSum == sum(1000, 0) and BakedSum == 500500
     assert BakedEven == isEven(1001) and not BakedEven
     assert BakedPad == "x..." and BakedPad == pad(3, "x")

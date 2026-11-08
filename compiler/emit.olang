@@ -2750,13 +2750,16 @@ fn (fe mut fnEm&) run() {
         fe.w("switch i8 %is, label %gen.end [ i8 0, label %gen.go i8 1, label %gen.free ]")
         fe.label("gen.go")
     }
+    # (S21: in a body with a become and a result scope - a tail scope - the copy is made there, so that a become may hand
+    # it on: the scope pass's givenLocal)
+    tailCopy := fe.tailCopies()
     for i in range f.Params.Len() {
         l := f.Params[i]
         lt := f.Locals[I64(l)].Ty
         if fe.runTime(lt) and fe.F.WritesInto(fe.E.T, l) {
-            fe.bigArena()
+            if tailCopy == "" { fe.bigArena() }
             v := fe.load("{ i64, ptr }", "%l" $l)
-            fe.store("{ i64, ptr }", fe.copyArrayIn("%big", v, lt), "%l" $l)
+            fe.store("{ i64, ptr }", fe.copyArrayIn("%big" if tailCopy == "" else tailCopy, v, lt), "%l" $l)
         }
     }
     fe.w("br label %bb0")
@@ -3429,6 +3432,19 @@ fn (fe mut fnEm&) scope(r mir.ScopeRef) String {
             return fe.let("inttoptr i64 " $v " to ptr")
         }
     }
+}
+
+# S21: where a body's own copies of its by-value run-time array parameters are made when it holds a become and has a
+# result scope - that scope's pointer - else "" (the frame's own arena)
+fn (fe mut fnEm&) tailCopies() String {
+    if fe.gen { return "" }
+    tails := false
+    for k in range fe.F.Blocks.Len() { if fe.F.Blocks[k].T == mir.Term.Tail: tails = true }
+    if not tails { return "" }
+    for k in range fe.F.Vars.Len() {
+        if k < fe.passed and fe.F.Vars[k] == mir.VarKind.Result: return "%v" $k
+    }
+    return ""
 }
 
 fn (fe mut fnEm&) program() String {
@@ -5261,11 +5277,20 @@ fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
         args.Push("ptr %out")
         first = false
     }
+    # S21: a become chain's tail scope, which the value's type does not pass - one made for the call, closed as it
+    # returns (the result holds no reference: RoleTail's is a result scope only where the result holds none)
+    tail := t.Role(mine) == types.RoleTail and cp > vp
+    if tail {
+        e.runtime("__olang_scope_close")
+        b.Push("  %tail = alloca %olang.scope\n  store %olang.scope zeroinitializer, ptr %tail\n")
+    }
     for i in range cp {
         if not first { args.Push(", ") }
         first = false
         if i < vp {
             args.Push("ptr %v" $i)
+        } else if tail and i == cp - 1 {
+            args.Push("ptr %tail")
         } else {
             e.define("__olang_prog_scope", "@__olang_prog_scope = external thread_local(initialexec) global ptr")
             b.Push("  %g" $i " = load ptr, ptr @__olang_prog_scope\n")
@@ -5285,14 +5310,15 @@ fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
     }
     rt := t.RetLlvm(mine)
     vt := t.RetLlvm(ty)
+    closeTail := "  call void @__olang_scope_close(ptr %tail)\n" if tail else ""
     if rt == "void" {
-        b.Push("  call void @" $s "(" $args.ToString() ")\n")
+        b.Push("  call void @" $s "(" $args.ToString() ")\n" $closeTail)
         # a function that cannot fail as a value that can (R6): it never fails
         b.Push("  ret void\n}\n\n" if vt == "void" else "  ret i32 0\n}\n\n")
         e.item(tsym, home, b.ToString())
         return
     }
-    b.Push("  %r = call " $rt " @" $s "(" $args.ToString() ")\n")
+    b.Push("  %r = call " $rt " @" $s "(" $args.ToString() ")\n" $closeTail)
     if vt == rt and t.Errors(mine) == t.Errors(ty) {
         b.Push("  ret " $rt " %r\n}\n\n")
         e.item(tsym, home, b.ToString())

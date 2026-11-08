@@ -1410,7 +1410,7 @@ test "an array of 128-bit elements is 16-aligned" { assert passed("widealign") }
 # O27 as placement, B18: storage built where a view of it is kept, listed by -memory at the view with the copy that would
 # let it go with its turn - a generator's borrowed elements and a slice kept past their turn, and a value holding a
 # destructor built where the view is kept, ended as that scope closes (O15); a program keeping nothing longer than its
-# storage lists none
+# storage lists none; and what a become chain keeps in its tail scope (S21)
 test "-memory lists the storage built where a view of it is kept" { assert passed("memoryplaced") }
 
 fn memoryplaced(r mut report&) ? Failed {
@@ -1429,6 +1429,14 @@ fn memoryplaced(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build -memory dtor.olang > out.txt 2>&1") == 0, "dtor did not build", dir)
     try r.expect(outOf(dir).Contains("dtor.olang:11:19: memory: 'f' is built in main's scope, a new one each time it is made, for a view of it kept here - its destructor runs as that scope closes, not at the end of its turn"), "no row for f", dir)
     try r.expect(sh(dir, "./build/dtor > run.txt 2>&1 && grep -q 'end 2-file' run.txt && tail -n 1 run.txt | grep -qx 'end 0-file'") == 0, "dtor printed otherwise", dir)
+    # (S21: what a become hands on, and a destructor value in a block it closes, built in the chain's tail scope)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory tail.olang > out.txt 2>&1") == 0, "tail did not build", dir)
+    t := outOf(dir)
+    try r.expect(t.Contains("tail.olang:8:12: memory: 'b' is built in the tail scope of its become chain, a new one each time it is made, for the become here, kept until its chain's first caller lets go of the result"), "no row for b", dir)
+    try r.expect(t.Contains("tail.olang:12:12: memory: a temporary is built in the tail scope of its become chain"), "no row for the text", dir)
+    try r.expect(t.Contains("tail.olang:15:10: memory: a temporary is built in the tail scope of its become chain, a new one each time it is made, for a become closing its block, kept until the chain's first caller lets go of the result - its destructor runs as that scope closes"), "no row for the instance", dir)
+    try r.expect(t.Contains("memory: 3 placements made for a become's chain, kept as long as its first call's result (S21)"), "no tail count", dir)
+    try r.expect(sh(dir, "./build/tail > run.txt 2>&1 && head -n 2 run.txt | tr '\\n' ' ' | grep -qx '4 3 0 used ' && tail -n 1 run.txt | grep -qx 'end 2'") == 0, "tail printed otherwise", dir)
 }
 
 fn widealign(r mut report&) ? Failed {

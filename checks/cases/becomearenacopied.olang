@@ -1,13 +1,28 @@
-# check: fail error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them
-# S21, D9b: a by-value run-time array parameter the body writes is its own copy, made in the frame - handing it on
-# would pass storage the become closes
+# check: run
+# flags: -debug -sanitize
+# S21, D9b (docs/refusals.md 5.5; refused - "this argument is storage made in one of them" - until the user's "Yes, do
+# A" of 2026-11-08): a by-value run-time array parameter the body writes is its own copy - made in the chain's tail
+# scope, so a become hands it on; each step writes its own copy, the caller's array untouched
 import "std/io"
 import "std/os"
 
 fn walk<T>(a T, n I64) I64 {
-    if n == 0: return a.Len()
-    a[0] = 5
+    if n == 0: return a[0] + a[1] + a.Len()
+    a[0] = a[0] + 5
+    a[1] = n
     become walk(a, n - 1)
 }
 
-fn main() { io.Println($walk(Array<I64>(os.Args().Len() + 3, 1), 2))! }
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+
+fn main() {
+    a := Array<I64>(os.Args().Len() + 3, 1)
+    r := walk(a, 2)
+    churn()
+    io.Println($r " " $a)!
+}

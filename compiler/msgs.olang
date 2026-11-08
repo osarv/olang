@@ -852,6 +852,7 @@ type Diag enum {
     BecomeErrors
     BecomeDestructor
     BecomeBorrows
+    BecomeHeldParam
     TopAssertFalse
     TopAssertFalseMessage
     TopAssertUndecidable
@@ -1634,6 +1635,9 @@ fn BecomeErrors(have String&, callee String&) r.Msg { return r.Msg(Diag.BecomeEr
 
 # become in a function holding what has a destructor (S21, O16)
 fn BecomeDestructor(what String&) r.Msg { return r.Msg(Diag.BecomeDestructor, "S21", "'become' closes this function's scopes before the call, and " $what " whose destructor would run then, before the call - write 'return' and the call") }
+
+# become leaving a by-value parameter holding a value with a destructor it does not hand on (S21, O15)
+fn BecomeHeldParam(name String&) r.Msg { return r.Msg(Diag.BecomeHeldParam, "S21", "'become' ends this function before the call, and its parameter '" $name "' holds a value with a destructor the call does not take, which would run then - hand it on, or write 'return' and the call") }
 
 # become handing the callee storage of a scope it closes (S21, section 8)
 fn BecomeBorrows() r.Msg { return r.Msg(Diag.BecomeBorrows, "S21", "'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'") }

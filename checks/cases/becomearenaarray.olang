@@ -1,16 +1,27 @@
-# check: fail error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them
-# S21, D9b: a run-time-length array bound to a by-value type variable holds no reference, so no scope variable names
-# it - but its storage, made in the frame, closes before the call
+# check: run
+# flags: -debug -sanitize
+# S21, D9b (docs/refusals.md 5.5; refused - "this argument is storage made in one of them" - until the user's "Yes, do
+# A" of 2026-11-08): a run-time-length array a step makes and hands on by value to a type variable is built in the
+# chain's tail scope - each step's 'b' kept until main lets go of the result, read after a churn
 import "std/io"
 import "std/os"
 
 fn walk<T>(a T, n I64) I64 {
-    if n == 0: return a[0] + a[1]
+    if n == 0: return a[0] + a[1] + a.Len()
     b := Array<I64>(n + 2, n * 10)
     become walk(b, n - 1)
 }
 
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+
 fn main() {
     a := Array<I64>(os.Args().Len() + 2, 1)
-    io.Println($walk(a, 3))!
+    r := walk(a, 3)
+    churn()
+    io.Println($r " " $walk(a, 0))!
 }

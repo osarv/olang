@@ -1,15 +1,24 @@
-# check: fail error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then, before the call - write 'return' and the call
-# S21, O16, section 8: an instance with a destructor built in a block of the function - held by no local - is still
-# destroyed as its scope closes, before a become's call
+# check: run
+# flags: -debug -sanitize
+# S21, O16, section 8 (docs/refusals.md 5.5; refused - "an instance is built in one of them whose destructor would run
+# then" - until the user's "Yes, do A" of 2026-11-08): an instance with a destructor built in a block a become closes,
+# held by no local, is built in the chain's tail scope and ended as it closes; one in a block closed before the
+# become ends there
 import "std/io"
 type Res unique struct(n I64) {
     n
 } destruct {
-    io.Println("closed")!
+    io.Println("closed " $n)!
 }
 fn f(n I64) I64 {
     if n == 0: return 0
+    {
+        assert Res(100 + n).n > 100
+    }
     m := Res(n).n
     become f(m - 1)
 }
-fn main() { assert f(2) == 0 }
+fn main() {
+    assert f(2) == 0
+    io.Println("done")!
+}

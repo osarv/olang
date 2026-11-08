@@ -1,0 +1,11 @@
+# check: fail error[S21]: 'become' ends this function before the call, and its parameter 'c' holds a value with a destructor the call does not take, which would run then - hand it on, or write 'return' and the call
+# S21, O15: a by-value parameter's value is the caller's, not the function's to keep for its chain - one the become does
+# not hand on is ended as the function ends, before the call; the tail scope keeps what the function made, never that
+type Conn unique struct(fd I64) {
+    fd
+} destruct { assert fd >= 0 }
+fn down(c Conn, n I64) I64 {
+    if n == 0: return c.fd
+    become down(Conn(n), n - 1)
+}
+fn main() { assert down(Conn(1), 3) == 1 }

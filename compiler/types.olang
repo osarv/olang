@@ -110,10 +110,12 @@ type ScopesId extends I32
 
 # what a function type's scopes pass besides its parameters' (O3): a function's result scope, where it has one (O13); a
 # constructor's - an enum case's payload as a constructor too - its instance's scope (C2d, T17c); a destructor's the
-# closing scope alone, which the runtime passes (C9a)
+# closing scope alone, which the runtime passes (C9a); a function of a become chain keeping what it hands on, whose
+# result holds no reference, its tail scope - passed as a result scope is, ResultVar (S21)
 RoleFn I64 = 0
 RoleCtor I64 = 1
 RoleDtor I64 = 2
+RoleTail I64 = 3
 
 # a scopes entry: a parameter's own scope variable - none where it holds no reference - or a result built (O13); a result
 # written as a bare type variable, which may hand back an argument where it became a reference (O14b, T22a); otherwise
@@ -697,6 +699,17 @@ fn (t mut Table&) Scopes(role I64, params Array<I64>&, results Array<I64>&) Scop
     t.scopes.Push(key)
     t.scopeKeys.Put(key, id)
     return id
+}
+
+# function type f as one of role: its parameters' and results' entries kept (S21's tail scope)
+fn (t mut Table&) WithRole(f TypeId, role I64) TypeId {
+    ps := t.Items(t.Params(f))
+    shares := Array<I64>(ps.Len())
+    for i in range ps.Len() { shares[i] = t.ShareOf(f, i) }
+    rs := t.Results(f)
+    from := Array<I64>(rs.Len())
+    for k in range rs.Len() { from[k] = t.ResultFrom(f, k) }
+    return t.Refunc(f, t.Params(f), t.Result(f), t.Errors(f), t.Scopes(role, shares, from), t.at(f).E)
 }
 
 # what a function type's scopes say: its role, the entry of parameter i, the entry of result k
@@ -1340,7 +1353,8 @@ fn (t mut Table&) partsOwn(l ListId, depth I64) Bool {
 # so a call, the body it reaches and a function value's adapter agree (DESIGN.md 1.6.1): each parameter (the receiver
 # first) holding a reference and sharing no earlier one's, by its index; then ResultVar where a result is built or
 # written as a type variable (O13, O14b) and holds one, or is an array value whose storage is made where the result goes
-# (T7b), or the function is a constructor (its instance, C2d); a destructor's is ClosingVar alone (C9a). A closure's
+# (T7b), or the function is a constructor (its instance, C2d) or keeps a become chain's storage (its tail scope, S21); a
+# destructor's is ClosingVar alone (C9a). A closure's
 # captures are its environment's, never the type's (D16c)
 fn (t mut Table&) ScopeVarsOf(f TypeId) Array<I64> {
     role := t.Role(f)
@@ -1350,7 +1364,7 @@ fn (t mut Table&) ScopeVarsOf(f TypeId) Array<I64> {
     for i in range ps.Len() {
         if t.ShareOf(f, i) == OwnScope and t.HoldsRefs(ps[i]) { out.Push(i) }
     }
-    built := role == RoleCtor
+    built := role == RoleCtor or role == RoleTail
     rs := t.Results(f)
     for k in range rs.Len() {
         e := t.ResultFrom(f, k)

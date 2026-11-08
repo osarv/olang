@@ -1,0 +1,22 @@
+# S21, B18: what a become hands on that its function made - a local array, text rendered at it - and an instance with a
+# destructor made in a block it closes are built in the chain's tail scope, kept until main lets go of the result
+import "std/io"
+type Res unique struct(n I64) { n } destruct { io.Println("end " $n)! }
+fn walk(a Array<I64>&, i I64) I64 {
+    if i >= 3: return a.Len()
+    b := Array<I64>(a.Len() + 1, i)
+    become walk(b, i + 1)
+}
+fn spell<T>(t T, n I64) I64 {
+    if n == 0: return t.Len()
+    become spell($t "x", n - 1)
+}
+fn held(n I64) I64 {
+    m := Res(n).n
+    if m == 0: return 0
+    become held(m - 1)
+}
+fn main() {
+    io.Println($walk(Array<I64>[1], 0) " " $spell("a", 2) " " $held(2))!
+    io.Println("used")!
+}
