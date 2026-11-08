@@ -1042,3 +1042,12 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   find the right scope": a derived scope passed as a hidden scope argument by every call that knows it (no word per
   instance), the fallback where none knows ASKED in the note (program scope or an address lookup). Both sent to the
   design note (wt-fnvalues).
+- Call 4 REVERSED by the user 2026-11-08 ("scrap it ... the destructor runs when ... the value that has the destructor
+  leaves any scope. So if we place it in a list, then that list also has to go ... it's about scope closure"): storage
+  a kept view needs is placed where the view is kept and the value's destructor runs where that storage's scope closes
+  (one rule with F4's escapedHome). ASKED with it: (1) remove `x.Destroy()` (the user: "doesn't really do anything
+  extra. So maybe we should not even have it") - blocks already end values early; rec remove, cost stated; (2) run-time
+  scope information (the user: "Would memory management become simpler if every object stored its scope ... if they
+  just make things better with very little cost, I can see them" - relaxing their 2026-11-01 rule): (a) a word per
+  allocation or (b) scope found from an address (aligned chunks); rec (b), only where no call knows the scope at
+  compile time; it makes C1/derived/"not known here" builds possible, not the dangling proof. Both sent to the note.
