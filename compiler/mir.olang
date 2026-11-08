@@ -435,9 +435,52 @@ type ConstNode enum {
 
 # a basic block: its statements, run in order, and its terminator
 type BasicBlock struct() {
-    Stmts Vec<Stmt>
+    Stmts StmtList
     T Term = Term.None
 }
+
+# a block's statements: a list whose room grows 1, 2, 4, ... - most blocks hold one or two, where a Vec's first
+# buffer has room for eight (a function of 80,000 blocks held 113 MB of room it never used, in every copy of it).
+# Read as a Vec is: Len, an index, a for-in (S9d's At and Len)
+type StmtList struct() {
+    data Array<Stmt>
+    n I64 = 0
+}
+
+fn (l StmtList&) Len() I64 { return l.n }
+
+fn (l StmtList&) At(i I64) Stmt { return l.data[i] }
+
+fn (l mut StmtList&) SetAt(i I64, s Stmt) { l.data[i] = s }
+
+fn (l mut StmtList&) Push(s Stmt) {
+    if l.n == l.data.Len() { l.room(s) }
+    l.data[l.n] = s
+    l.n++
+}
+
+# room for one more: twice the room there is (one at first), the statements moved into it - s filling the rest, as
+# every position needs a value
+fn (l mut StmtList&) room(s Stmt) {
+    more := Array<Stmt>(1 if l.data.Len() == 0 else 2 * l.data.Len(), s)
+    for i in range l.n { more[i] = l.data[i] }
+    l.data = more
+}
+
+# s at position i, the statements from i on moved one along
+fn (l mut StmtList&) Insert(i I64, s Stmt) ? OutOfRange {
+    if i < 0 or i > l.n: error OutOfRange
+    l.Push(s)
+    for j := l.n - 1, j > i, j-- { l.data[j] = l.data[j - 1] }
+    l.data[i] = s
+}
+
+# the first n statements kept
+fn (l mut StmtList&) Truncate(n I64) {
+    if n < l.n: l.n = n
+}
+
+fn (l mut StmtList&) Clear() { l.n = 0 }
 
 # ---- functions ----
 
