@@ -2309,6 +2309,7 @@ d171e33a34599ef2 4bc8d25a4f735766 tools/checkerror_rename.olang
 76620c45dbfcaccf 49fff8261c8d6015 tools/cli_words.olang
 f5a621227cbc61ea caec118c09330f20 tools/clone_migrate.olang
 b8049559c7457f8e 3ce83fc88ada8ac0 tools/contracts_migrate.olang
+47c95e904fd23f7c 5bfcf02d2442b384 tools/destroy_migrate.olang
 ab962bf992681c8b 92da17cd9180961f tools/diagedit.olang
 f6d5e99269a8a149 9b720784524edfc6 tools/donefail_migrate.olang
 40493d8031a0e687 90b988af214e1bf1 tools/equality_migrate.olang
