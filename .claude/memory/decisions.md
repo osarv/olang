@@ -37,4 +37,8 @@ Open questions:
   makes that depend on what the compiler proves. Proposed with question 2: a weak read gives null as soon as no
   owning place holds the node (the count in the header word the read loads anyway; needs 3(b)), and a compile-time
   error where a fresh node is stored only into weak places, or a type weak links name is held owning nowhere
-  (whole-program). Recommendation: both.
+  (whole-program). Recommendation: both. **The user: "Yes, do them both" (2026-11-08)** - decided, built with
+  questions 1-2 once those are answered (3(b), the count, follows from the first). The user then asked whether `?&`
+  itself could be the weak reference instead of a keyword; my answer: no - most `?&` fields own (a list's `next`, a
+  tree's children), every such structure would lose its nodes, an optional owning link would have no form, and every
+  type held by `?&` would pay the header; keep `weak`, only with `?&`. Awaiting their answer.
