@@ -1707,6 +1707,9 @@ type Scope enum {
     # a live scope nothing is built in: passed where a callee only reads - a value O12 lends for reading, the receiver
     # of a Str "$" calls (E11c) - lowering opens one, and the MIR verifier refuses any build into it
     Inert
+    # O29: a scope no call knows while compiling, found while the program runs from the address of the storage built
+    # through or into - the reference the plan's Roots holds at i
+    Found(i I64)
 }
 
 # the scope pass's decisions for one body: where each site builds (Built), where each local's storage is (Stored: a
@@ -1732,6 +1735,9 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     RegionKind mut Array<I64>& = Array<I64>(Sites)
     RegionParent mut Array<Scope>& = Array<Scope>(Sites)
     RegionRoot mut Array<Expr?&>& = Array<Expr?&>(Sites)
+    # O29: the references whose referents' scopes Found builds go into, found at run time - each one evaluating has no
+    # effect of (a local, a field read, a conditional of those)
+    Roots Vec<Expr&>
     passedAt mut Array<I64>& = Array<I64>(Sites)  # 1 + where a call's scopes start in passed; 0 for none recorded
     passedN mut Array<I64>& = Array<I64>(Sites)
     passed Vec<Scope>
@@ -1740,6 +1746,12 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
 fn Plan.New(b Body&) Plan { return Plan(b.Sites.Len(), b.Locals.Len(), b.Vars.Len()) }
 
 # what a call at a site passes, one scope per callee variable that is not a Capture, in order
+# O29: the scope found at run time from root's referent
+fn (pl mut Plan&) Find(root Expr&) Scope {
+    pl.Roots.Push(root)
+    return Scope.Found(pl.Roots.Len() - 1)
+}
+
 fn (pl mut Plan&) Pass(site SiteId, scopes Array<Scope>&) {
     pl.passedAt[I64(site)] = pl.passed.Len() + 1
     pl.passedN[I64(site)] = scopes.Len()

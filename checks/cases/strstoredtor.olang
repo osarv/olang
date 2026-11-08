@@ -1,4 +1,7 @@
-# check: fail error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or hold it by value in a field
+# check: run
+# flags: -debug -sanitize
+# O29 (round 6): refused until a scope no call knows while compiling was found while the program runs from the
+# address of the storage built through - now built where that storage lives, read back after a churn. Before:
 # E11c/O12: Str builds a destructor-bearing value where its receiver lives, whose destructor stores a new node through
 # it when that scope closes
 import "std/io"

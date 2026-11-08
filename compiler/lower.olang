@@ -639,8 +639,20 @@ fn (ln mut lowering&) scopeRef(sc typed.Scope) mir.ScopeRef {
         case typed.Scope.Var(i) { return mir.ScopeRef.Var(i) }
         case typed.Scope.Frame { return mir.ScopeRef.Frame }
         case typed.Scope.Region(site) { return ln.regionOf(I64(site)) }
+        case typed.Scope.Found(i) { return ln.foundOf(i) }
         case _ { return mir.ScopeRef.Program }
     }
+}
+
+# O29: the scope a Found build goes into, found while the program runs from its root's referent - looked up at each
+# build, the root one the scope pass chose as evaluating has no effect of (a local, a field read)
+fn (ln mut lowering&) foundOf(i I64) mir.ScopeRef {
+    if i >= ln.plan.Roots.Len(): return mir.ScopeRef.Program
+    sp := ln.B.Sp
+    o := ln.val(ln.plan.Roots[i])
+    h := ln.temp(mir.I64T, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), mir.Rvalue.ScopeOf(o)))
+    return mir.ScopeRef.Held(h)
 }
 
 # ---- regions (O8d): where a value made for a sole place is built ----

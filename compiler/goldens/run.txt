@@ -1872,6 +1872,10 @@
 | status 0
 === run c2dbuildlocal.olang
 | status 0
+=== run c2dcapturebuild.olang
+| status 0
+| b
+| 5
 === run c2dcondarg.olang
 | status 0
 | 1000 0
@@ -2192,6 +2196,8 @@
 | ok
 === run methodnamedlocal.olang
 | status 0
+=== run nllmerge.olang
+| status 0
 === run numtraitsqrtlit.olang
 | status 0
 === run o10arrlocal.olang
@@ -2497,11 +2503,17 @@
 | status 0
 === run reflfnoneself.olang
 | status 0
+=== run rendercopyc2d.olang
+| status 0
+| 39
+| 9
 === run renderoperandhere.olang
 | status 0
 === run runonstackdebug.olang
 | status 0
 === run rv3assigncopy.olang
+| status 0
+=== run rv3condstore.olang
 | status 0
 === run rv3copyrun.olang
 | status 0
@@ -2779,10 +2791,22 @@
 | 44
 | 45
 | 46
+=== run strobligation.olang
+| status 0
+| b
+| 9
 === run strrenderchanges.olang
 | status 0
 === run strshape.olang
 | status 0
+=== run strstoredtor.olang
+| status 0
+| b
+| 9
+=== run strstorelocal.olang
+| status 0
+| b
+| 5
 === run strtransientbuilds.olang
 | status 0
 | b2b5

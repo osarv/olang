@@ -364,6 +364,10 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     buildsVar Vec<Bool>                   # by scope variable: whether this body builds into it, directly or through a call
     realVar Vec<Bool>                     # ... a value, not only a task's stand-in
     standIn Bool = false                   # the build buildsInto records next is a task's stand-in (P2)
+    # O29: while a value is placed into a slot whose scope is not known here (foundTerm), the reference whose referent's
+    # scope its builds go into, found at run time; null for none
+    foundRoot typed.Expr?& = null
+    foundTerm Term = Term.None
     buildSp Vec<source.Span>              # by scope variable: where in this body it first builds there
     buildFile Vec<I64>                    # ... and that build's innermost site (a callee's, through a call)
     buildAt Vec<source.Span>
@@ -7001,7 +7005,10 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     ac := typed.Call.Of(x)
     if ac is not null { s.landSite, s.landSp = I64(ac.Site), s.eqAfter(p.Span()) }
     s.caseLocal = wholeLocal(p)
-    v := s.val(x, slot if slot.Runs() else s.here())
+    found := s.findInto(p, slot)
+    v := s.val(x, slot if slot.Runs() or found else s.here())
+    s.foundRoot = null
+    s.foundTerm = Term.None
     s.landSite, s.landSp = savedLand, savedLandSp
     if wholeLocal(p) >= 0 { s.noteLate(wholeLocal(p), x) }
     if v.K == ValKind.Existing and s.bindingUnknown(p, slot) {
@@ -7026,8 +7033,18 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
         s.fitTarget = -1
         s.fitAt, s.fitSp = savedAt, savedSp
     }
-    if v.K == ValKind.Fresh and not slot.Runs() and slot != Term.None { s.freshIntoUnknown(sp, p, slot) }
+    if v.K == ValKind.Fresh and not slot.Runs() and slot != Term.None and not found { s.freshIntoUnknown(sp, p, slot) }
     try s.targets.Pop() catch { }
+}
+
+# O29: a value stored into place p whose slot is not known here (O12's set, a derived scope, O23a; one not traced, O11)
+# is built where p's storage is found at run time - where p's root evaluates with no effect; false where it has none
+fn (s mut Scoper&) findInto(p typed.Lvalue&, slot Term) Bool {
+    if slot.Runs() or slot == Term.None: return false
+    root := s.rootOf(p)
+    if root is null: return false
+    s.foundRoot, s.foundTerm = root, slot
+    return true
 }
 
 # the reference local a store through whose referent's own fields p is (q.next, q.inner.next) - its slot where q's
@@ -8003,7 +8020,7 @@ fn (s mut Scoper&) calleeType(c typed.Call&) types.TypeId {
 # run-time term, else where the expression stands (O18a's last row)
 fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
     if x is null { return Val.plain() }
-    d := dest if dest.Runs() else s.here()
+    d := dest if dest.Runs() or s.finds(dest) else s.here()
     # (the local a value is declared as, for the outermost expression of its initializer only - C2)
     whole, wholeStor, wholePart := s.caseLocal, s.caseStor, s.casePart
     s.caseLocal, s.caseStor, s.casePart = -1, false, false
@@ -8834,7 +8851,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     }
     if rrels.Len() > 0 { s.valRelsAt.Put(I64(c.Site), s.unionRels(rrels, recs.Full, fty, vars, rv)) }
     if rv >= 0 {
-        beta[rv] = dest if dest.Runs() else here
+        beta[rv] = dest if dest.Runs() or s.finds(dest) else here
         # S21: a value with a destructor landing in a block a become closes is built in the tail scope instead
         if isBlockTerm(beta[rv]) and s.resultVar >= 0 and s.mayHoldDtor(ty) and s.tailCloses(beta[rv]) {
             beta[rv] = Term.Var(s.resultVar)
@@ -11797,6 +11814,10 @@ fn (s mut Scoper&) build(site typed.SiteId, t Term) {
 # site built in term t, the expression it builds at sp
 fn (s mut Scoper&) buildSite(site typed.SiteId, t Term, sp source.Span) {
     if site < typed.SiteId(0) or I64(site) >= s.plan.Built.Len() { return }
+    if s.finds(t) {
+        s.plan.Built[I64(site)] = s.plan.Find(s.foundRoot!)
+        return
+    }
     u := t if t.Runs() else s.here()
     s.plan.Built[I64(site)] = s.scopeOf(u)
     s.buildsInto(u, sp, s.B!.File, sp)
@@ -11846,13 +11867,62 @@ fn (s mut Scoper&) buildsThrough(t Term, sp source.Span, callee I64, v I64) {
     s.standIn = saved
 }
 
-# a term as the plan says it: Inert for one nothing exists for at run time
+# a term as the plan says it: Found where it is the slot a value is being placed into whose scope is found at run time
+# (O29), Inert for any other one nothing exists for at run time
 fn (s mut Scoper&) scopeOf(t Term) typed.Scope {
+    if s.finds(t): return s.plan.Find(s.foundRoot!)
     return match t {
         case Term.Block(b): typed.Scope.Block(b)
         case Term.Var(i): typed.Scope.Var(i)
         case Term.Program: typed.Scope.Program
         case _: typed.Scope.Inert
+    }
+}
+
+# O29: whether what is built in term t goes where a root's referent is found at run time
+fn (s Scoper&) finds(t Term) Bool {
+    return s.foundRoot is not null and not t.Runs() and t != Term.None and t == s.foundTerm
+}
+
+# O29: the reference whose referent the storage of place p is in - the container a field, element or payload is read
+# through, else the place's own old value where it is a reference - where evaluating it has no effect; null for none
+fn (s mut Scoper&) rootOf(p typed.Lvalue&) typed.Expr?& {
+    inner := match p {
+        case typed.Lvalue.Field(_, _, base, _): s.throughRoot(base)
+        case typed.Lvalue.Elem(_, _, e): s.throughRoot(e.Base)
+        case typed.Lvalue.Payload(_, _, q): s.throughRoot(q.Base)
+        case typed.Lvalue.Deref(_, _, r): r if pureExpr(r) else null
+        case _: null
+    }
+    if inner is not null or not s.isRef(p.Type()) or not pureLvalue(p): return inner
+    return typed.Expr.Read(p.Span(), p.Type(), p, typed.SiteId(-1))
+}
+
+# the root of a part read through base: base itself where it is a reference, else what base's storage is in
+fn (s mut Scoper&) throughRoot(base typed.Lvalue&) typed.Expr?& {
+    if not s.isRef(base.Type()): return s.rootOf(base)
+    return typed.Expr.Read(base.Span(), base.Type(), base, typed.SiteId(-1)) if pureLvalue(base) else null
+}
+
+# whether reading a place has no effect: a local or global, a field, element or payload of one, through references
+fn pureLvalue(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Local(_, _, _), typed.Lvalue.Global(_, _, _, _): true
+        case typed.Lvalue.Field(_, _, base, _): pureLvalue(base)
+        case typed.Lvalue.Elem(_, _, e): pureLvalue(e.Base) and pureExpr(e.Index)
+        case typed.Lvalue.Payload(_, _, q): pureLvalue(q.Base)
+        case typed.Lvalue.Deref(_, _, r): pureExpr(r)
+        case _: false
+    }
+}
+
+# whether evaluating an expression has no effect: a literal, a read of a pure place, a conditional of those
+fn pureExpr(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Lit(_, _, _): true
+        case typed.Expr.Read(_, _, p, _): pureLvalue(p)
+        case typed.Expr.Cond(_, _, c): pureExpr(c.C) and (c.A is null or pureExpr(c.A!)) and pureExpr(c.B)
+        case _: false
     }
 }
 

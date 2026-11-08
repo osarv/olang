@@ -2183,6 +2183,7 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
             if id == 0 { id = m.scopeOf(fi, s) }
             m.wr(dst, 8, id)
         }
+        case mir.Rvalue.ScopeOf(x) { m.wr(dst, 8, m.foundScope(m.objectOf(fi, x))) }
         case mir.Rvalue.ErrPush {
             id := m.newScope(sRegion)
             m.payScopes.Push(id)
@@ -2220,6 +2221,25 @@ fn (m mut Machine&) regionOfObject(q Ptr) I64 {
     sc := m.al[slot].Scope
     if not m.live(sc) or m.scopes[sc & slotMask].Kind != sRegion { return 0 }
     return sc
+}
+
+# O29: the scope an object lives in, as the run time finds it from its address - its allocation's scope, a region read
+# as the scope it lives in - else the program's (null, constant data, a frame's own storage, a scope closed)
+fn (m mut Machine&) foundScope(q Ptr) I64 {
+    if q.Id == 0 { return m.program }
+    slot := q.Id & slotMask
+    if slot >= m.nAl or m.al[slot].Gen != q.Id >> slotBits { return m.program }
+    sc := m.al[slot].Scope
+    for m.live(sc) and m.scopes[sc & slotMask].Kind == sRegion { sc = m.regionHome(sc) }
+    if not m.live(sc) { return m.program }
+    k := m.scopes[sc & slotMask].Kind
+    return m.program if k == sStore or k == sInert or k == sBuilder else sc
+}
+
+# the scope a region is read as (O29): its owner, else its parent
+fn (m mut Machine&) regionHome(r I64) I64 {
+    s := m.scopes[r & slotMask]
+    return s.Owner if s.Owner != 0 else s.Parent
 }
 
 # the array a type is, or a reference names; UnknownT for none
