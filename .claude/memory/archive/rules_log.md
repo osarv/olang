@@ -110,3 +110,550 @@ source (and the std it uses) needs, plus bug fixes. (The superseded rule, 2026-1
 always be up to date to the point where it can in one run compile the olang compiler ... we don't compile the olang
 compiler using the C compiler to compile the next bootstrap step" - stage 0 maintained for as long as the port is.)
 
+
+
+## Full text of rules.md before the slimming of 2026-11-08 (verbatim)
+
+The rules.md of that date, complete, with every rationale, story and superseded paragraph; rules.md now keeps the rules and their "how to apply" only.
+
+---
+name: rules
+description: "Standing rules from the user for how Claude works on olang, oann and oagent: commits and git, agents and pacing, deciding and recording, language rules, code rules, the compilers (port, C stage 0, oann after the compiler). Each rule keeps the user's own words as its evidence."
+metadata:
+  node_type: memory
+  type: feedback
+  modified: 2026-10-21
+---
+
+Merged on 2026-10-18 from the former `feedback_*` files. Where two said the same thing it is written once; where a
+later paragraph replaced an earlier one, the current rule stands with a one-line note of what it replaced.
+
+### Commits and git
+
+#### Which repositories are mine to work in
+olang, oann and oagent. **Not hotpath** (osarv/hotpath, the user's company material): the user, 2026-10-21, when I
+cloned it with the others on their local machine: "dont do hotpath tho, that is not yours to meddle with unless I say
+so". Don't clone, read, change or snapshot it unless they ask. **No company work here at all** (the user, 2026-10-26, the second time: "drop all the company stuff, delete it. There is another session for the company"): no business questions, letters or company records in this session or its memory. Locally (WSL) the three live side by side in
+/home/oscar; in a cloud session in /home/user.
+
+#### No Claude attribution
+Commits in the user's repositories carry no Claude attribution: author and committer are the user
+(Oscar Arvidsson <oscar.arvidsson@protonmail.com>, matching the history), and the message ends without a
+Co-Authored-By or Claude-Session line, whatever the environment's attribution reminder says.
+
+**Why:** the user, 2026-10-08: "Remove yourself from the commits". Their own instruction overrides the harness's
+attribution guidance.
+
+**How to apply:** in a fresh container set `git config user.name`/`user.email` in each repo before the first commit,
+and write messages in the repo's `<Rule>: <what>` style with nothing after them. The older commits' Claude-Session lines
+were stripped from all history on 2026-10-08 at the user's request ("strip Claude from old commits so it doesn't show
+up on GitHub"), so none remain to copy the style from.
+
+**Signing (2026-10-09):** the cloud environment turns on commit signing globally (`commit.gpgsign true`, an SSH key
+registered to Claude's identity), so a commit authored as the user was signed with that key and GitHub showed it as
+"Unverified" - and the environment's stop hook then asked to re-author it as Claude. In each repo set
+`git config commit.gpgsign false` (local config; worktrees share it): commits are then plainly unsigned, GitHub shows no
+badge, and the hook's signature check (which runs only while signing is on) stays quiet. The hook still asks to push
+unpushed commits, which is fine. Never re-author as Claude.
+
+#### Push always, merge promptly, keep branches
+**Push always (the user, 2026-10-17: "remember to push always. For example I can't see the test migration on GitHub
+yet").** Besides the backup/<name> snapshots (below, "Never lose work"), push every agent's branch under its own name
+(`wt-<name>`) whenever it has new commits (at least at each report and check-in), so the user can see the work on
+GitHub before it merges; and push master and the designated branch after every merge.
+
+**Merge promptly; keep the branches (the user, 2026-10-17: "Remember to merge the branches too so we don't end up
+with way too many active branches", then "You don't need to delete the branch memory from the agents. It's fine that
+they are part of the ref tree. Restore locally so we don't end up with a bunch of merge problems").** Merge a finished,
+verified branch at once, so few branches are unmerged at a time. Keep the branch itself, locally and on GitHub (the
+git proxy refuses deletions anyway). Removing a finished agent's worktree (disk space) is fine; never delete branches.
+(This replaced an earlier note to delete a `wt-*` branch on GitHub once merged.)
+
+### Agents, models, effort and pacing by usage
+
+#### Subagents in general
+The user (2026-10-08) is on the Max plan: "there is plenty of tokens to burn", "sub-agents speed things up a lot, and
+time is important", "when it comes to just doing search, yeah, you can use sub-agents that are a cheaper model",
+"do what you think is good ... no standing rule. Just try to adapt", and "eventually we're going to start doing a lot
+of work in different areas at the same time".
+
+**How to apply:** parallelize independent work with subagents, each implementation agent in its own git worktree
+(`git worktree add /home/user/wt/NAME -b wt-NAME`), committing there without pushing to master, records (CLAUDE.md,
+HISTORY.md, SPEC.md) written by the agent, memory/ledger left to me; I merge, resolve the append conflicts, run
+`make verify` and push. Pure searches go to a cheaper model. Judge per situation; there is no fixed rule.
+
+**The main session coordinates; agents do the hands-on work (the user, 2026-11-03: "are you running most tasks with
+background agents? ... do you want me to put your effort up to like maximum so that you don't actually do the tasks,
+but you just send them off to background agents the way I did it with my health VM?").** The session already runs at
+max effort, and effort does not decide delegation; what costs is whose context does the work - the main session's is
+hundreds of thousands of tokens, re-read at every step, an agent's starts small. So anything beyond a quick lookup, a
+merge, a gate run or a record goes to an agent with a brief - build and tooling fixes included (the build cleanup of
+2026-11-03 was done in the main session; it should not have been). Every brief also says: commit only the paths you
+changed, never `git add -A` over the whole tree (two agents swept `boot.rc` and `dev-stash.txt` into 250-file
+migration commits, 2026-10-25/26) - and `make consistency` fails on a root file it does not know.
+
+#### Model and effort per task
+The user, 2026-10-11: "Can you adapt the effort level dynamically to match the problem you are solving?" This is the
+explicit request the Agent tool's `effort` parameter needs, so I set it per agent. My own turns' effort is the user's
+session setting; I cannot change it, and I said so.
+
+**Model too (the user, 2026-10-17: "consider using cheaper models for easier tasks and remember to set an appropriate
+effort for them").** Pick the Agent tool's `model` and `effort` together, per task:
+- opus, xhigh: NEW design in section 8 / ownership (a new borrow or region rule), hard debugging.
+- opus, high: compiler features and fixes from review findings (semantic.c, the port's checker/scope pass), and routine
+  soundness reviews (below).
+- sonnet, medium: std/library code, mechanical-but-careful migrations with a script, records and docs (like slimming
+  CLAUDE.md), benchmarks, port pieces with a clear contract and an oracle to diff against.
+- haiku, low: searches, counting, listing, running a known command and reporting its output.
+When unsure between two, take the cheaper one for a first pass only where a review or a test oracle will catch its
+mistakes; never for soundness work.
+
+**Reviews at high, not xhigh (the user, 2026-10-17: "running review agents with Opus 5.5 XUltra might be a bit
+overkill no?").** Routine soundness reviews of fix rounds and batch relaxations: opus, high (the fuzzer runs beside as
+the mechanical check). xhigh only for NEW design in section 8 / ownership. (This replaced the 2026-10-11 line "xhigh or
+max for all soundness reviews".)
+
+**Full reviews in bulk (the user, 2026-10-25: "We don't need a full review every change. Do the full reviews in
+bulks").** A batch merges on its own verify (and the fuzzers); full read-only reviews run over several merged batches at
+once - for instance after a few language batches, or before announcing - not one per batch or per fix round. Soundness
+relaxations in section 8 still get looked at, but in the bulk review that follows, unless the change is large.
+
+**No more C-compiler soundness reviews (the user, 2026-10-17: "Do we need to review the C compiler much more in the
+future? It takes a lot of resources").** Stage 0's remaining job is building the port, whose test suite and the bootstrap
+fixed point (stage 2 == stage 3) catch a stage-0 miscompile. So: the e31view round-4 review is the last C review; C
+batches get the fuzzers, the scope sanitizer and the suite, plus a light review of the SPEC rules they change (which
+serves both compilers); deep reviews (opus, high) go to the port's section-8 and ownership passes.
+
+**Agent length (the user, 2026-10-17, asking whether to run shorter agents to save credits).** Every step re-sends an
+agent's whole context (mostly from cache, ~1/10 the price, still paid), so a long agent costs more per step as it
+grows. Rules: one fresh agent per ROUND of a big batch, starting from a hand-off note (PROGRESS-style: done, decided,
+next) that every long agent keeps up to date as it goes; resume an agent only for a short follow-up within about an
+hour (warm cache); never resume a very long agent (hundreds of k tokens) for a new round.
+
+#### Pacing by usage
+**Measuring:** this session's own transcript carries the plan's usage - `list_events` (claude-code-remote MCP) on the
+session id from the Claude-Session line, with `kinds: ["rate_limit_event"]`, gives `unifiedWindows.five_hour` and
+`.seven_day` utilization (0-1) and `resetsAt` (unix time). The user (2026-10-08): ration "at the end of a week where
+there is a bunch of tokens left to burn, but not very much time ... be a bit more resourceful in the beginning of a
+week". On 2026-10-08 20:40 UTC it read five_hour 0.18, seven_day 0.08, weekly reset Sat 04:00 UTC.
+
+(The first lessons of 2026-10-08/10 and the per-week rules before the standing ones below are in archive/rules_log.md.)
+
+**Standing rule from 2026-10-26, every week until the user changes it** (the user: "You dont need to place, just dont
+overrun say 95 percent. This is the new rule for every week until I change it. Use as much as you need, don't run
+things in parallel that slow either part down and stop at 95 percent always."): no pacing gaps; use what the work
+needs; run in parallel only what does not slow the other (disjoint files, no queueing on the one verify slot, memory);
+stop code work at ~0.95 weekly, every week. Supersedes the per-week 90% rules above. The user then: "And with slow down I mean
+use more tokens than necessary" - parallel work is fine as long as it does not cost extra tokens: no merge-conflict
+rework, no duplicated work, no agents polling or idling while they wait on a shared verify slot, no batch that must be
+redone after another lands.
+
+The user, 2026-10-27, on a batch asked at 0.94: "do it next week or right at the end of this week to consume all tokens
+before the reset" - so the last hours before a weekly reset may use what is left past 0.95 (a send_later armed for the
+Friday evening before it starts queued work); the 0.95 stop holds the rest of the week. And (the same day, on the
+third feature survey): "The sweep doesn't have to care about the 95 percent rule" - a survey the user asked for runs to
+its end whatever the week reads.
+
+**Standing rule from the week starting 2026-10-31, every week until the user changes it (the user, 2026-10-28: "Set
+the stopping percentage at 92% for next week", then "with for next week, I mean every week from next week").** Code
+work stops at ~0.92 weekly (nothing new starts near it; running agents finish and merge). Supersedes the 0.95 stop from
+that week on. Read as a hard stop: the last-hours burn before a reset is not taken unless the user says so. The week
+ending Sat 2026-10-31 keeps the 0.95 rule and its queued end-of-week batch.
+
+(The per-week pacing rules, the week ending 2026-11-07 and the finishing push of 2026-11-07 are in archive/rules_log.md; the standing 0.92 stop above holds.)
+
+#### Keep the loaded context small, always (the user, 2026-11-08)
+"the token context is kind of the biggest cost ... make sure to continuously keep it down so we don't pay extra usage
+unnecessarily. Usage is really something we are kind of low on."
+**How to apply:** what every session and agent loads (CLAUDE.md, PRINCIPLES.md, the imported memory files) stays
+small, continuously, not in occasional trims: an answered ledger entry moves to archive/decisions_log.md in the same
+commit that records the answer (the ledger holds open questions only); a finished plan.md log entry moves to
+archive/next_steps_log.md; a superseded rule moves to archive/rules_log.md; CLAUDE.md entries stay terse, detail
+going to HISTORY.md. Agents get short briefs pointing at files rather than restating them, the cheapest model that
+fits, and no speculative work; my own replies stay short; propose a /compact to the user when it is a good moment (the context has grown and nothing needs my working memory
+beyond /home/user/review/rounds/STATE.md), with a ready prompt to paste - the user, 2026-11-08: "propose for me to
+compact when you think it's good for me. And then also write a decent compact prompt ... I don't want to have to think
+about it." The prompt starts with `/compact ` so the user can copy it
+whole (the user, 2026-11-08: "include slash compact at the ... beginning, so I can just copy it").
+
+#### Waking up after a reset, and never losing work to a limit
+**Standing rule** (the user 2026-10-08: "Always schedule yourself to resume when tokens are back as your usage runs
+out"; earlier: "So I don't have to start you manually"): whenever work is left that the window will not cover - the
+five-hour one or the weekly one, whichever runs out first - arm `send_later` (claude-code-remote) for a few minutes
+after `resetsAt`, with a message saying what to resume. Arm it BEFORE the window runs out - a session stopped by the
+limit cannot arm anything. Uncommitted worktree changes survive only as long as the container, so have agents commit as
+they finish.
+
+**Never lose work to a limit (the user, 2026-10-17: "Make sure you don't lose any work when the limits are hit").** The
+weekly limit hit on 2026-10-12 stopped every agent, and nothing woke the session until the user did on 10-17 - five
+days lost, though no files were. Standing measures:
+1. A recurring Routine `olang: resume after usage limits` (trig_017cXPwPDKrFi8trMLqFdUpt, every 2 hours) wakes this
+   session: snapshot, read usage, resume any agent a rate limit stopped (SendMessage keeps its context). A wake during
+   a limit fails and the next one, after the reset, gets through - so a stop costs at most 2 hours.
+2. `/home/user/wipsnap.sh`, run every 10 minutes by `/home/user/wiploop.sh` (a detached process - a limit stops the
+   session, not it; both outside the repo, restarted in a new container by a SessionStart hook in `/home/user/.claude/settings.json` (2026-10-18; /root/.claude is
+   rebuilt with the container, /home/user is not) and by the 2-hourly check-in),
+   saves every worktree's uncommitted work into `refs/wip/<name>` in the shared repo, through a private index, never
+   touching the agent's index, HEAD or files. Run at every check-in. It guards against an agent's mistake or a killed
+   process, not a lost container.
+3. Every agent brief says: commit each coherent piece on your branch as you go, never one big commit at the end.
+4. Against a lost container: the user, 2026-10-17: "You can push to GitHub. I want to make sure I don't lose any progress
+   by running in the cloud. Else is rather run locally". So wipsnap.sh pushes, every 10 minutes when changed, each
+   worktree of olang, oann and oagent as `backup/<name>` (its branch plus a snapshot commit of uncommitted work), and
+   the review notes (/home/user/review, text only, through /home/user/.review-git) as olang's `backup/review`. Recovery:
+   `git fetch origin backup/<name>`. Delete a backup branch once its work is merged and the worktree removed.
+
+#### Distribute the load
+The user, 2026-10-09: "Make sure the tasks distribute the load reasonably so we don't get bottlenecks. Record that."
+The shared resources are: 4 cores, ~15GB RAM (the agents' memory cgroup is ~14.3GB), the verify slots, the coordinator's
+merging, and file-level merge conflicts. Seen 2026-10-09 08:00: four compiler agents queued on the verify lock at once
+while the load average was 1.2 of 4 - memory, not CPU, was the bottleneck. So:
+1. Mix task kinds - at most ~2 agents expected to need a full verify in the same stretch; fill the rest with light work
+   (reviews, benchmarks, design write-ups, docs, std code verified with targeted tests).
+2. Agents develop on targeted tests and run the full verify once, at the end; a merged result is re-verified only when
+   its code differs from a verified tip.
+3. Split work by file/area, and run the touches-everything changes (error messages, the bootstrap/ move, the refactor)
+   when nothing else is in flight.
+4. Before starting an agent, look at the verify queue (`pgrep -af "flock /home/user/verify.lock"`) and the load average -
+   a queue of 2+ means start light work, not compiler work.
+5. Merge finished batches promptly so I am not the bottleneck.
+
+**Memory, not just tokens:** the test compiler grew to ~7GB on the big corpus files (~11GB for the full-suite process,
+2026-10-09) and the container has ~15GB, so two full `make test`/`make verify` runs at once can be OOM-killed. The `-t`
+per-file child processes (fc1ddcc, 2026-10-09) cut a full verify's peak to ~3.2GB (was ~11-12GB), so full verifies may
+run side by side through `/home/user/vlock CMD` (a script outside the repo - recreate it if the container is new: flock
+slots, the first being /home/user/verify.lock). **Two slots, not three** (reduced 2026-10-09 21:20 CEST after a verify's
+shared.olang compile was OOM-killed beside five agents and an oann make test); only for branches that include fc1ddcc.
+(This replaced the earlier "ONE full-verify slot, ~11GB" and "three slots" notes.) Tell agents to run only targeted tests
+while others are verifying. The scratchpad is shared too: an agent's log there was overwritten by another's - tell
+agents to write logs inside their own worktree root (verify.log - NOT build/, which make verify deletes).
+checks/checks.olang alone was 156s of the ~240s suite before it was fanned out with join/spawn.
+
+**Environment (2026-10-09):** `make race` needs clang's sanitizer runtimes, which the container image lacks -
+`apt-get update && apt-get install -y libclang-rt-18-dev` fixes it for a session (verified: the suite under -r reports
+exactly the one intentional race, shared.readOut). The user was asked to add that line to the environment's setup
+script so new sessions have it; if a new session lacks it, install it again.
+
+### How to decide and record
+
+#### Decide details myself
+The user, 2026-10-08: "you are so fast now that I can barely keep up. You get to make authoritative decisions about
+details as long as the general vibe of the language is preserved."
+
+**How to apply:** decide details (spellings, edge-case rules, API names, error words, which of two reasonable
+semantics) myself, by direction.md, and record each in CLAUDE.md/HISTORY.md as a decision - not as a question in the
+ledger and not as an "unconfirmed call". Ask the user only about direction: something that changes the language's
+character, removes a capability, or trades one of the principles against another. Reports get shorter: what landed, what
+I decided (briefly, so they can object), and the few direction questions, numbered.
+
+#### Record every question I put to the user
+Whenever I ask the user to decide something about olang, add it to decisions.md in the same turn - question, the default
+in effect until they answer, and my recommendation.
+
+**Why:** the user said (2026-09-29): "If I forget to make a decision you flag for me. Record it always. I will miss some
+things you ask me." They often answer one question and move on to the next task, e.g. they skipped the `for` remake
+questions to do try-default first.
+
+**How to apply:** record at ask time, not later. Unanswered is not consent - keep the in-effect default and re-raise the
+entry when its area comes up or at the end of a report. Remove an entry only once answered, and move the answer into
+CLAUDE.md/HISTORY.md as with any design decision. **Narrowed 2026-10-08** by "Decide details myself": only
+direction-level questions go in the ledger as questions. Don't record my own framing as the user's decision in CLAUDE.md.
+
+#### Number the questions
+Number every list of questions or flagged decisions (1., 2., 3.) so the user can answer quickly by number. The user,
+2026-10-08: "next time order these with numbers so I can answer quickly". Any end-of-turn list of open questions / "my
+calls, worth checking" is a numbered list, one item per decision.
+
+#### No AskUserQuestion for design brainstorms
+When discussing open-ended language/design decisions (e.g. "can you think of a nice solution?"), don't reach for the
+AskUserQuestion tool to present options as a multiple-choice widget. Respond conversationally: lay out 2-3 options in
+plain text with a clear recommendation and the main tradeoff, and let the user redirect in their next message.
+
+**Why:** the user explicitly rejected an AskUserQuestion call mid-turn ("no get me back") when asked to compare three
+for-loop syntax redesigns. They want a fast, low-friction back-and-forth, not a formal decision UI, for this kind of
+brainstorming. Reserve AskUserQuestion for cases where the choice is genuinely blocking and hard to convey in prose (e.g.
+visual/preview-heavy comparisons).
+
+#### Revisit the user's own decisions when they prove rigid
+The user, 2026-10-09: "When it comes to revisiting some decisions I've made further along if adhering to them becomes
+unbearable, you can do that. The language is supposed to be flexible, if something becomes really rigid and in the
+way, then change it. Just remember to follow the overall design principles."
+
+**How to apply:** when one of the user's earlier calls (recorded in CLAUDE.md as "the user's call/decision") keeps
+forcing workarounds in real code - the usage study, std, oann, the port - change it rather than coding around it, as
+long as the change follows PRINCIPLES.md (no manual memory, no hidden per-operation cost, natural language, minimal
+syntax, multi-purpose, solid and smooth). Evidence first: name the code it got in the way of. Record it like any
+reversal - the CLAUDE.md entry marked as reversed with the reason, the story in HISTORY.md, spec and corpus migrated
+by the checklist - and say so in the next report, briefly, so the user can object. Not a licence to churn: a rule
+that is merely unfamiliar or slightly verbose stays; the bar is "really rigid and in the way". Extends "Decide details
+myself" from details to past decisions.
+
+#### Keep CLAUDE.md a living design doc
+olang's CLAUDE.md (repo root) was rewritten (2026-08-29) from a one-line project blurb into a design-principles
+document. Its "Open questions" section is gone: open questions live in the ledger decisions.md and recorded future work
+in plan.md; CLAUDE.md holds the checklist, the memory imports, and "Settled decisions".
+
+**Why:** the user explicitly asked me to keep adding to and removing from this document whenever changes are made, so it
+stays the up-to-date source of truth for olang's design instead of drifting stale.
+
+**How to apply:** whenever a design decision is made, implemented, revised, or reversed in a session, update CLAUDE.md in
+that same session (and HISTORY.md - an audit on 2026-10-08 found six changes with no HISTORY entry) - add Settled
+decisions as they're made, and put newly found gaps in the ledger or plan.md (the way the struct/array-literal-syntax
+gap was discovered while testing deep equality). Don't let this turn into a full changelog or spec - keep entries short
+and principle-level, not implementation detail. This supersedes the old deferred-codegen-gaps memory.
+
+**2026-10-08:** the memory files live in the repo (`.claude/memory/`), imported by CLAUDE.md, so every cloud session
+loads them with no manual step (the user: "I do not want any extra manual work every time"). They are committed with the
+work like CLAUDE.md; there is no other copy.
+
+### Language rules
+
+#### No per-operation run-time checks
+olang never gets a run-time check that is paid per operation (indexing, shifts, numeric conversions, division). Checks
+are opt-in with `checked` (R20/E15a, since 2026-10-17; `try` before that), or per-construction (slice bounds, array
+length), or compile-time.
+
+**Why:** the user removed such checks earlier ("it should never be done") and, asked again 2026-10-08 whether narrowing
+`Int32(i64)` should abort out of range, answered "1 for sure. It's not even a question."
+
+**How to apply:** don't offer an always-checked variant as an option; design the unchecked default plus the `checked`
+opt-in.
+
+#### Errors are errors
+In olang, use errors for absence/exhaustion/failure; never return a value beside a Bool flag (no `(T, Bool)`, no
+placeholder zero values).
+
+**Why:** the user, 2026-10-08: "Make sure you use errors and don't do the bool, value pattern. Errors are errors".
+Map.Get already failed on a miss; iterators were migrated to `Next() T ? Exhausted` for this.
+
+**How to apply:** any new std/prelude API or protocol method that can come up empty declares an error (a named one when
+callers must tell it apart, e.g. Exhausted) and callers use `try ... catch ... default` / `catch X { break }`.
+
+#### Every language change goes through the checklist; the evaluator stays current
+Every change to olang's semantics goes through the "Checklist for every language change" at the top of the olang repo's
+CLAUDE.md (/home/oscar/olang locally, /home/user/olang in a cloud session) - spec, checker/codegen, compile-time
+evaluator, tests (incl. one the evaluator runs), checks, corpus migration, diagnostics, records, make verify.
+
+**Why:** the user asked (2026-10-05), after checked arithmetic was first built with comptime.c just refusing it:
+"whenever we do changes that impact the evaluator, keep the evaluator up to date" and then "add that to a check
+list you go through".
+
+**How to apply:** before reporting any language change done, walk that list item by item; the evaluator step is the one
+most easily missed.
+
+**Extended 2026-10-07:** "always make the evaluator handle everything it can" - an exclusion in K1 needs a real reason
+(the body is outside the program, a run-time effect would be skipped, undefined behaviour). Exclusions that are only
+"not built yet" (as interface dispatch was) are gaps to close, not design.
+
+**Extended 2026-10-17 (the user: "I want the comptime eval to basically always run through everything it can. Anything
+that can be simulated at compile time should be.")** Not only "handle what it can when asked": a design should reach for
+compile-time evaluation and inference wherever they can stand in for something written or checked at run time - lengths
+followed through calls, a function's leading asserts decided at each call whose arguments are known, pure calls with
+constant arguments inside bodies computed while compiling. Anything it cannot decide falls back to the run time,
+never to an error or a guess.
+
+### Code rules
+
+#### Everything in olang
+The user, 2026-10-17: "One thing I don't like is how there are python scripts. Write everything in Olang", then "Unless
+it had to be written in C (the bootstrap compiler and the benchmarks)".
+
+**Clarified (the user, 2026-10-17):** "I want the python scripts migrated to Olang. All of them, python can be used by
+Claude to develop with short scripts that run once, but permanent scripts that end up in source should not be in
+Python ever." So: every committed script is ported (the one-off migrations too, not deleted); throwaway scripts in the
+scratchpad may be Python, never committed.
+
+**Exception:** C where it has to be C - the stage-0 compiler (bootstrap/), the benchmarks' C counterparts (bench/), and C
+programs that test the runtime from C (e.g. the scope-sanitizer check). Python and shell never.
+
+**How to apply:** new tools, migration scripts, test servers, benchmark drivers and generators are olang programs (on
+std/os, std/filepath, text, extern fn where needed). Tell every agent in its brief. Whether the makefile also becomes
+olang (`olang build.olang`) was asked (QT, decisions.md).
+
+**Status 2026-10-17:** every Python script is ported (wt-pyport, merged): tools/*.olang (io_print, io_try, io_fix,
+bare_typevars, perm_mut, int_literal_i64, shared srcmask/diagedit), compiler/tools/genmsgs.olang, the HTTP test server
+in olang over sockets. Run a tool as `build/out build tools/X.olang && build/tools_X ARGS` (tools/README.md). The shell
+and awk scripts followed (wt-shport, merged 2026-10-17: compiler/tools/*.olang sharing toolkit.olang, bench/run, rungemm,
+runfused, ir, the envcheck fixture). Left: inline awk one-liners in the makefile's checkir recipe and two commands in
+checks/checks.olang.
+
+#### A README per folder
+The user, 2026-10-17: "I want every main subfolder to contain a README.md that describes what the folder does. Add that
+for the ones that don't when it becomes relevant (the subfolder is it's own "thing")."
+
+**How to apply:** each top-level folder of a repository (olang: bench, bootstrap, checks, compiler, docs, fuzz, std,
+tests, tools; the same in oann and oagent) that is a thing of its own gets a README.md: what it is, what is in it, how to
+run or use it, where it fits. Short and current - update it in the same commit when the folder's contents change. A new
+folder of that kind gets its README in the commit that creates it; tell agents so in their briefs. Not for build output
+or small groupings inside a folder that are not things of their own.
+
+#### Keep old tests
+When adding new tests (test { } blocks in shared.olang/worker.olang/runner.olang, or wherever else tests live), never
+remove or replace an existing test case just to make room for new ones. Only touch an existing test if the language
+itself changed in a way that invalidates it (old syntax no longer compiles, old semantics no longer hold) - otherwise
+the suite is purely additive.
+
+**Why:** the test suite is the project's regression net; removing a passing test silently shrinks coverage of behavior
+that's still supposed to work, even if it feels redundant next to a newer test.
+
+**How to apply:** add new test { } blocks alongside the existing ones rather than replacing or trimming what's there. If
+an old test's syntax was superseded by a real language change (e.g. old literal-restated-array-size syntax after struct
+array literals simplified it), updating that one test is fine - deleting or shrinking others "for tidiness" is not.
+
+#### Nesting depth: three blocks, four at most
+The user, 2026-10-30: "your code has like 10 nested indented blocks. That is disastrous design. You should limit
+yourself to around 3, 4 on special occasions etc and break things up more."
+**How to apply:** at most three blocks nested inside a function's body, four on a special occasion; reach for guard
+clauses (`if bad: return`, `continue`), `:` one-line bodies and a helper function when a block is a thing of its own.
+Every agent brief says so. compiler/ is far over it (QCA, decisions.md) - a refactor batch is queued. The limit is mine and my agents'
+only (the user, 2026-10-31: "this is just for you. A human may write code how it wants") - no compiler, formatter or
+editor check on anyone else's code.
+
+#### Write each thing with the construct that fits it best
+The user, 2026-10-31: "make sure you use the most efficient language constructs for the job. I want the code to use
+what works best, not what you are used to necessarily."
+**How to apply:** in olang code (compiler/, std/, tools, tests), reach for what the language now has rather than the
+C-style habit: `:` one-line bodies and guard clauses, narrowing (`if e == C`, `is not null`) over matches of one case,
+`case P: v` value matches, conditional expressions, comprehensions and the iterator walks over hand loops, generators
+for walks, `try` covering a whole expression, errors raised by name, named arguments, `become` for state machines,
+`defer`/`errdefer`, reflection over repetition, lane operators over element loops - whichever is clearest and
+cheapest for the case. Every agent brief says so.
+
+#### Keep every dependent part in step
+The user, 2026-10-31: "keep a graph somewhere about which parts of the project reference which other part, so that
+when something is updated, the other parts of the project are updated too. For example the SPEC or LSP or neovim
+integration etc."
+**How to apply:** DEPENDENTS.md (repository root) lists, per kind of change, every place that must change with it; the
+mechanically checkable edges are checked by `make verify` (a consistency tool). Every change - and every agent brief -
+walks it before calling the work done; a new edge found goes into the map in the same commit.
+
+#### Flags beside values are errors, in my code too
+The user, 2026-10-30, seeing compiler/ return `value, Bool` and success Bools with out-parameters: the rule "errors are
+errors" (Language rules) holds for the compiler's own code, not only for std's API. New code declares an error; the
+~60 existing sites move with QBZ's decision.
+
+#### Style, form and conciseness
+Be diligent about style, form, and conciseness in this project - both in code and in how work is presented.
+
+**Why:** stated directly (2026-08-29) right after a file-merge went the wrong direction - I picked where to merge
+`type.c`/`type.h` (into itself, keeping `var`/`statement` there) based on my own architectural judgment instead of what
+the user actually meant ("merge type into semantic"), and the user had to correct me twice before it landed, calling the
+intermediate state "a mess."
+
+**How to apply:** when a user gives a refactor/reorg instruction with a specific target ("merge X into Y"), do exactly
+that unless truly ambiguous - don't substitute a different destination based on my own judgment about what's
+architecturally cleaner without flagging the disagreement first and getting confirmation. Keep code changes tight: no
+leftover cruft, no unnecessary intermediate states, consistent naming/section-header conventions matching the
+surrounding file (e.g. the `// ---- section ----` style already used in semantic.c). Keep my own responses concise too,
+not padded.
+
+**Files (the user, 2026-10-09):** "splitting files is overrated. I prefer long files if they all do the same thing.
+Only split where modularisation is a thing." Never split a file for its length; split only at a real module boundary.
+
+#### Surface and fix bugs found along the way
+When implementing a feature and a genuine bug turns up along the way (not the thing being asked for, just something
+broken that surfaces during the work), find it, fix it, and call it out explicitly in the summary/commit rather than
+quietly patching past it or ignoring it.
+
+**Why:** confirmed directly - after a session that implemented struct constructors/destructors and surfaced two real
+bugs in the process (a missing ASI-swallow before a constructor's closing `}`, and a destructor recursing into
+destructing its own self-parameter), the user said "it is good that you find bugs along the way... keep keeping an eye
+out." This echoes an earlier standing directive: when bugs are found and left unfixed, "bugs should be fixed" (and write
+them up in the design doc too, see "Keep CLAUDE.md a living design doc").
+
+**How to apply:** don't just narrowly satisfy the immediate ask - stay alert for adjacent bugs the change surfaces or
+stress-testing reveals, fix them without waiting to be asked, and report them plainly (what broke, why, what the fix
+was) rather than folding them silently into the diff.
+
+**Explicit reinforcement (2026-08-31), with a boundary:** after reporting a newly-found gap (a bare-pun constructor
+field silently not carrying scope-binding info, found while checking whether a scope-tracking fix generalized to 3+
+levels) and asking whether to fix it, the user said "fix it. fix everything you think might be a problem that doesn't
+require design decisions, always." So the default is: fix on sight, no need to ask first - the ONLY reason to pause and
+ask is when the fix itself requires a genuine design decision (a real fork in how the language/feature should behave,
+not just an implementation gap). A "does this generalize / is this handled" question that turns up a bug is itself
+grounds to just fix it, not merely report it and wait.
+
+#### Build what we will build anyway now (the user, 2026-11-08)
+Said of the incremental front end: "If we are going to do it eventually, just do it now, because we are building the
+language now and we don't want to do too many refactorings and full verifies." **How to apply:** where I would
+recommend "yes, later" for something we will clearly build, say so and offer it now; the user decides per question
+(their "yes" that evening covered only the question asked - never widen an answer to other lists).
+
+#### Optimizations are mine to decide
+The user, 2026-10-27 (asked whether to fuse comprehensions over lane expressions): "yes of course, all these kinda
+optimization tricks, dont even bother asking me, in fact, make a through search to find all that we have missed".
+**How to apply:** an optimization that changes no meaning (no syntax, no rule a program can observe beyond speed and
+memory) is never a question: measure it, queue it, build it, report it in one line. Only an optimization that would need
+a language change, a new cost a program does not show, or a trade against another principle goes to the user.
+
+### The compilers
+
+#### The port is a redesign
+The self-hosted compiler is a redesign, not a transliteration of the C one.
+
+The user, 2026-10-09: "When creating the self hosted compiler, please don't just copy the C solutions. Instead try to be
+smart about it and clean things up. Use industry standard where possible, for example the tokenizer doesn't really
+look very good, probably not very industry standard."
+
+**How to apply:** for each module of the port, first decide the standard design and write it idiomatically in olang;
+use the C code only as the reference for WHAT olang means (behaviour, diagnostics, edge cases), never for HOW. Known
+non-standard spots in the C compiler: the tokenizer matches a table of mini-pattern rules (`$a $d`...) at every
+position - standard is a hand-written scanner (switch on the first character, maximal munch, identifiers then a keyword
+lookup, tokens as spans into the source, line/column from a line table, statement-end insertion as Go's lexer does);
+the parser backtracks and memoizes by position - standard is recursive descent with Pratt/precedence climbing for
+expressions and one token of lookahead (where olang's grammar needs more, flag it as a language question rather than
+backtrack); the checker is one 14k-line pass - standard is separate name resolution, type checking and lowering over
+an AST of tagged unions (enums) with node spans for diagnostics. Acceptance for the port is behaviour (the whole test
+suite) plus the bootstrap fixed point, with per-stage diffs (tokens, AST) against the C compiler where cheap - not
+identical IR, which would force the C design onto the port. (The 2026-10-09 line "self-hosting starts only after the bug
+fixes and the refactor" is long done; the port is under way, see plan.md.)
+
+#### Stage 0 (the C compiler) is gone
+Stage 0 is removed since 2026-10-23, so its rules (what goes into which compiler, the frozen C compiler, the generated-seed bootstrap) are moot; they are in archive/rules_log.md. The seed bootstrap itself stands (CLAUDE.md, "The C compiler and the port").
+
+#### oann waits for the compiler
+The user, 2026-10-17: "Don't do Oann until the entire compiler is self hosted and 'mostly done'. There is no point in
+prematurely building oann."
+
+**How to apply:** no oann agents, migrations or catch-ups to new language changes while the port is being built - the
+language is still moving (errors, syntax, arrays batches) and each catch-up would be redone. oann stays as it is on its
+branch (last commit 0ed5de3, 2026-10-10). The migration tools (tools/*.olang, tools/cli_words.olang) are kept so oann can
+be caught up in one go later. Settling-network research (oagent) waits for the same point (direction.md).
+
+**Branch (2026-10-17):** oann's work was fast-forwarded into `main` (0ed5de3), a `master` was pushed at the same
+commit, and the user made `master` oann's default branch. From now on oann's work goes to `master`, as olang's does
+(and the designated session branch). The user deleted `main` the same day.
+
+#### Compile per module, whole program only on top
+The user, 2026-11-08: "I'm not against whole program compilation, but I do prefer if we can compile a part of a
+program and reuse it, because the compilation process is quite expensive. But like the final kind of compilation on
+top, given pre-compiled units, that can be whole program for sure ... I don't want to have to recompile every single
+piece of line of code every time."
+**How to apply:** every design keeps facts and code per module, reused when the module's inputs did not change (B3i);
+whatever needs the whole program runs only in the final step over precompiled units (the root's instances object,
+the link, LTO), as generic instances do. A design that makes an edit in one module recompile others states that cost
+and goes to the user. Every design brief says so. Not absolute (the user, the same day: "if this constraint is too
+much to actually make this memory safe and effective, then I'm willing to give it up as well"): where whole-program
+facts make memory safety or freeing clearly better, both variants are measured and the choice goes to the user.
+**Rescoped (the user, 2026-11-08 evening: yes to docs/wholeprog.md's questions 1-5, question 5 with "If we are going to
+do it eventually, just do it now").** Facts with readers replace "one module at a time": the front end may use whole-program
+facts; each fact records the modules that read it, delivered as a link-time constant, in the root's object, or in a
+module's object keyed by the facts it read; an edit recompiles exactly what read a changed fact; the front end itself
+becomes incremental on the same records, built with tests that make the suite cover it ("one small
+bug there can be disastrous ... you want the testing suites to cover it really"). At a precompiled library's boundary the defining module decides. The
+paragraphs above stand where they do not conflict.
+
+#### Models for the compiler/ refactor
+The user, 2026-11-01: "Yes, use Sonnet for the refactor but not for the validation", then "Actually nvm. Don't use
+sonnet for the refactor". The compiler/ refactor (task #66) runs on Opus, as its validation does (bulk review,
+soundness checks at high).
+Then (the same evening): "You can use sonnet for building smaller code pieces if you think it is effective, but do
+restructuring using opus". So: Sonnet may build small, self-contained code pieces where I judge it effective (a std
+function, a migration tool, a test, a contained fix); any restructuring - the compiler/ refactor, moving code between
+modules, changing how a pass is organised - and all validation run on Opus.
+
+#### The memory model may grow, without run-time cost
+The user, 2026-11-03: the scoping model is the base; additions on top that let refused programs work or free memory
+earlier are welcome when their cost is compile time only. No garbage collection or reference counting; reference
+counting only with a really good case in very specific places, and then asked first. Anything with a run-time cost is
+not done lightly.
