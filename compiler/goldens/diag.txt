@@ -3823,24 +3823,6 @@ o26own.olang:7:6: note: 'n' is the call's own copy of its argument - take it by 
     7 | fn f(n N) N& {
       |      ^
 compilation failed with 1 error
-=== o27destructorcall.olang
-o27destructorcall.olang:20:15: error[O27, O15]: this keeps a view of 'h', whose destructor runs when its block ends - its storage is not kept longer for a view: keep a copy of what it shows, '$x' or 'x.Copy()'
-   20 |         views.Push(first2(h))
-      |               ^~~~
-o27destructorcall.olang:31:14: error[O27, O15]: this keeps a view of 'h', whose destructor runs when its block ends - its storage is not kept longer for a view: keep a copy of what it shows, '$x' or 'x.Copy()'
-   31 |         v := first2(h)
-      |              ^~~~~~
-compilation failed with 2 errors
-=== o27destructorgen.olang
-o27destructorgen.olang:12:21: error[O27, O15]: this keeps a view of 'f', whose destructor runs when its block ends - its storage is not kept longer for a view: keep a copy of what it shows, '$x' or 'x.Copy()'
-   12 |         yield f.name[0:1]
-      |                     ^
-compilation failed with 1 error
-=== o27destructorview.olang
-o27destructorview.olang:12:14: error[O27, O15]: this keeps a view of 'f', whose destructor runs when its block ends - its storage is not kept longer for a view: keep a copy of what it shows, '$x' or 'x.Copy()'
-   12 |         keep.Push(f.name[0:1])
-      |              ^~~~
-compilation failed with 1 error
 === oparity.olang
 oparity.olang:9:15: error[E31]: V's Plus takes 2 parameters besides its receiver - an ordinary method, not the one '+' calls, which takes one
     9 |     t := V(1) + V(2)

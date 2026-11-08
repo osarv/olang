@@ -1,7 +1,10 @@
-# check: fail error[O27, O15]: this keeps a view of 'h', whose destructor runs when its block ends
-# O27 as placement, O15 (bulk review 8, F3): what a callee hands back of an argument (O13) is a view of that argument's
-# storage, so a value local holding a value whose destructor is still to run is never built longer for it either -
-# directly or through a local holding the view; written `views.Push(h.arr[0:2])` it was refused alike
+# check: run
+# flags: -debug -sanitize
+# O27 as placement, O15 (docs/fnvalues.md section 10; bulk review 8's F3 refused it - "this keeps a view of 'h', whose
+# destructor runs when its block ends"): what a callee hands back of an argument (O13) is a view of that argument's
+# storage, so a value local holding a value whose destructor is still to run is built where the view is kept - directly
+# or through a local holding the view - and ended as that scope closes: the views read every turn's array intact (the
+# destructor writes -99 into it), after a churn under the scope sanitizer
 import "std/io"
 
 type H unique struct(n I64) {
@@ -9,9 +12,17 @@ type H unique struct(n I64) {
     arr := Array<I64>(4 + n.Mod(3), n)
 } destruct {
     arr[0] = -99
+    io.Println("end " $n)!
 }
 
 fn first2(h H&) Array<I64>& { return h.arr[0:2] }
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
 
 fn keep(n I64) I64 {
     views := Vec<Array<I64>&>()
@@ -19,6 +30,7 @@ fn keep(n I64) I64 {
         h H = H(k + 1)
         views.Push(first2(h))
     }
+    churn()
     s := 0
     for v in views { s += v[0] }
     return s
@@ -31,9 +43,14 @@ fn viaLocal(n I64) I64 {
         v := first2(h)
         views.Push(v)
     }
-    return views.Len()
+    churn()
+    s := 0
+    for v in views { s += v[1] }
+    return s
 }
 
 fn main() {
-    io.Println($keep(50) " " $viaLocal(3))!
+    a := keep(5)
+    b := viaLocal(3)
+    io.Println($a " " $b)!
 }

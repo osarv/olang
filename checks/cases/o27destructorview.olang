@@ -1,15 +1,25 @@
-# check: fail error[O27, O15]: this keeps a view of 'f', whose destructor runs when its block ends
-# O27 as placement, O15 (docs/sec8.md 4.3, question 2): storage holding a value whose destructor is still to run is never
-# built longer for a view - its end stays where its holder lets go of it; the view kept past the turn names a copy
+# check: run
+# flags: -debug -sanitize
+# O27 as placement, O15 (docs/fnvalues.md section 10; it was refused - "this keeps a view of 'f', whose destructor runs
+# when its block ends" - until the user's decision of 2026-11-08): storage holding a value whose destructor is still to
+# run is built where the view is kept like any other, and the value goes with it - each turn's 'f' is built where 'keep'
+# lives and ended as that scope closes, after the views were read (after a churn, under the scope sanitizer)
 import "std/io"
 type Res unique struct(n String&) {
     name := $n
 } destruct { io.Println("end " $name)! }
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
 fn main() {
     keep := Vec<String&>()
     for i in range 3 {
         f := Res($i "-file")
         keep.Push(f.name[0:1])
     }
+    churn()
     io.Println($keep)!
 }
