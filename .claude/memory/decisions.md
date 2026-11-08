@@ -1082,3 +1082,8 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   wt-genrefs, docs/genrefs.md (opus xhigh). QCR (2) ANSWERED: no reference counting at all (the user: "doing ref
   counting is a bad idea"); truly shared ownership keeps memory until its scope closes. The fnvalues build waits: the
   user has not reviewed docs/fnvalues.md yet ("I haven't audited the function values yet").
+- The user 2026-11-08: "do these memory changes mean that we need whole program compilation now?" Answered: no new
+  requirement - the checker already reads the whole program from source (obligations come from bodies, B3, no interface
+  files) while objects stay per module and unchanged ones are reused (B3i); twins and clones follow generic instances
+  (made in the root's instances object, B3d); the address lookup is local. Mine: owning-link inference (wt-genrefs)
+  decides from the type's own module only, else keeps until its scope closes - sent to the note.
