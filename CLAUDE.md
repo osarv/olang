@@ -258,7 +258,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`I32(x)`), unchecked; `try x.Narrow<I32>()` checks it (E26b) - never a per-operation check (the user: "It's not even
   a question").
 - **Integer arithmetic wraps (E6c, the user's call, re-confirmed 2026-10-09).** Division by zero and MIN / -1 are
-  undefined (E6a); `std/arith` checks: `try arith.Add(a, b)`, `try arith.Checked(a) * b` (E15a).
+  undefined (E6a); `std/arith` checks: `try arith.Add(a, b)`, `try arith.Checked(a) * b` (E15a), and clamps:
+  `arith.Saturating(a) * b` (QCX 7, the user's yes 2026-11-07; built 2026-11-08: LLVM's saturating instructions, lanes vectorize).
 - **Value or reference is decided by the `&` marker alone (T11, T25a); references by default declined (QCS, the user
   2026-11-03: "don't do the object thing ... references are always shown with ampersand").** `&` is scope-tagged heap
   indirection, not an address-of: no pointer type, no unary `&`, no reference to a reference, no primitive

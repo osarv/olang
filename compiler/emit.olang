@@ -4819,6 +4819,8 @@ fn (fe mut fnEm&) saturating(op typed.PrimOp, r types.TypeId, x String&, args mi
         return fe.let("call " $lt " @" $intr "(" $lt " " $x ", " $lt " " $n ")")
     }
     y := fe.val(fe.arg(args, 1), fe.otype(fe.arg(args, 1)))
+    b := t.Bits(t.Repr(r))
+    if op == typed.PrimOp.SatMul and b <= 32 { return fe.satMulWide(s, lt, b, x, y) }
     if op == typed.PrimOp.SatMul {
         intr := "llvm." $s "mul.fix.sat." $lt
         fe.E.declare(intr, $lt " @" $intr "(" $lt ", " $lt ", i32)")
@@ -4827,6 +4829,27 @@ fn (fe mut fnEm&) saturating(op typed.PrimOp, r types.TypeId, x String&, args mi
     intr := "llvm." $s $("add" if op == typed.PrimOp.SatAdd else "sub") ".sat." $lt
     fe.E.declare(intr, $lt " @" $intr "(" $lt ", " $lt ")")
     return fe.let("call " $lt " @" $intr "(" $lt " " $x ", " $lt " " $y ")")
+}
+
+# a saturating product of at most 32 bits: the exact product at twice the width, clamped to the type's limits and
+# truncated - plain multiplies, minimums and maximums, which the loop vectorizer takes where LLVM's fixed-point multiply
+# would stay a lane at a time
+fn (fe mut fnEm&) satMulWide(s String&, lt String&, b I64, x String&, y String&) String {
+    wt := "i" $(2 * b)
+    ext := "zext " if s == "u" else "sext "
+    wx, wy := fe.let($ext $lt " " $x " to " $wt), fe.let($ext $lt " " $y " to " $wt)
+    p := fe.let("mul " $("nuw " if s == "u" else "nsw ") $wt " " $wx ", " $wy)
+    if s == "u" { p = fe.minMax("umin", wt, p, (I64(1) << b) - 1) } else {
+        p = fe.minMax("smax", wt, fe.minMax("smin", wt, p, (I64(1) << (b - 1)) - 1), 0 - (I64(1) << (b - 1)))
+    }
+    return fe.let("trunc " $wt " " $p " to " $lt)
+}
+
+# one of LLVM's integer minimums or maximums of v and a constant, at the type wt
+fn (fe mut fnEm&) minMax(f String&, wt String&, v String&, k I64) String {
+    intr := "llvm." $f "." $wt
+    fe.E.declare(intr, $wt " @" $intr "(" $wt ", " $wt ")")
+    return fe.let("call " $wt " @" $intr "(" $wt " " $v ", " $wt " " $k ")")
 }
 
 # an integer value of type from at the width of type to
