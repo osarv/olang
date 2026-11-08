@@ -1031,3 +1031,14 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   paths may be written (D10a, a call fitting any value position, D8e) and is written on declarations; the others only
   let a holder of a function value require things of the functions it accepts and rely on them at calls. It shares
   their position only. The design note (wt-fnvalues) builds on this.
+- Calls 4 and 5 DECIDED 2026-11-08. (4) the user: "we want to be able to control when the destructor runs ... can we
+  guarantee that whenever you want a destructor to run, you can always call the dot destruct method? If that is the
+  case ... let the view be built wherever we want ... treat it more as a memory question": answered that `x.Destroy()`
+  on a variable holding the value by value always compiles (only rule: `x` unused after); the gaps - a `:=` from a call
+  (held by registration, O16 - call 8's fix makes it a holder), a field (ends with its holder or when stored over), a
+  value in a collection (its removal ends it), a global (held by reference, C11). Decided: storage a view needs is
+  placed where the view is kept (memory only); the destructor stays with the whole value's holder (O15 / Destroy); a
+  reference to the whole flowing out keeps F4's rule (the destructor goes where it lives). (5) the user: "they should
+  find the right scope": a derived scope passed as a hidden scope argument by every call that knows it (no word per
+  instance), the fallback where none knows ASKED in the note (program scope or an address lookup). Both sent to the
+  design note (wt-fnvalues).
