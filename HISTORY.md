@@ -35258,6 +35258,11 @@ The harness of section 10.3, built in the suite:
   again, a mutable reference global, a G42 fact read, the C callback in the root, a number, an undo), each step built in
   place and clean and compared; a scenario the clean build refuses is left out of its module.
 
+**T7, run once**: the last 100 commits touching compiler/ built one after another in one directory by this compiler under
+`OLANG_CHECKREUSE` (an object reused only where emitted afresh it is the same, which stands in for a clean build without
+clang): 47 build in today's language (the older use retired spellings), every reused object the same, 555 modules lowered
+again in all - 11.8 a commit, none in 22 of them (edits to the root, never reused) - out of about 90.
+
 T4 and T8 belong to W3a/W3b. Measured: the compiler's leaf edit (a comment in `lsp.olang`) rebuilds in 6.3 s against 6.3
 s for master's compiler on the same tree (the round-8 figure of 3.5 s was on another machine state); `OLANG_TIMES`'s
 `facts` row is ~0.4 s for the compiler, almost all of it reading and hashing the reused records' IR, which was counted in
