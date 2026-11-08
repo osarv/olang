@@ -1,0 +1,8 @@
+# check: fail error[T21c]: 'keeps a in a' keeps a parameter in itself, which says nothing - leave it out
+# T21c: a parameter is never kept in itself
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+fn use(f fn&(a mut N&, b N&) keeps a in a) { f(N(1), N(2)) }
+fn main() { use(fn(a mut N&, b N&) { a.v = b.v }) }

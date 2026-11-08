@@ -1,0 +1,29 @@
+# check: run
+# flags: -debug -sanitize
+# T21c, T22b: t22alambdakeeps with the word written - a field "keeps k" holding a lambda keeping k in a captured list:
+# what a call through the field gives is built where the list lives; read back after a churn
+import "std/io"
+type Cache struct() {
+    onEvict fn?&(k String&) keeps k = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+fn main() ? {
+    c := Cache()
+    gone := Vec<String&>()
+    goneRef mut Vec<String&>& = gone
+    c.onEvict = fn(k String&) { goneRef.Push(k) }
+    for i in range 3 {
+        t := "key" $i
+        c.onEvict!(t)
+    }
+    churn()
+    try io.Println(gone.Join(","))
+}

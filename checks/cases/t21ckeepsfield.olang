@@ -1,0 +1,5 @@
+# check: fail error[T21c]: 'q' is no field of what 'y' refers to
+# T21c: "keeps b in a.f" names a field of what a refers to
+type H struct(items mut Vec<String&>&) { items }
+fn use(f fn&(x String&, y H&) keeps x in y.q) { }
+fn main() { }

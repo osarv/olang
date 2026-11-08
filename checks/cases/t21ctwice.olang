@@ -1,0 +1,4 @@
+# check: fail error[T21c]: 'noalloc' is promised twice - write it once
+# T21c: a word is written once
+fn use(f fn&(x I64) I64 noalloc noalloc) I64 { return f(1) }
+fn main() { _ := use(fn(x I64) I64 { return x }) }

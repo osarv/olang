@@ -1,0 +1,4 @@
+# check: fail error[T21c]: 'returns' promises every call comes back, and 'noreturn' that none does - write one of them
+# T21c: "returns" after "noreturn" contradicts it
+fn use(f fn&(code I32) noreturn returns) { f(1) }
+fn main() { }

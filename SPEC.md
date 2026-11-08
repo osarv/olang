@@ -458,7 +458,7 @@ a parameter's type, a return type, an array's element type) — is one of:
 
 ```
 type-expr ::= [ "mut" ] ( enum-body | struct-body | trait-body | func-type | type-ref | any-ref )
-func-type ::= "fn" reference-marker func-sig     (T21; bare - "fn" func-sig - only as a type declaration's base, T21b)
+func-type ::= "fn" reference-marker func-sig { promise }   (T21, T21c; bare - "fn" func-sig - only as a type declaration's base, T21b)
 ```
 
 A leading `mut` makes a reference type writable (T25b); it is valid on a reference-shaped type and on a type
@@ -1269,8 +1269,9 @@ the payload into the target set's part.
 
 ### 2.7 Function types
 
-**T21.** `func-type ::= "fn" reference-marker func-sig`, where `reference-marker` is T24's (`&` or `?&`, written directly
-after the `fn`) and `func-sig` is the parameter list, optional return type, and optional error list described in §3.4.
+**T21.** `func-type ::= "fn" reference-marker func-sig { promise }`, where `reference-marker` is T24's (`&` or `?&`,
+written directly after the `fn`), `func-sig` is the parameter list, optional return type, and optional error list
+described in §3.4 (D8), and each `promise` is T21c's.
 A function type is **reference-only**, as an `any` (T32) and an extern type (X10) are:
 every place holding a function value - a variable's, field's, parameter's or result's type, an element's, a type
 argument - writes its marker, `fn&(e Event)` a function value that is never null and `fn?&(e Event)` one that may be,
@@ -1302,18 +1303,71 @@ otherwise - a lambda, a named function, a `fn&(e Event)` - fits a `Handler&` dir
 it takes no type parameters (G6) and does not `extend` (T29f). A value of one is a function value - two words, called
 as `h(e)` - and renders as its signature (E11a); its type is spelled `Handler&`.
 
+**T21c (promises).** A function type may end with **promises**: words after its signature, separated by spaces, each
+saying what every call through a value of the type does not do, or does only as far as it says:
+
+```
+promise ::= "returns" | "noalloc" | "noblock" | "nospawn" | "norecurse" | "noextern" | "pure"
+          | "noborrow" | "borrows" IDEN | "keeps" IDEN [ "in" IDEN [ "." IDEN ] ]
+```
+
+```
+onClick fn?&(e Event&) noalloc noblock pure
+type Linker fn(list mut Vec<Node&>&, n Node&) keeps n in list
+find fn&(a Node&, k String&) Node& ? Missing borrows a
+onEvict fn?&(k String&) keeps k
+```
+
+They are written only on function types - a place's (`fn&`, `fn?&`), a declared function type's base (T21b), a type
+argument's: the type of something that holds a function value and calls through it. A function the program writes - a
+declaration, a method, a trait's method, a lambda, a constructor - writes none (a word after its signature is a
+compile-time error naming T21c): what it does is read off its body (its obligations O10b, its facts G42), and it is a
+value of such a type where what it does is within what the words say (T22b). `noreturn` (D8e) stands where it stood,
+before the promises (`fn&(I32) noreturn nospawn`); it is no promise.
+
+The promises are read for as long as a token on the signature's line begins one - a word, `borrows NAME`, `keeps NAME`
+and an `in NAME` and a `.NAME` after it - so the list ends at the first token that does not: a list's `,`, `)` or `>`, an
+initializer's or a default's `=`, a declaration's `{` or `?` (a function type's own error set comes before its
+promises, so `fn adder(names mut Vec<String&>&) fn&(k String&) keeps k ? Full { ... }` reads `? Full` as the
+declaration's), a line's end. They hold no comma, so they never make a type need L18c's parentheses. In `keeps b in a`,
+`in` is part of the type, where the membership operator (E29) cannot stand.
+
+| word | every function a value of the type can call ... | a call through the type relies on |
+|---|---|---|
+| `borrows a` | gives a result that refers only into what `a` refers to, or into what the function builds or the program's scope holds; one word per such parameter | the result needs nothing of the other arguments |
+| `noborrow` | gives a result that refers into nothing its parameters refer to | the result needs nothing of the arguments |
+| `keeps b in a` | may keep `b` - what it refers to, the references it holds - in what `a` refers to, beyond the call | `b` outlives `a`, exactly where something can be stored through `b` (O25g) |
+| `keeps b in a.f` | may keep `b` in what `a`'s field `f` refers to - where `f` has a binding of its own (O23a), there; else where `a`'s referent is, as `keeps b in a` | `b` outlives where that field refers |
+| `keeps x` | may keep `x` in what the function value itself holds: what a lambda captured, an adapter's receiver (E31) | `x` outlives where the function value lives (D16d) |
+
+Without `borrows` or `noborrow` a result holding references may refer into what every reference parameter refers to
+(T22). Without a `keeps` a call keeps nothing of its arguments beyond the call but what its result refers to (O17). The
+words `returns`, `noalloc`, `noblock`, `nospawn`, `norecurse`, `noextern` and `pure` promise facts of every call (G42).
+A function type writing `keeps x` is one something can be stored through (O25g): a value of it is held exactly where it
+lives, and a lambda held as it is built where its captures live, never in a caller's frame (D16d). The words are kept by
+position: `fn&(a mut N&, b N&) keeps b in a` and `fn&(x mut N&, y N&) keeps y in x` promise the same.
+
+It is a compile-time error naming T21c: a word naming no parameter of the type; a word written twice; `keeps a in a`; a
+`keeps` whose kept parameter holds no reference and is not unique (a copy is kept, which needs no word); `keeps b in a`
+where `a` holds no reference; `keeps b in a.f` where `f` is no field of what `a` refers to, or one holding no reference,
+or a path of more than one field; `borrows` or `noborrow` where the result holds no reference, `borrows a` where `a`
+holds none, and the two together; `returns` after `noreturn`.
+
 **T22.** Two function types are the same type (§2.10) only if they agree on parameter count, each
-parameter's type, permission included (T25b), in order, presence and identity of a return type, `noreturn` (D8e), and their error lists - the
+parameter's type, permission included (T25b), in order, presence and identity of a return type, `noreturn` (D8e), their error lists - the
 same error types **in the same order**, since a fallible call reports an error by its position in the
-callee's own list (§7). A function value **fits** a function type that differs only in permission where reading for
+callee's own list (§7) - and their promises (T21c), each by the position it names. A function value **fits** a function
+type that differs from its own only in promises, at the outermost level (E12; inside a type argument no fit crosses
+them, G16a), where everything its functions do is within that type's bound (T22b). A function value **fits** a function type that differs only in permission where reading for
 writing is safe: a parameter may be read-only where the type passes a writable reference (it reads what it may write), and
 the result writable where the type gives a read-only one - so `fn&(acc I32, b Box&) I32` is accepted for
 `fn&(acc I32, b mut Box&) I32`. A **named function** used as a value fits a type whose error list holds every error
 the function can fail with, in any order and with more beside them (§7 R1b): its value re-encodes its codes for the
 type's list. A `noreturn` function value also fits a type with the same parameters, no result, no error
 list and no `noreturn`: never returning, it does all such a type promises (D8e). Every other part must be the same. A
-function type says nothing more of where its references live (QCB): every parameter its own scope, and a result holding
-references may hand back what its reference parameters refer to - whole, or a view of it (T22a). So a call through a
+function type says nothing more of where its references live (QCB) than its promises do (T21c): every parameter its own
+scope, and a result holding references may hand back what its reference parameters refer to - whole, or a view of it
+(T22a) - but those `borrows` and `noborrow` leave out. So a call through a
 value of the type holds each reference argument to outlive the scope the result lands in (§8 O10c), exactly that scope
 where something can be stored through both the parameter and the result (O25g), and as a view: an argument's storage
 the caller builds is built where the result lands (O27). A value the inference follows - held in a local, given by a
@@ -1333,20 +1387,42 @@ into anything but a whole local (a field, an element, a payload, a global, a con
 tuple or an enum case is made of, a capture, a task's function, argument or result, an `any` (T32a), a `yield`, a
 binding of a pattern, a `return` of a function whose result is not one function value or that calls itself (O13c), and
 a call a cursor's version reaches before it is given (a loop's next turn, O25i); a type variable's binding is an
-argument. At a boundary a value may carry only what its written function type says of every call: each reference
-parameter's scope outliving its result's - exactly where something can be stored through both - so a function whose
-obligations are only these hands back what an argument refers to and is a value anywhere (`fn first(a Array<I64>&)
-Array<I64>& { return a[0:1] }`, `g := first`); and so must every function a call of it may give. A value carrying
-more there is a compile-time error naming the function (a lambda by the parameter it keeps), what it relates and the
-place - `g := link; g(x, N(5))` compiles, `put(link, x)` with `put(f fn&(a mut N&, b N&), ..)` does not; and `olang
-explain` says of every function carrying more that it is a value held in locals and results only, and why (B11b). The
-exception is a function type whose result is written as
+argument. At a boundary a value may carry only what the place's function type says of every call - its bound (T22b):
+with no promise, each reference parameter's scope outliving its result's - exactly where something can be stored
+through both - so a function whose obligations are only these hands back what an argument refers to and is a value
+anywhere (`fn first(a Array<I64>&) Array<I64>& { return a[0:1] }`, `g := first`); and so must every function a call of
+it may give, by the type's result. A value carrying more there is a compile-time error naming the function (a lambda by
+the parameter it keeps), what it does and the place, and, where one promise on the place's type would say it, that
+promise (`'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a'
+after its signature`) - `g := link; g(x, N(5))` compiles, `put(link, x)` with `put(f fn&(a mut N&, b N&), ..)` does
+not, and does with `put(f fn&(a mut N&, b N&) keeps b in a, ..)`; and `olang explain` says of every function carrying
+more than a type writing no promise says that it is a value held in locals and results only, and why (B11b). What no
+promise says - a result kept in an argument, a capture given back or kept in an argument, an argument kept in a global
+- is said with its fix, as above. The exception is a function type whose result is written as
 a **type variable** bound to a reference, or to a value holding references (a callback's `fn&(acc U, x T) U`):
 such a result may hand back one of the arguments (O14b), so the type itself requires each reference argument to
 outlive its result scope - and to be exactly it where something can be stored through the argument (O25g) - and a call
 through a value of it is held to that as a direct call is held to its callee's obligations (O10c). A lambda written for
 such a type may require that much and no more: `l.Iter().Fold(l[0], fn(best, w) { return w if w.Len() > best.Len() else
 best })` keeps the longest element.
+
+**T22b (a function type's bound).** A function type's promises (T21c) are a **bound** on every call through a value of
+it: its relations - what its result may borrow (T22, narrowed by `borrows` and `noborrow`) and what its `keeps` words
+keep - are the obligations a call may require (§8 O10c) and all it may keep of its arguments (O17); its effect words and
+`pure` are facts every call has (G42). A call through a value whose functions are not followed (T22a) discharges
+exactly these relations, the value's own home (`keeps x`) taken where the value called through lives (D16d). Where a
+value comes to be held as a function type - an argument, a store, an initializer, a `return`, a conversion - it fits
+only if each function it may call does what the bound allows: its obligations, in the type's positions (a parameter's
+scope as its parameter, the result scope as the result, a lambda's capture's or an adapter's receiver's as the value's
+home, a derived scope as its parameter's field), are each one of the bound's relations or follow from them (O10b's
+closure), exact only where the bound has both halves - judged where the value meets a boundary (T22a); and a value whose
+functions are not all followed fits only where its own type's bound is within this one's (each promise of this type
+promised by it, each relation of its bound one of this one's), else a compile-time error naming T22b and the promise.
+So a function promising more (keeping less, borrowing less) fits a type allowing more, and a type writing `keeps b in a`
+holds functions keeping `b` in `a`. A lambda held as a type writing `keeps x` keeps `x` only in a capture living exactly
+where the lambda does - one capturing from a longer-lived scope than its own is a compile-time error naming T22b. A
+named function keeping an argument in a global is held by no promise: the program's scope outlives every place a value
+lives. Nothing at run time changes: a value is two words whatever its type promises.
 
 ### 2.8 Scopes
 
@@ -2392,7 +2468,9 @@ instead, each scope it captures from required to outlive that - an obligation of
 another of its scope variables, as returning a parameter's function value is (O14a). Every rule for a reference (§8)
 then decides where it may be stored, passed and returned, so it can never be called after something it captured is gone. A function named as a value captures nothing and fits
 anywhere. Nothing is written through a function value itself, so it need only outlive where it is put: the
-exactness O25 requires of a reference does not apply to one. Where the lambda lives is unobservable beyond that, so an
+exactness O25 requires of a reference does not apply to one - but to one held as a type writing `keeps x`, which keeps
+what it is given where it lives (T21c), and which is never kept in a caller's frame. Where the lambda lives is
+unobservable beyond that, so an
 implementation may keep one made as an argument for a callee that can keep nothing of it - no obligation of the
 callee names that parameter's scope, its result does not, no other parameter shares it, no lambda captures it, and every
 read of it as a value is an argument of a direct call to a named function keeping nothing of that parameter (a call
@@ -7064,8 +7142,9 @@ elsewhere than its references, so storing one of them into the region is a store
 what it read out of the region** brings in nothing new either: one whose initializer and every value written into it, or
 into a part of it, anywhere in the body, is such a read - `t := a[i]  a[i] = a[j]  a[j] = t` - and which is never lent
 writably nor given a task's result. A call through a **function value** whose functions are not followed (T22a) keeps nothing of
-its arguments beyond the call but in its result, so it stores nothing where an argument leads whose parameter's type
-lets nothing be stored through it (O25g) - one whose functions are followed keeps and stores what each of them does - `less(a[i], a[j])` with `less fn&(x T, y T) Bool` and `T` a read-only reference or a value holding none; a
+its arguments beyond the call but in its result and what its type's `keeps` promises keep (T21c), so it stores nothing
+where an argument leads whose parameter's type lets nothing be stored through it (O25g) - one whose functions are
+followed keeps and stores what each of them does - `less(a[i], a[j])` with `less fn&(x T, y T) Bool` and `T` a read-only reference or a value holding none; a
 parameter through which something can be stored keeps counting as a store. So a callee that only permutes the elements
 - `Reverse`, `Sort`, a swap through a local - may be lent the value. A callee that only reads the value, or writes
 numbers into it, may be lent it: `toks := split(line);

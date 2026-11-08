@@ -1,0 +1,5 @@
+# check: fail error[T21c]: 'y' holds no reference, so nothing can be kept in what it refers to
+# T21c: nothing is stored through a parameter holding no reference
+type N struct(v I64) { v }
+fn use(f fn&(x N&, y I64) keeps x in y) { f(N(1), 2) }
+fn main() { use(fn(x N&, y I64) { }) }

@@ -1,0 +1,4 @@
+# check: fail error[T21c]: 'noalloc' is a promise, written only after a function type's signature
+# T21c: a lambda writes no promise - the type it is held as does
+fn use(f fn&(x I64) I64 noalloc) I64 { return f(1) }
+fn main() { _ := use(fn(x I64) I64 noalloc { return x }) }

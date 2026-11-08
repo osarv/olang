@@ -1,0 +1,6 @@
+# check: fail error[T21c]: 'pure' is a promise, written only after a function type's signature
+# T21c: a trait's method writes no promise
+type Shape trait {
+    Area() F64 pure
+}
+fn main() { }

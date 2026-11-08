@@ -1,0 +1,30 @@
+# check: run
+# flags: -debug -sanitize
+# T21c, T22b: t22areturncycle with the word written on the result's type - a function calling itself hands back a
+# function keeping b in a, and a call through it builds the temporary where a lives; read back after a churn
+import "std/io"
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+fn link(a mut N&, b N&) { a.next = b }
+fn pick(n I64) fn&(a mut N&, b N&) keeps b in a {
+    if n == 0 { return link }
+    return pick(n - 1)
+}
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+fn main() ? {
+    x mut N& = N(1)
+    h := pick(2)
+    h(x, N(7))
+    churn()
+    try io.Println($x.next!.v)
+}

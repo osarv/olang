@@ -555,6 +555,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # (judgeAll): by component, its judgings so far, the latest last; markReads, sumReads, wantsDecl and wantsField
     # what the component being judged reads and asks
     covered Map<I64, Bool>                 # the bodies whose obligations are what a call through a value holds (valueCovered)
+    gives Map<I64, I64>                    # by body: a function its returns give that its result's type does not hold (GivesHeld)
     reuse Bool = false
     NoReuse Bool = false
     gaveBack Bool = false                  # a round of the field inference gave a declaration's fields back as it went
@@ -588,6 +589,17 @@ fn (s mut Scoper&) Run() {
     if not s.inferFields() { s.judgeAll(true) }
     for b in range s.sums.Len() {
         if s.sums[b].Rels.Len() > 0 and s.valueCovered(b, s.sums[b].Rels, s.Bodies[b].Ty) { s.covered.Put(b, true) }
+        if s.sums[b].ResFn.Recs.Len() == 0 or not s.isFunc(s.Bodies[b].Ty) { continue }
+        # what its returns give, judged by its result's type, promises and all (T22b)
+        seen Map<I64, Bool>
+        seen.Put(b, true)
+        res := s.P.T.Result(s.Bodies[b].Ty)
+        for r in s.sums[b].ResFn.Recs {
+            g := s.uncovered(r.Body, r.Adapter, res, seen)
+            if g < 0 { continue }
+            s.gives.Put(b, g)
+            break
+        }
     }
     s.anyTables()
     s.exports()
@@ -1040,39 +1052,12 @@ fn (s mut Scoper&) derivedField(fty types.TypeId, a I64, w I64) String {
 # B11b (docs/sec8.md 5.5): a function body b's returns give - a function, or a lambda, whose relations a written
 # function type does not cover: its name ("a lambda" for one), "" for none. Read once every body is judged
 fn (s Scoper&) GivesHeld(b I64) String {
-    seen Map<I64, Bool>
-    seen.Put(b, true)
-    g := s.givesHeld(b, seen)
+    g := try s.gives.Get(b) catch default -1
     if g < 0 { return "" }
     return match s.Bodies[g].Of {
         case typed.BodyOf.Fn(inst): $"'" $s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name) "'"
         case _: "a lambda"
     }
-}
-
-fn (s Scoper&) givesHeld(b I64, seen mut Map<I64, Bool>&) I64 {
-    if b < 0 or b >= s.sums.Len() { return -1 }
-    for r in s.sums[b].ResFn.Recs {
-        if seen.Has(r.Body) { continue }
-        seen.Put(r.Body, true)
-        if not s.heldOK(r.Body, r.Adapter) { return r.Body }
-        g := s.givesHeld(r.Body, seen)
-        if g >= 0 { return g }
-    }
-    return -1
-}
-
-fn (s Scoper&) heldOK(b I64, adapter Bool) Bool {
-    rels := s.sums[b].Rels
-    if rels.Len() == 0 { return true }
-    if adapter { return false }
-    if s.covered.Has(b) { return true }
-    body := s.Bodies[b]
-    lambda := match body.Of {
-        case typed.BodyOf.Lambda(_): true
-        case _: false
-    }
-    return lambda and s.P.T.ResultFrom(body.Ty, 0) == types.FromTypeVar and resultsOnly(body, rels)
 }
 
 # the place a boundary is, as T22a's error says it

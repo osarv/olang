@@ -36,8 +36,10 @@ is no B3e limit.
 
 An ordinary keyword (one tier, L9): the "A keyword" section above, and the words of one place before it (`any`, `unique`,
 `immut`, `packed`, `commutes`) are keywords too. Add: `SPEC.md` L9a's field list and the rule giving the word its place
-(T21c, G42's table); `parse.olang` `keywordNamesField`; `ast.olang`, `unparse.olang` (the words), `types.olang` (identity,
-spelling); `scope.olang` (a relation word) or `effects.olang` (an effect word: its fact in `Fact.Named`); `explain.olang`'s
+(T21c, G42's table); `parse.olang` `keywordNamesField` and `promiseWord`; `token.olang` `EndsStatement` (a word that may
+end a function type ends a line's statement); `ast.olang`, `unparse.olang` (the words), `types.olang` (`PromiseNames`, the
+bits, identity, `Canon` and `PromiseText`), `generic.olang` (`promisesOf`'s misuses, `promiseBit`, `canonPromises`);
+`scope.olang` (a relation word: `boundEdges`) or `effects.olang` (an effect word: its fact in `Fact.Named`); `explain.olang`'s
 `# fits:`; `msgs.olang` and `diag.txt`; `tools/keyword_rename.olang` (the word joins its list so other people's code is
 renamed); `checks/cases`.
 

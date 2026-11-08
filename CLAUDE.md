@@ -435,10 +435,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   2026-11-03)**: a function or lambda whose inferred obligations are more than its type says is a value wherever the
   inference follows it whole, judged as the direct call; at a boundary (argument, store, capture, task, `any`,
   `yield`, return no caller follows) only what the written type says may come, else T22a's error. The function-values
-  work of 2026-11-08 (docs/fnvalues.md: promise words after a function type, `noalloc noblock nospawn norecurse
-  noextern pure returns`, `keeps n in list`, `keeps x`, `borrows a`, `noborrow`; written where relied on - function
-  types, declared function types, trait methods - inferred on implementations; function values followed and
-  specialized where it pays) is decided and being built.
+  work of 2026-11-08 (docs/fnvalues.md: function values followed and specialized where it pays) is decided and being
+  built. **Promises (T21c, T22b; the user's decision 2026-11-08; built 2026-11-08, round 4):** words after a function
+  type's signature - `keeps b in a`, `keeps b in a.f`, `keeps x`, `borrows a`, `noborrow` and the effect words
+  `returns noalloc noblock nospawn norecurse noextern pure` (G42's facts, judged from round 5) - written only on function
+  types (a declaration's, lambda's or trait method's is an error), part of the type's identity by position. They are the
+  type's bound: a call through an unfollowed value discharges exactly its relations (`keeps x` against where the value
+  lives, such a value held exactly), a value fits where its functions' obligations are within it, and T22a's error names
+  the word to write. No promise says an argument is kept in a global. The boundary's coverage now matches what a call
+  discharges (a hole: a result kept in an argument was accepted through a read-only result type).
 - **Static literals (T25d).** A literal known while compiling reaching a read-only reference is the constant data
   itself; an immutable global no writable reference reaches is `constant`, and importers see its value (K2).
 - **A number type's limits through its name (E36, the user's decision 2026-10-24).** `I64.Max`, `U8.Min`, `T.Max`, and

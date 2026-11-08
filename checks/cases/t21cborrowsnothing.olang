@@ -1,0 +1,5 @@
+# check: fail error[T21c]: this function type's result holds no reference, so 'borrows' says nothing - leave it out
+# T21c: a result holding no reference borrows from nothing
+type N struct(v I64) { v }
+fn use(f fn&(x N&) I64 borrows x) I64 { return f(N(1)) }
+fn main() { _ := use(fn(x N&) I64 { return x.v }) }

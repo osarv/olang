@@ -1,0 +1,23 @@
+# check: fail error[T22a]: 'put' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call
+# T22, T22b: a function keeping its result in its argument requires the result scope to outlive the argument's, which a
+# function type says only where something can be stored through both the parameter and the result (O25g) - 'put's
+# result is read-only, so a call through the type would not build the node where the list lives (a hole: it compiled,
+# and the scope sanitizer read the node after its scope closed)
+import "std/io"
+type N struct(v I64) { v }
+fn put(a mut Vec<N&>&) N& {
+    n := N(5)
+    a.Push(n)
+    return n
+}
+fn use(f fn&(a mut Vec<N&>&) N&, a mut Vec<N&>&) {
+    {
+        r := f(a)
+        assert r.v == 5
+    }
+}
+fn main() ? {
+    v := Vec<N&>()
+    use(put, v)
+    try io.Println($v[0].v)
+}
