@@ -1,0 +1,11 @@
+# the process's peak resident memory in KB, from /proc/self/status (VmHWM)
+import "std/os"
+
+fn PeakKb() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmHWM:") catch default -1
+    if at < 0: return -1
+    line := status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}

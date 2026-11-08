@@ -29,3 +29,10 @@ Open questions:
   three; 4. a field slot holding storage of two scopes (whole-program field analysis) - not now; 5. `any` copyable
   through a Copy in its table - not now; 6. `become` arguments placed in the tail scope (memory grows as `return`'s
   does, with a `-memory` row) - yes.
+- docs/genrefs.md's six direction questions (asked 2026-11-08; the note's section 14). Nothing is built until they
+  are answered. Recommendations: 1. back links written `weak` (they cannot be inferred) - yes, default nothing built;
+  2. a weak read turns null where the compiler reclaims (as in Swift, Java, Python; a program reading a removed node
+  through a back link then depends on the compiler) - accept; 3. holder record: (a) a held bit with pins, or (b) a
+  saturating count of owning places only - (b), default (a); 4. generational per module or per program - per module
+  (default); 5. early freeing in every module's code through link-time constants (round 7) - yes, default the root's
+  object only; 6. `std/pool` of generational handles - yes.
