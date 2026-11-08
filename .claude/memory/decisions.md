@@ -42,3 +42,7 @@ Open questions:
   itself could be the weak reference instead of a keyword; my answer: no - most `?&` fields own (a list's `next`, a
   tree's children), every such structure would lose its nodes, an optional owning link would have no form, and every
   type held by `?&` would pay the header; keep `weak`, only with `?&`. Awaiting their answer.
+  **Decided 2026-11-08: question 1, `weak` (the user: "Yes, record weak is decided", after weighing `?&` itself, `!`,
+  `back`, `unowned`, and an `owned`/`unowned` pair replacing `unique` - all declined: `unique` and `weak` stay); question
+  6, `std/pool` ("also do the pools ... basically just a standard library construct"), being built.** Open: 2 (implied
+  by the two rules, not yet said), 3 (the count follows from the first rule), 5 (every module).
