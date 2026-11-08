@@ -116,7 +116,6 @@ PlaceView I64 = 1
 PlacePart I64 = 2
 PlaceCapture I64 = 3
 PlaceTail I64 = 4      # S21: storage a become hands on, or a holder of a destructor value in a block it closes
-PlaceTailDtor I64 = 5  # S21: a call's value with a destructor, built in a block a become closes
 
 # what a judgment of "outlives" comes to (2.2): it holds; it is an obligation the body records; it fails because a
 # block is asked to outlive a scope variable (O10d) or another block it is nested in (O10); it cannot be judged here
@@ -7861,6 +7860,11 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             # proposes a longer claim for that local (2.4)
             owner := s.promoteLocal
             s.promoteLocal = -1
+            # S21: an instance with a destructor made in a block a become closes is made in the tail scope instead
+            if isBlockTerm(d) and s.resultVar >= 0 and s.mayHoldDtor(pr.X.Type()) and s.tailCloses(d) {
+                d = Term.Var(s.resultVar)
+                s.tailDtorRow(pr.X.Span())
+            }
             s.buildSite(pr.Site, d, pr.X.Span())
             s.anyItems = box and anyArrayBox(pr.X)
             pv := s.val(pr.X, d)
@@ -8657,6 +8661,11 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     if rrels.Len() > 0 { s.valRelsAt.Put(I64(c.Site), s.unionRels(rrels, recs.Full, fty, vars, rv)) }
     if rv >= 0 {
         beta[rv] = dest if dest.Runs() else here
+        # S21: a value with a destructor landing in a block a become closes is built in the tail scope instead
+        if isBlockTerm(beta[rv]) and s.resultVar >= 0 and s.mayHoldDtor(ty) and s.tailCloses(beta[rv]) {
+            beta[rv] = Term.Var(s.resultVar)
+            s.tailDtorRow(s.nameSpan(sp))
+        }
         # a result nothing puts anywhere lands by its obligations where they need its scope to outlive an argument's
         # (O18a, O18c) - a constructor's instance is built where it stands, C2d holding it
         if s.P.T.Role(fty) == types.RoleCtor { land = false }
@@ -8716,14 +8725,8 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     # ... and an instance with a destructor built in a block a become of the function closes would have it run early
     # (O16) - a reference to one, or a value that may hold one: a struct holding a "Res&", an any, a type variable's. It
     # is built in the tail scope instead (S21)
-    if rv >= 0 and isBlockTerm(beta[rv]) and s.mayHoldDtor(ty) and s.tailCloses(beta[rv]) {
-        if s.resultVar >= 0 and s.liftGather {
-            s.viewing(PlaceTailDtor, s.nameSpan(sp))
-            s.proposeSite(I64(c.Site), Term.Var(s.resultVar))
-            s.viewKind = 0
-        } else if s.resultVar < 0 and s.dtorAt.Start < I32(0) {
-            s.dtorAt = s.nameSpan(sp)
-        }
+    if rv >= 0 and isBlockTerm(beta[rv]) and s.mayHoldDtor(ty) and s.tailCloses(beta[rv]) and s.resultVar < 0 and s.dtorAt.Start < I32(0) {
+        s.dtorAt = s.nameSpan(sp)
     }
     scopes := Array<typed.Scope>(vars.Len())
     for v in range vars.Len() { scopes[v] = s.scopeOf(beta[v]) }
@@ -9017,7 +9020,8 @@ fn (s mut Scoper&) tailLifts(c typed.Call&, owner Array<I64>&, beta Array<Term>&
     b := s.B!
     for l in range b.Locals.Len() {
         loc := b.Locals[l]
-        if loc.Kind != typed.LocalKind.Var or s.isRef(loc.Ty) or not s.P.T.NeedsDrop(loc.Ty): continue
+        if loc.Kind == typed.LocalKind.Param or loc.Kind == typed.LocalKind.Field or loc.Kind == typed.LocalKind.Capture: continue
+        if s.isRef(loc.Ty) or not s.P.T.NeedsDrop(loc.Ty): continue
         if not s.tailCloses(Term.Block(loc.In)): continue
         s.viewing(PlaceTail, s.nameSpan(sp))
         s.proposeLocal(l, t, true)
@@ -9095,6 +9099,15 @@ fn (s mut Scoper&) tailRows(c typed.Call&, sp source.Span) {
         p.Tail = true
         s.tailPlaced.Put(pair.Pair<I64, I64>(s.Id, I64(a.Span().Start)), p)
     }
+}
+
+# -memory's row (B18) for a value with a destructor built in the tail scope at sp, for a become closing its block
+fn (s mut Scoper&) tailDtorRow(sp source.Span) {
+    if not s.report: return
+    text := $"a temporary is built in " $s.placedScope(s.Id, Term.Var(s.resultVar)) ", a new one each time it is made, for a become closing its block, kept until the chain's first caller lets go of the result - its destructor runs as that scope closes, not at the end of its block"
+    p := Placement(s.B!.File, I64(sp.Start), I64(sp.End), I64(sp.Start), $text)
+    p.Tail = true
+    s.tailPlaced.Put(pair.Pair<I64, I64>(s.Id, I64(sp.Start)), p)
 }
 
 # whether an argument is a value made where it is written: a call's, a rendering, an array or a case made
@@ -11583,7 +11596,6 @@ fn (s Scoper&) Placements() Vec<Placement> {
             case PlacePart: "for a part of it kept here"
             case PlaceCapture: "for a closure of it kept here"
             case PlaceTail: "for the become here, kept until its chain's first caller lets go of the result"
-            case PlaceTailDtor: "for a become closing its block, kept until the chain's first caller lets go of the result"
             case _: "for a view of it kept here"
         }
         name := "a temporary"
@@ -11602,10 +11614,9 @@ fn (s Scoper&) Placements() Vec<Placement> {
             if site < body.Sites.Len() { at = body.Sites[site].Sp }
             t = try s.siteLifts.Get(pair.Pair<I64, I64>(b, site)) catch default Term.None
         }
-        if row.Kind == PlaceTailDtor: ends = " - its destructor runs as that scope closes, not at the end of its block"
         text := $name " is built in " $s.placedScope(b, t) ", a new one each time it is made, " $what $ends
         p := Placement(body.File, I64(row.At.Start), I64(row.At.End), I64(at.Start), $text)
-        p.Tail = row.Kind == PlaceTail or row.Kind == PlaceTailDtor
+        p.Tail = row.Kind == PlaceTail
         if not rows.View().Some(fn(r): return r.File == p.File and r.Start == p.Start and r.Text == p.Text) { rows.Push(p) }
     }
     # S21: what a become hands on built in the tail scope that no lift says
