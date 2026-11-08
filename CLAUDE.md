@@ -91,7 +91,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   loop. **A lambda's body too (D16, the user's decision 2026-10-24):** `xs.Count(fn(x): return x > 3)`.
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build compile
   test interpret format explain help doc lsp mcp fix bindgen profile`; options `-output -debug -race -sanitize -target
-  -define -update -check -quick -html -library -memory -fuzz -fuzztime -caps -asm -ir -interpret`, each checked against
+  -define -update -check -quick -html -library -memory -fuzz -fuzztime -caps -asm -ir -interpret -bench`, each checked against
   the modes it applies to; old flags are gone.
 - **`-quick` (B2g, the user's call 2026-10-24).** `-O2` without link-time optimization; an error beside `-debug` or
   `-race`. The default stays `-O3` + LTO (B2c).
@@ -384,6 +384,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Fuzzing and property tests (B19, B19a, docs/survey2.md section 5, 2026-10-26).** `olang test -fuzz NAME FILE
   [-fuzztime SECONDS]` runs one test per input with libFuzzer. `std/fuzz` and `std/prop` (parameters made by
   reflection, failures shrunk and saved).
+- **Benchmarks are tests (B19b, QCX 4, the user's "sure" 2026-11-07; built 2026-11-08).** `bench.Run(fn() { ... })` in
+  a test runs the work once in every build; `olang test -bench FILE [WORD...]` grows the calls to a second (Go's rule)
+  and writes ns/op, allocs/op, B/op (counted only in that build) and instr/op where a counter exists. `bench.Keep(v)`
+  defeats dead-code elimination; `bench.Measurement.Of(f)` measures in any build.
 - **`olang profile FILE [ARGS]` (B20, QBL, the user's decision 2026-10-26).** A built-in sampling profiler; prints
   self/total by function, hot lines and callers, and writes an SVG flame graph. docs/profiling.md.
 - **Arguments by name (E14b, QBG, 2026-10-26 - reverses the 2026-09 rejection).** A defaulted parameter only, after

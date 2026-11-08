@@ -53,6 +53,21 @@
 | olang: error[B1]: -race applies to running a file, build, compile and test, not to interpret
 | stderr:
 | status 1
+=== olang build -bench main.olang
+| stdout:
+| olang: error[B1]: -bench applies to test, not to build
+| stderr:
+| status 1
+=== olang test -bench -interpret main.olang
+| stdout:
+| olang: error[B3e]: -interpret builds nothing, and -bench says how to build - give one
+| stderr:
+| status 1
+=== olang test -bench -fuzz x main.olang
+| stdout:
+| olang: error[B19b]: -bench measures the tests a build runs, and -fuzz runs one test on a fuzzer's inputs - give one
+| stderr:
+| status 1
 === olang help -debug
 | stdout:
 | olang: error[B1]: -debug applies to running a file, build, compile and test, not to help
@@ -325,6 +340,7 @@
 |   -fuzz NAME         fuzzes the one test NAME names (as test's words do) with libFuzzer, failing inputs saved beside the file (B19)
 |   -fuzztime SECONDS  with -fuzz: stops fuzzing after SECONDS (B19)
 |   -interpret         runs the tests by compile-time evaluation instead of building them, as interpret runs a program (B3e)
+|   -bench             measures the benchmarks the tests run (std/bench): time, allocations and bytes per call (B19b)
 | stderr:
 | status 0
 === olang help interpret
@@ -436,7 +452,7 @@
 |             | "bindgen" | "profile" | "api"
 | option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
 |             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-interpret"
+|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-interpret" | "-bench"
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -460,6 +476,7 @@
 | | `-memory` | running a file, build, test | B18 |
 | | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
 | | `-interpret` | test | B3e |
+| | `-bench` | test | B19b |
 | | `-caps` | explain | B11c |
 | | `-asm`, `-ir` | explain | B11d |
 | 

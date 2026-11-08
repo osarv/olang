@@ -14,6 +14,7 @@
 ;   ; @else          only where it does not. COND is "san" (a -s build) or an architecture ("x86_64", "aarch64"),
 ;   ; @end           or either after "!". Not nested.
 ;   ; @prof LINE     LINE, kept only in a build olang profile makes (B20) - a comment in every other build
+;   ; @bench LINE    LINE, kept only in a benchmark build, "olang test -bench" (B19b) - a comment in every other build
 ; Each function is then given the build's attributes - the target's CPU and features, and sanitize_thread under -r -
 ; as each function the compiler generates is (B12, P7). The constants the kernel and the C library define alike on
 ; every architecture here - errno values, signal numbers, the S_IF* kinds, mmap's, sigaction's and sigaltstack's flags,
@@ -49,6 +50,8 @@ declare void @free(ptr)
 declare ptr @mmap(ptr, i64, i32, i32, i32, i64)
 declare i32 @munmap(ptr, i64)
 declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)
+declare i64 @read(i32, ptr, i64)
+declare i64 @syscall(i64, ...)
 declare i64 @llvm.ctlz.i64(i64, i1)
 declare i128 @llvm.cttz.i128(i128, i1)
 ; O8b: the chunk pool's budget, an eighth of the machine's memory
@@ -1062,6 +1065,14 @@ bump:
   %result = getelementptr i8, ptr %dataptr, i64 %csaligned
   %newused = add i64 %csaligned, %size
   store i64 %newused, ptr %csusedptr, !tbaa !60
+  ; B19b: a benchmark build counts what this thread allocates - here and at the slow path's own bump, so each
+  ; allocation is counted once wherever it is made (a region's and a forwarded scope's come back through here)
+; @bench %bna = load i64, ptr @__olang_bench_allocs
+; @bench %bna1 = add i64 %bna, 1
+; @bench store i64 %bna1, ptr @__olang_bench_allocs
+; @bench %bnb = load i64, ptr @__olang_bench_bytes
+; @bench %bnb1 = add i64 %bnb, %size
+; @bench store i64 %bnb1, ptr @__olang_bench_bytes
   ret ptr %result
 needchunk:
   %slow = tail call ptr @__olang_scope_alloc_slow(ptr %scope, i64 %rawsize, i64 %aln)
@@ -1129,6 +1140,12 @@ settail:
 first:
   %ncusedptr = getelementptr %olang.chunk, ptr %newchunk, i32 0, i32 1
   store i64 %size, ptr %ncusedptr, !tbaa !60
+; @bench %bna = load i64, ptr @__olang_bench_allocs
+; @bench %bna1 = add i64 %bna, 1
+; @bench store i64 %bna1, ptr @__olang_bench_allocs
+; @bench %bnb = load i64, ptr @__olang_bench_bytes
+; @bench %bnb1 = add i64 %bnb, %size
+; @bench store i64 %bnb1, ptr @__olang_bench_bytes
   %ncdata = getelementptr %olang.chunk, ptr %newchunk, i32 1
   ret ptr %ncdata
 }
@@ -2968,6 +2985,87 @@ define void @__olang_test_detach() {
 entry:
   store ptr null, ptr @__olang_jmp_target
   ret void
+}
+
+;; B19b: benchmarks (std/bench). A benchmark build ("olang test -bench") is a test build whose allocator counts, per
+; thread, the allocations it makes and their bytes (the "; @bench" lines of __olang_scope_alloc_a and
+; __olang_scope_alloc_slow); every other build has the counters and never touches them, so it pays nothing.
+; __olang_bench_on says which build this is; __olang_bench_instructions reads the instructions this thread has retired,
+; from a hardware counter each thread opens on its first call (perf_event_open, user space only), or -1 where the
+; machine or the kernel gives none (a container's seccomp filter often refuses the call); __olang_bench_keep hands a value to an empty piece of assembly, so the optimizer must compute it
+@__olang_bench_allocs = thread_local(initialexec) global i64 0
+@__olang_bench_bytes = thread_local(initialexec) global i64 0
+@__olang_bench_perf = thread_local(initialexec) global i32 -2
+
+define i64 @__olang_bench_on() {
+entry:
+  %on = alloca i64
+  store i64 0, ptr %on
+; @bench store i64 1, ptr %on
+  %v = load i64, ptr %on
+  ret i64 %v
+}
+
+define i64 @__olang_bench_allocs_made() {
+entry:
+  %n = load i64, ptr @__olang_bench_allocs
+  ret i64 %n
+}
+
+define i64 @__olang_bench_bytes_made() {
+entry:
+  %n = load i64, ptr @__olang_bench_bytes
+  ret i64 %n
+}
+
+define void @__olang_bench_keep(i64 %v) alwaysinline {
+entry:
+  call void asm sideeffect "", "r"(i64 %v)
+  ret void
+}
+
+; perf_event_attr as its first version lays it out (64 bytes): type 0 (PERF_TYPE_HARDWARE) at 0, its size at 4, config
+; 1 (PERF_COUNT_HW_INSTRUCTIONS) at 8, and the flags at 40 - exclude_kernel (bit 5) and exclude_hv (bit 6), counting
+; from the moment it is opened. pid 0 and cpu -1: this thread, on whichever processor it runs
+define i64 @__olang_bench_instructions() {
+entry:
+  %attr = alloca [64 x i8], align 8
+  %buf = alloca i64
+  %fd0 = load i32, ptr @__olang_bench_perf
+  %untried = icmp eq i32 %fd0, -2
+  br i1 %untried, label %open, label %have
+open:
+  call void @llvm.memset.p0.i64(ptr %attr, i8 0, i64 64, i1 false)
+  store i32 0, ptr %attr
+  %szp = getelementptr i8, ptr %attr, i64 4
+  store i32 64, ptr %szp
+  %cfgp = getelementptr i8, ptr %attr, i64 8
+  store i64 1, ptr %cfgp
+  %flp = getelementptr i8, ptr %attr, i64 40
+  store i64 96, ptr %flp
+; @if x86_64
+  %fdw = call i64 (i64, ...) @syscall(i64 298, ptr %attr, i64 0, i64 -1, i64 -1, i64 0) ; SYS_perf_event_open
+; @else
+  %fdw = call i64 (i64, ...) @syscall(i64 241, ptr %attr, i64 0, i64 -1, i64 -1, i64 0) ; SYS_perf_event_open
+; @end
+  %fd1 = trunc i64 %fdw to i32
+  %bad = icmp slt i64 %fdw, 0
+  %fd2 = select i1 %bad, i32 -1, i32 %fd1
+  store i32 %fd2, ptr @__olang_bench_perf
+  br label %have
+have:
+  %fd = phi i32 [ %fd0, %entry ], [ %fd2, %open ]
+  %none = icmp slt i32 %fd, 0
+  br i1 %none, label %out, label %read
+read:
+  %n = call i64 @read(i32 %fd, ptr %buf, i64 8)
+  %ok = icmp eq i64 %n, 8
+  br i1 %ok, label %got, label %out
+got:
+  %v = load i64, ptr %buf
+  ret i64 %v
+out:
+  ret i64 -1
 }
 
 ; the variable "name" (NUL-terminated), or -1 when it is not set

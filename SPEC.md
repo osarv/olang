@@ -7583,7 +7583,7 @@ mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" 
             | "bindgen" | "profile" | "api"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-interpret"
+            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-interpret" | "-bench"
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -7607,6 +7607,7 @@ beginning with `-` that is no option is an error:
 | `-memory` | running a file, build, test | B18 |
 | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
 | `-interpret` | test | B3e |
+| `-bench` | test | B19b |
 | `-caps` | explain | B11c |
 | `-asm`, `-ir` | explain | B11d |
 
@@ -8312,6 +8313,26 @@ bytes are shrunk - runs cut, bytes lowered - while it still fails; the smallest 
 `argument N: VALUE` line per parameter as `$` writes it, saved under `testdata/fuzz/SLUG/` (replayed first by every
 later run, as B19a's inputs are), and then run in the test itself, so the test fails as `f` does. Under `-fuzz` the
 fuzzer's input is the bytes of one case, run in the test's own process.
+
+**B19b (benchmarks).** A benchmark is a test whose body hands std/bench the work to measure: `bench.Run(f)` takes `f`,
+a function of no parameters that may fail. `test -bench FILE [WORD...]` builds the file's tests as `test` does (B3a,
+the words choosing which run) into a **benchmark build** - distinct objects (B4, named with `.bench`) whose allocator
+counts, per thread, the allocations the program's scopes make and their bytes - and in it each `bench.Run(f)` calls `f`
+in rounds on the test's thread: one call, then each round as many calls as the last round's pace says would take the
+budget (one second unless `Run` is given another) and a fifth more, at most a hundred times the last round's and at
+least one more, until a round's calls take the budget together or make 10^9. The last round is written to the
+standard output before the test's own line, `bench NAME  N ops  T ns/op  A allocs/op  B B/op`, NAME the test's name as
+its run reports it and `/LABEL` after it where `Run` is given a label, T the nanoseconds of one call on the monotonic
+clock, A and B the allocations and bytes of one call rounded down, and `  I instr/op` after them where the machine and
+the kernel give a counter of the instructions the thread retires. What the test does outside `f` is not measured. In
+every other build, and under `-interpret` (where `-bench` is an error, B3e), `Run` calls `f` once and writes nothing,
+so a benchmark is a test as well; no other build counts allocations or holds the counting code. `bench.Keep(v)` hands
+a value to code the optimizer cannot see through, so work whose result is otherwise unused is done: a number, `Char`
+or `Bool` by its bits, any other value through its `Hash` (whose cost the measurement includes).
+`bench.Measurement.Of(f)` measures in any build, giving the rounds' last as numbers - its allocations and bytes -1
+outside a benchmark build, its instructions -1 where no counter is given. A call of `f` that fails ends the
+measurement with its error at once. `-bench` beside `-fuzz` is an error. The evaluator (K1) evaluates no benchmark
+build: there `Run` calls `f` once.
 
 ### 10.10 Profiling
 

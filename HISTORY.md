@@ -30761,6 +30761,44 @@ test.
   headers name `IP.Parse`, `Addr.Parse`, `Date.Of`.
 
 
+## Benchmarks in the test runner (B19b, std/bench; QCX 4, 2026-11-08, wt-bench)
+
+The user's yes to QCX (4) ("sure, I dont get it tho", 2026-11-07) - benchmarks in the test runner, after the compiler is
+done, no syntax. Built as std/bench used inside ordinary tests, Go-style, with one option of `test`.
+
+What it is: `bench.Run(f)` in a test. A plain `olang test` and `test -interpret` call `f` once, so every benchmark is
+also a test and the suite runs it; `olang test -bench FILE [WORD...]` builds a benchmark build and `Run` grows the number
+of calls to a budget (one second) and writes `bench NAME  N ops  T ns/op  A allocs/op  B B/op [I instr/op]` before the
+test's `ok` line. tests/bench.olang holds three real ones (a sort of 10,000 numbers, counting 1,000 words into a Map,
+a lane `Sum` of a million floats).
+
+Decisions, mine:
+1. Which tests are measured is said by test's own words (B7a, `olang test -bench FILE sorted`), not by a pattern given
+   to `-bench` (Go's `-bench REGEXP`): one selection rule. `-bench` takes no value.
+2. No keyword and no `Benchmark` function kind: a benchmark is a test calling `bench.Run`, so it is run, named, listed by
+   `olang doc` and selected as every test is. Setup outside the function is not measured (Go's `ResetTimer` needs no
+   counterpart). A label (`Run(f, label = "ten")`) tells several measurements of one test apart.
+3. Go's growth rule: one call, then rounds of `budget * last.Ops / last.Nanos`, a fifth more, at most 100x and at least
+   one more than the last round, never past 10^9; the last round is reported. ns/op written as Go writes it (whole from
+   100, one more decimal below each power of ten). allocs/op and B/op rounded down, as Go's are.
+4. Allocations are counted by the runtime's allocator only in a benchmark build: `; @bench` lines in runtime.ll (as
+   B20's `; @prof` lines) at the two places memory is handed out - the inlined bump path `__olang_scope_alloc_a` and the
+   slow path's fresh chunk; regions and forwarded scopes come back through the bump path, so each allocation is counted
+   once. Per-thread counters (`initialexec` thread-locals); a benchmark counts what its own thread allocates in olang's
+   scopes - not a task's thread and not the C library's own `malloc`. Every other build has the counters' globals and
+   never touches them, so it pays nothing; the benchmark build is a distinct artifact (`.bench`, the build-inputs hash).
+5. `bench.Keep(v)` hands an I64 to an empty `asm sideeffect` (`__olang_bench_keep`, inlined across LTO), so the
+   optimizer must compute it: integers and `Char` by value, floats by their bits, `Bool` as 0/1, any other type through
+   its `Hash` (G18a says at the call when a type has none), whose cost is measured with the work - documented.
+6. Instructions per call where the machine gives a counter: perf_event_open (user space only), opened per thread on
+   first use; -1 and the column left out where it is refused (this container's VM has no counter: ENOENT).
+7. `bench.Measurement.Of(f)` measures in any build and gives the numbers (a type-level builder, D19a); allocations -1
+   outside a benchmark build.
+8. `-bench` with `-interpret` is B3e's error (it says how to build), with `-fuzz` B19b's own error.
+9. The evaluator: `__olang_bench_*` are allowed while compiling (no effect skipping would show - no benchmark build is
+   evaluated): `on`, the counters give 0, the instruction counter -1, `keep` nothing; so a function calling `bench.Run`
+   is evaluable and runs the work once (std/bench's top-level assert decides it).
+
 ## From CLAUDE.md's settled decisions, moved 2026-11-07
 
 The entries as they stood before the trim of 2026-11-07, verbatim, by subsection of "Settled decisions".

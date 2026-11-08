@@ -2066,7 +2066,7 @@ efe336c8764b3874 aafa63e2e9dc5e5a checks/fixtures/vechandle/handle.olang
 a4483499720ef53e 8d03a5cb4c7e973e compiler/api.olang
 c5981293a7210cfa 2c002cc7f29670fb compiler/ast.olang
 76e002fe516379d0 23a5d5b8d2beea28 compiler/bindgen.olang
-66ea46391d3e2f5e 19e9fd14d8f7b088 compiler/build.olang
+6def0079548883d7 1bd21814bf095813 compiler/build.olang
 5bd986c42a6537a1 4a754ae29f789b2f compiler/cabi.olang
 845931edf8bb24d5 e30c22120f4e954a compiler/check.olang
 94c7f3b55fc68951 6e8d7c13cd955b3e compiler/cond.olang
@@ -2075,8 +2075,8 @@ c5981293a7210cfa 2c002cc7f29670fb compiler/ast.olang
 5f082e242ba93794 e94995ac5a2bfda1 compiler/diagmsg.olang
 cbc992a0673d2a33 40bac234d72be6a7 compiler/doc.olang
 c14cc22bbe2e17c2 ddf5ce6f81da39b9 compiler/effects.olang
-6c62d7a876175545 edb1c123bef36683 compiler/emit.olang
-63fff1e9ef18f4a0 45f663dcf387c8c6 compiler/eval.olang
+81c5445cbe7a4381 b17d5307d1aa6fdb compiler/emit.olang
+77169d9a707d1b6b 2931a4984047b1e7 compiler/eval.olang
 16163e6f9df276b3 94f312a95a4235aa compiler/explain.olang
 9b7a0b42d346bf49 1db7b17357fd28aa compiler/fetch.olang
 1630f5d961f45247 05ba66c9d6a54956 compiler/fix.olang
@@ -2090,13 +2090,13 @@ c1e7c54ab342bd83 cd34bacfa2d356d8 compiler/lower.olang
 3879802f0148397c 5dd6f84508da5a8e compiler/lsp.olang
 a9fdbee6672ba31e 89e29d0fd7116d29 compiler/mcp.olang
 3c13777ef661b4c6 998a11d8d8f6e563 compiler/mir.olang
-30beca3864bc2f7e a1d3084c8d5c8d7a compiler/msgs.olang
+118400a3b6f1fa69 793ca39184ba01de compiler/msgs.olang
 7cd82ba607aceedb f3c20600c4158349 compiler/names.olang
 3ca8bd78a33b7278 22dd9b1a97c41ffd compiler/needs.olang
-2b8f4f5046aec0c2 121f426b9089ca11 compiler/olang.olang
+c8ba8bf199202d91 dc5f39ce9725c7e6 compiler/olang.olang
 ce47bdc7fa898605 6de428a0fa48fa7e compiler/parse.olang
 de87a76ebcdd4f4f 36bf5cfa366d300c compiler/profile.olang
-0960e31b84f3f0e4 60c96d1bb8a8d4f0 compiler/runtime.olang
+cd6dc04fc51a289c 717b2d1c1d7ae607 compiler/runtime.olang
 1cd1dca247f6cfbd 65a9cc0be9512004 compiler/scan.olang
 d15325a7a08d1d1c 3418ab53434fa5a9 compiler/scope.olang
 9f088be9ecf4737c 241720405fea2c5a compiler/session.olang
@@ -2123,7 +2123,7 @@ ced597283d68871c f866940a2c290baa compiler/tools/checkdump.olang
 e5b13a71201f795a 70715a1ff53d80fb compiler/tools/consistency.olang
 1690066d28fc4d9e 80062e125a76b7b6 compiler/tools/diaggold.olang
 ce8510a68383331c 7f84ed5d004937e6 compiler/tools/diaggold_capture.olang
-fe3f7751e39d3ec9 9aa0c5b37e74418b compiler/tools/drvdiff.olang
+0d1435193c05f5be 93c767ef4b836875 compiler/tools/drvdiff.olang
 da3d0ee62b2755f3 b6b6948a1be93a26 compiler/tools/dump.olang
 0b161bd8d68d5ae0 67290c4b0f1a9d7f compiler/tools/emitdiff.olang
 e3c83d1d0170284d 722764baa3deb90a compiler/tools/emitdump.olang
@@ -2194,6 +2194,7 @@ a50a05dbfa9f2c6a c5e5e13bc2e016f7 fuzz/repro/trystmtarg.olang
 0a4db3097b2d7ba5 e4f1dd77de50a85d fuzz/scopegen.olang
 93ad8964d30bbcd3 c8f7d858c40eff31 std/arith.olang
 18c8eb0f52459335 5bb6c6e925f05f28 std/base64.olang
+01162bb9c9faf9a0 0251e9d5459b0592 std/bench.olang
 80f57eca5d0483c0 5c17f074e01cc554 std/bitset.olang
 e1152c6cb1a85c56 4dddc170e459bb9a std/cancel.olang
 d89ff4763ed462fd b3d40f57fdc1bdf8 std/chan.olang
@@ -2256,6 +2257,7 @@ ebdce43d45bd0f46 4fe0932269cb4550 tests/arraypat.olang
 54af13492897abd5 fbe33446132add60 tests/attrmod.olang
 6e2f4b51cf82ba96 d79947689b5cf178 tests/attrs.olang
 21aec343acebd599 9a2b1e8d7a0f324d tests/become.olang
+d8715d8ca6b99158 2067868eb50e4072 tests/bench.olang
 6e9b40f00bf294e2 4a89491b9007c4aa tests/builders.olang
 322d5e0fe5daef86 72dcca10b6b195bd tests/cimport.olang
 7322300d9c18d65a b7d33c2149bfd30d tests/comptime.olang

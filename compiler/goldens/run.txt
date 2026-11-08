@@ -58,6 +58,11 @@
 | ok - references given are handed on, results built where they go
 | ok - a run-time array a generic was given is handed on
 | ok - the evaluator agrees
+=== test tests/bench.olang
+| status 0
+| ok - sorted: ten thousand numbers
+| ok - counts: a thousand words into a map
+| ok - the sum of a million numbers, by lanes
 === test tests/builders.olang
 | status 0
 | ok - Color.Gray: makes three equal channels
@@ -1275,6 +1280,14 @@
 | ok - the RFC 4648 test vectors
 | ok - every byte round-trips, in both alphabets
 | ok - decoding is strict
+=== test std/bench.olang
+| status 0
+| ok - Run: outside -bench, calls the work once
+| ok - Measurement.Of: grows the calls to the budget
+| ok - Measurement.Of: fails as the work does, at once
+| ok - nextOps: grows by the last round's pace, within Go's bounds
+| ok - Measurement.Str: writes what one call cost, leaving out what was not counted
+| ok - Keep: keeps a value of any type
 === test std/bitset.olang
 | status 0
 | ok - BitSet: holds the cases of an enum
