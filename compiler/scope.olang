@@ -9048,17 +9048,10 @@ fn (s mut Scoper&) sameScope(a Term, b Term) Bool {
     return k == Holds or k == Obliged
 }
 
-# T22b: where function type have's bound is not within want's - a promise want writes that have does not, a parameter
-# have's result may refer into that want's may not, a relation have keeps that want's do not show - the promise want
-# would need ("noalloc", "borrows a", "keeps b in a"), "" where it is within
+# T22b: where function type have's relations are not within want's - a parameter have's result may refer into that
+# want's may not, a relation have keeps that want's do not show - the promise want would need ("borrows a", "keeps b in
+# a"), "" where they are within (its effect words are the effects pass's to judge, check.judgeEffects)
 fn (s mut Scoper&) typeBeyond(have types.TypeId, want types.TypeId) String {
-    hw := s.P.T.PromiseWords(have)
-    ww := s.P.T.PromiseWords(want)
-    for i in range types.PromiseNames.Len() {
-        bit := I64(1) << i
-        if bit == types.PromNoborrow or (ww & bit) == 0 or (hw & bit) != 0 { continue }
-        return types.PromiseNames[i]
-    }
     edges := s.boundEdges(want)
     named := have if s.P.T.NamesOf(have).Len() > 0 else want
     for e in s.boundEdges(have) {

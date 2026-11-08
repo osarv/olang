@@ -205,6 +205,7 @@
 === test tests/facts.olang
 | status 0
 | ok - facts are constants the running program reads too
+| ok - facts through function values: what is called through a parameter is what each call gives it
 === test tests/filtered.olang
 | status 0
 | ok - a filtered comprehension's result is an array of its own

@@ -442,7 +442,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   work of 2026-11-08 (docs/fnvalues.md: function values followed and specialized where it pays) is decided and being
   built. **Promises (T21c, T22b; the user's decision 2026-11-08; built 2026-11-08, round 4):** words after a function
   type's signature - `keeps b in a`, `keeps b in a.f`, `keeps x`, `borrows a`, `noborrow` and the effect words `returns
-  noalloc noblock nospawn norecurse noextern pure` (G42's facts; not judged yet, fnvalues round 5) - written only on
+  noalloc noblock nospawn norecurse noextern pure` (G42's facts, judged where a value is held since round 5) - written only on
   function types (a declaration's, lambda's or trait method's is an error), part of the type's identity by position.
   They are the type's bound: a call through an unfollowed value discharges exactly its relations (`keeps x` against
   where the value lives, such a value held exactly), a value fits where its functions' obligations are within it, and
@@ -514,9 +514,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `alias.Functions` and `T.Methods` give `FuncInfo` descriptors; `f(args)` calls one.
 - **Function facts (G42, QBP 9, B1.1, the user's "yes build with item 6" 2026-10-27; sharper rule item 27, "do the
   sharper rule" 2026-11-03).** `mix.Allocates`, `Blocks`, `WritesGlobals`, `CallsC`, `Spawns`, `Recursive`,
-  `Terminates` through a function's name or a descriptor: a Bool constant, true where the function or anything it may
-  call may; so `assert not mix.Allocates` (S17a) pins one. A C call is "anything" only in a program that hands an export
-  fn to C, is built `-library`, or links C of its own, and then not for libc's I/O, string, memory and time functions.
+  `Terminates`, `Pure`, `Returns` through a function's name or a descriptor: a Bool constant, true where the function or
+  anything it may call may (the last three where nothing is known against them); so `assert not mix.Allocates` (S17a)
+  pins one. A C call is "anything" only in a program that hands an export fn to C, is built `-library`, or links C of
+  its own, and then not for libc's I/O, string, memory and time functions. **Through function values (round 5 of
+  docs/fnvalues.md, 2026-11-08)**: a call through a value does what the functions it may hold do where followed, through
+  a parameter what each call gives it (`Twice(inc, x)` is `inc`'s), else what its type's effect words promise (no word:
+  anything); read through the name, a parameter by its written type. The effect words are judged where a value comes to
+  be held (T22b), `returns` and `norecurse` with no call through an unfollowed value relied on.
 
 ### Errors
 

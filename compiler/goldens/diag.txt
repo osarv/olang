@@ -6265,6 +6265,35 @@ t22bkeepsouter.olang:14:21: error[T22b]: this lambda keeps 'k' in what it captur
    14 |         c.onEvict = fn(k String&) {
       |                     ^~
 compilation failed with 1 error
+=== t22bnoalloc.olang
+t22bnoalloc.olang:9:16: error[T22b]: this lambda may allocate, and 'fn&(x I64) I64 noalloc', the type it is held as here, promises 'noalloc' - give a function that does not, or hold it as a type without 'noalloc'
+    9 |     k := Apply(fn(x I64) I64 {
+      |                ^~~~~~~~~~~~~~~
+t22bnoalloc.olang:10:9: note: its call of 'Println' may allocate
+   10 |         try io.Println($x) catch { }
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== t22bnoblock.olang
+t22bnoblock.olang:8:36: error[T22b]: a value of type 'fn&()' may do what 'fn&() noblock' does not say ('noblock'), and which functions it holds is not known here - write 'noblock' after the signature of the type it is held as, or give a function directly
+    8 | fn Keep(b mut Box&, g fn&()) { b.f = g }
+      |                                    ^
+compilation failed with 1 error
+=== t22bnorecurse.olang
+t22bnorecurse.olang:8:24: error[T22b]: 'Count' may call itself, and 'fn&(n I64) I64 norecurse', the type it is held as here, promises 'norecurse' - give a function that does not, or hold it as a type without 'norecurse'
+    8 | fn main() { assert Run(Count) == 3 }
+      |                        ^~~~~
+t22bnorecurse.olang:4:23: note: its call of 'Count' may call itself
+    4 | fn Count(n I64) I64 { return 0 if n < 1 else 1 + Count(n - 1) }
+      |                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== t22bpure.olang
+t22bpure.olang:10:14: error[T22b]: this lambda may write through what it was not given writably, and 'fn&(x I64) I64 pure', the type it is held as here, promises 'pure' - give a function that does not, or hold it as a type without 'pure'
+   10 |     k := Run(fn(x I64) I64 {
+      |              ^~~~~~~~~~~~~~~
+t22bpure.olang:11:9: note: it may write through what it was not given writably here
+   11 |         n.v = x
+      |         ^~~~~~~
+compilation failed with 1 error
 === t22breadonlyresult.olang
 t22breadonlyresult.olang:15:10: error[T22a]: 'self' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
    15 |     keep(self, x, 42)
@@ -6274,6 +6303,22 @@ compilation failed with 1 error
 t22bresultkept.olang:21:9: error[T22a]: 'put' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
    21 |     use(put, v)
       |         ^~~
+compilation failed with 1 error
+=== t22breturns.olang
+t22breturns.olang:7:14: error[T22b]: this lambda may end the program, and 'fn&(x I64) I64 returns', the type it is held as here, promises 'returns' - give a function that does not, or hold it as a type without 'returns'
+    7 |     k := Run(fn(x I64) I64 {
+      |              ^~~~~~~~~~~~~~~
+t22breturns.olang:8:9: note: it may end the program here
+    8 |         assert x > 0, "positive"
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== t22breturnscycle.olang
+t22breturnscycle.olang:11:9: error[T22b]: this lambda may call through a function value it does not follow, which may not come back, and 'fn&() returns', the type it is held as here, promises 'returns' - give a function that does not, or hold it as a type without 'returns'
+   11 |     b.f = fn() { b.f!() }
+      |         ^
+t22breturnscycle.olang:11:18: note: it calls through a function value here, and what that calls is not followed
+   11 |     b.f = fn() { b.f!() }
+      |                  ^~~~
 compilation failed with 1 error
 === t22btypebeyond.olang
 t22btypebeyond.olang:10:13: error[T22b]: a value of type 'fn&(a mut N&, b N&) keeps b in a' may do what 'fn&(mut N&, N&)' does not say ('keeps b in a'), and which functions it holds is not known here - write 'keeps b in a' after the signature of the type it is held as, or give a function directly

@@ -248,6 +248,9 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # attempt before found them - kept from one attempt to the next, as errPresets is
     factReads Vec<factRead>
     factPresets Map<String&, Bool>
+    # T22b: the places a function value comes to be held as a function type writing effect words its own type does not
+    # (E12's fit), as the last attempt made them - judged once the program has checked, by the effects pass
+    effectPlaces Vec<effectPlace>
     # R3b, T19b: the errors raised by name whose payload a later raise settled, met while the body holding the first
     # raise was being checked and before that raise - the first raise settles it again when it is met, and an attempt
     # whose first raise found other types is done again (raisedMoved), kept from one attempt to the next
@@ -485,6 +488,16 @@ type factRead struct(Inst I64, Fact String&, Value Bool, File I64, Sp source.Spa
     Text
 }
 
+# T22b: function value X, of type Have, held in body Body as function type Want, at Sp of File
+type effectPlace struct(Body I64, File I64, Sp source.Span, X typed.Expr&, Have types.TypeId, Want types.TypeId) {
+    Body
+    File
+    Sp
+    X
+    Have
+    Want
+}
+
 # E31b: a call made in place through x[i] - where (its file and offset), and the bodies it runs before its write lands:
 # the method's and those of the constructors its arguments call
 type inPlaceRead struct(Key String&, Bodies Vec<I64>, File I64, Sp source.Span) {
@@ -640,6 +653,7 @@ fn (c mut Checker&) CheckProgram() {
             c.settleFixed()
             c.settleDropOrder()
             c.copyEffects()
+            c.judgeEffects()
             c.orderGlobals()
             c.settleAllViews()
             c.P.L.MutStorage = c.mutStorage()
@@ -708,6 +722,7 @@ fn (c mut Checker&) reset() {
     c.inferredErrs = Map<I64, types.ListId>()
     c.errReads = Vec<pair.Pair<I64, I64>>()
     c.factReads = Vec<factRead>()
+    c.effectPlaces = Vec<effectPlace>()
     c.inPlaceReads = Vec<inPlaceRead>()
     c.unsettled = Map<I64, Bool>()
     c.found = Map<pair.Pair<I64, I64>, types.ListId>()
@@ -3675,8 +3690,22 @@ fn (c mut Checker&) InstNote(inst I64) String { return c.instNote(inst) }
 # A2.3, B1.1, B1.2: what each body may do, summarized where something asks - explain, doc, the language server, a fact
 # read through a function's name (G42) - and nowhere else
 fn (c mut Checker&) Effects() mut effects.Effects& {
-    if c.fx is null { c.fx = effects.Effects(c.P, c.Bodies) }
+    if c.fx is null {
+        c.fx = effects.Effects(c.P, c.Bodies)
+        c.fx!.WantPure = c.pureAsked()
+    }
     return c.fx!
+}
+
+# whether G42's Pure is asked: read through a name, or "pure" judged at a place (T22b)
+fn (c Checker&) pureAsked() Bool {
+    for r in c.factReads {
+        if r.Fact == "Pure": return true
+    }
+    for p in c.effectPlaces {
+        if c.P.T.PromiseWords(p.Want) & types.PromPure != 0: return true
+    }
+    return false
 }
 
 fn (c mut Checker&) Ty(t types.TypeId) String {
@@ -7260,7 +7289,13 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
         c.err(sp, msgs.FuncDeclMismatch(c.ty(want), c.ty(have), c.ty(c.P.T.FuncTag(want))))
         return x
     }
-    if hk == types.Kind.Func and wk == types.Kind.Func and c.funcFits(have, want, namedFn(x)) { return c.convert(sp, x, want) }
+    if hk == types.Kind.Func and wk == types.Kind.Func and c.funcFits(have, want, namedFn(x)) {
+        # T22b: an effect word the value's own type does not write is judged once the program has checked
+        if c.P.T.PromiseWords(want) & effects.EffectWords & ~c.P.T.PromiseWords(have) != 0 {
+            c.effectPlaces.Push(effectPlace(c.fr().Body, c.fr().File, sp, x, have, want))
+        }
+        return c.convert(sp, x, want)
+    }
     # an instance whose type declares Call, where a function value is wanted (E31): an adapter holding it
     if wk == types.Kind.Func and hk != types.Kind.Func and have != types.NullT {
         a := c.adapter(sp, x, want)
@@ -13595,7 +13630,7 @@ fn (c mut Checker&) settleInPlace() Bool {
         if c.inPlaceRefused.Has(r.Key): continue
         for b in r.Bodies {
             f := c.Effects().Of(b)
-            if not (f.WritesGlobals or f.Unknown or f.Unchecked): continue
+            if not (f.WritesGlobals or f.Unknown or f.Through or f.Unchecked): continue
             c.inPlaceRefused.Put(r.Key, true)
             moved = true
             break
@@ -22148,11 +22183,29 @@ fn (c mut Checker&) copyEffects() {
     }
 }
 
+# T22b, once the program has checked: each function value held as a function type writing effect words, judged by
+# what each function it may call does (effects.olang) - else the error naming the word, and where it is broken
+fn (c mut Checker&) judgeEffects() {
+    if c.effectPlaces.Len() == 0 or c.P.L.Diags.Errors() > 0: return
+    c.fx = null
+    for p in c.effectPlaces {
+        v := c.Effects().Judge(p.Body, p.X, p.Want)
+        if v.Word == "": continue
+        at := diag.Where.Span(p.File, I64(p.Sp.Start), I64(p.Sp.End))
+        if not v.Followed {
+            c.P.L.Diags.Error(at, msgs.FuncTypeBeyond(c.ty(v.Have), c.ty(p.Want), v.Word))
+            continue
+        }
+        rec := c.P.L.Diags.Error(at, msgs.EffectBeyond(v.What, v.Does, c.ty(p.Want), v.Word))
+        if v.NoteFile >= 0: c.P.L.Diags.Note(rec, diag.Where.Span(v.NoteFile, I64(v.NoteSp.Start), I64(v.NoteSp.End)), msgs.NoteEffect(v.Note))
+    }
+}
+
 # what a Copy does beyond building its value, "" for nothing
 fn copyDoes(f effects.Facts&) String {
     if f.WritesGlobals: return "writes a global"
     if f.Writes != 0: return "writes through what it is given"
-    if f.Unknown or f.Back: return "calls through a function value or an 'any'"
+    if f.Unknown or f.Back or f.Through: return "calls through a function value or an 'any'"
     if f.CallsC or f.Caps != 0: return "calls C"
     if f.Spawns: return "starts tasks"
     if f.Blocks: return "may wait"
@@ -25354,6 +25407,8 @@ fn (c mut Checker&) builderFactInst(x ast.Expr&, f I64) I64 {
 # are its own: nothing is settled)
 fn (c mut Checker&) settleFacts() Bool {
     if c.factReads.Len() == 0 or c.P.L.Diags.Errors() > 0 { return false }
+    # (summaries made while the attempt ran, for an extern's facts, may not have followed what Pure needs)
+    if c.fx is not null and not c.fx!.WantPure and c.pureAsked(): c.fx = null
     moved := false
     for r in c.factReads {
         found := c.Effects().Of(try c.fnBodies.Get(r.Inst) catch default -1).Holds(effects.Fact.Named(r.Fact))

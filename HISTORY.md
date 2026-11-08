@@ -35122,3 +35122,90 @@ SPEC's B3i names the new input. **Tests.** The checks scenario `reusefact` (`che
 fact and an in-place call, `bake` baking it, roots `back` and `quiet`): back then quiet in one directory gives quiet's
 clean answer (`true true 14`), then both again under `OLANG_CHECKREUSE` reuse every module with every object the same.
 The scenario fails on the compiler before the fix.
+
+## Effect words, and effects through parameters (G42, T21c, T22b, B11b; 2026-11-08, wt-effects, round 5 of docs/fnvalues.md)
+
+Round 4 gave the effect words (`returns noalloc noblock nospawn norecurse noextern pure`) their grammar, identity and
+spelling; this round gives them their meaning: G42's facts follow function values, the words are bounds a call through
+a value relies on, and every function a value may call is judged against them where it comes to be held
+(docs/fnvalues.md sections 3.5 and 4.5).
+
+**Facts through function values (effects.olang).** A call through a function value was "anything" (`Unknown`). Now each
+body's facts carry, by slot (its parameters, then a lambda's captures), the slots it calls through (`Calls`, as
+`Writes` already was by parameter). A value is classified into parts once the body's walk has seen every value its
+locals are given: a named function, a lambda or an adapter written there, the body's own slot, a call's result (what
+its callee's returns give, where each is a named function or null), or a value not followed (a field, an element, an
+`any`, another call's result), whose type's bound counts (`Facts.Bound`: every fact but those its words make false; a
+type writing no effect word is still `Unknown`, so every program writing no word reads exactly what it read before). A
+call of a body resolves each slot the callee calls through by what the call gives it: a named function becomes a call
+edge of the caller, found once the callee has settled (so `fn h() { register(h) }` is no recursion where `register`
+only stores it), the caller's own slot is passed on (a fixed point as `Writes` is), anything else counts its type's
+bound. A lambda's captures are resolved where it is made. A function's facts through its name (`Apply.Allocates`) take
+each call through a slot by the slot's written type (`named`). Locals are followed flow-insensitively - every value
+given a local (its declaration, every whole assignment, a match binding; a task's target is not followed) - a sound
+superset of what typed.Versions would give per read, cheaper, and enough for a fact that is a "may".
+
+**G42 gains `Pure` and `Returns`.** `Returns` is `Terminates` and no ending written: a `noreturn` call, `unreachable`,
+a `!` (a null reached or an error ended), an `assert`. `Pure` is no global read that changes or written, no write
+through what the body was not given writably - a parameter not given as a `mut` reference, a lambda's capture (its
+slots are now in `Writes` too), storage reached through a call's result or a local not every value of which is built
+there (`WritesOut`, links `outParam`) - no C but its math and the runtime's own, no class of B11c but threads, and only
+pure callees. Both are false where nothing is known.
+
+**The words judged (T22b).** The checker's E12 fit of a function value across promises records each place whose type
+writes an effect word its value's own type does not (`effectPlaces`); once the program has checked, `judgeEffects` asks
+the effects pass (`Judge`) for a verdict. Each part of the value is judged: a named function by its facts through its
+name, a lambda by its own with each capture resolved where it is made and its parameters by their types, an adapter
+with a write through its receiver impure; a part not followed by its own type's bound containing the place's
+(`FuncTypeBeyond`, the message the scope pass gave - its type-to-type check of effect words is removed from
+`typeBeyond`, which now judges relations only, so one pass owns each fact as the note says). An error names the word
+and the function, with a note at the innermost statement making it break (a re-walk in "why" mode): `this lambda may
+allocate, and 'fn&(x I64) I64 noalloc', the type it is held as here, promises 'noalloc'`, `note: its call of 'Println'
+may allocate`.
+
+**Found on the way (a hole in the design note, closed).** Section 3.5 had a call through a value of a type writing
+`returns` count as returning - and the place judging a function for `returns` would then rely on the very bound it was
+establishing: `b.f = fn() { b.f!() }` with `f fn?&() returns` judged the lambda by its call through the field, which the
+field's own word vouched for, and the program looped for ever; `type T fn(t T&) norecurse` held `fn(y T&) { y(y) }` the
+same way. Coinduction is sound for what a function never does (`noalloc`, `pure`) but not for what it always does.
+So `returns` and `norecurse` are judged with no call through a value not followed relied on, whatever its type promises
+(`Breaks`: "call through a function value it does not follow"); a caller still relies on the bound (every value of such
+a type was so judged, so it never reaches back). `checks/cases/t22breturnscycle` is the case.
+
+**Other changes.** `Unknown` now means an `any`'s call or a value whose type writes no effect word; `Through` is set by
+every call through a value not followed, and E31b's in-place refusal and E31d's Copy check read it beside `Unknown`, so
+nothing they refused is accepted. explain's `# effects:` names the parameters called through (`calls through 'f'`),
+each counted by what its type promises. An `assert` counts as an ending unless its condition is the literal `true`:
+which asserts the evaluator decides true is known only after the facts are (S18c runs after checking).
+
+**Tests.** tests/facts.olang: S17a asserts `not Apply.Allocates` with `f fn&(x I64) I64 noalloc`, `Sum.Pure`,
+`Sum.Returns`, `not Use.Allocates` through `Twice(inc, x)`, `Settled` relying on `returns pure`, `Chosen` given a lambda
+calling what a local may hold, and a run test beside them. Checks: `g42factvalue` kept and `g42factvaluewords` its
+passing twin; fail - `t22bnoalloc` (a lambda printing given for `noalloc`), `t22bpure` (a lambda writing through a
+captured reference given for `pure`), `t22breturns` (one reaching an `assert` given for `returns`), `t22bnoblock` (a
+field of type `fn&() noblock` given a parameter of type `fn&()`), `t22breturnscycle` (the hole above), `t22bnorecurse`
+(a recursive named function); build - `t22bwordsfit` (named functions, a lambda calling a local, `Twice` given a lambda,
+a parameter whose own type promises enough).
+
+**Decisions (mine).** 1. Locals are followed flow-insensitively, every value given them (not by typed.Versions). 2. A
+call's result is followed only where every return of its callee gives a named function or null; a lambda handed back is
+judged by its type's bound. 3. A function value handed to a call through another value sets no `Calls` bit: that
+callee's own type bound covers what it calls (it was judged with its parameter by its type). 4. `returns` and
+`norecurse` are judged strictly (above). 5. `pure` forbids writes through captures and an adapter's receiver, through
+storage not built here or given writably, and any class of B11c but threads; it allows allocation, waiting and tasks.
+6. `noextern` also excludes reaching files, the network, processes and the environment (their runtime functions are
+the runtime's own, but they are C's reach). 7. An unfollowed part is judged type to type, with the scope pass's
+message; the scope pass no longer judges effect words. 8. A type writing no effect word stays `Unknown` (every
+program writing none reads what it read before; explain's lines unchanged for them).
+
+**Cost (the round's gate: the effects pass on compiler/, `explain -caps`).** Measured on copies of the merge base and
+this branch, each timing `explain.Caps` alone: callgrind counts 154.5M instructions for the base and 156.6M here
+(+1.4%; deterministic). Wall time on the shared machine (load 5-20) is within noise of it - medians of 10-16
+interleaved runs from +1% to +5%. What kept it there: each callee merged once per component (a stamp, where calls
+listed a callee once per call site), `Merge` skipping the classes' loop where nothing was reached, a call's arguments
+classified only for callees taking a function value (`fnSlots`), what a body gives kept only where it gives anything,
+a body's facts read without a second copy, and what Pure needs (`WritesOut`: storage written through a local not
+every value of which is built there, links through such locals) followed only where Pure is asked - a fact read or a
+`pure` place (`WantPure`, set by the checker; a summary made earlier in an attempt is made again where Pure is then
+read). 9. Decided with it: a local's later whole assignments are followed for a function value, and for its slots and
+freshness only where Pure is asked - its slots read off its declaration as before otherwise.

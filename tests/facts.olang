@@ -62,6 +62,34 @@ assert not Settle.Terminates, "a loop on a condition is never bounded"
 assert Gather.Spawns and Gather.Blocks
 assert Twice.Allocates and Twice.Blocks and not Twice.Terminates, "a call through a function value is anything"
 assert not first<I64>.Allocates and first<I64>.Terminates
+# through function values (section 4.5 of docs/fnvalues.md): a call through a parameter is what its type promises, read
+# through the name; a call of a body calling through one is what that call gives it
+fn Apply(f fn&(x I64) I64 noalloc, x I64) I64 { return f(x) }
+
+fn Sum(xs Array<I64>&) I64 {
+    t I64 = 0
+    for x in xs: t += x
+    return t
+}
+
+fn inc(x I64) I64 { return x + 1 }
+
+fn Use(x I64) I64 { return Twice(inc, x) }
+
+fn Settled(f fn&(x I64) I64 returns pure, x I64) I64 { return f(x) }
+
+fn Chosen(up Bool) I64 {
+    g := inc if up else Use
+    return Apply(fn(x I64) I64: return g(x), 1)
+}
+
+assert not Apply.Allocates and Apply.Blocks and not Apply.Pure, "f promises noalloc, and nothing else"
+assert Sum.Pure and Sum.Returns and Scale.Pure
+assert not Use.Allocates and Use.Pure and Use.Returns, "Twice given inc does what inc does"
+assert Settled.Returns and Settled.Pure and not Settled.Recursive
+assert not Twice.Pure and not Twice.Returns and not Bump.Pure and not Note.Pure
+assert not Leave.Returns and not Fact.Returns and not Shout.Pure
+assert Chosen.Returns and not Chosen.Blocks and Chosen.Allocates, "Apply given a lambda calling what g may be (its environment allocated)"
 # how it is declared
 assert Leave.NoReturn and not Scale.NoReturn
 assert not Scale.Exported and not Scale.Extern
@@ -85,11 +113,11 @@ fn commuting() I64 {
 
 Terminating := terminating()
 
-assert Terminating == 5, "Scale, Bump, Label, terminating, commuting"
+assert Terminating == 10, "Scale, Bump, Label, terminating, commuting, Sum, inc, Use, Settled, Chosen"
 assert commuting() == 1
 
 test "facts are constants the running program reads too" {
-    assert terminating() == 5 and Terminating == 5
+    assert terminating() == 10 and Terminating == 10
     assert commuting() == 1
     assert Scale.Terminates and not Settle.Terminates
     out := Array<F64>(2)
@@ -100,4 +128,10 @@ test "facts are constants the running program reads too" {
     assert Seen.Len() == 1 and Seen[0] == 7
     assert Count == 1 and Gather(3) == 0 and Twice(fn(x I64) I64: return x + 1, 1) == 3 and first(1, 2) == 1
     assert (Vec2(1.0, 2.0) * 2.0).Len2() == 20.0 and (2.0 * Vec2(1.0, 0.0)).X == 2.0
+}
+
+test "facts through function values: what is called through a parameter is what each call gives it" {
+    assert Apply(inc, 1) == 2 and Sum(Array<I64>[1, 2, 3]) == 6 and Use(1) == 3 and Settled(inc, 2) == 3
+    assert Chosen(true) == 2 and Chosen(false) == 3
+    assert Apply.Blocks and not Use.Allocates and Sum.Pure
 }
