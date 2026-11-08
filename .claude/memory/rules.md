@@ -152,7 +152,10 @@ small, continuously, not in occasional trims: an answered ledger entry moves to 
 commit that records the answer (the ledger holds open questions only); a finished plan.md log entry moves to
 archive/next_steps_log.md; a superseded rule moves to archive/rules_log.md; CLAUDE.md entries stay terse, detail
 going to HISTORY.md. Agents get short briefs pointing at files rather than restating them, the cheapest model that
-fits, and no speculative work; my own replies stay short; remind the user to /compact this session when it grows.
+fits, and no speculative work; my own replies stay short; propose a /compact to the user when it is a good moment (the context has grown and nothing needs my working memory
+beyond /home/user/review/rounds/STATE.md), with a ready prompt to paste - the user, 2026-11-08: "propose for me to
+compact when you think it's good for me. And then also write a decent compact prompt ... I don't want to have to think
+about it."
 
 ## Waking up after a reset, and never losing work to a limit
 **Standing rule** (the user 2026-10-08: "Always schedule yourself to resume when tokens are back as your usage runs
