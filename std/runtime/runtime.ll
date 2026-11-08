@@ -410,11 +410,44 @@ done:
 ; left 783MB with their parked workers, and the main thread mapped new memory for the same work. The shared pool's lock
 ; is taken only on that slow path, and only when a relaxed atomic read says the shared pool holds something; nothing
 ; on the paths every allocation and every scope's close take is shared or atomic.
-; next, used, cap, the length mmap gave it (0 for one from aligned_alloc), whether it is fresh from the system and
-; zero above "used" (__olang_scope_alloc_zeroed), its class, then the pool's: prev (a class is a circular list
-; through next and prev) and the stamp ordering chunks by when they were given back. 64 bytes, so the data area
-; after it is 64-aligned like the chunk itself (O8a)
+; next, used, cap, the length of the pages it spans when mapped or in a slot (0 for one from aligned_alloc), whether it
+; is fresh from the system and zero above "used" (__olang_scope_alloc_zeroed), its class (-1 a region's first block, -2
+; a slab's header, below), then a word that is the pool's prev while the chunk is pooled (a class is a circular list
+; through next and prev) and its OWNER while a scope holds it - the scope, part (P2) or region (O8d) whose list holds
+; it, written where a scope takes it - and the stamp ordering pooled chunks by when they were given back. A chunk is in
+; exactly one of a scope's list, the pool, the quarantine (-s) or a slab, so the two uses of the word never meet. 64
+; bytes, so the data area after it is 64-aligned like the chunk itself (O8a)
 %olang.chunk = type { ptr, i64, i64, i64, i64, i64, ptr, i64 }
+
+; O29: the scope of storage found from its address alone, where no call knows it while compiling - nothing is stored
+; per object. At the first chunk a program makes, one large range of address space is reserved (1TB, halved until the
+; system grants it, down to 4GB: MAP_NORESERVE, or, where the system refuses that - strict overcommit - PROT_NONE with
+; each slot made writable as it is first carved) and carved into SLOTS of 128KB (G), each G-aligned. Every chunk of a
+; class below 128KB is placed at the start of a slot of its own - the pages it never touches cost address space only -
+; so p & ~(G - 1) is the header of the chunk p is in, and that header's owner names its scope. A slot given back to
+; the system is madvise(MADV_DONTNEED)d and kept on a list for the next chunk, never unmapped. A larger chunk (a class
+; from 128KB up) is mapped as before and entered in the LARGE TABLE, a sorted array of (start, end) behind a lock, as is
+; a chunk taken from aligned_alloc where slots run out; a region's first blocks are carved from SLABS - a slot holding
+; blocks of one size at a fixed stride, its header's class -2 and cap the stride - so a block's header is found by
+; division. Storage in no chunk - a stack, a global, constant data, C's memory - is found as the program's scope.
+@__olang_slot_base = global i64 0
+@__olang_slot_end = global i64 0
+@__olang_slot_next = global i64 0
+; whether the range was reserved PROT_NONE, each slot to be made writable as it is first carved; and whether the
+; reservation was tried (once, under the lock)
+@__olang_slot_rw = global i64 0
+@__olang_slot_tried = global i64 0
+; the slots given back, linked through their first word
+@__olang_slot_free = global ptr null
+@__olang_slot_lock = global [40 x i8] zeroinitializer
+; the large table: n entries of { start, end } sorted by start, room for cap
+@__olang_large = global ptr null
+@__olang_large_n = global i64 0
+@__olang_large_cap = global i64 0
+@__olang_large_lock = global [40 x i8] zeroinitializer
+declare i32 @mprotect(ptr, i64, i32)
+declare i32 @madvise(ptr, i64, i32)
+declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)
 ; a pool of chunks (O8b): a list per class, by its newest chunk; bit k of the mask set when class k holds one; what
 ; the pool holds, in bytes of whole chunks; the bound on that - an eighth of the machine's memory, read when the
 ; pool first reaches it, 0 until then; and a clock, one more for every chunk given to the pool, so a smaller stamp
@@ -551,11 +584,22 @@ take:
 make:
   %hdrsize = ptrtoint ptr getelementptr (%olang.chunk, ptr null, i32 1) to i64
   %total0 = add i64 %hdrsize, %classsize
+  ; O29: a class below 128KB at the start of a slot of its own (zero: carved fresh, or given back with MADV_DONTNEED)
+  %huge = icmp uge i64 %classsize, 131072
+  br i1 %huge, label %other, label %inslot
+inslot:
+  %slot = call ptr @__olang_slot_take()
+  %noslot = icmp eq ptr %slot, null
+  br i1 %noslot, label %other, label %slotted
+slotted:
+  %st1 = add i64 %total0, 4095
+  %stotal = and i64 %st1, -4096
+  br label %got
   ; D13c: a mapped chunk comes zeroed, which __olang_scope_alloc_zeroed relies on to skip clearing it again
   ; -s: every chunk is mapped, whatever its size, so that a closed scope's can be protected while it is quarantined
   ; (__olang_san_quarantine) - and one the system will not map is taken from aligned_alloc after all, poisoned only
+other:
 ; @if !san
-  %huge = icmp uge i64 %classsize, 131072
   br i1 %huge, label %map, label %heap
 ; @else
   br label %map
@@ -579,13 +623,20 @@ heap:
   %h = call ptr @aligned_alloc(i64 64, i64 %htotal)
   br label %got
 got:
-  %new = phi ptr [ %mchunk, %map ], [ %h, %heap ]
-  %total = phi i64 [ %mtotal, %map ], [ %htotal, %heap ]
-  %maplen = phi i64 [ %mtotal, %map ], [ 0, %heap ]
-  %zeroed = phi i64 [ 1, %map ], [ 0, %heap ]
+  %new = phi ptr [ %mchunk, %map ], [ %h, %heap ], [ %slot, %slotted ]
+  %total = phi i64 [ %mtotal, %map ], [ %htotal, %heap ], [ %stotal, %slotted ]
+  %maplen = phi i64 [ %mtotal, %map ], [ 0, %heap ], [ %stotal, %slotted ]
+  %zeroed = phi i64 [ 1, %map ], [ 0, %heap ], [ 1, %slotted ]
+  %inslotted = phi i1 [ false, %map ], [ false, %heap ], [ true, %slotted ]
   ; the allocator declining is a broken guarantee, as a thread that will not start is (P1c): reported, never
   ; written through - a null chunk used to be filled in as though it were one
   call void @__olang_alloc_check(ptr %new)
+  ; O29: a chunk in no slot is found through the large table
+  br i1 %inslotted, label %head, label %table
+table:
+  call void @__olang_large_add(ptr %new, i64 %total)
+  br label %head
+head:
   %usedptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 1
   store i64 0, ptr %usedptr.n
   %capptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 2
@@ -737,6 +788,15 @@ count:
 ; chunk c back to the system it came from: munmap for a mapped one, free for one from aligned_alloc
 define void @__olang_chunk_release(ptr %c) {
 entry:
+  ; O29: a slot's chunk gives its pages back and the slot is kept for the next; any other leaves the large table
+  %ci = ptrtoint ptr %c to i64
+  %inslot = call i1 @__olang_in_slots(i64 %ci)
+  br i1 %inslot, label %slot, label %other
+slot:
+  call void @__olang_slot_give(ptr %c)
+  ret void
+other:
+  call void @__olang_large_remove(ptr %c)
   %mapptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 3
   %maplen = load i64, ptr %mapptr
   %mapped = icmp ne i64 %maplen, 0
@@ -982,6 +1042,329 @@ entry:
   ret i64 %limit
 }
 
+; ---- O29: slots, the large table, and a scope found from an address ----
+
+; whether address a is in the slot range (none before the range is reserved: base and end are 0)
+define i1 @__olang_in_slots(i64 %a) alwaysinline {
+entry:
+  %base = load atomic i64, ptr @__olang_slot_base monotonic, align 8
+  %end = load atomic i64, ptr @__olang_slot_end monotonic, align 8
+  %off = sub i64 %a, %base
+  %span = sub i64 %end, %base
+  %in = icmp ult i64 %off, %span
+  ret i1 %in
+}
+
+; the range reserved, with the slot lock held: 1TB halved until the system grants it, down to 4GB - MAP_NORESERVE, else
+; PROT_NONE (each slot made writable as it is carved); G more is asked so the range can start G-aligned. None granted
+; leaves base and end 0: every chunk is then mapped or taken from aligned_alloc, and found through the large table
+define void @__olang_slot_reserve() noinline {
+entry:
+  store i64 1, ptr @__olang_slot_tried
+  br label %try
+try:
+  %size = phi i64 [ 1099511627776, %entry ], [ %half, %smaller ], [ 1099511627776, %strict ]
+  %prot = phi i32 [ 3, %entry ], [ %prot, %smaller ], [ 0, %strict ]
+  %ask = add i64 %size, 131072
+  ; MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE (Linux)
+  %m = call ptr @mmap(ptr null, i64 %ask, i32 %prot, i32 16418, i32 -1, i64 0)
+  %failed = icmp eq ptr %m, inttoptr (i64 -1 to ptr)
+  br i1 %failed, label %smaller, label %granted
+smaller:
+  %half = lshr i64 %size, 1
+  %enough = icmp uge i64 %half, 4294967296
+  br i1 %enough, label %try, label %next
+next:
+  %wasrw = icmp eq i32 %prot, 3
+  br i1 %wasrw, label %strict, label %none
+strict:
+  br label %try
+none:
+  ret void
+granted:
+  %mi = ptrtoint ptr %m to i64
+  %up = add i64 %mi, 131071
+  %base = and i64 %up, -131072
+  %end = add i64 %base, %size
+  %rw = icmp eq i32 %prot, 0
+  %rw64 = zext i1 %rw to i64
+  store i64 %rw64, ptr @__olang_slot_rw
+  store i64 %base, ptr @__olang_slot_next
+  store atomic i64 %base, ptr @__olang_slot_base monotonic, align 8
+  store atomic i64 %end, ptr @__olang_slot_end monotonic, align 8
+  ret void
+}
+
+; a slot for a chunk or a slab, zero but its first word: one given back, else one carved from the range (reserved
+; first); null where the range is used up or was refused
+define ptr @__olang_slot_take() noinline {
+entry:
+  call i32 @pthread_mutex_lock(ptr @__olang_slot_lock)
+  %f = load ptr, ptr @__olang_slot_free
+  %hasf = icmp ne ptr %f, null
+  br i1 %hasf, label %reuse, label %carve
+reuse:
+  %fn = load ptr, ptr %f
+  store ptr %fn, ptr @__olang_slot_free
+  call i32 @pthread_mutex_unlock(ptr @__olang_slot_lock)
+  ret ptr %f
+carve:
+  %tried = load i64, ptr @__olang_slot_tried
+  %fresh = icmp eq i64 %tried, 0
+  br i1 %fresh, label %reserve, label %bump
+reserve:
+  call void @__olang_slot_reserve()
+  br label %bump
+bump:
+  %at = load i64, ptr @__olang_slot_next
+  %end = load i64, ptr @__olang_slot_end
+  %left = icmp ult i64 %at, %end
+  br i1 %left, label %cut, label %out
+cut:
+  %at1 = add i64 %at, 131072
+  store i64 %at1, ptr @__olang_slot_next
+  %s = inttoptr i64 %at to ptr
+  %rw = load i64, ptr @__olang_slot_rw
+  %protect = icmp ne i64 %rw, 0
+  br i1 %protect, label %open, label %give
+open:
+  %r = call i32 @mprotect(ptr %s, i64 131072, i32 3)
+  %ok = icmp eq i32 %r, 0
+  br i1 %ok, label %give, label %out
+give:
+  call i32 @pthread_mutex_unlock(ptr @__olang_slot_lock)
+  ret ptr %s
+out:
+  call i32 @pthread_mutex_unlock(ptr @__olang_slot_lock)
+  ret ptr null
+}
+
+; a slot's chunk back to the system: its pages given back (zero when next touched), the slot kept for the next chunk
+define void @__olang_slot_give(ptr %c) noinline {
+entry:
+  %r = call i32 @madvise(ptr %c, i64 131072, i32 4) ; MADV_DONTNEED
+  call i32 @pthread_mutex_lock(ptr @__olang_slot_lock)
+  %f = load ptr, ptr @__olang_slot_free
+  store ptr %f, ptr %c
+  store ptr %c, ptr @__olang_slot_free
+  call i32 @pthread_mutex_unlock(ptr @__olang_slot_lock)
+  ret void
+}
+
+; the first entry of the large table whose start is above a (n where none is), with its lock held
+define i64 @__olang_large_after(ptr %tab, i64 %n, i64 %a) {
+entry:
+  br label %loop
+loop:
+  %lo = phi i64 [ 0, %entry ], [ %lo2, %step ]
+  %hi = phi i64 [ %n, %entry ], [ %hi2, %step ]
+  %done = icmp uge i64 %lo, %hi
+  br i1 %done, label %out, label %step
+step:
+  %sum = add i64 %lo, %hi
+  %mid = lshr i64 %sum, 1
+  %ep = getelementptr { i64, i64 }, ptr %tab, i64 %mid, i32 0
+  %start = load i64, ptr %ep
+  %above = icmp ugt i64 %start, %a
+  %mid1 = add i64 %mid, 1
+  %lo2 = select i1 %above, i64 %lo, i64 %mid1
+  %hi2 = select i1 %above, i64 %mid, i64 %hi
+  br label %loop
+out:
+  ret i64 %lo
+}
+
+; chunk c, of len bytes, entered in the large table (in order of start), the table grown by doubling
+define void @__olang_large_add(ptr %c, i64 %len) noinline {
+entry:
+  call i32 @pthread_mutex_lock(ptr @__olang_large_lock)
+  %n = load i64, ptr @__olang_large_n
+  %cap = load i64, ptr @__olang_large_cap
+  %tab0 = load ptr, ptr @__olang_large
+  %full = icmp eq i64 %n, %cap
+  br i1 %full, label %grow, label %put
+grow:
+  %dbl = shl i64 %cap, 1
+  %small = icmp ult i64 %dbl, 64
+  %ncap = select i1 %small, i64 64, i64 %dbl
+  %nbytes = shl i64 %ncap, 4
+  %ntab = call ptr @malloc(i64 %nbytes)
+  call void @__olang_alloc_check(ptr %ntab)
+  %obytes = shl i64 %n, 4
+  call void @llvm.memcpy.p0.p0.i64(ptr %ntab, ptr %tab0, i64 %obytes, i1 false)
+  call void @free(ptr %tab0)
+  store ptr %ntab, ptr @__olang_large
+  store i64 %ncap, ptr @__olang_large_cap
+  br label %put
+put:
+  %tab = phi ptr [ %tab0, %entry ], [ %ntab, %grow ]
+  %ci = ptrtoint ptr %c to i64
+  %at = call i64 @__olang_large_after(ptr %tab, i64 %n, i64 %ci)
+  %src = getelementptr { i64, i64 }, ptr %tab, i64 %at
+  %dst = getelementptr { i64, i64 }, ptr %tab, i64 1
+  %dsta = getelementptr { i64, i64 }, ptr %dst, i64 %at
+  %moved = sub i64 %n, %at
+  %mbytes = shl i64 %moved, 4
+  call void @llvm.memmove.p0.p0.i64(ptr %dsta, ptr %src, i64 %mbytes, i1 false)
+  store i64 %ci, ptr %src
+  %endp = getelementptr { i64, i64 }, ptr %src, i32 0, i32 1
+  %end = add i64 %ci, %len
+  store i64 %end, ptr %endp
+  %n1 = add i64 %n, 1
+  store atomic i64 %n1, ptr @__olang_large_n monotonic, align 8
+  call i32 @pthread_mutex_unlock(ptr @__olang_large_lock)
+  ret void
+}
+
+; chunk c taken out of the large table, where it is there
+define void @__olang_large_remove(ptr %c) noinline {
+entry:
+  call i32 @pthread_mutex_lock(ptr @__olang_large_lock)
+  %n = load i64, ptr @__olang_large_n
+  %tab = load ptr, ptr @__olang_large
+  %ci = ptrtoint ptr %c to i64
+  %after = call i64 @__olang_large_after(ptr %tab, i64 %n, i64 %ci)
+  %none = icmp eq i64 %after, 0
+  br i1 %none, label %done, label %look
+look:
+  %at = sub i64 %after, 1
+  %ep = getelementptr { i64, i64 }, ptr %tab, i64 %at
+  %start = load i64, ptr %ep
+  %hit = icmp eq i64 %start, %ci
+  br i1 %hit, label %drop, label %done
+drop:
+  %src = getelementptr { i64, i64 }, ptr %tab, i64 %after
+  %moved = sub i64 %n, %after
+  %mbytes = shl i64 %moved, 4
+  call void @llvm.memmove.p0.p0.i64(ptr %ep, ptr %src, i64 %mbytes, i1 false)
+  %n1 = sub i64 %n, 1
+  store atomic i64 %n1, ptr @__olang_large_n monotonic, align 8
+  br label %done
+done:
+  call i32 @pthread_mutex_unlock(ptr @__olang_large_lock)
+  ret void
+}
+
+; the header of the chunk in the large table holding address a, null for none
+define ptr @__olang_large_find(i64 %a) noinline {
+entry:
+  %n0 = load atomic i64, ptr @__olang_large_n monotonic, align 8
+  %empty = icmp eq i64 %n0, 0
+  br i1 %empty, label %none, label %lock
+lock:
+  call i32 @pthread_mutex_lock(ptr @__olang_large_lock)
+  %n = load i64, ptr @__olang_large_n
+  %tab = load ptr, ptr @__olang_large
+  %after = call i64 @__olang_large_after(ptr %tab, i64 %n, i64 %a)
+  %first = icmp eq i64 %after, 0
+  br i1 %first, label %miss, label %look
+look:
+  %at = sub i64 %after, 1
+  %endp = getelementptr { i64, i64 }, ptr %tab, i64 %at, i32 1
+  %end = load i64, ptr %endp
+  %in = icmp ult i64 %a, %end
+  br i1 %in, label %hit, label %miss
+hit:
+  %sp = getelementptr { i64, i64 }, ptr %tab, i64 %at, i32 0
+  %start = load i64, ptr %sp
+  %h = inttoptr i64 %start to ptr
+  call i32 @pthread_mutex_unlock(ptr @__olang_large_lock)
+  ret ptr %h
+miss:
+  call i32 @pthread_mutex_unlock(ptr @__olang_large_lock)
+  br label %none
+none:
+  ret ptr null
+}
+
+; the header of the chunk holding storage at p: a slot's header by a mask - or a slab's block, by its stride - else the
+; large table's; null for storage in no chunk (null itself among it)
+define ptr @__olang_chunk_of(ptr %p) {
+entry:
+  %a = ptrtoint ptr %p to i64
+  %isnull = icmp eq i64 %a, 0
+  br i1 %isnull, label %none, label %range
+range:
+  %inslot = call i1 @__olang_in_slots(i64 %a)
+  br i1 %inslot, label %slot, label %large
+slot:
+  %hi = and i64 %a, -131072
+  %h = inttoptr i64 %hi to ptr
+  %clsp = getelementptr %olang.chunk, ptr %h, i32 0, i32 5
+  %cls = load i64, ptr %clsp
+  %isslab = icmp eq i64 %cls, -2
+  br i1 %isslab, label %slab, label %found
+slab:
+  %stp = getelementptr %olang.chunk, ptr %h, i32 0, i32 2
+  %stride = load i64, ptr %stp
+  %off0 = sub i64 %a, %hi
+  %off = sub i64 %off0, 64
+  %inhdr = icmp ult i64 %off0, 64
+  br i1 %inhdr, label %none, label %block
+block:
+  %k = udiv i64 %off, %stride
+  %koff = mul i64 %k, %stride
+  %boff = add i64 %koff, 64
+  %b = getelementptr i8, ptr %h, i64 %boff
+  ret ptr %b
+found:
+  ret ptr %h
+large:
+  %lh = call ptr @__olang_large_find(i64 %a)
+  ret ptr %lh
+none:
+  ret ptr null
+}
+
+; O29: this thread's part (P2) of the scope storage at p lives in - else, where p is in no chunk, of the one storage at q
+; lives in (a reference held in the value p's referent is, or in a value passed by value: lowering's second choice) -
+; else the program's. A region found (O8d) is read as the scope it lives in - its owner, or its parent's, up to one that
+; is no region - so nothing is built into storage early freeing has not planned for; a stand-in folded at its join
+; forwards to what it stood in for, and a part of another thread's scope is this thread's part of its root
+; (__olang_capture_scope)
+define ptr @__olang_scope_of(ptr %p, ptr %q) noinline {
+entry:
+  %hp = call ptr @__olang_chunk_of(ptr %p)
+  %nop = icmp eq ptr %hp, null
+  br i1 %nop, label %second, label %have
+second:
+  %hq = call ptr @__olang_chunk_of(ptr %q)
+  br label %have
+have:
+  %h = phi ptr [ %hp, %entry ], [ %hq, %second ]
+  %noh = icmp eq ptr %h, null
+  br i1 %noh, label %prog, label %owner
+owner:
+  %op = getelementptr %olang.chunk, ptr %h, i32 0, i32 6
+  %o0 = load ptr, ptr %op
+  %noo = icmp eq ptr %o0, null
+  br i1 %noo, label %prog, label %up
+up:
+  %o = phi ptr [ %o0, %owner ], [ %parent, %inner ]
+  %ohp = getelementptr %olang.scope, ptr %o, i32 0, i32 0
+  %oh = load ptr, ptr %ohp
+  %isreg = icmp eq ptr %oh, @__olang_region_chunk
+  br i1 %isreg, label %region, label %plain
+region:
+  %rop = getelementptr %olang.region, ptr %o, i32 0, i32 6
+  %ro = load ptr, ptr %rop
+  %hasro = icmp ne ptr %ro, null
+  br i1 %hasro, label %plainro, label %inner
+inner:
+  %pp = getelementptr %olang.region, ptr %o, i32 0, i32 4
+  %parent = load ptr, ptr %pp
+  br label %up
+plainro:
+  %s1 = call ptr @__olang_capture_scope(ptr %ro)
+  ret ptr %s1
+plain:
+  %s2 = call ptr @__olang_capture_scope(ptr %o)
+  ret ptr %s2
+prog:
+  %pg = load ptr, ptr @__olang_prog_scope
+  ret ptr %pg
+}
+
 ; the storage an array made with no elements names where that is known while compiling (an Array<T>(0), a Vec's first
 ; buffer): nothing is ever read or written there, and arrays compare by what they hold (E10), so one address serves
 ; them all, made with no allocation (emit's newArray gives its offset 64). Its first words are the zero word a region's
@@ -1126,6 +1509,9 @@ link:
   %oldhead = load ptr, ptr %headptr, !tbaa !59
   %newnextptr = getelementptr %olang.chunk, ptr %newchunk, i32 0, i32 0
   store ptr %oldhead, ptr %newnextptr, !tbaa !60
+  ; O29: the chunk names the scope holding it
+  %ownerptr = getelementptr %olang.chunk, ptr %newchunk, i32 0, i32 6
+  store ptr %scope, ptr %ownerptr, !tbaa !60
   store ptr %newchunk, ptr %headptr, !tbaa !59
   ; first chunk in this scope: it is the tail, and stays the tail for the scope's whole life, since
   ; every later chunk is prepended ahead of it
@@ -1950,6 +2336,24 @@ make:
   ret ptr %sub
 }
 
+; O29: each chunk of a list, from head to its end, named as held by scope o
+define void @__olang_chunks_own(ptr %head, ptr %o) {
+entry:
+  br label %loop
+loop:
+  %c = phi ptr [ %head, %entry ], [ %n, %step ]
+  %end = icmp eq ptr %c, null
+  br i1 %end, label %done, label %step
+step:
+  %op = getelementptr %olang.chunk, ptr %c, i32 0, i32 6
+  store ptr %o, ptr %op
+  %np = getelementptr %olang.chunk, ptr %c, i32 0, i32 0
+  %n = load ptr, ptr %np
+  br label %loop
+done:
+  ret void
+}
+
 ; P2: every part other threads made of a scope closing - their destructors ahead of the scope's own, their chunks
 ; with its: spliced into what the scope holds (which it then reclaims as ever), each part's header freed. Takes and
 ; gives back the scope's lists as values, so that the scope's header never escapes into the call
@@ -1984,6 +2388,10 @@ dtored:
   %noch = icmp eq ptr %nh, null
   br i1 %noch, label %chunked, label %csplice
 csplice:
+  ; O29: the part's chunks name its root from now on - the part's header is freed below
+  %rootp = getelementptr %olang.scope, ptr %n, i32 0, i32 5
+  %root = load ptr, ptr %rootp
+  call void @__olang_chunks_own(ptr %nh, ptr %root)
   %ntp = getelementptr %olang.scope, ptr %n, i32 0, i32 2
   %nt = load ptr, ptr %ntp
   %ntn = getelementptr %olang.chunk, ptr %nt, i32 0, i32 0
@@ -2162,13 +2570,12 @@ link:
 
 ; the headers and first blocks of regions closed on this thread, kept for its next regions rather than given to the C
 ; allocator and asked of it again - early freeing makes a region per value a sole place lets go of, and a malloc'd
-; header and block each was about half of what such a loop cost: a list of headers, and a list of blocks per size (a
-; first block is 256 to 2240 bytes, 64 apart: 32 sizes), each linked through its first word, at most 256 headers and 32
-; blocks of a size kept - what a thread may hold back is bounded (under 3MB); a retiring worker gives them all back
+; header and block each was about half of what such a loop cost: a list of headers (at most 256 kept) and a list of
+; blocks per size (a first block is 256 to 2240 bytes, 64 apart: 32 sizes), each linked through its first word; a
+; retiring worker gives the headers back and its blocks to every thread (__olang_region_lists_drain)
 @__olang_rfree_hdr = thread_local(initialexec) global ptr null
 @__olang_rfree_nhdr = thread_local(initialexec) global i64 0
 @__olang_rfree_blk = thread_local(initialexec) global [32 x ptr] zeroinitializer
-@__olang_rfree_nblk = thread_local(initialexec) global [32 x i64] zeroinitializer
 
 ; a region's header: one this thread kept, else the C allocator's
 define ptr @__olang_region_hdr_new() {
@@ -2207,34 +2614,80 @@ give:
   ret void
 }
 
-; a region's first block of bbytes (256 to 2240, a multiple of 64): one this thread kept, else the C allocator's
+; a region's first block of bbytes (256 to 2240, a multiple of 64): one this thread kept, else one a retired thread
+; left, else carved from this thread's slab of its size (O29: so that its header, which names its region, is found from
+; any address in it) - a slot of blocks of one size, a new one taken when it is full; the C allocator's only where no
+; slot is left
+@__olang_slab_cur = thread_local(initialexec) global [32 x ptr] zeroinitializer
+@__olang_rshared_blk = global [32 x ptr] zeroinitializer
 define ptr @__olang_region_blk_new(i64 %bbytes) {
 entry:
   %q = lshr i64 %bbytes, 6
   %k = sub i64 %q, 4
-  %inrange = icmp ult i64 %k, 32
-  br i1 %inrange, label %look, label %fresh
-look:
   %slot = getelementptr [32 x ptr], ptr @__olang_rfree_blk, i64 0, i64 %k
   %b = load ptr, ptr %slot
   %none = icmp eq ptr %b, null
-  br i1 %none, label %fresh, label %reuse
+  br i1 %none, label %shared, label %reuse
 reuse:
   %next = load ptr, ptr %b
   store ptr %next, ptr %slot
-  %np = getelementptr [32 x i64], ptr @__olang_rfree_nblk, i64 0, i64 %k
-  %n = load i64, ptr %np
-  %n1 = sub i64 %n, 1
-  store i64 %n1, ptr %np
   ret ptr %b
+shared:
+  %shp = getelementptr [32 x ptr], ptr @__olang_rshared_blk, i64 0, i64 %k
+  %sh0 = load atomic ptr, ptr %shp monotonic, align 8
+  %noshared = icmp eq ptr %sh0, null
+  br i1 %noshared, label %carve, label %lock
+lock:
+  call i32 @pthread_mutex_lock(ptr @__olang_slot_lock)
+  %sh = load ptr, ptr %shp
+  %stillnone = icmp eq ptr %sh, null
+  br i1 %stillnone, label %unlocked, label %take
+take:
+  %shn = load ptr, ptr %sh
+  store atomic ptr %shn, ptr %shp monotonic, align 8
+  call i32 @pthread_mutex_unlock(ptr @__olang_slot_lock)
+  ret ptr %sh
+unlocked:
+  call i32 @pthread_mutex_unlock(ptr @__olang_slot_lock)
+  br label %carve
+carve:
+  %curp = getelementptr [32 x ptr], ptr @__olang_slab_cur, i64 0, i64 %k
+  %cur = load ptr, ptr %curp
+  %nocur = icmp eq ptr %cur, null
+  br i1 %nocur, label %newslab, label %room
+room:
+  %usedp = getelementptr %olang.chunk, ptr %cur, i32 0, i32 1
+  %used = load i64, ptr %usedp
+  %after = add i64 %used, %bbytes
+  %fits = icmp ule i64 %after, 131072
+  br i1 %fits, label %cut, label %newslab
+cut:
+  store i64 %after, ptr %usedp
+  %blk = getelementptr i8, ptr %cur, i64 %used
+  ret ptr %blk
+newslab:
+  %s = call ptr @__olang_slot_take()
+  %noslot = icmp eq ptr %s, null
+  br i1 %noslot, label %fresh, label %init
+init:
+  %sused = getelementptr %olang.chunk, ptr %s, i32 0, i32 1
+  %first = add i64 %bbytes, 64
+  store i64 %first, ptr %sused
+  %scap = getelementptr %olang.chunk, ptr %s, i32 0, i32 2
+  store i64 %bbytes, ptr %scap
+  %sclass = getelementptr %olang.chunk, ptr %s, i32 0, i32 5
+  store i64 -2, ptr %sclass
+  store ptr %s, ptr %curp
+  %sblk = getelementptr i8, ptr %s, i64 64
+  ret ptr %sblk
 fresh:
   %m = call ptr @aligned_alloc(i64 64, i64 %bbytes)
   call void @__olang_alloc_check(ptr %m)
   ret ptr %m
 }
 
-; a closed region's first block (its capacity says its size) kept for the next, or given back where 32 of its size are
-; kept already
+; a closed region's first block (its capacity says its size) kept for the next - a slab's block is never given back
+; to the system on its own, as a block of the C allocator's seldom was
 define void @__olang_region_blk_free(ptr %b) {
 entry:
   %capp = getelementptr %olang.chunk, ptr %b, i32 0, i32 2
@@ -2242,27 +2695,15 @@ entry:
   %bytes = add i64 %cap, 64
   %q = lshr i64 %bytes, 6
   %k = sub i64 %q, 4
-  %inrange = icmp ult i64 %k, 32
-  br i1 %inrange, label %count, label %give
-count:
-  %np = getelementptr [32 x i64], ptr @__olang_rfree_nblk, i64 0, i64 %k
-  %n = load i64, ptr %np
-  %full = icmp uge i64 %n, 32
-  br i1 %full, label %give, label %keep
-keep:
   %slot = getelementptr [32 x ptr], ptr @__olang_rfree_blk, i64 0, i64 %k
   %h = load ptr, ptr %slot
   store ptr %h, ptr %b
   store ptr %b, ptr %slot
-  %n1 = add i64 %n, 1
-  store i64 %n1, ptr %np
-  ret void
-give:
-  call void @free(ptr %b)
   ret void
 }
 
-; everything this thread kept for its regions given back - a worker retiring (P2a), as its chunk pool is
+; everything this thread kept for its regions given up - a worker retiring (P2a): the headers to the C allocator, the
+; blocks to the lists every thread takes from
 define void @__olang_region_lists_drain() {
 entry:
   %h0 = load ptr, ptr @__olang_rfree_hdr
@@ -2272,34 +2713,39 @@ entry:
 hdrs:
   %h = phi ptr [ %h0, %entry ], [ %hn, %hfree ]
   %hend = icmp eq ptr %h, null
-  br i1 %hend, label %sizes, label %hfree
+  br i1 %hend, label %lock, label %hfree
 hfree:
   %hn = load ptr, ptr %h
   call void @free(ptr %h)
   br label %hdrs
+lock:
+  call i32 @pthread_mutex_lock(ptr @__olang_slot_lock)
+  br label %sizes
 sizes:
-  %k = phi i64 [ 0, %hdrs ], [ %k1, %blkdone ]
+  %k = phi i64 [ 0, %lock ], [ %k1, %blkdone ]
   %kend = icmp eq i64 %k, 32
   br i1 %kend, label %done, label %size
 size:
   %slot = getelementptr [32 x ptr], ptr @__olang_rfree_blk, i64 0, i64 %k
   %b0 = load ptr, ptr %slot
   store ptr null, ptr %slot
-  %np = getelementptr [32 x i64], ptr @__olang_rfree_nblk, i64 0, i64 %k
-  store i64 0, ptr %np
+  %shp = getelementptr [32 x ptr], ptr @__olang_rshared_blk, i64 0, i64 %k
   br label %blks
 blks:
-  %b = phi ptr [ %b0, %size ], [ %bn, %bfree ]
+  %b = phi ptr [ %b0, %size ], [ %bn, %bmove ]
   %bend = icmp eq ptr %b, null
-  br i1 %bend, label %blkdone, label %bfree
-bfree:
+  br i1 %bend, label %blkdone, label %bmove
+bmove:
   %bn = load ptr, ptr %b
-  call void @free(ptr %b)
+  %sh = load ptr, ptr %shp
+  store ptr %sh, ptr %b
+  store atomic ptr %b, ptr %shp monotonic, align 8
   br label %blks
 blkdone:
   %k1 = add i64 %k, 1
   br label %sizes
 done:
+  call i32 @pthread_mutex_unlock(ptr @__olang_slot_lock)
   ret void
 }
 
@@ -2382,6 +2828,11 @@ bump:
 bump:
 ; @end
   %raw = call ptr @__olang_scope_alloc_a(ptr %inner, i64 %total, i64 %aln)
+  ; O29: the chunk bumped names the region, which a scope found from an address reads as the scope it lives in
+  %rhp = getelementptr %olang.scope, ptr %inner, i32 0, i32 0
+  %rhead = load ptr, ptr %rhp
+  %rownp = getelementptr %olang.chunk, ptr %rhead, i32 0, i32 6
+  store ptr %r, ptr %rownp
   %obj = getelementptr i8, ptr %raw, i64 %aln
   %word = getelementptr i8, ptr %obj, i64 -8
   store ptr %r, ptr %word
@@ -2865,6 +3316,7 @@ tospare:
 list:
   call void @__olang_pool_give_list(ptr %head)
 ; @else
+  call void @__olang_san_check_owner(ptr %head, ptr %scope)
   call void @__olang_san_quarantine_list(ptr %head)
 ; @end
   br label %done
