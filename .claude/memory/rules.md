@@ -586,7 +586,9 @@ piece of line of code every time."
 **How to apply:** every design keeps facts and code per module, reused when the module's inputs did not change (B3i);
 whatever needs the whole program runs only in the final step over precompiled units (the root's instances object,
 the link, LTO), as generic instances do. A design that makes an edit in one module recompile others states that cost
-and goes to the user. Every design brief says so.
+and goes to the user. Every design brief says so. Not absolute (the user, the same day: "if this constraint is too
+much to actually make this memory safe and effective, then I'm willing to give it up as well"): where whole-program
+facts make memory safety or freeing clearly better, both variants are measured and the choice goes to the user.
 
 ## Models for the compiler/ refactor
 The user, 2026-11-01: "Yes, use Sonnet for the refactor but not for the validation", then "Actually nvm. Don't use
