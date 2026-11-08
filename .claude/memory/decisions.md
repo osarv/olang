@@ -987,3 +987,12 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   "together" (no item of its own). Effect promises from G42's facts - `not Allocates`, `not Blocks`, `not WritesGlobals`,
   `not CallsC`, `not Spawns`, `Terminates`. Already in the type, so no items: `mut` (writes), `?` (errors), `noreturn`.
   Recommended for a first build: the two keeps and the result items; effects later. ASKED which.
+- Function values DECIDED 2026-11-08 (the user: "do all of them then. Do them as a normal ... listing rules within
+  those brackets. I want no names to be capitalized. They should basically be keywords. I'm not sure about using not
+  for everything ... single words?"): every item is built - relations (`a keeps b`, `keeps x`, result from a, new
+  result, `a.f keeps b`), the effect promises (G42's facts negated) and the write promise (writes only through `mut`
+  parameters) - in the contract brackets by the listing rule, lowercase words of one place (L9b). Spellings PROPOSED
+  (mine, the user to confirm): `nonallocating`, `nonblocking` (Clang 20's words), `terminating`, `nonrecursive`,
+  `nonspawning`, `nonforeign`, `confined`, `a keeps b`, `keeps x`, `returns a`, `fresh`. Read as approving the
+  specialization of function values too (the package was asked together). Design note running: wt-fnvalues,
+  docs/fnvalues.md (opus xhigh). Calls 4 and 5 of the push still ASKED.
