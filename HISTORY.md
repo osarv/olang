@@ -34790,7 +34790,9 @@ every destructor last made first as the outer scope closes; the call case's dest
 views read, which they never see); o27destructorfiles keeps views of open files' names, reads each descriptor back
 through `/proc/self/fd` while the views are in use and finds them all closed once the function keeping them returned;
 the `memoryplaced` scenario's fixture `dtor.olang` checks the row and the run's order; tests/drops.olang's `Viewed`
-test, through a callee handing back a field too.
+test, through a callee handing back a field too. The `interp` scenario's `refused.olang` (interpret refuses what a build
+refuses) kept a view of a block's resource; it keeps one of a match binding's own copy now, an O27 refusal that stands
+- the destructor cases were the last O27 errors in the checks corpus.
 
 Found on the way: early freeing's `-memory` row for such a holder ("'g' keeps what it lets go of until main's scope
 closes") can put its note at another local's store in the same loop (`keep.Push(f.name)` named for `g`, whose view is
