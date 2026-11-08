@@ -1098,3 +1098,10 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   (function types, declared function types, trait methods), inferred on implementations. Read as the go for the build:
   round 1 (one tier of keywords, the promise words reserved; wt-kw, sonnet medium) started; the rounds follow the
   note's plan one at a time where they share files. Rules for the rounds: /home/user/review/rounds/round-rules.md.
+- 2026-11-08 the user: the after-done items - "are we going to build them now? To which, yes" (benchmarks
+  wt-bench and saturating arithmetic wt-satarith started, opus high; the rest follow); oann HOLDS until version 1 is
+  mature ("everything is settled, we've built everything, it is maybe refactored once more, verified ... hoping it's
+  to be done this week"); trim CLAUDE.md again without losing anything (wt-trim2, sonnet: the ledger, plan and
+  superseded rules moved to archive/, CLAUDE.md detail to HISTORY.md - all verbatim). Saturating arithmetic (mine,
+  stated): no new base types - `arith.Saturating<T>` beside `arith.Checked<T>`, LLVM's saturating intrinsics, vector
+  forms under lane operators.
