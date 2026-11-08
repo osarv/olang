@@ -57,6 +57,8 @@
 | ok - a become's failure is the function's own
 | ok - references given are handed on, results built where they go
 | ok - a run-time array a generic was given is handed on
+| ok - grow: what a chain makes and hands on is kept in its tail scope
+| ok - probe: instances a become's blocks made end as the tail scope closes, last made first
 | ok - the evaluator agrees
 === test tests/bench.olang
 | status 0
@@ -1801,6 +1803,44 @@
 | status 0
 === run b9scanbranch.olang
 | status 0
+=== run becomearenaarray.olang
+| status 0
+| 23 5
+=== run becomearenacall.olang
+| status 0
+| 24
+=== run becomearenacopied.olang
+| status 0
+| 16 Array<I64>[1, 1, 1, 1]
+=== run becomearenatext.olang
+| status 0
+| 1 text 2 text abc
+=== run becomeborrows.olang
+| status 0
+=== run becomedtor.olang
+| status 0
+| used
+| closed 0
+| closed 1
+| closed 2
+| after
+=== run becomedtorpayload.olang
+| status 0
+| result 0
+| destroy 1
+| destroy 2
+=== run becomedtorresult.olang
+| status 0
+| result 0
+| destroy 1
+| destroy 2
+=== run becomedtortemp.olang
+| status 0
+| closed 102
+| closed 101
+| done
+| closed 1
+| closed 2
 === run c11dtorbyvalue.olang
 | status 0
 === run c2dargnote.olang
@@ -2581,6 +2621,9 @@
 | status 0
 === run s1bparallel.olang
 | status 0
+=== run s21becomeheld.olang
+| status 0
+| closed 1
 === run s3busy.olang
 | status 0
 | 1 5 1

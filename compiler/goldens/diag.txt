@@ -320,84 +320,20 @@ baseintodeclared.olang:6:16: error[T6b]: I32 does not flow into Meters - convert
     6 |     m Meters = a
       |                ^
 compilation failed with 1 error
-=== becomearenaarray.olang
-becomearenaarray.olang:10:17: error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'
-   10 |     become walk(b, n - 1)
-      |                 ^
-becomearenaarray.olang:15:17: note: instantiated here, with T = Array<I64>
-   15 |     io.Println($walk(a, 3))!
-      |                 ^~~~
-compilation failed with 1 error
-=== becomearenacall.olang
-becomearenacall.olang:10:17: error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'
-   10 |     become walk(mk(n + 2), n - 1)
-      |                 ^~~~~~~~~
-becomearenacall.olang:13:25: note: instantiated here, with T = Array<I64>
-   13 | fn main() { io.Println($walk(Array<I64>(os.Args().Len() + 3, 1), 2))! }
-      |                         ^~~~
-compilation failed with 1 error
-=== becomearenacopied.olang
-becomearenacopied.olang:10:17: error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'
-   10 |     become walk(a, n - 1)
-      |                 ^
-becomearenacopied.olang:13:25: note: instantiated here, with T = Array<I64>
-   13 | fn main() { io.Println($walk(Array<I64>(os.Args().Len() + 3, 1), 2))! }
-      |                         ^~~~
-compilation failed with 1 error
-=== becomearenatext.olang
-becomearenatext.olang:7:17: error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'
-    7 |     become walk($n " text", n - 1)
-      |                 ^~~~~~~~~~
-becomearenatext.olang:10:25: note: instantiated here, with T = String
-   10 | fn main() { io.Println($walk("abc", 2))! }
-      |                         ^~~~
-compilation failed with 1 error
-=== becomeborrows.olang
-becomeborrows.olang:6:17: error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'
-    6 |     become walk(b, i + 1)
-      |                 ^
-compilation failed with 1 error
 === becomedefer.olang
 becomedefer.olang:7:5: error[S21]: 'become' leaves the function at once, so not from a block with deferred code registered, which would run before the call - write 'return' and the call
     7 |     become f(n - 1)
       |     ^~~~~~
 compilation failed with 1 error
-=== becomedtor.olang
-becomedtor.olang:13:5: error[S21]: 'become' closes this function's scopes before the call, and it holds a value of Res&, which may hold an instance whose destructor would run then, before the call - write 'return' and the call
-   13 |     become f(n - 1)
-      |     ^~~~~~
-becomedtor.olang:11:5: note: here
-   11 |     r := Res(n)
-      |     ^
-compilation failed with 1 error
-=== becomedtorpayload.olang
-becomedtorpayload.olang:17:16: error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then, before the call - write 'return' and the call
-   17 |         become f(n - 1)
-      |                ^
-becomedtorpayload.olang:16:18: note: here
-   16 |     if size(Slot.mk(n)) > 0 {
-      |                  ^~
-compilation failed with 1 error
-=== becomedtorresult.olang
-becomedtorresult.olang:17:12: error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then, before the call - write 'return' and the call
-   17 |     become f(k - 1)
-      |            ^
-becomedtorresult.olang:16:20: note: here
-   16 |     k := peek(Wrap.mkw(n))
-      |                    ^~~
-compilation failed with 1 error
-=== becomedtortemp.olang
-becomedtortemp.olang:13:12: error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then, before the call - write 'return' and the call
-   13 |     become f(m - 1)
-      |            ^
-becomedtortemp.olang:12:10: note: here
-   12 |     m := Res(n).n
-      |          ^~~
-compilation failed with 1 error
 === becomeerrors.olang
 becomeerrors.olang:11:5: error[S21]: 'become' makes the callee's failure this function's own, and this one fails with A.X, B, the callee with B - give them one error set, in one order, or write 'return try' and the call
    11 |     become g(n)
       |     ^~~~~~
+compilation failed with 1 error
+=== becomeheldparam.olang
+becomeheldparam.olang:9:12: error[S21]: 'become' ends this function before the call, and its parameter 'c' holds a value with a destructor the call does not take, which would run then - hand it on, or write 'return' and the call
+    9 |     become down(Conn(n), n - 1)
+      |            ^~~~
 compilation failed with 1 error
 === becomejoin.olang
 becomejoin.olang:7:9: error[S21]: 'become' leaves the function at once, so not from a join block, whose tasks it would leave behind - write 'return' and the call
@@ -5039,11 +4975,6 @@ compilation failed with 2 errors
 s20yieldheld.olang:9:5: error[S20, O15]: a yield while a variable around it holds a value with a destructor - a walk stopped there would never run it; hold the value in a block that ends before the yield, or by reference
     9 |     yield c.fd
       |     ^~~~~
-compilation failed with 1 error
-=== s21becomeheld.olang
-s21becomeheld.olang:9:5: error[S21]: 'become' leaves the function at once, so not from a block whose variable holds a value with a destructor, which would run before the call - write 'return' and the call
-    9 |     become down(c, n - 1)
-      |     ^~~~~~
 compilation failed with 1 error
 === s3idle.olang
 s3idle.olang:11:5: error[S3]: 'x.Abs()' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out
