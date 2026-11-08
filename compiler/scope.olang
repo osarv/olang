@@ -2090,7 +2090,10 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
         nb := false
         if str {
             match body.Vars[k] {
-                case typed.ScopeVar.Param(l) { nb = body.Params.Len() > 0 and l == body.Params[0] }
+                # (O29: a reference receiver's own scope is passed found from it - only a value's stays unknown)
+                case typed.ScopeVar.Param(l) {
+                    nb = body.Params.Len() > 0 and l == body.Params[0] and not s.isRef(body.Locals[I64(l)].Ty)
+                }
                 case _ { }
             }
         }
@@ -8816,7 +8819,10 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         vals[i] = v
         if v.K != ValKind.Existing { continue }
         # an argument whose scope is one of several (O12): read through, never built into
-        if s.report and i < ps.Len() and s.buildsIntoSet(c, i, ps[i], owner[i], v.T) { s.err(s.opTok(a), msgs.BuildIntoUnknownScope()) }
+        # (O29: built where the argument's referent is found at run time, where reading it again has no effect)
+        if s.report and i < ps.Len() and s.buildsIntoSet(c, i, ps[i], owner[i], v.T) and s.argRoot(a) is null {
+            s.err(s.opTok(a), msgs.BuildIntoUnknownScope())
+        }
         k := owner[i]
         if beta[k] == Term.None {
             beta[k] = v.T
@@ -8920,7 +8926,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         s.dtorAt = s.nameSpan(sp)
     }
     scopes := Array<typed.Scope>(vars.Len())
-    for v in range vars.Len() { scopes[v] = s.scopeOf(beta[v]) }
+    for v in range vars.Len() { scopes[v] = s.passedScope(c, owner, v, beta[v]) }
     s.plan.Pass(c.Site, scopes)
     # what the callee may build into, recorded as this body's building there (O18c, E11c); a task is handed a stand-in for
     # every scope it binds, made where that scope is (P2)
@@ -11879,6 +11885,47 @@ fn (s mut Scoper&) scopeOf(t Term) typed.Scope {
     }
 }
 
+# the scope a call passes for its callee's variable v, bound to t: where t is not known here (O12's set, a derived
+# scope, one not traced) and an argument binding v is a reference reading which again has no effect, the scope its
+# referent is found in at run time (O29)
+fn (s mut Scoper&) passedScope(c typed.Call&, owner Array<I64>&, v I64, t Term) typed.Scope {
+    if t.Runs() or t == Term.None or s.finds(t): return s.scopeOf(t)
+    for i in range owner.Len() {
+        if owner[i] != v: continue
+        root := s.argRoot(c.Args[i])
+        if root is not null: return s.plan.Find(root)
+    }
+    return s.scopeOf(t)
+}
+
+# O29: an argument as the root a scope is found from - a reference whose evaluating has no effect; null for none
+fn (s mut Scoper&) argRoot(a typed.Expr&) typed.Expr?& {
+    if s.isRef(a.Type()): return a
+    return s.valueRoot(a)
+}
+
+# O29: a value argument's one reference, read again, as the root its references' scope is found from - where the
+# value is a struct whose only part holding references is one reference field, read from a place reading which has no
+# effect (with two, they may live in different scopes, and what is built must outlive each); null for none
+fn (s mut Scoper&) valueRoot(a typed.Expr&) typed.Expr?& {
+    match a {
+        case typed.Expr.Read(sp, ty, p, _) {
+            if not s.isStruct(ty) or not typed.PurePlace(p): return null
+            fs := s.P.T.Items(s.P.T.Fields(ty))
+            at := -1
+            for k in range fs.Len() {
+                if not s.P.T.HoldsRefs(fs[k]): continue
+                if at >= 0 or not s.isRef(fs[k]): return null
+                at = k
+            }
+            if at < 0: return null
+            return typed.Expr.Read(sp, fs[at], typed.Lvalue.Field(sp, fs[at], p, at), typed.SiteId(-1))
+        }
+        case typed.Expr.Away(_, _, y) { return s.valueRoot(y) }
+        case _ { return null }
+    }
+}
+
 # O29: whether what is built in term t goes where a root's referent is found at run time
 fn (s Scoper&) finds(t Term) Bool {
     return s.foundRoot is not null and not t.Runs() and t != Term.None and t == s.foundTerm
@@ -11891,40 +11938,19 @@ fn (s mut Scoper&) rootOf(p typed.Lvalue&) typed.Expr?& {
         case typed.Lvalue.Field(_, _, base, _): s.throughRoot(base)
         case typed.Lvalue.Elem(_, _, e): s.throughRoot(e.Base)
         case typed.Lvalue.Payload(_, _, q): s.throughRoot(q.Base)
-        case typed.Lvalue.Deref(_, _, r): r if pureExpr(r) else null
+        case typed.Lvalue.Deref(_, _, r): r if typed.Pure(r) else null
         case _: null
     }
-    if inner is not null or not s.isRef(p.Type()) or not pureLvalue(p): return inner
+    if inner is not null or not s.isRef(p.Type()) or not typed.PurePlace(p): return inner
     return typed.Expr.Read(p.Span(), p.Type(), p, typed.SiteId(-1))
 }
 
 # the root of a part read through base: base itself where it is a reference, else what base's storage is in
 fn (s mut Scoper&) throughRoot(base typed.Lvalue&) typed.Expr?& {
     if not s.isRef(base.Type()): return s.rootOf(base)
-    return typed.Expr.Read(base.Span(), base.Type(), base, typed.SiteId(-1)) if pureLvalue(base) else null
+    return typed.Expr.Read(base.Span(), base.Type(), base, typed.SiteId(-1)) if typed.PurePlace(base) else null
 }
 
-# whether reading a place has no effect: a local or global, a field, element or payload of one, through references
-fn pureLvalue(p typed.Lvalue&) Bool {
-    return match p {
-        case typed.Lvalue.Local(_, _, _), typed.Lvalue.Global(_, _, _, _): true
-        case typed.Lvalue.Field(_, _, base, _): pureLvalue(base)
-        case typed.Lvalue.Elem(_, _, e): pureLvalue(e.Base) and pureExpr(e.Index)
-        case typed.Lvalue.Payload(_, _, q): pureLvalue(q.Base)
-        case typed.Lvalue.Deref(_, _, r): pureExpr(r)
-        case _: false
-    }
-}
-
-# whether evaluating an expression has no effect: a literal, a read of a pure place, a conditional of those
-fn pureExpr(x typed.Expr&) Bool {
-    return match x {
-        case typed.Expr.Lit(_, _, _): true
-        case typed.Expr.Read(_, _, p, _): pureLvalue(p)
-        case typed.Expr.Cond(_, _, c): pureExpr(c.C) and (c.A is null or pureExpr(c.A!)) and pureExpr(c.B)
-        case _: false
-    }
-}
 
 # ---- the placements made for views (O27 as placement, B18) ----
 

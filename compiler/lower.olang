@@ -334,6 +334,9 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     plan typed.Plan = typed.Plan(0, 0, 0)
     freeing Bool = false            # whether this body frees early what sole places let go of (O8d, free.Frees)
     regions Map<I64, mir.LocalId>   # the regions made for sites being lowered (plan.RegionKind), by site
+    # O29: the reference arguments lowered, and their operands - a scope found from one is found from its operand
+    argExprs Vec<typed.Expr&>
+    argOps Vec<mir.Operand>
     tryRel I64 = -1                 # a try statement with clauses releasing its value on its success path (O8d): -1 not,
                                     # 0 the value, 1 the handle's state (free.IsHandle)
     walkSite typed.SiteId = typed.SiteId(-1)    # D18e: the generator call whose walk a for-in makes and finishes here
@@ -649,7 +652,13 @@ fn (ln mut lowering&) scopeRef(sc typed.Scope) mir.ScopeRef {
 fn (ln mut lowering&) foundOf(i I64) mir.ScopeRef {
     if i >= ln.plan.Roots.Len(): return mir.ScopeRef.Program
     sp := ln.B.Sp
-    o := ln.val(ln.plan.Roots[i])
+    root := ln.plan.Roots[i]
+    o := mir.Operand.None
+    for j := ln.argExprs.Len() - 1, j >= 0 and o == mir.Operand.None, j-- {
+        if ln.argExprs[j] == root: o = ln.argOps[j]
+    }
+    if o == mir.Operand.None and not typed.Pure(root): return mir.ScopeRef.Program
+    if o == mir.Operand.None: o = ln.val(root)
     h := ln.temp(mir.I64T, sp)
     ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), mir.Rvalue.ScopeOf(o)))
     return mir.ScopeRef.Held(h)
@@ -2948,6 +2957,10 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
             v = ln.into(ps[i], mir.Rvalue.Ref(mir.Lvalue.L(l), ps[i]), a.Span())
         }
         ops[i] = v
+        if t.IsRef(a.Type()) {
+            ln.argExprs.Push(c.Args[i])
+            ln.argOps.Push(v)
+        }
     }
     for st in gone { ln.stmt(st) }
     return ln.F.Args(ops)
@@ -6399,6 +6412,12 @@ fn (ln mut lowering&) renderStr(a pl, ty types.TypeId, b mir.ScopeRef, sp source
     vs := t.ScopeVarsOf(fty)
     xs := Array<mir.ScopeRef>(vs.Len())
     for i in range vs.Len() { xs[i] = mir.ScopeRef.Scope(rs) if vs[i] == types.ResultVar else mir.ScopeRef.Program }
+    # O29: a reference receiver's own scope found from it, so a Str builds where its receiver lives
+    if vs.Len() > 0 and vs[0] == 0 and t.IsRef(p0) {
+        h := ln.temp(mir.I64T, sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), mir.Rvalue.ScopeOf(recv)))
+        xs[0] = mir.ScopeRef.Held(h)
+    }
     k := ln.F.AddCall(mir.Call(callee, ln.F.Args(Array<mir.Operand>[recv]), ln.F.ScopeRefs(xs), mir.Lvalue.L(dest)
                                true, ok, mir.NoLocal, mir.NoBlock))
     ln.end(mir.Term.Call(sp, k))

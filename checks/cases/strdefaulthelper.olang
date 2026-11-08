@@ -1,4 +1,7 @@
-# check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
+# check: run
+# flags: -debug -sanitize
+# O29 (round 6): refused until a scope no call knows while compiling was found while the program runs from the
+# address of the storage built through - now built where that storage lives, read back after a churn. Before:
 # E11c/R9a: the same one call down - the helper hands its parameter's scope to the default's landing call, so the helper
 # builds there; codegen also holds a body to it where it only passes a scope on to a callee building there (C1d)
 import "std/io"
