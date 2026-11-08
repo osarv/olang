@@ -3776,3 +3776,15 @@ stood:
   olang, no BLAS; 6. CPU now, FPGA for the settling core later, no GPU in v1; 7. generic element type, integer widths
   and saturating arithmetic for fixed point.
   Answered the same day; see direction.md, "oann and oagent, redefined".
+
+- 2026-11-08, oann's design, round 2: oann's design (asked 2026-11-08; building waits for olang v1). Answered so far (direction.md, "oann and oagent,
+  redefined"): purpose, redesign, N-d tensor, kernels in olang, CPU+FPGA+GPU, number types; the GPU split as
+  recommended (one device subset in the language for GPU and FPGA kernels, LLVM's NVPTX/AMDGPU back ends, after v1 as
+  an addition; std over the driver API; oann's kernels in it); the element type a type parameter constrained by a
+  tensor-element trait (the user: "so we don't put anything in there"; closed, mine). Still open:
+  1. cuBLAS/cuDNN: our own kernels by default, NVIDIA's libraries as an optional back end and the yardstick, used
+     where they measurably win? Recommended: yes.
+  2. The model graph: one model description, run either as a run-time graph (for experiments whose structure
+     changes) or planned while compiling into specialized code (fixed models, GPU and FPGA)? Recommended: both, the
+     run-time graph built first.
+  Answered the same day: CPU without any BLAS (our kernels); GPU: our own kernels where they pay (fused, small, new formats), NVIDIA's libraries where they win (large dense products) - the user: "We don't redo NVIDIA stuff out of principle"; the model runs all three ways (eager to experiment quickly, a captured run-time graph, planned while compiling for targets).

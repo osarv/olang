@@ -21,13 +21,5 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-- oann's design (asked 2026-11-08; building waits for olang v1). Answered so far (direction.md, "oann and oagent,
-  redefined"): purpose, redesign, N-d tensor, kernels in olang, CPU+FPGA+GPU, number types; the GPU split as
-  recommended (one device subset in the language for GPU and FPGA kernels, LLVM's NVPTX/AMDGPU back ends, after v1 as
-  an addition; std over the driver API; oann's kernels in it); the element type a type parameter constrained by a
-  tensor-element trait (the user: "so we don't put anything in there"; closed, mine). Still open:
-  1. cuBLAS/cuDNN: our own kernels by default, NVIDIA's libraries as an optional back end and the yardstick, used
-     where they measurably win? Recommended: yes.
-  2. The model graph: one model description, run either as a run-time graph (for experiments whose structure
-     changes) or planned while compiling into specialized code (fixed models, GPU and FPGA)? Recommended: both, the
-     run-time graph built first.
+- When oann research starts (asked 2026-11-08): small CPU experiments now, written in today's olang without oann
+  (throwaway code, results recorded in oagent), or wait for oann? Default: wait. Recommended: start now.

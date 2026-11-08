@@ -39,7 +39,10 @@ networks too, "preferably a combination of them" - "a low parameter, high abilit
 technique", energy-efficient and scaling well, with optimization algorithms we design on top, found by experiment.
 Built after olang version 1 on the settled language, redesigned keeping what can be kept. The operand is an N-d
 tensor: the tensor holds what describes the data, the network and its structure the transformations. Kernels in
-olang with no BLAS ("No external unnecessary dependencies"); CPU, FPGA and GPU all needed (CUDA and the like are
+olang with no BLAS on the CPU ("No external unnecessary dependencies"); on the GPU our own kernels where they pay (fused,
+small, new formats) and NVIDIA's libraries where they win (the user: "We don't redo NVIDIA stuff out of principle");
+one model description run eagerly (quick, adaptive experiments), as a captured graph, or planned while compiling for
+a target once done; CPU, FPGA and GPU all needed (CUDA and the like are
 necessary dependencies). The user will hand over saved papers (an arXiv connector if there is one).
 **I am the research agent (the user, 2026-11-08):** reading papers, compiling them, trying things out is part of my
 job building oagent; "feel free to use the Arxiv connector frivolously" (alphaXiv, connected). Paper notes live in
