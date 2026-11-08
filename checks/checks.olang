@@ -41,7 +41,7 @@ fn workers() I64 {
 # a failure, never skipped.
 Scenarios := Array<String&>["fix", "strheld", "fuzz", "testfuzz", "bench", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
                      "scopesan", "frameenv", "crash", "interp", "target", "assertloc", "objnames", "spawnerr", "generators", "runfile"
-                     "chunkpool", "capscope", "reuse", "reusefact", "incremental", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
+                     "chunkpool", "capscope", "reuse", "reusefact", "incremental", "records", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
@@ -421,6 +421,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "reuse" { try reuse(r) }
         case "reusefact" { try reusefact(r) }
         case "incremental" { try incremental(r) }
+        case "records" { try records(r) }
         case "embed" { try embedded(r) }
         case "interp" { try interp(r) }
         case "osargs" { try osargs(r) }
@@ -1016,6 +1017,34 @@ fn incEdit(r mut report&, dir String&, e Edit&) ? Failed {
     try r.expect(incBuild(dir, "inc", "", "undone", "main.olang", "main") == 0, $"the build undoing " $what, dir)
     try r.expect(sh(dir, "! grep -q '^olang: lowered ' undone && grep -v '^olang: reused ' undone > a && grep -v '^olang: \\(reused\\|" $
                     "lowered\\) ' base > b && cmp -s a b") == 0, $"the build undoing " $what " lowered something or differs (undone, base)", dir)
+}
+
+# B3i, docs/wholeprog.md 10.3 (T6): a record truncated, a part's IR garbled, or a record another compiler wrote (its sum
+# right, a read line this one does not decide) is found by its own hash or its reads and written again, never read; two
+# builds at once in one directory write records side by side, and a third build takes them, every object the same
+test "a damaged or foreign record is written again, never read; builds side by side keep whole records" { assert passed("records") }
+
+fn records(r mut report&) ? Failed {
+    dir := fresh("records")
+    os.Run("cp checks/fixtures/incremental/* " $os.Quote(dir))
+    run := "48 12 1 true 14 data one 8"
+    build := "OLANG_FACTSTATS=1 OLANG_CHECKREUSE=1 \"$OLANG\" build main.olang > out.txt 2>&1 && ./build/main > run.txt"
+    try r.expect(sh(dir, "\"$OLANG\" build main.olang > out.txt 2>&1") == 0, "the first build", dir)
+    damages := Array<String&>["for f in build/rec/deep.*; do case $f in *.ll) ;; *) truncate -s 100 $f ;; esac; done"
+        "sed -i 's/ret /rett /' build/rec/deep.*.p0.ll"
+        "for f in build/rec/deep.*; do case $f in *.ll) ;; *) sed -i 's/^read false /read maybe /; /^sum /d' $f && " $
+        "echo \"sum $(sha256sum < $f | cut -d' ' -f1)\" >> $f ;; esac; done"]
+    for k, damage in damages {
+        try r.expect(sh(dir, $damage " && " $build) == 0, $"the build after damage " $k, dir)
+        try r.expect(outOf(dir).Contains("olang: lowered deep\n") and outOf(dir).Contains("modules reused, every object the same")
+                     $"damage " $k ": deep's record read, or another object differs", dir)
+        try r.expect(sh(dir, $"grep -qx '" $run "' run.txt") == 0, $"the run after damage " $k, dir)
+    }
+    try r.expect(sh(dir, "rm -rf build && (\"$OLANG\" build main.olang > o1 2>&1 & \"$OLANG\" build main.olang > o2 2>&1 & " $
+                    "wait) && grep -q built o1 && grep -q built o2") == 0, "two builds at once", dir)
+    try r.expect(sh(dir, build) == 0 and not outOf(dir).Contains("olang: lowered deep") and
+                 outOf(dir).Contains("modules reused, every object the same"), "the build after two at once", dir)
+    try r.expect(sh(dir, $"grep -qx '" $run "' run.txt") == 0, "the run after two builds at once", dir)
 }
 
 # E38, B3i: an embedded file is part of what its module's object is made from - a build after it changes makes that
