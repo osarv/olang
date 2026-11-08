@@ -3768,3 +3768,11 @@ stood:
 
 - The refusal audit's question 5 (asked 2026-11-08; docs/refusals.md, "Questions"): `any` copyable through a Copy in
   its table. Default: refused. Recommendation: not now. (Question 4 moved into docs/wholeprog.md's question 4.)
+
+- 2026-11-08, oann's design, asked: oann's design (asked 2026-11-08; building waits for olang v1, the user's hold). Defaults: nothing built.
+  Recommendations: 1. settling-first, the general graph kept for baselines; 2. a redesign on today's olang, carrying
+  kernels, tests and measurements; 3. an N-d `Tensor<T>` with strided views, kernels batch-major underneath; 4. models
+  built and planned while compiling by default, a run-time graph as fallback; 5. the GEMM kernels move into oann, in
+  olang, no BLAS; 6. CPU now, FPGA for the settling core later, no GPU in v1; 7. generic element type, integer widths
+  and saturating arithmetic for fixed point.
+  Answered the same day; see direction.md, "oann and oagent, redefined".

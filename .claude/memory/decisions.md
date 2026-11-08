@@ -21,9 +21,10 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-- oann's design (asked 2026-11-08; building waits for olang v1, the user's hold). Defaults: nothing built.
-  Recommendations: 1. settling-first, the general graph kept for baselines; 2. a redesign on today's olang, carrying
-  kernels, tests and measurements; 3. an N-d `Tensor<T>` with strided views, kernels batch-major underneath; 4. models
-  built and planned while compiling by default, a run-time graph as fallback; 5. the GEMM kernels move into oann, in
-  olang, no BLAS; 6. CPU now, FPGA for the settling core later, no GPU in v1; 7. generic element type, integer widths
-  and saturating arithmetic for fixed point.
+- oann's design (asked 2026-11-08; building waits for olang v1). Answered the same day (direction.md, "oann and oagent,
+  redefined"): purpose, redesign, N-d tensor, kernels in olang, CPU+FPGA+GPU, the number types. Still open:
+  1. Models built and planned while compiling by default, a run-time graph as fallback? Recommended: yes.
+  2. The GPU split between olang and oann. Default: undecided. Recommended: one device subset in the language shared
+     by GPU and FPGA kernels, compiled through LLVM's NVPTX/AMDGPU back ends after v1 as an addition, std reaching the
+     driver; oann writes its kernels in it.
+  3. The element type a tensor's type parameter (`Tensor<BF16>`) rather than a run-time tag. Recommended: parameter.

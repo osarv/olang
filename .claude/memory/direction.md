@@ -32,6 +32,16 @@ speed comes first, ahead of every language feature queued for after self-hosting
 **FPGA (2026-10-09):** the user wants olang to target FPGAs for spiking neural network implementations - a long-term
 domain to weigh when designing numeric types (bit widths, fixed point, saturation) and concurrency (dataflow).
 
+**oann and oagent, redefined (the user, 2026-11-08).** oann is the public library oagent links against; oagent is
+private and holds the reasoning work ("if it ever becomes a problem that oann is a library ... we'll just make them
+one" under the private repo). oann is research-oriented: settling networks have "unexplored potential", but ordinary
+networks too, "preferably a combination of them" - "a low parameter, high ability reasoning kernel, using any kind of
+technique", energy-efficient and scaling well, with optimization algorithms we design on top, found by experiment.
+Built after olang version 1 on the settled language, redesigned keeping what can be kept. The operand is an N-d
+tensor: the tensor holds what describes the data, the network and its structure the transformations. Kernels in
+olang with no BLAS ("No external unnecessary dependencies"); CPU, FPGA and GPU all needed (CUDA and the like are
+necessary dependencies). The user will hand over saved papers (an arXiv connector if there is one).
+
 **oann and the matrix library (2026-10-09):** "Oann btw is very incomplete. It should be written in Olang as well. I want
 the matrix library to be efficient. It should work as the base for all operations and operands." oann gets rewritten
 in olang (the C version is only a rough reference); std/linalg's Tensor is the operand of every numeric/NN operation,
