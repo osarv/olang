@@ -35341,3 +35341,10 @@ the whole's (all 15 within 0.1 MB here; `session` 1.7 MB against 260 MB before).
 sole place's decision flipped": the root keeps a view of a place the library lets go of, and nothing but the root is
 lowered again. `fuzz free` builds each passing program again as a module of its own under a calling root, -d -s and in
 the dead-region evaluator.
+
+Gates: `fuzz free` 260 programs (1,560 scenarios, 1,525 places freeing at once), each also as a module of its own, no
+finding; `make scopesan` passes; the dead-region evaluator over the split `earlyfree` programs. `-quick`'s cost: the
+compiler's own `-quick` build has 4,160 guarded sites over 1,209 places (none sole - it has tasks), its binary 3.6%
+larger, and its front end and lowering of itself (`build -memory`) as fast as before within noise (14.6-16.0 s both);
+bench's binarytrees, knucleotide, text, regex and Vec push built `-quick` run within noise of before. Under the default
+`-O3` and LTO the constants fold.
