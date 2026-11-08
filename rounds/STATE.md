@@ -41,3 +41,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - F6 merged, verified (all passed), pushed. Leftovers in plan.md. W1 running.
 - W1 merged, verified, pushed (goldens recaptured incl. modgraph).
 - Step 2 started: R1 (wt-refusals1) and W2 (wt-freeall), both opus medium (table said xhigh/high - A/B). Note: local master ref is stale; branch worktrees from wt-merge.
+- R1 merged (tree == its verified tip), pushed.

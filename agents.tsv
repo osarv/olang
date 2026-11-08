@@ -34,3 +34,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-08T19:45	E1: settling experiment	sonnet	medium	completed	140	15	23	n/a	?	results table + 2 LANGUAGE items; epdr mod5 diverged
 2026-11-08T20:00	F6 fnvalues round 6: scopes found at run time	opus	medium	completed	352	184	52	no (stale goldens + PROGRESS.md only)	?	41 refusals now run; found+fixed early-free UAF; 2 program-scope fallbacks remain
 2026-11-08T20:00	W1 facts with readers + incremental harness	opus	medium	completed	342	162	104	no (stale goldens + README only)	?	found 2 bugs (stale object via lowering read, -memory counts)
+2026-11-08T21:30	R1 refusals 5.1	opus	medium	completed	342	169	110	yes	?	41/44 compile; IR identical; scopesan+scopefuzz pass
