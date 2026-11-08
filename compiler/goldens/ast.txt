@@ -1819,7 +1819,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 244020b30fdf2de1 b897660d40972e4d checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-75494af5e56852c2 9f4bef27cc8e7012 checks/checks.olang
+d41270270dbecd68 5479ef287aa78e60 checks/checks.olang
 a9e28b3dd92156ad 622c84cf954c843d checks/fixtures/agree/agree.olang
 93a0581f17cca83e 855092106b73d871 checks/fixtures/agree/bfrand.olang
 a11159f77eaf86c0 20676fbca43683b2 checks/fixtures/agree/math.olang
@@ -1997,6 +1997,10 @@ a2b94daf56aceefe b0617845a435beab checks/fixtures/reuse/anyapp.olang
 0205c3fc0479541c 30f565923db64b7f checks/fixtures/reuse/leaf.olang
 fc1d7d3f5cf4dc2f ecd479a626e3e377 checks/fixtures/reuse/lib.olang
 9a61ddd28cf69607 43668600facc75ae checks/fixtures/reuse/other.olang
+b59f3944e57fbf0a ee0ea2e5d06da0ee checks/fixtures/reusefact/back.olang
+034663cb57644ea6 eac7ea90102191dd checks/fixtures/reusefact/bake.olang
+5422a6ef4ab0b1d9 44ce5626edf40370 checks/fixtures/reusefact/quiet.olang
+674979803f88dfbb ff941a998311ec72 checks/fixtures/reusefact/uid.olang
 9eca3c4e444f9e61 0046cd178a452192 checks/fixtures/runfile/bad.olang
 ed3790c99df2c410 de429ad4671e984f checks/fixtures/runfile/script.olang
 92b55e19786e8e69 6c01a6c37fb06576 checks/fixtures/s18c/s18c.olang
@@ -2080,7 +2084,7 @@ d59ff422cc197f42 c3df74a0ecf1a697 compiler/ast.olang
 76e002fe516379d0 23a5d5b8d2beea28 compiler/bindgen.olang
 6def0079548883d7 1bd21814bf095813 compiler/build.olang
 4f9f5d75a5784da7 7f46bd1270110a85 compiler/cabi.olang
-ac92c689556fe388 ea36ed2b7fe994f8 compiler/check.olang
+eeef0e625c8487f3 32c000cc68f8ccaa compiler/check.olang
 94c7f3b55fc68951 6e8d7c13cd955b3e compiler/cond.olang
 08c016b6fa677234 c409e181f4f7c754 compiler/definit.olang
 7889da610f9b16fe 0bd15fe0ec03de73 compiler/diag.olang
@@ -2105,7 +2109,7 @@ f8196ec000eedc18 7750064d5fa4bd68 compiler/mir.olang
 46c3833e04a46d2e 395ab773d71b36cd compiler/msgs.olang
 7cd82ba607aceedb f3c20600c4158349 compiler/names.olang
 3ca8bd78a33b7278 22dd9b1a97c41ffd compiler/needs.olang
-d7600840e883b1f9 e76fc12bcc386e2e compiler/olang.olang
+b8ae14f3f1c33f6a 7650a77bc6a99147 compiler/olang.olang
 19ff3c2fdfd3db4c fab4d6ba9da58358 compiler/parse.olang
 de87a76ebcdd4f4f 36bf5cfa366d300c compiler/profile.olang
 cd6dc04fc51a289c 717b2d1c1d7ae607 compiler/runtime.olang
