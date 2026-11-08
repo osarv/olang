@@ -34895,3 +34895,9 @@ checks: fail - the T21c misuses (t21cnoparam, -twice, -borrowsnothing, -borrowsv
 t22bkeepsouter (2.2.1), t22btypebeyond, t22bborrows, t22bglobalkeep, t22bresultkept, t22breadonlyresult; run -
 t22bpushedkeeps, t22blambdakeeps, t22breturncycle beside t22apushed, t22alambdakeeps, t22areturncycle, whose messages
 (and every T22a case's whose cause one word says) now name the word.
+
+**Gates.** The base commit's compiler/ and bench sources built by the base compiler and by this one: 349 modules' IR
+byte-identical. `make scopesan`: every file passes (24 of them run again after the disk filled mid-run). `make
+scopefuzz` (100 programs): no finding. `make verify` passed but for layoutdiff, which the new fields of the compiler's
+own types (`types.data.G`, `Table`'s promise lists, `ast.Sig.Promises`, two of `Scoper`'s) moved - `make layoutgold`
+captured it again (a type's key grew from 56 to 64 bytes).
