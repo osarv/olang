@@ -3748,3 +3748,11 @@ stood:
   6, `std/pool` ("also do the pools ... basically just a standard library construct"), being built.** Open: 2 (implied
   by the two rules, not yet said), 3 (the count follows from the first rule), 5 (every module).
 
+
+
+## 2026-11-08 evening, the licence
+
+The user: "forget about the license for now ... stop talking about it. I'll bring it up when it's relevant." Removed
+from the ledger; never raise it. The entry as it stood:
+
+- The licence: the user, 2026-11-07, "we'll still push it into the future" (postponed again). Default: no licence file. Ask when publishing. Context: archive/decisions_log.md, the entry "2026-11-07, the user on four answers".
