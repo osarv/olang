@@ -68,9 +68,10 @@ with parent links 100.0 MB, an LRU cache 44.4 MB - against 1.8 MB for the same l
    owning places (a child moved up a tree, a node relinked to the front of an LRU) cannot be proved statically in
    general. Two forms (2.4, question 3): (a) a held bit that pins an instance seen in two places at once, never counting,
    with the compiler recognizing transfers and the program clearing a link before relinking; (b) a count of holding
-   places, saturating at 3, which frees every shape measured as written. Measured: on the LRU, (a) without help pins
-   every node (414 MB at 10M operations, more than today's 355 MB); (a) with transfers recognized and "clear first"
-   1.7 MB; (b) 1.7 MB, and the fastest (550 ms against today's 734 ms).
+   places, saturating at 3, which frees every shape measured as written. Measured on the LRU: (a) with no transfer
+   recognized pins every node (414 MB at 10M operations, more than today's 355 MB); with transfers recognized it still
+   grows (13 MB at 1M, one node in four pinned); with "clear first" too, 1.7 MB; (b) 1.7 MB, and the fastest (550 ms
+   against today's 734 ms).
 6. **What is in use is judged while compiling** (5.3), by O8d's final step as today: a reference read from a weak place
    is a reference in use like any other, so nothing it may reach is reclaimed while it is; the body's own locals are
    told apart from the reclaimed instance by a compare at run time, and an instance let go of while a reference still
@@ -222,17 +223,18 @@ candidates differ in what it can say:
 
 Measured (8.2, a C simulation of the run-time half; "today" is an arena that frees nothing until the end):
 
-| shape, ops | today | (a) as written | (a), transfers recognized, "clear first" | (b) |
-|---|---|---|---|---|
-| tree, 1M | 95.2 MB, 61 ms | 1.8 MB, 21 ms (3,450 pinned) | 1.4 MB, 22 ms | 1.4 MB, 27 ms |
-| tree, 10M | 940 MB, 605 ms | 1.9 MB, 200 ms (4,612 pinned) | 1.4 MB, 205 ms | 1.4 MB, 202 ms |
-| LRU, 1M | 37.1 MB, 123 ms | 42.9 MB, 119 ms (753K pinned, none reclaimed) | 1.7 MB, 53 ms | 1.7 MB, 56 ms |
-| LRU, 10M | 355 MB, 734 ms | 414 MB, 882 ms (7.5M pinned) | 1.7 MB, 493 ms | 1.7 MB, 550 ms |
+| shape, ops | today | (a), no transfer recognized | (a), transfers recognized (5.2) | (a), transfers and "clear first" | (b) |
+|---|---|---|---|---|---|
+| tree, 1M | 95.2 MB, 61 ms | 1.8 MB, 21 ms (3,450 pinned) | the same (no transfer shape here) | 1.4 MB, 22 ms | 1.4 MB, 27 ms |
+| tree, 10M | 940 MB, 605 ms | 1.9 MB, 200 ms (4,612 pinned) | the same | 1.4 MB, 205 ms | 1.4 MB, 202 ms |
+| LRU, 1M | 37.1 MB, 123 ms | 42.9 MB, 119 ms (753K pinned, none reclaimed) | 13.0 MB, 60 ms (207K pinned, 545K reclaimed) | 1.7 MB, 53 ms | 1.7 MB, 56 ms |
+| LRU, 10M | 355 MB, 734 ms | 414 MB, 882 ms (7.5M pinned) | - | 1.7 MB, 493 ms | 1.7 MB, 550 ms |
 
-(a) works where the compiler recognizes the transfers and the program is written for it; (b) works as written. Both
-are faster than today's arena on these loops (reclaimed slots are reused while hot; today every node touches a fresh
-page). Question 3; the default, until it is answered, is (a) - the user's "no counting" - and every round before the
-holder record is the same for both.
+(a) works where the compiler recognizes the transfers and the program clears a link before relinking it; with the
+transfers alone the LRU still pins one node in four (each move-to-front's `p.next = q` while `n.next` still names
+`q`), so its memory still grows. (b) works as written. Both are faster than today's arena on these loops (reclaimed
+slots are reused while hot; today every node touches a fresh page). Question 3; the default, until it is answered, is
+(a) - the user's "no counting" - and every round before the holder record is the same for both.
 
 Either record is a cache of a fact, kept on the safe side: a store always records a holder, a let-go missed (an owning
 place whose storage is reclaimed by a scope's close, a non-root module's code that keeps - section 6) only leaves it
@@ -378,10 +380,11 @@ weak value flows into code that does not expect it. The check is paid where the 
 
 ### 4.3 Retirement
 
-Sixteen bits of generation wrap after 65,535 reclaimings of one slot. A slot whose generation would wrap is **retired**:
-its generation set to 65,535 and the slot not put back on a free list, kept until its scope closes. A stale weak word
-can therefore never meet its generation again within the scope, and after the scope closes no weak word into it exists
-(section 8). The simulation's 10M-operation list retired 101 slots (100 live nodes, each slot reused ~100K times) -
+Sixteen bits of generation would wrap after 65,535 reclaimings of one slot. Live instances carry generations 1 to
+65,534; reclaiming one of 65,534 sets 65,535 - which no live instance carries, so no weak word does - and **retires** the
+slot: it is not put back on a free list, and is kept until its scope closes. A stale weak word can therefore never meet
+its generation again within the scope (0 stays constant data's alone), and after the scope closes no weak word into it
+exists (section 8). The simulation's 10M-operation list retired 101 slots (100 live nodes, each slot reused ~100K times) -
 1/65,536 of the reclaimings, 11 KB.
 
 ### 4.4 Free lists by size, found by address
@@ -389,16 +392,18 @@ can therefore never meet its generation again within the scope, and after the sc
 A reclaimed instance's slot goes on its **scope part's** free list for its size class: classes of 16 bytes up to 256,
 then 320, 384, 512, 768, 1,024, 1,536, 2,048 (the header included); an instance larger than that is not reclaimed
 early (kept until its scope closes; `-memory` says so) - large nodes are rare, and the regions' block sizes stop at
-the same point. The lists are a small table (21 words) the scope part makes in its own storage the first time it
-reclaims, named from its header.
+the same point. The lists are a small table (one word per class, 23) the scope part makes in its own storage the first
+time it reclaims, named from its header. Every slot of these classes is laid out alike - its first word the
+generation, the payload after it - so after round 5 an instance's own arrays use them too, leaving the first word alone.
 
 The slot must go back to the scope part it came from, so its generation word stays at the same place for as long as a
 weak word may name it (4.3). The let-go site knows the owning place's scope, not always the instance's (placement may
 have built the instance further out). docs/fnvalues.md's O29 (section 12) answers it: chunks of up to 128 KB in
 128 KB-aligned slots, so `p & ~(128K - 1)` is the chunk's header, which names its scope part (`owner`). So reclaiming
 needs that round (fnvalues round 6) and nothing more per instance; a large chunk is found in its sorted table. A slot's
-memory is reused only by instances of generational types of its class in its scope part while that scope is open, so
-the word before an instance in a slot is always that slot's generation.
+memory is reused only as a slot of its class in its scope part while that scope is open, and its first word is written
+by nothing but a generational instance's allocation and reclaiming, so the word before an instance in a slot is always
+that slot's generation.
 
 Could the generations live in the chunk headers instead, with nothing per instance (as fnvalues 12 put the scope)? No:
 a generation is per instance, a chunk holds instances of every size by bump, and a side table indexed by offset would
@@ -413,7 +418,9 @@ fields and arrays of `x` holding references to generational instances), bump `x`
 clear its holder record, push the slot on its scope part's list. Letting go of a held instance updates its record and,
 where the record says no owning place holds it and the compiler planned a reclaim at that let-go (5.3), reclaims it -
 through a worklist, never recursion, so dropping a list of a million nodes takes no stack. Under (a), the cascade clears
-*held* on what the reclaimed instance's own places hold, and reclaims those not pinned.
+*held* on what the reclaimed instance's own places hold, and reclaims those not pinned. A child is reclaimed by the
+cascade only where the let-go that began it was judged for the child's type too (5.3: no reference in use may reach
+one); otherwise the child is left held by nothing and stays until its scope closes.
 
 ### 4.6 Threads
 
@@ -466,14 +473,14 @@ keep that from keeping everything:
 
 - **Compares with the body's own locals.** Where the references in use after a let-go are locals of the same body,
   the let-go compares the instance with each (one compare each) and reclaims only where it is none of them.
-- **Orphans.** An instance let go of while a local of the body may still name it is an **orphan**: no owning place
-  holds it. At that local's last use, where no other reference in use may reach a T (the body's later locals, its
-  callers across the call - by type, the final step), the compiler places a check: still held by no owning place (it
-  may have been stored again), then reclaim. `h := s.head!; s.head = h.next; return h.v` reclaims `h` after its last
-  read.
+- **Orphans.** An instance let go of while a local of the body (or of a caller, across the call) may still name it is
+  an **orphan**: no owning place holds it. After the statement holding that local's last use, where no other reference
+  in use may reach a T (the body's later locals, its callers across the call - by type, the final step), the compiler
+  places a check: still held by no owning place (it may have been stored again), then reclaim. `h := s.head!; s.head =
+  h.next; return h.v` reclaims `h` after its last read.
 - **Results.** A function giving back an instance it let go of (`fn (l mut DList&) PopFront() mut Node&`) records in its
-  summary that its result may be an orphan; the caller's local holding the result is then checked at its last use as
-  above. A `Pop` of the prelude's collections is the same shape (O8d's "moved there from a place that was its only
+  summary that its result may be an orphan; the caller's local holding the result is then checked after its last use
+  as above. A `Pop` of the prelude's collections is the same shape (O8d's "moved there from a place that was its only
   holder").
 
 What it reads: every body of the program, as O8d's final step does today (free.olang's must- and may-summaries, its
@@ -481,8 +488,9 @@ callers lists, its loop and order facts). Where a fact is missing - a call throu
 does not follow, an extern, a body not judged, a cycle not settled - the let-go keeps; `-memory` names it. The probes,
 by hand: the stack's push (a transfer under (a)) and pop (an orphan reclaimed after `h.v`); the list's `PopFront` (`q`,
 in use after `l.head = q`, is compared with `h`); the tree's `replace` (no reference to a Node in use after its stores
-in it or in `DeleteMin` after the call); the LRU's eviction (`old`, used by `c.at.Remove(old.key)`, an orphan
-reclaimed after that call - where `Remove` keeps no view of `old.key` past its let-go, O8d's condition 6 as today).
+in it or in `DeleteMin` after the call); the LRU's eviction, the `Map` owning (section 10): `old := c.tail!` reads a
+weak place, `c.unlink(old)` stores only into weak places, and `c.at.Remove(old.key)` lets the map's slot go of the
+node while `old` is still in use in that statement - an orphan, reclaimed by the check after it.
 
 ### 5.4 How it composes
 
@@ -500,9 +508,9 @@ reclaimed after that call - where `Remove` keeps no view of `old.key` past its l
   across such a call does today.
 - **Tasks.** Condition 3: nothing two threads can reach is reclaimed early; 4.6 for the header.
 - **C.** A reference to a generational instance handed to C is the instance's address (the header is before it,
-  invisible). A struct holding references is no plain-data struct, so no weak place crosses by value. A pointer C
-  makes and hands back as a generational type's reference - which only a wrong prototype can do - would have no header:
-  X1a's hole, stated with it. A program C may call back frees nothing early (condition 3, unchanged), so its weak places
+  invisible). A weak place is never a parameter or a result, and a struct holding references is no plain-data struct,
+  so no weak word ever crosses the boundary. A pointer C makes and hands back as a generational type's reference -
+  which only a wrong prototype can do - would have no header: X1a's hole, stated with it. A program C may call back frees nothing early (condition 3, unchanged), so its weak places
   never read `null` early.
 - **Early freeing's other places** (owners held in place, collections' slots and buffers, regions): unchanged.
 
@@ -514,6 +522,11 @@ reclaimed after that call - where `Remove` keeps no view of `old.key` past its l
 | headers at allocations, weak reads and stores, holder updates at owning stores, the cascade's per-type functions | each module's code, from the declaring modules' facts | nothing beyond the above |
 | transfers (5.2) | each body, alone | nothing beyond the above |
 | where an instance is reclaimed: references in use across calls, orphans, results (5.3) | O8d's final step, over every body, written into the plans of code emitted in the root's object (the root module and every instance) - as early freeing is today | the root's object and the link |
+
+The last row needs the whole program: whether a reference in use may reach an instance across a call depends on
+every caller, in every module. Decided per module, a let-go in an exported function could never reclaim (a caller
+elsewhere might hold the instance across the call), so the decision stays in the final step, where O8d's already is -
+over the typed bodies every build checks anyway (B3i), changing only the root's object.
 
 Code in a module compiled into its own object (a non-generic type's methods in a module other than the root) updates
 holder records and never reclaims early - as O8d's let-gos there never free today (free.olang's `rootEmitted`). A
@@ -542,11 +555,11 @@ constraint costs memory in one case: a non-generic structure's let-go sites in a
 - **`-sanitize` (B2f).** A reclaimed instance is quarantined - never reused, its contents written with a poison
   pattern, its generation bumped - and, since under `-sanitize` every chunk is a mapping of its own, a generational
   instance is given a mapping per page it fills, protected when reclaimed, so a reference in use that 5.3 wrongly let
-  through faults where it reads. The holder record is checked against a walk of the scope's owning places at each
-  scope's close (`__olang_san_check_holders`): an instance recorded with fewer holders than places holding it is the
-  sanitizer's report - the one way (b)'s count could go wrong.
+  through, or an owning place whose store recorded no holder, faults where it reads.
 - **The dead-region evaluator** (`OLANG_DEADREGIONS`) marks a reclaimed instance dead; a read of it through anything
-  but a weak place is a finding; a weak read gives `null`.
+  but a weak place is a finding; a weak read gives `null`. It also checks the holder record, which the run time cannot
+  (it knows no layouts): at each reclaim it walks its own heap model for an owning place still naming the instance - the
+  one way a missed store (2.4's under-statement) would show.
 - **`interpret`** (B3e) follows the plans as built: it keeps holder records and generations on its instances and
   reclaims where the plans say, so a weak read gives what the build's gives.
 - **Compile-time evaluation** (K1) follows holders exactly (its values carry them) and decides a weak read only where an
@@ -599,8 +612,9 @@ What can never dangle:
 
 1. **A weak read never returns a reclaimed instance.** A weak word names a slot and a generation. For as long as a weak
    place exists, its referent's scope is open (section 8 - unchanged for weak references), and while that scope is
-   open the slot is reused only by generational instances of its class in its scope part, with the generation at the
-   same address, only ever bumped, and retired before it wraps (4.3, 4.4). So the generation read is the slot's, and it
+   open the slot is reused only as a slot of its class in its scope part, its first word the generation, written only
+   by allocation and reclaiming, only ever bumped, and retired before it reaches a value a weak word could carry again
+   (4.3, 4.4). So the generation read is the slot's, and it
    equals the word's only if no reclaiming has happened since the word was written. Constant data's generation is 0 and
    never changes; frame instances are pinned.
 2. **No owning place names a reclaimed instance.** The holder record never under-states (2.4): every store into an
@@ -700,8 +714,8 @@ measured: the probes' time against round 1 (the 8-byte header and the check), be
 
 The record question 3 picks: updates at direct stores into owning places, the prelude's collections in instances of
 generational element types; (a)'s transfers, or (b)'s count. Round 3b: stores and copies of whole values holding
-references to generational instances. Still nothing reclaimed: `-sanitize`'s holder walk at each scope's close checks
-the records against the places on every test (the round's gate).
+references to generational instances. Still nothing reclaimed: the dead-region evaluator's holder check (section 7) runs
+over every test with a reclaim simulated at each let-go that empties a record (the round's gate).
 
 ### Round 4 - reclaiming (2.3, 4.4, 4.5, 5.3, section 7; opus, xhigh; after docs/fnvalues.md round 6)
 
@@ -780,7 +794,8 @@ and examples (B7a); any time, independent of the rest.
    olang declined (2.5). Recommendation: accept. Default: as designed.
 3. **The holder record**: (a) a held bit that pins a value seen in two owning places, no counting - frees the measured
    shapes only where the compiler recognizes the transfer and the program clears a link before relinking (the LRU as
-   written pins every node: 414 MB at 10M operations); or (b) a count of owning places, 0-3, in the same header bits -
+   written, transfers recognized, still pins one node in four and grows: 13 MB at 1M operations, against 1.7 MB); or
+   (b) a count of owning places, 0-3, in the same header bits -
    frees every shape as written (1.7 MB), nothing counted at locals, arguments, returns or copies into a frame, cycles
    left to the scope's close. (b) is a count, which the user dropped today; it is not reference counting's per-copy
    cost. Recommendation: (b). Default: (a).
