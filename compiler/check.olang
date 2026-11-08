@@ -479,8 +479,9 @@ type unsetCand struct(Body I64, Local I64, Group I64, NoZero Bool, ValueAt I64, 
 }
 
 # G42: a fact read while checking - of an instance, its name - the value it was read as, and where
-type factRead struct(Inst I64, Fact String&, Value Bool, File I64, Sp source.Span, Text String&) {
-    Inst
+type factRead struct(Inst I64, Fn I64, Fact String&, Value Bool, File I64, Sp source.Span, Text String&) {
+    Inst    # the instance whose facts are read, or -1 for an extern's (Fn)
+    Fn
     Fact
     Value
     File
@@ -722,6 +723,8 @@ fn (c mut Checker&) reset() {
     c.inferredErrs = Map<I64, types.ListId>()
     c.errReads = Vec<pair.Pair<I64, I64>>()
     c.factReads = Vec<factRead>()
+    c.P.Facts.Forget("G42 ")     # B3i: the facts this attempt reads are decided afresh
+    c.P.Facts.Forget("E31b ")
     c.effectPlaces = Vec<effectPlace>()
     c.inPlaceReads = Vec<inPlaceRead>()
     c.unsettled = Map<I64, Bool>()
@@ -13480,7 +13483,7 @@ fn (c mut Checker&) inPlaceCall(sp source.Span, call typed.Expr&) typed.Expr& {
     }
     if held and (not c.plainArgs(c.atIndices(tv)) or c.callArgs(tv).Len() == 0 or c.atValue(c.callArgs(tv)[0]) is not null): return call
     key := $c.fr().File ":" $sp.Start
-    if c.inPlaceRefused.Has(key): return call
+    if c.inPlaceCopied(key, sp): return call
     bodies := c.inPlaceBodies(cl)
     if bodies.Len() == 0: return call
     ref := c.inPlaceRef(sp, tv)
@@ -25304,7 +25307,14 @@ fn (c mut Checker&) fnFact(sp source.Span, nsp source.Span, x ast.Expr&, n sourc
     f := c.factFn(x)
     if f < 0 { return null }
     if declared { return c.lit(sp, types.BoolT, 1 if c.declFact(f, name) else 0) }
-    if c.P.FnIsExtern(f) { return c.lit(sp, types.BoolT, 1 if c.Effects().OfExtern(f).Holds(k) else 0) }
+    if c.P.FnIsExtern(f) {
+        # (whether C may call the program back, decided over the whole program, says what a C call may do: settled as a
+        # body's facts are)
+        xv := try c.factPresets.Get($"extern " $f ":" $name) catch default c.Effects().OfExtern(f).Holds(k)
+        xr := factRead(-1, f, $name, xv, c.fr().File, sp, $c.src(sp))
+        c.factReads.Push(xr)
+        return c.lit(sp, types.BoolT, 1 if c.readFact(xr) else 0)
+    }
     inst := c.factInst(x, f)
     if inst < 0 {
         c.err(nsp, msgs.FactOfGeneric(c.text(c.P.FnDecl(f).Name), name))
@@ -25313,8 +25323,43 @@ fn (c mut Checker&) fnFact(sp source.Span, nsp source.Span, x ast.Expr&, n sourc
     c.fnBody(inst)    # checked in this attempt, so its facts are found once it ends
     key := $inst ":" $name
     v := try c.factPresets.Get(key) catch default effects.Conservative(k)
-    c.factReads.Push(factRead(inst, $name, v, c.fr().File, sp, $c.src(sp)))
-    return c.lit(sp, types.BoolT, 1 if v else 0)
+    r := factRead(inst, -1, $name, v, c.fr().File, sp, $c.src(sp))
+    c.factReads.Push(r)
+    return c.lit(sp, types.BoolT, 1 if c.readFact(r) else 0)
+}
+
+# B3i: a fact as the code reading it folds it - decided in the program's table of facts and read back through it, so
+# the reading module's record holds the value it read (facts.olang). Named by where it is read, by the module's
+# identity, and by the function read, which an instance of a generic body may name otherwise
+fn (c mut Checker&) readFact(r factRead&) Bool {
+    of := c.P.InstanceName(r.Inst) if r.Fn < 0 else $"extern " $c.text(c.P.FnDecl(r.Fn).Name)
+    name := $"G42 " $c.fileIdentity(r.File) "@" $r.Sp.Start " " $r.Fact " " $of
+    c.P.Facts.Decide(name, $r.Value, true)
+    return (try c.P.Facts.Read(r.File, name) catch default "") == "true"
+}
+
+# E31b, B3i: whether the call through x[i] at sp is refused the in-place form - a decision of the whole program's
+# facts, read through the table as readFact's are (an importer's code never carries it)
+fn (c mut Checker&) inPlaceCopied(key String&, sp source.Span) Bool {
+    file := c.fr().File
+    name := $"E31b " $c.fileIdentity(file) "@" $sp.Start
+    c.P.Facts.Decide(name, "copy" if c.inPlaceRefused.Has(key) else "place", false)
+    return (try c.P.Facts.Read(file, name) catch default "") == "copy"
+}
+
+# the identity of the module file is, "" for none
+fn (c Checker&) fileIdentity(file I64) String& {
+    for m in c.P.L.Mods {
+        if m.File == file: return m.Identity
+    }
+    return ""
+}
+
+# what the bodies found of a fact read, once an attempt has checked them all
+fn (c mut Checker&) factFound(r factRead&) Bool {
+    k := effects.Fact.Named(r.Fact)
+    if r.Fn >= 0: return c.Effects().OfExtern(r.Fn).Holds(k)
+    return c.Effects().Of(try c.fnBodies.Get(r.Inst) catch default -1).Holds(k)
 }
 
 fn declaredFact(name String&) Bool { return name == "NoReturn" or name == "Exported" or name == "Extern" or name == "Commutes" }
@@ -25411,40 +25456,18 @@ fn (c mut Checker&) settleFacts() Bool {
     if c.fx is not null and not c.fx!.WantPure and c.pureAsked(): c.fx = null
     moved := false
     for r in c.factReads {
-        found := c.Effects().Of(try c.fnBodies.Get(r.Inst) catch default -1).Holds(effects.Fact.Named(r.Fact))
+        found := c.factFound(r)
         if found == r.Value { continue }
-        c.factPresets.Put($r.Inst ":" $r.Fact, found)
+        c.factPresets.Put($r.Inst ":" $r.Fact if r.Fn < 0 else $"extern " $r.Fn ":" $r.Fact, found)
         moved = true
     }
     return moved
 }
 
-# B3i: what the whole program decided of file f's code, beyond its own text and its imports': each G42 fact read in it
-# by its place and the value read (a fact hangs on whether C may call the program back, effects.cMayCallBack), and,
-# with own, the calls through x[i] there refused the in-place form (E31b, decided by the same facts) - "" for none. Part
-# of the key of its module's record (with own) and of every importer's (without: a fact's value reaches an importer's
-# code through a baked global or a decided condition), so a record is reused only by a program deciding these alike
-fn (c Checker&) ProgramReads(file I64, own Bool) String {
-    lines Vec<String&>
-    for r in c.factReads {
-        if r.File == file: lines.Push($"fact " $r.Sp.Start " " $r.Fact " " $r.Value)
-    }
-    at := $file ":"
-    for k in c.inPlaceRefused.Keys() {
-        if own and k.StartsWith(at): lines.Push($"copy " $k[at.Len():])
-    }
-    lines.Sort(fn(a String&, b String&) Bool { return a < b })
-    out Vec<String&>
-    for s in lines {
-        if out.Len() == 0 or out[out.Len() - 1] != s: out.Push(s)
-    }
-    return out.Join("\n")
-}
-
 # G42: facts still read as other than found after the last attempt - each changes the code it is read from
 fn (c mut Checker&) factsUndecided() {
     for r in c.factReads {
-        found := c.Effects().Of(try c.fnBodies.Get(r.Inst) catch default -1).Holds(effects.Fact.Named(r.Fact))
+        found := c.factFound(r)
         if found == r.Value { continue }
         c.P.L.Diags.Error(diag.Where.Span(r.File, I64(r.Sp.Start), I64(r.Sp.End)), msgs.FactUndecided(r.Text))
     }

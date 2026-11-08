@@ -19,6 +19,7 @@ import "names"
 import "types"
 import "cond"
 import "fetch"
+import "facts"
 import "std/os"
 
 # ---- the program ----
@@ -89,6 +90,8 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     L
     R
     T := types.Table.New(L.Names)
+    # B3i: what the program decided as a whole that a module's code reads, each read recorded (facts.olang)
+    Facts := facts.Table()
     declAt Map<I64, types.DeclId>      # by module and entry, (module << 32) | entry
     payloads Map<I64, types.TypeId>    # T19b: an error type's payload enum by its declaration (PayloadOf), UnknownT for none
     raisedFields Map<I64, types.ListId>    # T19b, R3b: an error raised by name's payload field types by its payload enum's
