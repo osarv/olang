@@ -585,7 +585,8 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     irs Map<String, String&>      # a reused module's parts' IR, "MODULE PART", read and checked against their hashes
     if kind != build.Kind.Module {
         keys, reads = moduleKeys(l, c, cfg, tests)
-        e.Reuse = reusable(l, c, cfg, keys, irs)
+        # -memory reports what lowering decided in every module, so it lowers every one (records still kept)
+        if not cfg.Memory: e.Reuse = reusable(l, c, cfg, keys, irs)
         build.Phase("facts")
     }
     objs := e.Objects()
@@ -602,7 +603,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         prog.FuzzCorpus = $e.FuzzCorpus
     }
     for w in e.TestWords { prog.TestWords.Push($w) }
-    # D9h: value results handed over as views (of what this build lowered)
+    # D9h: value results handed over as views (a -memory build lowers every module)
     if cfg.Memory {
         for line in lw.CopyLog { try io.Println(line) catch io.Error { } }
         try io.Println($lw.ViewReturns " returns hand back a view, " $lw.ViewReads " calls read one where it stands, " $lw.ViewCopies " calls copy one, " $lw.ArgViews " by-value arguments are read where they are, " $lw.Moves " copies are moves at a last use") catch io.Error { }

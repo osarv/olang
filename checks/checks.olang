@@ -41,7 +41,7 @@ fn workers() I64 {
 # a failure, never skipped.
 Scenarios := Array<String&>["fix", "strheld", "fuzz", "testfuzz", "bench", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
                      "scopesan", "frameenv", "crash", "interp", "target", "assertloc", "objnames", "spawnerr", "generators", "runfile"
-                     "chunkpool", "capscope", "reuse", "reusefact", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
+                     "chunkpool", "capscope", "reuse", "reusefact", "incremental", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
@@ -420,6 +420,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "stale" { try stale(r) }
         case "reuse" { try reuse(r) }
         case "reusefact" { try reusefact(r) }
+        case "incremental" { try incremental(r) }
         case "embed" { try embedded(r) }
         case "interp" { try interp(r) }
         case "osargs" { try osargs(r) }
@@ -941,6 +942,80 @@ fn reusefact(r mut report&) ? Failed {
         try r.expect(outOf(dir).Contains(same), $prog "'s reused objects: expected '" $same "'", dir)
     }
     try r.expect(sh(dir, "grep -qx 'true true 14' run.txt") == 0, "quiet's run, reused: expected 'true true 14'", dir)
+}
+
+# B3i, docs/wholeprog.md 10.3 (T2): an edit of every kind an input of the program can take, each built in the previous
+# build's directory and in a clean one and compared - the objects by their IR's hashes, the binary's output, -memory,
+# explain of the edited item and every diagnostic byte for byte; the modules of the program's own lowered again are
+# exactly those named (an extra one is a speed bug, a missing one a stale object); and the edit undone lowers nothing,
+# its first build's records taken again. A round adding a whole-program fact adds its edit kind here
+test "an edit of every kind built incrementally is the program built clean, lowering only what read it" { assert passed("incremental") }
+
+# an edit of the incremental scenario: the shell command making it in the program's directory, the flags it builds
+# with, the program's own modules (not std's or a C header's) it lowers again, and the item explain shows of it
+type Edit struct(name String&, cmd String&, flags String&, lowered String&, file String&, item String&) {
+    name
+    cmd
+    flags
+    lowered
+    file
+    item
+}
+
+# (a module importing an edited one is lowered with it while a module's key holds its imports' - W3a narrows that)
+Edits := Array<Edit>[Edit("a body alone", "sed -i 's/return b.n$/return b.n * 1/' deep.olang", "", "deep lib", "deep.olang", "Run")
+    Edit("a signature", "sed -i 's/s String&)/s String\\&, k I64 = 0)/' deep.olang", "", "deep lib", "deep.olang", "Keep")
+    Edit("an inferred error set grown", "sed -i 's/{ return try t.ParseInt(10) }/{\\n    if t == \"\": error Empty\\n    return " $
+         "try t.ParseInt(10)\\n}/' deep.olang", "", "deep lib", "deep.olang", "Parse")
+    Edit("a scope obligation removed", "sed -i 's/a.Push(s)/a.Push(\"k\")/' deep.olang", "", "deep lib", "deep.olang", "Keep")
+    Edit("the C callback input: an export fn handed to C (G42, E31b)", "sed -i 's/^fn main() ? {/export fn olang_inc(x I64) I64 " $
+         "{ return x + 1 }\\n\\nfn main() ? {\\n    fast.apply(olang_inc, 3)/' main.olang", "", "deep lib", "deep.olang", "work")
+    Edit("a baked global's value", "sed -i 's/40 + 2/40 + 3/' deep.olang", "", "deep lib", "deep.olang", "Baked")
+    Edit("a build constant", "true", "-define Baked=50 ", "deep lib", "deep.olang", "Baked")
+    Edit("an embedded file", "echo two >> data.txt", "", "deep lib", "deep.olang", "Data")
+    Edit("a generic instance added", "sed -i 's/gen.Max(2, 5)/gen.Max(2, 5) + I64(gen.Max(1.5, 0.5))/' main.olang", "", "", "gen.olang"
+         "Max")
+    Edit("an import added", "sed -i 's/^import \"deep\"/import \"deep\"\\nimport \"gen\"/; s/return c.n + deep.Baked/return " $
+         "gen.Max(c.n, 0) + deep.Baked/' lib.olang", "", "lib", "lib.olang", "Total")
+    Edit("a module renamed", "mv gen.olang gen2.olang && sed -i 's/^import \"gen\"/import gen \"gen2\"/' main.olang", "", ""
+         "main.olang", "main")
+    Edit("a diagnostic introduced", "sed -i 's/deep.Baked/deep.Bakd/' lib.olang", "", "", "lib.olang", "Kept")]
+
+fn incremental(r mut report&) ? Failed {
+    dir := fresh("incremental")
+    os.Run("mkdir " $os.Quote($dir "/inc") " " $os.Quote($dir "/orig") " && cp checks/fixtures/incremental/* " $os.Quote($dir "/inc") $
+           " && cp checks/fixtures/incremental/* " $os.Quote($dir "/orig"))
+    try r.expect(incBuild(dir, "inc", "", "base", "main.olang", "main") == 0, "the first build", dir)
+    try r.expect(sh(dir, "grep -qx '48 12 1 true 14 data one 8' base") == 0, "the first build's run: expected '48 12 1 true 14 data one 8'", dir)
+    for e in Edits { try incEdit(r, dir, e) }
+}
+
+# builds the program in dir/sub with flags into dir/to: what the build said (OLANG_FACTSTATS's lines with it), what it
+# printed when run, explain of item in file, and -memory (a build of its own, lowering every module) - 0 where the build
+# and the run both went
+fn incBuild(dir String&, sub String&, flags String&, to String&, file String&, item String&) I32 {
+    return sh($dir "/" $sub, "rm -f build/main && OLANG_FACTSTATS=1 \"$OLANG\" build " $flags "main.olang > ../" $to " 2>&1; b=$?; " $
+              "./build/main >> ../" $to " 2>&1; x=$?; \"$OLANG\" explain " $flags $file " " $item " >> ../" $to " 2>&1; " $
+              "\"$OLANG\" build -memory " $flags "main.olang >> ../" $to " 2>&1; test $b = 0 -a $x = 0")
+}
+
+# one edit: made, built here and clean and compared, then undone, built again with nothing lowered and the first build's
+# run (a diagnostic's edit builds nothing, and both builds fail alike)
+fn incEdit(r mut report&, dir String&, e Edit&) ? Failed {
+    what := $"after '" $e.name "'"
+    try r.expect(sh($dir "/inc", e.cmd) == 0, $"making the edit " $what, dir)
+    incBuild(dir, "inc", e.flags, "here", e.file, e.item)
+    os.Run("cd " $os.Quote(dir) " && rm -rf clean && mkdir clean && cp inc/*.olang inc/*.c inc/*.txt clean/")
+    incBuild(dir, "clean", e.flags, "there", e.file, e.item)
+    try r.expect(sh(dir, "grep -v '^olang: \\(reused\\|lowered\\) ' here | sort > a && grep -v '^olang: \\(reused\\|lowered\\) ' " $
+                    "there | sort > b && cmp -s a b") == 0, $"the build " $what " is not the clean one's (here, there)", dir)
+    sh(dir, "grep '^olang: lowered ' here | grep -v 'lowered std/' | grep -v 'lowered <' | cut -d' ' -f3 | sort | tr '\\n' ' ' > low")
+    low := (try os.ReadFile($dir "/low") catch default "").Trim()
+    try r.expect(low == e.lowered, $"the modules lowered " $what ": expected '" $e.lowered "', not '" $low "'", dir)
+    try r.expect(sh($dir "/inc", "rm -f *.olang *.c *.txt && cp ../orig/* .") == 0, $"undoing " $what, dir)
+    try r.expect(incBuild(dir, "inc", "", "undone", "main.olang", "main") == 0, $"the build undoing " $what, dir)
+    try r.expect(sh(dir, "! grep -q '^olang: lowered ' undone && grep -v '^olang: reused ' undone > a && grep -v '^olang: \\(reused\\|" $
+                    "lowered\\) ' base > b && cmp -s a b") == 0, $"the build undoing " $what " lowered something or differs (undone, base)", dir)
 }
 
 # E38, B3i: an embedded file is part of what its module's object is made from - a build after it changes makes that
