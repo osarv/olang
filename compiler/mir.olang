@@ -252,6 +252,12 @@ type Rvalue enum {
     # program's for storage in no chunk (a stack, a global, constant data, C's), a region read as the scope it lives in -
     # as a scope handle (an I64), which ScopeRef.Held names: where what is built through x goes
     ScopeOf(x Operand)
+    # O8d (docs/memory.md 3.5): whether candidate place k (free.olang's numbering) is decided sole - a link-time
+    # constant every module's object reads and the root's object defines (a Bool): its let-go sites release what it
+    # held and its build sites make regions only where it is
+    Sole(k I64)
+    # ...and scope s as a scope handle (an I64): where a region guarded by a place not decided sole builds - its parent
+    Handle(s ScopeRef)
     # T19b: a new payload record pushed on the thread's payload stack - its region (an I64 handle, which ScopeRef.Held
     # names), where the payload is copied before ErrSet points the record at it
     ErrPush
@@ -1104,7 +1110,8 @@ fn (v mut verifier&) rvalueShape(rv Rvalue) {
             v.ref(s)
         }
         case Rvalue.ScopeOf(x) { v.operand(x) }
-        case Rvalue.ErrPush, Rvalue.ErrTop(_) { }
+        case Rvalue.ErrPush, Rvalue.ErrTop(_), Rvalue.Sole(_) { }
+        case Rvalue.Handle(s) { v.ref(s) }
     }
 }
 
@@ -1491,6 +1498,8 @@ fn (v mut verifier&) rvalueType(rv Rvalue) types.TypeId {
         case Rvalue.ScopeOf(x): v.regionOrType(v.operandType(x))
         case Rvalue.ErrPush: I64T
         case Rvalue.ErrTop(ty): ty
+        case Rvalue.Sole(_): types.BoolT
+        case Rvalue.Handle(_): I64T
     }
 }
 
@@ -2211,7 +2220,8 @@ fn (v mut verifier&) rvalueFlow(rv Rvalue) {
             v.usesScope(s)
         }
         case Rvalue.ScopeOf(x) { v.reads(x) }
-        case Rvalue.ErrPush, Rvalue.ErrTop(_) { }
+        case Rvalue.ErrPush, Rvalue.ErrTop(_), Rvalue.Sole(_) { }
+        case Rvalue.Handle(s) { v.usesScope(s) }
     }
 }
 
@@ -2444,6 +2454,8 @@ fn (w mut dumper&) rvalue(rv Rvalue) String {
         case Rvalue.RegionOr(x, s): "region of " $w.operand(x) " or " $w.ref(s)
         case Rvalue.ScopeOf(x): "scope of " $w.operand(x)
         case Rvalue.ErrPush: "payload push"
+        case Rvalue.Sole(k): "sole place " $k
+        case Rvalue.Handle(s): "handle of " $w.ref(s)
         case Rvalue.ErrTop(ty): "payload top: " $t.Canon(ty)
     }
 }

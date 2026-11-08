@@ -1,0 +1,12 @@
+
+# (appended by the check: the peak resident memory this program reached, in KB, from /proc)
+fn Peak() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    for line in status.Lines() {
+        if not line.StartsWith("VmHWM:"): continue
+        v := line[6:].Trim()
+        if v.EndsWith(" kB"): v = v[:v.Len() - 3]
+        return try v.ParseInt() catch default -1
+    }
+    return -1
+}

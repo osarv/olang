@@ -1,0 +1,9 @@
+import "std/io"
+import "splitlib"
+
+# wholeprog 2.1: an earlyfree program's code as a module of its own - splitlib, the program with its main named Run
+# (the check writes it) - freeing what it lets go of at once as the one-module form (whole) does; its peak read here
+fn main() {
+    splitlib.Run()
+    io.PrintErrln($"peak " $splitlib.Peak())!
+}
