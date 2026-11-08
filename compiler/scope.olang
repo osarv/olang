@@ -6117,7 +6117,10 @@ fn (s mut Scoper&) letBody(sp source.Span, l typed.LocalId, x typed.Expr?&) {
     # temporary it is given lands (O18a) - and so is a set where its other values live elsewhere (E28)
     bareChoice := loc.Marked == typed.Mark.Bare and s.isRef(t) and s.choiceOfRefs(x!)
     s.atDest = bareChoice
+    # (an enum case built here, its payload exactly where a longer scope's references are, proposes the claim there - R1)
+    s.caseLocal = I64(l)
     v := s.val(x, claim)
+    s.caseLocal = -1
     s.atDest = false
     s.bindLocal(l, x!)
     # a conditional or a match of references living in different scopes declared with a bare "&" is held where it is
@@ -8099,6 +8102,8 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             }
             s.buildSite(pr.Site, d, pr.X.Span())
             s.anyItems = box and anyArrayBox(pr.X)
+            # (an enum case a reference local is declared with: its payload judged as the local's - R1, T17c)
+            if s.madeCase(pr.X) { s.caseLocal = whole }
             pv := s.val(pr.X, d)
             s.anyItems = false
             # a conversion of an array's storage to a type declared over it names that storage (T29a, E12c): it is no
@@ -8307,6 +8312,14 @@ fn (s mut Scoper&) convertedPlace(x typed.Expr&) typed.Lvalue?& {
         case _ { }
     }
     return null
+}
+
+# whether x makes an enum case
+fn (s mut Scoper&) madeCase(x typed.Expr&) Bool {
+    return match s.unAway(x) {
+        case typed.Expr.Make(_, _, m): m.Kind == typed.MakeKind.Case
+        case _: false
+    }
 }
 
 # an item of an array, tuple or case being built in d: a temporary built there too (O6), existing storage judged as a
@@ -9233,7 +9246,6 @@ fn (s mut Scoper&) argVal(c typed.Call&, i I64, fty types.TypeId, owner Array<I6
 # variable bound where they live, so what the callee builds through them is built there; the copy itself built there
 # too where the callee keeps its own storage. Whether it is lent so
 fn (s mut Scoper&) splitLent(c typed.Call&, i I64, pr typed.Promote&, v Val) Bool {
-    if s.Trace { s.TraceLog.Push($"splitLent " $v.T " " $(v.K == ValKind.Existing) " keepsSelf " $s.calleeKeepsSelf(c, i)) }
     if v.K != ValKind.Existing or not v.T.Runs() { return false }
     if s.calleeKeepsSelf(c, i) { s.build(pr.Site, v.T) }
     return true
@@ -9295,7 +9307,6 @@ fn (s mut Scoper&) argExisting(c typed.Call&, i I64, owner Array<I64>&, beta Arr
         # (where they live is one of several, O12: found at run time from the one reference the value holds, O29)
         if (rf.Runs() or s.argRoot(a) is not null) and not s.calleeKeepsSelf(c, i) { return Val.existing(rf) }
         if rf.Runs() and s.liftSplit(a, rf) { return Val.existing(rf) }
-        if s.Trace { s.TraceLog.Push($"split refused " $rf " " $v.T " keepsSelf " $s.calleeKeepsSelf(c, i) " | " $s.traceAt(a.Span().Start)) }
         s.wantPromotion(a)
         if s.report { s.splitRefused(a) }
         return v
@@ -11561,6 +11572,9 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
 fn (s mut Scoper&) liftAtCall(c typed.Call&, r rel, lo Term) {
     ai := s.argOfVar(c, r.Hi)
     if ai >= 0 {
+        # (R1: a split value - a for-in's copy of an element - whose references outlive lo: its storage lifted there)
+        rf := s.splitRefs(c.Args[ai])
+        if rf.Runs() and s.joinTerm(rf, lo) == rf { s.liftSplit(c.Args[ai], rf) }
         s.propose(c.Args[ai], lo)
         return
     }
