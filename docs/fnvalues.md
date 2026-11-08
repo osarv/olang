@@ -883,8 +883,9 @@ a derived scope no call passes (O23a), one of several (O12, E28), one a cursor's
 traced (O11), where a rendering's `Str` reaches (E11c) - it is built in the scope the storage it is built through or
 into lives in, found while the program runs from that storage's address. Nothing is stored per value for it: a value's
 size, `T.Size`, a struct's layout and C's view of it (X11) are what they are without it. Storage on a stack, in a global,
-in constant data or in memory C made is found as the program's scope. A scope found is the one the storage lives in, so
-what is built there lives exactly as long as what it is reached through (I1, I2). Nothing else is decided at run time:
+in constant data or in memory C made is found as the program's scope. A scope found is the one the storage lives in -
+or, for storage in no chunk, the program's, which outlives it - so what is built there lives as long as what it is
+reached through, exactly where the storage is in a chunk (I1, I2). Nothing else is decided at run time:
 every judgment of section 8 about existing storage - that a reference outlives what it is stored in, exactly where
 something can be stored through it - is made while compiling, as before.
 
