@@ -44,6 +44,8 @@ necessary dependencies). The user will hand over saved papers (an arXiv connecto
 **I am the research agent (the user, 2026-11-08):** reading papers, compiling them, trying things out is part of my
 job building oagent; "feel free to use the Arxiv connector frivolously" (alphaXiv, connected). Paper notes live in
 oagent's papers/. The L2-regression (delta-rule) update the user mentions comes from the Nested Learning paper.
+**GPUs are local (the user, 2026-11-08):** GPU work runs on the user's own machine, which has one modest GPU and a
+slot for a second; they will spec and buy GPUs and RAM eventually. No paid cloud GPUs (HF Jobs and the like cost).
 
 **oann and the matrix library (2026-10-09):** "Oann btw is very incomplete. It should be written in Olang as well. I want
 the matrix library to be efficient. It should work as the base for all operations and operands." oann gets rewritten
