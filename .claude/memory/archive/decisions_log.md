@@ -3715,3 +3715,36 @@ entry as it stood:
   constants, with genrefs' questions 4-5 - yes, after fnvalues round 6; 3. a precompiled library's defining module
   decides its fields' scope sets - yes, into B3i now; 4. field sets of two scopes (refusals question 4) - allow, after
   round 6 or when real code hits it; 5. an incremental front end - not now.
+
+## 2026-11-08 evening, the user on docs/genrefs.md
+
+All six answered: 1 `weak` ("Yes, record weak is decided"); 2 ("this is ... the entire point of having weak
+links"); 3 the count, following from the decided rule that a weak read gives null as soon as no owning place holds
+the node; 4 superseded by docs/wholeprog.md; 5 ("yes ... especially now since we have whole program compilation
+... there's no difference between these kind of things anymore"); 6 `std/pool` ("basically just a standard library
+construct"). Plus the two rules ("Yes, do them both") and the one-holder rule from the discussion. The entry as it
+stood:
+
+- docs/genrefs.md's direction questions (asked 2026-11-08; the note's section 14; the user: "We will settle this in a
+  couple of hours" - no agent depending on it starts before). My proposal after discussing it: settle the language now
+  - 1. `weak` written on back links, yes; 2. a weak link does not keep its node and reads null once it is freed,
+  accept - built as genrefs round 1 beside a one-holder rule (early freeing of nodes only ever held by one owning
+  link, compile time only, the user's idea); the reclaiming of nodes with back links later, after fnvalues round 6.
+  3. holder record (a) bit or (b) count of owning places - (b), may wait; 4. per module - default; 5. early freeing
+  in every module through link-time constants - yes, later; 6. `std/pool` of generational handles - yes.
+  Since docs/wholeprog.md was decided (facts with readers, 2026-11-08 evening), questions 3-5 and the one-holder rule
+  may use whole-program facts; std/pool depends on nothing. Re-raise when the user returns to it.
+  Added 2026-11-08 (the user asked what a list with every link weak does): it loses its nodes, and today's design
+  makes that depend on what the compiler proves. Proposed with question 2: a weak read gives null as soon as no
+  owning place holds the node (the count in the header word the read loads anyway; needs 3(b)), and a compile-time
+  error where a fresh node is stored only into weak places, or a type weak links name is held owning nowhere
+  (whole-program). Recommendation: both. **The user: "Yes, do them both" (2026-11-08)** - decided, built with
+  questions 1-2 once those are answered (3(b), the count, follows from the first). The user then asked whether `?&`
+  itself could be the weak reference instead of a keyword; my answer: no - most `?&` fields own (a list's `next`, a
+  tree's children), every such structure would lose its nodes, an optional owning link would have no form, and every
+  type held by `?&` would pay the header; keep `weak`, only with `?&`. Awaiting their answer.
+  **Decided 2026-11-08: question 1, `weak` (the user: "Yes, record weak is decided", after weighing `?&` itself, `!`,
+  `back`, `unowned`, and an `owned`/`unowned` pair replacing `unique` - all declined: `unique` and `weak` stay); question
+  6, `std/pool` ("also do the pools ... basically just a standard library construct"), being built.** Open: 2 (implied
+  by the two rules, not yet said), 3 (the count follows from the first rule), 5 (every module).
+
