@@ -444,6 +444,20 @@
 | RETURN 4:33-4:45
 | -- diagnostics
 | error T21 3:12
+=== checks/cases/t21cmisplaced.olang
+| FN 4:1-4:28
+| VAR 4:13-4:26
+| -- diagnostics
+| error T21c 3:21
+=== checks/cases/t21cmisplacedlambda.olang
+| FN 3:1-3:53
+| RETURN 3:40-3:51
+| -- diagnostics
+| error T21c 4:36
+=== checks/cases/t21cmisplacedtrait.olang
+| FN 6:1-6:14
+| -- diagnostics
+| error T21c 4:16
 === checks/cases/t22ainstancename.olang
 | EXPR 11:36-11:45
 | EXPR 14:24-14:41
