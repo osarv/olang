@@ -101,7 +101,7 @@ holding a destructor value.
    range, so `p & ~(128K - 1)` is a chunk's header, which now names its scope; larger chunks are found in a sorted
    table; storage in no chunk is the program's. Nothing per object (the self-build makes 96.6 million allocations of 105
    bytes on average: a word each would be 772 MB more); a lookup only where the compiler could not place. O12's, E11c's,
-   O25i's and O23a's refusals of a build become programs (~42 cases).
+   O25i's and O23a's refusals of a build become programs (about forty cases in checks/).
 8. **`x.Destroy()` removed (section 13)**, with `tools/destroy_migrate.olang`.
 
 **Rounds** (section 14): 1 keywords one tier; 2 `Destroy()` removed; 3 destructors follow storage; 4 promise words and
@@ -730,6 +730,9 @@ word), and leaves fields and methods (L9a). Idempotent. The repository's own nam
   whitespace only.
 - **`$`** of a function value renders its signature with its type's words (T21b, E11a).
 - **editors/nvim**: the seventeen keywords (syntax/olang.vim, [checked]). **help**: no new mode or option.
+- **A runtime function** (DEPENDENTS.md's section): `__olang_scope_of` and `__olang_san_check_owner` in runtime.ll and
+  san.ll, emit's declarations, the evaluator's equivalent (12.6), a C-driven test beside the region test, the seed.
+- **A rule removed**: C9b, L9b and L9c leave gaps; their messages leave msgs.olang and diag.txt.
 - **DEPENDENTS.md**: "A word of one place" goes; "A promise word" comes - SPEC T21c and G42's table; token.olang (the
   keyword rows); parse.olang, ast.olang, unparse.olang (the words); types.olang (identity, spelling); scope.olang (a
   relation word) or effects.olang (an effect word: its fact in `Fact.Named`); explain's `# fits:`; session.olang's
@@ -900,7 +903,8 @@ used, cap, maplen, fresh, class, prev, stamp` - nothing names the scope using it
 
 - **Slots.** At start the runtime reserves one large range of address space (1 TB, `MAP_NORESERVE`, halved until the
   system grants it - a 39-bit address space grants 256 GB; down to 4 GB at the least) and carves it into **slots** of
-  `G = 128 KB`, each `G`-aligned. Every chunk of up to `G` - every class below today's mmap threshold - is placed at the
+  `G = 128 KB`, each `G`-aligned (where the system refuses a `MAP_NORESERVE` range - strict overcommit - the range is
+  reserved `PROT_NONE` and each slot made writable as it is first carved, one `mprotect` on the slow path). Every chunk of up to `G` - every class below today's mmap threshold - is placed at the
   start of a slot of its own, its capacity its class's as today: the pages it never touches cost no memory (address
   space only). Carving is a bump of the range's next slot (an atomic add on the slow path, `__olang_new_chunk`), so a
   small chunk needs no `aligned_alloc` call; a slot given back to the system is `madvise(MADV_DONTNEED)`d and stays the
@@ -982,7 +986,9 @@ Counted with a copy of runtime.ll counting every scope allocation (scratch, not 
 |---|---|---|---|---|
 | the self-build's front end (`build -quick compiler/olang.olang`, one process) | 96,565,710 | 10.17 GB | 105 B | 772 MB (+7.6%) and 96.6M stores |
 | bench/binarytrees | 135,869 | 2.17 MB | 16 B | +50% |
-| bench/knucleotide, text, regex | 317 / 2,019 / 236 | 0.66 / 0.06 / 12.7 MB | large | negligible |
+| bench/text | 2,019 | 55.8 KB | 28 B | +29% (16 KB) |
+| bench/knucleotide | 317 | 661 KB | 2.1 KB | +0.4% |
+| bench/regex | 236 | 12.7 MB | 54 KB | negligible |
 
 Finding by address adds **nothing per allocation**; per chunk, one store on the slow path (its `owner`); per found
 build, a range check, a mask and two loads (`owner`, and the part `__olang_capture_scope` reads on its fast path) -
@@ -1033,7 +1039,7 @@ the part of the code the value lives in.
 | std/net.olang | 2 | `echoOnce`'s `c.Destroy()` at its body's end: nothing (its end ends it); the test's `l.Destroy()` before dialing: `l` in a block of its own, its address kept in a local declared before it (D13d) |
 | tests/drops.olang | 7 | blocks around each value's span; `defer x.Destroy()` / `errdefer x.Destroy()` are what O15 does already for a by-value holder (ended on every way out but a hand-on) - removed; `y.Destroy(); y = Res(6, t)` becomes the store (the new value made first, then the old ended - the order the test reads changes, and its expected text with it) |
 | tests/shared.olang | 10 | C9b's own tests: those testing Destroy's rules go with the rule; those testing an early end become blocks |
-| checks/cases | 19 `c9b*` and g42dtor | the `c9b*` cases test C9b's own rules and go with it (the rule is removed, so no case is kept for it); g42dtor's Destroy becomes a block |
+| checks/cases | 18 `c9b*` and g42dtor | the `c9b*` cases test C9b's own rules and go with it (the rule is removed, so no case is kept for it); g42dtor's Destroy becomes a block |
 | checks/fixtures/earlyfree | 2 | the server holding sockets in a `Map<I64, net.UDP&>`, each taken out and destroyed: a `Map<I64, net.UDP>` by value (C11 relaxed) with `s.socks.Remove(i)`, which ends it - memory and descriptors flat as before (the fixture's own check) |
 | compiler/ | typed.olang (`PrimOp.Destroy`), check.olang (11 mentions), free.olang (67: the destroy targets), effects.olang, msgs.olang | removed |
 | fuzz/scopegen.olang | 6 | its Destroy scenarios go; its block scenarios stay |
