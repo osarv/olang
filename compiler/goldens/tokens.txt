@@ -2200,7 +2200,7 @@ af1fccc4ea864809 68a0d83e904f802d std/fuzz.olang
 b4dece955c0fb2dc 6243cb47f656b48c std/io.olang
 c0478e7a2c449c53 21bc43094fde1e9d std/json.olang
 9c30495a70a9464d a0dff91b68cff943 std/list.olang
-806ed6040e0ad6fa 2a3f097576eaa940 std/net.olang
+4e43bbd73343bde2 828d0856c3b4f956 std/net.olang
 206807a6f9dd47ae 6c2ad7da75038662 std/order.olang
 dfb51f12cdc44e13 8e3c30629556d964 std/os.olang
 17c08f79ab55afc4 3582f78520a746d0 std/pair.olang

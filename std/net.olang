@@ -425,7 +425,7 @@ type Listener unique struct(fd I32) {
 # a socket listening at a, which may name port 0 for one the system chooses (Addr() says which), and the "any"
 # address to listen on every one this machine has. The address may be listened at again at once after a previous
 # listener closed (SO_REUSEADDR); IPv6's "any" takes IPv4 connections too
-fn Listener.Listen(a Addr&, backlog I32 = 128) mut Listener& ? Error {
+fn Listener.Listen(a Addr&, backlog I32 = 128) Listener ? Error {
     fd := try open(a, sockStream)
     setInt(fd, solSocket, soReuseaddr, 1)
     if a.Host.V6: setInt(fd, ipprotoIpv6, ipv6V6only, 0)
@@ -442,7 +442,7 @@ fn Listener.Listen(a Addr&, backlog I32 = 128) mut Listener& ? Error {
 fn (l Listener&) Addr() Addr ? Error { return try Addr.nameOf(l.fd, false) }
 
 # waits for a connection and gives it
-fn (l mut Listener&) Accept() mut Conn& ? Error {
+fn (l mut Listener&) Accept() Conn ? Error {
     for {
         sa := Array<U8>(28)
         len := Array<U32>[28]
@@ -454,7 +454,7 @@ fn (l mut Listener&) Accept() mut Conn& ? Error {
 }
 
 # a connection to a - failing with REFUSED when nothing listens there, UNREACHABLE, Timeout when the system gives up
-fn Conn.Dial(a Addr&) mut Conn& ? Error {
+fn Conn.Dial(a Addr&) Conn ? Error {
     fd := try open(a, sockStream)
     sa := sockaddr(a)
     if sock.connect(fd, sa, U32(sa.Len())) < 0 {
