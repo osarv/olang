@@ -43,6 +43,7 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 | `interp.olang` | evaluation in the pipeline: the build's conditions and asserts decided, a program's main or tests run |
 | `explain.olang` | `olang explain FILE NAME` (B11b): one top-level item as the compiler sees it - signature, inferred errors, obligations, effects, needs, a type's members, a global's baked value; `explain -caps` (B11c); `Codes`, the function `explain -asm` and `-ir` show (B11d) |
 | `effects.olang` | what each body may do - writes, storage, C and what it reaches, waits, tasks, loops, recursion - read off the typed core and settled over the call graph, on demand: explain's `# effects:` line (B11b), `explain -caps` (B11c) and the function facts (G42) |
+| `facts.olang` | the program's table of whole-program facts (B3i): a pass decides each by a stable name, code reads it only through the table, which records the read against the reading module, so a module's record is taken only where every fact it read holds |
 | `listing.olang` | `olang explain -asm` and `-ir` (B11d): a function's code as the link generated it (build.ListingCode), each run of instructions headed by its source line, LLVM's optimization remarks read from YAML beneath |
 | `needs.olang` | what a generic's body asks of each type variable, read off its text: explain's `# T needs:` line (B11b, G18a) |
 | `api.olang` | `olang api OLD NEW PATH` (B21): two versions' exported interfaces compared, each change breaking or not |
