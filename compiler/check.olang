@@ -25407,6 +25407,8 @@ fn (c mut Checker&) builderFactInst(x ast.Expr&, f I64) I64 {
 # are its own: nothing is settled)
 fn (c mut Checker&) settleFacts() Bool {
     if c.factReads.Len() == 0 or c.P.L.Diags.Errors() > 0 { return false }
+    # (summaries made while the attempt ran, for an extern's facts, may not have followed what Pure needs)
+    if c.fx is not null and not c.fx!.WantPure and c.pureAsked(): c.fx = null
     moved := false
     for r in c.factReads {
         found := c.Effects().Of(try c.fnBodies.Get(r.Inst) catch default -1).Holds(effects.Fact.Named(r.Fact))

@@ -35049,3 +35049,15 @@ storage not built here or given writably, and any class of B11c but threads; it 
 the runtime's own, but they are C's reach). 7. An unfollowed part is judged type to type, with the scope pass's
 message; the scope pass no longer judges effect words. 8. A type writing no effect word stays `Unknown` (every
 program writing none reads what it read before; explain's lines unchanged for them).
+
+**Cost (the round's gate: the effects pass on compiler/, `explain -caps`).** Measured on copies of the merge base and
+this branch, each timing `explain.Caps` alone: callgrind counts 154.5M instructions for the base and 156.6M here
+(+1.4%; deterministic). Wall time on the shared machine (load 5-20) is within noise of it - medians of 10-16
+interleaved runs from +1% to +5%. What kept it there: each callee merged once per component (a stamp, where calls
+listed a callee once per call site), `Merge` skipping the classes' loop where nothing was reached, a call's arguments
+classified only for callees taking a function value (`fnSlots`), what a body gives kept only where it gives anything,
+a body's facts read without a second copy, and what Pure needs (`WritesOut`: storage written through a local not
+every value of which is built there, links through such locals) followed only where Pure is asked - a fact read or a
+`pure` place (`WantPure`, set by the checker; a summary made earlier in an attempt is made again where Pure is then
+read). 9. Decided with it: a local's later whole assignments are followed for a function value, and for its slots and
+freshness only where Pure is asked - its slots read off its declaration as before otherwise.

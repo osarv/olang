@@ -442,7 +442,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   work of 2026-11-08 (docs/fnvalues.md: function values followed and specialized where it pays) is decided and being
   built. **Promises (T21c, T22b; the user's decision 2026-11-08; built 2026-11-08, round 4):** words after a function
   type's signature - `keeps b in a`, `keeps b in a.f`, `keeps x`, `borrows a`, `noborrow` and the effect words `returns
-  noalloc noblock nospawn norecurse noextern pure` (G42's facts; not judged yet, fnvalues round 5) - written only on
+  noalloc noblock nospawn norecurse noextern pure` (G42's facts, judged where a value is held since round 5) - written only on
   function types (a declaration's, lambda's or trait method's is an error), part of the type's identity by position.
   They are the type's bound: a call through an unfollowed value discharges exactly its relations (`keeps x` against
   where the value lives, such a value held exactly), a value fits where its functions' obligations are within it, and
