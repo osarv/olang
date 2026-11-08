@@ -3792,3 +3792,10 @@ stood:
 - 2026-11-08, When oann research starts (asked 2026-11-08): small CPU experiments now, written in today's olang without oann
   (throwaway code, results recorded in oagent), or wait for oann? Default: wait. Recommended: start now.
   Answered the same day: start now, since the settling experiments can inform the language - "but be smart, like, don't build a bunch of stuff we're going to have to remake once the language is done". So: self-contained programs in oagent/experiments, local learning rules only (no tensor, graph or autodiff, which are oann's), and a log of what the language lacked.
+
+- 2026-11-08, Token savings (asked 2026-11-08). Default: none of these done. Recommended: 1-3 and 5-7 yes; 4 is the user's call.
+  1. CLAUDE.md's Settled decisions (85 KB) to docs/decisions.md, read on demand; CLAUDE.md keeps the checklist and a
+     one-line index. 2. rules.md 44 KB -> ~10 KB, history to archive. 3. direction.md trimmed likewise. 4. Remove the
+     hotpath clone from this container (its CLAUDE.md loads here). 5. The 2-hourly check-in to 6-hourly. 6. xhigh
+     only for new section-8 design; Sonnet for more pieces. 7. Agent reports at most ~10 lines; /compact more often.
+  Answered: all yes ("move the rationales for rules out of the context we send"); 4: hotpath is now Odysx, access is fine, it has its own session - left alone; check-in 6-hourly and near-free; be resourceful, and every spawned agent too.
