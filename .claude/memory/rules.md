@@ -510,6 +510,10 @@ the link, LTO), as generic instances do. A design that makes an edit in one modu
 and goes to the user. Every design brief says so. Not absolute (the user, the same day: "if this constraint is too
 much to actually make this memory safe and effective, then I'm willing to give it up as well"): where whole-program
 facts make memory safety or freeing clearly better, both variants are measured and the choice goes to the user.
+**Being rescoped (the user, 2026-11-08 evening: "we want to rescope the compile each module at a time"; "it's come up a
+couple of times now that whole program compilation kind of seems attractive").** A survey of what whole-program
+compilation would gain, what is kept across compilations, and C/library boundaries is docs/wholeprog.md (being
+written); the replacement rule waits for the user's answers to its questions.
 
 ## Models for the compiler/ refactor
 The user, 2026-11-01: "Yes, use Sonnet for the refactor but not for the validation", then "Actually nvm. Don't use
