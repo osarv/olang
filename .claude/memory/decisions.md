@@ -24,7 +24,11 @@ Open questions:
 - The licence: the user, 2026-11-07, "we'll still push it into the future" (postponed again). Default: no licence file. Ask when publishing. Context: archive/decisions_log.md, the entry "2026-11-07, the user on four answers".
 - The refusal audit's questions 4-5 (asked 2026-11-08; docs/refusals.md, "Questions"; 1-3 and 6 answered, see
   archive/decisions_log.md). Default for each until answered: refused. 4. a field slot holding storage of two scopes
-  (whole-program field analysis) - recommend not now; the user wants to talk about it more. 5. `any` copyable through
+  (whole-program field analysis) - discussed 2026-11-08: the user proposed one module, then asked to reconsider
+  "compile one module at a time". My proposal asked: replace it with "objects reused unless a fact they were built from
+  changed; a whole-program fact records its readers, an edit recompiles exactly the modules whose facts changed"; then
+  question 4 is whole-program field sets for source builds, the defining module decides at a precompiled library's
+  boundary, after fnvalues round 6; measure the tracking cost while building. 5. `any` copyable through
   a Copy in its table - recommend not now; recorded, not answered.
 - docs/genrefs.md's direction questions (asked 2026-11-08; the note's section 14; the user: "We will settle this in a
   couple of hours" - no agent depending on it starts before). My proposal after discussing it: settle the language now
