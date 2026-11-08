@@ -1,4 +1,6 @@
-# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it
+# check: build
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O17b: whether a handle is used only through its reference is read off the callee's checked body, never its text:
 # here the handle reaches a stored field as the operand of a user operator ('h.c.kept & h' calls BitAnd, which hands
 # its argument back), so stash keeps the handle's own storage - a copy in a loop body - and the lend is judged as any

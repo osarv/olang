@@ -1,4 +1,6 @@
-# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O25i/O17: a reference local given two parameters' referents (c := q, then c = p) stores through whichever it holds -
 # the keeps analysis counts a store through it against every region any of its versions names, so a split value lent
 # for p is refused (since O25i nothing makes p's and q's scopes one at 'c = p', so this count is all that guards it)

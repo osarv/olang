@@ -1,4 +1,6 @@
-# check: fail note: 'p' is the loop's copy of an element, made in the loop's block - lend the element itself: 'parts[i]'
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O10c/B11: a for-in's copy of an element lent to a callee that relates its scope to a longer-lived one - the copy is
 # storage of the loop's block, while the element itself lives where the array does (a recorded limit: the callee's
 # obligation cannot tell the referent's storage from what it holds). A handle (a List, a Map) is lent as its reference

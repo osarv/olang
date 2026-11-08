@@ -1615,16 +1615,13 @@ e28condlocallent.olang:25:7: error[E31b]: x[i] gives a copy of the element, whic
       |       ^
 compilation failed with 9 errors
 === e31bcallargsowned.olang
-e31bcallargsowned.olang:15:7: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
-   15 |     bs[0].Take(grow(bs))
+e31bcallargsowned.olang:17:7: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   17 |     bs[0].Take(grow(bs))
       |       ^
-e31bcallargsowned.olang:15:7: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   15 |     bs[0].Take(grow(bs))
-      |       ^
-e31bcallargsowned.olang:7:34: note: the callee is no view of the element because of this statement
-    7 | fn (b mut B&) Take(v Vec<I64>) { b.xs = v }
+e31bcallargsowned.olang:9:34: note: the callee is no view of the element because of this statement
+    9 | fn (b mut B&) Take(v Vec<I64>) { b.xs = v }
       |                                  ^~~~~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === e31bdtor.olang
 e31bdtor.olang:19:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    19 |     G[0].Bump()
@@ -1640,11 +1637,6 @@ e31bexportback.olang:22:6: error[E31b]: x[i] gives a copy of the element, which 
 e31bexportback.olang:18:5: note: the callee is no view of the element because of this statement
    18 |     b.n = 99
       |     ^~~~~~~~
-compilation failed with 1 error
-=== e31bfieldviewbuild.olang
-e31bfieldviewbuild.olang:28:31: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
-   28 |     for i in range 3 { g(l[0].w, i + 10) }
-      |                               ^
 compilation failed with 1 error
 === e31bfnelem.olang
 e31bfnelem.olang:10:12: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -1699,16 +1691,13 @@ e31binplaceglobal.olang:12:5: note: the callee is no view of the element because
       |     ^~~~~~~~
 compilation failed with 1 error
 === e31binplacehome.olang
-e31binplacehome.olang:14:6: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
-   14 |     v[0].Bump()
+e31binplacehome.olang:16:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   16 |     v[0].Bump()
       |      ^
-e31binplacehome.olang:14:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   14 |     v[0].Bump()
-      |      ^
-e31binplacehome.olang:8:5: note: the callee is no view of the element because of this statement
-    8 |     b.n = 99
+e31binplacehome.olang:10:5: note: the callee is no view of the element because of this statement
+   10 |     b.n = 99
       |     ^~~~~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === e31btryat.olang
 e31btryat.olang:13:10: error[R8]: nothing here can fail - write it without 'try'
    13 |     bump(try l[0])
@@ -1748,22 +1737,6 @@ e31bviewalias.olang:12:5: note: the callee is no view of the element because of 
    12 |     w := v
       |     ^
 compilation failed with 1 error
-=== e31bviewbodyerrors.olang
-e31bviewbodyerrors.olang:29:15: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
-   29 |         hang(s[k], 100 + k)
-      |               ^
-compilation failed with 1 error
-=== e31bviewbuilds.olang
-e31bviewbuilds.olang:18:27: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
-   18 |     for k in range 3 { f(s[k]) }
-      |                           ^
-e31bviewbuilds.olang:18:27: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   18 |     for k in range 3 { f(s[k]) }
-      |                           ^
-e31bviewbuilds.olang:14:18: note: the callee is no view of the element because of this statement
-   14 | fn f(r mut R&) { r.l.Push($r.n) }
-      |                  ^~~~~~~~~~~~~~
-compilation failed with 2 errors
 === e31bviewcapture.olang
 e31bviewcapture.olang:19:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    19 |     f(s[0])
@@ -3375,16 +3348,6 @@ nextflag.olang:9:14: error[S9a]: It& cannot be walked - 'for ... in' takes an ar
     9 |     for _ in t { }
       |              ^
 compilation failed with 2 errors
-=== nllkeepsunion1.olang
-nllkeepsunion1.olang:19:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   19 |         f(x, t)
-      |              ^
-compilation failed with 1 error
-=== nllkeepsunion2.olang
-nllkeepsunion2.olang:19:11: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   19 |         f(t, x)
-      |           ^
-compilation failed with 1 error
 === noextendsmethod.olang
 noextendsmethod.olang:6:12: error[T29f]: Nums declares no 'Count', and does not extend its base, which has one - declare it with 'extends'
     6 |     c := n.Count(fn(x) { return x > 1 })
@@ -3429,17 +3392,6 @@ compilation failed with 1 error
 numtraitsqrtint.olang:7:10: error[G19, T31a]: I64 does not satisfy the constraint Float on T: Float is closed, met by F16, BF16, F32, F64 alone
     7 |     r := nsRoot(n)
       |          ^~~~~~
-compilation failed with 1 error
-=== o10cloopcopy.olang
-o10cloopcopy.olang:27:22: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   27 |     for p in parts { merge(sum, p) }
-      |                      ^~~~~
-o10cloopcopy.olang:20:23: note: the callee requires it because of this statement
-   20 |     for e in from.m { into.Put(e.Key, e.Value) }
-      |                       ^~~~
-o10cloopcopy.olang:27:9: note: 'p' is the loop's copy of an element, made in the loop's block - lend the element itself: 'parts[i]', with 'for i in range parts.Len()'
-   27 |     for p in parts { merge(sum, p) }
-      |         ^
 compilation failed with 1 error
 === o10dd9bslice.olang
 o10dd9bslice.olang:5:41: error[O10d]: this value lives in this function's own scope, which closes first
@@ -3505,179 +3457,20 @@ o15registeredtemp.olang:27:10: error[O15, O16]: this value is held where its cal
    27 |     hold(Grip(1), l)
       |          ^~~~~~~
 compilation failed with 1 error
-=== o17bbitand.olang
-o17bbitand.olang:20:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   20 |         b.stash()
-      |         ^
-compilation failed with 1 error
-=== o17bkeeps.olang
-o17bkeeps.olang:15:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   15 |         c.backlink()
-      |         ^
-compilation failed with 1 error
-=== o17bkeepsother.olang
-o17bkeepsother.olang:13:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   13 |         r := c.me()
-      |              ^
-compilation failed with 1 error
-=== o17blambdakeep.olang
-o17blambdakeep.olang:18:22: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   18 |         fs.Push(leak(idList(base)))
-      |                      ^~~~~~~~~~~~
-compilation failed with 1 error
-=== o17bnoand.olang
-o17bnoand.olang:14:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   14 |         b.stash()
-      |         ^
-compilation failed with 1 error
-=== o17bnonhandle.olang
-o17bnonhandle.olang:20:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   20 |         b.stash()
-      |         ^
-compilation failed with 1 error
-=== o17bpending.olang
-o17bpending.olang:15:11: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   15 |     try g(b, m, n)
-      |           ^
-compilation failed with 1 error
-=== o17copylent.olang
-o17copylent.olang:19:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   19 |     b.regrow(7)
-      |     ^
-compilation failed with 1 error
-=== o17handout.olang
-o17handout.olang:21:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   21 |     h := b.headOf()
-      |          ^
-compilation failed with 1 error
-=== o17lambdastore.olang
-o17lambdastore.olang:19:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   19 |     b.regrow(7)
-      |     ^
-compilation failed with 1 error
-=== o17permute14.olang
-o17permute14.olang:28:7: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   28 |     f(recs, mkText(7))
-      |       ^~~~
-compilation failed with 1 error
-=== o17permute15.olang
-o17permute15.olang:27:7: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   27 |     f(recs, mkText(7))
-      |       ^~~~
-compilation failed with 1 error
-=== o17permute3.olang
-o17permute3.olang:27:7: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   27 |     f(recs, mkText(7))
-      |       ^~~~
-compilation failed with 1 error
-=== o17permute4.olang
-o17permute4.olang:22:13: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   22 |     setName(t, s)
-      |             ^
-o17permute4.olang:22:5: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   22 |     setName(t, s)
-      |     ^~~~~~~
-o17permute4.olang:19:37: note: the callee requires it because of this statement
-   19 | fn setName(r mut Rec&, s String&) { r.name = s }
-      |                                     ^
-o17permute4.olang:27:7: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   27 |     f(recs, mkText(7))
-      |       ^~~~
-compilation failed with 3 errors
 === o17permute5.olang
-o17permute5.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   25 |     each(recs, fn(x mut Rec&) { x.name = s })
-      |          ^~~~
-o17permute5.olang:25:16: error[T22a]: this lambda ties where what it is given lives to what it keeps or gives back - its captures included - and this argument holds only what its written function type says of every call - hold it in a local and call it there
-   25 |     each(recs, fn(x mut Rec&) { x.name = s })
+o17permute5.olang:27:16: error[T22a]: this lambda ties where what it is given lives to what it keeps or gives back - its captures included - and this argument holds only what its written function type says of every call - hold it in a local and call it there
+   27 |     each(recs, fn(x mut Rec&) { x.name = s })
       |                ^~
-compilation failed with 2 errors
+compilation failed with 1 error
 === o17permute6.olang
-o17permute6.olang:25:14: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
-   25 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
+o17permute6.olang:27:14: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
+   27 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
       |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-o17permute6.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   25 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
-      |          ^~
-compilation failed with 2 errors
+compilation failed with 1 error
 === o17permute6b.olang
-o17permute6b.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   25 |     each(ns, g)
-      |          ^~
-o17permute6b.olang:29:12: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
-   29 |     run(h, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
+o17permute6b.olang:31:12: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
+   31 |     run(h, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
       |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-compilation failed with 2 errors
-=== o17readonlycapture.olang
-o17readonlycapture.olang:21:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   21 |     b.grow()
-      |     ^
-compilation failed with 1 error
-=== o17selfstore.olang
-o17selfstore.olang:22:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   22 |     tie(b)
-      |         ^
-compilation failed with 1 error
-=== o17selfview.olang
-o17selfview.olang:19:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   19 |     tie(b)
-      |         ^
-compilation failed with 1 error
-=== o17settlestale.olang
-o17settlestale.olang:31:8: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   31 |     zs(b, 1)
-      |        ^
-compilation failed with 1 error
-=== o17spawntargets.olang
-o17spawntargets.olang:26:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   26 |     grow(b)
-      |          ^
-compilation failed with 1 error
-=== o17tempcallresult.olang
-o17tempcallresult.olang:25:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   25 |         addRef(idBox(seed), i + 1)
-      |                ^~~~~~~~~~~
-compilation failed with 1 error
-=== o17tempcond.olang
-o17tempcond.olang:28:19: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   28 |         addVia(b1 if i >= 0 else b2, i + 1)
-      |                   ^~
-compilation failed with 1 error
-=== o17tempcondarray.olang
-o17tempcondarray.olang:28:21: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   28 |         addVia(a[0] if i >= 0 else a[1], i + 1)
-      |                     ^~
-compilation failed with 1 error
-=== o17templambdacond.olang
-o17templambdacond.olang:22:25: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   22 |         fs.Push(leak(b1 if i >= 0 else b2))
-      |                         ^~
-o17templambdacond.olang:22:17: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   22 |         fs.Push(leak(b1 if i >= 0 else b2))
-      |                 ^~~~
-o17templambdacond.olang:16:29: note: the callee requires it because of this statement
-   16 | fn leak(b Box&) fn&() I64 { return fn() I64 { return b.head.v } }
-      |                             ^~~~~~
-compilation failed with 2 errors
-=== o17templambdacycle.olang
-o17templambdacycle.olang:26:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   26 |         even(idBox(seed), 2, fs)
-      |              ^~~~~~~~~~~
-compilation failed with 1 error
-=== o17templambdakeep.olang
-o17templambdakeep.olang:24:22: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   24 |         fs.Push(leak(idBox(seed)))
-      |                      ^~~~~~~~~~~
-compilation failed with 1 error
-=== o17tempreadonly.olang
-o17tempreadonly.olang:28:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   28 |         addVia(mkBox(seed), i + 1)
-      |                ^~~~~~~~~~~
-compilation failed with 1 error
-=== o18claterkept.olang
-o18claterkept.olang:24:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   24 |         retext(s, j)
-      |                ^
 compilation failed with 1 error
 === o18cprojectionborrow.olang
 o18cprojectionborrow.olang:21:20: error[O25i]: this reads 'held', which an assignment may have given storage that no longer lives here - assign it a copy ('$x' or 'x.Copy()'), or what lives here
@@ -4517,25 +4310,10 @@ rv3roslice.olang:17:5: note: 'x' copies a place reached read-only, so it is read
    17 |     x := G
       |     ^
 compilation failed with 1 error
-=== rv3slicesplit.olang
-rv3slicesplit.olang:13:17: error[O17a]: this value's references live where its own storage does not, so it is not sliced or viewed - index the value itself, or lend it whole to a call
-   13 |     s := b.items[0:2]
-      |                 ^
-compilation failed with 1 error
 === rv3strreceiver.olang
 rv3strreceiver.olang:11:10: error[E11c, T25c]: '$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only
    11 | fn (a B) Str() String { return $peek(a.c) }
       |          ^~~
-compilation failed with 1 error
-=== rv3viewsplit.olang
-rv3viewsplit.olang:12:17: error[O17a]: this value's references live where its own storage does not, so it is not sliced or viewed - index the value itself, or lend it whole to a call
-   12 |     v := b.items[0:2]
-      |                 ^
-compilation failed with 1 error
-=== rv5condas.olang
-rv5condas.olang:34:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   34 |         grow(y)
-      |              ^
 compilation failed with 1 error
 === rv5ctormatch.olang
 rv5ctormatch.olang:19:30: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -5203,21 +4981,6 @@ sliceimmutableglobal.olang:12:6: error[T25b]: this writes through a read-only re
    12 |     s[0] = 9
       |      ^
 compilation failed with 2 errors
-=== splitborrowctor.olang
-splitborrowctor.olang:17:12: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   17 |     h := H(b)
-      |            ^
-compilation failed with 1 error
-=== splitborrowlocal.olang
-splitborrowlocal.olang:16:19: error[O17a]: this value's references live where its own storage does not, so it is not held by reference - use the value itself
-   16 |     br mut Box& = b
-      |                   ^
-compilation failed with 1 error
-=== splitborrowstore.olang
-splitborrowstore.olang:15:15: error[O17a]: this value's references live where its own storage does not, so it is not held by reference - use the value itself
-   15 |     br Box& = b
-      |               ^
-compilation failed with 1 error
 === stdprivate.olang
 stdprivate.olang:4:12: error: unknown name 'lookupBaked'
     4 |     assert lookupBaked == 41
@@ -5235,14 +4998,6 @@ strayfnbody.olang:4:12: error[L16]: unexpected character '`'
 strayfnbody.olang:4:14: error: expected end of line, found '2'
     4 |     x := 1 ` 2
       |              ^
-compilation failed with 2 errors
-=== stro17captures.olang
-stro17captures.olang:36:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   36 |     b.grow2()
-      |     ^
-stro17captures.olang:40:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference ('x T& = ...')
-   40 |     b.grow3()
-      |     ^
 compilation failed with 2 errors
 === strofnothing.olang
 strofnothing.olang:5:10: error[E11a]: '$' has nothing to render - this call returns no value
@@ -5628,16 +5383,6 @@ compilation failed with 1 error
 t17ewithouttype.olang:3:9: error[T17e]: a raw value needs the enum's raw type, written after 'enum': 'enum String {' or 'enum U8 {'
     3 |     A = 1
       |         ^
-compilation failed with 1 error
-=== t17payloadscopes.olang
-t17payloadscopes.olang:15:31: error[T17c]: this payload holds references into two scopes, and it lives in one - build what it holds in one scope
-   15 |         l Link& = Link.Two(x, y)
-      |                               ^
-compilation failed with 1 error
-=== t17payloadwrite.olang
-t17payloadwrite.olang:16:29: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
-   16 |         s Slot& = Slot.Held(outer)
-      |                             ^~~~~
 compilation failed with 1 error
 === t17sep.olang
 t17sep.olang:4:23: error: unknown type 'South'

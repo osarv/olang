@@ -1,4 +1,6 @@
-# check: fail x[i] gives a copy, and the call can build into what it holds where the copy is
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # E31b/O17: x[i] lent to a callee that writes only through the element's references, with no write-back - but the
 # callee builds text and pushes it through the copy's List, which would build it where the copy is (the statement's
 # block), not where the collection's list lives

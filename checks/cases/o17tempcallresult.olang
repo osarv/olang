@@ -1,4 +1,6 @@
-# check: fail this value's references live where its own storage does not, and the callee can store through it
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O17 (the third review of the view lend, U1): a call's value result holding a writable reference, lent to a
 # reference parameter whose callee builds through it in a loop - a split value: its copy is the block's, its references
 # seed's; the node was built in the loop body and hung off seed

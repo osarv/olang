@@ -35301,3 +35301,40 @@ T4 and T8 belong to W3a/W3b. Measured: the compiler's leaf edit (a comment in `l
 s for master's compiler on the same tree (the round-8 figure of 3.5 s was on another machine state); `OLANG_TIMES`'s
 `facts` row is ~0.4 s for the compiler, almost all of it reading and hashing the reused records' IR, which was counted in
 `lower+emit` before; the keys take 30 ms.
+
+## R1: split values lent where their references live (O17, O17a, O17b, T17c, O10c; 2026-11-08, wt-refusals1, docs/refusals.md 5.1)
+
+Round R1 of docs/wholeprog.md section 10. A split value - `b := src.b`, `x[i]`'s copy, a call's value result, a for-in's
+copy - holds references living elsewhere than its own storage. O17 refused lending one to a callee that could keep
+something it builds in it, since the callee's scope variable was bound to the storage's block and what it built hung off
+longer-lived nodes. O17b already lent a handle as its reference; R1 generalizes that to every split value:
+
+- **The binding.** The call binds the parameter's scope variable where the value's references live (`argExisting`, and
+  `splitLent` for a copy the call itself makes), so builds land where they hang. Where that is one of several scopes
+  (O12) it is found at run time from the one reference the value holds (O29: `argRoot` reads a borrowed split value's
+  place as a value, `valueRoot`).
+- **The lift, only where the callee keeps the value's own storage.** A new use mode, `UseOwn` (beside O17b's `UseThru`
+  and E31b's `UseView`), read off the callee's body: the parameter's own storage is never reached past the call - its
+  parts read, written and built through, but its reference (or one to a part of it) never stored, captured, rendered,
+  returned or handed to a callee that may. Where it may (`calleeKeepsSelf`), the local is lifted with its storage to
+  where its references live (`liftSplit`/`liftStorage`: its storage alone, the claim being O25h's already, so origin -2
+  locals lift too; a choice of places lifts each place), and a copy the call makes is built there. Refused (O17's message
+  kept) only where nothing can be lifted - a by-value parameter's storage, a set of scopes with no one reference.
+- **O17a.** A split value held by a reference local, stored by reference or sliced lifts its local's storage the same way
+  in the inference's gathering (`liftSplitPlace`); the messages stay for what cannot be lifted.
+- **The rest of the 44.** E31b's view mode took a rendered number field (`$r.n`) for a use of the instance; it is a read
+  (`numberField`) - e31bviewbuilds. A for-in's copy failing a callee's obligation (o10cloopcopy's `merge(sum, p)`) lifts
+  its storage where its references live (`liftAtCall`). An enum case a reference local is declared with (`s Slot& =
+  Slot.Held(outer)`) proposes the local's claim where its payload lives, as `:=` already did (T17c; t17payloadwrite).
+- o17spawntargets declared `k` and never read it, hidden behind O17; it reads it now. o17permute5 (T22a) and
+  o17permute6/6b (T25c) keep fnvalues round 7's errors, now alone (`# never: error[O17]`).
+- Beyond the 44: t17payloadscopes (5.2's shape) runs - the written reference local's case proposes its claim where `x`
+  lives and `y`, fitted exactly there, is built there too; e31bcallargsowned and e31binplacehome keep E31b's write-back
+  alone (section 6). The 41 compiled cases are `check: run` (o17bbitand and o17bnonhandle `check: build`: their programs
+  reach a null as written), their diag.txt rows gone and run.txt's added; each runs under the scope sanitizer and agrees
+  with `interpret`.
+
+Decided (docs/refusals.md section 11, item 1): lift only where the callee keeps the storage, not always - a callee that
+merely builds costs nothing extra. Every lift only moves storage of a program refused before: compiler/'s IR (its base
+sources built by both compilers) and bench's IR are byte-identical to master's.
+

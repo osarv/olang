@@ -1,4 +1,6 @@
-# check: fail error[O17]: this value's references live where its own storage does not
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O17: every call takes part in the fixed point, its callee's body checked before it or not. zs's body was checked while
 # ys's was in progress, and read xs's answer (false) then - xs's answer turned true only once the cycle through ys was
 # settled, and zs, never revisited, let bump lend it a value whose references live elsewhere than its storage

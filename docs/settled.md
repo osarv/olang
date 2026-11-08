@@ -568,8 +568,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   the scope of the thing we're storing it in").** A value local kept by reference past its block or turn, or copied
   whole at its last mention into longer-lived storage, has its storage placed where it is kept, a new value each time
   its declaration runs.
-- **Lending (O17, O17a, O17b).** A value whose references live elsewhere than its storage is lent only to callees that
-  keep nothing in it, read off their bodies; a handle (a struct of one reference) is lent as its reference.
+- **Lending (O17, O17a, O17b; R1 of docs/refusals.md, 2026-11-08, mine within the user's decisions).** A split value
+  (references living elsewhere than its storage) is lent where its references live, so a callee builds where they hang;
+  its own storage is lifted there too only where the callee keeps it (stores, captures, returns or hands on the
+  parameter itself), a local built there each time its declaration runs - not "always lift", which would hold a copy's
+  header per call. Held by reference or sliced (O17a), its local is lifted likewise. Refused only where nothing can be
+  placed (a by-value parameter's storage); where its references live is one of several, O29 finds it.
 - **Constructors (C2d, C2g).** A bare field lives with the instance; an argument binds the instance only where the
   body can make it hold it; a constructor's top level allocates into the instance scope. A field given a lambda or an
   adapter lives where what it captured does.

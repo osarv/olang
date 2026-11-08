@@ -1,4 +1,6 @@
-# check: fail error[O17a]: this value's references live where its own storage does not, so it is not held by reference
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O17a: a read-only reference too - what is read through it (a writable "mut Node&" field) is taken to live where the
 # copy does, so a node built through it would be built in the copy's block
 import "std/io"

@@ -992,7 +992,8 @@ somewhere is stored as it is, and the value may not outlive it: it must live in 
 something can be stored through it (O25g, O25c), and otherwise outlive it. That is checked wherever the value lands - a
 declaration, an assignment, a return, an argument, another payload - and two such arguments from two scopes hold the
 value to the shorter-lived where only outliving is asked, and are an error where exactness is. Where exactness asks a
-local holding the value - declared or assigned as it, or a collection it is pushed into - to live where a longer scope's
+local holding the value - declared or assigned as it (a reference local's written type included), or a collection it
+is pushed into - to live where a longer scope's
 argument does (a by-value parameter's references, `m := Maybe.Some(r)`), the local's references are placed there (O28),
 its own storage staying in its block. A payload parameter may name nothing - where each lives is inferred (O28).
 
@@ -7152,12 +7153,20 @@ binding the same variable must agree on one scope, or the call is a compile-time
 A **value** lvalue passed for a reference parameter is borrowed (E12c): the callee receives that very storage,
 so it binds the variable to where that storage is - a value local's block, wherever its references were built, or
 the result scope for a local the function returns (O26a). Where
-those live elsewhere (a copy of an element, O25h) and the callee can keep something it builds in the value's own slots - a field it may assign a reference
-to, or one referring to something that can be stored through (O25g) - what it built would be in the storage's scope under
-a value claiming the other: a compile-time error naming the fix, to declare it a reference (`b Box& = Box(n)`). A field
-with a binding of its own is no such slot (its referent is where the instance's binding says, which
-a callee is held to, O23a); lent read-only, or for its fields' referents, the value is fine; a handle is lent as its
-reference (O17b).
+those live elsewhere (a **split value**: a copy of an element, O25h) and the callee can keep something it builds in the
+value's own slots - a field it may assign a reference to, or one referring to something that can be stored through
+(O25g) - the call binds the variable **where the value's references live**, as a handle is lent (O17b), so what the
+callee builds through them is built where they hang. Where the callee may also keep the value's **own storage** past
+the call - store its reference or a reference to a part of it, capture it in a lambda, return it, or hand it to a callee
+or a constructor that may (read off its body, as below) - that storage is placed there too: a local's, or the local a
+borrowed part belongs to, is built where its references live, a new value each time its declaration runs (O28); a
+temporary is built there. Where they live is one of several (O12), the scope is found at run time from the one reference
+the value holds (O29). Only where nothing can be placed - a by-value parameter's own storage, references in one of
+several scopes with no one reference to find them from - is it a compile-time error naming the fix, to declare it a
+reference (`b Box& = Box(n)`). A field with a binding of its own is no such slot (its referent is where the instance's
+binding says, which a callee is held to, O23a); lent read-only, or for its fields' referents, the value is fine; a handle
+is lent as its reference (O17b). A for-in's copy of an element is lent as the storage it is, its loop's block; where a
+callee's obligation (O10c) needs it to live as long as its references, its storage is built where they live.
 What the callee can do is read off its **body**, never its signature's types: it keeps something it builds in the lent
 value's slots when its body stores into the value's region a reference or a value holding references (a field, an
 element, through any depth - by an assignment, or as a spawned task's result, P1g), when it returns a reference into
@@ -7187,9 +7196,10 @@ default v` - passed for a reference parameter is the same kind of value where it
 the block it is a temporary of (a call's result landed where its obligations say, O18c; a copy out of existing storage,
 O25h; the element a `try` reads): the call binds the variable where those references live, so what the callee builds
 through them is built there, while its own copy is a temporary of the block the call is written in. Where something can
-be stored through the parameter and the callee keeps something in the value (its body, as above), the same error is
-reported - `addRef(idBox(seed), v)` building through `b.head` is `b := idBox(seed)` written out; a callee that
-only reads may be given it. A callee **capturing the parameter itself** in a lambda that can outlive the call - returned,
+be stored through the parameter and the callee keeps something in the value (its body, as above), the variable is bound
+where the references live and the copy itself is built there where the callee may keep its own storage, as for a local -
+`addRef(idBox(seed), v)` building through `b.head` builds the node where `seed`'s nodes are; only where they live in one
+of several scopes is it the error. A callee **capturing the parameter itself** in a lambda that can outlive the call - returned,
 stored, handed to a callee that may keep it - keeps the lent value's own storage in the closure, which counts as keeping
 something in it (through a call cycle too); a lambda only called in the callee's frame (held in a local every use of
 which is a call), or made for a callee keeping nothing of it (D16c), keeps nothing. A read-only parameter is no exception: a shallow `mut` field is stored through as surely.
@@ -7210,12 +7220,14 @@ copy of existing storage (O25h, a copy out of a reference included: its referenc
 by-value parameter (O4b), a copy in an inner block of an outer one's
 value - is borrowed into a reference only as a call's argument, which O17 judges by the callee's body. Anywhere else - a
 reference local's initializer (`br mut Box& = b`), an assignment to a reference (`r = b`, `a[0] = b`), a constructor's
-reference parameter (whose instance keeps it, which counts as handing the region out, O17) - it is a compile-time error
-where something can be stored through what the value holds (O25g, by its type), read-only or not: a reference to a value
-takes everything reached through it to live where the value does (O20), so building through `br.head.next` would build
-in the copy's block and hang the result off the source's node. The value itself is written through instead
+reference parameter (whose instance keeps it, which counts as handing the region out, O17) - where something can be
+stored through what the value holds (O25g, by its type), read-only or not, the local the value is (a part of) has its
+own storage placed where its references live (O28, a new value each time its declaration runs): a reference to a value
+takes everything reached through it to live where the value does (O20), so building through `br.head.next` builds where
+the source's node is. Where that storage cannot be placed - a by-value parameter's, references in one of several
+scopes - it is a compile-time error. The value itself is written through instead
 (`b.head.next = Node()` builds where `b`'s references live, O25h). Nor is such a value **sliced** (E16a) where
-something can be stored through it: a slice is a reference to its storage, and is held,
+something can be stored through it, unless its storage is placed so likewise: a slice is a reference to its storage, and is held,
 returned and passed as any reference is, so it would carry the storage's scope away from where the references live -
 its elements are indexed in place instead (`b[i]`), or the whole value lent to a call. `for x in b.items` over such a value walks it through a
 reference of its own making, which it uses only to read the elements out and for its own calls (`At`, `Len`, `RunFrom`,

@@ -1,4 +1,6 @@
-# check: fail error[O17a]: this value's references live where its own storage does not, so it is not held by reference
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O17a: b is a copy of a field, its storage in this block and its references where src's are; a reference to it would
 # take the node reached through it to live in the block, so "br.head.next = Node()" would build there and hang the node
 # off src's (a use-after-free that printed garbage). Written through b itself it is built where b's references live

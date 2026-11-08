@@ -1,4 +1,6 @@
-# check: fail x[i] gives a copy, and the call can build into what it holds where the copy is
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # E31b/O17 (the second review of the view lend, F1): a struct value field of x[i] lent to a view callee that builds
 # through a reference of it - its hidden copy's references are where the collection's are, so it is O17's split lend, as
 # the whole element is

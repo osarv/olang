@@ -1,4 +1,6 @@
-# check: fail error[O17]: this value's references live where its own storage does not
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O17: a view of the lent value's own inline array ("b.head.view = b.data") is the value's storage, not something read
 # out of its region - no reference is followed on the way to it
 import "std/io"

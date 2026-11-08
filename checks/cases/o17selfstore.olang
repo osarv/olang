@@ -1,4 +1,6 @@
-# check: fail error[O17]: this value's references live where its own storage does not
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O17: a callee storing its parameter itself into the region its references lead to ("b.head.owner = b") stores the lent
 # value's own storage there - which, for a copy of src.b, is bump's block, while the node lives where src's references
 # do. Only what is read out of the region by following a reference brings in nothing new; this was taken for that, and

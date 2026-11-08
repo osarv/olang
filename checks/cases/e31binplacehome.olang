@@ -1,4 +1,6 @@
-# check: fail error[E31, O17]: x[i] gives a copy, and the call can build into what it holds
+# check: fail error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection
+# never: error[E31, O17]
+# R1 (refusals 5.1): the split lend is no longer refused; E31b's write-back stays (section 6)
 # E31b (bulk review 6 F1): an element holding a writable reference to a collection of its own type - its method may grow
 # the collection the element is in through it - is not made in place through RefMut: the copy's error
 type blk struct(n I64, home mut Vec<blk>&) { n, home }

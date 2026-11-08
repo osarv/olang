@@ -1,4 +1,6 @@
-# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store th
+# check: fail error[T25c]: this lambda writes through or keeps its by-value parameter
+# never: error[O17]
+# R1 (refusals 5.1): the split lend is no longer refused; T25c stays (docs/fnvalues.md, round 7)
 # O17 (Vec phase 1): a callee lent a split value only permutes its elements - ...a by-value parameter holding writable references is a store from outside
 type N2 struct(v I64) {
     v

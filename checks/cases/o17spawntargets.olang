@@ -1,4 +1,6 @@
-# check: fail error[O17]: this value's references live where its own storage does not
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O17/P1g: a spawn with several targets stores each result as an assignment would - "spawn b.head.next, k = two()" is a
 # store into the lent value's region, as the single-target form and a destructuring are
 import "std/io"
@@ -20,6 +22,7 @@ fn two() mut Node&, I64 { return Node.mkNode(), 5 }
 fn grow(b mut Box&) {
     k I64 = 0
     join { spawn b.head.next, k = two() }
+    b.head.v = k
 }
 fn bump(src mut W&) {
     b := src.b

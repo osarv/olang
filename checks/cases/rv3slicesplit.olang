@@ -1,4 +1,6 @@
-# check: fail error[O17a]: this value's references live where its own storage does not, so it is not sliced or viewed
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O17a: a copy of a value whose references live elsewhere is not sliced - the slice would be a reference to the copy's
 # storage, carrying it away from where its references are
 type Node struct() {

@@ -2091,6 +2091,9 @@
 | status 0
 === run e31bcallinplace.olang
 | status 0
+=== run e31bfieldviewbuild.olang
+| status 0
+| 12
 === run e31bfieldviewmethod.olang
 | status 0
 | 12
@@ -2114,6 +2117,12 @@
 | status 0
 === run e31bviewbigcond.olang
 | status 0
+=== run e31bviewbodyerrors.olang
+| status 0
+| 102
+=== run e31bviewbuilds.olang
+| status 0
+| Vec<String&>["0", "1", "2"]
 === run e31bviewlaterarg.olang
 | status 0
 === run e31bviewnested.olang
@@ -2200,6 +2209,10 @@
 | ok
 === run methodnamedlocal.olang
 | status 0
+=== run nllkeepsunion1.olang
+| status 0
+=== run nllkeepsunion2.olang
+| status 0
 === run nllmerge.olang
 | status 0
 === run numtraitsqrtlit.olang
@@ -2210,6 +2223,9 @@
 === run o10ccycle.olang
 | status 0
 === run o10celementstash.olang
+| status 0
+| 2
+=== run o10cloopcopy.olang
 | status 0
 | 2
 === run o10cnote.olang
@@ -2253,12 +2269,22 @@
 === run o17bhandleout.olang
 | status 0
 | 41
+=== run o17bkeeps.olang
+| status 0
+=== run o17bkeepsother.olang
+| status 0
+=== run o17blambdakeep.olang
+| status 0
 === run o17bloopcopy.olang
 | status 0
 | 2
+=== run o17bnoand.olang
+| status 0
 === run o17borrowsplit.olang
 | status 0
 === run o17borrowsplitwrap.olang
+| status 0
+=== run o17bpending.olang
 | status 0
 === run o17bpendingok.olang
 | status 0
@@ -2266,10 +2292,17 @@
 | status 0
 === run o17btrydefaultkept.olang
 | status 0
+=== run o17copylent.olang
+| status 0
 === run o17handlewalk.olang
 | status 0
 | 1133
+=== run o17handout.olang
+| status 0
+| 0
 === run o17lambdareads.olang
+| status 0
+=== run o17lambdastore.olang
 | status 0
 === run o17ownkept.olang
 | status 0
@@ -2282,16 +2315,59 @@
 === run o17ownturnwalk.olang
 | status 0
 | sum 15 (15)
+=== run o17permute14.olang
+| status 0
+=== run o17permute15.olang
+| status 0
+=== run o17permute3.olang
+| status 0
+=== run o17permute4.olang
+| status 0
+=== run o17readonlycapture.olang
+| status 0
+| 7
+=== run o17selfstore.olang
+| status 0
+| 42
+=== run o17selfview.olang
+| status 0
+| 42
+=== run o17settlestale.olang
+| status 0
+| 42
+=== run o17spawntargets.olang
+| status 0
+| 42
+=== run o17tempcallresult.olang
+| status 0
+| chain 321
+=== run o17tempcond.olang
+| status 0
+| b1 321
+=== run o17tempcondarray.olang
+| status 0
+| a 321
 === run o17templambdaarg.olang
+| status 0
+=== run o17templambdacond.olang
+| status 0
+=== run o17templambdacycle.olang
+| status 0
+=== run o17templambdakeep.olang
 | status 0
 === run o17templambdalocal.olang
 | status 0
 | 42
+=== run o17tempreadonly.olang
+| status 0
+| seed 321
 === run o17tempreadsonly.olang
 | status 0
 === run o18cforinborrowed.olang
 | status 0
 === run o18ckeptloop.olang
+| status 0
+=== run o18claterkept.olang
 | status 0
 === run o18claterlend.olang
 | status 0
@@ -2534,10 +2610,17 @@
 | status 0
 === run rv3roget.olang
 | status 0
+=== run rv3slicesplit.olang
+| status 0
 === run rv3spawnrun.olang
 | status 0
 === run rv3strwrites.olang
 | status 0
+=== run rv3viewsplit.olang
+| status 0
+=== run rv5condas.olang
+| status 0
+| 43
 === run rv5condmember.olang
 | status 0
 | 44
@@ -2758,6 +2841,15 @@
 === run s9erangeundertry.olang
 | status 0
 | Array<I32>[0, 2, 4, 6, 8]
+=== run splitborrowctor.olang
+| status 0
+| 0
+=== run splitborrowlocal.olang
+| status 0
+| 0
+=== run splitborrowstore.olang
+| status 0
+| 0
 === run stradapter.olang
 | status 0
 | 42
@@ -2868,6 +2960,11 @@
 === run strnotecopies.olang
 | status 0
 | 2 1
+=== run stro17captures.olang
+| status 0
+| 3
+| 7
+| 8
 === run stro20condstore.olang
 | status 0
 | 42
@@ -2957,6 +3054,10 @@
 === run t17enumref.olang
 | status 0
 === run t17payloadoutlived.olang
+| status 0
+=== run t17payloadscopes.olang
+| status 0
+=== run t17payloadwrite.olang
 | status 0
 === run t17wholereflines.olang
 | status 0

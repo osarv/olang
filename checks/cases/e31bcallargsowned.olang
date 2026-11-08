@@ -1,4 +1,6 @@
-# check: fail x[i] gives a copy, and the call can build into what it holds where the copy is
+# check: fail error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection
+# never: error[E31, O17]
+# R1 (refusals 5.1): the split lend is no longer refused; E31b's write-back stays (section 6)
 # E31b, two-phase: an argument evaluated first must own nothing and hold no reference - one owning storage a call makes
 # (a Vec) is no such value, so the call through x[i] stays the copy's and is refused
 type B struct() {

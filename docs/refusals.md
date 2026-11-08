@@ -21,6 +21,11 @@ is built and what this note proposes is built after it.
   holds no reference); the ten cases run; a by-value parameter holding a destructor value that the become does not hand
   on stays refused (`BecomeHeldParam`, becomeheldparam); `BecomeBorrows` and `BecomeDestructor` are kept as the net for
   a body the pre-judging read did not flag. HISTORY.md, "A become chain's tail scope".
+- Built: R1 (5.1, 2026-11-08, wt-refusals1) - a split value lent where its references live, its own storage lifted there
+  where the callee keeps it (`UseOwn`, `calleeKeepsSelf`); O17a's held or sliced split value lifts likewise; 41 of the 44
+  compile and run (o17bbitand and o17bnonhandle build, their programs reaching a null as written); o17permute5 keeps
+  T22a and o17permute6/6b keep T25c (fnvalues round 7). t17payloadscopes (5.2) runs too: a written reference local's case
+  proposes its claim as `:=`'s did; e31bcallargsowned and e31binplacehome keep E31b alone (section 6). HISTORY.md, "R1: split values lent where their references live".
 
 ## 0. Summary
 

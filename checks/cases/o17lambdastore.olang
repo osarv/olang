@@ -1,4 +1,6 @@
-# check: fail error[O17]: this value's references live where its own storage does not
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O17/D16c: a lambda made where it is called is judged by its body, as a declared callee is - this one stores a new array
 # into what its capture reaches, so the function making it stores into that region, and a copy whose references live
 # elsewhere than its own storage may not be lent to it (o17copylent.olang, through a lambda)

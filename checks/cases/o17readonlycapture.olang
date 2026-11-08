@@ -1,4 +1,6 @@
-# check: fail error[O17]
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O17/D16c: a lambda storing through a read-only capture's writable field stores into the region it was lent - so a copy
 # whose references live elsewhere than its storage may not be lent to the method making it (read back as -7)
 import "std/io"

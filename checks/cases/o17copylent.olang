@@ -1,4 +1,6 @@
-# check: fail error[O17]: this value's references live where its own storage does not
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O17/O25h: a copy of a value holding references keeps them where its source's are, while its own storage is this
 # block - lending it to a callee that stores into what it is lent (regrow builds a new array and puts it in a field)
 # would put what that builds in the block, under a value claiming the source's scope, and "src.b = b" would then hand

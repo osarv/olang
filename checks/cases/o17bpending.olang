@@ -1,4 +1,6 @@
-# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O17b: a lend decided while the callee's body was still being checked (g calls f, which lends a handle copy to g) is
 # taken on trust and verified once every body is checked - g keeps the handle, so the call is O17's error
 type Cell struct() {

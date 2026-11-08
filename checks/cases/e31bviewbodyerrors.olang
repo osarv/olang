@@ -1,4 +1,6 @@
-# check: fail error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or take it in place ('x.RefMut(i)')
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # never: x[i] gives a copy of the element
 # B11 (D2): one cause, one error - the callee's own C2d error, and no E31b at the call because a body with errors is
 # no view

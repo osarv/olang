@@ -1,4 +1,6 @@
-# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it
+# check: run
+# R1 (refusals 5.1): compiles now - a split value lent where its references live, its own storage lifted there where
+# the callee keeps it (O17b generalized); it was refused, as what follows says
 # O18c/O17, beside o18claterlend: a local whose references are kept beyond its block - pushed into a list outside the
 # loop - has its call landed where those references must live, so it is a split value, and lending it to a callee that
 # keeps something in it (stores into its slots) is refused, whatever module the other calls on it are in
