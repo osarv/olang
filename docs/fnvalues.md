@@ -569,3 +569,136 @@ functions are followed, by the composition of 4.5 where it is a parameter, and b
   each, about +0.5% IR. Gate: the self-build's time and peak memory within +2%; bench within noise but its new row, a
   sort with a lambda against the same sort written with `<` (from the C measurement, ~1.4x faster with the clone).
 - **Twins of programs refused today.** A whole judging of the body per twin, bounded by the limits.
+
+## 5. One tier of keywords (L9)
+
+**L9** (revised): the reserved words gain the promise words and the five words of one place:
+
+```
+if        else    try     catch   return  assert  noreturn
+for       do      in      range   match   case    break   continue
+is        as
+and       or      not     xor
+type      struct  enum    fn      error   mut     extends
+trait     spawn   join    defer   errdefer yield   become
+import    test    destruct embed  comptime
+unreachable
+extern    default
+any       unique  immut   packed  commutes
+returns   noalloc noblock nospawn norecurse noextern pure
+keeps     borrows noborrow
+```
+
+**L9a** (its field list): every new word begins no statement and no value (`any` begins a type, never either), so each
+may name a field declared with its type or `:=` and reached after `.` (`f.returns`), and, as every word, a method.
+**L9b** and **L9c** are removed - their numbers left as gaps (a removed rule's number is never reused): the words are
+reserved everywhere now, and each keeps the one place it means something - `immut`, `unique` and `packed` before a
+type's body (T13a-T13c), `commutes` after an operator method's result (E31c), `any` before a trait's name where a type
+is written (T32), the promises after a function type's signature (T21c).
+
+**What it renames** (measured over the repository's code, comments and text left out): about twenty declarations in
+twelve files, ~72 lines - in compiler/ the locals and parameters named `any` (free.olang five, scope.olang three, views,
+cabi, generic, olang.olang), `keeps` (free, lower, scope - a parameter - and views), `pure` (check.olang's comparison
+chain, a parameter and a local), `commutes` and `packed` (parse.olang); `any` in std/regex.olang and
+tools/cli_words.olang. L9a keeps the rest: `types.Table.unique` and std/json's `writer.any<T>` are methods, free.olang's
+`returns` a field. No name in the repository is spelled like a promise word but `keeps`, `pure` and `returns`.
+
+**The tool.** `tools/keyword_rename.olang`, a text tool (srcmask) in `olang fix`'s table after the text tools: it renames
+a local, parameter, function, type or global named by one of the new words, wherever it stands as that name - not after
+`.`, not in the word's own place (above) - by appending `_` (L6 allows it; Python's convention for a name that became a
+word), and leaves fields and methods (L9a). Idempotent. The repository's own names are renamed by meaning in the round
+(`any` to `found`, `keeps` to `kept`, `pure` to `folded` ...), so no `_` name lands in the repository.
+
+**DEPENDENTS.md**: the section "A word of one place" goes (its words are keywords: token.olang's `Tok` cases and
+`Keyword`, session.olang's `Keywords`, editors/nvim's syntax - all [checked]), and a section "A promise word" is added
+(section 9).
+
+## 6. The passes, file by file
+
+| file | what changes | round |
+|---|---|---|
+| token.olang | `Tok` cases, `Text`, `Keyword` for the seventeen words | 1 |
+| parse.olang | the five old words read as tokens where they stood (`packedWord`, `commutes`, `any`); T21c's words after a function type's signature (`sig` for a type), the list ending as 3.1 says | 1, 2 |
+| ast.olang, unparse.olang, fmt.olang | `ast.Sig` holds the words and the names they take; written back one space apart | 2 |
+| types.olang | a function type's promises - canonical, by position - part of its identity (`Canon`, G16a's spelling) and its rendering (`$`, E11a); what `ScopesOf` and `ResultFrom` read of `borrows`/`noborrow` | 2 |
+| check.olang | T21c's errors; E12 fits a function value across words and records the place for the passes; E31b reads `pure` | 2, 3, 6 |
+| typed.olang | `ScopeVar.Follow(input, k)`, `Plan.Twin(site)`, the per-site records free.olang reads; the core otherwise unchanged | 4 |
+| scope.olang | `valueRels` and `valueCovered` read the words; 2.2.1's capture check; T22a/T22b's errors naming the word; O17 by the words; then patterns, pass-through results, arguments and captures followed, symbolic records, twins as call-graph nodes with their components, limits, the twin a call reaches in the plan | 2, 4 |
+| effects.olang | `Calls` bits, per-fact bounds for unknown calls, `Pure` and `Returns`, `Fact.Named`, the effect words checked at the places check recorded | 3 |
+| free.olang | calls through followed functions as direct calls; the words; `letsVia`/`escVia`; a twin with its own plan analysed on its own | 4, 6 |
+| lower.olang | a twin's code from its plan; clones; D9h reading `pure` and followed functions | 4, 5, 6 |
+| emit.olang | twins' and clones' symbols, the hidden follow parameters, the root object only | 4, 5 |
+| views.olang | M19g reading `pure` and followed functions | 6 |
+| eval.olang, interp.olang | `interpret` follows a call into its twin's plan (B3e); nothing else | 4 |
+| explain.olang, doc.olang, session.olang, lsp.olang, mcp.olang, api.olang | `# fits:`, twins and clones listed, hover, completion, `api`'s variance | 7 |
+| msgs.olang, goldens/diag.txt | T21c's errors, T22a/T22b reworded to name the word, the limits' error | 2-4 |
+| fuzz/scopegen.olang | higher-order calls given keeping callbacks, chains, fields with words | 4 |
+| bench/ | a sort with a lambda beside the same sort with `<` | 5 |
+
+## 7. The evaluator and `interpret` (K1, B3e)
+
+- **Compile-time evaluation** runs before the scope pass on lowering's stand-in placement: twins, words and clones change
+  nothing it computes (a call through a value is evaluated when the function it reaches is, K1, and its words are no
+  run-time thing). Each round still gives it tests it runs, beside the run-time ones (checklist step 3): round 2 a global
+  baked through a call through a field written `keeps k` (K2); round 3 top-level asserts reading facts through a promised
+  parameter (S17a: `assert not Apply.Allocates` with `f fn&(x I64) I64 noalloc`, `assert Sum.Pure`, `assert
+  Sum.Returns`); round 4 a global baked through `Count` given a keeping lambda, and an assert decided (S18c) in a callee
+  given a keeping function.
+- **`interpret`** places by the plans (B3e): a call the plan routes to a twin uses the twin's plan, so the interpreted
+  run reclaims what the built run reclaims; clones are code only. The comparison (`interp@FILE`) runs every new test file;
+  no new entry in evaldiff's `Expected` is foreseen.
+- **The dead-region evaluator** (`OLANG_DEADREGIONS=1`) runs over the new tests in round 6, where early freeing starts
+  reading followed functions and words.
+
+## 8. Existing code and programs
+
+- **Nothing to migrate** for following or promises: every change accepts more. The keyword round renames about twenty
+  names (section 5).
+- **std's higher-order functions** - the array and iterator walks (`Count`, `Some`, `Every`, `FindIndex`, `Map`,
+  `Filter`, `Fold`, `Partition`, `MinBy`, `MaxBy`, `GroupBy` ...), the sorts of arrays, `Vec`, `Columns`, `ColumnVec` and
+  `list.List`, `Map.Update`, std/sync's `With`, `Read`, `Write`, `Update` and `Do`, `time.Virtual`, `fuzz.Check`,
+  `regex.ReplaceFunc`, `os.RunOnStack` - keep their source. Their callers may give them callbacks that keep their
+  arguments in captured collections (`m.With(fn(v mut Vec<String&>&) { v.Push(name) })` keeping a caller's text), the
+  callers' effects become what the callbacks do, and the sorts and the folds over loops are cloned per callback.
+- **std writes no promise word in this work** (decision 18): a word on a parameter's type refuses callers whose callbacks
+  do more, and gains nothing a followed call does not already know; words belong on stored function values, and std
+  stores few - `heap.Heap`'s `less`, the lazy walks' fields and `Generator.next`, all fixed by a constructor (question 1).
+- **Handler fields** - a GUI's `onClick fn?&(e Event&) keeps e`, a cache's `onEvict fn?&(k String&) keeps k`, an audio
+  callback's `fn&(buf mut Array<F32>&) noalloc noblock` - are where programs write words.
+- **Newly compiling** (each becomes a run case built `-debug -sanitize`, read back after a churn, keeping its comment and
+  saying what it was): t22aobligation, t22sharedscope, t22sharedscopetype, t22sharedscopegeneric, t22agivenvalue,
+  t22agivesarg, t22ainstancename, t22acapture, callvaluekeeps, callvaluekeepsframe (round 4); with the word written, new
+  run cases beside t22apushed, t22alambdakeeps and t22areturncycle, whose fail cases stay with their messages naming the
+  word (round 2).
+- **Staying refused**: t22alatelambda; t32anyscopes (unless question 1); g42factvalue (its parameter writes no word -
+  kept, with a passing twin writing `noalloc`); t22afallible and t22callunsafe (types); new fail cases for a lambda
+  keeping `x` in a capture that outlives it (2.2.1), a pattern past a limit, an effect word broken, `pure` broken by a
+  write through a capture, `returns` broken by an `assert`, and T21c's misplaced words.
+
+## 9. Tools, and the walk of DEPENDENTS.md
+
+- **explain (B11b).** Under a function, `# fits: fn&(a mut N&, b N&) keeps b in a noalloc noblock nospawn norecurse
+  noextern returns pure` - the tightest function type it is a value of, words in canonical order, so a place holding it
+  can copy the type. It replaces `# not a value` / `# as a value` (sec8 5.5); `# scopes:` and `# effects:` stay. A
+  function judged in twins lists them as a generic lists its instances (`# followed for: 'link' (keeps b in a), at
+  p.olang:12:5`), its clones after (`# compiled again for: 'less', at p.olang:20:9`). Every signature explain prints
+  writes a function type's words.
+- **doc (B14).** Signatures with their words; the `# fits:` line under each exported function.
+- **The language server (B15).** Hover as explain; completion offers the promise words after a function type's
+  signature, and the parameters' names after `keeps`, `in` and `borrows`; T22a/T22b's errors carry the word to write (a
+  quick fix inserting it waits for code actions, which the server does not have).
+- **mcp (B16).** `explain` and `doc` carry it.
+- **api (B21).** Each exported function's `# fits:` type is compared by variance: a word it loses (it now allocates,
+  keeps an argument, borrows from one more parameter) is breaking - an importer may hold it as a type with that word -
+  and one it gains is `ok`. A function type written in an exported signature: a parameter's gaining a word, or losing a
+  `keeps`, is breaking (its callers' functions must do less); the reverse is `ok`; a result's or a field's the other way
+  round; a declared function type's words changing either way is breaking (it is held and given both).
+- **The formatter (B13).** One space between words; `keeps b in a`, `keeps b in a.f`, `borrows a` as written;
+  whitespace only.
+- **`$`** of a function value renders its signature with its type's words (T21b, E11a).
+- **editors/nvim**: the seventeen keywords (syntax/olang.vim, [checked]). **help**: no new mode or option.
+- **DEPENDENTS.md**: "A word of one place" goes; "A promise word" comes - SPEC T21c and G42's table; token.olang (the
+  keyword rows); parse.olang, ast.olang, unparse.olang (the words); types.olang (identity, spelling); scope.olang (a
+  relation word) or effects.olang (an effect word: its fact in `Fact.Named`); explain's `# fits:`; session.olang's
+  completion; editors/nvim; msgs.olang and diag.txt; `checks/cases`. One new **[checked]** edge for `make consistency`:
+  every effect word and `pure`/`returns` has its G42 fact in effects.olang's `Fact.Named` and SPEC G42's table.
