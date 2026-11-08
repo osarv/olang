@@ -46,6 +46,9 @@ job building oagent; "feel free to use the Arxiv connector frivolously" (alphaXi
 oagent's papers/. The L2-regression (delta-rule) update the user mentions comes from the Nested Learning paper.
 **GPUs are local (the user, 2026-11-08):** GPU work runs on the user's own machine, which has one modest GPU and a
 slot for a second; they will spec and buy GPUs and RAM eventually. No paid cloud GPUs (HF Jobs and the like cost).
+The machine (2026-11-08): RTX 4060 (8 GB, compute capability 8.9, Ada: tensor cores with FP8/BF16/INT8; the GPU
+backend targets sm_89 first), Ryzen 5 7600 (Zen 4, 6 cores/12 threads, AVX-512 with VNNI and BF16), 7.4 GiB visible
+in WSL (WSL's default share of the host's RAM).
 
 **oann and the matrix library (2026-10-09):** "Oann btw is very incomplete. It should be written in Olang as well. I want
 the matrix library to be efficient. It should work as the base for all operations and operands." oann gets rewritten
