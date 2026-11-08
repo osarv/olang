@@ -21,5 +21,4 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-- The refusal audit's question 5 (asked 2026-11-08; docs/refusals.md, "Questions"): `any` copyable through a Copy in
-  its table. Default: refused. Recommendation: not now. (Question 4 moved into docs/wholeprog.md's question 4.)
+(None open.)

@@ -3756,3 +3756,15 @@ The user: "forget about the license for now ... stop talking about it. I'll brin
 from the ledger; never raise it. The entry as it stood:
 
 - The licence: the user, 2026-11-07, "we'll still push it into the future" (postponed again). Default: no licence file. Ask when publishing. Context: archive/decisions_log.md, the entry "2026-11-07, the user on four answers".
+
+
+## 2026-11-08 evening, the refusal audit's question 5
+
+The user: "Yes, do option B ... any is something we use not necessarily when we want performance, but when we want
+runtime flexibility ... it costs a bit of performance, in this case memory, but we get the kind of polymorphism that
+we want." So an `any`'s table carries the type's Copy and size, the copy is boxed where it lands, and a unique type
+made into an `any Trait&` some call copies is a compile-time error (whole-program). Built after W1. The entry as it
+stood:
+
+- The refusal audit's question 5 (asked 2026-11-08; docs/refusals.md, "Questions"): `any` copyable through a Copy in
+  its table. Default: refused. Recommendation: not now. (Question 4 moved into docs/wholeprog.md's question 4.)

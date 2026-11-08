@@ -491,3 +491,9 @@ owning link freed early, decided at compile time only): its classification in G2
 no `weak` names it needs no header, so it frees the plain linked stack of genrefs section 1 too. Facts genrefs reads
 from the whole program - a type generational, held owning nowhere, one-holder - go through W1's accessor, and their edit
 kinds join T2 and editgen in the round that adds them.
+
+**Added 2026-11-08: A1 - copying an `any`'s instance** (docs/refusals.md question 5, the user's "Yes, do option B"):
+the table carries the type's Copy and size; a copy (an adapter such as `Take`, a default keeping its receiver) is
+boxed where it lands; a unique type made into an `any Trait&` that some call copies is an error at the conversion,
+from the whole-program fact of where each any is made and copied. Opus high, after W1, beside any round not in
+check.olang's any code; turns anynocopy, anynocopyfunc, anynocopylist into run cases.
