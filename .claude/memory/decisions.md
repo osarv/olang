@@ -944,3 +944,19 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   copy, the newest satisfying both. After "done" (no syntax). And: plain `olang`, nothing after it, opens the REPL (the
   interpreter underneath); `olang interpret FILE` runs a whole file, `olang FILE` builds and runs - the user: "just
   running OLang then. Puts you in the REPL".
+- The push's calls, talked through 2026-11-08 (the user, by number). (3) T22a at a generic: the user "we don't want to
+  over reject" - explained it is not about handles: a relation is not part of a function type, and any body taking a
+  function value through a parameter (generic or not) is judged once for every caller; PROPOSED: a function returning
+  or storing its function parameter passes the caller's record through (a summary, cheap), and a body calling through
+  a function parameter is judged per record (the note's scope twins, compile time only, code shared where the plans
+  agree). (7) found already lifted by bfix8a (`f := keepIt` compiles; what stays refused is (3)'s boundary). (4) the
+  user: "if there's a view of it, then it should be made in the scope of that view" - PROPOSED: storage holding a
+  destructor value kept for a view is built where the view is kept and its destructor runs there, as bulk review 7's F4
+  already does for a returned or stored reference to the whole holder (escapedHome), listed by -memory. (5) C1
+  explained (a build through a reference field whose referent's scope is known only per instance goes to the program's
+  scope, since no run-time scope word exists); PROPOSED: keep, or find the referent's scope from its address on that
+  path only (needs a chunk lookup - a design pass). (6) the user: "Fix number 6" - mine (an optimization): move the
+  local into the keeper's scope at the keep where the keep is its last mention, so only keeping turns pay. (8)
+  explained: no view - two mechanisms (O16 registration for `:=` from a call, O15 holder for a written slot) and early
+  freeing releases only at a holder's drop; mine: a `:=` from a call of a destructor type becomes a holder too.
+  ASKED: go on (3), (4), (5).
