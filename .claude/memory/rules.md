@@ -46,6 +46,12 @@ slimming of 2026-11-08").
   overthink").** Effort: low for mechanical work, medium for everything else including compiler work on a planned list;
   high only for hard debugging or a design the brief cannot settle; xhigh never unless the user asks. This overrides the
   effort in the defaults above.
+- **Learn the right model and effort from data (the user, 2026-11-08: "develop some sense of when the effort and model
+  are good enough ... with kind of data on it ... you don't have to one-shot everything").** /home/user/review/agents.tsv
+  logs every agent: model, effort, tokens, tool calls, minutes (from its completion notice; review/agstats.py backfills
+  from the transcript), then whether its verify passed first time and the bugs later found in its work (reviews, fuzzers,
+  later rounds). Vary effort and model on comparable tasks on purpose; every ~10 agents read the table and move the
+  defaults above. Prefer fast iterations against the tests (build, run, fix, repeat) over long deliberation up front.
 - **Reviews**: routine soundness reviews opus high; full reviews in bulk, over several merged batches ("not one per
   change"); no more C-compiler (stage 0) reviews. (why: archive/rules_log.md)
 - **Agent length**: one fresh agent per round of a big batch, from a hand-off note kept up to date; resume only for a
