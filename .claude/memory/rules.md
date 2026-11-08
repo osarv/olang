@@ -155,7 +155,8 @@ going to HISTORY.md. Agents get short briefs pointing at files rather than resta
 fits, and no speculative work; my own replies stay short; propose a /compact to the user when it is a good moment (the context has grown and nothing needs my working memory
 beyond /home/user/review/rounds/STATE.md), with a ready prompt to paste - the user, 2026-11-08: "propose for me to
 compact when you think it's good for me. And then also write a decent compact prompt ... I don't want to have to think
-about it."
+about it." The prompt starts with `/compact ` so the user can copy it
+whole (the user, 2026-11-08: "include slash compact at the ... beginning, so I can just copy it").
 
 ## Waking up after a reset, and never losing work to a limit
 **Standing rule** (the user 2026-10-08: "Always schedule yourself to resume when tokens are back as your usage runs
