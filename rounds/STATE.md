@@ -38,3 +38,4 @@ oann: decided (direction.md "oann and oagent, redefined"); no open ledger questi
 - F6 (wt-scopefind) and W1 (wt-facts) restarted on Opus at high; each commits its WIP, merges master, then continues from PROGRESS.md. E1 (oagent) restarted on Sonnet at high from 0d93a53.
 - Token rules: briefs say be resourceful, reports are at most 10 lines.
 - Agent log started: /home/user/review/agents.tsv (32 rows backfilled, outcomes to fill). Current A/B: F6/W1 at opus medium vs earlier rounds at high/xhigh; E1 sonnet medium.
+- F6 merged, verified (all passed), pushed. Leftovers in plan.md. W1 running.
