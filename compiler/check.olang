@@ -3690,8 +3690,22 @@ fn (c mut Checker&) InstNote(inst I64) String { return c.instNote(inst) }
 # A2.3, B1.1, B1.2: what each body may do, summarized where something asks - explain, doc, the language server, a fact
 # read through a function's name (G42) - and nowhere else
 fn (c mut Checker&) Effects() mut effects.Effects& {
-    if c.fx is null { c.fx = effects.Effects(c.P, c.Bodies) }
+    if c.fx is null {
+        c.fx = effects.Effects(c.P, c.Bodies)
+        c.fx!.WantPure = c.pureAsked()
+    }
     return c.fx!
+}
+
+# whether G42's Pure is asked: read through a name, or "pure" judged at a place (T22b)
+fn (c Checker&) pureAsked() Bool {
+    for r in c.factReads {
+        if r.Fact == "Pure": return true
+    }
+    for p in c.effectPlaces {
+        if c.P.T.PromiseWords(p.Want) & types.PromPure != 0: return true
+    }
+    return false
 }
 
 fn (c mut Checker&) Ty(t types.TypeId) String {

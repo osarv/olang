@@ -282,13 +282,20 @@ type Verdict struct() {
 type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     P
     Bodies
+    # whether Pure is asked (a fact read, an effect word judged): what is written through storage neither given nor
+    # built here (WritesOut) is followed only then, so a build asking nothing of it pays nothing for it
+    WantPure Bool = false
     own Vec<Facts>       # by body: what it does itself, once walked
     calls Vec<Vec<I64>>  # by body: the bodies it calls, makes as lambdas or gives a slot that is called through
     links Vec<Vec<link>> # by body: its arguments rooted at its slots
-    givs Vec<Vec<given>> # by body: what it gives the slots holding function values of what it calls
-    rets Vec<Vec<I64>>   # by body giving a function value: the named functions its returns give
-    retsKnown Vec<Bool>  # ... whether its returns give only named functions, lambdas it makes and null
+    givs Map<I64, Vec<given>> # by body giving any: what it gives the slots holding function values of what it calls
+    rets Map<I64, Vec<I64>>   # by body giving a function value whose returns give only named functions and null: those
     whole Vec<Facts>     # by body: with what it may call, once settled (its slots' calls not counted: named does)
+    callsOf Vec<I64>     # by body: whole's Calls, once settled (read without its Facts)
+    merged Vec<I64>      # by body: the last component (stamp) whose facts it was merged into - each callee once
+    stamp I64 = 0
+    gives Vec<Bool>      # by body: whether it gives a slot a function value or makes a lambda or an adapter, so what
+                         # it calls may call through what it gives
     state Vec<I64>       # by body: 0 unseen, 1 walked, 2 settled
     fileMod Map<I64, I64>
     mutGlobals Map<pair, Bool>
@@ -313,9 +320,10 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     parts Vec<part>
     fnDefs Map<I64, Vec<typed.Expr&>>  # by local holding a function value: every value given it
     fnSome Map<I64, Bool>              # ... given one not seen here (a task's target)
-    fresh Map<I64, Bool>               # by local holding a reference: whether every value given it is built here
+    refDefs Vec<I64>                   # each value given a local holding a reference: 2 * the local + 1 where built here
     outs Vec<I64>                      # locals no slot a store went through: what it writes is not its own unless fresh
     outLinks Bool = false              # whether a link hands on such a local (outLocal - l)
+    giving Bool = false                # whether it gives a slot a function value or makes a lambda or an adapter
     retFn Bool = false                 # whether the body walked gives a function value
     curRets Vec<typed.Expr&>
     curRetNamed Vec<I64>
@@ -341,10 +349,10 @@ fn (e mut Effects&) grow() {
         e.own.Push(Facts())
         e.calls.Push(Vec<I64>())
         e.links.Push(Vec<link>())
-        e.givs.Push(Vec<given>())
-        e.rets.Push(Vec<I64>())
-        e.retsKnown.Push(false)
         e.whole.Push(Facts())
+        e.callsOf.Push(0)
+        e.merged.Push(-1)
+        e.gives.Push(false)
         e.state.Push(0)
         e.tIndex.Push(-1)
         e.tLow.Push(0)
@@ -395,8 +403,8 @@ fn (e mut Effects&) Of(b I64) Facts {
 
 # a settled body's facts with each call through one of its slots counted by the slot's type's bound
 fn (e mut Effects&) named(b I64) Facts {
+    if e.callsOf[b] == 0: return e.whole[b]
     f := e.whole[b]
-    if f.Calls == 0: return f
     for k in range 63 {
         if hasBit(f.Calls, k): Merge(f, Facts.Bound(e.P.T, e.slotType(b, k)))
     }
@@ -496,28 +504,32 @@ fn (e mut Effects&) edge(b I64, w I64) {
 # the named functions body b gives a slot its callee calls through (or calls through a value itself) as calls of its
 # own, once each callee is walked: a callee settled says whether it calls through the slot, one still open may
 fn (e mut Effects&) expand(b I64) {
-    n := e.givs[b].Len()
-    for i in range n {
-        g := e.givs[b][i]
+    if not e.gives[b] or not e.givs.Has(b): return
+    gs := try e.givs.Get(b) catch default Vec<given>()
+    for g in gs {
         if g.Kind != GivNamed and g.Kind != GivResult: continue
         if g.Site >= 0 {
             w := e.calls[b][g.Site]
-            if w < 0 or w >= e.Bodies.Len() or e.state[w] == 2 and not hasBit(e.whole[w].Calls, g.At): continue
+            if w < 0 or w >= e.Bodies.Len() or e.state[w] == 2 and not hasBit(e.callsOf[w], g.At): continue
         }
         if g.Kind == GivNamed {
             e.callEdge(b, g.Val)
             continue
         }
-        if e.retsKnown[g.Val] {
-            for t in e.rets[g.Val]: e.callEdge(b, t)
+        if e.rets.Has(g.Val) {
+            for t in e.retsOf(g.Val): e.callEdge(b, t)
         } else if g.Site < 0 {
             Merge(e.own.RefMut(b), Facts.Bound(e.P.T, g.Ty))    # (a callee's slot given it: settle's bounds)
         }
     }
 }
 
+# the named functions body b's returns give, where they give only those and null
+fn (e Effects&) retsOf(b I64) Vec<I64> { return try e.rets.Get(b) catch default Vec<I64>() }
+
 fn (e mut Effects&) callEdge(b I64, t I64) {
     if t < 0 or t >= e.Bodies.Len(): return
+    e.gives[b] = true
     for w in e.calls[b] {
         if w == t: return
     }
@@ -533,15 +545,17 @@ fn (e mut Effects&) settle(comp Vec<I64>&) {
     inComp Map<I64, Bool>
     for b in comp { inComp.Put(b, true) }
     cyclic := comp.Len() > 1
+    e.stamp++
     for b in comp {
         Merge(all, e.own[b])
         for w in e.calls[b] {
             if w == b { cyclic = true }
-            if inComp.Has(w) { continue }
             if w < 0 or w >= e.Bodies.Len() {
                 all.Unchecked = true
                 continue
             }
+            if e.merged[w] == e.stamp or inComp.Has(w) { continue }
+            e.merged[w] = e.stamp
             Merge(all, e.whole[w])
         }
     }
@@ -559,14 +573,17 @@ fn (e mut Effects&) settle(comp Vec<I64>&) {
         for b in comp { added += e.passWrites(b, comp, inComp) + e.passCalls(b, inComp) }
         if added == 0: break
     }
-    bnd := Facts()
+    through := false
     dirty := false
     for b in comp {
-        Merge(bnd, e.bounds(b))
+        e.callsOf[b] = e.whole[b].Calls
         if e.writesUnowned(b, e.whole[b].Writes): dirty = true
     }
     for b in comp {
-        if bnd.Through: Merge(e.whole.RefMut(b), bnd)
+        if not through and e.gives[b] and e.callsThrough(b): through = true
+    }
+    if through: e.throughBounds(comp)
+    for b in comp {
         if dirty: e.whole[b].Impure = true
         e.state[b] = 2
     }
@@ -603,7 +620,9 @@ fn (e mut Effects&) passWrites(b I64, comp Vec<I64>&, inComp Map<I64, Bool>&) I6
 # the slots of body b its calls call through, given b's own slots: passed on to b's: how many it added
 fn (e mut Effects&) passCalls(b I64, inComp Map<I64, Bool>&) I64 {
     added I64 = 0
-    for g in e.givs[b] {
+    if not e.gives[b] or not e.givs.Has(b): return 0
+    gs := try e.givs.Get(b) catch default Vec<given>()
+    for g in gs {
         if g.Kind != GivSlot or g.Site < 0: continue
         w := e.calls[b][g.Site]
         if w < 0 or w >= e.Bodies.Len() or not (inComp.Has(w) or e.state[w] == 2): continue
@@ -614,20 +633,39 @@ fn (e mut Effects&) passCalls(b I64, inComp Map<I64, Bool>&) I64 {
     return added
 }
 
+# what the calls through slots of a component's callees may do, added to each of its bodies
+fn (e mut Effects&) throughBounds(comp Vec<I64>&) {
+    bnd := Facts()
+    for b in comp {
+        if e.callsThrough(b): Merge(bnd, e.bounds(b))
+    }
+    for b in comp: Merge(e.whole.RefMut(b), bnd)
+}
+
+# whether something body b calls calls through one of its slots
+fn (e Effects&) callsThrough(b I64) Bool {
+    for i in range e.calls[b].Len() {
+        w := e.calls[b][i]
+        if w >= 0 and w < e.Bodies.Len() and e.callsOf[w] != 0: return true
+    }
+    return false
+}
+
 # what the calls through the slots of what body b calls may do where b gives them a value not followed, or nothing
 # (a lambda made, a function named as a value, a destructor: anything its callers give): the types' bounds, into into
 fn (e mut Effects&) bounds(b I64) Facts {
     into := Facts()
+    gs := try e.givs.Get(b) catch default Vec<given>()
     for i in range e.calls[b].Len() {
         w := e.calls[b][i]
-        if w < 0 or w >= e.Bodies.Len() or e.whole[w].Calls == 0: continue
+        if w < 0 or w >= e.Bodies.Len() or e.callsOf[w] == 0: continue
         for k in range 63 {
-            if not hasBit(e.whole[w].Calls, k): continue
+            if not hasBit(e.callsOf[w], k): continue
             seen := false
-            for g in e.givs[b] {
+            for g in gs {
                 if g.Site != i or g.At != k: continue
                 seen = true
-                if g.Kind == GivBound or g.Kind == GivResult and not e.retsKnown[g.Val]: Merge(into, Facts.Bound(e.P.T, g.Ty))
+                if g.Kind == GivBound or g.Kind == GivResult and not e.rets.Has(g.Val): Merge(into, Facts.Bound(e.P.T, g.Ty))
             }
             if not seen: Merge(into, Facts.Bound(e.P.T, e.slotType(w, k)))
         }
@@ -667,6 +705,7 @@ fn Merge(into mut Facts&, from Facts&) {
     into.Ends = into.Ends or from.Ends
     into.WritesOut = into.WritesOut or from.WritesOut
     into.Impure = into.Impure or from.Impure
+    if from.Caps == 0: return
     into.Caps = into.Caps | from.Caps
     for k in range CapCount {
         if into.Via[k] < 0 { into.Via[k] = from.Via[k] }
@@ -684,9 +723,11 @@ fn (e mut Effects&) walk(b I64) {
     e.own[b] = e.cur
     e.calls[b] = e.curCalls
     e.links[b] = e.curLinks
-    e.givs[b] = e.curGivs
-    e.rets[b] = e.curRetNamed
-    e.retsKnown[b] = e.curRetKnown
+    if e.curGivs.Len() > 0: e.givs.Put(b, e.curGivs)
+    e.gives[b] = e.giving or e.curGivs.Len() > 0
+    if e.retFn {
+        if e.curRetKnown: e.rets.Put(b, e.curRetNamed)
+    }
 }
 
 # body b's statements walked into cur and the rest of the walk's state - again where a value of it is judged (Judge)
@@ -696,25 +737,29 @@ fn (e mut Effects&) walkBody(b I64) {
     e.cur = Facts()
     e.curCalls = Vec<I64>()
     e.curLinks = Vec<link>()
-    e.curGivs = Vec<given>()
-    e.pends = Vec<pend>()
-    e.fnDefs = Map<I64, Vec<typed.Expr&>>()
-    e.fnSome = Map<I64, Bool>()
-    e.fresh = Map<I64, Bool>()
-    e.outs = Vec<I64>()
+    e.curGivs.Clear()
+    e.pends.Clear()
+    e.fnDefs.Clear()
+    e.fnSome.Clear()
+    e.refDefs.Clear()
+    e.outs.Clear()
     e.outLinks = false
-    e.curRets = Vec<typed.Expr&>()
-    e.curRetNamed = Vec<I64>()
+    e.giving = false
+    e.curRets.Clear()
+    e.curRetNamed.Clear()
     e.curRetKnown = false
     e.retFn = e.P.T.KindOf(body.Ty) == types.Kind.Func and e.isFn(e.P.T.Result(body.Ty))
     e.paramAt = Map<I64, I64>()
     e.derived = Map<I64, I64>()
     for i in range body.Params.Len() { e.paramAt.Put(I64(body.Params[i]), i) }
-    slot := body.Params.Len()
-    for i in range body.Locals.Len() {
-        if body.Locals[i].Kind != typed.LocalKind.Capture: continue
-        e.paramAt.Put(i, slot)
-        slot++
+    # a lambda's captures are slots after its parameters, in the order its locals hold them
+    if body.Of == typed.BodyOf.Lambda {
+        slot := body.Params.Len()
+        for i in range body.Locals.Len() {
+            if body.Locals[i].Kind != typed.LocalKind.Capture: continue
+            e.paramAt.Put(i, slot)
+            slot++
+        }
     }
     e.bounded = Map<I64, Bool>()
     for id in body.Bounded { e.bounded.Put(I64(id), true) }
@@ -737,16 +782,7 @@ fn (e mut Effects&) walkBody(b I64) {
 # the stores through locals no slot judged, what its returns give
 fn (e mut Effects&) finish() {
     for p in e.pends { e.resolve(p) }
-    for l in e.outs {
-        if not (try e.fresh.Get(l) catch default false): e.cur.WritesOut = true
-    }
-    if e.outLinks {
-        kept Vec<link>
-        for l in e.curLinks {
-            if l.Param > outLocal { kept.Push(l) } else if not (try e.fresh.Get(outLocal - l.Param) catch default false) { kept.Push(link(l.Callee, l.At, outParam)) }
-        }
-        e.curLinks = kept
-    }
+    if e.outs.Len() > 0 or e.outLinks: e.outsJudged()
     if not e.retFn: return
     e.curRetKnown = true
     for x in e.curRets {
@@ -855,7 +891,8 @@ fn (e mut Effects&) classifyLocal(id I64, ty types.TypeId, depth I64) {
     for d in defs: e.classify(d, depth + 1)
 }
 
-# a value given local id: kept for classifying a function value, and for whether it holds storage built here
+# a value given local id: kept for classifying a function value; for one holding references, the slots it is read out
+# of (derived) and whether it is storage built here (refDefs)
 fn (e mut Effects&) define(id I64, x typed.Expr&) {
     t := x.Type()
     if e.isFn(t) {
@@ -864,8 +901,25 @@ fn (e mut Effects&) define(id I64, x typed.Expr&) {
         return
     }
     if not (e.P.T.IsRef(t) or e.P.T.HoldsRefs(t)): return
-    own := e.built(x) and (try e.fresh.Get(id) catch default true)
-    e.fresh.Put(id, own)
+    bits := e.rootBits(x, 0)
+    if bits != 0: e.derived.Put(id, bits | (try e.derived.Get(id) catch default 0))
+    if e.WantPure: e.refDefs.Push(2 * id + (1 if e.built(x) else 0))
+}
+
+# the stores and the links through locals no slot: through storage not the body's own unless every value given the
+# local is storage built in it (none given: not)
+fn (e mut Effects&) outsJudged() {
+    fresh Map<I64, Bool>
+    for d in e.refDefs: fresh.Put(d / 2, d % 2 == 1 and (try fresh.Get(d / 2) catch default true))
+    for l in e.outs {
+        if not (try fresh.Get(l) catch default false): e.cur.WritesOut = true
+    }
+    if not e.outLinks: return
+    kept Vec<link>
+    for l in e.curLinks {
+        if l.Param > outLocal { kept.Push(l) } else if not (try fresh.Get(outLocal - l.Param) catch default false) { kept.Push(link(l.Callee, l.At, outParam)) }
+    }
+    e.curLinks = kept
 }
 
 # whether a value is storage made right there: a value given storage, an array, a comprehension, text, a constructor's
@@ -889,18 +943,16 @@ fn (e Effects&) ctorCall(cl typed.Call&) Bool {
 
 fn (e mut Effects&) block(b typed.Block?&) {
     if b is null { return }
-    for st in b.Stmts { e.stmt(st) }
+    for st in b.Stmts {
+        if e.whyWord == 0 { e.stmt(st) } else { e.whyStmt(st) }
+    }
 }
 
-fn (e mut Effects&) stmt(st typed.Stmt&) {
-    if e.whyWord == 0 {
-        e.stmtIn(st)
-        return
-    }
-    # Why: the innermost statement making the body break the word - a call of what breaks it, or its own doing
+# Why: the innermost statement of a block making the body break the word - a call of what breaks it, or its own doing
+fn (e mut Effects&) whyStmt(st typed.Stmt&) {
     was := e.whyNow()
     from := e.curCalls.Len()
-    e.stmtIn(st)
+    e.stmt(st)
     if e.whyFound: return
     for i in range from, e.curCalls.Len() {
         w := e.curCalls[i]
@@ -913,11 +965,10 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
     if not was and e.whyNow(): e.because(stmtSpan(st), $"it may " $e.whyDoes() " here")
 }
 
-fn (e mut Effects&) stmtIn(st typed.Stmt&) {
+fn (e mut Effects&) stmt(st typed.Stmt&) {
     match st {
         case typed.Stmt.Let(_, id, x) {
             e.expr(x)
-            e.derive(I64(id), x)
             e.define(I64(id), x)
         }
         case typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x) { e.expr(x) }
@@ -977,7 +1028,7 @@ fn (e mut Effects&) stmtIn(st typed.Stmt&) {
                 match t {
                     case typed.Lvalue.Local(_, _, id) {
                         e.fnSome.Put(I64(id), true)
-                        e.fresh.Put(I64(id), false)
+                        if e.WantPure: e.refDefs.Push(2 * I64(id))
                     }
                     case _ { }
                 }
@@ -1080,7 +1131,6 @@ fn (e mut Effects&) arm(a typed.Arm&) {
         e.expr(alt.Test)
         for bd in alt.Binds {
             e.expr(bd.From)
-            e.derive(I64(bd.To), bd.From)
             e.define(I64(bd.To), bd.From)
         }
     }
@@ -1099,12 +1149,14 @@ fn (e mut Effects&) fnVal(f typed.FnVal&) {
             for cp in caps { e.expr(cp.Outer) }
             site := e.curCalls.Len()
             e.curCalls.Push(I64(body))
+            e.giving = true
             # the function values it captures: what it calls through them is what they are here
             for cp in caps {
                 if e.isFn(cp.Outer.Type()): e.pends.Push(pend(site, e.captureSlot(I64(body), I64(cp.Inner)), cp.Outer))
             }
         }
         case typed.FnVal.Adapter(call, recv, _) {
+            e.giving = true
             e.cur.Allocates = true
             e.expr(recv)
             e.curCalls.Push(I64(call))
@@ -1150,12 +1202,11 @@ fn (e mut Effects&) call(cl typed.Call&) {
             site := e.curCalls.Len()
             e.curCalls.Push(I64(id))
             for j in range cl.Args.Len() {
-                k := e.argParam(cl.Args[j])
-                if k >= 0 { e.curLinks.Push(link(I64(id), j, k)) }
-                if e.argGlobal(cl.Args[j]) { e.curLinks.Push(link(I64(id), j, globalParam)) }
-                o := e.argOut(cl.Args[j])
-                if o != 0 { e.curLinks.Push(link(I64(id), j, o)) }
-                if e.isFn(cl.Args[j].Type()) { e.pends.Push(pend(site, j, cl.Args[j])) }
+                e.argLink(I64(id), j, cl.Args[j])
+                if e.isFn(cl.Args[j].Type()) {
+                    e.pends.Push(pend(site, j, cl.Args[j]))
+                    e.giving = true
+                }
             }
         }
         case typed.Callee.Extern(f) { e.extern(f) }
@@ -1242,14 +1293,6 @@ fn (e mut Effects&) store(p typed.Lvalue&) {
     if r.Local >= 0 { e.through(r.Local) } else { e.cur.WritesOut = true }
 }
 
-# a local made from what a parameter reaches - a reference read out of it, a binding of its payload, a copy holding its
-# references: a store through it is one through that parameter (writes through a payload binding went unsaid)
-fn (e mut Effects&) derive(id I64, x typed.Expr&) {
-    if not e.P.T.HoldsRefs(x.Type()) and not e.P.T.IsRef(x.Type()): return
-    bits := e.rootBits(x, 0)
-    if bits != 0: e.derived.Put(id, bits)
-}
-
 # the parameters a value may be read out of, as Writes bits: a conditional's or a match's either value too
 fn (e mut Effects&) rootBits(x typed.Expr&, depth I64) I64 {
     if depth > 16: return 0
@@ -1278,7 +1321,7 @@ fn (e mut Effects&) through(local I64) {
     d := try e.derived.Get(local) catch default 0
     if k >= 63: e.cur.WritesOut = true
     e.cur.Writes = e.cur.Writes | paramBit(k) | d
-    if k < 0 and d == 0: e.outs.Push(local)
+    if k < 0 and d == 0 and e.WantPure: e.outs.Push(local)
 }
 
 # whether a place is a global's storage or reached through a reference a global holds
@@ -1345,6 +1388,20 @@ fn (e mut Effects&) argParam(x typed.Expr&) I64 {
         }
         case typed.Expr.Away(_, _, y) { return e.argParam(y) }
         case _ { return -1 }
+    }
+}
+
+# the link argument x of a call of body id makes, where it hands on what a slot reaches, a global's storage, or storage
+# the body was not given and may not have built
+fn (e mut Effects&) argLink(id I64, j I64, x typed.Expr&) {
+    k := e.argParam(x)
+    if k >= 0 {
+        e.curLinks.Push(link(id, j, k))
+    } else if e.argGlobal(x) {
+        e.curLinks.Push(link(id, j, globalParam))
+    } else if e.WantPure {
+        o := e.argOut(x)
+        if o != 0: e.curLinks.Push(link(id, j, o))
     }
 }
 
@@ -1544,8 +1601,8 @@ fn (e mut Effects&) Judge(b I64, x typed.Expr&, want types.TypeId) Verdict {
     e.classify(x, 0)
     ps := e.parts
     for pt in ps {
-        if pt.Kind == GivResult and e.retsKnown[pt.Val] {
-            for g in e.rets[pt.Val] {
+        if pt.Kind == GivResult and e.rets.Has(pt.Val) {
+            for g in e.retsOf(pt.Val) {
                 e.judgeFacts(e.Of(g), words, v)
                 if v.Word != "": return e.blame(v, g, e.bodyName(g))
             }
@@ -1607,9 +1664,9 @@ fn (e mut Effects&) partFacts(b I64, pt part&) Facts {
     if pt.Kind == PartAdapter: return e.Of(pt.Val)
     if pt.Kind == PartLambda: return e.lambdaFacts(b, pt.Val, pt.X!)
     if pt.Kind == GivMade: return Facts()
-    if pt.Kind == GivResult and e.retsKnown[pt.Val] {
+    if pt.Kind == GivResult and e.rets.Has(pt.Val) {
         f := Facts()
-        for g in e.rets[pt.Val]: Merge(f, e.Of(g))
+        for g in e.retsOf(pt.Val): Merge(f, e.Of(g))
         return f
     }
     return Facts.Bound(e.P.T, pt.Ty)
