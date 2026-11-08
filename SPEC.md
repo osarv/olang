@@ -7898,7 +7898,9 @@ first to name them in the program's order of modules (the root's own last), name
 
 **B3i.** Since a module's object depends on nothing but its module, its transitive imports (the prelude's included), the
 files their embeds read (E38), the
-compiler and the build's modes, target and build constants (B3d), `build` and `test` keep what each module's object is
+compiler and the build's modes, target and build constants (B3d), and what the program decided that its code or an
+import's reads - the value of each function fact read (G42), which may depend on the whole program (whether C may call
+it back), and the calls through `x[i]` not made in place (E31b) - `build` and `test` keep what each module's object is
 made from - its IR - under a hash of exactly those inputs (`build/rec/`), with the instantiations it names. A later
 build whose module has the same inputs takes that IR as the module's and does not make it again: the module is still
 checked, as every module is, but nothing of it is lowered or emitted, and the instantiations its object names are made

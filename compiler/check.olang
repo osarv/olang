@@ -25364,6 +25364,28 @@ fn (c mut Checker&) settleFacts() Bool {
     return moved
 }
 
+# B3i: what the whole program decided of file f's code, beyond its own text and its imports': each G42 fact read in it
+# by its place and the value read (a fact hangs on whether C may call the program back, effects.cMayCallBack), and,
+# with own, the calls through x[i] there refused the in-place form (E31b, decided by the same facts) - "" for none. Part
+# of the key of its module's record (with own) and of every importer's (without: a fact's value reaches an importer's
+# code through a baked global or a decided condition), so a record is reused only by a program deciding these alike
+fn (c Checker&) ProgramReads(file I64, own Bool) String {
+    lines Vec<String&>
+    for r in c.factReads {
+        if r.File == file: lines.Push($"fact " $r.Sp.Start " " $r.Fact " " $r.Value)
+    }
+    at := $file ":"
+    for k in c.inPlaceRefused.Keys() {
+        if own and k.StartsWith(at): lines.Push($"copy " $k[at.Len():])
+    }
+    lines.Sort(fn(a String&, b String&) Bool { return a < b })
+    out Vec<String&>
+    for s in lines {
+        if out.Len() == 0 or out[out.Len() - 1] != s: out.Push(s)
+    }
+    return out.Join("\n")
+}
+
 # G42: facts still read as other than found after the last attempt - each changes the code it is read from
 fn (c mut Checker&) factsUndecided() {
     for r in c.factReads {

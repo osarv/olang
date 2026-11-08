@@ -35092,3 +35092,33 @@ with the two errors; G2+G3 the header, the weak word, the count (weak reads give
 reclaimed) and the one-holder classification; G4 reclaiming, its sites in every module through W2; G5+G6 an instance's
 own arrays and the fuzzers. "No reference counting" stands: the count is of owning places in a header word that
 generational types alone carry.
+
+## A module's record keyed on the program's facts it read (B3i, G42, E31b; 2026-11-08, wt-reusekey)
+
+docs/wholeprog.md section 8 found a stale record: a G42 fact (`work.WritesGlobals`) read in a module's body is folded
+into its IR, and it depends on whether C may call the program back (`effects.cMayCallBack`: built `-library`, an export
+fn given to C, own C linked with an export fn) - a fact of the whole program - while the module's record in
+`build/rec` was keyed on the module and its imports only. Reproduced: `uid.olang` reading the fact, a program printing it
+built, then one handing an export fn to `qsort` built in the same directory printed `true` where its clean build prints
+`false`; `OLANG_CHECKREUSE` said `uid differs`. An importer baking the fact into a global (`Q := uid.Quiet()`, K2) was
+stale too (`bake differs`): the fact reaches importers' code. The search for other decisions read the same way found one
+more: E31b's `settleInPlace` refuses a call through `x[i]` the in-place form where the method may write a global, so
+the call site's code (`RefMut` or a copy) followed the same program-wide fact; built in the other order it was reused
+stale (`vlib differs`).
+
+**Fix.** Check's `ProgramReads(file, own)` is the one accessor: each fact read in the file by its place and the value
+read, and with `own` the in-place calls refused there, sorted. `moduleKeys` adds a module's own reads to its key and
+the fact reads of every module its imports reach (not their in-place refusals, which change only their own code). A
+module that reads no fact keeps its key. **Decision (mine): key on the values read, not on a hash of
+`cMayCallBack`'s inputs as section 8 proposed.** The values cover whatever a fact hangs on, now and later (per-library
+callbacks, wholeprog 2.3); a program whose inputs differ but whose facts read alike still reuses the record; and it
+covers E31b's refusal, which the inputs' hash would have covered only where the module read a G42 fact by name. It is
+section 4.2's reader record in its smallest form.
+
+**Searched and clean.** The checker's other settled facts (views handed back, idle calls, unset locals, landings, drop
+order) read callees' bodies, which are imports; early freeing's `handedToC` reaches only the root's object; the root
+relative names of errors (`ErrQualifier`) were checked in both orders of an import cycle under `OLANG_CHECKREUSE`.
+SPEC's B3i names the new input. **Tests.** The checks scenario `reusefact` (`checks/fixtures/reusefact`: `uid` with the
+fact and an in-place call, `bake` baking it, roots `back` and `quiet`): back then quiet in one directory gives quiet's
+clean answer (`true true 14`), then both again under `OLANG_CHECKREUSE` reuse every module with every object the same.
+The scenario fails on the compiler before the fix.

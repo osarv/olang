@@ -1,0 +1,22 @@
+# B3i: a program handing an export fn to C (qsort's) - C may call it back from any C call, so uid's getuid may write a
+# global, and uid's code is decided otherwise than quiet.olang's
+import "std/io"
+import "uid"
+import "bake"
+
+G mut I64 = 0
+
+type Item struct(key I32) { key }
+
+extern fn qsort(base mut Array<Item>&, n I64, size I64, cmp fn&(a Item&, b Item&) I32)
+
+export fn olang_count(a Item&, b Item&) I32 {
+    G = G + 1
+    return a.key - b.key
+}
+
+fn main() ? {
+    xs := Array<Item>[Item(2), Item(1)]
+    qsort(xs, xs.Len(), 4, olang_count)
+    try io.Println($uid.Quiet() " " $bake.Said() " " $uid.Run())
+}
