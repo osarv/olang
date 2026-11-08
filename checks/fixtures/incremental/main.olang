@@ -1,0 +1,13 @@
+# B3i's incremental build (checks scenario "incremental"): the root of five modules - a library with a struct, a deep
+# import, a generic and a C file - each edit of the scenario's list built here and in a clean directory, and compared
+import "std/io"
+import "lib"
+import "gen"
+import fast "fast.c"
+
+fn main() ? {
+    c := lib.Counter(1)
+    c.Add(gen.Max(2, 5))
+    n := try lib.Num("12") catch default -1
+    try io.Println($c.Total() " " $n " " $lib.Kept() " " $lib.Said() " " $fast.twice_c(4))
+}

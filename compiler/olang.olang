@@ -653,7 +653,6 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         prog.Units.Push(u)
     }
     if kind != build.Kind.Module { keep(l, cfg, keys, reads, e.Made, objs, hashes) }
-    if (try os.Env("OLANG_FACTSTATS") catch default "") != "" { factStats(l, c, e, keys) }
     # X20: each C import's own C, compiled beside the modules into the same bitcode, so the link inlines it
     for m in l.Mods {
         if m.CUnit == "" { continue }
@@ -669,6 +668,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         prog.Units.Push(build.Unit($"c_" $m.Identity, build.UnitKind.Module, cir))
     }
     if (try os.Env("OLANG_CHECKREUSE") catch default "") != "" { checkReuse(e, prog, c, lw, d, cfg, kind, baked) }
+    if kind != build.Kind.Module and (try os.Env("OLANG_FACTSTATS") catch default "") != "" { factStats(l, c, e, keys, prog) }
     prog.Links = l.Links()
     if d.Errors() > 0 { error build.Failed.Reported }
     if e.Library {
@@ -925,14 +925,20 @@ fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, reads A
 }
 
 # OLANG_FACTSTATS: what the program decided and its modules read (facts.olang), and which modules were reused and which
-# lowered again, a line each on the standard error - what the incremental build's checks compare
-fn factStats(l mut load.Loader&, c typecheck.Checker&, e emit.Emitter&, keys Array<String&>&) {
+# written again (a module with no code of its own is neither), and each object, a line each on the standard error - what
+# the incremental build's checks compare
+fn factStats(l mut load.Loader&, c typecheck.Checker&, e emit.Emitter&, keys Array<String&>&, prog build.Program&) {
+    made Map<I64, Bool>
+    for r in e.Made { made.Put(r.Module, true) }
     b := StringBuilder()
     b.Push($"olang: facts " $c.P.Facts.Decided " decided, " $c.P.Facts.Reads " read\n")
     for m in range keys.Len() {
         if keys[m] == "" or l.Mods[m].File < 0: continue
-        b.Push($"olang: " $("reused " if e.ReusedAt.Has(m) else "lowered ") $l.Mods[m].Identity "\n")
+        what := "reused " if e.ReusedAt.Has(m) else "lowered " if made.Has(m) else ""
+        if what != "": b.Push($"olang: " $what $l.Mods[m].Identity "\n")
     }
+    # each object by its IR's hash: equal objects have equal names (B3j)
+    for u in prog.Units { b.Push($"olang: unit " $u.Identity " " $(u.Hash if u.Hash != "" else build.IrHash(u.Ir)) "\n") }
     try io.PrintErr(b.ToString()) catch io.Error { }
 }
 
@@ -947,15 +953,26 @@ fn putFile(path String&, text String&, pid I32) Bool {
     return true
 }
 
+# how many units the program's C files (X20) add after its objects
+fn cUnits(c typecheck.Checker&) I64 {
+    n := 0
+    for m in c.P.L.Mods {
+        if m.CUnit != "": n++
+    }
+    return n
+}
+
 # OLANG_CHECKREUSE: the program emitted again with nothing reused, every object compared with the units this build has
 fn checkReuse(e mut emit.Emitter&, prog mut build.Program&, c mut typecheck.Checker&, lw mut lower.Lowerer&
     d mut diag.Diagnostics&, cfg mut build.Config&, kind build.Kind, baked mut Map<I64, eval.Image>&) {
     if e.ReusedAt.Len() == 0 { return }
     f mut emit.Emitter& = emitter(c, lw, d, cfg, kind, baked)
     fresh := f.Objects()
-    bad := fresh.Len() != prog.Units.Len()
+    # (the units of the program's C files, X20, come after its objects)
+    units := prog.Units.Len() - cUnits(c)
+    bad := fresh.Len() != units
     for i in range fresh.Len() {
-        if i >= prog.Units.Len() { break }
+        if i >= units { break }
         u := prog.Units[i]
         if fresh[i].Identity != u.Identity or fresh[i].Ir != u.Ir {
             try io.PrintErr($"olang: reuse check: " $fresh[i].Identity " differs\n") catch io.Error { }
@@ -963,7 +980,7 @@ fn checkReuse(e mut emit.Emitter&, prog mut build.Program&, c mut typecheck.Chec
         }
     }
     if bad {
-        try io.PrintErr($"olang: reuse check: " $prog.Units.Len() " objects, " $fresh.Len() " written afresh\n") catch io.Error { }
+        try io.PrintErr($"olang: reuse check: " $units " objects, " $fresh.Len() " written afresh\n") catch io.Error { }
         os.Exit(3)
     }
     try io.PrintErr($"olang: reuse check: " $e.ReusedAt.Len() " modules reused, every object the same\n") catch io.Error { }

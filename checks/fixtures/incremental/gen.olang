@@ -1,0 +1,2 @@
+# B3i's incremental build: a generic, its instances made in the root's object
+fn Max<T>(a T, b T) T { return a if b < a else b }

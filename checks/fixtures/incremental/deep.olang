@@ -1,0 +1,31 @@
+# B3i's incremental build (checks scenario "incremental"): the deep import - a C call's fact (G42), a call through
+# x[i] made in place or on a copy by the same fact (E31b), a baked global (K2), an inferred error set (R1a), a scope
+# obligation (O10b) and an embedded file (E38), each an input an edit changes
+extern fn getuid() U32
+
+fn work() U32 { return getuid() }
+
+# G42: whether work may write a global - it may, where C may call the program back
+fn Quiet() Bool { return not work.WritesGlobals }
+
+Baked := 40 + 2
+
+Data := String(embed "data.txt")
+
+fn Parse(t String&) I64 ? { return try t.ParseInt(10) }
+
+fn Keep(a mut Vec<String&>&, s String&) { a.Push(s) }
+
+type Box struct(n I64) { n }
+
+fn (b mut Box&) Peek() I64 {
+    getuid()
+    return b.n
+}
+
+# E31b: v[0].Peek() on the element in place, or on a copy where Peek may change v
+fn Run() I64 {
+    v Vec<Box>
+    v.Push(Box(7))
+    return v[0].Peek() + v[0].n
+}

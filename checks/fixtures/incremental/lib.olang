@@ -1,0 +1,20 @@
+# B3i's incremental build: a library with a struct, importing the deep module
+import "deep"
+
+type Counter struct(start I64) {
+    n := start
+}
+
+fn (c mut Counter&) Add(k I64) { c.n += k }
+
+fn (c Counter&) Total() I64 { return c.n + deep.Baked }
+
+fn Num(t String&) I64 ? { return try deep.Parse(t) }
+
+fn Kept() I64 {
+    a Vec<String&>
+    deep.Keep(a, "kept")
+    return a.Len()
+}
+
+fn Said() String { return $deep.Quiet() " " $deep.Run() " " $deep.Data.Trim() }
