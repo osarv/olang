@@ -2610,6 +2610,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -2639,6 +2641,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -3190,6 +3193,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -3198,6 +3203,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -3625,6 +3631,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -3642,6 +3650,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -3860,6 +3869,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -3868,6 +3879,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -4073,6 +4085,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -4090,6 +4104,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -4394,6 +4409,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -4411,6 +4428,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -4587,6 +4605,31 @@
 |   hex std/hex
 | module std/time
 |   ctime <time.h>
+===  compiler/facts.olang
+| module <math.h>
+| module <string.h>
+| module compiler/facts
+|   sha std/sha256
+| module std/hex
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module std/sha256
+|   hex std/hex
 ===  compiler/fetch.olang
 | module <fcntl.h>
 | module <math.h>
@@ -4879,6 +4922,8 @@
 |   source compiler/source
 | module compiler/diagmsg
 |   msgs compiler/msgs
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -4896,6 +4941,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -5054,6 +5100,8 @@
 |   source compiler/source
 | module compiler/diagmsg
 |   msgs compiler/msgs
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -5062,6 +5110,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -5247,6 +5296,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -5264,6 +5315,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -5775,6 +5827,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -5792,6 +5846,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -6043,6 +6098,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -6072,6 +6129,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -6403,6 +6461,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -6432,6 +6492,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -6944,6 +7005,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -6952,6 +7015,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -7211,6 +7275,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -7246,6 +7312,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -7912,6 +7979,8 @@
 |   source compiler/source
 | module compiler/diagmsg
 |   msgs compiler/msgs
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -7920,6 +7989,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -8152,6 +8222,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -8181,6 +8253,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -8749,6 +8822,8 @@
 |   source compiler/source
 | module compiler/diagmsg
 |   msgs compiler/msgs
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -8757,6 +8832,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -8997,6 +9073,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -9005,6 +9083,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -9406,6 +9485,8 @@
 |   source compiler/source
 | module compiler/diagmsg
 |   msgs compiler/msgs
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -9414,6 +9495,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -9695,6 +9777,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -9712,6 +9796,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -10234,6 +10319,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -10251,6 +10338,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -10640,6 +10728,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -10648,6 +10738,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -10922,6 +11013,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -10957,6 +11050,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -11417,6 +11511,59 @@
 | module std/prelude/vec
 | module std/time
 |   ctime <time.h>
+===  fuzz/editgen.olang
+| module <fcntl.h>
+| module <math.h>
+| module <signal.h>
+| module <stdio.h>
+| module <stdlib.h>
+| module <string.h>
+| module <sys/mman.h>
+| module <sys/stat.h>
+| module <sys/wait.h>
+| module <time.h>
+| module <unistd.h>
+| module fuzz/editgen
+|   os std/os
+|   scopegen fuzz/scopegen
+| module fuzz/scopegen
+| module std/cancel
+|   ctime <time.h>
+|   time std/time
+| module std/io
+|   fcntl <fcntl.h>
+|   unistd <unistd.h>
+| module std/os
+|   cancel std/cancel
+|   csignal <signal.h>
+|   ctime <time.h>
+|   fcntl <fcntl.h>
+|   io std/io
+|   mman <sys/mman.h>
+|   stdio <stdio.h>
+|   stdlib <stdlib.h>
+|   sysstat <sys/stat.h>
+|   syswait <sys/wait.h>
+|   unistd <unistd.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module std/time
+|   ctime <time.h>
 ===  fuzz/fuzz.olang
 | module <fcntl.h>
 | module <math.h>
@@ -11430,8 +11577,12 @@
 | module <sys/wait.h>
 | module <time.h>
 | module <unistd.h>
+| module fuzz/editgen
+|   os std/os
+|   scopegen fuzz/scopegen
 | module fuzz/fuzz
 |   chan std/chan
+|   editgen fuzz/editgen
 |   gen fuzz/gen
 |   io std/io
 |   os std/os
@@ -15256,6 +15407,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -15285,6 +15438,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -15853,6 +16007,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -15861,6 +16017,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -16290,6 +16447,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -16307,6 +16466,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -16539,6 +16699,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -16547,6 +16709,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -16754,6 +16917,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -16771,6 +16936,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -17083,6 +17249,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -17100,6 +17268,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -17290,6 +17459,31 @@
 |   hex std/hex
 | module std/time
 |   ctime <time.h>
+=== -t compiler/facts.olang
+| module <math.h>
+| module <string.h>
+| module compiler/facts
+|   sha std/sha256
+| module std/hex
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module std/sha256
+|   hex std/hex
 === -t compiler/fetch.olang
 | module <fcntl.h>
 | module <math.h>
@@ -17611,6 +17805,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -17628,6 +17824,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -17794,6 +17991,8 @@
 |   source compiler/source
 | module compiler/diagmsg
 |   msgs compiler/msgs
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -17802,6 +18001,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -17989,6 +18189,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -18006,6 +18208,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -18535,6 +18738,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -18552,6 +18757,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -18811,6 +19017,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -18840,6 +19048,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -19185,6 +19394,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -19214,6 +19425,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -19742,6 +19954,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -19750,6 +19964,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -20011,6 +20226,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -20046,6 +20263,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -20757,6 +20975,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -20765,6 +20985,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -21005,6 +21226,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -21034,6 +21257,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -21645,6 +21869,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -21653,6 +21879,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -21901,6 +22128,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -21909,6 +22138,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -22318,6 +22548,8 @@
 |   source compiler/source
 | module compiler/diagmsg
 |   msgs compiler/msgs
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -22326,6 +22558,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -22609,6 +22842,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -22626,6 +22861,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -23162,6 +23398,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -23179,6 +23417,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -23576,6 +23815,8 @@
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -23584,6 +23825,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -23866,6 +24108,8 @@
 |   typecheck compiler/check
 |   typed compiler/typed
 |   types compiler/types
+| module compiler/facts
+|   sha std/sha256
 | module compiler/fetch
 |   io std/io
 |   os std/os
@@ -23901,6 +24145,7 @@
 |   cond compiler/cond
 |   diag compiler/diag
 |   diagmsg compiler/diagmsg
+|   facts compiler/facts
 |   fetch compiler/fetch
 |   load compiler/load
 |   msgs compiler/msgs
@@ -24375,6 +24620,59 @@
 | module std/prelude/vec
 | module std/time
 |   ctime <time.h>
+=== -t fuzz/editgen.olang
+| module <fcntl.h>
+| module <math.h>
+| module <signal.h>
+| module <stdio.h>
+| module <stdlib.h>
+| module <string.h>
+| module <sys/mman.h>
+| module <sys/stat.h>
+| module <sys/wait.h>
+| module <time.h>
+| module <unistd.h>
+| module fuzz/editgen
+|   os std/os
+|   scopegen fuzz/scopegen
+| module fuzz/scopegen
+| module std/cancel
+|   ctime <time.h>
+|   time std/time
+| module std/io
+|   fcntl <fcntl.h>
+|   unistd <unistd.h>
+| module std/os
+|   cancel std/cancel
+|   csignal <signal.h>
+|   ctime <time.h>
+|   fcntl <fcntl.h>
+|   io std/io
+|   mman <sys/mman.h>
+|   stdio <stdio.h>
+|   stdlib <stdlib.h>
+|   sysstat <sys/stat.h>
+|   syswait <sys/wait.h>
+|   unistd <unistd.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module std/time
+|   ctime <time.h>
 === -t fuzz/fuzz.olang
 | module <fcntl.h>
 | module <math.h>
@@ -24388,8 +24686,12 @@
 | module <sys/wait.h>
 | module <time.h>
 | module <unistd.h>
+| module fuzz/editgen
+|   os std/os
+|   scopegen fuzz/scopegen
 | module fuzz/fuzz
 |   chan std/chan
+|   editgen fuzz/editgen
 |   gen fuzz/gen
 |   io std/io
 |   os std/os
