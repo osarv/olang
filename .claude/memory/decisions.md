@@ -22,11 +22,10 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 Open questions:
 
 - The licence: the user, 2026-11-07, "we'll still push it into the future" (postponed again). Default: no licence file. Ask when publishing. Context: archive/decisions_log.md, the entry "2026-11-07, the user on four answers".
-- The refusal audit's questions 4-6 (asked 2026-11-08; docs/refusals.md, "Questions"; 1-3 answered yes, see
+- The refusal audit's questions 4-5 (asked 2026-11-08; docs/refusals.md, "Questions"; 1-3 and 6 answered, see
   archive/decisions_log.md). Default for each until answered: refused. 4. a field slot holding storage of two scopes
   (whole-program field analysis) - recommend not now; the user wants to talk about it more. 5. `any` copyable through
-  a Copy in its table - recommend not now; recorded, not answered. 6. `become` arguments built in a tail scope (memory
-  grows as `return`'s does, stack constant, a `-memory` row) - recommend yes; explained again 2026-11-08.
+  a Copy in its table - recommend not now; recorded, not answered.
 - docs/genrefs.md's six direction questions (asked 2026-11-08; the note's section 14). Nothing is built until they
   are answered. Recommendations: 1. back links written `weak` (they cannot be inferred) - yes, default nothing built;
   2. a weak read turns null where the compiler reclaims (as in Swift, Java, Python; a program reading a removed node

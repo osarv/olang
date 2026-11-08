@@ -34626,3 +34626,7 @@ C11 accepts a run-time-length `Array<T>(n)` of destructor values (ended last fir
 with a conditional destructor, and a global holding a destructor value by value (ended at exit after main's). Built in
 rounds R8 (1, 3) and R6 (2). Question 4 (a field slot holding two scopes) the user wants to discuss; 5 (`any`
 copyable) is recorded; 6 (`become` and a tail scope) was explained again. Nothing is built yet.
+Question 6 the user then answered "Yes, do A": storage a function builds and passes at a `become` is built in a hidden
+tail scope bound by the chain's first ordinary call and passed down unchanged, freed where that caller lets go of the
+result - the memory the `return` form keeps, with `become`'s constant stack; `-memory` names each site. Keeping the
+refusal (so `become` would also mean constant memory) was declined. Built in round R5.

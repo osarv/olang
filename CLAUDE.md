@@ -618,7 +618,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   docs/refusals.md, 2026-11-08, sorts them by cause; the user's yes the same day, rounds R6/R8: what a global keeps
   lives in the program's scope, deferred code pending at a `yield` runs when an unfinished generator is let go, and C11
   accepts run-time-length arrays of destructor values, a program's own conditional destructor and a global holding one
-  by value).
+  by value; and storage passed at a `become` is built in a tail scope shared by the chain, as `return`'s would be).
 - **The unique hand-on is a move (T13b, O8d, D9i, 2026-11-07).** A unique value handed on out of a by-value parameter
   at its last mention is moved, never copied; a lambda keeps its own copy; a named function moving a unique value into
   what outlives the call is no function value (T22a).

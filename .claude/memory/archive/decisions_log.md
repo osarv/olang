@@ -3694,3 +3694,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   pending at a `yield` runs when an unfinished generator is let go; 3. "yes, if they can be made memory safe ... so
   yes, allow them" - C11 accepts run-time-length arrays ending their elements, a program's own conditional destructor,
   a global holding a destructor value by value. Built in rounds R8 (1, 3) and R6 (2).
+- 2026-11-08, the user on the refusal audit's question 6 (explained again): "Yes, do A" - storage a function builds and
+  passes at a `become` is built in a tail scope shared by the chain, freed where the chain's first caller lets go (as
+  the `return` form; stack constant; a `-memory` row). Built in round R5.
