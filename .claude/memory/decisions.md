@@ -1012,3 +1012,8 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   rely on - conditions on arguments and promises about the body, all checked; declaration words say what a type or
   method IS (`unique`, `immut`, `packed`: how values are laid out, copied, changed; `commutes`: defines what `2.0 * v`
   means, claims nothing) - they stay outside; `noreturn` moves in (checked against the body, D8e). Sent to the note.
+- The user 2026-11-08: "If it terminates, then it does the same thing as not returning" - read as the word failing
+  (terminates = ends the program); the promise meant "every call comes back to its caller". Renamed `returns` (the
+  opposite of `noreturn`); the result relation became `borrows a` / `noborrow`. Layout confirmed by the user's
+  reading: `fn name(params) [conditions and promises] Result ? Errors { body }`; type words stay in the type
+  declaration, `commutes` after an operator method's result. Sent to the note.
