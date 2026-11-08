@@ -250,7 +250,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Integers of every width, `I1`-`I128` and `U1`-`U128` (T4a, docs/ideas.md #5, the user's decision 2026-10-18).**
   Ordinary members: wrapping at the width, the T6b lattice, literals adapting (up to 128 bits, E4a), `T.Max`/`Min`,
   `std/arith`, `Narrow`, `$`, `Hash`, `Format`, `T.Parse`, E37's bit operations. Storage is the next of 1, 2, 4, 8, 16
-  bytes. A declared type may not be named `I2` (it is one now).
+  bytes. A declared type may not be named `I2` (it is one now). Widths stay primitive (the user, 2026-11-08: a width is representation and layout - packed fields, C `_BitInt`, FPGAs - while wrapping, `arith.Checked` and `arith.Saturating` are behaviour, in std).
 - **A literal's own type: an integer is `I64`, a float `F64` (T6a, the user's calls, 2026-10-08/10).** A literal adapts
   to a typed target (T6); an expression of literals only adapts as one literal, computed exactly (E4a).
 - **Numbers widen implicitly toward their base, never narrow (T6b, the user's design).** Wider within a signedness,
