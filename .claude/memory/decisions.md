@@ -21,4 +21,8 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-(None open.)
+- Token savings (asked 2026-11-08). Default: none of these done. Recommended: 1-3 and 5-7 yes; 4 is the user's call.
+  1. CLAUDE.md's Settled decisions (85 KB) to docs/decisions.md, read on demand; CLAUDE.md keeps the checklist and a
+     one-line index. 2. rules.md 44 KB -> ~10 KB, history to archive. 3. direction.md trimmed likewise. 4. Remove the
+     hotpath clone from this container (its CLAUDE.md loads here). 5. The 2-hourly check-in to 6-hourly. 6. xhigh
+     only for new section-8 design; Sonnet for more pieces. 7. Agent reports at most ~10 lines; /compact more often.
