@@ -699,6 +699,8 @@ a60a07eeb5030117 4eef54c9c1ef32db checks/cases/k1faultydefault.olang
 ea011d31660e5d33 c53b89e38f2eb798 checks/cases/k1globalaborts.olang
 15db36d78c28ab8f 432033b35267bdcc checks/cases/k1matchnull.olang
 e0de5360f510421e 5a86c6bf4dd611f3 checks/cases/k2abortsread.olang
+5c38b1f5a17827ff a07ecd50afb7cae8 checks/cases/keywordfield.olang
+2c37a92a17b8f762 fcac5cf515f077ea checks/cases/keywordlocal.olang
 8481be5f2195dd58 06f633bb6075a51b checks/cases/kw.olang
 f7abf363fbd2b5f9 221912b49ef818e6 checks/cases/l10bdouble.olang
 830f9d7c333ff65d 20562a66c5370964 checks/cases/l10bprefix.olang

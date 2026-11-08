@@ -2081,6 +2081,10 @@
 | 1-title-built-at-run-time
 === run joinwritesafter.olang
 | status 0
+=== run keywordfield.olang
+| status 0
+| returns 10 keeps 6 pure true any 5
+| borrows 16 noalloc true
 === run kw.olang
 | status 0
 === run l12method.olang
