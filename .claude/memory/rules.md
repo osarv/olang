@@ -578,6 +578,16 @@ be caught up in one go later. Settling-network research (oagent) waits for the s
 commit, and the user made `master` oann's default branch. From now on oann's work goes to `master`, as olang's does
 (and the designated session branch). The user deleted `main` the same day.
 
+## Compile per module, whole program only on top
+The user, 2026-11-08: "I'm not against whole program compilation, but I do prefer if we can compile a part of a
+program and reuse it, because the compilation process is quite expensive. But like the final kind of compilation on
+top, given pre-compiled units, that can be whole program for sure ... I don't want to have to recompile every single
+piece of line of code every time."
+**How to apply:** every design keeps facts and code per module, reused when the module's inputs did not change (B3i);
+whatever needs the whole program runs only in the final step over precompiled units (the root's instances object,
+the link, LTO), as generic instances do. A design that makes an edit in one module recompile others states that cost
+and goes to the user. Every design brief says so.
+
 ## Models for the compiler/ refactor
 The user, 2026-11-01: "Yes, use Sonnet for the refactor but not for the validation", then "Actually nvm. Don't use
 sonnet for the refactor". The compiler/ refactor (task #66) runs on Opus, as its validation does (bulk review,
