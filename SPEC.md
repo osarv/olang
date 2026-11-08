@@ -1334,6 +1334,13 @@ declaration's), a line's end. They hold no comma, so they never make a type need
 
 | word | every function a value of the type can call ... | a call through the type relies on |
 |---|---|---|
+| `returns` | always comes back to its caller, with a value or an error: G42's `Terminates` (every loop counted, not recursive, waits for nothing, calls no C not known to return), and no ending it writes - no `noreturn` call, no `unreachable`, no `!`, no `assert` (but one whose condition is the literal `true`); the language's own checks aside (a slice or an array length out of range, running out of memory or stack: E16b, D14b, D14c) | the call comes back (G42's `Returns`) |
+| `noalloc` | asks the runtime for no storage (G42's `Allocates` false) | no allocation |
+| `noblock` | waits for nothing (`Blocks` false) | no wait |
+| `nospawn` | starts no task (`Spawns` false) | no task |
+| `norecurse` | never calls itself, directly or through others (`Recursive` false) | no re-entry |
+| `noextern` | calls no C - no `extern fn`, no C import's function - but C's math functions (X8) and the runtime's own (`CallsC` false), and reaches no class of B11c but threads | no C |
+| `pure` | writes nothing but through its `mut` reference parameters (an adapter's receiver, E31, and a lambda's captures are none): it stores only into storage it builds and storage a `mut` reference parameter reaches; reads and writes no mutable global; calls no C but C's math and the runtime's own; calls only what is pure, destructors included. It may allocate, wait and start tasks whose calls are pure | the call changes nothing it was not given writably (G42's `Pure`) |
 | `borrows a` | gives a result that refers only into what `a` refers to, or into what the function builds or the program's scope holds; one word per such parameter | the result needs nothing of the other arguments |
 | `noborrow` | gives a result that refers into nothing its parameters refer to | the result needs nothing of the arguments |
 | `keeps b in a` | may keep `b` - what it refers to, the references it holds - in what `a` refers to, beyond the call | `b` outlives `a`, exactly where something can be stored through `b` (O25g) |
@@ -1342,7 +1349,8 @@ declaration's), a line's end. They hold no comma, so they never make a type need
 
 Without `borrows` or `noborrow` a result holding references may refer into what every reference parameter refers to
 (T22). Without a `keeps` a call keeps nothing of its arguments beyond the call but what its result refers to (O17). The
-words `returns`, `noalloc`, `noblock`, `nospawn`, `norecurse`, `noextern` and `pure` promise facts of every call (G42).
+words `returns`, `noalloc`, `noblock`, `nospawn`, `norecurse`, `noextern` and `pure` promise facts of every call (G42);
+without one, a call through the type may do anything of its kind, and with none at all, anything.
 A function type writing `keeps x` is one something can be stored through (O25g): a value of it is held exactly where it
 lives, and a lambda held as it is built where its captures live, never in a caller's frame (D16d). The words are kept by
 position: `fn&(a mut N&, b N&) keeps b in a` and `fn&(x mut N&, y N&) keeps y in x` promise the same.
@@ -1409,7 +1417,12 @@ best })` keeps the longest element.
 **T22b (a function type's bound).** A function type's promises (T21c) are a **bound** on every call through a value of
 it: its relations - what its result may borrow (T22, narrowed by `borrows` and `noborrow`) and what its `keeps` words
 keep - are the obligations a call may require (§8 O10c) and all it may keep of its arguments (O17); its effect words and
-`pure` are facts every call has (G42). A call through a value whose functions are not followed (T22a) discharges
+`pure` are facts every call has (G42), each judged where a value comes to be held as the type by what each function it
+may call does: a named function's facts read through its name, a lambda's with what each capture holding a function
+value is where the lambda is made, an adapter's with a write through its receiver no `pure` one, a local's by every
+value given it, a call's result by what its callee's returns give where each is a named function. A function judged
+for `returns` or `norecurse` may call through no value whose functions are not followed - whatever that value's type
+promises, as the call could reach the very function judged. A call through a value whose functions are not followed (T22a) discharges
 exactly these relations, the value's own home (`keeps x`) taken where the value called through lives (D16d). Where a
 value comes to be held as a function type - an argument, a store, an initializer, a `return`, a conversion - it fits
 only if each function it may call does what the bound allows: its obligations, in the type's positions (a parameter's
@@ -1417,7 +1430,8 @@ scope as its parameter, the result scope as the result, a lambda's capture's or 
 home, a derived scope as its parameter's field), are each one of the bound's relations or follow from them (O10b's
 closure), exact only where the bound has both halves - judged where the value meets a boundary (T22a); and a value whose
 functions are not all followed fits only where its own type's bound is within this one's (each promise of this type
-promised by it, each relation of its bound one of this one's), else a compile-time error naming T22b and the promise.
+promised by it, each relation of its bound one of this one's), else a compile-time error naming T22b and the promise -
+for an effect word, with a note at what in the function breaks it (`its call of 'Println' may allocate`).
 So a function promising more (keeping less, borrowing less) fits a type allowing more, and a type writing `keeps b in a`
 holds functions keeping `b` in `a`. A lambda held as a type writing `keeps x` keeps `x` only in a capture living exactly
 where the lambda does - one capturing from a longer-lived scope than its own is a compile-time error naming T22b. A
@@ -8205,12 +8219,13 @@ tells the two forms apart: `explain` with a word ending in `.olang` and a name i
 
 Under a function's signature (and each instance's, and each method's under its type) a line `# effects: ...` says what a
 call may do beyond computing its result, read off its body and every body it may call: `none`, or each of - the
-parameters it writes through (`writes through 'out'`), `writes a global`, `allocates` or `allocates nothing`, `may grow a
+parameters it writes through (`writes through 'out'`), those it calls through (`calls through 'f'`, each such call
+counted by what the parameter's type promises, G42), `writes a global`, `allocates` or `allocates nothing`, `may grow a
 Vec`, `starts tasks`, the classes of B11c it reaches (`files`, `network`, `processes`, `environment`, `threads`, `C`),
 else `calls C`, `may end the program`, `may block` or `never blocks`, `recursive`, `always ends` (G42's `Terminates`),
 and `may be computed while compiling` (K1a: no C but C's math, no mutable global read or written) - a destructor the body
 registers or runs counted as G42's facts count it. A call through a
-function value or an `any` is `anything`, and so is a call of C (G42's) in a program C may call back (O8d condition 3)
+function value whose type writes no effect word, or through an `any`, is `anything`, and so is a call of C (G42's) in a program C may call back (O8d condition 3)
 - `anything - it calls C, which may call the program's export fns`; a body that did not check is `not known`. Under a generic function, a line
 `# T needs: Less, a walk ...` for each type variable says what its body asks of it beyond its written constraint
 (G18a). Under a function that cannot become a value (T21), a line `# not a value: ...` says why: a method is called as
@@ -9533,12 +9548,22 @@ none at its end, while one an error may leave with before the hand-on does):
 | `CallsC` | call an extern or a C import's function, C's math functions (X8) and the runtime's own aside |
 | `Spawns` | start a task |
 | `Recursive` | call itself, directly or through others |
-| `Terminates` | **always end**: every loop of it is a for-in over an array or a range (a count known before the loop starts), it is not recursive, and nothing of it waits or calls C not known to return - the one fact true where nothing is known against it |
+| `Terminates` | **always end**: every loop of it is a for-in over an array or a range (a count known before the loop starts), it is not recursive, and nothing of it waits or calls C not known to return |
+| `Pure` | **write nothing but through its `mut` reference parameters**, as T21c's `pure` says |
+| `Returns` | **always come back**: `Terminates`, and no ending it writes (a `noreturn` call, `unreachable`, `!`, an `assert`), as T21c's `returns` says |
 
-A call through a function value or an `any` may do anything, and so may a body that did not check, and - in a program
+`Terminates`, `Pure` and `Returns` are the facts true where nothing is known against them. A call through a function
+value does what the functions it may call do, where they are followed (T22a, T22b): a named function, a lambda or an
+adapter written there, a local by every value given it, a call's result by what its callee's returns give where each
+is a named function; through a parameter (or a lambda's capture), what the function given for it at each call does -
+so `Twice(inc, x)` does what `inc` does, read off each call of `Twice` - and otherwise what the value's type promises
+(T21c): an effect word makes its fact false (`returns` makes `Terminates` and `Returns` true and `Blocks` and
+`Recursive` false), `pure` makes `Pure` true, and anything else it may do; a type writing no effect word, anything. A
+function's facts read through its name take each call through one of its parameters by that parameter's written
+type: `fn Apply(f fn&(x I64) I64 noalloc, x I64) I64` has `Allocates` false and `Blocks` true. A call through an `any` may do anything, and so may a body that did not check, and - in a program
 C may call back (an export fn given to a C function, X13; built as a library, X14; or linking C of its own, a `.c`
 import or a `link`, which may name one) - a call of C but C's math, the runtime's own, the C functions known to return
-at once, and the C library's input and output, text, memory and time functions, none of which calls back: such a function has every fact but `Terminates`, so no
+at once, and the C library's input and output, text, memory and time functions, none of which calls back: such a function has every fact but `Terminates`, `Pure` and `Returns`, so no
 fact is claimed that a run could prove false. A fact is decided once the
 program has checked, from every body: read in a body, it is the constant the bodies give - an attempt reads each as
 its cautious value first and the program is checked again with the values found, until what is read is what is found

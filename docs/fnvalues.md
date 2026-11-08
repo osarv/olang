@@ -1129,6 +1129,15 @@ round 5 judges them (check records no place list yet - round 5 adds it).
 
 ### Round 5 - effect words, and effects through parameters (sections 3.5, 4.5; opus, high)
 
+Built 2026-11-08 (wt-effects; HISTORY.md, "Effect words, and effects through parameters"). Where it went otherwise than
+below: `returns` and `norecurse` are judged with no call through an unfollowed value relied on, whatever its type says
+(3.5 relied on the bound where it was being established: a lambda stored in a `returns` field calling through that
+field was accepted and looped); locals are followed by every value given them, not by typed.Versions; a call's result
+is followed where its callee's returns give named functions; a value handed to a call through another value sets no
+`Calls` bit (that value's bound covers it); a type writing no effect word stays "anything", so programs writing none
+read what they read before; the scope pass no longer judges effect words type to type - the effects pass owns them,
+its message for an unfollowed value the same.
+
 Beside round 4 once its grammar and types have merged (effects.olang, and check.olang's place list only).
 
 - **Spec**: G42 (its table gains `Pure` and `Returns`; its last paragraph, 3.5), T21c's effect rows.
