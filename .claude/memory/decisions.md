@@ -21,5 +21,4 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-- When oann research starts (asked 2026-11-08): small CPU experiments now, written in today's olang without oann
-  (throwaway code, results recorded in oagent), or wait for oann? Default: wait. Recommended: start now.
+(None open.)

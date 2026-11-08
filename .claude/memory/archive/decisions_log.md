@@ -3788,3 +3788,7 @@ stood:
      changes) or planned while compiling into specialized code (fixed models, GPU and FPGA)? Recommended: both, the
      run-time graph built first.
   Answered the same day: CPU without any BLAS (our kernels); GPU: our own kernels where they pay (fused, small, new formats), NVIDIA's libraries where they win (large dense products) - the user: "We don't redo NVIDIA stuff out of principle"; the model runs all three ways (eager to experiment quickly, a captured run-time graph, planned while compiling for targets).
+
+- 2026-11-08, When oann research starts (asked 2026-11-08): small CPU experiments now, written in today's olang without oann
+  (throwaway code, results recorded in oagent), or wait for oann? Default: wait. Recommended: start now.
+  Answered the same day: start now, since the settling experiments can inform the language - "but be smart, like, don't build a bunch of stuff we're going to have to remake once the language is done". So: self-contained programs in oagent/experiments, local learning rules only (no tensor, graph or autodiff, which are oann's), and a log of what the language lacked.
