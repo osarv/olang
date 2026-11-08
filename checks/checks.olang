@@ -39,7 +39,7 @@ fn workers() I64 {
 # the last check to finish is a short one. A scenario is a function reporting into a report (r.expect(ok, what, dir) for
 # each thing it checks), named here and in scenario(), with a test reporting it: one missing from either is reported as
 # a failure, never skipped.
-Scenarios := Array<String&>["fix", "strheld", "fuzz", "testfuzz", "bench", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
+Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "bench", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
                      "scopesan", "frameenv", "crash", "interp", "target", "assertloc", "objnames", "spawnerr", "generators", "runfile"
                      "chunkpool", "capscope", "reuse", "reusefact", "incremental", "records", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
@@ -69,6 +69,7 @@ fn withParts(names Array<String&>&) Array<String&>& {
     all Vec<String&>
     for n in names {
         if n == "strheld" { for p in StrheldPrograms { all.Push($"strheld/" $p) } }
+        if n == "reuseall" { for k in range 2 * ReuseWays { all.Push($"reuseall/" $k) } }
         all.Push($n)
     }
     return all.ToArray()
@@ -398,6 +399,10 @@ test "every case in checks/cases does what its header says" {
 
 # the scenario named "name", reporting into r
 fn scenario(r mut report&, name String&) ? Failed {
+    if name.StartsWith("reuseall/") {
+        try reuseAll(r, try name[9:].ParseInt(10) catch default 0)
+        return
+    }
     if name.StartsWith("strheld/") {
         try strheldProgram(r, name[8:])
         return
@@ -421,6 +426,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "reuse" { try reuse(r) }
         case "reusefact" { try reusefact(r) }
         case "incremental" { try incremental(r) }
+        case "reuseall" { }
         case "records" { try records(r) }
         case "embed" { try embedded(r) }
         case "interp" { try interp(r) }
@@ -1017,6 +1023,40 @@ fn incEdit(r mut report&, dir String&, e Edit&) ? Failed {
     try r.expect(incBuild(dir, "inc", "", "undone", "main.olang", "main") == 0, $"the build undoing " $what, dir)
     try r.expect(sh(dir, "! grep -q '^olang: lowered ' undone && grep -v '^olang: reused ' undone > a && grep -v '^olang: \\(reused\\|" $
                     "lowered\\) ' base > b && cmp -s a b") == 0, $"the build undoing " $what " lowered something or differs (undone, base)", dir)
+}
+
+# B3i, docs/wholeprog.md 10.3 (T3): every run case built under OLANG_CHECKREUSE in one shared directory, in two orders
+# (each its own directory) - so each reuses the records the cases before it left, every reused object is written afresh
+# and compared, and the builds of an order run ReuseWays at a time in its directory, side by side (B3k). A record read
+# where its program's code differs ends a build with 3, "reuse check: ... differs". The scenario is its parts
+test "every run case built in one directory, in two orders, reuses only what it would write afresh" { assert passed("reuseall") }
+
+# how many builds of one order run at once
+ReuseWays := 4
+
+# part k: the run cases at k, k + ReuseWays, ... of the sorted list - forward for the first ReuseWays parts, reversed for
+# the rest - built in that order's directory
+fn reuseAll(r mut report&, k I64) ? Failed {
+    names Vec<String&>
+    for name in Cases {
+        src := try os.ReadFile("checks/cases/" $name) catch default ""
+        if lineAfter(src, "# check: ").StartsWith("run"): names.Push($name)
+    }
+    names.Sort(fn(a String&, b String&) Bool { return a < b })
+    back := k >= ReuseWays
+    dir String& = $root() "/build/checks/reuseall-" $("back" if back else "forth")
+    os.Run("mkdir -p " $os.Quote(dir))
+    rep := fresh($"reuseall/" $k)                # where a failed build's output is copied, for the report
+    for i in range names.Len() {
+        if i % ReuseWays != k % ReuseWays: continue
+        name := names[names.Len() - 1 - i] if back else names[i]
+        flags := lineAfter(try os.ReadFile("checks/cases/" $name) catch default "", "# flags: ")
+        out := $"out-" $name ".txt"
+        status := sh(dir, $"OLANG_CHECKREUSE=1 \"$OLANG\" build " $flags " " $os.Quote($root() "/checks/cases/" $name) " > " $out " 2>&1")
+        if status == 0: continue
+        os.Run($"cp " $os.Quote($dir "/" $out) " " $os.Quote($rep "/out.txt"))
+        try r.expect(false, $name " built under OLANG_CHECKREUSE in " $dir, rep)
+    }
 }
 
 # B3i, docs/wholeprog.md 10.3 (T6): a record truncated, a part's IR garbled, or a record another compiler wrote (its sum

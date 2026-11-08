@@ -21569,12 +21569,47 @@ fn (c mut Checker&) heldResult(sig types.TypeId) types.TypeId {
 # "any" (types.ReachesWrite) - lowering's quiet statements read no view where it stands then (lower.quiet)
 fn (c mut Checker&) mutStorage() Bool {
     c.P.L.MutGlobals.Clear()
+    files Vec<I64>
     for key in c.globalTypes.Keys() {
         t := try c.globalTypes.Get(key) catch default types.UnknownT
         v := c.P.GlobalDecl(key.First, source.NameId(I32(key.Second)))
-        if v is not null and generic.WrittenMut(v.Ty) and not c.scalarType(t) or c.P.T.ReachesWrite(t) { c.P.L.MutGlobals.Push(I64(t)) }
+        if not (v is not null and generic.WrittenMut(v.Ty) and not c.scalarType(t) or c.P.T.ReachesWrite(t)): continue
+        c.P.L.MutGlobals.Push(I64(t))
+        files.Push(key.First)
     }
+    c.P.Facts.Decide(typed.MutGlobalsFact, c.mutGlobalsValue(files), false)
     return c.P.L.MutGlobals.Len() > 0
+}
+
+# B3i: the value of the fact lowering reads MutGlobals and MutStorage through (typed.MutGlobalsFact): "none", or the
+# globals' types by name and the text of every module the globals' modules reach through their imports - where those
+# types, and every type they hold, are declared - so a record of a module whose code judged them holds only where
+# they are the same
+fn (c mut Checker&) mutGlobalsValue(files Vec<I64>&) String {
+    if files.Len() == 0: return "none"
+    mods Vec<mut load.Module&>& = c.P.L.Mods
+    seen := Array<Bool>(mods.Len())
+    work Vec<I64>
+    for m in range mods.Len() {
+        if mods[m].File in files: work.Push(m)
+    }
+    for work.Len() > 0 {
+        x := try work.Pop() catch { break }
+        if seen[x]: continue
+        seen[x] = true
+        for im in mods[x].Imports {
+            if im.Target >= 0: work.Push(im.Target)
+        }
+    }
+    tys Vec<String&>
+    for g in c.P.L.MutGlobals { tys.Push(c.ty(types.TypeId(I32(g)))) }
+    tys.Sort(fn(a String&, b String&) Bool { return a < b })
+    b := StringBuilder()
+    b.Push($tys.Join(", ") "\n")
+    for m in range mods.Len() {
+        if seen[m]: b.Push($mods[m].Identity "\n" $(mods[m].Src!.Text if mods[m].Src is not null else "") "\n")
+    }
+    return b.ToString()
 }
 
 # a type no view can read: a number, a Bool, a declared type over one, an enum whose cases carry nothing

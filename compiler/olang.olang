@@ -581,10 +581,9 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     e mut emit.Emitter& = emitter(c, lw, d, cfg, kind, baked)
     # B3i: a module whose object a build with the same inputs made already is not lowered or written again
     keys Array<String&>& = Array<String&>(0)
-    reads Array<String&>& = Array<String&>(0)
     irs Map<String, String&>      # a reused module's parts' IR, "MODULE PART", read and checked against their hashes
     if kind != build.Kind.Module {
-        keys, reads = moduleKeys(l, c, cfg, tests)
+        keys = moduleKeys(l, cfg, tests)
         # -memory reports what lowering decided in every module, so it lowers every one (records still kept)
         if not cfg.Memory: e.Reuse = reusable(l, c, cfg, keys, irs)
         build.Phase("facts")
@@ -653,7 +652,8 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         hashes.Push($u.Hash)
         prog.Units.Push(u)
     }
-    if kind != build.Kind.Module { keep(l, cfg, keys, reads, e.Made, objs, hashes) }
+    # (the reader records again: lowering read facts of its own)
+    if kind != build.Kind.Module { keep(l, cfg, keys, readerRecords(l, c), e.Made, objs, hashes) }
     # X20: each C import's own C, compiled beside the modules into the same bitcode, so the link inlines it
     for m in l.Mods {
         if m.CUnit == "" { continue }
@@ -745,19 +745,16 @@ fn buildInputs(cfg build.Config&, tests Bool) String {
 }
 
 # each module's key, "" for the root's (never reused): the hash of buildInputs, then of its own text, identity and
-# paths and those of every module its imports reach, in their order, and the prelude's - and its reader record (B3i,
-# facts.olang): the whole-program facts its code read, and those its imports' code read that an importer's code may
-# carry (a G42 fact baked into a global, K2) - each "read VALUE NAME", sorted, "" for none. The key says which record a
-# module may take; the reader record, which of the records under that key holds for this program
-fn moduleKeys(l mut load.Loader&, c typecheck.Checker&, cfg mut build.Config&, tests Bool) Array<String&>&, Array<String&>& {
+# paths and those of every module its imports reach, in their order, and the prelude's. The key says which record a
+# module may take; its reader record (readerRecords), which of the records under that key holds for this program
+fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<String&>& {
     mods Vec<mut load.Module&>& = l.Mods
     n := mods.Len()
     keys mut Array<String&>& = Array<String&>(n, "")     # "" for none
-    reads mut Array<String&>& = Array<String&>(n, "")
     # under -debug every object's debug information names the program's compile unit, which is the root's file (B2e):
     # there a module's object is the root's program's as well as its own
     base := buildInputs(cfg, tests)
-    if base == "" { return keys, reads }
+    if base == "" { return keys }
     inputs := $base $("\nroot " $mods[l.Root].Identity " " $mods[l.Root].Path if cfg.Debug else "")
     hashOf := Array<String&>(n, "")
     for m in range n {
@@ -773,21 +770,32 @@ fn moduleKeys(l mut load.Loader&, c typecheck.Checker&, cfg mut build.Config&, t
     }
     for m in range n {
         if m == l.Root { continue }
-        order := reached(mods, m)
         parts Vec<String&>
         parts.Push(inputs)
         parts.Push(hashOf[m])
+        for x in reached(mods, m) { parts.Push($mods[x].Identity " " $hashOf[x]) }
+        keys[m] = build.HashOf(parts)
+    }
+    return keys
+}
+
+# each module's reader record (B3i, facts.olang), "" for the root's and for none: the whole-program facts its code read
+# - the checker's and lowering's (lower.mutGlobals) - and those its imports' code read that an importer's code may carry
+# (a G42 fact baked into a global, K2), each "read VALUE NAME", sorted - asked once lowering is done
+fn readerRecords(l mut load.Loader&, c typecheck.Checker&) Array<String&>& {
+    mods Vec<mut load.Module&>& = l.Mods
+    reads mut Array<String&>& = Array<String&>(mods.Len(), "")
+    for m in range mods.Len() {
+        if m == l.Root { continue }
         lines Vec<String&>
-        for x in order {
-            parts.Push($mods[x].Identity " " $hashOf[x])
+        for x in reached(mods, m) {
             if mods[x].File < 0: continue
             rec := c.P.Facts.Record(mods[x].File, x == m)
             if rec != "": lines.Push(rec)
         }
-        keys[m] = build.HashOf(parts)
         reads[m] = sortedLines(lines.Join("\n"))
     }
-    return keys, reads
+    return reads
 }
 
 # the modules m reaches through its imports, itself and the prelude's included, in the loader's order

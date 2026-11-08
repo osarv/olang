@@ -425,6 +425,10 @@ type ViewWalk struct(T types.Table&, B Body&, Elig I64, Views fn&(id BodyId) I64
 
 # the bits a function's view facts use: one per parameter below ViewBits, ViewOther for a view of anything else (a
 # tail call's argument that is no parameter's) - its result copied at every call, never read in place
+# B3i: the name of the whole-program fact lowering's D9h judgements read the program's mutable globals through
+# (check.mutStorage decides it, lower.mutGlobals reads it, facts.olang)
+MutGlobalsFact := "D9h mutable globals"
+
 ViewBits I64 = 62
 ViewOther I64 = I64(1) << 62
 
