@@ -1,4 +1,4 @@
-# check: fail error[T22a, E31]: Keeper's Call ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call
+# check: fail error[T22b]: Keeper's Call keeps 'x' in its instance, and the function type of this argument says nothing of that - write 'keeps x' after its signature
 # T22a/E31: a value adapted through a Call that keeps its argument beyond the call is called through a function value,
 # which checks nothing of it - refused as a lambda keeping its parameter is (PE1a)
 import "std/io"
