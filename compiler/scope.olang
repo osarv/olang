@@ -5466,7 +5466,9 @@ fn (s mut Scoper&) ueExpr(b typed.Body&, x typed.Expr?&, l I64, mode I64) Bool {
         }
         case typed.Expr.Text(_, _, t) {
             for pc in t.Pieces {
-                if pc == typed.Piece.Render and (flRootExpr(pc.x) == l or not s.ueExpr(b, pc.x, l, mode)) { return false }
+                if pc != typed.Piece.Render: continue
+                # (a number, a Bool read out of it is rendered as any read: R1's e31bviewbuilds)
+                if flRootExpr(pc.x) == l and not s.numberField(pc.x, l) or not s.ueExpr(b, pc.x, l, mode) { return false }
             }
             return true
         }
@@ -5562,6 +5564,14 @@ fn (s mut Scoper&) uePlace(b typed.Body&, p typed.Lvalue&, l I64, mode I64) Bool
         case typed.Lvalue.Payload(_, _, pl) { return s.uePlace(b, pl.Base, l, mode) }
         case typed.Lvalue.Temp(_, _, v, _) { return s.ueExpr(b, v, l, mode) }
         case _ { return true }
+    }
+}
+
+# whether x reads a number or a Bool out of a field of the parameter l's instance
+fn (s mut Scoper&) numberField(x typed.Expr&, l I64) Bool {
+    return match s.unAway(x) {
+        case typed.Expr.Read(_, ty, p, _): ownField(p, l) >= 0 and s.isNumberLike(ty)
+        case _: false
     }
 }
 
@@ -7807,10 +7817,20 @@ fn (s mut Scoper&) derivedBuilds(fty types.TypeId, vars Array<I64>&, v I64, beta
 fn (s mut Scoper&) splitBorrow(x typed.Expr&) {
     match s.unAway(x) {
         case typed.Expr.Borrow(sp, _, p) {
-            if s.splitPlace(p) and s.report { s.err(s.firstToken(s.B!.File, sp), msgs.BorrowSplitValue()) }
+            if s.splitPlace(p) and not s.liftSplitPlace(p) and s.report { s.err(s.firstToken(s.B!.File, sp), msgs.BorrowSplitValue()) }
         }
         case _ { }
     }
+}
+
+# R1 (refusals 5.1): a split value held by reference or sliced - the local it is part of has its storage lifted where
+# its references live, in the inference's gathering; whether a lift was proposed
+fn (s mut Scoper&) liftSplitPlace(p typed.Lvalue&) Bool {
+    refs := s.peekPlace(p, true)
+    l := flRoot(p)
+    if not s.liftGather or not refs.Runs() or s.genResult(refs) or l < 0 or not s.liftable(l) { return false }
+    s.liftStorage(l, refs)
+    return true
 }
 
 # whether a place, not reached through a reference, is (part of) a value whose references live where its own storage
@@ -8154,7 +8174,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             s.placeOperands(sl.Base)
             # a slice or a view of a value whose references live elsewhere than its storage would take them to live
             # where that is (O17a)
-            if s.splitPlace(sl.Base) and s.report { s.err(s.sliceAt(sp, sl), msgs.SliceSplitValue()) }
+            if s.splitPlace(sl.Base) and not s.liftSplitPlace(sl.Base) and s.report { s.err(s.sliceAt(sp, sl), msgs.SliceSplitValue()) }
             s.val(sl.Lo, Term.None)
             s.val(sl.Hi, Term.None)
             st := s.sliceTerm(sl.Base)
