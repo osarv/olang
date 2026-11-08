@@ -3697,3 +3697,26 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - 2026-11-08, the user on the refusal audit's question 6 (explained again): "Yes, do A" - storage a function builds and
   passes at a `become` is built in a tail scope shared by the chain, freed where the chain's first caller lets go (as
   the `return` form; stack constant; a `-memory` row). Built in round R5.
+
+
+## 2026-11-08 evening, the user on docs/wholeprog.md and docs/genrefs.md
+
+The user: "If we are going to do it eventually, just do it now, because we are building the language now and we don't
+want to do too many refactorings and full verifies. On all of the ones you recommended, yes, do yes." So every
+recommendation of both lists is decided as recommended, and wholeprog question 5 (an incremental front end) is yes now
+rather than later. genrefs: 1 `weak` yes; 2 accepted; 3 the count of owning places (b), now; 4 superseded by
+wholeprog (facts with readers); 5 yes; 6 `std/pool` yes. The entries as they stood:
+
+- docs/wholeprog.md's direction questions (asked 2026-11-08 evening; the user wants "compile one module at a time"
+  rescoped). Defaults: today's rule. 1. replace the per-module rule with facts with readers (link-time constants, the
+  root's object, module objects keyed by the facts read) - yes; 2. early freeing in every module through link-time
+  constants, with genrefs' questions 4-5 - yes, after fnvalues round 6; 3. a precompiled library's defining module
+  decides its fields' scope sets - yes, into B3i now; 4. field sets of two scopes (refusals question 4) - allow, after
+  round 6 or when real code hits it; 5. an incremental front end - not now.
+- docs/genrefs.md's direction questions (asked 2026-11-08; the note's section 14; the user: "We will settle this in a
+  couple of hours" - no agent depending on it starts before). My proposal after discussing it: settle the language now
+  - 1. `weak` written on back links, yes; 2. a weak link does not keep its node and reads null once it is freed,
+  accept - built as genrefs round 1 beside a one-holder rule (early freeing of nodes only ever held by one owning
+  link, compile time only, the user's idea); the reclaiming of nodes with back links later, after fnvalues round 6.
+  3. holder record (a) bit or (b) count of owning places - (b), may wait; 4. per module - default; 5. early freeing
+  in every module through link-time constants - yes, later; 6. `std/pool` of generational handles - yes.

@@ -454,6 +454,12 @@ ask is when the fix itself requires a genuine design decision (a real fork in ho
 not just an implementation gap). A "does this generalize / is this handled" question that turns up a bug is itself
 grounds to just fix it, not merely report it and wait.
 
+## Build what we will build anyway now (the user, 2026-11-08)
+"If we are going to do it eventually, just do it now, because we are building the language now and we don't want to do
+too many refactorings and full verifies." **How to apply:** a recommendation of mine of the form "yes, later" or
+"not now, revisit when" for something we will clearly do is built now, ordered so refactorings and full verifies are
+shared; "later" only where it truly depends on something unbuilt.
+
 ## Optimizations are mine to decide
 The user, 2026-10-27 (asked whether to fuse comprehensions over lane expressions): "yes of course, all these kinda
 optimization tricks, dont even bother asking me, in fact, make a through search to find all that we have missed".
@@ -510,10 +516,12 @@ the link, LTO), as generic instances do. A design that makes an edit in one modu
 and goes to the user. Every design brief says so. Not absolute (the user, the same day: "if this constraint is too
 much to actually make this memory safe and effective, then I'm willing to give it up as well"): where whole-program
 facts make memory safety or freeing clearly better, both variants are measured and the choice goes to the user.
-**Being rescoped (the user, 2026-11-08 evening: "we want to rescope the compile each module at a time"; "it's come up a
-couple of times now that whole program compilation kind of seems attractive").** A survey of what whole-program
-compilation would gain, what is kept across compilations, and C/library boundaries is docs/wholeprog.md (being
-written); the replacement rule waits for the user's answers to its questions.
+**Rescoped (the user, 2026-11-08 evening: yes to docs/wholeprog.md's recommendations, and "If we are going to do it
+eventually, just do it now").** Facts with readers replace "one module at a time": the front end may use whole-program
+facts; each fact records the modules that read it, delivered as a link-time constant, in the root's object, or in a
+module's object keyed by the facts it read; an edit recompiles exactly what read a changed fact; the front end itself
+becomes incremental on the same records. At a precompiled library's boundary the defining module decides. The
+paragraphs above stand where they do not conflict.
 
 ## Models for the compiler/ refactor
 The user, 2026-11-01: "Yes, use Sonnet for the refactor but not for the validation", then "Actually nvm. Don't use
