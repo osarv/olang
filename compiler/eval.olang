@@ -237,6 +237,7 @@ type frame struct() {
     ErrKind I64 = -1
     ErrAt I32 = 0
     Gen I32 = -1         # D18: a generator's Next running - its record in gens; -1 for any other frame
+    Tail I64 = 0         # S21: the tail scope made for its call through a function value, closed after its storage
 }
 
 # a generator (D18): its Next's function and what its walk is - not started (0), suspended (1) with its frame, the
@@ -4178,8 +4179,18 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
                 case mir.VarKind.Closing: types.ClosingVar
                 case _: -9
             }
+            found := false
             for j in range vvars.Len() {
-                if vvars[j] == want and j < I64(scopes.N) { s = m.scopeOf(fi, f.Refs[I64(scopes.At) + j]) }
+                if vvars[j] == want and j < I64(scopes.N) {
+                    s = m.scopeOf(fi, f.Refs[I64(scopes.At) + j])
+                    found = true
+                }
+            }
+            # S21: a become chain's tail scope, which the value's type does not pass - one made for the call, closed as
+            # it returns (as emit's thunk makes it)
+            if not found and want == types.ResultVar and m.T.Role(g.Ty) == types.RoleTail {
+                s = m.newScope(sBlock)
+                m.fs[nf].Tail = s
             }
         }
         m.ws[m.fs[nf].Vars + i] = s
@@ -4681,6 +4692,7 @@ fn (m mut Machine&) tail(fi I64, c mir.Call) {
     g.Scopes -= delta
     g.Vars -= delta
     g.Closing = fr.Closing
+    g.Tail = fr.Tail
     m.fs[fi] = g
     m.nFs--
     m.nWs -= delta
@@ -4751,6 +4763,7 @@ fn (m mut Machine&) leave(fi I64, raised Bool, x mir.Operand, code I64) {
         m.fs[fi].Done = true
         m.fs[fi].Raised = raised
         m.fs[fi].Code = code
+        if fr.Tail != 0 and m.live(fr.Tail) { m.closing.Push(fr.Tail) }
         m.closing.Push(fr.Store)
         m.fs[fi].Pending = true
         return
