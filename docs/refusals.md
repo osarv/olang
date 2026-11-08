@@ -14,9 +14,9 @@ is built and what this note proposes is built after it.
   appendix); a sample of each class read and compiled; the refusal kinds of `compiler/msgs.olang` in scope listed, the
   dead and the untested ones found; the `$x` copies of compiler/ tried without their `$` (section 9); the rounds,
   decisions and questions written.
-- Not done: the same strip experiment over std/ and tools/ (only compiler/'s 246 sites were run); a run of each (b)
-  shape under a hand-placed prototype (the soundness arguments are reasoned, section 5, not measured).
-- A fresh agent continuing would start at section 9 (more sites) or section 10 (refining a round).
+- Not done: the same strip experiment over std/ and tools/ (compiler/'s 246 sites were run, section 9); a run of each
+  (b) shape under a hand-placed prototype (the soundness arguments are reasoned, section 5, not measured).
+- A fresh agent continuing would start at section 9 (std/ and tools/) or section 10 (refining a round).
 
 ## 0. Summary
 
@@ -37,10 +37,10 @@ that stays in class (c) is a correctness rule rather than a placement one: what 
 accepted, it would compute something the program did not mean (a lost write, a stale read, a second copy of a unique
 value, a write through what was promised read-only).
 
-Real code shows the same: of compiler/'s `$x` copies passed to a `Push` or assigned whole, every one tried so far
-compiles without its `$` (section 9) - the placement rounds already merged (O27, O28, NLL) took over what they were
-written for, and std's own documentation still tells readers to write copies that are no longer needed (io.Lines,
-std/csv).
+Real code shows the same: of compiler/'s 246 `$x` copies passed to a `Push` or assigned whole, 234 compile without
+their `$` today - the placement rounds already merged (O27, O28, NLL) took over what they were written for - 6 are
+renderings of numbers, and the last 6 are refusals this note's rounds and fnvalues take over (section 9). std's own
+documentation still tells readers to write copies that are no longer needed (io.Lines, std/csv).
 
 The build (section 10): eight rounds after docs/fnvalues.md's round 6, the largest the split values (44 cases, O17
 generalized), then values kept through an obligation (15), by-value parameters and match bindings (15), tasks (9),
@@ -308,7 +308,33 @@ by fnvalues 11).
 **The `$x` copies of compiler/.** compiler/ (but its tools) has 246 places that copy a value only to put it somewhere:
 `out.Push($rel)`, `args.Push($c.Clang)`, `x = $y` assigned whole. Each was tried without its `$` - the file edited, the
 whole compiler checked (`olang explain compiler/olang.olang main`, which runs check, the scope pass and M19g in about 4
-seconds), the file restored. (Interim: the experiment is still running; section updated when it ends.)
+seconds), the file restored. Of the 246:
+
+| result | sites | |
+|---|---|---|
+| compiles without the `$` | 234 | placement (O27, O28, NLL, QCE's copy into a `Vec<String>`) already does what the copy was written for; String is immut, so sharing instead of copying is unobservable |
+| a type error | 6 | `$n` of a number or a Bool - a rendering, not a copy |
+| still refused | 6 | below |
+
+The six that still need their `$`:
+
+- compiler/bindgen.olang:252 and :817 - `g.recs[r].Key = t`, `g.recs[i].Name = n` with `t`, `n` this function's text:
+  O20's `StoredRefOutlived` ("the container outlives what this refers to"), a store into an element's field of a `Vec`
+  reached through a parameter. Class (b), round R2: the text built where `g.recs` lives, as O28 builds a local kept by
+  a direct store.
+- compiler/bindgen.olang:1180 and :1226 - `hide.Push(t)`, after which a split value is lent at :1208 (O17). Class (b),
+  round R1.
+- compiler/load.olang:808 - `dir := $m.Path` used later as a `catch default`: R11/O25's `DefaultScope` ("a reference
+  default lives where the call's result does"). Class (b), a sharper judgment (R8): the default already outlives where
+  the result lands.
+- compiler/source.olang:34 - `n.texts.Push(t)` in `Names.add`: refused far away, at compiler/mcp.olang:115, where a
+  lambda reaching `add` is passed for a written function type (T22a). Class (a), fnvalues round 7.
+
+O20's `StoredRefOutlived` and R11's `DefaultScope` are two of the kinds section 8 found without a must-fail case - the
+experiment gives each one, and R2 and R8 should keep them as run cases. So 234 copies in compiler/ are leftovers from
+before the placement rounds - written to satisfy a checker that no longer needs them - and 240 of 246 would go once
+the rounds here and fnvalues' round 7 are built. R8 removes the 234 (sonnet, medium: the experiment's list, one `make
+quick`); std/ and tools/ were not tried (Progress).
 
 **std's own guidance is stale.** std/io.olang (io.Lines) and std/csv.olang tell readers "to keep one longer, put it
 where it is to be kept (kept.Push($line) builds a copy in the list's scope)" and "kept.Push($row[0])". Since O27 became
