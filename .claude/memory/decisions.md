@@ -969,3 +969,14 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   plans agree, a cap falling back to the written type's contract), so callbacks, Map/Filter/Sort and the like judge
   and inline as direct calls; a function value stored in a field, collection, `any` or handed to C stays judged by its
   written type (the irreducible dynamic case). ASKED, folded into (3).
+- Written relations on function types, the user 2026-11-08: "all of the relations on a function are visible in the
+  signature if we want them to ... if we want a type that can hold a function value, we make that type very explicit
+  in what it has to fulfill". PROPOSED (with the monomorphization above, not instead): optional relation items in a
+  function type's contract brackets, worded by parameter names, never scopes - `fn&(a mut N&, b N&) [a keeps b]`
+  (b stored into a), `fn&(x T) [keeps x]` (x kept beyond the call, in what the value holds); checked against every
+  function or lambda that lands there (one keeping more is T22a's error naming the item to add), relied on at every
+  call through it; a function keeping less fits; the error at a boundary says the exact item to write; optional on a
+  `fn` declaration as a checked promise (`olang api` then reports a changed relation as breaking). Reverses part of
+  QCB (written relations removed 2026-11-02, "make manual scopes impossible") - stated: no scope is written, only what
+  the function does with its parameters, checked, never trusted. Open: effects promises too (`[not Allocates]`, G42's
+  facts) in the same brackets. ASKED.
