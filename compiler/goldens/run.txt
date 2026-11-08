@@ -1270,6 +1270,8 @@
 | ok - floats: IEEE's exceptions as errors
 | ok - Checked: each step checked, left to right, the same while compiling as at run time
 | ok - every width: Neg, Shift, Div, Mul, Rem and Pow at widths no case names - baked, decided and run alike (T4a)
+| ok - Saturating: clamped at the limits at every width - baked, decided and run alike (T4a)
+| ok - Saturating: lane by lane (E39), baked and run alike
 === test std/base64.olang
 | status 0
 | ok - the RFC 4648 test vectors

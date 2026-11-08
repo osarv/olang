@@ -1359,6 +1359,7 @@ fcfa8467169068db cc90ed014b81127d checks/cases/s8dwideor.olang
 533f6669a7ffb1b7 3a4e8359519ce100 checks/cases/s8eerrdefernull.olang
 36ac4ee903c1a49b 3205c2c3f3c093a7 checks/cases/s9erangeundertry.olang
 9420be80316ac417 4c9710212db009ab checks/cases/samevalue.olang
+9539cce793560b77 845499b7d3577a7e checks/cases/satadd01outside.olang
 fa8a92e7c42149b8 5b71f14c4c7be092 checks/cases/server.olang
 f4c72c86a6271d6b fbf73e8f0efb44bb checks/cases/setatcompound.olang
 655fca48c11f9423 f5ca527632fb2fda checks/cases/shiftliteralrange.olang
@@ -2068,15 +2069,15 @@ c5981293a7210cfa 6a458c8cb82ad07c compiler/ast.olang
 76e002fe516379d0 54e1e0a2c532d39c compiler/bindgen.olang
 66ea46391d3e2f5e fdd57a9623da9d04 compiler/build.olang
 5bd986c42a6537a1 8d01751edef42717 compiler/cabi.olang
-845931edf8bb24d5 130db8f92ecfda60 compiler/check.olang
+9856010ce6300f90 b2a7624b7f95b815 compiler/check.olang
 94c7f3b55fc68951 cbfca1ccd5f7e3bb compiler/cond.olang
 08c016b6fa677234 38b6caca809cf49b compiler/definit.olang
 7889da610f9b16fe c68171505df1539b compiler/diag.olang
 5f082e242ba93794 7f771c54233db1e4 compiler/diagmsg.olang
 cbc992a0673d2a33 ab5e9c3da9cc24be compiler/doc.olang
 c14cc22bbe2e17c2 dccb80632291d634 compiler/effects.olang
-6c62d7a876175545 76495988a6b5a623 compiler/emit.olang
-63fff1e9ef18f4a0 eec82c3dfaa0dbfa compiler/eval.olang
+f8e79f2522ce8231 a4753ea93eaa8d2c compiler/emit.olang
+eef409ba5791f9f7 0a08818951c7d88f compiler/eval.olang
 16163e6f9df276b3 54eb1c2c6e16237d compiler/explain.olang
 9b7a0b42d346bf49 dd17d2a288e6cc84 compiler/fetch.olang
 1630f5d961f45247 ee6c552b069c82be compiler/fix.olang
@@ -2089,7 +2090,7 @@ a60d3ef1c94e04ef 3210ecd7559b4af9 compiler/listing.olang
 c1e7c54ab342bd83 a0f3a2b4877e9b84 compiler/lower.olang
 3879802f0148397c 30a4a1749140521e compiler/lsp.olang
 a9fdbee6672ba31e 66c773708ec0132b compiler/mcp.olang
-3c13777ef661b4c6 508bd44d15663cb9 compiler/mir.olang
+f8196ec000eedc18 2140329dddb6fb9a compiler/mir.olang
 30beca3864bc2f7e cd1b08710fb2068e compiler/msgs.olang
 7cd82ba607aceedb c78d128299c7014b compiler/names.olang
 3ca8bd78a33b7278 b320b50c08e32326 compiler/needs.olang
@@ -2139,7 +2140,7 @@ d19ca4c6f3ef58cd 6e05437c6ff8bdbe compiler/tools/namesdiff.olang
 3eeaef21e68f3823 65a92702004d9f3c compiler/tools/seed.olang
 5f8e74923332b3f9 74d63a3b6b3102ec compiler/tools/tokdiff.olang
 0bfae04e3fc7eb91 6e3fa55efb6e4fa7 compiler/tools/toolkit.olang
-179bebc0213b095a 299b507f5a4309b5 compiler/typed.olang
+88523eb20bfd4a3c a25b6ded3cf01752 compiler/typed.olang
 b76ae0062b654d35 da9df37f33ec8c36 compiler/types.olang
 fa824335a9ff5728 34274dafb2707aad compiler/unparse.olang
 9d3a732e0dc4e8c6 50d46c98ba81451f compiler/views.olang
@@ -2192,7 +2193,7 @@ e80a737f7a20ca5f bde779a0d7f5b9af fuzz/repro/scopepayloadcopy.olang
 db8945d61d1da622 da12aa95f546f5f0 fuzz/repro/trygenericindex.olang
 a50a05dbfa9f2c6a fd4ecaaf9906e12f fuzz/repro/trystmtarg.olang
 0a4db3097b2d7ba5 134a5a5166dfe0a1 fuzz/scopegen.olang
-93ad8964d30bbcd3 d2bd44f9343367c6 std/arith.olang
+db65d99df6538287 8b27f2f21948c80e std/arith.olang
 18c8eb0f52459335 99ea9824edee2da8 std/base64.olang
 80f57eca5d0483c0 9fec421bf491d487 std/bitset.olang
 e1152c6cb1a85c56 aa09810fba5a2673 std/cancel.olang
