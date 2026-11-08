@@ -1,4 +1,4 @@
-# check: fail error[T22a]: 'hang' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call
+# check: fail error[T22b]: 'hang' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
 # T22a: hang requires b to outlive a, which a call through a function value would never check
 type Node struct(v I32) {
     v

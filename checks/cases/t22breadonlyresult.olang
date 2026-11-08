@@ -1,0 +1,16 @@
+# check: fail error[T22a]: 'self' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call
+# T22, T22b: a function handing back its writable argument as a writable result holds the result exactly where the
+# argument lives, which a type whose result is read-only does not say (t22borrowedresult writes 'mut N&')
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+fn self(a mut N&) mut N& { return a }
+fn keep(f fn&(a mut N&) N&, out mut N&, i I64) {
+    t := N(i)
+    out.next = f(t)
+}
+fn main() {
+    x mut N& = N(1)
+    keep(self, x, 42)
+}

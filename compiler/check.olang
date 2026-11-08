@@ -6229,8 +6229,9 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
                 }
             } else if res != types.VoidT {
                 b.PushChar(' ')
+                # (a result's promises end it before a "?", T21c)
                 c.spellGroup = es.Len() > 0 and c.P.T.KindOf(res) == types.Kind.Func and
-                               c.P.T.Items(c.P.T.Errors(res)).Len() == 0
+                               c.P.T.Items(c.P.T.Errors(res)).Len() == 0 and c.P.T.PromisesOf(res) == 0
                 c.spell(b, res, false)
                 c.spellGroup = false
             }
@@ -6245,6 +6246,7 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
                     k++
                 }
             }
+            b.Push(c.P.T.PromiseText(t))   # T21c: its promises after its signature
             if wrap { b.PushChar(')') }
         }
         case types.Kind.Tuple { c.spellList(b, c.P.T.Parts(t), "(", ")") }
@@ -19869,7 +19871,7 @@ fn (c mut Checker&) lambdaErrs(e typed.Expr?&, errs types.ListId) typed.Expr?& {
                     if c.P.T.Errors(vt) == errs { return e }
                     b := c.Bodies[I64(id)]
                     b.Ty = c.P.T.Func(c.P.T.Params(b.Ty), c.P.T.Result(b.Ty), errs, c.P.T.ScopesOf(b.Ty))
-                    nt := c.P.T.Func(c.P.T.Params(vt), c.P.T.Result(vt), errs, c.P.T.ScopesOf(vt), c.P.T.NamesIdOf(vt))
+                    nt := c.P.T.Refunc(vt, c.P.T.Params(vt), c.P.T.Result(vt), errs, c.P.T.ScopesOf(vt), c.P.T.NamesIdOf(vt))
                     return typed.Expr.Fn(sp, nt, fv)
                 }
                 case _ { return e }

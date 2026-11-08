@@ -34871,3 +34871,106 @@ chain's arrays read after a churn, a call through a function value, destructor o
 
 Found on the way: `Placements` read a site's lift under the row's key, `(body, -1 - site)`, where `siteLifts` keys it
 `(body, site)` - so every O27 row for a temporary named its scope "a longer-lived scope"; fixed.
+
+## Promise words and the relation words (T21, T21c, T22, T22a, T22b, O17, D16d; 2026-11-08, wt-promises, round 4 of docs/fnvalues.md)
+
+The user decided on 2026-11-08 that a function type may end with promises - words after its signature saying what
+every call through a value of it does not do, or does only as far as it says - checked against every function a value
+of the type can hold and relied on at every call through it (docs/fnvalues.md sections 2.2 and 3). Round 1 reserved
+the words; this round gives them their grammar, their place in a type's identity and the relation words' meaning in
+section 8. The effect words (`returns noalloc noblock nospawn norecurse noextern pure`) are parsed, kept and spelled
+here and judged in round 5 (G42's facts): until then a function given for one is not judged by its facts, and nothing
+relies on the word (a call through a value still counts as "anything" in G42).
+
+**Grammar (T21, T21c).** `func-type ::= "fn" reference-marker func-sig { promise }`; the words are read for as long as a
+token on the signature's line begins one, so a list's `,`, `)`, `>`, an `=`, a declaration's `{` or `?` (a function
+type's own error set comes before its words), or a line's end ends them. `token.olang`'s `EndsStatement` gained the
+bare words so a type ending a line ends its statement. A word after a declaration's, a lambda's or a trait method's
+signature is parsed and refused (T21c): what a function does is read off its body. `ast.Sig.Promises` holds them;
+`unparse` writes them back one space apart, and a result function type with words needs no parentheses before a
+declaration's `?`.
+
+**Identity (T22).** A function type's promises are a fourth part of its `types.data` (G, an interned array: the effect
+words and `noborrow` as bits, the parameters `borrows` names, each `keeps` as three numbers - kept parameter, the one it
+is kept in or the value's home, the field by name), kept by position so two types naming their parameters differently
+are one, kept in `Plain` (so inside a type argument no fit crosses them, G16a), carried by every rebuilding of a
+function type (`Refunc`, `NonNull`, `OrNull`, `Untagged`, `Subst`, a declared function type's instance), written in
+`Canon` as ` ![...]` and read back by `canonFunc`, and spelled after the signature by the checker, reflection's
+`T.Name` and `$` (E11a), the type's own parameter names first, else by position (`#2`). The checker's E12 fits a
+function value across promises at the outermost level only (a conversion, as a permission fit is).
+
+**T21c's misuses**, resolved where the type is (generic.olang's `promisesOf`, each said once per place however often
+the type is resolved): a name no parameter has, a word written twice, `keeps a in a`, a `keeps` of a value holding no
+reference and not unique, `keeps b in a` with `a` holding none, `keeps b in a.f` naming no field, a field holding no
+reference or a path, `borrows`/`noborrow` on a result holding none, `borrows a` of a value, the two together, `returns`
+after `noreturn`. A type variable may become anything, so it passes.
+
+**The bound (T22b) in the scope pass.** `valueRels` - what a call through a value not followed discharges - and the
+coverage a boundary judges by are now one function of the type, `boundEdges`: a result may borrow from each reference
+parameter `borrows`/`noborrow` leave (exactly where something can be stored through both, as before), `keeps b in a`
+adds b outlives a, `keeps b in a.f` b outlives the field's binding (its derived scope, O23a; the container's where it
+has none - so the word then says what `keeps b in a` says), `keeps x` x outlives the value's home (a slot after the
+call's bindings holding where the value called through lives), each with its exact half where something can be stored
+through what is kept. A boundary (T22a) is judged by the place's own type - the value's type there, `x.Type()`, which
+the checker's conversion made the place's - reading each obligation of each record's body in the type's positions
+(a parameter, the result, a capture or an adapter's receiver as the home, a derived scope), covered where a path of
+the bound's relations leads from one to the other (O10b's closure), exact only where it leads both ways. The error
+names the word that would say it (`ValueBeyondType`: "'link' keeps 'b' in 'a', and the function type of this argument
+says nothing of that - write 'keeps b in a' after its signature"); what no word says keeps T22a's messages. A value
+whose functions are not all followed coming to be held as a type promising otherwise (`funcHeld`, at the conversion) is
+held to its own type's bound being within the place's (`FuncTypeBeyond`, naming the promise). O17's lending reads a
+`keeps` as a keep of that argument.
+
+**`keeps x` and where a value lives (2.2.1, D16d).** A call through an unfollowed value knows only where the value lives
+(its term), which for a stored value is a lower bound - so a type writing `keeps x` is one something can be stored
+through (`storeThrough`, `narrowingMatters`): its values are held exactly where they live, so the term a call reads is
+the home itself. A lambda held as such a type is built where its captures say, never in a caller's frame (the frame
+placement makes its term shorter than what it keeps into), and what it keeps `x` in must be its home: each kept-into
+capture's scope and the value's home are judged the same, an obligation where they are scope variables (a function
+returning such a lambda requires its result to land where the capture lives) - else `LambdaKeepsOuter`. A named
+function captures nothing: held as such a type it is constant data fitting any home (`Static`). One keeping an
+argument in a global is no value of any `keeps` type - the program's scope outlives every place a value lives, and no
+word says it (decision 2 below).
+
+**Found on the way (a hole, fixed).** The boundary's coverage (`coveredRel`) accepted "the result scope outlives a
+parameter" wherever something could be stored through the parameter, while a call through the value discharged that
+half only where something could be stored through the result too. A function keeping its fresh result in its argument
+(`fn put(a mut Vec<N&>&) N& { n := N(5); a.Push(n); return n }`) given for `fn&(a mut Vec<N&>&) N&` compiled, and its
+node was read after its scope closed (the scope sanitizer aborted). The coverage now follows the bound exactly (T22's
+own words: "exactly where something can be stored through both"). `t22borrowedresult` (a function handing back its
+writable argument) held its value as a read-only result's type; it writes `mut N&` now, and `t22breadonlyresult` keeps
+the read-only form as a refusal; `t22bresultkept` is the hole.
+
+**explain.** `GivesHeld` (the `# as a value` line) judges what a function's returns give by its result's type, promises
+and all, so `fn adder(...) fn&(k String&) keeps k` no longer says its lambda is held in locals only. The `# fits:` line
+is round 11's.
+
+**Decisions (mine, within the user's decision).** 1. `keeps b in a.f` where `f` has no binding of its own means what
+`keeps b in a` means rather than being an error: which fields have bindings is inferred (O23a's promotion), so an error
+would depend on the inference; the word is refused only for a field that is not one, holds no reference, or a path.
+2. No promise says an argument is kept in a global: the design note let a named function keeping `x` in a global fit
+`keeps x` (it lives in the program's scope), but a value held in a block-scoped field would then let a call keep a
+block's storage in a global; holding such values exactly in the program's scope would refuse every named function in a
+field. 3. A named function held as a `keeps x` type is `Static` (fits any home, as constant data does). 4. The
+coverage hole is closed by tightening the coverage, not by widening what a call discharges (which would land results of
+calls through values exactly where their writable arguments live, changing placements of accepted programs). 5. A
+written function type always names its parameters (an unnamed one does not parse), so "a word naming an unnamed
+parameter" is only "a name no parameter has"; a type that lost its names (an instance's argument, Unnamed) spells its
+words by position. 6. The effect words are parsed and part of identity now and judged in round 5; the T21c table in
+SPEC gives the relation words, the effect rows coming with G42's in round 5.
+
+**Tests.** tests/promises.olang (run, `-debug -sanitize` and `test -interpret` alike; read back after churns): a cache's
+`onEvict fn?&(k String&) keeps k` holding a lambda keeping each key in a captured list; `Vec<fn&(a mut N&, b N&) keeps b
+in a>` pushed into and called through; a declared function type `Linker` with a promise; `borrows a` and `noborrow`;
+`keeps s in h.items`; `$` of a type with words; baked globals `Evicted`, `LinkedAll` (K2) and top-level asserts (S17a).
+checks: fail - the T21c misuses (t21cnoparam, -twice, -borrowsnothing, -borrowsvalue, -borrowsboth, -returnsnoreturn,
+-keepsself, -keepsvalue, -keepsinvalue, -keepspath, -keepsfield, -misplaced, -misplacedlambda, -misplacedtrait),
+t22bkeepsouter (2.2.1), t22btypebeyond, t22bborrows, t22bglobalkeep, t22bresultkept, t22breadonlyresult; run -
+t22bpushedkeeps, t22blambdakeeps, t22breturncycle beside t22apushed, t22alambdakeeps, t22areturncycle, whose messages
+(and every T22a case's whose cause one word says) now name the word.
+
+**Gates.** The base commit's compiler/ and bench sources built by the base compiler and by this one: 349 modules' IR
+byte-identical. `make scopesan`: every file passes (24 of them run again after the disk filled mid-run). `make
+scopefuzz` (100 programs): no finding. `make verify` passed but for layoutdiff, which the new fields of the compiler's
+own types (`types.data.G`, `Table`'s promise lists, `ast.Sig.Promises`, two of `Scoper`'s) moved - `make layoutgold`
+captured it again (a type's key grew from 56 to 64 bytes).

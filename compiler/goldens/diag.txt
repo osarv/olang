@@ -601,12 +601,12 @@ callrecvreadonly.olang:12:38: error[T25c]: a read-only reference cannot become w
       |                                      ^
 compilation failed with 1 error
 === callvaluekeeps.olang
-callvaluekeeps.olang:20:13: error[T22a, E31]: Keeper's Call ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it by name, or hold the value in a local and call it there
+callvaluekeeps.olang:20:13: error[T22b]: Keeper's Call keeps 'x' in its instance, and the function type of this argument says nothing of that - write 'keeps x' after its signature
    20 |     keepVia(kp, fn() I64 { return n.v + k })
       |             ^~
 compilation failed with 1 error
 === callvaluekeepsframe.olang
-callvaluekeepsframe.olang:22:13: error[T22a, E31]: Keeper's Call ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it by name, or hold the value in a local and call it there
+callvaluekeepsframe.olang:22:13: error[T22b]: Keeper's Call keeps 'x' in its instance, and the function type of this argument says nothing of that - write 'keeps x' after its signature
    22 |     keepVia(kp, c)
       |             ^~
 compilation failed with 1 error
@@ -6088,6 +6088,91 @@ t21callmaybenull.olang:8:12: error[T2c]: 'b.on' is a fn?&(n I64) I64, which may 
     8 |     assert b.on(1) == 1
       |            ^~~~
 compilation failed with 1 error
+=== t21cborrowsboth.olang
+t21cborrowsboth.olang:4:23: error[T21c]: 'noborrow' says the result refers into no parameter, and 'borrows' that it may refer into one - write one of them
+    4 | fn use(f fn&(x N&) N& noborrow borrows x) I64 { return f(N(2)).v }
+      |                       ^~~~~~~~
+t21cborrowsboth.olang:5:13: error[D8c]: '_' discards a value and names nothing, so it cannot be declared
+    5 | fn main() { _ := use(fn(x N&) N& { return N(x.v) }) }
+      |             ^
+compilation failed with 2 errors
+=== t21cborrowsnothing.olang
+t21cborrowsnothing.olang:4:24: error[T21c]: this function type's result holds no reference, so 'borrows' says nothing - leave it out
+    4 | fn use(f fn&(x N&) I64 borrows x) I64 { return f(N(1)) }
+      |                        ^~~~~~~~~
+t21cborrowsnothing.olang:5:13: error[D8c]: '_' discards a value and names nothing, so it cannot be declared
+    5 | fn main() { _ := use(fn(x N&) I64 { return x.v }) }
+      |             ^
+compilation failed with 2 errors
+=== t21cborrowsvalue.olang
+t21cborrowsvalue.olang:4:30: error[T21c]: 'x' holds no reference, so no result can refer into it - leave 'borrows x' out
+    4 | fn use(f fn&(x I64, y N&) N& borrows x) I64 { return f(1, N(2)).v }
+      |                              ^~~~~~~~~
+t21cborrowsvalue.olang:5:13: error[D8c]: '_' discards a value and names nothing, so it cannot be declared
+    5 | fn main() { _ := use(fn(x I64, y N&) N& { return y }) }
+      |             ^
+t21cborrowsvalue.olang:5:22: error[T22b]: this lambda gives back what 'y' refers to, and the function type of this argument says nothing of that - write 'borrows y' after its signature
+    5 | fn main() { _ := use(fn(x I64, y N&) N& { return y }) }
+      |                      ^~
+compilation failed with 3 errors
+=== t21ckeepsfield.olang
+t21ckeepsfield.olang:4:31: error[T21c]: 'q' is no field of what 'y' refers to
+    4 | fn use(f fn&(x String&, y H&) keeps x in y.q) { }
+      |                               ^~~~~~~~~~~~~~
+compilation failed with 1 error
+=== t21ckeepsinvalue.olang
+t21ckeepsinvalue.olang:4:27: error[T21c]: 'y' holds no reference, so nothing can be kept in what it refers to
+    4 | fn use(f fn&(x N&, y I64) keeps x in y) { f(N(1), 2) }
+      |                           ^~~~~~~~~~~~
+compilation failed with 1 error
+=== t21ckeepspath.olang
+t21ckeepspath.olang:5:31: error[T21c]: a promise names one field of a parameter - write 'in y.v'
+    5 | fn use(f fn&(x String&, y N&) keeps x in y.v.items) { }
+      |                               ^~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== t21ckeepsself.olang
+t21ckeepsself.olang:7:30: error[T21c]: 'keeps a in a' keeps a parameter in itself, which says nothing - leave it out
+    7 | fn use(f fn&(a mut N&, b N&) keeps a in a) { f(N(1), N(2)) }
+      |                              ^~~~~~~~~~~~
+compilation failed with 1 error
+=== t21ckeepsvalue.olang
+t21ckeepsvalue.olang:3:21: error[T21c]: 'x' holds no reference and is not unique, so a call can keep only a copy of it, which needs no word - leave the 'keeps' out
+    3 | fn use(f fn&(x I64) keeps x) { f(1) }
+      |                     ^~~~~~~
+compilation failed with 1 error
+=== t21cmisplaced.olang
+t21cmisplaced.olang:3:21: error[T21c]: 'pure' is a promise, written only after a function type's signature - what a function itself does is read off its body ('olang explain' shows it)
+    3 | fn twice(x I64) I64 pure { return 2 * x }
+      |                     ^~~~
+compilation failed with 1 error
+=== t21cmisplacedlambda.olang
+t21cmisplacedlambda.olang:4:36: error[T21c]: 'noalloc' is a promise, written only after a function type's signature - what a function itself does is read off its body ('olang explain' shows it)
+    4 | fn main() { _ := use(fn(x I64) I64 noalloc { return x }) }
+      |                                    ^~~~~~~
+compilation failed with 1 error
+=== t21cmisplacedtrait.olang
+t21cmisplacedtrait.olang:4:16: error[T21c]: 'pure' is a promise, written only after a function type's signature - what a function itself does is read off its body ('olang explain' shows it)
+    4 |     Area() F64 pure
+      |                ^~~~
+compilation failed with 1 error
+=== t21cnoparam.olang
+t21cnoparam.olang:3:25: error[T21c]: 'y' is no parameter of this function type - a promise names its parameters by the names written in it
+    3 | fn use(f fn&(x String&) keeps y) { f("a") }
+      |                         ^~~~~~~
+compilation failed with 1 error
+=== t21creturnsnoreturn.olang
+t21creturnsnoreturn.olang:3:33: error[T21c]: 'returns' promises every call comes back, and 'noreturn' that none does - write one of them
+    3 | fn use(f fn&(code I32) noreturn returns) { f(1) }
+      |                                 ^~~~~~~
+compilation failed with 1 error
+=== t21ctwice.olang
+t21ctwice.olang:3:33: error[T21c]: 'noalloc' is promised twice - write it once
+    3 | fn use(f fn&(x I64) I64 noalloc noalloc) I64 { return f(1) }
+      |                                 ^~~~~~~
+t21ctwice.olang:4:13: error[D8c]: '_' discards a value and names nothing, so it cannot be declared
+    4 | fn main() { _ := use(fn(x I64) I64 { return x }) }
+      |             ^
+compilation failed with 2 errors
 === t21isnullnever.olang
 t21isnullnever.olang:5:19: error[T2c]: 'f' is a fn&(x I64) I64, never null, so this is always false
     5 |     assert not (f is null)
@@ -6110,7 +6195,7 @@ t21nullnever.olang:4:9: note: the type is written here - write '?&' for '&' wher
       |         ^
 compilation failed with 1 error
 === t22acapture.olang
-t22acapture.olang:11:17: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this capture holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+t22acapture.olang:11:17: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this capture says nothing of that - write 'keeps b in a' after its signature
    11 |     f := fn() { g(x, N(2)) }
       |                 ^
 compilation failed with 1 error
@@ -6120,27 +6205,27 @@ t22afallible.olang:10:16: error[E12]: expected fn&(n I32) I32, found fn&(n I32) 
       |                ^~~
 compilation failed with 1 error
 === t22agivenvalue.olang
-t22agivenvalue.olang:16:9: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+t22agivenvalue.olang:16:9: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
    16 |     put(get, x)
       |         ^~~
 compilation failed with 1 error
 === t22agivesarg.olang
-t22agivesarg.olang:10:9: error[T22a]: this lambda keeps 'k' beyond the call, and this argument holds only what its written function type says of every call - keep a copy instead, or hold the lambda in a local and call it there
+t22agivesarg.olang:10:9: error[T22b]: this lambda keeps 'k' in what it captured, and the function type of this argument says nothing of that - write 'keeps k' after its signature
    10 |     use(adder(gone))
       |         ^~~~~
 compilation failed with 1 error
 === t22ainstancename.olang
-t22ainstancename.olang:19:9: error[T22a]: 'keepIt<Blob>' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+t22ainstancename.olang:19:9: error[T22b]: 'keepIt<Blob>' keeps 'x' in 'v', and the function type of this argument says nothing of that - write 'keeps x in v' after its signature
    19 |     use(keepIt<Blob>, v)
       |         ^~~~~~~~~~~~
 compilation failed with 1 error
 === t22alambdakeeps.olang
-t22alambdakeeps.olang:12:15: error[T22a]: this lambda keeps 'k' beyond the call, and this store holds only what its written function type says of every call - keep a copy instead, or hold the lambda in a local and call it there
+t22alambdakeeps.olang:12:15: error[T22b]: this lambda keeps 'k' in what it captured, and the function type of this store says nothing of that - write 'keeps k' after its signature
    12 |     c.onEvict = fn(k String&) { goneRef.Push(k) }
       |               ^
 compilation failed with 1 error
 === t22alatelambda.olang
-t22alatelambda.olang:15:9: error[T22a]: this lambda keeps 'b' beyond the call, and this call - reached in a loop's next turn by a value assigned after it - holds only what its written function type says of every call - keep a copy instead, or hold the lambda in a local and call it there
+t22alatelambda.olang:15:9: error[T22b]: this lambda keeps 'b' in what it captured, and the function type of this call - reached in a loop's next turn by a value assigned after it - says nothing of that - write 'keeps b' after its signature
    15 |         op(x, N(i))
       |         ^~
 compilation failed with 1 error
@@ -6148,19 +6233,52 @@ compilation failed with 1 error
 t22aobligation.olang:8:12: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     8 |     a.next = b
       |            ^
-t22aobligation.olang:17:11: error[T22a]: 'hang' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+t22aobligation.olang:17:11: error[T22b]: 'hang' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
    17 |     apply(hang, a, b)
       |           ^~~~
 compilation failed with 2 errors
 === t22apushed.olang
-t22apushed.olang:11:13: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+t22apushed.olang:11:13: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
    11 |     fs.Push(g)
       |             ^
 compilation failed with 1 error
 === t22areturncycle.olang
-t22areturncycle.olang:10:24: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this return (from a function calling itself, or among several results) holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+t22areturncycle.olang:10:24: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this return (from a function calling itself, or among several results) says nothing of that - write 'keeps b in a' after its signature
    10 |     if n == 0 { return link }
       |                        ^~~~
+compilation failed with 1 error
+=== t22bborrows.olang
+t22bborrows.olang:9:13: error[D8c]: '_' discards a value and names nothing, so it cannot be declared
+    9 | fn main() { _ := use(second, N(1)) }
+      |             ^
+t22bborrows.olang:9:22: error[T22b]: 'second' gives back what 'b' refers to, and the function type of this argument says nothing of that - write 'borrows b' after its signature
+    9 | fn main() { _ := use(second, N(1)) }
+      |                      ^~~~~~
+compilation failed with 2 errors
+=== t22bglobalkeep.olang
+t22bglobalkeep.olang:11:15: error[T22a]: 'keepIt' ties where what it is given lives to what it keeps or gives back, and this store holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+   11 |     c.onEvict = keepIt
+      |               ^
+compilation failed with 1 error
+=== t22bkeepsouter.olang
+t22bkeepsouter.olang:14:21: error[T22b]: this lambda keeps 'k' in what it captured from a scope that outlives where the lambda lives, and 'keeps k' says only that 'k' outlives the lambda - capture from one scope, or hold the lambda in a local and call it there
+   14 |         c.onEvict = fn(k String&) {
+      |                     ^~
+compilation failed with 1 error
+=== t22breadonlyresult.olang
+t22breadonlyresult.olang:15:10: error[T22a]: 'self' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+   15 |     keep(self, x, 42)
+      |          ^~~~
+compilation failed with 1 error
+=== t22bresultkept.olang
+t22bresultkept.olang:21:9: error[T22a]: 'put' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+   21 |     use(put, v)
+      |         ^~~
+compilation failed with 1 error
+=== t22btypebeyond.olang
+t22btypebeyond.olang:10:13: error[T22b]: a value of type 'fn&(a mut N&, b N&) keeps b in a' may do what 'fn&(mut N&, N&)' does not say ('keeps b in a'), and which functions it holds is not known here - write 'keeps b in a' after the signature of the type it is held as, or give a function directly
+   10 |     fs.Push(f)
+      |             ^
 compilation failed with 1 error
 === t22callunsafe.olang
 t22callunsafe.olang:20:29: error[E12]: expected fn&(n P&) I64, found fn&(n mut P&) I64
@@ -6171,17 +6289,17 @@ t22callunsafe.olang:20:48: error[E12]: expected fn&(n P&) I64, found R
       |                                                ^~~~
 compilation failed with 2 errors
 === t22sharedscope.olang
-t22sharedscope.olang:13:9: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+t22sharedscope.olang:13:9: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
    13 |     put(link, x, 42)
       |         ^~~~
 compilation failed with 1 error
 === t22sharedscopegeneric.olang
-t22sharedscopegeneric.olang:14:15: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+t22sharedscopegeneric.olang:14:15: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
    14 |     f := keep(link)
       |               ^~~~
 compilation failed with 1 error
 === t22sharedscopetype.olang
-t22sharedscopetype.olang:15:9: error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+t22sharedscopetype.olang:15:9: error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
    15 |     put(link, x)
       |         ^~~~
 compilation failed with 1 error

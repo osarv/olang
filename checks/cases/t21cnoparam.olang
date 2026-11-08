@@ -1,0 +1,4 @@
+# check: fail error[T21c]: 'y' is no parameter of this function type - a promise names its parameters by the names written in it
+# T21c: a promise names one of its function type's parameters
+fn use(f fn&(x String&) keeps y) { f("a") }
+fn main() { use(fn(x String&) { }) }

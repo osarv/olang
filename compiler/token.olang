@@ -146,6 +146,8 @@ fn (k Tok) EndsStatement() Bool {
         case Tok.Iden, Tok.IntLit, Tok.FloatLit, Tok.CharLit, Tok.StrLit, Tok.BoolLit, Tok.NullLit: true
         case Tok.Inc, Tok.Dec, Tok.Bang, Tok.RParen, Tok.RBrack: true
         case Tok.Return, Tok.Error, Tok.Noreturn, Tok.Break, Tok.Continue, Tok.Unreachable: true
+        # T21c: a promise word may end a function type, and with it a line
+        case Tok.Returns, Tok.Noalloc, Tok.Noblock, Tok.Nospawn, Tok.Norecurse, Tok.Noextern, Tok.Pure, Tok.Noborrow: true
         case _: false
     }
 }

@@ -1,0 +1,28 @@
+# check: run
+# flags: -debug -sanitize
+# T21c, T22b: t22apushed with the word written - a list of functions each keeping its second argument in its first,
+# called through: the temporary built where the first lives; read back after a churn
+import "std/io"
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+fn link(a mut N&, b N&) { a.next = b }
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+fn main() ? {
+    fs := Vec<fn&(a mut N&, b N&) keeps b in a>()
+    g := link
+    fs.Push(g)
+    x mut N& = N(1)
+    fs[0](x, N(3))
+    churn()
+    try io.Println($x.next!.v)
+}

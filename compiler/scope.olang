@@ -406,6 +406,8 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     bndDefs Map<I64, Vec<typed.Expr&>>     # the boundary walk's: by local, every value it is given
     bndSeen Map<I64, Bool>
     bndCollect Bool = false
+    bndWhy I64 = -1                        # the obligation valueOK last found beyond its type's bound (T22b), -1 none
+    bndType types.TypeId = types.UnknownT  # ... and the type it judged by
     kept Vec<Bool>                        # by local: computeKeeps' finding for a reference parameter
     keptStore Vec<Bool>                   # ... that it stores into what the parameter names (Stores)
     keptPut Vec<Bool>                     # ... itself, not only by handing a reference out (Puts)
@@ -558,6 +560,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # (judgeAll): by component, its judgings so far, the latest last; markReads, sumReads, wantsDecl and wantsField
     # what the component being judged reads and asks
     covered Map<I64, Bool>                 # the bodies whose obligations are what a call through a value holds (valueCovered)
+    gives Map<I64, I64>                    # by body: a function its returns give that its result's type does not hold (GivesHeld)
     reuse Bool = false
     NoReuse Bool = false
     gaveBack Bool = false                  # a round of the field inference gave a declaration's fields back as it went
@@ -590,7 +593,18 @@ fn (s mut Scoper&) Run() {
     s.components()
     if not s.inferFields() { s.judgeAll(true) }
     for b in range s.sums.Len() {
-        if s.sums[b].Rels.Len() > 0 and s.valueCovered(b, s.sums[b].Rels) { s.covered.Put(b, true) }
+        if s.sums[b].Rels.Len() > 0 and s.valueCovered(b, s.sums[b].Rels, s.Bodies[b].Ty) { s.covered.Put(b, true) }
+        if s.sums[b].ResFn.Recs.Len() == 0 or not s.isFunc(s.Bodies[b].Ty) { continue }
+        # what its returns give, judged by its result's type, promises and all (T22b)
+        seen Map<I64, Bool>
+        seen.Put(b, true)
+        res := s.P.T.Result(s.Bodies[b].Ty)
+        for r in s.sums[b].ResFn.Recs {
+            g := s.uncovered(r.Body, r.Adapter, res, seen)
+            if g < 0 { continue }
+            s.gives.Put(b, g)
+            break
+        }
     }
     s.anyTables()
     s.exports()
@@ -894,48 +908,55 @@ fn (s mut Scoper&) instContexts(inst I64) I64 {
 # ---- T22a: function values carrying their relations (docs/sec8.md 5) ----
 
 # a value carrying records (x) at a boundary (docs/sec8.md 5.4): code judged once for many values reads it there, so
-# each record's relations must be what a written function type says of every call (valueCovered) - and so must those of
-# every function a call of it may give (its ResFn) - else the error, at the value, naming the place
+# each record's relations must be within what the place's function type - the value's own there, x's - says of every
+# call (T22b) - and so must those of every function a call of it may give (its ResFn), within its result's type - else
+# the error, at the value, naming the place and the promise that would say it
 fn (s mut Scoper&) boundary(x typed.Expr&, place I64) {
     rs Vec<fnRec>
     s.bndSeen.Clear()
     s.bndRecs(x, rs)
     seen Map<I64, Bool>
     for r in rs {
-        bad := s.uncovered(r.Body, r.Adapter, seen)
+        bad := s.uncovered(r.Body, r.Adapter, x.Type(), seen)
         if bad < 0 { continue }
         s.bndError(x, bad, bad == r.Body and r.Adapter, place)
         return
     }
 }
 
-# the body among b and the functions a call of it may give whose relations a written function type does not cover, -1
-# for none
-fn (s mut Scoper&) uncovered(b I64, adapter Bool, seen mut Map<I64, Bool>&) I64 {
+# the body among b and the functions a call of it may give whose relations function type fty's bound does not cover
+# (the ones a call of it gives judged by fty's result), -1 for none; bndWhy, bndType the relation and the type it was
+# judged by, for the error
+fn (s mut Scoper&) uncovered(b I64, adapter Bool, fty types.TypeId, seen mut Map<I64, Bool>&) I64 {
     if b < 0 or seen.Has(b) { return -1 }
     seen.Put(b, true)
-    if not s.valueOK(b, adapter) { return b }
+    if not s.valueOK(b, adapter, fty) { return b }
+    res := s.P.T.Result(fty) if s.isFunc(fty) else types.UnknownT
     for r in s.sums[b].ResFn.Recs {
-        u := s.uncovered(r.Body, r.Adapter, seen)
+        u := s.uncovered(r.Body, r.Adapter, res if s.isFunc(res) else s.Bodies[r.Body].Ty, seen)
         if u >= 0 { return u }
     }
     return -1
 }
 
-# whether body b's obligations are only what a written function type says of every call through a value (valueRels) -
-# a lambda written for a callback whose result is a type variable may require what that type does, each argument
-# outliving its result scope (O14b); an adapter's Call (E31) none at all, its receiver no parameter of the type
-fn (s mut Scoper&) valueOK(b I64, adapter Bool) Bool {
+# whether body b's obligations are within what function type fty says of every call through a value (T22b) - a lambda
+# written for a callback whose result is a type variable may require what that type does, each argument outliving its
+# result scope (O14b); an adapter's Call (E31) has its receiver read as the value's home
+fn (s mut Scoper&) valueOK(b I64, adapter Bool, fty types.TypeId) Bool {
     rels := s.sums[b].Rels
+    s.bndWhy, s.bndType = -1, fty
     if rels.Len() == 0 { return true }
-    if adapter { return false }
     body := s.Bodies[b]
-    if s.valueCovered(b, rels) { return true }
+    if not s.isFunc(fty) { fty = body.Ty }
+    k := s.beyondBound(b, rels, fty, adapter)
+    if k < 0 { return true }
     lambda := match body.Of {
         case typed.BodyOf.Lambda(_): true
         case _: false
     }
-    return lambda and s.P.T.ResultFrom(body.Ty, 0) == types.FromTypeVar and resultsOnly(body, rels)
+    if lambda and s.P.T.ResultFrom(body.Ty, 0) == types.FromTypeVar and resultsOnly(body, rels) { return true }
+    s.bndWhy = k
+    return false
 }
 
 # T22a's error for body b reaching a boundary in value x (place, BndArg ...): a named function by its name, an adapter by
@@ -945,12 +966,14 @@ fn (s mut Scoper&) bndError(x typed.Expr&, b I64, adapter Bool, place I64) {
     pl := bndText(place)
     u := s.unAway(x)
     at := s.opTok(x)
+    # T22b: where one promise on the place's type would say what the body does, the error names it
+    word, does := s.wordFor(b, adapter, s.bndType, s.bndWhy)
     if adapter {
         t := body.Locals[I64(body.Params[0])].Ty if body.Params.Len() > 0 else types.UnknownT
         if s.isRef(t) { t = s.P.T.Referent(t) }
         t = s.P.T.Plain(t)
         name := s.P.L.Names.Text(s.P.T.DeclName(s.P.T.DeclOf(t))) if s.P.T.KindOf(t) == types.Kind.Named else ""
-        s.err(at, msgs.CallValueObligations(name, pl))
+        s.err(at, msgs.ValueBeyondType($name "'s Call", does, pl, word) if word != "" else msgs.CallValueObligations(name, pl))
         return
     }
     match body.Of {
@@ -966,7 +989,7 @@ fn (s mut Scoper&) bndError(x typed.Expr&, b I64, adapter Bool, place I64) {
                 }
                 case _ { }
             }
-            s.err(at, msgs.FuncValueObligations(name, pl))
+            s.err(at, msgs.ValueBeyondType($"'" $name "'", does, pl, word) if word != "" else msgs.FuncValueObligations(name, pl))
         }
         case _ {
             kept := s.keptParam(body, s.sums[b].Rels)
@@ -974,47 +997,72 @@ fn (s mut Scoper&) bndError(x typed.Expr&, b I64, adapter Bool, place I64) {
                 s.err(at, msgs.GenYieldsBorrow(kept))
                 return
             }
+            if word != "" {
+                s.err(at, msgs.ValueBeyondType("this lambda", does, pl, word))
+                return
+            }
             s.err(at, msgs.LambdaValueObligations(kept, pl) if kept != "" else msgs.LambdaValueRelates(pl))
         }
     }
 }
 
+# T21c: the promise that would let function type fty hold body b's obligation k, and what the body does - "keeps b in
+# a" and "keeps 'b' in 'a'" - the promise's names fty's own where it was written with them, the body's otherwise; ""
+# where no promise says it (a result held in an argument, a capture given back)
+fn (s mut Scoper&) wordFor(b I64, adapter Bool, fty types.TypeId, k I64) String, String {
+    if k < 0 or k >= s.sums[b].Rels.Len() or not s.isFunc(fty) { return "", "" }
+    body := s.Bodies[b]
+    r := s.sums[b].Rels[k]
+    hi := s.posOf(body, adapter, r.Hi)
+    lo := s.posOf(body, adapter, r.Lo)
+    if hi < 0 or hi >= PosDerived or lo == PosNone { return "", "" }
+    h := s.posName(fty, body, adapter, hi)
+    hb := s.bodyParamName(body, adapter, hi)
+    if lo == PosResult { return $"borrows " $h, $"gives back what '" $hb "' refers to" }
+    if lo == PosHome { return $"keeps " $h, $"keeps '" $hb "' in " $("its instance" if adapter else "what it captured") }
+    if lo < PosDerived { return $"keeps " $h " in " $s.posName(fty, body, adapter, lo), $"keeps '" $hb "' in '" $s.bodyParamName(body, adapter, lo) "'" }
+    a := (lo - PosDerived) / 65536
+    f := s.derivedField(fty, a, (lo - PosDerived) % 65536)
+    if f == "" { return "", "" }
+    return $"keeps " $h " in " $s.posName(fty, body, adapter, a) "." $f, $"keeps '" $hb "' in '" $s.bodyParamName(body, adapter, a) "." $f "'"
+}
+
+# parameter i of function type fty by the name it was written with, else by body's own parameter's
+fn (s mut Scoper&) posName(fty types.TypeId, body typed.Body&, adapter Bool, i I64) String {
+    ns := s.P.T.NamesOf(fty)
+    if i < ns.Len() and ns[i] != 0 { return s.P.L.Names.Text(source.NameId(I32(ns[i]))) }
+    return s.bodyParamName(body, adapter, i)
+}
+
+fn (s mut Scoper&) bodyParamName(body typed.Body&, adapter Bool, i I64) String {
+    j := i + 1 if adapter else i
+    return s.P.L.Names.Text(body.Locals[I64(body.Params[j])].Name) if j < body.Params.Len() else $"#" $(i + 1)
+}
+
+# the field of parameter a's type (fty's) whose own binding is its constructor's variable w (O23a), "" for none
+fn (s mut Scoper&) derivedField(fty types.TypeId, a I64, w I64) String {
+    ps := s.P.T.Items(s.P.T.Params(fty))
+    if a >= ps.Len() { return "" }
+    t := s.P.T.Referent(ps[a]) if s.isRef(ps[a]) else ps[a]
+    id := try s.ctorOf.Get(t) catch default -1
+    if id < 0 { return "" }
+    cb := s.Bodies[id]
+    for i in range cb.Fields.Len() {
+        m := s.fieldMark(t, i)
+        if m == typed.Mark.Of and s.ctorParamIndex(t, m.local) == w { return s.P.L.Names.Text(cb.Locals[I64(cb.Fields[i])].Name) }
+    }
+    return ""
+}
+
 # B11b (docs/sec8.md 5.5): a function body b's returns give - a function, or a lambda, whose relations a written
 # function type does not cover: its name ("a lambda" for one), "" for none. Read once every body is judged
 fn (s Scoper&) GivesHeld(b I64) String {
-    seen Map<I64, Bool>
-    seen.Put(b, true)
-    g := s.givesHeld(b, seen)
+    g := try s.gives.Get(b) catch default -1
     if g < 0 { return "" }
     return match s.Bodies[g].Of {
         case typed.BodyOf.Fn(inst): $"'" $s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name) "'"
         case _: "a lambda"
     }
-}
-
-fn (s Scoper&) givesHeld(b I64, seen mut Map<I64, Bool>&) I64 {
-    if b < 0 or b >= s.sums.Len() { return -1 }
-    for r in s.sums[b].ResFn.Recs {
-        if seen.Has(r.Body) { continue }
-        seen.Put(r.Body, true)
-        if not s.heldOK(r.Body, r.Adapter) { return r.Body }
-        g := s.givesHeld(r.Body, seen)
-        if g >= 0 { return g }
-    }
-    return -1
-}
-
-fn (s Scoper&) heldOK(b I64, adapter Bool) Bool {
-    rels := s.sums[b].Rels
-    if rels.Len() == 0 { return true }
-    if adapter { return false }
-    if s.covered.Has(b) { return true }
-    body := s.Bodies[b]
-    lambda := match body.Of {
-        case typed.BodyOf.Lambda(_): true
-        case _: false
-    }
-    return lambda and s.P.T.ResultFrom(body.Ty, 0) == types.FromTypeVar and resultsOnly(body, rels)
 }
 
 # the place a boundary is, as T22a's error says it
@@ -1649,7 +1697,7 @@ fn (s mut Scoper&) lateRecs(recs fnRecs&, x typed.Expr&) {
     for dv in vals { s.bndRecs(dv, rs) }
     seen Map<I64, Bool>
     for r in rs {
-        bad := s.uncovered(r.Body, r.Adapter, seen)
+        bad := s.uncovered(r.Body, r.Adapter, x.Type(), seen)
         if bad < 0 { continue }
         s.bndError(x, bad, bad == r.Body and r.Adapter, BndLate)
         return
@@ -1680,62 +1728,167 @@ fn (s mut Scoper&) keptParam(body typed.Body&, rels Vec<rel>&) String {
     return ""
 }
 
-# open point 5 (docs/rework.md 21): what a function type says of a call through a value - a result holding references
-# may hand back what its reference parameters refer to, so each of their arguments outlives the call's result scope,
-# exactly where something can be stored through the parameter and the result (O25g, as a direct call is held to such a
-# callee) - the result landing there (O18c) - and
-# as a view: never met by building the argument longer (O27 - the callee may hand back a view of its storage); a
-# function whose obligations are only these is a value of the type (valueCovered)
-fn (s mut Scoper&) valueRels(fty types.TypeId, vars Array<I64>&, rv I64, sp source.Span) Vec<rel> {
+# T22, T22b: what a function type says of a call through a value - its bound (T21c). A result holding references may
+# hand back what each reference parameter refers to that "borrows" and "noborrow" leave it (open point 5, docs/rework.md
+# 21), so each such argument outlives the call's result scope, exactly where something can be stored through the
+# parameter and the result (O25g, as a direct call is held to such a callee) - the result landing there (O18c) - and as
+# a view: never met by building the argument longer (O27 - the callee may hand back a view of its storage). Each "keeps
+# b in a" adds that b outlives a, "keeps b in a.f" that b outlives where a's field f refers (its binding, O23a, else a's
+# referent), "keeps x" that x outlives where the value lives (home: its index in the call's numbering, -1 where the
+# caller does not ask), each exactly where something can be stored through what is kept. A function whose obligations
+# are within the bound is a value of the type (valueCovered)
+fn (s mut Scoper&) valueRels(fty types.TypeId, vars Array<I64>&, rv I64, sp source.Span, home I64 = -1) Vec<rel> {
     rs Vec<rel>
-    if rv < 0 { return rs }
     ps := s.P.T.Items(s.P.T.Params(fty))
-    through := s.storeThrough(s.P.T.Result(fty))
+    pv := Array<I64>(ps.Len(), -1)   # by parameter, its scope variable in vars
     for v in range vars.Len() {
-        i := vars[v]
-        if i < 0 or i >= ps.Len() or not s.isRef(ps[i]) { continue }
-        rs.Push(rel(Term.Var(v), Term.Var(rv), false, sp, 0, true))
-        # exactly where the result hands back what something can be stored through: the other half, as a direct
-        # call's callee has it
-        if through and s.storeThrough(ps[i]) { rs.Push(rel(Term.Var(rv), Term.Var(v), false, sp, 0, true)) }
+        if vars[v] >= 0 and vars[v] < ps.Len() { pv[vars[v]] = v }
+    }
+    for e in s.boundEdges(fty) {
+        hi := s.boundTerm(e.First, pv, rv, home)
+        lo := s.boundTerm(e.Second, pv, rv, home)
+        if hi == Term.None or lo == Term.None { continue }
+        rs.Push(rel(hi, lo, false, sp, 0, e.First == PosResult or e.Second == PosResult))
     }
     return rs
 }
 
-# whether body b's obligations are only what its type says of a call through a value (valueRels): each a reference
-# parameter's scope outliving its result scope, exactly only where something can be stored through it - so it is a value
-# (decided once every body is judged, for explain's "not a value")
+# a position of a function type's bound as a term of a call's numbering (valueRels): None where the call has none
+fn (s Scoper&) boundTerm(p I64, pv Array<I64>&, rv I64, home I64) Term {
+    if p == PosResult { return Term.Var(rv) if rv >= 0 else Term.None }
+    if p == PosHome { return Term.Var(home) if home >= 0 else Term.None }
+    if p >= PosDerived { return Term.Derived((p - PosDerived) / 65536, (p - PosDerived) % 65536) }
+    return Term.Var(pv[p]) if p >= 0 and p < pv.Len() and pv[p] >= 0 else Term.None
+}
+
+# the positions of a function type's bound (T22b): a parameter by its index, the result, the value's home, a parameter's
+# field's derived scope (PosDerived + 65536 * parameter + its type's variable); anything else (the program's scope, a
+# block) is none of them
+PosResult I64 = -1
+PosHome I64 = -2
+PosNone I64 = -3
+PosDerived I64 = I64(1) << 40
+
+# the relations a function type's bound allows, as positions (hi outlives lo): what its result may borrow, what each
+# "keeps" keeps, each with its exact half where O25g asks for one
+fn (s mut Scoper&) boundEdges(fty types.TypeId) Vec<pair.Pair<I64, I64>> {
+    out Vec<pair.Pair<I64, I64>>
+    ps := s.P.T.Items(s.P.T.Params(fty))
+    res := s.P.T.Result(fty)
+    if res != types.VoidT and res != types.NoreturnT {
+        through := s.storeThrough(res)
+        for i in range ps.Len() {
+            if not s.isRef(ps[i]) or not s.P.T.MayBorrow(fty, i) { continue }
+            out.Push(pair.Pair<I64, I64>(i, PosResult))
+            if through and s.storeThrough(ps[i]) { out.Push(pair.Pair<I64, I64>(PosResult, i)) }
+        }
+    }
+    ks := s.P.T.KeepsOf(fty)
+    for k in range ks.Len() / 3 {
+        b := ks[3 * k]
+        if b >= ps.Len() { continue }
+        lo := PosHome if ks[3 * k + 1] == types.KeepsHome else s.fieldPos(fty, ks[3 * k + 1], ks[3 * k + 2])
+        out.Push(pair.Pair<I64, I64>(b, lo))
+        if s.storeThrough(ps[b]) { out.Push(pair.Pair<I64, I64>(lo, b)) }
+    }
+    return out
+}
+
+# where parameter a's field named f refers, as a position: its own binding's derived scope where the field has one
+# (O23a), else a's own (O20) - f 0 for a itself
+fn (s mut Scoper&) fieldPos(fty types.TypeId, a I64, f I64) I64 {
+    ps := s.P.T.Items(s.P.T.Params(fty))
+    if f == 0 or a >= ps.Len() { return a }
+    t := s.P.T.Referent(ps[a]) if s.isRef(ps[a]) else ps[a]
+    id := try s.ctorOf.Get(t) catch default -1
+    if id < 0 or not s.isStruct(t) { return a }
+    cb := s.Bodies[id]
+    for i in range cb.Fields.Len() {
+        if I64(cb.Locals[I64(cb.Fields[i])].Name) != f { continue }
+        m := s.fieldMark(t, i)
+        if m != typed.Mark.Of { return a }
+        w := s.ctorParamIndex(t, m.local)
+        return PosDerived + 65536 * a + w if w >= 0 else a
+    }
+    return a
+}
+
+# whether body b's obligations are only what its own function type says of a call through a value (its default bound,
+# T22) - so it is a value anywhere a type writing no promise holds it (decided once every body is judged, for explain's
+# "not a value")
 fn (s Scoper&) ValueCovered(b I64) Bool { return s.covered.Has(b) }
 
-fn (s mut Scoper&) valueCovered(b I64, rels Vec<rel>&) Bool {
+fn (s mut Scoper&) valueCovered(b I64, rels Vec<rel>&, fty types.TypeId, adapter Bool = false) Bool {
+    return s.beyondBound(b, rels, fty, adapter) < 0
+}
+
+# T22b: the first of body b's obligations (rels) not within function type fty's bound, -1 for none - each read in the
+# type's positions (a parameter's scope variable as its parameter, the result's as the result, a lambda's capture's or an
+# adapter's receiver's as the value's home, a derived scope as its parameter's) and within where the bound's relations
+# show it, through any of them (O10b's closure); one exactly the other only where the bound shows both ways
+fn (s mut Scoper&) beyondBound(b I64, rels Vec<rel>&, fty types.TypeId, adapter Bool) I64 {
+    if rels.Len() == 0 { return -1 }
+    edges := s.boundEdges(fty)
     body := s.Bodies[b]
-    for r in rels {
-        if not s.coveredRel(body, r) { return false }
+    for k in range rels.Len() {
+        r := rels[k]
+        hi := s.posOf(body, adapter, r.Hi)
+        lo := s.posOf(body, adapter, r.Lo)
+        if hi == PosNone or lo == PosNone { return k }
+        if not reaches(edges, hi, lo) { return k }
+        if r.Exact and not reaches(edges, lo, hi) { return k }
     }
-    return true
+    return -1
 }
 
-fn (s mut Scoper&) coveredRel(body typed.Body&, r rel) Bool {
-    hi := varOf(r.Hi)
-    lo := varOf(r.Lo)
-    if hi < 0 or lo < 0 or hi >= body.Vars.Len() or lo >= body.Vars.Len() { return false }
-    # a parameter outliving the result - or, the other half of their being exactly one, the result outliving a parameter
-    # something can be stored through
-    if body.Vars[lo] == typed.ScopeVar.Result {
-        t := s.paramVarType(body, hi)
-        return t != types.UnknownT and s.isRef(t) and not r.Exact
+# a term of body b's obligations as a position of a function type's bound (beyondBound): PosNone for one no position is
+fn (s Scoper&) posOf(body typed.Body&, adapter Bool, t Term) I64 {
+    match t {
+        case Term.Var(k) {
+            if k < 0 or k >= body.Vars.Len() { return PosNone }
+            match body.Vars[k] {
+                case typed.ScopeVar.Param(l) {
+                    j := paramIndexIn(body, l)
+                    if adapter { return PosHome if j == 0 else (j - 1 if j > 0 else PosNone) }
+                    return j if j >= 0 else PosNone
+                }
+                case typed.ScopeVar.Result { return PosResult }
+                case typed.ScopeVar.Capture(_) { return PosHome }
+                case _ { return PosNone }
+            }
+        }
+        case Term.Derived(p, w) {
+            q := p - 1 if adapter else p
+            return PosDerived + 65536 * q + w if q >= 0 and w >= 0 and w < 65536 else PosNone
+        }
+        case _ { return PosNone }
     }
-    if body.Vars[hi] != typed.ScopeVar.Result { return false }
-    t := s.paramVarType(body, lo)
-    return t != types.UnknownT and s.isRef(t) and s.storeThrough(t) and not r.Exact
 }
 
-# the type of the parameter scope variable k stands for, Unknown for another kind of variable
-fn (s Scoper&) paramVarType(body typed.Body&, k I64) types.TypeId {
-    return match body.Vars[k] {
-        case typed.ScopeVar.Param(l): body.Locals[I64(l)].Ty
-        case _: types.UnknownT
+# the index among a body's parameters of its local l, -1 for none
+fn paramIndexIn(body typed.Body&, l typed.LocalId) I64 {
+    for j in range body.Params.Len() {
+        if body.Params[j] == l { return j }
     }
+    return -1
+}
+
+# whether a path of edges leads from hi to lo (hi == lo included)
+fn reaches(edges Vec<pair.Pair<I64, I64>>&, hi I64, lo I64) Bool {
+    if hi == lo { return true }
+    seen Vec<I64>
+    todo Vec<I64>
+    todo.Push(hi)
+    for todo.Len() > 0 {
+        x := try todo.Pop() catch { break }
+        if x == lo { return true }
+        if seen.Has(x) { continue }
+        seen.Push(x)
+        for e in edges {
+            if e.First == x { todo.Push(e.Second) }
+        }
+    }
+    return false
 }
 
 fn varOf(t Term) I64 {
@@ -2058,7 +2211,8 @@ fn (s mut Scoper&) isRef(t types.TypeId) Bool { return s.P.T.KindOf(t) == types.
 fn (s mut Scoper&) isFunc(t types.TypeId) Bool { return s.P.T.KindOf(t) == types.Kind.Func }
 
 # whether something can be stored through a value of type t (O25g): a writable reference to storage with an assignable
-# part holding a reference; a value holding such a writable reference. Never a read-only reference or a function value
+# part holding a reference; a value holding such a writable reference; a function value whose type keeps what it is given
+# in the value's own home ("keeps x", T21c). Never a read-only reference or any other function value
 fn (s mut Scoper&) storeThrough(t types.TypeId) Bool {
     match s.P.T.KindOf(t) {
         case types.Kind.Ref {
@@ -2069,7 +2223,7 @@ fn (s mut Scoper&) storeThrough(t types.TypeId) Bool {
             if (s.P.T.PermOf(t) & types.Writable) == 0 { return s.admitsAt(s.P.T.Referent(t), false) }
             return s.assignableHolds(s.P.T.Referent(t))
         }
-        case types.Kind.Func { return false }
+        case types.Kind.Func { return s.P.T.KeepsHome(t) }
         case types.Kind.Named, types.Kind.Tuple, types.Kind.Record, types.Kind.Array, types.Kind.AnonEnum { }
         case _ { return false }
     }
@@ -4764,11 +4918,13 @@ fn (s mut Scoper&) kwCall(c typed.Call&) {
 }
 
 # argument k (handing over parameter r's region) of a call through a function value: by what each record's body keeps,
-# stores and puts (T22a, 5.3) - a value not followed keeps nothing beyond the call but in its result, storing only where
-# something can be stored through its parameter (T22). keeps: whether a keep counts (a region's own storage handed on)
+# stores and puts (T22a, 5.3) - a value not followed keeps nothing beyond the call but in its result and what its type's
+# "keeps" promises say (T21c), storing only where something can be stored through its parameter (T22). keeps: whether a
+# keep counts (a region's own storage handed on)
 fn (s mut Scoper&) kwValueArg(c typed.Call&, k I64, r I64, ps Array<types.TypeId>&, kept Bool) {
     rs := try s.callRecs.Get(I64(c.Site)) catch default fnRecs()
     if not rs.Full and k < ps.Len() and s.storeThrough(ps[k]) { s.storeParam(r, true) }
+    if not rs.Full and kept and s.typeKeeps(s.calleeType(c), k) { s.keepParam(r) }
     for x in rs.Recs {
         q := k + 1 if x.Adapter else k
         if s.sumStores(x.Body, q) {
@@ -4777,6 +4933,16 @@ fn (s mut Scoper&) kwValueArg(c typed.Call&, k I64, r I64, ps Array<types.TypeId
             s.keepParam(r)
         }
     }
+}
+
+# whether a function type's "keeps" promises keep its parameter k (T21c)
+fn (s mut Scoper&) typeKeeps(fty types.TypeId, k I64) Bool {
+    if not s.isFunc(fty) { return false }
+    ks := s.P.T.KeepsOf(fty)
+    for i in range ks.Len() / 3 {
+        if ks[3 * i] == k { return true }
+    }
+    return false
 }
 
 # argument k of call c (ua, its value) read through a reference out of parameter rr's region - handed out of no region
@@ -7921,6 +8087,11 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             return Val.fresh(d)
         }
         case typed.Expr.Prim(_, ty, op, _, args) {
+            # T22b: a function value held as a function type promising otherwise than its own
+            if op == typed.PrimOp.Convert and args.Len() == 1 and s.isFunc(ty) and s.isFunc(args[0].Type()) and
+               s.P.T.PromisesOf(ty) != s.P.T.PromisesOf(args[0].Type()) {
+                return s.funcHeld(ty, args[0], dest)
+            }
             # a conversion names its argument's storage (T29a): an array value's too
             if typed.PassesRefs(op) and args.Len() > 0 and (s.holds(ty) or s.arenaValue(ty)) {
                 s.anyBox = op == typed.PrimOp.AnyMake
@@ -8577,9 +8748,10 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     # T22a (5.3): what the value called through carries - judged as the direct call each record is; a task's not
     # followed (decision 15: its function is a boundary)
     recs := fnRecs()
+    home := Term.None   # where the value called through lives (T21c's "keeps x")
     match c.Target {
         case typed.Callee.Value(x) {
-            s.calleeValue(x, spawned, j)
+            home = s.calleeValue(x, spawned, j)
             if not spawned {
                 recs = s.recsOf(x)
                 s.lateRecs(recs, x)
@@ -8763,7 +8935,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     if callee < 0 and c.Target == typed.Callee.Value {
         # each record judged as the direct call it is (5.3); a value not followed by what its type says (T22)
         for i in range recs.Recs.Len() { s.dischargeRels(sp, rrels[i], recs.Recs[i].Body, s.recBeta(recs.Recs[i], rmaps[i], beta), c, agreed) }
-        if not recs.Full { s.dischargeRels(sp, s.valueRels(fty, vars, rv, sp), -1, beta, c, agreed) }
+        if not recs.Full { s.dischargeRels(sp, s.valueRels(fty, vars, rv, sp, vars.Len()), -1, withHome(beta, home), c, agreed) }
     }
     # what its result carries, where it is a function value (5.2)
     if s.isFunc(ty) { s.siteRecs.Put(I64(c.Site), s.resultRecs(c, callee, recs, vars, rv, beta)) }
@@ -8810,9 +8982,116 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     return s.liftedVal(Val.fresh(beta[rv] if rv >= 0 else here), sl, want)
 }
 
+# T22b: function value y coming to be held as function type ty, whose promises are not its own type's. Where its
+# functions are not all followed, its own type's bound must be within ty's - nothing else is known of them; followed
+# ones are judged where they meet code judged once for many values (boundary). Held where ty keeps what it is given in
+# the value's home ("keeps x", 2.2.1), it is held exactly where it lives (storeThrough): a named function, capturing
+# nothing, is constant data that fits any home (its keeping in a global no word says, beyondBound); a lambda is placed
+# where its captures say, never in a caller's frame, and what it keeps an argument in must be its home itself
+fn (s mut Scoper&) funcHeld(ty types.TypeId, y typed.Expr&, dest Term) Val {
+    home := s.P.T.KeepsHome(ty)
+    if home { s.onFrame = false }
+    v := s.val(y, dest)
+    recs := s.recsOf(y)
+    if s.report and not recs.Full {
+        w := s.typeBeyond(y.Type(), ty)
+        if w != "" { s.err(s.opTok(y), msgs.FuncTypeBeyond(s.spell(y.Type()), s.spell(ty), w)) }
+    }
+    if not home { return v }
+    if namedValue(s.unAway(y)) { return Val(ValKind.Static, Term.Program) }
+    for r in recs.Recs { s.keptAtHome(r, ty, v.T, y) }
+    return v
+}
+
+# whether a value is a function named as one (T21): it captures nothing
+fn namedValue(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Fn(_, _, f): f == typed.FnVal.Named
+        case _: false
+    }
+}
+
+# 2.2.1: a lambda (record r) held where ty says "keeps x" keeps x only in a capture that lives exactly where the lambda
+# does (h): "x outlives where the value lives" holds up nothing kept in a longer-lived capture. Each such capture's scope
+# and h are judged the same - an obligation where they are this function's scope variables - else the error
+fn (s mut Scoper&) keptAtHome(r fnRec, ty types.TypeId, h Term, y typed.Expr&) {
+    if r.Adapter or r.Body < 0 or r.Body >= s.sums.Len() { return }
+    body := s.Bodies[r.Body]
+    for rl in s.sums[r.Body].Rels {
+        lo := varOf(rl.Lo)
+        if lo < 0 or lo >= body.Vars.Len() or lo >= r.Caps.Len() or body.Vars[lo] != typed.ScopeVar.Capture { continue }
+        x := s.posOf(body, false, rl.Hi)
+        if x < 0 or x >= PosDerived or not s.keepsAtHome(ty, x) { continue }
+        t := r.Caps[lo]
+        if t == Term.None or t == h { continue }
+        if s.sameScope(t, h) and s.sameScope(h, t) { continue }
+        if s.report { s.err(s.opTok(y), msgs.LambdaKeepsOuter(s.bodyParamName(body, false, x))) }
+        return
+    }
+}
+
+# whether function type ty says "keeps x" of its parameter x
+fn (s Scoper&) keepsAtHome(ty types.TypeId, x I64) Bool {
+    ks := s.P.T.KeepsOf(ty)
+    for k in range ks.Len() / 3 {
+        if ks[3 * k] == x and ks[3 * k + 1] == types.KeepsHome { return true }
+    }
+    return false
+}
+
+# whether a outlives b, as an obligation where it is one of this function's scope variables' (O10b)
+fn (s mut Scoper&) sameScope(a Term, b Term) Bool {
+    k := s.order(a, b)
+    if k == Obliged { s.oblige(a, b, false) }
+    return k == Holds or k == Obliged
+}
+
+# T22b: where function type have's bound is not within want's - a promise want writes that have does not, a parameter
+# have's result may refer into that want's may not, a relation have keeps that want's do not show - the promise want
+# would need ("noalloc", "borrows a", "keeps b in a"), "" where it is within
+fn (s mut Scoper&) typeBeyond(have types.TypeId, want types.TypeId) String {
+    hw := s.P.T.PromiseWords(have)
+    ww := s.P.T.PromiseWords(want)
+    for i in range types.PromiseNames.Len() {
+        bit := I64(1) << i
+        if bit == types.PromNoborrow or (ww & bit) == 0 or (hw & bit) != 0 { continue }
+        return types.PromiseNames[i]
+    }
+    edges := s.boundEdges(want)
+    named := have if s.P.T.NamesOf(have).Len() > 0 else want
+    for e in s.boundEdges(have) {
+        if reaches(edges, e.First, e.Second) { continue }
+        return s.edgeWord(named, e.First, e.Second)
+    }
+    return ""
+}
+
+# the promise naming edge (hi, lo) of function type f's positions, as typeBeyond's error says it
+fn (s mut Scoper&) edgeWord(f types.TypeId, hi I64, lo I64) String {
+    if hi < 0 or hi >= PosDerived { return "keeps" }
+    h := s.P.T.ParamName(f, hi)
+    if lo == PosResult { return $"borrows " $h }
+    if lo == PosHome { return $"keeps " $h }
+    if lo < PosDerived { return s.P.T.KeepsText(f, hi, lo, 0) }
+    a := (lo - PosDerived) / 65536
+    fd := s.derivedField(f, a, (lo - PosDerived) % 65536)
+    return $s.P.T.KeepsText(f, hi, a, 0) "." $fd
+}
+
+# a type as source writes it, for a message
+fn (s mut Scoper&) spell(t types.TypeId) String { return s.Spell!(t) if s.Spell is not null else s.P.T.Canon(t) }
+
+# a call's bindings with where the value called through lives after them: the term valueRels' home stands for (T21c)
+fn withHome(beta Array<Term>&, home Term) Array<Term> {
+    out := Array<Term>(beta.Len() + 1)
+    for i in range beta.Len() { out[i] = beta[i] }
+    out[beta.Len()] = home
+    return out
+}
+
 # a call through function value x: a task's lambda - what it captured is handed to the task too (P2), and it is built to
 # last until the join j (D16e); a function value the task calls through lasts until the join as an argument does (P2)
-fn (s mut Scoper&) calleeValue(x typed.Expr&, spawned Bool, j Term) {
+fn (s mut Scoper&) calleeValue(x typed.Expr&, spawned Bool, j Term) Term {
     lambda := x == typed.Expr.Fn
     if lambda { s.inSpawn = spawned }
     savedTemp, savedAt, savedSlot, savedFunc := s.taskTemp, s.taskAt, s.taskSlot, s.taskFunc
@@ -8821,12 +9100,13 @@ fn (s mut Scoper&) calleeValue(x typed.Expr&, spawned Bool, j Term) {
     fv := s.val(x, j)
     s.taskTemp, s.taskAt, s.taskSlot, s.taskFunc = savedTemp, savedAt, savedSlot, savedFunc
     s.inSpawn = false
-    if not spawned or fv.K != ValKind.Existing or s.lastsUntil(fv.T, j) or not s.report { return }
+    if not spawned or fv.K != ValKind.Existing or s.lastsUntil(fv.T, j) or not s.report { return fv.T }
     if lambda {
         s.err(s.firstToken(s.B!.File, x.Span()), msgs.SpawnCaptureTooShort())
     } else {
         s.err(s.opTok(x), msgs.SpawnFuncTooShort())
     }
+    return fv.T
 }
 
 # argument i of call c, for a parameter with a scope variable (owner[i]): what it is - existing storage determines the
@@ -10367,7 +10647,7 @@ fn (s mut Scoper&) capsDiffer(x typed.Expr&) Bool {
 # whether a local of type t must hold exactly what it is given (O25, O25g): a reference; a value holding a reference
 # through which, at any depth, something could be stored
 fn (s mut Scoper&) narrowingMatters(t types.TypeId) Bool {
-    if s.isFunc(t) { return false }
+    if s.isFunc(t) { return s.P.T.KeepsHome(t) }   # (one keeping what it is given where it lives, T21c)
     # a reference local never narrows, whatever it refers to (O25)
     return s.isRef(t) or s.valueAdmits(t)
 }

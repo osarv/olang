@@ -1,4 +1,4 @@
-# check: fail error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call - call it directly, or hold it in a local and call it there
+# check: fail error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
 # T22: where a function's references live is part of its type - 'link' says b's argument lives where a's does, which a
 # call through a value of type fn(a mut N&, b N&) never establishes (it stored b where a lives with nothing checked, and
 # passed one hidden scope argument where link expected another: a segfault)

@@ -1,0 +1,20 @@
+# check: fail error[T22b]: this lambda keeps 'k' in what it captured from a scope that outlives where the lambda lives, and 'keeps k' says only that 'k' outlives the lambda
+# T22b (docs/fnvalues.md 2.2.1): "keeps k" relates k to where the function value lives - a lambda capturing from two
+# scopes lives in the inner one, so what it keeps in the outer one is held up by nothing the word says
+type Cache struct() {
+    onEvict fn?&(k String&) keeps k = null
+}
+fn main() {
+    outer := Vec<String&>()
+    outerRef mut Vec<String&>& = outer
+    {
+        inner := Vec<I64>()
+        innerRef mut Vec<I64>& = inner
+        c := Cache()
+        c.onEvict = fn(k String&) {
+            outerRef.Push(k)
+            innerRef.Push(1)
+        }
+        c.onEvict!("a")
+    }
+}

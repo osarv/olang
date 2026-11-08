@@ -1,0 +1,167 @@
+# Promises on function types (T21c, T22b): the words after a function type's signature say what every call through a
+# value of it may keep and borrow - "keeps b in a", "keeps x", "keeps b in a.f", "borrows a", "noborrow" - and are part
+# of the type (T22). A function or lambda is held as such a type where what it does is within what the words say, and
+# a call through the type relies on them: what it keeps is built where it is kept. Each test reads its values back after
+# an arena churn (what a closed scope left would be written over), and the evaluator decides the same values while
+# compiling (baked globals, top-level asserts).
+
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+
+# a cache handing what it lets go of to a handler that may keep it in what the handler captured
+type Cache struct() {
+    keys Vec<String&>
+    onEvict fn?&(k String&) keeps k = null
+}
+
+fn (c mut Cache&) Put(k String&) { c.keys.Push(k) }
+
+fn (c mut Cache&) Evict() {
+    for k in c.keys {
+        if c.onEvict is not null { c.onEvict!(k) }
+    }
+    c.keys.Clear()
+}
+
+# b kept in a
+fn link(a mut N&, b N&) { a.next = b }
+
+# a declared function type with a promise (T21b)
+type Linker fn(a mut N&, b N&) keeps b in a
+
+# what a closed scope left behind is written over
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i "-" $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+# a field written "keeps k" holding a lambda that keeps each key in a captured list: each turn's text lives where the
+# list does
+fn evicted(n I64) String {
+    gone := Vec<String&>()
+    goneRef mut Vec<String&>& = gone
+    c := Cache()
+    c.onEvict = fn(k String&) { goneRef.Push(k) }
+    for i in range n {
+        t := "k" $i
+        c.Put(t)
+    }
+    c.Evict()
+    churn()
+    return gone.Join(",")
+}
+
+# a list of functions each keeping its second argument in its first: the temporary built where the first lives
+fn linkedAll(n I64) I64 {
+    fs := Vec<fn&(a mut N&, b N&) keeps b in a>()
+    fs.Push(link)
+    g := link
+    fs.Push(g)
+    x mut N& = N(0)
+    y mut N& = N(0)
+    fs[0](x, N(n))
+    fs[1](y, N(n + 1))
+    churn()
+    return x.next!.v * 10 + y.next!.v
+}
+
+# the same through a declared function type
+fn viaLinker(l Linker&, n I64) I64 {
+    x mut N& = N(0)
+    l(x, N(n))
+    churn()
+    return x.next!.v
+}
+
+# "borrows a": the result refers only into the first argument - the second, a temporary, is no part of it
+fn first(a N&, b N&) N& { return a }
+
+fn pickFirst(f fn&(a N&, b N&) N& borrows a, n I64) I64 {
+    x := N(n)
+    r := f(x, N(n + 100))
+    churn()
+    return r.v
+}
+
+# "noborrow": the result refers into neither argument, so it is kept past both
+fn summed(a N&, b N&) N& { return N(a.v + b.v) }
+
+fn keptPast(f fn&(a N&, b N&) N& noborrow, n I64) I64 {
+    r N& = N(0)
+    {
+        x := N(n)
+        y := N(1)
+        r = f(x, y)
+    }
+    churn()
+    return r.v
+}
+
+# "keeps s in h.items": what a handler adds to a holder's list lives where the list does
+type Holder struct(items mut Vec<String&>&) { items }
+
+fn add(h Holder&, s String&) { h.items.Push(s) }
+
+fn addAll(f fn&(h Holder&, s String&) keeps s in h.items, h Holder&, n I64) {
+    for i in range n {
+        t := "item" $i
+        f(h, t)
+    }
+}
+
+fn held(n I64) String {
+    v := Vec<String&>()
+    h := Holder(v)
+    addAll(add, h, n)
+    churn()
+    return v.Join(",")
+}
+
+# the words are part of the type, and "$" writes them (E11a)
+fn width(t String&) I64 { return t.Len() }
+
+fn spelled() String {
+    f fn&(t String&) I64 returns noalloc pure = width
+    return $f
+}
+
+Evicted := evicted(3)
+LinkedAll := linkedAll(4)
+
+assert evicted(2) == "k0,k1" and linkedAll(5) == 56 and viaLinker(link, 7) == 7 and pickFirst(first, 3) == 3
+assert keptPast(summed, 8) == 9 and held(2) == "item0,item1"
+
+test Cache "keeps what a handler written 'keeps k' keeps of each key" {
+    assert evicted(4) == "k0,k1,k2,k3" and Evicted == "k0,k1,k2"
+}
+
+test linkedAll "holds functions keeping their second argument in their first" {
+    assert linkedAll(2) == 23 and LinkedAll == 45
+}
+
+test viaLinker "holds a function as a declared function type with a promise" {
+    assert viaLinker(link, 11) == 11
+}
+
+test pickFirst "lets a result borrow only from the argument 'borrows' names" {
+    assert pickFirst(first, 12) == 12
+}
+
+test keptPast "keeps a result written 'noborrow' past both arguments" {
+    assert keptPast(summed, 20) == 21
+}
+
+test addAll "keeps what is kept in a field's referent where the field refers" {
+    assert held(3) == "item0,item1,item2"
+}
+
+test spelled "writes a function type's promises" {
+    assert spelled() == "fn&(t String&) I64 returns noalloc pure"
+}

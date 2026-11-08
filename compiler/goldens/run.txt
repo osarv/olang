@@ -380,6 +380,15 @@
 | ok - E5a: '**' calls Pow - tighter than '-', to the right, '**=' with it
 | ok - E5a, E39: '**' lane by lane
 | ok - E5a: a type's Pow that fails makes '**' fail as written (E31)
+=== test tests/promises.olang
+| status 0
+| ok - Cache: keeps what a handler written 'keeps k' keeps of each key
+| ok - linkedAll: holds functions keeping their second argument in their first
+| ok - viaLinker: holds a function as a declared function type with a promise
+| ok - pickFirst: lets a result borrow only from the argument 'borrows' names
+| ok - keptPast: keeps a result written 'noborrow' past both arguments
+| ok - addAll: keeps what is kept in a field's referent where the field refers
+| ok - spelled: writes a function type's promises
 === test tests/raised.olang
 | status 0
 | ok - an error raised by name is caught by its name and is one error wherever it is raised
@@ -1917,6 +1926,9 @@
 === run callvaluekeepsblock.olang
 | status 0
 | 11 0
+=== run callvaluekeepsword.olang
+| status 0
+| 20 0
 === run chunkpool.olang
 | status 0
 === run columnsrun.olang
@@ -2813,9 +2825,18 @@
 === run t22aviewkept.olang
 | status 0
 | 2
+=== run t22blambdakeeps.olang
+| status 0
+| key0,key1,key2
 === run t22borrowedresult.olang
 | status 0
 | 42
+=== run t22bpushedkeeps.olang
+| status 0
+| 3
+=== run t22breturncycle.olang
+| status 0
+| 7
 === run t25ccopydecl.olang
 | status 0
 | 2

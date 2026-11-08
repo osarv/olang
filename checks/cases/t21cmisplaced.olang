@@ -1,0 +1,4 @@
+# check: fail error[T21c]: 'pure' is a promise, written only after a function type's signature - what a function itself does is read off its body ('olang explain' shows it)
+# T21c: a function's declaration writes no promise
+fn twice(x I64) I64 pure { return 2 * x }
+fn main() { _ := twice(2) }

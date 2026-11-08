@@ -1,0 +1,15 @@
+# check: fail error[T22b]: a value of type 'fn&(a mut N&, b N&) keeps b in a' may do what 'fn&(mut N&, N&)' does not say ('keeps b in a')
+# T22b: a value whose functions are not followed (a parameter's) fits a type only where its own type's bound is
+# within that type's - here it may keep b in a, which the element type does not say
+type N struct(v I64) {
+    v
+    next N?& = null
+}
+fn hold(f fn&(a mut N&, b N&) keeps b in a) {
+    fs := Vec<fn&(a mut N&, b N&)>()
+    fs.Push(f)
+    x mut N& = N(1)
+    fs[0](x, N(3))
+}
+fn link(a mut N&, b N&) { a.next = b }
+fn main() { hold(link) }

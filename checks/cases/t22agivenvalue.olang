@@ -1,4 +1,4 @@
-# check: fail error[T22a]: 'link' ties where what it is given lives to what it keeps or gives back, and this argument holds only what its written function type says of every call
+# check: fail error[T22b]: 'link' keeps 'b' in 'a', and the function type of this argument says nothing of that - write 'keeps b in a' after its signature
 # T22a, O13c: a function giving a function with relations, handed on as a value - every function a call of it may give
 # is held to what a written function type says too
 type N struct(v I64) {

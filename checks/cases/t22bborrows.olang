@@ -1,0 +1,9 @@
+# check: fail error[T22b]: 'second' gives back what 'b' refers to, and the function type of this argument says nothing of that - write 'borrows b' after its signature
+# T22b, T21c: "borrows a" says the result refers only into what a refers to
+type N struct(v I64) { v }
+fn second(a N&, b N&) N& { return b }
+fn use(f fn&(a N&, b N&) N& borrows a, a N&) I64 {
+    r := f(a, N(2))
+    return r.v
+}
+fn main() { _ := use(second, N(1)) }

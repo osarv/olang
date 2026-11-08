@@ -1,4 +1,4 @@
-# check: fail error[T22a]: this lambda keeps 'k' beyond the call, and this argument holds only what its written function type says of every call
+# check: fail error[T22b]: this lambda keeps 'k' in what it captured, and the function type of this argument says nothing of that - write 'keeps k' after its signature
 # T22a, O13c: what a call gives is followed (the callee's returns) - handed on as an argument it is a boundary, and the
 # closure it gives is named
 fn adder(names mut Vec<String&>&) fn&(k String&) {

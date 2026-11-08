@@ -1,0 +1,6 @@
+# check: fail error[T21c]: a promise names one field of a parameter - write 'in y.v'
+# T21c: "keeps b in a.f" names one field
+type M struct(items mut Vec<String&>&) { items }
+type N struct(v M&) { v }
+fn use(f fn&(x String&, y N&) keeps x in y.v.items) { }
+fn main() { }
