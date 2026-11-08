@@ -930,3 +930,38 @@ assert DeferredHandOn == "2031", "decided while compiling: " $DeferredHandOn
 test deferPush "hands its by-value parameter on from deferred code, once" {
     assert deferredHandOn() == "2031"
 }
+
+# O27, O15 (docs/fnvalues.md section 10): a value holding a destructor whose storage is built where a view of it, or of a
+# part of it, is kept - directly or through what a callee hands back of it - goes with that storage, ended as its scope
+# closes rather than at the end of its turn: each turn's 'r' outlives the loop and ends with the block 'keep' lives in,
+# the last made first (O16)
+type Viewed unique struct(id I64, log mut Tally&) {
+    id, log
+    name := "n" $id
+} destruct { log.seen.Push(id) }
+
+fn nameOf(r Viewed&) String& { return r.name }
+
+fn viewsKept() String {
+    t := Tally()
+    seen := ""
+    {
+        keep := Vec<String&>()
+        for i in range 3 {
+            r := Viewed(i + 1, t)
+            keep.Push(r.name[1:2])
+            s := Viewed(i + 4, t)
+            keep.Push(nameOf(s))
+        }
+        t.seen.Push(0)
+        for k in keep { seen = $seen $k }
+    }
+    return $seen "/" $t.Text()
+}
+
+test Viewed "is ended where the storage a view of it is kept in lives" {
+    assert viewsKept() == "1n42n53n6/0635241"
+}
+
+# (decided only at run time and by interpret: the values are registered where their storage lives, which the evaluator
+# refuses while compiling - K2c)

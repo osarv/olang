@@ -715,12 +715,10 @@ type Diag enum {
     ReturnOwnStorage
     ViewKept
     ViewReturned
-    ViewKeptDestructor
     ViewKeptCopy
     ReadAfterScope
     VersionsDiffer
     PartKept
-    PartKeptDestructor
     DeferReturns
     YieldOutside
     YieldInLambda
@@ -1770,10 +1768,6 @@ fn ViewKept(name String&) r.Msg { return r.Msg(Diag.ViewKept, "O27", "this keeps
 # ... returned: the result scope a view's storage would be built in is not known here
 fn ViewReturned(name String&) r.Msg { return r.Msg(Diag.ViewReturned, "O27", "this returns a view of '" $name "', whose storage cannot be built where the result goes - return the value (a result written without '&' copies it), or a copy: '$x'") }
 
-# ... of storage holding a value whose destructor is still to run, which is never built longer for a view (O15): its end
-# stays where its holder lets go of it
-fn ViewKeptDestructor(name String&) r.Msg { return r.Msg(Diag.ViewKeptDestructor, "O27, O15", "this keeps a view of '" $name "', whose destructor runs when its block ends - its storage is not kept longer for a view: keep a copy of what it shows, '$x' or 'x.Copy()'") }
-
 # ... of the copy a match binding or a lambda's capture made where it stands (S13b, D16c), which lives no longer
 fn ViewKeptCopy(name String&) r.Msg { return r.Msg(Diag.ViewKeptCopy, "O27", "this keeps a view of '" $name "', the copy its match or lambda made where it stands, which goes with it - keep a copy of what it shows: '$x' or 'x.Copy()'") }
 
@@ -1789,8 +1783,6 @@ fn VersionsDiffer(name String&) r.Msg { return r.Msg(Diag.VersionsDiffer, "O25i,
 # container does not live, through a field that cannot have a binding of its own
 fn PartKept(part String&, whole String&) r.Msg { return r.Msg(Diag.PartKept, "O20", "'" $part "' lives where '" $whole "' does, which closes first - keep a copy ('$" $part "'), or keep what '" $whole "' was made from") }
 
-# ... the container holding a value whose destructor is still to run, never built longer for a part of it (O27, O15)
-fn PartKeptDestructor(part String&, whole String&) r.Msg { return r.Msg(Diag.PartKeptDestructor, "O20, O15", "'" $part "' lives where '" $whole "' does, whose destructor runs when its block ends - keep a copy ('$" $part "')") }
 fn DeferReturns() r.Msg { return r.Msg(Diag.DeferReturns, "S19b", "deferred code may not return - it runs while its block is left") }
 fn YieldOutside() r.Msg { return r.Msg(Diag.YieldOutside, "D18, S20", "'yield' is a generator's - a function whose result is written 'Iterator<T>'") }
 fn YieldInLambda() r.Msg { return r.Msg(Diag.YieldInLambda, "S20", "a lambda is no generator - 'yield' in the function it is written in") }

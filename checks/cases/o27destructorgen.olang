@@ -1,7 +1,10 @@
-# check: fail error[O27, O15]: this keeps a view of 'f', whose destructor runs when its block ends
+# check: run
+# flags: -debug -sanitize
 # never: error[O10c]
-# C4, O27 as placement: a generator yielding views of a local that holds a value with a destructor (refused: its storage
-# is never built longer for a view) and a consumer keeping them - one error, in the generator, none at the consumer
+# C4, O27 as placement, O15, D18c (docs/fnvalues.md section 10; it was refused in the generator - "this keeps a view of
+# 'f', whose destructor runs when its block ends"): a generator yielding views of a local that holds a value with a
+# destructor, and a consumer keeping them - each turn's 'f' is built where the generator lives and ended as that scope
+# closes, after the consumer read the views (after a churn, under the scope sanitizer)
 import "std/io"
 type Res unique struct(n String&) {
     name := $n
@@ -12,8 +15,15 @@ fn names(n I64) Iterator<String&> {
         yield f.name[0:1]
     }
 }
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
 fn main() {
     out := Vec<String&>()
     for w in names(3) { out.Push(w) }
+    churn()
     io.Println($out)!
 }

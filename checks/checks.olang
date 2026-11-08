@@ -1408,8 +1408,9 @@ fn retslot(r mut report&) ? Failed {
 test "an array of 128-bit elements is 16-aligned" { assert passed("widealign") }
 
 # O27 as placement, B18: storage built where a view of it is kept, listed by -memory at the view with the copy that would
-# let it go with its turn - a generator's borrowed elements and a slice kept past their turn; a program keeping nothing
-# longer than its storage lists none
+# let it go with its turn - a generator's borrowed elements and a slice kept past their turn, and a value holding a
+# destructor built where the view is kept, ended as that scope closes (O15); a program keeping nothing longer than its
+# storage lists none
 test "-memory lists the storage built where a view of it is kept" { assert passed("memoryplaced") }
 
 fn memoryplaced(r mut report&) ? Failed {
@@ -1424,6 +1425,10 @@ fn memoryplaced(r mut report&) ? Failed {
     try r.expect(sh(dir, "./build/memoryplaced > run.txt 2>&1 && grep -q '\"0\", \"a\", \"1\", \"a\", \"2\", \"a\"' run.txt") == 0, "memoryplaced printed otherwise", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -memory plain.olang > out.txt 2>&1") == 0, "plain did not build", dir)
     try r.expect(not outOf(dir).Contains("placement"), "plain listed a placement", dir)
+    # (O15: a value holding a destructor goes with its storage, its row saying where it ends)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory dtor.olang > out.txt 2>&1") == 0, "dtor did not build", dir)
+    try r.expect(outOf(dir).Contains("dtor.olang:11:19: memory: 'f' is built in main's scope, a new one each time it is made, for a view of it kept here - its destructor runs as that scope closes, not at the end of its turn"), "no row for f", dir)
+    try r.expect(sh(dir, "./build/dtor > run.txt 2>&1 && grep -q 'end 2-file' run.txt && tail -n 1 run.txt | grep -qx 'end 0-file'") == 0, "dtor printed otherwise", dir)
 }
 
 fn widealign(r mut report&) ? Failed {

@@ -6965,10 +6965,11 @@ local's constructor built - a value read out of its field or element - kept long
 where the constructor can bind it (O28), else has the instance built where the part is kept. Storage that cannot be
 built elsewhere stays where it is, and keeping a view of it longer is a compile-time error naming a copy of what the
 view shows (`$x`, `x.Copy()`): a by-value parameter's own storage (the call's copy, O14, C2d), a match binding's or a
-capture's own copy (S13b, D16c), a generator `Next()`'s result scope (D18b), storage reached through a derived scope
-or a scope not known here (O23a, O12), and storage holding a value whose destructor is still to run (O15: it would run
-later than its holder lets go of it) - so `f := File(p); keep.Push(f.name[0:1])` in a loop is refused, naming
-`$f.name[0:1]`. What a body that said such an error of its own requires is not said again at its calls: one cause,
+capture's own copy (S13b, D16c), a generator `Next()`'s result scope (D18b), and storage reached through a derived
+scope or a scope not known here (O23a, O12). Storage holding a value with a destructor to run is built where the view
+is kept like any other storage, and the value goes with it: its destructors run as that scope closes (O15), not where
+its variable's block ends - `for i in range 3 { f := Res($i "-file"); keep.Push(f.name[0:1]) }` keeps each turn's `f`
+until the scope `keep` lives in closes; `-memory` says so for each (B18). What a body that said such an error of its own requires is not said again at its calls: one cause,
 one error.
 
 **O28 (scopes inferred).** No scope is written (QCB): the compiler places each local, each call's result, each
@@ -7243,8 +7244,9 @@ reference - has its destructors run exactly once, **where its holder lets go of 
   holds one once it is assigned. A lambda capturing such a variable names it where it is held (D16c). A variable whose
   storage flows out of its block - returned as a reference or an `any`, held by a returned value's reference field,
   stored by reference into what a parameter refers to, captured by a returned closure - lives where it flows (O26a),
-  and lets go there: as its block is left it is registered with the scope its storage lives in, as a value no place
-  takes is (O16), and its destructors run as that scope closes;
+  and one whose storage is built where a view of it, or of a part of it, is kept (O27) lives there; either lets go
+  there: as its block is left it is registered with the scope its storage lives in, as a value no place takes is (O16),
+  and its destructors run as that scope closes;
 - a value holding parts lets go of them with itself: its own destructor first, then each part's, the last part first;
 - a collection of the library's holding such values (C11) lets go of its **live elements** with itself, the last first -
   a `Vec`'s from its last position down, a `Map`'s entries by slot from the last one used, a `Deque`'s from the back to
@@ -8255,7 +8257,9 @@ values have destructors keeps what it lets go of (condition 4). Then a line for 
 stands or copy it. After early freeing's rows, a row for each placement made for a view, a part or a capture (O27), in
 source order - `path:line:column: memory:
 'X' is built in SCOPE, a new one each time it is made, for a view of it kept here` at the view (`for a part of it kept
-here`, `for a closure of it kept here`), SCOPE as above or `the result scope`, `the program's scope`, `an outer block`; a
+here`, `for a closure of it kept here`), SCOPE as above or `the result scope`, `the program's scope`, `an outer block`,
+ending `- its destructor runs as that scope closes, not at the end of its turn` where X holds a value with a destructor
+to run (O15, O27); a
 `note:` row at X's declaration naming the copy that would let it go with its turn (`keep a copy of what the view shows,
 '$x'`) - and a line counting them.
 

@@ -1,0 +1,44 @@
+# check: run
+# flags: -debug -sanitize
+# O27 as placement, O15 (docs/fnvalues.md section 10): a loop keeping views of what open files hold - each turn's file
+# is built where the list of views lives, so its descriptor stays open until that scope closes (read back through
+# /proc/self/fd while the views are in use, after a churn), and is closed as it does: none is left open once the
+# function keeping them has returned
+import "std/io"
+import "std/os"
+
+type File unique struct(path String&) {
+    name := $path
+    fd := os.Open(path)!
+} destruct { os.Close(fd)! }
+
+fn open(fd I32) Bool { return os.Exists($"/proc/self/fd/" $fd) }
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+
+# the views kept, every descriptor still open while they are read; the descriptors handed back as numbers
+fn keepNames(n I64) Vec<I32> {
+    keep := Vec<String&>()
+    fds := Vec<I32>()
+    for _ in range n {
+        f := File("/dev/null")
+        fds.Push(f.fd)
+        keep.Push(f.name[5:9])
+    }
+    churn()
+    for fd in fds { assert open(fd), "a kept file's descriptor was closed at the end of its turn" }
+    for k in keep { assert k == "null" }
+    assert fds.Len() == n and keep.Len() == n
+    return fds
+}
+
+fn main() {
+    fds := keepNames(4)
+    for fd in fds { assert not open(fd), "a kept file's descriptor was left open after its scope closed" }
+    io.Println($fds.Len() " files kept open for their views, then closed")!
+}

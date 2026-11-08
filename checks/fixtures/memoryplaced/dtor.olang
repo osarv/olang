@@ -1,0 +1,14 @@
+# O27, O15, B18: each turn's 'f' is built where 'keep' lives for the view kept of it, and its destructor runs as that
+# scope closes - -memory says so at the view
+import "std/io"
+type Res unique struct(n String&) {
+    name := $n
+} destruct { io.Println("end " $name)! }
+fn main() {
+    keep := Vec<String&>()
+    for i in range 3 {
+        f := Res($i "-file")
+        keep.Push(f.name[0:1])
+    }
+    io.Println($keep)!
+}

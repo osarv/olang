@@ -151,6 +151,7 @@
 | ok - gripsHeld: ends a collection by value before what its elements hold
 | ok - registeredHeld: ends a registered holder before a value registered before it
 | ok - deferPush: hands its by-value parameter on from deferred code, once
+| ok - Viewed: is ended where the storage a view of it is kept in lives
 === test tests/embed.olang
 | status 0
 | ok - E38: embed gives the file's bytes, baked and decided while compiling, read at run time
@@ -2325,6 +2326,32 @@
 === run o27callplaced.olang
 | status 0
 | 1275 35
+=== run o27destructorcall.olang
+| status 0
+| end 5
+| end 4
+| end 3
+| end 2
+| end 1
+| end 3
+| end 2
+| end 1
+| 15 6
+=== run o27destructorfiles.olang
+| status 0
+| 4 files kept open for their views, then closed
+=== run o27destructorgen.olang
+| status 0
+| Vec<String&>["0", "1", "2"]
+| end 2-file
+| end 1-file
+| end 0-file
+=== run o27destructorview.olang
+| status 0
+| Vec<String&>["0", "1", "2"]
+| end 2-file
+| end 1-file
+| end 0-file
 === run o27genborrow.olang
 | status 0
 | Vec<String&>["0", "a", "b", "1", "a", "b", "2", "a", "b", "3", "a", "b", "4", "a", "b"] Vec<String&>["0", "c", "d", "1", "c", "d", "2", "c", "d"] 50
