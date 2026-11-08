@@ -1819,7 +1819,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 244020b30fdf2de1 b897660d40972e4d checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-75494af5e56852c2 9f4bef27cc8e7012 checks/checks.olang
+f6340e0ec94a07ca fdb6cb2ddc49a7ba checks/checks.olang
 a9e28b3dd92156ad 622c84cf954c843d checks/fixtures/agree/agree.olang
 93a0581f17cca83e 855092106b73d871 checks/fixtures/agree/bfrand.olang
 a11159f77eaf86c0 20676fbca43683b2 checks/fixtures/agree/math.olang
@@ -2087,8 +2087,8 @@ ac92c689556fe388 ea36ed2b7fe994f8 compiler/check.olang
 5f082e242ba93794 e94995ac5a2bfda1 compiler/diagmsg.olang
 cbc992a0673d2a33 40bac234d72be6a7 compiler/doc.olang
 98f6738c459aaa4e 61b7b838635c143c compiler/effects.olang
-0dd2025ae0d01c2a 61612501c036547d compiler/emit.olang
-de02aeb1b0fcc0c7 9a0cd24743343ee8 compiler/eval.olang
+412c273c55258abe da44bc83a5878de3 compiler/emit.olang
+fd2cde6a4e2a1287 a2a123b8b62d6b58 compiler/eval.olang
 16163e6f9df276b3 94f312a95a4235aa compiler/explain.olang
 9b7a0b42d346bf49 1db7b17357fd28aa compiler/fetch.olang
 1131c7ea2dadf259 9021e4c95322f690 compiler/fix.olang
@@ -2098,10 +2098,10 @@ e732b62fd1c41637 69d11fe872c39e6e compiler/generic.olang
 d37fd1089d3515a3 454f6967856dcc02 compiler/interp.olang
 a60d3ef1c94e04ef 8c13020a89e52588 compiler/listing.olang
 8613922735c561a6 952e78f6e48dd4d4 compiler/load.olang
-384d1efeb259664a 6e4cc050a47a82ab compiler/lower.olang
+8f9259cd3c8a8a6f 94a529b56def31fc compiler/lower.olang
 3879802f0148397c 5dd6f84508da5a8e compiler/lsp.olang
 a9fdbee6672ba31e 89e29d0fd7116d29 compiler/mcp.olang
-f8196ec000eedc18 7750064d5fa4bd68 compiler/mir.olang
+447c934586c0749c 4d623d983283595a compiler/mir.olang
 46c3833e04a46d2e 395ab773d71b36cd compiler/msgs.olang
 7cd82ba607aceedb f3c20600c4158349 compiler/names.olang
 3ca8bd78a33b7278 22dd9b1a97c41ffd compiler/needs.olang
@@ -2110,7 +2110,7 @@ d7600840e883b1f9 e76fc12bcc386e2e compiler/olang.olang
 de87a76ebcdd4f4f 36bf5cfa366d300c compiler/profile.olang
 cd6dc04fc51a289c 717b2d1c1d7ae607 compiler/runtime.olang
 1cd1dca247f6cfbd 65a9cc0be9512004 compiler/scan.olang
-17a5c37842d68188 22091cec64657e4a compiler/scope.olang
+7c84ab8b0da92f27 38211727f5613b50 compiler/scope.olang
 6732e1f083c851a0 769db6a7e059f75f compiler/session.olang
 a846754911a07a9e 65d90941d2eb0321 compiler/source.olang
 bae5395316494bb3 77e39f1f8417f545 compiler/target.olang

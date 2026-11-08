@@ -34974,3 +34974,30 @@ byte-identical. `make scopesan`: every file passes (24 of them run again after t
 scopefuzz` (100 programs): no finding. `make verify` passed but for layoutdiff, which the new fields of the compiler's
 own types (`types.data.G`, `Table`'s promise lists, `ast.Sig.Promises`, two of `Scoper`'s) moved - `make layoutgold`
 captured it again (a type's key grew from 56 to 64 bytes).
+
+## The many local ifs' memory (2026-11-08, wt-manyifs)
+
+checks' `manyifs` (one function of 20,000 `if g(x) > 5 { s += 1 }`) had grown to a 6.0 GB peak in `compile` and 5.4 GB
+in `interpret`, and was killed for memory under every `make verify`. Measured by reading VmRSS through each phase at
+2,000 to 20,000 ifs: the scope phase grew quadratically, the evaluate and lower+emit phases linearly but at about 35 KB
+an if each.
+
+**Causes.** 1. The boundary walk's `bndDef` (T22a, scope.olang) read a local's list of values out of its map (a copy),
+pushed one and put it back: a local assigned n times held n lists of up to n values (`s` assigned 20,000 times: 4.7 GB).
+It pushes in place now (`RefMut`). 2. A MIR block's statements were a `Vec<Stmt>`, whose first buffer has room for eight
+176-byte statements, where most blocks hold one or two: 113 MB of a function of 80,000 blocks, in every copy of it.
+`mir.StmtList` grows its room 1, 2, 4, ..., read as the Vec was (Len, an index, a for-in by At and Len). 3. Copies of a
+whole lowered function kept for the build: `Lower` returned `ln.F` by value, a copy of what the lowering holds, and the
+evaluator's `Define` pushed another into its table. `Lower` and `LowerKey` give a `mir.Fn&` now, the lowering's own,
+and the machine keeps references (`Vec<mir.Fn&>`); its `Define` reads the function only. 4. `foldSlots` split the body
+into three Vecs of its lines doubling as they filled; it counts the lines first now.
+
+**Measured** (peak RSS, before -> after): 20,000 ifs `compile` 6.0 GB -> 640 MB, `interpret` 5.4 GB -> 290 MB, linear
+(2,000: 92 / 49 MB; 10,000: 335 / 151 MB); the compiler's own `-quick` build 3.2 -> 2.4 GB. The check runs under
+`ulimit -v 2500000` now (the compiler reserves a 1 GB stack; the old compiler aborts under 5 GB). IR byte-identical: the
+base commit's compiler/ and bench/ sources and the check's program built by the base compiler and this one, 355 files.
+
+**Left as it is.** What a function's lowering builds lives until the build ends: the lowering is placed where the
+Lowerer's result scope is, the checker's, so a build's memory is the sum over its functions rather than the largest.
+Freeing it per function would need the lowering's state apart from what it holds writably (the Lowerer, the type
+table) - a restructuring of lower.olang, not done here.

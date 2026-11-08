@@ -2496,18 +2496,25 @@ fn insertedSlot(line String&) String {
 # what clang parses, and keeps whole at -O0. nlocals is how many locals the function has (the slots are %l0 ...)
 fn foldSlots(body String&, nlocals I64) String {
     n := body.Len()
-    starts Vec<I64>      # each line's start, its end, and the block it is in (a label line starts one)
-    ends Vec<I64>
-    blocks Vec<I64>
+    # each line's start, its end, and the block it is in (a label line starts one) - arrays of the lines' count, which
+    # Vecs doubling as they fill held twice over (the many local ifs' 340,000 lines)
+    lines I64 = 0
+    for c in body {
+        if c == '\n': lines++
+    }
+    if n > 0 and body[n - 1] != '\n': lines++
+    starts := Array<I64>(lines)
+    ends := Array<I64>(lines)
+    blocks := Array<I64>(lines)
     s I64 = 0
     blk I64 = 0
-    for s < n {
+    for li in range lines {
         e := s
         for e < n and body[e] != '\n' { e++ }
         if e > s and body[s] != ' ' and body[e - 1] == ':' { blk++ }
-        starts.Push(s)
-        ends.Push(e)
-        blocks.Push(blk)
+        starts[li] = s
+        ends[li] = e
+        blocks[li] = blk
         s = e + 1
     }
     mentions := Array<I64>(nlocals)

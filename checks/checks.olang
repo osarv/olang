@@ -1616,7 +1616,9 @@ fn nestdeep(r mut report&) ? Failed {
 }
 
 # B9a/S8b: a module of many local ifs - each condition used to look its names up by reading the whole file again, and
-# then by walking the whole function for the locals it reads, each once per condition
+# then by walking the whole function for the locals it reads, each once per condition. In memory linear too, under a
+# cap: the boundary walk copied a local's list of values once per value (4.7 GB), and every block's statements had
+# room for eight in every copy of the function (now about 300 MB; the cap counts the compiler's 1 GB stack, reserved)
 test "a function of many local ifs compiles in time linear in their number" { assert passed("manyifs") }
 
 fn manyifs(r mut report&) ? Failed {
@@ -1624,7 +1626,8 @@ fn manyifs(r mut report&) ? Failed {
     many String& = nested("fn g(x I32) I32 { return x }\nfn f(x I32) I64 {\n    s := 0\n"
                           "    if g(x) > 5 { s += 1 }\n", "", "", "    return s\n}\nfn main() ? { assert f(9) == 20000 }\n", 20000)
     try os.WriteFile($dir "/many.olang", many) catch { }
-    try r.expect(sh(dir, "timeout 60 \"$OLANG\" interpret many.olang > out.txt 2>&1") == 0, "20000 local ifs", dir)
+    try r.expect(sh(dir, "(ulimit -v 2500000 && timeout 60 \"$OLANG\" interpret many.olang) > out.txt 2>&1") == 0
+                 "20000 local ifs", dir)
 }
 
 # a review of the code generator (2026-10-09): what only a whole build shows. A block inside a match value has an

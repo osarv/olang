@@ -1117,7 +1117,7 @@ fn (s mut Scoper&) bndRecs(x typed.Expr?&, out mut Vec<fnRec>&) {
             l := wholeLocal(p)
             if l < 0 or s.bndSeen.Has(l) { return }
             s.bndSeen.Put(l, true)
-            ds := try s.bndDefs.Get(l) catch default Vec<typed.Expr&>()
+            ds := try s.bndDefs.Ref(l) catch default Vec<typed.Expr&>()
             for d in ds { s.bndRecs(d, out) }
         }
         case typed.Expr.Call(_, _, c) {
@@ -1152,10 +1152,12 @@ fn (s mut Scoper&) fnBoundsDefs() {
 
 fn (s mut Scoper&) fnBounds() { s.bndBlock(s.B!.Root) }
 
+# (pushed where the map holds the local's list: a copy got and put back for each value made a local assigned n times
+# hold n lists of up to n values - the many local ifs' 4 GB)
 fn (s mut Scoper&) bndDef(l I64, x typed.Expr&) {
-    ds := try s.bndDefs.Get(l) catch default Vec<typed.Expr&>()
+    if l not in s.bndDefs: s.bndDefs.Put(l, Vec<typed.Expr&>())
+    ds := try s.bndDefs.RefMut(l) catch { return }
     ds.Push(x)
-    s.bndDefs.Put(l, ds)
 }
 
 fn (s mut Scoper&) bndBlock(bl typed.Block?&) {
@@ -1689,7 +1691,7 @@ fn (s mut Scoper&) lateRecs(recs fnRecs&, x typed.Expr&) {
         if dv is not null { vals.Push(dv) }
     }
     for l in recs.Loose {
-        ds := try s.bndDefs.Get(l) catch default Vec<typed.Expr&>()
+        ds := try s.bndDefs.Ref(l) catch default Vec<typed.Expr&>()
         for dv in ds { vals.Push(dv) }
     }
     rs Vec<fnRec>

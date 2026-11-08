@@ -6867,7 +6867,7 @@ compiler/lower:lowering	2616 8	%"compiler/lower:lowering"	{ ptr, ptr, ptr, %"com
 compiler/lower:pl	72 8	%"compiler/lower:pl"	{ { i64, [2 x i64] }, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", i64, i32 }	fields 0,24,56,64
 compiler/lower:tryCtx	64 8	%"compiler/lower:tryCtx"	{ i64, { i64, ptr }, i1, i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44" }	fields 0,8,24,25,32
 compiler/mir:Base	24 8	{ i64, [2 x i64] }	-	cases ;0;0,8,12
-compiler/mir:BasicBlock	104 8	%"compiler/mir:BasicBlock"	{ %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", { i64, [8 x i64] } }	fields 0,32
+compiler/mir:BasicBlock	96 8	%"compiler/mir:BasicBlock"	{ %"compiler/mir:StmtList", { i64, [8 x i64] } }	fields 0,24
 compiler/mir:BlockId	4 4	i32	-	-
 compiler/mir:Call	128 8	%"compiler/mir:Call"	{ { i64, [7 x i64] }, %"compiler/mir:Range", %"compiler/mir:Range", %"compiler/mir:Lvalue", i1, i32, i32, i32 }	fields 0,64,72,80,112,116,120,124
 compiler/mir:Callee	64 8	{ i64, [7 x i64] }	-	cases 0,24;0,8;0;0,40,48

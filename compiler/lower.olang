@@ -152,7 +152,7 @@ fn (lw mut Lowerer&) HasCode(id I64) Bool {
 
 # body id lowered: its MIR function. Gapped says whether lowering met a construct it does not lower yet (a gap, in Gaps)
 # or a type check left unknown (a body with errors) - either way the function is not one to verify
-fn (lw mut Lowerer&) Lower(id I64) mir.Fn {
+fn (lw mut Lowerer&) Lower(id I64) mir.Fn& {
     b := lw.Bodies[id]
     f := mir.Fn(mir.FnKey.Body(typed.BodyId(I32(id))), b.Ty, b.File, b.Sp)
     for i in range b.RaiseAt.Len() {
@@ -165,7 +165,7 @@ fn (lw mut Lowerer&) Lower(id I64) mir.Fn {
         ex := lw.P.PreludeType("std/prelude/iterator", "Exhausted")
         if ex != types.UnknownT { f.GenEnd = mir.ErrorCode(lw.P.T, lw.P.T.Errors(b.Ty), ex, 0) }
     }
-    ln := lowering(lw, b, lw.P.T, f)
+    ln mut lowering& = lowering(lw, b, lw.P.T, f)
     ln.file = b.File
     if id < lw.Plans.Len() {
         ln.planned = true
@@ -185,7 +185,7 @@ fn (lw mut Lowerer&) Want(k mir.FnKey) {
 }
 
 # the function a key names, lowered: a typed body, a helper, an adapter or a module's initialization. Gapped as Lower's
-fn (lw mut Lowerer&) LowerKey(k mir.FnKey) mir.Fn {
+fn (lw mut Lowerer&) LowerKey(k mir.FnKey) mir.Fn& {
     match k {
         case mir.FnKey.Body(id) { return lw.Lower(I64(id)) }
         case mir.FnKey.Helper(kind, t) { return lw.helper(kind, t) }
