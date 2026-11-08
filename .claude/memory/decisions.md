@@ -1087,3 +1087,14 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   files) while objects stay per module and unchanged ones are reused (B3i); twins and clones follow generic instances
   (made in the root's instances object, B3d); the address lookup is local. Mine: owning-link inference (wt-genrefs)
   decides from the type's own module only, else keeps until its scope closes - sent to the note.
+- docs/fnvalues.md questions ANSWERED 2026-11-08 (the user: "did I say stored function value stay dynamic? ... We
+  talked about monomorphization, and I like that idea as much as possible. But like with some restraint, there has to
+  be some like reasonable benefit to greater program size. On the traits, yes, for sure ... the only time I don't
+  actually want to write these things out is in the actual function declaration signatures ... constraints [are] part
+  of things that need to rely on them, but in actually implementing them, they can be implicit ... removing dot destroy
+  is okay"): (1) YES - function values followed as far as the compiler can know them, constructor-fixed fields
+  included; code specialized only where it pays (the note's "the user's rule keeps them dynamic" was my wording, a
+  limit not a rule - corrected); (2) YES - promise words on trait methods; the principle: written where relied on
+  (function types, declared function types, trait methods), inferred on implementations. Read as the go for the build:
+  round 1 (one tier of keywords, the promise words reserved; wt-kw, sonnet medium) started; the rounds follow the
+  note's plan one at a time where they share files. Rules for the rounds: /home/user/review/rounds/round-rules.md.
