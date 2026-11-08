@@ -171,14 +171,14 @@ fn Way.Classify(t mut types.Table&, arch String&, ty types.TypeId, result Bool) 
         lo := k * 8
         hi := lo + 8
         sse := true
-        any := false
+        found := false
         for s in sc {
             if s.Off >= lo and s.Off < hi {
-                any = true
+                found = true
                 if not s.IsFloat { sse = false }
             }
         }
-        if not any { continue }
+        if not found { continue }
         part, n := sseAt(sc, lo) if sse else intAt(sc, lo, size)
         parts.Push($part)
         offs.Push(lo)

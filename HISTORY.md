@@ -34699,3 +34699,32 @@ Question 6 the user then answered "Yes, do A": storage a function builds and pas
 tail scope bound by the chain's first ordinary call and passed down unchanged, freed where that caller lets go of the
 result - the memory the `return` form keeps, with `become`'s constant stack; `-memory` names each site. Keeping the
 refusal (so `become` would also mean constant memory) was declined. Built in round R5.
+## One tier of keywords (L9; 2026-11-08, wt-kw, round 1 of docs/fnvalues.md)
+
+The user, 2026-11-08: "I don't want us to have two tiers of keywords." Until now `any`, `unique`, `immut`, `packed` and
+`commutes` were words only in the one place the language gave them (SPEC L9b, L9c) and ordinary names everywhere else;
+the parser read them as identifiers by their spelling. They are now reserved words (L9) with token kinds of their own
+(`Tok.Any` ... `Tok.Commutes`), and so are the ten promise words that rounds 4 and 5 of the function-values plan give
+meaning to (`returns noalloc noblock nospawn norecurse noextern pure keeps borrows noborrow`), reserved in this round so
+the rename happens once. L9a's rule is unchanged and gains the fifteen words: a field named by one is declared with its
+type or `:=` and reached after `.`; a method after a receiver clause may carry one. L9b and L9c left gaps.
+
+What it renamed in the repository (decided by meaning, not by suffix): the locals and parameters named `any` (free,
+scope, views, cabi, generic, olang, std/regex, tools/cli_words) became `found`; `keeps` (free, lower, scope, views)
+`kept`; `pure` (check.olang's comparison chain) `folded`; `commutes` and `packed` in parse.olang `swaps` and `isPacked`;
+free.olang's `returns` field `returned`. Methods (`types.Table.unique`, std/json's `writer.any<T>`) stay (L9a). The
+scan found nothing else; tokgold and astgold differ on those files only (plus three checks cases whose parse changed
+in a way that kept its diagnostic).
+
+Parser changes: the declaration words, `packed`, `commutes` and `any` are read by token kind; `any` begins a type in
+`typeBase`, a statement `s any Shape&`, a result (`startsResult`), a type-argument shape and an array literal of
+trait values. Found on the way while rebuilding: `type R unique packed struct` and `unique immut struct` needed the
+declaration-word loop to accept a word as the next token.
+
+`tools/keyword_rename.olang` is a text tool (srcmask) after the other text tools in `olang fix`'s table. Decisions
+(mine): the rename is `_` appended (L6 allows it); a word is left where the language gives it its place - `any` before
+a type that ends in `&`, `unique immut packed` between `type NAME` and the body, `commutes` closing an operator
+method's signature, a promise word on a line holding a function type (`fn&(`, `fn?&(`, `type X fn(`) - after `.`, as a
+method's name after its receiver clause, and as a field declared at a line's start in a file reading `.word`
+(L9a allows the field; the tool cannot see other files). Idempotent: a renamed name no longer is the word. The
+evaluator and `interpret` read the same tokens, so no semantics changed; the compile-time tests are the existing ones.

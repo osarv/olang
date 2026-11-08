@@ -148,6 +148,9 @@ trait     spawn   join    defer   errdefer yield   become
 import    test    destruct embed  comptime
 unreachable
 extern    default
+any       unique  immut   packed  commutes
+returns   noalloc noblock nospawn norecurse noextern pure
+keeps     borrows noborrow
 ```
 
 `true` and `false` are not keywords; they are the two spellings of `BOOL_LIT` (L11). `null` is not a
@@ -160,21 +163,17 @@ any of the words above is a method's name there: `fn (w mut World&) spawn() I32`
 A field may be named by a word above that is a whole statement by itself - `break`, `continue`, `unreachable`,
 after which nothing can follow on its line - or that begins no statement and no value: `in`,
 `is`, `as`, `and`, `or`, `xor`, `range`, `case`, `type`, `struct`, `enum`, `trait`, `extends`, `import`,
-`test`, `extern`, `default`. It is declared with its type or `:=` (`break I64 = 0`, `in Bool`, `type := Kind.A`), never
+`test`, `extern`, `default`, and the words `any`, `unique`, `immut`, `packed`, `commutes`, `returns`, `noalloc`,
+`noblock`, `nospawn`, `norecurse`, `noextern`, `pure`, `keeps`, `borrows`, `noborrow` (each stands only in the one place
+its rule gives it: `any` before a type's name where a type is written, `immut`, `unique` and `packed` before a type
+declaration's body, `commutes` after an operator method's result, the others after a function type's signature). It is declared with its type or `:=` (`break I64 = 0`, `in Bool`, `type := Kind.A`), never
 as a pun, and is reached only after `.` (`s.break`, `s.break++`) - a word after `.` is always a member's name, and a line
 ending in one ends its statement there. In its constructor's body such a field is no name: it is set by its initializer,
 and a later statement reading it by the word alone is a compile-time error (a constructor's other fields are its locals,
 C2a). Anywhere else - a parameter, a local, a function, a type - the words stay reserved.
 
-**L9b (words of one place).** `commutes` is a word only right after a method's result (E31c), and `immut` and `unique`
-only right before a type declaration's body (T13a: `type Config immut struct(...)`, T13b: `type File unique
-struct(...)`, a type name - or `struct`, `enum`, `extends`, `trait`, `error`, `fn` - following it), and `packed` only
-right before `struct` in a type declaration, after either of those where one is written (T13c: `type Header packed
-struct(...)`; before `enum`, `extends`, `trait` or `error` it is an error naming T13c) - an ordinary name everywhere else.
-`immut` and `unique` are never written together (T13b).
-
-**L9c (`any`).** `any` is a word only where a type is written and the name of a type follows it on its line (T32):
-`s any Shape&`, `List<any Shape&>`, `fn f() any Shape&`; anywhere else it is an ordinary name.
+**L9b** and **L9c** are removed (the numbers are not reused): the words they named are reserved everywhere now (L9), and
+a local, parameter, function, type or global may not be named by one (L7).
 
 ### 1.5 Literals
 
@@ -839,7 +838,7 @@ the reference it holds is read-only - nothing is written through it, so any refe
 read-only reference to an immut type given where a writable one is wanted - a `String` or a slice of one handed to a
 `mut Array<Char>&` - is this rule's error, naming what may be written. The prelude's `String` is immut (T29c): text
 written into is an `Array<Char>` (or a declared type over one, or built by a `StringBuilder`), made a `String` with
-`String(chars)`. `immut` is a word only in that position (L9b); it names nothing.
+`String(chars)`. `immut` is a keyword (L9); it begins a type's body only in that position.
 
 **T13b (`unique`).** A type declared with the word `unique` before its body - `type File unique struct(fd I32) { fd
 }`, an enum or a type over a number or an array alike - holds values that **exist in exactly one place**. A **fresh
@@ -893,8 +892,8 @@ an immut value is copied freely, a unique one never. `unique` on a trait, an ext
 none has values of its own. A generic whose body copies a value of a type its call's binding makes unique - a `:=` or `=`
 from an existing value, a by-value argument, a store, a part, a result (but a by-value parameter handed on as above, and
 a walk's or a binding's name, which are references) - is refused at the program's call that bound it, as a generic's
-needs are (G18a): `Push needs a copy, and File is unique`, the note where the body copies. `unique` is a word only in
-that position (L9b); it names nothing.
+needs are (G18a): `Push needs a copy, and File is unique`, the note where the body copies. `unique` is a keyword (L9); it
+begins a type's body only in that position.
 
 **T13c (`packed`).** A struct declared with the word `packed` right before `struct` - `type Header packed struct(version
 U4, ihl U4, length U16) { version, ihl, length }`, after `immut` or `unique` where one is written (`type Reg immut packed
@@ -925,8 +924,8 @@ reference local, a slice of an array field, a walk of one by reference - is a co
 saying to copy it into a local (`lanes := h.lanes`), the copy written where it is wanted (principle 2); a method with a
 by-value receiver and an argument by value read the field as any value. A packed struct is otherwise a struct: it is
 built only by its constructor (T13), compares (`==`, E10), hashes, renders (`$h` is `Header(4, 5, 20)`), copies and
-reflects (G34) by its fields, and is computed while compiling as at run time (K1). `packed` is a word only in that
-position (L9b); it names nothing.
+reflects (G34) by its fields, and is computed while compiling as at run time (K1). `packed` is a keyword (L9); it
+begins a type's body only in that position.
 
 **T14.** A struct type is a value type: assignment, parameter passing, and return copy the whole value
 member-wise, and `==`/`!=` compare structurally (see §5.2 E10), unless referenced through a marker
@@ -1833,8 +1832,7 @@ storage.
 trait - an application of one, with its arguments (T35a) - and carries the reference marker, which is required: an
 `any` is always a reference, and `any Shape` with no marker is a compile-time error, as is `any` before anything but a
 trait. The marker is the instance's, as on any reference: `&`, or `?&` for one that may be null; where it lives is inferred (§8).
-`any` is a word only where a type is written and a type's name follows it on its line (L9c); elsewhere it is an ordinary
-name.
+`any` is a keyword (L9); it begins a type only where a type is written.
 
 An `any R&` is a reference to an **instance** of some type satisfying `R`, decided when the value is made, with the
 methods `R` declares: its value is two words, a reference to the instance and a reference to a static **table** - one
@@ -2003,7 +2001,7 @@ keeps from being checked.
 
 **D4.** `type-decl ::= "type" IDEN [ type-params ] [ decl-word ] [ "packed" ] [ "extends" ] type-expr [ prim-ctor ] [ STMNT_END ]`
 (`extends`: T29f; `decl-word ::= "immut" | "unique"`, T13a, T13b, and `"packed"` right before a struct body, T13c -
-words only there, L9b), with
+keywords, L9), with
 `prim-ctor ::= "(" param-list ")" [ "?" error-list ] block` valid only over a primitive (T29d), where `type-params`
 (§12.3 G6) declares type parameters and is valid only for a
 struct type, and `type-expr` is defined in
@@ -4349,7 +4347,7 @@ would on the right. `commutes` is written only on those five methods, of the ope
 the receiver), whose parameter's type is not the receiver's (where they are the same, `a * b` already reads both
 ways); anywhere else it is a compile-time error. A type `A` whose `Mul` takes a `B`, beside a `B` whose `Mul` takes an
 `A` and commutes, would give `a * b` two meanings: the commuting declaration - the later of two that both commute -
-is a compile-time error naming the other. `commutes` is a word only in that position (L9b); it names nothing.
+is a compile-time error naming the other. `commutes` is a keyword (L9); it stands only in that position.
 
 **E31d (`Copy`).** `Copy()` is the one method that makes a new value from an existing one. **Every type has one
 supplied**: the value's copy, part by part - deep through what it holds by value (a value array's elements, a struct

@@ -3004,17 +3004,17 @@ fn (s mut Scoper&) staticVar(c typed.Call&, v I64) Bool {
     if fty == types.UnknownT { return false }
     vars := s.P.T.ScopeVarsOf(fty)
     if v >= vars.Len() { return false }
-    any := false
+    found := false
     for i in range c.Args.Len() {
         k := s.P.T.ShareOf(fty, i)
         q := k if k >= 0 else i
         if vars[v] != q { continue }
         match s.unAway(c.Args[i]) {
-            case typed.Expr.Data(_, _, _, _) { any = true }
+            case typed.Expr.Data(_, _, _, _) { found = true }
             case _ { return false }
         }
     }
-    return any
+    return found
 }
 
 # whether a call's result passed on as an argument lands by its obligations (O18c): its arguments' terms, read without
@@ -4648,14 +4648,14 @@ fn (s mut Scoper&) kwCall(c typed.Call&) {
 # argument k (handing over parameter r's region) of a call through a function value: by what each record's body keeps,
 # stores and puts (T22a, 5.3) - a value not followed keeps nothing beyond the call but in its result, storing only where
 # something can be stored through its parameter (T22). keeps: whether a keep counts (a region's own storage handed on)
-fn (s mut Scoper&) kwValueArg(c typed.Call&, k I64, r I64, ps Array<types.TypeId>&, keeps Bool) {
+fn (s mut Scoper&) kwValueArg(c typed.Call&, k I64, r I64, ps Array<types.TypeId>&, kept Bool) {
     rs := try s.callRecs.Get(I64(c.Site)) catch default fnRecs()
     if not rs.Full and k < ps.Len() and s.storeThrough(ps[k]) { s.storeParam(r, true) }
     for x in rs.Recs {
         q := k + 1 if x.Adapter else k
         if s.sumStores(x.Body, q) {
             s.storeParam(r, s.sumPuts(x.Body, q))
-        } else if keeps and s.sumKeeps(x.Body, q) {
+        } else if kept and s.sumKeeps(x.Body, q) {
             s.keepParam(r)
         }
     }
@@ -6173,7 +6173,7 @@ fn (s mut Scoper&) versionsOf(b I64) typed.Versions?& {
     }
     body := s.Bodies[b]
     cand := Array<Bool>(body.Locals.Len(), false)
-    any := false
+    found := false
     for k in range s.assignedFrom[b], s.assignedFrom[b + 1] {
         l := s.assignedTo[k]
         if l < 0 or l >= body.Locals.Len() { continue }
@@ -6181,9 +6181,9 @@ fn (s mut Scoper&) versionsOf(b I64) typed.Versions?& {
         if loc.Kind != typed.LocalKind.Var and loc.Kind != typed.LocalKind.Param { continue }
         if not s.isRef(loc.Ty) and not s.isFunc(loc.Ty) { continue }
         cand[l] = true
-        any = true
+        found = true
     }
-    vs := typed.Versions.New(body, cand) if any else null
+    vs := typed.Versions.New(body, cand) if found else null
     if vs is null {
         s.versNone.Put(b, true)
         return null
@@ -11988,9 +11988,9 @@ if TestBuild {
             match c.Bodies[i].Of {
                 case typed.BodyOf.Lambda(parent) {
                     if I64(parent) != tl { continue }
-                    any := false
-                    for mb in s.Plans[i].MayBuild { any = any or mb }
-                    if any { building++ } else { reading++ }
+                    found := false
+                    for mb in s.Plans[i].MayBuild { found = found or mb }
+                    if found { building++ } else { reading++ }
                 }
                 case _ { }
             }

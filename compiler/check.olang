@@ -9980,8 +9980,8 @@ fn (c mut Checker&) membership(sp source.Span, a ast.Expr&, b ast.Expr&) typed.E
 fn (c mut Checker&) chain(sp source.Span, ch ast.Chain&) typed.Expr& {
     base := c.exprs.Len()
     n := ch.Xs.Len()
-    pure := Array<Bool>(n, false)
-    for i in range n { pure[i] = c.fold(ch.Xs[i]).Ok }
+    folded := Array<Bool>(n, false)
+    for i in range n { folded[i] = c.fold(ch.Xs[i]).Ok }
     # what is literal-like but runs (a conditional of literals) is evaluated once, adapting to the nearest operand that
     # is no literal - its left neighbour's first
     lit := Array<Bool>(n, false)
@@ -9994,7 +9994,7 @@ fn (c mut Checker&) chain(sp source.Span, ch ast.Chain&) typed.Expr& {
         }
     }
     for i in range n {
-        if not lit[i] or pure[i] { continue }
+        if not lit[i] or folded[i] { continue }
         j := -1
         for d in range 1, n {
             if i - d >= 0 and not lit[i - d] {
@@ -10019,23 +10019,23 @@ fn (c mut Checker&) chain(sp source.Span, ch ast.Chain&) typed.Expr& {
         if not fits { c.noMeet(c.between(ch.Xs[k].Span(), ch.Xs[k + 1].Span(), ch.Ops[k].Text().Len()), other, typeOf(e)) }
         c.exprs[base + i] = e
     }
-    r := c.chainFrom(sp, ch, base, pure, 0, null if pure[0] else c.exprs[base])
+    r := c.chainFrom(sp, ch, base, folded, 0, null if folded[0] else c.exprs[base])
     c.exprs.Truncate(base)
     return r
 }
 
 # comparison i of a chain and the rest: left its left operand, null where that is a literal, typed here
-fn (c mut Checker&) chainFrom(sp source.Span, ch ast.Chain&, base I64, pure Array<Bool>&, i I64, left typed.Expr?&) typed.Expr& {
+fn (c mut Checker&) chainFrom(sp source.Span, ch ast.Chain&, base I64, folded Array<Bool>&, i I64, left typed.Expr?&) typed.Expr& {
     n := ch.Xs.Len()
-    if i + 2 >= n { return c.chainCmp(sp, ch, i, left, null if pure[i + 1] else c.exprs[base + i + 1]) }
-    if pure[i + 1] { return typed.Expr.Cond(sp, types.BoolT, typed.Cond(c.chainCmp(sp, ch, i, left, null), c.chainFrom(sp, ch, base, pure, i + 1, null), c.lit(sp, types.BoolT, 0))) }
+    if i + 2 >= n { return c.chainCmp(sp, ch, i, left, null if folded[i + 1] else c.exprs[base + i + 1]) }
+    if folded[i + 1] { return typed.Expr.Cond(sp, types.BoolT, typed.Cond(c.chainCmp(sp, ch, i, left, null), c.chainFrom(sp, ch, base, folded, i + 1, null), c.lit(sp, types.BoolT, 0))) }
     rt := typeOf(c.exprs[base + i + 1])
     h := c.hidden(sp, rt)
     from := c.stmts.Len()
     c.stmts.Push(typed.Stmt.Let(sp, typed.LocalId(I32(h)), c.exprs[base + i + 1]))
     first := c.chainCmp(sp, ch, i, left, c.readLocal(sp, h))
     held := typed.Expr.Seq(sp, types.BoolT, typed.Seq(gather(c.stmts, from), first))
-    rest := c.chainFrom(sp, ch, base, pure, i + 1, c.readLocal(sp, h))
+    rest := c.chainFrom(sp, ch, base, folded, i + 1, c.readLocal(sp, h))
     return typed.Expr.Cond(sp, types.BoolT, typed.Cond(held, rest, c.lit(sp, types.BoolT, 0)))
 }
 

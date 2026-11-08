@@ -892,7 +892,7 @@ fn (m mut machine&) add(l mut threads&, pc0 I64, i I64) {
 
 # the leftmost-first match starting at or after byte from, its captures in m.best; whether there is one.
 # With "any", the first sign of a match is enough (ncap may be 0)
-fn (m mut machine&) run(from I64, any Bool) Bool {
+fn (m mut machine&) run(from I64, found Bool) Bool {
     p := m.p
     code := p.code
     t := m.t
@@ -924,7 +924,7 @@ fn (m mut machine&) run(from I64, any Bool) Bool {
             if op == opMatch {
                 m.found = true
                 for k in range m.ncap { m.best[k] = m.clist.caps[j * m.ncap + k] }
-                if any { return true }
+                if found { return true }
                 break                                # lower-priority threads lose to this match
             }
             if r < 0 { continue }
@@ -1130,7 +1130,7 @@ fn runeBefore(t String&, i I64) I64, I64 {
 
 # where the leftmost-first match at or after byte from ends, by the forward DFA: -1 for none, -2 when the DFA grew too
 # large (the Pike VM is to be used). With "any", the first match seen is enough
-fn (d mut dfa&) end(t String&, from I64, any Bool) I64 {
+fn (d mut dfa&) end(t String&, from I64, found Bool) I64 {
     start := d.initial(d.p.anchored and from > 0)
     s := start
     i := from
@@ -1144,7 +1144,7 @@ fn (d mut dfa&) end(t String&, from I64, any Bool) I64 {
         }
         if (d.flags[s] & 2) != 0 {
             last = i
-            if any { return i }
+            if found { return i }
         }
         if d.dead(s) or i >= t.Len() { break }
         c := t[i]

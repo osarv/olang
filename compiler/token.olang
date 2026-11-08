@@ -61,6 +61,21 @@ type Tok enum {
     Yield
     Become
     Comptime
+    Any
+    Unique
+    Immut
+    Packed
+    Commutes
+    Returns
+    Noalloc
+    Noblock
+    Nospawn
+    Norecurse
+    Noextern
+    Pure
+    Keeps
+    Borrows
+    Noborrow
     # operators and punctuation (L16)
     Plus
     Minus
@@ -182,6 +197,21 @@ fn (k Tok) Text() String& {
         case Tok.Yield: "yield"
         case Tok.Become: "become"
         case Tok.Comptime: "comptime"
+        case Tok.Any: "any"
+        case Tok.Unique: "unique"
+        case Tok.Immut: "immut"
+        case Tok.Packed: "packed"
+        case Tok.Commutes: "commutes"
+        case Tok.Returns: "returns"
+        case Tok.Noalloc: "noalloc"
+        case Tok.Noblock: "noblock"
+        case Tok.Nospawn: "nospawn"
+        case Tok.Norecurse: "norecurse"
+        case Tok.Noextern: "noextern"
+        case Tok.Pure: "pure"
+        case Tok.Keeps: "keeps"
+        case Tok.Borrows: "borrows"
+        case Tok.Noborrow: "noborrow"
         case Tok.NullLit: "null"
         case Tok.Plus: "+"
         case Tok.Minus: "-"
@@ -255,15 +285,18 @@ fn Tok.Keyword(t String&, at I64, n I64) Tok {
     if n < 2 or n > 11 or c < 'a' or c > 'y' { return Tok.Iden }
     match c {
         case 'a' {
+            if n == 3 and spells(t, at, "any") { return Tok.Any }
             if n == 2 and t[at + 1] == 's' { return Tok.As }
             if n == 3 and spells(t, at, "and") { return Tok.And }
             if n == 6 and spells(t, at, "assert") { return Tok.Assert }
         }
         case 'b' {
+            if n == 7 and spells(t, at, "borrows") { return Tok.Borrows }
             if n == 5 and spells(t, at, "break") { return Tok.Break }
             if n == 6 and spells(t, at, "become") { return Tok.Become }
         }
         case 'c' {
+            if n == 8 and spells(t, at, "commutes") { return Tok.Commutes }
             if n == 4 and spells(t, at, "case") { return Tok.Case }
             if n == 5 and spells(t, at, "catch") { return Tok.Catch }
             if n == 8 and spells(t, at, "continue") { return Tok.Continue }
@@ -290,6 +323,7 @@ fn Tok.Keyword(t String&, at I64, n I64) Tok {
             if n == 5 and spells(t, at, "false") { return Tok.BoolLit }
         }
         case 'i' {
+            if n == 5 and spells(t, at, "immut") { return Tok.Immut }
             if n == 2 {
                 d := t[at + 1]
                 if d == 'f' { return Tok.If }
@@ -304,6 +338,12 @@ fn Tok.Keyword(t String&, at I64, n I64) Tok {
             if n == 5 and spells(t, at, "match") { return Tok.Match }
         }
         case 'n' {
+            if n == 7 and spells(t, at, "noalloc") { return Tok.Noalloc }
+            if n == 7 and spells(t, at, "noblock") { return Tok.Noblock }
+            if n == 7 and spells(t, at, "nospawn") { return Tok.Nospawn }
+            if n == 9 and spells(t, at, "norecurse") { return Tok.Norecurse }
+            if n == 8 and spells(t, at, "noextern") { return Tok.Noextern }
+            if n == 8 and spells(t, at, "noborrow") { return Tok.Noborrow }
             if n == 3 and spells(t, at, "not") { return Tok.Not }
             if n == 4 and spells(t, at, "null") { return Tok.NullLit }
             if n == 8 and spells(t, at, "noreturn") { return Tok.Noreturn }
@@ -312,6 +352,7 @@ fn Tok.Keyword(t String&, at I64, n I64) Tok {
             if n == 2 and t[at + 1] == 'r' { return Tok.Or }
         }
         case 'r' {
+            if n == 7 and spells(t, at, "returns") { return Tok.Returns }
             if n == 5 and spells(t, at, "range") { return Tok.Range }
             if n == 6 and spells(t, at, "return") { return Tok.Return }
         }
@@ -328,7 +369,15 @@ fn Tok.Keyword(t String&, at I64, n I64) Tok {
             }
             if n == 5 and spells(t, at, "trait") { return Tok.Trait }
         }
-        case 'u' { if n == 11 and spells(t, at, "unreachable") { return Tok.Unreachable } }
+        case 'k' { if n == 5 and spells(t, at, "keeps") { return Tok.Keeps } }
+        case 'p' {
+            if n == 4 and spells(t, at, "pure") { return Tok.Pure }
+            if n == 6 and spells(t, at, "packed") { return Tok.Packed }
+        }
+        case 'u' {
+            if n == 6 and spells(t, at, "unique") { return Tok.Unique }
+            if n == 11 and spells(t, at, "unreachable") { return Tok.Unreachable }
+        }
         case 'x' { if n == 3 and spells(t, at, "xor") { return Tok.Xor } }
         case 'y' { if n == 5 and spells(t, at, "yield") { return Tok.Yield } }
         case _ { }
@@ -349,13 +398,14 @@ test "Keyword finds every reserved word and nothing else" {
                  Tok.Continue, Tok.Unreachable, Tok.Extends, Tok.Noreturn, Tok.Assert, Tok.For, Tok.Do
                  Tok.In, Tok.Is, Tok.As, Tok.Range, Tok.Match, Tok.Case, Tok.Type, Tok.Struct, Tok.Enum
                  Tok.Trait, Tok.Fn, Tok.Error, Tok.Mut, Tok.Import, Tok.Test, Tok.Destruct
-                 Tok.Extern, Tok.Default, Tok.And, Tok.Or, Tok.Xor, Tok.Not, Tok.Yield, Tok.Become, Tok.Comptime, Tok.NullLit] {
+                 Tok.Extern, Tok.Default, Tok.And, Tok.Or, Tok.Xor, Tok.Not, Tok.Yield, Tok.Become, Tok.Comptime, Tok.NullLit
+                 Tok.Any, Tok.Unique, Tok.Immut, Tok.Packed, Tok.Commutes, Tok.Returns, Tok.Noalloc, Tok.Noblock, Tok.Nospawn, Tok.Norecurse, Tok.Noextern, Tok.Pure, Tok.Keeps, Tok.Borrows, Tok.Noborrow] {
         w := k.Text()
         assert Tok.Keyword(w, 0, w.Len()) == k, "keyword " $w
     }
     assert Tok.Keyword("true", 0, 4) == Tok.BoolLit
     assert Tok.Keyword("false", 0, 5) == Tok.BoolLit
-    for w in Array<String&>["i", "iff", "If", "returns", "retur", "types", "x", "xo", "unreachables", "tru", "_if", "zz"] {
+    for w in Array<String&>["i", "iff", "If", "returnss", "retur", "types", "x", "xo", "unreachables", "tru", "_if", "zz"] {
         assert Tok.Keyword(w, 0, w.Len()) == Tok.Iden, "not a keyword: " $w
     }
     assert Tok.Keyword("a mut b", 2, 3) == Tok.Mut

@@ -159,6 +159,9 @@
 === checks/cases/g12spaced.olang
 | -- diagnostics
 | error G12 6:23
+=== checks/cases/keywordlocal.olang
+| -- diagnostics
+| error L9a 4:5
 === checks/cases/l10bdouble.olang
 | FN 3:1-5:2
 | VAR 4:5-4:16

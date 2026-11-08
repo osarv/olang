@@ -868,28 +868,27 @@ fn (p mut Parser&) typeDeclRest(at I32, name source.NameId) ast.Decl& ? Fail {
         params = try p.typeParams()
         p.typeParamsRead = params
     }
-    # T13a, T13b: "immut" or "unique" before the body - words only there (L9b), so no name is taken from programs; the
-    # two are never one type's, an error where both are written
+    # T13a, T13b: "immut" or "unique" before the body; the two are never one type's, an error where both are written
     word := ast.DeclWord.Plain
-    for p.sees(token.Tok.Iden) and declWordBody(p.ts.Toks[p.after(1)].Kind) {
-        w := declWord(p.text(p.tk()))
+    for (p.sees(token.Tok.Immut) or p.sees(token.Tok.Unique)) and declWordBody(p.ts.Toks[p.after(1)].Kind) {
+        w := declWord(p.peek())
         if w == ast.DeclWord.Plain: break
         if word != ast.DeclWord.Plain: p.report(p.here(), p.tk().End, msgs.UniqueImmut())
         word = w
         p.advance()
     }
-    packed := p.packedWord()
+    isPacked := p.packedWord()
     extending := p.accept(token.Tok.Extends)
     body := try p.typeBody()
     sp := p.from(at)
     if p.sees(token.Tok.StmtEnd) { p.advance() }
-    return ast.Decl.Type(sp, ast.TypeDecl(name, params, extending, body, Array<ast.Attr&>(0), word, packed))
+    return ast.Decl.Type(sp, ast.TypeDecl(name, params, extending, body, Array<ast.Attr&>(0), word, isPacked))
 }
 
-# T13c: "packed" right before "struct" - a word only there (L9b); before another body's keyword it is an error naming
-# T13c, read as the word so the body still parses
+# T13c: "packed" right before "struct"; before another body's keyword it is an error naming T13c, read as the word so
+# the body still parses
 fn (p mut Parser&) packedWord() Bool {
-    if not p.sees(token.Tok.Iden) or p.text(p.tk()) != "packed": return false
+    if not p.sees(token.Tok.Packed): return false
     k := p.ts.Toks[p.after(1)].Kind
     if k == token.Tok.Struct {
         p.advance()
@@ -901,17 +900,19 @@ fn (p mut Parser&) packedWord() Bool {
     return false
 }
 
-# the word a type declaration's word spells (T13a, T13b) - Plain for a name that is none
-fn declWord(t String&) ast.DeclWord {
-    if t == "immut": return ast.DeclWord.Immut
-    if t == "unique": return ast.DeclWord.Unique
-    return ast.DeclWord.Plain
+# the word a type declaration's word is (T13a, T13b) - Plain for any other kind
+fn declWord(k token.Tok) ast.DeclWord {
+    return match k {
+        case token.Tok.Immut: ast.DeclWord.Immut
+        case token.Tok.Unique: ast.DeclWord.Unique
+        case _: ast.DeclWord.Plain
+    }
 }
 
 # what may follow a type declaration's word (T13a) - so "type X immut" alone is X declared over a type named immut
 fn declWordBody(k token.Tok) Bool {
     return k == token.Tok.Struct or k == token.Tok.Enum or k == token.Tok.Extends or k == token.Tok.Trait or k == token.Tok.Error or
-           k == token.Tok.Iden or k == token.Tok.Fn
+           k == token.Tok.Iden or k == token.Tok.Fn or k == token.Tok.Unique or k == token.Tok.Immut or k == token.Tok.Packed
 }
 
 fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
@@ -1216,15 +1217,15 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false) ast.
         p.item = wasItem
         results = gather(p.tys, from)
     }
-    # E31c: "commutes" after a method's result - a word only there, so no name is taken from programs
-    commutes := false
-    if named and results.Len() > 0 and p.sees(token.Tok.Iden) and p.text(p.tk()) == "commutes" {
+    # E31c: "commutes" after a method's result
+    swaps := false
+    if named and results.Len() > 0 and p.sees(token.Tok.Commutes) {
         p.advance()
-        commutes = true
+        swaps = true
     }
     errs := try p.errorSet(one)
     return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn, k
-                   commutes, variadic)
+                   swaps, variadic)
 }
 
 # ---- contracts (D17) ----
@@ -1272,7 +1273,7 @@ fn (p mut Parser&) contract() ast.ContractBlock& ? Fail {
 fn (p Parser&) startsResult() Bool {
     k := p.peek()
     return k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Fn or k == token.Tok.LParen or
-           k == token.Tok.Enum or k == token.Tok.Struct or k == token.Tok.Trait
+           k == token.Tok.Enum or k == token.Tok.Struct or k == token.Tok.Trait or k == token.Tok.Any
 }
 
 # "[? [A, B.c]]" - a list on one line; one item where the function type or lambda it ends is an item of a list (one),
@@ -1460,13 +1461,13 @@ fn (p mut Parser&) typeBase() ast.TypeRef& ? Fail {
             body := try p.typeBody()
             return ast.TypeRef.Shape(p.from(at), body!)
         }
+        case token.Tok.Any {
+            # T32: "any" before a type's name - a run-time trait value
+            p.advance()
+            of := try p.typeBase()
+            return ast.TypeRef.Any(p.from(at), of)
+        }
         case token.Tok.Iden {
-            # T32, L9c: "any" before a type's name on its line - a run-time trait value
-            if p.anyHere() {
-                p.advance()
-                of := try p.typeBase()
-                return ast.TypeRef.Any(p.from(at), of)
-            }
             from := p.ids.Len()
             p.ids.Push(try p.name())
             for p.sees(token.Tok.Dot) {
@@ -1509,13 +1510,6 @@ fn (p mut Parser&) typeBase() ast.TypeRef& ? Fail {
         case _ { try p.fail("a type") }
     }
     unreachable
-}
-
-# L9c: whether the next word is "any" with a type's name after it on its line
-fn (p Parser&) anyHere() Bool {
-    if p.half != token.Tok.Eof or p.look(1) != token.Tok.Iden or p.lookTok(1).Has(token.LineBreak) { return false }
-    t := p.tk()
-    return t.End - t.Start == 3 and p.src.Text[I64(t.Start):I64(t.End)] == "any"
 }
 
 fn isFuncType(t ast.TypeRef&) Bool { return t.IsFunc() }
@@ -1598,7 +1592,8 @@ fn (p Parser&) typeArgsShape(n I64) I64 {
             if parens == 0 { return 0 }
             parens--
         } else if k != token.Tok.Iden and k != token.Tok.Dot and k != token.Tok.Comma and k != token.Tok.Amp and
-                  k != token.Tok.Question and k != token.Tok.Mut and k != token.Tok.Fn and k != token.Tok.Return {
+                  k != token.Tok.Question and k != token.Tok.Mut and k != token.Tok.Fn and k != token.Tok.Return and
+                  k != token.Tok.Any {
             return 0
         }
         if depth < 0 { return 0 }
@@ -1955,6 +1950,9 @@ fn keywordNamesField(k token.Tok) Bool {
         case token.Tok.Xor, token.Tok.Range, token.Tok.Case, token.Tok.Type, token.Tok.Struct: true
         case token.Tok.Enum, token.Tok.Trait, token.Tok.Extends, token.Tok.Import, token.Tok.Test: true
         case token.Tok.Extern, token.Tok.Default: true
+        case token.Tok.Any, token.Tok.Unique, token.Tok.Immut, token.Tok.Packed, token.Tok.Commutes, token.Tok.Returns: true
+        case token.Tok.Noalloc, token.Tok.Noblock, token.Tok.Nospawn, token.Tok.Norecurse, token.Tok.Noextern: true
+        case token.Tok.Pure, token.Tok.Keeps, token.Tok.Borrows, token.Tok.Noborrow: true
         case _: false
     }
 }
@@ -2012,7 +2010,7 @@ fn (p mut Parser&) idenStmt() ast.Stmt& ? Fail {
                          null, Array<ast.Expr&>(0), false, true)
         return ast.Stmt.Var(sp, v)
     }
-    if k2 == token.Tok.Define or k2 == token.Tok.Iden or k2 == token.Tok.Mut or
+    if k2 == token.Tok.Define or k2 == token.Tok.Iden or k2 == token.Tok.Mut or k2 == token.Tok.Any or
        k2 == token.Tok.Fn or k2 == token.Tok.Enum or k2 == token.Tok.Struct {
         nt := p.tk()
         name := try p.name()
@@ -3326,13 +3324,13 @@ fn (p mut Parser&) primary() ast.Expr& ? Fail {
             if p.messageHere() { msg = try p.expr() }
             return ast.Expr.Unreachable(p.from(at), msg)
         }
+        case token.Tok.Any {
+            # an array literal of run-time trait values, its element type written as $ renders it: "any W&[a, b]"
+            # (T32, E19) - "any" begins no other expression
+            elem := try p.typeExpr()
+            return try p.arrayLit(at, elem)
+        }
         case token.Tok.Iden {
-            if p.anyHere() {
-                # an array literal of run-time trait values, its element type written as $ renders it: "any W&[a, b]"
-                # (T32, E19) - "any" begins no other expression
-                elem := try p.typeExpr()
-                return try p.arrayLit(at, elem)
-            }
             t := p.tk()
             k2 := p.look(1)
             name := p.names.Intern(p.text(t))

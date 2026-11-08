@@ -1,0 +1,20 @@
+# check: run
+# L9a: the new keywords name a field declared with its type or `:=` and reached after `.`, and a method after a receiver
+import "std/io"
+
+type Record struct(n I64) {
+    returns I64 = n * 2
+    keeps := n + 1
+    pure Bool = true
+    any I64 = n
+}
+
+fn (r Record&) borrows() I64 { return r.returns + r.keeps }
+
+fn (r Record&) noalloc() Bool { return r.pure }
+
+fn main() ? io.Error {
+    r := Record(5)
+    try io.Println("returns " $r.returns " keeps " $r.keeps " pure " $r.pure " any " $r.any)
+    try io.Println("borrows " $r.borrows() " noalloc " $r.noalloc())
+}

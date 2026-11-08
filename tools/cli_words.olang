@@ -129,7 +129,7 @@ fn convert(rest String&) String {
     opts := StringBuilder()
     trail := rest[0:0]
     i I64 = 0              # where the flags read so far end in rest
-    any := false
+    found := false
     for {
         # the next word: spaces, then a run of non-spaces
         j := i
@@ -165,14 +165,14 @@ fn convert(rest String&) String {
         } else {
             break
         }
-        any = true
+        found = true
         i = e
         if tail != "" {
             trail = tail
             break
         }
     }
-    if not any { return "" }
+    if not found { return "" }
     head := (" " $mode) if mode != "" else ""
     return $head $opts.ToString() $trail $rest[i:]
 }
