@@ -1,10 +1,11 @@
 # docs - design notes
 
-Long design notes that are too big for `CLAUDE.md`. They are records and plans, not the specification: what the
-language means is `SPEC.md`, why each decision was made is `CLAUDE.md` and `HISTORY.md`.
+Long design notes that are too big for `CLAUDE.md`, and `settled.md`, the current-state design record. They are records and plans, not the specification: what the
+language means is `SPEC.md`, what is settled is `settled.md` and why is `HISTORY.md`.
 
 | file | what it is |
 |---|---|
+| `settled.md` | the settled decisions, current state only, one entry per area (Syntax, Types, Generics, Errors, Memory and scopes, Concurrency, Modules, Compile-time evaluation, std, Codegen, the port); read the entries for the area you touch; new and revised decisions are recorded here |
 | `ideas.md` | language features from other languages to work through one at a time: generators, reflection, units of measure, SIMD vectors, arbitrary widths, embedding files, `errdefer`, contracts, doc tests - none decided yet |
 | `survey.md` | features from other languages olang lacks, and what an announcement needs beyond the language (2026-10-24, for review): a ranked shortlist with recommendations, candidates by area with verdicts, a readiness checklist, and what newcomers will find unusual |
 | `survey2.md` | a second survey of other languages' features (2026-10-26, for review): Rust, Go, Python and C/C++ checked in depth, the functional languages and others; five ranked recommendations, candidates worth considering, rejected ones with reasons, a table of olang's form for each familiar feature, and tooling |
