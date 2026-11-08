@@ -1,8 +1,7 @@
 # olang Design History
 
-The full, chronological, discursive record behind every entry in CLAUDE.md's "Settled
-decisions" section: why each decision was made, what was tried and reverted, what bugs were
-found and fixed along the way. CLAUDE.md itself states only the current, terse settled fact
+The full, chronological, discursive record behind every entry in docs/settled.md: why each decision was made, what was tried and reverted, what bugs were
+found and fixed along the way. docs/settled.md states only the current, terse settled fact
 for each topic and points here for the complete story; this file is not auto-loaded into
 context, and is meant to be read on demand (e.g. when the "why" actually matters for a new
 decision, or during another implementation-vs-spec isomorphism pass).

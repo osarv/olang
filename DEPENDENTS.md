@@ -5,7 +5,7 @@ places, in the order to touch them, and why. `make consistency` (compiler/tools/
 marked **[checked]** and names the file that is out of step; the others are by hand. `CLAUDE.md`'s checklist says what a
 language change needs in all; this is the map of where.
 
-Records for every change: `SPEC.md` (the rule), `CLAUDE.md` (current-state entry), `HISTORY.md` (the story),
+Records for every change: `SPEC.md` (the rule), `docs/settled.md` (current-state entry), `HISTORY.md` (the story),
 `.claude/memory/decisions.md` (a question left open).
 
 Every change to what olang means keeps the interpreter comparison green (`interp@FILE` and `interp@casesK` in the
