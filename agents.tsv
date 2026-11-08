@@ -31,3 +31,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-08T18:26	Read paper 2610.14162	sonnet	high	completed	201	9	3	?	?	
 2026-11-08T18:26	Read paper 2512.24695	sonnet	high	completed	220	15	3	?	?	
 2026-11-08T19:38	Slim the always-loaded context	sonnet	medium	completed	164	19	4	?	?	
+2026-11-08T19:45	E1: settling experiment	sonnet	medium	completed	140	15	23	n/a	?	results table + 2 LANGUAGE items; epdr mod5 diverged
