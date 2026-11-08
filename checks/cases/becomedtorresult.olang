@@ -1,6 +1,8 @@
-# check: fail error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then
-# S21, O16: a by-value result holding a reference to an instance with a destructor, built in the function's frame by a
-# callee (its result scope), is destroyed as the frame closes - before a become's call, where a return runs it after
+# check: run
+# flags: -debug -sanitize
+# S21, O16 (docs/refusals.md 5.5; refused - "an instance is built in one of them whose destructor would run then" -
+# until the user's "Yes, do A" of 2026-11-08): a by-value result holding a reference to an instance with a destructor,
+# built by a callee in the frame's block a become closes, is built in the chain's tail scope and ended as it closes
 import "std/io"
 
 type Res unique struct(n I64) { n } destruct { io.Println("destroy " $n)! }

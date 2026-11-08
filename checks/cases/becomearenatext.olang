@@ -1,10 +1,23 @@
-# check: fail error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them
-# S21: text rendered in the function, bound to a by-value type variable, is storage of a scope the become closes
+# check: run
+# flags: -debug -sanitize
+# S21 (docs/refusals.md 5.5; refused - "this argument is storage made in one of them" - until the user's "Yes, do A" of
+# 2026-11-08): text rendered at a become and handed to a by-value type variable is built in the chain's tail scope
 import "std/io"
 
-fn walk<T>(a T, n I64) I64 {
-    if n == 0: return a.Len()
-    become walk($n " text", n - 1)
+fn walk<T>(a T, n I64) String {
+    if n == 0: return $a
+    become walk($n " text " $a, n - 1)
 }
 
-fn main() { io.Println($walk("abc", 2))! }
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+
+fn main() {
+    r := walk("abc", 2)
+    churn()
+    io.Println(r)!
+}
