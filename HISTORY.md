@@ -35001,3 +35001,50 @@ base commit's compiler/ and bench/ sources and the check's program built by the 
 Lowerer's result scope is, the checker's, so a build's memory is the sum over its functions rather than the largest.
 Freeing it per function would need the lowering's state apart from what it holds writably (the Lowerer, the type
 table) - a restructuring of lower.olang, not done here.
+
+## Facts with readers replace "one module at a time" (B3i; 2026-11-08, wt-wpplan, docs/wholeprog.md)
+
+The rule "compile per module, whole program only on top" (the user, 2026-11-08 morning) kept meeting facts that need the
+whole program: early freeing in code of a module compiled on its own, field slots holding storage of two scopes
+(docs/refusals.md, question 4), function values followed into calls, G42's facts about C, genrefs' holder records. The
+user asked for it to be rescoped, and docs/wholeprog.md surveyed it. Its findings: the front end already checks the whole
+program from source every build, so what the rule limits is what a module's *object* may depend on. The largest loss
+was early freeing outside the root's object: the earlyfree fixture `session.olang` peaks at 12.6 MB as one module and
+at 260 MB with its type moved into a module of its own - how every library's non-generic type is written - and LTO
+cannot recover it, because where storage is built is decided before LLVM sees the code. One whole-program fact already
+leaked across the boundary, wrongly: G42's `WritesGlobals` read in a body, reused from a record made by another program
+in the same directory (section 8; fixed on wt-reusekey).
+
+**The answers** (the user, 2026-11-08 evening): "If we are going to do it eventually, just do it now, because we are
+building the language now and we don't want to do too many refactorings and full verifies. On all of the ones you
+recommended, yes, do yes." So: (1) facts with readers replace the rule - a whole-program fact reaches code as a
+link-time constant where it chooses between two paths at a site, in the root's object where it makes code that exists
+for this program alone, and in a module's object keyed by the fact's hash only where neither fits; objects stay shared
+between programs wherever no program fact reaches them. (2) Early freeing in every module through link-time constants.
+(3) At a precompiled module's boundary the defining module decides, written into SPEC B3i now, so the field-set work is
+designed to it. (4) Field sets of two scopes are allowed. (5) The incremental front end, recommended "not now", is
+built now: "if we're gonna build the fifth one eventually, just do it now. Build it with a lot of testing though,
+because ... one small bug there can be disastrous. Not necessarily that you're gonna do a lot of verifies now, but you
+want the testing suites to cover it really." Compiling the program as one unit stays declined: it would give up the
+object sharing that took the test build of tests/shared.olang from 223 s to 55 s, for gains LTO already gives.
+
+**B3i's boundary rule, as written.** A module whose object is made apart from the program using it (by `compile`, or
+kept as a library of objects) decides from itself alone: where its code's storage is placed, what it frees early, which
+scopes its fields may be given. A program using it never changes what its object does; a store of the program's that
+would widen one of its fields is an error at that store, never inside the library. This keeps `olang api` honest: a
+library's decisions are part of what it exports. It is written in general terms; generational types (docs/genrefs.md)
+are not named while genrefs' questions are open.
+
+**The build order** (docs/wholeprog.md section 10) merges this note's rounds (W1 facts with readers and the testing
+harness, W2 early freeing in every module, W3a and W3b the incremental front end, W4 field sets) with fnvalues' rounds
+6-12 and refusals' R1-R4 and R6-R8, in two lanes: the rounds changing scope.olang's judgments one at a time, and beside
+each a round whose files are apart. Shared work is done once: the build records (W0, W1, W3), free.olang's final step
+(W2 before F7 and F10 change what it reads), the program's stores into a field (W4, read again by F12), and the front
+end's summaries cached only after the scope-pass rounds have changed their shape. The incremental build is tested
+inside the ordinary suite rather than by extra verifies: reads of whole-program facts that cannot bypass the record (the
+tables private to their modules), a scenario editing every kind of fact and comparing each incremental build with a clean
+one (objects, output, `-memory`, explain, diagnostics, and exactly the expected modules lowered again),
+`OLANG_CHECKREUSE` and a front-end `OLANG_CHECKINCR` over the whole suite in one shared directory, an edit fuzzer on
+scopegen's generator, damaged and contended records, a replay of the compiler's last 100 commits, and the language
+server's edit sequences. docs/genrefs.md's rounds wait for the user's answers to its own questions and are shown where
+they would go.

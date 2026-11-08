@@ -675,11 +675,19 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Remote packages** are fetched with git into a cache keyed by commit and pinned by `olang.lock` (M23b, the user's
   call); `-update` updates (M23c). Versions DECIDED 2026-11-07 (the user: "Yeah, go with the cargo model"): `olang get
   pkg` takes the newest same-major version and records it in olang.lock; `-update` moves all; `pkg@v1.2` pins.
-- **Separate compilation (B1-B8).** `compile` one module, `build` build and link, `test` each file's tests in a process
-  of its own (B3a), `interpret` through the evaluator (B3e). Imports are resolved from source. Globals initialize
-  imports first, then in dependency order (B5a). No interface file exists because scope obligations are derived from
-  bodies. The checker reads the whole program from source while objects stay per module and unchanged ones are reused
-  (B3i); whole-program compilation is not required (the user's question 2026-11-08).
+- **Separate compilation; facts with readers (B1-B8, B3i; the user's decision 2026-11-08 evening, docs/wholeprog.md:
+  "If we are going to do it eventually, just do it now").** `compile` one module, `build` build and link, `test` each
+  file's tests in a process of its own (B3a), `interpret` through the evaluator (B3e). Imports are resolved from source;
+  globals initialize imports first, then in dependency order (B5a). No interface file: records are a cache of what
+  the source says. **Decided, being built** (docs/wholeprog.md section 10): facts with readers replace "one module at a
+  time" - the front end may use whole-program facts, each recording the modules that read it, reaching code as a
+  link-time constant (a choice at a site, folded by LTO), in the root's object (code for this program), or in a
+  module's object keyed by the facts it read; an object is reused unless its module, its imports or a fact it read
+  changed, and stays shared between programs where no program fact reaches it. Early freeing in every module through
+  the constants; field sets of two scopes; the front end incremental on the same records, tested against clean builds
+  in the suite. **At a precompiled module's boundary the defining module decides (B3i)**: its decisions from its own
+  code, a store of the program's widening its field refused at that store. Compiling the program as one unit:
+  declined.
 - **Optimization (B2c-B2e):** `-O3` and full LTO by default (ThinLTO for a program of 8 MB of IR or more); `-debug` is
   `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize` the scope sanitizer (B2f).
 - **Targets (B12, the user's call):** native CPU by default, `-target NAME` to cross-compile; target constants

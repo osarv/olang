@@ -1,6 +1,7 @@
 # Whole-program compilation: what it would gain, and how to keep builds fast (wholeprog)
 
-A survey, 2026-11-08, for review; no compiler code changed. The user is reconsidering the rule "compile one module at a
+A survey, 2026-11-08; no compiler code changed. **Decided the same evening** (section 9: questions 1-5 yes, question 5
+now rather than later); the build order is section 10. The user is reconsidering the rule "compile one module at a
 time" (`.claude/memory/rules.md`, "Compile per module, whole program only on top"; SPEC B3i), because whole-program
 facts keep coming up: field slots holding storage of two scopes (docs/refusals.md, question 4), early freeing in code
 of a module compiled on its own (O8d), function values followed into calls (docs/fnvalues.md), G42's facts about C,
@@ -294,7 +295,8 @@ and known for slow builds; Zig compiles one unit and is building incremental com
    libraries.
 5. **Keep the front end whole-program from source.** It is 4-6 s on the compiler; revisit when a leaf edit's front end
    passes ~10 s or the language server needs it (question 5). The facts-with-readers records are the shape an
-   incremental front end would take, so nothing built now is thrown away.
+   incremental front end would take, so nothing built now is thrown away. *(Overruled by the user's answer to question
+   5: the incremental front end is built now, on the same records - section 10, rounds W3a and W3b.)*
 6. **Do not compile the whole program as one unit.** It gives up object sharing and parallel compilation for gains LTO
    already gives in the default build.
 
@@ -320,22 +322,176 @@ fn) whenever its lowering read a G42 fact - the first fact with readers. Not fix
 code); the programs are in this note's text. A check case should pin it: two roots sharing a module, built in turn
 under `OLANG_CHECKREUSE`.
 
-## 9. Direction questions
+## 9. Direction questions - answered 2026-11-08
+
+**Answered** by the user, 2026-11-08 evening: "If we are going to do it eventually, just do it now, because we are
+building the language now and we don't want to do too many refactorings and full verifies. On all of the ones you
+recommended, yes, do yes." Questions 1-4 are decided as recommended; question 5, which was recommended "not now", is yes
+and now: "if we're gonna build the fifth one eventually, just do it now. Build it with a lot of testing though, because
+... one small bug there can be disastrous. Not necessarily that you're gonna do a lot of verifies now, but you want the
+testing suites to cover it really." The questions as they were asked:
 
 1. **The rule.** Replace "compile per module, whole program only on top" with section 7's rule 1 (facts with readers,
    delivered as constants, root code, or keyed objects). Default: today's rule (objects depend on their module and
-   imports only). Recommendation: yes.
+   imports only). Recommendation: yes. **Answer: yes** (round W1).
 2. **Early freeing in every module.** The final step's decision at each let-go site delivered as a link-time constant,
    so a library's non-generic types free early (20x on 2.1's program); free under LTO, a load and a branch per site in
    `-quick` and `-debug`. One round with genrefs' questions 4 and 5. Default: the root's object only. Recommendation:
-   yes, next after fnvalues round 6.
+   yes, next after fnvalues round 6. **Answer: yes** (round W2, after fnvalues round 6; genrefs' questions 4 and 5 are
+   still open, so W2 is built for O8d's places and genrefs rides on it if they are answered yes).
 3. **The precompiled boundary.** Write into B3i now that at a precompiled library's boundary the defining module
    decides (field sets, generational types, its own early freeing through constants), and that a user's store widening
-   a library's field is refused at the user's code. Default: unwritten (no precompiled libraries exist). Recommendation:
-   yes, so question 4 and genrefs are designed to it.
+   a library's field is refused at the user's code. Default: unwritten (no precompiled libraries exist).
+   Recommendation: yes, so question 4 and genrefs are designed to it. **Answer: yes** - written into SPEC B3i
+   2026-11-08, in general terms (a precompiled module's decisions are its own; generational types are not named while
+   genrefs' questions are open).
 4. **Field sets of two scopes (refusals question 4).** Under rule 1 they need no change to how objects are built, only
    the front end's analysis and a few keyed build sites. Default: refused. Recommendation: allow it, built when real
-   code hits it or after fnvalues round 6, with the tracking cost measured as section 4.4 says.
+   code hits it or after fnvalues round 6, with the tracking cost measured as section 4.4 says. **Answer: yes** - built
+   now in the order (round W4), after fnvalues round 6 because a build through such a field finds its scope at run time
+   (O29).
 5. **An incremental front end** (summaries and signatures cached per module, the front end skipping unchanged modules).
    Default: no - the front end checks the whole program from source every build. Recommendation: not now; revisit when
-   a leaf edit's front end passes ~10 s or the language server needs it.
+   a leaf edit's front end passes ~10 s or the language server needs it. **Answer: yes, now**, with testing that makes
+   the suite cover it (rounds W3a and W3b; the testing plan is 10.3).
+
+## 10. Build order
+
+One order for four plans, written 2026-11-08 after section 9's answers: this note's rounds (**W**), docs/fnvalues.md
+section 14's rounds 6-12 (**F6-F12**; F1-F4 are built, F5 is being built), docs/refusals.md section 10's rounds
+(**R1-R4, R6-R8**; R5 is built) and docs/genrefs.md section 13's rounds (**G1-G8**), which wait for the user's answers to
+genrefs' questions (section 15 there): they are shown where they would go (10.4), and nothing below depends on them.
+**W0** is section 8's fix, being made on wt-reusekey.
+
+### 10.1 How it is ordered
+
+- **Two lanes, two rounds at a time.** Lane S holds every round that changes scope.olang's judgments, one at a time
+  (fnvalues section 14 and refusals section 10 both require it). Lane L holds a round whose files are apart from lane
+  S's at the same step. At most two compiler rounds are in flight, which is what the verify slots and the memory take.
+- **Each shared refactoring is done once.**
+  1. The build records: W0, then W1's fact table and reader records, then the incremental front end (W3a, W3b) on the
+     same records; W2's link-time constants are entries of the root's record W1 makes.
+  2. free.olang's final step: W2 delivers every let-go site's decision through constants before F7 and F10 change what
+     the step reads, so their sites (and genrefs' reclaim sites, if built) are emitted in every module from the start.
+  3. The runtime's allocator: F6's slots, owner word and large table first; genrefs' header word and free lists by
+     size, if built, sit on them.
+  4. The program's stores into a field: W4 gathers them once (a field's scope set); F12 reads the same gathering for
+     functions a constructor fixes in a field (wholeprog 2.5, row 6).
+  5. scope.olang's call judgment: R1 before F7, as refusals section 10 says.
+  6. The front end's summaries are cached (W3b) only after lane S has changed their shape (R1-R4, R8, F7, F8, W4, F12),
+     so the cache is written once. W1's test harness is there from the start and catches any round that reads a
+     whole-program fact without recording it.
+- **Verifies.** One full `make verify` per round, at its end, through `/home/user/vlock`; targeted tests and `make
+  quick` while developing. The heavier gates (scopesan, scopefuzz, `fuzz free`, the dead-region evaluator, `make race`,
+  `make cross`) only at the ends of the rounds that name them. Reviews in bulk: review A at step 5 (the section-8 rounds
+  until then, before clones build on twins), review B at the end.
+- **The testing of the incremental build is in the suite, not in extra verifies** (10.3): its scenarios, checks and
+  fuzz seeds run inside every `make verify` from W1 on.
+
+### 10.2 The order
+
+| step | lane S (scope.olang, one at a time) | lane L (beside it) | shared files, and why it is safe |
+|---|---|---|---|
+| 0, running | F5 effect words | W0 the reuse key (wt-reusekey) | - |
+| 1 | F6 scopes found at run time | W1 facts with readers, the test harness | lower.olang: W1 changes only the read where a G42 fact is folded |
+| 2 | R1 split values | W2 early freeing in every module | none |
+| 3 | F7 twins | W3a incremental front end: the checker's records | typed.olang: F7 adds `ScopeVar.Follow`/`Plan.Twin`, W3a writes signatures to records |
+| 4 | R2 kept through obligations | R6 + R7 generators, ends ordered | none (R2 is scope.olang alone) |
+| 5 | F8 derived scopes passed | review A (read-only) and its fixes | - |
+| 6 | R3 parameters and bindings | F9 clones | lower.olang: R3's entry copies, F9's clone emission - different functions |
+| 7 | R4 tasks | F10 lending and early freeing read what is followed | none |
+| 8 | R8 precision and the rest | F11 the tools | none (R8: scope, check, msgs; F11: explain, doc, session, lsp, mcp, api) |
+| 9 | W4 field sets of two scopes | genrefs, if answered (10.4) | - |
+| 10 | F12 functions fixed in a field, trait promise words | genrefs, if answered | - |
+| 11 | W3b incremental front end: the passes' summaries, the language server | genrefs, if answered | - |
+| 12 | review B, then the final gates | | |
+
+| round | what | model | files | waits for | gates beyond verify |
+|---|---|---|---|---|---|
+| F6 | O29: a scope found from an address (fnvalues 12) | opus xhigh | runtime.ll, san.ll, typed, scope, lower, emit, eval, interp, msgs, seed | nothing (may start beside F5) | scopesan, scopefuzz, fuzz free, dead regions, race, cross; bench and the self-build within noise |
+| W1 | facts with readers (4.2, section 7 rule 1); 10.3's harness | opus high | a new compiler/facts.olang; build, olang (driver, `OLANG_TIMES` `facts` row), effects (G42 reads through the accessor, replacing W0's key), lower (the folded read); checks scenarios; fuzz/editgen.olang; makefile; SPEC B3i | W0, F5 | T1-T6 of 10.3 in verify; T7 once; the leaf edit of the compiler not slower (HISTORY "Port M9, round 8": 3.5 s) |
+| R1 | refusals 5.1 | opus xhigh | scope, msgs, checks, goldens | F6 | compiler/'s and bench's IR byte-identical; scopesan, scopefuzz |
+| W2 | early freeing in every module (2.1, memory.md 3.5): a link-time constant per let-go site and orphan check, defined in the root's object; free.olang's `rootEmitted` gone | opus high | free, lower, emit, build, olang (`-memory`) | W1, F6 | fuzz free, dead regions, scopesan; each earlyfree fixture also split into two modules as a run case reading its own peak (`session` within 1 MB of the one-module form, against 260 MB today); a `compile`d module linked later frees what the link's constants say; `-quick`'s cost per site measured on bench and the self-build; the edit kind "a sole place flips" in T2 |
+| F7 | fnvalues 4.1-4.3, 4.6's lending | opus xhigh | scope, typed, lower, emit, interp, free, fuzz/scopegen, msgs | R1, W2 | as fnvalues round 7; the edit kind "a twin added" in T2 |
+| W3a | the incremental front end, part 1: a module's loaded text, names, signatures, inferred error sets, baked globals and summaries of checking kept as records keyed by its text and the facts it read from other modules; bodies checked only where changed, where a read fact changed, or on demand (an instance, the evaluator) | opus high | load, names, check, generic, types, typed, session, build, olang | W1 | T4 (`OLANG_CHECKINCR`) over the suite in verify; T2's signature, error-set and baked-value kinds; T5; T7 once; the front end of a leaf edit and of a no-op build measured (today 4-6 s) |
+| R2 | refusals 5.2 | opus xhigh | scope | R1, F7 | as R1 |
+| R6+R7 | refusals 5.6: destructor values in a coroutine frame, deferred code at a `yield` (refusals question 2), registered values as holders | opus high | check (S20, C11's generator parameter, the drop order), lower (coroutine frames, drops), eval, interp, msgs | nothing | scopesan, dead regions |
+| F8 | fnvalues section 11 | opus high | scope, lower, emit | R2 | as fnvalues round 8 |
+| review A | soundness of F3, F6, R1, W2, F7, R2 | opus high, read-only, fixes after | - | F7, R2 | the fuzzers' long runs |
+| R3 | refusals 5.3 | opus high | scope, lower (entry copies) | F8 | as R1 |
+| F9 | clones (fnvalues 4.4) | opus high | lower, emit | F8, review A | as fnvalues round 9 |
+| R4 | refusals 5.4 | opus high | scope | R3 | as R1, and race |
+| F10 | fnvalues 4.6 | opus high | free, lower (D9h), check (E31b), views, olang | F9 | scopesan, scopefuzz, fuzz free, dead regions |
+| R8 | refusals 5.7 and its questions 1 and 3 | opus high; the `$x` copies and stale comments after it, sonnet medium | scope, check, msgs, std comments, goldens | R4 (lane S), F7 | as R1 |
+| F11 | fnvalues section 9 | sonnet medium | explain, doc, session, lsp, mcp, api, DEPENDENTS.md | F10 | explain's and doc's goldens |
+| W4 | field sets of two scopes (2.4, question 4): a field carries the scopes its stores give it, reads judged against the shortest, stores against the longest, a build through it finding its scope at run time (O29); from source the error is at the widening store, at a precompiled boundary the store is refused (B3i) | opus xhigh | scope, lower and emit (the build sites, keyed by the field's fact), msgs; SPEC O23a, O25g | R8, F6, W1 | o25gfieldbinding and the o23alias cases as run cases read back after a churn; a store in module B widening module A's field, accepted from source and refused when A is a `compile`d object; the edit kind "a field's set widens" in T2 and editgen; scopesan, scopefuzz, fuzz free |
+| F12 | fnvalues round 12: functions a constructor fixes in a field followed with the instance; promise words on trait methods | opus xhigh, a design pass first | scope, effects, check, parse, types | W4 (its field gathering) | as fnvalues round 7 |
+| W3b | the incremental front end, part 2: scope obligations, effects and free.olang's summaries kept per body, the whole-program fixed points (O23a's bindings, R1a's sets, the final step) run over kept summaries with only changed components judged again; the language server keeping its session between edits on the same records | opus xhigh (a stale obligation is a soundness bug) | scope, effects, free, typed, session, lsp, mcp | F12, W3a | T4 over the passes' records; T2's obligation, effect and field kinds; T5 with scopefuzz's long run; T7; T8 |
+| review B | everything after review A, and W1-W4's reuse discipline | opus high, read-only, fixes after | - | all | the fuzzers' long runs, the bootstrap fixed point, bench |
+
+Sizes, judged from sections 4, 7 and 8: W1 is medium (the accessor and records are small - section 4.4 puts the facts at
+tens of thousands of short hashes and well under 100 ms - and most of the round is 10.3's harness); W2 is medium
+(free.olang's decisions exist, only their delivery changes); W3a is the largest of the five (the checker's results made
+records it can read back); W3b and W4 are large.
+
+### 10.3 Testing the incremental build
+
+The user: "one small bug there can be disastrous ... you want the testing suites to cover it really." A stale record is
+a wrong program built silently, so the harness compares every incremental build with a clean one, and it runs inside
+the ordinary suite. W1 builds T1-T7; each later W round extends them, and every round that adds a whole-program fact
+adds its edit kind to T2 and editgen (named in its gates above).
+
+- **T1. Reads cannot bypass the record.** The fact table and the passes' whole-program results are private to their
+  modules (M6); lowering and emission reach them only through `facts.Read`, which records the read. A read around it does
+  not compile, which is stronger than the discipline section 4.4 asks for.
+- **T2. An edit of every kind, against a clean build** (a checks scenario, `incremental`). A fixture of five modules - a
+  root, a library with a struct, a deep import, a generic, a C file with an export fn - and a list of edits, one or more
+  per kind of input: a body alone (no fact changes); a signature; an inferred error set grown and shrunk; a scope
+  obligation added and removed; each G42 fact flipped; a sole place's decision flipped (W2); a field's scope set
+  widened (W4); a generic instance added and removed; a twin added (F7); the C callback input (an export fn handed to a
+  C function, added and removed); a baked global's value; a build constant; an embedded file; an import added and
+  removed; a module renamed; a diagnostic introduced and fixed. Each edit is built in the previous build's directory and
+  in a clean one, and compared: the set of object names (named by content, so equal objects have equal names), the
+  binary's output, `-memory`, `explain` of the edited item and of its readers, and every diagnostic byte for byte. Two
+  more assertions per edit: the modules lowered again are exactly the readers of the facts the edit changed (an extra
+  one is a speed bug, a missing one a stale object), and undoing the edit reuses the first build's records and lowers
+  nothing.
+- **T3. `OLANG_CHECKREUSE=1` over the whole suite** in verify: every test file and every checks run case built in one
+  shared directory, in two orders, every reused record emitted afresh and compared - the way section 8's bug was found.
+- **T4. `OLANG_CHECKINCR=1`** (W3a, W3b): every front-end record reused is also computed afresh and compared, over the
+  whole suite in verify - T3 for the front end.
+- **T5. An edit fuzzer** (`make editfuzz`, fuzz/editgen.olang on scopegen's generator): generated programs of several
+  modules and random sequences of T2's edit kinds; after each step an incremental build is compared with a clean one as
+  T2 does. A fixed seed set runs in verify; the long run is part of scopefuzz's gate.
+- **T6. Damaged and contended records**: a truncated, garbled or older-compiler record is found by its own hash and
+  rebuilt, never read; two builds in one directory at once (B3k) write records and readers side by side and both build
+  what a clean build does.
+- **T7. History replay** (4.4, item 3): the last 100 commits of compiler/ built one after another in one directory, each
+  compared with a clean build, counting what was lowered - the correctness check on real edits and the measure of what
+  W1 and W3 save. Long, so run at the end of W1, W3a and W3b, not in verify.
+- **T8. The language server and the bootstrap** (W3b): scripted `didChange` sequences whose diagnostics are compared with
+  `olang build`'s check of the same text; stage 2 built in a directory holding stage 1's records equal to a clean
+  stage 2.
+
+T3 and T4 roughly double the suite's front end and emission in the verify target that runs them; W1 measures it, and the
+target runs beside the others (the suite is already split per file).
+
+### 10.4 genrefs, pending
+
+Where genrefs' rounds would go if its questions are answered yes. Nothing above waits for them; lane L is free at steps
+9-11 for them.
+
+- **G1** `weak` and generational types (front end: token, parse, ast, unparse, fmt, types, check, the tools, editors):
+  any lane-L step from 4 on. Its question 4 (generational per module, or per program as a fact with readers) decides
+  whether T13d's check reads a whole-program fact; either fits W1.
+- **G2 + G3** the header and weak word, and the holder record its question 3 picks (runtime.ll, lower, emit): after F6,
+  whose slots they sit on; step 9.
+- **G4** reclaiming (opus xhigh): after F6, W2, F7 and F10 (free.olang); step 10. If its question 5 is yes, its round 7
+  is W2 plus G4's own sites, which W2's constants already deliver.
+- **G5 + G6** an instance's arrays, the fuzzers: after G4; step 11, review B covering them.
+- **G8** `std/pool`: any time, independent of everything here.
+- **The one-holder rule** (the user's idea in the discussion: nodes only ever held by one owning link freed early,
+  decided at compile time only): its classification would go with G1 or G3, its reclaiming with G4. For a type no
+  `weak` names it needs neither a header nor a holder record - an extension of O8d - and could be built after W2 and F6
+  (whose slots let one node be reclaimed at a time) without genrefs, if the user takes it apart from genrefs'
+  questions.
