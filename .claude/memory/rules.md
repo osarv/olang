@@ -41,6 +41,11 @@ slimming of 2026-11-08").
   refactor) and all validation; Opus xhigh only for new section-8/ownership design. Sonnet may build small
   self-contained pieces; restructuring and validation stay on Opus. Take the cheaper model for a first pass only where a
   review or test oracle catches mistakes; never for soundness work.
+- **Effort low by default (the user, 2026-11-08: "be especially restrictive with the effort that you give the agents
+  ... a lot of the resources that we use are spent when the agents are just spinning ... don't make the agents
+  overthink").** Effort: low for mechanical work, medium for everything else including compiler work on a planned list;
+  high only for hard debugging or a design the brief cannot settle; xhigh never unless the user asks. This overrides the
+  effort in the defaults above.
 - **Reviews**: routine soundness reviews opus high; full reviews in bulk, over several merged batches ("not one per
   change"); no more C-compiler (stage 0) reviews. (why: archive/rules_log.md)
 - **Agent length**: one fresh agent per round of a big batch, from a hand-off note kept up to date; resume only for a
