@@ -1224,8 +1224,46 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false) ast.
         swaps = true
     }
     errs := try p.errorSet(one)
+    # T21c: a function type's promises follow its signature - written nowhere else
+    words := try p.promises()
+    if words.Len() > 0 and (lambda or not value) {
+        w := words[0]
+        p.report(w.Sp.Start, w.Sp.End, msgs.PromiseMisplaced(w.Word.Text()))
+    }
     return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn, k
-                   swaps, variadic)
+                   swaps, variadic, words)
+}
+
+# T21c: the promises after a signature - read for as long as a token on its line begins one: a word, "borrows NAME",
+# "keeps NAME" with "in NAME" and ".NAME"s after it (a path of more than one field is the checker's to refuse)
+fn (p mut Parser&) promises() Array<ast.Promise&>& ? Fail {
+    out mut Vec<ast.Promise&>& = Vec<ast.Promise&>()
+    for promiseWord(p.peek()) and not p.breakBefore() {
+        at := p.here()
+        w := p.peek()
+        p.advance()
+        ns mut Vec<source.NameId>& = Vec<source.NameId>()
+        if w == token.Tok.Borrows or w == token.Tok.Keeps { ns.Push(try p.name()) }
+        if w == token.Tok.Keeps and p.sees(token.Tok.In) and not p.breakBefore() {
+            p.advance()
+            ns.Push(try p.name())
+            for p.sees(token.Tok.Dot) and not p.breakBefore() {
+                p.advance()
+                ns.Push(try p.name())
+            }
+        }
+        out.Push(ast.Promise(p.from(at), w, ns.ToArray()))
+    }
+    return out.ToArray()
+}
+
+# T21c: whether a token begins a promise
+fn promiseWord(k token.Tok) Bool {
+    return match k {
+        case token.Tok.Returns, token.Tok.Noalloc, token.Tok.Noblock, token.Tok.Nospawn, token.Tok.Norecurse: true
+        case token.Tok.Noextern, token.Tok.Pure, token.Tok.Keeps, token.Tok.Borrows, token.Tok.Noborrow: true
+        case _: false
+    }
 }
 
 # ---- contracts (D17) ----
@@ -1240,7 +1278,7 @@ fn (p mut Parser&) contractHere() ast.ContractBlock?& ? Fail {
 # s with a contract k, null for none
 fn (p mut Parser&) withContract(s ast.Sig&, k ast.ContractBlock?&) ast.Sig& {
     if k is null { return s }
-    return ast.Sig(s.Params, s.Results, s.HasErrors, s.Errors, s.NoReturn, k, s.Commutes, s.Variadic)
+    return ast.Sig(s.Params, s.Results, s.HasErrors, s.Errors, s.NoReturn, k, s.Commutes, s.Variadic, s.Promises)
 }
 
 fn (p mut Parser&) contract() ast.ContractBlock& ? Fail {

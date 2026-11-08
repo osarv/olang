@@ -63,7 +63,8 @@ type Kind enum {
     Func        # A its parameters (a ListId), B its result (Void for none, a Tuple for several, D8c), C its errors, D its
                 # scopes (a ScopesId), E its parameters' names where it is written (rendering only: E11a, Unnamed), F
                 # Nullable where it may be null ("fn?&(...)", T21) - a function value is never null otherwise - and, above
-                # its low byte, the declared function type it is (T21b: "Handler&"), as its Named instance's id, 0 none
+                # its low byte, the declared function type it is (T21b: "Handler&"), as its Named instance's id, 0 none;
+                # G its promises (T21c, an index of promiseLists, 0 none) - part of its identity
     Tuple       # several results (D8c): A its elements
     Record      # an anonymous struct - an enum case's payload: A its fields
     AnonEnum    # an anonymous enum (T27): A its shape (cases and payloads)
@@ -94,7 +95,7 @@ Nullable I64 = 4    # "?&": a reference that may be null (T2c) - none is unless 
 Spread I64 = 8      # "xs ...T": a variadic parameter's read-only array, as its function's signature holds it (D8g)
 
 # a type's key: its kind and operands - what it is, and so what it is interned by
-type data struct(K Kind, A I64, B I64, C I64, D I64 = 0, E I64 = 0, F I64 = 0) {
+type data struct(K Kind, A I64, B I64, C I64, D I64 = 0, E I64 = 0, F I64 = 0, G I64 = 0) {
     K
     A
     B
@@ -102,6 +103,7 @@ type data struct(K Kind, A I64, B I64, C I64, D I64 = 0, E I64 = 0, F I64 = 0) {
     D
     E
     F
+    G
 }
 
 # a function type's scopes, interned: 0 the scopes of a function type no marker of which names anything - each parameter
@@ -197,6 +199,8 @@ type Table struct(Names mut source.Names&) {
     scopeKeys Map<Array<I64>&, ScopesId> # then the results'
     nameLists Vec<Array<I64>&>         # a written function type's parameter names (NameIds), by index; 0 none
     nameKeys Map<Array<I64>&, I64>
+    promiseLists Vec<Array<I64>&>      # a function type's promises (T21c) in canonical form (Promises), by index; 0 none
+    promiseKeys Map<Array<I64>&, I64>
     refHolds Vec<U8>                    # HoldsRefs, once asked, by type: 1 being asked, 2 no, 3 yes (0 not asked)
     holdsUnsure Bool = false            # HoldsRefs met a part whose type is not known yet: nothing it found is kept
     ints Vec<TypeId>                   # T4a: the integer type of each width, I1 .. I128 at 1 .. 128, U1 .. U128 above
@@ -216,6 +220,7 @@ fn Table.New(names mut source.Names&) Table {
     t.lists.Push(Array<TypeId>(0))
     t.scopes.Push(Array<I64>(0))
     t.nameLists.Push(Array<I64>(0))
+    t.promiseLists.Push(Array<I64>[0, 0])
     for k in Array<Kind>[Kind.Unknown, Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32
                   Kind.U64, Kind.F16, Kind.BF16, Kind.F32, Kind.F64, Kind.Null, Kind.DefaultErr, Kind.Noreturn] {
         t.intern(data(k, 0, 0, 0), 1)
@@ -367,17 +372,157 @@ fn (t mut Table&) Ref(of TypeId, perm I64) TypeId {
 # scopes - what its markers say, which T22's identity leaves out (Plain) - and whether it may be null ("fn?&", T21),
 # which is part of its identity as "?&" is a reference's (T2c)
 fn (t mut Table&) Func(params ListId, result TypeId, errors ListId, scopes ScopesId = ScopesId(0), names I64 = 0
-                       nullable Bool = false, tag TypeId = TypeId(0)) TypeId {
+                       nullable Bool = false, tag TypeId = TypeId(0), promises I64 = 0) TypeId {
     d := t.deepest(params)
     if t.depthOf(result) > d { d = t.depthOf(result) }
     fl := (Nullable if nullable else 0) | I64(tag) << 8
-    id := t.intern(data(Kind.Func, I64(params), I64(result), I64(errors), I64(scopes), names, fl), d + 1)
+    id := t.intern(data(Kind.Func, I64(params), I64(result), I64(errors), I64(scopes), names, fl, promises), d + 1)
     pp := t.PlainList(params)
     pr := t.Plain(result)
     if scopes != ScopesId(0) or names != 0 or pp != params or pr != result {
-        t.plains[I64(id)] = t.Func(pp, pr, errors, nullable = nullable, tag = tag)
+        t.plains[I64(id)] = t.Func(pp, pr, errors, nullable = nullable, tag = tag, promises = promises)
     }
     return id
+}
+
+# ---- promises (T21c) ----
+#
+# A function type's promises are kept by position, so two types naming their parameters differently promise the same
+# (T22): an array of words - the effect words and noborrow as bits of the first, then how many parameters "borrows"
+# names and their indices, sorted, then each "keeps" as three - the kept parameter, the parameter it is kept in (KeepsHome
+# for the function value's own home, "keeps x"), and the field of it (a NameId, 0 for none) - sorted. A type with none
+# is 0
+
+PromReturns I64 = 1
+PromNoalloc I64 = 2
+PromNoblock I64 = 4
+PromNospawn I64 = 8
+PromNorecurse I64 = 16
+PromNoextern I64 = 32
+PromPure I64 = 64
+PromNoborrow I64 = 128
+PromBorrows I64 = 256   # "borrows" written: the result borrows from the parameters it names alone
+KeepsHome I64 = -1
+# the words of the bits PromReturns ... PromNoborrow, in that order - the canonical order they are written in
+PromiseNames := Array<String&>["returns", "noalloc", "noblock", "nospawn", "norecurse", "noextern", "pure", "noborrow"]
+
+# a promises entry, interned: the words' bits, the parameters "borrows" names, the "keeps" triples - 0 where none says
+# anything
+fn (t mut Table&) Promises(words I64, borrowed Array<I64>&, kept Array<I64>&) I64 {
+    if words == 0 and borrowed.Len() == 0 and kept.Len() == 0 { return 0 }
+    key := Array<I64>(2 + borrowed.Len() + kept.Len())
+    key[0] = words | (PromBorrows if borrowed.Len() > 0 else 0)
+    key[1] = borrowed.Len()
+    for i in range borrowed.Len() { key[2 + i] = borrowed[i] }
+    from := 2 + borrowed.Len()
+    for i in range kept.Len() { key[from + i] = kept[i] }
+    sortRuns(key, 2, borrowed.Len(), 1)
+    sortRuns(key, from, kept.Len() / 3, 3)
+    id := try t.promiseKeys.Get(key) catch default -1
+    if id >= 0 { return id }
+    id = t.promiseLists.Len()
+    t.promiseLists.Push(key)
+    t.promiseKeys.Put(key, id)
+    return id
+}
+
+# n runs of w numbers each from a[at], sorted in place by their numbers in order (an insertion sort: a type writes few)
+fn sortRuns(a mut Array<I64>&, at I64, n I64, w I64) {
+    for i in range 1, n {
+        j := i
+        for j > 0 and runLess(a, at + j * w, at + (j - 1) * w, w) {
+            for k in range w { a[at + j * w + k], a[at + (j - 1) * w + k] = a[at + (j - 1) * w + k], a[at + j * w + k] }
+            j--
+        }
+    }
+}
+
+fn runLess(a Array<I64>&, x I64, y I64, w I64) Bool {
+    for k in range w {
+        if a[x + k] != a[y + k] { return a[x + k] < a[y + k] }
+    }
+    return false
+}
+
+# a function type's promises entry (0 for none)
+fn (t Table&) PromisesOf(f TypeId) I64 { return t.at(f).G if t.KindOf(f) == Kind.Func else 0 }
+
+# its words' bits: PromReturns ... PromNoborrow, PromBorrows
+fn (t Table&) PromiseWords(f TypeId) I64 { return t.promiseLists[t.PromisesOf(f)][0] }
+
+# the parameters its "borrows" names (empty where it writes none)
+fn (t Table&) BorrowsOf(f TypeId) Array<I64> {
+    p := t.promiseLists[t.PromisesOf(f)]
+    out := Array<I64>(p[1])
+    for i in range p[1] { out[i] = p[2 + i] }
+    return out
+}
+
+# its "keeps" promises, three numbers each: the kept parameter, the one it is kept in (KeepsHome: the value's home),
+# the field of that (a NameId, 0 none)
+fn (t Table&) KeepsOf(f TypeId) Array<I64> {
+    p := t.promiseLists[t.PromisesOf(f)]
+    from := 2 + p[1]
+    out := Array<I64>(p.Len() - from)
+    for i in range out.Len() { out[i] = p[from + i] }
+    return out
+}
+
+# whether a result holding references may refer into what parameter i refers to (T21c): every parameter unless
+# "borrows" or "noborrow" narrows it
+fn (t Table&) MayBorrow(f TypeId, i I64) Bool {
+    w := t.PromiseWords(f)
+    if (w & PromNoborrow) != 0 { return false }
+    if (w & PromBorrows) == 0 { return true }
+    for b in t.BorrowsOf(f) {
+        if b == i { return true }
+    }
+    return false
+}
+
+# whether a function type writes "keeps x" for some x: a value of it keeps what it is given in its own home (2.2.1)
+fn (t Table&) KeepsHome(f TypeId) Bool {
+    ks := t.KeepsOf(f)
+    for k in range ks.Len() / 3 {
+        if ks[3 * k + 1] == KeepsHome { return true }
+    }
+    return false
+}
+
+# a function type with other promises, as nullable as f is and the same declared type
+fn (t mut Table&) WithPromises(f TypeId, promises I64) TypeId {
+    if t.KindOf(f) != Kind.Func { return f }
+    return t.Func(t.Params(f), t.Result(f), t.Errors(f), t.ScopesOf(f), t.NamesIdOf(f), t.FuncNullable(f), t.FuncTag(f), promises)
+}
+
+# the promise words as source writes them after a signature, each with a space before it, in canonical order: the
+# effect words, "noborrow" or "borrows a", then each "keeps" - its parameters named by the names the type was written
+# with, else by position ("#2")
+fn (t Table&) PromiseText(f TypeId) String {
+    if t.PromisesOf(f) == 0 { return "" }
+    b := StringBuilder()
+    w := t.PromiseWords(f)
+    for i in range PromiseNames.Len() {
+        if (w & (I64(1) << i)) != 0 { b.Push(" " $PromiseNames[i]) }
+    }
+    for x in t.BorrowsOf(f) { b.Push(" borrows " $t.paramName(f, x)) }
+    ks := t.KeepsOf(f)
+    for k in range ks.Len() / 3 { b.Push(" " $t.KeepsText(f, ks[3 * k], ks[3 * k + 1], ks[3 * k + 2])) }
+    return b.ToString()
+}
+
+# one "keeps" promise as source writes it: "keeps b", "keeps b in a", "keeps b in a.f"
+fn (t Table&) KeepsText(f TypeId, kept I64, into I64, field I64) String {
+    if into == KeepsHome { return "keeps " $t.paramName(f, kept) }
+    fs := "." $t.Names.Text(source.NameId(I32(field))) if field != 0 else ""
+    return "keeps " $t.paramName(f, kept) " in " $t.paramName(f, into) $fs
+}
+
+# parameter i of a function type by the name it was written with, else by position ("#1" the first)
+fn (t Table&) paramName(f TypeId, i I64) String {
+    ns := t.NamesOf(f)
+    if i < ns.Len() { return t.Names.Text(source.NameId(I32(ns[i]))) }
+    return "#" $(i + 1)
 }
 
 # whether a function type may be null ("fn?&(...)", T21)
@@ -390,13 +535,13 @@ fn (t Table&) FuncTag(f TypeId) TypeId { return TypeId(I32(t.at(f).F >> 8)) if t
 # function type keeps
 fn (t mut Table&) Refunc(f TypeId, params ListId, result TypeId, errors ListId, scopes ScopesId = ScopesId(0)
                          names I64 = 0) TypeId {
-    return t.Func(params, result, errors, scopes, names, t.FuncNullable(f), t.FuncTag(f))
+    return t.Func(params, result, errors, scopes, names, t.FuncNullable(f), t.FuncTag(f), t.PromisesOf(f))
 }
 
 # the function type a declared one stands for, its declaration left out (T21b) - as nullable as it is
 fn (t mut Table&) Untagged(f TypeId) TypeId {
     if t.FuncTag(f) == UnknownT { return f }
-    return t.Func(t.Params(f), t.Result(f), t.Errors(f), t.ScopesOf(f), t.NamesIdOf(f), t.FuncNullable(f))
+    return t.Func(t.Params(f), t.Result(f), t.Errors(f), t.ScopesOf(f), t.NamesIdOf(f), t.FuncNullable(f), promises = t.PromisesOf(f))
 }
 
 # a written function type's parameter names, interned (0 for none: a type no source wrote, or one with no parameters)
@@ -607,14 +752,16 @@ fn (t Table&) IsNullable(id TypeId) Bool {
 fn (t mut Table&) NonNull(id TypeId) TypeId {
     if not t.IsNullable(id) { return id }
     if t.KindOf(id) == Kind.Func {
-        return t.Func(t.Params(id), t.Result(id), t.Errors(id), t.ScopesOf(id), t.NamesIdOf(id), tag = t.FuncTag(id))
+        return t.Func(t.Params(id), t.Result(id), t.Errors(id), t.ScopesOf(id), t.NamesIdOf(id), tag = t.FuncTag(id)
+                      promises = t.PromisesOf(id))
     }
     return t.Ref(t.Referent(id), t.PermOf(id) & ~Nullable)
 }
 fn (t mut Table&) OrNull(id TypeId) TypeId {
     if t.IsNullable(id) { return id }
     if t.KindOf(id) == Kind.Func {
-        return t.Func(t.Params(id), t.Result(id), t.Errors(id), t.ScopesOf(id), t.NamesIdOf(id), true, t.FuncTag(id))
+        return t.Func(t.Params(id), t.Result(id), t.Errors(id), t.ScopesOf(id), t.NamesIdOf(id), true, t.FuncTag(id)
+                      t.PromisesOf(id))
     }
     if t.KindOf(id) != Kind.Ref { return id }
     return t.Ref(t.Referent(id), t.PermOf(id) | Nullable)
@@ -1815,6 +1962,29 @@ fn (t mut Table&) Canon(id TypeId) String {
     return b.ToString()
 }
 
+# T21c: a function type's promises in its canonical text, by position: "returns, borrows 0, keeps 1 in 0.f, keeps 1"
+fn (t Table&) canonPromises(b mut StringBuilder&, f TypeId) {
+    w := t.PromiseWords(f)
+    sep := ""
+    for i in range PromiseNames.Len() {
+        if (w & (I64(1) << i)) == 0: continue
+        b.Push($sep $PromiseNames[i])
+        sep = ", "
+    }
+    for x in t.BorrowsOf(f) {
+        b.Push($sep "borrows " $x)
+        sep = ", "
+    }
+    ks := t.KeepsOf(f)
+    for k in range ks.Len() / 3 {
+        b.Push($sep "keeps " $ks[3 * k])
+        sep = ", "
+        if ks[3 * k + 1] == KeepsHome: continue
+        b.Push(" in " $ks[3 * k + 1])
+        if ks[3 * k + 2] != 0 { b.Push("." $t.Names.Text(source.NameId(I32(ks[3 * k + 2])))) }
+    }
+}
+
 # a type's canonical text with its function types' parameter names after each, "fn(I64){n}": what tells apart two
 # types Unnamed makes one - a symbol named by it means one type in every program, where a type's number would not
 fn (t mut Table&) CanonNamed(id TypeId) String {
@@ -1908,6 +2078,12 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
             if errs.Len() > 0 {
                 b.Push(" ?")
                 if not (errs.Len() == 1 and errs[0] == DefaultErrT) { t.canonErrs(b, errs) }
+            }
+            if d.G != 0 {
+                # T21c: its promises by position, " ![returns, borrows 0, keeps 1 in 0.f, keeps 1]"
+                b.Push(" ![")
+                t.canonPromises(b, id)
+                b.PushChar(']')
             }
             if t.canonNames and d.E != 0 {
                 b.PushChar('{')

@@ -13,6 +13,7 @@ import "token"
 import "ast"
 import "diag"
 import "msgs"
+import "diagmsg"
 import "load"
 import "names"
 import "types"
@@ -107,6 +108,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     indexed Map<I64, Bool>             # the modules typeIndex holds
     identity Map<String&, I64>         # a module by its identity
     r1bSaid Map<pair.Pair<I64, I64>, Bool>  # (module, start): a function type said to write its error set (R1b)
+    promiseSaid Map<pair.Pair<I64, I64>, Bool>  # (module, start): a promise said to be misused (T21c)
     modules I64 = 0                    # how many modules T knows
     patterns Map<I64, pattern>         # by the pattern's index in T
     fns Vec<fnRow>
@@ -1001,7 +1003,8 @@ fn (p mut Program&) DeclaredFunc(t types.TypeId) types.TypeId {
     if not p.Body(t) { return types.UnknownT }
     b := p.T.Base(t)
     if p.T.KindOf(b) != types.Kind.Func { return types.UnknownT }
-    return p.T.Func(p.T.Params(b), p.T.Result(b), p.T.Errors(b), p.T.ScopesOf(b), p.T.NamesIdOf(b), tag = t)
+    return p.T.Func(p.T.Params(b), p.T.Result(b), p.T.Errors(b), p.T.ScopesOf(b), p.T.NamesIdOf(b), tag = t
+                    promises = p.T.PromisesOf(b))
 }
 
 # whether a global's written type says "mut" - a writable global (its binding, which only a global's "mut" decides)
@@ -1228,7 +1231,143 @@ fn (p mut Program&) funcType(c Context&, sp source.Span, s ast.Sig&) types.TypeI
         }
         f = p.T.Refunc(f, p.T.Params(f), p.T.Result(f), types.ListId(0), p.T.ScopesOf(f))
     }
+    f = p.T.WithPromises(f, p.promisesOf(c, s, f))
     return p.T.WithNames(f, p.SigNames(s))
+}
+
+# ---- promises (T21c) ----
+
+# a function type's promises, by position: each word's names found among its parameters, and each misuse said once -
+# a name no parameter has, a word written twice, one saying nothing of the type or contradicting another
+fn (p mut Program&) promisesOf(c Context&, s ast.Sig&, f types.TypeId) I64 {
+    if s.Promises.Len() == 0 { return 0 }
+    words I64 = 0
+    borrowed Vec<I64>
+    kept Vec<I64>
+    for w in s.Promises {
+        bit := promiseBit(w.Word)
+        if bit != 0 {
+            if (words & bit) != 0: p.promiseErr(c, w, msgs.PromiseTwice(w.Word.Text()))
+            if w.Word == token.Tok.Returns and s.NoReturn: p.promiseErr(c, w, msgs.PromiseReturnsNoreturn())
+            if w.Word == token.Tok.Noborrow and not p.resultMayHold(f): p.promiseErr(c, w, msgs.PromiseBorrowsNothing("noborrow"))
+            words = words | bit
+            continue
+        }
+        a := p.promiseParam(c, s, w, 0)
+        if a < 0: continue
+        if w.Word == token.Tok.Borrows {
+            if borrowed.Has(a): p.promiseErr(c, w, msgs.PromiseTwice($"borrows " $p.text(w.Names[0])))
+            if not p.resultMayHold(f) {
+                p.promiseErr(c, w, msgs.PromiseBorrowsNothing("borrows"))
+            } else if not p.mayHold(p.T.Items(p.T.Params(f))[a]) {
+                p.promiseErr(c, w, msgs.PromiseBorrowsValue(p.text(w.Names[0])))
+            }
+            borrowed.Push(a)
+            continue
+        }
+        k := p.keepsPromise(c, s, f, w, a)
+        if k.Len() == 0: continue
+        for x in range kept.Len() / 3 {
+            if kept[3 * x] == k[0] and kept[3 * x + 1] == k[1] and kept[3 * x + 2] == k[2] {
+                p.promiseErr(c, w, msgs.PromiseTwice(p.T.KeepsText(p.T.WithNames(f, p.SigNames(s)), k[0], k[1], k[2])))
+            }
+        }
+        for v in k { kept.Push(v) }
+    }
+    if (words & types.PromNoborrow) != 0 and borrowed.Len() > 0: p.promiseErr(c, s.Promises[0], msgs.PromiseBorrowsBoth())
+    return p.T.Promises(words, borrowed.ToArray(), kept.ToArray())
+}
+
+# T21c: the bit of an effect word or "noborrow", 0 for a word naming parameters
+fn promiseBit(w token.Tok) I64 {
+    return match w {
+        case token.Tok.Returns: types.PromReturns
+        case token.Tok.Noalloc: types.PromNoalloc
+        case token.Tok.Noblock: types.PromNoblock
+        case token.Tok.Nospawn: types.PromNospawn
+        case token.Tok.Norecurse: types.PromNorecurse
+        case token.Tok.Noextern: types.PromNoextern
+        case token.Tok.Pure: types.PromPure
+        case token.Tok.Noborrow: types.PromNoborrow
+        case _: 0
+    }
+}
+
+# the parameter name k of a promise names, by its index - -1, said, where none has that name (an unnamed parameter,
+# "fn&(I32)", is named by none)
+fn (p mut Program&) promiseParam(c Context&, s ast.Sig&, w ast.Promise&, k I64) I64 {
+    n := w.Names[k]
+    for i in range s.Params.Len() {
+        if s.Params[i].Name == n and n != source.NameId(0) { return i }
+    }
+    p.promiseErr(c, w, msgs.PromiseNoParam(p.text(n)))
+    return -1
+}
+
+# a "keeps" promise as three numbers (types.KeepsOf) - empty where it is misused, said
+fn (p mut Program&) keepsPromise(c Context&, s ast.Sig&, f types.TypeId, w ast.Promise&, b I64) Array<I64> {
+    none := Array<I64>(0)
+    ps := p.T.Items(p.T.Params(f))
+    # what is kept is what a reference refers to, or a unique value handed on (T13b) - a copy needs no word
+    if not p.mayHold(ps[b]) and not p.T.Unique(ps[b]) {
+        p.promiseErr(c, w, msgs.PromiseKeepsValue(p.text(w.Names[0])))
+        return none
+    }
+    if w.Names.Len() == 1 { return Array<I64>[b, types.KeepsHome, 0] }
+    a := p.promiseParam(c, s, w, 1)
+    if a < 0 { return none }
+    if a == b {
+        p.promiseErr(c, w, msgs.PromiseKeepsSelf(p.text(w.Names[0])))
+        return none
+    }
+    if not p.mayHold(ps[a]) {
+        p.promiseErr(c, w, msgs.PromiseKeepsInValue(p.text(w.Names[1])))
+        return none
+    }
+    if w.Names.Len() == 2 { return Array<I64>[b, a, 0] }
+    if w.Names.Len() > 3 {
+        p.promiseErr(c, w, msgs.PromiseKeepsPath(p.text(w.Names[1]), p.text(w.Names[2])))
+        return none
+    }
+    fname := w.Names[2]
+    at := ps[a]
+    if p.T.IsRef(at) { at = p.T.Referent(at) }
+    if p.T.KindOf(at) == types.Kind.Var { return Array<I64>[b, a, I64(fname)] }
+    fs := p.FieldNames(at)
+    if not fs.Has(fname) {
+        p.promiseErr(c, w, msgs.PromiseKeepsField(p.text(fname), p.text(w.Names[1])))
+        return none
+    }
+    # (a field holding no reference has nothing kept in it - known once its type's body is)
+    if p.T.HasBody(at) and p.T.DeclKindOf(p.T.DeclOf(at)) == types.DeclKind.Struct {
+        ft := p.T.Items(p.T.Fields(at))
+        for i in range fs.Len() {
+            if fs[i] == fname and i < ft.Len() and not p.mayHold(ft[i]) {
+                p.promiseErr(c, w, msgs.PromiseKeepsInValue($p.text(w.Names[1]) "." $p.text(fname)))
+                return none
+            }
+        }
+    }
+    return Array<I64>[b, a, I64(fname)]
+}
+
+# whether a value of a type may hold a reference, a type variable's included (it might be bound to one)
+fn (p mut Program&) mayHold(t types.TypeId) Bool { return p.T.HoldsRefs(t) }
+
+# whether a function type's result may hold a reference - one of several results included
+fn (p mut Program&) resultMayHold(f types.TypeId) Bool {
+    for r in p.T.Results(f) {
+        if p.mayHold(r) { return true }
+    }
+    return false
+}
+
+# T21c's error at promise w, once however often its type is resolved (an instance's, a declaration's)
+fn (p mut Program&) promiseErr(c Context&, w ast.Promise&, m diagmsg.Msg) {
+    key := pair.Pair(c.Mi, I64(w.Sp.Start))
+    if try p.promiseSaid.Get(key) catch default false { return }
+    p.promiseSaid.Put(key, true)
+    p.L.Diags.Error(p.at(c.Mi, w.Sp), m)
 }
 
 # R23, R23a: a flag beside a value is no result - a Bool among several results, and a Bool given by a function that
@@ -2183,7 +2322,7 @@ fn (p mut Program&) Subst(t types.TypeId, owner I64, args types.ListId) types.Ty
             if tag != types.UnknownT { tag = p.Subst(tag, owner, args) }   # T21b: "Pred<T>&" in an instance
             return p.T.Func(p.substList(p.T.Params(t), owner, args), p.Subst(p.T.Result(t), owner, args)
                             p.substErrs(p.T.Errors(t), owner, args), p.T.ScopesOf(t), p.T.NamesIdOf(t)
-                            p.T.FuncNullable(t), tag)
+                            p.T.FuncNullable(t), tag, p.T.PromisesOf(t))
         }
         case types.Kind.ErrSet { return p.ErrSetOf(p.substErrs(p.T.ErrSetItems(t), owner, args)) }
         case types.Kind.Tuple { return p.T.Tuple(p.substList(p.T.Parts(t), owner, args)) }
@@ -4956,6 +5095,7 @@ fn (p mut Program&) reflName(b mut StringBuilder&, t types.TypeId) {
                 e := p.T.ErrOf(es[i])
                 if e != types.DefaultErrT and p.T.KindOf(e) == types.Kind.Named { b.Push(p.text(p.T.DeclName(p.T.DeclOf(e)))) }
             }
+            b.Push(p.T.PromiseText(t))   # T21c
         }
         case types.Kind.Const { b.Push($p.T.ConstValue(t)) }
         case types.Kind.ErrVal {
@@ -5388,7 +5528,8 @@ fn (p mut Program&) canonFunc(c mut cursor&, nullable Bool, tag types.TypeId = t
         l := try p.canonList(c, ")")
         xs := p.T.Items(l)
         result = xs[0] if xs.Len() == 1 else p.T.Tuple(l)
-    } else if c.At + 1 < c.Text.Len() and c.peek() == ' ' and c.Text[c.At + 1] != '?' and c.Text[c.At + 1] != '~' {
+    } else if c.At + 1 < c.Text.Len() and c.peek() == ' ' and c.Text[c.At + 1] != '?' and c.Text[c.At + 1] != '~' and
+              c.Text[c.At + 1] != '!' {
         c.At++
         result = try p.canonType(c)
     }
@@ -5407,6 +5548,7 @@ fn (p mut Program&) canonFunc(c mut cursor&, nullable Bool, tag types.TypeId = t
             es.Push(types.DefaultErrT)
         }
     }
+    promises := try p.canonPromises(c)
     scopes := types.ScopesId(0)
     if c.eat(" ~[") {
         xs Vec<I64>
@@ -5420,7 +5562,43 @@ fn (p mut Program&) canonFunc(c mut cursor&, nullable Bool, tag types.TypeId = t
         all := xs.ToArray()
         scopes = p.T.Scopes(all[0], all[2:2 + n], all[2 + n:])
     }
-    return p.T.Func(params, result, p.T.List(es.ToArray()), scopes, nullable = nullable, tag = tag)
+    return p.T.Func(params, result, p.T.List(es.ToArray()), scopes, nullable = nullable, tag = tag, promises = promises)
+}
+
+# T21c: a function type's promises as Canon writes them, " ![returns, borrows 0, keeps 1 in 0.f, keeps 1]" - 0 where
+# none is
+fn (p mut Program&) canonPromises(c mut cursor&) I64 ? {
+    if not c.eat(" ![") { return 0 }
+    words I64 = 0
+    borrowed Vec<I64>
+    kept Vec<I64>
+    for {
+        if c.eat("borrows ") {
+            borrowed.Push(try canonNumber(c))
+        } else if c.eat("keeps ") {
+            kp := try canonNumber(c)
+            into, field := types.KeepsHome, I64(0)
+            if c.eat(" in ") {
+                into = try canonNumber(c)
+                if c.eat(".") {
+                    start := c.At
+                    for c.At < c.Text.Len() and (c.peek().IsLetter() or c.peek().IsDigit() or c.peek() == '_') { c.At++ }
+                    field = I64(p.L.Names.Intern(c.Text[start:c.At]))
+                }
+            }
+            for v in Array<I64>[kp, into, field] { kept.Push(v) }
+        } else {
+            k := -1
+            for i in range types.PromiseNames.Len() {
+                if k < 0 and c.eat(types.PromiseNames[i]) { k = i }
+            }
+            if k < 0 { error BadCanon.Text }
+            words = words | (I64(1) << k)
+        }
+        if c.eat("]") { break }
+        if not c.eat(", ") { error BadCanon.Text }
+    }
+    return p.T.Promises(words, borrowed.ToArray(), kept.ToArray())
 }
 
 fn (p mut Program&) canonEnum(c mut cursor&) types.TypeId ? {

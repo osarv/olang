@@ -779,6 +779,21 @@ type Diag enum {
     LambdaValueRelates
     CallValueObligations
     CallValueErrors
+    ValueBeyondType
+    LambdaKeepsOuter
+    FuncTypeBeyond
+    PromiseMisplaced
+    PromiseNoParam
+    PromiseTwice
+    PromiseReturnsNoreturn
+    PromiseBorrowsNothing
+    PromiseBorrowsValue
+    PromiseBorrowsBoth
+    PromiseKeepsValue
+    PromiseKeepsSelf
+    PromiseKeepsInValue
+    PromiseKeepsPath
+    PromiseKeepsField
     TypeArgsSpaced
     LambdaResultUninferable
     LambdaArity
@@ -1841,6 +1856,26 @@ fn SpawnResultsDisagree() r.Msg { return r.Msg(Diag.SpawnResultsDisagree, "P1g",
 fn FuncValueObligations(text String&, place String&) r.Msg { return r.Msg(Diag.FuncValueObligations, "T22a", "'" $text "' ties where what it is given lives to what it keeps or gives back, and " $place " holds only what its written function type says of every call - call it directly, or hold it in a local and call it there") }
 fn LambdaValueObligations(text String&, place String&) r.Msg { return r.Msg(Diag.LambdaValueObligations, "T22a", "this lambda keeps '" $text "' beyond the call, and " $place " holds only what its written function type says of every call - keep a copy instead, or hold the lambda in a local and call it there") }
 fn LambdaValueRelates(place String&) r.Msg { return r.Msg(Diag.LambdaValueRelates, "T22a", "this lambda ties where what it is given lives to what it keeps or gives back - its captures included - and " $place " holds only what its written function type says of every call - hold it in a local and call it there") }
+# a function value at a boundary doing what one promise word would say of its place's type (T22b): the word to write
+fn ValueBeyondType(subject String&, does String&, place String&, word String&) r.Msg { return r.Msg(Diag.ValueBeyondType, "T22b", $subject " " $does ", and " $place "'s function type says nothing of that - write '" $word "' after its signature") }
+# 2.2.1: a lambda keeping an argument in a capture that outlives the lambda, held where "keeps x" is all the type says
+fn LambdaKeepsOuter(text String&, place String&) r.Msg { return r.Msg(Diag.LambdaKeepsOuter, "T22b", "this lambda keeps '" $text "' in what it captured from a scope that outlives where the lambda lives, and " $place "'s 'keeps " $text "' says only that '" $text "' outlives the lambda - capture from one scope, or hold the lambda in a local and call it there") }
+# a function value whose functions are not followed, held as a type promising more than its own (T22b)
+fn FuncTypeBeyond(have String&, want String&, word String&) r.Msg { return r.Msg(Diag.FuncTypeBeyond, "T22b", "a value of type '" $have "' may do what '" $want "' does not say - '" $word "' - and which functions it holds is not known here: write '" $word "' after this type's signature, or give a function directly") }
+
+# T21c: a promise's misuses
+fn PromiseMisplaced(word String&) r.Msg { return r.Msg(Diag.PromiseMisplaced, "T21c", "'" $word "' is a promise, written only after a function type's signature - what a function itself does is read off its body ('olang explain' shows it)") }
+fn PromiseNoParam(name String&) r.Msg { return r.Msg(Diag.PromiseNoParam, "T21c", "'" $name "' is no parameter of this function type - a promise names its parameters by the names written in it") }
+fn PromiseTwice(word String&) r.Msg { return r.Msg(Diag.PromiseTwice, "T21c", "'" $word "' is promised twice - write it once") }
+fn PromiseReturnsNoreturn() r.Msg { return r.Msg(Diag.PromiseReturnsNoreturn, "T21c", "'returns' promises every call comes back, and 'noreturn' that none does - write one of them") }
+fn PromiseBorrowsNothing(word String&) r.Msg { return r.Msg(Diag.PromiseBorrowsNothing, "T21c", "this function type's result holds no reference, so '" $word "' says nothing - leave it out") }
+fn PromiseBorrowsValue(name String&) r.Msg { return r.Msg(Diag.PromiseBorrowsValue, "T21c", "'" $name "' holds no reference, so no result can refer into it - leave 'borrows " $name "' out") }
+fn PromiseBorrowsBoth() r.Msg { return r.Msg(Diag.PromiseBorrowsBoth, "T21c", "'noborrow' says the result refers into no parameter, and 'borrows' that it may refer into one - write one of them") }
+fn PromiseKeepsValue(name String&) r.Msg { return r.Msg(Diag.PromiseKeepsValue, "T21c", "'" $name "' holds no reference and is not unique, so a call can keep only a copy of it, which needs no word - leave the 'keeps' out") }
+fn PromiseKeepsSelf(name String&) r.Msg { return r.Msg(Diag.PromiseKeepsSelf, "T21c", "'keeps " $name " in " $name "' keeps a parameter in itself, which says nothing - leave it out") }
+fn PromiseKeepsInValue(name String&) r.Msg { return r.Msg(Diag.PromiseKeepsInValue, "T21c", "'" $name "' holds no reference, so nothing can be kept in what it refers to") }
+fn PromiseKeepsPath(name String&, field String&) r.Msg { return r.Msg(Diag.PromiseKeepsPath, "T21c", "a promise names one field of a parameter - write 'in " $name "." $field "'") }
+fn PromiseKeepsField(field String&, name String&) r.Msg { return r.Msg(Diag.PromiseKeepsField, "T21c", "'" $field "' is no field of what '" $name "' refers to") }
 
 # type arguments written apart from the name or the "(" (G12)
 fn TypeArgsSpaced(name String&) r.Msg { return r.Msg(Diag.TypeArgsSpaced, "G12", "type arguments are written touching the name and the '(': '" $name "<...>(...)' - with spaces, '<' and '>' compare") }

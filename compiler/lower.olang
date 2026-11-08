@@ -6270,13 +6270,14 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
             parts := t.Items(t.Parts(res))
             for i in range parts.Len() { out.Push($(", " if i > 0 else " ") $ln.spell(parts[i], true, true)) }
         } else if res != types.VoidT {
-            g := es.Len() > 0 and t.KindOf(res) == types.Kind.Func and t.Items(t.Errors(res)).Len() == 0
+            g := es.Len() > 0 and t.KindOf(res) == types.Kind.Func and t.Items(t.Errors(res)).Len() == 0 and t.PromisesOf(res) == 0
             out.Push(" " $ln.spell(res, true, true, g))
         }
         if es.Len() > 0 {
             out.Push(" ?")
             for i in range es.Len() { out.Push($(", " if i > 0 else " ") $ln.spell(t.ErrOf(es[i]), true)) }
         }
+        out.Push(t.PromiseText(ty))   # T21c: its promises after its signature
         if wrap { out.PushChar(')') }
         return out.ToString()
     }

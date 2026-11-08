@@ -260,6 +260,19 @@ fn (w mut writer&) sig(s ast.Sig&) {
     w.item = was
     if s.Commutes { w.put(" commutes") }
     w.errors(s)
+    w.promises(s.Promises)
+}
+
+# a function type's promises (T21c), one space apart: "keeps b in a.f", "borrows a", a word alone
+fn (w mut writer&) promises(ps Array<ast.Promise&>&) {
+    for x in ps {
+        w.put(" ")
+        w.put(x.Word.Text())
+        for i, n in x.Names {
+            w.put(" " if i == 0 else (" in " if i == 1 else "."))
+            w.name(n)
+        }
+    }
 }
 
 # a contract (D17): " [item, ...]" - its conditions
@@ -283,10 +296,11 @@ fn (w mut writer&) contractItem(st ast.Stmt&) {
     }
 }
 
-# whether a type is a function type with no error set of its own
+# whether a type is a function type with no error set of its own - and no promise after it, which ends it before a "?"
+# (T21c)
 fn noErrorsOf(t ast.TypeRef&) Bool {
     s := t.FuncSig()
-    return s is not null and not s.HasErrors
+    return s is not null and not s.HasErrors and s.Promises.Len() == 0
 }
 
 fn (w mut writer&) errors(s ast.Sig&) {

@@ -50,7 +50,8 @@ type Attr struct(Sp source.Span, X Expr&, Global source.NameId) {
 # set ("?" alone, R1a); NoReturn for "noreturn" where a result would stand (D8e)
 # a declaration's contract, null for none (D17)
 type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool, Errors Array<Path&>&, NoReturn Bool = false
-                Contract ContractBlock?& = null, Commutes Bool = false, Variadic Bool = false) {
+                Contract ContractBlock?& = null, Commutes Bool = false, Variadic Bool = false
+                Promises Array<Promise&>& = Array<Promise&>(0)) {
     Params
     Results
     HasErrors
@@ -59,6 +60,20 @@ type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool,
     Contract
     Commutes   # "commutes" after an operator method's result (E31c): the operator applies with its operands swapped too
     Variadic   # "..." after an extern's parameters (X17): C's variable arguments
+    Promises   # the words after a function type's signature (T21c), as written
+}
+
+# a promise after a function type's signature (T21c): its word, and the names it takes as written - "keeps b in a.f"
+# Keeps with [b, a, f], "borrows a" Borrows with [a], an effect word none
+type Promise struct(Sp source.Span, Word token.Tok, Names Array<source.NameId>&) {
+    Sp
+    Word
+    Names
+}
+
+# s with its promises (T21c)
+fn (s Sig&) WithPromises(ps Array<Promise&>&) Sig& {
+    return Sig(s.Params, s.Results, s.HasErrors, s.Errors, s.NoReturn, s.Contract, s.Commutes, s.Variadic, ps)
 }
 
 # a contract (D17): its bracketed block's span and its conditions as statements - each an Assert with no message
