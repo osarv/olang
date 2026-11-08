@@ -17,3 +17,4 @@ dependent agent before), bench, satarith, kw (round 1) - master 5ec9f2f9. Round 
 /home/user/wt/destroy. Known: the "many local ifs" check needs ~5 GB (pre-existing, not a regression) and is killed
 under a full verify's load - a fix to queue (memory of interpreting 20000 ifs). Refusal answers: 1,2,3,6 yes; 4 to
 discuss; 5 open.
+2026-11-08 ~13:25 CET: round 2 (Destroy removed, wt-destroy f4b9ed62) merged into wt-merge, full verify running. Follow-ups from its report: (a) std/net constructors inconsistent - UDP.Listen now returns UDP by value, Listener.Listen/Conn.Dial still mut X&; decide (lean: all by value, T13b) and fold into a small std fix; (b) free.olang's dtorVal/dtorCand kept only for the RDtor row - simplify later; (c) diag golden on master had been stale (b11near [M9], m9builderold) - fixed by the recapture.
