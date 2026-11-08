@@ -35001,3 +35001,94 @@ base commit's compiler/ and bench/ sources and the check's program built by the 
 Lowerer's result scope is, the checker's, so a build's memory is the sum over its functions rather than the largest.
 Freeing it per function would need the lowering's state apart from what it holds writably (the Lowerer, the type
 table) - a restructuring of lower.olang, not done here.
+
+## Facts with readers replace "one module at a time" (B3i; 2026-11-08, wt-wpplan, docs/wholeprog.md)
+
+The rule "compile per module, whole program only on top" (the user, 2026-11-08 morning) kept meeting facts that need the
+whole program: early freeing in code of a module compiled on its own, field slots holding storage of two scopes
+(docs/refusals.md, question 4), function values followed into calls, G42's facts about C, genrefs' holder records. The
+user asked for it to be rescoped, and docs/wholeprog.md surveyed it. Its findings: the front end already checks the whole
+program from source every build, so what the rule limits is what a module's *object* may depend on. The largest loss
+was early freeing outside the root's object: the earlyfree fixture `session.olang` peaks at 12.6 MB as one module and
+at 260 MB with its type moved into a module of its own - how every library's non-generic type is written - and LTO
+cannot recover it, because where storage is built is decided before LLVM sees the code. One whole-program fact already
+leaked across the boundary, wrongly: G42's `WritesGlobals` read in a body, reused from a record made by another program
+in the same directory (section 8; fixed on wt-reusekey).
+
+**The answers** (the user, 2026-11-08 evening): "If we are going to do it eventually, just do it now, because we are
+building the language now and we don't want to do too many refactorings and full verifies. On all of the ones you
+recommended, yes, do yes." So: (1) facts with readers replace the rule - a whole-program fact reaches code as a
+link-time constant where it chooses between two paths at a site, in the root's object where it makes code that exists
+for this program alone, and in a module's object keyed by the fact's hash only where neither fits; objects stay shared
+between programs wherever no program fact reaches them. (2) Early freeing in every module through link-time constants.
+(3) At a precompiled module's boundary the defining module decides, written into SPEC B3i now, so the field-set work is
+designed to it. (4) Field sets of two scopes are allowed. (5) The incremental front end, recommended "not now", is
+built now: "if we're gonna build the fifth one eventually, just do it now. Build it with a lot of testing though,
+because ... one small bug there can be disastrous. Not necessarily that you're gonna do a lot of verifies now, but you
+want the testing suites to cover it really." Compiling the program as one unit stays declined: it would give up the
+object sharing that took the test build of tests/shared.olang from 223 s to 55 s, for gains LTO already gives.
+
+**B3i's boundary rule, as written.** A module whose object is made apart from the program using it (by `compile`, or
+kept as a library of objects) decides from itself alone: where its code's storage is placed, what it frees early, which
+scopes its fields may be given. A program using it never changes what its object does; a store of the program's that
+would widen one of its fields is an error at that store, never inside the library. This keeps `olang api` honest: a
+library's decisions are part of what it exports. It is written in general terms; generational types join it with T13d
+when genrefs' round G1 is built.
+
+**The build order** (docs/wholeprog.md section 10) merges this note's rounds (W1 facts with readers and the testing
+harness, W2 early freeing in every module, W3a and W3b the incremental front end, W4 field sets) with fnvalues' rounds
+6-12, refusals' R1-R4 and R6-R8 and genrefs' rounds (below), in two lanes: the rounds changing scope.olang's judgments one at a time, and beside
+each a round whose files are apart. Shared work is done once: the build records (W0, W1, W3), free.olang's final step
+(W2 before F7 and F10 change what it reads), the program's stores into a field (W4, read again by F12), and the front
+end's summaries cached only after the scope-pass rounds have changed their shape. The incremental build is tested
+inside the ordinary suite rather than by extra verifies: reads of whole-program facts that cannot bypass the record (the
+tables private to their modules), a scenario editing every kind of fact and comparing each incremental build with a clean
+one (objects, output, `-memory`, explain, diagnostics, and exactly the expected modules lowered again),
+`OLANG_CHECKREUSE` and a front-end `OLANG_CHECKINCR` over the whole suite in one shared directory, an edit fuzzer on
+scopegen's generator, damaged and contended records, a replay of the compiler's last 100 commits, and the language
+server's edit sequences.
+
+## Back links are `weak`: genrefs decided (T2d, T13d, O8e; 2026-11-08, wt-wpplan, docs/genrefs.md)
+
+docs/genrefs.md designed freeing what a long-lived linked structure removes before its scope closes: today a node
+linked from another node, or pointed back at, has two holders, so O8d frees none of it (a singly linked stack keeps
+17.9 MB of nodes for 100 live, an LRU 44.4 MB, against 1.8 MB). The user answered its questions in steps the same
+evening, after the wholeprog answers.
+
+**`weak`** (question 1, "Yes, record weak is decided"). Back links are written `weak` before a `?&` in a stored position;
+every other holding place owns. The user weighed `?&` alone, `!`, `back`, `unowned`, and an `owned`/`unowned` pair
+replacing `unique`, and declined them all, so `unique` and `weak` stay. Inference was not possible: nothing tells
+`next` from `prev` in a symmetric list, and a wrong guess breaks the program rather than costing memory.
+
+**Two rules** ("Yes, do them both"). (a) A weak read gives `null` as soon as no owning place holds the node, through the
+count of owning places in the header word the read loads anyway for the generation. That makes the holder record the
+count, 0-3 saturating, in two bits of that word (question 3's (b), measured at 1.7 MB on the LRU where the held bit
+with pins grew to 13 MB and needed a "clear first" idiom); (a)'s pins and the idiom are not built. It counts places,
+never references - nothing at a local, an argument, a return or a copy into a frame - so it is not reference counting's
+per-copy cost; a cycle never reaches 0 and stays until its scope closes. With (a), what a weak read answers follows the
+program's own stores into owning places, and the compiler decides only when the storage is reclaimed. (b) Storing a
+fresh node only into weak places (it would read `null` at once), and a type weak references name that no owning place
+of the program holds, are compile-time errors - the second judged over the whole program.
+
+**Question 2** (when a weak read turns `null` is the compiler's, as every language's weak reference): yes - "this is ...
+the entire point of having weak links". After (a) it covers only the count's over-statements (a node held by three
+owning places pins its count; a let-go no code records), which keep memory and keep a weak read giving the node.
+**Question 4** (generational per module or per program) was superseded by the wholeprog answers: a type is generational
+where any module names it weakly, and holder facts come from the whole program; the error for a by-value slot is said
+at the `weak` that made the type generational, and at a precompiled boundary the defining module decides (B3i). The
+status reaches code as a fact keying the objects of modules that allocate or store the type, rather than as a
+link-time constant, which would cost a load and a branch at every allocation of every struct type in `-quick` and
+`-debug` builds (mine). **Question 5** (every module's let-go sites): yes - "especially now since we have whole
+program compilation ... there's no difference between these kind of things anymore"; it is wholeprog's W2, which
+genrefs' round 7 joins. **Question 6**: `std/pool`, a slotmap of generational handles, yes (wt-pool2).
+
+**The one-holder rule** (the user's, from the discussion): nodes only ever held by one owning link are freed early,
+decided at compile time only. A type whose every store of an existing instance into an owning place is a transfer (the
+old value into the new, or the new out of the old) needs no count read to be reclaimed at its owning place's let-go;
+for a type no `weak` names it needs no header at all, so the plain linked stack frees too.
+
+The rounds (genrefs section 13 as revised, placed in docs/wholeprog.md section 10): G1 `weak` and generational types
+with the two errors; G2+G3 the header, the weak word, the count (weak reads give `null` from here, before anything is
+reclaimed) and the one-holder classification; G4 reclaiming, its sites in every module through W2; G5+G6 an instance's
+own arrays and the fuzzers. "No reference counting" stands: the count is of owning places in a header word that
+generational types alone carry.

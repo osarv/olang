@@ -632,9 +632,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `take`, loans and borrowed copies are removed. Early freeing keeps wherever a fact is missing (function values,
   externs, a module compiled on its own, tasks, destructors); `-memory` (B18) lists what keeps and why.
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
-  ownership keeps memory until its scope closes; for structures that churn, generational back-pointers instead (owning
-  links inferred, back-pointers `?&` with a generation, a freed node's back-pointers reading null; docs/genrefs.md,
-  design running). The memory model may grow by additions with no run-time cost (the user, 2026-11-03).
+  ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
+  use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by
+  additions with no run-time cost (the user, 2026-11-03).
+- **Back links are `weak` (T2d, T13d, O8e; the user's decisions 2026-11-08 evening, docs/genrefs.md 0.1; decided, being
+  built).** `prev weak mut Node?&` in a stored position holds without keeping; every other holding place owns. A type
+  any module names weakly is generational: held only by reference, one header word (generation and a count of owning
+  places, 0-3). A weak read gives `null` as soon as no owning place holds the node (the user: "the entire point of
+  having weak links"); reclaiming where the last owner lets go, in every module. Errors: a fresh node stored only into
+  weak places; a weakly named type no owning place of the program holds. Nodes only ever held by one owning link are
+  freed at compile time alone (the one-holder rule). `unique` and `weak` stay (alternatives declined); `std/pool` beside.
 - **Recorded limits:** long-lived mutated structures holding values a task can reach still only grow (ledger QF); a
   `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left (the refusal audit,
   docs/refusals.md, 2026-11-08, sorts them by cause; the user's yes the same day, rounds R6/R8: what a global keeps
@@ -675,11 +682,19 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Remote packages** are fetched with git into a cache keyed by commit and pinned by `olang.lock` (M23b, the user's
   call); `-update` updates (M23c). Versions DECIDED 2026-11-07 (the user: "Yeah, go with the cargo model"): `olang get
   pkg` takes the newest same-major version and records it in olang.lock; `-update` moves all; `pkg@v1.2` pins.
-- **Separate compilation (B1-B8).** `compile` one module, `build` build and link, `test` each file's tests in a process
-  of its own (B3a), `interpret` through the evaluator (B3e). Imports are resolved from source. Globals initialize
-  imports first, then in dependency order (B5a). No interface file exists because scope obligations are derived from
-  bodies. The checker reads the whole program from source while objects stay per module and unchanged ones are reused
-  (B3i); whole-program compilation is not required (the user's question 2026-11-08).
+- **Separate compilation; facts with readers (B1-B8, B3i; the user's decision 2026-11-08 evening, docs/wholeprog.md:
+  "If we are going to do it eventually, just do it now").** `compile` one module, `build` build and link, `test` each
+  file's tests in a process of its own (B3a), `interpret` through the evaluator (B3e). Imports are resolved from source;
+  globals initialize imports first, then in dependency order (B5a). No interface file: records are a cache of what
+  the source says. **Decided, being built** (docs/wholeprog.md section 10): facts with readers replace "one module at a
+  time" - the front end may use whole-program facts, each recording the modules that read it, reaching code as a
+  link-time constant (a choice at a site, folded by LTO), in the root's object (code for this program), or in a
+  module's object keyed by the facts it read; an object is reused unless its module, its imports or a fact it read
+  changed, and stays shared between programs where no program fact reaches it. Early freeing in every module through
+  the constants; field sets of two scopes; the front end incremental on the same records, tested against clean builds
+  in the suite. **At a precompiled module's boundary the defining module decides (B3i)**: its decisions from its own
+  code, a store of the program's widening its field refused at that store. Compiling the program as one unit:
+  declined.
 - **Optimization (B2c-B2e):** `-O3` and full LTO by default (ThinLTO for a program of 8 MB of IR or more); `-debug` is
   `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize` the scope sanitizer (B2f).
 - **Targets (B12, the user's call):** native CPU by default, `-target NAME` to cross-compile; target constants

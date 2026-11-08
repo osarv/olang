@@ -1,7 +1,8 @@
 # Weak references with generations: freeing a removed node early (genrefs)
 
-The design note for freeing what a long-lived structure removes before the structure's scope closes (2026-11-08, for
-review; nothing built). The user, 2026-11-08, after dropping the reference-counting carve-out (QCR 2): "if you hold
+The design note for freeing what a long-lived structure removes before the structure's scope closes (2026-11-08;
+**every question decided by the user the same evening**, section 15; nothing built yet - the build order is
+docs/wholeprog.md section 10). The user, 2026-11-08, after dropping the reference-counting carve-out (QCR 2): "if you hold
 something that can be freed earlier, and that thing is kind of let go of scope-wise, that reference then points into
 something that's guaranteed to be null, and then you must always check those references." The coordinator's framing
 (owning links inferred, back links generational as in Vale, the generation word before the allocation, nothing
@@ -33,8 +34,49 @@ Hand-off for a fresh agent after a restart. Output: this file, one line in docs/
 - [x] counted (section 10): `?&` in std/ and compiler/, back links in the corpus, uses of the name `weak`
 - [x] the coordinator's constraints folded in (per-module facts; whole-program variants as questions 4 and 5)
 - [x] sections 0-15
-- next: nothing - the note is complete; a build starts from section 13's round 1 once questions 1-3 are answered (the
-  rounds before the holder record do not depend on question 3)
+- [x] the user's answers folded in (2026-11-08 evening, section 15): `weak` written; a weak read gives `null` as soon as
+  no owning place holds its node, through the count (so the holder record is (b)); a fresh node stored only into weak
+  places, or a weakly named type held owning nowhere, is an error; generational status and holder facts from the whole
+  program (docs/wholeprog.md's facts with readers); every module's let-go sites (round 7, folded into wholeprog's W2);
+  the one-holder rule; `std/pool`. Where the text below still describes (a) or a per-module decision, sections 0.1 and
+  15 govern.
+- next: the build, in docs/wholeprog.md section 10's order
+
+## 0.1 Decided (the user, 2026-11-08 evening)
+
+What changes in the design below, in one place:
+
+1. **`weak`** is written on back links (T2d), as designed. The user weighed `?&` alone, `!`, `back`, `unowned`, and an
+   `owned`/`unowned` pair replacing `unique`, and declined them all: `unique` and `weak` stay.
+2. **A weak read gives `null` as soon as no owning place holds its node** - not only once the node is reclaimed - through
+   the count of owning places in the header word the read loads anyway (4.2). So the holder record is the count, (b)
+   of 2.4; (a), its pins and the "clear first" idiom are not built. The transfers of 5.2 are kept only for the one-holder
+   rule (item 5). A weak read's answer therefore follows the program's own stores into owning places; what stays the
+   compiler's (question 2, accepted) is only when the storage is reclaimed, and the count's over-statements (a node held
+   by three owning places at once pins its count; a let-go no code records) - both keep memory, and keep a weak read
+   giving the node, never the reverse.
+3. **Two compile-time errors** (T2d): storing a fresh node only into weak places (it would read `null` at once); and a
+   type that weak references name but no owning place of the program holds - a whole-program check, an acceptance fact
+   (docs/wholeprog.md, kind A).
+4. **Whole-program facts** (question 4, superseded by docs/wholeprog.md's facts with readers): a type is generational
+   where any module of the program names it weakly, and its holder facts come from the whole program. The error for a
+   slot holding it by value, where that slot is in another module than the `weak`, is said at the `weak` (the code that
+   widened the decision); at a precompiled module's boundary the defining module decides (SPEC B3i), so an importer's
+   `weak` to a precompiled type its module does not make generational is an error at that `weak`. The status reaches
+   code as a fact read by each module allocating or storing the type, keying its object (wholeprog kind D): it flips
+   only when the first `weak` to a type is written or the last removed, and kind B would put a load and a branch at every
+   allocation and owning store of every struct type in `-quick` and `-debug` builds.
+5. **The one-holder rule** (the user's): a type whose instances the compiler shows are never held by two owning places at
+   once - weak places not counting, every store of an existing instance into an owning place a transfer of 5.2's shapes
+   - is reclaimed where its owning place lets go of it (judged for references in use by 5.3), decided at compile time
+   only, with no count read. For a type no weak reference names it needs no header at all: an extension of O8d to
+   linked structures (the stack of section 1 is one). A store that is no transfer, anywhere in the program, makes the
+   type not qualify (a whole-program fact), and `-memory` names that store.
+6. **Every module's let-go sites reclaim** (question 5, round 7): the same mechanism as docs/wholeprog.md's early freeing
+   in every module, so round 7 is folded into wholeprog's round W2, and round 4's sites are emitted in every module
+   from the start.
+7. **`std/pool`** (question 6) is being built (wt-pool2).
+
 
 ## 0. Summary
 
@@ -233,7 +275,7 @@ Measured (8.2, a C simulation of the run-time half; "today" is an arena that fre
 (a) works where the compiler recognizes the transfers and the program clears a link before relinking it; with the
 transfers alone the LRU still pins one node in four (each move-to-front's `p.next = q` while `n.next` still names
 `q`), so its memory still grows. (b) works as written. Both are faster than today's arena on these loops (reclaimed
-slots are reused while hot; today every node touches a fresh page). Question 3; the default, until it is answered, is
+slots are reused while hot; today every node touches a fresh page). **Decided: (b)** (0.1, item 2). Before the answer, the default was
 (a) - the user's "no counting" - and every round before the holder record is the same for both.
 
 Either record is a cache of a fact, kept on the safe side: a store always records a holder, a let-go missed (an owning
@@ -272,24 +314,30 @@ ref-type    ::= [ "weak" ] [ "mut" ] type-ref          (* "weak" only with the m
 **weak reference**, written only where a value is stored: a field (a constructor's field included, C2a), a payload
 field of an enum case, the element type of an array or a type argument a type stores (`Array<weak Node?&>`,
 `Vec<weak Node?&>`, `Map<String, weak mut Node?&>`), or a global. A place of that type is a **weak place**: it holds its
-referent without keeping it. Reading it gives a `T?&` - the referent, or `null` once the referent has been reclaimed
+referent without keeping it. Reading it gives a `T?&` - the referent, or `null` once no owning place holds the referent
 (O8e); what is read is an ordinary `T?&`, narrowed by a test of a local (S8e) as any other. Everything else is a
 `T?&`'s: it is given any `T&` or `T?&`, compared by `==` (by identity, or `Eq`, E10), rendered by `$`, its permission
 the reference's (T25b). `weak` before a never-null reference (`weak Node&`), on a local, a parameter, a receiver, a
 result, a function type's parameter or result, before an array, a function type, an `any`, an extern type (X10) or a
 number is a compile-time error - naming `?&` for the never-null one, a stored position for the others; a type variable
-(`weak T?&` in a generic) is judged where its instance is asked for (G18a). A weak reference to a type that is not
-generational (T13d) holds its referent as any reference does: it reads `null` only where `null` was stored.
+(`weak T?&` in a generic) is judged where its instance is asked for (G18a). Two more errors (0.1, item 3): a body that
+makes an instance (a constructor, or a call giving a new one) and stores it into weak places while no path of the body
+stores it into an owning place, returns it, or hands it to a callee that may keep it - it would read `null` at once -
+is a compile-time error at the store, naming an owning place to store it into first; and a weak reference to a type no
+owning place of the program holds (a field, an element, a payload or a global holding it other than weakly) is a
+compile-time error at the `weak`, judged over the whole program.
 
-**T13d (generational types).** A struct or enum type whose own module names it in a weak reference (T2d) - `type Node
+**T13d (generational types).** A struct or enum type that any module of the program names in a weak reference (T2d;
+0.1, item 4) - `type Node
 struct(v I64) { v  next mut Node?& = null  prev weak mut Node?& = null }` - is **generational**: each of its values is an
 instance with an identity of its own, held only by reference. `n := Node(1)` makes `n` a `mut Node&` naming a new
 instance (built where O28 places it); a slot laid out for a value of it - a local written `x Node`, a field, an element,
 a payload, a parameter, a receiver or a result typed `Node`, an array of `Node` by value - is a compile-time error naming
 `Node&`. It may not be declared `unique` (T13b) - an error naming T13d - and a destructor does not make it unique (C11):
 no value of it is ever copied, only referenced, so each instance's destructor runs once (O15, O16). `x.Copy()` makes a
-new instance (E31d), but of a type declaring a destructor, where it is an error. Whether a type is generational is its
-own module's to say; its importers read it as they read its fields.
+new instance (E31d), but of a type declaring a destructor, where it is an error. Whether a type is generational is a
+fact of the whole program; where the `weak` making it so and a by-value slot are in different modules, the error is at
+the `weak`, and a type of a precompiled module is generational only where its own module names it weakly (B3i).
 
 **O8e (reclaiming an instance of a generational type).** An instance of a generational type is held by the **owning
 places** holding a reference to it - every place in a scope's storage but a weak place: a field of an instance, an
@@ -302,7 +350,8 @@ reference in use reaching it, where the compiler shows both; at the latest as it
 reclaimed early where O8d's conditions 3 or 4 forbid it - something it holds reached by two threads or by C able to call
 back, a destructor still to run - nor where the program's run cannot tell that the last owning place let go (an
 instance two owning places held at once whose second store was no recognized transfer, in the implementation without a
-count). From the moment it is reclaimed every weak place given it reads `null`; nothing else a program reads changes.
+count). From the moment no owning place holds it every weak place given it reads `null` (whether or not it is reclaimed
+yet); nothing else a program reads changes.
 Where an instance is reclaimed and where it is kept, and why, `-memory` reports (B18). O8d's conditions 1 and 2 are not
 asked of a generational type's instances: which owning places hold one is followed while the program runs, and a weak
 place is no holder.
@@ -311,7 +360,7 @@ place is no holder.
 "Reclaiming early changes no value a program can read" gains "but a weak place's (O8e)".
 
 **T2c** gains, after "a narrowing of a field path can still meet a null that a call stored there": "and a weak place
-reads `null` once its referent is reclaimed (O8e), with no store to it - read it into a local and test that (S8e)". S8d
+reads `null` once no owning place holds its referent (O8e), with no store to it - read it into a local and test that (S8e)". S8d
 and S8e are unchanged: a field never narrows, weak or not, so `p := n.prev; if p is not null { p.v }` is the form, as
 for any field, and `n.prev!.v` ends the program on a gone node as on a null one.
 
@@ -367,13 +416,14 @@ are not clear - a machine where it would is not one olang targets.
 ```
 read  x.prev:   w = load x.prev
                 p = w & 0x0000ffffffffffff
-                g = load16 (p - 8)                  ; only where p != 0
-                r = (p != 0 and g == w >> 48) ? p : null
+                h = load32 (p - 8)                  ; only where p != 0: generation and count in one load
+                r = (p != 0 and h & 0xffff == w >> 48 and h >> 16 & 3 != 0) ? p : null
 store x.prev = r:   w = r == null ? 0 : r | (load16 (r - 8) << 48)
 copy  a.prev = b.prev:   the word copied as it is (no check: the copy says what the source said)
 ```
 
-The read is one load (the header, on the instance's own cache line in most cases), a compare and a select; the store
+The read is one load (the header, on the instance's own cache line in most cases), two compares and a select - the
+count's test (0.1, item 2: no owning place, `null`) rides on the load the generation needs; the store
 one load, a shift and an or. Values read are plain `T?&` from then on - one representation for every local, so no
 weak value flows into code that does not expect it. The check is paid where the program reads a field it declared
 `weak` - shown in the declaration, as `mut` shows what a store may do - never per use of what was read.
@@ -533,7 +583,7 @@ holder records and never reclaims early - as O8d's let-gos there never free toda
 generic structure (`List<T>`, a user's `DList<T>`) is emitted in the root's object and reclaims. So the per-module
 constraint costs memory in one case: a non-generic structure's let-go sites in a module of its own, which keep.
 
-**The whole-program variants** (questions 4 and 5):
+**The whole-program variants** (questions 4 and 5 - both decided for the whole program, 0.1; the per-module text above is superseded):
 
 - **Generational by any module's `weak`** (question 4). The final step would decide that a type is generational where
   any module names it weakly. Every module allocating the type, or storing it into an owning place, would have to emit
@@ -690,6 +740,13 @@ written in. Both are worth having: a pool is a few hundred lines of std, buildab
 
 ## 13. The build plan
 
+As decided (0.1), the rounds change so: round 1 adds T2d's two errors (the whole-program one through docs/wholeprog.md's
+facts, W1) and decides generational status over the program; round 2 and round 3 are one round, the count with (a)'s
+weak read built in it (a weak read gives `null` from round 3 on, before anything is reclaimed) and the one-holder
+rule's classification; (a)'s pins and the "clear first" idiom are not built; round 4 reclaims counted types and
+one-holder types alike, its sites in every module through wholeprog's W2 (round 7 is W2); round 8 is being built
+(wt-pool2). Their places among the other rounds are docs/wholeprog.md section 10.
+
 Each round: spec first, then the checker and codegen, the evaluator in agreement, tests (corpus tests read back after
 an arena churn, as tests/nll.olang does; run cases reading their own peak through VmHWM, as checks/cases/mapchurn
 does; checks cases naming each new diagnostic; a test the evaluator decides beside each run-time test), the records,
@@ -738,12 +795,12 @@ part when the instance is generational, and reclaimed by the cascade's per-type 
 `fuzz free`'s generator writes linked structures with weak places, moves and references kept across calls; scopefuzz's
 stores include weak places; a soundness review of rounds 3-5 (the record never under-states, 5.3's judging by type).
 
-### Round 7 - every module's let-go sites (only if question 5 says yes; opus, high)
+### Round 7 - every module's let-go sites (decided; folded into docs/wholeprog.md's round W2)
 
 Link-time constants per let-go site and orphan check, for O8d's places and this note's alike; a measure of `-quick`
 builds' cost.
 
-### Round 8 - a std pool of generational handles (only if question 6 says yes; sonnet, medium)
+### Round 8 - a std pool of generational handles (decided; being built on wt-pool2; sonnet, medium)
 
 `std/pool`: `Pool<T>`, `Handle`, `Add`, `Get`/`Ref`/`RefMut` failing with `PoolError.Stale`, `Remove`, walks; tests
 and examples (B7a); any time, independent of the rest.
@@ -756,8 +813,9 @@ and examples (B7a); any time, independent of the rest.
    globals); never on locals, parameters, results or function types.
 3. **The check is at the read of a weak place**, not at a later `is null`: values read are ordinary `T?&`, so no weak
    value reaches code that does not expect one; one check per read, shown by the declaration.
-4. **A type is generational by its own module's `weak` references** (the coordinator's constraint); an importer's `weak`
-   to a non-generational type holds strongly, and `-memory` says so.
+4. ~~A type is generational by its own module's `weak` references~~ - **revised by the user's answer to question 4**
+   (0.1, item 4): a type is generational where any module of the program names it weakly, and its holder facts come
+   from the whole program (facts with readers); at a precompiled boundary its own module decides.
 5. **Generational types are held only by reference** and are never `unique`; a destructor does not make one unique
    (C11 relaxed for them); `Copy()` makes a new instance unless the type has a destructor.
 6. **One header word before the allocation**: 16-bit generation, 2-bit holder record; `T.Size` and layouts unchanged.
@@ -767,8 +825,8 @@ and examples (B7a); any time, independent of the rest.
    or epochs per chunk).
 9. **Reclaimed slots go to per-class free lists of their scope part**, found by address (fnvalues O29); instances above
    2 KB are not reclaimed early.
-10. **Where an instance is reclaimed is O8d's final step**, in the root's object as early freeing is today (question 5
-    for every module).
+10. **Where an instance is reclaimed is O8d's final step**, delivered to every module's let-go sites (question 5,
+    answered yes: docs/wholeprog.md's W2).
 11. **Condition 6 widened by type** for references in use, refined by run-time compares with the body's own locals,
     orphans checked at last uses, and results that may be orphans.
 12. **An instance with a destructor still to run is never reclaimed early** (condition 4 kept): its destructor at its
@@ -778,10 +836,21 @@ and examples (B7a); any time, independent of the rest.
 15. **Compile-time evaluation refuses a weak read whose referent no owning place holds**, rather than guess; `interpret`
     follows the plans.
 16. **Making a type generational and making a field weak are breaking changes** for `olang api`.
-17. **Holder record (a) is the default** until question 3 is answered, the rounds ordered so nothing before round 3
-    depends on it.
+17. ~~Holder record (a) is the default~~ - **the count (b), decided** (0.1, item 2).
 
-## 15. Direction questions
+## 15. Direction questions - all answered 2026-11-08
+
+**Answered** by the user, 2026-11-08 evening, in steps. Question 1: "Yes, record weak is decided" (after weighing `?&`
+alone, `!`, `back`, `unowned`, and an `owned`/`unowned` pair replacing `unique` - all declined, so `unique` and `weak`
+stay). Two rules, "Yes, do them both": a weak read gives `null` as soon as no owning place holds the node, through the
+count in the header word the read loads anyway - which answers question 3 with (b) - and a fresh node stored only into
+weak places, or a type weak links name held owning nowhere (a whole-program check), is a compile-time error. Question
+6: yes (`std/pool`, wt-pool2). Question 2: yes - "this is ... the entire point of having weak links". Question 5: yes -
+"especially now since we have whole program compilation ... there's no difference between these kind of things
+anymore". Question 4 is superseded by docs/wholeprog.md's facts with readers (the user's yes to its questions the same
+evening): generational status and holder facts from the whole program. And the one-holder rule (the user's, from the
+discussion): nodes only ever held by one owning link are freed early, decided at compile time only. Section 0.1 says
+what each changes. The questions as they were asked:
 
 1. **`weak` as a written word** - one keyword before a nullable reference in a stored position (`prev weak mut Node?&`),
    the owning side everything else. The brief asked for no syntax unless it must be written; it must, I think: no rule
