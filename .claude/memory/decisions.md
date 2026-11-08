@@ -1005,3 +1005,10 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   L9b/L9c's words of one place (`commutes`, `immut`, `unique`, `packed`, `any`) made plain keywords too - L9a already
   lets any keyword name a field or method after `.`, a tool renames the locals/functions using them. ASKED (the note
   wt-fnvalues told to carry it as a question).
+- The user 2026-11-08: "isn't halts and no return the same thing? ... how do we know which keywords should be within the
+  brackets and which should be outside? ... unique ... commutes?" Answered: opposites (noreturn: never returns; the
+  other: always returns; most functions are neither) - `halts` renamed `terminates` (it read as "stops the program";
+  matches G42's `f.Terminates`). Placement rule PROPOSED: brackets hold what a function's body is held to and callers
+  rely on - conditions on arguments and promises about the body, all checked; declaration words say what a type or
+  method IS (`unique`, `immut`, `packed`: how values are laid out, copied, changed; `commutes`: defines what `2.0 * v`
+  means, claims nothing) - they stay outside; `noreturn` moves in (checked against the body, D8e). Sent to the note.
