@@ -1,0 +1,53 @@
+# a doubly linked list churning in main's scope: 1M pushes at the back and pops at the front, at most 100 nodes live;
+# each node carries a 64-byte payload so a kept node is visible in the peak
+import "std/io"
+import "std/time"
+import "peak"
+
+type Node struct(v I64) {
+    v
+    pad Array<I64> = Array<I64>(8, 0)
+    next mut Node?& = null
+    prev mut Node?& = null
+}
+
+type DList struct() {
+    head mut Node?& = null
+    tail mut Node?& = null
+    n I64 = 0
+}
+
+fn (l mut DList&) PushBack(v I64) {
+    nd := Node(v)
+    t := l.tail
+    if t is null {
+        l.head = nd
+    } else {
+        t.next = nd
+        nd.prev = t
+    }
+    l.tail = nd
+    l.n++
+}
+
+fn (l mut DList&) PopFront() I64 {
+    h := l.head!
+    v := h.v
+    q := h.next
+    l.head = q
+    if q is null { l.tail = null } else { q.prev = null }
+    l.n--
+    return v
+}
+
+fn main() ? io.Error {
+    t0 := time.Now()
+    l := DList()
+    total := 0
+    for i in range 1000000 {
+        l.PushBack(i)
+        if l.n > 100: total += l.PopFront()
+    }
+    ms := time.Since(t0) / 1000000
+    try io.Println("dlist: total " $total " peak " $peak.PeakKb() " KB, " $ms " ms")
+}

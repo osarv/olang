@@ -1,0 +1,66 @@
+# an LRU cache of 1000 entries churning in main's scope: 1M lookups of pseudo-random keys out of 4000, each miss
+# evicting the least recently used entry; a node holds its key's text, the list owns the nodes and a Map finds them
+import "std/io"
+import "std/time"
+import "peak"
+
+type Node struct(key String, v I64) {
+    key
+    v
+    next mut Node?& = null
+    prev mut Node?& = null
+}
+
+type Lru struct(cap I64) {
+    cap
+    head mut Node?& = null
+    tail mut Node?& = null
+    at Map<String, mut Node&> = Map<String, mut Node&>()
+}
+
+fn (c mut Lru&) unlink(n mut Node&) {
+    p := n.prev
+    q := n.next
+    if p is null { c.head = q } else { p.next = q }
+    if q is null { c.tail = p } else { q.prev = p }
+    n.prev = null
+    n.next = null
+}
+
+fn (c mut Lru&) pushFront(n mut Node&) {
+    h := c.head
+    n.next = h
+    if h is null { c.tail = n } else { h.prev = n }
+    c.head = n
+}
+
+fn (c mut Lru&) Get(k String&, v I64) I64 {
+    n := try c.at.Get(k) catch {
+        if c.at.Len() >= c.cap {
+            old := c.tail!
+            c.unlink(old)
+            assert c.at.Remove(old.key)
+        }
+        fresh := Node(k, v)
+        c.at.Put(k, fresh)
+        c.pushFront(fresh)
+        return v
+    }
+    c.unlink(n)
+    c.pushFront(n)
+    return n.v
+}
+
+fn main() ? io.Error {
+    t0 := time.Now()
+    c := Lru(1000)
+    total := 0
+    x := 777
+    for _ in range 1000000 {
+        x = (x * 1103515245 + 12345) % 2147483648
+        k := x % 4000
+        total += c.Get("key-" $k, k)
+    }
+    ms := time.Since(t0) / 1000000
+    try io.Println("lru: total " $total " peak " $peak.PeakKb() " KB, " $ms " ms")
+}

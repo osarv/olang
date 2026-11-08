@@ -1,0 +1,38 @@
+# a singly linked stack churning in main's scope: 1M pushes and pops, at most 100 nodes live
+import "std/io"
+import "std/time"
+import "peak"
+
+type Node struct(v I64, next Node?&) {
+    v
+    next
+}
+
+type Stack struct() {
+    head Node?& = null
+    n I64 = 0
+}
+
+fn (s mut Stack&) Push(v I64) {
+    s.head = Node(v, s.head)
+    s.n++
+}
+
+fn (s mut Stack&) Pop() I64 {
+    h := s.head!
+    s.head = h.next
+    s.n--
+    return h.v
+}
+
+fn main() ? io.Error {
+    t0 := time.Now()
+    s := Stack()
+    total := 0
+    for i in range 1000000 {
+        s.Push(i)
+        if s.n > 100: total += s.Pop()
+    }
+    ms := time.Since(t0) / 1000000
+    try io.Println("stack: total " $total " peak " $peak.PeakKb() " KB, " $ms " ms")
+}
