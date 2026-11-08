@@ -41,7 +41,7 @@ fn workers() I64 {
 # a failure, never skipped.
 Scenarios := Array<String&>["fix", "strheld", "fuzz", "testfuzz", "bench", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
                      "scopesan", "frameenv", "crash", "interp", "target", "assertloc", "objnames", "spawnerr", "generators", "runfile"
-                     "chunkpool", "capscope", "reuse", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
+                     "chunkpool", "capscope", "reuse", "reusefact", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
@@ -419,6 +419,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "pkg" { try pkg(r) }
         case "stale" { try stale(r) }
         case "reuse" { try reuse(r) }
+        case "reusefact" { try reusefact(r) }
         case "embed" { try embedded(r) }
         case "interp" { try interp(r) }
         case "osargs" { try osargs(r) }
@@ -918,6 +919,28 @@ fn reuse(r mut report&) ? Failed {
                     "catch { }\\n}/' anyapp.olang && OLANG_CHECKREUSE=1 \"$OLANG\" build anyapp.olang > out.txt 2>&1 && " $
                     "./build/anyapp > run.txt") == 0, "anyapp's build calling Count through the any", dir)
     try r.expect(outOf(dir).Contains(same) and sh(dir, "grep -qx 'count 3' run.txt") == 0, "anyapp's run calling Count", dir)
+}
+
+# B3i, G42, E31b: a module's code a fact of the whole program decides (whether C may call the program back) - its record
+# is kept per answer, so a second program built in the same directory gives the answer its own clean build gives, and
+# OLANG_CHECKREUSE finds every reused object the one written afresh (docs/wholeprog.md section 8)
+test "a module's record is reused only by a program whose facts read alike" { assert passed("reusefact") }
+
+fn reusefact(r mut report&) ? Failed {
+    dir := fresh("reusefact")
+    os.Run("cp checks/fixtures/reusefact/* " $os.Quote(dir))
+    same := "modules reused, every object the same"
+    try r.expect(sh(dir, "\"$OLANG\" build back.olang > out.txt 2>&1 && ./build/back > run.txt") == 0, "back's build", dir)
+    try r.expect(sh(dir, "grep -qx 'false false 14' run.txt") == 0, "back's run: expected 'false false 14'", dir)
+    # uid's and bake's records made by back's build: not quiet's, which reads uid's facts otherwise
+    try r.expect(sh(dir, "\"$OLANG\" build quiet.olang > out.txt 2>&1 && ./build/quiet > run.txt") == 0, "quiet's build", dir)
+    try r.expect(sh(dir, "grep -qx 'true true 14' run.txt") == 0, "quiet's run after back's build: expected 'true true 14'", dir)
+    for prog in Array<String&>["back", "quiet"] {
+        try r.expect(sh(dir, $"OLANG_CHECKREUSE=1 \"$OLANG\" build " $prog ".olang > out.txt 2>&1 && ./build/" $prog " > run.txt") == 0
+                     $prog "'s build under OLANG_CHECKREUSE", dir)
+        try r.expect(outOf(dir).Contains(same), $prog "'s reused objects: expected '" $same "'", dir)
+    }
+    try r.expect(sh(dir, "grep -qx 'true true 14' run.txt") == 0, "quiet's run, reused: expected 'true true 14'", dir)
 }
 
 # E38, B3i: an embedded file is part of what its module's object is made from - a build after it changes makes that

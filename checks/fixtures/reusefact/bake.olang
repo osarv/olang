@@ -1,0 +1,6 @@
+# B3i: an importer of uid baking its fact into a global (K2) - its object hangs on the fact too
+import "uid"
+
+Q := uid.Quiet()
+
+fn Said() Bool { return Q }

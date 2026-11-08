@@ -1,0 +1,21 @@
+# B3i, G42, E31b: a module whose code the whole program decides - work's WritesGlobals is false where no C can call the
+# program back and true where C is given an export fn (back.olang), and the call through v[0] is made on the element in
+# place, or on a copy, by the same fact. Its record is kept per answer, never reused by a program answering otherwise
+extern fn getuid() U32
+
+fn work() U32 { return getuid() }
+
+fn Quiet() Bool { return not work.WritesGlobals }
+
+type Box struct(n I64) { n }
+
+fn (b mut Box&) Peek() I64 {
+    getuid()
+    return b.n
+}
+
+fn Run() I64 {
+    v Vec<Box>
+    v.Push(Box(7))
+    return v[0].Peek() + v[0].n
+}

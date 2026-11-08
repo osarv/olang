@@ -1,0 +1,8 @@
+# B3i: a program handing no export fn to C - uid's facts read "quiet"
+import "std/io"
+import "uid"
+import "bake"
+
+fn main() ? {
+    try io.Println($uid.Quiet() " " $bake.Said() " " $uid.Run())
+}
