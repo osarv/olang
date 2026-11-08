@@ -1024,3 +1024,10 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   space-separated, where `noreturn` already sits (so `noreturn` stays put, the first of them): `onClick fn&(e Event&)
   noalloc noblock pure`, `type Handler fn(e Event&) noalloc noblock`, `fn&(list mut Vec<Node&>&, n Node&) keeps n in
   list`, `keeps x`, `borrows a`, `noborrow`, `returns`. PROPOSED, ASKED to confirm; sent to the note.
+- Promise words DECIDED 2026-11-08 (the user: "yeah, go with that"): words follow a function type's signature,
+  space-separated, function types and declared function types only, inferred everywhere else - `noalloc`, `noblock`,
+  `nospawn`, `norecurse`, `noextern`, `pure`, `returns`, `keeps n in list`, `keeps x`, `keeps b in a.f`, `borrows a`,
+  `noborrow`; one tier of keywords. The user, for the record: `noreturn` is a different category - it changes what
+  paths may be written (D10a, a call fitting any value position, D8e) and is written on declarations; the others only
+  let a holder of a function value require things of the functions it accepts and rely on them at calls. It shares
+  their position only. The design note (wt-fnvalues) builds on this.
