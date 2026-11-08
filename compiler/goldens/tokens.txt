@@ -1894,7 +1894,7 @@ ffdde4db985e473e 52018eb8d0cf1c7b checks/fixtures/interp/cyclic.olang
 334dab265fdc399c 41c700cd94dcf60a checks/fixtures/interp/exec.olang
 0379ff4630aeaccf a79955cdafd68416 checks/fixtures/interp/gap.olang
 213dac0e328d13ad b9151fcf775b3a83 checks/fixtures/interp/prog.olang
-79220893df6cc623 6d1f69065f07bdf6 checks/fixtures/interp/refused.olang
+fa7fca224ff1da7a 2ca675a3e86be3b3 checks/fixtures/interp/refused.olang
 cfedd2acd90e0c40 9a222c5937cf23c4 checks/fixtures/interp/tasks.olang
 3635a1df29668b81 7d07fb0be5f90b6e checks/fixtures/interp/tests.olang
 cc2d9cb569bd1d13 85e3670ac3db13a2 checks/fixtures/interp/ub.olang

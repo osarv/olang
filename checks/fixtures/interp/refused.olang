@@ -1,16 +1,17 @@
-# B3e: interpret refuses what a build refuses, section 8's errors included - a view of a block's resource kept in a list
-# outside it (O27, O15: storage holding a value whose destructor is still to run is never built longer for a view)
-Ended mut I64 = 0
-
-type Res unique struct(n String&) {
-    name := $n
-} destruct { Ended++ }
+# B3e: interpret refuses what a build refuses, section 8's errors included - a view of a match binding's own copy kept
+# in a list outside its clause (O27, S13b: that copy is never built longer for a view). (It was a view of a block's
+# resource until O27 built such storage where the view is kept, its destructor with it - docs/fnvalues.md section 10)
+type Box enum {
+    One(s Array<I64>)
+}
 
 fn main() {
-    keep := Vec<String&>()
+    keep := Vec<Array<I64>&>()
     for i in range 3 {
-        f := Res("inner" $i)
-        keep.Push(f.name[0:2])
+        b := Box.One(Array<I64>[i, i])
+        match b {
+            case Box.One(s) { keep.Push(s[0:1]) }
+        }
     }
     assert keep.Len() == 3
 }
