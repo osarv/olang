@@ -4157,7 +4157,9 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
     t := m.T
     ps := t.Items(t.Params(ty))
     res := t.Result(ty)
-    if m.When == Mode.Compile and not typed.MathExtern(name, ps.Len()) {
+    # B19b: std/bench's runtime functions have no effect skipping would show - no benchmark build is evaluated, so
+    # nothing is counted and the work runs once
+    if m.When == Mode.Compile and not typed.MathExtern(name, ps.Len()) and not name.StartsWith("__olang_bench_") {
         m.refuse(WhyExtern)
         return false
     }
@@ -4418,6 +4420,10 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
             }
         }
         case "__olang_fuzz_input" { v = -1 }     # no fuzzer runs a test interpreted
+        # B19b: no benchmark build is evaluated - nothing counted, no counter, the work run once
+        case "__olang_bench_on", "__olang_bench_allocs_made", "__olang_bench_bytes_made" { v = 0 }
+        case "__olang_bench_instructions" { v = -1 }
+        case "__olang_bench_keep" { }
         case "__olang_test_detach" { m.Detached = true }
         case "__olang_on_crash" {
             # S2 under -i: the program's message written first, then the compiler's own - a crash now is likeliest in

@@ -1,0 +1,204 @@
+# bench - benchmarks, measured by "olang test -bench FILE [WORD...]" (B19b) and run once by every other test run.
+#
+# A benchmark is a test whose body hands Run the work to measure:
+#
+#     test Sum "a million numbers" {
+#         xs := Array<I64>[i for i in range 1000000]
+#         bench.Run(fn() { bench.Keep(Sum(xs)) })
+#     }
+#
+# Under "olang test -bench" Run calls the work N times, N grown until the N calls take the budget (a second unless
+# said), and writes what one call cost to the standard output, before the test's own "ok" line:
+#
+#     bench Sum: a million numbers  2048 ops  487113 ns/op  0 allocs/op  0 B/op  1500213 instr/op
+#
+# - the time, the allocations and their bytes counted by the runtime's allocator (only a benchmark build counts them,
+# so no other build pays for it), and the instructions the test's thread retired where the machine and the kernel
+# give a counter. What the test does outside the work (building xs above) is not measured. Keep hands a value to
+# nothing the optimizer can see through, so work whose result is otherwise unused is still done. Every other run of
+# the test - a plain "olang test", "olang test -interpret" - calls the work once and measures nothing, so a benchmark
+# is a test as well. Measurement.Of gives the numbers to a program, in any build.
+
+import "std/io"
+import "std/time"
+
+extern {
+    fn __olang_bench_on() I64
+    fn __olang_bench_allocs_made() I64
+    fn __olang_bench_bytes_made() I64
+    fn __olang_bench_instructions() I64
+    fn __olang_bench_keep(v I64)
+    fn __olang_test_running(buf Array<U8>, cap I64) I64
+}
+
+# the budget a benchmark's calls are grown to when Run is given none
+DefaultBudget time.Duration = time.Duration.Seconds(1)
+
+# the most calls one measurement makes, however cheap a call is
+MaxOps I64 = 1000000000
+
+# what Ops calls of a piece of work took together: Nanos on the monotonic clock; Allocs allocations of Bytes bytes made
+# on the calling thread (-1 for both outside a benchmark build, which does not count them); Instructions retired by
+# the calling thread, -1 where no counter is available
+type Measurement struct(Ops I64, Nanos I64, Allocs I64, Bytes I64, Instructions I64) {
+    Ops
+    Nanos
+    Allocs
+    Bytes
+    Instructions
+}
+
+# the nanoseconds one call took
+fn (m Measurement&) NanosPerOp() F64 { return F64(m.Nanos) / F64(m.Ops.Max(1)) }
+
+# the allocations one call made, rounded down (-1 where none were counted)
+fn (m Measurement&) AllocsPerOp() I64 { return -1 if m.Allocs < 0 else m.Allocs / m.Ops.Max(1) }
+
+# the bytes one call allocated, rounded down (-1 where none were counted)
+fn (m Measurement&) BytesPerOp() I64 { return -1 if m.Bytes < 0 else m.Bytes / m.Ops.Max(1) }
+
+# the instructions one call retired, rounded down (-1 where no counter is available)
+fn (m Measurement&) InstructionsPerOp() I64 { return -1 if m.Instructions < 0 else m.Instructions / m.Ops.Max(1) }
+
+# "2048 ops  487113 ns/op  0 allocs/op  0 B/op  1500213 instr/op": what is not counted is left out
+fn (m Measurement&) Str() String {
+    t := $m.Ops " ops  " $nanos(m.NanosPerOp()) " ns/op"
+    if m.Allocs >= 0: t = $t "  " $m.AllocsPerOp() " allocs/op  " $m.BytesPerOp() " B/op"
+    if m.Instructions >= 0: t = $t "  " $m.InstructionsPerOp() " instr/op"
+    return t
+}
+
+# nanoseconds as Go's benchmarks write them: whole from 100 up, with one more decimal below each power of ten under it
+fn nanos(x F64) String {
+    if x >= 100.0: return x.Fixed(0)
+    if x >= 10.0: return x.Fixed(1)
+    if x >= 1.0: return x.Fixed(2)
+    return x.Fixed(3)
+}
+
+# whether this is a benchmark build, "olang test -bench" - false in every other build and in the evaluator
+fn On() Bool { return __olang_bench_on() != 0 }
+
+# v handed to nothing the optimizer can see through, so the work computing it is done: a number or a Bool as its bits,
+# any other value through its Hash - which the measurement then includes; keep a number taken from such a value where
+# hashing it would cost more than the work
+fn Keep<T>(v T) {
+    match T {
+        case I8, I16, I32, I64, U8, U16, U32, U64, Char { __olang_bench_keep(I64(v)) }
+        case F16, BF16, F32 { __olang_bench_keep(I64(F64(v).Bits())) }
+        case F64 { __olang_bench_keep(I64(v.Bits())) }
+        case Bool { __olang_bench_keep(1 if v else 0) }
+        case _ { __olang_bench_keep(v.Hash()) }
+    }
+}
+
+# body called ops times on this thread, and what the calls took together
+fn Measurement.taken<? E>(body fn&() ? E, ops I64) Measurement ? E {
+    counted := On()
+    allocs, bytes := __olang_bench_allocs_made(), __olang_bench_bytes_made()
+    instructions := __olang_bench_instructions()
+    start := time.Now()
+    for _ in range ops { try body() }
+    took := time.Since(start)
+    after := __olang_bench_instructions()
+    spent := -1 if instructions < 0 or after < 0 else after - instructions
+    if not counted: return Measurement(ops, took, -1, -1, spent)
+    return Measurement(ops, took, __olang_bench_allocs_made() - allocs, __olang_bench_bytes_made() - bytes, spent)
+}
+
+# how many calls the next round makes to fill budget, from the last round's: as many as took the budget at its pace,
+# a fifth more, at most a hundred times as many and at least one more (Go's rule), never past MaxOps
+fn nextOps(last Measurement&, budget I64) I64 {
+    n := budget * last.Ops / last.Nanos.Max(1)
+    n += n / 5
+    return n.Min(100 * last.Ops).Max(last.Ops + 1).Min(MaxOps)
+}
+
+# body measured: called once, then in rounds of more calls, each round's count from the last's pace, until a round's
+# calls take budget together or make MaxOps; the last round's numbers. Fails with what body fails with, as soon as a
+# call does
+fn Measurement.Of<? E>(body fn&() ? E, budget time.Duration = DefaultBudget) Measurement ? E {
+    goal := budget.Nanos()
+    m := try Measurement.taken(body, 1)
+    for m.Nanos < goal and m.Ops < MaxOps: m = try Measurement.taken(body, nextOps(m, goal))
+    return m
+}
+
+# the benchmark the running test makes of body: in a benchmark build body measured (Measurement.Of) and "bench NAME  ..." written
+# to the standard output, NAME the running test's name and "/label" after it where a label is given (for a test
+# measuring several pieces of work); in every other build body called once. Fails with what body fails with
+fn Run<? E>(body fn&() ? E, label String& = "", budget time.Duration = DefaultBudget) ? E {
+    if not On() {
+        try body()
+        return
+    }
+    m := try Measurement.Of(body, budget)
+    name := $running() $("/" if label != "" else "") $label
+    try io.Println($"bench " $name "  " $m) catch io.Error { }
+}
+
+# the running test's name, as its run reports it ("Sum: a million numbers"), "" outside a test
+fn running() String {
+    n := __olang_test_running(Array<U8>(0), 0)
+    if n < 0 { return "" }
+    buf := Array<U8>(n)
+    __olang_test_running(buf, n)
+    return String(buf)
+}
+
+test Run "outside -bench, calls the work once" {
+    calls mut Vec<I64>& = Vec<I64>()
+    Run(fn() { calls.Push(calls.Len()) })
+    Run(fn() { calls.Push(calls.Len()) }, label = "again")
+    assert calls.ToArray() == Array<I64>[0, 1]
+}
+
+test Measurement.Of "grows the calls to the budget" {
+    count mut Vec<I64>& = Vec<I64>[0]
+    m := Measurement.Of(fn() { count[0] += 1 }, budget = time.Duration.Millis(5))
+    assert m.Ops > 1 and count[0] >= m.Ops and m.Nanos > 0 and m.NanosPerOp() > 0.0
+    assert (m.Allocs >= 0) == On() and (m.Bytes >= 0) == On()
+}
+
+test Measurement.Of "fails as the work does, at once" {
+    calls mut Vec<I64>& = Vec<I64>[0]
+    failed := false
+    try Measurement.Of(fn() ? Stop {
+        calls[0] += 1
+        if calls[0] == 3: error Stop
+    }) catch Stop { failed = true }
+    assert failed and calls[0] == 3
+}
+
+test nextOps "grows by the last round's pace, within Go's bounds" {
+    assert nextOps(Measurement(1, 1000, 0, 0, -1), 1000000) == 100
+    assert nextOps(Measurement(100, 1000, 0, 0, -1), 1000000) == 10000
+    assert nextOps(Measurement(100, 10000000, 0, 0, -1), 1000000) == 101
+    assert nextOps(Measurement(500000000, 1, 0, 0, -1), 1000000000) == MaxOps
+}
+
+test Measurement.Str "writes what one call cost, leaving out what was not counted" {
+    assert $Measurement(4, 1000, 8, 640, -1) == "4 ops  250 ns/op  2 allocs/op  160 B/op"
+    assert $Measurement(1000, 1234, -1, -1, 9000) == "1000 ops  1.23 ns/op  9 instr/op"
+    assert nanos(12.34) == "12.3" and nanos(0.1234) == "0.123"
+}
+
+test Keep "keeps a value of any type" {
+    Keep(3)
+    Keep(2.5)
+    Keep(F32(1.5))
+    Keep(true)
+    Keep('a')
+    Keep("text")
+    Keep(Array<I64>[1, 2])
+}
+
+# K1: what the evaluator decides - no benchmark build, so the work runs once
+fn runsOnce() I64 {
+    calls mut Vec<I64>& = Vec<I64>[0]
+    Run(fn() { calls[0] += 1 })
+    Keep(calls[0])
+    return calls[0]
+}
+
+assert runsOnce() == 1 and not On()

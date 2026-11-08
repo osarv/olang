@@ -83,6 +83,7 @@ odd-width paths (`tests/intsweep.olang`); `tools/precedence_migrate.olang` if pr
 | `compiler/doc.olang` | `olang doc -html` writes all of std; nothing to add per module |
 | `tools/stutter_rename.olang` | the naming rule (no module name repeated in a type: `io.Error`, never `io.IoError`) |
 | `std/runtime/*.ll` and `compiler/runtime.olang` | a new runtime function or C-library fact; `emit.olang` declares runtime functions from the runtime's text |
+| `compiler/eval.olang` `runtimeFn` (and `callExtern`'s compile-time list) | a runtime function std calls (`__olang_*`): what the evaluator answers for it, under `interpret` and while compiling (B19b's `__olang_bench_*`) |
 | `compiler/*.olang` that import it | `grep -l 'std/NAME'` - the compiler uses `std/os`, `std/io`, `std/json`, `std/filepath` and others |
 | `docs/` / `tests/` | only where a note or corpus case teaches it |
 | `tools/list_vec.olang` etc. | when a std type moves or is renamed: a migration (below) |

@@ -2991,11 +2991,11 @@ entry:
 ; thread, the allocations it makes and their bytes (the "; @bench" lines of __olang_scope_alloc_a and
 ; __olang_scope_alloc_slow); every other build has the counters and never touches them, so it pays nothing.
 ; __olang_bench_on says which build this is; __olang_bench_instructions reads the instructions this thread has retired,
-; from a hardware counter opened on its first call (perf_event_open, user space only), or -1 where the machine or the
-; kernel gives none; __olang_bench_keep hands a value to an empty piece of assembly, so the optimizer must compute it
+; from a hardware counter each thread opens on its first call (perf_event_open, user space only), or -1 where the
+; machine or the kernel gives none (a container's seccomp filter often refuses the call); __olang_bench_keep hands a value to an empty piece of assembly, so the optimizer must compute it
 @__olang_bench_allocs = thread_local(initialexec) global i64 0
 @__olang_bench_bytes = thread_local(initialexec) global i64 0
-@__olang_bench_perf = global i32 -2
+@__olang_bench_perf = thread_local(initialexec) global i32 -2
 
 define i64 @__olang_bench_on() {
 entry:

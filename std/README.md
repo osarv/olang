@@ -14,6 +14,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `rand.olang` | seeded xoshiro256** generator |
 | `list.olang` | `List<T>`: a growable sequence that never moves what it stores (chunks doubling in size) - for when a `Vec`'s growth copying its elements is what is to be avoided; `list.List.Of(a)`, `list.List.FromIter(it)`, `list.Error`, `list.Iter` |
 | `set.olang`, `deque.olang`, `heap.olang` | `Set<T>` over Map, a double-ended ring `Deque<T>`, a binary `Heap<T>` ordered by a function |
+| `bench.olang` | benchmarks inside tests: `bench.Run(fn() { bench.Keep(work()) })` runs the work once in a plain test run and is measured by `olang test -bench FILE [WORD...]` (ns/op, allocs/op, B/op, instr/op where a counter exists); `bench.Measurement.Of(f)` measures in any build (B19b) |
 | `bitset.olang` | `BitSet<T>`, the cases of a payload-free enum (at most 64) in one `U64`: `in`, `\| & - ^`, a walk in case order, `Bits`/`Flags` for C flag words |
 | `order.olang` | `ByFields<T>`, a `less` function for a struct or enum made from its fields (`xs.Sort(order.ByFields<T>)`) |
 | `pair.olang` | `Pair<A, B>`: two values of any types held as one (a map key when both are) |

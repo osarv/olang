@@ -149,7 +149,7 @@ OptWhat Array<String&> = Array<String&>[
     "prints a function's machine code as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)"
     "prints a function's optimized LLVM IR as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)"
     "runs the tests by compile-time evaluation instead of building them, as interpret runs a program (B3e)"
-    "measures each benchmark the tests run (std/bench): its time, allocations and bytes an operation, in a build counting them (B19b)"
+    "measures the benchmarks the tests run (std/bench): time, allocations and bytes per call (B19b)"
 ]
 
 fn modeName(m I64) String { return "running a file" if m == Run else $ModeWords[m] }
