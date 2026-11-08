@@ -26,10 +26,10 @@ Open questions:
   archive/decisions_log.md). Default for each until answered: refused. 4. a field slot holding storage of two scopes
   (whole-program field analysis) - recommend not now; the user wants to talk about it more. 5. `any` copyable through
   a Copy in its table - recommend not now; recorded, not answered.
-- docs/genrefs.md's six direction questions (asked 2026-11-08; the note's section 14). Nothing is built until they
-  are answered. Recommendations: 1. back links written `weak` (they cannot be inferred) - yes, default nothing built;
-  2. a weak read turns null where the compiler reclaims (as in Swift, Java, Python; a program reading a removed node
-  through a back link then depends on the compiler) - accept; 3. holder record: (a) a held bit with pins, or (b) a
-  saturating count of owning places only - (b), default (a); 4. generational per module or per program - per module
-  (default); 5. early freeing in every module's code through link-time constants (round 7) - yes, default the root's
-  object only; 6. `std/pool` of generational handles - yes.
+- docs/genrefs.md's direction questions (asked 2026-11-08; the note's section 14; the user: "We will settle this in a
+  couple of hours" - no agent depending on it starts before). My proposal after discussing it: settle the language now
+  - 1. `weak` written on back links, yes; 2. a weak link does not keep its node and reads null once it is freed,
+  accept - built as genrefs round 1 beside a one-holder rule (early freeing of nodes only ever held by one owning
+  link, compile time only, the user's idea); the reclaiming of nodes with back links later, after fnvalues round 6.
+  3. holder record (a) bit or (b) count of owning places - (b), may wait; 4. per module - default; 5. early freeing
+  in every module through link-time constants - yes, later; 6. `std/pool` of generational handles - yes.
