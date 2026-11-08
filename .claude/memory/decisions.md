@@ -1070,3 +1070,15 @@ archive/decisions_log.md on 2026-11-07 to keep the context every session and age
   Heap's `less`) with the instance - rec yes; default dynamic; (2) promise words on a trait's methods, so calls
   through an `any` rely on them - rec yes, with (1)'s round; default none. QCR (2) (counting) still ASKED. The build
   waits for the user's go.
+- DECIDED 2026-11-08 (the user: "Never do program scope callbacks, yes"; derived scopes "sounds like the kind of thing
+  you want to delete now that there is a simpler rule"): no program-scope fallback anywhere - the address lookup where
+  no call knows the scope; O23a's derived scopes deleted where the hidden scope argument and the lookup cover them.
+- DECIDED 2026-11-08 (the user: "yes, do the [audit] round ... [generational] back pointers"): (1) an audit of every
+  memory/placement refusal by cause - already gone by fnvalues, becomes a placement (storage moved outward, its memory
+  shown by -memory), stays an error, or needs a decision - running read-only: wt-refusals, docs/refusals.md (opus
+  high); its fixes a round after the function-values rounds. (2) generational back-pointers (the user's "a reference
+  that points into something that's guaranteed to be null" idea, Vale's design) instead of counting: owning links
+  inferred, back-pointers `?&` with a generation, a freed node's back-pointers reading null - design note running:
+  wt-genrefs, docs/genrefs.md (opus xhigh). QCR (2) ANSWERED: no reference counting at all (the user: "doing ref
+  counting is a bad idea"); truly shared ownership keeps memory until its scope closes. The fnvalues build waits: the
+  user has not reviewed docs/fnvalues.md yet ("I haven't audited the function values yet").
