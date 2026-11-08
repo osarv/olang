@@ -43,8 +43,8 @@ written for, and std's own documentation still tells readers to write copies tha
 std/csv).
 
 The build (section 10): eight rounds after docs/fnvalues.md's round 6, the largest the split values (44 cases, O17
-generalized), then values kept through an obligation (28), by-value parameters and match bindings (15), tasks (9),
-`become` (10), generators (2), ends ordered (4) and a precision round (9).
+generalized), then values kept through an obligation (15), by-value parameters and match bindings (15), tasks (9),
+`become` (10), generators (2), ends ordered (4) and a precision round (7).
 
 ## 1. How this was done
 
@@ -346,7 +346,7 @@ byte-identical before and after (every round only accepts more: a program accept
 | R5 `become` | 5.5: the tail scope | 10 | S21's `BecomeBorrows`, `BecomeDestructor` | opus, high | fnvalues round 3 (destructors follow storage) |
 | R6 generators | 5.6: destructor values in a coroutine frame; question 2's deferred code if yes | 2 (+2) | `YieldPastHeld`, C11's `DestructGenParam` (+ `YieldPastDefer`, `YieldInDefer`) | opus, high | fnvalues round 3 |
 | R7 ends ordered | 5.6: registered values as holders (call 8) | 4 | `DropRegistered`, `DropTempRegistered` | opus, high | none - check.olang and lowering's drop order; beside R1 |
-| R8 precision and the rest | 5.7; question 3's arrays, globals and generic destructors if yes; question 1 if yes; the dead messages; a case (or removal) for each untested kind (section 8); the `$x` copies section 9 shows unneeded; std's stale comments | 9 (+7) | P4a's and R11's default-existing messages, the five dead messages | opus, high (sonnet, medium for the copies and comments) | fnvalues round 7 (t22alatelambda) |
+| R8 precision and the rest | 5.7; question 3's arrays, globals and generic destructors if yes; question 1 if yes; the dead messages; a case (or removal) for each untested kind (section 8); the `$x` copies section 9 shows unneeded; std's stale comments | 7 (+7) | P4a's and R11's default-existing messages, the five dead messages | opus, high (sonnet, medium for the copies and comments) | fnvalues round 7 (t22alatelambda) |
 
 R1-R4 change scope.olang's call judgment and placement and run one after another; R5-R7 touch lower.olang, the
 coroutine lowering and check.olang's drop order and can run beside them by files. fnvalues' rounds 1-3 (keywords,
